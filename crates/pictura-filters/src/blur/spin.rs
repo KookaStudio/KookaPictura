@@ -20,8 +20,7 @@
 use pictura_core::PixelBuffer;
 use rayon::prelude::*;
 
-use super::field::{apply_effects, validate_noise, BlurNoise, MAX_FIELD_PINS};
-use super::path::BOKEH_OFF;
+use super::field::{apply_noise, validate_noise, BlurNoise, MAX_FIELD_PINS};
 use super::tilt::bilinear;
 use crate::{validate, FilterError};
 
@@ -109,7 +108,7 @@ pub fn spin_blur(
     validate_strobe(strobe)?;
     validate_noise(noise)?;
     if let Some(weights) = spin_pass(buf, spins, strobe) {
-        apply_effects(buf, &weights, &BOKEH_OFF, noise);
+        apply_noise(buf, &weights, noise);
     }
     Ok(())
 }

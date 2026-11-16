@@ -4,10 +4,13 @@
 #include <QtCore/QTemporaryDir>
 #include <QtCore/QTimer>
 #include <QtGui/QImage>
+#include <QtGui/QWheelEvent>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDoubleSpinBox>
+#include <QtWidgets/QLineEdit>
+#include <QtWidgets/QScrollBar>
 #include <QtWidgets/QTabWidget>
 
 #include "blur_gallery_canvas.h"
@@ -124,6 +127,8 @@ private slots:
     void irisPreviewKeepsTheCoreSharp();
     void irisMenuCommitsOnce();
     void canvasShowsTheBlendMode();
+    void zoomFieldWheelAndShortcuts();
+    void scrollbarsAndMiddleDragPan();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -541,6 +546,96 @@ void BlurGalleryDialogTest::canvasShowsTheBlendMode()
         return image.isNull() ? 255 : image.pixelColor(image.rect().center()).red();
     };
     QTRY_VERIFY2(centreRed() < 80, "the canvas ignored the Multiply blend mode");
+    dialog.reject();
+}
+
+void BlurGalleryDialogTest::zoomFieldWheelAndShortcuts()
+{
+    pictura::BlurGalleryDialog dialog(window_->activeView(), fieldBlurSpec());
+    dialog.resize(900, 600);
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    auto* canvas = dialog.canvas();
+    auto* zoom = dialog.findChild<QComboBox*>(QStringLiteral("blurGalleryZoom"));
+    QVERIFY(zoom != nullptr);
+
+    // The field opens on the fit percentage.
+    const double fit = canvas->zoom();
+    const auto shown = [zoom] { return zoom->currentText().chopped(1).toDouble(); };
+    QVERIFY2(qAbs(shown() - fit * 100.0) < 0.2,
+             qPrintable(QStringLiteral("%1 vs %2").arg(shown()).arg(fit * 100.0)));
+
+    // The wheel zooms in and out over the preview.
+    const QPoint centre = canvas->rect().center();
+    QWheelEvent wheelIn(QPointF(centre), canvas->mapToGlobal(centre), QPoint(), QPoint(0, 120),
+                        Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+    QCoreApplication::sendEvent(canvas, &wheelIn);
+    QVERIFY2(canvas->zoom() > fit, "the wheel did not zoom in");
+    const double wheeled = canvas->zoom();
+    QWheelEvent wheelOut(QPointF(centre), canvas->mapToGlobal(centre), QPoint(), QPoint(0, -120),
+                         Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+    QCoreApplication::sendEvent(canvas, &wheelOut);
+    QVERIFY2(canvas->zoom() < wheeled, "the wheel did not zoom out");
+
+    // Ctrl+= and Ctrl+- step the zoom.
+    dialog.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&dialog));
+    const double before = canvas->zoom();
+    QTest::keyClick(&dialog, Qt::Key_Equal, Qt::ControlModifier);
+    QVERIFY2(canvas->zoom() > before, "Ctrl+= did not zoom in");
+    const double stepped = canvas->zoom();
+    QTest::keyClick(&dialog, Qt::Key_Minus, Qt::ControlModifier);
+    QVERIFY2(canvas->zoom() < stepped, "Ctrl+- did not zoom out");
+
+    // The field accepts a typed percentage.
+    zoom->setEditText(QStringLiteral("200%"));
+    QTest::keyClick(zoom->lineEdit(), Qt::Key_Return);
+    QCOMPARE(canvas->zoom(), 2.0);
+    QCOMPARE(zoom->currentText(), QStringLiteral("200%"));
+
+    // Fit in View restores the fit.
+    const int fitIndex = zoom->findText(QStringLiteral("Fit in View"));
+    QVERIFY(fitIndex >= 0);
+    QMetaObject::invokeMethod(zoom, "activated", Qt::DirectConnection, Q_ARG(int, fitIndex));
+    QCOMPARE(canvas->zoom(), canvas->fitZoom());
+    dialog.reject();
+}
+
+void BlurGalleryDialogTest::scrollbarsAndMiddleDragPan()
+{
+    pictura::BlurGalleryDialog dialog(window_->activeView(), fieldBlurSpec());
+    dialog.resize(900, 600);
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    auto* canvas = dialog.canvas();
+    auto* hbar = dialog.findChild<QScrollBar*>(QStringLiteral("blurGalleryHScroll"));
+    auto* vbar = dialog.findChild<QScrollBar*>(QStringLiteral("blurGalleryVScroll"));
+    QVERIFY(hbar != nullptr && vbar != nullptr);
+    // The fitted picture is wholly visible, so no scrollbar shows.
+    QVERIFY(!hbar->isVisible());
+    QVERIFY(!vbar->isVisible());
+
+    // Zooming in overflows both axes and shows both scrollbars.
+    canvas->setZoom(canvas->fitZoom() * 4.0);
+    QVERIFY2(hbar->maximum() > 0 && hbar->isVisible(), "no horizontal scrollbar");
+    QVERIFY2(vbar->maximum() > 0 && vbar->isVisible(), "no vertical scrollbar");
+
+    // Scrolling moves the picture with the scrollbar.
+    const QRectF before = canvas->pictureRect();
+    hbar->setValue(hbar->maximum());
+    vbar->setValue(vbar->maximum());
+    QVERIFY(canvas->pictureRect().left() < before.left());
+    QVERIFY(canvas->pictureRect().top() < before.top());
+
+    // Pressing the scroll wheel and dragging pans the picture.
+    hbar->setValue(0);
+    vbar->setValue(0);
+    const QPoint start = canvas->rect().center();
+    QTest::mousePress(canvas, Qt::MiddleButton, Qt::NoModifier, start);
+    QTest::mouseMove(canvas, start - QPoint(40, 30));
+    QTest::mouseRelease(canvas, Qt::MiddleButton, Qt::NoModifier, start - QPoint(40, 30));
+    QVERIFY2(hbar->value() > 0, "the middle drag did not pan right");
+    QVERIFY2(vbar->value() > 0, "the middle drag did not pan down");
     dialog.reject();
 }
 

@@ -14,11 +14,11 @@
 use pictura_core::PixelBuffer;
 
 use super::field::{
-    apply_effects, field_radius, pyramid_blur, validate_bokeh, validate_noise, BlurNoise, BlurPin,
+    apply_noise, field_radius, pyramid_blur, validate_bokeh, validate_noise, BlurNoise, BlurPin,
     BokehParams,
 };
 use super::iris::{IrisField, IrisPin};
-use super::path::{path_pass, validate_motion, validate_paths, BlurPath, PathMotion, BOKEH_OFF};
+use super::path::{path_pass, validate_motion, validate_paths, BlurPath, PathMotion};
 use super::spin::{spin_pass, validate_spins, validate_strobe, SpinPin, SpinStrobe};
 use super::tilt::{smear, TiltField, TiltPin};
 use crate::{validate, FilterError};
@@ -56,7 +56,7 @@ pub fn blur_gallery(
     let max_pin = amounts.fold(0.0f64, f64::max);
     let radius_on = !(field.is_empty() && iris.is_empty() && tilt.is_empty());
     let radius_weights = if radius_on {
-        radius_pass(buf, field, iris, tilt, max_pin)
+        radius_pass(buf, field, iris, tilt, max_pin, bokeh)
     } else {
         None
     };
@@ -68,16 +68,8 @@ pub fn blur_gallery(
     };
     match (radius_weights, motion_weights) {
         (None, None) => {}
-        (Some(weights), None) => apply_effects(buf, &weights, bokeh, noise),
-        (None, Some(weights)) => apply_effects(buf, &weights, &BOKEH_OFF, noise),
-        (Some(radius), Some(motion)) => {
-            let noise_off = BlurNoise {
-                enabled: false,
-                ..*noise
-            };
-            apply_effects(buf, &radius, bokeh, &noise_off);
-            apply_effects(buf, &larger(&radius, &motion), &BOKEH_OFF, noise);
-        }
+        (Some(weights), None) | (None, Some(weights)) => apply_noise(buf, &weights, noise),
+        (Some(radius), Some(motion)) => apply_noise(buf, &larger(&radius, &motion), noise),
     }
     Ok(())
 }
@@ -94,6 +86,7 @@ fn radius_pass(
     iris: &[IrisPin],
     tilt: &[TiltPin],
     max_pin: f64,
+    bokeh: &BokehParams,
 ) -> Option<Vec<u8>> {
     let (w, h) = (f64::from(buf.width), f64::from(buf.height));
     let iris_field = (!iris.is_empty()).then(|| IrisField::new(iris, w, h));
@@ -111,7 +104,7 @@ fn radius_pass(
         }
         radius
     };
-    let weights = pyramid_blur(buf, max_pin, radius)?;
+    let weights = pyramid_blur(buf, max_pin, bokeh, radius)?;
     if let Some(tilt) = tilt_field.as_ref().filter(|tilt| tilt.distorts()) {
         smear(buf, tilt);
     }

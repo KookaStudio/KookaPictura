@@ -331,7 +331,7 @@ fn a_diverged_plane_is_checked_without_materializing() {
     let mut plane = pictura_core::Plane::from(vec![0u8; (w * h) as usize]);
     plane.tile(w as usize, h as usize);
     plane.write_rect_from(3..4, 150..151, w as usize, &[4]);
-    let before = pictura_core::materializations();
-    assert!(plane_has_coverage(&plane, w, h));
-    assert_eq!(pictura_core::materializations(), before);
+    assert!(pictura_core::assert_no_materialization(|| {
+        plane_has_coverage(&plane, w, h)
+    }));
 }

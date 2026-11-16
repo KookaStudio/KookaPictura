@@ -444,6 +444,80 @@ fn noise_is_seeded_and_follows_its_controls() {
 }
 
 #[test]
+fn light_bokeh_does_not_rim_a_blurred_edge() {
+    // A dark midtone left half inside the Light Range and a bright right half
+    // outside it. A single pin blurs the step. Light Bokeh must scale the
+    // dark region uniformly; brightening the blurred edge more than its
+    // interior would leave a bright rim around the subject (#458).
+    let px: Vec<[u8; 3]> = (0..256)
+        .map(|i| {
+            if i < 128 {
+                [80, 80, 80]
+            } else {
+                [220, 220, 220]
+            }
+        })
+        .collect();
+    let base = buf3(256, 1, &px);
+    let pins = [pin(0.5, 0.5, 20.0)];
+    let (off, noise) = effects_off();
+    let on = BokehParams {
+        enabled: true,
+        light_bokeh: 100.0,
+        bokeh_color: 0.0,
+        light_range: (40, 160),
+    };
+    let mut plain = base.clone();
+    field_blur(&mut plain, &pins, &off, &noise).unwrap();
+    let mut lit = base.clone();
+    field_blur(&mut lit, &pins, &on, &noise).unwrap();
+    let ratio = |x: u32| {
+        let den = f64::from(px3(&plain, x, 0)[0]);
+        if den > 0.0 {
+            f64::from(px3(&lit, x, 0)[0]) / den
+        } else {
+            1.0
+        }
+    };
+    let interior = ratio(8);
+    assert!(
+        interior > 1.2,
+        "the test's bokeh did not brighten the interior: {interior:.3}"
+    );
+    let max = (0..256).map(ratio).fold(0.0f64, f64::max);
+    assert!(
+        max <= interior * 1.05,
+        "the blurred edge gained a rim: interior {interior:.3}, max {max:.3}"
+    );
+}
+
+#[test]
+fn light_range_gate_is_continuous() {
+    // A luma ramp through the high bound. The soft window tapers the effect to
+    // zero at the bound, so no tonal step appears there; a hard threshold
+    // would jump by the whole lift.
+    let px: Vec<[u8; 3]> = (0..256).map(|i| [i as u8, i as u8, i as u8]).collect();
+    let mut buf = buf3(256, 1, &px);
+    let weights = vec![255u8; 256];
+    let bokeh = BokehParams {
+        enabled: true,
+        light_bokeh: 100.0,
+        bokeh_color: 0.0,
+        light_range: (0, 128),
+    };
+    apply_bokeh(&mut buf, &weights, &bokeh);
+    let max_step = (1..256)
+        .map(|x| i32::from(buf.data[x]) - i32::from(buf.data[x - 1]))
+        .map(i32::abs)
+        .max()
+        .unwrap_or(0);
+    assert!(
+        max_step <= 8,
+        "the Light Range bound added a step of {max_step}"
+    );
+}
+
+#[test]
 fn noise_highlights_damp_the_grain_in_bright_areas() {
     let base = buf3(64, 1, &[[220, 220, 220]; 64]);
     let pins = [pin(0.5, 0.5, 40.0)];

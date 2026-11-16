@@ -17,6 +17,7 @@
 #include <QtWidgets/QFrame>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
+#include <QtWidgets/QLineEdit>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QSlider>
 #include <QtWidgets/QTabWidget>
@@ -48,6 +49,36 @@ const double kMaxIrisRadius = 10.0;
 const double kMaxTiltExtent = 10.0;
 const double kMaxSpinAngle = 360.0;
 const int kSpinStrobeSlots = 3;
+
+// The zoom field's drop-down: percentage levels with separators, then the
+// named views. A positive value is a zoom factor; a negative one is a named
+// view (Fit in View / Actual Pixels).
+struct ZoomPreset {
+    const char* text;
+    double zoom;
+};
+const ZoomPreset kZoomPresets[] = {
+    {"6%", 0.0625},
+    {"12%", 0.125},
+    {"25%", 0.25},
+    {"33%", 1.0 / 3.0},
+    {"50%", 0.5},
+    {"66%", 2.0 / 3.0},
+    {"", 0.0},
+    {"100%", 1.0},
+    {"", 0.0},
+    {"200%", 2.0},
+    {"300%", 3.0},
+    {"400%", 4.0},
+    {"600%", 6.0},
+    {"800%", 8.0},
+    {"1000%", 10.0},
+    {"1200%", 12.0},
+    {"1600%", 16.0},
+    {"", 0.0},
+    {"Fit in View", -1.0},
+    {"Actual Pixels", -2.0},
+};
 
 BlurGalleryMode modeForKind(const QString& kind)
 {
@@ -137,6 +168,7 @@ BlurGalleryDialog::BlurGalleryDialog(PictureView* view, const FilterCommandSpec&
     outer->setSizeConstraint(QLayout::SetMinimumSize);
     outer->addLayout(body, 1);
     outer->addWidget(buildOptionsBar());
+    connect(canvas_, &BlurGalleryCanvas::zoomChanged, this, &BlurGalleryDialog::updateZoomLabel);
 
     auto* hide = new QShortcut(QKeySequence(Qt::Key_H), this);
     hide->setContext(Qt::WidgetWithChildrenShortcut);
@@ -146,6 +178,17 @@ BlurGalleryDialog::BlurGalleryDialog(PictureView* view, const FilterCommandSpec&
     selectEffect(active_);
     effectsEdited();
     render();
+    updateZoomLabel();
+}
+
+void BlurGalleryDialog::updateZoomLabel()
+{
+    if (!zoomCombo_ || !canvas_ || zoomCombo_->lineEdit()->hasFocus()) {
+        return;
+    }
+    // One decimal below 100 %, a whole percent above, as the Filter Gallery.
+    const double percent = canvas_->zoom() * 100.0;
+    zoomCombo_->setEditText(QStringLiteral("%1%").arg(qRound(percent * 10.0) / 10.0));
 }
 
 QWidget* BlurGalleryDialog::buildOptionsBar()
@@ -156,6 +199,58 @@ QWidget* BlurGalleryDialog::buildOptionsBar()
     auto* row = new QHBoxLayout(bar);
     row->setContentsMargins(6, 3, 6, 3);
     row->setSpacing(6);
+
+    // The zoom field sits at the bar's left, as Photoshop's status-bar zoom.
+    auto* zoomOut = new QToolButton(bar);
+    zoomOut->setObjectName(QStringLiteral("blurGalleryZoomOut"));
+    zoomOut->setText(QStringLiteral("−"));
+    auto* zoomIn = new QToolButton(bar);
+    zoomIn->setObjectName(QStringLiteral("blurGalleryZoomIn"));
+    zoomIn->setText(QStringLiteral("+"));
+    connect(zoomOut, &QToolButton::clicked, this, [this] { canvas_->zoomBy(0.5); });
+    connect(zoomIn, &QToolButton::clicked, this, [this] { canvas_->zoomBy(2.0); });
+    addZoomShortcuts(this, zoomIn, zoomOut);
+    zoomCombo_ = new QComboBox(bar);
+    zoomCombo_->setObjectName(QStringLiteral("blurGalleryZoom"));
+    zoomCombo_->setEditable(true);
+    zoomCombo_->setInsertPolicy(QComboBox::NoInsert);
+    zoomCombo_->setMaxVisibleItems(24);
+    zoomCombo_->setToolTip(QStringLiteral("Zoom level"));
+    for (const ZoomPreset& preset : kZoomPresets) {
+        if (preset.text[0] == '\0') {
+            zoomCombo_->insertSeparator(zoomCombo_->count());
+            continue;
+        }
+        zoomCombo_->addItem(QString::fromUtf8(preset.text), preset.zoom);
+    }
+    connect(zoomCombo_, &QComboBox::activated, this, [this](int index) {
+        if (index < 0) {
+            return; // typed text: `editingFinished` applies it
+        }
+        const double preset = zoomCombo_->itemData(index).toDouble();
+        if (preset > 0.0) {
+            canvas_->setZoom(preset);
+        } else if (preset == -1.0) {
+            canvas_->fitInView();
+        } else {
+            canvas_->setZoom(1.0); // Actual Pixels
+        }
+    });
+    connect(zoomCombo_->lineEdit(), &QLineEdit::editingFinished, this, [this] {
+        QString text = zoomCombo_->lineEdit()->text().trimmed();
+        text.remove(QLatin1Char('%'));
+        bool ok = false;
+        const double percent = text.toDouble(&ok);
+        if (ok && percent > 0.0) {
+            canvas_->setZoom(percent / 100.0);
+        } else {
+            updateZoomLabel(); // restore the shown value on bad input
+        }
+    });
+    row->addWidget(zoomOut);
+    row->addWidget(zoomIn);
+    row->addWidget(zoomCombo_);
+    row->addSpacing(12);
 
     auto* title = new QLabel(QStringLiteral("Blur Gallery"), bar);
     title->setObjectName(QStringLiteral("dialogTitle"));
