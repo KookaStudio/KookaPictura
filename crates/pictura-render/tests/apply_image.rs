@@ -283,3 +283,36 @@ fn thirty_two_bit_does_not_clamp() {
     assert!((value[0] - 1.75).abs() < 1e-6);
     assert_eq!(plane(layer, 0)[0], 255);
 }
+
+#[test]
+fn grown_layer_takes_the_source_across_the_document() {
+    let mut target = solid(4, 4, [10, 20, 30, 255]);
+    let small = PsdRect {
+        top: 1,
+        left: 1,
+        bottom: 3,
+        right: 3,
+    };
+    pictura_core::layer_bounds::shrink_layer_to(target.layers.first_mut().unwrap(), small);
+    let document = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: 4,
+        right: 4,
+    };
+    assert!(pictura_core::layer_bounds::grow_layer_to(
+        target.layers.first_mut().unwrap(),
+        document,
+        "a test",
+    )
+    .unwrap());
+    let source = solid(4, 4, [200, 10, 30, 255]);
+    let p = params(&source, ApplyImageMode::Layer(BlendMode::Normal));
+    run(&mut target, &p, None);
+    let layer = target.layers.first().unwrap();
+    assert_eq!(layer.rect, document);
+    assert_eq!(plane(layer, 0), vec![200; 16]);
+    assert_eq!(plane(layer, 1), vec![10; 16]);
+    assert_eq!(plane(layer, 2), vec![30; 16]);
+    assert_eq!(plane(layer, -1), vec![255; 16]);
+}
