@@ -59,7 +59,9 @@ WebPalette paletteOf(const WebSettings& settings)
 
 QByteArray quantizeWebImage(const QImage& image, const WebSettings& settings)
 {
-    if (settings.packed.size() >= 2) {
+    if (settings.packed.size() >= 2
+        && settings.packedWidth == image.width()
+        && settings.packedHeight == image.height()) {
         const int n = (int(quint8(settings.packed[0])) << 8)
             | int(quint8(settings.packed[1]));
         if (n > 0
@@ -122,6 +124,48 @@ QImage indexedImageFromPacked(const QByteArray& packed, const QSize& size)
     return indexed;
 }
 
+QByteArray cropPacked(const QByteArray& packed, const QSize& source, int x, int y,
+                      int width, int height)
+{
+    if (packed.size() < 2 || width <= 0 || height <= 0
+        || x < 0 || y < 0 || x + width > source.width() || y + height > source.height()) {
+        return QByteArray();
+    }
+    const int n = (int(quint8(packed[0])) << 8) | int(quint8(packed[1]));
+    const int table = 2 + n * 4;
+    if (n < 1 || packed.size() != table + source.width() * source.height()) {
+        return QByteArray();
+    }
+    QByteArray out;
+    out.reserve(table + width * height);
+    out.append(packed.constData(), table);
+    for (int row = 0; row < height; ++row) {
+        out.append(packed.constData() + table + (y + row) * source.width() + x, width);
+    }
+    return out;
+}
+
+QByteArray encodeIndexedWebImage(const QByteArray& packed, const QSize& size,
+                                 const WebSettings& settings)
+{
+    if (packed.isEmpty() || size.isEmpty()) {
+        return QByteArray();
+    }
+    if (settings.format == 1 || settings.format == 3 || settings.format == 4) {
+        return QByteArray();
+    }
+    QByteArray out;
+    if (settings.format == 2) {
+        QBuffer buffer(&out);
+        buffer.open(QIODevice::WriteOnly);
+        QImageWriter(&buffer, "png").write(indexedImageFromPacked(packed, size));
+        return out;
+    }
+    const ::rust::Vec<std::uint8_t> bytes =
+        web_encode_gif(bytesOf(packed), size.width(), size.height(), settings.interlaced);
+    return fromRust(bytes);
+}
+
 QVector<QRgb> paletteFromPacked(const QByteArray& packed)
 {
     QVector<QRgb> colors;
@@ -169,12 +213,8 @@ QByteArray encodeWebImage(const QImage& image, const WebSettings& settings)
         writer.write(over(image, matte));
         break;
     }
-    case 2: {
-        const QByteArray packed = quantizeWebImage(image, settings);
-        QImageWriter(&buffer, "png").write(
-            indexedImageFromPacked(packed, image.size()));
-        break;
-    }
+    case 2:
+        return encodeIndexedWebImage(quantizeWebImage(image, settings), image.size(), settings);
     case 3:
         QImageWriter(&buffer, "png")
             .write(settings.pngTransparency ? image : over(image, matte));
@@ -187,16 +227,8 @@ QByteArray encodeWebImage(const QImage& image, const WebSettings& settings)
         out = fromRust(bytes);
         break;
     }
-    default: {
-        const QByteArray packed = quantizeWebImage(image, settings);
-        if (packed.size() >= 2) {
-            const ::rust::Vec<std::uint8_t> bytes =
-                web_encode_gif(bytesOf(packed), image.width(), image.height(),
-                               settings.interlaced);
-            out = fromRust(bytes);
-        }
-        break;
-    }
+    default:
+        return encodeIndexedWebImage(quantizeWebImage(image, settings), image.size(), settings);
     }
     return out;
 }
@@ -218,6 +250,8 @@ WebSettings loweredSettings(const WebSettings& settings, int step)
         out.custom.clear();
         out.locked.clear();
         out.packed.clear();
+        out.packedWidth = 0;
+        out.packedHeight = 0;
         out.mappedTransparency = false;
     } else if (settings.format == 1) {
         out.quality = qMax(1, settings.quality - 20 * step);

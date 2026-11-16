@@ -70,11 +70,12 @@ pub fn sfw_metadata(raw: &WebMetadata, level: MetadataLevel) -> RasterMetadata {
                 .as_deref()
                 .map(|bytes| parse_xmp(&String::from_utf8_lossy(bytes)))
                 .unwrap_or_default();
+            let exif = raw.exif.as_deref().and_then(exif_copyright);
             let contact = level == MetadataLevel::CopyrightContact;
             RasterMetadata {
                 exif: None,
-                iptc: build_iptc(&iptc, &xmp, contact),
-                xmp: build_xmp(&iptc, &xmp, contact),
+                iptc: build_iptc(&iptc, &xmp, contact, exif.as_deref()),
+                xmp: build_xmp(&iptc, &xmp, contact, exif.as_deref()),
                 ..RasterMetadata::default()
             }
         }
@@ -100,10 +101,16 @@ pub fn embed_web_metadata(
     embed_raster_metadata(bytes, suffix, &metadata)
 }
 
-fn build_iptc(iptc: &Iptc, xmp: &crate::xmp::XmpProperties, contact: bool) -> Option<Vec<u8>> {
+fn build_iptc(
+    iptc: &Iptc,
+    xmp: &crate::xmp::XmpProperties,
+    contact: bool,
+    exif_copyright: Option<&str>,
+) -> Option<Vec<u8>> {
     let copyright = iptc
         .text(2, 116)
         .or_else(|| xmp.rights.clone())
+        .or_else(|| exif_copyright.map(str::to_string))
         .filter(|v| !v.is_empty());
     let creator = iptc
         .text(2, 80)
@@ -129,12 +136,18 @@ fn build_iptc(iptc: &Iptc, xmp: &crate::xmp::XmpProperties, contact: bool) -> Op
     any.then(|| encode_iptc(&out))
 }
 
-fn build_xmp(iptc: &Iptc, xmp: &crate::xmp::XmpProperties, contact: bool) -> Option<Vec<u8>> {
+fn build_xmp(
+    iptc: &Iptc,
+    xmp: &crate::xmp::XmpProperties,
+    contact: bool,
+    exif_copyright: Option<&str>,
+) -> Option<Vec<u8>> {
     let rights = xmp
         .rights
         .clone()
         .filter(|v| !v.is_empty())
-        .or_else(|| iptc.text(2, 116).filter(|v| !v.is_empty()));
+        .or_else(|| iptc.text(2, 116).filter(|v| !v.is_empty()))
+        .or_else(|| exif_copyright.map(str::to_string));
     let creator: Vec<String> = if xmp.creator.is_empty() {
         iptc.text(2, 80)
             .filter(|v| !v.is_empty())
@@ -183,26 +196,41 @@ fn build_xmp(iptc: &Iptc, xmp: &crate::xmp::XmpProperties, contact: bool) -> Opt
     Some(out.into_bytes())
 }
 
+fn exif_copyright(exif: &[u8]) -> Option<String> {
+    match parse_exif(exif).get(0x8298)? {
+        ExifValue::Ascii(text) if !text.is_empty() => Some(text.clone()),
+        _ => None,
+    }
+}
+
 fn minimal_copyright(exif: &[u8]) -> Option<Vec<u8>> {
-    let parsed = parse_exif(exif);
-    let text = match parsed.get(0x8298)? {
-        ExifValue::Ascii(text) if !text.is_empty() => text,
-        _ => return None,
-    };
+    exif_copyright(exif).map(|text| copyright_exif(&text))
+}
+
+fn copyright_exif(text: &str) -> Vec<u8> {
     let value = text.as_bytes();
+    let size = (value.len() + 1) as u32;
     let value_at = 8 + 2 + 12 + 4;
-    let mut out = Vec::with_capacity(value_at + value.len() + 1);
+    let mut out = Vec::with_capacity(value_at + if size > 4 { value.len() + 1 } else { 0 });
     out.extend_from_slice(b"II*\0");
     out.extend_from_slice(&8u32.to_le_bytes());
     out.extend_from_slice(&1u16.to_le_bytes());
     out.extend_from_slice(&0x8298u16.to_le_bytes());
     out.extend_from_slice(&2u16.to_le_bytes());
-    out.extend_from_slice(&((value.len() + 1) as u32).to_le_bytes());
-    out.extend_from_slice(&(value_at as u32).to_le_bytes());
+    out.extend_from_slice(&size.to_le_bytes());
+    if size <= 4 {
+        let mut inline = [0u8; 4];
+        inline[..value.len()].copy_from_slice(value);
+        out.extend_from_slice(&inline);
+    } else {
+        out.extend_from_slice(&(value_at as u32).to_le_bytes());
+    }
     out.extend_from_slice(&0u32.to_le_bytes());
-    out.extend_from_slice(value);
-    out.push(0);
-    Some(out)
+    if size > 4 {
+        out.extend_from_slice(value);
+        out.push(0);
+    }
+    out
 }
 
 fn escape_xml(text: &str) -> String {
@@ -244,20 +272,7 @@ mod tests {
     }
 
     fn minimal_copyright_from(text: &str) -> Option<Vec<u8>> {
-        let value = text.as_bytes();
-        let value_at = 26;
-        let mut out = Vec::new();
-        out.extend_from_slice(b"II*\0");
-        out.extend_from_slice(&8u32.to_le_bytes());
-        out.extend_from_slice(&1u16.to_le_bytes());
-        out.extend_from_slice(&0x8298u16.to_le_bytes());
-        out.extend_from_slice(&2u16.to_le_bytes());
-        out.extend_from_slice(&((value.len() + 1) as u32).to_le_bytes());
-        out.extend_from_slice(&(value_at as u32).to_le_bytes());
-        out.extend_from_slice(&0u32.to_le_bytes());
-        out.extend_from_slice(value);
-        out.push(0);
-        Some(out)
+        Some(copyright_exif(text))
     }
 
     #[test]
@@ -321,6 +336,30 @@ mod tests {
         assert_eq!(
             exif.get(0x8298),
             Some(&ExifValue::Ascii("(c) 2026 Kooka".into()))
+        );
+    }
+
+    #[test]
+    fn copyright_levels_use_exif_notice() {
+        let raw = WebMetadata {
+            exif: minimal_copyright_from("(c) 2026 Exif"),
+            iptc: None,
+            xmp: None,
+        };
+        let copyright = sfw_metadata(&raw, MetadataLevel::Copyright);
+        let iptc = parse_iptc(copyright.iptc.as_deref().unwrap());
+        assert_eq!(iptc.text(2, 116).as_deref(), Some("(c) 2026 Exif"));
+        let xmp = String::from_utf8(copyright.xmp.unwrap()).unwrap();
+        assert!(xmp.contains("(c) 2026 Exif"));
+    }
+
+    #[test]
+    fn short_copyright_is_inline() {
+        let exif = copyright_exif("ABC");
+        assert_eq!(exif.len(), 26);
+        assert_eq!(
+            parse_exif(&exif).get(0x8298),
+            Some(&ExifValue::Ascii("ABC".into()))
         );
     }
 }

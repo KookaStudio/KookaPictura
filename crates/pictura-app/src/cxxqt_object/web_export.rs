@@ -95,6 +95,9 @@ pub mod ffi {
         /// Sort a packed table: 0 hue, 1 luminance, 2 popularity.
         fn web_palette_sort(packed: &[u8], width: i32, height: i32, sort: i32) -> Vec<u8>;
 
+        /// Delete packed table entry `index`, remapping affected pixels.
+        fn web_palette_delete(packed: &[u8], width: i32, height: i32, index: i32) -> Vec<u8>;
+
         /// Parse a `.act` into `[count_hi, count_lo, RGBA entries..., transparent+1]`.
         fn web_act_parse(bytes: &[u8]) -> Vec<u8>;
 
@@ -113,14 +116,8 @@ pub mod ffi {
             level: i32,
         ) -> Vec<u8>;
 
-        /// Number of disjoint export slices (overlaps clipped; later-created wins).
-        fn web_export_slice_count(view: &PictureView) -> i32;
-
-        /// Export slice `index` as `[x, y, width, height, number, userIndex]`.
-        fn web_export_slice_at(view: &PictureView, index: i32) -> Vec<i32>;
-
-        /// Whether the document has at least one resolved user slice.
-        fn web_has_user_slices(view: &PictureView) -> bool;
+        /// All disjoint export slices as repeated `[x, y, width, height, number, userIndex]`.
+        fn web_export_slices(view: &PictureView) -> Vec<i32>;
 
         /// Emit the Save for Web slice HTML/CSS for `cells` (`layout` 0 table, 1 CSS).
         fn web_slice_html(

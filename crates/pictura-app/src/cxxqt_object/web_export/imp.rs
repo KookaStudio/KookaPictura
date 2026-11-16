@@ -261,6 +261,19 @@ pub(super) fn web_palette_sort(packed: &[u8], width: i32, height: i32, sort: i32
     pictura_codec::pack_indexed(&pictura_codec::palette_sort(&indexed, sort))
 }
 
+pub(super) fn web_palette_delete(packed: &[u8], width: i32, height: i32, index: i32) -> Vec<u8> {
+    let Some(indexed) = packed_indexed(packed, width, height) else {
+        return Vec::new();
+    };
+    let Ok(index) = u8::try_from(index) else {
+        return Vec::new();
+    };
+    if usize::from(index) >= indexed.palette.len() {
+        return Vec::new();
+    }
+    pictura_codec::pack_indexed(&pictura_codec::palette_delete(&indexed, index))
+}
+
 pub(super) fn web_act_parse(bytes: &[u8]) -> Vec<u8> {
     let Some(table) = pictura_codec::parse_act(bytes) else {
         return Vec::new();
@@ -303,7 +316,7 @@ pub(super) fn web_act_encode(packed: &[u8]) -> Vec<u8> {
             .collect(),
         transparent: {
             let clear = u16::from_be_bytes([packed[2 + n * 4], packed[2 + n * 4 + 1]]);
-            (clear > 0 && clear <= n as u16).then_some((clear - 1) as u8)
+            (clear > 0 && clear <= n as u16).then(|| (clear - 1) as u8)
         },
     };
     pictura_codec::encode_act(&table)
@@ -342,42 +355,26 @@ pub(super) fn web_embed_metadata(
         &raw,
         pictura_codec::MetadataLevel::from_code(level),
     )
-    .unwrap_or_else(|_| bytes.to_vec())
+    .unwrap_or_default()
 }
 
-pub(super) fn web_export_slice_count(view: &PictureView) -> i32 {
-    view.rust().session.doc.as_ref().map_or(0, |doc| {
-        pictura_render::resolve_export_slices(doc).len() as i32
-    })
-}
-
-pub(super) fn web_export_slice_at(view: &PictureView, index: i32) -> Vec<i32> {
+pub(super) fn web_export_slices(view: &PictureView) -> Vec<i32> {
     let Some(doc) = view.rust().session.doc.as_ref() else {
         return Vec::new();
     };
-    let slices = pictura_render::resolve_export_slices(doc);
-    let Some(slice) = usize::try_from(index)
-        .ok()
-        .and_then(|index| slices.get(index))
-    else {
-        return Vec::new();
-    };
-    vec![
-        slice.rect.left,
-        slice.rect.top,
-        slice.rect.width(),
-        slice.rect.height(),
-        slice.number as i32,
-        slice.user_index.map_or(-1, |index| index as i32),
-    ]
-}
-
-pub(super) fn web_has_user_slices(view: &PictureView) -> bool {
-    view.rust().session.doc.as_ref().is_some_and(|doc| {
-        pictura_render::resolve_export_slices(doc)
-            .iter()
-            .any(|slice| slice.user_index.is_some())
-    })
+    pictura_render::resolve_export_slices(doc)
+        .into_iter()
+        .flat_map(|slice| {
+            [
+                slice.rect.left,
+                slice.rect.top,
+                slice.rect.width(),
+                slice.rect.height(),
+                slice.number as i32,
+                slice.user_index.map_or(-1, |index| index as i32),
+            ]
+        })
+        .collect()
 }
 
 pub(super) fn web_slice_html(

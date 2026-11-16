@@ -325,34 +325,40 @@ void SaveForWebDialog::buildUi()
     right->addWidget(buttons);
     root->addLayout(right);
 
-    const auto changed = [this]() {
+    const auto changedEncoding = [this]() {
         {
             const QSignalBlocker block(preset_);
             preset_->setCurrentIndex(0);
         }
-        panes_[activePane_].packed.clear();
         storeActive();
         remember();
         refresh();
     };
+    const auto changed = [this, changedEncoding]() {
+        panes_[activePane_].packed.clear();
+        panes_[activePane_].packedWidth = 0;
+        panes_[activePane_].packedHeight = 0;
+        changedEncoding();
+    };
     const auto changedReduction = [this, changed]() {
         panes_[activePane_].custom.clear();
-        panes_[activePane_].packed.clear();
         panes_[activePane_].mappedTransparency = false;
         changed();
     };
-    for (QComboBox* combo : {format_, matte_, wbmpDither_, resample_}) {
+    connect(format_, &QComboBox::currentIndexChanged, this, changedEncoding);
+    for (QComboBox* combo : {matte_, resample_}) {
         connect(combo, &QComboBox::currentIndexChanged, this, changed);
     }
+    connect(wbmpDither_, &QComboBox::currentIndexChanged, this, changedEncoding);
     connect(reduction_, &QComboBox::currentIndexChanged, this, changedReduction);
     connect(dither_, &QComboBox::currentIndexChanged, this, changedReduction);
     for (QSpinBox* box : {quality_, wbmpAmount_}) {
-        connect(box, &QSpinBox::valueChanged, this, changed);
+        connect(box, &QSpinBox::valueChanged, this, changedEncoding);
     }
     connect(colors_, &QSpinBox::valueChanged, this, changedReduction);
     connect(ditherAmount_, &QSpinBox::valueChanged, this, changedReduction);
     for (QCheckBox* box : {interlaced_, progressive_, optimized_, pngTransparency_}) {
-        connect(box, &QCheckBox::toggled, this, changed);
+        connect(box, &QCheckBox::toggled, this, changedEncoding);
     }
     connect(transparency_, &QCheckBox::toggled, this, changedReduction);
     connect(tabs_, &QTabBar::currentChanged, this, [this]() {
@@ -436,6 +442,8 @@ void SaveForWebDialog::applyPreset(int index)
     }
     panes_[activePane_].custom.clear();
     panes_[activePane_].packed.clear();
+    panes_[activePane_].packedWidth = 0;
+    panes_[activePane_].packedHeight = 0;
     panes_[activePane_].mappedTransparency = false;
     storeActive();
     remember();
@@ -524,6 +532,8 @@ void SaveForWebDialog::restore()
         base.wbmpAmount = 88;
     }
     base.packed.clear();
+    base.packedWidth = 0;
+    base.packedHeight = 0;
     panes_[0] = base;
     panes_[1] = base;
     panes_[2] = loweredSettings(base, 1);
@@ -678,19 +688,26 @@ void SaveForWebDialog::repopulate()
 void SaveForWebDialog::onColorsEdited(const QVector<QRgb>& colors)
 {
     WebSettings& settings = panes_[activePane_];
-    QByteArray packed = quantizeWebImage(sized(), settings);
-    if (packed.size() >= 2) {
-        const int n = (int(quint8(packed[0])) << 8) | int(quint8(packed[1]));
-        for (int i = 0; i < n && i < colors.size(); ++i) {
-            const QRgb color = colors[i];
-            const int at = 2 + i * 4;
-            packed[at] = char(qRed(color));
-            packed[at + 1] = char(qGreen(color));
-            packed[at + 2] = char(qBlue(color));
-            packed[at + 3] = char(qAlpha(color));
-        }
-        settings.packed = packed;
+    const QImage image = sized();
+    QByteArray packed = quantizeWebImage(image, settings);
+    if (packed.size() < 2) {
+        return;
     }
+    const int n = (int(quint8(packed[0])) << 8) | int(quint8(packed[1]));
+    if (n < 1 || packed.size() < 2 + n * 4 || colors.size() < n) {
+        return;
+    }
+    for (int i = 0; i < n; ++i) {
+        const QRgb color = colors[i];
+        const int at = 2 + i * 4;
+        packed[at] = char(qRed(color));
+        packed[at + 1] = char(qGreen(color));
+        packed[at + 2] = char(qBlue(color));
+        packed[at + 3] = char(qAlpha(color));
+    }
+    settings.packed = packed;
+    settings.packedWidth = image.width();
+    settings.packedHeight = image.height();
     settings.custom = colors;
     settings.locked.clear();
     refresh();
@@ -704,21 +721,30 @@ void SaveForWebDialog::onAddColor(QRgb color)
     panes_[activePane_].locked.append(color);
     panes_[activePane_].custom.clear();
     panes_[activePane_].packed.clear();
+    panes_[activePane_].packedWidth = 0;
+    panes_[activePane_].packedHeight = 0;
     panes_[activePane_].mappedTransparency = false;
     refresh();
 }
 
 void SaveForWebDialog::onDeleteColor(int index)
 {
-    QVector<QRgb> colors = colorTable_->colors();
+    const QVector<QRgb> colors = colorTable_->colors();
     if (index < 0 || index >= colors.size()) {
         return;
     }
-    colors.removeAt(index);
-    panes_[activePane_].custom = colors;
+    const QImage image = sized();
+    const QByteArray packed = quantizeWebImage(image, panes_[activePane_]);
+    const QByteArray deleted = fromRust(
+        web_palette_delete(bytesOf(packed), image.width(), image.height(), index));
+    if (deleted.isEmpty()) {
+        return;
+    }
+    panes_[activePane_].packed = deleted;
+    panes_[activePane_].packedWidth = image.width();
+    panes_[activePane_].packedHeight = image.height();
+    panes_[activePane_].custom = paletteFromPacked(deleted);
     panes_[activePane_].locked.clear();
-    panes_[activePane_].packed.clear();
-    panes_[activePane_].mappedTransparency = false;
     refresh();
 }
 
@@ -731,9 +757,11 @@ void SaveForWebDialog::onSortColors(int sort)
     if (sorted.isEmpty()) {
         return;
     }
+    panes_[activePane_].packed = sorted;
+    panes_[activePane_].packedWidth = image.width();
+    panes_[activePane_].packedHeight = image.height();
     panes_[activePane_].custom = paletteFromPacked(sorted);
     panes_[activePane_].locked.clear();
-    panes_[activePane_].packed.clear();
     refresh();
 }
 
@@ -752,11 +780,8 @@ void SaveForWebDialog::onTransparency(int index, bool transparent)
             colors[i] = qRgba(qRed(color), qGreen(color), qBlue(color), 255);
         }
     }
-    panes_[activePane_].custom = colors;
-    panes_[activePane_].locked.clear();
-    panes_[activePane_].packed.clear();
     panes_[activePane_].mappedTransparency = transparent;
-    refresh();
+    onColorsEdited(colors);
 }
 
 void SaveForWebDialog::onLoadColorTable()
@@ -818,17 +843,32 @@ bool SaveForWebDialog::writeSlices(const QString& path, int format, int layout,
 {
     const QImage image = sized();
     const QDir dir = QFileInfo(path).absolutePath();
+    const WebSettings& settings = panes_[activePane_];
     const bool wantImages = format != 2;
     const bool wantHtml = format != 1;
+    const bool indexed = settings.format == Gif || settings.format == Png8;
+    QByteArray packed;
+    if (wantImages && indexed) {
+        packed = quantizeWebImage(image, settings);
+        if (packed.isEmpty()) {
+            return false;
+        }
+    }
     if (wantImages && !QDir().mkpath(dir.filePath(QStringLiteral("images")))) {
         return false;
     }
     if (wantImages) {
         for (const SlicePlacement& cell : cells) {
-            const QImage crop = image.copy(cell.x, cell.y, cell.width, cell.height);
-            QByteArray data = encodeWebImage(crop, panes_[activePane_]);
-            data = embedWebMetadata(data, webSuffix(panes_[activePane_]), rawMetadata_,
-                                    metadataLevel_);
+            QByteArray data;
+            if (indexed) {
+                const QByteArray slice = cropPacked(
+                    packed, image.size(), cell.x, cell.y, cell.width, cell.height);
+                data = encodeIndexedWebImage(slice, QSize(cell.width, cell.height), settings);
+            } else {
+                const QImage crop = image.copy(cell.x, cell.y, cell.width, cell.height);
+                data = encodeWebImage(crop, settings);
+            }
+            data = embedWebMetadata(data, webSuffix(settings), rawMetadata_, metadataLevel_);
             if (data.isEmpty()) {
                 return false;
             }
@@ -955,6 +995,8 @@ bool SaveForWebDialog::loadColorTableForTest(const QString& path)
     panes_[activePane_].custom = paletteFromPacked(packed);
     panes_[activePane_].locked.clear();
     panes_[activePane_].packed.clear();
+    panes_[activePane_].packedWidth = 0;
+    panes_[activePane_].packedHeight = 0;
     panes_[activePane_].mappedTransparency = true;
     refresh();
     return true;
@@ -978,7 +1020,15 @@ bool saveForWebFromView(QWidget* parent, PictureView* view, const QString& docum
         return false;
     }
     const QString documentBase = QFileInfo(documentName).completeBaseName();
-    if (!web_has_user_slices(*view)) {
+    const ::rust::Vec<std::int32_t> flat = web_export_slices(*view);
+    QVector<ExportSlice> slices;
+    bool hasUser = false;
+    for (int i = 0; i + 5 < flat.size(); i += 6) {
+        slices.append({flat[i], flat[i + 1], flat[i + 2], flat[i + 3], flat[i + 4],
+                       flat[i + 5]});
+        hasUser = hasUser || flat[i + 5] >= 0;
+    }
+    if (!hasUser) {
         const QString suffix = dialog.suffix();
         QString filter;
         const QString path = getSaveFileName(
@@ -987,14 +1037,6 @@ bool saveForWebFromView(QWidget* parent, PictureView* view, const QString& docum
                 + suffix,
             {QStringLiteral("Images (*.%1)").arg(suffix)}, &filter);
         return !path.isEmpty() && dialog.saveTo(path);
-    }
-    QVector<ExportSlice> slices;
-    const int count = web_export_slice_count(*view);
-    for (int i = 0; i < count; ++i) {
-        const ::rust::Vec<std::int32_t> f = web_export_slice_at(*view, i);
-        if (f.size() == 6) {
-            slices.append({f[0], f[1], f[2], f[3], f[4], f[5]});
-        }
     }
     SaveOptimizedDialog saveDialog(
         defaultFileDialogDirectory() + QLatin1Char('/') + documentBase + QStringLiteral(".html"),

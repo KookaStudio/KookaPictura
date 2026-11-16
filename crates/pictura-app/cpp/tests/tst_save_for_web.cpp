@@ -64,6 +64,24 @@ int distinctColors(const QImage& image)
     return int(seen.size());
 }
 
+int usedSwatch(const QImage& image, const QVector<QRgb>& table)
+{
+    for (int y = 0; y < image.height(); ++y) {
+        for (int x = 0; x < image.width(); ++x) {
+            const QRgb pixel = image.pixel(x, y);
+            if (qAlpha(pixel) == 0) {
+                continue;
+            }
+            for (int i = 0; i < table.size(); ++i) {
+                if (qRgba(qRed(table[i]), qGreen(table[i]), qBlue(table[i]), 255) == pixel) {
+                    return i;
+                }
+            }
+        }
+    }
+    return -1;
+}
+
 ::rust::Vec<std::uint8_t> rustBytes(const QByteArray& data)
 {
     ::rust::Vec<std::uint8_t> out;
@@ -111,10 +129,12 @@ private slots:
     void fourUp();
     void repopulate();
     void colorTableEdit();
+    void colorTableDeleteKeepsEdit();
     void colorTableTransparency();
     void colorTableUnmap();
     void colorBudget();
     void colorTableSortAct();
+    void packedCacheUsesDimensions();
     void metadataAllNone();
     void metadataFormats();
     void metadataRemember();
@@ -315,22 +335,7 @@ void SaveForWebTest::colorTableEdit()
     const QImage before =
         QImage::fromData(dialog.encoded()).convertToFormat(QImage::Format_RGBA8888);
     const QVector<QRgb> table = dialog.colorTableForTest();
-    int used = -1;
-    for (int y = 0; y < before.height() && used < 0; ++y) {
-        for (int x = 0; x < before.width() && used < 0; ++x) {
-            const QRgb pixel = before.pixel(x, y);
-            if (qAlpha(pixel) == 0) {
-                continue;
-            }
-            for (int i = 0; i < table.size(); ++i) {
-                if (qRgba(qRed(table[i]), qGreen(table[i]), qBlue(table[i]), 255)
-                    == pixel) {
-                    used = i;
-                    break;
-                }
-            }
-        }
-    }
+    const int used = usedSwatch(before, table);
     QVERIFY(used >= 0);
     dialog.editSwatchForTest(used, QColor(Qt::red));
     const QByteArray gif = dialog.encoded();
@@ -348,6 +353,34 @@ void SaveForWebTest::colorTableEdit()
     // Changing Colors drops the custom table so the reduction takes effect.
     child<QSpinBox>(dialog, "saveForWebColors")->setValue(8);
     QVERIFY(dialog.colorTableForTest() != edited);
+}
+
+void SaveForWebTest::colorTableDeleteKeepsEdit()
+{
+    pictura::SaveForWebDialog dialog(picture());
+    child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Gif);
+    child<QSpinBox>(dialog, "saveForWebColors")->setValue(16);
+    const QVector<QRgb> table = dialog.colorTableForTest();
+    const QImage before =
+        QImage::fromData(dialog.encoded()).convertToFormat(QImage::Format_RGBA8888);
+    const int used = usedSwatch(before, table);
+    QVERIFY(used >= 0);
+    dialog.editSwatchForTest(used, QColor(Qt::red));
+    const int removed = used == 0 ? 1 : 0;
+    QVERIFY(removed < dialog.colorTableForTest().size());
+    dialog.deleteSwatchForTest(removed);
+    const QImage decoded =
+        QImage::fromData(dialog.encoded()).convertToFormat(QImage::Format_RGBA8888);
+    QVERIFY(!decoded.isNull());
+    bool red = false;
+    for (int y = 0; y < decoded.height() && !red; ++y) {
+        for (int x = 0; x < decoded.width() && !red; ++x) {
+            red = qRed(decoded.pixel(x, y)) == 255
+                && qGreen(decoded.pixel(x, y)) == 0
+                && qBlue(decoded.pixel(x, y)) == 0;
+        }
+    }
+    QVERIFY(red);
 }
 
 void SaveForWebTest::colorTableTransparency()
@@ -376,6 +409,7 @@ void SaveForWebTest::colorTableUnmap()
 {
     pictura::SaveForWebDialog dialog(opaquePicture());
     child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Gif);
+    dialog.editSwatchForTest(0, QColor(Qt::red));
     dialog.mapSwatchForTest(0, true);
     dialog.mapSwatchForTest(0, false);
     const QVector<QRgb> table = dialog.colorTableForTest();
@@ -388,6 +422,7 @@ void SaveForWebTest::colorTableUnmap()
     for (int y = 0; y < decoded.height(); ++y) {
         for (int x = 0; x < decoded.width(); ++x) {
             QCOMPARE(qAlpha(decoded.pixel(x, y)), 255);
+            QCOMPARE(decoded.pixel(x, y), qRgba(255, 0, 0, 255));
         }
     }
 }
@@ -412,12 +447,43 @@ void SaveForWebTest::colorTableSortAct()
     pictura::SaveForWebDialog dialog(picture());
     child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Gif);
     child<QSpinBox>(dialog, "saveForWebColors")->setValue(16);
+    const QImage before =
+        QImage::fromData(dialog.encoded()).convertToFormat(QImage::Format_RGBA8888);
     dialog.sortSwatchesForTest(1);
+    const QImage after =
+        QImage::fromData(dialog.encoded()).convertToFormat(QImage::Format_RGBA8888);
+    QCOMPARE(after, before);
     const QVector<QRgb> sorted = dialog.colorTableForTest();
     const QString path = dir.filePath(QStringLiteral("table.act"));
     QVERIFY(dialog.saveColorTableForTest(path));
     QVERIFY(dialog.loadColorTableForTest(path));
     QCOMPARE(dialog.colorTableForTest().size(), sorted.size());
+
+    pictura::SaveForWebDialog opaque(opaquePicture());
+    const QString opaquePath = dir.filePath(QStringLiteral("opaque.act"));
+    QVERIFY(opaque.saveColorTableForTest(opaquePath));
+    QVERIFY(opaque.loadColorTableForTest(opaquePath));
+}
+
+void SaveForWebTest::packedCacheUsesDimensions()
+{
+    pictura::WebSettings settings;
+    settings.format = pictura::SaveForWebDialog::Gif;
+    settings.colors = 2;
+    settings.dither = 0;
+    settings.transparency = false;
+    QByteArray old;
+    old.append(char(0));
+    old.append(char(2));
+    old.append(QByteArray(4, '\0'));
+    old.append(QByteArray(4, '\xff'));
+    old.append(QByteArray(64 * 48, '\0'));
+    settings.packed = old;
+    settings.packedWidth = 64;
+    settings.packedHeight = 48;
+    QImage resized(48, 64, QImage::Format_RGBA8888);
+    resized.fill(qRgba(255, 0, 0, 255));
+    QVERIFY(pictura::quantizeWebImage(resized, settings) != old);
 }
 
 void SaveForWebTest::metadataAllNone()
@@ -479,15 +545,26 @@ void SaveForWebTest::sliceImages()
     QVERIFY(dir.isValid());
     pictura::SaveForWebDialog dialog(picture());
     child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Gif);
+    const QImage preview =
+        QImage::fromData(dialog.encoded()).convertToFormat(QImage::Format_RGBA8888);
+    const int used = usedSwatch(preview, dialog.colorTableForTest());
+    QVERIFY(used >= 0);
+    dialog.editSwatchForTest(used, QColor(Qt::red));
     const QVector<pictura::SlicePlacement> cells = pictura::SaveForWebDialog::buildSliceCells(
         twoSlices(), QSize(64, 48), QSize(64, 48), QStringLiteral("doc"), QStringLiteral("gif"));
     QCOMPARE(cells.size(), 2);
     const QString path = dir.filePath(QStringLiteral("doc.html"));
     QVERIFY(dialog.writeSlices(path, 0, 0, cells, QStringLiteral("doc")));
-    const QImage first = QImage::fromData(fileBytes(dir.filePath(QStringLiteral("images/doc_01.gif"))));
-    const QImage second = QImage::fromData(fileBytes(dir.filePath(QStringLiteral("images/doc_02.gif"))));
+    const QImage full =
+        QImage::fromData(dialog.encoded()).convertToFormat(QImage::Format_RGBA8888);
+    const QImage first = QImage::fromData(fileBytes(dir.filePath(QStringLiteral("images/doc_01.gif"))))
+                             .convertToFormat(QImage::Format_RGBA8888);
+    const QImage second = QImage::fromData(fileBytes(dir.filePath(QStringLiteral("images/doc_02.gif"))))
+                              .convertToFormat(QImage::Format_RGBA8888);
     QCOMPARE(first.size(), QSize(32, 48));
     QCOMPARE(second.size(), QSize(32, 48));
+    QCOMPARE(first, full.copy(0, 0, 32, 48));
+    QCOMPARE(second, full.copy(32, 0, 32, 48));
 
     // PNG-24 is lossless: a slice must equal the matching region of the
     // image the dialog sized.
@@ -520,14 +597,12 @@ void SaveForWebTest::sliceImages()
     pictura::PictureView* view = local->activeView();
     QVERIFY(view);
     QVERIFY(pictura::add_user_slice(*view, 0, 0, 32, 24) >= 0);
-    QVERIFY(pictura::web_has_user_slices(*view));
+    const ::rust::Vec<std::int32_t> flat = pictura::web_export_slices(*view);
+    QVERIFY(flat.size() > 6);
     QVector<pictura::ExportSlice> resolved;
-    const int count = pictura::web_export_slice_count(*view);
-    QVERIFY(count > 1);
-    for (int i = 0; i < count; ++i) {
-        const ::rust::Vec<std::int32_t> f = pictura::web_export_slice_at(*view, i);
-        QVERIFY(f.size() == 6);
-        resolved.append({f[0], f[1], f[2], f[3], f[4], f[5]});
+    for (qsizetype i = 0; i + 5 < flat.size(); i += 6) {
+        resolved.append({flat[i], flat[i + 1], flat[i + 2], flat[i + 3], flat[i + 4],
+                         flat[i + 5]});
     }
     bool userImage = false;
     bool autoImage = false;

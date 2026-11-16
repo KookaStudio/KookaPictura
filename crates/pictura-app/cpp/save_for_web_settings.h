@@ -52,8 +52,10 @@ struct WebSettings {
     QVector<QRgb> locked;
     QVector<QRgb> custom;
     // An index-preserving table edit: the packed indexed image the dialog
-    // last produced. It is valid only while its size matches the image.
+    // last produced. It is valid only for the dimensions it was made from.
     QByteArray packed;
+    int packedWidth = 0;
+    int packedHeight = 0;
 };
 
 WebPalette paletteOf(const WebSettings& settings);
@@ -66,6 +68,14 @@ QByteArray quantizeWebImage(const QImage& image, const WebSettings& settings);
 
 // A packed indexed result as a Qt indexed image, ready for the PNG writer.
 QImage indexedImageFromPacked(const QByteArray& packed, const QSize& size);
+
+// Crop a packed indexed image while retaining its palette.
+QByteArray cropPacked(const QByteArray& packed, const QSize& source, int x, int y,
+                      int width, int height);
+
+// Encode a packed indexed image as GIF or PNG-8 without re-quantizing.
+QByteArray encodeIndexedWebImage(const QByteArray& packed, const QSize& size,
+                                 const WebSettings& settings);
 
 QVector<QRgb> paletteFromPacked(const QByteArray& packed);
 
