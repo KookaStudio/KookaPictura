@@ -3,7 +3,6 @@
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_core/save_jobs.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/open_jobs.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/stack_files.cxxqt.h"
 
 #include <rust/cxx.h>
 

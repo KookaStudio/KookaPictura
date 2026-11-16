@@ -15,6 +15,7 @@ mod imp;
 
 use super::pdf_export::import::ffi::ImportTarget;
 use super::qobject::PictureView;
+pub use super::stack_files::load_files_into_stack;
 pub use imp::*;
 
 #[cxx_qt::bridge]
@@ -85,5 +86,17 @@ pub mod ffi {
         /// named snapshots and appending one `Revert` state; `false` without
         /// mutating on any decode failure.
         fn revert(view: Pin<&mut PictureView>, path: &QString) -> bool;
+
+        /// `File > Scripts > Load Files into Stack`: build `view`'s document
+        /// from `paths`, one native-size raster layer per decodable file on a
+        /// canvas sized to the largest, optionally auto-aligned and combined
+        /// into one embedded smart object. Returns the files that could not be
+        /// loaded.
+        fn load_files_into_stack(
+            view: Pin<&mut PictureView>,
+            paths: &QStringList,
+            align: bool,
+            smart_object: bool,
+        ) -> QStringList;
     }
 }

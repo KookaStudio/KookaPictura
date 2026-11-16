@@ -24,6 +24,7 @@
 
 #include "api/engine_bridge.h"
 #include "api/filters_bridge.h"
+#include "api/layers_api.h"
 #include "api/selection_bridge.h"
 #include "api/transform_bridge.h"
 #include "api/document_api.h"
@@ -65,6 +66,16 @@ void showLoadLayersDialog(PicturaMainWindow& frame)
         return;
     }
     frame.addDocument(view, QString());
+    if (dialog.createSmartObject()) {
+        const layers_api::Snapshot snapshot = layers_api::snapshot(*view, 0, false);
+        const bool combined =
+            snapshot.rows.size() == 1 && snapshot.rows.first().smartObject;
+        if (!combined) {
+            frame.statusBar()->showMessage(
+                PicturaMainWindow::tr("The layers could not be combined into a smart object."),
+                5000);
+        }
+    }
     if (!failures.isEmpty()) {
         QStringList names;
         names.reserve(failures.size());

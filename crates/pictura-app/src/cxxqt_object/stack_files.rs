@@ -3,8 +3,8 @@
 //! largest source, optionally auto-align the layers and combine them into one
 //! embedded smart object.
 //!
-//! Free functions over a [`PictureView`] (their own bridge, so the
-//! `PictureView` declaration list does not grow).
+//! The function is exposed through the `open_jobs` bridge rather than its own,
+//! so the bridge-file budget and the one-function bridge gate stay satisfied.
 //!
 //! [`PictureView`]: super::qobject::PictureView
 
@@ -23,35 +23,6 @@ use pictura_render::{
     CompositeScope, DocumentComposite,
 };
 use std::sync::atomic::{AtomicBool, AtomicU32};
-
-#[cxx_qt::bridge]
-pub mod ffi {
-    unsafe extern "C++" {
-        include!("cxx-qt-lib/qstring.h");
-        type QString = cxx_qt_lib::QString;
-
-        include!("cxx-qt-lib/qstringlist.h");
-        type QStringList = cxx_qt_lib::QStringList;
-
-        include!("pictura_app/src/cxxqt_object.cxxqt.h");
-        #[namespace = "pictura"]
-        type PictureView = super::PictureView;
-    }
-
-    #[namespace = "pictura"]
-    extern "Rust" {
-        /// Build `view`'s document from `paths`: one native-size raster layer
-        /// per decodable file on a canvas sized to the largest, optionally
-        /// auto-aligned and combined into one embedded smart object. Returns
-        /// the files that could not be loaded.
-        fn load_files_into_stack(
-            view: Pin<&mut PictureView>,
-            paths: &QStringList,
-            align: bool,
-            smart_object: bool,
-        ) -> QStringList;
-    }
-}
 
 struct Decoded {
     path: String,
