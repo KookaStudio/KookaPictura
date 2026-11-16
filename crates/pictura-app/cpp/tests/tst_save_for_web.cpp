@@ -1,11 +1,16 @@
-// File > Save for Web & Devices (#61).
+// File > Save for Web & Devices (#61, #629).
 
 #include <QtTest/QtTest>
 
+#include "api/engine_bridge.h"
+#include "api/transform_bridge.h"
 #include "commands.h"
 #include "frame.h"
 #include "save_for_web_dialog.h"
+#include "save_optimized_dialog.h"
 
+#include <QtCore/QDir>
+#include <QtCore/QFile>
 #include <QtCore/QTemporaryDir>
 #include <QtGui/QAction>
 #include <QtWidgets/QCheckBox>
@@ -13,6 +18,10 @@
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QSpinBox>
+#include <QtWidgets/QTabBar>
+#include <QtWidgets/QWidget>
+
+#include <cstdint>
 
 #include "qt_test_support.h"
 
@@ -28,6 +37,13 @@ QImage picture()
             image.setPixel(x, y, qRgba(x * 4, y * 5, (x + y) * 2, alpha));
         }
     }
+    return image;
+}
+
+QImage opaquePicture()
+{
+    QImage image(8, 8, QImage::Format_RGB32);
+    image.fill(qRgb(200, 20, 20));
     return image;
 }
 
@@ -48,6 +64,58 @@ int distinctColors(const QImage& image)
     return int(seen.size());
 }
 
+int usedSwatch(const QImage& image, const QVector<QRgb>& table)
+{
+    for (int y = 0; y < image.height(); ++y) {
+        for (int x = 0; x < image.width(); ++x) {
+            const QRgb pixel = image.pixel(x, y);
+            if (qAlpha(pixel) == 0) {
+                continue;
+            }
+            for (int i = 0; i < table.size(); ++i) {
+                if (qRgba(qRed(table[i]), qGreen(table[i]), qBlue(table[i]), 255) == pixel) {
+                    return i;
+                }
+            }
+        }
+    }
+    return -1;
+}
+
+::rust::Vec<std::uint8_t> rustBytes(const QByteArray& data)
+{
+    ::rust::Vec<std::uint8_t> out;
+    for (char byte : data) {
+        out.push_back(static_cast<std::uint8_t>(byte));
+    }
+    return out;
+}
+
+pictura::WebMetadata metadataWith(const QByteArray& exif = QByteArray(),
+                                  const QByteArray& iptc = QByteArray(),
+                                  const QByteArray& xmp = QByteArray())
+{
+    pictura::WebMetadata metadata;
+    metadata.exif = rustBytes(exif);
+    metadata.iptc = rustBytes(iptc);
+    metadata.xmp = rustBytes(xmp);
+    return metadata;
+}
+
+QVector<pictura::ExportSlice> twoSlices()
+{
+    return {{0, 0, 32, 48, 1, 0}, {32, 0, 32, 48, 2, 1}};
+}
+
+QByteArray fileBytes(const QString& path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return QByteArray();
+    }
+    return file.readAll();
+}
+
 } // namespace
 
 class SaveForWebTest : public QObject {
@@ -57,6 +125,27 @@ private slots:
     void initTestCase();
     void formats();
     void sizePresetsSaveAndDone();
+    void dialogSurfaces();
+    void fourUp();
+    void repopulate();
+    void colorTableEdit();
+    void colorTableDeleteKeepsEdit();
+    void colorTableTransparency();
+    void colorTableUnmap();
+    void colorBudget();
+    void colorTableSortAct();
+    void packedCacheUsesDimensions();
+    void metadataAllNone();
+    void metadataFormats();
+    void metadataRemember();
+    void sliceImages();
+    void sliceImageSize();
+    void htmlTable();
+    void htmlOnly();
+    void cssLayout();
+    void saveFormats();
+    void saveCancel();
+    void unslicedSave();
     void menuCommand();
 
 private:
@@ -130,6 +219,8 @@ void SaveForWebTest::sizePresetsSaveAndDone()
     QVERIFY(dir.isValid());
     {
         pictura::SaveForWebDialog dialog(picture());
+        // Remembered settings persist across tests; pin the format this check decodes.
+        child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Gif);
         // Image Size: 50 % halves both sides, proportions kept.
         child<QSpinBox>(dialog, "saveForWebPercent")->setValue(50);
         QCOMPARE(child<QSpinBox>(dialog, "saveForWebWidth")->value(), 32);
@@ -145,9 +236,7 @@ void SaveForWebTest::sizePresetsSaveAndDone()
         // Save writes exactly the optimised file.
         const QString path = dir.filePath(QStringLiteral("web.jpg"));
         QVERIFY(dialog.saveTo(path));
-        QFile file(path);
-        QVERIFY(file.open(QIODevice::ReadOnly));
-        QCOMPARE(file.readAll(), dialog.encoded());
+        QCOMPARE(fileBytes(path), dialog.encoded());
 
         // Done keeps the settings for the next open.
         child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Png24);
@@ -157,6 +246,499 @@ void SaveForWebTest::sizePresetsSaveAndDone()
     QCOMPARE(child<QComboBox>(again, "saveForWebFormat")->currentIndex(),
              int(pictura::SaveForWebDialog::Png24));
     QCOMPARE(child<QComboBox>(again, "saveForWebPreset")->currentIndex(), 0);
+}
+
+void SaveForWebTest::dialogSurfaces()
+{
+    pictura::SaveForWebDialog dialog(picture());
+    auto* tabs = child<QTabBar>(dialog, "saveForWebTabs");
+    QVERIFY(tabs);
+    for (int i = 0; i < 4; ++i) {
+        QVERIFY(tabs->isTabEnabled(i));
+    }
+    auto* format = child<QComboBox>(dialog, "saveForWebFormat");
+    auto* table = child<QWidget>(dialog, "saveForWebColorTable");
+    auto* metadata = child<QComboBox>(dialog, "saveForWebMetadata");
+    QVERIFY(table);
+    QVERIFY(metadata);
+    format->setCurrentIndex(pictura::SaveForWebDialog::Gif);
+    QVERIFY(!table->isHidden());
+    format->setCurrentIndex(pictura::SaveForWebDialog::Png8);
+    QVERIFY(!table->isHidden());
+    format->setCurrentIndex(pictura::SaveForWebDialog::Jpeg);
+    QVERIFY(table->isHidden());
+    format->setCurrentIndex(pictura::SaveForWebDialog::Png24);
+    QVERIFY(table->isHidden());
+}
+
+void SaveForWebTest::fourUp()
+{
+    pictura::SaveForWebDialog dialog(picture());
+    child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Gif);
+    const int otherQuality = dialog.paneSettingsForTest(1).quality;
+    child<QTabBar>(dialog, "saveForWebTabs")->setCurrentIndex(3);
+    dialog.show();
+    auto* pane3 = child<QLabel>(dialog, "saveForWebPane3");
+    QVERIFY(pane3);
+    QTest::mouseClick(pane3, Qt::LeftButton);
+    QCOMPARE(dialog.activePaneForTest(), 2);
+    child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Jpeg);
+    child<QSpinBox>(dialog, "saveForWebQuality")->setValue(10);
+    QCOMPARE(dialog.paneSettingsForTest(2).format, int(pictura::SaveForWebDialog::Jpeg));
+    QCOMPARE(dialog.paneSettingsForTest(2).quality, 10);
+    QCOMPARE(dialog.paneSettingsForTest(1).format, int(pictura::SaveForWebDialog::Gif));
+    QCOMPARE(dialog.paneSettingsForTest(1).quality, otherQuality);
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("pane.jpg"));
+    QVERIFY(dialog.saveTo(path));
+    QVERIFY(fileBytes(path).startsWith("\xff\xd8"));
+}
+
+void SaveForWebTest::repopulate()
+{
+    pictura::SaveForWebDialog dialog(picture());
+    child<QTabBar>(dialog, "saveForWebTabs")->setCurrentIndex(3);
+    child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Gif);
+    child<QSpinBox>(dialog, "saveForWebColors")->setValue(128);
+    dialog.repopulateForTest();
+    QVERIFY(dialog.paneSettingsForTest(2).colors <= 128);
+    QVERIFY(dialog.paneSettingsForTest(3).colors <= dialog.paneSettingsForTest(2).colors);
+
+    // An active non-default pane keeps its own settings; only the others lower.
+    dialog.setActivePaneForTest(2);
+    child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Gif);
+    child<QSpinBox>(dialog, "saveForWebColors")->setValue(128);
+    dialog.repopulateForTest();
+    QCOMPARE(dialog.paneSettingsForTest(2).colors, 128);
+    QVERIFY(dialog.paneSettingsForTest(1).colors <= 128);
+    QVERIFY(dialog.paneSettingsForTest(3).colors <= 128);
+
+    // A custom table does not survive Repopulate: the lowered panes re-reduce.
+    child<QSpinBox>(dialog, "saveForWebColors")->setValue(16);
+    dialog.editSwatchForTest(0, QColor(Qt::red));
+    QVERIFY(!dialog.paneSettingsForTest(2).custom.isEmpty());
+    dialog.repopulateForTest();
+    QVERIFY(dialog.paneSettingsForTest(1).custom.isEmpty());
+    QVERIFY(dialog.paneSettingsForTest(3).custom.isEmpty());
+}
+
+void SaveForWebTest::colorTableEdit()
+{
+    pictura::SaveForWebDialog dialog(picture());
+    child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Gif);
+    child<QSpinBox>(dialog, "saveForWebColors")->setValue(16);
+    QVERIFY(!dialog.colorTableForTest().isEmpty());
+    // Shift a swatch that the image actually uses and that is opaque. The GIF
+    // decoder may return ARGB32 rather than Indexed8, so match the decoded
+    // colour against the dialog's palette instead of reading palette indices.
+    const QImage before =
+        QImage::fromData(dialog.encoded()).convertToFormat(QImage::Format_RGBA8888);
+    const QVector<QRgb> table = dialog.colorTableForTest();
+    const int used = usedSwatch(before, table);
+    QVERIFY(used >= 0);
+    dialog.editSwatchForTest(used, QColor(Qt::red));
+    const QByteArray gif = dialog.encoded();
+    const QImage decoded = QImage::fromData(gif).convertToFormat(QImage::Format_RGBA8888);
+    QVERIFY(!decoded.isNull());
+    bool red = false;
+    for (int y = 0; y < decoded.height() && !red; ++y) {
+        for (int x = 0; x < decoded.width() && !red; ++x) {
+            red = decoded.pixel(x, y) == qRgba(255, 0, 0, 255);
+        }
+    }
+    QVERIFY(red);
+    const QVector<QRgb> edited = dialog.colorTableForTest();
+    QCOMPARE(edited[used], QColor(Qt::red).rgba());
+    // Changing Colors drops the custom table so the reduction takes effect.
+    child<QSpinBox>(dialog, "saveForWebColors")->setValue(8);
+    QVERIFY(dialog.colorTableForTest() != edited);
+}
+
+void SaveForWebTest::colorTableDeleteKeepsEdit()
+{
+    pictura::SaveForWebDialog dialog(picture());
+    child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Gif);
+    child<QSpinBox>(dialog, "saveForWebColors")->setValue(16);
+    const QVector<QRgb> table = dialog.colorTableForTest();
+    const QImage before =
+        QImage::fromData(dialog.encoded()).convertToFormat(QImage::Format_RGBA8888);
+    const int used = usedSwatch(before, table);
+    QVERIFY(used >= 0);
+    dialog.editSwatchForTest(used, QColor(Qt::red));
+    const int removed = used == 0 ? 1 : 0;
+    QVERIFY(removed < dialog.colorTableForTest().size());
+    dialog.deleteSwatchForTest(removed);
+    const QImage decoded =
+        QImage::fromData(dialog.encoded()).convertToFormat(QImage::Format_RGBA8888);
+    QVERIFY(!decoded.isNull());
+    bool red = false;
+    for (int y = 0; y < decoded.height() && !red; ++y) {
+        for (int x = 0; x < decoded.width() && !red; ++x) {
+            red = qRed(decoded.pixel(x, y)) == 255
+                && qGreen(decoded.pixel(x, y)) == 0
+                && qBlue(decoded.pixel(x, y)) == 0;
+        }
+    }
+    QVERIFY(red);
+}
+
+void SaveForWebTest::colorTableTransparency()
+{
+    pictura::SaveForWebDialog dialog(opaquePicture());
+    child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Gif);
+    child<QSpinBox>(dialog, "saveForWebColors")->setValue(16);
+    const QVector<QRgb> table = dialog.colorTableForTest();
+    QVERIFY(!table.isEmpty());
+    const QRgb swatch = qRgb(qRed(table.first()), qGreen(table.first()), qBlue(table.first()));
+    QCOMPARE(swatch, qRgb(200, 20, 20));
+    dialog.mapSwatchForTest(0, true);
+    const QImage decoded =
+        QImage::fromData(dialog.encoded()).convertToFormat(QImage::Format_RGBA8888);
+    QVERIFY(!decoded.isNull());
+    QCOMPARE(decoded.size(), QSize(8, 8));
+    // The picture was solid in the mapped swatch, so every pixel is transparent.
+    for (int y = 0; y < decoded.height(); ++y) {
+        for (int x = 0; x < decoded.width(); ++x) {
+            QCOMPARE(qAlpha(decoded.pixel(x, y)), 0);
+        }
+    }
+}
+
+void SaveForWebTest::colorTableUnmap()
+{
+    pictura::SaveForWebDialog dialog(opaquePicture());
+    child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Gif);
+    dialog.editSwatchForTest(0, QColor(Qt::red));
+    dialog.mapSwatchForTest(0, true);
+    dialog.mapSwatchForTest(0, false);
+    const QVector<QRgb> table = dialog.colorTableForTest();
+    QVERIFY(!table.isEmpty());
+    QCOMPARE(qAlpha(table.first()), 255);
+    const QByteArray gif = dialog.encoded();
+    QVERIFY(!gif.contains(QByteArray("\x21\xf9", 2)));
+    const QImage decoded = QImage::fromData(gif).convertToFormat(QImage::Format_RGBA8888);
+    QVERIFY(!decoded.isNull());
+    for (int y = 0; y < decoded.height(); ++y) {
+        for (int x = 0; x < decoded.width(); ++x) {
+            QCOMPARE(qAlpha(decoded.pixel(x, y)), 255);
+            QCOMPARE(decoded.pixel(x, y), qRgba(255, 0, 0, 255));
+        }
+    }
+}
+
+void SaveForWebTest::colorBudget()
+{
+    pictura::SaveForWebDialog dialog(opaquePicture());
+    child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Gif);
+    for (int i = 0; i < 256; ++i) {
+        dialog.addSwatchForTest(QColor(i, (i * 7) % 256, (i * 13) % 256));
+    }
+    const int pane = dialog.activePaneForTest();
+    QCOMPARE(int(dialog.paneSettingsForTest(pane).locked.size()), 256);
+    dialog.addSwatchForTest(QColor(Qt::red));
+    QCOMPARE(int(dialog.paneSettingsForTest(pane).locked.size()), 256);
+}
+
+void SaveForWebTest::colorTableSortAct()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    pictura::SaveForWebDialog dialog(picture());
+    child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Gif);
+    child<QSpinBox>(dialog, "saveForWebColors")->setValue(16);
+    const QImage before =
+        QImage::fromData(dialog.encoded()).convertToFormat(QImage::Format_RGBA8888);
+    dialog.sortSwatchesForTest(1);
+    const QImage after =
+        QImage::fromData(dialog.encoded()).convertToFormat(QImage::Format_RGBA8888);
+    QCOMPARE(after, before);
+    const QVector<QRgb> sorted = dialog.colorTableForTest();
+    const QString path = dir.filePath(QStringLiteral("table.act"));
+    QVERIFY(dialog.saveColorTableForTest(path));
+    QVERIFY(dialog.loadColorTableForTest(path));
+    QCOMPARE(dialog.colorTableForTest().size(), sorted.size());
+
+    pictura::SaveForWebDialog opaque(opaquePicture());
+    const QString opaquePath = dir.filePath(QStringLiteral("opaque.act"));
+    QVERIFY(opaque.saveColorTableForTest(opaquePath));
+    QVERIFY(opaque.loadColorTableForTest(opaquePath));
+}
+
+void SaveForWebTest::packedCacheUsesDimensions()
+{
+    pictura::WebSettings settings;
+    settings.format = pictura::SaveForWebDialog::Gif;
+    settings.colors = 2;
+    settings.dither = 0;
+    settings.transparency = false;
+    QByteArray old;
+    old.append(char(0));
+    old.append(char(2));
+    old.append(QByteArray(4, '\0'));
+    old.append(QByteArray(4, '\xff'));
+    old.append(QByteArray(64 * 48, '\0'));
+    settings.packed = old;
+    settings.packedWidth = 64;
+    settings.packedHeight = 48;
+    QImage resized(48, 64, QImage::Format_RGBA8888);
+    resized.fill(qRgba(255, 0, 0, 255));
+    QVERIFY(pictura::quantizeWebImage(resized, settings) != old);
+}
+
+void SaveForWebTest::metadataAllNone()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QByteArray iptc = QByteArray("\x1c\x02\x74\x00\x09(c) Kooka", 14);
+    const QByteArray xmp = "<x:xmpmeta/>";
+    const QByteArray exif = QByteArray("II*\0exif", 7);
+    pictura::SaveForWebDialog dialog(picture(), metadataWith(exif, iptc, xmp));
+    child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Jpeg);
+    child<QComboBox>(dialog, "saveForWebMetadata")->setCurrentIndex(4);
+    const QString allPath = dir.filePath(QStringLiteral("all.jpg"));
+    QVERIFY(dialog.saveTo(allPath));
+    const QByteArray all = fileBytes(allPath);
+    QVERIFY(all.contains("Exif\0\0"));
+    QVERIFY(all.contains("http://ns.adobe.com/xap/1.0/"));
+    QVERIFY(all.contains("Photoshop 3.0\0"));
+    child<QComboBox>(dialog, "saveForWebMetadata")->setCurrentIndex(0);
+    const QString nonePath = dir.filePath(QStringLiteral("none.jpg"));
+    QVERIFY(dialog.saveTo(nonePath));
+    const QByteArray none = fileBytes(nonePath);
+    QVERIFY(!none.contains("Exif\0\0"));
+    QVERIFY(!none.contains("http://ns.adobe.com/xap/1.0/"));
+    QVERIFY(!none.contains("Photoshop 3.0\0"));
+}
+
+void SaveForWebTest::metadataFormats()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QByteArray xmp = "<x:xmpmeta/>";
+    pictura::SaveForWebDialog dialog(picture(), metadataWith(QByteArray(), QByteArray(), xmp));
+    child<QComboBox>(dialog, "saveForWebMetadata")->setCurrentIndex(4);
+    child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Png24);
+    const QString pngPath = dir.filePath(QStringLiteral("all.png"));
+    QVERIFY(dialog.saveTo(pngPath));
+    QVERIFY(fileBytes(pngPath).contains("XML:com.adobe.xmp"));
+    child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Gif);
+    const QString gifPath = dir.filePath(QStringLiteral("all.gif"));
+    QVERIFY(dialog.saveTo(gifPath));
+    QVERIFY(!fileBytes(gifPath).contains("XML:com.adobe.xmp"));
+}
+
+void SaveForWebTest::metadataRemember()
+{
+    {
+        pictura::SaveForWebDialog dialog(picture());
+        child<QComboBox>(dialog, "saveForWebMetadata")->setCurrentIndex(4);
+        child<QPushButton>(dialog, "saveForWebDone")->click();
+    }
+    pictura::SaveForWebDialog again(picture());
+    QCOMPARE(child<QComboBox>(again, "saveForWebMetadata")->currentIndex(), 4);
+}
+
+void SaveForWebTest::sliceImages()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    pictura::SaveForWebDialog dialog(picture());
+    child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Gif);
+    const QImage preview =
+        QImage::fromData(dialog.encoded()).convertToFormat(QImage::Format_RGBA8888);
+    const int used = usedSwatch(preview, dialog.colorTableForTest());
+    QVERIFY(used >= 0);
+    dialog.editSwatchForTest(used, QColor(Qt::red));
+    const QVector<pictura::SlicePlacement> cells = pictura::SaveForWebDialog::buildSliceCells(
+        twoSlices(), QSize(64, 48), QSize(64, 48), QStringLiteral("doc"), QStringLiteral("gif"));
+    QCOMPARE(cells.size(), 2);
+    const QString path = dir.filePath(QStringLiteral("doc.html"));
+    QVERIFY(dialog.writeSlices(path, 0, 0, cells, QStringLiteral("doc")));
+    const QImage full =
+        QImage::fromData(dialog.encoded()).convertToFormat(QImage::Format_RGBA8888);
+    const QImage first = QImage::fromData(fileBytes(dir.filePath(QStringLiteral("images/doc_01.gif"))))
+                             .convertToFormat(QImage::Format_RGBA8888);
+    const QImage second = QImage::fromData(fileBytes(dir.filePath(QStringLiteral("images/doc_02.gif"))))
+                              .convertToFormat(QImage::Format_RGBA8888);
+    QCOMPARE(first.size(), QSize(32, 48));
+    QCOMPARE(second.size(), QSize(32, 48));
+    QCOMPARE(first, full.copy(0, 0, 32, 48));
+    QCOMPARE(second, full.copy(32, 0, 32, 48));
+
+    // PNG-24 is lossless: a slice must equal the matching region of the
+    // image the dialog sized.
+    child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Png24);
+    const QVector<pictura::SlicePlacement> exactCells = pictura::SaveForWebDialog::buildSliceCells(
+        twoSlices(), QSize(64, 48), QSize(64, 48), QStringLiteral("exact"),
+        QStringLiteral("png"));
+    const QString exactPath = dir.filePath(QStringLiteral("exact.html"));
+    QVERIFY(dialog.writeSlices(exactPath, 1, 0, exactCells, QStringLiteral("exact")));
+    const QImage exact = QImage::fromData(fileBytes(dir.filePath(QStringLiteral("images/exact_01.png"))))
+                             .convertToFormat(QImage::Format_RGBA8888);
+    const QImage expected =
+        dialog.sized().copy(0, 0, 32, 48).convertToFormat(QImage::Format_RGBA8888);
+    QCOMPARE(exact.size(), QSize(32, 48));
+    for (int y = 0; y < expected.height(); ++y) {
+        for (int x = 0; x < expected.width(); ++x) {
+            if (qAlpha(expected.pixel(x, y)) == 0) {
+                continue; // the clear corner's RGB is not meaningful
+            }
+            QCOMPARE(exact.pixel(x, y), expected.pixel(x, y));
+        }
+    }
+    child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Gif);
+
+    // One user slice smaller than the canvas: auto slices fill the rest.
+    auto local = pictura::test::makeMainWindow();
+    QVERIFY(local != nullptr);
+    QVERIFY(local->newDocument(QStringLiteral("Auto"), 64, 48, QStringLiteral("rgb"), 8,
+                               QStringLiteral("white")));
+    pictura::PictureView* view = local->activeView();
+    QVERIFY(view);
+    QVERIFY(pictura::add_user_slice(*view, 0, 0, 32, 24) >= 0);
+    const ::rust::Vec<std::int32_t> flat = pictura::web_export_slices(*view);
+    QVERIFY(flat.size() > 6);
+    QVector<pictura::ExportSlice> resolved;
+    for (qsizetype i = 0; i + 5 < flat.size(); i += 6) {
+        resolved.append({flat[i], flat[i + 1], flat[i + 2], flat[i + 3], flat[i + 4],
+                         flat[i + 5]});
+    }
+    bool userImage = false;
+    bool autoImage = false;
+    int area = 0;
+    for (const pictura::ExportSlice& slice : resolved) {
+        area += slice.width * slice.height;
+        userImage |= slice.userIndex >= 0;
+        autoImage |= slice.userIndex < 0;
+    }
+    QVERIFY(userImage);
+    QVERIFY(autoImage);
+    QCOMPARE(area, 64 * 48);
+    const QVector<pictura::SlicePlacement> autoCells = pictura::SaveForWebDialog::buildSliceCells(
+        resolved, QSize(64, 48), QSize(64, 48), QStringLiteral("auto"), QStringLiteral("gif"));
+    const QString autoPath = dir.filePath(QStringLiteral("auto.html"));
+    QVERIFY(dialog.writeSlices(autoPath, 0, 0, autoCells, QStringLiteral("auto")));
+    for (const pictura::ExportSlice& slice : resolved) {
+        const QString name =
+            QStringLiteral("images/auto_%1.gif").arg(slice.number, 2, 10, QLatin1Char('0'));
+        QVERIFY2(QFile::exists(dir.filePath(name)), qPrintable(name));
+        QCOMPARE(QImage::fromData(fileBytes(dir.filePath(name))).size(),
+                 QSize(slice.width, slice.height));
+    }
+}
+
+void SaveForWebTest::sliceImageSize()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    pictura::SaveForWebDialog dialog(picture());
+    child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Gif);
+    child<QSpinBox>(dialog, "saveForWebPercent")->setValue(50);
+    const QVector<pictura::SlicePlacement> cells = pictura::SaveForWebDialog::buildSliceCells(
+        twoSlices(), QSize(64, 48), dialog.sized().size(), QStringLiteral("half"),
+        QStringLiteral("gif"));
+    QCOMPARE(cells.size(), 2);
+    const QString path = dir.filePath(QStringLiteral("half.html"));
+    QVERIFY(dialog.writeSlices(path, 1, 0, cells, QStringLiteral("half")));
+    const QImage first = QImage::fromData(fileBytes(dir.filePath(QStringLiteral("images/half_01.gif"))));
+    QCOMPARE(first.size(), QSize(16, 24));
+}
+
+void SaveForWebTest::htmlTable()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    pictura::SaveForWebDialog dialog(picture());
+    child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Gif);
+    const QVector<pictura::SlicePlacement> cells = pictura::SaveForWebDialog::buildSliceCells(
+        twoSlices(), QSize(64, 48), QSize(64, 48), QStringLiteral("doc"), QStringLiteral("gif"));
+    const QString path = dir.filePath(QStringLiteral("doc.html"));
+    QVERIFY(dialog.writeSlices(path, 0, 0, cells, QStringLiteral("doc")));
+    const QString html = QString::fromUtf8(fileBytes(path));
+    QVERIFY(html.contains(QStringLiteral("<table id=\"Table_01\"")));
+    QVERIFY(html.contains(QStringLiteral("images/doc_01.gif")));
+    QVERIFY(html.contains(QStringLiteral("images/doc_02.gif")));
+}
+
+void SaveForWebTest::htmlOnly()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    pictura::SaveForWebDialog dialog(picture());
+    const QVector<pictura::SlicePlacement> cells = pictura::SaveForWebDialog::buildSliceCells(
+        twoSlices(), QSize(64, 48), QSize(64, 48), QStringLiteral("only"), QStringLiteral("gif"));
+    const QString path = dir.filePath(QStringLiteral("only.html"));
+    QVERIFY(dialog.writeSlices(path, 2, 0, cells, QStringLiteral("only")));
+    QVERIFY(QFile::exists(path));
+    QVERIFY(!QDir(dir.filePath(QStringLiteral("images"))).exists());
+}
+
+void SaveForWebTest::cssLayout()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    pictura::SaveForWebDialog dialog(picture());
+    child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Gif);
+    const QVector<pictura::SlicePlacement> cells = pictura::SaveForWebDialog::buildSliceCells(
+        twoSlices(), QSize(64, 48), QSize(64, 48), QStringLiteral("css"), QStringLiteral("gif"));
+    const QString path = dir.filePath(QStringLiteral("css.html"));
+    QVERIFY(dialog.writeSlices(path, 0, 1, cells, QStringLiteral("css")));
+    const QString html = QString::fromUtf8(fileBytes(path));
+    QVERIFY(!html.contains(QStringLiteral("<table")));
+    QVERIFY(html.contains(QStringLiteral("position:absolute")));
+    QVERIFY(html.contains(QStringLiteral("left:32px")));
+}
+
+void SaveForWebTest::saveFormats()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    pictura::SaveForWebDialog dialog(picture());
+    child<QComboBox>(dialog, "saveForWebFormat")->setCurrentIndex(pictura::SaveForWebDialog::Gif);
+    const QVector<pictura::SlicePlacement> cells = pictura::SaveForWebDialog::buildSliceCells(
+        twoSlices(), QSize(64, 48), QSize(64, 48), QStringLiteral("fmt"), QStringLiteral("gif"));
+    const QString both = dir.filePath(QStringLiteral("both.html"));
+    QVERIFY(dialog.writeSlices(both, 0, 0, cells, QStringLiteral("fmt")));
+    QVERIFY(QFile::exists(both));
+    QVERIFY(QFile::exists(dir.filePath(QStringLiteral("images/fmt_01.gif"))));
+
+    QTemporaryDir imagesOnly;
+    QVERIFY(imagesOnly.isValid());
+    const QString imagesPath = imagesOnly.filePath(QStringLiteral("images.html"));
+    QVERIFY(dialog.writeSlices(imagesPath, 1, 0, cells, QStringLiteral("fmt")));
+    QVERIFY(!QFile::exists(imagesPath));
+    QVERIFY(QFile::exists(imagesOnly.filePath(QStringLiteral("images/fmt_01.gif"))));
+
+    QTemporaryDir htmlOnly;
+    QVERIFY(htmlOnly.isValid());
+    const QString htmlPath = htmlOnly.filePath(QStringLiteral("html.html"));
+    QVERIFY(dialog.writeSlices(htmlPath, 2, 0, cells, QStringLiteral("fmt")));
+    QVERIFY(QFile::exists(htmlPath));
+    QVERIFY(!QDir(htmlOnly.filePath(QStringLiteral("images"))).exists());
+}
+
+void SaveForWebTest::saveCancel()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("cancel.html"));
+    pictura::SaveOptimizedDialog dialog(path);
+    dialog.reject();
+    QCOMPARE(dialog.result(), int(QDialog::Rejected));
+    QVERIFY(!QFile::exists(path));
+}
+
+void SaveForWebTest::unslicedSave()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    pictura::SaveForWebDialog dialog(picture());
+    const QString path = dir.filePath(QStringLiteral("single.gif"));
+    QVERIFY(dialog.saveTo(path));
+    QVERIFY(QFile::exists(path));
+    QVERIFY(!QFile::exists(dir.filePath(QStringLiteral("single.html"))));
+    QVERIFY(!QDir(dir.filePath(QStringLiteral("images"))).exists());
 }
 
 void SaveForWebTest::menuCommand()

@@ -4,6 +4,12 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Save for Web slices — #629 implemented; verification via CI** (OpenSpec
+  change `save-for-web-slices`; capability `interop/web-slice-export` and
+  `interop/save-for-web`). Slice images plus a table/CSS emitter, 4-Up with
+  per-pane settings, the GIF/PNG-8 colour-table editor, and the five metadata
+  levels. Deferred: slice names/URL/alt and Slice Options (#543), per-slice
+  optimization, `.aco`, Web Snap, saved output settings.
 - **Whole-picture readers — #1274 complete** (OpenSpec change
   `whole-picture-readers`; capability `compositing/whole-picture-readers`).
   The `ponytail:` readers #1216 left no longer build a canvas-sized composite.

@@ -3,7 +3,8 @@ use super::*;
 use super::super::helpers_composite::buffer_to_rgba_bytes;
 use super::super::picture::picture_rgba;
 use cxx_qt::CxxQtType;
-use ffi::WebPalette;
+use cxx_qt_lib::QString;
+use ffi::{WebMetadata, WebPalette, WebSliceCell};
 use pictura_codec::{ColorReduction, Dither, Indexed, PaletteOptions};
 use pictura_core::{Layer, PsdRect};
 
@@ -137,6 +138,7 @@ pub(super) fn web_quantize(rgba: &[u8], width: i32, height: i32, palette: &WebPa
         dither: dither_of(palette.dither),
         amount: palette.amount.clamp(0, 100) as u8,
         transparency: palette.transparency,
+        mapped_transparency: palette.mapped_transparency,
         matte: [
             (palette.matte >> 16) as u8,
             (palette.matte >> 8) as u8,
@@ -186,6 +188,229 @@ pub(super) fn web_encode_wbmp(
         return Vec::new();
     };
     pictura_codec::encode_wbmp(rgba, w, h, dither_of(dither), amount.clamp(0, 100) as u8)
+}
+
+pub(super) fn web_quantize_locked(
+    rgba: &[u8],
+    width: i32,
+    height: i32,
+    palette: &WebPalette,
+    locked: &[u8],
+) -> Vec<u8> {
+    let Some((w, h)) = size(rgba, width, height) else {
+        return Vec::new();
+    };
+    let locked: Vec<[u8; 3]> = locked.as_chunks::<3>().0.to_vec();
+    let indexed = pictura_codec::quantize_locked(rgba, w, h, options_of(palette), &locked);
+    pictura_codec::pack_indexed(&indexed)
+}
+
+pub(super) fn web_quantize_custom(
+    rgba: &[u8],
+    width: i32,
+    height: i32,
+    palette: &WebPalette,
+    table: &[u8],
+) -> Vec<u8> {
+    let Some((w, h)) = size(rgba, width, height) else {
+        return Vec::new();
+    };
+    let table: Vec<[u8; 4]> = table.as_chunks::<4>().0.to_vec();
+    let indexed = pictura_codec::quantize_custom(rgba, w, h, options_of(palette), &table);
+    pictura_codec::pack_indexed(&indexed)
+}
+
+fn options_of(palette: &WebPalette) -> pictura_codec::PaletteOptions {
+    let reduction = match palette.reduction {
+        0 => pictura_codec::ColorReduction::Perceptual,
+        2 => pictura_codec::ColorReduction::Adaptive,
+        3 => pictura_codec::ColorReduction::Restrictive,
+        4 => pictura_codec::ColorReduction::BlackAndWhite,
+        5 => pictura_codec::ColorReduction::Grayscale,
+        _ => pictura_codec::ColorReduction::Selective,
+    };
+    pictura_codec::PaletteOptions {
+        reduction,
+        colors: palette.colors.clamp(2, 256) as u16,
+        dither: dither_of(palette.dither),
+        amount: palette.amount.clamp(0, 100) as u8,
+        transparency: palette.transparency,
+        mapped_transparency: palette.mapped_transparency,
+        matte: [
+            (palette.matte >> 16) as u8,
+            (palette.matte >> 8) as u8,
+            palette.matte as u8,
+        ],
+    }
+}
+
+fn packed_indexed(packed: &[u8], width: i32, height: i32) -> Option<pictura_codec::Indexed> {
+    let (w, h) = (u32::try_from(width).ok()?, u32::try_from(height).ok()?);
+    pictura_codec::unpack_indexed(packed, w, h)
+}
+
+pub(super) fn web_palette_sort(packed: &[u8], width: i32, height: i32, sort: i32) -> Vec<u8> {
+    let Some(indexed) = packed_indexed(packed, width, height) else {
+        return Vec::new();
+    };
+    let sort = match sort {
+        0 => pictura_codec::PaletteSort::Hue,
+        1 => pictura_codec::PaletteSort::Luminance,
+        _ => pictura_codec::PaletteSort::Popularity,
+    };
+    pictura_codec::pack_indexed(&pictura_codec::palette_sort(&indexed, sort))
+}
+
+pub(super) fn web_palette_delete(packed: &[u8], width: i32, height: i32, index: i32) -> Vec<u8> {
+    let Some(indexed) = packed_indexed(packed, width, height) else {
+        return Vec::new();
+    };
+    let Ok(index) = u8::try_from(index) else {
+        return Vec::new();
+    };
+    if usize::from(index) >= indexed.palette.len() {
+        return Vec::new();
+    }
+    pictura_codec::pack_indexed(&pictura_codec::palette_delete(&indexed, index))
+}
+
+pub(super) fn web_act_parse(bytes: &[u8]) -> Vec<u8> {
+    let Some(table) = pictura_codec::parse_act(bytes) else {
+        return Vec::new();
+    };
+    let mut out = Vec::with_capacity(4 + table.colors.len() * 4);
+    out.extend_from_slice(&(table.colors.len() as u16).to_be_bytes());
+    for (i, color) in table.colors.iter().enumerate() {
+        out.extend_from_slice(&[
+            color[0],
+            color[1],
+            color[2],
+            if table.transparent == Some(i as u8) {
+                0
+            } else {
+                255
+            },
+        ]);
+    }
+    let clear = table.transparent.map_or(0u16, |index| u16::from(index) + 1);
+    out.extend_from_slice(&clear.to_be_bytes());
+    out
+}
+
+pub(super) fn web_act_encode(packed: &[u8]) -> Vec<u8> {
+    let Some(n) = packed
+        .get(..2)
+        .map(|b| usize::from(u16::from_be_bytes([b[0], b[1]])))
+    else {
+        return Vec::new();
+    };
+    if n == 0 || packed.len() != 4 + n * 4 {
+        return Vec::new();
+    }
+    let table = pictura_codec::ColorTable {
+        colors: packed[2..2 + n * 4]
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| [c[0], c[1], c[2]])
+            .collect(),
+        transparent: {
+            let clear = u16::from_be_bytes([packed[2 + n * 4], packed[2 + n * 4 + 1]]);
+            (clear > 0 && clear <= n as u16).then(|| (clear - 1) as u8)
+        },
+    };
+    pictura_codec::encode_act(&table)
+}
+
+pub(super) fn web_metadata(view: &PictureView) -> WebMetadata {
+    let Some(doc) = view.rust().session.doc.as_ref() else {
+        return WebMetadata {
+            exif: Vec::new(),
+            iptc: Vec::new(),
+            xmp: Vec::new(),
+        };
+    };
+    let metadata = pictura_codec::raster_metadata(doc);
+    WebMetadata {
+        exif: metadata.exif.unwrap_or_default(),
+        iptc: metadata.iptc.unwrap_or_default(),
+        xmp: metadata.xmp.unwrap_or_default(),
+    }
+}
+
+pub(super) fn web_embed_metadata(
+    bytes: &[u8],
+    suffix: &QString,
+    raw: &WebMetadata,
+    level: i32,
+) -> Vec<u8> {
+    let raw = pictura_codec::WebMetadata {
+        exif: (!raw.exif.is_empty()).then(|| raw.exif.clone()),
+        iptc: (!raw.iptc.is_empty()).then(|| raw.iptc.clone()),
+        xmp: (!raw.xmp.is_empty()).then(|| raw.xmp.clone()),
+    };
+    pictura_codec::embed_web_metadata(
+        bytes,
+        &suffix.to_string(),
+        &raw,
+        pictura_codec::MetadataLevel::from_code(level),
+    )
+    .unwrap_or_default()
+}
+
+pub(super) fn web_export_slices(view: &PictureView) -> Vec<i32> {
+    let Some(doc) = view.rust().session.doc.as_ref() else {
+        return Vec::new();
+    };
+    pictura_render::resolve_export_slices(doc)
+        .into_iter()
+        .flat_map(|slice| {
+            [
+                slice.rect.left,
+                slice.rect.top,
+                slice.rect.width(),
+                slice.rect.height(),
+                slice.number as i32,
+                slice.user_index.map_or(-1, |index| index as i32),
+            ]
+        })
+        .collect()
+}
+
+pub(super) fn web_slice_html(
+    cells: Vec<WebSliceCell>,
+    canvas_width: i32,
+    canvas_height: i32,
+    title: &QString,
+    image_dir: &QString,
+    layout: i32,
+) -> QString {
+    let cells: Vec<pictura_codec::SliceCell> = cells
+        .into_iter()
+        .map(|cell| pictura_codec::SliceCell {
+            name: cell.name,
+            x: cell.x.max(0) as u32,
+            y: cell.y.max(0) as u32,
+            width: cell.width.max(0) as u32,
+            height: cell.height.max(0) as u32,
+        })
+        .collect();
+    let title = title.to_string();
+    let image_dir = image_dir.to_string();
+    QString::from(pictura_codec::slice_html(
+        canvas_width.max(0) as u32,
+        canvas_height.max(0) as u32,
+        &cells,
+        &pictura_codec::SliceHtmlOptions {
+            title: &title,
+            image_dir: &image_dir,
+            layout: if layout == 1 {
+                pictura_codec::SliceLayout::Css
+            } else {
+                pictura_codec::SliceLayout::Table
+            },
+        },
+    ))
 }
 
 #[cfg(test)]

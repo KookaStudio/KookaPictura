@@ -8,11 +8,22 @@
 //! table linearly; the reduction methods, dithering, interlacing, and the
 //! hashed LZW dictionary are new here.
 
+mod act;
 mod gif;
+pub mod html;
+mod metadata;
+mod palette;
 mod quantize;
 
+pub use act::{encode_act, parse_act, ColorTable};
 pub use gif::encode_gif;
-pub use quantize::{quantize, web_safe_palette};
+pub use html::{slice_html, SliceCell, SliceHtmlOptions, SliceLayout};
+pub use metadata::{embed_web_metadata, sfw_metadata, MetadataLevel, WebMetadata};
+pub use palette::{
+    delete as palette_delete, edit as palette_edit, map_transparency as palette_map_transparency,
+    pack as pack_indexed, sort as palette_sort, unpack as unpack_indexed, PaletteSort,
+};
+pub use quantize::{quantize, quantize_custom, quantize_locked, web_safe_palette};
 
 /// The Color Reduction methods. Perceptual, Selective, and Adaptive are all
 /// median cut, differing in how a box is chosen for splitting: Adaptive by
@@ -46,6 +57,8 @@ pub enum Dither {
 /// dither and its amount (0–100), and transparency. With `transparency` a
 /// pixel under half opacity becomes the transparent entry and the rest are
 /// laid over `matte`; without it every pixel is laid over `matte`.
+/// `mapped_transparency` extends a custom table's clear entry to opaque pixels
+/// of that colour, which is what the Color Table's Map to Transparency does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PaletteOptions {
     pub reduction: ColorReduction,
@@ -53,6 +66,7 @@ pub struct PaletteOptions {
     pub dither: Dither,
     pub amount: u8,
     pub transparency: bool,
+    pub mapped_transparency: bool,
     pub matte: [u8; 3],
 }
 
@@ -83,6 +97,7 @@ pub fn encode_wbmp(rgba: &[u8], width: u32, height: u32, dither: Dither, amount:
         dither,
         amount,
         transparency: false,
+        mapped_transparency: false,
         matte: [255, 255, 255],
     };
     let indexed = quantize(rgba, width, height, options);

@@ -69,7 +69,7 @@ Deeper technical status for PSD/PSB lives in
 - [x] Native CMYK and 16-bit PDF and EPS rendering, Images mode on encrypted
       PDFs, and inline images (#627)
 - [ ] GIF-via-Indexed on save, and Save a Copy (#628)
-- [ ] The Save for Web slice HTML and CSS emitter, 2-Up and 4-Up, the
+- [x] The Save for Web slice HTML and CSS emitter, 2-Up and 4-Up, the
       colour-table editor, and the metadata menu (#629)
 - [ ] Data Sets As Files, Zoomify, Render Video, and Paths to Illustrator
       (#630)

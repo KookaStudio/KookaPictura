@@ -22,22 +22,7 @@ pub fn web_safe_palette() -> Vec<[u8; 3]> {
 pub fn quantize(rgba: &[u8], width: u32, height: u32, options: PaletteOptions) -> Indexed {
     let n = (width as usize) * (height as usize);
     let colors = usize::from(options.colors.clamp(2, 256));
-    // Lay every pixel over the matte; with transparency, the mostly clear
-    // ones become the transparent entry instead.
-    let mut transparent = vec![false; n];
-    let mut rgb = Vec::with_capacity(n);
-    for (i, px) in rgba.as_chunks::<4>().0.iter().take(n).enumerate() {
-        if options.transparency && px[3] < 128 {
-            transparent[i] = true;
-        }
-        let a = f32::from(px[3]) / 255.0;
-        let over = |c: u8, m: u8| f32::from(c) * a + f32::from(m) * (1.0 - a);
-        rgb.push([
-            over(px[0], options.matte[0]),
-            over(px[1], options.matte[1]),
-            over(px[2], options.matte[2]),
-        ]);
-    }
+    let (rgb, transparent) = laid_over(rgba, n, options);
     let has_clear = transparent.iter().any(|&t| t);
     let budget = if has_clear { colors - 1 } else { colors }.max(1);
     let mut palette: Vec<[u8; 3]> = match options.reduction {
@@ -68,6 +53,191 @@ pub fn quantize(rgba: &[u8], width: u32, height: u32, options: PaletteOptions) -
         palette: out,
         indices,
     }
+}
+
+/// Lay every pixel over the matte; with transparency the mostly clear ones are
+/// marked for the transparent entry.
+fn laid_over(rgba: &[u8], n: usize, options: PaletteOptions) -> (Vec<[f32; 3]>, Vec<bool>) {
+    let mut transparent = vec![false; n];
+    let mut rgb = Vec::with_capacity(n);
+    for (i, px) in rgba.as_chunks::<4>().0.iter().take(n).enumerate() {
+        if options.transparency && px[3] < 128 {
+            transparent[i] = true;
+        }
+        let a = f32::from(px[3]) / 255.0;
+        let over = |c: u8, m: u8| f32::from(c) * a + f32::from(m) * (1.0 - a);
+        rgb.push([
+            over(px[0], options.matte[0]),
+            over(px[1], options.matte[1]),
+            over(px[2], options.matte[2]),
+        ]);
+    }
+    (rgb, transparent)
+}
+
+/// Reduce to the active reduction plus `locked` colours, which survive and
+/// count against the table. A locked list longer than `Colors` raises the
+/// effective size up to 256.
+pub fn quantize_locked(
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    options: PaletteOptions,
+    locked: &[[u8; 3]],
+) -> Indexed {
+    let clear_pixels = options.transparency
+        && rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .take(width as usize * height as usize)
+            .any(|px| px[3] < 128);
+    // The clear slot counts against the table. A table already full of locked
+    // colours keeps all 256 of them and loses transparency instead.
+    let has_clear = clear_pixels && locked.len() < 256;
+    let effective = usize::from(options.colors.clamp(2, 256))
+        .max(locked.len() + usize::from(clear_pixels))
+        .min(256);
+    let opaque_budget = effective.saturating_sub(usize::from(has_clear)).max(1);
+    let mut reduced = options;
+    reduced.transparency = has_clear;
+    reduced.colors = opaque_budget.min(256) as u16;
+    let base = quantize(rgba, width, height, reduced);
+    let clear = base
+        .palette
+        .iter()
+        .find(|c| c[3] == 0)
+        .map(|c| [c[0], c[1], c[2]]);
+    let mut palette: Vec<[u8; 3]> = Vec::new();
+    for color in locked {
+        if palette.len() < 256 && !palette.contains(color) {
+            palette.push(*color);
+        }
+    }
+    for entry in &base.palette {
+        if entry[3] == 0 {
+            continue;
+        }
+        let color = [entry[0], entry[1], entry[2]];
+        if palette.len() < 256 && !palette.contains(&color) {
+            palette.push(color);
+        }
+    }
+    palette.truncate(opaque_budget);
+    let mut out: Vec<[u8; 4]> = palette.iter().map(|c| [c[0], c[1], c[2], 255]).collect();
+    let clear_index = if let Some(clear) = clear {
+        out.push([clear[0], clear[1], clear[2], 0]);
+        (out.len() - 1) as u8
+    } else {
+        0
+    };
+    let mut cache: HashMap<[u8; 3], u8> = HashMap::new();
+    let indices = base
+        .indices
+        .iter()
+        .map(|&index| {
+            let entry = base.palette[usize::from(index)];
+            if entry[3] == 0 {
+                return clear_index;
+            }
+            let key = [entry[0], entry[1], entry[2]];
+            *cache
+                .entry(key)
+                .or_insert_with(|| nearest_index(key, &palette))
+        })
+        .collect();
+    Indexed {
+        width,
+        height,
+        palette: out,
+        indices,
+    }
+}
+
+/// Reduce to a caller-supplied table (the `.act` path) by nearest entry. With
+/// transparency on, clear pixels and opaque pixels of the mapped colour use the
+/// table's transparent entry; otherwise the transparent entry is written
+/// opaque.
+pub fn quantize_custom(
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    options: PaletteOptions,
+    table: &[[u8; 4]],
+) -> Indexed {
+    let n = (width as usize) * (height as usize);
+    let (rgb, transparent) = laid_over(rgba, n, options);
+    let mut palette = table.to_vec();
+    if palette.is_empty() {
+        palette.push([0, 0, 0, 255]);
+    }
+    let mut clear = if options.transparency {
+        palette.iter().position(|c| c[3] == 0)
+    } else {
+        None
+    };
+    if !options.transparency {
+        for color in &mut palette {
+            color[3] = 255;
+        }
+    }
+    if clear.is_none() {
+        clear = palette.iter().position(|c| c[3] == 0);
+    }
+    let entries: Vec<(usize, [u8; 3])> = palette
+        .iter()
+        .enumerate()
+        .filter(|(i, c)| c[3] != 0 || (options.mapped_transparency && Some(*i) == clear))
+        .map(|(i, c)| (i, [c[0], c[1], c[2]]))
+        .collect();
+    let mut cache: HashMap<[u8; 3], u8> = HashMap::new();
+    let indices = (0..n)
+        .map(|i| {
+            if transparent[i] {
+                if let Some(clear) = clear {
+                    return clear as u8;
+                }
+            }
+            let key = rgb[i].map(|v| v.round().clamp(0.0, 255.0) as u8);
+            *cache.entry(key).or_insert_with(|| {
+                let mut best = (u32::MAX, 0u8);
+                for (index, color) in &entries {
+                    let d: u32 = (0..3)
+                        .map(|ch| {
+                            let e = i32::from(key[ch]) - i32::from(color[ch]);
+                            (e * e) as u32
+                        })
+                        .sum();
+                    if d < best.0 {
+                        best = (d, *index as u8);
+                    }
+                }
+                best.1
+            })
+        })
+        .collect();
+    Indexed {
+        width,
+        height,
+        palette,
+        indices,
+    }
+}
+
+fn nearest_index(color: [u8; 3], palette: &[[u8; 3]]) -> u8 {
+    let mut best = (u32::MAX, 0u8);
+    for (i, p) in palette.iter().enumerate() {
+        let d: u32 = (0..3)
+            .map(|ch| {
+                let e = i32::from(color[ch]) - i32::from(p[ch]);
+                (e * e) as u32
+            })
+            .sum();
+        if d < best.0 {
+            best = (d, i as u8);
+        }
+    }
+    best.1
 }
 
 /// Median cut over the distinct colours (weighted by count) of the opaque
@@ -266,6 +436,7 @@ mod tests {
             dither,
             amount: 100,
             transparency: true,
+            mapped_transparency: false,
             matte: [255, 255, 255],
         }
     }
@@ -321,6 +492,125 @@ mod tests {
         assert!(quantize(&ramp(), 64, 1, opaque)
             .transparent_index()
             .is_none());
+    }
+
+    #[test]
+    fn locked_palette_survives_reduction() {
+        let rgba = ramp();
+        let locked = [[12, 200, 34]];
+        let q = quantize_locked(
+            &rgba,
+            64,
+            1,
+            opts(ColorReduction::Selective, 16, Dither::None),
+            &locked,
+        );
+        assert!(q.palette.iter().any(|c| c[..3] == locked[0]));
+        assert!(q.palette.len() <= 16, "{}", q.palette.len());
+        assert!(q.indices.iter().all(|&i| usize::from(i) < q.palette.len()));
+    }
+
+    #[test]
+    fn locked_palette_over_budget() {
+        let rgba: Vec<u8> = (0..64u32)
+            .flat_map(|i| [(255 - i * 4) as u8, 0, (i * 4) as u8, 255])
+            .collect();
+        let locked: Vec<[u8; 3]> = (0..20).map(|i| [i as u8, (i * 7) as u8, 9]).collect();
+        let q = quantize_locked(
+            &rgba,
+            64,
+            1,
+            PaletteOptions {
+                transparency: false,
+                ..opts(ColorReduction::Selective, 16, Dither::None)
+            },
+            &locked,
+        );
+        assert_eq!(q.palette.len(), 20);
+        assert!(locked
+            .iter()
+            .all(|c| q.palette.iter().any(|p| p[..3] == *c)));
+    }
+
+    #[test]
+    fn locked_palette_reserves_the_clear_slot() {
+        let locked: Vec<[u8; 3]> = (0..255u16).map(|i| [i as u8, (i * 7) as u8, 9]).collect();
+        let q = quantize_locked(
+            &ramp(),
+            64,
+            1,
+            opts(ColorReduction::Selective, 16, Dither::None),
+            &locked,
+        );
+        assert_eq!(q.palette.len(), 256);
+        let clear = q.transparent_index().expect("a transparent entry");
+        assert_eq!(usize::from(clear), 255);
+        assert!(locked
+            .iter()
+            .all(|c| q.palette.iter().any(|p| p[..3] == *c)));
+    }
+
+    #[test]
+    fn locked_palette_full_drops_transparency() {
+        let rgba = [9u8, 9, 9, 0, 1, 2, 3, 255];
+        let locked: Vec<[u8; 3]> = (0..=255u16).map(|i| [i as u8, (i * 7) as u8, 9]).collect();
+        let q = quantize_locked(
+            &rgba,
+            2,
+            1,
+            opts(ColorReduction::Selective, 256, Dither::None),
+            &locked,
+        );
+        assert_eq!(q.palette.len(), 256);
+        assert!(q.transparent_index().is_none());
+        assert!(locked
+            .iter()
+            .all(|c| q.palette.iter().any(|p| p[..3] == *c)));
+        assert!(q.indices.iter().all(|&i| usize::from(i) < q.palette.len()));
+    }
+
+    #[test]
+    fn custom_palette_maps() {
+        // Red, blue, a clear pixel, then an opaque pixel of the clear entry's
+        // colour: the last maps to the transparent entry too.
+        let rgba = [255u8, 0, 0, 255, 0, 0, 255, 255, 0, 0, 0, 0, 9, 9, 9, 255];
+        let table = [[255u8, 0, 0, 255], [0, 0, 255, 255], [9, 9, 9, 0]];
+        let mapped = PaletteOptions {
+            mapped_transparency: true,
+            ..opts(ColorReduction::Selective, 3, Dither::None)
+        };
+        let q = quantize_custom(&rgba, 4, 1, mapped, &table);
+        assert_eq!(q.palette, table);
+        assert_eq!(q.indices, vec![0, 1, 2, 2]);
+        let opaque = PaletteOptions {
+            transparency: false,
+            ..opts(ColorReduction::Selective, 3, Dither::None)
+        };
+        let q = quantize_custom(&rgba[..12], 3, 1, opaque, &table);
+        assert!(q.palette.iter().all(|c| c[3] == 255));
+        assert!(q.indices.iter().all(|&i| i != 2));
+    }
+
+    #[test]
+    fn custom_clear_entry_does_not_catch_opaque_white() {
+        // The clear entry carries the white matte colour; editing an ordinary
+        // swatch must not let opaque white pixels fall into transparency.
+        let rgba = [255u8, 255, 255, 255, 255, 255, 255, 255];
+        let table = [[255u8, 0, 0, 255], [9, 9, 9, 255], [255, 255, 255, 0]];
+        let q = quantize_custom(
+            &rgba,
+            2,
+            1,
+            opts(ColorReduction::Selective, 3, Dither::None),
+            &table,
+        );
+        assert!(q.indices.iter().all(|&i| i != 2));
+        let mapped = PaletteOptions {
+            mapped_transparency: true,
+            ..opts(ColorReduction::Selective, 3, Dither::None)
+        };
+        let q = quantize_custom(&rgba, 2, 1, mapped, &table);
+        assert_eq!(q.indices, vec![2, 2]);
     }
 
     #[test]

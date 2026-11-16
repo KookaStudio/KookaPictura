@@ -71,6 +71,7 @@ fn magick_decodes_our_gifs_exactly() {
         dither: Dither::Diffusion,
         amount: 100,
         transparency: true,
+        mapped_transparency: false,
         matte: [255, 255, 255],
     };
     let indexed = quantize(&rgba, w, h, options);
