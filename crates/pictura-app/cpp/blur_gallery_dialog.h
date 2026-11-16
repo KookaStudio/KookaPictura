@@ -145,6 +145,9 @@ private:
     void syncControls();
     void effectsEdited();
     void scheduleRender();
+    // The zoom field shows the canvas's live percentage, unless it is being
+    // edited.
+    void updateZoomLabel();
     // A drag or held slider: preview the draft size.
     bool interacting() const;
     void render();
@@ -167,6 +170,9 @@ private:
     BlurGalleryMode active_ = BlurGalleryMode::Field;
     BlurGalleryCanvas* canvas_ = nullptr;
     QLabel* hint_ = nullptr;
+    // The bottom-left zoom field: an editable percentage box with CS6's
+    // presets and the named views.
+    QComboBox* zoomCombo_ = nullptr;
 
     // Tilt-Shift's row.
     QDoubleSpinBox* distortionSpin_ = nullptr;

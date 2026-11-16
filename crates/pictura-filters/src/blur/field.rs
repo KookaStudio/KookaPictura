@@ -3,10 +3,11 @@
 //!
 //! Adobe's Blur Gallery shaders are closed; this is the documented model — a
 //! per-pixel radius field from inverse-square-distance pin weights, applied
-//! through a box-blur level pyramid, then the bokeh lift and re-injected
-//! grain. The blur runs over every plane it is given, alpha included, so a
-//! layer's edges feather into transparency as with the other blurs; the
-//! effects passes touch the colour planes only.
+//! through a box-blur level pyramid. The bokeh lift runs on the source colour
+//! before that blur, so a brightened edge cannot outrun its interior and leave
+//! a rim; the grain is re-injected after it. The blur runs over every plane it
+//! is given, alpha included, so a layer's edges feather into transparency as
+//! with the other blurs; the effects passes touch the colour planes only.
 //!
 //! ponytail: the doc's inferred disc/bokeh gather is approximated by blending
 //! two levels of a Gaussian-like box pyramid. A per-pixel disc gather costs
@@ -150,9 +151,9 @@ pub(super) fn field_radius(pins: &[BlurPin], w: f64, h: f64, x: f64, y: f64) -> 
     weighted / weight_sum
 }
 
-/// The Blur Gallery's shared variable blur: [`pyramid_blur`], then the Blur
-/// Effects and Noise passes, weighted by `radius / max_radius`. Callers
-/// validate first; a non-positive `max_radius` is a no-op.
+/// The Blur Gallery's shared variable blur: [`pyramid_blur`], then the Noise
+/// pass, weighted by `radius / max_radius`. Callers validate first; a
+/// non-positive `max_radius` is a no-op.
 pub(super) fn variable_blur(
     buf: &mut PixelBuffer,
     max_radius: f64,
@@ -160,19 +161,22 @@ pub(super) fn variable_blur(
     noise: &BlurNoise,
     radius_at: impl Fn(f64, f64) -> f64 + Sync,
 ) {
-    if let Some(weights) = pyramid_blur(buf, max_radius, radius_at) {
-        apply_effects(buf, &weights, bokeh, noise);
+    if let Some(weights) = pyramid_blur(buf, max_radius, bokeh, radius_at) {
+        apply_noise(buf, &weights, noise);
     }
 }
 
-/// The variable blur alone: `radius_at` maps a pixel centre (buffer pixels)
-/// to a blur radius in `0..=max_radius`, which picks and blends the two
-/// bracketing levels of a box-blur pyramid. Returns each pixel's normalized
-/// weight (0 sharp, 255 at `max_radius`) for [`apply_effects`], or `None`
+/// The variable blur: `radius_at` maps a pixel centre (buffer pixels) to a
+/// blur radius in `0..=max_radius`, which picks and blends the two bracketing
+/// levels of a box-blur pyramid. The Blur Effects lift the source colour
+/// before the blur, gated by the same field weight, so a blurred edge keeps
+/// its shape instead of gaining a bright rim. Returns each pixel's normalized
+/// weight (0 sharp, 255 at `max_radius`) for [`apply_noise`], or `None`
 /// (buffer untouched) for a non-positive `max_radius`.
 pub(super) fn pyramid_blur(
     buf: &mut PixelBuffer,
     max_radius: f64,
+    bokeh: &BokehParams,
     radius_at: impl Fn(f64, f64) -> f64 + Sync,
 ) -> Option<Vec<u8>> {
     if max_radius <= 0.0 {
@@ -185,6 +189,7 @@ pub(super) fn pyramid_blur(
     let boxes = level_boxes(max_radius);
     let nominal = level_nominals(&boxes);
     let (brackets, weights) = bracket_map(w, h, &nominal, max_radius, radius_at);
+    apply_bokeh(buf, &weights, bokeh);
     let src = buf.data.clone();
     for c in 0..planes {
         let base = c * n;
@@ -269,18 +274,73 @@ pub(super) fn validate_noise(noise: &BlurNoise) -> Result<(), FilterError> {
     Ok(())
 }
 
-/// The Blur Effects and Noise passes over the blurred pixels: the field weight
-/// gates both, so sharp pixels never change. Runs on interleaved pixels, then
-/// scatters back to the planes.
-pub(super) fn apply_effects(
-    buf: &mut PixelBuffer,
-    weights: &[u8],
-    bokeh: &BokehParams,
-    noise: &BlurNoise,
-) {
-    let bokeh_on = bokeh.enabled && (bokeh.light_bokeh > 0.0 || bokeh.bokeh_color > 0.0);
-    let noise_on = noise.enabled && noise.amount > 0.0;
-    if !bokeh_on && !noise_on {
+/// The Blur Effects' Light Bokeh and Bokeh Color over the source colour
+/// planes, before the variable blur. The field weight gates them, so sharp
+/// pixels never change; the soft Light Range window tapers them to zero at
+/// the tonal bounds. Applying them before the blur keeps a blurred edge the
+/// same shape as the unlit blur, so it cannot gain a bright rim. Runs on
+/// interleaved pixels, then scatters back to the planes.
+pub(super) fn apply_bokeh(buf: &mut PixelBuffer, weights: &[u8], bokeh: &BokehParams) {
+    if !bokeh.enabled || (bokeh.light_bokeh <= 0.0 && bokeh.bokeh_color <= 0.0) {
+        return;
+    }
+    let n = buf.pixel_count();
+    if (buf.channels as usize).min(4) < 3 || n == 0 {
+        return;
+    }
+    let (low, high) = bokeh.light_range;
+    let pixels: Vec<[u8; 3]> = (0..n)
+        .into_par_iter()
+        .map(|i| {
+            let (mut r, mut g, mut b) = (
+                f64::from(buf.data[i]),
+                f64::from(buf.data[n + i]),
+                f64::from(buf.data[2 * n + i]),
+            );
+            let weight = f64::from(weights[i]) / 255.0;
+            if weight <= 0.0 {
+                return [r as u8, g as u8, b as u8];
+            }
+            let luma = 0.299 * r + 0.587 * g + 0.114 * b;
+            let gate = light_range_gate(luma, f64::from(low), f64::from(high));
+            if gate <= 0.0 {
+                return [r as u8, g as u8, b as u8];
+            }
+            // A doubled multiplicative brighten, so a bright, well-blurred
+            // pixel blooms brilliantly toward white as the reference shows.
+            let lift = bokeh.light_bokeh / 100.0 * (luma / 255.0) * weight * gate;
+            if lift > 0.0 {
+                let scale = 1.0 + 2.0 * lift;
+                r *= scale;
+                g *= scale;
+                b *= scale;
+            }
+            let blown = r > 250.0 && g > 250.0 && b > 250.0;
+            let tint = bokeh.bokeh_color / 100.0 * weight * gate;
+            if tint > 0.0 && !blown {
+                let luma = 0.299 * r + 0.587 * g + 0.114 * b;
+                let spread = 1.0 + tint;
+                r = luma + (r - luma) * spread;
+                g = luma + (g - luma) * spread;
+                b = luma + (b - luma) * spread;
+            }
+            [to_u8(r), to_u8(g), to_u8(b)]
+        })
+        .collect();
+    for c in 0..3 {
+        let plane = c * n;
+        buf.data[plane..plane + n]
+            .par_iter_mut()
+            .zip(pixels.par_iter())
+            .for_each(|(out, pixel)| *out = pixel[c]);
+    }
+}
+
+/// The Noise pass over the blurred pixels: the field weight gates it, so
+/// sharp pixels never change. Runs on interleaved pixels, then scatters back
+/// to the planes.
+pub(super) fn apply_noise(buf: &mut PixelBuffer, weights: &[u8], noise: &BlurNoise) {
+    if !(noise.enabled && noise.amount > 0.0) {
         return;
     }
     let n = buf.pixel_count();
@@ -294,35 +354,7 @@ pub(super) fn apply_effects(
                 f64::from(buf.data[2 * n + i]),
             );
             let weight = f64::from(weights[i]) / 255.0;
-            if weight <= 0.0 {
-                return [r as u8, g as u8, b as u8];
-            }
-            if bokeh_on {
-                let luma = 0.299 * r + 0.587 * g + 0.114 * b;
-                let (low, high) = bokeh.light_range;
-                if luma >= f64::from(low) && luma <= f64::from(high) {
-                    // A doubled multiplicative brighten, so a bright,
-                    // well-blurred pixel blooms brilliantly toward white as
-                    // the reference shows.
-                    let lift = bokeh.light_bokeh / 100.0 * (luma / 255.0) * weight;
-                    if lift > 0.0 {
-                        let scale = 1.0 + 2.0 * lift;
-                        r *= scale;
-                        g *= scale;
-                        b *= scale;
-                    }
-                    let blown = r > 250.0 && g > 250.0 && b > 250.0;
-                    let tint = bokeh.bokeh_color / 100.0 * weight;
-                    if tint > 0.0 && !blown {
-                        let luma = 0.299 * r + 0.587 * g + 0.114 * b;
-                        let spread = 1.0 + tint;
-                        r = luma + (r - luma) * spread;
-                        g = luma + (g - luma) * spread;
-                        b = luma + (b - luma) * spread;
-                    }
-                }
-            }
-            if noise_on {
+            if weight > 0.0 {
                 let luma = 0.299 * r + 0.587 * g + 0.114 * b;
                 let gate = (1.0 - noise.highlights / 100.0 * luma / 255.0).clamp(0.0, 1.0);
                 let amplitude = noise.amount / 100.0 * 127.5 * weight * gate;
@@ -347,6 +379,24 @@ pub(super) fn apply_effects(
             .zip(pixels.par_iter())
             .for_each(|(out, pixel)| *out = pixel[c]);
     }
+}
+
+/// A soft tonal window: 0 at both bounds, 1 across the middle, a smoothstep
+/// taper a quarter of the range wide on each side.
+fn light_range_gate(luma: f64, low: f64, high: f64) -> f64 {
+    if high <= low {
+        return 0.0;
+    }
+    let feather = ((high - low) * 0.25).max(1.0);
+    smoothstep(low, low + feather, luma) * (1.0 - smoothstep(high - feather, high, luma))
+}
+
+fn smoothstep(edge0: f64, edge1: f64, x: f64) -> f64 {
+    if edge1 <= edge0 {
+        return if x >= edge0 { 1.0 } else { 0.0 };
+    }
+    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
 }
 
 fn to_u8(value: f64) -> u8 {

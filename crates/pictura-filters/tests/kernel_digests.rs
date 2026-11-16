@@ -689,14 +689,14 @@ fn row_parallel_kernels_keep_their_serial_bytes() {
         ("radial spin", 0x4c62_de8a_06d5_6282),
         ("radial zoom", 0x356d_0a67_96e5_c3b5),
         ("lens blur", 0x55cd_8bd2_19be_c27a),
-        ("field blur", 0x28df_9133_325d_d4e6),
-        ("iris blur", 0xc3bb_434e_14ef_8186),
-        ("tilt-shift", 0x0c98_ef52_c090_cca3),
-        ("blur gallery", 0x4ab9_0f60_c404_69f0),
+        ("field blur", 0xd799_07a0_a13f_1edd),
+        ("iris blur", 0xa10d_94ce_ea25_6aaa),
+        ("tilt-shift", 0x1efe_20f1_863c_4792),
+        ("blur gallery", 0x74a6_ae6d_874b_4cde),
         ("path blur", 0x5de5_0e6d_9851_2588),
-        ("blur gallery paths", 0xfbc3_9ea9_6582_f8b9),
+        ("blur gallery paths", 0x9ec3_23dc_0b43_823f),
         ("spin blur", 0xd4c7_91b5_baea_e074),
-        ("blur gallery spins", 0xac82_6ac3_4d1e_5d6b),
+        ("blur gallery spins", 0xfff7_d98c_f3af_436e),
     ];
     let source = picture();
     for ((name, filter), (want_name, want)) in kernels().into_iter().zip(expected) {

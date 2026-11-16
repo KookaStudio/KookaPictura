@@ -19,7 +19,7 @@ use pictura_core::PixelBuffer;
 use rayon::prelude::*;
 
 use super::field::{
-    apply_effects, pyramid_blur, validate_bokeh, validate_noise, BlurNoise, BokehParams,
+    apply_noise, pyramid_blur, validate_bokeh, validate_noise, BlurNoise, BokehParams,
     MAX_FIELD_PINS, MAX_FIELD_RADIUS,
 };
 use crate::{validate, FilterError};
@@ -93,13 +93,13 @@ pub fn tilt_shift(
     let max_pin = pins.iter().map(|pin| pin.blur).fold(0.0f64, f64::max);
     let (w, h) = (f64::from(buf.width), f64::from(buf.height));
     let field = TiltField::new(pins, w, h);
-    let Some(weights) = pyramid_blur(buf, max_pin, |x, y| field.sample(x, y).0) else {
+    let Some(weights) = pyramid_blur(buf, max_pin, bokeh, |x, y| field.sample(x, y).0) else {
         return Ok(());
     };
     if field.distorts() {
         smear(buf, &field);
     }
-    apply_effects(buf, &weights, bokeh, noise);
+    apply_noise(buf, &weights, noise);
     Ok(())
 }
 

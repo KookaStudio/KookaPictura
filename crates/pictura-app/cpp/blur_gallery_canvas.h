@@ -17,6 +17,7 @@
 // The dialog handles `H` (hide the markers) and Delete.
 
 #include <QtCore/QList>
+#include <QtCore/QPoint>
 #include <QtCore/QPointF>
 #include <QtCore/QSize>
 #include <QtCore/QSizeF>
@@ -24,6 +25,9 @@
 #include <QtWidgets/QWidget>
 
 class QPainter;
+class QResizeEvent;
+class QScrollBar;
+class QWheelEvent;
 
 namespace pictura {
 
@@ -69,7 +73,21 @@ public:
     const QImage& image() const { return image_; }
     // The document's size, so a blur-ring drag moves the amount by document
     // pixels however the proxy is fitted to the widget.
-    void setDocumentSize(const QSize& size) { documentSize_ = size; }
+    void setDocumentSize(const QSize& size);
+    // Screen pixels per document pixel. The opening view fits the picture; the
+    // dialog's zoom field and the wheel change it. Zooming only changes the
+    // preview placement, never the pin fractions or amounts OK commits.
+    double zoom() const;
+    void setZoom(double zoom);
+    void zoomBy(double factor);
+    // Zoom keeping the document point under `anchor` in place.
+    void zoomAbout(double zoom, const QPointF& anchor);
+    double fitZoom() const;
+    void fitInView();
+    // The picture's placement in widget coordinates. Scrollbars appear when a
+    // zoomed picture overflows the preview; the wheel zooms and the middle
+    // button pans.
+    QRectF pictureRect() const { return imageRect(); }
     void setMode(BlurGalleryMode mode);
     // Edit another effect's pin list (owned by the dialog), selecting
     // `selected`.
@@ -101,6 +119,8 @@ signals:
     void dragFinished();
     // Delete or Backspace on the canvas; the dialog removes the pin.
     void deleteRequested();
+    // The wheel or a zoom control changed the preview zoom.
+    void zoomChanged();
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -109,10 +129,18 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
     QSize sizeHint() const override;
 
 private:
     QRectF imageRect() const;
+    // The widget's picture room: the margins removed, independent of the
+    // scrollbars, so a fit view never changes as they show or hide.
+    QRectF roomRect() const;
+    QSizeF documentPixels() const;
+    // Re-range and place the scrollbars for the current zoom and size.
+    void updateScrollBars();
     QPointF toWidget(const QPointF& fraction) const;
     QPointF toFraction(const QPointF& widget) const;
     // Where a pin's marker sits: a spin's rotation centre, else its position.
@@ -163,6 +191,16 @@ private:
     QList<BlurGalleryPin>* pins_ = nullptr;
     QImage image_;
     QSize documentSize_;
+    // The preview zoom in screen pixels per document pixel; 0 fits the picture
+    // to the widget, so the opening view follows a resize.
+    double zoom_ = 0.0;
+    // The preview's scrollbars, shown when the zoomed picture overflows the
+    // room; their values are the pan.
+    QScrollBar* hbar_ = nullptr;
+    QScrollBar* vbar_ = nullptr;
+    bool panning_ = false;
+    QPointF panStart_;
+    QPoint panValues_;
     int selected_ = 0;
     int selectedPoint_ = -1;
     bool building_ = false;

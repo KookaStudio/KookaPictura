@@ -18,7 +18,7 @@
 use pictura_core::PixelBuffer;
 use rayon::prelude::*;
 
-use super::field::{apply_effects, validate_noise, BlurNoise, BokehParams, MAX_FIELD_PINS};
+use super::field::{apply_noise, validate_noise, BlurNoise, MAX_FIELD_PINS};
 use super::tilt::bilinear;
 use crate::{validate, FilterError};
 
@@ -98,17 +98,10 @@ pub fn path_blur(
     validate_motion(motion)?;
     validate_noise(noise)?;
     if let Some(weights) = path_pass(buf, paths, motion) {
-        apply_effects(buf, &weights, &BOKEH_OFF, noise);
+        apply_noise(buf, &weights, noise);
     }
     Ok(())
 }
-
-pub(super) const BOKEH_OFF: BokehParams = BokehParams {
-    enabled: false,
-    light_bokeh: 0.0,
-    bokeh_color: 0.0,
-    light_range: (0, 255),
-};
 
 /// The gather alone. Returns each pixel's trail length as a weight (0 sharp,
 /// 255 at the longest trail) for the effects passes, or `None` (buffer

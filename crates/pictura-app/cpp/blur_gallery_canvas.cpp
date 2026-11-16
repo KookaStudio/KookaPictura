@@ -10,6 +10,9 @@
 #include <QtGui/QPainter>
 #include <QtGui/QPainterPath>
 #include <QtGui/QPolygonF>
+#include <QtGui/QResizeEvent>
+#include <QtGui/QWheelEvent>
+#include <QtWidgets/QScrollBar>
 
 #include <algorithm>
 #include <cmath>
@@ -33,6 +36,12 @@ const double kMinIrisRadius = 0.005;
 const double kMaxIrisRadius = 10.0;
 const double kMaxTiltExtent = 10.0;
 const double kMaxSpinAngle = 360.0;
+// The preview zoom bounds and one wheel notch's factor, as Liquify's.
+const double kMinZoom = 0.01;
+const double kMaxZoom = 32.0;
+const double kWheelZoom = 1.25;
+// The preview scrollbars' thickness, inside the 24 px pasteboard margin.
+const int kScrollBar = 14;
 
 // The superellipse exponent for a squareness, as `pictura_filters::iris_exponent`.
 double irisExponent(double squareness)
@@ -74,12 +83,137 @@ BlurGalleryCanvas::BlurGalleryCanvas(QList<BlurGalleryPin>* pins, QWidget* paren
     setMinimumSize(480, 320);
     setFocusPolicy(Qt::ClickFocus);
     setMouseTracking(true);
+    hbar_ = new QScrollBar(Qt::Horizontal, this);
+    hbar_->setObjectName(QStringLiteral("blurGalleryHScroll"));
+    vbar_ = new QScrollBar(Qt::Vertical, this);
+    vbar_->setObjectName(QStringLiteral("blurGalleryVScroll"));
+    for (QScrollBar* bar : {hbar_, vbar_}) {
+        connect(bar, &QScrollBar::valueChanged, this, [this] { update(); });
+        bar->hide();
+    }
 }
 
 void BlurGalleryCanvas::setImage(const QImage& image)
 {
     image_ = image;
+    updateScrollBars();
     update();
+}
+
+void BlurGalleryCanvas::setDocumentSize(const QSize& size)
+{
+    documentSize_ = size;
+    updateScrollBars();
+    if (zoom_ <= 0.0) {
+        // The fit zoom follows the new document size.
+        emit zoomChanged();
+    }
+    update();
+}
+
+double BlurGalleryCanvas::zoom() const
+{
+    return zoom_ > 0.0 ? zoom_ : fitZoom();
+}
+
+QRectF BlurGalleryCanvas::roomRect() const
+{
+    return QRectF(rect()).adjusted(kMargin, kMargin, -kMargin, -kMargin);
+}
+
+double BlurGalleryCanvas::fitZoom() const
+{
+    const QRectF room = roomRect();
+    const QSizeF doc = documentPixels();
+    if (room.isEmpty() || doc.isEmpty()) {
+        return 1.0;
+    }
+    return std::clamp(qMin(room.width() / doc.width(), room.height() / doc.height()), kMinZoom,
+                      kMaxZoom);
+}
+
+void BlurGalleryCanvas::setZoom(double zoom)
+{
+    zoomAbout(zoom, roomRect().center());
+}
+
+void BlurGalleryCanvas::zoomBy(double factor)
+{
+    setZoom(zoom() * factor);
+}
+
+void BlurGalleryCanvas::zoomAbout(double zoom, const QPointF& anchor)
+{
+    const QRectF before = imageRect();
+    const double next = std::clamp(zoom, kMinZoom, kMaxZoom);
+    if (before.width() <= 0.0 || before.height() <= 0.0) {
+        zoom_ = next;
+        updateScrollBars();
+        update();
+        emit zoomChanged();
+        return;
+    }
+    // The document fraction under the anchor stays under it after the zoom.
+    const QPointF at((anchor.x() - before.x()) / before.width(),
+                     (anchor.y() - before.y()) / before.height());
+    zoom_ = next;
+    updateScrollBars();
+    const QSizeF doc = documentPixels();
+    const QSizeF shown(doc.width() * next, doc.height() * next);
+    const QRectF room = roomRect();
+    // A picture that overflows scrolls, so solve the scroll value that puts
+    // `at` back under `anchor`; a fitted axis stays centred.
+    if (shown.width() > room.width() && hbar_) {
+        hbar_->setValue(qRound(room.left() - anchor.x() + at.x() * shown.width()));
+    }
+    if (shown.height() > room.height() && vbar_) {
+        vbar_->setValue(qRound(room.top() - anchor.y() + at.y() * shown.height()));
+    }
+    update();
+    emit zoomChanged();
+}
+
+void BlurGalleryCanvas::fitInView()
+{
+    zoom_ = 0.0;
+    if (hbar_) {
+        hbar_->setValue(0);
+    }
+    if (vbar_) {
+        vbar_->setValue(0);
+    }
+    updateScrollBars();
+    update();
+    emit zoomChanged();
+}
+
+QSizeF BlurGalleryCanvas::documentPixels() const
+{
+    return documentSize_.isEmpty() ? QSizeF(image_.size()) : QSizeF(documentSize_);
+}
+
+void BlurGalleryCanvas::updateScrollBars()
+{
+    if (!hbar_ || !vbar_) {
+        return;
+    }
+    const QRectF room = roomRect();
+    const QSizeF doc = documentPixels();
+    const QSizeF shown(doc.width() * zoom(), doc.height() * zoom());
+    const int maxH = qMax(0, static_cast<int>(std::ceil(shown.width() - room.width())));
+    const int maxV = qMax(0, static_cast<int>(std::ceil(shown.height() - room.height())));
+    hbar_->setRange(0, maxH);
+    hbar_->setPageStep(qMax(1, qRound(room.width())));
+    hbar_->setSingleStep(qMax(1, qRound(room.width() / 10.0)));
+    vbar_->setRange(0, maxV);
+    vbar_->setPageStep(qMax(1, qRound(room.height())));
+    vbar_->setSingleStep(qMax(1, qRound(room.height() / 10.0)));
+    hbar_->setVisible(maxH > 0);
+    vbar_->setVisible(maxV > 0);
+    hbar_->setGeometry(0, qMax(0, height() - kScrollBar),
+                       qMax(0, width() - (vbar_->isVisible() ? kScrollBar : 0)), kScrollBar);
+    vbar_->setGeometry(qMax(0, width() - kScrollBar), 0, kScrollBar,
+                       qMax(0, height() - (hbar_->isVisible() ? kScrollBar : 0)));
 }
 
 void BlurGalleryCanvas::setMode(BlurGalleryMode mode)
@@ -133,17 +267,25 @@ QSize BlurGalleryCanvas::sizeHint() const
 
 QRectF BlurGalleryCanvas::imageRect() const
 {
-    const QRectF room = QRectF(rect()).adjusted(kMargin, kMargin, -kMargin, -kMargin);
+    const QRectF room = roomRect();
     if (room.isEmpty()) {
         return room;
     }
-    // The document's aspect, so the draft and full previews fit identically.
-    const QSizeF aspect = documentSize_.isEmpty() ? QSizeF(image_.size()) : QSizeF(documentSize_);
-    if (aspect.isEmpty()) {
+    // The document's aspect and zoom, so the draft and full previews place
+    // identically. A fitted axis centres; an overflowing one follows its
+    // scrollbar.
+    const QSizeF doc = documentPixels();
+    if (doc.isEmpty()) {
         return room;
     }
-    const QSizeF fitted = aspect.scaled(room.size(), Qt::KeepAspectRatio);
-    return QRectF(room.center() - QPointF(fitted.width(), fitted.height()) / 2.0, fitted);
+    const QSizeF shown(doc.width() * zoom(), doc.height() * zoom());
+    const double x = (shown.width() <= room.width() || !hbar_)
+                         ? room.center().x() - shown.width() / 2.0
+                         : room.left() - hbar_->value();
+    const double y = (shown.height() <= room.height() || !vbar_)
+                         ? room.center().y() - shown.height() / 2.0
+                         : room.top() - vbar_->value();
+    return QRectF(x, y, shown.width(), shown.height());
 }
 
 QPointF BlurGalleryCanvas::toWidget(const QPointF& fraction) const
@@ -597,6 +739,17 @@ void BlurGalleryCanvas::paintTiltDots(QPainter& painter, const BlurGalleryPin& p
 
 void BlurGalleryCanvas::mousePressEvent(QMouseEvent* event)
 {
+    // The scroll wheel pressed and dragged pans the zoomed preview.
+    if (event->button() == Qt::MiddleButton) {
+        if (hbar_->maximum() > 0 || vbar_->maximum() > 0) {
+            panning_ = true;
+            panStart_ = event->position();
+            panValues_ = QPoint(hbar_->value(), vbar_->value());
+            setCursor(Qt::ClosedHandCursor);
+        }
+        event->accept();
+        return;
+    }
     if (!pins_ || !uiVisible_ || event->button() != Qt::LeftButton) {
         QWidget::mousePressEvent(event);
         return;
@@ -647,6 +800,13 @@ void BlurGalleryCanvas::mousePressEvent(QMouseEvent* event)
 
 void BlurGalleryCanvas::mouseMoveEvent(QMouseEvent* event)
 {
+    if (panning_) {
+        const QPointF delta = event->position() - panStart_;
+        hbar_->setValue(panValues_.x() - qRound(delta.x()));
+        vbar_->setValue(panValues_.y() - qRound(delta.y()));
+        event->accept();
+        return;
+    }
     if (drag_ == Drag::None && mode_ == BlurGalleryMode::Path && pins_ && uiVisible_) {
         // The path being placed follows the pointer; hover shows the pin
         // that places a stop.
@@ -676,6 +836,12 @@ void BlurGalleryCanvas::mouseMoveEvent(QMouseEvent* event)
 
 void BlurGalleryCanvas::mouseReleaseEvent(QMouseEvent* event)
 {
+    if (panning_ && event->button() == Qt::MiddleButton) {
+        panning_ = false;
+        unsetCursor();
+        event->accept();
+        return;
+    }
     if (drag_ == Drag::None) {
         QWidget::mouseReleaseEvent(event);
         return;
@@ -695,6 +861,28 @@ void BlurGalleryCanvas::mouseDoubleClickEvent(QMouseEvent* event)
         return;
     }
     QWidget::mouseDoubleClickEvent(event);
+}
+
+void BlurGalleryCanvas::wheelEvent(QWheelEvent* event)
+{
+    const int delta = event->angleDelta().y();
+    if (delta == 0) {
+        QWidget::wheelEvent(event);
+        return;
+    }
+    // A notch zooms about the pointer, so the detail under it stays put.
+    zoomAbout(zoom() * (delta > 0 ? kWheelZoom : 1.0 / kWheelZoom), event->position());
+    event->accept();
+}
+
+void BlurGalleryCanvas::resizeEvent(QResizeEvent* event)
+{
+    QWidget::resizeEvent(event);
+    updateScrollBars();
+    // A fit view re-fits to the new room; the dialog's zoom field follows.
+    if (zoom_ <= 0.0) {
+        emit zoomChanged();
+    }
 }
 
 void BlurGalleryCanvas::keyPressEvent(QKeyEvent* event)

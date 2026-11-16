@@ -556,3 +556,79 @@ other effects as they are with each other.
 - **THEN** the dialog commits `blur-gallery` with the field records, empty
   Iris, Tilt-Shift, and Path sections, the spin records, the motion slots,
   and the flash duration, and reopening it round-trips the list
+
+### Requirement: Blur Effects render order and soft Light Range
+
+The Blur Effects' Light Bokeh and Bokeh Color SHALL be applied to the source
+colour **before** the variable blur, gated by the same per-pixel field weight
+the blur uses, so a blurred high-contrast edge keeps the unlit blur's shape
+instead of gaining a bright rim. A pixel the field leaves sharp SHALL NOT
+change. The Noise pass SHALL remain after the blur, gated by the same field
+weight. The Light Range SHALL be a soft tonal window that reaches zero at both
+bounds, so raising Light Bokeh across a tonal ramp SHALL NOT add a step at a
+range bound.
+
+#### Scenario: A blurred edge keeps its shape [blur_bokeh_no_rim]
+
+- **WHEN** Light Bokeh is raised on a dark midtone subject against a bright
+  background with a single blur pin
+- **THEN** the blurred edge is not brightened relative to the unlit blur more
+  than the subject's interior is, so no bright rim appears
+
+#### Scenario: The Light Range bound is soft [blur_light_range_soft]
+
+- **WHEN** a tonal ramp crosses the Light Range's upper bound while Light Bokeh
+  is raised
+- **THEN** the output has no tonal step at the bound
+
+### Requirement: Blur Gallery preview zoom
+
+The Blur Gallery workspace SHALL show an editable zoom field at the bottom-left
+of its options bar. The field SHALL display the preview's live zoom percentage,
+list the preset levels plus **Fit in View** and **Actual Pixels**, and apply a
+typed percentage. The mouse wheel over the preview SHALL zoom in and out about
+the pointer, and `Ctrl++` / `Ctrl+-` (and the `+` / `−` buttons beside the
+field) SHALL step the zoom about the preview's centre. The zoom SHALL only
+place the preview; the pin fractions and blur amounts committed by OK SHALL be
+unchanged, and **Fit in View** SHALL restore the fitted opening view.
+
+#### Scenario: The zoom field sets the preview zoom [blur_zoom_field]
+
+- **WHEN** the workspace opens and the zoom field is typed to `200%`
+- **THEN** the field opens on the fitted percentage, typing `200%` sets the
+  preview to 200 %, and Fit in View restores the fitted percentage
+
+#### Scenario: The wheel zooms about the pointer [blur_zoom_wheel]
+
+- **WHEN** the mouse wheel is scrolled up and then down over the preview
+- **THEN** the preview zooms in and then out
+
+#### Scenario: The zoom shortcuts step the preview [blur_zoom_shortcuts]
+
+- **WHEN** `Ctrl+=` and then `Ctrl+-` are pressed in the workspace
+- **THEN** the preview zooms in and then out
+
+### Requirement: Blur Gallery preview scrollbars and panning
+
+The Blur Gallery preview SHALL show a horizontal and a vertical scrollbar when
+the zoomed picture overflows the preview in that axis, with each scrollbar's
+range covering the overflow, and SHALL hide them at the fitted view. Scrolling a
+bar SHALL move the picture with it. Pressing the scroll wheel (the middle
+button) and dragging over the preview SHALL pan the picture. Scrolling and
+panning SHALL only place the preview; the pin fractions and blur amounts
+committed by OK SHALL be unchanged.
+
+#### Scenario: Scrollbars appear when zoomed in [blur_scrollbars_appear]
+
+- **WHEN** the preview is zoomed in past the fitted view and then fitted again
+- **THEN** both scrollbars show while it overflows and hide at the fit
+
+#### Scenario: Scrolling moves the picture [blur_scrollbars_scroll]
+
+- **WHEN** the horizontal and vertical scrollbars are scrolled to their ends
+- **THEN** the picture moves left and up with the scrollbars
+
+#### Scenario: The middle button pans [blur_middle_drag_pans]
+
+- **WHEN** the scroll wheel is pressed and dragged over the zoomed preview
+- **THEN** the picture pans with the pointer
