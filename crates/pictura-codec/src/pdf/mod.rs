@@ -77,6 +77,9 @@ pub struct PdfEnv<'a> {
     /// The active proof setup for Use Proof Setup; ignored unless the option is
     /// on and Color Conversion is No Conversion.
     pub proof: Option<ProofRequest<'a>>,
+    /// The document to preserve in the editing payload when it differs from the
+    /// page projection, e.g. a working-RGB page with a CMYK source.
+    pub editing_doc: Option<&'a Document>,
 }
 
 const PRODUCER: &str = "Kooka Pictura";
@@ -503,11 +506,12 @@ fn build(
     }
     if options.preserve_editing {
         // ponytail: Pictura's own payload (design D6), not Adobe's layout.
+        let editing_doc = env.editing_doc.unwrap_or(doc);
         let psd = objects.add(Body::Stream(
             Dict::new()
                 .with("Subtype", Obj::name("PicturaPSD"))
                 .with("Filter", Obj::name("FlateDecode")),
-            flate(&editing_payload(doc, composite, options)?),
+            flate(&editing_payload(editing_doc, composite, options)?),
         ));
         page_objects.push(psd);
         page_dict.set("LastModified", Obj::text(&date));

@@ -2,12 +2,14 @@
 
 #include "api/document_api.h"
 #include "api/engine_bridge.h"
+#include "dialogs.h"
 #include "busy_job.h"
 
 #include <QtCore/QByteArray>
 #include <QtCore/QDir>
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QFileInfo>
+#include <QtCore/QPointer>
 #include <QtCore/QSaveFile>
 #include <QtCore/QVector>
 #include <QtCore/QThread>
@@ -68,6 +70,7 @@ struct JobState {
     QImage tier;
     int tierIndex = -1;
     int next = 0;
+    bool prepared = false;
     bool cancelled = false;
     bool failed = false;
     QString error;
@@ -181,7 +184,7 @@ QString ZoomifyDialog::templateName() const
 }
 
 bool zoomifyExport(PictureView* view, const QString& folder, int baseWidth, int baseHeight,
-                   int quality, bool* cancelled)
+                   int quality, bool* cancelled, QWidget* parent)
 {
     if (!view || !view->has_document()) {
         return false;
@@ -198,17 +201,6 @@ bool zoomifyExport(PictureView* view, const QString& folder, int baseWidth, int 
     }
 
     auto state = std::make_shared<JobState>();
-    {
-        const ::rust::Vec<std::uint8_t> rgba = web_flattened(*view);
-        if (rgba.size() != std::size_t(documentWidth) * std::size_t(documentHeight) * 4u) {
-            return false;
-        }
-        const QImage composite(rgba.data(), documentWidth, documentHeight, documentWidth * 4,
-                               QImage::Format_RGBA8888);
-        state->base = composite.scaled(baseWidth, baseHeight, Qt::IgnoreAspectRatio,
-                                       Qt::SmoothTransformation)
-                          .copy();
-    }
 
     const ::rust::Vec<std::int32_t> flat = zoomify_plan_flat(baseWidth, baseHeight);
     if (flat.size() < 4) {
@@ -243,12 +235,39 @@ bool zoomifyExport(PictureView* view, const QString& folder, int baseWidth, int 
         return false;
     }
 
+    const QPointer<PictureView> viewGuard(view);
     return runCancellableJob(
-        nullptr, QObject::tr("Zoomify"), QObject::tr("Writing tiles…"),
+        parent, QObject::tr("Zoomify"), QObject::tr("Writing tiles…"),
         [state] { return true; },
-        [state, folder, quality] {
+        [state, viewGuard, baseWidth, baseHeight, documentWidth, documentHeight, folder, quality] {
             if (state->cancelled || state->failed || state->next >= state->tiles.size()) {
                 return false;
+            }
+            if (!state->prepared) {
+                if (!viewGuard) {
+                    state->failed = true;
+                    return false;
+                }
+                QImage preview = documentPreviewImage(viewGuard.data(),
+                                                      qMax(baseWidth, baseHeight));
+                if (preview.isNull()) {
+                    const ::rust::Vec<std::uint8_t> rgba = web_flattened(*viewGuard.data());
+                    if (rgba.size()
+                        != std::size_t(documentWidth) * std::size_t(documentHeight) * 4u) {
+                        state->failed = true;
+                        return false;
+                    }
+                    preview = QImage(rgba.data(), documentWidth, documentHeight,
+                                     documentWidth * 4, QImage::Format_RGBA8888)
+                                  .copy();
+                }
+                state->base = preview.scaled(baseWidth, baseHeight, Qt::IgnoreAspectRatio,
+                                             Qt::SmoothTransformation)
+                                  .copy();
+                state->prepared = true;
+                if (state->cancelled) {
+                    return false;
+                }
             }
             QElapsedTimer budget;
             budget.start();
@@ -322,7 +341,8 @@ bool zoomifyExportFromView(QWidget* parent, PictureView* view)
     }
     bool cancelled = false;
     const bool exported = zoomifyExport(view, dialog.outputFolder(), dialog.baseWidth(),
-                                        dialog.baseHeight(), dialog.quality(), &cancelled);
+                                        dialog.baseHeight(), dialog.quality(), &cancelled,
+                                        parent);
     if (!exported && !cancelled && parent) {
         QMessageBox::warning(parent, QObject::tr("Zoomify"),
                              QObject::tr("The Zoomify export could not be written."));

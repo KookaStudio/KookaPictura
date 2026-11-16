@@ -597,6 +597,7 @@ fn pdf_seed(password: &str) -> Vec<u8> {
         title: "seed".into(),
         live_text: None,
         proof: None,
+        editing_doc: None,
     };
     write_pdf(&doc, &doc.composite, &options, &env).expect("seed writes")
 }

@@ -57,6 +57,7 @@ fn path_ops(path: &VectorPath, height: u32, pdf: bool) -> Option<String> {
     };
     let mut out = String::new();
     let mut wrote = false;
+    let discard = if pdf { "n" } else { "newpath" };
     for subpath in &path.subpaths {
         let Some(first) = subpath.points.first() else {
             continue;
@@ -97,8 +98,10 @@ fn path_ops(path: &VectorPath, height: u32, pdf: bool) -> Option<String> {
             out.push('\n');
         }
         if subpath.segment_count() == 0 && !subpath.closed {
-            // A one-point subpath has no stroked mark; keep it out of the file.
-            out.push_str("newpath\n");
+            // A one-point subpath has no stroked mark; discard it in the
+            // dialect's own path syntax.
+            out.push_str(discard);
+            out.push('\n');
             continue;
         }
         out.push_str(stroke);
@@ -251,6 +254,26 @@ mod tests {
         assert!(!escaped.contains('\n'));
         assert!(!escaped.contains('%'));
         assert!(escaped.contains("\\012"));
+    }
+
+    #[test]
+    fn illustrator_pdf_discards_one_point_subpaths_with_n() {
+        let mut both = path(vec![corner(0.0, 0.0), corner(50.0, 0.0)], false);
+        both.add_subpath(Subpath {
+            points: vec![corner(10.0, 10.0)],
+            closed: false,
+        });
+        let pdf = String::from_utf8(write_pdf(
+            100,
+            100,
+            &[AiPath {
+                name: "Both",
+                path: &both,
+            }],
+        ))
+        .unwrap();
+        assert!(!pdf.contains("newpath"));
+        assert!(pdf.contains("\nn\n"));
     }
 
     #[test]

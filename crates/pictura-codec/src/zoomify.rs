@@ -199,33 +199,50 @@ html,body{{margin:0;height:100%;background:#111;overflow:hidden}}
 <div id="hint">Drag to pan, wheel to zoom</div>
 <script>
 const W={w},H={h},TILE={tile},LEVELS=[{levels}];
-let level=LEVELS.length-1,scale=1,panX=0,panY=0;
+let level=LEVELS.length-1,zoom=1,panX=0,panY=0;
 const stage=document.getElementById('stage');
 function tileUrl(ordinal,z,x,y){{return 'TileGroup'+Math.floor(ordinal/{tiles_per_group})+'/'+z+'-'+x+'-'+y+'.jpg';}}
+function pickLevel(){{
+  const shownW=W*zoom,shownH=H*zoom;
+  for(let i=0;i<LEVELS.length;i++){{
+    const L=LEVELS[i];
+    if(L.w>=shownW&&L.h>=shownH)return i;
+  }}
+  return LEVELS.length-1;
+}}
 function show(next){{
   level=Math.max(0,Math.min(LEVELS.length-1,next));
-  const L=LEVELS[level];
+  const L=LEVELS[level],sx=W/L.w,sy=H/L.h;
   stage.innerHTML='';
-  stage.style.width=L.w+'px';stage.style.height=L.h+'px';
+  stage.style.width=W+'px';stage.style.height=H+'px';
   for(let y=0;y<L.rows;y++)for(let x=0;x<L.cols;x++){{
     const img=document.createElement('img');
     img.src=tileUrl(L.start+y*L.cols+x,L.z,x,y);
-    img.width=Math.min(TILE,L.w-x*TILE);img.height=Math.min(TILE,L.h-y*TILE);
-    img.style.left=(x*TILE)+'px';img.style.top=(y*TILE)+'px';
+    img.style.width=(Math.min(TILE,L.w-x*TILE)*sx)+'px';
+    img.style.height=(Math.min(TILE,L.h-y*TILE)*sy)+'px';
+    img.style.left=(x*TILE*sx)+'px';img.style.top=(y*TILE*sy)+'px';
     stage.appendChild(img);
   }}
-  apply();
 }}
-function apply(){{stage.style.transform='translate('+panX+'px,'+panY+'px) scale('+scale+')';}}
+function apply(){{stage.style.transform='translate('+panX+'px,'+panY+'px) scale('+zoom+')';}}
 function fit(){{
-  const L=LEVELS[level];scale=Math.min(innerWidth/L.w,innerHeight/L.h,1);
-  panX=(innerWidth-L.w*scale)/2;panY=(innerHeight-L.h*scale)/2;apply();
+  zoom=Math.min(innerWidth/W,innerHeight/H,1);
+  panX=(innerWidth-W*zoom)/2;panY=(innerHeight-H*zoom)/2;
+  show(pickLevel());apply();
+}}
+function zoomAt(x,y,factor){{
+  const next=Math.max(0.05,Math.min(8,zoom*factor));
+  const ix=(x-panX)/zoom,iy=(y-panY)/zoom;
+  zoom=next;panX=x-ix*zoom;panY=y-iy*zoom;
+  const picked=pickLevel();
+  if(picked!==level)show(picked);
+  apply();
 }}
 let dragging=false,lastX=0,lastY=0;
 stage.addEventListener('pointerdown',e=>{{dragging=true;lastX=e.clientX;lastY=e.clientY;stage.classList.add('drag');stage.setPointerCapture(e.pointerId);}});
 stage.addEventListener('pointermove',e=>{{if(!dragging)return;panX+=e.clientX-lastX;panY+=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;apply();}});
 stage.addEventListener('pointerup',()=>{{dragging=false;stage.classList.remove('drag');}});
-addEventListener('wheel',e=>{{e.preventDefault();show(level+(e.deltaY>0?-1:1));fit();}},{{passive:false}});
+addEventListener('wheel',e=>{{e.preventDefault();zoomAt(e.clientX,e.clientY,e.deltaY>0?0.8:1.25);}},{{passive:false}});
 addEventListener('resize',fit);
 show(level);fit();
 </script>
@@ -311,6 +328,16 @@ mod tests {
         assert!(html.contains("H=700"));
         assert!(html.contains("LEVELS=["));
         assert!(html.contains("{z:2,w:1000,h:700,cols:4,rows:3,start:5}"));
+    }
+
+    #[test]
+    fn zoomify_viewer_html_zooms_without_refitting() {
+        let html = viewer_html(&plan(4096, 4096));
+        assert!(html.contains("function zoomAt"));
+        assert!(html.contains("function pickLevel"));
+        let wheel = html.split("addEventListener('wheel'").nth(1).unwrap();
+        assert!(wheel.contains("zoomAt("));
+        assert!(!wheel.contains("fit()"));
     }
 
     #[test]

@@ -44,7 +44,7 @@ bool zoomifyExportFromView(QWidget* parent, PictureView* view);
 
 // The dialog's work without the dialog, for the Qt test suite.
 bool zoomifyExport(PictureView* view, const QString& folder, int baseWidth, int baseHeight,
-                   int quality, bool* cancelled = nullptr);
+                   int quality, bool* cancelled = nullptr, QWidget* parent = nullptr);
 
 // Hold each tile for `milliseconds`; the test suite's deterministic cancel seam.
 void zoomifySetTestDelay(int milliseconds);

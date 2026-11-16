@@ -25,6 +25,7 @@ pub(super) fn env() -> PdfEnv<'static> {
         title: "test".into(),
         live_text: None,
         proof: None,
+        editing_doc: None,
     }
 }
 

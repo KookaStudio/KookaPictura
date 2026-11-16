@@ -115,6 +115,7 @@ private slots:
     void layersReplaceExistingFiles();
     void layersDirectoryTargetStopsBatch();
     void layersCancelStopsBatch();
+    void layersCloseDuringDelayAbortsSafely();
     void layersRefusesBadDestination();
     void layersWriteFailureStopsBatch();
     void layersLeavesDocumentUnchanged();
@@ -460,6 +461,25 @@ void ExportLayersTest::layersCancelStopsBatch()
     QCOMPARE(view->history_count(), history);
     QCOMPARE(pictura::document_api::isDirty(*view), dirty);
     pictura::export_tools_set_delay(*view, 0);
+}
+
+void ExportLayersTest::layersCloseDuringDelayAbortsSafely()
+{
+    pictura::PictureView* view = newDoc(*window_, QStringLiteral("LayersClose"), 40, 40);
+    QVERIFY(view);
+    QVERIFY(!addLayer(*view, QStringLiteral("one")).isEmpty());
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    pictura::export_tools_set_delay(*view, 200000);
+    QTimer::singleShot(100, this, [this] {
+        window_->closeDocument(window_->activeDocumentIndex(), false);
+    });
+    const bool exported = exportAll(*view, dir.path());
+
+    pictura::PictureView* fresh = newDoc(*window_, QStringLiteral("LayersCloseReset"), 10, 10);
+    QVERIFY(fresh);
+    pictura::export_tools_set_delay(*fresh, 0);
+    QVERIFY(!exported);
 }
 
 void ExportLayersTest::layersRefusesBadDestination()

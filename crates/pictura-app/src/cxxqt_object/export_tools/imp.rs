@@ -127,9 +127,11 @@ fn sanitize_name(raw: &str) -> String {
 }
 
 fn fit_name(base: &str, suffix_len: usize) -> &str {
-    // The five output suffixes are four bytes; leave room for the suffix.
+    // The five output suffixes are four bytes; the writers also append either
+    // `.tmp-metadata` or `.<16 hex digits>.tmp`, so reserve the longer one.
     const FORMAT_SUFFIX_BYTES: usize = 4;
-    let max = 255usize.saturating_sub(FORMAT_SUFFIX_BYTES + suffix_len);
+    const TEMP_SUFFIX_BYTES: usize = 21;
+    let max = 255usize.saturating_sub(FORMAT_SUFFIX_BYTES + TEMP_SUFFIX_BYTES + suffix_len);
     if base.len() <= max {
         return base;
     }
@@ -232,8 +234,46 @@ pub(crate) fn scratch_document(source: &Document, layer: &Layer, gpu_compute: bo
         gpu_compute,
     ))
     .0;
+    if scratch.mode == ColorMode::Grayscale && scratch.composite.channels == 4 {
+        let plane = scratch.composite.pixel_count();
+        let data = scratch.composite.data.to_vec();
+        let mut normalized = vec![0u8; plane * 2];
+        normalized[..plane].copy_from_slice(&data[..plane]);
+        normalized[plane..].copy_from_slice(&data[3 * plane..4 * plane]);
+        scratch.composite = pictura_core::PixelBuffer {
+            width: scratch.composite.width,
+            height: scratch.composite.height,
+            channels: 2,
+            data: normalized.into(),
+        };
+    }
     scratch.merged_composite_present = true;
     scratch
+}
+
+fn effective_icc(doc: &Document) -> Vec<u8> {
+    let expected = doc.mode.color_channels();
+    if let Some(icc) = doc.document_icc.as_ref() {
+        if pictura_codec::Profile::from_icc(icc)
+            .is_ok_and(|profile| profile.channels() == Some(expected))
+        {
+            return icc.to_vec();
+        }
+    }
+    if doc.mode == ColorMode::Grayscale {
+        pictura_codec::Profile::gray_gamma22().to_icc()
+    } else {
+        pictura_codec::Profile::srgb().to_icc()
+    }
+}
+
+fn apply_icc(doc: &mut Document, include: bool) {
+    if include {
+        let icc = effective_icc(doc);
+        pictura_codec::embed_document_icc(doc, &icc);
+    } else {
+        pictura_codec::strip_document_icc(doc);
+    }
 }
 
 fn raster_file(doc: &Document, format: &str, include_icc: bool, path: &str) -> bool {
@@ -241,14 +281,7 @@ fn raster_file(doc: &Document, format: &str, include_icc: bool, path: &str) -> b
     let rgba = super::super::helpers_composite::buffer_to_rgba_bytes(buffer);
     let mut metadata = pictura_codec::raster_metadata(doc);
     if include_icc {
-        metadata.icc = Some(if doc.source_mode == Some(ColorMode::Cmyk) {
-            pictura_codec::Profile::srgb().to_icc()
-        } else {
-            doc.document_icc
-                .clone()
-                .unwrap_or_else(|| pictura_codec::Profile::srgb().to_icc().into())
-                .to_vec()
-        });
+        metadata.icc = Some(effective_icc(doc));
     }
     let options = super::super::save_format::SaveRasterOptions {
         quality: if format == "JPG" { 90 } else { -1 },
@@ -266,8 +299,14 @@ fn raster_file(doc: &Document, format: &str, include_icc: bool, path: &str) -> b
 }
 
 fn pdf_file(doc: &Document, include_icc: bool, path: &str) -> bool {
-    let save = pictura_render::save_view(doc);
-    let doc = save.as_ref();
+    let mut editing = doc.clone();
+    apply_icc(&mut editing, include_icc);
+    let mut page = editing.clone();
+    page.source_mode = None;
+    page.source_depth = None;
+    page.source_planes = None;
+    page.source_palette = None;
+    page.source_icc = None;
     let mut options = pictura_codec::pdf::PdfOptions {
         preserve_editing: true,
         layers: true,
@@ -298,8 +337,9 @@ fn pdf_file(doc: &Document, include_icc: bool, path: &str) -> bool {
             .unwrap_or_default(),
         live_text: None,
         proof: None,
+        editing_doc: Some(&editing),
     };
-    match pictura_codec::pdf::write_pdf(doc, &doc.composite, &options, &env) {
+    match pictura_codec::pdf::write_pdf(&page, &page.composite, &options, &env) {
         Ok(bytes) => super::super::helpers::safe_io::write_atomically(path, &bytes, false).is_ok(),
         Err(_) => false,
     }
@@ -324,11 +364,8 @@ pub fn export_layer_file(
     let path = path.to_string();
     match format.to_string().to_ascii_uppercase().as_str() {
         "PSD" => {
-            if !include_icc {
-                pictura_codec::strip_document_icc(&mut scratch);
-            }
-            let save = pictura_render::save_view(&scratch);
-            match pictura_codec::write_psd(save.as_ref()) {
+            apply_icc(&mut scratch, include_icc);
+            match pictura_codec::write_psd(&scratch) {
                 Ok(bytes) => {
                     super::super::helpers::safe_io::write_atomically(&path, &bytes, false).is_ok()
                 }
@@ -451,17 +488,80 @@ mod tests {
         let long = "é".repeat(200);
         let doc = doc(vec![layer(&long)]);
         let name = &collect_targets(&doc, false, "")[0].1;
-        assert!(name.len() + ".tif".len() <= 255);
+        assert!(name.len() + ".tif".len() + 21 <= 255);
         assert!(std::str::from_utf8(name.as_bytes()).is_ok());
     }
 
     #[test]
-    fn export_layers_cmyk_projection_trims_the_display_alpha() {
+    fn export_layers_name_reserves_temporary_suffixes() {
+        let long = "a".repeat(300);
+        let doc = doc(vec![layer(&long)]);
+        let name = &collect_targets(&doc, false, "")[0].1;
+        assert_eq!(name.len(), 230);
+        assert!(name.len() + ".tif".len() + 21 <= 255);
+    }
+
+    #[test]
+    fn export_layers_cmyk_projection_keeps_the_alpha() {
         let mut source = doc(vec![layer("a")]);
         source.source_mode = Some(ColorMode::Cmyk);
         let scratch = scratch_document(&source, &source.layers[0], false);
-        let save = pictura_render::save_view(&scratch);
-        assert_eq!(save.composite.channels, 3);
+        assert_eq!(scratch.composite.channels, 4);
+    }
+
+    #[test]
+    fn export_layers_grayscale_composite_keeps_gray_and_alpha() {
+        let mut source = Document::new(10, 10, ColorMode::Grayscale, BitDepth::Eight);
+        let only = layer("gray");
+        source.layers = LayerStack::from_layers(vec![only.clone()]);
+        let scratch = scratch_document(&source, &only, false);
+        assert_eq!(scratch.composite.channels, 2);
+        assert_eq!(scratch.composite.data.len(), 2 * 10 * 10);
+    }
+
+    #[test]
+    fn export_layers_grayscale_psd_and_pdf_use_gray() {
+        let mut source = Document::new(10, 10, ColorMode::Grayscale, BitDepth::Eight);
+        let only = layer("gray");
+        source.layers = LayerStack::from_layers(vec![only.clone()]);
+        let mut scratch = scratch_document(&source, &only, false);
+        let plane = scratch.composite.pixel_count();
+        let mut data = scratch.composite.data.to_vec();
+        for i in 0..plane {
+            data[i] = 64;
+            data[plane + i] = 128;
+        }
+        scratch.composite.data = data.into();
+        apply_icc(&mut scratch, false);
+
+        let psd = pictura_codec::write_psd(&scratch).expect("PSD writes");
+        assert_eq!(u16::from_be_bytes([psd[12], psd[13]]), 2, "gray + alpha");
+        assert_eq!(u16::from_be_bytes([psd[24], psd[25]]), 1, "grayscale mode");
+
+        let path =
+            std::env::temp_dir().join(format!("pictura-export-gray-{}.pdf", std::process::id()));
+        let path_text = path.to_string_lossy().into_owned();
+        assert!(pdf_file(&scratch, false, &path_text));
+        let pdf = std::fs::read(&path).expect("PDF reads");
+        let _ = std::fs::remove_file(&path);
+        assert!(pdf.starts_with(b"%PDF"));
+        assert!(pdf.windows(10).any(|window| window == b"DeviceGray"));
+        assert!(!pdf.windows(10).any(|window| window == b"DeviceCMYK"));
+    }
+
+    #[test]
+    fn export_layers_icc_option_embeds_and_strips() {
+        let mut scratch = scratch_document(&doc(vec![layer("a")]), &layer("a"), false);
+        apply_icc(&mut scratch, true);
+        assert!(scratch.document_icc.is_some());
+        assert!(pictura_codec::decode_image_resources(&scratch)
+            .iter()
+            .any(|resource| resource.id == pictura_codec::ICC_PROFILE));
+        apply_icc(&mut scratch, false);
+        assert!(scratch.document_icc.is_none());
+        assert!(pictura_codec::decode_image_resources(&scratch)
+            .iter()
+            .all(|resource| resource.id != pictura_codec::ICC_PROFILE));
     }
 
     #[test]

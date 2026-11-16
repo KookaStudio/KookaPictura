@@ -6,6 +6,7 @@
 
 #include <QtCore/QDir>
 #include <QtCore/QFileInfo>
+#include <QtCore/QPointer>
 #include <QtCore/QStringList>
 #include <QtCore/QVector>
 #include <QtWidgets/QCheckBox>
@@ -165,6 +166,11 @@ bool exportLayers(PictureView* view, const QString& folder, const QString& prefi
     }
     const QFileInfo destination(folder);
     if (!destination.isDir() || !destination.isWritable()) {
+        if (parent) {
+            QMessageBox::warning(
+                parent, QObject::tr("Export Layers to Files"),
+                QObject::tr("The destination folder is not writable."));
+        }
         return false;
     }
     const QString targetsText = export_layer_targets(*view, visibleOnly, prefix);
@@ -199,15 +205,23 @@ bool exportLayers(PictureView* view, const QString& folder, const QString& prefi
         return false;
     }
 
+    const QPointer<PictureView> viewGuard(view);
+    const QPointer<QWidget> parentGuard(parent);
     const bool done = runCancellableJob(
         parent, QObject::tr("Export Layers to Files"), QObject::tr("Writing files…"),
         [state] { return true; },
-        [state, view, format, includeIcc] {
+        [state, viewGuard, format, includeIcc] {
             if (state->cancelled || state->failed || state->next >= state->targets.size()) {
                 return false;
             }
+            if (!viewGuard) {
+                state->failed = true;
+                state->failingLayer = state->targets[state->next].layerPath;
+                state->failingPath = state->targets[state->next].outputPath;
+                return false;
+            }
             const Target& target = state->targets[state->next];
-            if (!export_layer_file(*view, target.layerPath, format, includeIcc,
+            if (!export_layer_file(*viewGuard.data(), target.layerPath, format, includeIcc,
                                    target.outputPath)) {
                 state->failed = true;
                 state->failingLayer = target.layerPath;
@@ -223,13 +237,13 @@ bool exportLayers(PictureView* view, const QString& folder, const QString& prefi
                 : state->next * 1000 / int(state->targets.size());
         },
         [state] { state->cancelled = true; },
-        [state, parent] {
+        [state, parentGuard] {
             if (!state->cancelled && !state->failed) {
                 return true;
             }
-            if (state->failed && parent) {
+            if (state->failed && parentGuard) {
                 QMessageBox::warning(
-                    parent, QObject::tr("Export Layers to Files"),
+                    parentGuard.data(), QObject::tr("Export Layers to Files"),
                     QObject::tr("Could not write layer %1 to %2.")
                         .arg(state->failingLayer, state->failingPath));
             }

@@ -130,7 +130,13 @@ bool exportPathsFromView(QWidget* parent, PictureView* view)
         }
         return false;
     }
-    return exportPaths(view, dialog.destination(), dialog.format());
+    const bool written = exportPaths(view, dialog.destination(), dialog.format());
+    if (!written && parent) {
+        QMessageBox::warning(
+            parent, QObject::tr("Paths to Illustrator"),
+            QObject::tr("Could not write %1.").arg(withAiSuffix(dialog.destination())));
+    }
+    return written;
 }
 
 } // namespace pictura
