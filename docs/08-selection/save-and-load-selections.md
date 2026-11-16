@@ -116,6 +116,8 @@ Loading is the same combine against the live selection mask instead of a channel
 
 Both dialogs require matching pixel dimensions for cross-document Save/Load (the Help states this for `Document` choices). Dragging a selection between images is a separate, dimension-flexible path (community behaviour) and should be modelled explicitly rather than folded into the dialog rule.
 
+The shipped drag path (`#1332`) scales the source coverage to fit the destination while preserving aspect ratio, centres the fitted plane, and leaves the uncovered border empty. The same policy applies to dragging an alpha channel into another document. This mapping is inferred; the Help does not state a resize rule.
+
 ## Rust module mapping
 
 - `pictura_selection::alpha` — `save_selection(doc, mask, target: ChannelRef, combine: Combine)`, `load_selection(doc, source: ChannelRef, invert: bool, combine: Combine)`.
@@ -195,7 +197,7 @@ Not used in this pass:
 - **Save combine arithmetic.** Replace/Add/Subtract/Intersect on soft coverage is not numerically specified. Resolve by comparing soft-channel saves against CS6.
 - **Load default channel.** The Load dialog's default `Channel` selection is not in the fetched text. Resolve from a CS6 UI capture.
 - **Exact default-name sequence.** `Alpha 1`, `Alpha 2`, … is community-reported; confirm numbering after deletions/reloads.
-- **Cross-image drag semantics.** Rescaling and sense handling when dragging a selection between differently sized documents is undocumented. Resolve with a CS6 behavioural study.
+- **Cross-image drag semantics.** Rescaling and sense handling when dragging a selection between differently sized documents is undocumented. The shipped path uses fit-and-centre with an empty border (`#1332`); a CS6 behavioural study is still needed to confirm parity.
 - **PSD alternate-channel encoding details.** The precise PSD resource keys and sense flags must be pinned in `01-architecture/file-formats.md` against the published Adobe file-format spec, not the Help PDF.
 - **Layer-mask destination bit depth.** Whether saving into a layer mask honours 16/32-bit precision is unstated. Resolve against a high-bit-depth CS6 document.
 - **Save/Load Selection in 32-bpc.** The Help restricts many selection commands at 32 bpc; whether Save/Load itself is restricted is unclear. Resolve with a CS6 32-bit test.
