@@ -11,6 +11,8 @@
 
 #include "api/document_bridge.h"
 #include "api/layers_bridge.h"
+#include "api/paint_bridge.h"
+#include "api/transform_api.h"
 
 #include <QtCore/QTemporaryDir>
 #include <QtGui/QAction>
@@ -41,6 +43,7 @@ private slots:
     void mergedDoesNotCompound();
     void maskTarget();
     void cancelRestoresNativeStore();
+    void growsSmallLayerToDocument();
 
 private:
     pictura::PictureView* open(const QColor& color, const QString& name, QSize size = {20, 20},
@@ -297,6 +300,51 @@ void ApplyImageTest::cancelRestoresNativeStore()
     }
     QCOMPARE(view.composite_argb(5, 5), before);
     QCOMPARE(view.document_depth_bits(), 16);
+}
+
+// [ai_grow_document] Preserve Transparency off grows a smaller layer to the
+// document; the merged source makes the pixels look unchanged, so the rect is
+// the assertion.
+void ApplyImageTest::growsSmallLayerToDocument()
+{
+    pictura::PictureView* view = open(Qt::white, QStringLiteral("grow.png"), {100, 100});
+    QVERIFY(view);
+    const int layer = view->add_layer(0);
+    QVERIFY(layer >= 0);
+    const QString path = QString::number(layer);
+    view->set_active_layer(path);
+    QVERIFY(view->select_rect(20, 20, 40, 40, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::edit_fill(*view, qRgba(0, 0, 0, 255), -1, QStringLiteral("normal"), 100,
+                               false));
+    view->deselect();
+    const auto before = pictura::transform_api::layerRect(*view, path);
+    QVERIFY(before.valid);
+    QCOMPARE(before.left, 20);
+    QCOMPARE(before.top, 20);
+    QCOMPARE(before.right, 60);
+    QCOMPARE(before.bottom, 60);
+
+    ApplyImageDialog dialog(view, window_->imageView(), documents());
+    pick(dialog, "applyImageBlending", QStringLiteral("Normal"));
+    auto* preserve = dialog.findChild<QCheckBox*>(QStringLiteral("applyImagePreserve"));
+    QVERIFY(preserve);
+    QVERIFY(!preserve->isChecked());
+    dialog.accept();
+
+    const auto after = pictura::transform_api::layerRect(*view, path);
+    QVERIFY(after.valid);
+    QCOMPARE(after.left, 0);
+    QCOMPARE(after.top, 0);
+    QCOMPARE(after.right, 100);
+    QCOMPARE(after.bottom, 100);
+    QCOMPARE(view->history_label(view->history_index()), QStringLiteral("Apply Image"));
+    QVERIFY(view->undo());
+    const auto restored = pictura::transform_api::layerRect(*view, path);
+    QVERIFY(restored.valid);
+    QCOMPARE(restored.left, 20);
+    QCOMPARE(restored.top, 20);
+    QCOMPARE(restored.right, 60);
+    QCOMPARE(restored.bottom, 60);
 }
 
 #include "tst_apply_image.moc"

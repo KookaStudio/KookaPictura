@@ -805,8 +805,9 @@ Snapshot for resuming after a context break. Update after each milestone.
   reads its source and mask once into snapshots, so a preview on the active
   document cannot compound. `pictura-render/src/apply_image.rs` holds the
   kernel, which writes the 8-bit channels or the 16/32-bit store. Layer masks
-  are valid targets. The write stops at the layer rect (#1139), and high-depth
-  Offset scaling is an inference.
+  are valid targets. With Preserve Transparency off the destination grows to
+  the document before the blend and a cancelled preview shrinks it back
+  (#1139); high-depth Offset scaling is an inference.
 
 - **Brush Airbrush build-up** (#1120, OpenSpec change
   `brush-airbrush-build-up`). The Brush options bar has an Airbrush toggle and

@@ -20,7 +20,9 @@ unless the user also asks for fixes. A review is a read-only task.
 - `AGENTS.md` applies. Any `docs/` edit needs `TASK-ALLOWS-DOCS`; never touch
   `docs/` for a review.
 - Use the `gh-reader` subagent for every GitHub read (issue/PR bodies, labels,
-  CI status). Do not read them yourself.
+  CI status). Do not read them yourself. If `gh-reader` fails twice, or hangs
+  for more than about two minutes, fall back to reading GitHub with the current
+  model.
 - Never open a malicious file with the normal build. For dynamic checks use a
   throwaway file, a hard timeout, and resource limits:
   `timeout 10s bash -c 'ulimit -v 2000000; ./build/pictura --headless ...'`.

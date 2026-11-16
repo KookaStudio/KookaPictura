@@ -12,7 +12,7 @@ use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_core::{layer_pixel_locked, PsdRect};
+use pictura_core::{layer_pixel_locked, layer_transparency_locked, PsdRect};
 
 impl qobject::PictureView {
     pub fn apply_filter(mut self: Pin<&mut Self>, kind: &QString) -> bool {
@@ -321,6 +321,31 @@ pub(super) fn apply_op_active_region(
             Err(error) => {
                 rust.filter_error = Some(error.to_string());
                 return None;
+            }
+        }
+    }
+    // Apply Image grows a smaller destination across the document when
+    // Preserve Transparency is off (#1139). Grow before the baseline is saved,
+    // so a later preview restores the grown layer and then shrinks it back.
+    if let ActiveOp::ApplyImage(params) = op {
+        if !params.preserve_transparency && !layer_transparency_locked(layer) {
+            let canvas = pictura_core::PsdRect {
+                top: 0,
+                left: 0,
+                bottom: doc_h as i32,
+                right: doc_w as i32,
+            };
+            match pictura_core::layer_bounds::grow_layer_to(
+                layer,
+                lrect.union(canvas),
+                "Apply Image",
+            ) {
+                Ok(true) => lrect = layer.rect,
+                Ok(false) => {}
+                Err(error) => {
+                    rust.filter_error = Some(error.to_string());
+                    return None;
+                }
             }
         }
     }

@@ -251,6 +251,8 @@ non-trivial changes and works from the CLI, with or without an agent** (the
 ## Workflow (mandatory order)
 1. DELEGATE: Use the `gh-reader` subagent for all GitHub reads
    (repo status, PRs, issue body/comments, CI status). Never read these yourself.
+   If `gh-reader` fails twice, or hangs for more than about two minutes, stop
+   delegating and read GitHub directly with the current model.
 2. CLARIFY: Before writing any code, list unclear requirements, risks, or
    missing info from the issue. Ask the user and WAIT for answers.
    If nothing is unclear, say so explicitly and proceed.

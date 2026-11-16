@@ -589,8 +589,8 @@ fn apply_channels(layer: &mut Layer, pass: Pass) -> Result<(), FilterError> {
 /// Blend `params` into `layer` over `region` (clamped to the layer), confined
 /// by `selection`.
 ///
-/// ponytail: the write stops at the layer rect, where Photoshop can grow a
-/// smaller layer to the document when Preserve Transparency is off.
+/// The caller grows a smaller destination to the document when Preserve
+/// Transparency is off (#1139); this function never changes the layer rect.
 pub fn apply_image_region(
     layer: &mut Layer,
     params: &ApplyImageParams,

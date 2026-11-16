@@ -2,7 +2,10 @@
 
 use super::*;
 use crate::cxxqt_object::tests::pixel_layer;
-use pictura_core::{Document, LockFlags};
+use pictura_core::{
+    BitDepth, ColorMode, Document, Layer, LockFlags, PsdRect, Samples, SourceChannels,
+};
+use std::sync::Arc;
 
 fn state() -> PictureViewRust {
     let mut doc = Document::new(
@@ -527,4 +530,418 @@ fn a_mask_filter_needs_the_target() {
     let original = mask_coverage(&rust);
     apply_filter_active(&mut rust, "gaussian-blur", &[2.0], true).expect("layer filter");
     assert_eq!(mask_coverage(&rust), original, "the mask is untouched");
+}
+
+fn apply_image_state(doc_size: u32, layer_rect: PsdRect, rgb: (u8, u8, u8)) -> PictureViewRust {
+    let mut doc = Document::new(doc_size, doc_size, ColorMode::Rgb, BitDepth::Eight);
+    let mut layer = pixel_layer(
+        "px",
+        layer_rect.width() as u32,
+        layer_rect.height() as u32,
+        rgb,
+    );
+    layer.rect = layer_rect;
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+    PictureViewRust {
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
+        layer_target: LayerTarget::only("0"),
+        gpu_compute: false,
+        ..Default::default()
+    }
+}
+
+fn apply_image_source(size: u32, hole: Option<PsdRect>) -> Document {
+    let mut pixels = Vec::with_capacity((size * size * 4) as usize);
+    for y in 0..size as i32 {
+        for x in 0..size as i32 {
+            let in_hole =
+                hole.is_some_and(|r| x >= r.left && x < r.right && y >= r.top && y < r.bottom);
+            pixels.extend_from_slice(if in_hole {
+                &[0, 0, 0, 0]
+            } else {
+                &[200, 10, 30, 255]
+            });
+        }
+    }
+    Document::from_rgba("source", size, size, &pixels)
+}
+
+fn apply_image_params(
+    source: &Document,
+    preserve: bool,
+    opacity: f32,
+) -> pictura_render::ApplyImageParams {
+    pictura_render::ApplyImageParams {
+        source: Arc::new(
+            pictura_render::apply_image_planes(
+                source,
+                None,
+                pictura_render::ApplyImageChannel::Composite,
+            )
+            .expect("the source composite"),
+        ),
+        invert: false,
+        mode: pictura_render::ApplyImageMode::Layer(pictura_core::BlendMode::Normal),
+        opacity,
+        preserve_transparency: preserve,
+        mask: None,
+        mask_invert: false,
+    }
+}
+
+fn apply_image_layer(rust: &PictureViewRust) -> &Layer {
+    &rust.session.doc.as_ref().expect("document").layers[0]
+}
+
+fn layer_rgba(layer: &Layer, x: i32, y: i32) -> [u8; 4] {
+    let w = layer.rect.width() as usize;
+    let at = (y - layer.rect.top) as usize * w + (x - layer.rect.left) as usize;
+    [0, 1, 2, -1].map(|id| {
+        layer
+            .channels
+            .iter()
+            .find(|c| c.id == id)
+            .expect("channel")
+            .data[at]
+    })
+}
+
+fn layer_planes(layer: &Layer) -> Vec<(i16, Vec<u8>)> {
+    layer
+        .channels
+        .iter()
+        .map(|c| (c.id, c.data.to_vec()))
+        .collect()
+}
+
+fn document_rect(size: i32) -> PsdRect {
+    PsdRect {
+        top: 0,
+        left: 0,
+        bottom: size,
+        right: size,
+    }
+}
+
+#[test]
+fn apply_image_grows_a_smaller_layer_to_the_document() {
+    let small = PsdRect {
+        top: 10,
+        left: 10,
+        bottom: 22,
+        right: 22,
+    };
+    let mut rust = apply_image_state(32, small, (40, 120, 200));
+    let source = apply_image_source(32, Some(small));
+    let params = apply_image_params(&source, false, 1.0);
+    assert!(
+        apply_op_active_region(&mut rust, &ActiveOp::ApplyImage(params), true, None, false,)
+            .is_some()
+    );
+    let layer = apply_image_layer(&rust);
+    assert_eq!(layer.rect, document_rect(32));
+    assert_eq!(
+        layer_rgba(layer, 16, 16),
+        [40, 120, 200, 255],
+        "the old pixel keeps its place"
+    );
+    assert_eq!(
+        layer_rgba(layer, 2, 2),
+        [200, 10, 30, 255],
+        "the new area takes the source"
+    );
+}
+
+#[test]
+fn apply_image_preserve_transparency_keeps_the_rect() {
+    let small = PsdRect {
+        top: 10,
+        left: 10,
+        bottom: 22,
+        right: 22,
+    };
+    let mut rust = apply_image_state(32, small, (40, 120, 200));
+    {
+        let layer = &mut rust.session.doc.as_mut().unwrap().layers[0];
+        let alpha = layer.channels.iter_mut().find(|c| c.id == -1).unwrap();
+        alpha.data.as_mut_slice()[0] = 0;
+    }
+    let source = apply_image_source(32, None);
+    let params = apply_image_params(&source, true, 1.0);
+    assert!(
+        apply_op_active_region(&mut rust, &ActiveOp::ApplyImage(params), true, None, false,)
+            .is_some()
+    );
+    let layer = apply_image_layer(&rust);
+    assert_eq!(layer.rect, small);
+    assert_eq!(
+        layer_rgba(layer, 10, 10),
+        [40, 120, 200, 0],
+        "the clear pixel is unchanged"
+    );
+    assert_eq!(
+        layer_rgba(layer, 16, 16),
+        [200, 10, 30, 255],
+        "an opaque pixel still blends"
+    );
+}
+
+#[test]
+fn apply_image_transparency_lock_keeps_the_rect() {
+    let small = PsdRect {
+        top: 10,
+        left: 10,
+        bottom: 22,
+        right: 22,
+    };
+    let mut rust = apply_image_state(32, small, (40, 120, 200));
+    rust.session.doc.as_mut().unwrap().layers[0].lock =
+        LockFlags::default().with(LockFlags::TRANSPARENCY, true);
+    let source = apply_image_source(32, None);
+    let params = apply_image_params(&source, false, 1.0);
+    assert!(
+        apply_op_active_region(&mut rust, &ActiveOp::ApplyImage(params), true, None, false,)
+            .is_some()
+    );
+    assert_eq!(apply_image_layer(&rust).rect, small);
+}
+
+#[test]
+fn apply_image_selection_confines_the_grown_blend() {
+    let small = PsdRect {
+        top: 10,
+        left: 10,
+        bottom: 22,
+        right: 22,
+    };
+    let mut rust = apply_image_state(32, small, (40, 120, 200));
+    rust.session.selection = Some(pictura_select::Selection::rect(32, 32, 0, 0, 16, 16));
+    let source = apply_image_source(32, None);
+    let params = apply_image_params(&source, false, 1.0);
+    assert!(
+        apply_op_active_region(&mut rust, &ActiveOp::ApplyImage(params), true, None, false,)
+            .is_some()
+    );
+    let layer = apply_image_layer(&rust);
+    assert_eq!(layer.rect, document_rect(32));
+    assert_eq!(
+        layer_rgba(layer, 2, 2),
+        [200, 10, 30, 255],
+        "a selected new pixel takes the source"
+    );
+    assert_eq!(
+        layer_rgba(layer, 20, 20),
+        [40, 120, 200, 255],
+        "an unselected old pixel is unchanged"
+    );
+    assert_eq!(
+        layer_rgba(layer, 24, 24),
+        [0, 0, 0, 0],
+        "an unselected new pixel stays transparent"
+    );
+}
+
+#[test]
+fn apply_image_preview_cancel_shrinks_the_grown_rect() {
+    let small = PsdRect {
+        top: 10,
+        left: 10,
+        bottom: 22,
+        right: 22,
+    };
+    let mut rust = apply_image_state(32, small, (40, 120, 200));
+    let original = apply_image_layer(&rust).clone();
+    let source = apply_image_source(32, None);
+    let params = apply_image_params(&source, false, 1.0);
+    let section = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: 16,
+        right: 16,
+    };
+    assert!(apply_op_active_region(
+        &mut rust,
+        &ActiveOp::ApplyImage(params),
+        false,
+        Some(section),
+        false,
+    )
+    .is_some());
+    assert_eq!(apply_image_layer(&rust).rect, document_rect(32));
+    assert!(cancel_filter_preview(&mut rust).is_some());
+    let layer = apply_image_layer(&rust);
+    assert_eq!(layer.rect, original.rect);
+    assert_eq!(layer_planes(layer), layer_planes(&original));
+}
+
+#[test]
+fn apply_image_growth_previews_do_not_compound() {
+    let small = PsdRect {
+        top: 10,
+        left: 10,
+        bottom: 22,
+        right: 22,
+    };
+    let source = apply_image_source(32, None);
+    let section = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: 16,
+        right: 16,
+    };
+
+    let mut once = apply_image_state(32, small, (40, 120, 200));
+    let half = apply_image_params(&source, false, 0.5);
+    assert!(apply_op_active_region(
+        &mut once,
+        &ActiveOp::ApplyImage(half.clone()),
+        true,
+        None,
+        false,
+    )
+    .is_some());
+
+    let mut twice = apply_image_state(32, small, (40, 120, 200));
+    let full = apply_image_params(&source, false, 1.0);
+    assert!(apply_op_active_region(
+        &mut twice,
+        &ActiveOp::ApplyImage(full),
+        false,
+        Some(section),
+        false,
+    )
+    .is_some());
+    assert!(apply_op_active_region(
+        &mut twice,
+        &ActiveOp::ApplyImage(half.clone()),
+        false,
+        Some(section),
+        false,
+    )
+    .is_some());
+    assert!(
+        apply_op_active_region(&mut twice, &ActiveOp::ApplyImage(half), true, None, false,)
+            .is_some()
+    );
+
+    let expected = apply_image_layer(&once);
+    let actual = apply_image_layer(&twice);
+    assert_eq!(actual.rect, expected.rect);
+    assert_eq!(layer_planes(actual), layer_planes(expected));
+}
+
+#[test]
+fn apply_image_grown_native_store_keeps_precision() {
+    let small = PsdRect {
+        top: 10,
+        left: 10,
+        bottom: 22,
+        right: 22,
+    };
+    let mut doc = Document::new(32, 32, ColorMode::Rgb, BitDepth::Sixteen);
+    doc.source_depth = Some(BitDepth::Sixteen);
+    let mut layer = pixel_layer("px", 12, 12, (40, 120, 200));
+    layer.rect = small;
+    let planes = (0..3)
+        .map(|id| (id as i16, Samples::U16(vec![30000u16; 144].into())))
+        .chain(std::iter::once((
+            -1,
+            Samples::U16(vec![65535u16; 144].into()),
+        )))
+        .collect();
+    layer.source_channels = Some(SourceChannels::new(BitDepth::Sixteen, small, planes));
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+    let mut rust = PictureViewRust {
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
+        layer_target: LayerTarget::only("0"),
+        gpu_compute: false,
+        ..Default::default()
+    };
+    let source = apply_image_source(32, None);
+    let params = apply_image_params(&source, false, 1.0);
+    assert!(
+        apply_op_active_region(&mut rust, &ActiveOp::ApplyImage(params), true, None, false,)
+            .is_some()
+    );
+    let layer = apply_image_layer(&rust);
+    assert_eq!(layer.rect, document_rect(32));
+    let store = layer.source_channels.as_ref().expect("native store");
+    assert_eq!(store.rect, document_rect(32));
+    let red = store
+        .planes
+        .iter()
+        .find(|(id, _)| *id == 0)
+        .expect("red plane")
+        .1
+        .clone();
+    assert_eq!(red.len(), 32 * 32);
+    let at = 2 * 32 + 2;
+    let Samples::U16(values) = red else {
+        panic!("the store stays 16-bit");
+    };
+    assert!((values[at] as i32 - 51400).abs() <= 1, "{}", values[at]);
+    let channel = layer.channels.iter().find(|c| c.id == 0).unwrap();
+    assert_eq!(channel.data[at], 200);
+}
+
+#[test]
+fn apply_image_grown_32_bit_store_keeps_values() {
+    let small = PsdRect {
+        top: 10,
+        left: 10,
+        bottom: 22,
+        right: 22,
+    };
+    let mut doc = Document::new(32, 32, ColorMode::Rgb, BitDepth::ThirtyTwo);
+    doc.source_depth = Some(BitDepth::ThirtyTwo);
+    let mut layer = pixel_layer("px", 12, 12, (64, 64, 64));
+    layer.rect = small;
+    let planes = (0..3)
+        .map(|id| (id as i16, Samples::F32(vec![0.25f32; 144].into())))
+        .chain(std::iter::once((
+            -1,
+            Samples::F32(vec![1.0f32; 144].into()),
+        )))
+        .collect();
+    layer.source_channels = Some(SourceChannels::new(BitDepth::ThirtyTwo, small, planes));
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+    let mut rust = PictureViewRust {
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
+        layer_target: LayerTarget::only("0"),
+        gpu_compute: false,
+        ..Default::default()
+    };
+    let source = apply_image_source(32, Some(small));
+    let params = apply_image_params(&source, false, 1.0);
+    assert!(
+        apply_op_active_region(&mut rust, &ActiveOp::ApplyImage(params), true, None, false,)
+            .is_some()
+    );
+    let layer = apply_image_layer(&rust);
+    assert_eq!(layer.rect, document_rect(32));
+    let store = layer.source_channels.as_ref().expect("native store");
+    assert_eq!(store.rect, document_rect(32));
+    let red = store
+        .planes
+        .iter()
+        .find(|(id, _)| *id == 0)
+        .expect("red plane")
+        .1
+        .clone();
+    assert_eq!(red.len(), 32 * 32);
+    let Samples::F32(values) = red else {
+        panic!("the store stays 32-bit");
+    };
+    let at = |x: usize, y: usize| y * 32 + x;
+    assert!(
+        (values[at(16, 16)] - 0.25).abs() < 1e-6,
+        "the old pixel is unchanged"
+    );
+    assert!(
+        (values[at(2, 2)] - 200.0 / 255.0).abs() < 1e-6,
+        "the new area takes the source"
+    );
+    let channel = layer.channels.iter().find(|c| c.id == 0).unwrap();
+    assert_eq!(channel.data[at(16, 16)], 64);
+    assert_eq!(channel.data[at(2, 2)], 200);
 }
