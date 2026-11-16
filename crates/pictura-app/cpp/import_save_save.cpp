@@ -427,9 +427,9 @@ bool ImportSaveCoordinator::promptSaveFormatOptions(const QString& path, SaveFor
                 options.gifColors = dialog.colors();
                 options.gifDither = dialog.dither();
                 options.gifAmount = dialog.amount();
-                if (!runSaveFormatDialog(kind, options)) {
-                    return false;
-                }
+            }
+            if (!runSaveFormatDialog(kind, options)) {
+                return false;
             }
         }
         // An already-Indexed document has no palette dialog, and its remembered
