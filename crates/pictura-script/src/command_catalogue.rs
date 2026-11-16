@@ -4,6 +4,23 @@
 mod const_names;
 mod entries;
 
+use pictura_core::Edition;
+
+/// The edition that first offered `id`. The 3D surface, the Measurement Log and
+/// the Count overlay are Extended-only; the Timeline is all editions.
+pub fn command_edition(id: &str) -> Edition {
+    match id {
+        "edit.preferences.3d"
+        | "layer.rasterize.3d"
+        | "type.extrude.to.3d"
+        | "view.show.3d.axis"
+        | "view.show.count"
+        | "window.panels.3d"
+        | "window.panels.measurement.log" => Edition::Extended,
+        _ => Edition::Standard,
+    }
+}
+
 /// One command table row: a menu command (or a path-derived stub).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CommandSpec {
@@ -293,6 +310,28 @@ mod tests {
             "Ctrl+Y"
         );
         assert_eq!(find("edit.redo").expect("redo row").shortcut, "");
+    }
+
+    #[test]
+    fn extended_only_command_ids() {
+        let extended: Vec<&str> = command_catalogue()
+            .iter()
+            .filter(|spec| command_edition(spec.id) == Edition::Extended)
+            .map(|spec| spec.id)
+            .collect();
+        assert_eq!(
+            extended,
+            [
+                "edit.preferences.3d",
+                "layer.rasterize.3d",
+                "type.extrude.to.3d",
+                "view.show.3d.axis",
+                "view.show.count",
+                "window.panels.3d",
+                "window.panels.measurement.log",
+            ]
+        );
+        assert_eq!(command_edition("window.panels.timeline"), Edition::Standard);
     }
 
     #[test]

@@ -609,7 +609,10 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       (#648)
 - [ ] `--version`, an About dialog with the Qt and GPU details, and an update
       checker (#649)
-- [ ] Edition gating for Standard and Extended (#650)
+- [x] Edition gating for Standard and Extended (#650): `PICTURA_EDITION`
+      selects the surface (default Extended); Standard hides the Count tool,
+      the 3D commands, the Measurement Log and the Count overlay, while the
+      Timeline stays in both editions.
 - [x] Opt-in performance metrics: phase timings, edit records and GPU counters
       (#651)
 - [x] Parallel CPU kernels for adjustments, effect mattes, clipping and the

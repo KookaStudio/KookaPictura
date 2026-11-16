@@ -626,6 +626,9 @@ QList<CommandInfo> CommandRegistry::describe() const
 void addDefaultCommands(CommandRegistry& registry)
 {
     for (const CommandSpecRow& row : command_catalogue()) {
+        if (row.extended_only && !edition_is_extended()) {
+            continue;
+        }
         for (int i = 0; i < kSeparatorCount; ++i) {
             if (kSeparators[i].beforePath == row.path) {
                 registry.addSeparator(kSeparators[i].path);

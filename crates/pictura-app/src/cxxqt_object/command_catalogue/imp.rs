@@ -1,5 +1,6 @@
 use super::super::engine_tables::ffi::CommandSpecRow;
 use cxx_qt_lib::{QString, QStringList};
+use pictura_core::Edition;
 use pictura_script::command_catalogue as catalogue;
 
 pub(crate) fn command_catalogue() -> Vec<CommandSpecRow> {
@@ -12,6 +13,7 @@ pub(crate) fn command_catalogue() -> Vec<CommandSpecRow> {
             shortcut: QString::from(spec.shortcut),
             implemented: spec.implemented,
             checkable: spec.checkable,
+            extended_only: catalogue::command_edition(spec.id) == Edition::Extended,
         })
         .collect()
 }

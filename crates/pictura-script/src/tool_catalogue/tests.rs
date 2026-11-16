@@ -1,4 +1,30 @@
 use super::*;
+use pictura_core::Edition;
+
+#[test]
+fn extended_only_tools_are_count_and_the_3d_rig() {
+    let extended: Vec<&str> = tool_catalogue()
+        .iter()
+        .filter(|row| tool_edition(row.name) == Edition::Extended)
+        .map(|row| row.name)
+        .collect();
+    assert_eq!(
+        extended,
+        [
+            "count",
+            "objectrotate",
+            "objectroll",
+            "objectpan",
+            "objectslide",
+            "objectscale",
+            "camerarotate",
+            "cameraroll",
+            "camerapan",
+            "camerawalk",
+            "camerazoom",
+        ]
+    );
+}
 
 #[test]
 fn tool_catalogue_rows_unique_and_grouped() {

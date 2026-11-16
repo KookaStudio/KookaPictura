@@ -1058,7 +1058,7 @@ dependencies = [
 
 [[package]]
 name = "pictura-adjust"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "pictura-color",
  "pictura-core",
@@ -1069,7 +1069,7 @@ dependencies = [
 
 [[package]]
 name = "pictura-codec"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "aes",
  "flate2",
@@ -1090,7 +1090,7 @@ dependencies = [
 
 [[package]]
 name = "pictura-color"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "lcms2",
  "pictura-testkit",
@@ -1099,7 +1099,7 @@ dependencies = [
 
 [[package]]
 name = "pictura-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "crc32fast",
  "libc",
@@ -1110,7 +1110,7 @@ dependencies = [
 
 [[package]]
 name = "pictura-filters"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "pictura-color",
  "pictura-core",
@@ -1123,7 +1123,7 @@ dependencies = [
 
 [[package]]
 name = "pictura-mcp"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "libc",
  "serde_json",
@@ -1131,7 +1131,7 @@ dependencies = [
 
 [[package]]
 name = "pictura-ops"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "pictura-core",
  "pictura-testkit",
@@ -1140,7 +1140,7 @@ dependencies = [
 
 [[package]]
 name = "pictura-paint"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "pictura-core",
  "rayon",
@@ -1148,7 +1148,7 @@ dependencies = [
 
 [[package]]
 name = "pictura-render"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "flate2",
  "pictura-adjust",
@@ -1169,9 +1169,10 @@ dependencies = [
 
 [[package]]
 name = "pictura-script"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "pictura-codec",
+ "pictura-core",
  "pictura-filters",
  "serde",
  "serde_json",
@@ -1180,7 +1181,7 @@ dependencies = [
 
 [[package]]
 name = "pictura-select"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "pictura-core",
  "rayon",
@@ -1189,11 +1190,11 @@ dependencies = [
 
 [[package]]
 name = "pictura-testkit"
-version = "0.3.0"
+version = "0.4.0"
 
 [[package]]
 name = "pictura_app"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "ash",
  "cxx",

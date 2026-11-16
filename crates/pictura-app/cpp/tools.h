@@ -120,6 +120,7 @@ struct ToolInfo {
     const char* hint;
     int group;
     bool implemented;
+    bool extendedOnly;
     int hotspotX;
     int hotspotY;
 };
@@ -127,6 +128,13 @@ struct ToolInfo {
 const ToolInfo& toolInfo(ToolId id);
 const QList<ToolId>& allToolIds();
 bool toolImplemented(ToolId id);
+// Present in the selected edition, whether or not it is implemented yet. The
+// toolbox keeps an unimplemented member in its flyout so the disabled entry is
+// visible; Standard drops the Extended-only tools.
+bool toolInEdition(ToolId id);
+// Implemented and allowed by the selected edition. Standard hides the
+// Extended-only tools (the Count tool and the 3D rig); Extended shows them.
+bool toolAvailable(ToolId id);
 // The painting brushes (the B group, the S stamps, the Y history brushes, the
 // Eraser and Background Eraser, and the retouch tools): they share the size ring, the `[` / `]` keys, and the paint
 // cursor policy.

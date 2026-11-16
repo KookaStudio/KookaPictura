@@ -1,6 +1,7 @@
 use super::super::ffi::{ToolHintRow, ToolSpecRow};
 use cxx_qt_lib::QString;
-use pictura_script::tool_catalogue::{tool_catalogue, ToolCursor};
+use pictura_core::Edition;
+use pictura_script::tool_catalogue::{tool_catalogue, tool_edition, ToolCursor};
 
 pub(crate) fn cursor_name(cursor: ToolCursor) -> &'static str {
     match cursor {
@@ -34,6 +35,7 @@ pub(crate) fn tool_catalogue_rows() -> Vec<ToolSpecRow> {
                 })
                 .collect(),
             implemented: spec.implemented,
+            extended_only: tool_edition(spec.name) == Edition::Extended,
         })
         .collect()
 }

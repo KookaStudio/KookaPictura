@@ -5,6 +5,20 @@
 
 mod entries;
 
+use pictura_core::Edition;
+
+/// The edition that first offered `name`. The Count tool and the 3D object and
+/// camera tools are Extended-only; every other CS6 tool ships in both editions.
+pub fn tool_edition(name: &str) -> Edition {
+    match name {
+        "count" | "objectrotate" | "objectroll" | "objectpan" | "objectslide" | "objectscale"
+        | "camerarotate" | "cameraroll" | "camerapan" | "camerawalk" | "camerazoom" => {
+            Edition::Extended
+        }
+        _ => Edition::Standard,
+    }
+}
+
 /// The cursor a tool shows before its SVG cursor asset loads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToolCursor {

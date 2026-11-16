@@ -335,7 +335,7 @@ ToolController::ToolController(QObject* parent)
 
 void ToolController::setActiveTool(ToolId id)
 {
-    if (!toolImplemented(id)) {
+    if (!toolAvailable(id)) {
         return;
     }
     if (active_ == id) {
