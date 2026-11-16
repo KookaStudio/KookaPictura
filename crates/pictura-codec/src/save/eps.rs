@@ -465,6 +465,7 @@ fn dcs_2_file(
     Ok(wrap_dos_eps(&main, preview.as_deref()))
 }
 
+#[cfg(test)]
 pub(super) fn write_dcs(
     path: &Path,
     raster: &Raster,
@@ -483,7 +484,7 @@ pub(super) fn write_dcs_guarded(
     jpeg: Option<&JpegEncode<'_>>,
     before_write: Option<&BeforeWrite<'_>>,
 ) -> Result<(), PsdError> {
-    let check = || before_write.map_or(true, |guard| guard());
+    let check = || before_write.is_none_or(|guard| guard());
     if options.dcs_version != 1 {
         let bytes = dcs_2_file(raster, options, doc, jpeg)?;
         if !check() {

@@ -402,7 +402,7 @@ pub fn save_document_with_jpeg_guarded(
 ) -> Result<(), PsdError> {
     let options = options.clone().with_defaults();
     let raster = Raster::from_document(doc)?;
-    let check = || before_write.map_or(true, |guard| guard());
+    let check = || before_write.is_none_or(|guard| guard());
     match kind {
         SaveKind::Png => {
             let bytes = write_png(&raster, &options)?;
