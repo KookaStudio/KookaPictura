@@ -344,6 +344,14 @@ void ExportAsTest::svgExportPaintServers()
     QCOMPARE(file.write(bytes), qint64(bytes.size()));
     file.close();
     QVERIFY(QFileInfo(path).size() > 0);
+
+    // Keep the generated file for a command-line run that wants to inspect it.
+    const QString keep = qEnvironmentVariable("PICTURA_SVG_OUT");
+    if (!keep.isEmpty()) {
+        QFile out(keep);
+        QVERIFY(out.open(QIODevice::WriteOnly));
+        QCOMPARE(out.write(bytes), qint64(bytes.size()));
+    }
 }
 
 QTEST_MAIN(ExportAsTest)
