@@ -86,6 +86,9 @@ const int kPreviewDelayMs = 120;
 // Screen pixels filtered past each edge of the pane, so a filter that reads
 // its neighbourhood sees real pixels at the visible border.
 const int kPreviewMargin = 16;
+// The pan cache reaches this fraction of the viewport past the filter context,
+// so small scrolls move already-filtered pixels instead of re-running the stack.
+const double kPreviewPanMargin = 0.25;
 // The thumbnails' source: the picture with its shorter side reduced to this.
 const int kThumbnailSourceSide = 160;
 
@@ -318,7 +321,7 @@ QWidget* FilterGalleryDialog::buildPreview()
     previewArea_->viewport()->setCursor(Qt::OpenHandCursor);
     for (QScrollBar* bar :
          {previewArea_->horizontalScrollBar(), previewArea_->verticalScrollBar()}) {
-        connect(bar, &QScrollBar::valueChanged, this, &FilterGalleryDialog::schedulePreview);
+        connect(bar, &QScrollBar::valueChanged, this, &FilterGalleryDialog::previewScrolled);
     }
     layout->addWidget(previewArea_, 1);
 
@@ -570,7 +573,18 @@ void FilterGalleryDialog::selectEffect(int index)
 
 void FilterGalleryDialog::schedulePreview()
 {
+    previewDirty_ = true;
     previewTimer_->start();
+}
+
+// A scrollbar change reuses the cached copy while the pane stays inside it, so
+// a pan moves already-filtered pixels; only leaving the cache re-filters.
+void FilterGalleryDialog::previewScrolled()
+{
+    if (!previewDirty_ && previewCoversNeeded()) {
+        return;
+    }
+    schedulePreview();
 }
 
 void FilterGalleryDialog::runPreview()
@@ -586,32 +600,90 @@ void FilterGalleryDialog::runPreview()
             params.append(effect.values);
         }
     }
-    // Only what the pane shows is filtered, on a copy reduced to about one
-    // pixel per device pixel; the document is untouched until OK filters the
-    // layer at full resolution.
-    const QSize doc = documentSize();
-    const QSize viewport = previewArea_->viewport()->size();
-    const double margin = kPreviewMargin / zoom_;
-    const double left = previewArea_->horizontalScrollBar()->value() / zoom_ - margin;
-    const double top = previewArea_->verticalScrollBar()->value() / zoom_ - margin;
-    const int x0 = std::max(0, static_cast<int>(std::floor(left)));
-    const int y0 = std::max(0, static_cast<int>(std::floor(top)));
-    const int x1 = std::min(doc.width(),
-                            static_cast<int>(std::ceil(left + viewport.width() / zoom_ + 2 * margin)));
-    const int y1 = std::min(doc.height(),
-                            static_cast<int>(std::ceil(top + viewport.height() / zoom_ + 2 * margin)));
-    if (x1 <= x0 || y1 <= y0) {
+    // Filter the pane plus its filter-context and pan margins on a copy reduced
+    // to about one pixel per device pixel; the document is untouched until OK
+    // filters the layer at full resolution.
+    const QRect region = paddedRegion();
+    if (region.isEmpty()) {
         return;
     }
-    const double scale = std::min(1.0, zoom_ * devicePixelRatioF());
-    const QImage image =
-        filter_gallery_preview(*view_, kinds, params, x0, y0, x1 - x0, y1 - y0, scale);
+    const double scale = previewScale();
+    const QImage image = filter_gallery_preview(*view_, kinds, params, region.x(), region.y(),
+                                                region.width(), region.height(), scale);
     if (image.isNull()) {
         return;
     }
     previewCanvas_->image = image;
-    previewRegion_ = QRect(x0, y0, x1 - x0, y1 - y0);
+    previewRegion_ = region;
+    previewScale_ = scale;
+    previewDirty_ = false;
     layoutPreview();
+}
+
+// The document rect under the pane's viewport, clipped to the document.
+QRect FilterGalleryDialog::visibleRegion() const
+{
+    const QSize doc = documentSize();
+    if (doc.isEmpty() || zoom_ <= 0.0) {
+        return {};
+    }
+    const QSize viewport = previewArea_->viewport()->size();
+    const double left = previewArea_->horizontalScrollBar()->value() / zoom_;
+    const double top = previewArea_->verticalScrollBar()->value() / zoom_;
+    const int x0 = qBound(0, static_cast<int>(std::floor(left)), doc.width());
+    const int y0 = qBound(0, static_cast<int>(std::floor(top)), doc.height());
+    const int x1 = qBound(0, static_cast<int>(std::ceil(left + viewport.width() / zoom_)),
+                          doc.width());
+    const int y1 = qBound(0, static_cast<int>(std::ceil(top + viewport.height() / zoom_)),
+                          doc.height());
+    if (x1 <= x0 || y1 <= y0) {
+        return {};
+    }
+    return QRect(x0, y0, x1 - x0, y1 - y0);
+}
+
+// The visible part plus the context a filter reads past the visible border.
+QRect FilterGalleryDialog::neededRegion() const
+{
+    const QRect visible = visibleRegion();
+    if (visible.isEmpty()) {
+        return {};
+    }
+    const int margin = static_cast<int>(std::ceil(kPreviewMargin / zoom_));
+    return visible.adjusted(-margin, -margin, margin, margin)
+        .intersected(QRect(QPoint(0, 0), documentSize()));
+}
+
+// The needed region plus a quarter viewport of pan margin on each side: what a
+// preview render filters, so small scrolls reuse it.
+QRect FilterGalleryDialog::paddedRegion() const
+{
+    const QRect needed = neededRegion();
+    if (needed.isEmpty()) {
+        return {};
+    }
+    const QSize viewport = previewArea_->viewport()->size();
+    const int padX = static_cast<int>(std::ceil(viewport.width() * kPreviewPanMargin / zoom_));
+    const int padY = static_cast<int>(std::ceil(viewport.height() * kPreviewPanMargin / zoom_));
+    return needed.adjusted(-padX, -padY, padX, padY)
+        .intersected(QRect(QPoint(0, 0), documentSize()));
+}
+
+bool FilterGalleryDialog::previewCoversNeeded() const
+{
+    if (!previewCanvas_ || previewCanvas_->image.isNull()) {
+        return false;
+    }
+    const QRect needed = neededRegion();
+    if (needed.isEmpty()) {
+        return false;
+    }
+    return std::abs(previewScale_ - previewScale()) < 1e-9 && previewRegion_.contains(needed);
+}
+
+double FilterGalleryDialog::previewScale() const
+{
+    return std::min(1.0, zoom_ * devicePixelRatioF());
 }
 
 void FilterGalleryDialog::layoutPreview()
@@ -762,6 +834,10 @@ bool FilterGalleryDialog::eventFilter(QObject* watched, QEvent* event)
             }
             break;
         }
+        case QEvent::Resize:
+            // A grown pane can expose a strip the cache does not cover.
+            previewScrolled();
+            break;
         default:
             break;
         }

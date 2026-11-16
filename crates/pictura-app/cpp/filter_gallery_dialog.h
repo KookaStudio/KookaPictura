@@ -86,9 +86,12 @@ public:
     // hidden nothing is committed, which is not a refusal.
     CommitResult commit();
 
-    // The pane's last rendered preview: the visible part of the picture,
-    // reduced and filtered.
+    // The cached filtered copy the pane draws: the visible part of the picture
+    // plus its filter-context and pan margins, reduced and filtered.
     QImage previewImage() const;
+
+    // The document rect previewImage() covers.
+    QRect previewRegion() const { return previewRegion_; }
 
 protected:
     void showEvent(QShowEvent* event) override;
@@ -102,9 +105,15 @@ private:
     void showVisibility(QListWidgetItem* item, bool visible);
     void effectMoved(int from, int to);
     void schedulePreview();
+    void previewScrolled();
     void runPreview();
     void layoutPreview();
     QSize documentSize() const;
+    QRect visibleRegion() const;
+    QRect neededRegion() const;
+    QRect paddedRegion() const;
+    bool previewCoversNeeded() const;
+    double previewScale() const;
     void setZoom(double zoom);
     void setZoomAt(double zoom, const QPointF& anchor);
     void stepZoom(bool zoomIn, const QPointF& anchor);
@@ -124,6 +133,8 @@ private:
     QScrollArea* previewArea_ = nullptr;
     GalleryPreviewCanvas* previewCanvas_ = nullptr;
     QRect previewRegion_;
+    double previewScale_ = 0.0;
+    bool previewDirty_ = false;
     QComboBox* zoomCombo_ = nullptr;
     QWidget* thumbnailPane_ = nullptr;
     QList<QToolButton*> thumbnails_;
