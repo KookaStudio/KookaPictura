@@ -42,8 +42,9 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
         return pictura::selfTest().fail(352, "round3 panel fixture");
     }
 
-    // lpr_rename_band (352): a content-band double-click opens the editor; the
-    // eye and chevron controls do not; a zero-width-name row still resolves.
+    // lpr_rename_band (352): a double-click inside the rendered name label
+    // opens the editor; the eye and chevron controls do not; a short label still
+    // has a non-zero hit rect when thumbnails are off.
     {
         const bool created = frame.newDocument(QStringLiteral("RenameBand"), 8, 8,
                                                QStringLiteral("rgb"), 8,

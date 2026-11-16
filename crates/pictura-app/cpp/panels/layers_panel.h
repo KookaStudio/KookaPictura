@@ -342,6 +342,8 @@ public:
     bool triggerLayerStyleMenuActionForTest(const QString& path, const QString& text);
     bool doubleClickFxBadgeForTest(const QString& path);
     bool doubleClickRowCenterForTest(const QString& path);
+    // Double-click just right of the rendered name label, in the empty row band.
+    bool doubleClickRightOfNameForTest(const QString& path);
     // The mask-thumbnail context menu: its item texts/enabled states, and a
     // direct run of one command by its action id (test seam).
     QStringList maskMenuTextsForPathForTest(const QString& path);
