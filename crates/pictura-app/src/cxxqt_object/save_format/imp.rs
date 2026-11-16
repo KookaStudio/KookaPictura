@@ -4,6 +4,7 @@ use super::super::picture::picture_rgba;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
+use pictura_codec::{ColorReduction, Dither, PaletteOptions};
 
 /// The typed Save As kind and options accepted by the dialogs.
 #[derive(Clone, Debug, Default)]
@@ -128,6 +129,40 @@ impl Default for SaveGifOptions {
             dither: 1,
             amount: 75,
             interlaced: false,
+        }
+    }
+}
+
+impl SaveGifOptions {
+    /// The engine palette options for these dialog values. The GIF save and
+    /// the GIF save preview both use this mapping so they cannot drift.
+    pub(in crate::cxxqt_object) fn palette_options(self) -> PaletteOptions {
+        let reduction = match self.palette {
+            0 => ColorReduction::Adaptive,
+            1 => ColorReduction::Restrictive,
+            2 => ColorReduction::Perceptual,
+            3 => ColorReduction::Selective,
+            _ => ColorReduction::Adaptive,
+        };
+        let colors = match self.palette {
+            0 => 256,
+            1 => 216,
+            _ => self.colors,
+        };
+        let dither = match (self.palette, self.dither) {
+            (0, _) => Dither::None,
+            (_, 1) => Dither::Diffusion,
+            (_, 2) => Dither::Pattern,
+            (_, 3) => Dither::Noise,
+            _ => Dither::None,
+        };
+        PaletteOptions {
+            reduction,
+            colors: colors.clamp(2, 256) as u16,
+            dither,
+            amount: self.amount.clamp(0, 100) as u8,
+            transparency: false,
+            matte: [255, 255, 255],
         }
     }
 }

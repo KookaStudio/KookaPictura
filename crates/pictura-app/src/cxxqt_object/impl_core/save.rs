@@ -5,7 +5,6 @@
 
 use super::*;
 use crate::cxxqt_object::PictureViewRust;
-use pictura_codec::{ColorReduction, Dither, PaletteOptions};
 use pictura_core::{ColorMode, Samples};
 use std::path::Path;
 
@@ -304,6 +303,7 @@ fn write_gif(rust: &mut PictureViewRust, path: &str) -> bool {
     let gpu_compute = rust.gpu_compute;
     let dirty = rust.session.dirty;
     let options = rust.save_gif_options.unwrap_or_default();
+    let unreadable_before = pictura_core::memory::eviction::unreadable_reads();
     let bytes = {
         let session = &mut rust.session;
         let Some(doc) = session.doc.as_mut() else {
@@ -312,22 +312,29 @@ fn write_gif(rust: &mut PictureViewRust, path: &str) -> bool {
         if doc.width == 0 || doc.height == 0 || doc.width > 65_535 || doc.height > 65_535 {
             return false;
         }
+        // A tile lost from scratch reads back as defaults; committing those
+        // bytes would overwrite a good GIF with a damaged one (#1217).
+        if crate::history::unreadable_tiles(doc) > 0 {
+            super::super::helpers::memory_gate::refuse_for_scratch();
+            return false;
+        }
         if dirty {
             pictura_render::refresh_native_composite(doc);
         }
-        if pictura_codec::indexed_source_is_current(doc) {
+        let bytes = if pictura_codec::gif_indexed_source_is_current(doc) {
             let Some(palette) = doc.source_palette else {
                 return false;
             };
             let Some(planes) = doc.source_planes.as_ref() else {
                 return false;
             };
-            let Samples::U8(indices) = &planes.samples else {
+            let Samples::U8(samples) = &planes.samples else {
                 return false;
             };
-            if indices.len() != doc.width as usize * doc.height as usize {
+            let plane = doc.width as usize * doc.height as usize;
+            let Some(indices) = samples.as_slice().get(..plane) else {
                 return false;
-            }
+            };
             let highest = indices.iter().copied().max().unwrap_or(0) as usize;
             let count = (highest + 1).clamp(2, 256);
             let palette = (0..count)
@@ -347,48 +354,25 @@ fn write_gif(rust: &mut PictureViewRust, path: &str) -> bool {
             let srgb = pictura_codec::buffer_to_srgb(doc, &buffer);
             let rgba = buffer_to_rgba_bytes(&srgb);
             let indexed =
-                pictura_codec::quantize(&rgba, doc.width, doc.height, gif_options(&options));
+                pictura_codec::quantize(&rgba, doc.width, doc.height, options.palette_options());
             pictura_codec::encode_gif(&indexed, options.interlaced)
+        };
+        // A tile can be lost while encoding, after the preflight. Reject the
+        // encoded bytes before the atomic write for the same reason.
+        if pictura_core::memory::eviction::unreadable_reads() != unreadable_before
+            && crate::history::unreadable_tiles(doc) > 0
+        {
+            return false;
         }
+        bytes
     };
     super::super::helpers::safe_io::write_atomically(path, &bytes, false).is_ok()
-}
-
-fn gif_options(options: &super::super::save_format::SaveGifOptions) -> PaletteOptions {
-    let reduction = match options.palette {
-        0 => ColorReduction::Adaptive,
-        1 => ColorReduction::Restrictive,
-        2 => ColorReduction::Perceptual,
-        3 => ColorReduction::Selective,
-        _ => ColorReduction::Adaptive,
-    };
-    let colors = match options.palette {
-        0 => 256,
-        1 => 216,
-        _ => options.colors,
-    };
-    let dither = match (options.palette, options.dither) {
-        (0, _) => Dither::None,
-        (_, 1) => Dither::Diffusion,
-        (_, 2) => Dither::Pattern,
-        (_, 3) => Dither::Noise,
-        _ => Dither::None,
-    };
-    PaletteOptions {
-        reduction,
-        colors: colors.clamp(2, 256) as u16,
-        dither,
-        amount: options.amount.clamp(0, 100) as u8,
-        transparency: false,
-        mapped_transparency: false,
-        matte: [255, 255, 255],
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicU64, Ordering};
+        use std::sync::atomic::{AtomicU64, Ordering};
 
     #[test]
     fn save_composite_converts_profiled_rgb_for_srgb_writers() {
@@ -455,12 +439,18 @@ mod tests {
         assert!(pictura_codec::indexed_source_is_current(&doc));
 
         let palette = doc.source_palette.expect("retained palette");
+        let plane = doc.width as usize * doc.height as usize;
         let indices = {
-            let planes = doc.source_planes.as_ref().expect("retained planes");
-            let Samples::U8(indices) = &planes.samples else {
+            let planes = doc.source_planes.as_mut().expect("retained planes");
+            let Samples::U8(samples) = &mut planes.samples else {
                 panic!("expected an 8-bit index plane");
             };
-            indices.to_vec()
+            let mut samples = samples.to_vec();
+            // The merged store also keeps alpha and document channels after the
+            // index plane; GIF reads only the first plane.
+            samples.extend(std::iter::repeat_n(0xA5, plane));
+            planes.samples = Samples::U8(samples.clone().into());
+            samples[..plane].to_vec()
         };
         let highest = indices.iter().copied().max().unwrap_or(0) as usize;
         let count = (highest + 1).clamp(2, 256);
@@ -477,6 +467,22 @@ mod tests {
             false,
         );
 
+        // A full refresh stores the working RGBA frame; GIF still accepts it
+        // while the RGB planes match and alpha stays opaque.
+        let mut refreshed = doc.composite.data.get(..3 * plane).unwrap().to_vec();
+        refreshed.extend(std::iter::repeat_n(255, plane));
+        doc.composite = pictura_core::PixelBuffer {
+            width: doc.width,
+            height: doc.height,
+            channels: 4,
+            data: refreshed.into(),
+        };
+        assert!(!pictura_codec::indexed_source_is_current(&doc));
+        assert!(pictura_codec::gif_indexed_source_is_current(&doc));
+        let mut transparent = doc.clone();
+        transparent.composite.data.as_mut_slice()[3 * plane] = 254;
+        assert!(!pictura_codec::gif_indexed_source_is_current(&transparent));
+
         let mut rust = PictureViewRust::default();
         rust.session.doc = Some(doc);
         rust.session.dirty = true;
@@ -484,6 +490,23 @@ mod tests {
         assert!(write_gif(&mut rust, &target));
         assert_eq!(std::fs::read(&target).unwrap(), expected);
         let _ = std::fs::remove_file(&target);
+    }
+
+    #[test]
+    fn gif_refuses_unreadable_tiles() {
+        use crate::cxxqt_object::scratch_rollback::tests::{dense_doc, lose_tiles};
+        let mut rust = PictureViewRust::default();
+        rust.session.doc = Some(dense_doc());
+        rust.session.dirty = true;
+        lose_tiles(rust.session.doc.as_ref().unwrap());
+        super::super::super::helpers::memory_gate::clear();
+        let target = path("unreadable.gif");
+        assert!(!write_gif(&mut rust, &target));
+        assert!(super::super::super::helpers::memory_gate::edit_refused_for_scratch());
+        assert!(
+            !std::path::Path::new(&target).exists(),
+            "nothing was written"
+        );
     }
 
     #[test]

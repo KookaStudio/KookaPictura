@@ -1180,15 +1180,13 @@ pub mod qobject {
         /// a no-op when metrics are off.
         #[qinvokable]
         fn record_metric_phase(&self, label: &QString, micros: i64);
-        /// The metrics snapshot as JSON (phases, counters, recent edits), or
-        /// empty when metrics are off. `reset` clears the totals and records.
+        /// The metrics snapshot as JSON (phases, counters, recent edits), or empty when metrics are off; `reset` clears the totals and records.
         #[qinvokable]
         fn metrics_snapshot(&self, reset: bool) -> QString;
         /// Whether a usable GPU adapter exists (cached capability probe).
         #[qinvokable]
         fn gpu_available(&self) -> bool;
-        /// GPU adapter fields: name, device type, backend, driver, driver info.
-        /// Empty when no usable adapter exists.
+        /// GPU adapter fields: name, device type, backend, driver, driver info; empty when no usable adapter exists.
         #[qinvokable]
         fn gpu_adapter_info(&self) -> QStringList;
         /// Active backend label: `"GPU"`, `"CPU"`, or `"CPU (no GPU)"`.

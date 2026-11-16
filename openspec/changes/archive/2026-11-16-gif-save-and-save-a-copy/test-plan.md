@@ -46,7 +46,7 @@ existing coverage; the GIF and copy scenarios are the new tests.
 | `gif-rgb-dialog` | Save an RGB document to `.gif` through the options seam | The format-dialog request is for GIF | `tst_save_gif_copy::rgbGifSaveShowsDialog` |
 | `gif-save-cancel` | Reject the GIF dialog and inspect the destination | No file is written; the document is unchanged | `tst_save_gif_copy::cancelledGifSaveWritesNothing` |
 | `gif-indexed-no-dialog` | Save an Indexed document to `.gif` | No format dialog is requested | `tst_save_gif_copy::indexedGifSaveSkipsDialog` |
-| `gif-preview-restores` | Toggle Preview during a GIF save, then accept or cancel | The pre-preview document is restored and no history state is added | `tst_save_gif_copy::gifPreviewRestoresAfterDialog`, `tst_image_mode::indexedPreviewsCancelsAndFlattens` |
+| `gif-preview-restores` | Toggle Preview during a GIF save, then accept or cancel | The pre-preview document is restored and no history state is added | `tst_save_gif_copy::gifPreviewRestoresAfterDialog`, `tst_save_gif_copy::gifPreviewUsesSrgbSnapshot`, `tst_image_mode::indexedPreviewsCancelsAndFlattens` |
 | `gif-settings-remembered` | Accept non-default GIF settings and reopen the dialog | Controls hold the accepted settings | `tst_save_gif_copy::gifSettingsRemembered`, `tst_save_format_options::gifSettingsRoundTrip` |
 | `gif-exact-fallback` | Remember Exact, then open a >256-color document | The dialog selects an available palette and the file uses it | `tst_save_gif_copy::gifExactFallback` |
 | `gif-indexed-palette` | Save an unchanged Indexed source as GIF | The written palette and indices match the source | `tst_save_gif_copy::indexedSourcePalettePreserved`, `pictura-app::gif_bytes_prefer_the_indexed_source` |

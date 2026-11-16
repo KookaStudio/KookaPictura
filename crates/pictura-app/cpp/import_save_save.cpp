@@ -399,29 +399,41 @@ bool ImportSaveCoordinator::promptSaveFormatOptions(const QString& path, SaveFor
     SaveFormatOptions options = saveFormatOptionsFromJson(saveFormatOptions_);
     if (kind == SaveFormatKind::Gif) {
         if (pictura::image_mode(*view) != QStringLiteral("indexed")) {
-            auto preview = [view](IndexedColorDialog& dialog) {
-                if (dialog.preview()) {
-                    preview_indexed(*view, dialog.palette(), dialog.colors(),
-                                    dialog.dither(), dialog.amount());
-                } else {
-                    cancel_mode_preview(*view);
-                }
-            };
             if (gifDialogForTest_) {
                 if (!gifDialogForTest_(view, options)) {
                     return false;
                 }
             } else {
-                IndexedColorDialog dialog(indexed_exact_available(*view), dialogParent_);
-                connect(&dialog, &IndexedColorDialog::optionsChanged, &dialog, [&] {
-                    preview(dialog);
-                });
-                preview(dialog);
+                const QString mode = pictura::image_mode(*view);
+                const bool canPreview = document_api::documentDepthBits(*view) == 8
+                    && (mode == QStringLiteral("rgb") || mode == QStringLiteral("grayscale"));
+                IndexedColorOptions initial;
+                initial.palette = options.gifPalette;
+                initial.colors = options.gifColors;
+                initial.dither = options.gifDither;
+                initial.amount = options.gifAmount;
+                initial.preview = canPreview;
+                IndexedColorDialog dialog(indexed_exact_available(*view), initial, dialogParent_);
+                dialog.setPreviewAvailable(canPreview);
+                if (canPreview) {
+                    const auto preview = [view, &dialog] {
+                        if (dialog.preview()) {
+                            preview_gif_indexed(*view, dialog.palette(), dialog.colors(),
+                                                dialog.dither(), dialog.amount());
+                        } else {
+                            cancel_mode_preview(*view);
+                        }
+                    };
+                    connect(&dialog, &IndexedColorDialog::optionsChanged, &dialog, preview);
+                    preview();
+                }
                 const int result = gifDialogDriver_
                     ? (gifDialogDriver_(dialog) ? QDialog::Accepted : QDialog::Rejected)
                     : runDialog(dialog, dialogParent_);
-                if (result != QDialog::Accepted) {
+                if (canPreview) {
                     cancel_mode_preview(*view);
+                }
+                if (result != QDialog::Accepted) {
                     return false;
                 }
                 options.gifPalette = dialog.palette();
@@ -429,11 +441,9 @@ bool ImportSaveCoordinator::promptSaveFormatOptions(const QString& path, SaveFor
                 options.gifDither = dialog.dither();
                 options.gifAmount = dialog.amount();
                 if (!runSaveFormatDialog(kind, options)) {
-                    cancel_mode_preview(*view);
                     return false;
                 }
             }
-            cancel_mode_preview(*view);
         }
         // An already-Indexed document has no palette dialog, and its remembered
         // row order applies without changing the document.

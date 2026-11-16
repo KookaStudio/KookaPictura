@@ -14,6 +14,7 @@
 #include <QtGui/QAction>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QStatusBar>
 
 #if defined(Q_OS_UNIX)
 #include <unistd.h>
@@ -168,6 +169,7 @@ private slots:
     void cancelledGifSaveWritesNothing();
     void indexedGifSaveSkipsDialog();
     void gifPreviewRestoresAfterDialog();
+    void gifPreviewUsesSrgbSnapshot();
     void gifSettingsRemembered();
     void gifExactFallback();
     void indexedSourcePalettePreserved();
@@ -425,6 +427,42 @@ void SaveGifCopyTest::gifPreviewRestoresAfterDialog()
     window_->setGifDialogDriverForTest(nullptr);
 }
 
+void SaveGifCopyTest::gifPreviewUsesSrgbSnapshot()
+{
+    QVERIFY(newDocument(QStringLiteral("Preview sRGB"), 8, 8, QColor(200, 40, 20)));
+    pictura::PictureView* view = window_->activeView();
+    if (!view->assign_profile(1)) {
+        QSKIP("the Adobe RGB profile is unavailable");
+    }
+    const int history = view->history_count();
+    window_->setSaveFormatDialogForTest(nullptr);
+    QColor previewColor;
+    const auto drive = [&previewColor, view](pictura::IndexedColorDialog& dialog) {
+        auto* preview = dialog.findChild<QCheckBox*>(QStringLiteral("indexedPreview"));
+        if (!preview) {
+            return false;
+        }
+        preview->setChecked(false);
+        preview->setChecked(true);
+        previewColor = view->image().pixelColor(4, 4);
+        return true;
+    };
+    window_->setGifDialogDriverForTest(drive);
+    const QString file = path(QStringLiteral("profile-preview.gif"));
+    QVERIFY(window_->saveActiveAsWithOptions(file));
+    const QImage saved = QImageReader(file).read();
+    QVERIFY(!saved.isNull());
+    const QColor savedColor = saved.pixelColor(4, 4);
+    QVERIFY2(qAbs(previewColor.red() - savedColor.red()) <= 2
+                 && qAbs(previewColor.green() - savedColor.green()) <= 2
+                 && qAbs(previewColor.blue() - savedColor.blue()) <= 2,
+             qPrintable(QStringLiteral("preview %1, saved %2")
+                            .arg(previewColor.name(), savedColor.name())));
+    QCOMPARE(pictura::image_mode(*view), QStringLiteral("rgb"));
+    QCOMPARE(view->history_count(), history);
+    window_->setGifDialogDriverForTest(nullptr);
+}
+
 void SaveGifCopyTest::gifSettingsRemembered()
 {
     QVERIFY(newDocument(QStringLiteral("Remember")));
@@ -464,17 +502,42 @@ void SaveGifCopyTest::gifExactFallback()
 
 void SaveGifCopyTest::indexedSourcePalettePreserved()
 {
-    QVERIFY(newDocument(QStringLiteral("Palette"), 8, 8, QColor(200, 40, 20)));
-    QVERIFY(pictura::convert_to_indexed(*window_->activeView(), 1, 16, 0, 0));
+    QImage image(16, 16, QImage::Format_RGBA8888);
+    for (int y = 0; y < 16; ++y) {
+        for (int x = 0; x < 16; ++x) {
+            const int color = (y / 4) * 4 + x / 4;
+            image.setPixelColor(x, y,
+                                QColor((color * 37) % 256, (color * 71 + 20) % 256,
+                                       (color * 113 + 40) % 256));
+        }
+    }
+    pictura::PictureView* view = openImage(image);
+    QVERIFY(view);
+
+    // Remember two colors for the GIF write; an unchanged Indexed source must
+    // still use its own 16-color palette and index order.
+    bool trained = false;
+    window_->setSaveFormatDialogForTest(
+        [&trained](pictura::SaveFormatKind kind, pictura::SaveFormatOptions& options) {
+            if (kind == pictura::SaveFormatKind::Gif && !trained) {
+                options.gifPalette = 2;
+                options.gifColors = 2;
+                options.gifDither = 0;
+                trained = true;
+            }
+            return true;
+        });
+    saveGif(path(QStringLiteral("palette-training.gif")));
+    QVERIFY(trained);
+    QVERIFY(pictura::convert_to_indexed(*view, 3, 16, 0, 0));
+
     const QString file = path(QStringLiteral("palette.gif"));
     saveGif(file);
-    QImageReader reader(file);
-    const QImage image = reader.read();
-    QVERIFY(!image.isNull());
-    QCOMPARE(image.size(), QSize(8, 8));
-    const QColor pixel = image.pixelColor(4, 4);
-    QVERIFY2(pixel.red() >= 190 && pixel.green() <= 60 && pixel.blue() <= 40,
-             qPrintable(pixel.name()));
+    const QByteArray bytes = fileBytes(file);
+    QVERIFY(bytes.size() > 13);
+    const int packed = quint8(bytes.at(10));
+    QVERIFY2(packed & 0x80, "the GIF has no global colour table");
+    QCOMPARE(1 << ((packed & 0x07) + 1), 16);
 }
 
 void SaveGifCopyTest::editedIndexedUsesComposite()
@@ -739,6 +802,9 @@ void SaveGifCopyTest::saveCopyFailurePreservesPreviousFile()
     QVERIFY(!window_->saveCopyWithDialog());
     QCOMPARE(fileBytes(file), QByteArrayLiteral("old bytes"));
     QVERIFY(!QFileInfo::exists(directory + QStringLiteral("/copy.psd")));
+    QVERIFY2(window_->statusBar()->currentMessage().contains(QStringLiteral("copy"),
+                                                             Qt::CaseInsensitive),
+             qPrintable(window_->statusBar()->currentMessage()));
 }
 
 QTEST_MAIN(SaveGifCopyTest)

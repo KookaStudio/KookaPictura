@@ -2,7 +2,9 @@ use super::*;
 
 use super::super::super::channels::mode_name;
 use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::helpers_composite::{buffer_to_rgba_bytes, current_buffer};
 use crate::cxxqt_object::impl_core::{JobBar, Outcome};
+use crate::cxxqt_object::save_format::SaveGifOptions;
 use crate::cxxqt_object::PictureViewRust;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -262,6 +264,55 @@ pub(super) fn preview_indexed(
             rust.session.doc = Some(converted);
         }
         ok
+    };
+    if previewed {
+        view.as_mut().recomposite();
+    }
+    previewed
+}
+
+pub(super) fn preview_gif_indexed(
+    mut view: Pin<&mut PictureView>,
+    palette: i32,
+    colors: i32,
+    dither: i32,
+    amount: i32,
+) -> bool {
+    let options = SaveGifOptions {
+        palette,
+        colors,
+        dither,
+        amount,
+        interlaced: false,
+    }
+    .palette_options();
+    let previewed = {
+        let mut rust = view.as_mut().rust_mut();
+        let Some(doc) = rust.mode_preview_base() else {
+            return false;
+        };
+        let buffer = current_buffer(&doc, rust.gpu_compute);
+        let srgb = pictura_codec::buffer_to_srgb(&doc, &buffer);
+        let rgba = buffer_to_rgba_bytes(&srgb);
+        let indexed = pictura_codec::quantize(&rgba, doc.width, doc.height, options);
+        let plane = doc.width as usize * doc.height as usize;
+        if indexed.indices.len() < plane {
+            return false;
+        }
+        let mut preview = Vec::with_capacity(plane * 4);
+        for &index in &indexed.indices[..plane] {
+            let Some(entry) = indexed.palette.get(index as usize) else {
+                return false;
+            };
+            preview.extend_from_slice(&[entry[0], entry[1], entry[2], 255]);
+        }
+        rust.session.doc = Some(Document::from_rgba(
+            "GIF Preview",
+            doc.width,
+            doc.height,
+            &preview,
+        ));
+        true
     };
     if previewed {
         view.as_mut().recomposite();
