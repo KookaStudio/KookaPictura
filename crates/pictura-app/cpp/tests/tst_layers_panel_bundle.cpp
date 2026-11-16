@@ -7,6 +7,7 @@
 #include <QtGui/QAction>
 #include <QtGui/QColor>
 #include <QtGui/QImage>
+#include <QtWidgets/QDialog>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QToolButton>
 
@@ -16,6 +17,7 @@
 
 #include "commands.h"
 #include "frame.h"
+#include "layer_style_dialog.h"
 #include "panels/layers_panel.h"
 #include "qt_test_support.h"
 
@@ -44,6 +46,7 @@ private slots:
     void adjustmentMaskWhite();
     void adjustmentMaskOff();
     void flyoutStateFollowsDocument();
+    void renameHitAreaMatchesRenderedLabel();
 
 private:
     bool newDoc(const QString& name);
@@ -346,6 +349,40 @@ void LayersPanelBundleTest::adjustmentMaskOff()
     QVERIFY(!pictura::layers_api::rowForPath(*view_, offPath).hasMask);
     QVERIFY(snapshot().maskTargetPath.isEmpty());
     QVERIFY(panel_->performPanelMenuAction(QStringLiteral("addMaskByDefault")));
+}
+
+// #896: the rename target is the rendered label, not the empty rest of the row.
+void LayersPanelBundleTest::renameHitAreaMatchesRenderedLabel()
+{
+    QVERIFY(newDoc(QStringLiteral("RenameHit")));
+    const QString layer = makeLayer(QStringLiteral("A"));
+    QVERIFY(!layer.isEmpty());
+    QVERIFY(pictura::layer_style_set(*view_, layer, QStringLiteral("colorOverlay.on"), 1.0));
+    pictura::layer_style_commit(*view_, QStringLiteral("Layer Style"));
+    QCoreApplication::processEvents();
+    panel_->refresh();
+
+    const QRect name = panel_->rowNameRectForTest(layer);
+    const QRect row = panel_->rowViewportRectForTest(layer);
+    QVERIFY2(name.width() > 0, "the rendered label has a hit width");
+    QVERIFY2(name.width() < row.width() / 2, "the hit rect stops at the rendered label");
+
+    QVERIFY2(panel_->doubleClickAtForTest(layer, true),
+             "a double-click inside the rendered label opens the editor");
+    QVERIFY2(!panel_->doubleClickAtForTest(layer, false),
+             "a double-click on the eye opens no editor");
+
+    bool styleOpened = false;
+    panel_->setDialogDriverForTest([&styleOpened](QDialog& dialog) {
+        styleOpened = qobject_cast<pictura::LayerStyleDialog*>(&dialog) != nullptr;
+        return false;
+    });
+    QVERIFY2(panel_->doubleClickRightOfNameForTest(layer),
+             "a double-click right of the label reaches the row");
+    panel_->setDialogDriverForTest(nullptr);
+    QVERIFY2(styleOpened, "a double-click right of the label opens Layer Style");
+    QVERIFY2(!panel_->inlineEditorOpenForTest(),
+             "a double-click right of the label opens no inline editor");
 }
 
 QTEST_MAIN(LayersPanelBundleTest)

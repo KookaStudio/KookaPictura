@@ -604,11 +604,10 @@ public:
         return maskSlotRight(itemRect, index);
     }
 
-    /// The name text's hit-target: immediately right of the thumbnail block
-    /// (image, mask, vector) plus the name gap and clipping indent, capped at
-    /// the right-edge lock/fx/Blend If badges. Floored to a non-zero width so a
-    /// click in an empty label area still resolves to the name.
-    QRect nameRect(const QRect& itemRect, const QModelIndex& index) const
+    /// The rendered name label's rect: the elided text width inside the
+    /// available band, floored to a one-pixel hit target at the label's left.
+    QRect nameRect(const QRect& itemRect, const QModelIndex& index,
+                   const QFont& baseFont = QApplication::font()) const
     {
         const int gap = isSyntheticRow(index) ? kNameGap / 2 : kNameGap;
         int x = thumbsRight(itemRect, index) + gap;
@@ -625,8 +624,12 @@ public:
         right -= linkBadgeAdvance(index);
         right -= blendIfAdvance(index);
         const int nameLeft = x + (index.data(ClippingRole).toBool() ? 12 : 0);
-        const int nameRight = qMax(nameLeft, right - 4);
-        return QRect(nameLeft, itemRect.top(), qMax(1, nameRight - nameLeft), itemRect.height());
+        const int available = qMax(1, right - 4 - nameLeft);
+        const QFontMetrics metrics(nameFont(baseFont, index));
+        const QString elided = metrics.elidedText(index.data(Qt::DisplayRole).toString(),
+                                                  Qt::ElideRight, available);
+        const int width = qBound(1, metrics.horizontalAdvance(elided), available);
+        return QRect(nameLeft, itemRect.top(), width, itemRect.height());
     }
 
     /// One named row height (floor 32 px) shared by sizeHint and centring; a
@@ -757,7 +760,7 @@ public:
         painter->fillRect(QRect(rect.left() + kEyeColumn - 1, rect.top(), 1, height), separator);
 
         if (isSyntheticRow(index)) {
-            const QRect nr = nameRect(rect, index);
+            const QRect nr = nameRect(rect, index, option.font);
             painter->setFont(nameFont(option.font, index));
             painter->setPen(selected ? palette.color(QPalette::HighlightedText)
                                      : palette.color(QPalette::Text));
@@ -1012,19 +1015,15 @@ public:
             right -= blendIfChipWidth() + 3;
         }
 
-        // Name, after the thumbnail block, with the base underline and the
-        // extra clipping indent.
-        const int nameX = thumbsRight(rect, index) + kNameGap;
-        const int nameLeft = nameX + (index.data(ClippingRole).toBool() ? 12 : 0);
-        const int nameRight = qMax(nameLeft, right - 4);
+        // Name, after the thumbnail block, drawn at the rendered label width.
+        const QRect name = nameRect(rect, index, option.font);
         painter->setFont(nameFont(option.font, index));
         painter->setPen(selected ? palette.color(QPalette::HighlightedText)
                                  : palette.color(QPalette::Text));
         const QString elided =
             painter->fontMetrics().elidedText(index.data(Qt::DisplayRole).toString(),
-                                              Qt::ElideRight, nameRight - nameLeft);
-        painter->drawText(QRect(nameLeft, rect.top(), nameRight - nameLeft, height),
-                          Qt::AlignVCenter | Qt::AlignLeft, elided);
+                                              Qt::ElideRight, name.width());
+        painter->drawText(name, Qt::AlignVCenter | Qt::AlignLeft, elided);
 
         // White 1 px corner brackets one pixel outside each selected mask or
         // content thumbnail; never around a group's icon.

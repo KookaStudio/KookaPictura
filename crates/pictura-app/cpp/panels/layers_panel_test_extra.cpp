@@ -387,6 +387,25 @@ bool LayersPanel::doubleClickRowCenterForTest(const QString& path)
     return true;
 }
 
+bool LayersPanel::doubleClickRightOfNameForTest(const QString& path)
+{
+    if (!delegate_ || !tree_) {
+        return false;
+    }
+    clearStaleEditorsForTest();
+    const QModelIndex index = proxyIndexForPath(path);
+    if (!index.isValid()) {
+        return false;
+    }
+    const QRect vr = tree_->visualRect(index);
+    const QPoint pos(qMin(vr.right(), delegate_->nameRect(vr, index).right() + 8),
+                     vr.center().y());
+    QMouseEvent dbl(QEvent::MouseButtonDblClick, pos, tree_->viewport()->mapToGlobal(pos),
+                    Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(tree_->viewport(), &dbl);
+    return true;
+}
+
 QStringList LayersPanel::rowMenuCommandIdsForPathForTest(const QString& path)
 {
     makeRowAnchor(path);
