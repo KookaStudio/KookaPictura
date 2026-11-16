@@ -1,12 +1,18 @@
 #include "file_drop_router.h"
 
 #include "frame.h"
+#include "channel_drag.h"
+#include "document_window.h"
 #include "image_view.h"
+#include "selection_drag.h"
 #include "panels/layers_panel_internal.h"
 
+#include "api/layers_bridge.h"
+#include "api/selection_bridge.h"
 #include "api/view_bridge.h"
 
 #include <QtCore/QEvent>
+#include <cstddef>
 #include <QtCore/QFileInfo>
 #include <QtCore/QMimeData>
 #include <QtCore/QUrl>
@@ -53,6 +59,38 @@ int FileDropRouter::otherDocumentTabAt(const QPoint& globalPos)
     return -1;
 }
 
+bool FileDropRouter::otherDocumentAt(const QPoint& globalPos, const PictureView* source,
+                                     QWidget* within)
+{
+    auto* frame = qobject_cast<PicturaMainWindow*>(within ? within->window() : nullptr);
+    if (!frame) {
+        for (QWidget* top : QApplication::topLevelWidgets()) {
+            if (auto* main = qobject_cast<PicturaMainWindow*>(top)) {
+                frame = main;
+                break;
+            }
+        }
+    }
+    for (QWidget* w = QApplication::widgetAt(globalPos); w; w = w->parentWidget()) {
+        if (auto* bar = qobject_cast<QTabBar*>(w)) {
+            const int tab = bar->tabAt(bar->mapFromGlobal(globalPos));
+            if (tab >= 0 && tab != bar->currentIndex()) {
+                return true;
+            }
+        }
+        if (auto* canvas = qobject_cast<ImageView*>(w)) {
+            if (!frame) {
+                continue;
+            }
+            PictureView* target = frame->viewForCanvas(canvas);
+            if (target && target != source) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 bool FileDropRouter::routeLayerDrag(QObject* watched, QEvent* event)
 {
     auto* drag = static_cast<QDropEvent*>(event);
@@ -95,11 +133,114 @@ bool FileDropRouter::routeLayerDrag(QObject* watched, QEvent* event)
     return true;
 }
 
+PictureView* FileDropRouter::dragTarget(QObject* watched, QEvent* event)
+{
+    auto* drag = static_cast<QDropEvent*>(event);
+    if (auto* bar = qobject_cast<QTabBar*>(watched)) {
+        const int tab = bar->tabAt(drag->position().toPoint());
+        if (tab < 0) {
+            return nullptr;
+        }
+        frame_->setActiveDocumentIndex(tab);
+        return frame_->activeView();
+    }
+    if (auto* canvas = qobject_cast<ImageView*>(watched)) {
+        return frame_->viewForCanvas(canvas);
+    }
+    return nullptr;
+}
+
+bool FileDropRouter::routeChannelDrag(QObject* watched, QEvent* event)
+{
+    auto* drag = static_cast<QDropEvent*>(event);
+    const QMimeData* mime = drag->mimeData();
+    if (!mime->hasFormat(kChannelRowMime) || !mime->hasFormat(kChannelSourceMime)) {
+        return false;
+    }
+    if (!qobject_cast<QTabBar*>(watched) && !qobject_cast<ImageView*>(watched)) {
+        return false;
+    }
+    auto* source = static_cast<PictureView*>(const_cast<void*>(channelDragSource(mime)));
+    PictureView* target = dragTarget(watched, event);
+    if (!source || !target || source == target || !source->has_document()
+        || !target->has_document()) {
+        drag->ignore();
+        return true;
+    }
+    if (event->type() == QEvent::Drop) {
+        const ChannelDrag payload = channelDrag(mime);
+        const int width = source->document_width();
+        const int height = source->document_height();
+        const auto coverage =
+            payload.alpha >= 0
+                ? channel_coverage(*source, QStringLiteral("alpha:%1").arg(payload.alpha))
+                : color_row_coverage(*source, payload.row, payload.mask);
+        if (coverage.size() != std::size_t(width) * std::size_t(height)) {
+            drag->ignore();
+            return true;
+        }
+        const QString name = payload.name.isEmpty()
+            ? tr("Alpha 1 copy")
+            : tr("%1 copy").arg(payload.name);
+        const ::rust::Slice<const std::uint8_t> bytes(coverage.data(), coverage.size());
+        if (!duplicate_channel_coverage(*target, bytes, width, height, name, false)) {
+            drag->ignore();
+            return true;
+        }
+        frame_->activateView(target);
+        frame_->refresh();
+    }
+    drag->setDropAction(Qt::CopyAction);
+    drag->accept();
+    return true;
+}
+
+bool FileDropRouter::routeSelectionDrag(QObject* watched, QEvent* event)
+{
+    auto* drag = static_cast<QDropEvent*>(event);
+    const QMimeData* mime = drag->mimeData();
+    if (!mime->hasFormat(kSelectionSourceMime)) {
+        return false;
+    }
+    if (!qobject_cast<QTabBar*>(watched) && !qobject_cast<ImageView*>(watched)) {
+        return false;
+    }
+    auto* source = static_cast<PictureView*>(const_cast<void*>(selectionDragSource(mime)));
+    PictureView* target = dragTarget(watched, event);
+    if (!source || !target || source == target || !source->has_document()
+        || !target->has_document()) {
+        drag->ignore();
+        return true;
+    }
+    if (event->type() == QEvent::Drop) {
+        const int width = source->document_width();
+        const int height = source->document_height();
+        const auto coverage = selection_coverage_bytes(*source);
+        if (coverage.size() != std::size_t(width) * std::size_t(height)) {
+            drag->ignore();
+            return true;
+        }
+        const ::rust::Slice<const std::uint8_t> bytes(coverage.data(), coverage.size());
+        if (!load_selection_coverage_fit(*target, bytes, width, height, false,
+                                         QStringLiteral("new"))) {
+            drag->ignore();
+            return true;
+        }
+        frame_->activateView(target);
+        frame_->refresh();
+    }
+    drag->setDropAction(Qt::CopyAction);
+    drag->accept();
+    return true;
+}
+
 bool FileDropRouter::eventFilter(QObject* watched, QEvent* event)
 {
     const bool dragEvent = event->type() == QEvent::DragEnter
         || event->type() == QEvent::DragMove || event->type() == QEvent::Drop;
-    if (dragEvent && routeLayerDrag(watched, event)) {
+    if (dragEvent
+        && (routeLayerDrag(watched, event) || routeChannelDrag(watched, event)
+            || routeSelectionDrag(watched, event))) {
         return true;
     }
     if (event->type() == QEvent::DragEnter || event->type() == QEvent::DragMove) {

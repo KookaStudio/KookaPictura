@@ -112,12 +112,12 @@ fn every_wired_filter_has_a_definition() {
 #[test]
 fn default_catalogue_shape_is_stable() {
     let catalogue = command_catalogue();
-    assert_eq!(catalogue.len(), 664);
+    assert_eq!(catalogue.len(), 665);
     assert_eq!(
         catalogue.iter().filter(|spec| spec.implemented).count(),
-        443
+        444
     );
-    assert_eq!(const_names().len(), 367);
+    assert_eq!(const_names().len(), 368);
 }
 
 #[test]

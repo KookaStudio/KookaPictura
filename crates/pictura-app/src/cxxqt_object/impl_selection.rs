@@ -555,6 +555,59 @@ impl qobject::PictureView {
             .unwrap_or_default()
     }
 
+    /// The coverage of colour row `row` (0 is the composite) under `mask`.
+    pub fn color_row_coverage(&self, row: i32, mask: i32) -> Vec<u8> {
+        let rust = self.rust();
+        let Some(doc) = rust.session.doc.as_ref() else {
+            return Vec::new();
+        };
+        channel_row_selection_from(
+            doc,
+            |f| stream_picture(doc, rust, whole(doc), f),
+            row,
+            mask as u8,
+        )
+        .map(|selection| selection.data.to_vec())
+        .unwrap_or_default()
+    }
+
+    /// Duplicate `coverage` into this document as a new channel: fit it to the
+    /// canvas, apply Invert, and record one "Duplicate Channel" state.
+    pub fn duplicate_channel_coverage(
+        mut self: Pin<&mut Self>,
+        coverage: &[u8],
+        width: i32,
+        height: i32,
+        name: &QString,
+        invert: bool,
+    ) -> bool {
+        let Some(shape) = coverage_selection(coverage, width, height) else {
+            return false;
+        };
+        let Some((target_width, target_height)) = self
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .map(|doc| (doc.width, doc.height))
+        else {
+            return false;
+        };
+        let shape = if invert { shape.invert() } else { shape };
+        let fitted = shape.fit_centered(target_width, target_height);
+        let name = name.to_string();
+        let outcome = self.as_mut().edit("Duplicate Channel", |rust| {
+            save_selection_shape(
+                rust,
+                fitted,
+                SelectionTarget::NewChannel,
+                &name,
+                CombineMode::New,
+            )
+        });
+        !matches!(outcome, Edit::None)
+    }
+
     /// Save `coverage` transferred from another document into `target`.
     pub fn save_selection_coverage(
         mut self: Pin<&mut Self>,
@@ -605,6 +658,37 @@ impl qobject::PictureView {
         )
     }
 
+    /// Load `coverage` transferred from another document of any size: fit it
+    /// to this canvas, apply Invert, and record one "Load Selection" state.
+    pub fn load_selection_coverage_fit(
+        mut self: Pin<&mut Self>,
+        coverage: &[u8],
+        width: i32,
+        height: i32,
+        invert: bool,
+        mode: &QString,
+    ) -> bool {
+        let Some(shape) = coverage_selection(coverage, width, height) else {
+            return false;
+        };
+        let Some((target_width, target_height)) = self
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .map(|doc| (doc.width, doc.height))
+        else {
+            return false;
+        };
+        let shape = if invert { shape.invert() } else { shape };
+        let fitted = shape.fit_centered(target_width, target_height);
+        self.as_mut().apply_selection_labeled(
+            fitted,
+            combine_mode_from(&mode.to_string()),
+            "Load Selection",
+        )
+    }
+
     /// Build a new grayscale document holding `coverage` as its extra channel.
     /// The codec does not write Multichannel, so the design's grayscale+alpha
     /// fallback is used.
@@ -614,10 +698,12 @@ impl qobject::PictureView {
         width: i32,
         height: i32,
         name: &QString,
+        invert: bool,
     ) -> bool {
         let Some(shape) = coverage_selection(coverage, width, height) else {
             return false;
         };
+        let shape = if invert { shape.invert() } else { shape };
         let mut doc = Document::new(
             width as u32,
             height as u32,

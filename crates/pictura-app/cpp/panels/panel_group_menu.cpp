@@ -105,7 +105,7 @@ const QList<MenuRow>& rowsForPanel(const QString& panel)
         {QStringLiteral("channelsPanel"),
          {
              dis(QStringLiteral("New Channel…")),
-             dis(QStringLiteral("Duplicate Channel…")),
+             imp(QStringLiteral("Duplicate Channel…"), QStringLiteral("duplicateChannel")),
              dis(QStringLiteral("Delete Channel")),
              dis(QStringLiteral("New Spot Channel…"), true),
              dis(QStringLiteral("Merge Spot Channel(s)")),
@@ -360,6 +360,12 @@ QString panelCommandId(const QString& panel, const QString& action)
             {QStringLiteral("mergeClippingMask"), command_ids::LayerMergeClippingMask},
             {QStringLiteral("flatten"), command_ids::LayerFlattenImage},
             {QStringLiteral("panelOptions"), command_ids::PanelLayersPanelOptions},
+        };
+        return map.contains(action) ? QString::fromLatin1(map.value(action)) : QString();
+    }
+    if (panel == QStringLiteral("channelsPanel")) {
+        static const QHash<QString, const char*> map = {
+            {QStringLiteral("duplicateChannel"), command_ids::PanelChannelsDuplicateChannel},
         };
         return map.contains(action) ? QString::fromLatin1(map.value(action)) : QString();
     }

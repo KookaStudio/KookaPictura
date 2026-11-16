@@ -426,6 +426,9 @@ public:
     static QString hoverCursorId(ToolId id, Qt::KeyboardModifiers mods, bool overSelection,
                                  bool ctrlPreview);
     bool contentMoveActiveForTest() const { return contentMove_; }
+    // Test seam: restore the source selection and leave the in-canvas move
+    // without entering the platform drag loop.
+    bool prepareSelectionDocumentDragForTest();
 
     // The generic keyboard gestures the frame forwards to the active tool:
     // `handleFinishPath` closes the current path (Enter), `handleEscape` cancels
@@ -605,6 +608,7 @@ private:
     void cancelSelectionMove();
     void updateSelectionHover(const QPointF& imagePos);
     void dragSelectionMove(const QPointF& imagePos);
+    void dragSelectionToDocument();
     void releaseSelectionMove(const QPointF& imagePos);
     void handlePressed(const QPointF& imagePos, int button, int modifiers);
     // A press while a Free Transform session is live: gesture modifiers,

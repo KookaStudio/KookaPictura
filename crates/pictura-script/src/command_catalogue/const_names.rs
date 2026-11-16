@@ -317,6 +317,7 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("PanelLayersRefineMask", "panel.layers.refineMask"),
     ("PanelLayersMaskOptions", "panel.layers.maskOptions"),
     ("PanelLayersPanelOptions", "panel.layers.panelOptions"),
+    ("PanelChannelsDuplicateChannel", "panel.channels.duplicateChannel"),
     ("PanelHistoryStepForward", "panel.history.stepForward"),
     ("PanelHistoryStepBackward", "panel.history.stepBackward"),
     ("PanelHistoryNewSnapshot", "panel.history.newSnapshot"),

@@ -287,6 +287,46 @@ fn invert_involution() {
 }
 
 #[test]
+fn fit_centered_same_size_is_identity() {
+    let a = sel_from(7, 5, |x, y| ((x * 29 + y * 13) % 256) as u8);
+    assert_eq!(a.fit_centered(7, 5), a);
+}
+
+#[test]
+fn fit_centered_letterboxes_a_wide_source() {
+    let fitted = Selection::all(8, 4).fit_centered(8, 8);
+    assert_eq!(fitted, rect(8, 8, 0, 2, 8, 6));
+}
+
+#[test]
+fn fit_centered_upscales_a_small_source() {
+    assert_eq!(
+        Selection::all(2, 2).fit_centered(4, 4),
+        Selection::all(4, 4)
+    );
+}
+
+#[test]
+fn fit_centered_centres_an_odd_margin() {
+    let fitted = Selection::all(4, 2).fit_centered(5, 5);
+    // scale = 1.25: 5×2.5 rounds to 5×3, leaving one empty row above and below.
+    assert_eq!(fitted, rect(5, 5, 0, 1, 5, 4));
+}
+
+#[test]
+fn fit_centered_zero_size_is_empty() {
+    let fitted = Selection::none(4, 4).fit_centered(0, 5);
+    assert_eq!(fitted.width, 0);
+    assert_eq!(fitted.height, 5);
+    assert!(fitted.data.is_empty());
+    assert!(Selection::none(0, 0)
+        .fit_centered(3, 3)
+        .data
+        .iter()
+        .all(|&v| v == 0));
+}
+
+#[test]
 fn feather_zero_is_identity() {
     let a = rect(9, 5, 2, 1, 7, 4);
     assert_eq!(a.feather(0.0), a);

@@ -11,6 +11,7 @@
 #include "api/layers_bridge.h"
 
 #include "panels/actions_panel.h"
+#include "panels/channels_panel.h"
 #include "panels/character_panel.h"
 #include "panels/history_panel.h"
 #include "panels/layers_panel.h"
@@ -68,6 +69,15 @@ void MenuRegistrar::wirePanelMenuCommands()
         if (panels_->layersPanel()) {
             panels_->layersPanel()->createGroupAtAnchor();
         }
+    });
+    commands_->setHandler(command_ids::PanelChannelsDuplicateChannel, [this]() {
+        if (runtime_.openDuplicateChannelDialog) {
+            runtime_.openDuplicateChannelDialog();
+        }
+    });
+    commands_->setEnabledProvider(command_ids::PanelChannelsDuplicateChannel, [this]() {
+        return panels_ && panels_->channelsPanel()
+            && panels_->channelsPanel()->canDuplicateCurrent();
     });
     commands_->setHandler(command_ids::PanelLayersMoveUp, [this]() {
         if (panels_->layersPanel()) {

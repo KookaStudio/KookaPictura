@@ -317,6 +317,7 @@ inline constexpr char PanelLayersMaskIntersect[] = "panel.layers.maskIntersect";
 inline constexpr char PanelLayersRefineMask[] = "panel.layers.refineMask";
 inline constexpr char PanelLayersMaskOptions[] = "panel.layers.maskOptions";
 inline constexpr char PanelLayersPanelOptions[] = "panel.layers.panelOptions";
+inline constexpr char PanelChannelsDuplicateChannel[] = "panel.channels.duplicateChannel";
 inline constexpr char PanelHistoryStepForward[] = "panel.history.stepForward";
 inline constexpr char PanelHistoryStepBackward[] = "panel.history.stepBackward";
 inline constexpr char PanelHistoryNewSnapshot[] = "panel.history.newSnapshot";
