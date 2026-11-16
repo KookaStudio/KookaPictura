@@ -87,9 +87,9 @@ private:
     pictura::test::ScopedStateHome stateHome_;
     std::unique_ptr<pictura::PicturaMainWindow> window_;
 };
-
 void CommandTreeTest::initTestCase()
 {
+    qputenv("PICTURA_EDITION", "extended");
     QVERIFY(stateHome_.isValid());
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);

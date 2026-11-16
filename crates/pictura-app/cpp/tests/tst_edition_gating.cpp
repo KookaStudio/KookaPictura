@@ -1,0 +1,91 @@
+#include <QtTest/QtTest>
+
+#include <QtCore/QCoreApplication>
+#include <QtCore/QStringList>
+#include <QtGui/QAction>
+#include <QtWidgets/QMenu>
+
+#include "commands.h"
+#include "frame.h"
+#include "toolbox.h"
+#include "tools.h"
+
+#include "qt_test_support.h"
+
+using pictura::PicturaMainWindow;
+using pictura::Toolbox;
+
+class EditionGatingTest : public QObject {
+    Q_OBJECT
+
+private slots:
+    void editionGating();
+};
+
+void EditionGatingTest::editionGating()
+{
+    const QByteArray savedEdition = qgetenv("PICTURA_EDITION");
+    const auto labelsForGroup = [](Toolbox* toolbox, int group) {
+        QStringList labels;
+        for (QAction* action : toolbox->slotMenuActionsForTest(group)) {
+            labels << action->text();
+        }
+        return labels;
+    };
+    const auto hasCommand = [](PicturaMainWindow& frame, const char* id) {
+        return frame.registry()->action(QString::fromLatin1(id)) != nullptr;
+    };
+
+    {
+        pictura::test::ScopedStateHome extendedHome;
+        QVERIFY(extendedHome.isValid());
+        qputenv("PICTURA_EDITION", "extended");
+        auto extended = pictura::test::makeMainWindow();
+        QVERIFY(extended != nullptr);
+        auto* toolbox = extended->findChild<Toolbox*>(QStringLiteral("toolsPanel"));
+        QVERIFY(toolbox != nullptr);
+        QVERIFY(pictura::toolAvailable(pictura::ToolId::Count));
+        QVERIFY2(labelsForGroup(toolbox, 6).contains(QStringLiteral("Count (Extended)")),
+                 "Extended keeps the Count tool");
+        for (const char* id : {"edit.preferences.3d", "layer.rasterize.3d",
+                               "type.extrude.to.3d", "view.show.3d.axis",
+                               "view.show.count", "window.panels.3d",
+                               "window.panels.measurement.log"}) {
+            QVERIFY2(hasCommand(*extended, id), id);
+        }
+    }
+
+    {
+        pictura::test::ScopedStateHome standardHome;
+        QVERIFY(standardHome.isValid());
+        qputenv("PICTURA_EDITION", "standard");
+        auto standard = pictura::test::makeMainWindow();
+        QVERIFY(standard != nullptr);
+        auto* toolbox = standard->findChild<Toolbox*>(QStringLiteral("toolsPanel"));
+        QVERIFY(toolbox != nullptr);
+        QVERIFY(!pictura::toolAvailable(pictura::ToolId::Count));
+        const QStringList labels = labelsForGroup(toolbox, 6);
+        QVERIFY2(!labels.contains(QStringLiteral("Count (Extended)")),
+                 "Standard drops the Count tool");
+        QVERIFY2(labels.contains(QStringLiteral("Note")), "the rest of the I group stays");
+        standard->setActiveTool(pictura::ToolId::Count);
+        QCOMPARE(standard->activeTool(), pictura::ToolId::Move);
+        for (const char* id : {"edit.preferences.3d", "layer.rasterize.3d",
+                               "type.extrude.to.3d", "view.show.3d.axis",
+                               "view.show.count", "window.panels.3d",
+                               "window.panels.measurement.log"}) {
+            QVERIFY2(!hasCommand(*standard, id), id);
+        }
+        QVERIFY2(hasCommand(*standard, "window.panels.timeline"),
+                 "the Timeline ships in both editions");
+    }
+
+    if (savedEdition.isNull()) {
+        qunsetenv("PICTURA_EDITION");
+    } else {
+        qputenv("PICTURA_EDITION", savedEdition);
+    }
+}
+
+QTEST_MAIN(EditionGatingTest)
+#include "tst_edition_gating.moc"

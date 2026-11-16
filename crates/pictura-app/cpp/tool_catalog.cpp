@@ -60,6 +60,7 @@ const Catalogue& catalogue()
                           out.keep(row.hint),
                           row.group,
                           row.implemented,
+                          row.extended_only,
                           row.hotspot_x,
                           row.hotspot_y};
             QList<ToolHint> hints;
@@ -94,6 +95,14 @@ const ToolInfo& toolInfo(ToolId id)
 }
 
 bool toolImplemented(ToolId id) { return toolInfo(id).implemented; }
+
+bool toolInEdition(ToolId id)
+{
+    const ToolInfo& info = toolInfo(id);
+    return !info.extendedOnly || edition_is_extended();
+}
+
+bool toolAvailable(ToolId id) { return toolInfo(id).implemented && toolInEdition(id); }
 
 bool isBrushTool(ToolId id)
 {

@@ -5,11 +5,13 @@
 pub(crate) mod adjustment_catalogue;
 pub(crate) mod blend_modes;
 pub(crate) mod color_models;
+pub(crate) mod edition;
 pub(crate) mod tool_catalogue;
 
 use self::adjustment_catalogue::adjustment_catalogue;
 use self::blend_modes::blend_mode_rows;
 use self::color_models::{channel_plane, lab_to_srgb, srgb_to_lab};
+use self::edition::edition_is_extended;
 use self::tool_catalogue::tool_catalogue_rows;
 use super::command_catalogue::{command_catalogue, command_id_for_path, command_is_modal};
 
@@ -73,6 +75,7 @@ pub mod ffi {
         hint: QString,
         hints: Vec<ToolHintRow>,
         implemented: bool,
+        extended_only: bool,
     }
 
     /// CIELAB D50: `l` in 0–100, `a`/`b` unclamped.
@@ -91,6 +94,7 @@ pub mod ffi {
         shortcut: QString,
         implemented: bool,
         checkable: bool,
+        extended_only: bool,
     }
 
     #[namespace = "pictura"]
@@ -106,6 +110,9 @@ pub mod ffi {
 
         /// Every catalogue row, in menu order.
         fn command_catalogue() -> Vec<CommandSpecRow>;
+
+        /// Whether `PICTURA_EDITION` selects the Extended surface.
+        fn edition_is_extended() -> bool;
 
         /// The stable id derived from a command path, or empty when the
         /// catalogue does not own the derived id.

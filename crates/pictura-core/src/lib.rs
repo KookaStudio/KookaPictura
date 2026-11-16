@@ -12,6 +12,7 @@ pub mod channels;
 mod crs;
 mod digest;
 mod document_composite;
+pub mod edition;
 mod guides;
 pub mod hdr;
 pub mod homography;
@@ -41,6 +42,7 @@ pub use annotations::{
 };
 pub use crs::CrsSettings;
 pub use digest::content_digest;
+pub use edition::{Edition, Feature};
 pub use guides::{guide_near, Guide, GuideOrientation};
 pub use hdr::{validate_hdr_toning_params, HdrToningParams};
 pub use homography::Homography;

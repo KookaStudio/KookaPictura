@@ -13,7 +13,9 @@ repository reimplements as a native Linux application using **Rust** (core) and
 
 - **Parity target:** Photoshop CS6, Standard edition, plus the Extended-only
   features the corpus marks and the project has chosen to build (the Count
-  tool). Edition gating is not implemented (#650).
+  tool). Edition gating is implemented: `PICTURA_EDITION=standard` hides the
+  Extended-only tools and commands, and unset or `extended` keeps the Extended
+  surface (#650).
 - **Platform:** Linux (native), X11 + Wayland.
 - **Stack:** Rust core, Qt6 UI (Widgets and/or QML), GPU compositing.
 - **Out of scope for parity:** OS-specific integration with no Linux equivalent
