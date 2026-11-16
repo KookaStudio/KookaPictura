@@ -722,9 +722,7 @@ mod tests {
         let held = alpha.data.clone();
         alpha.data.write_rect_from(0..1, 0..1, w as usize, &[0]);
         let doc = doc_with(vec![layer]);
-        let before = pictura_core::materializations();
-        assert!(content_rect(&doc, "0").is_some());
-        assert_eq!(pictura_core::materializations(), before);
+        assert!(pictura_core::assert_no_materialization(|| content_rect(&doc, "0")).is_some());
         drop(held);
     }
 

@@ -271,13 +271,7 @@ fn banded_composite_does_not_materialize_a_fractured_plane() {
     red.data
         .write_rect_from(0..1, 0..1, W as usize, &[held.sample(0).unwrap()]);
 
-    pictura_core::reset_materializations();
-    let _ = crate::composite_rgba(&d);
-    assert_eq!(
-        pictura_core::materializations(),
-        0,
-        "the band path reads no plane bytes"
-    );
+    pictura_core::assert_no_materialization(|| crate::composite_rgba(&d));
 }
 
 fn assert_edit_invalidates(d: &mut Document, index: usize, edit: impl FnOnce(&mut Layer)) {

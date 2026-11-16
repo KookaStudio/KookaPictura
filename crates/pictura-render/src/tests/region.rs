@@ -344,14 +344,9 @@ fn patching_a_tiled_region_does_not_materialize() {
         channels: 4,
         data: Plane::filled(1000, 900, 4, 0u8),
     };
-    pictura_core::reset_materializations();
-    let before = pictura_core::materializations();
-    crate::document_composite::patch_buffer_region(&mut composite, &region, 300, 200);
-    assert_eq!(
-        pictura_core::materializations(),
-        before,
-        "the region was materialized"
-    );
+    pictura_core::assert_no_materialization(|| {
+        crate::document_composite::patch_buffer_region(&mut composite, &region, 300, 200)
+    });
     for c in 0..4 {
         for y in [0usize, 255, 256, 511] {
             let mut row = vec![0u8; w];
