@@ -93,6 +93,7 @@ pub fn modal_ids() -> &'static [&'static str] {
         "file.export.zoomify",
         "file.export.paths.to.illustrator",
         "file.scripts.export.layers.to.files",
+        "file.scripts.load.files.into.stack",
         "file.quickExportPng",
         "file.saveForWeb",
         "file.print",

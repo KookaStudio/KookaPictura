@@ -2,6 +2,7 @@
 
 #include <QtCore/QSize>
 #include <QtCore/QString>
+#include <QtCore/QStringList>
 #include <QtCore/QVector>
 #include <QtCore/QtGlobal>
 
@@ -25,6 +26,10 @@ bool openImage(PictureView& view, const QString& path);
 bool openAsSmartObject(PictureView& view, const QString& path);
 bool newDocument(PictureView& view, int width, int height, const QString& mode, int depth,
                  const QString& background);
+/// File > Scripts > Load Files into Stack: build a new document in `view` with
+/// one layer per decodable path. Returns the paths that could not be loaded.
+QStringList loadFilesIntoStack(PictureView& view, const QStringList& paths, bool align,
+                               bool smartObject);
 bool save(PictureView& view, const QString& path);
 /// Write a copy without recording the path or clearing the modified state.
 bool saveCopy(PictureView& view, const QString& path);

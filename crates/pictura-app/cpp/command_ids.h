@@ -18,6 +18,7 @@ inline constexpr char FileInfo[] = "file.fileInfo";
 inline constexpr char FileExportZoomify[] = "file.export.zoomify";
 inline constexpr char FileExportPathsToIllustrator[] = "file.export.paths.to.illustrator";
 inline constexpr char FileScriptsExportLayersToFiles[] = "file.scripts.export.layers.to.files";
+inline constexpr char FileScriptsLoadFilesIntoStack[] = "file.scripts.load.files.into.stack";
 inline constexpr char FileClose[] = "file.close";
 inline constexpr char FileCloseAll[] = "file.closeAll";
 inline constexpr char FileExit[] = "file.exit";

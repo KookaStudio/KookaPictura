@@ -18,6 +18,7 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("FileExportZoomify", "file.export.zoomify"),
     ("FileExportPathsToIllustrator", "file.export.paths.to.illustrator"),
     ("FileScriptsExportLayersToFiles", "file.scripts.export.layers.to.files"),
+    ("FileScriptsLoadFilesIntoStack", "file.scripts.load.files.into.stack"),
     ("FileClose", "file.close"),
     ("FileCloseAll", "file.closeAll"),
     ("FileExit", "file.exit"),

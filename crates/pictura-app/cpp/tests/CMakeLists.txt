@@ -108,6 +108,7 @@ set(PICTURA_QT_TESTS
     tst_export_as
     tst_export_layers
     tst_file_export_tools
+    tst_load_files_into_stack
     tst_webp
     tst_type_tools
     tst_type_panels

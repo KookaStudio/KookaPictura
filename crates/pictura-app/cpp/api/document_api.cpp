@@ -34,6 +34,12 @@ bool newDocument(PictureView& view, int width, int height, const QString& mode, 
     return view.new_document(width, height, mode, depth, background);
 }
 
+QStringList loadFilesIntoStack(PictureView& view, const QStringList& paths, bool align,
+                               bool smartObject)
+{
+    return pictura::load_files_into_stack(view, paths, align, smartObject);
+}
+
 bool save(PictureView& view, const QString& path)
 {
     return view.save(path);

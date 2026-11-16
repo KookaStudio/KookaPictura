@@ -41,6 +41,8 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/import_pdf_dialog.h
     crates/pictura-app/cpp/jpeg_options_dialog.cpp
     crates/pictura-app/cpp/jpeg_options_dialog.h
+    crates/pictura-app/cpp/load_layers_dialog.cpp
+    crates/pictura-app/cpp/load_layers_dialog.h
     crates/pictura-app/cpp/new_document_dialog.cpp
     crates/pictura-app/cpp/new_document_dialog.h
     crates/pictura-app/cpp/pdf_presets_dialog.cpp
