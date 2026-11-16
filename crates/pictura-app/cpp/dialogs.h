@@ -133,6 +133,10 @@ QString pathForSaveFilter(const QString& path, int chosenFilter, int fallbackFil
 // and set `selectedFilter` to the chosen filter.
 QString getSaveFileName(QWidget* parent, const QString& caption, const QString& dir,
                         const QStringList& filters, QString* selectedFilter);
+// Test seam: answer the save path dialog without showing it; empty = cancel.
+using SaveFileNameProvider =
+    std::function<QString(QWidget*, const QString&, const QString&, const QStringList&, QString*)>;
+void setSaveFileNameProviderForTest(SaveFileNameProvider provider);
 QString getOpenFileName(QWidget* parent, const QString& caption, const QString& dir,
                         const QStringList& filters, QString* selectedFilter = nullptr);
 // Multi-select variant of getOpenFileName for File > Open: returns every chosen

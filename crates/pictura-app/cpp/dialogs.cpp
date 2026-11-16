@@ -839,9 +839,23 @@ QString defaultFileDialogDirectory()
     return remembered.isEmpty() ? QDir::homePath() : remembered;
 }
 
+namespace {
+
+SaveFileNameProvider g_saveFileNameForTest;
+
+} // namespace
+
+void setSaveFileNameProviderForTest(SaveFileNameProvider provider)
+{
+    g_saveFileNameForTest = std::move(provider);
+}
+
 QString getSaveFileName(QWidget* parent, const QString& caption, const QString& dir,
                         const QStringList& filters, QString* selectedFilter)
 {
+    if (g_saveFileNameForTest) {
+        return g_saveFileNameForTest(parent, caption, dir, filters, selectedFilter);
+    }
     QFileDialog dialog(parent, caption,
                        dir.isEmpty() ? defaultFileDialogDirectory() : dir);
     dialog.setAcceptMode(QFileDialog::AcceptSave);
