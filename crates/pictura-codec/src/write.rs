@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::common::*;
 use crate::depth::{apply_prediction, depth_bits, depth_of, output_depth, row_bytes};
 use crate::error::PsdError;
-use crate::write_cache::{CompositeKey, EncodeCache};
+use crate::write_cache::{ChannelKey, CompositeKey, EncodeCache};
 use crate::write_indexed::writes_indexed;
 use crate::write_layers::write_layer_info;
 
@@ -505,6 +505,112 @@ pub fn write_psb_cached(doc: &Document, cache: &EncodeCache) -> Result<Vec<u8>, 
     write_container(doc, true, Some(cache))
 }
 
+struct LayerMaskParts {
+    info: Vec<u8>,
+    tagged: Vec<u8>,
+    global_mask: Vec<u8>,
+    extra: Vec<u8>,
+    keys: Vec<ChannelKey>,
+}
+
+fn layer_mask_parts(
+    doc: &Document,
+    psb: bool,
+    cache: Option<&EncodeCache>,
+) -> Result<Option<LayerMaskParts>, PsdError> {
+    let plane = doc.width as usize * doc.height as usize;
+    let bitmap_mode = crate::write_bitmap::writes_bitmap(doc);
+    let depth = if bitmap_mode { 1 } else { output_depth(doc)? };
+    let lab_mode = doc.source_mode == Some(ColorMode::Lab)
+        && doc.composite.channels == 3
+        && (depth != 8 || doc.source_depth.is_none());
+    let cmyk_mode = doc.source_mode == Some(ColorMode::Cmyk)
+        && doc.composite.channels == 3
+        && (depth != 8 || doc.source_depth.is_none());
+    let indexed_mode = writes_indexed(doc, depth, plane);
+    let extra =
+        crate::type_path::encode_text_paths(&doc.layers, &doc.layer_section_extra, doc.is_psb);
+    let mut extra = reframe_document_extra(&extra, doc.is_psb, psb);
+    let authoring = crate::smart_writer::collect_authoring(&doc.layers);
+    if !authoring.is_empty() {
+        extra.extend_from_slice(&crate::smart_writer::author_lnk2_bytes(&authoring, psb));
+    }
+    let extra = crate::filter_effects::author_filter_masks(
+        &extra,
+        &doc.layers,
+        u32::from(doc.composite.channels),
+        psb,
+    );
+    if doc.layers.is_empty() && doc.global_layer_mask.is_empty() && extra.is_empty() {
+        return Ok(None);
+    }
+    let (info, keys) = write_layer_info(doc, psb, lab_mode, cmyk_mode, indexed_mode, cache)?;
+    let mut tagged = Vec::new();
+    if let Some(key) = tagged_layer_key(depth).filter(|_| !doc.layers.is_empty()) {
+        write_tag_document(&mut tagged, key, &info, psb);
+    }
+    let info = if tagged.is_empty() { info } else { Vec::new() };
+    Ok(Some(LayerMaskParts {
+        info,
+        tagged,
+        global_mask: doc.global_layer_mask.to_vec(),
+        extra,
+        keys,
+    }))
+}
+
+/// Build the layer-and-mask section body (layer info length + info + global
+/// mask + tagged layer block + document blocks), or an empty vector when the
+/// document has nothing to write there. The PSD container prepends the section
+/// length.
+pub(crate) fn layer_mask_section(
+    doc: &Document,
+    psb: bool,
+    cache: Option<&EncodeCache>,
+) -> Result<(Vec<u8>, Vec<ChannelKey>), PsdError> {
+    let Some(parts) = layer_mask_parts(doc, psb, cache)? else {
+        return Ok((Vec::new(), Vec::new()));
+    };
+    let mut body = Vec::new();
+    if psb {
+        body.extend_from_slice(&(parts.info.len() as u64).to_be_bytes());
+    } else {
+        body.extend_from_slice(&(parts.info.len() as u32).to_be_bytes());
+    }
+    body.extend_from_slice(&parts.info);
+    body.extend_from_slice(&(parts.global_mask.len() as u32).to_be_bytes());
+    body.extend_from_slice(&parts.global_mask);
+    body.extend_from_slice(&parts.tagged);
+    body.extend_from_slice(&parts.extra);
+    Ok((body, parts.keys))
+}
+
+/// Build the Photoshop ImageSourceData (tag 37724) payload for a layered TIFF.
+/// The PSD layer section is authored big-endian, so callers must write the TIFF
+/// container big-endian: the magic, block signatures, and lengths then share
+/// one byte order. Photoshop documents are big-endian too, so the layer data is
+/// reused without a conversion pass.
+pub(crate) fn layer_mask_tiff_tag(
+    doc: &Document,
+    cache: Option<&EncodeCache>,
+) -> Result<Option<Vec<u8>>, PsdError> {
+    let Some(parts) = layer_mask_parts(doc, false, cache)? else {
+        return Ok(None);
+    };
+    let mut out = Vec::new();
+    out.extend_from_slice(b"Adobe Photoshop Document Data Block\0");
+    if !parts.tagged.is_empty() {
+        out.extend_from_slice(&parts.tagged);
+    } else if !parts.info.is_empty() {
+        write_tag_document(&mut out, b"Layr", &parts.info, false);
+    }
+    if !parts.global_mask.is_empty() {
+        write_tag_document(&mut out, b"LMsk", &parts.global_mask, false);
+    }
+    out.extend_from_slice(&parts.extra);
+    Ok(Some(out))
+}
+
 fn write_container(
     doc: &Document,
     psb: bool,
@@ -613,54 +719,21 @@ fn write_container(
     out.extend_from_slice(&(resources.len() as u32).to_be_bytes());
     out.extend_from_slice(&resources);
 
-    // Authored smart objects append a document-level linked-record block; the
-    // preserved trailing bytes stay untouched, so an existing file is unchanged.
-    // A PSD-sourced document written as a PSB re-frames preserved big-key blocks
-    // to u64 lengths so psd-tools can parse them.
-    let extra =
-        crate::type_path::encode_text_paths(&doc.layers, &doc.layer_section_extra, doc.is_psb);
-    let mut extra = reframe_document_extra(&extra, doc.is_psb, psb);
-    let authoring = crate::smart_writer::collect_authoring(&doc.layers);
-    if !authoring.is_empty() {
-        extra.extend_from_slice(&crate::smart_writer::author_lnk2_bytes(&authoring, psb));
-    }
-    let extra = crate::filter_effects::author_filter_masks(
-        &extra,
-        &doc.layers,
-        u32::from(doc.composite.channels),
-        psb,
-    );
-
-    let mut used_layer_keys = Vec::new();
-    if doc.layers.is_empty() && doc.global_layer_mask.is_empty() && extra.is_empty() {
+    // The layer-and-mask section body is shared with the layered-TIFF writer.
+    let (body, used_layer_keys) = layer_mask_section(doc, psb, cache)?;
+    if body.is_empty() {
         if psb {
             out.extend_from_slice(&0u64.to_be_bytes()); // zero-length layer/mask section
         } else {
             out.extend_from_slice(&0u32.to_be_bytes()); // zero-length layer/mask section
         }
     } else {
-        let (info, keys) = write_layer_info(doc, psb, lab_mode, cmyk_mode, indexed_mode, cache)?;
-        used_layer_keys = keys;
-        let mut tagged = Vec::new();
-        if let Some(key) = tagged_layer_key(depth).filter(|_| !doc.layers.is_empty()) {
-            write_tag_document(&mut tagged, key, &info, psb);
-        }
-        let info: &[u8] = if tagged.is_empty() { &info } else { &[] };
-        let len_width = if psb { 8 } else { 4 };
-        let section_len =
-            len_width + info.len() + 4 + doc.global_layer_mask.len() + tagged.len() + extra.len();
         if psb {
-            out.extend_from_slice(&(section_len as u64).to_be_bytes());
-            out.extend_from_slice(&(info.len() as u64).to_be_bytes());
+            out.extend_from_slice(&(body.len() as u64).to_be_bytes());
         } else {
-            out.extend_from_slice(&(section_len as u32).to_be_bytes());
-            out.extend_from_slice(&(info.len() as u32).to_be_bytes());
+            out.extend_from_slice(&(body.len() as u32).to_be_bytes());
         }
-        out.extend_from_slice(info);
-        out.extend_from_slice(&(doc.global_layer_mask.len() as u32).to_be_bytes());
-        out.extend_from_slice(&doc.global_layer_mask);
-        out.extend_from_slice(&tagged);
-        out.extend_from_slice(&extra);
+        out.extend_from_slice(&body);
     }
 
     // "Maximize Compatibility" off: the source ended after the layer section, so

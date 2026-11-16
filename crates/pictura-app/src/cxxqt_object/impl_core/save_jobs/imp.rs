@@ -3,10 +3,10 @@ use super::*;
 use super::super::super::color_management::save_embed_default;
 use super::super::super::filter_tools::store_planes;
 use super::super::super::state::PictureViewRust;
-use super::super::{format_for_path, raster_writer_for_suffix};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -33,8 +33,15 @@ pub(in crate::cxxqt_object) fn save_start_rust(rust: &mut PictureViewRust, path:
     if rust.save_job.is_some() {
         return false;
     }
-    let suffix = format_for_path(path);
-    if matches!(suffix.as_str(), "pdf" | "pdp") || raster_writer_for_suffix(&suffix).is_some() {
+    let suffix = Path::new(path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .filter(|extension| !extension.is_empty())
+        .map(|extension| extension.to_ascii_lowercase());
+    let Some(suffix) = suffix else {
+        return false;
+    };
+    if !matches!(suffix.as_str(), "psd" | "psb") {
         return false;
     }
     let session = &rust.session;

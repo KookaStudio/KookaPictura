@@ -579,6 +579,7 @@ fn replacement_clears_outgoing_state() {
     view.pending_previews.mask_refine = Some("Mask Feather");
     view.session.pdf_options = Some("options".into());
     view.session.pdf_password = Some("secret".into());
+    view.save_options = Some(Default::default());
     view.replace_document(
         Some(doc()),
         History::default(),
@@ -600,6 +601,10 @@ fn replacement_clears_outgoing_state() {
     assert!(view.pending_previews.mask_refine.is_none());
     assert!(view.session.pdf_options.is_none());
     assert!(view.session.pdf_password.is_none());
+    assert!(
+        view.save_options.is_none(),
+        "the Save As kind must not leak"
+    );
     assert_eq!(view.session.document_generation, 1);
 }
 

@@ -57,6 +57,7 @@ mod probe;
 mod profile_probe;
 pub(crate) mod raster_metadata;
 mod read;
+mod save;
 mod smart_filter;
 mod smart_object;
 mod smart_writer;
@@ -156,6 +157,10 @@ pub use raster_metadata::{
 pub use read::{
     read_psd, read_psd_with, read_psd_with_options, read_psd_within, read_psd_within_options,
     OpenOptions,
+};
+pub use save::{
+    save_document, save_document_with_jpeg, save_document_with_jpeg_guarded, BeforeWrite,
+    JpegEncode, SaveKind, SaveOptions,
 };
 pub use smart_filter::{
     clear_smart_filters, delete_smart_filter, reorder_smart_filters, set_camera_raw_option,

@@ -1,5 +1,8 @@
 #include "bmp_options_dialog.h"
 
+#include "bmp_advanced_modes_dialog.h"
+#include "dialogs.h"
+
 #include <QtWidgets/QButtonGroup>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QDialogButtonBox>
@@ -25,8 +28,6 @@ BmpOptionsDialog::BmpOptionsDialog(const SaveFormatOptions& initial, QWidget* pa
 
     auto* root = new QVBoxLayout(this);
 
-    // ponytail: Qt's BMP writer exposes no file format, depth, RLE, or flip
-    // option, so every control below is shown disabled.
     auto* formatBox = new QGroupBox(tr("File Format"), this);
     auto* formatLayout = new QVBoxLayout(formatBox);
     windows_ = new QRadioButton(tr("Windows"), formatBox);
@@ -63,22 +64,17 @@ BmpOptionsDialog::BmpOptionsDialog(const SaveFormatOptions& initial, QWidget* pa
 
     auto* advanced = new QPushButton(tr("Advanced Modes"), this);
     advanced->setObjectName(QStringLiteral("bmpOptionsAdvanced"));
+    advanced_ = initial.bmpAdvanced;
+    connect(advanced, &QPushButton::clicked, this, [this] {
+        BmpAdvancedModesDialog dialog(advanced_, this);
+        if (runDialog(dialog, this) == QDialog::Accepted) {
+            advanced_ = dialog.layout();
+        }
+    });
     auto* advancedRow = new QHBoxLayout();
     advancedRow->addWidget(advanced);
     advancedRow->addStretch();
     root->addLayout(advancedRow);
-
-    for (QWidget* widget :
-         {static_cast<QWidget*>(windows_), static_cast<QWidget*>(os2_),
-          static_cast<QWidget*>(rle_), static_cast<QWidget*>(flip_),
-          static_cast<QWidget*>(advanced)}) {
-        widget->setEnabled(false);
-        widget->setToolTip(tr("This BMP option is not written yet."));
-    }
-    for (QRadioButton* button : depth_) {
-        button->setEnabled(false);
-        button->setToolTip(tr("This BMP option is not written yet."));
-    }
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     connect(buttons, &QDialogButtonBox::accepted, this, &BmpOptionsDialog::accept);
@@ -110,6 +106,11 @@ bool BmpOptionsDialog::rle() const
 bool BmpOptionsDialog::flip() const
 {
     return flip_->isChecked();
+}
+
+int BmpOptionsDialog::advanced() const
+{
+    return advanced_;
 }
 
 } // namespace pictura

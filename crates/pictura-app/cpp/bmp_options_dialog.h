@@ -10,8 +10,7 @@ class QRadioButton;
 namespace pictura {
 
 // BMP Options (WF-1): File Format, Depth, Compress (RLE), Flip Row Order, and
-// Advanced Modes. Qt's BMP writer exposes none of these, so every control is
-// shown disabled to mirror CS6 without claiming a write that does not happen.
+// Advanced Modes. Every control reaches the engine writer.
 class BmpOptionsDialog : public QDialog {
     Q_OBJECT
 
@@ -22,6 +21,7 @@ public:
     int depth() const;  // 1/4/8/16/24/32
     bool rle() const;
     bool flip() const;
+    int advanced() const; // 0 X1R5G5B5, 1 A1R5G5B5, 2 R5G6B5
 
 private:
     QRadioButton* windows_ = nullptr;
@@ -29,6 +29,7 @@ private:
     QRadioButton* depth_[6] = {};
     QCheckBox* rle_ = nullptr;
     QCheckBox* flip_ = nullptr;
+    int advanced_ = 0;
 };
 
 } // namespace pictura

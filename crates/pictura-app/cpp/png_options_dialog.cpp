@@ -33,11 +33,6 @@ PngOptionsDialog::PngOptionsDialog(const SaveFormatOptions& initial, QWidget* pa
     interlaced_ = new QRadioButton(tr("Interlaced"), interlaceBox);
     interlaced_->setObjectName(QStringLiteral("pngOptionsInterlaced"));
     (initial.pngInterlace == 1 ? interlaced_ : none_)->setChecked(true);
-    // ponytail: Qt's PNG writer exposes no interlace option.
-    for (QRadioButton* button : {none_, interlaced_}) {
-        button->setEnabled(false);
-        button->setToolTip(tr("PNG interlacing is not written yet."));
-    }
     interlaceLayout->addWidget(none_);
     interlaceLayout->addWidget(interlaced_);
     root->addWidget(interlaceBox);

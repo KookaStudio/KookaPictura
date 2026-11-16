@@ -9,8 +9,7 @@ class QRadioButton;
 namespace pictura {
 
 // PNG Options (WF-1): Compression (None/Fast … Smallest/Slow) and Interlace.
-// Compression reaches the encoder; Interlace is shown disabled because Qt's PNG
-// writer exposes no interlace control.
+// Both reach the engine writer.
 class PngOptionsDialog : public QDialog {
     Q_OBJECT
 

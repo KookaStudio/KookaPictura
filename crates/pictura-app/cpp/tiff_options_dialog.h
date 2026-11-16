@@ -13,8 +13,7 @@ namespace pictura {
 
 // TIFF Options (WF-1): Image Compression (with Quality for JPEG), Pixel Order,
 // Byte Order, Layer Compression, Save Image Pyramid, and Save Transparency.
-// Image Compression (None/LZW/JPEG) and Save Transparency reach the encoder;
-// the remaining controls are shown disabled.
+// All controls reach the engine writer.
 class TiffOptionsDialog : public QDialog {
     Q_OBJECT
 

@@ -107,8 +107,11 @@ int defaultSaveFilterIndex(PictureView* view);
 bool documentRequiresLayers(PictureView* view);
 // True when a plain Save to `path` cannot represent the document and must fall
 // back to the format-aware Save As dialog: a raster path on a document that
-// needs layers. `pathIsNative` is true for a PSD/PSB path.
-bool savePathNeedsFormatDialog(const QString& path, PictureView* view, bool pathIsNative);
+// needs layers. `pathIsNative` is true for a PSD/PSB path; `rememberedDcs`
+// keeps a previously accepted DCS kind on its `.eps` path. TIFF is admitted
+// because its layer section can preserve the document.
+bool savePathNeedsFormatDialog(const QString& path, PictureView* view, bool pathIsNative,
+                               bool rememberedDcs = false);
 // True when saving to `path` flattens features a flat raster format cannot
 // hold -- a raster extension on a document that needs layers.
 bool saveAsNeedsFeatureWarning(const QString& path, PictureView* view);

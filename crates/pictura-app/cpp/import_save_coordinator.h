@@ -86,9 +86,14 @@ public:
     // Save / close.
     bool saveActive();
     bool saveActiveAs(const QString& path);
+    // Save a known path with the remembered options for its suffix (no dialog):
+    // the path used by the control server and recorded-command replay.
+    bool saveActiveAtPath(const QString& path);
     bool saveAsWithDialog();
-    bool saveActiveAsWithOptions(const QString& path);
-    bool promptSaveFormatOptions(const QString& path);
+    bool saveActiveAsWithOptions(const QString& path,
+                                 SaveFormatKind hint = SaveFormatKind::None);
+    bool promptSaveFormatOptions(const QString& path,
+                                 SaveFormatKind hint = SaveFormatKind::None);
     bool runSaveFormatDialog(SaveFormatKind kind, SaveFormatOptions& options);
     void rememberSaveFormatOptions(SaveFormatKind kind, const SaveFormatOptions& options);
     void applySaveRasterOptions(PictureView& view, SaveFormatKind kind,
@@ -134,6 +139,14 @@ public:
         std::function<bool(SaveFormatKind, SaveFormatOptions&)> hook)
     {
         saveFormatDialogForTest_ = std::move(hook);
+    }
+    void setGifDialogForTest(std::function<bool(PictureView*, SaveFormatOptions&)> hook)
+    {
+        gifDialogForTest_ = std::move(hook);
+    }
+    void setWarningDriverForTest(std::function<bool(const QString&, const QString&)> driver)
+    {
+        warningDriverForTest_ = std::move(driver);
     }
     void setPdfDialogDriverForTest(std::function<bool(QDialog&)> driver)
     {
@@ -227,7 +240,10 @@ private:
     int openDelayForTest_ = 0;
 
     QJsonObject saveFormatOptions_;
+    QHash<PictureView*, SaveFormatKind> lastSaveKinds_;
     std::function<bool(SaveFormatKind, SaveFormatOptions&)> saveFormatDialogForTest_;
+    std::function<bool(PictureView*, SaveFormatOptions&)> gifDialogForTest_;
+    std::function<bool(const QString&, const QString&)> warningDriverForTest_;
     std::function<bool(QDialog&)> pdfDialogDriver_;
     std::function<bool(QDialog&)> importDialogDriver_;
     std::function<void(const QString&)> pdfViewer_;

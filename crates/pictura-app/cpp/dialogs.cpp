@@ -106,7 +106,11 @@ bool isKnownImageSuffix(const QString& suffix)
                                       QStringLiteral("jpeg"), QStringLiteral("jpe"),
                                       QStringLiteral("tif"), QStringLiteral("tiff"),
                                       QStringLiteral("webp"), QStringLiteral("bmp"),
-                                      QStringLiteral("pdf"), QStringLiteral("pdp")};
+                                      QStringLiteral("pdf"), QStringLiteral("pdp"),
+                                      QStringLiteral("gif"), QStringLiteral("eps"),
+                                      QStringLiteral("raw"), QStringLiteral("tga"),
+                                      QStringLiteral("vda"), QStringLiteral("icb"),
+                                      QStringLiteral("vst"), QStringLiteral("cin")};
     return known.contains(suffix);
 }
 
@@ -253,8 +257,15 @@ const QStringList& saveFileFilters()
         QStringLiteral("WebP (*.WEBP)"),
         QStringLiteral("BMP (*.BMP)"),
         QStringLiteral("Photoshop PDF (*.PDF *.PDP)"),
+        QStringLiteral("CompuServe GIF (*.GIF)"),
+        QStringLiteral("Photoshop EPS (*.EPS)"),
+        QStringLiteral("Photoshop DCS (*.EPS)"),
+        QStringLiteral("Photoshop Raw (*.RAW)"),
+        QStringLiteral("Targa (*.TGA *.VDA *.ICB *.VST)"),
+        QStringLiteral("Cineon (*.CIN)"),
         QStringLiteral("All Formats (*.PSD *.PSB *.PNG *.JPG *.JPEG *.JPE *.TIF *.TIFF "
-                       "*.WEBP *.BMP *.PDF *.PDP)"),
+                       "*.WEBP *.BMP *.PDF *.PDP *.GIF *.EPS *.RAW *.TGA *.VDA *.ICB *.VST "
+                       "*.CIN)"),
     };
     return filters;
 }
@@ -286,12 +297,23 @@ bool documentRequiresLayers(PictureView* view)
     return !documentIsFlat(view);
 }
 
-bool savePathNeedsFormatDialog(const QString& path, PictureView* view, bool pathIsNative)
+bool savePathNeedsFormatDialog(const QString& path, PictureView* view, bool pathIsNative,
+                               bool rememberedDcs)
 {
     if (path.isEmpty()) {
         return true;
     }
-    return view && !pathIsNative && documentRequiresLayers(view);
+    if (!view || pathIsNative || !documentRequiresLayers(view)) {
+        return false;
+    }
+    const QString suffix = QFileInfo(path).suffix().toLower();
+    // A TIFF keeps its layer section unless the options discard it, and the
+    // remembered DCS kind is what makes a shared .eps path a separation set.
+    if (suffix == QLatin1String("tif") || suffix == QLatin1String("tiff")
+        || (suffix == QLatin1String("eps") && rememberedDcs)) {
+        return false;
+    }
+    return true;
 }
 
 int defaultSaveFilterIndex(PictureView* view)
@@ -322,6 +344,25 @@ int defaultSaveFilterIndex(PictureView* view)
     if (format == QLatin1String("pdf")) {
         return 7;
     }
+    if (format == QLatin1String("gif")) {
+        return 8;
+    }
+    if (format == QLatin1String("eps")) {
+        return 9;
+    }
+    if (format == QLatin1String("dcs")) {
+        return 10;
+    }
+    if (format == QLatin1String("raw")) {
+        return 11;
+    }
+    if (format == QLatin1String("tga") || format == QLatin1String("vda")
+        || format == QLatin1String("icb") || format == QLatin1String("vst")) {
+        return 12;
+    }
+    if (format == QLatin1String("cin")) {
+        return 13;
+    }
     return 0;
 }
 
@@ -330,13 +371,23 @@ bool isRasterImageSuffix(const QString& suffix)
     static const QStringList raster = {QStringLiteral("png"), QStringLiteral("jpg"),
                                        QStringLiteral("jpeg"), QStringLiteral("jpe"),
                                        QStringLiteral("tif"), QStringLiteral("tiff"),
-                                       QStringLiteral("webp"), QStringLiteral("bmp")};
+                                       QStringLiteral("webp"), QStringLiteral("bmp"),
+                                       QStringLiteral("gif"), QStringLiteral("eps"),
+                                       QStringLiteral("raw"), QStringLiteral("tga"),
+                                       QStringLiteral("vda"), QStringLiteral("icb"),
+                                       QStringLiteral("vst"), QStringLiteral("cin")};
     return raster.contains(suffix.toLower());
 }
 
 bool saveAsNeedsFeatureWarning(const QString& path, PictureView* view)
 {
-    return isRasterImageSuffix(QFileInfo(path).suffix()) && documentRequiresLayers(view);
+    const QString suffix = QFileInfo(path).suffix().toLower();
+    // TIFF keeps the layer section unless its dialog selects Discard; that is
+    // a user choice, not a silent flatten.
+    if (suffix == QLatin1String("tif") || suffix == QLatin1String("tiff")) {
+        return false;
+    }
+    return isRasterImageSuffix(suffix) && documentRequiresLayers(view);
 }
 
 QString defaultSuffixForFilter(int filterIndex)
@@ -356,6 +407,17 @@ QString defaultSuffixForFilter(int filterIndex)
         return QStringLiteral(".bmp");
     case 7:
         return QStringLiteral(".pdf");
+    case 8:
+        return QStringLiteral(".gif");
+    case 9:
+    case 10:
+        return QStringLiteral(".eps");
+    case 11:
+        return QStringLiteral(".raw");
+    case 12:
+        return QStringLiteral(".tga");
+    case 13:
+        return QStringLiteral(".cin");
     default:
         return QStringLiteral(".psd");
     }

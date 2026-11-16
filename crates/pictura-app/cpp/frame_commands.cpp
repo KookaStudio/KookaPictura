@@ -288,7 +288,7 @@ void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
                         [this]() { showDesignSystemDialog(); });
 
     const auto saveToRecordedPath = [this](const CommandParams& params) {
-        return saveActiveAs(params.values.value(QStringLiteral("in")).toString());
+        return saveActiveAsWithRememberedOptions(params.values.value(QStringLiteral("in")).toString());
     };
     registry.setExecutor(command_ids::FileSave, saveToRecordedPath);
     registry.setExecutor(command_ids::FileSaveAs, saveToRecordedPath);
