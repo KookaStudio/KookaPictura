@@ -143,6 +143,28 @@ QString sanitizeName(const QString& name)
     return trimmed.isEmpty() ? QStringLiteral("export") : trimmed;
 }
 
+// A sanitized base name not yet used in this export, disambiguated with `-2`,
+// `-3`, … on a case-insensitive collision.
+QString uniqueExportBase(const QString& name, QSet<QString>& used)
+{
+    const QString base = sanitizeName(name);
+    QString candidate = base;
+    int counter = 2;
+    while (used.contains(candidate.toLower())) {
+        candidate = QStringLiteral("%1-%2").arg(base).arg(counter++);
+    }
+    used.insert(candidate.toLower());
+    return candidate;
+}
+
+// Write SVG text atomically through QSaveFile.
+bool writeSvgFile(const QString& path, const QString& svg)
+{
+    const QByteArray data = svg.toUtf8();
+    QSaveFile file(path);
+    return file.open(QIODevice::WriteOnly) && file.write(data) == data.size() && file.commit();
+}
+
 // Reduce `rgba` with the PNG-8 / GIF settings (Selective, 256 colours, no
 // dither); with `gif`, also encode it.
 QImage indexedImage(const QImage& rgba, bool transparency, QByteArray* gif)
@@ -675,6 +697,7 @@ bool exportAsFromView(QWidget* parent, PictureView* view)
     const int width = view->document_width();
     const int height = view->document_height();
     QVector<ExportEntry> entries;
+    QVector<int> entryLayer;
     {
         const ::rust::Vec<std::uint8_t> rgba = web_flattened(*view);
         if (rgba.size() != std::size_t(width) * std::size_t(height) * 4) {
@@ -687,6 +710,7 @@ bool exportAsFromView(QWidget* parent, PictureView* view)
         entries.append({name, QStringLiteral("document"),
                         QImage(rgba.data(), width, height, width * 4, QImage::Format_RGBA8888)
                             .copy()});
+        entryLayer.append(-1);
     }
     const int layerCount = view->layer_count();
     for (int i = 0; i < layerCount; ++i) {
@@ -709,6 +733,7 @@ bool exportAsFromView(QWidget* parent, PictureView* view)
         }
         entries.append({view->layer_name(i), view->layer_kind(i),
                         QImage(packed.data() + 8, lw, lh, lw * 4, QImage::Format_RGBA8888).copy()});
+        entryLayer.append(i);
     }
 
     ExportAsDialog dialog(entries, parent);
@@ -721,28 +746,45 @@ bool exportAsFromView(QWidget* parent, PictureView* view)
     }
     const QString documentPath = document_api::filePath(*view);
 
-    // SVG is document-level text, not a per-entry `QImage`: one `.svg` holds the
-    // whole document, so the checked entries do not select targets.
+    // SVG is text, not a per-entry `QImage`: each checked row is its own
+    // document-sized `.svg`, built through the `svg_from_view` /
+    // `svg_from_layer` bridge.
     if (dialog.format() == QLatin1String("SVG")) {
-        const QString svg = svg_from_view(*view);
-        if (svg.isEmpty()) {
-            return false;
+        QVector<QString> names;
+        QVector<QString> svgs;
+        for (const int entry : checked) {
+            const int layer = entryLayer.value(entry, -1);
+            const QString svg = layer < 0 ? svg_from_view(*view) : svg_from_layer(*view, layer);
+            if (svg.isEmpty()) {
+                return false;
+            }
+            names.append(entries[entry].name);
+            svgs.append(svg);
         }
         QString directory = QFileInfo(documentPath).absolutePath();
         if (directory.isEmpty()) {
             directory = defaultFileDialogDirectory();
         }
-        const QString path = getSaveFileName(
-            parent, QObject::tr("Export As"),
-            directory + QLatin1Char('/') + entries[0].name + QStringLiteral(".svg"),
-            {QStringLiteral("SVG (*.SVG)")}, nullptr);
-        if (path.isEmpty()) {
+        if (checked.size() == 1) {
+            const QString path = getSaveFileName(
+                parent, QObject::tr("Export As"),
+                directory + QLatin1Char('/') + names.first() + QStringLiteral(".svg"),
+                {QStringLiteral("SVG (*.SVG)")}, nullptr);
+            return !path.isEmpty()
+                && writeSvgFile(retargetPath(path, QStringLiteral("SVG")), svgs.first());
+        }
+        directory = QFileDialog::getExistingDirectory(parent, QObject::tr("Export As"), directory);
+        if (directory.isEmpty()) {
             return false;
         }
-        const QByteArray data = svg.toUtf8();
-        QSaveFile file(retargetPath(path, QStringLiteral("SVG")));
-        return file.open(QIODevice::WriteOnly) && file.write(data) == data.size()
-            && file.commit();
+        QSet<QString> used;
+        bool ok = true;
+        for (int i = 0; i < checked.size(); ++i) {
+            const QString base = uniqueExportBase(names[i], used);
+            const QString path = directory + QLatin1Char('/') + base + QStringLiteral(".svg");
+            ok = writeSvgFile(path, svgs[i]) && ok;
+        }
+        return ok;
     }
 
     if (checked.size() == 1) {
@@ -772,14 +814,8 @@ bool exportAsFromView(QWidget* parent, PictureView* view)
     QSet<QString> used;
     bool ok = true;
     for (const int entry : checked) {
-        QString base = sanitizeName(entries[entry].name);
-        QString candidate = base;
-        int counter = 2;
-        while (used.contains(candidate.toLower())) {
-            candidate = QStringLiteral("%1-%2").arg(base).arg(counter++);
-        }
-        used.insert(candidate.toLower());
-        const QString path = directory + QLatin1Char('/') + candidate + QLatin1Char('.') + suffix;
+        const QString base = uniqueExportBase(entries[entry].name, used);
+        const QString path = directory + QLatin1Char('/') + base + QLatin1Char('.') + suffix;
         ok = dialog.saveTo(entry, path) && ok;
     }
     return ok;

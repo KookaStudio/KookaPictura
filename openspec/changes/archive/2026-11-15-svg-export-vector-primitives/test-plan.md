@@ -1,0 +1,15 @@
+# Test plan
+
+| Scenario | Steps | Expected | Coverage |
+|---|---|---|---|
+| `svg_gradient_linear` | Export a shape layer filled with a linear two-stop gradient at angle 0 | `<defs>` has `<linearGradient>` with the stops; the shape `fill` is `url(#…)`; no `<image>` for the layer | `pictura-codec::a_linear_gradient_fill_registers_a_def`, `pictura-render::a_linear_gradient_shape_becomes_a_gradient_fill`, `tst_export_as::svgExportPaintServers` |
+| `svg_gradient_radial` | Export a shape layer filled with a radial two-stop gradient | `<defs>` has `<radialGradient>`; the shape `fill` is `url(#…)`; no `<image>` for the layer | `pictura-codec::a_radial_gradient_fill_registers_a_def`, `pictura-render::a_radial_gradient_shape_becomes_a_radial_fill` |
+| `svg_gradient_fallback` | Export a shape layer filled with an angle, reflected, or diamond gradient | The layer is an `<image>` fallback | `pictura-render::an_unsupported_gradient_kind_is_rasterized` |
+| `svg_pattern` | Export a shape layer filled with a document pattern at scale 100 | `<defs>` has `<pattern>` with a base64 PNG tile; the shape `fill` is `url(#…)`; no `<image>` for the layer | `pictura-codec::a_pattern_fill_registers_a_pattern_tile`, `pictura-render::a_pattern_shape_becomes_a_pattern_fill`, `tst_export_as::svgExportPaintServers` |
+| `svg_stroke_outside` | Export a shape layer with a solid outside stroke and no other active effect | A stroke-only element has `stroke`, `stroke-width`, and an exterior mask | `pictura-codec::an_outside_stroke_emits_a_masked_stroke_element`, `pictura-render::a_solid_shape_stroke_becomes_a_stroke` |
+| `svg_stroke_inside` | Export a shape layer with a solid inside stroke | A stroke-only element is masked to the interior | `pictura-codec::an_inside_stroke_emits_a_masked_stroke_element`, `pictura-render::a_solid_shape_stroke_becomes_a_stroke` |
+| `svg_stroke_fallback` | Export a shape with a stroke plus a drop shadow, a non-solid stroke fill, or a non-Normal stroke blend | The layer is an `<image>` fallback | `pictura-render::a_shape_with_another_effect_is_rasterized` |
+| `svg_export_per_layer` | Check only a top-level layer row, choose SVG, and write one file | The file has the document `width`/`height`/`viewBox` and contains only that layer | `tst_export_as::svgExportPerLayer`, `pictura-app::a_layer_serializes_to_a_document_sized_svg` |
+| `svg_export_per_layer_multi` | Check several rows, choose SVG, and pick a folder | One `.svg` per checked row, named and disambiguated without overwrite | manual: the folder chooser is a native modal; the per-row writer is the shared atomic `QSaveFile` loop |
+| librsvg agrees with the compositor | Export the existing solid-shape document and render with librsvg | Pixel match on white within the antialiasing tolerance | `pictura-render::librsvg_renders_the_exported_svg_like_the_composite` |
+| `svg_oracle_primitives` | Export a document with linear/radial gradients, a pattern fill, and an outside stroke; render with librsvg | Pixel match on white within the antialiasing tolerance | `pictura-render::librsvg_renders_gradients_patterns_and_strokes_like_the_composite` |

@@ -164,7 +164,8 @@ pub use smart_filter::{
 pub use smart_object::remove_linked_source;
 pub use svg::{
     blend_css, ellipse_element, encode_svg, image_element, path_data, path_element, rect_element,
-    rounded_rect_element, subpath_data, text_element, SvgContent, SvgNode, SvgOptions,
+    rounded_rect_element, subpath_data, text_element, SvgContent, SvgGradient, SvgGradientStop,
+    SvgNode, SvgOptions, SvgPaint, SvgPattern, SvgStroke, SvgStrokePosition,
 };
 pub use type_plain::type_is_plain;
 pub use type_tool::{decode_type_warp, encode_type_tool};

@@ -497,7 +497,7 @@ pub fn gradient_rgba_region(
 
 /// Linearly sample `stops` at index `z ∈ [0, 1]` (`z * 4096`), clamping outside
 /// the stop range. Stops are strictly increasing in location.
-fn sample_stops(stops: &[GradientStop], z: f64) -> [u8; 4] {
+pub(crate) fn sample_stops(stops: &[GradientStop], z: f64) -> [u8; 4] {
     let Some(first) = stops.first() else {
         return [0, 0, 0, 255];
     };
