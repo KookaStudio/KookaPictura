@@ -335,9 +335,13 @@ mod tests {
         let html = viewer_html(&plan(4096, 4096));
         assert!(html.contains("function zoomAt"));
         assert!(html.contains("function pickLevel"));
-        let wheel = html.split("addEventListener('wheel'").nth(1).unwrap();
+        let wheel = html
+            .split("addEventListener('wheel'")
+            .nth(1)
+            .and_then(|tail| tail.lines().next())
+            .unwrap();
         assert!(wheel.contains("zoomAt("));
-        assert!(!wheel.contains("fit()"));
+        assert!(!wheel.contains("fit"));
     }
 
     #[test]

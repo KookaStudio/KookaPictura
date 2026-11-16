@@ -468,10 +468,11 @@ void ExportLayersTest::layersCloseDuringDelayAbortsSafely()
     pictura::PictureView* view = newDoc(*window_, QStringLiteral("LayersClose"), 40, 40);
     QVERIFY(view);
     QVERIFY(!addLayer(*view, QStringLiteral("one")).isEmpty());
+    QVERIFY(!addLayer(*view, QStringLiteral("two")).isEmpty());
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     pictura::export_tools_set_delay(*view, 200000);
-    QTimer::singleShot(100, this, [this] {
+    QTimer::singleShot(0, this, [this] {
         window_->closeDocument(window_->activeDocumentIndex(), false);
     });
     const bool exported = exportAll(*view, dir.path());
