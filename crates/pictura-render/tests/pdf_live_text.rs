@@ -77,6 +77,7 @@ fn write_live(doc: &Document, options: &PdfOptions) -> (Vec<u8>, Option<PixelBuf
             intent: PdfIntent::RelativeColorimetric,
             bpc: true,
         }),
+        editing_doc: None,
     };
     let pdf = write_pdf(doc, &doc.composite, &options, &env).expect("writes");
     (pdf, background)

@@ -4,6 +4,9 @@
 
 #include "frame_includes.h"
 #include "export_as_dialog.h"
+#include "export_layers_dialog.h"
+#include "export_paths_dialog.h"
+#include "zoomify_dialog.h"
 #include "print_dialog.h"
 #include "save_for_web_dialog.h"
 
@@ -64,6 +67,12 @@ void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
     wirePdfCommands();
     registry.setHandler(command_ids::FileExportAs,
                         [this]() { exportAsFromView(this, activeView()); });
+    registry.setHandler(command_ids::FileExportZoomify,
+                        [this]() { zoomifyExportFromView(this, activeView()); });
+    registry.setHandler(command_ids::FileExportPathsToIllustrator,
+                        [this]() { exportPathsFromView(this, activeView()); });
+    registry.setHandler(command_ids::FileScriptsExportLayersToFiles,
+                        [this]() { exportLayersFromView(this, activeView()); });
     // File > Print… and Print One Copy (WF-013).
     const char* const printIds[] = {command_ids::FilePrint, command_ids::FilePrintOneCopy};
     for (int i = 0; i < 2; ++i) {
@@ -126,6 +135,9 @@ void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
     auto hasDocument = [this]() { return documentCount() > 0; };
     for (const char* id : {command_ids::FileSave, command_ids::FileSaveAs,
                            command_ids::FileExportAs, command_ids::FileQuickExportPng,
+                           command_ids::FileExportZoomify,
+                           command_ids::FileExportPathsToIllustrator,
+                           command_ids::FileScriptsExportLayersToFiles,
                            command_ids::FileSaveForWeb, command_ids::FileClose,
                            command_ids::FileCloseAll, command_ids::FileInfo}) {
         registry.setEnabledProvider(id, hasDocument);

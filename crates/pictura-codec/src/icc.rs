@@ -272,6 +272,31 @@ pub fn assign_cmyk_profile(doc: &mut Document, profile: &Profile) {
 /// profile, a profile too short to carry the signature, every other resource,
 /// and the unparsed tail are byte-identical; a section with no mismatching
 /// `1039` is returned unchanged.
+/// Remove the working ICC profile from the document's preserved image
+/// resources and clear `document_icc`, so a PSD/PDF written from it is
+/// untagged. Other resources, including the unparsed tail, are kept.
+pub fn strip_document_icc(doc: &mut Document) {
+    let (resources, consumed) = decode_image_resources_with_len(doc);
+    let kept: Vec<_> = resources
+        .into_iter()
+        .filter(|resource| resource.id != ICC_PROFILE)
+        .collect();
+    let mut section = encode_image_resources(&kept);
+    section.extend_from_slice(&doc.image_resources[consumed..]);
+    doc.image_resources = section.into();
+    doc.document_icc = None;
+}
+
+/// Embed `icc` as image resource 1039 and record it as the working profile,
+/// including the sRGB profile that [`assign_document_profile`] deliberately
+/// omits. Other resources and the unparsed tail are kept.
+pub fn embed_document_icc(doc: &mut Document, icc: &[u8]) {
+    let (resources, consumed) = decode_image_resources_with_len(doc);
+    let section = rebuild_resources(doc, resources, consumed, Some(icc));
+    doc.image_resources = section.into();
+    doc.document_icc = Some(icc.to_vec().into());
+}
+
 pub(crate) fn resources_for_output(doc: &Document, mode_code: u16) -> Vec<u8> {
     let Some(expected) = output_data_space(mode_code) else {
         return doc.image_resources.to_vec();

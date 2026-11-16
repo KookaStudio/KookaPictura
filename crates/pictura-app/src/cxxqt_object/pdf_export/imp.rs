@@ -94,6 +94,7 @@ pub(super) fn save_view(
                 intent: proof_intent,
                 bpc: proof_state.bpc,
             }),
+            editing_doc: None,
         };
         pdf::write_pdf(&save_doc, &composite, &options, &env).map_err(|e| e.to_string())?
     };
