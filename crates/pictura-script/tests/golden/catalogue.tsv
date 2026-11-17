@@ -609,6 +609,7 @@ panel.layers.maskIntersect		Intersect Mask With Selection		1	0
 panel.layers.refineMask		Refine Mask…		1	0
 panel.layers.maskOptions		Mask Options…		1	0
 panel.layers.panelOptions		Panel Options…		1	0
+panel.channels.duplicateChannel		Duplicate Channel…		1	0
 panel.history.stepForward		Step Forward		1	0
 panel.history.stepBackward		Step Backward		1	0
 panel.history.newSnapshot		New Snapshot…		1	0

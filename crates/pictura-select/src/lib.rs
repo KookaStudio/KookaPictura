@@ -449,6 +449,58 @@ impl Selection {
         )
     }
 
+    /// Fit this selection into `width`×`height`: preserve aspect ratio, centre
+    /// the fitted plane, and fill the uncovered border with 0. Same-size input
+    /// is returned unchanged; scaling samples the source bilinearly so soft
+    /// coverage stays soft.
+    pub fn fit_centered(&self, width: u32, height: u32) -> Selection {
+        if width == 0 || height == 0 {
+            return Selection::none(width, height);
+        }
+        if self.width == width && self.height == height {
+            return self.clone();
+        }
+        if self.width == 0 || self.height == 0 || self.data.is_empty() {
+            return Selection::none(width, height);
+        }
+        let scale = (width as f64 / self.width as f64).min(height as f64 / self.height as f64);
+        let fitted_w = ((self.width as f64 * scale).round() as u32).clamp(1, width);
+        let fitted_h = ((self.height as f64 * scale).round() as u32).clamp(1, height);
+        let source = self.data.as_slice();
+        let (sw, sh) = (self.width as usize, self.height as usize);
+        let (tw, th) = (width as usize, height as usize);
+        let mut out = vec![0u8; tw * th];
+        let offset_x = (tw - fitted_w as usize) / 2;
+        let offset_y = (th - fitted_h as usize) / 2;
+        for y in 0..fitted_h as usize {
+            let sy =
+                ((y as f64 + 0.5) * sh as f64 / fitted_h as f64 - 0.5).clamp(0.0, sh as f64 - 1.0);
+            let y0 = sy.floor() as usize;
+            let y1 = (y0 + 1).min(sh - 1);
+            let fy = sy - y0 as f64;
+            for x in 0..fitted_w as usize {
+                let sx = ((x as f64 + 0.5) * sw as f64 / fitted_w as f64 - 0.5)
+                    .clamp(0.0, sw as f64 - 1.0);
+                let x0 = sx.floor() as usize;
+                let x1 = (x0 + 1).min(sw - 1);
+                let fx = sx - x0 as f64;
+                let a = f64::from(source[y0 * sw + x0]);
+                let b = f64::from(source[y0 * sw + x1]);
+                let c = f64::from(source[y1 * sw + x0]);
+                let d = f64::from(source[y1 * sw + x1]);
+                let top = a + (b - a) * fx;
+                let bottom = c + (d - c) * fx;
+                let value = top + (bottom - top) * fy;
+                out[(offset_y + y) * tw + offset_x + x] = value.round().clamp(0.0, 255.0) as u8;
+            }
+        }
+        Selection {
+            width,
+            height,
+            data: out.into(),
+        }
+    }
+
     /// Blur the coverage with a Gaussian. radius 0 = identity.
     ///
     /// `sigma = radius / 2`, separable with clamped edges. A wide kernel

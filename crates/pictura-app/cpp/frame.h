@@ -123,6 +123,13 @@ public:
     bool updateChecksEnabled() const { return updateChecksEnabled_; }
     ImageView* imageView() const;       // active canvas, or nullptr with no document
     PictureView* activeView() const;    // active document, or nullptr
+    // The document shown by `canvas`, or nullptr for a canvas that is not an
+    // open document. Used by the drop router for canvas drops.
+    PictureView* viewForCanvas(const ImageView* canvas) const;
+    // Make `view`'s document active when it is open.
+    void activateView(PictureView* view);
+    // Channels panel > Duplicate Channel… (also a test hook).
+    void openDuplicateChannelDialog();
     // Creates two documents and drags the last tab before its neighbour through
     // the real tab bar; returns whether the tab windows followed the new visual
     // order while each document kept its index and the active view stayed.

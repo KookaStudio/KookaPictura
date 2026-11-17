@@ -3,6 +3,7 @@
 #include <QtCore/QList>
 #include <QtCore/QPoint>
 #include <QtCore/QString>
+#include <QtCore/QSet>
 #include <QtCore/QStringList>
 #include <QtGui/QColor>
 #include <QtGui/QPixmap>
@@ -10,6 +11,7 @@
 
 class QLabel;
 class QListWidget;
+class QMimeData;
 class QToolButton;
 
 namespace pictura {
@@ -26,8 +28,7 @@ class PictureView;
 // deletes alpha channels. Ported from photorust's ChannelsPanel.
 // ponytail: a CMYK / Lab / other source mode lists its channels with
 // thumbnails derived from the RGB working data, and their eyes are disabled;
-// alpha-channel eyes (the overlay) and channel targeting for edits are not
-// modelled; Lab thumbnails show lightness.
+// channel targeting for edits is not modelled; Lab thumbnails show lightness.
 class ChannelsPanel : public QWidget {
     Q_OBJECT
 
@@ -54,6 +55,19 @@ public:
     void clickChannelForTest(int index, Qt::KeyboardModifiers mods);
     int currentChannelForTest() const;
     bool ctrlOverlayVisibleForTest() const;
+    // The current row and the data the Duplicate Channel path needs.
+    int currentRow() const;
+    int alphaIndexAt(int row) const;
+    QString nameAt(int row) const;
+    bool canDuplicateRow(int row) const;
+    bool canDuplicateCurrent() const;
+    int channelMask() const;
+    // The alpha channels currently shown on the canvas; empty for the composite.
+    QList<int> shownAlphas() const;
+    // The drag payload for a row, for the frame's drop tests.
+    QMimeData* channelDragMime(int row) const;
+    QToolButton* eyeForTest(int row) const;
+    QWidget* rowWidgetForTest(int row) const;
     // The row widget's surface colour, for the Layers-style restyle check.
     QColor rowSurfaceForTest(int index) const;
     // The row widget's text colour, for the family-restyle check.
@@ -64,6 +78,8 @@ signals:
     void channelMaskChanged(int mask);
     // Alt-clicking Save Selection asks the frame for the Save dialog.
     void saveOptionsRequested();
+    // An alpha channel eye changed: the frame re-syncs the canvas view.
+    void alphaVisibilityChanged();
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -85,6 +101,8 @@ private:
     void addRow(const QString& name, const QString& shortcut, int alpha, RowKind kind=RowKind::Color);
     void refreshThumbnails();
     void toggle(int index);
+    void toggleAlpha(int alpha);
+    void updateAlphaEyes();
     void updateFooter();
     void styleRows();
     int selectedAlpha() const;
@@ -98,6 +116,7 @@ private:
     // colour row (or the composite) via `load_channel_selection` under `mask_`.
     void loadRowSelection(int row, Qt::KeyboardModifiers mods);
     void startChannelDrag(int row);
+    bool duplicateChannelFromMime(const QMimeData* mime);
 
     PictureView* view_ = nullptr;
     QListWidget* list_ = nullptr;
@@ -109,6 +128,7 @@ private:
     int dragRow_ = -1;
     QPoint dragStart_;
     int mask_ = 0x7;
+    QSet<int> shownAlphas_;
     // The active layer's mask channel row (`-1` when it has no raster mask) and
     // its name, so `refresh` rebuilds when the mask appears or disappears.
     int maskRowIndex_ = -1;

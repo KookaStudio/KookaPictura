@@ -1,19 +1,109 @@
 #include <QtTest/QtTest>
 
+#include "channel_drag.h"
+#include "duplicate_channel_dialog.h"
 #include "frame.h"
 #include "image_view.h"
 #include "panels/channels_panel.h"
+#include "panels/panel_group.h"
 #include "api/layers_bridge.h"
 #include "api/selection_bridge.h"
 
 #include <QtTest/QSignalSpy>
+#include <QtCore/QTimer>
 #include <QtCore/QTemporaryDir>
+#include <QtGui/QAction>
 #include <QtGui/QDragEnterEvent>
 #include <QtGui/QDropEvent>
 #include <QtCore/QMimeData>
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QLabel>
+#include <QtWidgets/QMenu>
+#include <QtWidgets/QTabBar>
 #include <QtWidgets/QToolButton>
 
+#include <functional>
+
 #include "qt_test_support.h"
+
+namespace {
+
+QMenu* livePanelMenu(pictura::PicturaMainWindow& window, const QString& panelName)
+{
+    for (pictura::PanelGroup* group : window.findChildren<pictura::PanelGroup*>()) {
+        if (group->containsPanel(panelName)) {
+            group->setCurrentPanel(panelName);
+            break;
+        }
+    }
+    auto* button =
+        window.findChild<QToolButton*>(QStringLiteral("panelWidgetMenu_") + panelName);
+    return button ? button->menu() : nullptr;
+}
+
+QAction* menuText(QMenu* menu, const QString& text)
+{
+    for (QAction* action : menu->actions()) {
+        if (action->text() == text) {
+            return action;
+        }
+        if (QMenu* submenu = action->menu()) {
+            if (QAction* found = menuText(submenu, text)) {
+                return found;
+            }
+        }
+    }
+    return nullptr;
+}
+
+bool applyDuplicateDialog(
+    pictura::PicturaMainWindow& window,
+    const std::function<void(pictura::DuplicateChannelDialog*)>& setup)
+{
+    window.show();
+    QTest::qWait(0);
+    bool seen = false;
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<pictura::DuplicateChannelDialog*>(
+            QApplication::activeModalWidget());
+        if (dialog) {
+            seen = true;
+            setup(dialog);
+            dialog->accept();
+        }
+    });
+    window.openDuplicateChannelDialog();
+    return seen;
+}
+
+bool dragMimeOver(QWidget* target, const QMimeData* mime, const QPoint& pos, bool drop)
+{
+    const auto actions = Qt::MoveAction | Qt::CopyAction;
+    QDragEnterEvent enter(pos, actions, mime, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(target, &enter);
+    QDragMoveEvent move(pos, actions, mime, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(target, &move);
+    if (!drop) {
+        return move.isAccepted();
+    }
+    QDropEvent release(QPointF(pos), actions, mime, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(target, &release);
+    return release.isAccepted();
+}
+
+QByteArray coverageBytes(const ::rust::Vec<std::uint8_t>& coverage)
+{
+    return QByteArray(reinterpret_cast<const char*>(coverage.data()), int(coverage.size()));
+}
+
+void addNamedAlpha(pictura::PictureView* view, const QString& name, int x, int y, int w, int h)
+{
+    view->select_rect(x, y, w, h, QStringLiteral("new"), 0.0);
+    pictura::save_selection_to(*view, QStringLiteral("new"), name, QStringLiteral("replace"));
+    view->deselect();
+}
+
+} // namespace
 
 class ChannelsPanelTest : public QObject {
     Q_OBJECT
@@ -37,6 +127,24 @@ private slots:
     void altClickSaveOpensDialog();
     void alphaRowShowsStoredName();
     void modifierClickRecordsOneState();
+    void clickChannelRowSelects();
+    void clickChannelNameHitsRow();
+    void clickAlphaEyeSelectsRow();
+    void alphaEyeShowsChannel();
+    void alphaEyesShowMultiple();
+    void alphaEyesAccumulateRedness();
+    void deletingShownAlphaClearsView();
+    void duplicateChannelMenu();
+    void duplicateChannelColorRow();
+    void duplicateChannelSameDocument();
+    void duplicateChannelCrossDocument();
+    void duplicateChannelNewDocument();
+    void duplicateChannelInvert();
+    void duplicateChannelOntoNewButton();
+    void dragChannelOntoAnotherDocument();
+    void dragChannelToDifferentSizeFits();
+    void dragChannelInvalidSourceIgnored();
+    void duplicateChannelAtCapRefused();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -161,7 +269,8 @@ void ChannelsPanelTest::alphaChannelsAndFooter()
     QCOMPARE(panel_->channelCountForTest(), 5);
     QCOMPARE(panel_->channelNameForTest(4), QStringLiteral("Alpha 1"));
     QCOMPARE(panel_->channelShortcutForTest(4), QStringLiteral("Ctrl+6"));
-    QVERIFY(!panel_->channelEyeEnabledForTest(4));
+    QVERIFY(panel_->channelEyeEnabledForTest(4));
+    QVERIFY(!panel_->channelVisibleForTest(4));
     QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("New Channel"));
     QVERIFY(remove->isEnabled());
     remove->click();
@@ -478,6 +587,509 @@ void ChannelsPanelTest::modifierClickRecordsOneState()
         panel_->clickChannelForTest(1, mods);
         QCOMPARE(view_->history_count(), before + 1);
     }
+}
+
+
+void ChannelsPanelTest::clickChannelRowSelects()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("RowClick"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    addNamedAlpha(view_, QStringLiteral("Hair"), 2, 2, 8, 8);
+    panel_->refresh();
+    panel_->clickChannelForTest(4, Qt::NoModifier);
+    QCOMPARE(panel_->currentChannelForTest(), 4);
+}
+
+void ChannelsPanelTest::clickChannelNameHitsRow()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("NameHit"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    addNamedAlpha(view_, QStringLiteral("Hair"), 2, 2, 8, 8);
+    panel_->refresh();
+    for (pictura::PanelGroup* group : window_->findChildren<pictura::PanelGroup*>()) {
+        if (group->containsPanel(QStringLiteral("channelsPanel"))) {
+            group->setCurrentPanel(QStringLiteral("channelsPanel"));
+            break;
+        }
+    }
+    window_->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
+    QLabel* alpha = nullptr;
+    for (QLabel* label : panel_->findChildren<QLabel*>(QStringLiteral("channelsRowName"))) {
+        if (label->text() == QStringLiteral("Hair")) {
+            alpha = label;
+            break;
+        }
+    }
+    QVERIFY(alpha);
+    const QPoint global = alpha->mapToGlobal(alpha->rect().center());
+    QWidget* hit = window_->childAt(window_->mapFromGlobal(global));
+    QVERIFY(hit);
+    QTest::mouseClick(hit, Qt::LeftButton, Qt::NoModifier, hit->mapFromGlobal(global));
+    QCOMPARE(panel_->currentChannelForTest(), 4);
+}
+
+void ChannelsPanelTest::clickAlphaEyeSelectsRow()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("EyeHit"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    addNamedAlpha(view_, QStringLiteral("Hair"), 2, 2, 8, 8);
+    panel_->refresh();
+    for (pictura::PanelGroup* group : window_->findChildren<pictura::PanelGroup*>()) {
+        if (group->containsPanel(QStringLiteral("channelsPanel"))) {
+            group->setCurrentPanel(QStringLiteral("channelsPanel"));
+            break;
+        }
+    }
+    window_->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
+    QToolButton* eye = panel_->eyeForTest(4);
+    QVERIFY(eye && eye->isEnabled());
+    QTest::mouseClick(eye, Qt::LeftButton, Qt::NoModifier, eye->rect().center());
+    QCOMPARE(panel_->currentChannelForTest(), 4);
+    QVERIFY(panel_->shownAlphas().contains(0));
+}
+
+void ChannelsPanelTest::alphaEyeShowsChannel()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("AlphaEye"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    addNamedAlpha(view_, QStringLiteral("Hair"), 2, 2, 8, 8);
+    panel_->refresh();
+    QToolButton* eye = panel_->eyeForTest(4);
+    QVERIFY(eye && eye->isEnabled());
+    panel_->toggleChannelForTest(4);
+    QVERIFY(panel_->shownAlphas().contains(0));
+    QVERIFY(eye->isChecked());
+    pictura::ImageView* canvas = window_->imageView();
+    QVERIFY(canvas);
+    const QImage overlay = canvas->maskOverlayForTest();
+    QVERIFY(!overlay.isNull());
+    const QColor masked = overlay.pixelColor(0, 0);
+    QCOMPARE(masked.red(), 255);
+    QCOMPARE(masked.green(), 0);
+    QCOMPARE(masked.blue(), 0);
+    QCOMPARE(masked.alpha(), 128);
+    QCOMPARE(overlay.pixelColor(4, 4).alpha(), 0);
+    panel_->toggleChannelForTest(4);
+    QVERIFY(panel_->shownAlphas().isEmpty());
+    QVERIFY(canvas->maskOverlayForTest().isNull());
+    panel_->toggleChannelForTest(4);
+    QVERIFY(panel_->shownAlphas().contains(0));
+    panel_->toggleChannelForTest(0);
+    QVERIFY(panel_->shownAlphas().isEmpty());
+    QVERIFY(canvas->maskOverlayForTest().isNull());
+}
+
+void ChannelsPanelTest::alphaEyesShowMultiple()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("AlphaMulti"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    addNamedAlpha(view_, QStringLiteral("Hair"), 2, 2, 8, 8);
+    addNamedAlpha(view_, QStringLiteral("Skin"), 10, 10, 4, 4);
+    panel_->refresh();
+    panel_->toggleChannelForTest(4);
+    panel_->toggleChannelForTest(5);
+    QCOMPARE(panel_->shownAlphas().size(), 2);
+    QVERIFY(panel_->eyeForTest(4)->isChecked());
+    QVERIFY(panel_->eyeForTest(5)->isChecked());
+    pictura::ImageView* canvas = window_->imageView();
+    QVERIFY(canvas);
+    QImage overlay = canvas->maskOverlayForTest();
+    QVERIFY(!overlay.isNull());
+    QCOMPARE(overlay.pixelColor(0, 0).alpha(), 192);
+    QCOMPARE(overlay.pixelColor(4, 4).alpha(), 128);
+    QCOMPARE(overlay.pixelColor(11, 11).alpha(), 128);
+    QCOMPARE(overlay.pixelColor(4, 4).red(), 255);
+    QCOMPARE(overlay.pixelColor(4, 4).green(), 0);
+    panel_->toggleChannelForTest(4);
+    QCOMPARE(panel_->shownAlphas().size(), 1);
+    overlay = canvas->maskOverlayForTest();
+    QVERIFY(!overlay.isNull());
+    QCOMPARE(overlay.pixelColor(0, 0).alpha(), 128);
+    QCOMPARE(overlay.pixelColor(4, 4).alpha(), 128);
+    QCOMPARE(overlay.pixelColor(11, 11).alpha(), 0);
+}
+
+void ChannelsPanelTest::alphaEyesAccumulateRedness()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("AlphaRed"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    QCOMPARE(pictura::channels_new_alpha(*view_), 0);
+    QCOMPARE(pictura::channels_new_alpha(*view_), 1);
+    QCOMPARE(pictura::channels_new_alpha(*view_), 2);
+    panel_->refresh();
+    pictura::ImageView* canvas = window_->imageView();
+    QVERIFY(canvas);
+    panel_->toggleChannelForTest(4);
+    QCOMPARE(canvas->maskOverlayForTest().pixelColor(0, 0).alpha(), 128);
+    panel_->toggleChannelForTest(5);
+    QCOMPARE(canvas->maskOverlayForTest().pixelColor(0, 0).alpha(), 192);
+    panel_->toggleChannelForTest(6);
+    const QImage overlay = canvas->maskOverlayForTest();
+    const QColor red = overlay.pixelColor(0, 0);
+    QCOMPARE(red.red(), 255);
+    QCOMPARE(red.green(), 0);
+    QCOMPARE(red.blue(), 0);
+    QCOMPARE(red.alpha(), 224);
+    panel_->toggleChannelForTest(6);
+    QCOMPARE(canvas->maskOverlayForTest().pixelColor(0, 0).alpha(), 192);
+}
+
+void ChannelsPanelTest::deletingShownAlphaClearsView()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("AlphaDelete"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    addNamedAlpha(view_, QStringLiteral("Hair"), 2, 2, 8, 8);
+    panel_->refresh();
+    panel_->selectChannelForTest(4);
+    panel_->toggleChannelForTest(4);
+    QVERIFY(panel_->shownAlphas().contains(0));
+    auto* remove = panel_->findChild<QToolButton*>(QStringLiteral("channelsDelete"));
+    QVERIFY(remove && remove->isEnabled());
+    remove->click();
+    QVERIFY(panel_->shownAlphas().isEmpty());
+    QCOMPARE(view_->selection_channel_count(), 0);
+}
+
+void ChannelsPanelTest::duplicateChannelMenu()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Menu"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    addNamedAlpha(view_, QStringLiteral("Hair"), 2, 2, 8, 8);
+    panel_->refresh();
+    panel_->clickChannelForTest(4, Qt::NoModifier);
+    QCOMPARE(panel_->currentChannelForTest(), 4);
+    window_->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
+
+    QMenu* menu = livePanelMenu(*window_, QStringLiteral("channelsPanel"));
+    QVERIFY(menu);
+    QAction* action = menuText(menu, QStringLiteral("Duplicate Channel…"));
+    QVERIFY2(action && action->isEnabled(), "Duplicate Channel… must be live");
+    bool seen = false;
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<pictura::DuplicateChannelDialog*>(
+            QApplication::activeModalWidget());
+        if (dialog) {
+            seen = true;
+            dialog->setNameForTest(QStringLiteral("MenuCopy"));
+            dialog->accept();
+        }
+    });
+    action->trigger();
+    QVERIFY(seen);
+    QCOMPARE(view_->selection_channel_count(), 2);
+    QCOMPARE(QString(pictura::channels_alpha_name(*view_, 1)), QStringLiteral("MenuCopy"));
+    QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Duplicate Channel"));
+}
+
+void ChannelsPanelTest::duplicateChannelColorRow()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("ColorRow"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    panel_->selectChannelForTest(1);
+    QVERIFY(applyDuplicateDialog(*window_, [](pictura::DuplicateChannelDialog* dialog) {
+        dialog->setNameForTest(QStringLiteral("Red copy"));
+    }));
+    QCOMPARE(view_->selection_channel_count(), 1);
+    QCOMPARE(QString(pictura::channels_alpha_name(*view_, 0)), QStringLiteral("Red copy"));
+    const QByteArray coverage =
+        coverageBytes(pictura::channel_coverage(*view_, QStringLiteral("alpha:0")));
+    QCOMPARE(coverage.size(), 16 * 16);
+    QCOMPARE(static_cast<unsigned char>(coverage.at(0)), 255);
+}
+
+void ChannelsPanelTest::duplicateChannelSameDocument()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Same"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    addNamedAlpha(view_, QStringLiteral("Hair"), 2, 2, 8, 8);
+    panel_->refresh();
+    panel_->selectChannelForTest(4);
+    const QByteArray source = coverageBytes(pictura::channel_coverage(*view_, QStringLiteral("alpha:0")));
+    const int before = view_->history_count();
+    QVERIFY(applyDuplicateDialog(*window_, [](pictura::DuplicateChannelDialog* dialog) {
+        dialog->setNameForTest(QStringLiteral("Copy"));
+    }));
+    QCOMPARE(view_->selection_channel_count(), 2);
+    QCOMPARE(QString(pictura::channels_alpha_name(*view_, 1)), QStringLiteral("Copy"));
+    QCOMPARE(coverageBytes(pictura::channel_coverage(*view_, QStringLiteral("alpha:1"))), source);
+    QCOMPARE(view_->history_count(), before + 1);
+    QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Duplicate Channel"));
+}
+
+void ChannelsPanelTest::duplicateChannelCrossDocument()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Source"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* source = window_->activeView();
+    QVERIFY(source);
+    addNamedAlpha(source, QStringLiteral("Hair"), 2, 2, 8, 8);
+    QVERIFY(window_->newDocument(QStringLiteral("Target"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* target = window_->activeView();
+    QVERIFY(target);
+    window_->setActiveDocumentIndex(0);
+    view_ = source;
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(panel_);
+    panel_->setView(source);
+    panel_->refresh();
+    panel_->selectChannelForTest(4);
+    const int sourceHistory = source->history_count();
+    const int targetHistory = target->history_count();
+    QVERIFY(applyDuplicateDialog(*window_, [](pictura::DuplicateChannelDialog* dialog) {
+        dialog->setDocumentIndexForTest(1);
+        dialog->setNameForTest(QStringLiteral("Cross"));
+    }));
+    QCOMPARE(source->selection_channel_count(), 1);
+    QCOMPARE(source->history_count(), sourceHistory);
+    QCOMPARE(target->selection_channel_count(), 1);
+    QCOMPARE(QString(pictura::channels_alpha_name(*target, 0)), QStringLiteral("Cross"));
+    QCOMPARE(target->history_count(), targetHistory + 1);
+    QCOMPARE(target->history_label(target->history_index()), QStringLiteral("Duplicate Channel"));
+}
+
+void ChannelsPanelTest::duplicateChannelNewDocument()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("NewSource"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    addNamedAlpha(view_, QStringLiteral("Hair"), 2, 2, 8, 8);
+    panel_->refresh();
+    panel_->selectChannelForTest(4);
+    const int before = window_->documentCount();
+    QVERIFY(applyDuplicateDialog(*window_, [](pictura::DuplicateChannelDialog* dialog) {
+        dialog->setDocumentIndexForTest(dialog->documentCountForTest() - 1);
+        dialog->setNameForTest(QStringLiteral("NewCopy"));
+    }));
+    QCOMPARE(window_->documentCount(), before + 1);
+    pictura::PictureView* created = window_->activeView();
+    QVERIFY(created && created != view_);
+    QCOMPARE(QString(pictura::channels_mode(*created)), QStringLiteral("grayscale"));
+    QCOMPARE(created->selection_channel_count(), 1);
+    QCOMPARE(QString(pictura::channels_alpha_name(*created, 0)), QStringLiteral("NewCopy"));
+}
+
+void ChannelsPanelTest::duplicateChannelInvert()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Invert"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    const QByteArray flat(16 * 16, char(64));
+    QVERIFY(pictura::save_selection_coverage(
+        *view_,
+        ::rust::Slice<const std::uint8_t>(
+            reinterpret_cast<const std::uint8_t*>(flat.constData()), flat.size()),
+        16, 16, QStringLiteral("new"), QStringLiteral("Src"), QStringLiteral("replace")));
+    panel_->refresh();
+    panel_->selectChannelForTest(4);
+    QVERIFY(applyDuplicateDialog(*window_, [](pictura::DuplicateChannelDialog* dialog) {
+        dialog->setNameForTest(QStringLiteral("Inv"));
+        dialog->setInvertForTest(true);
+    }));
+    const QByteArray inverted = coverageBytes(pictura::channel_coverage(*view_, QStringLiteral("alpha:1")));
+    QCOMPARE(inverted.size(), 16 * 16);
+    QCOMPARE(static_cast<unsigned char>(inverted.at(0)), 191);
+    QCOMPARE(static_cast<unsigned char>(inverted.at(16 * 16 - 1)), 191);
+}
+
+void ChannelsPanelTest::duplicateChannelOntoNewButton()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Button"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel_);
+    panel_->setView(view_);
+    addNamedAlpha(view_, QStringLiteral("Hair"), 2, 2, 8, 8);
+    panel_->refresh();
+    panel_->selectChannelForTest(4);
+    std::unique_ptr<QMimeData> mime(panel_->channelDragMime(4));
+    QVERIFY(mime);
+    auto* add = panel_->findChild<QToolButton*>(QStringLiteral("channelsNew"));
+    QVERIFY(add);
+    const int before = view_->history_count();
+    QVERIFY2(dragMimeOver(add, mime.get(), QPoint(1, 1), true), "New Channel drop");
+    QCOMPARE(view_->selection_channel_count(), 2);
+    QCOMPARE(QString(pictura::channels_alpha_name(*view_, 1)), QStringLiteral("Hair copy"));
+    QCOMPARE(view_->history_count(), before + 1);
+    QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Duplicate Channel"));
+}
+
+void ChannelsPanelTest::dragChannelOntoAnotherDocument()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("DragSource"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* source = window_->activeView();
+    QVERIFY(source);
+    addNamedAlpha(source, QStringLiteral("Hair"), 2, 2, 8, 8);
+    QVERIFY(window_->newDocument(QStringLiteral("DragTarget"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* target = window_->activeView();
+    QVERIFY(target);
+    window_->setActiveDocumentIndex(0);
+    view_ = source;
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(panel_);
+    panel_->setView(source);
+    panel_->refresh();
+    panel_->selectChannelForTest(4);
+    window_->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
+    auto* bar = window_->findChild<QTabBar*>(QStringLiteral("documentTabBar"));
+    QVERIFY(bar && bar->count() == 2);
+    const QByteArray sourceCoverage =
+        coverageBytes(pictura::channel_coverage(*source, QStringLiteral("alpha:0")));
+    const int sourceHistory = source->history_count();
+    const int targetHistory = target->history_count();
+    std::unique_ptr<QMimeData> mime(panel_->channelDragMime(4));
+    QVERIFY(mime);
+    QVERIFY2(dragMimeOver(bar, mime.get(), bar->tabRect(1).center(), true), "tab drop");
+    QCOMPARE(target->selection_channel_count(), 1);
+    QCOMPARE(QString(pictura::channels_alpha_name(*target, 0)), QStringLiteral("Hair copy"));
+    QCOMPARE(coverageBytes(pictura::channel_coverage(*target, QStringLiteral("alpha:0"))),
+             sourceCoverage);
+    QCOMPARE(target->history_count(), targetHistory + 1);
+    QCOMPARE(source->selection_channel_count(), 1);
+    QCOMPARE(coverageBytes(pictura::channel_coverage(*source, QStringLiteral("alpha:0"))),
+             sourceCoverage);
+    QCOMPARE(source->history_count(), sourceHistory);
+}
+
+void ChannelsPanelTest::dragChannelToDifferentSizeFits()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("FitSource"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* source = window_->activeView();
+    QVERIFY(source);
+    addNamedAlpha(source, QStringLiteral("Hair"), 4, 4, 8, 8);
+    QVERIFY(window_->newDocument(QStringLiteral("FitTarget"), 32, 32, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* target = window_->activeView();
+    QVERIFY(target);
+    window_->setActiveDocumentIndex(0);
+    view_ = source;
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(panel_);
+    panel_->setView(source);
+    panel_->refresh();
+    panel_->selectChannelForTest(4);
+    window_->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
+    auto* bar = window_->findChild<QTabBar*>(QStringLiteral("documentTabBar"));
+    QVERIFY(bar && bar->count() == 2);
+    std::unique_ptr<QMimeData> mime(panel_->channelDragMime(4));
+    QVERIFY(mime);
+    QVERIFY2(dragMimeOver(bar, mime.get(), bar->tabRect(1).center(), true), "tab drop");
+    QCOMPARE(target->selection_channel_count(), 1);
+    const QByteArray fitted =
+        coverageBytes(pictura::channel_coverage(*target, QStringLiteral("alpha:0")));
+    QCOMPARE(fitted.size(), 32 * 32);
+    QCOMPARE(static_cast<unsigned char>(fitted.at(16 * 32 + 16)), 255);
+    QCOMPARE(static_cast<unsigned char>(fitted.at(0)), 0);
+    QCOMPARE(static_cast<unsigned char>(fitted.at(32 * 32 - 1)), 0);
+}
+
+void ChannelsPanelTest::dragChannelInvalidSourceIgnored()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("BadChannelSource"), 16, 16, QStringLiteral("rgb"),
+                                 8, QStringLiteral("white")));
+    pictura::PictureView* source = window_->activeView();
+    QVERIFY(source);
+    addNamedAlpha(source, QStringLiteral("Hair"), 2, 2, 8, 8);
+    QVERIFY(window_->newDocument(QStringLiteral("BadChannelTarget"), 16, 16, QStringLiteral("rgb"),
+                                 8, QStringLiteral("white")));
+    pictura::PictureView* target = window_->activeView();
+    QVERIFY(target);
+    window_->setActiveDocumentIndex(0);
+    window_->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
+    auto* bar = window_->findChild<QTabBar*>(QStringLiteral("documentTabBar"));
+    QVERIFY(bar && bar->count() == 2);
+    const int targetChannels = target->selection_channel_count();
+    const int targetHistory = target->history_count();
+    std::unique_ptr<QMimeData> mime(pictura::makeChannelDragMime(
+        reinterpret_cast<const void*>(quintptr(1)), 4, 0, 0x7, QStringLiteral("Hair")));
+    QVERIFY(mime);
+    QVERIFY2(!dragMimeOver(bar, mime.get(), bar->tabRect(1).center(), true),
+             "an unknown source is ignored");
+    QCOMPARE(window_->activeView(), source);
+    QCOMPARE(target->selection_channel_count(), targetChannels);
+    QCOMPARE(target->history_count(), targetHistory);
+}
+
+void ChannelsPanelTest::duplicateChannelAtCapRefused()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("CapSource"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* source = window_->activeView();
+    QVERIFY(source);
+    addNamedAlpha(source, QStringLiteral("Hair"), 2, 2, 8, 8);
+    QVERIFY(window_->newDocument(QStringLiteral("CapTarget"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* target = window_->activeView();
+    QVERIFY(target);
+    for (int i = 0; i < 53; ++i) {
+        QCOMPARE(pictura::channels_new_alpha(*target), i);
+    }
+    const QByteArray coverage =
+        coverageBytes(pictura::channel_coverage(*source, QStringLiteral("alpha:0")));
+    const int before = target->history_count();
+    QVERIFY(!pictura::duplicate_channel_coverage(
+        *target,
+        ::rust::Slice<const std::uint8_t>(
+            reinterpret_cast<const std::uint8_t*>(coverage.constData()), coverage.size()),
+        16, 16, QStringLiteral("Refused"), false));
+    QCOMPARE(target->selection_channel_count(), 53);
+    QCOMPARE(target->history_count(), before);
 }
 
 QTEST_MAIN(ChannelsPanelTest)

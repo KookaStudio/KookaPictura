@@ -226,6 +226,21 @@ pub(super) fn channel_coverage(view: &PictureView, target: &QString) -> Vec<u8> 
     view.channel_coverage(target)
 }
 
+pub(super) fn color_row_coverage(view: &PictureView, row: i32, mask: i32) -> Vec<u8> {
+    view.color_row_coverage(row, mask)
+}
+
+pub(super) fn duplicate_channel_coverage(
+    view: Pin<&mut PictureView>,
+    coverage: &[u8],
+    width: i32,
+    height: i32,
+    name: &QString,
+    invert: bool,
+) -> bool {
+    view.duplicate_channel_coverage(coverage, width, height, name, invert)
+}
+
 pub(super) fn save_selection_coverage(
     view: Pin<&mut PictureView>,
     coverage: &[u8],
@@ -249,12 +264,24 @@ pub(super) fn load_selection_coverage(
     view.load_selection_coverage(coverage, width, height, invert, mode)
 }
 
+pub(super) fn load_selection_coverage_fit(
+    view: Pin<&mut PictureView>,
+    coverage: &[u8],
+    width: i32,
+    height: i32,
+    invert: bool,
+    mode: &QString,
+) -> bool {
+    view.load_selection_coverage_fit(coverage, width, height, invert, mode)
+}
+
 pub(super) fn new_selection_document(
     view: Pin<&mut PictureView>,
     coverage: &[u8],
     width: i32,
     height: i32,
     name: &QString,
+    invert: bool,
 ) -> bool {
-    view.new_selection_document(coverage, width, height, name)
+    view.new_selection_document(coverage, width, height, name, invert)
 }

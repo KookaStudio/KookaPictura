@@ -31,6 +31,8 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/export_paths_dialog.h
     crates/pictura-app/cpp/zoomify_dialog.cpp
     crates/pictura-app/cpp/zoomify_dialog.h
+    crates/pictura-app/cpp/channel_drag.h
+    crates/pictura-app/cpp/selection_drag.h
     crates/pictura-app/cpp/file_drop_router.cpp
     crates/pictura-app/cpp/file_drop_router.h
     crates/pictura-app/cpp/file_info_dialog.cpp

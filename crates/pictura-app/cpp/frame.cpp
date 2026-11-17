@@ -168,6 +168,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     };
     menuRuntime.openSaveSelectionDialog = [this]() { openSaveSelectionDialog(); };
     menuRuntime.openLoadSelectionDialog = [this]() { openLoadSelectionDialog(); };
+    menuRuntime.openDuplicateChannelDialog = [this]() { openDuplicateChannelDialog(); };
     menuRuntime.uiScalePercent = [this]() { return uiScalePercent_; };
     menuRuntime.foregroundColor = [this]() { return foregroundColor(); };
     menu_ = std::make_unique<MenuRegistrar>(
@@ -194,6 +195,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
         }
     };
     panelHooks.saveSelectionOptions = [this]() { openSaveSelectionDialog(); };
+    panelHooks.alphaVisibilityChanged = [this]() { refresh(); };
     panelHooks.convertImageMode = [this](const QString& mode) {
         if (menu_) {
             menu_->convertImageMode(mode);
@@ -498,6 +500,20 @@ ImageView* PicturaMainWindow::imageView() const
 PictureView* PicturaMainWindow::activeView() const
 {
     return documents_->activeView();
+}
+
+PictureView* PicturaMainWindow::viewForCanvas(const ImageView* canvas) const
+{
+    DocWindow* window = documents_->windowOfCanvas(canvas);
+    return window && window->doc ? window->doc->view : nullptr;
+}
+
+void PicturaMainWindow::activateView(PictureView* view)
+{
+    const int index = documents_->indexOfView(view);
+    if (index >= 0) {
+        setActiveDocumentIndex(index);
+    }
 }
 
 int PicturaMainWindow::documentCount() const

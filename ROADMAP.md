@@ -255,6 +255,8 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       document cap (#614); control-server selection ops stay binary.
 - [x] Combine operations, the layer-mask target, modifier-click combine on
       saved selections, and channel names (#615)
+- [x] Duplicate Channel, channel drags between documents, selection-outline
+      drags between documents, and the alpha-channel eye view (#1332)
 - [x] Quick Mask (#172)
 
 ## Adjustments and image operations

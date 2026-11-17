@@ -1,14 +1,22 @@
 #include <QtTest/QtTest>
 
 #include "frame.h"
+#include "image_view.h"
 #include "save_load_selection_dialog.h"
+#include "selection_drag.h"
+#include "tools.h"
 #include "api/document_api.h"
 #include "api/layers_bridge.h"
 #include "api/selection_bridge.h"
 
 #include "qt_test_support.h"
 
+#include <QtCore/QCoreApplication>
+#include <QtCore/QMimeData>
 #include <QtCore/QTemporaryDir>
+#include <QtGui/QDragEnterEvent>
+#include <QtGui/QDropEvent>
+#include <QtWidgets/QTabBar>
 
 namespace {
 
@@ -16,6 +24,24 @@ namespace {
 {
     return ::rust::Slice<const std::uint8_t>(
         reinterpret_cast<const std::uint8_t*>(bytes.constData()), bytes.size());
+}
+
+bool dragSelectionOver(QWidget* target, const void* source, const QPoint& pos, bool drop)
+{
+    QMimeData mime;
+    mime.setData(pictura::kSelectionSourceMime,
+                 QByteArray::number(reinterpret_cast<quintptr>(source)));
+    const auto actions = Qt::MoveAction | Qt::CopyAction;
+    QDragEnterEvent enter(pos, actions, &mime, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(target, &enter);
+    QDragMoveEvent move(pos, actions, &mime, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(target, &move);
+    if (!drop) {
+        return move.isAccepted();
+    }
+    QDropEvent release(QPointF(pos), actions, &mime, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(target, &release);
+    return release.isAccepted();
 }
 
 } // namespace
@@ -39,6 +65,12 @@ private slots:
     void loadDialogDisabledWithoutSources();
     void channelLimitRefusal();
     void wrongLengthRefused();
+    void selectionDragSameSize();
+    void selectionDragDifferentSizeFits();
+    void selectionDragSourceUnchanged();
+    void selectionDragOntoSourceIgnored();
+    void selectionDragInvalidSourceIgnored();
+    void selectionDragPreparationRestoresSource();
 
 private:
     pictura::PictureView* newDoc(int width, int height);
@@ -228,7 +260,7 @@ void SelectionSaveLoadTest::saveDialogNewImage()
     auto* created = new pictura::PictureView(window_.get());
     QVERIFY(pictura::new_selection_document(*created, coverageSlice(
         QByteArray(reinterpret_cast<const char*>(coverage.data()), int(coverage.size()))),
-        16, 16, request.name));
+        16, 16, request.name, false));
     QCOMPARE(created->document_width(), 16);
     QCOMPARE(created->document_height(), 16);
     QCOMPARE(pictura::channels_mode(*created), QStringLiteral("grayscale"));
@@ -382,6 +414,127 @@ void SelectionSaveLoadTest::wrongLengthRefused()
             shortCoverage.size()),
         16, 16, false, QStringLiteral("new")));
     QCOMPARE(view->history_index(), before);
+}
+
+
+void SelectionSaveLoadTest::selectionDragSameSize()
+{
+    pictura::PictureView* source = newDoc(16, 16);
+    QVERIFY(source);
+    QVERIFY(source->select_rect(4, 4, 8, 8, QStringLiteral("new"), 0.0));
+    pictura::PictureView* target = newDoc(16, 16);
+    QVERIFY(target);
+    window_->setActiveDocumentIndex(0);
+    window_->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
+    auto* bar = window_->findChild<QTabBar*>(QStringLiteral("documentTabBar"));
+    QVERIFY(bar && bar->count() == 2);
+    const int sourceHistory = source->history_count();
+    const int targetHistory = target->history_count();
+    QVERIFY2(dragSelectionOver(bar, source, bar->tabRect(1).center(), true), "tab drop");
+    QCOMPARE(target->selection_coverage(8, 8), 255);
+    QCOMPARE(target->selection_coverage(0, 0), 0);
+    QCOMPARE(target->history_count(), targetHistory + 1);
+    QCOMPARE(target->history_label(target->history_index()), QStringLiteral("Load Selection"));
+    QCOMPARE(source->history_count(), sourceHistory);
+    QCOMPARE(source->selection_coverage(8, 8), 255);
+}
+
+void SelectionSaveLoadTest::selectionDragDifferentSizeFits()
+{
+    pictura::PictureView* source = newDoc(16, 16);
+    QVERIFY(source);
+    QVERIFY(source->select_rect(4, 4, 8, 8, QStringLiteral("new"), 0.0));
+    pictura::PictureView* target = newDoc(32, 32);
+    QVERIFY(target);
+    window_->setActiveDocumentIndex(0);
+    window_->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
+    auto* bar = window_->findChild<QTabBar*>(QStringLiteral("documentTabBar"));
+    QVERIFY(bar && bar->count() == 2);
+    const int targetHistory = target->history_count();
+    QVERIFY2(dragSelectionOver(bar, source, bar->tabRect(1).center(), true), "tab drop");
+    QCOMPARE(target->selection_coverage(16, 16), 255);
+    QCOMPARE(target->selection_coverage(0, 0), 0);
+    QCOMPARE(target->selection_coverage(31, 31), 0);
+    QCOMPARE(target->history_count(), targetHistory + 1);
+    QCOMPARE(target->history_label(target->history_index()), QStringLiteral("Load Selection"));
+}
+
+void SelectionSaveLoadTest::selectionDragSourceUnchanged()
+{
+    pictura::PictureView* source = newDoc(16, 16);
+    QVERIFY(source);
+    QVERIFY(source->select_rect(2, 2, 6, 6, QStringLiteral("new"), 0.0));
+    pictura::PictureView* target = newDoc(16, 16);
+    QVERIFY(target);
+    window_->setActiveDocumentIndex(0);
+    window_->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
+    auto* bar = window_->findChild<QTabBar*>(QStringLiteral("documentTabBar"));
+    QVERIFY(bar && bar->count() == 2);
+    const int sourceHistory = source->history_count();
+    QVERIFY2(dragSelectionOver(bar, source, bar->tabRect(1).center(), true), "tab drop");
+    QCOMPARE(source->selection_coverage(4, 4), 255);
+    QCOMPARE(source->selection_coverage(0, 0), 0);
+    QCOMPARE(source->history_count(), sourceHistory);
+}
+
+void SelectionSaveLoadTest::selectionDragOntoSourceIgnored()
+{
+    pictura::PictureView* source = newDoc(16, 16);
+    QVERIFY(source);
+    QVERIFY(source->select_rect(4, 4, 8, 8, QStringLiteral("new"), 0.0));
+    window_->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
+    auto* bar = window_->findChild<QTabBar*>(QStringLiteral("documentTabBar"));
+    QVERIFY(bar && bar->count() == 1);
+    const int history = source->history_count();
+    QVERIFY2(!dragSelectionOver(bar, source, bar->tabRect(0).center(), true), "own tab drop");
+    QCOMPARE(source->selection_coverage(8, 8), 255);
+    QCOMPARE(source->history_count(), history);
+}
+
+void SelectionSaveLoadTest::selectionDragInvalidSourceIgnored()
+{
+    pictura::PictureView* source = newDoc(16, 16);
+    QVERIFY(source);
+    QVERIFY(source->select_rect(4, 4, 8, 8, QStringLiteral("new"), 0.0));
+    pictura::PictureView* target = newDoc(16, 16);
+    QVERIFY(target);
+    window_->setActiveDocumentIndex(0);
+    window_->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
+    auto* bar = window_->findChild<QTabBar*>(QStringLiteral("documentTabBar"));
+    QVERIFY(bar && bar->count() == 2);
+    const int targetHistory = target->history_count();
+    QVERIFY2(!dragSelectionOver(bar, reinterpret_cast<const void*>(quintptr(1)),
+                                bar->tabRect(1).center(), true),
+             "an unknown source is ignored");
+    QCOMPARE(window_->activeView(), source);
+    QCOMPARE(target->selection_coverage(8, 8), 0);
+    QCOMPARE(target->history_count(), targetHistory);
+}
+
+void SelectionSaveLoadTest::selectionDragPreparationRestoresSource()
+{
+    pictura::PictureView* source = newDoc(16, 16);
+    QVERIFY(source);
+    QVERIFY(source->select_rect(4, 4, 8, 8, QStringLiteral("new"), 0.0));
+    window_->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
+    auto* tools = window_->findChild<pictura::ToolController*>();
+    QVERIFY(tools);
+    tools->setActiveTool(pictura::ToolId::Marquee);
+    pictura::ImageView* canvas = window_->imageView();
+    QVERIFY(canvas);
+    const int history = source->history_count();
+    QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier,
+                      canvas->imageToWidget(QPointF(8, 8)).toPoint());
+    QVERIFY(tools->prepareSelectionDocumentDragForTest());
+    QCOMPARE(source->selection_coverage(8, 8), 255);
+    QCOMPARE(source->selection_coverage(0, 0), 0);
+    QCOMPARE(source->history_count(), history);
 }
 
 QTEST_MAIN(SelectionSaveLoadTest)

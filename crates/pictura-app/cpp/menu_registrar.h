@@ -45,6 +45,7 @@ public:
         std::function<void()> requestRefresh;
         std::function<void()> openSaveSelectionDialog;
         std::function<void()> openLoadSelectionDialog;
+        std::function<void()> openDuplicateChannelDialog;
         std::function<void(const QString& message, int timeoutMs)> showStatus;
         std::function<OptionsBar*()> optionsBar;
         std::function<QWidget*()> dialogParent;

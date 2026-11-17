@@ -66,6 +66,7 @@ public:
     struct Hooks {
         std::function<void()> saveSession;
         std::function<void()> saveSelectionOptions;
+        std::function<void()> alphaVisibilityChanged;
         std::function<void()> interfaceOptionsRequested;
         std::function<PictureView*()> activeView;
         std::function<ImageView*()> activeCanvas;

@@ -148,6 +148,20 @@ pub mod ffi {
         /// The coverage of `target` in this document; empty on failure.
         fn channel_coverage(view: &PictureView, target: &QString) -> Vec<u8>;
 
+        /// The coverage of colour row `row` (0 is the composite) under `mask`.
+        fn color_row_coverage(view: &PictureView, row: i32, mask: i32) -> Vec<u8>;
+
+        /// Duplicate transferred coverage as a new channel: fit to this canvas,
+        /// optionally invert, and record one "Duplicate Channel" state.
+        fn duplicate_channel_coverage(
+            view: Pin<&mut PictureView>,
+            coverage: &[u8],
+            width: i32,
+            height: i32,
+            name: &QString,
+            invert: bool,
+        ) -> bool;
+
         /// Save transferred coverage into `target`; one history state.
         fn save_selection_coverage(
             view: Pin<&mut PictureView>,
@@ -169,6 +183,17 @@ pub mod ffi {
             mode: &QString,
         ) -> bool;
 
+        /// Load transferred coverage into this document of any size; fit it to
+        /// the canvas and record one "Load Selection" state.
+        fn load_selection_coverage_fit(
+            view: Pin<&mut PictureView>,
+            coverage: &[u8],
+            width: i32,
+            height: i32,
+            invert: bool,
+            mode: &QString,
+        ) -> bool;
+
         /// Build a single-channel multichannel document from coverage.
         fn new_selection_document(
             view: Pin<&mut PictureView>,
@@ -176,6 +201,7 @@ pub mod ffi {
             width: i32,
             height: i32,
             name: &QString,
+            invert: bool,
         ) -> bool;
     }
 }

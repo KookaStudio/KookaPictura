@@ -4,9 +4,13 @@
 
 #include "tools.h"
 
+#include "file_drop_router.h"
 #include "image_view.h"
+#include "selection_drag.h"
 
 #include "api/selection_bridge.h"
+
+#include <QtGui/QDrag>
 
 namespace pictura {
 
@@ -102,6 +106,12 @@ void ToolController::dragSelectionMove(const QPointF& imagePos)
     if (!v) {
         return;
     }
+    if (!contentMove_ && canvas_
+        && FileDropRouter::otherDocumentAt(
+               canvas_->mapToGlobal(canvas_->imageToWidget(imagePos)).toPoint(), v, canvas_)) {
+        dragSelectionToDocument();
+        return;
+    }
     const int dx = qRound(imagePos.x() - selectionMoveAnchor_.x());
     const int dy = qRound(imagePos.y() - selectionMoveAnchor_.y());
     if (pictura::preview_selection_move(*v, dx, dy) && canvas_) {
@@ -110,6 +120,32 @@ void ToolController::dragSelectionMove(const QPointF& imagePos)
     if (contentPreviewActive_ && canvas_) {
         canvas_->setMovePreviewDelta(QPointF(dx, dy));
     }
+}
+
+void ToolController::dragSelectionToDocument()
+{
+    PictureView* v = view();
+    ImageView* canvas = canvas_;
+    if (!v || !canvas) {
+        return;
+    }
+    cancelSelectionMove();
+    dragging_ = false;
+    auto* drag = new QDrag(canvas);
+    drag->setMimeData(makeSelectionDragMime(v));
+    // Blocks until the drop; the router may switch the active document, so
+    // neither the controller's view nor the canvas is touched afterwards.
+    drag->exec(Qt::CopyAction);
+}
+
+bool ToolController::prepareSelectionDocumentDragForTest()
+{
+    if (!movingSelection_ || contentMove_) {
+        return false;
+    }
+    cancelSelectionMove();
+    dragging_ = false;
+    return true;
 }
 
 void ToolController::releaseSelectionMove(const QPointF& imagePos)

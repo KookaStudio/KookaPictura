@@ -61,6 +61,7 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/menu_registrar.h
     crates/pictura-app/cpp/menu_registrar_internal.h
     crates/pictura-app/cpp/menu_select.cpp
+    crates/pictura-app/cpp/frame_selection_dialogs.cpp
     crates/pictura-app/cpp/menu_smart_object.cpp
     crates/pictura-app/cpp/menu_transform.cpp
     crates/pictura-app/cpp/menu_type.cpp

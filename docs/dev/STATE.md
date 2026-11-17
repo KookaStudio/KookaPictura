@@ -4,6 +4,19 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Cross-document channel/selection drag — #1332 implemented** (OpenSpec
+  change `2026-11-16-channel-selection-drag`, archived; capabilities
+  `ui/channels-panel` and `tools/selection-channels`). The Channels panel has
+  `Duplicate Channel…` (name, same-size destination or New, Invert), a Create
+  New Channel drop target, and tab/canvas channel drags. Selection-tool outline
+  drags copy a selection to another document. Both drag paths fit-and-centre
+  the source when sizes differ (`Selection::fit_centered`, bilinear, inferred
+  policy). Destinations record one `Duplicate Channel` / `Load Selection` state;
+  sources record none. Alpha-channel eyes now show one or more channels as a
+  display-only red 50 % rubylith overlay over the masked (black) area; each
+  additional shown channel deepens the red (OpenSpec changes
+  `2026-11-16-alpha-channel-view` and
+  `2026-11-16-alpha-channel-multi-view`, archived).
 - **Save As all formats — #625 implemented; verification via CI** (OpenSpec
   change `save-as-all-formats`). `pictura-codec` has the engine Save As writers
   under `crates/pictura-codec/src/save/`; the six new dialogs and the BMP
