@@ -22,7 +22,7 @@ impl qobject::PictureView {
                     rust.session
                         .selection
                         .as_ref()
-                        .map(|selection| selection_to_mask(selection, doc)),
+                        .map(|selection| selection.coverage()),
                 ))
             } else {
                 None

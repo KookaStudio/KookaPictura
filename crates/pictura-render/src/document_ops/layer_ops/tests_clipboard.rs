@@ -42,7 +42,14 @@ fn copy_keeps_only_the_selection_bounding_box() {
     let doc = doc_with(vec![pixel_layer("base", 4, 4, 40)]);
     let mut sel = select(1, 1, 3, 3);
     sel[4 + 2] = 128;
-    let clip = copy_layer(&doc, "0", Some(&sel)).unwrap();
+    let clip = {
+        let (width, height) = (doc.width, doc.height);
+        match pictura_core::Coverage::for_canvas(&(sel), width, height) {
+            Some(coverage) => copy_layer(&doc, "0", Some(&coverage)),
+            None => None,
+        }
+    }
+    .unwrap();
 
     assert_eq!(clip.rect, prect(1, 1, 3, 3));
     assert_eq!(clip.rgba.len(), 2 * 2 * 4, "a small copy stays small");
@@ -69,7 +76,14 @@ fn copy_refuses_groups_empty_selections_and_transparent_pixels() {
 
     assert!(copy_layer(&doc, "2", None).is_none(), "group");
     assert!(
-        copy_layer(&doc, "0", Some(&Plane::from(vec![0u8; 16]))).is_none(),
+        {
+            let (width, height) = (doc.width, doc.height);
+            match pictura_core::Coverage::for_canvas(&(Plane::from(vec![0u8; 16])), width, height) {
+                Some(coverage) => copy_layer(&doc, "0", Some(&coverage)),
+                None => None,
+            }
+        }
+        .is_none(),
         "empty selection"
     );
     assert!(
@@ -102,7 +116,14 @@ fn copy_merged_reads_the_composite_planes() {
         channels: 4,
         data: data.into(),
     };
-    let clip = copy_merged(&doc, &composite, Some(&select(0, 0, 2, 1))).unwrap();
+    let clip = {
+        let (width, height) = (doc.width, doc.height);
+        match pictura_core::Coverage::for_canvas(&(select(0, 0, 2, 1)), width, height) {
+            Some(coverage) => copy_merged(&doc, &composite, Some(&coverage)),
+            None => None,
+        }
+    }
+    .unwrap();
 
     assert_eq!(clip.rect, prect(0, 0, 2, 1));
     assert_eq!(clip.rgba, vec![10, 20, 30, 255, 10, 20, 30, 255]);
@@ -119,10 +140,22 @@ fn clear_scales_alpha_by_coverage_and_reports_no_change() {
     let mut sel = select(0, 0, 2, 1);
     sel[1] = 128;
 
-    assert!(clear_layer(&mut doc, "0", Some(&sel)));
+    assert!({
+        let (width, height) = (doc.width, doc.height);
+        match pictura_core::Coverage::for_canvas(&(sel), width, height) {
+            Some(coverage) => clear_layer(&mut doc, "0", Some(&coverage)),
+            None => false,
+        }
+    });
     assert_eq!(&alpha(&doc, 0)[..3], &[0, 127, 255]);
     assert!(
-        !clear_layer(&mut doc, "0", Some(&select(0, 0, 1, 1))),
+        !{
+            let (width, height) = (doc.width, doc.height);
+            match pictura_core::Coverage::for_canvas(&(select(0, 0, 1, 1)), width, height) {
+                Some(coverage) => clear_layer(&mut doc, "0", Some(&coverage)),
+                None => false,
+            }
+        },
         "already clear"
     );
     assert!(clear_layer(&mut doc, "0", None));
@@ -152,7 +185,13 @@ fn clear_fills_a_background_toward_white() {
     background.lock = LockFlags::default().with(LockFlags::TRANSPARENCY, true);
     let mut doc = doc_with(vec![background]);
 
-    assert!(clear_layer(&mut doc, "0", Some(&select(0, 0, 1, 1))));
+    assert!({
+        let (width, height) = (doc.width, doc.height);
+        match pictura_core::Coverage::for_canvas(&(select(0, 0, 1, 1)), width, height) {
+            Some(coverage) => clear_layer(&mut doc, "0", Some(&coverage)),
+            None => false,
+        }
+    });
     let red = &doc.layers[0].channels[0].data;
     assert_eq!((red[0], red[1]), (255, 40));
 }
@@ -196,7 +235,20 @@ fn paste_into_and_outside_mask_by_the_selection() {
     let sel = select(0, 0, 2, 2);
 
     assert!(paste_clip(&mut doc, "0", &clip, (0, 0), PasteMode::Into, None).is_empty());
-    let into = paste_clip(&mut doc, "0", &clip, (0, 0), PasteMode::Into, Some(&sel));
+    let into = {
+        let (width, height) = (doc.width, doc.height);
+        match pictura_core::Coverage::for_canvas(&(sel), width, height) {
+            Some(coverage) => paste_clip(
+                &mut doc,
+                "0",
+                &clip,
+                (0, 0),
+                PasteMode::Into,
+                Some(&coverage),
+            ),
+            None => String::new(),
+        }
+    };
     let mask = doc.layers[1].mask.as_ref().unwrap();
     assert_eq!(into, "1");
     assert_eq!(
@@ -204,7 +256,20 @@ fn paste_into_and_outside_mask_by_the_selection() {
         (0, Some(&sel[..]))
     );
 
-    let outside = paste_clip(&mut doc, "1", &clip, (0, 0), PasteMode::Outside, Some(&sel));
+    let outside = {
+        let (width, height) = (doc.width, doc.height);
+        match pictura_core::Coverage::for_canvas(&(sel), width, height) {
+            Some(coverage) => paste_clip(
+                &mut doc,
+                "1",
+                &clip,
+                (0, 0),
+                PasteMode::Outside,
+                Some(&coverage),
+            ),
+            None => String::new(),
+        }
+    };
     let mask = doc.layers[2].mask.as_ref().unwrap();
     assert_eq!(outside, "2");
     assert_eq!(mask.default_color, 255);
@@ -219,8 +284,21 @@ fn cut_then_paste_in_place_restores_the_pixels() {
     let mut doc = doc_with(vec![layer]);
     let sel = select(1, 1, 3, 3);
 
-    let clip = copy_layer(&doc, "0", Some(&sel)).unwrap();
-    assert!(clear_layer(&mut doc, "0", Some(&sel)));
+    let clip = {
+        let (width, height) = (doc.width, doc.height);
+        match pictura_core::Coverage::for_canvas(&(sel), width, height) {
+            Some(coverage) => copy_layer(&doc, "0", Some(&coverage)),
+            None => None,
+        }
+    }
+    .unwrap();
+    assert!({
+        let (width, height) = (doc.width, doc.height);
+        match pictura_core::Coverage::for_canvas(&(sel), width, height) {
+            Some(coverage) => clear_layer(&mut doc, "0", Some(&coverage)),
+            None => false,
+        }
+    });
     assert_eq!(alpha(&doc, 0)[5], 0);
     let origin = (clip.rect.left, clip.rect.top);
     let path = paste_clip(&mut doc, "0", &clip, origin, PasteMode::Plain, None);

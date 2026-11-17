@@ -22,7 +22,13 @@ fn layer_via_copy_extracts_selection_and_keeps_source() {
     let mut doc = doc_with(vec![pixel_layer("base", 4, 4, 40)]);
     let mut data = vec![0u8; 16];
     data[..8].fill(255);
-    let path = layer_via_copy(&mut doc, "0", &selection_mask(data));
+    let path = layer_via_copy(
+        &mut doc,
+        "0",
+        &(selection_mask(data))
+            .edit_coverage()
+            .expect("valid mask geometry"),
+    );
 
     assert_eq!(path, "1");
     assert_eq!(doc.layers.len(), 2);
@@ -51,7 +57,13 @@ fn layer_via_copy_extracts_selection_and_keeps_source() {
 #[test]
 fn layer_via_copy_scales_feathered_alpha() {
     let mut doc = doc_with(vec![pixel_layer("base", 4, 4, 40)]);
-    let path = layer_via_copy(&mut doc, "0", &selection_mask(vec![128; 16]));
+    let path = layer_via_copy(
+        &mut doc,
+        "0",
+        &(selection_mask(vec![128; 16]))
+            .edit_coverage()
+            .expect("valid mask geometry"),
+    );
 
     assert_eq!(path, "1");
     let alpha = doc.layers[1].channels.iter().find(|c| c.id == -1).unwrap();
@@ -70,7 +82,13 @@ fn layer_via_copy_scales_feathered_alpha() {
 fn layer_via_cut_clears_full_and_scales_partial_coverage() {
     let mut doc = doc_with(vec![pixel_layer("base", 4, 4, 40)]);
     assert_eq!(
-        layer_via_cut(&mut doc, "0", &selection_mask(vec![255; 16])),
+        layer_via_cut(
+            &mut doc,
+            "0",
+            &(selection_mask(vec![255; 16]))
+                .edit_coverage()
+                .expect("valid mask geometry")
+        ),
         "1"
     );
     let source_alpha = doc.layers[0].channels.iter().find(|c| c.id == -1).unwrap();
@@ -80,7 +98,13 @@ fn layer_via_cut_clears_full_and_scales_partial_coverage() {
     );
 
     let mut doc = doc_with(vec![pixel_layer("base", 4, 4, 40)]);
-    layer_via_cut(&mut doc, "0", &selection_mask(vec![128; 16]));
+    layer_via_cut(
+        &mut doc,
+        "0",
+        &(selection_mask(vec![128; 16]))
+            .edit_coverage()
+            .expect("valid mask geometry"),
+    );
     let source_alpha = doc.layers[0].channels.iter().find(|c| c.id == -1).unwrap();
     assert!(
         source_alpha.data.iter().all(|&v| v == 127),
@@ -94,7 +118,13 @@ fn layer_via_copy_lands_above_the_source_inside_its_group() {
     let _ = group.children.push(pixel_layer("child", 4, 4, 40));
     let mut doc = doc_with(vec![group]);
 
-    let path = layer_via_copy(&mut doc, "0/0", &selection_mask(vec![255; 16]));
+    let path = layer_via_copy(
+        &mut doc,
+        "0/0",
+        &(selection_mask(vec![255; 16]))
+            .edit_coverage()
+            .expect("valid mask geometry"),
+    );
     assert_eq!(path, "0/1");
     assert_eq!(doc.layers[0].children.len(), 2);
     assert_eq!(doc.layers[0].children[1].name, "child copy");
@@ -104,8 +134,22 @@ fn layer_via_copy_lands_above_the_source_inside_its_group() {
 fn layer_via_refuses_missing_group_and_empty_mask() {
     let mut doc = doc_with(vec![pixel_layer("base", 4, 4, 40)]);
     let before = doc.clone();
-    assert!(layer_via_copy(&mut doc, "9", &selection_mask(vec![255; 16])).is_empty());
-    assert!(layer_via_copy(&mut doc, "bad", &selection_mask(vec![255; 16])).is_empty());
+    assert!(layer_via_copy(
+        &mut doc,
+        "9",
+        &(selection_mask(vec![255; 16]))
+            .edit_coverage()
+            .expect("valid mask geometry")
+    )
+    .is_empty());
+    assert!(layer_via_copy(
+        &mut doc,
+        "bad",
+        &(selection_mask(vec![255; 16]))
+            .edit_coverage()
+            .expect("valid mask geometry")
+    )
+    .is_empty());
     let empty = LayerMask {
         rect: rect(4, 4),
         default_color: 0,
@@ -114,14 +158,33 @@ fn layer_via_refuses_missing_group_and_empty_mask() {
         data: None,
         ..Default::default()
     };
-    assert!(layer_via_copy(&mut doc, "0", &empty).is_empty());
+    assert!(layer_via_copy(
+        &mut doc,
+        "0",
+        &empty.edit_coverage().expect("valid mask geometry")
+    )
+    .is_empty());
     assert_eq!(doc, before);
 
     let mut group = empty_group("Group 1");
     let _ = group.children.push(pixel_layer("child", 4, 4, 1));
     let mut doc = doc_with(vec![group]);
     let before = doc.clone();
-    assert!(layer_via_copy(&mut doc, "0", &selection_mask(vec![255; 16])).is_empty());
-    assert!(layer_via_cut(&mut doc, "0", &selection_mask(vec![255; 16])).is_empty());
+    assert!(layer_via_copy(
+        &mut doc,
+        "0",
+        &(selection_mask(vec![255; 16]))
+            .edit_coverage()
+            .expect("valid mask geometry")
+    )
+    .is_empty());
+    assert!(layer_via_cut(
+        &mut doc,
+        "0",
+        &(selection_mask(vec![255; 16]))
+            .edit_coverage()
+            .expect("valid mask geometry")
+    )
+    .is_empty());
     assert_eq!(doc, before);
 }

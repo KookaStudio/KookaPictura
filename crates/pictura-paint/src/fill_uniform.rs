@@ -128,7 +128,7 @@ fn decide(
         at.left as usize..at.right as usize,
         at.top as usize..at.bottom as usize,
     );
-    let over = |mask: Option<&pictura_core::mask_ops::TiledMask>| {
+    let over = |mask: Option<&pictura_core::Coverage>| {
         mask.map_or(Some(255), |m| m.uniform_over(xs.clone(), ys.clone()))
     };
     let (Some(selected), Some(m)) = (over(pass.through.selection), over(pass.through.mask)) else {

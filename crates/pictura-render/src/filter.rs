@@ -7,7 +7,7 @@
 
 use pictura_adjust::{Adjustment, ColorBalanceMode};
 use pictura_core::{
-    layer_pixel_locked, layer_transparency_locked, Layer, LayerMask, PixelBuffer, PsdRect,
+    layer_pixel_locked, layer_transparency_locked, Coverage, Layer, PixelBuffer, PsdRect,
 };
 use pictura_filters::{Filter, FilterError};
 use rayon::prelude::*;
@@ -25,7 +25,7 @@ use crate::channel;
 pub fn apply_filter(
     layer: &mut Layer,
     filter: &Filter,
-    mask: Option<&LayerMask>,
+    mask: Option<&Coverage>,
     gpu_enabled: bool,
 ) -> Result<(), FilterError> {
     let region = layer.rect;
@@ -41,7 +41,7 @@ pub fn apply_filter(
 pub fn apply_filter_region(
     layer: &mut Layer,
     filter: &Filter,
-    mask: Option<&LayerMask>,
+    mask: Option<&Coverage>,
     gpu_enabled: bool,
     region: PsdRect,
 ) -> Result<(), FilterError> {
@@ -69,7 +69,7 @@ pub fn apply_filter_region(
 pub fn apply_adjustment_region(
     layer: &mut Layer,
     adjustment: &Adjustment,
-    mask: Option<&LayerMask>,
+    mask: Option<&Coverage>,
     region: PsdRect,
 ) -> Result<(), FilterError> {
     apply_op_region(
@@ -88,7 +88,7 @@ pub fn apply_adjustment_region(
 pub fn apply_adjustment_region_in_mode(
     layer: &mut Layer,
     adjustment: &Adjustment,
-    mask: Option<&LayerMask>,
+    mask: Option<&Coverage>,
     region: PsdRect,
     cmyk: Option<&crate::channel_mixer_cmyk::CmykMix>,
     color_balance: ColorBalanceMode,
@@ -113,7 +113,7 @@ enum Op<'a> {
 fn apply_op_region(
     layer: &mut Layer,
     op: Op,
-    mask: Option<&LayerMask>,
+    mask: Option<&Coverage>,
     region: PsdRect,
     cmyk: Option<&crate::channel_mixer_cmyk::CmykMix>,
     color_balance: ColorBalanceMode,
@@ -310,7 +310,7 @@ struct Placement {
 #[derive(Clone, Copy)]
 struct Blend<'a> {
     source: &'a [u8],
-    mask: Option<&'a LayerMask>,
+    mask: Option<&'a Coverage>,
     keep_clear: Option<&'a [u8]>,
 }
 
@@ -363,70 +363,20 @@ fn channel_mut(layer: &mut Layer, id: i16) -> Option<&mut [u8]> {
         .map(|c| c.data.as_mut_slice())
 }
 
-/// Mask coverage at a document pixel. `255` when there is no mask or the mask
-/// is disabled; outside the mask rect (or with no decoded data) the mask's
-/// `default_color` applies.
-pub(crate) fn coverage(mask: Option<&LayerMask>, x: i32, y: i32) -> u8 {
-    let Some(mask) = mask else {
-        return 255;
-    };
-    if mask.disabled {
-        return 255;
-    }
-    let (mw, mh) = (mask.rect.width(), mask.rect.height());
-    let (mx, my) = (x - mask.rect.left, y - mask.rect.top);
-    if mw <= 0 || mh <= 0 || mx < 0 || my < 0 || mx >= mw || my >= mh {
-        return mask.default_color;
-    }
-    let Some(data) = &mask.data else {
-        return mask.default_color;
-    };
-    data.sample(my as usize * mw as usize + mx as usize)
-        .unwrap_or(mask.default_color)
+/// Coverage of an optional editing constraint at a document pixel.
+pub(crate) fn coverage(mask: Option<&Coverage>, x: i32, y: i32) -> u8 {
+    mask.map_or(255, |mask| mask.sample(x, y))
 }
 
-/// [`coverage`] of the document pixels `left..left + out.len()` on row `y`,
-/// with the mask's samples read as one row span, so a tiled mask (a
-/// selection) is never materialized (#1268).
-pub(crate) fn coverage_row(mask: Option<&LayerMask>, left: i32, y: i32, out: &mut [u8]) {
-    let Some(mask) = mask.filter(|mask| !mask.disabled) else {
-        out.fill(255);
-        return;
-    };
-    out.fill(mask.default_color);
-    let (mw, mh) = (mask.rect.width(), mask.rect.height());
-    let my = y - mask.rect.top;
-    let Some(data) = &mask.data else {
-        return;
-    };
-    if mw <= 0 || mh <= 0 || my < 0 || my >= mh {
-        return;
-    }
-    let x0 = (mask.rect.left - left).max(0);
-    let x1 = (mask.rect.right - left).min(out.len() as i32);
-    if x1 <= x0 {
-        return;
-    }
-    let (mx0, mx1) = (
-        (left + x0 - mask.rect.left) as usize,
-        (left + x1 - mask.rect.left) as usize,
-    );
-    let width = mw as usize;
-    let span = data
-        .geometry()
-        .is_none_or(|(w, _, _)| w == width)
-        .then(|| data.row_span(my as usize, mx0..mx1, width))
-        .flatten();
-    if let Some(row) = span {
-        out[x0 as usize..x1 as usize].copy_from_slice(&row);
-    } else {
-        for (x, value) in (mx0..mx1).zip(&mut out[x0 as usize..x1 as usize]) {
-            if let Some(sample) = data.sample(my as usize * width + x) {
-                *value = sample;
-            }
-        }
+pub(crate) fn coverage_row(mask: Option<&Coverage>, left: i32, y: i32, out: &mut [u8]) {
+    match mask {
+        Some(mask) => mask.read_row(left, y, out),
+        None => out.fill(255),
     }
 }
+
+#[cfg(test)]
+use pictura_core::LayerMask;
 
 #[cfg(test)]
 mod tests;

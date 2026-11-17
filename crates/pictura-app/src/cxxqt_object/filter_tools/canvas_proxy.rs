@@ -4,12 +4,11 @@
 //! canvas shows rather than what the document holds. The document is untouched
 //! until OK filters it at full resolution.
 
-use super::super::helpers_composite::selection_to_mask;
 use super::super::state::{CanvasProxy, PictureViewRust};
 #[cfg(test)]
 use crate::layer_target::LayerTarget;
 use cxx_qt_lib::{QList, QString, QStringList};
-use pictura_core::{Document, LayerMask, PixelBuffer, PsdRect};
+use pictura_core::{Coverage, Document, PixelBuffer, PsdRect};
 
 /// Resolve a stack: each kind takes the next `arity` slots of `params`.
 pub(in crate::cxxqt_object) fn resolve_stack(
@@ -143,7 +142,7 @@ fn proxy_render(
 /// selection as a canvas-sized coverage mask.
 pub(in crate::cxxqt_object) fn pre_preview_sources(
     rust: &PictureViewRust,
-) -> Option<(Document, Option<LayerMask>)> {
+) -> Option<(Document, Option<Coverage>)> {
     let mut doc = rust.session.doc.clone()?;
     // An open section preview has written into the live layer; the work starts
     // from the pixels before it, as the commit does.
@@ -153,11 +152,7 @@ pub(in crate::cxxqt_object) fn pre_preview_sources(
             *layer = original;
         }
     }
-    let mask = rust
-        .session
-        .selection
-        .as_ref()
-        .map(|s| selection_to_mask(s, &doc));
+    let mask = rust.session.selection.as_ref().map(|s| s.coverage());
     Some((doc, mask))
 }
 

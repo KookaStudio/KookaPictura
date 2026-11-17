@@ -17,7 +17,10 @@ fn patch_layer(
     selection: &[u8],
     options: PatchOptions,
 ) -> Result<Option<PsdRect>, HealError> {
-    super::patch_layer(doc, path, &selection.to_vec().into(), options)
+    match pictura_core::Coverage::for_canvas(&selection.to_vec().into(), doc.width, doc.height) {
+        Some(coverage) => super::patch_layer(doc, path, &coverage, options),
+        None => Ok(None),
+    }
 }
 
 /// [`super::move_layer`] over a flat copy of `selection`.
@@ -27,7 +30,10 @@ fn move_layer(
     selection: &[u8],
     options: MoveOptions,
 ) -> Result<Option<PsdRect>, HealError> {
-    super::move_layer(doc, path, &selection.to_vec().into(), options)
+    match pictura_core::Coverage::for_canvas(&selection.to_vec().into(), doc.width, doc.height) {
+        Some(coverage) => super::move_layer(doc, path, &coverage, options),
+        None => Ok(None),
+    }
 }
 
 fn flat(w: i32, h: i32, px: [u8; 4]) -> RgbaImage {
@@ -1200,7 +1206,11 @@ fn selection_bounds_match_a_serial_scan() {
         }
     }
     mask[3 * 32 + 2] = 128;
-    let (bounds, coverage) = super::patch::selection_coverage(&doc, &mask.into()).unwrap();
+    let (bounds, coverage) = super::patch::selection_coverage(
+        &doc,
+        &pictura_core::Coverage::for_canvas(&mask.into(), 32, 32).unwrap(),
+    )
+    .unwrap();
     assert_eq!(
         bounds,
         PsdRect {
@@ -1309,7 +1319,11 @@ fn healing_reads_a_tiled_selection() {
     for options in patches {
         let (mut got, mut want) = (doc.clone(), doc.clone());
         let done = pictura_core::assert_no_materialization(|| {
-            super::patch_layer(&mut got, "0", &tiled, options)
+            let (width, height) = (got.width, got.height);
+            match pictura_core::Coverage::for_canvas(&(tiled), width, height) {
+                Some(coverage) => super::patch_layer(&mut got, "0", &coverage, options),
+                None => Ok(None),
+            }
         });
         assert_eq!(done, patch_layer(&mut want, "0", &mask, options));
         assert!(done.unwrap().is_some());
@@ -1321,9 +1335,15 @@ fn healing_reads_a_tiled_selection() {
     for extend in [false, true] {
         let (mut got, mut want) = (doc.clone(), doc.clone());
         let done = pictura_core::assert_no_materialization(|| {
-            super::move_layer(&mut got, "0", &tiled, drag(40, extend))
+            let (width, height) = (got.width, got.height);
+            match pictura_core::Coverage::for_canvas(&(tiled), width, height) {
+                Some(coverage) => super::move_layer(&mut got, "0", &coverage, drag(40, extend)),
+                None => Ok(None),
+            }
         });
         assert_eq!(done, move_layer(&mut want, "0", &mask, drag(40, extend)));
         assert_eq!(got, want, "extend={extend}");
     }
 }
+
+mod coverage;

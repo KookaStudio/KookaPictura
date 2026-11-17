@@ -664,7 +664,13 @@ fn erase_magic(
             ensure_alpha(layer);
         }
     }
-    magic_erase(doc, path, &mask, opacity, background)
+    magic_erase(
+        doc,
+        path,
+        &pictura_core::Coverage::for_canvas(&mask, size.0, size.1)?,
+        opacity,
+        background,
+    )
 }
 
 pub(super) fn magic_erase_at(

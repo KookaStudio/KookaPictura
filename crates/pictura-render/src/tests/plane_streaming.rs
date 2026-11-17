@@ -4,7 +4,7 @@
 //! operation on flat copies of those planes byte for byte.
 
 use super::*;
-use pictura_core::{assert_no_materialization, Plane};
+use pictura_core::{assert_no_materialization, Coverage, Plane};
 
 const W: u32 = 24;
 const H: u32 = 200;
@@ -147,12 +147,7 @@ fn moving_selected_content_merges_into_diverged_rows_in_place() {
             coverage[y * W as usize + x] = 255;
         }
     }
-    let selection = LayerMask {
-        rect: full(W, H),
-        default_color: 0,
-        data: Some(coverage.into()),
-        ..Default::default()
-    };
+    let selection = Coverage::new(full(W, H), coverage.into(), 0).unwrap();
     let moved = assert_no_materialization(|| {
         crate::move_selection_content(&mut banded, "1", &selection, 2, 70, false)
     });

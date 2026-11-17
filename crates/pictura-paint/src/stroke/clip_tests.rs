@@ -57,7 +57,7 @@ fn doc(layer: Layer) -> Document {
     doc
 }
 
-fn selection(width: u32, height: u32, inside: impl Fn(i32, i32) -> bool) -> CoverageClip {
+fn selection(width: u32, height: u32, inside: impl Fn(i32, i32) -> bool) -> Coverage {
     let mut data = vec![0u8; (width * height) as usize];
     for y in 0..height as i32 {
         for x in 0..width as i32 {
@@ -66,10 +66,7 @@ fn selection(width: u32, height: u32, inside: impl Fn(i32, i32) -> bool) -> Cove
             }
         }
     }
-    CoverageClip {
-        data: Plane::from(data),
-        width,
-    }
+    Coverage::for_canvas(&Plane::from(data), width, height).unwrap()
 }
 
 fn pixel(doc: &Document, x: i32, y: i32) -> (u8, u8, u8, u8) {
@@ -149,10 +146,9 @@ fn a_partial_selection_scales_the_paint() {
         },
         WHITE,
     ));
-    let mut clip = selection(8, 8, |_, _| false);
     let mut data = vec![0u8; 64];
     data[4 * 8 + 4] = 128;
-    clip.data = Plane::from(data);
+    let clip = Coverage::for_canvas(&Plane::from(data), 8, 8).unwrap();
     let mut stroke = Stroke::begin_at(&doc, "0", brush(8)).expect("stroke begins");
     stroke.set_coverage_clip(Some(clip));
     assert!(stroke.sample(

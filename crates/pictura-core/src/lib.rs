@@ -9,6 +9,8 @@ mod annotations;
 pub mod blend;
 pub mod blur;
 pub mod channels;
+mod coverage;
+pub use coverage::Coverage;
 mod crs;
 mod digest;
 mod document_composite;
@@ -951,26 +953,6 @@ impl LayerMask {
 
     pub fn set_feather(&mut self, radius: f64) {
         self.feather_bits = radius.to_bits();
-    }
-}
-
-impl Default for LayerMask {
-    fn default() -> Self {
-        Self {
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 0,
-                right: 0,
-            },
-            default_color: 0,
-            disabled: false,
-            flags: 0,
-            data: None,
-            extra: Plane::default(),
-            density: 255,
-            feather_bits: 0,
-        }
     }
 }
 

@@ -153,11 +153,21 @@ fn every_structural_op_leaves_a_well_formed_stack() {
         data: Some(vec![255; 16].into()),
         ..Default::default()
     };
-    layer_via_copy(&mut d, "0", &mask);
+    layer_via_copy(
+        &mut d,
+        "0",
+        &mask.edit_coverage().expect("valid mask geometry"),
+    );
     assert_valid(&d, "via_copy");
 
     let mut d = doc(vec![layer("A", false)]);
-    let floating = lift_selection(&mut d, "0", &vec![255u8; 16].into());
+    let floating = {
+        let (width, height) = (d.width, d.height);
+        match pictura_core::Coverage::for_canvas(&(vec![255u8; 16].into()), width, height) {
+            Some(coverage) => lift_selection(&mut d, "0", &coverage),
+            None => String::new(),
+        }
+    };
     assert_valid(&d, "lift_selection");
     if !floating.is_empty() {
         merge_lifted(&mut d, &floating);
@@ -194,7 +204,11 @@ fn every_structural_op_leaves_a_well_formed_stack() {
         data: Some(vec![255; 16].into()),
         ..Default::default()
     };
-    layer_via_cut(&mut d, "0", &mask);
+    layer_via_cut(
+        &mut d,
+        "0",
+        &mask.edit_coverage().expect("valid mask geometry"),
+    );
     assert_valid(&d, "via_cut");
 
     let mut d = doc(vec![layer("A", false), layer("B", true)]);
@@ -288,11 +302,21 @@ fn insertion_and_lift_never_leave_a_baseless_clip() {
         data: Some(vec![255; 16].into()),
         ..Default::default()
     };
-    layer_via_copy(&mut d, "0", &mask);
+    layer_via_copy(
+        &mut d,
+        "0",
+        &mask.edit_coverage().expect("valid mask geometry"),
+    );
     assert_valid(&d, "via copy");
 
     let mut d = doc(vec![layer("A", false)]);
-    lift_selection(&mut d, "0", &vec![255u8; 16].into());
+    {
+        let (width, height) = (d.width, d.height);
+        match pictura_core::Coverage::for_canvas(&(vec![255u8; 16].into()), width, height) {
+            Some(coverage) => lift_selection(&mut d, "0", &coverage),
+            None => String::new(),
+        }
+    };
     assert_valid(&d, "lift");
 }
 
@@ -376,7 +400,14 @@ fn lift_refusal_keeps_source_pixels() {
     background.background = true;
     let mut d = doc(vec![src, background]);
     let before = d.layers[0].channels[3].data.to_vec();
-    assert!(lift_selection(&mut d, "0", &vec![255u8; 16].into()).is_empty());
+    assert!({
+        let (width, height) = (d.width, d.height);
+        match pictura_core::Coverage::for_canvas(&(vec![255u8; 16].into()), width, height) {
+            Some(coverage) => lift_selection(&mut d, "0", &coverage),
+            None => String::new(),
+        }
+    }
+    .is_empty());
     assert_eq!(&d.layers[0].channels[3].data[..], &before[..]);
 }
 
@@ -398,7 +429,12 @@ fn via_cut_refusal_keeps_source_pixels() {
         data: Some(vec![255; 16].into()),
         ..Default::default()
     };
-    assert!(layer_via_cut(&mut d, "0", &mask).is_empty());
+    assert!(layer_via_cut(
+        &mut d,
+        "0",
+        &mask.edit_coverage().expect("valid mask geometry")
+    )
+    .is_empty());
     assert_eq!(&d.layers[0].channels[3].data[..], &before[..]);
 }
 
@@ -434,7 +470,13 @@ fn smart_object_conversion_with_a_background_host() {
 #[test]
 fn merge_lifted_keeps_a_run_clipped_to_the_source() {
     let mut d = doc(vec![layer("A", false), layer("B", true)]);
-    let floating = lift_selection(&mut d, "0", &vec![255u8; 16].into());
+    let floating = {
+        let (width, height) = (d.width, d.height);
+        match pictura_core::Coverage::for_canvas(&(vec![255u8; 16].into()), width, height) {
+            Some(coverage) => lift_selection(&mut d, "0", &coverage),
+            None => String::new(),
+        }
+    };
     assert!(!floating.is_empty());
     assert_eq!(d.layers.len(), 3);
     assert!(d.layers[2].clipping);

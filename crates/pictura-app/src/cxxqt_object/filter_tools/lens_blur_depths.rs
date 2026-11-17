@@ -11,7 +11,6 @@ use pictura_core::{Layer, LayerMask, PsdRect};
 use pictura_filters::DepthMap;
 
 use super::super::helpers::active_pixel_layer;
-use super::super::helpers_composite::selection_to_mask;
 use super::super::state::PictureViewRust;
 #[cfg(test)]
 use crate::layer_target::LayerTarget;
@@ -103,8 +102,10 @@ pub(super) fn materialize(rust: &PictureViewRust, source: i32) -> Option<DepthMa
         1 => transparency_plane(layer, lw, lh),
         2 => crop_mask(layer.mask.as_ref()?, lrect, lw, lh),
         3 => {
-            let mask = selection_to_mask(rust.session.selection.as_ref()?, doc);
-            crop_mask(&mask, lrect, lw, lh)
+            let mask = (rust.session.selection.as_ref()?).coverage();
+            let mut out = vec![0; lw as usize * lh as usize];
+            mask.read_rect(lrect, &mut out);
+            out
         }
         _ => return None,
     };

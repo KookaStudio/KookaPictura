@@ -5,7 +5,7 @@
 //! successful command recomposites then records exactly one undo state; a
 //! refusal records nothing.
 
-use super::helpers_composite::{default_layer_mask, selection_to_mask};
+use super::helpers_composite::default_layer_mask;
 use super::qobject;
 use crate::cxxqt_object::document_session::DocumentSession;
 use crate::cxxqt_object::edit::{structural, structural_paths, Edit};
@@ -26,10 +26,7 @@ fn apply_default_mask(
     if !use_default_masks || path.is_empty() {
         return;
     }
-    let mask = default_layer_mask(
-        doc,
-        selection.map(|selection| selection_to_mask(selection, doc)),
-    );
+    let mask = default_layer_mask(doc, selection.map(|selection| selection.coverage()));
     if let Some(layer) = pictura_render::resolve_path_mut(doc, path) {
         layer.mask = Some(mask);
     }

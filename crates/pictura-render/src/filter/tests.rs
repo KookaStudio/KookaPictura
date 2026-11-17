@@ -123,7 +123,7 @@ fn mask_confines_change_to_left_half() {
     apply_filter(
         &mut layer,
         &Filter::GaussianBlur { radius: 2.0 },
-        Some(&mask),
+        Some(&mask.edit_coverage().expect("valid mask geometry")),
         false,
     )
     .unwrap();
@@ -156,18 +156,33 @@ fn disabled_mask_reports_full_coverage() {
         ..Default::default()
     };
     assert_eq!(
-        coverage(Some(&mask), 0, 0),
+        coverage(
+            Some(&mask.edit_coverage().expect("valid mask geometry")),
+            0,
+            0
+        ),
         255,
         "disabled mask must not gate"
     );
-    assert_eq!(coverage(Some(&mask), 3, 3), 255);
+    assert_eq!(
+        coverage(
+            Some(&mask.edit_coverage().expect("valid mask geometry")),
+            3,
+            3
+        ),
+        255
+    );
 
     let enabled = LayerMask {
         disabled: false,
         ..mask
     };
     assert_eq!(
-        coverage(Some(&enabled), 1, 1),
+        coverage(
+            Some(&enabled.edit_coverage().expect("valid mask geometry")),
+            1,
+            1
+        ),
         0,
         "enabled mask still gates"
     );
@@ -998,7 +1013,7 @@ fn auto_tone_uses_selection_histogram() {
     apply_adjustment_region(
         &mut layer,
         &Adjustment::Auto(pictura_adjust::AutoKind::Tone),
-        Some(&mask),
+        Some(&mask.edit_coverage().expect("valid mask geometry")),
         rect(0, 0, 1, w as i32),
     )
     .unwrap();
@@ -1123,19 +1138,41 @@ fn selection_filters_read_a_tiled_selection() {
     let (mut got, mut want) = (layer.clone(), layer.clone());
     let tiled_mask = mask(&tiled);
     pictura_core::assert_no_materialization(|| {
-        apply_filter(&mut got, &blur, Some(&tiled_mask), false)
+        apply_filter(
+            &mut got,
+            &blur,
+            Some(&tiled_mask.edit_coverage().expect("valid mask geometry")),
+            false,
+        )
     })
     .unwrap();
-    apply_filter(&mut want, &blur, Some(&mask(&flat)), false).unwrap();
+    apply_filter(
+        &mut want,
+        &blur,
+        Some(&(mask(&flat)).edit_coverage().expect("valid mask geometry")),
+        false,
+    )
+    .unwrap();
     assert_eq!(got, want, "blur");
 
     let auto = Adjustment::Auto(pictura_adjust::AutoKind::Tone);
     let region = layer.rect;
     let (mut got, mut want) = (layer.clone(), layer);
     pictura_core::assert_no_materialization(|| {
-        apply_adjustment_region(&mut got, &auto, Some(&tiled_mask), region)
+        apply_adjustment_region(
+            &mut got,
+            &auto,
+            Some(&tiled_mask.edit_coverage().expect("valid mask geometry")),
+            region,
+        )
     })
     .unwrap();
-    apply_adjustment_region(&mut want, &auto, Some(&mask(&flat)), region).unwrap();
+    apply_adjustment_region(
+        &mut want,
+        &auto,
+        Some(&(mask(&flat)).edit_coverage().expect("valid mask geometry")),
+        region,
+    )
+    .unwrap();
     assert_eq!(got, want, "auto tone");
 }

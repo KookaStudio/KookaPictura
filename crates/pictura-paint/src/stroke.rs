@@ -257,7 +257,7 @@ pub struct Stroke {
     /// held to.
     serial: bool,
     inverse_grayscale: bool,
-    coverage_clip: Option<CoverageClip>,
+    coverage_clip: Option<Coverage>,
 }
 
 impl Stroke {
@@ -1097,7 +1097,7 @@ mod dynamics;
 mod per_dab;
 mod stencil;
 use dynamics::PlacedDab;
-pub use stencil::CoverageClip;
+pub use stencil::Coverage;
 use stencil::Stencil;
 #[cfg(test)]
 mod clip_tests;

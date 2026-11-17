@@ -18,6 +18,7 @@
 use crate::fill::{fill_layer_within, pixel_noise, Alpha, Through};
 use crate::healing::RgbaImage;
 use crate::{PaintMode, Rgba};
+#[cfg(test)]
 use pictura_core::mask_ops::TiledMask;
 use pictura_core::{ColorMode, Document, PsdRect};
 use std::borrow::Cow;
@@ -227,7 +228,7 @@ pub fn draw(
     options: &GradientOptions,
     start: (f32, f32),
     end: (f32, f32),
-    selection: Option<&TiledMask>,
+    selection: Option<&pictura_core::Coverage>,
     within: Option<PsdRect>,
 ) -> Option<PsdRect> {
     let axis = (end.0 - start.0, end.1 - start.1);
@@ -772,16 +773,22 @@ mod tests {
             .map(|i| if i % 32 < 16 { 255 } else { 0 })
             .collect();
         let black = Gradient::two_stop(BLACK, BLACK);
-        let dirty = draw(
-            &mut d,
-            "0",
-            &black,
-            &GradientOptions::default(),
-            (0.0, 16.0),
-            (31.0, 16.0),
-            Some(&mask),
-            None,
-        )
+        let dirty = {
+            let (width, height) = (d.width, d.height);
+            match pictura_core::Coverage::for_canvas(&(mask), width, height) {
+                Some(coverage) => draw(
+                    &mut d,
+                    "0",
+                    &black,
+                    &GradientOptions::default(),
+                    (0.0, 16.0),
+                    (31.0, 16.0),
+                    Some(&coverage),
+                    None,
+                ),
+                None => None,
+            }
+        }
         .expect("drawn");
         assert_eq!((dirty.left, dirty.right), (0, 16));
         assert_eq!(pixel(&d, 8, 16), BLACK_PX);
@@ -917,16 +924,22 @@ mod tests {
         mask.tile(w as usize, h as usize);
         let draw_with = |within| {
             let mut d = base.clone();
-            let dirty = draw(
-                &mut d,
-                "0",
-                &black_white(),
-                &GradientOptions::default(),
-                (0.0, 0.0),
-                (39.0, 299.0),
-                Some(&mask),
-                within,
-            );
+            let dirty = {
+                let (width, height) = (d.width, d.height);
+                match pictura_core::Coverage::for_canvas(&(mask), width, height) {
+                    Some(coverage) => draw(
+                        &mut d,
+                        "0",
+                        &black_white(),
+                        &GradientOptions::default(),
+                        (0.0, 0.0),
+                        (39.0, 299.0),
+                        Some(&coverage),
+                        within,
+                    ),
+                    None => None,
+                }
+            };
             (d, dirty)
         };
         let (whole, dirty) = draw_with(None);

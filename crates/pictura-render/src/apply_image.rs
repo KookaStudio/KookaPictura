@@ -11,8 +11,8 @@ use std::sync::Arc;
 
 use pictura_core::nonseparable::lum;
 use pictura_core::{
-    layer_pixel_locked, layer_transparency_locked, BitDepth, BlendMode, Document, Layer, LayerMask,
-    Plane, PsdRect, Sample, Samples,
+    layer_pixel_locked, layer_transparency_locked, BitDepth, BlendMode, Coverage, Document, Layer,
+    LayerMask, Plane, PsdRect, Sample, Samples,
 };
 use pictura_filters::FilterError;
 use rayon::prelude::*;
@@ -334,7 +334,7 @@ impl Store for f32 {
 #[derive(Clone, Copy)]
 struct Pass<'a> {
     params: &'a ApplyImageParams,
-    selection: Option<&'a LayerMask>,
+    selection: Option<&'a Coverage>,
     target: ApplyImageTarget,
     rect: PsdRect,
     clip: PsdRect,
@@ -598,7 +598,7 @@ fn apply_channels(layer: &mut Layer, pass: Pass) -> Result<(), FilterError> {
 pub fn apply_image_region(
     layer: &mut Layer,
     params: &ApplyImageParams,
-    selection: Option<&LayerMask>,
+    selection: Option<&Coverage>,
     region: PsdRect,
     target: ApplyImageTarget,
 ) -> Result<(), FilterError> {

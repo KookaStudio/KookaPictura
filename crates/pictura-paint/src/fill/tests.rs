@@ -487,3 +487,5 @@ fn a_run_of_equal_pixels_blends_like_each_pixel_alone() {
         }
     }
 }
+
+mod coverage;

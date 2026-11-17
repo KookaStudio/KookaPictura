@@ -1,13 +1,6 @@
 use super::*;
 
-/// A document-space coverage clip: the active selection. The stroke's layer
-/// rect is in document coordinates, so the stencil maps its local index into
-/// the clip directly.
-#[derive(Clone, Debug)]
-pub struct CoverageClip {
-    pub data: pictura_core::Plane<u8>,
-    pub width: u32,
-}
+pub use pictura_core::Coverage;
 
 /// A stroke's per-pixel inputs, resolved once per sample so a dab's loop walks
 /// neither the layer path nor the channel list and re-derives no profile.
@@ -15,7 +8,7 @@ pub(super) struct Stencil<'a> {
     pub(super) base: [Option<&'a [u8]>; 4],
     pub(super) locked: bool,
     pub(super) inverse_grayscale: bool,
-    pub(super) coverage_clip: Option<&'a CoverageClip>,
+    pub(super) coverage_clip: Option<&'a Coverage>,
     pub(super) cfg: StrokeConfig,
     /// Clone Stamp / Pattern Stamp / History Brush: the colour at each pixel
     /// comes from the source instead of `paint`.
@@ -44,13 +37,7 @@ impl Stencil<'_> {
                 let w = self.rect.width().max(1) as usize;
                 let dx = self.rect.left + (i % w) as i32;
                 let dy = self.rect.top + (i / w) as i32;
-                if dx < 0 || dy < 0 {
-                    0
-                } else {
-                    c.data
-                        .sample(dy as usize * c.width as usize + dx as usize)
-                        .unwrap_or(0)
-                }
+                c.sample(dx, dy)
             }
         };
         let cov = coverage as f32 / 255.0 * clip as f32 / 255.0;
@@ -106,7 +93,7 @@ impl Stencil<'_> {
 
 /// Apply [`mask_dab_output`] to every rect a per-dab sample changed.
 pub(super) fn mask_dabs(
-    clip: Option<&CoverageClip>,
+    clip: Option<&Coverage>,
     stroke_rect: PsdRect,
     doc: &Document,
     layer_path: &[usize],
@@ -128,7 +115,7 @@ pub(super) fn mask_dabs(
 /// cover, blending partial coverage between the pre-dab layer pixel and the
 /// engine's result.
 pub(super) fn mask_dab_output(
-    clip: &CoverageClip,
+    clip: &Coverage,
     stroke_rect: PsdRect,
     layer: &Layer,
     pixels: &mut crate::healing::RgbaImage,
@@ -139,13 +126,7 @@ pub(super) fn mask_dab_output(
         for x in rect.left.max(0)..rect.right {
             let dx = stroke_rect.left + x;
             let dy = stroke_rect.top + y;
-            let coverage = if dx < 0 || dy < 0 {
-                0
-            } else {
-                clip.data
-                    .sample(dy as usize * clip.width as usize + dx as usize)
-                    .unwrap_or(0)
-            };
+            let coverage = clip.sample(dx, dy);
             if coverage == 255 {
                 continue;
             }
@@ -172,7 +153,7 @@ pub(super) fn mask_dab_output(
 
 impl Stroke {
     /// Constrain dab coverage with a document-space selection clip.
-    pub fn set_coverage_clip(&mut self, clip: Option<CoverageClip>) {
+    pub fn set_coverage_clip(&mut self, clip: Option<Coverage>) {
         self.coverage_clip = clip;
     }
     /// Blend a grayscale coverage plane in its inverted editing convention.
