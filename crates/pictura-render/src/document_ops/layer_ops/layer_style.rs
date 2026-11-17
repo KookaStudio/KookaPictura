@@ -691,6 +691,20 @@ pub fn create_style_layers(doc: &mut Document, path: &str) -> Vec<String> {
     create_style_layers_with_base(doc, path).0
 }
 
+/// The plain effect name when it is free, otherwise the next numbered name.
+fn style_layer_name(doc: &Document, base: &str) -> String {
+    fn taken(layers: &[pictura_core::Layer], name: &str) -> bool {
+        layers
+            .iter()
+            .any(|layer| layer.name == name || taken(&layer.children, name))
+    }
+    if taken(&doc.layers, base) {
+        super::create::next_layer_name(doc, base)
+    } else {
+        base.to_string()
+    }
+}
+
 /// As [`create_style_layers`], also returning the base layer's path after the
 /// insertions shifted its index.
 pub fn create_style_layers_with_base(doc: &mut Document, path: &str) -> (Vec<String>, String) {
@@ -725,7 +739,7 @@ pub fn create_style_layers_with_base(doc: &mut Document, path: &str) -> (Vec<Str
     let mut inserted_above = 0usize;
     for pass in passes {
         let is_below = pass.below;
-        let name = super::create::next_layer_name(doc, pass.name);
+        let name = style_layer_name(doc, pass.name);
         let node = pass_layer(&name, pass, opacity, visible);
         let at = if is_below {
             let at = below_at;

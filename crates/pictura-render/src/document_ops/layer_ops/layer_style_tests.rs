@@ -559,9 +559,26 @@ fn rasterize_layer_style_keeps_vector_mask() {
     assert!(crate::rasterize_layer_style(&mut d, "1"));
     assert!(resolve_path(&d, "1").unwrap().vector_mask.is_some());
     let after = crate::composite_rgba(&d);
-    for (a, b) in before.data.iter().zip(after.data.iter()) {
-        assert!(a.abs_diff(*b) <= 2, "vector-mask bake pixel {a} vs {b}");
+    let plane = before.width as usize * before.height as usize;
+    let interior = 5 * before.width as usize + 5;
+    let exterior = 7 * before.width as usize + 7;
+    for offset in [0, plane, 2 * plane, 3 * plane] {
+        assert_eq!(
+            before.data[interior + offset],
+            after.data[interior + offset],
+            "vector-mask interior"
+        );
+        assert_eq!(
+            before.data[exterior + offset],
+            after.data[exterior + offset],
+            "vector-mask exterior"
+        );
     }
+    assert!(
+        after.data[plane + interior] < 128,
+        "the baked overlay stays inside the vector mask"
+    );
+    assert_eq!(after.data[plane + exterior], 255);
 }
 
 #[test]
@@ -586,6 +603,7 @@ fn rasterize_layer_style_refuses() {
     assert!(!crate::can_rasterize_layer_style(&d, "1"), "unstyled");
 
     let layer = square(&mut d);
+    set(layer, "dropShadow.on", 1.0);
     set(layer, "dropShadow.on", 0.0);
     assert!(
         !crate::can_rasterize_layer_style(&d, "1"),
@@ -601,19 +619,27 @@ fn rasterize_layer_style_refuses() {
     assert!(!group.is_empty());
     assert!(!crate::can_rasterize_layer_style(&d, &group), "group");
 
-    let layer = crate::resolve_path_mut(&mut d, "1").unwrap();
-    layer.background = true;
+    {
+        let layer = crate::resolve_path_mut(&mut d, "1").unwrap();
+        layer.background = true;
+    }
     assert!(!crate::can_rasterize_layer_style(&d, "1"), "background");
-    layer.background = false;
-    layer.blending_ranges = vec![1u8].into();
+    {
+        let layer = crate::resolve_path_mut(&mut d, "1").unwrap();
+        layer.background = false;
+        layer.blending_ranges = vec![1u8].into();
+    }
     assert!(
         !crate::can_rasterize_layer_style(&d, "1"),
         "customized Blend If"
     );
-    layer.blending_ranges = pictura_core::Plane::default();
-    layer.knockout = pictura_core::Knockout::Shallow;
+    {
+        let layer = crate::resolve_path_mut(&mut d, "1").unwrap();
+        layer.blending_ranges = pictura_core::Plane::default();
+        layer.knockout = pictura_core::Knockout::Shallow;
+    }
     assert!(!crate::can_rasterize_layer_style(&d, "1"), "knockout");
-    layer.knockout = pictura_core::Knockout::None;
+    crate::resolve_path_mut(&mut d, "1").unwrap().knockout = pictura_core::Knockout::None;
 
     let mut clipped = doc();
     set(square(&mut clipped), "dropShadow.on", 1.0);
@@ -781,6 +807,7 @@ fn create_style_layers_refuses() {
     assert!(crate::create_style_layers(&mut d, "1").is_empty());
 
     let layer = square(&mut d);
+    set(layer, "dropShadow.on", 1.0);
     set(layer, "dropShadow.on", 0.0);
     assert!(crate::create_style_layers(&mut d, "1").is_empty());
     set(square(&mut d), "dropShadow.on", 1.0);

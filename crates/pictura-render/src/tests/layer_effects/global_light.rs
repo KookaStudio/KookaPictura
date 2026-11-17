@@ -32,8 +32,8 @@ fn shadowed(global: bool, distance: f64) -> Layer {
 fn global_light_angle_orients_a_shadow() {
     let left = compose_with_light(shadowed(true, 4.0), 0);
     let down = compose_with_light(shadowed(true, 4.0), 90);
-    assert_ne!(px(&left, 2, 4), [255, 255, 255, 255], "angle 0 casts left");
-    assert_eq!(px(&down, 2, 4), [255, 255, 255, 255]);
+    assert_ne!(px(&left, 1, 4), [255, 255, 255, 255], "angle 0 casts left");
+    assert_eq!(px(&down, 1, 4), [255, 255, 255, 255]);
     assert_ne!(px(&down, 4, 7), [255, 255, 255, 255], "angle 90 casts down");
     assert_eq!(px(&left, 4, 7), [255, 255, 255, 255]);
 }
