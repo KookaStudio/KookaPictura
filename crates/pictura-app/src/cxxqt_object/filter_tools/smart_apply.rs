@@ -242,7 +242,7 @@ pub(in crate::cxxqt_object) fn smart_preview(
     let layer = pictura_render::resolve_path_mut(rust.session.doc.as_mut()?, &path)?;
     let baseline = PreviewBaseline::Layer(Box::new(layer.clone()));
     layer.smart_object()?;
-    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+    pictura_codec::edit_layer(layer, |parts| {
         let so = parts.smart_object.as_mut().expect("checked");
         if let Some(index) = editing {
             so.smart_filters.truncate(index);

@@ -8,7 +8,7 @@ use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString, QStringList};
 use pictura_core::{
-    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LockFlags, PsdRect,
+    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, LockFlags, PsdRect,
 };
 use pictura_render::{CompositeScope, DocumentComposite};
 use std::time::Instant;

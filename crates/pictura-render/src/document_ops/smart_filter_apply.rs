@@ -54,7 +54,7 @@ pub fn apply_smart_filter(
     };
     if so.filter_mask.is_none() {
         if let Some(mask) = selection {
-            pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            pictura_codec::edit_layer(layer, |parts| {
                 parts.smart_object.as_mut().expect("checked").filter_mask = Some(mask);
             });
             let _ = pictura_codec::set_filter_mask_enabled(layer, true);

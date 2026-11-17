@@ -609,7 +609,7 @@ pub fn background_from_layer(doc: &mut Document, path: &str) -> bool {
     if promoted {
         if let Some(layer) = resolve_path_mut(doc, path) {
             pictura_core::layer_comp::clear_layer_id(layer);
-            pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            pictura_codec::edit_layer(layer, |parts| {
                 parts.extra_blocks.retain(|block| block.key != *b"shmd")
             });
         }

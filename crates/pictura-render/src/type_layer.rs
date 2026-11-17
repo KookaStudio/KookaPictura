@@ -612,7 +612,7 @@ pub fn replace_type_layer(doc: &mut Document, path: &str, spec: &TypeSpec) -> bo
         key: *b"TySh",
         data: pictura_codec::encode_type_tool(&tool).into(),
     };
-    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+    pictura_codec::edit_layer(layer, |parts| {
         match parts.extra_blocks.iter_mut().find(|b| &b.key == b"TySh") {
             Some(existing) => *existing = block,
             None => parts.extra_blocks.push(block),

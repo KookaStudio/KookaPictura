@@ -136,7 +136,7 @@ pub fn convert_to_smart_object(doc: &mut Document, path: &str) -> bool {
         super::create::release_background(layer);
         layer.name = name.clone();
     }
-    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+    pictura_codec::edit_layer(layer, |parts| {
         parts.smart_object = Some(
             {
                 let mut so = SmartObject::default();
@@ -280,12 +280,12 @@ pub fn replace_smart_object_contents(
     {
         let layer = resolve_path_mut(doc, path).expect("can_replace_smart_object_contents checked");
         layer.channels_mut().clear();
-        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        pictura_codec::edit_layer(layer, |parts| {
             parts
                 .extra_blocks
                 .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd"))
         });
-        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        pictura_codec::edit_layer(layer, |parts| {
             let so = parts.smart_object.as_mut().expect("checked");
             so.set_payload(bytes.to_vec());
             so.filename = filename.to_string();
@@ -506,7 +506,7 @@ pub fn rasterize_smart_object(doc: &mut Document, path: &str) -> bool {
         if let Some(channels) = rendered {
             layer.set_channels(channels);
         }
-        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        pictura_codec::edit_layer(layer, |parts| {
             parts.extra_blocks.retain(|block| {
                 !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd" | b"PiSt")
             })

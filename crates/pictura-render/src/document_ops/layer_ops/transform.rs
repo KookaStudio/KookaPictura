@@ -533,7 +533,7 @@ pub(super) fn write_layer(
         layer.mask = Some(mask);
     }
     if prepared.materialize {
-        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        pictura_codec::edit_layer(layer, |parts| {
             parts
                 .extra_blocks
                 .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd"))

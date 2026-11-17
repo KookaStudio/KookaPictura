@@ -1,6 +1,6 @@
 //! Layer-effect pass dispatch: replay a cached `EffectPass` on the GPU.
 
-use pictura_core::{Document, Layer};
+use pictura_core::Document;
 
 use super::backend::{Gpu, SrcLayout};
 use super::NO_ADJ;

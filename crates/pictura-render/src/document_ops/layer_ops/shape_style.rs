@@ -70,7 +70,7 @@ pub fn set_shape_fill(layer: &mut Layer, fill: Option<[u8; 3]>) -> bool {
     }
     match fill {
         Some(color) => {
-            pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            pictura_codec::edit_layer(layer, |parts| {
                 parts.adjustment = Some(crate::encode_solid_color_fill(color))
             });
             layer.fill = 255;
@@ -172,7 +172,7 @@ pub fn set_shape_stroke(layer: &mut Layer, stroke: Option<&ShapeStroke>) -> bool
     let has_effects = items
         .iter()
         .any(|(k, _)| !matches!(k.as_slice(), b"Scl " | b"masterFXSwitch"));
-    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+    pictura_codec::edit_layer(layer, |parts| {
         parts.extra_blocks.retain(|b| &b.key != b"lfx2")
     });
     if has_effects {
@@ -184,7 +184,7 @@ pub fn set_shape_stroke(layer: &mut Layer, stroke: Option<&ShapeStroke>) -> bool
                 .map(|(k, v)| (k.as_slice(), v.clone()))
                 .collect(),
         )));
-        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        pictura_codec::edit_layer(layer, |parts| {
             parts.extra_blocks.push(pictura_core::LayerBlock {
                 key: *b"lfx2",
                 data: data.into(),

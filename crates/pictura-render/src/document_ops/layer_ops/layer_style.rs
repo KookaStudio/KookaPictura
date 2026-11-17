@@ -331,7 +331,7 @@ fn write_lfx2(layer: &mut Layer, items: Vec<(Vec<u8>, DescValue)>) {
         .iter()
         .any(|(k, _)| !matches!(k.as_slice(), b"Scl " | b"masterFXSwitch"));
     let at = layer.extra_blocks().iter().position(|b| &b.key == b"lfx2");
-    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+    pictura_codec::edit_layer(layer, |parts| {
         parts.extra_blocks.retain(|b| &b.key != b"lfx2")
     });
     if !has_effects {
@@ -799,7 +799,7 @@ pub fn create_style_layers_with_base(doc: &mut Document, path: &str) -> (Vec<Str
         }
     }
     if let Some(layer) = resolve_path_mut(doc, &base) {
-        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        pictura_codec::edit_layer(layer, |parts| {
             parts
                 .extra_blocks
                 .retain(|block| !matches!(&block.key, b"lfx2" | b"lrFX"));

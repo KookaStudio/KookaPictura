@@ -269,7 +269,7 @@ fn shift_into_region(layer: &mut pictura_core::Layer, dx: i32, dy: i32) {
         }
         vector.rows = Default::default();
     }
-    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+    pictura_codec::edit_layer(layer, |parts| {
         if let Some(tool) = parts.type_tool.as_mut() {
             if let Some(path) = tool.path.as_mut() {
                 path.subpath.translate(f64::from(dx), f64::from(dy));

@@ -128,7 +128,7 @@ pub(super) fn edit_adjustment(
         let Some(next) = layer.adjustment().and_then(edit) else {
             return false;
         };
-        pictura_codec::edit_layer(layer.as_mut(), |parts| parts.adjustment = Some(next));
+        pictura_codec::edit_layer(layer, |parts| parts.adjustment = Some(next));
     }
     if let Some(rect) = view.as_mut().rust_mut().present_display_preview() {
         view.as_mut().present(Presentation {

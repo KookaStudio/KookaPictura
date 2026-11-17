@@ -131,9 +131,14 @@ fn fill_content_retains_each_parameter_set() {
 
 #[test]
 fn incompatible_content_transitions_leave_the_layer_unchanged() {
-    let mut layer = Layer::default();
-    layer.name = "pixel".into();
-    layer.opacity = 128;
+    let mut layer = Layer::from_parts(
+        LayerParts {
+            name: "pixel".into(),
+            opacity: 128,
+            ..Default::default()
+        },
+        LayerContent::Pixel,
+    );
     let before = layer.clone();
     assert!(!layer.set_fill_content(FillContent::Solid([1, 2, 3, 255])));
     assert_eq!(layer, before);

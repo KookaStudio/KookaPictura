@@ -100,7 +100,7 @@ pub fn delete_smart_filter_mask(doc: &mut Document, path: &str) -> bool {
     let Some(layer) = resolve_path_mut(doc, path) else {
         return false;
     };
-    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+    pictura_codec::edit_layer(layer, |parts| {
         if let Some(so) = parts.smart_object.as_mut() {
             so.filter_mask = None;
         }

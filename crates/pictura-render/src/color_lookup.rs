@@ -22,20 +22,6 @@ use crate::composite::desc_item;
 #[cfg(test)]
 use pictura_codec::layer_content::color_lookup::decode_color_lookup;
 
-/// `clrL`: a payload whose 2-byte version is not 1, whose descriptor does not
-/// parse, or whose `lookupType` is absent is `None`, never a panic.
-
-/// A `lookupType` enum value, or `None` when it is not one this engine knows.
-
-/// The payload of a `tdta` raw value: `[4-byte ostype][u32 length][bytes]`.
-
-/// Build a `clrL` block: version 1, a `3DLUT` descriptor embedding `file_data`
-/// as a `.CUBE`, `rgbOrder` data/table order, dither off. `decode_adjustment` on
-/// the output parses the `.CUBE` back when it is valid.
-
-/// A `LUT_3D_SIZE 2` identity `.cube`, so an authored Color Lookup layer is an
-/// exact no-op.
-
 /// The [`COLOR_LOOKUP_PRESETS`] index of `d`'s stored `Nm  ` name, or `None`
 /// when `d` does not carry a preset name (a hand-authored file, or a block that
 /// is not a Color Lookup).

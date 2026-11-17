@@ -136,7 +136,7 @@ impl qobject::PictureView {
             // source so the fit and later scale keep the original pixels.
             if let Some(layer) = pictura_render::resolve_path_mut(doc, &path) {
                 layer.channels_mut().clear();
-                pictura_codec::edit_layer(layer.as_mut(), |parts| parts.raw_channels.clear());
+                pictura_codec::edit_layer(layer, |parts| parts.raw_channels.clear());
                 layer.source_channels = None;
             }
             pictura_render::fit_smart_object_to_canvas(doc, &path);

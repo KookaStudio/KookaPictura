@@ -201,7 +201,7 @@ pub fn rasterize_shape(doc: &mut Document, path: &str) -> bool {
     pictura_codec::retire_layer_content(layer);
     layer.vector_mask = None;
     layer.pixel_data_irrelevant = false;
-    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+    pictura_codec::edit_layer(layer, |parts| {
         parts.extra_blocks.retain(|block| {
             let key = block.key.as_slice();
             key != b"vmsk"

@@ -12,7 +12,7 @@ use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 use ffi::{PaintDynamics, PaintTip};
-use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, PsdRect};
+use pictura_core::{BitDepth, Channel, ColorMode, Document, PsdRect};
 use pictura_paint::art_history::{ArtHistoryOptions, ArtStyle, STYLE_NAMES};
 use pictura_paint::bristle::{BristleShape, BristleTip};
 use pictura_paint::bucket::{self, BucketSource};

@@ -50,6 +50,8 @@ use std::fmt;
 use std::sync::OnceLock;
 
 use pictura_adjust::Adjustment;
+#[cfg(test)]
+use pictura_core::Layer;
 use pictura_core::{
     BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, LockFlags, PixelBuffer, PsdRect,
 };

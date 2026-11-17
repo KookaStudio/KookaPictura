@@ -8,7 +8,7 @@ use crate::cxxqt_object::{
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QImageFormat};
-use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, LockFlags, PsdRect};
+use pictura_core::{BitDepth, Channel, ColorMode, Document, LockFlags, PsdRect};
 use pictura_paint::{Stroke, StrokeConfig, StrokeSample};
 use pictura_select::{
     quick_mask::{overlay, working_value},

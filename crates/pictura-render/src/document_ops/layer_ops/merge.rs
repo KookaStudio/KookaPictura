@@ -502,7 +502,7 @@ fn count_layers(layers: &[Layer]) -> usize {
 fn child_count(doc: &Document, parent: &[usize]) -> Option<usize> {
     let mut layers: &[Layer] = &doc.layers;
     for &index in parent {
-        layers = &layers.get(index)?.children();
+        layers = layers.get(index)?.children();
     }
     Some(layers.len())
 }

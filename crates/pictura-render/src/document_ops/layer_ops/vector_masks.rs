@@ -58,13 +58,13 @@ fn set_vector_mask_block(layer: &mut Layer, key: &[u8; 4], data: Option<Vec<u8>>
     let slot = layer.extra_blocks().iter().position(|b| &b.key == key);
     match (slot, data) {
         (Some(i), Some(data)) => {
-            pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            pictura_codec::edit_layer(layer, |parts| {
                 parts.extra_blocks[i].data = data.into();
             });
             true
         }
         (None, Some(data)) => {
-            pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            pictura_codec::edit_layer(layer, |parts| {
                 parts.extra_blocks.push(LayerBlock {
                     key: *key,
                     data: data.into(),
@@ -73,7 +73,7 @@ fn set_vector_mask_block(layer: &mut Layer, key: &[u8; 4], data: Option<Vec<u8>>
             true
         }
         (Some(i), None) => {
-            pictura_codec::edit_layer(layer.as_mut(), |parts| parts.extra_blocks.remove(i));
+            pictura_codec::edit_layer(layer, |parts| parts.extra_blocks.remove(i));
             true
         }
         (None, None) => false,
@@ -82,7 +82,7 @@ fn set_vector_mask_block(layer: &mut Layer, key: &[u8; 4], data: Option<Vec<u8>>
 
 /// Remove every vector-mask block, so no key restores the mask on reload.
 fn remove_vector_mask_blocks(layer: &mut Layer) {
-    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+    pictura_codec::edit_layer(layer, |parts| {
         parts
             .extra_blocks
             .retain(|block| &block.key != VMSK && &block.key != VSMS)
@@ -104,7 +104,7 @@ fn patch_flag(layer: &mut Layer, bit: u32, on: bool, width: u32, height: u32) ->
     if updated == flags {
         return false;
     }
-    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+    pictura_codec::edit_layer(layer, |parts| {
         let data = &mut parts.extra_blocks[index].data;
         write_flags(data, updated);
         let view = pictura_codec::decode_vector_mask(data, width, height);

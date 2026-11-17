@@ -348,10 +348,10 @@ impl PictureViewRust {
                 pictura_render::resolve_path(doc, &target)
                     .and_then(|layer| pictura_render::layer_shape_paths(layer, width, height))
                     .map(
-                        |subpaths| super::super::document_session::PathRestore::pictura_codec::layer_from_parts(pictura_core::LayerParts {
+                        |subpaths| super::super::document_session::PathRestore::Layer {
                             target,
                             subpaths,
-                        }),
+                        },
                     )
             });
             match backup {

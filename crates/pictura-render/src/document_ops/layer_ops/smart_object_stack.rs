@@ -71,7 +71,7 @@ pub fn set_smart_object_stack_mode(
     let Some(layer) = resolve_path_mut(doc, path) else {
         return false;
     };
-    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+    pictura_codec::edit_layer(layer, |parts| {
         parts.smart_object.as_mut().expect("checked").stack_mode = mode
     });
     true

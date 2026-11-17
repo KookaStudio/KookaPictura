@@ -47,12 +47,12 @@ pub fn copy_layer_style(layer: &Layer) -> Option<LayerStyle> {
 pub fn paste_layer_style(doc: &mut Document, paths: &[&str], style: &LayerStyle) -> usize {
     edit_styles(doc, paths, |layer| {
         let before = layer.clone();
-        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        pictura_codec::edit_layer(layer, |parts| {
             parts
                 .extra_blocks
                 .retain(|b| !matches!(&b.key, b"lfx2" | b"lrFX"));
         });
-        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        pictura_codec::edit_layer(layer, |parts| {
             parts.extra_blocks.extend(style.blocks.iter().cloned());
         });
         layer.blend = style.blend;
@@ -76,7 +76,7 @@ pub fn paste_layer_style(doc: &mut Document, paths: &[&str], style: &LayerStyle)
 pub fn clear_layer_style(doc: &mut Document, paths: &[&str]) -> usize {
     edit_styles(doc, paths, |layer| {
         let before = layer.extra_blocks().len();
-        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        pictura_codec::edit_layer(layer, |parts| {
             parts
                 .extra_blocks
                 .retain(|b| !matches!(&b.key, b"lfx2" | b"lrFX"));

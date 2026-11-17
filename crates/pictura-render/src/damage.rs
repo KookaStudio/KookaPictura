@@ -53,7 +53,7 @@ pub fn content_influence(doc: &Document, path: &str) -> Option<PsdRect> {
     let layer = resolve_path(doc, path)?;
     let index: usize = path.rsplit('/').next()?.parse().ok()?;
     let siblings: &[Layer] = match parent_path(path) {
-        Some(parent) => &resolve_path(doc, parent)?.children(),
+        Some(parent) => resolve_path(doc, parent)?.children(),
         None => &doc.layers,
     };
     // A clipped member is confined to its base's rendered alpha, so the base's

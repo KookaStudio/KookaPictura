@@ -292,14 +292,14 @@ fn composite_layer_dispatch(
     canvas.effect_scale = effect_scale * ctx.opacity();
     crate::layer_effects::composite_layer_effects(canvas, passes);
     canvas.effect_scale = effect_scale;
-    let content_body = match &node.body {
+    let content_body = matches!(
+        &node.body,
         Body::Pixels
-        | Body::SmartFiltered { .. }
-        | Body::SmartSource { .. }
-        | Body::TypeSource { .. } => true,
-        Body::Fill(_) => true,
-        _ => false,
-    };
+            | Body::SmartFiltered { .. }
+            | Body::SmartSource { .. }
+            | Body::TypeSource { .. }
+            | Body::Fill(_)
+    );
     let fold_group = layer.blend_interior
         && !layer.is_group()
         && !canvas.skip_effects
@@ -469,7 +469,7 @@ fn composite_layer_dispatch(
     canvas.effect_scale = effect_scale;
 }
 
-pub(crate) use pictura_codec::layer_content::basic::{be_u16, desc_item};
+pub(crate) use pictura_codec::layer_content::basic::desc_item;
 
 pub(crate) fn blend_if_factor(view: Option<&BlendIf>, cs: [f32; 3], backdrop: [f32; 3]) -> f32 {
     let Some(view) = view else {
