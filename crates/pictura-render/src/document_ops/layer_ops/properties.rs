@@ -295,6 +295,8 @@ pub fn duplicate_paths(doc: &mut Document, paths: &[&str]) -> Vec<String> {
         .filter_map(|(segments, path)| {
             let mut copy = resolve_path(doc, &path)?.clone();
             copy.name = format!("{} copy", copy.name);
+            pictura_core::layer_comp::clear_layer_id(&mut copy);
+            copy.extra_blocks.retain(|block| block.key != *b"shmd");
             if copy.background {
                 release_background(&mut copy);
             }

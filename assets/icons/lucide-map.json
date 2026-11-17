@@ -1186,6 +1186,26 @@
       "slug": "layers",
       "match": "exact"
     },
+    "window.panels.layer.comps": {
+      "kind": "lucide",
+      "slug": "layers",
+      "match": "exact"
+    },
+    "file.scripts.layer.comps.to.files": {
+      "kind": "lucide",
+      "slug": "save-all",
+      "match": "good"
+    },
+    "file.scripts.layer.comps.to.pdf": {
+      "kind": "lucide",
+      "slug": "save-all",
+      "match": "good"
+    },
+    "layercomps.warning": {
+      "kind": "custom",
+      "match": "custom",
+      "note": "Lucide triangle-alert shape for the cannot-be-restored caution"
+    },
     "window.panels.navigator": {
       "kind": "lucide",
       "slug": "ship-wheel",

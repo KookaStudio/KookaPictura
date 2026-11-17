@@ -361,21 +361,36 @@ pub fn export_layer_file(
     };
     let mut scratch = scratch_document(doc, layer, rust.gpu_compute);
     delay();
-    let path = path.to_string();
-    match format.to_string().to_ascii_uppercase().as_str() {
+    write_document_file(
+        &mut scratch,
+        &format.to_string(),
+        include_icc,
+        &path.to_string(),
+    )
+}
+
+/// Write a fully prepared document in the selected export format. Shared by
+/// Export Layers and Layer Comps to Files so both use one save edge.
+pub(crate) fn write_document_file(
+    doc: &mut Document,
+    format: &str,
+    include_icc: bool,
+    path: &str,
+) -> bool {
+    match format.to_ascii_uppercase().as_str() {
         "PSD" => {
-            apply_icc(&mut scratch, include_icc);
-            match pictura_codec::write_psd(&scratch) {
+            apply_icc(doc, include_icc);
+            match pictura_codec::write_psd(doc) {
                 Ok(bytes) => {
-                    super::super::helpers::safe_io::write_atomically(&path, &bytes, false).is_ok()
+                    super::super::helpers::safe_io::write_atomically(path, &bytes, false).is_ok()
                 }
                 Err(_) => false,
             }
         }
-        "JPEG" | "JPG" => raster_file(&scratch, "JPG", include_icc, &path),
-        "TIFF" | "TIF" => raster_file(&scratch, "TIF", include_icc, &path),
-        "BMP" => raster_file(&scratch, "BMP", false, &path),
-        "PDF" => pdf_file(&scratch, include_icc, &path),
+        "JPEG" | "JPG" => raster_file(doc, "JPG", include_icc, path),
+        "TIFF" | "TIF" => raster_file(doc, "TIF", include_icc, path),
+        "BMP" => raster_file(doc, "BMP", false, path),
+        "PDF" => pdf_file(doc, include_icc, path),
         _ => false,
     }
 }

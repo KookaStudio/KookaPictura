@@ -41,6 +41,7 @@ class HistogramPanel;
 class HistoryPanel;
 class ImageView;
 class InfoPanel;
+class LayerCompsPanel;
 class LayersPanel;
 class NavigatorPanel;
 class NotesPanel;
@@ -116,6 +117,7 @@ public:
     AdjustmentsPanel* adjustmentsPanel() const { return adjustmentsPanel_; }
     ChannelsPanel* channelsPanel() const { return channelsPanel_; }
     PathsPanel* pathsPanel() const { return pathsPanel_; }
+    LayerCompsPanel* layerCompsPanel() const { return layerCompsPanel_; }
     ActionsPanel* actionsPanel() const { return actionsPanel_; }
     BrushPanel* brushPanel() const { return brushPanel_; }
     CloneSourcePanel* cloneSourcePanel() const { return cloneSourcePanel_; }
@@ -282,6 +284,7 @@ private:
     AdjustmentsPanel* adjustmentsPanel_ = nullptr;
     ChannelsPanel* channelsPanel_ = nullptr;
     PathsPanel* pathsPanel_ = nullptr;
+    LayerCompsPanel* layerCompsPanel_ = nullptr;
     ActionsPanel* actionsPanel_ = nullptr;
     PlaceholderPanel* stylesPanel_ = nullptr;
     BrushPanel* brushPanel_ = nullptr;

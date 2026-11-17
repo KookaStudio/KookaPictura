@@ -97,6 +97,10 @@
     <file>icons/layer.distributeVerticalCenter.svg</file>
     <file>icons/layers.clipMask.svg</file>
     <file>icons/layers.delete.svg</file>
+    <file>icons/window.panels.layer.comps.svg</file>
+    <file>icons/file.scripts.layer.comps.to.files.svg</file>
+    <file>icons/file.scripts.layer.comps.to.pdf.svg</file>
+    <file>icons/layercomps.warning.svg</file>
     <file>icons/layers.disclosureDown.svg</file>
     <file>icons/layers.disclosureRight.svg</file>
     <file>icons/layers.eyeOff.svg</file>

@@ -8,6 +8,9 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/api/filters_bridge.h
     crates/pictura-app/cpp/api/history_api.cpp
     crates/pictura-app/cpp/api/history_api.h
+    crates/pictura-app/cpp/api/layer_comps_api.cpp
+    crates/pictura-app/cpp/api/layer_comps_api.h
+    crates/pictura-app/cpp/api/layer_comps_bridge.h
     crates/pictura-app/cpp/api/layers_api.cpp
     crates/pictura-app/cpp/api/layers_api.h
     crates/pictura-app/cpp/api/layers_bridge.h

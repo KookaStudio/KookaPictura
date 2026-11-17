@@ -888,3 +888,46 @@ fn pdf_jpeg_requests_the_quality() {
     assert_eq!(&data[2..10], b"FAKEJPEG");
     assert_eq!(data[10..], [3, Quality::Low.encoder_quality()]);
 }
+
+#[test]
+fn multi_page_pdf_writes_one_page_per_document() {
+    let first = rgb_doc(32, 24, 72.0, None);
+    let second = rgb_doc(24, 16, 72.0, None);
+    let pages = [(&first, &first.composite), (&second, &second.composite)];
+    let pdf = write_pdf_pages(&pages, &PdfOptions::default(), &env()).expect("writes");
+    let text = text(&pdf);
+    assert!(text.contains("/Count 2"));
+    assert_eq!(text.matches("/Type /Page/").count(), 2);
+}
+
+#[test]
+fn multi_page_pdf_keeps_page_size() {
+    let first = rgb_doc(600, 300, 300.0, None);
+    let second = rgb_doc(300, 150, 300.0, None);
+    let pages = [(&first, &first.composite), (&second, &second.composite)];
+    let pdf = write_pdf_pages(&pages, &PdfOptions::default(), &env()).expect("writes");
+    let text = text(&pdf);
+    assert!(text.contains("144"));
+    assert!(text.contains("72"));
+}
+
+#[test]
+fn multi_page_pdf_cross_page_references_are_valid() {
+    let first = rgb_doc(8, 8, 72.0, None);
+    let second = rgb_doc(8, 8, 72.0, None);
+    let pages = [(&first, &first.composite), (&second, &second.composite)];
+    let pdf = write_pdf_pages(&pages, &PdfOptions::default(), &env()).expect("writes");
+    let text = text(&pdf);
+    assert!(text.contains("/Kids"));
+    assert!(text.contains("/Count 2"));
+    assert!(text.contains("trailer"));
+}
+
+#[test]
+fn single_page_pdf_output_is_unchanged() {
+    let doc = rgb_doc(16, 16, 72.0, None);
+    let pdf = write(&doc, &PdfOptions::default());
+    let text = text(&pdf);
+    assert!(text.starts_with("%PDF-"));
+    assert!(text.contains("/Count 1"));
+}

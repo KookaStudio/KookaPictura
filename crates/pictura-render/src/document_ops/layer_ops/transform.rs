@@ -507,6 +507,7 @@ pub(super) fn write_layer(
         }
     }
     let layer = resolve_path_mut(doc, path).expect("resolved by prepare_layer");
+    let old_rect = layer.rect;
     layer.channels = out.channels;
     layer.rect = PsdRect {
         top: out.dest.1,
@@ -514,6 +515,9 @@ pub(super) fn write_layer(
         bottom: out.dest.3,
         right: out.dest.2,
     };
+    let anchor_dx = layer.rect.left - old_rect.left;
+    let anchor_dy = layer.rect.top - old_rect.top;
+    pictura_core::layer_comp::bump_layer_anchor(layer, anchor_dx, anchor_dy);
     // A raw channel stream carries no position, so a pure integer translation
     // (Free Transform's move handle) keeps it and only re-anchors the store rect.
     if pure_translate {

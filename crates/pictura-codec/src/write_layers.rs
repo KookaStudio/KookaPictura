@@ -526,6 +526,7 @@ pub(crate) fn write_layer_info(
             doc.width,
             doc.height,
             psb,
+            &doc.layer_comps,
         );
     }
     for channels in &encoded {
@@ -546,6 +547,7 @@ fn write_record(
     doc_width: u32,
     doc_height: u32,
     psb: bool,
+    comps: &pictura_core::layer_comp::LayerCompStore,
 ) {
     match record.layer {
         Some(layer) => {
@@ -594,9 +596,9 @@ fn write_record(
                 layer,
                 record.name,
                 record.section,
-                doc_width,
-                doc_height,
+                (doc_width, doc_height),
                 psb,
+                comps,
             );
             out.extend_from_slice(&(extra.len() as u32).to_be_bytes());
             out.extend_from_slice(&extra);
@@ -617,9 +619,9 @@ fn write_record(
                 &empty_layer(record.name),
                 record.name,
                 record.section,
-                doc_width,
-                doc_height,
+                (doc_width, doc_height),
                 psb,
+                comps,
             );
             out.extend_from_slice(&(extra.len() as u32).to_be_bytes());
             out.extend_from_slice(&extra);
@@ -659,10 +661,11 @@ fn write_extra(
     layer: &Layer,
     name: &str,
     section: u32,
-    doc_width: u32,
-    doc_height: u32,
+    doc_size: (u32, u32),
     psb: bool,
+    comps: &pictura_core::layer_comp::LayerCompStore,
 ) {
+    let (doc_width, doc_height) = doc_size;
     crate::mask_params::write_record(out, layer);
     crate::advanced_blending::write_ranges(out, layer);
     write_pascal(out, name);
@@ -705,8 +708,11 @@ fn write_extra(
     let stack_mode = layer.smart_object.as_ref().and_then(|so| so.stack_mode);
     // Unmodeled tagged blocks, re-emitted in encounter order; a preserved
     // `PiSt` yields to the modelled marker, and at most one preserved marker is
-    // re-emitted when no mode is modelled.
+    // re-emitted when no mode is modelled. A dirty comp store replaces the
+    // layer's `shmd` block with the current cmls state.
     let mut preserved_stack_marker = false;
+    let rewrite_shmd = crate::layer_comps::rewrites_shmd(comps);
+    let mut wrote_shmd = false;
     for block in &layer.extra_blocks {
         if block.key == crate::stack_marker::KEY {
             if stack_mode.is_some() || preserved_stack_marker {
@@ -714,7 +720,26 @@ fn write_extra(
             }
             preserved_stack_marker = true;
         }
-        write_tag(out, &block.key, &block.data, psb);
+        if block.key == *b"shmd" && rewrite_shmd {
+            wrote_shmd = true;
+            if let Some(data) = crate::layer_comps::layer_shmd(comps, layer) {
+                if !data.is_empty() {
+                    write_tag(out, b"shmd", &data, psb);
+                }
+            }
+        } else {
+            write_tag(out, &block.key, &block.data, psb);
+            if block.key == *b"shmd" {
+                wrote_shmd = true;
+            }
+        }
+    }
+    if rewrite_shmd && !wrote_shmd {
+        if let Some(data) = crate::layer_comps::layer_shmd(comps, layer) {
+            if !data.is_empty() {
+                write_tag(out, b"shmd", &data, psb);
+            }
+        }
     }
     if let Some(mode) = stack_mode {
         write_tag(out, b"PiSt", &crate::stack_marker::marker_data(mode), psb);

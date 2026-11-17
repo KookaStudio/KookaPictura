@@ -1,7 +1,7 @@
 # Layer Comps
 
 - **Spec ID:** `LAY-022`
-- **Status:** `Draft`
+- **Status:** `Shipped`
 - **Parity tier:** `Core`
 - **New in CS6:** `Changed` — layer comps themselves date from Photoshop CS; CS6 restores **Layer Comps to PDF** as a `File > Scripts` option (JDI list). Smart-object/layer-comp integration and bulk update across comps are **post-CS6** (CC 2014). See `## Open questions`.
 - **Depends on:** `ARCH-008` document-model, `ARCH-009` undo-history, `LAY-020` smart-objects, `LAY-021` smart-filters, `02-ui-ux/panels/layers-panel.md`, `09-automation/script-events-and-jsx.md`, `10-workflow-io/export-formats.md`
@@ -207,8 +207,8 @@ Not used in this pass:
 
 ## Open questions
 
-- **Resource 1065 descriptor schema.** The spec states the resource is a version-16 descriptor but does not enumerate its comp-list keys or the per-layer captured fields. Resolve by parsing CS6-authored PSDs with layer comps (`psd-tools`/`PhotoshopAPI` support is partial).
-- **Layer identity in comps.** Whether CS6 keys comps by layer ID (`lyid`), the 1044 seed, or a comp-internal index is unconfirmed. Resolve with a controlled test: delete a layer, add another, and inspect resource 1065.
+- **Resource 1065 descriptor schema.** Resolved from public sources and black-box inspection: the resource is a version-16 `CompList` descriptor with `list` of `Comp` objects (`Nm  `, `compID`, `capturedInfo`), and each layer carries `shmd`/`cmls` variants. Position and style keys remain partly inferred; see the change design.
+- **Layer identity in comps.** Pictura uses the layer `lyid`; Photoshop-authored files carry it on every layer. The 1044 seed advances when Pictura assigns new ids.
 - **Exact "appearance" capture set.** Help names layer style on/off and blending mode. Whether opacity, fill, clipping, mask enable/disable, or layer effects parameters are also captured is unverified. Resolve with a state-matrix test.
 - **Position representation.** Whether position is stored as absolute canvas coordinates, layer offset, or a transform is not documented. Resolve with a move-and-capture test.
 - **`Last Document State` persistence.** Whether the pre-comp state is serialized in the PSD or only held in memory is unconfirmed; this decides whether it survives save/reopen.

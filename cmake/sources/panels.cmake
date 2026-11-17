@@ -53,6 +53,8 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/panels/layers_filter_bar.h
     crates/pictura-app/cpp/panels/layers_filter_proxy.cpp
     crates/pictura-app/cpp/panels/layers_filter_proxy.h
+    crates/pictura-app/cpp/panels/layer_comps_panel.cpp
+    crates/pictura-app/cpp/panels/layer_comps_panel.h
     crates/pictura-app/cpp/panels/layers_panel.cpp
     crates/pictura-app/cpp/panels/layers_panel.h
     crates/pictura-app/cpp/panels/layers_panel_actions.cpp

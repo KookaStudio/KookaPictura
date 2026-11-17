@@ -50,6 +50,7 @@ mod impl_pictura_raw;
 mod impl_selection;
 mod impl_transform;
 mod layer_arrange;
+mod layer_comps;
 mod layer_path;
 mod layer_style;
 mod layer_target_bridge;
@@ -1199,6 +1200,5 @@ pub mod qobject {
         #[qinvokable]
         fn color_policy(&self) -> i32;
     }
-
     impl cxx_qt::Threading for PictureView {}
 }

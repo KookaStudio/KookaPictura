@@ -16,6 +16,7 @@
 #include "panels/histogram_panel.h"
 #include "panels/history_panel.h"
 #include "panels/info_panel.h"
+#include "panels/layer_comps_panel.h"
 #include "panels/layers_panel.h"
 #include "panels/navigator_panel.h"
 #include "panels/notes_panel.h"
@@ -843,6 +844,10 @@ void PanelHost::retargetDock()
         pictura::ScopedTimer t("cxx_pathsPanel_refresh");
         pathsPanel_->setView(view);
     }
+    if (layerCompsPanel_) {
+        pictura::ScopedTimer t("cxx_layerCompsPanel_refresh");
+        layerCompsPanel_->setView(view);
+    }
     if (histogramPanel_) {
         pictura::ScopedTimer t("cxx_histogramPanel_refresh");
         histogramPanel_->setView(view);
@@ -891,6 +896,7 @@ void PanelHost::refreshDock(bool includeSelfRefreshing, bool includeLayers)
     timed("cxx_characterStylesPanel_refresh", characterStylesPanel_);
     timed("cxx_notesPanel_refresh", notesPanel_);
     timed("cxx_pathsPanel_refresh", pathsPanel_);
+    timed("cxx_layerCompsPanel_refresh", layerCompsPanel_);
     timed("cxx_histogramPanel_refresh", histogramPanel_);
 }
 

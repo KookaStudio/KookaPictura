@@ -6,7 +6,7 @@ here.
 
 ## Vector artwork (`assets/icons`, `assets/cursors`)
 
-- 321 SVG icons and cursors (238 under `assets/icons`, 83 under `assets/cursors`).
+- 325 SVG icons and cursors (242 under `assets/icons`, 83 under `assets/cursors`).
 - Except where noted below, generated with an AI model (DeepSeek v4.1 Flash)
   and released by the project under **CC0-1.0 / MIT** (reuse under either).
 - The `actions.record`, `actions.play`, `actions.stop`, `actions.newSet`,

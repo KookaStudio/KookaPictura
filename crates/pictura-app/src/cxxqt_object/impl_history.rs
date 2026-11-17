@@ -293,6 +293,9 @@ impl qobject::PictureView {
         let mut rust = self.as_mut().rust_mut();
         rust.cancel_active_sessions_report_only();
         rust.session.doc = Some(snapshot.doc);
+        if let Some(doc) = rust.session.doc.as_mut() {
+            pictura_render::prune_layer_comp_warnings(doc);
+        }
         rust.session.set_selection(snapshot.selection);
         rust.session
             .restore_quick_mask_selection(snapshot.quick_mask);

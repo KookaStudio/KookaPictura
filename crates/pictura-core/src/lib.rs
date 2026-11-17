@@ -18,6 +18,7 @@ pub mod hdr;
 pub mod homography;
 pub mod job;
 pub mod layer_bounds;
+pub mod layer_comp;
 mod layer_stack;
 pub mod mask_ops;
 pub mod memory;
@@ -231,30 +232,26 @@ pub struct Document {
     pub image_resources: Plane<u8>,
     /// Global layer mask payload, preserved verbatim for lossless re-save.
     pub global_layer_mask: Plane<u8>,
-    /// Bytes after the global layer mask up to the layer-section end, preserved
-    /// verbatim for lossless re-save.
+    /// Bytes after the global layer mask up to the layer-section end, preserved verbatim for lossless re-save.
     pub layer_section_extra: Plane<u8>,
-    /// User slices drawn with the Slice tool, in document pixels; auto slices
-    /// are derived from them. ponytail: not yet written to or read from the
-    /// slices image resource (1050), which stays preserved verbatim.
+    /// User slices drawn with the Slice tool, in document pixels; auto slices are derived from them.
+    /// ponytail: not yet written to or read from the slices image resource (1050), which stays preserved verbatim.
     pub slices: Vec<PsdRect>,
     /// Color samplers and notes; they ride the history snapshot like slices.
     pub annotations: Annotations,
-    /// Guides in placement order; they ride the history snapshot. Read from
-    /// and written to the PSD grid-and-guides resource (1032).
+    /// Guides in placement order; they ride the history snapshot. Read from and written to the PSD grid-and-guides resource (1032).
     pub guides: Vec<Guide>,
-    /// The Work Path the Pen tool group draws; it rides the history snapshot.
-    /// Read from and written to the PSD Work Path resource (1025).
+    /// The Work Path the Pen tool group draws; it rides the history snapshot. Read from and written to the PSD Work Path resource (1025).
     pub work_path: path::VectorPath,
-    /// The saved paths the Paths panel lists above the Work Path, in panel
-    /// order; they ride the history snapshot. Read from and written to the PSD
-    /// saved-path resources (2000-2997).
+    /// The saved paths the Paths panel lists above the Work Path, in panel order; they ride the history snapshot.
+    /// Read from and written to the PSD saved-path resources (2000-2997).
     pub saved_paths: Vec<path::NamedPath>,
-    /// Named character and paragraph styles, carried on the history snapshot so
-    /// a style edit is undone with the document. `Basic Paragraph` is always
-    /// present. ponytail: not yet written to or read from PSD (the style block's
-    /// location is unresolved); an existing block is preserved verbatim.
+    /// Named character and paragraph styles, carried on the history snapshot so a style edit is undone with the document.
+    /// `Basic Paragraph` is always present.
+    /// ponytail: not yet written to or read from PSD (the style block's location is unresolved); an existing block is preserved verbatim.
     pub text_styles: TextStyleSheet,
+    /// Document-level layer comps; they ride the history snapshot and cloning.
+    pub layer_comps: layer_comp::LayerCompStore,
 }
 
 impl Document {
@@ -304,6 +301,7 @@ impl Document {
             work_path: path::VectorPath::default(),
             saved_paths: Vec::new(),
             text_styles: TextStyleSheet::default(),
+            layer_comps: layer_comp::LayerCompStore::default(),
         }
     }
 
@@ -1081,21 +1079,18 @@ pub struct Layer {
     pub clipping: bool,
     pub visible: bool,
     /// PSD record flag bit 4: the layer's pixel data is irrelevant to the
-    /// document's appearance. Set on shape layers and preserved on save so a
-    /// re-saved shape layer stays a shape. The writer emits bit 3 (`0x08`,
-    /// "flags valid") with it.
+    /// document's appearance. Set on shape layers and preserved on save so a re-saved shape layer stays a shape.
+    /// The writer emits bit 3 (`0x08`, "flags valid") with it.
     pub pixel_data_irrelevant: bool,
     pub mask: Option<LayerMask>,
     pub adjustment: Option<AdjustmentData>,
     pub channels: Vec<Channel>,
     pub children: LayerStack,
     pub is_group: bool,
-    /// First-class Background flag. PSD has no background bit; the codec infers
-    /// it from the bottom top-level non-group named `"Background"` and writes
-    /// that name back for a flagged layer (design D5).
+    /// First-class Background flag. PSD has no background bit; the codec infers it from the bottom
+    /// top-level non-group named `"Background"` and writes that name back for a flagged layer (design D5).
     pub background: bool,
-    /// Raw blend-mode key, stored only when it does not map to a known
-    /// [`BlendMode`], preserved for lossless re-save.
+    /// Raw blend-mode key, stored only when it does not map to a known [`BlendMode`], preserved for lossless re-save.
     pub blend_key: Option<[u8; 4]>,
     /// Raw blending-ranges block bytes, preserved verbatim for lossless re-save.
     pub blending_ranges: Plane<u8>,
@@ -1117,8 +1112,7 @@ pub struct Layer {
     pub restricted_channels: Vec<u32>,
     /// Typed Blend If view of `blending_ranges`; `None` when empty or malformed.
     pub blend_if: Option<BlendIf>,
-    /// Additional-layer-info tagged blocks the engine does not model, preserved
-    /// verbatim for lossless re-save.
+    /// Additional-layer-info tagged blocks the engine does not model, preserved verbatim for lossless re-save.
     pub extra_blocks: Vec<LayerBlock>,
     /// Layer channels the engine does not decode, kept as full on-disk streams
     /// for verbatim re-emit.

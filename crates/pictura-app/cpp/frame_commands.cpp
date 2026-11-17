@@ -5,6 +5,7 @@
 #include "frame_includes.h"
 #include "export_as_dialog.h"
 #include "export_layers_dialog.h"
+#include "layer_comps_export.h"
 #include "export_paths_dialog.h"
 #include "zoomify_dialog.h"
 #include "print_dialog.h"
@@ -132,6 +133,20 @@ void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
                         [this]() { exportPathsFromView(this, activeView()); });
     registry.setHandler(command_ids::FileScriptsExportLayersToFiles,
                         [this]() { exportLayersFromView(this, activeView()); });
+    const char* const compIds[] = {command_ids::FileScriptsLayerCompsToFiles,
+                                   command_ids::FileScriptsLayerCompsToPdf};
+    for (const char* id : compIds) {
+        const QString command = QString::fromLatin1(id);
+        const bool pdf = command == QLatin1String(command_ids::FileScriptsLayerCompsToPdf);
+        registry.setImplemented(command, true);
+        registry.setHandler(command, [this, pdf] {
+            pdf ? exportLayerCompsPdfFromView(this, activeView())
+                : exportLayerCompsFromView(this, activeView());
+        });
+        registry.setEnabledProvider(command, [this] {
+            return activeView() && activeView()->has_document();
+        });
+    }
     registry.setHandler(command_ids::FileScriptsLoadFilesIntoStack,
                         [this]() { showLoadLayersDialog(*this); });
     // File > Print… and Print One Copy (WF-013).
@@ -200,6 +215,8 @@ void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
                            command_ids::FileExportZoomify,
                            command_ids::FileExportPathsToIllustrator,
                            command_ids::FileScriptsExportLayersToFiles,
+                           command_ids::FileScriptsLayerCompsToFiles,
+                           command_ids::FileScriptsLayerCompsToPdf,
                            command_ids::FileSaveForWeb, command_ids::FileClose,
                            command_ids::FileCloseAll, command_ids::FileInfo}) {
         registry.setEnabledProvider(id, hasDocument);

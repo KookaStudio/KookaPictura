@@ -11,6 +11,9 @@ mod clipping;
 mod create;
 mod crossed_quad;
 mod kernel;
+mod layer_comps;
+#[cfg(test)]
+mod layer_comps_tests;
 mod layer_masks;
 mod layer_style;
 mod mask_domain;
@@ -97,6 +100,12 @@ pub use create::{
     neutral_color, next_layer_name, ungroup_layer, NewLayerSpec,
 };
 pub use kernel::Interpolation;
+pub use layer_comps::{
+    apply_layer_comp, capture_last_document_state, capture_layer_comp,
+    clear_all_layer_comp_warnings, clear_layer_comp_warning, layer_comp_anchor, layer_comp_changes,
+    layer_comp_missing_ids, layer_comp_warning, prune_layer_comp_warnings,
+    restore_last_document_state, update_layer_comp, ApplyOutcome,
+};
 pub use layer_masks::{
     add_layer_mask, add_layer_mask_converting_background, apply_layer_mask, delete_layer_mask,
     has_layer_mask, invert_layer_mask, layer_mask_disabled, layer_mask_linked,

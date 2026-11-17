@@ -101,7 +101,7 @@ or from community CS6-era sources (marked inferred). Highest-impact gaps:
 ## D. PSD/PSB serialization gaps
 
 - Artboard (`artb`/`artd`/`abdd`), smart-object (`SoLd`/`SoLE`), linked (`lnkD`/`lnk2`/`lnk3`), filter-mask (`FMsk`), filter-effects (`FXid`/`FEid`) descriptor internals not enumerated in the fetched spec excerpts.
-- Layer Comps image resource **1065** descriptor schema.
+- Layer Comps image resource **1065** descriptor schema: resolved for the comp-list and `shmd`/`cmls` containers; position/appearance keys remain partly inferred.
 - Data-driven graphics image resources **7000/7001** XML schema (a community attempt to write 7000 was ignored by Photoshop).
 - Non-destructive crop, color-sampler, slice, note/count serialization keys.
 - Duotone Color Mode Data blob format (spec says "undocumented").

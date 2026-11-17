@@ -7352,3 +7352,14 @@ M6 through M34 are archived; their deltas now live in `openspec/specs/`.
 - Agent Control shipped (#1053): `pictura --mcp` over a permissioned control server,
   with a Preferences page. See `docs/11-cross-cutting/agent-control.md`. Open:
   MCP revision 2026-07-28 (#1080).
+
+## Layer Comps (#265)
+
+Layer Comps shipped: the document-level comp store, capture/apply/update/delete,
+Last Document State, caution warnings, stable `lyid` identities, resource 1065
+plus `shmd`/`cmls` persistence, the Layer Comps dock, and Files/PDF exports.
+The panel is hidden by default under `Window > Panels > Layer Comps`. Omitted as
+parity gaps: drag duplicate/delete, recordable Actions commands, WPG, and the
+docs' O(captured-entries) apply refresh. The position/style PSD keys remain
+partly inferred and need the manual Photoshop round-trip in the change's
+`test-plan.md`.
