@@ -1200,6 +1200,5 @@ pub mod qobject {
         #[qinvokable]
         fn color_policy(&self) -> i32;
     }
-
     impl cxx_qt::Threading for PictureView {}
 }
