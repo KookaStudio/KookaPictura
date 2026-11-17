@@ -108,13 +108,13 @@ void HistogramPanel::refresh()
 void HistogramPanel::recompute()
 {
     bins_ = {};
+    sourceSize_ = {};
+    binnedSize_ = {};
     if (!view_ || !view_->has_document()) {
         return;
     }
-    // Read the coarsest view-pyramid level (always at most 512 px on its long
-    // side) instead of the full-resolution image, so the scan cost is
-    // independent of document size and no full-resolution image rebuild is
-    // triggered by a panel refresh.
+    // Thin documents may have only level 0; bound the binning image after
+    // fetching the coarsest tiles without forcing the whole-image accessor.
     QImage image;
     const QVector<document_api::CanvasSize> levels = document_api::pyramidSizes(*view_);
     if (!levels.isEmpty()) {
@@ -125,10 +125,12 @@ void HistogramPanel::recompute()
     if (image.isNull()) {
         return;
     }
+    sourceSize_ = image.size();
     if (image.width() > 512 || image.height() > 512) {
         image = image.scaled(512, 512, Qt::KeepAspectRatio, Qt::FastTransformation);
     }
     image = image.convertToFormat(QImage::Format_RGB32);
+    binnedSize_ = image.size();
     for (int y = 0; y < image.height(); ++y) {
         const QRgb* line = reinterpret_cast<const QRgb*>(image.constScanLine(y));
         for (int x = 0; x < image.width(); ++x) {

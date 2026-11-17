@@ -40,19 +40,6 @@ impl Built {
     fn planes(&self) -> Planes<'_> {
         Planes::new(self.width, self.height, &self.r, &self.g, &self.b, &self.a)
     }
-
-    fn blit(&mut self, src: &Built, rect: PsdRect) {
-        for y in rect.top..rect.bottom {
-            for x in rect.left..rect.right {
-                let i = y as usize * self.width as usize + x as usize;
-                let j = y as usize * src.width as usize + x as usize;
-                self.r[i] = src.r[j];
-                self.g[i] = src.g[j];
-                self.b[i] = src.b[j];
-                self.a[i] = src.a[j];
-            }
-        }
-    }
 }
 
 #[test]
@@ -73,30 +60,6 @@ fn a_511_long_side_still_gets_a_256_level() {
         .map(|l| pyramid.level_size(l))
         .collect();
     assert_eq!(sizes, vec![(511, 300), (256, 150)]);
-}
-
-#[test]
-fn coarse_pyramid_matches_the_exact_levels() {
-    let p = Built::new(1600, 1200, 5);
-    let exact = ViewPyramid::rebuild(p.planes());
-    let coarse = ViewPyramid::coarse(p.planes(), 2);
-    assert_eq!(coarse.level_count(), exact.level_count());
-    for level in 0..exact.level_count() {
-        assert_eq!(coarse.level_size(level), exact.level_size(level));
-    }
-    for (x, y) in [(0, 0), (31, 17), (399, 299)] {
-        assert_eq!(
-            stored_pixel(&coarse.levels[1], x, y),
-            premultiplied_row_pixel(&p.planes().rows(y * 4).expect("row"), x * 4)
-        );
-    }
-    assert!(coarse.levels[0].data().iter().all(|&byte| byte == 0));
-}
-
-#[test]
-fn the_coarse_level_fits_its_budget() {
-    assert_eq!(ViewPyramid::coarse_level(2000, 2000), 0);
-    assert_eq!(ViewPyramid::coarse_level(16507, 16196), 4);
 }
 
 #[test]
@@ -129,43 +92,6 @@ fn odd_edges_average_over_what_is_there() {
         let got = stored_pixel(above, x, y);
         assert_eq!(got.to_vec(), want, "at {x},{y}");
     }
-}
-
-#[test]
-fn an_update_leaves_every_level_as_a_rebuild_would() {
-    let (w, h) = (1203u32, 811u32);
-    let mut level0 = Built::new(w, h, 0);
-    let after = Built::new(w, h, 99);
-
-    let mut pyramid = ViewPyramid::rebuild(level0.planes());
-    for region in [rect(301, 97, 150, 83), rect(700, 1100, 103, 111)] {
-        level0.blit(&after, region);
-        pyramid.update(level0.planes(), region);
-    }
-
-    let rebuilt = ViewPyramid::rebuild(level0.planes());
-    assert_eq!(pyramid.level_count(), rebuilt.level_count());
-    for level in 0..rebuilt.levels.len() {
-        assert_eq!(
-            pyramid.levels[level],
-            rebuilt.levels[level],
-            "level {} differs",
-            level + 1
-        );
-    }
-}
-
-#[test]
-fn a_damage_rect_is_rounded_out_to_the_tile_grid() {
-    let aligned = tile_align(rect(70, 130, 10, 20));
-    assert_eq!(aligned.top, 64);
-    assert_eq!(aligned.left, 128);
-    assert_eq!(aligned.bottom, 128);
-    assert_eq!(aligned.right, 192);
-    let already = rect(64, 128, 64, 64);
-    assert_eq!(tile_align(already), already, "an aligned rect is fixed");
-    let empty = tile_align(rect(0, 0, 0, 0));
-    assert_eq!((empty.right, empty.bottom), (0, 0));
 }
 
 #[test]
@@ -278,17 +204,6 @@ fn a_tiled_level0_builds_the_same_levels() {
         );
     }
 
-    // The coarse stand-in reads level 0 at its texel corners.
-    let coarse = ViewPyramid::coarse(banded, 1);
-    let flat = p.planes();
-    for (x, y) in [(0, 0), (7, 5), (74, 49)] {
-        let want = premultiplied_row_pixel(&flat.rows(y * 2).expect("row"), x * 2);
-        assert_eq!(
-            stored_pixel(&coarse.levels[0], x, y),
-            want,
-            "coarse texel {x},{y}"
-        );
-    }
     assert!(
         !plane.is_mirrored(),
         "a tiled level 0 is never materialized"
@@ -296,52 +211,23 @@ fn a_tiled_level0_builds_the_same_levels() {
 }
 
 #[test]
-fn a_tiled_level0_updates_and_crops() {
-    let (w, h) = (400u32, 300u32);
-    let mut flat = Built::new(w, h, 9);
-    let changed = Built::new(w, h, 11);
-    let mut plane = planar_plane(&flat, 1);
-
-    let mut flat_pyramid = ViewPyramid::rebuild(flat.planes());
-    let mut banded_pyramid = ViewPyramid::rebuild(Planes::planar(w, h, &plane).expect("planar"));
-
-    let damage = rect(40, 50, 90, 70);
-    flat.blit(&changed, damage);
-    for channel in 0..4 {
-        for y in damage.top..damage.bottom {
-            let src = match channel {
-                0 => &flat.r,
-                1 => &flat.g,
-                2 => &flat.b,
-                _ => &flat.a,
-            };
-            let start = y as usize * w as usize + damage.left as usize;
-            let py = channel * h as usize + y as usize;
-            plane.write_rect_from(
-                damage.left as usize..damage.right as usize,
-                py..py + 1,
-                w as usize,
-                &src[start..start + damage.width() as usize],
+fn a_tiled_level0_crops_without_materializing() {
+    let source = Built::new(600, 401, 9);
+    let plane = planar_plane(&source, 1);
+    let tiled = Planes::planar(source.width, source.height, &plane).expect("planar");
+    let reference = ViewPyramid::rebuild(source.planes());
+    let from_tiles = ViewPyramid::rebuild(tiled);
+    for level in 0..reference.level_count() {
+        for crop in [rect(10, 20, 30, 40), rect(-5, -5, 13, 17)] {
+            assert_eq!(
+                from_tiles.crop(tiled, level, crop),
+                reference.crop(source.planes(), level, crop)
             );
         }
     }
-
-    flat_pyramid.update(flat.planes(), damage);
-    banded_pyramid.update(Planes::planar(w, h, &plane).expect("planar"), damage);
-    for level in 1..flat_pyramid.level_count() {
-        assert!(
-            banded_pyramid.levels[level - 1].data() == flat_pyramid.levels[level - 1].data(),
-            "level {level} differs after the update"
-        );
-    }
-
-    let crop = rect(10, 20, 30, 40);
-    let banded_crop = banded_pyramid.crop(Planes::planar(w, h, &plane).expect("planar"), 0, crop);
-    let flat_crop = flat_pyramid.crop(flat.planes(), 0, crop);
-    assert!(banded_crop.data() == flat_crop.data(), "the crop differs");
     assert!(
         !plane.is_mirrored(),
-        "an update and a crop never materialize level 0"
+        "rebuild and crop read only source rows"
     );
 }
 

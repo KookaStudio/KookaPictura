@@ -307,11 +307,19 @@ mod tests {
     #[test]
     fn preview_leaves_the_composite_unchanged() {
         let mut view = view_of(document());
+        assert_eq!(view.display_level_count(), 1);
         let composite = view.session.doc.as_ref().expect("doc").composite.clone();
         view.begin_display_preview(vec!["0".to_string()], PreviewKind::Opacity);
         view.session.doc.as_mut().expect("doc").layers[0].opacity = 128;
         assert!(view.present_display_preview().is_some());
         assert_eq!(view.session.doc.as_ref().expect("doc").composite, composite);
+        let doc = view.session.doc.as_ref().expect("doc");
+        let exact =
+            pictura_codec::buffer_to_srgb(doc, &pictura_render::composite_rgba(doc)).into_owned();
+        assert_eq!(
+            shown(&view, 0, view.presented_rect),
+            pictura_render::premultiply_planar(&exact)
+        );
     }
 
     #[test]
@@ -392,9 +400,13 @@ mod tests {
     #[test]
     fn no_stored_level_falls_back_to_exact() {
         let mut view = view_of(document());
+        let before = shown(&view, 0, view.presented_rect);
+        view.damage.take(view.presented_rect);
         view.presented_level = 99;
         view.begin_display_preview(vec!["0".to_string()], PreviewKind::Opacity);
         assert!(view.present_display_preview().is_none());
+        assert!(view.damage.take(view.presented_rect).is_empty());
+        assert_eq!(shown(&view, 0, view.presented_rect), before);
     }
 
     #[test]
@@ -432,6 +444,11 @@ mod tests {
         let mut view = view_of(document());
         view.mask_solo = Some("0".to_string());
         view.begin_display_preview(vec!["0".to_string()], PreviewKind::Opacity);
+        assert!(view.present_display_preview().is_none());
+        view.mask_solo = None;
+        view.session
+            .live
+            .set_stroke_session(super::super::document_session::StrokeSession::default());
         assert!(view.present_display_preview().is_none());
     }
 

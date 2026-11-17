@@ -14,7 +14,9 @@ The canvas SHALL present a view by assembling the visible 256² tiles of the lev
 it is displaying from a cache keyed by source, level and tile position. Level-0
 tiles SHALL hold straight-alpha sRGB pixels and tiles above level 0 SHALL hold
 premultiplied pixels. A crop assembled from cached tiles SHALL equal the same crop
-of a pyramid rebuilt from the whole display composite, byte for byte. The
+of an independent pyramid rebuilt from the whole display composite using
+compositing/region-composite pixel semantics, byte for byte. That whole rebuild
+SHALL be a verification reference, not retained production storage. The
 application MUST NOT keep a full-resolution display frame or whole stored pyramid
 levels.
 
@@ -120,3 +122,32 @@ composite tiles.
 
 - **WHEN** a 16507×16196 document with a soloed mask is restored in a 1920×1080 viewport
 - **THEN** the visible mask is presented within 50 ms of GUI-thread time and the exact tiles complete on workers
+
+### Requirement: Logical pyramid levels do not require stored images
+
+The tile pyramid SHALL report level 0 at the document dimensions. Each next
+level SHALL ceil-halve both dimensions and SHALL be available only while its
+long side is at least 256 pixels and both dimensions are greater than 1.
+Level count and dimensions SHALL be determined without constructing whole
+level images. The availability rule SHALL NOT require the oracle in an
+ordinary application build.
+
+#### Scenario: A typical image has the expected logical levels [tp_level_sizes]
+
+- **WHEN** levels are reported for a 1500x700 image
+- **THEN** their sizes are 1500x700, 750x350 and 375x175, with no further level
+
+#### Scenario: Ceil-halving includes a 256-long-side level [tp_level_511]
+
+- **WHEN** levels are reported for a 511x300 image
+- **THEN** their sizes are 511x300 and 256x150, with no further level
+
+#### Scenario: A small image has only level zero [tp_level_small]
+
+- **WHEN** levels are reported for a 300x200 image
+- **THEN** only level 0 is available
+
+#### Scenario: A thin image stops before a one-pixel dimension [tp_level_thin]
+
+- **WHEN** levels are reported for a 4096x2 image or its transpose
+- **THEN** only level 0 is available even though another ceil-halving would leave the long side above 256
