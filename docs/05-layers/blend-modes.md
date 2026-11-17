@@ -85,7 +85,7 @@ each clipped layer's own mode and appearance. Also in Advanced Blending:
 
 - **32-bit (HDR) documents:** only **Normal, Dissolve, Darken, Multiply, Lighten,
   Darker Color, Linear Dodge (Add), Lighter Color, Difference, Subtract, Divide,
-  Hue, Saturation, Color, Luminosity** are offered (14 modes).
+  Hue, Saturation, Color, Luminosity** are offered (15 modes).
 - **Lab documents:** **Color Dodge, Color Burn, Darken, Lighten, Difference,
   Exclusion, Subtract, Divide** are unavailable.
 - **Bitmap / Indexed:** only `Normal` (`Threshold` for bitmap) is meaningful;
@@ -272,7 +272,7 @@ blended as a unit.
 |---|---|---|---|
 | 8-bit | `u8`, 0–255 | Normalize to [0,1], compute, round and clamp to [0,255] | Integer quantization; per-mode rounding differs from a float reference |
 | 16-bit | `u16`, 0–65535 | Same normalized formulas | More headroom; still clamped for the 27 non-HDR modes |
-| 32-bit (float) | `f32`, unbounded | 14 modes only; intermediate values may exceed [0,1] and are not clamped until display | Photoshop's exact 32-bit clamps for Add/Subtract etc. are undocumented |
+| 32-bit (float) | `f32`, unbounded | 15 modes only; intermediate values may exceed [0,1] and are not clamped until display | Photoshop's exact 32-bit clamps for Add/Subtract etc. are undocumented |
 
 Integer implementations should compute in a wider type (e.g. `f32` or fixed point)
 and round once at write-back. Whether Adobe rounds half-up, half-to-even, or
@@ -353,11 +353,13 @@ Widgets (consistent with `01-architecture/qt6-ui-design.md`).
 
 - **Transparent backdrop.** Where `αb = 0`, `Cr = Cs`; blend modes have no effect
   on empty areas. Where the layer itself has `αs = 0`, the base is unchanged.
-- **32-bit restriction.** The mode menu must hide the 13 unavailable modes; opening
-  a file that references one in a 32-bit document is a conflict (CS6 cannot create
-  it) — refuse or convert, never silently blend.
-- **Lab restriction.** Same for the 8 unavailable modes; loading a file that
-  stores them requires conversion to RGB or refusal.
+- **32-bit restriction.** The mode menu must hide the 12 unavailable modes.
+  Until the global availability gate lands (#490), a file that stores one keeps
+  the mode: the control shows it selected and disabled, never silently replacing
+  it with Normal.
+- **Lab restriction.** The menu hides the 8 unavailable modes under the same
+  interim policy; converting the document back to RGB makes the stored mode
+  selectable again.
 - **Hard Mix in CMYK.** Every channel resolves to 0 or the mode maximum (100 in
   CMYK, 255 in RGB); a naive 0/1 float implementation is wrong for CMYK.
 - **Subtract/Divide clamping.** Negative results clip to 0 (Subtract); Divide by
@@ -389,8 +391,8 @@ Widgets (consistent with `01-architecture/qt6-ui-design.md`).
 2. Given Opacity `O`, the layer's contribution is `O` of the fully-opaque result;
    given Fill `F` with a Drop Shadow, the shadow's alpha is unchanged by `F` but
    changes with `O`.
-3. Given a 32-bit document, the Blend Mode menu offers exactly the 14 available
-   modes; the 13 unsupported modes cannot be selected.
+3. Given a 32-bit document, the Blend Mode menu offers exactly the 15 available
+   modes; the 12 unsupported modes cannot be selected.
 4. Given a Lab document, Color Dodge, Color Burn, Darken, Lighten, Difference,
    Exclusion, Subtract, and Divide are unavailable.
 5. Given a group with `Pass Through`, children blend against the parent backdrop;

@@ -2,6 +2,11 @@
 
 #include "api/engine_bridge.h"
 
+#include <QtCore/QSignalBlocker>
+#include <QtCore/QStringList>
+#include <QtGui/QStandardItemModel>
+#include <QtWidgets/QComboBox>
+
 namespace pictura {
 
 const QVector<BlendEntry>& blendModes()
@@ -16,14 +21,81 @@ const QVector<BlendEntry>& blendModes()
     return entries;
 }
 
-QString blendModeName(const QString& key)
+int blendModeIndex(const QString& key)
 {
-    for (const BlendEntry& entry : blendModes()) {
-        if (entry.key == key) {
-            return entry.name;
+    for (int i = 0; i < blendModes().size(); ++i) {
+        if (blendModes().at(i).key == key) {
+            return i;
         }
     }
-    return key;
+    return -1;
+}
+
+QString blendModeName(const QString& key)
+{
+    const int index = blendModeIndex(key);
+    return index >= 0 ? blendModes().at(index).name : key;
+}
+
+QVector<BlendEntry> allowedBlendModes(const PictureView* view)
+{
+    if (!view) {
+        return blendModes();
+    }
+    const QStringList allowed = allowed_blend_mode_keys(*view);
+    QVector<BlendEntry> out;
+    out.reserve(allowed.size());
+    for (const BlendEntry& entry : blendModes()) {
+        if (allowed.contains(entry.key)) {
+            out.append(entry);
+        }
+    }
+    return out;
+}
+
+int syncBlendCombo(QComboBox* combo, const PictureView* view, const QString& currentKey)
+{
+    QVector<BlendEntry> desired = allowedBlendModes(view);
+    const int currentEngineIndex = blendModeIndex(currentKey);
+    bool currentAllowed = false;
+    for (const BlendEntry& entry : desired) {
+        if (entry.key == currentKey) {
+            currentAllowed = true;
+            break;
+        }
+    }
+    const bool appendCurrent = currentEngineIndex >= 0 && !currentAllowed;
+    if (appendCurrent) {
+        desired.append(blendModes().at(currentEngineIndex));
+    }
+    bool same = combo->count() == desired.size();
+    for (int i = 0; same && i < desired.size(); ++i) {
+        same = combo->itemData(i).toString() == desired.at(i).key
+               && combo->itemText(i) == desired.at(i).name;
+    }
+    // An appended conflict entry must be disabled, so an enabled one is stale.
+    if (same && appendCurrent) {
+        if (auto* model = qobject_cast<QStandardItemModel*>(combo->model())) {
+            if (auto* item = model->item(combo->count() - 1)) {
+                same = !item->isEnabled();
+            }
+        }
+    }
+    if (!same) {
+        const QSignalBlocker block(combo);
+        combo->clear();
+        for (const BlendEntry& entry : desired) {
+            combo->addItem(entry.name, entry.key);
+        }
+        if (appendCurrent) {
+            if (auto* model = qobject_cast<QStandardItemModel*>(combo->model())) {
+                if (auto* item = model->item(combo->count() - 1)) {
+                    item->setEnabled(false);
+                }
+            }
+        }
+    }
+    return combo->findData(currentKey);
 }
 
 } // namespace pictura

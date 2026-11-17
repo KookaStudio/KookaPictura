@@ -163,6 +163,11 @@ void LayerStyleTest::groupBlendingOptions()
     pictura::LayerStyleDialog dialog(view_, group, QString());
     QCOMPARE(dialog.currentPage(), 0);
     QVERIFY(!(dialog.effectList()->item(1)->flags() & Qt::ItemIsEnabled));
+    auto* mode = dialog.findChild<QComboBox*>(QStringLiteral("blending.mode"));
+    QVERIFY(mode != nullptr);
+    QCOMPARE(mode->count(), 27);
+    QCOMPARE(mode->currentIndex(), 0);
+    QVERIFY(mode->findData(QStringLiteral("pass")) < 0);
 }
 
 void LayerStyleTest::menuCommands()

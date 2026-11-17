@@ -13,7 +13,7 @@
 
 namespace pictura {
 
-LayerNewDialog::LayerNewDialog(bool group, QWidget* parent)
+LayerNewDialog::LayerNewDialog(bool group, QWidget* parent, PictureView* view)
     : QDialog(parent)
     , group_(group)
 {
@@ -33,7 +33,7 @@ LayerNewDialog::LayerNewDialog(bool group, QWidget* parent)
 
     modeCombo_ = new QComboBox(this);
     modeCombo_->setObjectName(QStringLiteral("layerNewMode"));
-    for (const BlendEntry& entry : blendModes()) {
+    for (const BlendEntry& entry : allowedBlendModes(view)) {
         modeCombo_->addItem(entry.name, entry.key);
     }
 
@@ -79,9 +79,14 @@ void LayerNewDialog::syncNeutralForMode()
         return;
     }
     // The engine's `neutral_color` decides which modes have a neutral fill.
-    const int index = modeCombo_->currentIndex();
-    const bool available = index >= 0 && index < blendModes().size()
-                           && blendModes().at(index).hasNeutral;
+    const QString key = modeCombo_->currentData().toString();
+    bool available = false;
+    for (const BlendEntry& entry : blendModes()) {
+        if (entry.key == key) {
+            available = entry.hasNeutral;
+            break;
+        }
+    }
     neutralCheck_->setEnabled(available);
     if (!available) {
         neutralCheck_->setChecked(false);
@@ -137,9 +142,9 @@ bool LayerNewDialog::getNameColor(QWidget* parent, const QString& defaultName, L
 }
 
 bool LayerNewDialog::get(bool group, QWidget* parent, LayerNewSpec* out,
-                         const QString& defaultName)
+                         const QString& defaultName, PictureView* view)
 {
-    LayerNewDialog dialog(group, parent);
+    LayerNewDialog dialog(group, parent, view);
     if (!defaultName.isEmpty()) {
         dialog.nameEdit_->setText(defaultName);
     }

@@ -551,7 +551,8 @@ Snapshot for resuming after a context break. Update after each milestone.
   `Edit ▸ Fade…` opens `FadeDialog` (Opacity, Mode, Preview), prefills the last
   values, previews without history, cancels bit-identically, and commits one
   `Fade <effect>` state. Reopening recomputes from the effect output. Lab
-  disables Color Dodge, Color Burn, Lighten, Darken, Difference, and Exclusion.
+  disables Color Dodge, Color Burn, Lighten, Darken, Difference, Exclusion,
+  Subtract, and Divide.
   Tests: `pictura-filters` fade units (8), `pictura-app` fade units (8), and
   `tst_fade` (16). The W3C blend function moved to `pictura_core::blend`.
   Verified: `bash scripts/verify-fast.sh` — unified report 5328 passed · 127

@@ -10,6 +10,7 @@ class QLineEdit;
 namespace pictura {
 
 class NumericField;
+class PictureView;
 
 // The values collected by the New Layer / New Group dialog.
 struct LayerNewSpec {
@@ -27,7 +28,8 @@ class LayerNewDialog : public QDialog {
     Q_OBJECT
 
 public:
-    explicit LayerNewDialog(bool group, QWidget* parent = nullptr);
+    explicit LayerNewDialog(bool group, QWidget* parent = nullptr,
+                            PictureView* view = nullptr);
 
     // Name-and-color-only variant used to convert the Background to a normal
     // layer; `defaultName` seeds the name edit.
@@ -38,7 +40,7 @@ public:
     // Run the dialog modally; returns true and fills `out` on OK. `defaultName`
     // seeds the name edit (used by the fill-layer flows).
     static bool get(bool group, QWidget* parent, LayerNewSpec* out,
-                    const QString& defaultName = {});
+                    const QString& defaultName = {}, PictureView* view = nullptr);
 
     // Run the name-and-color-only dialog modally.
     static bool getNameColor(QWidget* parent, const QString& defaultName, LayerNewSpec* out);

@@ -134,7 +134,7 @@ Deeper technical status for PSD/PSB lives in
 - [x] Auto-Blend Layers (#583)
 - [x] Fill With (Mode)-Neutral Color for new layers (#584).
   `crates/pictura-app/cpp/layer_new_dialog.cpp`
-- [ ] 32-bit and Lab blend-mode menu gating (#589)
+- [x] 32-bit and Lab blend-mode menu gating (#589)
 - [x] `Ctrl+J` duplicate-group semantics (#590)
 - [ ] Smart-object Stack Modes (#591)
 - [x] Pattern fill layers using the open document's embedded patterns (#262)

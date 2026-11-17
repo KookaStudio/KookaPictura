@@ -48,6 +48,118 @@ fn blend_names_are_distinct_and_non_empty() {
     assert_eq!(names.len(), 27, "blend names must be unique");
 }
 
+const HDR_MODES: [BlendMode; 15] = [
+    BlendMode::Normal,
+    BlendMode::Dissolve,
+    BlendMode::Darken,
+    BlendMode::Multiply,
+    BlendMode::DarkerColor,
+    BlendMode::Lighten,
+    BlendMode::LinearDodge,
+    BlendMode::LighterColor,
+    BlendMode::Difference,
+    BlendMode::Subtract,
+    BlendMode::Divide,
+    BlendMode::Hue,
+    BlendMode::Saturation,
+    BlendMode::Color,
+    BlendMode::Luminosity,
+];
+
+fn allowed_count(mode: ColorMode, depth: BitDepth) -> usize {
+    BlendMode::LAYER_MODES
+        .iter()
+        .filter(|m| m.allowed(mode, depth))
+        .count()
+}
+
+fn allowed_modes(mode: ColorMode, depth: BitDepth) -> Vec<BlendMode> {
+    BlendMode::LAYER_MODES
+        .iter()
+        .copied()
+        .filter(|m| m.allowed(mode, depth))
+        .collect()
+}
+
+#[test]
+fn blend_availability_32_bit() {
+    for mode in BlendMode::LAYER_MODES {
+        assert_eq!(
+            mode.allowed(ColorMode::Rgb, BitDepth::ThirtyTwo),
+            HDR_MODES.contains(&mode),
+            "{mode:?}"
+        );
+    }
+    assert_eq!(
+        allowed_modes(ColorMode::Rgb, BitDepth::ThirtyTwo),
+        HDR_MODES.to_vec()
+    );
+}
+
+#[test]
+fn blend_availability_lab() {
+    let excluded = [
+        BlendMode::ColorDodge,
+        BlendMode::ColorBurn,
+        BlendMode::Darken,
+        BlendMode::Lighten,
+        BlendMode::Difference,
+        BlendMode::Exclusion,
+        BlendMode::Subtract,
+        BlendMode::Divide,
+    ];
+    for depth in [BitDepth::Eight, BitDepth::Sixteen] {
+        for mode in BlendMode::LAYER_MODES {
+            assert_eq!(
+                mode.allowed(ColorMode::Lab, depth),
+                !excluded.contains(&mode),
+                "{mode:?} at {depth:?}"
+            );
+        }
+        assert_eq!(allowed_count(ColorMode::Lab, depth), 19);
+    }
+}
+
+#[test]
+fn blend_availability_lab_32_bit_intersection() {
+    let allowed = allowed_modes(ColorMode::Lab, BitDepth::ThirtyTwo);
+    assert_eq!(allowed.len(), 10);
+    assert_eq!(
+        allowed,
+        vec![
+            BlendMode::Normal,
+            BlendMode::Dissolve,
+            BlendMode::Multiply,
+            BlendMode::DarkerColor,
+            BlendMode::LinearDodge,
+            BlendMode::LighterColor,
+            BlendMode::Hue,
+            BlendMode::Saturation,
+            BlendMode::Color,
+            BlendMode::Luminosity,
+        ]
+    );
+}
+
+#[test]
+fn blend_availability_bitmap_indexed() {
+    for (mode, depth) in [
+        (ColorMode::Bitmap, BitDepth::One),
+        (ColorMode::Indexed, BitDepth::Eight),
+    ] {
+        assert_eq!(allowed_modes(mode, depth), vec![BlendMode::Normal]);
+    }
+}
+
+#[test]
+fn blend_availability_unrestricted_modes() {
+    for mode in [ColorMode::Rgb, ColorMode::Grayscale, ColorMode::Cmyk] {
+        for depth in [BitDepth::Eight, BitDepth::Sixteen] {
+            assert_eq!(allowed_count(mode, depth), 27, "{mode:?} at {depth:?}");
+        }
+    }
+}
+
 #[test]
 fn unknown_blend_key_is_none() {
     assert_eq!(BlendMode::from_psd_key(*b"zzzz"), None);

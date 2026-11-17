@@ -67,7 +67,7 @@ The Filter menu groups Adobe filters in submenus; third-party filters are append
 - `Edit > Fade` changes the **opacity and blending mode of the most recently applied filter**, painting tool, erasing tool, or color adjustment. It is described as equivalent to applying the effect on a separate layer and then using the layer's opacity and blend controls.
 - Fade controls: a **Preview** option, an **Opacity** slider from **0% (transparent) to 100%**, and a **Mode** menu. The Fade mode list is a **subset of the painting/editing-tool modes, excluding Behind and Clear**.
 - The Fade command also applies to the effects of `Liquify` and the Brush Strokes filters (and, by extension, to any destructive filter).
-- **Lab caveat:** the Color Dodge, Color Burn, Lighten, Darken, Difference, and Exclusion modes do not work on Lab images.
+- **Lab caveat:** the Color Dodge, Color Burn, Lighten, Darken, Difference, Exclusion, Subtract, and Divide modes do not work on Lab images.
 - On a Smart Object the equivalent controls are the Smart Filter's **Edit Blending Options** (Blend Mode + Opacity), edited from the Layers panel (`LAY-021`).
 - "Fade last filter" therefore only applies immediately after a filter/effect; the UI entry is disabled once another operation intervenes. *(inferred: Photoshop exposes only the single most recent effect.)*
 

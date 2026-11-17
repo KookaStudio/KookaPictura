@@ -36,7 +36,8 @@ pub mod ffi {
         fn fade_mode(view: &PictureView) -> QString;
 
         /// Whether `key` is allowed on the document: a Lab document refuses
-        /// Color Dodge, Color Burn, Lighten, Darken, Difference, and Exclusion.
+        /// Color Dodge, Color Burn, Lighten, Darken, Difference, Exclusion,
+        /// Subtract, and Divide.
         fn fade_mode_allowed(view: &PictureView, key: &QString) -> bool;
 
         /// Show `opacity`/`mode` on the canvas without recording history.

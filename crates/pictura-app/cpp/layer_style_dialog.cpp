@@ -8,7 +8,9 @@
 #include "panels/color_swatch_widget.h"
 
 #include <QtCore/QSignalBlocker>
+#include <QtCore/QVariant>
 #include <QtGui/QMouseEvent>
+#include <QtGui/QStandardItemModel>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
@@ -378,12 +380,46 @@ void LayerStyleDialog::bindChoice(QComboBox* combo, const QString& key)
 
 void LayerStyleDialog::bindBlendMode(QComboBox* combo, const QString& key)
 {
-    for (const BlendEntry& entry : blendModes()) {
-        combo->addItem(entry.name);
+    const double current = value(key);
+    const int currentEngine =
+        std::isfinite(current) && current >= 0 ? int(current + 0.5) : -1;
+    QVector<BlendEntry> entries = allowedBlendModes(view_);
+    bool currentAllowed = false;
+    if (currentEngine >= 0) {
+        for (const BlendEntry& entry : entries) {
+            if (blendModeIndex(entry.key) == currentEngine) {
+                currentAllowed = true;
+                break;
+            }
+        }
     }
-    // CS6 groups the modes with separators; the combo keeps one index per
-    // mode instead so the index is the engine's.
-    bindChoice(combo, key);
+    const bool appendCurrent = currentEngine >= 0 && currentEngine < blendModes().size()
+                               && !currentAllowed;
+    if (appendCurrent) {
+        entries.append(blendModes().at(currentEngine));
+    }
+    for (const BlendEntry& entry : entries) {
+        combo->addItem(entry.name, blendModeIndex(entry.key));
+    }
+    if (appendCurrent) {
+        if (auto* model = qobject_cast<QStandardItemModel*>(combo->model())) {
+            if (auto* item = model->item(combo->count() - 1)) {
+                item->setEnabled(false);
+            }
+        }
+    }
+    if (currentEngine >= 0) {
+        const int index = combo->findData(currentEngine);
+        if (index >= 0) {
+            combo->setCurrentIndex(index);
+        }
+    }
+    connect(combo, &QComboBox::currentIndexChanged, this, [this, key, combo](int index) {
+        const QVariant data = combo->itemData(index);
+        if (data.isValid()) {
+            setValue(key, double(data.toInt()));
+        }
+    });
 }
 
 void LayerStyleDialog::bindColor(ColorSwatchWidget* button, const QString& key)
