@@ -6,10 +6,9 @@
 // the layer's style as it moves, so the canvas is the preview; OK records the
 // visit as one history state and Cancel (or Escape, or the close box) drops
 // every edit. Ported from photorust's LayerStyleDialog.
-// ponytail: no contour, texture, gradient editor, Blend If, channel
-// restrictions, New Style or Make / Reset to Default; the gradient is two
-// colour stops, the stroke a colour fill, and the Pattern Overlay picks from
-// the eight built-in patterns.
+// ponytail: no texture, Blend If, New Style or Make / Reset to Default; the
+// stroke is a colour fill, and the Pattern Overlay picks from the eight
+// built-in patterns.
 
 #include <QtCore/QPointF>
 #include <QtCore/QString>
@@ -25,6 +24,7 @@ class QStackedWidget;
 namespace pictura {
 
 class ColorSwatchWidget;
+class ContourSwatch;
 class PictureView;
 
 class LayerStyleDialog : public QDialog {
@@ -91,6 +91,13 @@ private:
     void bindBlendMode(QComboBox* combo, const QString& key);
     void bindColor(ColorSwatchWidget* button, const QString& key);
     QWidget* colorButton(const QString& key);
+    // Structured values: the contour and gradient text formats live in the
+    // engine, so the page reads, writes and binds them here.
+    QString contourText(const QString& key) const;
+    bool setContourText(const QString& key, const QString& points);
+    void bindContour(ContourSwatch* swatch, const QString& key);
+    QString gradientText(const QString& key) const;
+    bool setGradientText(const QString& key, const QString& stops);
     // CS6's slider-and-number pair on one setting.
     QWidget* sliderRow(const QString& key, int min, int max, const QString& suffix);
     // The same, on CS6's exponential 0–30000 px Distance scale.

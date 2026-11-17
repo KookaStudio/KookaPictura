@@ -130,8 +130,8 @@ Deeper technical status for PSD/PSB lives in
       Effects as Group (#579)
 - [ ] Layer Style dialog controls for the advanced-blending toggles (#695)
 - [x] Layer-style Global Light, Create Layers, and Rasterize Layer Style (#580)
-- [ ] Bevel Contour and Texture, a gradient editor in the style dialog, and
-      channel include (#581)
+- [x] Bevel Contour, the style dialog's gradient editor, and channel include
+      (#581)
 - [x] Auto-Align Layers (#582)
 - [x] Auto-Blend Layers (#583)
 - [x] Fill With (Mode)-Neutral Color for new layers (#584).

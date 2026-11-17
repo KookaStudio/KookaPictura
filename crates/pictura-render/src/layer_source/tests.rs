@@ -344,11 +344,13 @@ fn every_source_kind_hits_on_the_second_composite() {
         crate::metrics::counters().source_hits >= hits + 4,
         "the smart object, smart filter, type raster, and effect passes all hit"
     );
-    assert_eq!(cache_kind_count(Kind::Embedded), 1);
-    assert_eq!(cache_kind_count(Kind::Filtered), 1);
-    assert_eq!(cache_kind_count(Kind::Text), 1);
-    assert_eq!(cache_kind_count(Kind::Effects), 1);
-    assert_eq!(cache_kind_count(Kind::Passes), 1);
+    // The source cache is process-global and other tests composite in parallel;
+    // presence is the invariant, while the hit delta above proves reuse.
+    assert!(cache_kind_count(Kind::Embedded) >= 1);
+    assert!(cache_kind_count(Kind::Filtered) >= 1);
+    assert!(cache_kind_count(Kind::Text) >= 1);
+    assert!(cache_kind_count(Kind::Effects) >= 1);
+    assert!(cache_kind_count(Kind::Passes) >= 1);
 }
 
 #[test]

@@ -134,8 +134,9 @@ void MenuRegistrar::wireLayerStyleMenu()
                 refresh();
             }
         },
-        [this, current, canEdit]() {
-            return canEdit() && layer_style_has(*activeView(), current());
+        [this, current]() {
+            PictureView* view = activeView();
+            return view && view->has_document() && layer_style_can_copy(*view, current());
         });
     wire(
         QString::fromLatin1(command_ids::LayerStylePasteLayerStyle),

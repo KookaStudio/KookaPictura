@@ -61,8 +61,12 @@ public:
     void setStops(const GradientStops& stops);
     QSize sizeHint() const override;
 
+signals:
+    void clicked();
+
 protected:
     void paintEvent(QPaintEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
 
 private:
     GradientStops stops_;
@@ -86,6 +90,9 @@ public:
     // The stop's colour or location, kept in order; the selection follows it.
     void setStopColor(int index, const QColor& color);
     void setStopLocation(int index, int location);
+    // Keep the locations strictly rising: a moved or added stop is clamped to
+    // its neighbours. The layer-style call site enables this.
+    void setStrictLocations(bool strict) { strict_ = strict; }
     void removeStop(int index);
     // A stop at `location` in the gradient's colour there, selected.
     int addStop(int location);
@@ -114,6 +121,7 @@ private:
     int selected_ = -1;
     bool dragging_ = false;
     bool dragOff_ = false;
+    bool strict_ = false;
 };
 
 // CS6's Gradient Editor: the Presets grid, Name, Gradient Type, and either the
@@ -137,6 +145,9 @@ public:
     PercentField* smoothnessField() const { return smoothness_; }
     // Load preset `index`, as clicking its swatch does.
     void choosePreset(int index);
+    // Hide the Noise type and Smoothness control; the layer-style call site
+    // writes only a solid gradient.
+    void setSolidOnly(bool solidOnly);
 
 signals:
     void gradientChanged();

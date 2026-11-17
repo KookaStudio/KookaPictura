@@ -1,6 +1,7 @@
 #include "layer_style_dialog.h"
 
 #include "blend_modes.h"
+#include "layer_style_contour.h"
 #include "api/layers_api.h"
 #include "color_picker_dialog.h"
 #include "image_view.h"
@@ -361,6 +362,49 @@ void LayerStyleDialog::setValue(const QString& key, double v)
     if (view_ && layer_style_set(*view_, path_, key, v)) {
         dirty_ = true;
     }
+}
+
+QString LayerStyleDialog::contourText(const QString& key) const
+{
+    return view_ ? layer_style_contour(*view_, path_, key) : QString();
+}
+
+bool LayerStyleDialog::setContourText(const QString& key, const QString& points)
+{
+    if (view_ && layer_style_set_contour(*view_, path_, key, points)) {
+        dirty_ = true;
+        return true;
+    }
+    return false;
+}
+
+void LayerStyleDialog::bindContour(ContourSwatch* swatch, const QString& key)
+{
+    swatch->setObjectName(key);
+    swatch->setPointsText(contourText(key));
+    connect(swatch, &QPushButton::clicked, this, [this, key, swatch] {
+        ContourEditorDialog dialog(swatch->pointsText(), this);
+        if (dialog.exec() == QDialog::Accepted) {
+            const QString points = dialog.pointsText();
+            if (points != swatch->pointsText() && setContourText(key, points)) {
+                swatch->setPointsText(points);
+            }
+        }
+    });
+}
+
+QString LayerStyleDialog::gradientText(const QString& key) const
+{
+    return view_ ? layer_style_gradient(*view_, path_, key) : QString();
+}
+
+bool LayerStyleDialog::setGradientText(const QString& key, const QString& stops)
+{
+    if (view_ && layer_style_set_gradient(*view_, path_, key, stops)) {
+        dirty_ = true;
+        return true;
+    }
+    return false;
 }
 
 // ------------------------------------------------------------------ binding --

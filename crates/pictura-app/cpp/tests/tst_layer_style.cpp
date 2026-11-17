@@ -8,15 +8,21 @@
 #include "commands.h"
 #include "dialogs.h"
 #include "frame.h"
+#include "gradient_editor_dialog.h"
 #include "image_view.h"
+#include "layer_style_contour.h"
 #include "layer_style_dialog.h"
 #include "panels/layers_panel.h"
+#include "panels/percent_field.h"
 #include "api/layers_bridge.h"
 
 #include <QtGui/QAction>
+#include <QtGui/QColor>
 #include <QtCore/QTimer>
+#include <QtCore/QVector>
 
 #include <cmath>
+#include <functional>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
@@ -49,6 +55,17 @@ private slots:
     void createLayersCommand();
     void rasterizeLayerStyleCommand();
     void globalLightDialogNoOpAcceptRecordsNothing();
+    void contourPresetChangesTheBevelAndCancelDropsIt();
+    void glossContourWritesTheEffect();
+    void contourCheckboxGatesTheSubControls();
+    void gradientEditorWritesTheOverlayStops();
+    void gradientEditorCancelKeepsTheGradient();
+    void gradientEditorKeepsLocationsStrict();
+    void gradientEditorHidesNoiseAndSmoothness();
+    void channelIncludeChangesTheCompositeAndCancelRestores();
+    void channelRowFollowsTheDocumentMode();
+    void gradientEditorPresetStaysOpaque();
+    void copyEnabledForChannelOnlyStyle();
 
 private:
     // A 10x10 white square at (10, 10) lifted onto layer "1" over a white
@@ -537,6 +554,343 @@ void LayerStyleTest::globalLightDialogNoOpAcceptRecordsNothing()
     });
     globalLight->trigger();
     QCOMPARE(view_->history_count(), states);
+}
+
+
+QVector<QRgb> layerSamples(const std::function<QRgb(int, int)>& at)
+{
+    QVector<QRgb> out;
+    for (int y = 10; y < 20; ++y) {
+        for (int x = 10; x < 20; ++x) {
+            out.append(at(x, y));
+        }
+    }
+    return out;
+}
+
+void LayerStyleTest::contourPresetChangesTheBevelAndCancelDropsIt()
+{
+    setupSquare();
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("colorOverlay.on"), 1.0));
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("bevel.on"), 1.0));
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("bevel.size"), 4.0));
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("bevel.depth"), 500.0));
+    pictura::layer_style_commit(*view_, QStringLiteral("Setup"));
+    const int states = view_->history_count();
+    const auto samples = [this] {
+        return layerSamples([this](int x, int y) { return at(x, y); });
+    };
+    const QVector<QRgb> before = samples();
+
+    pictura::LayerStyleDialog dialog(view_, QStringLiteral("1"), QStringLiteral("bevel"));
+    auto* swatch =
+        dialog.findChild<pictura::ContourSwatch*>(QStringLiteral("bevel.glossContour"));
+    QVERIFY(swatch);
+    QCOMPARE(swatch->pointsText(), QStringLiteral("0,0 255,255"));
+    QTimer::singleShot(0, [] {
+        auto* editor = qobject_cast<pictura::ContourEditorDialog*>(
+            QApplication::activeModalWidget());
+        if (!editor) {
+            return;
+        }
+        if (auto* preset = editor->findChild<QComboBox*>(QStringLiteral("contourPreset"))) {
+            preset->setCurrentIndex(2);
+        }
+        editor->accept();
+    });
+    swatch->click();
+    QCOMPARE(pictura::layer_style_contour(*view_, QStringLiteral("1"),
+                                          QStringLiteral("bevel.glossContour")),
+             QStringLiteral("0,0 128,255 255,0"));
+    QVERIFY(samples() != before);
+    dialog.reject();
+    QCOMPARE(pictura::layer_style_contour(*view_, QStringLiteral("1"),
+                                          QStringLiteral("bevel.glossContour")),
+             QStringLiteral("0,0 255,255"));
+    QCOMPARE(view_->history_count(), states);
+}
+
+void LayerStyleTest::glossContourWritesTheEffect()
+{
+    setupSquare();
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("colorOverlay.on"), 1.0));
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("bevel.on"), 1.0));
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("bevel.depth"), 500.0));
+    pictura::layer_style_commit(*view_, QStringLiteral("Setup"));
+    const auto samples = [this] {
+        return layerSamples([this](int x, int y) { return at(x, y); });
+    };
+    const QVector<QRgb> before = samples();
+    pictura::LayerStyleDialog dialog(view_, QStringLiteral("1"), QStringLiteral("bevel"));
+    auto* swatch =
+        dialog.findChild<pictura::ContourSwatch*>(QStringLiteral("bevel.glossContour"));
+    QVERIFY(swatch);
+    QTimer::singleShot(0, [] {
+        auto* editor = qobject_cast<pictura::ContourEditorDialog*>(
+            QApplication::activeModalWidget());
+        if (!editor) {
+            return;
+        }
+        if (auto* preset = editor->findChild<QComboBox*>(QStringLiteral("contourPreset"))) {
+            preset->setCurrentIndex(4);
+        }
+        editor->accept();
+    });
+    swatch->click();
+    QCOMPARE(pictura::layer_style_contour(*view_, QStringLiteral("1"),
+                                          QStringLiteral("bevel.glossContour")),
+             QStringLiteral("0,0 32,96 128,160 224,96 255,0"));
+    QVERIFY(samples() != before);
+    dialog.reject();
+}
+
+void LayerStyleTest::contourCheckboxGatesTheSubControls()
+{
+    setupSquare();
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("colorOverlay.on"), 1.0));
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("bevel.on"), 1.0));
+    pictura::layer_style_commit(*view_, QStringLiteral("Setup"));
+    const auto samples = [this] {
+        return layerSamples([this](int x, int y) { return at(x, y); });
+    };
+    const QVector<QRgb> off = samples();
+    QVERIFY(pictura::layer_style_set_contour(
+        *view_, QStringLiteral("1"), QStringLiteral("bevel.edgeContour"),
+        QStringLiteral("0,0 128,220 255,255")));
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("bevel.edgeContourOn"), 1.0));
+    pictura::layer_style_commit(*view_, QStringLiteral("Edge"));
+    pictura::LayerStyleDialog dialog(view_, QStringLiteral("1"), QStringLiteral("bevel"));
+    auto* on = dialog.findChild<QCheckBox*>(QStringLiteral("bevel.edgeContourOn"));
+    auto* swatch =
+        dialog.findChild<pictura::ContourSwatch*>(QStringLiteral("bevel.edgeContour"));
+    auto* range = dialog.findChild<QSpinBox*>(QStringLiteral("bevel.edgeRange"));
+    auto* antiAlias = dialog.findChild<QCheckBox*>(QStringLiteral("bevel.edgeAntiAlias"));
+    QVERIFY(on && swatch && range && antiAlias);
+    QVERIFY(on->isChecked());
+    QVERIFY(swatch->isEnabled());
+    QVERIFY(range->isEnabled());
+    QVERIFY(antiAlias->isEnabled());
+    on->setChecked(false);
+    QVERIFY(!swatch->isEnabled());
+    QVERIFY(!range->isEnabled());
+    QVERIFY(!antiAlias->isEnabled());
+    QVERIFY(samples() == off);
+    dialog.reject();
+}
+
+void LayerStyleTest::gradientEditorWritesTheOverlayStops()
+{
+    setupSquare();
+    pictura::LayerStyleDialog dialog(view_, QStringLiteral("1"),
+                                     QStringLiteral("gradientOverlay"));
+    auto* swatch =
+        dialog.findChild<pictura::GradientSwatch*>(QStringLiteral("gradientOverlay.gradient"));
+    QVERIFY(swatch);
+    const QString before =
+        pictura::layer_style_gradient(*view_, QStringLiteral("1"),
+                                      QStringLiteral("gradientOverlay.gradient"));
+    QCOMPARE(before, QStringLiteral("0:000000 4096:ffffff"));
+    const auto samples = [this] {
+        return layerSamples([this](int x, int y) { return at(x, y); });
+    };
+    const QVector<QRgb> beforePixels = samples();
+    QTimer::singleShot(0, [] {
+        auto* editor = qobject_cast<pictura::GradientEditorDialog*>(
+            QApplication::activeModalWidget());
+        if (!editor) {
+            return;
+        }
+        editor->bar()->setStopColor(0, QColor(Qt::red));
+        editor->bar()->addStop(2048);
+        editor->accept();
+    });
+    dialog.show();
+    QTest::mouseClick(swatch, Qt::LeftButton);
+    const QString text = pictura::layer_style_gradient(
+        *view_, QStringLiteral("1"), QStringLiteral("gradientOverlay.gradient"));
+    QCOMPARE(text.split(QLatin1Char(' '), Qt::SkipEmptyParts).size(), 3);
+    QVERIFY(text.startsWith(QStringLiteral("0:ff0000 ")));
+    QVERIFY(text.endsWith(QStringLiteral("4096:ffffff")));
+    QVERIFY(samples() != beforePixels);
+    dialog.reject();
+}
+
+void LayerStyleTest::gradientEditorCancelKeepsTheGradient()
+{
+    setupSquare();
+    pictura::LayerStyleDialog dialog(view_, QStringLiteral("1"),
+                                     QStringLiteral("gradientOverlay"));
+    auto* swatch =
+        dialog.findChild<pictura::GradientSwatch*>(QStringLiteral("gradientOverlay.gradient"));
+    QVERIFY(swatch);
+    const QString before =
+        pictura::layer_style_gradient(*view_, QStringLiteral("1"),
+                                      QStringLiteral("gradientOverlay.gradient"));
+    QTimer::singleShot(0, [] {
+        auto* editor = qobject_cast<pictura::GradientEditorDialog*>(
+            QApplication::activeModalWidget());
+        if (!editor) {
+            return;
+        }
+        editor->bar()->setStopColor(0, QColor(Qt::red));
+        editor->reject();
+    });
+    dialog.show();
+    QTest::mouseClick(swatch, Qt::LeftButton);
+    QCOMPARE(pictura::layer_style_gradient(*view_, QStringLiteral("1"),
+                                           QStringLiteral("gradientOverlay.gradient")),
+             before);
+    dialog.reject();
+}
+
+void LayerStyleTest::gradientEditorKeepsLocationsStrict()
+{
+    setupSquare();
+    pictura::LayerStyleDialog dialog(view_, QStringLiteral("1"),
+                                     QStringLiteral("gradientOverlay"));
+    auto* swatch =
+        dialog.findChild<pictura::GradientSwatch*>(QStringLiteral("gradientOverlay.gradient"));
+    QVERIFY(swatch);
+    bool strict = false;
+    QTimer::singleShot(0, [&strict] {
+        auto* editor = qobject_cast<pictura::GradientEditorDialog*>(
+            QApplication::activeModalWidget());
+        if (!editor) {
+            return;
+        }
+        auto* bar = editor->bar();
+        const int first = bar->stops().at(0).location;
+        bar->setStopLocation(1, first);
+        strict = bar->stops().at(1).location > bar->stops().at(0).location;
+        editor->reject();
+    });
+    dialog.show();
+    QTest::mouseClick(swatch, Qt::LeftButton);
+    QVERIFY(strict);
+    dialog.reject();
+}
+
+void LayerStyleTest::gradientEditorHidesNoiseAndSmoothness()
+{
+    setupSquare();
+    pictura::LayerStyleDialog dialog(view_, QStringLiteral("1"),
+                                     QStringLiteral("gradientOverlay"));
+    auto* swatch =
+        dialog.findChild<pictura::GradientSwatch*>(QStringLiteral("gradientOverlay.gradient"));
+    QVERIFY(swatch);
+    bool solidOnly = false;
+    QTimer::singleShot(0, [&solidOnly] {
+        auto* editor = qobject_cast<pictura::GradientEditorDialog*>(
+            QApplication::activeModalWidget());
+        if (!editor) {
+            return;
+        }
+        solidOnly = !editor->typeCombo()->isEnabled()
+                    && !editor->smoothnessField()->isEnabled();
+        editor->reject();
+    });
+    dialog.show();
+    QTest::mouseClick(swatch, Qt::LeftButton);
+    QVERIFY(solidOnly);
+    dialog.reject();
+}
+
+void LayerStyleTest::channelIncludeChangesTheCompositeAndCancelRestores()
+{
+    setupSquare();
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("colorOverlay.on"), 1.0));
+    pictura::layer_style_commit(*view_, QStringLiteral("Setup"));
+    const int states = view_->history_count();
+    QCOMPARE(at(15, 15), QRgb(0xff0000));
+    pictura::LayerStyleDialog dialog(view_, QStringLiteral("1"), QString());
+    auto* include = dialog.findChild<QCheckBox*>(QStringLiteral("blending.include1"));
+    QVERIFY(include);
+    QVERIFY(include->isChecked());
+    include->setChecked(false);
+    QCOMPARE(at(15, 15), QRgb(0xffff00));
+    dialog.reject();
+    QCOMPARE(at(15, 15), QRgb(0xff0000));
+    QCOMPARE(view_->history_count(), states);
+}
+
+void LayerStyleTest::channelRowFollowsTheDocumentMode()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("RgbStyle"), 16, 16,
+                                 QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    view_ = window_->activeView();
+    QVERIFY(view_);
+    {
+        pictura::LayerStyleDialog dialog(view_, QStringLiteral("0"), QString());
+        QVERIFY(dialog.findChild<QCheckBox*>(QStringLiteral("blending.include0")));
+        QVERIFY(dialog.findChild<QCheckBox*>(QStringLiteral("blending.include1")));
+        QVERIFY(dialog.findChild<QCheckBox*>(QStringLiteral("blending.include2")));
+        QVERIFY(!dialog.findChild<QCheckBox*>(QStringLiteral("blending.include3")));
+        dialog.reject();
+    }
+    QVERIFY(window_->newDocument(QStringLiteral("GrayStyle"), 16, 16,
+                                 QStringLiteral("grayscale"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    QVERIFY(view_);
+    {
+        pictura::LayerStyleDialog dialog(view_, QStringLiteral("0"), QString());
+        QVERIFY(!dialog.findChild<QCheckBox*>(QStringLiteral("blending.include0")));
+        dialog.reject();
+    }
+}
+
+void LayerStyleTest::gradientEditorPresetStaysOpaque()
+{
+    setupSquare();
+    pictura::LayerStyleDialog dialog(view_, QStringLiteral("1"),
+                                     QStringLiteral("gradientOverlay"));
+    auto* swatch =
+        dialog.findChild<pictura::GradientSwatch*>(QStringLiteral("gradientOverlay.gradient"));
+    QVERIFY(swatch);
+    QTimer::singleShot(0, [] {
+        auto* editor = qobject_cast<pictura::GradientEditorDialog*>(
+            QApplication::activeModalWidget());
+        if (!editor) {
+            return;
+        }
+        editor->choosePreset(1);
+        editor->accept();
+    });
+    dialog.show();
+    QTest::mouseClick(swatch, Qt::LeftButton);
+    const QString text = pictura::layer_style_gradient(
+        *view_, QStringLiteral("1"), QStringLiteral("gradientOverlay.gradient"));
+    for (const QString& item : text.split(QLatin1Char(' '), Qt::SkipEmptyParts)) {
+        QCOMPARE(item.section(QLatin1Char(':'), 1).size(), 6);
+    }
+    dialog.reject();
+}
+
+void LayerStyleTest::copyEnabledForChannelOnlyStyle()
+{
+    setupSquare();
+    QAction* copy = leaf(QStringLiteral("Copy Layer Style"));
+    QAction* clear = leaf(QStringLiteral("Clear Layer Style"));
+    QVERIFY(copy && clear);
+    QVERIFY(!copy->isEnabled());
+    QVERIFY(!clear->isEnabled());
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("blending.include1"), 0.0));
+    pictura::layer_style_commit(*view_, QStringLiteral("Channel"));
+    window_->registry()->refresh();
+    QVERIFY(copy->isEnabled());
+    QVERIFY(!clear->isEnabled());
 }
 
 QTEST_MAIN(LayerStyleTest)

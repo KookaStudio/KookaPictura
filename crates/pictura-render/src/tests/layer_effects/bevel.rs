@@ -78,6 +78,11 @@ struct BevelSpec {
     sh_blend: Vec<u8>,
     sh_color: [f64; 3],
     sh_opacity: f64,
+    gloss_contour: Option<Vec<(f64, f64)>>,
+    edge_contour: Option<Vec<(f64, f64)>>,
+    edge_on: bool,
+    edge_range: f64,
+    edge_antialias: bool,
 }
 
 impl Default for BevelSpec {
@@ -100,41 +105,82 @@ impl Default for BevelSpec {
             sh_blend: b"Mltp".to_vec(),
             sh_color: [0.0, 0.0, 0.0],
             sh_opacity: 75.0,
+            gloss_contour: None,
+            edge_contour: None,
+            edge_on: false,
+            edge_range: 50.0,
+            edge_antialias: false,
         }
     }
 }
 
+fn contour(points: &[(f64, f64)]) -> DescValue {
+    DescValue::Object {
+        name: String::new(),
+        class_id: b"ShpC".to_vec(),
+        items: vec![
+            (b"Nm  ".to_vec(), DescValue::Text("Custom".into())),
+            (
+                b"Crv ".to_vec(),
+                DescValue::List(
+                    points
+                        .iter()
+                        .map(|&(x, y)| DescValue::Object {
+                            name: String::new(),
+                            class_id: b"CrPt".to_vec(),
+                            items: vec![
+                                (b"Hrzn".to_vec(), DescValue::Double(x)),
+                                (b"Vrtc".to_vec(), DescValue::Double(y)),
+                            ],
+                        })
+                        .collect(),
+                ),
+            ),
+        ],
+    }
+}
+
 fn bevel_block(spec: &BevelSpec) -> LayerBlock {
-    lfx2_effect(
-        b"ebbl",
-        ebbl(vec![
-            (b"enab".to_vec(), DescValue::Bool(spec.enabled)),
-            (b"present".to_vec(), DescValue::Bool(spec.present)),
-            (b"showInDialog".to_vec(), DescValue::Bool(true)),
-            (b"bvlS".to_vec(), enumerated(b"BESl", &spec.style)),
-            (b"bvlT".to_vec(), enumerated(b"bvlT", &spec.technique)),
-            (b"bvlD".to_vec(), enumerated(b"BESs", &spec.direction)),
-            (b"srgR".to_vec(), unit(spec.depth, PRC)),
-            (b"blur".to_vec(), unit(spec.size, PXL)),
-            (b"Sftn".to_vec(), unit(spec.soften, PXL)),
-            (b"lagl".to_vec(), unit(spec.angle, ANG)),
-            (b"Lald".to_vec(), unit(spec.altitude, ANG)),
-            (b"uglg".to_vec(), DescValue::Bool(spec.global)),
-            (b"hglM".to_vec(), enumerated(b"BlnM", &spec.hi_blend)),
-            (
-                b"hglC".to_vec(),
-                rgbc(spec.hi_color[0], spec.hi_color[1], spec.hi_color[2]),
-            ),
-            (b"hglO".to_vec(), unit(spec.hi_opacity, PRC)),
-            (b"sdwM".to_vec(), enumerated(b"BlnM", &spec.sh_blend)),
-            (
-                b"sdwC".to_vec(),
-                rgbc(spec.sh_color[0], spec.sh_color[1], spec.sh_color[2]),
-            ),
-            (b"sdwO".to_vec(), unit(spec.sh_opacity, PRC)),
-            (b"AntA".to_vec(), DescValue::Bool(true)),
-        ]),
-    )
+    let mut items = vec![
+        (b"enab".to_vec(), DescValue::Bool(spec.enabled)),
+        (b"present".to_vec(), DescValue::Bool(spec.present)),
+        (b"showInDialog".to_vec(), DescValue::Bool(true)),
+        (b"bvlS".to_vec(), enumerated(b"BESl", &spec.style)),
+        (b"bvlT".to_vec(), enumerated(b"bvlT", &spec.technique)),
+        (b"bvlD".to_vec(), enumerated(b"BESs", &spec.direction)),
+        (b"srgR".to_vec(), unit(spec.depth, PRC)),
+        (b"blur".to_vec(), unit(spec.size, PXL)),
+        (b"Sftn".to_vec(), unit(spec.soften, PXL)),
+        (b"lagl".to_vec(), unit(spec.angle, ANG)),
+        (b"Lald".to_vec(), unit(spec.altitude, ANG)),
+        (b"uglg".to_vec(), DescValue::Bool(spec.global)),
+        (b"hglM".to_vec(), enumerated(b"BlnM", &spec.hi_blend)),
+        (
+            b"hglC".to_vec(),
+            rgbc(spec.hi_color[0], spec.hi_color[1], spec.hi_color[2]),
+        ),
+        (b"hglO".to_vec(), unit(spec.hi_opacity, PRC)),
+        (b"sdwM".to_vec(), enumerated(b"BlnM", &spec.sh_blend)),
+        (
+            b"sdwC".to_vec(),
+            rgbc(spec.sh_color[0], spec.sh_color[1], spec.sh_color[2]),
+        ),
+        (b"sdwO".to_vec(), unit(spec.sh_opacity, PRC)),
+        (b"Inpr".to_vec(), unit(spec.edge_range, PRC)),
+    ];
+    if let Some(points) = &spec.gloss_contour {
+        items.push((b"TrnS".to_vec(), contour(points)));
+    }
+    if let Some(points) = &spec.edge_contour {
+        items.push((b"MpgS".to_vec(), contour(points)));
+    }
+    if spec.edge_on {
+        items.push((b"useShape".to_vec(), DescValue::Bool(true)));
+    }
+    if spec.edge_antialias {
+        items.push((b"AntA".to_vec(), DescValue::Bool(true)));
+    }
+    lfx2_effect(b"ebbl", ebbl(items))
 }
 
 fn spec_bevel(spec: &BevelSpec) -> Layer {
@@ -247,6 +293,11 @@ fn bevel_missing_keys_take_defaults() {
     assert_eq!(b.shadow.mode, BlendMode::Multiply);
     assert_eq!(b.shadow.color, [0, 0, 0]);
     assert_eq!(b.shadow.opacity, 75.0);
+    assert!(b.gloss_contour.is_linear());
+    assert!(b.edge_contour.is_linear());
+    assert!(!b.edge_contour_on);
+    assert_eq!(b.edge_range, 50.0);
+    assert!(!b.edge_anti_alias);
 }
 
 #[test]
@@ -837,7 +888,7 @@ fn composite_bevel_emboss_clamps_hand_built_non_finite_parameters() {
     clamped.soften = 0.0;
     clamped.depth = 0.0;
     clamped.altitude_deg = 0.0;
-    let mut unbounded = clamped;
+    let mut unbounded = clamped.clone();
     unbounded.angle_deg = f32::NAN;
     unbounded.size = f32::INFINITY;
     unbounded.depth = f32::NAN;
@@ -959,4 +1010,179 @@ fn global_light_altitude_lights_a_bevel() {
     let low = compose_with_light(spec_bevel(&spec), 120, 10);
     let high = compose_with_light(spec_bevel(&spec), 120, 75);
     assert_ne!(low, high, "the global altitude changes the shading");
+}
+
+// --- Contours --------------------------------------------------------------
+
+fn bent_gloss() -> Vec<(f64, f64)> {
+    vec![(0.0, 0.0), (64.0, 0.0), (192.0, 64.0), (255.0, 255.0)]
+}
+
+fn bent_edge() -> Vec<(f64, f64)> {
+    vec![(0.0, 0.0), (128.0, 220.0), (255.0, 255.0)]
+}
+
+#[test]
+fn bevel_contours_decode() {
+    let spec = BevelSpec {
+        gloss_contour: Some(bent_gloss()),
+        edge_contour: Some(bent_edge()),
+        edge_on: true,
+        edge_range: 30.0,
+        edge_antialias: true,
+        ..Default::default()
+    };
+    let b = decode_bevel_emboss(&spec_bevel(&spec)).expect("decodes");
+    assert_eq!(
+        b.gloss_contour.points(),
+        &[(0.0f32, 0.0), (64.0, 0.0), (192.0, 64.0), (255.0, 255.0)]
+    );
+    assert_eq!(
+        b.edge_contour.points(),
+        &[(0.0f32, 0.0), (128.0, 220.0), (255.0, 255.0)]
+    );
+    assert!(b.edge_contour_on);
+    assert_eq!(b.edge_range, 30.0);
+    assert!(b.edge_anti_alias);
+}
+
+#[test]
+fn bevel_contours_default_to_linear() {
+    let b = decode_bevel_emboss(&spec_bevel(&BevelSpec::default())).expect("decodes");
+    assert!(b.gloss_contour.is_linear());
+    assert!(b.edge_contour.is_linear());
+    assert!(!b.edge_contour_on);
+    assert_eq!(b.edge_range, 50.0);
+    assert!(!b.edge_anti_alias);
+}
+
+#[test]
+fn bevel_contour_malformed_is_linear() {
+    let point = |x: f64, y: f64| DescValue::Object {
+        name: String::new(),
+        class_id: b"CrPt".to_vec(),
+        items: vec![
+            (b"Hrzn".to_vec(), DescValue::Double(x)),
+            (b"Vrtc".to_vec(), DescValue::Double(y)),
+        ],
+    };
+    let malformed = [
+        DescValue::Object {
+            name: String::new(),
+            class_id: b"ShpC".to_vec(),
+            items: vec![(b"Crv ".to_vec(), DescValue::List(Vec::new()))],
+        },
+        DescValue::Object {
+            name: String::new(),
+            class_id: b"ShpC".to_vec(),
+            items: vec![(b"Crv ".to_vec(), DescValue::List(vec![point(0.0, 0.0)]))],
+        },
+        DescValue::Object {
+            name: String::new(),
+            class_id: b"ShpC".to_vec(),
+            items: vec![(
+                b"Crv ".to_vec(),
+                DescValue::List(vec![point(0.0, f64::NAN), point(255.0, 255.0)]),
+            )],
+        },
+        DescValue::Object {
+            name: String::new(),
+            class_id: b"ShpC".to_vec(),
+            items: vec![(b"Crv ".to_vec(), DescValue::Bool(true))],
+        },
+    ];
+    for contour in malformed {
+        let block = lfx2_effect(
+            b"ebbl",
+            ebbl(vec![
+                (b"enab".to_vec(), DescValue::Bool(true)),
+                (b"TrnS".to_vec(), contour),
+            ]),
+        );
+        let b = decode_bevel_emboss(&bevel_layer(Some(block))).expect("decodes");
+        assert!(b.gloss_contour.is_linear());
+    }
+}
+
+#[test]
+fn gloss_contour_remaps_the_shading() {
+    let linear = compose(spec_bevel(&BevelSpec {
+        gloss_contour: Some(vec![(0.0, 0.0), (255.0, 255.0)]),
+        ..Default::default()
+    }));
+    let bent = compose(spec_bevel(&BevelSpec {
+        gloss_contour: Some(bent_gloss()),
+        ..Default::default()
+    }));
+    assert!(interior_changed(&bent, &linear) > 0);
+    for y in 0..12 {
+        for x in 0..12 {
+            if !(3..9).contains(&x) || !(3..9).contains(&y) {
+                assert_eq!(px(&bent, x, y), px(&linear, x, y), "({x},{y})");
+            }
+        }
+    }
+}
+
+#[test]
+fn edge_contour_remaps_the_profile() {
+    let linear = compose(spec_bevel(&BevelSpec {
+        edge_contour: Some(vec![(0.0, 0.0), (255.0, 255.0)]),
+        edge_on: true,
+        ..Default::default()
+    }));
+    let bent = compose(spec_bevel(&BevelSpec {
+        edge_contour: Some(bent_edge()),
+        edge_on: true,
+        ..Default::default()
+    }));
+    assert!(interior_changed(&bent, &linear) > 0);
+}
+
+#[test]
+fn edge_contour_off_is_a_no_op() {
+    let off = compose(spec_bevel(&BevelSpec {
+        edge_contour: Some(bent_edge()),
+        edge_on: false,
+        ..Default::default()
+    }));
+    let plain = compose(spec_bevel(&BevelSpec::default()));
+    assert_eq!(off, plain);
+    let on = compose(spec_bevel(&BevelSpec {
+        edge_contour: Some(bent_edge()),
+        edge_on: true,
+        ..Default::default()
+    }));
+    assert_ne!(on, plain);
+}
+
+#[test]
+fn contour_range_scales_the_profile() {
+    let full = compose(spec_bevel(&BevelSpec {
+        edge_contour: Some(bent_edge()),
+        edge_on: true,
+        edge_range: 100.0,
+        ..Default::default()
+    }));
+    let narrow = compose(spec_bevel(&BevelSpec {
+        edge_contour: Some(bent_edge()),
+        edge_on: true,
+        edge_range: 50.0,
+        ..Default::default()
+    }));
+    assert_ne!(full, narrow);
+    assert_eq!(narrow.width, 12);
+    assert_eq!(narrow.height, 12);
+}
+
+#[test]
+fn linear_contours_are_byte_identical() {
+    let on = compose(spec_bevel(&BevelSpec {
+        gloss_contour: Some(vec![(0.0, 0.0), (255.0, 255.0)]),
+        edge_contour: Some(vec![(0.0, 0.0), (255.0, 255.0)]),
+        edge_on: true,
+        ..Default::default()
+    }));
+    let off = compose(spec_bevel(&BevelSpec::default()));
+    assert_eq!(on, off);
 }

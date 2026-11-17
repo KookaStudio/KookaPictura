@@ -20,7 +20,6 @@
 //! dilate of radius `round(spread / 100 * size)` (not the reference's spread-then-
 //! blur split), and the exterior is the multiplicative `1 - matte` rather than
 //! the exact knock-out equation.
-//!
 //! An inner shadow composites **above** the layer content (interior-only): it is
 //! the offset, choke-eroded and blurred inverted matte multiplied by the content
 //! matte. ponytail: `knocks_out` (`layerConceals`) is decoded but inert — the
@@ -73,11 +72,10 @@
 //! A bevel & emboss (`ebbl`) also composites **above** the content: the content
 //! matte `M` is blurred by `size` into a height field, its central-difference
 //! normal is lit from `Angle`/`Altitude`, and the signed shading tints the
-//! interior. ponytail: only the `Inner` style with the `Smooth` technique
-//! renders; the chisel techniques, the `Outer`/`Emboss`/`Pillow`/`Stroke`
-//! styles, contour (`MpgS`), gloss contour (`TrnS`), contour range (`Inpr`),
-//! anti-alias (`AntA`/`antialiasGloss`), texture, `useShape` and `showInDialog`
-//! are decoded/ignored; the light comes from `light::effective` (global when
+//! interior. ponytail: the chisel techniques, the `Outer`/`Emboss`/`Pillow`
+//! styles and the gloss/edge contours render as described; the `Stroke` style
+//! renders nothing; anti-alias (`AntA`/`antialiasGloss`), texture and
+//! `showInDialog` are decoded/ignored; the light comes from `light::effective` (global when
 //! `uglg` is on); the height profile is a Gaussian blur of `M`
 //! rather than the reference's distance transform; `scale = size · depth/100` and the
 //! `dot(N,L) - sin(alt)` flat-offset are ungrounded model choices; the build
@@ -101,6 +99,7 @@ use crate::composite_rows::serial;
 mod bevel;
 #[cfg(test)]
 pub(crate) use bevel::blur_reference;
+pub mod contour;
 mod glows;
 mod legacy;
 mod light;
@@ -120,6 +119,7 @@ pub use bevel::{
     decode_bevel_emboss, BevelDirection, BevelEmboss, BevelHighlight, BevelShadow, BevelStyle,
     BevelTechnique,
 };
+pub use contour::Contour;
 pub use glows::{decode_inner_glow, decode_outer_glow, GlowSource, InnerGlow, OuterGlow};
 pub use overlays::{
     decode_color_overlay, decode_gradient_overlay, decode_pattern_overlay, ColorOverlay,

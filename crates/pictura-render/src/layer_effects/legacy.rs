@@ -342,6 +342,11 @@ fn decode_bevel_record(r: &mut Reader) -> Option<BevelEmboss> {
         angle_deg: angle as f32,
         altitude_deg: 30.0f32.clamp(0.0, MAX_ALTITUDE),
         use_global_angle,
+        gloss_contour: Default::default(),
+        edge_contour: Default::default(),
+        edge_contour_on: false,
+        edge_range: 50.0,
+        edge_anti_alias: false,
         highlight: BevelHighlight {
             mode: layer_blend(highlight_key, BlendMode::Screen),
             color: highlight_color,

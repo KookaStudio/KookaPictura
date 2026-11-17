@@ -147,6 +147,7 @@ GradientStops resolvedStops(const GradientSpec& spec)
 GradientSwatch::GradientSwatch(QWidget* parent)
     : QWidget(parent)
 {
+    setCursor(Qt::PointingHandCursor);
     setMinimumHeight(24);
 }
 
@@ -159,6 +160,14 @@ void GradientSwatch::setStops(const GradientStops& stops)
 QSize GradientSwatch::sizeHint() const
 {
     return {380, 26};
+}
+
+void GradientSwatch::mousePressEvent(QMouseEvent* event)
+{
+    if (event->button() == Qt::LeftButton) {
+        emit clicked();
+    }
+    QWidget::mousePressEvent(event);
 }
 
 void GradientSwatch::paintEvent(QPaintEvent*)
@@ -216,7 +225,14 @@ void GradientStopBar::setStopLocation(int index, int location)
     if (index < 0 || index >= stops_.size()) {
         return;
     }
-    stops_[index].location = qBound(0, location, kMaxLocation);
+    location = qBound(0, location, kMaxLocation);
+    if (strict_) {
+        const int lower = index > 0 ? stops_.at(index - 1).location + 1 : 0;
+        const int upper =
+            index + 1 < stops_.size() ? stops_.at(index + 1).location - 1 : kMaxLocation;
+        location = qBound(lower, location, qMax(lower, upper));
+    }
+    stops_[index].location = location;
     selected_ = index;
     sortKeepingSelection();
     update();
@@ -237,7 +253,32 @@ void GradientStopBar::removeStop(int index)
 
 int GradientStopBar::addStop(int location)
 {
-    location = qBound(0, location, kMaxLocation);
+    const int requested = qBound(0, location, kMaxLocation);
+    location = requested;
+    if (strict_) {
+        const auto taken = [this](int value) {
+            return std::any_of(stops_.begin(), stops_.end(), [value](const GradientColorStop& stop) {
+                return stop.location == value;
+            });
+        };
+        if (taken(location)) {
+            bool found = false;
+            for (int offset = 1; offset <= kMaxLocation && !found; ++offset) {
+                const int up = requested + offset;
+                const int down = requested - offset;
+                if (up <= kMaxLocation && !taken(up)) {
+                    location = up;
+                    found = true;
+                } else if (down >= 0 && !taken(down)) {
+                    location = down;
+                    found = true;
+                }
+            }
+            if (!found) {
+                return -1;
+            }
+        }
+    }
     stops_.append({location, colorAt(stops_, location)});
     selected_ = int(stops_.size()) - 1;
     sortKeepingSelection();
@@ -572,6 +613,15 @@ GradientEditorDialog::GradientEditorDialog(const GradientSpec& spec, const QColo
     });
     showSelection(bar_->selected());
     setMinimumWidth(560);
+}
+
+void GradientEditorDialog::setSolidOnly(bool solidOnly)
+{
+    type_->setEnabled(!solidOnly);
+    smoothness_->setEnabled(!solidOnly);
+    if (solidOnly) {
+        type_->setCurrentIndex(GradientSpec::Solid);
+    }
 }
 
 void GradientEditorDialog::choosePreset(int index)
