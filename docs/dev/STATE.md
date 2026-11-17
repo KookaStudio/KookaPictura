@@ -4,6 +4,17 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Document source and composite state — #1345 implemented; tests via CI**
+  (OpenSpec change `2026-11-17-document-source-state`, archived; capability
+  `document/document-source-state`). `Document.source` and `Document.composite`
+  hold private source/profile/native-sample and composite/output-policy state.
+  Checked transitions preserve metadata and shared stores; core owns the common
+  mode/depth, retention, native-plane authority, and stored-composite queries.
+  Codec, render, application, and history consumers use those interfaces.
+  Fifteen new checks cover invariants, save/history transitions, packed Bitmap
+  staging, native-depth conversion, and allocation sharing. The CMake app and
+  Qt test build passed with the 80% CPU budget. Test execution and the remaining
+  verification gates are delegated to CI at the user's request.
 - **Tiled selection readers — #1268 complete** (OpenSpec change
   `tiled-selection-readers`; capability `tools/tiled-selection-readers`).
   `Plane` derefs to a slice, and that deref materializes a tiled selection;
