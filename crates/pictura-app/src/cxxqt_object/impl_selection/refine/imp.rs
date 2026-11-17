@@ -496,7 +496,7 @@ pub(super) fn apply(
                 let Some(path) = layer.clone() else {
                     return false;
                 };
-                let mask = (&refined).coverage();
+                let mask = refined.coverage();
                 let new_path = pictura_render::layer_via_copy(doc, &path, &mask);
                 if new_path.is_empty() {
                     return false;

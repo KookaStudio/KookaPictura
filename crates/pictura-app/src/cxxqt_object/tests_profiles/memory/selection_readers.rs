@@ -71,7 +71,7 @@ fn selection_readers_do_not_materialize() {
     let mut lifted = doc.clone();
     assert!(!pictura_render::lift_selection(&mut lifted, "0", &coverage).is_empty());
 
-    let mask = (&selection).coverage();
+    let mask = selection.coverage();
     let mut filtered = doc.clone();
     let layer = pictura_render::resolve_path_mut(&mut filtered, "0").expect("layer");
     let blur = pictura_filters::Filter::GaussianBlur { radius: 2.0 };

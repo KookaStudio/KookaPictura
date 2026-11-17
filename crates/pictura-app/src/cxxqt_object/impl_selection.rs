@@ -256,7 +256,7 @@ impl qobject::PictureView {
             }
             (
                 path.to_string(),
-                (&selection).coverage(),
+                selection.coverage(),
                 selection.translate(dx, dy),
                 move_dirty_rect(&selection, dx, dy),
             )

@@ -17,7 +17,7 @@ fn quick_mask_coverage_keeps_temporary_clip() {
             }
             let baseline = rust.session.quick_mask.coverage.clone();
             let mut clip = Selection::none(8, 8);
-            clip.data.write_rect_from(0..4, 0..8, 8, &vec![128; 32]);
+            clip.data.write_rect_from(0..4, 0..8, 8, &[128; 32]);
             rust.session.set_selection(Some(clip.clone()));
             rust.session.record(&rust.layer_target, "Initial");
             let cfg = StrokeConfig {

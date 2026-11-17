@@ -12,7 +12,6 @@ use crate::cxxqt_object::open_jobs::{apply_opened, decode_psd, make_background};
 use crate::cxxqt_object::state::PictureViewRust;
 use crate::history::{History, Restored};
 use crate::layer_target::LayerTarget;
-use pictura_core::mask_ops::TiledMask;
 use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, PsdRect};
 use pictura_paint::bucket::{self, BucketPaint, BucketSource};
 use pictura_paint::stroke::Stroke;
