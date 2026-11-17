@@ -216,8 +216,8 @@ void LayerCompsExportTest::namesAreSanitized()
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     QVERIFY(pictura::exportLayerComps(view, dir.path(), QStringLiteral("Export"),
-                                      QStringLiteral("TIFF"), false));
-    QCOMPARE(files(dir.path()), QStringList {QStringLiteral("Exporta_b_c_.tif")});
+                                      QStringLiteral("JPEG"), false));
+    QCOMPARE(files(dir.path()), QStringList {QStringLiteral("Exporta_b_c_.jpg")});
 }
 
 void LayerCompsExportTest::nameCollisionsGetSuffix()
