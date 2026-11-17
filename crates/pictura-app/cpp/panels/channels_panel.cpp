@@ -16,6 +16,8 @@
 #include <QtGui/QDragEnterEvent>
 #include <QtGui/QDropEvent>
 #include <QtGui/QMouseEvent>
+#include <QtGui/QPaintEvent>
+#include <QtGui/QPainter>
 #include <QtGui/QPalette>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QHBoxLayout>
@@ -119,6 +121,32 @@ void applyEyeIcon(QToolButton* eye)
                                        : QStringLiteral("layers.eyeOff")));
 }
 
+// The row surface is painted here rather than through the widget palette: a
+// style or palette change re-polishes item widgets and resets an explicit
+// palette, but the family-aware fill must survive that. The labels keep the
+// inherited palette, so their text follows the family too.
+class ChannelRowWidget : public QWidget {
+public:
+    using QWidget::QWidget;
+
+    void setSurface(const QColor& color)
+    {
+        surface_ = color;
+        update();
+    }
+    QColor surface() const { return surface_; }
+
+protected:
+    void paintEvent(QPaintEvent*) override
+    {
+        QPainter painter(this);
+        painter.fillRect(rect(), surface_);
+    }
+
+private:
+    QColor surface_;
+};
+
 QToolButton* footerButton(QWidget* parent, const char* iconId, const QString& tip,
                           const char* name)
 {
@@ -217,8 +245,7 @@ ChannelsPanel::ChannelsPanel(QWidget* parent)
 
 void ChannelsPanel::addRow(const QString& name, const QString& shortcut, int alpha, RowKind kind)
 {
-    auto* rowWidget = new QWidget(list_);
-    rowWidget->setAutoFillBackground(true);
+    auto* rowWidget = new ChannelRowWidget(list_);
     auto* rowLayout = new QHBoxLayout(rowWidget);
     rowLayout->setContentsMargins(2, 1, 6, 1);
     auto* eye = new QToolButton(rowWidget);
@@ -467,13 +494,19 @@ void ChannelsPanel::styleRows()
     const QColor base = palette().color(QPalette::Window);
     const int current = list_->currentRow();
     for (int i = 0; i < rows_.size(); ++i) {
-        QWidget* widget = rows_.at(i).widget;
+        auto* widget = static_cast<ChannelRowWidget*>(rows_.at(i).widget);
         if (!widget) {
             continue;
         }
-        QPalette rowPalette = widget->palette();
-        rowPalette.setColor(QPalette::Window, Theme::shade(base, i == current ? 3 : 1));
-        widget->setPalette(rowPalette);
+        widget->setSurface(Theme::contrastShade(base, i == current ? 3 : 1));
+    }
+}
+
+void ChannelsPanel::changeEvent(QEvent* event)
+{
+    QWidget::changeEvent(event);
+    if (event->type() == QEvent::PaletteChange || event->type() == QEvent::StyleChange) {
+        styleRows();
     }
 }
 
@@ -678,7 +711,15 @@ QColor ChannelsPanel::rowSurfaceForTest(int index) const
     if (index < 0 || index >= rows_.size() || !rows_.at(index).widget) {
         return {};
     }
-    return rows_.at(index).widget->palette().color(QPalette::Window);
+    return static_cast<const ChannelRowWidget*>(rows_.at(index).widget)->surface();
+}
+
+QColor ChannelsPanel::rowTextColorForTest(int index) const
+{
+    if (index < 0 || index >= rows_.size() || !rows_.at(index).widget) {
+        return {};
+    }
+    return rows_.at(index).widget->palette().color(QPalette::WindowText);
 }
 
 } // namespace pictura

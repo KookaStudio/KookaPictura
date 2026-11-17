@@ -610,6 +610,11 @@ QColor Theme::shade(QColor color, int steps)
     return color.toRgb();
 }
 
+QColor Theme::contrastShade(QColor color, int steps)
+{
+    return shade(color, currentFamily() == ThemeFamily::Light ? -steps : steps);
+}
+
 int Theme::clampLevel(int level)
 {
     if (level < 0) {

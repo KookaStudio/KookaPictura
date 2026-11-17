@@ -56,6 +56,12 @@ public:
     static constexpr int kShadeStep = 112;
     static QColor shade(QColor color, int steps);
 
+    // Step `steps` shades toward the active family's contrasting direction:
+    // lighter on the dark family and darker on the light family. Custom-painted
+    // rows use it so their surfaces and selection stay distinct and their text
+    // stays legible in either family.
+    static QColor contrastShade(QColor color, int steps);
+
     // Clamp a level into [0, kLevelCount).
     static int clampLevel(int level);
 

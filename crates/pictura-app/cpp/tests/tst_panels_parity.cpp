@@ -122,9 +122,11 @@ private slots:
     void hiddenLayerShowsFadedEye();
     void eyeGutterIsFlatAndLighter();
     void selectedRowUsesFlatHighlight();
+    void layerRowTextStaysLegibleInLightFamily();
     void visibilityToggleIsResponsive();
     void channelHoverAndCtrlOverlay();
     void channelRowsUseLayerSurfaces();
+    void channelRowsFollowLightFamily();
     void compactFlyoutClosesWhenGroupTearsOff();
     void compactFlyoutStaysOpenForTabTearOff();
     void compactFlyoutClosesWhenTabEmptiesIt();
@@ -155,6 +157,7 @@ void PanelsParityTest::cleanup()
             window_->closeDocument(window_->activeDocumentIndex(), false);
         }
     }
+    pictura::Theme::apply(pictura::Theme::kDefaultFamily, pictura::Theme::kDefaultLevel);
     view_ = nullptr;
     panel_ = nullptr;
 }
@@ -548,6 +551,29 @@ void PanelsParityTest::channelRowsUseLayerSurfaces()
     QCOMPARE(panel->rowSurfaceForTest(1).rgba(), pictura::Theme::shade(base, 1).rgba());
 }
 
+void PanelsParityTest::channelRowsFollowLightFamily()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("ChanLight"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    auto* panel = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(view_ && panel);
+    panel->setView(view_);
+    panel->refresh();
+
+    pictura::Theme::apply(pictura::Theme::ThemeFamily::Light, pictura::Theme::kDefaultLevel);
+    const QColor base = panel->palette().color(QPalette::Window);
+    QVERIFY2(base.lightness() > 180, "the panel carries the light window");
+
+    QCOMPARE(panel->rowSurfaceForTest(0).rgba(), pictura::Theme::contrastShade(base, 3).rgba());
+    QCOMPARE(panel->rowSurfaceForTest(1).rgba(), pictura::Theme::contrastShade(base, 1).rgba());
+    QVERIFY2(panel->rowSurfaceForTest(0).lightness() < panel->rowSurfaceForTest(1).lightness(),
+             "the selected channel row steps darker than the rest");
+    QVERIFY2(panel->rowTextColorForTest(0).lightness() < 96
+                 && panel->rowTextColorForTest(1).lightness() < 96,
+             "the channel names follow the light family's dark text");
+}
+
 void PanelsParityTest::redockAllFloats(pictura::PanelColumn* column)
 {
     for (int i = 0; i < 8 && column->floatCountForTest() > 0; ++i) {
@@ -710,6 +736,40 @@ void PanelsParityTest::selectedRowUsesFlatHighlight()
     QCOMPARE(focusedBorder, unfocusedBorder);
     QVERIFY2(focused.red() == focused.green() && focused.green() == focused.blue(),
              "the selected row uses a neutral grey, not the blue focus tint");
+    window_->closeDocument(doc, false);
+}
+
+void PanelsParityTest::layerRowTextStaysLegibleInLightFamily()
+{
+    QVERIFY2(setupLayers(), "light-family layers fixture");
+    const int doc = window_->activeDocumentIndex();
+    const QString path = view_->add_layer_in(QString());
+    QVERIFY(!path.isEmpty());
+    pictura::Theme::apply(pictura::Theme::ThemeFamily::Light, pictura::Theme::kDefaultLevel);
+    window_->show();
+    panel_->refresh();
+    QTest::qWait(0);
+
+    panel_->selectPaths({path}, path);
+    const QImage selected = panel_->rowImageForTest(path, 1.0, true);
+    QVERIFY2(!selected.isNull(), "the selected row paints");
+
+    // The selection steps away from the light window instead of clamping to
+    // white, so the white highlighted name keeps a legible contrast.
+    const QColor surface = selected.pixelColor(selected.width() - 4, 1);
+    QVERIFY2(surface.lightness() > 80 && surface.lightness() < 210,
+             "the selected surface is a mid grey, not white or the dark family's");
+
+    const QRect name = panel_->rowNameRectForTest(path);
+    int ink = 0;
+    for (int y = name.top(); y <= name.bottom(); ++y) {
+        for (int x = name.left(); x <= name.right(); ++x) {
+            if (selected.pixelColor(x, y).lightness() > surface.lightness() + 40) {
+                ++ink;
+            }
+        }
+    }
+    QVERIFY2(ink > 0, "the selected name paints a contrasting glyph");
     window_->closeDocument(doc, false);
 }
 

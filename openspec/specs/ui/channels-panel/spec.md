@@ -66,7 +66,9 @@ the thumbnails SHALL be empty.
 A channel item SHALL show a pointing-hand cursor while hovered. Holding Ctrl
 while over a channel item SHALL show a dashed-square symbol at the cursor,
 indicating "select all pixels of this channel". The channel table rows SHALL use
-the same surface and item styling as the Layers panel.
+the same surface and item styling as the Layers panel, including the
+family-aware row, gutter, and selected-row steps, and SHALL re-style when the
+theme family changes so the selection stays distinct in either family.
 
 #### Scenario: Hover shows the hand cursor [uic_channel_hover_cursor]
 
@@ -81,7 +83,14 @@ the same surface and item styling as the Layers panel.
 #### Scenario: Rows match the Layers panel style [uic_channel_row_style]
 
 - **WHEN** the Channels panel is shown
-- **THEN** its rows use the same surface shading and item layout as the Layers panel
+- **THEN** its rows use the same surface shading and item layout as the Layers
+  panel
+
+#### Scenario: Channel rows follow the light family [cp_light_row_contrast]
+
+- **WHEN** the light family is applied with a channel row selected
+- **THEN** the selected row surface is darker than the unselected rows and the
+  channel name stays legible
 
 ### Requirement: Mask channel row
 

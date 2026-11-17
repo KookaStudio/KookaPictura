@@ -10,11 +10,13 @@
 #include "panels/numeric_field.h"
 #include "paint_tip.h"
 #include "qt_test_support.h"
+#include "theme.h"
 #include "tool_options_json.h"
 #include "tools.h"
 
 #include "api/paint_bridge.h"
 
+#include <QtCore/QCoreApplication>
 #include <QtCore/QJsonObject>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
@@ -73,6 +75,7 @@ class BrushDynamicsTest : public QObject {
 
 private slots:
     void initTestCase();
+    void cleanup();
     void shapeDynamicsPageOpens();
     void setCheckboxWritesTheModel();
     void lockedSetSurvivesPreset();
@@ -81,6 +84,7 @@ private slots:
     void legacySettingsKeepDefaults();
     void roundnessReachesTheBrush();
     void flattenedTipPaintsWide();
+    void tipPresetsFollowLightFamily();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -89,6 +93,11 @@ private:
 void BrushDynamicsTest::initTestCase()
 {
     QVERIFY(stateHome_.isValid());
+}
+
+void BrushDynamicsTest::cleanup()
+{
+    pictura::Theme::apply(pictura::Theme::kDefaultFamily, pictura::Theme::kDefaultLevel);
 }
 
 void BrushDynamicsTest::shapeDynamicsPageOpens()
@@ -323,6 +332,23 @@ void BrushDynamicsTest::flattenedTipPaintsWide()
     }
     QVERIFY(maxX >= minX && maxY >= minY);
     QVERIFY(maxX - minX > maxY - minY);
+}
+
+void BrushDynamicsTest::tipPresetsFollowLightFamily()
+{
+    pictura::Theme::apply(pictura::Theme::ThemeFamily::Dark, pictura::Theme::kDefaultLevel);
+    auto window = pictura::test::makeMainWindow();
+    QVERIFY(window);
+    auto* tip = window->findChild<QToolButton*>(QStringLiteral("brushTip0"));
+    QVERIFY(tip);
+    const auto ink = [tip]() {
+        return tip->icon().pixmap(24, 24).toImage().pixelColor(12, 9);
+    };
+    QVERIFY2(ink().lightness() > 200, "the dark family paints a light tip");
+
+    pictura::Theme::apply(pictura::Theme::ThemeFamily::Light, pictura::Theme::kDefaultLevel);
+    QCoreApplication::processEvents();
+    QVERIFY2(ink().lightness() < 96, "the light family repaints the tip in dark ink");
 }
 
 QTEST_MAIN(BrushDynamicsTest)
