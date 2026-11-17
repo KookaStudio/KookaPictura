@@ -59,6 +59,9 @@ private slots:
     void aMagnifiedViewIsSmooth();
     void toolShortcutsFollowTheMode();
     void aDragDistortsThePreviewNotTheDocument();
+    void undoAndRedoStepThroughStrokes();
+    void undoRestoresTheFreezeMask();
+    void emptyUndoAndRedoAreNoOps();
     void restoreAllAndReconstructUndoTheDistortion();
     void aFrozenLayerTakesNoDistortion();
     void cancelLeavesTheDocumentAndHistory();
@@ -279,6 +282,86 @@ void LiquifyDialogTest::aDragDistortsThePreviewNotTheDocument()
     dialog.reject();
 }
 
+void LiquifyDialogTest::undoAndRedoStepThroughStrokes()
+{
+    LiquifyDialog dialog(window_->activeView(), QStringLiteral("stripes.png"));
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    pictura::LiquifyCanvas* canvas = dialog.canvas();
+    canvas->setFocus();
+
+    canvas->strokeForTest({QPointF(40, 40), QPointF(80, 40)});
+    canvas->refreshAll();
+    const QImage afterA = canvas->previewImage();
+
+    canvas->strokeForTest({QPointF(40, 80), QPointF(80, 80)});
+    canvas->refreshAll();
+    const QImage afterB = canvas->previewImage();
+    QVERIFY(afterA != afterB);
+
+    QTest::keyClick(&dialog, Qt::Key_Z, Qt::ControlModifier);
+    QCOMPARE(canvas->previewImage(), afterA);
+    QTest::keyClick(&dialog, Qt::Key_Z, Qt::ControlModifier | Qt::ShiftModifier);
+    QCOMPARE(canvas->previewImage(), afterB);
+
+    // A new stroke after undo discards the redo path.
+    QTest::keyClick(&dialog, Qt::Key_Z, Qt::ControlModifier);
+    QCOMPARE(canvas->previewImage(), afterA);
+    canvas->strokeForTest({QPointF(40, 60), QPointF(80, 60)});
+    canvas->refreshAll();
+    const QImage afterC = canvas->previewImage();
+    QVERIFY(afterC != afterA);
+    QTest::keyClick(&dialog, Qt::Key_Z, Qt::ControlModifier | Qt::ShiftModifier);
+    QCOMPARE(canvas->previewImage(), afterC);
+    dialog.reject();
+}
+
+void LiquifyDialogTest::undoRestoresTheFreezeMask()
+{
+    LiquifyDialog dialog(window_->activeView(), QStringLiteral("stripes.png"));
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    dialog.setAdvanced(true);
+    dialog.findChild<QCheckBox*>(QStringLiteral("liquifyShowMask"))->setChecked(true);
+    pictura::LiquifyCanvas* canvas = dialog.canvas();
+    canvas->setFocus();
+    const QImage plain = canvas->previewImage();
+
+    dialog.findChild<QPushButton*>(QStringLiteral("liquifyMaskAll"))->click();
+    QVERIFY(canvas->previewImage() != plain);
+    QTest::keyClick(&dialog, Qt::Key_Z, Qt::ControlModifier);
+    QCOMPARE(canvas->previewImage(), plain);
+
+    dialog.findChild<QPushButton*>(QStringLiteral("liquifyMaskInvert"))->click();
+    QVERIFY(canvas->previewImage() != plain);
+    QTest::keyClick(&dialog, Qt::Key_Z, Qt::ControlModifier);
+    QCOMPARE(canvas->previewImage(), plain);
+
+    dialog.selectTool(LiquifyDialog::Freeze);
+    canvas->strokeForTest(kDrag);
+    QVERIFY(canvas->previewImage() != plain);
+    QTest::keyClick(&dialog, Qt::Key_Z, Qt::ControlModifier);
+    QCOMPARE(canvas->previewImage(), plain);
+    dialog.reject();
+}
+
+void LiquifyDialogTest::emptyUndoAndRedoAreNoOps()
+{
+    LiquifyDialog dialog(window_->activeView(), QStringLiteral("stripes.png"));
+    dialog.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+    pictura::LiquifyCanvas* canvas = dialog.canvas();
+    canvas->setFocus();
+    const QImage before = canvas->previewImage();
+
+    QTest::keyClick(&dialog, Qt::Key_Z, Qt::ControlModifier);
+    QCOMPARE(canvas->previewImage(), before);
+    QTest::keyClick(&dialog, Qt::Key_Z, Qt::ControlModifier | Qt::ShiftModifier);
+    QCOMPARE(canvas->previewImage(), before);
+    QVERIFY(!pictura::liquify_distorted());
+    dialog.reject();
+}
+
 void LiquifyDialogTest::restoreAllAndReconstructUndoTheDistortion()
 {
     LiquifyDialog dialog(window_->activeView(), QStringLiteral("stripes.png"));
@@ -408,15 +491,21 @@ void LiquifyDialogTest::lastFilterSettingsReopensWithTheMesh()
     pictura::PictureView* view = window_->activeView();
     const int history = view->history_count();
     bool distorted = false;
-    QTimer::singleShot(0, [&distorted] {
+    bool stillDistorted = false;
+    QTimer::singleShot(0, [&distorted, &stillDistorted] {
         if (LiquifyDialog* dialog = openLiquifyDialog()) {
             distorted = pictura::liquify_distorted();
+            // The initial mesh is the undo baseline, not an action.
+            dialog->canvas()->setFocus();
+            QTest::keyClick(dialog, Qt::Key_Z, Qt::ControlModifier);
+            stillDistorted = pictura::liquify_distorted();
             dialog->reject();
         }
     });
     QVERIFY(window_->registry()->dispatch(
         QString::fromLatin1(pictura::command_ids::FilterLastFilterSettings)));
     QVERIFY(distorted);
+    QVERIFY(stillDistorted);
     QCOMPARE(view->history_count(), history);
 }
 

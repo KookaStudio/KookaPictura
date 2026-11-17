@@ -89,6 +89,15 @@ pub mod ffi {
         /// One Brush Rate tick with the brush held at the stroke's last point.
         fn liquify_hold() -> Vec<i32>;
 
+        /// Undo the last Liquify action (a stroke, a whole-mesh mask or
+        /// reconstruct action, or Load Last Mesh). False when there is nothing
+        /// to undo.
+        fn liquify_undo() -> bool;
+
+        /// Redo the last undone Liquify action. False when there is nothing to
+        /// redo.
+        fn liquify_redo() -> bool;
+
         /// The Reconstruct button: restore unfrozen areas by `amount` percent.
         fn liquify_reconstruct(amount: f64);
 
@@ -109,9 +118,10 @@ pub mod ffi {
         fn liquify_last_mesh_id() -> i32;
 
         /// Replace the session's distortion with kept mesh `id`, stretched to
-        /// fit this layer; the session's freeze mask stays. False when the id
-        /// is not kept.
-        fn liquify_load_mesh(id: i32) -> bool;
+        /// fit this layer; the session's freeze mask stays. `record` puts the
+        /// load in the undo history; the dialog's initial mesh is the session's
+        /// baseline and is not recorded. False when the id is not kept.
+        fn liquify_load_mesh(id: i32, record: bool) -> bool;
 
         /// End the session. With `keep` and a mesh that moves something, keep
         /// it (and remember it for Load Last Mesh) and return its id for the

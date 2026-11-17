@@ -20,6 +20,9 @@ use super::super::hidden_layer_region;
 /// offered.
 pub(super) const KEPT: usize = 8;
 
+/// CS6's default History States: how many Liquify actions the dialog can undo.
+pub(super) const UNDO_LIMIT: usize = 20;
+
 pub(super) struct Store {
     next: u32,
     last: u32,
@@ -61,6 +64,44 @@ pub(in crate::cxxqt_object) fn liquify_mesh(id: u32) -> Option<Arc<LiquifyMesh>>
         .map(|(_, mesh)| mesh.clone())
 }
 
+/// The dialog's undo and redo stacks, each entry a whole mesh (distortion and
+/// freeze mask).
+#[derive(Default)]
+pub(super) struct History {
+    past: VecDeque<LiquifyMesh>,
+    future: Vec<LiquifyMesh>,
+}
+
+impl History {
+    /// Record the mesh as it was before an action; a new action drops the
+    /// redo path.
+    fn record(&mut self, mesh: LiquifyMesh) {
+        self.past.push_back(mesh);
+        if self.past.len() > UNDO_LIMIT {
+            self.past.pop_front();
+        }
+        self.future.clear();
+    }
+
+    fn undo(&mut self, current: &mut LiquifyMesh) -> bool {
+        let Some(previous) = self.past.pop_back() else {
+            return false;
+        };
+        let now = std::mem::replace(current, previous);
+        self.future.push(now);
+        true
+    }
+
+    fn redo(&mut self, current: &mut LiquifyMesh) -> bool {
+        let Some(next) = self.future.pop() else {
+            return false;
+        };
+        let now = std::mem::replace(current, next);
+        self.past.push_back(now);
+        true
+    }
+}
+
 pub(super) struct Session {
     mesh: LiquifyMesh,
     source: LiquifySource,
@@ -70,6 +111,10 @@ pub(super) struct Session {
     /// The selection's bounding rectangle in layer coordinates, or `None`
     /// without a selection: the dialog's preview frame and the mesh's clip.
     clip: Option<PsdRect>,
+    history: History,
+    /// The mesh as it was when the current stroke began; the first dab that
+    /// changes anything records it, so a whole stroke is one undo step.
+    stroke_base: Option<LiquifyMesh>,
 }
 
 pub(super) static SESSION: Mutex<Option<Session>> = Mutex::new(None);
@@ -81,6 +126,29 @@ pub(super) fn with_session<R>(default: R, f: impl FnOnce(&mut Session) -> R) -> 
 
 pub(super) fn rect_vec(r: Option<PsdRect>) -> Vec<i32> {
     r.map_or_else(Vec::new, |r| vec![r.left, r.top, r.width(), r.height()])
+}
+
+/// Record `before` when the action changed the mesh.
+fn record_change(s: &mut Session, before: LiquifyMesh) {
+    if s.mesh != before {
+        s.history.record(before);
+    }
+}
+
+/// The first change in a stroke commits the mesh as it was when the stroke
+/// began; later dabs of the same stroke are the same undo step.
+fn record_stroke(s: &mut Session) {
+    if let Some(before) = s.stroke_base.take() {
+        record_change(s, before);
+    }
+}
+
+/// Run a whole-mesh action as one undo step.
+fn edit_mesh(s: &mut Session, edit: impl FnOnce(&mut LiquifyMesh)) {
+    s.stroke_base = None;
+    let before = s.mesh.clone();
+    edit(&mut s.mesh);
+    record_change(s, before);
 }
 
 /// The session's processing rectangle in layer coordinates. `Ok(None)` is the
@@ -166,6 +234,8 @@ pub(super) fn liquify_begin(view: &PictureView) -> bool {
         last: None,
         mask: None,
         clip,
+        history: History::default(),
+        stroke_base: None,
     };
     *SESSION.lock().unwrap_or_else(|e| e.into_inner()) = Some(session);
     true
@@ -321,8 +391,13 @@ pub(super) fn liquify_set_brush(
 pub(super) fn liquify_stroke_begin(x: f64, y: f64, pressure: f64) -> Vec<i32> {
     with_session(Vec::new(), |s| {
         let p = [x, y, pressure];
+        s.stroke_base = Some(s.mesh.clone());
         s.last = Some(p);
-        rect_vec(s.mesh.stroke_begin(&s.brush, p))
+        let dirty = s.mesh.stroke_begin(&s.brush, p);
+        if dirty.is_some() {
+            record_stroke(s);
+        }
+        rect_vec(dirty)
     })
 }
 
@@ -331,29 +406,52 @@ pub(super) fn liquify_stroke_to(x: f64, y: f64, pressure: f64) -> Vec<i32> {
         let b = [x, y, pressure];
         let dirty = s.last.and_then(|a| s.mesh.stroke_to(&s.brush, a, b));
         s.last = Some(b);
+        if dirty.is_some() {
+            record_stroke(s);
+        }
         rect_vec(dirty)
     })
 }
 
 pub(super) fn liquify_hold() -> Vec<i32> {
     with_session(Vec::new(), |s| {
-        rect_vec(s.last.and_then(|p| s.mesh.hold(&s.brush, p)))
+        let dirty = s.last.and_then(|p| s.mesh.hold(&s.brush, p));
+        if dirty.is_some() {
+            record_stroke(s);
+        }
+        rect_vec(dirty)
+    })
+}
+
+pub(super) fn liquify_undo() -> bool {
+    with_session(false, |s| {
+        s.stroke_base = None;
+        s.history.undo(&mut s.mesh)
+    })
+}
+
+pub(super) fn liquify_redo() -> bool {
+    with_session(false, |s| {
+        s.stroke_base = None;
+        s.history.redo(&mut s.mesh)
     })
 }
 
 pub(super) fn liquify_reconstruct(amount: f64) {
-    with_session((), |s| s.mesh.reconstruct(amount));
+    with_session((), |s| edit_mesh(s, |mesh| mesh.reconstruct(amount)));
 }
 
 pub(super) fn liquify_restore_all() {
-    with_session((), |s| s.mesh.restore_all());
+    with_session((), |s| edit_mesh(s, LiquifyMesh::restore_all));
 }
 
 pub(super) fn liquify_mask(op: i32) {
-    with_session((), |s| match op {
-        0 => s.mesh.thaw_all(),
-        1 => s.mesh.freeze_all(),
-        _ => s.mesh.invert_freeze(),
+    with_session((), |s| {
+        edit_mesh(s, |mesh| match op {
+            0 => mesh.thaw_all(),
+            1 => mesh.freeze_all(),
+            _ => mesh.invert_freeze(),
+        });
     });
 }
 
@@ -375,7 +473,7 @@ pub(super) fn liquify_last_mesh_id() -> i32 {
     }
 }
 
-pub(super) fn liquify_load_mesh(id: i32) -> bool {
+pub(super) fn liquify_load_mesh(id: i32, record: bool) -> bool {
     let kept = match u32::try_from(id) {
         Ok(id) if id != 0 => liquify_mesh(id),
         _ => None,
@@ -389,7 +487,14 @@ pub(super) fn liquify_load_mesh(id: i32) -> bool {
         // The session's selection decides where the mesh may act, not the one
         // the kept mesh was committed under.
         mesh.set_clip(s.clip);
-        s.mesh = mesh;
+        if record {
+            edit_mesh(s, |current| *current = mesh);
+        } else {
+            // The dialog's initial mesh is where undo starts, not an action.
+            s.stroke_base = None;
+            s.history = History::default();
+            s.mesh = mesh;
+        }
         true
     })
 }
@@ -473,5 +578,38 @@ mod tests {
         assert_eq!(session_clip(Some(&off), layer_rect), Err(()));
         let empty = Selection::none(100, 100);
         assert_eq!(session_clip(Some(&empty), layer_rect), Err(()));
+    }
+
+    #[test]
+    fn history_undoes_and_redoes_one_action_at_a_time() {
+        let identity = LiquifyMesh::new(8, 8);
+        let mut frozen = identity.clone();
+        frozen.freeze_all();
+        let mut history = History::default();
+        history.record(identity.clone());
+        let mut current = frozen.clone();
+        assert!(history.undo(&mut current));
+        assert_eq!(current, identity);
+        assert!(history.redo(&mut current));
+        assert_eq!(current, frozen);
+        assert!(!history.redo(&mut current));
+        // A new action after undo drops the redo path.
+        assert!(history.undo(&mut current));
+        history.record(frozen.clone());
+        assert!(!history.redo(&mut current));
+    }
+
+    #[test]
+    fn history_keeps_a_bounded_undo_stack() {
+        let mut history = History::default();
+        for _ in 0..UNDO_LIMIT + 5 {
+            history.record(LiquifyMesh::new(2, 2));
+        }
+        assert_eq!(history.past.len(), UNDO_LIMIT);
+        let mut current = LiquifyMesh::new(2, 2);
+        for _ in 0..UNDO_LIMIT {
+            assert!(history.undo(&mut current));
+        }
+        assert!(!history.undo(&mut current));
     }
 }
