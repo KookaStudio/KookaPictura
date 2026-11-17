@@ -187,7 +187,11 @@ pub(crate) fn mask_value(so: &SmartObject, x: i32, y: i32) -> f32 {
             0.0
         };
     }
-    f32::from(mask.data[my as usize * w as usize + mx as usize]) / 255.0
+    f32::from(
+        mask.data
+            .sample(my as usize * w as usize + mx as usize)
+            .unwrap_or(0),
+    ) / 255.0
 }
 
 /// Composite a smart object's filtered source, rendering the source first so an

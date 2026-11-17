@@ -41,6 +41,8 @@ mod tests_perspective_crop;
 #[cfg(test)]
 mod tests_stack;
 #[cfg(test)]
+mod tests_tiled_selection;
+#[cfg(test)]
 mod tests_transfer;
 #[cfg(test)]
 mod tests_via;

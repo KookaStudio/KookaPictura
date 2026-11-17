@@ -2,7 +2,8 @@
 //! Outside. A copy keeps only the selection's bounding box — straight RGBA plus
 //! the selection coverage over it — so a small copy stays small. The selection
 //! arrives as a document-sized coverage plane (`width * height` bytes, 255 =
-//! fully selected); `None` means "no selection", which selects everything.
+//! fully selected), read by rows so a tiled selection is never materialized
+//! (#1268); `None` means "no selection", which selects everything.
 //!
 //! Ported from photorust's `Document::{copy_selection, paste_into,
 //! clear_selection_pixels}` (<https://github.com/perfecto25/photorust>).
@@ -12,7 +13,6 @@ use pictura_core::{
     PsdRect,
 };
 use rayon::prelude::*;
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
@@ -82,7 +82,7 @@ pub enum PasteMode {
 /// Copy the selected pixels of the layer at `path`. Refuses (`None`) a group,
 /// an adjustment or other channel-less layer, a region that misses the layer or
 /// the canvas, and a selection that covers only transparent pixels.
-pub fn copy_layer(doc: &Document, path: &str, selection: Option<&[u8]>) -> Option<Clip> {
+pub fn copy_layer(doc: &Document, path: &str, selection: Option<&Plane<u8>>) -> Option<Clip> {
     let layer = resolve_path(doc, path)?;
     if !has_pixels(layer) {
         return None;
@@ -112,7 +112,7 @@ pub fn copy_layer(doc: &Document, path: &str, selection: Option<&[u8]>) -> Optio
 pub fn copy_merged(
     doc: &Document,
     composite: &PixelBuffer,
-    selection: Option<&[u8]>,
+    selection: Option<&Plane<u8>>,
 ) -> Option<Clip> {
     if composite.channels != 4 || composite.width != doc.width || composite.height != doc.height {
         return None;
@@ -136,7 +136,7 @@ pub fn copy_merged(
 /// large document composites no more than its bounds (#1274).
 pub fn copy_merged_region(
     doc: &Document,
-    selection: Option<&[u8]>,
+    selection: Option<&Plane<u8>>,
     read: impl FnOnce(PsdRect) -> PixelBuffer,
 ) -> Option<Clip> {
     let region = match selection {
@@ -168,7 +168,7 @@ pub fn copy_merged_region(
 /// white instead. Refuses a group, a channel-less layer, a pixel lock, and a
 /// transparency lock on a layer with alpha. Returns true only when a pixel
 /// changed.
-pub fn clear_layer(doc: &mut Document, path: &str, selection: Option<&[u8]>) -> bool {
+pub fn clear_layer(doc: &mut Document, path: &str, selection: Option<&Plane<u8>>) -> bool {
     let (doc_w, doc_h) = (doc.width, doc.height);
     let Some(layer) = resolve_path_mut(doc, path) else {
         return false;
@@ -224,10 +224,17 @@ pub fn clear_layer(doc: &mut Document, path: &str, selection: Option<&[u8]>) -> 
                 .data
                 .read_rect_into(col0..col1, row..row + 1, src_w, &mut pixels);
             let mut row_changed = false;
-            let coverage = selection.map(|coverage| {
-                let base = y as usize * doc_w as usize + (rect.left + col0 as i32) as usize;
-                &coverage[base..base + (col1 - col0)]
-            });
+            let x0 = (rect.left + col0 as i32) as usize;
+            let coverage = match selection {
+                None => None,
+                Some(coverage) => {
+                    let span = x0..x0 + (col1 - col0);
+                    match coverage.row_span(y as usize, span, doc_w as usize) {
+                        Some(row) => Some(row),
+                        None => continue,
+                    }
+                }
+            };
             let clear = |value: u8, cov: u8| {
                 if has_alpha {
                     scale(value, 255 - cov)
@@ -244,7 +251,7 @@ pub fn clear_layer(doc: &mut Document, path: &str, selection: Option<&[u8]>) -> 
                     }
                 }
                 Some(coverage) => {
-                    for (value, &cov) in pixels.iter_mut().zip(coverage) {
+                    for (value, &cov) in pixels.iter_mut().zip(coverage.iter()) {
                         if cov == 0 {
                             continue;
                         }
@@ -278,7 +285,7 @@ pub fn paste_clip(
     clip: &Clip,
     (left, top): (i32, i32),
     mode: PasteMode,
-    selection: Option<&[u8]>,
+    selection: Option<&Plane<u8>>,
 ) -> String {
     let (w, h) = (clip.width(), clip.height());
     let count = w as usize * h as usize;
@@ -315,27 +322,17 @@ pub fn paste_clip(
 }
 
 /// The bounding box of nonzero `coverage` over a `width * height` plane, or
-/// `None` when nothing is selected.
-pub fn coverage_bounds(coverage: &[u8], width: u32, height: u32) -> Option<PsdRect> {
-    let (w, h) = (width as usize, height as usize);
-    if w == 0 || coverage.len() < w * h {
-        return None;
-    }
-    row_bounds(h, |y| coverage.get(y * w..(y + 1) * w).map(Cow::Borrowed))
-}
-
-/// [`coverage_bounds`] of a plane, read by rows so a plane whose bands have
-/// diverged is not materialized.
-pub(super) fn plane_coverage_bounds(
-    coverage: &Plane<u8>,
-    width: u32,
-    height: u32,
-) -> Option<PsdRect> {
-    let (w, h) = (width as usize, height as usize);
-    if w == 0 || coverage.len() < w * h {
-        return None;
-    }
-    row_bounds(h, |y| coverage.row(y, w))
+/// `None` when nothing is selected. A tiled plane is read tile by tile, its
+/// uniform tiles whole, so it is never materialized.
+pub fn coverage_bounds(coverage: &Plane<u8>, width: u32, height: u32) -> Option<PsdRect> {
+    pictura_core::mask_ops::coverage_bounds(coverage, width as usize, height as usize).map(
+        |(x0, y0, x1, y1)| PsdRect {
+            top: y0 as i32,
+            left: x0 as i32,
+            bottom: y1 as i32,
+            right: x1 as i32,
+        },
+    )
 }
 
 /// How many planes [`plane_has_coverage`] remembers before it starts over.
@@ -357,7 +354,7 @@ thread_local! {
 }
 
 /// Whether `coverage` holds a nonzero sample: exactly when
-/// [`plane_coverage_bounds`] is `Some`. Rows are read in place and the scan
+/// [`coverage_bounds`] is `Some`. Rows are read in place and the scan
 /// stops at the first hit. The answer is remembered by the plane's ident, so
 /// the menu checks one refresh runs read an unchanged plane once (#1145).
 pub fn plane_has_coverage(coverage: &Plane<u8>, width: u32, height: u32) -> bool {
@@ -389,37 +386,13 @@ pub fn plane_has_coverage(coverage: &Plane<u8>, width: u32, height: u32) -> bool
     covered
 }
 
-fn row_bounds<'a>(
-    height: usize,
-    row: impl Fn(usize) -> Option<Cow<'a, [u8]>> + Sync,
-) -> Option<PsdRect> {
-    (0..height)
-        .into_par_iter()
-        .filter_map(|y| {
-            let row = row(y)?;
-            let first = row.iter().position(|&v| v > 0)?;
-            let last = row.iter().rposition(|&v| v > 0).unwrap_or(first);
-            Some(PsdRect {
-                top: y as i32,
-                left: first as i32,
-                bottom: y as i32 + 1,
-                right: last as i32 + 1,
-            })
-        })
-        .reduce_with(|a, b| PsdRect {
-            top: a.top.min(b.top),
-            left: a.left.min(b.left),
-            bottom: a.bottom.max(b.bottom),
-            right: a.right.max(b.right),
-        })
-}
 /// Sample `region` through `pixel` into a clip, with the selection coverage (or
 /// full coverage) as its mask. `None` for an empty region or when every sampled
 /// pixel is transparent after masking.
 fn build(
     region: PsdRect,
     doc_w: u32,
-    selection: Option<&[u8]>,
+    selection: Option<&Plane<u8>>,
     pixel: impl Fn(i32, i32) -> [u8; 4],
 ) -> Option<Clip> {
     if region.width() <= 0 || region.height() <= 0 {
@@ -429,15 +402,23 @@ fn build(
     let mut rgba = Vec::with_capacity(count * 4);
     let mut mask = Vec::with_capacity(count);
     let mut visible = false;
+    let span = region.left.max(0) as usize..region.right.max(0) as usize;
     for y in region.top..region.bottom {
+        let row = selection.map(|coverage| {
+            (y >= 0)
+                .then(|| coverage.row_span(y as usize, span.clone(), doc_w as usize))
+                .flatten()
+        });
         for x in region.left..region.right {
             let px = pixel(x, y);
-            let cov = selection.map_or(255, |coverage| {
-                coverage
-                    .get(y as usize * doc_w as usize + x as usize)
+            let cov = match &row {
+                None => 255,
+                Some(row) => row
+                    .as_ref()
+                    .and_then(|row| row.get((x - region.left) as usize))
                     .copied()
-                    .unwrap_or(0)
-            });
+                    .unwrap_or(0),
+            };
             visible |= scale(px[3], cov) > 0;
             rgba.extend_from_slice(&px);
             mask.push(cov);
@@ -452,11 +433,15 @@ fn build(
 
 /// The selection as a document-sized layer mask. Outside the canvas a Paste Into
 /// hides and a Paste Outside shows.
-fn selection_mask(doc: &Document, coverage: &[u8], invert: bool) -> LayerMask {
-    let data = coverage
-        .iter()
-        .map(|&v| if invert { 255 - v } else { v })
-        .collect();
+fn selection_mask(doc: &Document, coverage: &Plane<u8>, invert: bool) -> LayerMask {
+    use pictura_core::mask_ops::{tiled_view, zip_tiles};
+    let (w, h) = (doc.width as usize, doc.height as usize);
+    let data = if invert {
+        let view = tiled_view(coverage, w, h);
+        zip_tiles(&view, &view, w, h, |v, _| 255 - v)
+    } else {
+        coverage.clone()
+    };
     LayerMask {
         rect: canvas(doc),
         default_color: if invert { 255 } else { 0 },

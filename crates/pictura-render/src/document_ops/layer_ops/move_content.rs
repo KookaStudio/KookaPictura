@@ -4,14 +4,14 @@
 
 use pictura_core::{
     layer_move_locked, layer_pixel_locked, layer_transparency_locked, BlendMode, Channel,
-    ColorLabel, Document, Layer, LayerMask, LockFlags, PsdRect,
+    ColorLabel, Document, Layer, LayerMask, LockFlags, Plane, PsdRect,
 };
 
 use std::borrow::Cow;
 
 use pictura_core::layer_bounds::{cropped_plane, padded_plane};
 
-use super::clipboard::{clear_layer, coverage_bounds, plane_coverage_bounds};
+use super::clipboard::{clear_layer, coverage_bounds};
 use super::merge::{merge_scope, MergeScope};
 use super::paths::{format_segments, parse_path, resolve_path, resolve_path_mut};
 use super::via::{layer_via_copy, layer_via_cut};
@@ -25,7 +25,7 @@ use crate::document_ops::canvas::offset_rect;
 /// Returns the new layer's path; empty when [`can_lift_selection`] refuses the
 /// source, or the selection covers no visible pixel. Put it back with
 /// [`merge_lifted`].
-pub fn lift_selection(doc: &mut Document, source_path: &str, coverage: &[u8]) -> String {
+pub fn lift_selection(doc: &mut Document, source_path: &str, coverage: &Plane<u8>) -> String {
     let Some(segments) = parse_path(source_path) else {
         return String::new();
     };
@@ -55,7 +55,7 @@ pub fn lift_selection(doc: &mut Document, source_path: &str, coverage: &[u8]) ->
 /// `source`'s pixels under `coverage`, as a layer at the coverage bounds
 /// (clipped to the source) whose alpha is the source alpha scaled by the
 /// coverage; `None` when no covered pixel is visible.
-fn lifted_copy(source: &Layer, coverage: &[u8], doc_w: u32, doc_h: u32) -> Option<Layer> {
+fn lifted_copy(source: &Layer, coverage: &Plane<u8>, doc_w: u32, doc_h: u32) -> Option<Layer> {
     let bounds = coverage_bounds(coverage, doc_w, doc_h)?;
     let rect = bounds.intersect(source.rect)?;
     let (w, h) = (rect.width() as usize, rect.height() as usize);
@@ -72,9 +72,11 @@ fn lifted_copy(source: &Layer, coverage: &[u8], doc_w: u32, doc_h: u32) -> Optio
         let alpha_row = alpha_row.as_deref();
         let colour_rows: Vec<Cow<'_, [u8]>> =
             colour.iter().map(|c| layer_row(c, sy, src_w)).collect();
+        let x0 = rect.left as usize;
+        let covered_row = coverage.row_span(dy, x0..x0 + w, doc_w as usize)?;
         for x in 0..w {
-            let dx = rect.left as usize + x;
-            let covered = coverage[dy * doc_w as usize + dx];
+            let dx = x0 + x;
+            let covered = covered_row[x];
             if covered == 0 {
                 continue;
             }
@@ -340,7 +342,7 @@ fn trim_bounds(layer: &Layer) -> Option<PsdRect> {
     let alpha = layer.channels.iter().find(|c| c.id == -1)?;
     let rect = layer.rect;
     let (w, h) = (rect.width().max(0), rect.height().max(0));
-    let local = plane_coverage_bounds(&alpha.data, w as u32, h as u32)?;
+    let local = coverage_bounds(&alpha.data, w as u32, h as u32)?;
     if (local.left, local.top, local.right, local.bottom) == (0, 0, w, h) {
         return None;
     }
@@ -499,12 +501,12 @@ mod tests {
         &layer.channels.iter().find(|c| c.id == -1).unwrap().data
     }
 
-    fn square_coverage() -> Vec<u8> {
+    fn square_coverage() -> Plane<u8> {
         let mut coverage = vec![0; 16];
         for i in [5, 6, 9, 10] {
             coverage[i] = 255;
         }
-        coverage
+        coverage.into()
     }
 
     fn channel(layer: &Layer, id: i16) -> &[u8] {
@@ -617,7 +619,7 @@ mod tests {
     #[test]
     fn lift_refuses_empty_coverage_and_pixel_and_position_locks() {
         let mut doc = doc_with(vec![pixel_layer("base", 4, 4, 40)]);
-        assert!(lift_selection(&mut doc, "0", &[0; 16]).is_empty());
+        assert!(lift_selection(&mut doc, "0", &vec![0; 16].into()).is_empty());
         doc.layers[0].lock = LockFlags::default().with(LockFlags::PIXELS, true);
         assert!(lift_selection(&mut doc, "0", &square_coverage()).is_empty());
         doc.layers[0].lock = LockFlags::default().with(LockFlags::POSITION, true);
@@ -629,7 +631,7 @@ mod tests {
     fn trim_to_content_hugs_the_opaque_pixels() {
         let mut layer = pixel_layer("square", 4, 4, 40);
         let alpha = layer.channels.iter_mut().find(|c| c.id == -1).unwrap();
-        alpha.data = square_coverage().into();
+        alpha.data = square_coverage();
         let mut doc = doc_with(vec![layer]);
         assert!(trim_to_content(&mut doc, "0"));
         assert_eq!(
@@ -658,7 +660,7 @@ mod tests {
     #[test]
     fn trim_keeps_the_composite() {
         let mut layer = pixel_layer("square", 4, 4, 40);
-        layer.channels.iter_mut().find(|c| c.id == -1).unwrap().data = square_coverage().into();
+        layer.channels.iter_mut().find(|c| c.id == -1).unwrap().data = square_coverage();
         let before = layer.clone();
         let mut doc = doc_with(vec![layer]);
         assert!(trim_to_content(&mut doc, "0"));
@@ -729,7 +731,7 @@ mod tests {
     #[test]
     fn untrim_restores_the_extent_without_changing_pixels() {
         let mut layer = pixel_layer("square", 4, 4, 40);
-        layer.channels.iter_mut().find(|c| c.id == -1).unwrap().data = square_coverage().into();
+        layer.channels.iter_mut().find(|c| c.id == -1).unwrap().data = square_coverage();
         let mut doc = doc_with(vec![layer]);
         let before = doc.layers[0].clone();
         let hugged = content_rect(&doc, "0").unwrap();
@@ -761,7 +763,7 @@ mod tests {
     #[test]
     fn trim_leaves_type_layers() {
         let mut layer = pixel_layer("type", 4, 4, 40);
-        layer.channels.iter_mut().find(|c| c.id == -1).unwrap().data = square_coverage().into();
+        layer.channels.iter_mut().find(|c| c.id == -1).unwrap().data = square_coverage();
         layer.extra_blocks.push(pictura_core::LayerBlock {
             key: *b"TySh",
             data: Vec::new().into(),

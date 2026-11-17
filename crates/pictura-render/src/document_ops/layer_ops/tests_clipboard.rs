@@ -1,22 +1,22 @@
 //! Edit clipboard tests: Copy / Copy Merged / Clear / Paste (Into, Outside).
 
 use super::clipboard::{
-    clear_layer, copy_layer, copy_merged, coverage_bounds, paste_clip, plane_coverage_bounds,
-    plane_has_coverage, Clip, PasteMode, COVERAGE_SCANS,
+    clear_layer, copy_layer, copy_merged, coverage_bounds, paste_clip, plane_has_coverage, Clip,
+    PasteMode, COVERAGE_SCANS,
 };
 use super::create::empty_group;
 use super::tests::{doc_with, pixel_layer};
-use pictura_core::{LockFlags, PixelBuffer, PsdRect};
+use pictura_core::{LockFlags, PixelBuffer, Plane, PsdRect};
 
 /// A 4×4 selection covering `(x0..x1, y0..y1)` at full strength.
-fn select(x0: usize, y0: usize, x1: usize, y1: usize) -> Vec<u8> {
+fn select(x0: usize, y0: usize, x1: usize, y1: usize) -> Plane<u8> {
     let mut data = vec![0u8; 16];
     for y in y0..y1 {
         for x in x0..x1 {
             data[y * 4 + x] = 255;
         }
     }
-    data
+    data.into()
 }
 
 fn alpha(doc: &pictura_core::Document, index: usize) -> &[u8] {
@@ -69,7 +69,7 @@ fn copy_refuses_groups_empty_selections_and_transparent_pixels() {
 
     assert!(copy_layer(&doc, "2", None).is_none(), "group");
     assert!(
-        copy_layer(&doc, "0", Some(&[0u8; 16])).is_none(),
+        copy_layer(&doc, "0", Some(&Plane::from(vec![0u8; 16]))).is_none(),
         "empty selection"
     );
     assert!(
@@ -250,9 +250,13 @@ fn coverage_bounds_spans_every_selected_pixel() {
     sel[4 + 2] = 1;
     sel[3 * 4 + 1] = 255;
 
-    assert_eq!(coverage_bounds(&sel, 4, 4), Some(prect(1, 1, 3, 4)));
-    assert_eq!(coverage_bounds(&[0u8; 16], 4, 4), None);
-    assert_eq!(coverage_bounds(&[255u8; 3], 4, 4), None, "short plane");
+    assert_eq!(coverage_bounds(&sel.into(), 4, 4), Some(prect(1, 1, 3, 4)));
+    assert_eq!(coverage_bounds(&vec![0u8; 16].into(), 4, 4), None);
+    assert_eq!(
+        coverage_bounds(&vec![255u8; 3].into(), 4, 4),
+        None,
+        "short plane"
+    );
 }
 
 #[test]
@@ -299,7 +303,7 @@ fn plane_coverage_test_matches_its_bounds() {
     for (i, plane) in cases.iter().enumerate() {
         assert_eq!(
             plane_has_coverage(plane, w, h),
-            plane_coverage_bounds(plane, w, h).is_some(),
+            coverage_bounds(plane, w, h).is_some(),
             "case {i}"
         );
     }
