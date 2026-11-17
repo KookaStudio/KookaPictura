@@ -246,7 +246,18 @@ layer.smartObject.replaceContents	Layer/Smart Objects/Replace Contents…	Replac
 layer.smartObject.resetTransform	Layer/Smart Objects/Reset Transform	Reset Transform		1	0
 layer.smartObject.convertToLayers	Layer/Smart Objects/Convert to Layers	Convert to Layers		1	0
 layer.smart.objects.rasterize	Layer/Smart Objects/Rasterize	Rasterize		0	0
-layer.smart.objects.stack.mode	Layer/Smart Objects/Stack Mode	Stack Mode		0	0
+layer.smart.objects.stack.mode.none	Layer/Smart Objects/Stack Mode/None	None		1	1
+layer.smart.objects.stack.mode.entropy	Layer/Smart Objects/Stack Mode/Entropy	Entropy		1	1
+layer.smart.objects.stack.mode.kurtosis	Layer/Smart Objects/Stack Mode/Kurtosis	Kurtosis		1	1
+layer.smart.objects.stack.mode.maximum	Layer/Smart Objects/Stack Mode/Maximum	Maximum		1	1
+layer.smart.objects.stack.mode.mean	Layer/Smart Objects/Stack Mode/Mean	Mean		1	1
+layer.smart.objects.stack.mode.median	Layer/Smart Objects/Stack Mode/Median	Median		1	1
+layer.smart.objects.stack.mode.minimum	Layer/Smart Objects/Stack Mode/Minimum	Minimum		1	1
+layer.smart.objects.stack.mode.range	Layer/Smart Objects/Stack Mode/Range	Range		1	1
+layer.smart.objects.stack.mode.skewness	Layer/Smart Objects/Stack Mode/Skewness	Skewness		1	1
+layer.smart.objects.stack.mode.standard.deviation	Layer/Smart Objects/Stack Mode/Standard Deviation	Standard Deviation		1	1
+layer.smart.objects.stack.mode.summation	Layer/Smart Objects/Stack Mode/Summation	Summation		1	1
+layer.smart.objects.stack.mode.variance	Layer/Smart Objects/Stack Mode/Variance	Variance		1	1
 layer.video.layers.new.blank.video.layer	Layer/Video Layers/New Blank Video Layer	New Blank Video Layer		0	0
 layer.video.layers.new.video.layer.from.file	Layer/Video Layers/New Video Layer From File	New Video Layer From File		0	0
 layer.video.layers.replace.footage	Layer/Video Layers/Replace Footage	Replace Footage		0	0

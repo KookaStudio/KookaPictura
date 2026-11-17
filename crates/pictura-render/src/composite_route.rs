@@ -307,7 +307,7 @@ pub(crate) mod tests {
     }
 
     fn two_frame_payload() -> Vec<u8> {
-        use pictura_core::{Document, Layer, LayerStack};
+        use pictura_core::{Document, LayerStack};
         let mut doc = Document::new(
             1,
             1,

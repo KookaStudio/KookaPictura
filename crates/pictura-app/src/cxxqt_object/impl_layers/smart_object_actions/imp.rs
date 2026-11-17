@@ -169,6 +169,15 @@ pub(super) fn set_smart_object_stack_mode(
     if current == target {
         return false;
     }
+    if !view
+        .rust()
+        .session
+        .doc
+        .as_ref()
+        .is_some_and(|doc| pictura_render::can_set_smart_object_stack_mode(doc, &path, target))
+    {
+        return false;
+    }
     let label = match target {
         Some(mode) => format!("Stack Mode: {}", mode.label()),
         None => "Stack Mode: None".to_string(),

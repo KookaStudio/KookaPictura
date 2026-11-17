@@ -90,6 +90,10 @@ void MenuRegistrar::wireAdvancedSmartObjectActions()
                               }
                               refresh();
                           });
+    commands_->setEnabledProvider(command_ids::LayerSmartObjectNewViaCopy,
+                                  [currentCopyableSmartPath]() {
+                                      return !currentCopyableSmartPath().isEmpty();
+                                  });
 
     // Layer > Smart Objects > Stack Mode: 12 checkable leaves. None clears the
     // mode; the other leaves reduce the embedded stack. A mode needs an

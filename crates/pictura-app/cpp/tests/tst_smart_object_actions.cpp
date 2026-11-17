@@ -502,8 +502,9 @@ void SmartObjectActionsTest::stackModeRefusalRecordsNothing()
                   ->action(id(pictura::command_ids::LayerSmartObjectsStackModeMedian))
                   ->isEnabled(),
              "a plain layer disables the mode");
+    const int afterPlain = view->history_count();
     window_->registry()->dispatch(id(pictura::command_ids::LayerSmartObjectsStackModeMedian));
-    QCOMPARE(view->history_count(), before + 1);
+    QCOMPARE(view->history_count(), afterPlain);
     QCOMPARE(pictura::layer_smart_object_stack_mode(*view, plain), 0);
 }
 

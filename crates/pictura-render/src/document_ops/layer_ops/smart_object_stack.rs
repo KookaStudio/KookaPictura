@@ -62,12 +62,11 @@ pub fn set_smart_object_stack_mode(
     if so.stack_mode == mode {
         return true;
     }
-    if mode.is_some() {
-        if so.kind != SmartObjectKind::Embedded
-            || !crate::layer_source::stack_frame_count(so).is_some_and(|count| count >= 2)
-        {
-            return false;
-        }
+    if mode.is_some()
+        && (so.kind != SmartObjectKind::Embedded
+            || !crate::layer_source::stack_frame_count(so).is_some_and(|count| count >= 2))
+    {
+        return false;
     }
     let Some(layer) = resolve_path_mut(doc, path) else {
         return false;
