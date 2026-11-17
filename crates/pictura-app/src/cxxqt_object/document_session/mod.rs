@@ -19,7 +19,10 @@ pub(super) use active::{ActiveSession, PathRestore, SessionKind};
 pub(super) use previews::{FilterPreview, FilterPreviewSession, PreviewBaseline};
 pub(super) use selection::{SelectionGesture, SelectionMoveState};
 pub(super) use session::{DocumentSession, PendingPreviews, QuickSelectionSnapshot};
-pub(super) use stroke::{MaskPreview, MaskStroke, PreviewSample, PreviewStroke, StrokeSession};
+pub(super) use stroke::{
+    LayerStrokeFinish, MaskPreview, MaskStroke, MaskStrokeFinish, PreviewSample, PreviewStroke,
+    StrokeFinish, StrokePlan, StrokeSession,
+};
 pub(super) use transform::{
     RepeatTransform, TransformMode, TransformSession, TransformTarget, WarpDrag,
 };

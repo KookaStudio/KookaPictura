@@ -1,4 +1,7 @@
-use super::document_session::{PreviewSample, PreviewStroke, SessionKind, StrokeSession};
+use super::document_session::{
+    LayerStrokeFinish, PreviewSample, PreviewStroke, SessionKind, StrokeFinish, StrokePlan,
+    StrokeSession,
+};
 use super::helpers::*;
 use super::qobject;
 use super::state::PictureViewRust;
@@ -404,179 +407,138 @@ impl PictureViewRust {
         let Some(doc) = self.session.doc.as_ref() else {
             return false;
         };
-        let path = self.layer_target.single().unwrap_or_default();
-        if !memory_gate::admit_fresh(memory_gate::brush_bytes(doc, path)) {
+        let path = self.layer_target.single().unwrap_or_default().to_string();
+        if !memory_gate::admit_fresh(memory_gate::brush_bytes(doc, &path)) {
             return false;
         }
         // A mask target paints the mask's coverage instead of the layer: the
         // foreground's Rec.601 luma is the painted value, so black hides and
-        // white reveals. The stroke runs on a canvas-sized grayscale document.
-        // The target is resolved before the slot is taken, so a mask stroke
-        // does not begin a second session inside this one.
+        // white reveals. The target is resolved before the slot is taken, so a
+        // mask stroke does not begin a second session inside this one.
         if let Some(path) = active_mask_target(self) {
-            if !self.slot_allows(SessionKind::MaskPaint) {
-                return false;
-            }
-            let begun = self.begin_mask_paint(&path, mask_stroke_config(cfg), label);
-            if begun {
-                tool_recording::begin(label, &cfg, tool_recording::ToolStrokeKind::Mask);
-            }
-            return begun;
+            let cfg = mask_stroke_config(cfg);
+            return self.begin_stroke(
+                SessionKind::MaskPaint,
+                label,
+                &cfg,
+                tool_recording::ToolStrokeKind::Mask,
+                |rust| mask::mask_plan(rust, &path, cfg),
+            );
         }
-        if !self.slot_allows(SessionKind::Paint) {
-            return false;
-        }
-        let begun = {
-            let rust = &*self;
-            let Some(doc) = rust.session.doc.as_ref() else {
-                return false;
-            };
-            let Some(path) = rust.layer_target.single() else {
-                return false;
-            };
-            if active_pixel_layer(doc, Some(path)).is_none()
-                || !active_layer_visible(doc, Some(path))
+        self.begin_stroke(
+            SessionKind::Paint,
+            label,
+            &cfg,
+            tool_recording::ToolStrokeKind::Paint,
+            |rust| layer_paint_plan(rust, &path, cfg),
+        )
+    }
+}
+
+/// Build the layer stroke and the accelerator the exact stroke can use.
+fn layer_paint_plan(rust: &PictureViewRust, path: &str, cfg: StrokeConfig) -> Option<StrokePlan> {
+    let doc = rust.session.doc.as_ref()?;
+    if active_pixel_layer(doc, Some(path)).is_none() || !active_layer_visible(doc, Some(path)) {
+        return None;
+    }
+    let t = Instant::now();
+    let outcome = Stroke::begin_at(doc, path, cfg);
+    paint_timing::record("stroke_begin_at (doc clone)", t.elapsed());
+    let mut stroke = outcome.ok()?;
+    stroke.set_coverage_clip(stroke_selection_clip(rust));
+    let (gpu_stroke, gpu_placer, preview) = layer_backend(rust, cfg, &stroke, doc);
+    Some(StrokePlan::layer(path, stroke).with_backend(gpu_stroke, gpu_placer, preview))
+}
+
+/// The GPU or reduced-level preview a layer stroke starts with.
+fn layer_backend(
+    rust: &PictureViewRust,
+    cfg: StrokeConfig,
+    stroke: &Stroke,
+    doc: &pictura_core::Document,
+) -> (Option<GpuStroke>, Option<DabPlacer>, Option<PreviewStroke>) {
+    // GPU first, but only where the CPU has a ceiling to beat: a dab over the
+    // raster budget. Below it the exact CPU raster is a few hundred
+    // microseconds, while seeding the GPU costs a full-frame upload (~65 ms at
+    // 4000²), so a small brush stays on the CPU path.
+    let level = preview_level(cfg.diameter as i32, doc.width, doc.height);
+    // The GPU dab shader has no paper grain, wet-edge curve, or per-sample
+    // pressure; such a stroke stays on the CPU oracle (or its preview) so the
+    // committed pixels match.
+    let gpu_mode = gpu_paint_mode(cfg.mode).filter(|_| {
+        !cfg.auto_erase
+            && cfg.grain == 0
+            && !cfg.wet_edges
+            && !cfg.pressure_size
+            && !cfg.pressure_opacity
+            && cfg.dynamics.is_default()
+            && cfg.bristle.is_none()
+    });
+    if level.is_some() && rust.gpu_compute && rust.session.selection.is_none() {
+        let seeded = match gpu_mode {
+            Some(mode)
+                if !stroke.transparency_locked()
+                    && !(cfg.mode == PaintMode::Clear && !stroke.has_alpha_plane()) =>
             {
-                return false;
+                let t = Instant::now();
+                let seed = stroke.base_layer_rgba_doc(doc);
+                let (w, h) = (doc.width, doc.height);
+                paint_timing::record("gpu_seed_interleave", t.elapsed());
+                let tip = stroke.tip_params();
+                let params = GpuStrokeParams {
+                    radius: tip.radius,
+                    round_radius: tip.round_radius,
+                    sin_t: tip.sin,
+                    cos_t: tip.cos,
+                    core: tip.core,
+                    denom: tip.denom,
+                    flow: cfg.flow as f32 / 100.0,
+                    opacity: cfg.opacity as f32 / 100.0,
+                    color: [
+                        cfg.color.r as f32 / 255.0,
+                        cfg.color.g as f32 / 255.0,
+                        cfg.color.b as f32 / 255.0,
+                        cfg.color.a as f32 / 255.0,
+                    ],
+                    aliased: tip.aliased,
+                    flip_x: tip.flip_x,
+                    flip_y: tip.flip_y,
+                    mode,
+                    channels: 4,
+                };
+                let t = Instant::now();
+                let gpu = GpuStroke::new(w, h, &seed, params);
+                paint_timing::record("gpu_new (alloc+upload)", t.elapsed());
+                gpu.ok()
             }
-            let t = Instant::now();
-            let outcome = Stroke::begin_at(doc, path, cfg);
-            paint_timing::record("stroke_begin_at (doc clone)", t.elapsed());
-            outcome.map(|mut stroke| {
-                stroke.set_coverage_clip(stroke_selection_clip(rust));
-                stroke
-            })
+            _ => None,
         };
-        match begun {
-            Ok(stroke) => {
-                let paint_pad = {
-                    let rust = &*self;
-                    rust.session
-                        .doc
-                        .as_ref()
-                        .and_then(|doc| {
-                            rust.layer_target
-                                .single()
-                                .map(|path| paint_pad_for(doc, path))
-                        })
-                        .unwrap_or(0)
-                };
-                let rust = &mut *self;
-                // The stroke's own session takes the slot: the payload and the
-                // present state it accumulates travel together.
-                let session = StrokeSession {
-                    stroke: Some(stroke),
-                    stroke_label: label.to_string(),
-                    paint_pad,
-                    fade_capture: crate::cxxqt_object::fade::capture(rust),
-                    ..Default::default()
-                };
-                rust.session.live.set_stroke_session(session);
-                // A new stroke opens its own present frame.
-                rust.clear_pending_present();
-                let dims = rust.session.doc.as_ref().map(|doc| (doc.width, doc.height));
-                if let Some((width, height)) = dims {
-                    rust.session.live.reset_stroke_tiles(width, height);
-                }
-                tool_recording::begin(label, &cfg, tool_recording::ToolStrokeKind::Paint);
-                // GPU first, but only where the CPU has a ceiling to beat: a dab
-                // over the raster budget. Below it the exact CPU raster is a few
-                // hundred microseconds, while seeding the GPU costs a full-frame
-                // upload (~65 ms at 4000²), so a small brush stays on the CPU path.
-                let level = rust
-                    .session
-                    .doc
-                    .as_ref()
-                    .and_then(|doc| preview_level(cfg.diameter as i32, doc.width, doc.height));
-                // The GPU dab shader has no paper grain, wet-edge curve, or
-                // per-sample pressure; such a stroke stays on the CPU oracle
-                // (or its preview) so the committed pixels match.
-                let gpu_mode = gpu_paint_mode(cfg.mode).filter(|_| {
-                    !cfg.auto_erase
-                        && cfg.grain == 0
-                        && !cfg.wet_edges
-                        && !cfg.pressure_size
-                        && !cfg.pressure_opacity
-                        && cfg.dynamics.is_default()
-                        && cfg.bristle.is_none()
-                });
-                if level.is_some() && rust.gpu_compute && rust.session.selection.is_none() {
-                    let seeded = match (
-                        gpu_mode,
-                        rust.session.live.stroke(),
-                        rust.session.doc.as_ref(),
-                    ) {
-                        (Some(mode), Some(stroke), Some(doc))
-                            if !stroke.transparency_locked()
-                                && !(cfg.mode == PaintMode::Clear && !stroke.has_alpha_plane()) =>
-                        {
-                            let t = Instant::now();
-                            let seed = stroke.base_layer_rgba_doc(doc);
-                            let (w, h) = (doc.width, doc.height);
-                            paint_timing::record("gpu_seed_interleave", t.elapsed());
-                            let tip = stroke.tip_params();
-                            let params = GpuStrokeParams {
-                                radius: tip.radius,
-                                round_radius: tip.round_radius,
-                                sin_t: tip.sin,
-                                cos_t: tip.cos,
-                                core: tip.core,
-                                denom: tip.denom,
-                                flow: cfg.flow as f32 / 100.0,
-                                opacity: cfg.opacity as f32 / 100.0,
-                                color: [
-                                    cfg.color.r as f32 / 255.0,
-                                    cfg.color.g as f32 / 255.0,
-                                    cfg.color.b as f32 / 255.0,
-                                    cfg.color.a as f32 / 255.0,
-                                ],
-                                aliased: tip.aliased,
-                                flip_x: tip.flip_x,
-                                flip_y: tip.flip_y,
-                                mode,
-                                channels: 4,
-                            };
-                            let t = Instant::now();
-                            let gpu = GpuStroke::new(w, h, &seed, params);
-                            paint_timing::record("gpu_new (alloc+upload)", t.elapsed());
-                            gpu.ok()
-                        }
-                        _ => None,
-                    };
-                    if let Some(gpu) = seeded {
-                        rust.session.live.set_gpu_stroke(gpu);
-                        rust.session
-                            .live
-                            .set_gpu_placer(DabPlacer::new(cfg.spacing, cfg.diameter as f32));
-                    }
-                }
-                // The reduced-level preview is the fallback when the GPU path is
-                // not taken; the exact stroke below still runs, replayed from the
-                // log when the stroke commits.
-                if rust.session.live.gpu_stroke().is_none() {
-                    let t = Instant::now();
-                    let size = rust.session.doc.as_ref().map(|d| (d.width, d.height));
-                    let preview = match (level, size) {
-                        (Some(level), Some(size)) => rust
-                            .level_snapshot(level)
-                            .and_then(|snapshot| PreviewStroke::new(level, snapshot, size, cfg)),
-                        _ => None,
-                    };
-                    let clip = stroke_selection_clip(rust);
-                    let preview = preview.map(|mut preview| {
-                        preview.clip = clip;
-                        preview
-                    });
-                    if let Some(preview) = preview {
-                        rust.session.live.set_preview(preview);
-                    }
-                    paint_timing::record("preview_new (snapshot)", t.elapsed());
-                }
-                true
-            }
-            Err(_) => false,
+        if let Some(gpu) = seeded {
+            return (
+                Some(gpu),
+                Some(DabPlacer::new(cfg.spacing, cfg.diameter as f32)),
+                None,
+            );
         }
     }
+    // The reduced-level preview is the fallback when the GPU path is not taken;
+    // the exact stroke still runs, replayed from the log when the stroke
+    // commits.
+    let t = Instant::now();
+    let size = (doc.width, doc.height);
+    let preview = match level {
+        Some(level) => rust
+            .level_snapshot(level)
+            .and_then(|snapshot| PreviewStroke::new(level, snapshot, size, cfg)),
+        None => None,
+    };
+    let clip = stroke_selection_clip(rust);
+    let preview = preview.map(|mut preview| {
+        preview.clip = clip;
+        preview
+    });
+    paint_timing::record("preview_new (snapshot)", t.elapsed());
+    (None, None, preview)
 }
 
 impl qobject::PictureView {
@@ -887,115 +849,105 @@ impl qobject::PictureView {
             paint_timing::report();
             return false;
         };
-        let StrokeSession {
-            stroke,
-            mask_stroke,
-            preview,
-            stroke_label,
-            stroke_base,
-            paint_pad,
-            fade_capture,
-            mut stroke_tiles,
-            ..
-        } = session;
-        if let Some(ctx) = mask_stroke {
-            let ok =
-                self.as_mut()
-                    .end_mask_paint(ctx, preview, &stroke_label, stroke_tiles, paint_pad);
-            tool_recording::finish(ok);
-            paint_timing::record("end_paint_total", t0.elapsed());
-            paint_timing::report();
-            return ok;
-        }
-        let ok = match stroke {
-            None => false,
-            Some(mut stroke) => {
-                // A GPU stroke already patched the exact working document, so it
-                // commits with no replay. A previewed stroke never fed the exact
-                // stroke: replay its log now, so every committed pixel matches a
-                // stroke that rasterized at full resolution from the first dab.
-                let previewed = preview.is_some();
-                if let Some(preview) = preview {
-                    let t = Instant::now();
-                    let mut rust = self.as_mut().rust_mut();
-                    let rust = &mut *rust;
-                    if let Some(doc) = rust.session.doc.as_mut() {
-                        for entry in preview.samples {
-                            match entry {
-                                PreviewSample::Move(sample) => {
-                                    stroke.sample(doc, sample);
-                                }
-                                PreviewSample::Hold => {
-                                    stroke.hold(doc);
-                                }
-                            }
-                            if let Some(rect) = stroke.take_dirty() {
-                                stroke_tiles.mark(rect.grow(paint_pad));
-                            }
-                        }
-                    }
-                    paint_timing::record("commit_replay_cpu_stroke", t.elapsed());
-                }
-                let t = Instant::now();
-                let finished = stroke.finish();
-                paint_timing::record("commit_finish", t.elapsed());
-                match finished {
-                    None => {
-                        // A stroke that changed nothing leaves no history state,
-                        // so a Background it layered goes back to a Background.
-                        // Otherwise the composite and the canvas still hold every
-                        // pixel: Sponge over grey lands here, and on a very large
-                        // document a recomposite is seconds. Only a preview left
-                        // a level to overwrite.
-                        let restored = stroke_base.is_some();
-                        if let Some(base) = stroke_base {
-                            self.as_mut().rust_mut().session.doc = Some(base);
-                        }
-                        if restored || previewed {
-                            self.as_mut().recomposite();
-                        }
-                        false
-                    }
-                    Some(rect) => {
-                        let rect = rect.grow(paint_pad);
-                        // A previewed stroke never presented full resolution:
-                        // refresh its dirty tiles. Decomposing them into
-                        // disjoint rectangles keeps a diagonal stroke from
-                        // recompositing its whole bounding box; the collapse in
-                        // `TileSet::regions` falls back to the union when the
-                        // tiles are not worth splitting. Patching level 0 and
-                        // rebuilding from it is also what overwrites the preview
-                        // level, so the canvas returns to the zoom-selected one.
-                        // Any other stroke presented as it went, so only the
-                        // region still pending is left.
-                        let stroke_union = stroke_tiles.bounds().unwrap_or(rect);
-                        let hint = stroke_tiles.regions(stroke_union);
-                        let regions = if previewed {
-                            hint.clone()
-                        } else {
-                            pending.map_or_else(|| vec![rect], |pending| vec![pending])
-                        };
-                        let t = Instant::now();
-                        self.as_mut().edit(&stroke_label, |_| {
-                            Edit::regions_hinted(regions, hint, false)
-                        });
-                        if let Some(capture) = fade_capture {
-                            crate::cxxqt_object::fade::record(
-                                &mut self.as_mut().rust_mut(),
-                                capture,
-                                &stroke_label,
-                            );
-                        }
-                        paint_timing::record("commit_record_history", t.elapsed());
-                        true
-                    }
-                }
-            }
+        let ok = match session.finish(pending) {
+            StrokeFinish::Layer(finish) => self.as_mut().end_layer_paint(finish),
+            StrokeFinish::Mask(finish) => self.as_mut().end_mask_paint(finish),
+            StrokeFinish::QuickMask | StrokeFinish::None => false,
         };
         tool_recording::finish(ok);
         paint_timing::record("end_paint_total", t0.elapsed());
         paint_timing::report();
         ok
+    }
+
+    fn end_layer_paint(mut self: Pin<&mut Self>, finish: LayerStrokeFinish) -> bool {
+        let LayerStrokeFinish {
+            mut stroke,
+            preview,
+            label,
+            stroke_base,
+            paint_pad,
+            fade_capture,
+            mut stroke_tiles,
+            pending,
+        } = finish;
+        // A GPU stroke already patched the exact working document, so it commits
+        // with no replay. A previewed stroke never fed the exact stroke: replay
+        // its log now, so every committed pixel matches a stroke that rasterized
+        // at full resolution from the first dab.
+        let previewed = preview.is_some();
+        if let Some(preview) = preview {
+            let t = Instant::now();
+            let mut rust = self.as_mut().rust_mut();
+            let rust = &mut *rust;
+            if let Some(doc) = rust.session.doc.as_mut() {
+                for entry in preview.samples {
+                    match entry {
+                        PreviewSample::Move(sample) => {
+                            stroke.sample(doc, sample);
+                        }
+                        PreviewSample::Hold => {
+                            stroke.hold(doc);
+                        }
+                    }
+                    if let Some(rect) = stroke.take_dirty() {
+                        stroke_tiles.mark(rect.grow(paint_pad));
+                    }
+                }
+            }
+            paint_timing::record("commit_replay_cpu_stroke", t.elapsed());
+        }
+        let t = Instant::now();
+        let finished = stroke.finish();
+        paint_timing::record("commit_finish", t.elapsed());
+        match finished {
+            None => {
+                // A stroke that changed nothing leaves no history state, so a
+                // Background it layered goes back to a Background. Otherwise the
+                // composite and the canvas still hold every pixel: Sponge over
+                // grey lands here, and on a very large document a recomposite is
+                // seconds. Only a preview left a level to overwrite.
+                let restored = stroke_base.is_some();
+                if let Some(base) = stroke_base {
+                    self.as_mut().rust_mut().session.doc = Some(base);
+                }
+                if restored || previewed {
+                    self.as_mut().recomposite();
+                }
+                false
+            }
+            Some(rect) => {
+                let rect = rect.grow(paint_pad);
+                // A previewed stroke never presented full resolution: refresh
+                // its dirty tiles. Decomposing them into disjoint rectangles
+                // keeps a diagonal stroke from recompositing its whole bounding
+                // box; the collapse in `TileSet::regions` falls back to the union
+                // when the tiles are not worth splitting. Patching level 0 and
+                // rebuilding from it is also what overwrites the preview level,
+                // so the canvas returns to the zoom-selected one. Any other
+                // stroke presented as it went, so only the region still pending
+                // is left.
+                let stroke_union = stroke_tiles.bounds().unwrap_or(rect);
+                let hint = stroke_tiles.regions(stroke_union);
+                let regions = if previewed {
+                    hint.clone()
+                } else {
+                    pending.map_or_else(|| vec![rect], |pending| vec![pending])
+                };
+                let t = Instant::now();
+                self.as_mut()
+                    .edit(&label, |_| Edit::regions_hinted(regions, hint, false));
+                if let Some(capture) = fade_capture {
+                    crate::cxxqt_object::fade::record(
+                        &mut self.as_mut().rust_mut(),
+                        capture,
+                        &label,
+                    );
+                }
+                paint_timing::record("commit_record_history", t.elapsed());
+                true
+            }
+        }
     }
 
     pub fn cancel_paint(mut self: Pin<&mut Self>) {

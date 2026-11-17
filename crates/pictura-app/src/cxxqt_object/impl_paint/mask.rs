@@ -4,7 +4,7 @@
 
 use super::super::document_session::SessionKind;
 use super::super::document_session::{
-    MaskPreview, MaskStroke, PreviewSample, PreviewStroke, StrokeSession,
+    MaskPreview, MaskStroke, MaskStrokeFinish, PreviewSample, PreviewStroke, StrokePlan,
 };
 use super::super::helpers::*;
 use super::super::helpers_composite::display_rgba_bytes;
@@ -152,124 +152,101 @@ impl PictureViewRust {
         cfg: StrokeConfig,
         label: &str,
     ) -> bool {
-        if !self.slot_allows(SessionKind::MaskPaint) {
-            return false;
-        }
-        let built = {
-            let rust = &*self;
-            if rust.session.live.stroke().is_some() || rust.session.live.mask_stroke().is_some() {
-                return false;
-            }
-            let Some(doc) = rust.session.doc.as_ref() else {
-                return false;
-            };
-            if !memory_gate::admit(u64::from(doc.width) * u64::from(doc.height) * 4) {
-                return false;
-            }
-            let Some(mask) = pictura_render::mask_document_coverage(doc, path) else {
-                return false;
-            };
-            Stroke::begin_at(&mask.document, "0", cfg)
-                .ok()
-                .map(|mut stroke| {
-                    stroke.set_coverage_clip(stroke_selection_clip(rust));
-                    MaskStroke {
-                        path: path.to_string(),
-                        baseline: pictura_render::resolve_path(doc, path).cloned(),
-                        rect: mask.rect,
-                        document: mask.document,
-                        stroke,
-                    }
-                })
-        };
-        let Some(mask_stroke) = built else {
-            return false;
-        };
-        // A large mask brush runs the same GPU stroke the pixel path uses, with
-        // one channel: the shader blends the coverage byte only, so the mask
-        // gains accelerator parity without an RGBA round-trip. The shader has
-        // no paper grain or wet-edge curve, so such a tip stays on the CPU.
-        let gpu = {
-            let (mw, mh) = (mask_stroke.document.width, mask_stroke.document.height);
-            match (
-                preview_level(cfg.diameter as i32, mw, mh),
-                gpu_paint_mode(cfg.mode).filter(|_| {
-                    cfg.grain == 0
-                        && !cfg.wet_edges
-                        && !cfg.pressure_size
-                        && !cfg.pressure_opacity
-                        && cfg.dynamics.is_default()
-                }),
-                self.gpu_compute && self.session.selection.is_none(),
-            ) {
-                (Some(_), Some(mode), true) => {
-                    let seed = mask_gpu::mask_rgba_seed(&mask_stroke.document);
-                    let tip = mask_stroke.stroke.tip_params();
-                    let params = GpuStrokeParams {
-                        radius: tip.radius,
-                        round_radius: tip.round_radius,
-                        sin_t: tip.sin,
-                        cos_t: tip.cos,
-                        core: tip.core,
-                        denom: tip.denom,
-                        flow: cfg.flow as f32 / 100.0,
-                        opacity: cfg.opacity as f32 / 100.0,
-                        color: [
-                            cfg.color.r as f32 / 255.0,
-                            cfg.color.g as f32 / 255.0,
-                            cfg.color.b as f32 / 255.0,
-                            cfg.color.a as f32 / 255.0,
-                        ],
-                        aliased: tip.aliased,
-                        flip_x: tip.flip_x,
-                        flip_y: tip.flip_y,
-                        mode,
-                        channels: 1,
-                    };
-                    GpuStroke::new(mw, mh, &seed, params).ok()
-                }
-                _ => None,
-            }
-        };
-        // Without the GPU stroke (no compute, or a mode only the CPU raster
-        // models), a large brush previews at a pyramid level like a pixel one.
-        let preview = match gpu {
-            Some(_) => None,
-            None => mask_preview(self, path, cfg.sanitized()),
-        };
-        let has_gpu = gpu.is_some();
-        let paint_pad = {
-            let rust = &*self;
-            rust.session
-                .doc
-                .as_ref()
-                .map(|doc| mask_paint_pad_for(doc, path))
-                .unwrap_or(0)
-        };
-        let rust = &mut *self;
-        // The mask stroke's own session takes the slot: the stroke, its
-        // backend, and the present state it accumulates travel together.
-        let session = StrokeSession {
-            mask_stroke: Some(mask_stroke),
-            stroke_label: label.to_string(),
-            paint_pad,
-            gpu_stroke: gpu,
-            gpu_placer: if has_gpu {
-                Some(DabPlacer::new(cfg.spacing, cfg.diameter as f32))
-            } else {
-                None
-            },
-            preview,
-            ..Default::default()
-        };
-        rust.session.live.set_stroke_session(session);
-        rust.clear_pending_present();
-        let dims = rust.session.doc.as_ref().map(|doc| (doc.width, doc.height));
-        if let Some((width, height)) = dims {
-            rust.session.live.reset_stroke_tiles(width, height);
-        }
-        true
+        self.begin_stroke(
+            SessionKind::MaskPaint,
+            label,
+            &cfg,
+            crate::cxxqt_object::impl_paint::tool_recording::ToolStrokeKind::Mask,
+            |rust| mask_plan(rust, path, cfg),
+        )
     }
+}
+
+/// Build the mask stroke and the accelerator the exact stroke can use.
+pub(super) fn mask_plan(
+    rust: &PictureViewRust,
+    path: &str,
+    cfg: StrokeConfig,
+) -> Option<StrokePlan> {
+    let doc = rust.session.doc.as_ref()?;
+    if !memory_gate::admit(u64::from(doc.width) * u64::from(doc.height) * 4) {
+        return None;
+    }
+    let mask = pictura_render::mask_document_coverage(doc, path)?;
+    let mut stroke = Stroke::begin_at(&mask.document, "0", cfg).ok()?;
+    stroke.set_coverage_clip(stroke_selection_clip(rust));
+    let mask_stroke = MaskStroke {
+        path: path.to_string(),
+        baseline: pictura_render::resolve_path(doc, path).cloned(),
+        rect: mask.rect,
+        document: mask.document,
+        stroke,
+    };
+    let (gpu, placer, preview) = mask_backend(rust, path, cfg, &mask_stroke);
+    Some(StrokePlan::mask(mask_stroke).with_backend(gpu, placer, preview))
+}
+
+/// The GPU or reduced-level preview a mask stroke starts with.
+fn mask_backend(
+    rust: &PictureViewRust,
+    path: &str,
+    cfg: StrokeConfig,
+    mask_stroke: &MaskStroke,
+) -> (Option<GpuStroke>, Option<DabPlacer>, Option<PreviewStroke>) {
+    // A large mask brush runs the same GPU stroke the pixel path uses, with one
+    // channel: the shader blends the coverage byte only, so the mask gains
+    // accelerator parity without an RGBA round-trip. The shader has no paper
+    // grain or wet-edge curve, so such a tip stays on the CPU.
+    let (mw, mh) = (mask_stroke.document.width, mask_stroke.document.height);
+    let gpu = match (
+        preview_level(cfg.diameter as i32, mw, mh),
+        gpu_paint_mode(cfg.mode).filter(|_| {
+            cfg.grain == 0
+                && !cfg.wet_edges
+                && !cfg.pressure_size
+                && !cfg.pressure_opacity
+                && cfg.dynamics.is_default()
+        }),
+        rust.gpu_compute && rust.session.selection.is_none(),
+    ) {
+        (Some(_), Some(mode), true) => {
+            let seed = mask_gpu::mask_rgba_seed(&mask_stroke.document);
+            let tip = mask_stroke.stroke.tip_params();
+            let params = GpuStrokeParams {
+                radius: tip.radius,
+                round_radius: tip.round_radius,
+                sin_t: tip.sin,
+                cos_t: tip.cos,
+                core: tip.core,
+                denom: tip.denom,
+                flow: cfg.flow as f32 / 100.0,
+                opacity: cfg.opacity as f32 / 100.0,
+                color: [
+                    cfg.color.r as f32 / 255.0,
+                    cfg.color.g as f32 / 255.0,
+                    cfg.color.b as f32 / 255.0,
+                    cfg.color.a as f32 / 255.0,
+                ],
+                aliased: tip.aliased,
+                flip_x: tip.flip_x,
+                flip_y: tip.flip_y,
+                mode,
+                channels: 1,
+            };
+            GpuStroke::new(mw, mh, &seed, params).ok()
+        }
+        _ => None,
+    };
+    // Without the GPU stroke (no compute, or a mode only the CPU raster models),
+    // a large brush previews at a pyramid level like a pixel one.
+    let preview = match gpu {
+        Some(_) => None,
+        None => mask_preview(rust, path, cfg.sanitized()),
+    };
+    let placer = gpu
+        .as_ref()
+        .map(|_| DabPlacer::new(cfg.spacing, cfg.diameter as f32));
+    (gpu, placer, preview)
 }
 
 impl qobject::PictureView {
@@ -380,14 +357,14 @@ impl qobject::PictureView {
     /// exact stroke's regions would otherwise leave behind. The stroke's regions
     /// are then refreshed and recorded; a stroke that changed nothing
     /// recomposites and records nothing.
-    pub(super) fn end_mask_paint(
-        mut self: Pin<&mut Self>,
-        mut ctx: MaskStroke,
-        preview: Option<PreviewStroke>,
-        label: &str,
-        mut tiles: TileSet,
-        paint_pad: i32,
-    ) -> bool {
+    pub(super) fn end_mask_paint(mut self: Pin<&mut Self>, finish: MaskStrokeFinish) -> bool {
+        let MaskStrokeFinish {
+            mask_stroke: mut ctx,
+            preview,
+            label,
+            stroke_tiles: mut tiles,
+            paint_pad,
+        } = finish;
         if let Some(preview) = preview {
             let t = Instant::now();
             let mut rust = self.as_mut().rust_mut();
@@ -437,7 +414,8 @@ impl qobject::PictureView {
             Some(rect) => {
                 let rect = to_document(rect, ctx.rect).grow(paint_pad);
                 let regions = tiles.regions(rect);
-                self.as_mut().edit(label, |_| Edit::regions(regions, false));
+                self.as_mut()
+                    .edit(&label, |_| Edit::regions(regions, false));
                 true
             }
         }
