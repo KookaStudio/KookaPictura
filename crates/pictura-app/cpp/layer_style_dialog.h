@@ -101,6 +101,11 @@ private:
     void refreshControls(const QString& key);
     // CS6's angle dial and the number beside it.
     QWidget* angleRow(const QString& key);
+    // Keep an effect's Angle (and optional Altitude) controls in step with the
+    // document global light while its Use Global Light checkbox is checked.
+    // `root` is the page widget; the page is not yet parented when built.
+    void bindGlobalLight(QWidget* root, QCheckBox* box, const QString& angleKey,
+                         const QString& altitudeKey = QString());
 
     double value(const QString& key) const;
     void setValue(const QString& key, double value);

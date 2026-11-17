@@ -485,12 +485,20 @@ void LayersPanel::populateLayerStyleMenu(QMenu& menu, const QString& path)
     });
     menu.addSeparator();
 
-    QAction* globalLight = menu.addAction(tr("Global Light…"));
-    globalLight->setEnabled(false);
-    globalLight->setToolTip(tr("Global Light… — not implemented yet"));
-    QAction* createLayer = menu.addAction(tr("Create Layer"));
-    createLayer->setEnabled(false);
-    createLayer->setToolTip(tr("Create Layer — not implemented yet"));
+    for (const char* id : {command_ids::LayerStyleGlobalLight,
+                           command_ids::LayerStyleCreateLayers}) {
+        const QString command = QString::fromLatin1(id);
+        QAction* action = registry_ ? registry_->detachedAction(command, &menu) : nullptr;
+        if (!action) {
+            continue;
+        }
+        menu.addAction(action);
+        connect(action, &QAction::triggered, this, [this, command]() {
+            if (registry_) {
+                registry_->dispatch(command);
+            }
+        });
+    }
 
     const bool anyVisible = layer_style_any_visible(*view_, true);
     QAction* hide =
@@ -536,6 +544,7 @@ void LayersPanel::populateRowMenu(QMenu& menu, const QString& path, int color,
         facts.canRasterizeSmartObject = view_->layer_can_rasterize_smart_object(path);
         facts.canReleaseClipping = clipping_can_release(*view_, QStringList{path});
         facts.hasStyle = layer_style_has(*view_, path);
+        facts.canRasterizeStyle = layer_style_can_rasterize(*view_, path);
         facts.hasMask = layer_mask_present_path(*view_, path);
         facts.hasVectorMask = vector_mask_present_path(*view_, path);
     }
@@ -602,6 +611,7 @@ void LayersPanel::populateRowMenu(QMenu& menu, const QString& path, int color,
             if (action.id == QLatin1String("rasterizeType")
                 || action.id == QLatin1String("rasterizeShape")
                 || action.id == QLatin1String("rasterizeLayer")
+                || action.id == QLatin1String("rasterizeStyle")
                 || action.id == QLatin1String("deleteLayerMask")
                 || action.id == QLatin1String("enableLayerMask")
                 || action.id == QLatin1String("disableLayerMask")

@@ -7,10 +7,9 @@
 //! and the `IrGl` object holds the inner glow. This slice decodes and renders
 //! all four.
 //!
-//! ponytail: the effective angle is the stored `lagl`, not the document
-//! global-light resource (1037), which this crate does not decode; `uglg` is
-//! carried for a later slice. Contour (`TrnS`), noise (`Nose`) and anti-alias
-//! (`AntA`) are not applied. A shadow always composites behind the layer
+//! ponytail: the document global light (resources 1037/1049) is resolved into
+//! effects with `uglg` before their passes are built (`light::effective`).
+//! Contour (`TrnS`), noise (`Nose`) and anti-alias (`AntA`) are not applied. A shadow always composites behind the layer
 //! content, so a semi-transparent layer shows it through (the `knocks_out =
 //! false` look). The matte is a full-canvas `f32` buffer, matching the
 //! compositor's ceiling.
@@ -28,8 +27,8 @@
 //! confinement is unconditional; the interior effect blends against the
 //! layer-over-backdrop result rather than an isolated content buffer, so
 //! `Blend Interior Effects As Group` is not modelled; contour (`TrnS`), noise
-//! (`Nose`) and anti-alias (`AntA`) are ignored; and the effective angle is the
-//! stored `lagl`, not the global-light resource.
+//! (`Nose`) and anti-alias (`AntA`) are ignored; the effective angle comes from
+//! `light::effective` (global when `uglg` is on).
 //!
 //! An inner glow also composites **above** the content: the choke-eroded content
 //! matte is blurred and turned into an interior field. ponytail: `Source =
@@ -65,8 +64,8 @@
 //! A satin (`ChFX`) composites **above** the content: the blurred content matte
 //! is differenced against itself shifted by `distance` along `angle`, and the
 //! absolute difference tints the interior band. ponytail: contour (`MpgS`),
-//! anti-alias (`AntA`), `uglg` and `showInDialog` are ignored; the effective
-//! angle is the stored `lagl`, not the global-light resource; the band is
+//! anti-alias (`AntA`), `uglg` and `showInDialog` are ignored; satin keeps its
+//! stored `lagl` even when `uglg` is set; the band is
 //! confined to `M` once rather than libpsd's extra knockout multiplication; the
 //! build region pads by `dist_reach + blur_support` rather than `size`; the
 //! exact inter-effect order among the above-content effects is not modelled.
@@ -78,8 +77,8 @@
 //! renders; the chisel techniques, the `Outer`/`Emboss`/`Pillow`/`Stroke`
 //! styles, contour (`MpgS`), gloss contour (`TrnS`), contour range (`Inpr`),
 //! anti-alias (`AntA`/`antialiasGloss`), texture, `useShape` and `showInDialog`
-//! are decoded/ignored; the effective angle/altitude is the stored `lagl`/`Lald`,
-//! not the global-light resource; the height profile is a Gaussian blur of `M`
+//! are decoded/ignored; the light comes from `light::effective` (global when
+//! `uglg` is on); the height profile is a Gaussian blur of `M`
 //! rather than the reference's distance transform; `scale = size · depth/100` and the
 //! `dot(N,L) - sin(alt)` flat-offset are ungrounded model choices; the build
 //! region pads by the blur supports only; the exact inter-effect and
@@ -104,6 +103,8 @@ mod bevel;
 pub(crate) use bevel::blur_reference;
 mod glows;
 mod legacy;
+mod light;
+mod materialize;
 mod overlays;
 mod planes;
 pub(crate) use planes::content_matte;
@@ -366,6 +367,8 @@ fn master_switch_on(data: &[u8]) -> bool {
         Some(DescValue::Bool(false))
     )
 }
+
+pub(crate) use materialize::{style_passes, MaterializedPass};
 
 pub(crate) fn effects_reach(layer: &Layer) -> PsdRect {
     let rect = layer.rect;
@@ -724,7 +727,11 @@ fn effect_change_reach(effects: &LayerEffects) -> i32 {
         .as_ref()
         .filter(|e| on(e.enabled, e.present))
     {
-        let (ox, oy) = angle_offset(s.distance, s.angle_deg);
+        let (ox, oy) = if s.use_global_angle {
+            global_offset_pad(s.distance)
+        } else {
+            angle_offset(s.distance, s.angle_deg)
+        };
         reach = reach.max(
             ((ox + oy) as f32 + spread_pad(s.spread as f64, s.size as f64) as f32).ceil() as i32,
         );
@@ -747,7 +754,11 @@ fn effect_change_reach(effects: &LayerEffects) -> i32 {
         .as_ref()
         .filter(|e| on(e.enabled, e.present))
     {
-        let (ox, oy) = angle_offset(s.distance, s.angle_deg);
+        let (ox, oy) = if s.use_global_angle {
+            global_offset_pad(s.distance)
+        } else {
+            angle_offset(s.distance, s.angle_deg)
+        };
         let erode = (f64::from(s.choke) / 100.0 * f64::from(s.size)).round() as i32;
         reach = reach.max(ox + oy + erode + blur_support(s.size as f64) as i32);
     }
@@ -768,6 +779,15 @@ fn effect_change_reach(effects: &LayerEffects) -> i32 {
     } else {
         reach.saturating_add(2)
     }
+}
+
+/// The worst-case offset pad of a globally-lit shadow. This doc-free path does
+/// not know the angle, so it uses the 45-degree diagonal.
+fn global_offset_pad(distance: f32) -> (i32, i32) {
+    (
+        (f64::from(distance) * std::f64::consts::SQRT_2).ceil() as i32,
+        0,
+    )
 }
 
 /// The paint-change reach: how far a dab's effect halo can move outside the
@@ -795,6 +815,7 @@ pub(crate) fn build_layer_passes(
     let _span = crate::metrics::phase("effect_build", true);
     #[cfg(test)]
     crate::layer_source::note_pass_build(layer, doc);
+    let effects = &light::effective(effects, doc);
     let build = BuildRegion {
         region,
         mask_clip: build_mask_clip(region, effects, doc),

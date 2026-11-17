@@ -1,6 +1,6 @@
 use super::*;
 
-use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::edit::{structural, Edit};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
@@ -34,6 +34,105 @@ pub(in crate::cxxqt_object) fn layer_is_blend_if_customised(layer: &pictura_core
         Some(view) => !view.is_default(),
         None => !layer.blending_ranges.is_empty(),
     }
+}
+
+pub(super) fn layer_style_global_angle(view: &PictureView) -> f64 {
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .map_or(f64::NAN, |doc| doc.global_light.angle as f64)
+}
+
+pub(super) fn layer_style_global_altitude(view: &PictureView) -> f64 {
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .map_or(f64::NAN, |doc| doc.global_light.altitude as f64)
+}
+
+pub(super) fn layer_style_set_global_light(
+    mut view: Pin<&mut PictureView>,
+    angle: i32,
+    altitude: i32,
+) -> bool {
+    let mut changed = false;
+    view.as_mut().edit("Global Light", |rust| {
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return Edit::None;
+        };
+        changed = pictura_render::set_document_global_light(doc, angle, altitude);
+        if changed {
+            Edit::Full
+        } else {
+            Edit::None
+        }
+    });
+    changed
+}
+
+pub(super) fn layer_style_can_rasterize(view: &PictureView, path: &QString) -> bool {
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .is_some_and(|doc| pictura_render::can_rasterize_layer_style(doc, &path.to_string()))
+}
+
+pub(super) fn rasterize_layer_style(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
+    let path = path.to_string();
+    if path.is_empty() {
+        return false;
+    }
+    let mut changed = false;
+    view.as_mut().edit("Rasterize Layer Style", |rust| {
+        let before = rust
+            .session
+            .doc
+            .as_ref()
+            .and_then(|doc| pictura_render::damage::influence(doc, &path));
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return Edit::None;
+        };
+        changed = pictura_render::rasterize_layer_style(doc, &path);
+        if changed {
+            let after = pictura_render::damage::influence(doc, &path);
+            structural(before, after)
+        } else {
+            Edit::None
+        }
+    });
+    changed
+}
+
+pub(super) fn layer_style_can_create_layers(view: &PictureView, path: &QString) -> bool {
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .is_some_and(|doc| pictura_render::can_create_style_layers(doc, &path.to_string()))
+}
+
+pub(super) fn layer_style_create_layers(mut view: Pin<&mut PictureView>, path: &QString) -> i32 {
+    let path = path.to_string();
+    if path.is_empty() {
+        return 0;
+    }
+    let mut created = 0;
+    view.as_mut().edit("Create Layers", |rust| {
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return Edit::None;
+        };
+        let (paths, base) = pictura_render::create_style_layers_with_base(doc, &path);
+        created = paths.len();
+        if created == 0 {
+            return Edit::None;
+        }
+        rust.select_only_layer(&base);
+        Edit::Structural { damage: None }
+    });
+    created as i32
 }
 
 pub(super) fn layer_style_effect_names() -> QStringList {

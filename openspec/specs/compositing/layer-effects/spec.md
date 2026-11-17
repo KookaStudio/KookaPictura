@@ -1102,8 +1102,11 @@ range SHALL be clamped (`depth` `0..=1000`, `size` `0..=250`, `soften`
 `0..=250`, `altitude_deg` `0..=90`, both opacities `0..=100`). The gloss contour
 (`TrnS`), edge contour (`MpgS`), contour range (`Inpr`), anti-alias
 (`AntA`/`antialiasGloss`), texture (`useTexture`, `InvT`, `Algn`, `Scl `,
-`Ptrn`), `useShape` and `showInDialog` keys SHALL be ignored; the effective angle
-and altitude SHALL be the stored `lagl`/`Lald`. A missing `lfx2` block, a missing
+`Ptrn`), `useShape` and `showInDialog` keys SHALL be ignored. The decoder SHALL
+keep the stored `lagl`/`Lald` as the effect's local angle and altitude; when
+`use_global_angle` is true the compositor SHALL take the effective light from the
+document's global light (see the global-light requirement), so the stored local
+values apply only when the flag is false. A missing `lfx2` block, a missing
 `ebbl`, an unknown data version, a wrong class id, a wrong-typed or non-finite
 numeric value (including a finite `f64` that overflows to infinity as an `f32`),
 a wrong enum typeID, a non-`RGBC` colour, or a descriptor that fails to parse
@@ -1141,6 +1144,7 @@ SHALL be a no-op (`None`) and SHALL NOT panic. An `ebbl` whose `present` or
 
 - **WHEN** a layer has no `lfx2` block, or its `lfx2` block lacks an `ebbl`, has an unknown data version, an `ebbl` with a wrong class id, a wrong-typed numeric, a wrong enum typeID, a non-`RGBC` colour, or fails to parse
 - **THEN** `decode_bevel_emboss` returns `None` and does not panic
+
 
 ### Requirement: A bevel and emboss composites inside the layer content
 
@@ -1480,3 +1484,45 @@ flag is on, so a fill or shape layer is not narrowed to that mask's box.
 
 - **WHEN** a fill or shape layer with a mask has `layer_mask_hides_effects` true
 - **THEN** its effect source box is the layer's whole box rather than the mask's confining box, and the effect output is clipped by the mask
+
+### Requirement: Global light drives the effects that use it
+
+For an effect with `use_global_angle` true, the CPU compositor SHALL take its
+effective lighting from the document's global light instead of the stored local
+values: Drop Shadow and Inner Shadow SHALL use the global angle, and Bevel &
+Emboss SHALL use the global angle and the global altitude. For an effect with
+the flag false, the stored local angle and altitude SHALL apply unchanged. Satin
+SHALL keep its stored angle regardless of any global-light flag. The effective
+light SHALL feed both the rendered passes and the reach used to bound them, and
+changing the document's global light SHALL invalidate the cached effect passes
+of layers whose style bytes did not change, so the next composite repaints.
+
+#### Scenario: A global angle reorients a shadow [gle_angle]
+
+- **WHEN** two documents hold the same layer with an enabled Drop Shadow at a stored angle of 0 and `use_global_angle` true, and one document's global angle is 90 while the other's is 0
+- **THEN** the shadow paints on opposite sides of the content in the two composites
+
+#### Scenario: Turning the flag off restores the local angle [gle_local]
+
+- **WHEN** the same layer's `use_global_angle` is false and the document's global angle changes
+- **THEN** the composite is unchanged and the shadow keeps its stored angle
+
+#### Scenario: A global light edit repaints cached passes [gle_cache]
+
+- **WHEN** a document with a globally-lit effect is composited, its global angle is changed, and it is composited again
+- **THEN** the second composite shows the new light rather than the cached first result
+
+#### Scenario: Global altitude lights a bevel [gle_altitude]
+
+- **WHEN** an enabled Bevel & Emboss has `use_global_angle` true and the document's global altitude changes from 30 to 60
+- **THEN** the bevel's highlight and shadow coverage changes with the new altitude
+
+#### Scenario: An inner shadow follows the global angle [gle_inner_shadow]
+
+- **WHEN** two documents hold the same layer with an enabled Inner Shadow at a stored angle of 0 and `use_global_angle` true, and one document's global angle is 90 while the other's is 0
+- **THEN** the inner shadow band appears on opposite edges in the two composites
+
+#### Scenario: A bevel highlight follows the global angle [gle_bevel_angle]
+
+- **WHEN** an enabled Bevel & Emboss has `use_global_angle` true and the document's global angle changes from 0 to 180
+- **THEN** the highlighted side of the bevel swaps

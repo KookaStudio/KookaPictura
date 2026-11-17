@@ -717,7 +717,10 @@ fn write_container(
     out.extend_from_slice(color_mode_data);
     let resources = crate::layer_comps::resources_for_output(
         doc,
-        crate::guide_resources::output_resources(doc, mode_code),
+        crate::global_light::with_document_global_light(
+            doc,
+            crate::guide_resources::output_resources(doc, mode_code),
+        ),
     );
     out.extend_from_slice(&(resources.len() as u32).to_be_bytes());
     out.extend_from_slice(&resources);

@@ -149,6 +149,9 @@ pub fn flatten(doc: &mut Document) -> Result<MergeOutcome, MergeError> {
 
     // White backdrop first, then the tree; `composite_rgba` skips hidden layers.
     let mut scratch = Document::new(doc.width, doc.height, doc.mode, doc.depth);
+    scratch.global_light = doc.global_light;
+    scratch.layer_section_extra = doc.layer_section_extra.clone();
+    scratch.is_psb = doc.is_psb;
     let mut scratch_layers = Vec::with_capacity(doc.layers.len() + 1);
     scratch_layers.push(opaque_white_layer(doc.width, doc.height));
     scratch_layers.extend(doc.layers.iter().cloned());
@@ -439,6 +442,9 @@ fn bake_inputs(
     clipping: bool,
 ) -> Result<MergeOutcome, MergeError> {
     let mut scratch = Document::new(doc.width, doc.height, doc.mode, doc.depth);
+    scratch.global_light = doc.global_light;
+    scratch.layer_section_extra = doc.layer_section_extra.clone();
+    scratch.is_psb = doc.is_psb;
     scratch.layers = pictura_core::LayerStack::from_layers(inputs.to_vec());
     let union = inputs
         .iter()
@@ -655,6 +661,9 @@ pub fn stamp_scope(doc: &mut Document, scope: StampScope<'_>, anchor: &str) -> O
     }
 
     let mut scratch = Document::new(doc.width, doc.height, doc.mode, doc.depth);
+    scratch.global_light = doc.global_light;
+    scratch.layer_section_extra = doc.layer_section_extra.clone();
+    scratch.is_psb = doc.is_psb;
     scratch.layers = pictura_core::LayerStack::from_layers(std::mem::take(&mut inputs));
     let buffer = crate::composite_rgba(&scratch);
 

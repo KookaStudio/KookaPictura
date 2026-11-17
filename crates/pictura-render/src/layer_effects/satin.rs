@@ -6,8 +6,8 @@
 //! `M`, above the content.
 //!
 //! ponytail: the contour (`MpgS`), anti-alias (`AntA`), `uglg` and
-//! `showInDialog` keys are ignored; the effective angle is the stored `lagl`,
-//! not the document global-light resource (1037); the band is confined to `M`
+//! `showInDialog` keys are ignored; satin keeps its stored `lagl` even when a
+//! document global light exists; the band is confined to `M`
 //! once rather than libpsd's extra knockout multiplication (which squares `M`);
 //! the build region pads by `dist_reach + blur_support` rather than libpsd's
 //! `size`; `Scale Effects` and the exact inter-effect order are not modelled.

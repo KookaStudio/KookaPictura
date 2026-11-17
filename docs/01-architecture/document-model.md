@@ -96,7 +96,7 @@ backdrop (inferred behavior).
 | Layer ID | int | generated | seed in image resource 1044 | — |
 | Layer style: blur | int (px) | mode default | ≥ 0 | Effects layer record |
 | Layer style: intensity | int percent | mode default | 0–100 | Effects layer record |
-| Layer style: angle | int degrees | 30 (global) | 0–359 | Global angle resource 1037 |
+| Layer style: angle | int degrees | 30 (global) | 0–359 | Global angle resource 1037; altitude resource 1049 |
 | Layer style: distance | int (px) | mode default | ≥ 0 | Effects layer record |
 | Layer style: opacity | int percent | mode default | 0–100 | Effects layer record |
 

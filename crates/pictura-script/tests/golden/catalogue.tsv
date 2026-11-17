@@ -190,8 +190,8 @@ layer.layer.style.stroke	Layer/Layer Style/Stroke…	Stroke…		0	0
 layer.layer.style.copy.layer.style	Layer/Layer Style/Copy Layer Style	Copy Layer Style		0	0
 layer.layer.style.paste.layer.style	Layer/Layer Style/Paste Layer Style	Paste Layer Style		0	0
 layer.layer.style.clear.layer.style	Layer/Layer Style/Clear Layer Style	Clear Layer Style		0	0
-layer.layer.style.global.light	Layer/Layer Style/Global Light…	Global Light…		0	0
-layer.layer.style.create.layers	Layer/Layer Style/Create Layers	Create Layers		0	0
+layer.layer.style.global.light	Layer/Layer Style/Global Light…	Global Light…		1	0
+layer.layer.style.create.layers	Layer/Layer Style/Create Layers	Create Layers		1	0
 layer.layer.style.scale.effects	Layer/Layer Style/Scale Effects	Scale Effects		0	0
 layer.layer.style.hide.all.effects	Layer/Layer Style/Hide All Effects	Hide All Effects		0	0
 layer.layer.style.show.all.effects	Layer/Layer Style/Show All Effects	Show All Effects		0	0
@@ -270,7 +270,7 @@ layer.rasterize.smartObject	Layer/Rasterize/Smart Object	Smart Object		1	0
 layer.rasterize.fillContent	Layer/Rasterize/Fill Content	Fill Content		1	0
 layer.rasterize.layer	Layer/Rasterize/Layer	Layer		1	0
 layer.rasterize.allLayers	Layer/Rasterize/All Layers	All Layers		1	0
-layer.rasterize.layer.style	Layer/Rasterize/Layer Style	Layer Style		0	0
+layer.rasterize.layer.style	Layer/Rasterize/Layer Style	Layer Style		1	0
 layer.rasterize.video	Layer/Rasterize/Video	Video		0	0
 layer.rasterize.3d	Layer/Rasterize/3D	3D		0	0
 layer.copyShapeAttributes	Layer/Copy Shape Attributes	Copy Shape Attributes		1	0

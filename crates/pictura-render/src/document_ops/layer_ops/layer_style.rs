@@ -16,19 +16,32 @@
 //! ponytail: a layer carrying only a legacy `lrFX` block starts a fresh `lfx2`
 //! on its first edit, which then wins over the legacy set; the stroke is always
 //! a colour fill; a Pattern Overlay can be edited but not created (no pattern
-//! preset system yet); Global Light, Create Layers and Blend If are not
-//! authored here.
+//! preset system yet); Blend If is not authored here.
 
 use pictura_codec::DescValue;
-use pictura_core::{BlendMode, Document, Knockout, Layer, LayerBlock};
+use pictura_core::{BlendMode, Channel, Document, Knockout, Layer, LayerBlock};
 
-use super::paths::{flatten_rows, is_background, resolve_path_mut};
+use super::paths::{flatten_rows, is_background, resolve_path, resolve_path_mut};
 use crate::composite::desc_item;
 
 #[path = "layer_style_fields.rs"]
 mod fields;
 
 use fields::{Effect, Field, Kind, EFFECTS};
+
+/// Set the document's global light. The angle wraps into `0..=359` and the
+/// altitude clamps to `0..=90`; false when neither value changes.
+pub fn set_document_global_light(doc: &mut Document, angle: i32, altitude: i32) -> bool {
+    let wanted = pictura_core::GlobalLight {
+        angle: angle.rem_euclid(360),
+        altitude: altitude.clamp(0, 90),
+    };
+    if doc.global_light == wanted {
+        return false;
+    }
+    doc.global_light = wanted;
+    true
+}
 
 /// The dialog key prefixes of the ten effects, in CS6's list order.
 pub fn layer_style_effect_names() -> Vec<&'static str> {
@@ -646,6 +659,168 @@ fn set_pattern(layer: &mut Layer, id: &str, index: usize) {
     }
     set_item(&mut items, effect.key, obj);
     write_lfx2(layer, items);
+}
+
+/// Whether the layer at `path` can be exploded into style layers: a styled
+/// raster pixel layer with at least one drawable effect, not the Background, a
+/// group, a clipped layer, or a base that owns a clipped run above it.
+pub fn can_create_style_layers(doc: &Document, path: &str) -> bool {
+    let Some(layer) = resolve_path(doc, path) else {
+        return false;
+    };
+    if layer.is_group
+        || layer.background
+        || layer.clipping
+        || layer.channels.is_empty()
+        || !has_layer_style(layer)
+    {
+        return false;
+    }
+    if super::rasterize::owns_clipped_run(doc, path) {
+        return false;
+    }
+    let effects = crate::layer_effects::decode_layer_effects(layer);
+    !crate::layer_effects::no_passes(layer, &effects, false)
+}
+
+/// Explode the layer's style into ordinary pixel layers: below-content passes
+/// beneath the base, above-content passes over it in draw order. The base keeps
+/// its pixels and loses the style. Returns the new paths (below first, then
+/// above, bottom-to-top), or empty when refused.
+pub fn create_style_layers(doc: &mut Document, path: &str) -> Vec<String> {
+    create_style_layers_with_base(doc, path).0
+}
+
+/// The plain effect name when it is free, otherwise the next numbered name.
+fn style_layer_name(doc: &Document, base: &str) -> String {
+    fn taken(layers: &[pictura_core::Layer], name: &str) -> bool {
+        layers
+            .iter()
+            .any(|layer| layer.name == name || taken(&layer.children, name))
+    }
+    if taken(&doc.layers, base) {
+        super::create::next_layer_name(doc, base)
+    } else {
+        base.to_string()
+    }
+}
+
+/// As [`create_style_layers`], also returning the base layer's path after the
+/// insertions shifted its index.
+pub fn create_style_layers_with_base(doc: &mut Document, path: &str) -> (Vec<String>, String) {
+    if !can_create_style_layers(doc, path) {
+        return (Vec::new(), String::new());
+    }
+    let Some(segments) = super::paths::parse_path(path) else {
+        return (Vec::new(), String::new());
+    };
+    let Some((&index, parent)) = segments.split_last() else {
+        return (Vec::new(), String::new());
+    };
+    let (opacity, visible, passes) = {
+        let Some(layer) = resolve_path(doc, path) else {
+            return (Vec::new(), String::new());
+        };
+        let effects = crate::layer_effects::decode_layer_effects(layer);
+        (
+            layer.opacity,
+            layer.visible,
+            crate::layer_effects::style_passes(layer, doc, &effects),
+        )
+    };
+    if passes.is_empty() {
+        return (Vec::new(), String::new());
+    }
+    let below = passes.iter().filter(|pass| pass.below).count();
+    let base = super::paths::format_segments(&with_index(parent, index + below));
+    let mut below_at = index;
+    let mut above_at = index + below + 1;
+    let mut inserted_below = 0usize;
+    let mut inserted_above = 0usize;
+    for pass in passes {
+        let is_below = pass.below;
+        let name = style_layer_name(doc, pass.name);
+        let node = pass_layer(&name, pass, opacity, visible);
+        let at = if is_below {
+            let at = below_at;
+            below_at += 1;
+            at
+        } else {
+            let at = above_at;
+            above_at += 1;
+            at
+        };
+        if doc.layers.insert(parent, at, node).is_err() {
+            // Roll back the layers already inserted; the style is untouched.
+            for i in (0..inserted_above).rev() {
+                let _ = doc
+                    .layers
+                    .remove(&with_index(parent, index + below + 1 + i));
+            }
+            for i in (0..inserted_below).rev() {
+                let _ = doc.layers.remove(&with_index(parent, index + i));
+            }
+            return (Vec::new(), String::new());
+        }
+        if is_below {
+            inserted_below += 1;
+        } else {
+            inserted_above += 1;
+        }
+    }
+    if let Some(layer) = resolve_path_mut(doc, &base) {
+        layer
+            .extra_blocks
+            .retain(|block| !matches!(&block.key, b"lfx2" | b"lrFX"));
+    }
+    let mut created = Vec::with_capacity(inserted_below + inserted_above);
+    for i in 0..inserted_below {
+        created.push(super::paths::format_segments(&with_index(
+            parent,
+            index + i,
+        )));
+    }
+    for i in 0..inserted_above {
+        created.push(super::paths::format_segments(&with_index(
+            parent,
+            index + below + 1 + i,
+        )));
+    }
+    (created, base)
+}
+
+fn with_index(parent: &[usize], index: usize) -> Vec<usize> {
+    let mut out = parent.to_vec();
+    out.push(index);
+    out
+}
+
+/// A plain pixel layer holding one materialised pass.
+fn pass_layer(
+    name: &str,
+    pass: crate::layer_effects::MaterializedPass,
+    opacity: u8,
+    visible: bool,
+) -> Layer {
+    let width = pass.rect.width().max(0) as u32;
+    let height = pass.rect.height().max(0) as u32;
+    let plane = width as usize * height as usize;
+    let channel = |plane_index: usize, id: i16| Channel {
+        id,
+        data: pass.buffer.data[plane_index * plane..(plane_index + 1) * plane]
+            .to_vec()
+            .into(),
+    };
+    Layer {
+        name: name.to_string(),
+        rect: pass.rect,
+        opacity,
+        fill: 255,
+        blend: pass.blend,
+        visible,
+        channels: vec![channel(0, 0), channel(1, 1), channel(2, 2), channel(3, -1)],
+        ..Default::default()
+    }
 }
 
 /// Whether the layer carries any effect, on or off (an `lfx2` or legacy

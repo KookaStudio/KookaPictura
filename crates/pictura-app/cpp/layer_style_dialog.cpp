@@ -203,7 +203,9 @@ QString LayerStyleDialog::shadowKey() const
 bool LayerStyleDialog::setShadowOffset(const QPointF& offset)
 {
     const QString key = shadowKey();
-    if (key.isEmpty()) {
+    // A globally-lit shadow's angle is not local; the drag would overwrite the
+    // stored local value the page is keeping for when the flag is turned off.
+    if (key.isEmpty() || value(key + QStringLiteral(".useGlobalLight")) >= 0.5) {
         return false;
     }
     // The renderer offsets by (−d·cos θ, d·sin θ): the light comes from θ.
@@ -226,16 +228,20 @@ void LayerStyleDialog::refreshControls(const QString& key)
     if (!std::isfinite(v)) {
         return;
     }
-    if (auto* spin = findChild<QSpinBox*>(key)) {
+    // A globally-lit control is disabled and shows the document light; a
+    // canvas drag must not overwrite that display with the stored local value.
+    if (auto* spin = findChild<QSpinBox*>(key); spin && spin->isEnabled()) {
         const QSignalBlocker block(spin);
         spin->setValue(int(std::lround(v)));
     }
-    if (auto* slider = findChild<QSlider*>(key + QStringLiteral(".slider"))) {
+    if (auto* slider = findChild<QSlider*>(key + QStringLiteral(".slider"));
+        slider && slider->isEnabled()) {
         const QSignalBlocker block(slider);
         slider->setValue(slider->property("exponential").toBool() ? distanceToSlider(v)
                                                                   : int(std::lround(v)));
     }
-    if (auto* dial = findChild<AngleDial*>(key + QStringLiteral(".dial"))) {
+    if (auto* dial = findChild<AngleDial*>(key + QStringLiteral(".dial"));
+        dial && dial->isEnabled()) {
         const QSignalBlocker block(dial);
         dial->setAngle(v);
     }
@@ -523,7 +529,11 @@ QWidget* LayerStyleDialog::angleRow(const QString& key)
     spin->setSuffix(QStringLiteral("°"));
     spin->setFixedWidth(80);
     const double start = value(key);
-    const int v = std::isfinite(start) ? int(std::lround(start)) : 0;
+    int v = std::isfinite(start) ? int(std::lround(start)) : 0;
+    v = ((v % 360) + 360) % 360;
+    if (v > 180) {
+        v -= 360;
+    }
     dial->setAngle(v);
     spin->setValue(v);
     // The dial wraps into [0, 360); CS6 shows the angle in (-180, 180].

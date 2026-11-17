@@ -320,6 +320,8 @@ fn prefix_digest(doc: &Document, k: usize, level: u32, rect: PsdRect) -> u64 {
     doc.width.hash(&mut hasher);
     doc.height.hash(&mut hasher);
     doc.mode.hash(&mut hasher);
+    doc.global_light.angle.hash(&mut hasher);
+    doc.global_light.altitude.hash(&mut hasher);
     // The pattern library lives in the layer-section extra bytes and is not
     // part of any layer's content key; a pattern edit must invalidate.
     doc.layer_section_extra.ident().hash(&mut hasher);
@@ -453,6 +455,14 @@ mod tests {
         let mut layers: Vec<Layer> = doc.layers.iter().cloned().collect();
         layers.swap(0, 1);
         doc.layers = LayerStack::from_layers(layers);
+        assert_ne!(before, prefix_digest(&doc, 1, 0, whole(&doc)));
+    }
+
+    #[test]
+    fn prefix_digest_changes_on_a_global_light_edit() {
+        let mut doc = two_layers();
+        let before = prefix_digest(&doc, 1, 0, whole(&doc));
+        doc.global_light.angle = 90;
         assert_ne!(before, prefix_digest(&doc, 1, 0, whole(&doc)));
     }
 

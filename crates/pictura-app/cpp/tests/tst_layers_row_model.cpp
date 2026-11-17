@@ -80,6 +80,7 @@ void LayersRowModelTest::theRowTableCarriesStaticCommandIds()
     RowFacts facts;
     facts.hasMask = true;
     facts.hasStyle = true;
+    facts.canRasterizeStyle = true;
     const QVector<ResolvedRowAction> actions = model.actionsFor(QStringLiteral("1"), facts);
 
     const ResolvedRowAction* duplicate = findAction(actions, "duplicate");
@@ -103,8 +104,9 @@ void LayersRowModelTest::theRowTableCarriesStaticCommandIds()
 
     const ResolvedRowAction* rasterizeStyle = findAction(actions, "rasterizeStyle");
     QVERIFY(rasterizeStyle != nullptr);
-    QVERIFY(rasterizeStyle->commandId.isEmpty());
-    QVERIFY(!rasterizeStyle->enabled);
+    QCOMPARE(rasterizeStyle->commandId,
+             QString::fromLatin1(command_ids::LayerRasterizeLayerStyle));
+    QVERIFY(rasterizeStyle->enabled);
 }
 
 void LayersRowModelTest::dynamicRowsResolveFromRowFacts()
@@ -233,14 +235,6 @@ void LayersRowModelTest::unimplementedRowsAreDisabled()
         QVERIFY(!action->enabled);
     }
 
-    model.setRows({makeRow(QStringLiteral("pixel"))});
-    RowFacts facts;
-    facts.hasStyle = true;
-    actions = model.actionsFor(QStringLiteral("1"), facts);
-    const ResolvedRowAction* style = findAction(actions, "rasterizeStyle");
-    QVERIFY(style != nullptr);
-    QVERIFY(style->commandId.isEmpty());
-    QVERIFY(!style->enabled);
 }
 
 void LayersRowModelTest::absentPathResolvesToEmpty()

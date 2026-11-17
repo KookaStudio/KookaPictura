@@ -16,6 +16,8 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/dialogs.h
     crates/pictura-app/cpp/duplicate_channel_dialog.cpp
     crates/pictura-app/cpp/duplicate_channel_dialog.h
+    crates/pictura-app/cpp/global_light_dialog.cpp
+    crates/pictura-app/cpp/global_light_dialog.h
     crates/pictura-app/cpp/image_size_dialog.cpp
     crates/pictura-app/cpp/image_size_dialog.h
     crates/pictura-app/cpp/justification_dialog.cpp

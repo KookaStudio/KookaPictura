@@ -1335,8 +1335,8 @@ Snapshot for resuming after a context break. Update after each milestone.
   disclosure; a double-click on the badge or the group opens Blending Options
   and on an effect row opens that effect's page; the badge's and rows' context
   menu is the CS6 layer-style menu (Disable/Enable Layer Effects, Blending
-  Options…, the ten effects, Copy/Paste/Clear, disabled Global Light…/Create
-  Layer, Hide/Show All Effects, Scale Effects…). Tests: `tst_layers_effects`.
+  Options…, the ten effects, Copy/Paste/Clear, Global Light…/Create Layers,
+  Hide/Show All Effects, Scale Effects…). Tests: `tst_layers_effects`.
 - **Colour management bundle** (#568, #569, #600, #604, #809, #947; OpenSpec
   changes `color-management-bundle` and `color-conversion-layer-fix`). CMYK
   now converts through the document's embedded profile or the configured working profile, with `OpenOptions` and a shared
@@ -4198,8 +4198,9 @@ Snapshot for resuming after a context break. Update after each milestone.
   fixture proves decode + round-trip + rendering. Ceilings: only Drop Shadow
   (other effects, legacy `lrFX`, group/adjustment-layer effects, `Scale
   Effects`, knock-out application, and a GPU shader are deferred); the
-  global-light resource (id 1037) is not decoded (the stored local angle is
-  used); a canvas-filling layer at the maximum `Size` is O(canvas·size). The
+  global-light resources (1037 angle, 1049 altitude) are decoded and applied
+  to `uglg` effects (#580); a canvas-filling layer at the maximum `Size` is
+  O(canvas·size). The
   change also did a pure move: the blend-mode math moved out of `composite.rs`
   into `blend.rs` and the source-over blend was factored into a `blend_parts`
   helper (behaviour unchanged), keeping `composite.rs` under the cap.
@@ -4212,8 +4213,8 @@ Snapshot for resuming after a context break. Update after each milestone.
   enabled+present glow (`UnsupportedLayerEffect`) and falls back to CPU; a
   psd-tools-authored `outer_glow.psd` fixture proves decode/round-trip/render.
   Ceilings: `Precise` technique renders as `Softer`; range/contour/noise/jitter/
-  anti-alias/gradient-mode glows and a GPU shader are deferred; the global-light
-  resource is still not decoded.
+  anti-alias/gradient-mode glows and a GPU shader are deferred; the
+  global-light resources are decoded (#580).
 - Layer effects — Inner Shadow (roadmap P3/G6, archived
   `2026-09-19-layer-effects-inner-shadow`): the object-based `lfx2` **Inner
   Shadow** (`IrSh`) is now decoded and composited — an interior matte
@@ -4225,8 +4226,8 @@ Snapshot for resuming after a context break. Update after each milestone.
   render. `composite.rs` now runs a below-content and an above-content effects
   pass (drop shadow/outer glow below, inner shadow above); the split was verified
   byte-identical to the single-pass composite. Ceilings: `knocks_out`
-  (`layerConceals`) is decoded but inert; contour/noise/anti-alias, the
-  global-light resource, and a GPU shader are deferred.
+  (`layerConceals`) is decoded but inert; contour/noise/anti-alias and a GPU
+  shader are deferred, and the global-light resources are decoded (#580).
 - Layer effects — Inner Glow (roadmap P3/G6, archived
   `2026-09-19-layer-effects-inner-glow`): the object-based `lfx2` **Inner Glow**
   (`IrGl`) is now decoded and composited — an interior matte confined to the
@@ -4282,8 +4283,9 @@ Snapshot for resuming after a context break. Update after each milestone.
   it; the GPU rejects an enabled+present satin (`UnsupportedLayerEffect`) and
   falls back to CPU; a psd-tools-authored `satin.psd` fixture proves
   decode/round-trip/render; the new `layer_effects/satin.rs` holds the kind.
-  Ceilings: contour (`MpgS`)/anti-alias/global-light ignored, one `M` confinement
-  (libpsd squares it), and the rounding differs from libpsd by ≤1 px.
+  Ceilings: contour (`MpgS`)/anti-alias ignored (satin keeps its local angle),
+  one `M` confinement (libpsd squares it), and the rounding differs from libpsd
+  by ≤1 px.
 - Layer effects — Bevel & Emboss (roadmap P3/G6, archived
   `2026-09-20-layer-effects-bevel`): the object-based `lfx2` **Bevel & Emboss**
   (`ebbl`) is now decoded and, for the **Inner + Smooth** slice, composited — a
@@ -4294,7 +4296,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   renderable bevel (`UnsupportedLayerEffect`); a psd-tools-authored `bevel.psd`
   fixture proves decode/round-trip/render; the new `layer_effects/bevel.rs` holds
   the kind. Ceilings: chisel techniques, the Outer/Emboss/Pillow/Stroke styles,
-  contour/texture, and the global-light resource.
+  and contour/texture; the global-light resources are decoded (#580).
 - Effect blend-mode fix (cross-cutting, in `2026-09-20-layer-effects-bevel`): all
   `lfx2` effect blend modes (`Md  `, and a bevel's `hglM`/`sdwM`) now decode the
   `BlnM` descriptor vocabulary (`Nrml`/`Mltp`/`Scrn`/`Ovrl`/…) via a shared

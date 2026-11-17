@@ -218,6 +218,9 @@ pub fn export_layer_targets(view: &PictureView, visible_only: bool, prefix: &QSt
 
 pub(crate) fn scratch_document(source: &Document, layer: &Layer, gpu_compute: bool) -> Document {
     let mut scratch = Document::new(source.width, source.height, source.mode, BitDepth::Eight);
+    scratch.global_light = source.global_light;
+    scratch.layer_section_extra = source.layer_section_extra.clone();
+    scratch.is_psb = source.is_psb;
     scratch.source_mode = source.source_mode;
     scratch.source_depth = None;
     scratch.source_palette = source.source_palette;
@@ -426,6 +429,24 @@ mod tests {
         let mut doc = Document::new(10, 10, ColorMode::Rgb, BitDepth::Eight);
         doc.layers = LayerStack::from_layers(layers);
         doc
+    }
+
+    #[test]
+    fn scratch_document_carries_the_global_light_and_pattern_state() {
+        let mut source = doc(vec![layer("a")]);
+        source.global_light = pictura_core::GlobalLight {
+            angle: 90,
+            altitude: 45,
+        };
+        source.layer_section_extra = vec![1u8, 2, 3].into();
+        source.is_psb = true;
+        let scratch = scratch_document(&source, &layer("a"), false);
+        assert_eq!(scratch.global_light, source.global_light);
+        assert_eq!(
+            &scratch.layer_section_extra[..],
+            &source.layer_section_extra[..]
+        );
+        assert!(scratch.is_psb);
     }
 
     #[test]

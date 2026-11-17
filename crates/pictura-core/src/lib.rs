@@ -13,6 +13,7 @@ mod crs;
 mod digest;
 mod document_composite;
 pub mod edition;
+mod global_light;
 mod guides;
 pub mod hdr;
 pub mod homography;
@@ -45,6 +46,7 @@ pub use annotations::{
 pub use crs::CrsSettings;
 pub use digest::content_digest;
 pub use edition::{Edition, Feature};
+pub use global_light::GlobalLight;
 pub use guides::{guide_near, Guide, GuideOrientation};
 pub use hdr::{validate_hdr_toning_params, HdrToningParams};
 pub use homography::Homography;
@@ -234,26 +236,23 @@ pub struct Document {
     pub global_layer_mask: Plane<u8>,
     /// Bytes after the global layer mask up to the layer-section end, preserved verbatim for lossless re-save.
     pub layer_section_extra: Plane<u8>,
-    /// User slices drawn with the Slice tool, in document pixels; auto slices are derived from them.
-    /// ponytail: not yet written to or read from the slices image resource (1050), which stays preserved verbatim.
+    /// Slice-tool rectangles in document pixels; resource 1050 stays preserved.
     pub slices: Vec<PsdRect>,
     /// Color samplers and notes; they ride the history snapshot like slices.
     pub annotations: Annotations,
     /// Guides in placement order; they ride the history snapshot. Read from and written to the PSD grid-and-guides resource (1032).
     pub guides: Vec<Guide>,
-    /// The Work Path the Pen tool group draws; it rides the history snapshot. Read from and written to the PSD Work Path resource (1025).
+    /// Master light angle/altitude in degrees; PSD resources 1037/1049.
+    pub global_light: GlobalLight,
+    /// The Work Path the Pen tool group draws; PSD resource 1025.
     pub work_path: path::VectorPath,
-    /// The saved paths the Paths panel lists above the Work Path, in panel order; they ride the history snapshot.
-    /// Read from and written to the PSD saved-path resources (2000-2997).
+    /// Saved paths above the Work Path; PSD resources 2000-2997.
     pub saved_paths: Vec<path::NamedPath>,
-    /// Named character and paragraph styles, carried on the history snapshot so a style edit is undone with the document.
-    /// `Basic Paragraph` is always present.
-    /// ponytail: not yet written to or read from PSD (the style block's location is unresolved); an existing block is preserved verbatim.
+    /// Named character/paragraph styles; snapshots carry them.
     pub text_styles: TextStyleSheet,
     /// Document-level layer comps; they ride the history snapshot and cloning.
     pub layer_comps: layer_comp::LayerCompStore,
 }
-
 impl Document {
     pub fn new(width: u32, height: u32, mode: ColorMode, depth: BitDepth) -> Self {
         let channels = mode.color_channels();
@@ -298,6 +297,7 @@ impl Document {
             slices: Vec::new(),
             annotations: Annotations::default(),
             guides: Vec::new(),
+            global_light: GlobalLight::default(),
             work_path: path::VectorPath::default(),
             saved_paths: Vec::new(),
             text_styles: TextStyleSheet::default(),

@@ -14,6 +14,7 @@ struct RowFacts {
     bool canRasterizeSmartObject = false;
     bool canReleaseClipping = false;
     bool hasStyle = false;
+    bool canRasterizeStyle = false;
     bool hasMask = false;
     bool hasVectorMask = false;
 };

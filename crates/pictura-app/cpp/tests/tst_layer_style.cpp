@@ -17,6 +17,8 @@
 #include <QtCore/QTimer>
 
 #include <cmath>
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QSlider>
@@ -40,6 +42,13 @@ private slots:
     void zoomKeysReachTheCanvasBehindADialog();
     void previewIsBounded();
     void refusedValueEmitsNothing();
+    void globalLightDialogWritesAndUndoes();
+    void globalLightDialogCancelKeepsTheLight();
+    void globalAngleFieldFollowsGlobalLight();
+    void globalAltitudeFieldFollowsGlobalLight();
+    void createLayersCommand();
+    void rasterizeLayerStyleCommand();
+    void globalLightDialogNoOpAcceptRecordsNothing();
 
 private:
     // A 10x10 white square at (10, 10) lifted onto layer "1" over a white
@@ -184,7 +193,7 @@ void LayerStyleTest::menuCommands()
 
     QVERIFY(dropShadow->isEnabled());
     QVERIFY(!copy->isEnabled() && !clear->isEnabled() && !hide->isEnabled());
-    QVERIFY(!globalLight->isEnabled());
+    QVERIFY(globalLight->isEnabled());
 
     QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
                                      QStringLiteral("colorOverlay.on"), 1.0));
@@ -273,6 +282,8 @@ void LayerStyleTest::distanceSliderIsExponential()
 void LayerStyleTest::canvasDragMovesTheShadow()
 {
     setupSquare();
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("dropShadow.useGlobalLight"), 0.0));
     pictura::LayerStyleDialog dialog(view_, QStringLiteral("1"), QStringLiteral("dropShadow"));
     // Straight down by 8 px: the light comes from 90°.
     QVERIFY(dialog.setShadowOffset(QPointF(0, 8)));
@@ -355,6 +366,177 @@ void LayerStyleTest::refusedValueEmitsNothing()
     QVERIFY(!pictura::layer_style_set(*view_, QStringLiteral("1"),
                                       QStringLiteral("dropShadow.on"), 1.0));
     QCOMPARE(damaged.count(), 0);
+}
+
+void LayerStyleTest::globalLightDialogWritesAndUndoes()
+{
+    setupSquare();
+    const int states = view_->history_count();
+    QAction* globalLight = leaf(QStringLiteral("Global Light…"));
+    QVERIFY(globalLight && globalLight->isEnabled());
+    QTimer::singleShot(0, this, [this] {
+        auto* dialog = window_->findChild<QDialog*>(QStringLiteral("globalLightDialog"));
+        if (!dialog) {
+            dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        }
+        if (!dialog) {
+            return;
+        }
+        if (auto* angle = dialog->findChild<QSpinBox*>(QStringLiteral("globalLight.angle"))) {
+            angle->setValue(90);
+        }
+        if (auto* altitude =
+                dialog->findChild<QSpinBox*>(QStringLiteral("globalLight.altitude"))) {
+            altitude->setValue(45);
+        }
+        dialog->accept();
+    });
+    globalLight->trigger();
+    QCOMPARE(view_->history_count(), states + 1);
+    QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Global Light"));
+    QCOMPARE(pictura::layer_style_global_angle(*view_), 90.0);
+    QCOMPARE(pictura::layer_style_global_altitude(*view_), 45.0);
+    QVERIFY(view_->undo());
+    QCOMPARE(pictura::layer_style_global_angle(*view_), 30.0);
+}
+
+void LayerStyleTest::globalLightDialogCancelKeepsTheLight()
+{
+    setupSquare();
+    const int states = view_->history_count();
+    QAction* globalLight = leaf(QStringLiteral("Global Light…"));
+    QTimer::singleShot(0, this, [this] {
+        auto* dialog = window_->findChild<QDialog*>(QStringLiteral("globalLightDialog"));
+        if (!dialog) {
+            dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        }
+        if (!dialog) {
+            return;
+        }
+        if (auto* angle = dialog->findChild<QSpinBox*>(QStringLiteral("globalLight.angle"))) {
+            angle->setValue(200);
+        }
+        dialog->reject();
+    });
+    globalLight->trigger();
+    QCOMPARE(view_->history_count(), states);
+    QCOMPARE(pictura::layer_style_global_angle(*view_), 30.0);
+}
+
+void LayerStyleTest::globalAngleFieldFollowsGlobalLight()
+{
+    setupSquare();
+    QVERIFY(pictura::layer_style_set_global_light(*view_, 90, 45));
+    pictura::LayerStyleDialog dialog(view_, QStringLiteral("1"),
+                                     QStringLiteral("dropShadow"));
+    auto* angle = dialog.findChild<QSpinBox*>(QStringLiteral("dropShadow.angle"));
+    auto* global = dialog.findChild<QCheckBox*>(QStringLiteral("dropShadow.useGlobalLight"));
+    QVERIFY(angle && global);
+    QVERIFY(global->isChecked());
+    QVERIFY(!angle->isEnabled());
+    QCOMPARE(angle->value(), 90);
+    global->setChecked(false);
+    QVERIFY(angle->isEnabled());
+    QCOMPARE(angle->value(), 120);
+}
+
+void LayerStyleTest::globalAltitudeFieldFollowsGlobalLight()
+{
+    setupSquare();
+    QVERIFY(pictura::layer_style_set_global_light(*view_, 30, 60));
+    pictura::LayerStyleDialog dialog(view_, QStringLiteral("1"), QStringLiteral("bevel"));
+    auto* altitude = dialog.findChild<QSpinBox*>(QStringLiteral("bevel.altitude"));
+    auto* global = dialog.findChild<QCheckBox*>(QStringLiteral("bevel.useGlobalLight"));
+    QVERIFY(altitude && global);
+    QVERIFY(global->isChecked());
+    QVERIFY(!altitude->isEnabled());
+    QCOMPARE(altitude->value(), 60);
+    global->setChecked(false);
+    QVERIFY(altitude->isEnabled());
+    QCOMPARE(altitude->value(), 30);
+}
+
+void LayerStyleTest::createLayersCommand()
+{
+    setupSquare();
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("dropShadow.on"), 1.0));
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("dropShadow.useGlobalLight"), 0.0));
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("dropShadow.angle"), 90.0));
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("dropShadow.distance"), 3.0));
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("colorOverlay.on"), 1.0));
+    pictura::layer_style_commit(*view_, QStringLiteral("Layer Style"));
+    window_->registry()->refresh();
+    const int states = view_->history_count();
+    QAction* create = window_->registry()->action(pictura::commandIdForPath(
+        {QStringLiteral("Layer"), QStringLiteral("Layer Style"), QStringLiteral("Create Layers")}));
+    QVERIFY(create && create->isEnabled());
+    create->trigger();
+    QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Create Layers"));
+    QCOMPARE(view_->history_count(), states + 1);
+    // The base moved below the created drop shadow and stays the target.
+    QCOMPARE(pictura::layer_selection_anchor(*view_), QStringLiteral("2"));
+    QVERIFY(!pictura::layer_style_has(*view_, QStringLiteral("2")));
+    QVERIFY(view_->undo());
+    QVERIFY(pictura::layer_style_has(*view_, QStringLiteral("1")));
+}
+
+void LayerStyleTest::rasterizeLayerStyleCommand()
+{
+    setupSquare();
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("dropShadow.on"), 1.0));
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("dropShadow.useGlobalLight"), 0.0));
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("dropShadow.angle"), 90.0));
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("dropShadow.distance"), 3.0));
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("dropShadow.size"), 0.0));
+    pictura::layer_style_commit(*view_, QStringLiteral("Layer Style"));
+    window_->registry()->refresh();
+    const QRgb shadowPixel = at(15, 22);
+    const int states = view_->history_count();
+    QAction* rasterize = window_->registry()->action(pictura::commandIdForPath(
+        {QStringLiteral("Layer"), QStringLiteral("Rasterize"), QStringLiteral("Layer Style")}));
+    QVERIFY(rasterize && rasterize->isEnabled());
+    rasterize->trigger();
+    QCOMPARE(view_->history_label(view_->history_index()),
+             QStringLiteral("Rasterize Layer Style"));
+    QCOMPARE(view_->history_count(), states + 1);
+    QVERIFY(!pictura::layer_style_has(*view_, QStringLiteral("1")));
+    QVERIFY(view_->undo());
+    QVERIFY(pictura::layer_style_has(*view_, QStringLiteral("1")));
+    QCOMPARE(at(15, 22), shadowPixel);
+
+    // Only disabled effects: the command is disabled.
+    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
+                                     QStringLiteral("dropShadow.on"), 0.0));
+    pictura::layer_style_commit(*view_, QStringLiteral("Disable"));
+    window_->registry()->refresh();
+    QVERIFY(!rasterize->isEnabled());
+}
+
+void LayerStyleTest::globalLightDialogNoOpAcceptRecordsNothing()
+{
+    setupSquare();
+    const int states = view_->history_count();
+    QAction* globalLight = leaf(QStringLiteral("Global Light…"));
+    QVERIFY(globalLight && globalLight->isEnabled());
+    QTimer::singleShot(0, this, [this] {
+        auto* dialog = window_->findChild<QDialog*>(QStringLiteral("globalLightDialog"));
+        if (!dialog) {
+            return;
+        }
+        dialog->accept();
+    });
+    globalLight->trigger();
+    QCOMPARE(view_->history_count(), states);
 }
 
 QTEST_MAIN(LayerStyleTest)

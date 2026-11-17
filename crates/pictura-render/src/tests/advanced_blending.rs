@@ -23,6 +23,7 @@ fn color_overlay(layer: &mut Layer, rgb: u32, opacity: f64) {
 
 fn drop_shadow(layer: &mut Layer, angle: f64, distance: f64) {
     set(layer, "dropShadow.on", 1.0);
+    set(layer, "dropShadow.useGlobalLight", 0.0);
     set(layer, "dropShadow.color", 0.0);
     set(layer, "dropShadow.opacity", 100.0);
     set(layer, "dropShadow.mode", 0.0);

@@ -113,9 +113,10 @@ pub use layer_masks::{
     set_layer_mask_feather, set_layer_mask_linked, LayerMaskKind, MASK_FLAG_UNLINKED,
 };
 pub use layer_style::{
-    any_effects_visible, clear_layer_style, copy_layer_style, has_layer_style,
-    layer_style_effect_names, layer_style_pattern_names, layer_style_value, paste_layer_style,
-    scale_layer_effects, set_all_effects_visible, set_document_layer_style_value,
+    any_effects_visible, can_create_style_layers, clear_layer_style, copy_layer_style,
+    create_style_layers, create_style_layers_with_base, has_layer_style, layer_style_effect_names,
+    layer_style_pattern_names, layer_style_value, paste_layer_style, scale_layer_effects,
+    set_all_effects_visible, set_document_global_light, set_document_layer_style_value,
     set_layer_style_value, LayerStyle,
 };
 pub(crate) use mask_domain::normalize_layer_mask;
@@ -148,7 +149,8 @@ pub use properties::{
     set_visible_paths, ungroup_paths, Arrange,
 };
 pub use rasterize::{
-    is_fill_content_layer, rasterize_all_layers, rasterize_fill_content, rasterize_shape,
+    can_rasterize_layer_style, is_fill_content_layer, rasterize_all_layers, rasterize_fill_content,
+    rasterize_layer_style, rasterize_shape,
 };
 pub use selection_transform::{
     selection_transform_point, transform_selection, warp_dest_rect, warp_selection,

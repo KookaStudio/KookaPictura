@@ -3,7 +3,7 @@
 
 use super::*;
 use crate::composite_route::tests::{adjustment, filter, proxy, rect, smart, type_layer};
-use crate::tests::layer_effects::{spec_block, ShadowSpec};
+use crate::tests::layer_effects::{global_shadow_block, spec_block, ShadowSpec};
 use pictura_codec::CAMERA_RAW_FILTER_ID;
 use pictura_core::{AdjustmentData, Knockout, LayerBlock};
 
@@ -167,6 +167,18 @@ fn decoded_vector_fill_is_accepted() {
     assert_eq!(reason(check_supported(&doc)), "ok");
     let plans = plan(&doc).expect("accepted");
     assert!(matches!(&plans[0].body, plan::Body::Fill(_)));
+}
+
+#[test]
+fn globally_lit_effects_are_accepted() {
+    let mut styled = pixels();
+    styled.extra_blocks.push(global_shadow_block());
+    let mut doc = doc_of(styled);
+    doc.global_light = pictura_core::GlobalLight {
+        angle: 90,
+        altitude: 45,
+    };
+    assert_eq!(reason(check_supported(&doc)), "ok");
 }
 
 #[test]

@@ -129,7 +129,7 @@ Deeper technical status for PSD/PSB lives in
       Shapes Layers, Mask Hides Effects, channel Include and Blend Interior
       Effects as Group (#579)
 - [ ] Layer Style dialog controls for the advanced-blending toggles (#695)
-- [ ] Layer-style Global Light, Create Layers, and Rasterize Layer Style (#580)
+- [x] Layer-style Global Light, Create Layers, and Rasterize Layer Style (#580)
 - [ ] Bevel Contour and Texture, a gradient editor in the style dialog, and
       channel include (#581)
 - [x] Auto-Align Layers (#582)

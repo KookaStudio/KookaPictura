@@ -432,8 +432,16 @@ void LayersRowMenuTest::rasterizeRows()
     QVERIFY(pictura::layer_style_set(*view_, pixel, QStringLiteral("colorOverlay.on"), 1.0));
     const QStringList styled = panel_->rowMenuTextsForPathForTest(pixel);
     QVERIFY(styled.contains(QStringLiteral("Rasterize Layer Style")));
-    QVERIFY(!panel_->rowMenuEnabledForPathForTest(pixel,
-                                                  QStringLiteral("Rasterize Layer Style")));
+    QVERIFY(panel_->rowMenuEnabledForPathForTest(pixel,
+                                                 QStringLiteral("Rasterize Layer Style")));
+
+    // A styled fill layer has no raster pixels to bake into.
+    QVERIFY(pictura::layer_style_set(*view_, fill, QStringLiteral("colorOverlay.on"), 1.0));
+    refreshPanel();
+    QVERIFY(panel_->rowMenuTextsForPathForTest(fill)
+                .contains(QStringLiteral("Rasterize Layer Style")));
+    QVERIFY(!panel_->rowMenuEnabledForPathForTest(
+        fill, QStringLiteral("Rasterize Layer Style")));
 }
 
 void LayersRowMenuTest::isolationRow()
@@ -592,12 +600,11 @@ void LayersRowMenuTest::pixelAndSmartRowsOfferExport()
 void LayersRowMenuTest::unimplementedDisabled()
 {
     QVERIFY(newDoc(QStringLiteral("Unimplemented")));
-    const QString path = makeLayer(QStringLiteral("Styled"));
-    QVERIFY(pictura::layer_style_set(*view_, path, QStringLiteral("colorOverlay.on"), 1.0));
-    QVERIFY(!panel_->rowMenuEnabledForPathForTest(path,
-                                                  QStringLiteral("Rasterize Layer Style")));
-    QVERIFY(panel_->rowMenuToolTipForPathForTest(path,
-                                                 QStringLiteral("Rasterize Layer Style"))
+    const QString group = view_->add_group_in(QString());
+    QVERIFY(!group.isEmpty());
+    refreshPanel();
+    QVERIFY(!panel_->rowMenuEnabledForPathForTest(group, QStringLiteral("Copy CSS")));
+    QVERIFY(panel_->rowMenuToolTipForPathForTest(group, QStringLiteral("Copy CSS"))
                 .contains(QStringLiteral("not implemented yet")));
 }
 

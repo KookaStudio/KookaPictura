@@ -783,8 +783,8 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
 
         // lpr_rasterize_refuse (238): a plain layer is not rasterizable by the
         // generic, type, or all-layers commands, all without history; the
-        // Rasterize variants with no matching current layer (Shape/Layer
-        // Style/Video/3D) stay disabled.
+        // Rasterize variants with no matching current layer (Shape/Video/3D)
+        // stay disabled; Layer Style is style-gated and covered by Qt Test.
         const bool rrCreated = frame.newDocument(QStringLiteral("RasterRefuseCtl"), 4, 4,
                                                  QStringLiteral("rgb"), 8,
                                                  QStringLiteral("white"));
@@ -800,7 +800,6 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         const bool rrHistory = rrView->history_count() == rrBase;
         bool kindlessDisabled = true;
         for (const QString& command : {QStringLiteral("layer.rasterize.shape"),
-                                       QStringLiteral("layer.rasterize.layer.style"),
                                        QStringLiteral("layer.rasterize.video"),
                                        QStringLiteral("layer.rasterize.3d")}) {
             QAction* action = frame.registry()->action(command);

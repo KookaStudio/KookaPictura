@@ -33,6 +33,7 @@ pub(crate) fn assert_gpu_accepts_and_matches_cpu(doc: &Document) {
 }
 
 mod cache;
+mod global_light;
 
 const PRC: [u8; 4] = *b"#Prc";
 const ANG: [u8; 4] = *b"#Ang";
@@ -204,6 +205,8 @@ pub(crate) struct ShadowSpec {
     blend: Vec<u8>,
     color: [f64; 3],
     opacity: f64,
+    /// Whether the effect follows the document global light.
+    global: bool,
     angle: f64,
     distance: f64,
     spread: f64,
@@ -218,6 +221,7 @@ impl Default for ShadowSpec {
             blend: b"Nrml".to_vec(),
             color: [0.0, 0.0, 0.0],
             opacity: 100.0,
+            global: false,
             angle: 0.0,
             distance: 2.0,
             spread: 0.0,
@@ -242,7 +246,7 @@ pub(crate) fn spec_block(spec: &ShadowSpec) -> LayerBlock {
             rgbc(spec.color[0], spec.color[1], spec.color[2]),
         ),
         (b"Opct".to_vec(), unit(spec.opacity, PRC)),
-        (b"uglg".to_vec(), DescValue::Bool(true)),
+        (b"uglg".to_vec(), DescValue::Bool(spec.global)),
         (b"lagl".to_vec(), unit(spec.angle, ANG)),
         (b"Dstn".to_vec(), unit(spec.distance, PXL)),
         (b"Ckmt".to_vec(), unit(spec.spread, PRC)),
@@ -253,6 +257,14 @@ pub(crate) fn spec_block(spec: &ShadowSpec) -> LayerBlock {
 
 fn spec_shadow(spec: &ShadowSpec) -> Layer {
     shadow_layer(Some(spec_block(spec)))
+}
+
+/// A drop shadow with `uglg` set, for the global-light acceptance test.
+pub(crate) fn global_shadow_block() -> LayerBlock {
+    spec_block(&ShadowSpec {
+        global: true,
+        ..Default::default()
+    })
 }
 
 /// Pixels in the strip left of the content that differ from the white backdrop.
@@ -1271,6 +1283,45 @@ fn rasterized_styled_object_bakes_the_effect_reach() {
         after.width() > before.width(),
         "the bake includes the shadow/stroke reach: {before:?} -> {after:?}"
     );
+}
+
+#[test]
+fn rasterize_shape_uses_the_document_global_light() {
+    use pictura_core::shape::{outline_in_box, ShapeKind, ShapeOptions};
+
+    let mut d = doc(
+        80,
+        80,
+        vec![solid(
+            "Backdrop",
+            full(80, 80),
+            (255, 255, 255),
+            255,
+            BlendMode::Normal,
+            255,
+        )],
+    );
+    d.global_light = pictura_core::GlobalLight {
+        angle: 90,
+        altitude: 30,
+    };
+    let ellipse = outline_in_box(
+        ShapeOptions::new(ShapeKind::Ellipse, 0.0, 3),
+        (30.0, 30.0, 20.0, 20.0),
+    )
+    .unwrap();
+    let path = crate::add_shape_layer(&mut d, "", [255, 0, 0, 255], "Ellipse", &ellipse, None);
+    let layer = crate::resolve_path_mut(&mut d, &path).unwrap();
+    layer.rect = rect(30, 30, 50, 50);
+    crate::set_layer_style_value(layer, "dropShadow.on", 1.0);
+    crate::set_layer_style_value(layer, "dropShadow.distance", 6.0);
+    crate::set_layer_style_value(layer, "dropShadow.size", 0.0);
+    let before = composite_rgba(&d);
+    assert!(crate::rasterize_shape(&mut d, &path));
+    let after = composite_rgba(&d);
+    for (a, b) in before.data.iter().zip(after.data.iter()) {
+        assert!(a.abs_diff(*b) <= 2, "shape bake pixel {a} vs {b}");
+    }
 }
 
 #[test]

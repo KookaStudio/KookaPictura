@@ -43,6 +43,7 @@ struct InnerSpec {
     blend: Vec<u8>,
     color: [f64; 3],
     opacity: f64,
+    global: bool,
     angle: f64,
     distance: f64,
     choke: f64,
@@ -58,6 +59,7 @@ impl Default for InnerSpec {
             blend: b"Nrml".to_vec(),
             color: [0.0, 0.0, 0.0],
             opacity: 100.0,
+            global: false,
             angle: 0.0,
             distance: 2.0,
             choke: 0.0,
@@ -83,7 +85,7 @@ fn spec_block(spec: &InnerSpec) -> LayerBlock {
             rgbc(spec.color[0], spec.color[1], spec.color[2]),
         ),
         (b"Opct".to_vec(), unit(spec.opacity, PRC)),
-        (b"uglg".to_vec(), DescValue::Bool(false)),
+        (b"uglg".to_vec(), DescValue::Bool(spec.global)),
         (b"lagl".to_vec(), unit(spec.angle, ANG)),
         (b"Dstn".to_vec(), unit(spec.distance, PXL)),
         (b"Ckmt".to_vec(), unit(spec.choke, PRC)),
@@ -106,6 +108,22 @@ fn compose_inner(shadowed: Layer) -> PixelBuffer {
         255,
     );
     composite_rgba(&doc(12, 12, vec![backdrop, shadowed]))
+}
+fn compose_inner_with_light(spec: &InnerSpec, angle: i32) -> PixelBuffer {
+    let backdrop = solid(
+        "Backdrop",
+        full(12, 12),
+        (255, 255, 255),
+        255,
+        BlendMode::Normal,
+        255,
+    );
+    let mut d = doc(12, 12, vec![backdrop, spec_inner(spec)]);
+    d.global_light = pictura_core::GlobalLight {
+        angle,
+        altitude: 30,
+    };
+    composite_rgba(&d)
 }
 
 fn plain_inner() -> PixelBuffer {
@@ -869,4 +887,35 @@ pub(super) fn parallel_layer() -> Layer {
         size: 3.0,
         ..Default::default()
     })
+}
+
+#[test]
+fn global_light_inner_shadow_angle() {
+    let plain = plain_inner();
+    let right = compose_inner_with_light(
+        &InnerSpec {
+            global: true,
+            ..Default::default()
+        },
+        0,
+    );
+    let top = compose_inner_with_light(
+        &InnerSpec {
+            global: true,
+            ..Default::default()
+        },
+        90,
+    );
+    assert_ne!(
+        px(&right, 9, 5),
+        px(&plain, 9, 5),
+        "angle 0 shades the right edge"
+    );
+    assert_eq!(px(&right, 5, 2), px(&plain, 5, 2));
+    assert_ne!(
+        px(&top, 5, 2),
+        px(&plain, 5, 2),
+        "angle 90 shades the top edge"
+    );
+    assert_eq!(px(&top, 9, 5), px(&plain, 9, 5));
 }

@@ -15,6 +15,99 @@ use pictura_core::{Channel, Document, Layer, PixelBuffer, PsdRect};
 use super::paths::{flatten_rows, resolve_path_mut};
 use super::shape_layer::is_shape_layer;
 
+/// Whether the layer at `path` can be rasterized with Rasterize Layer Style.
+pub fn can_rasterize_layer_style(doc: &Document, path: &str) -> bool {
+    let Some(layer) = super::paths::resolve_path(doc, path) else {
+        return false;
+    };
+    style_bakeable(layer) && !owns_clipped_run(doc, path)
+}
+
+fn style_bakeable(layer: &Layer) -> bool {
+    if layer.is_group
+        || layer.background
+        || layer.smart_object.is_some()
+        || layer.type_tool.is_some()
+        || layer.adjustment.is_some()
+        || super::shape_layer::is_shape_layer(layer)
+        || layer.pixel_data_irrelevant
+        || layer.channels.is_empty()
+        || !crate::has_layer_style(layer)
+    {
+        return false;
+    }
+    if layer
+        .blend_if
+        .as_ref()
+        .is_some_and(|view| !view.is_default())
+        || !layer.blending_ranges.is_empty()
+        || !matches!(layer.knockout, pictura_core::Knockout::None)
+    {
+        return false;
+    }
+    let effects = crate::layer_effects::decode_layer_effects(layer);
+    !crate::layer_effects::no_passes(layer, &effects, false)
+}
+
+/// Whether the layer owns a clipped run directly above it. Baking effects into
+/// a clip base widens the clip coverage; Create Layers would also break the run.
+pub(super) fn owns_clipped_run(doc: &Document, path: &str) -> bool {
+    let Some(segments) = super::paths::parse_path(path) else {
+        return false;
+    };
+    let Some((&index, parent)) = segments.split_last() else {
+        return false;
+    };
+    super::paths::container_of(doc, parent)
+        .and_then(|container| container.get(index + 1))
+        .is_some_and(|next| next.clipping)
+}
+
+/// Rasterize a layer style: render the layer and its enabled effects through the
+/// compositor, bake the result into the layer's pixels, and remove the style.
+/// The live fill is baked (the result's fill becomes 255), the vector mask is
+/// applied once (by the result), and the document global light and pattern
+/// library are carried into the scratch so the bake matches the canvas.
+pub fn rasterize_layer_style(doc: &mut Document, path: &str) -> bool {
+    if !can_rasterize_layer_style(doc, path) {
+        return false;
+    }
+    let Some(layer) = super::paths::resolve_path(doc, path) else {
+        return false;
+    };
+    let render_rect = effects_bounds(layer);
+    if render_rect.is_empty() {
+        return false;
+    }
+    let mut scratch = Document::new(doc.width, doc.height, doc.mode, doc.depth);
+    scratch.global_light = doc.global_light;
+    scratch.layer_section_extra = doc.layer_section_extra.clone();
+    scratch.is_psb = doc.is_psb;
+    let mut source = layer.clone();
+    source.visible = true;
+    source.opacity = 255;
+    source.blend = pictura_core::BlendMode::Normal;
+    source.mask = None;
+    source.vector_mask = None;
+    source.blend_if = None;
+    source.blending_ranges = pictura_core::Plane::default();
+    source.knockout = pictura_core::Knockout::None;
+    scratch.layers = pictura_core::LayerStack::from_layers(vec![source]);
+    let rendered = crate::composite_rgba(&scratch);
+    let Some(layer) = resolve_path_mut(doc, path) else {
+        return false;
+    };
+    layer.rect = render_rect;
+    bake_from_composite(layer, &rendered);
+    layer.fill = 255;
+    layer.source_channels = None;
+    layer
+        .extra_blocks
+        .retain(|block| !matches!(&block.key, b"lfx2" | b"lrFX"));
+    layer.pixel_data_irrelevant = false;
+    true
+}
+
 /// A decodable fill-content layer: a `SoCo`/`GdFl`/`PtFl` block whose payload
 /// decodes to a fill [`Adjustment`]. Routing both this predicate and the bakers
 /// through [`crate::decode_adjustment`] keeps them from disagreeing.
@@ -94,12 +187,14 @@ pub fn rasterize_shape(doc: &mut Document, path: &str) -> bool {
     // scratch copy neutralizes them; a shape's fill is binary (`0` or `255`), so
     // leaving it as-is bakes the fill on/off correctly.
     let mut scratch = Document::new(doc.width, doc.height, doc.mode, doc.depth);
+    scratch.global_light = doc.global_light;
     // A pattern fill resolves its tile from the document's global `Patt` block,
     // so the scratch copy must carry the same layer-section bytes (and PSB
     // framing) as the real document.
     scratch.layer_section_extra = doc.layer_section_extra.clone();
     scratch.is_psb = doc.is_psb;
     let mut source = layer.clone();
+    source.visible = true;
     source.opacity = 255;
     source.mask = None;
     source.blend = pictura_core::BlendMode::Normal;
@@ -111,6 +206,7 @@ pub fn rasterize_shape(doc: &mut Document, path: &str) -> bool {
     };
     layer.rect = render_rect;
     bake_from_composite(layer, &rendered);
+    layer.source_channels = None;
     layer.adjustment = None;
     layer.vector_mask = None;
     layer.pixel_data_irrelevant = false;

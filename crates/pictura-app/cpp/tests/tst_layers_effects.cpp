@@ -250,15 +250,20 @@ void LayersEffectsTest::rowMenuListsLayerStyleCommands()
     QVERIFY(texts.contains(QStringLiteral("Paste Layer Style")));
     QVERIFY(texts.contains(QStringLiteral("Clear Layer Style")));
     QVERIFY(texts.contains(QStringLiteral("Global Light…")));
-    QVERIFY(texts.contains(QStringLiteral("Create Layer")));
+    QVERIFY(texts.contains(QStringLiteral("Create Layers")));
     QVERIFY(texts.contains(QStringLiteral("Hide All Effects")));
     QVERIFY(texts.contains(QStringLiteral("Scale Effects…")));
-    QVERIFY(!panel_->layerStyleMenuEnabledForTest(QStringLiteral("1"),
-                                                  QStringLiteral("Global Light…")));
-    QVERIFY(!panel_->layerStyleMenuEnabledForTest(QStringLiteral("1"),
-                                                  QStringLiteral("Create Layer")));
+    QVERIFY(panel_->layerStyleMenuEnabledForTest(QStringLiteral("1"),
+                                                 QStringLiteral("Global Light…")));
+    QVERIFY(panel_->layerStyleMenuEnabledForTest(QStringLiteral("1"),
+                                                 QStringLiteral("Create Layers")));
     QVERIFY(panel_->layerStyleMenuEnabledForTest(QStringLiteral("1"),
                                                  QStringLiteral("Copy Layer Style")));
+
+    // The panel entry dispatches the registry command, not just lists it.
+    QVERIFY(panel_->triggerLayerStyleMenuActionForTest(QStringLiteral("1"),
+                                                       QStringLiteral("Create Layers")));
+    QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Create Layers"));
 }
 
 void LayersEffectsTest::disableLayerEffectsIsOneState()
