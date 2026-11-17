@@ -389,7 +389,10 @@ fn admitted_content_preserves_parameters_and_bytes() {
 
     let mut cube_bytes = cube(2, 27);
     cube_bytes.extend_from_slice(b"LUT_3D_SIZE 3\n");
-    let raw = crate::layer_content::encode_color_lookup(&cube_bytes, "Later Header");
+    let mut raw = crate::layer_content::encode_color_lookup(&cube_bytes, "Later Header");
+    let mut data = raw.data.to_vec();
+    data.resize(data.len() + (data.len() & 1), 0);
+    raw.data = data.into();
     let mut document = lookup_document(&raw.data, 1);
     document
         .layers

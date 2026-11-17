@@ -596,7 +596,7 @@ mod tests {
                 }),
                 ..Default::default()
             },
-            pictura_core::LayerContent::Pixel,
+            pictura_core::LayerContent::Adjustment(None),
         );
         let stack = doc(vec![
             layer(32, 32, |_, _| RED),

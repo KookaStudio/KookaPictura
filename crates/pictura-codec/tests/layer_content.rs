@@ -75,9 +75,9 @@ fn adjustment_candidates_preserve_raw_bytes() {
     for key in [
         *b"levl", *b"curv", *b"brit", *b"expA", *b"vibA", *b"hue2", *b"hue ", *b"blwh", *b"phfl",
         *b"blnc", *b"mixr", *b"grdm", *b"gdrm", *b"invr", *b"nvrt", *b"post", *b"thrs", *b"selc",
-        *b"clrL", *b"SoCo", *b"GdFl", *b"PtFl",
+        *b"clrL", *b"SoCo", *b"GdFl", *b"PtFl", *b"shdH",
     ] {
-        let original = block(&key, vec![0, 0, 231, 19, 11]);
+        let original = block(&key, vec![0, 0, 231, 19, 11, 0]);
         let doc = document(layer(Some(original.clone()), Vec::new()));
         for bytes in [write_psd(&doc).unwrap(), write_psb(&doc).unwrap()] {
             let back = read_psd(&bytes).unwrap();
@@ -200,6 +200,13 @@ fn adjustment_decoders_preserve_parameter_contract() {
                 green: [10.0, 90.0, 0.0],
                 blue: [0.0, 20.0, 110.0],
                 constant: [5.0, -20.0, 40.0],
+                ink: [
+                    [30.0, -10.0, 50.0, 0.0],
+                    [10.0, 90.0, 0.0, 0.0],
+                    [0.0, 20.0, 110.0, 0.0],
+                    [30.0, -10.0, 50.0, 0.0],
+                ],
+                ink_constant: [5.0, -20.0, 40.0, 5.0],
                 ..Default::default()
             }),
         ),
@@ -497,15 +504,15 @@ fn conflicting_import_candidates_follow_one_precedence() {
 
 #[test]
 fn conflicting_content_preserves_psd_and_psb_data() {
-    let original = block(b"brit", vec![0, 0, 255]);
+    let original = block(b"brit", vec![0, 0, 255, 0]);
     let extra = vec![
         LayerBlock {
             key: *b"TySh",
-            data: vec![2, 3, 4].into(),
+            data: vec![2, 3, 4, 0].into(),
         },
         LayerBlock {
             key: *b"zzzz",
-            data: vec![111, 222, 33].into(),
+            data: vec![111, 222, 33, 0].into(),
         },
     ];
     let mut parts = LayerParts {

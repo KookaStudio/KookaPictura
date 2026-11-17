@@ -633,7 +633,14 @@ mod tests {
                 crate::author_type_tool(&spec, [0.0, -12.0, 100.0, 10.0], None, None)
             })
             .collect();
-        let raw: Vec<_> = tools.iter().map(crate::encode_type_tool).collect();
+        let raw: Vec<_> = tools
+            .iter()
+            .map(|tool| {
+                let mut bytes = crate::encode_type_tool(tool);
+                bytes.resize(bytes.len() + (bytes.len() & 1), 0);
+                bytes
+            })
+            .collect();
         let all_text = LayerStack::from_layers(
             tools
                 .iter()

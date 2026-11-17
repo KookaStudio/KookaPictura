@@ -67,7 +67,7 @@ from psd_tools.psd import PSD
 with open(sys.argv[1], "rb") as f:
     PSD.read(f)
 image = PSDImage.open(sys.argv[1], lazy=False)
-so = image[0].smart_object()
+so = image[0].smart_object
 print(so.kind)
 print(so.filename)
 print(len(so.data))

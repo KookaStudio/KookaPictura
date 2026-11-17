@@ -120,7 +120,7 @@ fn real_mask_document() -> (Document, Vec<u8>) {
         .into_iter()
         .chain([0i32, 0, 2, 2].iter().flat_map(|v| v.to_be_bytes()))
         .collect();
-    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+    pictura_codec::edit_layer(layer, |parts| {
         parts.raw_channels.push(RawChannel {
             id: -3,
             data: vec![0, 0, 9, 9, 9, 9].into(),

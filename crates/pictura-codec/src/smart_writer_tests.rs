@@ -303,7 +303,7 @@ fn psd_tools_parses_authored_smart_object() {
 import sys
 from psd_tools import PSDImage
 psd = PSDImage.open(sys.argv[1], lazy=False)
-so = psd[0].smart_object()
+so = psd[0].smart_object
 print(so.kind)
 print(so.filename)
 print(len(so.data))

@@ -28,7 +28,7 @@ const psd = ag.readPsd(fs.readFileSync(process.argv[1]), {
 const lines = [];
 (function walk(layers) {
   for (const layer of layers || []) {
-    const a = layer.adjustment();
+    const a = layer.adjustment;
     if (a && a.type === 'channel mixer') {
       if (a.monochrome) {
         const g = a.gray;
@@ -39,9 +39,9 @@ const lines = [];
           b.red, b.green, b.blue, b.constant, y.red, y.green, y.blue, y.constant].join(' '));
       }
     }
-    walk(layer.children());
+    walk(layer.children);
   }
-})(psd.children());
+})(psd.children);
 console.log(lines.join('\n'));
 "#;
 
@@ -112,7 +112,7 @@ const psd = ag.readPsd(fs.readFileSync(process.argv[1]), {
 const lines = [];
 (function walk(layers) {
   for (const layer of layers || []) {
-    const a = layer.adjustment();
+    const a = layer.adjustment;
     if (a && a.type === 'curves') {
       const parts = [];
       // ag-psd <= 32 exposes rgb/red/green/blue; 33 replaced them with a
@@ -126,9 +126,9 @@ const lines = [];
       }
       lines.push(parts.join(' '));
     }
-    walk(layer.children());
+    walk(layer.children);
   }
-})(psd.children());
+})(psd.children);
 console.log(lines.join('\n'));
 "#;
 
@@ -194,7 +194,7 @@ const ranges = ['reds', 'yellows', 'greens', 'cyans', 'blues', 'magentas', 'whit
 const lines = [];
 (function walk(layers) {
   for (const layer of layers || []) {
-    const a = layer.adjustment();
+    const a = layer.adjustment;
     if (a && a.type === 'selective color') {
       const parts = [a.mode === 'absolute' ? 1 : 0];
       for (const name of ranges) {
@@ -203,9 +203,9 @@ const lines = [];
       }
       lines.push(parts.join(' '));
     }
-    walk(layer.children());
+    walk(layer.children);
   }
-})(psd.children());
+})(psd.children);
 console.log(lines.join('\n'));
 "#;
 
@@ -281,9 +281,9 @@ const lines = [];
       for (const knot of path.knots) parts.push(knot.points.join(','));
       lines.push(parts.join('|'));
     }
-    walk(layer.children());
+    walk(layer.children);
   }
-})(psd.children());
+})(psd.children);
 console.log(lines.join('\n'));
 "#;
 
@@ -341,9 +341,9 @@ const lines = [];
     if (vf && vf.type === 'color') {
       lines.push([layer.name, vf.color.r, vf.color.g, vf.color.b].join('|'));
     }
-    walk(layer.children());
+    walk(layer.children);
   }
-})(psd.children());
+})(psd.children);
 console.log(lines.join('\n'));
 "#;
 
@@ -391,15 +391,15 @@ const psd = ag.readPsd(fs.readFileSync(process.argv[1]), {
 const lines = [];
 (function walk(layers) {
   for (const layer of layers || []) {
-    const a = layer.adjustment();
+    const a = layer.adjustment;
     if (a && a.type === 'color lookup') {
       const d = a.lut3DFileData || new Uint8Array();
       lines.push([a.lookupType, a.lutFormat, a.dataOrder, a.tableOrder, a.dither ? 1 : 0,
         Buffer.from(d).toString('hex')].join(' '));
     }
-    walk(layer.children());
+    walk(layer.children);
   }
-})(psd.children());
+})(psd.children);
 console.log(lines.join('\n'));
 "#;
 
@@ -464,9 +464,9 @@ const lines = [];
     if (p) {
       lines.push([p.data.type, p.bezierCurve.controlPoints.length, p.data.textRange[0]].join(' '));
     }
-    walk(layer.children());
+    walk(layer.children);
   }
-})(psd.children());
+})(psd.children);
 console.log(lines.join('\n'));
 "#;
 

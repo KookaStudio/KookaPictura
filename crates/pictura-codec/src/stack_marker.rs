@@ -250,7 +250,7 @@ mod tests {
             parts.extra_blocks.extend([
                 LayerBlock {
                     key: *b"zzzz",
-                    data: vec![4, 5, 6].into(),
+                    data: vec![4, 5, 6, 0].into(),
                 },
                 LayerBlock {
                     key: KEY,
@@ -262,7 +262,7 @@ mod tests {
                 },
                 LayerBlock {
                     key: *b"yyyy",
-                    data: vec![7, 8, 9].into(),
+                    data: vec![7, 8, 9, 0].into(),
                 },
             ]);
             match kind {

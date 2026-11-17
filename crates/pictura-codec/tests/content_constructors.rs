@@ -86,7 +86,12 @@ fn source_free_adjustment_constructors_preserve_supported_parameters() {
         let rendered = pictura_render::composite_rgba(&doc);
         for bytes in [write_psd(&doc).unwrap(), write_psb(&doc).unwrap()] {
             let back = read_psd(&bytes).unwrap();
-            assert_eq!(back.layers[1].kind(), LayerKind::Adjustment);
+            assert_eq!(
+                back.layers[1].kind(),
+                LayerKind::Adjustment,
+                "{:?}",
+                block.key
+            );
             assert_eq!(
                 back.layers[1].adjustment_parameters(),
                 Some(&expected),
@@ -112,6 +117,9 @@ fn source_free_adjustment_constructors_preserve_supported_parameters() {
 fn source_free_text_constructor_preserves_its_model() {
     let spec = TypeSpec::new("Hello", "Liberation Sans", 12.0);
     let expected = author_type_tool(&spec, [0.0, -12.0, 40.0, 4.0], None, None);
+    let mut encoded = encode_type_tool(&expected);
+    // Per-layer PSD blocks include their even-length padding in the payload.
+    encoded.resize(encoded.len() + (encoded.len() & 1), 0);
     let doc = host(LayerContent::Text(Some(Arc::new(expected.clone()))));
     assert!(doc.layers[1].extra_block(b"TySh").is_none());
     let rendered = pictura_render::composite_rgba(&doc);
@@ -121,7 +129,7 @@ fn source_free_text_constructor_preserves_its_model() {
         assert_eq!(back.layers[1].type_tool(), Some(&expected));
         assert_eq!(
             back.layers[1].extra_block(b"TySh").unwrap().data.as_slice(),
-            encode_type_tool(&expected)
+            encoded
         );
         assert_eq!(pictura_render::composite_rgba(&back), rendered);
         let saved = if back.is_psb {
