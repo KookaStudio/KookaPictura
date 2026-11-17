@@ -281,13 +281,30 @@ fn blending_options_write_the_layer_record() {
     set(layer, "blending.mode", 3.0);
     set(layer, "blending.opacity", 50.0);
     set(layer, "blending.knockout", 2.0);
-    set(layer, "blending.blendInterior", 0.0);
+    set(layer, "blending.blendInterior", 1.0);
     assert_eq!(layer.blend, BlendMode::Multiply);
     assert_eq!(layer.opacity, 128);
     assert_eq!(layer.knockout, Knockout::Deep);
-    assert!(!layer.blend_interior);
+    assert!(layer.blend_interior);
     assert_eq!(layer_style_value(layer, "blending.opacity"), Some(50.0));
     assert!(!set_layer_style_value(layer, "blending.mode", 99.0));
+}
+
+#[test]
+fn layer_style_copy_paste_preserves_advanced_blending() {
+    let mut d = doc();
+    let source = square(&mut d);
+    source.transparency_shapes = false;
+    source.layer_mask_hides_effects = true;
+    source.vector_mask_hides_effects = true;
+    source.restricted_channels = vec![0, 2];
+    let style = copy_layer_style(source).expect("a pixel layer is styleable");
+    assert_eq!(paste_layer_style(&mut d, &["0"], &style), 1);
+    let target = resolve_path(&d, "0").unwrap();
+    assert!(!target.transparency_shapes);
+    assert!(target.layer_mask_hides_effects);
+    assert!(target.vector_mask_hides_effects);
+    assert_eq!(target.restricted_channels, vec![0, 2]);
 }
 
 #[test]

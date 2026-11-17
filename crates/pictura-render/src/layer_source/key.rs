@@ -98,6 +98,9 @@ pub(super) fn text_key(type_tool: &TypeTool, rect: PsdRect) -> u64 {
 
 pub(super) fn effect_digest(layer: &Layer) -> u64 {
     let mut hasher = DefaultHasher::new();
+    layer.transparency_shapes.hash(&mut hasher);
+    layer.layer_mask_hides_effects.hash(&mut hasher);
+    layer.vector_mask_hides_effects.hash(&mut hasher);
     if let Some(block) = layer.extra_block(b"lfx2") {
         2u8.hash(&mut hasher);
         block.data.ident().hash(&mut hasher);

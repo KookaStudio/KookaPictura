@@ -142,7 +142,7 @@ impl fmt::Display for GpuError {
                 write!(f, "layer effect is CPU-only")
             }
             GpuError::UnsupportedAdvancedBlending => {
-                write!(f, "advanced blending (Blend If/knockout) is CPU-only")
+                write!(f, "advanced blending is CPU-only")
             }
             GpuError::UnsupportedDepth => {
                 write!(
@@ -265,7 +265,7 @@ fn plan_bytes_per_pixel(plan: &plan::LayerPlan<'_>) -> u64 {
     let passes = plan
         .effects
         .as_ref()
-        .map_or(0, |p| (p.below.len() + p.above.len()) as u64);
+        .map_or(0, |p| (p.below.len() + p.fold.len() + p.above.len()) as u64);
     let body = match &plan.body {
         plan::Body::Decline(_) => 0,
         plan::Body::Group {

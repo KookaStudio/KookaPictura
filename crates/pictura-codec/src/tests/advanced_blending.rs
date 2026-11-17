@@ -84,8 +84,173 @@ fn advanced_blending_defaults_when_blocks_absent() {
     let layer = &read_psd(&tagged_layer_psd(0, &[])).unwrap().layers[0];
     assert_eq!(layer.knockout, Knockout::None);
     assert!(layer.blend_clipping);
-    assert!(layer.blend_interior);
+    assert!(!layer.blend_interior);
+    assert!(layer.transparency_shapes);
+    assert!(!layer.layer_mask_hides_effects);
+    assert!(!layer.vector_mask_hides_effects);
+    assert!(layer.restricted_channels.is_empty());
     assert!(layer.blend_if.is_none());
+}
+
+#[test]
+fn empty_boolean_payloads_keep_defaults() {
+    let layer = &read_psd(&tagged_layer_psd(
+        0,
+        &[
+            (b"clbl", &[]),
+            (b"infx", &[]),
+            (b"tsly", &[]),
+            (b"lmgm", &[]),
+            (b"vmgm", &[]),
+        ],
+    ))
+    .unwrap()
+    .layers[0];
+    assert!(layer.blend_clipping);
+    assert!(!layer.blend_interior);
+    assert!(layer.transparency_shapes);
+    assert!(!layer.layer_mask_hides_effects);
+    assert!(!layer.vector_mask_hides_effects);
+    for key in [b"clbl", b"infx", b"tsly", b"lmgm", b"vmgm"] {
+        assert!(layer.extra_block(key).is_none(), "{key:?} is consumed");
+    }
+}
+
+#[test]
+fn non_one_boolean_bytes_are_off() {
+    let layer = &read_psd(&tagged_layer_psd(
+        0,
+        &[
+            (b"clbl", &[2]),
+            (b"infx", &[2]),
+            (b"tsly", &[2]),
+            (b"lmgm", &[2]),
+            (b"vmgm", &[2]),
+        ],
+    ))
+    .unwrap()
+    .layers[0];
+    assert!(!layer.blend_clipping);
+    assert!(!layer.blend_interior);
+    assert!(!layer.transparency_shapes);
+    assert!(!layer.layer_mask_hides_effects);
+    assert!(!layer.vector_mask_hides_effects);
+}
+
+#[test]
+fn infx_byte_one_sets_blend_interior() {
+    let layer = &read_psd(&tagged_layer_psd(0, &[(b"infx", &[1, 0, 0, 0])]))
+        .unwrap()
+        .layers[0];
+    assert!(layer.blend_interior);
+    assert!(layer.extra_block(b"infx").is_none());
+}
+
+#[test]
+fn tsly_zero_disables_transparency_shapes() {
+    let layer = &read_psd(&tagged_layer_psd(0, &[(b"tsly", &[0, 0, 0, 0])]))
+        .unwrap()
+        .layers[0];
+    assert!(!layer.transparency_shapes);
+}
+
+#[test]
+fn lmgm_and_vmgm_decode_independently() {
+    let layer = &read_psd(&tagged_layer_psd(0, &[(b"lmgm", &[1, 0, 0, 0])]))
+        .unwrap()
+        .layers[0];
+    assert!(layer.layer_mask_hides_effects);
+    assert!(!layer.vector_mask_hides_effects);
+}
+
+#[test]
+fn channel_restrictions_decode_in_file_order() {
+    // Big-endian 2, then 0.
+    let layer = &read_psd(&tagged_layer_psd(
+        0,
+        &[(b"brst", &[0, 0, 0, 2, 0, 0, 0, 0])],
+    ))
+    .unwrap()
+    .layers[0];
+    assert_eq!(layer.restricted_channels, vec![2, 0]);
+    assert!(layer.extra_block(b"brst").is_none());
+}
+
+#[test]
+fn infx_is_written_only_when_on() {
+    let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
+    let mut layer = pixel("Adv", rect(0, 0, 2, 2), 3, BlendMode::Normal, 255);
+    layer.blend_interior = true;
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+    let bytes = write_psd(&doc).unwrap();
+    assert!(has_key(&bytes, b"infx"));
+    let back = read_psd(&bytes).unwrap();
+    assert!(back.layers[0].blend_interior);
+}
+
+#[test]
+fn transparency_and_mask_flags_round_trip() {
+    let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
+    let mut layer = pixel("Adv", rect(0, 0, 2, 2), 3, BlendMode::Normal, 255);
+    layer.transparency_shapes = false;
+    layer.layer_mask_hides_effects = true;
+    layer.vector_mask_hides_effects = true;
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+    let bytes = write_psd(&doc).unwrap();
+    for key in [b"tsly", b"lmgm", b"vmgm"] {
+        assert!(has_key(&bytes, key), "{key:?} is emitted");
+    }
+    let back = read_psd(&bytes).unwrap();
+    assert!(!back.layers[0].transparency_shapes);
+    assert!(back.layers[0].layer_mask_hides_effects);
+    assert!(back.layers[0].vector_mask_hides_effects);
+}
+
+#[test]
+fn channel_restrictions_write_sorted_and_deduped() {
+    let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
+    let mut layer = pixel("Adv", rect(0, 0, 2, 2), 3, BlendMode::Normal, 255);
+    layer.restricted_channels = vec![2, 0, 2];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+    let bytes = write_psd(&doc).unwrap();
+    assert!(has_key(&bytes, b"brst"));
+    let back = read_psd(&bytes).unwrap();
+    assert_eq!(back.layers[0].restricted_channels, vec![0, 2]);
+}
+
+#[test]
+fn unknown_channel_index_round_trips() {
+    let layer = &read_psd(&tagged_layer_psd(
+        0,
+        &[(b"brst", &[0, 0, 0, 0, 0, 0, 0, 7])],
+    ))
+    .unwrap()
+    .layers[0];
+    assert_eq!(layer.restricted_channels, vec![0, 7]);
+    let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers = pictura_core::LayerStack::from_layers(vec![(*layer).clone()]);
+    let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
+    assert_eq!(back.layers[0].restricted_channels, vec![0, 7]);
+}
+
+#[test]
+fn malformed_channel_restrictions_stay_opaque() {
+    let psd = tagged_layer_psd(0, &[(b"brst", &[0, 0])]);
+    let doc = read_psd(&psd).unwrap();
+    let layer = &doc.layers[0];
+    assert!(layer.restricted_channels.is_empty());
+    let block = layer.extra_block(b"brst").expect("raw block preserved");
+    assert_eq!(block.data.to_vec(), vec![0, 0]);
+    let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
+    assert!(back.layers[0].restricted_channels.is_empty());
+    assert_eq!(
+        back.layers[0]
+            .extra_block(b"brst")
+            .expect("raw block re-emitted")
+            .data
+            .to_vec(),
+        vec![0, 0]
+    );
 }
 
 #[test]
@@ -103,17 +268,27 @@ fn advanced_blending_non_defaults_round_trip_and_defaults_omit_keys() {
     let mut layer = pixel("Adv", rect(0, 0, 2, 2), 3, BlendMode::Normal, 255);
     layer.knockout = Knockout::Deep;
     layer.blend_clipping = false;
-    layer.blend_interior = false;
+    layer.blend_interior = true;
+    layer.transparency_shapes = false;
+    layer.layer_mask_hides_effects = true;
+    layer.vector_mask_hides_effects = true;
+    layer.restricted_channels = vec![0, 2];
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
     let bytes = write_psd(&doc).unwrap();
-    assert!(has_key(&bytes, b"knko"));
-    assert!(has_key(&bytes, b"clbl"));
-    assert!(has_key(&bytes, b"infx"));
+    for key in [
+        b"knko", b"clbl", b"infx", b"tsly", b"lmgm", b"vmgm", b"brst",
+    ] {
+        assert!(has_key(&bytes, key), "{key:?} is emitted");
+    }
     let back = read_psd(&bytes).unwrap();
     assert_eq!(back.layers[0].knockout, Knockout::Deep);
     assert!(!back.layers[0].blend_clipping);
-    assert!(!back.layers[0].blend_interior);
+    assert!(back.layers[0].blend_interior);
+    assert!(!back.layers[0].transparency_shapes);
+    assert!(back.layers[0].layer_mask_hides_effects);
+    assert!(back.layers[0].vector_mask_hides_effects);
+    assert_eq!(back.layers[0].restricted_channels, vec![0, 2]);
     assert_eq!(back, doc);
 
     let mut defaults = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
@@ -125,7 +300,9 @@ fn advanced_blending_non_defaults_round_trip_and_defaults_omit_keys() {
         255,
     )]);
     let plain = write_psd(&defaults).unwrap();
-    for key in [b"knko", b"clbl", b"infx"] {
+    for key in [
+        b"knko", b"clbl", b"infx", b"tsly", b"lmgm", b"vmgm", b"brst",
+    ] {
         assert!(!has_key(&plain, key), "{key:?} omitted at default");
     }
 }

@@ -917,7 +917,11 @@ fn read_layer_record(r: &mut Reader, is_psb: bool) -> Result<RawLayer, PsdError>
     let mut fill = 255u8;
     let mut lock = LockFlags::default();
     let mut color = ColorLabel::None;
-    let (mut knockout, mut blend_clipping, mut blend_interior) = (Knockout::None, true, true);
+    let (mut knockout, mut blend_clipping, mut blend_interior) = (Knockout::None, true, false);
+    let mut transparency_shapes = true;
+    let mut layer_mask_hides_effects = false;
+    let mut vector_mask_hides_effects = false;
+    let mut restricted_channels: Vec<u32> = Vec::new();
 
     let extra_len = r.u32()? as usize;
     let extra = r.take(extra_len)?;
@@ -1011,8 +1015,21 @@ fn read_layer_record(r: &mut Reader, is_psb: bool) -> Result<RawLayer, PsdError>
                 fill = data[0];
             }
             b"knko" => knockout = Knockout::from_byte(data.first().copied().unwrap_or(0)),
-            b"clbl" => blend_clipping = data.first().is_none_or(|&b| b != 0),
-            b"infx" => blend_interior = data.first().is_none_or(|&b| b != 0),
+            b"clbl" => blend_clipping = crate::advanced_blending::bool_tag(data, true),
+            b"infx" => blend_interior = crate::advanced_blending::bool_tag(data, false),
+            b"tsly" => transparency_shapes = crate::advanced_blending::bool_tag(data, true),
+            b"lmgm" => layer_mask_hides_effects = crate::advanced_blending::bool_tag(data, false),
+            b"vmgm" => vector_mask_hides_effects = crate::advanced_blending::bool_tag(data, false),
+            b"brst" => {
+                if let Some(channels) = crate::advanced_blending::parse_channel_restrictions(data) {
+                    restricted_channels = channels;
+                } else {
+                    extra_blocks.push(LayerBlock {
+                        key: tag_key,
+                        data: data.to_vec().into(),
+                    });
+                }
+            }
             b"lsct" if data.len() >= 4 => {
                 section = Some(u32::from_be_bytes(data[0..4].try_into().unwrap()));
                 // The reference/psd-tools store a group's blend key inside 'lsct'
@@ -1083,6 +1100,10 @@ fn read_layer_record(r: &mut Reader, is_psb: bool) -> Result<RawLayer, PsdError>
             knockout,
             blend_clipping,
             blend_interior,
+            transparency_shapes,
+            layer_mask_hides_effects,
+            vector_mask_hides_effects,
+            restricted_channels,
             blend_if,
             extra_blocks,
             raw_channels: Vec::new(),

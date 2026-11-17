@@ -22,8 +22,9 @@ use super::apply_mask;
 use super::planes::{EffectPass, PassWriter};
 use super::BuildRegion;
 use super::{
-    blur_matte, bool_or, clamp_finite, clip_rect, content_matte, decode_color, effect_blend_mode,
-    num_clamped, num_or, pad_rect, rect_empty, MAX_DISTANCE, MAX_OPACITY, MAX_SIZE,
+    blur_matte, bool_or, clamp_finite, content_matte, decode_color, effect_blend_mode,
+    effect_source_rect, num_clamped, num_or, pad_rect, rect_empty, MAX_DISTANCE, MAX_OPACITY,
+    MAX_SIZE,
 };
 
 /// The typed satin decoded from a layer's `lfx2` block.
@@ -101,7 +102,7 @@ pub(super) fn build_satin(
     if w == 0 || h == 0 {
         return Vec::new();
     }
-    let source = clip_rect(layer, w, h);
+    let source = effect_source_rect(layer, w, h);
     if rect_empty(source) {
         return Vec::new();
     }

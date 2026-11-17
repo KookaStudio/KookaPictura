@@ -9,6 +9,28 @@ use pictura_core::{BlendIf, Knockout, Layer};
 
 use crate::write::write_tag;
 
+/// Decode a boolean tagged block: byte 1 is on, any other byte is off, and an
+/// empty payload keeps the block's default.
+pub(crate) fn bool_tag(data: &[u8], default: bool) -> bool {
+    data.first().map_or(default, |&b| b == 1)
+}
+
+/// Parse a `brst` body: big-endian restricted channel numbers. A length that
+/// is not a multiple of four is unusable and returns `None`.
+pub(crate) fn parse_channel_restrictions(bytes: &[u8]) -> Option<Vec<u32>> {
+    if !bytes.len().is_multiple_of(4) {
+        return None;
+    }
+    Some(
+        bytes
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| u32::from_be_bytes(*c))
+            .collect(),
+    )
+}
+
 /// Parse a blending-ranges body into a typed view: 8 bytes of composite
 /// source/dest ranges, then 8-byte channel groups. Empty or a length that is
 /// not a multiple of 8 yields `None` (raw bytes still round-trip).
@@ -72,7 +94,26 @@ pub(crate) fn write_advanced_tags(out: &mut Vec<u8>, layer: &Layer, psb: bool) {
     if !layer.blend_clipping {
         write_tag(out, b"clbl", &[0, 0, 0, 0], psb);
     }
-    if !layer.blend_interior {
-        write_tag(out, b"infx", &[0, 0, 0, 0], psb);
+    if layer.blend_interior {
+        write_tag(out, b"infx", &[1, 0, 0, 0], psb);
+    }
+    if !layer.transparency_shapes {
+        write_tag(out, b"tsly", &[0, 0, 0, 0], psb);
+    }
+    if layer.layer_mask_hides_effects {
+        write_tag(out, b"lmgm", &[1, 0, 0, 0], psb);
+    }
+    if layer.vector_mask_hides_effects {
+        write_tag(out, b"vmgm", &[1, 0, 0, 0], psb);
+    }
+    if !layer.restricted_channels.is_empty() {
+        let mut channels = layer.restricted_channels.clone();
+        channels.sort_unstable();
+        channels.dedup();
+        let mut payload = Vec::with_capacity(channels.len() * 4);
+        for channel in channels {
+            payload.extend_from_slice(&channel.to_be_bytes());
+        }
+        write_tag(out, b"brst", &payload, psb);
     }
 }

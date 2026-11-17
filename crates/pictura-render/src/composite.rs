@@ -4,9 +4,9 @@ use pictura_adjust::{
     VibranceParams,
 };
 use pictura_codec::DescValue;
-#[cfg(test)]
-use pictura_core::BlendMode;
-use pictura_core::{AdjustmentData, BlendIf, Document, Layer, LayerMask, PixelBuffer, PsdRect};
+use pictura_core::{
+    AdjustmentData, BlendIf, BlendMode, Document, Layer, LayerMask, PixelBuffer, PsdRect,
+};
 
 pub(crate) use crate::blend::blend;
 use crate::composite_blend::BlendOverride;
@@ -231,7 +231,45 @@ pub(crate) fn unit_u8(v: u8) -> f32 {
     UNIT_U8[v as usize]
 }
 
+/// Composite a layer, restoring any channel it excludes at the layer boundary.
+///
+/// The snapshot is taken before the below-content effects and restored after the
+/// above-content effects, so content, effect passes, clipping and a
+/// pass-through group's children all leave an excluded channel at the entry
+/// backdrop's premultiplied value.
 pub(crate) fn composite_layer_inner(
+    canvas: &mut Canvas,
+    node: &PlanNode<'_>,
+    doc: &Document,
+    deep: Option<&Canvas>,
+    shallow: Option<&Canvas>,
+    over: Option<&BlendOverride>,
+) {
+    if !node.layer.visible {
+        return;
+    }
+    if over.is_some_and(|over| over.no_channel_restrictions) {
+        composite_layer_dispatch(canvas, node, doc, deep, shallow, over);
+        return;
+    }
+    let excluded = crate::composite_channels::excluded_planes(node.layer, doc);
+    if crate::composite_channels::all_excluded(excluded) {
+        return;
+    }
+    if !excluded.iter().any(|&value| value) {
+        composite_layer_dispatch(canvas, node, doc, deep, shallow, over);
+        return;
+    }
+    let Some(region) = crate::composite_channels::region(canvas, node) else {
+        composite_layer_dispatch(canvas, node, doc, deep, shallow, over);
+        return;
+    };
+    let snapshot = crate::composite_channels::snapshot(canvas, region);
+    composite_layer_dispatch(canvas, node, doc, deep, shallow, over);
+    crate::composite_channels::restore(canvas, region, excluded, &snapshot);
+}
+
+fn composite_layer_dispatch(
     canvas: &mut Canvas,
     node: &PlanNode<'_>,
     doc: &Document,
@@ -258,6 +296,46 @@ pub(crate) fn composite_layer_inner(
     canvas.effect_scale = effect_scale * ctx.opacity();
     crate::layer_effects::composite_layer_effects(canvas, passes);
     canvas.effect_scale = effect_scale;
+    let content_body = match &node.body {
+        Body::Pixels
+        | Body::SmartFiltered { .. }
+        | Body::SmartSource { .. }
+        | Body::TypeSource { .. } => true,
+        Body::Fill(adjustment) => crate::fill::is_fill_kind(adjustment),
+        _ => false,
+    };
+    let fold_group = layer.blend_interior
+        && !layer.is_group
+        && !canvas.skip_effects
+        && content_body
+        && passes.is_some_and(|passes| !passes.fold.is_empty());
+    if fold_group {
+        let mut inner = canvas.derived(canvas.ox, canvas.oy, canvas.w, canvas.h);
+        inner.skip_effects = true;
+        inner.effect_scale = effect_scale;
+        let inner_over = BlendOverride {
+            mode: Some(BlendMode::Normal),
+            opacity: Some(255),
+            no_blend_if: true,
+            no_channel_restrictions: true,
+            ..Default::default()
+        };
+        composite_layer_inner(&mut inner, node, doc, deep, shallow, Some(&inner_over));
+        crate::layer_effects::composite_layer_effects_fold(&mut inner, passes);
+        let proxy_over = BlendOverride {
+            fill: Some(255),
+            no_mask: true,
+            no_curve: true,
+            ..Default::default()
+        };
+        let final_ctx = ctx.with_override(&proxy_over);
+        composite_canvas(canvas, layer, doc, &inner, &final_ctx, Some(&proxy_over));
+        let effect_scale = canvas.effect_scale;
+        canvas.effect_scale = effect_scale * ctx.opacity();
+        crate::layer_effects::composite_layer_effects_above(canvas, passes);
+        canvas.effect_scale = effect_scale;
+        return;
+    }
     // Each arm keeps the fall-through the old if/else chain had: a source
     // that cannot render (an empty region, an unreadable payload) leaves the
     // layer to the next path, ending at `composite_pixels`.
@@ -384,9 +462,10 @@ pub(crate) fn composite_layer_inner(
         // fill-less shape layer needs to be truly transparent.
         Body::Pixels => composite_pixels(canvas, node, doc, &ctx, over),
     }
-    // The above-content effect (inner shadow) renders over the layer's content.
+    // The above-content effects render over the layer's content.
     let effect_scale = canvas.effect_scale;
     canvas.effect_scale = effect_scale * ctx.opacity();
+    crate::layer_effects::composite_layer_effects_fold(canvas, passes);
     crate::layer_effects::composite_layer_effects_above(canvas, passes);
     canvas.effect_scale = effect_scale;
 }

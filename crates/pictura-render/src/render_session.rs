@@ -306,6 +306,12 @@ fn sync_targets(reduced: &mut Document, original: &Document, targets: &[&str]) {
         destination.visible = source.visible;
         destination.clipping = source.clipping;
         destination.knockout = source.knockout;
+        destination.blend_clipping = source.blend_clipping;
+        destination.blend_interior = source.blend_interior;
+        destination.transparency_shapes = source.transparency_shapes;
+        destination.layer_mask_hides_effects = source.layer_mask_hides_effects;
+        destination.vector_mask_hides_effects = source.vector_mask_hides_effects;
+        destination.restricted_channels = source.restricted_channels.clone();
     }
 }
 
@@ -341,6 +347,13 @@ fn layer_digest(layer: &Layer, doc: &Document, hasher: &mut DefaultHasher) {
     layer.blend_if.is_some().hash(hasher);
     layer.blend_clipping.hash(hasher);
     layer.blend_interior.hash(hasher);
+    layer.transparency_shapes.hash(hasher);
+    layer.layer_mask_hides_effects.hash(hasher);
+    layer.vector_mask_hides_effects.hash(hasher);
+    let mut restricted = layer.restricted_channels.clone();
+    restricted.sort_unstable();
+    restricted.dedup();
+    restricted.hash(hasher);
     layer.background.hash(hasher);
     layer.blend_key.hash(hasher);
     for child in &layer.children {
@@ -669,5 +682,43 @@ mod tests {
         let doc = two_layers();
         let mut session = RenderSession::with_budget(1);
         assert!(session.preview(&doc, &["1"], 0, whole(&doc), 0).is_none());
+    }
+
+    #[test]
+    fn digest_tracks_advanced_blending_flags() {
+        let mut doc = two_layers();
+        let mut before = prefix_digest(&doc, 1, 0, whole(&doc));
+        let mut changed = |doc: &mut Document, apply: fn(&mut Layer)| {
+            apply(&mut doc.layers[0]);
+            let after = prefix_digest(doc, 1, 0, whole(doc));
+            assert_ne!(before, after);
+            before = after;
+        };
+        changed(&mut doc, |layer| layer.blend_clipping = false);
+        changed(&mut doc, |layer| layer.blend_interior = true);
+        changed(&mut doc, |layer| layer.transparency_shapes = false);
+        changed(&mut doc, |layer| layer.layer_mask_hides_effects = true);
+        changed(&mut doc, |layer| layer.vector_mask_hides_effects = true);
+        changed(&mut doc, |layer| layer.restricted_channels = vec![0, 1]);
+    }
+
+    #[test]
+    fn sync_targets_copies_advanced_blending_flags() {
+        let mut original = two_layers();
+        original.layers[1].blend_clipping = false;
+        original.layers[1].blend_interior = true;
+        original.layers[1].transparency_shapes = false;
+        original.layers[1].layer_mask_hides_effects = true;
+        original.layers[1].vector_mask_hides_effects = true;
+        original.layers[1].restricted_channels = vec![0, 2];
+        let mut reduced = two_layers();
+        sync_targets(&mut reduced, &original, &["1"]);
+        let target = &reduced.layers[1];
+        assert!(!target.blend_clipping);
+        assert!(target.blend_interior);
+        assert!(!target.transparency_shapes);
+        assert!(target.layer_mask_hides_effects);
+        assert!(target.vector_mask_hides_effects);
+        assert_eq!(target.restricted_channels, vec![0, 2]);
     }
 }

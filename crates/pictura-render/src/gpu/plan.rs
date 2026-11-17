@@ -218,6 +218,7 @@ fn plan_layer<'a>(layer: &'a Layer, doc: &Document, region: Option<PsdRect>) -> 
         if passes
             .below
             .iter()
+            .chain(&passes.fold)
             .chain(&passes.above)
             .any(|pass| matches!(pass.mode, BlendMode::Dissolve))
         {
@@ -333,6 +334,12 @@ fn own_attribute_decline(layer: &Layer) -> Option<GpuError> {
         Some(GpuError::UnsupportedMode(layer.blend))
     } else if layer.blend_if.as_ref().is_some_and(|v| !v.is_default())
         || layer.knockout != Knockout::None
+        || !layer.blend_clipping
+        || layer.blend_interior
+        || !layer.transparency_shapes
+        || layer.layer_mask_hides_effects
+        || layer.vector_mask_hides_effects
+        || !layer.restricted_channels.is_empty()
     {
         Some(GpuError::UnsupportedAdvancedBlending)
     } else {

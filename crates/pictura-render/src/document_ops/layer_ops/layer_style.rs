@@ -665,6 +665,10 @@ pub struct LayerStyle {
     knockout: Knockout,
     blend_interior: bool,
     blend_clipping: bool,
+    transparency_shapes: bool,
+    layer_mask_hides_effects: bool,
+    vector_mask_hides_effects: bool,
+    restricted_channels: Vec<u32>,
 }
 
 /// Copy `layer`'s style, or `None` when it cannot carry one.
@@ -682,6 +686,10 @@ pub fn copy_layer_style(layer: &Layer) -> Option<LayerStyle> {
         knockout: layer.knockout,
         blend_interior: layer.blend_interior,
         blend_clipping: layer.blend_clipping,
+        transparency_shapes: layer.transparency_shapes,
+        layer_mask_hides_effects: layer.layer_mask_hides_effects,
+        vector_mask_hides_effects: layer.vector_mask_hides_effects,
+        restricted_channels: layer.restricted_channels.clone(),
     })
 }
 
@@ -700,6 +708,10 @@ pub fn paste_layer_style(doc: &mut Document, paths: &[&str], style: &LayerStyle)
         layer.knockout = style.knockout;
         layer.blend_interior = style.blend_interior;
         layer.blend_clipping = style.blend_clipping;
+        layer.transparency_shapes = style.transparency_shapes;
+        layer.layer_mask_hides_effects = style.layer_mask_hides_effects;
+        layer.vector_mask_hides_effects = style.vector_mask_hides_effects;
+        layer.restricted_channels = style.restricted_channels.clone();
         *layer != before
     })
 }

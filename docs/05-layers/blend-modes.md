@@ -62,17 +62,18 @@ differs subtly between them:
 ### Blend Interior Effects As Group (layer styles nuance)
 
 `Blend Interior Effects As Group` (Advanced Blending in the Layer Style dialog)
-decides whether the **layer's** blend mode is applied to effects that modify
-opaque pixels — **Inner Glow, Satin, Color Overlay, Gradient Overlay, Pattern
-Overlay, Stroke Emboss** — in addition to the layer's own pixels. Exterior effects
-that only affect transparent pixels (**Drop Shadow, Outer Glow**) always blend
-against the underlying visible layers and are not governed by this option.
+decides whether the **layer's** blend mode is applied once to the content
+together with **Inner Glow, Satin, Color Overlay, Gradient Overlay and Pattern
+Overlay**. Inner Shadow, Stroke and Bevel composite onto the blended result
+either way, and exterior effects that only affect transparent pixels (**Drop
+Shadow, Outer Glow**) always blend against the underlying visible layers.
 
-- **Deselected (default):** interior effects composite onto the layer using their
-  own effect blend modes; the layer's blend mode is then applied to the combined
-  layer+interior result. Interior effects are effectively "inside" the layer.
-- **Selected:** the layer's blend mode is applied to the interior effects as a
-  group, and the whole group is then composited with the underlying layers.
+- **Deselected (default):** the layer's blend mode carries the layer's own
+  pixels; interior effects composite over that result with their own effect
+  blend modes.
+- **Selected:** the layer's blend mode applies once to the content and the five
+  interior effects as a group; Inner Shadow, Stroke and Bevel then composite
+  onto that group.
 
 The closely related `Blend Clipped Layers As Group` (default **on**) applies the
 base layer's blend mode to every layer in a clipping mask; turning it off keeps
@@ -339,9 +340,9 @@ Widgets (consistent with `01-architecture/qt6-ui-design.md`).
   load.
 - Advanced blending flags are new node fields: `blend_interior_effects_as_group`,
   `blend_clipped_layers_as_group`, `transparency_shapes_layers`,
-  `layer_mask_hides_effects`, `vector_mask_hides_effects`, `channel_include:
-  [bool; N]`. PSD stores them in the `8BIM`/`lrFX` style blocks and the layer
-  flags; unknown bits are preserved.
+  `layer_mask_hides_effects`, `vector_mask_hides_effects`, and
+  `restricted_channels: Vec<u32>`. PSD stores them in the `8BIM` style blocks and
+  the layer flags; unknown bits are preserved.
 - `Blend If` is stored per layer as `(channel, this_lo, this_hi, under_lo,
   under_hi)` sets; PSD encodes blending ranges in the layer record.
 - Undo: changing blend mode/opacity/Blend If is a scalar command with an undo

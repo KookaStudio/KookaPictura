@@ -46,9 +46,10 @@ surface). The Contour sub-panel is indented under Bevel & Emboss exactly as its
 
 ### Advanced Blending (per-layer, in Blending Options)
 
-- **Blend Interior Effects As Group** — apply the layer's blend mode to interior
-  effects (Inner Glow, Satin, Color/Gradient/Pattern Overlay, Stroke Emboss).
-  Off by default. See `LAY-010`.
+- **Blend Interior Effects As Group** — apply the layer's blend mode once to
+  the content together with Inner Glow, Satin and the Color/Gradient/Pattern
+  Overlays. Inner Shadow, Stroke and Bevel composite onto the blended result
+  either way. Off by default. See `LAY-010`.
 - **Blend Clipped Layers As Group** — apply the base layer's mode to all clipped
   layers (default on).
 - **Transparency Shapes Layers** (default on), **Layer Mask Hides Effects**,

@@ -446,12 +446,20 @@ pub fn layer_paint_bounds(doc: &Document, path: &str) -> Option<PsdRect> {
 }
 
 pub(crate) fn paint_bounds(layer: &Layer, doc: &Document) -> Option<PsdRect> {
+    if !layer.transparency_shapes && layer.knockout != pictura_core::Knockout::None {
+        return Some(canvas_rect(doc));
+    }
     if layer.is_group {
         return layer
             .children
             .iter()
             .filter_map(|child| paint_bounds(child, doc))
             .reduce(PsdRect::union);
+    }
+    if !layer.transparency_shapes
+        && (layer.extra_block(b"lfx2").is_some() || layer.extra_block(b"lrFX").is_some())
+    {
+        return Some(canvas_rect(doc));
     }
     if is_destructive_adjustment(layer) {
         return adjustment_bounds(layer, doc);
@@ -571,20 +579,28 @@ fn masked_fill_bounds(layer: &Layer) -> Option<PsdRect> {
 /// [`masked_fill_bounds`] grown by `pad` instead of the effects' reach.
 fn confined_fill_box(layer: &Layer, pad: i32) -> Option<PsdRect> {
     let grow = |rect: PsdRect, feather: f64| rect.grow(pad.saturating_add(feather_pad(feather)));
-    let raster = layer.mask.as_ref().and_then(|mask| {
-        (!mask.disabled
-            && mask.data.is_some()
-            && mask.default_color == 0
-            && mask.density == 255
-            && mask.rect.width() > 0
-            && mask.rect.height() > 0)
-            .then(|| grow(mask.rect, mask.feather()))
-    });
-    let vector = layer
-        .vector_mask
-        .as_ref()
-        .filter(|mask| mask.has_fill() && !mask.invert && mask.density == 255)
-        .and_then(|mask| vector_mask_box(mask).map(|rect| grow(rect, mask.feather())));
+    let raster = if layer.layer_mask_hides_effects {
+        None
+    } else {
+        layer.mask.as_ref().and_then(|mask| {
+            (!mask.disabled
+                && mask.data.is_some()
+                && mask.default_color == 0
+                && mask.density == 255
+                && mask.rect.width() > 0
+                && mask.rect.height() > 0)
+                .then(|| grow(mask.rect, mask.feather()))
+        })
+    };
+    let vector = if layer.vector_mask_hides_effects {
+        None
+    } else {
+        layer
+            .vector_mask
+            .as_ref()
+            .filter(|mask| mask.has_fill() && !mask.invert && mask.density == 255)
+            .and_then(|mask| vector_mask_box(mask).map(|rect| grow(rect, mask.feather())))
+    };
     match (raster, vector) {
         // The product of the two masks is within either one.
         (Some(rect), _) => Some(rect),
@@ -610,6 +626,17 @@ pub(crate) fn composite_layer_effects_above(
 ) {
     if let Some(passes) = passes {
         planes::apply(canvas, &passes.above);
+    }
+}
+
+/// Replay the already-built interior pass group that `infx` folds into the
+/// layer colour.
+pub(crate) fn composite_layer_effects_fold(
+    canvas: &mut Canvas,
+    passes: Option<&crate::layer_source::LayerPasses>,
+) {
+    if let Some(passes) = passes {
+        planes::apply(canvas, &passes.fold);
     }
 }
 
@@ -776,7 +803,7 @@ pub(crate) fn build_layer_passes(
     if let Some(shadow) = effects
         .drop_shadow
         .as_ref()
-        .filter(|effect| effect.enabled && effect.present)
+        .filter(|effect| layer.transparency_shapes && effect.enabled && effect.present)
     {
         out.below
             .extend(shadows::build_drop_shadow(layer, doc, shadow, build, fill));
@@ -784,18 +811,19 @@ pub(crate) fn build_layer_passes(
     if let Some(glow) = effects
         .outer_glow
         .as_ref()
-        .filter(|effect| effect.enabled && effect.present)
+        .filter(|effect| layer.transparency_shapes && effect.enabled && effect.present)
     {
         out.below
             .extend(glows::build_outer_glow(layer, doc, glow, build, fill));
     }
     let on = |enabled: bool, present: bool| enabled && present;
+    let edge = |enabled: bool, present: bool| layer.transparency_shapes && on(enabled, present);
     if let Some(overlay) = effects
         .pattern_overlay
         .as_ref()
         .filter(|effect| on(effect.enabled, effect.present))
     {
-        out.above.extend(overlays::build_pattern_overlay(
+        out.fold.extend(overlays::build_pattern_overlay(
             layer, doc, overlay, build, fill,
         ));
     }
@@ -804,7 +832,7 @@ pub(crate) fn build_layer_passes(
         .as_ref()
         .filter(|effect| on(effect.enabled, effect.present))
     {
-        out.above.extend(overlays::build_gradient_overlay(
+        out.fold.extend(overlays::build_gradient_overlay(
             layer, doc, overlay, build, fill,
         ));
     }
@@ -813,30 +841,30 @@ pub(crate) fn build_layer_passes(
         .as_ref()
         .filter(|effect| on(effect.enabled, effect.present))
     {
-        out.above.extend(overlays::build_color_overlay(
+        out.fold.extend(overlays::build_color_overlay(
             layer, doc, overlay, build, fill,
         ));
     }
     if let Some(satin) = effects
         .satin
         .as_ref()
-        .filter(|effect| on(effect.enabled, effect.present))
+        .filter(|effect| edge(effect.enabled, effect.present))
     {
-        out.above
+        out.fold
             .extend(satin::build_satin(layer, doc, satin, build, None));
     }
     if let Some(glow) = effects
         .inner_glow
         .as_ref()
-        .filter(|effect| on(effect.enabled, effect.present))
+        .filter(|effect| edge(effect.enabled, effect.present))
     {
-        out.above
+        out.fold
             .extend(glows::build_inner_glow(layer, doc, glow, build, fill));
     }
     if let Some(shadow) = effects
         .inner_shadow
         .as_ref()
-        .filter(|effect| on(effect.enabled, effect.present))
+        .filter(|effect| edge(effect.enabled, effect.present))
     {
         out.above
             .extend(shadows::build_inner_shadow(layer, doc, shadow, build, fill));
@@ -844,7 +872,7 @@ pub(crate) fn build_layer_passes(
     if let Some(stroke) = effects
         .stroke
         .as_ref()
-        .filter(|effect| on(effect.enabled, effect.present))
+        .filter(|effect| edge(effect.enabled, effect.present))
     {
         out.above
             .extend(strokes::build_stroke(layer, doc, stroke, build, fill));
@@ -852,11 +880,12 @@ pub(crate) fn build_layer_passes(
     if let Some(bevel) = effects
         .bevel
         .as_ref()
-        .filter(|effect| on(effect.enabled, effect.present))
+        .filter(|effect| edge(effect.enabled, effect.present))
     {
         out.above
             .extend(bevel::build_bevel_emboss(layer, doc, bevel, build, None));
     }
+    planes::apply_output_masks(&mut out, layer, build.mask_clip);
     out
 }
 
@@ -1023,6 +1052,16 @@ fn clip_rect(layer: &Layer, w: i32, h: i32) -> (i32, i32, i32, i32) {
     )
 }
 
+/// The rect an effect reads its source from. With transparency shapes off the
+/// whole canvas is the source, whatever the layer's pixel alpha.
+fn effect_source_rect(layer: &Layer, w: i32, h: i32) -> (i32, i32, i32, i32) {
+    if layer.transparency_shapes {
+        clip_rect(layer, w, h)
+    } else {
+        (0, 0, w, h)
+    }
+}
+
 fn rect_empty(r: (i32, i32, i32, i32)) -> bool {
     r.2 <= r.0 || r.3 <= r.1
 }
@@ -1104,8 +1143,10 @@ pub(super) fn apply_mask(
     if w == 0 || matte.is_empty() {
         return;
     }
-    let raster = crate::mask_refine::resolve_raster(layer.mask.as_ref(), clip);
-    let vector = crate::mask_refine::resolve_vector(layer.vector_mask.as_ref(), clip);
+    let raster = (!layer.layer_mask_hides_effects)
+        .then(|| crate::mask_refine::resolve_raster(layer.mask.as_ref(), clip));
+    let vector = (!layer.vector_mask_hides_effects)
+        .then(|| crate::mask_refine::resolve_vector(layer.vector_mask.as_ref(), clip));
     let run = |row: usize, row_matte: &mut [f32]| {
         let y = y0 + row as i32;
         for (i, v) in row_matte.iter_mut().enumerate() {
@@ -1113,8 +1154,8 @@ pub(super) fn apply_mask(
                 continue;
             }
             let x = x0 + i as i32;
-            let r = raster.u8_at(x, y);
-            let vmask = vector.u8_at(x, y);
+            let r = raster.as_ref().map_or(255, |gate| gate.u8_at(x, y));
+            let vmask = vector.as_ref().map_or(255, |gate| gate.u8_at(x, y));
             let mask = ((r as u16 * vmask as u16 + 127) / 255) as u8;
             *v *= mask as f32 / 255.0;
         }

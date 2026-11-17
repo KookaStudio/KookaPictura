@@ -2,24 +2,29 @@
 
 ## Purpose
 Knockout layers that punch through to the background, verified against psd-tools references including group cases.
+
 ## Requirements
+
 ### Requirement: Knockout punches a layer through to the background
 
 The CPU compositor SHALL apply the `Knockout` mode of a non-bottom layer. When
 such a layer's mode is `Shallow` or `Deep`, the layer's content SHALL be
 composited against a knockout base instead of the running backdrop, and the
 result SHALL replace the running backdrop at pixels the layer covers, so the
-layers between the knockout layer and the base do not contribute there. The base
-SHALL depend on the mode. For `Deep` it SHALL be the document background — the
-bottom layer's composite, or transparency when there is none — inherited across
-pass-through groups and reset at an isolation boundary to the enclosing isolated
-group's initial backdrop. For `Shallow` it SHALL be the initial backdrop of the
-compositor applying the layer: the document background at the document root and
-for a top-level layer, and the backdrop current when the enclosing group began
-for a layer inside a group. At the document root `Shallow` and `Deep` SHALL
-produce byte-identical output. A layer whose mode is `None`, a layer at the
-bottom of the document, and a layer in a group with no knockout SHALL composite
-byte-identically to before.
+layers between the knockout layer and the base do not contribute there. The
+base SHALL depend on the mode. For `Deep` it SHALL be the document background —
+the bottom layer's composite, or transparency when there is none — inherited
+across pass-through groups and reset at an isolation boundary to the enclosing
+isolated group's initial backdrop. For `Shallow` it SHALL be the initial
+backdrop of the compositor applying the layer: the document background at the
+document root and for a top-level layer, and the backdrop current when the
+enclosing group began for a layer inside a group. At the document root
+`Shallow` and `Deep` SHALL produce byte-identical output. The layer's
+Transparency Shapes flag SHALL choose what the knockout covers: when `true`
+(the default), the pixels the layer's content covers; when `false`, the whole
+document canvas regardless of source alpha, bounded by a mask whose hide flag is
+off. A layer whose mode is `None`, a layer at the bottom of the document, and a
+layer in a group with no knockout SHALL have no knockout effect.
 
 #### Scenario: Deep punches through the intermediate layer
 
@@ -53,8 +58,18 @@ byte-identically to before.
 
 #### Scenario: A transparent pixel does not punch through
 
-- **WHEN** a knockout layer covers a pixel with zero source alpha
+- **WHEN** a knockout layer with transparency-shapes on covers a pixel with zero source alpha
 - **THEN** the running backdrop at that pixel is unchanged
+
+#### Scenario: Transparency Shapes off cuts the whole canvas [ko_tsly_off_canvas]
+
+- **WHEN** the same knockout layer has transparency-shapes off
+- **THEN** the knockout base replaces every canvas pixel the layer's masks allow (with no mask, the whole canvas), including pixels where the layer has no content
+
+#### Scenario: Transparency Shapes off respects the layer mask [ko_tsly_off_masked]
+
+- **WHEN** the same knockout layer has a half mask and transparency-shapes off
+- **THEN** the masked-out half is not punched through and the layers below it remain
 
 ### Requirement: The GPU compositor declines a knockout layer
 
@@ -168,4 +183,3 @@ contributes (Shallow did not punch through it).
 
 - **WHEN** `psd_tools` is not importable or is older than 1.19
 - **THEN** the reference-comparison test skips rather than fails
-

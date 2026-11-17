@@ -832,6 +832,9 @@ impl Gpu {
             super::plan::Body::Decline(_) => {}
         }
         if let Some(passes) = &plan.effects {
+            for pass in &passes.fold {
+                self.composite_effect_pass(canvas, pass, layer.opacity, doc);
+            }
             for pass in &passes.above {
                 self.composite_effect_pass(canvas, pass, layer.opacity, doc);
             }

@@ -200,6 +200,9 @@ pub(crate) fn content_matte(
     let rw = (x1 - x0) as usize;
     let rh = (y1 - y0) as usize;
     let mut matte = vec![0.0f32; rw * rh];
+    if !layer.transparency_shapes {
+        return vec![1.0; rw * rh];
+    }
     let decoded;
     let adjustment = match fill {
         Some(adjustment) => Some(adjustment),
@@ -337,3 +340,44 @@ fn apply_scalar(canvas: &mut Canvas, passes: &[EffectPass]) {
 #[cfg(test)]
 #[path = "replay_tests.rs"]
 mod replay_tests;
+
+/// Multiply every built effect pass by the masks whose hide-effects flag is on.
+/// A pass covers its own rectangle; the mask is sampled in document space.
+pub(super) fn apply_output_masks(
+    passes: &mut crate::layer_source::LayerPasses,
+    layer: &Layer,
+    clip: PsdRect,
+) {
+    let raster = layer
+        .layer_mask_hides_effects
+        .then(|| crate::mask_refine::resolve_raster(layer.mask.as_ref(), clip));
+    let vector = layer
+        .vector_mask_hides_effects
+        .then(|| crate::mask_refine::resolve_vector(layer.vector_mask.as_ref(), clip));
+    if raster.is_none() && vector.is_none() {
+        return;
+    }
+    for pass in passes
+        .below
+        .iter_mut()
+        .chain(passes.fold.iter_mut())
+        .chain(passes.above.iter_mut())
+    {
+        let w = pass.rect.width().max(0) as usize;
+        if w == 0 {
+            continue;
+        }
+        for y in pass.rect.top..pass.rect.bottom {
+            let row = (y - pass.rect.top) as usize * w;
+            for x in pass.rect.left..pass.rect.right {
+                let i = row + (x - pass.rect.left) as usize;
+                if i >= pass.alpha.len() {
+                    continue;
+                }
+                let r = raster.as_ref().map_or(255, |gate| gate.u8_at(x, y));
+                let v = vector.as_ref().map_or(255, |gate| gate.u8_at(x, y));
+                pass.alpha[i] *= ((r as u16 * v as u16 + 127) / 255) as f32 / 255.0;
+            }
+        }
+    }
+}
