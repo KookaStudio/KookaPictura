@@ -965,10 +965,10 @@ fn save_refuses_invalid() {
     let doc = Document::new(0, 0, ColorMode::Rgb, BitDepth::Eight);
     assert!(Raster::from_document(&doc).is_err());
     let mut short = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
-    short
-        .composite
-        .replace_data(vec![0u8; 3].into())
-        .expect("valid composite plane");
+    let before = short.clone();
+    assert!(short.composite.replace_data(vec![0u8; 3].into()).is_err());
+    assert_eq!(short, before);
+    short.composite.detach_plane();
     assert!(Raster::from_document(&short).is_err());
 }
 

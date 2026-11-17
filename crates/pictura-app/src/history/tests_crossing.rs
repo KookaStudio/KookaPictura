@@ -1,7 +1,7 @@
 //! A walk across a history segment reports the composite's real change.
 
 use super::*;
-use pictura_core::{BitDepth, Channel, ColorMode, Layer, LayerStack};
+use pictura_core::{BitDepth, Channel, ColorMode, Layer, LayerStack, PixelBuffer};
 
 // Two 256² tiles a side, so one changed tile is a quarter of the document.
 const SIDE: u32 = 512;
@@ -29,8 +29,13 @@ fn layer(side: u32) -> Layer {
 fn document() -> Document {
     let mut doc = Document::new(SIDE, SIDE, ColorMode::Rgb, BitDepth::Eight);
     doc.composite
-        .replace_data(vec![1; (SIDE * SIDE * 4) as usize].into())
-        .expect("valid composite plane");
+        .replace(PixelBuffer {
+            width: SIDE,
+            height: SIDE,
+            channels: 4,
+            data: vec![1; (SIDE * SIDE * 4) as usize].into(),
+        })
+        .expect("valid RGBA composite");
     doc.layers = LayerStack::from_layers(vec![layer(SIDE)]);
     doc
 }
