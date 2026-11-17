@@ -249,8 +249,8 @@ Quick Mask is tracked by `#172`.
 |---|---|---|---|---|---|
 | AUTO-1 | `actions.md` + `script-events-and-jsx.md` | Shared ActionDescriptor / command-recording bus (foundation) | SHIPPED | `crates/pictura-script/src/command_catalogue/`; `crates/pictura-app/cpp/commands.cpp`; `crates/pictura-codec/src/action_descriptor.rs` | #616 |
 | AUTO-2 | `droplets.md` | Create Droplet, `.opd`, `.desktop` launcher | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #617 |
-| AUTO-3 | `batch-processing.md` | File ▸ Automate ▸ Batch engine + dialog | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #618 |
-| AUTO-4 | `batch-processing.md` | Remaining Automate commands (Image Processor, Conditional Mode Change, PDF Presentation, Contact Sheet II, Picture Package, Photomerge, Web Photo Gallery, File Naming) | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #619 |
+| AUTO-3 | `batch-processing.md` | File ▸ Automate ▸ Batch engine + dialog (Folder and Opened Files sources; Import/Bridge sources deferred to #1406) | SHIPPED | `crates/pictura-script/src/batch/`; `crates/pictura-app/cpp/batch_runner.cpp`; `crates/pictura-app/cpp/batch_dialog.cpp` | #618 |
+| AUTO-4 | `batch-processing.md` | Remaining Automate commands (Image Processor, Conditional Mode Change, PDF Presentation, Contact Sheet II, Picture Package, Photomerge, Web Photo Gallery) | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #619 |
 | AUTO-5 | `rust-scripting-replacement.md` | Scripting host, DOM, ActionManager, notifiers (QuickJS) | MISSING | `crates/pictura-script` covers action automation, not a scripting host/DOM | #620 |
 | AUTO-6 | `rust-scripting-replacement.md` | Script console, sandbox limits, security prompt, progress bridge | MISSING | none found | #621 |
 | AUTO-7 | `variables-and-data-driven-graphics.md` | Variables / data-driven graphics | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #622 |
