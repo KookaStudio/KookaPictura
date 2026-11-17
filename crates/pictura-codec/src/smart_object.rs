@@ -30,21 +30,35 @@ struct LinkedRecord {
 /// descriptor leaves the layer unresolved.
 #[cfg(test)]
 pub(crate) fn resolve_smart_objects(layers: &mut LayerStack, extra: &[u8], is_psb: bool) {
-    resolve_smart_objects_within(layers, extra, is_psb, &mut crate::budget::DecodeBudget::default())
-        .expect("smart object views fit the default budget");
+    resolve_smart_objects_within(
+        layers,
+        extra,
+        is_psb,
+        &mut crate::budget::DecodeBudget::default(),
+    )
+    .expect("smart object views fit the default budget");
 }
 
 pub(crate) fn resolve_smart_objects_within(
-    layers: &mut LayerStack, layer_section_extra: &[u8], is_psb: bool,
+    layers: &mut LayerStack,
+    layer_section_extra: &[u8],
+    is_psb: bool,
     budget: &mut crate::budget::DecodeBudget,
 ) -> Result<(), PsdError> {
     let records = collect_linked_records(layer_section_extra, is_psb);
     let masks = crate::filter_effects::collect_filter_masks(layer_section_extra, is_psb);
-    for layer in layers.iter_mut() { resolve_layer(layer, &records, &masks, budget)?; }
+    for layer in layers.iter_mut() {
+        resolve_layer(layer, &records, &masks, budget)?;
+    }
     Ok(())
 }
 
-fn resolve_layer(layer: &mut Layer, records: &[LinkedRecord], masks: &[crate::filter_effects::FilterMaskRecord], budget: &mut crate::budget::DecodeBudget) -> Result<(), PsdError> {
+fn resolve_layer(
+    layer: &mut Layer,
+    records: &[LinkedRecord],
+    masks: &[crate::filter_effects::FilterMaskRecord],
+    budget: &mut crate::budget::DecodeBudget,
+) -> Result<(), PsdError> {
     crate::stage_content::edit_layer_staged(layer, budget, |parts| {
         parts.smart_object = build_smart_object(parts, records, masks);
         if parts.smart_object.is_some() {
@@ -54,7 +68,9 @@ fn resolve_layer(layer: &mut Layer, records: &[LinkedRecord], masks: &[crate::fi
         }
         Ok(())
     })?;
-    for child in layer.children_iter_mut() { resolve_layer(child, records, masks, budget)?; }
+    for child in layer.children_iter_mut() {
+        resolve_layer(child, records, masks, budget)?;
+    }
     Ok(())
 }
 

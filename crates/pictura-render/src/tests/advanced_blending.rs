@@ -827,11 +827,11 @@ fn blend_interior_is_inert_on_groups_and_adjustments() {
 fn blend_interior_applies_the_text_curve_once() {
     let mut ink = solid("ink", full(8, 8), (0, 0, 0), 0, BlendMode::Normal, 255);
     ink.channels_mut()[3].data = (0..64).map(|v| (v * 4) as u8).collect::<Vec<_>>().into();
-    pictura_codec::edit_layer(ink.as_mut(), |parts| { parts.type_tool = Some(type_tool()) });
+    pictura_codec::edit_layer(ink.as_mut(), |parts| parts.type_tool = Some(type_tool()));
     color_overlay(&mut ink, 0x0000FF, 50.0);
     ink.blend_interior = true;
     let on = composite_rgba(&doc(8, 8, vec![ink.clone()]));
-    pictura_codec::edit_layer(ink.as_mut(), |parts| { parts.type_tool = None });
+    pictura_codec::edit_layer(ink.as_mut(), |parts| parts.type_tool = None);
     let plain = composite_rgba(&doc(8, 8, vec![ink]));
     assert!(
         on.data.iter().zip(plain.data.iter()).any(|(a, b)| a != b),

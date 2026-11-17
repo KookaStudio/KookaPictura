@@ -47,10 +47,12 @@ fn auto_select_skips_hidden_transparent_and_adjustment_layers() {
         channel.data = vec![0u8; 4].into();
     }
     let mut adjustment = pixel_layer("adjust", 2, 2, (0, 0, 255));
-    pictura_codec::edit_layer(adjustment.as_mut(), |parts| { parts.adjustment = Some(pictura_core::AdjustmentData {
-        key: *b"inv ",
-        data: Vec::new().into(),
-    }) });
+    pictura_codec::edit_layer(adjustment.as_mut(), |parts| {
+        parts.adjustment = Some(pictura_core::AdjustmentData {
+            key: *b"inv ",
+            data: Vec::new().into(),
+        })
+    });
     doc.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("bottom", 4, 4, (255, 0, 0)),
         hidden,

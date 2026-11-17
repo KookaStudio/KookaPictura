@@ -62,7 +62,12 @@ fn pattern_fill_defaults_and_unit_float() {
     let minimal = ptfl_from(vec![(b"Ptrn".to_vec(), ptrn("p"))]);
     assert_eq!(
         pictura_codec::decode_fill(&minimal),
-        Some(pictura_core::FillContent::Pattern(params("p", 100.0, true, (0, 0))))
+        Some(pictura_core::FillContent::Pattern(params(
+            "p",
+            100.0,
+            true,
+            (0, 0)
+        )))
     );
 
     // A unit-float scale decodes like a double.
@@ -79,7 +84,12 @@ fn pattern_fill_defaults_and_unit_float() {
     ]);
     assert_eq!(
         pictura_codec::decode_fill(&unit),
-        Some(pictura_core::FillContent::Pattern(params("p", 87.0, false, (0, 0))))
+        Some(pictura_core::FillContent::Pattern(params(
+            "p",
+            87.0,
+            false,
+            (0, 0)
+        )))
     );
 }
 
@@ -191,8 +201,9 @@ fn pattern_fill_masked_out_is_noop() {
 #[test]
 fn missing_pattern_uses_placeholder() {
     let mut doc = pattern_fixture_doc();
-    pictura_codec::edit_layer(resolve_path_mut(&mut doc, "1").unwrap().as_mut(), |parts| { parts.adjustment =
-        Some(ptfl(&params("not-installed", 100.0, true, (0, 0)))) });
+    pictura_codec::edit_layer(resolve_path_mut(&mut doc, "1").unwrap().as_mut(), |parts| {
+        parts.adjustment = Some(ptfl(&params("not-installed", 100.0, true, (0, 0))))
+    });
     let out = composite_rgba(&doc);
     assert_eq!(rgb(&out, 3, 5), [128, 128, 128], "opaque 50% grey");
     assert_eq!(px(&out, 3, 5)[3], 255, "placeholder is opaque");
@@ -204,8 +215,9 @@ fn link_with_layer_false_anchors_at_document_origin() {
     let mut layer = doc.layers[1].clone();
     layer.rect = rect(1, 1, 8, 8); // top, left, bottom, right: a (1,1) offset
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
-    pictura_codec::edit_layer(resolve_path_mut(&mut doc, "0").unwrap().as_mut(), |parts| { parts.adjustment =
-        Some(ptfl(&params("pictura-pattern", 100.0, false, (0, 0)))) });
+    pictura_codec::edit_layer(resolve_path_mut(&mut doc, "0").unwrap().as_mut(), |parts| {
+        parts.adjustment = Some(ptfl(&params("pictura-pattern", 100.0, false, (0, 0))))
+    });
 
     let out = composite_rgba(&doc);
     // With the anchor at the document origin, canvas (1,1) samples tile (1,1):
@@ -220,8 +232,9 @@ fn link_with_layer_true_anchors_at_layer_rect() {
     let mut layer = doc.layers[1].clone();
     layer.rect = rect(1, 1, 8, 8); // top, left, bottom, right: a (1,1) offset
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
-    pictura_codec::edit_layer(resolve_path_mut(&mut doc, "0").unwrap().as_mut(), |parts| { parts.adjustment =
-        Some(ptfl(&params("pictura-pattern", 100.0, true, (0, 0)))) });
+    pictura_codec::edit_layer(resolve_path_mut(&mut doc, "0").unwrap().as_mut(), |parts| {
+        parts.adjustment = Some(ptfl(&params("pictura-pattern", 100.0, true, (0, 0))))
+    });
 
     let out = composite_rgba(&doc);
     // Link With Layer anchors the tile at the layer's top-left, so the layer
@@ -240,8 +253,9 @@ fn link_with_layer_true_anchors_at_layer_rect() {
 fn non_zero_origin_shifts_the_tile() {
     fn shifted(origin: (i32, i32)) -> [u8; 3] {
         let mut doc = pattern_fixture_doc();
-        pictura_codec::edit_layer(resolve_path_mut(&mut doc, "1").unwrap().as_mut(), |parts| { parts.adjustment =
-            Some(ptfl(&params("pictura-pattern", 100.0, true, origin))) });
+        pictura_codec::edit_layer(resolve_path_mut(&mut doc, "1").unwrap().as_mut(), |parts| {
+            parts.adjustment = Some(ptfl(&params("pictura-pattern", 100.0, true, origin)))
+        });
         rgb(&composite_rgba(&doc), 0, 0)
     }
 

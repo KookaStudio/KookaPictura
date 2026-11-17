@@ -207,12 +207,8 @@ fn authored_shared_payload_emits_one_record() {
     ]);
 
     let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
-    let a = back.layers[0]
-        .smart_object()
-        .expect("layer A resolves");
-    let b = back.layers[1]
-        .smart_object()
-        .expect("layer B resolves");
+    let a = back.layers[0].smart_object().expect("layer A resolves");
+    let b = back.layers[1].smart_object().expect("layer B resolves");
 
     assert_eq!(a.kind, SmartObjectKind::Embedded);
     assert_eq!(b.kind, SmartObjectKind::Embedded);

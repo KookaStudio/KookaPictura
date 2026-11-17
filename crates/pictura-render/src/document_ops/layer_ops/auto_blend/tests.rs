@@ -184,7 +184,9 @@ fn auto_blend_refuses_selected_kinds() {
     assert!(!can_auto_blend(&d, &["0", "1"]), "Background");
 
     let mut d = pair();
-    pictura_codec::edit_layer(d.layers[1].as_mut(), |parts| { parts.smart_object = Some(SmartObject::default()) });
+    pictura_codec::edit_layer(d.layers[1].as_mut(), |parts| {
+        parts.smart_object = Some(SmartObject::default())
+    });
     assert!(!can_auto_blend(&d, &["0", "1"]), "Smart Object");
 
     let mut d = pair();
@@ -199,7 +201,9 @@ fn auto_blend_refuses_selected_kinds() {
 fn auto_blend_ignores_a_smart_object_outside_the_selection() {
     let mut d = pair();
     let mut smart = solid("S", full(20, 20), (9, 9, 9), 255, BlendMode::Normal, 255);
-    pictura_codec::edit_layer(smart.as_mut(), |parts| { parts.smart_object = Some(SmartObject::default()) });
+    pictura_codec::edit_layer(smart.as_mut(), |parts| {
+        parts.smart_object = Some(SmartObject::default())
+    });
     d.layers.push(smart).expect("a free slot");
     assert!(can_auto_blend(&d, &["0", "1"]));
     assert!(!can_auto_blend(&d, &["0", "1", "2"]));
@@ -220,18 +224,20 @@ fn auto_blend_skips_ineligible_layers() {
     hidden.visible = false;
     let empty = solid("Empty", full(20, 20), (0, 0, 0), 0, BlendMode::Normal, 255);
     let mut text = solid("Type", full(20, 20), (2, 2, 2), 255, BlendMode::Normal, 255);
-    pictura_codec::edit_layer(text.as_mut(), |parts| { parts.type_tool = Some(pictura_core::TypeTool {
-        transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
-        parts: "T".into(),
-        bounds: [0; 4],
-        text_desc: Vec::new().into(),
-        warp_desc: Vec::new().into(),
-        fonts: Vec::new(),
-        style: None,
-        vertical: false,
-        box_bounds: None,
-        path: None,
-    }) });
+    pictura_codec::edit_layer(text.as_mut(), |parts| {
+        parts.type_tool = Some(pictura_core::TypeTool {
+            transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+            parts: "T".into(),
+            bounds: [0; 4],
+            text_desc: Vec::new().into(),
+            warp_desc: Vec::new().into(),
+            fonts: Vec::new(),
+            style: None,
+            vertical: false,
+            box_bounds: None,
+            path: None,
+        })
+    });
     d.layers.push(hidden).expect("slot");
     d.layers.push(empty).expect("slot");
     d.layers.push(text).expect("slot");

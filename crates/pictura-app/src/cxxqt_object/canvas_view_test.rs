@@ -376,7 +376,10 @@ fn panel_reads_stay_bounded() {
     }
     assert!(!pictura_render::DocumentComposite::is_stored(doc));
     assert!(view.tile_stats().resident_bytes < u64::from(w) * u64::from(h));
-    assert!(doc.layers[0].channels().iter().all(|c| !c.data.is_mirrored()));
+    assert!(doc.layers[0]
+        .channels()
+        .iter()
+        .all(|c| !c.data.is_mirrored()));
 }
 
 #[test]

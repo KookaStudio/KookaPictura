@@ -533,9 +533,11 @@ pub(super) fn write_layer(
         layer.mask = Some(mask);
     }
     if prepared.materialize {
-        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts
-            .extra_blocks
-            .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd")) });
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts
+                .extra_blocks
+                .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd"))
+        });
         pictura_codec::retire_layer_content(layer);
         if !prepared.old_uuid.is_empty() {
             if let Some(cleaned) = pictura_codec::remove_linked_source(

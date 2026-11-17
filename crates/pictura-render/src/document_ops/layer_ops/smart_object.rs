@@ -31,9 +31,7 @@ fn remove_link_if_unreferenced(doc: &mut Document, uuid: &str) {
 
 fn uuid_referenced(layers: &[Layer], uuid: &str) -> bool {
     layers.iter().any(|layer| {
-        layer
-            .smart_object()
-            .is_some_and(|so| so.uuid == uuid)
+        layer.smart_object().is_some_and(|so| so.uuid == uuid)
             || pictura_codec::layer_references_smart_source(layer, uuid)
             || uuid_referenced(layer.children(), uuid)
     })
@@ -138,17 +136,19 @@ pub fn convert_to_smart_object(doc: &mut Document, path: &str) -> bool {
         super::create::release_background(layer);
         layer.name = name.clone();
     }
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.smart_object = Some(
-        {
-            let mut so = SmartObject::default();
-            so.kind = SmartObjectKind::Embedded;
-            so.filename = format!("{name}.psd");
-            so.filetype = *b"8BPB";
-            so.creator = *b"8BIM";
-            so
-        }
-        .with_payload(payload),
-    ) });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.smart_object = Some(
+            {
+                let mut so = SmartObject::default();
+                so.kind = SmartObjectKind::Embedded;
+                so.filename = format!("{name}.psd");
+                so.filetype = *b"8BPB";
+                so.creator = *b"8BIM";
+                so
+            }
+            .with_payload(payload),
+        )
+    });
     true
 }
 
@@ -280,16 +280,18 @@ pub fn replace_smart_object_contents(
     {
         let layer = resolve_path_mut(doc, path).expect("can_replace_smart_object_contents checked");
         layer.channels_mut().clear();
-        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts
-            .extra_blocks
-            .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd")) });
         pictura_codec::edit_layer(layer.as_mut(), |parts| {
-        let so = parts.smart_object.as_mut().expect("checked");
-        so.set_payload(bytes.to_vec());
-        so.filename = filename.to_string();
-        so.filetype = *b"8BPB";
-        so.creator = *b"8BIM";
-        so.uuid.clear();
+            parts
+                .extra_blocks
+                .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd"))
+        });
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            let so = parts.smart_object.as_mut().expect("checked");
+            so.set_payload(bytes.to_vec());
+            so.filename = filename.to_string();
+            so.filetype = *b"8BPB";
+            so.creator = *b"8BIM";
+            so.uuid.clear();
         });
     }
     remove_link_if_unreferenced(doc, &old_uuid);
@@ -504,9 +506,11 @@ pub fn rasterize_smart_object(doc: &mut Document, path: &str) -> bool {
         if let Some(channels) = rendered {
             layer.set_channels(channels);
         }
-        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts
-            .extra_blocks
-            .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd" | b"PiSt")) });
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks.retain(|block| {
+                !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd" | b"PiSt")
+            })
+        });
         pictura_codec::retire_layer_content(layer);
     }
     remove_link_if_unreferenced(doc, &uuid);
@@ -692,7 +696,7 @@ fn map_layer(layer: &Layer, sx: f64, sy: f64, ox: i32, oy: i32) -> Layer {
     if out.background {
         super::create::release_background(&mut out);
     }
-    pictura_codec::edit_layer(out.as_mut(), |parts| { parts.raw_channels.clear() });
+    pictura_codec::edit_layer(out.as_mut(), |parts| parts.raw_channels.clear());
     out.source_channels = None;
     out
 }
@@ -769,12 +773,17 @@ pub fn new_smart_object_via_copy(doc: &mut Document, path: &str) -> Option<Strin
     let segments = parse_path(path)?;
     let mut copy = resolve_path(doc, path)?.clone();
     copy.name = format!("{} copy", copy.name);
-    pictura_codec::edit_layer(copy.as_mut(), |parts| { parts.extra_blocks
-        .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd")) });
-    pictura_codec::edit_layer(copy.as_mut(), |parts| { if let Some(so) = parts.smart_object.as_mut() {
-        so.config_descriptor.clear();
-        so.uuid.clear();
-    } });
+    pictura_codec::edit_layer(copy.as_mut(), |parts| {
+        parts
+            .extra_blocks
+            .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd"))
+    });
+    pictura_codec::edit_layer(copy.as_mut(), |parts| {
+        if let Some(so) = parts.smart_object.as_mut() {
+            so.config_descriptor.clear();
+            so.uuid.clear();
+        }
+    });
     let (&index, parent) = segments.split_last()?;
     if doc.layers.insert(parent, index + 1, copy).is_err() {
         return None;

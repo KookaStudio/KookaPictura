@@ -490,21 +490,23 @@ fn sixteen_bit_document_refuses_conversion() {
 #[test]
 fn grayscale_layer_converts_to_grayscale_source() {
     let mut d = Document::new(2, 2, ColorMode::Grayscale, BitDepth::Eight);
-    d.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
-        name: "Gray".into(),
-        rect: full(2, 2),
-        channels: vec![
-            Channel {
-                id: 0,
-                data: vec![128; 4].into(),
-            },
-            Channel {
-                id: -1,
-                data: vec![255; 4].into(),
-            },
-        ],
-        ..Default::default()
-    })]);
+    d.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            name: "Gray".into(),
+            rect: full(2, 2),
+            channels: vec![
+                Channel {
+                    id: 0,
+                    data: vec![128; 4].into(),
+                },
+                Channel {
+                    id: -1,
+                    data: vec![255; 4].into(),
+                },
+            ],
+            ..Default::default()
+        },
+    )]);
     assert!(convert_to_smart_object(&mut d, "0"));
     let payload = d.layers[0]
         .smart_object()
@@ -527,11 +529,15 @@ fn rasterize_keeps_proxy_channels_and_drops_config() {
         BlendMode::Normal,
         255,
     );
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.smart_object = Some(embedded(payload_of([1, 2, 3]))) });
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![LayerBlock {
-        key: *b"SoLd",
-        data: vec![9, 9, 9, 9].into(),
-    }] });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.smart_object = Some(embedded(payload_of([1, 2, 3])))
+    });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks = vec![LayerBlock {
+            key: *b"SoLd",
+            data: vec![9, 9, 9, 9].into(),
+        }]
+    });
     let mut d = doc(4, 4, vec![layer]);
     let before = d.clone();
     let before_comp = composite_rgba(&d);
@@ -594,7 +600,9 @@ fn rasterize_refuses_ineligible_targets() {
         4,
         vec![{
             let mut g = group("G", BlendMode::Normal, 255, None, vec![]);
-            pictura_codec::edit_layer(g.as_mut(), |parts| { parts.smart_object = Some(embedded(payload_of([1, 2, 3]))) });
+            pictura_codec::edit_layer(g.as_mut(), |parts| {
+                parts.smart_object = Some(embedded(payload_of([1, 2, 3])))
+            });
             g
         }],
     );
@@ -608,7 +616,9 @@ fn rasterize_refuses_ineligible_targets() {
         4,
         vec![{
             let mut a = adjustment_layer("Adj", *b"inv ", vec![0], 255, None);
-            pictura_codec::edit_layer(a.as_mut(), |parts| { parts.smart_object = Some(embedded(payload_of([1, 2, 3]))) });
+            pictura_codec::edit_layer(a.as_mut(), |parts| {
+                parts.smart_object = Some(embedded(payload_of([1, 2, 3])))
+            });
             a
         }],
     );
@@ -961,7 +971,9 @@ fn replace_refuses_ineligible_and_malformed_targets() {
         4,
         vec![{
             let mut g = group("G", BlendMode::Normal, 255, None, vec![]);
-            pictura_codec::edit_layer(g.as_mut(), |parts| { parts.smart_object = Some(embedded(valid.clone())) });
+            pictura_codec::edit_layer(g.as_mut(), |parts| {
+                parts.smart_object = Some(embedded(valid.clone()))
+            });
             g
         }],
     );
@@ -979,7 +991,9 @@ fn replace_refuses_ineligible_and_malformed_targets() {
         4,
         vec![{
             let mut a = adjustment_layer("Adj", *b"inv ", vec![0], 255, None);
-            pictura_codec::edit_layer(a.as_mut(), |parts| { parts.smart_object = Some(embedded(valid.clone())) });
+            pictura_codec::edit_layer(a.as_mut(), |parts| {
+                parts.smart_object = Some(embedded(valid.clone()))
+            });
             a
         }],
     );
@@ -1144,7 +1158,9 @@ fn source_bytes_refuses_ineligible_targets() {
         4,
         vec![{
             let mut g = group("G", BlendMode::Normal, 255, None, vec![]);
-            pictura_codec::edit_layer(g.as_mut(), |parts| { parts.smart_object = Some(embedded(valid.clone())) });
+            pictura_codec::edit_layer(g.as_mut(), |parts| {
+                parts.smart_object = Some(embedded(valid.clone()))
+            });
             g
         }],
     );
@@ -1155,7 +1171,9 @@ fn source_bytes_refuses_ineligible_targets() {
         4,
         vec![{
             let mut a = adjustment_layer("Adj", *b"inv ", vec![0], 255, None);
-            pictura_codec::edit_layer(a.as_mut(), |parts| { parts.smart_object = Some(embedded(valid.clone())) });
+            pictura_codec::edit_layer(a.as_mut(), |parts| {
+                parts.smart_object = Some(embedded(valid.clone()))
+            });
             a
         }],
     );
@@ -1302,17 +1320,15 @@ fn disabled_smart_filter_matches_no_filter() {
     );
     let mut disabled = plain.clone();
     pictura_codec::attach_pictura_raw_filter(&mut disabled, &settings).expect("filter attaches");
-    pictura_codec::edit_layer(disabled.as_mut(), |parts| { parts.smart_object.as_mut().unwrap().smart_filters[0].enabled = false });
+    pictura_codec::edit_layer(disabled.as_mut(), |parts| {
+        parts.smart_object.as_mut().unwrap().smart_filters[0].enabled = false
+    });
 
     // Composite equality alone cannot distinguish "the chain skipped a disabled
     // filter" from "there is no chain": both fall back to the unfiltered source.
     // Assert the typed and render outcomes explicitly.
     assert!(
-        plain
-            .smart_object()
-            .unwrap()
-            .smart_filters
-            .is_empty(),
+        plain.smart_object().unwrap().smart_filters.is_empty(),
         "the plain layer carries no filter"
     );
     let so = disabled.smart_object().unwrap();

@@ -594,7 +594,10 @@ impl PictureViewRust {
                     self.active_path = active;
                     Presentation::notify()
                 }
-                PathRestore::pictura_codec::layer_from_parts(pictura_core::LayerParts { target, subpaths }) => {
+                PathRestore::pictura_codec::layer_from_parts(pictura_core::LayerParts {
+                    target,
+                    subpaths,
+                }) => {
                     let (width, height) = (doc.width, doc.height);
                     if let Some(layer) = pictura_render::resolve_path_mut(doc, &target) {
                         pictura_render::set_layer_shape_paths(layer, &subpaths, width, height);

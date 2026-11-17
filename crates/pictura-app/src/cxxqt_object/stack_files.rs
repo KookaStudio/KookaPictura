@@ -267,7 +267,10 @@ mod tests {
     fn no_smart_object_keeps_layers() {
         let doc = build_document(&two_images(), false, false);
         assert_eq!(doc.layers.len(), 2);
-        assert!(doc.layers.iter().all(|layer| layer.smart_object().is_none()));
+        assert!(doc
+            .layers
+            .iter()
+            .all(|layer| layer.smart_object().is_none()));
     }
 
     #[test]

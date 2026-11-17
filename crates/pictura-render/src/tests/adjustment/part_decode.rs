@@ -78,7 +78,10 @@ fn solid_fill_decodes_both_payload_forms() {
 
     // A non-4-byte, non-descriptor payload is a no-op.
     for payload in [vec![], vec![1, 2, 3], vec![1, 2, 3, 4, 5]] {
-        assert_eq!(pictura_codec::decode_fill(&adjdata(*b"SoCo", payload)), None);
+        assert_eq!(
+            pictura_codec::decode_fill(&adjdata(*b"SoCo", payload)),
+            None
+        );
     }
     // A descriptor missing `Clr ` is a no-op.
     let no_clr = write_descriptor(&desc_object("", b"SoCo", vec![]));
@@ -100,7 +103,10 @@ fn solid_fill_decodes_both_payload_forms() {
             ),
         )],
     ));
-    assert_eq!(pictura_codec::decode_fill(&adjdata(*b"SoCo", wrong_type)), None);
+    assert_eq!(
+        pictura_codec::decode_fill(&adjdata(*b"SoCo", wrong_type)),
+        None
+    );
     // A non-finite component is a no-op.
     let non_finite = write_descriptor(&desc_object(
         "",
@@ -118,7 +124,10 @@ fn solid_fill_decodes_both_payload_forms() {
             ),
         )],
     ));
-    assert_eq!(pictura_codec::decode_fill(&adjdata(*b"SoCo", non_finite)), None);
+    assert_eq!(
+        pictura_codec::decode_fill(&adjdata(*b"SoCo", non_finite)),
+        None
+    );
 }
 
 #[test]

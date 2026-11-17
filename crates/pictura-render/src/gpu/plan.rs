@@ -167,7 +167,8 @@ fn plan_layer<'a>(layer: &'a Layer, doc: &Document, region: Option<PsdRect>) -> 
                 Body::Decline(GpuError::UnsupportedAdjustment)
             }
         }
-        ContentRoute::Fill(_) => crate::fill::fill_source(layer, doc).map(Body::Fill)
+        ContentRoute::Fill(_) => crate::fill::fill_source(layer, doc)
+            .map(Body::Fill)
             .unwrap_or(Body::Decline(GpuError::UnsupportedAdjustment)),
         ContentRoute::UndecodedAdjustment | ContentRoute::UndecodedVectorFill => {
             Body::Decline(GpuError::UnsupportedAdjustment)
@@ -264,8 +265,11 @@ fn plan_clip_member(layer: &Layer, doc: &Document) -> Result<(), GpuError> {
             }
         }
         ContentRoute::Fill(_) => {
-            if layer.rect.width() > 0 && layer.rect.height() > 0 { Ok(()) }
-            else { decline(GpuError::UnsupportedAdjustment) }
+            if layer.rect.width() > 0 && layer.rect.height() > 0 {
+                Ok(())
+            } else {
+                decline(GpuError::UnsupportedAdjustment)
+            }
         }
         ContentRoute::UndecodedAdjustment | ContentRoute::UndecodedVectorFill => {
             decline(GpuError::UnsupportedAdjustment)

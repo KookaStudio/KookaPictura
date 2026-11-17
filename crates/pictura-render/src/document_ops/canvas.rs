@@ -139,7 +139,11 @@ pub fn extend_background(
         right: doc.width as i32,
     };
     let gray = doc.mode == pictura_core::ColorMode::Grayscale;
-    let Some(layer) = doc.layers.iter_mut().find(|l| l.background && !l.is_group()) else {
+    let Some(layer) = doc
+        .layers
+        .iter_mut()
+        .find(|l| l.background && !l.is_group())
+    else {
         return Ok(false);
     };
     if layer.rect == canvas {
@@ -192,7 +196,11 @@ pub(super) fn extend_background_dense(doc: &mut pictura_core::Document, color: [
         right: doc.width as i32,
     };
     let gray = doc.mode == pictura_core::ColorMode::Grayscale;
-    let Some(layer) = doc.layers.iter_mut().find(|l| l.background && !l.is_group()) else {
+    let Some(layer) = doc
+        .layers
+        .iter_mut()
+        .find(|l| l.background && !l.is_group())
+    else {
         return false;
     };
     if layer.rect == canvas {

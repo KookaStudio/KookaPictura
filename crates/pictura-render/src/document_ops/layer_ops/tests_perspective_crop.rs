@@ -166,10 +166,12 @@ fn masks_and_extra_channels_warp_with_the_pixels() {
 #[test]
 fn live_type_and_high_depth_refuse() {
     let mut d = doc(8, 8, 10);
-    pictura_codec::edit_layer(d.layers[0].as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-        key: *b"TySh",
-        data: Vec::new().into(),
-    }) });
+    pictura_codec::edit_layer(d.layers[0].as_mut(), |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"TySh",
+            data: Vec::new().into(),
+        })
+    });
     assert!(perspective_crop_refusal(&d).is_some());
     let before = d.clone();
     assert!(!perspective_crop(&mut d, canvas(8, 8)));

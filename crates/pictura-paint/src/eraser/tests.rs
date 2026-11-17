@@ -20,23 +20,26 @@ fn doc(background: bool) -> Document {
     } else {
         &[(0, 0), (1, 1), (2, 2), (-1, 3)]
     };
-    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_core::Layer::from_parts(pictura_core::LayerParts {
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: h,
-            right: w,
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_core::Layer::from_parts(
+        pictura_core::LayerParts {
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: h,
+                right: w,
+            },
+            channels: ids
+                .iter()
+                .map(|&(id, c)| Channel {
+                    id,
+                    data: vec![GREY[c]; (w * h) as usize].into(),
+                })
+                .collect(),
+            background,
+            ..Default::default()
         },
-        channels: ids
-            .iter()
-            .map(|&(id, c)| Channel {
-                id,
-                data: vec![GREY[c]; (w * h) as usize].into(),
-            })
-            .collect(),
-        background,
-        ..Default::default()
-    }, pictura_core::LayerContent::Pixel)]);
+        pictura_core::LayerContent::Pixel,
+    )]);
     doc
 }
 
@@ -383,23 +386,26 @@ fn uniform_tiled_doc(background: bool) -> Document {
     } else {
         &[(0, 0), (1, 1), (2, 2), (-1, 3)]
     };
-    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_core::Layer::from_parts(pictura_core::LayerParts {
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: h as i32,
-            right: w as i32,
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_core::Layer::from_parts(
+        pictura_core::LayerParts {
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: h as i32,
+                right: w as i32,
+            },
+            channels: ids
+                .iter()
+                .map(|&(id, c)| Channel {
+                    id,
+                    data: Plane::filled(w, h, 1, GREY[c]),
+                })
+                .collect(),
+            background,
+            ..Default::default()
         },
-        channels: ids
-            .iter()
-            .map(|&(id, c)| Channel {
-                id,
-                data: Plane::filled(w, h, 1, GREY[c]),
-            })
-            .collect(),
-        background,
-        ..Default::default()
-    }, pictura_core::LayerContent::Pixel)]);
+        pictura_core::LayerContent::Pixel,
+    )]);
     doc
 }
 

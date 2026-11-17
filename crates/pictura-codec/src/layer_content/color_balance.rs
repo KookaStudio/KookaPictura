@@ -6,8 +6,8 @@
 //! shadows, midtones, highlights order, a `u8` luminosity flag, and padding to a
 //! 4-byte boundary.
 
-use pictura_core::{Adjustment, ColorBalanceParams};
 use pictura_core::AdjustmentData;
+use pictura_core::{Adjustment, ColorBalanceParams};
 
 use super::basic::be_i16;
 

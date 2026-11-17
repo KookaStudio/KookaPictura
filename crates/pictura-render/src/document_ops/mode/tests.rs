@@ -193,11 +193,13 @@ fn indexed_flattens_a_layered_document_and_discards_hidden_layers() {
     hidden.visible = false;
     let _ = doc.layers.push(hidden);
     {
-        let _ = doc.layers.push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
-            name: "group".into(),
-            is_group: true,
-            ..Default::default()
-        }));
+        let _ = doc
+            .layers
+            .push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
+                name: "group".into(),
+                is_group: true,
+                ..Default::default()
+            }));
     };
     convert_to_indexed(
         &mut doc,

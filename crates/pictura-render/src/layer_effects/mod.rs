@@ -87,7 +87,6 @@
 //! when present, and the legacy block supplies the mapped set only when `lfx2`
 //! is absent, so the two are never combined or double-applied.
 
-
 use pictura_codec::DescValue;
 use pictura_core::mask_ops::{self, Border};
 use pictura_core::{BlendMode, Document, Layer, PixelBuffer, PsdRect};
@@ -1025,7 +1024,9 @@ pub(crate) fn composite_bevel_emboss_for_test(
 
 /// A layer whose content is a destructive adjustment (not fill content) has no
 /// matte; its effect is deferred.
-pub(crate) fn is_destructive_adjustment(layer: &Layer) -> bool { layer.adjustment_parameters().is_some() }
+pub(crate) fn is_destructive_adjustment(layer: &Layer) -> bool {
+    layer.adjustment_parameters().is_some()
+}
 
 /// The effect `Noise` grain at canvas `(x, y)`: a factor on the effect's alpha
 /// that is 1 at 0 % and breaks the effect into a fixed speckle as it rises.

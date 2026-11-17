@@ -69,7 +69,8 @@ pub fn grow_layer_to(
     // The 8-bit planes are tiled: the grown area is empty tiles, and only the
     // tiles the old content lands on are written (#1213). The native store
     // stays flat and pays the whole grown area.
-    let tiled_planes = layer.channels()
+    let tiled_planes = layer
+        .channels()
         .iter()
         .filter(|channel| channel.data.len() == old_n)
         .count() as u64;
@@ -332,10 +333,13 @@ mod tests {
     }
 
     fn layer_at(rect: PsdRect, w: usize, h: usize) -> Layer {
-        let mut layer = crate::Layer::from_parts(crate::LayerParts {
-            rect,
-            ..Default::default()
-        }, crate::LayerContent::Pixel);
+        let mut layer = crate::Layer::from_parts(
+            crate::LayerParts {
+                rect,
+                ..Default::default()
+            },
+            crate::LayerContent::Pixel,
+        );
         for id in [0, 1, 2, -1] {
             layer.channels_mut().push(Channel {
                 id,
@@ -409,7 +413,10 @@ mod tests {
         let layer = layer_at(rect(0, 0, 2, 2), 2, 2);
         let content = layer.content().clone();
         let mut parts = crate::LayerParts::from(layer);
-        parts.raw_channels.push(crate::RawChannel { id: 7, data: Plane::from(vec![0u8,0,0]) });
+        parts.raw_channels.push(crate::RawChannel {
+            id: 7,
+            data: Plane::from(vec![0u8, 0, 0]),
+        });
         let mut layer = Layer::from_parts(parts, content);
         assert!(grow_layer_to(&mut layer, rect(0, 0, 3, 3), "a test").unwrap());
         assert!(layer.raw_channels().is_empty());

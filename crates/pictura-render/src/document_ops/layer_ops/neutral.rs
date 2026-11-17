@@ -362,8 +362,11 @@ mod tests {
         type Tweak = (&'static str, fn(&mut Layer));
         let tweaks: Vec<Tweak> = vec![
             ("translucent", |l| {
-                l.channels_mut().iter_mut().find(|c| c.id == -1).unwrap().data =
-                    vec![200; (W * H) as usize].into();
+                l.channels_mut()
+                    .iter_mut()
+                    .find(|c| c.id == -1)
+                    .unwrap()
+                    .data = vec![200; (W * H) as usize].into();
             }),
             ("one soft pixel", |l| {
                 l.channels_mut()
@@ -380,9 +383,12 @@ mod tests {
             ("clipped", |l| l.clipping = true),
             ("knockout", |l| l.knockout = Knockout::Shallow),
             ("effects", |l| {
-                pictura_codec::edit_layer(l, |parts| parts.extra_blocks.push(pictura_core::LayerBlock {
-                    key: *b"lfx2", ..Default::default()
-                }))
+                pictura_codec::edit_layer(l, |parts| {
+                    parts.extra_blocks.push(pictura_core::LayerBlock {
+                        key: *b"lfx2",
+                        ..Default::default()
+                    })
+                })
             }),
             ("no alpha, not a Background", |l| {
                 l.channels_mut().retain(|c| c.id != -1)
@@ -417,10 +423,12 @@ mod tests {
     #[test]
     fn metadata_blocks_do_not_exclude_a_duplicate() {
         let mut base = pixel("base", 90, 255);
-        pictura_codec::edit_layer(base.as_mut(), |parts| { parts.extra_blocks.push(pictura_core::LayerBlock {
-            key: *b"luni",
-            ..Default::default()
-        }) });
+        pictura_codec::edit_layer(base.as_mut(), |parts| {
+            parts.extra_blocks.push(pictura_core::LayerBlock {
+                key: *b"luni",
+                ..Default::default()
+            })
+        });
         let mut d = doc(vec![base]);
         let created = crate::duplicate_paths(&mut d, &["0"]);
         assert!(duplicate_is_content_neutral(&d, &created[0]));
@@ -679,7 +687,9 @@ mod tests {
                     super::super::create::transparent_layer(W, H, "new"),
                     pictura_codec::layer_from_parts(pictura_core::LayerParts {
                         clipping: true,
-                        ..pictura_core::LayerParts::from(super::super::create::transparent_layer(W, H, "new clip"))
+                        ..pictura_core::LayerParts::from(super::super::create::transparent_layer(
+                            W, H, "new clip",
+                        ))
                     }),
                     super::super::create::empty_group("new group"),
                 ];

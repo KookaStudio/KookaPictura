@@ -393,12 +393,14 @@ mod tests {
             bottom: 40,
             right: 80,
         };
-        layer.set_channels((0..3)
-            .map(|id| Channel {
-                id,
-                data: vec![10u8; 80 * 40].into(),
-            })
-            .collect());
+        layer.set_channels(
+            (0..3)
+                .map(|id| Channel {
+                    id,
+                    data: vec![10u8; 80 * 40].into(),
+                })
+                .collect(),
+        );
         let mut doc = Document::new(80, 40, ColorMode::Rgb, BitDepth::Eight);
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         let buffer = preview_pictura_raw(&doc, "0", &PicturaRawSettings::default(), 16).unwrap();
@@ -442,25 +444,30 @@ mod tests {
         assert!(!apply_pictura_raw_destructive(&mut missing, "9", &settings));
 
         let mut group = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
-        group.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
-            name: "g".into(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 2,
-                right: 2,
-            },
-            is_group: true,
-            ..Default::default()
-        })]);
+        group.layers =
+            pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+                pictura_core::LayerParts {
+                    name: "g".into(),
+                    rect: PsdRect {
+                        top: 0,
+                        left: 0,
+                        bottom: 2,
+                        right: 2,
+                    },
+                    is_group: true,
+                    ..Default::default()
+                },
+            )]);
         assert!(!apply_pictura_raw_destructive(&mut group, "0", &settings));
 
         let mut smart = destructive_doc(None);
-        pictura_codec::edit_layer(smart.layers[0].as_mut(), |parts| { parts.smart_object = Some({
-            let mut so = SmartObject::default();
-            so.kind = SmartObjectKind::Embedded;
-            so
-        }) });
+        pictura_codec::edit_layer(smart.layers[0].as_mut(), |parts| {
+            parts.smart_object = Some({
+                let mut so = SmartObject::default();
+                so.kind = SmartObjectKind::Embedded;
+                so
+            })
+        });
         assert!(!apply_pictura_raw_destructive(&mut smart, "0", &settings));
 
         let mut locked = destructive_doc(None);
@@ -472,10 +479,12 @@ mod tests {
         assert!(!apply_pictura_raw_destructive(&mut cmyk, "0", &settings));
 
         let mut adjustment = destructive_doc(None);
-        pictura_codec::edit_layer(adjustment.layers[0].as_mut(), |parts| { parts.adjustment = Some(AdjustmentData {
-            key: *b"adj?",
-            data: Vec::new().into(),
-        }) });
+        pictura_codec::edit_layer(adjustment.layers[0].as_mut(), |parts| {
+            parts.adjustment = Some(AdjustmentData {
+                key: *b"adj?",
+                data: Vec::new().into(),
+            })
+        });
         assert!(!apply_pictura_raw_destructive(
             &mut adjustment,
             "0",
@@ -513,20 +522,22 @@ mod tests {
     #[test]
     fn destructive_apply_handles_grayscale() {
         let mut doc = Document::new(2, 2, ColorMode::Grayscale, BitDepth::Eight);
-        doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
-            name: "L".into(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 2,
-                right: 2,
+        doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+            pictura_core::LayerParts {
+                name: "L".into(),
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 2,
+                    right: 2,
+                },
+                channels: vec![Channel {
+                    id: 0,
+                    data: vec![128u8; 4].into(),
+                }],
+                ..Default::default()
             },
-            channels: vec![Channel {
-                id: 0,
-                data: vec![128u8; 4].into(),
-            }],
-            ..Default::default()
-        })]);
+        )]);
         assert!(apply_pictura_raw_destructive(
             &mut doc,
             "0",
@@ -534,7 +545,11 @@ mod tests {
         ));
         assert_ne!(channel_of(&doc, 0), vec![128u8; 4]);
         assert_eq!(
-            doc.layers[0].channels().iter().filter(|c| c.id >= 0).count(),
+            doc.layers[0]
+                .channels()
+                .iter()
+                .filter(|c| c.id >= 0)
+                .count(),
             1,
             "no color channels added"
         );

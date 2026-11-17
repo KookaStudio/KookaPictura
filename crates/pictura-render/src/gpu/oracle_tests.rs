@@ -141,19 +141,21 @@ fn the_region_estimate_counts_every_upload() {
     let plans = plan::plan_stack(&doc, None).expect("plannable");
     assert_eq!(region_host_bytes(&plans, SIZE, SIZE), 64 * (16 + 2 * 5));
     let mut grouped = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
-    grouped.layers = LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
-        name: "group".into(),
-        is_group: true,
-        visible: true,
-        opacity: 255,
-        fill: 255,
-        blend: BlendMode::Normal,
-        children: LayerStack::from_layers(vec![
-            layer("a", BlendMode::Normal),
-            layer("b", BlendMode::Normal),
-        ]),
-        ..Default::default()
-    })]);
+    grouped.layers = LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            name: "group".into(),
+            is_group: true,
+            visible: true,
+            opacity: 255,
+            fill: 255,
+            blend: BlendMode::Normal,
+            children: LayerStack::from_layers(vec![
+                layer("a", BlendMode::Normal),
+                layer("b", BlendMode::Normal),
+            ]),
+            ..Default::default()
+        },
+    )]);
     let plans = plan::plan_stack(&grouped, None).expect("plannable");
     let per_pixel = region_host_bytes(&plans, 1, 1) - 16;
     assert!(per_pixel >= 2 * 5, "both children counted: {per_pixel}");

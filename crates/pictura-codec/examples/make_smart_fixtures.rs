@@ -254,17 +254,19 @@ fn smoke_smart_layer(payload: Vec<u8>) -> Layer {
         [230, 120, 40],
         255,
     );
-    crate::edit_layer(layer.as_mut(), |parts| { parts.smart_object = Some(
-        {
-            let mut so = SmartObject::default();
-            so.kind = SmartObjectKind::Embedded;
-            so.filename = EMBEDDED_FILENAME.to_string();
-            so.filetype = *b"8BPB";
-            so.creator = *b"8BIM";
-            so
-        }
-        .with_payload(payload),
-    ) });
+    crate::edit_layer(layer.as_mut(), |parts| {
+        parts.smart_object = Some(
+            {
+                let mut so = SmartObject::default();
+                so.kind = SmartObjectKind::Embedded;
+                so.filename = EMBEDDED_FILENAME.to_string();
+                so.filetype = *b"8BPB";
+                so.creator = *b"8BIM";
+                so
+            }
+            .with_payload(payload),
+        )
+    });
     layer
 }
 

@@ -53,7 +53,9 @@ pub fn apply_visibility(doc: &mut Document, paths: &[&str]) -> usize {
                 layer.visible = want;
                 changed += 1;
             }
-            if let Some(children) = layer.children_mut() { changed += walk(children, &path, visible); }
+            if let Some(children) = layer.children_mut() {
+                changed += walk(children, &path, visible);
+            }
         }
         changed
     }
@@ -296,7 +298,9 @@ pub fn duplicate_paths(doc: &mut Document, paths: &[&str]) -> Vec<String> {
             let mut copy = resolve_path(doc, &path)?.clone();
             copy.name = format!("{} copy", copy.name);
             pictura_core::layer_comp::clear_layer_id(&mut copy);
-            pictura_codec::edit_layer(copy.as_mut(), |parts| { parts.extra_blocks.retain(|block| block.key != *b"shmd") });
+            pictura_codec::edit_layer(copy.as_mut(), |parts| {
+                parts.extra_blocks.retain(|block| block.key != *b"shmd")
+            });
             if copy.background {
                 release_background(&mut copy);
             }

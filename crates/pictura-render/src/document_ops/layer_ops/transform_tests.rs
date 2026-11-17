@@ -98,10 +98,12 @@ fn scale_two_doubles_rect_and_planes() {
 #[test]
 fn high_depth_transform_move_keeps_and_scale_resamples_the_native_store() {
     let mut layer = pixel_layer(4, 4);
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.raw_channels = vec![RawChannel {
-        id: 3,
-        data: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].into(),
-    }] });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.raw_channels = vec![RawChannel {
+            id: 3,
+            data: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].into(),
+        }]
+    });
     layer.source_channels = Some(SourceChannels {
         depth: BitDepth::Sixteen,
         rect: rect(4, 4),

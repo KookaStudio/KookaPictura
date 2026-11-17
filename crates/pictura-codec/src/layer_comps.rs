@@ -334,7 +334,9 @@ pub(crate) fn resolve(doc: &mut Document) {
                     }
                 }
             }
-            if let Some(children) = layer.children_mut() { apply_anchors(children, anchors); }
+            if let Some(children) = layer.children_mut() {
+                apply_anchors(children, anchors);
+            }
         }
     }
     let layers = doc.layers.clone();

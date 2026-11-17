@@ -7,9 +7,7 @@ use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString, QStringList};
 use pictura_core::{BlendMode, Document, FillContent, Layer, LayerKind, PsdRect};
-use pictura_render::{
-    GradientFillParams, GradientKind, GradientStop, PatternFillParams,
-};
+use pictura_render::{GradientFillParams, GradientKind, GradientStop, PatternFillParams};
 
 pub(super) fn layer<'a>(doc: &'a Document, path: &str) -> Option<&'a Layer> {
     pictura_render::resolve_path(doc, path)
@@ -17,7 +15,9 @@ pub(super) fn layer<'a>(doc: &'a Document, path: &str) -> Option<&'a Layer> {
 
 pub(super) fn fill_adjustment(doc: &Document, path: &str) -> Option<FillContent> {
     let layer = layer(doc, path)?;
-    if layer.kind() != LayerKind::Fill { return None; }
+    if layer.kind() != LayerKind::Fill {
+        return None;
+    }
     layer.fill_content().cloned()
 }
 
@@ -218,12 +218,7 @@ pub(super) fn set_layer_fill_color(
         color as u8,
         (color >> 24) as u8,
     ];
-    set_fill(
-        view,
-        path,
-        "Solid Color Fill",
-        FillContent::Solid(rgba),
-    )
+    set_fill(view, path, "Solid Color Fill", FillContent::Solid(rgba))
 }
 
 pub(super) fn set_layer_fill_gradient(
@@ -234,12 +229,7 @@ pub(super) fn set_layer_fill_gradient(
     let Some(params) = parse_gradient(&payload.to_string()) else {
         return false;
     };
-    set_fill(
-        view,
-        path,
-        "Gradient Fill",
-        FillContent::Gradient(params),
-    )
+    set_fill(view, path, "Gradient Fill", FillContent::Gradient(params))
 }
 
 pub(super) fn set_layer_fill_pattern(

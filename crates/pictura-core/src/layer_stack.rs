@@ -193,7 +193,9 @@ impl LayerStack {
         if count_backgrounds_in(&node) > 0 && self.count_backgrounds() > 0 {
             return Err(StackError::SecondBackground);
         }
-        if let Some(children) = node.children_mut() { children.normalize_tree(); }
+        if let Some(children) = node.children_mut() {
+            children.normalize_tree();
+        }
         let layers = self.container_mut(parent).ok_or(StackError::NoSuchPath)?;
         if index > layers.len() {
             return Err(StackError::NoSuchPath);
@@ -399,7 +401,9 @@ impl LayerStack {
         }
 
         for node in &mut replacement {
-            if let Some(children) = node.children_mut() { children.normalize_tree(); }
+            if let Some(children) = node.children_mut() {
+                children.normalize_tree();
+            }
         }
         let Some(layers) = self.container_mut(post_parent) else {
             *self = backup;
@@ -541,7 +545,9 @@ impl LayerStack {
             } else if !was_clipped {
                 release_run = false;
             }
-            if let Some(children) = layer.children_mut() { removed_children += children.retain_recursive(predicate); }
+            if let Some(children) = layer.children_mut() {
+                removed_children += children.retain_recursive(predicate);
+            }
             kept.push(layer);
         }
         self.0 = Arc::new(kept);
@@ -660,7 +666,9 @@ impl LayerStack {
 
     fn normalize_tree(&mut self) {
         for layer in self.vec_mut() {
-            if let Some(children) = layer.children_mut() { children.normalize_tree(); }
+            if let Some(children) = layer.children_mut() {
+                children.normalize_tree();
+            }
         }
         self.normalize(None);
     }

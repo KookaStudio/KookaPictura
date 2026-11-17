@@ -1,9 +1,9 @@
 //! The block an Image > Adjustments dialog opens on: each kind at CS6's dialog
 //! defaults, in the same encoding an adjustment layer stores.
 
-use pictura_core::{GradientMapParams, GradientStop, SelectiveColorMethod, SelectiveRange};
 use crate::DescValue;
 use pictura_core::AdjustmentData;
+use pictura_core::{GradientMapParams, GradientStop, SelectiveColorMethod, SelectiveRange};
 
 use super::{
     encode_brightness_contrast, encode_channel_mixer, encode_channel_mixer_ink,
@@ -168,4 +168,3 @@ pub fn default_adjustment_block_in_mode(
         _ => return None,
     })
 }
-

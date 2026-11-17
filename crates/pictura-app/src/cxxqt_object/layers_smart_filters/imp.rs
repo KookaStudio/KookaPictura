@@ -71,10 +71,7 @@ pub(super) fn set_smart_filters_enabled(doc: &mut Document, path: &str, enabled:
     let Some(layer) = pictura_render::resolve_path_mut(doc, base_path(path)) else {
         return false;
     };
-    let Some(current) = layer
-        .smart_object()
-        .map(|so| so.smart_filters_enabled)
-    else {
+    let Some(current) = layer.smart_object().map(|so| so.smart_filters_enabled) else {
         return false;
     };
     if current == enabled {

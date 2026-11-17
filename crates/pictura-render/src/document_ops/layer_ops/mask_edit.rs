@@ -59,16 +59,18 @@ pub fn mask_document_coverage(doc: &Document, path: &str) -> Option<MaskDocument
     let mut document = Document::new(0, 0, ColorMode::Grayscale, BitDepth::Eight);
     document.width = doc.width;
     document.height = doc.height;
-    document.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
-        name: "Mask".into(),
-        rect,
-        channels: vec![Channel {
-            id: 0,
-            data: coverage,
-        }],
-        lock: LockFlags::default().with(LockFlags::TRANSPARENCY, true),
-        ..Default::default()
-    })]);
+    document.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            name: "Mask".into(),
+            rect,
+            channels: vec![Channel {
+                id: 0,
+                data: coverage,
+            }],
+            lock: LockFlags::default().with(LockFlags::TRANSPARENCY, true),
+            ..Default::default()
+        },
+    )]);
     Some(MaskDocument { document, rect })
 }
 
@@ -341,7 +343,9 @@ mod tests {
         assert_eq!(layer.channels()[0].data[2], 255);
         let source = resolve_path(&doc, "0").unwrap().mask.as_ref().unwrap();
         assert!(
-            layer.channels()[0].data.shares(source.data.as_ref().unwrap()),
+            layer.channels()[0]
+                .data
+                .shares(source.data.as_ref().unwrap()),
             "the stroke start shares the mask's plane instead of copying it"
         );
         assert!(mask.document.composite.data.is_empty(), "no composite");

@@ -954,23 +954,26 @@ fn a_windowed_stroke_equals_the_whole_document_stroke() {
 fn a_bucket_fills_an_empty_layer() {
     use pictura_core::{BitDepth, ColorMode};
     let mut doc = Document::new(16, 16, ColorMode::Rgb, BitDepth::Eight);
-    let _ = doc.layers.push(pictura_core::Layer::from_parts(pictura_core::LayerParts {
-        name: "empty".into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 0,
-            right: 0,
+    let _ = doc.layers.push(pictura_core::Layer::from_parts(
+        pictura_core::LayerParts {
+            name: "empty".into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 0,
+                right: 0,
+            },
+            channels: [0i16, 1, 2, -1]
+                .into_iter()
+                .map(|id| pictura_core::Channel {
+                    id,
+                    data: Vec::new().into(),
+                })
+                .collect(),
+            ..Default::default()
         },
-        channels: [0i16, 1, 2, -1]
-            .into_iter()
-            .map(|id| pictura_core::Channel {
-                id,
-                data: Vec::new().into(),
-            })
-            .collect(),
-        ..Default::default()
-    }, pictura_core::LayerContent::Pixel));
+        pictura_core::LayerContent::Pixel,
+    ));
     let bounds = PsdRect {
         top: 4,
         left: 4,
@@ -1005,17 +1008,20 @@ fn a_whole_canvas_bucket_writes_uniform_tiles() {
     use pictura_core::{BitDepth, ColorMode, TileState};
     let (w, h) = (600u32, 520u32);
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-    let _ = doc.layers.push(pictura_core::Layer::from_parts(pictura_core::LayerParts {
-        name: "empty".into(),
-        channels: [0i16, 1, 2, -1]
-            .into_iter()
-            .map(|id| pictura_core::Channel {
-                id,
-                data: Vec::new().into(),
-            })
-            .collect(),
-        ..Default::default()
-    }, pictura_core::LayerContent::Pixel));
+    let _ = doc.layers.push(pictura_core::Layer::from_parts(
+        pictura_core::LayerParts {
+            name: "empty".into(),
+            channels: [0i16, 1, 2, -1]
+                .into_iter()
+                .map(|id| pictura_core::Channel {
+                    id,
+                    data: Vec::new().into(),
+                })
+                .collect(),
+            ..Default::default()
+        },
+        pictura_core::LayerContent::Pixel,
+    ));
     let all = PsdRect {
         top: 0,
         left: 0,
@@ -1116,7 +1122,11 @@ fn uniform_tiles_are_filled_without_allocating() {
     let (fast, fast_dirty) = run(&tiled);
     let (slow, slow_dirty) = run(&flat);
     assert_eq!(fast_dirty, slow_dirty);
-    for (a, b) in fast.layers[0].channels().iter().zip(slow.layers[0].channels()) {
+    for (a, b) in fast.layers[0]
+        .channels()
+        .iter()
+        .zip(slow.layers[0].channels())
+    {
         assert!(a.data == b.data, "channel {}", a.id);
         // Tile (1, 1) lies inside the marquee whole.
         let inner = (w as usize).div_ceil(256) + 1;

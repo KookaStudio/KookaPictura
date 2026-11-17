@@ -11,18 +11,22 @@
 //! custom-stop approximation. Raise these one at a time when a fixture shows a
 //! real gap.
 
-pub use pictura_codec::layer_content::{decode_gradient_fill, decode_vector_fill, decode_pattern_fill, gradient_params_from_desc, pattern_params_from_desc, pattern_params_from_desc_with_link, encode_gradient_fill, encode_gradient_fill_params, encode_pattern_fill};
-use pictura_core::FillContent;
-use pictura_adjust::{
-    GradientFillParams, GradientKind, GradientStop, PatternFillParams,
+use pictura_adjust::{GradientFillParams, GradientKind, GradientStop, PatternFillParams};
+pub use pictura_codec::layer_content::{
+    decode_gradient_fill, decode_pattern_fill, decode_vector_fill, encode_gradient_fill,
+    encode_gradient_fill_params, encode_pattern_fill, gradient_params_from_desc,
+    pattern_params_from_desc, pattern_params_from_desc_with_link,
 };
 use pictura_codec::PatternPixels;
+use pictura_core::FillContent;
 use pictura_core::{Document, Layer, PixelBuffer};
 
 use crate::composite::{blend_into_ctx, Canvas};
 use crate::composite_blend::{BlendCtx, BlendOverride};
 
-pub(crate) fn is_pattern_fill(layer: &Layer) -> bool { matches!(layer.fill_content(), Some(FillContent::Pattern(_))) }
+pub(crate) fn is_pattern_fill(layer: &Layer) -> bool {
+    matches!(layer.fill_content(), Some(FillContent::Pattern(_)))
+}
 
 /// The layer's decoded fill content: its modeled adjustment block first, else
 /// its preserved `vscg` vector fill. Shared by the compositor dispatch and the
@@ -32,7 +36,9 @@ pub(crate) fn is_pattern_fill(layer: &Layer) -> bool { matches!(layer.fill_conte
 /// The choice is strict: an adjustment block is consulted on its own, so an
 /// undecodable key is a no-op and never falls through to the `vscg` fill; the
 /// `vscg` block is decoded only when the layer has no adjustment block.
-pub fn decode_layer_fill(layer: &Layer) -> Option<FillContent> { layer.fill_content().cloned() }
+pub fn decode_layer_fill(layer: &Layer) -> Option<FillContent> {
+    layer.fill_content().cloned()
+}
 
 pub fn gradient_rgba(w: i32, h: i32, params: &GradientFillParams) -> Vec<[u8; 4]> {
     gradient_rgba_region(w, h, (0, 0, w.max(0), h.max(0)), params)
@@ -615,7 +621,12 @@ mod tests {
         let layer = doc
             .layers
             .iter()
-            .find(|layer| matches!(decode_layer_fill(layer), Some(pictura_core::FillContent::Pattern(_))))
+            .find(|layer| {
+                matches!(
+                    decode_layer_fill(layer),
+                    Some(pictura_core::FillContent::Pattern(_))
+                )
+            })
             .expect("a pattern fill layer");
         let cached = fill_source(layer, &doc).expect("the fill rasterizes");
         assert!(!cached.retain, "a pattern fill is not retained");
@@ -657,7 +668,12 @@ mod tests {
         let mut layer = doc
             .layers
             .iter()
-            .find(|layer| matches!(decode_layer_fill(layer), Some(pictura_core::FillContent::Pattern(_))))
+            .find(|layer| {
+                matches!(
+                    decode_layer_fill(layer),
+                    Some(pictura_core::FillContent::Pattern(_))
+                )
+            })
             .expect("a pattern fill layer")
             .clone();
         let Some(pictura_core::FillContent::Pattern(mut params)) = decode_layer_fill(&layer) else {
@@ -665,7 +681,9 @@ mod tests {
         };
         let first = fill_source(&layer, &doc).expect("first raster");
         params.pattern_id = "pictura-changed".into();
-        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.adjustment = Some(encode_pattern_fill(&params)) });
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.adjustment = Some(encode_pattern_fill(&params))
+        });
         let record = pictura_codec::encode_rgb_pattern(
             "changed",
             "pictura-changed",
@@ -685,11 +703,21 @@ mod tests {
     }
 }
 
-pub(crate) fn composite_fill(canvas: &mut Canvas, layer: &Layer, doc: &Document,
-    fill: &FillContent, ctx: &BlendCtx<'_>, over: Option<&BlendOverride>) {
+pub(crate) fn composite_fill(
+    canvas: &mut Canvas,
+    layer: &Layer,
+    doc: &Document,
+    fill: &FillContent,
+    ctx: &BlendCtx<'_>,
+    over: Option<&BlendOverride>,
+) {
     match fill {
         FillContent::Solid(rgba) => composite_solid_fill(canvas, layer, doc, *rgba, ctx, over),
-        FillContent::Gradient(params) => composite_gradient_fill(canvas, layer, doc, params, ctx, over),
-        FillContent::Pattern(params) => composite_pattern_fill(canvas, layer, doc, params, ctx, over),
+        FillContent::Gradient(params) => {
+            composite_gradient_fill(canvas, layer, doc, params, ctx, over)
+        }
+        FillContent::Pattern(params) => {
+            composite_pattern_fill(canvas, layer, doc, params, ctx, over)
+        }
     }
 }

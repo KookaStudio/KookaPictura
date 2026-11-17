@@ -527,20 +527,22 @@ fn region_deltas_retain_only_changed_tiles() {
 #[test]
 fn every_state_matches_a_reference_copy() {
     let mut doc = doc(200, 130, 5);
-    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
-        name: "paint".into(),
-        rect: pictura_core::PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 130,
-            right: 200,
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            name: "paint".into(),
+            rect: pictura_core::PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 130,
+                right: 200,
+            },
+            channels: vec![Channel {
+                id: 0,
+                data: vec![9u8; 200 * 130].into(),
+            }],
+            ..Default::default()
         },
-        channels: vec![Channel {
-            id: 0,
-            data: vec![9u8; 200 * 130].into(),
-        }],
-        ..Default::default()
-    })]);
+    )]);
 
     let mut history = History::default();
     let mut reference: Vec<Snapshot> = Vec::new();
@@ -808,7 +810,8 @@ fn a_capture_after_a_duplicate_stays_a_delta() {
 
     assert_eq!(history.anchor_count(), anchors, "paint must stay a delta");
     assert_eq!(
-        live.layers[1].channels()[0].data[0], duplicate_byte,
+        live.layers[1].channels()[0].data[0],
+        duplicate_byte,
         "the duplicate keeps its byte after an unrelated layer is painted"
     );
     assert!(matches!(
@@ -822,26 +825,28 @@ fn a_capture_after_a_duplicate_stays_a_delta() {
 #[test]
 fn paint_commit_undo_restores_the_prior_pixels() {
     let mut doc = Document::new(64, 64, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
-        name: "base".into(),
-        rect: pictura_core::PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 64,
-            right: 64,
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            name: "base".into(),
+            rect: pictura_core::PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 64,
+                right: 64,
+            },
+            channels: vec![
+                Channel {
+                    id: 0,
+                    data: vec![10u8; 64 * 64].into(),
+                },
+                Channel {
+                    id: -1,
+                    data: vec![255u8; 64 * 64].into(),
+                },
+            ],
+            ..Default::default()
         },
-        channels: vec![
-            Channel {
-                id: 0,
-                data: vec![10u8; 64 * 64].into(),
-            },
-            Channel {
-                id: -1,
-                data: vec![255u8; 64 * 64].into(),
-            },
-        ],
-        ..Default::default()
-    })]);
+    )]);
     let prior_layer = doc.layers[0].channels()[0].data.clone();
     let prior_composite = doc.composite.data.clone();
 

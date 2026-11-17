@@ -11,8 +11,7 @@ use crate::fill::{fill_planes, Alpha, Pass, Through};
 use crate::stroke::{layer_at, layer_at_mut, parse_layer_path};
 use crate::{PaintMode, Rgba};
 use pictura_core::{
-    layer_pixel_locked, layer_transparency_locked, BitDepth, Document, Layer, PsdRect, Sample,
-    Samples,
+    layer_pixel_locked, layer_transparency_locked, BitDepth, Document, PsdRect, Sample, Samples,
 };
 
 /// Where the layer's pixels live.
@@ -101,11 +100,7 @@ fn fill_at<T: Sample + PartialEq + Send + Sync>(
     let rect = layer.rect;
     let n = (rect.width().max(0) * rect.height().max(0)) as usize;
     // The store's planes, borrowed mutably: the fill holds them at once.
-    let pictura_core::Layer::from_parts(pictura_core::LayerParts {
-        source_channels,
-        channels,
-        ..
-    }, pictura_core::LayerContent::Pixel) = layer;
+    let (channels, source_channels) = layer.channels_and_source_mut();
     let store = source_channels.as_mut()?;
     let mut r: Option<&mut [T]> = None;
     let mut g: Option<&mut [T]> = None;
@@ -311,27 +306,30 @@ pub(crate) mod tests {
         };
         let planes = [red.clone(), green.clone(), blue.clone()];
         let mut doc = Document::new(w as u32, h as u32, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = LayerStack::from_layers(vec![pictura_core::Layer::from_parts(pictura_core::LayerParts {
-            rect,
-            channels: planes
-                .iter()
-                .enumerate()
-                .map(|(i, p)| Channel {
-                    id: i as i16,
-                    data: Samples::U16(p.clone().into()).narrow_to_u8().into(),
-                })
-                .collect(),
-            source_channels: Some(SourceChannels::new(
-                BitDepth::Sixteen,
+        doc.layers = LayerStack::from_layers(vec![pictura_core::Layer::from_parts(
+            pictura_core::LayerParts {
                 rect,
-                vec![
-                    (0, Samples::U16(red.into())),
-                    (1, Samples::U16(green.into())),
-                    (2, Samples::U16(blue.into())),
-                ],
-            )),
-            ..Default::default()
-        }, pictura_core::LayerContent::Pixel)]);
+                channels: planes
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| Channel {
+                        id: i as i16,
+                        data: Samples::U16(p.clone().into()).narrow_to_u8().into(),
+                    })
+                    .collect(),
+                source_channels: Some(SourceChannels::new(
+                    BitDepth::Sixteen,
+                    rect,
+                    vec![
+                        (0, Samples::U16(red.into())),
+                        (1, Samples::U16(green.into())),
+                        (2, Samples::U16(blue.into())),
+                    ],
+                )),
+                ..Default::default()
+            },
+            pictura_core::LayerContent::Pixel,
+        )]);
         doc.source
             .set_native(Some(BitDepth::Sixteen), doc.source.planes().clone())
             .expect("valid source depth");
@@ -349,27 +347,30 @@ pub(crate) mod tests {
         };
         let planes = [red.clone(), green.clone(), blue.clone()];
         let mut doc = Document::new(w as u32, h as u32, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = LayerStack::from_layers(vec![pictura_core::Layer::from_parts(pictura_core::LayerParts {
-            rect,
-            channels: planes
-                .iter()
-                .enumerate()
-                .map(|(i, p)| Channel {
-                    id: i as i16,
-                    data: Samples::F32(p.clone().into()).narrow_to_u8().into(),
-                })
-                .collect(),
-            source_channels: Some(SourceChannels::new(
-                BitDepth::ThirtyTwo,
+        doc.layers = LayerStack::from_layers(vec![pictura_core::Layer::from_parts(
+            pictura_core::LayerParts {
                 rect,
-                vec![
-                    (0, Samples::F32(red.into())),
-                    (1, Samples::F32(green.into())),
-                    (2, Samples::F32(blue.into())),
-                ],
-            )),
-            ..Default::default()
-        }, pictura_core::LayerContent::Pixel)]);
+                channels: planes
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| Channel {
+                        id: i as i16,
+                        data: Samples::F32(p.clone().into()).narrow_to_u8().into(),
+                    })
+                    .collect(),
+                source_channels: Some(SourceChannels::new(
+                    BitDepth::ThirtyTwo,
+                    rect,
+                    vec![
+                        (0, Samples::F32(red.into())),
+                        (1, Samples::F32(green.into())),
+                        (2, Samples::F32(blue.into())),
+                    ],
+                )),
+                ..Default::default()
+            },
+            pictura_core::LayerContent::Pixel,
+        )]);
         doc.source
             .set_native(Some(BitDepth::ThirtyTwo), doc.source.planes().clone())
             .expect("valid source depth");

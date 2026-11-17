@@ -87,7 +87,12 @@ fn reading_fills_tiles() {
             channel.id
         );
     }
-    let red = &layer.channels().iter().find(|c| c.id == 0).expect("red").data;
+    let red = &layer
+        .channels()
+        .iter()
+        .find(|c| c.id == 0)
+        .expect("red")
+        .data;
     assert_eq!(red.sample(10 * w as usize + 10), Some(200));
     assert!(matches!(red.tile_state(0), Some(TileState::Dense(_))));
 }

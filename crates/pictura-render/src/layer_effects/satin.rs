@@ -12,7 +12,6 @@
 //! the build region pads by `dist_reach + blur_support` rather than libpsd's
 //! `size`; `Scale Effects` and the exact inter-effect order are not modelled.
 
-
 use pictura_codec::DescValue;
 use pictura_core::{BlendMode, Document, Layer, PsdRect};
 

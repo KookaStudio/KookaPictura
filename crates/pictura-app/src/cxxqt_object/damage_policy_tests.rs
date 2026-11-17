@@ -108,10 +108,12 @@ fn unbounded_effect_recomposites_fully() {
         right: 30,
     };
     knockout.knockout = Knockout::Shallow;
-    pictura_codec::edit_layer(knockout.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-        key: *b"lfx2",
-        data: Vec::new().into(),
-    }) });
+    pictura_codec::edit_layer(knockout.as_mut(), |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"lfx2",
+            data: Vec::new().into(),
+        })
+    });
     let mut d = Document::new(64, 64, ColorMode::Rgb, BitDepth::Eight);
     d.layers = LayerStack::from_layers(vec![pixel_layer("base", 64, 64, (0, 0, 0)), knockout]);
     // A knockout base is global, so the layer-local reach cannot prove a bound.

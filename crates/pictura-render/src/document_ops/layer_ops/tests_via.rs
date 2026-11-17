@@ -50,7 +50,11 @@ fn layer_via_copy_extracts_selection_and_keeps_source() {
         "outside not copied"
     );
 
-    let source_alpha = doc.layers[0].channels().iter().find(|c| c.id == -1).unwrap();
+    let source_alpha = doc.layers[0]
+        .channels()
+        .iter()
+        .find(|c| c.id == -1)
+        .unwrap();
     assert!(source_alpha.data.iter().all(|&v| v == 255), "source intact");
 }
 
@@ -66,12 +70,20 @@ fn layer_via_copy_scales_feathered_alpha() {
     );
 
     assert_eq!(path, "1");
-    let alpha = doc.layers[1].channels().iter().find(|c| c.id == -1).unwrap();
+    let alpha = doc.layers[1]
+        .channels()
+        .iter()
+        .find(|c| c.id == -1)
+        .unwrap();
     assert!(
         alpha.data.iter().all(|&v| v == 128),
         "255 * 128/255 rounds to 128"
     );
-    let source_alpha = doc.layers[0].channels().iter().find(|c| c.id == -1).unwrap();
+    let source_alpha = doc.layers[0]
+        .channels()
+        .iter()
+        .find(|c| c.id == -1)
+        .unwrap();
     assert!(
         source_alpha.data.iter().all(|&v| v == 255),
         "copy leaves source"
@@ -91,7 +103,11 @@ fn layer_via_cut_clears_full_and_scales_partial_coverage() {
         ),
         "1"
     );
-    let source_alpha = doc.layers[0].channels().iter().find(|c| c.id == -1).unwrap();
+    let source_alpha = doc.layers[0]
+        .channels()
+        .iter()
+        .find(|c| c.id == -1)
+        .unwrap();
     assert!(
         source_alpha.data.iter().all(|&v| v == 0),
         "full coverage clears"
@@ -105,7 +121,11 @@ fn layer_via_cut_clears_full_and_scales_partial_coverage() {
             .edit_coverage()
             .expect("valid mask geometry"),
     );
-    let source_alpha = doc.layers[0].channels().iter().find(|c| c.id == -1).unwrap();
+    let source_alpha = doc.layers[0]
+        .channels()
+        .iter()
+        .find(|c| c.id == -1)
+        .unwrap();
     assert!(
         source_alpha.data.iter().all(|&v| v == 127),
         "255 * 127/255 = 127"
@@ -115,7 +135,10 @@ fn layer_via_cut_clears_full_and_scales_partial_coverage() {
 #[test]
 fn layer_via_copy_lands_above_the_source_inside_its_group() {
     let mut group = empty_group("Group 1");
-    let _ = group.children_mut().expect("group").push(pixel_layer("child", 4, 4, 40));
+    let _ = group
+        .children_mut()
+        .expect("group")
+        .push(pixel_layer("child", 4, 4, 40));
     let mut doc = doc_with(vec![group]);
 
     let path = layer_via_copy(
@@ -167,7 +190,10 @@ fn layer_via_refuses_missing_group_and_empty_mask() {
     assert_eq!(doc, before);
 
     let mut group = empty_group("Group 1");
-    let _ = group.children_mut().expect("group").push(pixel_layer("child", 4, 4, 1));
+    let _ = group
+        .children_mut()
+        .expect("group")
+        .push(pixel_layer("child", 4, 4, 1));
     let mut doc = doc_with(vec![group]);
     let before = doc.clone();
     assert!(layer_via_copy(

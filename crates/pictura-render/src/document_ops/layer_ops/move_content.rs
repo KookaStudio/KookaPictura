@@ -688,7 +688,11 @@ mod tests {
     #[test]
     fn trim_to_content_hugs_the_opaque_pixels() {
         let mut layer = pixel_layer("square", 4, 4, 40);
-        let alpha = layer.channels_mut().iter_mut().find(|c| c.id == -1).unwrap();
+        let alpha = layer
+            .channels_mut()
+            .iter_mut()
+            .find(|c| c.id == -1)
+            .unwrap();
         alpha.data = square_coverage();
         let mut doc = doc_with(vec![layer]);
         assert!(trim_to_content(&mut doc, "0"));
@@ -718,7 +722,12 @@ mod tests {
     #[test]
     fn trim_keeps_the_composite() {
         let mut layer = pixel_layer("square", 4, 4, 40);
-        layer.channels_mut().iter_mut().find(|c| c.id == -1).unwrap().data = square_coverage();
+        layer
+            .channels_mut()
+            .iter_mut()
+            .find(|c| c.id == -1)
+            .unwrap()
+            .data = square_coverage();
         let before = layer.clone();
         let mut doc = doc_with(vec![layer]);
         assert!(trim_to_content(&mut doc, "0"));
@@ -765,7 +774,12 @@ mod tests {
                 }
             }
             let mut layer = pixel_layer("pattern", w as u32, h as u32, 40);
-            layer.channels_mut().iter_mut().find(|c| c.id == -1).unwrap().data = data.into();
+            layer
+                .channels_mut()
+                .iter_mut()
+                .find(|c| c.id == -1)
+                .unwrap()
+                .data = data.into();
             let found = content_rect(&doc_with(vec![layer]), "0").unwrap();
             let expected = (y0 as i32, x0 as i32, y1 as i32, x1 as i32);
             assert_eq!((found.top, found.left, found.bottom, found.right), expected);
@@ -776,7 +790,11 @@ mod tests {
     fn content_rect_does_not_materialize_a_diverged_plane() {
         let (w, h) = (8u32, 200u32);
         let mut layer = pixel_layer("banded", w, h, 40);
-        let alpha = layer.channels_mut().iter_mut().find(|c| c.id == -1).unwrap();
+        let alpha = layer
+            .channels_mut()
+            .iter_mut()
+            .find(|c| c.id == -1)
+            .unwrap();
         alpha.data = vec![255; (w * h) as usize].into();
         alpha.data.tile(w as usize, h as usize);
         let held = alpha.data.clone();
@@ -789,7 +807,12 @@ mod tests {
     #[test]
     fn untrim_restores_the_extent_without_changing_pixels() {
         let mut layer = pixel_layer("square", 4, 4, 40);
-        layer.channels_mut().iter_mut().find(|c| c.id == -1).unwrap().data = square_coverage();
+        layer
+            .channels_mut()
+            .iter_mut()
+            .find(|c| c.id == -1)
+            .unwrap()
+            .data = square_coverage();
         let mut doc = doc_with(vec![layer]);
         let before = doc.layers[0].clone();
         let hugged = content_rect(&doc, "0").unwrap();
@@ -821,11 +844,18 @@ mod tests {
     #[test]
     fn trim_leaves_type_layers() {
         let mut layer = pixel_layer("type", 4, 4, 40);
-        layer.channels_mut().iter_mut().find(|c| c.id == -1).unwrap().data = square_coverage();
-        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(pictura_core::LayerBlock {
-            key: *b"TySh",
-            data: Vec::new().into(),
-        }) });
+        layer
+            .channels_mut()
+            .iter_mut()
+            .find(|c| c.id == -1)
+            .unwrap()
+            .data = square_coverage();
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks.push(pictura_core::LayerBlock {
+                key: *b"TySh",
+                data: Vec::new().into(),
+            })
+        });
         let mut doc = doc_with(vec![layer]);
         assert!(!trim_to_content(&mut doc, "0"));
         assert_eq!(doc.layers[0].rect, rect(4, 4));

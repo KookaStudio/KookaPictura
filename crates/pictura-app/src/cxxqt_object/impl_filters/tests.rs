@@ -50,7 +50,12 @@ fn big_state() -> PictureViewRust {
         pictura_core::BitDepth::Eight,
     );
     let mut layer = pixel_layer("px", 256, 256, (40, 120, 200));
-    for (c, ch) in layer.channels_mut().iter_mut().filter(|c| c.id >= 0).enumerate() {
+    for (c, ch) in layer
+        .channels_mut()
+        .iter_mut()
+        .filter(|c| c.id >= 0)
+        .enumerate()
+    {
         let plane: Vec<u8> = (0..256 * 256)
             .map(|i| {
                 let x = i % 256;
@@ -663,7 +668,11 @@ fn apply_image_preserve_transparency_keeps_the_rect() {
     let mut rust = apply_image_state(32, small, (40, 120, 200));
     {
         let layer = &mut rust.session.doc.as_mut().unwrap().layers[0];
-        let alpha = layer.channels_mut().iter_mut().find(|c| c.id == -1).unwrap();
+        let alpha = layer
+            .channels_mut()
+            .iter_mut()
+            .find(|c| c.id == -1)
+            .unwrap();
         alpha.data.as_mut_slice()[0] = 0;
     }
     let source = apply_image_source(32, None);

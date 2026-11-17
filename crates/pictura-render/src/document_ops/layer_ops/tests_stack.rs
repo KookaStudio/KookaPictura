@@ -529,7 +529,10 @@ fn ungrouping_a_non_bottom_group_with_a_nested_background_is_refused() {
 #[test]
 fn duplicate_paths_returns_new_paths() {
     let mut group = group("Group 1");
-    let _ = group.children_mut().expect("group").push(layer("child", false));
+    let _ = group
+        .children_mut()
+        .expect("group")
+        .push(layer("child", false));
     let mut d = doc(vec![layer("bottom", false), group]);
 
     let created = duplicate_paths(&mut d, &["0", "1"]);
@@ -552,7 +555,10 @@ fn duplicate_paths_reports_every_copy_at_its_final_path() {
 #[test]
 fn duplicate_paths_shifts_a_nested_copy_with_its_ancestor() {
     let mut group = group("Group 1");
-    let _ = group.children_mut().expect("group").push(layer("child", false));
+    let _ = group
+        .children_mut()
+        .expect("group")
+        .push(layer("child", false));
     let mut d = doc(vec![layer("bottom", false), group]);
 
     let created = duplicate_paths(&mut d, &["0", "1/0"]);
@@ -564,7 +570,10 @@ fn duplicate_paths_shifts_a_nested_copy_with_its_ancestor() {
 #[test]
 fn duplicate_paths_copies_a_source_a_later_copy_would_hide() {
     let mut group = group("Group 1");
-    let _ = group.children_mut().expect("group").push(layer("child", false));
+    let _ = group
+        .children_mut()
+        .expect("group")
+        .push(layer("child", false));
     let mut d = doc(vec![layer("bottom", false), layer("middle", false), group]);
 
     let created = duplicate_paths(&mut d, &["1", "2/0"]);

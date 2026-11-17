@@ -494,7 +494,14 @@ fn color_balance_lab_mode_matches_the_eight_bit_shift() {
 fn unsupported_adjustment_is_refused_without_mutation() {
     let mut store = Samples::U16(vec![10, 20, 30, 40, 50, 60].into());
     let before = store.clone();
-    let fill = Adjustment::ReplaceColor(ReplaceColorParams { samples: Vec::new(), fuzziness: 0.0, localized: false, hue: 0.0, saturation: 0.0, lightness: 0.0 });
+    let fill = Adjustment::ReplaceColor(ReplaceColorParams {
+        samples: Vec::new(),
+        fuzziness: 0.0,
+        localized: false,
+        hue: 0.0,
+        saturation: 0.0,
+        lightness: 0.0,
+    });
     let err = apply_native(&fill, &mut store, 2, 1, 3).unwrap_err();
     assert!(matches!(err, AdjustError::Unsupported(_)));
     assert_eq!(store, before);

@@ -46,10 +46,22 @@ fn content_constructors_have_one_active_kind() {
         assert_eq!(layer.kind(), expected);
         assert_eq!(layer.is_group(), expected == LayerKind::Group);
         assert_eq!(layer.is_type(), expected == LayerKind::Text);
-        assert_eq!(layer.smart_object().is_some(), expected == LayerKind::SmartObject);
-        assert_eq!(layer.adjustment_parameters().is_some(), expected == LayerKind::Adjustment);
-        assert_eq!(layer.fill_content().is_some(), matches!(expected, LayerKind::Fill | LayerKind::Shape));
-        assert_eq!(layer.children().len(), usize::from(expected == LayerKind::Group));
+        assert_eq!(
+            layer.smart_object().is_some(),
+            expected == LayerKind::SmartObject
+        );
+        assert_eq!(
+            layer.adjustment_parameters().is_some(),
+            expected == LayerKind::Adjustment
+        );
+        assert_eq!(
+            layer.fill_content().is_some(),
+            matches!(expected, LayerKind::Fill | LayerKind::Shape)
+        );
+        assert_eq!(
+            layer.children().len(),
+            usize::from(expected == LayerKind::Group)
+        );
     }
     let pixel = Layer::default();
     assert_eq!(pixel.kind(), LayerKind::Pixel);
@@ -59,8 +71,15 @@ fn content_constructors_have_one_active_kind() {
 #[test]
 fn content_types_have_no_execution_dependency() {
     let manifest = include_str!("../../Cargo.toml");
-    for dependency in ["pictura-adjust", "pictura-codec", "pictura-render", "cxx-qt"] {
-        assert!(!manifest.lines().any(|line| line.trim_start().starts_with(dependency)));
+    for dependency in [
+        "pictura-adjust",
+        "pictura-codec",
+        "pictura-render",
+        "cxx-qt",
+    ] {
+        assert!(!manifest
+            .lines()
+            .any(|line| line.trim_start().starts_with(dependency)));
     }
     let layer = Layer::new(LayerContent::Adjustment(Some(Arc::new(Adjustment::Invert))));
     assert!(matches!(layer.content(), LayerContent::Adjustment(Some(_))));
@@ -70,18 +89,32 @@ fn content_types_have_no_execution_dependency() {
 fn fill_content_retains_each_parameter_set() {
     let solid = FillContent::Solid([10, 20, 30, 40]);
     assert_eq!(solid, FillContent::Solid([10, 20, 30, 40]));
-    for kind in [GradientKind::Linear, GradientKind::Radial, GradientKind::Angle, GradientKind::Reflected, GradientKind::Diamond] {
+    for kind in [
+        GradientKind::Linear,
+        GradientKind::Radial,
+        GradientKind::Angle,
+        GradientKind::Reflected,
+        GradientKind::Diamond,
+    ] {
         let params = GradientFillParams {
             stops: vec![
-                GradientStop { location: 12, color: [10, 20, 30] },
-                GradientStop { location: 4000, color: [200, 210, 220] },
+                GradientStop {
+                    location: 12,
+                    color: [10, 20, 30],
+                },
+                GradientStop {
+                    location: 4000,
+                    color: [200, 210, 220],
+                },
             ],
             reverse: true,
             kind,
             angle_deg: 45.0,
             scale: 60.0,
         };
-        let layer = Layer::new(LayerContent::Fill(Arc::new(FillContent::Gradient(params.clone()))));
+        let layer = Layer::new(LayerContent::Fill(Arc::new(FillContent::Gradient(
+            params.clone(),
+        ))));
         assert_eq!(layer.fill_content(), Some(&FillContent::Gradient(params)));
     }
     let pattern = PatternFillParams {
@@ -90,7 +123,9 @@ fn fill_content_retains_each_parameter_set() {
         link_with_layer: false,
         origin: (3, -4),
     };
-    let layer = Layer::new(LayerContent::Fill(Arc::new(FillContent::Pattern(pattern.clone()))));
+    let layer = Layer::new(LayerContent::Fill(Arc::new(FillContent::Pattern(
+        pattern.clone(),
+    ))));
     assert_eq!(layer.fill_content(), Some(&FillContent::Pattern(pattern)));
 }
 
@@ -110,7 +145,10 @@ fn incompatible_content_transitions_leave_the_layer_unchanged() {
 
 #[test]
 fn proxies_and_masks_preserve_content_identity() {
-    let channels = vec![Channel { id: 0, data: vec![42u8; 4].into() }];
+    let channels = vec![Channel {
+        id: 0,
+        data: vec![42u8; 4].into(),
+    }];
     for content in [
         LayerContent::Pixel,
         LayerContent::Text(Some(Arc::new(text()))),
@@ -137,10 +175,12 @@ fn proxies_and_masks_preserve_content_identity() {
 #[test]
 fn metadata_cannot_install_an_active_content_definition() {
     let mut layer = Layer::default();
-    assert!(layer.set_metadata_block(*b"zzzz", Some(vec![1,2,3].into())));
+    assert!(layer.set_metadata_block(*b"zzzz", Some(vec![1, 2, 3].into())));
     let before = layer.clone();
-    for key in [*b"TySh", *b"SoCo", *b"vscg", *b"vmsk", *b"SoLd", *b"PiSt", *b"lsct"] {
-        assert!(!layer.set_metadata_block(key, Some(vec![0;8].into())));
+    for key in [
+        *b"TySh", *b"SoCo", *b"vscg", *b"vmsk", *b"SoLd", *b"PiSt", *b"lsct",
+    ] {
+        assert!(!layer.set_metadata_block(key, Some(vec![0; 8].into())));
         assert_eq!(layer, before);
     }
     assert!(layer.set_metadata_block(*b"zzzz", None));
@@ -149,7 +189,7 @@ fn metadata_cannot_install_an_active_content_definition() {
 
 #[test]
 fn content_generations_track_edits_without_changing_semantic_equality() {
-    let content = LayerContent::Fill(Arc::new(FillContent::Solid([1,2,3,255])));
+    let content = LayerContent::Fill(Arc::new(FillContent::Solid([1, 2, 3, 255])));
     let mut layer = Layer::new(content.clone());
     let equal = Layer::new(content);
     assert_eq!(layer, equal);
@@ -157,10 +197,13 @@ fn content_generations_track_edits_without_changing_semantic_equality() {
     let original = layer.clone();
     assert_eq!(layer.content_identity(), original.content_identity());
     let mut previous = layer.content_identity();
-    for value in [10,20,30,40] {
-        assert!(layer.set_fill_content(FillContent::Solid([value,2,3,255])));
+    for value in [10, 20, 30, 40] {
+        assert!(layer.set_fill_content(FillContent::Solid([value, 2, 3, 255])));
         assert_ne!(layer.content_identity(), previous);
         previous = layer.content_identity();
-        assert_eq!(original.fill_content(), Some(&FillContent::Solid([1,2,3,255])));
+        assert_eq!(
+            original.fill_content(),
+            Some(&FillContent::Solid([1, 2, 3, 255]))
+        );
     }
 }

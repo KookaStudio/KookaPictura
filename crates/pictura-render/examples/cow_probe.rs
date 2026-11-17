@@ -85,7 +85,9 @@ fn main() {
         rect(w, h),
         vec![(0, Samples::U16(vec![1u16; plane].into()))],
     ));
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.smart_object = Some(SmartObject::default().with_payload(vec![0u8; 8 * 1024 * 1024])) });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.smart_object = Some(SmartObject::default().with_payload(vec![0u8; 8 * 1024 * 1024]))
+    });
     doc.layers = LayerStack::from_layers(vec![layer]);
     report("after document");
 
@@ -119,10 +121,12 @@ fn main() {
     });
     group.set_group_children(LayerStack::from_layers(
         (0..1000)
-            .map(|i| pictura_codec::layer_from_parts(pictura_core::LayerParts {
-                name: format!("child {i}"),
-                ..Default::default()
-            }))
+            .map(|i| {
+                pictura_codec::layer_from_parts(pictura_core::LayerParts {
+                    name: format!("child {i}"),
+                    ..Default::default()
+                })
+            })
             .collect(),
     ));
     let iterations = 1000;

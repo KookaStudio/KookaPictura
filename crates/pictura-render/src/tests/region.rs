@@ -613,9 +613,9 @@ fn pattern_effects_disable_banding_and_stay_identical() {
     assert_eq!(cold.data.as_ref(), warm.data.as_ref());
 
     let mut plain = d.clone();
-    pictura_codec::edit_layer(plain.layers[0].as_mut(), |parts| { parts
-        .extra_blocks
-        .retain(|block| &block.key != b"lfx2") });
+    pictura_codec::edit_layer(plain.layers[0].as_mut(), |parts| {
+        parts.extra_blocks.retain(|block| &block.key != b"lfx2")
+    });
     assert!(
         crate::composite_region::banded(&plain, 300),
         "without the pattern overlay the same tall document is bandable"

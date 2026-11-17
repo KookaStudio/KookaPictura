@@ -7,9 +7,9 @@
 //! and knockout are decided by the caller, and Blend If, Dissolve, and text
 //! gamma apply inside the blend; each stays an attribute check.
 
-use std::sync::Arc;
 use pictura_core::{Adjustment, FillContent, LayerContent};
 use pictura_core::{BlendMode, Layer};
+use std::sync::Arc;
 
 use crate::smart_filter::decode_smart_filter;
 
@@ -77,24 +77,39 @@ pub(crate) fn stack_source_applies(layer: &Layer) -> bool {
 pub fn content_route(layer: &Layer) -> ContentRoute {
     match layer.content() {
         LayerContent::Group(_) => {
-            if matches!(layer.blend, BlendMode::PassThrough) && layer.opacity == 255
-                && layer.mask.is_none() && layer.vector_mask.is_none() {
+            if matches!(layer.blend, BlendMode::PassThrough)
+                && layer.opacity == 255
+                && layer.mask.is_none()
+                && layer.vector_mask.is_none()
+            {
                 ContentRoute::PassThroughGroup
-            } else { ContentRoute::IsolatedGroup }
+            } else {
+                ContentRoute::IsolatedGroup
+            }
         }
         LayerContent::Adjustment(Some(value)) => ContentRoute::Adjustment(value.clone()),
         LayerContent::Adjustment(None) => ContentRoute::UndecodedAdjustment,
         LayerContent::Fill(value) | LayerContent::Shape(value) => ContentRoute::Fill(value.clone()),
         LayerContent::SmartObject(_) => {
-            if smart_filters_apply(layer) { ContentRoute::SmartFiltered }
-            else if stack_source_applies(layer) || crate::channel_plane(layer, 0).is_none() { ContentRoute::SmartSource }
-            else if layer.extra_block(b"vscg").is_some() { ContentRoute::UndecodedVectorFill }
-            else { ContentRoute::Pixels }
+            if smart_filters_apply(layer) {
+                ContentRoute::SmartFiltered
+            } else if stack_source_applies(layer) || crate::channel_plane(layer, 0).is_none() {
+                ContentRoute::SmartSource
+            } else if layer.extra_block(b"vscg").is_some() {
+                ContentRoute::UndecodedVectorFill
+            } else {
+                ContentRoute::Pixels
+            }
         }
-        LayerContent::Text(Some(_)) if crate::channel_plane(layer, 0).is_none() => ContentRoute::TypeSource,
+        LayerContent::Text(Some(_)) if crate::channel_plane(layer, 0).is_none() => {
+            ContentRoute::TypeSource
+        }
         LayerContent::Pixel | LayerContent::Text(_) => {
-            if layer.extra_block(b"vscg").is_some() { ContentRoute::UndecodedVectorFill }
-            else { ContentRoute::Pixels }
+            if layer.extra_block(b"vscg").is_some() {
+                ContentRoute::UndecodedVectorFill
+            } else {
+                ContentRoute::Pixels
+            }
         }
     }
 }
@@ -120,7 +135,12 @@ pub(crate) mod tests {
             } else {
                 "isolated"
             }
-        } else if crate::fill::decode_layer_fill(layer).is_some() || layer.adjustment().and_then(pictura_codec::decode_adjustment).is_some() {
+        } else if crate::fill::decode_layer_fill(layer).is_some()
+            || layer
+                .adjustment()
+                .and_then(pictura_codec::decode_adjustment)
+                .is_some()
+        {
             "fill"
         } else if layer.adjustment().is_some() {
             "no-op"
@@ -239,12 +259,14 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn corpus() -> Vec<Layer> {
-        let group = |blend, opacity| pictura_codec::layer_from_parts(pictura_core::LayerParts {
-            is_group: true,
-            blend,
-            opacity,
-            ..Default::default()
-        });
+        let group = |blend, opacity| {
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
+                is_group: true,
+                blend,
+                opacity,
+                ..Default::default()
+            })
+        };
         vec![
             group(BlendMode::PassThrough, 255),
             group(BlendMode::PassThrough, 128),
@@ -325,27 +347,33 @@ pub(crate) mod tests {
         assert!(stack_source_applies(&layer));
         assert!(matches!(content_route(&layer), ContentRoute::SmartSource));
 
-        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.smart_object.as_mut().expect("object").smart_filters = vec![filter(1, true)] });
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.smart_object.as_mut().expect("object").smart_filters = vec![filter(1, true)]
+        });
         assert!(
             !stack_source_applies(&layer),
             "unknown filter keeps the proxy"
         );
         assert!(matches!(content_route(&layer), ContentRoute::Pixels));
 
-        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.smart_object.as_mut().expect("object").smart_filters =
-            vec![filter(CAMERA_RAW_FILTER_ID, true)] });
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.smart_object.as_mut().expect("object").smart_filters =
+                vec![filter(CAMERA_RAW_FILTER_ID, true)]
+        });
         assert!(stack_source_applies(&layer));
         assert!(matches!(content_route(&layer), ContentRoute::SmartFiltered));
 
-        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.smart_object.as_mut().expect("object").set_payload(
-            pictura_codec::write_psd(&pictura_core::Document::new(
-                1,
-                1,
-                pictura_core::ColorMode::Rgb,
-                pictura_core::BitDepth::Eight,
-            ))
-            .expect("single payload"),
-        ) });
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.smart_object.as_mut().expect("object").set_payload(
+                pictura_codec::write_psd(&pictura_core::Document::new(
+                    1,
+                    1,
+                    pictura_core::ColorMode::Rgb,
+                    pictura_core::BitDepth::Eight,
+                ))
+                .expect("single payload"),
+            )
+        });
         assert!(!stack_source_applies(&layer), "one frame keeps the proxy");
     }
 }

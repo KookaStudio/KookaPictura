@@ -2,24 +2,30 @@ use super::*;
 use crate::PsdRect;
 
 fn layer(name: &str, clipping: bool) -> Layer {
-    crate::Layer::from_parts(crate::LayerParts {
-        name: name.into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 1,
-            right: 1,
+    crate::Layer::from_parts(
+        crate::LayerParts {
+            name: name.into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 1,
+                right: 1,
+            },
+            clipping,
+            ..Default::default()
         },
-        clipping,
-        ..Default::default()
-    }, crate::LayerContent::Pixel)
+        crate::LayerContent::Pixel,
+    )
 }
 
 fn background(name: &str) -> Layer {
-    crate::Layer::from_parts(crate::LayerParts {
-        background: true,
-        ..crate::LayerParts::from(layer(name, false))
-    }, crate::LayerContent::Pixel)
+    crate::Layer::from_parts(
+        crate::LayerParts {
+            background: true,
+            ..crate::LayerParts::from(layer(name, false))
+        },
+        crate::LayerContent::Pixel,
+    )
 }
 
 fn stack(layers: Vec<Layer>) -> LayerStack {
@@ -463,10 +469,17 @@ fn grouping_refuses_non_group_content_without_removing_nodes() {
     let before = tree.clone();
     for candidate in [
         Layer::default(),
-        Layer::new(crate::LayerContent::Adjustment(Some(std::sync::Arc::new(crate::Adjustment::Invert)))),
-        Layer::new(crate::LayerContent::Fill(std::sync::Arc::new(crate::FillContent::Solid([1,2,3,255])))),
+        Layer::new(crate::LayerContent::Adjustment(Some(std::sync::Arc::new(
+            crate::Adjustment::Invert,
+        )))),
+        Layer::new(crate::LayerContent::Fill(std::sync::Arc::new(
+            crate::FillContent::Solid([1, 2, 3, 255]),
+        ))),
     ] {
-        assert_eq!(tree.group(&[], &[0,1], candidate), Err(StackError::NotAGroup));
+        assert_eq!(
+            tree.group(&[], &[0, 1], candidate),
+            Err(StackError::NotAGroup)
+        );
         assert_eq!(tree, before);
         assert_eq!(tree.well_formed(), Ok(()));
     }

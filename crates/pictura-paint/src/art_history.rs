@@ -345,21 +345,24 @@ mod tests {
     fn doc(px: [u8; 4]) -> Document {
         let mut doc = Document::new(W as u32, H as u32, ColorMode::Rgb, BitDepth::Eight);
         {
-            let _ = doc.layers.push(pictura_core::Layer::from_parts(pictura_core::LayerParts {
-                rect: PsdRect {
-                    top: 0,
-                    left: 0,
-                    bottom: H,
-                    right: W,
+            let _ = doc.layers.push(pictura_core::Layer::from_parts(
+                pictura_core::LayerParts {
+                    rect: PsdRect {
+                        top: 0,
+                        left: 0,
+                        bottom: H,
+                        right: W,
+                    },
+                    channels: [(0, 0), (1, 1), (2, 2), (-1, 3)]
+                        .map(|(id, c)| Channel {
+                            id,
+                            data: vec![px[c]; (W * H) as usize].into(),
+                        })
+                        .into(),
+                    ..Default::default()
                 },
-                channels: [(0, 0), (1, 1), (2, 2), (-1, 3)]
-                    .map(|(id, c)| Channel {
-                        id,
-                        data: vec![px[c]; (W * H) as usize].into(),
-                    })
-                    .into(),
-                ..Default::default()
-            }, pictura_core::LayerContent::Pixel));
+                pictura_core::LayerContent::Pixel,
+            ));
         };
         doc
     }

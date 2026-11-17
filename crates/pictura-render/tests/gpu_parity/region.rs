@@ -78,7 +78,9 @@ fn stamp_layers(layers: &mut pictura_core::LayerStack) {
                 data.set_stamp(fresh_stamp());
             }
         }
-        if let Some(children) = layer.children_mut() { stamp_layers(children); }
+        if let Some(children) = layer.children_mut() {
+            stamp_layers(children);
+        }
     }
 }
 
@@ -117,7 +119,9 @@ fn region_scenes() -> Vec<(&'static str, Document)> {
     let mut proxied_type = layer("text", BlendMode::Normal, |x, y| {
         (0, 0, 0, alpha_ramp(x, y))
     });
-    pictura_codec::edit_layer(proxied_type.as_mut(), |parts| { parts.type_tool = Some(type_tool()) });
+    pictura_codec::edit_layer(proxied_type.as_mut(), |parts| {
+        parts.type_tool = Some(type_tool())
+    });
     let mut typed = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
     typed.layers = pictura_core::LayerStack::from_layers(vec![base_layer(), proxied_type]);
 

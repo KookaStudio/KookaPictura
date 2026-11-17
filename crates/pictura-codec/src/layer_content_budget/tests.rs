@@ -141,7 +141,10 @@ fn descriptor_temporary_claims_are_not_refunded() {
         }
     }
     assert!(admitted > 0, "the sufficient-budget control must decode");
-    assert!(refused, "one shared cumulative budget must eventually refuse");
+    assert!(
+        refused,
+        "one shared cumulative budget must eventually refuse"
+    );
 }
 
 #[test]
@@ -317,12 +320,8 @@ fn hidden_lookup_tables_share_the_document_budget() {
     let one = crate::write_psd(&lookup_document(&raw.data, 1)).unwrap();
     let two = crate::write_psd(&lookup_document(&raw.data, 2)).unwrap();
     let options = crate::OpenOptions::default();
-    let admitted = crate::read_psd_within_options(
-        &two,
-        &options,
-        image_budget(1 << 20, 1 << 20),
-    )
-    .expect("sufficient-budget control");
+    let admitted = crate::read_psd_within_options(&two, &options, image_budget(1 << 20, 1 << 20))
+        .expect("sufficient-budget control");
     assert_eq!(admitted.layers.len(), 2);
     for layer in admitted.layers.iter() {
         assert!(!layer.visible);
@@ -378,7 +377,10 @@ fn imported_ignored_dom_fields_are_still_budgeted() {
         image_budget(1 << 20, 1 << 20),
     )
     .expect("the sufficient-budget control still reads valid known parameters");
-    assert_eq!(admitted.layers[0].adjustment().unwrap().data, payload.as_slice());
+    assert_eq!(
+        admitted.layers[0].adjustment().unwrap().data,
+        payload.as_slice()
+    );
 }
 
 #[test]
@@ -419,8 +421,14 @@ fn admitted_content_preserves_parameters_and_bytes() {
     assert_eq!(lookup.size, 3);
     assert_eq!(lookup.points, vec![[0.25, 0.5, 0.75]; 27]);
     assert_eq!(reopened.layers[1].kind(), LayerKind::Fill);
-    assert_eq!(reopened.layers[1].fill_content(), Some(&FillContent::Solid([10, 20, 30, 255])));
-    assert_eq!(pictura_render::composite_rgba(&reopened).data.as_slice(), &[10, 20, 30, 255]);
+    assert_eq!(
+        reopened.layers[1].fill_content(),
+        Some(&FillContent::Solid([10, 20, 30, 255]))
+    );
+    assert_eq!(
+        pictura_render::composite_rgba(&reopened).data.as_slice(),
+        &[10, 20, 30, 255]
+    );
     for (original, decoded) in document.layers.iter().zip(reopened.layers.iter()) {
         assert_eq!(decoded.adjustment(), original.adjustment());
     }
@@ -434,14 +442,18 @@ fn growing_content_vectors_admit_replacement_while_old_storage_is_live() {
     let mut alloc = super::ContentAlloc::new(Some(&mut refused));
     let mut points: Vec<[f32; 3]> = alloc.vec(4, "test content vector").unwrap();
     points.extend_from_slice(&[[0.0; 3]; 4]);
-    assert!(alloc.push(&mut points, [1.0; 3], "test content vector").is_none());
+    assert!(alloc
+        .push(&mut points, [1.0; 3], "test content vector")
+        .is_none());
     resource_error(alloc.finish(Some(points)));
 
     let mut admitted = budget(8 * element, 12 * element);
     let mut alloc = super::ContentAlloc::new(Some(&mut admitted));
     let mut points: Vec<[f32; 3]> = alloc.vec(4, "test content vector").unwrap();
     points.extend_from_slice(&[[0.0; 3]; 4]);
-    alloc.push(&mut points, [1.0; 3], "test content vector").unwrap();
+    alloc
+        .push(&mut points, [1.0; 3], "test content vector")
+        .unwrap();
     let points = alloc.finish(Some(points)).unwrap().unwrap();
     assert_eq!(points.len(), 5);
     assert_eq!(points[4], [1.0; 3]);

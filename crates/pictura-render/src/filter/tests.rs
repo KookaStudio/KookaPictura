@@ -62,7 +62,12 @@ fn chan(layer: &Layer, id: i16) -> &[u8] {
 fn varied_layer(w: i32, h: i32) -> Layer {
     let n = (w * h) as usize;
     let mut layer = step_layer(w, h, 255);
-    for (c, ch) in layer.channels_mut().iter_mut().filter(|c| c.id >= 0).enumerate() {
+    for (c, ch) in layer
+        .channels_mut()
+        .iter_mut()
+        .filter(|c| c.id >= 0)
+        .enumerate()
+    {
         let plane: Vec<u8> = (0..n)
             .map(|i| {
                 let x = (i % w as usize) as u32;
@@ -822,7 +827,12 @@ fn moving_kernels_move_a_soft_layer_edge() {
             }
         })
         .collect();
-    layer.channels_mut().iter_mut().find(|c| c.id == -1).unwrap().data = alpha.clone().into();
+    layer
+        .channels_mut()
+        .iter_mut()
+        .find(|c| c.id == -1)
+        .unwrap()
+        .data = alpha.clone().into();
     for filter in moving_kernels() {
         let mut out = layer.clone();
         apply_filter(&mut out, &filter, None, false).unwrap();

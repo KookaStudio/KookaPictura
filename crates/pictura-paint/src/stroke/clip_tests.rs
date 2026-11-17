@@ -14,41 +14,44 @@ const RED: Rgba = Rgba {
 fn layer(rect: PsdRect, rgba: (u8, u8, u8, u8)) -> Layer {
     let n = (rect.width().max(0) * rect.height().max(0)) as usize;
     let (r, g, b, a) = rgba;
-    pictura_core::Layer::from_parts(pictura_core::LayerParts {
-        name: "px".into(),
-        rect,
-        blend: BlendMode::Normal,
-        opacity: 255,
-        fill: 255,
-        lock: LockFlags::default(),
-        color: ColorLabel::None,
-        clipping: false,
-        visible: true,
-        mask: None,
-        adjustment: None,
-        channels: vec![
-            Channel {
-                id: 0,
-                data: vec![r; n].into(),
-            },
-            Channel {
-                id: 1,
-                data: vec![g; n].into(),
-            },
-            Channel {
-                id: 2,
-                data: vec![b; n].into(),
-            },
-            Channel {
-                id: -1,
-                data: vec![a; n].into(),
-            },
-        ],
-        children: pictura_core::LayerStack::default(),
-        is_group: false,
-        background: false,
-        ..Default::default()
-    }, pictura_core::LayerContent::Pixel)
+    pictura_core::Layer::from_parts(
+        pictura_core::LayerParts {
+            name: "px".into(),
+            rect,
+            blend: BlendMode::Normal,
+            opacity: 255,
+            fill: 255,
+            lock: LockFlags::default(),
+            color: ColorLabel::None,
+            clipping: false,
+            visible: true,
+            mask: None,
+            adjustment: None,
+            channels: vec![
+                Channel {
+                    id: 0,
+                    data: vec![r; n].into(),
+                },
+                Channel {
+                    id: 1,
+                    data: vec![g; n].into(),
+                },
+                Channel {
+                    id: 2,
+                    data: vec![b; n].into(),
+                },
+                Channel {
+                    id: -1,
+                    data: vec![a; n].into(),
+                },
+            ],
+            children: pictura_core::LayerStack::default(),
+            is_group: false,
+            background: false,
+            ..Default::default()
+        },
+        pictura_core::LayerContent::Pixel,
+    )
 }
 
 fn doc(layer: Layer) -> Document {
@@ -279,31 +282,34 @@ fn a_clip_follows_the_layer_document_position() {
 
 #[test]
 fn a_grown_layer_keeps_the_document_space_clip() {
-    let empty = pictura_core::Layer::from_parts(pictura_core::LayerParts {
-        name: "px".into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 0,
-            right: 0,
-        },
-        channels: [0i16, 1, 2, -1]
-            .into_iter()
-            .map(|id| Channel {
-                id,
-                data: Plane::default(),
-            })
-            .collect(),
-        ..pictura_core::LayerParts::from(layer(
-            PsdRect {
+    let empty = pictura_core::Layer::from_parts(
+        pictura_core::LayerParts {
+            name: "px".into(),
+            rect: PsdRect {
                 top: 0,
                 left: 0,
                 bottom: 0,
                 right: 0,
             },
-            WHITE,
-        ))
-    }, pictura_core::LayerContent::Pixel);
+            channels: [0i16, 1, 2, -1]
+                .into_iter()
+                .map(|id| Channel {
+                    id,
+                    data: Plane::default(),
+                })
+                .collect(),
+            ..pictura_core::LayerParts::from(layer(
+                PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 0,
+                    right: 0,
+                },
+                WHITE,
+            ))
+        },
+        pictura_core::LayerContent::Pixel,
+    );
     let mut doc = doc(empty);
     let mut stroke = Stroke::begin_at(&doc, "0", brush(6)).expect("stroke begins");
     stroke.set_coverage_clip(Some(selection(16, 16, |x, y| {

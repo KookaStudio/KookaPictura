@@ -1,4 +1,3 @@
-
 use pictura_adjust::{GradientFillParams, PatternFillParams};
 use pictura_codec::DescValue;
 use pictura_core::{BlendMode, Document, Layer, PsdRect};

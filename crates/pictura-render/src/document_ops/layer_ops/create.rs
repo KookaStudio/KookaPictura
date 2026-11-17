@@ -238,7 +238,9 @@ pub fn duplicate_layer(doc: &mut Document, index: i32) -> i32 {
     let mut copy = doc.layers[source].clone();
     copy.name = format!("{} copy", copy.name);
     pictura_core::layer_comp::clear_layer_id(&mut copy);
-    pictura_codec::edit_layer(copy.as_mut(), |parts| { parts.extra_blocks.retain(|block| block.key != *b"shmd") });
+    pictura_codec::edit_layer(copy.as_mut(), |parts| {
+        parts.extra_blocks.retain(|block| block.key != *b"shmd")
+    });
     if copy.background {
         release_background(&mut copy);
     }
@@ -568,9 +570,9 @@ pub(super) fn release_background(layer: &mut Layer) {
 /// Whether `path` can become the Background: it is a raster layer that is not
 /// already the Background, and the document has no Background yet.
 pub fn can_background_from_layer(doc: &Document, path: &str) -> bool {
-    resolve_path(doc, path)
-        .is_some_and(|layer| !layer.is_group() && !layer.has_adjustment_content() && !layer.background)
-        && !doc.layers.has_background()
+    resolve_path(doc, path).is_some_and(|layer| {
+        !layer.is_group() && !layer.has_adjustment_content() && !layer.background
+    }) && !doc.layers.has_background()
 }
 
 pub fn background_from_layer(doc: &mut Document, path: &str) -> bool {
@@ -607,7 +609,9 @@ pub fn background_from_layer(doc: &mut Document, path: &str) -> bool {
     if promoted {
         if let Some(layer) = resolve_path_mut(doc, path) {
             pictura_core::layer_comp::clear_layer_id(layer);
-            pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.retain(|block| block.key != *b"shmd") });
+            pictura_codec::edit_layer(layer.as_mut(), |parts| {
+                parts.extra_blocks.retain(|block| block.key != *b"shmd")
+            });
         }
     }
     promoted

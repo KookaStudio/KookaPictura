@@ -17,24 +17,26 @@ fn document(w: u32, h: u32) -> Document {
     let data: Vec<u8> = (0..w as usize * h as usize)
         .map(|i| (i % 197 + 20) as u8)
         .collect();
-    doc.layers = LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
-        rect,
-        opacity: 255,
-        fill: 255,
-        visible: true,
-        channels: [0, 1, 2, -1]
-            .into_iter()
-            .map(|id| Channel {
-                id,
-                data: if id == -1 {
-                    vec![255; data.len()].into()
-                } else {
-                    data.clone().into()
-                },
-            })
-            .collect(),
-        ..Default::default()
-    })]);
+    doc.layers = LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            rect,
+            opacity: 255,
+            fill: 255,
+            visible: true,
+            channels: [0, 1, 2, -1]
+                .into_iter()
+                .map(|id| Channel {
+                    id,
+                    data: if id == -1 {
+                        vec![255; data.len()].into()
+                    } else {
+                        data.clone().into()
+                    },
+                })
+                .collect(),
+            ..Default::default()
+        },
+    )]);
     doc
 }
 fn coverage(w: u32, h: u32, value: u8) -> Coverage {

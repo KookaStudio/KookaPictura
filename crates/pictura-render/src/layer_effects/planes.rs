@@ -5,7 +5,6 @@
 //! the same arithmetic is byte-identical. Alpha is stored unscaled; the layer's
 //! opacity is applied at replay time.
 
-
 use pictura_core::{BlendMode, Document, Layer, PixelBuffer, PsdRect};
 
 #[cfg(test)]

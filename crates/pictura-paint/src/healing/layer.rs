@@ -115,7 +115,7 @@ pub fn heal_layer(
         }
         let lx = (window.left - rect.left) as usize + xs.start;
         let ly = (window.top - rect.top) as usize + ys.start;
-        layer.channels()[plane].data.write_rect_from(
+        layer.channels_mut()[plane].data.write_rect_from(
             lx..lx + stride,
             ly..ly + rows,
             w as usize,
@@ -130,9 +130,12 @@ pub fn heal_layer(
         }
         let lx = (window.left - rect.left) as usize + xs.start;
         let ly = (window.top - rect.top) as usize + ys.start;
-        layer.channels()[a]
-            .data
-            .write_rect_from(lx..lx + stride, ly..ly + rows, w as usize, &buf);
+        layer.channels_mut()[a].data.write_rect_from(
+            lx..lx + stride,
+            ly..ly + rows,
+            w as usize,
+            &buf,
+        );
     }
     Ok(Some(PsdRect {
         top: dirty.top + window.top,

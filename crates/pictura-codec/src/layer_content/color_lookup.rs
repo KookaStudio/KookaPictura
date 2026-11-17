@@ -10,10 +10,10 @@
 //! self-describing), and an abstract-profile or device-link lookup decodes to a
 //! no-op. Raise either when a real fixture disagrees.
 
-use pictura_core::{Adjustment, ColorLookupKind, ColorLookupParams, Lut3d};
-use crate::DescValue;
 use crate::layer_content_budget::ContentAlloc;
+use crate::DescValue;
 use pictura_core::AdjustmentData;
+use pictura_core::{Adjustment, ColorLookupKind, ColorLookupParams, Lut3d};
 
 use super::basic::{be_u16, desc_item};
 
@@ -31,7 +31,10 @@ pub fn color_lookup_from_desc(obj: &DescValue) -> Option<Adjustment> {
     color_lookup_from_desc_using(obj, &mut ContentAlloc::new(None))
 }
 
-pub(crate) fn color_lookup_from_desc_using(obj: &DescValue, alloc: &mut ContentAlloc) -> Option<Adjustment> {
+pub(crate) fn color_lookup_from_desc_using(
+    obj: &DescValue,
+    alloc: &mut ContentAlloc,
+) -> Option<Adjustment> {
     let kind = match desc_item(obj, b"lookupType") {
         Some(DescValue::Enum { value, .. }) => decode_kind(value)?,
         _ => return None,
@@ -139,4 +142,3 @@ pub fn identity_cube() -> Vec<u8> {
     }
     s.into_bytes()
 }
-

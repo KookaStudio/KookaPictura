@@ -1,8 +1,8 @@
 //! Supported fill and shape content rasterization.
 
-use pictura_core::{GradientFillParams, PatternFillParams};
 use pictura_codec::PatternPixels;
 use pictura_core::{Channel, Document, Layer, PixelBuffer, PsdRect};
+use pictura_core::{GradientFillParams, PatternFillParams};
 
 use super::paths::{flatten_rows, resolve_path_mut};
 use super::shape_layer::is_shape_layer;
@@ -94,14 +94,18 @@ pub fn rasterize_layer_style(doc: &mut Document, path: &str) -> bool {
     layer.fill = 255;
     layer.source_channels = None;
     pictura_codec::edit_layer(layer, |parts| {
-        parts.extra_blocks.retain(|block| !matches!(&block.key, b"lfx2" | b"lrFX"));
+        parts
+            .extra_blocks
+            .retain(|block| !matches!(&block.key, b"lfx2" | b"lrFX"));
     });
     layer.pixel_data_irrelevant = false;
     true
 }
 
 /// Generative fill content, including the fill retained by a shape.
-pub fn is_fill_content_layer(layer: &Layer) -> bool { layer.fill_content().is_some() }
+pub fn is_fill_content_layer(layer: &Layer) -> bool {
+    layer.fill_content().is_some()
+}
 
 /// Rasterize the fill content at `path`: bake the decoded fill into the layer's
 /// `0/1/2/-1` channels over its rect, clear the adjustment, and keep the name,
@@ -113,7 +117,9 @@ pub fn rasterize_fill_content(doc: &mut Document, path: &str) -> bool {
     let Some(layer) = resolve_path_mut(doc, path) else {
         return false;
     };
-    if !is_fill_content_layer(layer) { return false; }
+    if !is_fill_content_layer(layer) {
+        return false;
+    }
     let Some(adjustment) = layer.fill_content().cloned() else {
         return false;
     };
@@ -195,16 +201,18 @@ pub fn rasterize_shape(doc: &mut Document, path: &str) -> bool {
     pictura_codec::retire_layer_content(layer);
     layer.vector_mask = None;
     layer.pixel_data_irrelevant = false;
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.retain(|block| {
-        let key = block.key.as_slice();
-        key != b"vmsk"
-            && key != b"vsms"
-            && key != b"vscg"
-            && key != b"vstk"
-            && key != b"vogk"
-            && key != b"lfx2"
-            && key != b"lrFX"
-    }) });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks.retain(|block| {
+            let key = block.key.as_slice();
+            key != b"vmsk"
+                && key != b"vsms"
+                && key != b"vscg"
+                && key != b"vstk"
+                && key != b"vogk"
+                && key != b"lfx2"
+                && key != b"lrFX"
+        })
+    });
     true
 }
 

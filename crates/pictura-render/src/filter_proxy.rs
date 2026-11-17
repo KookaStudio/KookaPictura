@@ -496,12 +496,12 @@ mod tests {
         assert!(FilterProxy::reduces_faithfully(&doc));
 
         let mut styled = doc.clone();
-        pictura_codec::edit_layer(styled.layers[0].as_mut(), |parts| { parts
-            .extra_blocks
-            .push(pictura_core::LayerBlock {
+        pictura_codec::edit_layer(styled.layers[0].as_mut(), |parts| {
+            parts.extra_blocks.push(pictura_core::LayerBlock {
                 key: *b"lfx2",
                 data: vec![0u8; 4].into(),
-            }) });
+            })
+        });
         assert!(!FilterProxy::reduces_faithfully(&styled));
         styled.layers[0].visible = false;
         assert!(

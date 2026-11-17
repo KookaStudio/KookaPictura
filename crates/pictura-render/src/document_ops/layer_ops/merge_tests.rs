@@ -70,7 +70,9 @@ fn solid(name: &str, bounds: PsdRect, r: u8, g: u8, b: u8, a: u8) -> Layer {
 fn adjustment(name: &str, bounds: PsdRect) -> Layer {
     let mut layer = solid(name, bounds, 0, 0, 0, 0);
     layer.channels_mut().clear();
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.adjustment = Some(crate::encode_invert()) });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.adjustment = Some(crate::encode_invert())
+    });
     layer
 }
 
@@ -182,7 +184,8 @@ fn merge_down_union_rect_covers_both_content_boxes() {
 #[test]
 fn merge_down_applies_masks_into_alpha() {
     let mut lower = solid("lower", rect(4, 4), 10, 20, 30, 255);
-    let lower_alpha = lower.channels_mut()
+    let lower_alpha = lower
+        .channels_mut()
         .iter_mut()
         .find(|channel| channel.id == -1)
         .expect("lower alpha");
@@ -715,7 +718,9 @@ fn select_similar_matches_class_adjustment_kind_and_blend() {
     multiply.blend = BlendMode::Multiply;
     let mut posterize = solid("poster", rect(4, 4), 0, 0, 0, 0);
     posterize.channels_mut().clear();
-    pictura_codec::edit_layer(posterize.as_mut(), |parts| { parts.adjustment = Some(crate::encode_posterize(4)) });
+    pictura_codec::edit_layer(posterize.as_mut(), |parts| {
+        parts.adjustment = Some(crate::encode_posterize(4))
+    });
 
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![

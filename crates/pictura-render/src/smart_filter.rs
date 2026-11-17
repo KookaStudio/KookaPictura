@@ -293,11 +293,7 @@ mod tests {
             ..Default::default()
         });
         pictura_codec::attach_lens_correction_filter(&mut layer, slots).expect("attaches");
-        layer
-            .smart_object()
-            .expect("smart object")
-            .smart_filters[0]
-            .clone()
+        layer.smart_object().expect("smart object").smart_filters[0].clone()
     }
 
     #[test]

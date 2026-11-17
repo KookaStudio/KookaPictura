@@ -189,7 +189,9 @@ fn plan_node<'a>(
         crate::tests::effect_preparation::probe::Event::Resolve(parallel),
     );
     #[cfg(test)]
-    if let Some(data) = layer.adjustment() { counters::note_content_resolution(data); }
+    if let Some(data) = layer.adjustment() {
+        counters::note_content_resolution(data);
+    }
     let body = match crate::composite_route::content_route(layer) {
         ContentRoute::PassThroughGroup => Body::Group { pass_through: true },
         ContentRoute::IsolatedGroup => Body::Group {

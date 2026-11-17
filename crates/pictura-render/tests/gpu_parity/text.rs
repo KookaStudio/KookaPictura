@@ -45,7 +45,7 @@ fn type_scene() -> Document {
 /// The same scene with the type layer's own blend mode set to `blend`.
 fn blend_type_scene(blend: BlendMode) -> Document {
     let mut text = layer("text", blend, |x, y| (0, 0, 0, alpha_ramp(x, y)));
-    pictura_codec::edit_layer(text.as_mut(), |parts| { parts.type_tool = Some(type_tool()) });
+    pictura_codec::edit_layer(text.as_mut(), |parts| parts.type_tool = Some(type_tool()));
     let mut doc = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![base_layer(), text]);
     doc
@@ -72,7 +72,7 @@ fn group_type_scene(pass_through: bool) -> Document {
     let mut text = layer("text", BlendMode::Normal, |x, y| {
         (0, 0, 0, alpha_ramp(x, y))
     });
-    pictura_codec::edit_layer(text.as_mut(), |parts| { parts.type_tool = Some(type_tool()) });
+    pictura_codec::edit_layer(text.as_mut(), |parts| parts.type_tool = Some(type_tool()));
     let (blend, opacity) = if pass_through {
         (BlendMode::PassThrough, 255)
     } else {

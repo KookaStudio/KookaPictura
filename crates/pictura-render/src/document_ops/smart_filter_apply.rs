@@ -49,7 +49,9 @@ pub fn apply_smart_filter(
     if pictura_codec::append_smart_filter(layer, filter).is_err() {
         return false;
     }
-    let Some(so) = layer.smart_object() else { return false; };
+    let Some(so) = layer.smart_object() else {
+        return false;
+    };
     if so.filter_mask.is_none() {
         if let Some(mask) = selection {
             pictura_codec::edit_layer(layer.as_mut(), |parts| {
@@ -221,18 +223,24 @@ mod tests {
         assert!(!apply_smart_filter(&mut raster, "0", blur(2.0), None));
 
         let mut linked = smart_doc();
-        pictura_codec::edit_layer(linked.layers[0].as_mut(), |parts| { parts.smart_object.as_mut().unwrap().kind = SmartObjectKind::External });
+        pictura_codec::edit_layer(linked.layers[0].as_mut(), |parts| {
+            parts.smart_object.as_mut().unwrap().kind = SmartObjectKind::External
+        });
         assert!(!apply_smart_filter(&mut linked, "0", blur(2.0), None));
         assert!(so(&linked).smart_filters.is_empty());
 
         let mut legacy = smart_doc();
-        pictura_codec::edit_layer(legacy.layers[0].as_mut(), |parts| { parts
-            .extra_blocks
-            .retain(|b| &b.key != b"SoLd" && &b.key != b"SoLE") });
-        pictura_codec::edit_layer(legacy.layers[0].as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-            key: *b"PlLd",
-            data: vec![0; 8].into(),
-        }) });
+        pictura_codec::edit_layer(legacy.layers[0].as_mut(), |parts| {
+            parts
+                .extra_blocks
+                .retain(|b| &b.key != b"SoLd" && &b.key != b"SoLE")
+        });
+        pictura_codec::edit_layer(legacy.layers[0].as_mut(), |parts| {
+            parts.extra_blocks.push(LayerBlock {
+                key: *b"PlLd",
+                data: vec![0; 8].into(),
+            })
+        });
         assert!(!apply_smart_filter(&mut legacy, "0", blur(2.0), None));
         assert!(so(&legacy).smart_filters.is_empty());
 

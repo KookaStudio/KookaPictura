@@ -485,10 +485,12 @@ mod tests {
     #[test]
     fn export_layers_adjustment_is_a_target() {
         let mut adjustment = layer("Adjustment");
-        pictura_codec::edit_layer(adjustment.as_mut(), |parts| { parts.adjustment = Some(AdjustmentData {
-            key: *b"inv ",
-            data: Plane::default(),
-        }) });
+        pictura_codec::edit_layer(adjustment.as_mut(), |parts| {
+            parts.adjustment = Some(AdjustmentData {
+                key: *b"inv ",
+                data: Plane::default(),
+            })
+        });
         let doc = doc(vec![adjustment]);
         assert_eq!(collect_targets(&doc, false, "").len(), 1);
     }

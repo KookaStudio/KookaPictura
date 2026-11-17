@@ -1,7 +1,7 @@
 //! The Pictura-private `PiSt` layer block that carries a smart object's stack
 //! mode. A recognized marker is modelled; an unknown version stays verbatim.
 
-use pictura_core::{Layer, StackMode};
+use pictura_core::StackMode;
 
 pub(crate) const KEY: [u8; 4] = *b"PiSt";
 const VERSION: u8 = 1;
@@ -21,18 +21,26 @@ fn parse(data: &[u8]) -> Option<StackMode> {
 /// Take the first recognized marker from `layer` and remove it from the
 /// unmodelled blocks; an unrecognized version or code stays in place.
 #[cfg(test)]
-pub(crate) fn take_stack_marker(layer: &mut Layer) -> Option<StackMode> {
+pub(crate) fn take_stack_marker(layer: &mut pictura_core::Layer) -> Option<StackMode> {
     crate::edit_layer(layer, take_stack_marker_from_parts)
 }
 
 /// Read a candidate's marker without consuming losing preservation data.
 pub(crate) fn stack_marker_from_parts(parts: &pictura_core::LayerParts) -> Option<StackMode> {
-    parts.extra_blocks.iter().filter(|block| block.key == KEY)
+    parts
+        .extra_blocks
+        .iter()
+        .filter(|block| block.key == KEY)
         .find_map(|block| parse(&block.data))
 }
 
-pub(crate) fn take_stack_marker_from_parts(parts: &mut pictura_core::LayerParts) -> Option<StackMode> {
-    let index = parts.extra_blocks.iter().position(|block| block.key == KEY && parse(&block.data).is_some())?;
+pub(crate) fn take_stack_marker_from_parts(
+    parts: &mut pictura_core::LayerParts,
+) -> Option<StackMode> {
+    let index = parts
+        .extra_blocks
+        .iter()
+        .position(|block| block.key == KEY && parse(&block.data).is_some())?;
     let mode = parse(&parts.extra_blocks[index].data).expect("checked recognized");
     parts.extra_blocks.remove(index);
     Some(mode)
@@ -111,9 +119,7 @@ mod tests {
 
         let again = write_psd(&back).expect("second write");
         let reread = read_psd(&again).expect("second read");
-        let so = reread.layers[0]
-            .smart_object()
-            .expect("resolved again");
+        let so = reread.layers[0].smart_object().expect("resolved again");
         assert_eq!(so.stack_mode, Some(StackMode::Median));
         assert_eq!(so.config_descriptor, descriptor);
     }
@@ -152,10 +158,7 @@ mod tests {
         let bytes = write_psd(&host(stack_layer(None, vec![unknown]))).expect("host writes");
         let back = read_psd(&bytes).expect("host reads");
         assert_eq!(
-            back.layers[0]
-                .smart_object()
-                .expect("resolved")
-                .stack_mode,
+            back.layers[0].smart_object().expect("resolved").stack_mode,
             None
         );
         let block = back.layers[0]
@@ -177,10 +180,7 @@ mod tests {
         assert_eq!(marker_count(&bytes), 1, "one authored marker");
         let back = read_psd(&bytes).expect("host reads");
         assert_eq!(
-            back.layers[0]
-                .smart_object()
-                .expect("resolved")
-                .stack_mode,
+            back.layers[0].smart_object().expect("resolved").stack_mode,
             Some(StackMode::Maximum)
         );
         assert!(back.layers[0]
@@ -242,17 +242,33 @@ mod tests {
     #[test]
     fn losing_smart_object_keeps_original_stack_markers() {
         use pictura_core::{LayerKind, LayerParts};
-        let original = read_psd(&write_psd(&host(stack_layer(Some(StackMode::Median),Vec::new()))).unwrap()).unwrap();
-        for kind in [LayerKind::Fill,LayerKind::Adjustment,LayerKind::Group] {
+        let original =
+            read_psd(&write_psd(&host(stack_layer(Some(StackMode::Median), Vec::new()))).unwrap())
+                .unwrap();
+        for kind in [LayerKind::Fill, LayerKind::Adjustment, LayerKind::Group] {
             let mut parts = LayerParts::from(original.layers[0].clone());
             parts.extra_blocks.extend([
-                LayerBlock { key: *b"zzzz", data: vec![4,5,6].into() },
-                LayerBlock { key: KEY, data: vec![1,StackMode::Median.code(),37,112].into() },
-                LayerBlock { key: KEY, data: vec![99,12].into() },
-                LayerBlock { key: *b"yyyy", data: vec![7,8,9].into() },
+                LayerBlock {
+                    key: *b"zzzz",
+                    data: vec![4, 5, 6].into(),
+                },
+                LayerBlock {
+                    key: KEY,
+                    data: vec![1, StackMode::Median.code(), 37, 112].into(),
+                },
+                LayerBlock {
+                    key: KEY,
+                    data: vec![99, 12].into(),
+                },
+                LayerBlock {
+                    key: *b"yyyy",
+                    data: vec![7, 8, 9].into(),
+                },
             ]);
             match kind {
-                LayerKind::Fill => parts.adjustment = Some(crate::encode_solid_color_fill([10,20,30])),
+                LayerKind::Fill => {
+                    parts.adjustment = Some(crate::encode_solid_color_fill([10, 20, 30]))
+                }
                 LayerKind::Adjustment => parts.adjustment = Some(crate::encode_invert()),
                 LayerKind::Group => parts.is_group = true,
                 _ => unreachable!(),
@@ -260,16 +276,20 @@ mod tests {
             let expected = parts.extra_blocks.clone();
             let mut doc = original.clone();
             doc.layers = LayerStack::from_layers(vec![crate::layer_from_parts(parts)]);
-            for bytes in [write_psd(&doc).unwrap(),crate::write_psb(&doc).unwrap()] {
+            for bytes in [write_psd(&doc).unwrap(), crate::write_psb(&doc).unwrap()] {
                 let back = read_psd(&bytes).unwrap();
-                assert_eq!(back.layers[0].kind(),kind);
+                assert_eq!(back.layers[0].kind(), kind);
                 assert_eq!(back.layers[0].extra_blocks(), &expected);
-                let again = if back.is_psb { crate::write_psb(&back) } else { write_psd(&back) }.unwrap();
+                let again = if back.is_psb {
+                    crate::write_psb(&back)
+                } else {
+                    write_psd(&back)
+                }
+                .unwrap();
                 let second = read_psd(&again).unwrap();
                 assert_eq!(second.layers[0].extra_blocks(), &expected);
-                assert_eq!(second.layer_section_extra,back.layer_section_extra);
+                assert_eq!(second.layer_section_extra, back.layer_section_extra);
             }
         }
     }
-
 }

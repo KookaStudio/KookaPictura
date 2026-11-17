@@ -212,10 +212,12 @@ fn extra_channel_document() -> Document {
     }];
     let mut stream = COMPRESSION_RAW.to_be_bytes().to_vec();
     stream.extend_from_slice(&plane);
-    crate::edit_layer(doc.layers.get_mut(0).expect("layer").as_mut(), |parts| { parts.raw_channels = vec![RawChannel {
-        id: -3,
-        data: stream.into(),
-    }] });
+    crate::edit_layer(doc.layers.get_mut(0).expect("layer").as_mut(), |parts| {
+        parts.raw_channels = vec![RawChannel {
+            id: -3,
+            data: stream.into(),
+        }]
+    });
     doc
 }
 

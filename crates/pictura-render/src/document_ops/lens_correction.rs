@@ -204,21 +204,24 @@ mod tests {
         assert!(!apply_lens_correction(&mut missing, "9", &slots(20.0)));
 
         let mut raster = smart_doc();
-        pictura_codec::edit_layer(raster.layers[0].as_mut(), |parts| { parts.smart_object = None });
+        pictura_codec::edit_layer(raster.layers[0].as_mut(), |parts| parts.smart_object = None);
         assert!(!apply_lens_correction(&mut raster, "0", &slots(20.0)));
 
         let mut group = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-        group.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
-            name: "g".into(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 4,
-                right: 4,
-            },
-            is_group: true,
-            ..Default::default()
-        })]);
+        group.layers =
+            pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+                pictura_core::LayerParts {
+                    name: "g".into(),
+                    rect: PsdRect {
+                        top: 0,
+                        left: 0,
+                        bottom: 4,
+                        right: 4,
+                    },
+                    is_group: true,
+                    ..Default::default()
+                },
+            )]);
         assert!(!apply_lens_correction(&mut group, "0", &slots(20.0)));
 
         // Slots that do not map are refused without attaching.

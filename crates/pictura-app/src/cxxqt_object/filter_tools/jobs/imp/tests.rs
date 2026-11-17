@@ -11,7 +11,12 @@ use pictura_render::DocumentComposite;
 fn striped() -> PictureViewRust {
     let mut doc = Document::new(96, 80, ColorMode::Rgb, BitDepth::Eight);
     let mut layer = pixel_layer("px", 96, 80, (0, 0, 0));
-    for (c, ch) in layer.channels_mut().iter_mut().filter(|c| c.id >= 0).enumerate() {
+    for (c, ch) in layer
+        .channels_mut()
+        .iter_mut()
+        .filter(|c| c.id >= 0)
+        .enumerate()
+    {
         ch.data = (0..96 * 80)
             .map(|i| {
                 if (i % 96 + i / 96 + c) % 7 < 3 {

@@ -6,11 +6,20 @@ Repeated untagged titles have separate rows with their own steps and expected
 results. No manual-only scenarios are required: the data, file, render, and UI
 assertions can run as Rust or offscreen Qt Test checks.
 
+CI repair uses the existing scenario coverage below and the full workspace
+compile, formatting, and file-size gates. The first CI run on `2c2a553b`
+stopped before runtime checks on invalid syntax and borrows introduced during
+the model migration. The repair preserves the existing native-fill and healing
+assertions, restores the path-session enum variant, and moves layer-record
+parsing into its own module without changing behavior. CI remains responsible
+for compilation and runtime evidence; local source formatting is applied as
+part of the repair.
+
 Coverage names identify the automated test sources written during apply; they
 are not execution results. Existing coverage was migrated to typed access with
 its original assertions retained. The focused plan-cell unquoting change and
-parser regression sources are also written. Builds, test execution, formatting,
-validation, and evidence collection are delegated to CI at the user's request.
+parser regression sources are also written. Builds, test execution, validation,
+and execution evidence collection are delegated to CI at the user's request.
 Main-spec sync and archival are complete; the coverage below remains planned
 coverage until CI reports execution results.
 Existing OpenSpec scenario titles are intentionally retained.

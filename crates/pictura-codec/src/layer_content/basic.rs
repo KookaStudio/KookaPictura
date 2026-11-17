@@ -1,11 +1,11 @@
+use crate::layer_content_budget::ContentAlloc;
+use crate::DescValue;
 use pictura_core::{
     Adjustment, BlackWhiteParams, BrightnessContrastParams, ExposureParams, HueRange,
     HueSaturationParams, LevelsChannel, LevelsParams, PhotoFilterParams, ShadowsHighlightsParams,
     VibranceParams,
 };
 use pictura_core::{AdjustmentData, FillContent};
-use crate::DescValue;
-use crate::layer_content_budget::ContentAlloc;
 
 /// `SoCo`: the standard PSD solid-color fill descriptor. A version-16
 /// `DescriptorBlock` whose `Clr ` object carries `Rd  `/`Grn `/`Bl  ` `doub`
@@ -148,7 +148,10 @@ pub fn decode_hue_saturation(d: &[u8]) -> Option<Adjustment> {
     decode_hue_saturation_using(d, &mut ContentAlloc::new(None))
 }
 
-pub(crate) fn decode_hue_saturation_using(d: &[u8], alloc: &mut ContentAlloc) -> Option<Adjustment> {
+pub(crate) fn decode_hue_saturation_using(
+    d: &[u8],
+    alloc: &mut ContentAlloc,
+) -> Option<Adjustment> {
     if be_u16(d, 0)? != 2 {
         return None;
     }
@@ -184,15 +187,19 @@ pub(crate) fn decode_hue_saturation_using(d: &[u8], alloc: &mut ContentAlloc) ->
         } else {
             [v(0), v(1), v(2), v(3)]
         };
-        alloc.push(&mut ranges, HueRange {
-            begin_ramp: band[0],
-            begin_sustain: band[1],
-            end_sustain: band[2],
-            end_ramp: band[3],
-            hue,
-            saturation,
-            lightness,
-        }, "hue adjustment ranges")?;
+        alloc.push(
+            &mut ranges,
+            HueRange {
+                begin_ramp: band[0],
+                begin_sustain: band[1],
+                end_sustain: band[2],
+                end_ramp: band[3],
+                hue,
+                saturation,
+                lightness,
+            },
+            "hue adjustment ranges",
+        )?;
     }
     Some(Adjustment::HueSaturation(HueSaturationParams {
         hue,
@@ -526,4 +533,3 @@ fn encode_short(key: [u8; 4], value: u16) -> AdjustmentData {
         data: data.into(),
     }
 }
-

@@ -113,10 +113,12 @@ fn psb_widens_preserved_verbatim_channel_length() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
     let mut layer = pixel("RawHold", rect(0, 0, 2, 2), 3, BlendMode::Normal, 255);
     let stream = vec![0u8, 3, 1, 2, 3, 0xFF, 0xFE];
-    crate::edit_layer(layer.as_mut(), |parts| { parts.raw_channels = vec![RawChannel {
-        id: -3,
-        data: stream.clone().into(),
-    }] });
+    crate::edit_layer(layer.as_mut(), |parts| {
+        parts.raw_channels = vec![RawChannel {
+            id: -3,
+            data: stream.clone().into(),
+        }]
+    });
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
     let bytes = write_psb(&doc).unwrap();
@@ -135,7 +137,8 @@ fn psb_widens_preserved_verbatim_channel_length() {
 
     let back = read_psd(&bytes).unwrap();
     assert_eq!(
-        back.layers[0].raw_channels()[0].data, stream,
+        back.layers[0].raw_channels()[0].data,
+        stream,
         "stream bytes survive"
     );
     doc.is_psb = true;
@@ -146,10 +149,12 @@ fn psb_widens_preserved_verbatim_channel_length() {
 fn psb_preserved_big_key_block_uses_u64_length() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
     let mut layer = pixel("Big", rect(0, 0, 2, 2), 3, BlendMode::Normal, 255);
-    crate::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![LayerBlock {
-        key: *b"Lr16",
-        data: vec![1, 2, 3, 4, 5].into(),
-    }] });
+    crate::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks = vec![LayerBlock {
+            key: *b"Lr16",
+            data: vec![1, 2, 3, 4, 5].into(),
+        }]
+    });
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
     let bytes = write_psb(&doc).unwrap();
@@ -338,10 +343,12 @@ fn psb_write_is_deterministic() {
 fn psb_non_big_key_block_keeps_u32_length() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
     let mut layer = pixel("Small", rect(0, 0, 2, 2), 3, BlendMode::Normal, 255);
-    crate::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![LayerBlock {
-        key: *b"lfx2",
-        data: vec![1, 2, 3, 4].into(),
-    }] });
+    crate::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks = vec![LayerBlock {
+            key: *b"lfx2",
+            data: vec![1, 2, 3, 4].into(),
+        }]
+    });
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
     let bytes = write_psb(&doc).unwrap();

@@ -103,9 +103,12 @@ fn pixel_target_refuses_smart_object() {
         .is_some_and(|e| e.contains("smart object")));
 
     let mut linked = smart_state();
-    pictura_codec::edit_layer(&mut linked.session.doc.as_mut().unwrap().layers[0], |parts| {
-        parts.smart_object.as_mut().unwrap().kind = pictura_core::SmartObjectKind::External;
-    });
+    pictura_codec::edit_layer(
+        &mut linked.session.doc.as_mut().unwrap().layers[0],
+        |parts| {
+            parts.smart_object.as_mut().unwrap().kind = pictura_core::SmartObjectKind::External;
+        },
+    );
     assert_eq!(
         commit_kind(&mut linked, "gaussian-blur", &[2.0]),
         Some(false)

@@ -88,8 +88,6 @@ pub struct HueRange {
     pub lightness: i16,
 }
 
-
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct BlackWhiteParams {
     /// Contributions in percent, matching the CS6 -200…+300 sliders.
@@ -416,7 +414,6 @@ pub struct ReplaceColorParams {
     pub saturation: f64,
     pub lightness: f64,
 }
-
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum FillContent {

@@ -169,7 +169,10 @@ fn apply_changes_no_pixels() {
     let comp = comp_for(&mut doc, 1);
     add_comp(&mut doc, comp.clone());
     apply_layer_comp(&mut doc, &comp);
-    assert_eq!(doc.layers[0].channels()[0].data.as_slice(), before.as_slice());
+    assert_eq!(
+        doc.layers[0].channels()[0].data.as_slice(),
+        before.as_slice()
+    );
 }
 
 #[test]
@@ -402,7 +405,9 @@ fn duplicating_a_layer_does_not_persist_stale_comp_state() {
     let mut doc = document(vec![pixel("A", 1, rect(0, 0, 4, 4), 10)]);
     let comp = comp_for(&mut doc, 1);
     let mut copy = doc.layers[0].clone();
-    pictura_codec::edit_layer(copy.as_mut(), |parts| { parts.extra_blocks.retain(|block| block.key != *b"shmd") });
+    pictura_codec::edit_layer(copy.as_mut(), |parts| {
+        parts.extra_blocks.retain(|block| block.key != *b"shmd")
+    });
     clear_layer_id(&mut copy);
     assert_eq!(layer_id(&copy), None);
     assert!(comp.entry(1).is_some());
@@ -440,17 +445,22 @@ fn a_nested_group_moves_once() {
         }
     }
     apply_layer_comp(&mut doc, &comp);
-    assert_eq!(doc.layers[0].children()[0].children()[0].rect, rect(0, 0, 4, 4));
+    assert_eq!(
+        doc.layers[0].children()[0].children()[0].rect,
+        rect(0, 0, 4, 4)
+    );
 }
 
 #[test]
 fn an_adjustment_mask_moves() {
     let mut adjustment = pixel("A", 1, rect(0, 0, 4, 4), 0);
     adjustment.channels_mut().clear();
-    pictura_codec::edit_layer(adjustment.as_mut(), |parts| { parts.adjustment = Some(pictura_core::AdjustmentData {
-        key: *b"brit",
-        data: Plane::default(),
-    }) });
+    pictura_codec::edit_layer(adjustment.as_mut(), |parts| {
+        parts.adjustment = Some(pictura_core::AdjustmentData {
+            key: *b"brit",
+            data: Plane::default(),
+        })
+    });
     adjustment.mask = Some(pictura_core::LayerMask {
         rect: rect(0, 0, 4, 4),
         ..Default::default()
@@ -552,10 +562,12 @@ fn comps_still_resolve_after_save_and_reopen() {
 #[test]
 fn smart_filter_settings_do_not_vary() {
     let mut doc = document(vec![pixel("A", 1, rect(0, 0, 4, 4), 10)]);
-    pictura_codec::edit_layer(doc.layers[0].as_mut(), |parts| { parts.extra_blocks.push(pictura_core::LayerBlock {
-        key: *b"FXid",
-        data: vec![1, 2, 3].into(),
-    }) });
+    pictura_codec::edit_layer(doc.layers[0].as_mut(), |parts| {
+        parts.extra_blocks.push(pictura_core::LayerBlock {
+            key: *b"FXid",
+            data: vec![1, 2, 3].into(),
+        })
+    });
     let comp = comp_for(&mut doc, 1);
     let before = doc.layers[0].extra_blocks().clone();
     apply_layer_comp(&mut doc, &comp);

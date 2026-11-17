@@ -70,13 +70,13 @@ mod pyramid_level;
 #[cfg(any(test, feature = "test-oracle"))]
 mod view_pyramid;
 pub(crate) use composite::{channel, channel_plane, mask_alpha, render_smart_source};
-pub use pictura_codec::decode_fill;
 pub use composite::{
     composite_rgba, decode_adjustment, encode_brightness_contrast, encode_hue_saturation,
     encode_invert, encode_photo_filter, encode_posterize, encode_solid_color_fill,
     encode_threshold,
 };
 pub use composite_request::{composite, CompositeRequest};
+pub use pictura_codec::decode_fill;
 pub use pyramid_level::{PyramidLevel, SMALLEST_SIDE, TILE};
 #[cfg(any(test, feature = "test-oracle"))]
 pub use view_pyramid::{Planes, ViewPyramid};

@@ -4,9 +4,9 @@
 //! budget, as `color_balance.rs` is. The layout is psd-tools' `GradientMap`
 //! struct.
 
-use pictura_core::{Adjustment, GradientMapParams, GradientStop, OpacityStop};
-use pictura_core::AdjustmentData;
 use crate::layer_content_budget::ContentAlloc;
+use pictura_core::AdjustmentData;
+use pictura_core::{Adjustment, GradientMapParams, GradientStop, OpacityStop};
 
 use super::basic::{be_u16, be_u32};
 

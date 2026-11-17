@@ -36,7 +36,9 @@ fn depth16_doc() -> Document {
         )),
         ..Default::default()
     });
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.smart_object = Some(SmartObject::default().with_payload(vec![9, 9, 9])) });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.smart_object = Some(SmartObject::default().with_payload(vec![9, 9, 9]))
+    });
     doc.layers = LayerStack::from_layers(vec![layer]);
     doc
 }
@@ -211,7 +213,11 @@ fn native_edit_undo_restores_old_bytes() {
     }
     doc.layer_section_extra.as_mut_slice()[0] = 42;
     pictura_codec::edit_layer(&mut doc.layers[0], |parts| {
-        parts.smart_object.as_mut().unwrap().set_payload(vec![7, 7, 7]);
+        parts
+            .smart_object
+            .as_mut()
+            .unwrap()
+            .set_payload(vec![7, 7, 7]);
     });
     selection.as_mut().unwrap().data.as_mut_slice()[0] = 0;
     history.capture_live(&mut doc, &selection, &target, "Edit");
@@ -260,7 +266,9 @@ fn depth16_doc_sized(w: u32, h: u32) -> Document {
         )),
         ..Default::default()
     });
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.smart_object = Some(SmartObject::default().with_payload(vec![0u8; 8 * 1024 * 1024])) });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.smart_object = Some(SmartObject::default().with_payload(vec![0u8; 8 * 1024 * 1024]))
+    });
     doc.layers = LayerStack::from_layers(vec![layer]);
     doc
 }
@@ -299,16 +307,18 @@ fn stamped_doc() -> Document {
             data: vec![9; 4].into(),
         })
         .to_vec();
-    doc.layers = LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 2,
-            right: 2,
+    doc.layers = LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 2,
+                right: 2,
+            },
+            channels,
+            ..Default::default()
         },
-        channels,
-        ..Default::default()
-    })]);
+    )]);
     doc
 }
 

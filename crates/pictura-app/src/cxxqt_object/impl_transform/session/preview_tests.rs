@@ -81,10 +81,12 @@ fn a_small_layer_gets_a_backdrop_patch() {
 #[test]
 fn effects_patch_their_reach_and_lifts_keep_the_whole_backdrop() {
     let mut effected = small_layer();
-    pictura_codec::edit_layer(effected.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-        key: *b"lfx2",
-        data: Vec::new().into(),
-    }) });
+    pictura_codec::edit_layer(effected.as_mut(), |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"lfx2",
+            data: Vec::new().into(),
+        })
+    });
     let doc = document(effected);
     let styled =
         build_transform_preview(&doc, "1", &["1".to_string()], RECT, false, true).expect("preview");

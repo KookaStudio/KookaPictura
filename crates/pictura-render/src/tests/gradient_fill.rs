@@ -396,7 +396,8 @@ fn gradient_fill_decode_rejects_malformed() {
 #[test]
 fn gradient_fill_reads_optional_reverse_and_scale() {
     let reversed = gradient_fill_data(GradientKind::Radial, &bw_stops(), 45.0, true, 50.0);
-    let Some(pictura_core::FillContent::Gradient(params)) = pictura_codec::decode_fill(&reversed) else {
+    let Some(pictura_core::FillContent::Gradient(params)) = pictura_codec::decode_fill(&reversed)
+    else {
         panic!("decodes");
     };
     assert!(params.reverse);

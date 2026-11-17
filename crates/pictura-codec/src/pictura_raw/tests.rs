@@ -304,11 +304,15 @@ fn attach_inserts_into_a_preserved_sold_and_preserves_other_keys() {
     let layer = embedded_layer();
     let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
     let mut layer = layer;
-    crate::edit_layer(&mut layer, |parts| { parts.smart_object.as_mut().unwrap().uuid = so.uuid.clone(); });
-    crate::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-        key: *b"SoLd",
-        data: data.into(),
-    }) });
+    crate::edit_layer(&mut layer, |parts| {
+        parts.smart_object.as_mut().unwrap().uuid = so.uuid.clone();
+    });
+    crate::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"SoLd",
+            data: data.into(),
+        })
+    });
 
     let settings = PicturaRawSettings {
         basic: CrsSettings {
@@ -447,10 +451,12 @@ fn reattach_a_generic_filter_replaces_only_its_own_entry() {
     let layer0 = embedded_layer();
     let data = crate::smart_writer::author_sold_block(&so, &layer0, 2, 2);
     let mut layer = layer0;
-    crate::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-        key: *b"SoLd",
-        data: data.into(),
-    }) });
+    crate::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"SoLd",
+            data: data.into(),
+        })
+    });
 
     let replacement = SmartFilter {
         filter_id: 4242,
@@ -659,10 +665,12 @@ fn append_stacks_same_id_preserved() {
     let mut layer = embedded_layer();
     let so = layer.smart_object().cloned().unwrap();
     let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
-    crate::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-        key: *b"SoLd",
-        data: data.into(),
-    }) });
+    crate::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"SoLd",
+            data: data.into(),
+        })
+    });
     append_smart_filter(&mut layer, generic("A")).expect("appends");
     append_smart_filter(&mut layer, generic("B")).expect("appends");
     let so = layer.smart_object().unwrap();
@@ -704,10 +712,12 @@ fn replace_keeps_position_flag_and_blend_options() {
     let mut layer = embedded_layer();
     let so = layer.smart_object().cloned().unwrap();
     let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
-    crate::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-        key: *b"SoLd",
-        data: data.into(),
-    }) });
+    crate::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"SoLd",
+            data: data.into(),
+        })
+    });
     append_smart_filter(&mut layer, generic("A")).expect("appends");
     append_smart_filter(&mut layer, generic("B")).expect("appends");
     crate::set_smart_filter_enabled(&mut layer, 0, false).expect("disables");

@@ -350,7 +350,9 @@ fn convert_cmyk_planes(
 fn for_each_source_layer(layers: &mut LayerStack, f: &mut impl FnMut(&mut Layer)) {
     for layer in layers {
         f(layer);
-        if let Some(children) = layer.children_mut() { for_each_source_layer(children, f); }
+        if let Some(children) = layer.children_mut() {
+            for_each_source_layer(children, f);
+        }
     }
 }
 
@@ -428,7 +430,9 @@ pub(crate) fn retain_lab_layer_planes(layers: &mut LayerStack, depth: u16) {
                     Some(SourceChannels::new(BitDepth::Eight, layer.rect, planes));
             }
         }
-        if let Some(children) = layer.children_mut() { retain_lab_layer_planes(children, depth); }
+        if let Some(children) = layer.children_mut() {
+            retain_lab_layer_planes(children, depth);
+        }
     }
 }
 
@@ -454,7 +458,9 @@ pub(crate) fn retain_cmyk_layer_planes(layers: &mut LayerStack, depth: u16) {
                     Some(SourceChannels::new(BitDepth::Eight, layer.rect, planes));
             }
         }
-        if let Some(children) = layer.children_mut() { retain_cmyk_layer_planes(children, depth); }
+        if let Some(children) = layer.children_mut() {
+            retain_cmyk_layer_planes(children, depth);
+        }
     }
 }
 
@@ -479,7 +485,9 @@ pub(crate) fn retain_indexed_layer_planes(layers: &mut LayerStack, depth: u16) {
                     Some(SourceChannels::new(BitDepth::Eight, layer.rect, planes));
             }
         }
-        if let Some(children) = layer.children_mut() { retain_indexed_layer_planes(children, depth); }
+        if let Some(children) = layer.children_mut() {
+            retain_indexed_layer_planes(children, depth);
+        }
     }
 }
 

@@ -25,7 +25,7 @@ fn vscg(key: &[u8; 4], descriptor: &[u8]) -> LayerBlock {
 fn shaped_layer(name: &str, w: u32, h: u32, fill: LayerBlock) -> Layer {
     let mut layer = solid(name, full(w, h), (0, 0, 0), 0, BlendMode::Normal, 255);
     layer.channels_mut().clear();
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(fill) });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| parts.extra_blocks.push(fill));
     layer
 }
 
@@ -50,7 +50,8 @@ fn decode_vector_fill_reuses_the_solid_and_gradient_decoders() {
     ];
     let gradient = encode_gradient_fill(GradientKind::Linear, &stops, 0.0);
     let block = vscg(b"GdFl", &gradient.data);
-    let Some(pictura_core::FillContent::Gradient(params)) = crate::fill::decode_vector_fill(&block.data)
+    let Some(pictura_core::FillContent::Gradient(params)) =
+        crate::fill::decode_vector_fill(&block.data)
     else {
         panic!("gradient vscg decodes");
     };
@@ -103,7 +104,9 @@ fn vector_fill_without_a_mask_covers_the_layer_rect() {
 fn adjustment_block_takes_precedence_over_vector_fill() {
     let fill = vscg(b"SoCo", &encode_solid_color_fill([0, 255, 0]).data);
     let mut shape = shaped_layer("shape", 8, 8, fill);
-    pictura_codec::edit_layer(shape.as_mut(), |parts| { parts.adjustment = Some(encode_solid_color_fill([0, 0, 255])) });
+    pictura_codec::edit_layer(shape.as_mut(), |parts| {
+        parts.adjustment = Some(encode_solid_color_fill([0, 0, 255]))
+    });
     let out = composite_rgba(&doc(8, 8, vec![shape]));
 
     assert_eq!(
@@ -117,10 +120,12 @@ fn adjustment_block_takes_precedence_over_vector_fill() {
 fn undecodable_adjustment_block_wins_over_vector_fill() {
     let fill = vscg(b"SoCo", &encode_solid_color_fill([0, 255, 0]).data);
     let mut shape = shaped_layer("shape", 4, 4, fill);
-    pictura_codec::edit_layer(shape.as_mut(), |parts| { parts.adjustment = Some(AdjustmentData {
-        key: *b"zzzz",
-        data: Vec::new().into(),
-    }) });
+    pictura_codec::edit_layer(shape.as_mut(), |parts| {
+        parts.adjustment = Some(AdjustmentData {
+            key: *b"zzzz",
+            data: Vec::new().into(),
+        })
+    });
     let base = solid(
         "Base",
         full(4, 4),
@@ -179,10 +184,12 @@ fn malformed_vector_fill_is_a_no_op() {
             255,
         );
         let mut pixel = base.clone();
-        pictura_codec::edit_layer(pixel.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-            key: *b"vscg",
-            data: data.into(),
-        }) });
+        pictura_codec::edit_layer(pixel.as_mut(), |parts| {
+            parts.extra_blocks.push(LayerBlock {
+                key: *b"vscg",
+                data: data.into(),
+            })
+        });
         let with = doc(4, 4, vec![base.clone(), pixel]);
         let without = doc(4, 4, vec![base]);
         assert_eq!(

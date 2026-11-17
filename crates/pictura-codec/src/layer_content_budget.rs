@@ -11,7 +11,10 @@ pub(crate) struct ContentAlloc<'a> {
 
 impl<'a> ContentAlloc<'a> {
     pub(crate) fn new(budget: Option<&'a mut DecodeBudget>) -> Self {
-        Self { budget, error: None }
+        Self {
+            budget,
+            error: None,
+        }
     }
 
     pub(crate) fn vec<T>(&mut self, count: usize, what: &str) -> Option<Vec<T>> {
@@ -33,7 +36,9 @@ impl<'a> ContentAlloc<'a> {
     pub(crate) fn push<T>(&mut self, values: &mut Vec<T>, value: T, what: &str) -> Option<()> {
         if values.len() == values.capacity() {
             let Some(capacity) = values.capacity().checked_mul(2) else {
-                self.error = Some(PsdError::Unsupported(format!("{what} exceeds decode budget address space")));
+                self.error = Some(PsdError::Unsupported(format!(
+                    "{what} exceeds decode budget address space"
+                )));
                 return None;
             };
             let capacity = capacity.max(4);
@@ -94,16 +99,15 @@ pub(crate) fn vec_with_capacity<T>(
     budget.charge(what, &[count, size_of::<T>()])?;
     let mut values = Vec::new();
     values.try_reserve_exact(count).map_err(|_| {
-        PsdError::Unsupported(format!("{what} allocation refused after decode budget admission"))
+        PsdError::Unsupported(format!(
+            "{what} allocation refused after decode budget admission"
+        ))
     })?;
     Ok(values)
 }
 
 #[cfg(test)]
-pub(crate) fn copy_payload(
-    bytes: &[u8],
-    budget: &mut DecodeBudget,
-) -> Result<Vec<u8>, PsdError> {
+pub(crate) fn copy_payload(bytes: &[u8], budget: &mut DecodeBudget) -> Result<Vec<u8>, PsdError> {
     let mut copy = vec_with_capacity(bytes.len(), budget, "content payload copy")?;
     copy.extend_from_slice(bytes);
     Ok(copy)
@@ -117,7 +121,9 @@ pub(crate) fn copy_string(
     budget.charge(what, &[value.len()])?;
     let mut copy = String::new();
     copy.try_reserve_exact(value.len()).map_err(|_| {
-        PsdError::Unsupported(format!("{what} allocation refused after decode budget admission"))
+        PsdError::Unsupported(format!(
+            "{what} allocation refused after decode budget admission"
+        ))
     })?;
     copy.push_str(value);
     Ok(copy)
@@ -151,10 +157,7 @@ pub(crate) fn parse_cube_unbudgeted(bytes: &[u8]) -> Option<(usize, Vec<[f32; 3]
     Some((size, points))
 }
 
-fn walk_cube(
-    bytes: &[u8],
-    mut point: impl FnMut([f32; 3]),
-) -> Option<(usize, usize)> {
+fn walk_cube(bytes: &[u8], mut point: impl FnMut([f32; 3])) -> Option<(usize, usize)> {
     let text = std::str::from_utf8(bytes).ok()?;
     let mut size: Option<usize> = None;
     let mut count = 0usize;

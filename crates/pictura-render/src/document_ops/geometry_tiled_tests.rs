@@ -197,7 +197,11 @@ fn tiled_canvas_size_matches_the_dense_paths() {
         assert!(extend_background(&mut doc, [200, 100, 50]).expect("extends"));
         assert!(extend_background_dense(&mut dense, [200, 100, 50]));
         assert_eq!(doc.layers[0].rect, dense.layers[0].rect);
-        for (got, want) in doc.layers[0].channels().iter().zip(dense.layers[0].channels()) {
+        for (got, want) in doc.layers[0]
+            .channels()
+            .iter()
+            .zip(dense.layers[0].channels())
+        {
             assert!(got.data.is_tiled());
             assert!(
                 every(&got.data) == every(&want.data),

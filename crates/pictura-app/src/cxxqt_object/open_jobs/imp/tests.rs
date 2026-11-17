@@ -555,10 +555,13 @@ fn whole_rect(w: u32, h: u32) -> pictura_core::PsdRect {
 /// Whether every layer channel tile is still away in the file.
 fn layers_untouched(view: &PictureViewRust) -> bool {
     let doc = view.session.doc.as_ref().expect("document");
-    doc.layers.iter().flat_map(|l| l.channels().iter()).all(|c| {
-        (0..c.data.tile_count())
-            .all(|i| c.data.tile_residency(i) == Some(pictura_core::Residency::Backed))
-    })
+    doc.layers
+        .iter()
+        .flat_map(|l| l.channels().iter())
+        .all(|c| {
+            (0..c.data.tile_count())
+                .all(|i| c.data.tile_residency(i) == Some(pictura_core::Residency::Backed))
+        })
 }
 
 /// The tiles of `level` against a whole rebuild from the layers.

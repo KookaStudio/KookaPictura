@@ -59,7 +59,8 @@ impl<'a> BlendCtx<'a> {
             layer.fill as f32 / 255.0
         };
         let curve = crate::text_gamma::applies_to(layer)
-            .then(crate::text_gamma::current_curve).flatten();
+            .then(crate::text_gamma::current_curve)
+            .flatten();
         let blend_if = layer.blend_if.as_ref().filter(|view| !view.is_default());
         Self {
             opacity,
@@ -328,7 +329,8 @@ pub(crate) fn blend_into_row_legacy(
     };
     let mut content = src_a * opacity * fill;
     if let Some(curve) = crate::text_gamma::applies_to(layer)
-        .then(crate::text_gamma::current_curve).flatten()
+        .then(crate::text_gamma::current_curve)
+        .flatten()
     {
         content = curve.apply(content);
     }

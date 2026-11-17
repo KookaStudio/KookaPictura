@@ -10,12 +10,14 @@
 //! self-describing), and an abstract-profile or device-link lookup decodes to a
 //! no-op. Raise either when a real fixture disagrees.
 
-pub use pictura_codec::layer_content::color_lookup::{decode_color_lookup, encode_color_lookup, identity_cube};
 use pictura_adjust::{Adjustment, ColorLookupKind};
-#[cfg(test)]
-use pictura_core::ColorLookupParams;
+pub use pictura_codec::layer_content::color_lookup::{
+    decode_color_lookup, encode_color_lookup, identity_cube,
+};
 use pictura_codec::DescValue;
 use pictura_core::AdjustmentData;
+#[cfg(test)]
+use pictura_core::ColorLookupParams;
 
 use crate::color_lookup_presets::{preset_cube, COLOR_LOOKUP_PRESETS};
 use crate::composite::{be_u16, desc_item};
@@ -23,21 +25,16 @@ use crate::composite::{be_u16, desc_item};
 /// `clrL`: a payload whose 2-byte version is not 1, whose descriptor does not
 /// parse, or whose `lookupType` is absent is `None`, never a panic.
 
-
 /// A `lookupType` enum value, or `None` when it is not one this engine knows.
 
-
 /// The payload of a `tdta` raw value: `[4-byte ostype][u32 length][bytes]`.
-
 
 /// Build a `clrL` block: version 1, a `3DLUT` descriptor embedding `file_data`
 /// as a `.CUBE`, `rgbOrder` data/table order, dither off. `decode_adjustment` on
 /// the output parses the `.CUBE` back when it is valid.
 
-
 /// A `LUT_3D_SIZE 2` identity `.cube`, so an authored Color Lookup layer is an
 /// exact no-op.
-
 
 /// The [`COLOR_LOOKUP_PRESETS`] index of `d`'s stored `Nm  ` name, or `None`
 /// when `d` does not carry a preset name (a hand-authored file, or a block that

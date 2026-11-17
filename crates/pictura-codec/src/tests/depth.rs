@@ -537,21 +537,23 @@ fn short_high_depth_lab_cmyk_source_plane_is_a_typed_error() {
             )
             .expect("valid native source");
         {
-            let _ = doc.layers.push(crate::layer_from_parts(pictura_core::LayerParts {
-                rect,
-                channels: (0i16..pictura_core::LayerParts::from(3))
-                    .map(|id| Channel {
-                        id,
-                        data: vec![1].into(),
-                    })
-                    .collect(),
-                source_channels: Some(SourceChannels::new(
-                    bits,
+            let _ = doc
+                .layers
+                .push(crate::layer_from_parts(pictura_core::LayerParts {
                     rect,
-                    vec![(0, Samples::from_bytes(&vec![0u8; native_len], bits))],
-                )),
-                ..Default::default()
-            }));
+                    channels: (0i16..pictura_core::LayerParts::from(3))
+                        .map(|id| Channel {
+                            id,
+                            data: vec![1].into(),
+                        })
+                        .collect(),
+                    source_channels: Some(SourceChannels::new(
+                        bits,
+                        rect,
+                        vec![(0, Samples::from_bytes(&vec![0u8; native_len], bits))],
+                    )),
+                    ..Default::default()
+                }));
         };
         assert!(
             matches!(write_psd(&doc), Err(PsdError::Invalid(_))),
@@ -658,15 +660,17 @@ fn short_high_depth_layer_plane_is_a_typed_error() {
         )
         .expect("valid native source");
     {
-        let _ = doc.layers.push(crate::layer_from_parts(pictura_core::LayerParts {
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 2,
-                right: 2,
-            },
-            ..Default::default()
-        }));
+        let _ = doc
+            .layers
+            .push(crate::layer_from_parts(pictura_core::LayerParts {
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 2,
+                    right: 2,
+                },
+                ..Default::default()
+            }));
     };
 
     // A modeled color channel with a one-byte plane.
@@ -678,10 +682,12 @@ fn short_high_depth_layer_plane_is_a_typed_error() {
 
     // An unmodeled raw channel with a one-byte plane (after its header).
     doc.layers[0].channels_mut().clear();
-    crate::edit_layer(doc.layers[0].as_mut(), |parts| { parts.raw_channels = vec![RawChannel {
-        id: 3,
-        data: vec![0, 0, 1].into(),
-    }] });
+    crate::edit_layer(doc.layers[0].as_mut(), |parts| {
+        parts.raw_channels = vec![RawChannel {
+            id: 3,
+            data: vec![0, 0, 1].into(),
+        }]
+    });
     assert!(matches!(write_psd(&doc), Err(PsdError::Invalid(_))));
 }
 
@@ -984,7 +990,9 @@ fn profile_conversion_leaves_partial_native_layer_unchanged() {
     let layer_channels = [(0i16, r.as_slice()), (1, g.as_slice()), (2, b.as_slice())];
     let p = layered_psd_depth(16, 3, 3, &[&r, &g, &b], &layer_channels);
     let mut doc = read_psd(&p).unwrap();
-    doc.layers[0].channels_mut().retain(|channel| channel.id != 2);
+    doc.layers[0]
+        .channels_mut()
+        .retain(|channel| channel.id != 2);
     let before = doc.layers[0].source_channels.clone();
     assert!(convert_document(&mut doc, &Profile::adobe_rgb()));
     assert_eq!(

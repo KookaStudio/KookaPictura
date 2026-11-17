@@ -269,13 +269,15 @@ fn shift_into_region(layer: &mut pictura_core::Layer, dx: i32, dy: i32) {
         }
         vector.rows = Default::default();
     }
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { if let Some(tool) = parts.type_tool.as_mut() {
-        if let Some(path) = tool.path.as_mut() {
-            path.subpath.translate(f64::from(dx), f64::from(dy));
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        if let Some(tool) = parts.type_tool.as_mut() {
+            if let Some(path) = tool.path.as_mut() {
+                path.subpath.translate(f64::from(dx), f64::from(dy));
+            }
+            tool.transform[4] += f64::from(dx);
+            tool.transform[5] += f64::from(dy);
         }
-        tool.transform[4] += f64::from(dx);
-        tool.transform[5] += f64::from(dy);
-    } });
+    });
 }
 
 /// Render the layer alone over transparency and crop to its visible rect, so
@@ -436,7 +438,8 @@ fn backdrop_patch_rect(
         // Hiding a group, an effect or an adjustment changes at most the pixels
         // that can depend on it, the reach history damage already proves
         // (#1274); `None` (a knockout) keeps the whole backdrop.
-        let reaching = layer_has_effects(layer) || layer.has_adjustment_content() || layer.is_group();
+        let reaching =
+            layer_has_effects(layer) || layer.has_adjustment_content() || layer.is_group();
         // A painted layer's rect can be the whole canvas around a small mark.
         let drawn = if shape {
             pictura_render::damage::content_influence(doc, path)?

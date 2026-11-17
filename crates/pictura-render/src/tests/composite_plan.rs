@@ -243,15 +243,17 @@ fn banded_reuses_resolved_mask_and_native_state() {
 
 #[test]
 fn hidden_pattern_layer_does_not_disable_banding() {
-    let pattern = || pictura_codec::layer_from_parts(pictura_core::LayerParts {
-        name: "pattern".into(),
-        rect: full(W, H),
-        adjustment: Some(pictura_core::AdjustmentData {
-            key: *b"PtFl",
-            data: Vec::new().into(),
-        }),
-        ..Default::default()
-    });
+    let pattern = || {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
+            name: "pattern".into(),
+            rect: full(W, H),
+            adjustment: Some(pictura_core::AdjustmentData {
+                key: *b"PtFl",
+                data: Vec::new().into(),
+            }),
+            ..Default::default()
+        })
+    };
     let visible = doc(W, H, vec![base_layer(), pattern()]);
     assert!(!crate::composite_region::banded(&visible, H));
     let mut hidden = pattern();
@@ -297,8 +299,10 @@ fn content_key_invalidates_on_edit() {
 
     let mut adjustment = doc(W, H, vec![base_layer(), curves_layer()]);
     assert_edit_invalidates(&mut adjustment, 1, |layer| {
-        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.adjustment.as_mut().expect("curves block").data =
-            crate::encode_curves(&[(0, 0), (128, 90), (255, 255)], None, None, None).data });
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.adjustment.as_mut().expect("curves block").data =
+                crate::encode_curves(&[(0, 0), (128, 90), (255, 255)], None, None, None).data
+        });
     });
 
     let mut channel = doc(W, H, vec![base_layer()]);

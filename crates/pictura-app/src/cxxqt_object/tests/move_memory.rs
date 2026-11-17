@@ -81,7 +81,10 @@ fn reading_a_diverged_tiled_layer_builds_no_mirror() {
     let got = layer_buffer_within(&doc.layers[0], MARK).expect("banded");
     assert_eq!(got.data.as_slice(), expected.data.as_slice());
     assert!(
-        doc.layers[0].channels().iter().all(|c| !c.data.is_mirrored()),
+        doc.layers[0]
+            .channels()
+            .iter()
+            .all(|c| !c.data.is_mirrored()),
         "a plane was materialized whole"
     );
     drop(history);

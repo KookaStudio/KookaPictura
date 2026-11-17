@@ -247,10 +247,12 @@ fn unknown_variant_keys_survive_a_dirty_rewrite() {
 #[test]
 fn non_participating_layer_keeps_shmd() {
     let mut doc = document(layer("A", Some(1)));
-    crate::edit_layer(doc.layers[0].as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-        key: *b"cust",
-        data: vec![1, 2].into(),
-    }) });
+    crate::edit_layer(doc.layers[0].as_mut(), |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"cust",
+            data: vec![1, 2].into(),
+        })
+    });
     let bytes = crate::write_psd(&doc).expect("writes");
     let back = crate::read_psd(&bytes).expect("reads");
     assert!(back.layers[0].extra_block(b"cust").is_some());
@@ -339,14 +341,16 @@ fn base_variant_refreshes_after_apply() {
 #[test]
 fn truncated_cmls_does_not_fail_open() {
     let mut doc = document(layer("A", Some(1)));
-    crate::edit_layer(doc.layers[0].as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-        key: *b"shmd",
-        data: vec![
-            0, 0, 0, 1, b'8', b'B', b'I', b'M', b'c', b'm', b'l', b's', 0, 0, 0, 0, 0, 0, 0, 4, 1,
-            2,
-        ]
-        .into(),
-    }) });
+    crate::edit_layer(doc.layers[0].as_mut(), |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"shmd",
+            data: vec![
+                0, 0, 0, 1, b'8', b'B', b'I', b'M', b'c', b'm', b'l', b's', 0, 0, 0, 0, 0, 0, 0, 4,
+                1, 2,
+            ]
+            .into(),
+        })
+    });
     let bytes = crate::write_psd(&doc).expect("writes");
     assert!(crate::read_psd(&bytes).is_ok());
 }

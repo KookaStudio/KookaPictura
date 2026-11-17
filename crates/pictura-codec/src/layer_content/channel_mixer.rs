@@ -13,8 +13,8 @@
 //! zero bytes. The CMYK interpretation is inferred: no independent decoder
 //! models it, so it is covered by round-trip and hand-built bytes only.
 
-use pictura_core::{Adjustment, ChannelMixerParams};
 use pictura_core::AdjustmentData;
+use pictura_core::{Adjustment, ChannelMixerParams};
 
 use super::basic::{be_i16, be_u16};
 

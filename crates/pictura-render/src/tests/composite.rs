@@ -594,27 +594,29 @@ fn dissolve_is_binary_and_deterministic() {
 #[test]
 fn grayscale_layer_replicates_channel() {
     let mut d = Document::new(1, 1, ColorMode::Grayscale, BitDepth::Eight);
-    d.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
-        name: "gray".into(),
-        rect: full(1, 1),
-        blend: BlendMode::Normal,
-        opacity: 255,
-        fill: 255,
-        lock: LockFlags::default(),
-        color: ColorLabel::None,
-        clipping: false,
-        visible: true,
-        mask: None,
-        adjustment: None,
-        channels: vec![Channel {
-            id: 0,
-            data: vec![120].into(),
-        }],
-        children: pictura_core::LayerStack::default(),
-        is_group: false,
-        background: false,
-        ..Default::default()
-    })]);
+    d.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            name: "gray".into(),
+            rect: full(1, 1),
+            blend: BlendMode::Normal,
+            opacity: 255,
+            fill: 255,
+            lock: LockFlags::default(),
+            color: ColorLabel::None,
+            clipping: false,
+            visible: true,
+            mask: None,
+            adjustment: None,
+            channels: vec![Channel {
+                id: 0,
+                data: vec![120].into(),
+            }],
+            children: pictura_core::LayerStack::default(),
+            is_group: false,
+            background: false,
+            ..Default::default()
+        },
+    )]);
     assert_eq!(px(&composite_rgba(&d), 0, 0), [120, 120, 120, 255]);
 }
 
@@ -898,7 +900,9 @@ fn proxy_less_type_that_paints_nothing_leaves_the_backdrop() {
         255,
     );
     let mut layer = type_layer(Some(type_style()));
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.type_tool.as_mut().unwrap().text = "   ".into() });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.type_tool.as_mut().unwrap().text = "   ".into()
+    });
     let with = composite_rgba(&doc(200, 80, vec![base.clone(), layer]));
     let without = composite_rgba(&doc(200, 80, vec![base]));
     assert_eq!(

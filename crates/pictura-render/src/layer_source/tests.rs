@@ -222,17 +222,23 @@ fn text_raster_hits_and_invalidates() {
     let second = text_raster(&layer).expect("text rasterizes");
     assert!(Arc::ptr_eq(&first, &second), "an unchanged type layer hits");
 
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.type_tool.as_mut().unwrap().text = "Hello".into() });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.type_tool.as_mut().unwrap().text = "Hello".into()
+    });
     let edited = text_raster(&layer).expect("text rasterizes");
     assert!(!Arc::ptr_eq(&first, &edited), "editing text invalidates");
 
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.type_tool.as_mut()
-        .unwrap()
-        .style
-        .as_mut()
-        .unwrap()
-        .character
-        .size = 64.0; });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts
+            .type_tool
+            .as_mut()
+            .unwrap()
+            .style
+            .as_mut()
+            .unwrap()
+            .character
+            .size = 64.0;
+    });
     let restyled = text_raster(&layer).expect("text rasterizes");
     assert!(
         !Arc::ptr_eq(&edited, &restyled),
@@ -240,20 +246,28 @@ fn text_raster_hits_and_invalidates() {
     );
 
     let plain_key = key::text_key(layer.type_tool().unwrap(), layer.rect);
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.type_tool.as_mut().unwrap().vertical = true });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.type_tool.as_mut().unwrap().vertical = true
+    });
     assert_ne!(
         plain_key,
         key::text_key(layer.type_tool().unwrap(), layer.rect),
         "vertical text invalidates"
     );
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.type_tool.as_mut().unwrap().vertical = false });
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.type_tool.as_mut().unwrap().box_bounds = Some([0.0, 0.0, 40.0, 120.0]) });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.type_tool.as_mut().unwrap().vertical = false
+    });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.type_tool.as_mut().unwrap().box_bounds = Some([0.0, 0.0, 40.0, 120.0])
+    });
     assert_ne!(
         plain_key,
         key::text_key(layer.type_tool().unwrap(), layer.rect),
         "a paragraph box invalidates"
     );
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.type_tool.as_mut().unwrap().box_bounds = None });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.type_tool.as_mut().unwrap().box_bounds = None
+    });
 
     let before_font = text_raster(&layer).expect("text rasterizes");
     assert!(crate::fonts::register_font(
@@ -679,7 +693,9 @@ fn editing_text_invalidates_the_composite() {
     let _guard = locked();
     let mut d = doc(60, 60, vec![type_layer(Some(type_style()))]);
     let first = crate::composite_rgba(&d);
-    pictura_codec::edit_layer(d.layers[0].as_mut(), |parts| { parts.type_tool.as_mut().expect("type").text = "Changed".into() });
+    pictura_codec::edit_layer(d.layers[0].as_mut(), |parts| {
+        parts.type_tool.as_mut().expect("type").text = "Changed".into()
+    });
     let warm = crate::composite_rgba(&d);
     purge_source_cache();
     let cold = crate::composite_rgba(&d);
@@ -713,9 +729,13 @@ fn replacing_smart_object_contents_invalidates_the_composite() {
         .replace(crate::composite_rgba(&other))
         .expect("valid composite");
     let payload = pictura_codec::write_psd(&other).expect("other writes");
-    pictura_codec::edit_layer(d.layers[0].as_mut(), |parts| { parts.smart_object.as_mut()
-        .expect("smart object")
-        .set_payload(payload); });
+    pictura_codec::edit_layer(d.layers[0].as_mut(), |parts| {
+        parts
+            .smart_object
+            .as_mut()
+            .expect("smart object")
+            .set_payload(payload);
+    });
     let warm = crate::composite_rgba(&d);
     purge_source_cache();
     let cold = crate::composite_rgba(&d);
@@ -866,12 +886,15 @@ pub(super) fn nested_payload(levels: usize) -> Vec<u8> {
         so.kind = SmartObjectKind::Embedded;
         so.set_payload(payload);
         let mut wrapper = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-        wrapper.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
-            name: "nest".into(),
-            rect: rect(0, 0, 4, 4),
-            smart_object: Some(so),
-            ..Default::default()
-        })]);
+        wrapper.layers =
+            pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+                pictura_core::LayerParts {
+                    name: "nest".into(),
+                    rect: rect(0, 0, 4, 4),
+                    smart_object: Some(so),
+                    ..Default::default()
+                },
+            )]);
         let bytes = pictura_codec::write_psd(&wrapper).expect("wrapper writes");
         let layer_section = u32::from_be_bytes(bytes[34..38].try_into().unwrap()) as usize;
         payload = bytes[..38 + layer_section].to_vec();
@@ -974,13 +997,13 @@ fn other_source_doc() -> Document {
 fn filtered_with_mask() -> Layer {
     let mut layer = filtered_layer(rect(0, 0, 4, 4));
     pictura_codec::edit_layer(layer.as_mut(), |parts| {
-    let so = parts.smart_object.as_mut().expect("smart object");
-    so.filter_mask_enabled = true;
-    so.filter_mask_extend_with_white = true;
-    so.filter_mask = Some(pictura_core::FilterMask {
-        rect: rect(0, 0, 4, 4),
-        data: (0..16).map(|i| (i * 17) as u8).collect::<Vec<u8>>().into(),
-    });
+        let so = parts.smart_object.as_mut().expect("smart object");
+        so.filter_mask_enabled = true;
+        so.filter_mask_extend_with_white = true;
+        so.filter_mask = Some(pictura_core::FilterMask {
+            rect: rect(0, 0, 4, 4),
+            data: (0..16).map(|i| (i * 17) as u8).collect::<Vec<u8>>().into(),
+        });
     });
     layer
 }
@@ -1021,13 +1044,17 @@ fn composited_source_invalidates_on_filter_mask() {
     let mut layer = filtered_with_mask();
     let d = doc(4, 4, vec![layer.clone()]);
     let first = composited_source(&layer, &d, RasterRoute::SmartFiltered).expect("mix");
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.smart_object.as_mut()
-        .expect("smart object")
-        .filter_mask
-        .as_mut()
-        .expect("mask")
-        .data
-        .as_mut_slice()[0] ^= 0xFF; });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts
+            .smart_object
+            .as_mut()
+            .expect("smart object")
+            .filter_mask
+            .as_mut()
+            .expect("mask")
+            .data
+            .as_mut_slice()[0] ^= 0xFF;
+    });
     let second = composited_source(&layer, &d, RasterRoute::SmartFiltered).expect("mix");
     assert!(!Arc::ptr_eq(&first.buffer, &second.buffer));
 }
@@ -1038,16 +1065,22 @@ fn composited_source_invalidates_on_payload_or_text() {
     let mut smart = smart_layer(rect(0, 0, 4, 4));
     let d = doc(4, 4, vec![smart.clone()]);
     let first = composited_source(&smart, &d, RasterRoute::SmartSource).expect("source");
-    pictura_codec::edit_layer(smart.as_mut(), |parts| { parts.smart_object.as_mut()
-        .expect("smart object")
-        .set_payload(pictura_codec::write_psd(&other_source_doc()).expect("payload")); });
+    pictura_codec::edit_layer(smart.as_mut(), |parts| {
+        parts
+            .smart_object
+            .as_mut()
+            .expect("smart object")
+            .set_payload(pictura_codec::write_psd(&other_source_doc()).expect("payload"));
+    });
     let second = composited_source(&smart, &d, RasterRoute::SmartSource).expect("source");
     assert!(!Arc::ptr_eq(&first.buffer, &second.buffer));
 
     let mut text = type_layer(Some(type_style()));
     let d = doc(4, 4, vec![text.clone()]);
     let first = composited_source(&text, &d, RasterRoute::Type).expect("raster");
-    pictura_codec::edit_layer(text.as_mut(), |parts| { parts.type_tool.as_mut().expect("type").text = "Changed".into() });
+    pictura_codec::edit_layer(text.as_mut(), |parts| {
+        parts.type_tool.as_mut().expect("type").text = "Changed".into()
+    });
     let second = composited_source(&text, &d, RasterRoute::Type).expect("raster");
     assert!(!Arc::ptr_eq(&first.buffer, &second.buffer));
 }
@@ -1282,7 +1315,11 @@ fn typed_fill_edits_keep_source_and_upload_identities_distinct() {
     let mut uploads = std::collections::HashSet::from([first.content]);
     let mut retained = vec![first];
     for i in 0..32 {
-        let rgba = if i % 2 == 0 { [40, 50, 60, 255] } else { [10, 20, 30, 255] };
+        let rgba = if i % 2 == 0 {
+            [40, 50, 60, 255]
+        } else {
+            [10, 20, 30, 255]
+        };
         assert!(layer.set_fill_content(pictura_core::FillContent::Solid(rgba)));
         assert_eq!(layer.adjustment(), original.as_ref());
         assert!(generations.insert(layer.content_identity()));
@@ -1292,7 +1329,11 @@ fn typed_fill_edits_keep_source_and_upload_identities_distinct() {
         assert!(keys.insert(key::content_key(&layer, &d)));
         let source = crate::fill::fill_source(&layer, &d).expect("edited fill source");
         assert!(uploads.insert(source.content));
-        for y in 0..4 { for x in 0..4 { assert_eq!(pixel(&source.buffer, x, y), rgba); } }
+        for y in 0..4 {
+            for x in 0..4 {
+                assert_eq!(pixel(&source.buffer, x, y), rgba);
+            }
+        }
         retained.push(source);
     }
     assert_eq!(retained.len(), 33);

@@ -7,21 +7,24 @@ const WHITE: u8 = 255;
 
 fn white_doc() -> Document {
     let mut doc = Document::new(SIDE as u32, SIDE as u32, ColorMode::Rgb, BitDepth::Eight);
-    let _ = doc.layers.push(pictura_core::Layer::from_parts(pictura_core::LayerParts {
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: SIDE,
-            right: SIDE,
+    let _ = doc.layers.push(pictura_core::Layer::from_parts(
+        pictura_core::LayerParts {
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: SIDE,
+                right: SIDE,
+            },
+            channels: [0, 1, 2, -1]
+                .map(|id| Channel {
+                    id,
+                    data: vec![WHITE; (SIDE * SIDE) as usize].into(),
+                })
+                .into(),
+            ..Default::default()
         },
-        channels: [0, 1, 2, -1]
-            .map(|id| Channel {
-                id,
-                data: vec![WHITE; (SIDE * SIDE) as usize].into(),
-            })
-            .into(),
-        ..Default::default()
-    }, pictura_core::LayerContent::Pixel));
+        pictura_core::LayerContent::Pixel,
+    ));
     doc
 }
 

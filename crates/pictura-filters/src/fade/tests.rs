@@ -15,10 +15,13 @@ fn plane(values: &[u8]) -> Plane<u8> {
 }
 
 fn layer(rect: PsdRect, rgba: [&[u8]; 4]) -> Layer {
-    let mut layer = pictura_core::Layer::from_parts(pictura_core::LayerParts {
-        rect,
-        ..Default::default()
-    }, pictura_core::LayerContent::Pixel);
+    let mut layer = pictura_core::Layer::from_parts(
+        pictura_core::LayerParts {
+            rect,
+            ..Default::default()
+        },
+        pictura_core::LayerContent::Pixel,
+    );
     for (id, values) in [0i16, 1, 2, -1].into_iter().zip(rgba) {
         layer.channels_mut().push(Channel {
             id,

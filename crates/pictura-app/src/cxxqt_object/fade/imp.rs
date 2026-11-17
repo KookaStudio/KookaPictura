@@ -95,7 +95,8 @@ fn record_layers(
     original: Layer,
     effected: Layer,
 ) {
-    if effected.smart_object().is_some() || effected.is_group() || effected.has_adjustment_content() {
+    if effected.smart_object().is_some() || effected.is_group() || effected.has_adjustment_content()
+    {
         return;
     }
     if original == effected {

@@ -336,11 +336,21 @@ mod tests {
             pixel_layer("base", rect(4, 5, 6, 7), 20, 255),
             pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 clipping: true,
-                ..pictura_core::LayerParts::from(pixel_layer("clip", rect(0, 0, W as i32, H as i32), 30, 255))
+                ..pictura_core::LayerParts::from(pixel_layer(
+                    "clip",
+                    rect(0, 0, W as i32, H as i32),
+                    30,
+                    255,
+                ))
             }),
             pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 clipping: true,
-                ..pictura_core::LayerParts::from(pixel_layer("clip2", rect(0, 0, W as i32, H as i32), 40, 255))
+                ..pictura_core::LayerParts::from(pixel_layer(
+                    "clip2",
+                    rect(0, 0, W as i32, H as i32),
+                    40,
+                    255,
+                ))
             }),
         ]);
         let base_rect = rect(4, 5, 6, 7);
@@ -360,7 +370,12 @@ mod tests {
             pixel_layer("base", rect(4, 5, 6, 7), 20, 255),
             pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 clipping: true,
-                ..pictura_core::LayerParts::from(pixel_layer("clip", rect(0, 0, W as i32, H as i32), 30, 255))
+                ..pictura_core::LayerParts::from(pixel_layer(
+                    "clip",
+                    rect(0, 0, W as i32, H as i32),
+                    30,
+                    255,
+                ))
             }),
         ]);
         let canvas = rect(0, 0, W as i32, H as i32);
@@ -410,7 +425,12 @@ mod tests {
             }),
             pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 clipping: true,
-                ..pictura_core::LayerParts::from(pixel_layer("freed", rect(0, 0, W as i32, H as i32), 40, 255))
+                ..pictura_core::LayerParts::from(pixel_layer(
+                    "freed",
+                    rect(0, 0, W as i32, H as i32),
+                    40,
+                    255,
+                ))
             }),
         ]);
         let canvas = rect(0, 0, W as i32, H as i32);
@@ -473,7 +493,12 @@ mod tests {
             pixel_layer("base", rect(4, 5, 10, 8), 20, 255),
             pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 clipping: true,
-                ..pictura_core::LayerParts::from(pixel_layer("clip", rect(0, 0, W as i32, H as i32), 200, 255))
+                ..pictura_core::LayerParts::from(pixel_layer(
+                    "clip",
+                    rect(0, 0, W as i32, H as i32),
+                    200,
+                    255,
+                ))
             }),
         ]);
         let damage = influence(&d, "2").expect("bounded");
@@ -548,25 +573,29 @@ mod tests {
 
     #[test]
     fn unmasked_adjustment_is_unbounded() {
-        let d = doc(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
-            name: "adjustment".into(),
-            adjustment: Some(crate::encode_brightness_contrast(10, 0)),
-            rect: rect(0, 0, W as i32, H as i32),
-            ..Default::default()
-        })]);
+        let d = doc(vec![pictura_codec::layer_from_parts(
+            pictura_core::LayerParts {
+                name: "adjustment".into(),
+                adjustment: Some(crate::encode_brightness_contrast(10, 0)),
+                rect: rect(0, 0, W as i32, H as i32),
+                ..Default::default()
+            },
+        )]);
         assert_eq!(influence(&d, "0"), None);
     }
 
     #[test]
     fn feathered_adjustment_is_bounded() {
         let mask = masked(rect(16, 20, 4, 4), 8.0);
-        let d = doc(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
-            name: "adjustment".into(),
-            adjustment: Some(crate::encode_brightness_contrast(10, 0)),
-            rect: rect(0, 0, W as i32, H as i32),
-            mask: Some(mask),
-            ..Default::default()
-        })]);
+        let d = doc(vec![pictura_codec::layer_from_parts(
+            pictura_core::LayerParts {
+                name: "adjustment".into(),
+                adjustment: Some(crate::encode_brightness_contrast(10, 0)),
+                rect: rect(0, 0, W as i32, H as i32),
+                mask: Some(mask),
+                ..Default::default()
+            },
+        )]);
         let damage = influence(&d, "0").expect("bounded");
         assert!(damage.width() > 4 && damage.height() > 4);
         assert!(damage.left < 20 && damage.top < 16);
@@ -655,13 +684,15 @@ mod tests {
             points: vec![[512, 512], [1024, 512], [1024, 1024], [512, 1024]],
             ..Default::default()
         });
-        let d = doc(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
-            name: "adjustment".into(),
-            adjustment: Some(crate::encode_brightness_contrast(10, 0)),
-            rect: rect(0, 0, W as i32, H as i32),
-            vector_mask: Some(mask),
-            ..Default::default()
-        })]);
+        let d = doc(vec![pictura_codec::layer_from_parts(
+            pictura_core::LayerParts {
+                name: "adjustment".into(),
+                adjustment: Some(crate::encode_brightness_contrast(10, 0)),
+                rect: rect(0, 0, W as i32, H as i32),
+                vector_mask: Some(mask),
+                ..Default::default()
+            },
+        )]);
         assert_eq!(influence(&d, "0"), None);
     }
 
@@ -881,7 +912,9 @@ mod tests {
                     let Some(layer) = crate::resolve_path_mut(&mut after, path) else {
                         continue;
                     };
-                    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.adjustment = Some(crate::encode_brightness_contrast(30, 0)) });
+                    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+                        parts.adjustment = Some(crate::encode_brightness_contrast(30, 0))
+                    });
                     union(before_rect, total(&after, &[path]))
                 }
                 9 => {

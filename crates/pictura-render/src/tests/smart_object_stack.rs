@@ -46,7 +46,9 @@ fn stack_doc(
 }
 
 fn proxy_rgb(rgb: (u8, u8, u8), size: u32) -> Vec<Channel> {
-    solid("proxy", full(size, size), rgb, 255, BlendMode::Normal, 255).channels().clone()
+    solid("proxy", full(size, size), rgb, 255, BlendMode::Normal, 255)
+        .channels()
+        .clone()
 }
 
 #[test]
@@ -92,9 +94,13 @@ fn clearing_a_stack_mode_restores_the_proxy() {
         2,
     );
     assert_close(&composite_rgba(&d), 0, 0, [0, 255, 0, 255]);
-    pictura_codec::edit_layer(d.layers[0].as_mut(), |parts| { parts.smart_object.as_mut()
-        .expect("smart object")
-        .stack_mode = None; });
+    pictura_codec::edit_layer(d.layers[0].as_mut(), |parts| {
+        parts
+            .smart_object
+            .as_mut()
+            .expect("smart object")
+            .stack_mode = None;
+    });
     assert_close(&composite_rgba(&d), 0, 0, [255, 0, 0, 255]);
 }
 
@@ -146,14 +152,15 @@ fn stack_mode_unknown_filter_keeps_the_proxy() {
         proxy_rgb((255, 0, 0), 2),
         2,
     );
-    pictura_codec::edit_layer(d.layers[0].as_mut(), |parts| { parts.smart_object.as_mut()
-        .expect("object")
-        .smart_filters = vec![pictura_core::SmartFilter {
-        filter_id: 999,
-        name: "unknown".into(),
-        enabled: true,
-        options: Vec::new().into(),
-    }]; });
+    pictura_codec::edit_layer(d.layers[0].as_mut(), |parts| {
+        parts.smart_object.as_mut().expect("object").smart_filters =
+            vec![pictura_core::SmartFilter {
+                filter_id: 999,
+                name: "unknown".into(),
+                enabled: true,
+                options: Vec::new().into(),
+            }];
+    });
     assert_close(&composite_rgba(&d), 0, 0, [255, 0, 0, 255]);
 }
 

@@ -23,23 +23,26 @@ pub(crate) fn doc_at(
     } else {
         &[0, 1, 2, -1]
     };
-    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_core::Layer::from_parts(pictura_core::LayerParts {
-        rect: PsdRect {
-            top,
-            left,
-            bottom: top + h,
-            right: left + w,
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_core::Layer::from_parts(
+        pictura_core::LayerParts {
+            rect: PsdRect {
+                top,
+                left,
+                bottom: top + h,
+                right: left + w,
+            },
+            channels: ids
+                .iter()
+                .map(|&id| Channel {
+                    id,
+                    data: vec![rgba[if id < 0 { 3 } else { id as usize }]; (w * h) as usize].into(),
+                })
+                .collect(),
+            background,
+            ..Default::default()
         },
-        channels: ids
-            .iter()
-            .map(|&id| Channel {
-                id,
-                data: vec![rgba[if id < 0 { 3 } else { id as usize }]; (w * h) as usize].into(),
-            })
-            .collect(),
-        background,
-        ..Default::default()
-    }, pictura_core::LayerContent::Pixel)]);
+        pictura_core::LayerContent::Pixel,
+    )]);
     doc
 }
 
@@ -312,25 +315,28 @@ fn dissolve_paints_whole_pixels_in_proportion_and_repeats() {
 /// A Grayscale document's layer carries one colour plane.
 pub(crate) fn gray_doc(w: i32, h: i32, rgba: [u8; 4]) -> Document {
     let mut doc = Document::new(w as u32, h as u32, ColorMode::Grayscale, BitDepth::Eight);
-    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_core::Layer::from_parts(pictura_core::LayerParts {
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: h,
-            right: w,
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_core::Layer::from_parts(
+        pictura_core::LayerParts {
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: h,
+                right: w,
+            },
+            channels: vec![
+                Channel {
+                    id: 0,
+                    data: vec![rgba[0]; (w * h) as usize].into(),
+                },
+                Channel {
+                    id: -1,
+                    data: vec![rgba[3]; (w * h) as usize].into(),
+                },
+            ],
+            ..Default::default()
         },
-        channels: vec![
-            Channel {
-                id: 0,
-                data: vec![rgba[0]; (w * h) as usize].into(),
-            },
-            Channel {
-                id: -1,
-                data: vec![rgba[3]; (w * h) as usize].into(),
-            },
-        ],
-        ..Default::default()
-    }, pictura_core::LayerContent::Pixel)]);
+        pictura_core::LayerContent::Pixel,
+    )]);
     doc
 }
 

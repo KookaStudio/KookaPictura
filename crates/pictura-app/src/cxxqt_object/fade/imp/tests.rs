@@ -22,7 +22,11 @@ fn view(color: (u8, u8, u8), mode: ColorMode) -> PictureViewRust {
 fn set_color(rust: &mut PictureViewRust, color: (u8, u8, u8)) {
     let layer = pictura_render::resolve_path_mut(rust.session.doc.as_mut().unwrap(), "0").unwrap();
     for (id, value) in [0i16, 1, 2].into_iter().zip([color.0, color.1, color.2]) {
-        let channel = layer.channels_mut().iter_mut().find(|c| c.id == id).unwrap();
+        let channel = layer
+            .channels_mut()
+            .iter_mut()
+            .find(|c| c.id == id)
+            .unwrap();
         channel.data = vec![value; 16].into();
     }
 }

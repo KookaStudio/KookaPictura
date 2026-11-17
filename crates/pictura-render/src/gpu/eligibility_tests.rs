@@ -52,10 +52,12 @@ fn renderable_type() -> Layer {
         bottom: 80,
         right: 200,
     };
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { if let Some(type_tool) = parts.type_tool.as_mut() {
-        type_tool.bounds = [0, 0, 200, 80];
-        type_tool.style = Some(crate::tests::composite::type_style());
-    } });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        if let Some(type_tool) = parts.type_tool.as_mut() {
+            type_tool.bounds = [0, 0, 200, 80];
+            type_tool.style = Some(crate::tests::composite::type_style());
+        }
+    });
     layer
 }
 
@@ -183,7 +185,9 @@ fn decoded_vector_fill_is_accepted() {
 #[test]
 fn globally_lit_effects_are_accepted() {
     let mut styled = pixels();
-    pictura_codec::edit_layer(&mut styled, |parts| parts.extra_blocks.push(global_shadow_block()));
+    pictura_codec::edit_layer(&mut styled, |parts| {
+        parts.extra_blocks.push(global_shadow_block())
+    });
     let mut doc = doc_of(styled);
     doc.global_light = pictura_core::GlobalLight {
         angle: 90,
@@ -195,7 +199,9 @@ fn globally_lit_effects_are_accepted() {
 #[test]
 fn effects_and_clipping_are_accepted() {
     let mut styled = pixels();
-    pictura_codec::edit_layer(styled.as_mut(), |parts| { parts.extra_blocks.push(spec_block(&ShadowSpec::default())) });
+    pictura_codec::edit_layer(styled.as_mut(), |parts| {
+        parts.extra_blocks.push(spec_block(&ShadowSpec::default()))
+    });
     assert_eq!(reason(check_supported(&doc_of(styled))), "ok");
 
     let mut clipped = pixels();

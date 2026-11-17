@@ -119,14 +119,29 @@ impl Default for LayerParts {
     }
 }
 
-
 impl LayerParts {
-    pub fn is_group(&self) -> bool { self.is_group }
-    pub fn adjustment(&self) -> Option<&AdjustmentData> { self.adjustment.as_ref() }
-    pub fn smart_object(&self) -> Option<&SmartObject> { self.smart_object.as_ref() }
-    pub fn type_tool(&self) -> Option<&TypeTool> { self.type_tool.as_ref() }
-    pub fn extra_blocks(&self) -> &[LayerBlock] { &self.extra_blocks }
-    pub fn raw_channels(&self) -> &[RawChannel] { &self.raw_channels }
-    pub fn channels(&self) -> &[Channel] { &self.channels }
-    pub fn extra_block(&self, key: &[u8;4]) -> Option<&LayerBlock> { self.extra_blocks.iter().find(|b| &b.key == key) }
+    pub fn is_group(&self) -> bool {
+        self.is_group
+    }
+    pub fn adjustment(&self) -> Option<&AdjustmentData> {
+        self.adjustment.as_ref()
+    }
+    pub fn smart_object(&self) -> Option<&SmartObject> {
+        self.smart_object.as_ref()
+    }
+    pub fn type_tool(&self) -> Option<&TypeTool> {
+        self.type_tool.as_ref()
+    }
+    pub fn extra_blocks(&self) -> &[LayerBlock] {
+        &self.extra_blocks
+    }
+    pub fn raw_channels(&self) -> &[RawChannel] {
+        &self.raw_channels
+    }
+    pub fn channels(&self) -> &[Channel] {
+        &self.channels
+    }
+    pub fn extra_block(&self, key: &[u8; 4]) -> Option<&LayerBlock> {
+        self.extra_blocks.iter().find(|b| &b.key == key)
+    }
 }

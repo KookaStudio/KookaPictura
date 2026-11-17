@@ -225,7 +225,11 @@ fn delete_smart_filter_parts(layer: &mut LayerParts, filter_index: usize) -> Res
 /// Both the preserved `filterFXList` order and the typed `smart_filters` order
 /// change, so the applied order (bottom-up on render) follows the panel order.
 /// `from == to` and equal indices are a no-op; an out-of-range index errors.
-fn reorder_smart_filters_parts(layer: &mut LayerParts, from: usize, to: usize) -> Result<(), PsdError> {
+fn reorder_smart_filters_parts(
+    layer: &mut LayerParts,
+    from: usize,
+    to: usize,
+) -> Result<(), PsdError> {
     let len = layer
         .smart_object
         .as_ref()
@@ -344,33 +348,53 @@ fn set_filter_mask_enabled_parts(layer: &mut LayerParts, enabled: bool) -> Resul
     Ok(())
 }
 
-
-pub fn set_camera_raw_option(layer: &mut Layer, filter_index: usize, key: &[u8], value: DescValue) -> Result<(), PsdError> {
-    crate::stage_content::try_edit_layer(layer, |parts| set_camera_raw_option_parts(parts, filter_index, key, value))
+pub fn set_camera_raw_option(
+    layer: &mut Layer,
+    filter_index: usize,
+    key: &[u8],
+    value: DescValue,
+) -> Result<(), PsdError> {
+    crate::stage_content::try_edit_layer(layer, |parts| {
+        set_camera_raw_option_parts(parts, filter_index, key, value)
+    })
 }
 
 pub fn delete_smart_filter(layer: &mut Layer, filter_index: usize) -> Result<(), PsdError> {
-    crate::stage_content::try_edit_layer(layer, |parts| delete_smart_filter_parts(parts, filter_index))
+    crate::stage_content::try_edit_layer(layer, |parts| {
+        delete_smart_filter_parts(parts, filter_index)
+    })
 }
 
 pub fn reorder_smart_filters(layer: &mut Layer, from: usize, to: usize) -> Result<(), PsdError> {
-    crate::stage_content::try_edit_layer(layer, |parts| reorder_smart_filters_parts(parts, from, to))
+    crate::stage_content::try_edit_layer(layer, |parts| {
+        reorder_smart_filters_parts(parts, from, to)
+    })
 }
 
 pub fn clear_smart_filters(layer: &mut Layer) -> Result<(), PsdError> {
     crate::stage_content::try_edit_layer(layer, |parts| clear_smart_filters_parts(parts))
 }
 
-pub fn set_smart_filter_enabled(layer: &mut Layer, filter_index: usize, enabled: bool) -> Result<(), PsdError> {
-    crate::stage_content::try_edit_layer(layer, |parts| set_smart_filter_enabled_parts(parts, filter_index, enabled))
+pub fn set_smart_filter_enabled(
+    layer: &mut Layer,
+    filter_index: usize,
+    enabled: bool,
+) -> Result<(), PsdError> {
+    crate::stage_content::try_edit_layer(layer, |parts| {
+        set_smart_filter_enabled_parts(parts, filter_index, enabled)
+    })
 }
 
 pub fn set_smart_filters_enabled(layer: &mut Layer, enabled: bool) -> Result<(), PsdError> {
-    crate::stage_content::try_edit_layer(layer, |parts| set_smart_filters_enabled_parts(parts, enabled))
+    crate::stage_content::try_edit_layer(layer, |parts| {
+        set_smart_filters_enabled_parts(parts, enabled)
+    })
 }
 
 pub fn set_filter_mask_enabled(layer: &mut Layer, enabled: bool) -> Result<(), PsdError> {
-    crate::stage_content::try_edit_layer(layer, |parts| set_filter_mask_enabled_parts(parts, enabled))
+    crate::stage_content::try_edit_layer(layer, |parts| {
+        set_filter_mask_enabled_parts(parts, enabled)
+    })
 }
 
 #[cfg(test)]
@@ -527,11 +551,7 @@ mod tests {
             .iter_mut()
             .find(|l| l.name == "Layer 1 copy")
             .expect("Layer 1 copy present");
-        let original = layer
-            .smart_object()
-            .unwrap()
-            .config_descriptor
-            .clone();
+        let original = layer.smart_object().unwrap().config_descriptor.clone();
 
         set_camera_raw_option(layer, 0, b"Ex12", DescValue::Double(-1.15)).expect("no-op edit");
 
@@ -579,10 +599,12 @@ mod tests {
         data.extend_from_slice(&descriptor::write_descriptor(&desc));
 
         let mut layer = Layer::default();
-        crate::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-            key: *b"SoLE",
-            data: data.into(),
-        }) });
+        crate::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks.push(LayerBlock {
+                key: *b"SoLE",
+                data: data.into(),
+            })
+        });
         set_camera_raw_option(&mut layer, 0, b"Ex12", DescValue::Double(2.5)).expect("SoLE edit");
         assert_eq!(&layer.extra_blocks()[0].data[..4], b"soLE");
 
@@ -619,10 +641,12 @@ mod tests {
     #[test]
     fn unknown_signature_is_unsupported() {
         let mut layer = Layer::default();
-        crate::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-            key: *b"SoLd",
-            data: b"junk\x00\x00\x00\x00".to_vec().into(),
-        }) });
+        crate::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks.push(LayerBlock {
+                key: *b"SoLd",
+                data: b"junk\x00\x00\x00\x00".to_vec().into(),
+            })
+        });
         let err =
             set_camera_raw_option(&mut layer, 0, b"Ex12", DescValue::Double(1.0)).unwrap_err();
         assert!(matches!(err, PsdError::Unsupported(_)), "got {err:?}");
@@ -846,10 +870,12 @@ mod tests {
         });
         let so = layer.smart_object().cloned().unwrap();
         let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
-        crate::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-            key: *b"SoLd",
-            data: data.into(),
-        }) });
+        crate::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks.push(LayerBlock {
+                key: *b"SoLd",
+                data: data.into(),
+            })
+        });
         crate::append_smart_filter(
             &mut layer,
             SmartFilter {

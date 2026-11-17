@@ -23,14 +23,8 @@ fn adjustment_layers_preserve_key_and_bytes() {
     let invert = find("Invert").adjustment().expect("invert block");
     assert_eq!(invert.key, *b"nvrt");
     assert!(invert.data.is_empty(), "Invert has no payload");
-    assert_eq!(
-        find("Posterize").adjustment().unwrap().data,
-        [0, 4, 0, 0]
-    );
-    assert_eq!(
-        find("Threshold").adjustment().unwrap().data,
-        [0, 128, 0, 0]
-    );
+    assert_eq!(find("Posterize").adjustment().unwrap().data, [0, 4, 0, 0]);
+    assert_eq!(find("Threshold").adjustment().unwrap().data, [0, 128, 0, 0]);
     let brit = find("BrightnessContrast").adjustment().unwrap();
     assert_eq!(brit.key, *b"brit");
     assert_eq!(brit.data, [0, 10, 0, 20, 0, 0, 0, 0]);

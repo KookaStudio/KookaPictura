@@ -5,35 +5,38 @@ use super::*;
 /// A document whose only layer is an empty-rect pixel layer (#1208).
 fn empty_layer_doc(w: u32, h: u32) -> Document {
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-    let _ = doc.layers.push(pictura_core::Layer::from_parts(pictura_core::LayerParts {
-        name: "empty".into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 0,
-            right: 0,
+    let _ = doc.layers.push(pictura_core::Layer::from_parts(
+        pictura_core::LayerParts {
+            name: "empty".into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 0,
+                right: 0,
+            },
+            blend: BlendMode::Normal,
+            opacity: 255,
+            fill: 255,
+            lock: LockFlags::default(),
+            color: ColorLabel::None,
+            clipping: false,
+            visible: true,
+            mask: None,
+            adjustment: None,
+            channels: [0i16, 1, 2, -1]
+                .into_iter()
+                .map(|id| Channel {
+                    id,
+                    data: Vec::new().into(),
+                })
+                .collect(),
+            children: pictura_core::LayerStack::default(),
+            is_group: false,
+            background: false,
+            ..Default::default()
         },
-        blend: BlendMode::Normal,
-        opacity: 255,
-        fill: 255,
-        lock: LockFlags::default(),
-        color: ColorLabel::None,
-        clipping: false,
-        visible: true,
-        mask: None,
-        adjustment: None,
-        channels: [0i16, 1, 2, -1]
-            .into_iter()
-            .map(|id| Channel {
-                id,
-                data: Vec::new().into(),
-            })
-            .collect(),
-        children: pictura_core::LayerStack::default(),
-        is_group: false,
-        background: false,
-        ..Default::default()
-    }, pictura_core::LayerContent::Pixel));
+        pictura_core::LayerContent::Pixel,
+    ));
     doc
 }
 

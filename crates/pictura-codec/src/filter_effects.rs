@@ -582,10 +582,12 @@ mod tests {
             ..Default::default()
         });
         let sold = crate::smart_writer::author_sold_block(&so, &layer, 4, 3);
-        crate::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-            key: *b"SoLd",
-            data: sold.into(),
-        }) });
+        crate::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks.push(LayerBlock {
+                key: *b"SoLd",
+                data: sold.into(),
+            })
+        });
         let mut layers = LayerStack::from_layers(vec![layer]);
         let extra = mask_extra(&uuid, (0, 0, 3, 4), &plane(), 4, 3);
         crate::smart_object::resolve_smart_objects(&mut layers, &extra, false);
@@ -620,10 +622,12 @@ mod tests {
             },
             ..Default::default()
         });
-        crate::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-            key: *b"SoLd",
-            data: sold.into(),
-        }) });
+        crate::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks.push(LayerBlock {
+                key: *b"SoLd",
+                data: sold.into(),
+            })
+        });
         let mut layers = LayerStack::from_layers(vec![layer]);
         let extra = mask_extra("placed-1", (0, 0, 3, 4), &plane(), 4, 3);
         crate::smart_object::resolve_smart_objects(&mut layers, &extra, false);
@@ -727,15 +731,8 @@ mod tests {
         let entries = feid_entries(&back.layer_section_extra, false);
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].0, uuid);
-        assert_eq!(
-            back.layers[0].smart_object().unwrap().placed_uuid,
-            uuid
-        );
-        assert!(back.layers[0]
-            .smart_object()
-            .unwrap()
-            .filter_mask
-            .is_some());
+        assert_eq!(back.layers[0].smart_object().unwrap().placed_uuid, uuid);
+        assert!(back.layers[0].smart_object().unwrap().filter_mask.is_some());
     }
 
     #[test]
@@ -767,7 +764,14 @@ mod tests {
         assert_eq!(before.len(), 2);
         let edited = vec![128u8; 12];
         crate::edit_layer(&mut once.layers[1], |parts| {
-            parts.smart_object.as_mut().unwrap().filter_mask.as_mut().unwrap().data = edited.clone().into();
+            parts
+                .smart_object
+                .as_mut()
+                .unwrap()
+                .filter_mask
+                .as_mut()
+                .unwrap()
+                .data = edited.clone().into();
         });
         let extra = author_filter_masks(&once.layer_section_extra, &once.layers, 3, false);
         let after = feid_entries(&extra, false);

@@ -8,21 +8,23 @@ use std::sync::Arc;
 fn layered(seed: u8, layers: usize) -> Document {
     let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
     for i in 0..layers {
-        let _ = doc.layers.push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 8,
-                right: 8,
-            },
-            channels: [(0, 0), (1, 1), (2, 2), (-1, 3)]
-                .map(|(id, c)| Channel {
-                    id,
-                    data: vec![seed.wrapping_add(i as u8).wrapping_add(c as u8); 64].into(),
-                })
-                .into(),
-            ..Default::default()
-        }));
+        let _ = doc
+            .layers
+            .push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 8,
+                    right: 8,
+                },
+                channels: [(0, 0), (1, 1), (2, 2), (-1, 3)]
+                    .map(|(id, c)| Channel {
+                        id,
+                        data: vec![seed.wrapping_add(i as u8).wrapping_add(c as u8); 64].into(),
+                    })
+                    .into(),
+                ..Default::default()
+            }));
     }
     doc
 }

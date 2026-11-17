@@ -58,18 +58,22 @@ fn set_vector_mask_block(layer: &mut Layer, key: &[u8; 4], data: Option<Vec<u8>>
     let slot = layer.extra_blocks().iter().position(|b| &b.key == key);
     match (slot, data) {
         (Some(i), Some(data)) => {
-            pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks[i].data = data.into(); });
+            pictura_codec::edit_layer(layer.as_mut(), |parts| {
+                parts.extra_blocks[i].data = data.into();
+            });
             true
         }
         (None, Some(data)) => {
-            pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-                key: *key,
-                data: data.into(),
-            }) });
+            pictura_codec::edit_layer(layer.as_mut(), |parts| {
+                parts.extra_blocks.push(LayerBlock {
+                    key: *key,
+                    data: data.into(),
+                })
+            });
             true
         }
         (Some(i), None) => {
-            pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.remove(i) });
+            pictura_codec::edit_layer(layer.as_mut(), |parts| parts.extra_blocks.remove(i));
             true
         }
         (None, None) => false,
@@ -78,9 +82,11 @@ fn set_vector_mask_block(layer: &mut Layer, key: &[u8; 4], data: Option<Vec<u8>>
 
 /// Remove every vector-mask block, so no key restores the mask on reload.
 fn remove_vector_mask_blocks(layer: &mut Layer) {
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts
-        .extra_blocks
-        .retain(|block| &block.key != VMSK && &block.key != VSMS) });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts
+            .extra_blocks
+            .retain(|block| &block.key != VMSK && &block.key != VSMS)
+    });
 }
 
 /// Set or clear one flags bit in the effective vector-mask block and re-decode the
@@ -573,10 +579,12 @@ mod tests {
         );
         let layer = &mut doc.layers[0];
         layer.vector_mask = pictura_codec::decode_vector_mask(&data, 4, 4);
-        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-            key: *b"vsms",
-            data: data.into(),
-        }) });
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks.push(LayerBlock {
+                key: *b"vsms",
+                data: data.into(),
+            })
+        });
         doc
     }
 
@@ -680,14 +688,16 @@ mod tests {
         assert!(vector_mask_linked(&doc, "0"));
         assert!(!vector_mask_disabled(&doc, "0"));
 
-        pictura_codec::edit_layer(doc.layers[0].as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-            key: *b"vmsk",
-            data: {
-                let mut data = pictura_codec::encode_vector_mask(&[], 4, 4);
-                write_flags(&mut data, VECTOR_MASK_FLAG_NOT_LINKED);
-                data.into()
-            },
-        }) });
+        pictura_codec::edit_layer(doc.layers[0].as_mut(), |parts| {
+            parts.extra_blocks.push(LayerBlock {
+                key: *b"vmsk",
+                data: {
+                    let mut data = pictura_codec::encode_vector_mask(&[], 4, 4);
+                    write_flags(&mut data, VECTOR_MASK_FLAG_NOT_LINKED);
+                    data.into()
+                },
+            })
+        });
         assert!(
             !vector_mask_linked(&doc, "0"),
             "the linked read follows the effective vmsk block"

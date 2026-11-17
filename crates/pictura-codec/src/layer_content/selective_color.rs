@@ -11,8 +11,8 @@
 //! ponytail: the reserved plate is ignored on read and written as zeroes; give
 //! it a model only if a file is found that uses it.
 
-use pictura_core::{Adjustment, SelectiveColorMethod, SelectiveColorParams, SelectiveRange};
 use pictura_core::AdjustmentData;
+use pictura_core::{Adjustment, SelectiveColorMethod, SelectiveColorParams, SelectiveRange};
 
 use super::basic::{be_i16, be_u16};
 
@@ -85,4 +85,3 @@ fn method_code(method: SelectiveColorMethod) -> u16 {
         SelectiveColorMethod::Absolute => 1,
     }
 }
-

@@ -3,16 +3,18 @@ use super::*;
 fn layered_doc(count: usize) -> Document {
     let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
     let layers = (0..count)
-        .map(|index| pictura_codec::layer_from_parts(pictura_core::LayerParts {
-            name: format!("layer {index}"),
-            rect: pictura_core::PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 8,
-                right: 8,
-            },
-            ..Default::default()
-        }))
+        .map(|index| {
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
+                name: format!("layer {index}"),
+                rect: pictura_core::PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 8,
+                    right: 8,
+                },
+                ..Default::default()
+            })
+        })
         .collect();
     doc.layers = pictura_core::LayerStack::from_layers(layers);
     doc

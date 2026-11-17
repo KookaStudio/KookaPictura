@@ -617,24 +617,24 @@ fn intcmyk_to_rgb(c: i32, m: i32, y: i32, k: i32) -> (u8, u8, u8) {
     (channel(c), channel(m), channel(y))
 }
 
-    /// How strongly the range applies to hue `h` (0..360): 1 inside the
-    /// sustain band, linear across each ramp, 0 outside.
-    pub fn hue_range_weight(range: &HueRange, h: f64) -> f64 {
-        let from = f64::from(range.begin_ramp);
-        let rel = |v: i16| (f64::from(v) - from).rem_euclid(360.0);
-        let (h, b, c, d) = (
-            (h - from).rem_euclid(360.0),
-            rel(range.begin_sustain),
-            rel(range.end_sustain),
-            rel(range.end_ramp),
-        );
-        if h < b {
-            h / b
-        } else if h <= c {
-            1.0
-        } else if h < d {
-            (d - h) / (d - c)
-        } else {
-            0.0
-        }
+/// How strongly the range applies to hue `h` (0..360): 1 inside the
+/// sustain band, linear across each ramp, 0 outside.
+pub fn hue_range_weight(range: &HueRange, h: f64) -> f64 {
+    let from = f64::from(range.begin_ramp);
+    let rel = |v: i16| (f64::from(v) - from).rem_euclid(360.0);
+    let (h, b, c, d) = (
+        (h - from).rem_euclid(360.0),
+        rel(range.begin_sustain),
+        rel(range.end_sustain),
+        rel(range.end_ramp),
+    );
+    if h < b {
+        h / b
+    } else if h <= c {
+        1.0
+    } else if h < d {
+        (d - h) / (d - c)
+    } else {
+        0.0
     }
+}

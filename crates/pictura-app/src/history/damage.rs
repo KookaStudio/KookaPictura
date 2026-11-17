@@ -124,8 +124,12 @@ pub(super) fn meta_damage(before: &Document, after: &Document) -> Option<Option<
     }
     fn same(a: &pictura_core::Layer, b: &pictura_core::Layer) -> bool {
         let (mut a, mut b) = (a.clone(), b.clone());
-        if a.is_group() { a.set_group_children(Default::default()); }
-        if b.is_group() { b.set_group_children(Default::default()); }
+        if a.is_group() {
+            a.set_group_children(Default::default());
+        }
+        if b.is_group() {
+            b.set_group_children(Default::default());
+        }
         a == b
     }
     fn shows_nothing(layer: &pictura_core::Layer) -> bool {

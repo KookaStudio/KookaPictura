@@ -113,13 +113,15 @@ fn a_shape_preview_ignores_empty_channels() {
     // comes from the descriptor and vector mask, not the channels.
     let plane = (doc.width * doc.height) as usize;
     let layer = pictura_render::resolve_path_mut(&mut doc, &path).expect("shape");
-    layer.set_channels([0, 1, 2, -1]
-        .into_iter()
-        .map(|id| Channel {
-            id,
-            data: vec![0; plane].into(),
-        })
-        .collect());
+    layer.set_channels(
+        [0, 1, 2, -1]
+            .into_iter()
+            .map(|id| Channel {
+                id,
+                data: vec![0; plane].into(),
+            })
+            .collect(),
+    );
 
     let TransformPreview {
         image: preview,

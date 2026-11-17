@@ -83,46 +83,48 @@ fn psd_tools_reads_rle_composite_and_layer() {
     let planes: Vec<Vec<u8>> = (0..4u8)
         .map(|c| (0..8).map(|i| c * 20 + i).collect())
         .collect();
-    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
-        name: "Rle".into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 2,
-            right: 4,
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            name: "Rle".into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 2,
+                right: 4,
+            },
+            blend: BlendMode::Normal,
+            opacity: 255,
+            fill: 255,
+            lock: LockFlags::default(),
+            color: ColorLabel::None,
+            clipping: false,
+            visible: true,
+            mask: None,
+            adjustment: None,
+            channels: vec![
+                Channel {
+                    id: 0,
+                    data: planes[0].clone().into(),
+                },
+                Channel {
+                    id: 1,
+                    data: planes[1].clone().into(),
+                },
+                Channel {
+                    id: 2,
+                    data: planes[2].clone().into(),
+                },
+                Channel {
+                    id: -1,
+                    data: planes[3].clone().into(),
+                },
+            ],
+            children: pictura_core::LayerStack::default(),
+            is_group: false,
+            background: false,
+            ..Default::default()
         },
-        blend: BlendMode::Normal,
-        opacity: 255,
-        fill: 255,
-        lock: LockFlags::default(),
-        color: ColorLabel::None,
-        clipping: false,
-        visible: true,
-        mask: None,
-        adjustment: None,
-        channels: vec![
-            Channel {
-                id: 0,
-                data: planes[0].clone().into(),
-            },
-            Channel {
-                id: 1,
-                data: planes[1].clone().into(),
-            },
-            Channel {
-                id: 2,
-                data: planes[2].clone().into(),
-            },
-            Channel {
-                id: -1,
-                data: planes[3].clone().into(),
-            },
-        ],
-        children: pictura_core::LayerStack::default(),
-        is_group: false,
-        background: false,
-        ..Default::default()
-    })]);
+    )]);
 
     let dir = scratch_dir("psd-rle-read");
     let path = dir.join("rle.psd");
@@ -243,58 +245,60 @@ fn psd_tools_reads_written_compression_kinds() {
             .map(|c| (0..8).map(|i| c * 20 + i).collect())
             .collect();
         let mask: Vec<u8> = (0..8).map(|i| 30 + i as u8).collect();
-        doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
-            name: "Kind".into(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 2,
-                right: 4,
-            },
-            blend: BlendMode::Normal,
-            opacity: 255,
-            fill: 255,
-            lock: LockFlags::default(),
-            color: ColorLabel::None,
-            clipping: false,
-            visible: true,
-            mask: Some(LayerMask {
+        doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+            pictura_core::LayerParts {
+                name: "Kind".into(),
                 rect: PsdRect {
                     top: 0,
                     left: 0,
                     bottom: 2,
                     right: 4,
                 },
-                default_color: 0,
-                disabled: false,
-                flags: 0,
-                data: Some(mask.clone().into()),
+                blend: BlendMode::Normal,
+                opacity: 255,
+                fill: 255,
+                lock: LockFlags::default(),
+                color: ColorLabel::None,
+                clipping: false,
+                visible: true,
+                mask: Some(LayerMask {
+                    rect: PsdRect {
+                        top: 0,
+                        left: 0,
+                        bottom: 2,
+                        right: 4,
+                    },
+                    default_color: 0,
+                    disabled: false,
+                    flags: 0,
+                    data: Some(mask.clone().into()),
+                    ..Default::default()
+                }),
+                adjustment: None,
+                channels: vec![
+                    Channel {
+                        id: 0,
+                        data: planes[0].clone().into(),
+                    },
+                    Channel {
+                        id: 1,
+                        data: planes[1].clone().into(),
+                    },
+                    Channel {
+                        id: 2,
+                        data: planes[2].clone().into(),
+                    },
+                    Channel {
+                        id: -1,
+                        data: planes[3].clone().into(),
+                    },
+                ],
+                children: pictura_core::LayerStack::default(),
+                is_group: false,
+                background: false,
                 ..Default::default()
-            }),
-            adjustment: None,
-            channels: vec![
-                Channel {
-                    id: 0,
-                    data: planes[0].clone().into(),
-                },
-                Channel {
-                    id: 1,
-                    data: planes[1].clone().into(),
-                },
-                Channel {
-                    id: 2,
-                    data: planes[2].clone().into(),
-                },
-                Channel {
-                    id: -1,
-                    data: planes[3].clone().into(),
-                },
-            ],
-            children: pictura_core::LayerStack::default(),
-            is_group: false,
-            background: false,
-            ..Default::default()
-        })]);
+            },
+        )]);
 
         let bytes = write_psd(&doc).unwrap();
         assert_eq!(bytes, write_psd(&doc).unwrap(), "deterministic ({tag})");

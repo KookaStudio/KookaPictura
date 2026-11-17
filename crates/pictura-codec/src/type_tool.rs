@@ -22,13 +22,20 @@ pub(crate) fn resolve_type_tools(layers: &mut LayerStack) {
         .expect("text views fit the default budget");
 }
 
-pub(crate) fn resolve_type_tools_within(layers: &mut LayerStack, budget: &mut crate::budget::DecodeBudget) -> Result<(), crate::PsdError> {
+pub(crate) fn resolve_type_tools_within(
+    layers: &mut LayerStack,
+    budget: &mut crate::budget::DecodeBudget,
+) -> Result<(), crate::PsdError> {
     for layer in layers.iter_mut() {
         crate::stage_content::edit_layer_staged(layer, budget, |parts| {
-            parts.type_tool = parts.extra_block(b"TySh").and_then(|block| decode_type_tool(&block.data));
+            parts.type_tool = parts
+                .extra_block(b"TySh")
+                .and_then(|block| decode_type_tool(&block.data));
             Ok(())
         })?;
-        if let Some(children) = layer.children_mut() { resolve_type_tools_within(children, budget)?; }
+        if let Some(children) = layer.children_mut() {
+            resolve_type_tools_within(children, budget)?;
+        }
     }
     Ok(())
 }
@@ -420,13 +427,14 @@ mod tests {
         bytes[text_version_at..text_version_at + 2].copy_from_slice(&49u16.to_be_bytes());
         assert!(decode_type_tool(&bytes).is_none(), "text version != 50");
 
-        let mut layers = LayerStack::from_layers(vec![crate::layer_from_parts(pictura_core::LayerParts {
-            extra_blocks: vec![pictura_core::LayerBlock {
-                key: *b"TySh",
-                data: bad_version.into(),
-            }],
-            ..Default::default()
-        })]);
+        let mut layers =
+            LayerStack::from_layers(vec![crate::layer_from_parts(pictura_core::LayerParts {
+                extra_blocks: vec![pictura_core::LayerBlock {
+                    key: *b"TySh",
+                    data: bad_version.into(),
+                }],
+                ..Default::default()
+            })]);
         resolve_type_tools(&mut layers);
         assert!(layers[0].type_tool().is_none(), "view stays unset");
         assert!(layers[0].is_type(), "kind detection stays presence-only");

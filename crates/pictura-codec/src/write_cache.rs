@@ -392,7 +392,10 @@ mod tests {
             .map(|i| {
                 let mut layer = base.clone();
                 layer.name = format!("Layer {i}");
-                layer.channels_mut()[0].data.as_mut_slice().fill((i * 11) as u8);
+                layer.channels_mut()[0]
+                    .data
+                    .as_mut_slice()
+                    .fill((i * 11) as u8);
                 layer
             })
             .collect();

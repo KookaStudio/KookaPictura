@@ -99,7 +99,11 @@ pub fn perspective_crop_sized(
 
     for_each_layer(&mut doc.layers, &mut |layer| {
         let rect = layer.rect;
-        if layer.is_group() || layer.channels().is_empty() || rect.width() <= 0 || rect.height() <= 0 {
+        if layer.is_group()
+            || layer.channels().is_empty()
+            || rect.width() <= 0
+            || rect.height() <= 0
+        {
             return;
         }
         // ponytail: a layer without alpha (the Background) fills outside the

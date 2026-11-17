@@ -118,7 +118,11 @@ fn clear_source(doc: &mut Document, segments: &[usize], mask: &Coverage) {
     if src_w <= 0 || src_h <= 0 {
         return;
     }
-    let Some(alpha) = layer.channels_mut().iter_mut().find(|channel| channel.id == -1) else {
+    let Some(alpha) = layer
+        .channels_mut()
+        .iter_mut()
+        .find(|channel| channel.id == -1)
+    else {
         return;
     };
     for sy in 0..src_h {
@@ -148,7 +152,11 @@ fn scale(value: u8, coverage: u8) -> u8 {
 }
 
 fn set_channel(layer: &mut Layer, id: i16, index: usize, value: u8) {
-    if let Some(channel) = layer.channels_mut().iter_mut().find(|channel| channel.id == id) {
+    if let Some(channel) = layer
+        .channels_mut()
+        .iter_mut()
+        .find(|channel| channel.id == id)
+    {
         if index < channel.data.len() {
             channel.data[index] = value;
         }

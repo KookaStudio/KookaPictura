@@ -93,7 +93,13 @@ pub fn copy_layer(doc: &Document, path: &str, selection: Option<&Coverage>) -> O
         None => region,
     };
     let src_w = layer.rect.width() as usize;
-    let plane = |id: i16| layer.channels().iter().find(|c| c.id == id).map(|c| &c.data);
+    let plane = |id: i16| {
+        layer
+            .channels()
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| &c.data)
+    };
     let red = plane(0)?;
     // A grayscale layer has only channel 0; replicate it into G and B.
     let green = plane(1).unwrap_or(red);
@@ -436,7 +442,9 @@ fn selection_mask(doc: &Document, coverage: &Coverage, invert: bool) -> LayerMas
 }
 
 fn has_pixels(layer: &Layer) -> bool {
-    !layer.is_group() && !layer.has_adjustment_content() && layer.channels().iter().any(|c| c.id == 0)
+    !layer.is_group()
+        && !layer.has_adjustment_content()
+        && layer.channels().iter().any(|c| c.id == 0)
 }
 
 pub(super) fn canvas(doc: &Document) -> PsdRect {

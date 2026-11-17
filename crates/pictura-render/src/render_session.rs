@@ -301,13 +301,26 @@ fn sync_targets(reduced: &mut Document, original: &Document, targets: &[&str]) {
         };
         let same_content = match (source.content(), destination.content()) {
             (pictura_core::LayerContent::Fill(a), pictura_core::LayerContent::Fill(b))
-            | (pictura_core::LayerContent::Shape(a), pictura_core::LayerContent::Shape(b)) => std::sync::Arc::ptr_eq(a, b),
-            (pictura_core::LayerContent::Adjustment(Some(a)), pictura_core::LayerContent::Adjustment(Some(b))) => std::sync::Arc::ptr_eq(a, b),
-            (pictura_core::LayerContent::Adjustment(None), pictura_core::LayerContent::Adjustment(None)) => true,
+            | (pictura_core::LayerContent::Shape(a), pictura_core::LayerContent::Shape(b)) => {
+                std::sync::Arc::ptr_eq(a, b)
+            }
+            (
+                pictura_core::LayerContent::Adjustment(Some(a)),
+                pictura_core::LayerContent::Adjustment(Some(b)),
+            ) => std::sync::Arc::ptr_eq(a, b),
+            (
+                pictura_core::LayerContent::Adjustment(None),
+                pictura_core::LayerContent::Adjustment(None),
+            ) => true,
             _ => false,
         };
-        if matches!(source.content(), pictura_core::LayerContent::Adjustment(_) | pictura_core::LayerContent::Fill(_) | pictura_core::LayerContent::Shape(_))
-            && (!same_content || source.adjustment() != destination.adjustment()) {
+        if matches!(
+            source.content(),
+            pictura_core::LayerContent::Adjustment(_)
+                | pictura_core::LayerContent::Fill(_)
+                | pictura_core::LayerContent::Shape(_)
+        ) && (!same_content || source.adjustment() != destination.adjustment())
+        {
             let mut parts = pictura_core::LayerParts::from(std::mem::take(destination));
             parts.adjustment = source.adjustment().cloned();
             *destination = Layer::from_parts(parts, source.content().clone());
@@ -486,10 +499,12 @@ mod tests {
         assert_ne!(before, prefix_digest(&doc, 1, 0, whole(&doc)));
 
         let before = prefix_digest(&doc, 1, 0, whole(&doc));
-        pictura_codec::edit_layer(doc.layers[0].as_mut(), |parts| { parts.adjustment = Some(pictura_core::AdjustmentData {
-            key: *b"PtFl",
-            data: vec![1, 2, 3].into(),
-        }) });
+        pictura_codec::edit_layer(doc.layers[0].as_mut(), |parts| {
+            parts.adjustment = Some(pictura_core::AdjustmentData {
+                key: *b"PtFl",
+                data: vec![1, 2, 3].into(),
+            })
+        });
         assert_ne!(before, prefix_digest(&doc, 1, 0, whole(&doc)));
     }
 
@@ -625,10 +640,12 @@ mod tests {
     fn unreducible_content_falls_back_to_full() {
         let mut layer = layer("shape", rect(0, 0, 8, 8), [0, 0, 0, 0]);
         layer.channels_mut().clear();
-        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![pictura_core::LayerBlock {
-            key: *b"vscg",
-            data: vec![0xFF; 3].into(),
-        }] });
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks = vec![pictura_core::LayerBlock {
+                key: *b"vscg",
+                data: vec![0xFF; 3].into(),
+            }]
+        });
         let doc = document(1024, 1024, vec![layer]);
         let mut session = RenderSession::default();
         assert!(session.preview(&doc, &["0"], 2, whole(&doc), 0).is_none());
@@ -753,20 +770,35 @@ mod tests {
 
     #[test]
     fn sync_targets_keeps_an_edited_typed_fill_in_reduced_geometry() {
-        let mut source = document(8, 8, vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
-            rect: rect(0, 0, 8, 8),
-            adjustment: Some(crate::encode_solid_color_fill([10, 20, 30])),
-            ..Default::default()
-        })]);
+        let mut source = document(
+            8,
+            8,
+            vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
+                rect: rect(0, 0, 8, 8),
+                adjustment: Some(crate::encode_solid_color_fill([10, 20, 30])),
+                ..Default::default()
+            })],
+        );
         let mut reduced = source.clone();
         reduced.layers[0].rect = rect(0, 0, 4, 4);
-        assert!(source.layers[0].set_fill_content(pictura_core::FillContent::Solid([40, 50, 60, 255])));
-        assert_eq!(source.layers[0].adjustment(), reduced.layers[0].adjustment());
+        assert!(
+            source.layers[0].set_fill_content(pictura_core::FillContent::Solid([40, 50, 60, 255]))
+        );
+        assert_eq!(
+            source.layers[0].adjustment(),
+            reduced.layers[0].adjustment()
+        );
         sync_targets(&mut reduced, &source, &["0"]);
         assert_eq!(reduced.layers[0].rect, rect(0, 0, 4, 4));
-        assert_eq!(reduced.layers[0].fill_content(), source.layers[0].fill_content());
+        assert_eq!(
+            reduced.layers[0].fill_content(),
+            source.layers[0].fill_content()
+        );
         let (pictura_core::LayerContent::Fill(a), pictura_core::LayerContent::Fill(b)) =
-            (reduced.layers[0].content(), source.layers[0].content()) else { panic!("fill content"); };
+            (reduced.layers[0].content(), source.layers[0].content())
+        else {
+            panic!("fill content");
+        };
         assert!(std::sync::Arc::ptr_eq(a, b));
         let generation = reduced.layers[0].content_identity();
         sync_targets(&mut reduced, &source, &["0"]);

@@ -515,49 +515,49 @@ fn apply_store<T: Store>(layer: &mut Layer, pass: Pass) -> Result<(), FilterErro
     let missing = || FilterError::InvalidParams("the layer has no native store".into());
     let mut store = layer.source_channels.take().ok_or_else(missing)?;
     let result = (|| {
-    let channels = layer.channels_mut();
-    let depth = store.depth;
-    // A store without transparency reads the 8-bit plane, at the store's width.
-    let mut widened = match store.planes.iter().any(|(id, _)| *id == -1) {
-        true => None,
-        false => channels
-            .iter()
-            .find(|c| c.id == -1)
-            .map(|c| Samples::widen_from_u8(c.data.as_slice(), depth)),
-    };
-    let mut slots: [Option<&mut [T]>; 4] = [None, None, None, None];
-    for (id, samples) in store.planes.iter_mut() {
-        let slot = match *id {
-            0..=2 => *id as usize,
-            -1 => 3,
-            _ => continue,
+        let channels = layer.channels_mut();
+        let depth = store.depth;
+        // A store without transparency reads the 8-bit plane, at the store's width.
+        let mut widened = match store.planes.iter().any(|(id, _)| *id == -1) {
+            true => None,
+            false => channels
+                .iter()
+                .find(|c| c.id == -1)
+                .map(|c| Samples::widen_from_u8(c.data.as_slice(), depth)),
         };
-        slots[slot] = T::as_slice_mut(samples).filter(|plane| plane.len() == n);
-    }
-    if let Some(samples) = widened.as_mut() {
-        slots[3] = T::as_slice_mut(samples).filter(|plane| plane.len() == n);
-    }
-    if slots[0].is_none() {
-        return Err(missing());
-    }
-    blend_planes(slots, pass);
-
-    let ox = (pass.clip.left - pass.rect.left) as usize;
-    let oy = (pass.clip.top - pass.rect.top) as usize;
-    let size = (pass.clip.width() as usize, pass.clip.height() as usize);
-    let planes = store.planes.iter_mut().map(|(id, s)| (*id, s));
-    for (id, samples) in planes.chain(widened.iter_mut().map(|s| (-1, s))) {
-        if !(0..3).contains(&id) && (id != -1 || pass.keep_alpha) {
-            continue;
+        let mut slots: [Option<&mut [T]>; 4] = [None, None, None, None];
+        for (id, samples) in store.planes.iter_mut() {
+            let slot = match *id {
+                0..=2 => *id as usize,
+                -1 => 3,
+                _ => continue,
+            };
+            slots[slot] = T::as_slice_mut(samples).filter(|plane| plane.len() == n);
         }
-        let out = channels.iter_mut().find(|c| c.id == id);
-        if let (Some(out), Some(from)) = (out, T::as_slice_mut(samples)) {
-            if out.data.len() == n && from.len() == n {
-                narrow_clip(from, out.data.as_mut_slice(), lw, ox, oy, size);
+        if let Some(samples) = widened.as_mut() {
+            slots[3] = T::as_slice_mut(samples).filter(|plane| plane.len() == n);
+        }
+        if slots[0].is_none() {
+            return Err(missing());
+        }
+        blend_planes(slots, pass);
+
+        let ox = (pass.clip.left - pass.rect.left) as usize;
+        let oy = (pass.clip.top - pass.rect.top) as usize;
+        let size = (pass.clip.width() as usize, pass.clip.height() as usize);
+        let planes = store.planes.iter_mut().map(|(id, s)| (*id, s));
+        for (id, samples) in planes.chain(widened.iter_mut().map(|s| (-1, s))) {
+            if !(0..3).contains(&id) && (id != -1 || pass.keep_alpha) {
+                continue;
+            }
+            let out = channels.iter_mut().find(|c| c.id == id);
+            if let (Some(out), Some(from)) = (out, T::as_slice_mut(samples)) {
+                if out.data.len() == n && from.len() == n {
+                    narrow_clip(from, out.data.as_mut_slice(), lw, ox, oy, size);
+                }
             }
         }
-    }
-    Ok(())
+        Ok(())
     })();
     layer.source_channels = Some(store);
     result

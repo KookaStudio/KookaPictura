@@ -257,7 +257,8 @@ mod tests {
                 .expect("alpha");
             alpha.data.as_mut_slice().fill(0);
         }
-        let alpha = corner.channels()
+        let alpha = corner
+            .channels()
             .iter_mut()
             .find(|c| c.id == -1)
             .expect("alpha");

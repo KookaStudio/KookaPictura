@@ -433,21 +433,24 @@ mod tests {
 
     fn layer(w: i32, h: i32, px: impl Fn(i32, i32) -> [u8; 4]) -> Layer {
         let plane = |c: usize| (0..w * h).map(|i| px(i % w, i / w)[c]).collect::<Vec<u8>>();
-        pictura_core::Layer::from_parts(pictura_core::LayerParts {
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: h,
-                right: w,
+        pictura_core::Layer::from_parts(
+            pictura_core::LayerParts {
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: h,
+                    right: w,
+                },
+                channels: [(0, 0), (1, 1), (2, 2), (-1, 3)]
+                    .map(|(id, c)| Channel {
+                        id,
+                        data: plane(c).into(),
+                    })
+                    .into(),
+                ..Default::default()
             },
-            channels: [(0, 0), (1, 1), (2, 2), (-1, 3)]
-                .map(|(id, c)| Channel {
-                    id,
-                    data: plane(c).into(),
-                })
-                .into(),
-            ..Default::default()
-        }, pictura_core::LayerContent::Pixel)
+            pictura_core::LayerContent::Pixel,
+        )
     }
 
     fn doc(layers: Vec<Layer>) -> Document {
@@ -585,13 +588,16 @@ mod tests {
 
     #[test]
     fn sampling_scopes_drop_layers_above_and_optionally_adjustments() {
-        let adjustment = pictura_core::Layer::from_parts(pictura_core::LayerParts {
-            adjustment: Some(AdjustmentData {
-                key: *b"levl",
-                data: Vec::new().into(),
-            }),
-            ..Default::default()
-        }, pictura_core::LayerContent::Pixel);
+        let adjustment = pictura_core::Layer::from_parts(
+            pictura_core::LayerParts {
+                adjustment: Some(AdjustmentData {
+                    key: *b"levl",
+                    data: Vec::new().into(),
+                }),
+                ..Default::default()
+            },
+            pictura_core::LayerContent::Pixel,
+        );
         let stack = doc(vec![
             layer(32, 32, |_, _| RED),
             layer(32, 32, |_, _| BLUE),
@@ -641,9 +647,12 @@ mod tests {
         let restored = stamp(&after, StampSource::new(past, (0, 0)), &[16.0]);
         assert_eq!(pixel(&restored, 16, 16), RED);
         assert_eq!(pixel(&restored, 2, 2), BLUE);
-        let grouped = doc(vec![pictura_core::Layer::from_parts(pictura_core::LayerParts {
-            ..Default::default()
-        }, pictura_core::LayerContent::Group(Default::default()))]);
+        let grouped = doc(vec![pictura_core::Layer::from_parts(
+            pictura_core::LayerParts {
+                ..Default::default()
+            },
+            pictura_core::LayerContent::Group(Default::default()),
+        )]);
         assert!(layer_surface(&grouped, "0").is_none());
     }
 
@@ -697,20 +706,23 @@ mod tests {
     fn offset_layer(w: i32, h: i32, rect: PsdRect, px: impl Fn(i32, i32) -> [u8; 4]) -> Layer {
         let plane = |c: usize| (0..w * h).map(|i| px(i % w, i / w)[c]).collect::<Vec<u8>>();
         let width = w.max(1) as usize;
-        pictura_core::Layer::from_parts(pictura_core::LayerParts {
-            rect,
-            channels: [(0, 0), (1, 1), (2, 2), (-1, 3)]
-                .map(|(id, c)| {
-                    let mut channel = Channel {
-                        id,
-                        data: plane(c).into(),
-                    };
-                    channel.data.tile(width, h.max(1) as usize);
-                    channel
-                })
-                .into(),
-            ..Default::default()
-        }, pictura_core::LayerContent::Pixel)
+        pictura_core::Layer::from_parts(
+            pictura_core::LayerParts {
+                rect,
+                channels: [(0, 0), (1, 1), (2, 2), (-1, 3)]
+                    .map(|(id, c)| {
+                        let mut channel = Channel {
+                            id,
+                            data: plane(c).into(),
+                        };
+                        channel.data.tile(width, h.max(1) as usize);
+                        channel
+                    })
+                    .into(),
+                ..Default::default()
+            },
+            pictura_core::LayerContent::Pixel,
+        )
     }
 
     fn layer_surface_serial(doc: &Document, path: &str) -> Option<RgbaImage> {
@@ -797,25 +809,28 @@ mod tests {
             layer_surface_serial(&zero_doc, "0")
         );
 
-        let no_alpha = pictura_core::Layer::from_parts(pictura_core::LayerParts {
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 4,
-                right: 4,
+        let no_alpha = pictura_core::Layer::from_parts(
+            pictura_core::LayerParts {
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 4,
+                    right: 4,
+                },
+                channels: [(0, 10u8), (1, 20), (2, 30)]
+                    .map(|(id, value)| {
+                        let mut channel = Channel {
+                            id,
+                            data: vec![value; 16].into(),
+                        };
+                        channel.data.tile(4, 4);
+                        channel
+                    })
+                    .into(),
+                ..Default::default()
             },
-            channels: [(0, 10u8), (1, 20), (2, 30)]
-                .map(|(id, value)| {
-                    let mut channel = Channel {
-                        id,
-                        data: vec![value; 16].into(),
-                    };
-                    channel.data.tile(4, 4);
-                    channel
-                })
-                .into(),
-            ..Default::default()
-        }, pictura_core::LayerContent::Pixel);
+            pictura_core::LayerContent::Pixel,
+        );
         let no_alpha_doc = doc(vec![no_alpha]);
         assert_eq!(
             layer_surface(&no_alpha_doc, "0"),
@@ -877,15 +892,18 @@ mod tests {
 
     #[test]
     fn zero_size_sources_are_empty() {
-        let empty = pictura_core::Layer::from_parts(pictura_core::LayerParts {
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 0,
-                right: 0,
+        let empty = pictura_core::Layer::from_parts(
+            pictura_core::LayerParts {
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 0,
+                    right: 0,
+                },
+                ..Default::default()
             },
-            ..Default::default()
-        }, pictura_core::LayerContent::Pixel);
+            pictura_core::LayerContent::Pixel,
+        );
         assert!(layer_rgba(&empty).data.is_empty());
         let buf = PixelBuffer::new(0, 0, 4);
         assert!(surface_from_composite(&buf).data.is_empty());
@@ -904,10 +922,14 @@ mod tests {
             .data
             .is_empty());
         let mut zero_doc = Document::new(0, 0, ColorMode::Rgb, BitDepth::Eight);
-        zero_doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_core::Layer::from_parts(pictura_core::LayerParts {
-            rect: empty_rect,
-            ..Default::default()
-        }, pictura_core::LayerContent::Pixel)]);
+        zero_doc.layers =
+            pictura_core::LayerStack::from_layers(vec![pictura_core::Layer::from_parts(
+                pictura_core::LayerParts {
+                    rect: empty_rect,
+                    ..Default::default()
+                },
+                pictura_core::LayerContent::Pixel,
+            )]);
         assert!(layer_surface(&zero_doc, "0").unwrap().data.is_empty());
     }
 }

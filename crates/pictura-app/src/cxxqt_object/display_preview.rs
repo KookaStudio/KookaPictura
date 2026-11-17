@@ -372,7 +372,9 @@ mod tests {
             let index = pictura_render::add_layer(&mut doc, -1, "adjustment");
             let path = index.to_string();
             if let Some(layer) = pictura_render::resolve_path_mut(&mut doc, &path) {
-                pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.adjustment = Some(pictura_render::encode_invert()) });
+                pictura_codec::edit_layer(layer.as_mut(), |parts| {
+                    parts.adjustment = Some(pictura_render::encode_invert())
+                });
             }
             view.session.doc = Some(doc);
             path

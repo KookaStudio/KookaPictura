@@ -13,7 +13,6 @@
 //! canvas-sized; the exact inter-effect order among the overlays and
 //! Stroke is not modelled.
 
-
 use pictura_adjust::{GradientFillParams, GradientKind, GradientStop, PatternFillParams};
 use pictura_codec::DescValue;
 use pictura_core::{BlendMode, Document, Layer, PsdRect};

@@ -1,6 +1,8 @@
+pub use pictura_codec::{
+    decode_adjustment, encode_brightness_contrast, encode_hue_saturation, encode_invert,
+    encode_photo_filter, encode_posterize, encode_solid_color_fill, encode_threshold,
+};
 use pictura_core::{BlendIf, BlendMode, Document, Layer, LayerMask, PixelBuffer, PsdRect};
-pub use pictura_codec::{decode_adjustment, encode_invert, encode_posterize, encode_threshold,
-    encode_brightness_contrast, encode_hue_saturation, encode_photo_filter, encode_solid_color_fill};
 
 pub(crate) use crate::blend::blend;
 use crate::composite_blend::BlendOverride;
@@ -378,7 +380,9 @@ fn composite_layer_dispatch(
             );
             composite_canvas(canvas, layer, doc, &inner, &ctx, over);
         }
-        Body::Adjustment(adjustment) => composite_adjustment(canvas, layer, doc, adjustment, &ctx, over),
+        Body::Adjustment(adjustment) => {
+            composite_adjustment(canvas, layer, doc, adjustment, &ctx, over)
+        }
         Body::Fill(fill) => crate::fill::composite_fill(canvas, layer, doc, fill, &ctx, over),
         // A layer with no decoded fill but an adjustment block is a no-op.
         Body::UndecodedAdjustment => {}
@@ -465,7 +469,7 @@ fn composite_layer_dispatch(
     canvas.effect_scale = effect_scale;
 }
 
-pub(crate) use pictura_codec::layer_content::basic::{be_u16, be_i16, be_u32, desc_item};
+pub(crate) use pictura_codec::layer_content::basic::{be_i16, be_u16, be_u32, desc_item};
 
 pub(crate) fn blend_if_factor(view: Option<&BlendIf>, cs: [f32; 3], backdrop: [f32; 3]) -> f32 {
     let Some(view) = view else {
@@ -560,7 +564,11 @@ pub(crate) fn channel(layer: &Layer, id: i16) -> Option<&[u8]> {
 /// The plane of `layer`'s channel `id`, for readers that walk rows instead of
 /// materializing a banded plane into one contiguous slice.
 pub(crate) fn channel_plane(layer: &Layer, id: i16) -> Option<&pictura_core::Plane<u8>> {
-    layer.channels().iter().find(|c| c.id == id).map(|c| &c.data)
+    layer
+        .channels()
+        .iter()
+        .find(|c| c.id == id)
+        .map(|c| &c.data)
 }
 
 /// Mask value at a canvas pixel inside `clip` (see [`crate::mask_refine`]);

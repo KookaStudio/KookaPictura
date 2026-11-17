@@ -471,10 +471,12 @@ fn transform_smart_object_rect_refuses_stray_channels() {
             Vec::new(),
         )],
     );
-    pictura_codec::edit_layer(raw.layers[0].as_mut(), |parts| { parts.raw_channels = vec![pictura_core::RawChannel {
-        id: 3,
-        data: vec![0, 0, 0, 0].into(),
-    }] });
+    pictura_codec::edit_layer(raw.layers[0].as_mut(), |parts| {
+        parts.raw_channels = vec![pictura_core::RawChannel {
+            id: 3,
+            data: vec![0, 0, 0, 0].into(),
+        }]
+    });
     let before = raw.clone();
     assert!(!can_transform_smart_object_rect(&raw, "0"));
     assert!(!transform_smart_object_rect(
@@ -489,7 +491,12 @@ fn transform_smart_object_rect_refuses_stray_channels() {
 fn losing_smart_object_references_retain_shared_linked_payloads() {
     use pictura_core::{LayerBlock, LayerKind, LayerParts};
     let source = payload_of([17, 53, 109]);
-    let object = smart_layer("active", full(2, 2), embedded(source.clone()), green_proxy());
+    let object = smart_layer(
+        "active",
+        full(2, 2),
+        embedded(source.clone()),
+        green_proxy(),
+    );
     let seed = pictura_codec::read_psd(&write_psd(&doc(4, 4, vec![object])).unwrap()).unwrap();
     let uuid = seed.layers[0].smart_object().unwrap().uuid.clone();
     assert!(!uuid.is_empty());
@@ -504,36 +511,63 @@ fn losing_smart_object_references_retain_shared_linked_payloads() {
             data.extend_from_slice(&3u32.to_be_bytes());
             data.push(uuid.len() as u8);
             data.extend_from_slice(uuid.as_bytes());
-            LayerBlock { key, data: data.into() }
+            LayerBlock {
+                key,
+                data: data.into(),
+            }
         };
         for kind in [LayerKind::Fill, LayerKind::Adjustment, LayerKind::Group] {
             for operation in ["rasterize", "replace", "unpack"] {
                 let mut d = seed.clone();
                 let mut parts = LayerParts::from(d.layers[0].clone());
                 parts.name = "preserved".into();
-                parts.extra_blocks.retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd"));
+                parts
+                    .extra_blocks
+                    .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd"));
                 parts.extra_blocks.push(config.clone());
                 match kind {
-                    LayerKind::Fill => parts.adjustment = Some(crate::encode_solid_color_fill([3, 5, 7])),
+                    LayerKind::Fill => {
+                        parts.adjustment = Some(crate::encode_solid_color_fill([3, 5, 7]))
+                    }
                     LayerKind::Adjustment => parts.adjustment = Some(crate::encode_invert()),
                     LayerKind::Group => parts.is_group = true,
                     _ => unreachable!(),
                 }
-                d.layers.push(pictura_codec::layer_from_parts(parts)).unwrap();
+                d.layers
+                    .push(pictura_codec::layer_from_parts(parts))
+                    .unwrap();
                 let original_sources = d.layer_section_extra.clone();
                 let changed = match operation {
                     "rasterize" => rasterize_smart_object(&mut d, "0"),
-                    "replace" => replace_smart_object_contents(&mut d, "0", "replacement.psd", &payload_of([201, 33, 11])),
+                    "replace" => replace_smart_object_contents(
+                        &mut d,
+                        "0",
+                        "replacement.psd",
+                        &payload_of([201, 33, 11]),
+                    ),
                     _ => convert_smart_object_to_layers(&mut d, "0"),
                 };
                 assert!(changed, "{key:?} {kind:?} {operation}");
-                assert_eq!(d.layer_section_extra, original_sources, "{key:?} {kind:?} {operation} dropped a shared record");
+                assert_eq!(
+                    d.layer_section_extra, original_sources,
+                    "{key:?} {kind:?} {operation} dropped a shared record"
+                );
                 let back = pictura_codec::read_psd(&write_psd(&d).unwrap()).unwrap();
-                let retained = back.layers.iter().find(|layer| layer.name == "preserved").unwrap();
+                let retained = back
+                    .layers
+                    .iter()
+                    .find(|layer| layer.name == "preserved")
+                    .unwrap();
                 assert_eq!(retained.kind(), kind);
                 assert_eq!(retained.extra_block(&key), Some(&config));
-                assert!(back.layer_section_extra.windows(uuid.len()).any(|bytes| bytes == uuid.as_bytes()));
-                assert!(back.layer_section_extra.windows(source.len()).any(|bytes| bytes == source.as_slice()));
+                assert!(back
+                    .layer_section_extra
+                    .windows(uuid.len())
+                    .any(|bytes| bytes == uuid.as_bytes()));
+                assert!(back
+                    .layer_section_extra
+                    .windows(source.len())
+                    .any(|bytes| bytes == source.as_slice()));
             }
         }
     }

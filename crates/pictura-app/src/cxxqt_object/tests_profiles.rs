@@ -692,7 +692,12 @@ fn large_document_filter_profile() {
     let (w, h) = (16507u32, 16196u32);
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     let mut layer = pixel_layer("Background", w, h, (30, 60, 90));
-    for (c, ch) in layer.channels_mut().iter_mut().filter(|c| c.id >= 0).enumerate() {
+    for (c, ch) in layer
+        .channels_mut()
+        .iter_mut()
+        .filter(|c| c.id >= 0)
+        .enumerate()
+    {
         let plane = ch.data.as_mut_slice();
         for (i, px) in plane.iter_mut().enumerate() {
             let (x, y) = (i % w as usize, i / w as usize);
@@ -903,7 +908,12 @@ fn radial_blur_commit_profile() {
     let (w, h) = (8000u32, 8000u32);
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     let mut layer = pixel_layer("Background", w, h, (30, 60, 90));
-    for (c, ch) in layer.channels_mut().iter_mut().filter(|c| c.id >= 0).enumerate() {
+    for (c, ch) in layer
+        .channels_mut()
+        .iter_mut()
+        .filter(|c| c.id >= 0)
+        .enumerate()
+    {
         for (i, px) in ch.data.as_mut_slice().iter_mut().enumerate() {
             let (x, y) = (i % w as usize, i / w as usize);
             *px = ((x * 7 + y * 13 + c * 53) % 256) as u8;

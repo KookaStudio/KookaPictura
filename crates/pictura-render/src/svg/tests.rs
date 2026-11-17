@@ -266,41 +266,47 @@ fn encode_document_svg_nests_a_group() {
 #[test]
 fn a_type_layer_uses_its_raster_fallback() {
     let mut text = pixel("text");
-    pictura_codec::edit_layer(text.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-        key: *b"TySh",
-        data: Vec::new().into(),
-    }) });
+    pictura_codec::edit_layer(text.as_mut(), |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"TySh",
+            data: Vec::new().into(),
+        })
+    });
     let (nodes, _) = nodes(vec![text]);
     raster_fill(&nodes[0]);
 }
 
 fn gradient_layer(kind: GradientKind) -> Layer {
     let mut layer = shape_layer([0, 0, 0]);
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.adjustment = Some(crate::encode_gradient_fill(
-        kind,
-        &[
-            GradientStop {
-                location: 0,
-                color: [255, 0, 0],
-            },
-            GradientStop {
-                location: 4096,
-                color: [0, 0, 255],
-            },
-        ],
-        0.0,
-    )) });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.adjustment = Some(crate::encode_gradient_fill(
+            kind,
+            &[
+                GradientStop {
+                    location: 0,
+                    color: [255, 0, 0],
+                },
+                GradientStop {
+                    location: 4096,
+                    color: [0, 0, 255],
+                },
+            ],
+            0.0,
+        ))
+    });
     layer
 }
 
 fn pattern_layer() -> Layer {
     let mut layer = shape_layer([0, 0, 0]);
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.adjustment = Some(crate::encode_pattern_fill(&PatternFillParams {
-        pattern_id: "missing".into(),
-        scale: 100.0,
-        link_with_layer: true,
-        origin: (0, 0),
-    })) });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.adjustment = Some(crate::encode_pattern_fill(&PatternFillParams {
+            pattern_id: "missing".into(),
+            scale: 100.0,
+            link_with_layer: true,
+            origin: (0, 0),
+        }))
+    });
     layer
 }
 
@@ -491,12 +497,15 @@ fn a_shape_with_another_effect_is_rasterized() {
 fn raster_normalization_keeps_edited_typed_content() {
     let original = pictura_codec::encode_solid_color_fill([10, 20, 30]);
     let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
-        opacity: 123, blend: BlendMode::Multiply, adjustment: Some(original.clone()),
+        opacity: 123,
+        blend: BlendMode::Multiply,
+        adjustment: Some(original.clone()),
         ..Default::default()
     });
     assert!(layer.set_fill_content(pictura_core::FillContent::Solid([40, 50, 60, 77])));
     let neutral = normalized(&layer);
-    assert_eq!(neutral.opacity, 255); assert_eq!(neutral.blend, BlendMode::Normal);
+    assert_eq!(neutral.opacity, 255);
+    assert_eq!(neutral.blend, BlendMode::Normal);
     assert_eq!(neutral.fill_content(), layer.fill_content());
     assert!(neutral.fill_was_edited());
     assert_eq!(neutral.adjustment(), Some(&original));

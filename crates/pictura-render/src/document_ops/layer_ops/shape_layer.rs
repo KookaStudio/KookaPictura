@@ -40,7 +40,9 @@ pub fn add_shape_layer(
 /// A fill-content layer with a vector mask: its fill comes from a modeled
 /// adjustment block (an app-authored shape) or a preserved `vscg` vector-fill
 /// block (an imported CC shape).
-pub fn is_shape_layer(layer: &Layer) -> bool { layer.kind() == pictura_core::LayerKind::Shape }
+pub fn is_shape_layer(layer: &Layer) -> bool {
+    layer.kind() == pictura_core::LayerKind::Shape
+}
 
 /// Whether the layer forces Lock Transparency and Lock Image on in the Layers
 /// panel (CS6: type and shape layers).
@@ -163,13 +165,16 @@ pub(crate) fn map_shape_layer(
 
 fn set_block(layer: &mut Layer, key: &[u8; 4], data: Option<Vec<u8>>) {
     let slot = layer.extra_blocks().iter().position(|b| &b.key == key);
-    pictura_codec::edit_layer(layer, |parts| {
-        match (slot, data) {
-            (Some(i), Some(data)) => parts.extra_blocks[i].data = data.into(),
-            (None, Some(data)) => parts.extra_blocks.push(LayerBlock { key: *key, data: data.into() }),
-            (Some(i), None) => { parts.extra_blocks.remove(i); }
-            (None, None) => {},
+    pictura_codec::edit_layer(layer, |parts| match (slot, data) {
+        (Some(i), Some(data)) => parts.extra_blocks[i].data = data.into(),
+        (None, Some(data)) => parts.extra_blocks.push(LayerBlock {
+            key: *key,
+            data: data.into(),
+        }),
+        (Some(i), None) => {
+            parts.extra_blocks.remove(i);
         }
+        (None, None) => {}
     });
 }
 

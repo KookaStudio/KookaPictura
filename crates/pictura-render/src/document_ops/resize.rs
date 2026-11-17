@@ -527,10 +527,12 @@ mod tests {
                 }),
             )
             .expect("valid native source");
-        pictura_codec::edit_layer(doc.layers[0].as_mut(), |parts| { parts.raw_channels = vec![RawChannel {
-            id: 3,
-            data: vec![0, 0, 1].into(),
-        }] });
+        pictura_codec::edit_layer(doc.layers[0].as_mut(), |parts| {
+            parts.raw_channels = vec![RawChannel {
+                id: 3,
+                data: vec![0, 0, 1].into(),
+            }]
+        });
         doc.layers[0].source_channels = Some(SourceChannels {
             depth: BitDepth::Sixteen,
             rect: rect(0, 0, 4, 4),

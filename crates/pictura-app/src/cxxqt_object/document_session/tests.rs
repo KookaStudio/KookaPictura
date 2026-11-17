@@ -507,12 +507,14 @@ fn a_shape_path_abort_requests_a_rebuild() {
     let mut view = view();
     // A gesture on a shape layer's outline edits the layer, whose pixels
     // change: the abort restores the outline and asks for a rebuild.
-    view.session
-        .live
-        .set_path(crate::cxxqt_object::document_session::PathRestore::pictura_codec::layer_from_parts(pictura_core::LayerParts {
-            target: "0".into(),
-            subpaths: Vec::new(),
-        }));
+    view.session.live.set_path(
+        crate::cxxqt_object::document_session::PathRestore::pictura_codec::layer_from_parts(
+            pictura_core::LayerParts {
+                target: "0".into(),
+                subpaths: Vec::new(),
+            },
+        ),
+    );
     assert!(view.has_active_session(), "the gesture is live");
 
     let change = view.cancel_active_sessions();

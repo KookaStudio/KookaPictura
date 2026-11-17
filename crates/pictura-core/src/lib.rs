@@ -11,8 +11,8 @@ pub mod blur;
 pub mod channels;
 mod coverage;
 pub use coverage::Coverage;
-mod crs;
 mod content_params;
+mod crs;
 pub use content_params::*;
 mod digest;
 mod document_composite;
@@ -25,8 +25,8 @@ pub mod homography;
 pub mod job;
 pub mod layer_bounds;
 pub mod layer_comp;
-mod layer_stack;
 mod layer_content;
+mod layer_stack;
 pub use layer_content::{Layer, LayerContent, LayerKind, LayerParts};
 pub mod mask_ops;
 pub mod memory;
@@ -320,17 +320,20 @@ impl Document {
                 data: composite.into(),
             })
             .expect("valid composite");
-        doc.layers = LayerStack::from_layers(vec![crate::Layer::from_parts(crate::LayerParts {
-            name: name.to_string(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: height as i32,
-                right: width as i32,
+        doc.layers = LayerStack::from_layers(vec![crate::Layer::from_parts(
+            crate::LayerParts {
+                name: name.to_string(),
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: height as i32,
+                    right: width as i32,
+                },
+                channels,
+                ..Default::default()
             },
-            channels,
-            ..Default::default()
-        }, crate::LayerContent::Pixel)]);
+            crate::LayerContent::Pixel,
+        )]);
         doc
     }
 

@@ -100,9 +100,11 @@ pub fn delete_smart_filter_mask(doc: &mut Document, path: &str) -> bool {
     let Some(layer) = resolve_path_mut(doc, path) else {
         return false;
     };
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { if let Some(so) = parts.smart_object.as_mut() {
-        so.filter_mask = None;
-    } });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        if let Some(so) = parts.smart_object.as_mut() {
+            so.filter_mask = None;
+        }
+    });
     true
 }
 
@@ -186,18 +188,17 @@ mod tests {
     #[test]
     fn delete_smart_filter_mask_clears_the_typed_mask() {
         let mut doc = smart_doc();
-        pictura_codec::edit_layer(resolve_path_mut(&mut doc, "0")
-            .unwrap().as_mut(), |parts| { parts.smart_object.as_mut()
-            .unwrap()
-            .filter_mask = Some(pictura_core::FilterMask {
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 4,
-                right: 4,
-            },
-            data: vec![255u8; 16].into(),
-        }); });
+        pictura_codec::edit_layer(resolve_path_mut(&mut doc, "0").unwrap().as_mut(), |parts| {
+            parts.smart_object.as_mut().unwrap().filter_mask = Some(pictura_core::FilterMask {
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 4,
+                    right: 4,
+                },
+                data: vec![255u8; 16].into(),
+            });
+        });
         assert!(has_smart_filter_mask(&doc, "0"));
         assert!(delete_smart_filter_mask(&mut doc, "0"));
         assert!(!has_smart_filter_mask(&doc, "0"));

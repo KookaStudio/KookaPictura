@@ -313,7 +313,12 @@ fn a_projective_box_is_kept_exactly() {
     let r = rect(0, 0, 40, 40);
     let mut layer = pixel_layer(r);
     let gradient: Vec<u8> = (0..1600).map(|i| (i % 40) as u8 * 6).collect();
-    layer.channels_mut().iter_mut().find(|c| c.id == 0).unwrap().data = gradient.into();
+    layer
+        .channels_mut()
+        .iter_mut()
+        .find(|c| c.id == 0)
+        .unwrap()
+        .data = gradient.into();
     let quad = [(0.0, 0.0), (40.0, 8.0), (40.0, 32.0), (0.0, 40.0)];
     let b = bounds(r);
     let mut doc = doc_with(layer);

@@ -235,9 +235,13 @@ fn find_smart_object<'a>(layers: &'a [Layer], uuid: &str) -> Option<&'a SmartObj
 
 fn find_smart_layer_mut<'a>(layers: &'a mut LayerStack, uuid: &str) -> Option<&'a mut Layer> {
     for layer in layers.iter_mut() {
-        if layer.smart_object().is_some_and(|so| so.uuid == uuid) { return Some(layer); }
+        if layer.smart_object().is_some_and(|so| so.uuid == uuid) {
+            return Some(layer);
+        }
         if let Some(children) = layer.children_mut() {
-            if let Some(found) = find_smart_layer_mut(children, uuid) { return Some(found); }
+            if let Some(found) = find_smart_layer_mut(children, uuid) {
+                return Some(found);
+            }
         }
     }
     None

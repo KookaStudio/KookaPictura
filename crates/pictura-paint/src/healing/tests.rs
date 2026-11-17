@@ -400,36 +400,39 @@ fn layer_doc(w: u32, h: u32, rgba: [u8; 4]) -> Document {
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     let n = (w * h) as usize;
     {
-        let _ = doc.layers.push(pictura_core::Layer::from_parts(pictura_core::LayerParts {
-            name: "px".into(),
-            rect: rect(w as i32, h as i32),
-            blend: BlendMode::Normal,
-            opacity: 255,
-            fill: 255,
-            lock: LockFlags::default(),
-            color: ColorLabel::None,
-            clipping: false,
-            visible: true,
-            channels: vec![
-                Channel {
-                    id: 0,
-                    data: vec![rgba[0]; n].into(),
-                },
-                Channel {
-                    id: 1,
-                    data: vec![rgba[1]; n].into(),
-                },
-                Channel {
-                    id: 2,
-                    data: vec![rgba[2]; n].into(),
-                },
-                Channel {
-                    id: -1,
-                    data: vec![rgba[3]; n].into(),
-                },
-            ],
-            ..Default::default()
-        }, pictura_core::LayerContent::Pixel));
+        let _ = doc.layers.push(pictura_core::Layer::from_parts(
+            pictura_core::LayerParts {
+                name: "px".into(),
+                rect: rect(w as i32, h as i32),
+                blend: BlendMode::Normal,
+                opacity: 255,
+                fill: 255,
+                lock: LockFlags::default(),
+                color: ColorLabel::None,
+                clipping: false,
+                visible: true,
+                channels: vec![
+                    Channel {
+                        id: 0,
+                        data: vec![rgba[0]; n].into(),
+                    },
+                    Channel {
+                        id: 1,
+                        data: vec![rgba[1]; n].into(),
+                    },
+                    Channel {
+                        id: 2,
+                        data: vec![rgba[2]; n].into(),
+                    },
+                    Channel {
+                        id: -1,
+                        data: vec![rgba[3]; n].into(),
+                    },
+                ],
+                ..Default::default()
+            },
+            pictura_core::LayerContent::Pixel,
+        ));
     };
     doc
 }
@@ -480,10 +483,13 @@ fn heal_layer_writes_the_pixels_and_returns_a_document_rect() {
 fn heal_layer_refuses_a_group_or_bad_path() {
     let mut doc = layer_doc(16, 16, BASE);
     {
-        let _ = doc.layers.push(pictura_core::Layer::from_parts(pictura_core::LayerParts {
-            name: "group".into(),
-            ..Default::default()
-        }, pictura_core::LayerContent::Group(Default::default())));
+        let _ = doc.layers.push(pictura_core::Layer::from_parts(
+            pictura_core::LayerParts {
+                name: "group".into(),
+                ..Default::default()
+            },
+            pictura_core::LayerContent::Group(Default::default()),
+        ));
     };
     let region = rect(4, 4);
     let op = |img: &mut RgbaImage, local, cov: &[f32]| {

@@ -204,10 +204,12 @@ fn reattaching_keeps_unmodeled_keys() {
     .with_payload(b"8BPS\x00\x01x".to_vec());
     let mut layer = embedded_layer();
     let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
-    crate::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-        key: *b"SoLd",
-        data: data.into(),
-    }) });
+    crate::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"SoLd",
+            data: data.into(),
+        })
+    });
 
     let new_slots = slots();
     attach_lens_correction_filter(&mut layer, &new_slots).expect("re-attaches");
@@ -259,10 +261,12 @@ fn a_foreign_filter_id_is_left_alone() {
     .with_payload(b"8BPS\x00\x01x".to_vec());
     let mut layer = embedded_layer();
     let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
-    crate::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-        key: *b"SoLd",
-        data: data.into(),
-    }) });
+    crate::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"SoLd",
+            data: data.into(),
+        })
+    });
 
     attach_lens_correction_filter(&mut layer, &DEFAULT_SLOTS).expect("attaches");
 

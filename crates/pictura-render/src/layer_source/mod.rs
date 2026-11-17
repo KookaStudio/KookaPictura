@@ -371,10 +371,14 @@ pub(super) fn decode_payload(so: &SmartObject) -> Option<Document> {
     let mut stacks = vec![&mut embedded.layers];
     while let Some(stack) = stacks.pop() {
         for layer in stack.iter_mut() {
-            pictura_codec::edit_layer(layer.as_mut(), |parts| { if let Some(inner) = parts.smart_object.as_mut() {
-                inner.nesting = so.nesting + 1;
-            } });
-            if let Some(children) = layer.children_mut() { stacks.push(children); }
+            pictura_codec::edit_layer(layer.as_mut(), |parts| {
+                if let Some(inner) = parts.smart_object.as_mut() {
+                    inner.nesting = so.nesting + 1;
+                }
+            });
+            if let Some(children) = layer.children_mut() {
+                stacks.push(children);
+            }
         }
     }
     Some(embedded)

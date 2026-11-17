@@ -1,7 +1,9 @@
-use pictura_core::{AdjustmentData, FillContent, GradientFillParams, GradientKind, GradientStop, PatternFillParams};
-use crate::DescValue;
-use crate::layer_content_budget::ContentAlloc;
 use super::basic::desc_item;
+use crate::layer_content_budget::ContentAlloc;
+use crate::DescValue;
+use pictura_core::{
+    AdjustmentData, FillContent, GradientFillParams, GradientKind, GradientStop, PatternFillParams,
+};
 
 pub fn decode_gradient_fill(d: &[u8]) -> Option<FillContent> {
     let obj = crate::read_descriptor(d).ok()?;
@@ -16,7 +18,10 @@ pub fn gradient_params_from_desc(obj: &DescValue) -> Option<GradientFillParams> 
     gradient_params_from_desc_using(obj, &mut ContentAlloc::new(None))
 }
 
-pub(crate) fn gradient_params_from_desc_using(obj: &DescValue, alloc: &mut ContentAlloc) -> Option<GradientFillParams> {
+pub(crate) fn gradient_params_from_desc_using(
+    obj: &DescValue,
+    alloc: &mut ContentAlloc,
+) -> Option<GradientFillParams> {
     if !matches!(obj, DescValue::Object { .. }) {
         return None;
     }
@@ -358,4 +363,3 @@ fn encode_stop(stop: &GradientStop) -> DescValue {
         ],
     }
 }
-

@@ -30,20 +30,11 @@ pub(crate) fn adjustment(layer: &Layer) -> Result<Option<AdjustmentData>, PsdErr
         Adjustment::PhotoFilter(p) => {
             crate::encode_photo_filter(p.color, p.density, p.preserve_luminosity)
         }
-        Adjustment::ColorBalance(p) => crate::encode_color_balance(
-            p.shadows,
-            p.midtones,
-            p.highlights,
-            p.preserve_luminosity,
-        ),
+        Adjustment::ColorBalance(p) => {
+            crate::encode_color_balance(p.shadows, p.midtones, p.highlights, p.preserve_luminosity)
+        }
         Adjustment::ChannelMixer(p) => {
-            let rgb = crate::encode_channel_mixer(
-                p.monochrome,
-                p.red,
-                p.green,
-                p.blue,
-                p.constant,
-            );
+            let rgb = crate::encode_channel_mixer(p.monochrome, p.red, p.green, p.blue, p.constant);
             if layer_content::decode_adjustment(&rgb).as_ref() == Some(value) {
                 rgb
             } else {
@@ -58,10 +49,9 @@ pub(crate) fn adjustment(layer: &Layer) -> Result<Option<AdjustmentData>, PsdErr
         ),
         Adjustment::SelectiveColor(p) => crate::encode_selective_color(p.method, &p.ranges),
         Adjustment::GradientMap(p) => crate::encode_gradient_map(p, false),
-        Adjustment::ShadowsHighlights(p) => crate::encode_shadows_highlights(
-            p.shadows_amount as u16,
-            p.highlights_amount as u16,
-        ),
+        Adjustment::ShadowsHighlights(p) => {
+            crate::encode_shadows_highlights(p.shadows_amount as u16, p.highlights_amount as u16)
+        }
         Adjustment::Levels(_)
         | Adjustment::Exposure(_)
         | Adjustment::BlackWhite(_)
@@ -106,9 +96,11 @@ pub(crate) fn require_definition(layer: &Layer) -> Result<(), PsdError> {
             Err(unsupported())
         }
         LayerContent::SmartObject(_)
-            if !layer.extra_blocks().iter().any(|block| {
-                matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd")
-            }) && crate::smart_writer::should_author(layer).is_none() =>
+            if !layer
+                .extra_blocks()
+                .iter()
+                .any(|block| matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd"))
+                && crate::smart_writer::should_author(layer).is_none() =>
         {
             Err(unsupported())
         }

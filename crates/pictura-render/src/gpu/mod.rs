@@ -607,21 +607,23 @@ mod tests {
         };
         doc.layers = pictura_core::LayerStack::from_layers(
             (0..2u8)
-                .map(|k| pictura_codec::layer_from_parts(pictura_core::LayerParts {
-                    rect,
-                    opacity: 200,
-                    fill: 255,
-                    visible: true,
-                    channels: (-1..3)
-                        .map(|id| Channel {
-                            id,
-                            data: (0..(w * h) as usize)
-                                .map(|i| (i * (3 + k as usize) + (id + 1) as usize * 40) as u8)
-                                .collect(),
-                        })
-                        .collect(),
-                    ..Default::default()
-                }))
+                .map(|k| {
+                    pictura_codec::layer_from_parts(pictura_core::LayerParts {
+                        rect,
+                        opacity: 200,
+                        fill: 255,
+                        visible: true,
+                        channels: (-1..3)
+                            .map(|id| Channel {
+                                id,
+                                data: (0..(w * h) as usize)
+                                    .map(|i| (i * (3 + k as usize) + (id + 1) as usize * 40) as u8)
+                                    .collect(),
+                            })
+                            .collect(),
+                        ..Default::default()
+                    })
+                })
                 .collect(),
         );
         // Stamp every plane, as the history does after each capture.
@@ -884,21 +886,23 @@ mod tests {
         let payload = pictura_codec::write_psd(&source).expect("payload writes");
 
         let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
-            name: "placed".into(),
-            rect: px_rect(w, h),
-            channels: Vec::new(),
-            smart_object: Some(
-                {
-                    let mut so = SmartObject::default();
-                    so.filename = "source.psd".into();
-                    so.kind = SmartObjectKind::Embedded;
-                    so
-                }
-                .with_payload(payload),
-            ),
-            ..Default::default()
-        })]);
+        doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+            pictura_core::LayerParts {
+                name: "placed".into(),
+                rect: px_rect(w, h),
+                channels: Vec::new(),
+                smart_object: Some(
+                    {
+                        let mut so = SmartObject::default();
+                        so.filename = "source.psd".into();
+                        so.kind = SmartObjectKind::Embedded;
+                        so
+                    }
+                    .with_payload(payload),
+                ),
+                ..Default::default()
+            },
+        )]);
 
         // The cached smart source is accepted; the CPU oracle renders the
         // embedded source rather than the channel-less layer's opaque black.

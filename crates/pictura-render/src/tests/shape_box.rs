@@ -45,7 +45,9 @@ fn shape_doc(shadow: bool) -> Document {
     let path = crate::add_shape_layer(&mut d, "", [255, 0, 0, 255], "Ellipse", &ellipse, None);
     if shadow {
         let layer = crate::resolve_path_mut(&mut d, &path).unwrap();
-        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(spec_block(&ShadowSpec::default())) });
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks.push(spec_block(&ShadowSpec::default()))
+        });
     }
     d
 }

@@ -6,20 +6,23 @@ use crate::tone::ToneOptions;
 #[test]
 fn a_stroke_forks_only_touched_tiles() {
     let (w, h) = (8usize, 300usize);
-    let mut layer = pictura_core::Layer::from_parts(pictura_core::LayerParts {
-        name: "px".into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: h as i32,
-            right: w as i32,
+    let mut layer = pictura_core::Layer::from_parts(
+        pictura_core::LayerParts {
+            name: "px".into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: h as i32,
+                right: w as i32,
+            },
+            channels: vec![Channel {
+                id: 0,
+                data: vec![1u8; w * h].into(),
+            }],
+            ..Default::default()
         },
-        channels: vec![Channel {
-            id: 0,
-            data: vec![1u8; w * h].into(),
-        }],
-        ..Default::default()
-    }, pictura_core::LayerContent::Pixel);
+        pictura_core::LayerContent::Pixel,
+    );
     layer.channels()[0].data.tile(w, h);
     let holder = layer.channels()[0].data.clone();
 

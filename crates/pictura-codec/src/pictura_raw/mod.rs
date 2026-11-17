@@ -415,8 +415,14 @@ fn replace_smart_filter_parts(
     Ok(())
 }
 
-pub fn replace_smart_filter(layer: &mut Layer, index: usize, filter: SmartFilter) -> Result<(), PsdError> {
-    crate::stage_content::try_edit_layer(layer, |parts| replace_smart_filter_parts(parts, index, filter))
+pub fn replace_smart_filter(
+    layer: &mut Layer,
+    index: usize,
+    filter: SmartFilter,
+) -> Result<(), PsdError> {
+    crate::stage_content::try_edit_layer(layer, |parts| {
+        replace_smart_filter_parts(parts, index, filter)
+    })
 }
 
 pub(crate) fn object(class_id: &[u8], items: Vec<(&[u8], DescValue)>) -> DescValue {

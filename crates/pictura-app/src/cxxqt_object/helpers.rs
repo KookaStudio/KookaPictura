@@ -166,10 +166,14 @@ pub(super) fn adjustment_layer_in_mode(
 pub(super) fn adjustment_kind(layer: &Layer) -> String {
     use pictura_render::Adjustment;
     if let Some(fill) = layer.fill_content() {
-        return match fill { pictura_core::FillContent::Solid(_) => "solid-color", pictura_core::FillContent::Gradient(_) => "gradient", pictura_core::FillContent::Pattern(_) => "pattern" }.into();
+        return match fill {
+            pictura_core::FillContent::Solid(_) => "solid-color",
+            pictura_core::FillContent::Gradient(_) => "gradient",
+            pictura_core::FillContent::Pattern(_) => "pattern",
+        }
+        .into();
     }
-    match layer.adjustment_parameters()
-    {
+    match layer.adjustment_parameters() {
         Some(Adjustment::Levels(_)) => "levels",
         Some(Adjustment::Curves(_)) => "curves",
         Some(Adjustment::BrightnessContrast(_)) => "brightness-contrast",
@@ -227,10 +231,22 @@ pub(super) fn layer_kind_str(doc: &Document, path: &str, layer: &Layer) -> QStri
     QString::from(match layer.kind() {
         LayerKind::Group => "group",
         LayerKind::Adjustment | LayerKind::Fill => "adjustment",
-        LayerKind::Shape => if layer.adjustment().is_some() { "adjustment" } else { "pixel" },
+        LayerKind::Shape => {
+            if layer.adjustment().is_some() {
+                "adjustment"
+            } else {
+                "pixel"
+            }
+        }
         LayerKind::Text => "type",
         LayerKind::SmartObject => "pixel",
-        LayerKind::Pixel => if pictura_render::is_background(doc, path) { "background" } else { "pixel" },
+        LayerKind::Pixel => {
+            if pictura_render::is_background(doc, path) {
+                "background"
+            } else {
+                "pixel"
+            }
+        }
     })
 }
 /// Owned copy of a `QStringList`'s entries.
@@ -1044,7 +1060,10 @@ mod tests {
         for entry in layers {
             let kind = entry.kind;
             let layer = adjustment_layer(kind, None).unwrap_or_else(|| panic!("{kind} should map"));
-            assert!(layer.adjustment().is_some(), "{kind} carries adjustment data");
+            assert!(
+                layer.adjustment().is_some(),
+                "{kind} carries adjustment data"
+            );
             assert_eq!(layer.name, entry.title);
         }
         assert!(adjustment_layer("bogus", None).is_none());

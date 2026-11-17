@@ -639,7 +639,9 @@ mod tests {
     fn apply_refuses_a_smart_object() {
         let mut doc = doc(2, 1);
         assert!(add_layer_mask(&mut doc, "0", LayerMaskKind::HideAll, None));
-        pictura_codec::edit_layer(doc.layers[0].as_mut(), |parts| { parts.smart_object = Some(SmartObject::default()) });
+        pictura_codec::edit_layer(doc.layers[0].as_mut(), |parts| {
+            parts.smart_object = Some(SmartObject::default())
+        });
         assert!(!apply_layer_mask(&mut doc, "0"));
         assert!(has_layer_mask(&doc, "0"));
     }
@@ -659,7 +661,9 @@ mod tests {
 
         let mut fill = doc(2, 1);
         assert!(add_layer_mask(&mut fill, "0", LayerMaskKind::HideAll, None));
-        pictura_codec::edit_layer(fill.layers[0].as_mut(), |parts| { parts.adjustment = Some(crate::encode_solid_color_fill([255, 0, 0])) });
+        pictura_codec::edit_layer(fill.layers[0].as_mut(), |parts| {
+            parts.adjustment = Some(crate::encode_solid_color_fill([255, 0, 0]))
+        });
         assert!(!apply_layer_mask(&mut fill, "0"));
         assert!(has_layer_mask(&fill, "0"));
     }

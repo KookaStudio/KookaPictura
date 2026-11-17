@@ -136,7 +136,7 @@ fn shadow_layer(block: Option<LayerBlock>) -> Layer {
         255,
     );
     if let Some(block) = block {
-        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![block] });
+        pictura_codec::edit_layer(layer.as_mut(), |parts| parts.extra_blocks = vec![block]);
     }
     layer
 }
@@ -692,7 +692,9 @@ fn solid_fill_shadow_follows_payload_alpha() {
             }),
             ..Default::default()
         });
-        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![spec_block(&ShadowSpec::default())] });
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks = vec![spec_block(&ShadowSpec::default())]
+        });
         compose(layer)
     };
     assert!(left_strip_changed(&fill(255)) > 0, "an opaque fill casts");
@@ -717,7 +719,9 @@ fn pattern_fill_shadow_is_confined_to_the_fill() {
         adjustment: Some(ptfl(&params)),
         ..Default::default()
     });
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![spec_block(&ShadowSpec::default())] });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks = vec![spec_block(&ShadowSpec::default())]
+    });
     let mut d = pattern_fixture_doc();
     let backdrop = solid(
         "Backdrop",
@@ -749,7 +753,9 @@ fn channel_less_smart_object_shadow_covers_the_layer_rect() {
         ),
         ..Default::default()
     });
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![spec_block(&ShadowSpec::default())] });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks = vec![spec_block(&ShadowSpec::default())]
+    });
     let out = compose(layer);
     assert!(
         left_strip_changed(&out) > 0,
@@ -902,7 +908,9 @@ fn gpu_reports_the_effect_for_a_fill_layer() {
         }),
         ..Default::default()
     });
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![spec_block(&ShadowSpec::default())] });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks = vec![spec_block(&ShadowSpec::default())]
+    });
     let d = doc(9, 9, vec![layer]);
     assert_gpu_accepts_and_matches_cpu(&d);
 }
@@ -935,7 +943,7 @@ fn drop_shadow_fixture_decodes_and_composites() {
     let with_effect = composite_rgba(&d);
     let mut plain = d.clone();
     for l in plain.layers.iter_mut() {
-        pictura_codec::edit_layer(l.as_mut(), |parts| { parts.extra_blocks.clear() });
+        pictura_codec::edit_layer(l.as_mut(), |parts| parts.extra_blocks.clear());
     }
     assert_ne!(with_effect, composite_rgba(&plain), "the shadow renders");
 }
@@ -1102,13 +1110,15 @@ fn effects_reach_includes_spread() {
         BlendMode::Normal,
         255,
     );
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![spec_block(&ShadowSpec {
-        distance: 0.0,
-        size: 10.0,
-        spread: 100.0,
-        opacity: 100.0,
-        ..Default::default()
-    })] });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks = vec![spec_block(&ShadowSpec {
+            distance: 0.0,
+            size: 10.0,
+            spread: 100.0,
+            opacity: 100.0,
+            ..Default::default()
+        })]
+    });
     let backdrop = solid(
         "Backdrop",
         full(80, 80),
@@ -1147,7 +1157,9 @@ fn transparent_corner_payload() -> Vec<u8> {
         BlendMode::Normal,
         255,
     );
-    let alpha = source.channels_mut().iter_mut()
+    let alpha = source
+        .channels_mut()
+        .iter_mut()
         .find(|c| c.id == -1)
         .expect("source alpha");
     for y in 0..4usize {
@@ -1180,12 +1192,14 @@ fn placed_smart_object_effect_matte() {
         ),
         ..Default::default()
     });
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![spec_block(&ShadowSpec {
-        distance: 0.0,
-        size: 0.0,
-        opacity: 100.0,
-        ..Default::default()
-    })] });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks = vec![spec_block(&ShadowSpec {
+            distance: 0.0,
+            size: 0.0,
+            opacity: 100.0,
+            ..Default::default()
+        })]
+    });
     let out = compose(layer);
     assert_eq!(
         rgb(&out, 3, 3),
@@ -1337,11 +1351,13 @@ fn effect_parallel_speedup_profile() {
         BlendMode::Normal,
         255,
     );
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![spec_block(&ShadowSpec {
-        distance: 20.0,
-        size: 30.0,
-        ..Default::default()
-    })] });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks = vec![spec_block(&ShadowSpec {
+            distance: 20.0,
+            size: 30.0,
+            ..Default::default()
+        })]
+    });
     let backdrop = solid(
         "backdrop",
         full(2048, 2048),

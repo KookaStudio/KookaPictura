@@ -695,14 +695,26 @@ fn write_extra(
         write_tag(out, b"iOpa", &[layer.fill, 0, 0, 0], psb);
     }
     crate::advanced_blending::write_advanced_tags(out, layer, psb);
-    let encoded_fill = layer.fill_content().filter(|_| layer.fill_was_edited()
-        || (layer.adjustment().is_none() && layer.extra_block(b"vscg").is_none()))
+    let encoded_fill = layer
+        .fill_content()
+        .filter(|_| {
+            layer.fill_was_edited()
+                || (layer.adjustment().is_none() && layer.extra_block(b"vscg").is_none())
+        })
         .map(crate::stage_content::encoded_fill);
     // A legacy RGBA tuple has no descriptor form for vscg; a primary SoCo
     // preserves its alpha while the old vector bytes remain passive.
-    let rgba_tuple = encoded_fill.as_ref().is_some_and(|fill| fill.key == *b"SoCo" && fill.data.len() == 4);
-    let vector_fill = layer.adjustment().is_none() && layer.extra_block(b"vscg").is_some() && !rgba_tuple;
-    if let Some(adjustment) = encoded_fill.as_ref().filter(|_| !vector_fill).or(source_adjustment.as_ref()).or_else(|| layer.adjustment()) {
+    let rgba_tuple = encoded_fill
+        .as_ref()
+        .is_some_and(|fill| fill.key == *b"SoCo" && fill.data.len() == 4);
+    let vector_fill =
+        layer.adjustment().is_none() && layer.extra_block(b"vscg").is_some() && !rgba_tuple;
+    if let Some(adjustment) = encoded_fill
+        .as_ref()
+        .filter(|_| !vector_fill)
+        .or(source_adjustment.as_ref())
+        .or_else(|| layer.adjustment())
+    {
         write_tag(out, &adjustment.key, &adjustment.data, psb);
     }
     if section != 0 {
@@ -763,7 +775,9 @@ fn write_extra(
     if let Some(mode) = stack_mode {
         write_tag(out, b"PiSt", &crate::stack_marker::marker_data(mode), psb);
     }
-    if let Some(data) = source_text { write_tag(out,b"TySh",&data,psb); }
+    if let Some(data) = source_text {
+        write_tag(out, b"TySh", &data, psb);
+    }
     // An embedded smart object with no preserved config block is authored here.
     if let Some(so) = crate::smart_writer::should_author(layer) {
         let data = crate::smart_writer::author_sold_block(so, layer, doc_width, doc_height);

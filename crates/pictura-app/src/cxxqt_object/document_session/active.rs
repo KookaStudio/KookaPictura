@@ -56,10 +56,10 @@ pub(in crate::cxxqt_object) enum PathRestore {
         path: VectorPath,
     },
     /// A shape layer's outline, which lives in the layer.
-    pictura_codec::layer_from_parts(pictura_core::LayerParts {
+    Layer {
         target: String,
         subpaths: Vec<Subpath>,
-    }),
+    },
 }
 
 /// The document's one live edit session.

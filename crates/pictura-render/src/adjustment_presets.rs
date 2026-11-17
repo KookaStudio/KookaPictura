@@ -44,7 +44,11 @@ const MAX_NAME_CHARS: usize = 80;
 /// decode.
 pub fn kind_of(data: &AdjustmentData) -> Option<&'static str> {
     if let Some(fill) = pictura_codec::decode_fill(data) {
-        return Some(match fill { pictura_core::FillContent::Solid(_) => "solid-color", pictura_core::FillContent::Gradient(_) => "gradient", pictura_core::FillContent::Pattern(_) => "pattern" });
+        return Some(match fill {
+            pictura_core::FillContent::Solid(_) => "solid-color",
+            pictura_core::FillContent::Gradient(_) => "gradient",
+            pictura_core::FillContent::Pattern(_) => "pattern",
+        });
     }
     Some(match decode_adjustment(data)? {
         Adjustment::Levels(_) => "levels",
@@ -402,9 +406,15 @@ mod tests {
         let c = crate::set_adjustment_param(&a, "inputBlack", 1.0).unwrap();
         assert!(!blocks_match(&a, &c));
         let fill = crate::encode_solid_color_fill([10, 20, 30]);
-        let legacy = AdjustmentData { key: *b"SoCo", data: vec![10, 20, 30, 255].into() };
+        let legacy = AdjustmentData {
+            key: *b"SoCo",
+            data: vec![10, 20, 30, 255].into(),
+        };
         assert!(blocks_match(&fill, &legacy));
-        assert!(!blocks_match(&fill, &crate::encode_solid_color_fill([40, 50, 60])));
+        assert!(!blocks_match(
+            &fill,
+            &crate::encode_solid_color_fill([40, 50, 60])
+        ));
         assert!(!blocks_match(&fill, &a));
     }
 

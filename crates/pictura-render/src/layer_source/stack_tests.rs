@@ -67,8 +67,10 @@ fn stack_mode_change_invalidates_the_cached_source() {
     let second = embedded_source(layer.smart_object().expect("object")).expect("second");
     assert!(Arc::ptr_eq(&first, &second));
 
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.smart_object.as_mut().expect("object").stack_mode =
-        Some(pictura_core::StackMode::Maximum) });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.smart_object.as_mut().expect("object").stack_mode =
+            Some(pictura_core::StackMode::Maximum)
+    });
     let third = embedded_source(layer.smart_object().expect("object")).expect("third");
     assert!(!Arc::ptr_eq(&first, &third));
 
@@ -90,8 +92,10 @@ fn stack_mode_change_invalidates_the_composited_raster() {
     let second = composited_source(&layer, &d, RasterRoute::SmartSource).expect("second");
     assert!(Arc::ptr_eq(&first.buffer, &second.buffer));
 
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.smart_object.as_mut().expect("object").stack_mode =
-        Some(pictura_core::StackMode::Maximum) });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.smart_object.as_mut().expect("object").stack_mode =
+            Some(pictura_core::StackMode::Maximum)
+    });
     let third = composited_source(&layer, &d, RasterRoute::SmartSource).expect("third");
     assert!(!Arc::ptr_eq(&first.buffer, &third.buffer));
 }

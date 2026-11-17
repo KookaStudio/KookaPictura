@@ -57,7 +57,7 @@ pub(crate) fn fill_tiled_layer(
     }
     let first = planes[0]?;
     for &ci in planes.iter().flatten() {
-        if !layer.channels()[ci].data.tile(w, h) {
+        if !layer.channels_mut()[ci].data.tile(w, h) {
             return None;
         }
     }
@@ -81,7 +81,7 @@ pub(crate) fn fill_tiled_layer(
             Decision::Write(values) => {
                 for (k, ci) in planes.iter().enumerate() {
                     if let Some(ci) = *ci {
-                        layer.channels()[ci].data.set_tile_uniform(t, values[k]);
+                        layer.channels_mut()[ci].data.set_tile_uniform(t, values[k]);
                     }
                 }
                 changed = Some(changed.map_or(at, |c| c.union(at)));
@@ -92,7 +92,7 @@ pub(crate) fn fill_tiled_layer(
         changed = Some(changed.map_or(dirty, |c| c.union(dirty)));
     }
     for &ci in planes.iter().flatten() {
-        layer.channels()[ci].data.settle();
+        layer.channels_mut()[ci].data.settle();
     }
     Some(changed)
 }
@@ -118,7 +118,7 @@ fn decide(
         let Some(ci) = *ci else {
             continue;
         };
-        match layer.channels_mut()[ci].data.tile_state(t) {
+        match layer.channels()[ci].data.tile_state(t) {
             Some(TileState::Empty) => dst[k] = 0,
             Some(TileState::Uniform(v)) => dst[k] = v,
             _ => return Decision::Dense,

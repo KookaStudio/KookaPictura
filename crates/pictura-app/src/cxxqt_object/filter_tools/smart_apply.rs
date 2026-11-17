@@ -243,15 +243,15 @@ pub(in crate::cxxqt_object) fn smart_preview(
     let baseline = PreviewBaseline::Layer(Box::new(layer.clone()));
     layer.smart_object()?;
     pictura_codec::edit_layer(layer.as_mut(), |parts| {
-    let so = parts.smart_object.as_mut().expect("checked");
-    if let Some(index) = editing {
-        so.smart_filters.truncate(index);
-    }
-    so.smart_filters.push(record);
-    if so.filter_mask.is_none() && mask.is_some() {
-        so.filter_mask = mask;
-        so.filter_mask_enabled = true;
-    }
+        let so = parts.smart_object.as_mut().expect("checked");
+        if let Some(index) = editing {
+            so.smart_filters.truncate(index);
+        }
+        so.smart_filters.push(record);
+        if so.filter_mask.is_none() && mask.is_some() {
+            so.filter_mask = mask;
+            so.filter_mask_enabled = true;
+        }
     });
     let region = (!layer_has_effects(layer)).then_some(layer.rect);
     rust.session.live.set_filter_preview(FilterPreview {

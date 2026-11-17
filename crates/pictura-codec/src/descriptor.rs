@@ -54,7 +54,6 @@ fn admitted_vec<T>(
     Ok(values)
 }
 
-
 /// A parsed descriptor value.
 ///
 /// `Raw` holds the 4-byte ostype followed by the exact value bytes of an
@@ -105,9 +104,7 @@ fn read_descriptor_block(
 ) -> DescriptorResult<DescValue> {
     let version = r.u32()?;
     if version != 16 {
-        return Err(PsdError::Unsupported(format!(
-            "descriptor block version {version}"
-        )).into());
+        return Err(PsdError::Unsupported(format!("descriptor block version {version}")).into());
     }
     read_descriptor_body(r, 0, budget)
 }
@@ -350,7 +347,9 @@ fn read_unicode_string_admitted(
     let data = r.take(bytes)?;
     let capacity = count.checked_mul(3).ok_or_else(size_overflow)?;
     if let Some(budget) = budget.as_deref_mut() {
-        budget.charge("descriptor text", &[capacity]).map_err(DescriptorFailure::Resource)?;
+        budget
+            .charge("descriptor text", &[capacity])
+            .map_err(DescriptorFailure::Resource)?;
     }
     let mut value = String::new();
     value.try_reserve_exact(capacity).map_err(|_| {
@@ -358,9 +357,15 @@ fn read_unicode_string_admitted(
             "descriptor text allocation refused after decode budget admission".into(),
         ))
     })?;
-    value.extend(char::decode_utf16(data.as_chunks::<2>().0.iter().map(|unit| {
-        u16::from_be_bytes([unit[0], unit[1]])
-    })).map(|decoded| decoded.unwrap_or(char::REPLACEMENT_CHARACTER)));
+    value.extend(
+        char::decode_utf16(
+            data.as_chunks::<2>()
+                .0
+                .iter()
+                .map(|unit| u16::from_be_bytes([unit[0], unit[1]])),
+        )
+        .map(|decoded| decoded.unwrap_or(char::REPLACEMENT_CHARACTER)),
+    );
     Ok(value)
 }
 

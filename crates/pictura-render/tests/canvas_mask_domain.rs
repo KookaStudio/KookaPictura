@@ -15,18 +15,20 @@ fn rect(x: i32, y: i32, w: i32, h: i32) -> PsdRect {
 
 fn fixture() -> Document {
     let mut doc = Document::new(12, 8, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
-        name: "Small".into(),
-        rect: rect(2, 1, 3, 2),
-        channels: [0, 1, 2, -1]
-            .into_iter()
-            .map(|id| Channel {
-                id,
-                data: vec![if id == -1 { 255 } else { 120 }; 6].into(),
-            })
-            .collect(),
-        ..Default::default()
-    })]);
+    doc.layers = LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            name: "Small".into(),
+            rect: rect(2, 1, 3, 2),
+            channels: [0, 1, 2, -1]
+                .into_iter()
+                .map(|id| Channel {
+                    id,
+                    data: vec![if id == -1 { 255 } else { 120 }; 6].into(),
+                })
+                .collect(),
+            ..Default::default()
+        },
+    )]);
     doc
 }
 
@@ -58,7 +60,8 @@ fn write_pixel(doc: &mut Document, x: i32, y: i32, value: u8) {
         (view.document.width, view.document.height),
         (doc.width, doc.height)
     );
-    view.document.layers[0].channels_mut()[0].data[y as usize * doc.width as usize + x as usize] = value;
+    view.document.layers[0].channels_mut()[0].data[y as usize * doc.width as usize + x as usize] =
+        value;
     assert!(write_mask_back(
         doc,
         "0",
@@ -96,7 +99,9 @@ fn mask_creation_preserves_empty_and_group_defaults() {
     for group in [false, true] {
         for kind in [LayerMaskKind::RevealAll, LayerMaskKind::FromTransparency] {
             let mut doc = fixture();
-            if group { doc.layers[0].set_group_children(Default::default()); }
+            if group {
+                doc.layers[0].set_group_children(Default::default());
+            }
             doc.layers[0].rect = rect(0, 0, 0, 0);
             doc.layers[0].channels_mut().clear();
             assert!(add_layer_mask(&mut doc, "0", kind, None));
@@ -221,7 +226,9 @@ fn mask_creation_refusals_are_atomic() {
 fn canvas_mask_adapter_preserves_document_coordinates() {
     for group in [false, true] {
         let mut doc = imported(128);
-        if group { doc.layers[0].set_group_children(Default::default()); }
+        if group {
+            doc.layers[0].set_group_children(Default::default());
+        }
         let pixels = doc.layers[0].channels().clone();
         write_pixel(&mut doc, 10, 6, 7);
         assert_eq!(sample(&doc, 10, 6), 7);

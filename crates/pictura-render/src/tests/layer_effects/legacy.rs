@@ -245,7 +245,7 @@ fn legacy_layer(block: LayerBlock) -> Layer {
         BlendMode::Normal,
         255,
     );
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![block] });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| parts.extra_blocks = vec![block]);
     layer
 }
 
@@ -585,7 +585,7 @@ fn lfx2_wins_when_both_blocks_are_present() {
     let lfx2_block = lfx2_drsh(b"Mltp", [1, 2, 3], 50.0, 10.0, 2.0, 0.0, 0.0);
     let lr_block = lr_fx(&[(b"dsdw", shadow_body(&ShadowArgs::default()))]);
     let mut both = legacy_layer(lfx2_block.clone());
-    pictura_codec::edit_layer(both.as_mut(), |parts| { parts.extra_blocks.push(lr_block) });
+    pictura_codec::edit_layer(both.as_mut(), |parts| parts.extra_blocks.push(lr_block));
     let resolved = decode_layer_effects(&both).drop_shadow.expect("shadow");
     assert_eq!(resolved.color, [1, 2, 3]);
     assert_eq!(resolved.opacity, 50.0);
@@ -612,9 +612,11 @@ fn lfx2_omitting_an_effect_suppresses_its_legacy_record() {
         ],
     );
     let mut layer = legacy_layer(lfx2_effect(b"OrGl", orgl));
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts
-        .extra_blocks
-        .push(lr_fx(&[(b"dsdw", shadow_body(&ShadowArgs::default()))])) });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts
+            .extra_blocks
+            .push(lr_fx(&[(b"dsdw", shadow_body(&ShadowArgs::default()))]))
+    });
     let resolved = decode_layer_effects(&layer);
     assert!(resolved.drop_shadow.is_none());
     assert!(resolved.outer_glow.is_some());
@@ -791,7 +793,7 @@ fn legacy_effects_fixture_decodes_and_composites() {
     let with_effect = composite_rgba(&d);
     let mut plain = d.clone();
     for l in plain.layers.iter_mut() {
-        pictura_codec::edit_layer(l.as_mut(), |parts| { parts.extra_blocks.clear() });
+        pictura_codec::edit_layer(l.as_mut(), |parts| parts.extra_blocks.clear());
     }
     assert_ne!(with_effect, composite_rgba(&plain), "the effects render");
 }

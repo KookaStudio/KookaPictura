@@ -221,8 +221,9 @@ pub(in crate::cxxqt_object) fn add_layer_bytes(_doc: &Document) -> u64 {
 /// A brush stroke's start (M6): the target layer's planes and the stroke's
 /// canvas-sized buffers.
 pub(in crate::cxxqt_object) fn brush_bytes(doc: &Document, path: &str) -> u64 {
-    let layer = pictura_render::resolve_path(doc, path)
-        .map_or(0, |l| l.channels().iter().map(|c| c.data.len() as u64).sum());
+    let layer = pictura_render::resolve_path(doc, path).map_or(0, |l| {
+        l.channels().iter().map(|c| c.data.len() as u64).sum()
+    });
     layer + 3 * canvas(doc)
 }
 
@@ -451,7 +452,11 @@ mod tests {
                 300,
                 (0, 0, 0),
             )]);
-        let planes = doc.layers[0].channels().iter().filter(|c| c.id >= -1).count() as u64;
+        let planes = doc.layers[0]
+            .channels()
+            .iter()
+            .filter(|c| c.id >= -1)
+            .count() as u64;
         let rows = |top, bottom| PsdRect {
             top,
             left: 10,
@@ -676,7 +681,11 @@ mod tests {
             doc.layers = pictura_core::LayerStack::from_layers(vec![
                 crate::cxxqt_object::tests::pixel_layer("layer", 1000, 1000, (0, 0, 0)),
             ]);
-            let planes = doc.layers[0].channels().iter().filter(|c| c.id >= -1).count() as u64;
+            let planes = doc.layers[0]
+                .channels()
+                .iter()
+                .filter(|c| c.id >= -1)
+                .count() as u64;
             let inside = PsdRect {
                 top: 300,
                 left: 300,
@@ -711,7 +720,11 @@ mod tests {
             bottom: 140,
             right: 120,
         };
-        let planes = doc.layers[0].channels().iter().filter(|c| c.id >= -1).count() as u64;
+        let planes = doc.layers[0]
+            .channels()
+            .iter()
+            .filter(|c| c.id >= -1)
+            .count() as u64;
         // The grown layer is one 120×140 tile.
         assert_eq!(fork_bytes(&doc, "0", bounds), planes * 140 * 120);
     }

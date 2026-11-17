@@ -251,7 +251,13 @@ pub(super) fn layer_buffer_within(layer: &Layer, rect: PsdRect) -> Option<PixelB
     );
     let full = lw * lh;
     let plane = width * height;
-    let channel = |id: i16| layer.channels().iter().find(|c| c.id == id).map(|c| &c.data);
+    let channel = |id: i16| {
+        layer
+            .channels()
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| &c.data)
+    };
     let copy = |src: &pictura_core::Plane<u8>, dst: &mut [u8]| {
         for (y, row) in dst.chunks_exact_mut(width).enumerate() {
             if let Some(line) = src.row(y0 + y, lw) {
@@ -302,7 +308,13 @@ pub(super) fn layer_thumbnail_image(layer: &Layer, size: u32) -> Option<QImage> 
     }
     let (width, height) = (width as u32, height as u32);
     let plane = (width * height) as usize;
-    let channel = |id: i16| layer.channels().iter().find(|c| c.id == id).map(|c| &c.data);
+    let channel = |id: i16| {
+        layer
+            .channels()
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| &c.data)
+    };
 
     let gray = channel(1).is_none() && channel(2).is_none();
     let c0 = channel(0)?;
@@ -368,7 +380,13 @@ pub(super) fn layer_pixel(layer: &Layer, x: u32, y: u32) -> Option<[u8; 4]> {
     }
     let plane = (width * height) as usize;
     let at = (y * width + x) as usize;
-    let channel = |id: i16| layer.channels().iter().find(|c| c.id == id).map(|c| &c.data);
+    let channel = |id: i16| {
+        layer
+            .channels()
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| &c.data)
+    };
     let c0 = channel(0)?;
     if c0.len() != plane {
         return None;

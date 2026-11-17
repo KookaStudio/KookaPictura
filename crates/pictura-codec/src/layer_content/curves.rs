@@ -12,9 +12,9 @@
 //! to `None` (its leading byte is nonzero); add it if a real `is_map` fixture
 //! appears.
 
-use pictura_core::{Adjustment, CurvesParams};
-use pictura_core::AdjustmentData;
 use crate::layer_content_budget::ContentAlloc;
+use pictura_core::AdjustmentData;
+use pictura_core::{Adjustment, CurvesParams};
 
 use super::basic::{be_i16, be_u16};
 
@@ -136,4 +136,3 @@ pub fn encode_curves(
         data: data.into(),
     }
 }
-

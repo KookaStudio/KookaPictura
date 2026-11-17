@@ -303,21 +303,24 @@ mod tests {
     fn transparent_doc(w: u32, h: u32) -> Document {
         let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
         let n = (w * h) as usize;
-        let _ = doc.layers.push(pictura_core::Layer::from_parts(pictura_core::LayerParts {
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: h as i32,
-                right: w as i32,
+        let _ = doc.layers.push(pictura_core::Layer::from_parts(
+            pictura_core::LayerParts {
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: h as i32,
+                    right: w as i32,
+                },
+                channels: [0, 1, 2, -1]
+                    .map(|id| Channel {
+                        id,
+                        data: vec![0; n].into(),
+                    })
+                    .into(),
+                ..Default::default()
             },
-            channels: [0, 1, 2, -1]
-                .map(|id| Channel {
-                    id,
-                    data: vec![0; n].into(),
-                })
-                .into(),
-            ..Default::default()
-        }, pictura_core::LayerContent::Pixel));
+            pictura_core::LayerContent::Pixel,
+        ));
         doc
     }
 

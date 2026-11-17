@@ -49,7 +49,9 @@ pub(crate) fn resolve_vector_masks(layers: &mut LayerStack, width: u32, height: 
                     view
                 })
         };
-        if let Some(children) = layer.children_mut() { resolve_vector_masks(children, width, height); }
+        if let Some(children) = layer.children_mut() {
+            resolve_vector_masks(children, width, height);
+        }
     }
 }
 
@@ -415,25 +417,26 @@ mod tests {
         mask_flags: u8,
         raw_ids: &[i16],
     ) -> Option<VectorMask> {
-        let mut layers = LayerStack::from_layers(vec![crate::layer_from_parts(pictura_core::LayerParts {
-            pixel_data_irrelevant,
-            mask: Some(LayerMask {
-                flags: mask_flags,
+        let mut layers =
+            LayerStack::from_layers(vec![crate::layer_from_parts(pictura_core::LayerParts {
+                pixel_data_irrelevant,
+                mask: Some(LayerMask {
+                    flags: mask_flags,
+                    ..Default::default()
+                }),
+                raw_channels: raw_ids
+                    .iter()
+                    .map(|&id| RawChannel {
+                        id,
+                        data: Vec::new().into(),
+                    })
+                    .collect(),
+                extra_blocks: vec![LayerBlock {
+                    key: *b"vmsk",
+                    data: header(3, 0).into(),
+                }],
                 ..Default::default()
-            }),
-            raw_channels: raw_ids
-                .iter()
-                .map(|&id| RawChannel {
-                    id,
-                    data: Vec::new().into(),
-                })
-                .collect(),
-            extra_blocks: vec![LayerBlock {
-                key: *b"vmsk",
-                data: header(3, 0).into(),
-            }],
-            ..Default::default()
-        })]);
+            })]);
         resolve_vector_masks(&mut layers, 8, 8);
         layers[0].vector_mask.take()
     }
@@ -631,10 +634,12 @@ mod tests {
         let vmsk = rectangle_body(&[(1, 1), (1, 3), (3, 3), (3, 1)]);
         let vsms = rectangle_body(&[(2, 2), (2, 6), (6, 6), (6, 2)]);
         let mut layer = mask_layer_with(b"vmsk", vmsk);
-        crate::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-            key: *b"vsms",
-            data: vsms.into(),
-        }) });
+        crate::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks.push(LayerBlock {
+                key: *b"vsms",
+                data: vsms.into(),
+            })
+        });
 
         let mask = resolve_layer(layer).expect("decodes");
         assert!(mask.subpaths[0].points.contains(&[3 * 256, 3 * 256]));
@@ -680,10 +685,12 @@ mod tests {
         let vmsk = rectangle_body(&[(1, 1), (1, 3), (3, 3), (3, 1)]);
         let bad = header(2, 0);
         let mut layer = mask_layer_with(b"vmsk", vmsk.clone());
-        crate::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-            key: *b"vsms",
-            data: bad.clone().into(),
-        }) });
+        crate::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks.push(LayerBlock {
+                key: *b"vsms",
+                data: bad.clone().into(),
+            })
+        });
 
         let (mask, layer) = resolve_layer_with_blocks(layer);
         let mask = mask.expect("vmsk decodes");
@@ -711,10 +718,12 @@ mod tests {
         let bad = header(2, 0);
         let vsms = rectangle_body(&[(1, 1), (1, 5), (5, 5), (5, 1)]);
         let mut layer = mask_layer_with(b"vmsk", bad.clone());
-        crate::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
-            key: *b"vsms",
-            data: vsms.clone().into(),
-        }) });
+        crate::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks.push(LayerBlock {
+                key: *b"vsms",
+                data: vsms.clone().into(),
+            })
+        });
 
         let (mask, layer) = resolve_layer_with_blocks(layer);
         assert!(mask.is_none(), "no fallback past a present vmsk");
@@ -758,10 +767,12 @@ mod tests {
             bottom: 8,
             right: 8,
         };
-        crate::edit_layer(shape.as_mut(), |parts| { parts.extra_blocks = vec![LayerBlock {
-            key: *b"vsms",
-            data: data.clone().into(),
-        }] });
+        crate::edit_layer(shape.as_mut(), |parts| {
+            parts.extra_blocks = vec![LayerBlock {
+                key: *b"vsms",
+                data: data.clone().into(),
+            }]
+        });
         shape.vector_mask = crate::decode_vector_mask(&data, 8, 8);
         let _ = doc.layers.push(shape);
 

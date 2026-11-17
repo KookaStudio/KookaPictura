@@ -22,7 +22,6 @@
 //! supports only; `Scale Effects`, the exact inter-effect order and the
 //! highlight/shadow order are not modelled.
 
-
 use pictura_codec::DescValue;
 use pictura_core::{BlendMode, Document, Layer, PsdRect};
 use rayon::prelude::*;

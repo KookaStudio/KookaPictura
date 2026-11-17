@@ -21,34 +21,36 @@ fn region_rect((left, top, width, height): (u32, u32, u32, u32)) -> PsdRect {
 fn source_doc() -> Document {
     let mut d = Document::new(200, 200, ColorMode::Rgb, BitDepth::Eight);
     let n = 200 * 200;
-    d.layers = LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
-        name: "source".into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 200,
-            right: 200,
+    d.layers = LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            name: "source".into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 200,
+                right: 200,
+            },
+            channels: vec![
+                Channel {
+                    id: 0,
+                    data: vec![180u8; n].into(),
+                },
+                Channel {
+                    id: 1,
+                    data: vec![40u8; n].into(),
+                },
+                Channel {
+                    id: 2,
+                    data: vec![10u8; n].into(),
+                },
+                Channel {
+                    id: -1,
+                    data: vec![255u8; n].into(),
+                },
+            ],
+            ..Default::default()
         },
-        channels: vec![
-            Channel {
-                id: 0,
-                data: vec![180u8; n].into(),
-            },
-            Channel {
-                id: 1,
-                data: vec![40u8; n].into(),
-            },
-            Channel {
-                id: 2,
-                data: vec![10u8; n].into(),
-            },
-            Channel {
-                id: -1,
-                data: vec![255u8; n].into(),
-            },
-        ],
-        ..Default::default()
-    })]);
+    )]);
     d.composite
         .replace(pictura_render::composite_rgba(&d))
         .expect("valid composite");

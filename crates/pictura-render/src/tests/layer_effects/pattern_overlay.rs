@@ -29,7 +29,7 @@ fn overlay_layer(block: Option<LayerBlock>) -> Layer {
         255,
     );
     if let Some(block) = block {
-        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![block] });
+        pictura_codec::edit_layer(layer.as_mut(), |parts| parts.extra_blocks = vec![block]);
     }
     layer
 }
@@ -391,7 +391,7 @@ fn small_pattern_overlay_layer_on_a_larger_canvas_is_bounded() {
         d.height = 32;
         let mut layer = layer;
         if !effect {
-            pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.clear() });
+            pictura_codec::edit_layer(layer.as_mut(), |parts| parts.extra_blocks.clear());
         }
         d.layers = pictura_core::LayerStack::from_layers(vec![
             solid(
@@ -490,7 +490,7 @@ fn pattern_overlay_fixture_decodes_and_composites() {
     let with_effect = composite_rgba(&d);
     let mut plain = d.clone();
     for l in plain.layers.iter_mut() {
-        pictura_codec::edit_layer(l.as_mut(), |parts| { parts.extra_blocks.clear() });
+        pictura_codec::edit_layer(l.as_mut(), |parts| parts.extra_blocks.clear());
     }
     assert_ne!(with_effect, composite_rgba(&plain), "the overlay renders");
 }

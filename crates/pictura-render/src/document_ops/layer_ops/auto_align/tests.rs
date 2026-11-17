@@ -354,7 +354,9 @@ fn ineligible_layers_are_skipped() {
     let fill = super::super::create::add_solid_fill(&mut doc, "", [255, 0, 0, 255]);
     let smart = super::super::create::add_raster_layer_from_rgba(&mut doc, "smart", W, H, &tex);
     if let Some(layer) = doc.layers.iter_mut().find(|l| l.name == "smart") {
-        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.smart_object = Some(SmartObject::default()) });
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.smart_object = Some(SmartObject::default())
+        });
     }
     let shape = super::super::create::add_raster_layer_from_rgba(&mut doc, "shape", W, H, &tex);
     if let Some(layer) = doc.layers.iter_mut().find(|l| l.name == "shape") {

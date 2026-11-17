@@ -221,12 +221,14 @@ fn pattern_fill_is_fill_content_and_rasterizes_to_tiles() {
 #[test]
 fn pattern_fill_with_missing_pattern_rasterizes_to_placeholder() {
     let mut doc = pattern_fixture_doc();
-    pictura_codec::edit_layer(resolve_path_mut(&mut doc, "1").unwrap().as_mut(), |parts| { parts.adjustment = Some(ptfl(&PatternFillParams {
-        pattern_id: "not-installed".into(),
-        scale: 100.0,
-        link_with_layer: true,
-        origin: (0, 0),
-    })) });
+    pictura_codec::edit_layer(resolve_path_mut(&mut doc, "1").unwrap().as_mut(), |parts| {
+        parts.adjustment = Some(ptfl(&PatternFillParams {
+            pattern_id: "not-installed".into(),
+            scale: 100.0,
+            link_with_layer: true,
+            origin: (0, 0),
+        }))
+    });
 
     assert!(rasterize_fill_content(&mut doc, "1"));
     let layer = resolve_path(&doc, "1").unwrap();
@@ -379,12 +381,18 @@ fn a_vsms_shape_layer_is_recognized_and_rasterizes() {
         layer_shape_paths(layer, 8, 8).expect("outline").len(),
         1,
         "the outline reads from vsms"
-    );pictura_codec::edit_layer(resolve_path_mut(&mut d, &path).expect("Shape path").as_mut(), |parts| { parts
-        .extra_blocks
-        .push(pictura_core::LayerBlock {
-            key: *b"vstk",
-            data: vec![1, 2, 3].into(),
-        }) });
+    );
+    pictura_codec::edit_layer(
+        resolve_path_mut(&mut d, &path)
+            .expect("Shape path")
+            .as_mut(),
+        |parts| {
+            parts.extra_blocks.push(pictura_core::LayerBlock {
+                key: *b"vstk",
+                data: vec![1, 2, 3].into(),
+            })
+        },
+    );
     let before = composite_rgba(&d);
 
     assert!(rasterize_shape(&mut d, &path));
@@ -433,10 +441,12 @@ fn a_pattern_filled_shape_rasterizes_with_the_document_pattern() {
     {
         let layer = resolve_path_mut(&mut d, path).expect("fill layer");
         layer.vector_mask = pictura_codec::decode_vector_mask(&data, width, height);
-        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(pictura_core::LayerBlock {
-            key: *b"vmsk",
-            data: data.into(),
-        }) });
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks.push(pictura_core::LayerBlock {
+                key: *b"vmsk",
+                data: data.into(),
+            })
+        });
     }
     assert!(
         is_shape_layer(resolve_path(&d, path).expect("fill layer")),
@@ -561,32 +571,34 @@ fn rasterize_all_layers_rasterizes_a_type_layer() {
     let mut d = doc(200, 80, Vec::new());
     add_solid_fill(&mut d, "", [1, 1, 1, 255]);
     {
-        let _ = d.layers.push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
-            name: "text".into(),
-            rect: full(200, 80),
-            type_tool: Some(pictura_core::TypeTool {
-                transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
-                text: "Hi".into(),
-                bounds: [0, 0, 200, 80],
-                text_desc: Vec::new().into(),
-                warp_desc: Vec::new().into(),
-                fonts: Vec::new(),
-                style: Some(pictura_core::TextStyle {
-                    font: Some("Arial".into()),
-                    character: pictura_core::CharacterAttrs {
-                        size: 48.0,
-                        fill_color: [1.0, 0.0, 0.0, 0.0],
-                        ..pictura_core::CharacterAttrs::default()
-                    },
-                    paragraph: pictura_core::ParagraphAttrs::default(),
-                    ..pictura_core::TextStyle::default()
+        let _ = d
+            .layers
+            .push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
+                name: "text".into(),
+                rect: full(200, 80),
+                type_tool: Some(pictura_core::TypeTool {
+                    transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+                    text: "Hi".into(),
+                    bounds: [0, 0, 200, 80],
+                    text_desc: Vec::new().into(),
+                    warp_desc: Vec::new().into(),
+                    fonts: Vec::new(),
+                    style: Some(pictura_core::TextStyle {
+                        font: Some("Arial".into()),
+                        character: pictura_core::CharacterAttrs {
+                            size: 48.0,
+                            fill_color: [1.0, 0.0, 0.0, 0.0],
+                            ..pictura_core::CharacterAttrs::default()
+                        },
+                        paragraph: pictura_core::ParagraphAttrs::default(),
+                        ..pictura_core::TextStyle::default()
+                    }),
+                    vertical: false,
+                    box_bounds: None,
+                    path: None,
                 }),
-                vertical: false,
-                box_bounds: None,
-                path: None,
-            }),
-            ..Default::default()
-        }));
+                ..Default::default()
+            }));
     };
     assert_eq!(
         rasterize_all_layers(&mut d),

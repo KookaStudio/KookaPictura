@@ -143,13 +143,15 @@ pub(crate) fn offset_layer(layer: &mut Layer, dx: i32, dy: i32) {
     if let Some(mask) = &mut layer.mask {
         mask.rect = offset_rect(mask.rect, dx, dy);
     }
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { if let Some(tool) = parts.type_tool.as_mut() {
-        if let Some(path) = tool.path.as_mut() {
-            path.subpath.translate(f64::from(dx), f64::from(dy));
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        if let Some(tool) = parts.type_tool.as_mut() {
+            if let Some(path) = tool.path.as_mut() {
+                path.subpath.translate(f64::from(dx), f64::from(dy));
+            }
+            tool.transform[4] += f64::from(dx);
+            tool.transform[5] += f64::from(dy);
         }
-        tool.transform[4] += f64::from(dx);
-        tool.transform[5] += f64::from(dy);
-    } });
+    });
     pictura_core::layer_comp::bump_layer_anchor(layer, dx, dy);
 }
 
@@ -536,27 +538,29 @@ mod tests {
     #[test]
     fn translate_layer_rejects_non_pixel_layers() {
         let mut doc = sample_doc();
-        doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
-            name: "adj".into(),
-            rect: full(4, 4),
-            blend: BlendMode::Normal,
-            opacity: 255,
-            fill: 255,
-            lock: LockFlags::default(),
-            color: ColorLabel::None,
-            clipping: false,
-            visible: true,
-            mask: None,
-            adjustment: Some(pictura_core::AdjustmentData {
-                key: *b"nvrt",
-                data: vec![].into(),
-            }),
-            channels: Vec::new(),
-            children: pictura_core::LayerStack::default(),
-            is_group: false,
-            background: false,
-            ..Default::default()
-        })]);
+        doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+            pictura_core::LayerParts {
+                name: "adj".into(),
+                rect: full(4, 4),
+                blend: BlendMode::Normal,
+                opacity: 255,
+                fill: 255,
+                lock: LockFlags::default(),
+                color: ColorLabel::None,
+                clipping: false,
+                visible: true,
+                mask: None,
+                adjustment: Some(pictura_core::AdjustmentData {
+                    key: *b"nvrt",
+                    data: vec![].into(),
+                }),
+                channels: Vec::new(),
+                children: pictura_core::LayerStack::default(),
+                is_group: false,
+                background: false,
+                ..Default::default()
+            },
+        )]);
         let before = doc.clone();
         assert!(!translate_layer(&mut doc, 2, 2));
         assert_eq!(doc, before);

@@ -868,22 +868,24 @@ mod tests {
     fn a_neutral_duplicate_is_an_inserted_edit() {
         use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, LayerStack};
 
-        let opaque = |alpha: u8| pictura_codec::layer_from_parts(pictura_core::LayerParts {
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 2,
-                right: 2,
-            },
-            visible: true,
-            channels: [0i16, 1, 2, -1]
-                .map(|id| Channel {
-                    id,
-                    data: vec![alpha; 4].into(),
-                })
-                .to_vec(),
-            ..Default::default()
-        });
+        let opaque = |alpha: u8| {
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 2,
+                    right: 2,
+                },
+                visible: true,
+                channels: [0i16, 1, 2, -1]
+                    .map(|id| Channel {
+                        id,
+                        data: vec![alpha; 4].into(),
+                    })
+                    .to_vec(),
+                ..Default::default()
+            })
+        };
         let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
         doc.layers = LayerStack::from_layers(vec![opaque(255), opaque(255)]);
         let changed = || Edit::Structural { damage: None };

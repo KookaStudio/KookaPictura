@@ -526,16 +526,19 @@ mod tests {
     use crate::{BitDepth, ColorMode};
 
     fn layer(name: &str, id: Option<LayerId>) -> Layer {
-        let mut layer = crate::Layer::from_parts(crate::LayerParts {
-            name: name.to_string(),
-            rect: crate::PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 4,
-                right: 4,
+        let mut layer = crate::Layer::from_parts(
+            crate::LayerParts {
+                name: name.to_string(),
+                rect: crate::PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 4,
+                    right: 4,
+                },
+                ..Default::default()
             },
-            ..Default::default()
-        }, crate::LayerContent::Pixel);
+            crate::LayerContent::Pixel,
+        );
         if let Some(id) = id {
             set_layer_id(&mut layer, id);
         }

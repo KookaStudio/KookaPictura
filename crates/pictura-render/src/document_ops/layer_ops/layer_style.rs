@@ -331,7 +331,9 @@ fn write_lfx2(layer: &mut Layer, items: Vec<(Vec<u8>, DescValue)>) {
         .iter()
         .any(|(k, _)| !matches!(k.as_slice(), b"Scl " | b"masterFXSwitch"));
     let at = layer.extra_blocks().iter().position(|b| &b.key == b"lfx2");
-    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.retain(|b| &b.key != b"lfx2") });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks.retain(|b| &b.key != b"lfx2")
+    });
     if !has_effects {
         return;
     }
@@ -798,7 +800,9 @@ pub fn create_style_layers_with_base(doc: &mut Document, path: &str) -> (Vec<Str
     }
     if let Some(layer) = resolve_path_mut(doc, &base) {
         pictura_codec::edit_layer(layer.as_mut(), |parts| {
-            parts.extra_blocks.retain(|block| !matches!(&block.key, b"lfx2" | b"lrFX"));
+            parts
+                .extra_blocks
+                .retain(|block| !matches!(&block.key, b"lfx2" | b"lrFX"));
         });
     }
     let mut created = Vec::with_capacity(inserted_below + inserted_above);
@@ -839,16 +843,19 @@ fn pass_layer(
             .to_vec()
             .into(),
     };
-    Layer::from_parts(pictura_core::LayerParts {
-        name: name.to_string(),
-        rect: pass.rect,
-        opacity,
-        fill: 255,
-        blend: pass.blend,
-        visible,
-        channels: vec![channel(0, 0), channel(1, 1), channel(2, 2), channel(3, -1)],
-        ..Default::default()
-    }, pictura_core::LayerContent::Pixel)
+    Layer::from_parts(
+        pictura_core::LayerParts {
+            name: name.to_string(),
+            rect: pass.rect,
+            opacity,
+            fill: 255,
+            blend: pass.blend,
+            visible,
+            channels: vec![channel(0, 0), channel(1, 1), channel(2, 2), channel(3, -1)],
+            ..Default::default()
+        },
+        pictura_core::LayerContent::Pixel,
+    )
 }
 
 /// Whether the layer carries any effect, on or off (an `lfx2` or legacy

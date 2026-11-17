@@ -124,18 +124,20 @@ pub(super) fn background_from_composite(doc: &mut Document) {
         id: -1,
         data: vec![255; plane].into(),
     });
-    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
-        name: "Background".to_string(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: doc.height as i32,
-            right: doc.width as i32,
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            name: "Background".to_string(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: doc.height as i32,
+                right: doc.width as i32,
+            },
+            channels,
+            background: true,
+            ..Default::default()
         },
-        channels,
-        background: true,
-        ..Default::default()
-    })]);
+    )]);
 }
 
 /// Reshape a working Grayscale document to working RGB by replicating the gray
