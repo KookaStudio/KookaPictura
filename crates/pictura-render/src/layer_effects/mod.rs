@@ -20,7 +20,6 @@
 //! dilate of radius `round(spread / 100 * size)` (not the reference's spread-then-
 //! blur split), and the exterior is the multiplicative `1 - matte` rather than
 //! the exact knock-out equation.
-//!
 //! An inner shadow composites **above** the layer content (interior-only): it is
 //! the offset, choke-eroded and blurred inverted matte multiplied by the content
 //! matte. ponytail: `knocks_out` (`layerConceals`) is decoded but inert — the
