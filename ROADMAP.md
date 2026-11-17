@@ -645,7 +645,8 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       256² display tile pyramid, with no stored full-resolution composite for
       layered documents (#1216); export, selections, previews, conversions and
       dialog backdrops read bands, tiles or reduced levels instead of a whole
-      composite (#1274)
+      composite (#1274); the whole-level rebuild remains only as an independent
+      test oracle, excluded from ordinary app builds (#1349)
 - [x] Scratch paging and Efficiency accounting (#943): cold tiles pack (LZ4)
       and spill to checksummed scratch volumes under the memory ceiling, with
       Scratch Sizes and Efficiency in `status` (#1217).

@@ -62,7 +62,7 @@ effects, an unmasked adjustment).
 ### Requirement: A document canvas holds no full-resolution image
 
 A canvas presenting a document SHALL know the document by its size and present
-it from view-pyramid crops alone, holding no full-resolution image; a region
+it from tile-pyramid crops alone, holding no full-resolution image; a region
 the view repaints SHALL only invalidate the crops. The canvas SHALL still yield
 the document as one image on request, cropped whole from level 0, and its
 single-channel view SHALL be built from the presented crop.

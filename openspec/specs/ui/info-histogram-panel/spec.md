@@ -55,41 +55,6 @@ stable `objectName`s and SHALL expose `Window > Panels > Info` and
 - **WHEN** the user toggles Histogram from the Window menu
 - **THEN** the panel is shown or hidden
 
-### Requirement: Panels do not re-composite per refresh
-
-The Info panel's pixel sampling SHALL read the document's planar composite
-directly rather than building a full-resolution image. The Histogram SHALL be
-computed from a view-pyramid level — a bounded reduction of the composite of at
-most 512×512 — so that its cost is independent of document size, and it MUST NOT
-read `PictureView::image()` or otherwise force a full-resolution image rebuild.
-Both SHALL remain visually equivalent to the previous full-resolution results.
-
-#### Scenario: Sampling a large document performs no full composite
-
-- **WHEN** a pixel is sampled in the Info panel on a 4000×4000 document whose
-  composite is already current
-- **THEN** the sample is read from the cached composite and no full-document
-  composite is run
-
-#### Scenario: Histogram refresh does not scan every pixel
-
-- **WHEN** the Histogram panel refreshes on a 4000×4000 document
-- **THEN** it bins a downsample of at most 512×512 and the plotted distribution
-  remains visually equivalent
-
-#### Scenario: Histogram refresh does not read the full-resolution image
-
-- **WHEN** the Histogram panel refreshes after a region refresh
-- **THEN** it reads a view-pyramid level, does not call `PictureView::image()`,
-  and no full-resolution image rebuild runs
-
-#### Scenario: Histogram cost is independent of document size
-
-- **WHEN** the Histogram panel refreshes on a document at least twice as large in
-  each dimension
-- **THEN** the work it does is bounded by the chosen pyramid level and does not
-  grow with the document's pixel count
-
 ### Requirement: CMYK colour readout
 
 The Info panel SHALL show the CMYK components of the colour under the cursor in
@@ -369,3 +334,41 @@ or selection changes instead, and a pointer move MUST NOT stat the document file
 
 - **WHEN** a document opened from disk has its file removed and the pointer is then moved across the canvas
 - **THEN** the document-size line keeps the size it showed on open and the panel does not read the file again
+
+### Requirement: Tile-based panel sampling and bounded histogram binning
+
+The Info panel's pixel sampling SHALL read the requested current composite
+sample through a region or cached tile rather than building a full-resolution
+image or requiring a stored planar composite. The Histogram SHALL fetch the
+coarsest tile-pyramid level and, when either dimension exceeds 512, scale the
+fetched image to fit within 512×512 before binning. The source level itself
+need not fit that bound: a 4096×2 document has only level 0 and fetches that
+level before scaling. Binning is bounded by 512×512 pixels; source fetching and
+tile generation can depend on document dimensions and cache state. Histogram
+refresh MUST NOT call `PictureView::image()` or force a full-resolution image
+rebuild. Both panels SHALL retain their current visual results.
+
+#### Scenario: Sampling a large document performs no full composite
+
+- **WHEN** a pixel is sampled in the Info panel on a 4000×4000 document whose display tiles are already current
+- **THEN** the sample is read through the current composite region or tile and no full-document composite is run
+
+#### Scenario: Histogram bins a bounded image
+
+- **WHEN** the Histogram panel refreshes on a 4000×4000 document
+- **THEN** it bins an image of at most 512×512 and retains the current plotted distribution
+
+#### Scenario: Histogram refresh uses a tile level
+
+- **WHEN** the Histogram panel refreshes after a region refresh
+- **THEN** it reads the coarsest tile-pyramid level without calling `PictureView::image()` or rebuilding the full-resolution image
+
+#### Scenario: A thin document is scaled after fetching level 0
+
+- **WHEN** the Histogram panel refreshes on a 4096×2 document
+- **THEN** it fetches the 4096×2 level 0 and scales it to fit within 512×512 before binning
+
+#### Scenario: Histogram binning is bounded for larger documents
+
+- **WHEN** the Histogram panel refreshes on a document at least twice as large in each dimension
+- **THEN** the image it bins is at most 512×512, regardless of the dimensions of the fetched source level

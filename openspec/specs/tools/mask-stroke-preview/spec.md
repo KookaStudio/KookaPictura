@@ -12,7 +12,7 @@ full-resolution mask, and start the stroke without copying the mask.
 
 When a mask dab's bounding box exceeds the raster budget that the pixel-stroke
 preview uses and the GPU mask stroke is not taken, the system SHALL present the
-in-progress mask stroke at the view-pyramid level that the pixel preview would
+in-progress mask stroke at the tile-pyramid level that the pixel preview would
 use. The preview MUST NOT write level 0 or the mask. The preview MAY
 approximate how the edited coverage appears in the composite. At the commit,
 the system SHALL replay the recorded samples through the exact full-resolution
