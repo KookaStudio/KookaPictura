@@ -74,7 +74,7 @@ fn a_mask_target_is_not_captured() {
 }
 
 #[test]
-fn lab_refuses_the_six_restricted_modes() {
+fn lab_refuses_the_eight_restricted_modes() {
     let mut rust = view((20, 40, 60), ColorMode::Lab);
     record_filter(&mut rust);
     for mode in [
@@ -84,6 +84,8 @@ fn lab_refuses_the_six_restricted_modes() {
         BlendMode::Darken,
         BlendMode::Difference,
         BlendMode::Exclusion,
+        BlendMode::Subtract,
+        BlendMode::Divide,
     ] {
         assert!(!mode_allowed(&rust, mode), "{mode:?}");
     }

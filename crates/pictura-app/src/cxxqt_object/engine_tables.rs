@@ -9,11 +9,12 @@ pub(crate) mod edition;
 pub(crate) mod tool_catalogue;
 
 use self::adjustment_catalogue::adjustment_catalogue;
-use self::blend_modes::blend_mode_rows;
+use self::blend_modes::{allowed_blend_mode_keys, blend_mode_rows};
 use self::color_models::{channel_plane, lab_to_srgb, srgb_to_lab};
 use self::edition::edition_is_extended;
 use self::tool_catalogue::tool_catalogue_rows;
 use super::command_catalogue::{command_catalogue, command_id_for_path, command_is_modal};
+use super::qobject::PictureView;
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -22,6 +23,10 @@ pub mod ffi {
         type QString = cxx_qt_lib::QString;
         include!("cxx-qt-lib/qstringlist.h");
         type QStringList = cxx_qt_lib::QStringList;
+
+        include!("pictura_app/src/cxxqt_object.cxxqt.h");
+        #[namespace = "pictura"]
+        type PictureView = super::PictureView;
     }
 
     #[namespace = "pictura"]
@@ -101,6 +106,10 @@ pub mod ffi {
     extern "Rust" {
         /// The 27 layer modes in engine order; Pass Through is excluded.
         fn blend_mode_rows() -> Vec<BlendModeRow>;
+
+        /// The layer-mode keys CS6 offers for the document behind `view`, in
+        /// engine order; all 27 without a document.
+        fn allowed_blend_mode_keys(view: &PictureView) -> QStringList;
 
         /// Every adjustment and fill kind in CS6 order.
         fn adjustment_catalogue() -> Vec<AdjustmentRow>;

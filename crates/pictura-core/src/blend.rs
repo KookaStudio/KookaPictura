@@ -2,7 +2,53 @@
 //! separable modes. Non-separable modes use the PDF/CSS triplet math.
 
 use crate::nonseparable::{lum, sat, set_lum, set_sat};
-use crate::BlendMode;
+use crate::{BitDepth, BlendMode, ColorMode};
+
+impl BlendMode {
+    /// Whether CS6 offers this layer mode in a document of `mode` and `depth`.
+    ///
+    /// The restrictions are conjunctive: Bitmap/Indexed offer Normal only, Lab
+    /// excludes eight modes, and a 32-bit document offers the 15-mode HDR
+    /// subset. It covers the 27 layer modes only; `PassThrough` is group-only
+    /// and is not part of the table.
+    pub fn allowed(self, mode: ColorMode, depth: BitDepth) -> bool {
+        if matches!(mode, ColorMode::Bitmap | ColorMode::Indexed) {
+            return self == BlendMode::Normal;
+        }
+        let lab_allowed = mode != ColorMode::Lab
+            || !matches!(
+                self,
+                BlendMode::ColorDodge
+                    | BlendMode::ColorBurn
+                    | BlendMode::Darken
+                    | BlendMode::Lighten
+                    | BlendMode::Difference
+                    | BlendMode::Exclusion
+                    | BlendMode::Subtract
+                    | BlendMode::Divide
+            );
+        let hdr_allowed = depth != BitDepth::ThirtyTwo
+            || matches!(
+                self,
+                BlendMode::Normal
+                    | BlendMode::Dissolve
+                    | BlendMode::Darken
+                    | BlendMode::Multiply
+                    | BlendMode::Lighten
+                    | BlendMode::DarkerColor
+                    | BlendMode::LinearDodge
+                    | BlendMode::LighterColor
+                    | BlendMode::Difference
+                    | BlendMode::Subtract
+                    | BlendMode::Divide
+                    | BlendMode::Hue
+                    | BlendMode::Saturation
+                    | BlendMode::Color
+                    | BlendMode::Luminosity
+            );
+        lab_allowed && hdr_allowed
+    }
+}
 
 #[inline]
 pub fn blend(mode: BlendMode, cb: [f32; 3], cs: [f32; 3]) -> [f32; 3] {

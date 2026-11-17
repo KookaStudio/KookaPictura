@@ -6,7 +6,7 @@ use crate::cxxqt_object::state::PictureViewRust;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_core::{BlendMode, ColorMode, Layer, PsdRect};
+use pictura_core::{BlendMode, Layer, PsdRect};
 use pictura_filters::fade::{fade_layer, Fade};
 
 /// The last destructive effect's pixels and the current Fade values.
@@ -140,17 +140,9 @@ pub(in crate::cxxqt_object) fn mode_allowed(rust: &PictureViewRust, mode: BlendM
     let Some(doc) = rust.session.doc.as_ref() else {
         return false;
     };
-    if pictura_render::document_color_mode(doc) != ColorMode::Lab {
-        return true;
-    }
-    !matches!(
-        mode,
-        BlendMode::ColorDodge
-            | BlendMode::ColorBurn
-            | BlendMode::Lighten
-            | BlendMode::Darken
-            | BlendMode::Difference
-            | BlendMode::Exclusion
+    mode.allowed(
+        pictura_render::document_color_mode(doc),
+        pictura_render::document_bit_depth(doc),
     )
 }
 

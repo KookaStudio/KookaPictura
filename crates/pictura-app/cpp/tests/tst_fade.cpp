@@ -13,6 +13,7 @@
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QSpinBox>
 
+#include "blend_modes.h"
 #include "commands.h"
 #include "fade_dialog.h"
 #include "frame.h"
@@ -69,6 +70,8 @@ private slots:
     void okCommitsOneState();
     void reopeningRecomputesFromEffectOutput();
     void labDisablesRestrictedModes();
+    void hdrDisablesRestrictedModes();
+    void eightBitOffersAllModes();
     void commandIsImplementedAndDispatchable();
 
 private:
@@ -306,9 +309,82 @@ void FadeTest::labDisablesRestrictedModes()
         }
         for (const QString& key :
              {QStringLiteral("idiv"), QStringLiteral("div "), QStringLiteral("lite"),
-              QStringLiteral("dark"), QStringLiteral("diff"), QStringLiteral("smud")}) {
+              QStringLiteral("dark"), QStringLiteral("diff"), QStringLiteral("smud"),
+              QStringLiteral("fsub"), QStringLiteral("fdiv")}) {
             const int index = mode->findData(key);
             if (index < 0 || !model->item(index) || model->item(index)->isEnabled()) {
+                dialog->reject();
+                return;
+            }
+        }
+        checked = true;
+        dialog->reject();
+    }));
+    QVERIFY(checked);
+}
+
+void FadeTest::hdrDisablesRestrictedModes()
+{
+    pictura::PictureView* view = newRgbDocument(QStringLiteral("FadeHdr"));
+    QVERIFY(view != nullptr);
+    QVERIFY(pictura::create_document(*view, 32, 32, QStringLiteral("rgb"), 32, 0xffffffu, false,
+                                     72.0, false));
+    QCOMPARE(view->document_depth_bits(), 32);
+    QVERIFY(pictura::image_adjust_direct(*view, QStringLiteral("invert")));
+
+    bool checked = false;
+    QVERIFY(withDialog([&](pictura::FadeDialog* dialog) {
+        auto* mode = dialog->findChild<QComboBox*>(QStringLiteral("fadeMode"));
+        auto* model = mode ? qobject_cast<QStandardItemModel*>(mode->model()) : nullptr;
+        if (!mode || !model) {
+            dialog->reject();
+            return;
+        }
+        for (const QString& key :
+             {QStringLiteral("idiv"), QStringLiteral("lbrn"), QStringLiteral("scrn"),
+              QStringLiteral("div "), QStringLiteral("over"), QStringLiteral("sLit"),
+              QStringLiteral("hLit"), QStringLiteral("vLit"), QStringLiteral("lLit"),
+              QStringLiteral("pLit"), QStringLiteral("hMix"), QStringLiteral("smud")}) {
+            const int index = mode->findData(key);
+            if (index < 0 || !model->item(index) || model->item(index)->isEnabled()) {
+                dialog->reject();
+                return;
+            }
+        }
+        for (const QString& key :
+             {QStringLiteral("norm"), QStringLiteral("diss"), QStringLiteral("dark"),
+              QStringLiteral("mul "), QStringLiteral("lite"), QStringLiteral("dkCl"),
+              QStringLiteral("lddg"), QStringLiteral("lgCl"), QStringLiteral("diff"),
+              QStringLiteral("fsub"), QStringLiteral("fdiv"), QStringLiteral("hue "),
+              QStringLiteral("sat "), QStringLiteral("colr"), QStringLiteral("lum ")}) {
+            const int index = mode->findData(key);
+            if (index < 0 || !model->item(index) || !model->item(index)->isEnabled()) {
+                dialog->reject();
+                return;
+            }
+        }
+        checked = true;
+        dialog->reject();
+    }));
+    QVERIFY(checked);
+}
+
+void FadeTest::eightBitOffersAllModes()
+{
+    pictura::PictureView* view = newRgbDocument(QStringLiteral("FadeAllModes"));
+    QVERIFY(view != nullptr);
+    QVERIFY(pictura::image_adjust_direct(*view, QStringLiteral("invert")));
+
+    bool checked = false;
+    QVERIFY(withDialog([&](pictura::FadeDialog* dialog) {
+        auto* mode = dialog->findChild<QComboBox*>(QStringLiteral("fadeMode"));
+        auto* model = mode ? qobject_cast<QStandardItemModel*>(mode->model()) : nullptr;
+        if (!mode || !model || mode->count() != pictura::blendModes().size()) {
+            dialog->reject();
+            return;
+        }
+        for (int i = 0; i < mode->count(); ++i) {
+            if (!model->item(i) || !model->item(i)->isEnabled()) {
                 dialog->reject();
                 return;
             }

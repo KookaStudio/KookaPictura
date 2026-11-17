@@ -70,7 +70,7 @@ bool createFillLayerFromDialog(PictureView& view, const QString& kind, const QCo
         const QString defaultName = kind == QLatin1String("solid-color") ? QStringLiteral("Color Fill 1")
                                     : kind == QLatin1String("gradient") ? QStringLiteral("Gradient Fill 1")
                                                                         : QStringLiteral("Pattern Fill 1");
-        if (!LayerNewDialog::get(false, parent, &spec, defaultName)) {
+        if (!LayerNewDialog::get(false, parent, &spec, defaultName, &view)) {
             return false;
         }
         name = spec.name == defaultName ? QString() : spec.name;

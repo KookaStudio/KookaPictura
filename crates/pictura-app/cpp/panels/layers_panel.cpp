@@ -905,6 +905,7 @@ void LayersPanel::syncControls()
 {
     const QModelIndex current = tree_->currentIndex();
     const QStringList paths = targetPaths();
+    if (!view_ || paths.isEmpty()) syncBlendCombo(blend_, view_, QString());
     if (view_) {
         // While the Selected filter isolates a set, scope Move Auto-Select to
         // it; otherwise leave Auto-Select unscoped.
@@ -960,7 +961,7 @@ void LayersPanel::syncControls()
         if (!valueIndex.isValid()) {
             valueIndex = model_->indexForPath(paths.first());
         }
-        const int blend = blend_->findData(valueIndex.data(BlendRole).toString());
+        const int blend = syncBlendCombo(blend_, view_, valueIndex.data(BlendRole).toString());
         blend_->setCurrentIndex(blend >= 0 ? blend : 0);
         opacityPct = qRound(valueIndex.data(OpacityRole).toInt() * 100.0 / 255.0);
         fillPct = qRound(valueIndex.data(FillRole).toInt() * 100.0 / 255.0);

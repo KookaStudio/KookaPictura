@@ -82,7 +82,7 @@ void LayersPanel::openNewLayerDialog()
         return;
     }
     LayerNewSpec spec;
-    if (!LayerNewDialog::get(false, this, &spec)) {
+    if (!LayerNewDialog::get(false, this, &spec, {}, view_)) {
         return;
     }
     clearSolo();
@@ -100,7 +100,7 @@ void LayersPanel::openNewGroupDialog()
         return;
     }
     LayerNewSpec spec;
-    if (!LayerNewDialog::get(true, this, &spec)) {
+    if (!LayerNewDialog::get(true, this, &spec, {}, view_)) {
         return;
     }
     clearSolo();
@@ -122,7 +122,7 @@ void LayersPanel::openGroupFromLayersDialog()
         return;
     }
     LayerNewSpec spec;
-    if (!LayerNewDialog::get(true, this, &spec)) {
+    if (!LayerNewDialog::get(true, this, &spec, {}, view_)) {
         return;
     }
     clearSolo();
