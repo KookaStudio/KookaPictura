@@ -848,6 +848,7 @@ fn create_style_layers_refuses() {
     assert!(!crate::can_create_style_layers(&run, "1"));
 }
 
+#[test]
 fn contour_text_round_trips() {
     let mut d = doc();
     let layer = square(&mut d);
