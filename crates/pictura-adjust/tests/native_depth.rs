@@ -6,8 +6,8 @@ use pictura_adjust::{
     AutoKind, BlackWhiteParams, BrightnessContrastParams, ChannelMixerParams, ColorBalanceMode,
     ColorBalanceParams, ColorLookupKind, ColorLookupParams, CurvesParams, ExposureParams,
     GradientMapParams, GradientStop, HueSaturationParams, LevelsParams, MatchColorParams,
-    MatchColorStats, PhotoFilterParams, SelectiveColorMethod, SelectiveColorParams, SelectiveRange,
-    ShadowsHighlightsParams, VibranceParams,
+    MatchColorStats, PhotoFilterParams, ReplaceColorParams, SelectiveColorMethod,
+    SelectiveColorParams, SelectiveRange, ShadowsHighlightsParams, VibranceParams,
 };
 use pictura_core::{PixelBuffer, Samples};
 

@@ -6,7 +6,7 @@
 
 use std::time::Instant;
 
-use pictura_core::{BitDepth, BlendMode, Channel, ColorMode, Document, Layer, PsdRect, TypeTool};
+use pictura_core::{BitDepth, BlendMode, Channel, ColorMode, Document, PsdRect, TypeTool};
 use pictura_render::{
     composite, gpu_available, set_text_gamma, text_gamma, Backend, CompositeRequest,
     DEFAULT_TEXT_GAMMA,

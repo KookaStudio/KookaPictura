@@ -51,11 +51,9 @@ fn layer_only_native_depth_converts_with_absent_composite() {
         ],
     ));
     let child = doc.layers[0].clone();
-    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
-        is_group: true,
-        children: pictura_core::LayerStack::from_layers(vec![child]),
-        ..Default::default()
-    }]);
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_core::Layer::new(
+        pictura_core::LayerContent::Group(pictura_core::LayerStack::from_layers(vec![child])),
+    )]);
     doc.source
         .set_native(Some(BitDepth::Sixteen), None)
         .unwrap();
@@ -66,7 +64,7 @@ fn layer_only_native_depth_converts_with_absent_composite() {
         doc.source.planes().as_ref().unwrap().depth,
         BitDepth::ThirtyTwo
     );
-    let Samples::F32(values) = &doc.layers[0].children[0]
+    let Samples::F32(values) = &doc.layers[0].children()[0]
         .source_channels
         .as_ref()
         .unwrap()
