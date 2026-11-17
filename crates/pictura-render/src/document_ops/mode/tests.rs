@@ -2,7 +2,7 @@ use super::*;
 use pictura_codec::{
     read_psd, web_safe_palette, write_psd, ColorReduction, Dither, PaletteOptions,
 };
-use pictura_core::{Channel, Layer, Samples};
+use pictura_core::{Channel, Samples};
 
 /// A one-layer RGB document whose layer and (RGBA) composite hold `pixels`,
 /// as the app keeps it.

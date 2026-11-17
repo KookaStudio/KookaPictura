@@ -315,12 +315,6 @@ fn write_length_and_key(key: &[u8], out: &mut Vec<u8>) {
     out.extend_from_slice(key);
 }
 
-/// Descriptor key: a `u32` length; a zero length means the following 4 bytes
-/// are an interned term key.
-pub(crate) fn read_length_and_key(r: &mut Reader) -> Result<Vec<u8>, PsdError> {
-    read_length_and_key_admitted(r, &mut None).map_err(DescriptorFailure::into_error)
-}
-
 fn read_length_and_key_admitted(
     r: &mut Reader,
     budget: &mut Option<&mut DecodeBudget>,

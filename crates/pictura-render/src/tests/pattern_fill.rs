@@ -1,5 +1,5 @@
 use super::*;
-use pictura_adjust::{Adjustment, PatternFillParams};
+use pictura_adjust::PatternFillParams;
 
 #[test]
 fn pattern_fill_output_remains_unchanged() {

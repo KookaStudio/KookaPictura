@@ -6,8 +6,8 @@ use pictura_core::job::{self, Cancelled, JobProgress};
 use pictura_core::memory::eviction::{self, run_pass};
 use pictura_core::warp::{BezierMesh, Warp, WarpStyle};
 use pictura_core::{
-    BitDepth, Channel, ColorMode, Document, Layer, LayerMask, Plane, PsdRect, Residency, Sample,
-    Samples, SourceChannels, SourcePlanes, TileSample,
+    BitDepth, Channel, ColorMode, Document, LayerMask, Plane, PsdRect, Residency, Sample, Samples,
+    SourceChannels, SourcePlanes, TileSample,
 };
 
 use super::kernel::Interpolation;

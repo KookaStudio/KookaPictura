@@ -307,7 +307,7 @@ pub fn decline_count(reason: &str) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pictura_core::{BitDepth, BlendMode, Channel, ColorMode, Document, Layer, PsdRect};
+    use pictura_core::{BitDepth, BlendMode, Channel, ColorMode, Document, PsdRect};
 
     fn solid_doc(w: u32, h: u32, blend: BlendMode) -> Document {
         let n = (w * h) as usize;

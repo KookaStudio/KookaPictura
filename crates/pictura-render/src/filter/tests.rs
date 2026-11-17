@@ -515,7 +515,7 @@ fn cpu_preferred_kernels_skip_the_gpu() {
         let mut cpu = gpu.clone();
         apply_filter(&mut gpu, &filter, None, true).unwrap();
         apply_filter(&mut cpu, &filter, None, false).unwrap();
-        assert_eq!(gpu.channels, cpu.channels, "{filter:?}");
+        assert_eq!(gpu.channels(), cpu.channels(), "{filter:?}");
     }
 }
 

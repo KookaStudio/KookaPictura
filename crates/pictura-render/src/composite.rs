@@ -355,7 +355,7 @@ fn composite_layer_dispatch(
                     canvas,
                     layer.children(),
                     doc,
-                    node.children(),
+                    &node.children,
                     |canvas, _, child, over| {
                         composite_layer(canvas, child, doc, deep, child_shallow, over)
                     },
@@ -373,7 +373,7 @@ fn composite_layer_dispatch(
                 &mut inner,
                 layer.children(),
                 doc,
-                node.children(),
+                &node.children,
                 |canvas, _, child, over| {
                     composite_layer(canvas, child, doc, None, ko_base.as_ref(), over)
                 },
@@ -469,7 +469,7 @@ fn composite_layer_dispatch(
     canvas.effect_scale = effect_scale;
 }
 
-pub(crate) use pictura_codec::layer_content::basic::{be_i16, be_u16, be_u32, desc_item};
+pub(crate) use pictura_codec::layer_content::basic::{be_u16, desc_item};
 
 pub(crate) fn blend_if_factor(view: Option<&BlendIf>, cs: [f32; 3], backdrop: [f32; 3]) -> f32 {
     let Some(view) = view else {

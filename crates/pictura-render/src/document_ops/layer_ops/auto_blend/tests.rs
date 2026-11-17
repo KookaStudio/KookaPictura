@@ -227,7 +227,7 @@ fn auto_blend_skips_ineligible_layers() {
     pictura_codec::edit_layer(text.as_mut(), |parts| {
         parts.type_tool = Some(pictura_core::TypeTool {
             transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
-            parts: "T".into(),
+            text: "T".into(),
             bounds: [0; 4],
             text_desc: Vec::new().into(),
             warp_desc: Vec::new().into(),
@@ -616,8 +616,8 @@ fn narrows_mismatch(gray: bool) {
     assert_eq!(d.layers[2].name, "B (merged)");
     assert!(d.layers.iter().all(|l| l.adjustment().is_none()));
     assert!(seam_step(&d) < before / 2, "{} vs {before}", seam_step(&d));
-    assert_eq!(d.layers[0].channels(), channels[0], "pixels unchanged");
-    assert_eq!(d.layers[1].channels(), channels[1], "pixels unchanged");
+    assert_eq!(d.layers[0].channels(), &channels[0], "pixels unchanged");
+    assert_eq!(d.layers[1].channels(), &channels[1], "pixels unchanged");
 }
 
 #[test]

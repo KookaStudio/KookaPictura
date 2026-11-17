@@ -526,7 +526,10 @@ fn a_picture_region_after_a_refresh_reads_the_current_composite() {
         right: 40,
     };
     let paint = rust.session.doc.as_mut().expect("document");
-    paint.layers[0].channels()[1].data.as_mut_slice().fill(200);
+    paint.layers[0].channels_mut()[1]
+        .data
+        .as_mut_slice()
+        .fill(200);
     assert!(rust.refresh_display_rect(rect).is_some());
 
     let doc = rust.session.doc.as_ref().expect("the document survives");
@@ -1012,7 +1015,10 @@ fn a_whole_document_region_refresh_repairs_the_cached_tiles() {
     let frame = view.frame_revision;
 
     let doc = view.session.doc.as_mut().expect("document");
-    doc.layers[0].channels()[0].data.as_mut_slice().fill(200);
+    doc.layers[0].channels_mut()[0]
+        .data
+        .as_mut_slice()
+        .fill(200);
     assert_eq!(view.refresh_regions(&[whole(w, h)]), Some(whole(w, h)));
 
     let doc = view.session.doc.as_ref().expect("document");

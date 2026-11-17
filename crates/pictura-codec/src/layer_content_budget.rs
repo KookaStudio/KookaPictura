@@ -66,7 +66,7 @@ impl<'a> ContentAlloc<'a> {
         }
     }
 
-    pub(crate) fn cube(&mut self, bytes: &[u8]) -> Option<(usize, Vec<[f32; 3]>)> {
+    pub(crate) fn cube(&mut self, bytes: &[u8]) -> Option<CubePoints> {
         if self.error.is_some() {
             return None;
         }
@@ -136,10 +136,12 @@ pub(crate) fn read_descriptor(
     crate::descriptor::read_descriptor_with_budget(&mut Reader::new(bytes), budget)
 }
 
+type CubePoints = (usize, Vec<[f32; 3]>);
+
 pub(crate) fn parse_cube(
     bytes: &[u8],
     budget: &mut DecodeBudget,
-) -> Result<Option<(usize, Vec<[f32; 3]>)>, PsdError> {
+) -> Result<Option<CubePoints>, PsdError> {
     let Some((size, count)) = walk_cube(bytes, |_| {}) else {
         return Ok(None);
     };
@@ -150,7 +152,7 @@ pub(crate) fn parse_cube(
     Ok(Some((size, points)))
 }
 
-pub(crate) fn parse_cube_unbudgeted(bytes: &[u8]) -> Option<(usize, Vec<[f32; 3]>)> {
+pub(crate) fn parse_cube_unbudgeted(bytes: &[u8]) -> Option<CubePoints> {
     let (size, count) = walk_cube(bytes, |_| {})?;
     let mut points = Vec::with_capacity(count);
     walk_cube(bytes, |point| points.push(point))?;

@@ -320,7 +320,7 @@ pub(crate) fn resolve(doc: &mut Document) {
                     anchors.push((id, base));
                 }
             }
-            walk(doc, &layer.children(), anchors);
+            walk(doc, layer.children(), anchors);
         }
     }
     fn apply_anchors(layers: &mut pictura_core::LayerStack, anchors: &[(u32, PositionAnchor)]) {
@@ -444,7 +444,7 @@ fn max_layer_id(doc: &Document) -> u32 {
             if let Some(id) = layer_id(layer) {
                 *highest = (*highest).max(id);
             }
-            walk(&layer.children(), highest);
+            walk(layer.children(), highest);
         }
     }
     let mut highest = 0;

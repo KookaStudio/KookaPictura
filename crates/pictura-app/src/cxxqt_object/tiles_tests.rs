@@ -200,7 +200,7 @@ fn an_edit_repairs_the_visible_tiles() {
         let doc = view.session.doc.as_mut().expect("document");
         let layer = &mut doc.layers[0];
         let w = layer.rect.width() as usize;
-        let red = layer.channels()[0].data.as_mut_slice();
+        let red = layer.channels_mut()[0].data.as_mut_slice();
         for y in dirty.top..dirty.bottom {
             for x in dirty.left..dirty.right {
                 red[y as usize * w + x as usize] ^= 0x5a;

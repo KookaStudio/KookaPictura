@@ -1247,7 +1247,7 @@ fn a_pixel_undo_without_a_stored_composite_reports_its_layer_tiles() {
     let mut history = History::default();
     history.capture_live(&mut live, &selection, &target, "Open");
     let lw = (w - 100) as usize;
-    let red = live.layers[0].channels()[0].data.as_mut_slice();
+    let red = live.layers[0].channels_mut()[0].data.as_mut_slice();
     for y in 10..20 {
         for x in 300..310 {
             red[y * lw + x] ^= 0xff;

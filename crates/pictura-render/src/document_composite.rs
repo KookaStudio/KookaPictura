@@ -469,7 +469,7 @@ mod tests {
             }
         }
 
-        d.layers[0].channels()[0].data.fill(200);
+        d.layers[0].channels_mut()[0].data.fill(200);
         let mutated = crate::composite_rgba(&d);
         let before = d.composite.buffer().clone();
         let region = rect(2, 2, 6, 6);
@@ -543,7 +543,7 @@ mod tests {
         DocumentComposite::new(&mut d).store(&full_before);
         let snapshot = d.composite.buffer().clone();
         assert!(snapshot.data.shares(&d.composite.data));
-        d.layers[0].channels()[0].data.fill(200);
+        d.layers[0].channels_mut()[0].data.fill(200);
         let full = crate::composite_rgba(&d);
         let region = rect(0, 0, 64, 32);
         DocumentComposite::new(&mut d).refresh(CompositeScope::Regions(vec![region]), false);
@@ -751,7 +751,7 @@ mod tests {
                 top,
             ],
         );
-        d.layers[0].channels()[0].data.fill(200);
+        d.layers[0].channels_mut()[0].data.fill(200);
         let full = crate::composite_rgba(&d);
         let region = rect(2, 2, 6, 6);
         let buffer = region_buffer(&mut d, region);

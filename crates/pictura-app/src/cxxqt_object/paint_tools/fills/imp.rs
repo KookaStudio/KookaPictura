@@ -599,7 +599,7 @@ pub(super) fn styled_except(layers: &[Layer], prefix: &str, own: &str) -> bool {
             format!("{prefix}/{i}")
         };
         (path != own && pictura_render::has_layer_style(l))
-            || styled_except(&l.children(), &path, own)
+            || styled_except(l.children(), &path, own)
     })
 }
 

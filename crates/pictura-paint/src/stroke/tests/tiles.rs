@@ -23,7 +23,7 @@ fn a_stroke_forks_only_touched_tiles() {
         },
         pictura_core::LayerContent::Pixel,
     );
-    layer.channels()[0].data.tile(w, h);
+    layer.channels_mut()[0].data.tile(w, h);
     let holder = layer.channels()[0].data.clone();
 
     let ch: PlaneIndex = [Some(0), None, None, None];

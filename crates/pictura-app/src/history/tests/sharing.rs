@@ -16,7 +16,7 @@ fn shares_layer_planes(a: &Document, b: &Document) -> bool {
     a.layers[0]
         .channels()
         .iter()
-        .zip(&b.layers[0].channels())
+        .zip(b.layers[0].channels())
         .all(|(a, b)| {
             // A swapped plane's tiles have diverged one by one, so they are
             // compared one by one.

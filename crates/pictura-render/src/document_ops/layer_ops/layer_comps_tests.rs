@@ -571,5 +571,5 @@ fn smart_filter_settings_do_not_vary() {
     let comp = comp_for(&mut doc, 1);
     let before = doc.layers[0].extra_blocks().clone();
     apply_layer_comp(&mut doc, &comp);
-    assert_eq!(doc.layers[0].extra_blocks(), before);
+    assert_eq!(doc.layers[0].extra_blocks(), &before);
 }

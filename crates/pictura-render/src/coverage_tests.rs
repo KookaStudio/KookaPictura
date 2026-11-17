@@ -1,7 +1,7 @@
 use crate::*;
 use pictura_adjust::Adjustment;
 use pictura_core::{
-    assert_no_materialization, BitDepth, Channel, ColorMode, Coverage, Document, Layer, LayerMask,
+    assert_no_materialization, BitDepth, Channel, ColorMode, Coverage, Document, LayerMask,
     LayerStack, Plane, PsdRect,
 };
 use pictura_filters::Filter;

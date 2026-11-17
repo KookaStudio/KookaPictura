@@ -7,7 +7,7 @@
 //! single layer is transparency-locked so opacity stays 255 while its colour
 //! plane carries the coverage.
 
-use pictura_core::{BitDepth, Channel, ColorMode, Coverage, Document, Layer, LockFlags, PsdRect};
+use pictura_core::{BitDepth, Channel, ColorMode, Coverage, Document, LockFlags, PsdRect};
 
 use super::paths::{resolve_path, resolve_path_mut};
 #[cfg(test)]
@@ -542,7 +542,11 @@ mod tests {
             &mut doc, "0", &[255; 4], 1, 0, false, 255
         ));
         assert_eq!(coverage(&doc), vec![0, 0, 64, 128, 255]);
-        assert_eq!(doc.layers[0].channels(), channels, "layer pixels untouched");
+        assert_eq!(
+            doc.layers[0].channels(),
+            &channels,
+            "layer pixels untouched"
+        );
         assert!(doc.layers[0].mask.is_some());
     }
 
@@ -598,7 +602,7 @@ mod tests {
         assert!(move_mask_selection_content(
             &mut doc, "0", &[255; 8], 1, 0, false, 0
         ));
-        assert_eq!(doc.layers[0].channels(), channels);
+        assert_eq!(doc.layers[0].channels(), &channels);
         let mask = doc.layers[0].mask.as_ref().unwrap();
         assert_eq!(mask.rect, mask_rect(0, 0, rect.right + 1, rect.bottom));
         assert_eq!(mask.default_color, 0);

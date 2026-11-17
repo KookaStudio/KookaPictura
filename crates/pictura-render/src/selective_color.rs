@@ -6,6 +6,8 @@ use pictura_core::*;
 mod tests {
     use super::*;
 
+    const LEN: usize = 84;
+
     /// Build an 84-byte payload: version 1, `method`, a reserved plate of
     /// `reserved`, and the nine `ranges`.
     fn payload(method: u16, reserved: i16, ranges: [SelectiveRange; 9]) -> Vec<u8> {
@@ -139,7 +141,7 @@ mod tests {
 
     #[test]
     fn non_zero_layer_changes_non_uniform_backdrop() {
-        use pictura_core::{BitDepth, BlendMode, Channel, ColorMode, Document, Layer, PsdRect};
+        use pictura_core::{BitDepth, BlendMode, Channel, ColorMode, Document, PsdRect};
 
         let base = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "base".into(),

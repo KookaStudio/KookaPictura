@@ -107,7 +107,7 @@ fn styled_layer_paths(
             format!("{prefix}/{i}")
         };
         if layer.is_group() {
-            styled_layer_paths(&layer.children(), &path, name, paragraph, out);
+            styled_layer_paths(layer.children(), &path, name, paragraph, out);
             continue;
         }
         let matches = if paragraph {

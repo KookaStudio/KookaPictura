@@ -335,7 +335,7 @@ mod tests {
         let group = add_group_in(&mut doc, "", "G");
         add_layer_in(&mut doc, &group, "A");
         add_layer_in(&mut doc, &group, "B");
-        doc.layers[0].children()[1].clipping = true;
+        doc.layers[0].children_mut().expect("group")[1].clipping = true;
         assert!(background_from_layer(&mut doc, "0/0"));
         assert_eq!(names(&doc), vec!["A", "G"]);
         assert!(doc.layers[0].background);
@@ -350,7 +350,7 @@ mod tests {
         let group = add_group_in(&mut doc, "", "G");
         add_layer_in(&mut doc, &group, "A");
         add_layer_in(&mut doc, &group, "B");
-        doc.layers[0].children()[1].clipping = true;
+        doc.layers[0].children_mut().expect("group")[1].clipping = true;
         assert!(reverse_paths(&mut doc, &["0/0", "0/1"]));
         assert_eq!(doc.layers[0].children()[0].name, "B");
         assert!(!doc.layers[0].children()[0].clipping);
@@ -362,7 +362,7 @@ mod tests {
         let group = add_group_in(&mut doc, "", "G");
         add_layer_in(&mut doc, &group, "A");
         add_layer_in(&mut doc, &group, "B");
-        doc.layers[0].children()[0].clipping = true;
+        doc.layers[0].children_mut().expect("group")[0].clipping = true;
         assert!(ungroup_layer(&mut doc, 0));
         assert_eq!(doc.layers.len(), 2);
         assert_eq!(doc.layers[0].name, "A");
@@ -421,7 +421,7 @@ mod tests {
         let group = add_group_in(&mut nested, "", "G");
         add_layer_in(&mut nested, &group, "Bg");
         add_layer_in(&mut nested, &group, "Above");
-        nested.layers[0].children()[0].background = true;
+        nested.layers[0].children_mut().expect("group")[0].background = true;
         assert!(
             !can_create_clipping_mask(&nested, "0/1"),
             "the nested Background"

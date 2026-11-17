@@ -13,9 +13,8 @@
 
 use pictura_adjust::{GradientFillParams, GradientKind, GradientStop, PatternFillParams};
 pub use pictura_codec::layer_content::{
-    decode_gradient_fill, decode_pattern_fill, decode_vector_fill, encode_gradient_fill,
-    encode_gradient_fill_params, encode_pattern_fill, gradient_params_from_desc,
-    pattern_params_from_desc, pattern_params_from_desc_with_link,
+    decode_vector_fill, encode_gradient_fill, encode_gradient_fill_params, encode_pattern_fill,
+    gradient_params_from_desc, pattern_params_from_desc, pattern_params_from_desc_with_link,
 };
 use pictura_codec::PatternPixels;
 use pictura_core::FillContent;

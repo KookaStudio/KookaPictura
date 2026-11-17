@@ -117,7 +117,7 @@ fn a_commit_reuses_a_finished_exact_preview() {
     let marker = {
         let preview = rust.filter_jobs.preview.as_mut().unwrap();
         let (_, exact) = preview.done.as_mut().unwrap();
-        exact.layer.channels()[0].data.as_mut_slice().fill(7);
+        exact.layer.channels_mut()[0].data.as_mut_slice().fill(7);
         exact.layer.clone()
     };
     assert!(commit_start(&mut rust, vec![blur()], "Filter".into(), None));

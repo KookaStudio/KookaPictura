@@ -226,7 +226,7 @@ fn find_smart_object<'a>(layers: &'a [Layer], uuid: &str) -> Option<&'a SmartObj
                 return Some(so);
             }
         }
-        if let Some(so) = find_smart_object(&layer.children(), uuid) {
+        if let Some(so) = find_smart_object(layer.children(), uuid) {
             return Some(so);
         }
     }

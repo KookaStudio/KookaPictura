@@ -448,7 +448,7 @@ fn collect_hits(
             format!("{prefix}/{i}")
         };
         if layer.is_group() {
-            collect_hits(&layer.children(), &path, x, y, isolation, limit, out);
+            collect_hits(layer.children(), &path, x, y, isolation, limit, out);
             continue;
         }
         if layer.has_adjustment_content() {

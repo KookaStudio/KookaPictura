@@ -295,7 +295,7 @@ mod tests {
         let whole = rect(0, 0, 128, 128);
         let first = canvas_proxy_buffer(&mut rust, &blur, whole, 0.5).expect("proxy");
         // A change the key does not see is not picked up: the copy was reused.
-        rust.session.doc.as_mut().unwrap().layers[0].channels()[0]
+        rust.session.doc.as_mut().unwrap().layers[0].channels_mut()[0]
             .data
             .as_mut_slice()
             .fill(0);

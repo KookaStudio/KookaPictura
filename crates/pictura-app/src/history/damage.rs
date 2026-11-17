@@ -119,7 +119,7 @@ pub(super) fn meta_damage(before: &Document, after: &Document) -> Option<Option<
                 format!("{prefix}/{index}")
             };
             out.push((path.clone(), layer));
-            rows(&layer.children(), &path, out);
+            rows(layer.children(), &path, out);
         }
     }
     fn same(a: &pictura_core::Layer, b: &pictura_core::Layer) -> bool {

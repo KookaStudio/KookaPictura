@@ -482,11 +482,11 @@ mod tests {
         assert!(add_vector_mask(&mut doc, "0", VectorMaskKind::RevealAll));
         assert!(vector_mask_linked(&doc, "0"));
         // Set an unrelated bit and the invert bit, then unlink.
-        {
-            let data = &mut doc.layers[0].extra_blocks()[0].data;
+        pictura_codec::edit_layer(&mut doc.layers[0], |parts| {
+            let data = &mut parts.extra_blocks[0].data;
             let flags = flags_of(data) | VECTOR_MASK_FLAG_INVERT | 0x08;
             write_flags(data, flags);
-        }
+        });
         assert!(set_vector_mask_linked(&mut doc, "0", false));
         let flags = flags_of(&doc.layers[0].extra_block(VMSK).unwrap().data);
         assert_eq!(

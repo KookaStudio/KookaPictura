@@ -35,7 +35,7 @@ pub fn resize_canvas_document(
         .planes()
         .as_ref()
         .filter(|s| s.depth != pictura_core::BitDepth::One);
-    let planes = next.channels().len()
+    let planes = next.channels.len()
         + store.map_or(0, |s| s.samples.len() / (old_w as usize * old_h as usize));
     if let Some(job) = pictura_core::job::current() {
         job.begin_stage(planes as u64 * u64::from(height));

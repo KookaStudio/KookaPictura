@@ -77,9 +77,7 @@ pub fn smart_source_buffer(doc: &Document, path: &str) -> Option<PixelBuffer> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pictura_core::{
-        BitDepth, Channel, ColorMode, Layer, PsdRect, SmartObject, SmartObjectKind,
-    };
+    use pictura_core::{BitDepth, Channel, ColorMode, PsdRect, SmartObject, SmartObjectKind};
 
     /// A 4x4 RGB payload with a gradient, so a correction changes the pixels.
     fn payload() -> Vec<u8> {

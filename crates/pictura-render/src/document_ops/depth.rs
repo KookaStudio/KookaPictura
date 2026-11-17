@@ -14,7 +14,7 @@
 
 use pictura_adjust::{tone_map, ExposureGamma, HdrToneMap};
 use pictura_core::{
-    BitDepth, Channel, ColorMode, Document, Layer, LayerStack, PixelBuffer, PsdRect, Samples,
+    BitDepth, Channel, ColorMode, Document, LayerStack, PixelBuffer, PsdRect, Samples,
     SourceChannels, SourcePlanes,
 };
 use pictura_ops::OpsError;

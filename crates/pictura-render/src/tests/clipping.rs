@@ -343,15 +343,15 @@ fn a_clipped_layer_follows_a_vmsk_shape_base() {
 
     let mut d = vsms_clipped_doc();
     let index = shape_index(&d);
-    let data = {
-        let block = d.layers[index]
-            .extra_blocks()
+    let data = pictura_codec::edit_layer(&mut d.layers[index], |parts| {
+        let block = parts
+            .extra_blocks
             .iter_mut()
             .find(|block| block.key == *b"vsms")
             .expect("Shape vsms block");
         block.key = *b"vmsk";
         block.data.clone()
-    };
+    });
     d.layers[index].vector_mask = pictura_codec::decode_vector_mask(&data, 8, 8);
     assert!(
         d.layers[index].vector_mask.is_some(),

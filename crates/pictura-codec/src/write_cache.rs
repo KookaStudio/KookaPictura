@@ -181,7 +181,7 @@ pub fn warm_encode_idents(doc: &Document) {
             if let Some(data) = layer.mask.as_ref().and_then(|mask| mask.data.as_ref()) {
                 data.ident();
             }
-            walk(&layer.children());
+            walk(layer.children());
         }
     }
     walk(&doc.layers);

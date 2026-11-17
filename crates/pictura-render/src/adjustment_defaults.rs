@@ -1,8 +1,6 @@
 pub use pictura_codec::layer_content::defaults::*;
 
 #[cfg(test)]
-use pictura_core::*;
-#[cfg(test)]
 mod tests {
     use super::*;
     use crate::{adjustment_editor, ImageCommand, ADJUSTMENT_CATALOGUE};

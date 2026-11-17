@@ -9,7 +9,7 @@ const BLACK: [u8; 4] = [0, 0, 0, 255];
 /// Two white rooms with a 2 px black wall between them.
 fn rooms() -> Document {
     let mut d = doc(40, 20, WHITE);
-    for c in d.layers[0].channels_mut()[..3] {
+    for c in &mut d.layers[0].channels_mut()[..3] {
         for (i, v) in c.data.iter_mut().enumerate() {
             if (19..21).contains(&(i % 40)) {
                 *v = 0;
@@ -310,7 +310,7 @@ fn opacity_and_the_mask_scale_the_fill() {
 #[test]
 fn a_transparency_lock_keeps_the_fill_off_empty_pixels() {
     let mut d = doc(20, 20, [255, 255, 255, 0]);
-    for a in d.layers[0].channels_mut()[3].data[..200] {
+    for a in &mut d.layers[0].channels_mut()[3].data[..200] {
         *a = 255;
     }
     lock(&mut d, LockFlags::TRANSPARENCY);

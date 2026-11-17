@@ -40,7 +40,7 @@ fn layer_rgb_planes(layer: &Layer) -> Option<Vec<&[u8]>> {
 fn indexed_layers_unchanged(layers: &[Layer], palette: &[u8; 768], depth: u16) -> bool {
     layers.iter().all(|layer| {
         if layer.is_group() {
-            return indexed_layers_unchanged(&layer.children(), palette, depth);
+            return indexed_layers_unchanged(layer.children(), palette, depth);
         }
         let Some(rgb) = layer_rgb_planes(layer) else {
             return true;

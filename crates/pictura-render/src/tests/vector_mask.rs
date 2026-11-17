@@ -268,9 +268,9 @@ fn an_inverted_vsms_mask_hides_its_inside() {
         .position(|layer| layer.name == "Shape")
         .expect("Shape layer");
     d.layers[index].rect = full(8, 8);
-    let data = {
-        let block = d.layers[index]
-            .extra_blocks()
+    let data = pictura_codec::edit_layer(&mut d.layers[index], |parts| {
+        let block = parts
+            .extra_blocks
             .iter_mut()
             .find(|block| block.key == *b"vsms")
             .expect("Shape vsms block");
@@ -282,7 +282,7 @@ fn an_inverted_vsms_mask_hides_its_inside() {
         flags |= crate::VECTOR_MASK_FLAG_INVERT;
         block.data.as_mut_slice()[4..8].copy_from_slice(&flags.to_be_bytes());
         block.data.clone()
-    };
+    });
     d.layers[index].vector_mask = pictura_codec::decode_vector_mask(&data, 8, 8);
     assert!(
         d.layers[index]

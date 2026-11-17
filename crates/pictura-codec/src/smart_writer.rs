@@ -265,7 +265,7 @@ pub(crate) fn collect_authoring(layers: &[Layer]) -> Vec<&SmartObject> {
             if let Some(so) = should_author(layer) {
                 out.push(so);
             }
-            walk(&layer.children(), out);
+            walk(layer.children(), out);
         }
     }
     let mut out = Vec::new();

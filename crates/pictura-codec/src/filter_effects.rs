@@ -194,7 +194,7 @@ fn collect_wanted<'a>(layers: &'a [Layer], out: &mut Vec<(String, &'a FilterMask
                 }
             }
         }
-        collect_wanted(&layer.children(), out);
+        collect_wanted(layer.children(), out);
     }
 }
 

@@ -452,7 +452,7 @@ fn heal_layer_writes_the_pixels_and_returns_a_document_rect() {
         for y in 12..20 {
             for x in 12..20 {
                 let i = (y * 32 + x) as usize;
-                for c in l.channels_mut()[..3] {
+                for c in &mut l.channels_mut()[..3] {
                     c.data[i] = 255;
                 }
             }
@@ -701,7 +701,7 @@ fn a_spot_gesture_heals_under_its_dab() {
     for y in 14..18 {
         for x in 14..18 {
             let i = (y * 32 + x) as usize;
-            for c in doc.layers[0].channels_mut()[..3] {
+            for c in &mut doc.layers[0].channels_mut()[..3] {
                 c.data[i] = 255;
             }
         }
@@ -739,7 +739,7 @@ fn a_clone_gesture_uses_its_source_offset() {
     for y in 0..h {
         for x in 24..w {
             let i = (y * w + x) as usize;
-            for c in doc.layers[0].channels_mut()[..3] {
+            for c in &mut doc.layers[0].channels_mut()[..3] {
                 c.data[i] = 180;
             }
         }

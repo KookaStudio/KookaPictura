@@ -176,7 +176,7 @@ fn walk(
         };
         let visible = ancestors_visible && layer.visible;
         if layer.is_group() {
-            walk(&layer.children(), &path, visible, visible_only, prefix, out);
+            walk(layer.children(), &path, visible, visible_only, prefix, out);
         } else if !visible_only || visible {
             out.push((path, sanitize_name(&format!("{prefix}{}", layer.name))));
         }

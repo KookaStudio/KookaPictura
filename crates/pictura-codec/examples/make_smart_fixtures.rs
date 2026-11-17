@@ -40,7 +40,7 @@ fn embedded_psb() -> Vec<u8> {
 }
 
 fn smart_layer(name: &str, payload: Vec<u8>, smart_filters: Vec<SmartFilter>) -> Layer {
-    crate::layer_from_parts(pictura_core::LayerParts {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.to_string(),
         rect: PsdRect {
             top: 0,
@@ -98,7 +98,7 @@ fn pixel_layer(name: &str, rect: PsdRect, rgb: [u8; 3], alpha: u8) -> Layer {
     let width = rect.width().max(0) as usize;
     let height = rect.height().max(0) as usize;
     let plane = width * height;
-    crate::layer_from_parts(pictura_core::LayerParts {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.to_string(),
         rect,
         channels: vec![
@@ -131,7 +131,7 @@ fn background_layer() -> Layer {
 }
 
 fn group_layer(name: &str, children: Vec<Layer>) -> Layer {
-    crate::layer_from_parts(pictura_core::LayerParts {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.to_string(),
         blend: BlendMode::PassThrough,
         children: LayerStack::from_layers(children),
@@ -152,7 +152,7 @@ fn default_mask() -> LayerMask {
 }
 
 fn adjustment_layer(name: &str, key: [u8; 4], data: Vec<u8>) -> Layer {
-    crate::layer_from_parts(pictura_core::LayerParts {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.to_string(),
         rect: full_rect(),
         mask: Some(default_mask()),
@@ -210,7 +210,7 @@ fn smoke_type_layer() -> Layer {
         }
     }
     let white = vec![255u8; width * height];
-    crate::layer_from_parts(pictura_core::LayerParts {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Type".to_string(),
         rect,
         lock: LockFlags::default()
@@ -254,7 +254,7 @@ fn smoke_smart_layer(payload: Vec<u8>) -> Layer {
         [230, 120, 40],
         255,
     );
-    crate::edit_layer(layer.as_mut(), |parts| {
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
         parts.smart_object = Some(
             {
                 let mut so = SmartObject::default();

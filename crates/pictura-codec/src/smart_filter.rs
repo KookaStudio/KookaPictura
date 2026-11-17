@@ -372,7 +372,7 @@ pub fn reorder_smart_filters(layer: &mut Layer, from: usize, to: usize) -> Resul
 }
 
 pub fn clear_smart_filters(layer: &mut Layer) -> Result<(), PsdError> {
-    crate::stage_content::try_edit_layer(layer, |parts| clear_smart_filters_parts(parts))
+    crate::stage_content::try_edit_layer(layer, clear_smart_filters_parts)
 }
 
 pub fn set_smart_filter_enabled(

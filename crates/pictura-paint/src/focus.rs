@@ -321,7 +321,7 @@ mod tests {
     /// A hard black/white edge down the middle of a 40 px square.
     fn edge() -> Document {
         let mut d = doc(40, 40, WHITE);
-        for c in d.layers[0].channels_mut()[..3] {
+        for c in &mut d.layers[0].channels_mut()[..3] {
             for (i, v) in c.data.iter_mut().enumerate() {
                 if i % 40 >= 20 {
                     *v = 0;
@@ -528,7 +528,7 @@ mod tests {
     /// A grey `w`-wide square whose value at column `x` is `f(x)`.
     fn columns(f: impl Fn(usize) -> u8) -> Document {
         let mut d = doc(40, 40, WHITE);
-        for c in d.layers[0].channels_mut()[..3] {
+        for c in &mut d.layers[0].channels_mut()[..3] {
             for (i, v) in c.data.iter_mut().enumerate() {
                 *v = f(i % 40);
             }

@@ -9,7 +9,7 @@
 //! actual SVG text is built by `pictura_codec::svg`; this module only decodes
 //! the engine views the codec cannot reach.
 
-use pictura_adjust::{Adjustment, GradientFillParams, GradientKind, PatternFillParams};
+use pictura_adjust::{GradientFillParams, GradientKind, PatternFillParams};
 use pictura_codec::{
     encode_svg, SvgContent, SvgGradient, SvgGradientStop, SvgNode, SvgOptions, SvgPaint,
     SvgPattern, SvgStroke, SvgStrokePosition,

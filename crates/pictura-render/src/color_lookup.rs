@@ -11,16 +11,16 @@
 //! no-op. Raise either when a real fixture disagrees.
 
 use pictura_adjust::{Adjustment, ColorLookupKind};
-pub use pictura_codec::layer_content::color_lookup::{
-    decode_color_lookup, encode_color_lookup, identity_cube,
-};
+pub use pictura_codec::layer_content::color_lookup::{encode_color_lookup, identity_cube};
 use pictura_codec::DescValue;
 use pictura_core::AdjustmentData;
 #[cfg(test)]
 use pictura_core::ColorLookupParams;
 
 use crate::color_lookup_presets::{preset_cube, COLOR_LOOKUP_PRESETS};
-use crate::composite::{be_u16, desc_item};
+use crate::composite::desc_item;
+#[cfg(test)]
+use pictura_codec::layer_content::color_lookup::decode_color_lookup;
 
 /// `clrL`: a payload whose 2-byte version is not 1, whose descriptor does not
 /// parse, or whose `lookupType` is absent is `None`, never a panic.

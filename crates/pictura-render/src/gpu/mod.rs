@@ -51,8 +51,7 @@ use std::sync::OnceLock;
 
 use pictura_adjust::Adjustment;
 use pictura_core::{
-    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LockFlags, PixelBuffer,
-    PsdRect,
+    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, LockFlags, PixelBuffer, PsdRect,
 };
 
 mod assemble;
@@ -540,7 +539,7 @@ fn mode_id(mode: BlendMode) -> u32 {
 mod tests {
     use super::*;
     use pictura_core::{
-        BitDepth, Channel, ColorLabel, ColorMode, Document, Layer, LayerMask, LockFlags, PsdRect,
+        BitDepth, Channel, ColorLabel, ColorMode, Document, LayerMask, LockFlags, PsdRect,
         SmartObject, SmartObjectKind,
     };
     use std::time::Instant;

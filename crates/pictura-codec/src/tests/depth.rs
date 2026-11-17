@@ -166,7 +166,7 @@ fn depth16_unmodeled_layer_channel_round_trips_at_source_depth() {
     );
     let doc = read_psd(&p).unwrap();
     assert_eq!(doc.source.depth(), Some(BitDepth::Sixteen));
-    let raw = &doc.layers[0].raw_channels();
+    let raw = doc.layers[0].raw_channels();
     assert_eq!(raw.len(), 1);
     assert_eq!(raw[0].id, 3);
     assert_eq!(

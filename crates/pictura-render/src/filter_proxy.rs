@@ -117,6 +117,7 @@ impl FilterProxy {
             let route = match content_route(layer) {
                 ContentRoute::PassThroughGroup
                 | ContentRoute::IsolatedGroup
+                | ContentRoute::Adjustment(_)
                 | ContentRoute::UndecodedAdjustment
                 | ContentRoute::Pixels => true,
                 ContentRoute::Fill(_) => !crate::document_ops::is_fill_content_layer(layer),

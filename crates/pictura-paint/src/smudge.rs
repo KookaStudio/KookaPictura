@@ -193,7 +193,7 @@ mod tests {
     /// An 80 × 40 layer, black left of x = 20 and white right of it.
     fn bar() -> Document {
         let mut d = doc(80, 40, WHITE);
-        for c in d.layers[0].channels_mut()[..3] {
+        for c in &mut d.layers[0].channels_mut()[..3] {
             for (i, v) in c.data.iter_mut().enumerate() {
                 if i % 80 < 20 {
                     *v = 0;

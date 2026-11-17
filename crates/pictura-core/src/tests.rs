@@ -420,7 +420,7 @@ fn lock_flags_bits_contains_with_and_all() {
 }
 
 fn channel(layer: &Layer, id: i16) -> &[u8] {
-    layer
+    &layer
         .channels()
         .iter()
         .find(|c| c.id == id)

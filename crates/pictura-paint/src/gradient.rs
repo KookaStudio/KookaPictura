@@ -746,7 +746,7 @@ mod tests {
     #[test]
     fn a_transparency_lock_confines_the_gradient_to_existing_pixels() {
         let mut d = doc(32, 32, [200, 200, 200, 255]);
-        for a in d.layers[0].channels_mut()[3].data[16 * 32..] {
+        for a in &mut d.layers[0].channels_mut()[3].data[16 * 32..] {
             *a = 0;
         }
         lock(&mut d, LockFlags::TRANSPARENCY);

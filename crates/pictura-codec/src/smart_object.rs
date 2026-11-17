@@ -61,10 +61,9 @@ fn resolve_layer(
 ) -> Result<(), PsdError> {
     crate::stage_content::edit_layer_staged(layer, budget, |parts| {
         parts.smart_object = build_smart_object(parts, records, masks);
-        if parts.smart_object.is_some() {
-            if let Some(mode) = crate::stack_marker::stack_marker_from_parts(parts) {
-                parts.smart_object.as_mut().expect("checked").stack_mode = Some(mode);
-            }
+        let stack_mode = crate::stack_marker::stack_marker_from_parts(parts);
+        if let (Some(smart_object), Some(mode)) = (parts.smart_object.as_mut(), stack_mode) {
+            smart_object.stack_mode = Some(mode);
         }
         Ok(())
     })?;
@@ -79,7 +78,7 @@ fn build_smart_object(
     records: &[LinkedRecord],
     masks: &[crate::filter_effects::FilterMaskRecord],
 ) -> Option<SmartObject> {
-    let block = find_config_block(&layer.extra_blocks())?;
+    let block = find_config_block(layer.extra_blocks())?;
     let raw = block.data.clone();
     // `uuid` links the layer to its linked-source record (`Idnt`); `placed` is
     // the second SoLd uuid, which the document-level filter effect (`FEid`) is

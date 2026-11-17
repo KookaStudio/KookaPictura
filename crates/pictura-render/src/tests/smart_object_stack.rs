@@ -384,7 +384,7 @@ fn rasterize_keeps_the_proxy_when_the_stack_does_not_apply() {
         2,
     );
     assert!(rasterize_smart_object(&mut one, "0"));
-    assert_eq!(one.layers[0].channels(), proxy);
+    assert_eq!(one.layers[0].channels(), &proxy);
     assert!(one.layers[0].smart_object().is_none());
 
     let proxy = proxy_rgb((255, 0, 0), 2);
@@ -395,7 +395,7 @@ fn rasterize_keeps_the_proxy_when_the_stack_does_not_apply() {
         2,
     );
     assert!(rasterize_smart_object(&mut unreadable, "0"));
-    assert_eq!(unreadable.layers[0].channels(), proxy);
+    assert_eq!(unreadable.layers[0].channels(), &proxy);
     assert!(unreadable.layers[0].smart_object().is_none());
 }
 

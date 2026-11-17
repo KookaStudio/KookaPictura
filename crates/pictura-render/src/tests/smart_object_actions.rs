@@ -24,7 +24,7 @@ fn reset_restores_native_placement_and_keeps_the_object() {
     assert!(reset_smart_object_transform(&mut d, "0"));
     assert_eq!(d.layers[0].rect, rect(0, 0, 2, 2));
     assert!(d.layers[0].channels().is_empty());
-    assert_eq!(d.layers[0].smart_object(), so_before);
+    assert_eq!(d.layers[0].smart_object(), so_before.as_ref());
 }
 
 #[test]
@@ -84,7 +84,7 @@ fn convert_to_layers_yields_source_at_the_object_position() {
     assert_eq!(d.layers.len(), 1);
     assert_eq!(d.layers[0].rect, rect(5, 7, 8, 9));
     assert!(d.layers[0].smart_object().is_none());
-    assert_eq!(d.layers[0].channels(), proxy);
+    assert_eq!(d.layers[0].channels(), &proxy);
 }
 
 #[test]
@@ -227,7 +227,7 @@ fn fit_smart_object_scales_an_oversized_source() {
     // 40 × 20 into 10 × 10: scale 0.25, fitted 10 × 5, centred at y = 2.
     assert_eq!(d.layers[1].rect, rect(2, 0, 7, 10));
     assert!(d.layers[1].channels().is_empty());
-    assert_eq!(d.layers[1].smart_object(), object);
+    assert_eq!(d.layers[1].smart_object(), object.as_ref());
     assert_eq!(
         d.layers[1].smart_object().unwrap().payload(),
         Some(payload.as_slice())
@@ -306,7 +306,7 @@ fn transform_smart_object_rect_keeps_the_source() {
 
     assert_eq!(d.layers[1].rect, rect(0, 0, 8, 8));
     assert!(d.layers[1].channels().is_empty());
-    assert_eq!(d.layers[1].smart_object(), object);
+    assert_eq!(d.layers[1].smart_object(), object.as_ref());
     assert_eq!(
         d.layers[1].smart_object().unwrap().payload(),
         Some(payload.as_slice())

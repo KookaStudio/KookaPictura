@@ -598,7 +598,7 @@ fn lfx2_wins_when_both_blocks_are_present() {
 
     // The composite ignores the legacy block entirely.
     let mut only_lfx2 = legacy_layer(lfx2_block);
-    only_lfx2.extra_blocks().truncate(1);
+    pictura_codec::edit_layer(&mut only_lfx2, |parts| parts.extra_blocks.truncate(1));
     assert_eq!(compose_legacy(both), compose_legacy(only_lfx2));
 }
 
