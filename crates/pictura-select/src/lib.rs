@@ -57,10 +57,9 @@ pub enum SelectError {
 /// A document-sized 8-bit selection coverage mask (0 = outside, 255 = inside),
 /// stored as a tiled mask (#1214).
 ///
-/// ponytail: the selection operations, the fills, the wand and Quick Mask read
-/// `data` tile by tile; the other consumers (adjustments, clipboard, mask
-/// edits, healing, filters) still read it as one slice, a counted
-/// materialization.
+/// Consumers read `data` by tiles or rows (#1214, #1268): `Plane` derefs to a
+/// slice, and that deref materializes a tiled selection into one canvas-sized
+/// copy (counted). Refine Edge is the one consumer left on that path.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Selection {
     pub width: u32,
@@ -440,6 +439,14 @@ impl Selection {
         }
     }
 
+    /// The coverage as one row-major buffer, copied out of the tiles: unlike a
+    /// deref of `data`, it leaves no cached contiguous copy behind (#1268).
+    pub fn coverage_bytes(&self) -> Vec<u8> {
+        let mut out = vec![0u8; self.data.len()];
+        self.data.read_into(0, &mut out);
+        out
+    }
+
     pub fn invert(&self) -> Selection {
         let (w, h) = self.size();
         Self::of(
@@ -466,8 +473,9 @@ impl Selection {
         let scale = (width as f64 / self.width as f64).min(height as f64 / self.height as f64);
         let fitted_w = ((self.width as f64 * scale).round() as u32).clamp(1, width);
         let fitted_h = ((self.height as f64 * scale).round() as u32).clamp(1, height);
-        let source = self.data.as_slice();
         let (sw, sh) = (self.width as usize, self.height as usize);
+        // Two source rows per output row, copied out of the tiles (#1268).
+        let row = |y: usize| self.data.row(y, sw).unwrap_or_default();
         let (tw, th) = (width as usize, height as usize);
         let mut out = vec![0u8; tw * th];
         let offset_x = (tw - fitted_w as usize) / 2;
@@ -478,26 +486,29 @@ impl Selection {
             let y0 = sy.floor() as usize;
             let y1 = (y0 + 1).min(sh - 1);
             let fy = sy - y0 as f64;
+            let (upper, lower) = (row(y0), row(y1));
             for x in 0..fitted_w as usize {
                 let sx = ((x as f64 + 0.5) * sw as f64 / fitted_w as f64 - 0.5)
                     .clamp(0.0, sw as f64 - 1.0);
                 let x0 = sx.floor() as usize;
                 let x1 = (x0 + 1).min(sw - 1);
                 let fx = sx - x0 as f64;
-                let a = f64::from(source[y0 * sw + x0]);
-                let b = f64::from(source[y0 * sw + x1]);
-                let c = f64::from(source[y1 * sw + x0]);
-                let d = f64::from(source[y1 * sw + x1]);
+                let a = f64::from(upper[x0]);
+                let b = f64::from(upper[x1]);
+                let c = f64::from(lower[x0]);
+                let d = f64::from(lower[x1]);
                 let top = a + (b - a) * fx;
                 let bottom = c + (d - c) * fx;
                 let value = top + (bottom - top) * fy;
                 out[(offset_y + y) * tw + offset_x + x] = value.round().clamp(0.0, 255.0) as u8;
             }
         }
+        let mut data = Plane::from(out);
+        data.tile(tw, th);
         Selection {
             width,
             height,
-            data: out.into(),
+            data,
         }
     }
 
