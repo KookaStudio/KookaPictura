@@ -4,7 +4,7 @@
 
 #[cfg(test)]
 use pictura_core::PsdRect;
-use pictura_core::{Channel, Document, LayerMask};
+use pictura_core::{Channel, Coverage, Document, LayerMask};
 
 use super::create::layer_from_background;
 use super::paths::{resolve_path, resolve_path_mut};
@@ -31,7 +31,7 @@ pub fn add_layer_mask(
     doc: &mut Document,
     path: &str,
     kind: LayerMaskKind,
-    selection: Option<&LayerMask>,
+    selection: Option<&Coverage>,
 ) -> bool {
     let Some(canvas) = super::mask_domain::canvas(doc) else {
         return false;
@@ -52,7 +52,7 @@ pub fn add_layer_mask(
     let fallback = layer.is_group || layer.rect.is_empty();
     let content = if fallback { canvas } else { layer.rect };
     let source_rect = if selection_kind {
-        selection.unwrap().rect
+        selection.unwrap().rect()
     } else {
         content
     };
@@ -115,11 +115,7 @@ pub fn add_layer_mask(
                 }
                 LayerMaskKind::RevealSelection | LayerMaskKind::HideSelection => {
                     let sel = selection.unwrap();
-                    let v = if sel.data.is_none() {
-                        sel.default_color
-                    } else {
-                        super::mask_domain::stored(sel, dx, dy)
-                    };
+                    let v = sel.sample(dx, dy);
                     if kind == LayerMaskKind::HideSelection {
                         255 - v
                     } else {
@@ -150,7 +146,7 @@ pub fn add_layer_mask_converting_background(
     doc: &mut Document,
     path: &str,
     kind: LayerMaskKind,
-    selection: Option<&LayerMask>,
+    selection: Option<&Coverage>,
 ) -> bool {
     if !add_layer_mask(doc, path, kind, selection) {
         return false;
@@ -582,7 +578,7 @@ mod tests {
             &mut reveal,
             "0",
             LayerMaskKind::RevealSelection,
-            Some(&pick)
+            Some(&pick.edit_coverage().expect("valid mask geometry"))
         ));
         let mask = reveal.layers[0].mask.as_ref().unwrap();
         assert_eq!(mask.data.as_deref(), Some(&[255u8, 0][..]));
@@ -595,7 +591,7 @@ mod tests {
             &mut hide,
             "0",
             LayerMaskKind::HideSelection,
-            Some(&pick)
+            Some(&pick.edit_coverage().expect("valid mask geometry"))
         ));
         let mask = hide.layers[0].mask.as_ref().unwrap();
         assert_eq!(mask.data.as_deref(), Some(&[0u8, 255][..]));
@@ -620,7 +616,11 @@ mod tests {
             &mut doc,
             "0",
             LayerMaskKind::RevealSelection,
-            Some(&selection(&[255, 0]))
+            Some(
+                &(selection(&[255, 0]))
+                    .edit_coverage()
+                    .expect("valid mask geometry")
+            )
         ));
         let masked = composite_rgba(&doc);
         assert!(apply_layer_mask(&mut doc, "0"));
@@ -731,7 +731,12 @@ mod tests {
             LayerMaskKind::FromTransparency,
         ] {
             let mut doc = doc(2, 1);
-            assert!(add_layer_mask(&mut doc, "0", kind, Some(&selection)));
+            assert!(add_layer_mask(
+                &mut doc,
+                "0",
+                kind,
+                Some(&selection.edit_coverage().expect("valid mask geometry"))
+            ));
             assert!(layer_mask_linked(&doc, "0"), "{kind:?}");
             assert_eq!(
                 doc.layers[0].mask.as_ref().unwrap().flags & 1,

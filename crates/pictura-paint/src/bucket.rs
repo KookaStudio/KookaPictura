@@ -12,6 +12,7 @@
 //! (<https://github.com/perfecto25/photorust>), extended with the pattern
 //! fill. Behavioural parity only.
 
+use pictura_core::Coverage;
 use std::ops::Range;
 
 use crate::eraser::antialias_mask;
@@ -215,7 +216,7 @@ pub fn flood(
     source: BucketSource<'_>,
     canvas: (u32, u32),
     bounds: PsdRect,
-    selection: Option<&TiledMask>,
+    selection: Option<&Coverage>,
     seed: (i32, i32),
     tolerance: u8,
     contiguous: bool,
@@ -268,7 +269,7 @@ fn flood_in(
     source: BucketSource<'_>,
     canvas: (u32, u32),
     bounds: PsdRect,
-    selection: Option<&TiledMask>,
+    selection: Option<&Coverage>,
     query: Query,
 ) -> Option<TiledMask> {
     let Query {
@@ -291,7 +292,7 @@ fn flood_in(
         return None;
     }
     let (sx, sy) = (seed.0 as usize, seed.1 as usize);
-    if selection.is_some_and(|s| s.sample(sy * cw + sx).is_none_or(|v| v == 0)) {
+    if selection.is_some_and(|s| s.sample(seed.0, seed.1) == 0) {
         return None;
     }
     let mut target = [[0u8; 4]];
@@ -341,7 +342,7 @@ fn flood_in(
             source.row(y as i32, x0 as i32, &mut pixels);
             if let Some(s) = selection {
                 open.fill(0);
-                s.read_rect_into(xs.clone(), y..y + 1, cw, &mut open);
+                s.read_row(x0 as i32, y as i32, &mut open);
             }
             for dx in ix0 - x0..ix1 - x0 {
                 out[dx] = open[dx] > 0 && matches(&pixels[dx]);
@@ -367,7 +368,7 @@ pub fn antialias(
     flood: TiledMask,
     canvas: (u32, u32),
     bounds: PsdRect,
-    selection: Option<&TiledMask>,
+    selection: Option<&Coverage>,
 ) -> TiledMask {
     let (cw, ch) = (canvas.0 as usize, canvas.1 as usize);
     let clip = bounds.intersect(PsdRect {
@@ -423,7 +424,15 @@ pub fn antialias(
             flood.read_rect_into(wx0..wx1, wy0..wy1, cw, &mut window);
             if let Some(s) = selection {
                 let mut wall = vec![0u8; ww * wh];
-                s.read_rect_into(wx0..wx1, wy0..wy1, cw, &mut wall);
+                s.read_rect(
+                    PsdRect {
+                        left: wx0 as i32,
+                        top: wy0 as i32,
+                        right: wx1 as i32,
+                        bottom: wy1 as i32,
+                    },
+                    &mut wall,
+                );
                 for (m, &v) in window.iter_mut().zip(&wall) {
                     if v == 0 {
                         *m = 255;
@@ -458,7 +467,7 @@ pub fn fill(
     paint: BucketPaint<'_>,
     mode: PaintMode,
     opacity: f32,
-    selection: Option<&TiledMask>,
+    selection: Option<&Coverage>,
     alpha: Alpha,
 ) -> Option<PsdRect> {
     let opacity = opacity.clamp(0.0, 1.0);
@@ -526,7 +535,7 @@ pub fn fill_within(
     paint: BucketPaint<'_>,
     mode: PaintMode,
     opacity: f32,
-    selection: Option<&TiledMask>,
+    selection: Option<&Coverage>,
     alpha: Alpha,
 ) -> Option<PsdRect> {
     let opacity = opacity.clamp(0.0, 1.0);
@@ -594,7 +603,7 @@ pub fn fill_tiled(
     paint: BucketPaint<'_>,
     mode: PaintMode,
     opacity: f32,
-    selection: Option<&TiledMask>,
+    selection: Option<&Coverage>,
     alpha: Alpha,
 ) -> Option<PsdRect> {
     let opacity = opacity.clamp(0.0, 1.0);
@@ -611,9 +620,10 @@ pub fn fill_tiled(
         right: x1 as i32,
     }
     .intersect(bounds)?;
+    let mask_coverage = Coverage::for_canvas(mask, doc.width, doc.height)?;
     let through = Through {
         selection,
-        mask: Some(mask),
+        mask: Some(&mask_coverage),
         solid: matches!(paint, BucketPaint::Foreground(_)),
     };
     fill_layer_within(
@@ -651,7 +661,7 @@ pub fn fill_tiled(
 pub fn stroke_selection(
     doc: &mut Document,
     path: &str,
-    selection: &TiledMask,
+    selection: &Coverage,
     bounds: PsdRect,
     color: Rgba,
     width: u32,
@@ -660,7 +670,7 @@ pub fn stroke_selection(
     opacity: f32,
 ) -> Option<PsdRect> {
     let (w, h) = (doc.width as i32, doc.height as i32);
-    if width == 0 || opacity <= 0.0 || selection.len() < (w * h) as usize {
+    if width == 0 || opacity <= 0.0 {
         return None;
     }
     let radius = width.min(u32::from(u16::MAX)) as i32;
@@ -670,6 +680,13 @@ pub fn stroke_selection(
         StrokeAlign::Center => ((radius + 1) / 2, radius / 2),
     };
     let window = stroke_window(bounds, out_r.max(in_r) + 1, (w, h))?;
+    let selection_plane = selection.plane_within(PsdRect {
+        left: 0,
+        top: 0,
+        right: w,
+        bottom: h,
+    })?;
+    let selection = &selection_plane;
     let (wu, hu) = (w as usize, h as usize);
     let covered = coverage_bounds(selection, wu, hu).and_then(|(x0, y0, x1, y1)| {
         PsdRect {

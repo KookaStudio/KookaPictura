@@ -147,12 +147,16 @@ fn apply_fill(
     view: &mut PictureViewRust,
     path: &str,
     label: &str,
-    edit: impl FnOnce(&mut Document, PsdRect, Option<&TiledMask>) -> Option<PsdRect>,
+    edit: impl FnOnce(&mut Document, PsdRect, Option<&pictura_core::Coverage>) -> Option<PsdRect>,
 ) {
     view.layer_target = LayerTarget::only(path);
     let doc = view.session.doc.as_ref().expect("document");
     let canvas = canvas(doc.width);
-    let selection = view.session.selection.as_ref().map(|s| &s.data);
+    let selection = view
+        .session
+        .selection
+        .as_ref()
+        .map(pictura_select::Selection::coverage);
     let bounds = match selection {
         Some(_) => view
             .selection_mask_bounds()
@@ -161,7 +165,7 @@ fn apply_fill(
         None => canvas,
     };
     let mut edited = doc.clone();
-    let rect = edit(&mut edited, bounds, selection).expect("the fill changes pixels");
+    let rect = edit(&mut edited, bounds, selection.as_ref()).expect("the fill changes pixels");
     view.session.doc = Some(edited);
     view.refresh_regions(&[rect]);
     record(view, label);

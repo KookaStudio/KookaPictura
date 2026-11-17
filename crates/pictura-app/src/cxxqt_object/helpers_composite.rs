@@ -1,10 +1,9 @@
 use super::helpers::paint_timing;
 use cxx_qt_lib::{QImage, QImageFormat};
 use pictura_codec::buffer_to_srgb;
-use pictura_core::{BlendMode, Document, Layer, LayerMask, PixelBuffer, Plane, PsdRect};
+use pictura_core::{BlendMode, Document, Layer, LayerMask, PixelBuffer, PsdRect};
 use pictura_paint::stamp::{layer_surface, sample_scope, surface_from_composite, CloneSampling};
 use pictura_render::PyramidLevel;
-use pictura_select::Selection;
 use std::time::Instant;
 /// The pure half of a region refresh: the clamped origin, the working-space
 /// buffer and its straight-sRGB frame. Patching the view is the caller's.
@@ -119,39 +118,47 @@ pub(super) fn crop_planar(buffer: &PixelBuffer, x0: i32, y0: i32, w: u32, h: u32
         data: data.into(),
     }
 }
-/// A full-frame raster mask whose coverage is the selection.
-pub(super) fn selection_to_mask(selection: &Selection, doc: &Document) -> LayerMask {
-    LayerMask {
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: doc.height as i32,
-            right: doc.width as i32,
-        },
-        default_color: 0,
-        disabled: false,
-        flags: 0,
-        data: Some(selection.data.clone()),
-        ..Default::default()
-    }
-}
 /// The mask a new fill or adjustment layer receives when the matching default
 /// is enabled: the active selection when there is one, else a white
 /// document-sized reveal-all mask.
-pub(super) fn default_layer_mask(doc: &Document, selection: Option<LayerMask>) -> LayerMask {
-    selection.unwrap_or_else(|| LayerMask {
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: doc.height as i32,
-            right: doc.width as i32,
-        },
-        default_color: 255,
-        disabled: false,
-        flags: 1,
-        data: Some(vec![255u8; doc.width as usize * doc.height as usize].into()),
-        ..Default::default()
-    })
+pub(super) fn default_layer_mask(
+    doc: &Document,
+    selection: Option<pictura_core::Coverage>,
+) -> LayerMask {
+    selection
+        .map(|coverage| LayerMask {
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: doc.height as i32,
+                right: doc.width as i32,
+            },
+            default_color: 0,
+            data: Some(
+                coverage
+                    .plane_within(PsdRect {
+                        top: 0,
+                        left: 0,
+                        bottom: doc.height as i32,
+                        right: doc.width as i32,
+                    })
+                    .expect("valid document coverage"),
+            ),
+            ..Default::default()
+        })
+        .unwrap_or_else(|| LayerMask {
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: doc.height as i32,
+                right: doc.width as i32,
+            },
+            default_color: 255,
+            disabled: false,
+            flags: 1,
+            data: Some(vec![255u8; doc.width as usize * doc.height as usize].into()),
+            ..Default::default()
+        })
 }
 
 /// A document-sized selection plane cropped to `rect` in mask-local coordinates
@@ -160,14 +167,6 @@ pub(super) fn crop_selection(data: &[u8], doc_w: u32, doc_h: u32, rect: PsdRect)
     crop_rows(doc_w, doc_h, rect, |y, xs, out| {
         let src = y * doc_w as usize;
         out.copy_from_slice(&data[src + xs.start..src + xs.end]);
-    })
-}
-
-/// [`crop_selection`] of a plane, tiled or flat, read one row at a time so a
-/// tiled selection is never materialized (#1214).
-pub(super) fn crop_plane(data: &Plane<u8>, doc_w: u32, doc_h: u32, rect: PsdRect) -> Vec<u8> {
-    crop_rows(doc_w, doc_h, rect, |y, xs, out| {
-        data.read_rect_into(xs, y..y + 1, doc_w as usize, out);
     })
 }
 
@@ -203,22 +202,6 @@ fn crop_rows(
         );
     }
     out
-}
-/// The selection cropped to `rect` as a full-rect coverage mask, for an edit
-/// that runs on a mask-sized document.
-pub(super) fn selection_mask_for(selection: &Selection, rect: PsdRect) -> LayerMask {
-    let (w, h) = (rect.width().max(0), rect.height().max(0));
-    LayerMask {
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: h,
-            right: w,
-        },
-        default_color: 0,
-        data: Some(crop_plane(&selection.data, selection.width, selection.height, rect).into()),
-        ..Default::default()
-    }
 }
 /// The buffer a wand samples: the composited layer stack when present,
 /// otherwise the embedded PSD composite.

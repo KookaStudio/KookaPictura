@@ -3,7 +3,6 @@ use super::*;
 use super::super::super::helpers::{
     active_layer_visible, active_pixel_layer, active_pixel_layer_mut,
 };
-use super::super::super::helpers_composite::selection_to_mask;
 use super::super::super::state::PictureViewRust;
 use crate::cxxqt_object::edit::Edit;
 #[cfg(test)]
@@ -28,11 +27,11 @@ pub(super) fn apply_matte(
 ) -> Option<Result<(), MattingError>> {
     let active = rust.layer_target.single().map(str::to_string);
     let mask = {
-        let doc = rust.session.doc.as_ref()?;
+        rust.session.doc.as_ref()?;
         rust.session
             .selection
             .as_ref()
-            .map(|selection| selection_to_mask(selection, doc))
+            .map(|selection| selection.coverage())
     };
     let doc = rust.session.doc.as_mut()?;
     if !active_layer_visible(doc, active.as_deref()) {

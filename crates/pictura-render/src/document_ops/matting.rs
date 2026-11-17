@@ -7,7 +7,7 @@
 //! gated by an optional coverage mask (the active selection), refuse a locked or
 //! empty layer, and never change transparency.
 
-use pictura_core::{layer_pixel_locked, Layer, LayerMask};
+use pictura_core::{layer_pixel_locked, Coverage, Layer};
 
 /// The background colour assumed to have been composited into the layer alpha.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -42,7 +42,7 @@ impl std::error::Error for MattingError {}
 pub fn remove_matte(
     layer: &mut Layer,
     background: MatteBackground,
-    mask: Option<&LayerMask>,
+    mask: Option<&Coverage>,
 ) -> Result<(), MattingError> {
     if layer_pixel_locked(layer) {
         return Err(MattingError::Locked);
@@ -85,7 +85,7 @@ pub fn remove_matte(
 pub fn defringe(
     layer: &mut Layer,
     width: u32,
-    mask: Option<&LayerMask>,
+    mask: Option<&Coverage>,
 ) -> Result<(), MattingError> {
     if layer_pixel_locked(layer) {
         return Err(MattingError::Locked);
@@ -271,6 +271,9 @@ fn channel_mut(layer: &mut Layer, id: i16) -> Option<&mut [u8]> {
 }
 
 #[cfg(test)]
+use pictura_core::LayerMask;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use pictura_core::{BlendMode, Channel, ColorLabel, LockFlags, PsdRect};
@@ -376,7 +379,12 @@ mod tests {
     fn remove_matte_honours_mask_coverage() {
         let mut l = layer(2, 1, [100, 100, 100], vec![128, 128]);
         let m = mask(|i| if i == 0 { 255 } else { 0 }, 2);
-        remove_matte(&mut l, MatteBackground::Black, Some(&m)).unwrap();
+        remove_matte(
+            &mut l,
+            MatteBackground::Black,
+            Some(&m.edit_coverage().expect("valid mask geometry")),
+        )
+        .unwrap();
         assert_ne!(chan(&l, 0)[0], 100, "covered pixel un-matted");
         assert_eq!(chan(&l, 0)[1], 100, "uncovered pixel untouched");
     }
@@ -464,7 +472,12 @@ mod tests {
             }
         }
         let m = mask(|i| if i == 1 { 0 } else { 255 }, 5);
-        defringe(&mut l, 1, Some(&m)).unwrap();
+        defringe(
+            &mut l,
+            1,
+            Some(&m.edit_coverage().expect("valid mask geometry")),
+        )
+        .unwrap();
         assert_eq!(chan(&l, 2)[1], 10, "masked-out band pixel keeps its colour");
         assert_eq!(chan(&l, 2)[3], 200, "an uncovered band pixel changes");
     }

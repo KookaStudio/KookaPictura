@@ -252,7 +252,13 @@ fn selection_move_drag_costs() {
     report(
         "move_mask_selection_content (release)",
         &mut time(5, || {
-            move_mask_selection_content(&mut doc, "0", &coverage, 37, 41, false, 0)
+            let (width, height) = (doc.width, doc.height);
+            match pictura_core::Coverage::for_canvas(&(coverage), width, height) {
+                Some(coverage) => {
+                    move_mask_selection_content(&mut doc, "0", &coverage, 37, 41, false, 0)
+                }
+                None => false,
+            }
         }),
     );
 }

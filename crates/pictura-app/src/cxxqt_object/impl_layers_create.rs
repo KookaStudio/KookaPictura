@@ -7,7 +7,6 @@
 //! a missing document, or a missing selection returns empty and records nothing.
 
 use super::helpers::{as_str_slice, list_of_strings};
-use super::helpers_composite::selection_to_mask;
 use super::qobject;
 use crate::cxxqt_object::edit::{insertion_edit, structural, structural_paths, Edit};
 use core::pin::Pin;
@@ -188,13 +187,13 @@ impl qobject::PictureView {
         }
         let mask = {
             let rust = self.rust();
-            let Some(doc) = rust.session.doc.as_ref() else {
+            let Some(_doc) = rust.session.doc.as_ref() else {
                 return QString::default();
             };
             let Some(selection) = rust.session.selection.as_ref() else {
                 return QString::default();
             };
-            selection_to_mask(selection, doc)
+            selection.coverage()
         };
         let mut created = String::new();
         self.as_mut().edit(

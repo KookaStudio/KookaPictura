@@ -575,7 +575,7 @@ fn content_move_region_fixture() -> (Document, PixelBuffer, PixelBuffer, PsdRect
     let mut picture = before.clone();
 
     let selection = rect_selection(64, 64, 12, 10, 40, 36);
-    let mask = selection_to_mask(&selection, &doc);
+    let mask = (&selection).coverage();
     let (dx, dy) = (9, 6);
     assert!(pictura_render::move_selection_content(
         &mut doc, &path, &mask, dx, dy, false

@@ -1,7 +1,7 @@
 use super::*;
 
 use super::super::super::edit::Edit;
-use super::super::super::helpers_composite::{default_layer_mask, rgba_image, selection_to_mask};
+use super::super::super::helpers_composite::{default_layer_mask, rgba_image};
 use super::super::super::impl_layers_create::{decode_blend_key, decode_color};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -512,9 +512,7 @@ pub(super) fn add_fill_layer(
         if use_mask {
             layer.mask = Some(default_layer_mask(
                 doc,
-                selection
-                    .as_ref()
-                    .map(|selection| selection_to_mask(selection, doc)),
+                selection.as_ref().map(|selection| selection.coverage()),
             ));
         }
         created = pictura_render::insert_layer(doc, &selection_path, layer);

@@ -7,10 +7,11 @@
 //! single layer is transparency-locked so opacity stays 255 while its colour
 //! plane carries the coverage.
 
-use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, LockFlags, Plane, PsdRect};
+use pictura_core::{BitDepth, Channel, ColorMode, Coverage, Document, Layer, LockFlags, PsdRect};
 
-use super::clipboard::coverage_bounds;
 use super::paths::{resolve_path, resolve_path_mut};
+#[cfg(test)]
+use pictura_core::Plane;
 
 /// A layer's raster mask as a standalone document: `document` is a canvas-sized
 /// grayscale image whose one layer's colour plane is the coverage, and `rect`
@@ -125,7 +126,7 @@ pub fn write_mask_back(
 pub fn move_mask_selection_content(
     doc: &mut Document,
     path: &str,
-    coverage: &Plane<u8>,
+    coverage: &Coverage,
     dx: i32,
     dy: i32,
     duplicate: bool,
@@ -137,12 +138,7 @@ pub fn move_mask_selection_content(
     let Some(canvas) = super::mask_domain::canvas(doc) else {
         return false;
     };
-    let w = doc.width as usize;
-    let h = doc.height;
-    if coverage.len() != w * h as usize {
-        return false;
-    }
-    let Some(bounds) = coverage_bounds(coverage, doc.width, h) else {
+    let Some(bounds) = coverage.covered_bounds(canvas) else {
         return false;
     };
     let Some(dest) = super::mask_domain::translated(bounds, dx, dy) else {
@@ -159,9 +155,7 @@ pub fn move_mask_selection_content(
     };
     if !duplicate {
         for y in bounds.top..bounds.bottom {
-            let Some(row) = coverage_row(coverage, y, bounds, w) else {
-                return false;
-            };
+            let row = coverage.row(bounds.left, y, bounds.width() as usize);
             for x in bounds.left..bounds.right {
                 let selected = row[(x - bounds.left) as usize];
                 if selected != 0
@@ -179,9 +173,7 @@ pub fn move_mask_selection_content(
         }
     }
     for y in bounds.top..bounds.bottom {
-        let Some(row) = coverage_row(coverage, y, bounds, w) else {
-            return false;
-        };
+        let row = coverage.row(bounds.left, y, bounds.width() as usize);
         for x in bounds.left..bounds.right {
             let selected = row[(x - bounds.left) as usize];
             if selected == 0 {
@@ -197,17 +189,6 @@ pub fn move_mask_selection_content(
     }
     pending.publish(layer);
     true
-}
-
-/// Row `y` of a `w`-wide coverage plane over `bounds`' columns.
-fn coverage_row(
-    coverage: &Plane<u8>,
-    y: i32,
-    bounds: PsdRect,
-    w: usize,
-) -> Option<std::borrow::Cow<'_, [u8]>> {
-    let xs = bounds.left as usize..bounds.right as usize;
-    coverage.row_span(y as usize, xs, w)
 }
 
 /// `top` over `bottom` with `alpha` (`0..=255`), in straight 8-bit coverage.
@@ -501,9 +482,15 @@ mod tests {
         let canvas = doc.width as usize * doc.height as usize;
         if coverage.len() == canvas {
             let coverage = Plane::from(coverage.to_vec());
-            return super::move_mask_selection_content(
-                doc, path, &coverage, dx, dy, duplicate, background,
-            );
+            return {
+                let (width, height) = (doc.width, doc.height);
+                match pictura_core::Coverage::for_canvas(&(coverage), width, height) {
+                    Some(coverage) => super::move_mask_selection_content(
+                        doc, path, &coverage, dx, dy, duplicate, background,
+                    ),
+                    None => false,
+                }
+            };
         }
         let Some(mask) = resolve_path(doc, path).and_then(|l| l.mask.as_ref()) else {
             return false;
@@ -512,9 +499,15 @@ mod tests {
         let h = mask.rect.height().max(0) as usize;
         if coverage.len() != w * h {
             let coverage = Plane::from(coverage.to_vec());
-            return super::move_mask_selection_content(
-                doc, path, &coverage, dx, dy, duplicate, background,
-            );
+            return {
+                let (width, height) = (doc.width, doc.height);
+                match pictura_core::Coverage::for_canvas(&(coverage), width, height) {
+                    Some(coverage) => super::move_mask_selection_content(
+                        doc, path, &coverage, dx, dy, duplicate, background,
+                    ),
+                    None => false,
+                }
+            };
         }
         let mut expanded = vec![0; canvas];
         for y in 0..h {
@@ -526,7 +519,15 @@ mod tests {
             }
         }
         let expanded = Plane::from(expanded);
-        super::move_mask_selection_content(doc, path, &expanded, dx, dy, duplicate, background)
+        {
+            let (width, height) = (doc.width, doc.height);
+            match pictura_core::Coverage::for_canvas(&(expanded), width, height) {
+                Some(coverage) => super::move_mask_selection_content(
+                    doc, path, &coverage, dx, dy, duplicate, background,
+                ),
+                None => false,
+            }
+        }
     }
 
     #[test]

@@ -36,7 +36,8 @@ use crate::replace::{dab_bounds, grow, match_strength, reachable, Limits, Sampli
 use crate::stamp::StampSource;
 use crate::stroke::{layer_at, layer_at_mut, parse_layer_path};
 use crate::{tip_coverage, PaintError, PaintMode, Rgba, Stroke, StrokeConfig};
-use pictura_core::mask_ops::{coverage_bounds, TiledMask};
+#[cfg(test)]
+use pictura_core::mask_ops::TiledMask;
 use pictura_core::{
     layer_transparency_locked, Channel, Document, Layer, Plane, PsdRect, TileState,
 };
@@ -308,17 +309,28 @@ pub fn ensure_alpha(layer: &mut Layer) {
 pub fn magic_erase(
     doc: &mut Document,
     path: &str,
-    mask: &TiledMask,
+    mask: &pictura_core::Coverage,
     opacity: f32,
     background: Rgba,
 ) -> Option<PsdRect> {
     let opacity = opacity.clamp(0.0, 1.0);
     let canvas = (doc.width as i32, doc.height as i32);
     let (cw, ch) = (canvas.0.max(0) as usize, canvas.1.max(0) as usize);
-    if opacity <= 0.0 || mask.len() < cw * ch {
+    if opacity <= 0.0 {
         return None;
     }
-    let (mx0, my0, mx1, my1) = coverage_bounds(mask, cw, ch)?;
+    let bounds = mask.covered_bounds(PsdRect {
+        left: 0,
+        top: 0,
+        right: canvas.0,
+        bottom: canvas.1,
+    })?;
+    let (mx0, my0, mx1, my1) = (
+        bounds.left as usize,
+        bounds.top as usize,
+        bounds.right as usize,
+        bounds.bottom as usize,
+    );
     let layer = layer_at_mut(doc, &parse_layer_path(path)?)?;
     if layer.is_group || layer.adjustment.is_some() {
         return None;
@@ -423,12 +435,7 @@ pub fn magic_erase(
                     if y < 0 || y >= canvas.1 || x0 >= x1 {
                         continue;
                     }
-                    mask.read_rect_into(
-                        x0 as usize..x1 as usize,
-                        y as usize..y as usize + 1,
-                        cw,
-                        &mut row[(x0 - left) as usize..(x1 - left) as usize],
-                    );
+                    mask.read_row(x0, y, &mut row[(x0 - left) as usize..(x1 - left) as usize]);
                     for (dx, v) in tile.row_mut(dy).iter_mut().enumerate() {
                         let cover = row[dx] as f32 / 255.0 * opacity;
                         if cover <= 0.0 {
@@ -863,7 +870,14 @@ mod tests {
         let mut d = doc(false);
         let mut mask = vec![0u8; 40 * 20];
         mask[10 * 40 + 5] = 255;
-        let dirty = magic_erase(&mut d, "0", &TiledMask::from(mask), 0.5, TEAL).expect("erased");
+        let dirty = {
+            let (width, height) = (d.width, d.height);
+            match pictura_core::Coverage::for_canvas(&(TiledMask::from(mask)), width, height) {
+                Some(coverage) => magic_erase(&mut d, "0", &coverage, 0.5, TEAL),
+                None => None,
+            }
+        }
+        .expect("erased");
         assert_eq!((dirty.left, dirty.top), (5, 10));
         let half = pixel(&d, 5, 10);
         assert!((half[3] as i32 - 128).abs() <= 1, "alpha {}", half[3]);
@@ -905,7 +919,14 @@ mod tests {
     fn a_uniform_erase_writes_uniform_alpha_tiles() {
         let mut d = uniform_tiled_doc(false);
         let mask = TiledMask::filled(512, 512, 1, 255);
-        let dirty = magic_erase(&mut d, "0", &mask, 1.0, TEAL).expect("erased");
+        let dirty = {
+            let (width, height) = (d.width, d.height);
+            match pictura_core::Coverage::for_canvas(&(mask), width, height) {
+                Some(coverage) => magic_erase(&mut d, "0", &coverage, 1.0, TEAL),
+                None => None,
+            }
+        }
+        .expect("erased");
         assert_eq!(
             dirty,
             PsdRect {
@@ -941,8 +962,22 @@ mod tests {
         // A flat mask has no uniform tile state, so it takes the per-pixel
         // path with the same coverage.
         let flat = TiledMask::from(vec![255u8; 512 * 512]);
-        assert!(magic_erase(&mut fast, "0", &tiled, 0.5, TEAL).is_some());
-        assert!(magic_erase(&mut dense, "0", &flat, 0.5, TEAL).is_some());
+        assert!({
+            let (width, height) = (fast.width, fast.height);
+            match pictura_core::Coverage::for_canvas(&(tiled), width, height) {
+                Some(coverage) => magic_erase(&mut fast, "0", &coverage, 0.5, TEAL),
+                None => None,
+            }
+        }
+        .is_some());
+        assert!({
+            let (width, height) = (dense.width, dense.height);
+            match pictura_core::Coverage::for_canvas(&(flat), width, height) {
+                Some(coverage) => magic_erase(&mut dense, "0", &coverage, 0.5, TEAL),
+                None => None,
+            }
+        }
+        .is_some());
         for (a, b) in fast.layers[0]
             .channels
             .iter()
@@ -970,7 +1005,14 @@ mod tests {
     fn the_magic_eraser_fills_a_locked_layer_with_the_background_colour() {
         let mut d = doc(true);
         let mask = vec![255u8; 40 * 20];
-        magic_erase(&mut d, "0", &TiledMask::from(mask), 1.0, TEAL).expect("filled");
+        {
+            let (width, height) = (d.width, d.height);
+            match pictura_core::Coverage::for_canvas(&(TiledMask::from(mask)), width, height) {
+                Some(coverage) => magic_erase(&mut d, "0", &coverage, 1.0, TEAL),
+                None => None,
+            }
+        }
+        .expect("filled");
         assert_eq!(pixel(&d, 3, 3), [0, 128, 128, 255]);
         let mut layer = d.layers[0].clone();
         layer.background = false;
@@ -1139,7 +1181,13 @@ mod tests {
                 } else {
                     flood
                 };
-                magic_erase(&mut got, "0", &mask, 0.8, TEAL);
+                {
+                    let (width, height) = (got.width, got.height);
+                    match pictura_core::Coverage::for_canvas(&(mask), width, height) {
+                        Some(coverage) => magic_erase(&mut got, "0", &coverage, 0.8, TEAL),
+                        None => None,
+                    }
+                };
                 for (a, b) in got.layers[0]
                     .channels
                     .iter()

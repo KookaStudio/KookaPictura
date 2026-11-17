@@ -137,7 +137,7 @@ pub(super) fn patch_selection(
         ) else {
             return false;
         };
-        match patch_layer(doc, path, &selection.data, options) {
+        match patch_layer(doc, path, &selection.coverage(), options) {
             Ok(Some(dirty)) => dirty,
             _ => return false,
         }
@@ -170,7 +170,7 @@ pub(super) fn content_aware_move(
         ) else {
             return false;
         };
-        match move_layer(doc, path, &selection.data, options) {
+        match move_layer(doc, path, &selection.coverage(), options) {
             Ok(Some(dirty)) => {
                 *selection = selection.translate(dx, dy);
                 dirty

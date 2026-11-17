@@ -4,7 +4,7 @@
 
 use pictura_core::{
     layer_move_locked, layer_pixel_locked, layer_transparency_locked, BlendMode, Channel,
-    ColorLabel, Document, Layer, LayerMask, LockFlags, Plane, PsdRect,
+    ColorLabel, Coverage, Document, Layer, LockFlags, PsdRect,
 };
 
 use std::borrow::Cow;
@@ -25,7 +25,7 @@ use crate::document_ops::canvas::offset_rect;
 /// Returns the new layer's path; empty when [`can_lift_selection`] refuses the
 /// source, or the selection covers no visible pixel. Put it back with
 /// [`merge_lifted`].
-pub fn lift_selection(doc: &mut Document, source_path: &str, coverage: &Plane<u8>) -> String {
+pub fn lift_selection(doc: &mut Document, source_path: &str, coverage: &Coverage) -> String {
     let Some(segments) = parse_path(source_path) else {
         return String::new();
     };
@@ -55,8 +55,13 @@ pub fn lift_selection(doc: &mut Document, source_path: &str, coverage: &Plane<u8
 /// `source`'s pixels under `coverage`, as a layer at the coverage bounds
 /// (clipped to the source) whose alpha is the source alpha scaled by the
 /// coverage; `None` when no covered pixel is visible.
-fn lifted_copy(source: &Layer, coverage: &Plane<u8>, doc_w: u32, doc_h: u32) -> Option<Layer> {
-    let bounds = coverage_bounds(coverage, doc_w, doc_h)?;
+fn lifted_copy(source: &Layer, coverage: &Coverage, doc_w: u32, doc_h: u32) -> Option<Layer> {
+    let bounds = coverage.covered_bounds(PsdRect {
+        left: 0,
+        top: 0,
+        right: doc_w as i32,
+        bottom: doc_h as i32,
+    })?;
     let rect = bounds.intersect(source.rect)?;
     let (w, h) = (rect.width() as usize, rect.height() as usize);
     let src = source.rect;
@@ -73,7 +78,7 @@ fn lifted_copy(source: &Layer, coverage: &Plane<u8>, doc_w: u32, doc_h: u32) -> 
         let colour_rows: Vec<Cow<'_, [u8]>> =
             colour.iter().map(|c| layer_row(c, sy, src_w)).collect();
         let x0 = rect.left as usize;
-        let covered_row = coverage.row_span(dy, x0..x0 + w, doc_w as usize)?;
+        let covered_row = coverage.row(x0 as i32, dy as i32, w);
         for x in 0..w {
             let dx = x0 + x;
             let covered = covered_row[x];
@@ -383,7 +388,7 @@ fn trim_layer(layer: &mut pictura_core::Layer, bounds: PsdRect) {
 pub fn move_selection_content(
     doc: &mut Document,
     source_path: &str,
-    mask: &LayerMask,
+    mask: &Coverage,
     dx: i32,
     dy: i32,
     duplicate: bool,
@@ -429,7 +434,7 @@ mod tests {
     use super::*;
     use pictura_core::{
         BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LayerMask, LockFlags,
-        PsdRect,
+        Plane, PsdRect,
     };
 
     fn rect(w: i32, h: i32) -> PsdRect {
@@ -516,7 +521,13 @@ mod tests {
     #[test]
     fn lift_copies_the_covered_pixels_trimmed_and_clears_them() {
         let mut doc = doc_with(vec![pixel_layer("base", 4, 4, 40)]);
-        let lifted = lift_selection(&mut doc, "0", &square_coverage());
+        let lifted = {
+            let (width, height) = (doc.width, doc.height);
+            match pictura_core::Coverage::for_canvas(&(square_coverage()), width, height) {
+                Some(coverage) => lift_selection(&mut doc, "0", &coverage),
+                None => String::new(),
+            }
+        };
         assert_eq!(lifted, "1");
         let layer = &doc.layers[1];
         assert_eq!(
@@ -552,7 +563,13 @@ mod tests {
             .with(LockFlags::TRANSPARENCY, true)
             .with(LockFlags::POSITION, true);
         let mut doc = doc_with(vec![background]);
-        let lifted = lift_selection(&mut doc, "0", &square_coverage());
+        let lifted = {
+            let (width, height) = (doc.width, doc.height);
+            match pictura_core::Coverage::for_canvas(&(square_coverage()), width, height) {
+                Some(coverage) => lift_selection(&mut doc, "0", &coverage),
+                None => String::new(),
+            }
+        };
         assert_eq!(lifted, "1");
         assert_eq!(
             channel(&doc.layers[0], 0)[5],
@@ -575,7 +592,16 @@ mod tests {
         background.channels.retain(|c| c.id != -1);
         background.background = true;
         let mut doc = doc_with(vec![background]);
-        assert_eq!(lift_selection(&mut doc, "0", &square_coverage()), "1");
+        assert_eq!(
+            {
+                let (width, height) = (doc.width, doc.height);
+                match pictura_core::Coverage::for_canvas(&(square_coverage()), width, height) {
+                    Some(coverage) => lift_selection(&mut doc, "0", &coverage),
+                    None => String::new(),
+                }
+            },
+            "1"
+        );
         assert_eq!(doc.layers.len(), 2);
     }
 
@@ -594,7 +620,13 @@ mod tests {
         layer.mask = Some(selection_mask(vec![200; 16]));
         let mut doc = doc_with(vec![layer]);
         let before = doc.clone();
-        let lifted = lift_selection(&mut doc, "0", &square_coverage());
+        let lifted = {
+            let (width, height) = (doc.width, doc.height);
+            match pictura_core::Coverage::for_canvas(&(square_coverage()), width, height) {
+                Some(coverage) => lift_selection(&mut doc, "0", &coverage),
+                None => String::new(),
+            }
+        };
         assert_eq!(doc.layers[1].rect.width(), 2, "sized to the selection");
         assert!(merge_lifted(&mut doc, &lifted));
         assert_eq!(doc, before, "opacity, blend, mask, and pixels survive");
@@ -603,7 +635,13 @@ mod tests {
     #[test]
     fn moved_pixels_grow_a_layer_with_alpha() {
         let mut doc = doc_with(vec![pixel_layer("base", 4, 4, 40)]);
-        let lifted = lift_selection(&mut doc, "0", &square_coverage());
+        let lifted = {
+            let (width, height) = (doc.width, doc.height);
+            match pictura_core::Coverage::for_canvas(&(square_coverage()), width, height) {
+                Some(coverage) => lift_selection(&mut doc, "0", &coverage),
+                None => String::new(),
+            }
+        };
         if let Some(layer) = resolve_path_mut(&mut doc, &lifted) {
             layer.rect = offset_rect(layer.rect, 3, 0);
         }
@@ -619,11 +657,32 @@ mod tests {
     #[test]
     fn lift_refuses_empty_coverage_and_pixel_and_position_locks() {
         let mut doc = doc_with(vec![pixel_layer("base", 4, 4, 40)]);
-        assert!(lift_selection(&mut doc, "0", &vec![0; 16].into()).is_empty());
+        assert!({
+            let (width, height) = (doc.width, doc.height);
+            match pictura_core::Coverage::for_canvas(&(vec![0; 16].into()), width, height) {
+                Some(coverage) => lift_selection(&mut doc, "0", &coverage),
+                None => String::new(),
+            }
+        }
+        .is_empty());
         doc.layers[0].lock = LockFlags::default().with(LockFlags::PIXELS, true);
-        assert!(lift_selection(&mut doc, "0", &square_coverage()).is_empty());
+        assert!({
+            let (width, height) = (doc.width, doc.height);
+            match pictura_core::Coverage::for_canvas(&(square_coverage()), width, height) {
+                Some(coverage) => lift_selection(&mut doc, "0", &coverage),
+                None => String::new(),
+            }
+        }
+        .is_empty());
         doc.layers[0].lock = LockFlags::default().with(LockFlags::POSITION, true);
-        assert!(lift_selection(&mut doc, "0", &square_coverage()).is_empty());
+        assert!({
+            let (width, height) = (doc.width, doc.height);
+            match pictura_core::Coverage::for_canvas(&(square_coverage()), width, height) {
+                Some(coverage) => lift_selection(&mut doc, "0", &coverage),
+                None => String::new(),
+            }
+        }
+        .is_empty());
         assert_eq!(doc.layers.len(), 1);
     }
 
@@ -776,8 +835,16 @@ mod tests {
     #[test]
     fn move_cuts_translates_and_merges_without_changing_layer_count() {
         let mut doc = doc_with(vec![pixel_layer("base", 4, 4, 40)]);
-        let moved =
-            move_selection_content(&mut doc, "0", &selection_mask(vec![255; 16]), 2, 0, false);
+        let moved = move_selection_content(
+            &mut doc,
+            "0",
+            &(selection_mask(vec![255; 16]))
+                .edit_coverage()
+                .expect("valid mask geometry"),
+            2,
+            0,
+            false,
+        );
 
         assert!(moved);
         assert_eq!(doc.layers.len(), 1, "the moved copy merges back down");
@@ -796,8 +863,16 @@ mod tests {
     #[test]
     fn move_duplicate_keeps_source_and_adds_a_layer() {
         let mut doc = doc_with(vec![pixel_layer("base", 4, 4, 40)]);
-        let moved =
-            move_selection_content(&mut doc, "0", &selection_mask(vec![255; 16]), 2, 0, true);
+        let moved = move_selection_content(
+            &mut doc,
+            "0",
+            &(selection_mask(vec![255; 16]))
+                .edit_coverage()
+                .expect("valid mask geometry"),
+            2,
+            0,
+            true,
+        );
 
         assert!(moved);
         assert_eq!(doc.layers.len(), 2, "the duplicate is a new layer");
@@ -836,7 +911,12 @@ mod tests {
         let mut doc = doc_with(vec![pixel_layer("base", 4, 4, 40)]);
         let before = doc.clone();
         assert!(!move_selection_content(
-            &mut doc, "0", &no_data, 2, 0, false
+            &mut doc,
+            "0",
+            &no_data.edit_coverage().expect("valid mask geometry"),
+            2,
+            0,
+            false
         ));
         assert_eq!(doc, before, "no mask data refuses without mutation");
 
@@ -848,7 +928,9 @@ mod tests {
         assert!(move_selection_content(
             &mut doc,
             "0",
-            &selection_mask(vec![0; 16]),
+            &(selection_mask(vec![0; 16]))
+                .edit_coverage()
+                .expect("valid mask geometry"),
             2,
             0,
             false
@@ -865,7 +947,14 @@ mod tests {
             doc.layers[0].lock = LockFlags::default().with(flag, true);
             let before = doc.clone();
             assert!(
-                !move_selection_content(&mut doc, "0", &mask, 2, 0, false),
+                !move_selection_content(
+                    &mut doc,
+                    "0",
+                    &mask.edit_coverage().expect("valid mask geometry"),
+                    2,
+                    0,
+                    false
+                ),
                 "flag {flag} refuses the move"
             );
             assert_eq!(doc, before, "refusal leaves the document unchanged");
@@ -875,12 +964,26 @@ mod tests {
         doc.layers[0].lock = LockFlags::default().with(LockFlags::TRANSPARENCY, true);
         let before = doc.clone();
         assert!(
-            !move_selection_content(&mut doc, "0", &mask, 2, 0, false),
+            !move_selection_content(
+                &mut doc,
+                "0",
+                &mask.edit_coverage().expect("valid mask geometry"),
+                2,
+                0,
+                false
+            ),
             "a transparency lock refuses the cut"
         );
         assert_eq!(doc, before);
         assert!(
-            move_selection_content(&mut doc, "0", &mask, 2, 0, true),
+            move_selection_content(
+                &mut doc,
+                "0",
+                &mask.edit_coverage().expect("valid mask geometry"),
+                2,
+                0,
+                true
+            ),
             "a duplicate leaves the source alpha intact"
         );
     }

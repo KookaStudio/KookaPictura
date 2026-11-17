@@ -3,7 +3,6 @@ use super::*;
 use super::super::super::document_session::{FilterPreview, PreviewBaseline, SessionKind};
 use super::super::super::filter_tools::jobs::commit_op_start;
 use super::super::super::helpers::{clamp_region, layer_has_effects};
-use super::super::super::helpers_composite::selection_to_mask;
 use super::super::super::impl_filters::{cancel_filter_preview, pixel_filter_target, ActiveOp};
 use super::super::super::presentation::{Dirty, Presentation, Rebuild};
 use super::super::super::state::PictureViewRust;
@@ -11,10 +10,10 @@ use super::super::decode;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
+use pictura_core::Coverage;
 use pictura_core::{layer_pixel_locked, Document, Layer, PsdRect};
 use pictura_render::Adjustment;
 use pictura_render::DocumentComposite;
-use pictura_select::Selection;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -76,26 +75,30 @@ pub(in crate::cxxqt_object) enum WorkerAdjustRefresh {
 }
 
 /// The pre-preview document and the selection, for a worker.
-pub(super) fn preview_sources(rust: &PictureViewRust) -> Option<(Document, Option<Selection>)> {
+pub(super) fn preview_sources(rust: &PictureViewRust) -> Option<(Document, Option<Coverage>)> {
     let mut doc = rust.session.doc.clone()?;
     if let Some(preview) = rust.session.live.filter_preview() {
         if let Some(layer) = pictura_render::resolve_path_mut(&mut doc, &preview.layer_path) {
             *layer = preview.baseline.original(layer).into_owned();
         }
     }
-    Some((doc, rust.session.selection.clone()))
+    Some((
+        doc,
+        rust.session
+            .selection
+            .as_ref()
+            .map(pictura_select::Selection::coverage),
+    ))
 }
 
 /// Adjust one layer of a cloned document and composite its changed rect.
 pub(super) fn adjust_preview(
     mut doc: Document,
     request: AdjustRequest,
-    selection: Option<Selection>,
+    selection: Option<Coverage>,
     gpu: bool,
 ) -> Option<AdjustResult> {
-    let mask = selection
-        .as_ref()
-        .map(|selection| selection_to_mask(selection, &doc));
+    let mask = selection;
     let mode = pictura_render::document_color_mode(&doc).into();
     let layer = pictura_render::resolve_path_mut(&mut doc, &request.path)?;
     if layer.is_group || layer.adjustment.is_some() || layer_pixel_locked(layer) {

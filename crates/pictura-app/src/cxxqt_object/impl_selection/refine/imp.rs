@@ -1,7 +1,6 @@
 use super::*;
 
 use super::super::super::helpers::active_pixel_layer;
-use super::super::super::helpers_composite::selection_to_mask;
 use super::super::super::impl_layers::coverage_at;
 use super::super::super::picture::{picture, preview_picture, sample_tiles, tile_source};
 use crate::cxxqt_object::edit::Edit;
@@ -497,7 +496,7 @@ pub(super) fn apply(
                 let Some(path) = layer.clone() else {
                     return false;
                 };
-                let mask = selection_to_mask(&refined, doc);
+                let mask = (&refined).coverage();
                 let new_path = pictura_render::layer_via_copy(doc, &path, &mask);
                 if new_path.is_empty() {
                     return false;

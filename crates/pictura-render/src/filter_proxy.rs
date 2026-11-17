@@ -10,7 +10,7 @@
 //! scale inside the proxy, so a preview over such layers is approximate beyond
 //! the filter itself; scale them too if a gallery preview over one matters.
 
-use pictura_core::{Document, Layer, LayerMask, PixelBuffer, Plane, PsdRect};
+use pictura_core::{Coverage, Document, Layer, LayerMask, PixelBuffer, Plane, PsdRect};
 use pictura_filters::{Filter, FilterError};
 use rayon::prelude::*;
 
@@ -19,7 +19,7 @@ use crate::document_ops::for_each_layer;
 
 pub struct FilterProxy {
     doc: Document,
-    selection: Option<LayerMask>,
+    selection: Option<Coverage>,
 }
 
 /// A raster mask's reduced coverage and the reduced composites at its two
@@ -43,7 +43,7 @@ impl FilterProxy {
     /// reduced alongside. `None` for an empty region.
     pub fn new(
         doc: &Document,
-        selection: Option<&LayerMask>,
+        selection: Option<&Coverage>,
         region: PsdRect,
         scale: f64,
     ) -> Option<Self> {
@@ -72,7 +72,11 @@ impl FilterProxy {
                 doc.composite.channels,
             )
         };
-        let selection = selection.map(|mask| reduce_mask(mask, &map));
+        let selection = selection.and_then(|coverage| {
+            let data = coverage.plane_within(region)?;
+            let (rect, samples) = map.plane(&data, 0, region)?;
+            Coverage::new(rect, samples.into(), coverage.outside())
+        });
         Some(Self {
             doc: proxy,
             selection,
@@ -606,10 +610,16 @@ mod tests {
             data: Some(vec![255u8; 1600].into()),
             ..Default::default()
         };
-        let proxy = FilterProxy::new(&doc, Some(&selection), rect(0, 0, 40, 40), 0.25).unwrap();
+        let proxy = FilterProxy::new(
+            &doc,
+            Some(&selection.edit_coverage().expect("valid mask geometry")),
+            rect(0, 0, 40, 40),
+            0.25,
+        )
+        .unwrap();
         let reduced = proxy.selection.as_ref().unwrap();
-        assert_eq!(reduced.rect, rect(0, 0, 10, 10));
-        assert_eq!(reduced.data.as_ref().unwrap().len(), 100);
+        assert_eq!(reduced.rect(), rect(0, 0, 10, 10));
+        assert_eq!(reduced.row(0, 0, 10), vec![255; 10]);
     }
 
     #[test]

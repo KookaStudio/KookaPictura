@@ -750,7 +750,7 @@ fn selection_becomes_full_frame_mask_that_confines_adjustment() {
         height: 1,
         data: vec![255, 255, 0, 0].into(),
     };
-    let mask = selection_to_mask(&selection, &doc);
+    let mask = default_layer_mask(&doc, Some(selection.coverage()));
     assert_eq!(mask.rect.right, 4);
     assert_eq!(mask.rect.bottom, 1);
     assert_eq!(mask.data.as_deref(), Some(&[255u8, 255, 0, 0][..]));
@@ -1100,7 +1100,14 @@ fn content_move_refused_on_locked_layer() {
         doc.layers[0].lock = LockFlags::default().with(flag, true);
         let before = doc.clone();
         assert!(
-            !pictura_render::move_selection_content(&mut doc, "0", &mask, 2, 0, false),
+            !pictura_render::move_selection_content(
+                &mut doc,
+                "0",
+                &mask.edit_coverage().expect("valid mask geometry"),
+                2,
+                0,
+                false
+            ),
             "flag {flag} refuses the content move"
         );
         assert_eq!(doc, before, "refusal leaves the document unchanged");

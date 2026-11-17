@@ -143,7 +143,12 @@ fn mask_creation_preserves_selection_coordinates() {
     };
     for kind in [LayerMaskKind::RevealSelection, LayerMaskKind::HideSelection] {
         let mut doc = fixture();
-        assert!(add_layer_mask(&mut doc, "0", kind, Some(&selection)));
+        assert!(add_layer_mask(
+            &mut doc,
+            "0",
+            kind,
+            Some(&selection.edit_coverage().expect("valid mask geometry"))
+        ));
         let invert = |v| {
             if kind == LayerMaskKind::HideSelection {
                 255 - v
@@ -178,7 +183,7 @@ fn mask_creation_retains_offcanvas_samples() {
         &mut doc,
         "0",
         LayerMaskKind::RevealSelection,
-        Some(&sel)
+        Some(&sel.edit_coverage().expect("valid mask geometry"))
     ));
     assert_eq!(sample(&doc, 13, 9), 64);
 }
@@ -438,15 +443,19 @@ fn selected_mask_move_preserves_offcanvas_samples() {
             let mut coverage = vec![0; 96];
             coverage[15] = 255;
             coverage[16] = 255;
-            assert!(move_mask_selection_content(
-                &mut doc,
-                "0",
-                &Plane::from(coverage.clone()),
-                dx,
-                dy,
-                duplicate,
-                255
-            ));
+            assert!({
+                let (width, height) = (doc.width, doc.height);
+                match pictura_core::Coverage::for_canvas(
+                    &(Plane::from(coverage.clone())),
+                    width,
+                    height,
+                ) {
+                    Some(coverage) => move_mask_selection_content(
+                        &mut doc, "0", &coverage, dx, dy, duplicate, 255,
+                    ),
+                    None => false,
+                }
+            });
             assert_eq!(sample(&doc, 3 + dx, 1 + dy), 1);
             assert_eq!(sample(&doc, 4 + dx, 1 + dy), 64);
             assert_eq!(sample(&doc, 4, 1), if duplicate { 64 } else { 0 });
@@ -456,15 +465,15 @@ fn selected_mask_move_preserves_offcanvas_samples() {
     let mut coverage = vec![0; 96];
     coverage[15] = 255;
     coverage[16] = 255;
-    assert!(move_mask_selection_content(
-        &mut doc,
-        "0",
-        &Plane::from(coverage.clone()),
-        1,
-        0,
-        false,
-        255
-    ));
+    assert!({
+        let (width, height) = (doc.width, doc.height);
+        match pictura_core::Coverage::for_canvas(&(Plane::from(coverage.clone())), width, height) {
+            Some(coverage) => {
+                move_mask_selection_content(&mut doc, "0", &coverage, 1, 0, false, 255)
+            }
+            None => false,
+        }
+    });
     assert_eq!(
         (sample(&doc, 3, 1), sample(&doc, 4, 1), sample(&doc, 5, 1)),
         (0, 1, 64)
@@ -477,15 +486,15 @@ fn selected_mask_move_blends_toward_black() {
     doc.layers[0].mask.as_mut().unwrap().data.as_mut().unwrap()[0] = 200;
     let mut coverage = vec![0; 96];
     coverage[14] = 128;
-    assert!(move_mask_selection_content(
-        &mut doc,
-        "0",
-        &Plane::from(coverage.clone()),
-        5,
-        0,
-        false,
-        255
-    ));
+    assert!({
+        let (width, height) = (doc.width, doc.height);
+        match pictura_core::Coverage::for_canvas(&(Plane::from(coverage.clone())), width, height) {
+            Some(coverage) => {
+                move_mask_selection_content(&mut doc, "0", &coverage, 5, 0, false, 255)
+            }
+            None => false,
+        }
+    });
     assert_eq!((sample(&doc, 2, 1), sample(&doc, 7, 1)), (100, 100));
 }
 
@@ -593,15 +602,15 @@ fn canvas_mask_refusals_are_atomic() {
         assert_eq!(retained, original);
         let mut selected = vec![0; 96];
         selected[15] = 128;
-        assert!(!move_mask_selection_content(
-            &mut retained,
-            "0",
-            &Plane::from(selected),
-            30,
-            0,
-            false,
-            255
-        ));
+        assert!(!{
+            let (width, height) = (retained.width, retained.height);
+            match pictura_core::Coverage::for_canvas(&(Plane::from(selected)), width, height) {
+                Some(coverage) => {
+                    move_mask_selection_content(&mut retained, "0", &coverage, 30, 0, false, 255)
+                }
+                None => false,
+            }
+        });
         assert_eq!(retained, original);
         assert!(!invert_layer_mask(&mut retained, "0"));
         assert_eq!(retained, original);

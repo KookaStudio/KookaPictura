@@ -12,8 +12,7 @@
 
 use super::layer::{heal_layer, layer_rect, HealError};
 use super::{clamped_shift, clone_region, heal_region, HealMode, Transfer, BORDER};
-use pictura_core::mask_ops::coverage_bounds;
-use pictura_core::{Document, Plane, PsdRect};
+use pictura_core::{Coverage, Document, PsdRect};
 
 /// The Patch options bar, plus the drag.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -37,7 +36,7 @@ pub struct PatchOptions {
 pub fn patch_layer(
     doc: &mut Document,
     path: &str,
-    selection: &Plane<u8>,
+    selection: &Coverage,
     options: PatchOptions,
 ) -> Result<Option<PsdRect>, HealError> {
     let Some((bounds, coverage)) = selection_coverage(doc, selection) else {
@@ -91,16 +90,23 @@ pub fn patch_layer(
 /// mask is read tile by tile and row by row, never materialized (#1268).
 pub(super) fn selection_coverage(
     doc: &Document,
-    selection: &Plane<u8>,
+    selection: &Coverage,
 ) -> Option<(PsdRect, Vec<f32>)> {
-    let (w, h) = (doc.width as usize, doc.height as usize);
-    if selection.len() != w * h {
-        return None;
-    }
-    let (x0, y0, x1, y1) = coverage_bounds(selection, w, h)?;
+    let bounds = selection.covered_bounds(PsdRect {
+        left: 0,
+        top: 0,
+        right: doc.width as i32,
+        bottom: doc.height as i32,
+    })?;
+    let (x0, y0, x1, y1) = (
+        bounds.left as usize,
+        bounds.top as usize,
+        bounds.right as usize,
+        bounds.bottom as usize,
+    );
     let mut coverage = Vec::with_capacity((x1 - x0) * (y1 - y0));
     for y in y0..y1 {
-        let row = selection.row_span(y, x0..x1, w)?;
+        let row = selection.row(x0 as i32, y as i32, x1 - x0);
         coverage.extend(row.iter().map(|&v| f32::from(v) / 255.0));
     }
     let bounds = PsdRect {

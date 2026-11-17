@@ -1,6 +1,5 @@
 use super::*;
 
-use super::super::super::helpers_composite::selection_to_mask;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
@@ -47,12 +46,10 @@ pub(super) fn layer_mask_add_path(
     let path = path.to_string();
     let selection = {
         let rust = view.rust();
-        rust.session.doc.as_ref().and_then(|doc| {
-            rust.session
-                .selection
-                .as_ref()
-                .map(|s| selection_to_mask(s, doc))
-        })
+        rust.session
+            .doc
+            .as_ref()
+            .and_then(|_doc| rust.session.selection.as_ref().map(|s| s.coverage()))
     };
     let changed = view
         .as_mut()

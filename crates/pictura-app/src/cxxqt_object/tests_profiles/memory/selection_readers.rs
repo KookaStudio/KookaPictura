@@ -5,7 +5,6 @@
 
 use super::*;
 use crate::cxxqt_object::clipboard::{clip_selection, copy_of};
-use crate::cxxqt_object::helpers_composite::selection_to_mask;
 use crate::cxxqt_object::picture::readers_fixture::{layered, view_of};
 use pictura_core::{Channel, Plane};
 use pictura_paint::healing::{move_layer, patch_layer, MoveOptions, PatchOptions};
@@ -72,7 +71,7 @@ fn selection_readers_do_not_materialize() {
     let mut lifted = doc.clone();
     assert!(!pictura_render::lift_selection(&mut lifted, "0", &coverage).is_empty());
 
-    let mask = selection_to_mask(&selection, &doc);
+    let mask = (&selection).coverage();
     let mut filtered = doc.clone();
     let layer = pictura_render::resolve_path_mut(&mut filtered, "0").expect("layer");
     let blur = pictura_filters::Filter::GaussianBlur { radius: 2.0 };
@@ -83,13 +82,13 @@ fn selection_readers_do_not_materialize() {
         dx: 20,
         ..PatchOptions::default()
     };
-    assert!(patch_layer(&mut patched, "0", &selection.data, patch).is_ok());
+    assert!(patch_layer(&mut patched, "0", &selection.coverage(), patch).is_ok());
     let mut moved = doc.clone();
     let shift = MoveOptions {
         dx: 20,
         ..MoveOptions::default()
     };
-    assert!(move_layer(&mut moved, "0", &selection.data, shift).is_ok());
+    assert!(move_layer(&mut moved, "0", &selection.coverage(), shift).is_ok());
 
     assert_eq!(view.selection_coverage_bytes().len(), (W * H) as usize);
     assert!(view.begin_selection_move());

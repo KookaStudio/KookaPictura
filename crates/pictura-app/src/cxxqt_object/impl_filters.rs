@@ -3,7 +3,6 @@ mod adjustment;
 use super::document_session::{FilterPreview, PreviewBaseline};
 use super::filter_map::filter_from_kind_params;
 use super::helpers::*;
-use super::helpers_composite::*;
 use super::qobject;
 use super::state::PictureViewRust;
 use crate::cxxqt_object::edit::Edit;
@@ -50,13 +49,13 @@ impl qobject::PictureView {
         let fade_capture = super::fade::capture(self.rust());
         let mask = {
             let rust = self.rust();
-            let Some(doc) = rust.session.doc.as_ref() else {
+            let Some(_doc) = rust.session.doc.as_ref() else {
                 return false;
             };
             rust.session
                 .selection
                 .as_ref()
-                .map(|selection| selection_to_mask(selection, doc))
+                .map(|selection| selection.coverage())
         };
         let active = self.rust().layer_target.single().map(str::to_string);
         let applied = {
@@ -236,11 +235,11 @@ pub(super) fn apply_op_active_region(
         if ignore_selection {
             None
         } else {
-            let doc = rust.session.doc.as_ref()?;
+            let _doc = rust.session.doc.as_ref()?;
             rust.session
                 .selection
                 .as_ref()
-                .map(|selection| selection_to_mask(selection, doc))
+                .map(|selection| selection.coverage())
         }
     };
     let native = match (op, rust.session.doc.as_ref()) {
@@ -529,14 +528,14 @@ fn apply_mask_op(
             rust.filter_error = Some("the active layer has no mask to filter".to_string());
             return None;
         };
-        let selection = rust
-            .session
-            .selection
-            .as_ref()
-            .map(|s| selection_mask_for(s, mask.rect));
+        let selection = rust.session.selection.as_ref().map(|s| s.coverage());
         (mask, selection, original)
     };
     let mask_origin = mask.rect;
+    let selection = match selection {
+        Some(coverage) => Some(coverage.rebased(mask_origin.left, mask_origin.top)?),
+        None => None,
+    };
     let result = {
         let layer = mask.document.layers.first_mut()?;
         let rect = layer.rect;

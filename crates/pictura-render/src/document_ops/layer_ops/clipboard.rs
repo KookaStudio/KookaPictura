@@ -9,8 +9,8 @@
 //! clear_selection_pixels}` (<https://github.com/perfecto25/photorust>).
 
 use pictura_core::{
-    layer_pixel_locked, layer_transparency_locked, Document, Layer, LayerMask, PixelBuffer, Plane,
-    PsdRect,
+    layer_pixel_locked, layer_transparency_locked, Coverage, Document, Layer, LayerMask,
+    PixelBuffer, Plane, PsdRect,
 };
 use rayon::prelude::*;
 use std::collections::HashMap;
@@ -82,14 +82,14 @@ pub enum PasteMode {
 /// Copy the selected pixels of the layer at `path`. Refuses (`None`) a group,
 /// an adjustment or other channel-less layer, a region that misses the layer or
 /// the canvas, and a selection that covers only transparent pixels.
-pub fn copy_layer(doc: &Document, path: &str, selection: Option<&Plane<u8>>) -> Option<Clip> {
+pub fn copy_layer(doc: &Document, path: &str, selection: Option<&Coverage>) -> Option<Clip> {
     let layer = resolve_path(doc, path)?;
     if !has_pixels(layer) {
         return None;
     }
     let region = layer.rect.intersect(canvas(doc))?;
     let region = match selection {
-        Some(coverage) => region.intersect(coverage_bounds(coverage, doc.width, doc.height)?)?,
+        Some(coverage) => region.intersect(coverage.covered_bounds(canvas(doc))?)?,
         None => region,
     };
     let src_w = layer.rect.width() as usize;
@@ -112,15 +112,13 @@ pub fn copy_layer(doc: &Document, path: &str, selection: Option<&Plane<u8>>) -> 
 pub fn copy_merged(
     doc: &Document,
     composite: &PixelBuffer,
-    selection: Option<&Plane<u8>>,
+    selection: Option<&Coverage>,
 ) -> Option<Clip> {
     if composite.channels != 4 || composite.width != doc.width || composite.height != doc.height {
         return None;
     }
     let region = match selection {
-        Some(coverage) => {
-            canvas(doc).intersect(coverage_bounds(coverage, doc.width, doc.height)?)?
-        }
+        Some(coverage) => canvas(doc).intersect(coverage.covered_bounds(canvas(doc))?)?,
         None => canvas(doc),
     };
     let plane = doc.width as usize * doc.height as usize;
@@ -136,13 +134,11 @@ pub fn copy_merged(
 /// large document composites no more than its bounds (#1274).
 pub fn copy_merged_region(
     doc: &Document,
-    selection: Option<&Plane<u8>>,
+    selection: Option<&Coverage>,
     read: impl FnOnce(PsdRect) -> PixelBuffer,
 ) -> Option<Clip> {
     let region = match selection {
-        Some(coverage) => {
-            canvas(doc).intersect(coverage_bounds(coverage, doc.width, doc.height)?)?
-        }
+        Some(coverage) => canvas(doc).intersect(coverage.covered_bounds(canvas(doc))?)?,
         None => canvas(doc),
     };
     let pixels = read(region);
@@ -168,7 +164,7 @@ pub fn copy_merged_region(
 /// white instead. Refuses a group, a channel-less layer, a pixel lock, and a
 /// transparency lock on a layer with alpha. Returns true only when a pixel
 /// changed.
-pub fn clear_layer(doc: &mut Document, path: &str, selection: Option<&Plane<u8>>) -> bool {
+pub fn clear_layer(doc: &mut Document, path: &str, selection: Option<&Coverage>) -> bool {
     let (doc_w, doc_h) = (doc.width, doc.height);
     let Some(layer) = resolve_path_mut(doc, path) else {
         return false;
@@ -191,7 +187,12 @@ pub fn clear_layer(doc: &mut Document, path: &str, selection: Option<&Plane<u8>>
     let (col0, col1) = match selection {
         None => (0, src_w),
         Some(coverage) => {
-            let Some(bounds) = coverage_bounds(coverage, doc_w, doc_h) else {
+            let Some(bounds) = coverage.covered_bounds(PsdRect {
+                left: 0,
+                top: 0,
+                right: doc_w as i32,
+                bottom: doc_h as i32,
+            }) else {
                 return false;
             };
             let x0 = rect.left.max(bounds.left).max(0);
@@ -224,17 +225,8 @@ pub fn clear_layer(doc: &mut Document, path: &str, selection: Option<&Plane<u8>>
                 .data
                 .read_rect_into(col0..col1, row..row + 1, src_w, &mut pixels);
             let mut row_changed = false;
-            let x0 = (rect.left + col0 as i32) as usize;
-            let coverage = match selection {
-                None => None,
-                Some(coverage) => {
-                    let span = x0..x0 + (col1 - col0);
-                    match coverage.row_span(y as usize, span, doc_w as usize) {
-                        Some(row) => Some(row),
-                        None => continue,
-                    }
-                }
-            };
+            let x0 = rect.left + col0 as i32;
+            let coverage = selection.map(|coverage| coverage.row(x0, y, col1 - col0));
             let clear = |value: u8, cov: u8| {
                 if has_alpha {
                     scale(value, 255 - cov)
@@ -285,7 +277,7 @@ pub fn paste_clip(
     clip: &Clip,
     (left, top): (i32, i32),
     mode: PasteMode,
-    selection: Option<&Plane<u8>>,
+    selection: Option<&Coverage>,
 ) -> String {
     let (w, h) = (clip.width(), clip.height());
     let count = w as usize * h as usize;
@@ -391,8 +383,8 @@ pub fn plane_has_coverage(coverage: &Plane<u8>, width: u32, height: u32) -> bool
 /// pixel is transparent after masking.
 fn build(
     region: PsdRect,
-    doc_w: u32,
-    selection: Option<&Plane<u8>>,
+    _doc_w: u32,
+    selection: Option<&Coverage>,
     pixel: impl Fn(i32, i32) -> [u8; 4],
 ) -> Option<Clip> {
     if region.width() <= 0 || region.height() <= 0 {
@@ -402,23 +394,13 @@ fn build(
     let mut rgba = Vec::with_capacity(count * 4);
     let mut mask = Vec::with_capacity(count);
     let mut visible = false;
-    let span = region.left.max(0) as usize..region.right.max(0) as usize;
     for y in region.top..region.bottom {
-        let row = selection.map(|coverage| {
-            (y >= 0)
-                .then(|| coverage.row_span(y as usize, span.clone(), doc_w as usize))
-                .flatten()
-        });
+        let row = selection.map(|coverage| coverage.row(region.left, y, region.width() as usize));
         for x in region.left..region.right {
             let px = pixel(x, y);
-            let cov = match &row {
-                None => 255,
-                Some(row) => row
-                    .as_ref()
-                    .and_then(|row| row.get((x - region.left) as usize))
-                    .copied()
-                    .unwrap_or(0),
-            };
+            let cov = row
+                .as_ref()
+                .map_or(255, |row| row[(x - region.left) as usize]);
             visible |= scale(px[3], cov) > 0;
             rgba.extend_from_slice(&px);
             mask.push(cov);
@@ -433,14 +415,17 @@ fn build(
 
 /// The selection as a document-sized layer mask. Outside the canvas a Paste Into
 /// hides and a Paste Outside shows.
-fn selection_mask(doc: &Document, coverage: &Plane<u8>, invert: bool) -> LayerMask {
+fn selection_mask(doc: &Document, coverage: &Coverage, invert: bool) -> LayerMask {
     use pictura_core::mask_ops::{tiled_view, zip_tiles};
     let (w, h) = (doc.width as usize, doc.height as usize);
+    let plane = coverage
+        .plane_within(canvas(doc))
+        .expect("valid canvas geometry");
     let data = if invert {
-        let view = tiled_view(coverage, w, h);
+        let view = tiled_view(&plane, w, h);
         zip_tiles(&view, &view, w, h, |v, _| 255 - v)
     } else {
-        coverage.clone()
+        plane
     };
     LayerMask {
         rect: canvas(doc),
@@ -454,7 +439,7 @@ fn has_pixels(layer: &Layer) -> bool {
     !layer.is_group && layer.adjustment.is_none() && layer.channels.iter().any(|c| c.id == 0)
 }
 
-fn canvas(doc: &Document) -> PsdRect {
+pub(super) fn canvas(doc: &Document) -> PsdRect {
     PsdRect {
         top: 0,
         left: 0,

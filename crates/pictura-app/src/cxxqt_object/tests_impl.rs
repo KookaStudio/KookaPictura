@@ -647,7 +647,7 @@ fn filter_confines_to_selection_and_skips_adjustment_layer() {
         height: 1,
         data: vec![255, 255, 255, 0, 0, 0, 0, 0].into(),
     };
-    let mask = selection_to_mask(&selection, &doc);
+    let mask = (&selection).coverage();
     let layer = active_pixel_layer_mut(&mut doc, Some("0")).expect("pixel layer");
     assert_eq!(layer.name, "base");
     let before = layer

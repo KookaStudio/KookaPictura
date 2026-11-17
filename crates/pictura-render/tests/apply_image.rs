@@ -44,9 +44,11 @@ fn params(source: &Document, mode: ApplyImageMode) -> ApplyImageParams {
 }
 
 fn run(target: &mut Document, p: &ApplyImageParams, selection: Option<&LayerMask>) {
+    let selection = selection.map(|mask| mask.edit_coverage().expect("valid mask geometry"));
+
     let layer = target.layers.first_mut().unwrap();
     let rect = whole(layer);
-    apply_image_region(layer, p, selection, rect, LAYER).unwrap();
+    apply_image_region(layer, p, selection.as_ref(), rect, LAYER).unwrap();
 }
 
 fn first(target: &Document, id: i16) -> u8 {
