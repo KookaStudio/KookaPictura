@@ -188,7 +188,7 @@ mod tests {
     #[test]
     fn delete_smart_filter_mask_clears_the_typed_mask() {
         let mut doc = smart_doc();
-        pictura_codec::edit_layer(resolve_path_mut(&mut doc, "0").unwrap().as_mut(), |parts| {
+        pictura_codec::edit_layer(resolve_path_mut(&mut doc, "0").unwrap(), |parts| {
             parts.smart_object.as_mut().unwrap().filter_mask = Some(pictura_core::FilterMask {
                 rect: PsdRect {
                     top: 0,

@@ -20,9 +20,14 @@ fn host(content: LayerContent) -> Document {
             })
             .collect(),
     );
-    let mut background = Layer::default();
-    background.rect = layer.rect;
-    background.set_channels(layer.channels().clone());
+    let background = Layer::from_parts(
+        pictura_core::LayerParts {
+            rect: layer.rect,
+            channels: layer.channels().clone(),
+            ..Default::default()
+        },
+        LayerContent::Pixel,
+    );
     doc.layers = LayerStack::from_layers(vec![background, layer]);
     doc
 }

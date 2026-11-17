@@ -504,7 +504,9 @@ pub fn ensure_layer_ids(doc: &mut Document, seed: LayerId) -> bool {
                 *next = next.saturating_add(1);
                 changed = true;
             }
-            changed |= assign(layer.children_mut().expect("group"), used, next);
+            if let Some(children) = layer.children_mut() {
+                changed |= assign(children, used, next);
+            }
         }
         changed
     }

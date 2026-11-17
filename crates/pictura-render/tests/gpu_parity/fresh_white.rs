@@ -2,8 +2,7 @@
 //! opaque white.
 
 use pictura_core::{
-    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LockFlags, PixelBuffer,
-    PsdRect,
+    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, LockFlags, PixelBuffer, PsdRect,
 };
 use pictura_render::{composite, composite_rgba, Backend, CompositeRequest};
 

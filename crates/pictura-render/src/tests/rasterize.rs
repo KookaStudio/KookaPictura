@@ -221,7 +221,7 @@ fn pattern_fill_is_fill_content_and_rasterizes_to_tiles() {
 #[test]
 fn pattern_fill_with_missing_pattern_rasterizes_to_placeholder() {
     let mut doc = pattern_fixture_doc();
-    pictura_codec::edit_layer(resolve_path_mut(&mut doc, "1").unwrap().as_mut(), |parts| {
+    pictura_codec::edit_layer(resolve_path_mut(&mut doc, "1").unwrap(), |parts| {
         parts.adjustment = Some(ptfl(&PatternFillParams {
             pattern_id: "not-installed".into(),
             scale: 100.0,
@@ -383,9 +383,7 @@ fn a_vsms_shape_layer_is_recognized_and_rasterizes() {
         "the outline reads from vsms"
     );
     pictura_codec::edit_layer(
-        resolve_path_mut(&mut d, &path)
-            .expect("Shape path")
-            .as_mut(),
+        resolve_path_mut(&mut d, &path).expect("Shape path"),
         |parts| {
             parts.extra_blocks.push(pictura_core::LayerBlock {
                 key: *b"vstk",
@@ -441,7 +439,7 @@ fn a_pattern_filled_shape_rasterizes_with_the_document_pattern() {
     {
         let layer = resolve_path_mut(&mut d, path).expect("fill layer");
         layer.vector_mask = pictura_codec::decode_vector_mask(&data, width, height);
-        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        pictura_codec::edit_layer(layer, |parts| {
             parts.extra_blocks.push(pictura_core::LayerBlock {
                 key: *b"vmsk",
                 data: data.into(),

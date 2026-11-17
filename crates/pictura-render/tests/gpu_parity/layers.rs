@@ -1,6 +1,5 @@
 //! Group, mask, fill, and adjustment-layer parity tests.
 
-use pictura_adjust::Adjustment;
 use pictura_core::{
     AdjustmentData, BitDepth, BlendMode, Channel, ColorMode, Document, Layer, LayerMask,
     LayerStack, PsdRect, SmartObject, SmartObjectKind, TextStyle, TypeTool, VectorFillRule,
@@ -685,7 +684,7 @@ fn pattern_fill_is_not_served_stale() {
         unreachable!()
     };
     params.pattern_id = "pictura-changed".into();
-    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+    pictura_codec::edit_layer(layer, |parts| {
         parts.adjustment = Some(encode_pattern_fill(&params))
     });
     let rgba = [255u8; 4 * 4 * 4];

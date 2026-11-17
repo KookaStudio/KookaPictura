@@ -511,6 +511,9 @@ fn losing_smart_object_references_retain_shared_linked_payloads() {
             data.extend_from_slice(&3u32.to_be_bytes());
             data.push(uuid.len() as u8);
             data.extend_from_slice(uuid.as_bytes());
+            if !data.len().is_multiple_of(2) {
+                data.push(0);
+            }
             LayerBlock {
                 key,
                 data: data.into(),

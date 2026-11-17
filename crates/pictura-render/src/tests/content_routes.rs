@@ -219,12 +219,14 @@ fn shape_content_routes_preserve_output() {
 #[test]
 fn text_content_routes_preserve_output() {
     use crate::composite_route::tests::{proxy, type_layer};
+    let _gamma = crate::test_support::gamma_guard();
     let proxied = type_layer(proxy());
     assert_eq!(proxied.kind(), LayerKind::Text);
     assert!(matches!(content_route(&proxied), ContentRoute::Pixels));
     assert_eq!(
         composite_rgba(&doc(2, 2, vec![proxied])),
-        expected([90, 90, 90, 90])
+        // The established 1.45 text-gamma curve thins proxy alpha 90 to 64.
+        expected([90, 90, 90, 64])
     );
     let source = type_layer(Vec::new());
     assert_eq!(source.kind(), LayerKind::Text);
@@ -272,7 +274,8 @@ fn smart_object_content_routes_preserve_output() {
             expected([90, 90, 90, 90])
         );
     }
-    let source = doc(2, 2, vec![pixel()]);
+    let mut source = doc(2, 2, vec![pixel()]);
+    source.composite = composite_rgba(&source);
     let mut object =
         SmartObject::default().with_payload(pictura_codec::write_psd(&source).unwrap());
     object.kind = SmartObjectKind::Embedded;

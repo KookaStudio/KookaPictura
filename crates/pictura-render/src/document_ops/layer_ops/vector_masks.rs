@@ -579,7 +579,7 @@ mod tests {
         );
         let layer = &mut doc.layers[0];
         layer.vector_mask = pictura_codec::decode_vector_mask(&data, 4, 4);
-        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        pictura_codec::edit_layer(layer, |parts| {
             parts.extra_blocks.push(LayerBlock {
                 key: *b"vsms",
                 data: data.into(),

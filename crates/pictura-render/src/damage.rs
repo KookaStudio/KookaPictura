@@ -912,7 +912,7 @@ mod tests {
                     let Some(layer) = crate::resolve_path_mut(&mut after, path) else {
                         continue;
                     };
-                    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+                    pictura_codec::edit_layer(layer, |parts| {
                         parts.adjustment = Some(crate::encode_brightness_contrast(30, 0))
                     });
                     union(before_rect, total(&after, &[path]))

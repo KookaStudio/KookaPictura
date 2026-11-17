@@ -891,7 +891,7 @@ fn inner_shadow_fixture_decodes_and_composites() {
     let with_effect = composite_rgba(&d);
     let mut plain = d.clone();
     for l in plain.layers.iter_mut() {
-        pictura_codec::edit_layer(l.as_mut(), |parts| parts.extra_blocks.clear());
+        pictura_codec::edit_layer(l, |parts| parts.extra_blocks.clear());
     }
     assert_ne!(with_effect, composite_rgba(&plain), "the shadow renders");
 }

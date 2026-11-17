@@ -299,7 +299,7 @@ fn content_key_invalidates_on_edit() {
 
     let mut adjustment = doc(W, H, vec![base_layer(), curves_layer()]);
     assert_edit_invalidates(&mut adjustment, 1, |layer| {
-        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        pictura_codec::edit_layer(layer, |parts| {
             parts.adjustment.as_mut().expect("curves block").data =
                 crate::encode_curves(&[(0, 0), (128, 90), (255, 255)], None, None, None).data
         });

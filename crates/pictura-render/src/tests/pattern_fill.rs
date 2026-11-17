@@ -201,7 +201,7 @@ fn pattern_fill_masked_out_is_noop() {
 #[test]
 fn missing_pattern_uses_placeholder() {
     let mut doc = pattern_fixture_doc();
-    pictura_codec::edit_layer(resolve_path_mut(&mut doc, "1").unwrap().as_mut(), |parts| {
+    pictura_codec::edit_layer(resolve_path_mut(&mut doc, "1").unwrap(), |parts| {
         parts.adjustment = Some(ptfl(&params("not-installed", 100.0, true, (0, 0))))
     });
     let out = composite_rgba(&doc);
@@ -215,7 +215,7 @@ fn link_with_layer_false_anchors_at_document_origin() {
     let mut layer = doc.layers[1].clone();
     layer.rect = rect(1, 1, 8, 8); // top, left, bottom, right: a (1,1) offset
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
-    pictura_codec::edit_layer(resolve_path_mut(&mut doc, "0").unwrap().as_mut(), |parts| {
+    pictura_codec::edit_layer(resolve_path_mut(&mut doc, "0").unwrap(), |parts| {
         parts.adjustment = Some(ptfl(&params("pictura-pattern", 100.0, false, (0, 0))))
     });
 
@@ -232,7 +232,7 @@ fn link_with_layer_true_anchors_at_layer_rect() {
     let mut layer = doc.layers[1].clone();
     layer.rect = rect(1, 1, 8, 8); // top, left, bottom, right: a (1,1) offset
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
-    pictura_codec::edit_layer(resolve_path_mut(&mut doc, "0").unwrap().as_mut(), |parts| {
+    pictura_codec::edit_layer(resolve_path_mut(&mut doc, "0").unwrap(), |parts| {
         parts.adjustment = Some(ptfl(&params("pictura-pattern", 100.0, true, (0, 0))))
     });
 
@@ -253,7 +253,7 @@ fn link_with_layer_true_anchors_at_layer_rect() {
 fn non_zero_origin_shifts_the_tile() {
     fn shifted(origin: (i32, i32)) -> [u8; 3] {
         let mut doc = pattern_fixture_doc();
-        pictura_codec::edit_layer(resolve_path_mut(&mut doc, "1").unwrap().as_mut(), |parts| {
+        pictura_codec::edit_layer(resolve_path_mut(&mut doc, "1").unwrap(), |parts| {
             parts.adjustment = Some(ptfl(&params("pictura-pattern", 100.0, true, origin)))
         });
         rgb(&composite_rgba(&doc), 0, 0)

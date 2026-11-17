@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     Adjustment, Channel, FillContent, GradientFillParams, GradientKind, GradientStop, Layer,
-    LayerContent, LayerKind, LayerStack, PatternFillParams, SmartObject, TypeTool,
+    LayerContent, LayerKind, LayerParts, LayerStack, PatternFillParams, SmartObject, TypeTool,
 };
 
 fn text() -> TypeTool {

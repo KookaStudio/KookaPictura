@@ -24,7 +24,12 @@ use crate::composite::{blend_into_ctx, Canvas};
 use crate::composite_blend::{BlendCtx, BlendOverride};
 
 pub(crate) fn is_pattern_fill(layer: &Layer) -> bool {
+    // Opaque primary pattern blocks retain the established uncached-pass policy.
     matches!(layer.fill_content(), Some(FillContent::Pattern(_)))
+        || (matches!(
+            layer.content(),
+            pictura_core::LayerContent::Adjustment(None)
+        ) && layer.adjustment().is_some_and(|data| data.key == *b"PtFl"))
 }
 
 /// The layer's decoded fill content: its modeled adjustment block first, else
@@ -609,6 +614,25 @@ fn rgba_to_planar(px: &[[u8; 4]], w: i32, h: i32) -> PixelBuffer {
     buf
 }
 
+pub(crate) fn composite_fill(
+    canvas: &mut Canvas,
+    layer: &Layer,
+    doc: &Document,
+    fill: &FillContent,
+    ctx: &BlendCtx<'_>,
+    over: Option<&BlendOverride>,
+) {
+    match fill {
+        FillContent::Solid(rgba) => composite_solid_fill(canvas, layer, doc, *rgba, ctx, over),
+        FillContent::Gradient(params) => {
+            composite_gradient_fill(canvas, layer, doc, params, ctx, over)
+        }
+        FillContent::Pattern(params) => {
+            composite_pattern_fill(canvas, layer, doc, params, ctx, over)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -699,24 +723,5 @@ mod tests {
         let second = fill_source(&layer, &doc).expect("second raster");
         assert_ne!(first.content, second.content);
         assert_ne!(first.buffer.data.as_ref(), second.buffer.data.as_ref());
-    }
-}
-
-pub(crate) fn composite_fill(
-    canvas: &mut Canvas,
-    layer: &Layer,
-    doc: &Document,
-    fill: &FillContent,
-    ctx: &BlendCtx<'_>,
-    over: Option<&BlendOverride>,
-) {
-    match fill {
-        FillContent::Solid(rgba) => composite_solid_fill(canvas, layer, doc, *rgba, ctx, over),
-        FillContent::Gradient(params) => {
-            composite_gradient_fill(canvas, layer, doc, params, ctx, over)
-        }
-        FillContent::Pattern(params) => {
-            composite_pattern_fill(canvas, layer, doc, params, ctx, over)
-        }
     }
 }

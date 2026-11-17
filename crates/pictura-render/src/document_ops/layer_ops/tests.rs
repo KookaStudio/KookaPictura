@@ -241,7 +241,7 @@ fn ungroup_rejects_non_group() {
 fn next_layer_name_uses_highest_suffix() {
     let mut doc = doc_with(vec![
         pixel_layer("Layer 1", 4, 4, 1),
-        pixel_layer("Layer 5", 4, 4, 2),
+        empty_group("Layer 5"),
         pixel_layer("Group 2", 4, 4, 3),
     ]);
     let _ = doc.layers[1]

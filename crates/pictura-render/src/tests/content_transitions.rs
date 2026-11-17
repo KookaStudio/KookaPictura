@@ -33,6 +33,8 @@ fn edited_fill_reopens_with_new_parameters() {
         ..Default::default()
     });
     let mut d = reopen(&doc(4, 4, vec![source]));
+    let imported = d.layers[0].extra_block(b"zzzz").unwrap().clone();
+    assert_eq!(imported.data.as_slice(), &[19, 23, 29, 0]);
     let previous = composite_rgba(&d);
     let clone = d.clone();
     assert!(d.layers[0].set_fill_content(FillContent::Solid([40, 50, 60, 255])));
@@ -50,7 +52,7 @@ fn edited_fill_reopens_with_new_parameters() {
         back.layers[0].fill_content(),
         Some(&FillContent::Solid([40, 50, 60, 255]))
     );
-    assert_eq!(back.layers[0].extra_block(b"zzzz"), Some(&unrelated));
+    assert_eq!(back.layers[0].extra_block(b"zzzz"), Some(&imported));
     let picture = composite_rgba(&back);
     for y in 0..4 {
         for x in 0..4 {
