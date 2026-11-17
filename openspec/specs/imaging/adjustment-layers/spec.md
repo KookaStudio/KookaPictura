@@ -7,26 +7,29 @@ Carries adjustment layers opaquely in the document model and applies the support
 
 ### Requirement: Adjustment data is carried opaquely in the document model
 
-The document model SHALL carry an adjustment as raw bytes without interpreting
-them. `pictura-core` MUST expose `AdjustmentData { key: [u8; 4], data: Vec<u8> }`
-and `Layer.adjustment: Option<AdjustmentData>`, and MUST NOT depend on
-`pictura-adjust` or any other adjustment-decoding crate.
+The document model SHALL retain an adjustment's original four-byte key and
+payload without normalization or re-encoding. The retained data SHALL be
+accessible independently of the active typed content, through read-only
+preservation access. An ordinary pixel layer SHALL have no active adjustment.
+The layer's authoritative content SHALL represent either a supported typed
+adjustment or an opaque undecodable adjustment, never an independently writable
+optional adjustment competing with other content kinds. Core SHALL own the
+plain content data and SHALL NOT depend on adjustment execution or PSD decoding.
 
 #### Scenario: AdjustmentData preserves the key and payload verbatim
 
-- **WHEN** an `AdjustmentData` is constructed with a 4-byte key and a payload
-- **THEN** the key and every payload byte are readable unchanged, with no
-  normalisation or re-encoding by the model
+- **WHEN** an adjustment is imported with a four-byte key and a payload
+- **THEN** preservation access returns the exact key and every original payload byte without re-encoding
 
 #### Scenario: Core stays free of an adjustment dependency
 
-- **WHEN** the `pictura-core` crate manifest is inspected
-- **THEN** it declares no dependency on `pictura-adjust`
+- **WHEN** the core crate manifest is inspected
+- **THEN** it declares no dependency on adjustment execution or PSD decoding
 
 #### Scenario: A pixel layer has no adjustment
 
-- **WHEN** a layer without an adjustment is loaded or constructed
-- **THEN** its `adjustment` field is `None`
+- **WHEN** an ordinary layer without an adjustment is loaded or constructed
+- **THEN** its active content is Pixel and its typed adjustment accessor returns no adjustment
 
 ### Requirement: Codec preserves adjustment blocks through PSD read/write
 
@@ -41,8 +44,8 @@ round-trips byte-for-byte and unknown payload fields are not lost.
 
 - **WHEN** a PSD layer record contains an additional-layer-info block whose key
   is one of the recognised adjustment keys
-- **THEN** the resulting layer has `adjustment` set to that key and the block's
-  exact payload bytes
+- **THEN** the resulting layer retains that key and the block's exact payload bytes
+  separately from its normalized active content
 
 #### Scenario: Read/write round-trip preserves key and bytes
 

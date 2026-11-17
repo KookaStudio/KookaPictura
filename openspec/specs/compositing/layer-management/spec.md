@@ -351,10 +351,10 @@ no history state.
 ### Requirement: Rasterize subset
 
 The system SHALL provide a `Rasterize` submenu. `Fill Content` SHALL be
-implemented: for a fill-content layer (a layer whose opaque adjustment block is
+implemented: for a fill-content layer (a layer whose active Fill content retains
 a fill-content key — `SoCo`, `GdFl`, or `PtFl` — and whose payload decodes to
-`Adjustment::SolidFill`, `Adjustment::GradientFill`, or
-`Adjustment::PatternFill`) it SHALL render the fill content to a full-layer
+`FillContent::Solid`, `FillContent::Gradient`, or
+`FillContent::Pattern`) it SHALL render the fill content to a full-layer
 pixel node and clear the fill/adjustment data. A solid fill SHALL bake its
 decoded colour across the layer rect; a gradient fill SHALL bake the generated
 five-kind ramp with opaque alpha across the layer rect; a pattern fill SHALL
@@ -373,7 +373,9 @@ and SHALL otherwise refuse without changing the document. `Rasterize All
 Layers` SHALL rasterize every fill-content layer and every shape layer in the
 document. The `Type`, `Vector Mask`, `Smart Object`, `Video`, and `3D` variants
 SHALL remain visible and disabled, with a documented reason that those layer
-kinds do not exist or are handled elsewhere. A rasterization whose content is
+kinds do not exist or are handled elsewhere. Later capabilities that implement
+Type or Smart Object rasterization SHALL retain their existing enabled behavior;
+this subset SHALL NOT disable them during the content-model migration. A rasterization whose content is
 not decodable SHALL be disabled and SHALL refuse without changing the document,
 and every applied rasterization SHALL recomposite and record exactly one undo
 state.
@@ -394,7 +396,7 @@ state.
 #### Scenario: A gradient fill is rasterizable
 
 - **WHEN** Rasterize Fill Content runs on a layer whose `GdFl` payload decodes to
-  `Adjustment::GradientFill`
+  `FillContent::Gradient`
 - **THEN** the layer becomes a pixel layer holding the generated gradient over
   its rect, its fill / adjustment data is cleared, and the change is one undo
   step
@@ -402,7 +404,7 @@ state.
 #### Scenario: A pattern fill is rasterizable
 
 - **WHEN** Rasterize Fill Content runs on a layer whose `PtFl` payload decodes to
-  `Adjustment::PatternFill`
+  `FillContent::Pattern`
 - **THEN** the layer becomes a pixel layer holding the tiled pattern over its
   rect, its fill / adjustment data is cleared, and the change is one undo step
 
@@ -430,8 +432,9 @@ state.
 #### Scenario: A kind-less variant stays disabled
 
 - **WHEN** the Rasterize submenu is shown
-- **THEN** Type, Vector Mask, Smart Object, Video, and 3D are visible but
-  disabled, and their reason is documented
+- **THEN** Vector Mask, Video, and 3D remain visible but disabled with their
+  documented reason; Type and Smart Object follow their later implemented
+  capabilities rather than being disabled by this subset
 
 #### Scenario: Rasterize Layer refuses a non-fill layer
 
