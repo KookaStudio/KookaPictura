@@ -234,7 +234,9 @@ pub(super) fn selected_area_empty(
                 && dy >= 0
                 && (dx as u32) < s.width
                 && (dy as u32) < s.height
-                && s.data[dy as usize * s.width as usize + dx as usize] > 0
+                && s.data
+                    .sample(dy as usize * s.width as usize + dx as usize)
+                    .is_some_and(|v| v > 0)
         })
     };
     !(0..h).any(|y| (0..w).any(|x| opaque(x, y) && selected(x, y)))

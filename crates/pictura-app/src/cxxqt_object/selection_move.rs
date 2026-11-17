@@ -181,12 +181,14 @@ mod tests {
     use super::*;
     use pictura_select::Selection;
 
+    /// A tiled `w × h` selection covering `x0..x1 × y0..y1`, written through
+    /// the tile writer so it stays tiled (#1268).
     fn rect_selection(w: u32, h: u32, x0: u32, y0: u32, x1: u32, y1: u32) -> Selection {
         let mut sel = Selection::none(w, h);
-        for y in y0..y1 {
-            let row = y as usize * w as usize;
-            sel.data[row + x0 as usize..row + x1 as usize].fill(255);
-        }
+        let (xs, ys) = (x0 as usize..x1 as usize, y0 as usize..y1 as usize);
+        let full = vec![255u8; xs.len() * ys.len()];
+        sel.data.write_rect_from(xs, ys, w as usize, &full);
+        sel.data.settle();
         sel
     }
 
@@ -230,6 +232,38 @@ mod tests {
         );
         assert!(rust.session.live.selection_move_origin().is_none());
         assert!(rust.session.live.selection_move_delta().is_none());
+    }
+
+    /// A drag of a tiled selection reads and writes its tiles: the moved
+    /// selection is tiled, nothing is materialized, and its bytes are the
+    /// dense shift of the origin.
+    #[test]
+    fn selection_move_writes_stay_tiled() {
+        let (w, h) = (600u32, 530u32);
+        let origin = rect_selection(w, h, 40, 30, 570, 500);
+        assert!(origin.data.is_tiled());
+        let mut rust = view(origin.clone());
+        let (dx, dy) = (37, -21);
+        pictura_core::assert_no_materialization(|| {
+            assert!(rust.begin_selection_move());
+            assert!(rust.preview_selection_move(dx, dy));
+            assert_eq!(rust.selection_coverage_at(100, 100), 255);
+            assert!(rust.selection_bounds().is_some());
+            assert!(rust.commit_selection_move());
+        });
+        let moved = rust.session.selection.as_ref().expect("a selection");
+        assert!(moved.data.is_tiled());
+        let source = origin.coverage_bytes();
+        let mut want = vec![0u8; source.len()];
+        for y in 0..h as i32 {
+            for x in 0..w as i32 {
+                let (sx, sy) = (x - dx, y - dy);
+                if sx >= 0 && sy >= 0 && sx < w as i32 && sy < h as i32 {
+                    want[(y * w as i32 + x) as usize] = source[(sy * w as i32 + sx) as usize];
+                }
+            }
+        }
+        assert_eq!(moved.coverage_bytes(), want);
     }
 
     #[test]
@@ -309,7 +343,8 @@ mod tests {
         assert_eq!(rust.selection_pixel_count(), 28);
         assert_eq!(rust.selection_bounds_computes.get(), 2);
 
-        rust.session.selection.as_mut().expect("selection").data[0] = 255;
+        let written = rust.session.selection.as_mut().expect("selection");
+        written.data.write_rect_from(0..1, 0..1, 32, &[255]);
         rust.session.touch_selection();
         assert_eq!(
             rust.selection_bounds(),

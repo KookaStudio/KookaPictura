@@ -84,7 +84,7 @@ pub(super) fn color_range_preview(
     );
     *width = mask.width as i32;
     *height = mask.height as i32;
-    mask.data.to_vec()
+    mask.coverage_bytes()
 }
 
 pub(super) fn color_range_apply(
@@ -111,7 +111,7 @@ pub(super) fn color_range_apply(
         stream_picture(doc, rust, whole(doc), |offset, band| {
             let part = color_range(&band, select, target(rgb), fuzziness.max(0) as u32, invert);
             let at = offset as usize * w;
-            data[at..at + part.data.len()].copy_from_slice(part.data.as_slice());
+            part.data.read_into(0, &mut data[at..at + part.data.len()]);
         });
         let shape = Selection {
             width: doc.width,
