@@ -26,9 +26,10 @@ fn native_depth_edit_survives_a_psd_round_trip() {
     let source = doc
         .source
         .planes()
-        .as_mut()
+        .as_ref()
         .expect("rgb16 retains source planes");
     assert_eq!(source.depth, BitDepth::Sixteen);
+    let mut adjusted = source.samples.clone();
 
     let adjustment = Adjustment::Levels(LevelsParams {
         input_black: 0,
@@ -40,9 +41,11 @@ fn native_depth_edit_survives_a_psd_round_trip() {
         green: None,
         blue: None,
     });
-    apply_native(&adjustment, &mut source.samples, width, height, channels)
+    apply_native(&adjustment, &mut adjusted, width, height, channels)
         .expect("native apply on retained samples");
-    let adjusted = source.samples.clone();
+    doc.source
+        .replace_samples(adjusted.clone())
+        .expect("same native sample representation and shape");
 
     let plane = width * height * channels as usize;
     doc.composite
@@ -102,7 +105,7 @@ fn refresh_splices_native_color_planes_into_a_layered_depth_document() {
         "output header keeps the source depth"
     );
     let back = read_psd(&out).expect("re-read saved document");
-    let Samples::U16(v) = back.source.planes().as_ref().unwrap().samples else {
+    let Samples::U16(v) = &back.source.planes().as_ref().unwrap().samples else {
         panic!("depth-16 read retains u16 samples")
     };
     for c in 0..color_channels {

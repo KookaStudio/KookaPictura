@@ -273,7 +273,7 @@ fn eight_to_sixteen_widens_and_saves_sixteen_bit() {
     assert_eq!(document_bit_depth(&doc), BitDepth::Sixteen);
     let read = roundtrip(&doc);
     assert_eq!(read.source.depth(), Some(BitDepth::Sixteen));
-    let Some(Samples::U16(v)) = read.source.planes().as_ref().map(|s| s.samples) else {
+    let Some(Samples::U16(v)) = read.source.planes().as_ref().map(|s| &s.samples) else {
         panic!("16-bit store");
     };
     assert_eq!(v[1], doc.composite.data[1] as u16 * 257);
@@ -300,7 +300,7 @@ fn sixteen_to_thirty_two_and_back_down_to_eight() {
     convert_bit_depth(&mut doc, BitDepth::Sixteen).unwrap();
     convert_bit_depth(&mut doc, BitDepth::Eight).unwrap();
     assert_eq!(document_bit_depth(&doc), BitDepth::Eight);
-    assert_eq!(doc.source.planes(), None);
+    assert!(doc.source.planes().is_none());
     assert_eq!(layer_plane(&doc, 0), before);
 }
 
