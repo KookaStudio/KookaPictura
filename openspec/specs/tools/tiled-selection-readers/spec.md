@@ -1,7 +1,7 @@
 # tools/tiled-selection-readers Specification
 
 ## Purpose
-TBD - created by archiving change tiled-selection-readers. Update Purpose after archive.
+Consumers of a selection — the clipboard, layer operations, mask moves, healing, filters and adjustments limited to a selection, and the application's reads and exports — read its tiles or rows, so a tiled selection is never materialized into one canvas-sized copy, with results byte-identical to the dense path.
 
 ## Requirements
 
