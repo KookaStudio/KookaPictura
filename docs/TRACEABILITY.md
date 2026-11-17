@@ -114,7 +114,7 @@ and the shared module.
 | Fill layers | `fill-layers.md` | LAY-013 | `pictura_core::fill_layer` | Properties panel | draft |
 | Smart objects | `smart-objects.md` | LAY-020 | `pictura_core::smart` | Properties panel | draft |
 | Smart filters | `smart-filters.md` | LAY-021 | `pictura_core::smart` | Properties panel | draft |
-| Layer comps | `layer-comps.md` | LAY-022 | `pictura_core::comp` | Layer Comps panel | draft |
+| Layer comps | `layer-comps.md` | LAY-022 | `pictura_core::layer_comp` | Layer Comps panel | shipped |
 | Align/Distribute/Auto | `align-and-distribute.md` | LAY-030 | `pictura_core::layer` | menu | draft |
 | Merge/Flatten | `merge-and-flatten.md` | LAY-031 | `pictura_core::layer` | menu | draft |
 | Layer filtering | `layer-filtering-and-search.md` | LAY-032 | — | `QSortFilterProxyModel` | draft |

@@ -195,7 +195,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | LAY-14 | `merge-and-flatten.md` | Merge Down result appearance: the merged node inherits the target's blend mode and opacity, so a target with non-default settings renders the merged result differently from the pre-merge canvas; the pair also composites against a transparent backdrop, so where the target is non-`Normal` or not opaque the source's blend sees the target's unblended colour | UNRESOLVED | `merge.rs:195`; `merge.rs:202-203`; `merge.rs:422-424` | #813 |
 | LAY-15 | `smart-filters.md` | Filter-menu filters on a Smart Object append Smart Filters (#984); missing: Shadow/Highlight and Variations as Smart Filters, per-filter blend mode and opacity, the white mask without a selection, Smart Lens Blur/Displace/Adaptive Wide Angle, Photoshop-validated `FEid`/`FMsk` | PARTIAL | `crates/pictura-render/src/document_ops/smart_filter_apply.rs`; `crates/pictura-app/src/cxxqt_object/filter_tools/smart_apply.rs` | #996, #998, #1000, #1001, #999 |
 
-Layer Comps (`LAY-022`) is already tracked by `#265`.
+| LAY-22 | `layer-comps.md` | Layer Comps panel, capture/apply/update/delete, Last Document State, caution warnings, resource 1065 and `shmd`/`cmls` persistence, Files/PDF scripts. Omitted: drag duplicate/delete, recordable Actions commands, WPG, full O(captured-entries) apply | SHIPPED | `crates/pictura-app/cpp/panels/layer_comps_panel.cpp`; `crates/pictura-codec/src/layer_comps.rs`; `crates/pictura-render/src/document_ops/layer_ops/layer_comps.rs` | #265 |
 
 ### 06-filters
 
@@ -328,7 +328,7 @@ Two entries this list used to carry are corrected here:
 `#102`/`#103`/`#104`/`#309` crop · `#113` linked smart objects · `#166` smart
 filters · `#167`/`#183` filter bundles · `#172` Quick Mask · `#261` vector-mask
 path authoring · `#262` pattern fill layers · `#263` Edit Adjustment row ·
-`#264` Blend-If UI · `#265` Layer Comps · `#305` View Snap ·
+`#264` Blend-If UI · `#305` View Snap ·
 `#306` canvas right-click menus · `#312` Alt-drag duplicate · `#313` picker
 eyedropper · `#319` Color panel · `#344`/`#345`/`#346`/`#347`/`#349`/`#350`/`#351`
 filters & watermark · `#367` Help menu · `#392`/`#396`–`#402`

@@ -254,7 +254,7 @@ Stage is the milestone that closes it.
 | Smart Objects | convert/edit/replace/rasterize | absent | smart-object kind | `SoLd`/`lnk2` | commands | panel + menus | M43 |
 | Vector masks / clipping | thumb, density/feather, clip runs | `clipping` bool only | vector mask, clip run | `vmsk`/`vsms` | commands | delegate + Properties | M43 |
 | Artboards | **not CS6** (non-goal) | — | — | — | — | — | M43 (non-goal) |
-| Layer Comps | capture/apply, resource 1065 | absent | `LayerComp` store | image resource 1065 | commands | panel | M43 |
+| Layer Comps | capture/apply, resource 1065 | shipped | `LayerComp` store | image resource 1065 | commands | panel | M43 |
 | Type/shape kinds | forced locks, tool names | `kind` is pixel/adj/group | `NodeKind` | `TySh`/`vmsk` | `layer_kind` | delegate | M41/M43 |
 | `00`/`Shift+00` | layer/fill opacity 0% | absent | — | — | — | shortcut | M39/M40 |
 | Select All/Similar/Linked | menus | absent | — | — | commands | menu | M41 |
