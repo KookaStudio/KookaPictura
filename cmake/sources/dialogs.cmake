@@ -26,6 +26,8 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/keyboard_shortcuts_dialog.h
     crates/pictura-app/cpp/layer_new_dialog.cpp
     crates/pictura-app/cpp/layer_new_dialog.h
+    crates/pictura-app/cpp/layer_style_contour.cpp
+    crates/pictura-app/cpp/layer_style_contour.h
     crates/pictura-app/cpp/layer_style_dialog.cpp
     crates/pictura-app/cpp/layer_style_dialog.h
     crates/pictura-app/cpp/mask_display_options_dialog.cpp

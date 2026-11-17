@@ -12,10 +12,10 @@
 //! `Pillow` over `M` with the outside (`1 - M`) shading inverted.
 //!
 //! ponytail: the technique roundings are model choices, not Adobe's; the `Stroke` style
-//! (which needs the Stroke effect's band) renders nothing; edge contour (`MpgS`), gloss
-//! contour (`TrnS`), contour range (`Inpr`), anti-alias (`AntA`,
-//! `antialiasGloss`), texture (`useTexture`, `InvT`, `Algn`, `Scl `, `Ptrn`),
-//! `useShape` and `showInDialog` are decoded/ignored; the light comes from
+//! (which needs the Stroke effect's band) renders nothing; the gloss and edge
+//! contours and `Inpr` remap the shading and profile as described above;
+//! anti-alias (`AntA`, `antialiasGloss`), texture (`useTexture`, `InvT`, `Algn`,
+//! `Scl `, `Ptrn`) and `showInDialog` are decoded/ignored; the light comes from
 //! `light::effective` (global when `uglg` is on); `scale = size · depth/100`
 //! and the `dot(N,L) - sin(alt)`
 //! flat-offset are ungrounded model choices; the build region pads by the blur
@@ -33,6 +33,7 @@ pub(crate) mod blur_reference;
 use crate::composite::desc_item;
 
 use super::apply_mask;
+use super::contour::Contour;
 use super::planes::{EffectPass, PassWriter};
 use super::BuildRegion;
 use super::{
@@ -85,7 +86,7 @@ pub struct BevelShadow {
 }
 
 /// The typed bevel & emboss decoded from a layer's `lfx2` block.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BevelEmboss {
     pub enabled: bool,
     pub present: bool,
@@ -103,6 +104,16 @@ pub struct BevelEmboss {
     /// Degrees, `0..=90` (`Lald`).
     pub altitude_deg: f32,
     pub use_global_angle: bool,
+    /// The gloss contour (`TrnS`).
+    pub gloss_contour: Contour,
+    /// The edge contour (`MpgS`).
+    pub edge_contour: Contour,
+    /// The edge-contour sub-panel switch (`useShape`).
+    pub edge_contour_on: bool,
+    /// Percent, `1..=100` (`Inpr`).
+    pub edge_range: f32,
+    /// The edge-contour anti-alias flag (`AntA`), carried but inert.
+    pub edge_anti_alias: bool,
     pub highlight: BevelHighlight,
     pub shadow: BevelShadow,
 }
@@ -164,6 +175,15 @@ pub fn decode_bevel_emboss(layer: &Layer) -> Option<BevelEmboss> {
             Some(value) => decode_color(value),
         }
     };
+    let gloss_contour = desc_item(ebbl, b"TrnS")
+        .and_then(Contour::decode)
+        .unwrap_or_default();
+    let edge_contour = desc_item(ebbl, b"MpgS")
+        .and_then(Contour::decode)
+        .unwrap_or_default();
+    let edge_contour_on = bool_or(ebbl, b"useShape", false)?;
+    let edge_range = num_clamped(ebbl, b"Inpr", 50.0, 1.0, 100.0)?;
+    let edge_anti_alias = bool_or(ebbl, b"AntA", false)?;
     Some(BevelEmboss {
         enabled: bool_or(ebbl, b"enab", false)?,
         present: bool_or(ebbl, b"present", false)?,
@@ -176,6 +196,11 @@ pub fn decode_bevel_emboss(layer: &Layer) -> Option<BevelEmboss> {
         angle_deg: num_or(ebbl, b"lagl", 120.0)?,
         altitude_deg: num_clamped(ebbl, b"Lald", 30.0, 0.0, MAX_ALTITUDE)?,
         use_global_angle: bool_or(ebbl, b"uglg", true)?,
+        gloss_contour,
+        edge_contour,
+        edge_contour_on,
+        edge_range,
+        edge_anti_alias,
         highlight: BevelHighlight {
             mode: blend(b"hglM", BlendMode::Screen)?,
             color: color(b"hglC", [255, 255, 255])?,
@@ -248,6 +273,10 @@ pub(super) fn build_bevel_emboss(
     }
     let size = size.max(1.0);
     let round = rounding(bevel.technique, size);
+    let gloss_lut = (!bevel.gloss_contour.is_linear()).then(|| bevel.gloss_contour.lut());
+    let edge_lut = (bevel.edge_contour_on && !bevel.edge_contour.is_linear())
+        .then(|| bevel.edge_contour.lut());
+    let edge_range = clamp_finite(bevel.edge_range, 100.0).max(1.0) as f64;
     // The chamfer reaches `size` past the edge (half for the straddling styles);
     // the rounding and soften blurs reach a little further.
     let pad = size.ceil() as i64 + blur_support(round) + blur_support(soften) + 2;
@@ -287,6 +316,13 @@ pub(super) fn build_bevel_emboss(
     );
     if round > 0.0 {
         height = blur(&height, pw, ph, round);
+    }
+    if let Some(lut) = edge_lut {
+        let scale = 100.0 / edge_range;
+        height.par_iter_mut().for_each(|h| {
+            let t = ((*h as f64) * scale).clamp(0.0, 1.0) as f32;
+            *h = lut[((t * 255.0).round() as usize).min(255)];
+        });
     }
     #[cfg(test)]
     crate::tests::effect_preparation::probe::observe(
@@ -348,6 +384,10 @@ pub(super) fn build_bevel_emboss(
             let mut s = (nx * lx + ny * ly + lz) * inv - phi.sin();
             if down {
                 s = -s;
+            }
+            if let Some(lut) = &gloss_lut {
+                let t = ((s + 1.0) * 0.5).clamp(0.0, 1.0) as f32;
+                s = 2.0 * lut[((t * 255.0).round() as usize).min(255)] as f64 - 1.0;
             }
             *out = s as f32;
         }

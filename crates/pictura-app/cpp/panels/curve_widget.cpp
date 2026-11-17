@@ -101,6 +101,46 @@ void splineInterpolate(const QVector<QPointF>& pts, float out[256])
     }
 }
 
+// Piecewise linear between the control points, matching the engine contour LUT.
+void linearInterpolate(const QVector<QPointF>& pts, float out[256])
+{
+    const int n = pts.size();
+    if (n == 0) {
+        for (int i = 0; i < 256; ++i) {
+            out[i] = i / 255.0f;
+        }
+        return;
+    }
+    for (int ix = 0; ix < 256; ++ix) {
+        const double x = ix / 255.0;
+        if (x <= pts[0].x()) {
+            out[ix] = qBound(0.0f, static_cast<float>(pts[0].y()), 1.0f);
+            continue;
+        }
+        if (x >= pts[n - 1].x()) {
+            out[ix] = qBound(0.0f, static_cast<float>(pts[n - 1].y()), 1.0f);
+            continue;
+        }
+        int seg = 0;
+        for (int i = n - 2; i >= 0; --i) {
+            if (x >= pts[i].x()) {
+                seg = i;
+                break;
+            }
+        }
+        const double h = pts[seg + 1].x() - pts[seg].x();
+        if (h < 1e-12) {
+            out[ix] = qBound(0.0f, static_cast<float>(pts[seg].y()), 1.0f);
+            continue;
+        }
+        const double t = (x - pts[seg].x()) / h;
+        out[ix] = qBound(
+            0.0f,
+            static_cast<float>(pts[seg].y() + (pts[seg + 1].y() - pts[seg].y()) * t),
+            1.0f);
+    }
+}
+
 constexpr qreal kRamp = 10.0;
 constexpr qreal kGap = 4.0;
 
@@ -185,7 +225,18 @@ void CurveWidget::buildLut(uint8_t lut[256]) const
 void CurveWidget::interpolate()
 {
     std::sort(points_.begin(), points_.end(), byInput);
-    splineInterpolate(points_, curve_);
+    if (linear_) {
+        linearInterpolate(points_, curve_);
+    } else {
+        splineInterpolate(points_, curve_);
+    }
+}
+
+void CurveWidget::setLinearInterpolation(bool linear)
+{
+    linear_ = linear;
+    interpolate();
+    update();
 }
 
 void CurveWidget::select(int index)

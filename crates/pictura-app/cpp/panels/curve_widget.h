@@ -45,6 +45,10 @@ public:
         showRamps_ = v;
         update();
     }
+    // Draw and LUT the points as straight segments instead of the spline. The
+    // contour editor uses this so its curve matches the engine's piecewise
+    // linear lookup table.
+    void setLinearInterpolation(bool linear);
 
     void resetCurve();
     void setPoints(const QVector<QPointF>& pts);
@@ -93,6 +97,7 @@ private:
     bool showHisto_ = true;
     bool showBaseline_ = true;
     bool showRamps_ = false;
+    bool linear_ = false;
 };
 
 } // namespace pictura

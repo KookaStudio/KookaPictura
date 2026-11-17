@@ -142,7 +142,10 @@ const BEVEL: &[Field] = &[
     field("shadowMode", b"sdwM", Kind::Blend, MULTIPLY),
     field("shadowColor", b"sdwC", Kind::Color, 0x000000 as f64),
     field("shadowOpacity", b"sdwO", PCT, 75.0),
-    field("antiAlias", b"antialiasGloss", Kind::Bool, 0.0),
+    field("antiAlias", b"antialiasGloss", Kind::Bool, 1.0),
+    field("edgeContourOn", b"useShape", Kind::Bool, 0.0),
+    field("edgeRange", b"Inpr", Kind::Unit(b"#Prc", 1.0, 100.0), 50.0),
+    field("edgeAntiAlias", b"AntA", Kind::Bool, 0.0),
 ];
 
 const SATIN: &[Field] = &[

@@ -175,6 +175,104 @@ pub(super) fn layer_style_set(
     changed
 }
 
+/// Run one structured style edit with the scalar setter's bounds refresh and
+/// content-revision bump.
+pub(super) fn apply_style_edit(
+    mut view: Pin<&mut PictureView>,
+    path: &QString,
+    edit: impl FnOnce(&mut pictura_core::Layer) -> bool,
+) -> bool {
+    let path = path.to_string();
+    let before = paint_bounds(view.as_ref().get_ref(), &path);
+    let changed = view
+        .as_mut()
+        .rust_mut()
+        .session
+        .doc
+        .as_mut()
+        .is_some_and(|doc| pictura_render::resolve_path_mut(doc, &path).is_some_and(edit));
+    if changed {
+        refresh_paint_bounds(view.as_mut(), &path, before);
+        let mut rust = view.as_mut().rust_mut();
+        rust.session.content_revision = rust.session.content_revision.wrapping_add(1);
+    }
+    changed
+}
+
+pub(super) fn layer_style_contour(view: &PictureView, path: &QString, key: &QString) -> QString {
+    let key = key.to_string();
+    with_layer(view, path, |layer| {
+        pictura_render::layer_style_contour(layer, &key)
+    })
+    .flatten()
+    .map_or_else(QString::default, |text| QString::from(text.as_str()))
+}
+
+pub(super) fn layer_style_set_contour(
+    view: Pin<&mut PictureView>,
+    path: &QString,
+    key: &QString,
+    points: &QString,
+) -> bool {
+    let (key, points) = (key.to_string(), points.to_string());
+    apply_style_edit(view, path, |layer| {
+        pictura_render::set_layer_style_contour(layer, &key, &points)
+    })
+}
+
+pub(super) fn layer_style_gradient(view: &PictureView, path: &QString, key: &QString) -> QString {
+    let key = key.to_string();
+    with_layer(view, path, |layer| {
+        pictura_render::layer_style_gradient(layer, &key)
+    })
+    .flatten()
+    .map_or_else(QString::default, |text| QString::from(text.as_str()))
+}
+
+pub(super) fn layer_style_set_gradient(
+    view: Pin<&mut PictureView>,
+    path: &QString,
+    key: &QString,
+    gradient: &QString,
+) -> bool {
+    let (key, gradient) = (key.to_string(), gradient.to_string());
+    apply_style_edit(view, path, |layer| {
+        pictura_render::set_layer_style_gradient(layer, &key, &gradient)
+    })
+}
+
+/// Whether Copy Layer Style can capture something: an effect block or a
+/// channel restriction (the channel-only style has no `lfx2`/`lrFX`).
+pub(super) fn layer_style_can_copy(view: &PictureView, path: &QString) -> bool {
+    with_layer(view, path, |layer| {
+        !layer.background
+            && !layer.is_group
+            && (pictura_render::has_layer_style(layer) || !layer.restricted_channels.is_empty())
+    })
+    .unwrap_or(false)
+}
+
+pub(super) fn layer_style_channel_names(view: &PictureView, path: &QString) -> QStringList {
+    let mut names = QStringList::default();
+    let Some(doc) = view.rust().session.doc.as_ref() else {
+        return names;
+    };
+    if pictura_render::resolve_path(doc, &path.to_string()).is_none() {
+        return names;
+    }
+    for name in channel_names(doc.mode) {
+        names.append(QString::from(*name));
+    }
+    names
+}
+
+fn channel_names(mode: pictura_core::ColorMode) -> &'static [&'static str] {
+    match mode {
+        pictura_core::ColorMode::Rgb => &["Red", "Green", "Blue"],
+        _ => &[],
+    }
+}
+
 /// The layer's paint bounds before or after a style change.
 pub(super) fn paint_bounds(view: &PictureView, path: &str) -> Option<pictura_core::PsdRect> {
     view.rust()

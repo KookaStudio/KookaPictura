@@ -6,6 +6,8 @@
 
 #include "api/layers_bridge.h"
 #include "panels/angle_dial.h"
+#include "gradient_editor_dialog.h"
+#include "layer_style_contour.h"
 
 #include <QtCore/QSignalBlocker>
 #include <QtWidgets/QCheckBox>
@@ -134,6 +136,18 @@ QWidget* LayerStyleDialog::buildBlendingOptionsPage()
         combo(QStringLiteral("blending.knockout"), {tr("None"), tr("Shallow"), tr("Deep")});
     bindChoice(knockout, QStringLiteral("blending.knockout"));
     advanced->addRow(tr("Knockout:"), knockout);
+    const QStringList channels = layer_style_channel_names(*view_, path_);
+    auto* channelRow = new QWidget;
+    auto* channelLayout = new QHBoxLayout(channelRow);
+    channelLayout->setContentsMargins(0, 0, 0, 0);
+    for (int i = 0; i < channels.size(); ++i) {
+        const QString key = QStringLiteral("blending.include%1").arg(i);
+        auto* box = check(key, channels.at(i));
+        bindCheck(box, key);
+        channelLayout->addWidget(box);
+    }
+    channelLayout->addStretch();
+    advanced->addRow(tr("Channels:"), channelRow);
     QCheckBox* interior =
         check(QStringLiteral("blending.blendInterior"), tr("Blend Interior Effects as Group"));
     bindCheck(interior, QStringLiteral("blending.blendInterior"));
@@ -187,6 +201,11 @@ QWidget* LayerStyleDialog::buildBevelPage()
                     sliderRow(QStringLiteral("bevel.altitude"), 0, 90, QStringLiteral("°")));
     bindGlobalLight(page.widget, global, QStringLiteral("bevel.angle"),
                     QStringLiteral("bevel.altitude"));
+    auto* glossContour = new ContourSwatch;
+    auto* glossAA = check(QStringLiteral("bevel.antiAlias"), tr("Anti-aliased"));
+    bindCheck(glossAA, QStringLiteral("bevel.antiAlias"));
+    bindContour(glossContour, QStringLiteral("bevel.glossContour"));
+    shading->addRow(tr("Gloss Contour:"), pair(glossContour, glossAA));
     for (const auto& [label, prefix] :
          {std::pair{tr("Highlight Mode:"), QStringLiteral("bevel.highlight")},
           std::pair{tr("Shadow Mode:"), QStringLiteral("bevel.shadow")}}) {
@@ -196,6 +215,25 @@ QWidget* LayerStyleDialog::buildBevelPage()
         shading->addRow(tr("Opacity:"),
                         sliderRow(prefix + QStringLiteral("Opacity"), 0, 100, QStringLiteral("%")));
     }
+    QFormLayout* contour = page.group(tr("Contour"));
+    auto* edgeOn = check(QStringLiteral("bevel.edgeContourOn"), tr("Contour"));
+    bindCheck(edgeOn, QStringLiteral("bevel.edgeContourOn"));
+    contour->addRow(QString(), edgeOn);
+    auto* edgeContour = new ContourSwatch;
+    bindContour(edgeContour, QStringLiteral("bevel.edgeContour"));
+    contour->addRow(tr("Contour:"), edgeContour);
+    QWidget* edgeRange = sliderRow(QStringLiteral("bevel.edgeRange"), 1, 100, QStringLiteral("%"));
+    contour->addRow(tr("Range:"), edgeRange);
+    auto* edgeAA = check(QStringLiteral("bevel.edgeAntiAlias"), tr("Anti-aliased"));
+    bindCheck(edgeAA, QStringLiteral("bevel.edgeAntiAlias"));
+    contour->addRow(QString(), edgeAA);
+    const auto gate = [edgeContour, edgeRange, edgeAA](bool on) {
+        edgeContour->setEnabled(on);
+        edgeRange->setEnabled(on);
+        edgeAA->setEnabled(on);
+    };
+    gate(edgeOn->isChecked());
+    connect(edgeOn, &QCheckBox::toggled, this, gate);
     return page.done();
 }
 
@@ -323,15 +361,39 @@ QWidget* LayerStyleDialog::buildGradientOverlayPage()
     gradient->addRow(tr("Blend Mode:"), mode);
     gradient->addRow(tr("Opacity:"), sliderRow(QStringLiteral("gradientOverlay.opacity"), 0, 100,
                                                QStringLiteral("%")));
-    // Two stops rather than the gradient editor.
-    auto* stops = new QHBoxLayout;
-    stops->addWidget(colorButton(QStringLiteral("gradientOverlay.from")));
-    stops->addWidget(colorButton(QStringLiteral("gradientOverlay.to")));
+    auto* gradientSwatch = new GradientSwatch;
+    gradientSwatch->setObjectName(QStringLiteral("gradientOverlay.gradient"));
+    gradientSwatch->setStops(
+        parseGradientStops(gradientText(QStringLiteral("gradientOverlay.gradient"))));
     QCheckBox* reverse = check(QStringLiteral("gradientOverlay.reverse"), tr("Reverse"));
     bindCheck(reverse, QStringLiteral("gradientOverlay.reverse"));
+    auto* stops = new QHBoxLayout;
+    stops->addWidget(gradientSwatch, 1);
     stops->addWidget(reverse);
-    stops->addStretch();
     gradient->addRow(tr("Gradient:"), stops);
+    connect(gradientSwatch, &GradientSwatch::clicked, this, [this, gradientSwatch] {
+        const QString key = QStringLiteral("gradientOverlay.gradient");
+        GradientSpec spec;
+        spec.name = tr("Custom");
+        spec.type = GradientSpec::Solid;
+        spec.stops = parseGradientStops(gradientText(key));
+        GradientEditorDialog dialog(spec, Qt::white, Qt::black, this);
+        dialog.setSolidOnly(true);
+        dialog.bar()->setStrictLocations(true);
+        if (dialog.exec() == QDialog::Accepted) {
+            GradientStops next = dialog.spec().stops;
+            for (GradientColorStop& stop : next) {
+                stop.color.setAlpha(255);
+            }
+            bool rising = next.size() >= 2;
+            for (int i = 1; rising && i < next.size(); ++i) {
+                rising = next.at(i).location > next.at(i - 1).location;
+            }
+            if (rising && setGradientText(key, formatGradientStops(next))) {
+                gradientSwatch->setStops(next);
+            }
+        }
+    });
     QComboBox* style = combo(QStringLiteral("gradientOverlay.style"),
                              {tr("Linear"), tr("Radial"), tr("Angle"), tr("Reflected"),
                               tr("Diamond")});

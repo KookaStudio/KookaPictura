@@ -443,6 +443,7 @@ void LayersPanel::populateLayerStyleMenu(QMenu& menu, const QString& path)
     const bool visible =
         layer_style_value(*view_, path, QStringLiteral("fx.visible")) >= 0.5;
     const bool styled = layer_style_has(*view_, path);
+    const bool copyable = layer_style_can_copy(*view_, path);
 
     QAction* toggle = menu.addAction(visible ? tr("Disable Layer Effects")
                                              : tr("Enable Layer Effects"));
@@ -467,7 +468,7 @@ void LayersPanel::populateLayerStyleMenu(QMenu& menu, const QString& path)
     menu.addSeparator();
 
     QAction* copy = menu.addAction(tr("Copy Layer Style"));
-    copy->setEnabled(styled);
+    copy->setEnabled(copyable);
     connect(copy, &QAction::triggered, this, [this, path] { layer_style_copy(*view_, path); });
     QAction* paste = menu.addAction(tr("Paste Layer Style"));
     paste->setEnabled(layer_style_can_paste());

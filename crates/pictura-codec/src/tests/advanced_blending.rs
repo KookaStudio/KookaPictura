@@ -371,3 +371,41 @@ fn encode_blend_if_round_trips_through_parse() {
     let doc = read_psd(&ranges_layer_psd(&bytes)).unwrap();
     assert_eq!(doc.layers[0].blend_if.as_ref(), Some(&view));
 }
+
+#[test]
+fn brst_decodes_channel_restrictions() {
+    let psd = tagged_layer_psd(0, &[(b"brst", &[0, 0, 0, 1, 0, 0, 0, 2])]);
+    let layer = &read_psd(&psd).unwrap().layers[0];
+    assert_eq!(layer.restricted_channels, vec![1, 2]);
+    assert!(layer.extra_block(b"brst").is_none());
+}
+
+#[test]
+fn absent_brst_includes_every_channel() {
+    let layer = &read_psd(&tagged_layer_psd(0, &[])).unwrap().layers[0];
+    assert!(layer.restricted_channels.is_empty());
+}
+
+#[test]
+fn malformed_brst_is_dropped() {
+    let doc = read_psd(&tagged_layer_psd(0, &[(b"brst", &[0, 0, 1])])).unwrap();
+    assert!(doc.layers[0].restricted_channels.is_empty());
+    let bytes = write_psd(&doc).unwrap();
+    assert!(
+        !has_key(&bytes, b"brst"),
+        "a malformed block is not re-emitted"
+    );
+}
+
+#[test]
+fn channel_restrictions_round_trip() {
+    let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
+    let mut layer = pixel("Adv", rect(0, 0, 2, 2), 3, BlendMode::Normal, 255);
+    layer.restricted_channels = vec![1, 2];
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+    let bytes = write_psd(&doc).unwrap();
+    assert!(has_key(&bytes, b"brst"));
+    let back = read_psd(&bytes).unwrap();
+    assert_eq!(back.layers[0].restricted_channels, vec![1, 2]);
+    assert_eq!(back, doc);
+}

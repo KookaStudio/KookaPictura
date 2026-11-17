@@ -847,3 +847,545 @@ fn create_style_layers_refuses() {
         .unwrap();
     assert!(!crate::can_create_style_layers(&run, "1"));
 }
+
+fn contour_text_round_trips() {
+    let mut d = doc();
+    let layer = square(&mut d);
+    assert!(set_layer_style_contour(
+        layer,
+        "bevel.glossContour",
+        "0,0 64,128 255,255"
+    ));
+    assert_eq!(
+        layer_style_contour(layer, "bevel.glossContour").as_deref(),
+        Some("0,0 64,128 255,255")
+    );
+    let bevel = decode_bevel_emboss(layer).expect("decodes");
+    assert_eq!(
+        bevel.gloss_contour.points(),
+        &[(0.0f32, 0.0), (64.0, 128.0), (255.0, 255.0)]
+    );
+}
+
+#[test]
+fn absent_contour_reads_linear() {
+    let mut d = doc();
+    let layer = square(&mut d);
+    assert_eq!(
+        layer_style_contour(layer, "bevel.edgeContour").as_deref(),
+        Some("0,0 255,255")
+    );
+}
+
+#[test]
+fn bad_contour_text_is_refused() {
+    let mut d = doc();
+    let layer = square(&mut d);
+    for text in ["0,0", "0,0 0,255", "0,0 256,10", "0,0 nope 255,255"] {
+        assert!(
+            !set_layer_style_contour(layer, "bevel.glossContour", text),
+            "{text}"
+        );
+    }
+    layer.is_group = true;
+    assert!(!set_layer_style_contour(
+        layer,
+        "bevel.glossContour",
+        "0,0 255,255"
+    ));
+    layer.is_group = false;
+    layer.background = true;
+    assert!(!set_layer_style_contour(
+        layer,
+        "bevel.glossContour",
+        "0,0 255,255"
+    ));
+}
+
+#[test]
+fn contour_edit_preserves_point_items() {
+    use pictura_codec::DescValue;
+
+    let mut d = doc();
+    let layer = square(&mut d);
+    assert!(set_layer_style_contour(
+        layer,
+        "bevel.glossContour",
+        "0,0 128,128 255,255"
+    ));
+    let mut items = lfx2_items(layer);
+    let ebbl = items
+        .iter_mut()
+        .find(|(key, _)| key.as_slice() == b"ebbl")
+        .map(|(_, value)| value)
+        .expect("ebbl");
+    let DescValue::Object { items: fields, .. } = ebbl else {
+        panic!("effect object");
+    };
+    let trns = fields
+        .iter_mut()
+        .find(|(key, _)| key.as_slice() == b"TrnS")
+        .map(|(_, value)| value)
+        .expect("TrnS");
+    let DescValue::Object {
+        items: trns_items, ..
+    } = trns
+    else {
+        panic!("contour object");
+    };
+    let crv = trns_items
+        .iter_mut()
+        .find(|(key, _)| key.as_slice() == b"Crv ")
+        .map(|(_, value)| value)
+        .expect("Crv");
+    let DescValue::List(points) = crv else {
+        panic!("point list");
+    };
+    let DescValue::Object { items: point, .. } = &mut points[1] else {
+        panic!("point");
+    };
+    point.push((b"Smoo".to_vec(), DescValue::Bool(true)));
+    write_lfx2(layer, items);
+
+    assert!(set_layer_style_contour(
+        layer,
+        "bevel.glossContour",
+        "0,0 128,200 255,255"
+    ));
+    let items = lfx2_items(layer);
+    let ebbl = items
+        .iter()
+        .find(|(key, _)| key.as_slice() == b"ebbl")
+        .map(|(_, value)| value)
+        .expect("ebbl");
+    let DescValue::Object { items: fields, .. } = ebbl else {
+        panic!("effect object");
+    };
+    let trns = fields
+        .iter()
+        .find(|(key, _)| key.as_slice() == b"TrnS")
+        .map(|(_, value)| value)
+        .expect("TrnS");
+    let DescValue::Object {
+        items: trns_items, ..
+    } = trns
+    else {
+        panic!("contour object");
+    };
+    let crv = trns_items
+        .iter()
+        .find(|(key, _)| key.as_slice() == b"Crv ")
+        .map(|(_, value)| value)
+        .expect("Crv");
+    let DescValue::List(points) = crv else {
+        panic!("point list");
+    };
+    let DescValue::Object { items: point, .. } = &points[1] else {
+        panic!("point");
+    };
+    assert!(point
+        .iter()
+        .any(|(key, value)| { key.as_slice() == b"Smoo" && *value == DescValue::Bool(true) }));
+    assert!(point
+        .iter()
+        .any(|(key, value)| { key.as_slice() == b"Vrtc" && *value == DescValue::Double(200.0) }));
+}
+
+#[test]
+fn bevel_sub_panel_fields_round_trip() {
+    let mut d = doc();
+    let layer = square(&mut d);
+    set(layer, "bevel.edgeContourOn", 1.0);
+    set(layer, "bevel.edgeRange", 30.0);
+    set(layer, "bevel.edgeAntiAlias", 1.0);
+    assert_eq!(layer_style_value(layer, "bevel.edgeContourOn"), Some(1.0));
+    assert_eq!(layer_style_value(layer, "bevel.edgeRange"), Some(30.0));
+    assert_eq!(layer_style_value(layer, "bevel.edgeAntiAlias"), Some(1.0));
+    let bevel = decode_bevel_emboss(layer).expect("decodes");
+    assert!(bevel.edge_contour_on);
+    assert_eq!(bevel.edge_range, 30.0);
+    assert!(bevel.edge_anti_alias);
+}
+
+#[test]
+fn bevel_gloss_antialias_defaults_on() {
+    use pictura_codec::DescValue;
+
+    let mut d = doc();
+    let layer = square(&mut d);
+    assert!(set_layer_style_contour(
+        layer,
+        "bevel.glossContour",
+        "0,0 255,255"
+    ));
+    assert_eq!(layer_style_value(layer, "bevel.antiAlias"), Some(1.0));
+    let items = lfx2_items(layer);
+    let ebbl = items
+        .iter()
+        .find(|(key, _)| key.as_slice() == b"ebbl")
+        .map(|(_, value)| value)
+        .expect("ebbl");
+    let DescValue::Object { items: fields, .. } = ebbl else {
+        panic!("effect object");
+    };
+    assert!(fields.iter().any(|(key, value)| {
+        key.as_slice() == b"antialiasGloss" && *value == DescValue::Bool(true)
+    }));
+}
+
+#[test]
+fn gradient_text_round_trips() {
+    let mut d = doc();
+    let layer = square(&mut d);
+    assert!(set_layer_style_gradient(
+        layer,
+        "gradientOverlay.gradient",
+        "0:000000 2048:00ff00 4096:ffffff"
+    ));
+    assert_eq!(
+        layer_style_gradient(layer, "gradientOverlay.gradient").as_deref(),
+        Some("0:000000 2048:00ff00 4096:ffffff")
+    );
+    let overlay = decode_gradient_overlay(layer).expect("decodes");
+    assert_eq!(
+        overlay
+            .stops
+            .iter()
+            .map(|stop| (stop.location, stop.color))
+            .collect::<Vec<_>>(),
+        vec![(0, [0, 0, 0]), (2048, [0, 255, 0]), (4096, [255, 255, 255])]
+    );
+}
+
+#[test]
+fn gradient_edit_preserves_opacity_stops() {
+    use pictura_codec::DescValue;
+
+    let mut d = doc();
+    let layer = square(&mut d);
+    assert!(set_layer_style_gradient(
+        layer,
+        "gradientOverlay.gradient",
+        "0:000000 2048:000000 4096:000000"
+    ));
+    let opacity = |location: i32, value: f64| DescValue::Object {
+        name: String::new(),
+        class_id: b"TrnS".to_vec(),
+        items: vec![
+            (
+                b"Opct".to_vec(),
+                DescValue::UnitFloat {
+                    unit: *b"#Prc",
+                    value,
+                },
+            ),
+            (b"Lctn".to_vec(), DescValue::Long(location)),
+            (b"Mdpn".to_vec(), DescValue::Long(50)),
+        ],
+    };
+    let custom = vec![opacity(0, 40.0), opacity(4096, 90.0)];
+    let mut items = lfx2_items(layer);
+    let grfl = items
+        .iter_mut()
+        .find(|(key, _)| key.as_slice() == b"GrFl")
+        .map(|(_, value)| value)
+        .expect("GrFl");
+    let DescValue::Object { items: fields, .. } = grfl else {
+        panic!("effect object");
+    };
+    let grad = fields
+        .iter_mut()
+        .find(|(key, _)| key.as_slice() == b"Grad")
+        .map(|(_, value)| value)
+        .expect("Grad");
+    let DescValue::Object {
+        items: grad_items, ..
+    } = grad
+    else {
+        panic!("gradient object");
+    };
+    let trns = grad_items
+        .iter_mut()
+        .find(|(key, _)| key.as_slice() == b"Trns")
+        .map(|(_, value)| value)
+        .expect("Trns");
+    *trns = DescValue::List(custom.clone());
+    let clrs = grad_items
+        .iter_mut()
+        .find(|(key, _)| key.as_slice() == b"Clrs")
+        .map(|(_, value)| value)
+        .expect("Clrs");
+    let DescValue::List(stops) = clrs else {
+        panic!("stops");
+    };
+    let DescValue::Object { items: middle, .. } = &mut stops[1] else {
+        panic!("stop");
+    };
+    set_item(middle, b"Mdpn", DescValue::Long(25));
+    write_lfx2(layer, items);
+
+    let before = crate::composite_rgba(&d);
+    assert!(set_layer_style_gradient(
+        layer,
+        "gradientOverlay.gradient",
+        "0:ff0000 2048:00ff00 4096:0000ff"
+    ));
+    let items = lfx2_items(layer);
+    let grfl = items
+        .iter()
+        .find(|(key, _)| key.as_slice() == b"GrFl")
+        .map(|(_, value)| value)
+        .expect("GrFl");
+    let DescValue::Object { items: fields, .. } = grfl else {
+        panic!("effect object");
+    };
+    let grad = fields
+        .iter()
+        .find(|(key, _)| key.as_slice() == b"Grad")
+        .map(|(_, value)| value)
+        .expect("Grad");
+    let DescValue::Object {
+        items: grad_items, ..
+    } = grad
+    else {
+        panic!("gradient object");
+    };
+    let trns = grad_items
+        .iter()
+        .find(|(key, _)| key.as_slice() == b"Trns")
+        .map(|(_, value)| value)
+        .expect("Trns");
+    assert_eq!(*trns, DescValue::List(custom));
+    let clrs = grad_items
+        .iter()
+        .find(|(key, _)| key.as_slice() == b"Clrs")
+        .map(|(_, value)| value)
+        .expect("Clrs");
+    let DescValue::List(stops) = clrs else {
+        panic!("stops");
+    };
+    let DescValue::Object { items: middle, .. } = &stops[1] else {
+        panic!("stop");
+    };
+    assert!(middle
+        .iter()
+        .any(|(key, value)| { key.as_slice() == b"Mdpn" && *value == DescValue::Long(25) }));
+    let after = crate::composite_rgba(&d);
+    let plane = (before.width * before.height) as usize;
+    assert_eq!(before.data[3 * plane..], after.data[3 * plane..]);
+    assert_ne!(before.data[..3 * plane], after.data[..3 * plane]);
+}
+
+#[test]
+fn bad_gradient_text_is_refused() {
+    let mut d = doc();
+    let layer = square(&mut d);
+    for text in [
+        "0:000000",
+        "0:000000 4097:ffffff",
+        "0:000000 0:ffffff",
+        "0:zzzzzz 4096:ffffff",
+        "0:000000ff 4096:ffffff",
+    ] {
+        assert!(
+            !set_layer_style_gradient(layer, "gradientOverlay.gradient", text),
+            "{text}"
+        );
+    }
+    layer.is_group = true;
+    assert!(!set_layer_style_gradient(
+        layer,
+        "gradientOverlay.gradient",
+        "0:000000 4096:ffffff"
+    ));
+    layer.is_group = false;
+    layer.background = true;
+    assert!(!set_layer_style_gradient(
+        layer,
+        "gradientOverlay.gradient",
+        "0:000000 4096:ffffff"
+    ));
+}
+
+#[test]
+fn authored_contour_and_gradient_survive_save() {
+    let mut d = doc();
+    let layer = square(&mut d);
+    assert!(set_layer_style_contour(
+        layer,
+        "bevel.glossContour",
+        "0,0 64,128 255,255"
+    ));
+    assert!(set_layer_style_gradient(
+        layer,
+        "gradientOverlay.gradient",
+        "0:000000 2048:00ff00 4096:ffffff"
+    ));
+    let before = crate::composite_rgba(&d);
+    let bytes = pictura_codec::write_psd(&d).unwrap();
+    let reopened = pictura_codec::read_psd(&bytes).unwrap();
+    let layer = resolve_path(&reopened, "1").unwrap();
+    assert_eq!(
+        layer_style_contour(layer, "bevel.glossContour").as_deref(),
+        Some("0,0 64,128 255,255")
+    );
+    assert_eq!(
+        layer_style_gradient(layer, "gradientOverlay.gradient").as_deref(),
+        Some("0:000000 2048:00ff00 4096:ffffff")
+    );
+    let bevel = decode_bevel_emboss(layer).expect("decodes");
+    assert_eq!(
+        bevel.gloss_contour.points(),
+        &[(0.0f32, 0.0), (64.0, 128.0), (255.0, 255.0)]
+    );
+    assert_eq!(crate::composite_rgba(&reopened).data, before.data);
+}
+
+#[test]
+fn channel_include_toggles_the_restriction() {
+    let mut d = doc();
+    let layer = square(&mut d);
+    assert!(set_layer_style_value(layer, "blending.include1", 0.0));
+    assert_eq!(layer.restricted_channels, vec![1]);
+    assert_eq!(layer_style_value(layer, "blending.include1"), Some(0.0));
+    assert!(set_layer_style_value(layer, "blending.include1", 1.0));
+    assert!(layer.restricted_channels.is_empty());
+    assert!(!set_layer_style_value(layer, "blending.include1", 1.0));
+}
+
+#[test]
+fn channels_are_included_by_default() {
+    let mut d = doc();
+    let layer = square(&mut d);
+    for key in [
+        "blending.include0",
+        "blending.include1",
+        "blending.include2",
+    ] {
+        assert_eq!(layer_style_value(layer, key), Some(1.0), "{key}");
+    }
+    assert_eq!(layer_style_value(layer, "blending.include3"), None);
+}
+
+#[test]
+fn group_accepts_channel_include() {
+    let mut d = doc();
+    let layer = square(&mut d);
+    layer.is_group = true;
+    assert!(set_layer_style_value(layer, "blending.include2", 0.0));
+    assert_eq!(layer.restricted_channels, vec![2]);
+    assert!(!set_layer_style_value(layer, "dropShadow.on", 1.0));
+}
+
+#[test]
+fn restricted_channels_survives_copy_and_paste() {
+    let mut d = doc();
+    let style = {
+        let layer = square(&mut d);
+        layer.restricted_channels = vec![1];
+        copy_layer_style(layer).expect("style")
+    };
+    let backdrop = resolve_path(&d, "0").unwrap().clone();
+    let source = resolve_path(&d, "1").unwrap().clone();
+    let mut target = source.clone();
+    target.name = "Target".into();
+    target.rect = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: 4,
+        right: 4,
+    };
+    d.layers = pictura_core::LayerStack::from_layers(vec![backdrop, target, source]);
+    assert_eq!(paste_layer_style(&mut d, &["1"], &style), 1);
+    assert_eq!(resolve_path(&d, "1").unwrap().restricted_channels, vec![1]);
+    assert_eq!(rgb(&d, 1, 1), [255, 255, 0]);
+    assert_eq!(rgb(&d, 5, 5), [255, 255, 0]);
+}
+
+#[test]
+fn default_gradient_text_creates_an_absent_effect() {
+    let mut d = doc();
+    let layer = square(&mut d);
+    assert!(set_layer_style_gradient(
+        layer,
+        "gradientOverlay.gradient",
+        "0:000000 4096:ffffff"
+    ));
+    assert_eq!(
+        layer_style_value(layer, "gradientOverlay.exists"),
+        Some(1.0)
+    );
+    assert_eq!(
+        layer_style_gradient(layer, "gradientOverlay.gradient").as_deref(),
+        Some("0:000000 4096:ffffff")
+    );
+}
+
+#[test]
+fn malformed_stored_contour_and_gradient_are_replaced() {
+    use pictura_codec::DescValue;
+
+    let mut d = doc();
+    let layer = square(&mut d);
+    assert!(set_layer_style_contour(
+        layer,
+        "bevel.glossContour",
+        "0,0 128,128 255,255"
+    ));
+    let mut items = lfx2_items(layer);
+    let ebbl = items
+        .iter_mut()
+        .find(|(key, _)| key.as_slice() == b"ebbl")
+        .map(|(_, value)| value)
+        .expect("ebbl");
+    let DescValue::Object { items: fields, .. } = ebbl else {
+        panic!("effect object");
+    };
+    let trns = fields
+        .iter_mut()
+        .find(|(key, _)| key.as_slice() == b"TrnS")
+        .map(|(_, value)| value)
+        .expect("TrnS");
+    *trns = DescValue::Bool(true);
+    write_lfx2(layer, items);
+    assert!(set_layer_style_contour(
+        layer,
+        "bevel.glossContour",
+        "0,0 64,64 255,255"
+    ));
+    assert_eq!(
+        layer_style_contour(layer, "bevel.glossContour").as_deref(),
+        Some("0,0 64,64 255,255")
+    );
+
+    assert!(set_layer_style_gradient(
+        layer,
+        "gradientOverlay.gradient",
+        "0:000000 2048:000000 4096:ffffff"
+    ));
+    let mut items = lfx2_items(layer);
+    let grfl = items
+        .iter_mut()
+        .find(|(key, _)| key.as_slice() == b"GrFl")
+        .map(|(_, value)| value)
+        .expect("GrFl");
+    let DescValue::Object { items: fields, .. } = grfl else {
+        panic!("effect object");
+    };
+    let grad = fields
+        .iter_mut()
+        .find(|(key, _)| key.as_slice() == b"Grad")
+        .map(|(_, value)| value)
+        .expect("Grad");
+    *grad = DescValue::Bool(true);
+    write_lfx2(layer, items);
+    assert!(set_layer_style_gradient(
+        layer,
+        "gradientOverlay.gradient",
+        "0:ff0000 2048:00ff00 4096:0000ff"
+    ));
+    assert_eq!(
+        layer_style_gradient(layer, "gradientOverlay.gradient").as_deref(),
+        Some("0:ff0000 2048:00ff00 4096:0000ff")
+    );
+}
