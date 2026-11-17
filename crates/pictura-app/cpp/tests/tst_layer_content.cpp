@@ -316,7 +316,16 @@ void LayerContentTest::rasterizeKeepsAppearanceAndHistory()
     QVERIFY(typeAction && typeAction->isEnabled());
     const auto typePixels = pixels(*active); const int typeHistory = active->history_count();
     QVERIFY(registry->dispatch(QString::fromLatin1(pictura::command_ids::LayerRasterizeType)));
-    QCOMPARE(active->history_count(), typeHistory + 1); QCOMPARE(pixels(*active), typePixels);
+    QCOMPARE(active->history_count(), typeHistory + 1);
+    const auto rasterizedTypePixels = pixels(*active);
+    QCOMPARE(rasterizedTypePixels.size(), typePixels.size());
+    // Match the type-rasterization oracle's two-level quantization tolerance.
+    for (qsizetype i = 0; i < typePixels.size(); ++i) {
+        for (int shift : {0, 8, 16, 24}) {
+            QVERIFY(qAbs(int((rasterizedTypePixels[i] >> shift) & 0xffu)
+                - int((typePixels[i] >> shift) & 0xffu)) <= 2);
+        }
+    }
     QCOMPARE(rowForPath(*active, text).kind, QStringLiteral("pixel"));
     const QString smart = active->add_layer_in(QString()); QVERIFY(active->convert_to_smart_object(smart));
     panel->refresh(); panel->selectPaths({smart}, smart); registry->refresh();

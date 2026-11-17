@@ -816,7 +816,7 @@ mod tests {
             }],
             smart_object: Some({
                 let mut so = SmartObject::default();
-                so.smart_filters = (0..pictura_core::LayerParts::from(typed_len))
+                so.smart_filters = (0..typed_len)
                     .map(|_| SmartFilter {
                         filter_id: 2683,
                         name: "f".to_string(),
@@ -887,8 +887,9 @@ mod tests {
         )
         .expect("appends");
         let preserved_flag = |layer: &pictura_core::Layer| {
-            let idx = config_block_index(layer).expect("block");
-            let mut desc = parse_config(layer, idx).expect("parses");
+            let parts = pictura_core::LayerParts::from(layer.clone());
+            let idx = config_block_index(&parts).expect("block");
+            let mut desc = parse_config(&parts, idx).expect("parses");
             match filter_fx_mut(&mut desc)
                 .and_then(|fx| get_object_item(fx, b"filterMaskEnable").cloned())
             {

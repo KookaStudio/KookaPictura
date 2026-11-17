@@ -173,7 +173,9 @@ fn psb_preserved_big_key_block_uses_u64_length() {
     assert_eq!(back.layers[0].extra_blocks()[0].key, *b"Lr16");
     let mut expected = doc.clone();
     expected.is_psb = true;
-    expected.layers[0].extra_blocks()[0].data = vec![1, 2, 3, 4, 5, 0].into();
+    crate::edit_layer(expected.layers[0].as_mut(), |parts| {
+        parts.extra_blocks[0].data = vec![1, 2, 3, 4, 5, 0].into();
+    });
     assert_eq!(
         back, expected,
         "preserved big-key block round-trips in a PSB"

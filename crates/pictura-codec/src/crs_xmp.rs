@@ -579,9 +579,16 @@ crs:Exposure2012=\"+0.50\" crs:Contrast2012=\"-10\"/></rdf:RDF></x:xmpmeta>"
             "patching the CRS packet changes the payload"
         );
 
-        find_smart_object_mut(&mut doc.layers, UUID)
-            .unwrap()
-            .set_payload(b"8BPS\x00\x01replacement".to_vec());
+        crate::edit_layer(
+            find_smart_layer_mut(&mut doc.layers, UUID).unwrap(),
+            |parts| {
+                parts
+                    .smart_object
+                    .as_mut()
+                    .unwrap()
+                    .set_payload(b"8BPS\x00\x01replacement".to_vec());
+            },
+        );
         let replaced = find_smart_object(&doc.layers, UUID)
             .unwrap()
             .payload_digest();

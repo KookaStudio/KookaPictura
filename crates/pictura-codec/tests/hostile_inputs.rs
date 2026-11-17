@@ -409,7 +409,7 @@ fn over_budget_channel_is_refused_before_decoding() {
         mask: Some([0, 0, 1, 1]),
         ..LayerSpec::default()
     };
-    *layer.channels_mut() = vec![
+    layer.channels = vec![
         (-2, vec![0, 1, 0x81]), // RLE whose 2-byte count table is truncated
         (0, raw_channel(0, 2048).1),
     ];

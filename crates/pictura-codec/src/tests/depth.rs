@@ -541,7 +541,7 @@ fn short_high_depth_lab_cmyk_source_plane_is_a_typed_error() {
                 .layers
                 .push(crate::layer_from_parts(pictura_core::LayerParts {
                     rect,
-                    channels: (0i16..pictura_core::LayerParts::from(3))
+                    channels: (0i16..3)
                         .map(|id| Channel {
                             id,
                             data: vec![1].into(),

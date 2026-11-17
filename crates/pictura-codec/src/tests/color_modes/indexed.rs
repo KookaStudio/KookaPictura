@@ -1,6 +1,6 @@
 use super::*;
 
-fn indexed_palette() -> [u8; 768] {
+pub(super) fn indexed_palette() -> [u8; 768] {
     let mut palette = [0u8; 768];
     for i in 0..256 {
         palette[i] = i as u8;
