@@ -248,6 +248,7 @@ fn selection_move_drag_costs() {
             "cpu only (no Vulkan device in this environment)"
         }
     );
+    let coverage = pictura_core::Plane::from(coverage);
     report(
         "move_mask_selection_content (release)",
         &mut time(5, || {

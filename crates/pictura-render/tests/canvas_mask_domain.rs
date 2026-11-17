@@ -1,6 +1,6 @@
 use pictura_core::{
-    memory, BitDepth, Channel, ColorMode, Document, Layer, LayerMask, LayerStack, PsdRect, Samples,
-    SourceChannels,
+    memory, BitDepth, Channel, ColorMode, Document, Layer, LayerMask, LayerStack, Plane, PsdRect,
+    Samples, SourceChannels,
 };
 use pictura_render::*;
 
@@ -439,7 +439,13 @@ fn selected_mask_move_preserves_offcanvas_samples() {
             coverage[15] = 255;
             coverage[16] = 255;
             assert!(move_mask_selection_content(
-                &mut doc, "0", &coverage, dx, dy, duplicate, 255
+                &mut doc,
+                "0",
+                &Plane::from(coverage.clone()),
+                dx,
+                dy,
+                duplicate,
+                255
             ));
             assert_eq!(sample(&doc, 3 + dx, 1 + dy), 1);
             assert_eq!(sample(&doc, 4 + dx, 1 + dy), 64);
@@ -451,7 +457,13 @@ fn selected_mask_move_preserves_offcanvas_samples() {
     coverage[15] = 255;
     coverage[16] = 255;
     assert!(move_mask_selection_content(
-        &mut doc, "0", &coverage, 1, 0, false, 255
+        &mut doc,
+        "0",
+        &Plane::from(coverage.clone()),
+        1,
+        0,
+        false,
+        255
     ));
     assert_eq!(
         (sample(&doc, 3, 1), sample(&doc, 4, 1), sample(&doc, 5, 1)),
@@ -466,7 +478,13 @@ fn selected_mask_move_blends_toward_black() {
     let mut coverage = vec![0; 96];
     coverage[14] = 128;
     assert!(move_mask_selection_content(
-        &mut doc, "0", &coverage, 5, 0, false, 255
+        &mut doc,
+        "0",
+        &Plane::from(coverage.clone()),
+        5,
+        0,
+        false,
+        255
     ));
     assert_eq!((sample(&doc, 2, 1), sample(&doc, 7, 1)), (100, 100));
 }
@@ -578,7 +596,7 @@ fn canvas_mask_refusals_are_atomic() {
         assert!(!move_mask_selection_content(
             &mut retained,
             "0",
-            &selected,
+            &Plane::from(selected),
             30,
             0,
             false,

@@ -646,3 +646,36 @@ fn row_copy_translate_matches_the_per_pixel_shift() {
         assert_eq!(src.translate(dx, dy), expected, "shift {dx},{dy}");
     }
 }
+
+/// Fit Centered reads a tiled selection two rows at a time (#1268): no
+/// materialization, a tiled result, and the bytes of the flat run.
+#[test]
+fn fit_centered_reads_a_tiled_selection() {
+    let (w, h) = (600u32, 530u32);
+    let mut state = 0x1268_u64;
+    let data: Vec<u8> = (0..w as usize * h as usize)
+        .map(|i| {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            let (x, y) = (i % w as usize, i / w as usize);
+            if (40..560).contains(&x) && (30..510).contains(&y) {
+                255
+            } else {
+                (state >> 56) as u8
+            }
+        })
+        .collect();
+    let flat = Selection {
+        width: w,
+        height: h,
+        data: data.into(),
+    };
+    let mut tiled = flat.clone();
+    assert!(tiled.data.tile(w as usize, h as usize));
+    for (tw, th) in [(900, 700), (311, 405)] {
+        let got = pictura_core::assert_no_materialization(|| tiled.fit_centered(tw, th));
+        assert!(got.data.is_tiled());
+        assert_eq!(got, flat.fit_centered(tw, th), "{tw}×{th}");
+    }
+}

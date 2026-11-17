@@ -14,6 +14,7 @@ mod bridge;
 #[cfg(test)]
 mod cap_tests;
 mod channel_rows;
+mod exports;
 mod query;
 mod quick;
 mod refine;
@@ -42,7 +43,7 @@ impl qobject::PictureView {
             {
                 let mut rust = self.as_mut().rust_mut();
                 if let Some(prev) = rust.session.take_selection() {
-                    if prev.data.iter().any(|&v| v > 0) {
+                    if !prev.data.all_eq(0) {
                         rust.session.deselected_selection = Some(prev);
                     }
                 }
@@ -203,7 +204,7 @@ impl qobject::PictureView {
                     return false;
                 }
                 (
-                    selection.data.to_vec(),
+                    selection.data.clone(),
                     selection.translate(dx, dy),
                     0,
                     move_dirty_rect(selection, dx, dy),
@@ -536,39 +537,17 @@ impl qobject::PictureView {
 
     /// The live selection's coverage, row-major; empty without a selection.
     pub fn selection_coverage_bytes(&self) -> Vec<u8> {
-        self.rust()
-            .session
-            .selection
-            .as_ref()
-            .map(|selection| selection.data.to_vec())
-            .unwrap_or_default()
+        self.rust().selection_coverage_bytes()
     }
 
     /// The coverage of `target` in this document; empty on failure.
     pub fn channel_coverage(&self, target: &QString) -> Vec<u8> {
-        self.rust()
-            .session
-            .doc
-            .as_ref()
-            .and_then(|doc| selection_from_target(doc, &target.to_string()))
-            .map(|selection| selection.data.to_vec())
-            .unwrap_or_default()
+        self.rust().channel_coverage(&target.to_string())
     }
 
     /// The coverage of colour row `row` (0 is the composite) under `mask`.
     pub fn color_row_coverage(&self, row: i32, mask: i32) -> Vec<u8> {
-        let rust = self.rust();
-        let Some(doc) = rust.session.doc.as_ref() else {
-            return Vec::new();
-        };
-        channel_row_selection_from(
-            doc,
-            |f| stream_picture(doc, rust, whole(doc), f),
-            row,
-            mask as u8,
-        )
-        .map(|selection| selection.data.to_vec())
-        .unwrap_or_default()
+        self.rust().color_row_coverage(row, mask as u8)
     }
 
     /// Duplicate `coverage` into this document as a new channel: fit it to the

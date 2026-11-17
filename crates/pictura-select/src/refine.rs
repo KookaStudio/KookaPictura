@@ -10,6 +10,10 @@
 //! made from and returns a refined coverage. [`decontaminate`] replaces colour
 //! fringes at soft edges with nearby foreground colour and returns a new pixel
 //! buffer.
+//!
+//! ponytail: the passes read the selection densely and build whole-canvas
+//! `f64`/`bool` work arrays from it, so a tiled selection is materialized
+//! here; bounding Refine Edge needs banded work arrays, not row reads (#1268).
 
 use pictura_core::{PixelBuffer, Plane, TILE};
 

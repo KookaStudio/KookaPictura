@@ -37,7 +37,8 @@ fn copy_merged_reads_the_selection_bounds() {
             coverage[y as usize * w + x as usize] = ((x + y) % 256) as u8;
         }
     }
-    for selection in [Some(&coverage[..]), None] {
+    let coverage = pictura_core::Plane::from(coverage);
+    for selection in [Some(&coverage), None] {
         let mut read = Vec::new();
         let clip = pictura_render::copy_merged_region(doc, selection, |region| {
             read.push(region);

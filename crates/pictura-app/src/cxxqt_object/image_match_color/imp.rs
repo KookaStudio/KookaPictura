@@ -5,7 +5,7 @@ use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_core::PsdRect;
+use pictura_core::{Plane, PsdRect};
 use pictura_paint::stamp::{layer_surface, surface_from_composite};
 use pictura_render::{
     match_color_stats, Adjustment, MatchColorAccumulator, MatchColorParams, MatchColorStats,
@@ -16,8 +16,9 @@ use super::super::picture::{stream_picture, whole};
 use super::ffi::QList_f64;
 
 /// The document-sized selection coverage plane of `view`, when its selection
-/// matches the document. Match Color's statistics weight pixels by it.
-pub(super) fn selection_plane(view: &PictureView, use_selection: bool) -> Option<Vec<u8>> {
+/// matches the document, as a tile-sharing clone. Match Color's statistics
+/// weight pixels by it.
+pub(super) fn selection_plane(view: &PictureView, use_selection: bool) -> Option<Plane<u8>> {
     if !use_selection {
         return None;
     }
@@ -27,7 +28,7 @@ pub(super) fn selection_plane(view: &PictureView, use_selection: bool) -> Option
         .selection
         .as_ref()
         .filter(|s| s.width == doc.width && s.height == doc.height)
-        .map(|s| s.data.to_vec())
+        .map(|s| s.data.clone())
 }
 
 pub(super) fn stats_vec(stats: MatchColorStats) -> Vec<f64> {
@@ -47,9 +48,9 @@ pub(super) fn match_color_target_stats(view: &PictureView, use_selection: bool) 
     let Some(image) = layer_surface(doc, path) else {
         return Vec::new();
     };
-    stats_vec(match_color_stats(
+    stats_vec(surface_stats(
         &image.data,
-        selection_plane(view, use_selection).as_deref(),
+        selection_plane(view, use_selection).as_ref(),
     ))
 }
 
@@ -64,12 +65,35 @@ pub(super) fn match_color_source_stats(
     };
     let selection = selection_plane(source, use_selection);
     if path.is_empty() {
-        return stats_vec(picture_stats(doc, rust, selection.as_deref()));
+        return stats_vec(picture_stats(doc, rust, selection.as_ref()));
     }
     let Some(image) = layer_surface(doc, &path.to_string()) else {
         return Vec::new();
     };
-    stats_vec(match_color_stats(&image.data, selection.as_deref()))
+    stats_vec(surface_stats(&image.data, selection.as_ref()))
+}
+
+/// The coverage of `plane`'s samples `at..at + n`, clipped to its end, read
+/// out of the tiles (#1268).
+fn coverage_span(plane: &Plane<u8>, at: usize, n: usize) -> Vec<u8> {
+    let mut out = vec![0u8; n.min(plane.len().saturating_sub(at))];
+    plane.read_into(at, &mut out);
+    out
+}
+
+/// [`match_color_stats`] of document-sized `pixels` under `selection`, the
+/// coverage read a piece at a time: the pieces sum in pixel order, so the
+/// result is bit-identical to one pass over a contiguous coverage.
+fn surface_stats(pixels: &[[u8; 4]], selection: Option<&Plane<u8>>) -> MatchColorStats {
+    const PIECE: usize = 1 << 16;
+    let Some(plane) = selection else {
+        return match_color_stats(pixels, None);
+    };
+    let mut stats = MatchColorAccumulator::default();
+    for (k, piece) in pixels.chunks(PIECE).enumerate() {
+        stats.add(piece, Some(&coverage_span(plane, k * PIECE, piece.len())));
+    }
+    stats.finish()
 }
 
 /// Match Color's statistics of the picture, `selection` its coverage: band by
@@ -78,16 +102,15 @@ pub(super) fn match_color_source_stats(
 pub(super) fn picture_stats(
     doc: &pictura_core::Document,
     view: &crate::cxxqt_object::state::PictureViewRust,
-    selection: Option<&[u8]>,
+    selection: Option<&Plane<u8>>,
 ) -> MatchColorStats {
     let w = doc.width as usize;
     let mut stats = MatchColorAccumulator::default();
     stream_picture(doc, view, whole(doc), |offset, band| {
         let pixels = surface_from_composite(&band).data;
         let at = offset as usize * w;
-        let coverage = selection
-            .map(|plane| &plane[at.min(plane.len())..(at + pixels.len()).min(plane.len())]);
-        stats.add(&pixels, coverage);
+        let coverage = selection.map(|plane| coverage_span(plane, at, pixels.len()));
+        stats.add(&pixels, coverage.as_deref());
     });
     stats.finish()
 }
@@ -270,8 +293,9 @@ mod picture_stats_tests {
         let coverage: Vec<u8> = (0..whole_pixels.len())
             .map(|i| (i * 7 % 256) as u8)
             .collect();
-        for selection in [None, Some(&coverage[..])] {
-            let streamed = picture_stats(doc, &view, selection);
+        let plane = Plane::from(coverage.clone());
+        for (selection, plane) in [(None, None), (Some(&coverage[..]), Some(&plane))] {
+            let streamed = picture_stats(doc, &view, plane);
             let want = match_color_stats(&whole_pixels, selection);
             assert_eq!(streamed.mean.map(f64::to_bits), want.mean.map(f64::to_bits));
             assert_eq!(streamed.std.map(f64::to_bits), want.std.map(f64::to_bits));

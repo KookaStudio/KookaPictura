@@ -1075,3 +1075,67 @@ fn mixed_color_and_missing_channel_is_invalid_params() {
     let err = apply_filter(&mut layer, &Filter::Sharpen, None, false).unwrap_err();
     assert!(matches!(err, FilterError::InvalidParams(_)), "{err:?}");
 }
+
+/// A filter and Auto Tone through a tiled soft selection read the mask by rows
+/// (#1268): no materialization, and the layer equals the run through the same
+/// selection held flat.
+#[test]
+fn selection_filters_read_a_tiled_selection() {
+    let (w, h) = (600usize, 530usize);
+    let mut state = 0x1268_u64;
+    let mut next = || {
+        state = state
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        (state >> 56) as u8
+    };
+    let coverage: Vec<u8> = (0..w * h)
+        .map(|i| {
+            let (x, y) = (i % w, i / w);
+            let noise = next();
+            if (40..w - 30).contains(&x) && (30..h - 20).contains(&y) {
+                255
+            } else if x < 20 || y < 10 {
+                0
+            } else {
+                noise
+            }
+        })
+        .collect();
+    let flat = pictura_core::Plane::from(coverage);
+    let mut tiled = flat.clone();
+    assert!(tiled.tile(w, h));
+    let mask = |data: &pictura_core::Plane<u8>| LayerMask {
+        rect: rect(0, 0, h as i32, w as i32),
+        default_color: 0,
+        data: Some(data.clone()),
+        ..Default::default()
+    };
+    let mut layer = step_layer(w as i32 - 40, h as i32 - 30, 230);
+    layer.rect = rect(15, 20, h as i32 - 15, w as i32 - 20);
+    for channel in layer.channels.iter_mut().filter(|c| c.id >= 0) {
+        for value in channel.data.as_mut_slice() {
+            *value = value.wrapping_add(next() / 4);
+        }
+    }
+
+    let blur = Filter::GaussianBlur { radius: 2.0 };
+    let (mut got, mut want) = (layer.clone(), layer.clone());
+    let tiled_mask = mask(&tiled);
+    pictura_core::assert_no_materialization(|| {
+        apply_filter(&mut got, &blur, Some(&tiled_mask), false)
+    })
+    .unwrap();
+    apply_filter(&mut want, &blur, Some(&mask(&flat)), false).unwrap();
+    assert_eq!(got, want, "blur");
+
+    let auto = Adjustment::Auto(pictura_adjust::AutoKind::Tone);
+    let region = layer.rect;
+    let (mut got, mut want) = (layer.clone(), layer);
+    pictura_core::assert_no_materialization(|| {
+        apply_adjustment_region(&mut got, &auto, Some(&tiled_mask), region)
+    })
+    .unwrap();
+    apply_adjustment_region(&mut want, &auto, Some(&mask(&flat)), region).unwrap();
+    assert_eq!(got, want, "auto tone");
+}

@@ -157,7 +157,7 @@ fn every_structural_op_leaves_a_well_formed_stack() {
     assert_valid(&d, "via_copy");
 
     let mut d = doc(vec![layer("A", false)]);
-    let floating = lift_selection(&mut d, "0", &[255; 16]);
+    let floating = lift_selection(&mut d, "0", &vec![255u8; 16].into());
     assert_valid(&d, "lift_selection");
     if !floating.is_empty() {
         merge_lifted(&mut d, &floating);
@@ -292,7 +292,7 @@ fn insertion_and_lift_never_leave_a_baseless_clip() {
     assert_valid(&d, "via copy");
 
     let mut d = doc(vec![layer("A", false)]);
-    lift_selection(&mut d, "0", &[255; 16]);
+    lift_selection(&mut d, "0", &vec![255u8; 16].into());
     assert_valid(&d, "lift");
 }
 
@@ -376,7 +376,7 @@ fn lift_refusal_keeps_source_pixels() {
     background.background = true;
     let mut d = doc(vec![src, background]);
     let before = d.layers[0].channels[3].data.to_vec();
-    assert!(lift_selection(&mut d, "0", &[255; 16]).is_empty());
+    assert!(lift_selection(&mut d, "0", &vec![255u8; 16].into()).is_empty());
     assert_eq!(&d.layers[0].channels[3].data[..], &before[..]);
 }
 
@@ -434,7 +434,7 @@ fn smart_object_conversion_with_a_background_host() {
 #[test]
 fn merge_lifted_keeps_a_run_clipped_to_the_source() {
     let mut d = doc(vec![layer("A", false), layer("B", true)]);
-    let floating = lift_selection(&mut d, "0", &[255; 16]);
+    let floating = lift_selection(&mut d, "0", &vec![255u8; 16].into());
     assert!(!floating.is_empty());
     assert_eq!(d.layers.len(), 3);
     assert!(d.layers[2].clipping);

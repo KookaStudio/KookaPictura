@@ -3,7 +3,7 @@
 //! [`LayerMask`]; the coverage at each document pixel modulates the copied
 //! alpha, so a feathered selection copies (or cuts) partially.
 
-use pictura_core::{Document, Layer, LayerMask};
+use pictura_core::{Document, Layer, LayerMask, Plane};
 
 use super::create::transparent_layer;
 use super::paths::{format_segments, parse_path, resolve_path, resolve_path_mut};
@@ -27,7 +27,7 @@ fn via(doc: &mut Document, source_path: &str, mask: &LayerMask, cut: bool) -> St
     let Some(segments) = parse_path(source_path) else {
         return String::new();
     };
-    let Some(mask_data) = mask.data.as_deref() else {
+    let Some(mask_data) = mask.data.as_ref() else {
         return String::new();
     };
     let copy = {
@@ -63,7 +63,7 @@ fn via(doc: &mut Document, source_path: &str, mask: &LayerMask, cut: bool) -> St
 fn copy_source(
     source: &Layer,
     mask: &LayerMask,
-    mask_data: &[u8],
+    mask_data: &Plane<u8>,
     width: u32,
     height: u32,
     name: String,
@@ -114,7 +114,7 @@ fn copy_source(
 
 /// Scale the source layer's alpha down by coverage, `alpha * (255 - coverage) /
 /// 255`; a fully covered pixel becomes transparent.
-fn clear_source(doc: &mut Document, segments: &[usize], mask: &LayerMask, mask_data: &[u8]) {
+fn clear_source(doc: &mut Document, segments: &[usize], mask: &LayerMask, mask_data: &Plane<u8>) {
     let path = format_segments(segments);
     let Some(layer) = resolve_path_mut(doc, &path) else {
         return;
@@ -156,7 +156,7 @@ fn scale(value: u8, coverage: u8) -> u8 {
 
 /// The mask coverage at document pixel `(x, y)`; outside the mask rectangle the
 /// mask's default color applies.
-fn coverage_at(mask: &LayerMask, data: &[u8], x: i32, y: i32) -> u8 {
+fn coverage_at(mask: &LayerMask, data: &Plane<u8>, x: i32, y: i32) -> u8 {
     let rx = x - mask.rect.left;
     let ry = y - mask.rect.top;
     let width = mask.rect.width();
@@ -165,7 +165,7 @@ fn coverage_at(mask: &LayerMask, data: &[u8], x: i32, y: i32) -> u8 {
         return mask.default_color;
     }
     let index = ry as usize * width as usize + rx as usize;
-    data.get(index).copied().unwrap_or(mask.default_color)
+    data.sample(index).unwrap_or(mask.default_color)
 }
 
 fn set_channel(layer: &mut Layer, id: i16, index: usize, value: u8) {

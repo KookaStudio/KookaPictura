@@ -2,9 +2,11 @@ use super::*;
 
 use super::super::picture::picture_region;
 use crate::cxxqt_object::edit::Edit;
+use crate::cxxqt_object::state::PictureViewRust;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
+use pictura_core::Plane;
 use pictura_render::{Clip, PasteMode};
 use std::sync::Mutex;
 
@@ -87,33 +89,36 @@ pub(super) fn copy_layer_from_document(
     QString::from(created.as_str())
 }
 
-/// The active selection's coverage plane, when it matches the document.
-pub(super) fn coverage(view: &PictureView) -> Option<Vec<u8>> {
-    let rust = view.rust();
+/// The active selection's coverage plane, when it matches the document: a
+/// tile-sharing clone, never a contiguous copy (#1268).
+pub(in crate::cxxqt_object) fn clip_selection(rust: &PictureViewRust) -> Option<Plane<u8>> {
     let doc = rust.session.doc.as_ref()?;
     rust.session
         .selection
         .as_ref()
         .filter(|s| s.width == doc.width && s.height == doc.height)
-        .map(|s| s.data.to_vec())
+        .map(|s| s.data.clone())
 }
 
 /// The clip `Copy`/`Copy Merged` would take, without storing it.
-pub(super) fn copy_of(view: &PictureView, path: &str, merged: bool) -> Option<Clip> {
-    let selection = coverage(view);
-    let rust = view.rust();
+pub(in crate::cxxqt_object) fn copy_of(
+    rust: &PictureViewRust,
+    path: &str,
+    merged: bool,
+) -> Option<Clip> {
+    let selection = clip_selection(rust);
     let doc = rust.session.doc.as_ref()?;
     if merged {
-        pictura_render::copy_merged_region(doc, selection.as_deref(), |region| {
+        pictura_render::copy_merged_region(doc, selection.as_ref(), |region| {
             picture_region(doc, rust, region)
         })
     } else {
-        pictura_render::copy_layer(doc, path, selection.as_deref())
+        pictura_render::copy_layer(doc, path, selection.as_ref())
     }
 }
 
 pub(super) fn clipboard_copy(view: Pin<&mut PictureView>, path: &QString, merged: bool) -> bool {
-    match copy_of(&view, &path.to_string(), merged) {
+    match copy_of(view.rust(), &path.to_string(), merged) {
         Some(clip) => {
             store(clip);
             true
@@ -127,7 +132,7 @@ pub(super) fn clipboard_cut(view: Pin<&mut PictureView>, path: &QString) -> bool
         return false;
     }
     let path = path.to_string();
-    let Some(clip) = copy_of(&view, &path, false) else {
+    let Some(clip) = copy_of(view.rust(), &path, false) else {
         return false;
     };
     if !clear(view, &path, "Cut") {
@@ -145,9 +150,9 @@ pub(super) fn clipboard_clear(view: Pin<&mut PictureView>, path: &QString) -> bo
 }
 
 pub(super) fn clear(mut view: Pin<&mut PictureView>, path: &str, label: &str) -> bool {
-    let selection = coverage(&view);
+    let selection = clip_selection(view.rust());
     let cleared = match view.as_mut().rust_mut().session.doc.as_mut() {
-        Some(doc) => pictura_render::clear_layer(doc, path, selection.as_deref()),
+        Some(doc) => pictura_render::clear_layer(doc, path, selection.as_ref()),
         None => false,
     };
     if cleared {
@@ -184,7 +189,7 @@ pub(super) fn clipboard_paste(
     let Some(clip) = stored() else {
         return QString::default();
     };
-    let selection = coverage(&view);
+    let selection = clip_selection(view.rust());
     let Some((width, height)) = view
         .rust()
         .session
@@ -195,7 +200,7 @@ pub(super) fn clipboard_paste(
         return QString::default();
     };
     let into_bounds = selection
-        .as_deref()
+        .as_ref()
         .filter(|_| mode == PasteMode::Into)
         .and_then(|s| pictura_render::coverage_bounds(s, width, height));
     let origin = match kind {
@@ -222,7 +227,7 @@ pub(super) fn clipboard_paste(
             &clip,
             origin,
             mode,
-            selection.as_deref(),
+            selection.as_ref(),
         ),
         None => String::new(),
     };

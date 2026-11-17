@@ -4,6 +4,24 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Tiled selection readers — #1268 complete** (OpenSpec change
+  `tiled-selection-readers`; capability `tools/tiled-selection-readers`).
+  `Plane` derefs to a slice, and that deref materializes a tiled selection;
+  the consumers #1214 left on it now read tiles or rows.
+  - **Engine.** The clipboard family, `coverage_bounds` (now core's tile scan),
+    Lift, Layer via Copy/Cut, `move_mask_selection_content`, Patch and
+    Content-Aware Move take `&Plane<u8>`. Filters and Auto adjustments through
+    a selection read mask rows (`filter::coverage_row`); Apply Image and smart
+    filter masks read row spans or samples. `fit_centered` reads two rows per
+    output row and returns a tiled selection.
+  - **App.** Clipboard, Lift and Match Color pass tile-sharing plane clones
+    (Match Color reads coverage in pieces, bit-identical). Bridge exports fill
+    one buffer with `Selection::coverage_bytes` (no cached mirror).
+  - **Guard.** `selection_readers_do_not_materialize` (nextest) runs Copy,
+    Copy Merged, Clear, Lift, a filter, Patch, Content-Aware Move, an export
+    and a selection drag on a tiled selection: 0 materializations.
+  - **Left (`ponytail:`).** Refine Edge reads the selection densely; its
+    whole-canvas work arrays need banding first.
 - **Cross-document channel/selection drag — #1332 implemented** (OpenSpec
   change `2026-11-16-channel-selection-drag`, archived; capabilities
   `ui/channels-panel` and `tools/selection-channels`). The Channels panel has

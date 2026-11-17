@@ -205,9 +205,10 @@ pub(super) fn shrink_selection(sel: &Selection, w: u32, h: u32) -> Selection {
     let mut data = vec![0u8; w as usize * h as usize];
     for y in 0..h as usize {
         let sy = (y * sh / h as usize).min(sh - 1);
+        let row = sel.data.row(sy, sw).unwrap_or_default();
         for x in 0..w as usize {
             let sx = (x * sw / w as usize).min(sw - 1);
-            data[y * w as usize + x] = sel.data[sy * sw + sx];
+            data[y * w as usize + x] = row[sx];
         }
     }
     Selection {
@@ -296,7 +297,7 @@ pub(super) fn preview(
         Ok(refined) => {
             *width = refined.width as i32;
             *height = refined.height as i32;
-            refined.data.to_vec()
+            refined.coverage_bytes()
         }
         Err(_) => Vec::new(),
     }
@@ -304,7 +305,11 @@ pub(super) fn preview(
 
 /// Write `data` into the layer at `path` as a document-sized raster mask. An
 /// existing mask keeps its flags, density and feather; only its pixels change.
-pub(super) fn set_layer_mask(doc: &mut pictura_core::Document, path: &str, data: Vec<u8>) {
+pub(super) fn set_layer_mask(
+    doc: &mut pictura_core::Document,
+    path: &str,
+    data: pictura_core::Plane<u8>,
+) {
     let (w, h) = (doc.width as i32, doc.height as i32);
     if let Some(layer) = pictura_render::resolve_path_mut(doc, path) {
         let mask = layer.mask.get_or_insert_with(LayerMask::default);
@@ -315,7 +320,7 @@ pub(super) fn set_layer_mask(doc: &mut pictura_core::Document, path: &str, data:
             right: w,
         };
         mask.default_color = 0;
-        mask.data = Some(data.into());
+        mask.data = Some(data);
     }
 }
 
@@ -338,9 +343,12 @@ pub(super) fn write_decontaminated(
             continue;
         };
         for y in 0..h {
+            let Some(row) = coverage.data.row(y, w) else {
+                continue;
+            };
             for x in 0..w {
                 let i = y * w + x;
-                if coverage.data[i] == 0 {
+                if row[x] == 0 {
                     continue;
                 }
                 let sx = x as i32 - rect.left;
@@ -479,7 +487,7 @@ pub(super) fn apply(
                 if !eligible {
                     return false;
                 }
-                set_layer_mask(doc, &path, refined.data.to_vec());
+                set_layer_mask(doc, &path, refined.data.clone());
                 true
             }
             OutputTarget::NewLayer | OutputTarget::NewLayerWithMask => {
@@ -498,7 +506,7 @@ pub(super) fn apply(
                     write_decontaminated(doc, &new_path, &refined, decon);
                 }
                 if target == OutputTarget::NewLayerWithMask {
-                    set_layer_mask(doc, &new_path, refined.data.to_vec());
+                    set_layer_mask(doc, &new_path, refined.data.clone());
                 }
                 new_layer_path = Some(new_path);
                 true

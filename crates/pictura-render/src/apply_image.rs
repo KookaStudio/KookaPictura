@@ -156,11 +156,15 @@ fn mask_plane(mask: &LayerMask, width: usize, height: usize) -> Vec<u8> {
         if my < 0 || my as usize >= mh {
             continue;
         }
-        for (x, value) in row.iter_mut().enumerate() {
-            let mx = x as i32 - mask.rect.left;
-            if mx >= 0 && (mx as usize) < mw {
-                *value = data[my as usize * mw + mx as usize];
-            }
+        // Document columns `x0..x1` meet mask columns `x0 - left..x1 - left`.
+        let x0 = mask.rect.left.max(0) as usize;
+        let x1 = (mask.rect.left + mw as i32).clamp(0, row.len() as i32) as usize;
+        if x1 <= x0 {
+            continue;
+        }
+        let mx0 = (x0 as i32 - mask.rect.left) as usize;
+        if let Some(span) = data.row_span(my as usize, mx0..mx0 + (x1 - x0), mw) {
+            row[x0..x1].copy_from_slice(&span);
         }
     }
     out

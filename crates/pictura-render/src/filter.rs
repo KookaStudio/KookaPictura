@@ -218,12 +218,9 @@ fn apply_op_region(
     let coverage_plane = if matches!(op, Op::Adjustment(..)) {
         mask.map(|mask| {
             let mut plane = vec![0u8; n];
-            for y in 0..ch {
-                for x in 0..cw {
-                    plane[y * cw + x] =
-                        coverage(Some(mask), clip.left + x as i32, clip.top + y as i32);
-                }
-            }
+            plane.par_chunks_mut(cw).enumerate().for_each(|(y, row)| {
+                coverage_row(Some(mask), clip.left, clip.top + y as i32, row);
+            });
             plane
         })
     } else {
@@ -340,12 +337,14 @@ fn write_back(out: &mut [u8], filtered: &[u8], blend: Option<Blend>, at: Placeme
                 dst.copy_from_slice(src);
                 return;
             };
+            let mut covs = vec![0u8; cw];
+            coverage_row(blend.mask, left, top + ly as i32, &mut covs);
             for lx in 0..cw {
                 let i = ly * cw + lx;
                 if blend.keep_clear.is_some_and(|a| a[i] == 0) {
                     continue;
                 }
-                let cov = coverage(blend.mask, left + lx as i32, top + ly as i32);
+                let cov = covs[lx];
                 if cov == 0 {
                     continue;
                 }
@@ -382,9 +381,51 @@ pub(crate) fn coverage(mask: Option<&LayerMask>, x: i32, y: i32) -> u8 {
     let Some(data) = &mask.data else {
         return mask.default_color;
     };
-    data.get(my as usize * mw as usize + mx as usize)
-        .copied()
+    data.sample(my as usize * mw as usize + mx as usize)
         .unwrap_or(mask.default_color)
+}
+
+/// [`coverage`] of the document pixels `left..left + out.len()` on row `y`,
+/// with the mask's samples read as one row span, so a tiled mask (a
+/// selection) is never materialized (#1268).
+pub(crate) fn coverage_row(mask: Option<&LayerMask>, left: i32, y: i32, out: &mut [u8]) {
+    let Some(mask) = mask.filter(|mask| !mask.disabled) else {
+        out.fill(255);
+        return;
+    };
+    out.fill(mask.default_color);
+    let (mw, mh) = (mask.rect.width(), mask.rect.height());
+    let my = y - mask.rect.top;
+    let Some(data) = &mask.data else {
+        return;
+    };
+    if mw <= 0 || mh <= 0 || my < 0 || my >= mh {
+        return;
+    }
+    let x0 = (mask.rect.left - left).max(0);
+    let x1 = (mask.rect.right - left).min(out.len() as i32);
+    if x1 <= x0 {
+        return;
+    }
+    let (mx0, mx1) = (
+        (left + x0 - mask.rect.left) as usize,
+        (left + x1 - mask.rect.left) as usize,
+    );
+    let width = mw as usize;
+    let span = data
+        .geometry()
+        .is_none_or(|(w, _, _)| w == width)
+        .then(|| data.row_span(my as usize, mx0..mx1, width))
+        .flatten();
+    if let Some(row) = span {
+        out[x0 as usize..x1 as usize].copy_from_slice(&row);
+    } else {
+        for (x, value) in (mx0..mx1).zip(&mut out[x0 as usize..x1 as usize]) {
+            if let Some(sample) = data.sample(my as usize * width + x) {
+                *value = sample;
+            }
+        }
+    }
 }
 
 #[cfg(test)]
