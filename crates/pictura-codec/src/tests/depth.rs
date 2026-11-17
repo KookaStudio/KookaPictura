@@ -787,7 +787,7 @@ fn read_conversion_reaches_native_composite() {
     let out = apply_icc(doc);
     assert_ne!(
         out.source.planes(),
-        before,
+        &before,
         "the retained native composite is converted on read"
     );
     assert_eq!(
