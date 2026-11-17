@@ -117,7 +117,6 @@ pub fn read_psd_within_options(
     crate::global_light::resolve_global_light(&mut doc);
     Ok(doc)
 }
-
 pub(crate) fn read_container(
     bytes: &[u8],
     options: &OpenOptions,
