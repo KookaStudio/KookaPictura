@@ -128,7 +128,7 @@ fn add_gradient_shape(
     let outline = outline_in_box(ShapeOptions::new(ShapeKind::Rectangle, 0.0, 3), rect).unwrap();
     let path = pictura_render::add_shape_layer(doc, "", [0, 0, 0, 255], "Gradient", &outline, None);
     let layer = pictura_render::resolve_path_mut(doc, &path).unwrap();
-    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+    pictura_codec::edit_layer(layer, |parts| {
         parts.adjustment = Some(pictura_render::encode_gradient_fill(
             kind,
             &[
@@ -150,7 +150,7 @@ fn add_pattern_shape(doc: &mut Document, rect: (f64, f64, f64, f64)) {
     let outline = outline_in_box(ShapeOptions::new(ShapeKind::Rectangle, 0.0, 3), rect).unwrap();
     let path = pictura_render::add_shape_layer(doc, "", [0, 0, 0, 255], "Pattern", &outline, None);
     let layer = pictura_render::resolve_path_mut(doc, &path).unwrap();
-    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+    pictura_codec::edit_layer(layer, |parts| {
         parts.adjustment = Some(pictura_render::encode_pattern_fill(&PatternFillParams {
             pattern_id: "oracle-checker".into(),
             scale: 100.0,

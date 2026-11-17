@@ -1,6 +1,6 @@
 use super::*;
 use crate::stroke::layer_rgba;
-use pictura_core::{Channel, Layer, LockFlags};
+use pictura_core::{Channel, LockFlags};
 
 pub(crate) const RED: Rgba = Rgba {
     r: 220,

@@ -300,9 +300,13 @@ void LayerContentTest::rasterizeKeepsAppearanceAndHistory()
         auto* action = menuAction(rasterize->menu(), leaf); QVERIFY2(action, qPrintable(leaf));
         QVERIFY(!action->isEnabled());
         const auto unchanged = pixels(*active); const int history = active->history_count();
+        const QString command = leaf == QStringLiteral("Vector Mask")
+            ? QString::fromLatin1(pictura::command_ids::LayerRasterizeVectorMask)
+            : leaf == QStringLiteral("Layer Style")
+                ? QString::fromLatin1(pictura::command_ids::LayerRasterizeLayerStyle)
+                : pictura::commandIdForPath({QStringLiteral("Layer"), QStringLiteral("Rasterize"), leaf});
         // Dispatch reports registered handlers, even when their preconditions reject an edit.
-        const bool handled = registry->dispatch(pictura::commandIdForPath(
-            {QStringLiteral("Layer"), QStringLiteral("Rasterize"), leaf}));
+        const bool handled = registry->dispatch(command);
         QCOMPARE(handled, leaf == QStringLiteral("Vector Mask") || leaf == QStringLiteral("Layer Style"));
         QCOMPARE(active->history_count(), history); QCOMPARE(pixels(*active), unchanged);
     }

@@ -3,9 +3,7 @@
 //! `healing.rs` tests onto this crate's `RgbaImage`/`Document` API.
 
 use super::*;
-use pictura_core::{
-    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LockFlags,
-};
+use pictura_core::{BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, LockFlags};
 
 const BASE: [u8; 4] = [100, 120, 140, 255];
 
