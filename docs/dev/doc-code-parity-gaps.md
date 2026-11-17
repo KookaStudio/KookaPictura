@@ -183,7 +183,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 |---|---|---|---|---|---|
 | LAY-1 | `blend-modes.md` | Advanced Blending toggles (Blend Clipped, Transparency Shapes, mask hides effects, channel Include; Blend Interior) | PARTIAL | engine: `crates/pictura-render/src/composite_channels.rs`, `composite_clipping.rs`, `composite.rs`, `layer_effects/*`; dialog controls pending #695/#581 | #579, #695 |
 | LAY-2 | `layer-styles.md` | Global Light dialog, Create Layers, Rasterize Layer Style | SHIPPED | `crates/pictura-app/cpp/menu_layer_style.cpp`; `crates/pictura-render/src/document_ops/layer_ops/layer_style.rs` | #580 |
-| LAY-3 | `layer-styles.md` | Bevel Contour/Texture UI, gradient editor, channel include in the authoring dialog | MISSING | `layer_style_dialog.h:9` | #581 |
+| LAY-3 | `layer-styles.md` | Bevel Contour and the style dialog's gradient editor; Bevel Texture remains | PARTIAL | `crates/pictura-render/src/layer_effects/contour.rs`; `crates/pictura-app/cpp/layer_style_contour.cpp`; `tst_layer_style` | #581, #606 |
 | LAY-4 | `align-and-distribute.md` | Auto-Align Layers | SHIPPED | `crates/pictura-render/src/document_ops/layer_ops/auto_align/`; `crates/pictura-app/cpp/auto_align_dialog.cpp`; `tst_auto_align`. Behavioral parity only: the matcher and projection tolerances are our own | #582 |
 | LAY-6 | `blend-modes.md` | `Fill With (Mode)-Neutral Color` for new layers | SHIPPED | `crates/pictura-app/cpp/layer_new_dialog.cpp:49`; `crates/pictura-render/src/document_ops/layer_ops/create.rs:317` | #584 |
 | LAY-8 | `layer-management-ui.md` | Panel Options thumbnail size (Entire Document/Bounds) | SHIPPED | `crates/pictura-app/cpp/panels/layers_panel.cpp:1053` | #586 |

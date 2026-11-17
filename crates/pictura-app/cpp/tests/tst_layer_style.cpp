@@ -22,10 +22,7 @@
 #include <QtCore/QVector>
 
 #include <cmath>
-<<<<<<< HEAD
-=======
 #include <functional>
->>>>>>> c44e6bbe (feat(layer-style): bevel contour, gradient editing, and channel include (#581))
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
@@ -51,7 +48,6 @@ private slots:
     void zoomKeysReachTheCanvasBehindADialog();
     void previewIsBounded();
     void refusedValueEmitsNothing();
-<<<<<<< HEAD
     void globalLightDialogWritesAndUndoes();
     void globalLightDialogCancelKeepsTheLight();
     void globalAngleFieldFollowsGlobalLight();
@@ -59,7 +55,6 @@ private slots:
     void createLayersCommand();
     void rasterizeLayerStyleCommand();
     void globalLightDialogNoOpAcceptRecordsNothing();
-=======
     void contourPresetChangesTheBevelAndCancelDropsIt();
     void glossContourWritesTheEffect();
     void contourCheckboxGatesTheSubControls();
@@ -71,7 +66,6 @@ private slots:
     void channelRowFollowsTheDocumentMode();
     void gradientEditorPresetStaysOpaque();
     void copyEnabledForChannelOnlyStyle();
->>>>>>> c44e6bbe (feat(layer-style): bevel contour, gradient editing, and channel include (#581))
 
 private:
     // A 10x10 white square at (10, 10) lifted onto layer "1" over a white
@@ -391,7 +385,6 @@ void LayerStyleTest::refusedValueEmitsNothing()
     QCOMPARE(damaged.count(), 0);
 }
 
-<<<<<<< HEAD
 void LayerStyleTest::globalLightDialogWritesAndUndoes()
 {
     setupSquare();
@@ -563,7 +556,6 @@ void LayerStyleTest::globalLightDialogNoOpAcceptRecordsNothing()
     QCOMPARE(view_->history_count(), states);
 }
 
-=======
 
 QVector<QRgb> layerSamples(const std::function<QRgb(int, int)>& at)
 {
@@ -916,6 +908,5 @@ void LayerStyleTest::copyEnabledForChannelOnlyStyle()
     QVERIFY(!clear->isEnabled());
 }
 
->>>>>>> c44e6bbe (feat(layer-style): bevel contour, gradient editing, and channel include (#581))
 QTEST_MAIN(LayerStyleTest)
 #include "tst_layer_style.moc"
