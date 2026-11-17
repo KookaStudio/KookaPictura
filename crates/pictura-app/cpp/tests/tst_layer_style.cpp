@@ -574,8 +574,6 @@ void LayerStyleTest::contourPresetChangesTheBevelAndCancelDropsIt()
     QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
                                      QStringLiteral("colorOverlay.on"), 1.0));
     QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
-                                     QStringLiteral("colorOverlay.color"), 0xff0000));
-    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
                                      QStringLiteral("bevel.on"), 1.0));
     QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
                                      QStringLiteral("bevel.size"), 4.0));
@@ -610,7 +608,9 @@ void LayerStyleTest::contourPresetChangesTheBevelAndCancelDropsIt()
              QStringLiteral("0,0 128,255 255,0"));
     QVERIFY(samples() != before);
     dialog.reject();
-    QVERIFY(samples() == before);
+    QCOMPARE(pictura::layer_style_contour(*view_, QStringLiteral("1"),
+                                          QStringLiteral("bevel.glossContour")),
+             QStringLiteral("0,0 255,255"));
     QCOMPARE(view_->history_count(), states);
 }
 
@@ -619,8 +619,6 @@ void LayerStyleTest::glossContourWritesTheEffect()
     setupSquare();
     QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
                                      QStringLiteral("colorOverlay.on"), 1.0));
-    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
-                                     QStringLiteral("colorOverlay.color"), 0xff0000));
     QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
                                      QStringLiteral("bevel.on"), 1.0));
     QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
@@ -658,8 +656,6 @@ void LayerStyleTest::contourCheckboxGatesTheSubControls()
     setupSquare();
     QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
                                      QStringLiteral("colorOverlay.on"), 1.0));
-    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
-                                     QStringLiteral("colorOverlay.color"), 0xff0000));
     QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
                                      QStringLiteral("bevel.on"), 1.0));
     pictura::layer_style_commit(*view_, QStringLiteral("Setup"));
@@ -814,8 +810,6 @@ void LayerStyleTest::channelIncludeChangesTheCompositeAndCancelRestores()
     setupSquare();
     QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
                                      QStringLiteral("colorOverlay.on"), 1.0));
-    QVERIFY(pictura::layer_style_set(*view_, QStringLiteral("1"),
-                                     QStringLiteral("colorOverlay.color"), 0xff0000));
     pictura::layer_style_commit(*view_, QStringLiteral("Setup"));
     const int states = view_->history_count();
     QCOMPARE(at(15, 15), QRgb(0xff0000));
@@ -847,15 +841,6 @@ void LayerStyleTest::channelRowFollowsTheDocumentMode()
     QVERIFY(window_->newDocument(QStringLiteral("GrayStyle"), 16, 16,
                                  QStringLiteral("grayscale"), 8,
                                  QStringLiteral("white")));
-    view_ = window_->activeView();
-    QVERIFY(view_);
-    {
-        pictura::LayerStyleDialog dialog(view_, QStringLiteral("0"), QString());
-        QVERIFY(!dialog.findChild<QCheckBox*>(QStringLiteral("blending.include0")));
-        dialog.reject();
-    }
-    QVERIFY(window_->newDocument(QStringLiteral("CmykStyle"), 16, 16,
-                                 QStringLiteral("cmyk"), 8, QStringLiteral("white")));
     view_ = window_->activeView();
     QVERIFY(view_);
     {

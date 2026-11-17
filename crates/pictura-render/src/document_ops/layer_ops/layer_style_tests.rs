@@ -1062,69 +1062,74 @@ fn gradient_edit_preserves_opacity_stops() {
     use pictura_codec::DescValue;
 
     let mut d = doc();
-    let layer = square(&mut d);
-    assert!(set_layer_style_gradient(
-        layer,
-        "gradientOverlay.gradient",
-        "0:000000 2048:000000 4096:000000"
-    ));
-    let opacity = |location: i32, value: f64| DescValue::Object {
-        name: String::new(),
-        class_id: b"TrnS".to_vec(),
-        items: vec![
-            (
-                b"Opct".to_vec(),
-                DescValue::UnitFloat {
-                    unit: *b"#Prc",
-                    value,
-                },
-            ),
-            (b"Lctn".to_vec(), DescValue::Long(location)),
-            (b"Mdpn".to_vec(), DescValue::Long(50)),
-        ],
+    let custom = {
+        let layer = square(&mut d);
+        assert!(set_layer_style_gradient(
+            layer,
+            "gradientOverlay.gradient",
+            "0:000000 2048:000000 4096:000000"
+        ));
+        set(layer, "gradientOverlay.on", 1.0);
+        let opacity = |location: i32, value: f64| DescValue::Object {
+            name: String::new(),
+            class_id: b"TrnS".to_vec(),
+            items: vec![
+                (
+                    b"Opct".to_vec(),
+                    DescValue::UnitFloat {
+                        unit: *b"#Prc",
+                        value,
+                    },
+                ),
+                (b"Lctn".to_vec(), DescValue::Long(location)),
+                (b"Mdpn".to_vec(), DescValue::Long(50)),
+            ],
+        };
+        let custom = vec![opacity(0, 40.0), opacity(4096, 90.0)];
+        let mut items = lfx2_items(layer);
+        let grfl = items
+            .iter_mut()
+            .find(|(key, _)| key.as_slice() == b"GrFl")
+            .map(|(_, value)| value)
+            .expect("GrFl");
+        let DescValue::Object { items: fields, .. } = grfl else {
+            panic!("effect object");
+        };
+        let grad = fields
+            .iter_mut()
+            .find(|(key, _)| key.as_slice() == b"Grad")
+            .map(|(_, value)| value)
+            .expect("Grad");
+        let DescValue::Object {
+            items: grad_items, ..
+        } = grad
+        else {
+            panic!("gradient object");
+        };
+        let trns = grad_items
+            .iter_mut()
+            .find(|(key, _)| key.as_slice() == b"Trns")
+            .map(|(_, value)| value)
+            .expect("Trns");
+        *trns = DescValue::List(custom.clone());
+        let clrs = grad_items
+            .iter_mut()
+            .find(|(key, _)| key.as_slice() == b"Clrs")
+            .map(|(_, value)| value)
+            .expect("Clrs");
+        let DescValue::List(stops) = clrs else {
+            panic!("stops");
+        };
+        let DescValue::Object { items: middle, .. } = &mut stops[1] else {
+            panic!("stop");
+        };
+        set_item(middle, b"Mdpn", DescValue::Long(25));
+        write_lfx2(layer, items);
+        custom
     };
-    let custom = vec![opacity(0, 40.0), opacity(4096, 90.0)];
-    let mut items = lfx2_items(layer);
-    let grfl = items
-        .iter_mut()
-        .find(|(key, _)| key.as_slice() == b"GrFl")
-        .map(|(_, value)| value)
-        .expect("GrFl");
-    let DescValue::Object { items: fields, .. } = grfl else {
-        panic!("effect object");
-    };
-    let grad = fields
-        .iter_mut()
-        .find(|(key, _)| key.as_slice() == b"Grad")
-        .map(|(_, value)| value)
-        .expect("Grad");
-    let DescValue::Object {
-        items: grad_items, ..
-    } = grad
-    else {
-        panic!("gradient object");
-    };
-    let trns = grad_items
-        .iter_mut()
-        .find(|(key, _)| key.as_slice() == b"Trns")
-        .map(|(_, value)| value)
-        .expect("Trns");
-    *trns = DescValue::List(custom.clone());
-    let clrs = grad_items
-        .iter_mut()
-        .find(|(key, _)| key.as_slice() == b"Clrs")
-        .map(|(_, value)| value)
-        .expect("Clrs");
-    let DescValue::List(stops) = clrs else {
-        panic!("stops");
-    };
-    let DescValue::Object { items: middle, .. } = &mut stops[1] else {
-        panic!("stop");
-    };
-    set_item(middle, b"Mdpn", DescValue::Long(25));
-    write_lfx2(layer, items);
 
     let before = crate::composite_rgba(&d);
+    let layer = square(&mut d);
     assert!(set_layer_style_gradient(
         layer,
         "gradientOverlay.gradient",
@@ -1289,6 +1294,7 @@ fn restricted_channels_survives_copy_and_paste() {
     let source = resolve_path(&d, "1").unwrap().clone();
     let mut target = source.clone();
     target.name = "Target".into();
+    target.restricted_channels.clear();
     target.rect = PsdRect {
         top: 0,
         left: 0,
