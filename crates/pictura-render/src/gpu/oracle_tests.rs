@@ -120,11 +120,12 @@ fn unsupported_adjustment_falls_back_or_errors() {
 fn document_past_2d_product_limit_returns_too_large() {
     require_gpu();
     let doc = Document {
+        composite: pictura_core::CompositeState::new(PixelBuffer::new(0, 0, 3))
+            .expect("valid composite"),
         width: u32::MAX,
         height: u32::MAX,
         mode: ColorMode::Rgb,
         depth: BitDepth::Eight,
-        composite: PixelBuffer::new(0, 0, 3),
         layers: LayerStack::default(),
         channels: Vec::new(),
         ..Default::default()

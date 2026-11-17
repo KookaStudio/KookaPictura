@@ -99,7 +99,7 @@ impl Control<'_> {
 
 fn blendable_mode(doc: &Document) -> bool {
     matches!(
-        doc.source_mode.unwrap_or(doc.mode),
+        doc.source.mode().unwrap_or(doc.mode),
         ColorMode::Rgb | ColorMode::Grayscale
     )
 }
@@ -219,7 +219,7 @@ pub fn plan_auto_blend(
         let mut merged = blend::blend(doc, &layers, &input, &control)?;
         control.step()?;
         let high_depth = matches!(
-            doc.source_depth,
+            doc.source.depth(),
             Some(BitDepth::Sixteen | BitDepth::ThirtyTwo)
         );
         if options.fill_transparent && !high_depth {

@@ -30,13 +30,13 @@ pub(super) fn save_view(
             .doc
             .as_ref()
             .map_or((true, false), |doc| {
-                let mode = doc.source_mode.unwrap_or(doc.mode);
+                let mode = doc.source.mode().unwrap_or(doc.mode);
                 (
                     !matches!(
                         mode,
                         pictura_core::ColorMode::Bitmap | pictura_core::ColorMode::Indexed
                     ),
-                    doc.source_depth == Some(pictura_core::BitDepth::Sixteen),
+                    doc.source.depth() == Some(pictura_core::BitDepth::Sixteen),
                 )
             });
         if !continuous || (deep && !options.convert_16_to_8) {
@@ -178,7 +178,7 @@ pub fn pdf_document_is_16bit(view: &PictureView) -> bool {
         .session
         .doc
         .as_ref()
-        .is_some_and(|doc| doc.source_depth == Some(pictura_core::BitDepth::Sixteen))
+        .is_some_and(|doc| doc.source.depth() == Some(pictura_core::BitDepth::Sixteen))
 }
 
 pub fn pdf_spot_channel_count(view: &PictureView) -> i32 {
@@ -189,7 +189,7 @@ pub fn pdf_spot_channel_count(view: &PictureView) -> i32 {
 
 pub fn pdf_document_is_continuous_tone(view: &PictureView) -> bool {
     view.rust().session.doc.as_ref().is_some_and(|doc| {
-        let mode = doc.source_mode.unwrap_or(doc.mode);
+        let mode = doc.source.mode().unwrap_or(doc.mode);
         !matches!(
             mode,
             pictura_core::ColorMode::Bitmap | pictura_core::ColorMode::Indexed
@@ -202,7 +202,7 @@ pub fn pdf_document_is_bitmap(view: &PictureView) -> bool {
         .session
         .doc
         .as_ref()
-        .is_some_and(|doc| doc.source_mode.unwrap_or(doc.mode) == pictura_core::ColorMode::Bitmap)
+        .is_some_and(|doc| doc.source.mode().unwrap_or(doc.mode) == pictura_core::ColorMode::Bitmap)
 }
 
 pub fn pdf_open(mut view: Pin<&mut PictureView>, path: &QString, password: &QString) -> QString {

@@ -49,7 +49,9 @@ fn source_doc() -> Document {
         ],
         ..Default::default()
     }]);
-    d.composite = pictura_render::composite_rgba(&d);
+    d.composite
+        .replace(pictura_render::composite_rgba(&d))
+        .expect("valid composite");
     d
 }
 

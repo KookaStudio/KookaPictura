@@ -13,7 +13,11 @@ use crate::common::require_gpu;
 /// one full-size Normal layer whose colour planes and alpha are all 255.
 fn fresh_white_document(w: u32, h: u32) -> Document {
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite.data.fill(255);
+    doc.composite
+        .edit_data(|data| {
+            data.fill(255);
+        })
+        .expect("pixel edit preserves geometry");
     let n = (w as usize) * (h as usize);
     let plane = || vec![255u8; n];
     doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {

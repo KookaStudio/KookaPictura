@@ -127,7 +127,7 @@ pub(super) fn render(
 
 /// The composite flattened onto white as interleaved RGB.
 pub(super) fn expected_rgb(doc: &Document) -> Vec<u8> {
-    let c = &doc.composite;
+    let c = doc.composite.buffer();
     let plane = c.pixel_count();
     let color = if c.channels >= 3 { 3 } else { 1 };
     let mut out = Vec::with_capacity(plane * 3);

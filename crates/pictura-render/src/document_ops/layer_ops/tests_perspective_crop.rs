@@ -91,7 +91,9 @@ fn a_skewed_region_is_straightened_and_becomes_the_canvas() {
     for x in [w / 4, w / 2, w * 3 / 4] {
         assert_eq!(gray_at(&d, x, h / 2), 0, "column {x} is not trapezoid");
     }
-    d.composite = crate::composite_rgba(&d);
+    d.composite
+        .replace(crate::composite_rgba(&d))
+        .expect("valid composite");
     assert_eq!(d.composite.width, w as u32, "composite not rebuilt");
 }
 

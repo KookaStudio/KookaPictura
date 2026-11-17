@@ -50,7 +50,9 @@ fn source_doc() -> Document {
             255,
         )],
     );
-    d.composite = crate::composite_rgba(&d);
+    d.composite
+        .replace(crate::composite_rgba(&d))
+        .expect("valid composite");
     d
 }
 
@@ -708,7 +710,10 @@ fn replacing_smart_object_contents_invalidates_the_composite() {
             255,
         )],
     );
-    other.composite = crate::composite_rgba(&other);
+    other
+        .composite
+        .replace(crate::composite_rgba(&other))
+        .expect("valid composite");
     let payload = pictura_codec::write_psd(&other).expect("other writes");
     d.layers[0]
         .smart_object
@@ -964,7 +969,9 @@ fn other_source_doc() -> Document {
             255,
         )],
     );
-    d.composite = crate::composite_rgba(&d);
+    d.composite
+        .replace(crate::composite_rgba(&d))
+        .expect("valid composite");
     d
 }
 

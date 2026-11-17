@@ -58,7 +58,7 @@ pub(super) fn plan_stack<'a>(
     doc: &'a Document,
     region: Option<PsdRect>,
 ) -> Result<Vec<LayerPlan<'a>>, GpuError> {
-    if doc.source_depth.is_some() {
+    if doc.source.depth().is_some() {
         return Err(GpuError::UnsupportedDepth);
     }
     plan_layers(&doc.layers, doc, region)

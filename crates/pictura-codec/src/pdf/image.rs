@@ -69,7 +69,8 @@ impl Raster {
 /// else sRGB (Gray Gamma 2.2 for gray). ponytail: an untagged gray document is
 /// assumed to be gamma 2.2.
 fn working_profile(doc: &Document) -> Profile {
-    doc.document_icc
+    doc.source
+        .working_profile()
         .as_deref()
         .and_then(|icc| Profile::from_icc(icc).ok())
         .filter(|p| p.channels() == Some(doc.mode.color_channels()))
@@ -86,7 +87,7 @@ fn working_profile(doc: &Document) -> Profile {
 /// and Bitmap sources keep their source planes but present an RGB composite;
 /// their ICC profile is not the composite's profile.
 fn proof_input_profile(doc: &Document) -> Profile {
-    match doc.source_mode {
+    match doc.source.mode() {
         Some(ColorMode::Lab) | Some(ColorMode::Bitmap) | Some(ColorMode::Indexed) => {
             Profile::srgb()
         }
@@ -96,7 +97,7 @@ fn proof_input_profile(doc: &Document) -> Profile {
 
 /// The ICC bytes that tag an unconverted Gray/RGB image.
 fn working_icc(doc: &Document) -> Vec<u8> {
-    match doc.document_icc.as_ref() {
+    match doc.source.working_profile().as_ref() {
         Some(icc)
             if Profile::from_icc(icc).is_ok_and(|p| p.channels() == Some(color_of(doc) as u8)) =>
         {
@@ -167,7 +168,7 @@ pub(crate) fn build_raster(
     ppi: f64,
     proof: Option<&super::ProofRequest>,
 ) -> Result<Raster, PsdError> {
-    if doc.source_mode == Some(ColorMode::Multichannel) || doc.mode == ColorMode::Multichannel {
+    if doc.source.mode() == Some(ColorMode::Multichannel) || doc.mode == ColorMode::Multichannel {
         return Err(PsdError::Unsupported(
             "Photoshop PDF does not support Multichannel".into(),
         ));
@@ -230,8 +231,8 @@ pub(crate) fn build_raster(
 
     let sixteen = !options.convert_16_to_8
         && options.compatibility >= Compatibility::Acrobat6
-        && doc.source_depth == Some(BitDepth::Sixteen)
-        && doc.source_mode.is_none()
+        && doc.source.depth() == Some(BitDepth::Sixteen)
+        && doc.source.mode().is_none()
         && !converting;
 
     let (space, samples, max): (Space, Vec<u16>, u16) = if let Some(proof) = proofing {
@@ -292,11 +293,11 @@ pub(crate) fn build_raster(
             }
         }
         (device_or_icc(doc, options), interleaved, 65535)
-    } else if doc.source_mode == Some(ColorMode::Cmyk) && color == 3 {
+    } else if doc.source.mode() == Some(ColorMode::Cmyk) && color == 3 {
         let psd = retained_or(doc, &current, 4, cmyk_to_rgb, rgb_to_cmyk);
         let inks: Vec<u8> = psd.iter().map(|v| 255 - v).collect();
         (Space::Cmyk, planar_to_interleaved(&inks, 4, plane), 255)
-    } else if doc.source_mode == Some(ColorMode::Lab) && color == 3 {
+    } else if doc.source.mode() == Some(ColorMode::Lab) && color == 3 {
         let lab = retained_or(doc, &current, 3, lab_to_rgb, rgb_to_lab);
         (Space::Lab, planar_to_interleaved(&lab, 3, plane), 255)
     } else if alpha.is_none()
@@ -304,7 +305,7 @@ pub(crate) fn build_raster(
         && options.compression != super::options::Compression::Jpeg
         && crate::write_indexed::writes_indexed(doc, 8, plane)
     {
-        let palette = doc.source_palette.expect("writes_indexed checked it");
+        let palette = doc.source.palette().expect("writes_indexed checked it");
         let index = crate::write::composite_retained(doc, 8, 0)
             .map(|s| s.to_bytes())
             .ok_or_else(|| PsdError::Invalid("indexed plane missing".into()))?;

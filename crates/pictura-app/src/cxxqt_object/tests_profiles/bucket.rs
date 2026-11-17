@@ -35,7 +35,9 @@ fn bucket_fill_profile() {
         (120, 170, 220),
     )]);
     assert!(pictura_render::add_layer(&mut doc, -1, "Layer") >= 0);
-    doc.composite = pictura_render::composite_rgba(&doc);
+    doc.composite
+        .replace(pictura_render::composite_rgba(&doc))
+        .expect("valid composite");
     let mut view = PictureViewRust {
         session: DocumentSession::with_document(doc),
         layer_target: LayerTarget::only("1"),

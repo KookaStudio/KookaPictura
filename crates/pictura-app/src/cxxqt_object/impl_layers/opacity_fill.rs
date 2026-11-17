@@ -257,7 +257,9 @@ mod tests {
     fn view() -> PictureViewRust {
         let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
         doc.layers = LayerStack::from_layers(vec![pixel_layer("base", 4, 4, (255, 0, 0))]);
-        doc.composite = pictura_render::composite_rgba(&doc);
+        doc.composite
+            .replace(pictura_render::composite_rgba(&doc))
+            .expect("valid composite");
         let mut view = PictureViewRust {
             session: DocumentSession::with_document(doc),
             ..Default::default()
@@ -426,7 +428,9 @@ mod tests {
             let mut doc = Document::new(600, 600, ColorMode::Rgb, BitDepth::Eight);
             doc.layers =
                 LayerStack::from_layers(vec![pixel_layer("base", 600, 600, (255, 0, 0)), layer]);
-            doc.composite = pictura_render::composite_rgba(&doc);
+            doc.composite
+                .replace(pictura_render::composite_rgba(&doc))
+                .expect("valid composite");
             let mut view = PictureViewRust {
                 session: DocumentSession::with_document(doc),
                 presented_level: 1,

@@ -92,7 +92,9 @@ fn the_proxy_base_hides_the_active_layer_and_restores_it() {
         pixel_layer("bottom", 4, 4, (255, 0, 0)),
         pixel_layer("top", 4, 4, (0, 0, 255)),
     ]);
-    doc.composite = pictura_render::composite_rgba(&doc);
+    doc.composite
+        .replace(pictura_render::composite_rgba(&doc))
+        .expect("valid composite");
 
     let canvas = whole_canvas(&doc);
     let base = hidden_layer_region(&mut doc, "1", canvas).expect("base").0;
@@ -117,7 +119,9 @@ fn a_nested_active_layer_resolves_for_the_proxy() {
         pixel_layer("nested-blue", 4, 4, (0, 0, 255)),
     ]);
     doc.layers = pictura_core::LayerStack::from_layers(vec![group]);
-    doc.composite = pictura_render::composite_rgba(&doc);
+    doc.composite
+        .replace(pictura_render::composite_rgba(&doc))
+        .expect("valid composite");
 
     let canvas = whole_canvas(&doc);
     let base = hidden_layer_region(&mut doc, "0/1", canvas)

@@ -37,6 +37,47 @@ fn layer_plane(doc: &Document, id: i16) -> Vec<u8> {
         .expect("channel")
 }
 
+#[test]
+fn layer_only_native_depth_converts_with_absent_composite() {
+    let mut doc = rgb_doc(1, 1, &[[40, 80, 120]]);
+    let rect = doc.layers[0].rect;
+    doc.layers[0].source_channels = Some(pictura_core::SourceChannels::new(
+        BitDepth::Sixteen,
+        rect,
+        vec![
+            (0, Samples::U16(vec![10281].into())),
+            (1, Samples::U16(vec![20561].into())),
+            (2, Samples::U16(vec![30841].into())),
+        ],
+    ));
+    let child = doc.layers[0].clone();
+    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
+        is_group: true,
+        children: pictura_core::LayerStack::from_layers(vec![child]),
+        ..Default::default()
+    }]);
+    doc.source
+        .set_native(Some(BitDepth::Sixteen), None)
+        .unwrap();
+    doc.composite.detach_plane();
+    convert_bit_depth(&mut doc, BitDepth::ThirtyTwo).unwrap();
+    assert_eq!(doc.source.depth(), Some(BitDepth::ThirtyTwo));
+    assert_eq!(
+        doc.source.planes().as_ref().unwrap().depth,
+        BitDepth::ThirtyTwo
+    );
+    let Samples::F32(values) = &doc.layers[0].children[0]
+        .source_channels
+        .as_ref()
+        .unwrap()
+        .planes[0]
+        .1
+    else {
+        panic!("expected float samples")
+    };
+    assert!((values[0] - 10281.0 / 65535.0).abs() < 1e-6);
+}
+
 fn indexed_options(reduction: ColorReduction, dither: Dither) -> PaletteOptions {
     PaletteOptions {
         reduction,
@@ -98,11 +139,11 @@ fn cmyk_conversion_saves_as_cmyk_and_shows_what_it_saves() {
     convert_mode(&mut doc, ColorMode::Cmyk).expect("converts");
     assert_eq!(document_color_mode(&doc), ColorMode::Cmyk);
     let read = roundtrip(&doc);
-    assert_eq!(read.source_mode, Some(ColorMode::Cmyk));
+    assert_eq!(read.source.mode(), Some(ColorMode::Cmyk));
     assert_eq!(layer_plane(&read, 0), layer_plane(&doc, 0));
     assert_eq!(layer_plane(&read, 2), layer_plane(&doc, 2));
     // The retained store is what was written, byte for byte.
-    assert_eq!(read.source_planes, doc.source_planes);
+    assert_eq!(read.source.planes(), doc.source.planes());
 }
 
 #[test]
@@ -110,12 +151,12 @@ fn lab_conversion_saves_as_lab_and_reads_back_the_shown_rgb() {
     let mut doc = ramp(8, 4);
     convert_mode(&mut doc, ColorMode::Lab).expect("converts");
     let read = roundtrip(&doc);
-    assert_eq!(read.source_mode, Some(ColorMode::Lab));
+    assert_eq!(read.source.mode(), Some(ColorMode::Lab));
     assert_eq!(layer_plane(&read, 1), layer_plane(&doc, 1));
     // Converting again from Lab to RGB drops the Lab store: a plain RGB save.
     convert_mode(&mut doc, ColorMode::Rgb).unwrap();
-    assert_eq!(doc.source_mode, None);
-    assert_eq!(roundtrip(&doc).source_mode, None);
+    assert_eq!(doc.source.mode(), None);
+    assert_eq!(roundtrip(&doc).source.mode(), None);
 }
 
 #[test]
@@ -139,8 +180,8 @@ fn indexed_web_palette_contains_only_web_colors_and_saves_indexed() {
         );
     }
     let read = roundtrip(&doc);
-    assert_eq!(read.source_mode, Some(ColorMode::Indexed));
-    assert_eq!(read.source_palette, doc.source_palette);
+    assert_eq!(read.source.mode(), Some(ColorMode::Indexed));
+    assert_eq!(read.source.palette(), doc.source.palette());
     assert_eq!(layer_plane(&read, 0), r);
 }
 
@@ -193,7 +234,7 @@ fn bitmap_threshold_is_exact_at_mid_gray_and_saves_as_bitmap() {
     assert!(doc.layers.is_empty());
     assert_eq!(&doc.composite.data[..4], &[0, 0, 255, 255]);
     let read = roundtrip(&doc);
-    assert_eq!(read.source_mode, Some(ColorMode::Bitmap));
+    assert_eq!(read.source.mode(), Some(ColorMode::Bitmap));
     assert_eq!(read.composite.data, doc.composite.data);
 }
 
@@ -220,7 +261,7 @@ fn grayscale_from_bitmap_rebuilds_a_background_layer() {
         "Bitmap leaves through Grayscale"
     );
     convert_mode(&mut doc, ColorMode::Grayscale).unwrap();
-    assert_eq!(doc.source_mode, None);
+    assert_eq!(doc.source.mode(), None);
     assert_eq!(doc.layers.len(), 1);
     assert_eq!(layer_plane(&doc, 0), vec![0, 255]);
 }
@@ -231,8 +272,8 @@ fn eight_to_sixteen_widens_and_saves_sixteen_bit() {
     convert_bit_depth(&mut doc, BitDepth::Sixteen).expect("converts");
     assert_eq!(document_bit_depth(&doc), BitDepth::Sixteen);
     let read = roundtrip(&doc);
-    assert_eq!(read.source_depth, Some(BitDepth::Sixteen));
-    let Some(Samples::U16(v)) = read.source_planes.map(|s| s.samples) else {
+    assert_eq!(read.source.depth(), Some(BitDepth::Sixteen));
+    let Some(Samples::U16(v)) = read.source.planes().as_ref().map(|s| s.samples) else {
         panic!("16-bit store");
     };
     assert_eq!(v[1], doc.composite.data[1] as u16 * 257);
@@ -245,7 +286,7 @@ fn sixteen_to_thirty_two_and_back_down_to_eight() {
     convert_bit_depth(&mut doc, BitDepth::Sixteen).unwrap();
     convert_bit_depth(&mut doc, BitDepth::ThirtyTwo).unwrap();
     assert_eq!(document_bit_depth(&doc), BitDepth::ThirtyTwo);
-    assert_eq!(roundtrip(&doc).source_depth, Some(BitDepth::ThirtyTwo));
+    assert_eq!(roundtrip(&doc).source.depth(), Some(BitDepth::ThirtyTwo));
     assert!(
         convert_bit_depth(&mut doc, BitDepth::Eight).is_err(),
         "32-bit needs HDR toning"
@@ -259,7 +300,7 @@ fn sixteen_to_thirty_two_and_back_down_to_eight() {
     convert_bit_depth(&mut doc, BitDepth::Sixteen).unwrap();
     convert_bit_depth(&mut doc, BitDepth::Eight).unwrap();
     assert_eq!(document_bit_depth(&doc), BitDepth::Eight);
-    assert_eq!(doc.source_planes, None);
+    assert_eq!(doc.source.planes(), None);
     assert_eq!(layer_plane(&doc, 0), before);
 }
 
@@ -281,8 +322,8 @@ fn sixteen_bit_cmyk_saves_cmyk_at_sixteen_bits() {
     convert_mode(&mut doc, ColorMode::Cmyk).unwrap();
     convert_bit_depth(&mut doc, BitDepth::Sixteen).unwrap();
     let read = roundtrip(&doc);
-    assert_eq!(read.source_mode, Some(ColorMode::Cmyk));
-    assert_eq!(read.source_depth, Some(BitDepth::Sixteen));
+    assert_eq!(read.source.mode(), Some(ColorMode::Cmyk));
+    assert_eq!(read.source.depth(), Some(BitDepth::Sixteen));
     assert!(
         !can_convert_mode(&doc, ColorMode::Indexed),
         "Indexed needs 8-bit"
@@ -290,7 +331,7 @@ fn sixteen_bit_cmyk_saves_cmyk_at_sixteen_bits() {
     convert_bit_depth(&mut doc, BitDepth::Eight).unwrap();
     let read = roundtrip(&doc);
     assert_eq!(
-        (read.source_mode, read.source_depth),
+        (read.source.mode(), read.source.depth()),
         (Some(ColorMode::Cmyk), None)
     );
 }
@@ -335,19 +376,24 @@ fn save_view_trims_the_display_alpha_for_a_source_mode_or_extra_channels() {
     });
     assert_eq!(save_view(&extra).composite.channels, 3);
     let mut short = extra.clone();
-    short.composite = PixelBuffer {
-        width: 2,
-        height: 2,
-        channels: 4,
-        data: vec![0u8; 3 * 4].into(),
-    };
+    short
+        .composite
+        .replace(PixelBuffer {
+            width: 2,
+            height: 2,
+            channels: 4,
+            data: vec![0u8; 3 * 4].into(),
+        })
+        .expect("valid composite");
     assert!(matches!(save_view(&short), Cow::Borrowed(_)));
 }
 
 #[test]
 fn an_extra_channel_saves_without_a_duplicate_alpha_plane() {
     let mut doc = ramp(2, 2);
-    doc.composite = PixelBuffer::new(0, 0, 4);
+    doc.composite
+        .replace(PixelBuffer::new(0, 0, 4))
+        .expect("valid composite");
     let alpha = [255u8, 0, 128, 200];
     doc.channels = vec![Channel {
         id: 0,
@@ -390,7 +436,9 @@ fn an_rgba_document_without_extra_channels_keeps_its_alpha_plane() {
 #[test]
 fn a_depth16_extra_channel_saves_without_a_duplicate_alpha_plane() {
     let mut doc = ramp(2, 2);
-    doc.source_depth = Some(BitDepth::Sixteen);
+    doc.source
+        .set_native(Some(BitDepth::Sixteen), doc.source.planes().clone())
+        .expect("valid source depth");
     let plane = 4;
     let mut samples = Vec::with_capacity(4 * plane);
     for c in 0..3u16 {
@@ -400,12 +448,14 @@ fn a_depth16_extra_channel_saves_without_a_duplicate_alpha_plane() {
     }
     let extra = [7u8, 8, 9, 10];
     samples.extend(extra.iter().map(|v| u16::from(*v) * 257));
-    doc.source_planes = Some(pictura_core::SourcePlanes {
-        depth: BitDepth::Sixteen,
-        width: 2,
-        height: 2,
-        samples: Samples::U16(samples.into()),
-    });
+    doc.source
+        .replace_planes(Some(pictura_core::SourcePlanes {
+            depth: BitDepth::Sixteen,
+            width: 2,
+            height: 2,
+            samples: Samples::U16(samples.into()),
+        }))
+        .expect("valid source planes");
     doc.channels = vec![Channel {
         id: 0,
         data: extra.to_vec().into(),
@@ -425,7 +475,7 @@ fn a_depth16_extra_channel_saves_without_a_duplicate_alpha_plane() {
         "the retained depth is written"
     );
     let back = read_psd(&bytes).expect("reads");
-    assert_eq!(back.source_depth, Some(BitDepth::Sixteen));
+    assert_eq!(back.source.depth(), Some(BitDepth::Sixteen));
     assert_eq!(back.composite.data.to_vec(), expected);
     assert_eq!(back.channels.len(), 1);
     assert_eq!(back.channels[0].data.to_vec(), extra);
@@ -434,18 +484,22 @@ fn a_depth16_extra_channel_saves_without_a_duplicate_alpha_plane() {
 #[test]
 fn a_depth32_extra_channel_saves_without_a_duplicate_alpha_plane() {
     let mut doc = ramp(2, 2);
-    doc.source_depth = Some(BitDepth::ThirtyTwo);
+    doc.source
+        .set_native(Some(BitDepth::ThirtyTwo), doc.source.planes().clone())
+        .expect("valid source depth");
     let plane = 4;
     let color = [3u8, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36];
     let extra = [7u8, 8, 9, 10];
     let mut bytes = color.to_vec();
     bytes.extend_from_slice(&extra);
-    doc.source_planes = Some(pictura_core::SourcePlanes {
-        depth: BitDepth::ThirtyTwo,
-        width: 2,
-        height: 2,
-        samples: Samples::widen_from_u8(&bytes, BitDepth::ThirtyTwo),
-    });
+    doc.source
+        .replace_planes(Some(pictura_core::SourcePlanes {
+            depth: BitDepth::ThirtyTwo,
+            width: 2,
+            height: 2,
+            samples: Samples::widen_from_u8(&bytes, BitDepth::ThirtyTwo),
+        }))
+        .expect("valid source planes");
     doc.channels = vec![Channel {
         id: 0,
         data: extra.to_vec().into(),
@@ -465,7 +519,7 @@ fn a_depth32_extra_channel_saves_without_a_duplicate_alpha_plane() {
         "the retained depth is written"
     );
     let back = read_psd(&bytes).expect("reads");
-    assert_eq!(back.source_depth, Some(BitDepth::ThirtyTwo));
+    assert_eq!(back.source.depth(), Some(BitDepth::ThirtyTwo));
     assert_eq!(back.composite.data.to_vec(), expected);
     assert_eq!(back.channels.len(), 1);
     assert_eq!(back.channels[0].data.to_vec(), extra);
@@ -484,7 +538,7 @@ fn mode_profile_uses_working_cmyk() {
         .expect("converts");
     let expected =
         pictura_codec::rgb_to_cmyk_with_profile(&source, &profile, options).expect("lcms2 encode");
-    let store = doc.source_planes.as_ref().expect("store");
+    let store = doc.source.planes().as_ref().expect("store");
     let Samples::U8(values) = &store.samples else {
         panic!("8-bit store");
     };
@@ -503,7 +557,7 @@ fn mode_profile_falls_back() {
     let source = doc.composite.data[..6].to_vec();
     convert_mode(&mut doc, ColorMode::Cmyk).expect("converts");
     let expected = planes::rgb_to_cmyk_gcr(&source);
-    let store = doc.source_planes.as_ref().expect("store");
+    let store = doc.source.planes().as_ref().expect("store");
     let Samples::U8(values) = &store.samples else {
         panic!("8-bit store");
     };
@@ -536,8 +590,8 @@ fn mode_profile_round_trip() {
         },
     )
     .expect("reads");
-    assert_eq!(read.source_mode, Some(ColorMode::Cmyk));
-    assert_eq!(read.source_planes, doc.source_planes);
+    assert_eq!(read.source.mode(), Some(ColorMode::Cmyk));
+    assert_eq!(read.source.planes(), doc.source.planes());
     for (a, b) in shown.iter().zip(&read.composite.data[..6]) {
         assert!(
             a.abs_diff(*b) <= 8,
@@ -559,7 +613,9 @@ fn layered_without_composite(width: u32, height: u32) -> Document {
         channel.data = flipped.into();
     }
     doc.layers.push(top).expect("a second layer");
-    doc.composite = PixelBuffer::new(0, 0, 4);
+    doc.composite
+        .replace(PixelBuffer::new(0, 0, 4))
+        .expect("valid composite");
     doc
 }
 
@@ -574,7 +630,7 @@ type ConvertedState = (
 );
 
 fn converted_state(doc: &Document) -> ConvertedState {
-    let store = doc.source_planes.as_ref().map(|store| {
+    let store = doc.source.planes().as_ref().map(|store| {
         let bytes = match &store.samples {
             Samples::U8(v) => v.to_vec(),
             Samples::U16(v) => v.iter().flat_map(|s| s.to_le_bytes()).collect(),
@@ -633,7 +689,10 @@ fn streamed_conversions_match_the_whole_path() {
         let mut streamed = layered_without_composite(301, 530);
         assert!(stream::streams_source(&streamed));
         let mut whole = streamed.clone();
-        whole.composite = crate::composite_tiled(&whole);
+        whole
+            .composite
+            .replace(crate::composite_tiled(&whole))
+            .expect("valid composite");
         assert!(!stream::streams_source(&whole));
         convert(&mut streamed);
         convert(&mut whole);

@@ -472,19 +472,26 @@ fn retains_source_depth_tracks_the_retained_store() {
     let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
     assert!(!doc.retains_source_depth(), "8-bit retains nothing");
     // A converted mode records the depth for the notice but keeps no samples.
-    doc.source_depth = Some(BitDepth::Sixteen);
+    doc.source
+        .set_native(Some(BitDepth::Sixteen), doc.source.planes().clone())
+        .expect("valid source depth");
     assert!(!doc.retains_source_depth());
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::Sixteen,
-        width: 1,
-        height: 1,
-        samples: Samples::U16(vec![0].into()),
-    });
+    doc.source
+        .replace_planes(Some(SourcePlanes {
+            depth: BitDepth::Sixteen,
+            width: 1,
+            height: 1,
+            samples: Samples::U16(vec![0].into()),
+        }))
+        .expect("valid source planes");
     assert!(doc.retains_source_depth());
 
     // A layer store alone also counts (a layered file with no composite).
     let mut layered = Document::new(1, 1, ColorMode::Rgb, BitDepth::Sixteen);
-    layered.source_depth = Some(BitDepth::Sixteen);
+    layered
+        .source
+        .set_native(Some(BitDepth::Sixteen), layered.source.planes().clone())
+        .expect("valid source depth");
     layered.layers = crate::LayerStack::from_layers(vec![Layer {
         source_channels: Some(SourceChannels {
             depth: BitDepth::Sixteen,
@@ -525,7 +532,11 @@ fn a_cloned_document_shares_its_planes_until_a_write_forks_them() {
     let plane_before = doc.layers[0].channels[0].data[0];
     let untouched_before = doc.layers[0].channels[1].data[0];
 
-    doc.composite.data[0] = !composite_before;
+    doc.composite
+        .edit_data(|data| {
+            data[0] = !composite_before;
+        })
+        .expect("pixel edit preserves geometry");
     doc.layers[0].channels[0].data[0] = !plane_before;
 
     assert!(!shares(&doc.composite.data, &snapshot.composite.data));
@@ -874,29 +885,37 @@ fn a_wider_sample_buffer_is_expressible() {
 #[test]
 fn a_document_clone_shares_retained_samples() {
     let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Sixteen);
-    doc.source_depth = Some(BitDepth::Sixteen);
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::Sixteen,
-        width: 2,
-        height: 2,
-        samples: Samples::U16(vec![1; 12].into()),
-    });
+    doc.source
+        .set_native(
+            Some(BitDepth::Sixteen),
+            Some(SourcePlanes {
+                depth: BitDepth::Sixteen,
+                width: 2,
+                height: 2,
+                samples: Samples::U16(vec![1; 12].into()),
+            }),
+        )
+        .expect("valid native source");
     let clone = doc.clone();
-    let a = &doc.source_planes.as_ref().unwrap().samples;
-    let b = &clone.source_planes.as_ref().unwrap().samples;
+    let a = &doc.source.planes().as_ref().unwrap().samples;
+    let b = &clone.source.planes().as_ref().unwrap().samples;
     assert!(matches!((a, b), (Samples::U16(a), Samples::U16(b)) if a.shares(b)));
 }
 
 #[test]
 fn a_document_clone_shares_native_samples_and_payload() {
     let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Sixteen);
-    doc.source_depth = Some(BitDepth::Sixteen);
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::Sixteen,
-        width: 2,
-        height: 2,
-        samples: Samples::U16(vec![1; 12].into()),
-    });
+    doc.source
+        .set_native(
+            Some(BitDepth::Sixteen),
+            Some(SourcePlanes {
+                depth: BitDepth::Sixteen,
+                width: 2,
+                height: 2,
+                samples: Samples::U16(vec![1; 12].into()),
+            }),
+        )
+        .expect("valid native source");
     doc.layers = LayerStack::from_layers(vec![cow_layer()]);
     let clone = doc.clone();
     assert_eq!(doc, clone);
@@ -1008,23 +1027,25 @@ fn a_layer_clone_shares_blocks_and_children() {
 #[test]
 fn a_document_clone_shares_preserved_blocks() {
     let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.source_icc = Some(vec![1, 2].into());
-    doc.document_icc = Some(vec![3, 4].into());
+    doc.source.set_original_profile(Some(vec![1, 2].into()));
+    doc.source.set_working_profile(Some(vec![3, 4].into()));
     doc.color_mode_data = vec![5].into();
     doc.image_resources = vec![6].into();
     doc.global_layer_mask = vec![7].into();
     doc.layer_section_extra = vec![8].into();
     let clone = doc.clone();
     assert!(doc
-        .source_icc
+        .source
+        .original_profile()
         .as_ref()
         .unwrap()
-        .shares(clone.source_icc.as_ref().unwrap()));
+        .shares(clone.source.original_profile().as_ref().unwrap()));
     assert!(doc
-        .document_icc
+        .source
+        .working_profile()
         .as_ref()
         .unwrap()
-        .shares(clone.document_icc.as_ref().unwrap()));
+        .shares(clone.source.working_profile().as_ref().unwrap()));
     assert!(doc.color_mode_data.shares(&clone.color_mode_data));
     assert!(doc.image_resources.shares(&clone.image_resources));
     assert!(doc.global_layer_mask.shares(&clone.global_layer_mask));

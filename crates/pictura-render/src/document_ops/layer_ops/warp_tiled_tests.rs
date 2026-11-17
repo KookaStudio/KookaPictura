@@ -284,16 +284,20 @@ fn deep_case(
     };
     let mut doc = Document::new(300, 200, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
-    doc.source_depth = Some(depth);
-    doc.source_planes = Some(SourcePlanes {
-        depth,
-        width: 300,
-        height: 200,
-        samples: match depth {
-            BitDepth::ThirtyTwo => Samples::F32(vec![0.0; 3 * 300 * 200].into()),
-            _ => Samples::U16(vec![0; 3 * 300 * 200].into()),
-        },
-    });
+    doc.source
+        .set_native(
+            Some(depth),
+            Some(SourcePlanes {
+                depth,
+                width: 300,
+                height: 200,
+                samples: match depth {
+                    BitDepth::ThirtyTwo => Samples::F32(vec![0.0; 3 * 300 * 200].into()),
+                    _ => Samples::U16(vec![0; 3 * 300 * 200].into()),
+                },
+            }),
+        )
+        .expect("valid native source");
     let warp = Warp::preset(WarpStyle::Arc, 50.0, bounds(r));
     let interp = Interpolation::Bicubic;
     assert!(transform_layer_warp(&mut doc, "0", &warp, None, interp));

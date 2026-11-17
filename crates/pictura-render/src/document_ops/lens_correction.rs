@@ -88,9 +88,21 @@ mod tests {
         for y in 0..4usize {
             for x in 0..4usize {
                 let i = y * 4 + x;
-                d.composite.data[i] = (x * 60) as u8;
-                d.composite.data[16 + i] = (y * 60) as u8;
-                d.composite.data[32 + i] = ((x + y) * 30) as u8;
+                d.composite
+                    .edit_data(|data| {
+                        data[i] = (x * 60) as u8;
+                    })
+                    .expect("pixel edit preserves geometry");
+                d.composite
+                    .edit_data(|data| {
+                        data[16 + i] = (y * 60) as u8;
+                    })
+                    .expect("pixel edit preserves geometry");
+                d.composite
+                    .edit_data(|data| {
+                        data[32 + i] = ((x + y) * 30) as u8;
+                    })
+                    .expect("pixel edit preserves geometry");
             }
         }
         pictura_codec::write_psd(&d).expect("payload writes")

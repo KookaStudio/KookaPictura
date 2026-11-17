@@ -274,7 +274,11 @@ fn smoke_document(payload: Vec<u8>) -> Document {
         for x in 0..SMOKE_SIZE as usize {
             let shade = if (x / 8 + y / 8) % 2 == 0 { 196 } else { 168 };
             let at = (y * SMOKE_SIZE as usize + x) * 3;
-            doc.composite.data[at..at + 3].copy_from_slice(&[shade, shade, shade]);
+            doc.composite
+                .edit_data(|data| {
+                    data[at..at + 3].copy_from_slice(&[shade, shade, shade]);
+                })
+                .expect("pixel edit preserves geometry");
         }
     }
     doc.layers = LayerStack::from_layers(vec![
@@ -514,9 +518,13 @@ fn camera_raw_filter() -> SmartFilter {
 
 fn document(layer: Layer) -> Document {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    for (i, byte) in doc.composite.data.iter_mut().enumerate() {
-        *byte = (i * 7 + 3) as u8;
-    }
+    doc.composite
+        .edit_data(|data| {
+            for (i, byte) in data.iter_mut().enumerate() {
+                *byte = (i * 7 + 3) as u8;
+            }
+        })
+        .expect("pixel edit preserves geometry");
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
     doc
 }

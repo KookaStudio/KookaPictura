@@ -839,7 +839,9 @@ fn apply_image_grown_native_store_keeps_precision() {
         right: 22,
     };
     let mut doc = Document::new(32, 32, ColorMode::Rgb, BitDepth::Sixteen);
-    doc.source_depth = Some(BitDepth::Sixteen);
+    doc.source
+        .set_native(Some(BitDepth::Sixteen), doc.source.planes().clone())
+        .expect("valid source depth");
     let mut layer = pixel_layer("px", 12, 12, (40, 120, 200));
     layer.rect = small;
     let planes = (0..3)
@@ -893,7 +895,9 @@ fn apply_image_grown_32_bit_store_keeps_values() {
         right: 22,
     };
     let mut doc = Document::new(32, 32, ColorMode::Rgb, BitDepth::ThirtyTwo);
-    doc.source_depth = Some(BitDepth::ThirtyTwo);
+    doc.source
+        .set_native(Some(BitDepth::ThirtyTwo), doc.source.planes().clone())
+        .expect("valid source depth");
     let mut layer = pixel_layer("px", 12, 12, (64, 64, 64));
     layer.rect = small;
     let planes = (0..3)

@@ -258,7 +258,8 @@ fn finish_native(
         ));
     }
     let full = doc
-        .source_planes
+        .source
+        .planes()
         .as_ref()
         .map(|store| store.samples.clone())
         .ok_or_else(|| RasterError::Failed("the native render has no retained planes".into()))?;

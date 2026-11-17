@@ -4,9 +4,13 @@ use super::*;
 /// the writer authors as a `SoLd` block plus a document-level `lnk2` record.
 fn embedded_smart_doc() -> Document {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    for (i, b) in doc.composite.data.iter_mut().enumerate() {
-        *b = (i * 7 + 1) as u8;
-    }
+    doc.composite
+        .edit_data(|data| {
+            for (i, b) in data.iter_mut().enumerate() {
+                *b = (i * 7 + 1) as u8;
+            }
+        })
+        .expect("pixel edit preserves geometry");
     doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
         name: "Smart".into(),
         rect: PsdRect {

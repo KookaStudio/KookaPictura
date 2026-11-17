@@ -73,7 +73,7 @@ pub(super) fn channel_row_selection_from(
     mask: u8,
 ) -> Option<Selection> {
     let row = usize::try_from(row).ok()?;
-    let mode = doc.source_mode.unwrap_or(doc.mode);
+    let mode = doc.source.mode().unwrap_or(doc.mode);
     let (composite, channels) = color_rows(mode);
     if row >= channels + usize::from(composite) {
         return None;

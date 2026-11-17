@@ -51,12 +51,16 @@ pub fn resize_document(
     for channel in &mut next.channels {
         channel.data = resize_bytes(&channel.data, from, to, resample)?;
     }
-    if let Some(store) = &mut next.source_planes {
+    if let Some(mut store) = next.source.planes().clone() {
         if store.depth != pictura_core::BitDepth::One {
             store.samples = resize_native(&store.samples, from, to, resample)?;
             store.width = width;
             store.height = height;
         }
+
+        next.source
+            .replace_planes(Some(store))
+            .expect("valid source planes");
     }
 
     next.width = width;
@@ -127,7 +131,8 @@ fn resampled_rows(doc: &mut pictura_core::Document, sx: f64, sy: f64, to: (u32, 
     if resized {
         rows += doc.channels.len() as u64 * u64::from(to.1);
         if let Some(store) = doc
-            .source_planes
+            .source
+            .planes()
             .as_ref()
             .filter(|s| s.depth != pictura_core::BitDepth::One)
         {
@@ -199,7 +204,8 @@ pub(crate) fn mapped_plane_bytes(
     };
     add(canvas, doc.channels.len(), 1);
     if let Some(store) = doc
-        .source_planes
+        .source
+        .planes()
         .as_ref()
         .filter(|s| s.depth != pictura_core::BitDepth::One)
     {
@@ -464,7 +470,9 @@ mod tests {
             }
         }
         assert_eq!(doc.channels[0].data.len(), 64);
-        doc.composite = crate::composite_rgba(&doc);
+        doc.composite
+            .replace(crate::composite_rgba(&doc))
+            .expect("valid composite");
         assert_eq!(doc.composite, crate::composite_rgba(&doc));
     }
 
@@ -508,13 +516,17 @@ mod tests {
     #[test]
     fn resize_resamples_the_native_store_and_saves() {
         let mut doc = sample_doc();
-        doc.source_depth = Some(BitDepth::Sixteen);
-        doc.source_planes = Some(SourcePlanes {
-            depth: BitDepth::Sixteen,
-            width: 4,
-            height: 4,
-            samples: Samples::U16(vec![0; 3 * 4 * 4].into()),
-        });
+        doc.source
+            .set_native(
+                Some(BitDepth::Sixteen),
+                Some(SourcePlanes {
+                    depth: BitDepth::Sixteen,
+                    width: 4,
+                    height: 4,
+                    samples: Samples::U16(vec![0; 3 * 4 * 4].into()),
+                }),
+            )
+            .expect("valid native source");
         doc.layers[0].raw_channels = vec![RawChannel {
             id: 3,
             data: vec![0, 0, 1].into(),
@@ -549,11 +561,13 @@ mod tests {
             store.planes.iter().find(|(id, _)| *id == 3).unwrap().1,
             Samples::U16(vec![0; 64].into())
         );
-        let planes = doc.source_planes.as_ref().unwrap();
+        let planes = doc.source.planes().as_ref().unwrap();
         assert_eq!((planes.width, planes.height), (8, 8));
         assert_eq!(planes.samples.len(), 3 * 64);
 
-        doc.composite = crate::composite_rgba(&doc);
+        doc.composite
+            .replace(crate::composite_rgba(&doc))
+            .expect("valid composite");
         let bytes = pictura_codec::write_psd(&doc).expect("a resized high-depth doc saves");
         assert_eq!(u16::from_be_bytes(bytes[22..24].try_into().unwrap()), 16);
     }

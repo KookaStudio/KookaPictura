@@ -122,7 +122,9 @@ fn seeded_samples(depth: BitDepth, n: usize, seed: usize) -> Samples {
 /// `-2` plane at its mask rect, and the document a three-plane store.
 fn deep_doc(depth: BitDepth) -> Document {
     let mut doc = seeded_doc();
-    doc.source_depth = Some(depth);
+    doc.source
+        .set_native(Some(depth), doc.source.planes().clone())
+        .expect("valid source depth");
     let offset = &mut doc.layers[1];
     let (lw, lh) = dims(offset.rect);
     let (mw, mh) = dims(offset.mask.as_ref().unwrap().rect);
@@ -134,12 +136,14 @@ fn deep_doc(depth: BitDepth) -> Document {
             (-2, seeded_samples(depth, mw * mh, 5)),
         ],
     ));
-    doc.source_planes = Some(SourcePlanes {
-        depth,
-        width: W as u32,
-        height: H as u32,
-        samples: seeded_samples(depth, 3 * (W * H) as usize, 9),
-    });
+    doc.source
+        .replace_planes(Some(SourcePlanes {
+            depth,
+            width: W as u32,
+            height: H as u32,
+            samples: seeded_samples(depth, 3 * (W * H) as usize, 9),
+        }))
+        .expect("valid source planes");
     doc
 }
 
@@ -212,10 +216,10 @@ fn the_document_store_shifts_through_tiles() {
         let mut doc = before.clone();
         resize_canvas_document(&mut doc, 900, 700, Anchor::Center).expect("resizes");
         let (dx, dy) = anchor_offset(Anchor::Center, W as u32, H as u32, 900, 700);
-        let store = doc.source_planes.as_ref().unwrap();
+        let store = doc.source.planes().as_ref().unwrap();
         assert_eq!((store.width, store.height), (900, 700));
         assert!(is_tiled(&store.samples));
-        let old = &before.source_planes.as_ref().unwrap().samples;
+        let old = &before.source.planes().as_ref().unwrap().samples;
         let want = extend_samples(old, W as usize, H as usize, 900, 700, dx, dy);
         assert_eq!(store.samples, want, "{depth:?}");
     }
@@ -341,8 +345,8 @@ fn retained_stores_turn_through_tiles() {
                 assert!(is_tiled(b), "{depth:?} {name} {id}");
                 assert_eq!(b, &remap_samples(a, w, h, remap), "{depth:?} {name} {id}");
             }
-            let old = &before.source_planes.as_ref().unwrap().samples;
-            let new = &doc.source_planes.as_ref().unwrap().samples;
+            let old = &before.source.planes().as_ref().unwrap().samples;
+            let new = &doc.source.planes().as_ref().unwrap().samples;
             assert!(is_tiled(new));
             assert_eq!(new, &remap_samples(old, W as usize, H as usize, remap));
         }
@@ -434,8 +438,8 @@ fn retained_stores_rotate_through_tiles() {
             };
             assert_eq!(b, &want, "{depth:?} {id}");
         }
-        let old = &before.source_planes.as_ref().unwrap().samples;
-        let new_store = doc.source_planes.as_ref().unwrap();
+        let old = &before.source.planes().as_ref().unwrap().samples;
+        let new_store = doc.source.planes().as_ref().unwrap();
         assert!(is_tiled(&new_store.samples));
         let to = rect(0, 0, doc.width as i32, doc.height as i32);
         let from = rect(0, 0, W, H);

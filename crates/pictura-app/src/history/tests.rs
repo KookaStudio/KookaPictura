@@ -1,3 +1,5 @@
+mod restore;
+
 use super::*;
 use pictura_core::TILE;
 use pictura_core::{BitDepth, Channel, CharacterOverrides, ColorMode, Layer};
@@ -10,7 +12,9 @@ mod tiles;
 
 fn doc(w: u32, h: u32, seed: u8) -> Document {
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite.data = vec![seed; (w * h * 3) as usize].into();
+    doc.composite
+        .replace_data(vec![seed; (w * h * 3) as usize].into())
+        .expect("valid composite plane");
     doc
 }
 
@@ -483,7 +487,11 @@ fn region_deltas_retain_only_changed_tiles() {
 
     // Ten edits, each touching only the first tile.
     for i in 1..=10u8 {
-        doc.composite.data[0] = i;
+        doc.composite
+            .edit_data(|data| {
+                data[0] = i;
+            })
+            .expect("pixel edit preserves geometry");
         history.capture(
             Snapshot {
                 quick_mask: None,
@@ -556,7 +564,11 @@ fn every_state_matches_a_reference_copy() {
         seed = seed.wrapping_mul(31).wrapping_add(step as u8);
         for k in 0..500usize {
             let idx = (seed as usize * 137 + k * 61) % doc.composite.data.len();
-            doc.composite.data[idx] ^= (seed ^ k as u8) | 1;
+            doc.composite
+                .edit_data(|data| {
+                    data[idx] ^= (seed ^ k as u8) | 1;
+                })
+                .expect("pixel edit preserves geometry");
         }
         let layer = &mut doc.layers[0];
         for k in 0..300usize {
@@ -571,7 +583,11 @@ fn every_state_matches_a_reference_copy() {
             height: 130,
             data: vec![seed; 200 * 130].into(),
         });
-        doc.composite.data[0] = seed;
+        doc.composite
+            .edit_data(|data| {
+                data[0] = seed;
+            })
+            .expect("pixel edit preserves geometry");
         let snapshot = Snapshot {
             quick_mask: None,
             doc: doc.clone(),
@@ -783,7 +799,11 @@ fn a_capture_after_a_duplicate_stays_a_delta() {
 
     let other_byte = live.layers[2].channels[0].data[0];
     live.layers[2].channels[0].data[0] = other_byte.wrapping_add(1);
-    live.composite.data[0] = other_byte.wrapping_add(2);
+    live.composite
+        .edit_data(|data| {
+            data[0] = other_byte.wrapping_add(2);
+        })
+        .expect("pixel edit preserves geometry");
     history.capture_live(&mut live, &selection, &target, "Paint");
 
     assert_eq!(history.anchor_count(), anchors, "paint must stay a delta");
@@ -840,9 +860,14 @@ fn paint_commit_undo_restores_the_prior_pixels() {
     for p in painted.layers[0].channels[0].data[..64 * 32].iter_mut() {
         *p = 200;
     }
-    for p in painted.composite.data[..64 * 32].iter_mut() {
-        *p = 200;
-    }
+    painted
+        .composite
+        .edit_data(|data| {
+            for p in data[..64 * 32].iter_mut() {
+                *p = 200;
+            }
+        })
+        .expect("pixel edit preserves geometry");
     history.capture(
         Snapshot {
             quick_mask: None,
@@ -1115,143 +1140,6 @@ fn shares_a_tile(a: &Document, b: &Document) -> bool {
 }
 
 #[test]
-fn live_restores_match_a_full_snapshot_history() {
-    let (w, h) = (70u32, 45u32);
-    for seed in 0..12u64 {
-        let mut rng = Rng(seed);
-        let mut live = doc(w, h, 3);
-        live.composite.data = (0..(w * h * 3) as usize).map(|i| (i % 251) as u8).collect();
-        live.layers = pictura_core::LayerStack::from_layers(vec![model_layer("base", w, h, 1)]);
-        let mut selection: Option<Selection> = None;
-        let mut target = LayerTarget::default();
-        let mut history = History::default();
-        history.capture_live(&mut live, &selection, &target, "Open");
-        let mut reference = vec![Snapshot {
-            quick_mask: None,
-            doc: live.clone(),
-            selection: selection.clone(),
-        }];
-        let mut cursor = 0usize;
-
-        for step in 0..160 {
-            let op = rng.below(14);
-            let restore = op >= 9;
-            if restore {
-                let before = live.composite.data.clone();
-                let restored = match op {
-                    9 => history.undo_live(&mut live, &mut selection, &mut target),
-                    10 => history.redo_live(&mut live, &mut selection, &mut target),
-                    11 => {
-                        let i = rng.below(reference.len());
-                        history.jump_live(i, &mut live, &mut selection, &mut target)
-                    }
-                    _ => history.undo().map(|s| {
-                        live = s.doc;
-                        selection = s.selection;
-                        Restored::Everywhere
-                    }),
-                };
-                let target = match op {
-                    9 => cursor.checked_sub(1),
-                    10 => (cursor + 1 < reference.len()).then_some(cursor + 1),
-                    11 => Some(history.index()),
-                    _ => cursor.checked_sub(1),
-                };
-                assert_eq!(
-                    restored.is_some(),
-                    target.is_some(),
-                    "seed {seed} step {step}"
-                );
-                if let Some(t) = target {
-                    cursor = t;
-                }
-                if let Some(Restored::Region(r) | Restored::Composite(r)) = restored {
-                    let hh = h as usize;
-                    for (i, (a, b)) in before.iter().zip(live.composite.data.iter()).enumerate() {
-                        let (x, y) = ((i % w as usize) as i32, ((i / w as usize) % hh) as i32);
-                        let inside = x >= r.left && x < r.right && y >= r.top && y < r.bottom;
-                        assert!(
-                            a == b || inside,
-                            "seed {seed} step {step}: composite changed outside {r:?}"
-                        );
-                    }
-                }
-            } else {
-                match op {
-                    0..=4 => {
-                        let li = rng.below(live.layers.len());
-                        let c = rng.below(4);
-                        let (x, y) = (rng.below(w as usize), rng.below(h as usize));
-                        let (rw, rh) = (1 + rng.below(30), 1 + rng.below(20));
-                        let v = rng.next() as u8;
-                        for yy in y..(y + rh).min(h as usize) {
-                            for xx in x..(x + rw).min(w as usize) {
-                                live.layers[li].channels[c].data[yy * w as usize + xx] = v;
-                                let k = (c % 3) * h as usize + yy;
-                                live.composite.data[k * w as usize + xx] = v ^ 0x5A;
-                            }
-                        }
-                    }
-                    5 => {
-                        let _ = live
-                            .layers
-                            .push(model_layer("added", w, h, rng.next() as u8));
-                    }
-                    6 if live.layers.len() > 1 => {
-                        let _ = live.layers.pop();
-                    }
-                    7 => live.layers[0].opacity = rng.next() as u8,
-                    8 if live.layers.len() > 1 && rng.below(2) == 0 => {
-                        let from = rng.below(live.layers.len());
-                        let to = rng.below(live.layers.len() + 1);
-                        let _ = live.layers.move_node(&[from], &[], to);
-                    }
-                    _ => selection = Some(Selection::rect(w, h, 2, 3, 1 + rng.below(20) as i32, 4)),
-                }
-                history.capture_live(&mut live, &selection, &target, "Edit");
-                reference.truncate(cursor + 1);
-                reference.push(Snapshot {
-                    quick_mask: None,
-                    doc: live.clone(),
-                    selection: selection.clone(),
-                });
-                if reference.len() > MAX_DEPTH + 1 {
-                    reference.remove(0);
-                }
-                cursor = reference.len() - 1;
-            }
-            assert_eq!(history.index(), cursor, "seed {seed} step {step}");
-            assert_eq!(history.count(), reference.len(), "seed {seed} step {step}");
-            assert!(
-                live == reference[cursor].doc,
-                "seed {seed} step {step} op {op}: live document differs from the reference"
-            );
-            assert!(
-                selection == reference[cursor].selection,
-                "seed {seed} step {step}: selection differs"
-            );
-            assert!(
-                history.full_state_count() <= history.anchor_count() + 1,
-                "seed {seed} step {step}: the cursor's anchor must be hollow"
-            );
-            // Deltas keep one side each; every state must still rebuild
-            // without moving the cursor, whichever way the walks went.
-            for (i, expected) in reference.iter().enumerate() {
-                let snap = history.materialize(i);
-                assert!(
-                    snap.doc == expected.doc && snap.selection == expected.selection,
-                    "seed {seed} step {step}: state {i} rebuilds wrong"
-                );
-            }
-        }
-        for (i, expected) in reference.iter().enumerate() {
-            let snap = history.jump(i).expect("state");
-            assert!(snap.doc == expected.doc, "seed {seed}: jump {i} differs");
-        }
-    }
-}
-
-#[test]
 fn a_segment_break_keeps_an_unchanged_composite() {
     let (w, h) = (40u32, 30u32);
     let mut live = doc(w, h, 3);
@@ -1260,7 +1148,9 @@ fn a_segment_break_keeps_an_unchanged_composite() {
         model_layer("a", w, h, 1),
         model_layer("a", w, h, 1),
     ]);
-    live.composite = pictura_render::composite_rgba(&live);
+    live.composite
+        .replace(pictura_render::composite_rgba(&live))
+        .expect("valid composite");
     let mut selection: Option<Selection> = None;
     let mut target = LayerTarget::default();
     let mut history = History::default();
@@ -1268,7 +1158,9 @@ fn a_segment_break_keeps_an_unchanged_composite() {
     let open = live.clone();
 
     assert!(live.layers.move_node(&[0], &[], 2).is_ok());
-    live.composite = pictura_render::composite_rgba(&live);
+    live.composite
+        .replace(pictura_render::composite_rgba(&live))
+        .expect("valid composite");
     history.capture_live(&mut live, &selection, &target, "Reorder");
     assert_eq!(history.anchor_count(), 2, "a reorder starts a new segment");
     assert!(
@@ -1297,7 +1189,9 @@ fn a_segment_break_keeps_a_changed_composite() {
         model_layer("a", w, h, 1),
         model_layer("b", w, h, 90),
     ]);
-    live.composite = pictura_render::composite_rgba(&live);
+    live.composite
+        .replace(pictura_render::composite_rgba(&live))
+        .expect("valid composite");
     let mut selection: Option<Selection> = None;
     let mut target = LayerTarget::default();
     let mut history = History::default();
@@ -1305,7 +1199,9 @@ fn a_segment_break_keeps_a_changed_composite() {
     let open = live.clone();
 
     assert!(live.layers.move_node(&[0], &[], 2).is_ok());
-    live.composite = pictura_render::composite_rgba(&live);
+    live.composite
+        .replace(pictura_render::composite_rgba(&live))
+        .expect("valid composite");
     history.capture_live(&mut live, &selection, &target, "Reorder");
     assert!(
         !live.composite.data.shares(&open.composite.data),
@@ -1338,7 +1234,9 @@ fn a_pixel_undo_without_a_stored_composite_reports_its_layer_tiles() {
         right: w as i32,
     };
     live.layers = pictura_core::LayerStack::from_layers(vec![layer]);
-    live.composite = pictura_core::PixelBuffer::new(0, 0, 4);
+    live.composite
+        .replace(pictura_core::PixelBuffer::new(0, 0, 4))
+        .expect("valid composite");
     let mut selection: Option<Selection> = None;
     let mut target = LayerTarget::default();
     let mut history = History::default();

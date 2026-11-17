@@ -46,7 +46,9 @@ fn shape_lasso_profile() {
         height,
         (255, 255, 255),
     )]);
-    doc.composite = pictura_render::composite_rgba(&doc);
+    doc.composite
+        .replace(pictura_render::composite_rgba(&doc))
+        .expect("valid composite");
 
     for vertices in [30, 30_000] {
         let t = Instant::now();
@@ -73,7 +75,7 @@ fn shape_lasso_profile() {
     }
 
     let t = Instant::now();
-    let map = EdgeMap::from_buffer(&doc.composite, 10);
+    let map = EdgeMap::from_buffer(doc.composite.buffer(), 10);
     ms("magnetic press (peak pass)", t.elapsed());
     let t = Instant::now();
     let wire = map.trace((2000, 2000), (2600, 2300), 10);

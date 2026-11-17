@@ -109,13 +109,17 @@ fn high_depth_transform_move_keeps_and_scale_resamples_the_native_store() {
         working_idents: [0; 3],
     });
     let mut doc = doc_with(layer);
-    doc.source_depth = Some(BitDepth::Sixteen);
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::Sixteen,
-        width: 4,
-        height: 4,
-        samples: Samples::U16(vec![0; 3 * 4 * 4].into()),
-    });
+    doc.source
+        .set_native(
+            Some(BitDepth::Sixteen),
+            Some(SourcePlanes {
+                depth: BitDepth::Sixteen,
+                width: 4,
+                height: 4,
+                samples: Samples::U16(vec![0; 3 * 4 * 4].into()),
+            }),
+        )
+        .expect("valid native source");
 
     // A pure integer translation keeps the channel and re-anchors the store.
     assert!(transform_layer(
@@ -200,13 +204,17 @@ fn pure_move_reemits_native_samples_on_save() {
         ],
     ));
     let mut doc = doc_with(layer);
-    doc.source_depth = Some(BitDepth::Sixteen);
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::Sixteen,
-        width: 4,
-        height: 4,
-        samples: Samples::U16(vec![0; 3 * 16].into()),
-    });
+    doc.source
+        .set_native(
+            Some(BitDepth::Sixteen),
+            Some(SourcePlanes {
+                depth: BitDepth::Sixteen,
+                width: 4,
+                height: 4,
+                samples: Samples::U16(vec![0; 3 * 16].into()),
+            }),
+        )
+        .expect("valid native source");
 
     assert!(transform_layer(
         &mut doc,

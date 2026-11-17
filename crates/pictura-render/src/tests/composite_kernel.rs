@@ -240,7 +240,10 @@ fn advanced_attributes_keep_the_general_kernel() {
     blend_if_layer.blend_if = Some(blend_if());
 
     let mut native = doc(4, 4, vec![native_layer(4, 4)]);
-    native.source_depth = Some(BitDepth::Sixteen);
+    native
+        .source
+        .set_native(Some(BitDepth::Sixteen), native.source.planes().clone())
+        .expect("valid source depth");
 
     let multiply = doc(
         4,
@@ -445,7 +448,10 @@ fn kernel_masks_match_the_general_path() {
             native_mask_layer(8, 8),
         ],
     );
-    native_mask.source_depth = Some(BitDepth::Sixteen);
+    native_mask
+        .source
+        .set_native(Some(BitDepth::Sixteen), native_mask.source.planes().clone())
+        .expect("valid source depth");
 
     let mut gray = masked_doc(plain_mask(8, 8, 128));
     gray.mode = ColorMode::Grayscale;
@@ -572,7 +578,10 @@ fn kernel_matrix_matches_the_general_path() {
             native_mask_layer(8, 8),
         ],
     );
-    native_mask.source_depth = Some(BitDepth::Sixteen);
+    native_mask
+        .source
+        .set_native(Some(BitDepth::Sixteen), native_mask.source.planes().clone())
+        .expect("valid source depth");
     let mut gray = masked_doc(plain_mask(8, 8, 128));
     gray.mode = ColorMode::Grayscale;
 

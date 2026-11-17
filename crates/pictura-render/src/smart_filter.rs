@@ -433,9 +433,21 @@ mod tests {
         for y in 0..4 {
             for x in 0..4 {
                 let i = y * 4 + x;
-                d.composite.data[i] = (x * 60) as u8;
-                d.composite.data[n + i] = (y * 60) as u8;
-                d.composite.data[2 * n + i] = ((x + y) * 30) as u8;
+                d.composite
+                    .edit_data(|data| {
+                        data[i] = (x * 60) as u8;
+                    })
+                    .expect("pixel edit preserves geometry");
+                d.composite
+                    .edit_data(|data| {
+                        data[n + i] = (y * 60) as u8;
+                    })
+                    .expect("pixel edit preserves geometry");
+                d.composite
+                    .edit_data(|data| {
+                        data[2 * n + i] = ((x + y) * 30) as u8;
+                    })
+                    .expect("pixel edit preserves geometry");
             }
         }
         pictura_codec::write_psd(&d).expect("source writes")

@@ -33,7 +33,9 @@ fn levels_opacity_doc(output_white: u16, opacity: u8) -> Document {
         4,
         vec![base_layer(), levels_layer(output_white, opacity)],
     );
-    d.source_depth = Some(BitDepth::Sixteen);
+    d.source
+        .set_native(Some(BitDepth::Sixteen), d.source.planes().clone())
+        .expect("valid source depth");
     d
 }
 
@@ -51,19 +53,25 @@ fn hdr_doc(width: u32, height: u32, samples: Vec<f32>) -> Document {
     let color_len = plane * 3;
     let narrowed = Samples::F32(samples[..color_len].to_vec().into()).narrow_to_u8();
     let mut d = doc(width, height, Vec::new());
-    d.source_depth = Some(BitDepth::ThirtyTwo);
-    d.composite = PixelBuffer {
-        width,
-        height,
-        channels: 3,
-        data: narrowed.into(),
-    };
-    d.source_planes = Some(SourcePlanes {
-        depth: BitDepth::ThirtyTwo,
-        width,
-        height,
-        samples: Samples::F32(samples.into()),
-    });
+    d.source
+        .set_native(Some(BitDepth::ThirtyTwo), d.source.planes().clone())
+        .expect("valid source depth");
+    d.composite
+        .replace(PixelBuffer {
+            width,
+            height,
+            channels: 3,
+            data: narrowed.into(),
+        })
+        .expect("valid composite");
+    d.source
+        .replace_planes(Some(SourcePlanes {
+            depth: BitDepth::ThirtyTwo,
+            width,
+            height,
+            samples: Samples::F32(samples.into()),
+        }))
+        .expect("valid source planes");
     d
 }
 
@@ -102,7 +110,10 @@ fn depth16_native_composite_keeps_sub_8bit_adjustment_samples() {
 #[test]
 fn adjustment_opacity_is_honored_at_native_depth() {
     let mut base_doc = doc(4, 4, vec![base_layer()]);
-    base_doc.source_depth = Some(BitDepth::Sixteen);
+    base_doc
+        .source
+        .set_native(Some(BitDepth::Sixteen), base_doc.source.planes().clone())
+        .expect("valid source depth");
     let base = native_u16(&base_doc);
     let full = native_u16(&levels_opacity_doc(200, 255));
     let mid = native_u16(&levels_opacity_doc(200, 128));
@@ -158,7 +169,9 @@ fn composite_native_is_none_without_depth_and_f32_at_32() {
     assert!(composite_native(&d).is_none());
 
     let mut d32 = d.clone();
-    d32.source_depth = Some(BitDepth::ThirtyTwo);
+    d32.source
+        .set_native(Some(BitDepth::ThirtyTwo), d32.source.planes().clone())
+        .expect("valid source depth");
     match composite_native(&d32) {
         Some(Samples::F32(v)) => assert_eq!(v.len(), 2 * 2 * 4),
         other => panic!("depth-32 document must yield f32 samples, got {other:?}"),
@@ -182,10 +195,10 @@ fn depth32_conversion_to_16_tones_above_one_and_keeps_extras() {
     .unwrap();
 
     assert_eq!(d.depth, BitDepth::Eight, "the working model stays 8-bit");
-    assert_eq!(d.source_depth, Some(BitDepth::Sixteen));
+    assert_eq!(d.source.depth(), Some(BitDepth::Sixteen));
     assert!(d.retains_source_depth());
-    let Samples::U16(v) = &d.source_planes.as_ref().unwrap().samples else {
-        panic!("expected a u16 store, got {:?}", d.source_planes);
+    let Samples::U16(v) = &d.source.planes().as_ref().unwrap().samples else {
+        panic!("expected a u16 store, got {:?}", d.source.planes());
     };
     assert_eq!(v[0], 65535, "4.0 tone-mapped then clamped");
     assert_ne!(v[0], 16384, "the pre-clamped 1.0 would quantize to 16384");
@@ -203,8 +216,8 @@ fn depth32_conversion_to_8_clears_the_retained_store() {
     convert_depth_exposure_gamma(&mut d, BitDepth::Eight, ExposureGamma::default()).unwrap();
 
     assert_eq!(d.depth, BitDepth::Eight);
-    assert_eq!(d.source_depth, None);
-    assert!(d.source_planes.is_none());
+    assert_eq!(d.source.depth(), None);
+    assert!(d.source.planes().is_none());
     assert!(!d.retains_source_depth());
     assert_eq!(d.composite.data, vec![0, 128, 255]);
 }
@@ -220,8 +233,14 @@ fn conversion_refusals_leave_the_document_untouched() {
     assert_eq!(eight, before, "an 8-bit source is refused");
 
     let mut converted = doc(1, 1, Vec::new());
-    converted.source_depth = Some(BitDepth::ThirtyTwo);
-    converted.source_mode = Some(ColorMode::Cmyk);
+    converted
+        .source
+        .set_native(Some(BitDepth::ThirtyTwo), converted.source.planes().clone())
+        .expect("valid source depth");
+    converted
+        .source
+        .set_encoding(Some(ColorMode::Cmyk), None)
+        .expect("valid source encoding");
     let before = converted.clone();
     assert!(convert_depth_exposure_gamma(
         &mut converted,
@@ -245,7 +264,9 @@ fn conversion_refusals_leave_the_document_untouched() {
 #[test]
 fn auto_adjustment_on_depth16_uses_the_native_path() {
     let mut d = doc(4, 4, Vec::new());
-    d.source_depth = Some(BitDepth::Sixteen);
+    d.source
+        .set_native(Some(BitDepth::Sixteen), d.source.planes().clone())
+        .expect("valid source depth");
 
     let mut canvas = Canvas::new(4, 4);
     for (i, p) in canvas.px.iter_mut().enumerate() {
@@ -317,7 +338,9 @@ fn assert_native_is_widen(d: &Document) {
 #[test]
 fn depth16_rgb_layer_keeps_native_content() {
     let mut d = doc(4, 4, vec![native_store_layer((100, 140, 200), 7)]);
-    d.source_depth = Some(BitDepth::Sixteen);
+    d.source
+        .set_native(Some(BitDepth::Sixteen), d.source.planes().clone())
+        .expect("valid source depth");
 
     let native = native_u16(&d);
     let rgba = composite_rgba(&d);
@@ -334,8 +357,12 @@ fn depth16_rgb_layer_keeps_native_content() {
 #[test]
 fn converted_mode_document_uses_the_8bit_path() {
     let mut d = doc(4, 4, vec![native_store_layer((100, 140, 200), 7)]);
-    d.source_depth = Some(BitDepth::Sixteen);
-    d.source_mode = Some(ColorMode::Cmyk);
+    d.source
+        .set_native(Some(BitDepth::Sixteen), d.source.planes().clone())
+        .expect("valid source depth");
+    d.source
+        .set_encoding(Some(ColorMode::Cmyk), None)
+        .expect("valid source encoding");
     assert_native_is_widen(&d);
 }
 
@@ -344,7 +371,9 @@ fn depth16_layer_without_matching_store_falls_back() {
     let mut layer = native_store_layer((100, 140, 200), 7);
     layer.source_channels.as_mut().unwrap().rect = rect(0, 0, 2, 2);
     let mut d = doc(4, 4, vec![layer]);
-    d.source_depth = Some(BitDepth::Sixteen);
+    d.source
+        .set_native(Some(BitDepth::Sixteen), d.source.planes().clone())
+        .expect("valid source depth");
     assert_native_is_widen(&d);
 
     let mut none = doc(
@@ -359,7 +388,9 @@ fn depth16_layer_without_matching_store_falls_back() {
             255,
         )],
     );
-    none.source_depth = Some(BitDepth::Sixteen);
+    none.source
+        .set_native(Some(BitDepth::Sixteen), none.source.planes().clone())
+        .expect("valid source depth");
     assert_native_is_widen(&none);
 }
 
@@ -395,9 +426,15 @@ fn masked_red(mask_byte: u8, native: Option<u16>) -> Layer {
 #[test]
 fn depth16_native_mask_gates_differently_from_the_widened_8bit_mask() {
     let mut native_doc = doc(1, 1, vec![masked_red(50, Some(65000))]);
-    native_doc.source_depth = Some(BitDepth::Sixteen);
+    native_doc
+        .source
+        .set_native(Some(BitDepth::Sixteen), native_doc.source.planes().clone())
+        .expect("valid source depth");
     let mut widened_doc = doc(1, 1, vec![masked_red(50, None)]);
-    widened_doc.source_depth = Some(BitDepth::Sixteen);
+    widened_doc
+        .source
+        .set_native(Some(BitDepth::Sixteen), widened_doc.source.planes().clone())
+        .expect("valid source depth");
 
     assert_ne!(
         composite_rgba(&native_doc).data,
@@ -410,7 +447,9 @@ fn depth16_native_mask_gates_differently_from_the_widened_8bit_mask() {
 fn mask_alpha_unit_matches_the_eight_bit_fallbacks() {
     let plain = solid("l", full(1, 1), (10, 20, 30), 255, BlendMode::Normal, 255);
     let mut d = doc(1, 1, vec![plain.clone()]);
-    d.source_depth = Some(BitDepth::Sixteen);
+    d.source
+        .set_native(Some(BitDepth::Sixteen), d.source.planes().clone())
+        .expect("valid source depth");
 
     assert_eq!(
         mask_alpha_unit(&d, &plain, crate::mask_refine::canvas(&d), 0, 0),
@@ -489,13 +528,13 @@ fn hdr_conversion_methods_convert() {
         let mut d = non_uniform_hdr();
         crate::convert_depth(&mut d, BitDepth::Eight, method).unwrap();
         assert_eq!(d.depth, BitDepth::Eight);
-        assert_eq!(d.source_depth, None, "{method:?}");
-        assert!(d.source_planes.is_none(), "{method:?}");
+        assert_eq!(d.source.depth(), None, "{method:?}");
+        assert!(d.source.planes().is_none(), "{method:?}");
 
         // At 16 bits the converted store must not be the identity result.
         let mut converted = non_uniform_hdr();
         crate::convert_depth(&mut converted, BitDepth::Sixteen, method).unwrap();
-        let Samples::U16(toned) = &converted.source_planes.as_ref().unwrap().samples else {
+        let Samples::U16(toned) = &converted.source.planes().as_ref().unwrap().samples else {
             panic!("expected a u16 store");
         };
         let mut identity = non_uniform_hdr();
@@ -505,7 +544,7 @@ fn hdr_conversion_methods_convert() {
             ExposureGamma::default(),
         )
         .unwrap();
-        let Samples::U16(unchanged) = &identity.source_planes.as_ref().unwrap().samples else {
+        let Samples::U16(unchanged) = &identity.source.planes().as_ref().unwrap().samples else {
             panic!("expected a u16 store");
         };
         assert_ne!(toned, unchanged, "{method:?} must reflect its method");
@@ -515,7 +554,7 @@ fn hdr_conversion_methods_convert() {
 #[test]
 fn local_adaptation_leaves_alpha_untouched() {
     let mut d = non_uniform_hdr();
-    let Samples::F32(source) = &d.source_planes.as_ref().unwrap().samples else {
+    let Samples::F32(source) = &d.source.planes().as_ref().unwrap().samples else {
         panic!("expected an f32 store");
     };
     let alpha: Vec<f32> = source[12..16].to_vec();
@@ -531,7 +570,7 @@ fn local_adaptation_leaves_alpha_untouched() {
     )
     .unwrap();
 
-    let Samples::U16(v) = &d.source_planes.as_ref().unwrap().samples else {
+    let Samples::U16(v) = &d.source.planes().as_ref().unwrap().samples else {
         panic!("expected a u16 store");
     };
     assert_eq!(&v[12..16], expected.as_slice(), "alpha is untouched");
@@ -549,12 +588,12 @@ fn hdr_conversion_copies_extra_planes() {
     ];
     for method in methods {
         let mut d = non_uniform_hdr();
-        let Samples::F32(source) = &d.source_planes.as_ref().unwrap().samples else {
+        let Samples::F32(source) = &d.source.planes().as_ref().unwrap().samples else {
             panic!("expected an f32 store");
         };
         let expected = Samples::F32(source[12..16].to_vec().into()).to_u16();
         crate::convert_depth(&mut d, BitDepth::Sixteen, method).unwrap();
-        let Samples::U16(v) = &d.source_planes.as_ref().unwrap().samples else {
+        let Samples::U16(v) = &d.source.planes().as_ref().unwrap().samples else {
             panic!("expected a u16 store");
         };
         assert_eq!(&v[12..16], expected.as_slice(), "{method:?} copied extra");
@@ -565,7 +604,9 @@ fn hdr_conversion_copies_extra_planes() {
 fn edited_document_converts_current_composite() {
     let mut d = hdr_doc(1, 1, vec![4.0, 0.5, 0.25]);
     // Simulate an edit that updated the composite but not the retained store.
-    d.composite.data = vec![10, 20, 30].into();
+    d.composite
+        .replace_data(vec![10, 20, 30].into())
+        .expect("valid composite plane");
 
     crate::convert_depth(
         &mut d,

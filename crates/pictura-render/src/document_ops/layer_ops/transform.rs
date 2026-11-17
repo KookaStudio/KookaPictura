@@ -490,7 +490,7 @@ pub(super) fn write_layer(
     // the writer's `narrow(retained) == current` gate re-emits native samples.
     // A converted source mode stores source-mode planes, not working RGB, so is
     // excluded here.
-    if doc.source_mode.is_none() && !pure_translate {
+    if doc.source.mode().is_none() && !pure_translate {
         if let Some(store) = &out.native {
             for (id, samples) in &store.planes {
                 let narrowed = samples.narrow_to_u8();

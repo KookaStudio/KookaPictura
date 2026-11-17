@@ -35,7 +35,9 @@ fn view(width: u32, height: u32) -> PictureViewRust {
         pixel_layer("under", width, height, (120, 170, 220)),
         pixel_layer("over", width, height, (220, 90, 40)),
     ]);
-    doc.composite = pictura_render::composite_rgba(&doc);
+    doc.composite
+        .replace(pictura_render::composite_rgba(&doc))
+        .expect("valid composite");
     let mut view = PictureViewRust {
         session: DocumentSession::with_document(doc),
         gpu_compute: false,

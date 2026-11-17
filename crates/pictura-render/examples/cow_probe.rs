@@ -67,13 +67,17 @@ fn main() {
     report("baseline");
 
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Sixteen);
-    doc.source_depth = Some(BitDepth::Sixteen);
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::Sixteen,
-        width: w,
-        height: h,
-        samples: Samples::U16(vec![1u16; plane * 3].into()),
-    });
+    doc.source
+        .set_native(
+            Some(BitDepth::Sixteen),
+            Some(SourcePlanes {
+                depth: BitDepth::Sixteen,
+                width: w,
+                height: h,
+                samples: Samples::U16(vec![1u16; plane * 3].into()),
+            }),
+        )
+        .expect("valid native source");
     doc.layer_section_extra = vec![0u8; 8 * 1024 * 1024].into();
     let mut layer = pixel_layer("smart", w, h, false);
     layer.source_channels = Some(SourceChannels::new(

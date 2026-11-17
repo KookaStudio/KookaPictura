@@ -38,7 +38,7 @@ pub(crate) fn native_plan(doc: &Document, path: &str, gray: bool) -> NativePlan 
     let Some(layer) = layer_at(doc, &indices) else {
         return NativePlan::Copy;
     };
-    let Some(depth) = doc.source_depth else {
+    let Some(depth) = doc.source.depth() else {
         return NativePlan::Copy;
     };
     let colors = if gray { 1 } else { 3 };
@@ -332,7 +332,9 @@ pub(crate) mod tests {
             )),
             ..Default::default()
         }]);
-        doc.source_depth = Some(BitDepth::Sixteen);
+        doc.source
+            .set_native(Some(BitDepth::Sixteen), doc.source.planes().clone())
+            .expect("valid source depth");
         doc
     }
 
@@ -368,7 +370,9 @@ pub(crate) mod tests {
             )),
             ..Default::default()
         }]);
-        doc.source_depth = Some(BitDepth::ThirtyTwo);
+        doc.source
+            .set_native(Some(BitDepth::ThirtyTwo), doc.source.planes().clone())
+            .expect("valid source depth");
         doc
     }
 
@@ -739,7 +743,9 @@ pub(crate) mod tests {
         let mut doc = depth16_doc(2, 2, vec![0; 4], vec![0; 4], vec![0; 4]);
         // A converted colour mode's store holds source-mode planes, not the
         // working copy the compositor reads.
-        doc.source_mode = Some(ColorMode::Cmyk);
+        doc.source
+            .set_encoding(Some(ColorMode::Cmyk), None)
+            .expect("valid source encoding");
         let dirty = fill_layer(
             &mut doc,
             "0",

@@ -193,7 +193,7 @@ impl Read<'_> {
 fn layer_samples(doc: &Document, layer: &Layer) -> Samples {
     match doc
         .authoritative_plane(layer, 0)
-        .and(doc.source_depth)
+        .and(doc.source.depth())
         .unwrap_or(BitDepth::Eight)
     {
         BitDepth::Sixteen => Samples::U16(place::<u16>(doc, layer).into()),

@@ -14,6 +14,7 @@ pub use coverage::Coverage;
 mod crs;
 mod digest;
 mod document_composite;
+mod document_source;
 pub mod edition;
 mod global_light;
 mod guides;
@@ -47,6 +48,8 @@ pub use annotations::{
 };
 pub use crs::CrsSettings;
 pub use digest::content_digest;
+pub use document_composite::CompositeState;
+pub use document_source::{DocumentStateError, SourceState};
 pub use edition::{Edition, Feature};
 pub use global_light::GlobalLight;
 pub use guides::{guide_near, Guide, GuideOrientation};
@@ -172,48 +175,8 @@ pub struct Document {
     pub height: u32,
     pub mode: ColorMode,
     pub depth: BitDepth,
-    /// The header color mode of the file this document was read from, when that
-    /// mode was normalized to the working mode on read. `None` for a Grayscale
-    /// or RGB file and for a constructed document.
-    pub source_mode: Option<ColorMode>,
-    /// The header bit depth of the file this document was read from when it was
-    /// not 8-bit. `None` for an 8-bit file, a depth-1 Bitmap file (whose mode
-    /// `source_mode` records), and a constructed document; `Some(16/32)` for a
-    /// 16/32-bit file of any mode, including a converted CMYK/Lab read. A
-    /// Grayscale/RGB 16/32-bit read also retains native planes and re-emits this
-    /// depth on save; a converted mode records it for the notice but retains no
-    /// samples and still saves 8-bit.
-    pub source_depth: Option<BitDepth>,
-    /// Retained source planes of the composite color channels and the document
-    /// extra channels, re-emitted on save when the plane is unchanged. Set for a
-    /// 16/32-bit Grayscale or RGB read (native-depth samples) and for an 8-bit
-    /// Lab read (the Lab color planes, so an unedited Lab file saves exactly).
-    /// `None` for an 8-bit RGB/Grayscale read, a constructed document, and a
-    /// 16/32-bit converted mode.
-    pub source_planes: Option<SourcePlanes>,
-    /// The 768-byte Indexed palette (256 red, then green, then blue) read from an
-    /// Indexed file, retained so an unchanged document can re-emit it. `None` for
-    /// every other mode, an RGB/Grayscale read, and a constructed document.
-    /// Deliberately separate from `color_mode_data`, which stays cleared on an
-    /// Indexed read (normalization consumes the palette).
-    pub source_palette: Option<[u8; 768]>,
-    /// The embedded ICC profile bytes of the file this document was read from,
-    /// when it was converted to the sRGB working space on read. `None` for a
-    /// file with no decodable non-sRGB profile and for a constructed document.
-    /// Deliberately not re-emitted on save: the profile is removed from
-    /// `image_resources` so the converted sRGB pixels are not mis-tagged.
-    pub source_icc: Option<Plane<u8>>,
-    /// The ICC bytes of the working profile the stored composite and layer color
-    /// numbers are in. `None` means the sRGB working space. Set by an
-    /// assign/convert command, or by a Preserve incoming-policy read that kept the
-    /// embedded non-sRGB profile; distinct from `source_icc`, which records a
-    /// profile a read converted away.
-    pub document_icc: Option<Plane<u8>>,
-    pub composite: PixelBuffer,
-    /// True when the file carried a merged composite image-data section. False
-    /// when the file ended after the layer section (maximize-compatibility off),
-    /// in which case `composite` is a zero-filled placeholder, not authoritative.
-    pub merged_composite_present: bool,
+    pub source: SourceState,
+    pub composite: CompositeState,
     /// Compression observed for the composite image-data section on read; RLE for
     /// a constructed document. Re-emitted on save to preserve the source encoding.
     pub composite_compression: Compression,
@@ -279,14 +242,8 @@ impl Document {
             height,
             mode,
             depth,
-            source_mode: None,
-            source_depth: None,
-            source_planes: None,
-            source_palette: None,
-            source_icc: None,
-            document_icc: None,
-            composite,
-            merged_composite_present: true,
+            source: SourceState::default(),
+            composite: CompositeState::new(composite).expect("valid initial composite"),
             composite_compression: Compression::Rle,
             layer_compression: Compression::Rle,
             is_psb: false,
@@ -351,12 +308,14 @@ impl Document {
                 composite[c * plane + i] = value;
             }
         }
-        doc.composite = PixelBuffer {
-            width,
-            height,
-            channels: 4,
-            data: composite.into(),
-        };
+        doc.composite
+            .replace(PixelBuffer {
+                width,
+                height,
+                channels: 4,
+                data: composite.into(),
+            })
+            .expect("valid composite");
         doc.layers = LayerStack::from_layers(vec![Layer {
             name: name.to_string(),
             rect: PsdRect {
@@ -376,7 +335,8 @@ impl Document {
     /// an 8-bit Lab read, whose retained store is 8-bit) and a constructed
     /// document, which still save 8-bit.
     pub fn retains_source_depth(&self) -> bool {
-        self.source_planes
+        self.source
+            .planes()
             .as_ref()
             .is_some_and(|store| store.depth != BitDepth::Eight)
             || retains_source_depth(&self.layers)
@@ -395,11 +355,11 @@ impl Document {
     /// the compositor reads, or its edit never reaches the display.
     #[inline]
     pub fn authoritative_plane<'a>(&self, layer: &'a Layer, id: i16) -> Option<&'a Samples> {
-        let depth = self.source_depth?;
+        let depth = self.source.depth()?;
         if !matches!(depth, BitDepth::Sixteen | BitDepth::ThirtyTwo) {
             return None;
         }
-        if self.source_mode.is_some() {
+        if self.source.mode().is_some() {
             return None;
         }
         let store = layer.source_channels.as_ref()?;

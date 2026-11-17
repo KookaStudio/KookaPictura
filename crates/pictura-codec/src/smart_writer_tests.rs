@@ -63,9 +63,13 @@ fn smart_layer(name: &str, so: SmartObject) -> Layer {
 
 fn doc_with(layers: Vec<Layer>) -> Document {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    for (i, b) in doc.composite.data.iter_mut().enumerate() {
-        *b = (i * 7 + 3) as u8;
-    }
+    doc.composite
+        .edit_data(|data| {
+            for (i, b) in data.iter_mut().enumerate() {
+                *b = (i * 7 + 3) as u8;
+            }
+        })
+        .expect("pixel edit preserves geometry");
     doc.layers = pictura_core::LayerStack::from_layers(layers);
     doc
 }

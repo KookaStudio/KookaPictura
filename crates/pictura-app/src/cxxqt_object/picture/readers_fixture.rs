@@ -58,7 +58,8 @@ pub(in crate::cxxqt_object) fn layered(w: u32, h: u32, profiled: bool) -> Docume
     top.blend = pictura_core::BlendMode::Multiply;
     doc.layers = LayerStack::from_layers(vec![base, top]);
     if profiled {
-        doc.document_icc = Some(pictura_codec::Profile::adobe_rgb().to_icc().into());
+        doc.source
+            .set_working_profile(Some(pictura_codec::Profile::adobe_rgb().to_icc().into()));
     }
     doc
 }

@@ -383,7 +383,8 @@ pub fn document_profile_name(view: &PictureView) -> QString {
     let Some(doc) = view.rust().session.doc.as_ref() else {
         return QString::from("sRGB IEC61966-2.1");
     };
-    doc.document_icc
+    doc.source
+        .working_profile()
         .as_deref()
         .and_then(pictura_codec::profile_description)
         .map(|name| QString::from(name.as_str()))
@@ -415,10 +416,11 @@ pub(in crate::cxxqt_object) fn save_embed_default(rust: &PictureViewRust, native
     let Some(doc) = rust.session.doc.as_ref() else {
         return false;
     };
-    if native && doc.source_mode == Some(ColorMode::Cmyk) {
+    if native && doc.source.mode() == Some(ColorMode::Cmyk) {
         return true;
     }
-    doc.document_icc
+    doc.source
+        .working_profile()
         .as_deref()
         .and_then(|icc| Profile::from_icc(icc).ok())
         .is_some_and(|profile| !profile.is_srgb())

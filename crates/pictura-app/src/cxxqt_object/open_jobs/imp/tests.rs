@@ -16,7 +16,11 @@ fn temp_path(extension: &str) -> std::path::PathBuf {
 
 fn white_psd() -> (std::path::PathBuf, Vec<u8>) {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite.data.fill(255);
+    doc.composite
+        .edit_data(|data| {
+            data.fill(255);
+        })
+        .expect("pixel edit preserves geometry");
     let bytes = pictura_codec::write_psd(&doc).expect("write PSD");
     let path = temp_path("psd");
     std::fs::write(&path, &bytes).expect("write fixture");
@@ -72,19 +76,25 @@ fn hdr_layer_psd() -> (std::path::PathBuf, Vec<u8>) {
         ..Default::default()
     };
     let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.source_depth = Some(BitDepth::ThirtyTwo);
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::ThirtyTwo,
-        width: 1,
-        height: 1,
-        samples: Samples::F32(vec![1.0, 1.0, 1.0].into()),
-    });
-    doc.composite = pictura_core::PixelBuffer {
-        width: 1,
-        height: 1,
-        channels: 3,
-        data: vec![255, 255, 255].into(),
-    };
+    doc.source
+        .set_native(
+            Some(BitDepth::ThirtyTwo),
+            Some(SourcePlanes {
+                depth: BitDepth::ThirtyTwo,
+                width: 1,
+                height: 1,
+                samples: Samples::F32(vec![1.0, 1.0, 1.0].into()),
+            }),
+        )
+        .expect("valid native source");
+    doc.composite
+        .replace(pictura_core::PixelBuffer {
+            width: 1,
+            height: 1,
+            channels: 3,
+            data: vec![255, 255, 255].into(),
+        })
+        .expect("valid composite");
     doc.layers = LayerStack::from_layers(vec![layer]);
     let bytes = pictura_codec::write_psd(&doc).expect("write 32-bit fixture");
     let path = temp_path("psd");
@@ -321,8 +331,11 @@ fn raster_import_policy_preserve() {
         Policy::Preserve,
         pictura_codec::ConversionOptions::default(),
     );
-    assert_eq!(doc.document_icc.as_deref(), Some(icc.as_slice()));
-    assert!(doc.source_icc.is_none());
+    assert_eq!(
+        doc.source.working_profile().as_deref(),
+        Some(icc.as_slice())
+    );
+    assert!(doc.source.original_profile().is_none());
     assert_eq!(doc.composite.data.to_vec(), before);
 }
 
@@ -338,8 +351,11 @@ fn raster_import_policy_convert() {
         Policy::Convert,
         pictura_codec::ConversionOptions::default(),
     );
-    assert_eq!(doc.source_icc.as_deref(), Some(icc.as_slice()));
-    assert!(doc.document_icc.is_none());
+    assert_eq!(
+        doc.source.original_profile().as_deref(),
+        Some(icc.as_slice())
+    );
+    assert!(doc.source.working_profile().is_none());
     assert_ne!(doc.composite.data.to_vec(), before);
 }
 
@@ -355,8 +371,8 @@ fn raster_import_policy_off() {
         Policy::Off,
         pictura_codec::ConversionOptions::default(),
     );
-    assert!(doc.document_icc.is_none());
-    assert!(doc.source_icc.is_none());
+    assert!(doc.source.working_profile().is_none());
+    assert!(doc.source.original_profile().is_none());
     assert_eq!(doc.composite.data.to_vec(), before);
 }
 
@@ -375,8 +391,8 @@ fn raster_import_policy_malformed_profile() {
         Policy::Convert,
         pictura_codec::ConversionOptions::default(),
     );
-    assert!(doc.document_icc.is_none());
-    assert!(doc.source_icc.is_none());
+    assert!(doc.source.working_profile().is_none());
+    assert!(doc.source.original_profile().is_none());
 }
 
 const MIB: u64 = 1024 * 1024;
@@ -499,12 +515,14 @@ fn lazy_psd() -> std::path::PathBuf {
     let plane = (LW * LH) as usize;
     let mut merged = vec![GRAY; plane * 4];
     merged[plane * 3..].fill(255);
-    doc.composite = PixelBuffer {
-        width: LW,
-        height: LH,
-        channels: 4,
-        data: merged.into(),
-    };
+    doc.composite
+        .replace(PixelBuffer {
+            width: LW,
+            height: LH,
+            channels: 4,
+            data: merged.into(),
+        })
+        .expect("valid composite");
     let path = temp_path("psd");
     std::fs::write(&path, pictura_codec::write_psd(&doc).expect("write")).expect("fixture");
     path

@@ -20,12 +20,12 @@ pub(crate) fn flat_source_mode(
     depth: u16,
     plane: usize,
 ) -> Option<(u16, usize, Vec<u8>)> {
-    let mode = doc.source_mode?;
+    let mode = doc.source.mode()?;
     if !matches!(mode, ColorMode::Duotone | ColorMode::Multichannel)
         || depth != 8
-        || !matches!(doc.source_depth, None | Some(BitDepth::Eight))
+        || !matches!(doc.source.depth(), None | Some(BitDepth::Eight))
         || doc.composite.channels != 3
-        || !doc.merged_composite_present
+        || !doc.composite.merged_output()
         || !doc.layers.is_empty()
         || !doc.channels.is_empty()
     {
@@ -36,7 +36,7 @@ pub(crate) fn flat_source_mode(
     } else {
         // Multichannel plate count is header-authoritative: derive it from the
         // retained store (color planes only; document extras already rejected).
-        let store = doc.source_planes.as_ref()?;
+        let store = doc.source.planes().as_ref()?;
         if plane == 0 || store.samples.len() % plane != 0 {
             return None;
         }

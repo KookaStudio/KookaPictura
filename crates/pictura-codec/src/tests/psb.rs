@@ -28,9 +28,13 @@ fn layer_lengths(bytes: &[u8]) -> (u64, u64, usize) {
 #[test]
 fn write_psb_small_document_widens_lengths() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    for (i, b) in doc.composite.data.iter_mut().enumerate() {
-        *b = (i * 3 + 1) as u8;
-    }
+    doc.composite
+        .edit_data(|data| {
+            for (i, b) in data.iter_mut().enumerate() {
+                *b = (i * 3 + 1) as u8;
+            }
+        })
+        .expect("pixel edit preserves geometry");
     doc.layers = pictura_core::LayerStack::from_layers(vec![pixel(
         "One",
         rect(0, 0, 2, 2),
@@ -85,9 +89,13 @@ fn write_psb_small_document_widens_lengths() {
 #[test]
 fn write_psd_auto_selects_psb_above_psd_limit() {
     let mut doc = Document::new(30_001, 1, ColorMode::Rgb, BitDepth::Eight);
-    for (i, b) in doc.composite.data.iter_mut().enumerate() {
-        *b = (i * 5 + 2) as u8;
-    }
+    doc.composite
+        .edit_data(|data| {
+            for (i, b) in data.iter_mut().enumerate() {
+                *b = (i * 5 + 2) as u8;
+            }
+        })
+        .expect("pixel edit preserves geometry");
     let bytes = write_psd(&doc).unwrap();
     assert_eq!(
         u16::from_be_bytes([bytes[4], bytes[5]]),
@@ -189,9 +197,13 @@ fn psb_reads_tagged_layer_info_signed_8b64() {
 #[test]
 fn psb_document_resaves_as_psb() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    for (i, b) in doc.composite.data.iter_mut().enumerate() {
-        *b = (i * 3 + 7) as u8;
-    }
+    doc.composite
+        .edit_data(|data| {
+            for (i, b) in data.iter_mut().enumerate() {
+                *b = (i * 3 + 7) as u8;
+            }
+        })
+        .expect("pixel edit preserves geometry");
     let psb = write_psb(&doc).unwrap();
     let read = read_psd(&psb).unwrap();
     assert!(read.is_psb, "a read PSB is flagged");
@@ -280,7 +292,9 @@ fn iopa_block_is_four_bytes() {
 #[test]
 fn psb_composite_uses_u32_rle_counts_and_psd_uses_u16() {
     let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite.data = vec![10, 20, 30].into();
+    doc.composite
+        .replace_data(vec![10, 20, 30].into())
+        .expect("valid composite plane");
     let psd = write_psd(&doc).unwrap();
     let psb = write_psb(&doc).unwrap();
 
@@ -303,9 +317,13 @@ fn psb_composite_uses_u32_rle_counts_and_psd_uses_u16() {
 #[test]
 fn psb_write_is_deterministic() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    for (i, b) in doc.composite.data.iter_mut().enumerate() {
-        *b = (i * 11 + 3) as u8;
-    }
+    doc.composite
+        .edit_data(|data| {
+            for (i, b) in data.iter_mut().enumerate() {
+                *b = (i * 11 + 3) as u8;
+            }
+        })
+        .expect("pixel edit preserves geometry");
     doc.layers = pictura_core::LayerStack::from_layers(vec![pixel(
         "One",
         rect(0, 0, 2, 2),

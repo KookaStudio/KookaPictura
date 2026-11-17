@@ -110,7 +110,9 @@ pub(super) fn pixel_layer(name: &str, w: u32, h: u32, rgb: (u8, u8, u8)) -> Laye
 #[test]
 fn converts_planar_rgb_to_rgba() {
     let mut doc = Document::new(2, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite.data = vec![10, 20, 30, 40, 50, 60].into();
+    doc.composite
+        .replace_data(vec![10, 20, 30, 40, 50, 60].into())
+        .expect("valid composite plane");
     let image = document_to_image(&doc, false);
     assert_eq!(image.width(), 2);
     assert_eq!(image.height(), 1);
@@ -597,7 +599,12 @@ fn move_preview_base_preserves_layer_visibility() {
 
     // The full-composite fallback (a missing/mismatched composite).
     let mut no_composite = doc.clone();
-    no_composite.composite.data.clear();
+    no_composite
+        .composite
+        .edit_data(|data| {
+            data.clear();
+        })
+        .expect("pixel edit preserves geometry");
     no_composite.layers[1].visible = false;
     let _ = build_move_preview_base(&mut no_composite, &["1".to_string()], false);
     assert!(
@@ -905,9 +912,21 @@ fn layer_can_edit_smart_object_contents_eligibility() {
         let mut src = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
         let n = 4usize;
         for i in 0..n {
-            src.composite.data[i] = 10;
-            src.composite.data[n + i] = 20;
-            src.composite.data[2 * n + i] = 30;
+            src.composite
+                .edit_data(|data| {
+                    data[i] = 10;
+                })
+                .expect("pixel edit preserves geometry");
+            src.composite
+                .edit_data(|data| {
+                    data[n + i] = 20;
+                })
+                .expect("pixel edit preserves geometry");
+            src.composite
+                .edit_data(|data| {
+                    data[2 * n + i] = 30;
+                })
+                .expect("pixel edit preserves geometry");
         }
         pictura_codec::write_psd(&src).expect("payload writes")
     };

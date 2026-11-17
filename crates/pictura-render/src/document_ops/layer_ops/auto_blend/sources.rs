@@ -168,7 +168,7 @@ fn read_row(doc: &Document, layer: &Layer, y: usize, w: usize) -> Row {
         }
     }
     // 32-bit samples are linear; analysis wants a perceptual scale.
-    if doc.source_depth == Some(BitDepth::ThirtyTwo) {
+    if doc.source.depth() == Some(BitDepth::ThirtyTwo) {
         luma.iter_mut().for_each(|v| *v = v.powf(1.0 / 2.2));
     }
     Row { luma, alpha }

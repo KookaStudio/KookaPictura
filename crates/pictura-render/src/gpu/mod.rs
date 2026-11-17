@@ -862,9 +862,24 @@ mod tests {
         let n = (w * h) as usize;
         let mut source = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
         for i in 0..n {
-            source.composite.data[i] = 10;
-            source.composite.data[n + i] = 20;
-            source.composite.data[2 * n + i] = 30;
+            source
+                .composite
+                .edit_data(|data| {
+                    data[i] = 10;
+                })
+                .expect("pixel edit preserves geometry");
+            source
+                .composite
+                .edit_data(|data| {
+                    data[n + i] = 20;
+                })
+                .expect("pixel edit preserves geometry");
+            source
+                .composite
+                .edit_data(|data| {
+                    data[2 * n + i] = 30;
+                })
+                .expect("pixel edit preserves geometry");
         }
         let payload = pictura_codec::write_psd(&source).expect("payload writes");
 

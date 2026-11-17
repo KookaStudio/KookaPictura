@@ -20,7 +20,9 @@ fn rect(left: i32, top: i32, right: i32, bottom: i32) -> PsdRect {
 fn doc_with_layer() -> Document {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = LayerStack::from_layers(vec![pixel_layer("base", 4, 4, (255, 0, 0))]);
-    doc.composite = pictura_render::composite_rgba(&doc);
+    doc.composite
+        .replace(pictura_render::composite_rgba(&doc))
+        .expect("valid composite");
     doc
 }
 

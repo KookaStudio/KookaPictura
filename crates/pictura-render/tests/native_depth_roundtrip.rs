@@ -24,7 +24,8 @@ fn native_depth_edit_survives_a_psd_round_trip() {
     let height = doc.height as usize;
     let channels = doc.composite.channels;
     let source = doc
-        .source_planes
+        .source
+        .planes()
         .as_mut()
         .expect("rgb16 retains source planes");
     assert_eq!(source.depth, BitDepth::Sixteen);
@@ -44,11 +45,13 @@ fn native_depth_edit_survives_a_psd_round_trip() {
     let adjusted = source.samples.clone();
 
     let plane = width * height * channels as usize;
-    doc.composite.data = adjusted.narrow_to_u8()[..plane].to_vec().into();
+    doc.composite
+        .replace_data(adjusted.narrow_to_u8()[..plane].to_vec().into())
+        .expect("valid composite plane");
 
     let out = write_psd(&doc).expect("save edited document");
     let back = read_psd(&out).expect("re-read saved document");
-    assert_eq!(back.source_planes.unwrap().samples, adjusted);
+    assert_eq!(back.source.planes().as_ref().unwrap().samples, adjusted);
 
     let Samples::U16(v) = &adjusted else {
         panic!("rgb16 retains u16 samples")
@@ -69,14 +72,14 @@ fn refresh_splices_native_color_planes_into_a_layered_depth_document() {
         .join("../pictura-codec/tests/fixtures/rgb16_layered.psd");
     let bytes = std::fs::read(&path).unwrap();
     let mut doc = read_psd(&bytes).unwrap();
-    assert_eq!(doc.source_depth, Some(BitDepth::Sixteen));
+    assert_eq!(doc.source.depth(), Some(BitDepth::Sixteen));
     assert!(!doc.layers.is_empty(), "fixture carries a layer");
 
     let plane = doc.width as usize * doc.height as usize;
     let color_channels = doc.mode.color_channels() as usize;
     let edited = doc.composite.data[..color_channels * plane].to_vec();
     let extras_before = doc.channels.clone();
-    let retained_before = doc.source_planes.as_ref().unwrap().samples.to_bytes();
+    let retained_before = doc.source.planes().as_ref().unwrap().samples.to_bytes();
 
     assert!(
         refresh_native_composite(&mut doc),
@@ -84,7 +87,7 @@ fn refresh_splices_native_color_planes_into_a_layered_depth_document() {
     );
     assert_eq!(doc.channels, extras_before, "document extras untouched");
 
-    let retained_after = doc.source_planes.as_ref().unwrap().samples.to_bytes();
+    let retained_after = doc.source.planes().as_ref().unwrap().samples.to_bytes();
     let cut = color_channels * plane * 2;
     assert_eq!(
         &retained_after[cut..],
@@ -99,7 +102,7 @@ fn refresh_splices_native_color_planes_into_a_layered_depth_document() {
         "output header keeps the source depth"
     );
     let back = read_psd(&out).expect("re-read saved document");
-    let Samples::U16(v) = back.source_planes.unwrap().samples else {
+    let Samples::U16(v) = back.source.planes().as_ref().unwrap().samples else {
         panic!("depth-16 read retains u16 samples")
     };
     for c in 0..color_channels {
@@ -123,11 +126,20 @@ fn refresh_leaves_out_of_scope_documents_untouched() {
     let mut no_layers = base.clone();
     no_layers.layers = pictura_core::LayerStack::default();
     let mut converted = base.clone();
-    converted.source_mode = Some(ColorMode::Cmyk);
+    converted
+        .source
+        .set_encoding(Some(ColorMode::Cmyk), None)
+        .expect("valid source encoding");
     let mut no_depth = base.clone();
-    no_depth.source_depth = None;
+    no_depth
+        .source
+        .set_native(None, no_depth.source.planes().clone())
+        .expect("valid source depth");
     let mut no_planes = base.clone();
-    no_planes.source_planes = None;
+    no_planes
+        .source
+        .replace_planes(None)
+        .expect("valid source planes");
 
     for (name, mut doc) in [
         ("no layers", no_layers),
@@ -152,7 +164,7 @@ fn layered_fixture() -> Document {
 
 fn assert_layer_round_trips_native(apply: impl Fn(&mut Document)) {
     let mut doc = layered_fixture();
-    assert_eq!(doc.source_depth, Some(BitDepth::Sixteen));
+    assert_eq!(doc.source.depth(), Some(BitDepth::Sixteen));
     apply(&mut doc);
     let out = write_psd(&doc).expect("save transformed document");
     assert_eq!(
@@ -211,7 +223,7 @@ fn a_depth16_fill_survives_a_psd_round_trip() {
         .join("../pictura-codec/tests/fixtures/rgb16_layered.psd");
     let bytes = std::fs::read(&path).unwrap();
     let mut doc = read_psd(&bytes).unwrap();
-    assert_eq!(doc.source_depth, Some(BitDepth::Sixteen));
+    assert_eq!(doc.source.depth(), Some(BitDepth::Sixteen));
 
     // Fill the layer with a solid colour.
     let mask = vec![255u8; (doc.width * doc.height) as usize];
@@ -265,7 +277,7 @@ fn a_depth16_fill_survives_a_psd_round_trip() {
 #[test]
 fn a_depth16_filter_survives_a_psd_round_trip() {
     let mut doc = layered_fixture();
-    assert_eq!(doc.source_depth, Some(BitDepth::Sixteen));
+    assert_eq!(doc.source.depth(), Some(BitDepth::Sixteen));
     let filter = pictura_filters::Filter::LensCorrection {
         params: pictura_filters::LensCorrectionParams {
             distortion: 100.0,

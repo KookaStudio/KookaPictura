@@ -321,7 +321,7 @@ impl qobject::PictureView {
         let Some(doc) = self.rust().session.doc.as_ref() else {
             return QString::default();
         };
-        let Some(mode) = doc.source_mode else {
+        let Some(mode) = doc.source.mode() else {
             return QString::default();
         };
         let name = match mode {
@@ -341,7 +341,7 @@ impl qobject::PictureView {
         let preserves_source = matches!(
             mode,
             ColorMode::Lab | ColorMode::Cmyk | ColorMode::Indexed | ColorMode::Bitmap
-        ) && (doc.source_depth.is_none() || doc.retains_source_depth());
+        ) && (doc.source.depth().is_none() || doc.retains_source_depth());
         let saved = if preserves_source { name } else { "RGB" };
         QString::from(format!("Converted from {name}; saved as {saved}"))
     }
@@ -350,7 +350,7 @@ impl qobject::PictureView {
         let Some(doc) = self.rust().session.doc.as_ref() else {
             return QString::default();
         };
-        let Some(depth) = doc.source_depth else {
+        let Some(depth) = doc.source.depth() else {
             return QString::default();
         };
         let name = match depth {
@@ -374,13 +374,13 @@ impl qobject::PictureView {
         let Some(doc) = self.rust().session.doc.as_ref() else {
             return QString::default();
         };
-        if let Some(icc) = doc.source_icc.as_deref() {
+        if let Some(icc) = doc.source.original_profile().as_deref() {
             return match pictura_codec::profile_description(icc) {
                 Some(name) => QString::from(format!("Converted from ICC profile {name}")),
                 None => QString::from("Converted from embedded ICC profile"),
             };
         }
-        let Some(icc) = doc.document_icc.as_deref() else {
+        let Some(icc) = doc.source.working_profile().as_deref() else {
             return QString::default();
         };
         match pictura_codec::profile_description(icc) {
@@ -492,7 +492,7 @@ impl qobject::PictureView {
         // The working model is always 8-bit; a retained 16/32-bit source store is
         // the depth a save re-emits, so report that as the document's depth.
         let depth = if doc.retains_source_depth() {
-            doc.source_depth.unwrap_or(doc.depth)
+            doc.source.depth().unwrap_or(doc.depth)
         } else {
             doc.depth
         };

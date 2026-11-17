@@ -18,7 +18,9 @@ fn stack_payload(frames: &[((u8, u8, u8), bool)], size: u32) -> Vec<u8> {
         })
         .collect();
     d.layers = pictura_core::LayerStack::from_layers(layers);
-    d.composite = composite_rgba(&d);
+    d.composite
+        .replace(composite_rgba(&d))
+        .expect("valid composite");
     write_psd(&d).expect("stack payload writes")
 }
 
@@ -251,7 +253,10 @@ fn stack_frames_render_a_nested_smart_object() {
         smart_layer("nested", full(2, 2), nested, Vec::new()),
         solid("solid", full(2, 2), (0, 0, 10), 255, BlendMode::Normal, 255),
     ]);
-    payload_doc.composite = composite_rgba(&payload_doc);
+    payload_doc
+        .composite
+        .replace(composite_rgba(&payload_doc))
+        .expect("valid composite");
     let payload = write_psd(&payload_doc).expect("payload writes");
     let d = stack_doc(
         payload,

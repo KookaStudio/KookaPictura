@@ -41,7 +41,10 @@ fn psd_write_is_byte_identical_tiled() {
     let mut tiled = flat.clone();
     let mut held = Vec::new();
     let (w, h) = (W as usize, H as usize);
-    diverge(&mut tiled.composite.data, w, h, &mut held);
+    tiled
+        .composite
+        .edit_data(|data| diverge(data, w, h, &mut held))
+        .expect("divergence preserves geometry");
     for layer in tiled.layers.iter_mut() {
         let (lw, lh) = (layer.rect.width() as usize, layer.rect.height() as usize);
         for channel in &mut layer.channels {
@@ -109,7 +112,9 @@ fn streamed_merged_image_is_byte_identical() {
         .flat_map(|c| (0..w * h).map(move |i| (c, i)))
         .map(|(c, i)| rgba[i * 4 + c])
         .collect();
-    flat.composite.data = planar.clone().into();
+    flat.composite
+        .replace_data(planar.clone().into())
+        .expect("valid composite plane");
 
     let mut banded = Plane::filled(w, h, 4, 0u8);
     for band in (0..h).step_by(256) {
@@ -136,7 +141,10 @@ fn streamed_merged_image_is_byte_identical() {
     ] {
         flat.composite_compression = compression;
         let mut streamed = flat.clone();
-        streamed.composite.data = banded.clone();
+        streamed
+            .composite
+            .replace_data(banded.clone())
+            .expect("valid composite plane");
         let written = assert_no_materialization(|| write_psd(&streamed).expect("tiled write"));
         assert!(
             written == write_psd(&flat).expect("flat write"),
@@ -173,7 +181,7 @@ fn a_layered_merged_image_is_skipped_on_request() {
             },
         )
         .expect("read skipping the merged image");
-        assert!(skipped.merged_composite_present, "{compression:?}");
+        assert!(skipped.composite.merged_output(), "{compression:?}");
         assert!(
             skipped.composite.data.is_empty(),
             "{compression:?}: no merged planes"

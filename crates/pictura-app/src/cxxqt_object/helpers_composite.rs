@@ -207,7 +207,7 @@ fn crop_rows(
 /// otherwise the embedded PSD composite.
 pub(super) fn current_buffer(doc: &Document, gpu_compute: bool) -> PixelBuffer {
     if doc.layers.is_empty() {
-        doc.composite.clone()
+        doc.composite.buffer().clone()
     } else {
         pictura_render::composite(pictura_render::CompositeRequest::whole(doc, gpu_compute)).0
     }

@@ -379,12 +379,14 @@ mod tests {
         let height = 4000;
         let rgba = vec![128u8; width * height * 4];
         let mut doc = Document::new(width as u32, height as u32, ColorMode::Rgb, BitDepth::Eight);
-        doc.composite = pictura_core::PixelBuffer {
-            width: width as u32,
-            height: height as u32,
-            channels: 4,
-            data: rgba.into(),
-        };
+        doc.composite
+            .replace(pictura_core::PixelBuffer {
+                width: width as u32,
+                height: height as u32,
+                channels: 4,
+                data: rgba.into(),
+            })
+            .expect("valid composite");
         let base = layer("Layer 0", width as u32, height as u32, 30);
         let layers: Vec<Layer> = (0..20)
             .map(|i| {

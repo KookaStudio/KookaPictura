@@ -66,12 +66,12 @@ fn embedded_icc_profile_is_applied_and_dropped() {
     let doc = read_psd(&bytes).expect("fixture parses");
 
     assert_eq!(
-        doc.source_icc.as_deref(),
+        doc.source.original_profile().as_deref(),
         Some(profile.as_slice()),
         "the source profile is recorded"
     );
     assert!(
-        doc.document_icc.is_none(),
+        doc.source.working_profile().is_none(),
         "read-normalisation must not set the working profile"
     );
     assert!(
@@ -113,7 +113,7 @@ fn icc_normalized_save_has_no_profile_resource() {
     let bytes = std::fs::read(fixture("icc_profile.psd")).expect("read fixture");
     let doc = read_psd(&bytes).expect("fixture parses");
     assert!(
-        doc.document_icc.is_none(),
+        doc.source.working_profile().is_none(),
         "the read-normalised document has no working profile"
     );
     let out = write_psd(&doc).expect("write");
@@ -125,11 +125,11 @@ fn icc_normalized_save_has_no_profile_resource() {
         "the saved file carries no ICC profile resource"
     );
     assert!(
-        back.source_icc.is_none(),
+        back.source.original_profile().is_none(),
         "the re-read file is not ICC-normalized"
     );
     assert!(
-        back.document_icc.is_none(),
+        back.source.working_profile().is_none(),
         "a plain re-read has no working profile"
     );
 }
@@ -139,7 +139,7 @@ fn plain_read_has_no_working_profile() {
     let bytes = std::fs::read(fixture("two_layers.psd")).expect("read fixture");
     let doc = read_psd(&bytes).expect("fixture parses");
     assert!(
-        doc.document_icc.is_none(),
+        doc.source.working_profile().is_none(),
         "a document without an assigned profile stays in the sRGB working space"
     );
 }
@@ -160,7 +160,7 @@ fn preserve_keeps_pixels_and_the_profile_through_a_save() {
         "the layer pixels are byte-identical to the file"
     );
     assert_eq!(
-        preserved.document_icc.as_deref(),
+        preserved.source.working_profile().as_deref(),
         Some(embedded.as_slice()),
         "the working profile is the embedded one"
     );
@@ -204,10 +204,11 @@ fn preserve_keeps_pixels_and_the_profile_through_a_save() {
         "the engine re-reads the layer pixels byte-identically"
     );
     assert_eq!(
-        reread.document_icc, preserved.document_icc,
+        reread.source.working_profile(),
+        preserved.source.working_profile(),
         "the re-read document is still tagged with the embedded profile"
     );
-    assert!(reread.source_icc.is_none());
+    assert!(reread.source.original_profile().is_none());
     assert!(
         decode_image_resources(&reread)
             .iter()
@@ -253,7 +254,7 @@ sys.stdout.buffer.write(data)
 fn off_resaves_untagged() {
     let bytes = std::fs::read(fixture("icc_profile.psd")).expect("read fixture");
     let off = read_psd_with(&bytes, Policy::Off).expect("fixture parses");
-    assert!(off.document_icc.is_none() && off.source_icc.is_none());
+    assert!(off.source.working_profile().is_none() && off.source.original_profile().is_none());
 
     let out = write_psd(&off).expect("write");
     assert!(

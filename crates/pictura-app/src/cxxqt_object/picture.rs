@@ -47,7 +47,7 @@ use std::borrow::Cow;
 /// (#1274).
 pub(super) fn picture<'a>(doc: &'a Document, view: &PictureViewRust) -> Cow<'a, PixelBuffer> {
     if stored_is_current(doc, view) {
-        return Cow::Borrowed(&doc.composite);
+        return Cow::Borrowed(doc.composite.buffer());
     }
     Cow::Owned(picture_region(doc, view, whole(doc)))
 }
@@ -69,7 +69,7 @@ pub(super) fn picture_region(doc: &Document, view: &PictureViewRust, rect: PsdRe
     }
     let pixels = if stored_is_current(doc, view) {
         crop_planar(
-            &doc.composite,
+            doc.composite.buffer(),
             inside.left,
             inside.top,
             inside.width() as u32,
@@ -126,7 +126,13 @@ pub(super) fn stream_picture(
             let band = rows.min(h - top);
             f(
                 top,
-                crop_planar(&doc.composite, rect.left, rect.top + top as i32, w, band),
+                crop_planar(
+                    doc.composite.buffer(),
+                    rect.left,
+                    rect.top + top as i32,
+                    w,
+                    band,
+                ),
             );
             top += band;
         }
@@ -189,7 +195,7 @@ pub(super) fn preview_picture<'a>(
     let source = |r: PsdRect| {
         if stored {
             crop_planar(
-                &doc.composite,
+                doc.composite.buffer(),
                 r.left,
                 r.top,
                 r.width().max(0) as u32,
@@ -382,7 +388,7 @@ impl<D: std::ops::Deref<Target = Document>> PictureTiles<D> {
         };
         let pixels = if self.stored {
             crop_planar(
-                &doc.composite,
+                doc.composite.buffer(),
                 rect.left,
                 rect.top,
                 rect.width().max(0) as u32,
@@ -409,7 +415,7 @@ fn from_tiles(doc: &Document, view: &PictureViewRust, rect: PsdRect) -> Option<P
     // Tiles built from the file's merged image (#1218) are Photoshop's
     // picture, not the layers': the readers here composite the layers.
     if doc.composite_is_authoritative()
-        || doc.document_icc.is_some()
+        || doc.source.working_profile().is_some()
         || !tiles_are_current(view)
         || view.tiles.preview.borrow().is_some()
     {
@@ -461,7 +467,7 @@ fn tiles_are_current(view: &PictureViewRust) -> bool {
 pub(super) fn stored_is_current(doc: &Document, view: &PictureViewRust) -> bool {
     tiles_are_current(view)
         && doc.composite_is_authoritative()
-        && doc.source_depth.is_none()
+        && doc.source.depth().is_none()
         && pictura_render::DocumentComposite::is_shape_valid(doc)
 }
 
@@ -703,7 +709,9 @@ mod tests {
     fn a_lifted_transform_is_composited() {
         let mut doc = doc_with_layer();
         doc.layers[0].opacity = 128;
-        doc.composite = pictura_render::composite_rgba(&doc);
+        doc.composite
+            .replace(pictura_render::composite_rgba(&doc))
+            .expect("valid composite");
         let mut view = view_of(doc);
         view.session.selection = Some(Selection::all(SIDE, SIDE));
         let session = view
@@ -719,12 +727,14 @@ mod tests {
     fn a_grayscale_document_is_composited() {
         let mut doc = doc_with_layer();
         doc.mode = ColorMode::Grayscale;
-        doc.composite = PixelBuffer {
-            width: SIDE,
-            height: SIDE,
-            channels: 1,
-            data: vec![100u8; (SIDE * SIDE) as usize].into(),
-        };
+        doc.composite
+            .replace(PixelBuffer {
+                width: SIDE,
+                height: SIDE,
+                channels: 1,
+                data: vec![100u8; (SIDE * SIDE) as usize].into(),
+            })
+            .expect("valid composite");
         let view = view_of(doc);
         let doc = view.session.doc.as_ref().expect("document");
         let served = served(doc, &view);
@@ -736,7 +746,9 @@ mod tests {
     #[test]
     fn a_retained_native_composite_is_composited() {
         let mut doc = doc_with_layer();
-        doc.source_depth = Some(BitDepth::Sixteen);
+        doc.source
+            .set_native(Some(BitDepth::Sixteen), doc.source.planes().clone())
+            .expect("valid source depth");
         let view = view_of(doc);
         let doc = view.session.doc.as_ref().expect("document");
         assert!(matches!(picture(doc, &view), Cow::Owned(_)));
@@ -746,12 +758,14 @@ mod tests {
     #[test]
     fn a_mismatched_composite_is_composited() {
         let mut doc = doc_with_layer();
-        doc.composite = PixelBuffer {
-            width: SIDE / 2,
-            height: SIDE / 2,
-            channels: 4,
-            data: vec![0u8; (SIDE * SIDE) as usize].into(),
-        };
+        doc.composite
+            .replace(PixelBuffer {
+                width: SIDE / 2,
+                height: SIDE / 2,
+                channels: 4,
+                data: vec![0u8; (SIDE * SIDE) as usize].into(),
+            })
+            .expect("valid composite");
         let view = view_of(doc);
         let doc = view.session.doc.as_ref().expect("document");
         let served = served(doc, &view);
@@ -763,12 +777,14 @@ mod tests {
     #[test]
     fn a_layerless_document_keeps_its_embedded_composite() {
         let mut doc = Document::new(SIDE, SIDE, ColorMode::Rgb, BitDepth::Eight);
-        doc.composite = PixelBuffer {
-            width: SIDE,
-            height: SIDE,
-            channels: 4,
-            data: vec![42u8; (SIDE * SIDE * 4) as usize].into(),
-        };
+        doc.composite
+            .replace(PixelBuffer {
+                width: SIDE,
+                height: SIDE,
+                channels: 4,
+                data: vec![42u8; (SIDE * SIDE * 4) as usize].into(),
+            })
+            .expect("valid composite");
         let view = view_of(doc);
         let doc = view.session.doc.as_ref().expect("document");
         assert!(matches!(picture(doc, &view), Cow::Borrowed(_)));
@@ -816,7 +832,10 @@ mod tests {
         // must be recomputed.
         let mut lifted_doc = doc_with_layer();
         lifted_doc.layers[0].opacity = 128;
-        lifted_doc.composite = pictura_render::composite_rgba(&lifted_doc);
+        lifted_doc
+            .composite
+            .replace(pictura_render::composite_rgba(&lifted_doc))
+            .expect("valid composite");
         let mut lifted = view_of(lifted_doc);
         lifted.session.selection = Some(Selection::all(SIDE, SIDE));
         let session = lifted
@@ -831,12 +850,14 @@ mod tests {
         // one-plane cache.
         let mut gray = doc_with_layer();
         gray.mode = ColorMode::Grayscale;
-        gray.composite = PixelBuffer {
-            width: SIDE,
-            height: SIDE,
-            channels: 1,
-            data: vec![7u8; (SIDE * SIDE) as usize].into(),
-        };
+        gray.composite
+            .replace(PixelBuffer {
+                width: SIDE,
+                height: SIDE,
+                channels: 1,
+                data: vec![7u8; (SIDE * SIDE) as usize].into(),
+            })
+            .expect("valid composite");
         let gray = view_of(gray);
         let doc = gray.session.doc.as_ref().unwrap();
         let served_gray = served(doc, &gray);
@@ -845,24 +866,30 @@ mod tests {
 
         // A layerless document: the embedded composite, not an empty stack.
         let mut layerless = Document::new(SIDE, SIDE, ColorMode::Rgb, BitDepth::Eight);
-        layerless.composite = PixelBuffer {
-            width: SIDE,
-            height: SIDE,
-            channels: 4,
-            data: vec![9u8; (SIDE * SIDE * 4) as usize].into(),
-        };
+        layerless
+            .composite
+            .replace(PixelBuffer {
+                width: SIDE,
+                height: SIDE,
+                channels: 4,
+                data: vec![9u8; (SIDE * SIDE * 4) as usize].into(),
+            })
+            .expect("valid composite");
         let layerless = view_of(layerless);
         let doc = layerless.session.doc.as_ref().unwrap();
         assert_eq!(served(doc, &layerless), doc.composite);
 
         // A mismatched composite: recomputed at the document's dimensions.
         let mut mismatched = doc_with_layer();
-        mismatched.composite = PixelBuffer {
-            width: SIDE / 2,
-            height: SIDE / 2,
-            channels: 4,
-            data: vec![0u8; (SIDE * SIDE) as usize].into(),
-        };
+        mismatched
+            .composite
+            .replace(PixelBuffer {
+                width: SIDE / 2,
+                height: SIDE / 2,
+                channels: 4,
+                data: vec![0u8; (SIDE * SIDE) as usize].into(),
+            })
+            .expect("valid composite");
         let mismatched = view_of(mismatched);
         let doc = mismatched.session.doc.as_ref().unwrap();
         let served_mismatched = served(doc, &mismatched);
@@ -887,7 +914,9 @@ mod tests {
             .collect();
         let mut doc = Document::new(4000, 4000, ColorMode::Rgb, BitDepth::Eight);
         doc.layers = pictura_core::LayerStack::from_layers(layers);
-        doc.composite = pictura_render::composite_rgba(&doc);
+        doc.composite
+            .replace(pictura_render::composite_rgba(&doc))
+            .expect("valid composite");
         let view = PictureViewRust {
             session: DocumentSession::with_document(doc),
             ..Default::default()

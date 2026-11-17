@@ -482,7 +482,9 @@ fn neutral_move_still_yields_inserted() {
             ..pixel_layer("clip", 8, 8, (10, 20, 30))
         },
     ]);
-    doc.composite = pictura_render::composite_rgba(&doc);
+    doc.composite
+        .replace(pictura_render::composite_rgba(&doc))
+        .expect("valid composite");
     let inserted = pictura_render::add_layer_in(&mut doc, "", "");
     assert!(!inserted.is_empty());
     let before_doc = doc.clone();

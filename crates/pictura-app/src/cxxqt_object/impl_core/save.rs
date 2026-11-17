@@ -122,10 +122,11 @@ impl qobject::PictureView {
             let mut metadata = pictura_codec::raster_metadata(doc);
             metadata.vanishing_point = store_planes(session.vanishing_planes.as_ref(), doc);
             if keeps_working && embed {
-                metadata.icc = Some(if doc.source_mode == Some(ColorMode::Cmyk) {
+                metadata.icc = Some(if doc.source.mode() == Some(ColorMode::Cmyk) {
                     pictura_codec::Profile::srgb().to_icc()
                 } else {
-                    doc.document_icc
+                    doc.source
+                        .working_profile()
                         .clone()
                         .unwrap_or_else(|| pictura_codec::Profile::srgb().to_icc().into())
                         .to_vec()
@@ -207,7 +208,7 @@ impl qobject::PictureView {
         ) else {
             return false;
         };
-        let source_mode = doc.source_mode.unwrap_or(doc.mode);
+        let source_mode = doc.source.mode().unwrap_or(doc.mode);
         let srgb = matches!(
             kind,
             pictura_codec::SaveKind::Png
@@ -217,15 +218,18 @@ impl qobject::PictureView {
                 | pictura_codec::SaveKind::Eps
                 | pictura_codec::SaveKind::Dcs
         ) && source_mode == ColorMode::Rgb;
-        doc.composite = save_composite(&doc, gpu_compute, srgb);
+        doc.composite
+            .replace(save_composite(&doc, gpu_compute, srgb))
+            .expect("valid composite");
         if embed_tiff {
-            let mode = doc.source_mode.unwrap_or(doc.mode);
+            let mode = doc.source.mode().unwrap_or(doc.mode);
             options.icc = match mode {
                 ColorMode::Cmyk => {
                     pictura_codec::document_cmyk_profile(&doc).map(|profile| profile.to_icc())
                 }
                 ColorMode::Rgb => Some(
-                    doc.document_icc
+                    doc.source
+                        .working_profile()
                         .clone()
                         .unwrap_or_else(|| pictura_codec::Profile::srgb().to_icc().into())
                         .to_vec(),
@@ -289,7 +293,7 @@ pub(super) fn save_composite(
     srgb: bool,
 ) -> pictura_core::PixelBuffer {
     let buffer = current_buffer(doc, gpu_compute);
-    if srgb && doc.document_icc.is_some() {
+    if srgb && doc.source.working_profile().is_some() {
         pictura_codec::buffer_to_srgb(doc, &buffer).into_owned()
     } else {
         buffer
@@ -322,10 +326,10 @@ fn write_gif(rust: &mut PictureViewRust, path: &str) -> bool {
             pictura_render::refresh_native_composite(doc);
         }
         let bytes = if pictura_codec::gif_indexed_source_is_current(doc) {
-            let Some(palette) = doc.source_palette else {
+            let Some(palette) = doc.source.palette() else {
                 return false;
             };
-            let Some(planes) = doc.source_planes.as_ref() else {
+            let Some(planes) = doc.source.planes().as_ref() else {
                 return false;
             };
             let Samples::U8(samples) = &planes.samples else {
@@ -438,10 +442,10 @@ mod tests {
         pictura_render::convert_to_indexed(&mut doc, options()).unwrap();
         assert!(pictura_codec::indexed_source_is_current(&doc));
 
-        let palette = doc.source_palette.expect("retained palette");
+        let palette = doc.source.palette().expect("retained palette");
         let plane = doc.width as usize * doc.height as usize;
         let indices = {
-            let planes = doc.source_planes.as_mut().expect("retained planes");
+            let mut planes = doc.source.planes().clone().expect("retained planes");
             let Samples::U8(samples) = &mut planes.samples else {
                 panic!("expected an 8-bit index plane");
             };
@@ -450,6 +454,9 @@ mod tests {
             // index plane; GIF reads only the first plane.
             samples.extend(std::iter::repeat_n(0xA5, plane));
             planes.samples = Samples::U8(samples.clone().into());
+            doc.source
+                .replace_planes(Some(planes))
+                .expect("retained index planes");
             samples[..plane].to_vec()
         };
         let highest = indices.iter().copied().max().unwrap_or(0) as usize;
@@ -471,16 +478,23 @@ mod tests {
         // while the RGB planes match and alpha stays opaque.
         let mut refreshed = doc.composite.data.get(..3 * plane).unwrap().to_vec();
         refreshed.extend(std::iter::repeat_n(255, plane));
-        doc.composite = pictura_core::PixelBuffer {
-            width: doc.width,
-            height: doc.height,
-            channels: 4,
-            data: refreshed.into(),
-        };
+        doc.composite
+            .replace(pictura_core::PixelBuffer {
+                width: doc.width,
+                height: doc.height,
+                channels: 4,
+                data: refreshed.into(),
+            })
+            .expect("valid composite");
         assert!(!pictura_codec::indexed_source_is_current(&doc));
         assert!(pictura_codec::gif_indexed_source_is_current(&doc));
         let mut transparent = doc.clone();
-        transparent.composite.data.as_mut_slice()[3 * plane] = 254;
+        transparent
+            .composite
+            .edit_data(|data| {
+                data.as_mut_slice()[3 * plane] = 254;
+            })
+            .expect("pixel edit preserves geometry");
         assert!(!pictura_codec::gif_indexed_source_is_current(&transparent));
 
         let mut rust = PictureViewRust::default();
@@ -513,7 +527,11 @@ mod tests {
     fn edited_indexed_source_is_stale() {
         let mut doc = rgb_doc(4, 4);
         pictura_render::convert_to_indexed(&mut doc, options()).unwrap();
-        doc.composite.data.as_mut_slice()[0] ^= 0xFF;
+        doc.composite
+            .edit_data(|data| {
+                data.as_mut_slice()[0] ^= 0xFF;
+            })
+            .expect("pixel edit preserves geometry");
         doc.layers[0].channels[0].data.as_mut_slice()[0] ^= 0xFF;
         assert!(!pictura_codec::indexed_source_is_current(&doc));
         let mut rust = PictureViewRust::default();

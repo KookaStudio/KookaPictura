@@ -255,7 +255,7 @@ fn resume_index(doc: &Document, target: &str) -> Option<usize> {
     if layer.clipping {
         return None;
     }
-    if doc.mode != ColorMode::Rgb || doc.depth != BitDepth::Eight || doc.source_depth.is_some() {
+    if doc.mode != ColorMode::Rgb || doc.depth != BitDepth::Eight || doc.source.depth().is_some() {
         return None;
     }
     Some(k)
@@ -675,7 +675,7 @@ mod tests {
         let mut doc = two_layers();
         doc.depth = BitDepth::Sixteen;
         assert!(
-            doc.source_depth.is_none(),
+            doc.source.depth().is_none(),
             "working depth, not a read depth"
         );
         let mut session = RenderSession::default();

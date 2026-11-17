@@ -324,7 +324,7 @@ fn a_mask_present_leaves_the_composite_unchanged() {
         data: vec![3u8; 4 * 4 * 4].into(),
     };
     let before = seed_marker.clone();
-    doc.composite = seed_marker;
+    doc.composite.replace(seed_marker).expect("valid composite");
 
     let mask_doc = Document::from_rgba("0", 4, 4, &[0u8; 64]);
     let stroke =

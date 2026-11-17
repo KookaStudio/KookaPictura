@@ -308,8 +308,14 @@ fn commit_refresh_profile_4000() {
                         .map(|i| pixel_layer(&format!("L{i}"), 4000, 4000, (30, 60, 90)))
                         .collect(),
                 );
-                doc.composite =
-                    pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, gpu)).0;
+                doc.composite
+                    .replace(
+                        pictura_render::composite(pictura_render::CompositeRequest::whole(
+                            &doc, gpu,
+                        ))
+                        .0,
+                    )
+                    .expect("valid composite");
                 let mut rust = PictureViewRust {
                     session: crate::cxxqt_object::document_session::DocumentSession::with_document(
                         doc,
@@ -455,8 +461,9 @@ fn large_document_stroke_profile() {
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     doc.layers =
         pictura_core::LayerStack::from_layers(vec![pixel_layer("Background", w, h, (30, 60, 90))]);
-    doc.composite =
-        pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0;
+    doc.composite
+        .replace(pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0)
+        .expect("valid composite");
     let mut rust = PictureViewRust {
         session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         ..Default::default()
@@ -616,8 +623,9 @@ fn large_document_structural_edit_profile() {
             .map(|i| pixel_layer(&format!("Layer {i}"), w, h, ((i * 11) as u8, 60, 90)))
             .collect(),
     );
-    doc.composite =
-        pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0;
+    doc.composite
+        .replace(pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0)
+        .expect("valid composite");
     let mut history = History::default();
     let mut selection: Option<Selection> = None;
     let mut target = LayerTarget::default();
@@ -692,8 +700,9 @@ fn large_document_filter_profile() {
         }
     }
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
-    doc.composite =
-        pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0;
+    doc.composite
+        .replace(pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0)
+        .expect("valid composite");
     let mut rust = PictureViewRust {
         session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         layer_target: LayerTarget::only("0"),
@@ -901,8 +910,9 @@ fn radial_blur_commit_profile() {
         }
     }
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
-    doc.composite =
-        pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0;
+    doc.composite
+        .replace(pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0)
+        .expect("valid composite");
     let mut rust = PictureViewRust {
         session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         layer_target: LayerTarget::only("0"),

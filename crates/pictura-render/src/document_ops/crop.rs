@@ -262,7 +262,7 @@ pub fn translate_layer_active(doc: &mut Document, dx: i32, dy: i32, gpu_enabled:
     let (composite, _) = crate::composite_request::composite(
         crate::composite_request::CompositeRequest::whole(doc, gpu_enabled),
     );
-    doc.composite = composite;
+    doc.composite.replace(composite).expect("valid composite");
     true
 }
 
@@ -403,7 +403,9 @@ mod tests {
         assert_eq!(doc.channels[0].data, vec![5, 6, 9, 10]);
         assert_eq!(doc.layers[0].rect, rect(-1, -1, 3, 3));
 
-        doc.composite = crate::composite_rgba(&doc);
+        doc.composite
+            .replace(crate::composite_rgba(&doc))
+            .expect("valid composite");
         // The layer rect moved to (-1,-1), so doc (0,0) samples local (1,1) = 5.
         let plane = 4usize;
         assert_eq!(doc.composite.width, 2);
@@ -420,7 +422,9 @@ mod tests {
         assert_eq!((doc.width, doc.height), (1, 1));
         assert_eq!(doc.channels[0].data, vec![15]);
         assert_eq!(doc.layers[0].rect, rect(-3, -3, 1, 1));
-        doc.composite = crate::composite_rgba(&doc);
+        doc.composite
+            .replace(crate::composite_rgba(&doc))
+            .expect("valid composite");
         assert_eq!(doc.composite.data[0], 15, "old (3,3) becomes the origin");
     }
 
@@ -482,7 +486,9 @@ mod tests {
 
         assert!(translate_layer(&mut doc, 1, 1));
         assert_eq!(doc.layers[0].rect, rect(1, 1, 5, 5));
-        doc.composite = crate::composite_rgba(&doc);
+        doc.composite
+            .replace(crate::composite_rgba(&doc))
+            .expect("valid composite");
 
         let plane = 16usize;
         // Doc (1,1) now samples layer local (0,0); doc (2,1) samples local (1,0).
@@ -499,7 +505,10 @@ mod tests {
         let mut oracle = sample_doc();
         assert!(translate_layer_active(&mut active, 1, 1, false));
         assert!(translate_layer(&mut oracle, 1, 1));
-        oracle.composite = crate::composite_rgba(&oracle);
+        oracle
+            .composite
+            .replace(crate::composite_rgba(&oracle))
+            .expect("valid composite");
         assert_eq!(active, oracle);
         assert_eq!(active.composite.data, oracle.composite.data);
     }
@@ -507,7 +516,7 @@ mod tests {
     #[test]
     fn translate_layer_rect_shifts_without_recompositing() {
         let mut doc = sample_doc();
-        let before = doc.composite.clone();
+        let before = doc.composite.buffer().clone();
         let mask = LayerMask {
             rect: full(4, 4),
             default_color: 255,
@@ -579,13 +588,17 @@ mod tests {
     #[test]
     fn crop_rebases_the_retained_store() {
         let mut doc = sample_doc();
-        doc.source_depth = Some(BitDepth::Sixteen);
-        doc.source_planes = Some(SourcePlanes {
-            depth: BitDepth::Sixteen,
-            width: 4,
-            height: 4,
-            samples: Samples::U16((0..16).map(|i| i as u16).collect()),
-        });
+        doc.source
+            .set_native(
+                Some(BitDepth::Sixteen),
+                Some(SourcePlanes {
+                    depth: BitDepth::Sixteen,
+                    width: 4,
+                    height: 4,
+                    samples: Samples::U16((0..16).map(|i| i as u16).collect()),
+                }),
+            )
+            .expect("valid native source");
         doc.layers[0].source_channels = Some(SourceChannels {
             depth: BitDepth::Sixteen,
             rect: doc.layers[0].rect,
@@ -595,7 +608,7 @@ mod tests {
 
         assert!(crop_document(&mut doc, 1, 1, 2, 2));
 
-        let store = doc.source_planes.as_ref().unwrap();
+        let store = doc.source.planes().as_ref().unwrap();
         assert_eq!((store.width, store.height), (2, 2));
         assert_eq!(store.samples, Samples::U16(vec![5, 6, 9, 10].into()));
         assert_eq!(
@@ -625,7 +638,9 @@ mod tests {
             },
             None,
         )]);
-        doc.composite = crate::composite_rgba(&doc);
+        doc.composite
+            .replace(crate::composite_rgba(&doc))
+            .expect("valid composite");
 
         let full = Instant::now();
         let _ = crate::composite_request::composite(
