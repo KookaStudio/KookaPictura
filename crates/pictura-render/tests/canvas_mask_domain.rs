@@ -1,6 +1,6 @@
 use pictura_core::{
-    memory, BitDepth, Channel, ColorMode, Document, Layer, LayerMask, LayerStack, Plane, PsdRect,
-    Samples, SourceChannels,
+    memory, BitDepth, Channel, ColorMode, Document, LayerMask, LayerStack, Plane, PsdRect, Samples,
+    SourceChannels,
 };
 use pictura_render::*;
 

@@ -1188,46 +1188,47 @@ fn alpha_is_never_modified() {
             reverse: false,
             transparency: Vec::new(),
         }),
-        pictura_core::FillContent::Gradient(GradientFillParams {
-            stops: vec![
-                GradientStop {
-                    location: 0,
-                    color: [0, 0, 0],
-                },
-                GradientStop {
-                    location: 4096,
-                    color: [255, 255, 255],
-                },
-            ],
-            reverse: false,
-            kind: GradientKind::Linear,
-            angle_deg: 0.0,
-            scale: 100.0,
+        Adjustment::ShadowsHighlights(ShadowsHighlightsParams {
+            shadows_amount: 20.0,
+            highlights_amount: 10.0,
         }),
-        pictura_core::FillContent::Pattern(PatternFillParams {
-            pattern_id: "pictura-pattern".into(),
-            scale: 100.0,
-            link_with_layer: true,
-            origin: (0, 0),
+        Adjustment::Equalize,
+        Adjustment::ColorLookup(ColorLookupParams {
+            kind: ColorLookupKind::ThreeDLut,
+            lookup: Some(Lut3d {
+                size: 2,
+                points: vec![[0.25, 0.5, 0.75]; 8],
+            }),
         }),
-        pictura_core::FillContent::Solid([10, 20, 30, 40]),
+        Adjustment::ReplaceColor(ReplaceColorParams {
+            samples: vec![ReplaceColorSample {
+                x: -1,
+                y: -1,
+                rgb: [10, 20, 30],
+            }],
+            fuzziness: 40.0,
+            localized: false,
+            hue: 10.0,
+            saturation: 10.0,
+            lightness: 10.0,
+        }),
+        Adjustment::MatchColor(MatchColorParams {
+            target: MatchColorStats::ZERO,
+            source: MatchColorStats::ZERO,
+            neutralize: false,
+            luminance: 100.0,
+            color_intensity: 100.0,
+            fade: 0.0,
+        }),
     ];
-    // One entry per `Adjustment` variant: the 17 destructive ones plus the three
-    // refused fills (`SolidFill`, `GradientFill`, `PatternFill`).
     assert_eq!(
         adjustments.len(),
-        20,
+        22,
         "every Adjustment variant is exercised"
     );
     for a in adjustments {
         let mut b = base.clone();
-        match apply(&a, &mut b) {
-            Ok(()) => {}
-            Err(AdjustError::Unsupported(_)) => {
-                assert_eq!(b, base, "{a:?} refused but mutated the buffer");
-            }
-            Err(e) => panic!("{a:?} failed: {e}"),
-        }
+        apply(&a, &mut b).unwrap_or_else(|error| panic!("{a:?} failed: {error}"));
         assert_eq!(&b.data[3 * n..4 * n], &alpha[..], "{a:?} touched alpha");
     }
 }
