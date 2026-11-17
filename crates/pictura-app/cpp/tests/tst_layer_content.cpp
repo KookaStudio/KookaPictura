@@ -222,7 +222,7 @@ void LayerContentTest::rasterizeKeepsAppearanceAndHistory()
             : view->rasterize_fill_content(path);
         QVERIFY(changed);
         QCOMPARE(view->history_count(), count + 1);
-        QCOMPARE(pixels(*view), before);
+        QVERIFY2(pixels(*view) == before, qPrintable(QStringLiteral("rasterization changed pixels for %1").arg(kind)));
         const auto after = rowForPath(*view, path);
         QCOMPARE(after.kind, QStringLiteral("pixel"));
         QCOMPARE(after.opacity, row.opacity); QCOMPARE(after.fill, row.fill);
@@ -340,6 +340,7 @@ void LayerContentTest::rowsAndCommandsFollowContent()
     QCOMPARE(rowForPath(*view, path).adjustmentKind, QStringLiteral("solid-color"));
     QVERIFY(!rowForPath(*view, path).shape && !rowForPath(*view, path).smartObject);
     QVERIFY(pictura::layer_is_editable_fill(*view, path));
+    if (rowForPath(*view, path).hasMask) { QVERIFY(pictura::layer_mask_delete_path(*view, path)); }
     QVERIFY(pictura::layer_mask_add_path(*view, path, QStringLiteral("reveal-all")));
     QVERIFY(pictura::layer_is_editable_fill(*view, path));
     QVERIFY(pictura::vector_mask_add_path(*view, path, QStringLiteral("reveal-all")));
@@ -391,7 +392,13 @@ void LayerContentTest::typeRowsUseNormalizedIdentity()
     QCOMPARE(rowForPath(opaque, path).kind, QStringLiteral("type"));
     QVERIFY(!rowForPath(opaque, path).hasAdjustment && !rowForPath(opaque, path).smartObject);
     QCOMPARE(rowForPath(opaque, path).lockBits & 3, 3);
-    QCOMPARE(pixels(opaque), pixels(parsed));
+    QByteArray proxyBytes = bytes; proxyBytes.replace(tag, 4, "zzzz");
+    const QString proxyFile = dir.filePath(QStringLiteral("pixel-proxy.psd"));
+    QFile proxyOutput(proxyFile); QVERIFY(proxyOutput.open(QIODevice::WriteOnly));
+    QCOMPARE(proxyOutput.write(proxyBytes), qint64(proxyBytes.size())); proxyOutput.close();
+    PictureView proxy; QVERIFY(pictura::document_api::open(proxy, proxyFile));
+    QCOMPARE(rowForPath(proxy, path).kind, QStringLiteral("pixel"));
+    QCOMPARE(pixels(opaque), pixels(proxy));
     const QString copy = dir.filePath(QStringLiteral("opaque.psd"));
     QVERIFY(pictura::document_api::saveCopy(opaque, copy));
     QFile saved(copy); QVERIFY(saved.open(QIODevice::ReadOnly));

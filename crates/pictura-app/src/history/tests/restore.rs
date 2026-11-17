@@ -74,7 +74,7 @@ fn live_restores_match_a_full_snapshot_history() {
                         let v = rng.next() as u8;
                         for yy in y..(y + rh).min(h as usize) {
                             for xx in x..(x + rw).min(w as usize) {
-                                live.layers[li].channels[c].data[yy * w as usize + xx] = v;
+                                live.layers[li].channels_mut()[c].data[yy * w as usize + xx] = v;
                                 let k = (c % 3) * h as usize + yy;
                                 live.composite
                                     .edit_data(|data| {

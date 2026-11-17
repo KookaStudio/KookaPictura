@@ -24,14 +24,18 @@ fn opaque_layer_blocks_round_trip() {
     let mut layer = pixel("Opaque", rect(0, 0, 2, 2), 3, BlendMode::Normal, 255);
     layer.blend_key = Some(*b"zzzz");
     layer.blending_ranges = vec![1, 2, 3, 4].into();
-    crate::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![LayerBlock {
-        key: *b"lfx2",
-        data: vec![1, 2, 3, 4].into(),
-    }] });
-    crate::edit_layer(layer.as_mut(), |parts| { parts.raw_channels = vec![RawChannel {
-        id: -3,
-        data: vec![0, 0, 9, 9].into(),
-    }] });
+    crate::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks = vec![LayerBlock {
+            key: *b"lfx2",
+            data: vec![1, 2, 3, 4].into(),
+        }]
+    });
+    crate::edit_layer(layer.as_mut(), |parts| {
+        parts.raw_channels = vec![RawChannel {
+            id: -3,
+            data: vec![0, 0, 9, 9].into(),
+        }]
+    });
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
     let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
@@ -82,4 +86,3 @@ fn truncated_preserved_blocks_error() {
     let cut = bytes.len() - doc.composite.data.len() - 2 - 2;
     assert!(matches!(read_psd(&bytes[..cut]), Err(PsdError::Truncated)));
 }
-

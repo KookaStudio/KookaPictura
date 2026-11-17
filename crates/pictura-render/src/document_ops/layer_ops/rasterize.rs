@@ -175,8 +175,8 @@ pub fn rasterize_shape(doc: &mut Document, path: &str) -> bool {
     let render_rect = effects_bounds(layer);
     // Render the layer's intrinsic appearance through the real compositor.
     // Opacity, blend, and the layer mask stay live on the raster result, so the
-    // scratch copy neutralizes them; a shape's fill is binary (`0` or `255`), so
-    // leaving it as-is bakes the fill on/off correctly.
+    // scratch copy neutralizes them, including Fill, which stays live on the
+    // raster result.
     let mut scratch = Document::new(doc.width, doc.height, doc.mode, doc.depth);
     scratch.global_light = doc.global_light;
     // A pattern fill resolves its tile from the document's global `Patt` block,
@@ -188,6 +188,7 @@ pub fn rasterize_shape(doc: &mut Document, path: &str) -> bool {
     source.visible = true;
     source.opacity = 255;
     source.mask = None;
+    source.fill = 255;
     source.blend = pictura_core::BlendMode::Normal;
     scratch.layers = pictura_core::LayerStack::from_layers(vec![source]);
     let rendered = crate::composite_rgba(&scratch);

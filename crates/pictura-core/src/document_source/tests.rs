@@ -21,15 +21,18 @@ fn native_layer(depth: BitDepth) -> Layer {
         bottom: 1,
         right: 1,
     };
-    Layer {
-        rect,
-        source_channels: Some(SourceChannels::new(
-            depth,
+    Layer::from_parts(
+        LayerParts {
             rect,
-            vec![(0, Samples::widen_from_u8(&[17], depth))],
-        )),
-        ..Default::default()
-    }
+            source_channels: Some(SourceChannels::new(
+                depth,
+                rect,
+                vec![(0, Samples::widen_from_u8(&[17], depth))],
+            )),
+            ..Default::default()
+        },
+        LayerContent::Pixel,
+    )
 }
 
 #[test]
@@ -117,26 +120,25 @@ fn source_state_rejects_invalid_combinations() {
 fn source_queries_include_descendant_stores() {
     for depth in [BitDepth::Sixteen, BitDepth::ThirtyTwo] {
         let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = LayerStack::from_layers(vec![Layer {
-            children: LayerStack::from_layers(vec![native_layer(depth)]),
-            ..Default::default()
-        }]);
+        doc.layers = LayerStack::from_layers(vec![Layer::new(LayerContent::Group(
+            LayerStack::from_layers(vec![native_layer(depth)]),
+        ))]);
         assert!(doc.retains_source_depth());
         assert!(doc
-            .authoritative_plane(&doc.layers[0].children[0], 0)
+            .authoritative_plane(&doc.layers[0].children()[0], 0)
             .is_none());
         doc.source.set_native(Some(depth), None).unwrap();
         assert!(doc
-            .authoritative_plane(&doc.layers[0].children[0], 0)
+            .authoritative_plane(&doc.layers[0].children()[0], 0)
             .is_some());
         doc.source
             .set_encoding(Some(ColorMode::Cmyk), None)
             .unwrap();
         assert!(doc.retains_source_depth());
         assert!(doc
-            .authoritative_plane(&doc.layers[0].children[0], 0)
+            .authoritative_plane(&doc.layers[0].children()[0], 0)
             .is_none());
-        doc.layers[0].children[0].source_channels = None;
+        doc.layers[0].children_mut().expect("group")[0].source_channels = None;
         assert!(!doc.retains_source_depth());
     }
 }

@@ -97,12 +97,17 @@ fn indexed_layer_color_channel_writes_back_as_indexed() {
     let back = read_psd(&out).unwrap();
     let back_layer = &back.layers[0];
     assert_eq!(
-        back_layer.channels().iter().map(|c| c.id).collect::<Vec<_>>(),
+        back_layer
+            .channels()
+            .iter()
+            .map(|c| c.id)
+            .collect::<Vec<_>>(),
         vec![0, 1, 2, -1]
     );
     for c in 0..3 {
         assert_eq!(
-            back_layer.channels()[c].data, layer.channels()[c].data,
+            back_layer.channels()[c].data,
+            layer.channels()[c].data,
             "layer color channel {c} is exact"
         );
     }
@@ -146,7 +151,8 @@ fn grouped_indexed_layer_round_trips() {
     let back_child = &back.layers[0].children()[0];
     for c in 0..3 {
         assert_eq!(
-            back_child.channels()[c].data, child.channels()[c].data,
+            back_child.channels()[c].data,
+            child.channels()[c].data,
             "nested channel {c} after save"
         );
     }
@@ -195,7 +201,8 @@ fn edited_indexed_layer_falls_back_to_rgb() {
     assert_eq!(back.mode, ColorMode::Rgb);
     assert_eq!(back.source.mode(), None);
     assert_eq!(
-        back.layers[0].channels()[0].data, doc.layers[0].channels()[0].data,
+        back.layers[0].channels()[0].data,
+        doc.layers[0].channels()[0].data,
         "the edited layer round-trips in RGB"
     );
 }
@@ -283,16 +290,18 @@ fn added_empty_layer_keeps_indexed_on_save() {
     let p = layered_psd_with_data(8, 2, 1, &palette, &[&[2]], &[(0, &[5]), (-1, &[200])]);
     let mut doc = read_psd(&p).unwrap();
     {
-        let _ = doc.layers.push(crate::layer_from_parts(pictura_core::LayerParts {
-            name: "adjustment".into(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 1,
-                right: 1,
-            },
-            ..Default::default()
-        }));
+        let _ = doc
+            .layers
+            .push(crate::layer_from_parts(pictura_core::LayerParts {
+                name: "adjustment".into(),
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 1,
+                    right: 1,
+                },
+                ..Default::default()
+            }));
     };
 
     let out = write_psd(&doc).unwrap();
@@ -311,4 +320,3 @@ fn added_empty_layer_keeps_indexed_on_save() {
         "the original index channel is byte-identical"
     );
 }
-

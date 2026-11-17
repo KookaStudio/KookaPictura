@@ -275,7 +275,10 @@ fn smart_object_content_routes_preserve_output() {
         );
     }
     let mut source = doc(2, 2, vec![pixel()]);
-    source.composite = composite_rgba(&source);
+    source
+        .composite
+        .replace(composite_rgba(&source))
+        .expect("valid composite");
     let mut object =
         SmartObject::default().with_payload(pictura_codec::write_psd(&source).unwrap());
     object.kind = SmartObjectKind::Embedded;
