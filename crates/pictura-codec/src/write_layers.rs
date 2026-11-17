@@ -596,8 +596,7 @@ fn write_record(
                 layer,
                 record.name,
                 record.section,
-                doc_width,
-                doc_height,
+                (doc_width, doc_height),
                 psb,
                 comps,
             );
@@ -620,8 +619,7 @@ fn write_record(
                 &empty_layer(record.name),
                 record.name,
                 record.section,
-                doc_width,
-                doc_height,
+                (doc_width, doc_height),
                 psb,
                 comps,
             );
@@ -663,11 +661,11 @@ fn write_extra(
     layer: &Layer,
     name: &str,
     section: u32,
-    doc_width: u32,
-    doc_height: u32,
+    doc_size: (u32, u32),
     psb: bool,
     comps: &pictura_core::layer_comp::LayerCompStore,
 ) {
+    let (doc_width, doc_height) = doc_size;
     crate::mask_params::write_record(out, layer);
     crate::advanced_blending::write_ranges(out, layer);
     write_pascal(out, name);

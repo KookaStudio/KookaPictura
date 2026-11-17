@@ -579,7 +579,7 @@ window.panels.gradients	Window/Panels/Gradients	Gradients		1	1
 window.panels.histogram	Window/Panels/Histogram	Histogram		1	1
 window.panels.history	Window/Panels/History	History		1	1
 window.panels.info	Window/Panels/Info	Info	F8	1	1
-window.panels.layer.comps	Window/Panels/Layer Comps	Layer Comps		0	0
+window.panels.layer.comps	Window/Panels/Layer Comps	Layer Comps		0	1
 window.panels.layers	Window/Panels/Layers	Layers	F7	1	1
 window.panels.measurement.log	Window/Panels/Measurement Log	Measurement Log		0	0
 window.panels.navigator	Window/Panels/Navigator	Navigator		1	1

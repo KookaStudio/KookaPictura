@@ -897,7 +897,7 @@ fn multi_page_pdf_writes_one_page_per_document() {
     let pdf = write_pdf_pages(&pages, &PdfOptions::default(), &env()).expect("writes");
     let text = text(&pdf);
     assert!(text.contains("/Count 2"));
-    assert_eq!(text.matches("/Type /Page").count(), 2);
+    assert_eq!(text.matches("/Type /Page/").count(), 2);
 }
 
 #[test]

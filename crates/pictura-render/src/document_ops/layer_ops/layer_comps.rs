@@ -43,8 +43,7 @@ fn captured_state(doc: &Document, layer: &Layer, record: CompRecord) -> Captured
     let style_visible = record.appearance
         && layer.extra_block(b"lfx2").is_some()
         && layer_style_value(layer, "fx.visible").is_some();
-    let style_visible = style_visible
-        .then(|| layer_style_value(layer, "fx.visible").map_or(true, |value| value != 0.0));
+    let style_visible = style_visible.then(|| layer_style_value(layer, "fx.visible") != Some(0.0));
     CapturedState {
         visible,
         position,
@@ -254,13 +253,12 @@ pub fn layer_comp_changes(doc: &Document, comp: &LayerComp) -> bool {
             continue;
         };
         let state = &entry.state;
-        if comp.record.visibility {
-            if state
+        if comp.record.visibility
+            && state
                 .visible
                 .is_some_and(|visible| layer.visible != visible)
-            {
-                return true;
-            }
+        {
+            return true;
         }
         if comp.record.appearance {
             if let Some(blend) = state.blend {

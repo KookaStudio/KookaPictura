@@ -137,7 +137,7 @@ fn read_shmd_entries(data: &[u8]) -> Vec<(Vec<u8>, Vec<u8>)> {
     entries
 }
 
-fn entry_for<'a>(comp: &'a mut LayerComp, layer_id: u32) -> &'a mut CapturedState {
+fn entry_for(comp: &mut LayerComp, layer_id: u32) -> &mut CapturedState {
     if let Some(index) = comp.entries.iter().position(|e| e.layer_id == layer_id) {
         return &mut comp.entries[index].state;
     }
@@ -148,7 +148,10 @@ fn entry_for<'a>(comp: &'a mut LayerComp, layer_id: u32) -> &'a mut CapturedStat
     &mut comp.entries.last_mut().expect("just pushed").state
 }
 
-fn read_cmls(data: &[u8]) -> Option<(u32, PositionAnchor, Vec<(Vec<i32>, DescValue)>)> {
+type CmlsVariant = (Vec<i32>, DescValue);
+type Cmls = (u32, PositionAnchor, Vec<CmlsVariant>);
+
+fn read_cmls(data: &[u8]) -> Option<Cmls> {
     let mut reader = Reader::new(data);
     let DescValue::Object { items, .. } = read_descriptor(&mut reader).ok()? else {
         return None;
@@ -680,9 +683,7 @@ pub(crate) fn layer_shmd(store: &LayerCompStore, layer: &Layer) -> Option<Vec<u8
     if !participating && !only_base {
         return None;
     }
-    let Some(cmls) = cmls_descriptor(store, layer, &original_variants, only_base) else {
-        return None;
-    };
+    let cmls = cmls_descriptor(store, layer, &original_variants, only_base)?;
     let cmls_count = original.iter().filter(|(key, _)| key == b"cmls").count();
     let mut out = Vec::new();
     out.extend_from_slice(&((original.len() - cmls_count + 1) as u32).to_be_bytes());

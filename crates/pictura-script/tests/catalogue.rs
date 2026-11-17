@@ -112,12 +112,20 @@ fn every_wired_filter_has_a_definition() {
 #[test]
 fn default_catalogue_shape_is_stable() {
     let catalogue = command_catalogue();
+<<<<<<< HEAD
     assert_eq!(catalogue.len(), 676);
+=======
+    assert_eq!(catalogue.len(), 677);
+>>>>>>> 70bcce62 (fix(layer-comps): repair CI clippy and test drift (#265))
     assert_eq!(
         catalogue.iter().filter(|spec| spec.implemented).count(),
         456
     );
+<<<<<<< HEAD
     assert_eq!(const_names().len(), 380);
+=======
+    assert_eq!(const_names().len(), 381);
+>>>>>>> 70bcce62 (fix(layer-comps): repair CI clippy and test drift (#265))
 }
 
 #[test]
