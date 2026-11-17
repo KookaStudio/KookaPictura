@@ -79,9 +79,8 @@ fn lifted_copy(source: &Layer, coverage: &Coverage, doc_w: u32, doc_h: u32) -> O
             colour.iter().map(|c| layer_row(c, sy, src_w)).collect();
         let x0 = rect.left as usize;
         let covered_row = coverage.row(x0 as i32, dy as i32, w);
-        for x in 0..w {
+        for (x, covered) in covered_row.into_iter().enumerate() {
             let dx = x0 + x;
-            let covered = covered_row[x];
             if covered == 0 {
                 continue;
             }

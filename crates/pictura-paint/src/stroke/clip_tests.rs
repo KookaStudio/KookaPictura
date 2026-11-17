@@ -146,10 +146,9 @@ fn a_partial_selection_scales_the_paint() {
         },
         WHITE,
     ));
-    let mut clip = selection(8, 8, |_, _| false);
     let mut data = vec![0u8; 64];
     data[4 * 8 + 4] = 128;
-    clip = Coverage::for_canvas(&Plane::from(data), 8, 8).unwrap();
+    let clip = Coverage::for_canvas(&Plane::from(data), 8, 8).unwrap();
     let mut stroke = Stroke::begin_at(&doc, "0", brush(8)).expect("stroke begins");
     stroke.set_coverage_clip(Some(clip));
     assert!(stroke.sample(

@@ -1096,7 +1096,7 @@ fn uniform_tiles_are_filled_without_allocating() {
         let mut d = base.clone();
         let dirty = {
             let (width, height) = (d.width, d.height);
-            match pictura_core::Coverage::for_canvas(&(selection), width, height) {
+            match pictura_core::Coverage::for_canvas(selection, width, height) {
                 Some(coverage) => fill_within(
                     &mut d,
                     "0",
