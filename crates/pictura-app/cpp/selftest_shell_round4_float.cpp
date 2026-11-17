@@ -100,7 +100,7 @@ int pictura::runShellRound4FloatCheck(pictura::PicturaMainWindow& frame)
     // top-level, and it follows the cursor parent-relative, staying clamped to
     // the frame rect. The auto (top-level) branch is asserted first so the
     // platform decision itself is covered.
-    frame.applyPanelSessionForTest(pictura::SessionState{});
+    frame.restoreLegacyDefaultForTest();
     pumpFloat(6);
     const bool autoTopLevel = pictura::PanelFloat::overlayUsesTopLevel();
     pictura::PanelFloat::setForceChildOverlayForTest(true);
@@ -135,8 +135,8 @@ int pictura::runShellRound4FloatCheck(pictura::PicturaMainWindow& frame)
             child = torn && floatWindow && !floatWindow->isWindow()
                     && qobject_cast<QMainWindow*>(floatWindow->parentWidget()) == &frame;
             if (child) {
-                const QPoint a(
-                    frame.mapToGlobal(QPoint(frame.width() / 2, frame.height() / 4)));
+                const int room = qMax(1, (frame.height() - floatWindow->height()) / 4);
+                const QPoint a(frame.mapToGlobal(QPoint(frame.width() / 2, room)));
                 const QPoint b = a + QPoint(4, 18);
                 const bool movedA = column->floatClampedForTest(index, a);
                 const QPoint posA = floatWindow->pos();
@@ -1032,7 +1032,7 @@ int pictura::runShellRound4FloatCheck(pictura::PicturaMainWindow& frame)
     // column lands as a new first/last group, not only in the gaps between the
     // existing groups.
     {
-        frame.applyPanelSessionForTest(pictura::SessionState{});
+        frame.restoreLegacyDefaultForTest();
         pumpFloat(6);
         pictura::PanelColumn* primary = frame.panelColumn();
         bool topOk = false, bottomOk = false;
