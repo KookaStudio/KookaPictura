@@ -59,7 +59,9 @@ public:
     bool ready() const { return ready_; }
 
     // Replace the distortion with kept mesh `id` (Last Filter Settings).
-    bool loadMesh(int id);
+    // `record` is false for the dialog's initial mesh, which is the undo
+    // baseline.
+    bool loadMesh(int id, bool record = true);
 
     bool advanced() const;
     void setAdvanced(bool on);
@@ -88,6 +90,8 @@ private:
     // `refetch`: Show Backdrop or Use changed, so the picture is read again.
     void backdropChanged(bool refetch);
     void reconstructWithAmount();
+    void undo();
+    void redo();
     void updateZoomLabel();
     void finish(bool keep);
 

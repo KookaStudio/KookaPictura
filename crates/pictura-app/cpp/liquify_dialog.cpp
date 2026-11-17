@@ -258,6 +258,10 @@ LiquifyDialog::LiquifyDialog(PictureView* view, const QString& documentName, QWi
     canvas_->zoomChanged = [this] { updateZoomLabel(); };
     canvas_->beforeStroke = [this](bool reverse) { pushBrush(reverse); };
     canvas_->tabletSeen = [this] { stylus_->setEnabled(true); };
+    auto* undoKey = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Z), this);
+    connect(undoKey, &QShortcut::activated, this, &LiquifyDialog::undo);
+    auto* redoKey = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Z), this);
+    connect(redoKey, &QShortcut::activated, this, &LiquifyDialog::redo);
 
     // The options column.
     auto* ok = new QPushButton(QStringLiteral("OK"), this);
@@ -501,13 +505,27 @@ QSpinBox* LiquifyDialog::addSliderRow(QWidget* box, const QString& label, const 
     return spin;
 }
 
-bool LiquifyDialog::loadMesh(int id)
+bool LiquifyDialog::loadMesh(int id, bool record)
 {
-    if (!ready_ || !liquify_load_mesh(id)) {
+    if (!ready_ || !liquify_load_mesh(id, record)) {
         return false;
     }
     canvas_->refreshAll();
     return true;
+}
+
+void LiquifyDialog::undo()
+{
+    if (liquify_undo()) {
+        canvas_->refreshAll();
+    }
+}
+
+void LiquifyDialog::redo()
+{
+    if (liquify_redo()) {
+        canvas_->refreshAll();
+    }
 }
 
 bool LiquifyDialog::advanced() const
@@ -688,7 +706,7 @@ bool LiquifyDialog::get(PictureView* view, const QString& documentName,
         return false;
     }
     if (!initial.isEmpty() && initial.first() > 0.0) {
-        dialog.loadMesh(static_cast<int>(initial.first()));
+        dialog.loadMesh(static_cast<int>(initial.first()), false);
     }
     if (runDialog(dialog, parent) != QDialog::Accepted || dialog.meshId() == 0) {
         return false;
