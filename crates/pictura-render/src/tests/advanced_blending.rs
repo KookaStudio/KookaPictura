@@ -824,15 +824,13 @@ fn blend_interior_is_inert_on_groups_and_adjustments() {
 
 #[test]
 fn blend_interior_applies_the_text_curve_once() {
-    let _gamma = crate::test_support::gamma_guard();
-    crate::text_gamma::set_text_gamma(Some(2.0));
     let mut ink = solid("ink", full(8, 8), (0, 0, 0), 0, BlendMode::Normal, 255);
     ink.channels[3].data = (0..64).map(|v| (v * 4) as u8).collect::<Vec<_>>().into();
     ink.type_tool = Some(type_tool());
     color_overlay(&mut ink, 0x0000FF, 50.0);
     ink.blend_interior = true;
     let on = composite_rgba(&doc(8, 8, vec![ink.clone()]));
-    crate::text_gamma::set_text_gamma(None);
+    ink.type_tool = None;
     let plain = composite_rgba(&doc(8, 8, vec![ink]));
     assert!(
         on.data.iter().zip(plain.data.iter()).any(|(a, b)| a != b),
