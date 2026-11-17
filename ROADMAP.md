@@ -124,9 +124,10 @@ Deeper technical status for PSD/PSB lives in
 - [x] **Locks, colour labels, and layer filtering.**
   `crates/pictura-app/cpp/panels/layers_panel.cpp`.
 - [ ] Layer comps — create, apply, update and delete (#265)
-- [ ] Advanced blending toggles: Blend Clipped Layers as Group, Transparency
-      Shapes Layers, Mask Hides Effects and channel Include. Blend Interior
-      Effects as Group is stored but never read (#579)
+- [x] Advanced blending engine: Blend Clipped Layers as Group, Transparency
+      Shapes Layers, Mask Hides Effects, channel Include and Blend Interior
+      Effects as Group (#579)
+- [ ] Layer Style dialog controls for the advanced-blending toggles (#695)
 - [ ] Layer-style Global Light, Create Layers, and Rasterize Layer Style (#580)
 - [ ] Bevel Contour and Texture, a gradient editor in the style dialog, and
       channel include (#581)

@@ -1097,8 +1097,18 @@ pub struct Layer {
     pub knockout: Knockout,
     /// `clbl` blend clipped elements (CS6 default `true` when absent).
     pub blend_clipping: bool,
-    /// `infx` blend interior elements (CS6 default `true` when absent).
+    /// `infx` blend interior effects as a group (CS6 default `false` when
+    /// absent; a stored byte `1` turns it on).
     pub blend_interior: bool,
+    /// `tsly` transparency shapes layer (CS6 default `true` when absent).
+    pub transparency_shapes: bool,
+    /// `lmgm` layer mask hides effects (CS6 default `false` when absent).
+    pub layer_mask_hides_effects: bool,
+    /// `vmgm` vector mask hides effects (CS6 default `false` when absent).
+    pub vector_mask_hides_effects: bool,
+    /// `brst` channel numbers excluded from blending, in file order; the writer
+    /// sorts and dedupes them.
+    pub restricted_channels: Vec<u32>,
     /// Typed Blend If view of `blending_ranges`; `None` when empty or malformed.
     pub blend_if: Option<BlendIf>,
     /// Additional-layer-info tagged blocks the engine does not model, preserved
@@ -1155,7 +1165,11 @@ impl Default for Layer {
             blending_ranges: Plane::default(),
             knockout: Knockout::None,
             blend_clipping: true,
-            blend_interior: true,
+            blend_interior: false,
+            transparency_shapes: true,
+            layer_mask_hides_effects: false,
+            vector_mask_hides_effects: false,
+            restricted_channels: Vec::new(),
             blend_if: None,
             extra_blocks: Vec::new(),
             raw_channels: Vec::new(),

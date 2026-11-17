@@ -53,11 +53,23 @@ pub(crate) fn composite_siblings_range<'a>(
     while i < end {
         let base = &layers[i];
         let run = layers[i + 1..end].iter().take_while(|l| l.clipping).count();
-        if run == 0 || !base.visible {
+        if run == 0 {
+            composite(canvas, i, &plan[i], None);
+            i += 1;
+            continue;
+        }
+        if !base.visible {
             // A hidden base hides the clipped layers above it.
-            if base.visible || run == 0 {
-                composite(canvas, i, &plan[i], None);
-            }
+            i += 1 + run;
+            continue;
+        }
+        let excluded = crate::composite_channels::excluded_planes(base, doc);
+        if crate::composite_channels::all_excluded(excluded) {
+            i += 1 + run;
+            continue;
+        }
+        if !base.blend_clipping {
+            composite_siblings_ungrouped(canvas, layers, doc, plan, i, i + 1 + run, &mut composite);
             i += 1 + run;
             continue;
         }
@@ -91,6 +103,10 @@ pub(crate) fn composite_siblings_range<'a>(
             .as_ref()
             .expect("a visible base resolves a blend context")
             .with_override(&proxy_over);
+        let snapshot = excluded
+            .iter()
+            .any(|&value| value)
+            .then(|| crate::composite_channels::snapshot(canvas, bounds));
         composite_canvas(
             canvas,
             plan[i].layer,
@@ -99,6 +115,9 @@ pub(crate) fn composite_siblings_range<'a>(
             &proxy_ctx,
             Some(&proxy_over),
         );
+        if let Some(snapshot) = snapshot {
+            crate::composite_channels::restore(canvas, bounds, excluded, &snapshot);
+        }
         i += 1 + run;
     }
 }
@@ -132,6 +151,7 @@ pub(crate) fn build_sibling_group<'a>(
         opacity: Some(255),
         mode: Some(BlendMode::Normal),
         isolated_group: Some(true),
+        no_channel_restrictions: true,
         ..Default::default()
     };
     composite(
@@ -151,20 +171,53 @@ pub(crate) fn build_sibling_group<'a>(
         }
         let mut tmp = group.clone();
         composite(&mut tmp, index, &plan[index], None);
-        if serial() {
-            for ((out, inside), &k) in group.px.iter_mut().zip(&tmp.px).zip(&cover) {
-                lerp(out, inside, k);
-            }
-        } else {
-            group
-                .px
-                .par_iter_mut()
-                .zip(tmp.px.par_iter())
-                .zip(cover.par_iter())
-                .for_each(|((out, inside), &k)| lerp(out, inside, k));
-        }
+        lerp_canvas(&mut group, &tmp, &cover);
     }
     group
+}
+
+/// Composite a run whose base has Blend Clipped Layers as Group off: the base
+/// uses its own context, and each member uses its own context while the base's
+/// content coverage still bounds it. No isolated group is built, so a member's
+/// blend mode sees the running backdrop rather than only the base.
+fn composite_siblings_ungrouped<'a>(
+    canvas: &mut Canvas,
+    layers: &'a [Layer],
+    doc: &'a Document,
+    plan: &[PlanNode<'a>],
+    base_index: usize,
+    end: usize,
+    composite: &mut impl FnMut(&mut Canvas, usize, &PlanNode<'a>, Option<&BlendOverride>),
+) {
+    composite(canvas, base_index, &plan[base_index], None);
+    let cover = coverage(canvas, &plan[base_index], doc);
+    for index in (base_index + 1)..end {
+        let layer = &layers[index];
+        if !layer.visible {
+            continue;
+        }
+        if crate::layer_effects::is_destructive_adjustment(layer) {
+            composite_clipped_adjustment(canvas, &cover, index, &plan[index], composite);
+            continue;
+        }
+        let mut tmp = canvas.clone();
+        composite(&mut tmp, index, &plan[index], None);
+        lerp_canvas(canvas, &tmp, &cover);
+    }
+}
+
+fn lerp_canvas(out: &mut Canvas, inside: &Canvas, cover: &[f32]) {
+    if serial() {
+        for ((out, inside), &k) in out.px.iter_mut().zip(&inside.px).zip(cover) {
+            lerp(out, inside, k);
+        }
+    } else {
+        out.px
+            .par_iter_mut()
+            .zip(&inside.px)
+            .zip(cover)
+            .for_each(|((out, inside), &k)| lerp(out, inside, k));
+    }
 }
 
 /// A clipped adjustment recolors the group and adds no coverage. It runs over an
@@ -222,6 +275,7 @@ fn coverage(canvas: &Canvas, base: &PlanNode<'_>, doc: &Document) -> Vec<f32> {
         fill: Some(255),
         mode: Some(BlendMode::Normal),
         isolated_group: Some(true),
+        no_channel_restrictions: true,
         ..Default::default()
     };
     composite_layer_inner(&mut alone, base, doc, None, None, Some(&full_over));

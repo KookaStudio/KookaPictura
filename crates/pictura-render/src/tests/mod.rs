@@ -7,6 +7,7 @@ use pictura_core::{
 };
 
 mod adjustment;
+mod advanced_blending;
 mod blend;
 mod clipping;
 pub(crate) mod composite;

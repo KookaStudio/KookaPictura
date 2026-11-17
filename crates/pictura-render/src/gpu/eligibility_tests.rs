@@ -194,6 +194,52 @@ fn advanced_blending_still_declines() {
 }
 
 #[test]
+fn gpu_declines_each_advanced_blending_toggle() {
+    let mut cases: Vec<Layer> = Vec::new();
+    let mut layer = pixels();
+    layer.blend_clipping = false;
+    cases.push(layer);
+    let mut layer = pixels();
+    layer.blend_interior = true;
+    cases.push(layer);
+    let mut layer = pixels();
+    layer.transparency_shapes = false;
+    cases.push(layer);
+    let mut layer = pixels();
+    layer.layer_mask_hides_effects = true;
+    cases.push(layer);
+    let mut layer = pixels();
+    layer.vector_mask_hides_effects = true;
+    cases.push(layer);
+    let mut layer = pixels();
+    layer.restricted_channels = vec![0];
+    cases.push(layer);
+    for layer in cases {
+        assert!(
+            matches!(
+                check_supported(&doc_of(layer)),
+                Err(GpuError::UnsupportedAdvancedBlending)
+            ),
+            "a non-default advanced-blending flag must decline"
+        );
+    }
+
+    let mut child = pixels();
+    child.transparency_shapes = false;
+    let group = Layer {
+        rect: rect(),
+        is_group: true,
+        blend: BlendMode::Normal,
+        children: pictura_core::LayerStack::from_layers(vec![child]),
+        ..Default::default()
+    };
+    assert!(matches!(
+        check_supported(&doc_of(group)),
+        Err(GpuError::UnsupportedAdvancedBlending)
+    ));
+}
+
+#[test]
 fn hidden_layer_is_not_planned() {
     let mut hidden = pixels();
     hidden.visible = false;

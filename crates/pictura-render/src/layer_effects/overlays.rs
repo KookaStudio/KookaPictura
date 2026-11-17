@@ -24,8 +24,8 @@ use super::apply_mask;
 use super::planes::{EffectPass, PassWriter};
 use super::BuildRegion;
 use super::{
-    bool_or, clamp_finite, clip_rect, content_matte, effect_blend_mode, num_clamped, num_or,
-    rect_empty, MAX_OPACITY,
+    bool_or, clamp_finite, content_matte, effect_blend_mode, effect_source_rect, num_clamped,
+    num_or, rect_empty, MAX_OPACITY,
 };
 
 /// The typed color overlay decoded from a layer's `lfx2` block.
@@ -207,7 +207,7 @@ fn coverage(
     if w == 0 || h == 0 {
         return None;
     }
-    let region = clip_rect(layer, w, h);
+    let region = effect_source_rect(layer, w, h);
     if rect_empty(region) {
         return None;
     }

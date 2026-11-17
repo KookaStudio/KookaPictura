@@ -338,7 +338,7 @@ fn first_shown_root(plan: &CompositePlan<'_>, doc: &Document, region: PsdRect) -
 /// nothing, for anything but an RGB layer whose three colour rows all cover
 /// the region.
 fn copy_band(layer: &Layer, doc: &Document, region: PsdRect, out: [&mut [u8]; 3]) -> bool {
-    if doc.mode != pictura_core::ColorMode::Rgb {
+    if doc.mode != pictura_core::ColorMode::Rgb || !layer.restricted_channels.is_empty() {
         return false;
     }
     let rect = layer.rect;
@@ -372,10 +372,9 @@ fn copy_band(layer: &Layer, doc: &Document, region: PsdRect, out: [&mut [u8]; 3]
 /// clipping, no group or other source.
 fn plain(node: &PlanNode<'_>) -> bool {
     matches!(node.body, Body::Pixels)
-        && node
-            .passes
-            .as_ref()
-            .is_none_or(|passes| passes.below.is_empty() && passes.above.is_empty())
+        && node.passes.as_ref().is_none_or(|passes| {
+            passes.below.is_empty() && passes.fold.is_empty() && passes.above.is_empty()
+        })
         && !node.layer.clipping
         && node.layer.smart_object.is_none()
 }

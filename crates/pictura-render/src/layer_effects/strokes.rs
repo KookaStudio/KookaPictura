@@ -9,9 +9,9 @@ use super::apply_mask;
 use super::planes::{EffectPass, PassWriter};
 use super::BuildRegion;
 use super::{
-    bool_or, clamp_finite, clip_rect, content_matte, decode_color, dilate_matte, effect_blend_mode,
-    erode_matte, num_clamped, num_or, pad_rect, rect_empty, with_gradient_defaults, MAX_OPACITY,
-    MAX_SIZE,
+    bool_or, clamp_finite, content_matte, decode_color, dilate_matte, effect_blend_mode,
+    effect_source_rect, erode_matte, num_clamped, num_or, pad_rect, rect_empty,
+    with_gradient_defaults, MAX_OPACITY, MAX_SIZE,
 };
 
 /// The stroke position stored in `Styl` (typeID `FStl`).
@@ -182,7 +182,7 @@ pub(super) fn build_stroke(
     if w == 0 || h == 0 {
         return Vec::new();
     }
-    let source = clip_rect(layer, w, h);
+    let source = effect_source_rect(layer, w, h);
     if rect_empty(source) {
         return Vec::new();
     }

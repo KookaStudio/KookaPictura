@@ -86,6 +86,8 @@ impl Clone for Artifact {
 #[derive(Default)]
 pub(crate) struct LayerPasses {
     pub(crate) below: Vec<EffectPass>,
+    /// Interior effects that fold into the layer colour when `infx` is on.
+    pub(crate) fold: Vec<EffectPass>,
     pub(crate) above: Vec<EffectPass>,
 }
 
@@ -93,6 +95,7 @@ impl LayerPasses {
     fn size(&self) -> usize {
         self.below
             .iter()
+            .chain(&self.fold)
             .chain(&self.above)
             .map(EffectPass::size)
             .sum()

@@ -33,6 +33,7 @@ pub mod cold_profile;
 pub use canvas_damage::CanvasDamage;
 mod composite;
 mod composite_blend;
+mod composite_channels;
 mod composite_clipping;
 mod composite_knockout;
 mod composite_plan;

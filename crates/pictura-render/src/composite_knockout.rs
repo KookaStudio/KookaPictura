@@ -97,6 +97,9 @@ pub(crate) fn composite_layer(
     shallow: Option<&Canvas>,
     over: Option<&BlendOverride>,
 ) {
+    if !node.layer.visible {
+        return;
+    }
     let base = match node.layer.knockout {
         Knockout::None => None,
         Knockout::Deep => deep.or(shallow),
@@ -121,12 +124,58 @@ fn composite_knockout(
     base: &Canvas,
     over: Option<&BlendOverride>,
 ) {
+    let excluded = crate::composite_channels::excluded_planes(node.layer, doc);
+    if crate::composite_channels::all_excluded(excluded) {
+        return;
+    }
+    let restore = excluded.iter().any(|&value| value);
+    let region = restore
+        .then(|| crate::composite_channels::region(canvas, node))
+        .flatten();
+    let snapshot = region.map(|region| crate::composite_channels::snapshot(canvas, region));
     let mut tmp = Canvas::with_cover_from(base);
-    composite_layer_inner(&mut tmp, node, doc, None, None, over);
-    let cover = tmp.cover.take().unwrap_or_default();
+    let mut tmp_over = over.copied().unwrap_or_default();
+    tmp_over.no_channel_restrictions = true;
+    composite_layer_inner(&mut tmp, node, doc, None, None, Some(&tmp_over));
+    let cover = {
+        let mut cover = tmp.cover.take().unwrap_or_default();
+        if !node.layer.transparency_shapes {
+            cover = vec![true; canvas.px.len()];
+            if !node.layer.layer_mask_hides_effects {
+                let gate =
+                    crate::mask_refine::resolve_raster(node.layer.mask.as_ref(), canvas.clip());
+                for y in canvas.oy..canvas.oy + canvas.h as i32 {
+                    let row = (y - canvas.oy) as usize * canvas.w;
+                    for x in canvas.ox..canvas.ox + canvas.w as i32 {
+                        if gate.u8_at(x, y) == 0 {
+                            cover[row + (x - canvas.ox) as usize] = false;
+                        }
+                    }
+                }
+            }
+            if !node.layer.vector_mask_hides_effects {
+                let gate = crate::mask_refine::resolve_vector(
+                    node.layer.vector_mask.as_ref(),
+                    canvas.clip(),
+                );
+                for y in canvas.oy..canvas.oy + canvas.h as i32 {
+                    let row = (y - canvas.oy) as usize * canvas.w;
+                    for x in canvas.ox..canvas.ox + canvas.w as i32 {
+                        if gate.u8_at(x, y) == 0 {
+                            cover[row + (x - canvas.ox) as usize] = false;
+                        }
+                    }
+                }
+            }
+        }
+        cover
+    };
     for (i, covered) in cover.iter().enumerate() {
         if *covered {
             canvas.px[i] = tmp.px[i];
         }
+    }
+    if let (Some(region), Some(snapshot)) = (region, snapshot) {
+        crate::composite_channels::restore(canvas, region, excluded, &snapshot);
     }
 }

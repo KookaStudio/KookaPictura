@@ -224,13 +224,18 @@ fn assert_region_passes_equal(d: &Document, region: PsdRect) {
                 "below ({x},{y})"
             );
             assert_eq!(
+                samples(&part.fold, x, y),
+                samples(&full.fold, x, y),
+                "fold ({x},{y})"
+            );
+            assert_eq!(
                 samples(&part.above, x, y),
                 samples(&full.above, x, y),
                 "above ({x},{y})"
             );
         }
     }
-    for pass in part.below.iter().chain(&part.above) {
+    for pass in part.below.iter().chain(&part.fold).chain(&part.above) {
         assert!(
             pass.rect.left >= region.left
                 && pass.rect.top >= region.top
@@ -523,7 +528,7 @@ fn cold_overlay_region_sources_stay_bounded() {
     let region = rect(110, 110, 170, 170);
     let passes =
         crate::layer_source::effect_passes_with(layer, &d, &effects, Some(region), false, None);
-    for pass in passes.below.iter().chain(&passes.above) {
+    for pass in passes.below.iter().chain(&passes.fold).chain(&passes.above) {
         assert!(
             pass.rect.left >= region.left
                 && pass.rect.top >= region.top

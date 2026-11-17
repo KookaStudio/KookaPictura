@@ -43,6 +43,8 @@ pub(crate) struct BlendOverride {
     pub(crate) mode: Option<BlendMode>,
     pub(crate) no_mask: bool,
     pub(crate) no_blend_if: bool,
+    pub(crate) no_curve: bool,
+    pub(crate) no_channel_restrictions: bool,
     pub(crate) isolated_group: Option<bool>,
 }
 
@@ -153,6 +155,9 @@ impl<'a> BlendCtx<'a> {
         }
         if over.no_blend_if {
             ctx.blend_if = None;
+        }
+        if over.no_curve {
+            ctx.curve = None;
         }
         ctx
     }

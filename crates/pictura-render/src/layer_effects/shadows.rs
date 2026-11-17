@@ -8,9 +8,10 @@ use super::apply_mask;
 use super::planes::{EffectPass, PassWriter};
 use super::BuildRegion;
 use super::{
-    blur_matte, blur_support, bool_or, clamp_finite, clip_rect, content_matte, decode_color,
-    dilate_matte, effect_blend_mode, erode_matte, noise_factor, num_clamped, num_or, pad_rect,
-    rect_empty, spread_dilate, MAX_CHOKE, MAX_DISTANCE, MAX_OPACITY, MAX_SIZE, MAX_SPREAD,
+    blur_matte, blur_support, bool_or, clamp_finite, content_matte, decode_color, dilate_matte,
+    effect_blend_mode, effect_source_rect, erode_matte, noise_factor, num_clamped, num_or,
+    pad_rect, rect_empty, spread_dilate, MAX_CHOKE, MAX_DISTANCE, MAX_OPACITY, MAX_SIZE,
+    MAX_SPREAD,
 };
 
 /// The typed drop shadow decoded from a layer's `lfx2` block.
@@ -160,7 +161,7 @@ pub(super) fn build_drop_shadow(
     if w == 0 || h == 0 {
         return Vec::new();
     }
-    let source = clip_rect(layer, w, h);
+    let source = effect_source_rect(layer, w, h);
     if rect_empty(source) {
         return Vec::new();
     }
@@ -252,7 +253,7 @@ pub(super) fn build_inner_shadow(
     if w == 0 || h == 0 {
         return Vec::new();
     }
-    let source = clip_rect(layer, w, h);
+    let source = effect_source_rect(layer, w, h);
     if rect_empty(source) {
         return Vec::new();
     }
