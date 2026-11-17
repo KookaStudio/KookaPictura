@@ -1,4 +1,4 @@
-use pictura_core::{BitDepth, BlendMode, Channel, ColorMode, Document, Layer, LockFlags, PsdRect};
+use pictura_core::{BitDepth, BlendMode, Channel, ColorMode, Document, LockFlags, PsdRect};
 use pictura_render::{
     composite, composite_rgba, gpu_available, set_backend, Backend, CompositeRequest, GpuBackend,
 };

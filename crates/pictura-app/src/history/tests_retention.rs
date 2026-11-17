@@ -1,6 +1,6 @@
 use super::*;
 use pictura_core::{
-    BitDepth, ColorMode, Document, Layer, LayerStack, Plane, PsdRect, Samples, SmartObject,
+    BitDepth, ColorMode, Document, LayerStack, Plane, PsdRect, Samples, SmartObject,
     SourceChannels, SourcePlanes,
 };
 

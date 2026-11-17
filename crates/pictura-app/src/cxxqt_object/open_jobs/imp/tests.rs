@@ -39,7 +39,7 @@ fn rgba_document() -> Vec<u8> {
 /// display recomposite clamps the layer to 1.0 and halves it).
 fn hdr_layer_psd() -> (std::path::PathBuf, Vec<u8>) {
     use pictura_core::{
-        BlendMode, Channel, Layer, LayerStack, PsdRect, Samples, SourceChannels, SourcePlanes,
+        BlendMode, Channel, LayerStack, PsdRect, Samples, SourceChannels, SourcePlanes,
     };
     let rect = PsdRect {
         top: 0,

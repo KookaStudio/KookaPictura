@@ -474,7 +474,7 @@ console.log(lines.join('\n'));
 fn ag_psd_reads_authored_text_path() {
     use pictura_core::path::{PathPoint, Subpath};
     use pictura_core::{
-        BitDepth, Channel, ColorMode, Document, Layer, LayerBlock, PsdRect, TextPath, TextPathKind,
+        BitDepth, Channel, ColorMode, Document, LayerBlock, PsdRect, TextPath, TextPathKind,
         TypeSpec,
     };
 

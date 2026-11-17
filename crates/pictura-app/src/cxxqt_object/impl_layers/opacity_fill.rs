@@ -394,7 +394,7 @@ mod tests {
 
     #[test]
     fn unreducible_content_presents_and_commits_exact_fallback_pixels() {
-        use pictura_core::{Layer, LayerBlock, SmartObject, TypeTool};
+        use pictura_core::{LayerBlock, SmartObject, TypeTool};
 
         let unsupported = [
             pictura_codec::layer_from_parts(pictura_core::LayerParts {

@@ -866,7 +866,7 @@ mod tests {
 
     #[test]
     fn a_neutral_duplicate_is_an_inserted_edit() {
-        use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, LayerStack};
+        use pictura_core::{BitDepth, Channel, ColorMode, Document, LayerStack};
 
         let opaque = |alpha: u8| {
             pictura_codec::layer_from_parts(pictura_core::LayerParts {

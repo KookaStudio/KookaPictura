@@ -265,7 +265,7 @@ fn skip_ws(packet: &[u8], mut i: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pictura_core::{BitDepth, Channel, ColorMode, Layer, LayerBlock, PsdRect};
+    use pictura_core::{BitDepth, Channel, ColorMode, LayerBlock, PsdRect};
 
     const UUID: &str = "12345678-1234-1234-1234-123456789abc";
 

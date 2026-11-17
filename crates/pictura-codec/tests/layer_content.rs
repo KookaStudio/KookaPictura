@@ -154,7 +154,7 @@ fn adjustment_decoders_preserve_parameter_contract() {
             }),
         ),
         (
-            pictura_render::encode_photo_filter([255, 180, 80], 25, true),
+            pictura_render::encode_photo_filter([255, 180, 80], 25.0, true),
             Adjustment::PhotoFilter(PhotoFilterParams {
                 color: [255, 180, 80],
                 density: 25.0,

@@ -17,7 +17,7 @@ use crate::cxxqt_object::impl_core::{
 };
 use crate::cxxqt_object::metrics;
 use crate::cxxqt_object::open_jobs::{apply_opened, decode_psd};
-use pictura_core::{BitDepth, ColorMode, Document, Layer, LayerMask, LayerStack, PsdRect};
+use pictura_core::{BitDepth, ColorMode, Document, LayerMask, LayerStack, PsdRect};
 use pictura_render::cold_profile::{Cohort, Report, PRIMARY, REGION, REPEATED_FULL};
 
 const CHILD: &str = "cxxqt_object::tests_profiles::cold::first_full_edit_child";

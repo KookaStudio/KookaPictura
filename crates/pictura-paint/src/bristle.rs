@@ -298,7 +298,7 @@ fn unit(x: u64) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, PsdRect};
+    use pictura_core::{BitDepth, Channel, ColorMode, Document, PsdRect};
 
     fn transparent_doc(w: u32, h: u32) -> Document {
         let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);

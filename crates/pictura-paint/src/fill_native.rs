@@ -286,7 +286,7 @@ pub(crate) mod tests {
     use crate::fill::fill_layer;
     use crate::fill::tests::RED;
     use pictura_core::{
-        Channel, ColorMode, Layer, LayerStack, LockFlags, PsdRect, Samples, SourceChannels,
+        Channel, ColorMode, LayerStack, LockFlags, PsdRect, Samples, SourceChannels,
     };
 
     /// A `w × h` document whose single layer retains a 16-bit native store of

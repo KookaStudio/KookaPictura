@@ -203,7 +203,7 @@ fn from_channel_wrong_length_errors() {
 
 #[test]
 fn layer_alpha_selection_offsets_and_fills() {
-    use pictura_core::{Layer, PsdRect};
+    use pictura_core::PsdRect;
     let mut layer = pictura_core::Layer::from_parts(
         pictura_core::LayerParts {
             rect: PsdRect {

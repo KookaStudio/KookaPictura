@@ -335,7 +335,7 @@ mod tests {
     use super::*;
     use crate::stroke::layer_rgba;
     use crate::{PaintError, Stroke, StrokeSample};
-    use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer};
+    use pictura_core::{BitDepth, Channel, ColorMode, Document};
 
     const W: i32 = 64;
     const H: i32 = 64;

@@ -574,7 +574,7 @@ pub(crate) fn next_f32(rng: &mut u64) -> f32 {
 mod tests {
     use super::*;
     use crate::StrokeConfig;
-    use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, LayerStack, PsdRect};
+    use pictura_core::{BitDepth, Channel, ColorMode, Document, LayerStack, PsdRect};
 
     fn config() -> StrokeConfig {
         StrokeConfig::default()

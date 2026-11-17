@@ -235,7 +235,6 @@ fn extract_text(value: &DescValue) -> String {
 mod tests {
     use super::*;
     use crate::descriptor::write_descriptor;
-    use pictura_core::Layer;
 
     const TEXT: &str = "Hi\rThere";
 

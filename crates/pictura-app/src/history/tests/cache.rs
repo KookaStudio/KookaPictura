@@ -1,5 +1,5 @@
 use super::*;
-use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, PsdRect};
+use pictura_core::{BitDepth, Channel, ColorMode, Document, PsdRect};
 use pictura_paint::healing::RgbaImage;
 use pictura_paint::stamp::{layer_surface, StampSource};
 use pictura_paint::{Stroke, StrokeConfig, StrokeSample};

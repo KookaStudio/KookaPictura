@@ -58,7 +58,7 @@ fn preview_ticks(kind: PreviewKind, level: u32, rect: PsdRect) -> (f64, f64, f64
                         } else {
                             vec![(0, 0), (128, 96), (255, 255)]
                         };
-                        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+                        pictura_codec::edit_layer(layer, |parts| {
                             parts.adjustment = pictura_render::set_curve_points(
                                 parts.adjustment.as_ref().expect("adjustment"),
                                 0,

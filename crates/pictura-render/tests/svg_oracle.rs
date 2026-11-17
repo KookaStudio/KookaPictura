@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use pictura_adjust::{GradientKind, GradientStop, PatternFillParams};
 use pictura_core::shape::{outline_in_box, ShapeKind, ShapeOptions};
-use pictura_core::{BitDepth, BlendMode, ColorMode, Document, Layer};
+use pictura_core::{BitDepth, BlendMode, ColorMode, Document};
 use pictura_testkit::compare;
 
 // A unique path per call: nextest runs one binary's tests in parallel threads.
