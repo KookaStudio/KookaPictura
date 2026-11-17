@@ -189,7 +189,9 @@ fn request_matrix_matches_the_oracles() {
     }
 
     let mut deep = doc.clone();
-    deep.source_depth = Some(BitDepth::ThirtyTwo);
+    deep.source
+        .set_native(Some(BitDepth::ThirtyTwo), deep.source.planes().clone())
+        .expect("valid source depth");
     let (deep_region, backend) =
         crate::composite(crate::CompositeRequest::region(&deep, region, true));
     assert_eq!(backend, Backend::Cpu, "32-bit region backend");

@@ -9,12 +9,14 @@ use pictura_core::{BitDepth, Channel, Layer};
 #[test]
 fn save_selection_notifies() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite = pictura_core::PixelBuffer {
-        width: 4,
-        height: 4,
-        channels: 4,
-        data: vec![0u8; 4 * 4 * 4].into(),
-    };
+    doc.composite
+        .replace(pictura_core::PixelBuffer {
+            width: 4,
+            height: 4,
+            channels: 4,
+            data: vec![0u8; 4 * 4 * 4].into(),
+        })
+        .expect("valid composite");
     let mut rust = PictureViewRust {
         session: DocumentSession::with_document(doc),
         ..Default::default()
@@ -26,6 +28,7 @@ fn save_selection_notifies() {
         .as_ref()
         .expect("document")
         .composite
+        .buffer()
         .clone();
     let outcome = save_selection_shape(
         &mut rust,
@@ -89,77 +92,87 @@ fn gray_and_ink_match_the_panel_derivation() {
 fn channel_row_selection_reads_the_row_plane() {
     let mut doc = Document::new(2, 1, ColorMode::Rgb, BitDepth::Eight);
     // Planes 0/1/2 are R/G/B.
-    doc.composite.data = vec![100, 100, 150, 150, 200, 200].into();
+    doc.composite
+        .replace_data(vec![100, 100, 150, 150, 200, 200].into())
+        .expect("valid composite plane");
 
-    let red = channel_row_selection(&doc, &doc.composite, 1, 0x7).unwrap();
+    let red = channel_row_selection(&doc, doc.composite.buffer(), 1, 0x7).unwrap();
     assert_eq!(red.data, vec![100, 100]);
-    let green = channel_row_selection(&doc, &doc.composite, 2, 0x7).unwrap();
+    let green = channel_row_selection(&doc, doc.composite.buffer(), 2, 0x7).unwrap();
     assert_eq!(green.data, vec![150, 150]);
-    let blue = channel_row_selection(&doc, &doc.composite, 3, 0x7).unwrap();
+    let blue = channel_row_selection(&doc, doc.composite.buffer(), 3, 0x7).unwrap();
     assert_eq!(blue.data, vec![200, 200]);
 
-    let composite = channel_row_selection(&doc, &doc.composite, 0, 0x7).unwrap();
+    let composite = channel_row_selection(&doc, doc.composite.buffer(), 0, 0x7).unwrap();
     assert_eq!(composite.data, vec![140, 140]);
 
     // A hidden red channel is zeroed in the composite row.
-    let hidden = channel_row_selection(&doc, &doc.composite, 0, 0x6).unwrap();
+    let hidden = channel_row_selection(&doc, doc.composite.buffer(), 0, 0x6).unwrap();
     assert_eq!(hidden.data, vec![106, 106]);
 
     // Rows past the colour channels are refused.
-    assert!(channel_row_selection(&doc, &doc.composite, 4, 0x7).is_none());
-    assert!(channel_row_selection(&doc, &doc.composite, -1, 0x7).is_none());
+    assert!(channel_row_selection(&doc, doc.composite.buffer(), 4, 0x7).is_none());
+    assert!(channel_row_selection(&doc, doc.composite.buffer(), -1, 0x7).is_none());
 }
 
 #[test]
 fn multichannel_rows_derive_naive_inks() {
     let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.source_mode = Some(ColorMode::Multichannel);
-    doc.composite.data = vec![255, 0, 0].into();
+    doc.source
+        .set_encoding(Some(ColorMode::Multichannel), None)
+        .expect("valid source encoding");
+    doc.composite
+        .replace_data(vec![255, 0, 0].into())
+        .expect("valid composite plane");
     // Row 0 is Cyan (ink 0), rows 1/2 Magenta and Yellow (full ink) — and
     // there is no composite row in Multichannel.
     assert_eq!(
-        channel_row_selection(&doc, &doc.composite, 0, 0x7)
+        channel_row_selection(&doc, doc.composite.buffer(), 0, 0x7)
             .unwrap()
             .data,
         vec![255]
     );
     assert_eq!(
-        channel_row_selection(&doc, &doc.composite, 1, 0x7)
+        channel_row_selection(&doc, doc.composite.buffer(), 1, 0x7)
             .unwrap()
             .data,
         vec![0]
     );
     assert_eq!(
-        channel_row_selection(&doc, &doc.composite, 2, 0x7)
+        channel_row_selection(&doc, doc.composite.buffer(), 2, 0x7)
             .unwrap()
             .data,
         vec![0]
     );
-    assert!(channel_row_selection(&doc, &doc.composite, 3, 0x7).is_none());
+    assert!(channel_row_selection(&doc, doc.composite.buffer(), 3, 0x7).is_none());
 }
 
 #[test]
 fn single_row_modes_have_no_second_channel() {
     let mut doc = Document::new(1, 1, ColorMode::Grayscale, BitDepth::Eight);
-    doc.composite.data = vec![200].into();
+    doc.composite
+        .replace_data(vec![200].into())
+        .expect("valid composite plane");
     // The one Gray row is the composite; there is no colour channel after it.
     assert_eq!(
-        channel_row_selection(&doc, &doc.composite, 0, 0x7)
+        channel_row_selection(&doc, doc.composite.buffer(), 0, 0x7)
             .unwrap()
             .data,
         vec![200]
     );
-    assert!(channel_row_selection(&doc, &doc.composite, 1, 0x7).is_none());
+    assert!(channel_row_selection(&doc, doc.composite.buffer(), 1, 0x7).is_none());
 }
 
 fn test_doc(w: u32, h: u32) -> Document {
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite = pictura_core::PixelBuffer {
-        width: w,
-        height: h,
-        channels: 4,
-        data: vec![0u8; w as usize * h as usize * 4].into(),
-    };
+    doc.composite
+        .replace(pictura_core::PixelBuffer {
+            width: w,
+            height: h,
+            channels: 4,
+            data: vec![0u8; w as usize * h as usize * 4].into(),
+        })
+        .expect("valid composite");
     doc
 }
 

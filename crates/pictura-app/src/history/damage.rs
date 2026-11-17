@@ -95,7 +95,7 @@ fn placed(tile: &planes::TileDelta, origin: PsdRect, reach: i32) -> PsdRect {
 /// Whether two states would display differently with the same composite.
 pub(super) fn display_differs(a: &Document, b: &Document) -> bool {
     (a.width, a.height, a.mode, a.depth) != (b.width, b.height, b.mode, b.depth)
-        || a.document_icc != b.document_icc
+        || a.source.working_profile() != b.source.working_profile()
 }
 
 /// Where a change of layer metadata (opacity, blend, visibility, position,

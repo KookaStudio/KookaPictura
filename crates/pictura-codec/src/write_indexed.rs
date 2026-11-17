@@ -59,19 +59,19 @@ fn indexed_layers_unchanged(layers: &[Layer], palette: &[u8; 768], depth: u16) -
 /// makes this false, so the save falls back to the working RGB rather than
 /// inventing an RGB-to-palette quantization.
 fn writes_indexed_impl(doc: &Document, depth: u16, plane: usize, allow_opaque_rgba: bool) -> bool {
-    if depth != 8 || doc.source_depth.is_some() || doc.source_mode != Some(ColorMode::Indexed) {
+    if depth != 8 || doc.source.depth().is_some() || doc.source.mode() != Some(ColorMode::Indexed) {
         return false;
     }
     let composite_channels = doc.composite.channels;
     if composite_channels != 3 && !(allow_opaque_rgba && composite_channels == 4) {
         return false;
     }
-    let Some(palette) = doc.source_palette else {
+    let Some(palette) = doc.source.palette() else {
         return false;
     };
     // A file with "Maximize Compatibility" off carries no merged composite, so
     // there is no composite plane to check; the layers still must reconstruct.
-    if doc.merged_composite_present {
+    if doc.composite.merged_output() {
         let Some(index) = composite_retained(doc, depth, 0).map(|s| s.to_bytes()) else {
             return false;
         };

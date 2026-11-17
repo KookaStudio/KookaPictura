@@ -183,12 +183,13 @@ fn depth_documents_preserve_source_depth_on_save() {
         assert_eq!(doc.mode, ColorMode::Rgb, "{name}: working mode");
         assert_eq!(doc.depth, BitDepth::Eight, "{name}: normalized depth");
         assert_eq!(
-            doc.source_depth,
+            doc.source.depth(),
             Some(bits),
             "{name}: recorded source depth"
         );
         let source = doc
-            .source_planes
+            .source
+            .planes()
             .clone()
             .unwrap_or_else(|| panic!("{name}: retained source planes"));
         assert_eq!(source.depth, bits);
@@ -200,7 +201,7 @@ fn depth_documents_preserve_source_depth_on_save() {
             "{name}: output header declares the source depth"
         );
         let back = read_psd(&out).unwrap();
-        assert_eq!(back.source_depth, Some(bits), "{name}: depth round-trips");
+        assert_eq!(back.source.depth(), Some(bits), "{name}: depth round-trips");
         assert_eq!(
             back.composite, doc.composite,
             "{name}: normalized pixels are stable across a save"
@@ -239,7 +240,7 @@ fn high_depth_composite_re_encodes_every_compression() {
         ("rgb32.psd", BitDepth::ThirtyTwo, 32u16),
     ] {
         let mut doc = load(name);
-        let source = doc.source_planes.clone().unwrap();
+        let source = doc.source.planes().clone().unwrap();
         assert_eq!(source.depth, bits);
         let plane = source.samples.to_bytes().len() / 3;
         for kind in [
@@ -288,7 +289,11 @@ fn edited_plane_saves_widened_at_source_depth() {
     for (name, depth) in [("rgb16.psd", 16u16), ("rgb32.psd", 32u16)] {
         let mut doc = load(name);
         let edited = doc.composite.data[0].wrapping_add(1);
-        doc.composite.data[0] = edited;
+        doc.composite
+            .edit_data(|data| {
+                data[0] = edited;
+            })
+            .expect("pixel edit preserves geometry");
         let out = write_psd(&doc).unwrap();
         assert_eq!(
             u16::from_be_bytes(out[22..24].try_into().unwrap()),
@@ -390,7 +395,11 @@ fn unmodeled_layer_channel_preserves_source_depth() {
     ] {
         let input = layered_spot_psd(depth, 3, &plane);
         let doc = read_psd(&input).unwrap();
-        assert_eq!(doc.source_depth, Some(bits), "depth {depth}: source depth");
+        assert_eq!(
+            doc.source.depth(),
+            Some(bits),
+            "depth {depth}: source depth"
+        );
         let retained = doc.layers[0]
             .source_channels
             .as_ref()
@@ -450,9 +459,9 @@ fn layered_depth_fixtures_preserve_depth_and_channels() {
         ("rgb32_layered.psd", BitDepth::ThirtyTwo, 32u16),
     ] {
         let doc = load(name);
-        assert_eq!(doc.source_depth, Some(bits));
+        assert_eq!(doc.source.depth(), Some(bits));
         assert_eq!(doc.channels.len(), 1, "{name}: one document extra channel");
-        let source = doc.source_planes.clone().unwrap();
+        let source = doc.source.planes().clone().unwrap();
         let layer_source = doc.layers[0].source_channels.clone().unwrap();
         assert_eq!(layer_source.depth, bits);
         assert_eq!(
@@ -522,7 +531,7 @@ fn grouped_depth_fixtures_round_trip_whole() {
         ("rgb32_grouped.psd", BitDepth::ThirtyTwo, 32u16),
     ] {
         let doc = load(name);
-        assert_eq!(doc.source_depth, Some(bits));
+        assert_eq!(doc.source.depth(), Some(bits));
         assert_eq!(doc.layers.len(), 2, "{name}: a plain layer and a group");
         let plain = &doc.layers[0];
         assert!(!plain.is_group(), "{name}: plain layer first");

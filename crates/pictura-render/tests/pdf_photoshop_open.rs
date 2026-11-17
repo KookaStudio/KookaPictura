@@ -23,7 +23,9 @@ fn type_doc() -> Document {
     let mut spec = TypeSpec::new("PDF FROM PHOTOSHOP", "Liberation Sans", 12.0);
     spec.origin = (4.0, 24.0);
     assert!(!pictura_render::add_type_layer(&mut doc, "0", &spec).is_empty());
-    doc.composite = pictura_render::composite_rgba(&doc);
+    doc.composite
+        .replace(pictura_render::composite_rgba(&doc))
+        .expect("valid composite");
     doc
 }
 

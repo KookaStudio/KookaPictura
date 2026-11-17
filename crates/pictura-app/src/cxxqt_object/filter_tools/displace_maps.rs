@@ -65,11 +65,11 @@ pub(super) fn load(path: &str) -> Result<u32, String> {
 fn map_from_psd(bytes: &[u8]) -> Result<DisplaceMap, String> {
     let doc = pictura_codec::read_psd_with(bytes, pictura_codec::Policy::Off)
         .map_err(|e| e.to_string())?;
-    if doc.source_mode == Some(ColorMode::Bitmap) || doc.mode == ColorMode::Bitmap {
+    if doc.source.mode() == Some(ColorMode::Bitmap) || doc.mode == ColorMode::Bitmap {
         return Err("a Bitmap-mode file cannot be a displacement map".into());
     }
-    let flat = if doc.merged_composite_present {
-        doc.composite.clone()
+    let flat = if doc.composite.merged_output() {
+        doc.composite.buffer().clone()
     } else {
         current_buffer(&doc, false)
     };
@@ -95,7 +95,9 @@ mod tests {
     fn psd(mode: ColorMode, planes: &[&[u8]]) -> Vec<u8> {
         let mut doc = Document::new(2, 2, mode, BitDepth::Eight);
         let data: Vec<u8> = planes.concat();
-        doc.composite.data = data.into();
+        doc.composite
+            .replace_data(data.into())
+            .expect("valid composite plane");
         pictura_codec::write_psd(&doc).expect("writes")
     }
 

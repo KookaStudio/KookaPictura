@@ -102,7 +102,7 @@ pub enum ColorError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Policy {
     /// Keep the embedded profile: pixels stay in it, resource 1039 stays, and
-    /// `Document.document_icc` drives the display conversion.
+    /// `Document.source.working_profile()` drives the display conversion.
     #[default]
     Preserve,
     /// Convert the pixels to the sRGB working space and drop the profile.

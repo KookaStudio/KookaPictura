@@ -290,7 +290,14 @@ mod tests {
             right: 8,
         };
         let before = shown(&view, 0, whole);
-        let composite = view.session.doc.as_ref().expect("doc").composite.clone();
+        let composite = view
+            .session
+            .doc
+            .as_ref()
+            .expect("doc")
+            .composite
+            .buffer()
+            .clone();
         view.begin_display_preview(vec!["0".to_string()], PreviewKind::Opacity);
         view.session.doc.as_mut().expect("doc").layers[0].opacity = 128;
         let rect = view.present_display_preview().expect("preview");
@@ -308,7 +315,14 @@ mod tests {
     fn preview_leaves_the_composite_unchanged() {
         let mut view = view_of(document());
         assert_eq!(view.display_level_count(), 1);
-        let composite = view.session.doc.as_ref().expect("doc").composite.clone();
+        let composite = view
+            .session
+            .doc
+            .as_ref()
+            .expect("doc")
+            .composite
+            .buffer()
+            .clone();
         view.begin_display_preview(vec!["0".to_string()], PreviewKind::Opacity);
         view.session.doc.as_mut().expect("doc").layers[0].opacity = 128;
         assert!(view.present_display_preview().is_some());

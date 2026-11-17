@@ -47,12 +47,14 @@ fn scroll_zoom_pan_profile(n: u32) {
         data[3 * plane + i] = 255;
     }
     let mut doc = Document::new(n, n, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite = PixelBuffer {
-        width: n,
-        height: n,
-        channels: 4,
-        data: data.into(),
-    };
+    doc.composite
+        .replace(PixelBuffer {
+            width: n,
+            height: n,
+            channels: 4,
+            data: data.into(),
+        })
+        .expect("valid composite");
     let planes = Planes::new(
         n,
         n,

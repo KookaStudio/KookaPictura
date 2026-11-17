@@ -534,7 +534,10 @@ fn smart_source_layer(rect: pictura_core::PsdRect) -> Layer {
             255,
         )],
     );
-    source.composite = composite_rgba(&source);
+    source
+        .composite
+        .replace(composite_rgba(&source))
+        .expect("valid composite");
     let payload = pictura_codec::write_psd(&source).expect("source writes");
     let mut so = {
         let mut so = pictura_core::SmartObject::default();

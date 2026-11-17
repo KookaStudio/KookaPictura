@@ -593,9 +593,24 @@ mod tests {
             pictura_core::BitDepth::Eight,
         );
         for i in 0..4 {
-            payload_doc.composite.data[i] = 30;
-            payload_doc.composite.data[4 + i] = 60;
-            payload_doc.composite.data[8 + i] = 90;
+            payload_doc
+                .composite
+                .edit_data(|data| {
+                    data[i] = 30;
+                })
+                .expect("pixel edit preserves geometry");
+            payload_doc
+                .composite
+                .edit_data(|data| {
+                    data[4 + i] = 60;
+                })
+                .expect("pixel edit preserves geometry");
+            payload_doc
+                .composite
+                .edit_data(|data| {
+                    data[8 + i] = 90;
+                })
+                .expect("pixel edit preserves geometry");
         }
         let payload = pictura_codec::write_psd(&payload_doc).expect("payload writes");
 

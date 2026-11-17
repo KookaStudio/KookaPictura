@@ -382,14 +382,14 @@ pub(super) fn decode_payload(so: &SmartObject) -> Option<Document> {
 
 /// The decoded document's stored merged source, or its composited layers.
 pub(super) fn merged_source(embedded: &Document) -> Option<PixelBuffer> {
-    let comp = &embedded.composite;
+    let comp = embedded.composite.buffer();
     let usable = comp.width > 0
         && comp.height > 0
         && comp.channels >= 1
         && comp.data.len() == comp.width as usize * comp.height as usize * comp.channels as usize;
-    if embedded.merged_composite_present && usable {
+    if embedded.composite.merged_output() && usable {
         // ponytail: depth-1 Bitmap extras stay packed, not 8-bit alpha.
-        let merged = embedded.source_mode != Some(pictura_core::ColorMode::Bitmap);
+        let merged = embedded.source.mode() != Some(pictura_core::ColorMode::Bitmap);
         Some(if merged {
             with_merged_alpha(comp, &embedded.channels)
         } else {

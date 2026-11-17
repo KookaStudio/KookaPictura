@@ -363,9 +363,13 @@ crs:Exposure2012=\"+0.50\" crs:Contrast2012=\"-10\"/></rdf:RDF></x:xmpmeta>"
 
     fn base_doc(section: Vec<u8>) -> Document {
         let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-        for (i, b) in doc.composite.data.iter_mut().enumerate() {
-            *b = (i * 7 + 1) as u8;
-        }
+        doc.composite
+            .edit_data(|data| {
+                for (i, b) in data.iter_mut().enumerate() {
+                    *b = (i * 7 + 1) as u8;
+                }
+            })
+            .expect("pixel edit preserves geometry");
         let layer = Layer {
             name: "Smart".into(),
             rect: PsdRect {

@@ -408,7 +408,9 @@ pub(super) fn write_fixture(side: u32, file: &TempFile) -> String {
             })
             .expect("the layer is added");
     }
-    doc.composite = pictura_render::composite_rgba(&doc);
+    doc.composite
+        .replace(pictura_render::composite_rgba(&doc))
+        .expect("valid composite");
     let bytes = pictura_codec::write_psd(&doc).expect("the fixture encodes");
     std::fs::write(&file.0, bytes).expect("the fixture is written");
     file.0.clone()

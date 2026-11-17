@@ -130,7 +130,9 @@ pub fn perspective_crop_sized(
     for channel in &mut doc.channels {
         channel.data = warp_plane(&channel.data, old, &map, w, h, 0).into();
     }
-    doc.source_planes = None;
+    doc.source
+        .replace_planes(None)
+        .expect("valid source planes");
     doc.width = w;
     doc.height = h;
     true

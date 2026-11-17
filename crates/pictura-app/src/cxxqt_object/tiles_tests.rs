@@ -465,7 +465,10 @@ fn save_streams_the_merged_image() {
     assert!(!pictura_render::DocumentComposite::is_stored(doc));
     let streamed = pictura_codec::write_psd(&pictura_render::save_view(doc)).expect("writes");
     let mut stored = doc.clone();
-    stored.composite = pictura_render::composite_rgba(doc);
+    stored
+        .composite
+        .replace(pictura_render::composite_rgba(doc))
+        .expect("valid composite");
     let expected = pictura_codec::write_psd(&stored).expect("writes");
     assert!(streamed == expected, "the merged image is byte-identical");
 }

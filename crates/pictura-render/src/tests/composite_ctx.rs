@@ -216,9 +216,14 @@ fn native_layer_32(rgb: [f32; 3]) -> Layer {
 fn ctx_high_depth_matches_legacy() {
     let _guard = crate::composite_rows::serial_test_lock();
     let mut d16 = doc(2, 2, vec![native_layer_16((100, 140, 200), 7)]);
-    d16.source_depth = Some(BitDepth::Sixteen);
+    d16.source
+        .set_native(Some(BitDepth::Sixteen), d16.source.planes().clone())
+        .expect("valid source depth");
     let mut d16_missing = doc(2, 2, vec![native_layer_16((100, 140, 200), 7)]);
-    d16_missing.source_depth = Some(BitDepth::Sixteen);
+    d16_missing
+        .source
+        .set_native(Some(BitDepth::Sixteen), d16_missing.source.planes().clone())
+        .expect("valid source depth");
     d16_missing.layers[0]
         .source_channels
         .as_mut()
@@ -226,7 +231,9 @@ fn ctx_high_depth_matches_legacy() {
         .planes
         .retain(|(id, _)| *id != 1);
     let mut d32 = doc(2, 2, vec![native_layer_32([0.4, 0.6, 0.8])]);
-    d32.source_depth = Some(BitDepth::ThirtyTwo);
+    d32.source
+        .set_native(Some(BitDepth::ThirtyTwo), d32.source.planes().clone())
+        .expect("valid source depth");
 
     for d in [&d16, &d16_missing, &d32] {
         crate::composite_blend::set_legacy_source(false);
@@ -284,7 +291,10 @@ fn ctx_masks_match_legacy() {
             native_layer,
         ],
     );
-    native_doc.source_depth = Some(BitDepth::Sixteen);
+    native_doc
+        .source
+        .set_native(Some(BitDepth::Sixteen), native_doc.source.planes().clone())
+        .expect("valid source depth");
 
     for d in [
         masked_scene(Some(plain_raster), None),

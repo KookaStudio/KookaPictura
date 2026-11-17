@@ -88,12 +88,16 @@ fn layer_store_plane(store: &SourceChannels, id: i16) -> Option<&Samples> {
 /// Forget the mode a read (or an earlier conversion) recorded, with every store
 /// and palette encoded in it, so the document saves as its working mode.
 pub(super) fn drop_source_state(doc: &mut Document) {
-    if doc.source_mode.take().is_some() {
-        doc.source_planes = None;
+    if doc.source.mode().is_some() {
+        doc.source
+            .replace_planes(None)
+            .expect("valid source planes");
         doc.color_mode_data.clear();
         drop_layer_stores(doc);
     }
-    doc.source_palette = None;
+    doc.source
+        .set_encoding(None, None)
+        .expect("working source encoding");
 }
 
 pub(super) fn drop_layer_stores(doc: &mut Document) {
@@ -146,16 +150,22 @@ pub(super) fn expand_gray(doc: &mut Document) {
         .data
         .get(..plane)
         .map_or_else(|| vec![0; plane], <[u8]>::to_vec);
-    doc.composite = PixelBuffer {
-        width: doc.width,
-        height: doc.height,
-        channels: 3,
-        data: [&gray[..], &gray[..], &gray[..]].concat().into(),
-    };
-    if let Some(store) = doc.source_planes.as_mut() {
+    doc.composite
+        .replace(PixelBuffer {
+            width: doc.width,
+            height: doc.height,
+            channels: 3,
+            data: [&gray[..], &gray[..], &gray[..]].concat().into(),
+        })
+        .expect("valid composite");
+    if let Some(mut store) = doc.source.planes().clone() {
         if store.samples.len() >= plane {
             store.samples = map_samples!(&store.samples, |v| gray_store_to_rgb(v, plane).into());
         }
+
+        doc.source
+            .replace_planes(Some(store))
+            .expect("valid source planes");
     }
     for_each_layer(&mut doc.layers, &mut |layer| {
         let Some(pos) = color_positions(layer, 1) else {
@@ -195,26 +205,32 @@ pub(super) fn reduce_to_gray(doc: &mut Document, gray: Option<PixelBuffer>) {
         return;
     }
     let plane = doc.width as usize * doc.height as usize;
-    doc.composite = gray.unwrap_or_else(|| {
-        let rgb = &doc.composite.data;
-        let gray: Vec<u8> = if rgb.len() >= 3 * plane {
-            (0..plane)
-                .map(|i| luma_u8(rgb[i], rgb[plane + i], rgb[2 * plane + i]))
-                .collect()
-        } else {
-            vec![0; plane]
-        };
-        PixelBuffer {
-            width: doc.width,
-            height: doc.height,
-            channels: 1,
-            data: gray.into(),
-        }
-    });
-    if let Some(store) = doc.source_planes.as_mut() {
+    doc.composite
+        .replace(gray.unwrap_or_else(|| {
+            let rgb = &doc.composite.data;
+            let gray: Vec<u8> = if rgb.len() >= 3 * plane {
+                (0..plane)
+                    .map(|i| luma_u8(rgb[i], rgb[plane + i], rgb[2 * plane + i]))
+                    .collect()
+            } else {
+                vec![0; plane]
+            };
+            PixelBuffer {
+                width: doc.width,
+                height: doc.height,
+                channels: 1,
+                data: gray.into(),
+            }
+        }))
+        .expect("valid composite");
+    if let Some(mut store) = doc.source.planes().clone() {
         if store.samples.len() >= 3 * plane {
             store.samples = map_samples!(&store.samples, |v| rgb_store_to_gray(v, plane).into());
         }
+
+        doc.source
+            .replace_planes(Some(store))
+            .expect("valid source planes");
     }
     for_each_layer(&mut doc.layers, &mut |layer| {
         let Some(pos) = color_positions(layer, 3) else {
@@ -254,7 +270,7 @@ pub(super) fn reduce_to_gray(doc: &mut Document, gray: Option<PixelBuffer>) {
     });
     doc.mode = ColorMode::Grayscale;
     // An RGB working profile cannot describe gray numbers.
-    doc.document_icc = None;
+    doc.source.set_working_profile(None);
 }
 
 /// The 8-bit source-mode planes for working RGB `rgb` (plane-major), and the
@@ -304,6 +320,13 @@ pub(super) fn rgb_to_cmyk_gcr(rgb: &[u8]) -> Vec<u8> {
     out
 }
 
+fn conversion_planes(store: SourcePlanes, doc: &mut Document) {
+    let recorded = doc.source.depth().map(|_| store.depth);
+    doc.source
+        .set_native(recorded, Some(store))
+        .expect("conversion sample representation");
+}
+
 /// Encode a working RGB document in `mode` (CMYK or Lab): each color plane set
 /// gains an 8-bit store in that mode and the working RGB becomes what the
 /// store displays as, so a save re-emits the store and the canvas matches it.
@@ -317,8 +340,8 @@ pub(super) fn encode_document(
 ) {
     let plane = doc.width as usize * doc.height as usize;
     if let Some((composite, store)) = encoded {
-        doc.composite = composite;
-        doc.source_planes = Some(store);
+        doc.composite.replace(composite).expect("valid composite");
+        conversion_planes(store, doc);
     } else if doc.composite.data.len() >= 3 * plane {
         let (encoded, shown) = encode_source_mode(
             mode,
@@ -328,18 +351,25 @@ pub(super) fn encode_document(
         );
         let mut data = doc.composite.data.to_vec();
         data[..3 * plane].copy_from_slice(&shown);
-        doc.composite.data = data.into();
-        doc.source_planes = Some(SourcePlanes {
-            depth: BitDepth::Eight,
-            width: doc.width,
-            height: doc.height,
-            samples: Samples::U8(encoded.into()),
-        });
+        doc.composite
+            .replace_data(data.into())
+            .expect("valid composite plane");
+        conversion_planes(
+            SourcePlanes {
+                depth: BitDepth::Eight,
+                width: doc.width,
+                height: doc.height,
+                samples: Samples::U8(encoded.into()),
+            },
+            doc,
+        );
     }
     for_each_layer(&mut doc.layers, &mut |layer| {
         encode_layer(layer, mode, true, cmyk_profile, options)
     });
-    doc.source_mode = Some(mode);
+    doc.source
+        .set_encoding(Some(mode), None)
+        .expect("valid source encoding");
 }
 
 /// Store `layer`'s color planes encoded in `mode`; with `show`, also rewrite
@@ -381,9 +411,9 @@ fn encode_layer(
 /// CMYK/Lab), building any that are missing. The step before widening.
 pub(super) fn ensure_stores(doc: &mut Document) {
     let plane = doc.width as usize * doc.height as usize;
-    match doc.source_mode {
+    match doc.source.mode() {
         Some(mode @ (ColorMode::Cmyk | ColorMode::Lab)) => {
-            if doc.source_planes.is_none() && doc.composite.data.len() >= 3 * plane {
+            if doc.source.planes().is_none() && doc.composite.data.len() >= 3 * plane {
                 let (encoded, _) = encode_source_mode(
                     mode,
                     &doc.composite.data[..3 * plane],
@@ -393,12 +423,15 @@ pub(super) fn ensure_stores(doc: &mut Document) {
                         ..Default::default()
                     },
                 );
-                doc.source_planes = Some(SourcePlanes {
-                    depth: BitDepth::Eight,
-                    width: doc.width,
-                    height: doc.height,
-                    samples: Samples::U8(encoded.into()),
-                });
+                conversion_planes(
+                    SourcePlanes {
+                        depth: BitDepth::Eight,
+                        width: doc.width,
+                        height: doc.height,
+                        samples: Samples::U8(encoded.into()),
+                    },
+                    doc,
+                );
             }
             for_each_layer(&mut doc.layers, &mut |layer| {
                 if layer.source_channels.is_none() {
@@ -417,13 +450,16 @@ pub(super) fn ensure_stores(doc: &mut Document) {
         }
         _ => {
             let colors = doc.mode.color_channels() as usize;
-            if doc.source_planes.is_none() && doc.composite.data.len() >= colors * plane {
-                doc.source_planes = Some(SourcePlanes {
-                    depth: BitDepth::Eight,
-                    width: doc.width,
-                    height: doc.height,
-                    samples: Samples::U8(doc.composite.data[..colors * plane].to_vec().into()),
-                });
+            if doc.source.planes().is_none() && doc.composite.data.len() >= colors * plane {
+                conversion_planes(
+                    SourcePlanes {
+                        depth: BitDepth::Eight,
+                        width: doc.width,
+                        height: doc.height,
+                        samples: Samples::U8(doc.composite.data[..colors * plane].to_vec().into()),
+                    },
+                    doc,
+                );
             }
             for_each_layer(&mut doc.layers, &mut |layer| {
                 if layer.source_channels.is_some() {
@@ -462,11 +498,16 @@ pub(super) fn restore_depth(doc: &mut Document, depth: BitDepth) {
             BitDepth::One => samples.clone(),
         }
     };
-    if let Some(store) = doc.source_planes.as_mut() {
+    if let Some(mut store) = doc.source.planes().clone() {
         if store.depth != BitDepth::One {
             store.samples = convert(&store.samples);
             store.depth = depth;
         }
+
+        let recorded = doc.source.depth().map(|_| store.depth);
+        doc.source
+            .set_native(recorded, Some(store))
+            .expect("valid source depth");
     }
     for_each_layer(&mut doc.layers, &mut |layer| {
         if let Some(store) = layer.source_channels.as_mut() {

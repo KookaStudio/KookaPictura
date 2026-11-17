@@ -254,7 +254,9 @@ impl History {
                     // makes the undo across this boundary free and drops one
                     // full composite from history (#1152).
                     if !display_differs(&cur.doc, doc) && composite_unchanged(&mut cur.doc, doc) {
-                        doc.composite = cur.doc.composite.clone();
+                        doc.composite
+                            .replace(cur.doc.composite.buffer().clone())
+                            .expect("valid composite");
                     }
                     let current = Snapshot {
                         doc: shared_copy(doc, &cur.doc),

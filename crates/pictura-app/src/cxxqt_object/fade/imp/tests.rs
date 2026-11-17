@@ -9,7 +9,9 @@ use pictura_render::composite_rgba;
 fn view(color: (u8, u8, u8), mode: ColorMode) -> PictureViewRust {
     let mut doc = Document::new(4, 4, mode, BitDepth::Eight);
     doc.layers = LayerStack::from_layers(vec![pixel_layer("px", 4, 4, color)]);
-    doc.composite = composite_rgba(&doc);
+    doc.composite
+        .replace(composite_rgba(&doc))
+        .expect("valid composite");
     PictureViewRust {
         session: DocumentSession::with_document(doc),
         layer_target: LayerTarget::only("0"),

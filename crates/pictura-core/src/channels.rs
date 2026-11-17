@@ -22,7 +22,7 @@ impl Document {
     /// Indexed/Bitmap/Duotone document may save back at the working RGB count;
     /// taking the larger of the two is conservative.
     pub fn can_add_channel(&self) -> bool {
-        let opened = self.source_mode.unwrap_or(self.mode);
+        let opened = self.source.mode().unwrap_or(self.mode);
         let colour = if opened == ColorMode::Multichannel {
             let channels = self.composite.channels as usize;
             if channels == 0 {
@@ -30,7 +30,7 @@ impl Document {
             }
             channels
         } else if self.mode == ColorMode::Rgb
-            && self.source_mode.is_none()
+            && self.source.mode().is_none()
             && self.composite.channels == 4
         {
             3
@@ -81,7 +81,9 @@ mod tests {
     #[test]
     fn channel_budget_multichannel_uses_composite() {
         let mut doc = document(ColorMode::Multichannel);
-        doc.composite.channels = 3;
+        doc.composite
+            .replace(crate::PixelBuffer::new(doc.width, doc.height, 3))
+            .expect("three color planes");
         add(&mut doc, 52);
         assert!(doc.can_add_channel(), "3 header channels + 52 extras = 55");
         add(&mut doc, 1);
@@ -110,7 +112,9 @@ mod tests {
     #[test]
     fn channel_budget_uses_the_source_mode() {
         let mut doc = document(ColorMode::Rgb);
-        doc.source_mode = Some(ColorMode::Cmyk);
+        doc.source
+            .set_encoding(Some(ColorMode::Cmyk), None)
+            .expect("valid source encoding");
         add(&mut doc, 51);
         assert!(
             doc.can_add_channel(),

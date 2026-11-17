@@ -42,18 +42,23 @@ pub(super) fn without_merged_image(
         layer_section_extra,
     } = sections;
     Document {
+        source: {
+            let mut source = pictura_core::SourceState::new(None, source_depth, None, None)
+                .expect("valid source representation");
+            source.set_original_profile(None);
+            source.set_working_profile(None);
+            source
+        },
+        composite: {
+            let mut composite =
+                pictura_core::CompositeState::new(composite).expect("valid composite");
+            composite.set_merged_output(merged_composite_present);
+            composite
+        },
         width,
         height,
         mode,
         depth: BitDepth::Eight,
-        source_mode: None,
-        source_depth,
-        source_planes: None,
-        source_palette: None,
-        source_icc: None,
-        document_icc: None,
-        composite,
-        merged_composite_present,
         composite_compression,
         layer_compression,
         is_psb,

@@ -31,7 +31,8 @@ pub fn resize_canvas_document(
     let mut next = doc.clone();
     materialize_merged_composite(&mut next);
     let store = next
-        .source_planes
+        .source
+        .planes()
         .as_ref()
         .filter(|s| s.depth != pictura_core::BitDepth::One);
     let planes = next.channels.len()
@@ -58,7 +59,7 @@ pub fn resize_canvas_document(
     for channel in &mut next.channels {
         channel.data = geometry_tiled::shift(&channel.data, from, 1, to, offset, 0)?;
     }
-    if let Some(store) = &mut next.source_planes {
+    if let Some(mut store) = next.source.planes().clone() {
         // The depth-1 store is a packed plane, not a `width * height` one; it is
         // only re-emitted for an unchanged flat Bitmap, so leave it stale.
         if store.depth != pictura_core::BitDepth::One {
@@ -66,6 +67,10 @@ pub fn resize_canvas_document(
             store.width = width;
             store.height = height;
         }
+
+        next.source
+            .replace_planes(Some(store))
+            .expect("valid source planes");
     }
 
     next.width = width;
@@ -228,7 +233,7 @@ pub(super) fn rebase_source_planes(
     dx: i32,
     dy: i32,
 ) {
-    let Some(store) = &mut doc.source_planes else {
+    let Some(mut store) = doc.source.planes().clone() else {
         return;
     };
     if store.depth == pictura_core::BitDepth::One {
@@ -247,6 +252,9 @@ pub(super) fn rebase_source_planes(
     );
     store.width = width;
     store.height = height;
+    doc.source
+        .replace_planes(Some(store))
+        .expect("canvas geometry preserves source representation");
 }
 
 /// Top-left of the old canvas within the new one, per anchor.
@@ -472,7 +480,9 @@ mod tests {
         resize_canvas_document(&mut doc, 6, 5, Anchor::MiddleRight).unwrap();
 
         assert_eq!((doc.width, doc.height), (6, 5));
-        doc.composite = crate::composite_rgba(&doc);
+        doc.composite
+            .replace(crate::composite_rgba(&doc))
+            .expect("valid composite");
         assert_eq!(doc.composite, crate::composite_rgba(&doc));
         assert_eq!(doc.composite.width, 6);
         assert_eq!(doc.composite.height, 5);
@@ -521,17 +531,21 @@ mod tests {
     #[test]
     fn canvas_rebases_the_retained_store() {
         let mut doc = sample_doc();
-        doc.source_depth = Some(BitDepth::Sixteen);
-        doc.source_planes = Some(SourcePlanes {
-            depth: BitDepth::Sixteen,
-            width: 4,
-            height: 4,
-            samples: Samples::U16((0..16).map(|i| i as u16).collect()),
-        });
+        doc.source
+            .set_native(
+                Some(BitDepth::Sixteen),
+                Some(SourcePlanes {
+                    depth: BitDepth::Sixteen,
+                    width: 4,
+                    height: 4,
+                    samples: Samples::U16((0..16).map(|i| i as u16).collect()),
+                }),
+            )
+            .expect("valid native source");
 
         resize_canvas_document(&mut doc, 6, 6, Anchor::Center).unwrap();
 
-        let store = doc.source_planes.as_ref().unwrap();
+        let store = doc.source.planes().as_ref().unwrap();
         assert_eq!((store.width, store.height), (6, 6));
         let Samples::U16(v) = &store.samples else {
             panic!("expected a u16 store")

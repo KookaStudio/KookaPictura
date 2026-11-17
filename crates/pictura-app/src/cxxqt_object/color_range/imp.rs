@@ -11,7 +11,7 @@ pub(super) fn color_range_available(view: &PictureView) -> bool {
         .session
         .doc
         .as_ref()
-        .is_some_and(|doc| doc.source_depth.unwrap_or(doc.depth) != BitDepth::ThirtyTwo)
+        .is_some_and(|doc| doc.source.depth().unwrap_or(doc.depth) != BitDepth::ThirtyTwo)
 }
 
 pub(super) fn target(rgb: u32) -> [u8; 3] {

@@ -160,7 +160,10 @@ fn auto_blend_refuses_modes() {
             "{mode:?} as a working mode"
         );
         let mut d = pair();
-        d.source_mode = Some(mode);
+        let palette = (mode == ColorMode::Indexed).then_some([0; 768]);
+        d.source
+            .set_encoding(Some(mode), palette)
+            .expect("valid source encoding");
         assert!(
             !can_auto_blend(&d, &["0", "1"]),
             "{mode:?} read from a file"
@@ -511,10 +514,12 @@ fn keeps_depth(depth: BitDepth) {
             native(depth, "B", full(20, 20), 0.6),
         ],
     );
-    d.source_depth = Some(depth);
+    d.source
+        .set_native(Some(depth), d.source.planes().clone())
+        .expect("valid source depth");
     let channels: Vec<_> = d.layers.iter().map(|l| l.source_channels.clone()).collect();
     blend(&mut d, &["0", "1"], STACK);
-    assert_eq!(d.source_depth, Some(depth));
+    assert_eq!(d.source.depth(), Some(depth));
     for (layer, before) in d.layers.iter().zip(channels) {
         assert!(layer.mask.is_some());
         assert_eq!(layer.source_channels, before, "planes unchanged");
@@ -780,7 +785,9 @@ fn content_aware_fill_is_ignored_at_high_depth() {
             native(BitDepth::Sixteen, "B", rect(0, 25, 40, 40), 0.4),
         ],
     );
-    d.source_depth = Some(BitDepth::Sixteen);
+    d.source
+        .set_native(Some(BitDepth::Sixteen), d.source.planes().clone())
+        .expect("valid source depth");
     blend(&mut d, &["0", "1"], FILLED);
     assert_eq!(d.layers[2].channels[3].data.as_slice()[20 * 40 + 20], 0);
 }
@@ -797,7 +804,9 @@ fn retained_mask_layer() -> Document {
         ..Default::default()
     });
     let mut d = doc(4, 4, vec![layer]);
-    d.source_depth = Some(BitDepth::Sixteen);
+    d.source
+        .set_native(Some(BitDepth::Sixteen), d.source.planes().clone())
+        .expect("valid source depth");
     d
 }
 

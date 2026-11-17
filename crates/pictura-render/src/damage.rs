@@ -592,7 +592,9 @@ mod tests {
         assert_eq!(influence(&d, "1"), None);
         assert_eq!(content_influence(&d, "1"), Some(target));
 
-        d.composite = crate::composite_rgba(&d);
+        d.composite
+            .replace(crate::composite_rgba(&d))
+            .expect("valid composite");
         d.layers[1].channels[0].data = vec![200; 36].into();
         let full = crate::composite_rgba(&d);
         let region = crate::composite::composite_rgba_region(&d, 6, 6, 6, 6);

@@ -6,13 +6,17 @@ use pictura_core::{
 
 fn depth16_doc() -> Document {
     let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Sixteen);
-    doc.source_depth = Some(BitDepth::Sixteen);
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::Sixteen,
-        width: 2,
-        height: 2,
-        samples: Samples::U16(vec![1; 12].into()),
-    });
+    doc.source
+        .set_native(
+            Some(BitDepth::Sixteen),
+            Some(SourcePlanes {
+                depth: BitDepth::Sixteen,
+                width: 2,
+                height: 2,
+                samples: Samples::U16(vec![1; 12].into()),
+            }),
+        )
+        .expect("valid native source");
     doc.layer_section_extra = vec![1, 2, 3].into();
     let rect = PsdRect {
         top: 0,
@@ -82,8 +86,8 @@ fn native_samples_and_selection_are_shared_across_captures() {
         );
         assert!(
             share_samples(
-                &current.doc.source_planes.as_ref().unwrap().samples,
-                &meta.source_planes.as_ref().unwrap().samples
+                &current.doc.source.planes().as_ref().unwrap().samples,
+                &meta.source.planes().as_ref().unwrap().samples
             ),
             "state {k} must share the document native samples"
         );
@@ -232,13 +236,17 @@ fn native_edit_undo_restores_old_bytes() {
 fn depth16_doc_sized(w: u32, h: u32) -> Document {
     let plane = w as usize * h as usize;
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Sixteen);
-    doc.source_depth = Some(BitDepth::Sixteen);
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::Sixteen,
-        width: w,
-        height: h,
-        samples: Samples::U16(vec![1; plane * 3].into()),
-    });
+    doc.source
+        .set_native(
+            Some(BitDepth::Sixteen),
+            Some(SourcePlanes {
+                depth: BitDepth::Sixteen,
+                width: w,
+                height: h,
+                samples: Samples::U16(vec![1; plane * 3].into()),
+            }),
+        )
+        .expect("valid native source");
     doc.layer_section_extra = vec![0u8; 8 * 1024 * 1024].into();
     let rect = PsdRect {
         top: 0,
@@ -393,7 +401,9 @@ fn patterned_doc() -> Document {
         .map(|i| (i as u8).wrapping_mul(31).wrapping_add((i >> 11) as u8))
         .collect();
     let _ = pictura_render::add_raster_layer_from_rgba(&mut doc, "px", SIDE, SIDE, &rgba);
-    doc.composite = pictura_render::composite_rgba(&doc);
+    doc.composite
+        .replace(pictura_render::composite_rgba(&doc))
+        .expect("valid composite");
     doc
 }
 
@@ -640,4 +650,43 @@ fn undo_redo_identity_seeded() {
         );
     }
     assert_eq!(history.held_bytes(), history.recount_held_bytes());
+}
+
+#[test]
+fn history_hollow_reattaches_shared_composite() {
+    let mut doc = Document::from_rgba("pixel", 2, 1, &[1, 2, 3, 255, 4, 5, 6, 255]);
+    doc.composite.set_merged_output(false);
+    doc.channels.push(pictura_core::Channel {
+        id: 0,
+        data: vec![1, 2].into(),
+    });
+    let before = doc.clone();
+    let mut meta = planes::hollow(&doc);
+    assert_eq!(
+        (
+            meta.composite.width,
+            meta.composite.height,
+            meta.composite.channels
+        ),
+        (2, 1, 4)
+    );
+    assert!(!meta.composite.merged_output());
+    assert!(meta.composite.data.is_empty());
+    assert_eq!(
+        planes::plane_kinds(&meta).len(),
+        planes::plane_kinds(&doc).len()
+    );
+    let mut data = Vec::new();
+    planes::each_plane(&before, &mut |p, _, _, _| data.push(p.clone()));
+    let mut index = 0;
+    planes::each_plane_mut(&mut meta, &mut |p, _, _, _| {
+        *p = data[index].clone();
+        index += 1;
+    });
+    assert_eq!(meta, before);
+    assert!(meta.composite.data.shares(&before.composite.data));
+    assert!(meta.channels[0].data.shares(&before.channels[0].data));
+    planes::adopt_metadata(&mut doc, &meta);
+    assert_eq!(doc, before);
+    assert!(doc.composite.data.shares(&before.composite.data));
 }

@@ -35,12 +35,12 @@ pub fn convert_depth(
     out: BitDepth,
     method: HdrToneMap,
 ) -> Result<(), OpsError> {
-    if doc.source_depth != Some(BitDepth::ThirtyTwo) {
+    if doc.source.depth() != Some(BitDepth::ThirtyTwo) {
         return Err(OpsError::InvalidParams(
             "HDR conversion needs a 32-bit source".into(),
         ));
     }
-    if doc.source_mode.is_some() {
+    if doc.source.mode().is_some() {
         return Err(OpsError::Unsupported(
             "HDR conversion is limited to a native Grayscale/RGB source".into(),
         ));
@@ -110,14 +110,17 @@ pub fn convert_depth(
     // The working model stays 8-bit (`write_psd` rejects a non-8 working depth);
     // the converted store and `source_depth` are what a save re-emits.
     doc.depth = BitDepth::Eight;
-    doc.source_depth = store.as_ref().map(|_| BitDepth::Sixteen);
-    doc.source_planes = store;
-    doc.composite = PixelBuffer {
-        width: doc.width,
-        height: doc.height,
-        channels: color_channels as u8,
-        data: composite.into(),
-    };
+    doc.source
+        .set_native(store.as_ref().map(|_| BitDepth::Sixteen), store)
+        .expect("valid source depth");
+    doc.composite
+        .replace(PixelBuffer {
+            width: doc.width,
+            height: doc.height,
+            channels: color_channels as u8,
+            data: composite.into(),
+        })
+        .expect("valid composite");
     drop_layer_source(&mut doc.layers);
     flatten_converted(doc, display_alpha.as_deref());
     Ok(())
@@ -155,7 +158,7 @@ fn flatten_converted(doc: &mut Document, display_alpha: Option<&[u8]>) {
         bottom: doc.height as i32,
         right: doc.width as i32,
     };
-    let source_channels = doc.source_planes.as_ref().and_then(|store| {
+    let source_channels = doc.source.planes().as_ref().and_then(|store| {
         let mut planes: Vec<(i16, Samples)> = (0..colors)
             .filter_map(|c| {
                 store
@@ -204,7 +207,7 @@ pub fn convert_depth_exposure_gamma(
 /// stale store falls back to the current composite. A document with layers is
 /// recomposited at native depth; a layerless document reads its composite.
 fn source_samples(doc: &Document, color_len: usize) -> Result<Vec<f32>, OpsError> {
-    if let Some(Samples::F32(v)) = doc.source_planes.as_ref().map(|s| &s.samples) {
+    if let Some(Samples::F32(v)) = doc.source.planes().as_ref().map(|s| &s.samples) {
         if v.len() >= color_len && store_matches_composite(doc, &v[..color_len]) {
             return Ok(v.to_vec());
         }

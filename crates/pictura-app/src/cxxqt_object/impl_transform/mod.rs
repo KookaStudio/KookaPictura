@@ -46,9 +46,7 @@ pub(super) fn build_move_preview_base(
     else {
         return QImage::default();
     };
-    let composite_ok = doc.composite.width == doc.width
-        && doc.composite.height == doc.height
-        && !doc.composite.data.is_empty();
+    let composite_ok = doc.has_stored_composite();
     match move_preview_region(union, doc.width, doc.height, composite_ok) {
         Some((x0, y0, ..)) => {
             set_member_visibility(doc, &members, false);
@@ -56,7 +54,7 @@ pub(super) fn build_move_preview_base(
                 pictura_render::CompositeRequest::region(doc, union, gpu_compute),
             );
             restore_member_visibility(doc, &members);
-            let mut base_buffer = doc.composite.clone();
+            let mut base_buffer = doc.composite.buffer().clone();
             patch_buffer_region(&mut base_buffer, &region, x0, y0);
             buffer_to_image(&pictura_codec::buffer_to_srgb(doc, &base_buffer))
         }

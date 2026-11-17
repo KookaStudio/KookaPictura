@@ -265,7 +265,7 @@ fn level0(doc: &Document, rect: PsdRect) -> PixelBuffer {
 /// A layerless document's embedded composite, cropped chunk by chunk to
 /// four-channel RGBA (a missing alpha plane is opaque).
 fn stream_layerless(doc: &Document, rect: PsdRect, rows: u32, mut f: impl FnMut(u32, PixelBuffer)) {
-    let source = &doc.composite;
+    let source = doc.composite.buffer();
     let (w, h) = (source.width as usize, source.height as usize);
     let channels = usize::from(source.channels);
     let rw = rect.width().max(0) as usize;

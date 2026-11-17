@@ -96,8 +96,12 @@ pub fn convert_to_smart_object(doc: &mut Document, path: &str) -> bool {
         for c in 0..doc.mode.color_channels() as usize {
             if let Some(channel) = layer.channels.iter().find(|ch| ch.id == c as i16) {
                 let n = plane.min(channel.data.len());
-                embedded.composite.data[c * plane..c * plane + n]
-                    .copy_from_slice(&channel.data[..n]);
+                embedded
+                    .composite
+                    .edit_data(|data| {
+                        data[c * plane..c * plane + n].copy_from_slice(&channel.data[..n]);
+                    })
+                    .expect("pixel edit preserves geometry");
             }
         }
         // The merged extra plane restores the source's straight alpha on read
@@ -424,7 +428,9 @@ pub fn transform_smart_object_rect(doc: &mut Document, path: &str, rect: PsdRect
 pub fn open_as_smart_object(filename: &str, bytes: &[u8]) -> Option<Document> {
     let src = pictura_codec::read_psd(bytes).ok()?;
     let mut doc = Document::new(src.width, src.height, src.mode, src.depth);
-    doc.composite = src.composite;
+    doc.composite
+        .replace(src.composite.into_buffer())
+        .expect("valid composite");
     place_smart_object(&mut doc, filename, bytes)?;
     Some(doc)
 }

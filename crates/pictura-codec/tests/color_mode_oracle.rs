@@ -209,12 +209,12 @@ fn bitmap_document_saves_as_bitmap() {
     let doc = load(name);
     assert_eq!(doc.mode, ColorMode::Rgb, "{name}: working mode");
     assert_eq!(
-        doc.source_mode,
+        doc.source.mode(),
         Some(ColorMode::Bitmap),
         "{name}: recorded source mode"
     );
     assert_eq!(doc.depth, BitDepth::Eight, "{name}: normalized depth");
-    let store = doc.source_planes.as_ref().expect("packed plane retained");
+    let store = doc.source.planes().as_ref().expect("packed plane retained");
     assert_eq!(store.depth, BitDepth::One, "{name}: depth-1 store");
     let packed = store.samples.to_bytes();
     assert_eq!(
@@ -243,12 +243,13 @@ fn bitmap_document_saves_as_bitmap() {
     let back = read_psd(&out).unwrap();
     assert_eq!(back.mode, ColorMode::Rgb, "{name}: re-read working mode");
     assert_eq!(
-        back.source_mode,
+        back.source.mode(),
         Some(ColorMode::Bitmap),
         "{name}: re-read source mode"
     );
     assert_eq!(
-        back.source_planes
+        back.source
+            .planes()
             .as_ref()
             .expect("re-read packed")
             .samples
@@ -341,14 +342,15 @@ fn bitmap_rle_document_saves_as_bitmap() {
     let packed = [0xF0u8, 0xF0, 0xF0, 0x0F, 0xC3, 0x8A];
     let doc = read_psd(&bitmap_rle_psd(24, &rows)).unwrap();
     assert_eq!(doc.mode, ColorMode::Rgb, "working mode");
-    assert_eq!(doc.source_mode, Some(ColorMode::Bitmap), "source mode");
+    assert_eq!(doc.source.mode(), Some(ColorMode::Bitmap), "source mode");
     assert_eq!(
         doc.composite_compression,
         Compression::Rle,
         "read compression"
     );
     assert_eq!(
-        doc.source_planes
+        doc.source
+            .planes()
             .as_ref()
             .expect("packed plane retained")
             .samples
@@ -372,7 +374,8 @@ fn bitmap_rle_document_saves_as_bitmap() {
 
     let back = read_psd(&out).unwrap();
     assert_eq!(
-        back.source_planes
+        back.source
+            .planes()
             .as_ref()
             .expect("re-read packed")
             .samples
@@ -424,14 +427,14 @@ fn indexed_document_saves_as_indexed() {
     let doc = load("indexed.psd");
     assert_eq!(doc.mode, ColorMode::Rgb, "working mode");
     assert_eq!(
-        doc.source_mode,
+        doc.source.mode(),
         Some(ColorMode::Indexed),
         "recorded source mode"
     );
     assert!(doc.color_mode_data.is_empty(), "palette consumed");
-    let palette = doc.source_palette.expect("palette retained");
+    let palette = doc.source.palette().expect("palette retained");
     let plane = doc.composite.pixel_count();
-    let retained = doc.source_planes.clone().expect("index plane retained");
+    let retained = doc.source.planes().clone().expect("index plane retained");
     assert_eq!(retained.depth, BitDepth::Eight, "8-bit index store");
     assert!(
         !doc.retains_source_depth(),
@@ -459,12 +462,12 @@ fn indexed_document_saves_as_indexed() {
     let back = read_psd(&out).unwrap();
     assert_eq!(back.mode, ColorMode::Rgb, "re-read working mode");
     assert_eq!(
-        back.source_mode,
+        back.source.mode(),
         Some(ColorMode::Indexed),
         "re-read source mode"
     );
     assert_eq!(
-        back.source_planes.as_ref().unwrap().samples.to_bytes()[..plane],
+        back.source.planes().as_ref().unwrap().samples.to_bytes()[..plane],
         source_index[..],
         "the written index plane is byte-identical"
     );
@@ -514,12 +517,12 @@ print(int(psd.color_mode))
 fn lab_document_saves_as_lab() {
     let doc = load("lab.psd");
     assert_eq!(
-        doc.source_mode,
+        doc.source.mode(),
         Some(ColorMode::Lab),
         "recorded source mode"
     );
     let plane = doc.composite.pixel_count();
-    let retained = doc.source_planes.clone().expect("Lab planes retained");
+    let retained = doc.source.planes().clone().expect("Lab planes retained");
     assert_eq!(retained.depth, BitDepth::Eight, "8-bit Lab store");
     assert!(
         !doc.retains_source_depth(),
@@ -542,11 +545,11 @@ fn lab_document_saves_as_lab() {
     let back = read_psd(&out).unwrap();
     assert_eq!(back.mode, ColorMode::Rgb, "re-read working mode");
     assert_eq!(
-        back.source_mode,
+        back.source.mode(),
         Some(ColorMode::Lab),
         "re-read source mode"
     );
-    let back_retained = back.source_planes.clone().expect("re-read Lab planes");
+    let back_retained = back.source.planes().clone().expect("re-read Lab planes");
     assert_eq!(
         back_retained.samples.to_bytes()[..3 * plane],
         source_lab[..],
@@ -606,12 +609,12 @@ print(int(psd.color_mode))
 fn cmyk_document_saves_as_cmyk() {
     let doc = load("cmyk.psd");
     assert_eq!(
-        doc.source_mode,
+        doc.source.mode(),
         Some(ColorMode::Cmyk),
         "recorded source mode"
     );
     let plane = doc.composite.pixel_count();
-    let retained = doc.source_planes.clone().expect("CMYK planes retained");
+    let retained = doc.source.planes().clone().expect("CMYK planes retained");
     assert_eq!(retained.depth, BitDepth::Eight, "8-bit CMYK store");
     assert!(
         !doc.retains_source_depth(),
@@ -634,11 +637,11 @@ fn cmyk_document_saves_as_cmyk() {
     let back = read_psd(&out).unwrap();
     assert_eq!(back.mode, ColorMode::Rgb, "re-read working mode");
     assert_eq!(
-        back.source_mode,
+        back.source.mode(),
         Some(ColorMode::Cmyk),
         "re-read source mode"
     );
-    let back_retained = back.source_planes.clone().expect("re-read CMYK planes");
+    let back_retained = back.source.planes().clone().expect("re-read CMYK planes");
     assert_eq!(
         back_retained.samples.to_bytes()[..4 * plane],
         source_cmyk[..],

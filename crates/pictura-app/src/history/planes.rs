@@ -373,7 +373,7 @@ pub(super) fn composite_change(
 pub(super) fn composite_unchanged(a: &mut Document, b: &mut Document) -> bool {
     tile_planes(a);
     tile_planes(b);
-    let (left, right) = (&a.composite, &b.composite);
+    let (left, right) = (a.composite.buffer(), b.composite.buffer());
     if (left.width, left.height, left.channels) != (right.width, right.height, right.channels) {
         return false;
     }
@@ -755,7 +755,11 @@ pub(super) fn each_plane_mut(
 ) {
     let width = doc.width as usize;
     let h = plane_height(doc.composite.data.len(), width);
-    f(&mut doc.composite.data, width, h, PlanePlacement::Composite);
+    let mut composite = doc.composite.detach_plane();
+    f(&mut composite, width, h, PlanePlacement::Composite);
+    doc.composite
+        .attach_plane(composite)
+        .expect("history plane matches retained composite geometry");
     for channel in doc.channels.iter_mut() {
         let h = plane_height(channel.data.len(), width);
         f(&mut channel.data, width, h, PlanePlacement::Canvas);

@@ -436,7 +436,9 @@ fn cpu_oracle_unchanged_for_every_route() {
 #[test]
 fn sixteen_bit_document_declines() {
     let mut doc = doc_of(pixels());
-    doc.source_depth = Some(BitDepth::Sixteen);
+    doc.source
+        .set_native(Some(BitDepth::Sixteen), doc.source.planes().clone())
+        .expect("valid source depth");
     assert!(matches!(
         check_supported(&doc),
         Err(GpuError::UnsupportedDepth)
@@ -446,7 +448,9 @@ fn sixteen_bit_document_declines() {
 #[test]
 fn thirty_two_bit_active_backend_is_cpu() {
     let mut doc = doc_of(pixels());
-    doc.source_depth = Some(BitDepth::ThirtyTwo);
+    doc.source
+        .set_native(Some(BitDepth::ThirtyTwo), doc.source.planes().clone())
+        .expect("valid source depth");
     let (buf, backend) = crate::composite_request::composite(
         crate::composite_request::CompositeRequest::whole(&doc, true),
     );
@@ -457,7 +461,7 @@ fn thirty_two_bit_active_backend_is_cpu() {
 #[test]
 fn eight_bit_document_stays_eligible() {
     let doc = doc_of(pixels());
-    assert!(doc.source_depth.is_none());
+    assert!(doc.source.depth().is_none());
     assert!(check_supported(&doc).is_ok());
 }
 

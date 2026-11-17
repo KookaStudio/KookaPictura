@@ -44,7 +44,7 @@ impl PictureViewRust {
             return self.refresh_regions(&[rect]);
         }
         let (x0, y0, w, h) = clamp_region(rect, doc.width, doc.height)?;
-        let crop = crop_planar(&doc.composite, x0, y0, w, h);
+        let crop = crop_planar(doc.composite.buffer(), x0, y0, w, h);
         let srgb = into_rgba_frame(pictura_codec::buffer_to_srgb(doc, &crop).into_owned());
         let clipped = PsdRect {
             top: y0,
@@ -319,9 +319,11 @@ impl qobject::PictureView {
         rust.session.document_generation = rust.session.document_generation.wrapping_add(1);
         // A named snapshot's composite is exact (see `named_snapshot`), so the
         // restore presents it instead of compositing the layers again.
-        let exact = rust.session.doc.as_ref().is_some_and(|doc| {
-            doc.composite.width == doc.width && doc.composite.height == doc.height
-        });
+        let exact = rust
+            .session
+            .doc
+            .as_ref()
+            .is_some_and(Document::has_stored_composite);
         if exact {
             rust.reset_pyramid();
             self.as_mut().changed();

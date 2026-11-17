@@ -231,7 +231,9 @@ fn section_matches_full_apply() {
 
 fn native_layer(depth: BitDepth, planes: Vec<(i16, Samples)>) -> Document {
     let mut doc = solid(1, 1, [128, 128, 128, 255]);
-    doc.source_depth = Some(depth);
+    doc.source
+        .set_native(Some(depth), doc.source.planes().clone())
+        .expect("valid source depth");
     let layer = doc.layers.first_mut().unwrap();
     layer.source_channels = Some(SourceChannels::new(depth, layer.rect, planes));
     doc

@@ -271,13 +271,17 @@ fn depth16_warp_resamples_and_keeps_the_native_store() {
         ],
     ));
     let mut doc = doc_with(layer);
-    doc.source_depth = Some(BitDepth::Sixteen);
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::Sixteen,
-        width: 64,
-        height: 64,
-        samples: Samples::U16(vec![0; 3 * 64 * 64].into()),
-    });
+    doc.source
+        .set_native(
+            Some(BitDepth::Sixteen),
+            Some(SourcePlanes {
+                depth: BitDepth::Sixteen,
+                width: 64,
+                height: 64,
+                samples: Samples::U16(vec![0; 3 * 64 * 64].into()),
+            }),
+        )
+        .expect("valid native source");
     let b = bounds(r);
     let mut mesh = BezierMesh::identity(b, 1, 1);
     mesh.points[5] = [1.0, 1.0];

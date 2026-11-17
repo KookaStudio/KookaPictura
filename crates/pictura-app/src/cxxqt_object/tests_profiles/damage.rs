@@ -17,7 +17,9 @@ fn large_profile_doc() -> Document {
         layers.push(layer);
     }
     doc.layers = LayerStack::from_layers(layers);
-    doc.composite = pictura_render::composite_rgba(&doc);
+    doc.composite
+        .replace(pictura_render::composite_rgba(&doc))
+        .expect("valid composite");
     doc
 }
 
@@ -117,7 +119,9 @@ fn clipping_move_doc(clipped_layers: usize, extra_layers: usize) -> Document {
     }
     doc.layers = LayerStack::from_layers(layers);
     // Sized blank composite: the profile measures the edit, not the open.
-    doc.composite = pictura_core::PixelBuffer::new(doc.width, doc.height, 4);
+    doc.composite
+        .replace(pictura_core::PixelBuffer::new(doc.width, doc.height, 4))
+        .expect("valid composite");
     doc
 }
 

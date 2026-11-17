@@ -118,7 +118,7 @@ pub(super) fn adjust_preview(
     let refresh = if layer_has_effects(&layer) {
         DocumentComposite::new(&mut doc).refresh(pictura_render::CompositeScope::Full, gpu);
         WorkerAdjustRefresh::Everywhere {
-            composite: doc.composite.clone(),
+            composite: doc.composite.buffer().clone(),
         }
     } else {
         match clamp_region(rect, doc.width, doc.height) {

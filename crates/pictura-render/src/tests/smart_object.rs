@@ -12,9 +12,21 @@ fn solid_doc(w: u32, h: u32, rgb: [u8; 3]) -> Document {
     let n = (w * h) as usize;
     let mut d = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     for i in 0..n {
-        d.composite.data[i] = rgb[0];
-        d.composite.data[n + i] = rgb[1];
-        d.composite.data[2 * n + i] = rgb[2];
+        d.composite
+            .edit_data(|data| {
+                data[i] = rgb[0];
+            })
+            .expect("pixel edit preserves geometry");
+        d.composite
+            .edit_data(|data| {
+                data[n + i] = rgb[1];
+            })
+            .expect("pixel edit preserves geometry");
+        d.composite
+            .edit_data(|data| {
+                data[2 * n + i] = rgb[2];
+            })
+            .expect("pixel edit preserves geometry");
     }
     d
 }
@@ -26,9 +38,21 @@ pub(super) fn payload_of(rgb: [u8; 3]) -> Vec<u8> {
 pub(super) fn payload_2x2(colors: [[u8; 3]; 4]) -> Vec<u8> {
     let mut d = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
     for (i, c) in colors.iter().enumerate() {
-        d.composite.data[i] = c[0];
-        d.composite.data[4 + i] = c[1];
-        d.composite.data[8 + i] = c[2];
+        d.composite
+            .edit_data(|data| {
+                data[i] = c[0];
+            })
+            .expect("pixel edit preserves geometry");
+        d.composite
+            .edit_data(|data| {
+                data[4 + i] = c[1];
+            })
+            .expect("pixel edit preserves geometry");
+        d.composite
+            .edit_data(|data| {
+                data[8 + i] = c[2];
+            })
+            .expect("pixel edit preserves geometry");
     }
     write_psd(&d).expect("payload writes")
 }

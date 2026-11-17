@@ -193,14 +193,18 @@ fn is_tiled(s: &Samples) -> bool {
 fn deep_document<T: Seeded>(depth: BitDepth) -> Document {
     let mut doc = document();
     doc.depth = depth;
-    doc.source_depth = Some(depth);
+    doc.source
+        .set_native(Some(depth), doc.source.planes().clone())
+        .expect("valid source depth");
     let (w, h) = (doc.width as usize, doc.height as usize);
-    doc.source_planes = Some(SourcePlanes {
-        depth,
-        width: doc.width,
-        height: doc.height,
-        samples: store::<T>(w, h, 3, 11),
-    });
+    doc.source
+        .replace_planes(Some(SourcePlanes {
+            depth,
+            width: doc.width,
+            height: doc.height,
+            samples: store::<T>(w, h, 3, 11),
+        }))
+        .expect("valid source planes");
     let offset = &mut doc.layers[1];
     let (lw, lh) = dims(offset.rect);
     let (mw, mh) = dims(offset.mask.as_ref().unwrap().rect);
@@ -233,8 +237,8 @@ fn assert_deep<T: Seeded>(depth: BitDepth) {
         assert!(bits(now) == bits(&want), "{depth:?} plane {id}");
     }
     let (was, now) = (
-        before.source_planes.as_ref().unwrap(),
-        doc.source_planes.as_ref().unwrap(),
+        before.source.planes().as_ref().unwrap(),
+        doc.source.planes().as_ref().unwrap(),
     );
     assert_eq!((now.width, now.height), (450, 300));
     assert!(is_tiled(&now.samples), "{depth:?} document store not tiled");

@@ -95,7 +95,9 @@ fn small_layers(side: u32) -> Document {
         layer("b", side as i32 / 2, side as i32 * 2 / 3, (10, 40, 200)),
     ]);
     // A layered RGB document keeps no stored composite in the app (#1216).
-    doc.composite = pictura_core::PixelBuffer::new(0, 0, 4);
+    doc.composite
+        .replace(pictura_core::PixelBuffer::new(0, 0, 4))
+        .expect("valid composite");
     doc
 }
 

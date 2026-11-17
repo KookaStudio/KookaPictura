@@ -191,10 +191,14 @@ pub(crate) fn convert_retained_cmyk(
     dst: &Profile,
     options: ConversionOptions,
 ) {
-    if let Some(store) = doc.source_planes.as_mut() {
+    if let Some(mut store) = doc.source.planes().clone() {
         if store.depth == BitDepth::Eight {
             convert_cmyk_samples(&mut store.samples, src, dst, options);
         }
+
+        doc.source
+            .replace_planes(Some(store))
+            .expect("valid source planes");
     }
     for_each_source_layer(&mut doc.layers, &mut |layer| {
         let Some(store) = layer.source_channels.as_mut() else {
@@ -230,13 +234,17 @@ pub(crate) fn convert_retained_cmyk(
         }
         write_working_rgb(layer, &converted, dst, options);
     });
-    if let Some(store) = doc.source_planes.as_ref() {
+    if let Some(store) = doc.source.planes().as_ref() {
         if store.depth == BitDepth::Eight {
             let plane = doc.width as usize * doc.height as usize;
             if let Samples::U8(values) = &store.samples {
                 if values.len() == plane * 4 && doc.composite.data.len() >= plane * 3 {
                     if let Some(rgb) = cmyk_to_rgb_with_profile(values, dst, options) {
-                        doc.composite.data[..plane * 3].copy_from_slice(&rgb);
+                        doc.composite
+                            .edit_data(|data| {
+                                data[..plane * 3].copy_from_slice(&rgb);
+                            })
+                            .expect("pixel edit preserves geometry");
                     }
                 }
             }

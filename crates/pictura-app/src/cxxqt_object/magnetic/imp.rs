@@ -64,7 +64,7 @@ impl super::super::state::PictureViewRust {
             return 0;
         };
         let depth = if doc.retains_source_depth() {
-            doc.source_depth.unwrap_or(doc.depth)
+            doc.source.depth().unwrap_or(doc.depth)
         } else {
             doc.depth
         };

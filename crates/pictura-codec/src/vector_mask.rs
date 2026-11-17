@@ -742,12 +742,14 @@ mod tests {
         let mut doc = Document::from_rgba("Base", 8, 8, &[255; 8 * 8 * 4]);
         // The reader reconstructs an RGB merged composite with three planes;
         // match that here so whole-document equality can hold.
-        doc.composite = pictura_core::PixelBuffer {
-            width: 8,
-            height: 8,
-            channels: 3,
-            data: vec![255u8; 8 * 8 * 3].into(),
-        };
+        doc.composite
+            .replace(pictura_core::PixelBuffer {
+                width: 8,
+                height: 8,
+                channels: 3,
+                data: vec![255u8; 8 * 8 * 3].into(),
+            })
+            .expect("valid composite");
         let mut shape = doc.layers[0].clone();
         shape.name = "Shape".into();
         shape.rect = PsdRect {

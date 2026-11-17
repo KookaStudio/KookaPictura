@@ -55,7 +55,7 @@ fn convert_srgb_to_adobe_matches_lcms2() {
         convert_document(&mut doc, &Profile::adobe_rgb()),
         "conversion runs"
     );
-    let got = rgb_pixels(&doc.composite);
+    let got = rgb_pixels(doc.composite.buffer());
 
     let script = r#"
 import sys
@@ -179,7 +179,10 @@ fn convert_back_to_srgb_leaves_the_document_untagged() {
     let mut doc = Document::from_rgba("px", 3, 1, &sample_rgba());
     assign_document_profile(&mut doc, &Profile::adobe_rgb());
     assert!(convert_document(&mut doc, &Profile::srgb()));
-    assert!(doc.document_icc.is_none(), "the working profile is sRGB");
+    assert!(
+        doc.source.working_profile().is_none(),
+        "the working profile is sRGB"
+    );
     assert!(
         decode_image_resources(&doc)
             .iter()

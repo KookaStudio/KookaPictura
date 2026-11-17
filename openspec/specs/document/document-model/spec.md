@@ -135,15 +135,17 @@ SHALL NOT clamp layer or mask bounds to the document.
 ### Requirement: Document and layer clones share their storage
 
 Cloning a `Document` or `Layer` SHALL be a refcount bump for every bulk store it
-owns: pixel planes, retained native sample stores, smart-object payloads and the
-raw linked-section bytes (`Document.layer_section_extra`), preserved byte blocks
-(including `Document.source_icc`, `Document.document_icc`,
+owns: pixel planes (including those held by the encapsulated composite value),
+retained native sample stores, smart-object payloads and the raw linked-section
+bytes (`Document.layer_section_extra`), preserved byte blocks (including original
+and working ICC bytes held by the encapsulated source value,
 `Document.color_mode_data`, `Document.image_resources`,
 `Document.global_layer_mask`, `Layer.blending_ranges`, `SmartFilter.options`, and
 the `TypeTool` descriptors), and the layer tree. A clone MUST NOT copy those
 buffers. A write SHALL fork only the store it touches; untouched stores SHALL
 remain shared. Layer-tree structural edits SHALL fork the tree once, leaving the
-source tree's nodes unchanged.
+source tree's nodes unchanged. Read access to source and composite buffers SHALL
+borrow their stores without allocating replacement byte buffers.
 
 #### Scenario: Cloning a document shares native samples and payload
 
@@ -162,8 +164,8 @@ source tree's nodes unchanged.
 
 #### Scenario: Preserved document byte blocks share on clone
 
-- **WHEN** a document with `source_icc`, `document_icc`, `color_mode_data`, `image_resources`, `global_layer_mask`, and `layer_section_extra` is cloned
-- **THEN** the clone shares each of those allocations with the original
+- **WHEN** a document with original ICC bytes, working ICC bytes, `color_mode_data`, `image_resources`, `global_layer_mask`, and `layer_section_extra` is cloned
+- **THEN** borrowed access through each clone exposes the same respective allocations, and the bytes are unchanged
 
 #### Scenario: A structural edit forks the tree
 

@@ -460,9 +460,10 @@ impl Merged {
             _ => Samples::F32(plane.to_vec().into()),
         };
         let source_channels = doc
-            .source_depth
+            .source
+            .depth()
             .filter(|depth| {
-                doc.source_mode.is_none()
+                doc.source.mode().is_none()
                     && matches!(depth, BitDepth::Sixteen | BitDepth::ThirtyTwo)
             })
             .map(|depth| {

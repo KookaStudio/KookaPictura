@@ -264,7 +264,7 @@ impl Raster {
             gray[i] = pictura_core::rec601_luma(r, g, b);
         }
         let alpha = channels >= 4 && rgba.as_chunks::<4>().0.iter().any(|p| p[3] != 255);
-        let mode = doc.source_mode.unwrap_or(doc.mode);
+        let mode = doc.source.mode().unwrap_or(doc.mode);
         // Only the mode that needs colour separation pays for it; the RGB
         // writers should not allocate CMYK and Lab planes they never read.
         let cmyk = if mode == ColorMode::Cmyk {
@@ -273,7 +273,8 @@ impl Raster {
             Vec::new()
         };
         let lab = if mode == ColorMode::Lab {
-            doc.source_planes
+            doc.source
+                .planes()
                 .as_ref()
                 .map(|s| s.samples.narrow_to_u8())
                 .filter(|v| v.len() == n * 3)
@@ -283,8 +284,8 @@ impl Raster {
         };
         let indexed = if mode == ColorMode::Indexed {
             match (
-                doc.source_palette,
-                doc.source_planes.as_ref().and_then(|s| match &s.samples {
+                doc.source.palette(),
+                doc.source.planes().as_ref().and_then(|s| match &s.samples {
                     Samples::U8(v) if v.len() == n => Some(v.to_vec()),
                     _ => None,
                 }),

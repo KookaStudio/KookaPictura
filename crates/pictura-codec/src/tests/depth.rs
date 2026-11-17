@@ -21,7 +21,7 @@ fn retained_store_is_typed_to_the_source_depth() {
     let doc = read_psd(&p).unwrap();
     assert!(
         matches!(
-            &doc.source_planes.as_ref().unwrap().samples,
+            &doc.source.planes().as_ref().unwrap().samples,
             Samples::U16(_)
         ),
         "a 16-bit composite retains u16 samples"
@@ -37,7 +37,7 @@ fn retained_store_is_typed_to_the_source_depth() {
     let doc = read_psd(&p).unwrap();
     assert!(
         matches!(
-            &doc.source_planes.as_ref().unwrap().samples,
+            &doc.source.planes().as_ref().unwrap().samples,
             Samples::F32(_)
         ),
         "a 32-bit composite retains f32 samples"
@@ -52,7 +52,7 @@ fn depth16_raw_composite_narrows_high_byte() {
     let doc = read_psd(&p).unwrap();
     assert_eq!(doc.mode, ColorMode::Rgb);
     assert_eq!(doc.depth, BitDepth::Eight);
-    assert_eq!(doc.source_depth, Some(BitDepth::Sixteen));
+    assert_eq!(doc.source.depth(), Some(BitDepth::Sixteen));
     let expected = [0u8, 0, 0, 1, 1, 128, 255, 255];
     assert_eq!(&doc.composite.data[0..8], &expected, "R narrows v >> 8");
     assert_eq!(&doc.composite.data[8..16], &expected, "G");
@@ -86,7 +86,7 @@ fn depth32_raw_composite_narrows_clamped() {
     let plane = be32(&values);
     let p = flat_psd(32, 3, 3, 8, 1, &[&plane, &plane, &plane]);
     let doc = read_psd(&p).unwrap();
-    assert_eq!(doc.source_depth, Some(BitDepth::ThirtyTwo));
+    assert_eq!(doc.source.depth(), Some(BitDepth::ThirtyTwo));
     let expected = [0u8, 0, 128, 255, 255, 0, 255, 255];
     assert_eq!(
         &doc.composite.data[0..8],
@@ -135,7 +135,7 @@ fn depth16_layer_and_mask_channels_are_narrowed() {
         ],
     );
     let doc = read_psd(&p).unwrap();
-    assert_eq!(doc.source_depth, Some(BitDepth::Sixteen));
+    assert_eq!(doc.source.depth(), Some(BitDepth::Sixteen));
     let layer = &doc.layers[0];
     assert_eq!(
         layer
@@ -165,7 +165,7 @@ fn depth16_unmodeled_layer_channel_round_trips_at_source_depth() {
         &[(3, &spot)],
     );
     let doc = read_psd(&p).unwrap();
-    assert_eq!(doc.source_depth, Some(BitDepth::Sixteen));
+    assert_eq!(doc.source.depth(), Some(BitDepth::Sixteen));
     let raw = &doc.layers[0].raw_channels;
     assert_eq!(raw.len(), 1);
     assert_eq!(raw[0].id, 3);
@@ -205,7 +205,7 @@ fn depth32_unmodeled_layer_channel_round_trips_at_source_depth() {
         &[(-3, &spot)],
     );
     let doc = read_psd(&p).unwrap();
-    assert_eq!(doc.source_depth, Some(BitDepth::ThirtyTwo));
+    assert_eq!(doc.source.depth(), Some(BitDepth::ThirtyTwo));
     assert_eq!(doc.layers[0].raw_channels[0].data, vec![0, 0, 128]);
     let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
     assert_eq!(back.layers[0].raw_channels[0].data, vec![0, 0, 128]);
@@ -241,8 +241,8 @@ fn depth16_cmyk_preserves_source_mode_and_depth() {
     let p = flat_psd(16, 4, 4, 3, 1, &[&c, &m, &y, &k]);
     let doc = read_psd(&p).unwrap();
     assert_eq!(doc.mode, ColorMode::Rgb);
-    assert_eq!(doc.source_mode, Some(ColorMode::Cmyk));
-    assert_eq!(doc.source_depth, Some(BitDepth::Sixteen));
+    assert_eq!(doc.source.mode(), Some(ColorMode::Cmyk));
+    assert_eq!(doc.source.depth(), Some(BitDepth::Sixteen));
     assert!(doc.retains_source_depth(), "native samples retained");
     assert_eq!(
         doc.composite.data,
@@ -262,9 +262,9 @@ fn depth16_cmyk_preserves_source_mode_and_depth() {
         "output header color mode is CMYK"
     );
     let back = read_psd(&out).unwrap();
-    assert_eq!(back.source_depth, Some(BitDepth::Sixteen));
+    assert_eq!(back.source.depth(), Some(BitDepth::Sixteen));
     assert_eq!(
-        back.source_planes.as_ref().unwrap().samples.to_bytes(),
+        back.source.planes().as_ref().unwrap().samples.to_bytes(),
         native,
         "the retained native CMYK planes are byte-identical"
     );
@@ -284,7 +284,7 @@ fn depth32_cmyk_preserves_source_mode_and_depth() {
     );
     let doc = read_psd(&p).unwrap();
     assert_eq!(doc.mode, ColorMode::Rgb);
-    assert_eq!(doc.source_depth, Some(BitDepth::ThirtyTwo));
+    assert_eq!(doc.source.depth(), Some(BitDepth::ThirtyTwo));
     assert!(doc.retains_source_depth(), "native samples retained");
 
     let native: Vec<u8> = [plane(0.5), plane(0.25), plane(0.125), plane(0.75)].concat();
@@ -300,9 +300,9 @@ fn depth32_cmyk_preserves_source_mode_and_depth() {
         "output header color mode is CMYK"
     );
     let back = read_psd(&out).unwrap();
-    assert_eq!(back.source_depth, Some(BitDepth::ThirtyTwo));
+    assert_eq!(back.source.depth(), Some(BitDepth::ThirtyTwo));
     assert_eq!(
-        back.source_planes.as_ref().unwrap().samples.to_bytes(),
+        back.source.planes().as_ref().unwrap().samples.to_bytes(),
         native,
         "the retained native CMYK planes are byte-identical"
     );
@@ -318,8 +318,8 @@ fn high_depth_lab_preserves_source_mode_and_depth() {
         let p = flat_psd(depth, 9, 3, 2, 1, &[&native, &native, &native]);
         let doc = read_psd(&p).unwrap();
         assert_eq!(doc.mode, ColorMode::Rgb);
-        assert_eq!(doc.source_mode, Some(ColorMode::Lab));
-        assert_eq!(doc.source_depth, Some(bits));
+        assert_eq!(doc.source.mode(), Some(ColorMode::Lab));
+        assert_eq!(doc.source.depth(), Some(bits));
         assert!(doc.retains_source_depth(), "depth {depth}: native retained");
 
         let expected: Vec<u8> = [native.clone(), native.clone(), native.clone()].concat();
@@ -336,7 +336,7 @@ fn high_depth_lab_preserves_source_mode_and_depth() {
         );
         let back = read_psd(&out).unwrap();
         assert_eq!(
-            back.source_planes.as_ref().unwrap().samples.to_bytes(),
+            back.source.planes().as_ref().unwrap().samples.to_bytes(),
             expected,
             "depth {depth}: native Lab planes are byte-identical"
         );
@@ -358,8 +358,8 @@ fn high_depth_cmyk_layer_preserves_source_samples() {
             .collect();
         let p = layered_psd_depth(depth, 4, 4, &composite, &layer_channels);
         let doc = read_psd(&p).unwrap();
-        assert_eq!(doc.source_mode, Some(ColorMode::Cmyk));
-        assert_eq!(doc.source_depth, Some(bits));
+        assert_eq!(doc.source.mode(), Some(ColorMode::Cmyk));
+        assert_eq!(doc.source.depth(), Some(bits));
         assert!(doc.retains_source_depth(), "depth {depth}: native retained");
         assert_eq!(
             doc.layers[0].source_channels.as_ref().unwrap().depth,
@@ -408,8 +408,8 @@ fn high_depth_lab_layer_preserves_source_samples() {
             .collect();
         let p = layered_psd_depth(depth, 9, 3, &composite, &layer_channels);
         let doc = read_psd(&p).unwrap();
-        assert_eq!(doc.source_mode, Some(ColorMode::Lab));
-        assert_eq!(doc.source_depth, Some(bits));
+        assert_eq!(doc.source.mode(), Some(ColorMode::Lab));
+        assert_eq!(doc.source.depth(), Some(bits));
         assert!(doc.retains_source_depth(), "depth {depth}: native retained");
         assert_eq!(
             doc.layers[0].source_channels.as_ref().unwrap().depth,
@@ -455,7 +455,11 @@ fn high_depth_edited_plane_widens_the_reencode() {
     let p = flat_psd(16, 4, 4, 1, 1, &[&c, &m, &y, &k]);
     let mut doc = read_psd(&p).unwrap();
     let edited = [7u8, 200, 123];
-    doc.composite.data[..3].copy_from_slice(&edited);
+    doc.composite
+        .edit_data(|data| {
+            data[..3].copy_from_slice(&edited);
+        })
+        .expect("pixel edit preserves geometry");
     let out = write_psd(&doc).unwrap();
     assert_eq!(u16::from_be_bytes(out[22..24].try_into().unwrap()), 16);
     assert_eq!(u16::from_be_bytes(out[24..26].try_into().unwrap()), 4);
@@ -463,7 +467,9 @@ fn high_depth_edited_plane_widens_the_reencode() {
     assert_eq!(
         read_psd(&out)
             .unwrap()
-            .source_planes
+            .source
+            .planes()
+            .as_ref()
             .unwrap()
             .samples
             .to_bytes(),
@@ -476,7 +482,11 @@ fn high_depth_edited_plane_widens_the_reencode() {
     let p = flat_psd(32, 9, 3, 1, 1, &[&lab, &lab, &lab]);
     let mut doc = read_psd(&p).unwrap();
     let edited = [10u8, 240, 60];
-    doc.composite.data[..3].copy_from_slice(&edited);
+    doc.composite
+        .edit_data(|data| {
+            data[..3].copy_from_slice(&edited);
+        })
+        .expect("pixel edit preserves geometry");
     let out = write_psd(&doc).unwrap();
     assert_eq!(u16::from_be_bytes(out[22..24].try_into().unwrap()), 32);
     assert_eq!(u16::from_be_bytes(out[24..26].try_into().unwrap()), 9);
@@ -484,7 +494,9 @@ fn high_depth_edited_plane_widens_the_reencode() {
     assert_eq!(
         read_psd(&out)
             .unwrap()
-            .source_planes
+            .source
+            .planes()
+            .as_ref()
             .unwrap()
             .samples
             .to_bytes(),
@@ -510,14 +522,20 @@ fn short_high_depth_lab_cmyk_source_plane_is_a_typed_error() {
             right: 2,
         };
         let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
-        doc.source_mode = Some(mode);
-        doc.source_depth = Some(bits);
-        doc.source_planes = Some(SourcePlanes {
-            depth: bits,
-            width: 2,
-            height: 2,
-            samples: Samples::from_bytes(&[0u8; 48], bits),
-        });
+        doc.source
+            .set_encoding(Some(mode), None)
+            .expect("valid source encoding");
+        doc.source
+            .set_native(
+                Some(bits),
+                Some(SourcePlanes {
+                    depth: bits,
+                    width: 2,
+                    height: 2,
+                    samples: Samples::from_bytes(&[0u8; 48], bits),
+                }),
+            )
+            .expect("valid native source");
         {
             let _ = doc.layers.push(Layer {
                 rect,
@@ -567,25 +585,30 @@ fn depth16_grayscale_preserves_source_depth() {
     let p = flat_psd(16, 1, 1, 2, 1, &[&plane]);
     let doc = read_psd(&p).unwrap();
     assert_eq!(doc.mode, ColorMode::Grayscale);
-    assert_eq!(doc.source_depth, Some(BitDepth::Sixteen));
-    assert!(doc.source_planes.is_some(), "native gray plane retained");
+    assert_eq!(doc.source.depth(), Some(BitDepth::Sixteen));
+    assert!(doc.source.planes().is_some(), "native gray plane retained");
     let out = write_psd(&doc).unwrap();
     assert_eq!(u16::from_be_bytes(out[22..24].try_into().unwrap()), 16);
     let back = read_psd(&out).unwrap();
     assert_eq!(back.composite, doc.composite);
-    assert_eq!(back.source_depth, Some(BitDepth::Sixteen));
+    assert_eq!(back.source.depth(), Some(BitDepth::Sixteen));
 }
 
 #[test]
 fn native_and_constructed_documents_have_no_source_depth() {
     let plane = vec![7u8; 3];
     let p = flat_psd(8, 3, 3, 1, 1, &[&plane, &plane, &plane]);
-    assert_eq!(read_psd(&p).unwrap().source_depth, None);
+    assert_eq!(read_psd(&p).unwrap().source.depth(), None);
     assert_eq!(
-        Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight).source_depth,
+        Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight)
+            .source
+            .depth(),
         None
     );
-    assert_eq!(Document::from_rgba("x", 1, 1, &[0u8; 4]).source_depth, None);
+    assert_eq!(
+        Document::from_rgba("x", 1, 1, &[0u8; 4]).source.depth(),
+        None
+    );
 }
 
 #[test]
@@ -623,13 +646,17 @@ fn apply_prediction_inverts_undo_prediction() {
 #[test]
 fn short_high_depth_layer_plane_is_a_typed_error() {
     let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
-    doc.source_depth = Some(BitDepth::Sixteen);
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::Sixteen,
-        width: 2,
-        height: 2,
-        samples: Samples::U16(vec![0; 12].into()),
-    });
+    doc.source
+        .set_native(
+            Some(BitDepth::Sixteen),
+            Some(SourcePlanes {
+                depth: BitDepth::Sixteen,
+                width: 2,
+                height: 2,
+                samples: Samples::U16(vec![0; 12].into()),
+            }),
+        )
+        .expect("valid native source");
     {
         let _ = doc.layers.push(Layer {
             rect: PsdRect {
@@ -664,14 +691,20 @@ fn short_high_depth_layer_plane_is_a_typed_error() {
 #[test]
 fn depth1_store_without_bitmap_write_back_is_a_typed_error() {
     let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.source_depth = Some(BitDepth::One);
-    doc.source_mode = Some(ColorMode::Rgb);
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::One,
-        width: 1,
-        height: 1,
-        samples: Samples::U8(vec![0].into()),
-    });
+    doc.source
+        .set_native(Some(BitDepth::One), doc.source.planes().clone())
+        .expect("valid source depth");
+    doc.source
+        .set_encoding(Some(ColorMode::Rgb), None)
+        .expect("valid source encoding");
+    doc.source
+        .replace_planes(Some(SourcePlanes {
+            depth: BitDepth::One,
+            width: 1,
+            height: 1,
+            samples: Samples::U8(vec![0].into()),
+        }))
+        .expect("valid source planes");
     assert!(matches!(write_psd(&doc), Err(PsdError::Invalid(_))));
 
     // A legitimate depth-1 Bitmap still writes back as mode 0 / depth 1.
@@ -698,12 +731,12 @@ fn depth32_converted_to_16_writes_a_16bit_file() {
     use pictura_render::{convert_depth_exposure_gamma, ExposureGamma};
 
     let mut doc = read_psd(include_bytes!("../../tests/fixtures/rgb32.psd")).unwrap();
-    assert_eq!(doc.source_depth, Some(BitDepth::ThirtyTwo));
+    assert_eq!(doc.source.depth(), Some(BitDepth::ThirtyTwo));
     assert!(doc.retains_source_depth());
 
     convert_depth_exposure_gamma(&mut doc, BitDepth::Sixteen, ExposureGamma::default()).unwrap();
     assert_eq!(doc.depth, BitDepth::Eight, "the working model stays 8-bit");
-    assert_eq!(doc.source_depth, Some(BitDepth::Sixteen));
+    assert_eq!(doc.source.depth(), Some(BitDepth::Sixteen));
     assert!(doc.retains_source_depth());
 
     let out = write_psd(&doc).unwrap();
@@ -713,9 +746,9 @@ fn depth32_converted_to_16_writes_a_16bit_file() {
         "the save re-emits the converted source depth"
     );
     let back = read_psd(&out).unwrap();
-    assert_eq!(back.source_depth, Some(BitDepth::Sixteen));
+    assert_eq!(back.source.depth(), Some(BitDepth::Sixteen));
     assert_eq!(back.composite, doc.composite);
-    let Samples::U16(samples) = &back.source_planes.unwrap().samples else {
+    let Samples::U16(samples) = &back.source.planes().as_ref().unwrap().samples else {
         panic!("the read-back store is 16-bit");
     };
     assert_eq!(
@@ -733,24 +766,34 @@ fn read_conversion_reaches_native_composite() {
 
     let profile = Profile::adobe_rgb().to_icc();
     let mut doc = Document::new(2, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.source_depth = Some(BitDepth::Sixteen);
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::Sixteen,
-        width: 2,
-        height: 1,
-        samples: Samples::U16(vec![10000, 60000, 10000, 60000, 10000, 60000].into()),
-    });
-    doc.composite.data = vec![0, 255, 0, 255, 0, 255].into();
+    doc.source
+        .set_native(
+            Some(BitDepth::Sixteen),
+            Some(SourcePlanes {
+                depth: BitDepth::Sixteen,
+                width: 2,
+                height: 1,
+                samples: Samples::U16(vec![10000, 60000, 10000, 60000, 10000, 60000].into()),
+            }),
+        )
+        .expect("valid native source");
+    doc.composite
+        .replace_data(vec![0, 255, 0, 255, 0, 255].into())
+        .expect("valid composite plane");
     doc.image_resources =
         encode_image_resources(&[frame_image_resource(ICC_PROFILE, "", &profile)]).into();
-    let before = doc.source_planes.clone();
+    let before = doc.source.planes().clone();
 
     let out = apply_icc(doc);
     assert_ne!(
-        out.source_planes, before,
+        out.source.planes(),
+        &before,
         "the retained native composite is converted on read"
     );
-    assert_eq!(out.source_icc.as_deref(), Some(profile.as_slice()));
+    assert_eq!(
+        out.source.original_profile().as_deref(),
+        Some(profile.as_slice())
+    );
 }
 
 #[test]
@@ -769,7 +812,7 @@ fn profile_conversion_preserves_native_samples() {
     let mut doc = read_psd(&p).unwrap();
     assert!(convert_document(&mut doc, &Profile::adobe_rgb()));
 
-    let store = doc.source_planes.as_ref().expect("native store");
+    let store = doc.source.planes().as_ref().expect("native store");
     let Samples::U16(values) = &store.samples else {
         panic!("the store stays 16-bit");
     };
@@ -787,8 +830,8 @@ fn profile_conversion_preserves_native_samples() {
 
     let saved = write_psd(&doc).unwrap();
     let back = read_psd(&saved).unwrap();
-    assert_eq!(back.source_depth, Some(BitDepth::Sixteen));
-    let back_store = back.source_planes.expect("saved store");
+    assert_eq!(back.source.depth(), Some(BitDepth::Sixteen));
+    let back_store = back.source.planes().as_ref().expect("saved store");
     let Samples::U16(back_values) = &back_store.samples else {
         panic!("the saved file stays 16-bit");
     };
@@ -858,7 +901,7 @@ fn profile_conversion_does_not_clamp_32bit() {
     let p = flat_psd(32, 3, 3, 2, 1, &[&r, &g, &b]);
     let mut doc = read_psd(&p).unwrap();
     assert!(convert_document(&mut doc, &Profile::adobe_rgb()));
-    let store = doc.source_planes.as_ref().expect("native store");
+    let store = doc.source.planes().as_ref().expect("native store");
     let Samples::F32(converted) = &store.samples else {
         panic!("the store stays 32-bit");
     };
@@ -874,8 +917,8 @@ fn profile_conversion_does_not_clamp_32bit() {
     );
     let saved = write_psd(&doc).unwrap();
     let back = read_psd(&saved).unwrap();
-    assert_eq!(back.source_depth, Some(BitDepth::ThirtyTwo));
-    let back_store = back.source_planes.expect("saved store");
+    assert_eq!(back.source.depth(), Some(BitDepth::ThirtyTwo));
+    let back_store = back.source.planes().as_ref().expect("saved store");
     let Samples::F32(back_samples) = &back_store.samples else {
         panic!("the saved file stays 32-bit");
     };

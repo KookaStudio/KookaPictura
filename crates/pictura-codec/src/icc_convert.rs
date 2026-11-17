@@ -178,11 +178,11 @@ fn convert_source_planes(
     dst: &Profile,
     options: ConversionOptions,
 ) {
-    if doc.source_mode.is_some() {
+    if doc.source.mode().is_some() {
         return;
     }
     let (width, height) = (doc.width, doc.height);
-    let Some(store) = doc.source_planes.as_mut() else {
+    let Some(mut store) = doc.source.planes().clone() else {
         return;
     };
     if !matches!(store.depth, BitDepth::Sixteen | BitDepth::ThirtyTwo)
@@ -198,15 +198,20 @@ fn convert_source_planes(
     let Some(converted) = convert_native(&planes, store.depth, src, dst, options) else {
         return;
     };
-    for (ch, plane) in converted.iter().enumerate() {
-        let narrow = plane.narrow_to_u8();
-        if let Some(channel) = doc.composite.data.get_mut(ch * n..(ch + 1) * n) {
-            if narrow.len() == channel.len() {
-                channel.copy_from_slice(&narrow);
+    doc.composite.edit_data_slice(|data| {
+        for (ch, plane) in converted.iter().enumerate() {
+            let narrow = plane.narrow_to_u8();
+            if let Some(channel) = data.get_mut(ch * n..(ch + 1) * n) {
+                if narrow.len() == channel.len() {
+                    channel.copy_from_slice(&narrow);
+                }
             }
         }
-    }
+    });
     write_color_planes(&mut store.samples, n, &converted);
+    doc.source
+        .replace_planes(Some(store))
+        .expect("profile conversion preserves source depth");
 }
 
 /// Convert a layer's retained native color planes and sync its 8-bit working

@@ -88,15 +88,15 @@ fn apply_icc_with_options(doc: Document, options: ConversionOptions) -> Document
     // The composite transform decides: if it cannot run (for example a CMYK
     // profile on an RGB document), leave the whole document untouched rather
     // than strip a profile whose pixels were not converted.
-    let Some(composite) = convert_buffer(&doc.composite, &src, &dst) else {
+    let Some(composite) = convert_buffer(doc.composite.buffer(), &src, &dst) else {
         return doc;
     };
     let profile_bytes = profile.data.clone();
     let mut doc = doc;
-    doc.composite = composite;
+    doc.composite.replace(composite).expect("valid composite");
     convert_layers(&mut doc.layers, &src, &dst, options, true);
     convert_native_document(&mut doc, &src, &dst, options);
-    doc.source_icc = Some(profile_bytes.into());
+    doc.source.set_original_profile(Some(profile_bytes.into()));
     let section = rebuild_resources(&doc, resources, consumed, None);
     doc.image_resources = section.into();
     doc
@@ -119,7 +119,7 @@ pub(crate) fn apply_icc_policy_with_options(
 ) -> Document {
     // A normalized source mode (CMYK/Lab/Indexed/...) has already had its
     // profile pass; the RGB profile pass must not reinterpret its pixels.
-    if doc.source_mode.is_some() {
+    if doc.source.mode().is_some() {
         return doc;
     }
     match policy {
@@ -149,12 +149,13 @@ fn apply_passthrough_policy(mut doc: Document, preserve: bool) -> Document {
         // A profile the normalized RGB pixels no longer match (a CMYK resource on
         // a document normalize converted to RGB) cannot drive a display transform;
         // leave the document byte-unchanged, as Convert does.
-        if convert_buffer(&doc.composite, &src, &Profile::srgb()).is_none() {
+        if convert_buffer(doc.composite.buffer(), &src, &Profile::srgb()).is_none() {
             return doc;
         }
         // The embedded bytes stay resource 1039 and drive the display
         // conversion; `source_icc` records only a conversion the read threw away.
-        doc.document_icc = Some(profile.data.clone().into());
+        doc.source
+            .set_working_profile(Some(profile.data.clone().into()));
     } else {
         doc.image_resources = rebuild_resources(&doc, resources, consumed, None).into();
     }
@@ -284,7 +285,7 @@ pub fn strip_document_icc(doc: &mut Document) {
     let mut section = encode_image_resources(&kept);
     section.extend_from_slice(&doc.image_resources[consumed..]);
     doc.image_resources = section.into();
-    doc.document_icc = None;
+    doc.source.set_working_profile(None);
 }
 
 /// Embed `icc` as image resource 1039 and record it as the working profile,
@@ -294,7 +295,7 @@ pub fn embed_document_icc(doc: &mut Document, icc: &[u8]) {
     let (resources, consumed) = decode_image_resources_with_len(doc);
     let section = rebuild_resources(doc, resources, consumed, Some(icc));
     doc.image_resources = section.into();
-    doc.document_icc = Some(icc.to_vec().into());
+    doc.source.set_working_profile(Some(icc.to_vec().into()));
 }
 
 pub(crate) fn resources_for_output(doc: &Document, mode_code: u16) -> Vec<u8> {
@@ -413,7 +414,7 @@ pub fn assign_document_profile(doc: &mut Document, target: &Profile) {
     let (resources, consumed) = decode_image_resources_with_len(doc);
     let section = rebuild_resources(doc, resources, consumed, icc.as_deref());
     doc.image_resources = section.into();
-    doc.document_icc = icc.map(Into::into);
+    doc.source.set_working_profile(icc.map(Into::into));
 }
 
 /// Convert to Profile: transform the composite and every layer's color channels
@@ -436,15 +437,16 @@ pub fn convert_document_with(
     if doc.mode != ColorMode::Rgb {
         return false;
     }
-    let src = match doc.document_icc.as_deref() {
+    let src = match doc.source.working_profile().as_deref() {
         None => Profile::srgb(),
         Some(icc) => match Profile::from_icc(icc) {
             Ok(profile) => profile,
             Err(_) => return false,
         },
     };
-    if let Some(composite) = convert_buffer_with_options(&doc.composite, &src, dst, options) {
-        doc.composite = composite;
+    if let Some(composite) = convert_buffer_with_options(doc.composite.buffer(), &src, dst, options)
+    {
+        doc.composite.replace(composite).expect("valid composite");
     }
     // A recorded source mode (CMYK/Lab) keeps its native store in that mode,
     // not RGB; only the 8-bit working channels are RGB and safe to convert.
@@ -453,7 +455,7 @@ pub fn convert_document_with(
         &src,
         dst,
         options,
-        doc.source_mode.is_none(),
+        doc.source.mode().is_none(),
     );
     convert_native_document(doc, &src, dst, options);
     assign_document_profile(doc, dst);
@@ -468,7 +470,7 @@ pub fn convert_document_with(
 /// document reuses the parsed profile and its transform across refreshes, keyed
 /// on `document_icc`, so changing the working profile rebuilds it.
 pub fn buffer_to_srgb<'a>(doc: &Document, buf: &'a PixelBuffer) -> Cow<'a, PixelBuffer> {
-    let Some(icc) = doc.document_icc.as_deref() else {
+    let Some(icc) = doc.source.working_profile().as_deref() else {
         return Cow::Borrowed(buf);
     };
     if buf.channels != 3 && buf.channels != 4 {

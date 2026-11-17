@@ -223,7 +223,10 @@ fn embedded_object() -> SmartObject {
     source.layers = LayerStack::from_layers(vec![layer("source", BlendMode::Normal, |x, y| {
         (x as u8 * 20, y as u8 * 20, 80, 255)
     })]);
-    source.composite = composite_rgba(&source);
+    source
+        .composite
+        .replace(composite_rgba(&source))
+        .expect("valid composite");
     let payload = pictura_codec::write_psd(&source).expect("payload writes");
     let mut so = SmartObject::default();
     so.kind = SmartObjectKind::Embedded;
@@ -242,7 +245,10 @@ fn embedded_object_with_transparent_margin() -> SmartObject {
             (0, 0, 0, 0)
         }
     })]);
-    source.composite = composite_rgba(&source);
+    source
+        .composite
+        .replace(composite_rgba(&source))
+        .expect("valid composite");
     let payload = pictura_codec::write_psd(&source).expect("payload writes");
     let mut so = SmartObject::default();
     so.kind = SmartObjectKind::Embedded;

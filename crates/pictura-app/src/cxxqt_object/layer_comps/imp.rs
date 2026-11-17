@@ -327,7 +327,7 @@ pub(super) fn layer_comp_restore_last(mut view: Pin<&mut PictureView>) -> bool {
 }
 
 fn effective_icc(doc: &pictura_core::Document) -> Vec<u8> {
-    if let Some(icc) = doc.document_icc.as_ref() {
+    if let Some(icc) = doc.source.working_profile().as_ref() {
         if pictura_codec::Profile::from_icc(icc).is_ok() {
             return icc.to_vec();
         }
@@ -432,12 +432,17 @@ pub(super) fn layer_comp_export_file(
     };
     let mut scratch = doc.clone();
     pictura_render::apply_layer_comp(&mut scratch, &comp);
-    scratch.composite = pictura_render::composite(pictura_render::CompositeRequest::whole(
-        &scratch,
-        rust.gpu_compute,
-    ))
-    .0;
-    scratch.merged_composite_present = true;
+    scratch
+        .composite
+        .replace(
+            pictura_render::composite(pictura_render::CompositeRequest::whole(
+                &scratch,
+                rust.gpu_compute,
+            ))
+            .0,
+        )
+        .expect("valid composite");
+    scratch.composite.set_merged_output(true);
     crate::cxxqt_object::export_tools::write_document_file(
         &mut scratch,
         &format.to_string(),
@@ -461,18 +466,25 @@ pub(super) fn layer_comp_export_pdf(view: &PictureView, path: &QString) -> bool 
     for comp in doc.layer_comps.comps() {
         let mut scratch = doc.clone();
         pictura_render::apply_layer_comp(&mut scratch, comp);
-        scratch.composite = pictura_render::composite(pictura_render::CompositeRequest::whole(
-            &scratch,
-            rust.gpu_compute,
-        ))
-        .0;
-        scratch.merged_composite_present = true;
+        scratch
+            .composite
+            .replace(
+                pictura_render::composite(pictura_render::CompositeRequest::whole(
+                    &scratch,
+                    rust.gpu_compute,
+                ))
+                .0,
+            )
+            .expect("valid composite");
+        scratch.composite.set_merged_output(true);
         let icc = effective_icc(&scratch);
         pictura_codec::embed_document_icc(&mut scratch, &icc);
         rendered.push(scratch);
     }
-    let pages: Vec<(&pictura_core::Document, &pictura_core::PixelBuffer)> =
-        rendered.iter().map(|doc| (doc, &doc.composite)).collect();
+    let pages: Vec<(&pictura_core::Document, &pictura_core::PixelBuffer)> = rendered
+        .iter()
+        .map(|doc| (doc, doc.composite.buffer()))
+        .collect();
     let mut options = pictura_codec::pdf::PdfOptions {
         preserve_editing: false,
         layers: false,

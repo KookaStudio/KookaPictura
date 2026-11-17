@@ -10,9 +10,13 @@ fn psd_tools_sees_layer_attributes() {
     }
 
     let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
-    for (i, b) in doc.composite.data.iter_mut().enumerate() {
-        *b = (i * 3 + 1) as u8;
-    }
+    doc.composite
+        .edit_data(|data| {
+            for (i, b) in data.iter_mut().enumerate() {
+                *b = (i * 3 + 1) as u8;
+            }
+        })
+        .expect("pixel edit preserves geometry");
     let layer = Layer {
         name: "Attrs".into(),
         rect: PsdRect {

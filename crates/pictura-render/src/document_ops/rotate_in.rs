@@ -430,7 +430,7 @@ fn rotate_frame(doc: &mut Document, angle_deg: f64, pivot: (f64, f64)) -> Result
     for channel in &mut next.channels {
         channel.data = rotate_tiled(&channel.data, src, dest, 1, &rot)?;
     }
-    if let Some(store) = &mut next.source_planes {
+    if let Some(mut store) = next.source.planes().clone() {
         // The depth-1 store is a packed plane, not a `width * height` one; it is
         // only re-emitted for an unchanged flat Bitmap, so leave it stale.
         if store.depth != pictura_core::BitDepth::One {
@@ -438,6 +438,10 @@ fn rotate_frame(doc: &mut Document, angle_deg: f64, pivot: (f64, f64)) -> Result
             store.width = new_w;
             store.height = new_h;
         }
+
+        next.source
+            .replace_planes(Some(store))
+            .expect("valid source planes");
     }
 
     next.width = new_w;
@@ -502,7 +506,8 @@ fn canvas_rect(width: u32, height: u32) -> PsdRect {
 fn rotated_rows(doc: &mut Document, rot: &Rotation, new_h: u32) -> u64 {
     let area = (doc.width as usize * doc.height as usize).max(1);
     let store = doc
-        .source_planes
+        .source
+        .planes()
         .as_ref()
         .filter(|s| s.depth != pictura_core::BitDepth::One)
         .map_or(0, |s| s.samples.len() / area);
@@ -624,7 +629,9 @@ mod tests {
         let mut top = pixel_layer("top", rect(0, 0, 3, 5), 15);
         top.mask = Some(mask);
         doc.layers = pictura_core::LayerStack::from_layers(vec![bg, top]);
-        doc.composite = crate::composite_rgba(&doc);
+        doc.composite
+            .replace(crate::composite_rgba(&doc))
+            .expect("valid composite");
         doc
     }
 
@@ -661,7 +668,9 @@ mod tests {
         // 45° about the centre: the bounding box grows past the original.
         assert!(rotate_document_in(&mut d, 45.0, (2.5, 1.5)));
         assert!(d.width >= 5 && d.height >= 3);
-        d.composite = crate::composite_rgba(&d);
+        d.composite
+            .replace(crate::composite_rgba(&d))
+            .expect("valid composite");
         assert_eq!(d.composite, crate::composite_rgba(&d));
         for layer in &d.layers {
             let area = (layer.rect.width() * layer.rect.height()) as usize;
@@ -685,7 +694,9 @@ mod tests {
             vec![(0, Samples::U16(vec![100u16; 6].into()))],
         ));
         d.layers = pictura_core::LayerStack::from_layers(vec![layer]);
-        d.composite = crate::composite_rgba(&d);
+        d.composite
+            .replace(crate::composite_rgba(&d))
+            .expect("valid composite");
 
         assert!(rotate_document_in(&mut d, 30.0, (1.5, 1.0)));
         let store = d.layers[0].source_channels.as_ref().unwrap();
@@ -724,7 +735,9 @@ mod tests {
             ..Default::default()
         });
         d.layers = pictura_core::LayerStack::from_layers(vec![layer]);
-        d.composite = crate::composite_rgba(&d);
+        d.composite
+            .replace(crate::composite_rgba(&d))
+            .expect("valid composite");
 
         // 180° about the centre: (0,0) -> (10,10) in 1/256 units.
         assert!(rotate_document_in(&mut d, 180.0, (5.0, 5.0)));

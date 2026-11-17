@@ -552,7 +552,9 @@ mod tests {
             (0..3).map(|id| (id as i16, native.clone())).collect(),
         ));
         let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
-        doc.source_depth = Some(BitDepth::Sixteen);
+        doc.source
+            .set_native(Some(BitDepth::Sixteen), doc.source.planes().clone())
+            .expect("valid source depth");
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
         assert!(apply_pictura_raw_destructive(

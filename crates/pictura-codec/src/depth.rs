@@ -51,7 +51,7 @@ pub(crate) fn output_depth(doc: &Document) -> Result<u16, PsdError> {
     if !doc.retains_source_depth() {
         return Ok(8);
     }
-    match doc.source_depth {
+    match doc.source.depth() {
         Some(BitDepth::Sixteen) => Ok(16),
         Some(BitDepth::ThirtyTwo) => Ok(32),
         Some(BitDepth::One) => Err(PsdError::Invalid("depth-1 source store".into())),

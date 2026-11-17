@@ -58,20 +58,26 @@ impl FilterProxy {
         let mut proxy = doc.clone();
         proxy.width = full.width() as u32;
         proxy.height = full.height() as u32;
-        proxy.source_planes = None;
+        proxy
+            .source
+            .replace_planes(None)
+            .expect("valid source planes");
         proxy.channels.clear();
         for_each_layer(&mut proxy.layers, &mut |layer| reduce_layer(layer, &map));
         // A layerless document composites from its flat image; a layered one
         // composites its layers, so the reduced composite is unused.
-        proxy.composite = if proxy.layers.is_empty() {
-            reduce_flat(&doc.composite, &map, full)
-        } else {
-            PixelBuffer::new(
-                full.width() as u32,
-                full.height() as u32,
-                doc.composite.channels,
-            )
-        };
+        proxy
+            .composite
+            .replace(if proxy.layers.is_empty() {
+                reduce_flat(doc.composite.buffer(), &map, full)
+            } else {
+                PixelBuffer::new(
+                    full.width() as u32,
+                    full.height() as u32,
+                    doc.composite.channels,
+                )
+            })
+            .expect("valid composite");
         let selection = selection.and_then(|coverage| {
             let data = coverage.plane_within(region)?;
             let (rect, samples) = map.plane(&data, 0, region)?;

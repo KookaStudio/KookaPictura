@@ -150,13 +150,17 @@ fn transform_document(doc: &mut Document, kind: Kind) -> Result<(), OpsError> {
     for channel in &mut next.channels {
         channel.data = geometry_tiled::orient(&channel.data, canvas, 1, kind.remap())?;
     }
-    if let Some(store) = &mut next.source_planes {
+    if let Some(mut store) = next.source.planes().clone() {
         if store.depth != pictura_core::BitDepth::One {
             store.samples = orient_samples(&store.samples, canvas, kind.remap())?;
             if kind.swaps_axes() {
                 std::mem::swap(&mut store.width, &mut store.height);
             }
         }
+
+        next.source
+            .replace_planes(Some(store))
+            .expect("valid source planes");
     }
 
     if kind.swaps_axes() {
@@ -228,7 +232,8 @@ fn orient_rows(doc: &mut Document, kind: Kind) -> u64 {
     };
     let mut total = rows(canvas, doc.channels.len());
     if let Some(store) = doc
-        .source_planes
+        .source
+        .planes()
         .as_ref()
         .filter(|s| s.depth != pictura_core::BitDepth::One)
     {
@@ -364,12 +369,16 @@ mod tests {
             id: -1,
             data: plane(0, 15).into(),
         }];
-        doc.composite = crate::composite_rgba(&doc);
+        doc.composite
+            .replace(crate::composite_rgba(&doc))
+            .expect("valid composite");
         doc
     }
 
     fn assert_consistent(doc: &mut Document) {
-        doc.composite = crate::composite_rgba(doc);
+        doc.composite
+            .replace(crate::composite_rgba(doc))
+            .expect("valid composite");
         assert_eq!(doc.composite, crate::composite_rgba(doc));
     }
 
@@ -399,7 +408,9 @@ mod tests {
             rect(0, 0, 2, 3),
             None,
         )]);
-        doc.composite = crate::composite_rgba(&doc);
+        doc.composite
+            .replace(crate::composite_rgba(&doc))
+            .expect("valid composite");
 
         rotate_document(&mut doc, 1).unwrap();
 
@@ -482,13 +493,17 @@ mod tests {
     #[test]
     fn depth16_orientation_remaps_the_native_store_and_saves() {
         let mut doc = Document::new(3, 2, ColorMode::Rgb, BitDepth::Eight);
-        doc.source_depth = Some(BitDepth::Sixteen);
-        doc.source_planes = Some(SourcePlanes {
-            depth: BitDepth::Sixteen,
-            width: 3,
-            height: 2,
-            samples: Samples::U16((0..6 * 3).map(|i| i as u16 * 257 + 5).collect()),
-        });
+        doc.source
+            .set_native(
+                Some(BitDepth::Sixteen),
+                Some(SourcePlanes {
+                    depth: BitDepth::Sixteen,
+                    width: 3,
+                    height: 2,
+                    samples: Samples::U16((0..6 * 3).map(|i| i as u16 * 257 + 5).collect()),
+                }),
+            )
+            .expect("valid native source");
         let mut layer = pixel_layer("only", rect(0, 0, 2, 3), None);
         layer.source_channels = Some(SourceChannels::new(
             BitDepth::Sixteen,
@@ -499,7 +514,9 @@ mod tests {
             )],
         ));
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
-        doc.composite = crate::composite_rgba(&doc);
+        doc.composite
+            .replace(crate::composite_rgba(&doc))
+            .expect("valid composite");
 
         rotate_document(&mut doc, 1).unwrap();
 
@@ -512,9 +529,11 @@ mod tests {
             .map(|v| *v as u16 * 257 + 5)
             .collect();
         assert_eq!(samples, &Samples::U16(want.into()), "exact 90° index remap");
-        let planes = doc.source_planes.as_ref().unwrap();
+        let planes = doc.source.planes().as_ref().unwrap();
         assert_eq!((planes.width, planes.height), (2, 3));
-        doc.composite = crate::composite_rgba(&doc);
+        doc.composite
+            .replace(crate::composite_rgba(&doc))
+            .expect("valid composite");
         let bytes = pictura_codec::write_psd(&doc).expect("a rotated high-depth doc saves");
         assert_eq!(u16::from_be_bytes(bytes[22..24].try_into().unwrap()), 16);
     }

@@ -15,12 +15,14 @@ use pictura_select::Selection;
 fn doc() -> Document {
     let mut doc = Document::new(16, 16, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = LayerStack::from_layers(vec![pixel_layer("px", 16, 16, (255, 0, 0))]);
-    doc.composite = PixelBuffer {
-        width: 16,
-        height: 16,
-        channels: 4,
-        data: vec![0u8; 16 * 16 * 4].into(),
-    };
+    doc.composite
+        .replace(PixelBuffer {
+            width: 16,
+            height: 16,
+            channels: 4,
+            data: vec![0u8; 16 * 16 * 4].into(),
+        })
+        .expect("valid composite");
     doc
 }
 

@@ -230,7 +230,9 @@ fn banded_reuses_resolved_mask_and_native_state() {
     mask.set_feather(4.0);
     masked.mask = Some(mask);
     let mut d = doc(W, H, vec![base_layer(), masked]);
-    d.source_depth = Some(BitDepth::Sixteen);
+    d.source
+        .set_native(Some(BitDepth::Sixteen), d.source.planes().clone())
+        .expect("valid source depth");
     reset(&d);
     let banded = crate::composite_rgba(&d);
     assert_eq!(counters::mask_gate_count(&d.layers[1]), 1);

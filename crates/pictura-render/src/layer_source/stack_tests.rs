@@ -32,7 +32,9 @@ fn stack_payload_two() -> Vec<u8> {
             ),
         ],
     );
-    d.composite = crate::composite_rgba(&d);
+    d.composite
+        .replace(crate::composite_rgba(&d))
+        .expect("valid composite");
     pictura_codec::write_psd(&d).expect("stack payload")
 }
 
@@ -123,7 +125,10 @@ fn stack_frames_keep_the_embed_nesting_bound() {
             ),
         ],
     );
-    payload_doc.composite = crate::composite_rgba(&payload_doc);
+    payload_doc
+        .composite
+        .replace(crate::composite_rgba(&payload_doc))
+        .expect("valid composite");
     let payload = pictura_codec::write_psd(&payload_doc).expect("payload");
     let layer = stack_layer_at(
         payload,
