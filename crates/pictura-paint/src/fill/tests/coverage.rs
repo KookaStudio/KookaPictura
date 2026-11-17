@@ -1,6 +1,11 @@
 use super::*;
 use pictura_core::{assert_no_materialization, Coverage, Plane};
 
+fn document_pixel(doc: &Document, x: i32, y: i32) -> [u8; 4] {
+    let rect = doc.layers[0].rect;
+    pixel(doc, x - rect.left, y - rect.top)
+}
+
 #[test]
 fn paint_edits_share_coverage_input() {
     let bounds = PsdRect {
@@ -30,8 +35,8 @@ fn paint_edits_share_coverage_input() {
             )
         })
         .unwrap();
-        assert_eq!(pixel(&image, 0, 0), [0, 0, 0, 255]);
-        assert_eq!(pixel(&image, 3, 3)[0], 110);
+        assert_eq!(document_pixel(&image, 1, 1), [0, 0, 0, 255]);
+        assert_eq!(document_pixel(&image, 4, 4)[0], 110);
         let gradient = crate::gradient::Gradient::new(vec![
             crate::gradient::GradientStop::new(0.0, RED),
             crate::gradient::GradientStop::new(
@@ -54,7 +59,7 @@ fn paint_edits_share_coverage_input() {
             Some(&clip),
             Some(bounds),
         );
-        assert_eq!(pixel(&image, 0, 0), [0, 0, 0, 255]);
+        assert_eq!(document_pixel(&image, 1, 1), [0, 0, 0, 255]);
         let source = crate::bucket::BucketSource::layer(&image, "0").unwrap();
         let flooded =
             crate::bucket::flood(source, (8, 8), bounds, Some(&clip), (3, 3), 255, true).unwrap();
@@ -78,7 +83,8 @@ fn paint_edits_share_coverage_input() {
             },
         );
         let _ = stroke.finish();
-        assert_eq!(pixel(&image, 0, 0), [0, 0, 0, 255]);
+        assert_eq!(document_pixel(&image, 1, 1), [0, 0, 0, 255]);
+        assert_eq!(document_pixel(&image, 0, 0), [0; 4]);
         let mut retouch =
             crate::Stroke::begin_tone(&image, "0", cfg, crate::tone::ToneOptions::default())
                 .unwrap();
@@ -92,10 +98,10 @@ fn paint_edits_share_coverage_input() {
             },
         );
         let _ = retouch.finish();
-        assert_eq!(pixel(&image, 0, 0), [0, 0, 0, 255]);
+        assert_eq!(document_pixel(&image, 1, 1), [0, 0, 0, 255]);
         crate::eraser::magic_erase(&mut image, "0", &clip, 1.0, RED).unwrap();
-        assert_eq!(pixel(&image, 3, 3)[3], 127);
-        assert_eq!(pixel(&image, 0, 0)[3], 255);
+        assert_eq!(document_pixel(&image, 4, 4)[3], 127);
+        assert_eq!(document_pixel(&image, 1, 1)[3], 255);
         let local = clip.rebased(1, 1).unwrap();
         let mut mask = doc(8, 8, [255; 4]);
         mask.mode = ColorMode::Grayscale;
