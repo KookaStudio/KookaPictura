@@ -12,8 +12,8 @@
 
 use super::layer::{heal_layer, layer_rect, HealError};
 use super::{clamped_shift, clone_region, heal_region, HealMode, Transfer, BORDER};
-use pictura_core::{Document, PsdRect};
-use rayon::prelude::*;
+use pictura_core::mask_ops::coverage_bounds;
+use pictura_core::{Document, Plane, PsdRect};
 
 /// The Patch options bar, plus the drag.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -37,7 +37,7 @@ pub struct PatchOptions {
 pub fn patch_layer(
     doc: &mut Document,
     path: &str,
-    selection: &[u8],
+    selection: &Plane<u8>,
     options: PatchOptions,
 ) -> Result<Option<PsdRect>, HealError> {
     let Some((bounds, coverage)) = selection_coverage(doc, selection) else {
@@ -87,58 +87,27 @@ pub fn patch_layer(
 }
 
 /// A document-sized selection mask as its bounding box and the `0..=1`
-/// coverage inside it; `None` when the mask is the wrong size or empty.
-pub(super) fn selection_coverage(doc: &Document, selection: &[u8]) -> Option<(PsdRect, Vec<f32>)> {
-    let (w, h) = (doc.width as i32, doc.height as i32);
-    if selection.len() != (w.max(0) * h.max(0)) as usize {
+/// coverage inside it; `None` when the mask is the wrong size or empty. The
+/// mask is read tile by tile and row by row, never materialized (#1268).
+pub(super) fn selection_coverage(
+    doc: &Document,
+    selection: &Plane<u8>,
+) -> Option<(PsdRect, Vec<f32>)> {
+    let (w, h) = (doc.width as usize, doc.height as usize);
+    if selection.len() != w * h {
         return None;
     }
-    let bounds = bounds(selection, w, h)?;
-    let coverage = (bounds.top..bounds.bottom)
-        .flat_map(|y| (bounds.left..bounds.right).map(move |x| (y * w + x) as usize))
-        .map(|i| f32::from(selection[i]) / 255.0)
-        .collect();
+    let (x0, y0, x1, y1) = coverage_bounds(selection, w, h)?;
+    let mut coverage = Vec::with_capacity((x1 - x0) * (y1 - y0));
+    for y in y0..y1 {
+        let row = selection.row_span(y, x0..x1, w)?;
+        coverage.extend(row.iter().map(|&v| f32::from(v) / 255.0));
+    }
+    let bounds = PsdRect {
+        top: y0 as i32,
+        left: x0 as i32,
+        bottom: y1 as i32,
+        right: x1 as i32,
+    };
     Some((bounds, coverage))
-}
-
-/// The bounding box of the non-zero coverage, or `None` when there is none.
-/// Rows are scanned in parallel; the fold keeps scan order.
-fn bounds(selection: &[u8], w: i32, h: i32) -> Option<PsdRect> {
-    let width = w.max(0) as usize;
-    let rows = h.max(0) as usize;
-    if width == 0 {
-        return None;
-    }
-    let spans: Vec<Option<(i32, i32)>> = selection
-        .par_chunks(width)
-        .take(rows)
-        .enumerate()
-        .map(|(_, row)| {
-            let first = row.iter().position(|&c| c > 0)?;
-            let last = row.iter().rposition(|&c| c > 0)?;
-            Some((first as i32, last as i32 + 1))
-        })
-        .collect();
-    let mut r: Option<PsdRect> = None;
-    for (y, span) in spans.into_iter().enumerate() {
-        let Some((left, right)) = span else {
-            continue;
-        };
-        let y = y as i32;
-        r = Some(match r {
-            None => PsdRect {
-                top: y,
-                left,
-                bottom: y + 1,
-                right,
-            },
-            Some(r) => PsdRect {
-                top: r.top,
-                left: r.left.min(left),
-                bottom: y + 1,
-                right: r.right.max(right),
-            },
-        });
-    }
-    r
 }

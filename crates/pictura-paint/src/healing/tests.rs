@@ -9,6 +9,27 @@ use pictura_core::{
 
 const BASE: [u8; 4] = [100, 120, 140, 255];
 
+/// [`super::patch_layer`] over a flat copy of `selection`, so the fixtures
+/// can keep slicing their masks.
+fn patch_layer(
+    doc: &mut Document,
+    path: &str,
+    selection: &[u8],
+    options: PatchOptions,
+) -> Result<Option<PsdRect>, HealError> {
+    super::patch_layer(doc, path, &selection.to_vec().into(), options)
+}
+
+/// [`super::move_layer`] over a flat copy of `selection`.
+fn move_layer(
+    doc: &mut Document,
+    path: &str,
+    selection: &[u8],
+    options: MoveOptions,
+) -> Result<Option<PsdRect>, HealError> {
+    super::move_layer(doc, path, &selection.to_vec().into(), options)
+}
+
 fn flat(w: i32, h: i32, px: [u8; 4]) -> RgbaImage {
     RgbaImage {
         width: w,
@@ -1179,7 +1200,7 @@ fn selection_bounds_match_a_serial_scan() {
         }
     }
     mask[3 * 32 + 2] = 128;
-    let (bounds, coverage) = super::patch::selection_coverage(&doc, &mask).unwrap();
+    let (bounds, coverage) = super::patch::selection_coverage(&doc, &mask.into()).unwrap();
     assert_eq!(
         bounds,
         PsdRect {
@@ -1252,5 +1273,57 @@ fn red_eye_processes_a_wide_box_like_the_definition() {
             ];
             assert_eq!(got, want, "pixel ({x}, {y})");
         }
+    }
+}
+
+/// Patch and Content-Aware Move read a tiled selection by rows (#1268): no
+/// materialization, and the layer equals the run through the same selection
+/// held flat.
+#[test]
+fn healing_reads_a_tiled_selection() {
+    let tiled_of = |mask: &[u8], w: usize, h: usize| {
+        let mut plane = pictura_core::Plane::from(mask.to_vec());
+        assert!(plane.tile(w, h));
+        plane
+    };
+    let (doc, mut mask) = patch_doc(PATCH_FIELD, (20, 20, 20, 20));
+    mask[19 * 140 + 25] = 90;
+    mask[40 * 140 + 30] = 160;
+    let tiled = tiled_of(&mask, 140, 60);
+    let patches = [
+        PatchOptions {
+            dx: 60,
+            ..PatchOptions::default()
+        },
+        PatchOptions {
+            dx: 60,
+            destination: true,
+            ..PatchOptions::default()
+        },
+        PatchOptions {
+            dx: 60,
+            transparent: true,
+            ..PatchOptions::default()
+        },
+    ];
+    for options in patches {
+        let (mut got, mut want) = (doc.clone(), doc.clone());
+        let done = pictura_core::assert_no_materialization(|| {
+            super::patch_layer(&mut got, "0", &tiled, options)
+        });
+        assert_eq!(done, patch_layer(&mut want, "0", &mask, options));
+        assert!(done.unwrap().is_some());
+        assert_eq!(got, want, "{options:?}");
+    }
+
+    let (doc, mask) = move_doc();
+    let tiled = tiled_of(&mask, 96, 48);
+    for extend in [false, true] {
+        let (mut got, mut want) = (doc.clone(), doc.clone());
+        let done = pictura_core::assert_no_materialization(|| {
+            super::move_layer(&mut got, "0", &tiled, drag(40, extend))
+        });
+        assert_eq!(done, move_layer(&mut want, "0", &mask, drag(40, extend)));
+        assert_eq!(got, want, "extend={extend}");
     }
 }

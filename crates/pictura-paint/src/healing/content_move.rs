@@ -14,7 +14,7 @@
 use super::layer::{heal_layer, layer_rect, HealError};
 use super::patch::selection_coverage;
 use super::{heal_region_adapted, Adaptation, HealMode, RgbaImage, BORDER};
-use pictura_core::{Document, PsdRect};
+use pictura_core::{Document, Plane, PsdRect};
 
 /// The Content-Aware Move options bar, plus the drag.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -34,7 +34,7 @@ pub struct MoveOptions {
 pub fn move_layer(
     doc: &mut Document,
     path: &str,
-    selection: &[u8],
+    selection: &Plane<u8>,
     options: MoveOptions,
 ) -> Result<Option<PsdRect>, HealError> {
     let Some((bounds, coverage)) = selection_coverage(doc, selection) else {
