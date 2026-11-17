@@ -160,8 +160,9 @@ fn auto_blend_refuses_modes() {
             "{mode:?} as a working mode"
         );
         let mut d = pair();
+        let palette = (mode == ColorMode::Indexed).then_some([0; 768]);
         d.source
-            .set_encoding(Some(mode), None)
+            .set_encoding(Some(mode), palette)
             .expect("valid source encoding");
         assert!(
             !can_auto_blend(&d, &["0", "1"]),

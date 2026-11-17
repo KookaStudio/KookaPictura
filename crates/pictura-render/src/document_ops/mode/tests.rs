@@ -375,17 +375,26 @@ fn save_view_trims_the_display_alpha_for_a_source_mode_or_extra_channels() {
         data: vec![0u8; 4].into(),
     });
     assert_eq!(save_view(&extra).composite.channels, 3);
-    let mut short = extra.clone();
-    short
+    let rgb = PixelBuffer {
+        width: 2,
+        height: 2,
+        channels: 3,
+        data: vec![0u8; 3 * 4].into(),
+    };
+    let mut without_alpha = extra.clone();
+    assert!(without_alpha
         .composite
         .replace(PixelBuffer {
-            width: 2,
-            height: 2,
             channels: 4,
-            data: vec![0u8; 3 * 4].into(),
+            ..rgb.clone()
         })
-        .expect("valid composite");
-    assert!(matches!(save_view(&short), Cow::Borrowed(_)));
+        .is_err());
+    assert_eq!(without_alpha, extra);
+    without_alpha
+        .composite
+        .replace(rgb)
+        .expect("valid RGB composite without alpha");
+    assert!(matches!(save_view(&without_alpha), Cow::Borrowed(_)));
 }
 
 #[test]
