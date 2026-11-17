@@ -76,8 +76,8 @@
 //! interior. ponytail: the chisel techniques, the `Outer`/`Emboss`/`Pillow`
 //! styles and the gloss/edge contours render as described; the `Stroke` style
 //! renders nothing; anti-alias (`AntA`/`antialiasGloss`), texture and
-//! `showInDialog` are decoded/ignored; the light comes from `light::effective`
-//! (global when `uglg` is on); the height profile is a Gaussian blur of `M`
+//! `showInDialog` are decoded/ignored; the light comes from `light::effective` (global when
+//! `uglg` is on); the height profile is a Gaussian blur of `M`
 //! rather than the reference's distance transform; `scale = size · depth/100` and the
 //! `dot(N,L) - sin(alt)` flat-offset are ungrounded model choices; the build
 //! region pads by the blur supports only; the exact inter-effect and
