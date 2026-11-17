@@ -657,6 +657,149 @@ fn build(
     })
 }
 
+/// Serialize a multi-page PDF from already-rendered document pages. Each page
+/// is one flattened composite; the comps export uses this, while Save As keeps
+/// the richer single-page [`write_pdf`] path.
+pub fn write_pdf_pages(
+    pages: &[(&Document, &PixelBuffer)],
+    options: &PdfOptions,
+    env: &PdfEnv,
+) -> Result<Vec<u8>, PsdError> {
+    if pages.is_empty() {
+        return Err(PsdError::Invalid("no PDF pages".into()));
+    }
+    let mut options = options.clone();
+    options.normalize();
+    let built = build_pages(pages, &options, env)?;
+    Ok(write_plain(&built))
+}
+
+fn build_pages(
+    pages: &[(&Document, &PixelBuffer)],
+    options: &PdfOptions,
+    env: &PdfEnv,
+) -> Result<Built, PsdError> {
+    let minor = options.compatibility.minor();
+    let date = xmp::pdf_date(env.now);
+    let mut objects = Objects::default();
+    let catalog = objects.reserve();
+    let pages_object = objects.reserve();
+    let mut kids = Vec::new();
+    let mut page_objects = Vec::new();
+    let mut first_page = 0;
+    let mut first_content = 0;
+
+    for (index, (doc, composite)) in pages.iter().enumerate() {
+        let ppi = document_ppi(doc);
+        let raster = image::build_raster(doc, composite, options, ppi, None)?;
+        let points = |px: u32| f64::from(px) * 72.0 / ppi;
+        let (page_w, page_h) = (points(doc.width), points(doc.height));
+
+        let page = objects.reserve();
+        let content = objects.reserve();
+        let image = objects.reserve();
+        if index == 0 {
+            first_page = page;
+            first_content = content;
+        }
+        let mut local = vec![page, content, image];
+        let (mut image_dict, image_data) = image_stream(&raster, options, env)?;
+        let mut owned = Vec::new();
+        let space = color_space(&mut objects, &mut owned, &raster.space, minor);
+        local.extend(owned);
+        image_dict.set("ColorSpace", space);
+
+        if let Some(alpha) = &raster.alpha {
+            let smask = objects.add(Body::Stream(
+                Dict::typed("XObject")
+                    .with("Subtype", Obj::name("Image"))
+                    .with("Width", Obj::Int(i64::from(raster.width)))
+                    .with("Height", Obj::Int(i64::from(raster.height)))
+                    .with("ColorSpace", Obj::name("DeviceGray"))
+                    .with("BitsPerComponent", Obj::Int(8))
+                    .with("Filter", Obj::name("FlateDecode")),
+                flate(alpha),
+            ));
+            local.push(smask);
+            image_dict.set("SMask", Obj::Ref(smask));
+        }
+        objects.set(image, Body::Stream(image_dict, image_data));
+
+        let operators = format!(
+            "q {} 0 0 {} 0 0 cm /Im0 Do Q
+",
+            object::real(page_w),
+            object::real(page_h)
+        );
+        objects.set(
+            content,
+            Body::Stream(
+                Dict::new().with("Filter", Obj::name("FlateDecode")),
+                flate(operators.as_bytes()),
+            ),
+        );
+
+        let mut resources = Dict::new();
+        resources.set("XObject", Dict::new().with("Im0", Obj::Ref(image)).into());
+        let proc_image = match raster.space {
+            Space::Indexed(_) => "ImageI",
+            Space::Gray => "ImageB",
+            _ => "ImageC",
+        };
+        resources.set(
+            "ProcSet",
+            Obj::Array(vec![Obj::name("PDF"), Obj::name(proc_image)]),
+        );
+        let page_dict = Dict::typed("Page")
+            .with("Parent", Obj::Ref(pages_object))
+            .with("MediaBox", Obj::reals(&[0.0, 0.0, page_w, page_h]))
+            .with("Resources", resources.into())
+            .with("Contents", Obj::Ref(content));
+        objects.set(page, Body::Obj(page_dict.into()));
+        kids.push(Obj::Ref(page));
+        page_objects.extend(local);
+    }
+
+    objects.set(
+        pages_object,
+        Body::Obj(
+            Dict::typed("Pages")
+                .with("Kids", Obj::Array(kids))
+                .with("Count", Obj::Int(pages.len() as i64))
+                .into(),
+        ),
+    );
+    let info = objects.add(Body::Obj(
+        Dict::new()
+            .with("Title", Obj::text(&env.title))
+            .with("Producer", Obj::text(PRODUCER))
+            .with("Creator", Obj::text(PRODUCER))
+            .with("CreationDate", Obj::text(&date))
+            .with("ModDate", Obj::text(&date))
+            .into(),
+    ));
+    objects.set(
+        catalog,
+        Body::Obj(
+            Dict::typed("Catalog")
+                .with("Pages", Obj::Ref(pages_object))
+                .into(),
+        ),
+    );
+    Ok(Built {
+        objects,
+        catalog,
+        info,
+        page: first_page,
+        content: first_content,
+        page_objects,
+        encrypt: None,
+        encryptor: None,
+        id: Entropy::new(env.entropy).bytes(),
+        minor,
+    })
+}
+
 /// `%PDF-1.x` plus the binary comment marking the file as binary.
 pub(crate) fn header(minor: u8) -> Vec<u8> {
     let mut out = format!("%PDF-1.{minor}\n").into_bytes();

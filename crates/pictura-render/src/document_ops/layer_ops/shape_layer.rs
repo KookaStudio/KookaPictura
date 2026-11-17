@@ -163,6 +163,11 @@ pub(crate) fn map_shape_layer(
     let live = translate.and_then(|(dx, dy)| layer_live_shape(layer).map(|l| l.translated(dx, dy)));
     set_layer_shape_paths(layer, &paths, width, height);
     set_layer_live_shape(layer, live.as_ref());
+    if let Some((dx, dy)) = translate {
+        if dx.fract() == 0.0 && dy.fract() == 0.0 {
+            pictura_core::layer_comp::bump_layer_anchor(layer, dx as i32, dy as i32);
+        }
+    }
     true
 }
 

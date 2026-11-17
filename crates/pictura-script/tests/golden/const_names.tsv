@@ -13,6 +13,8 @@ FileInfo	file.fileInfo
 FileExportZoomify	file.export.zoomify
 FileExportPathsToIllustrator	file.export.paths.to.illustrator
 FileScriptsExportLayersToFiles	file.scripts.export.layers.to.files
+FileScriptsLayerCompsToFiles	file.scripts.layer.comps.to.files
+FileScriptsLayerCompsToPdf	file.scripts.layer.comps.to.pdf
 FileScriptsLoadFilesIntoStack	file.scripts.load.files.into.stack
 FileClose	file.close
 FileCloseAll	file.closeAll
@@ -216,6 +218,7 @@ ViewScreenModeStandard	view.screenMode.standard
 ViewScreenModeFullWithMenuBar	view.screenMode.fullWithMenuBar
 ViewScreenModeFull	view.screenMode.full
 WindowPanelsLayers	window.panels.layers
+WindowPanelsLayerComps	window.panels.layer.comps
 WindowPanelsTools	window.panels.tools
 WindowPanelsNavigator	window.panels.navigator
 WindowPanelsNotes	window.panels.notes

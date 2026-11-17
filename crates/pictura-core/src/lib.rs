@@ -18,6 +18,7 @@ pub mod hdr;
 pub mod homography;
 pub mod job;
 pub mod layer_bounds;
+pub mod layer_comp;
 mod layer_stack;
 pub mod mask_ops;
 pub mod memory;
@@ -255,6 +256,8 @@ pub struct Document {
     /// present. ponytail: not yet written to or read from PSD (the style block's
     /// location is unresolved); an existing block is preserved verbatim.
     pub text_styles: TextStyleSheet,
+    /// Document-level layer comps; they ride the history snapshot and cloning.
+    pub layer_comps: layer_comp::LayerCompStore,
 }
 
 impl Document {
@@ -304,6 +307,7 @@ impl Document {
             work_path: path::VectorPath::default(),
             saved_paths: Vec::new(),
             text_styles: TextStyleSheet::default(),
+            layer_comps: layer_comp::LayerCompStore::default(),
         }
     }
 

@@ -114,6 +114,7 @@ pub fn read_psd_within_options(
     let mut doc = read_container(bytes, options, &mut DecodeBudget::new(budget), &mut None)?;
     crate::path_resources::resolve_paths(&mut doc);
     crate::guide_resources::resolve_guides(&mut doc);
+    crate::layer_comps::resolve(&mut doc);
     Ok(doc)
 }
 

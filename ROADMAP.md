@@ -33,7 +33,7 @@ Deeper technical status for PSD/PSB lives in
 | Panels | 19 of 22 populated; Gradients, Patterns and Styles are placeholders |
 | Automation | The control server, Rust command catalogue, Actions engine and command bus ship; batch, scripting and plug-ins are open |
 | HDR tone mapping | Shipped — all four conversion methods; the Local Adaptation Toning Curve/Corner is open |
-| Layer comps, preset manager, Blend-If UI | Open |
+| Preset manager, Blend-If UI | Open |
 
 ## Files, formats and metadata
 
@@ -123,7 +123,8 @@ Deeper technical status for PSD/PSB lives in
   `crates/pictura-render/src/document_ops/layer_ops/align.rs`.
 - [x] **Locks, colour labels, and layer filtering.**
   `crates/pictura-app/cpp/panels/layers_panel.cpp`.
-- [ ] Layer comps — create, apply, update and delete (#265)
+- [x] Layer comps — create, apply, update and delete (#265)
+  `crates/pictura-app/cpp/panels/layer_comps_panel.cpp`; `crates/pictura-codec/src/layer_comps.rs`.
 - [x] Advanced blending engine: Blend Clipped Layers as Group, Transparency
       Shapes Layers, Mask Hides Effects, channel Include and Blend Interior
       Effects as Group (#579)

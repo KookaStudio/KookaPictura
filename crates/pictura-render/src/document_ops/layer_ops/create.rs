@@ -237,6 +237,8 @@ pub fn duplicate_layer(doc: &mut Document, index: i32) -> i32 {
     let source = index as usize;
     let mut copy = doc.layers[source].clone();
     copy.name = format!("{} copy", copy.name);
+    pictura_core::layer_comp::clear_layer_id(&mut copy);
+    copy.extra_blocks.retain(|block| block.key != *b"shmd");
     if copy.background {
         release_background(&mut copy);
     }
@@ -601,7 +603,14 @@ pub fn background_from_layer(doc: &mut Document, path: &str) -> bool {
         }
         opaque_transparency(layer, [255, 255, 255]);
     }
-    doc.layers.promote_background(&segments).is_ok()
+    let promoted = doc.layers.promote_background(&segments).is_ok();
+    if promoted {
+        if let Some(layer) = resolve_path_mut(doc, path) {
+            pictura_core::layer_comp::clear_layer_id(layer);
+            layer.extra_blocks.retain(|block| block.key != *b"shmd");
+        }
+    }
+    promoted
 }
 
 /// Set every fully transparent pixel (`alpha == 0`) to `rgb` at full opacity,

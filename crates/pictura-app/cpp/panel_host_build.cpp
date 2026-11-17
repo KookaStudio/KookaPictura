@@ -26,6 +26,7 @@
 #include "panels/histogram_panel.h"
 #include "panels/history_panel.h"
 #include "panels/info_panel.h"
+#include "panels/layer_comps_panel.h"
 #include "panels/layers_panel.h"
 #include "panels/navigator_panel.h"
 #include "panels/notes_panel.h"
@@ -169,6 +170,11 @@ QList<PanelGroup*> PanelHost::buildPanels(const SessionState& state)
     pathsPanel_ = new PathsPanel(shell_);
     pathsPanel_->setObjectName(QStringLiteral("pathsPanel"));
 
+    layerCompsPanel_ = new LayerCompsPanel(shell_);
+    layerCompsPanel_->setObjectName(QStringLiteral("layerCompsPanel"));
+    setPanelMenuHook(QStringLiteral("layerCompsPanel"),
+                     [this](QMenu* menu) { layerCompsPanel_->updatePanelMenu(menu); });
+
     actionsPanel_ = new ActionsPanel(shell_);
     actionsPanel_->setObjectName(QStringLiteral("actionsPanel"));
     wireActionsPanel(state);
@@ -215,6 +221,7 @@ QList<PanelGroup*> PanelHost::buildPanels(const SessionState& state)
     registerPanel(adjustmentsPanel_, Qt::RightDockWidgetArea);
     registerPanel(channelsPanel_, Qt::RightDockWidgetArea);
     registerPanel(pathsPanel_, Qt::RightDockWidgetArea);
+    registerPanel(layerCompsPanel_, Qt::RightDockWidgetArea);
     registerPanel(actionsPanel_, Qt::RightDockWidgetArea);
     registerPanel(brushPanel_, Qt::RightDockWidgetArea);
     registerPanel(cloneSourcePanel_, Qt::RightDockWidgetArea);
@@ -303,6 +310,8 @@ QList<PanelGroup*> PanelHost::buildPanels(const SessionState& state)
              QString::fromLatin1(command_ids::WindowPanelsBrush));
     addPanel(overflowGroup, cloneSourcePanel_, tr("Clone Source"),
              QString::fromLatin1(command_ids::WindowPanelsCloneSource));
+    addPanel(overflowGroup, layerCompsPanel_, tr("Layer Comps"),
+             QStringLiteral("window.panels.layer.comps"));
     attachGroup(overflowGroup);
 
     // CS6 docks Character and Paragraph as one group, opened from the Window
@@ -341,6 +350,7 @@ QList<PanelGroup*> PanelHost::buildPanels(const SessionState& state)
     panelColumn_->showPanel(QStringLiteral("paragraphPanel"), false);
     panelColumn_->showPanel(QStringLiteral("paragraphStylesPanel"), false);
     panelColumn_->showPanel(QStringLiteral("characterStylesPanel"), false);
+    panelColumn_->showPanel(QStringLiteral("layerCompsPanel"), false);
 
     wireStaticPanels();
     buildingPanels_ = false;

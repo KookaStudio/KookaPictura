@@ -35,6 +35,7 @@ class IconAssetsTest : public QObject {
 
 private slots:
     void panelGlyphsResolve();
+    void layerCompsGlyphsResolve();
     void pathGlyphsResolve();
     void infoGlyphsResolve();
     void adjustmentsGlyphsResolve();
@@ -59,6 +60,22 @@ void IconAssetsTest::panelGlyphsResolve()
         QStringLiteral("layers.kindShape"),
         QStringLiteral("layers.kindSmartObject"),
         QStringLiteral("layers.reset"),
+    };
+    for (const QString& id : ids) {
+        const QIcon icon = pictura::icon(id);
+        QVERIFY2(!icon.isNull(), qPrintable(id + QStringLiteral(" resolves")));
+        QVERIFY2(!icon.pixmap(16, 16).isNull(),
+                 qPrintable(id + QStringLiteral(" renders at 16px")));
+    }
+}
+
+void IconAssetsTest::layerCompsGlyphsResolve()
+{
+    const QStringList ids = {
+        QStringLiteral("window.panels.layer.comps"),
+        QStringLiteral("file.scripts.layer.comps.to.files"),
+        QStringLiteral("file.scripts.layer.comps.to.pdf"),
+        QStringLiteral("layercomps.warning"),
     };
     for (const QString& id : ids) {
         const QIcon icon = pictura::icon(id);

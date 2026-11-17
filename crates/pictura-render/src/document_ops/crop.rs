@@ -150,6 +150,7 @@ pub(crate) fn offset_layer(layer: &mut Layer, dx: i32, dy: i32) {
         tool.transform[4] += f64::from(dx);
         tool.transform[5] += f64::from(dy);
     }
+    pictura_core::layer_comp::bump_layer_anchor(layer, dx, dy);
 }
 
 fn translate_checked(layer: &mut Layer, canvas: PsdRect, dx: i32, dy: i32) -> bool {

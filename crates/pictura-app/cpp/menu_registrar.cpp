@@ -946,6 +946,8 @@ void MenuRegistrar::registerPanelCommands()
             return owner && owner->isPanelVisible(panel);
         });
     }
+    // The catalogue keeps this row disabled; the generic toggle owns it now.
+    commands_->setImplemented(QStringLiteral("window.panels.layer.comps"), true);
 }
 
 void MenuRegistrar::registerTextCommands()
@@ -1003,6 +1005,9 @@ void MenuRegistrar::buildMenus(QMenuBar* menuBar)
         command_ids::ViewOptions,
         command_ids::WindowPanelsLayers,
         command_ids::WindowPanelsTools,
+        command_ids::WindowPanelsLayerComps,
+        command_ids::FileScriptsLayerCompsToFiles,
+        command_ids::FileScriptsLayerCompsToPdf,
         command_ids::HelpAbout,
     };
     for (const char* id : kIconCommands) {

@@ -32,6 +32,7 @@ file.automate.picture.package	File/Automate/Picture Package	Picture Package		0	0
 file.scripts.export.layers.to.files	File/Scripts/Export Layers to Files…	Export Layers to Files…		1	0
 file.scripts.image.processor	File/Scripts/Image Processor	Image Processor		0	0
 file.scripts.layer.comps.to.files	File/Scripts/Layer Comps to Files	Layer Comps to Files		0	0
+file.scripts.layer.comps.to.pdf	File/Scripts/Layer Comps to PDF	Layer Comps to PDF		0	0
 file.scripts.load.files.into.stack	File/Scripts/Load Files into Stack…	Load Files into Stack…		1	0
 file.scripts.script.events.manager	File/Scripts/Script Events Manager	Script Events Manager		0	0
 file.scripts.statistics	File/Scripts/Statistics	Statistics		0	0

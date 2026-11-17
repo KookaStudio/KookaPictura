@@ -41,6 +41,7 @@ mod icc_convert;
 pub mod illustrator;
 mod image_resources;
 mod iptc;
+mod layer_comps;
 mod lazy;
 mod lens_correction;
 mod live_shape;

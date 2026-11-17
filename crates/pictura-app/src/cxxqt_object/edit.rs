@@ -241,6 +241,15 @@ impl PictureViewRust {
                 ..Presentation::none()
             };
         }
+        if matches!(edit, Edit::Structural { .. } | Edit::Inserted) {
+            if let Some(doc) = self.session.doc.as_mut() {
+                if !doc.layer_comps.is_empty() {
+                    let seed = doc.layer_comps.next_layer_id();
+                    pictura_core::layer_comp::ensure_layer_ids(doc, seed);
+                    pictura_render::prune_layer_comp_warnings(doc);
+                }
+            }
+        }
         let _efficiency = pictura_core::scratch::operation();
         if let Some(rolled_back) = self.roll_back_unreadable() {
             return rolled_back;
