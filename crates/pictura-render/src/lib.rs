@@ -65,6 +65,8 @@ pub use tile_pyramid::{
     build_tile, interleave, level_count, Ticket, TileKey, TilePyramid, TileSource, TileStats,
     TILE_SIDE,
 };
+mod pyramid_level;
+#[cfg(any(test, feature = "test-oracle"))]
 mod view_pyramid;
 pub(crate) use composite::{channel, channel_plane, mask_alpha, render_smart_source};
 pub use composite::{
@@ -73,7 +75,9 @@ pub use composite::{
     encode_threshold,
 };
 pub use composite_request::{composite, CompositeRequest};
-pub use view_pyramid::{Planes, PyramidLevel, ViewPyramid, SMALLEST_SIDE, TILE};
+pub use pyramid_level::{PyramidLevel, SMALLEST_SIDE, TILE};
+#[cfg(any(test, feature = "test-oracle"))]
+pub use view_pyramid::{Planes, ViewPyramid};
 
 mod composite_native;
 pub use composite_native::refresh_native_composite;

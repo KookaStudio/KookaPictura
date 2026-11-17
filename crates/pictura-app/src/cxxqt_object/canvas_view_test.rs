@@ -294,10 +294,9 @@ fn the_display_after_a_region_refresh_matches_a_full_recomposite() {
 
 #[test]
 fn histogram_source_level_is_bounded_and_size_independent() {
-    // The Histogram panel reads the coarsest pyramid level. Its long side is
-    // always at most 512, whatever the document size, so the binning cost does
-    // not grow with the document.
-    for (w, h) in [(513u32, 513u32), (4000, 3000), (8000, 100)] {
+    // Thin documents can stop at level 0; the panel bounds binning only after
+    // reading the coarsest available source.
+    for (w, h) in [(513u32, 513u32), (4000, 3000), (8000, 100), (4096, 2)] {
         let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
         doc.composite = varied_rgba(w, h, 3);
         let rust = view_of(doc);
@@ -307,10 +306,11 @@ fn histogram_source_level_is_bounded_and_size_independent() {
         let (lw, lh) = rust
             .display_level_size(levels - 1)
             .expect("coarsest level size");
-        assert!(
-            lw <= 512 && lh <= 512,
-            "coarsest level {lw}x{lh} for a {w}x{h} document"
-        );
+        if h == 2 {
+            assert_eq!((levels, lw, lh), (1, 4096, 2));
+        } else {
+            assert!(lw <= 512 && lh <= 512, "coarsest level {lw}x{lh}");
+        }
 
         let (crop, missing) = rust.display_crop_keys(levels - 1, whole(lw, lh));
         assert!(missing.is_empty());
@@ -320,11 +320,55 @@ fn histogram_source_level_is_bounded_and_size_independent() {
 }
 
 #[test]
+fn panel_reads_stay_bounded() {
+    let (w, h) = (4000, 4000);
+    let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
+    let mut layer = super::tests::pixel_layer("sample", 1, 1, (10, 20, 30));
+    layer.rect = whole(w, h);
+    for channel in &mut layer.channels {
+        let value = match channel.id {
+            0 => 10,
+            1 => 20,
+            2 => 30,
+            _ => 255,
+        };
+        channel.data = pictura_core::Plane::filled(w as usize, h as usize, 1, value);
+    }
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+    let view = view_of(doc);
+    let (_, missing) = view.tile_crop(TileSource::Composite, 0, whole(256, 256));
+    assert!(missing.is_empty());
+    let doc = view.session.doc.as_ref().expect("document");
+    let before = super::picture::composites_so_far();
+    for (x, expected_composites) in [(100, 0), (3000, 1)] {
+        let sample = super::picture::picture_region(
+            doc,
+            &view,
+            PsdRect {
+                top: 100,
+                left: x,
+                bottom: 101,
+                right: x + 1,
+            },
+        );
+        assert_eq!((sample.width, sample.height), (1, 1));
+        assert_eq!(sample.data.as_slice(), &[10, 20, 30, 255]);
+        assert_eq!(
+            super::picture::composites_so_far() - before,
+            expected_composites
+        );
+    }
+    assert!(!pictura_render::DocumentComposite::is_stored(doc));
+    assert!(view.tile_stats().resident_bytes < u64::from(w) * u64::from(h));
+    assert!(doc.layers[0].channels.iter().all(|c| !c.data.is_mirrored()));
+}
+
+#[test]
 fn mid_stroke_tiles_match_a_full_recomposite_of_the_working_document() {
     use pictura_paint::{Stroke, StrokeConfig, StrokeSample};
 
-    let rgba = vec![40u8; 128 * 128 * 4];
-    let mut doc = Document::from_rgba("paint", 128, 128, &rgba);
+    let rgba = vec![40u8; 600 * 400 * 4];
+    let mut doc = Document::from_rgba("paint", 600, 400, &rgba);
     let mut stroke = Stroke::begin_at(&doc, "0", StrokeConfig::default()).expect("begin stroke");
     assert!(stroke.sample(
         &mut doc,
@@ -334,6 +378,16 @@ fn mid_stroke_tiles_match_a_full_recomposite_of_the_working_document() {
             pressure: 1.0,
         }
     ));
+    for (x, y) in [(72.0, 65.0), (80.0, 67.0)] {
+        assert!(stroke.sample(
+            &mut doc,
+            StrokeSample {
+                x,
+                y,
+                pressure: 1.0,
+            }
+        ));
+    }
     let rect = stroke.take_dirty().expect("a dab dirties a region");
 
     let session = crate::cxxqt_object::document_session::StrokeSession {

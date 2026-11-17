@@ -16,7 +16,7 @@ use crate::composite_plan::CompositePlan;
 use crate::composite_route::{content_route, ContentRoute};
 use crate::filter_proxy::FilterProxy;
 use crate::layer_source::key::content_key;
-use crate::view_pyramid::SMALLEST_SIDE;
+use crate::pyramid_level::SMALLEST_SIDE;
 
 /// The default preview backdrop budget: the backdrop plus its scratch canvas.
 pub const DEFAULT_PREVIEW_BUDGET: usize = 64 * 1024 * 1024;
@@ -610,6 +610,20 @@ mod tests {
         let doc = document(1024, 1024, vec![layer]);
         let mut session = RenderSession::default();
         assert!(session.preview(&doc, &["0"], 2, whole(&doc), 0).is_none());
+        let smart = Layer {
+            name: "smart".into(),
+            rect: rect(0, 0, 8, 8),
+            smart_object: Some(pictura_core::SmartObject::default()),
+            ..Default::default()
+        };
+        let doc = document(1024, 1024, vec![smart]);
+        assert!(session.preview(&doc, &["0"], 2, whole(&doc), 0).is_none());
+        let doc = document(
+            1024,
+            1024,
+            vec![crate::composite_route::tests::type_layer(Vec::new())],
+        );
+        assert!(session.preview(&doc, &["0"], 2, whole(&doc), 0).is_none());
     }
 
     #[test]
@@ -619,6 +633,9 @@ mod tests {
         assert!(session
             .preview(&doc, &["1"], 0, rect(0, 0, 0, 0), 0)
             .is_none());
+        assert_eq!(session.backdrop_builds(), 0);
+        assert_eq!(session.preview_doc_builds(), 0);
+        assert!(session.backdrop.is_none());
     }
 
     #[test]
@@ -682,6 +699,16 @@ mod tests {
         let doc = two_layers();
         let mut session = RenderSession::with_budget(1);
         assert!(session.preview(&doc, &["1"], 0, whole(&doc), 0).is_none());
+        let pixels = (doc.width * doc.height) as usize;
+        let mut session = RenderSession::with_budget(pixels * 16);
+        assert!(session.preview(&doc, &["1"], 0, whole(&doc), 0).is_none());
+        assert!(session.backdrop.is_none());
+        assert_eq!(session.backdrop_builds(), 0);
+        let mut session = RenderSession::with_budget(pixels * 36);
+        let frame = session
+            .preview(&doc, &["1"], 0, whole(&doc), 0)
+            .expect("fits");
+        assert_eq!(frame, crate::composite_rgba(&doc));
     }
 
     #[test]

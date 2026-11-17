@@ -45,6 +45,7 @@ ash = "0.38"
 # The counting allocator the memory guards install in the unit-test binary
 # (#1210); a workspace crate, no new dependency.
 [dev-dependencies]
+pictura-render = { path = "../pictura-render", features = ["test-oracle"] }
 pictura-testkit = { path = "../pictura-testkit" }
 
 [build-dependencies]

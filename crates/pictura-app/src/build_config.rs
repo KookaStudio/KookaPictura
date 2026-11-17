@@ -6,6 +6,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+mod view_oracle;
+
 // Split so this file does not itself read as a bridge file to the CMake scan.
 const BRIDGE_MARKER: &str = concat!("cxx_qt", "::bridge");
 const BRIDGE_ATTRIBUTE: &str = concat!("#[cxx_qt", "::bridge");

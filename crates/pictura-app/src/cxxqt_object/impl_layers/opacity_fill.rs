@@ -314,4 +314,132 @@ mod tests {
         assert!(opacity_changed > 0 && fill_changed > 0);
         assert!(opacity_presentation.is_some() && fill_presentation.is_some());
     }
+
+    fn exact_fallback(view: &mut PictureViewRust) {
+        let paths = ["0".to_string()];
+        let (changed, presentation, saved) =
+            preview_layer_property(view, &paths, 128, PreviewKind::Opacity);
+        assert_eq!(changed, 1);
+        assert!(saved.is_some(), "the display-only preview must fall back");
+        present_core(view, &presentation.expect("fallback presentation"));
+        view.display_preview = saved;
+        crate::cxxqt_object::tests::assert_display_current(view);
+        if view.mask_solo_active() {
+            assert_solo_mask(view);
+        }
+
+        let (changed, presentation) =
+            commit_layer_property(view, &paths, 128, PreviewKind::Opacity);
+        assert_eq!(changed, 1);
+        present_core(view, &presentation.expect("commit presentation"));
+        crate::cxxqt_object::tests::assert_display_current(view);
+        if view.mask_solo_active() {
+            assert_solo_mask(view);
+        }
+        assert_eq!(view.session.history.count(), 1);
+    }
+
+    fn assert_solo_mask(view: &PictureViewRust) {
+        let (mask, missing) =
+            view.tile_crop(pictura_render::TileSource::Mask, 0, view.presented_rect);
+        assert!(missing.is_empty());
+        assert_eq!(mask.data(), [96u8, 96, 96, 255].repeat(16));
+    }
+
+    #[test]
+    fn unavailable_preview_levels_present_and_commit_exact_pixels() {
+        for level in [-1, 99] {
+            let mut view = view();
+            view.presented_level = level;
+            exact_fallback(&mut view);
+        }
+    }
+
+    #[test]
+    fn solo_mask_and_live_stroke_present_exact_fallback_pixels() {
+        let mut solo = view();
+        let rect = solo.presented_rect;
+        solo.session.doc.as_mut().expect("doc").layers[0].mask = Some(pictura_core::LayerMask {
+            rect,
+            data: Some(vec![96u8; 16].into()),
+            ..Default::default()
+        });
+        solo.mask_solo = Some("0".to_string());
+        solo.rebuild_mask_solo_source();
+        exact_fallback(&mut solo);
+
+        let mut painting = view();
+        let doc = painting.session.doc.as_mut().expect("doc");
+        let mut stroke =
+            pictura_paint::Stroke::begin_at(doc, "0", pictura_paint::StrokeConfig::default())
+                .expect("stroke");
+        assert!(stroke.sample(
+            doc,
+            pictura_paint::StrokeSample {
+                x: 2.0,
+                y: 2.0,
+                pressure: 1.0,
+            }
+        ));
+        painting.session.live.set_stroke_session(
+            crate::cxxqt_object::document_session::StrokeSession {
+                stroke: Some(stroke),
+                ..Default::default()
+            },
+        );
+        exact_fallback(&mut painting);
+    }
+
+    #[test]
+    fn unreducible_content_presents_and_commits_exact_fallback_pixels() {
+        use pictura_core::{Layer, LayerBlock, SmartObject, TypeTool};
+
+        let unsupported = [
+            Layer {
+                type_tool: Some(TypeTool {
+                    transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+                    text: "Hi".into(),
+                    bounds: [0, 0, 2, 2],
+                    text_desc: Vec::new().into(),
+                    warp_desc: Vec::new().into(),
+                    fonts: vec!["Arial".into()],
+                    style: None,
+                    vertical: false,
+                    box_bounds: None,
+                    path: None,
+                }),
+                ..Default::default()
+            },
+            Layer {
+                smart_object: Some(SmartObject::default()),
+                ..Default::default()
+            },
+            Layer {
+                extra_blocks: vec![LayerBlock {
+                    key: *b"vscg",
+                    data: vec![0xff; 3].into(),
+                }],
+                ..Default::default()
+            },
+        ];
+        for layer in unsupported {
+            let mut doc = Document::new(600, 600, ColorMode::Rgb, BitDepth::Eight);
+            doc.layers =
+                LayerStack::from_layers(vec![pixel_layer("base", 600, 600, (255, 0, 0)), layer]);
+            doc.composite = pictura_render::composite_rgba(&doc);
+            let mut view = PictureViewRust {
+                session: DocumentSession::with_document(doc),
+                presented_level: 1,
+                presented_rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 600,
+                    right: 600,
+                },
+                ..Default::default()
+            };
+            view.reset_pyramid();
+            exact_fallback(&mut view);
+        }
+    }
 }

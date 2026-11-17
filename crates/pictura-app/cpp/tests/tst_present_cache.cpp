@@ -10,6 +10,9 @@
 #include <QtCore/QDir>
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QFileInfo>
+#include <QtCore/QJsonArray>
+#include <QtCore/QJsonDocument>
+#include <QtCore/QJsonObject>
 #include <QtCore/QStringList>
 #include <QtGui/QColor>
 #include <QtGui/QImage>
@@ -19,8 +22,13 @@
 
 #include "frame.h"
 #include "image_view.h"
+#include "panels/histogram_panel.h"
+#include "panels/navigator_panel.h"
 
+#include "api/document_api.h"
+#include "api/document_bridge.h"
 #include "api/layers_bridge.h"
+#include "api/paint_bridge.h"
 #include "api/view_bridge.h"
 
 #include "qt_test_support.h"
@@ -46,6 +54,71 @@ bool samePixels(const QImage& a, const QImage& b)
         return false;
     }
     return a.convertToFormat(QImage::Format_ARGB32) == b.convertToFormat(QImage::Format_ARGB32);
+}
+
+bool replayExactRed(pictura::PictureView& view, int diameter, const QList<QPointF>& points)
+{
+    QJsonArray samples;
+    for (const QPointF& point : points) {
+        samples.append(QJsonObject{{QStringLiteral("x"), point.x()},
+                                   {QStringLiteral("y"), point.y()},
+                                   {QStringLiteral("pressure"), 1.0},
+                                   {QStringLiteral("time"), 0.0}});
+    }
+    const QJsonObject settings{{QStringLiteral("foreground"), double(kRed)},
+                               {QStringLiteral("background"), double(kWhite)},
+                               {QStringLiteral("diameter"), diameter},
+                               {QStringLiteral("hardness"), 100},
+                               {QStringLiteral("roundness"), 100},
+                               {QStringLiteral("opacity"), 100},
+                               {QStringLiteral("flow"), 100},
+                               {QStringLiteral("spacing"), 25},
+                               {QStringLiteral("mode"), QStringLiteral("normal")}};
+    const QJsonObject stroke{{QStringLiteral("version"), 1},
+                             {QStringLiteral("tool"), QStringLiteral("Brush")},
+                             {QStringLiteral("settings"), settings},
+                             {QStringLiteral("samples"), samples}};
+    return pictura::replay_tool_stroke(
+        view, QString::fromUtf8(QJsonDocument(stroke).toJson(QJsonDocument::Compact)));
+}
+
+// Whole-image reference, independent of the renderer's regional/tiled reducers.
+QImage referenceLevel(const QImage& straight, int level)
+{
+    const QImage source = straight.convertToFormat(QImage::Format_ARGB32);
+    QImage current(source.size(), QImage::Format_ARGB32_Premultiplied);
+    for (int y = 0; y < source.height(); ++y) {
+        for (int x = 0; x < source.width(); ++x) {
+            const QRgb pixel = source.pixel(x, y);
+            const int alpha = qAlpha(pixel);
+            current.setPixel(x, y, qRgba((qRed(pixel) * alpha + 127) / 255,
+                                       (qGreen(pixel) * alpha + 127) / 255,
+                                       (qBlue(pixel) * alpha + 127) / 255, alpha));
+        }
+    }
+    for (int k = 0; k < level; ++k) {
+        QImage next((current.width() + 1) / 2, (current.height() + 1) / 2,
+                    QImage::Format_ARGB32_Premultiplied);
+        for (int y = 0; y < next.height(); ++y) {
+            for (int x = 0; x < next.width(); ++x) {
+                int r = 0, g = 0, b = 0, a = 0, n = 0;
+                for (int dy = 0; dy < 2 && 2 * y + dy < current.height(); ++dy) {
+                    for (int dx = 0; dx < 2 && 2 * x + dx < current.width(); ++dx) {
+                        const QRgb pixel = current.pixel(2 * x + dx, 2 * y + dy);
+                        r += qRed(pixel);
+                        g += qGreen(pixel);
+                        b += qBlue(pixel);
+                        a += qAlpha(pixel);
+                        ++n;
+                    }
+                }
+                next.setPixel(x, y, qRgba((r + n / 2) / n, (g + n / 2) / n,
+                                         (b + n / 2) / n, (a + n / 2) / n));
+            }
+        }
+        current = std::move(next);
+    }
+    return current;
 }
 
 } // namespace
@@ -79,6 +152,10 @@ private slots:
     void damageOutsideCacheChangesNothing();
     void damageForAnotherLevelDiscardsCrop();
     void filterCommitPresentsThroughDamage();
+    void previewStrokeUsesTilesAndRestoresZoom();
+    void frameBoundedPaintMatchesCpu();
+    void frameBoundedPaintMatchesCpu_data();
+    void panelsUseTileCrops();
 
 private:
     bool newDoc(int width, int height);
@@ -375,6 +452,10 @@ void PresentCacheTest::cachedLevelCropMatchesTheUncachedDraw()
         setZoom(zoom);
         QVERIFY2(canvas_->presentLevelForTest() > 0, "the zoom must select a stored level");
         const QImage view = renderCanvas(*canvas_);
+        const int builds = canvas_->presentCacheRebuildCount();
+        const QImage repeated = renderCanvas(*canvas_);
+        QCOMPARE(canvas_->presentCacheRebuildCount(), builds);
+        QVERIFY(samePixels(view, repeated));
         // Without the cache the same paint crops the level afresh, so this
         // compares the cached crop with a fresh one.
         canvas_->setPresentCacheEnabledForTest(false);
@@ -454,6 +535,26 @@ void PresentCacheTest::largeDocumentPresentsThroughALevel()
     QVERIFY(canvas_->presentCacheImageSize().width() <= 1000);
     QVERIFY(canvas_->presentCacheImageSize().height() <= 750);
     QVERIFY(!shot.isNull());
+
+    setZoom(4.0);
+    renderCanvas(*canvas_);
+    QCOMPARE(canvas_->presentLevelForTest(), 0);
+    QVERIFY(!canvas_->holdsImageForTest());
+    QVERIFY(qint64(canvas_->presentCacheImageSize().width())
+                * canvas_->presentCacheImageSize().height() < 64 * 1024 * 1024);
+
+    window_->closeDocument(window_->activeDocumentIndex(), false);
+    QVERIFY2(newDoc(16000, 16000), "sparse large document");
+    view_->set_gpu_compute(false);
+    setZoom(0.05);
+    QVERIFY(view_->begin_paint(kRed, kWhite, 8, 100, 100, 0, 100, 100, 25,
+                              QStringLiteral("normal"), false, false));
+    QVERIFY(view_->paint_dab(8000.0, 8000.0, 1.0));
+    view_->flush_present();
+    renderCanvas(*canvas_);
+    QVERIFY(canvas_->presentLevelForTest() > 0);
+    QVERIFY(!canvas_->holdsImageForTest());
+    view_->cancel_paint();
 }
 
 void PresentCacheTest::panPresentsWithoutResamplingTheDocument()
@@ -642,6 +743,154 @@ void PresentCacheTest::filterCommitPresentsThroughDamage()
     QVERIFY2(damaged.count() >= 1, "a filter commit emits a damage rectangle");
     QCOMPARE(blitted.count(), 0);
     QVERIFY(damaged.last().at(2).toInt() > 0);
+}
+
+void PresentCacheTest::previewStrokeUsesTilesAndRestoresZoom()
+{
+    QVERIFY2(newDoc(2048, 2048), "preview fixture");
+    view_->set_gpu_compute(false);
+    setZoom(0.4);
+    renderCanvas(*canvas_);
+    const int zoomLevel = canvas_->presentLevelForTest();
+    const int history = view_->history_count();
+    const QImage before = view_->display_image(0, 650, 650, 700, 700);
+    QVERIFY(view_->begin_paint(kRed, kWhite, 600, 100, 100, 0, 100, 100, 25,
+                              QStringLiteral("normal"), false, false));
+    const int preview = pictura::preview_present_level(*view_);
+    QVERIFY(preview > zoomLevel);
+    QVERIFY(view_->paint_dab(1000.0, 1000.0, 1.0));
+    view_->flush_present();
+    renderCanvas(*canvas_);
+    QCOMPARE(canvas_->presentLevelForTest(), preview);
+    QCOMPARE(view_->history_count(), history);
+    QVERIFY(samePixels(view_->display_image(0, 650, 650, 700, 700), before));
+    QVERIFY(view_->end_paint());
+    renderCanvas(*canvas_);
+    QCOMPARE(canvas_->presentLevelForTest(), zoomLevel);
+    QCOMPARE(pictura::preview_present_level(*view_), 0);
+    QCOMPARE(view_->history_count(), history + 1);
+    const QImage committed = view_->image();
+
+    QVERIFY(view_->undo());
+    renderCanvas(*canvas_);
+    const QImage restored = view_->display_image(0, 650, 650, 700, 700);
+    QVERIFY(samePixels(restored, before));
+    const int cancelledHistory = view_->history_count();
+    QVERIFY(view_->begin_paint(kRed, kWhite, 600, 100, 100, 0, 100, 100, 25,
+                              QStringLiteral("normal"), false, false));
+    QVERIFY(view_->paint_dab(1000.0, 1000.0, 1.0));
+    view_->flush_present();
+    renderCanvas(*canvas_);
+    view_->cancel_paint();
+    renderCanvas(*canvas_);
+    QCOMPARE(canvas_->presentLevelForTest(), zoomLevel);
+    QCOMPARE(pictura::preview_present_level(*view_), 0);
+    QCOMPARE(view_->history_count(), cancelledHistory);
+    QVERIFY(samePixels(view_->display_image(0, 650, 650, 700, 700), before));
+
+    pictura::PictureView exact;
+    QVERIFY(exact.new_document(2048, 2048,
+                               QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    exact.set_gpu_compute(false);
+    exact.set_active_layer(QStringLiteral("0"));
+    QVERIFY(replayExactRed(exact, 600, {QPointF(1000.0, 1000.0)}));
+    QVERIFY(samePixels(committed, exact.image()));
+}
+
+void PresentCacheTest::frameBoundedPaintMatchesCpu_data()
+{
+    QTest::addColumn<bool>("gpu");
+    QTest::newRow("cpu") << false;
+    QTest::newRow("gpu") << true;
+}
+
+void PresentCacheTest::frameBoundedPaintMatchesCpu()
+{
+    QFETCH(bool, gpu);
+    QVERIFY(newDoc(1024, 1024));
+    view_->set_gpu_compute(gpu);
+    if (gpu && !view_->gpu_available()) {
+        QSKIP("GPU paint adapter unavailable; CPU case runs separately");
+    }
+    setZoom(0.4);
+    const int diameter = gpu ? 600 : 8;
+    const QList<QPointF> samples{QPointF(300, 300), QPointF(450, 450),
+                                QPointF(600, 600), QPointF(750, 750)};
+    const quint64 revision = view_->canvas_revision();
+    QVERIFY(view_->begin_paint(kRed, kWhite, diameter, 100, 100, 0, 100, 100, 25,
+                              QStringLiteral("normal"), false, false));
+    QCOMPARE(pictura::preview_present_level(*view_), 0);
+    for (const QPointF& sample : samples) {
+        QVERIFY(view_->paint_dab(sample.x(), sample.y(), 1.0));
+    }
+    const quint64 beforeFlush = view_->canvas_revision();
+    QVERIFY(beforeFlush - revision <= 1);
+    QVERIFY(view_->flush_present());
+    QCOMPARE(view_->canvas_revision(), beforeFlush + 1);
+    QVERIFY(!view_->flush_present());
+    QCOMPARE(view_->canvas_revision(), beforeFlush + 1);
+    renderCanvas(*canvas_);
+    QCOMPARE(canvas_->presentLevelForTest(), 1);
+
+    const QImage working = view_->image();
+    const auto levels = pictura::document_api::pyramidSizes(*view_);
+    for (int level = 0; level < levels.size(); ++level) {
+        const auto size = levels.at(level);
+        const QImage tiles = view_->display_image(level, 0, 0, size.width, size.height);
+        QVERIFY(samePixels(tiles, referenceLevel(working, level)));
+    }
+    QVERIFY(view_->end_paint());
+    const QImage committed = view_->image();
+    pictura::PictureView cpu;
+    QVERIFY(cpu.new_document(1024, 1024, QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    cpu.set_active_layer(QStringLiteral("0"));
+    cpu.set_gpu_compute(false);
+    QVERIFY(replayExactRed(cpu, diameter, samples));
+    QVERIFY(samePixels(committed, cpu.image()));
+}
+
+void PresentCacheTest::panelsUseTileCrops()
+{
+    auto* navigator = window_->findChild<pictura::NavigatorPanel*>(QStringLiteral("navigatorPanel"));
+    auto* histogram = window_->findChild<pictura::HistogramPanel*>(QStringLiteral("histogramPanel"));
+    QVERIFY(navigator && histogram);
+    for (const QSize size : {QSize(1024, 768), QSize(2048, 1536), QSize(4096, 2)}) {
+        QVERIFY(newDoc(size.width(), size.height()));
+        view_->set_gpu_compute(false);
+        navigator->setCanvas(canvas_);
+        navigator->setView(view_);
+        histogram->setView(view_);
+        const auto levels = pictura::document_api::pyramidSizes(*view_);
+        QVERIFY(!levels.isEmpty());
+        const auto last = levels.last();
+        const QSize sourceSize(last.width, last.height);
+        const QImage expected = view_->display_image(levels.size() - 1, 0, 0,
+                                                     last.width, last.height);
+        navigator->refresh();
+        histogram->refresh();
+        QCOMPARE(navigator->thumbnailSourceSizeForTest(), sourceSize);
+        QVERIFY(samePixels(navigator->thumbnailSourceImageForTest(), expected));
+        QCOMPARE(histogram->sourceSizeForTest(), sourceSize);
+        QImage binned = expected;
+        if (sourceSize.width() > 512 || sourceSize.height() > 512) {
+            binned = expected.scaled(512, 512, Qt::KeepAspectRatio, Qt::FastTransformation);
+        }
+        QCOMPARE(histogram->binnedSizeForTest(), binned.size());
+        quint64 count = 0;
+        for (int bin = 0; bin < 256; ++bin) {
+            count += histogram->binForTest(0, bin);
+        }
+        QCOMPARE(count, quint64(binned.width()) * quint64(binned.height()));
+        QVERIFY(!canvas_->holdsImageForTest());
+        if (size.height() == 2) {
+            QCOMPARE(levels.size(), 1);
+            QCOMPARE(sourceSize, size);
+        } else {
+            QVERIFY(sourceSize.width() <= 512 && sourceSize.height() <= 512);
+            QVERIFY(navigator->thumbnailSourceSizeForTest() != size);
+        }
+        window_->closeDocument(window_->activeDocumentIndex(), false);
+    }
 }
 
 QTEST_MAIN(PresentCacheTest)

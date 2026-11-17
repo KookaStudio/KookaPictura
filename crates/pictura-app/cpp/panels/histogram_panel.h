@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QtCore/QString>
+#include <QtCore/QSize>
 #include <QtCore/QVector>
 #include <QtGui/QColor>
 #include <QtWidgets/QWidget>
@@ -50,6 +51,8 @@ public:
     int seriesCountForTest() const;
     QVector<QColor> seriesColorsForTest() const;
     void setChannelIndexForTest(int index);
+    QSize sourceSizeForTest() const { return sourceSize_; }
+    QSize binnedSizeForTest() const { return binnedSize_; }
     quint32 binForTest(int channel, int bin) const
     {
         return channel >= 0 && channel < 4 && bin >= 0 && bin < 256
@@ -65,6 +68,8 @@ private:
     HistogramView* histogram_ = nullptr;
     QComboBox* channel_ = nullptr;
     std::array<std::array<quint32, 256>, 4> bins_{};
+    QSize sourceSize_;
+    QSize binnedSize_;
 };
 
 } // namespace pictura
