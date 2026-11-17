@@ -26,8 +26,7 @@ use header_mode::{color_mode_from_code, palette_from};
 /// the cap keeps the recursive compositor and `Drop` off the stack limit.
 pub(crate) const MAX_GROUP_DEPTH: usize = 64;
 
-/// Fallback for an Indexed document's palette; unreachable because
-/// `palette_from` errors on a malformed Indexed palette before conversion.
+/// Fallback for an Indexed document's palette; unreachable because `palette_from` errors on a malformed Indexed palette before conversion.
 const EMPTY_PALETTE: [u8; 768] = [0; 768];
 
 /// Options for opening a PSD/PSB: the incoming-profile policy, an optional
