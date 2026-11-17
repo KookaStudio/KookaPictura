@@ -33,7 +33,7 @@ Deeper technical status for PSD/PSB lives in
 | Panels | 19 of 22 populated; Gradients, Patterns and Styles are placeholders |
 | Automation | The control server, Rust command catalogue, Actions engine and command bus ship; batch, scripting and plug-ins are open |
 | HDR tone mapping | Shipped — all four conversion methods; the Local Adaptation Toning Curve/Corner is open |
-| Layer comps, preset manager, stack modes, Blend-If UI | Open |
+| Layer comps, preset manager, Blend-If UI | Open |
 
 ## Files, formats and metadata
 
@@ -136,7 +136,7 @@ Deeper technical status for PSD/PSB lives in
   `crates/pictura-app/cpp/layer_new_dialog.cpp`
 - [ ] 32-bit and Lab blend-mode menu gating (#589)
 - [x] `Ctrl+J` duplicate-group semantics (#590)
-- [ ] Smart-object Stack Modes (#591)
+- [x] Smart-object Stack Modes (#591)
 - [x] Pattern fill layers using the open document's embedded patterns (#262)
 - [ ] Pattern preset library and `Edit > Define Pattern` (#262, #599)
 - [ ] Vector-mask path authoring (#261)

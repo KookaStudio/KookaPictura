@@ -35,6 +35,16 @@ Snapshot for resuming after a context break. Update after each milestone.
   additional shown channel deepens the red (OpenSpec changes
   `2026-11-16-alpha-channel-view` and
   `2026-11-16-alpha-channel-multi-view`, archived).
+- **Smart-object Stack Modes — #591 implemented; verification via CI** (OpenSpec
+  change `2026-11-17-smart-object-stack-modes`, archived; capability
+  `compositing/smart-object-stack-modes`). `StackMode` and `reduce_stack` live in
+  `crates/pictura-core/src/stack_mode.rs`; the renderer reduces the embedded
+  payload's visible top-level frames in bands, prefers the reduced source over a
+  proxy when a mode is active, and rasterize bakes it. The mode persists in the
+  Pictura-private `PiSt` layer block, and `Layer > Smart Objects > Stack Mode`
+  has the 12 Extended-only checkable leaves. The raster proxy stays pre-stack,
+  so `None` reverts to it. The local build passes; the test and verify gates
+  run in CI.
 - **Save As all formats — #625 implemented; verification via CI** (OpenSpec
   change `save-as-all-formats`). `pictura-codec` has the engine Save As writers
   under `crates/pictura-codec/src/save/`; the six new dialogs and the BMP
