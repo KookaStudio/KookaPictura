@@ -324,7 +324,7 @@ fn ctx_constants_match_legacy() {
         composite_dest: (2000, 64000),
         channel_ranges: vec![((0, 65535), (1000, 60000))],
     });
-    layer.type_tool = type_layer(None).type_tool;
+    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.type_tool = type_layer(None).type_tool().cloned() });
     let d = doc(
         2,
         2,
@@ -405,7 +405,7 @@ fn ctx_route_callers_match_legacy() {
     let solid_fill = doc(2, 2, vec![base(), solid_fill]);
     let mut gradient = adjustment_layer("gradient", *b"GdFl", Vec::new(), 200, None);
     gradient.rect = full(2, 2);
-    gradient.adjustment = Some(crate::encode_gradient_fill(
+    pictura_codec::edit_layer(gradient.as_mut(), |parts| { parts.adjustment = Some(crate::encode_gradient_fill(
         GradientKind::Linear,
         &[
             GradientStop {
@@ -418,7 +418,7 @@ fn ctx_route_callers_match_legacy() {
             },
         ],
         0.0,
-    ));
+    )) });
     let gradient = doc(2, 2, vec![base(), gradient]);
     let pattern = pattern_fixture_doc();
     let smart_source = doc(

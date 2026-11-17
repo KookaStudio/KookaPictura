@@ -200,10 +200,10 @@ fn small_grouped_or_unviewed_moves_keep_the_exact_preview() {
 fn a_document_a_reduction_would_misdraw_keeps_the_exact_preview_above_level_zero() {
     let mut doc = document();
     let mut styled: Layer = pixel_layer("styled", 10, 10, UNDER);
-    styled.extra_blocks.push(pictura_core::LayerBlock {
+    pictura_codec::edit_layer(styled.as_mut(), |parts| { parts.extra_blocks.push(pictura_core::LayerBlock {
         key: *b"lfx2",
         data: vec![0u8; 4].into(),
-    });
+    }) });
     let layers: Vec<Layer> = doc.layers.iter().cloned().chain([styled]).collect();
     doc.layers = LayerStack::from_layers(layers);
     let visible = rect(0, 0, 800, 600);

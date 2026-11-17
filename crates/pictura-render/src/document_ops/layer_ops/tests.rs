@@ -18,7 +18,7 @@ pub(super) fn rect(w: i32, h: i32) -> PsdRect {
 
 pub(super) fn pixel_layer(name: &str, w: u32, h: u32, value: u8) -> Layer {
     let n = w as usize * h as usize;
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: rect(w as i32, h as i32),
         blend: BlendMode::Normal,
@@ -52,7 +52,7 @@ pub(super) fn pixel_layer(name: &str, w: u32, h: u32, value: u8) -> Layer {
         is_group: false,
         background: name == "Background",
         ..Default::default()
-    }
+    })
 }
 
 pub(super) fn doc_with(layers: Vec<Layer>) -> Document {
@@ -73,11 +73,11 @@ fn new_layer_is_empty_rect() {
     assert_eq!(added.rect, rect(0, 0), "a new layer stores no pixels");
     assert_eq!(added.blend, BlendMode::Normal);
     assert_eq!((added.opacity, added.fill), (255, 255));
-    assert!(added.visible && !added.is_group);
-    assert_eq!(added.channels.len(), 4);
+    assert!(added.visible && !added.is_group());
+    assert_eq!(added.channels().len(), 4);
     for (id, channel) in [(0i16, 0), (1, 1), (2, 2), (-1, 3)] {
-        assert_eq!(added.channels[channel].id, id);
-        assert!(added.channels[channel].data.is_empty());
+        assert_eq!(added.channels()[channel].id, id);
+        assert!(added.channels()[channel].data.is_empty());
     }
 }
 
@@ -106,8 +106,8 @@ fn add_group_inserts_empty_group() {
 
     assert_eq!(index, 1);
     let group = &doc.layers[1];
-    assert!(group.is_group);
-    assert!(group.children.is_empty());
+    assert!(group.is_group());
+    assert!(group.children().is_empty());
     assert_eq!(group.rect, rect(0, 0));
     assert_eq!(group.blend, BlendMode::Normal);
 }
@@ -136,21 +136,21 @@ fn duplicate_layer_deep_copies_above_the_source() {
     assert_eq!(doc.layers[1].color, ColorLabel::Red);
     assert_eq!(doc.layers[1].opacity, 200);
 
-    doc.layers[1].channels[0].data[0] = 7;
-    assert_eq!(doc.layers[0].channels[0].data[0], 40, "deep copy");
+    doc.layers[1].channels_mut()[0].data[0] = 7;
+    assert_eq!(doc.layers[0].channels()[0].data[0], 40, "deep copy");
 }
 
 #[test]
 fn duplicate_group_copies_children() {
     let mut group = empty_group("Group 1");
-    let _ = group.children.push(pixel_layer("child", 4, 4, 30));
+    let _ = group.children_mut().expect("group").push(pixel_layer("child", 4, 4, 30));
     let mut doc = doc_with(vec![group]);
 
     assert_eq!(duplicate_layer(&mut doc, 0), 1);
     assert_eq!(doc.layers[1].name, "Group 1 copy");
-    assert!(doc.layers[1].is_group);
-    assert_eq!(doc.layers[1].children.len(), 1);
-    assert_eq!(doc.layers[1].children[0].name, "child");
+    assert!(doc.layers[1].is_group());
+    assert_eq!(doc.layers[1].children().len(), 1);
+    assert_eq!(doc.layers[1].children()[0].name, "child");
 }
 
 #[test]
@@ -173,10 +173,10 @@ fn group_layer_wraps_in_place() {
     assert_eq!(index, 1);
     assert_eq!(doc.layers.len(), 3);
     let group = &doc.layers[1];
-    assert!(group.is_group);
+    assert!(group.is_group());
     assert_eq!(group.name, "Group 1");
-    assert_eq!(group.children.len(), 1);
-    assert_eq!(group.children[0].name, "b");
+    assert_eq!(group.children().len(), 1);
+    assert_eq!(group.children()[0].name, "b");
     assert_eq!(doc.layers[0].name, "a");
     assert_eq!(doc.layers[2].name, "c");
 }
@@ -206,8 +206,8 @@ fn group_layer_names_after_existing_groups() {
 #[test]
 fn ungroup_splices_children_in_order() {
     let mut group = empty_group("Group 1");
-    let _ = group.children.push(pixel_layer("a", 4, 4, 1));
-    let _ = group.children.push(pixel_layer("b", 4, 4, 2));
+    let _ = group.children_mut().expect("group").push(pixel_layer("a", 4, 4, 1));
+    let _ = group.children_mut().expect("group").push(pixel_layer("b", 4, 4, 2));
     let mut doc = doc_with(vec![
         pixel_layer("bottom", 4, 4, 0),
         group,
@@ -235,7 +235,7 @@ fn next_layer_name_uses_highest_suffix() {
         pixel_layer("Layer 5", 4, 4, 2),
         pixel_layer("Group 2", 4, 4, 3),
     ]);
-    let _ = doc.layers[1].children.push(pixel_layer("Layer 9", 4, 4, 4));
+    let _ = doc.layers[1].children_mut().expect("group").push(pixel_layer("Layer 9", 4, 4, 4));
     assert_eq!(next_layer_name(&doc, "Layer"), "Layer 10");
     assert_eq!(next_layer_name(&doc, "Group"), "Group 3");
 
@@ -264,7 +264,7 @@ fn locked_layer(name: &str) -> Layer {
 
 fn sample_doc() -> Document {
     let mut group = empty_group("Group 1");
-    let _ = group.children.push(pixel_layer("child", 4, 4, 2));
+    let _ = group.children_mut().expect("group").push(pixel_layer("child", 4, 4, 2));
     doc_with(vec![
         pixel_layer("Background", 4, 4, 0),
         locked_layer("locked"),
@@ -279,7 +279,7 @@ fn visible_names(doc: &Document) -> Vec<String> {
             if layer.visible {
                 out.push(layer.name.clone());
             }
-            walk(&layer.children, out);
+            walk(layer.children(), out);
         }
     }
     let mut out = Vec::new();
@@ -290,8 +290,8 @@ fn visible_names(doc: &Document) -> Vec<String> {
 #[test]
 fn path_resolve_nested() {
     let mut group = empty_group("Group 1");
-    let _ = group.children.push(pixel_layer("a", 4, 4, 1));
-    let _ = group.children.push(pixel_layer("b", 4, 4, 2));
+    let _ = group.children_mut().expect("group").push(pixel_layer("a", 4, 4, 1));
+    let _ = group.children_mut().expect("group").push(pixel_layer("b", 4, 4, 2));
     let mut doc = doc_with(vec![pixel_layer("bottom", 4, 4, 0), group]);
 
     assert_eq!(resolve_path(&doc, "0").unwrap().name, "bottom");
@@ -302,13 +302,13 @@ fn path_resolve_nested() {
     assert_eq!(parent_path("0"), None);
 
     resolve_path_mut(&mut doc, "1/0").unwrap().opacity = 100;
-    assert_eq!(doc.layers[1].children[0].opacity, 100);
+    assert_eq!(doc.layers[1].children()[0].opacity, 100);
 }
 
 #[test]
 fn path_resolve_rejects() {
     let mut group = empty_group("Group 1");
-    let _ = group.children.push(pixel_layer("a", 4, 4, 1));
+    let _ = group.children_mut().expect("group").push(pixel_layer("a", 4, 4, 1));
     let mut doc = doc_with(vec![pixel_layer("bottom", 4, 4, 0), group]);
 
     for bad in [
@@ -327,8 +327,8 @@ fn path_resolve_rejects() {
 #[test]
 fn flatten_rows_is_topmost_first() {
     let mut group = empty_group("Group 1");
-    let _ = group.children.push(pixel_layer("c0", 4, 4, 1));
-    let _ = group.children.push(pixel_layer("c1", 4, 4, 2));
+    let _ = group.children_mut().expect("group").push(pixel_layer("c0", 4, 4, 1));
+    let _ = group.children_mut().expect("group").push(pixel_layer("c1", 4, 4, 2));
     let doc = doc_with(vec![
         pixel_layer("bottom", 4, 4, 0),
         group,
@@ -370,7 +370,7 @@ fn is_background_reads_the_flag_not_position_or_name() {
 #[test]
 fn background_from_layer_flags_opaque_and_moves_to_bottom() {
     let mut top = pixel_layer("Base", 4, 4, 50);
-    top.channels[3].data[0] = 0; // one fully transparent pixel
+    top.channels_mut()[3].data[0] = 0; // one fully transparent pixel
     let mut doc = doc_with(vec![pixel_layer("other", 4, 4, 10), top]);
 
     assert!(background_from_layer(&mut doc, "1"));
@@ -380,29 +380,29 @@ fn background_from_layer_flags_opaque_and_moves_to_bottom() {
     assert!(moved.background);
     assert_eq!(doc.layers[1].name, "other");
     assert_eq!(
-        moved.channels[3].data[0], 255,
+        moved.channels()[3].data[0], 255,
         "transparent pixel becomes opaque"
     );
     assert_eq!(
-        moved.channels[0].data[0], 255,
+        moved.channels()[0].data[0], 255,
         "and takes the white background"
     );
-    assert_eq!(moved.channels[1].data[0], 255);
-    assert_eq!(moved.channels[2].data[0], 255);
-    assert_eq!(moved.channels[0].data[1], 50, "opaque pixels are untouched");
-    assert_eq!(moved.channels[3].data[1], 255);
+    assert_eq!(moved.channels()[1].data[0], 255);
+    assert_eq!(moved.channels()[2].data[0], 255);
+    assert_eq!(moved.channels()[0].data[1], 50, "opaque pixels are untouched");
+    assert_eq!(moved.channels()[3].data[1], 255);
 }
 
 #[test]
 fn background_from_layer_refuses_non_raster_and_existing_background() {
     let mut group = empty_group("Group");
-    let _ = group.children.push(pixel_layer("child", 4, 4, 1));
+    let _ = group.children_mut().expect("group").push(pixel_layer("child", 4, 4, 1));
     let mut doc = doc_with(vec![group]);
     assert!(!background_from_layer(&mut doc, "0"));
 
     let mut adj = pixel_layer("adj", 4, 4, 1);
-    adj.channels.clear();
-    adj.adjustment = Some(crate::encode_invert());
+    adj.channels_mut().clear();
+    pictura_codec::edit_layer(adj.as_mut(), |parts| { parts.adjustment = Some(crate::encode_invert()) });
     let mut doc = doc_with(vec![adj]);
     assert!(!background_from_layer(&mut doc, "0"));
 
@@ -426,7 +426,7 @@ fn layer_from_background_clears_flag_and_unlocks() {
         "renamed to the next free name"
     );
     assert!(
-        doc.layers[0].channels.iter().any(|c| c.id == -1),
+        doc.layers[0].channels().iter().any(|c| c.id == -1),
         "it can take transparency"
     );
 
@@ -439,11 +439,11 @@ fn layer_from_background_clears_flag_and_unlocks() {
 fn layer_from_background_gives_a_uniform_alpha_plane() {
     let mut flagged = pixel_layer("Background", 4, 4, 1);
     flagged.background = true;
-    flagged.channels.retain(|c| c.id != -1);
+    flagged.channels_mut().retain(|c| c.id != -1);
     let mut doc = doc_with(vec![flagged]);
     assert!(layer_from_background(&mut doc, "0"));
     let alpha = doc.layers[0]
-        .channels
+        .channels()
         .iter()
         .find(|c| c.id == -1)
         .expect("an alpha channel");
@@ -521,7 +521,7 @@ fn lock_group_layers_locks_descendants_only() {
     let mut doc = sample_doc();
     // Group 1 is layer index 2 with one child at path "2/0".
     assert_eq!(lock_group_layers(&mut doc, "2"), 1);
-    assert!(doc.layers[2].children[0].lock.is_all());
+    assert!(doc.layers[2].children()[0].lock.is_all());
     assert_eq!(
         doc.layers[2].lock.bits(),
         0,
@@ -542,19 +542,19 @@ fn lock_group_layers_locks_descendants_only() {
 #[test]
 fn lock_group_layers_covers_nested_descendants() {
     let mut inner = empty_group("Inner");
-    let _ = inner.children.push(pixel_layer("deep", 4, 4, 1));
+    let _ = inner.children_mut().expect("group").push(pixel_layer("deep", 4, 4, 1));
     let mut outer = empty_group("Outer");
-    let _ = outer.children.push(pixel_layer("mid", 4, 4, 2));
-    let _ = outer.children.push(inner);
+    let _ = outer.children_mut().expect("group").push(pixel_layer("mid", 4, 4, 2));
+    let _ = outer.children_mut().expect("group").push(inner);
     let mut doc = doc_with(vec![outer]);
     assert_eq!(lock_group_layers(&mut doc, "0"), 3);
     assert!(
         !doc.layers[0].lock.is_all(),
         "the outer group is not locked"
     );
-    assert!(doc.layers[0].children[0].lock.is_all());
-    assert!(doc.layers[0].children[1].lock.is_all());
-    assert!(doc.layers[0].children[1].children[0].lock.is_all());
+    assert!(doc.layers[0].children()[0].lock.is_all());
+    assert!(doc.layers[0].children()[1].lock.is_all());
+    assert!(doc.layers[0].children()[1].children()[0].lock.is_all());
 }
 
 #[test]
@@ -587,7 +587,7 @@ fn duplicate_applies_everywhere() {
     let copy = &doc.layers[1];
     assert!(!copy.background, "one Background; its copy is ordinary");
     assert_eq!(copy.lock.bits(), 0, "and unlocked");
-    assert!(copy.channels.iter().any(|c| c.id == -1));
+    assert!(copy.channels().iter().any(|c| c.id == -1));
     assert_eq!(
         doc.layers[3].lock, doc.layers[2].lock,
         "other copies keep locks"
@@ -597,7 +597,7 @@ fn duplicate_applies_everywhere() {
 #[test]
 fn duplicating_a_background_makes_an_unlocked_layer_with_alpha() {
     let mut background = pixel_layer("Background", 4, 4, 9);
-    background.channels.retain(|c| c.id != -1);
+    background.channels_mut().retain(|c| c.id != -1);
     background.background = true;
     background.lock = LockFlags::default()
         .with(LockFlags::TRANSPARENCY, true)
@@ -606,7 +606,7 @@ fn duplicating_a_background_makes_an_unlocked_layer_with_alpha() {
     assert_eq!(duplicate_layer(&mut doc, 0), 1);
     let copy = &doc.layers[1];
     assert!(!copy.background && copy.lock.bits() == 0);
-    let alpha = copy.channels.iter().find(|c| c.id == -1).unwrap();
+    let alpha = copy.channels().iter().find(|c| c.id == -1).unwrap();
     assert_eq!(&alpha.data[..], &[255; 16]);
     assert!(doc.layers[0].background);
 }
@@ -643,9 +643,9 @@ fn group_paths_refuses_cross_container_and_succeeds_within_one() {
     let path = group_paths(&mut doc, &["0", "2"]).unwrap();
     assert_eq!(path, "1");
     assert_eq!(doc.layers.len(), 2);
-    assert!(doc.layers[1].is_group);
+    assert!(doc.layers[1].is_group());
     let children: Vec<&str> = doc.layers[1]
-        .children
+        .children()
         .iter()
         .map(|layer| layer.name.as_str())
         .collect();
@@ -656,8 +656,8 @@ fn group_paths_refuses_cross_container_and_succeeds_within_one() {
 #[test]
 fn apply_visibility_is_solo() {
     let mut group = empty_group("Group 1");
-    let _ = group.children.push(pixel_layer("c", 4, 4, 1));
-    let _ = group.children.push(pixel_layer("d", 4, 4, 2));
+    let _ = group.children_mut().expect("group").push(pixel_layer("c", 4, 4, 1));
+    let _ = group.children_mut().expect("group").push(pixel_layer("d", 4, 4, 2));
     let mut doc = doc_with(vec![
         pixel_layer("a", 4, 4, 0),
         pixel_layer("b", 4, 4, 3),
@@ -667,7 +667,7 @@ fn apply_visibility_is_solo() {
     assert_eq!(apply_visibility(&mut doc, &["1"]), 4);
     assert_eq!(visible_names(&doc), vec!["b"]);
     assert!(!doc.layers[2].visible);
-    assert!(doc.layers[2].children.iter().all(|child| !child.visible));
+    assert!(doc.layers[2].children().iter().all(|child| !child.visible));
 
     assert_eq!(apply_visibility(&mut doc, &["2", "2/0"]), 3);
     assert_eq!(visible_names(&doc), vec!["Group 1", "c"]);
@@ -676,7 +676,7 @@ fn apply_visibility_is_solo() {
 #[test]
 fn delete_paths_nested_pair_deletes_once() {
     let mut group = empty_group("Group 1");
-    let _ = group.children.push(pixel_layer("child", 4, 4, 1));
+    let _ = group.children_mut().expect("group").push(pixel_layer("child", 4, 4, 1));
     let mut doc = doc_with(vec![pixel_layer("below", 4, 4, 1), group]);
 
     assert_eq!(delete_paths(&mut doc, &["1", "1/0"]), 1);
@@ -696,7 +696,7 @@ fn delete_paths_keeps_the_last_layer() {
     assert_eq!(doc.layers.len(), 1);
 
     let mut group = empty_group("Group 1");
-    let _ = group.children.push(pixel_layer("child", 4, 4, 1));
+    let _ = group.children_mut().expect("group").push(pixel_layer("child", 4, 4, 1));
     let mut doc = doc_with(vec![group]);
     assert_eq!(delete_paths(&mut doc, &["0"]), 0, "the only group stays");
     assert_eq!(
@@ -711,7 +711,7 @@ fn can_delete_paths_agrees_with_a_real_delete() {
     let mut background = pixel_layer("bg", 4, 4, 0);
     background.background = true;
     let mut group = empty_group("Group 1");
-    let _ = group.children.push(pixel_layer("child", 4, 4, 1));
+    let _ = group.children_mut().expect("group").push(pixel_layer("child", 4, 4, 1));
     let docs = [
         doc_with(vec![pixel_layer("only", 4, 4, 1)]),
         doc_with(vec![background.clone(), pixel_layer("top", 4, 4, 1)]),
@@ -735,17 +735,17 @@ fn can_delete_paths_agrees_with_a_real_delete() {
 #[test]
 fn add_layer_in_inside_group_and_on_top() {
     let mut group = empty_group("Group 1");
-    let _ = group.children.push(pixel_layer("child", 4, 4, 1));
+    let _ = group.children_mut().expect("group").push(pixel_layer("child", 4, 4, 1));
     let mut doc = doc_with(vec![group]);
 
     let path = add_layer_in(&mut doc, "0", "Inside");
     assert_eq!(path, "0/1");
-    assert_eq!(doc.layers[0].children.len(), 2);
-    assert_eq!(doc.layers[0].children[1].name, "Inside");
+    assert_eq!(doc.layers[0].children().len(), 2);
+    assert_eq!(doc.layers[0].children()[1].name, "Inside");
 
     let path = add_group_in(&mut doc, "", "New Group");
     assert_eq!(path, "1", "empty selection lands on top");
-    assert!(doc.layers[1].is_group);
+    assert!(doc.layers[1].is_group());
 
     let path = add_layer_in(&mut doc, "99", "Top");
     assert_eq!(path, "2", "missing selection lands on top");
@@ -759,13 +759,13 @@ fn renaming_a_background_converts_it() {
         pixel_layer("top", 4, 4, 1),
     ]);
     doc.layers[0].lock = LockFlags::all();
-    doc.layers[0].channels.retain(|channel| channel.id != -1);
+    doc.layers[0].channels_mut().retain(|channel| channel.id != -1);
     assert!(rename_path(&mut doc, "0", "Sky"));
     assert_eq!(doc.layers[0].name, "Sky");
     assert!(!doc.layers[0].background);
     assert_eq!(doc.layers[0].lock, LockFlags::default());
     assert!(doc.layers[0]
-        .channels
+        .channels()
         .iter()
         .any(|channel| channel.id == -1));
 }
@@ -838,7 +838,7 @@ fn nesting_lock_refuses_grouping_but_allows_reorder() {
 
     let mut group = empty_group("Group 1");
     group.lock = LockFlags::default().with(LockFlags::NESTING, true);
-    let _ = group.children.push(pixel_layer("child", 4, 4, 1));
+    let _ = group.children_mut().expect("group").push(pixel_layer("child", 4, 4, 1));
     let mut doc = doc_with(vec![group]);
     let before = doc.clone();
     assert_eq!(
@@ -853,10 +853,10 @@ fn nesting_lock_refuses_grouping_but_allows_reorder() {
 fn nesting_lock_refuses_reparent_in_and_out() {
     let mut group = empty_group("Locked");
     group.lock = LockFlags::default().with(LockFlags::NESTING, true);
-    group.children = pictura_core::LayerStack::from_layers(vec![
+    group.set_group_children(pictura_core::LayerStack::from_layers(vec![
         pixel_layer("A", 4, 4, 1),
         pixel_layer("B", 4, 4, 2),
-    ]);
+    ]));
     let mut doc = doc_with(vec![pixel_layer("top", 4, 4, 3), group]);
 
     // A drop into the nesting-locked group is refused in both forms.
@@ -878,18 +878,18 @@ fn nesting_lock_refuses_reparent_in_and_out() {
     // A within-container reorder keeps the same parent and stays allowed.
     assert!(can_move_path_to(&doc, "1/0", "1/1", 0));
     assert!(move_path_to(&mut doc, "1/0", "1/1", 0));
-    assert_eq!(doc.layers[1].children[0].name, "B");
-    assert_eq!(doc.layers[1].children[1].name, "A");
+    assert_eq!(doc.layers[1].children()[0].name, "B");
+    assert_eq!(doc.layers[1].children()[1].name, "A");
 }
 
 #[test]
 fn move_path_to_reparents_refuses_and_dry_runs() {
     fn sample() -> Document {
         let mut group = empty_group("Group");
-        group.children = pictura_core::LayerStack::from_layers(vec![
+        group.set_group_children(pictura_core::LayerStack::from_layers(vec![
             pixel_layer("A", 4, 4, 1),
             pixel_layer("B", 4, 4, 2),
-        ]);
+        ]));
         doc_with(vec![
             pixel_layer("Background", 4, 4, 0),
             group,
@@ -897,7 +897,7 @@ fn move_path_to_reparents_refuses_and_dry_runs() {
         ])
     }
     fn child_names(group: &Layer) -> Vec<&str> {
-        group.children.iter().map(|c| c.name.as_str()).collect()
+        group.children().iter().map(|c| c.name.as_str()).collect()
     }
 
     // Valid moves agree with the dry run and land where expected.
@@ -905,8 +905,8 @@ fn move_path_to_reparents_refuses_and_dry_runs() {
     assert!(can_move_path_to(&doc, "2", "1", 2));
     assert!(move_path_to(&mut doc, "2", "1", 2));
     assert_eq!(doc.layers.len(), 2);
-    assert_eq!(doc.layers[1].children.len(), 3);
-    assert_eq!(doc.layers[1].children[2].name, "top");
+    assert_eq!(doc.layers[1].children().len(), 3);
+    assert_eq!(doc.layers[1].children()[2].name, "top");
 
     // Below then above a sibling both put A on top of B (bottom-first stack).
     let mut doc = sample();
@@ -964,7 +964,7 @@ fn move_path_to_into_group_from_above_resolves_post_removal() {
     assert_eq!(doc.layers.len(), 1, "A left the root");
     assert_eq!(doc.layers[0].name, "G");
     let children: Vec<&str> = doc.layers[0]
-        .children
+        .children()
         .iter()
         .map(|layer| layer.name.as_str())
         .collect();
@@ -982,7 +982,7 @@ fn move_path_to_into_group_from_above_resolves_post_removal() {
     let root: Vec<&str> = doc.layers.iter().map(|layer| layer.name.as_str()).collect();
     assert_eq!(root, ["G", "B"], "A left the root, B did not move");
     let children: Vec<&str> = doc.layers[0]
-        .children
+        .children()
         .iter()
         .map(|layer| layer.name.as_str())
         .collect();
@@ -993,22 +993,21 @@ fn move_path_to_into_group_from_above_resolves_post_removal() {
 fn move_path_to_into_a_sibling_container_shifts_each_depth() {
     // Root G has children [A, H]; H shifts from 0/1 to 0/0 once A is removed.
     let mut outer = empty_group("G");
-    outer.children =
-        pictura_core::LayerStack::from_layers(vec![pixel_layer("A", 4, 4, 1), empty_group("H")]);
+    outer.set_group_children(pictura_core::LayerStack::from_layers(vec![pixel_layer("A", 4, 4, 1), empty_group("H")]));
     let mut doc = doc_with(vec![outer]);
 
     assert!(can_move_path_to(&doc, "0/0", "0/1", 2));
     assert!(move_path_to(&mut doc, "0/0", "0/1", 2));
-    assert_eq!(doc.layers[0].children.len(), 1);
-    assert_eq!(doc.layers[0].children[0].name, "H");
-    assert_eq!(doc.layers[0].children[0].children[0].name, "A");
+    assert_eq!(doc.layers[0].children().len(), 1);
+    assert_eq!(doc.layers[0].children()[0].name, "H");
+    assert_eq!(doc.layers[0].children()[0].children()[0].name, "A");
 }
 
 #[test]
 fn move_path_to_out_of_group_to_root_and_root_siblings() {
     fn sample() -> Document {
         let mut group = empty_group("G");
-        group.children = pictura_core::LayerStack::from_layers(vec![pixel_layer("c", 4, 4, 1)]);
+        group.set_group_children(pictura_core::LayerStack::from_layers(vec![pixel_layer("c", 4, 4, 1)]));
         doc_with(vec![
             pixel_layer("bottom", 4, 4, 0),
             group,
@@ -1022,7 +1021,7 @@ fn move_path_to_out_of_group_to_root_and_root_siblings() {
     assert!(move_path_to(&mut doc, "1/0", "", 0));
     let root: Vec<&str> = doc.layers.iter().map(|layer| layer.name.as_str()).collect();
     assert_eq!(root, ["bottom", "G", "top", "c"]);
-    assert!(doc.layers[1].children.is_empty(), "the group is now empty");
+    assert!(doc.layers[1].children().is_empty(), "the group is now empty");
 
     // Above a root sibling.
     let mut doc = sample();
@@ -1041,10 +1040,10 @@ fn move_path_to_out_of_group_to_root_and_root_siblings() {
 fn move_path_to_keeps_reorder_and_refusals() {
     fn sample() -> Document {
         let mut group = empty_group("G");
-        group.children = pictura_core::LayerStack::from_layers(vec![
+        group.set_group_children(pictura_core::LayerStack::from_layers(vec![
             pixel_layer("A", 4, 4, 1),
             pixel_layer("B", 4, 4, 2),
-        ]);
+        ]));
         doc_with(vec![
             pixel_layer("Background", 4, 4, 0),
             group,
@@ -1056,7 +1055,7 @@ fn move_path_to_keeps_reorder_and_refusals() {
     let mut doc = sample();
     assert!(move_path_to(&mut doc, "1/1", "1/0", 1));
     let children: Vec<&str> = doc.layers[1]
-        .children
+        .children()
         .iter()
         .map(|layer| layer.name.as_str())
         .collect();
@@ -1162,7 +1161,7 @@ fn add_layer_full_applies_attributes_and_neutral_fill() {
     assert_eq!(layer.opacity, 128);
     assert_eq!(layer.fill, 200);
     assert!(layer.clipping);
-    for channel in &layer.channels {
+    for channel in layer.channels() {
         let expected = match channel.id {
             -1..=2 => 255,
             _ => continue,
@@ -1186,7 +1185,7 @@ fn add_layer_full_without_a_neutral_color_is_transparent() {
     };
     let path = add_layer_full(&mut doc, "", &spec);
     assert_eq!(path, "1");
-    for channel in &doc.layers[1].channels {
+    for channel in doc.layers[1].channels() {
         assert!(
             channel.data.iter().all(|&v| v == 0),
             "channel {} transparent",
@@ -1210,14 +1209,14 @@ fn add_group_full_ignores_fill_clipping_and_neutral_fill() {
     let path = add_group_full(&mut doc, "", &spec);
     assert_eq!(path, "1");
     let group = &doc.layers[1];
-    assert!(group.is_group);
+    assert!(group.is_group());
     assert_eq!(group.name, "Grp");
     assert_eq!(group.color, ColorLabel::Blue);
     assert_eq!(group.blend, BlendMode::Screen);
     assert_eq!(group.opacity, 200);
     assert_eq!(group.fill, 255, "groups ignore fill");
     assert!(!group.clipping, "groups ignore clipping");
-    assert!(group.channels.is_empty());
+    assert!(group.channels().is_empty());
 }
 
 #[test]
@@ -1295,12 +1294,12 @@ fn arrange_refuses_background_and_locked() {
 #[test]
 fn arrange_stays_within_the_group() {
     let mut group = empty_group("Group 1");
-    let _ = group.children.push(pixel_layer("c0", 4, 4, 0));
-    let _ = group.children.push(pixel_layer("c1", 4, 4, 1));
+    let _ = group.children_mut().expect("group").push(pixel_layer("c0", 4, 4, 0));
+    let _ = group.children_mut().expect("group").push(pixel_layer("c1", 4, 4, 1));
     let mut doc = doc_with(vec![pixel_layer("outer", 4, 4, 2), group]);
 
     assert!(arrange_path(&mut doc, "1/0", Arrange::Front));
-    assert_eq!(doc.layers[1].children[1].name, "c0");
+    assert_eq!(doc.layers[1].children()[1].name, "c0");
     assert_eq!(
         doc.layers[0].name, "outer",
         "the layer did not leave its group"
@@ -1330,7 +1329,7 @@ fn reverse_flips_a_contiguous_run_and_refuses_otherwise() {
 #[test]
 fn reverse_refuses_cross_container_and_background() {
     let mut group = empty_group("Group 1");
-    let _ = group.children.push(pixel_layer("child", 4, 4, 1));
+    let _ = group.children_mut().expect("group").push(pixel_layer("child", 4, 4, 1));
     let mut doc = doc_with(vec![pixel_layer("outer", 4, 4, 0), group]);
     let before = doc.clone();
     assert!(!reverse_paths(&mut doc, &["0", "1/0"]), "cross-container");

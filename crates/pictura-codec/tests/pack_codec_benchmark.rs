@@ -18,7 +18,7 @@ fn dense_tiles(path: &str) -> Vec<Vec<u8>> {
     let doc = pictura_codec::read_psd(&bytes).expect("a readable PSD");
     let mut tiles = Vec::new();
     for layer in &doc.layers {
-        for channel in &layer.channels {
+        for channel in layer.channels() {
             for i in 0..channel.data.tile_count() {
                 if let Some(tile) = channel.data.tile_at(i) {
                     if let TileData::Dense(d) = &tile.data {

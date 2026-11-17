@@ -23,7 +23,7 @@ pub(crate) fn doc_at(
     } else {
         &[0, 1, 2, -1]
     };
-    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_core::Layer::from_parts(pictura_core::LayerParts {
         rect: PsdRect {
             top,
             left,
@@ -39,7 +39,7 @@ pub(crate) fn doc_at(
             .collect(),
         background,
         ..Default::default()
-    }]);
+    }, pictura_core::LayerContent::Pixel)]);
     doc
 }
 
@@ -168,7 +168,7 @@ fn a_layer_is_filled_in_document_space() {
 #[test]
 fn a_transparency_lock_keeps_alpha_and_refuses_clear() {
     let mut d = doc(4, 1, [10, 10, 10, 0]);
-    d.layers[0].channels[3].data[0] = 200;
+    d.layers[0].channels_mut()[3].data[0] = 200;
     lock(&mut d, LockFlags::TRANSPARENCY);
     flood(&mut d, PaintMode::Normal, None).expect("filled");
     assert_eq!(pixel(&d, 0, 0), [220, 0, 0, 200]);
@@ -184,8 +184,8 @@ fn a_transparency_lock_keeps_alpha_and_refuses_clear() {
 fn a_keep_policy_keeps_the_destination_alpha() {
     // An opaque pixel, a half transparent one and an empty one.
     let mut d = doc(3, 1, [255; 4]);
-    d.layers[0].channels[3].data[1] = 128;
-    d.layers[0].channels[3].data[2] = 0;
+    d.layers[0].channels_mut()[3].data[1] = 128;
+    d.layers[0].channels_mut()[3].data[2] = 0;
     fill_layer(&mut d, "0", PaintMode::Normal, None, Alpha::Keep, |_, _| {
         Some((RED, 1.0))
     })
@@ -256,7 +256,7 @@ fn locked_pixels_a_group_and_other_modes_are_refused() {
     assert!(flood(&mut locked, PaintMode::Normal, None).is_none());
 
     let mut group = doc(4, 1, [255; 4]);
-    group.layers[0].is_group = true;
+    group.layers[0].set_group_children(pictura_core::LayerStack::default());
     assert!(flood(&mut group, PaintMode::Normal, None).is_none());
 
     let mut deep = doc(4, 1, [255; 4]);
@@ -267,7 +267,7 @@ fn locked_pixels_a_group_and_other_modes_are_refused() {
 #[test]
 fn behind_fills_only_what_is_not_opaque_and_clear_erases() {
     let mut d = doc(2, 1, [255; 4]);
-    d.layers[0].channels[3].data[1] = 0;
+    d.layers[0].channels_mut()[3].data[1] = 0;
     flood(&mut d, PaintMode::Behind, None).expect("filled");
     assert_eq!(pixel(&d, 0, 0), [255; 4]);
     assert_eq!(pixel(&d, 1, 0), [220, 0, 0, 255]);
@@ -312,7 +312,7 @@ fn dissolve_paints_whole_pixels_in_proportion_and_repeats() {
 /// A Grayscale document's layer carries one colour plane.
 pub(crate) fn gray_doc(w: i32, h: i32, rgba: [u8; 4]) -> Document {
     let mut doc = Document::new(w as u32, h as u32, ColorMode::Grayscale, BitDepth::Eight);
-    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_core::Layer::from_parts(pictura_core::LayerParts {
         rect: PsdRect {
             top: 0,
             left: 0,
@@ -330,7 +330,7 @@ pub(crate) fn gray_doc(w: i32, h: i32, rgba: [u8; 4]) -> Document {
             },
         ],
         ..Default::default()
-    }]);
+    }, pictura_core::LayerContent::Pixel)]);
     doc
 }
 
@@ -339,9 +339,9 @@ fn a_gray_layer_takes_the_colours_luma() {
     let mut d = gray_doc(2, 1, [255, 255, 255, 255]);
     flood(&mut d, PaintMode::Normal, None);
     // 0.299 * 220 = 65.78, the Rec. 601 luma of #DC0000.
-    assert_eq!(d.layers[0].channels[0].data.as_slice(), &[66, 66]);
+    assert_eq!(d.layers[0].channels()[0].data.as_slice(), &[66, 66]);
     let alpha = d.layers[0]
-        .channels
+        .channels()
         .iter()
         .find(|c| c.id == -1)
         .expect("an alpha channel");
@@ -352,9 +352,9 @@ fn a_gray_layer_takes_the_colours_luma() {
 fn an_rgb_layer_keeps_the_colours_channels() {
     let mut d = doc(2, 1, [255; 4]);
     flood(&mut d, PaintMode::Normal, None);
-    assert_eq!(d.layers[0].channels[0].data.as_slice(), &[220, 220]);
-    assert_eq!(d.layers[0].channels[1].data.as_slice(), &[0, 0]);
-    assert_eq!(d.layers[0].channels[2].data.as_slice(), &[0, 0]);
+    assert_eq!(d.layers[0].channels()[0].data.as_slice(), &[220, 220]);
+    assert_eq!(d.layers[0].channels()[1].data.as_slice(), &[0, 0]);
+    assert_eq!(d.layers[0].channels()[2].data.as_slice(), &[0, 0]);
 }
 
 #[test]
@@ -362,7 +362,7 @@ fn a_layer_above_the_canvas_fills_the_rows_on_the_canvas() {
     // A layer that hangs above the canvas: its first rows are off-canvas,
     // and every plane has to be cut on the same span.
     let mut d = doc_at((4, 4), (0, -2), [255, 255, 255, 255], false);
-    for (i, byte) in d.layers[0].channels[3]
+    for (i, byte) in d.layers[0].channels_mut()[3]
         .data
         .as_mut_slice()
         .iter_mut()
@@ -380,7 +380,7 @@ fn a_layer_above_the_canvas_fills_the_rows_on_the_canvas() {
     );
     // The canvas rows are the layer's last two rows, and their alpha took
     // the fill; the rows above the canvas are untouched.
-    let alpha = d.layers[0].channels[3].data.as_slice();
+    let alpha = d.layers[0].channels()[3].data.as_slice();
     assert_eq!(&alpha[8..12], &[255; 4]);
     assert_eq!(&alpha[0..8], &[0, 10, 20, 30, 40, 50, 60, 70]);
 }
@@ -398,10 +398,10 @@ fn an_eight_bit_fill_is_byte_identical() {
         Alpha::Blend,
         |_, _| Some((RED, 1.0)),
     );
-    assert_eq!(d.layers[0].channels[0].data.as_slice(), &[220, 237]);
-    assert_eq!(d.layers[0].channels[1].data.as_slice(), &[0, 127]);
-    assert_eq!(d.layers[0].channels[2].data.as_slice(), &[0, 127]);
-    assert_eq!(d.layers[0].channels[3].data.as_slice(), &[255, 255]);
+    assert_eq!(d.layers[0].channels()[0].data.as_slice(), &[220, 237]);
+    assert_eq!(d.layers[0].channels()[1].data.as_slice(), &[0, 127]);
+    assert_eq!(d.layers[0].channels()[2].data.as_slice(), &[0, 127]);
+    assert_eq!(d.layers[0].channels()[3].data.as_slice(), &[255, 255]);
 }
 
 #[test]
@@ -464,10 +464,10 @@ fn a_run_of_equal_pixels_blends_like_each_pixel_alone() {
     // input, so the reused blend is checked against a fresh one.
     let (w, h) = (24, 3);
     let mut d = doc(w, h, [0; 4]);
-    for (i, v) in d.layers[0].channels[3].data.iter_mut().enumerate() {
+    for (i, v) in d.layers[0].channels_mut()[3].data.iter_mut().enumerate() {
         *v = [0, 0, 0, 90, 90, 255][i % 6];
     }
-    for (i, v) in d.layers[0].channels[0].data.iter_mut().enumerate() {
+    for (i, v) in d.layers[0].channels_mut()[0].data.iter_mut().enumerate() {
         *v = if i % 12 < 6 { 10 } else { 200 };
     }
     let before = layer_rgba(&d.layers[0]);

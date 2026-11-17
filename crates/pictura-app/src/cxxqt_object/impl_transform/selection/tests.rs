@@ -100,7 +100,7 @@ fn selection_transform_keeps_layer_bytes() {
         .unwrap()
         .layers
         .iter()
-        .flat_map(|layer| layer.channels.iter().map(|channel| channel.data.to_vec()))
+        .flat_map(|layer| layer.channels().iter().map(|channel| channel.data.to_vec()))
         .collect();
     assert!(view.begin_selection_transform());
     scale_session(&mut view, 1.5);
@@ -112,7 +112,7 @@ fn selection_transform_keeps_layer_bytes() {
         .unwrap()
         .layers
         .iter()
-        .flat_map(|layer| layer.channels.iter().map(|channel| channel.data.to_vec()))
+        .flat_map(|layer| layer.channels().iter().map(|channel| channel.data.to_vec()))
         .collect();
     assert_eq!(after, before);
 }

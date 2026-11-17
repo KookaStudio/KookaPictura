@@ -267,7 +267,7 @@ mod tests {
     fn no_smart_object_keeps_layers() {
         let doc = build_document(&two_images(), false, false);
         assert_eq!(doc.layers.len(), 2);
-        assert!(doc.layers.iter().all(|layer| layer.smart_object.is_none()));
+        assert!(doc.layers.iter().all(|layer| layer.smart_object().is_none()));
     }
 
     #[test]
@@ -276,12 +276,11 @@ mod tests {
         assert_eq!(doc.layers.len(), 1);
         let layer = doc.layers.last().expect("smart object");
         assert_eq!(
-            layer.smart_object.as_ref().map(|so| so.kind),
+            layer.smart_object().map(|so| so.kind),
             Some(pictura_core::SmartObjectKind::Embedded)
         );
         let payload = layer
-            .smart_object
-            .as_ref()
+            .smart_object()
             .and_then(|so| so.payload())
             .expect("payload");
         let embedded = pictura_codec::read_psd(payload).expect("embedded PSD");

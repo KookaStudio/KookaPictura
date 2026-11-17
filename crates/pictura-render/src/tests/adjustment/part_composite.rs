@@ -717,7 +717,7 @@ fn destructive_channel_mixer_cmyk() {
         BlendMode::Normal,
         255,
     );
-    let before = layer.channels[0].data.clone();
+    let before = layer.channels()[0].data.clone();
     apply_adjustment_region_in_mode(
         &mut layer,
         &Adjustment::ChannelMixer(params),
@@ -727,7 +727,7 @@ fn destructive_channel_mixer_cmyk() {
         pictura_adjust::ColorBalanceMode::Rgb,
     )
     .expect("the destructive mix applies");
-    assert_ne!(layer.channels[0].data, before);
+    assert_ne!(layer.channels()[0].data, before);
 }
 
 #[test]

@@ -371,10 +371,10 @@ pub(super) fn decode_payload(so: &SmartObject) -> Option<Document> {
     let mut stacks = vec![&mut embedded.layers];
     while let Some(stack) = stacks.pop() {
         for layer in stack.iter_mut() {
-            if let Some(inner) = layer.smart_object.as_mut() {
+            pictura_codec::edit_layer(layer.as_mut(), |parts| { if let Some(inner) = parts.smart_object.as_mut() {
                 inner.nesting = so.nesting + 1;
-            }
-            stacks.push(&mut layer.children);
+            } });
+            if let Some(children) = layer.children_mut() { stacks.push(children); }
         }
     }
     Some(embedded)
@@ -430,7 +430,7 @@ fn with_merged_alpha(comp: &PixelBuffer, channels: &[pictura_core::Channel]) -> 
 pub(crate) fn filtered_source(layer: &Layer, doc: &Document) -> Option<CachedBuffer> {
     #[cfg(test)]
     crate::composite_plan::counters::note_source_lookup(layer);
-    let so = layer.smart_object.as_ref()?;
+    let so = layer.smart_object()?;
     let rect = layer.rect.clip_to(doc.width, doc.height)?;
     let mut hasher = DefaultHasher::new();
     so.payload_digest().hash(&mut hasher);
@@ -474,7 +474,7 @@ pub(crate) fn composited_source(
 ) -> Option<CachedBuffer> {
     match route {
         RasterRoute::Type => {
-            let type_tool = layer.type_tool.as_ref()?;
+            let type_tool = layer.type_tool().or_else(|| layer.fallback_type_tool())?;
             let buffer = text_raster(layer)?;
             // ponytail: the CPU text renderer is box-sized, so it builds the
             // full layer raster; the GPU upload clips it to the document.
@@ -486,7 +486,7 @@ pub(crate) fn composited_source(
             })
         }
         RasterRoute::SmartSource => {
-            let so = layer.smart_object.as_ref()?;
+            let so = layer.smart_object()?;
             let rect = layer.rect.clip_to(doc.width, doc.height)?;
             let mut hasher = DefaultHasher::new();
             key::embedded_key(so).hash(&mut hasher);
@@ -506,7 +506,7 @@ pub(crate) fn composited_source(
             })
         }
         RasterRoute::SmartFiltered => {
-            let so = layer.smart_object.as_ref()?;
+            let so = layer.smart_object()?;
             let filtered = filtered_source(layer, doc)?;
             let has_mask = so
                 .filter_mask
@@ -561,7 +561,7 @@ pub(crate) fn composited_source(
 
 /// The type-layer raster at `layer.rect`, or `None` when nothing paints.
 pub(crate) fn text_raster(layer: &Layer) -> Option<Arc<PixelBuffer>> {
-    let type_tool = layer.type_tool.as_ref()?;
+    let type_tool = layer.type_tool().or_else(|| layer.fallback_type_tool())?;
     #[cfg(test)]
     crate::composite_plan::counters::note_source_lookup(layer);
     let width = layer.rect.width();
@@ -663,7 +663,7 @@ pub(crate) fn effect_passes_with(
     effects: &LayerEffects,
     region: Option<PsdRect>,
     destructive: bool,
-    fill: Option<&pictura_adjust::Adjustment>,
+    fill: Option<&pictura_core::FillContent>,
 ) -> Arc<LayerPasses> {
     if crate::layer_effects::no_passes(layer, effects, destructive) {
         return Arc::new(LayerPasses::default());

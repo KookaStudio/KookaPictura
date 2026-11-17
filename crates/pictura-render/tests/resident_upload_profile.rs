@@ -29,7 +29,7 @@ fn whole_rect() -> PsdRect {
 
 fn layer(k: u8) -> Layer {
     let n = (DOC * DOC) as usize;
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: format!("layer {k}"),
         rect: whole_rect(),
         opacity: 255,
@@ -55,7 +55,7 @@ fn layer(k: u8) -> Layer {
         ]
         .to_vec(),
         ..Default::default()
-    }
+    })
 }
 
 fn profile_doc() -> Document {
@@ -77,7 +77,7 @@ fn moving_rect(frame: u32) -> PsdRect {
 }
 
 fn stamp_layer(layer: &mut Layer) {
-    for channel in &mut layer.channels {
+    for channel in layer.channels_mut() {
         channel.data.set_stamp(fresh_stamp());
     }
 }
@@ -104,7 +104,7 @@ fn resident_uploads_profile() {
     for frame in 0..PRESENTS {
         // The stroke writes the active layer: its stamp clears, so it cannot be
         // reused. The other layers keep their stamps.
-        doc.layers[0].channels[0].data.as_mut_slice()[0] ^= 1;
+        doc.layers[0].channels_mut()[0].data.as_mut_slice()[0] ^= 1;
         let _ = pictura_render::composite(pictura_render::CompositeRequest::region(
             &doc,
             moving_rect(frame),

@@ -34,7 +34,7 @@ fn prepared_effect_mattes_match_scalar() {
     for feather in [0.0, 1.5] {
         for density in [0, 123, 255] {
             for disabled in [false, true] {
-                let mut layer = Layer {
+                let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
                     mask: Some(LayerMask {
                         rect: PsdRect {
                             top: 3,
@@ -61,7 +61,7 @@ fn prepared_effect_mattes_match_scalar() {
                         ..Default::default()
                     }),
                     ..Default::default()
-                };
+                });
                 layer.mask.as_mut().unwrap().set_feather(feather);
                 layer.vector_mask.as_mut().unwrap().set_feather(feather);
                 let expected: Vec<_> = src

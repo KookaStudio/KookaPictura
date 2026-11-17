@@ -36,8 +36,8 @@ fn white(w: u32, h: u32) -> Layer {
 /// A black layer over `full(256, 1)` whose alpha ramps 0…255.
 fn ramp(type_tool: Option<TypeTool>) -> Layer {
     let mut layer = solid("ink", full(256, 1), (0, 0, 0), 0, BlendMode::Normal, 255);
-    layer.channels[3].data = (0..=255u8).collect::<Vec<_>>().into();
-    layer.type_tool = type_tool;
+    layer.channels_mut()[3].data = (0..=255u8).collect::<Vec<_>>().into();
+    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.type_tool = type_tool });
     layer
 }
 
@@ -65,7 +65,7 @@ fn type_edges_thin_by_default() {
 fn opacity_passes_through_the_curve() {
     let _gamma = crate::test_support::gamma_guard();
     let mut ink = solid("ink", full(1, 1), (0, 0, 0), 255, BlendMode::Normal, 128);
-    ink.type_tool = tool();
+    pictura_codec::edit_layer(ink.as_mut(), |parts| { parts.type_tool = tool() });
     let out = composite_rgba(&doc(1, 1, vec![white(1, 1), ink]));
     let curved = text_gamma_alpha(128.0 / 255.0, DEFAULT_TEXT_GAMMA);
     let expected = (255.0 * (1.0 - curved)).round() as i32;
@@ -96,4 +96,35 @@ fn gpu_accepts_proxied_type_while_gamma_is_on() {
         composite_gpu(&d),
         Ok(_) | Err(GpuError::Unavailable)
     ));
+}
+
+#[test]
+fn retained_parsed_type_keeps_its_blending_attribute() {
+    let _gamma = crate::test_support::gamma_guard();
+    let mut fill = pictura_codec::layer_from_parts(pictura_core::LayerParts {
+        rect: full(1, 1), opacity: 128,
+        adjustment: Some(crate::encode_solid_color_fill([0; 3])),
+        type_tool: tool(), ..Default::default()
+    });
+    assert_eq!(fill.kind(), pictura_core::LayerKind::Fill);
+    assert!(fill.type_tool().is_none() && fill.fallback_type_tool().is_some());
+    let curved = text_gamma_alpha(128.0 / 255.0, DEFAULT_TEXT_GAMMA);
+    let expected = (255.0 * (1.0 - curved)).round() as i32;
+    let rendered = composite_rgba(&doc(1, 1, vec![white(1, 1), fill.clone()]));
+    assert!((i32::from(px(&rendered, 0, 0)[0]) - expected).abs() <= 1);
+    pictura_codec::edit_layer(&mut fill, |parts| {
+        parts.type_tool = None;
+        parts.extra_blocks.push(pictura_core::LayerBlock { key: *b"TySh", data: vec![255; 3].into() });
+    });
+    let opaque = composite_rgba(&doc(1, 1, vec![white(1, 1), fill]));
+    assert_eq!(px(&opaque, 0, 0), [127, 127, 127, 255]);
+
+    let mut smart = solid("smart", full(1, 1), (0, 0, 0), 255, BlendMode::Normal, 128);
+    pictura_codec::edit_layer(&mut smart, |parts| {
+        parts.smart_object = Some(pictura_core::SmartObject::default());
+        parts.type_tool = tool();
+    });
+    assert_eq!(smart.kind(), pictura_core::LayerKind::SmartObject);
+    let rendered = composite_rgba(&doc(1, 1, vec![white(1, 1), smart]));
+    assert!((i32::from(px(&rendered, 0, 0)[0]) - expected).abs() <= 1);
 }

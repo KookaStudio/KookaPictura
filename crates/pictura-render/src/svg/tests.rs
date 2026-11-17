@@ -18,7 +18,7 @@ fn shape_layer(rgb: [u8; 3]) -> Layer {
         (1.0, 1.0, 5.0, 5.0),
     )
     .unwrap();
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         rect: pictura_core::PsdRect {
             left: 0,
             top: 0,
@@ -37,33 +37,33 @@ fn shape_layer(rgb: [u8; 3]) -> Layer {
             },
         ],
         ..Default::default()
-    }
+    })
 }
 
 fn pixel(name: &str) -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         ..Default::default()
-    }
+    })
 }
 
 fn group(blend: BlendMode, children: Vec<Layer>) -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         is_group: true,
         blend,
         children: pictura_core::LayerStack::from_layers(children),
         ..Default::default()
-    }
+    })
 }
 
 fn adjustment() -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         adjustment: Some(AdjustmentData {
             key: *b"nvrt",
             data: Vec::new().into(),
         }),
         ..Default::default()
-    }
+    })
 }
 
 fn doc(layers: Vec<Layer>) -> Document {
@@ -266,17 +266,17 @@ fn encode_document_svg_nests_a_group() {
 #[test]
 fn a_type_layer_uses_its_raster_fallback() {
     let mut text = pixel("text");
-    text.extra_blocks.push(LayerBlock {
+    pictura_codec::edit_layer(text.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
         key: *b"TySh",
         data: Vec::new().into(),
-    });
+    }) });
     let (nodes, _) = nodes(vec![text]);
     raster_fill(&nodes[0]);
 }
 
 fn gradient_layer(kind: GradientKind) -> Layer {
     let mut layer = shape_layer([0, 0, 0]);
-    layer.adjustment = Some(crate::encode_gradient_fill(
+    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.adjustment = Some(crate::encode_gradient_fill(
         kind,
         &[
             GradientStop {
@@ -289,18 +289,18 @@ fn gradient_layer(kind: GradientKind) -> Layer {
             },
         ],
         0.0,
-    ));
+    )) });
     layer
 }
 
 fn pattern_layer() -> Layer {
     let mut layer = shape_layer([0, 0, 0]);
-    layer.adjustment = Some(crate::encode_pattern_fill(&PatternFillParams {
+    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.adjustment = Some(crate::encode_pattern_fill(&PatternFillParams {
         pattern_id: "missing".into(),
         scale: 100.0,
         link_with_layer: true,
         origin: (0, 0),
-    }));
+    })) });
     layer
 }
 
@@ -344,7 +344,7 @@ fn an_unsupported_gradient_kind_is_rasterized() {
 
 #[test]
 fn a_gradient_fill_layer_becomes_a_canvas_primitive() {
-    let layer = Layer {
+    let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         rect: pictura_core::PsdRect {
             left: 2,
             top: 3,
@@ -367,7 +367,7 @@ fn a_gradient_fill_layer_becomes_a_canvas_primitive() {
             0.0,
         )),
         ..Default::default()
-    };
+    });
     let (nodes, calls) = nodes(vec![layer]);
     assert!(calls.is_empty(), "a gradient fill needs no raster");
     match &nodes[0].content {
@@ -485,4 +485,19 @@ fn a_shape_with_another_effect_is_rasterized() {
     ));
     let (nodes, _) = nodes(vec![layer]);
     raster_fill(&nodes[0]);
+}
+
+#[test]
+fn raster_normalization_keeps_edited_typed_content() {
+    let original = pictura_codec::encode_solid_color_fill([10, 20, 30]);
+    let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
+        opacity: 123, blend: BlendMode::Multiply, adjustment: Some(original.clone()),
+        ..Default::default()
+    });
+    assert!(layer.set_fill_content(pictura_core::FillContent::Solid([40, 50, 60, 77])));
+    let neutral = normalized(&layer);
+    assert_eq!(neutral.opacity, 255); assert_eq!(neutral.blend, BlendMode::Normal);
+    assert_eq!(neutral.fill_content(), layer.fill_content());
+    assert!(neutral.fill_was_edited());
+    assert_eq!(neutral.adjustment(), Some(&original));
 }

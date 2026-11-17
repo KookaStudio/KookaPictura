@@ -43,14 +43,14 @@ fn auto_select_skips_hidden_transparent_and_adjustment_layers() {
     let mut faded = pixel_layer("faded", 2, 2, (0, 255, 0));
     faded.opacity = 0;
     let mut clear = pixel_layer("clear", 2, 2, (0, 255, 0));
-    for channel in clear.channels.iter_mut().filter(|c| c.id == -1) {
+    for channel in clear.channels_mut().iter_mut().filter(|c| c.id == -1) {
         channel.data = vec![0u8; 4].into();
     }
     let mut adjustment = pixel_layer("adjust", 2, 2, (0, 0, 255));
-    adjustment.adjustment = Some(pictura_core::AdjustmentData {
+    pictura_codec::edit_layer(adjustment.as_mut(), |parts| { parts.adjustment = Some(pictura_core::AdjustmentData {
         key: *b"inv ",
         data: Vec::new().into(),
-    });
+    }) });
     doc.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("bottom", 4, 4, (255, 0, 0)),
         hidden,
@@ -68,7 +68,7 @@ fn auto_select_skips_hidden_transparent_and_adjustment_layers() {
 #[test]
 fn auto_select_group_resolves_the_top_level_ancestor() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    let group = Layer {
+    let group = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "group".into(),
         is_group: true,
         children: pictura_core::LayerStack::from_layers(vec![placed(
@@ -77,7 +77,7 @@ fn auto_select_group_resolves_the_top_level_ancestor() {
             0,
         )]),
         ..Default::default()
-    };
+    });
     doc.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("bottom", 4, 4, (255, 0, 0)),
         group,
@@ -127,7 +127,7 @@ fn auto_select_isolation_scopes_the_hit() {
 #[test]
 fn auto_select_isolation_reaches_a_group_descendant() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    let group = Layer {
+    let group = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "group".into(),
         is_group: true,
         children: pictura_core::LayerStack::from_layers(vec![placed(
@@ -136,7 +136,7 @@ fn auto_select_isolation_reaches_a_group_descendant() {
             0,
         )]),
         ..Default::default()
-    };
+    });
     doc.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("bottom", 4, 4, (255, 0, 0)),
         group,

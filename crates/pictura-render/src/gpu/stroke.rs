@@ -474,7 +474,7 @@ mod tests {
         let n = (w * h) as usize;
         let (r, g, b, a) = rgba;
         {
-            let _ = doc.layers.push(Layer {
+            let _ = doc.layers.push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 name: "px".into(),
                 rect: PsdRect {
                     top: 0,
@@ -513,7 +513,7 @@ mod tests {
                 is_group: false,
                 background: false,
                 ..Default::default()
-            });
+            }));
         };
         doc
     }
@@ -522,7 +522,7 @@ mod tests {
         let n = (w * h) as usize;
         let at = |id: i16| {
             layer
-                .channels
+                .channels()
                 .iter()
                 .find(|c| c.id == id)
                 .map(|c| c.data.as_slice())
@@ -714,7 +714,7 @@ mod tests {
         let dabs: Vec<(f32, f32)> = (0..8)
             .map(|i| (16.0 + i as f32 * 5.0, 16.0 + i as f32 * 5.0))
             .collect();
-        let flat = |v: u8| Layer {
+        let flat = |v: u8| pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "mask".into(),
             rect: PsdRect {
                 top: 0,
@@ -727,7 +727,7 @@ mod tests {
                 data: vec![v; (w * h) as usize].into(),
             }],
             ..Default::default()
-        };
+        });
 
         // CPU oracle on the 1-channel mask document.
         let mut doc = Document::new(w, h, ColorMode::Grayscale, BitDepth::Eight);
@@ -745,7 +745,7 @@ mod tests {
         }
         stroke.finish();
         let cpu = doc.layers[0]
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == 0)
             .unwrap()

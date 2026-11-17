@@ -52,7 +52,7 @@ fn stroke_layer(block: Option<LayerBlock>) -> Layer {
         255,
     );
     if let Some(block) = block {
-        layer.extra_blocks = vec![block];
+        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![block] });
     }
     layer
 }
@@ -980,10 +980,10 @@ fn off_canvas_or_zero_area_stroke_is_a_no_op() {
     let mut off = stroke_layer(None);
     off.rect = rect(-50, -50, -40, -40);
     let mut off_effect = off.clone();
-    off_effect.extra_blocks = vec![spec_block(&StrokeSpec {
+    pictura_codec::edit_layer(off_effect.as_mut(), |parts| { parts.extra_blocks = vec![spec_block(&StrokeSpec {
         size: 250.0,
         ..Default::default()
-    })];
+    })] });
     assert_eq!(
         compose_stroke(off_effect),
         compose_stroke(off),
@@ -993,7 +993,7 @@ fn off_canvas_or_zero_area_stroke_is_a_no_op() {
     let mut empty = stroke_layer(None);
     empty.rect = rect(4, 4, 4, 4);
     let mut empty_effect = empty.clone();
-    empty_effect.extra_blocks = vec![spec_block(&StrokeSpec::default())];
+    pictura_codec::edit_layer(empty_effect.as_mut(), |parts| { parts.extra_blocks = vec![spec_block(&StrokeSpec::default())] });
     assert_eq!(
         compose_stroke(empty_effect),
         compose_stroke(empty),
@@ -1045,7 +1045,7 @@ fn pattern_stroke_doc(id: &str, link: bool) -> Document {
         BlendMode::Normal,
         255,
     );
-    layer.extra_blocks = vec![pattern_stroke_block(id, link)];
+    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![pattern_stroke_block(id, link)] });
     let mut d = pattern_fixture_doc();
     let backdrop = solid(
         "Backdrop",
@@ -1163,7 +1163,7 @@ fn unreadable_fill_is_a_bounded_no_op() {
 #[test]
 fn solid_fill_stroke_follows_payload_alpha() {
     let fill = |alpha: u8| {
-        let mut layer = Layer {
+        let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "Solid".into(),
             rect: rect(4, 4, 8, 8),
             adjustment: Some(AdjustmentData {
@@ -1171,8 +1171,8 @@ fn solid_fill_stroke_follows_payload_alpha() {
                 data: vec![255, 0, 0, alpha].into(),
             }),
             ..Default::default()
-        };
-        layer.extra_blocks = vec![spec_block(&StrokeSpec::default())];
+        });
+        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![spec_block(&StrokeSpec::default())] });
         compose_stroke(layer)
     };
     assert_eq!(
@@ -1192,17 +1192,17 @@ fn pattern_fill_stroke_is_confined_to_the_fill() {
         origin: (0, 0),
     };
     let build = |effect: bool| {
-        let mut layer = Layer {
+        let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "Pattern".into(),
             rect: rect(3, 3, 6, 6),
             adjustment: Some(ptfl(&params)),
             ..Default::default()
-        };
+        });
         if effect {
-            layer.extra_blocks = vec![spec_block(&StrokeSpec {
+            pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![spec_block(&StrokeSpec {
                 size: 2.0,
                 ..Default::default()
-            })];
+            })] });
         }
         let mut d = pattern_fixture_doc();
         d.layers = pictura_core::LayerStack::from_layers(vec![
@@ -1237,7 +1237,7 @@ fn pattern_fill_stroke_is_confined_to_the_fill() {
 
 #[test]
 fn channel_less_smart_object_stroke_covers_the_rect() {
-    let mut layer = Layer {
+    let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Smart".into(),
         rect: rect(4, 4, 8, 8),
         channels: Vec::new(),
@@ -1250,8 +1250,8 @@ fn channel_less_smart_object_stroke_covers_the_rect() {
             .with_payload(vec![0; 4]),
         ),
         ..Default::default()
-    };
-    layer.extra_blocks = vec![spec_block(&StrokeSpec::default())];
+    });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![spec_block(&StrokeSpec::default())] });
     let out = compose_stroke(layer);
     assert_eq!(
         rgb(&out, 3, 5),
@@ -1347,7 +1347,7 @@ fn stroke_fixture_decodes_and_composites() {
     let with_effect = composite_rgba(&d);
     let mut plain = d.clone();
     for l in plain.layers.iter_mut() {
-        l.extra_blocks.clear();
+        pictura_codec::edit_layer(l.as_mut(), |parts| { parts.extra_blocks.clear() });
     }
     assert_ne!(with_effect, composite_rgba(&plain), "the stroke renders");
 }

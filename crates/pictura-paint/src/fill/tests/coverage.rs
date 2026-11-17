@@ -105,7 +105,7 @@ fn paint_edits_share_coverage_input() {
         let local = clip.rebased(1, 1).unwrap();
         let mut mask = doc(8, 8, [255; 4]);
         mask.mode = ColorMode::Grayscale;
-        mask.layers[0].channels.retain(|c| c.id == 0);
+        mask.layers[0].channels_mut().retain(|c| c.id == 0);
         crate::bucket::fill_tiled(
             &mut mask,
             "0",
@@ -118,11 +118,11 @@ fn paint_edits_share_coverage_input() {
             Alpha::Keep,
         )
         .unwrap();
-        assert_eq!(mask.layers[0].channels[0].data.sample(0), Some(255));
-        assert!(mask.layers[0].channels[0].data.sample(3 * 8 + 3).unwrap() < 255);
+        assert_eq!(mask.layers[0].channels()[0].data.sample(0), Some(255));
+        assert!(mask.layers[0].channels()[0].data.sample(3 * 8 + 3).unwrap() < 255);
         let mut growing = doc(8, 8, [0; 4]);
         growing.layers[0].rect = PsdRect::default();
-        for channel in &mut growing.layers[0].channels {
+        for channel in growing.layers[0].channels_mut() {
             channel.data = Plane::default();
         }
         crate::bucket::fill_tiled(

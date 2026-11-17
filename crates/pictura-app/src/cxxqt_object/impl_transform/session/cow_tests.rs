@@ -4,7 +4,7 @@ use pictura_core::{BitDepth, ColorMode, Document, Layer, LayerStack, PsdRect, Sm
 fn smart_layer(payload: Vec<u8>) -> Layer {
     let mut so = SmartObject::default().with_payload(payload);
     so.kind = pictura_core::SmartObjectKind::Embedded;
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         rect: PsdRect {
             top: 0,
             left: 0,
@@ -13,7 +13,7 @@ fn smart_layer(payload: Vec<u8>) -> Layer {
         },
         smart_object: Some(so),
         ..Default::default()
-    }
+    })
 }
 
 #[test]
@@ -42,7 +42,7 @@ fn a_channel_less_smart_object_with_an_undecodable_payload_is_not_transformable(
 #[test]
 fn a_channel_less_non_smart_layer_is_not_transformable() {
     let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = LayerStack::from_layers(vec![Layer {
+    doc.layers = LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
         rect: PsdRect {
             top: 0,
             left: 0,
@@ -50,6 +50,6 @@ fn a_channel_less_non_smart_layer_is_not_transformable() {
             right: 2,
         },
         ..Default::default()
-    }]);
+    })]);
     assert!(!can_free_transform(&doc, "0"));
 }

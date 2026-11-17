@@ -30,7 +30,7 @@ fn at(left: i32, top: i32, right: i32, bottom: i32) -> PsdRect {
 
 fn solid(name: &str, bounds: PsdRect, r: u8, g: u8, b: u8, a: u8) -> Layer {
     let n = (bounds.width().max(0) * bounds.height().max(0)) as usize;
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: bounds,
         blend: BlendMode::Normal,
@@ -64,18 +64,18 @@ fn solid(name: &str, bounds: PsdRect, r: u8, g: u8, b: u8, a: u8) -> Layer {
         is_group: false,
         background: false,
         ..Default::default()
-    }
+    })
 }
 
 fn adjustment(name: &str, bounds: PsdRect) -> Layer {
     let mut layer = solid(name, bounds, 0, 0, 0, 0);
-    layer.channels.clear();
-    layer.adjustment = Some(crate::encode_invert());
+    layer.channels_mut().clear();
+    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.adjustment = Some(crate::encode_invert()) });
     layer
 }
 
 fn group(name: &str, children: Vec<Layer>) -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: rect(0, 0),
         blend: BlendMode::PassThrough,
@@ -92,7 +92,7 @@ fn group(name: &str, children: Vec<Layer>) -> Layer {
         is_group: true,
         background: false,
         ..Default::default()
-    }
+    })
 }
 
 fn doc_with(w: u32, h: u32, layers: Vec<Layer>) -> Document {
@@ -124,7 +124,7 @@ fn node_interleaved(layer: &Layer) -> Vec<u8> {
     let n = (layer.rect.width().max(0) * layer.rect.height().max(0)) as usize;
     let plane = |id: i16| {
         layer
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == id)
             .map(|c| c.data.clone())
@@ -182,8 +182,7 @@ fn merge_down_union_rect_covers_both_content_boxes() {
 #[test]
 fn merge_down_applies_masks_into_alpha() {
     let mut lower = solid("lower", rect(4, 4), 10, 20, 30, 255);
-    let lower_alpha = lower
-        .channels
+    let lower_alpha = lower.channels_mut()
         .iter_mut()
         .find(|channel| channel.id == -1)
         .expect("lower alpha");
@@ -207,7 +206,7 @@ fn merge_down_applies_masks_into_alpha() {
     let expected = inputs_composite(vec![lower, upper], &doc, rect(4, 4));
     assert_eq!(node_interleaved(merged), expected);
     let alpha = merged
-        .channels
+        .channels()
         .iter()
         .find(|channel| channel.id == -1)
         .expect("merged alpha");
@@ -263,7 +262,7 @@ fn merge_down_bakes_an_adjustment_source() {
     assert_eq!(merged.name, "lower");
     assert_eq!(merged.blend, lower.blend);
     assert_eq!(merged.opacity, lower.opacity);
-    assert!(merged.adjustment.is_none());
+    assert!(merged.adjustment().is_none());
 
     let expected = inputs_composite(vec![lower, adj], &doc, rect(4, 4));
     assert_eq!(node_interleaved(merged), expected);
@@ -344,7 +343,7 @@ fn merge_layers_bakes_an_adjustment_above_the_bottom() {
     assert_eq!(merged.name, "top");
     assert_eq!(merged.blend, BlendMode::Normal);
     assert_eq!(merged.opacity, 255);
-    assert!(merged.adjustment.is_none());
+    assert!(merged.adjustment().is_none());
 
     let expected = inputs_composite(vec![bottom, adj, top], &doc, rect(4, 4));
     assert_eq!(node_interleaved(merged), expected);
@@ -413,7 +412,7 @@ fn flatten_discards_hidden_and_fills_transparency_white() {
     hidden.visible = false;
     // A single transparent source pixel at (0,0) leaves the backdrop white.
     let mut partial = solid("partial", rect(4, 4), 10, 20, 30, 255);
-    partial.channels[3].data[0] = 0;
+    partial.channels_mut()[3].data[0] = 0;
     let mut doc = doc_with(4, 4, vec![hidden, partial]);
 
     let outcome = flatten(&mut doc).unwrap();
@@ -426,10 +425,10 @@ fn flatten_discards_hidden_and_fills_transparency_white() {
     assert_eq!(background.blend, BlendMode::Normal);
     assert_eq!(background.opacity, 255);
     assert_eq!(background.fill, 255);
-    assert!(background.channels.iter().all(|c| c.data.len() == 16));
+    assert!(background.channels().iter().all(|c| c.data.len() == 16));
     assert!(
         background
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == -1)
             .unwrap()
@@ -439,9 +438,9 @@ fn flatten_discards_hidden_and_fills_transparency_white() {
         "flattened pixels are opaque"
     );
     // Transparent source becomes white (channel order 0,1,2,-1).
-    assert_eq!(background.channels[0].data[0], 255);
-    assert_eq!(background.channels[1].data[0], 255);
-    assert_eq!(background.channels[2].data[0], 255);
+    assert_eq!(background.channels()[0].data[0], 255);
+    assert_eq!(background.channels()[1].data[0], 255);
+    assert_eq!(background.channels()[2].data[0], 255);
 }
 
 #[test]
@@ -460,7 +459,7 @@ fn flatten_removes_groups_and_masks() {
 
     flatten(&mut doc).unwrap();
     assert_eq!(doc.layers.len(), 1);
-    assert!(!doc.layers[0].is_group);
+    assert!(!doc.layers[0].is_group());
     assert!(doc.layers[0].mask.is_none());
 }
 
@@ -470,7 +469,7 @@ fn clipping_mask_folds_base_alpha_into_siblings() {
     // Base alpha is a left/right split.
     for x in 0..4 {
         for y in 0..4 {
-            base.channels[3].data[y * 4 + x] = if x < 2 { 255 } else { 0 };
+            base.channels_mut()[3].data[y * 4 + x] = if x < 2 { 255 } else { 0 };
         }
     }
     let mut clipped = solid("clipped", rect(4, 4), 200, 50, 0, 255);
@@ -485,7 +484,7 @@ fn clipping_mask_folds_base_alpha_into_siblings() {
     assert_eq!(outcome.path, "0");
 
     // Right half was clipped away by the base's zero alpha.
-    let alpha = merged.channels.iter().find(|c| c.id == -1).unwrap();
+    let alpha = merged.channels().iter().find(|c| c.id == -1).unwrap();
     for y in 0..4 {
         for x in 0..4 {
             let expect = if x < 2 { 255 } else { 0 };
@@ -499,7 +498,7 @@ fn merge_clipped_layer_preserves_clip() {
     // Base coverage is the left half.
     let mut base = solid("base", rect(4, 4), 100, 100, 100, 255);
     let base_alpha = base
-        .channels
+        .channels_mut()
         .iter_mut()
         .find(|channel| channel.id == -1)
         .expect("base alpha");
@@ -536,7 +535,7 @@ fn merge_clipped_layer_preserves_clip() {
     // Merging a clipped layer into its base bakes the clip and stays unclipped.
     let mut base = solid("base", rect(4, 4), 100, 100, 100, 255);
     let base_alpha = base
-        .channels
+        .channels_mut()
         .iter_mut()
         .find(|channel| channel.id == -1)
         .expect("base alpha");
@@ -662,9 +661,9 @@ fn nested_merge_keeps_the_group_for_itself() {
     let outcome = merge_scope(&mut doc, MergeScope::Down("0/1")).unwrap();
     assert_eq!(outcome.path, "0/0");
     assert_eq!(doc.layers.len(), 2, "top-level stack unchanged");
-    assert_eq!(doc.layers[0].children.len(), 1);
-    assert_eq!(doc.layers[0].children[0].name, "inner");
-    assert!(doc.layers[0].is_group, "merge stays inside its group");
+    assert_eq!(doc.layers[0].children().len(), 1);
+    assert_eq!(doc.layers[0].children()[0].name, "inner");
+    assert!(doc.layers[0].is_group(), "merge stays inside its group");
 }
 
 #[test]
@@ -674,7 +673,7 @@ fn flatten_empty_tree_yields_white_background() {
     assert_eq!(outcome.replaced, 0);
     assert_eq!(doc.layers.len(), 1);
     assert_eq!(doc.layers[0].name, "Background");
-    assert!(doc.layers[0].channels[0].data.iter().all(|&v| v == 255));
+    assert!(doc.layers[0].channels()[0].data.iter().all(|&v| v == 255));
 }
 
 #[test]
@@ -715,8 +714,8 @@ fn select_similar_matches_class_adjustment_kind_and_blend() {
     let mut multiply = solid("mul", rect(4, 4), 1, 1, 1, 255);
     multiply.blend = BlendMode::Multiply;
     let mut posterize = solid("poster", rect(4, 4), 0, 0, 0, 0);
-    posterize.channels.clear();
-    posterize.adjustment = Some(crate::encode_posterize(4));
+    posterize.channels_mut().clear();
+    pictura_codec::edit_layer(posterize.as_mut(), |parts| { parts.adjustment = Some(crate::encode_posterize(4)) });
 
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![

@@ -1,4 +1,4 @@
-use pictura_adjust::Adjustment;
+
 use pictura_adjust::{GradientFillParams, PatternFillParams};
 use pictura_codec::DescValue;
 use pictura_core::{BlendMode, Document, Layer, PsdRect};
@@ -173,7 +173,7 @@ pub(super) fn build_stroke(
     doc: &Document,
     stroke: &Stroke,
     build: BuildRegion,
-    fill: Option<&Adjustment>,
+    fill: Option<&pictura_core::FillContent>,
 ) -> Vec<EffectPass> {
     let (w, h) = (
         doc.width.min(i32::MAX as u32) as i32,

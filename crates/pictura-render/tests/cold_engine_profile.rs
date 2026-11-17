@@ -39,7 +39,7 @@ fn rect(left: i32, top: i32, right: i32, bottom: i32) -> PsdRect {
 
 fn pixel(name: &str, r: PsdRect, rgb: [u8; 3], alpha: u8) -> Layer {
     let n = (r.width().max(0) as usize) * (r.height().max(0) as usize);
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: r,
         opacity: 255,
@@ -64,7 +64,7 @@ fn pixel(name: &str, r: PsdRect, rgb: [u8; 3], alpha: u8) -> Layer {
             },
         ],
         ..Default::default()
-    }
+    })
 }
 
 fn embedded_source() -> SmartObject {
@@ -82,7 +82,7 @@ fn embedded_source() -> SmartObject {
 fn scene() -> Document {
     let (w, h) = (1200, 800);
     let background = pixel("Background", full(w, h), [245, 245, 240], 255);
-    let group = Layer {
+    let group = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "group".into(),
         rect: full(w, h),
         is_group: true,
@@ -91,7 +91,7 @@ fn scene() -> Document {
             pixel("group-b", rect(80, 80, 640, 440), [200, 120, 40], 180),
         ]),
         ..Default::default()
-    };
+    });
     let base = pixel("base", rect(100, 120, 700, 620), [255, 255, 255], 255);
     let mut clipped = pixel("clipped", full(w, h), [10, 200, 80], 255);
     clipped.clipping = true;
@@ -108,12 +108,12 @@ fn scene() -> Document {
     masked.mask = Some(mask);
     let mut styled = pixel("styled", rect(300, 160, 1000, 600), [210, 70, 70], 255);
     pictura_render::set_layer_style_value(&mut styled, "dropShadow.on", 1.0);
-    let smart = Layer {
+    let smart = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "smart".into(),
         rect: rect(500, 300, 900, 700),
         smart_object: Some(embedded_source()),
         ..Default::default()
-    };
+    });
     let mut hidden = pixel("hidden", full(w, h), [255, 0, 255], 255);
     hidden.visible = false;
 

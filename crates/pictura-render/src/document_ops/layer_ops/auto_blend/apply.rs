@@ -10,7 +10,7 @@ use super::AutoBlendPlan;
 fn siblings<'a>(doc: &'a Document, parent: &[usize]) -> Option<&'a [Layer]> {
     let mut layers: &[Layer] = &doc.layers;
     for &index in parent {
-        layers = &layers.get(index)?.children;
+        layers = &layers.get(index)?.children();
     }
     Some(layers)
 }

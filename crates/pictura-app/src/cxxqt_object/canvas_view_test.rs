@@ -341,7 +341,7 @@ fn panel_reads_stay_bounded() {
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     let mut layer = super::tests::pixel_layer("sample", 1, 1, (10, 20, 30));
     layer.rect = whole(w, h);
-    for channel in &mut layer.channels {
+    for channel in layer.channels_mut() {
         let value = match channel.id {
             0 => 10,
             1 => 20,
@@ -376,7 +376,7 @@ fn panel_reads_stay_bounded() {
     }
     assert!(!pictura_render::DocumentComposite::is_stored(doc));
     assert!(view.tile_stats().resident_bytes < u64::from(w) * u64::from(h));
-    assert!(doc.layers[0].channels.iter().all(|c| !c.data.is_mirrored()));
+    assert!(doc.layers[0].channels().iter().all(|c| !c.data.is_mirrored()));
 }
 
 #[test]
@@ -463,9 +463,9 @@ fn a_mid_stroke_named_snapshot_shares_the_painted_tiles() {
         "a layered RGB snapshot composites nothing (#1216)"
     );
     assert!(
-        snapshot.doc.layers[0].channels[0]
+        snapshot.doc.layers[0].channels()[0]
             .data
-            .shares(&live.layers[0].channels[0].data),
+            .shares(&live.layers[0].channels()[0].data),
         "a snapshot shares its tiles with the document instead of copying them (#1215)"
     );
 }
@@ -523,7 +523,7 @@ fn a_picture_region_after_a_refresh_reads_the_current_composite() {
         right: 40,
     };
     let paint = rust.session.doc.as_mut().expect("document");
-    paint.layers[0].channels[1].data.as_mut_slice().fill(200);
+    paint.layers[0].channels()[1].data.as_mut_slice().fill(200);
     assert!(rust.refresh_display_rect(rect).is_some());
 
     let doc = rust.session.doc.as_ref().expect("the document survives");
@@ -1009,7 +1009,7 @@ fn a_whole_document_region_refresh_repairs_the_cached_tiles() {
     let frame = view.frame_revision;
 
     let doc = view.session.doc.as_mut().expect("document");
-    doc.layers[0].channels[0].data.as_mut_slice().fill(200);
+    doc.layers[0].channels()[0].data.as_mut_slice().fill(200);
     assert_eq!(view.refresh_regions(&[whole(w, h)]), Some(whole(w, h)));
 
     let doc = view.session.doc.as_ref().expect("document");

@@ -12,7 +12,7 @@ use pictura_core::{BitDepth, ColorMode, Document, LayerStack, PsdRect};
 fn marked(w: u32, h: u32, mark: PsdRect) -> Document {
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     let mut layer = pixel_layer("mark", w, h, (0, 0, 0));
-    for c in &mut layer.channels {
+    for c in layer.channels_mut() {
         for (i, v) in c.data.iter_mut().enumerate() {
             let (x, y) = ((i as u32 % w) as i32, (i as u32 / w) as i32);
             let inside = x >= mark.left && x < mark.right && y >= mark.top && y < mark.bottom;
@@ -65,7 +65,7 @@ fn a_bounded_buffer_is_the_crop_of_the_whole() {
 fn reading_a_diverged_tiled_layer_builds_no_mirror() {
     let mut doc = marked(90, 300, MARK);
     let history = doc.clone();
-    for c in &mut doc.layers[0].channels {
+    for c in doc.layers[0].channels_mut() {
         c.data.tile(90, 300);
         let v = c.data.sample(256 * 90).expect("a sample");
         c.data
@@ -73,7 +73,7 @@ fn reading_a_diverged_tiled_layer_builds_no_mirror() {
     }
     let expected = {
         let mut flat = doc.clone();
-        for c in &mut flat.layers[0].channels {
+        for c in flat.layers[0].channels_mut() {
             c.data = c.data.to_vec().into();
         }
         layer_buffer_within(&flat.layers[0], MARK).expect("flat")
@@ -81,7 +81,7 @@ fn reading_a_diverged_tiled_layer_builds_no_mirror() {
     let got = layer_buffer_within(&doc.layers[0], MARK).expect("banded");
     assert_eq!(got.data.as_slice(), expected.data.as_slice());
     assert!(
-        doc.layers[0].channels.iter().all(|c| !c.data.is_mirrored()),
+        doc.layers[0].channels().iter().all(|c| !c.data.is_mirrored()),
         "a plane was materialized whole"
     );
     drop(history);

@@ -34,7 +34,7 @@ fn varied(name: &str, r: PsdRect, seed: u32) -> Layer {
     let (w, h) = (r.width() as u32, r.height() as u32);
     let mut layer = super::super::tests::pixel_layer(name, w, h, (0, 0, 0));
     layer.rect = r;
-    for (c, channel) in layer.channels.iter_mut().enumerate() {
+    for (c, channel) in layer.channels_mut().iter_mut().enumerate() {
         let data: Vec<u8> = (0..w * h)
             .map(|i| {
                 let (x, y) = (i % w, i / w);
@@ -59,7 +59,7 @@ fn varied(name: &str, r: PsdRect, seed: u32) -> Layer {
 fn layered(w: u32, h: u32) -> Document {
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     let mut base = varied("base", whole(w, h), 3);
-    for channel in &mut base.channels {
+    for channel in base.channels_mut() {
         if channel.id == -1 {
             channel.data = vec![255u8; (w * h) as usize].into();
         }
@@ -200,7 +200,7 @@ fn an_edit_repairs_the_visible_tiles() {
         let doc = view.session.doc.as_mut().expect("document");
         let layer = &mut doc.layers[0];
         let w = layer.rect.width() as usize;
-        let red = layer.channels[0].data.as_mut_slice();
+        let red = layer.channels()[0].data.as_mut_slice();
         for y in dirty.top..dirty.bottom {
             for x in dirty.left..dirty.right {
                 red[y as usize * w + x as usize] ^= 0x5a;
@@ -479,7 +479,7 @@ fn save_allocates_no_whole_composite() {
     let (w, h) = (2048u32, 2048u32);
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     let mut base = super::super::tests::pixel_layer("base", w, h, (255, 255, 255));
-    for channel in &mut base.channels {
+    for channel in base.channels_mut() {
         let value = channel.data.sample(0).expect("a sample");
         channel.data = pictura_core::Plane::filled(w as usize, h as usize, 1, value);
     }
@@ -543,7 +543,7 @@ fn the_view_holds_only_the_tiles_it_built() {
     use pictura_core::memory::eviction::Residency;
     let (w, h) = (4096u32, 2048u32);
     let mut doc = layered(w, h);
-    for channel in &mut doc.layers.first_mut().expect("base").channels {
+    for channel in doc.layers.first_mut().expect("base").channels_mut() {
         assert!(channel.data.tile(w as usize, h as usize));
     }
     let mut view = view_of(doc);
@@ -571,7 +571,7 @@ fn the_view_holds_only_the_tiles_it_built() {
     );
     let base = |view: &PictureViewRust| {
         let doc = view.session.doc.as_ref().expect("document");
-        doc.layers.as_slice()[0].channels[0].data.clone()
+        doc.layers.as_slice()[0].channels()[0].data.clone()
     };
     let plane = base(&view);
     let under = plane.tiles_in(1000..1800, 600..1200);

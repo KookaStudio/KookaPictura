@@ -49,7 +49,7 @@ pub fn add_layer_mask(
     if selection_kind && selection.is_none() {
         return false;
     }
-    let fallback = layer.is_group || layer.rect.is_empty();
+    let fallback = layer.is_group() || layer.rect.is_empty();
     let content = if fallback { canvas } else { layer.rect };
     let source_rect = if selection_kind {
         selection.unwrap().rect()
@@ -74,7 +74,7 @@ pub fn add_layer_mask(
         return false;
     };
     let alpha = layer
-        .channels
+        .channels()
         .iter()
         .find(|c| c.id == -1)
         .filter(|c| Some(c.data.len()) == super::mask_domain::pixels(content));
@@ -183,7 +183,7 @@ pub fn apply_layer_mask(doc: &mut Document, path: &str) -> bool {
     let Some(layer) = resolve_path_mut(doc, path) else {
         return false;
     };
-    if layer.smart_object.is_some() || layer.is_group || layer.adjustment.is_some() {
+    if layer.smart_object().is_some() || layer.is_group() || layer.has_adjustment_content() {
         return false;
     }
     let Some(mask) = layer.mask.take() else {
@@ -194,14 +194,14 @@ pub fn apply_layer_mask(doc: &mut Document, path: &str) -> bool {
     if width == 0 || height == 0 {
         return true;
     }
-    let alpha = match layer.channels.iter().position(|channel| channel.id == -1) {
+    let alpha = match layer.channels().iter().position(|channel| channel.id == -1) {
         Some(index) => index,
         None => {
-            layer.channels.push(Channel {
+            layer.channels_mut().push(Channel {
                 id: -1,
                 data: vec![255; width * height].into(),
             });
-            layer.channels.len() - 1
+            layer.channels().len() - 1
         }
     };
     for row in 0..height {
@@ -210,7 +210,7 @@ pub fn apply_layer_mask(doc: &mut Document, path: &str) -> bool {
             let y = rect.top + row as i32;
             let coverage = u32::from(crate::mask_refine::raster(&mask, rect, x, y));
             let index = row * width + col;
-            if let Some(sample) = layer.channels[alpha].data.get_mut(index) {
+            if let Some(sample) = layer.channels_mut()[alpha].data.get_mut(index) {
                 *sample = ((u32::from(*sample) * coverage + 127) / 255) as u8;
             }
         }
@@ -253,7 +253,7 @@ pub fn invert_layer_mask(doc: &mut Document, path: &str) -> bool {
         return false;
     };
     let (width, height) = (view.document.width as usize, view.document.height as usize);
-    let coverage = &mut view.document.layers[0].channels[0].data;
+    let coverage = &mut view.document.layers[0].channels_mut()[0].data;
     coverage.tile(width, height);
     coverage.for_each_tile_mut(0..width, 0..height, width, |tile| {
         for value in tile.data.iter_mut() {
@@ -354,7 +354,7 @@ mod tests {
 
     fn set_layer_alpha(doc: &mut Document, values: &[u8]) {
         let alpha = doc.layers[0]
-            .channels
+            .channels_mut()
             .iter_mut()
             .find(|channel| channel.id == -1)
             .expect("layer has alpha");
@@ -455,7 +455,7 @@ mod tests {
     #[test]
     fn add_layer_mask_group_is_document_sized() {
         let mut group = doc(4, 3);
-        group.layers[0].is_group = true;
+        group.layers[0].set_group_children(pictura_core::LayerStack::default());
         group.layers[0].rect = PsdRect {
             top: 0,
             left: 0,
@@ -475,7 +475,7 @@ mod tests {
         assert!(data.iter().all(|&v| v == 255));
 
         let mut hidden = doc(4, 3);
-        hidden.layers[0].is_group = true;
+        hidden.layers[0].set_group_children(pictura_core::LayerStack::default());
         hidden.layers[0].rect = PsdRect {
             top: 0,
             left: 0,
@@ -639,7 +639,7 @@ mod tests {
     fn apply_refuses_a_smart_object() {
         let mut doc = doc(2, 1);
         assert!(add_layer_mask(&mut doc, "0", LayerMaskKind::HideAll, None));
-        doc.layers[0].smart_object = Some(SmartObject::default());
+        pictura_codec::edit_layer(doc.layers[0].as_mut(), |parts| { parts.smart_object = Some(SmartObject::default()) });
         assert!(!apply_layer_mask(&mut doc, "0"));
         assert!(has_layer_mask(&doc, "0"));
     }
@@ -653,13 +653,13 @@ mod tests {
             LayerMaskKind::HideAll,
             None
         ));
-        group.layers[0].is_group = true;
+        group.layers[0].set_group_children(pictura_core::LayerStack::default());
         assert!(!apply_layer_mask(&mut group, "0"));
         assert!(has_layer_mask(&group, "0"), "the mask keeps hiding");
 
         let mut fill = doc(2, 1);
         assert!(add_layer_mask(&mut fill, "0", LayerMaskKind::HideAll, None));
-        fill.layers[0].adjustment = Some(crate::encode_solid_color_fill([255, 0, 0]));
+        pictura_codec::edit_layer(fill.layers[0].as_mut(), |parts| { parts.adjustment = Some(crate::encode_solid_color_fill([255, 0, 0])) });
         assert!(!apply_layer_mask(&mut fill, "0"));
         assert!(has_layer_mask(&fill, "0"));
     }

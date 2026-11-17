@@ -78,7 +78,7 @@ pub(super) fn new_document(side: u32) -> PictureViewRust {
         })
         .collect();
     doc.layers
-        .push(Layer {
+        .push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "Layer 0".to_string(),
             rect: canvas(side),
             opacity: 255,
@@ -86,7 +86,7 @@ pub(super) fn new_document(side: u32) -> PictureViewRust {
             visible: true,
             channels,
             ..Default::default()
-        })
+        }))
         .expect("the layer is added");
     make_background(doc.layers.first_mut().expect("the layer"));
     DocumentComposite::new(&mut doc).refresh(pictura_render::CompositeScope::Full, false);
@@ -397,7 +397,7 @@ pub(super) fn write_fixture(side: u32, file: &TempFile) -> String {
             })
             .collect();
         doc.layers
-            .push(Layer {
+            .push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 name: format!("Paint {}", index + 1),
                 rect: canvas(side),
                 opacity: 255,
@@ -405,7 +405,7 @@ pub(super) fn write_fixture(side: u32, file: &TempFile) -> String {
                 visible: true,
                 channels,
                 ..Default::default()
-            })
+            }))
             .expect("the layer is added");
     }
     doc.composite

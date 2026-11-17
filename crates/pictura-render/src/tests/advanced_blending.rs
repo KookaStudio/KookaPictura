@@ -420,14 +420,14 @@ fn adjustment_leaves_excluded_channel_unadjusted() {
         BlendMode::Normal,
         255,
     );
-    let mut adjustment = Layer {
+    let mut adjustment = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         adjustment: Some(AdjustmentData {
             key: *b"nvrt",
             data: Vec::new().into(),
         }),
         restricted_channels: vec![0],
         ..Default::default()
-    };
+    });
     adjustment.rect = rect(0, 0, 0, 0);
     let out = composite_rgba(&doc(12, 12, vec![backdrop, adjustment]));
     assert_eq!(px(&out, 5, 5), [255, 255, 255, 255]);
@@ -808,14 +808,14 @@ fn blend_interior_is_inert_on_groups_and_adjustments() {
     let off = composite_rgba(&doc(12, 12, vec![grouped]));
     assert_eq!(on.data, off.data);
 
-    let mut adjustment = Layer {
+    let mut adjustment = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         adjustment: Some(AdjustmentData {
             key: *b"nvrt",
             data: Vec::new().into(),
         }),
         blend_interior: true,
         ..Default::default()
-    };
+    });
     let backdrop = gray(12, 12);
     let on = composite_rgba(&doc(12, 12, vec![backdrop.clone(), adjustment.clone()]));
     adjustment.blend_interior = false;
@@ -826,12 +826,12 @@ fn blend_interior_is_inert_on_groups_and_adjustments() {
 #[test]
 fn blend_interior_applies_the_text_curve_once() {
     let mut ink = solid("ink", full(8, 8), (0, 0, 0), 0, BlendMode::Normal, 255);
-    ink.channels[3].data = (0..64).map(|v| (v * 4) as u8).collect::<Vec<_>>().into();
-    ink.type_tool = Some(type_tool());
+    ink.channels_mut()[3].data = (0..64).map(|v| (v * 4) as u8).collect::<Vec<_>>().into();
+    pictura_codec::edit_layer(ink.as_mut(), |parts| { parts.type_tool = Some(type_tool()) });
     color_overlay(&mut ink, 0x0000FF, 50.0);
     ink.blend_interior = true;
     let on = composite_rgba(&doc(8, 8, vec![ink.clone()]));
-    ink.type_tool = None;
+    pictura_codec::edit_layer(ink.as_mut(), |parts| { parts.type_tool = None });
     let plain = composite_rgba(&doc(8, 8, vec![ink]));
     assert!(
         on.data.iter().zip(plain.data.iter()).any(|(a, b)| a != b),

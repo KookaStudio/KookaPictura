@@ -181,7 +181,7 @@ pub(crate) fn materialize_merged_composite(doc: &mut pictura_core::Document) {
         id: -1,
         data: alpha.unwrap_or_else(|| vec![255; plane]).into(),
     });
-    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_core::Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Background".to_string(),
         rect: pictura_core::PsdRect {
             top: 0,
@@ -192,7 +192,7 @@ pub(crate) fn materialize_merged_composite(doc: &mut pictura_core::Document) {
         channels,
         background: true,
         ..Default::default()
-    }]);
+    })]);
 }
 
 /// Visit each layer depth-first, groups before their children.
@@ -202,7 +202,7 @@ pub(crate) fn for_each_layer(
 ) {
     for layer in layers {
         f(layer);
-        for_each_layer(&mut layer.children, f);
+        if let Some(children) = layer.children_mut() { for_each_layer(children, f); }
     }
 }
 
@@ -342,7 +342,7 @@ mod tests {
         }];
         materialize_merged_composite(&mut doc);
         let alpha = doc.layers[0]
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == -1)
             .expect("alpha channel");
@@ -368,7 +368,7 @@ mod tests {
             let layer = &doc.layers[0];
             assert!(layer.background, "{name}: Background flag");
             let alpha = layer
-                .channels
+                .channels()
                 .iter()
                 .find(|c| c.id == -1)
                 .unwrap_or_else(|| panic!("{name}: alpha channel"));

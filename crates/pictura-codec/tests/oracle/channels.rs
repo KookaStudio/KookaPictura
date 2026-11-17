@@ -83,7 +83,7 @@ fn psd_tools_reads_rle_composite_and_layer() {
     let planes: Vec<Vec<u8>> = (0..4u8)
         .map(|c| (0..8).map(|i| c * 20 + i).collect())
         .collect();
-    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Rle".into(),
         rect: PsdRect {
             top: 0,
@@ -122,7 +122,7 @@ fn psd_tools_reads_rle_composite_and_layer() {
         is_group: false,
         background: false,
         ..Default::default()
-    }]);
+    })]);
 
     let dir = scratch_dir("psd-rle-read");
     let path = dir.join("rle.psd");
@@ -243,7 +243,7 @@ fn psd_tools_reads_written_compression_kinds() {
             .map(|c| (0..8).map(|i| c * 20 + i).collect())
             .collect();
         let mask: Vec<u8> = (0..8).map(|i| 30 + i as u8).collect();
-        doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
+        doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "Kind".into(),
             rect: PsdRect {
                 top: 0,
@@ -294,7 +294,7 @@ fn psd_tools_reads_written_compression_kinds() {
             is_group: false,
             background: false,
             ..Default::default()
-        }]);
+        })]);
 
         let bytes = write_psd(&doc).unwrap();
         assert_eq!(bytes, write_psd(&doc).unwrap(), "deterministic ({tag})");

@@ -53,7 +53,7 @@ fn merge_scope_paths(
             let siblings: &[pictura_core::Layer] = if parent.is_empty() {
                 &doc.layers
             } else {
-                &pictura_render::resolve_path(doc, &parent)?.children
+                &pictura_render::resolve_path(doc, &parent)?.children()
             };
             let base = (0..=index)
                 .rev()

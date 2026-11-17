@@ -114,7 +114,7 @@ fn assign_leaves_composite_and_layers_byte_identical() {
     assign_document_profile(&mut doc, &Profile::adobe_rgb());
     assert_eq!(doc.composite, before.composite, "composite bytes change");
     assert_eq!(
-        doc.layers[0].channels, before.layers[0].channels,
+        doc.layers[0].channels(), before.layers[0].channels(),
         "layer channel bytes change"
     );
 }

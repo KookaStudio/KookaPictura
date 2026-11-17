@@ -34,7 +34,7 @@ fn via(doc: &mut Document, source_path: &str, mask: &Coverage, cut: bool) -> Str
         let Some(source) = resolve_path(doc, source_path) else {
             return String::new();
         };
-        if source.is_group {
+        if source.is_group() {
             return String::new();
         }
         let name = format!("{} copy", source.name);
@@ -67,7 +67,7 @@ fn copy_source(source: &Layer, mask: &Coverage, width: u32, height: u32, name: S
     if src_w <= 0 || src_h <= 0 || width == 0 || height == 0 {
         return layer;
     }
-    let src_alpha = source.channels.iter().find(|channel| channel.id == -1);
+    let src_alpha = source.channels().iter().find(|channel| channel.id == -1);
     let w = width as usize;
     for sy in 0..src_h {
         for sx in 0..src_w {
@@ -92,7 +92,7 @@ fn copy_source(source: &Layer, mask: &Coverage, width: u32, height: u32, name: S
             }
             for id in [0i16, 1, 2] {
                 if let Some(value) = source
-                    .channels
+                    .channels()
                     .iter()
                     .find(|channel| channel.id == id)
                     .and_then(|channel| channel.data.sample(si))
@@ -118,7 +118,7 @@ fn clear_source(doc: &mut Document, segments: &[usize], mask: &Coverage) {
     if src_w <= 0 || src_h <= 0 {
         return;
     }
-    let Some(alpha) = layer.channels.iter_mut().find(|channel| channel.id == -1) else {
+    let Some(alpha) = layer.channels_mut().iter_mut().find(|channel| channel.id == -1) else {
         return;
     };
     for sy in 0..src_h {
@@ -148,7 +148,7 @@ fn scale(value: u8, coverage: u8) -> u8 {
 }
 
 fn set_channel(layer: &mut Layer, id: i16, index: usize, value: u8) {
-    if let Some(channel) = layer.channels.iter_mut().find(|channel| channel.id == id) {
+    if let Some(channel) = layer.channels_mut().iter_mut().find(|channel| channel.id == id) {
         if index < channel.data.len() {
             channel.data[index] = value;
         }

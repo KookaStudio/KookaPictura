@@ -51,7 +51,7 @@ fn painted(name: &str, r: PsdRect, value: impl Fn(i32, i32) -> u8) -> Layer {
     }
     let mut layer = solid(name, r, (0, 0, 0), 255, BlendMode::Normal, 255);
     for id in 0..3 {
-        layer.channels[id].data = data.clone().into();
+        layer.channels_mut()[id].data = data.clone().into();
     }
     layer
 }
@@ -135,14 +135,14 @@ fn pair() -> Document {
 }
 
 fn adjustment(name: &str) -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         opacity: 255,
         fill: 255,
         visible: true,
         adjustment: Some(encode_invert()),
         ..Default::default()
-    }
+    })
 }
 
 #[test]
@@ -184,7 +184,7 @@ fn auto_blend_refuses_selected_kinds() {
     assert!(!can_auto_blend(&d, &["0", "1"]), "Background");
 
     let mut d = pair();
-    d.layers[1].smart_object = Some(SmartObject::default());
+    pictura_codec::edit_layer(d.layers[1].as_mut(), |parts| { parts.smart_object = Some(SmartObject::default()) });
     assert!(!can_auto_blend(&d, &["0", "1"]), "Smart Object");
 
     let mut d = pair();
@@ -199,7 +199,7 @@ fn auto_blend_refuses_selected_kinds() {
 fn auto_blend_ignores_a_smart_object_outside_the_selection() {
     let mut d = pair();
     let mut smart = solid("S", full(20, 20), (9, 9, 9), 255, BlendMode::Normal, 255);
-    smart.smart_object = Some(SmartObject::default());
+    pictura_codec::edit_layer(smart.as_mut(), |parts| { parts.smart_object = Some(SmartObject::default()) });
     d.layers.push(smart).expect("a free slot");
     assert!(can_auto_blend(&d, &["0", "1"]));
     assert!(!can_auto_blend(&d, &["0", "1", "2"]));
@@ -220,9 +220,9 @@ fn auto_blend_skips_ineligible_layers() {
     hidden.visible = false;
     let empty = solid("Empty", full(20, 20), (0, 0, 0), 0, BlendMode::Normal, 255);
     let mut text = solid("Type", full(20, 20), (2, 2, 2), 255, BlendMode::Normal, 255);
-    text.type_tool = Some(pictura_core::TypeTool {
+    pictura_codec::edit_layer(text.as_mut(), |parts| { parts.type_tool = Some(pictura_core::TypeTool {
         transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
-        text: "T".into(),
+        parts: "T".into(),
         bounds: [0; 4],
         text_desc: Vec::new().into(),
         warp_desc: Vec::new().into(),
@@ -231,7 +231,7 @@ fn auto_blend_skips_ineligible_layers() {
         vertical: false,
         box_bounds: None,
         path: None,
-    });
+    }) });
     d.layers.push(hidden).expect("slot");
     d.layers.push(empty).expect("slot");
     d.layers.push(text).expect("slot");
@@ -277,7 +277,7 @@ fn stack_images_beats_each_input_focus() {
     let out = composite_rgba(&d);
     let score = focus(|x, y| gray_of(&out, x as u32, y as u32), 2, 62);
     for layer in [0, 1] {
-        let alone = inputs.layers[layer].channels[0].data.as_slice();
+        let alone = inputs.layers[layer].channels()[0].data.as_slice();
         let input = focus(|x, y| alone[y as usize * 64 + x as usize], 2, 62);
         assert!(score as f64 > input as f64 * 1.4, "{score} vs {input}");
     }
@@ -445,7 +445,7 @@ fn auto_blend_spans_groups() {
         BlendMode::Normal,
         255,
     );
-    let group = Layer {
+    let group = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "G".into(),
         opacity: 255,
         fill: 255,
@@ -454,7 +454,7 @@ fn auto_blend_spans_groups() {
         blend: BlendMode::PassThrough,
         children: pictura_core::LayerStack::from_layers(vec![inner]),
         ..Default::default()
-    };
+    });
     let mut d = doc(
         30,
         20,
@@ -473,7 +473,7 @@ fn auto_blend_spans_groups() {
     assert!(can_auto_blend(&d, &["0", "1/0"]));
     assert_eq!(blend(&mut d, &["1/0", "0"], PANORAMA), ["0", "1/0"]);
     assert_eq!(mask_at(&d.layers[0], 2, 5), 255);
-    assert_eq!(mask_at(&d.layers[1].children[0], 28, 5), 255);
+    assert_eq!(mask_at(&d.layers[1].children()[0], 28, 5), 255);
 
     d.layers[1].visible = false;
     assert!(
@@ -492,8 +492,8 @@ fn native(depth: BitDepth, name: &str, r: PsdRect, value: f32) -> Layer {
         BlendMode::Normal,
         255,
     );
-    layer.channels[1].data = layer.channels[0].data.clone();
-    layer.channels[2].data = layer.channels[0].data.clone();
+    layer.channels_mut()[1].data = layer.channels()[0].data.clone();
+    layer.channels_mut()[2].data = layer.channels()[0].data.clone();
     let plane = |v: f32| match depth {
         BitDepth::Sixteen => Samples::U16(vec![(v * 65535.0) as u16; n].into()),
         _ => Samples::F32(vec![v; n].into()),
@@ -584,7 +584,7 @@ fn mismatched(gray: bool) -> Document {
     if gray {
         d.mode = ColorMode::Grayscale;
         for layer in d.layers.iter_mut() {
-            layer.channels.retain(|c| c.id == 0 || c.id == -1);
+            layer.channels_mut().retain(|c| c.id == 0 || c.id == -1);
         }
     }
     d
@@ -604,14 +604,14 @@ fn seam_step(d: &Document) -> u8 {
 fn narrows_mismatch(gray: bool) {
     let mut d = mismatched(gray);
     let before = seam_step(&d);
-    let channels: Vec<Vec<_>> = d.layers.iter().map(|l| l.channels.clone()).collect();
+    let channels: Vec<Vec<_>> = d.layers.iter().map(|l| l.channels().clone()).collect();
     blend(&mut d, &["0", "1"], SEAMLESS);
     assert_eq!(d.layers.len(), 3, "the sources and the merged layer");
     assert_eq!(d.layers[2].name, "B (merged)");
-    assert!(d.layers.iter().all(|l| l.adjustment.is_none()));
+    assert!(d.layers.iter().all(|l| l.adjustment().is_none()));
     assert!(seam_step(&d) < before / 2, "{} vs {before}", seam_step(&d));
-    assert_eq!(d.layers[0].channels, channels[0], "pixels unchanged");
-    assert_eq!(d.layers[1].channels, channels[1], "pixels unchanged");
+    assert_eq!(d.layers[0].channels(), channels[0], "pixels unchanged");
+    assert_eq!(d.layers[1].channels(), channels[1], "pixels unchanged");
 }
 
 #[test]
@@ -676,7 +676,7 @@ fn stack_images_blends_softly() {
         ],
     );
     blend(&mut d, &["0", "1"], STACK);
-    let merged = d.layers[2].channels[0].data.as_slice();
+    let merged = d.layers[2].channels()[0].data.as_slice();
     let mean = |x: usize| {
         (0..128)
             .map(|y| i32::from(merged[y * 128 + x]))
@@ -693,7 +693,7 @@ fn merged_sits_above_a_clipped_run() {
     let b = painted("B", rect(0, 20, 20, 60), |_, _| 170);
     let mut clipped = adjustment("Mine");
     clipped.clipping = true;
-    let group = Layer {
+    let group = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "G".into(),
         opacity: 255,
         fill: 255,
@@ -702,12 +702,12 @@ fn merged_sits_above_a_clipped_run() {
         blend: BlendMode::PassThrough,
         children: pictura_core::LayerStack::from_layers(vec![a, b, clipped]),
         ..Default::default()
-    };
+    });
     let top = solid("Top", full(60, 20), (0, 0, 0), 0, BlendMode::Normal, 255);
     let mut d = doc(60, 20, vec![group, top]);
     let paths = blend(&mut d, &["0/0", "0/1"], SEAMLESS);
     let names: Vec<&str> = d.layers[0]
-        .children
+        .children()
         .iter()
         .map(|l| l.name.as_str())
         .collect();
@@ -770,9 +770,9 @@ fn content_aware_fill_covers_the_canvas() {
     blend(&mut d, &["0", "1"], FILLED);
     let merged = &d.layers[2];
     assert_eq!(merged.rect, full(40, 40));
-    let alpha = merged.channels[3].data.as_slice();
+    let alpha = merged.channels()[3].data.as_slice();
     assert!(alpha.iter().all(|&a| a == 255), "opaque across the canvas");
-    assert_eq!(merged.channels[0].data.as_slice()[20 * 40 + 20], 200);
+    assert_eq!(merged.channels()[0].data.as_slice()[20 * 40 + 20], 200);
 }
 
 #[test]
@@ -789,7 +789,7 @@ fn content_aware_fill_is_ignored_at_high_depth() {
         .set_native(Some(BitDepth::Sixteen), d.source.planes().clone())
         .expect("valid source depth");
     blend(&mut d, &["0", "1"], FILLED);
-    assert_eq!(d.layers[2].channels[3].data.as_slice()[20 * 40 + 20], 0);
+    assert_eq!(d.layers[2].channels()[3].data.as_slice()[20 * 40 + 20], 0);
 }
 
 fn retained_mask_layer() -> Document {
@@ -908,7 +908,7 @@ fn seamless_stack_takes_tone_from_the_base() {
     };
     let mut d = subject_over_sky();
     blend(&mut d, &["0", "1"], TONED);
-    let merged = d.layers[2].channels[0].data.as_slice();
+    let merged = d.layers[2].channels()[0].data.as_slice();
     let mean: u32 = (40..56)
         .flat_map(|y| (40..56).map(move |x| u32::from(merged[y * 96 + x])))
         .sum::<u32>()
@@ -943,7 +943,7 @@ fn seamless_stack_keeps_the_subject_colour() {
             }
         })
         .collect();
-    subject.channels[0].data = red.into();
+    subject.channels_mut()[0].data = red.into();
     let sky = solid("Sky", square, (40, 120, 230), 255, BlendMode::Normal, 255);
     let mut d = doc(96, 96, vec![sky, subject]);
     blend(
@@ -954,7 +954,7 @@ fn seamless_stack_keeps_the_subject_colour() {
             ..STACK
         },
     );
-    let at = |id: usize| i32::from(d.layers[2].channels[id].data.as_slice()[48 * 96 + 48]);
+    let at = |id: usize| i32::from(d.layers[2].channels()[id].data.as_slice()[48 * 96 + 48]);
     assert!(
         at(0) > at(2) + 40,
         "red over a blue base: {} vs {}",

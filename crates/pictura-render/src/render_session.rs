@@ -270,7 +270,7 @@ fn reducible(doc: &Document) -> bool {
             ContentRoute::TypeSource
             | ContentRoute::SmartSource
             | ContentRoute::UndecodedVectorFill => false,
-            _ => layer.children.iter().all(walk),
+            _ => layer.children().iter().all(walk),
         }
     }
     doc.layers.iter().all(walk)
@@ -299,7 +299,19 @@ fn sync_targets(reduced: &mut Document, original: &Document, targets: &[&str]) {
         let Some(destination) = crate::resolve_path_mut(reduced, target) else {
             continue;
         };
-        destination.adjustment = source.adjustment.clone();
+        let same_content = match (source.content(), destination.content()) {
+            (pictura_core::LayerContent::Fill(a), pictura_core::LayerContent::Fill(b))
+            | (pictura_core::LayerContent::Shape(a), pictura_core::LayerContent::Shape(b)) => std::sync::Arc::ptr_eq(a, b),
+            (pictura_core::LayerContent::Adjustment(Some(a)), pictura_core::LayerContent::Adjustment(Some(b))) => std::sync::Arc::ptr_eq(a, b),
+            (pictura_core::LayerContent::Adjustment(None), pictura_core::LayerContent::Adjustment(None)) => true,
+            _ => false,
+        };
+        if matches!(source.content(), pictura_core::LayerContent::Adjustment(_) | pictura_core::LayerContent::Fill(_) | pictura_core::LayerContent::Shape(_))
+            && (!same_content || source.adjustment() != destination.adjustment()) {
+            let mut parts = pictura_core::LayerParts::from(std::mem::take(destination));
+            parts.adjustment = source.adjustment().cloned();
+            *destination = Layer::from_parts(parts, source.content().clone());
+        }
         destination.opacity = source.opacity;
         destination.fill = source.fill;
         destination.blend = source.blend;
@@ -344,7 +356,7 @@ fn layer_digest(layer: &Layer, doc: &Document, hasher: &mut DefaultHasher) {
     layer.visible.hash(hasher);
     layer.clipping.hash(hasher);
     (layer.knockout as u8).hash(hasher);
-    layer.is_group.hash(hasher);
+    layer.is_group().hash(hasher);
     layer.blending_ranges.ident().hash(hasher);
     layer.blend_if.is_some().hash(hasher);
     layer.blend_clipping.hash(hasher);
@@ -358,7 +370,7 @@ fn layer_digest(layer: &Layer, doc: &Document, hasher: &mut DefaultHasher) {
     restricted.hash(hasher);
     layer.background.hash(hasher);
     layer.blend_key.hash(hasher);
-    for child in &layer.children {
+    for child in layer.children() {
         layer_digest(child, doc, hasher);
     }
 }
@@ -383,7 +395,7 @@ mod tests {
 
     fn layer(name: &str, at: PsdRect, rgba: [u8; 4]) -> Layer {
         let n = (at.width().max(0) * at.height().max(0)) as usize;
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: name.into(),
             rect: at,
             blend: BlendMode::Normal,
@@ -399,7 +411,7 @@ mod tests {
                 })
                 .collect(),
             ..Default::default()
-        }
+        })
     }
 
     fn document(width: u32, height: u32, layers: Vec<Layer>) -> Document {
@@ -436,7 +448,7 @@ mod tests {
     fn prefix_digest_changes_on_a_pixel_edit() {
         let mut doc = two_layers();
         let before = prefix_digest(&doc, 1, 0, whole(&doc));
-        doc.layers[0].channels[0].data = vec![1u8; 64].into();
+        doc.layers[0].channels_mut()[0].data = vec![1u8; 64].into();
         assert_ne!(before, prefix_digest(&doc, 1, 0, whole(&doc)));
     }
 
@@ -474,10 +486,10 @@ mod tests {
         assert_ne!(before, prefix_digest(&doc, 1, 0, whole(&doc)));
 
         let before = prefix_digest(&doc, 1, 0, whole(&doc));
-        doc.layers[0].adjustment = Some(pictura_core::AdjustmentData {
+        pictura_codec::edit_layer(doc.layers[0].as_mut(), |parts| { parts.adjustment = Some(pictura_core::AdjustmentData {
             key: *b"PtFl",
             data: vec![1, 2, 3].into(),
-        });
+        }) });
         assert_ne!(before, prefix_digest(&doc, 1, 0, whole(&doc)));
     }
 
@@ -486,7 +498,7 @@ mod tests {
         let mut doc = two_layers();
         let before = prefix_digest(&doc, 1, 0, whole(&doc));
         doc.layers[1].opacity = 128;
-        doc.layers[1].channels[0].data = vec![7u8; 16].into();
+        doc.layers[1].channels_mut()[0].data = vec![7u8; 16].into();
         assert_eq!(before, prefix_digest(&doc, 1, 0, whole(&doc)));
     }
 
@@ -612,20 +624,20 @@ mod tests {
     #[test]
     fn unreducible_content_falls_back_to_full() {
         let mut layer = layer("shape", rect(0, 0, 8, 8), [0, 0, 0, 0]);
-        layer.channels.clear();
-        layer.extra_blocks = vec![pictura_core::LayerBlock {
+        layer.channels_mut().clear();
+        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![pictura_core::LayerBlock {
             key: *b"vscg",
             data: vec![0xFF; 3].into(),
-        }];
+        }] });
         let doc = document(1024, 1024, vec![layer]);
         let mut session = RenderSession::default();
         assert!(session.preview(&doc, &["0"], 2, whole(&doc), 0).is_none());
-        let smart = Layer {
+        let smart = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "smart".into(),
             rect: rect(0, 0, 8, 8),
             smart_object: Some(pictura_core::SmartObject::default()),
             ..Default::default()
-        };
+        });
         let doc = document(1024, 1024, vec![smart]);
         assert!(session.preview(&doc, &["0"], 2, whole(&doc), 0).is_none());
         let doc = document(
@@ -737,6 +749,28 @@ mod tests {
         changed(&mut doc, |layer| layer.layer_mask_hides_effects = true);
         changed(&mut doc, |layer| layer.vector_mask_hides_effects = true);
         changed(&mut doc, |layer| layer.restricted_channels = vec![0, 1]);
+    }
+
+    #[test]
+    fn sync_targets_keeps_an_edited_typed_fill_in_reduced_geometry() {
+        let mut source = document(8, 8, vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
+            rect: rect(0, 0, 8, 8),
+            adjustment: Some(crate::encode_solid_color_fill([10, 20, 30])),
+            ..Default::default()
+        })]);
+        let mut reduced = source.clone();
+        reduced.layers[0].rect = rect(0, 0, 4, 4);
+        assert!(source.layers[0].set_fill_content(pictura_core::FillContent::Solid([40, 50, 60, 255])));
+        assert_eq!(source.layers[0].adjustment(), reduced.layers[0].adjustment());
+        sync_targets(&mut reduced, &source, &["0"]);
+        assert_eq!(reduced.layers[0].rect, rect(0, 0, 4, 4));
+        assert_eq!(reduced.layers[0].fill_content(), source.layers[0].fill_content());
+        let (pictura_core::LayerContent::Fill(a), pictura_core::LayerContent::Fill(b)) =
+            (reduced.layers[0].content(), source.layers[0].content()) else { panic!("fill content"); };
+        assert!(std::sync::Arc::ptr_eq(a, b));
+        let generation = reduced.layers[0].content_identity();
+        sync_targets(&mut reduced, &source, &["0"]);
+        assert_eq!(reduced.layers[0].content_identity(), generation);
     }
 
     #[test]

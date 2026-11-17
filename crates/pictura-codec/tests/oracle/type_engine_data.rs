@@ -190,7 +190,7 @@ fn grounded_cs6_antialias_fixtures_match_the_confirmed_mapping() {
         let tool = doc
             .layers
             .iter()
-            .find_map(|layer| layer.type_tool.as_ref())
+            .find_map(|layer| layer.type_tool())
             .unwrap_or_else(|| panic!("{file}: no type layer"));
         let (ant_a, raw_flag) = descriptor_ant_a(&tool.text_desc);
         assert_eq!(
@@ -257,7 +257,7 @@ fn authored_type_layer_psd_round_trips_through_psd_tools() {
     let tysh = encode_type_tool(&tool);
 
     let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Pin".into(),
         rect: PsdRect {
             top: 0,
@@ -288,7 +288,7 @@ fn authored_type_layer_psd_round_trips_through_psd_tools() {
             data: tysh.into(),
         }],
         ..Default::default()
-    }]);
+    })]);
 
     let bytes = write_psd(&doc).expect("write_psd");
     let out = psd_tools_type_values(&bytes);

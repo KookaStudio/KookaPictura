@@ -532,7 +532,7 @@ mod tests {
                 data.as_mut_slice()[0] ^= 0xFF;
             })
             .expect("pixel edit preserves geometry");
-        doc.layers[0].channels[0].data.as_mut_slice()[0] ^= 0xFF;
+        doc.layers[0].channels_mut()[0].data.as_mut_slice()[0] ^= 0xFF;
         assert!(!pictura_codec::indexed_source_is_current(&doc));
         let mut rust = PictureViewRust::default();
         rust.session.doc = Some(doc);

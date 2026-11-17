@@ -50,7 +50,7 @@ pub enum MergeError {
 /// A merge target must be raster: not an adjustment and not a fill-content
 /// layer. Groups are raster-mergeable (they collapse their children).
 pub fn can_merge_target(layer: &Layer) -> bool {
-    layer.adjustment.is_none()
+    !layer.has_adjustment_content()
 }
 
 /// The panel's effective eye: the layer's own visibility and every ancestor's.
@@ -68,7 +68,7 @@ pub fn is_visible_in_panel(doc: &Document, path: &str) -> bool {
             return false;
         }
         found = true;
-        layers = &layer.children;
+        layers = layer.children();
     }
     found
 }
@@ -417,7 +417,7 @@ fn clipping_plan(doc: &Document, path: &str) -> Option<ClippingPlan> {
     let mut base_segments = parent.clone();
     base_segments.push(base_index);
     let base = resolve_path(doc, &format_segments(&base_segments))?;
-    if base.is_group || !can_merge_target(base) {
+    if base.is_group() || !can_merge_target(base) {
         return None;
     }
     Some(ClippingPlan {
@@ -495,14 +495,14 @@ fn is_ancestor(ancestor: &[usize], descendant: &[usize]) -> bool {
 fn count_layers(layers: &[Layer]) -> usize {
     layers
         .iter()
-        .map(|layer| 1 + count_layers(&layer.children))
+        .map(|layer| 1 + count_layers(layer.children()))
         .sum()
 }
 
 fn child_count(doc: &Document, parent: &[usize]) -> Option<usize> {
     let mut layers: &[Layer] = &doc.layers;
     for &index in parent {
-        layers = &layers.get(index)?.children;
+        layers = &layers.get(index)?.children();
     }
     Some(layers.len())
 }
@@ -510,14 +510,14 @@ fn child_count(doc: &Document, parent: &[usize]) -> Option<usize> {
 /// The bounding rectangle of a layer's raster content, recursing into groups.
 /// Adjustments own no pixels and contribute nothing.
 fn content_rect(layer: &Layer) -> Option<PsdRect> {
-    if layer.is_group {
+    if layer.is_group() {
         return layer
-            .children
+            .children()
             .iter()
             .filter_map(content_rect)
             .reduce(PsdRect::union);
     }
-    if layer.adjustment.is_some() {
+    if layer.has_adjustment_content() {
         return None;
     }
     if layer.rect.width() > 0 && layer.rect.height() > 0 {
@@ -547,7 +547,7 @@ fn pixel_result(
     clipping: bool,
     channels: Vec<Channel>,
 ) -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name,
         rect,
         blend,
@@ -564,7 +564,7 @@ fn pixel_result(
         is_group: false,
         background: false,
         ..Default::default()
-    }
+    })
 }
 
 fn opaque_white_layer(width: u32, height: u32) -> Layer {
@@ -576,7 +576,7 @@ fn opaque_white_layer(width: u32, height: u32) -> Layer {
         bottom: height as i32,
         right: width as i32,
     };
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Backdrop".to_string(),
         rect,
         blend: BlendMode::Normal,
@@ -610,7 +610,7 @@ fn opaque_white_layer(width: u32, height: u32) -> Layer {
         is_group: false,
         background: false,
         ..Default::default()
-    }
+    })
 }
 
 // --- stamping ---------------------------------------------------------------

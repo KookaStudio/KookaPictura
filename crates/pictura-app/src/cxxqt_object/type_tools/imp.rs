@@ -332,7 +332,7 @@ pub(super) fn set_visible(mut view: Pin<&mut PictureView>, path: &QString, visib
         .doc
         .as_mut()
         .and_then(|doc| pictura_render::resolve_path_mut(doc, &path.to_string()))
-        .filter(|layer| layer.type_tool.is_some())
+        .filter(|layer| layer.type_tool().is_some())
         .map(|layer| layer.visible = visible)
         .is_some();
     if changed {

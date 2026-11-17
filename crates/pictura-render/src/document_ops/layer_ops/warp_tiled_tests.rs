@@ -190,7 +190,7 @@ fn tiled_warp_matches_the_dense_rasterizer() {
         }
     }
     // The layer op stores what the rasterizer builds: tiled channels and mask.
-    let layer = Layer {
+    let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "L".into(),
         rect: r,
         channels: (0..4)
@@ -206,7 +206,7 @@ fn tiled_warp_matches_the_dense_rasterizer() {
             ..Default::default()
         }),
         ..Default::default()
-    };
+    });
     let mut doc = Document::new(400, 300, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
     let warp = Warp::preset(WarpStyle::Arc, 50.0, bounds(r));
@@ -227,7 +227,7 @@ fn tiled_warp_matches_the_dense_rasterizer() {
         Interpolation::Bilinear,
         false,
     );
-    for (c, want) in layer.channels.iter().zip(&oracle) {
+    for (c, want) in layer.channels().iter().zip(&oracle) {
         assert!(c.data.is_tiled(), "channel {}", c.id);
         assert!(every(&c.data) == to_u8(want), "channel {}", c.id);
     }
@@ -262,7 +262,7 @@ fn deep_case(
         .enumerate()
         .map(|(k, id)| (*id, store(k)))
         .collect();
-    let layer = Layer {
+    let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "L".into(),
         rect: r,
         channels: ids[1..]
@@ -281,7 +281,7 @@ fn deep_case(
         }),
         source_channels: Some(SourceChannels::new(depth, r, planes.clone())),
         ..Default::default()
-    };
+    });
     let mut doc = Document::new(300, 200, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
     doc.source
@@ -392,7 +392,7 @@ fn a_solid_layer_warps_into_uniform_tiles() {
     ));
     let layer = resolve_path(&doc, "0").expect("layer");
     let dense = (layer.rect.width() * layer.rect.height()) as usize;
-    for c in &layer.channels {
+    for c in layer.channels() {
         // Only tiles the wavy edge crosses hold samples.
         assert!(
             c.data.allocated_bytes() * 4 < dense,
@@ -484,7 +484,7 @@ fn a_cancelled_warp_changes_nothing() {
         resolve_path(&doc, "0").expect("layer"),
     );
     assert_eq!(before.rect, after.rect);
-    for (a, b) in before.channels.iter().zip(&after.channels) {
+    for (a, b) in before.channels().iter().zip(after.channels()) {
         assert!(a.data == b.data, "channel {}", a.id);
     }
 }

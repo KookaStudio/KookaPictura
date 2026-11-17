@@ -8,13 +8,13 @@ fn an_empty_layer_or_an_empty_selected_area_has_nothing_to_filter() {
     let mut layer = pixel_layer("layer", 4, 4, (10, 20, 30));
     assert!(!selected_area_empty(&layer, None));
     let mut no_alpha = layer.clone();
-    no_alpha.channels.retain(|c| c.id != -1);
+    no_alpha.channels_mut().retain(|c| c.id != -1);
     assert!(!selected_area_empty(&no_alpha, None), "an opaque layer");
 
     // One opaque pixel at (3, 1); the rest transparent.
     let mut alpha = vec![0u8; 16];
     alpha[4 + 3] = 255;
-    layer.channels.last_mut().unwrap().data = alpha.into();
+    layer.channels_mut().last_mut().unwrap().data = alpha.into();
     assert!(!selected_area_empty(&layer, None));
     let mut selection = Selection {
         width: 4,
@@ -29,14 +29,14 @@ fn an_empty_layer_or_an_empty_selected_area_has_nothing_to_filter() {
     selection.data[4 + 3] = 1;
     assert!(!selected_area_empty(&layer, Some(&selection)));
 
-    layer.channels.last_mut().unwrap().data = vec![0u8; 16].into();
+    layer.channels_mut().last_mut().unwrap().data = vec![0u8; 16].into();
     assert!(selected_area_empty(&layer, None), "fully transparent");
     let mut sized_out = pixel_layer("new", 0, 0, (0, 0, 0));
     assert!(
         selected_area_empty(&sized_out, None),
         "a zero-size new layer"
     );
-    sized_out.channels.clear();
+    sized_out.channels_mut().clear();
     assert!(selected_area_empty(&sized_out, None));
 }
 
@@ -112,12 +112,12 @@ fn a_nested_active_layer_resolves_for_the_proxy() {
 
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
     let mut group = pixel_layer("group", 4, 4, (0, 0, 0));
-    group.is_group = true;
-    group.channels.clear();
-    group.children = pictura_core::LayerStack::from_layers(vec![
+    group.set_group_children(pictura_core::LayerStack::default());
+    group.channels_mut().clear();
+    group.set_group_children(pictura_core::LayerStack::from_layers(vec![
         pixel_layer("nested-red", 4, 4, (255, 0, 0)),
         pixel_layer("nested-blue", 4, 4, (0, 0, 255)),
-    ]);
+    ]));
     doc.layers = pictura_core::LayerStack::from_layers(vec![group]);
     doc.composite
         .replace(pictura_render::composite_rgba(&doc))
@@ -130,7 +130,7 @@ fn a_nested_active_layer_resolves_for_the_proxy() {
     let plane = 16;
     assert_eq!(base.data[0], 255, "the red nested layer survives");
     assert_eq!(base.data[2 * plane], 0, "the blue nested layer is hidden");
-    assert!(doc.layers[0].children[1].visible, "visibility restored");
+    assert!(doc.layers[0].children()[1].visible, "visibility restored");
 }
 
 #[test]

@@ -49,12 +49,12 @@ pub fn apply_smart_filter(
     if pictura_codec::append_smart_filter(layer, filter).is_err() {
         return false;
     }
-    let Some(so) = layer.smart_object.as_mut() else {
-        return false;
-    };
+    let Some(so) = layer.smart_object() else { return false; };
     if so.filter_mask.is_none() {
         if let Some(mask) = selection {
-            so.filter_mask = Some(mask);
+            pictura_codec::edit_layer(layer.as_mut(), |parts| {
+                parts.smart_object.as_mut().expect("checked").filter_mask = Some(mask);
+            });
             let _ = pictura_codec::set_filter_mask_enabled(layer, true);
         }
     }
@@ -85,7 +85,7 @@ mod tests {
     use pictura_core::{BitDepth, Channel, ColorMode, Layer, LayerBlock, PsdRect, SmartObjectKind};
 
     fn gradient_layer() -> Layer {
-        let mut layer = Layer {
+        let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "Layer".into(),
             rect: PsdRect {
                 top: 0,
@@ -94,12 +94,12 @@ mod tests {
                 right: 8,
             },
             ..Default::default()
-        };
+        });
         for id in 0..3i16 {
             let data: Vec<u8> = (0..64)
                 .map(|i| ((i % 8) * 30 + (i / 8) * (id as usize + 1) * 3) as u8)
                 .collect();
-            layer.channels.push(Channel {
+            layer.channels_mut().push(Channel {
                 id,
                 data: data.into(),
             });
@@ -140,7 +140,7 @@ mod tests {
 
     fn channels(doc: &Document) -> Vec<Vec<u8>> {
         doc.layers[0]
-            .channels
+            .channels()
             .iter()
             .map(|c| c.data.to_vec())
             .collect()
@@ -148,7 +148,7 @@ mod tests {
 
     fn so(doc: &Document) -> &pictura_core::SmartObject {
         resolve_path(doc, "0")
-            .and_then(|l| l.smart_object.as_ref())
+            .and_then(|l| l.smart_object())
             .expect("smart object")
     }
 
@@ -221,18 +221,18 @@ mod tests {
         assert!(!apply_smart_filter(&mut raster, "0", blur(2.0), None));
 
         let mut linked = smart_doc();
-        linked.layers[0].smart_object.as_mut().unwrap().kind = SmartObjectKind::External;
+        pictura_codec::edit_layer(linked.layers[0].as_mut(), |parts| { parts.smart_object.as_mut().unwrap().kind = SmartObjectKind::External });
         assert!(!apply_smart_filter(&mut linked, "0", blur(2.0), None));
         assert!(so(&linked).smart_filters.is_empty());
 
         let mut legacy = smart_doc();
-        legacy.layers[0]
+        pictura_codec::edit_layer(legacy.layers[0].as_mut(), |parts| { parts
             .extra_blocks
-            .retain(|b| &b.key != b"SoLd" && &b.key != b"SoLE");
-        legacy.layers[0].extra_blocks.push(LayerBlock {
+            .retain(|b| &b.key != b"SoLd" && &b.key != b"SoLE") });
+        pictura_codec::edit_layer(legacy.layers[0].as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
             key: *b"PlLd",
             data: vec![0; 8].into(),
-        });
+        }) });
         assert!(!apply_smart_filter(&mut legacy, "0", blur(2.0), None));
         assert!(so(&legacy).smart_filters.is_empty());
 

@@ -16,7 +16,7 @@ fn state() -> PictureViewRust {
     );
     let mut layer = pixel_layer("px", 16, 16, (40, 120, 200));
     // A left/right step so a blur has a gradient to smooth.
-    for ch in layer.channels.iter_mut().filter(|c| c.id >= 0) {
+    for ch in layer.channels_mut().iter_mut().filter(|c| c.id >= 0) {
         ch.data = (0..16 * 16)
             .map(|i| if i % 16 < 8 { 40u8 } else { 200 })
             .collect();
@@ -32,7 +32,7 @@ fn state() -> PictureViewRust {
 
 fn red(rust: &PictureViewRust) -> Vec<u8> {
     rust.session.doc.as_ref().unwrap().layers[0]
-        .channels
+        .channels()
         .iter()
         .find(|c| c.id == 0)
         .unwrap()
@@ -50,7 +50,7 @@ fn big_state() -> PictureViewRust {
         pictura_core::BitDepth::Eight,
     );
     let mut layer = pixel_layer("px", 256, 256, (40, 120, 200));
-    for (c, ch) in layer.channels.iter_mut().filter(|c| c.id >= 0).enumerate() {
+    for (c, ch) in layer.channels_mut().iter_mut().filter(|c| c.id >= 0).enumerate() {
         let plane: Vec<u8> = (0..256 * 256)
             .map(|i| {
                 let x = i % 256;
@@ -98,7 +98,7 @@ fn blur_grows_the_layer() {
         "the blur grew the layer by its apron: {:?}",
         layer.rect
     );
-    let alpha = layer.channels.iter().find(|c| c.id == -1).unwrap();
+    let alpha = layer.channels().iter().find(|c| c.id == -1).unwrap();
     let w = layer.rect.width() as usize;
     let at = |x: i32, y: i32| {
         alpha.data[(y - layer.rect.top) as usize * w + (x - layer.rect.left) as usize]
@@ -298,7 +298,7 @@ fn section_previews_restore_only_what_they_wrote() {
 fn section_previews_write_the_live_planes_in_place() {
     let mut rust = big_state();
     let plane = |rust: &PictureViewRust| {
-        rust.session.doc.as_ref().unwrap().layers[0].channels[0]
+        rust.session.doc.as_ref().unwrap().layers[0].channels()[0]
             .data
             .as_ptr()
     };
@@ -598,7 +598,7 @@ fn layer_rgba(layer: &Layer, x: i32, y: i32) -> [u8; 4] {
     let at = (y - layer.rect.top) as usize * w + (x - layer.rect.left) as usize;
     [0, 1, 2, -1].map(|id| {
         layer
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == id)
             .expect("channel")
@@ -608,7 +608,7 @@ fn layer_rgba(layer: &Layer, x: i32, y: i32) -> [u8; 4] {
 
 fn layer_planes(layer: &Layer) -> Vec<(i16, Vec<u8>)> {
     layer
-        .channels
+        .channels()
         .iter()
         .map(|c| (c.id, c.data.to_vec()))
         .collect()
@@ -663,7 +663,7 @@ fn apply_image_preserve_transparency_keeps_the_rect() {
     let mut rust = apply_image_state(32, small, (40, 120, 200));
     {
         let layer = &mut rust.session.doc.as_mut().unwrap().layers[0];
-        let alpha = layer.channels.iter_mut().find(|c| c.id == -1).unwrap();
+        let alpha = layer.channels_mut().iter_mut().find(|c| c.id == -1).unwrap();
         alpha.data.as_mut_slice()[0] = 0;
     }
     let source = apply_image_source(32, None);
@@ -882,7 +882,7 @@ fn apply_image_grown_native_store_keeps_precision() {
         panic!("the store stays 16-bit");
     };
     assert!((values[at] as i32 - 51400).abs() <= 1, "{}", values[at]);
-    let channel = layer.channels.iter().find(|c| c.id == 0).unwrap();
+    let channel = layer.channels().iter().find(|c| c.id == 0).unwrap();
     assert_eq!(channel.data[at], 200);
 }
 
@@ -945,7 +945,7 @@ fn apply_image_grown_32_bit_store_keeps_values() {
         (values[at(2, 2)] - 200.0 / 255.0).abs() < 1e-6,
         "the new area takes the source"
     );
-    let channel = layer.channels.iter().find(|c| c.id == 0).unwrap();
+    let channel = layer.channels().iter().find(|c| c.id == 0).unwrap();
     assert_eq!(channel.data[at(16, 16)], 64);
     assert_eq!(channel.data[at(2, 2)], 200);
 }

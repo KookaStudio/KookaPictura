@@ -17,7 +17,7 @@ fn document(w: u32, h: u32) -> Document {
     let data: Vec<u8> = (0..w as usize * h as usize)
         .map(|i| (i % 197 + 20) as u8)
         .collect();
-    doc.layers = LayerStack::from_layers(vec![Layer {
+    doc.layers = LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
         rect,
         opacity: 255,
         fill: 255,
@@ -34,7 +34,7 @@ fn document(w: u32, h: u32) -> Document {
             })
             .collect(),
         ..Default::default()
-    }]);
+    })]);
     doc
 }
 fn coverage(w: u32, h: u32, value: u8) -> Coverage {
@@ -48,8 +48,8 @@ fn coverage_constraints_distinguish_absent_and_empty() {
     let mut unrestricted = baseline.clone();
     apply_adjustment_region(&mut unrestricted, &Adjustment::Invert, None, baseline.rect).unwrap();
     for (value, expected) in [
-        (0, baseline.channels[0].data.sample(0).unwrap()),
-        (255, unrestricted.channels[0].data.sample(0).unwrap()),
+        (0, baseline.channels()[0].data.sample(0).unwrap()),
+        (255, unrestricted.channels()[0].data.sample(0).unwrap()),
         (128, 128),
     ] {
         let mut layer = baseline.clone();
@@ -60,7 +60,7 @@ fn coverage_constraints_distinguish_absent_and_empty() {
             baseline.rect,
         )
         .unwrap();
-        assert_eq!(layer.channels[0].data.sample(0).unwrap(), expected);
+        assert_eq!(layer.channels()[0].data.sample(0).unwrap(), expected);
     }
 }
 
@@ -86,7 +86,7 @@ fn renderer_edits_share_coverage_input() {
     )
     .unwrap();
     let mut layer = doc.layers[0].clone();
-    let outside = layer.channels[0].data.sample(0);
+    let outside = layer.channels()[0].data.sample(0);
     let region = layer.rect;
     apply_filter(
         &mut layer,
@@ -98,7 +98,7 @@ fn renderer_edits_share_coverage_input() {
     apply_adjustment_region(&mut layer, &Adjustment::Invert, Some(&clip), region).unwrap();
     remove_matte(&mut layer, MatteBackground::Black, Some(&clip)).unwrap();
     defringe(&mut layer, 1, Some(&clip)).unwrap();
-    assert_eq!(layer.channels[0].data.sample(0), outside);
+    assert_eq!(layer.channels()[0].data.sample(0), outside);
     let params = ApplyImageParams {
         source: std::sync::Arc::new(
             ApplyImagePlanes::from_coverage(8, 8, Plane::filled(8, 8, 1, 255)).unwrap(),
@@ -122,7 +122,7 @@ fn renderer_edits_share_coverage_input() {
         },
     )
     .unwrap();
-    assert_eq!(layer.channels[0].data.sample(0), outside);
+    assert_eq!(layer.channels()[0].data.sample(0), outside);
     assert!(FilterProxy::new(&doc, Some(&clip), region, 0.5)
         .unwrap()
         .render("0", &[], false)
@@ -169,7 +169,7 @@ fn clipboard_reads_shared_coverage() {
     assert_eq!(locked, before);
     let mut cleared = doc.clone();
     assert!(clear_layer(&mut cleared, "0", Some(&tiled)));
-    assert_eq!(cleared.layers[0].channels[3].data.sample(0), Some(255));
+    assert_eq!(cleared.layers[0].channels()[3].data.sample(0), Some(255));
     assert!(copy_layer(&doc, "0", Some(&Coverage::constant(0))).is_none());
     for mode in [PasteMode::Into, PasteMode::Outside] {
         let mut pasted = doc.clone();
@@ -230,7 +230,7 @@ fn coverage_preserves_real_mask_semantics() {
     let _ = composite_rgba(&retained);
     assert_eq!(retained, before);
     let mut edit = mask_document(&retained, "0").unwrap();
-    edit.document.layers[0].channels[0]
+    edit.document.layers[0].channels_mut()[0]
         .data
         .write_rect_from(7..8, 7..8, 8, &[64]);
     assert!(write_mask_back(

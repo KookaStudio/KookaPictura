@@ -17,7 +17,7 @@ pub(super) fn base_path(path: &str) -> &str {
 }
 
 pub(super) fn smart_object<'a>(doc: &'a Document, path: &str) -> Option<&'a SmartObject> {
-    pictura_render::resolve_path(doc, base_path(path)).and_then(|layer| layer.smart_object.as_ref())
+    pictura_render::resolve_path(doc, base_path(path)).and_then(|layer| layer.smart_object())
 }
 
 pub(super) fn has_smart_filters(doc: &Document, path: &str) -> bool {
@@ -55,8 +55,7 @@ pub(super) fn set_smart_filter_visible(
         return false;
     };
     let Some(current) = layer
-        .smart_object
-        .as_ref()
+        .smart_object()
         .and_then(|so| so.smart_filters.get(i as usize))
         .map(|filter| filter.enabled)
     else {
@@ -73,8 +72,7 @@ pub(super) fn set_smart_filters_enabled(doc: &mut Document, path: &str, enabled:
         return false;
     };
     let Some(current) = layer
-        .smart_object
-        .as_ref()
+        .smart_object()
         .map(|so| so.smart_filters_enabled)
     else {
         return false;
@@ -447,7 +445,7 @@ mod tests {
     fn disabled_group_bypasses_the_chain() {
         let doc = camera_raw_exposure_doc();
         let so = pictura_render::resolve_path(&doc, "0")
-            .and_then(|layer| layer.smart_object.as_ref())
+            .and_then(|layer| layer.smart_object())
             .expect("smart object");
         let base = pictura_core::PixelBuffer {
             width: 4,
@@ -468,7 +466,7 @@ mod tests {
         let mut doc = preserved_smart_filter_doc();
         let layer = pictura_render::resolve_path(&doc, "0").expect("layer");
         assert!(
-            layer.extra_blocks.iter().any(|b| &b.key == b"SoLd"),
+            layer.extra_blocks().iter().any(|b| &b.key == b"SoLd"),
             "the round trip leaves a preserved SoLd"
         );
 
@@ -478,7 +476,7 @@ mod tests {
         let bytes = pictura_codec::write_psd(&doc).expect("writes");
         let back = pictura_codec::read_psd(&bytes).expect("re-reads");
         let so = pictura_render::resolve_path(&back, "0")
-            .and_then(|layer| layer.smart_object.as_ref())
+            .and_then(|layer| layer.smart_object())
             .expect("smart object survives");
         assert!(!so.smart_filters[0].enabled, "filter toggle persists");
         assert!(!so.smart_filters_enabled, "group toggle persists");
@@ -516,7 +514,7 @@ mod tests {
     fn add_reorder_delete_and_clear_reach_the_preserved_descriptor() {
         let ids = |doc: &Document| {
             pictura_render::resolve_path(doc, "0")
-                .and_then(|layer| layer.smart_object.as_ref())
+                .and_then(|layer| layer.smart_object())
                 .map(|so| {
                     so.smart_filters
                         .iter()

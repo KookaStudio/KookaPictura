@@ -8,7 +8,7 @@ use std::sync::Arc;
 fn layered(seed: u8, layers: usize) -> Document {
     let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
     for i in 0..layers {
-        let _ = doc.layers.push(Layer {
+        let _ = doc.layers.push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
             rect: PsdRect {
                 top: 0,
                 left: 0,
@@ -22,7 +22,7 @@ fn layered(seed: u8, layers: usize) -> Document {
                 })
                 .into(),
             ..Default::default()
-        });
+        }));
     }
     doc
 }
@@ -56,7 +56,7 @@ fn two_states() -> (History, Document, LayerTarget) {
     let target = LayerTarget::default();
     history.capture_live(&mut doc, &None, &target, "Open");
     for i in 0..2 {
-        doc.layers[i].channels[0].data = vec![99; 64].into();
+        doc.layers[i].channels_mut()[0].data = vec![99; 64].into();
     }
     history.capture_live(&mut doc, &None, &target, "Edit");
     (history, doc, target)
@@ -68,7 +68,7 @@ fn brush_source_surface_is_reused() {
     assert!(history.set_brush_source(BrushSource::State(0)));
     let first = history.brush_source_surface("0").expect("first surface");
     // A committed stroke adds a state; the source state itself is unchanged.
-    doc.layers[0].channels[1].data = vec![7; 64].into();
+    doc.layers[0].channels_mut()[1].data = vec![7; 64].into();
     history.capture_live(&mut doc, &None, &target, "Stroke");
     let second = history.brush_source_surface("0").expect("second surface");
     assert!(
@@ -103,7 +103,7 @@ fn brush_source_surface_reuses_a_source_dropped_by_depth() {
     assert!(history.set_brush_source(BrushSource::State(0)));
     let first = history.brush_source_surface("0").expect("first surface");
     for i in 0..(crate::history::MAX_DEPTH + 2) {
-        doc.layers[0].channels[0].data = vec![i as u8; 64].into();
+        doc.layers[0].channels_mut()[0].data = vec![i as u8; 64].into();
         history.capture_live(&mut doc, &None, &target, "Step");
     }
     let second = history.brush_source_surface("0").expect("pinned surface");

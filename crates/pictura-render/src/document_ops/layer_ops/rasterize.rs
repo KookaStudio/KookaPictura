@@ -1,14 +1,6 @@
-//! The Rasterize subset (design D8).
-//!
-//! Fill content is a layer whose opaque adjustment block decodes through
-//! [`crate::decode_adjustment`] to [`Adjustment::SolidFill`] (a `SoCo` block, in
-//! either the 4-byte in-house form or the standard PSD descriptor),
-//! [`Adjustment::GradientFill`] (a `GdFl` descriptor), or
-//! [`Adjustment::PatternFill`] (a `PtFl` descriptor). Type/Shape/Vector
-//! Mask/Smart Object/Video/3D layers do not exist in the model, so those
-//! commands refuse without mutating.
+//! Supported fill and shape content rasterization.
 
-use pictura_adjust::{Adjustment, GradientFillParams, PatternFillParams};
+use pictura_core::{GradientFillParams, PatternFillParams};
 use pictura_codec::PatternPixels;
 use pictura_core::{Channel, Document, Layer, PixelBuffer, PsdRect};
 
@@ -24,14 +16,14 @@ pub fn can_rasterize_layer_style(doc: &Document, path: &str) -> bool {
 }
 
 fn style_bakeable(layer: &Layer) -> bool {
-    if layer.is_group
+    if layer.is_group()
         || layer.background
-        || layer.smart_object.is_some()
-        || layer.type_tool.is_some()
-        || layer.adjustment.is_some()
+        || layer.smart_object().is_some()
+        || layer.is_type()
+        || layer.has_adjustment_content()
         || super::shape_layer::is_shape_layer(layer)
         || layer.pixel_data_irrelevant
-        || layer.channels.is_empty()
+        || layer.channels().is_empty()
         || !crate::has_layer_style(layer)
     {
         return false;
@@ -101,22 +93,15 @@ pub fn rasterize_layer_style(doc: &mut Document, path: &str) -> bool {
     bake_from_composite(layer, &rendered);
     layer.fill = 255;
     layer.source_channels = None;
-    layer
-        .extra_blocks
-        .retain(|block| !matches!(&block.key, b"lfx2" | b"lrFX"));
+    pictura_codec::edit_layer(layer, |parts| {
+        parts.extra_blocks.retain(|block| !matches!(&block.key, b"lfx2" | b"lrFX"));
+    });
     layer.pixel_data_irrelevant = false;
     true
 }
 
-/// A decodable fill-content layer: a `SoCo`/`GdFl`/`PtFl` block whose payload
-/// decodes to a fill [`Adjustment`]. Routing both this predicate and the bakers
-/// through [`crate::decode_adjustment`] keeps them from disagreeing.
-pub fn is_fill_content_layer(layer: &Layer) -> bool {
-    matches!(
-        layer.adjustment.as_ref().and_then(crate::decode_adjustment),
-        Some(Adjustment::SolidFill(_) | Adjustment::GradientFill(_) | Adjustment::PatternFill(_))
-    )
-}
+/// Generative fill content, including the fill retained by a shape.
+pub fn is_fill_content_layer(layer: &Layer) -> bool { layer.fill_content().is_some() }
 
 /// Rasterize the fill content at `path`: bake the decoded fill into the layer's
 /// `0/1/2/-1` channels over its rect, clear the adjustment, and keep the name,
@@ -128,16 +113,16 @@ pub fn rasterize_fill_content(doc: &mut Document, path: &str) -> bool {
     let Some(layer) = resolve_path_mut(doc, path) else {
         return false;
     };
-    let Some(adjustment) = layer.adjustment.as_ref().and_then(crate::decode_adjustment) else {
+    if !is_fill_content_layer(layer) { return false; }
+    let Some(adjustment) = layer.fill_content().cloned() else {
         return false;
     };
     match adjustment {
-        Adjustment::SolidFill(rgba) => bake_solid(layer, rgba),
-        Adjustment::GradientFill(params) => bake_gradient(layer, &params),
-        Adjustment::PatternFill(params) => bake_pattern(layer, &params, &patterns),
-        _ => return false,
+        pictura_core::FillContent::Solid(rgba) => bake_solid(layer, rgba),
+        pictura_core::FillContent::Gradient(params) => bake_gradient(layer, &params),
+        pictura_core::FillContent::Pattern(params) => bake_pattern(layer, &params, &patterns),
     }
-    layer.adjustment = None;
+    pictura_codec::retire_layer_content(layer);
     layer.pixel_data_irrelevant = false;
     true
 }
@@ -207,10 +192,10 @@ pub fn rasterize_shape(doc: &mut Document, path: &str) -> bool {
     layer.rect = render_rect;
     bake_from_composite(layer, &rendered);
     layer.source_channels = None;
-    layer.adjustment = None;
+    pictura_codec::retire_layer_content(layer);
     layer.vector_mask = None;
     layer.pixel_data_irrelevant = false;
-    layer.extra_blocks.retain(|block| {
+    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.retain(|block| {
         let key = block.key.as_slice();
         key != b"vmsk"
             && key != b"vsms"
@@ -219,7 +204,7 @@ pub fn rasterize_shape(doc: &mut Document, path: &str) -> bool {
             && key != b"vogk"
             && key != b"lfx2"
             && key != b"lrFX"
-    });
+    }) });
     true
 }
 
@@ -242,7 +227,7 @@ fn bake_from_composite(layer: &mut Layer, out: &PixelBuffer) {
     let w = rect.width().max(0) as usize;
     let h = rect.height().max(0) as usize;
     if w == 0 || h == 0 {
-        layer.channels = Vec::new();
+        layer.set_channels(Vec::new());
         return;
     }
     let plane = out.width as usize * out.height as usize;
@@ -267,7 +252,7 @@ fn bake_from_composite(layer: &mut Layer, out: &PixelBuffer) {
         }
     }
     let [red, green, blue, alpha] = planes;
-    layer.channels = vec![
+    layer.set_channels(vec![
         Channel {
             id: 0,
             data: red.into(),
@@ -284,7 +269,7 @@ fn bake_from_composite(layer: &mut Layer, out: &PixelBuffer) {
             id: -1,
             data: alpha.into(),
         },
-    ];
+    ]);
 }
 
 /// Overwrite the layer's color channels with `rgba` over its rect.
@@ -292,11 +277,11 @@ fn bake_solid(layer: &mut Layer, rgba: [u8; 4]) {
     let w = layer.rect.width();
     let h = layer.rect.height();
     if w <= 0 || h <= 0 {
-        layer.channels = Vec::new();
+        layer.set_channels(Vec::new());
         return;
     }
     let n = w as usize * h as usize;
-    layer.channels = vec![
+    layer.set_channels(vec![
         Channel {
             id: 0,
             data: vec![rgba[0]; n].into(),
@@ -313,7 +298,7 @@ fn bake_solid(layer: &mut Layer, rgba: [u8; 4]) {
             id: -1,
             data: vec![rgba[3]; n].into(),
         },
-    ];
+    ]);
 }
 
 /// Overwrite the layer's color channels with a generated gradient over its
@@ -322,11 +307,11 @@ fn bake_gradient(layer: &mut Layer, params: &GradientFillParams) {
     let w = layer.rect.width();
     let h = layer.rect.height();
     if w <= 0 || h <= 0 {
-        layer.channels = Vec::new();
+        layer.set_channels(Vec::new());
         return;
     }
     let px = crate::fill::gradient_rgba(w, h, params);
-    layer.channels = vec![
+    layer.set_channels(vec![
         Channel {
             id: 0,
             data: px.iter().map(|p| p[0]).collect(),
@@ -343,7 +328,7 @@ fn bake_gradient(layer: &mut Layer, params: &GradientFillParams) {
             id: -1,
             data: vec![255; px.len()].into(),
         },
-    ];
+    ]);
 }
 
 /// Overwrite the layer's color channels with the tiled pattern (or the
@@ -353,12 +338,12 @@ fn bake_pattern(layer: &mut Layer, params: &PatternFillParams, patterns: &[Patte
     let w = layer.rect.width();
     let h = layer.rect.height();
     if w <= 0 || h <= 0 {
-        layer.channels = Vec::new();
+        layer.set_channels(Vec::new());
         return;
     }
     let px =
         crate::fill::pattern_tile_rgba(patterns, params, layer.rect.left, layer.rect.top, w, h);
-    layer.channels = vec![
+    layer.set_channels(vec![
         Channel {
             id: 0,
             data: px.iter().map(|p| p[0]).collect(),
@@ -375,5 +360,5 @@ fn bake_pattern(layer: &mut Layer, params: &PatternFillParams, patterns: &[Patte
             id: -1,
             data: px.iter().map(|p| p[3]).collect(),
         },
-    ];
+    ]);
 }

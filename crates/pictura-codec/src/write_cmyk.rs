@@ -57,7 +57,7 @@ pub(crate) fn cmyk_layer_color_planes(
     profile: Option<&pictura_color::Profile>,
 ) -> Vec<Vec<u8>> {
     let positions: Vec<usize> = layer
-        .channels
+        .channels()
         .iter()
         .enumerate()
         .filter(|(_, c)| c.id >= 0 && c.id < 3)
@@ -66,16 +66,16 @@ pub(crate) fn cmyk_layer_color_planes(
     if positions.len() != 3 {
         return Vec::new();
     }
-    let plane = layer.channels[positions[0]].data.len();
+    let plane = layer.channels()[positions[0]].data.len();
     if positions
         .iter()
-        .any(|&i| layer.channels[i].data.len() != plane)
+        .any(|&i| layer.channels()[i].data.len() != plane)
     {
         return Vec::new();
     }
     let mut current = Vec::with_capacity(plane * 3);
     for &i in &positions {
-        current.extend_from_slice(&layer.channels[i].data);
+        current.extend_from_slice(&layer.channels()[i].data);
     }
     let options = ConversionOptions {
         dither: false,
@@ -88,7 +88,7 @@ pub(crate) fn cmyk_layer_color_planes(
         if store.working_idents != [0; 3] {
             let ids = [0i16, 1, 2].map(|id| {
                 layer
-                    .channels
+                    .channels()
                     .iter()
                     .find(|channel| channel.id == id)
                     .map(|channel| channel.data.ident())

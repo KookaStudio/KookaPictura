@@ -21,7 +21,7 @@ fn doc() -> Document {
             id: -1,
             data: vec![255; n].into(),
         });
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: name.into(),
             rect,
             opacity: 255,
@@ -29,7 +29,7 @@ fn doc() -> Document {
             visible: true,
             channels,
             ..Default::default()
-        }
+        })
     };
     let rect = |top, left, bottom, right| PsdRect {
         top,
@@ -645,10 +645,10 @@ fn rasterize_layer_style_refuses() {
     set(square(&mut clipped), "dropShadow.on", 1.0);
     clipped
         .layers
-        .push(pictura_core::Layer {
+        .push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
             clipping: true,
             ..Default::default()
-        })
+        }))
         .unwrap();
     assert!(
         !crate::can_rasterize_layer_style(&clipped, "1"),
@@ -840,10 +840,10 @@ fn create_style_layers_refuses() {
     let mut run = doc();
     set(square(&mut run), "dropShadow.on", 1.0);
     run.layers
-        .push(pictura_core::Layer {
+        .push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
             clipping: true,
             ..Default::default()
-        })
+        }))
         .unwrap();
     assert!(!crate::can_create_style_layers(&run, "1"));
 }
@@ -888,13 +888,13 @@ fn bad_contour_text_is_refused() {
             "{text}"
         );
     }
-    layer.is_group = true;
+    pictura_codec::edit_layer(layer, |parts| parts.is_group = true);
     assert!(!set_layer_style_contour(
         layer,
         "bevel.glossContour",
         "0,0 255,255"
     ));
-    layer.is_group = false;
+    pictura_codec::edit_layer(layer, |parts| parts.is_group = false);
     layer.background = true;
     assert!(!set_layer_style_contour(
         layer,
@@ -1198,13 +1198,13 @@ fn bad_gradient_text_is_refused() {
             "{text}"
         );
     }
-    layer.is_group = true;
+    pictura_codec::edit_layer(layer, |parts| parts.is_group = true);
     assert!(!set_layer_style_gradient(
         layer,
         "gradientOverlay.gradient",
         "0:000000 4096:ffffff"
     ));
-    layer.is_group = false;
+    pictura_codec::edit_layer(layer, |parts| parts.is_group = false);
     layer.background = true;
     assert!(!set_layer_style_gradient(
         layer,
@@ -1277,7 +1277,7 @@ fn channels_are_included_by_default() {
 fn group_accepts_channel_include() {
     let mut d = doc();
     let layer = square(&mut d);
-    layer.is_group = true;
+    pictura_codec::edit_layer(layer, |parts| parts.is_group = true);
     assert!(set_layer_style_value(layer, "blending.include2", 0.0));
     assert_eq!(layer.restricted_channels, vec![2]);
     assert!(!set_layer_style_value(layer, "dropShadow.on", 1.0));

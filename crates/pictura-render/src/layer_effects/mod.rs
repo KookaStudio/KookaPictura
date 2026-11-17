@@ -87,7 +87,7 @@
 //! when present, and the legacy block supplies the mapped set only when `lfx2`
 //! is absent, so the two are never combined or double-applied.
 
-use pictura_adjust::Adjustment;
+
 use pictura_codec::DescValue;
 use pictura_core::mask_ops::{self, Border};
 use pictura_core::{BlendMode, Document, Layer, PixelBuffer, PsdRect};
@@ -372,7 +372,7 @@ pub(crate) use materialize::{style_passes, MaterializedPass};
 
 pub(crate) fn effects_reach(layer: &Layer) -> PsdRect {
     let rect = layer.rect;
-    let pixels = !layer.channels.is_empty();
+    let pixels = !layer.channels().is_empty();
     let (l, t, r, b) = match layer.vector_mask.as_ref().filter(|mask| mask.has_fill()) {
         Some(mask) if !mask.invert => {
             let points = mask
@@ -452,9 +452,9 @@ pub(crate) fn paint_bounds(layer: &Layer, doc: &Document) -> Option<PsdRect> {
     if !layer.transparency_shapes && layer.knockout != pictura_core::Knockout::None {
         return Some(canvas_rect(doc));
     }
-    if layer.is_group {
+    if layer.is_group() {
         return layer
-            .children
+            .children()
             .iter()
             .filter_map(|child| paint_bounds(child, doc))
             .reduce(PsdRect::union);
@@ -467,7 +467,7 @@ pub(crate) fn paint_bounds(layer: &Layer, doc: &Document) -> Option<PsdRect> {
     if is_destructive_adjustment(layer) {
         return adjustment_bounds(layer, doc);
     }
-    if layer.channels.is_empty()
+    if layer.channels().is_empty()
         && (crate::document_ops::is_fill_content_layer(layer)
             || crate::document_ops::is_shape_layer(layer))
     {
@@ -554,10 +554,9 @@ pub(crate) fn fill_content_box(layer: &Layer) -> Option<PsdRect> {
     // The block key names a fill without decoding it: a composite asks for
     // this box once per effect and must still decode the fill once.
     let fill = layer
-        .adjustment
-        .as_ref()
+        .adjustment()
         .is_some_and(|a| matches!(&a.key, b"SoCo" | b"GdFl" | b"PtFl"));
-    if !layer.channels.is_empty() || !fill {
+    if !layer.channels().is_empty() || !fill {
         return None;
     }
     let confined = confined_fill_box(layer, 0)?;
@@ -810,7 +809,7 @@ pub(crate) fn build_layer_passes(
     doc: &Document,
     effects: &LayerEffects,
     region: Option<PsdRect>,
-    fill: Option<&Adjustment>,
+    fill: Option<&pictura_core::FillContent>,
 ) -> crate::layer_source::LayerPasses {
     let _span = crate::metrics::phase("effect_build", true);
     #[cfg(test)]
@@ -912,7 +911,7 @@ pub(crate) fn build_layer_passes(
 
 /// Whether the layer has no drawable pass group, so the cache can skip it.
 pub(crate) fn no_passes(layer: &Layer, effects: &LayerEffects, destructive: bool) -> bool {
-    if layer.is_group || destructive {
+    if layer.is_group() || destructive {
         return true;
     }
     let on = |enabled: bool, present: bool| enabled && present;
@@ -1026,15 +1025,7 @@ pub(crate) fn composite_bevel_emboss_for_test(
 
 /// A layer whose content is a destructive adjustment (not fill content) has no
 /// matte; its effect is deferred.
-pub(crate) fn is_destructive_adjustment(layer: &Layer) -> bool {
-    match layer.adjustment.as_ref().and_then(crate::decode_adjustment) {
-        Some(
-            Adjustment::SolidFill(_) | Adjustment::GradientFill(_) | Adjustment::PatternFill(_),
-        ) => false,
-        Some(_) => true,
-        None => false,
-    }
-}
+pub(crate) fn is_destructive_adjustment(layer: &Layer) -> bool { layer.adjustment_parameters().is_some() }
 
 /// The effect `Noise` grain at canvas `(x, y)`: a factor on the effect's alpha
 /// that is 1 at 0 % and breaks the effect into a fixed speckle as it rises.

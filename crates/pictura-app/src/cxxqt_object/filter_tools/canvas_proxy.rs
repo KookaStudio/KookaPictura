@@ -242,7 +242,7 @@ mod tests {
     fn striped() -> PictureViewRust {
         let mut doc = Document::new(128, 128, ColorMode::Rgb, BitDepth::Eight);
         let mut layer = pixel_layer("px", 128, 128, (0, 0, 0));
-        for ch in layer.channels.iter_mut().filter(|c| c.id >= 0) {
+        for ch in layer.channels_mut().iter_mut().filter(|c| c.id >= 0) {
             ch.data = (0..128 * 128)
                 .map(|i| {
                     if (i % 128 + i / 128) % 8 < 4 {
@@ -264,7 +264,7 @@ mod tests {
     }
 
     fn red(rust: &PictureViewRust) -> Vec<u8> {
-        rust.session.doc.as_ref().unwrap().layers[0].channels[0]
+        rust.session.doc.as_ref().unwrap().layers[0].channels()[0]
             .data
             .to_vec()
     }
@@ -295,7 +295,7 @@ mod tests {
         let whole = rect(0, 0, 128, 128);
         let first = canvas_proxy_buffer(&mut rust, &blur, whole, 0.5).expect("proxy");
         // A change the key does not see is not picked up: the copy was reused.
-        rust.session.doc.as_mut().unwrap().layers[0].channels[0]
+        rust.session.doc.as_mut().unwrap().layers[0].channels()[0]
             .data
             .as_mut_slice()
             .fill(0);
@@ -457,9 +457,9 @@ mod tests {
         let mut rust = stacked((255, 0, 0), (0, 0, 255));
         let doc = rust.session.doc.as_mut().unwrap();
         let mut group = pixel_layer("group", 8, 8, (0, 0, 0));
-        group.is_group = true;
-        group.channels.clear();
-        group.children = std::mem::take(&mut doc.layers);
+        group.set_group_children(pictura_core::LayerStack::default());
+        group.channels_mut().clear();
+        group.set_group_children(std::mem::take(&mut doc.layers));
         doc.layers = pictura_core::LayerStack::from_layers(vec![group]);
         rust.layer_target = LayerTarget::only("0/1");
         let shown = pane(&mut rust);

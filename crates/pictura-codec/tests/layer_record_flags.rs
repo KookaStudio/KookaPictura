@@ -166,7 +166,7 @@ fn codec_does_not_add_the_flag_to_ordinary_fill_or_vector_masked_pixel_layers() 
     let outline = rectangle();
     {
         let base = resolve_path_mut(&mut doc, &base_path).expect("Base layer");
-        assert!(base.adjustment.is_none(), "no fill adjustment");
+        assert!(base.adjustment().is_none(), "no fill adjustment");
         set_layer_shape_paths(base, std::slice::from_ref(&outline), width, height);
         assert!(!base.pixel_data_irrelevant);
     }

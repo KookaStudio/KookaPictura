@@ -5,7 +5,7 @@
 //! the same arithmetic is byte-identical. Alpha is stored unscaled; the layer's
 //! opacity is applied at replay time.
 
-use pictura_adjust::Adjustment;
+
 use pictura_core::{BlendMode, Document, Layer, PixelBuffer, PsdRect};
 
 #[cfg(test)]
@@ -194,7 +194,7 @@ pub(crate) fn content_matte(
     layer: &Layer,
     doc: &Document,
     region: (i32, i32, i32, i32),
-    fill: Option<&Adjustment>,
+    fill: Option<&pictura_core::FillContent>,
 ) -> Vec<f32> {
     let (x0, y0, x1, y1) = region;
     let rw = (x1 - x0) as usize;
@@ -266,7 +266,7 @@ pub(crate) fn content_matte(
 fn smart_source_matte(layer: &Layer, region: (i32, i32, i32, i32), matte: &mut [f32]) -> bool {
     // ponytail: the embedded source is decoded once per effect; cache the
     // rendered alpha if a profile shows it.
-    let Some(so) = layer.smart_object.as_ref() else {
+    let Some(so) = layer.smart_object() else {
         return false;
     };
     let (x0, y0, x1, y1) = region;

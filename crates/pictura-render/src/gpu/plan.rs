@@ -131,13 +131,13 @@ fn plan_layer<'a>(layer: &'a Layer, doc: &Document, region: Option<PsdRect>) -> 
 
     // A group's own Dissolve/advanced-blending attributes are checked before its
     // children, matching the old document-wide walk.
-    if layer.is_group {
+    if layer.is_group() {
         if let Some(e) = own_attribute_decline(layer) {
             return decline(layer, e, false);
         }
         let (pass_through, children) = match route {
-            ContentRoute::PassThroughGroup => (true, plan_layers(&layer.children, doc, region)),
-            ContentRoute::IsolatedGroup => (false, plan_layers(&layer.children, doc, region)),
+            ContentRoute::PassThroughGroup => (true, plan_layers(layer.children(), doc, region)),
+            ContentRoute::IsolatedGroup => (false, plan_layers(layer.children(), doc, region)),
             _ => unreachable!("content_route returns a group route for a group layer"),
         };
         return match children {
@@ -158,17 +158,17 @@ fn plan_layer<'a>(layer: &'a Layer, doc: &Document, region: Option<PsdRect>) -> 
         ContentRoute::PassThroughGroup | ContentRoute::IsolatedGroup => {
             unreachable!("a non-group layer has a non-group content route")
         }
-        ContentRoute::Fill(adjustment) => {
+        ContentRoute::Adjustment(adjustment) => {
             if let Some(adj) = adjustment_params(&adjustment) {
                 Body::Adjustment(AdjustmentPlan::Inline(adj))
             } else if let Some(lut) = pictura_adjust::adjustment_lut(&adjustment) {
                 Body::Adjustment(AdjustmentPlan::Lut(lut))
-            } else if let Some(cached) = crate::fill::fill_source(layer, doc) {
-                Body::Fill(cached)
             } else {
                 Body::Decline(GpuError::UnsupportedAdjustment)
             }
         }
+        ContentRoute::Fill(_) => crate::fill::fill_source(layer, doc).map(Body::Fill)
+            .unwrap_or(Body::Decline(GpuError::UnsupportedAdjustment)),
         ContentRoute::UndecodedAdjustment | ContentRoute::UndecodedVectorFill => {
             Body::Decline(GpuError::UnsupportedAdjustment)
         }
@@ -252,20 +252,20 @@ fn plan_clip_member(layer: &Layer, doc: &Document) -> Result<(), GpuError> {
     };
     match content_route(layer) {
         ContentRoute::PassThroughGroup | ContentRoute::IsolatedGroup => {
-            plan_clip_children(&layer.children, doc)
+            plan_clip_children(layer.children(), doc)
         }
-        ContentRoute::Fill(adjustment) => {
-            let fill = crate::fill::is_fill_kind(&adjustment)
-                && layer.rect.width() > 0
-                && layer.rect.height() > 0;
+        ContentRoute::Adjustment(adjustment) => {
             if adjustment_params(&adjustment).is_some()
                 || pictura_adjust::adjustment_lut(&adjustment).is_some()
-                || fill
             {
                 Ok(())
             } else {
                 decline(GpuError::UnsupportedAdjustment)
             }
+        }
+        ContentRoute::Fill(_) => {
+            if layer.rect.width() > 0 && layer.rect.height() > 0 { Ok(()) }
+            else { decline(GpuError::UnsupportedAdjustment) }
         }
         ContentRoute::UndecodedAdjustment | ContentRoute::UndecodedVectorFill => {
             decline(GpuError::UnsupportedAdjustment)
@@ -281,8 +281,7 @@ fn plan_clip_member(layer: &Layer, doc: &Document) -> Result<(), GpuError> {
         }
         ContentRoute::SmartSource => {
             let embedded = layer
-                .smart_object
-                .as_ref()
+                .smart_object()
                 .and_then(layer_source::embedded_source)
                 .is_some();
             if embedded || crate::channel_plane(layer, 0).is_some() {

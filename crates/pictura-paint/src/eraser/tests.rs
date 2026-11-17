@@ -20,7 +20,7 @@ fn doc(background: bool) -> Document {
     } else {
         &[(0, 0), (1, 1), (2, 2), (-1, 3)]
     };
-    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_core::Layer::from_parts(pictura_core::LayerParts {
         rect: PsdRect {
             top: 0,
             left: 0,
@@ -36,7 +36,7 @@ fn doc(background: bool) -> Document {
             .collect(),
         background,
         ..Default::default()
-    }]);
+    }, pictura_core::LayerContent::Pixel)]);
     doc
 }
 
@@ -259,7 +259,7 @@ fn pencil_erases_without_a_soft_edge() {
 #[test]
 fn erase_to_history_paints_the_source_back() {
     let mut past = doc(false);
-    for c in &mut past.layers[0].channels {
+    for c in past.layers[0].channels_mut() {
         if c.id == 0 {
             c.data.fill(250);
         }
@@ -273,7 +273,7 @@ fn split() -> Document {
     // Sky (blue) on the left, a subject (yellow) from x = 20.
     let mut d = doc(false);
     let w = 40;
-    for c in &mut d.layers[0].channels {
+    for c in d.layers[0].channels_mut() {
         let (sky, subject) = match c.id {
             0 => (30, 220),
             1 => (120, 200),
@@ -383,7 +383,7 @@ fn uniform_tiled_doc(background: bool) -> Document {
     } else {
         &[(0, 0), (1, 1), (2, 2), (-1, 3)]
     };
-    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_core::Layer::from_parts(pictura_core::LayerParts {
         rect: PsdRect {
             top: 0,
             left: 0,
@@ -399,7 +399,7 @@ fn uniform_tiled_doc(background: bool) -> Document {
             .collect(),
         background,
         ..Default::default()
-    }]);
+    }, pictura_core::LayerContent::Pixel)]);
     doc
 }
 
@@ -425,7 +425,7 @@ fn a_uniform_erase_writes_uniform_alpha_tiles() {
         }
     );
     let alpha = d.layers[0]
-        .channels
+        .channels()
         .iter()
         .find(|c| c.id == -1)
         .expect("an alpha channel");
@@ -467,9 +467,9 @@ fn a_uniform_erase_matches_the_per_pixel_path() {
     }
     .is_some());
     for (a, b) in fast.layers[0]
-        .channels
+        .channels()
         .iter()
-        .zip(&dense.layers[0].channels)
+        .zip(dense.layers[0].channels())
     {
         assert!(a.data == b.data, "channel {}", a.id);
     }
@@ -481,7 +481,7 @@ fn ensure_alpha_gives_a_uniform_plane() {
     let mut layer = d.layers[0].clone();
     ensure_alpha(&mut layer);
     let alpha = layer
-        .channels
+        .channels()
         .iter()
         .find(|c| c.id == -1)
         .expect("an alpha channel");
@@ -614,8 +614,8 @@ fn magic_erase_reference(
     let layer = &mut d.layers[0];
     let rect = layer.rect;
     let lw = rect.width() as usize;
-    let alpha = layer.channels.iter().position(|c| c.id == -1).unwrap();
-    let data = layer.channels[alpha].data.as_mut_slice();
+    let alpha = layer.channels().iter().position(|c| c.id == -1).unwrap();
+    let data = layer.channels_mut()[alpha].data.as_mut_slice();
     for y in rect.top.max(0)..rect.bottom.min(h as i32) {
         for x in rect.left.max(0)..rect.right.min(w as i32) {
             let cover = mask[y as usize * w + x as usize] as f32 / 255.0 * 0.8;
@@ -644,7 +644,7 @@ fn magic_erase_tiled_matches_dense() {
             [90u8, 92, 200, 10][(state % 4) as usize]
         })
         .collect();
-    for c in &mut base.layers[0].channels[..3] {
+    for c in &mut base.layers[0].channels_mut()[..3] {
         let data: Vec<u8> = (0..n)
             .map(|i| cells[(((i / lw) / 70) * 8 + (i % lw) / 90) as usize % 64])
             .collect();
@@ -677,9 +677,9 @@ fn magic_erase_tiled_matches_dense() {
                 }
             };
             for (a, b) in got.layers[0]
-                .channels
+                .channels()
                 .iter()
-                .zip(&expected.layers[0].channels)
+                .zip(expected.layers[0].channels())
             {
                 assert!(a.data == b.data, "channel {} {contiguous} {soften}", a.id);
             }

@@ -171,7 +171,7 @@ fn cmyk_fixture_matches_psd_tools_within_one() {
     assert_eq!(doc.layers.len(), 1, "cmyk.psd carries one pixel layer");
     assert_eq!(
         doc.layers[0]
-            .channels
+            .channels()
             .iter()
             .map(|c| c.id)
             .collect::<Vec<_>>(),

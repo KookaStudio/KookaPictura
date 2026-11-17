@@ -311,7 +311,7 @@ mod tests {
 
     fn solid_doc(w: u32, h: u32, blend: BlendMode) -> Document {
         let n = (w * h) as usize;
-        let layer = Layer {
+        let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "solid".into(),
             rect: PsdRect {
                 top: 0,
@@ -330,7 +330,7 @@ mod tests {
                 })
                 .to_vec(),
             ..Default::default()
-        };
+        });
         let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         doc
@@ -378,7 +378,7 @@ mod tests {
 
     #[test]
     fn type_source_decline_is_counted() {
-        let layer = Layer {
+        let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "text".into(),
             rect: PsdRect {
                 top: 0,
@@ -399,7 +399,7 @@ mod tests {
                 path: None,
             }),
             ..Default::default()
-        };
+        });
         let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         let before = decline_count("type_source");

@@ -271,13 +271,13 @@ fn cmyk_layer_converts_to_rgb_and_keeps_transparency() {
     let doc = read_psd(&p).unwrap();
     let layer = &doc.layers[0];
     assert_eq!(
-        layer.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
+        layer.channels().iter().map(|c| c.id).collect::<Vec<_>>(),
         vec![0, 1, 2, -1]
     );
-    assert_eq!(layer.channels[0].data, vec![100]);
-    assert_eq!(layer.channels[1].data, vec![50]);
-    assert_eq!(layer.channels[2].data, vec![25]);
-    assert_eq!(layer.channels[3].data, vec![200]);
+    assert_eq!(layer.channels()[0].data, vec![100]);
+    assert_eq!(layer.channels()[1].data, vec![50]);
+    assert_eq!(layer.channels()[2].data, vec![25]);
+    assert_eq!(layer.channels()[3].data, vec![200]);
 }
 
 #[test]
@@ -291,10 +291,10 @@ fn cmyk_layer_with_wrong_channel_count_is_left_unchanged() {
     let doc = read_psd(&p).unwrap();
     let layer = &doc.layers[0];
     assert_eq!(
-        layer.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
+        layer.channels().iter().map(|c| c.id).collect::<Vec<_>>(),
         vec![0, 1, 2]
     );
-    assert_eq!(layer.channels[0].data, vec![10]);
+    assert_eq!(layer.channels()[0].data, vec![10]);
 }
 
 #[test]
@@ -317,24 +317,24 @@ fn cmyk_layer_leaves_alpha_mask_and_spot_untouched() {
     let layer = &doc.layers[0];
     // The four CMYK color planes become RGB; every non-color channel is intact.
     assert_eq!(
-        layer.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
+        layer.channels().iter().map(|c| c.id).collect::<Vec<_>>(),
         vec![0, 1, 2, -1]
     );
-    assert_eq!(layer.channels[0].data, vec![100]);
-    assert_eq!(layer.channels[1].data, vec![50]);
-    assert_eq!(layer.channels[2].data, vec![25]);
-    assert_eq!(layer.channels[3].data, vec![111], "transparency untouched");
+    assert_eq!(layer.channels()[0].data, vec![100]);
+    assert_eq!(layer.channels()[1].data, vec![50]);
+    assert_eq!(layer.channels()[2].data, vec![25]);
+    assert_eq!(layer.channels()[3].data, vec![111], "transparency untouched");
     assert_eq!(
         layer.mask.as_ref().and_then(|m| m.data.as_deref()),
         Some(&[222u8][..]),
         "mask channel untouched"
     );
     assert_eq!(
-        layer.raw_channels.iter().map(|c| c.id).collect::<Vec<_>>(),
+        layer.raw_channels().iter().map(|c| c.id).collect::<Vec<_>>(),
         vec![-3]
     );
     assert_eq!(
-        layer.raw_channels[0].data,
+        layer.raw_channels()[0].data,
         vec![0, 0, 123],
         "spot untouched"
     );
@@ -350,11 +350,11 @@ fn bitmap_depth1_layer_color_channel_expands() {
         assert_eq!(doc.source.mode(), Some(ColorMode::Bitmap));
         let layer = &doc.layers[0];
         assert_eq!(
-            layer.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
+            layer.channels().iter().map(|c| c.id).collect::<Vec<_>>(),
             vec![0, 1, 2],
             "bitmap layer becomes RGB"
         );
-        for channel in &layer.channels {
+        for channel in layer.channels() {
             assert_eq!(channel.data, vec![expected], "packed {packed:#04x}");
         }
     }
@@ -722,7 +722,7 @@ fn cmyk_layer_color_channels_write_back_as_cmyk() {
     let back = read_psd(&out).unwrap();
     let layer = &back.layers[0];
     assert_eq!(
-        layer.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
+        layer.channels().iter().map(|c| c.id).collect::<Vec<_>>(),
         vec![0, 1, 2, -1],
         "the layer carries four CMYK channels plus transparency"
     );
@@ -730,11 +730,11 @@ fn cmyk_layer_color_channels_write_back_as_cmyk() {
     // round-trip to the same RGB bytes.
     for c in 0..3 {
         assert_eq!(
-            layer.channels[c].data, doc.layers[0].channels[c].data,
+            layer.channels()[c].data, doc.layers[0].channels()[c].data,
             "layer color channel {c} is exact"
         );
     }
-    assert_eq!(layer.channels[3].data, vec![200], "transparency untouched");
+    assert_eq!(layer.channels()[3].data, vec![200], "transparency untouched");
 }
 
 #[test]
@@ -748,7 +748,7 @@ fn lab_layer_color_channels_write_back_as_lab() {
     let doc = read_psd(&p).unwrap();
     assert_eq!(
         doc.layers[0]
-            .channels
+            .channels()
             .iter()
             .map(|c| c.id)
             .collect::<Vec<_>>(),
@@ -779,18 +779,18 @@ fn lab_layer_color_channels_write_back_as_lab() {
     let back = read_psd(&out).unwrap();
     let layer = &back.layers[0];
     assert_eq!(
-        layer.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
+        layer.channels().iter().map(|c| c.id).collect::<Vec<_>>(),
         vec![0, 1, 2, -1]
     );
     // The layer's Lab planes were re-emitted exactly, so its color channels
     // round-trip to the same RGB bytes.
     for c in 0..3 {
         assert_eq!(
-            layer.channels[c].data, doc.layers[0].channels[c].data,
+            layer.channels()[c].data, doc.layers[0].channels()[c].data,
             "layer color channel {c} is exact"
         );
     }
-    assert_eq!(layer.channels[3].data, vec![200], "transparency untouched");
+    assert_eq!(layer.channels()[3].data, vec![200], "transparency untouched");
 }
 
 /// A 1x1 grouped document: a bounding divider, one pixel layer, and its
@@ -889,22 +889,22 @@ fn grouped_lab_layers_convert_on_read_and_round_trip() {
     assert_eq!(doc.mode, ColorMode::Rgb);
     assert_eq!(doc.source.mode(), Some(ColorMode::Lab));
     assert!(doc.layers[0].is_group());
-    let child = &doc.layers[0].children[0];
+    let child = &doc.layers[0].children()[0];
     assert_eq!(
-        child.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
+        child.channels().iter().map(|c| c.id).collect::<Vec<_>>(),
         vec![0, 1, 2]
     );
     for (c, expected) in [(0usize, 60u8), (1, 246), (2, 246)] {
-        assert_eq!(child.channels[c].data, vec![expected], "nested channel {c}");
+        assert_eq!(child.channels()[c].data, vec![expected], "nested channel {c}");
     }
 
     // The unedited nested plane survives a save exactly.
     let out = write_psd(&doc).unwrap();
     let back = read_psd(&out).unwrap();
-    let back_child = &back.layers[0].children[0];
+    let back_child = &back.layers[0].children()[0];
     for c in 0..3 {
         assert_eq!(
-            back_child.channels[c].data, child.channels[c].data,
+            back_child.channels()[c].data, child.channels()[c].data,
             "nested channel {c} after save"
         );
     }
@@ -921,14 +921,14 @@ fn grouped_cmyk_layers_convert_on_read() {
     );
     let doc = read_psd(&p).unwrap();
     assert_eq!(doc.mode, ColorMode::Rgb);
-    let child = &doc.layers[0].children[0];
+    let child = &doc.layers[0].children()[0];
     assert_eq!(
-        child.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
+        child.channels().iter().map(|c| c.id).collect::<Vec<_>>(),
         vec![0, 1, 2]
     );
-    assert_eq!(child.channels[0].data, vec![100]);
-    assert_eq!(child.channels[1].data, vec![50]);
-    assert_eq!(child.channels[2].data, vec![25]);
+    assert_eq!(child.channels()[0].data, vec![100]);
+    assert_eq!(child.channels()[1].data, vec![50]);
+    assert_eq!(child.channels()[2].data, vec![25]);
 }
 
 #[test]
@@ -974,7 +974,7 @@ fn lab_document_without_a_merged_composite_writes_lab() {
         .set_encoding(Some(ColorMode::Lab), None)
         .expect("valid source encoding");
     doc.composite.set_merged_output(false);
-    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![crate::layer_from_parts(pictura_core::LayerParts {
         rect: PsdRect {
             top: 0,
             left: 0,
@@ -996,7 +996,7 @@ fn lab_document_without_a_merged_composite_writes_lab() {
             },
         ],
         ..Default::default()
-    }]);
+    })]);
 
     let p = write_psd(&doc).unwrap();
     assert_eq!(
@@ -1010,9 +1010,9 @@ fn lab_document_without_a_merged_composite_writes_lab() {
     assert_eq!(back.mode, ColorMode::Rgb);
     assert_eq!(back.source.mode(), Some(ColorMode::Lab));
     let layer = &back.layers[0];
-    assert_eq!(layer.channels[0].data, vec![60]);
-    assert_eq!(layer.channels[1].data, vec![246]);
-    assert_eq!(layer.channels[2].data, vec![246]);
+    assert_eq!(layer.channels()[0].data, vec![60]);
+    assert_eq!(layer.channels()[1].data, vec![246]);
+    assert_eq!(layer.channels()[2].data, vec![246]);
 
     let out = write_psd(&back).unwrap();
     assert_eq!(
@@ -1104,7 +1104,7 @@ fn indexed_layer_color_channel_writes_back_as_indexed() {
     assert_eq!(doc.source.mode(), Some(ColorMode::Indexed));
     let layer = &doc.layers[0];
     assert_eq!(
-        layer.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
+        layer.channels().iter().map(|c| c.id).collect::<Vec<_>>(),
         vec![0, 1, 2, -1],
         "the index layer becomes RGB plus transparency"
     );
@@ -1122,17 +1122,17 @@ fn indexed_layer_color_channel_writes_back_as_indexed() {
     let back = read_psd(&out).unwrap();
     let back_layer = &back.layers[0];
     assert_eq!(
-        back_layer.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
+        back_layer.channels().iter().map(|c| c.id).collect::<Vec<_>>(),
         vec![0, 1, 2, -1]
     );
     for c in 0..3 {
         assert_eq!(
-            back_layer.channels[c].data, layer.channels[c].data,
+            back_layer.channels()[c].data, layer.channels()[c].data,
             "layer color channel {c} is exact"
         );
     }
     assert_eq!(
-        back_layer.channels[3].data,
+        back_layer.channels()[3].data,
         vec![200],
         "transparency untouched"
     );
@@ -1149,9 +1149,9 @@ fn grouped_indexed_layer_round_trips() {
     assert_eq!(doc.mode, ColorMode::Rgb);
     assert_eq!(doc.source.mode(), Some(ColorMode::Indexed));
     assert!(doc.layers[0].is_group());
-    let child = &doc.layers[0].children[0];
+    let child = &doc.layers[0].children()[0];
     assert_eq!(
-        child.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
+        child.channels().iter().map(|c| c.id).collect::<Vec<_>>(),
         vec![0, 1, 2]
     );
     assert_eq!(
@@ -1168,10 +1168,10 @@ fn grouped_indexed_layer_round_trips() {
     );
 
     let back = read_psd(&out).unwrap();
-    let back_child = &back.layers[0].children[0];
+    let back_child = &back.layers[0].children()[0];
     for c in 0..3 {
         assert_eq!(
-            back_child.channels[c].data, child.channels[c].data,
+            back_child.channels()[c].data, child.channels()[c].data,
             "nested channel {c} after save"
         );
     }
@@ -1208,7 +1208,7 @@ fn edited_indexed_layer_falls_back_to_rgb() {
     let palette = indexed_palette();
     let p = layered_psd_with_data(8, 2, 1, &palette, &[&[2]], &[(0, &[5]), (-1, &[200])]);
     let mut doc = read_psd(&p).unwrap();
-    doc.layers[0].channels[0].data[0] ^= 1;
+    doc.layers[0].channels_mut()[0].data[0] ^= 1;
 
     let out = write_psd(&doc).unwrap();
     assert_eq!(
@@ -1220,7 +1220,7 @@ fn edited_indexed_layer_falls_back_to_rgb() {
     assert_eq!(back.mode, ColorMode::Rgb);
     assert_eq!(back.source.mode(), None);
     assert_eq!(
-        back.layers[0].channels[0].data, doc.layers[0].channels[0].data,
+        back.layers[0].channels()[0].data, doc.layers[0].channels()[0].data,
         "the edited layer round-trips in RGB"
     );
 }
@@ -1308,7 +1308,7 @@ fn added_empty_layer_keeps_indexed_on_save() {
     let p = layered_psd_with_data(8, 2, 1, &palette, &[&[2]], &[(0, &[5]), (-1, &[200])]);
     let mut doc = read_psd(&p).unwrap();
     {
-        let _ = doc.layers.push(Layer {
+        let _ = doc.layers.push(crate::layer_from_parts(pictura_core::LayerParts {
             name: "adjustment".into(),
             rect: PsdRect {
                 top: 0,
@@ -1317,7 +1317,7 @@ fn added_empty_layer_keeps_indexed_on_save() {
                 right: 1,
             },
             ..Default::default()
-        });
+        }));
     };
 
     let out = write_psd(&doc).unwrap();

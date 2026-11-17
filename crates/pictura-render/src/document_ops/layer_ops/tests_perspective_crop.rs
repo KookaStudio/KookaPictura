@@ -20,13 +20,13 @@ fn doc(w: u32, h: u32, value: u8) -> Document {
 
 fn set_gray(d: &mut Document, x: usize, y: usize, value: u8) {
     let w = d.layers[0].rect.width() as usize;
-    for c in d.layers[0].channels.iter_mut().filter(|c| c.id >= 0) {
+    for c in d.layers[0].channels_mut().iter_mut().filter(|c| c.id >= 0) {
         c.data[y * w + x] = value;
     }
 }
 
 fn gray_at(d: &Document, x: usize, y: usize) -> u8 {
-    d.layers[0].channels[0].data[y * d.width as usize + x]
+    d.layers[0].channels()[0].data[y * d.width as usize + x]
 }
 
 #[test]
@@ -112,11 +112,11 @@ fn outside_the_source_is_transparent_or_white_on_a_background() {
     let quad = [(-8.0, -8.0), (8.0, -8.0), (8.0, 8.0), (-8.0, 8.0)];
     let mut layered = doc(8, 8, 0);
     assert!(perspective_crop(&mut layered, quad));
-    let alpha = &layered.layers[0].channels[3].data;
+    let alpha = &layered.layers[0].channels()[3].data;
     assert_eq!((alpha[0], alpha[16 * 16 - 1]), (0, 255));
 
     let mut background = doc(8, 8, 0);
-    background.layers[0].channels.retain(|c| c.id != -1);
+    background.layers[0].channels_mut().retain(|c| c.id != -1);
     assert!(perspective_crop(&mut background, quad));
     assert_eq!(
         (gray_at(&background, 0, 0), gray_at(&background, 15, 15)),
@@ -166,10 +166,10 @@ fn masks_and_extra_channels_warp_with_the_pixels() {
 #[test]
 fn live_type_and_high_depth_refuse() {
     let mut d = doc(8, 8, 10);
-    d.layers[0].extra_blocks.push(LayerBlock {
+    pictura_codec::edit_layer(d.layers[0].as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
         key: *b"TySh",
         data: Vec::new().into(),
-    });
+    }) });
     assert!(perspective_crop_refusal(&d).is_some());
     let before = d.clone();
     assert!(!perspective_crop(&mut d, canvas(8, 8)));

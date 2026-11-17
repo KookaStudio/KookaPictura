@@ -307,7 +307,7 @@ fn params_ok(t: &LayerTransform) -> bool {
 
 /// Whether `layer` carries a materializable channel-less embedded smart object.
 fn materialized_channels(doc: &Document, layer: &Layer) -> Option<Vec<Channel>> {
-    let so = layer.smart_object.as_ref()?;
+    let so = layer.smart_object()?;
     let buf = crate::render_smart_source(so, layer.rect, layer.rect)?;
     if buf.width != layer.rect.width() as u32 || buf.height != layer.rect.height() as u32 {
         return None;
@@ -426,8 +426,8 @@ pub(super) struct Prepared {
 /// channel-less embedded smart object. `None` refuses without mutation.
 pub(super) fn prepare_layer(doc: &Document, path: &str) -> Option<Prepared> {
     let layer = resolve_path(doc, path)?;
-    if layer.is_group
-        || layer.adjustment.is_some()
+    if layer.is_group()
+        || layer.has_adjustment_content()
         || layer.background
         || layer.lock.contains(LockFlags::POSITION)
     {
@@ -443,18 +443,17 @@ pub(super) fn prepare_layer(doc: &Document, path: &str) -> Option<Prepared> {
     // payload and preserved blocks: the original source survives as the proxy's
     // cache and Replace re-renders from a new source. Only a channel-less target
     // is consumed below.
-    let materialize = !layer.channels.iter().any(|c| c.id == 0);
+    let materialize = !layer.channels().iter().any(|c| c.id == 0);
     let source_channels = if materialize {
         materialized_channels(doc, layer)?
     } else {
-        if layer.channels.iter().any(|c| c.data.len() != plane) {
+        if layer.channels().iter().any(|c| c.data.len() != plane) {
             return None;
         }
-        layer.channels.clone()
+        layer.channels().clone()
     };
     let old_uuid = layer
-        .smart_object
-        .as_ref()
+        .smart_object()
         .map(|so| so.uuid.clone())
         .unwrap_or_default();
     Some(Prepared {
@@ -508,7 +507,7 @@ pub(super) fn write_layer(
     }
     let layer = resolve_path_mut(doc, path).expect("resolved by prepare_layer");
     let old_rect = layer.rect;
-    layer.channels = out.channels;
+    layer.set_channels(out.channels);
     layer.rect = PsdRect {
         top: out.dest.1,
         left: out.dest.0,
@@ -527,17 +526,17 @@ pub(super) fn write_layer(
     } else {
         // ponytail: an unmodeled raw on-disk stream cannot be resampled, so a
         // scale/rotate/fractional move, projective map, or mesh warp drops it.
-        layer.raw_channels.clear();
+        layer.discard_raw_channels();
         layer.source_channels = out.native;
     }
     if let Some(mask) = out.mask {
         layer.mask = Some(mask);
     }
     if prepared.materialize {
-        layer
+        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts
             .extra_blocks
-            .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd"));
-        layer.smart_object = None;
+            .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd")) });
+        pictura_codec::retire_layer_content(layer);
         if !prepared.old_uuid.is_empty() {
             if let Some(cleaned) = pictura_codec::remove_linked_source(
                 &doc.layer_section_extra,
@@ -958,7 +957,7 @@ mod tests {
             resolve_path(&doc, "0").expect("layer"),
         );
         assert_eq!(before.rect, after.rect);
-        for (a, b) in before.channels.iter().zip(&after.channels) {
+        for (a, b) in before.channels().iter().zip(after.channels()) {
             assert!(a.data == b.data, "channel {}", a.id);
         }
     }
@@ -987,7 +986,7 @@ mod tests {
             Interpolation::Bicubic,
         ));
         let layer = resolve_path(&doc, "0").expect("layer");
-        let alpha = layer.channels.iter().find(|c| c.id == -1).expect("alpha");
+        let alpha = layer.channels().iter().find(|c| c.id == -1).expect("alpha");
         let fractional = (0..alpha.data.len())
             .filter_map(|i| alpha.data.sample(i))
             .filter(|a| *a != 0 && *a != 255)
@@ -1024,7 +1023,7 @@ mod tests {
             Interpolation::Bicubic,
         ));
         let layer = resolve_path(&doc, "0").expect("layer");
-        let alpha = layer.channels.iter().find(|c| c.id == -1).expect("alpha");
+        let alpha = layer.channels().iter().find(|c| c.id == -1).expect("alpha");
         let fractional = (0..alpha.data.len())
             .filter_map(|i| alpha.data.sample(i))
             .filter(|a| *a != 0 && *a != 255)

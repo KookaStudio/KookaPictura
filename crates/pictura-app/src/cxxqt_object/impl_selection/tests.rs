@@ -221,21 +221,21 @@ fn mask_with(value: u8, w: u32, h: u32) -> LayerMask {
 }
 
 fn layer_with_mask(doc: &mut Document, mask: LayerMask) {
-    let _ = doc.layers.push(Layer {
+    let _ = doc.layers.push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "M".to_string(),
         rect: full(doc.width, doc.height),
         mask: Some(mask),
         ..Default::default()
-    });
+    }));
 }
 
 fn layer_with_mask_rect(doc: &mut Document, rect: PsdRect, mask: LayerMask) {
-    let _ = doc.layers.push(Layer {
+    let _ = doc.layers.push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "M".to_string(),
         rect,
         mask: Some(mask),
         ..Default::default()
-    });
+    }));
 }
 
 #[test]

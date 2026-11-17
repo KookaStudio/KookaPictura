@@ -21,7 +21,7 @@ pub fn grow_layer_to(
     purpose: &'static str,
 ) -> Result<bool, MemoryError> {
     let old = layer.rect;
-    if rect == old || rect.is_empty() || layer.is_group || layer.adjustment.is_some() {
+    if rect == old || rect.is_empty() || layer.is_group() || layer.adjustment().is_some() {
         return Ok(false);
     }
     if !old.is_empty() && old.union(rect) != rect {
@@ -69,8 +69,7 @@ pub fn grow_layer_to(
     // The 8-bit planes are tiled: the grown area is empty tiles, and only the
     // tiles the old content lands on are written (#1213). The native store
     // stays flat and pays the whole grown area.
-    let tiled_planes = layer
-        .channels
+    let tiled_planes = layer.channels()
         .iter()
         .filter(|channel| channel.data.len() == old_n)
         .count() as u64;
@@ -88,7 +87,7 @@ pub fn grow_layer_to(
         .saturating_add(flat_added);
     let _held = memory::governor().reserve(added, purpose)?;
 
-    for channel in &mut layer.channels {
+    for channel in layer.channels_mut() {
         if channel.data.len() != old_n {
             continue;
         }
@@ -111,7 +110,7 @@ pub fn grow_layer_to(
     // Verbatim compressed streams for unmodeled channels cannot be padded; a
     // grown layer re-emits only the channels the engine models.
     // ponytail: a grow drops preserved raw channels instead of growing them.
-    layer.raw_channels.clear();
+    layer.discard_raw_channels();
     layer.rect = rect;
     Ok(true)
 }
@@ -124,7 +123,7 @@ pub fn shrink_layer_to(layer: &mut Layer, rect: PsdRect) {
         return;
     }
     if rect.is_empty() {
-        for channel in &mut layer.channels {
+        for channel in layer.channels_mut() {
             channel.data = crate::Plane::default();
         }
         if let Some(store) = layer.source_channels.as_mut() {
@@ -149,7 +148,7 @@ pub fn shrink_layer_to(layer: &mut Layer, rect: PsdRect) {
         (rect.left - old.left).max(0) as usize,
         (rect.top - old.top).max(0) as usize,
     );
-    for channel in &mut layer.channels {
+    for channel in layer.channels_mut() {
         if channel.data.len() != old_w * old_h {
             continue;
         }
@@ -333,12 +332,12 @@ mod tests {
     }
 
     fn layer_at(rect: PsdRect, w: usize, h: usize) -> Layer {
-        let mut layer = Layer {
+        let mut layer = crate::Layer::from_parts(crate::LayerParts {
             rect,
-            ..Layer::default()
-        };
+            ..Default::default()
+        }, crate::LayerContent::Pixel);
         for id in [0, 1, 2, -1] {
-            layer.channels.push(Channel {
+            layer.channels_mut().push(Channel {
                 id,
                 data: Plane::from(vec![id as u8; w * h]),
             });
@@ -359,7 +358,7 @@ mod tests {
         ));
         assert!(grow_layer_to(&mut layer, rect(0, 0, 4, 4), "a test").unwrap());
         assert_eq!(layer.rect, rect(0, 0, 4, 4));
-        for channel in &layer.channels {
+        for channel in layer.channels() {
             assert_eq!(channel.data.len(), 16);
             assert_eq!(channel.data[5], channel.id as u8, "old pixel at (1,1)");
             assert_eq!(channel.data[0], 0, "new area is transparent");
@@ -407,12 +406,12 @@ mod tests {
 
     #[test]
     fn drops_verbatim_raw_channels() {
-        let mut layer = layer_at(rect(0, 0, 2, 2), 2, 2);
-        layer.raw_channels.push(crate::RawChannel {
-            id: 7,
-            data: Plane::from(vec![0u8, 0, 0]),
-        });
+        let layer = layer_at(rect(0, 0, 2, 2), 2, 2);
+        let content = layer.content().clone();
+        let mut parts = crate::LayerParts::from(layer);
+        parts.raw_channels.push(crate::RawChannel { id: 7, data: Plane::from(vec![0u8,0,0]) });
+        let mut layer = Layer::from_parts(parts, content);
         assert!(grow_layer_to(&mut layer, rect(0, 0, 3, 3), "a test").unwrap());
-        assert!(layer.raw_channels.is_empty());
+        assert!(layer.raw_channels().is_empty());
     }
 }

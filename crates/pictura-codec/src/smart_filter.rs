@@ -4,7 +4,7 @@
 //! parses it to the descriptor DOM, replaces one key, and re-serializes the
 //! whole block so every unmodeled key survives the round trip.
 
-use pictura_core::Layer;
+use pictura_core::{Layer, LayerParts};
 
 use crate::common::Reader;
 use crate::descriptor::{self, get_object_item_mut, set_object_item, DescValue};
@@ -12,8 +12,8 @@ use crate::error::PsdError;
 
 /// Replace (or insert) one key in the `Fltr` options of the Pictura Raw filter at
 /// `filter_index` on `layer`, rewriting the preserved `SoLd`/`SoLE` block in place.
-pub fn set_camera_raw_option(
-    layer: &mut Layer,
+fn set_camera_raw_option_parts(
+    layer: &mut LayerParts,
     filter_index: usize,
     key: &[u8],
     value: DescValue,
@@ -98,7 +98,7 @@ fn malformed(what: &str) -> PsdError {
 }
 
 /// The index of the preserved `SoLd`/`SoLE` config block, preferring `SoLd`.
-fn config_block_index(layer: &Layer) -> Option<usize> {
+fn config_block_index(layer: &LayerParts) -> Option<usize> {
     layer
         .extra_blocks
         .iter()
@@ -107,7 +107,7 @@ fn config_block_index(layer: &Layer) -> Option<usize> {
 }
 
 /// Parse a preserved config block into its descriptor, validating the signature.
-fn parse_config(layer: &Layer, block_idx: usize) -> Result<DescValue, PsdError> {
+fn parse_config(layer: &LayerParts, block_idx: usize) -> Result<DescValue, PsdError> {
     let data = &layer.extra_blocks[block_idx].data;
     let mut r = Reader::new(data);
     let signature = r.take(4)?.to_vec();
@@ -134,7 +134,7 @@ fn serialize_config(data: &[u8], desc: &DescValue) -> Vec<u8> {
 
 /// Store rewritten block bytes on the layer and keep the typed view's
 /// `config_descriptor` consistent.
-fn store_config(layer: &mut Layer, block_idx: usize, data: Vec<u8>) {
+fn store_config(layer: &mut LayerParts, block_idx: usize, data: Vec<u8>) {
     layer.extra_blocks[block_idx].data = data.clone().into();
     if let Some(so) = layer.smart_object.as_mut() {
         so.config_descriptor = data.into();
@@ -190,7 +190,7 @@ fn remove_filter_fx(desc: &mut DescValue) {
 /// block rewritten; when the list becomes empty the whole `filterFX` object is
 /// dropped. The typed `smart_filters` view is kept in step. Without a preserved
 /// block only the typed view changes. An out-of-range index is an error.
-pub fn delete_smart_filter(layer: &mut Layer, filter_index: usize) -> Result<(), PsdError> {
+fn delete_smart_filter_parts(layer: &mut LayerParts, filter_index: usize) -> Result<(), PsdError> {
     let mut removed = false;
     if let Some(block_idx) = config_block_index(layer) {
         let mut desc = parse_config(layer, block_idx)?;
@@ -225,7 +225,7 @@ pub fn delete_smart_filter(layer: &mut Layer, filter_index: usize) -> Result<(),
 /// Both the preserved `filterFXList` order and the typed `smart_filters` order
 /// change, so the applied order (bottom-up on render) follows the panel order.
 /// `from == to` and equal indices are a no-op; an out-of-range index errors.
-pub fn reorder_smart_filters(layer: &mut Layer, from: usize, to: usize) -> Result<(), PsdError> {
+fn reorder_smart_filters_parts(layer: &mut LayerParts, from: usize, to: usize) -> Result<(), PsdError> {
     let len = layer
         .smart_object
         .as_ref()
@@ -262,7 +262,7 @@ pub fn reorder_smart_filters(layer: &mut Layer, from: usize, to: usize) -> Resul
 /// (a stack with no filters authors no descriptor) and the typed view is
 /// cleared. The filter mask flags are left for the writer to omit with the rest
 /// of `filterFX`.
-pub fn clear_smart_filters(layer: &mut Layer) -> Result<(), PsdError> {
+fn clear_smart_filters_parts(layer: &mut LayerParts) -> Result<(), PsdError> {
     if let Some(block_idx) = config_block_index(layer) {
         let mut desc = parse_config(layer, block_idx)?;
         remove_filter_fx(&mut desc);
@@ -280,8 +280,8 @@ pub fn clear_smart_filters(layer: &mut Layer) -> Result<(), PsdError> {
 /// A preserved `SoLd`/`SoLE` descriptor is rewritten in place (every unmodeled
 /// key survives); the typed view is synced in both cases. Without a preserved
 /// block only the typed view changes and the writer authors the block on save.
-pub fn set_smart_filter_enabled(
-    layer: &mut Layer,
+fn set_smart_filter_enabled_parts(
+    layer: &mut LayerParts,
     filter_index: usize,
     enabled: bool,
 ) -> Result<(), PsdError> {
@@ -308,7 +308,7 @@ pub fn set_smart_filter_enabled(
 /// A preserved `SoLd`/`SoLE` descriptor's `filterFX.enab` is rewritten in place;
 /// the typed view is synced in both cases. Without a preserved block only the
 /// typed view changes and the writer authors the block on save.
-pub fn set_smart_filters_enabled(layer: &mut Layer, enabled: bool) -> Result<(), PsdError> {
+fn set_smart_filters_enabled_parts(layer: &mut LayerParts, enabled: bool) -> Result<(), PsdError> {
     if let Some(block_idx) = config_block_index(layer) {
         let mut desc = parse_config(layer, block_idx)?;
         if let Some(filter_fx) = filter_fx_mut(&mut desc) {
@@ -329,7 +329,7 @@ pub fn set_smart_filters_enabled(layer: &mut Layer, enabled: bool) -> Result<(),
 /// rewritten in place; the typed view is synced in both cases. Without a
 /// preserved block (or before a `filterFX` exists) only the typed view changes
 /// and the writer authors the flag with the block.
-pub fn set_filter_mask_enabled(layer: &mut Layer, enabled: bool) -> Result<(), PsdError> {
+fn set_filter_mask_enabled_parts(layer: &mut LayerParts, enabled: bool) -> Result<(), PsdError> {
     if let Some(block_idx) = config_block_index(layer) {
         let mut desc = parse_config(layer, block_idx)?;
         if let Some(filter_fx) = filter_fx_mut(&mut desc) {
@@ -342,6 +342,35 @@ pub fn set_filter_mask_enabled(layer: &mut Layer, enabled: bool) -> Result<(), P
         so.filter_mask_enabled = enabled;
     }
     Ok(())
+}
+
+
+pub fn set_camera_raw_option(layer: &mut Layer, filter_index: usize, key: &[u8], value: DescValue) -> Result<(), PsdError> {
+    crate::stage_content::try_edit_layer(layer, |parts| set_camera_raw_option_parts(parts, filter_index, key, value))
+}
+
+pub fn delete_smart_filter(layer: &mut Layer, filter_index: usize) -> Result<(), PsdError> {
+    crate::stage_content::try_edit_layer(layer, |parts| delete_smart_filter_parts(parts, filter_index))
+}
+
+pub fn reorder_smart_filters(layer: &mut Layer, from: usize, to: usize) -> Result<(), PsdError> {
+    crate::stage_content::try_edit_layer(layer, |parts| reorder_smart_filters_parts(parts, from, to))
+}
+
+pub fn clear_smart_filters(layer: &mut Layer) -> Result<(), PsdError> {
+    crate::stage_content::try_edit_layer(layer, |parts| clear_smart_filters_parts(parts))
+}
+
+pub fn set_smart_filter_enabled(layer: &mut Layer, filter_index: usize, enabled: bool) -> Result<(), PsdError> {
+    crate::stage_content::try_edit_layer(layer, |parts| set_smart_filter_enabled_parts(parts, filter_index, enabled))
+}
+
+pub fn set_smart_filters_enabled(layer: &mut Layer, enabled: bool) -> Result<(), PsdError> {
+    crate::stage_content::try_edit_layer(layer, |parts| set_smart_filters_enabled_parts(parts, enabled))
+}
+
+pub fn set_filter_mask_enabled(layer: &mut Layer, enabled: bool) -> Result<(), PsdError> {
+    crate::stage_content::try_edit_layer(layer, |parts| set_filter_mask_enabled_parts(parts, enabled))
 }
 
 #[cfg(test)]
@@ -381,7 +410,7 @@ mod tests {
             .find(|l| l.name == "Layer 1 copy")
             .expect("Layer 1 copy present");
 
-        let filter = &layer.smart_object.as_ref().unwrap().smart_filters[0];
+        let filter = &layer.smart_object().unwrap().smart_filters[0];
         assert_eq!(filter.filter_id, 2683);
         let DescValue::Object { items, .. } =
             crate::camera_raw_options(&filter.options).expect("Fltr parses")
@@ -398,7 +427,7 @@ mod tests {
             .layers
             .iter()
             .find(|l| l.name == "Layer 1 copy")
-            .and_then(|l| l.smart_object.as_ref())
+            .and_then(|l| l.smart_object())
             .expect("smart object survives a write");
         let filter = &so.smart_filters[0];
         assert_eq!(filter.filter_id, 2683);
@@ -438,7 +467,7 @@ mod tests {
         set_smart_filter_enabled(layer, 0, false).expect("toggle the filter");
         set_smart_filters_enabled(layer, false).expect("toggle the group");
 
-        let so = layer.smart_object.as_ref().expect("smart object");
+        let so = layer.smart_object().expect("smart object");
         assert!(
             !so.smart_filters[0].enabled,
             "typed filter follows the edit"
@@ -451,7 +480,7 @@ mod tests {
             .layers
             .iter()
             .find(|l| l.name == "Layer 1 copy")
-            .and_then(|l| l.smart_object.as_ref())
+            .and_then(|l| l.smart_object())
             .expect("smart object survives a write");
         assert!(!so.smart_filters[0].enabled, "per-filter enab persists");
         assert!(!so.smart_filters_enabled, "group enab persists");
@@ -459,7 +488,7 @@ mod tests {
 
     #[test]
     fn toggle_without_a_preserved_block_updates_only_the_typed_view() {
-        let mut layer = Layer {
+        let mut layer = crate::layer_from_parts(pictura_core::LayerParts {
             smart_object: Some({
                 let mut so = SmartObject::default();
                 so.smart_filters = vec![SmartFilter {
@@ -472,14 +501,14 @@ mod tests {
                 so
             }),
             ..Default::default()
-        };
+        });
         set_smart_filter_enabled(&mut layer, 0, false).expect("typed toggle");
         set_smart_filters_enabled(&mut layer, false).expect("typed group toggle");
-        let so = layer.smart_object.as_ref().unwrap();
+        let so = layer.smart_object().unwrap();
         assert!(!so.smart_filters[0].enabled);
         assert!(!so.smart_filters_enabled);
         assert!(
-            layer.extra_blocks.is_empty(),
+            layer.extra_blocks().is_empty(),
             "no block is authored in memory"
         );
     }
@@ -499,15 +528,14 @@ mod tests {
             .find(|l| l.name == "Layer 1 copy")
             .expect("Layer 1 copy present");
         let original = layer
-            .smart_object
-            .as_ref()
+            .smart_object()
             .unwrap()
             .config_descriptor
             .clone();
 
         set_camera_raw_option(layer, 0, b"Ex12", DescValue::Double(-1.15)).expect("no-op edit");
 
-        let edited = &layer.smart_object.as_ref().unwrap().config_descriptor;
+        let edited = &layer.smart_object().unwrap().config_descriptor;
         assert_eq!(
             edited.len(),
             original.len(),
@@ -551,14 +579,14 @@ mod tests {
         data.extend_from_slice(&descriptor::write_descriptor(&desc));
 
         let mut layer = Layer::default();
-        layer.extra_blocks.push(LayerBlock {
+        crate::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
             key: *b"SoLE",
             data: data.into(),
-        });
+        }) });
         set_camera_raw_option(&mut layer, 0, b"Ex12", DescValue::Double(2.5)).expect("SoLE edit");
-        assert_eq!(&layer.extra_blocks[0].data[..4], b"soLE");
+        assert_eq!(&layer.extra_blocks()[0].data[..4], b"soLE");
 
-        let mut r = Reader::new(&layer.extra_blocks[0].data);
+        let mut r = Reader::new(&layer.extra_blocks()[0].data);
         let _ = r.take(4).unwrap();
         let _ = r.u32().unwrap();
         let DescValue::Object { items, .. } = descriptor::read_descriptor(&mut r).unwrap() else {
@@ -591,10 +619,10 @@ mod tests {
     #[test]
     fn unknown_signature_is_unsupported() {
         let mut layer = Layer::default();
-        layer.extra_blocks.push(LayerBlock {
+        crate::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
             key: *b"SoLd",
             data: b"junk\x00\x00\x00\x00".to_vec().into(),
-        });
+        }) });
         let err =
             set_camera_raw_option(&mut layer, 0, b"Ex12", DescValue::Double(1.0)).unwrap_err();
         assert!(matches!(err, PsdError::Unsupported(_)), "got {err:?}");
@@ -643,8 +671,7 @@ mod tests {
 
     fn filter_ids(layer: &Layer) -> Vec<i32> {
         layer
-            .smart_object
-            .as_ref()
+            .smart_object()
             .expect("smart object")
             .smart_filters
             .iter()
@@ -679,7 +706,7 @@ mod tests {
             .layers
             .iter()
             .find(|l| l.name == "Layer 1 copy")
-            .and_then(|l| l.smart_object.as_ref())
+            .and_then(|l| l.smart_object())
             .expect("smart object survives");
         let ids: Vec<i32> = so.smart_filters.iter().map(|f| f.filter_id).collect();
         assert_eq!(ids, vec![4242, 2683], "the reordered list persists");
@@ -702,7 +729,7 @@ mod tests {
             .layers
             .iter()
             .find(|l| l.name == "Layer 1 copy")
-            .and_then(|l| l.smart_object.as_ref())
+            .and_then(|l| l.smart_object())
             .expect("survives")
             .smart_filters
             .iter()
@@ -718,7 +745,7 @@ mod tests {
             .layers
             .iter()
             .find(|l| l.name == "Layer 1 copy")
-            .and_then(|l| l.smart_object.as_ref())
+            .and_then(|l| l.smart_object())
             .expect("survives");
         assert!(
             so.smart_filters.is_empty(),
@@ -728,7 +755,7 @@ mod tests {
 
     #[test]
     fn out_of_range_delete_and_reorder_are_errors() {
-        let mut layer = Layer {
+        let mut layer = crate::layer_from_parts(pictura_core::LayerParts {
             smart_object: Some({
                 let mut so = SmartObject::default();
                 so.smart_filters = vec![SmartFilter {
@@ -740,7 +767,7 @@ mod tests {
                 so
             }),
             ..Default::default()
-        };
+        });
         assert!(delete_smart_filter(&mut layer, 3).is_err());
         assert!(reorder_smart_filters(&mut layer, 0, 2).is_err());
         assert_eq!(filter_ids(&layer), vec![2683], "refusals do not mutate");
@@ -758,14 +785,14 @@ mod tests {
         let mut data = b"soLD".to_vec();
         data.extend_from_slice(&0u32.to_be_bytes());
         data.extend_from_slice(&descriptor::write_descriptor(&desc));
-        Layer {
+        crate::layer_from_parts(pictura_core::LayerParts {
             extra_blocks: vec![LayerBlock {
                 key: *b"SoLd",
                 data: data.into(),
             }],
             smart_object: Some({
                 let mut so = SmartObject::default();
-                so.smart_filters = (0..typed_len)
+                so.smart_filters = (0..pictura_core::LayerParts::from(typed_len))
                     .map(|_| SmartFilter {
                         filter_id: 2683,
                         name: "f".to_string(),
@@ -776,7 +803,7 @@ mod tests {
                 so
             }),
             ..Default::default()
-        }
+        })
     }
 
     #[test]
@@ -798,7 +825,7 @@ mod tests {
 
     #[test]
     fn filter_mask_enable_flag_round_trips() {
-        let mut layer = pictura_core::Layer {
+        let mut layer = crate::layer_from_parts(pictura_core::LayerParts {
             name: "L".into(),
             rect: pictura_core::PsdRect {
                 top: 0,
@@ -816,13 +843,13 @@ mod tests {
                 .with_payload(b"8BPS\x00\x01x".to_vec()),
             ),
             ..Default::default()
-        };
-        let so = layer.smart_object.clone().unwrap();
+        });
+        let so = layer.smart_object().cloned().unwrap();
         let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
-        layer.extra_blocks.push(LayerBlock {
+        crate::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
             key: *b"SoLd",
             data: data.into(),
-        });
+        }) });
         crate::append_smart_filter(
             &mut layer,
             SmartFilter {
@@ -854,7 +881,7 @@ mod tests {
             );
             doc.layers = pictura_core::LayerStack::from_layers(vec![layer.clone()]);
             let back = crate::read_psd(&crate::write_psd(&doc).expect("writes")).expect("reads");
-            let so = back.layers[0].smart_object.as_ref().expect("smart object");
+            let so = back.layers[0].smart_object().expect("smart object");
             assert_eq!(so.filter_mask_enabled, enabled);
             assert_eq!(preserved_flag(&back.layers[0]), enabled);
         }

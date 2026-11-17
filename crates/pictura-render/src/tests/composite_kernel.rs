@@ -43,7 +43,7 @@ impl Drop for KernelTest {
 }
 
 fn without_alpha(mut layer: Layer) -> Layer {
-    layer.channels.retain(|channel| channel.id != -1);
+    layer.channels_mut().retain(|channel| channel.id != -1);
     layer
 }
 
@@ -118,7 +118,7 @@ fn type_proxy(w: u32, h: u32) -> Layer {
     let n = (w * h) as usize;
     let mut layer = type_layer(Some(type_style()));
     layer.rect = full(w, h);
-    layer.channels = vec![
+    layer.set_channels(vec![
         Channel {
             id: 0,
             data: vec![10; n].into(),
@@ -135,7 +135,7 @@ fn type_proxy(w: u32, h: u32) -> Layer {
             id: -1,
             data: vec![255; n].into(),
         },
-    ];
+    ]);
     layer
 }
 

@@ -61,7 +61,7 @@ fn overlay_layer(block: Option<LayerBlock>) -> Layer {
         255,
     );
     if let Some(block) = block {
-        layer.extra_blocks = vec![block];
+        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![block] });
     }
     layer
 }

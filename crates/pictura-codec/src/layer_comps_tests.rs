@@ -20,11 +20,11 @@ fn rect(left: i32, top: i32, right: i32, bottom: i32) -> PsdRect {
 }
 
 fn layer(name: &str, id: Option<u32>) -> Layer {
-    let mut layer = Layer {
+    let mut layer = crate::layer_from_parts(pictura_core::LayerParts {
         name: name.to_string(),
         rect: rect(0, 0, 4, 4),
         ..Default::default()
-    };
+    });
     if let Some(id) = id {
         set_layer_id(&mut layer, id);
     }
@@ -247,10 +247,10 @@ fn unknown_variant_keys_survive_a_dirty_rewrite() {
 #[test]
 fn non_participating_layer_keeps_shmd() {
     let mut doc = document(layer("A", Some(1)));
-    doc.layers[0].extra_blocks.push(LayerBlock {
+    crate::edit_layer(doc.layers[0].as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
         key: *b"cust",
         data: vec![1, 2].into(),
-    });
+    }) });
     let bytes = crate::write_psd(&doc).expect("writes");
     let back = crate::read_psd(&bytes).expect("reads");
     assert!(back.layers[0].extra_block(b"cust").is_some());
@@ -293,7 +293,7 @@ fn resource_1044_seed_is_advanced() {
 #[test]
 fn comp_free_file_without_lyid_is_unchanged() {
     let mut doc = document(layer("A", None));
-    doc.layers[0].channels.clear();
+    doc.layers[0].channels_mut().clear();
     let first = crate::write_psd(&doc).expect("writes");
     let back = crate::read_psd(&first).expect("reads");
     let second = crate::write_psd(&back).expect("writes");
@@ -339,14 +339,14 @@ fn base_variant_refreshes_after_apply() {
 #[test]
 fn truncated_cmls_does_not_fail_open() {
     let mut doc = document(layer("A", Some(1)));
-    doc.layers[0].extra_blocks.push(LayerBlock {
+    crate::edit_layer(doc.layers[0].as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
         key: *b"shmd",
         data: vec![
             0, 0, 0, 1, b'8', b'B', b'I', b'M', b'c', b'm', b'l', b's', 0, 0, 0, 0, 0, 0, 0, 4, 1,
             2,
         ]
         .into(),
-    });
+    }) });
     let bytes = crate::write_psd(&doc).expect("writes");
     assert!(crate::read_psd(&bytes).is_ok());
 }

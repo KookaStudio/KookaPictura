@@ -72,7 +72,7 @@ fn capture_entries(doc: &Document, record: CompRecord) -> Vec<CompEntry> {
                     state: captured_state(doc, layer, record),
                 });
             }
-            walk(doc, &layer.children, &path, record, out);
+            walk(doc, layer.children(), &path, record, out);
         }
     }
     let mut entries = Vec::new();
@@ -124,10 +124,10 @@ fn translate_node(doc: &mut Document, path: &str, dx: i32, dy: i32) -> bool {
         return false;
     };
     let locked = layer_move_locked(layer) || layer.background;
-    let is_group = layer.is_group;
-    let child_count = layer.children.len();
+    let is_group = layer.is_group();
+    let child_count = layer.children().len();
     let is_shape = crate::is_shape_layer(layer);
-    let is_adjustment = layer.adjustment.is_some() && !is_shape;
+    let is_adjustment = layer.has_adjustment_content() && !is_shape;
     if locked {
         return false;
     }

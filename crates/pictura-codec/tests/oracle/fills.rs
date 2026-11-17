@@ -20,24 +20,24 @@ fn adjustment_layers_preserve_key_and_bytes() {
     );
 
     let find = |n: &str| doc.layers.iter().find(|l| l.name == n).unwrap();
-    let invert = find("Invert").adjustment.as_ref().expect("invert block");
+    let invert = find("Invert").adjustment().expect("invert block");
     assert_eq!(invert.key, *b"nvrt");
     assert!(invert.data.is_empty(), "Invert has no payload");
     assert_eq!(
-        find("Posterize").adjustment.as_ref().unwrap().data,
+        find("Posterize").adjustment().unwrap().data,
         [0, 4, 0, 0]
     );
     assert_eq!(
-        find("Threshold").adjustment.as_ref().unwrap().data,
+        find("Threshold").adjustment().unwrap().data,
         [0, 128, 0, 0]
     );
-    let brit = find("BrightnessContrast").adjustment.as_ref().unwrap();
+    let brit = find("BrightnessContrast").adjustment().unwrap();
     assert_eq!(brit.key, *b"brit");
     assert_eq!(brit.data, [0, 10, 0, 20, 0, 0, 0, 0]);
-    let levl = find("Levels").adjustment.as_ref().unwrap();
+    let levl = find("Levels").adjustment().unwrap();
     assert_eq!(levl.key, *b"levl");
     assert_eq!(levl.data.len(), 292);
-    let phfl = find("PhotoFilter").adjustment.as_ref().unwrap();
+    let phfl = find("PhotoFilter").adjustment().unwrap();
     assert_eq!(phfl.key, *b"phfl");
     assert_eq!(
         phfl.data,
@@ -62,7 +62,7 @@ fn gradient_map_layer_preserves_key_and_bytes() {
         .layers
         .iter()
         .find(|l| l.name == "Gradient Map")
-        .and_then(|l| l.adjustment.as_ref())
+        .and_then(|l| l.adjustment())
         .expect("gradient map adjustment block");
     assert_eq!(gm.key, *b"grdm");
     assert_eq!(gm.data.len(), 140, "psd-tools version-1 grdm payload");
@@ -87,7 +87,7 @@ fn solid_fill_layer_preserves_descriptor() {
         .layers
         .iter()
         .find(|l| l.name == "Solid Fill")
-        .and_then(|l| l.adjustment.as_ref())
+        .and_then(|l| l.adjustment())
         .expect("solid fill adjustment block");
     assert_eq!(adj.key, *b"SoCo");
 
@@ -144,7 +144,7 @@ fn gradient_fill_layer_preserves_descriptor() {
         .layers
         .iter()
         .find(|l| l.name == "Gradient Fill")
-        .and_then(|l| l.adjustment.as_ref())
+        .and_then(|l| l.adjustment())
         .expect("gradient fill adjustment block");
     assert_eq!(adj.key, *b"GdFl");
 
@@ -207,11 +207,11 @@ fn pattern_fill_layer_preserves_descriptor_and_pattern() {
         .layers
         .iter()
         .find(|l| l.name == "Pattern Fill")
-        .and_then(|l| l.adjustment.as_ref())
+        .and_then(|l| l.adjustment())
         .expect("pattern fill adjustment block");
     assert_eq!(
         adj.key, *b"PtFl",
-        "the PtFl block is routed to layer.adjustment"
+        "the PtFl block is routed to layer.adjustment()"
     );
 
     let desc = read_descriptor(&adj.data).expect("version-16 descriptor");
@@ -251,7 +251,7 @@ fn pattern_fill_masked_fixture_decodes_pattern_and_mask() {
         .iter()
         .find(|l| l.name == "Pattern Fill")
         .expect("pattern fill layer");
-    let adj = fill.adjustment.as_ref().expect("PtFl block");
+    let adj = fill.adjustment().expect("PtFl block");
     assert_eq!(adj.key, *b"PtFl");
 
     let patterns = pictura_codec::decode_patterns(&doc);
@@ -285,7 +285,7 @@ fn pattern_fill_16bit_pattern_is_skipped() {
         .layers
         .iter()
         .find(|l| l.name == "Pattern Fill 16")
-        .and_then(|l| l.adjustment.as_ref())
+        .and_then(|l| l.adjustment())
         .expect("pattern fill adjustment block");
     assert_eq!(adj.key, *b"PtFl");
     assert!(

@@ -57,7 +57,7 @@ pub(super) fn for_each_layer(
             return;
         }
         if layer.is_group() {
-            for_each_layer(&mut layer.children, f);
+            for_each_layer(layer.children_mut().expect("group"), f);
         } else {
             f(layer);
         }
@@ -68,12 +68,12 @@ pub(super) fn for_each_layer(
 /// once with a common length; `None` for an adjustment, group, or other layout.
 pub(super) fn color_positions(layer: &Layer, n: i16) -> Option<Vec<usize>> {
     let positions: Vec<usize> = (0..n)
-        .map(|id| layer.channels.iter().position(|c| c.id == id))
+        .map(|id| layer.channels().iter().position(|c| c.id == id))
         .collect::<Option<_>>()?;
-    let len = layer.channels[positions[0]].data.len();
+    let len = layer.channels()[positions[0]].data.len();
     positions
         .iter()
-        .all(|&i| layer.channels[i].data.len() == len)
+        .all(|&i| layer.channels()[i].data.len() == len)
         .then_some(positions)
 }
 
@@ -124,7 +124,7 @@ pub(super) fn background_from_composite(doc: &mut Document) {
         id: -1,
         data: vec![255; plane].into(),
     });
-    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Background".to_string(),
         rect: PsdRect {
             top: 0,
@@ -135,7 +135,7 @@ pub(super) fn background_from_composite(doc: &mut Document) {
         channels,
         background: true,
         ..Default::default()
-    }]);
+    })]);
 }
 
 /// Reshape a working Grayscale document to working RGB by replicating the gray
@@ -171,11 +171,11 @@ pub(super) fn expand_gray(doc: &mut Document) {
         let Some(pos) = color_positions(layer, 1) else {
             return;
         };
-        if layer.channels.iter().any(|c| c.id == 1 || c.id == 2) {
+        if layer.channels().iter().any(|c| c.id == 1 || c.id == 2) {
             return;
         }
-        let gray = layer.channels[pos[0]].data.clone();
-        layer.channels.insert(
+        let gray = layer.channels()[pos[0]].data.clone();
+        layer.channels_mut().insert(
             pos[0] + 1,
             Channel {
                 id: 1,
@@ -183,7 +183,7 @@ pub(super) fn expand_gray(doc: &mut Document) {
             },
         );
         layer
-            .channels
+            .channels_mut()
             .insert(pos[0] + 2, Channel { id: 2, data: gray });
         if let Some(store) = layer.source_channels.as_mut() {
             if let Some(y) = layer_store_plane(store, 0).cloned() {
@@ -237,13 +237,13 @@ pub(super) fn reduce_to_gray(doc: &mut Document, gray: Option<PixelBuffer>) {
             return;
         };
         let (r, g, b) = (
-            &layer.channels[pos[0]].data,
-            &layer.channels[pos[1]].data,
-            &layer.channels[pos[2]].data,
+            &layer.channels()[pos[0]].data,
+            &layer.channels()[pos[1]].data,
+            &layer.channels()[pos[2]].data,
         );
         let gray: Vec<u8> = (0..r.len()).map(|i| luma_u8(r[i], g[i], b[i])).collect();
-        layer.channels[pos[0]].data = gray.into();
-        layer.channels.retain(|c| c.id != 1 && c.id != 2);
+        layer.channels_mut()[pos[0]].data = gray.into();
+        layer.channels_mut().retain(|c| c.id != 1 && c.id != 2);
         if let Some(store) = layer.source_channels.as_mut() {
             let planes: Option<Vec<Samples>> = (0..3)
                 .map(|id| layer_store_plane(store, id).cloned())
@@ -384,15 +384,15 @@ fn encode_layer(
     let Some(pos) = color_positions(layer, 3) else {
         return;
     };
-    let n = layer.channels[pos[0]].data.len();
+    let n = layer.channels()[pos[0]].data.len();
     let rgb: Vec<u8> = pos
         .iter()
-        .flat_map(|&i| layer.channels[i].data.iter().copied())
+        .flat_map(|&i| layer.channels()[i].data.iter().copied())
         .collect();
     let (encoded, shown) = encode_source_mode(mode, &rgb, cmyk_profile, options);
     if show {
         for (c, &i) in pos.iter().enumerate() {
-            layer.channels[i].data = shown[c * n..(c + 1) * n].to_vec().into();
+            layer.channels_mut()[i].data = shown[c * n..(c + 1) * n].to_vec().into();
         }
     }
     let planes = (0..encoded.len() / n.max(1))
@@ -471,7 +471,7 @@ pub(super) fn ensure_stores(doc: &mut Document) {
                 let planes = pos
                     .iter()
                     .map(|&i| {
-                        let c = &layer.channels[i];
+                        let c = &layer.channels()[i];
                         (c.id, Samples::U8(c.data.clone()))
                     })
                     .collect();

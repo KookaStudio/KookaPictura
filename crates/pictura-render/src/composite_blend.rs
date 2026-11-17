@@ -53,15 +53,13 @@ impl<'a> BlendCtx<'a> {
         #[cfg(test)]
         crate::composite_plan::counters::note_mask_gate(layer);
         let opacity = layer.opacity as f32 / 255.0;
-        let fill = if layer.is_group {
+        let fill = if layer.is_group() {
             1.0
         } else {
             layer.fill as f32 / 255.0
         };
-        let curve = layer
-            .type_tool
-            .as_ref()
-            .and_then(|_| crate::text_gamma::current_curve());
+        let curve = crate::text_gamma::applies_to(layer)
+            .then(crate::text_gamma::current_curve).flatten();
         let blend_if = layer.blend_if.as_ref().filter(|view| !view.is_default());
         Self {
             opacity,
@@ -306,7 +304,7 @@ pub(crate) fn blend_into_row_legacy(
     src_a: f32,
 ) {
     let opacity = over.and_then(|over| over.opacity).unwrap_or(layer.opacity) as f32 / 255.0;
-    let fill = if layer.is_group {
+    let fill = if layer.is_group() {
         1.0
     } else {
         over.and_then(|over| over.fill).unwrap_or(layer.fill) as f32 / 255.0
@@ -329,10 +327,8 @@ pub(crate) fn blend_into_row_legacy(
         _ => 1.0,
     };
     let mut content = src_a * opacity * fill;
-    if let Some(curve) = layer
-        .type_tool
-        .as_ref()
-        .and_then(|_| crate::text_gamma::current_curve())
+    if let Some(curve) = crate::text_gamma::applies_to(layer)
+        .then(crate::text_gamma::current_curve).flatten()
     {
         content = curve.apply(content);
     }
@@ -394,7 +390,7 @@ mod tests {
             bottom: 1,
             right: 1,
         };
-        let layer = Layer {
+        let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             rect: clip,
             mask: Some(pictura_core::LayerMask {
                 rect: clip,
@@ -403,7 +399,7 @@ mod tests {
                 ..Default::default()
             }),
             ..Default::default()
-        };
+        });
         let doc = Document::new(
             1,
             1,

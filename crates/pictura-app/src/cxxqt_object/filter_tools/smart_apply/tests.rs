@@ -10,7 +10,7 @@ use pictura_core::{BitDepth, ColorMode, Document};
 fn smart_state() -> PictureViewRust {
     let mut doc = Document::new(16, 16, ColorMode::Rgb, BitDepth::Eight);
     let mut layer = pixel_layer("px", 16, 16, (40, 120, 200));
-    for ch in layer.channels.iter_mut().filter(|c| c.id >= 0) {
+    for ch in layer.channels_mut().iter_mut().filter(|c| c.id >= 0) {
         ch.data = (0..16 * 16)
             .map(|i| if i % 16 < 8 { 40u8 } else { 200 })
             .collect();
@@ -27,8 +27,7 @@ fn smart_state() -> PictureViewRust {
 
 fn filters(rust: &PictureViewRust) -> Vec<pictura_core::SmartFilter> {
     rust.session.doc.as_ref().unwrap().layers[0]
-        .smart_object
-        .as_ref()
+        .smart_object()
         .unwrap()
         .smart_filters
         .clone()
@@ -46,21 +45,20 @@ fn preview_cancel_restores_layer() {
     assert!(apply_filter_active_region(&mut rust, "gaussian-blur", &[3.0], false, None).is_some());
     assert_eq!(filters(&rust).len(), 1, "the preview pushes the record");
     assert!(rust.session.doc.as_ref().unwrap().layers[0]
-        .smart_object
-        .as_ref()
+        .smart_object()
         .unwrap()
         .filter_mask
         .is_some());
     assert!(cancel_filter_preview(&mut rust).is_some());
     let after = &rust.session.doc.as_ref().unwrap().layers[0];
     let (a, b) = (
-        after.smart_object.as_ref().unwrap(),
-        before.smart_object.as_ref().unwrap(),
+        after.smart_object().unwrap(),
+        before.smart_object().unwrap(),
     );
     assert_eq!(a.smart_filters, b.smart_filters);
     assert_eq!(a.filter_mask, b.filter_mask);
     assert_eq!(a.filter_mask_enabled, b.filter_mask_enabled);
-    assert_eq!(after.channels, before.channels);
+    assert_eq!(after.channels(), before.channels());
 }
 
 #[test]
@@ -105,11 +103,9 @@ fn pixel_target_refuses_smart_object() {
         .is_some_and(|e| e.contains("smart object")));
 
     let mut linked = smart_state();
-    linked.session.doc.as_mut().unwrap().layers[0]
-        .smart_object
-        .as_mut()
-        .unwrap()
-        .kind = pictura_core::SmartObjectKind::External;
+    pictura_codec::edit_layer(&mut linked.session.doc.as_mut().unwrap().layers[0], |parts| {
+        parts.smart_object.as_mut().unwrap().kind = pictura_core::SmartObjectKind::External;
+    });
     assert_eq!(
         commit_kind(&mut linked, "gaussian-blur", &[2.0]),
         Some(false)
@@ -188,8 +184,7 @@ fn edit_commit_replaces_in_place() {
     let (steps, _) = record_steps(&after[0]).expect("generic record");
     assert_eq!(steps[0].slots, vec![5.0]);
     let so = rust.session.doc.as_ref().unwrap().layers[0]
-        .smart_object
-        .as_ref()
+        .smart_object()
         .unwrap();
     assert!(so.filter_mask.is_none(), "an edit does not add a mask");
 }

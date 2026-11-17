@@ -1,7 +1,7 @@
 //! Smart-object resolution: link a layer's config descriptor to its
 //! document-level linked-layer record by `uuid`.
 //!
-//! The preserved bytes (`Layer.extra_blocks`, `Document.layer_section_extra`)
+//! The preserved bytes (`Layer.extra_blocks()`, `Document.layer_section_extra`)
 //! remain the source of truth for re-emission; everything here derives a typed
 //! view and degrades to [`SmartObjectKind::Unresolved`] rather than failing a
 //! file whose smart-object data is malformed but preserved.
@@ -28,40 +28,42 @@ struct LinkedRecord {
 /// Resolve smart objects for `layers` (and their children) from the preserved
 /// document-level linked-layer bytes. Never fails: an unparseable list or
 /// descriptor leaves the layer unresolved.
-pub(crate) fn resolve_smart_objects(
-    layers: &mut LayerStack,
-    layer_section_extra: &[u8],
-    is_psb: bool,
-) {
-    let records = collect_linked_records(layer_section_extra, is_psb);
-    let masks = crate::filter_effects::collect_filter_masks(layer_section_extra, is_psb);
-    for layer in layers.iter_mut() {
-        resolve_layer(layer, &records, &masks);
-    }
+#[cfg(test)]
+pub(crate) fn resolve_smart_objects(layers: &mut LayerStack, extra: &[u8], is_psb: bool) {
+    resolve_smart_objects_within(layers, extra, is_psb, &mut crate::budget::DecodeBudget::default())
+        .expect("smart object views fit the default budget");
 }
 
-fn resolve_layer(
-    layer: &mut Layer,
-    records: &[LinkedRecord],
-    masks: &[crate::filter_effects::FilterMaskRecord],
-) {
-    layer.smart_object = build_smart_object(layer, records, masks);
-    if layer.smart_object.is_some() {
-        if let Some(mode) = crate::stack_marker::take_stack_marker(layer) {
-            layer.smart_object.as_mut().expect("checked").stack_mode = Some(mode);
+pub(crate) fn resolve_smart_objects_within(
+    layers: &mut LayerStack, layer_section_extra: &[u8], is_psb: bool,
+    budget: &mut crate::budget::DecodeBudget,
+) -> Result<(), PsdError> {
+    let records = collect_linked_records(layer_section_extra, is_psb);
+    let masks = crate::filter_effects::collect_filter_masks(layer_section_extra, is_psb);
+    for layer in layers.iter_mut() { resolve_layer(layer, &records, &masks, budget)?; }
+    Ok(())
+}
+
+fn resolve_layer(layer: &mut Layer, records: &[LinkedRecord], masks: &[crate::filter_effects::FilterMaskRecord], budget: &mut crate::budget::DecodeBudget) -> Result<(), PsdError> {
+    crate::stage_content::edit_layer_staged(layer, budget, |parts| {
+        parts.smart_object = build_smart_object(parts, records, masks);
+        if parts.smart_object.is_some() {
+            if let Some(mode) = crate::stack_marker::stack_marker_from_parts(parts) {
+                parts.smart_object.as_mut().expect("checked").stack_mode = Some(mode);
+            }
         }
-    }
-    for child in layer.children.iter_mut() {
-        resolve_layer(child, records, masks);
-    }
+        Ok(())
+    })?;
+    for child in layer.children_iter_mut() { resolve_layer(child, records, masks, budget)?; }
+    Ok(())
 }
 
 fn build_smart_object(
-    layer: &Layer,
+    layer: &pictura_core::LayerParts,
     records: &[LinkedRecord],
     masks: &[crate::filter_effects::FilterMaskRecord],
 ) -> Option<SmartObject> {
-    let block = find_config_block(&layer.extra_blocks)?;
+    let block = find_config_block(&layer.extra_blocks())?;
     let raw = block.data.clone();
     // `uuid` links the layer to its linked-source record (`Idnt`); `placed` is
     // the second SoLd uuid, which the document-level filter effect (`FEid`) is
@@ -212,6 +214,21 @@ fn bool_item(items: &[(Vec<u8>, DescValue)], key: &[u8], default: bool) -> bool 
         Some(DescValue::Bool(value)) => *value,
         _ => default,
     }
+}
+
+/// Whether any retained config still references a document-level source.
+/// Losing configs remain serialization data even when another content kind wins.
+pub fn layer_references_smart_source(layer: &Layer, uuid: &str) -> bool {
+    layer.extra_blocks().iter().any(|block| {
+        match &block.key {
+            b"SoLd" | b"SoLE" => {
+                let Ok(DescValue::Object { items, .. }) = read_layer_data_descriptor(&block.data) else { return false; };
+                matches!(get_object_item(&items, b"Idnt"), Some(DescValue::Text(id)) if id.trim_end_matches('\0') == uuid)
+            }
+            b"plLd" | b"PlLd" => read_placed_layer_uuid(&block.data).is_ok_and(|id| id.trim_end_matches('\0') == uuid),
+            _ => false,
+        }
+    })
 }
 
 /// The config tagged block, preferring the modern descriptors over the legacy
@@ -710,14 +727,14 @@ mod tests {
     }
 
     fn config_layer(uuid: &str) -> Layer {
-        Layer {
+        crate::layer_from_parts(pictura_core::LayerParts {
             name: "L".into(),
             extra_blocks: vec![LayerBlock {
                 key: *b"PlLd",
                 data: plld(uuid).into(),
             }],
             ..Default::default()
-        }
+        })
     }
 
     fn fnv1a(bytes: &[u8]) -> u64 {
@@ -737,7 +754,7 @@ mod tests {
 
         let mut layers = LayerStack::from_layers(vec![config_layer(uuid)]);
         resolve_smart_objects(&mut layers, &section, false);
-        let so = layers[0].smart_object.as_ref().expect("resolved");
+        let so = layers[0].smart_object().expect("resolved");
         assert_eq!(so.kind, SmartObjectKind::External);
         assert!(so.payload().is_none(), "external payload is not exposed");
         assert_eq!(so.filename, "linked.psd");
@@ -748,7 +765,7 @@ mod tests {
         let mut layers =
             LayerStack::from_layers(vec![config_layer("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")]);
         resolve_smart_objects(&mut layers, &tagged(b"lnk2", &linked_list(&[])), false);
-        let so = layers[0].smart_object.as_ref().expect("resolved");
+        let so = layers[0].smart_object().expect("resolved");
         assert_eq!(so.kind, SmartObjectKind::Unresolved);
         assert_eq!(so.uuid, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
         assert!(so.payload().is_none());
@@ -762,7 +779,7 @@ mod tests {
 
         let mut layers = LayerStack::from_layers(vec![config_layer(uuid)]);
         resolve_smart_objects(&mut layers, &section, false);
-        let so = layers[0].smart_object.as_ref().expect("resolved");
+        let so = layers[0].smart_object().expect("resolved");
         assert_eq!(so.kind, SmartObjectKind::Embedded);
         assert_eq!(so.filename, "Layer 1.psb");
         assert_eq!(so.filetype, *b"8BPB");
@@ -781,7 +798,7 @@ crs:Exposure2012=\"+0.50\"/></rdf:RDF></x:xmpmeta>";
 
         let mut layers = LayerStack::from_layers(vec![config_layer(uuid)]);
         resolve_smart_objects(&mut layers, &section, false);
-        let so = layers[0].smart_object.as_ref().expect("resolved");
+        let so = layers[0].smart_object().expect("resolved");
         assert_eq!(so.kind, SmartObjectKind::Embedded);
         let crs = so.crs_xmp.as_ref().expect("crs xmp is exposed");
         assert!(
@@ -866,7 +883,7 @@ crs:Exposure2012=\"+0.50\"/></rdf:RDF></x:xmpmeta>";
             .iter()
             .find(|l| l.name == "Layer 1")
             .expect("Layer 1 present");
-        let so = layer.smart_object.as_ref().expect("smart object resolved");
+        let so = layer.smart_object().expect("smart object resolved");
         assert_eq!(so.kind, SmartObjectKind::Embedded);
         assert!(!so.uuid.is_empty(), "authored uuid is present");
         assert_eq!(
@@ -896,7 +913,7 @@ crs:Exposure2012=\"+0.50\"/></rdf:RDF></x:xmpmeta>";
             .layers
             .iter()
             .find(|l| l.name == "Layer 1")
-            .and_then(|l| l.smart_object.as_ref())
+            .and_then(|l| l.smart_object())
             .expect("smart object survives a write");
         assert_eq!(so2.uuid, so.uuid);
         assert_eq!(so2.kind, SmartObjectKind::Embedded);
@@ -916,7 +933,7 @@ crs:Exposure2012=\"+0.50\"/></rdf:RDF></x:xmpmeta>";
             .layers
             .iter()
             .find(|l| l.name == "Layer 1")
-            .and_then(|l| l.smart_object.as_ref())
+            .and_then(|l| l.smart_object())
             .expect("smart object resolved")
             .config_descriptor
             .clone();
@@ -927,7 +944,7 @@ crs:Exposure2012=\"+0.50\"/></rdf:RDF></x:xmpmeta>";
             .layers
             .iter()
             .find(|l| l.name == "Layer 1")
-            .and_then(|l| l.smart_object.as_ref())
+            .and_then(|l| l.smart_object())
             .expect("smart object survives a write")
             .config_descriptor
             .clone();
@@ -947,7 +964,7 @@ crs:Exposure2012=\"+0.50\"/></rdf:RDF></x:xmpmeta>";
             .layers
             .iter()
             .find(|l| l.name == "Layer 1 copy")
-            .and_then(|l| l.smart_object.as_ref())
+            .and_then(|l| l.smart_object())
             .expect("smart object resolved");
 
         assert_eq!(so.smart_filters.len(), 1, "exactly one smart filter");

@@ -10,7 +10,7 @@ use crate::write::{composite_retained, layer_retained};
 /// has exactly one each of ids `0`/`1`/`2` of equal length. `None` otherwise.
 fn layer_rgb_planes(layer: &Layer) -> Option<Vec<&[u8]>> {
     let positions: Vec<usize> = layer
-        .channels
+        .channels()
         .iter()
         .enumerate()
         .filter(|(_, c)| c.id >= 0 && c.id < 3)
@@ -19,17 +19,17 @@ fn layer_rgb_planes(layer: &Layer) -> Option<Vec<&[u8]>> {
     if positions.len() != 3 {
         return None;
     }
-    let plane = layer.channels[positions[0]].data.len();
+    let plane = layer.channels()[positions[0]].data.len();
     if positions
         .iter()
-        .any(|&i| layer.channels[i].data.len() != plane)
+        .any(|&i| layer.channels()[i].data.len() != plane)
     {
         return None;
     }
     Some(
         positions
             .iter()
-            .map(|&i| layer.channels[i].data.as_slice())
+            .map(|&i| layer.channels()[i].data.as_slice())
             .collect(),
     )
 }
@@ -40,7 +40,7 @@ fn layer_rgb_planes(layer: &Layer) -> Option<Vec<&[u8]>> {
 fn indexed_layers_unchanged(layers: &[Layer], palette: &[u8; 768], depth: u16) -> bool {
     layers.iter().all(|layer| {
         if layer.is_group() {
-            return indexed_layers_unchanged(&layer.children, palette, depth);
+            return indexed_layers_unchanged(&layer.children(), palette, depth);
         }
         let Some(rgb) = layer_rgb_planes(layer) else {
             return true;

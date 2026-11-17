@@ -512,13 +512,10 @@ fn narrow_clip<T: Store>(
 fn apply_store<T: Store>(layer: &mut Layer, pass: Pass) -> Result<(), FilterError> {
     let lw = pass.rect.width() as usize;
     let n = lw * pass.rect.height() as usize;
-    let Layer {
-        source_channels,
-        channels,
-        ..
-    } = layer;
     let missing = || FilterError::InvalidParams("the layer has no native store".into());
-    let store = source_channels.as_mut().ok_or_else(missing)?;
+    let mut store = layer.source_channels.take().ok_or_else(missing)?;
+    let result = (|| {
+    let channels = layer.channels_mut();
     let depth = store.depth;
     // A store without transparency reads the 8-bit plane, at the store's width.
     let mut widened = match store.planes.iter().any(|(id, _)| *id == -1) {
@@ -561,12 +558,15 @@ fn apply_store<T: Store>(layer: &mut Layer, pass: Pass) -> Result<(), FilterErro
         }
     }
     Ok(())
+    })();
+    layer.source_channels = Some(store);
+    result
 }
 
 fn apply_channels(layer: &mut Layer, pass: Pass) -> Result<(), FilterError> {
     let n = pass.rect.width() as usize * pass.rect.height() as usize;
     let mut slots: [Option<&mut [u8]>; 4] = [None, None, None, None];
-    for channel in layer.channels.iter_mut() {
+    for channel in layer.channels_mut().iter_mut() {
         let slot = match channel.id {
             0..=2 => channel.id as usize,
             -1 => 3,

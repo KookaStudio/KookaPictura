@@ -42,7 +42,7 @@ fn plane(value: u8, n: usize) -> Vec<u8> {
 
 fn pixel_layer(w: u32, h: u32, value: u8) -> Layer {
     let n = w as usize * h as usize;
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "base".into(),
         rect: PsdRect {
             top: 0,
@@ -81,7 +81,7 @@ fn pixel_layer(w: u32, h: u32, value: u8) -> Layer {
         is_group: false,
         background: true,
         ..Default::default()
-    }
+    })
 }
 
 fn masked_document() -> Document {

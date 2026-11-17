@@ -1,9 +1,5 @@
-//! Solid/gradient fill creation and the Rasterize subset bridge commands.
-//!
-//! A fill layer is an opaque `SoCo` or `GdFl` block (solid or gradient), so it
-//! lives in the existing adjustment slot and needs no new `Layer` field. Each
-//! successful command recomposites then records exactly one undo state; a
-//! refusal records nothing.
+//! Fill creation and supported content rasterization bridge commands.
+//! Each successful command records one undo state; refusal records nothing.
 
 use super::helpers_composite::default_layer_mask;
 use super::qobject;
@@ -85,8 +81,7 @@ impl qobject::PictureView {
         QString::from(created.as_str())
     }
 
-    /// Whether the layer at `path` is a decodable solid-color or gradient fill
-    /// layer.
+    /// Whether the layer at `path` has active Fill content.
     pub fn layer_is_fill_content(&self, path: &QString) -> bool {
         self.rust()
             .session

@@ -186,7 +186,7 @@ const FMSK_DEFAULT: [u8; 12] = [0, 0, 0xff, 0xff, 0, 0, 0, 0, 0, 0, 0, 50];
 /// this save, else the `placed` uuid, falling back to `Idnt`.
 fn collect_wanted<'a>(layers: &'a [Layer], out: &mut Vec<(String, &'a FilterMask)>) {
     for layer in layers {
-        if let Some(so) = layer.smart_object.as_ref() {
+        if let Some(so) = layer.smart_object() {
             if let Some(mask) = so.filter_mask.as_ref() {
                 let uuid = mask_key(layer, so);
                 if !uuid.is_empty() && !out.iter().any(|(id, _)| *id == uuid) {
@@ -194,7 +194,7 @@ fn collect_wanted<'a>(layers: &'a [Layer], out: &mut Vec<(String, &'a FilterMask
                 }
             }
         }
-        collect_wanted(&layer.children, out);
+        collect_wanted(&layer.children(), out);
     }
 }
 
@@ -571,7 +571,7 @@ mod tests {
         }
         .with_payload(b"8BPS\x00\x01x".to_vec());
         let uuid = crate::smart_writer::author_uuid(&so);
-        let mut layer = Layer {
+        let mut layer = crate::layer_from_parts(pictura_core::LayerParts {
             name: "L".into(),
             rect: PsdRect {
                 top: 0,
@@ -580,18 +580,17 @@ mod tests {
                 right: 4,
             },
             ..Default::default()
-        };
+        });
         let sold = crate::smart_writer::author_sold_block(&so, &layer, 4, 3);
-        layer.extra_blocks.push(LayerBlock {
+        crate::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
             key: *b"SoLd",
             data: sold.into(),
-        });
+        }) });
         let mut layers = LayerStack::from_layers(vec![layer]);
         let extra = mask_extra(&uuid, (0, 0, 3, 4), &plane(), 4, 3);
         crate::smart_object::resolve_smart_objects(&mut layers, &extra, false);
         let mask = layers[0]
-            .smart_object
-            .as_ref()
+            .smart_object()
             .and_then(|so| so.filter_mask.as_ref())
             .expect("mask attaches");
         assert_eq!(mask.data.to_vec(), plane());
@@ -611,7 +610,7 @@ mod tests {
         let mut sold = b"soLD".to_vec();
         sold.extend_from_slice(&16u32.to_be_bytes());
         sold.extend_from_slice(&crate::write_descriptor(&descriptor));
-        let mut layer = Layer {
+        let mut layer = crate::layer_from_parts(pictura_core::LayerParts {
             name: "L".into(),
             rect: PsdRect {
                 top: 0,
@@ -620,22 +619,22 @@ mod tests {
                 right: 4,
             },
             ..Default::default()
-        };
-        layer.extra_blocks.push(LayerBlock {
+        });
+        crate::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.push(LayerBlock {
             key: *b"SoLd",
             data: sold.into(),
-        });
+        }) });
         let mut layers = LayerStack::from_layers(vec![layer]);
         let extra = mask_extra("placed-1", (0, 0, 3, 4), &plane(), 4, 3);
         crate::smart_object::resolve_smart_objects(&mut layers, &extra, false);
-        let so = layers[0].smart_object.as_ref().expect("smart object");
+        let so = layers[0].smart_object().expect("smart object");
         assert_eq!(so.uuid, "idnt-1");
         assert_eq!(so.placed_uuid, "placed-1");
         assert!(so.filter_mask.is_some(), "the mask attaches by placed");
     }
 
     fn masked_layer(filename: &str, coverage: Vec<u8>) -> Layer {
-        let mut layer = Layer {
+        let mut layer = crate::layer_from_parts(pictura_core::LayerParts {
             name: filename.into(),
             rect: PsdRect {
                 top: 0,
@@ -663,9 +662,9 @@ mod tests {
                 .with_payload(format!("8BPS\x00\x01{filename}").into_bytes()),
             ),
             ..Default::default()
-        };
+        });
         for id in 0..3i16 {
-            layer.channels.push(pictura_core::Channel {
+            layer.channels_mut().push(pictura_core::Channel {
                 id,
                 data: vec![90u8; 12].into(),
             });
@@ -703,13 +702,12 @@ mod tests {
     fn authored_mask_reads_back() {
         let doc = masked_doc(vec![masked_layer("a.psd", plane())]);
         let back = crate::read_psd(&crate::write_psd(&doc).expect("writes")).expect("reads");
-        let so = back.layers[0].smart_object.as_ref().expect("smart object");
+        let so = back.layers[0].smart_object().expect("smart object");
         let mask = so.filter_mask.as_ref().expect("the mask attaches");
         assert_eq!(
             mask.rect,
             doc.layers[0]
-                .smart_object
-                .as_ref()
+                .smart_object()
                 .unwrap()
                 .filter_mask
                 .as_ref()
@@ -724,18 +722,17 @@ mod tests {
     #[test]
     fn converted_object_keyed_by_authored_uuid() {
         let doc = masked_doc(vec![masked_layer("a.psd", plane())]);
-        let uuid = crate::smart_writer::author_uuid(doc.layers[0].smart_object.as_ref().unwrap());
+        let uuid = crate::smart_writer::author_uuid(doc.layers[0].smart_object().unwrap());
         let back = crate::read_psd(&crate::write_psd(&doc).expect("writes")).expect("reads");
         let entries = feid_entries(&back.layer_section_extra, false);
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].0, uuid);
         assert_eq!(
-            back.layers[0].smart_object.as_ref().unwrap().placed_uuid,
+            back.layers[0].smart_object().unwrap().placed_uuid,
             uuid
         );
         assert!(back.layers[0]
-            .smart_object
-            .as_ref()
+            .smart_object()
             .unwrap()
             .filter_mask
             .is_some());
@@ -769,14 +766,9 @@ mod tests {
         let before = feid_entries(&once.layer_section_extra, false);
         assert_eq!(before.len(), 2);
         let edited = vec![128u8; 12];
-        once.layers[1]
-            .smart_object
-            .as_mut()
-            .unwrap()
-            .filter_mask
-            .as_mut()
-            .unwrap()
-            .data = edited.clone().into();
+        crate::edit_layer(&mut once.layers[1], |parts| {
+            parts.smart_object.as_mut().unwrap().filter_mask.as_mut().unwrap().data = edited.clone().into();
+        });
         let extra = author_filter_masks(&once.layer_section_extra, &once.layers, 3, false);
         let after = feid_entries(&extra, false);
         assert_eq!(after.len(), 2);
@@ -793,8 +785,7 @@ mod tests {
         let back = crate::read_psd(&crate::write_psb(&doc).expect("writes")).expect("reads");
         assert!(back.is_psb);
         let mask = back.layers[0]
-            .smart_object
-            .as_ref()
+            .smart_object()
             .and_then(|so| so.filter_mask.as_ref())
             .expect("the mask attaches");
         assert_eq!(mask.data.to_vec(), plane());

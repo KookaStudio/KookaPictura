@@ -29,7 +29,7 @@ pub use apply::{
     adjustment_lut, apply, apply_in_mode, apply_with_coverage, apply_with_coverage_in_mode,
     gradient_luma_index, AdjustmentLut,
 };
-pub use color::apply_channel_mixer_ink;
+pub use color::{apply_channel_mixer_ink, hue_range_weight};
 pub use hdr_toning::{exposure_gamma, tone_map, ExposureGamma, HdrToneMap, LocalAdaptationParams};
 pub use lut::parse_cube;
 pub use match_color::{

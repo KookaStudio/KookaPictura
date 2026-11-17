@@ -204,7 +204,7 @@ fn from_channel_wrong_length_errors() {
 #[test]
 fn layer_alpha_selection_offsets_and_fills() {
     use pictura_core::{Layer, PsdRect};
-    let mut layer = Layer {
+    let mut layer = pictura_core::Layer::from_parts(pictura_core::LayerParts {
         rect: PsdRect {
             top: 1,
             left: 2,
@@ -212,7 +212,7 @@ fn layer_alpha_selection_offsets_and_fills() {
             right: 5,
         }, // 3x2
         ..Default::default()
-    };
+    }, pictura_core::LayerContent::Pixel);
     // No alpha channel -> fully opaque inside the rect, zero outside.
     let at = |x: usize, y: usize| y * 6 + x;
     let sel = selection_from_layer_alpha(&layer, 6, 4);
@@ -222,10 +222,10 @@ fn layer_alpha_selection_offsets_and_fills() {
     assert_eq!(sel.data[at(5, 1)], 0, "right edge exclusive");
 
     // Alpha channel -> layer-local coverage copied to the document offset.
-    layer.channels = vec![Channel {
+    layer.set_channels(vec![Channel {
         id: -1,
         data: vec![0, 64, 255, 128, 0, 255].into(),
-    }];
+    }]);
     let sel = selection_from_layer_alpha(&layer, 6, 4);
     assert_eq!(sel.data[at(2, 1)], 0);
     assert_eq!(sel.data[at(3, 1)], 64);

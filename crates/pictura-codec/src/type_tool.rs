@@ -1,7 +1,7 @@
 //! Decode a layer's preserved `TySh` block into the derived
 //! [`pictura_core::TypeTool`] view.
 //!
-//! The raw block stays in `Layer.extra_blocks` and is the source of truth for
+//! The raw block stays in `Layer.extra_blocks()` and is the source of truth for
 //! re-emission; this module only parses the framing. The text and warp
 //! descriptors are kept as their full version-16 bytes so an edited view can
 //! re-encode framing-only (EngineData stays opaque inside those bytes). A
@@ -16,13 +16,21 @@ use crate::engine_data::{extract_fonts, extract_style, parse_engine_data};
 
 /// Resolve `TySh` for `layers` (and their children). Never fails: an absent or
 /// unparseable block leaves `type_tool` unset.
+#[cfg(test)]
 pub(crate) fn resolve_type_tools(layers: &mut LayerStack) {
+    resolve_type_tools_within(layers, &mut crate::budget::DecodeBudget::default())
+        .expect("text views fit the default budget");
+}
+
+pub(crate) fn resolve_type_tools_within(layers: &mut LayerStack, budget: &mut crate::budget::DecodeBudget) -> Result<(), crate::PsdError> {
     for layer in layers.iter_mut() {
-        layer.type_tool = layer
-            .extra_block(b"TySh")
-            .and_then(|block| decode_type_tool(&block.data));
-        resolve_type_tools(&mut layer.children);
+        crate::stage_content::edit_layer_staged(layer, budget, |parts| {
+            parts.type_tool = parts.extra_block(b"TySh").and_then(|block| decode_type_tool(&block.data));
+            Ok(())
+        })?;
+        if let Some(children) = layer.children_mut() { resolve_type_tools_within(children, budget)?; }
     }
+    Ok(())
 }
 
 /// Parse the `TySh` payload: version-1 framing, transform, text and warp
@@ -412,15 +420,15 @@ mod tests {
         bytes[text_version_at..text_version_at + 2].copy_from_slice(&49u16.to_be_bytes());
         assert!(decode_type_tool(&bytes).is_none(), "text version != 50");
 
-        let mut layers = LayerStack::from_layers(vec![Layer {
+        let mut layers = LayerStack::from_layers(vec![crate::layer_from_parts(pictura_core::LayerParts {
             extra_blocks: vec![pictura_core::LayerBlock {
                 key: *b"TySh",
                 data: bad_version.into(),
             }],
             ..Default::default()
-        }]);
+        })]);
         resolve_type_tools(&mut layers);
-        assert!(layers[0].type_tool.is_none(), "view stays unset");
+        assert!(layers[0].type_tool().is_none(), "view stays unset");
         assert!(layers[0].is_type(), "kind detection stays presence-only");
     }
 

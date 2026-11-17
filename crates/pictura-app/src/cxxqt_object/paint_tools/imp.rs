@@ -890,7 +890,7 @@ pub(super) fn white_preview(
     let mut doc = Document::new(w as u32, h as u32, ColorMode::Rgb, BitDepth::Eight);
     let n = (w * h) as usize;
     {
-        let _ = doc.layers.push(Layer {
+        let _ = doc.layers.push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
             rect: PsdRect {
                 top: 0,
                 left: 0,
@@ -904,7 +904,7 @@ pub(super) fn white_preview(
                 })
                 .into(),
             ..Default::default()
-        });
+        }));
     };
     let cfg = StrokeConfig {
         color: Rgba {
@@ -918,7 +918,7 @@ pub(super) fn white_preview(
     paint_stroke(&mut doc, "0", &cfg, samples);
     let plane = |id: i16| {
         doc.layers[0]
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == id)
             .map_or(&[][..], |c| c.data.as_slice())

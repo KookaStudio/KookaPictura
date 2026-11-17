@@ -1188,7 +1188,7 @@ fn alpha_is_never_modified() {
             reverse: false,
             transparency: Vec::new(),
         }),
-        Adjustment::GradientFill(GradientFillParams {
+        pictura_core::FillContent::Gradient(GradientFillParams {
             stops: vec![
                 GradientStop {
                     location: 0,
@@ -1204,13 +1204,13 @@ fn alpha_is_never_modified() {
             angle_deg: 0.0,
             scale: 100.0,
         }),
-        Adjustment::PatternFill(PatternFillParams {
+        pictura_core::FillContent::Pattern(PatternFillParams {
             pattern_id: "pictura-pattern".into(),
             scale: 100.0,
             link_with_layer: true,
             origin: (0, 0),
         }),
-        Adjustment::SolidFill([10, 20, 30, 40]),
+        pictura_core::FillContent::Solid([10, 20, 30, 40]),
     ];
     // One entry per `Adjustment` variant: the 17 destructive ones plus the three
     // refused fills (`SolidFill`, `GradientFill`, `PatternFill`).
@@ -1230,82 +1230,6 @@ fn alpha_is_never_modified() {
         }
         assert_eq!(&b.data[3 * n..4 * n], &alpha[..], "{a:?} touched alpha");
     }
-}
-
-#[test]
-fn apply_refuses_gradient_fill_without_mutating() {
-    let mut buf = buf3(
-        2,
-        2,
-        &[[10, 20, 30], [40, 50, 60], [70, 80, 90], [100, 110, 120]],
-    );
-    let before = buf.clone();
-    let params = GradientFillParams {
-        stops: vec![
-            GradientStop {
-                location: 0,
-                color: [0, 0, 0],
-            },
-            GradientStop {
-                location: 4096,
-                color: [255, 255, 255],
-            },
-        ],
-        reverse: false,
-        kind: GradientKind::Radial,
-        angle_deg: 45.0,
-        scale: 100.0,
-    };
-    assert!(matches!(
-        apply(&Adjustment::GradientFill(params), &mut buf),
-        Err(AdjustError::Unsupported(_))
-    ));
-    assert_eq!(
-        buf, before,
-        "a refused gradient fill leaves the buffer unchanged"
-    );
-}
-
-#[test]
-fn apply_refuses_pattern_fill_without_mutating() {
-    let mut buf = buf3(
-        2,
-        2,
-        &[[10, 20, 30], [40, 50, 60], [70, 80, 90], [100, 110, 120]],
-    );
-    let before = buf.clone();
-    let params = PatternFillParams {
-        pattern_id: "pictura-pattern".into(),
-        scale: 50.0,
-        link_with_layer: false,
-        origin: (3, 4),
-    };
-    assert!(matches!(
-        apply(&Adjustment::PatternFill(params), &mut buf),
-        Err(AdjustError::Unsupported(_))
-    ));
-    assert_eq!(
-        buf, before,
-        "a refused pattern fill leaves the buffer unchanged"
-    );
-}
-
-#[test]
-fn apply_refuses_solid_fill_without_mutating() {
-    let mut buf = buf3(
-        2,
-        2,
-        &[[10, 20, 30], [40, 50, 60], [70, 80, 90], [100, 110, 120]],
-    );
-    let before = buf.clone();
-    assert!(matches!(
-        apply(&Adjustment::SolidFill([1, 2, 3, 200]), &mut buf),
-        Err(AdjustError::Unsupported(_))
-    ));
-    assert_eq!(
-        buf, before,
-        "a refused solid fill leaves the buffer unchanged"
-    );
 }
 
 #[test]

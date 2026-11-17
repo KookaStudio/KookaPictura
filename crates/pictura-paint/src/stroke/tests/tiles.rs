@@ -6,7 +6,7 @@ use crate::tone::ToneOptions;
 #[test]
 fn a_stroke_forks_only_touched_tiles() {
     let (w, h) = (8usize, 300usize);
-    let mut layer = Layer {
+    let mut layer = pictura_core::Layer::from_parts(pictura_core::LayerParts {
         name: "px".into(),
         rect: PsdRect {
             top: 0,
@@ -19,9 +19,9 @@ fn a_stroke_forks_only_touched_tiles() {
             data: vec![1u8; w * h].into(),
         }],
         ..Default::default()
-    };
-    layer.channels[0].data.tile(w, h);
-    let holder = layer.channels[0].data.clone();
+    }, pictura_core::LayerContent::Pixel);
+    layer.channels()[0].data.tile(w, h);
+    let holder = layer.channels()[0].data.clone();
 
     let ch: PlaneIndex = [Some(0), None, None, None];
     let mut scratch = Plane::filled(w, h, 1, 0u8);
@@ -44,11 +44,11 @@ fn a_stroke_forks_only_touched_tiles() {
     }
 
     assert!(
-        !layer.channels[0].data.shares_tile(0, &holder),
+        !layer.channels()[0].data.shares_tile(0, &holder),
         "the touched tile forked"
     );
     assert!(
-        layer.channels[0].data.shares_tile(1, &holder),
+        layer.channels()[0].data.shares_tile(1, &holder),
         "the untouched tile stayed shared"
     );
     assert_eq!(holder.sample(0), Some(1));
@@ -65,7 +65,7 @@ fn a_tone_stroke_forks_only_touched_tiles() {
         right: 64,
     };
     let mut doc = offset_layer_doc(64, 600, rect, (120, 90, 60, 255));
-    for channel in &mut doc.layers[0].channels {
+    for channel in doc.layers[0].channels_mut() {
         channel.data.tile(64, 600);
     }
     let history = doc.clone();
@@ -77,9 +77,9 @@ fn a_tone_stroke_forks_only_touched_tiles() {
         Stroke::begin_tone(&doc, "0", cfg, ToneOptions::default()).expect("begin tone");
     assert!(stroke.sample(&mut doc, sample(20.0, 20.0)), "nothing toned");
     for (live, held) in doc.layers[0]
-        .channels
+        .channels()
         .iter()
-        .zip(&history.layers[0].channels)
+        .zip(history.layers[0].channels())
     {
         assert!(live.data.is_tiled(), "the plane was flattened");
         assert!(
@@ -87,8 +87,8 @@ fn a_tone_stroke_forks_only_touched_tiles() {
             "an untouched tile was copied"
         );
     }
-    let red = &doc.layers[0].channels[0].data;
-    assert!(!red.shares_tile(0, &history.layers[0].channels[0].data));
+    let red = &doc.layers[0].channels()[0].data;
+    assert!(!red.shares_tile(0, &history.layers[0].channels()[0].data));
 }
 
 // [tsr_write_back]
@@ -210,7 +210,7 @@ fn a_stroke_costs_the_tiles_it_covers_not_the_document_width() {
             right: side,
         };
         let mut doc = offset_layer_doc(side as u32, side as u32, rect, (120, 90, 60, 255));
-        for channel in &mut doc.layers[0].channels {
+        for channel in doc.layers[0].channels_mut() {
             channel.data.tile(side as usize, side as usize);
         }
         let history = doc.clone();
@@ -224,9 +224,9 @@ fn a_stroke_costs_the_tiles_it_covers_not_the_document_width() {
         }
         assert!(stroke.finish().is_some(), "the stroke painted");
         doc.layers[0]
-            .channels
+            .channels()
             .iter()
-            .zip(&history.layers[0].channels)
+            .zip(history.layers[0].channels())
             .map(|(live, held)| {
                 (0..live.data.tile_count())
                     .filter(|&i| !live.data.shares_tile(i, &held.data))

@@ -108,7 +108,7 @@ impl LayerTarget {
             .map(|(path, _)| path)
             .find(|path| {
                 pictura_render::resolve_path(doc, path)
-                    .is_some_and(|layer| layer.adjustment.is_none() && !layer.is_group)
+                    .is_some_and(|layer| !layer.has_adjustment_content() && !layer.is_group())
             });
         if let Some(path) = topmost_pixel {
             target.select_only(&path);
@@ -125,7 +125,7 @@ mod tests {
     use pictura_core::{BitDepth, ColorMode, Document, Layer, LayerStack};
 
     fn pixel(name: &str) -> Layer {
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: name.to_string(),
             rect: pictura_core::PsdRect {
                 top: 0,
@@ -133,8 +133,8 @@ mod tests {
                 bottom: 8,
                 right: 8,
             },
-            ..Layer::default()
-        }
+            ..Default::default()
+        })
     }
 
     fn doc(names: &[&str]) -> Document {
@@ -206,7 +206,7 @@ mod opened_tests {
     use pictura_core::{BitDepth, ColorMode, Document, Layer, LayerStack};
 
     fn layer(name: &str, group: bool) -> Layer {
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: name.to_string(),
             is_group: group,
             rect: pictura_core::PsdRect {
@@ -215,8 +215,8 @@ mod opened_tests {
                 bottom: 8,
                 right: 8,
             },
-            ..Layer::default()
-        }
+            ..Default::default()
+        })
     }
 
     fn doc(layers: Vec<Layer>) -> Document {
@@ -242,7 +242,7 @@ mod opened_tests {
     #[test]
     fn open_target_finds_a_pixel_inside_the_top_group() {
         let mut group = layer("group", true);
-        group.children = LayerStack::from_layers(vec![layer("child", false)]);
+        group.set_group_children(LayerStack::from_layers(vec![layer("child", false)]));
         let doc = doc(vec![layer("bottom", false), group]);
         let target = LayerTarget::for_opened(&doc, None);
         assert_eq!(target.single(), Some("1/0"));

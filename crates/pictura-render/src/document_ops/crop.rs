@@ -85,10 +85,10 @@ pub fn delete_cropped_pixels(doc: &mut Document) -> usize {
     for_each_layer(&mut doc.layers, &mut |layer| {
         let rect = layer.rect;
         let live = layer.is_type()
-            || layer.smart_object.is_some()
+            || layer.smart_object().is_some()
             || layer.vector_mask.is_some()
             || layer.source_channels.is_some();
-        if layer.is_group || layer.channels.is_empty() || live || rect.is_empty() {
+        if layer.is_group() || layer.channels().is_empty() || live || rect.is_empty() {
             return;
         }
         let keep = rect.intersect(canvas);
@@ -96,7 +96,7 @@ pub fn delete_cropped_pixels(doc: &mut Document) -> usize {
             return;
         }
         let keep = keep.unwrap_or_default();
-        for channel in &mut layer.channels {
+        for channel in layer.channels_mut() {
             channel.data = trim_plane(&channel.data, rect, keep).into();
         }
         if let Some(mask) = &mut layer.mask {
@@ -108,7 +108,7 @@ pub fn delete_cropped_pixels(doc: &mut Document) -> usize {
             }
         }
         layer.rect = keep;
-        layer.raw_channels.clear();
+        layer.discard_raw_channels();
         trimmed += 1;
     });
     trimmed
@@ -143,13 +143,13 @@ pub(crate) fn offset_layer(layer: &mut Layer, dx: i32, dy: i32) {
     if let Some(mask) = &mut layer.mask {
         mask.rect = offset_rect(mask.rect, dx, dy);
     }
-    if let Some(tool) = layer.type_tool.as_mut() {
+    pictura_codec::edit_layer(layer.as_mut(), |parts| { if let Some(tool) = parts.type_tool.as_mut() {
         if let Some(path) = tool.path.as_mut() {
             path.subpath.translate(f64::from(dx), f64::from(dy));
         }
         tool.transform[4] += f64::from(dx);
         tool.transform[5] += f64::from(dy);
-    }
+    } });
     pictura_core::layer_comp::bump_layer_anchor(layer, dx, dy);
 }
 
@@ -279,7 +279,7 @@ pub fn translate_layer_index(doc: &mut Document, index: usize, dx: i32, dy: i32)
     let Some(layer) = doc.layers.get_mut(index) else {
         return false;
     };
-    if layer.is_group || layer.adjustment.is_some() {
+    if layer.is_group() || layer.has_adjustment_content() {
         return false;
     }
     if layer_move_locked(layer) {
@@ -306,7 +306,7 @@ pub fn translate_layer_path(doc: &mut Document, path: &str, dx: i32, dy: i32) ->
         let (fx, fy) = (f64::from(dx), f64::from(dy));
         return map_shape_layer(doc, path, Some((fx, fy)), |x, y| Some((x + fx, y + fy)));
     }
-    if layer.is_group || layer.adjustment.is_some() {
+    if layer.is_group() || layer.has_adjustment_content() {
         return false;
     }
     if layer_move_locked(layer) {
@@ -319,7 +319,7 @@ fn topmost_pixel_layer(layers: &mut pictura_core::LayerStack) -> Option<&mut Lay
     layers
         .iter_mut()
         .rev()
-        .find(|l| l.adjustment.is_none() && !l.is_group)
+        .find(|l| !l.has_adjustment_content() && !l.is_group())
 }
 
 #[cfg(test)]
@@ -346,7 +346,7 @@ mod tests {
     fn pixel_layer(name: &str, r: PsdRect, mask: Option<LayerMask>) -> Layer {
         let n = (r.width().max(0) * r.height().max(0)) as usize;
         let ramp = |offset: u8| (0..n).map(|i| (i as u8).wrapping_add(offset)).collect();
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: name.into(),
             rect: r,
             blend: BlendMode::Normal,
@@ -380,7 +380,7 @@ mod tests {
             is_group: false,
             background: false,
             ..Default::default()
-        }
+        })
     }
 
     fn sample_doc() -> Document {
@@ -536,7 +536,7 @@ mod tests {
     #[test]
     fn translate_layer_rejects_non_pixel_layers() {
         let mut doc = sample_doc();
-        doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
+        doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "adj".into(),
             rect: full(4, 4),
             blend: BlendMode::Normal,
@@ -556,7 +556,7 @@ mod tests {
             is_group: false,
             background: false,
             ..Default::default()
-        }]);
+        })]);
         let before = doc.clone();
         assert!(!translate_layer(&mut doc, 2, 2));
         assert_eq!(doc, before);
@@ -687,8 +687,8 @@ mod tests {
         let kept = &doc.layers[0];
         assert_eq!(kept.rect, full(4, 4));
         // Old pixel (x=2, y=3) is the new top-left: ramp index 3*8+2.
-        assert_eq!(kept.channels[0].data.len(), 16);
-        assert_eq!(kept.channels[0].data[0], 26);
+        assert_eq!(kept.channels()[0].data.len(), 16);
+        assert_eq!(kept.channels()[0].data[0], 26);
         let mask = kept.mask.as_ref().unwrap();
         assert_eq!(
             (mask.rect, mask.data.as_ref().unwrap()[0]),
@@ -700,7 +700,7 @@ mod tests {
             rect(0, 0, 0, 0),
             "an off-canvas layer loses its pixels"
         );
-        assert!(off.channels.iter().all(|c| c.data.is_empty()));
+        assert!(off.channels().iter().all(|c| c.data.is_empty()));
         assert_eq!(delete_cropped_pixels(&mut doc), 0, "nothing left to trim");
     }
 

@@ -593,6 +593,9 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 
 ## Engine and performance
 
+- [x] Authoritative layer content for pixels, adjustments, fills, text, shapes,
+  smart objects, and groups, with PSD preservation and shared render routing (#1344).
+
 - [x] **A Rust engine under a Qt 6 shell** — ten engine crates, with no Qt type
       in any of them. `crates/`.
 - [x] **A wgpu/Vulkan compute path** for compositing, the heavy filters, and the

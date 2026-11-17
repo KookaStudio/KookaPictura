@@ -247,9 +247,9 @@ fn applying_a_style_is_one_undoable_state() {
     );
     assert_eq!(spec.paragraph.justify, Justify::Center);
 
-    let before = doc.layers[0].type_tool.clone();
+    let before = doc.layers[0].type_tool().cloned();
     assert!(!apply_type_style(&mut doc, &path, "Ghost", false));
-    assert_eq!(doc.layers[0].type_tool, before);
+    assert_eq!(doc.layers[0].type_tool(), before.as_ref());
 }
 
 #[test]
@@ -527,7 +527,7 @@ fn region_deltas_retain_only_changed_tiles() {
 #[test]
 fn every_state_matches_a_reference_copy() {
     let mut doc = doc(200, 130, 5);
-    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "paint".into(),
         rect: pictura_core::PsdRect {
             top: 0,
@@ -540,7 +540,7 @@ fn every_state_matches_a_reference_copy() {
             data: vec![9u8; 200 * 130].into(),
         }],
         ..Default::default()
-    }]);
+    })]);
 
     let mut history = History::default();
     let mut reference: Vec<Snapshot> = Vec::new();
@@ -572,8 +572,8 @@ fn every_state_matches_a_reference_copy() {
         }
         let layer = &mut doc.layers[0];
         for k in 0..300usize {
-            let idx = (seed as usize * 53 + k * 97) % layer.channels[0].data.len();
-            layer.channels[0].data[idx] = seed.wrapping_add(k as u8);
+            let idx = (seed as usize * 53 + k * 97) % layer.channels()[0].data.len();
+            layer.channels_mut()[0].data[idx] = seed.wrapping_add(k as u8);
         }
         if step == 3 {
             doc.layers[0].visible = false;
@@ -657,7 +657,7 @@ fn structural_captures_retain_only_new_planes() {
     let at = pictura_render::add_layer(&mut live, -1, "added 0");
     assert!(at >= 0);
     let layer_bytes: usize = live.layers[at as usize]
-        .channels
+        .channels()
         .iter()
         .map(|c| c.data.len())
         .sum();
@@ -711,9 +711,9 @@ fn undoing_a_structural_edit_keeps_the_live_planes() {
         "undo keeps the live composite"
     );
     assert!(
-        live.layers[0].channels[0]
+        live.layers[0].channels()[0]
             .data
-            .shares(&before.layers[0].channels[0].data),
+            .shares(&before.layers[0].channels()[0].data),
         "undo keeps the live layer plane"
     );
     let mut before_planes = Vec::new();
@@ -795,10 +795,10 @@ fn a_capture_after_a_duplicate_stays_a_delta() {
     assert!(pictura_render::duplicate_layer(&mut live, 0) > 0);
     history.capture_live(&mut live, &selection, &target, "Duplicate Layer");
     let anchors = history.anchor_count();
-    let duplicate_byte = live.layers[1].channels[0].data[0];
+    let duplicate_byte = live.layers[1].channels()[0].data[0];
 
-    let other_byte = live.layers[2].channels[0].data[0];
-    live.layers[2].channels[0].data[0] = other_byte.wrapping_add(1);
+    let other_byte = live.layers[2].channels()[0].data[0];
+    live.layers[2].channels_mut()[0].data[0] = other_byte.wrapping_add(1);
     live.composite
         .edit_data(|data| {
             data[0] = other_byte.wrapping_add(2);
@@ -808,7 +808,7 @@ fn a_capture_after_a_duplicate_stays_a_delta() {
 
     assert_eq!(history.anchor_count(), anchors, "paint must stay a delta");
     assert_eq!(
-        live.layers[1].channels[0].data[0], duplicate_byte,
+        live.layers[1].channels()[0].data[0], duplicate_byte,
         "the duplicate keeps its byte after an unrelated layer is painted"
     );
     assert!(matches!(
@@ -822,7 +822,7 @@ fn a_capture_after_a_duplicate_stays_a_delta() {
 #[test]
 fn paint_commit_undo_restores_the_prior_pixels() {
     let mut doc = Document::new(64, 64, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "base".into(),
         rect: pictura_core::PsdRect {
             top: 0,
@@ -841,8 +841,8 @@ fn paint_commit_undo_restores_the_prior_pixels() {
             },
         ],
         ..Default::default()
-    }]);
-    let prior_layer = doc.layers[0].channels[0].data.clone();
+    })]);
+    let prior_layer = doc.layers[0].channels()[0].data.clone();
     let prior_composite = doc.composite.data.clone();
 
     let mut history = History::default();
@@ -857,7 +857,7 @@ fn paint_commit_undo_restores_the_prior_pixels() {
 
     // A paint commit: dab bytes into the layer plane and recomposite.
     let mut painted = doc.clone();
-    for p in painted.layers[0].channels[0].data[..64 * 32].iter_mut() {
+    for p in painted.layers[0].channels_mut()[0].data[..64 * 32].iter_mut() {
         *p = 200;
     }
     painted
@@ -878,12 +878,12 @@ fn paint_commit_undo_restores_the_prior_pixels() {
     );
 
     let undone = history.undo().expect("undo the paint");
-    assert_eq!(undone.doc.layers[0].channels[0].data, prior_layer);
+    assert_eq!(undone.doc.layers[0].channels()[0].data, prior_layer);
     assert_eq!(undone.doc.composite.data, prior_composite);
 
     let redone = history.redo().expect("redo the paint");
-    assert_eq!(redone.doc.layers[0].channels[0].data[0], 200);
-    assert_eq!(redone.doc.layers[0].channels[0].data[32 * 64], 10);
+    assert_eq!(redone.doc.layers[0].channels()[0].data[0], 200);
+    assert_eq!(redone.doc.layers[0].channels()[0].data[32 * 64], 10);
     assert_eq!(redone.doc.composite.data[0], 200);
 }
 
@@ -1099,7 +1099,7 @@ impl Rng {
 
 fn model_layer(name: &str, w: u32, h: u32, seed: u8) -> Layer {
     let n = (w * h) as usize;
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: pictura_core::PsdRect {
             top: 0,
@@ -1120,7 +1120,7 @@ fn model_layer(name: &str, w: u32, h: u32, seed: u8) -> Layer {
             })
             .collect(),
         ..Default::default()
-    }
+    })
 }
 
 /// Some plane of `a` shares at least one band with a plane of `b`.
@@ -1242,7 +1242,7 @@ fn a_pixel_undo_without_a_stored_composite_reports_its_layer_tiles() {
     let mut history = History::default();
     history.capture_live(&mut live, &selection, &target, "Open");
     let lw = (w - 100) as usize;
-    let red = live.layers[0].channels[0].data.as_mut_slice();
+    let red = live.layers[0].channels()[0].data.as_mut_slice();
     for y in 10..20 {
         for x in 300..310 {
             red[y * lw + x] ^= 0xff;

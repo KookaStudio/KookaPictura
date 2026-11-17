@@ -8,7 +8,7 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use crate::{BlendMode, Document, Layer, LayerBlock, LayerStack, Plane};
+use crate::{BlendMode, Document, Layer, LayerStack, Plane};
 
 /// The additional-layer-info key carrying a layer's stable identity.
 pub const LYID: [u8; 4] = *b"lyid";
@@ -378,16 +378,12 @@ pub fn layer_id(layer: &Layer) -> Option<LayerId> {
 /// Write `layer`'s stable identity, replacing an existing `lyid` block in place.
 pub fn set_layer_id(layer: &mut Layer, id: LayerId) {
     let data: Plane<u8> = id.to_be_bytes().to_vec().into();
-    if let Some(block) = layer.extra_blocks.iter_mut().find(|b| b.key == LYID) {
-        block.data = data;
-    } else {
-        layer.extra_blocks.push(LayerBlock { key: LYID, data });
-    }
+    layer.set_metadata_block(LYID, Some(data));
 }
 
 /// Remove `layer`'s stable identity.
 pub fn clear_layer_id(layer: &mut Layer) {
-    layer.extra_blocks.retain(|block| block.key != LYID);
+    layer.set_metadata_block(LYID, None);
 }
 
 /// The layer's position anchor: its `fxrp` block when present, otherwise the
@@ -414,14 +410,7 @@ pub fn set_layer_anchor(layer: &mut Layer, anchor: PositionAnchor) {
     data.extend_from_slice(&anchor.x.to_be_bytes());
     data.extend_from_slice(&anchor.y.to_be_bytes());
     let data: Plane<u8> = data.into();
-    if let Some(block) = layer.extra_blocks.iter_mut().find(|b| b.key == *b"fxrp") {
-        block.data = data;
-    } else {
-        layer.extra_blocks.push(LayerBlock {
-            key: *b"fxrp",
-            data,
-        });
-    }
+    layer.set_metadata_block(*b"fxrp", Some(data));
 }
 
 /// Shift the layer's position anchor by `(dx, dy)` when it has an `fxrp`
@@ -447,7 +436,7 @@ pub fn layer_ids(doc: &Document) -> BTreeSet<LayerId> {
             if let Some(id) = layer_id(layer) {
                 ids.insert(id);
             }
-            walk(&layer.children, ids);
+            walk(layer.children(), ids);
         }
     }
     let mut ids = BTreeSet::new();
@@ -471,7 +460,7 @@ pub fn layer_paths_by_id(doc: &Document) -> std::collections::BTreeMap<LayerId, 
             if let Some(id) = layer_id(layer) {
                 out.entry(id).or_insert_with(|| path.clone());
             }
-            walk(&layer.children, &path, out);
+            walk(layer.children(), &path, out);
         }
     }
     let mut out = std::collections::BTreeMap::new();
@@ -493,7 +482,7 @@ pub fn ensure_layer_ids(doc: &mut Document, seed: LayerId) -> bool {
                 used.insert(id);
                 *highest = (*highest).max(id);
             }
-            scan(&layer.children, used, highest);
+            scan(layer.children(), used, highest);
         }
     }
     scan(&doc.layers, &mut used, &mut highest);
@@ -515,7 +504,7 @@ pub fn ensure_layer_ids(doc: &mut Document, seed: LayerId) -> bool {
                 *next = next.saturating_add(1);
                 changed = true;
             }
-            changed |= assign(&mut layer.children, used, next);
+            changed |= assign(layer.children_mut().expect("group"), used, next);
         }
         changed
     }
@@ -537,7 +526,7 @@ mod tests {
     use crate::{BitDepth, ColorMode};
 
     fn layer(name: &str, id: Option<LayerId>) -> Layer {
-        let mut layer = Layer {
+        let mut layer = crate::Layer::from_parts(crate::LayerParts {
             name: name.to_string(),
             rect: crate::PsdRect {
                 top: 0,
@@ -546,7 +535,7 @@ mod tests {
                 right: 4,
             },
             ..Default::default()
-        };
+        }, crate::LayerContent::Pixel);
         if let Some(id) = id {
             set_layer_id(&mut layer, id);
         }

@@ -30,7 +30,7 @@ fn embedded(filename: &str, data: Vec<u8>) -> SmartObject {
 }
 
 fn smart_layer(name: &str, so: SmartObject) -> Layer {
-    Layer {
+    crate::layer_from_parts(pictura_core::LayerParts {
         name: name.to_string(),
         rect: PsdRect {
             top: 0,
@@ -58,7 +58,7 @@ fn smart_layer(name: &str, so: SmartObject) -> Layer {
         ],
         smart_object: Some(so),
         ..Default::default()
-    }
+    })
 }
 
 fn doc_with(layers: Vec<Layer>) -> Document {
@@ -103,8 +103,7 @@ fn authored_smart_object_round_trips() {
 
     let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
     let so = back.layers[0]
-        .smart_object
-        .as_ref()
+        .smart_object()
         .expect("authored smart object resolves");
 
     assert_eq!(so.kind, SmartObjectKind::Embedded);
@@ -144,8 +143,7 @@ fn authored_smart_object_with_filter_round_trips() {
     let doc = doc_with(vec![smart_layer("Smart", so)]);
     let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
     let so = back.layers[0]
-        .smart_object
-        .as_ref()
+        .smart_object()
         .expect("authored smart object resolves");
 
     assert_eq!(so.smart_filters.len(), 1, "the filter survives write/read");
@@ -187,8 +185,7 @@ fn authored_disabled_filter_group_round_trips() {
     let doc = doc_with(vec![smart_layer("Smart", so)]);
     let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
     let so = back.layers[0]
-        .smart_object
-        .as_ref()
+        .smart_object()
         .expect("authored smart object resolves");
 
     assert!(
@@ -211,12 +208,10 @@ fn authored_shared_payload_emits_one_record() {
 
     let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
     let a = back.layers[0]
-        .smart_object
-        .as_ref()
+        .smart_object()
         .expect("layer A resolves");
     let b = back.layers[1]
-        .smart_object
-        .as_ref()
+        .smart_object()
         .expect("layer B resolves");
 
     assert_eq!(a.kind, SmartObjectKind::Embedded);
@@ -238,7 +233,7 @@ fn authored_descriptor_is_sold_v4() {
     let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
 
     let block = back.layers[0]
-        .extra_blocks
+        .extra_blocks()
         .iter()
         .find(|b| &b.key == b"SoLd")
         .expect("the writer authored a SoLd block");
@@ -290,7 +285,7 @@ fn psd_tools_parses_authored_smart_object() {
         .layers
         .iter()
         .find(|l| l.name == "Layer 1")
-        .and_then(|l| l.smart_object.as_ref())
+        .and_then(|l| l.smart_object())
         .expect("fixture smart object resolves");
     let payload = source
         .payload()
@@ -312,7 +307,7 @@ fn psd_tools_parses_authored_smart_object() {
 import sys
 from psd_tools import PSDImage
 psd = PSDImage.open(sys.argv[1], lazy=False)
-so = psd[0].smart_object
+so = psd[0].smart_object()
 print(so.kind)
 print(so.filename)
 print(len(so.data))

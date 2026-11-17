@@ -15,7 +15,7 @@ fn rect(x: i32, y: i32, w: i32, h: i32) -> PsdRect {
 
 fn fixture() -> Document {
     let mut doc = Document::new(12, 8, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = LayerStack::from_layers(vec![Layer {
+    doc.layers = LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Small".into(),
         rect: rect(2, 1, 3, 2),
         channels: [0, 1, 2, -1]
@@ -26,7 +26,7 @@ fn fixture() -> Document {
             })
             .collect(),
         ..Default::default()
-    }]);
+    })]);
     doc
 }
 
@@ -58,7 +58,7 @@ fn write_pixel(doc: &mut Document, x: i32, y: i32, value: u8) {
         (view.document.width, view.document.height),
         (doc.width, doc.height)
     );
-    view.document.layers[0].channels[0].data[y as usize * doc.width as usize + x as usize] = value;
+    view.document.layers[0].channels_mut()[0].data[y as usize * doc.width as usize + x as usize] = value;
     assert!(write_mask_back(
         doc,
         "0",
@@ -96,9 +96,9 @@ fn mask_creation_preserves_empty_and_group_defaults() {
     for group in [false, true] {
         for kind in [LayerMaskKind::RevealAll, LayerMaskKind::FromTransparency] {
             let mut doc = fixture();
-            doc.layers[0].is_group = group;
+            if group { doc.layers[0].set_group_children(Default::default()); }
             doc.layers[0].rect = rect(0, 0, 0, 0);
-            doc.layers[0].channels.clear();
+            doc.layers[0].channels_mut().clear();
             assert!(add_layer_mask(&mut doc, "0", kind, None));
             assert_eq!(doc.layers[0].mask.as_ref().unwrap().rect, rect(0, 0, 12, 8));
             assert_eq!(sample(&doc, 11, 7), 255);
@@ -113,9 +113,9 @@ fn mask_creation_preserves_alpha_coordinates() {
     for with_alpha in [false, true] {
         let mut doc = fixture();
         if with_alpha {
-            doc.layers[0].channels[3].data = vec![0, 1, 64, 128, 254, 255].into();
+            doc.layers[0].channels_mut()[3].data = vec![0, 1, 64, 128, 254, 255].into();
         } else {
-            doc.layers[0].channels.retain(|c| c.id != -1);
+            doc.layers[0].channels_mut().retain(|c| c.id != -1);
         }
         assert!(add_layer_mask(
             &mut doc,
@@ -221,13 +221,13 @@ fn mask_creation_refusals_are_atomic() {
 fn canvas_mask_adapter_preserves_document_coordinates() {
     for group in [false, true] {
         let mut doc = imported(128);
-        doc.layers[0].is_group = group;
-        let pixels = doc.layers[0].channels.clone();
+        if group { doc.layers[0].set_group_children(Default::default()); }
+        let pixels = doc.layers[0].channels().clone();
         write_pixel(&mut doc, 10, 6, 7);
         assert_eq!(sample(&doc, 10, 6), 7);
         assert_eq!(sample(&doc, 0, 0), 128);
         assert_eq!(sample(&doc, 3, 1), 1);
-        assert_eq!(doc.layers[0].channels, pixels);
+        assert_eq!(doc.layers[0].channels(), &pixels);
     }
     let mut doc = fixture();
     doc.layers[0].mask = Some(LayerMask {
@@ -236,7 +236,7 @@ fn canvas_mask_adapter_preserves_document_coordinates() {
     });
     let original = doc.clone();
     let view = mask_document_coverage(&doc, "0").unwrap();
-    assert!(view.document.layers[0].channels[0]
+    assert!(view.document.layers[0].channels()[0]
         .data
         .iter()
         .all(|&v| v == 255));
@@ -275,7 +275,7 @@ fn canvas_mask_data_less_import_preserves_visible_coverage() {
         let original = doc.clone();
         let rendered = composite_rgba(&doc);
         let view = mask_document(&doc, "0").unwrap();
-        assert!(view.document.layers[0].channels[0]
+        assert!(view.document.layers[0].channels()[0]
             .data
             .iter()
             .all(|&v| v == 255));
@@ -290,12 +290,12 @@ fn canvas_mask_data_less_import_preserves_visible_coverage() {
 #[test]
 fn canvas_mask_moves_keep_black_exterior() {
     let mut doc = imported(255);
-    let pixels = doc.layers[0].channels.clone();
+    let pixels = doc.layers[0].channels().clone();
     assert!(translate_layer_mask(&mut doc, "0", 3, 2));
     assert_eq!(sample(&doc, 0, 0), 0);
     assert_eq!(sample(&doc, 5, 3), 0);
     assert_eq!(sample(&doc, 6, 3), 1);
-    assert_eq!(doc.layers[0].channels, pixels);
+    assert_eq!(doc.layers[0].channels(), &pixels);
 }
 
 #[test]
@@ -518,7 +518,7 @@ fn canvas_mask_properties_invert_preserves_retained_samples() {
         ));
         assert!(translate_layer_mask(&mut doc, "0", -5, 0));
         let sentinel = native_sample(&doc, -2, 1);
-        let pixels = doc.layers[0].channels.clone();
+        let pixels = doc.layers[0].channels().clone();
         assert!(invert_layer_mask(&mut doc, "0"));
         assert_eq!(native_sample(&doc, -2, 1), sentinel);
         assert_eq!(sample(&doc, 11, 7), 255);
@@ -531,7 +531,7 @@ fn canvas_mask_properties_invert_preserves_retained_samples() {
             }
         );
         assert_eq!(doc.layers[0].mask.as_ref().unwrap().default_color, 0);
-        assert_eq!(doc.layers[0].channels, pixels);
+        assert_eq!(doc.layers[0].channels(), &pixels);
     }
 }
 
@@ -567,7 +567,7 @@ fn canvas_mask_refusals_are_atomic() {
         assert_eq!(malformed, original);
     }
     let mut edited = mask_document_coverage(&doc, "0").unwrap().document;
-    edited.layers[0].channels[0].data[81] = 255;
+    edited.layers[0].channels_mut()[0].data[81] = 255;
     memory::set_host_for_test(Some(memory::HostReading {
         available: Some(0),
         ..Default::default()

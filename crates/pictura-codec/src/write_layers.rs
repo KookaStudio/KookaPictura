@@ -29,7 +29,7 @@ struct OutRecord<'a> {
 
 /// A layer channel to emit. Both variants are a complete on-disk stream
 /// (compression word included): `Encoded` is engine-authored channel data,
-/// `Verbatim` is a preserved `Layer.raw_channels` stream re-emitted unchanged.
+/// `Verbatim` is a preserved `Layer.raw_channels()` stream re-emitted unchanged.
 enum OutChannel {
     Encoded(Arc<[u8]>),
     Verbatim(Vec<u8>),
@@ -113,14 +113,14 @@ fn flatten(layers: &[Layer]) -> Vec<OutRecord<'_>> {
     let mut stack: Vec<Frame> = layers.iter().rev().map(Frame::Visit).collect();
     while let Some(frame) = stack.pop() {
         match frame {
-            Frame::Visit(layer) if layer.is_group => {
+            Frame::Visit(layer) if layer.is_group() => {
                 out.push(OutRecord {
                     layer: None,
                     section: SECTION_DIVIDER,
                     name: DIVIDER_NAME,
                 });
                 stack.push(Frame::Group(layer));
-                for child in layer.children.iter().rev() {
+                for child in layer.children().iter().rev() {
                     stack.push(Frame::Visit(child));
                 }
             }
@@ -150,7 +150,7 @@ fn record_name(layer: &Layer) -> &str {
 }
 
 /// The Lab planes to emit for a layer's three color channels, aligned to
-/// `layer.channels` (a `None` entry for every non-color channel). Prefers the
+/// `layer.channels()` (a `None` entry for every non-color channel). Prefers the
 /// retained Lab plane when its forward conversion still matches the working
 /// planes; empty when the layer does not carry exactly three id-0/1/2 color
 /// channels of equal length, letting the caller keep the original planes.
@@ -158,7 +158,7 @@ fn record_name(layer: &Layer) -> &str {
 /// ponytail: one edited channel re-encodes all three Lab planes.
 fn lab_layer_color_planes(layer: &Layer, depth: u16) -> Vec<Option<Vec<u8>>> {
     let positions: Vec<usize> = layer
-        .channels
+        .channels()
         .iter()
         .enumerate()
         .filter(|(_, c)| c.id >= 0 && c.id < 3)
@@ -167,20 +167,20 @@ fn lab_layer_color_planes(layer: &Layer, depth: u16) -> Vec<Option<Vec<u8>>> {
     if positions.len() != 3 {
         return Vec::new();
     }
-    let plane = layer.channels[positions[0]].data.len();
+    let plane = layer.channels()[positions[0]].data.len();
     if positions
         .iter()
-        .any(|&i| layer.channels[i].data.len() != plane)
+        .any(|&i| layer.channels()[i].data.len() != plane)
     {
         return Vec::new();
     }
     let mut current = Vec::with_capacity(plane * 3);
     for &i in &positions {
-        current.extend_from_slice(&layer.channels[i].data);
+        current.extend_from_slice(&layer.channels()[i].data);
     }
     let retained: Option<Vec<Vec<u8>>> = positions
         .iter()
-        .map(|&i| crate::color_mode::layer_retained_8(layer, depth, layer.channels[i].id))
+        .map(|&i| crate::color_mode::layer_retained_8(layer, depth, layer.channels()[i].id))
         .collect();
     let known = layer
         .source_channels
@@ -188,7 +188,7 @@ fn lab_layer_color_planes(layer: &Layer, depth: u16) -> Vec<Option<Vec<u8>>> {
         .is_some_and(|store| store.working_idents != [0; 3]);
     let ids = [0i16, 1, 2].map(|id| {
         layer
-            .channels
+            .channels()
             .iter()
             .find(|channel| channel.id == id)
             .map(|channel| channel.data.ident())
@@ -224,7 +224,7 @@ fn lab_layer_color_planes(layer: &Layer, depth: u16) -> Vec<Option<Vec<u8>>> {
             _ => crate::color_mode::rgb_to_lab(&current),
         }
     };
-    let mut out = vec![None; layer.channels.len()];
+    let mut out = vec![None; layer.channels().len()];
     for (c, &i) in positions.iter().enumerate() {
         out[i] = Some(lab[c * plane..(c + 1) * plane].to_vec());
     }
@@ -312,7 +312,7 @@ fn layer_plans<'a>(
                     None,
                 ));
             }
-            for (index, channel) in layer.channels.iter().enumerate() {
+            for (index, channel) in layer.channels().iter().enumerate() {
                 // The CMYK / Indexed color channels are already synthesized above.
                 if (cmyk_active || indexed_active) && channel.id >= 0 && channel.id < 3 {
                     continue;
@@ -354,7 +354,7 @@ fn layer_plans<'a>(
                 };
                 channels.push(ChannelPlan::encode(channel.id, layer_w, layer_h, data, key));
             }
-            for channel in &layer.raw_channels {
+            for channel in layer.raw_channels() {
                 // A depth-8 read keeps the original on-disk stream verbatim. A
                 // 16/32-bit read re-wrapped it as a raw 8-bit stream, so replay
                 // the retained native plane (or widen) under the output depth.
@@ -527,7 +527,7 @@ pub(crate) fn write_layer_info(
             doc.height,
             psb,
             &doc.layer_comps,
-        );
+        )?;
     }
     for channels in &encoded {
         for (_, channel) in channels {
@@ -548,7 +548,7 @@ fn write_record(
     doc_height: u32,
     psb: bool,
     comps: &pictura_core::layer_comp::LayerCompStore,
-) {
+) -> Result<(), PsdError> {
     match record.layer {
         Some(layer) => {
             out.extend_from_slice(&layer.rect.top.to_be_bytes());
@@ -599,7 +599,7 @@ fn write_record(
                 (doc_width, doc_height),
                 psb,
                 comps,
-            );
+            )?;
             out.extend_from_slice(&(extra.len() as u32).to_be_bytes());
             out.extend_from_slice(&extra);
         }
@@ -622,16 +622,17 @@ fn write_record(
                 (doc_width, doc_height),
                 psb,
                 comps,
-            );
+            )?;
             out.extend_from_slice(&(extra.len() as u32).to_be_bytes());
             out.extend_from_slice(&extra);
         }
     }
+    Ok(())
 }
 
 /// Placeholder used to reuse [`write_extra`] for the (layer-less) divider record.
 fn empty_layer(name: &str) -> Layer {
-    Layer {
+    crate::layer_from_parts(pictura_core::LayerParts {
         name: name.to_string(),
         rect: PsdRect {
             top: 0,
@@ -653,7 +654,7 @@ fn empty_layer(name: &str) -> Layer {
         is_group: false,
         background: false,
         ..Default::default()
-    }
+    })
 }
 
 fn write_extra(
@@ -664,8 +665,11 @@ fn write_extra(
     doc_size: (u32, u32),
     psb: bool,
     comps: &pictura_core::layer_comp::LayerCompStore,
-) {
+) -> Result<(), PsdError> {
     let (doc_width, doc_height) = doc_size;
+    crate::source_content::require_definition(layer)?;
+    let source_adjustment = crate::source_content::adjustment(layer)?;
+    let source_text = crate::source_content::text(layer)?;
     crate::mask_params::write_record(out, layer);
     crate::advanced_blending::write_ranges(out, layer);
     write_pascal(out, name);
@@ -691,8 +695,14 @@ fn write_extra(
         write_tag(out, b"iOpa", &[layer.fill, 0, 0, 0], psb);
     }
     crate::advanced_blending::write_advanced_tags(out, layer, psb);
-    if let Some(adjustment) = &layer.adjustment {
-        // Adjustment payload is opaque here; write the key and bytes back as read.
+    let encoded_fill = layer.fill_content().filter(|_| layer.fill_was_edited()
+        || (layer.adjustment().is_none() && layer.extra_block(b"vscg").is_none()))
+        .map(crate::stage_content::encoded_fill);
+    // A legacy RGBA tuple has no descriptor form for vscg; a primary SoCo
+    // preserves its alpha while the old vector bytes remain passive.
+    let rgba_tuple = encoded_fill.as_ref().is_some_and(|fill| fill.key == *b"SoCo" && fill.data.len() == 4);
+    let vector_fill = layer.adjustment().is_none() && layer.extra_block(b"vscg").is_some() && !rgba_tuple;
+    if let Some(adjustment) = encoded_fill.as_ref().filter(|_| !vector_fill).or(source_adjustment.as_ref()).or_else(|| layer.adjustment()) {
         write_tag(out, &adjustment.key, &adjustment.data, psb);
     }
     if section != 0 {
@@ -705,16 +715,25 @@ fn write_extra(
         lsct.extend_from_slice(&layer.blend.to_psd_key());
         write_tag(out, b"lsct", &lsct, psb);
     }
-    let stack_mode = layer.smart_object.as_ref().and_then(|so| so.stack_mode);
+    let stack_mode = layer.smart_object().and_then(|so| so.stack_mode);
     // Unmodeled tagged blocks, re-emitted in encounter order; a preserved
-    // `PiSt` yields to the modelled marker, and at most one preserved marker is
-    // re-emitted when no mode is modelled. A dirty comp store replaces the
+    // `PiSt` on an active smart object yields to its modelled marker; at most
+    // one unknown marker remains there. Losing candidates keep every marker.
+    // A dirty comp store replaces the
     // layer's `shmd` block with the current cmls state.
     let mut preserved_stack_marker = false;
     let rewrite_shmd = crate::layer_comps::rewrites_shmd(comps);
     let mut wrote_shmd = false;
-    for block in &layer.extra_blocks {
-        if block.key == crate::stack_marker::KEY {
+    for block in layer.extra_blocks() {
+        if block.key == *b"vscg" && vector_fill {
+            if let Some(fill) = encoded_fill.as_ref() {
+                let mut data = fill.key.to_vec();
+                data.extend_from_slice(&fill.data);
+                write_tag(out, &block.key, &data, psb);
+                continue;
+            }
+        }
+        if block.key == crate::stack_marker::KEY && layer.smart_object().is_some() {
             if stack_mode.is_some() || preserved_stack_marker {
                 continue;
             }
@@ -744,6 +763,7 @@ fn write_extra(
     if let Some(mode) = stack_mode {
         write_tag(out, b"PiSt", &crate::stack_marker::marker_data(mode), psb);
     }
+    if let Some(data) = source_text { write_tag(out,b"TySh",&data,psb); }
     // An embedded smart object with no preserved config block is authored here.
     if let Some(so) = crate::smart_writer::should_author(layer) {
         let data = crate::smart_writer::author_sold_block(so, layer, doc_width, doc_height);
@@ -752,6 +772,7 @@ fn write_extra(
     if out.len() % 2 == 1 {
         out.push(0);
     }
+    Ok(())
 }
 
 fn write_pascal(out: &mut Vec<u8>, name: &str) {
@@ -788,7 +809,7 @@ mod tests {
             right: 2,
         };
         let working = [[10u8, 20, 30, 40], [50, 60, 70, 80], [90, 100, 110, 120]];
-        let mut layer = Layer {
+        let mut layer = crate::layer_from_parts(pictura_core::LayerParts {
             name: "Lab".to_string(),
             rect,
             channels: working
@@ -800,10 +821,10 @@ mod tests {
                 })
                 .collect(),
             ..Default::default()
-        };
+        });
         let idents = [0i16, 1, 2].map(|id| {
             layer
-                .channels
+                .channels()
                 .iter()
                 .find(|channel| channel.id == id)
                 .expect("working channel")

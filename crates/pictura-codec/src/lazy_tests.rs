@@ -26,7 +26,7 @@ fn fixture(compression: Compression) -> Document {
     }
     let mut doc = Document::from_rgba("Background", W, H, &rgba);
     let bottom = doc.layers.get_mut(0).expect("a layer");
-    bottom.channels.retain(|c| c.id != -1);
+    bottom.channels_mut().retain(|c| c.id != -1);
     bottom.background = true;
     let (tw, th) = (300u32, 520u32);
     let top = Document::from_rgba("Top", tw, th, &noise(7, (tw * th * 4) as usize));
@@ -88,7 +88,7 @@ fn open_eager(bytes: &[u8], skip: bool) -> Result<Document, PsdError> {
 fn planes(doc: &Document) -> Vec<&Plane<u8>> {
     let mut out = Vec::new();
     for layer in doc.layers.iter() {
-        out.extend(layer.channels.iter().map(|c| &c.data));
+        out.extend(layer.channels().iter().map(|c| &c.data));
         if let Some(data) = layer.mask.as_ref().and_then(|m| m.data.as_ref()) {
             out.push(data);
         }
@@ -189,7 +189,7 @@ fn a_backed_tile_reads_only_its_band() {
     let path = temp_path("rows");
     written(&path, &fixture(Compression::Raw));
     let lazy = open_lazy(&path, true).expect("open");
-    let red = &lazy.doc.layers.get(0).unwrap().channels[0].data;
+    let red = &lazy.doc.layers.get(0).unwrap().channels()[0].data;
     let first = red.tile_at(0).expect("tile");
     assert_eq!(first.h, TILE);
     drop(first);
@@ -280,7 +280,7 @@ fn lazy_decode_of_a_truncated_source_is_unreadable() {
     let file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
     file.set_len(bytes.len() as u64 / 3).unwrap();
     drop(file);
-    let red = &lazy.doc.layers.get(0).unwrap().channels[0].data;
+    let red = &lazy.doc.layers.get(0).unwrap().channels()[0].data;
     let last = red.tile_count() - 1;
     let tile = red.tile_at(last).expect("tile");
     assert!((0..tile.h).all(|dy| (0..tile.w).all(|dx| tile.get(dx, dy) == 0)));
@@ -400,7 +400,7 @@ fn source_modified_in_place_marks_tiles_unreadable() {
     let mut other = bytes.clone();
     other.extend_from_slice(&[0; 16]);
     std::fs::write(&path, &other).unwrap();
-    let red = &lazy.doc.layers.get(0).unwrap().channels[0].data;
+    let red = &lazy.doc.layers.get(0).unwrap().channels()[0].data;
     drop(red.tile_at(0));
     assert_eq!(red.tile_residency(0), Some(Residency::Unreadable));
     assert!(lazy.pin.rewritten());

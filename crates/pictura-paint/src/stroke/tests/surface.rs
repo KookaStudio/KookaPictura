@@ -4,7 +4,7 @@ use pictura_core::{Channel, Layer, PsdRect};
 fn layer_with(rect: PsdRect, channels: &[(i16, u8)]) -> Layer {
     let n = (rect.width().max(0) * rect.height().max(0)) as usize;
     let width = rect.width().max(1) as usize;
-    Layer {
+    pictura_core::Layer::from_parts(pictura_core::LayerParts {
         rect,
         channels: channels
             .iter()
@@ -18,7 +18,7 @@ fn layer_with(rect: PsdRect, channels: &[(i16, u8)]) -> Layer {
             })
             .collect::<Vec<_>>(),
         ..Default::default()
-    }
+    }, pictura_core::LayerContent::Pixel)
 }
 
 #[test]

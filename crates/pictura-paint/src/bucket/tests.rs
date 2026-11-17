@@ -9,7 +9,7 @@ const BLACK: [u8; 4] = [0, 0, 0, 255];
 /// Two white rooms with a 2 px black wall between them.
 fn rooms() -> Document {
     let mut d = doc(40, 20, WHITE);
-    for c in &mut d.layers[0].channels[..3] {
+    for c in d.layers[0].channels_mut()[..3] {
         for (i, v) in c.data.iter_mut().enumerate() {
             if (19..21).contains(&(i % 40)) {
                 *v = 0;
@@ -192,7 +192,7 @@ fn tolerance_is_inclusive_per_channel() {
     let patched = || {
         let mut d = doc(20, 20, [100, 100, 100, 255]);
         // A patch 20 levels off on one channel only.
-        for (i, v) in d.layers[0].channels[1].data.iter_mut().enumerate() {
+        for (i, v) in d.layers[0].channels_mut()[1].data.iter_mut().enumerate() {
             if i % 20 >= 10 {
                 *v = 120;
             }
@@ -215,7 +215,7 @@ fn transparency_is_not_black() {
     for y in 5..15 {
         for x in 5..15 {
             if x == 5 || x == 14 || y == 5 || y == 14 {
-                d.layers[0].channels[3].data[y * 20 + x] = 255;
+                d.layers[0].channels_mut()[3].data[y * 20 + x] = 255;
             }
         }
     }
@@ -245,7 +245,7 @@ fn an_empty_layer_floods_whole_and_an_enclosed_seed_does_not() {
     for y in 5..15 {
         for x in 5..15 {
             if x == 5 || x == 14 || y == 5 || y == 14 {
-                d.layers[0].channels[3].data[y * 30 + x] = 255;
+                d.layers[0].channels_mut()[3].data[y * 30 + x] = 255;
             }
         }
     }
@@ -310,7 +310,7 @@ fn opacity_and_the_mask_scale_the_fill() {
 #[test]
 fn a_transparency_lock_keeps_the_fill_off_empty_pixels() {
     let mut d = doc(20, 20, [255, 255, 255, 0]);
-    for a in &mut d.layers[0].channels[3].data[..200] {
+    for a in d.layers[0].channels_mut()[3].data[..200] {
         *a = 255;
     }
     lock(&mut d, LockFlags::TRANSPARENCY);
@@ -475,7 +475,7 @@ fn a_boxed_fill_matches_the_document_mask_and_forks_only_its_tiles() {
             Alpha::Blend,
         );
         let mut history = base.clone();
-        for c in &mut history.layers[0].channels {
+        for c in history.layers[0].channels_mut() {
             c.data.tile(w as usize, h as usize);
         }
         let mut got = history.clone();
@@ -492,9 +492,9 @@ fn a_boxed_fill_matches_the_document_mask_and_forks_only_its_tiles() {
         );
         assert_eq!(boxed_dirty, dirty, "origin {origin:?}");
         for (a, b) in got.layers[0]
-            .channels
+            .channels()
             .iter()
-            .zip(&expected.layers[0].channels)
+            .zip(expected.layers[0].channels())
         {
             assert_eq!(
                 a.data.as_slice(),
@@ -504,9 +504,9 @@ fn a_boxed_fill_matches_the_document_mask_and_forks_only_its_tiles() {
             );
         }
         for (a, b) in got.layers[0]
-            .channels
+            .channels()
             .iter()
-            .zip(&history.layers[0].channels)
+            .zip(history.layers[0].channels())
         {
             assert!(a.data.shares_tile(1, &b.data), "tile 1 stayed shared");
             assert!(!a.data.shares_tile(0, &b.data), "tile 0 was written");
@@ -527,7 +527,7 @@ fn noise(w: i32, h: i32, origin: (i32, i32), background: bool) -> Document {
             ((state >> 33) % 3) as u8
         })
         .collect();
-    for c in &mut d.layers[0].channels {
+    for c in d.layers[0].channels_mut() {
         for (v, &k) in c.data.iter_mut().zip(&picks) {
             *v = match (c.id, k) {
                 (-1, 1) => 0,
@@ -838,7 +838,7 @@ fn a_fill_without_a_mask_covers_its_box() {
     );
     assert_eq!(da, Some(bounds));
     assert_eq!(da, db);
-    for (x, y) in a.layers[0].channels.iter().zip(&b.layers[0].channels) {
+    for (x, y) in a.layers[0].channels().iter().zip(b.layers[0].channels()) {
         assert_eq!(x.data.as_slice(), y.data.as_slice());
     }
 }
@@ -939,9 +939,9 @@ fn a_windowed_stroke_equals_the_whole_document_stroke() {
                 };
                 assert_eq!(dirty, dirty_expected, "{position:?} {width}");
                 for (a, b) in got.layers[0]
-                    .channels
+                    .channels()
                     .iter()
-                    .zip(&expected.layers[0].channels)
+                    .zip(expected.layers[0].channels())
                 {
                     assert_eq!(a.data.as_slice(), b.data.as_slice(), "{position:?} {width}");
                 }
@@ -954,7 +954,7 @@ fn a_windowed_stroke_equals_the_whole_document_stroke() {
 fn a_bucket_fills_an_empty_layer() {
     use pictura_core::{BitDepth, ColorMode};
     let mut doc = Document::new(16, 16, ColorMode::Rgb, BitDepth::Eight);
-    let _ = doc.layers.push(Layer {
+    let _ = doc.layers.push(pictura_core::Layer::from_parts(pictura_core::LayerParts {
         name: "empty".into(),
         rect: PsdRect {
             top: 0,
@@ -970,7 +970,7 @@ fn a_bucket_fills_an_empty_layer() {
             })
             .collect(),
         ..Default::default()
-    });
+    }, pictura_core::LayerContent::Pixel));
     let bounds = PsdRect {
         top: 4,
         left: 4,
@@ -1005,7 +1005,7 @@ fn a_whole_canvas_bucket_writes_uniform_tiles() {
     use pictura_core::{BitDepth, ColorMode, TileState};
     let (w, h) = (600u32, 520u32);
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-    let _ = doc.layers.push(Layer {
+    let _ = doc.layers.push(pictura_core::Layer::from_parts(pictura_core::LayerParts {
         name: "empty".into(),
         channels: [0i16, 1, 2, -1]
             .into_iter()
@@ -1015,7 +1015,7 @@ fn a_whole_canvas_bucket_writes_uniform_tiles() {
             })
             .collect(),
         ..Default::default()
-    });
+    }, pictura_core::LayerContent::Pixel));
     let all = PsdRect {
         top: 0,
         left: 0,
@@ -1046,7 +1046,7 @@ fn a_whole_canvas_bucket_writes_uniform_tiles() {
     assert_eq!(dirty, Some(all));
     let layer = &doc.layers[0];
     assert_eq!(layer.rect, all);
-    for c in &layer.channels {
+    for c in layer.channels() {
         assert_eq!(c.data.allocated_bytes(), 0, "channel {} holds pixels", c.id);
         for t in 0..c.data.tile_count() {
             assert!(
@@ -1088,7 +1088,7 @@ fn uniform_tiles_are_filled_without_allocating() {
     assert!(tiled.tile(w as usize, h as usize));
     let flat = TiledMask::from(dense);
     let mut base = doc_at((w, h), (0, 0), [90, 140, 200, 255], false);
-    for c in &mut base.layers[0].channels {
+    for c in base.layers[0].channels_mut() {
         c.data.tile(w as usize, h as usize);
     }
     let red = BucketPaint::Foreground(RED);
@@ -1116,7 +1116,7 @@ fn uniform_tiles_are_filled_without_allocating() {
     let (fast, fast_dirty) = run(&tiled);
     let (slow, slow_dirty) = run(&flat);
     assert_eq!(fast_dirty, slow_dirty);
-    for (a, b) in fast.layers[0].channels.iter().zip(&slow.layers[0].channels) {
+    for (a, b) in fast.layers[0].channels().iter().zip(slow.layers[0].channels()) {
         assert!(a.data == b.data, "channel {}", a.id);
         // Tile (1, 1) lies inside the marquee whole.
         let inner = (w as usize).div_ceil(256) + 1;

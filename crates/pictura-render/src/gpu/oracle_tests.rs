@@ -27,7 +27,7 @@ fn layer(name: &str, blend: BlendMode) -> Layer {
             data: vec![255u8; pixels].into(),
         },
     ];
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: PsdRect {
             top: 0,
@@ -41,7 +41,7 @@ fn layer(name: &str, blend: BlendMode) -> Layer {
         visible: true,
         channels,
         ..Default::default()
-    }
+    })
 }
 
 fn scene(blend: BlendMode) -> Document {
@@ -52,7 +52,7 @@ fn scene(blend: BlendMode) -> Document {
 }
 
 fn adjustment_layer(name: &str, adjustment: AdjustmentData) -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: PsdRect {
             top: 0,
@@ -66,7 +66,7 @@ fn adjustment_layer(name: &str, adjustment: AdjustmentData) -> Layer {
         visible: true,
         adjustment: Some(adjustment),
         ..Default::default()
-    }
+    })
 }
 
 #[test]
@@ -141,7 +141,7 @@ fn the_region_estimate_counts_every_upload() {
     let plans = plan::plan_stack(&doc, None).expect("plannable");
     assert_eq!(region_host_bytes(&plans, SIZE, SIZE), 64 * (16 + 2 * 5));
     let mut grouped = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
-    grouped.layers = LayerStack::from_layers(vec![Layer {
+    grouped.layers = LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "group".into(),
         is_group: true,
         visible: true,
@@ -153,7 +153,7 @@ fn the_region_estimate_counts_every_upload() {
             layer("b", BlendMode::Normal),
         ]),
         ..Default::default()
-    }]);
+    })]);
     let plans = plan::plan_stack(&grouped, None).expect("plannable");
     let per_pixel = region_host_bytes(&plans, 1, 1) - 16;
     assert!(per_pixel >= 2 * 5, "both children counted: {per_pixel}");

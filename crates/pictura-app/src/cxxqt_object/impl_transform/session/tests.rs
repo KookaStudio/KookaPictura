@@ -113,13 +113,13 @@ fn a_shape_preview_ignores_empty_channels() {
     // comes from the descriptor and vector mask, not the channels.
     let plane = (doc.width * doc.height) as usize;
     let layer = pictura_render::resolve_path_mut(&mut doc, &path).expect("shape");
-    layer.channels = [0, 1, 2, -1]
+    layer.set_channels([0, 1, 2, -1]
         .into_iter()
         .map(|id| Channel {
             id,
             data: vec![0; plane].into(),
         })
-        .collect();
+        .collect());
 
     let TransformPreview {
         image: preview,
@@ -229,7 +229,7 @@ fn a_move_about_an_off_centre_pivot_keeps_the_planes() {
     let after = pictura_render::resolve_path(&doc, "0").expect("layer");
     assert_eq!(after.rect.left, before.rect.left + 7);
     assert_eq!(after.rect.top, before.rect.top - 3);
-    for (a, b) in before.channels.iter().zip(&after.channels) {
+    for (a, b) in before.channels().iter().zip(after.channels()) {
         assert!(b.data.shares(&a.data), "channel {} was resampled", a.id);
     }
 }

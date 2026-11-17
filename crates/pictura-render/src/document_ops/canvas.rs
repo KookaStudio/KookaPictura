@@ -35,7 +35,7 @@ pub fn resize_canvas_document(
         .planes()
         .as_ref()
         .filter(|s| s.depth != pictura_core::BitDepth::One);
-    let planes = next.channels.len()
+    let planes = next.channels().len()
         + store.map_or(0, |s| s.samples.len() / (old_w as usize * old_h as usize));
     if let Some(job) = pictura_core::job::current() {
         job.begin_stage(planes as u64 * u64::from(height));
@@ -98,9 +98,9 @@ pub fn canvas_plane_bytes(
         bottom: height as i32,
         right: width as i32,
     };
-    let background = doc.layers.iter().find(|l| l.background && !l.is_group);
+    let background = doc.layers.iter().find(|l| l.background && !l.is_group());
     if let Some(layer) = background.filter(|l| offset_rect(l.rect, dx, dy) != canvas) {
-        bytes += layer.channels.len() as u64 * u64::from(width) * u64::from(height);
+        bytes += layer.channels().len() as u64 * u64::from(width) * u64::from(height);
     }
     (bytes, widest)
 }
@@ -139,7 +139,7 @@ pub fn extend_background(
         right: doc.width as i32,
     };
     let gray = doc.mode == pictura_core::ColorMode::Grayscale;
-    let Some(layer) = doc.layers.iter_mut().find(|l| l.background && !l.is_group) else {
+    let Some(layer) = doc.layers.iter_mut().find(|l| l.background && !l.is_group()) else {
         return Ok(false);
     };
     if layer.rect == canvas {
@@ -150,17 +150,17 @@ pub fn extend_background(
     let from = (old.width().max(0) as usize, old.height().max(0) as usize);
     let offset = (i64::from(old.left), i64::from(old.top));
     if let Some(job) = pictura_core::job::current() {
-        job.begin_stage(layer.channels.len() as u64 * to.1 as u64);
+        job.begin_stage(layer.channels().len() as u64 * to.1 as u64);
     }
     let planes = layer
-        .channels
+        .channels()
         .iter()
         .map(|channel| {
             let fill = background_fill(channel.id, color, gray);
             geometry_tiled::shift(&channel.data, from, 1, to, offset, fill)
         })
         .collect::<Result<Vec<_>, _>>()?;
-    for (channel, plane) in layer.channels.iter_mut().zip(planes) {
+    for (channel, plane) in layer.channels_mut().iter_mut().zip(planes) {
         channel.data = plane;
     }
     layer.rect = canvas;
@@ -192,7 +192,7 @@ pub(super) fn extend_background_dense(doc: &mut pictura_core::Document, color: [
         right: doc.width as i32,
     };
     let gray = doc.mode == pictura_core::ColorMode::Grayscale;
-    let Some(layer) = doc.layers.iter_mut().find(|l| l.background && !l.is_group) else {
+    let Some(layer) = doc.layers.iter_mut().find(|l| l.background && !l.is_group()) else {
         return false;
     };
     if layer.rect == canvas {
@@ -201,7 +201,7 @@ pub(super) fn extend_background_dense(doc: &mut pictura_core::Document, color: [
     let old = layer.rect;
     let (width, height) = (canvas.width() as u32, canvas.height() as u32);
     let old_w = old.width().max(0) as usize;
-    for channel in &mut layer.channels {
+    for channel in layer.channels_mut() {
         let fill = background_fill(channel.id, color, gray);
         let mut plane = vec![fill; width as usize * height as usize];
         let x0 = old.left.max(0);
@@ -345,7 +345,7 @@ mod tests {
 
     fn pixel_layer(name: &str, r: PsdRect, mask: Option<LayerMask>) -> Layer {
         let n = (r.width().max(0) * r.height().max(0)) as usize;
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: name.into(),
             rect: r,
             blend: BlendMode::Normal,
@@ -379,7 +379,7 @@ mod tests {
             is_group: false,
             background: false,
             ..Default::default()
-        }
+        })
     }
 
     fn sample_doc() -> Document {
@@ -401,7 +401,7 @@ mod tests {
         assert!(extend_background(&mut doc, [200, 100, 50]).unwrap());
         let layer = &doc.layers[0];
         assert_eq!(layer.rect, full(6, 4));
-        let at = |id: i16, i: usize| layer.channels.iter().find(|c| c.id == id).unwrap().data[i];
+        let at = |id: i16, i: usize| layer.channels().iter().find(|c| c.id == id).unwrap().data[i];
         assert_eq!(
             (at(0, 0), at(1, 0), at(2, 0)),
             (10, 20, 30),

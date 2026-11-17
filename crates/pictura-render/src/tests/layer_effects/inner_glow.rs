@@ -45,7 +45,7 @@ fn inner_layer(block: Option<LayerBlock>) -> Layer {
         255,
     );
     if let Some(block) = block {
-        layer.extra_blocks = vec![block];
+        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![block] });
     }
     layer
 }
@@ -503,7 +503,7 @@ fn size_zero_edge_is_a_no_op_for_partial_alpha_content() {
             255,
         );
         if let Some(block) = block {
-            layer.extra_blocks = vec![block];
+            pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![block] });
         }
         compose_inner(layer)
     };
@@ -569,7 +569,7 @@ fn opacity_and_colour_shape_the_glow() {
             BlendMode::Normal,
             255,
         );
-        layer.extra_blocks = vec![spec_block(spec)];
+        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![spec_block(spec)] });
         compose_inner(layer)
     };
     let spec = InnerGlowSpec {
@@ -601,10 +601,10 @@ fn opacity_and_colour_shape_the_glow() {
             BlendMode::Normal,
             255,
         );
-        l.extra_blocks = vec![spec_block(&InnerGlowSpec {
+        pictura_codec::edit_layer(l.as_mut(), |parts| { parts.extra_blocks = vec![spec_block(&InnerGlowSpec {
             enabled: false,
             ..spec.clone()
-        })];
+        })] });
         compose_inner(l)
     };
     assert_eq!(zero, plain, "opacity 0 writes nothing");
@@ -720,10 +720,10 @@ fn zero_opacity_or_off_canvas_inner_glow_is_a_no_op() {
     let mut off = inner_layer(None);
     off.rect = rect(-50, -50, -40, -40);
     let mut off_effect = off.clone();
-    off_effect.extra_blocks = vec![spec_block(&InnerGlowSpec {
+    pictura_codec::edit_layer(off_effect.as_mut(), |parts| { parts.extra_blocks = vec![spec_block(&InnerGlowSpec {
         size: 250.0,
         ..Default::default()
-    })];
+    })] });
     assert_eq!(
         compose_inner(off_effect),
         compose_inner(off),
@@ -732,7 +732,7 @@ fn zero_opacity_or_off_canvas_inner_glow_is_a_no_op() {
     let mut empty = inner_layer(None);
     empty.rect = rect(2, 2, 2, 2);
     let mut empty_effect = empty.clone();
-    empty_effect.extra_blocks = vec![spec_block(&InnerGlowSpec::default())];
+    pictura_codec::edit_layer(empty_effect.as_mut(), |parts| { parts.extra_blocks = vec![spec_block(&InnerGlowSpec::default())] });
     assert_eq!(
         compose_inner(empty_effect),
         compose_inner(empty),
@@ -763,7 +763,7 @@ fn softer_and_precise_inner_glow_render_identically() {
 #[test]
 fn solid_fill_inner_glow_follows_payload_alpha() {
     let fill = |alpha: u8| {
-        let mut layer = Layer {
+        let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "Solid".into(),
             rect: rect(2, 2, 10, 10),
             adjustment: Some(AdjustmentData {
@@ -771,8 +771,8 @@ fn solid_fill_inner_glow_follows_payload_alpha() {
                 data: vec![255, 0, 0, alpha].into(),
             }),
             ..Default::default()
-        };
-        layer.extra_blocks = vec![spec_block(&InnerGlowSpec::default())];
+        });
+        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![spec_block(&InnerGlowSpec::default())] });
         compose_inner(layer)
     };
     assert_ne!(
@@ -792,17 +792,17 @@ fn pattern_fill_inner_glow_is_confined_to_the_fill() {
         origin: (0, 0),
     };
     let build = |effect: bool| {
-        let mut layer = Layer {
+        let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "Pattern".into(),
             rect: rect(3, 3, 6, 6),
             adjustment: Some(ptfl(&params)),
             ..Default::default()
-        };
+        });
         if effect {
-            layer.extra_blocks = vec![spec_block(&InnerGlowSpec {
+            pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![spec_block(&InnerGlowSpec {
                 size: 2.0,
                 ..Default::default()
-            })];
+            })] });
         }
         let mut d = pattern_fixture_doc();
         d.layers = pictura_core::LayerStack::from_layers(vec![
@@ -837,7 +837,7 @@ fn pattern_fill_inner_glow_is_confined_to_the_fill() {
 
 #[test]
 fn channel_less_smart_object_inner_glow_covers_the_rect() {
-    let mut layer = Layer {
+    let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Smart".into(),
         rect: rect(2, 2, 10, 10),
         channels: Vec::new(),
@@ -850,8 +850,8 @@ fn channel_less_smart_object_inner_glow_covers_the_rect() {
             .with_payload(vec![0; 4]),
         ),
         ..Default::default()
-    };
-    layer.extra_blocks = vec![spec_block(&InnerGlowSpec::default())];
+    });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![spec_block(&InnerGlowSpec::default())] });
     let out = compose_inner(layer);
     assert_ne!(
         rgb(&out, 2, 6),
@@ -925,7 +925,7 @@ fn inner_glow_fixture_decodes_and_composites() {
     let with_effect = composite_rgba(&d);
     let mut plain = d.clone();
     for l in plain.layers.iter_mut() {
-        l.extra_blocks.clear();
+        pictura_codec::edit_layer(l.as_mut(), |parts| { parts.extra_blocks.clear() });
     }
     assert_ne!(with_effect, composite_rgba(&plain), "the glow renders");
 }

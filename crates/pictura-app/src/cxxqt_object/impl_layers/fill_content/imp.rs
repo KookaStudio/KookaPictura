@@ -6,28 +6,19 @@ use super::super::super::impl_layers_create::{decode_blend_key, decode_color};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString, QStringList};
-use pictura_core::{BlendMode, Document, Layer, PsdRect};
+use pictura_core::{BlendMode, Document, FillContent, Layer, LayerKind, PsdRect};
 use pictura_render::{
-    Adjustment, GradientFillParams, GradientKind, GradientStop, PatternFillParams,
+    GradientFillParams, GradientKind, GradientStop, PatternFillParams,
 };
 
 pub(super) fn layer<'a>(doc: &'a Document, path: &str) -> Option<&'a Layer> {
     pictura_render::resolve_path(doc, path)
 }
 
-pub(super) fn fill_adjustment(doc: &Document, path: &str) -> Option<Adjustment> {
+pub(super) fn fill_adjustment(doc: &Document, path: &str) -> Option<FillContent> {
     let layer = layer(doc, path)?;
-    if pictura_render::is_shape_layer(layer) {
-        return None;
-    }
-    Some(layer)
-        .and_then(pictura_render::decode_layer_fill)
-        .filter(|adjustment| {
-            matches!(
-                adjustment,
-                Adjustment::SolidFill(_) | Adjustment::GradientFill(_) | Adjustment::PatternFill(_)
-            )
-        })
+    if layer.kind() != LayerKind::Fill { return None; }
+    layer.fill_content().cloned()
 }
 
 pub(super) fn layer_fill_kind(view: &PictureView, path: &QString) -> QString {
@@ -35,9 +26,9 @@ pub(super) fn layer_fill_kind(view: &PictureView, path: &QString) -> QString {
         return QString::default();
     };
     match fill_adjustment(doc, &path.to_string()) {
-        Some(Adjustment::SolidFill(_)) => QString::from("solid-color"),
-        Some(Adjustment::GradientFill(_)) => QString::from("gradient"),
-        Some(Adjustment::PatternFill(_)) => QString::from("pattern"),
+        Some(pictura_core::FillContent::Solid(_)) => QString::from("solid-color"),
+        Some(pictura_core::FillContent::Gradient(_)) => QString::from("gradient"),
+        Some(pictura_core::FillContent::Pattern(_)) => QString::from("pattern"),
         _ => QString::default(),
     }
 }
@@ -47,7 +38,7 @@ pub(super) fn layer_fill_color(view: &PictureView, path: &QString) -> u32 {
         return 0;
     };
     match fill_adjustment(doc, &path.to_string()) {
-        Some(Adjustment::SolidFill([r, g, b, a])) => {
+        Some(pictura_core::FillContent::Solid([r, g, b, a])) => {
             (a as u32) << 24 | (r as u32) << 16 | (g as u32) << 8 | b as u32
         }
         _ => 0,
@@ -93,7 +84,7 @@ pub(super) fn layer_fill_gradient(view: &PictureView, path: &QString) -> QString
         return QString::default();
     };
     match fill_adjustment(doc, &path.to_string()) {
-        Some(Adjustment::GradientFill(params)) => QString::from(
+        Some(pictura_core::FillContent::Gradient(params)) => QString::from(
             format!(
                 "{}|{}|{}|{}|{}",
                 kind_key(params.kind),
@@ -113,7 +104,7 @@ pub(super) fn layer_fill_pattern(view: &PictureView, path: &QString) -> QString 
         return QString::default();
     };
     match fill_adjustment(doc, &path.to_string()) {
-        Some(Adjustment::PatternFill(params)) => QString::from(
+        Some(pictura_core::FillContent::Pattern(params)) => QString::from(
             format!(
                 "{}|{}|{}|{}|{}",
                 params.pattern_id,
@@ -186,11 +177,11 @@ pub(super) fn layer_rect(layer: &Layer) -> Option<PsdRect> {
     (rect.width() > 0 && rect.height() > 0).then_some(rect)
 }
 
-pub(super) fn set_fill_adjustment(
+pub(super) fn set_fill(
     mut view: Pin<&mut PictureView>,
     path: &QString,
     label: &str,
-    data: pictura_core::AdjustmentData,
+    fill: FillContent,
 ) -> bool {
     let path = path.to_string();
     let mut changed = false;
@@ -201,10 +192,10 @@ pub(super) fn set_fill_adjustment(
         let Some(layer) = pictura_render::resolve_path_mut(doc, &path) else {
             return Edit::None;
         };
-        if pictura_render::is_shape_layer(layer) || layer.adjustment.as_ref() == Some(&data) {
+        if layer.kind() != LayerKind::Fill || layer.fill_content() == Some(&fill) {
             return Edit::None;
         }
-        layer.adjustment = Some(data);
+        layer.set_fill_content(fill);
         changed = true;
         match layer_rect(layer) {
             // The fill preview lives in the row thumbnail, so the panel
@@ -227,11 +218,11 @@ pub(super) fn set_layer_fill_color(
         color as u8,
         (color >> 24) as u8,
     ];
-    set_fill_adjustment(
+    set_fill(
         view,
         path,
         "Solid Color Fill",
-        pictura_render::encode_solid_color_fill([rgba[0], rgba[1], rgba[2]]),
+        FillContent::Solid(rgba),
     )
 }
 
@@ -243,11 +234,11 @@ pub(super) fn set_layer_fill_gradient(
     let Some(params) = parse_gradient(&payload.to_string()) else {
         return false;
     };
-    set_fill_adjustment(
+    set_fill(
         view,
         path,
         "Gradient Fill",
-        pictura_render::encode_gradient_fill_params(&params),
+        FillContent::Gradient(params),
     )
 }
 
@@ -259,7 +250,7 @@ pub(super) fn set_layer_fill_pattern(
     let Some(params) = parse_pattern(&payload.to_string()) else {
         return false;
     };
-    let data = pictura_render::encode_pattern_fill(&params);
+    let fill = FillContent::Pattern(params.clone());
     let path = path.to_string();
     let mut changed = false;
     view.as_mut().edit("Pattern Fill", |rust| {
@@ -270,7 +261,7 @@ pub(super) fn set_layer_fill_pattern(
             let Some(layer) = pictura_render::resolve_path_mut(doc, &path) else {
                 return Edit::None;
             };
-            if pictura_render::is_shape_layer(layer) || layer.adjustment.as_ref() == Some(&data) {
+            if layer.kind() != LayerKind::Fill || layer.fill_content() == Some(&fill) {
                 return Edit::None;
             }
         }
@@ -280,7 +271,7 @@ pub(super) fn set_layer_fill_pattern(
         let Some(layer) = pictura_render::resolve_path_mut(doc, &path) else {
             return Edit::None;
         };
-        layer.adjustment = Some(data);
+        layer.set_fill_content(fill);
         changed = true;
         match layer_rect(layer) {
             // The fill preview lives in the row thumbnail, so the panel
@@ -447,7 +438,7 @@ pub(super) fn fill_layer(
         ),
         _ => return None,
     };
-    Some(Layer {
+    Some(pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name,
         rect: PsdRect {
             top: 0,
@@ -469,7 +460,7 @@ pub(super) fn fill_layer(
         is_group: false,
         background: false,
         ..Default::default()
-    })
+    }))
 }
 
 #[allow(clippy::too_many_arguments)]

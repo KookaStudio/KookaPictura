@@ -40,7 +40,7 @@ fn embedded_psb() -> Vec<u8> {
 }
 
 fn smart_layer(name: &str, payload: Vec<u8>, smart_filters: Vec<SmartFilter>) -> Layer {
-    Layer {
+    crate::layer_from_parts(pictura_core::LayerParts {
         name: name.to_string(),
         rect: PsdRect {
             top: 0,
@@ -80,7 +80,7 @@ fn smart_layer(name: &str, payload: Vec<u8>, smart_filters: Vec<SmartFilter>) ->
             .with_payload(payload),
         ),
         ..Default::default()
-    }
+    })
 }
 
 const SMOKE_SIZE: u32 = 64;
@@ -98,7 +98,7 @@ fn pixel_layer(name: &str, rect: PsdRect, rgb: [u8; 3], alpha: u8) -> Layer {
     let width = rect.width().max(0) as usize;
     let height = rect.height().max(0) as usize;
     let plane = width * height;
-    Layer {
+    crate::layer_from_parts(pictura_core::LayerParts {
         name: name.to_string(),
         rect,
         channels: vec![
@@ -120,24 +120,24 @@ fn pixel_layer(name: &str, rect: PsdRect, rgb: [u8; 3], alpha: u8) -> Layer {
             },
         ],
         ..Default::default()
-    }
+    })
 }
 
 fn background_layer() -> Layer {
     let mut layer = pixel_layer("Background", full_rect(), [42, 48, 58], 255);
     layer.background = true;
-    layer.channels.retain(|channel| channel.id >= 0);
+    layer.channels_mut().retain(|channel| channel.id >= 0);
     layer
 }
 
 fn group_layer(name: &str, children: Vec<Layer>) -> Layer {
-    Layer {
+    crate::layer_from_parts(pictura_core::LayerParts {
         name: name.to_string(),
         blend: BlendMode::PassThrough,
         children: LayerStack::from_layers(children),
         is_group: true,
         ..Default::default()
-    }
+    })
 }
 
 fn default_mask() -> LayerMask {
@@ -152,7 +152,7 @@ fn default_mask() -> LayerMask {
 }
 
 fn adjustment_layer(name: &str, key: [u8; 4], data: Vec<u8>) -> Layer {
-    Layer {
+    crate::layer_from_parts(pictura_core::LayerParts {
         name: name.to_string(),
         rect: full_rect(),
         mask: Some(default_mask()),
@@ -161,7 +161,7 @@ fn adjustment_layer(name: &str, key: [u8; 4], data: Vec<u8>) -> Layer {
             data: data.into(),
         }),
         ..Default::default()
-    }
+    })
 }
 
 /// The standard `SoCo` solid-color fill descriptor, with no alpha.
@@ -210,7 +210,7 @@ fn smoke_type_layer() -> Layer {
         }
     }
     let white = vec![255u8; width * height];
-    Layer {
+    crate::layer_from_parts(pictura_core::LayerParts {
         name: "Type".to_string(),
         rect,
         lock: LockFlags::default()
@@ -239,7 +239,7 @@ fn smoke_type_layer() -> Layer {
             data: encode_type_tool(&tool).into(),
         }],
         ..Default::default()
-    }
+    })
 }
 
 fn smoke_smart_layer(payload: Vec<u8>) -> Layer {
@@ -254,7 +254,7 @@ fn smoke_smart_layer(payload: Vec<u8>) -> Layer {
         [230, 120, 40],
         255,
     );
-    layer.smart_object = Some(
+    crate::edit_layer(layer.as_mut(), |parts| { parts.smart_object = Some(
         {
             let mut so = SmartObject::default();
             so.kind = SmartObjectKind::Embedded;
@@ -264,7 +264,7 @@ fn smoke_smart_layer(payload: Vec<u8>) -> Layer {
             so
         }
         .with_payload(payload),
-    );
+    ) });
     layer
 }
 
@@ -320,23 +320,23 @@ fn verify_smoke(bytes: &[u8]) {
     let doc = read_psd(bytes).expect("smoke fixture reads");
     assert_eq!(doc.layers.len(), 7, "one row per smoke kind");
     assert!(doc.layers[0].background, "bottom row is a Background");
-    assert_eq!(doc.layers[1].channels.len(), 4, "pixel row");
+    assert_eq!(doc.layers[1].channels().len(), 4, "pixel row");
     assert!(doc.layers[2].is_group(), "group row");
-    assert_eq!(doc.layers[2].children.len(), 1, "group child");
+    assert_eq!(doc.layers[2].children().len(), 1, "group child");
     assert_eq!(
-        doc.layers[3].adjustment.as_ref().map(|a| a.key),
+        doc.layers[3].adjustment().map(|a| a.key),
         Some(*b"nvrt"),
         "adjustment row"
     );
     assert!(doc.layers[3].mask.is_some(), "adjustment default mask");
     assert_eq!(
-        doc.layers[4].adjustment.as_ref().map(|a| a.key),
+        doc.layers[4].adjustment().map(|a| a.key),
         Some(*b"SoCo"),
         "fill row"
     );
     assert!(doc.layers[4].mask.is_some(), "fill default mask");
     assert!(doc.layers[5].is_type(), "type row");
-    assert!(doc.layers[6].smart_object.is_some(), "smart object row");
+    assert!(doc.layers[6].smart_object().is_some(), "smart object row");
 }
 
 /// The Camera Raw `Fltr` options the tests assert on: every modeled tab, plus a

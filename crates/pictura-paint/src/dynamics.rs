@@ -592,7 +592,7 @@ mod tests {
     fn layer_doc(w: u32, h: u32) -> Document {
         let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
         let n = (w * h) as usize;
-        let _ = doc.layers.push(Layer {
+        let _ = doc.layers.push(pictura_core::Layer::from_parts(pictura_core::LayerParts {
             rect: PsdRect {
                 top: 0,
                 left: 0,
@@ -607,7 +607,7 @@ mod tests {
                 .into(),
             children: LayerStack::default(),
             ..Default::default()
-        });
+        }, pictura_core::LayerContent::Pixel));
         doc
     }
 
@@ -662,8 +662,8 @@ mod tests {
         with.dynamics = Dynamics::default();
         crate::paint_stroke(&mut b, "0", &with, &samples);
         assert_eq!(
-            a.layers[0].channels[0].data.as_slice(),
-            b.layers[0].channels[0].data.as_slice()
+            a.layers[0].channels()[0].data.as_slice(),
+            b.layers[0].channels()[0].data.as_slice()
         );
     }
 
@@ -754,10 +754,10 @@ mod tests {
     }
 
     fn painted_colors(doc: &Document) -> Vec<(u8, u8, u8)> {
-        let r = doc.layers[0].channels[0].data.as_slice();
-        let g = doc.layers[0].channels[1].data.as_slice();
-        let b = doc.layers[0].channels[2].data.as_slice();
-        let a = doc.layers[0].channels[3].data.as_slice();
+        let r = doc.layers[0].channels()[0].data.as_slice();
+        let g = doc.layers[0].channels()[1].data.as_slice();
+        let b = doc.layers[0].channels()[2].data.as_slice();
+        let a = doc.layers[0].channels()[3].data.as_slice();
         (0..r.len())
             .filter(|&i| a[i] > 0)
             .map(|i| (r[i], g[i], b[i]))

@@ -11,7 +11,7 @@ use pictura_render::DocumentComposite;
 fn striped() -> PictureViewRust {
     let mut doc = Document::new(96, 80, ColorMode::Rgb, BitDepth::Eight);
     let mut layer = pixel_layer("px", 96, 80, (0, 0, 0));
-    for (c, ch) in layer.channels.iter_mut().filter(|c| c.id >= 0).enumerate() {
+    for (c, ch) in layer.channels_mut().iter_mut().filter(|c| c.id >= 0).enumerate() {
         ch.data = (0..96 * 80)
             .map(|i| {
                 if (i % 96 + i / 96 + c) % 7 < 3 {
@@ -43,7 +43,7 @@ fn striped() -> PictureViewRust {
 }
 
 fn red(rust: &PictureViewRust) -> Vec<u8> {
-    rust.session.doc.as_ref().unwrap().layers[0].channels[0]
+    rust.session.doc.as_ref().unwrap().layers[0].channels()[0]
         .data
         .to_vec()
 }
@@ -112,12 +112,12 @@ fn a_commit_reuses_a_finished_exact_preview() {
     let marker = {
         let preview = rust.filter_jobs.preview.as_mut().unwrap();
         let (_, exact) = preview.done.as_mut().unwrap();
-        exact.layer.channels[0].data.as_mut_slice().fill(7);
+        exact.layer.channels()[0].data.as_mut_slice().fill(7);
         exact.layer.clone()
     };
     assert!(commit_start(&mut rust, vec![blur()], "Filter".into(), None));
     finish(&mut rust).expect("committed");
-    assert_eq!(red(&rust), marker.channels[0].data.to_vec());
+    assert_eq!(red(&rust), marker.channels()[0].data.to_vec());
 }
 
 #[test]
@@ -167,7 +167,7 @@ fn the_section_render_matches_a_section_preview_and_leaves_the_document() {
     };
     let mut previewed = striped();
     apply_filter_active_region_section(&mut previewed, section);
-    let expected = previewed.session.doc.as_ref().unwrap().layers[0].channels[0]
+    let expected = previewed.session.doc.as_ref().unwrap().layers[0].channels()[0]
         .data
         .to_vec();
 

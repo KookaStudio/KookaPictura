@@ -43,6 +43,13 @@ pub mod illustrator;
 mod image_resources;
 mod iptc;
 mod layer_comps;
+mod normalize_content;
+pub mod layer_content;
+mod layer_content_budget;
+pub use normalize_content::{edit_layer, layer_from_parts, retire_layer_content};
+mod stage_content;
+mod source_content;
+pub use layer_content::*;
 mod lazy;
 mod lens_correction;
 mod live_shape;
@@ -173,7 +180,7 @@ pub use smart_filter::{
     clear_smart_filters, delete_smart_filter, reorder_smart_filters, set_camera_raw_option,
     set_filter_mask_enabled, set_smart_filter_enabled, set_smart_filters_enabled,
 };
-pub use smart_object::remove_linked_source;
+pub use smart_object::{layer_references_smart_source, remove_linked_source};
 pub use svg::{
     blend_css, ellipse_element, encode_svg, image_element, path_data, path_element, rect_element,
     rounded_rect_element, subpath_data, text_element, SvgContent, SvgGradient, SvgGradientStop,

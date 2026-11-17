@@ -45,7 +45,7 @@ fn rect(w: u32, h: u32) -> PsdRect {
 
 fn pixel_layer(name: &str, w: u32, h: u32, clipping: bool) -> Layer {
     let plane = w as usize * h as usize;
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: rect(w, h),
         clipping,
@@ -57,7 +57,7 @@ fn pixel_layer(name: &str, w: u32, h: u32, clipping: bool) -> Layer {
             })
             .collect(),
         ..Default::default()
-    }
+    })
 }
 
 fn main() {
@@ -85,7 +85,7 @@ fn main() {
         rect(w, h),
         vec![(0, Samples::U16(vec![1u16; plane].into()))],
     ));
-    layer.smart_object = Some(SmartObject::default().with_payload(vec![0u8; 8 * 1024 * 1024]));
+    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.smart_object = Some(SmartObject::default().with_payload(vec![0u8; 8 * 1024 * 1024])) });
     doc.layers = LayerStack::from_layers(vec![layer]);
     report("after document");
 
@@ -112,19 +112,19 @@ fn main() {
     let layer_us = started.elapsed().as_micros() as f64 / iterations as f64;
     println!("Layer::clone (8 MiB payload + native store): {layer_us:.1} us/iter");
 
-    let mut group = Layer {
+    let mut group = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "group".into(),
         is_group: true,
         ..Default::default()
-    };
-    group.children = LayerStack::from_layers(
+    });
+    group.set_group_children(LayerStack::from_layers(
         (0..1000)
-            .map(|i| Layer {
+            .map(|i| pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 name: format!("child {i}"),
                 ..Default::default()
-            })
+            }))
             .collect(),
-    );
+    ));
     let iterations = 1000;
     let started = Instant::now();
     for _ in 0..iterations {

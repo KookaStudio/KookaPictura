@@ -193,7 +193,7 @@ mod tests {
     /// An 80 × 40 layer, black left of x = 20 and white right of it.
     fn bar() -> Document {
         let mut d = doc(80, 40, WHITE);
-        for c in &mut d.layers[0].channels[..3] {
+        for c in d.layers[0].channels_mut()[..3] {
             for (i, v) in c.data.iter_mut().enumerate() {
                 if i % 80 < 20 {
                     *v = 0;
@@ -293,7 +293,7 @@ mod tests {
     #[test]
     fn the_transparency_lock_keeps_the_smear_off_empty_pixels() {
         let mut d = doc(80, 40, [240, 200, 40, 0]);
-        for (i, a) in d.layers[0].channels[3].data.iter_mut().enumerate() {
+        for (i, a) in d.layers[0].channels_mut()[3].data.iter_mut().enumerate() {
             if i % 80 < 40 {
                 *a = 255;
             }

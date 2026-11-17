@@ -114,7 +114,7 @@ mod tests {
     fn doc() -> Document {
         let mut doc = Document::new(4, 2, ColorMode::Rgb, BitDepth::Eight);
         {
-            let _ = doc.layers.push(Layer {
+            let _ = doc.layers.push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 mask: Some(LayerMask {
                     rect: PsdRect {
                         top: 0,
@@ -127,7 +127,7 @@ mod tests {
                     ..Default::default()
                 }),
                 ..Default::default()
-            });
+            }));
         };
         doc
     }

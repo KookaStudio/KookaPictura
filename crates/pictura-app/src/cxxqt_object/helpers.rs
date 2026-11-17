@@ -137,7 +137,7 @@ pub(super) fn adjustment_layer_in_mode(
     };
     let name = pictura_render::adjustment_entry(kind)?.title;
 
-    Some(Layer {
+    Some(pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: PsdRect {
             top: 0,
@@ -159,16 +159,16 @@ pub(super) fn adjustment_layer_in_mode(
         is_group: false,
         background: false,
         ..Default::default()
-    })
+    }))
 }
 /// The adjustments-panel kind key for `layer`'s decoded adjustment block, or
 /// empty when it has none. Fill blocks map to the three fill kinds.
 pub(super) fn adjustment_kind(layer: &Layer) -> String {
     use pictura_render::Adjustment;
-    match layer
-        .adjustment
-        .as_ref()
-        .and_then(pictura_render::decode_adjustment)
+    if let Some(fill) = layer.fill_content() {
+        return match fill { pictura_core::FillContent::Solid(_) => "solid-color", pictura_core::FillContent::Gradient(_) => "gradient", pictura_core::FillContent::Pattern(_) => "pattern" }.into();
+    }
+    match layer.adjustment_parameters()
     {
         Some(Adjustment::Levels(_)) => "levels",
         Some(Adjustment::Curves(_)) => "curves",
@@ -189,9 +189,6 @@ pub(super) fn adjustment_kind(layer: &Layer) -> String {
         Some(Adjustment::Desaturate) => "desaturate",
         Some(Adjustment::Equalize) => "equalize",
         Some(Adjustment::GradientMap(_)) => "gradient-map",
-        Some(Adjustment::GradientFill(_)) => "gradient",
-        Some(Adjustment::SolidFill(_)) => "solid-color",
-        Some(Adjustment::PatternFill(_)) => "pattern",
         Some(Adjustment::ColorLookup(_)) => "color-lookup",
         Some(Adjustment::ReplaceColor(_)) => "replace-color",
         Some(Adjustment::MatchColor(_)) => "match-color",
@@ -208,7 +205,7 @@ pub(super) fn is_background_layer(doc: &Document, i: i32) -> bool {
 /// alias (`liFA`) source, the rows the panel underlines.
 pub(super) fn is_placed_smart_object(layer: &Layer) -> bool {
     matches!(
-        layer.smart_object.as_ref().map(|object| object.kind),
+        layer.smart_object().map(|object| object.kind),
         Some(pictura_core::SmartObjectKind::External) | Some(pictura_core::SmartObjectKind::Alias)
     )
 }
@@ -226,17 +223,15 @@ pub(super) fn lock_bit(flag: &str) -> Option<u8> {
 }
 /// The shared row-kind label, so [`layer_kind`] and the tree projection agree.
 pub(super) fn layer_kind_str(doc: &Document, path: &str, layer: &Layer) -> QString {
-    if layer.is_group {
-        QString::from("group")
-    } else if layer.adjustment.is_some() {
-        QString::from("adjustment")
-    } else if pictura_render::is_background(doc, path) {
-        QString::from("background")
-    } else if layer.is_type() {
-        QString::from("type")
-    } else {
-        QString::from("pixel")
-    }
+    use pictura_core::LayerKind;
+    QString::from(match layer.kind() {
+        LayerKind::Group => "group",
+        LayerKind::Adjustment | LayerKind::Fill => "adjustment",
+        LayerKind::Shape => if layer.adjustment().is_some() { "adjustment" } else { "pixel" },
+        LayerKind::Text => "type",
+        LayerKind::SmartObject => "pixel",
+        LayerKind::Pixel => if pictura_render::is_background(doc, path) { "background" } else { "pixel" },
+    })
 }
 /// Owned copy of a `QStringList`'s entries.
 pub(super) fn list_of_strings(paths: &QStringList) -> Vec<String> {
@@ -460,7 +455,7 @@ pub(super) fn survivor_after_delete(doc: &Document, deleted: &[String]) -> Optio
 pub(super) fn topmost_pixel_layer_index(doc: &Document) -> Option<usize> {
     doc.layers
         .iter()
-        .rposition(|l| l.adjustment.is_none() && !l.is_group)
+        .rposition(|l| !l.has_adjustment_content() && !l.is_group())
 }
 /// The single active layer a tool edit may target, or `None` when no layer is
 /// active or the path does not name a raster leaf layer.
@@ -471,7 +466,7 @@ pub(super) fn topmost_pixel_layer_index(doc: &Document) -> Option<usize> {
 /// while a nested path resolves to its exact leaf.
 pub(super) fn active_pixel_layer<'a>(doc: &'a Document, active: Option<&str>) -> Option<&'a Layer> {
     let layer = pictura_render::resolve_path(doc, active?)?;
-    (!layer.is_group && layer.adjustment.is_none()).then_some(layer)
+    (!layer.is_group() && !layer.has_adjustment_content()).then_some(layer)
 }
 /// Mutable [`active_pixel_layer`].
 pub(super) fn active_pixel_layer_mut<'a>(
@@ -479,7 +474,7 @@ pub(super) fn active_pixel_layer_mut<'a>(
     active: Option<&str>,
 ) -> Option<&'a mut Layer> {
     let layer = pictura_render::resolve_path_mut(doc, active?)?;
-    (!layer.is_group && layer.adjustment.is_none()).then_some(layer)
+    (!layer.is_group() && !layer.has_adjustment_content()).then_some(layer)
 }
 /// Whether the single active layer a tool edit may target is visible.
 ///
@@ -499,7 +494,7 @@ pub(super) fn active_layer_visible(doc: &Document, active: Option<&str>) -> bool
 pub(super) fn layer_has_effects(layer: &Layer) -> bool {
     layer.extra_block(b"lfx2").is_some()
         || layer.extra_block(b"lrFX").is_some()
-        || layer.children.iter().any(layer_has_effects)
+        || layer.children().iter().any(layer_has_effects)
 }
 
 /// The paint-change reach of the layer at `path`, or 0 when it does not resolve.
@@ -973,7 +968,7 @@ pub(super) fn container_slice<'a>(doc: &'a Document, parent: &str) -> Option<&'a
     } else {
         Some(
             pictura_render::resolve_path(doc, parent)?
-                .children
+                .children()
                 .as_slice(),
         )
     }
@@ -1033,9 +1028,9 @@ mod tests {
     #[test]
     fn channel_mixer_adjustment_layer() {
         let layer = adjustment_layer("channel-mixer", None).expect("channel mixer");
-        assert_eq!(layer.adjustment.as_ref().map(|d| d.key), Some(*b"mixr"));
+        assert_eq!(layer.adjustment().map(|d| d.key), Some(*b"mixr"));
         assert!(matches!(
-            pictura_render::decode_adjustment(layer.adjustment.as_ref().expect("block")),
+            pictura_render::decode_adjustment(layer.adjustment().expect("block")),
             Some(pictura_render::Adjustment::ChannelMixer(_))
         ));
         assert_eq!(adjustment_kind(&layer), "channel-mixer");
@@ -1049,7 +1044,7 @@ mod tests {
         for entry in layers {
             let kind = entry.kind;
             let layer = adjustment_layer(kind, None).unwrap_or_else(|| panic!("{kind} should map"));
-            assert!(layer.adjustment.is_some(), "{kind} carries adjustment data");
+            assert!(layer.adjustment().is_some(), "{kind} carries adjustment data");
             assert_eq!(layer.name, entry.title);
         }
         assert!(adjustment_layer("bogus", None).is_none());

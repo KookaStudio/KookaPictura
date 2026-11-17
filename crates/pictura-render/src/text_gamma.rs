@@ -91,6 +91,13 @@ pub fn text_gamma() -> Option<f32> {
     }
 }
 
+/// Parsed retained type data keeps the existing blending attribute when a
+/// higher-priority content definition owns the layer. Opaque TySh alone never
+/// supplied this attribute.
+pub(crate) fn applies_to(layer: &pictura_core::Layer) -> bool {
+    layer.type_tool().is_some() || layer.fallback_type_tool().is_some()
+}
+
 /// The current setting's curve; `None` while it is off.
 pub(crate) fn current_curve() -> Option<&'static TextCurve> {
     match TEXT_GAMMA.load(Ordering::Relaxed) {

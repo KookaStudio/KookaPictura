@@ -28,7 +28,7 @@ fn generated_doc(style: &[u8], technique: &[u8], soften: f64) -> Document {
         data: Some(mask.into()),
         ..Default::default()
     });
-    layer.extra_blocks = vec![bevel_block(&BevelSpec {
+    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![bevel_block(&BevelSpec {
         style: style.to_vec(),
         technique: technique.to_vec(),
         size: 17.5,
@@ -36,7 +36,7 @@ fn generated_doc(style: &[u8], technique: &[u8], soften: f64) -> Document {
         depth: 480.0,
         angle: 137.0,
         ..Default::default()
-    })];
+    })] });
     doc(
         w,
         h,

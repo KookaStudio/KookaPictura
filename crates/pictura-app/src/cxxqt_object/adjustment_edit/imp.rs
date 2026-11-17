@@ -11,7 +11,8 @@ use pictura_render::ParamKind;
 
 pub(super) fn adjustment_data(view: &PictureView, path: &str) -> Option<AdjustmentData> {
     let doc = view.rust().session.doc.as_ref()?;
-    pictura_render::resolve_path(doc, path)?.adjustment.clone()
+    let layer = pictura_render::resolve_path(doc, path)?;
+    layer.has_adjustment_content().then(|| layer.adjustment().cloned()).flatten()
 }
 
 fn block_bytes(data: &AdjustmentData) -> Vec<u8> {
@@ -118,10 +119,11 @@ pub(super) fn edit_adjustment(
         else {
             return false;
         };
-        let Some(next) = layer.adjustment.as_ref().and_then(edit) else {
+        if !layer.has_adjustment_content() { return false; }
+        let Some(next) = layer.adjustment().and_then(edit) else {
             return false;
         };
-        layer.adjustment = Some(next);
+        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.adjustment = Some(next) });
     }
     if let Some(rect) = view.as_mut().rust_mut().present_display_preview() {
         view.as_mut().present(Presentation {

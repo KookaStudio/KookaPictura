@@ -345,7 +345,7 @@ mod tests {
     fn doc(px: [u8; 4]) -> Document {
         let mut doc = Document::new(W as u32, H as u32, ColorMode::Rgb, BitDepth::Eight);
         {
-            let _ = doc.layers.push(Layer {
+            let _ = doc.layers.push(pictura_core::Layer::from_parts(pictura_core::LayerParts {
                 rect: PsdRect {
                     top: 0,
                     left: 0,
@@ -359,7 +359,7 @@ mod tests {
                     })
                     .into(),
                 ..Default::default()
-            });
+            }, pictura_core::LayerContent::Pixel));
         };
         doc
     }

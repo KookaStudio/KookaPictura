@@ -1,4 +1,4 @@
-use pictura_adjust::Adjustment;
+
 use pictura_codec::DescValue;
 use pictura_core::{BlendMode, Document, Layer, PsdRect};
 
@@ -152,7 +152,7 @@ pub(super) fn build_drop_shadow(
     doc: &Document,
     shadow: &DropShadow,
     build: BuildRegion,
-    fill: Option<&Adjustment>,
+    fill: Option<&pictura_core::FillContent>,
 ) -> Vec<EffectPass> {
     let (w, h) = (
         doc.width.min(i32::MAX as u32) as i32,
@@ -244,7 +244,7 @@ pub(super) fn build_inner_shadow(
     doc: &Document,
     shadow: &InnerShadow,
     build: BuildRegion,
-    fill: Option<&Adjustment>,
+    fill: Option<&pictura_core::FillContent>,
 ) -> Vec<EffectPass> {
     let (w, h) = (
         doc.width.min(i32::MAX as u32) as i32,

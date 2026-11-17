@@ -25,10 +25,10 @@ pub fn apply_lens_correction(doc: &mut Document, path: &str, slots: &[f64]) -> b
     let Some(layer) = resolve_path(doc, path) else {
         return false;
     };
-    if layer.is_group || layer.adjustment.is_some() {
+    if layer.is_group() || layer.has_adjustment_content() {
         return false;
     }
-    let Some(so) = layer.smart_object.as_ref() else {
+    let Some(so) = layer.smart_object() else {
         return false;
     };
     if so.kind != SmartObjectKind::Embedded {
@@ -51,8 +51,7 @@ pub fn apply_lens_correction(doc: &mut Document, path: &str, slots: &[f64]) -> b
 pub fn lens_correction_slots(doc: &Document, path: &str) -> Option<Vec<f64>> {
     let layer = resolve_path(doc, path)?;
     layer
-        .smart_object
-        .as_ref()?
+        .smart_object()?
         .smart_filters
         .iter()
         .find(|f| f.filter_id == pictura_codec::LENS_CORRECTION_FILTER_ID)
@@ -64,10 +63,10 @@ pub fn lens_correction_slots(doc: &Document, path: &str) -> Option<Vec<f64>> {
 /// than the baked proxy. `None` for an ineligible target or a rect with no area.
 pub fn smart_source_buffer(doc: &Document, path: &str) -> Option<PixelBuffer> {
     let layer = resolve_path(doc, path)?;
-    if layer.is_group || layer.adjustment.is_some() {
+    if layer.is_group() || layer.has_adjustment_content() {
         return None;
     }
-    let so = layer.smart_object.as_ref()?;
+    let so = layer.smart_object()?;
     let rect = layer.rect;
     if rect.width() <= 0 || rect.height() <= 0 {
         return None;
@@ -109,7 +108,7 @@ mod tests {
     }
 
     fn smart_doc() -> Document {
-        let mut layer = Layer {
+        let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "Smart".into(),
             rect: PsdRect {
                 top: 0,
@@ -126,14 +125,14 @@ mod tests {
                 .with_payload(payload()),
             ),
             ..Default::default()
-        };
+        });
         for id in 0..3i16 {
-            layer.channels.push(Channel {
+            layer.channels_mut().push(Channel {
                 id,
                 data: vec![50u8; 16].into(),
             });
         }
-        layer.channels.push(Channel {
+        layer.channels_mut().push(Channel {
             id: -1,
             data: vec![200u8; 16].into(),
         });
@@ -156,7 +155,7 @@ mod tests {
 
     fn channel(doc: &Document, id: i16) -> Vec<u8> {
         doc.layers[0]
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == id)
             .map(|c| c.data.to_vec())
@@ -174,7 +173,7 @@ mod tests {
             "the proxy stays the unfiltered source"
         );
 
-        let so = doc.layers[0].smart_object.as_ref().expect("smart object");
+        let so = doc.layers[0].smart_object().expect("smart object");
         assert_eq!(so.smart_filters.len(), 1);
         assert_eq!(
             so.smart_filters[0].filter_id,
@@ -191,7 +190,7 @@ mod tests {
         let mut doc = smart_doc();
         assert!(apply_lens_correction(&mut doc, "0", &slots(20.0)));
         assert!(apply_lens_correction(&mut doc, "0", &slots(60.0)));
-        let so = doc.layers[0].smart_object.as_ref().expect("smart object");
+        let so = doc.layers[0].smart_object().expect("smart object");
         assert_eq!(so.smart_filters.len(), 1, "replaced, not duplicated");
         assert_eq!(
             pictura_codec::decode_lens_correction_slots(&so.smart_filters[0].options),
@@ -205,11 +204,11 @@ mod tests {
         assert!(!apply_lens_correction(&mut missing, "9", &slots(20.0)));
 
         let mut raster = smart_doc();
-        raster.layers[0].smart_object = None;
+        pictura_codec::edit_layer(raster.layers[0].as_mut(), |parts| { parts.smart_object = None });
         assert!(!apply_lens_correction(&mut raster, "0", &slots(20.0)));
 
         let mut group = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-        group.layers = pictura_core::LayerStack::from_layers(vec![Layer {
+        group.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "g".into(),
             rect: PsdRect {
                 top: 0,
@@ -219,15 +218,14 @@ mod tests {
             },
             is_group: true,
             ..Default::default()
-        }]);
+        })]);
         assert!(!apply_lens_correction(&mut group, "0", &slots(20.0)));
 
         // Slots that do not map are refused without attaching.
         let mut bad = smart_doc();
         assert!(!apply_lens_correction(&mut bad, "0", &[0.0; 15]));
         assert!(bad.layers[0]
-            .smart_object
-            .as_ref()
+            .smart_object()
             .expect("smart object")
             .smart_filters
             .is_empty());

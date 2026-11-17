@@ -64,7 +64,7 @@ impl Gpu {
         let src = self.upload_with("pictura-clip", n * 4, move |start, mut out| {
             out.copy_from_slice(&bytes[start..start + out.len()]);
         });
-        let proxy = Layer {
+        let proxy = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             is_group: true,
             opacity: base.opacity,
             blend: base.blend,
@@ -73,7 +73,7 @@ impl Gpu {
             vector_mask: None,
             blend_if: None,
             ..Default::default()
-        };
+        });
         let mask = self.build_mask(&proxy, doc);
         let layout = SrcLayout {
             x0: bounds.left as u32,
@@ -120,16 +120,16 @@ fn group_bounds(base: &Layer, clipped: &[&Layer], region: PsdRect) -> Option<Psd
 }
 
 fn layer_bounds(layer: &Layer) -> Option<PsdRect> {
-    if layer.is_group {
+    if layer.is_group() {
         let mut bounds = None;
-        for child in &layer.children {
+        for child in layer.children() {
             if child.visible {
                 bounds = union(bounds, layer_bounds(child));
             }
         }
         return bounds.map(|rect| rect.grow(crate::layer_effects::paint_reach(layer)));
     }
-    if layer.adjustment.is_some() && crate::fill::decode_layer_fill(layer).is_none() {
+    if layer.has_adjustment_content() && crate::fill::decode_layer_fill(layer).is_none() {
         return None;
     }
     Some(layer.rect.grow(crate::layer_effects::paint_reach(layer)))

@@ -46,7 +46,7 @@ pub(crate) fn fill_layer(doc: &mut Document, rgb: [u8; 3]) {
     let gray = doc.mode == ColorMode::Grayscale;
     let luma = pictura_core::rec601_luma(rgb[0], rgb[1], rgb[2]);
     for layer in &mut doc.layers {
-        for channel in &mut layer.channels {
+        for channel in layer.channels_mut() {
             let value = match channel.id {
                 0 if gray => luma,
                 id @ 0..=2 => rgb[id as usize],
@@ -186,15 +186,15 @@ mod tests {
     fn fill_uses_the_luminance_on_gray() {
         let mut doc = Document::new(2, 1, ColorMode::Grayscale, BitDepth::Eight);
         {
-            let _ = doc.layers.push(pictura_core::Layer {
+            let _ = doc.layers.push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 channels: vec![pictura_core::Channel {
                     id: 0,
                     data: vec![255; 2].into(),
                 }],
                 ..Default::default()
-            });
+            }));
         };
         fill_layer(&mut doc, [255, 0, 0]);
-        assert_eq!(&doc.layers[0].channels[0].data[..], &[76, 76]);
+        assert_eq!(&doc.layers[0].channels()[0].data[..], &[76, 76]);
     }
 }

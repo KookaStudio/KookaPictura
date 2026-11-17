@@ -338,7 +338,7 @@ pub(super) fn write_decontaminated(
     };
     let rect = layer.rect;
     for c in 0..3usize {
-        let Some(channel) = layer.channels.iter_mut().find(|ch| ch.id == c as i16) else {
+        let Some(channel) = layer.channels_mut().iter_mut().find(|ch| ch.id == c as i16) else {
             continue;
         };
         for y in 0..h {

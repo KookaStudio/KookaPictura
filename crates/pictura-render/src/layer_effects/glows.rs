@@ -1,4 +1,4 @@
-use pictura_adjust::Adjustment;
+
 use pictura_codec::DescValue;
 use pictura_core::{BlendMode, Document, Layer, PsdRect};
 use rayon::prelude::*;
@@ -188,7 +188,7 @@ pub(super) fn build_outer_glow(
     doc: &Document,
     glow: &OuterGlow,
     build: BuildRegion,
-    fill: Option<&Adjustment>,
+    fill: Option<&pictura_core::FillContent>,
 ) -> Vec<EffectPass> {
     let (w, h) = (
         doc.width.min(i32::MAX as u32) as i32,
@@ -261,7 +261,7 @@ pub(super) fn build_inner_glow(
     doc: &Document,
     glow: &InnerGlow,
     build: BuildRegion,
-    fill: Option<&Adjustment>,
+    fill: Option<&pictura_core::FillContent>,
 ) -> Vec<EffectPass> {
     let (w, h) = (
         doc.width.min(i32::MAX as u32) as i32,

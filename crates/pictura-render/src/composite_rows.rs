@@ -424,7 +424,7 @@ pub(crate) fn composite_pixels(
     // embedded-source branch in `composite_layer_inner` handles it; if that
     // source is unusable, leave the backdrop unchanged instead of painting the
     // channel-less rect black.
-    if layer.smart_object.is_some() && channel_plane(layer, 0).is_none() {
+    if layer.smart_object().is_some() && channel_plane(layer, 0).is_none() {
         return;
     }
     #[cfg(test)]
@@ -533,7 +533,7 @@ fn composite_pixels_legacy(
     over: Option<&BlendOverride>,
 ) {
     let layer = node.layer;
-    if layer.smart_object.is_some() && channel_plane(layer, 0).is_none() {
+    if layer.smart_object().is_some() && channel_plane(layer, 0).is_none() {
         return;
     }
     let lw = layer.rect.width();

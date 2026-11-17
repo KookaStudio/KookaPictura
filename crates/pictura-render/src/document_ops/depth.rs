@@ -179,14 +179,14 @@ fn flatten_converted(doc: &mut Document, display_alpha: Option<&[u8]>) {
         planes.push((-1, native_alpha));
         Some(SourceChannels::new(store.depth, rect, planes))
     });
-    doc.layers = LayerStack::from_layers(vec![Layer {
+    doc.layers = LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Background".to_string(),
         rect,
         channels,
         source_channels,
         background: true,
         ..Default::default()
-    }]);
+    })]);
 }
 
 /// Convert a 32-bit Grayscale/RGB `doc` with the Exposure & Gamma method.
@@ -268,6 +268,6 @@ fn current_composite_samples(doc: &Document, color_len: usize) -> Result<Vec<f32
 fn drop_layer_source(layers: &mut pictura_core::LayerStack) {
     for layer in layers {
         layer.source_channels = None;
-        drop_layer_source(&mut layer.children);
+        if let Some(children) = layer.children_mut() { drop_layer_source(children); }
     }
 }

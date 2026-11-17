@@ -594,7 +594,7 @@ fn dissolve_is_binary_and_deterministic() {
 #[test]
 fn grayscale_layer_replicates_channel() {
     let mut d = Document::new(1, 1, ColorMode::Grayscale, BitDepth::Eight);
-    d.layers = pictura_core::LayerStack::from_layers(vec![Layer {
+    d.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "gray".into(),
         rect: full(1, 1),
         blend: BlendMode::Normal,
@@ -614,7 +614,7 @@ fn grayscale_layer_replicates_channel() {
         is_group: false,
         background: false,
         ..Default::default()
-    }]);
+    })]);
     assert_eq!(px(&composite_rgba(&d), 0, 0), [120, 120, 120, 255]);
 }
 
@@ -763,7 +763,7 @@ pub(crate) fn type_style() -> TextStyle {
 }
 
 pub(crate) fn type_layer(style: Option<TextStyle>) -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "text".into(),
         rect: rect(0, 0, 80, 200),
         type_tool: Some(TypeTool {
@@ -779,14 +779,14 @@ pub(crate) fn type_layer(style: Option<TextStyle>) -> Layer {
             path: None,
         }),
         ..Default::default()
-    }
+    })
 }
 
 #[test]
 fn proxy_less_type_layer_composites_live_coverage() {
     let layer = type_layer(Some(type_style()));
     assert!(
-        layer.channels.is_empty(),
+        layer.channels().is_empty(),
         "proxy-less type carries no channel"
     );
     let d = doc(200, 80, vec![layer]);
@@ -823,7 +823,7 @@ fn proxy_less_type_layer_composites_live_coverage() {
 fn type_layer_with_channel_composites_from_the_raster() {
     let n = (200 * 80) as usize;
     let mut layer = type_layer(Some(type_style()));
-    layer.channels = vec![
+    layer.set_channels(vec![
         Channel {
             id: 0,
             data: vec![10; n].into(),
@@ -840,7 +840,7 @@ fn type_layer_with_channel_composites_from_the_raster() {
             id: -1,
             data: vec![255; n].into(),
         },
-    ];
+    ]);
     let out = composite_rgba(&doc(200, 80, vec![layer]));
     for y in 0..80 {
         for x in 0..200 {
@@ -876,8 +876,7 @@ fn a_missing_family_keeps_its_stored_name() {
     assert_eq!(spec.character.font_family, "NoSuchFontPictura");
     assert_eq!(
         d.layers[0]
-            .type_tool
-            .as_ref()
+            .type_tool()
             .unwrap()
             .style
             .as_ref()
@@ -899,7 +898,7 @@ fn proxy_less_type_that_paints_nothing_leaves_the_backdrop() {
         255,
     );
     let mut layer = type_layer(Some(type_style()));
-    layer.type_tool.as_mut().unwrap().text = "   ".into();
+    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.type_tool.as_mut().unwrap().text = "   ".into() });
     let with = composite_rgba(&doc(200, 80, vec![base.clone(), layer]));
     let without = composite_rgba(&doc(200, 80, vec![base]));
     assert_eq!(

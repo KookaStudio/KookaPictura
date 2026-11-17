@@ -245,7 +245,7 @@ impl qobject::PictureView {
         }
         let mut doc = Document::with_uniform_composite(w, h, mode, BitDepth::Eight, fill);
         {
-            let _ = doc.layers.push(Layer {
+            let _ = doc.layers.push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 name: "Layer 0".to_string(),
                 rect: PsdRect {
                     top: 0,
@@ -267,7 +267,7 @@ impl qobject::PictureView {
                 is_group: false,
                 background: false,
                 ..Default::default()
-            });
+            }));
         };
         let gpu_compute = self.rust().gpu_compute;
         DocumentComposite::new(&mut doc).refresh(CompositeScope::Full, gpu_compute);

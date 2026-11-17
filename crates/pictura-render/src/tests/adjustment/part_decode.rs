@@ -67,22 +67,22 @@ fn decode_adjustment_subset_and_unknown() {
 fn solid_fill_decodes_both_payload_forms() {
     // The in-house 4-byte straight-alpha tuple is unchanged.
     assert_eq!(
-        decode_adjustment(&adjdata(*b"SoCo", vec![10, 20, 30, 40])),
-        Some(Adjustment::SolidFill([10, 20, 30, 40]))
+        pictura_codec::decode_fill(&adjdata(*b"SoCo", vec![10, 20, 30, 40])),
+        Some(pictura_core::FillContent::Solid([10, 20, 30, 40]))
     );
     // The standard descriptor decodes with alpha forced to 255.
     assert_eq!(
-        decode_adjustment(&encode_solid_color_fill([10, 20, 30])),
-        Some(Adjustment::SolidFill([10, 20, 30, 255]))
+        pictura_codec::decode_fill(&encode_solid_color_fill([10, 20, 30])),
+        Some(pictura_core::FillContent::Solid([10, 20, 30, 255]))
     );
 
     // A non-4-byte, non-descriptor payload is a no-op.
     for payload in [vec![], vec![1, 2, 3], vec![1, 2, 3, 4, 5]] {
-        assert_eq!(decode_adjustment(&adjdata(*b"SoCo", payload)), None);
+        assert_eq!(pictura_codec::decode_fill(&adjdata(*b"SoCo", payload)), None);
     }
     // A descriptor missing `Clr ` is a no-op.
     let no_clr = write_descriptor(&desc_object("", b"SoCo", vec![]));
-    assert_eq!(decode_adjustment(&adjdata(*b"SoCo", no_clr)), None);
+    assert_eq!(pictura_codec::decode_fill(&adjdata(*b"SoCo", no_clr)), None);
     // A `Clr ` object with a wrong-typed component is a no-op.
     let wrong_type = write_descriptor(&desc_object(
         "",
@@ -100,7 +100,7 @@ fn solid_fill_decodes_both_payload_forms() {
             ),
         )],
     ));
-    assert_eq!(decode_adjustment(&adjdata(*b"SoCo", wrong_type)), None);
+    assert_eq!(pictura_codec::decode_fill(&adjdata(*b"SoCo", wrong_type)), None);
     // A non-finite component is a no-op.
     let non_finite = write_descriptor(&desc_object(
         "",
@@ -118,7 +118,7 @@ fn solid_fill_decodes_both_payload_forms() {
             ),
         )],
     ));
-    assert_eq!(decode_adjustment(&adjdata(*b"SoCo", non_finite)), None);
+    assert_eq!(pictura_codec::decode_fill(&adjdata(*b"SoCo", non_finite)), None);
 }
 
 #[test]
@@ -126,8 +126,8 @@ fn encoded_solid_fill_is_version16_descriptor() {
     let encoded = encode_solid_color_fill([10, 20, 30]);
     assert_eq!(encoded.key, *b"SoCo");
     assert_eq!(
-        decode_adjustment(&encoded),
-        Some(Adjustment::SolidFill([10, 20, 30, 255]))
+        pictura_codec::decode_fill(&encoded),
+        Some(pictura_core::FillContent::Solid([10, 20, 30, 255]))
     );
 
     let desc = pictura_codec::read_descriptor(&encoded.data).expect("version-16 descriptor");
@@ -675,8 +675,8 @@ fn fixture_solid_fill_decodes_descriptor() {
         .find(|l| l.name == "Solid Fill")
         .expect("Solid Fill layer");
     assert_eq!(
-        decode_adjustment(fill.adjustment.as_ref().expect("SoCo block")),
-        Some(Adjustment::SolidFill([10, 20, 30, 255]))
+        pictura_codec::decode_fill(fill.adjustment().expect("SoCo block")),
+        Some(pictura_core::FillContent::Solid([10, 20, 30, 255]))
     );
 }
 
@@ -894,7 +894,7 @@ fn fixture_channel_mixer_decodes() {
         .find(|l| l.name == "Channel Mixer")
         .expect("Channel Mixer layer");
     assert_eq!(
-        decode_adjustment(color.adjustment.as_ref().expect("mixr block")),
+        decode_adjustment(color.adjustment().expect("mixr block")),
         Some(Adjustment::ChannelMixer(ChannelMixerParams {
             monochrome: false,
             red: [30.0, -10.0, 50.0],
@@ -917,7 +917,7 @@ fn fixture_channel_mixer_decodes() {
         .find(|l| l.name == "Channel Mixer Mono")
         .expect("Channel Mixer Mono layer");
     assert_eq!(
-        decode_adjustment(mono.adjustment.as_ref().expect("mixr block")),
+        decode_adjustment(mono.adjustment().expect("mixr block")),
         Some(Adjustment::ChannelMixer(ChannelMixerParams {
             monochrome: true,
             red: [20.0, 40.0, 60.0],

@@ -30,7 +30,7 @@ fn roundtrip(doc: &Document) -> Document {
 
 fn layer_plane(doc: &Document, id: i16) -> Vec<u8> {
     doc.layers[0]
-        .channels
+        .channels()
         .iter()
         .find(|c| c.id == id)
         .map(|c| c.data.to_vec())
@@ -99,7 +99,7 @@ fn grayscale_is_rounded_rec601_luma_on_layers_and_composite() {
     // 0.299 * 255 = 76.2; 0.299*10 + 0.587*200 + 0.114*30 = 123.81.
     assert_eq!(layer_plane(&doc, 0), vec![76, 124]);
     assert!(doc.layers[0]
-        .channels
+        .channels()
         .iter()
         .all(|c| c.id != 1 && c.id != 2));
     assert_eq!(doc.composite.channels, 1);
@@ -193,11 +193,11 @@ fn indexed_flattens_a_layered_document_and_discards_hidden_layers() {
     hidden.visible = false;
     let _ = doc.layers.push(hidden);
     {
-        let _ = doc.layers.push(Layer {
+        let _ = doc.layers.push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "group".into(),
             is_group: true,
             ..Default::default()
-        });
+        }));
     };
     convert_to_indexed(
         &mut doc,
@@ -617,7 +617,7 @@ fn layered_without_composite(width: u32, height: u32) -> Document {
     let mut top = doc.layers[0].clone();
     top.name = "Layer 2".into();
     top.opacity = 128;
-    for channel in &mut top.channels {
+    for channel in top.channels_mut() {
         let flipped: Vec<u8> = channel.data.to_vec().iter().rev().copied().collect();
         channel.data = flipped.into();
     }
@@ -650,7 +650,7 @@ fn converted_state(doc: &Document) -> ConvertedState {
     let layers = doc
         .layers
         .iter()
-        .flat_map(|layer| layer.channels.iter().map(|c| c.data.to_vec()))
+        .flat_map(|layer| layer.channels().iter().map(|c| c.data.to_vec()))
         .collect();
     (
         doc.mode,

@@ -53,7 +53,7 @@ pub(in crate::cxxqt_object) fn capture(rust: &PictureViewRust) -> Option<FadeCap
     let doc = rust.session.doc.as_ref()?;
     let path = rust.layer_target.single()?.to_string();
     let layer = active_pixel_layer(doc, Some(&path))?;
-    if layer.smart_object.is_some() || layer.is_group || layer.adjustment.is_some() {
+    if layer.smart_object().is_some() || layer.is_group() || layer.has_adjustment_content() {
         return None;
     }
     Some(FadeCapture {
@@ -95,7 +95,7 @@ fn record_layers(
     original: Layer,
     effected: Layer,
 ) {
-    if effected.smart_object.is_some() || effected.is_group || effected.adjustment.is_some() {
+    if effected.smart_object().is_some() || effected.is_group() || effected.has_adjustment_content() {
         return;
     }
     if original == effected {

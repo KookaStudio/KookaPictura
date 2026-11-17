@@ -88,7 +88,7 @@ fn fill_at<T: Sample + PartialEq + Send + Sync>(
 ) -> Option<PsdRect> {
     let canvas = (doc.width as i32, doc.height as i32);
     let layer = layer_at_mut(doc, &parse_layer_path(path)?)?;
-    if layer.is_group || layer.adjustment.is_some() || layer_pixel_locked(layer) {
+    if layer.is_group() || layer.has_adjustment_content() || layer_pixel_locked(layer) {
         return None;
     }
     let keep_alpha = layer_transparency_locked(layer);
@@ -101,11 +101,11 @@ fn fill_at<T: Sample + PartialEq + Send + Sync>(
     let rect = layer.rect;
     let n = (rect.width().max(0) * rect.height().max(0)) as usize;
     // The store's planes, borrowed mutably: the fill holds them at once.
-    let Layer {
+    let pictura_core::Layer::from_parts(pictura_core::LayerParts {
         source_channels,
         channels,
         ..
-    } = layer;
+    }, pictura_core::LayerContent::Pixel) = layer;
     let store = source_channels.as_mut()?;
     let mut r: Option<&mut [T]> = None;
     let mut g: Option<&mut [T]> = None;
@@ -311,7 +311,7 @@ pub(crate) mod tests {
         };
         let planes = [red.clone(), green.clone(), blue.clone()];
         let mut doc = Document::new(w as u32, h as u32, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = LayerStack::from_layers(vec![Layer {
+        doc.layers = LayerStack::from_layers(vec![pictura_core::Layer::from_parts(pictura_core::LayerParts {
             rect,
             channels: planes
                 .iter()
@@ -331,7 +331,7 @@ pub(crate) mod tests {
                 ],
             )),
             ..Default::default()
-        }]);
+        }, pictura_core::LayerContent::Pixel)]);
         doc.source
             .set_native(Some(BitDepth::Sixteen), doc.source.planes().clone())
             .expect("valid source depth");
@@ -349,7 +349,7 @@ pub(crate) mod tests {
         };
         let planes = [red.clone(), green.clone(), blue.clone()];
         let mut doc = Document::new(w as u32, h as u32, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = LayerStack::from_layers(vec![Layer {
+        doc.layers = LayerStack::from_layers(vec![pictura_core::Layer::from_parts(pictura_core::LayerParts {
             rect,
             channels: planes
                 .iter()
@@ -369,7 +369,7 @@ pub(crate) mod tests {
                 ],
             )),
             ..Default::default()
-        }]);
+        }, pictura_core::LayerContent::Pixel)]);
         doc.source
             .set_native(Some(BitDepth::ThirtyTwo), doc.source.planes().clone())
             .expect("valid source depth");
@@ -419,7 +419,7 @@ pub(crate) mod tests {
         assert_eq!(plane(&doc, 0), vec![220 * 257; 4]);
         assert_eq!(plane(&doc, 1), vec![0; 4]);
         // The 8-bit channels are the store's narrowing.
-        assert_eq!(doc.layers[0].channels[0].data.as_slice(), &[220; 4]);
+        assert_eq!(doc.layers[0].channels()[0].data.as_slice(), &[220; 4]);
     }
 
     #[test]
@@ -438,7 +438,7 @@ pub(crate) mod tests {
             Alpha::Blend,
             |_, _| Some((RED, 0.5)),
         );
-        let eight_red = eight.layers[0].channels[0].data[0];
+        let eight_red = eight.layers[0].channels()[0].data[0];
         assert_eq!(eight_red, 174);
         let mut doc = depth16_doc(2, 2, backdrop.clone(), backdrop.clone(), backdrop);
         fill_layer(
@@ -474,7 +474,7 @@ pub(crate) mod tests {
             "the fill's samples: {red:?}"
         );
         // The 8-bit channels are the store's narrowing.
-        assert_eq!(doc.layers[0].channels[0].data.as_slice(), &[220; 4]);
+        assert_eq!(doc.layers[0].channels()[0].data.as_slice(), &[220; 4]);
     }
 
     #[test]
@@ -493,7 +493,7 @@ pub(crate) mod tests {
             Alpha::Blend,
             |_, _| Some((RED, 0.5)),
         );
-        let eight_red = eight.layers[0].channels[0].data[0];
+        let eight_red = eight.layers[0].channels()[0].data[0];
         assert_eq!(eight_red, 174);
         let mut doc = depth32_doc(2, 2, backdrop.clone(), backdrop.clone(), backdrop);
         fill_layer(
@@ -544,7 +544,7 @@ pub(crate) mod tests {
             PaintMode::Multiply,
         ] {
             let mut eight = depth16_doc(2, 2, vec![0; 4], vec![0; 4], vec![0; 4]);
-            eight.layers[0].channels.push(Channel {
+            eight.layers[0].channels_mut().push(Channel {
                 id: -1,
                 data: vec![128; 4].into(),
             });
@@ -553,7 +553,7 @@ pub(crate) mod tests {
                 Some((white, 1.0))
             });
             let mut doc = depth16_doc(2, 2, vec![0; 4], vec![0; 4], vec![0; 4]);
-            doc.layers[0].channels.push(Channel {
+            doc.layers[0].channels_mut().push(Channel {
                 id: -1,
                 data: vec![128; 4].into(),
             });
@@ -561,7 +561,7 @@ pub(crate) mod tests {
                 Some((white, 1.0))
             });
             // The native colour is within one 8-bit step of the 8-bit path's.
-            let eight_red = eight.layers[0].channels[0].data[0] as i32 * 257;
+            let eight_red = eight.layers[0].channels()[0].data[0] as i32 * 257;
             let native_red = plane(&doc, 0)[0] as i32;
             assert!(
                 (native_red - eight_red).abs() <= 257,
@@ -600,7 +600,7 @@ pub(crate) mod tests {
             Alpha::Blend,
             |_, _| Some((see_through, 1.0)),
         );
-        let eight_red = eight.layers[0].channels[0].data.as_slice();
+        let eight_red = eight.layers[0].channels()[0].data.as_slice();
         let native_red = plane(&doc, 0);
         for (i, &value) in native_red.iter().enumerate() {
             assert_eq!(
@@ -625,7 +625,7 @@ pub(crate) mod tests {
         let store = doc.layers[0].source_channels.as_ref().expect("a store");
         for (id, samples) in &store.planes {
             let channel = doc.layers[0]
-                .channels
+                .channels()
                 .iter()
                 .find(|c| c.id == *id)
                 .expect("the channel");
@@ -637,7 +637,7 @@ pub(crate) mod tests {
     fn a_store_without_a_transparency_plane_still_fills() {
         let mut doc = depth16_doc(2, 2, vec![0; 4], vec![0; 4], vec![0; 4]);
         // The layer has an 8-bit transparency the store does not carry.
-        doc.layers[0].channels.push(Channel {
+        doc.layers[0].channels_mut().push(Channel {
             id: -1,
             data: vec![128; 4].into(),
         });
@@ -653,7 +653,7 @@ pub(crate) mod tests {
         // The colour came from the store.
         assert_eq!(plane(&doc, 0), vec![220 * 257; 4]);
         // The transparency came from the 8-bit channel, and the store has none.
-        assert_eq!(doc.layers[0].channels[3].data.as_slice(), &[255; 4]);
+        assert_eq!(doc.layers[0].channels()[3].data.as_slice(), &[255; 4]);
         assert!(!doc.layers[0]
             .source_channels
             .as_ref()
@@ -685,7 +685,7 @@ pub(crate) mod tests {
         );
         assert!(dirty.is_some(), "the fill changed the layer");
         // The 8-bit channels took the colour; the store did not.
-        assert_eq!(doc.layers[0].channels[0].data.as_slice(), &[220; 4]);
+        assert_eq!(doc.layers[0].channels()[0].data.as_slice(), &[220; 4]);
         assert_eq!(plane(&doc, 0), vec![0; 4]);
     }
 
@@ -694,7 +694,7 @@ pub(crate) mod tests {
         let mut doc = depth16_doc(2, 1, vec![0; 2], vec![0; 2], vec![0; 2]);
         // The layer's 8-bit transparency: one half transparent pixel and one
         // empty one. The store carries no transparency plane of its own.
-        doc.layers[0].channels.push(Channel {
+        doc.layers[0].channels_mut().push(Channel {
             id: -1,
             data: vec![128, 0].into(),
         });
@@ -709,13 +709,13 @@ pub(crate) mod tests {
         assert!(dirty.is_some(), "the fill changed the layer");
         // The half transparent pixel kept its alpha; the empty one was not
         // filled.
-        assert_eq!(doc.layers[0].channels[3].data.as_slice(), &[128, 0]);
+        assert_eq!(doc.layers[0].channels()[3].data.as_slice(), &[128, 0]);
     }
 
     #[test]
     fn a_replace_policy_takes_the_sources_alpha_at_depth_16() {
         let mut doc = depth16_doc(2, 1, vec![0; 2], vec![0; 2], vec![0; 2]);
-        doc.layers[0].channels.push(Channel {
+        doc.layers[0].channels_mut().push(Channel {
             id: -1,
             data: vec![255; 2].into(),
         });
@@ -735,7 +735,7 @@ pub(crate) mod tests {
         );
         assert!(dirty.is_some(), "the fill changed the layer");
         // The source's alpha is the pixel's alpha, at the store's width.
-        assert_eq!(doc.layers[0].channels[3].data.as_slice(), &[0, 0]);
+        assert_eq!(doc.layers[0].channels()[3].data.as_slice(), &[0, 0]);
     }
 
     #[test]
@@ -755,7 +755,7 @@ pub(crate) mod tests {
             |_, _| Some((RED, 1.0)),
         );
         assert!(dirty.is_some(), "the fill changed the layer");
-        assert_eq!(doc.layers[0].channels[0].data.as_slice(), &[220; 4]);
+        assert_eq!(doc.layers[0].channels()[0].data.as_slice(), &[220; 4]);
         assert_eq!(plane(&doc, 0), vec![0; 4]);
     }
 }

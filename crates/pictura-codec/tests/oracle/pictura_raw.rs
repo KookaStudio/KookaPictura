@@ -13,7 +13,7 @@ fn authoring_smart_doc() -> Document {
             }
         })
         .expect("pixel edit preserves geometry");
-    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Smart".into(),
         rect: PsdRect {
             top: 0,
@@ -31,7 +31,7 @@ fn authoring_smart_doc() -> Document {
             .with_payload((0..512).map(|i| (i % 251) as u8).collect()),
         ),
         ..Default::default()
-    }]);
+    })]);
     doc
 }
 

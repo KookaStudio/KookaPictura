@@ -14,7 +14,7 @@ const RED: Rgba = Rgba {
 fn layer(rect: PsdRect, rgba: (u8, u8, u8, u8)) -> Layer {
     let n = (rect.width().max(0) * rect.height().max(0)) as usize;
     let (r, g, b, a) = rgba;
-    Layer {
+    pictura_core::Layer::from_parts(pictura_core::LayerParts {
         name: "px".into(),
         rect,
         blend: BlendMode::Normal,
@@ -48,7 +48,7 @@ fn layer(rect: PsdRect, rgba: (u8, u8, u8, u8)) -> Layer {
         is_group: false,
         background: false,
         ..Default::default()
-    }
+    }, pictura_core::LayerContent::Pixel)
 }
 
 fn doc(layer: Layer) -> Document {
@@ -279,7 +279,7 @@ fn a_clip_follows_the_layer_document_position() {
 
 #[test]
 fn a_grown_layer_keeps_the_document_space_clip() {
-    let empty = Layer {
+    let empty = pictura_core::Layer::from_parts(pictura_core::LayerParts {
         name: "px".into(),
         rect: PsdRect {
             top: 0,
@@ -294,7 +294,7 @@ fn a_grown_layer_keeps_the_document_space_clip() {
                 data: Plane::default(),
             })
             .collect(),
-        ..layer(
+        ..pictura_core::LayerParts::from(layer(
             PsdRect {
                 top: 0,
                 left: 0,
@@ -302,8 +302,8 @@ fn a_grown_layer_keeps_the_document_space_clip() {
                 right: 0,
             },
             WHITE,
-        )
-    };
+        ))
+    }, pictura_core::LayerContent::Pixel);
     let mut doc = doc(empty);
     let mut stroke = Stroke::begin_at(&doc, "0", brush(6)).expect("stroke begins");
     stroke.set_coverage_clip(Some(selection(16, 16, |x, y| {

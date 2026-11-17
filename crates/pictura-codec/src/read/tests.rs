@@ -196,7 +196,7 @@ fn sample_document() -> Document {
     let base = doc.layers.get(0).expect("base layer").clone();
     let mut top = base.clone();
     top.name = "Top".to_string();
-    for channel in &mut top.channels {
+    for channel in top.channels_mut() {
         channel.data.as_mut_slice().fill(200);
     }
     doc.layers = LayerStack::from_layers(vec![base, top]);
@@ -212,10 +212,10 @@ fn extra_channel_document() -> Document {
     }];
     let mut stream = COMPRESSION_RAW.to_be_bytes().to_vec();
     stream.extend_from_slice(&plane);
-    doc.layers.get_mut(0).expect("layer").raw_channels = vec![RawChannel {
+    crate::edit_layer(doc.layers.get_mut(0).expect("layer").as_mut(), |parts| { parts.raw_channels = vec![RawChannel {
         id: -3,
         data: stream.into(),
-    }];
+    }] });
     doc
 }
 
@@ -492,7 +492,7 @@ fn a_mask_channel_is_sized_by_the_mask_rect() {
     assert_eq!(mask.rect.width(), 2);
     assert_eq!(mask.rect.height(), 2);
     assert_eq!(mask.data.as_deref().map(<[u8]>::len), Some(4));
-    let color = layer.channels.iter().find(|c| c.id == 0).expect("color");
+    let color = layer.channels().iter().find(|c| c.id == 0).expect("color");
     assert_eq!(color.data.len(), 64);
 }
 
@@ -735,8 +735,8 @@ fn decoded_layer_channels_are_tiled() {
     let bytes = write_psd(&masked_layer_document(side, side, &solid)).expect("write");
     let back = read_psd(&bytes).expect("read");
     let layer = back.layers.get(0).expect("layer");
-    assert!(!layer.channels.is_empty());
-    for channel in &layer.channels {
+    assert!(!layer.channels().is_empty());
+    for channel in layer.channels() {
         assert!(channel.data.is_tiled(), "channel {} is tiled", channel.id);
         assert!(
             channel.data.allocated_bytes() < side * side / 4,

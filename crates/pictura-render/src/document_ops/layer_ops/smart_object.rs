@@ -32,10 +32,10 @@ fn remove_link_if_unreferenced(doc: &mut Document, uuid: &str) {
 fn uuid_referenced(layers: &[Layer], uuid: &str) -> bool {
     layers.iter().any(|layer| {
         layer
-            .smart_object
-            .as_ref()
+            .smart_object()
             .is_some_and(|so| so.uuid == uuid)
-            || uuid_referenced(&layer.children, uuid)
+            || pictura_codec::layer_references_smart_source(layer, uuid)
+            || uuid_referenced(layer.children(), uuid)
     })
 }
 
@@ -48,7 +48,7 @@ fn uuid_referenced(layers: &[Layer], uuid: &str) -> bool {
 pub fn can_convert_to_smart_object(doc: &Document, path: &str) -> bool {
     doc.depth == BitDepth::Eight
         && resolve_path(doc, path).is_some_and(|layer| {
-            !layer.is_group && layer.adjustment.is_none() && layer.smart_object.is_none()
+            !layer.is_group() && !layer.has_adjustment_content() && layer.smart_object().is_none()
         })
 }
 
@@ -94,7 +94,7 @@ pub fn convert_to_smart_object(doc: &mut Document, path: &str) -> bool {
         let mut embedded = Document::new(w, h, doc.mode, doc.depth);
         let plane = w as usize * h as usize;
         for c in 0..doc.mode.color_channels() as usize {
-            if let Some(channel) = layer.channels.iter().find(|ch| ch.id == c as i16) {
+            if let Some(channel) = layer.channels().iter().find(|ch| ch.id == c as i16) {
                 let n = plane.min(channel.data.len());
                 embedded
                     .composite
@@ -107,7 +107,7 @@ pub fn convert_to_smart_object(doc: &mut Document, path: &str) -> bool {
         // The merged extra plane restores the source's straight alpha on read
         // (`with_merged_alpha`); without it a converted transparent raster
         // would render as an opaque rectangle.
-        if let Some(alpha) = layer.channels.iter().find(|channel| channel.id == -1) {
+        if let Some(alpha) = layer.channels().iter().find(|channel| channel.id == -1) {
             if alpha.data.len() == plane {
                 embedded.channels.push(Channel {
                     id: 0,
@@ -138,7 +138,7 @@ pub fn convert_to_smart_object(doc: &mut Document, path: &str) -> bool {
         super::create::release_background(layer);
         layer.name = name.clone();
     }
-    layer.smart_object = Some(
+    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.smart_object = Some(
         {
             let mut so = SmartObject::default();
             so.kind = SmartObjectKind::Embedded;
@@ -148,7 +148,7 @@ pub fn convert_to_smart_object(doc: &mut Document, path: &str) -> bool {
             so
         }
         .with_payload(payload),
-    );
+    ) });
     true
 }
 
@@ -183,7 +183,7 @@ pub fn stack_into_smart_object(doc: &mut Document) -> bool {
     let Ok(payload) = pictura_codec::write_psd(&embedded) else {
         return false;
     };
-    let layer = Layer {
+    let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.clone(),
         rect: PsdRect {
             top: 0,
@@ -208,7 +208,7 @@ pub fn stack_into_smart_object(doc: &mut Document) -> bool {
             .with_payload(payload),
         ),
         ..Default::default()
-    };
+    });
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
     true
 }
@@ -217,9 +217,9 @@ pub fn stack_into_smart_object(doc: &mut Document) -> bool {
 /// adjustment data, and an `Embedded` object with a non-empty payload.
 pub fn can_replace_smart_object_contents(doc: &Document, path: &str) -> bool {
     resolve_path(doc, path).is_some_and(|layer| {
-        !layer.is_group
-            && layer.adjustment.is_none()
-            && layer.smart_object.as_ref().is_some_and(|so| {
+        !layer.is_group()
+            && !layer.has_adjustment_content()
+            && layer.smart_object().is_some_and(|so| {
                 so.kind == SmartObjectKind::Embedded && so.payload().is_some_and(|p| !p.is_empty())
             })
     })
@@ -232,12 +232,11 @@ pub fn can_replace_smart_object_contents(doc: &Document, path: &str) -> bool {
 /// target returns `None`. Pure read: never mutates the document.
 pub fn smart_object_source_bytes(doc: &Document, path: &str) -> Option<Vec<u8>> {
     resolve_path(doc, path).and_then(|layer| {
-        if layer.is_group || layer.adjustment.is_some() {
+        if layer.is_group() || layer.has_adjustment_content() {
             return None;
         }
         layer
-            .smart_object
-            .as_ref()
+            .smart_object()
             .and_then(|so| so.payload())
             .filter(|p| !p.is_empty())
             .map(<[u8]>::to_vec)
@@ -275,21 +274,23 @@ pub fn replace_smart_object_contents(
         return false;
     }
     let old_uuid = resolve_path(doc, path)
-        .and_then(|layer| layer.smart_object.as_ref())
+        .and_then(|layer| layer.smart_object())
         .map(|so| so.uuid.clone())
         .unwrap_or_default();
     {
         let layer = resolve_path_mut(doc, path).expect("can_replace_smart_object_contents checked");
-        layer.channels.clear();
-        layer
+        layer.channels_mut().clear();
+        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts
             .extra_blocks
-            .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd"));
-        let so = layer.smart_object.as_mut().expect("checked");
+            .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd")) });
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        let so = parts.smart_object.as_mut().expect("checked");
         so.set_payload(bytes.to_vec());
         so.filename = filename.to_string();
         so.filetype = *b"8BPB";
         so.creator = *b"8BIM";
         so.uuid.clear();
+        });
     }
     remove_link_if_unreferenced(doc, &old_uuid);
     true
@@ -305,7 +306,7 @@ pub fn replace_smart_object_contents(
 pub fn place_smart_object(doc: &mut Document, filename: &str, bytes: &[u8]) -> Option<String> {
     let decoded = pictura_codec::read_psd(bytes).ok()?;
     let index = doc.layers.len();
-    let layer = Layer {
+    let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: filename.to_string(),
         rect: PsdRect {
             top: 0,
@@ -330,7 +331,7 @@ pub fn place_smart_object(doc: &mut Document, filename: &str, bytes: &[u8]) -> O
             .with_payload(bytes.to_vec()),
         ),
         ..Default::default()
-    };
+    });
     if doc.layers.insert(&[], index, layer).is_err() {
         return None;
     }
@@ -350,9 +351,9 @@ pub fn fit_smart_object_to_canvas(doc: &mut Document, path: &str) -> bool {
     let Some(layer) = resolve_path(doc, path) else {
         return false;
     };
-    if layer.is_group
-        || layer.adjustment.is_some()
-        || layer.smart_object.is_none()
+    if layer.is_group()
+        || layer.has_adjustment_content()
+        || layer.smart_object().is_none()
         || layer.rect.width() <= 0
         || layer.rect.height() <= 0
         || canvas_w == 0
@@ -391,13 +392,13 @@ pub fn fit_smart_object_to_canvas(doc: &mut Document, path: &str) -> bool {
 /// source, and an unlocked position.
 pub fn can_transform_smart_object_rect(doc: &Document, path: &str) -> bool {
     resolve_path(doc, path).is_some_and(|layer| {
-        !layer.is_group
-            && layer.adjustment.is_none()
+        !layer.is_group()
+            && !layer.has_adjustment_content()
             && !layer.background
             && !layer.lock.contains(pictura_core::LockFlags::POSITION)
             && layer.mask.is_none()
-            && layer.channels.is_empty()
-            && layer.raw_channels.is_empty()
+            && layer.channels().is_empty()
+            && layer.raw_channels().is_empty()
             && can_materialize_smart_source(layer)
     })
 }
@@ -439,7 +440,7 @@ pub fn open_as_smart_object(filename: &str, bytes: &[u8]) -> Option<Document> {
 /// no adjustment data, and a typed smart object to consume.
 pub fn can_rasterize_smart_object(doc: &Document, path: &str) -> bool {
     resolve_path(doc, path).is_some_and(|layer| {
-        !layer.is_group && layer.adjustment.is_none() && layer.smart_object.is_some()
+        !layer.is_group() && !layer.has_adjustment_content() && layer.smart_object().is_some()
     })
 }
 
@@ -448,8 +449,7 @@ pub fn can_rasterize_smart_object(doc: &Document, path: &str) -> bool {
 /// case (a channel id `0`) separately.
 pub fn can_materialize_smart_source(layer: &Layer) -> bool {
     layer
-        .smart_object
-        .as_ref()
+        .smart_object()
         .is_some_and(|so| crate::render_smart_source(so, layer.rect, layer.rect).is_some())
 }
 
@@ -469,12 +469,12 @@ pub fn rasterize_smart_object(doc: &mut Document, path: &str) -> bool {
     }
     let rendered = {
         let layer = resolve_path(doc, path).expect("can_rasterize_smart_object checked");
-        let has_proxy = layer.channels.iter().any(|c| c.id == 0);
+        let has_proxy = layer.channels().iter().any(|c| c.id == 0);
         let bake_stack = crate::composite_route::stack_source_applies(layer);
         if has_proxy && !bake_stack {
             None
         } else {
-            let so = layer.smart_object.as_ref().expect("checked");
+            let so = layer.smart_object().expect("checked");
             match crate::render_smart_source(so, layer.rect, layer.rect) {
                 Some(src) => {
                     let plane = src.width as usize * src.height as usize;
@@ -496,18 +496,18 @@ pub fn rasterize_smart_object(doc: &mut Document, path: &str) -> bool {
         }
     };
     let uuid = resolve_path(doc, path)
-        .and_then(|layer| layer.smart_object.as_ref())
+        .and_then(|layer| layer.smart_object())
         .map(|so| so.uuid.clone())
         .unwrap_or_default();
     {
         let layer = resolve_path_mut(doc, path).expect("checked");
         if let Some(channels) = rendered {
-            layer.channels = channels;
+            layer.set_channels(channels);
         }
-        layer
+        pictura_codec::edit_layer(layer.as_mut(), |parts| { parts
             .extra_blocks
-            .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd" | b"PiSt"));
-        layer.smart_object = None;
+            .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd" | b"PiSt")) });
+        pictura_codec::retire_layer_content(layer);
     }
     remove_link_if_unreferenced(doc, &uuid);
     true
@@ -550,10 +550,10 @@ pub fn reset_smart_object_transform(doc: &mut Document, path: &str) -> bool {
         bottom: src.height as i32,
         right: src.width as i32,
     };
-    layer.channels.clear();
+    layer.channels_mut().clear();
     // The mapped frame is native, so the retained native/raw streams no longer
     // match the layer; drop them rather than re-emitting a stale transform.
-    layer.raw_channels.clear();
+    layer.discard_raw_channels();
     layer.source_channels = None;
     true
 }
@@ -588,8 +588,7 @@ pub fn convert_smart_object_to_layers(doc: &mut Document, path: &str) -> bool {
         Some(layer) => (
             layer.rect,
             layer
-                .smart_object
-                .as_ref()
+                .smart_object()
                 .map(|so| so.uuid.clone())
                 .unwrap_or_default(),
         ),
@@ -657,7 +656,7 @@ fn map_layer(layer: &Layer, sx: f64, sy: f64, ox: i32, oy: i32) -> Layer {
         out.rect.width().max(0) as usize,
         out.rect.height().max(0) as usize,
     );
-    for channel in out.channels.iter_mut() {
+    for channel in out.channels_mut().iter_mut() {
         if sw > 0 && sh > 0 && channel.data.len() == (sw as usize) * (sh as usize) {
             channel.data = resample_plane(&channel.data, sw as usize, sh as usize, dw, dh).into();
         } else {
@@ -681,19 +680,19 @@ fn map_layer(layer: &Layer, sx: f64, sy: f64, ox: i32, oy: i32) -> Layer {
             })
         });
     }
-    if !out.children.is_empty() {
-        out.children = pictura_core::LayerStack::from_layers(
+    if !out.children().is_empty() {
+        out.set_group_children(pictura_core::LayerStack::from_layers(
             layer
-                .children
+                .children()
                 .iter()
                 .map(|child| map_layer(child, sx, sy, ox, oy))
                 .collect(),
-        );
+        ));
     }
     if out.background {
         super::create::release_background(&mut out);
     }
-    out.raw_channels.clear();
+    pictura_codec::edit_layer(out.as_mut(), |parts| { parts.raw_channels.clear() });
     out.source_channels = None;
     out
 }
@@ -735,21 +734,21 @@ fn raster_layer_from_composite(source: &Document, obj_rect: PsdRect) -> Layer {
             });
         }
     }
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Layer".into(),
         rect: obj_rect,
         channels,
         ..Default::default()
-    }
+    })
 }
 
 /// Whether `path` resolves to a non-group, non-adjustment `Embedded` smart
 /// object with a non-empty payload, so an independent copy can be made.
 pub fn can_new_smart_object_via_copy(doc: &Document, path: &str) -> bool {
     resolve_path(doc, path).is_some_and(|layer| {
-        !layer.is_group
-            && layer.adjustment.is_none()
-            && layer.smart_object.as_ref().is_some_and(|so| {
+        !layer.is_group()
+            && !layer.has_adjustment_content()
+            && layer.smart_object().is_some_and(|so| {
                 so.kind == SmartObjectKind::Embedded && so.payload().is_some_and(|p| !p.is_empty())
             })
     })
@@ -770,12 +769,12 @@ pub fn new_smart_object_via_copy(doc: &mut Document, path: &str) -> Option<Strin
     let segments = parse_path(path)?;
     let mut copy = resolve_path(doc, path)?.clone();
     copy.name = format!("{} copy", copy.name);
-    copy.extra_blocks
-        .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd"));
-    if let Some(so) = copy.smart_object.as_mut() {
+    pictura_codec::edit_layer(copy.as_mut(), |parts| { parts.extra_blocks
+        .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd")) });
+    pictura_codec::edit_layer(copy.as_mut(), |parts| { if let Some(so) = parts.smart_object.as_mut() {
         so.config_descriptor.clear();
         so.uuid.clear();
-    }
+    } });
     let (&index, parent) = segments.split_last()?;
     if doc.layers.insert(parent, index + 1, copy).is_err() {
         return None;

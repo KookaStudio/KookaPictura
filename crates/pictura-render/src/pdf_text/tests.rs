@@ -63,7 +63,7 @@ fn a_top_type_layer_becomes_live_text_and_is_hidden() {
 fn covered_type_stays_in_the_image() {
     let mut doc = doc();
     {
-        let _ = doc.layers.push(Layer {
+        let _ = doc.layers.push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "cover".into(),
             rect: PsdRect {
                 top: 0,
@@ -71,8 +71,8 @@ fn covered_type_stays_in_the_image() {
                 bottom: 10,
                 right: 10,
             },
-            ..doc.layers[0].clone()
-        });
+            ..pictura_core::LayerParts::from(doc.layers[0].clone())
+        }));
     };
     assert!(pdf_live_type(&doc, OPEN).is_none());
 }

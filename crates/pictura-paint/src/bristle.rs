@@ -303,7 +303,7 @@ mod tests {
     fn transparent_doc(w: u32, h: u32) -> Document {
         let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
         let n = (w * h) as usize;
-        let _ = doc.layers.push(Layer {
+        let _ = doc.layers.push(pictura_core::Layer::from_parts(pictura_core::LayerParts {
             rect: PsdRect {
                 top: 0,
                 left: 0,
@@ -317,13 +317,13 @@ mod tests {
                 })
                 .into(),
             ..Default::default()
-        });
+        }, pictura_core::LayerContent::Pixel));
         doc
     }
 
     fn alpha_plane(doc: &Document) -> Vec<u8> {
         doc.layers[0]
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == -1)
             .map(|c| c.data.as_slice().to_vec())

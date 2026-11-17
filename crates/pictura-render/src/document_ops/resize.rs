@@ -150,7 +150,7 @@ fn resampled_rows(doc: &mut pictura_core::Document, sx: f64, sy: f64, to: (u32, 
         }
     };
     for_each_layer(&mut doc.layers, &mut |layer| {
-        count(layer.rect, layer.channels.len() as u64);
+        count(layer.rect, layer.channels().len() as u64);
         let mask = layer
             .mask
             .as_ref()
@@ -215,7 +215,7 @@ pub(crate) fn mapped_plane_bytes(
     }
     walk(&doc.layers, &mut |layer| {
         if let Some(to) = layer_dims(layer.rect) {
-            add(to, layer.channels.len(), 1);
+            add(to, layer.channels().len(), 1);
         }
         let mask = layer.mask.as_ref().filter(|m| m.data.is_some());
         if let Some(to) = mask.and_then(|m| layer_dims(m.rect)) {
@@ -239,7 +239,7 @@ pub(crate) fn mapped_plane_bytes(
 fn walk(layers: &pictura_core::LayerStack, f: &mut dyn FnMut(&pictura_core::Layer)) {
     for layer in layers.iter() {
         f(layer);
-        walk(&layer.children, f);
+        walk(layer.children(), f);
     }
 }
 
@@ -289,7 +289,7 @@ fn resize_layer(
     if lw > 0 && lh > 0 {
         let (nw, nh) = scaled_dims(lw, lh, sx, sy);
         let (from, to) = ((lw as usize, lh as usize), (nw as usize, nh as usize));
-        for channel in &mut layer.channels {
+        for channel in layer.channels_mut() {
             channel.data = resize_bytes(&channel.data, from, to, resample)?;
         }
         layer.rect = scaled_rect(old_rect, nw, nh, sx, sy);
@@ -308,7 +308,7 @@ fn resize_layer(
     }
     if sx != 1.0 || sy != 1.0 {
         // ponytail: an unmodeled raw on-disk stream still has no resampler.
-        layer.raw_channels.clear();
+        layer.discard_raw_channels();
         if let Some(store) = layer.source_channels.take() {
             layer.source_channels =
                 Some(resize_store(store, old_rect, old_mask, sx, sy, resample)?);
@@ -384,7 +384,7 @@ mod tests {
 
     fn pixel_layer(name: &str, r: PsdRect, mask: Option<LayerMask>) -> Layer {
         let n = (r.width().max(0) * r.height().max(0)) as usize;
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: name.into(),
             rect: r,
             blend: BlendMode::Normal,
@@ -418,7 +418,7 @@ mod tests {
             is_group: false,
             background: false,
             ..Default::default()
-        }
+        })
     }
 
     fn sample_doc() -> Document {
@@ -453,7 +453,7 @@ mod tests {
         for (layer, old) in doc.layers.iter().zip(&before.layers) {
             assert!(layer.rect.width() > 0 && layer.rect.height() > 0);
             let area = (layer.rect.width() * layer.rect.height()) as usize;
-            for channel in &layer.channels {
+            for channel in layer.channels() {
                 assert_eq!(
                     channel.data.len(),
                     area,
@@ -507,7 +507,7 @@ mod tests {
         assert_eq!(dims0, dims1);
         for layer in &doc.layers {
             let area = (layer.rect.width() * layer.rect.height()) as usize;
-            for channel in &layer.channels {
+            for channel in layer.channels() {
                 assert_eq!(channel.data.len(), area);
             }
         }
@@ -527,10 +527,10 @@ mod tests {
                 }),
             )
             .expect("valid native source");
-        doc.layers[0].raw_channels = vec![RawChannel {
+        pictura_codec::edit_layer(doc.layers[0].as_mut(), |parts| { parts.raw_channels = vec![RawChannel {
             id: 3,
             data: vec![0, 0, 1].into(),
-        }];
+        }] });
         doc.layers[0].source_channels = Some(SourceChannels {
             depth: BitDepth::Sixteen,
             rect: rect(0, 0, 4, 4),
@@ -541,7 +541,7 @@ mod tests {
         // A no-op resize (unchanged dimensions) keeps the channel.
         resize_document(&mut doc, 4, 4, pictura_ops::Resample::Nearest).unwrap();
         assert_eq!(
-            doc.layers[0].raw_channels.len(),
+            doc.layers[0].raw_channels().len(),
             1,
             "a no-op resize keeps the unmodeled channel"
         );
@@ -549,7 +549,7 @@ mod tests {
 
         resize_document(&mut doc, 8, 8, pictura_ops::Resample::Nearest).unwrap();
         assert!(
-            doc.layers[0].raw_channels.is_empty(),
+            doc.layers[0].raw_channels().is_empty(),
             "the unmodeled raw stream is dropped"
         );
         let store = doc.layers[0]

@@ -34,7 +34,7 @@ fn doc() -> Document {
 fn trimmed_layer() -> pictura_core::Layer {
     let mut layer = pixel_layer("px", 8, 8, (255, 0, 0));
     let alpha = layer
-        .channels
+        .channels_mut()
         .iter_mut()
         .find(|c| c.id == -1)
         .expect("the alpha channel");
@@ -509,10 +509,10 @@ fn a_shape_path_abort_requests_a_rebuild() {
     // change: the abort restores the outline and asks for a rebuild.
     view.session
         .live
-        .set_path(crate::cxxqt_object::document_session::PathRestore::Layer {
+        .set_path(crate::cxxqt_object::document_session::PathRestore::pictura_codec::layer_from_parts(pictura_core::LayerParts {
             target: "0".into(),
             subpaths: Vec::new(),
-        });
+        }));
     assert!(view.has_active_session(), "the gesture is live");
 
     let change = view.cancel_active_sessions();
@@ -777,8 +777,8 @@ fn a_region_change_can_also_notify() {
 
 fn group_layer(name: &str, children: Vec<pictura_core::Layer>) -> pictura_core::Layer {
     let mut group = pixel_layer(name, 8, 8, (0, 0, 0));
-    group.is_group = true;
-    group.children = LayerStack::from_layers(children);
+    group.set_group_children(pictura_core::LayerStack::default());
+    group.set_group_children(LayerStack::from_layers(children));
     group
 }
 

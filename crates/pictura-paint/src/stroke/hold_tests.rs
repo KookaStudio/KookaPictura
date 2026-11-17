@@ -7,7 +7,7 @@ const WHITE: u8 = 255;
 
 fn white_doc() -> Document {
     let mut doc = Document::new(SIDE as u32, SIDE as u32, ColorMode::Rgb, BitDepth::Eight);
-    let _ = doc.layers.push(Layer {
+    let _ = doc.layers.push(pictura_core::Layer::from_parts(pictura_core::LayerParts {
         rect: PsdRect {
             top: 0,
             left: 0,
@@ -21,7 +21,7 @@ fn white_doc() -> Document {
             })
             .into(),
         ..Default::default()
-    });
+    }, pictura_core::LayerContent::Pixel));
     doc
 }
 

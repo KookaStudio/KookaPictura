@@ -317,7 +317,7 @@ pub fn materialize_text_rgba(doc: &mut Document, path: &str, rgba: &[u8]) -> boo
         b.push(px[2]);
         a.push(baked[usize::from(px[3])]);
     }
-    layer.channels = vec![
+    layer.set_channels(vec![
         Channel {
             id: 0,
             data: r.into(),
@@ -334,7 +334,7 @@ pub fn materialize_text_rgba(doc: &mut Document, path: &str, rgba: &[u8]) -> boo
             id: -1,
             data: a.into(),
         },
-    ];
+    ]);
     drop_type(layer);
     true
 }
@@ -358,8 +358,7 @@ fn baked_text_alpha(layer: &Layer) -> [u8; 256] {
 /// the transparency and pixel locks type layers carry, so the result paints like
 /// any pixel layer.
 fn drop_type(layer: &mut Layer) {
-    layer.extra_blocks.retain(|block| &block.key != b"TySh");
-    layer.type_tool = None;
+    pictura_codec::retire_layer_content(layer);
     layer.applied_character_style = None;
     layer.applied_paragraph_style = None;
     layer.type_overrides = Default::default();
@@ -391,7 +390,7 @@ pub fn render_text_layer(doc: &mut Document, path: &str) -> bool {
     let Some(layer) = crate::resolve_path(doc, path) else {
         return false;
     };
-    let Some(type_tool) = layer.type_tool.as_ref() else {
+    let Some(type_tool) = layer.type_tool() else {
         return false;
     };
     if has_type_pixels(layer) {
@@ -399,7 +398,7 @@ pub fn render_text_layer(doc: &mut Document, path: &str) -> bool {
             return false;
         };
         let baked = baked_text_alpha(layer);
-        if let Some(alpha) = layer.channels.iter_mut().find(|c| c.id == -1) {
+        if let Some(alpha) = layer.channels_mut().iter_mut().find(|c| c.id == -1) {
             for a in alpha.data.as_mut_slice() {
                 *a = baked[usize::from(*a)];
             }

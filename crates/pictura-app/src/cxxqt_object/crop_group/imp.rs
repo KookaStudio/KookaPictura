@@ -182,7 +182,7 @@ pub(super) fn composite_bounds(view: &PictureView) -> QString {
     fn union(layers: &[pictura_core::Layer], acc: &mut Option<PsdRect>) {
         for layer in layers {
             *acc = Some(acc.map_or(layer.rect, |r| r.union(layer.rect)));
-            union(&layer.children, acc);
+            union(&layer.children(), acc);
         }
     }
     let Some(doc) = view.rust().session.doc.as_ref() else {

@@ -235,15 +235,16 @@ pub(crate) fn read_container(
         )?;
     // Derive the smart-object view from the preserved bytes; a malformed
     // descriptor or linked-layer record degrades to Unresolved (design D5).
-    crate::smart_object::resolve_smart_objects(&mut layers, &layer_section_extra, is_psb);
+    crate::smart_object::resolve_smart_objects_within(&mut layers, &layer_section_extra, is_psb, budget)?;
     // Derive the vector-mask view from the preserved `vmsk`/`vsms` blocks.
     // ponytail: this is a read snapshot. In-session resize/crop/orientation do
     // not re-derive it; the raw block stays authoritative and a reload re-derives.
     crate::vector_mask::resolve_vector_masks(&mut layers, width, height);
     // Derive the type-tool view from the preserved `TySh` blocks, then apply
     // the document-level `Txt2` text-frame paths to those layers.
-    crate::type_tool::resolve_type_tools(&mut layers);
-    crate::type_path::resolve_text_paths(&mut layers, &layer_section_extra, is_psb);
+    crate::type_tool::resolve_type_tools_within(&mut layers, budget)?;
+    crate::type_path::resolve_text_paths_within(&mut layers, &layer_section_extra, is_psb, budget)?;
+    crate::normalize_content::normalize_tree_within(&mut layers, budget)?;
 
     // "Maximize Compatibility" off: a layered file may end after the layer
     // section with no merged composite. A file with no layers at all and no
@@ -679,8 +680,11 @@ fn read_layer_info(
                     Some(SourceChannels::new(bits, raw.layer.rect, retained));
             }
         }
-        raw.layer.channels = channels;
-        raw.layer.raw_channels = raw_channels;
+        raw.layer.set_channels(channels);
+        let content = raw.layer.content().clone();
+        let mut parts = pictura_core::LayerParts::from(raw.layer);
+        parts.raw_channels = raw_channels;
+        raw.layer = pictura_core::Layer::from_parts(parts, content);
         if let Some(data) = mask_data {
             match raw.layer.mask.as_mut() {
                 Some(mask) => mask.data = Some(data),
@@ -733,7 +737,7 @@ fn charge_plane(
 /// `"Background"` is the Background (design D5, marked inferred).
 fn derive_background(layers: &mut LayerStack) {
     if let Some(bottom) = layers.first_mut() {
-        if !bottom.is_group && bottom.name == "Background" {
+        if !bottom.is_group() && bottom.name == "Background" {
             bottom.background = true;
         }
     }
@@ -949,7 +953,7 @@ fn read_layer_record(r: &mut Reader, is_psb: bool) -> Result<RawLayer, PsdError>
     }
 
     Ok(RawLayer {
-        layer: Layer {
+        layer: pictura_core::Layer::from_parts(pictura_core::LayerParts {
             name,
             rect,
             blend,
@@ -985,7 +989,7 @@ fn read_layer_record(r: &mut Reader, is_psb: bool) -> Result<RawLayer, PsdError>
             applied_paragraph_style: None,
             type_overrides: Default::default(),
             source_channels: None,
-        },
+        }, pictura_core::LayerContent::Pixel),
         channel_ids,
         channel_lens,
         section,
@@ -1043,8 +1047,8 @@ fn build_tree(raws: Vec<RawLayer>) -> Result<LayerStack, PsdError> {
             }
             Some(SECTION_OPEN_FOLDER) | Some(SECTION_CLOSED_FOLDER) => {
                 let mut group = raw.layer;
-                group.is_group = true;
-                group.channels = Vec::new();
+                group.set_group_children(pictura_core::LayerStack::default());
+                group.set_channels(Vec::new());
                 group.mask = None;
                 // A folder with no open divider closes an empty group; the
                 // root level is never popped.
@@ -1053,7 +1057,7 @@ fn build_tree(raws: Vec<RawLayer>) -> Result<LayerStack, PsdError> {
                 } else {
                     Vec::new()
                 };
-                group.children = LayerStack::from_layers(children);
+                group.set_group_children(LayerStack::from_layers(children));
                 stack.last_mut().unwrap().push(group);
             }
             _ => stack.last_mut().unwrap().push(raw.layer),

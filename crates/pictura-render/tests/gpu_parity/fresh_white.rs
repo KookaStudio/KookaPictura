@@ -20,7 +20,7 @@ fn fresh_white_document(w: u32, h: u32) -> Document {
         .expect("pixel edit preserves geometry");
     let n = (w as usize) * (h as usize);
     let plane = || vec![255u8; n];
-    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Layer 0".into(),
         rect: PsdRect {
             top: 0,
@@ -59,7 +59,7 @@ fn fresh_white_document(w: u32, h: u32) -> Document {
         is_group: false,
         background: false,
         ..Default::default()
-    }]);
+    })]);
     doc
 }
 

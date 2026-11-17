@@ -15,12 +15,12 @@ fn plane(values: &[u8]) -> Plane<u8> {
 }
 
 fn layer(rect: PsdRect, rgba: [&[u8]; 4]) -> Layer {
-    let mut layer = Layer {
+    let mut layer = pictura_core::Layer::from_parts(pictura_core::LayerParts {
         rect,
         ..Default::default()
-    };
+    }, pictura_core::LayerContent::Pixel);
     for (id, values) in [0i16, 1, 2, -1].into_iter().zip(rgba) {
-        layer.channels.push(Channel {
+        layer.channels_mut().push(Channel {
             id,
             data: plane(values),
         });
@@ -39,7 +39,7 @@ fn solid(rect: PsdRect, color: [u8; 3], alpha: u8) -> Layer {
 
 fn channel(layer: &Layer, id: i16) -> &[u8] {
     layer
-        .channels
+        .channels()
         .iter()
         .find(|c| c.id == id)
         .expect("channel")

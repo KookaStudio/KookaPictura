@@ -409,7 +409,7 @@ fn over_budget_channel_is_refused_before_decoding() {
         mask: Some([0, 0, 1, 1]),
         ..LayerSpec::default()
     };
-    layer.channels = vec![
+    *layer.channels_mut() = vec![
         (-2, vec![0, 1, 0x81]), // RLE whose 2-byte count table is truncated
         (0, raw_channel(0, 2048).1),
     ];
@@ -447,9 +447,9 @@ fn group_nesting_is_capped() {
     let doc = read_psd(&psd(&Header::rgb(4, 4), &nested_groups(64), None)).expect("at the cap");
     let mut depth = 0;
     let mut layer = &doc.layers[0];
-    while layer.is_group {
+    while layer.is_group() {
         depth += 1;
-        layer = &layer.children[0];
+        layer = &layer.children()[0];
     }
     assert_eq!(depth, 64);
 }
@@ -466,7 +466,7 @@ fn a_folder_without_a_divider_is_an_empty_group() {
     layers.push(folder);
     let doc = read_psd(&psd(&Header::rgb(4, 4), &layers, None)).expect("reads");
     assert_eq!(doc.layers.len(), 2);
-    assert!(doc.layers[1].is_group && doc.layers[1].children.is_empty());
+    assert!(doc.layers[1].is_group() && doc.layers[1].children().is_empty());
 }
 
 #[test]

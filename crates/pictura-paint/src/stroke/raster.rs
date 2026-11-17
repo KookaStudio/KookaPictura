@@ -179,7 +179,7 @@ pub(super) fn cells<'a>(
 ) -> Vec<Cell<'a>> {
     let len = width * height;
     let mut planes: [Option<std::vec::IntoIter<TileMut<'a, u8>>>; 4] = [None, None, None, None];
-    for (idx, c) in layer.channels.iter_mut().enumerate() {
+    for (idx, c) in layer.channels_mut().iter_mut().enumerate() {
         let Some(k) = ch.iter().position(|&x| x == Some(idx)) else {
             continue;
         };

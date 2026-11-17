@@ -7,12 +7,53 @@
 //! verbatim as [`DescValue::Raw`], which carries its 4-byte ostype so it can be
 //! re-emitted unchanged.
 
+use crate::budget::DecodeBudget;
 use crate::common::Reader;
 use crate::error::PsdError;
 
 /// Nesting cap. Real descriptors are a handful of levels deep; the cap keeps a
 /// malformed file from exhausting the stack.
 const MAX_DEPTH: u32 = 64;
+
+enum DescriptorFailure {
+    Malformed(PsdError),
+    Resource(PsdError),
+}
+
+impl From<PsdError> for DescriptorFailure {
+    fn from(error: PsdError) -> Self {
+        Self::Malformed(error)
+    }
+}
+
+impl DescriptorFailure {
+    fn into_error(self) -> PsdError {
+        match self {
+            Self::Malformed(error) | Self::Resource(error) => error,
+        }
+    }
+}
+
+type DescriptorResult<T> = Result<T, DescriptorFailure>;
+
+fn admitted_vec<T>(
+    count: usize,
+    budget: &mut Option<&mut DecodeBudget>,
+    what: &str,
+) -> DescriptorResult<Vec<T>> {
+    if let Some(budget) = budget.as_deref_mut() {
+        return crate::layer_content_budget::vec_with_capacity(count, budget, what)
+            .map_err(DescriptorFailure::Resource);
+    }
+    let mut values = Vec::new();
+    values.try_reserve_exact(count).map_err(|_| {
+        DescriptorFailure::Resource(PsdError::Unsupported(format!(
+            "{what} allocation refused after decode budget admission"
+        )))
+    })?;
+    Ok(values)
+}
+
 
 /// A parsed descriptor value.
 ///
@@ -44,13 +85,31 @@ pub enum DescValue {
 /// Read a version-16 `DescriptorBlock` (a descriptor body preceded by its
 /// `u32` version) into a [`DescValue::Object`].
 pub(crate) fn read_descriptor(r: &mut Reader) -> Result<DescValue, PsdError> {
+    read_descriptor_block(r, &mut None).map_err(DescriptorFailure::into_error)
+}
+
+pub(crate) fn read_descriptor_with_budget(
+    r: &mut Reader,
+    budget: &mut DecodeBudget,
+) -> Result<Option<DescValue>, PsdError> {
+    match read_descriptor_block(r, &mut Some(budget)) {
+        Ok(value) => Ok(Some(value)),
+        Err(DescriptorFailure::Malformed(_)) => Ok(None),
+        Err(DescriptorFailure::Resource(error)) => Err(error),
+    }
+}
+
+fn read_descriptor_block(
+    r: &mut Reader,
+    budget: &mut Option<&mut DecodeBudget>,
+) -> DescriptorResult<DescValue> {
     let version = r.u32()?;
     if version != 16 {
         return Err(PsdError::Unsupported(format!(
             "descriptor block version {version}"
-        )));
+        )).into());
     }
-    read_descriptor_body(r, 0)
+    read_descriptor_body(r, 0, budget)
 }
 
 /// Serialize a descriptor as a version-16 `DescriptorBlock`. Only an
@@ -97,17 +156,24 @@ pub(crate) fn set_object_item(obj: &mut Vec<(Vec<u8>, DescValue)>, key: &[u8], v
     }
 }
 
-fn read_descriptor_body(r: &mut Reader, depth: u32) -> Result<DescValue, PsdError> {
+fn read_descriptor_body(
+    r: &mut Reader,
+    depth: u32,
+    budget: &mut Option<&mut DecodeBudget>,
+) -> DescriptorResult<DescValue> {
     if depth > MAX_DEPTH {
-        return Err(too_deep());
+        return Err(too_deep().into());
     }
-    let name = read_unicode_string(r)?;
-    let class_id = read_length_and_key(r)?;
-    let count = r.u32()?;
-    let mut items = Vec::new();
+    let name = read_unicode_string_admitted(r, budget)?;
+    let class_id = read_length_and_key_admitted(r, budget)?;
+    let count = r.u32()? as usize;
+    if count > r.remaining() / 4 {
+        return Err(PsdError::Truncated.into());
+    }
+    let mut items = admitted_vec(count, budget, "descriptor container")?;
     for _ in 0..count {
-        let key = read_length_and_key(r)?;
-        let value = read_descriptor_value(r, depth + 1)?;
+        let key = read_length_and_key_admitted(r, budget)?;
+        let value = read_descriptor_value(r, depth + 1, budget)?;
         items.push((key, value));
     }
     Ok(DescValue::Object {
@@ -117,42 +183,56 @@ fn read_descriptor_body(r: &mut Reader, depth: u32) -> Result<DescValue, PsdErro
     })
 }
 
-fn read_descriptor_value(r: &mut Reader, depth: u32) -> Result<DescValue, PsdError> {
+fn read_descriptor_value(
+    r: &mut Reader,
+    depth: u32,
+    budget: &mut Option<&mut DecodeBudget>,
+) -> DescriptorResult<DescValue> {
     if depth > MAX_DEPTH {
-        return Err(too_deep());
+        return Err(too_deep().into());
     }
     let start = r.pos;
     let ostype = arr4(r.take(4)?);
     Ok(match ostype.as_slice() {
-        b"Objc" | b"GlbO" => read_descriptor_body(r, depth)?,
-        b"VlLs" | b"obj " => read_list(r, depth)?,
+        b"Objc" | b"GlbO" => read_descriptor_body(r, depth, budget)?,
+        b"VlLs" | b"obj " => read_list(r, depth, budget)?,
         b"long" => DescValue::Long(r.i32()?),
         b"doub" => DescValue::Double(f64::from_bits(r.u64()?)),
         b"UntF" => DescValue::UnitFloat {
             unit: arr4(r.take(4)?),
             value: f64::from_bits(r.u64()?),
         },
-        b"TEXT" => DescValue::Text(read_unicode_string(r)?),
+        b"TEXT" => DescValue::Text(read_unicode_string_admitted(r, budget)?),
         b"bool" => DescValue::Bool(r.u8()? != 0),
         b"enum" => DescValue::Enum {
-            kind: read_length_and_key(r)?,
-            value: read_length_and_key(r)?,
+            kind: read_length_and_key_admitted(r, budget)?,
+            value: read_length_and_key_admitted(r, budget)?,
         },
         _ => {
             skip_descriptor_value(r, ostype, depth)?;
-            DescValue::Raw(r.data[start..r.pos].to_vec())
+            let bytes = &r.data[start..r.pos];
+            let mut raw = admitted_vec(bytes.len(), budget, "descriptor raw data")?;
+            raw.extend_from_slice(bytes);
+            DescValue::Raw(raw)
         }
     })
 }
 
-fn read_list(r: &mut Reader, depth: u32) -> Result<DescValue, PsdError> {
+fn read_list(
+    r: &mut Reader,
+    depth: u32,
+    budget: &mut Option<&mut DecodeBudget>,
+) -> DescriptorResult<DescValue> {
     if depth > MAX_DEPTH {
-        return Err(too_deep());
+        return Err(too_deep().into());
     }
-    let count = r.u32()?;
-    let mut items = Vec::new();
+    let count = r.u32()? as usize;
+    if count > r.remaining() / 4 {
+        return Err(PsdError::Truncated.into());
+    }
+    let mut items = admitted_vec(count, budget, "descriptor container")?;
     for _ in 0..count {
-        items.push(read_descriptor_value(r, depth + 1)?);
+        items.push(read_descriptor_value(r, depth + 1, budget)?);
     }
     Ok(DescValue::List(items))
 }
@@ -241,23 +321,57 @@ fn write_length_and_key(key: &[u8], out: &mut Vec<u8>) {
 /// Descriptor key: a `u32` length; a zero length means the following 4 bytes
 /// are an interned term key.
 pub(crate) fn read_length_and_key(r: &mut Reader) -> Result<Vec<u8>, PsdError> {
+    read_length_and_key_admitted(r, &mut None).map_err(DescriptorFailure::into_error)
+}
+
+fn read_length_and_key_admitted(
+    r: &mut Reader,
+    budget: &mut Option<&mut DecodeBudget>,
+) -> DescriptorResult<Vec<u8>> {
     let len = r.u32()? as usize;
     let n = if len == 0 { 4 } else { len };
-    Ok(r.take(n)?.to_vec())
+    let bytes = r.take(n)?;
+    let mut key = admitted_vec(n, budget, "descriptor key")?;
+    key.extend_from_slice(bytes);
+    Ok(key)
 }
 
 /// UTF-16BE string with a `u32` code-unit count.
 pub(crate) fn read_unicode_string(r: &mut Reader) -> Result<String, PsdError> {
+    read_unicode_string_admitted(r, &mut None).map_err(DescriptorFailure::into_error)
+}
+
+fn read_unicode_string_admitted(
+    r: &mut Reader,
+    budget: &mut Option<&mut DecodeBudget>,
+) -> DescriptorResult<String> {
     let count = r.u32()? as usize;
     let bytes = count.checked_mul(2).ok_or_else(size_overflow)?;
     let data = r.take(bytes)?;
-    let units: Vec<u16> = data
-        .as_chunks::<2>()
-        .0
-        .iter()
-        .map(|c| u16::from_be_bytes([c[0], c[1]]))
-        .collect();
-    Ok(String::from_utf16_lossy(&units))
+    let capacity = count.checked_mul(3).ok_or_else(size_overflow)?;
+    if let Some(budget) = budget.as_deref_mut() {
+        budget.charge("descriptor text", &[capacity]).map_err(DescriptorFailure::Resource)?;
+    }
+    let mut value = String::new();
+    value.try_reserve_exact(capacity).map_err(|_| {
+        DescriptorFailure::Resource(PsdError::Unsupported(
+            "descriptor text allocation refused after decode budget admission".into(),
+        ))
+    })?;
+    value.extend(char::decode_utf16(data.as_chunks::<2>().0.iter().map(|unit| {
+        u16::from_be_bytes([unit[0], unit[1]])
+    })).map(|decoded| decoded.unwrap_or(char::REPLACEMENT_CHARACTER)));
+    Ok(value)
+}
+
+fn skip_unicode_string(r: &mut Reader) -> Result<(), PsdError> {
+    let count = r.u32()? as usize;
+    r.skip(count.checked_mul(2).ok_or_else(size_overflow)?)
+}
+
+fn skip_length_and_key(r: &mut Reader) -> Result<(), PsdError> {
+    let len = r.u32()? as usize;
+    r.skip(if len == 0 { 4 } else { len })
 }
 
 /// Skip a `DescriptorBlock` (version header plus body); used by the linked-layer
@@ -281,20 +395,20 @@ fn skip_descriptor_value(r: &mut Reader, ostype: [u8; 4], depth: u32) -> Result<
             r.skip(n.checked_mul(8).ok_or_else(too_deep)?)
         }
         b"TEXT" => {
-            read_unicode_string(r)?;
+            skip_unicode_string(r)?;
             Ok(())
         }
         b"enum" => {
-            read_length_and_key(r)?;
-            read_length_and_key(r)?;
+            skip_length_and_key(r)?;
+            skip_length_and_key(r)?;
             Ok(())
         }
         b"long" | b"indx" | b"Idnt" => r.skip(4),
         b"comp" => r.skip(8),
         b"bool" => r.skip(1),
         b"type" | b"GlbC" | b"Clss" => {
-            read_unicode_string(r)?;
-            read_length_and_key(r)?;
+            skip_unicode_string(r)?;
+            skip_length_and_key(r)?;
             Ok(())
         }
         b"alis" | b"tdta" | b"Pth " => {
@@ -306,27 +420,27 @@ fn skip_descriptor_value(r: &mut Reader, ostype: [u8; 4], depth: u32) -> Result<
             skip_descriptor_body(r, depth)
         }
         b"prop" => {
-            read_unicode_string(r)?;
-            read_length_and_key(r)?;
-            read_length_and_key(r)?;
+            skip_unicode_string(r)?;
+            skip_length_and_key(r)?;
+            skip_length_and_key(r)?;
             Ok(())
         }
         b"Enmr" => {
-            read_unicode_string(r)?;
-            read_length_and_key(r)?;
-            read_length_and_key(r)?;
-            read_length_and_key(r)?;
+            skip_unicode_string(r)?;
+            skip_length_and_key(r)?;
+            skip_length_and_key(r)?;
+            skip_length_and_key(r)?;
             Ok(())
         }
         b"rele" => {
-            read_unicode_string(r)?;
-            read_length_and_key(r)?;
+            skip_unicode_string(r)?;
+            skip_length_and_key(r)?;
             r.skip(4)
         }
         b"name" => {
-            read_unicode_string(r)?;
-            read_length_and_key(r)?;
-            read_unicode_string(r)?;
+            skip_unicode_string(r)?;
+            skip_length_and_key(r)?;
+            skip_unicode_string(r)?;
             Ok(())
         }
         _ => Err(PsdError::Unsupported(format!(
@@ -340,11 +454,11 @@ fn skip_descriptor_body(r: &mut Reader, depth: u32) -> Result<(), PsdError> {
     if depth > MAX_DEPTH {
         return Err(too_deep());
     }
-    read_unicode_string(r)?; // name
-    read_length_and_key(r)?; // classID
+    skip_unicode_string(r)?; // name
+    skip_length_and_key(r)?; // classID
     let count = r.u32()?;
     for _ in 0..count {
-        read_length_and_key(r)?; // item key
+        skip_length_and_key(r)?; // item key
         let ostype = arr4(r.take(4)?);
         skip_descriptor_value(r, ostype, depth + 1)?;
     }

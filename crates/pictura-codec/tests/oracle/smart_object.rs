@@ -11,7 +11,7 @@ fn embedded_smart_doc() -> Document {
             }
         })
         .expect("pixel edit preserves geometry");
-    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Smart".into(),
         rect: PsdRect {
             top: 0,
@@ -47,7 +47,7 @@ fn embedded_smart_doc() -> Document {
             .with_payload((0..4096).map(|i| (i % 251) as u8).collect()),
         ),
         ..Default::default()
-    }]);
+    })]);
     doc
 }
 
@@ -65,7 +65,7 @@ from psd_tools.psd import PSD
 with open(sys.argv[1], "rb") as f:
     PSD.read(f)
 image = PSDImage.open(sys.argv[1], lazy=False)
-so = image[0].smart_object
+so = image[0].smart_object()
 print(so.kind)
 print(so.filename)
 print(len(so.data))
@@ -133,7 +133,7 @@ fn psd_tools_parses_block_after_odd_length_block_in_psb() {
     // A 5-byte (odd) and a 6-byte (non-4-multiple) per-layer block precede the
     // authored `SoLd`. With the old external pad the next `8BIM` is misread and
     // the smart object is dropped.
-    doc.layers[0].extra_blocks = vec![
+    pictura_codec::edit_layer(doc.layers[0].as_mut(), |parts| { parts.extra_blocks = vec![
         LayerBlock {
             key: *b"zzzz",
             data: vec![1, 2, 3, 4, 5].into(),
@@ -142,7 +142,7 @@ fn psd_tools_parses_block_after_odd_length_block_in_psb() {
             key: *b"yyyy",
             data: vec![1, 2, 3, 4, 5, 6].into(),
         },
-    ];
+    ] });
     let bytes = write_psb(&doc).unwrap();
     let stdout = psd_tools_reads("psb-odd-block-then-smart", &bytes);
     assert_embedded_smart_object(&stdout);

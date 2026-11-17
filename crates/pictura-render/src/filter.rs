@@ -357,7 +357,7 @@ fn write_back(out: &mut [u8], filtered: &[u8], blend: Option<Blend>, at: Placeme
 
 fn channel_mut(layer: &mut Layer, id: i16) -> Option<&mut [u8]> {
     layer
-        .channels
+        .channels_mut()
         .iter_mut()
         .find(|c| c.id == id)
         .map(|c| c.data.as_mut_slice())

@@ -86,13 +86,13 @@ pub(super) fn smart_layer(
     so: SmartObject,
     channels: Vec<Channel>,
 ) -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: r,
         channels,
         smart_object: Some(so),
         ..Default::default()
-    }
+    })
 }
 
 pub(super) fn green_proxy() -> Vec<Channel> {
@@ -210,12 +210,12 @@ fn absent_composite_falls_back_to_layers() {
 
 #[test]
 fn channel_less_non_smart_layer_still_paints_black() {
-    let layer = Layer {
+    let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "bare".into(),
         rect: full(4, 4),
         channels: Vec::new(),
         ..Default::default()
-    };
+    });
     let out = composite_rgba(&doc(4, 4, vec![layer]));
     for y in 0..4 {
         for x in 0..4 {
@@ -296,13 +296,13 @@ fn convert_authors_embedded_object_and_keeps_proxy() {
     assert!(can_convert_to_smart_object(&d, "0"));
     assert!(convert_to_smart_object(&mut d, "0"));
 
-    let so = d.layers[0].smart_object.as_ref().expect("smart object");
+    let so = d.layers[0].smart_object().expect("smart object");
     assert_eq!(so.kind, SmartObjectKind::Embedded);
     assert!(so.payload().is_some_and(|p| !p.is_empty()));
     assert_eq!(so.filename, "Raster.psd");
     assert_eq!(so.filetype, *b"8BPB");
     assert_eq!(so.creator, *b"8BIM");
-    assert_eq!(d.layers[0].channels, before.layers[0].channels);
+    assert_eq!(d.layers[0].channels(), before.layers[0].channels());
     assert_eq!(composite_rgba(&d), before_comp);
 
     let embedded = read_psd(so.payload().unwrap()).expect("payload reads");
@@ -329,8 +329,7 @@ fn converted_layer_round_trips() {
     let mut d = doc(4, 4, vec![layer]);
     assert!(convert_to_smart_object(&mut d, "0"));
     let payload = d.layers[0]
-        .smart_object
-        .as_ref()
+        .smart_object()
         .unwrap()
         .payload()
         .map(<[u8]>::to_vec)
@@ -338,10 +337,10 @@ fn converted_layer_round_trips() {
 
     let bytes = write_psd(&d).expect("host writes");
     let back = read_psd(&bytes).expect("host reads");
-    let so = back.layers[0].smart_object.as_ref().expect("smart object");
+    let so = back.layers[0].smart_object().expect("smart object");
     assert_eq!(so.kind, SmartObjectKind::Embedded);
     assert_eq!(so.payload(), Some(payload.as_slice()));
-    assert_eq!(back.layers[0].channels, d.layers[0].channels);
+    assert_eq!(back.layers[0].channels(), d.layers[0].channels());
     assert_eq!(composite_rgba(&back), composite_rgba(&d));
 }
 
@@ -363,7 +362,7 @@ fn an_empty_layer_converts_to_a_canvas_sized_smart_object() {
     assert!(convert_to_smart_object(&mut d, "0"));
     let layer = &d.layers[0];
     assert_eq!(layer.rect, full(4, 4), "the smart object is canvas-sized");
-    assert!(layer.smart_object.is_some());
+    assert!(layer.smart_object().is_some());
 }
 
 // An empty layer is eligible now (it grows to the canvas first); see
@@ -439,7 +438,7 @@ fn convert_background_unlocks_and_embeds() {
     assert!(!layer.background, "no longer the Background");
     assert_eq!(layer.lock.bits(), 0, "unlocked");
     assert_eq!(layer.name, "Layer 1", "renamed to the next free Layer N");
-    assert!(layer.smart_object.is_some(), "carries a smart object");
+    assert!(layer.smart_object().is_some(), "carries a smart object");
     assert_eq!(composite_rgba(&d), before, "composite unchanged");
 
     let converted = d.clone();
@@ -468,7 +467,7 @@ fn convert_for_smart_filters_unlocks_a_background() {
 
     assert!(convert_for_smart_filters(&mut d, "0"));
     assert!(!d.layers[0].background);
-    assert!(d.layers[0].smart_object.is_some());
+    assert!(d.layers[0].smart_object().is_some());
 }
 
 #[test]
@@ -491,7 +490,7 @@ fn sixteen_bit_document_refuses_conversion() {
 #[test]
 fn grayscale_layer_converts_to_grayscale_source() {
     let mut d = Document::new(2, 2, ColorMode::Grayscale, BitDepth::Eight);
-    d.layers = pictura_core::LayerStack::from_layers(vec![Layer {
+    d.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Gray".into(),
         rect: full(2, 2),
         channels: vec![
@@ -505,11 +504,10 @@ fn grayscale_layer_converts_to_grayscale_source() {
             },
         ],
         ..Default::default()
-    }]);
+    })]);
     assert!(convert_to_smart_object(&mut d, "0"));
     let payload = d.layers[0]
-        .smart_object
-        .as_ref()
+        .smart_object()
         .unwrap()
         .payload()
         .map(<[u8]>::to_vec)
@@ -529,11 +527,11 @@ fn rasterize_keeps_proxy_channels_and_drops_config() {
         BlendMode::Normal,
         255,
     );
-    layer.smart_object = Some(embedded(payload_of([1, 2, 3])));
-    layer.extra_blocks = vec![LayerBlock {
+    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.smart_object = Some(embedded(payload_of([1, 2, 3]))) });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks = vec![LayerBlock {
         key: *b"SoLd",
         data: vec![9, 9, 9, 9].into(),
-    }];
+    }] });
     let mut d = doc(4, 4, vec![layer]);
     let before = d.clone();
     let before_comp = composite_rgba(&d);
@@ -541,9 +539,9 @@ fn rasterize_keeps_proxy_channels_and_drops_config() {
     assert!(can_rasterize_smart_object(&d, "0"));
     assert!(rasterize_smart_object(&mut d, "0"));
 
-    assert_eq!(d.layers[0].channels, before.layers[0].channels);
-    assert!(d.layers[0].smart_object.is_none());
-    assert!(!d.layers[0].extra_blocks.iter().any(|b| &b.key == b"SoLd"));
+    assert_eq!(d.layers[0].channels(), before.layers[0].channels());
+    assert!(d.layers[0].smart_object().is_none());
+    assert!(!d.layers[0].extra_blocks().iter().any(|b| &b.key == b"SoLd"));
     assert!(!can_rasterize_smart_object(&d, "0"));
     assert_eq!(composite_rgba(&d), before_comp);
 }
@@ -562,12 +560,12 @@ fn rasterize_materializes_source_into_channels() {
     assert!(can_rasterize_smart_object(&d, "0"));
     assert!(rasterize_smart_object(&mut d, "0"));
 
-    let channel = |id: i16| d.layers[0].channels.iter().find(|c| c.id == id).unwrap();
+    let channel = |id: i16| d.layers[0].channels().iter().find(|c| c.id == id).unwrap();
     assert_eq!(channel(0).data, vec![255u8; 16]);
     assert_eq!(channel(1).data, vec![0u8; 16]);
     assert_eq!(channel(2).data, vec![0u8; 16]);
     assert_eq!(channel(-1).data, vec![255u8; 16]);
-    assert!(d.layers[0].smart_object.is_none());
+    assert!(d.layers[0].smart_object().is_none());
     assert_eq!(composite_rgba(&d), before_comp);
 }
 
@@ -596,7 +594,7 @@ fn rasterize_refuses_ineligible_targets() {
         4,
         vec![{
             let mut g = group("G", BlendMode::Normal, 255, None, vec![]);
-            g.smart_object = Some(embedded(payload_of([1, 2, 3])));
+            pictura_codec::edit_layer(g.as_mut(), |parts| { parts.smart_object = Some(embedded(payload_of([1, 2, 3]))) });
             g
         }],
     );
@@ -610,7 +608,7 @@ fn rasterize_refuses_ineligible_targets() {
         4,
         vec![{
             let mut a = adjustment_layer("Adj", *b"inv ", vec![0], 255, None);
-            a.smart_object = Some(embedded(payload_of([1, 2, 3])));
+            pictura_codec::edit_layer(a.as_mut(), |parts| { parts.smart_object = Some(embedded(payload_of([1, 2, 3]))) });
             a
         }],
     );
@@ -679,7 +677,7 @@ fn rasterize_preserves_layout_fields() {
     assert_eq!(after.opacity, before.opacity);
     assert_eq!(after.fill, before.fill);
     assert_eq!(after.mask, before.mask);
-    assert!(after.smart_object.is_none());
+    assert!(after.smart_object().is_none());
 }
 
 #[test]
@@ -698,29 +696,28 @@ fn rasterize_drops_preserved_config_and_linked_record_round_trip() {
 
     let mut back = read_psd(&saved).expect("first read");
     let uuid = back.layers[0]
-        .smart_object
-        .as_ref()
+        .smart_object()
         .expect("resolved")
         .uuid
         .clone();
     assert_eq!(uuid.len(), 36);
     assert!(back.layers[0]
-        .extra_blocks
+        .extra_blocks()
         .iter()
         .any(|b| &b.key == b"SoLd"));
     assert!(section_has_uuid(&back.layer_section_extra, &uuid));
 
     assert!(rasterize_smart_object(&mut back, "0"));
-    assert!(back.layers[0].smart_object.is_none());
+    assert!(back.layers[0].smart_object().is_none());
     assert!(!back.layers[0]
-        .extra_blocks
+        .extra_blocks()
         .iter()
         .any(|b| matches!(&b.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd")));
     assert!(!section_has_uuid(&back.layer_section_extra, &uuid));
 
     let resaved = write_psd(&back).expect("second write");
     let reread = read_psd(&resaved).expect("second read");
-    assert!(reread.layers[0].smart_object.is_none());
+    assert!(reread.layers[0].smart_object().is_none());
     assert!(!section_has_uuid(&reread.layer_section_extra, &uuid));
 }
 
@@ -732,8 +729,7 @@ fn convert_keeps_a_linked_record_a_duplicate_still_references() {
     let saved = write_psd(&d).expect("first write");
     let mut back = read_psd(&saved).expect("first read");
     let uuid = back.layers[0]
-        .smart_object
-        .as_ref()
+        .smart_object()
         .expect("resolved")
         .uuid
         .clone();
@@ -741,7 +737,7 @@ fn convert_keeps_a_linked_record_a_duplicate_still_references() {
 
     // A duplicate shares the uuid, hence the one linked record.
     assert_eq!(duplicate_layer(&mut back, 0), 1);
-    assert_eq!(back.layers[1].smart_object.as_ref().unwrap().uuid, uuid);
+    assert_eq!(back.layers[1].smart_object().unwrap().uuid, uuid);
 
     // Converting one instance must leave the record for the sibling.
     assert!(convert_smart_object_to_layers(&mut back, "0"));
@@ -754,7 +750,7 @@ fn convert_keeps_a_linked_record_a_duplicate_still_references() {
     let remaining = back
         .layers
         .iter()
-        .position(|layer| layer.smart_object.is_some())
+        .position(|layer| layer.smart_object().is_some())
         .expect("the duplicate is still a smart object");
     assert!(convert_smart_object_to_layers(
         &mut back,
@@ -779,12 +775,12 @@ fn place_appends_topmost_channel_less_embedded_object() {
     let layer = &d.layers[1];
     assert_eq!(layer.name, "source.psd");
     assert_eq!(layer.rect, rect(0, 0, 2, 2));
-    assert!(layer.channels.is_empty());
+    assert!(layer.channels().is_empty());
     assert!(layer.visible);
     assert_eq!(layer.blend, BlendMode::Normal);
     assert_eq!(layer.opacity, 255);
     assert_eq!(layer.fill, 255);
-    let so = layer.smart_object.as_ref().expect("smart object");
+    let so = layer.smart_object().expect("smart object");
     assert_eq!(so.kind, SmartObjectKind::Embedded);
     assert_eq!(so.payload(), Some(payload.as_slice()));
     assert_eq!(so.filename, "source.psd");
@@ -830,8 +826,7 @@ fn placed_layer_round_trips() {
     let mut d = doc(4, 4, vec![base]);
     place_smart_object(&mut d, "source.psd", &payload).expect("places");
     let placed = d.layers[1]
-        .smart_object
-        .as_ref()
+        .smart_object()
         .unwrap()
         .payload()
         .map(<[u8]>::to_vec)
@@ -839,7 +834,7 @@ fn placed_layer_round_trips() {
 
     let bytes = write_psd(&d).expect("host writes");
     let back = read_psd(&bytes).expect("host reads");
-    let so = back.layers[1].smart_object.as_ref().expect("resolved");
+    let so = back.layers[1].smart_object().expect("resolved");
     assert_eq!(so.kind, SmartObjectKind::Embedded);
     assert_eq!(so.payload(), Some(placed.as_slice()));
 }
@@ -882,11 +877,11 @@ fn replace_swaps_source_and_drops_preserved_blocks() {
         .with(LockFlags::TRANSPARENCY, true)
         .with(LockFlags::POSITION, true);
     let before = d.layers[index].clone();
-    let old_uuid = before.smart_object.as_ref().unwrap().uuid.clone();
+    let old_uuid = before.smart_object().unwrap().uuid.clone();
     assert!(!old_uuid.is_empty());
     assert!(section_has_uuid(&d.layer_section_extra, &old_uuid));
-    assert!(before.extra_blocks.iter().any(|b| &b.key == b"SoLd"));
-    assert!(before.smart_object.as_ref().unwrap().payload().is_some());
+    assert!(before.extra_blocks().iter().any(|b| &b.key == b"SoLd"));
+    assert!(before.smart_object().unwrap().payload().is_some());
 
     let new_payload = payload_of([10, 20, 30]);
     let new_hash = hash(&new_payload);
@@ -899,7 +894,7 @@ fn replace_swaps_source_and_drops_preserved_blocks() {
     ));
 
     let after = &d.layers[index];
-    let so = after.smart_object.as_ref().expect("still smart");
+    let so = after.smart_object().expect("still smart");
     assert_eq!(so.payload(), Some(new_payload.as_slice()));
     assert_eq!(hash(so.payload().unwrap()), new_hash);
     read_psd(so.payload().unwrap()).expect("payload parses");
@@ -907,7 +902,7 @@ fn replace_swaps_source_and_drops_preserved_blocks() {
     assert_eq!(so.filetype, *b"8BPB");
     assert_eq!(so.creator, *b"8BIM");
     assert!(so.uuid.is_empty());
-    assert!(after.channels.is_empty());
+    assert!(after.channels().is_empty());
     assert_eq!(after.name, before.name);
     assert_eq!(after.rect, before.rect);
     assert_eq!(after.blend, before.blend);
@@ -921,7 +916,7 @@ fn replace_swaps_source_and_drops_preserved_blocks() {
         Some(&[0, 64, 128, 255][..])
     );
     assert!(!after
-        .extra_blocks
+        .extra_blocks()
         .iter()
         .any(|b| matches!(&b.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd")));
     assert!(!section_has_uuid(&d.layer_section_extra, &old_uuid));
@@ -933,7 +928,7 @@ fn replace_swaps_source_and_drops_preserved_blocks() {
 
     let saved = write_psd(&d).expect("replaced document writes");
     let back = read_psd(&saved).expect("replaced document reads");
-    let reread = back.layers[index].smart_object.as_ref().expect("resolves");
+    let reread = back.layers[index].smart_object().expect("resolves");
     assert_eq!(reread.kind, SmartObjectKind::Embedded);
     assert_eq!(hash(reread.payload().unwrap()), new_hash);
 }
@@ -966,7 +961,7 @@ fn replace_refuses_ineligible_and_malformed_targets() {
         4,
         vec![{
             let mut g = group("G", BlendMode::Normal, 255, None, vec![]);
-            g.smart_object = Some(embedded(valid.clone()));
+            pictura_codec::edit_layer(g.as_mut(), |parts| { parts.smart_object = Some(embedded(valid.clone())) });
             g
         }],
     );
@@ -984,7 +979,7 @@ fn replace_refuses_ineligible_and_malformed_targets() {
         4,
         vec![{
             let mut a = adjustment_layer("Adj", *b"inv ", vec![0], 255, None);
-            a.smart_object = Some(embedded(valid.clone()));
+            pictura_codec::edit_layer(a.as_mut(), |parts| { parts.smart_object = Some(embedded(valid.clone())) });
             a
         }],
     );
@@ -1059,7 +1054,7 @@ fn replace_clears_proxy_and_renders_new_source() {
         )],
     );
     assert!(convert_to_smart_object(&mut d, "0"));
-    assert!(d.layers[0].channels.iter().any(|c| c.id == 0));
+    assert!(d.layers[0].channels().iter().any(|c| c.id == 0));
     let before_comp = composite_rgba(&d);
     assert!(can_replace_smart_object_contents(&d, "0"));
 
@@ -1071,8 +1066,8 @@ fn replace_clears_proxy_and_renders_new_source() {
         &new_payload
     ));
 
-    assert!(d.layers[0].channels.is_empty());
-    let so = d.layers[0].smart_object.as_ref().unwrap();
+    assert!(d.layers[0].channels().is_empty());
+    let so = d.layers[0].smart_object().unwrap();
     assert_eq!(so.payload(), Some(new_payload.as_slice()));
     assert_eq!(so.filename, "new.psd");
     assert!(so.uuid.is_empty());
@@ -1095,9 +1090,9 @@ fn open_as_smart_object_builds_one_embedded_layer() {
     assert_eq!(d.layers.len(), 1);
     let layer = &d.layers[0];
     assert_eq!(layer.name, "source");
-    assert!(layer.channels.is_empty());
+    assert!(layer.channels().is_empty());
     assert_eq!(layer.rect, rect(0, 0, 2, 2));
-    let so = layer.smart_object.as_ref().expect("smart object");
+    let so = layer.smart_object().expect("smart object");
     assert_eq!(so.kind, SmartObjectKind::Embedded);
     assert_eq!(so.payload(), Some(bytes.as_slice()));
     assert_eq!(so.filename, "source");
@@ -1149,7 +1144,7 @@ fn source_bytes_refuses_ineligible_targets() {
         4,
         vec![{
             let mut g = group("G", BlendMode::Normal, 255, None, vec![]);
-            g.smart_object = Some(embedded(valid.clone()));
+            pictura_codec::edit_layer(g.as_mut(), |parts| { parts.smart_object = Some(embedded(valid.clone())) });
             g
         }],
     );
@@ -1160,7 +1155,7 @@ fn source_bytes_refuses_ineligible_targets() {
         4,
         vec![{
             let mut a = adjustment_layer("Adj", *b"inv ", vec![0], 255, None);
-            a.smart_object = Some(embedded(valid.clone()));
+            pictura_codec::edit_layer(a.as_mut(), |parts| { parts.smart_object = Some(embedded(valid.clone())) });
             a
         }],
     );
@@ -1194,7 +1189,7 @@ fn apply_pictura_raw_bakes_the_proxy_and_keeps_the_settings() {
     );
     let mut d = doc(4, 4, vec![layer]);
     assert!(convert_to_smart_object(&mut d, "0"));
-    let before_channels = d.layers[0].channels.clone();
+    let before_channels = d.layers[0].channels().clone();
 
     let settings = PicturaRawSettings {
         basic: CrsSettings {
@@ -1207,7 +1202,7 @@ fn apply_pictura_raw_bakes_the_proxy_and_keeps_the_settings() {
     };
     assert!(apply_pictura_raw(&mut d, "0", &settings));
 
-    let after_channels = &d.layers[0].channels;
+    let after_channels = d.layers[0].channels();
     assert_ne!(after_channels, &before_channels, "the proxy pixels change");
     let alpha = |channels: &[Channel]| {
         channels
@@ -1219,12 +1214,12 @@ fn apply_pictura_raw_bakes_the_proxy_and_keeps_the_settings() {
     };
     assert_eq!(alpha(after_channels), alpha(&before_channels), "alpha kept");
 
-    let filter = &d.layers[0].smart_object.as_ref().unwrap().smart_filters[0];
+    let filter = &d.layers[0].smart_object().unwrap().smart_filters[0];
     assert_eq!(filter.filter_id, 2683);
     assert_eq!(decode_pictura_raw_settings(&filter.options), settings);
 
     let back = read_psd(&write_psd(&d).expect("writes")).expect("re-reads");
-    let filter = &back.layers[0].smart_object.as_ref().unwrap().smart_filters[0];
+    let filter = &back.layers[0].smart_object().unwrap().smart_filters[0];
     assert_eq!(filter.filter_id, 2683);
     assert_eq!(decode_pictura_raw_settings(&filter.options), settings);
 }
@@ -1276,7 +1271,7 @@ fn smart_filter_chain_composites_the_filtered_source() {
     );
     let mut filtered = plain.clone();
     pictura_codec::attach_pictura_raw_filter(&mut filtered, &settings).expect("filter attaches");
-    let so = filtered.smart_object.clone().unwrap();
+    let so = filtered.smart_object().cloned().unwrap();
     assert_eq!(so.smart_filters.len(), 1);
 
     let unfiltered = composite_rgba(&doc(4, 4, vec![plain]));
@@ -1307,21 +1302,20 @@ fn disabled_smart_filter_matches_no_filter() {
     );
     let mut disabled = plain.clone();
     pictura_codec::attach_pictura_raw_filter(&mut disabled, &settings).expect("filter attaches");
-    disabled.smart_object.as_mut().unwrap().smart_filters[0].enabled = false;
+    pictura_codec::edit_layer(disabled.as_mut(), |parts| { parts.smart_object.as_mut().unwrap().smart_filters[0].enabled = false });
 
     // Composite equality alone cannot distinguish "the chain skipped a disabled
     // filter" from "there is no chain": both fall back to the unfiltered source.
     // Assert the typed and render outcomes explicitly.
     assert!(
         plain
-            .smart_object
-            .as_ref()
+            .smart_object()
             .unwrap()
             .smart_filters
             .is_empty(),
         "the plain layer carries no filter"
     );
-    let so = disabled.smart_object.as_ref().unwrap();
+    let so = disabled.smart_object().unwrap();
     assert_eq!(
         so.smart_filters.len(),
         1,
@@ -1374,7 +1368,7 @@ fn smart_filter_chain_ignores_a_baked_proxy() {
     assert!(apply_pictura_raw(&mut d, "0", &settings));
 
     let out = composite_rgba(&d);
-    let so = d.layers[0].smart_object.as_ref().unwrap();
+    let so = d.layers[0].smart_object().unwrap();
     let src = render_smart_source(so, full(4, 4), full(4, 4)).unwrap();
     let expected = pictura_adjust::render_pictura_raw(&src, &settings).unwrap();
     assert_eq!(

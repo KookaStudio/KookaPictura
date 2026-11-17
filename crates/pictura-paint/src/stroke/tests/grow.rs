@@ -5,7 +5,7 @@ use super::*;
 /// A document whose only layer is an empty-rect pixel layer (#1208).
 fn empty_layer_doc(w: u32, h: u32) -> Document {
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-    let _ = doc.layers.push(Layer {
+    let _ = doc.layers.push(pictura_core::Layer::from_parts(pictura_core::LayerParts {
         name: "empty".into(),
         rect: PsdRect {
             top: 0,
@@ -33,7 +33,7 @@ fn empty_layer_doc(w: u32, h: u32) -> Document {
         is_group: false,
         background: false,
         ..Default::default()
-    });
+    }, pictura_core::LayerContent::Pixel));
     doc
 }
 

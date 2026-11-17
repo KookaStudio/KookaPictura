@@ -330,8 +330,8 @@ fn write_lfx2(layer: &mut Layer, items: Vec<(Vec<u8>, DescValue)>) {
     let has_effects = items
         .iter()
         .any(|(k, _)| !matches!(k.as_slice(), b"Scl " | b"masterFXSwitch"));
-    let at = layer.extra_blocks.iter().position(|b| &b.key == b"lfx2");
-    layer.extra_blocks.retain(|b| &b.key != b"lfx2");
+    let at = layer.extra_blocks().iter().position(|b| &b.key == b"lfx2");
+    pictura_codec::edit_layer(layer.as_mut(), |parts| { parts.extra_blocks.retain(|b| &b.key != b"lfx2") });
     if !has_effects {
         return;
     }
@@ -341,10 +341,10 @@ fn write_lfx2(layer: &mut Layer, items: Vec<(Vec<u8>, DescValue)>) {
         key: *b"lfx2",
         data: data.into(),
     };
-    match at {
-        Some(i) => layer.extra_blocks.insert(i, block),
-        None => layer.extra_blocks.push(block),
-    }
+    pictura_codec::edit_layer(layer, |parts| match at {
+        Some(i) => parts.extra_blocks.insert(i, block),
+        None => parts.extra_blocks.push(block),
+    });
 }
 
 fn lfx2_items(layer: &Layer) -> Vec<(Vec<u8>, DescValue)> {
@@ -377,7 +377,7 @@ fn effect_named(name: &str) -> Option<&'static Effect> {
 /// Whether a layer can carry a style: not a group (the compositor draws no
 /// group effects yet) and not the Background.
 fn styleable(layer: &Layer) -> bool {
-    !layer.is_group && !layer.background
+    !layer.is_group() && !layer.background
 }
 
 /// The value of `key` on `layer`: an effect field (its default when the effect
@@ -437,7 +437,7 @@ pub fn set_layer_style_value(layer: &mut Layer, key: &str, value: f64) -> bool {
     };
     // Groups carry Blending Options now; their effects wait for the group
     // effects renderer.
-    if layer.is_group {
+    if layer.is_group() {
         return group == "blending" && set_blending_value(layer, name, value);
     }
     if group == "blending" {
@@ -696,10 +696,10 @@ pub fn can_create_style_layers(doc: &Document, path: &str) -> bool {
     let Some(layer) = resolve_path(doc, path) else {
         return false;
     };
-    if layer.is_group
+    if layer.is_group()
         || layer.background
         || layer.clipping
-        || layer.channels.is_empty()
+        || layer.channels().is_empty()
         || !has_layer_style(layer)
     {
         return false;
@@ -724,7 +724,7 @@ fn style_layer_name(doc: &Document, base: &str) -> String {
     fn taken(layers: &[pictura_core::Layer], name: &str) -> bool {
         layers
             .iter()
-            .any(|layer| layer.name == name || taken(&layer.children, name))
+            .any(|layer| layer.name == name || taken(layer.children(), name))
     }
     if taken(&doc.layers, base) {
         super::create::next_layer_name(doc, base)
@@ -797,9 +797,9 @@ pub fn create_style_layers_with_base(doc: &mut Document, path: &str) -> (Vec<Str
         }
     }
     if let Some(layer) = resolve_path_mut(doc, &base) {
-        layer
-            .extra_blocks
-            .retain(|block| !matches!(&block.key, b"lfx2" | b"lrFX"));
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks.retain(|block| !matches!(&block.key, b"lfx2" | b"lrFX"));
+        });
     }
     let mut created = Vec::with_capacity(inserted_below + inserted_above);
     for i in 0..inserted_below {
@@ -839,7 +839,7 @@ fn pass_layer(
             .to_vec()
             .into(),
     };
-    Layer {
+    Layer::from_parts(pictura_core::LayerParts {
         name: name.to_string(),
         rect: pass.rect,
         opacity,
@@ -848,7 +848,7 @@ fn pass_layer(
         visible,
         channels: vec![channel(0, 0), channel(1, 1), channel(2, 2), channel(3, -1)],
         ..Default::default()
-    }
+    }, pictura_core::LayerContent::Pixel)
 }
 
 /// Whether the layer carries any effect, on or off (an `lfx2` or legacy

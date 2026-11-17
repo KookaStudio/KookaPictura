@@ -40,17 +40,7 @@ pub fn add_shape_layer(
 /// A fill-content layer with a vector mask: its fill comes from a modeled
 /// adjustment block (an app-authored shape) or a preserved `vscg` vector-fill
 /// block (an imported CC shape).
-pub fn is_shape_layer(layer: &Layer) -> bool {
-    super::vector_masks::effective_key(layer).is_some()
-        && matches!(
-            crate::fill::decode_layer_fill(layer),
-            Some(
-                pictura_adjust::Adjustment::SolidFill(_)
-                    | pictura_adjust::Adjustment::GradientFill(_)
-                    | pictura_adjust::Adjustment::PatternFill(_)
-            )
-        )
-}
+pub fn is_shape_layer(layer: &Layer) -> bool { layer.kind() == pictura_core::LayerKind::Shape }
 
 /// Whether the layer forces Lock Transparency and Lock Image on in the Layers
 /// panel (CS6: type and shape layers).
@@ -92,7 +82,7 @@ pub fn set_layer_live_shape(layer: &mut Layer, live: Option<&LiveShape>) {
 /// The shape layer's solid fill color; `None` for another fill or layer.
 pub fn shape_fill_color(layer: &Layer) -> Option<[u8; 4]> {
     match crate::fill::decode_layer_fill(layer)? {
-        pictura_adjust::Adjustment::SolidFill(rgba) if is_shape_layer(layer) => Some(rgba),
+        pictura_core::FillContent::Solid(rgba) if is_shape_layer(layer) => Some(rgba),
         _ => None,
     }
 }
@@ -172,18 +162,15 @@ pub(crate) fn map_shape_layer(
 }
 
 fn set_block(layer: &mut Layer, key: &[u8; 4], data: Option<Vec<u8>>) {
-    let slot = layer.extra_blocks.iter().position(|b| &b.key == key);
-    match (slot, data) {
-        (Some(i), Some(data)) => layer.extra_blocks[i].data = data.into(),
-        (None, Some(data)) => layer.extra_blocks.push(LayerBlock {
-            key: *key,
-            data: data.into(),
-        }),
-        (Some(i), None) => {
-            layer.extra_blocks.remove(i);
+    let slot = layer.extra_blocks().iter().position(|b| &b.key == key);
+    pictura_codec::edit_layer(layer, |parts| {
+        match (slot, data) {
+            (Some(i), Some(data)) => parts.extra_blocks[i].data = data.into(),
+            (None, Some(data)) => parts.extra_blocks.push(LayerBlock { key: *key, data: data.into() }),
+            (Some(i), None) => { parts.extra_blocks.remove(i); }
+            (None, None) => {},
         }
-        (None, None) => {}
-    }
+    });
 }
 
 #[cfg(test)]
@@ -243,7 +230,7 @@ mod tests {
         assert!(edited.extra_block(b"vogk").is_none());
         assert_eq!(
             edited
-                .extra_blocks
+                .extra_blocks()
                 .iter()
                 .filter(|b| &b.key == b"vmsk")
                 .count(),
@@ -295,7 +282,7 @@ mod tests {
         let fill = crate::encode_solid_color_fill([10, 20, 30]);
         let mut vscg = fill.key.to_vec();
         vscg.extend_from_slice(&fill.data);
-        let layer = Layer {
+        let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             extra_blocks: vec![
                 LayerBlock {
                     key: *b"vmsk",
@@ -307,7 +294,7 @@ mod tests {
                 },
             ],
             ..Default::default()
-        };
+        });
         assert!(is_shape_layer(&layer));
         assert_eq!(shape_fill_color(&layer), Some([10, 20, 30, 255]));
     }
@@ -399,7 +386,7 @@ mod tests {
         ));
         assert_eq!(outline_rect(&doc, &path), Some(rect(3, 2, 11, 6)));
         let layer = super::super::paths::resolve_path(&doc, &path).unwrap();
-        assert!(layer.channels.is_empty(), "the shape stays vector");
+        assert!(layer.channels().is_empty(), "the shape stays vector");
         assert_eq!(crate::content_rect(&doc, &path), Some(rect(3, 2, 11, 6)));
     }
 

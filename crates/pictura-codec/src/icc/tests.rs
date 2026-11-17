@@ -104,7 +104,7 @@ fn a_layer_with_incomplete_color_channels_is_skipped() {
     let mut doc = rgb_document();
     doc.image_resources = icc_resource(&profile).into();
     {
-        let _ = doc.layers.push(Layer {
+        let _ = doc.layers.push(crate::layer_from_parts(pictura_core::LayerParts {
             name: "partial".into(),
             rect: PsdRect {
                 top: 0,
@@ -117,11 +117,11 @@ fn a_layer_with_incomplete_color_channels_is_skipped() {
                 data: vec![1, 2].into(),
             }],
             ..Default::default()
-        });
+        }));
     };
-    let original = doc.layers[0].channels[0].data.clone();
+    let original = doc.layers[0].channels()[0].data.clone();
     let out = apply_icc(doc);
-    assert_eq!(out.layers[0].channels[0].data, original);
+    assert_eq!(out.layers[0].channels()[0].data, original);
 }
 
 #[test]
@@ -177,7 +177,7 @@ fn layer_channels_are_selected_by_id_not_storage_order() {
     let mut doc = rgb_document();
     doc.image_resources = icc_resource(&profile).into();
     {
-        let _ = doc.layers.push(Layer {
+        let _ = doc.layers.push(crate::layer_from_parts(pictura_core::LayerParts {
             name: "bgr".into(),
             rect: PsdRect {
                 top: 0,
@@ -201,13 +201,13 @@ fn layer_channels_are_selected_by_id_not_storage_order() {
                 },
             ],
             ..Default::default()
-        });
+        }));
     };
 
     let out = apply_icc(doc);
     let id = |id: i16| {
         out.layers[0]
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == id)
             .expect("channel")
@@ -228,7 +228,7 @@ fn assign_leaves_composite_and_layers_byte_identical() {
     let before = doc.clone();
     assign_document_profile(&mut doc, &Profile::adobe_rgb());
     assert_eq!(doc.composite, before.composite);
-    assert_eq!(doc.layers[0].channels, before.layers[0].channels);
+    assert_eq!(doc.layers[0].channels(), before.layers[0].channels());
     assert!(doc.source.working_profile().is_some());
 }
 
@@ -292,7 +292,7 @@ fn convert_changes_pixels_and_tags_destination() {
 fn convert_with_incomplete_layer_channels_is_not_an_error() {
     let mut doc = rgb_document();
     {
-        let _ = doc.layers.push(Layer {
+        let _ = doc.layers.push(crate::layer_from_parts(pictura_core::LayerParts {
             name: "partial".into(),
             rect: PsdRect {
                 top: 0,
@@ -305,11 +305,11 @@ fn convert_with_incomplete_layer_channels_is_not_an_error() {
                 data: vec![1, 2].into(),
             }],
             ..Default::default()
-        });
+        }));
     };
-    let before = doc.layers[0].channels[0].data.clone();
+    let before = doc.layers[0].channels()[0].data.clone();
     assert!(convert_document(&mut doc, &Profile::adobe_rgb()));
-    assert_eq!(doc.layers[0].channels[0].data, before);
+    assert_eq!(doc.layers[0].channels()[0].data, before);
 }
 
 #[test]
@@ -364,7 +364,7 @@ fn buffer_to_srgb_reuses_the_transform_and_follows_profile_changes() {
 }
 
 fn rgb_layer(name: &str) -> Layer {
-    Layer {
+    crate::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: PsdRect {
             top: 0,
@@ -387,25 +387,25 @@ fn rgb_layer(name: &str) -> Layer {
             },
         ],
         ..Default::default()
-    }
+    })
 }
 
 #[test]
 fn convert_reaches_pixel_layers_nested_in_groups() {
     let mut doc = rgb_document();
     let child = rgb_layer("child");
-    let before = child.channels[0].data.clone();
+    let before = child.channels()[0].data.clone();
     {
-        let _ = doc.layers.push(Layer {
+        let _ = doc.layers.push(crate::layer_from_parts(pictura_core::LayerParts {
             name: "group".into(),
             is_group: true,
             children: pictura_core::LayerStack::from_layers(vec![child]),
             ..Default::default()
-        });
+        }));
     };
     assert!(convert_document(&mut doc, &Profile::adobe_rgb()));
     assert_ne!(
-        doc.layers[0].children[0].channels[0].data, before,
+        doc.layers[0].children()[0].channels()[0].data, before,
         "the nested layer was converted"
     );
 }
@@ -416,17 +416,17 @@ fn read_conversion_reaches_pixel_layers_nested_in_groups() {
     let mut doc = rgb_document();
     doc.image_resources = icc_resource(&profile).into();
     let child = rgb_layer("child");
-    let before = child.channels[0].data.clone();
+    let before = child.channels()[0].data.clone();
     {
-        let _ = doc.layers.push(Layer {
+        let _ = doc.layers.push(crate::layer_from_parts(pictura_core::LayerParts {
             name: "group".into(),
             is_group: true,
             children: pictura_core::LayerStack::from_layers(vec![child]),
             ..Default::default()
-        });
+        }));
     };
     let out = apply_icc(doc);
-    assert_ne!(out.layers[0].children[0].channels[0].data, before);
+    assert_ne!(out.layers[0].children()[0].channels()[0].data, before);
 }
 
 #[test]

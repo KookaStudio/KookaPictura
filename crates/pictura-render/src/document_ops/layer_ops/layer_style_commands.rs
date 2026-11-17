@@ -24,7 +24,7 @@ pub struct LayerStyle {
 pub fn copy_layer_style(layer: &Layer) -> Option<LayerStyle> {
     styleable(layer).then(|| LayerStyle {
         blocks: layer
-            .extra_blocks
+            .extra_blocks()
             .iter()
             .filter(|b| matches!(&b.key, b"lfx2" | b"lrFX"))
             .cloned()
@@ -47,10 +47,12 @@ pub fn copy_layer_style(layer: &Layer) -> Option<LayerStyle> {
 pub fn paste_layer_style(doc: &mut Document, paths: &[&str], style: &LayerStyle) -> usize {
     edit_styles(doc, paths, |layer| {
         let before = layer.clone();
-        layer
-            .extra_blocks
-            .retain(|b| !matches!(&b.key, b"lfx2" | b"lrFX"));
-        layer.extra_blocks.extend(style.blocks.iter().cloned());
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks.retain(|b| !matches!(&b.key, b"lfx2" | b"lrFX"));
+        });
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks.extend(style.blocks.iter().cloned());
+        });
         layer.blend = style.blend;
         layer.opacity = style.opacity;
         layer.fill = style.fill;
@@ -71,10 +73,10 @@ pub fn paste_layer_style(doc: &mut Document, paths: &[&str], style: &LayerStyle)
 /// Layer Style also resets them is unverified.
 pub fn clear_layer_style(doc: &mut Document, paths: &[&str]) -> usize {
     edit_styles(doc, paths, |layer| {
-        let before = layer.extra_blocks.len();
-        layer
-            .extra_blocks
-            .retain(|b| !matches!(&b.key, b"lfx2" | b"lrFX"));
-        layer.extra_blocks.len() != before
+        let before = layer.extra_blocks().len();
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks.retain(|b| !matches!(&b.key, b"lfx2" | b"lrFX"));
+        });
+        layer.extra_blocks().len() != before
     })
 }
