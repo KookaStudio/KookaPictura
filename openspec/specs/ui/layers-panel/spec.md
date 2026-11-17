@@ -507,7 +507,8 @@ separator between adjacent non-empty command blocks, in this order:
 4. Artboard/Frame placeholders, then Convert to Smart Object (pixel, Background, and
    type rows enabled; group and adjustment rows disabled).
 5. Rasterize Type, Rasterize Shape, Rasterize Layer, and Rasterize Layer Style
-   (applicable kinds; the style row is not yet implemented and is disabled).
+   (applicable kinds; the style row is enabled only for a raster pixel row with
+   a renderable effect).
 6. Add Layer Mask (a submenu of Reveal All, Hide All, Reveal Selection, Hide
    Selection, and From Transparency), Delete/Enable/Disable Layer Mask, Add
    Vector Mask (a submenu of Reveal All, Hide All, and Current Path),
@@ -587,8 +588,11 @@ Group from Layers dialog for the row's selection. A row with a layer style
 SHALL offer the style rows. **Rasterize Type** SHALL rasterize a type row,
 **Rasterize Shape** a shape row, and **Rasterize Layer** a smart-object or
 fill-content row; a plain pixel row and a group SHALL hide the rasterize rows.
-**Rasterize Layer Style** SHALL appear disabled with the `— not implemented
-yet` tooltip on a styled row.
+**Rasterize Layer Style** SHALL be offered on a styled row and SHALL dispatch
+the `Rasterize Layer Style` registry command; it SHALL be enabled only when the
+layer's style can be baked (a raster pixel layer with at least one enabled and
+present effect, effects not hidden by the master switch, no customized Blend If
+or knockout, and no clipped run above), and it SHALL be disabled otherwise.
 
 Every row action that maps to a document command SHALL be a registry command:
 the action SHALL carry the command's stable identifier, its enabled, checked,
@@ -768,7 +772,7 @@ buttons, so Move Up/Down SHALL NOT appear in the strip.
 #### Scenario: The row menu rasterizes by kind [lpr_rasterize_rows]
 
 - **WHEN** the user opens the row menu for a type layer, a shape layer, a fill layer, a smart object, and a plain pixel layer
-- **THEN** the first four offer Rasterize Type, Rasterize Shape, Rasterize Layer, and Rasterize Layer respectively, the plain pixel row hides the rasterize rows, and a styled row also offers the disabled Rasterize Layer Style
+- **THEN** the first four offer Rasterize Type, Rasterize Shape, Rasterize Layer, and Rasterize Layer respectively, the plain pixel row hides the rasterize rows, a styled pixel row also offers the enabled Rasterize Layer Style, and a styled fill row offers it disabled
 
 #### Scenario: Release from Isolation sits near the bottom [lpr_isolation_row]
 
@@ -2968,8 +2972,10 @@ row SHALL open it on that effect's page. Right-clicking the `fx` badge, the
 which SHALL offer **Disable Layer Effects** (or **Enable Layer Effects** when the
 layer's effects are hidden), **Blending Options…**, the ten effect entries, the
 **Copy** / **Paste** / **Clear Layer Style** commands, **Global Light…** and
-**Create Layer** disabled, **Hide All Effects** (or **Show All Effects**), and
-**Scale Effects…**. **Disable/Enable Layer Effects** SHALL write the layer's
+**Create Layers**, **Hide All Effects** (or **Show All Effects**), and
+**Scale Effects…**. **Global Light…** and **Create Layers** SHALL dispatch their
+registry commands and take their enabled and label state from the registry.
+**Disable/Enable Layer Effects** SHALL write the layer's
 `fx.visible` as one undoable state. Each effect entry SHALL open the Layer Style
 dialog on that effect's page, and the menu SHALL act on the layer that owns the
 effects.
@@ -2988,8 +2994,8 @@ effects.
 
 - **WHEN** the user right-clicks the `fx` badge or an effects row of a styled layer
 - **THEN** the menu offers Disable Layer Effects, Blending Options…, the ten
-  effect entries, Copy/Paste/Clear Layer Style, Global Light… and Create Layer
-  disabled, Hide All Effects, and Scale Effects…
+  effect entries, Copy/Paste/Clear Layer Style, enabled Global Light… and
+  Create Layers, Hide All Effects, and Scale Effects…
 
 #### Scenario: Disable Layer Effects hides the layer's effects [lpr_fx_disable]
 
