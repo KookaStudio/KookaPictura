@@ -11,7 +11,7 @@ use crate::tests::{doc, rect, solid};
 
 static LOCK: Mutex<()> = Mutex::new(());
 
-fn locked() -> std::sync::MutexGuard<'static, ()> {
+pub(super) fn locked() -> std::sync::MutexGuard<'static, ()> {
     let guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     purge_source_cache();
     guard
@@ -856,7 +856,7 @@ fn panicking_build_releases_its_claim() {
 /// A payload whose only layer is a no-proxy smart object wrapping the payload
 /// `levels - 1` deep, around `source_doc`. The merged composite is cut off at
 /// every wrapping level, so each one renders through its embedded source.
-fn nested_payload(levels: usize) -> Vec<u8> {
+pub(super) fn nested_payload(levels: usize) -> Vec<u8> {
     let mut payload = pictura_codec::write_psd(&source_doc()).expect("source writes");
     for _ in 0..levels {
         let mut so = SmartObject::default();
@@ -892,7 +892,7 @@ fn nested_top(levels: usize) -> Document {
     )
 }
 
-fn centre(buf: &PixelBuffer) -> [u8; 4] {
+pub(super) fn centre(buf: &PixelBuffer) -> [u8; 4] {
     let plane = (buf.width * buf.height) as usize;
     let i = (buf.width + 1) as usize;
     std::array::from_fn(|c| buf.data[c * plane + i])

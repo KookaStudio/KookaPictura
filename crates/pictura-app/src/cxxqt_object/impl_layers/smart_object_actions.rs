@@ -47,5 +47,25 @@ pub mod ffi {
         /// one "New Smart Object via Copy" state. Returns the copy's path, or an
         /// empty string (no state) on refusal.
         fn smart_object_new_via_copy(view: Pin<&mut PictureView>, path: &QString) -> QString;
+
+        /// The active stack-mode code for `path`: 0 for `None`, 1..=11 for a
+        /// mode, and 0 when the path is not a smart object.
+        fn layer_smart_object_stack_mode(view: &PictureView, path: &QString) -> i32;
+
+        /// Whether the object at `path` can take the stack mode `mode` (0 is
+        /// `None`): an embedded source with at least two visible frames.
+        fn layer_can_set_smart_object_stack_mode(
+            view: &PictureView,
+            path: &QString,
+            mode: i32,
+        ) -> bool;
+
+        /// Apply or clear the stack mode and recomposite; one `Stack Mode:`
+        /// state on success, none on a refusal or the active mode.
+        fn set_smart_object_stack_mode(
+            view: Pin<&mut PictureView>,
+            path: &QString,
+            mode: i32,
+        ) -> bool;
     }
 }

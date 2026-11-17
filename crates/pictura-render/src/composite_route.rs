@@ -56,6 +56,26 @@ pub(crate) fn smart_filters_apply(layer: &Layer) -> bool {
     enabled > 0
 }
 
+/// Whether an active stack mode takes over from a raster proxy: a mode is set
+/// and every enabled Smart Filter decodes. An unknown enabled filter keeps the
+/// normal proxy path so an imported baked result is not double-applied.
+pub(crate) fn stack_source_applies(layer: &Layer) -> bool {
+    let Some(so) = layer.smart_object.as_ref() else {
+        return false;
+    };
+    if so.stack_mode.is_none() {
+        return false;
+    }
+    if so
+        .smart_filters
+        .iter()
+        .any(|filter| filter.enabled && decode_smart_filter(filter).is_none())
+    {
+        return false;
+    }
+    crate::layer_source::stack_frame_count(so).is_some_and(|count| count >= 2)
+}
+
 pub(crate) fn content_route(layer: &Layer) -> ContentRoute {
     if layer.is_group {
         return if matches!(layer.blend, BlendMode::PassThrough)
@@ -76,6 +96,9 @@ pub(crate) fn content_route(layer: &Layer) -> ContentRoute {
     }
     if smart_filters_apply(layer) {
         return ContentRoute::SmartFiltered;
+    }
+    if stack_source_applies(layer) {
+        return ContentRoute::SmartSource;
     }
     let proxy = crate::channel_plane(layer, 0).is_some();
     if layer.smart_object.is_some() && !proxy {
@@ -281,5 +304,62 @@ pub(crate) mod tests {
     fn the_filter_master_switch_does_not_change_the_route() {
         let off = smart(proxy(), vec![filter(CAMERA_RAW_FILTER_ID, true)], false);
         assert!(matches!(content_route(&off), ContentRoute::SmartFiltered));
+    }
+
+    fn two_frame_payload() -> Vec<u8> {
+        use pictura_core::{Document, Layer, LayerStack};
+        let mut doc = Document::new(
+            1,
+            1,
+            pictura_core::ColorMode::Rgb,
+            pictura_core::BitDepth::Eight,
+        );
+        let frame = Layer {
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 1,
+                right: 1,
+            },
+            ..Default::default()
+        };
+        doc.layers = LayerStack::from_layers(vec![frame.clone(), frame]);
+        pictura_codec::write_psd(&doc).expect("two-frame payload")
+    }
+
+    #[test]
+    fn a_stack_mode_forces_the_source_route() {
+        let mut layer = smart(proxy(), Vec::new(), true);
+        {
+            let so = layer.smart_object.as_mut().expect("object");
+            so.kind = pictura_core::SmartObjectKind::Embedded;
+            so.set_payload(two_frame_payload());
+            so.stack_mode = Some(pictura_core::StackMode::Median);
+        }
+        assert!(stack_source_applies(&layer));
+        assert!(matches!(content_route(&layer), ContentRoute::SmartSource));
+
+        layer.smart_object.as_mut().expect("object").smart_filters = vec![filter(1, true)];
+        assert!(
+            !stack_source_applies(&layer),
+            "unknown filter keeps the proxy"
+        );
+        assert!(matches!(content_route(&layer), ContentRoute::Pixels));
+
+        layer.smart_object.as_mut().expect("object").smart_filters =
+            vec![filter(CAMERA_RAW_FILTER_ID, true)];
+        assert!(stack_source_applies(&layer));
+        assert!(matches!(content_route(&layer), ContentRoute::SmartFiltered));
+
+        layer.smart_object.as_mut().expect("object").set_payload(
+            pictura_codec::write_psd(&pictura_core::Document::new(
+                1,
+                1,
+                pictura_core::ColorMode::Rgb,
+                pictura_core::BitDepth::Eight,
+            ))
+            .expect("single payload"),
+        );
+        assert!(!stack_source_applies(&layer), "one frame keeps the proxy");
     }
 }

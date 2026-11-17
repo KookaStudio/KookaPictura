@@ -30,6 +30,7 @@ mod selection_transform_tests;
 mod shape_layer;
 mod shape_style;
 mod smart_object;
+mod smart_object_stack;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
@@ -162,6 +163,9 @@ pub use smart_object::{
     new_smart_object_via_copy, open_as_smart_object, place_smart_object, rasterize_smart_object,
     replace_smart_object_contents, reset_smart_object_transform, smart_object_source_bytes,
     stack_into_smart_object, transform_smart_object_rect,
+};
+pub use smart_object_stack::{
+    can_set_smart_object_stack_mode, set_smart_object_stack_mode, smart_object_stack_mode,
 };
 pub use transfer::copy_path_to_document;
 pub use transform::{

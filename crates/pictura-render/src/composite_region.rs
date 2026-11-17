@@ -54,6 +54,39 @@ pub(crate) fn composite_rgba_region(
     canvas.into_pixel_buffer()
 }
 
+/// Composite one layer alone over transparency for the document-space region
+/// `[x0, x0+rw) × [y0, y0+rh)`, mirroring [`composite_rgba_region`] with a
+/// single-layer plan. Used for the frames of an image stack.
+pub(crate) fn composite_layer_region(
+    layer: &Layer,
+    doc: &Document,
+    x0: u32,
+    y0: u32,
+    rw: u32,
+    rh: u32,
+) -> PixelBuffer {
+    if rw == 0 || rh == 0 {
+        return PixelBuffer::new(0, 0, 4);
+    }
+    let mut canvas = Canvas::new_region(x0 as i32, y0 as i32, rw as usize, rh as usize);
+    let clip = PsdRect {
+        top: y0 as i32,
+        left: x0 as i32,
+        bottom: (y0 + rh) as i32,
+        right: (x0 + rw) as i32,
+    };
+    canvas.clip = clip;
+    if x0 != 0 || y0 != 0 || rw != doc.width || rh != doc.height {
+        canvas.effect_region = Some(clip);
+    }
+    let plan = CompositePlan {
+        roots: CompositePlan::build_for_layers(&[layer], doc, clip, canvas.effect_region),
+    };
+    let _span = crate::metrics::phase("render_execute", false);
+    composite_layers(&mut canvas, doc, &plan);
+    canvas.into_pixel_buffer()
+}
+
 /// Whether `rows` rows of `doc` composite in bands. Cached sources make every
 /// stack bandable except one whose effect pass build reads the document pattern
 /// library: those passes are intentionally not cached, so a band would rebuild

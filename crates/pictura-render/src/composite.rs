@@ -350,7 +350,7 @@ pub(crate) fn composite_layer_inner(
             has_proxy,
         } => {
             let mut drew = false;
-            if !has_proxy {
+            if !has_proxy || crate::composite_route::stack_source_applies(layer) {
                 if let Some(source) = source {
                     drew = composite_smart_source(canvas, layer, doc, source, &ctx, over);
                 }

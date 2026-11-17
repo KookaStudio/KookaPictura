@@ -2,6 +2,7 @@
 #include "api/layers_api.h"
 
 #include <QtCore/QStringList>
+#include <QtCore/QTemporaryDir>
 
 #include "commands.h"
 #include "frame.h"
@@ -36,9 +37,14 @@ private slots:
     void resetTransformRecordsOneState();
     void convertToLayersConsumesObject();
     void newViaCopyAddsIndependentLayer();
+    void stackModeMenuRows();
+    void stackModeStateFollowsTheLayer();
+    void stackModeRecordsOneState();
+    void stackModeRefusalRecordsNothing();
 
 private:
     QString makeSmartLayer(pictura::PictureView* view, pictura::LayersPanel* panel);
+    QString makeStackLayer(pictura::LayersPanel* panel, const QString& dir);
 
     pictura::test::ScopedStateHome stateHome_;
     std::unique_ptr<pictura::PicturaMainWindow> window_;
@@ -321,6 +327,184 @@ void SmartObjectActionsTest::backgroundRowConvertsToSmartObject()
     panel->refresh();
     QVERIFY2(!panel->rowMenuEnabledForPathForTest(path, QStringLiteral("Convert to Smart Object")),
              "an existing smart object disables Convert to Smart Object");
+}
+
+QString SmartObjectActionsTest::makeStackLayer(pictura::LayersPanel* panel,
+                                                  const QString& dir)
+{
+    if (!window_->newDocument(QStringLiteral("StackSource"), 16, 16, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white"))) {
+        return QString();
+    }
+    pictura::PictureView* source = window_->activeView();
+    if (!source) {
+        return QString();
+    }
+    source->add_layer(-1);
+    const QString file = dir + QStringLiteral("/source.psd");
+    if (!source->save(file)) {
+        return QString();
+    }
+    if (!window_->newDocument(QStringLiteral("StackHost"), 16, 16, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white"))) {
+        return QString();
+    }
+    pictura::PictureView* host = window_->activeView();
+    if (!host) {
+        return QString();
+    }
+    const QString path = host->place_smart_object(file);
+    if (path.isEmpty()) {
+        return QString();
+    }
+    panel->refresh();
+    panel->selectPaths({path}, path);
+    window_->registry()->refresh();
+    return path;
+}
+
+void SmartObjectActionsTest::stackModeMenuRows()
+{
+    pictura::CommandRegistry* registry = window_->registry();
+    QVERIFY(registry != nullptr);
+    QStringList labels;
+    for (const pictura::CommandInfo& info : registry->describe()) {
+        if (info.path.size() == 4 && info.path.at(2) == QStringLiteral("Stack Mode")) {
+            labels << info.label;
+        }
+    }
+    if (labels.isEmpty()) {
+        QSKIP("Stack Mode is an Extended-only surface");
+    }
+    const QStringList expected = {
+        QStringLiteral("None"),       QStringLiteral("Entropy"),
+        QStringLiteral("Kurtosis"),   QStringLiteral("Maximum"),
+        QStringLiteral("Mean"),       QStringLiteral("Median"),
+        QStringLiteral("Minimum"),    QStringLiteral("Range"),
+        QStringLiteral("Skewness"),   QStringLiteral("Standard Deviation"),
+        QStringLiteral("Summation"),  QStringLiteral("Variance"),
+    };
+    QCOMPARE(labels, expected);
+    for (const char* command : {
+             pictura::command_ids::LayerSmartObjectsStackModeNone,
+             pictura::command_ids::LayerSmartObjectsStackModeEntropy,
+             pictura::command_ids::LayerSmartObjectsStackModeKurtosis,
+             pictura::command_ids::LayerSmartObjectsStackModeMaximum,
+             pictura::command_ids::LayerSmartObjectsStackModeMean,
+             pictura::command_ids::LayerSmartObjectsStackModeMedian,
+             pictura::command_ids::LayerSmartObjectsStackModeMinimum,
+             pictura::command_ids::LayerSmartObjectsStackModeRange,
+             pictura::command_ids::LayerSmartObjectsStackModeSkewness,
+             pictura::command_ids::LayerSmartObjectsStackModeStandardDeviation,
+             pictura::command_ids::LayerSmartObjectsStackModeSummation,
+             pictura::command_ids::LayerSmartObjectsStackModeVariance,
+         }) {
+        QAction* action = registry->action(id(command));
+        QVERIFY2(action != nullptr, command);
+        QVERIFY2(action->isCheckable(), command);
+    }
+}
+
+void SmartObjectActionsTest::stackModeStateFollowsTheLayer()
+{
+    if (!window_->registry()->action(
+            id(pictura::command_ids::LayerSmartObjectsStackModeNone))) {
+        QSKIP("Stack Mode is an Extended-only surface");
+    }
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    auto* panel = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    pictura::CommandRegistry* registry = window_->registry();
+    QVERIFY(panel && registry);
+    const QString path = makeStackLayer(panel, dir.path());
+    QVERIFY2(!path.isEmpty(), "stack layer prepared");
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view);
+
+    auto* median = registry->action(id(pictura::command_ids::LayerSmartObjectsStackModeMedian));
+    auto* none = registry->action(id(pictura::command_ids::LayerSmartObjectsStackModeNone));
+    auto* maximum = registry->action(id(pictura::command_ids::LayerSmartObjectsStackModeMaximum));
+    QVERIFY(median && none && maximum);
+    QVERIFY2(median->isEnabled(), "an eligible object enables Median");
+    QVERIFY2(!none->isEnabled(), "None needs an active mode");
+    QVERIFY2(!median->isChecked(), "no mode is checked initially");
+    QVERIFY2(none->isChecked(), "None is checked when no mode is active");
+
+    QVERIFY(registry->dispatch(id(pictura::command_ids::LayerSmartObjectsStackModeMedian)));
+    registry->refresh();
+    QVERIFY2(median->isChecked(), "Median is checked");
+    QVERIFY2(none->isEnabled(), "None clears an active mode");
+    QVERIFY2(!median->isEnabled(), "the active mode is not re-applied");
+    QVERIFY2(maximum->isEnabled(), "another mode stays enabled");
+    QCOMPARE(pictura::layer_smart_object_stack_mode(*view, path), 4);
+
+    QVERIFY(registry->dispatch(id(pictura::command_ids::LayerSmartObjectsStackModeNone)));
+    registry->refresh();
+    QCOMPARE(pictura::layer_smart_object_stack_mode(*view, path), 0);
+    QVERIFY2(!median->isChecked(), "the mode is cleared");
+    QVERIFY2(none->isChecked(), "None is checked again");
+}
+
+void SmartObjectActionsTest::stackModeRecordsOneState()
+{
+    if (!window_->registry()->action(
+            id(pictura::command_ids::LayerSmartObjectsStackModeNone))) {
+        QSKIP("Stack Mode is an Extended-only surface");
+    }
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    auto* panel = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(panel != nullptr);
+    const QString path = makeStackLayer(panel, dir.path());
+    QVERIFY2(!path.isEmpty(), "stack layer prepared");
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view != nullptr);
+
+    const int before = view->history_count();
+    QVERIFY(window_->registry()->dispatch(
+        id(pictura::command_ids::LayerSmartObjectsStackModeMedian)));
+    QCOMPARE(view->history_count(), before + 1);
+    QCOMPARE(view->history_label(before), QStringLiteral("Stack Mode: Median"));
+}
+
+void SmartObjectActionsTest::stackModeRefusalRecordsNothing()
+{
+    if (!window_->registry()->action(
+            id(pictura::command_ids::LayerSmartObjectsStackModeNone))) {
+        QSKIP("Stack Mode is an Extended-only surface");
+    }
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    auto* panel = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(panel != nullptr);
+    const QString path = makeStackLayer(panel, dir.path());
+    QVERIFY2(!path.isEmpty(), "stack layer prepared");
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view != nullptr);
+
+    const int before = view->history_count();
+    QVERIFY(window_->registry()->dispatch(
+        id(pictura::command_ids::LayerSmartObjectsStackModeMedian)));
+    QCOMPARE(view->history_count(), before + 1);
+
+    // Re-selecting the active mode records nothing.
+    window_->registry()->dispatch(id(pictura::command_ids::LayerSmartObjectsStackModeMedian));
+    QCOMPARE(view->history_count(), before + 1);
+    QCOMPARE(pictura::layer_smart_object_stack_mode(*view, path), 4);
+
+    // A plain layer refuses without a state.
+    view->add_layer(-1);
+    panel->refresh();
+    const QString plain = pictura::layers_api::rowAt(*view, 0).path;
+    panel->selectPaths({plain}, plain);
+    window_->registry()->refresh();
+    QVERIFY2(!window_->registry()
+                  ->action(id(pictura::command_ids::LayerSmartObjectsStackModeMedian))
+                  ->isEnabled(),
+             "a plain layer disables the mode");
+    window_->registry()->dispatch(id(pictura::command_ids::LayerSmartObjectsStackModeMedian));
+    QCOMPARE(view->history_count(), before + 1);
+    QCOMPARE(pictura::layer_smart_object_stack_mode(*view, plain), 0);
 }
 
 QTEST_MAIN(SmartObjectActionsTest)

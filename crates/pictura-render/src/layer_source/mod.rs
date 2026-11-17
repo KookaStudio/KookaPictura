@@ -18,6 +18,10 @@ use pictura_core::{Document, Layer, PixelBuffer, PsdRect, SmartObject};
 use crate::layer_effects::{EffectPass, LayerEffects};
 
 pub(crate) mod key;
+mod stack;
+pub(crate) use stack::stack_frame_count;
+#[cfg(test)]
+mod stack_tests;
 #[cfg(test)]
 mod tests;
 
@@ -316,6 +320,7 @@ pub fn purge_source_cache() {
     cache.entries.clear();
     cache.bytes = 0;
     crate::metrics::set_source_bytes(0);
+    stack::purge_frame_counts();
 }
 
 fn cached_buffer(
@@ -350,11 +355,12 @@ pub(crate) fn embedded_source(so: &SmartObject) -> Option<Arc<PixelBuffer>> {
     }
     so.payload().filter(|p| !p.is_empty())?;
     cached_buffer(Kind::Embedded, key::embedded_key(so), || {
-        decode_embedded(so)
+        stack::stack_or_merged(so)
     })
 }
 
-fn decode_embedded(so: &SmartObject) -> Option<PixelBuffer> {
+/// Decode the payload and stamp every nested smart object with its depth.
+pub(super) fn decode_payload(so: &SmartObject) -> Option<Document> {
     let _span = crate::metrics::phase("embedded_decode", true);
     let mut embedded = pictura_codec::read_psd(so.payload()?).ok()?;
     // The depth travels in the data, not the call stack: a nested composite
@@ -368,6 +374,11 @@ fn decode_embedded(so: &SmartObject) -> Option<PixelBuffer> {
             stacks.push(&mut layer.children);
         }
     }
+    Some(embedded)
+}
+
+/// The decoded document's stored merged source, or its composited layers.
+pub(super) fn merged_source(embedded: &Document) -> Option<PixelBuffer> {
     let comp = &embedded.composite;
     let usable = comp.width > 0
         && comp.height > 0
@@ -382,7 +393,7 @@ fn decode_embedded(so: &SmartObject) -> Option<PixelBuffer> {
             comp.clone()
         })
     } else {
-        Some(crate::composite_rgba(&embedded))
+        Some(crate::composite_rgba(embedded))
     }
 }
 
