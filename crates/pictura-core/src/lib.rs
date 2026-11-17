@@ -29,6 +29,7 @@ mod raw_settings;
 mod samples;
 pub mod scratch;
 pub mod shape;
+mod stack_mode;
 mod text_render;
 pub mod tiled_plane;
 mod type_tool;
@@ -55,6 +56,7 @@ pub use raw_settings::{
     ToneCurve, HSL_RANGES,
 };
 pub use samples::{Sample, SampleRow, Samples};
+pub use stack_mode::{reduce_stack, StackMode};
 pub use text_render::{
     layout_lines, FontPolicy, GlyphMask, LayoutLine, LayoutParams, PlacedGlyph, RasterRequest,
     Rasterizer, ShapedGlyph, TextAlign, TextLayout, TextProvenance,
@@ -824,6 +826,8 @@ pub struct SmartObject {
     /// The document-level filter mask (`FEid`/`FMsk`), when the smart filter
     /// stack is limited by one. `None` when there is none.
     pub filter_mask: Option<FilterMask>,
+    /// The active image-stack reduction, or `None` when the object renders normally.
+    pub stack_mode: Option<StackMode>,
 }
 
 impl Default for SmartObject {
@@ -848,6 +852,7 @@ impl Default for SmartObject {
             filter_mask_extend_with_white: true,
             smart_filters_enabled: true,
             filter_mask: None,
+            stack_mode: None,
         }
     }
 }
@@ -870,6 +875,7 @@ impl PartialEq for SmartObject {
             && self.filter_mask_extend_with_white == other.filter_mask_extend_with_white
             && self.smart_filters_enabled == other.smart_filters_enabled
             && self.filter_mask == other.filter_mask
+            && self.stack_mode == other.stack_mode
     }
 }
 

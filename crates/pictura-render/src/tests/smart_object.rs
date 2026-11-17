@@ -92,7 +92,7 @@ pub(super) fn green_proxy() -> Vec<Channel> {
     ]
 }
 
-fn assert_close(buf: &PixelBuffer, x: u32, y: u32, expected: [u8; 4]) {
+pub(super) fn assert_close(buf: &PixelBuffer, x: u32, y: u32, expected: [u8; 4]) {
     let got = px(buf, x, y);
     for i in 0..4 {
         assert!(

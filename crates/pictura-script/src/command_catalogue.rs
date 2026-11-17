@@ -17,6 +17,7 @@ pub fn command_edition(id: &str) -> Edition {
         | "view.show.count"
         | "window.panels.3d"
         | "window.panels.measurement.log" => Edition::Extended,
+        id if id.starts_with("layer.smart.objects.stack.mode.") => Edition::Extended,
         _ => Edition::Standard,
     }
 }
@@ -319,23 +320,35 @@ mod tests {
 
     #[test]
     fn extended_only_command_ids() {
-        let extended: Vec<&str> = command_catalogue()
+        let extended: std::collections::BTreeSet<&str> = command_catalogue()
             .iter()
             .filter(|spec| command_edition(spec.id) == Edition::Extended)
             .map(|spec| spec.id)
             .collect();
-        assert_eq!(
-            extended,
-            [
-                "edit.preferences.3d",
-                "layer.rasterize.3d",
-                "type.extrude.to.3d",
-                "view.show.3d.axis",
-                "view.show.count",
-                "window.panels.3d",
-                "window.panels.measurement.log",
-            ]
-        );
+        let expected: std::collections::BTreeSet<&str> = [
+            "edit.preferences.3d",
+            "layer.rasterize.3d",
+            "layer.smart.objects.stack.mode.entropy",
+            "layer.smart.objects.stack.mode.kurtosis",
+            "layer.smart.objects.stack.mode.maximum",
+            "layer.smart.objects.stack.mode.mean",
+            "layer.smart.objects.stack.mode.median",
+            "layer.smart.objects.stack.mode.minimum",
+            "layer.smart.objects.stack.mode.none",
+            "layer.smart.objects.stack.mode.range",
+            "layer.smart.objects.stack.mode.skewness",
+            "layer.smart.objects.stack.mode.standard.deviation",
+            "layer.smart.objects.stack.mode.summation",
+            "layer.smart.objects.stack.mode.variance",
+            "type.extrude.to.3d",
+            "view.show.3d.axis",
+            "view.show.count",
+            "window.panels.3d",
+            "window.panels.measurement.log",
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(extended, expected);
         assert_eq!(command_edition("window.panels.timeline"), Edition::Standard);
     }
 

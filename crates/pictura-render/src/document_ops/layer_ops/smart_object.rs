@@ -449,37 +449,44 @@ pub fn can_materialize_smart_source(layer: &Layer) -> bool {
 
 /// Rasterize the smart-object layer at `path` back into a plain pixel layer.
 ///
-/// A layer with a color channel keeps its raster proxy byte-for-byte; a
-/// channel-less layer is materialized from the decoded embedded source into
-/// channels `0..mode.color_channels()` plus a `-1` alpha. On success the typed
+/// A layer with a color channel keeps its raster proxy byte-for-byte unless an
+/// eligible active stack mode applies, in which case the reduced stack render is
+/// baked; a channel-less layer is materialized from the decoded embedded source
+/// into channels `0..mode.color_channels()` plus a `-1` alpha. On success the typed
 /// object, the preserved config block, and the matching document-level linked
 /// record are dropped so a re-save authors no smart object. Returns `false`
-/// without mutating for an ineligible target or an undecodable payload.
+/// without mutating for an ineligible target, or for a channel-less layer whose
+/// embedded payload cannot be rendered.
 pub fn rasterize_smart_object(doc: &mut Document, path: &str) -> bool {
     if !can_rasterize_smart_object(doc, path) {
         return false;
     }
     let rendered = {
         let layer = resolve_path(doc, path).expect("can_rasterize_smart_object checked");
-        if layer.channels.iter().any(|c| c.id == 0) {
+        let has_proxy = layer.channels.iter().any(|c| c.id == 0);
+        let bake_stack = crate::composite_route::stack_source_applies(layer);
+        if has_proxy && !bake_stack {
             None
         } else {
             let so = layer.smart_object.as_ref().expect("checked");
-            let Some(src) = crate::render_smart_source(so, layer.rect, layer.rect) else {
-                return false;
-            };
-            let plane = src.width as usize * src.height as usize;
-            let mut channels: Vec<Channel> = (0..doc.mode.color_channels() as usize)
-                .map(|c| Channel {
-                    id: c as i16,
-                    data: src.data[c * plane..(c + 1) * plane].to_vec().into(),
-                })
-                .collect();
-            channels.push(Channel {
-                id: -1,
-                data: src.data[3 * plane..4 * plane].to_vec().into(),
-            });
-            Some(channels)
+            match crate::render_smart_source(so, layer.rect, layer.rect) {
+                Some(src) => {
+                    let plane = src.width as usize * src.height as usize;
+                    let mut channels: Vec<Channel> = (0..doc.mode.color_channels() as usize)
+                        .map(|c| Channel {
+                            id: c as i16,
+                            data: src.data[c * plane..(c + 1) * plane].to_vec().into(),
+                        })
+                        .collect();
+                    channels.push(Channel {
+                        id: -1,
+                        data: src.data[3 * plane..4 * plane].to_vec().into(),
+                    });
+                    Some(channels)
+                }
+                None if has_proxy => None,
+                None => return false,
+            }
         }
     };
     let uuid = resolve_path(doc, path)
@@ -493,7 +500,7 @@ pub fn rasterize_smart_object(doc: &mut Document, path: &str) -> bool {
         }
         layer
             .extra_blocks
-            .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd"));
+            .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd" | b"PiSt"));
         layer.smart_object = None;
     }
     remove_link_if_unreferenced(doc, &uuid);

@@ -94,6 +94,54 @@ void MenuRegistrar::wireAdvancedSmartObjectActions()
                                   [currentCopyableSmartPath]() {
                                       return !currentCopyableSmartPath().isEmpty();
                                   });
+
+    // Layer > Smart Objects > Stack Mode: 12 checkable leaves. None clears the
+    // mode; the other leaves reduce the embedded stack. A mode needs an
+    // embedded payload with at least two visible frames.
+    struct StackModeLeaf {
+        const char* command;
+        int code;
+    };
+    static const StackModeLeaf stackModeLeaves[] = {
+        {command_ids::LayerSmartObjectsStackModeNone, 0},
+        {command_ids::LayerSmartObjectsStackModeEntropy, 11},
+        {command_ids::LayerSmartObjectsStackModeKurtosis, 10},
+        {command_ids::LayerSmartObjectsStackModeMaximum, 1},
+        {command_ids::LayerSmartObjectsStackModeMean, 3},
+        {command_ids::LayerSmartObjectsStackModeMedian, 4},
+        {command_ids::LayerSmartObjectsStackModeMinimum, 2},
+        {command_ids::LayerSmartObjectsStackModeRange, 6},
+        {command_ids::LayerSmartObjectsStackModeSkewness, 9},
+        {command_ids::LayerSmartObjectsStackModeStandardDeviation, 8},
+        {command_ids::LayerSmartObjectsStackModeSummation, 5},
+        {command_ids::LayerSmartObjectsStackModeVariance, 7},
+    };
+    for (const StackModeLeaf& leaf : stackModeLeaves) {
+        const QString command = QString::fromLatin1(leaf.command);
+        const int code = leaf.code;
+        commands_->setHandler(command, [this, code]() {
+            PictureView* view = activeView();
+            const QString path = layerAnchor();
+            if (!view || path.isEmpty()) {
+                return;
+            }
+            if (set_smart_object_stack_mode(*view, path, code)) {
+                refresh();
+            }
+        });
+        commands_->setEnabledProvider(command, [this, code]() {
+            PictureView* view = activeView();
+            const QString path = layerAnchor();
+            return view && !path.isEmpty()
+                && layer_can_set_smart_object_stack_mode(*view, path, code);
+        });
+        commands_->setCheckedProvider(command, [this, code]() {
+            PictureView* view = activeView();
+            const QString path = layerAnchor();
+            return view && !path.isEmpty()
+                && layer_smart_object_stack_mode(*view, path) == code;
+        });
+    }
 }
 
 bool MenuRegistrar::replaceSmartObjectContents(const QString& layerPath)

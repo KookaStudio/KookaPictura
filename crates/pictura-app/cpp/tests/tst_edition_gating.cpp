@@ -50,7 +50,19 @@ void EditionGatingTest::editionGating()
         for (const char* id : {"edit.preferences.3d", "layer.rasterize.3d",
                                "type.extrude.to.3d", "view.show.3d.axis",
                                "view.show.count", "window.panels.3d",
-                               "window.panels.measurement.log"}) {
+                               "window.panels.measurement.log",
+                               "layer.smart.objects.stack.mode.none",
+                               "layer.smart.objects.stack.mode.entropy",
+                               "layer.smart.objects.stack.mode.kurtosis",
+                               "layer.smart.objects.stack.mode.maximum",
+                               "layer.smart.objects.stack.mode.mean",
+                               "layer.smart.objects.stack.mode.median",
+                               "layer.smart.objects.stack.mode.minimum",
+                               "layer.smart.objects.stack.mode.range",
+                               "layer.smart.objects.stack.mode.skewness",
+                               "layer.smart.objects.stack.mode.standard.deviation",
+                               "layer.smart.objects.stack.mode.summation",
+                               "layer.smart.objects.stack.mode.variance"}) {
             QVERIFY2(hasCommand(*extended, id), id);
         }
     }
@@ -73,7 +85,19 @@ void EditionGatingTest::editionGating()
         for (const char* id : {"edit.preferences.3d", "layer.rasterize.3d",
                                "type.extrude.to.3d", "view.show.3d.axis",
                                "view.show.count", "window.panels.3d",
-                               "window.panels.measurement.log"}) {
+                               "window.panels.measurement.log",
+                               "layer.smart.objects.stack.mode.none",
+                               "layer.smart.objects.stack.mode.entropy",
+                               "layer.smart.objects.stack.mode.kurtosis",
+                               "layer.smart.objects.stack.mode.maximum",
+                               "layer.smart.objects.stack.mode.mean",
+                               "layer.smart.objects.stack.mode.median",
+                               "layer.smart.objects.stack.mode.minimum",
+                               "layer.smart.objects.stack.mode.range",
+                               "layer.smart.objects.stack.mode.skewness",
+                               "layer.smart.objects.stack.mode.standard.deviation",
+                               "layer.smart.objects.stack.mode.summation",
+                               "layer.smart.objects.stack.mode.variance"}) {
             QVERIFY2(!hasCommand(*standard, id), id);
         }
         QVERIFY2(hasCommand(*standard, "window.panels.timeline"),

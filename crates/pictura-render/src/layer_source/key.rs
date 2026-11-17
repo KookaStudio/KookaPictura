@@ -70,6 +70,7 @@ pub(super) fn embedded_key(so: &SmartObject) -> u64 {
     let mut hasher = DefaultHasher::new();
     so.payload_digest().hash(&mut hasher);
     so.nesting.hash(&mut hasher);
+    so.stack_mode.hash(&mut hasher);
     text_state_hash().hash(&mut hasher);
     hasher.finish()
 }
@@ -77,6 +78,7 @@ pub(super) fn embedded_key(so: &SmartObject) -> u64 {
 pub(super) fn chain_hash(so: &SmartObject) -> u64 {
     let mut hasher = DefaultHasher::new();
     so.smart_filters_enabled.hash(&mut hasher);
+    so.stack_mode.hash(&mut hasher);
     for filter in &so.smart_filters {
         filter.enabled.hash(&mut hasher);
         filter.filter_id.hash(&mut hasher);

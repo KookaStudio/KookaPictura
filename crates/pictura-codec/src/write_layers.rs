@@ -702,9 +702,22 @@ fn write_extra(
         lsct.extend_from_slice(&layer.blend.to_psd_key());
         write_tag(out, b"lsct", &lsct, psb);
     }
-    // Unmodeled tagged blocks, re-emitted in encounter order.
+    let stack_mode = layer.smart_object.as_ref().and_then(|so| so.stack_mode);
+    // Unmodeled tagged blocks, re-emitted in encounter order; a preserved
+    // `PiSt` yields to the modelled marker, and at most one preserved marker is
+    // re-emitted when no mode is modelled.
+    let mut preserved_stack_marker = false;
     for block in &layer.extra_blocks {
+        if block.key == crate::stack_marker::KEY {
+            if stack_mode.is_some() || preserved_stack_marker {
+                continue;
+            }
+            preserved_stack_marker = true;
+        }
         write_tag(out, &block.key, &block.data, psb);
+    }
+    if let Some(mode) = stack_mode {
+        write_tag(out, b"PiSt", &crate::stack_marker::marker_data(mode), psb);
     }
     // An embedded smart object with no preserved config block is authored here.
     if let Some(so) = crate::smart_writer::should_author(layer) {

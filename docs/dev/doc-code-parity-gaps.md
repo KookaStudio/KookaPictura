@@ -9,7 +9,9 @@
 - **Re-checked:** `#1358` corrected five rows whose tracking issues had shipped
   since that sweep, narrowed `PAN-15`, and added the remaining Smart-Filter
   preview gap as `FILT-11`; the corrections are listed in §G.
-- **Rows:** 157 gaps — 4 systemic in §B, 153 per-domain in §C.
+- **Re-checked:** `#591` shipped `LAY-13` (Extended Stack Modes); the row keeps
+  the implementation evidence.
+- **Rows:** 156 gaps — 4 systemic in §B, 152 per-domain in §C.
 
 This register maps the behavioural contract in `docs/` against the implementation
 in `crates/`. It is the canonical place to see **what is specified but missing,
@@ -189,7 +191,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | LAY-10 | `layer-management-ui.md` | Shape layer naming `<Tool> N` | SHIPPED | `crates/pictura-render/src/document_ops/layer_ops/shape_layer.rs:17`; `crates/pictura-app/cpp/tests/tst_shape_tools.cpp:258` | #588 |
 | LAY-11 | `blend-modes.md` | 32-bit/Lab blend-mode menu gating | SHIPPED | `crates/pictura-core/src/blend.rs` (`BlendMode::allowed`); `crates/pictura-app/cpp/blend_modes.cpp`; `crates/pictura-app/cpp/tests/tst_blend_mode_list.cpp` | #589 |
 | LAY-12 | `layer-management-ui.md` | `Ctrl+J` duplicate-group semantics | SHIPPED | `crates/pictura-app/cpp/menu_registrar.cpp:555`; `crates/pictura-app/cpp/tests/tst_layer_commands.cpp:212` | #590 |
-| LAY-13 | `smart-objects.md` | Extended Stack Modes | MISSING | no `StackMode`/`reduce_stack` | #591 |
+| LAY-13 | `smart-objects.md` | Extended Stack Modes | SHIPPED | `crates/pictura-core/src/stack_mode.rs`; `crates/pictura-render/src/layer_source/stack.rs`; `crates/pictura-codec/src/stack_marker.rs`; `crates/pictura-app/cpp/tests/tst_smart_object_actions.cpp` | #591 |
 | LAY-14 | `merge-and-flatten.md` | Merge Down result appearance: the merged node inherits the target's blend mode and opacity, so a target with non-default settings renders the merged result differently from the pre-merge canvas; the pair also composites against a transparent backdrop, so where the target is non-`Normal` or not opaque the source's blend sees the target's unblended colour | UNRESOLVED | `merge.rs:195`; `merge.rs:202-203`; `merge.rs:422-424` | #813 |
 | LAY-15 | `smart-filters.md` | Filter-menu filters on a Smart Object append Smart Filters (#984); missing: Shadow/Highlight and Variations as Smart Filters, per-filter blend mode and opacity, the white mask without a selection, Smart Lens Blur/Displace/Adaptive Wide Angle, Photoshop-validated `FEid`/`FMsk` | PARTIAL | `crates/pictura-render/src/document_ops/smart_filter_apply.rs`; `crates/pictura-app/src/cxxqt_object/filter_tools/smart_apply.rs` | #996, #998, #1000, #1001, #999 |
 

@@ -62,6 +62,7 @@ mod save;
 mod smart_filter;
 mod smart_object;
 mod smart_writer;
+mod stack_marker;
 mod svg;
 mod type_path;
 mod type_plain;

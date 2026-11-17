@@ -46,6 +46,11 @@ fn resolve_layer(
     masks: &[crate::filter_effects::FilterMaskRecord],
 ) {
     layer.smart_object = build_smart_object(layer, records, masks);
+    if layer.smart_object.is_some() {
+        if let Some(mode) = crate::stack_marker::take_stack_marker(layer) {
+            layer.smart_object.as_mut().expect("checked").stack_mode = Some(mode);
+        }
+    }
     for child in layer.children.iter_mut() {
         resolve_layer(child, records, masks);
     }
