@@ -76,8 +76,11 @@ global angle is `30°` (`ARCH-008`; resource 1037).
   parameters without scaling the layer object, via a percentage with preview.
 - **Create Layers** (`Layer > Layer Style > Create Layers`) explodes the style into
   regular image layers for hand-editing; the result may not exactly match the live
-  style. `Rasterize Layer Style` (CS6) merges the effects into the layer in one
-  step. Some effects (e.g. Inner Glow) become layers inside a clipping mask.
+  style. It creates one ordinary pixel layer per effect pass — below effects under
+  the base, surface/interior effects above it, in draw order — rather than a
+  clipping group, because the compositor renders a clipping group in isolation
+  and that would change appearance on semi-transparent content. `Rasterize Layer
+  Style` (CS6) merges the effects into the layer in one step.
 - **Style presets** live in the **Styles** panel and are grouped into loadable
   libraries (web buttons, text effects, etc.). Clicking a style replaces the
   current style; `Shift`-click/drag **appends** instead of replacing. Styles can
@@ -98,7 +101,8 @@ global angle is `30°` (`ARCH-008`; resource 1037).
 |---|---|---|---|
 | Layers panel > Add a Layer Style icon | Menu | n/a | Adds one effect or opens Blending Options |
 | Layers panel > double-click layer (outside name/thumbnail) | Gesture | n/a | Opens Layer Style dialog / Blending Options |
-| Layer > Layer Style | Menu | n/a | All effects, Copy/Paste/Clear Layer Style, Global Light, Scale/Create/Rasterize, Hide/Show All Effects |
+| Layer > Layer Style | Menu | n/a | All effects, Copy/Paste/Clear Layer Style, Global Light, Scale Effects, Create Layers, Hide/Show All Effects |
+| Layer > Rasterize > Layer Style | Menu | n/a | Bakes the current layer's style into its pixels |
 | Layer Style dialog | Dialog | n/a | Left list of effects; checkbox to enable without selecting; click name to edit |
 | Styles panel | Dock | `Window > Styles` | Preset thumbnails/list; Create New Style, Clear Style buttons; fly-out library menu |
 | Options bar (Shape/Pen in shape mode) | Pop-up style picker | n/a | Select a style before drawing |
@@ -301,8 +305,9 @@ Satin blend mode. It is the bevel's distance field without the lighting.
 ### Global light and Scale Effects
 
 - **Global light:** one `(Angle, Altitude)` pair stored at document level (image
-  resource 1037). Every effect with `Use Global Light` reads it; editing it
-  updates all such effects. Local mode stores its own angle on the effect.
+  resources 1037 for the angle and 1049 for the altitude). Every effect with
+  `Use Global Light` reads it; editing it updates all such effects. Local mode
+  stores its own angle on the effect.
 - **Scale Effects:** multiply every pixel-valued parameter (Distance, Size, Spread/
   Choke effective radius, Stroke Size, bevel Size/Soften, Texture/Gradient/Pattern
   scale, Satin Distance/Size) by the percentage. Opacity, angle, colors, contours,
@@ -382,7 +387,7 @@ Widgets (consistent with `ARCH-003`).
   information** blocks with Pascal-string unit-float descriptors (e.g. `SoLd`,
   `vstk`, `vsms`, `vscg`, `vogk` families). Unknown keys and unknown descriptor
   fields are **preserved verbatim** so CS6 files round-trip.
-- **Global light** is document image resource 1037; **Scale Effects** and copying/
+- **Global light** is document image resources 1037/1049; **Scale Effects** and copying/
   pasting are commands, not stored state.
 - Style presets are external `.asl` libraries plus in-panel presets; a new preset
   saved from the panel lives in preferences until explicitly saved to a library.

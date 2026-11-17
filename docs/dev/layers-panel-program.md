@@ -402,8 +402,8 @@ Carried forward from `LAY-002` / `PAN-001`:
   block or transiently is unsourced. Blocks the M41 link-set serialization.
 - **Color-label palette coordinates.** The exact RGB of each label is not
   sourced; only the seven names and the 0–7 PSD values.
-- **Rasterize Layer Style semantics.** Whether it bakes only effects or also
-  clears the style list, and its undo granularity, is undocumented. M42.
+- **Rasterize Layer Style semantics** (resolved): it bakes the enabled effects
+  into the layer's pixels, removes the style, and records one structural state.
 - **Panel Options defaults.** Thumbnail contents = Entire Document, Expand New
   Effects = on, Add "copy" = on, Use Default Masks = on are sourced; the
   thumbnail-size default is still not stated.
