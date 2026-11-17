@@ -248,13 +248,9 @@ fn coverage_preserves_real_mask_semantics() {
     assert_eq!(mask.flags, 9);
     assert_eq!(mask.density, 192);
     assert_eq!(mask.feather(), 1.0);
-    assert_eq!(
-        mask.data
-            .as_ref()
-            .unwrap()
-            .sample(((1 - mask.rect.top) * mask.rect.width()) as usize),
-        Some(0)
-    );
+    let retained_index = ((1 - mask.rect.top) * mask.rect.width() + (-2 - mask.rect.left)) as usize;
+    assert_eq!(mask.data.as_ref().unwrap().sample(retained_index), Some(0));
+    assert_eq!(mask.raw_coverage().unwrap().sample(7, 7), 64);
     let native = &retained.layers[0]
         .source_channels
         .as_ref()
@@ -265,10 +261,7 @@ fn coverage_preserves_real_mask_semantics() {
         .unwrap()
         .1;
     match native {
-        pictura_core::Samples::U16(values) => assert_eq!(
-            values.sample(((1 - mask.rect.top) * mask.rect.width()) as usize),
-            Some(1)
-        ),
+        pictura_core::Samples::U16(values) => assert_eq!(values.sample(retained_index), Some(1)),
         _ => panic!("native mask precision was discarded"),
     }
 }
