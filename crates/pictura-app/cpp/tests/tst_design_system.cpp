@@ -118,6 +118,7 @@ private slots:
     void swatchPaintsDataColour();
     void paintedWidgetsUseTokens();
     void lightFamilyTokensAreConsistent();
+    void contrastShadeFollowsFamily();
     void numericFieldArrowIsInset();
     void inputsShareOneHeight();
 };
@@ -544,6 +545,21 @@ void DesignSystemTest::lightFamilyTokensAreConsistent()
     QVERIFY2(Theme::styleSheet(Theme::ThemeFamily::Light, 1)
                  .contains(QStringLiteral(":/ui/select-chevron-light.svg")),
              "the light family uses the dark-coloured chevron asset");
+}
+
+void DesignSystemTest::contrastShadeFollowsFamily()
+{
+    const QColor base(128, 128, 128);
+    Theme::apply(Theme::ThemeFamily::Dark, Theme::kDefaultLevel);
+    QCOMPARE(Theme::contrastShade(base, 2), Theme::shade(base, 2));
+    QVERIFY2(Theme::contrastShade(base, 2).lightness() > base.lightness(),
+             "the dark family steps lighter");
+
+    Theme::apply(Theme::ThemeFamily::Light, Theme::kDefaultLevel);
+    QCOMPARE(Theme::contrastShade(base, 2), Theme::shade(base, -2));
+    QVERIFY2(Theme::contrastShade(base, 2).lightness() < base.lightness(),
+             "the light family steps darker");
+    Theme::apply(Theme::kDefaultFamily, Theme::kDefaultLevel);
 }
 
 // The popup slider's arrow is an inset child of the value box (not a sibling

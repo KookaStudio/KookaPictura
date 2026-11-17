@@ -56,6 +56,8 @@ public:
     bool ctrlOverlayVisibleForTest() const;
     // The row widget's surface colour, for the Layers-style restyle check.
     QColor rowSurfaceForTest(int index) const;
+    // The row widget's text colour, for the family-restyle check.
+    QColor rowTextColorForTest(int index) const;
 
 signals:
     // The visible working colour channels: bit 0 red, 1 green, 2 blue (0x7 all).
@@ -65,6 +67,7 @@ signals:
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
+    void changeEvent(QEvent* event) override;
 
 private:
     enum class RowKind { Color, Alpha, LayerMask, QuickMask };

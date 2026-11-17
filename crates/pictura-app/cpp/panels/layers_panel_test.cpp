@@ -1361,7 +1361,7 @@ void LayersPanel::expandForTest(const QString& path)
     }
 }
 
-QImage LayersPanel::rowImageForTest(const QString& path, qreal dpr) const
+QImage LayersPanel::rowImageForTest(const QString& path, qreal dpr, bool livePalette) const
 {
     const QModelIndex index = proxyIndexForPath(path);
     if (!index.isValid() || !delegate_ || !tree_) {
@@ -1379,10 +1379,12 @@ QImage LayersPanel::rowImageForTest(const QString& path, qreal dpr) const
     QStyleOptionViewItem option;
     option.rect = QRect(0, 0, vr.width(), vr.height());
     QPalette palette = tree_->palette();
-    palette.setColor(QPalette::Window, base);
-    palette.setColor(QPalette::Base, base);
-    palette.setColor(QPalette::Highlight, QColor(0, 0, 255));
-    palette.setColor(QPalette::HighlightedText, QColor(255, 255, 255));
+    if (!livePalette) {
+        palette.setColor(QPalette::Window, base);
+        palette.setColor(QPalette::Base, base);
+        palette.setColor(QPalette::Highlight, QColor(0, 0, 255));
+        palette.setColor(QPalette::HighlightedText, QColor(255, 255, 255));
+    }
     option.palette = palette;
     option.widget = tree_;
     option.font = tree_->font();

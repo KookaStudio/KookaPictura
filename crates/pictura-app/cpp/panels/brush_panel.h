@@ -46,8 +46,13 @@ public:
     // Self-test hook: the preview's current pixels.
     QImage previewForTest() const;
 
+protected:
+    void changeEvent(QEvent* event) override;
+
 private:
     void refreshAirbrush();
+    // Rebuild the preset glyphs in the active family's icon ink.
+    void updateTipIcons();
     void buildDynamicsPages();
     void refreshDynamics();
     void updateDynamics(const std::function<void(BrushDynamics&)>& edit);
@@ -75,6 +80,7 @@ private:
     QListWidget* sets_ = nullptr;
     QStackedWidget* pages_ = nullptr;
     QToolButton* lockButton_ = nullptr;
+    std::vector<QToolButton*> tipButtons_;
     QHash<QString, QWidget*> dynWidgets_;
     std::vector<std::function<void(const BrushDynamics&)>> dynRefreshers_;
 };

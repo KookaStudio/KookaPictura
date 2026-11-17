@@ -3,8 +3,10 @@
 #include "numeric_field.h"
 
 #include "paint_tip.h"
+#include "theme.h"
 #include "tools.h"
 
+#include <QtCore/QEvent>
 #include <QtCore/QSignalBlocker>
 #include <QtGui/QImage>
 #include <QtGui/QPainter>
@@ -102,21 +104,23 @@ constexpr std::array<StandardTip, 18> kStandardTips = {{
     {35, 0}, {45, 0}, {65, 0}, {100, 0}, {200, 0}, {300, 0},
 }};
 
-QIcon tipIcon(const StandardTip& tip)
+QIcon tipIcon(const StandardTip& tip, const QColor& ink)
 {
     QPixmap pm(24, 24);
     pm.fill(Qt::transparent);
     QPainter p(&pm);
     p.setRenderHint(QPainter::Antialiasing, true);
     const double r = 2.0 + 6.0 * std::min(tip.size, 60) / 60.0;
+    QColor fade = ink;
+    fade.setAlpha(0);
     QRadialGradient g(QPointF(12, 9), r);
-    g.setColorAt(0.0, Qt::white);
-    g.setColorAt(tip.hardness / 100.0 * 0.95, Qt::white);
-    g.setColorAt(1.0, QColor(255, 255, 255, 0));
+    g.setColorAt(0.0, ink);
+    g.setColorAt(tip.hardness / 100.0 * 0.95, ink);
+    g.setColorAt(1.0, fade);
     p.setPen(Qt::NoPen);
     p.setBrush(g);
     p.drawEllipse(QPointF(12, 9), r, r);
-    p.setPen(Qt::white);
+    p.setPen(ink);
     QFont font = p.font();
     font.setPixelSize(8);
     p.setFont(font);
@@ -249,8 +253,9 @@ BrushPanel::BrushPanel(QWidget* parent)
         const StandardTip tip = kStandardTips[i];
         auto* button = new QToolButton(page);
         button->setObjectName(QStringLiteral("brushTip%1").arg(i));
-        button->setIcon(tipIcon(tip));
+        button->setIcon(tipIcon(tip, Theme::tokenColor(QStringLiteral("icon"))));
         button->setIconSize(QSize(24, 24));
+        tipButtons_.push_back(button);
         button->setAutoRaise(true);
         button->setToolTip(tip.hardness == 100 ? tr("Hard Round %1").arg(tip.size)
                                                : tr("Soft Round %1").arg(tip.size));
@@ -795,6 +800,25 @@ void BrushPanel::refresh()
 QImage BrushPanel::previewForTest() const
 {
     return preview_->pixmap().toImage();
+}
+
+void BrushPanel::updateTipIcons()
+{
+    QColor ink = Theme::tokenColor(QStringLiteral("icon"));
+    if (!ink.isValid()) {
+        ink = palette().color(QPalette::WindowText);
+    }
+    for (size_t i = 0; i < tipButtons_.size() && i < kStandardTips.size(); ++i) {
+        tipButtons_[i]->setIcon(tipIcon(kStandardTips[i], ink));
+    }
+}
+
+void BrushPanel::changeEvent(QEvent* event)
+{
+    QWidget::changeEvent(event);
+    if (event->type() == QEvent::PaletteChange || event->type() == QEvent::StyleChange) {
+        updateTipIcons();
+    }
 }
 
 } // namespace pictura
