@@ -64,6 +64,7 @@ private slots:
     void ctrlJDuplicatesGroup();
     void ctrlJDuplicatesLayerWithoutSelection();
     void ctrlJCutOutcomes();
+    void ctrlJRecordsDuplicate();
     void solidFillCommandUsesForeground();
     void managementNoOpRecordsNoHistory();
     void managementCommandRecordsOneState();
@@ -430,12 +431,18 @@ void LayerCommandsTest::ctrlJCutOutcomes()
     QCOMPARE(pictura::layers_api::rowCount(*view), rows);
     QCOMPARE(view->history_count(), history);
 
-    // A selection covering no pixels is also unavailable.
+    // A selection covering no pixels is also unavailable, even on a direct
+    // dispatch: the handler mirrors the enabled provider.
     QVERIFY(view->select_rect(100, 100, 2, 2, QStringLiteral("new"), 0.0));
     QVERIFY2(view->has_selection(), "the empty selection is active");
     QCOMPARE(view->selection_count(), 0);
     registry->refresh();
     QVERIFY2(!viaCut->isEnabled(), "disabled for a zero-coverage selection");
+    const int rowsZero = pictura::layers_api::rowCount(*view);
+    const int historyZero = view->history_count();
+    QVERIFY(registry->dispatch(id));
+    QCOMPARE(pictura::layers_api::rowCount(*view), rowsZero);
+    QCOMPARE(view->history_count(), historyZero);
 
     // Group target: unavailable and a dispatch changes nothing.
     const QString group = view->add_group_in(QString());
@@ -451,6 +458,37 @@ void LayerCommandsTest::ctrlJCutOutcomes()
     layers->refresh();
     QCOMPARE(pictura::layers_api::rowCount(*view), rows);
     QCOMPARE(view->history_count(), history);
+}
+
+// The group duplicate branch routes through layer.duplicate.layer so an active
+// Action recording captures the step instead of losing it.
+void LayerCommandsTest::ctrlJRecordsDuplicate()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("CtrlJRecord"), 16, 16, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    auto* layers = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    pictura::CommandRegistry* registry = frame.registry();
+    QVERIFY(view != nullptr && layers != nullptr && registry != nullptr);
+    const QString id = QString::fromLatin1(pictura::command_ids::LayerNewLayerViaCopy);
+    QVERIFY(registry->action(id) != nullptr);
+
+    const QString group = view->add_group_in(QString());
+    QVERIFY(!group.isEmpty());
+    layers->refresh();
+    layers->selectPaths({group}, group);
+    registry->refresh();
+
+    auto recorded = std::make_shared<QStringList>();
+    registry->setRecordingSink([recorded](const QString& commandId,
+                                          const pictura::CommandParams&) {
+        recorded->append(commandId);
+    });
+    QVERIFY(registry->dispatch(id));
+    registry->setRecordingSink(pictura::CommandRecordingSink());
+    QCOMPARE(*recorded,
+             QStringList{QString::fromLatin1(pictura::command_ids::LayerDuplicateLayer)});
 }
 
 // The Layer menu's Solid Color... fills with the current foreground colour,

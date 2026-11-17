@@ -554,9 +554,10 @@ void MenuRegistrar::registerLayerCommands()
 
     // Layer via Copy dispatches on the active layer target: a group, or a
     // selection that covers no pixels, duplicates the selected layers through
-    // the panel; a non-group target with a non-empty selection copies the
-    // selection's pixels. Cut needs a non-empty selection and a non-group
-    // target (the engine refuses groups).
+    // the duplicate command so an active Action recording keeps the step; a
+    // non-group target with a non-empty selection copies the selection's
+    // pixels. Cut needs a non-empty selection and a non-group target (the
+    // engine refuses groups).
     commands_->setHandler(command_ids::LayerNewLayerViaCopy, [this]() {
         PictureView* view = activeView();
         const QString path = layerAnchor();
@@ -566,30 +567,27 @@ void MenuRegistrar::registerLayerCommands()
         const bool group = pictura::layers_api::rowForPath(*view, path).kind
             == QLatin1String("group");
         if (group || view->selection_count() == 0) {
-            if (panels_ && panels_->layersPanel()) {
-                panels_->layersPanel()->duplicateSelection();
-            }
+            commands_->dispatch(command_ids::LayerDuplicateLayer);
             return;
         }
         view->layer_via_copy(path);
     });
-    commands_->setHandler(command_ids::LayerNewLayerViaCut, [this]() {
+    const auto canLayerViaCut = [this]() {
         PictureView* view = activeView();
         const QString path = layerAnchor();
-        if (view && !path.isEmpty()) {
-            view->layer_via_cut(path);
+        return view && view->has_document() && view->selection_count() > 0 && !path.isEmpty()
+            && pictura::layers_api::rowForPath(*view, path).kind != QLatin1String("group");
+    };
+    commands_->setHandler(command_ids::LayerNewLayerViaCut, [this, canLayerViaCut]() {
+        if (canLayerViaCut()) {
+            activeView()->layer_via_cut(layerAnchor());
         }
     });
     commands_->setEnabledProvider(command_ids::LayerNewLayerViaCopy, [this]() {
         PictureView* view = activeView();
         return view && view->has_document() && !layerAnchor().isEmpty();
     });
-    commands_->setEnabledProvider(command_ids::LayerNewLayerViaCut, [this]() {
-        PictureView* view = activeView();
-        const QString path = layerAnchor();
-        return view && view->has_document() && view->selection_count() > 0 && !path.isEmpty()
-            && pictura::layers_api::rowForPath(*view, path).kind != QLatin1String("group");
-    });
+    commands_->setEnabledProvider(command_ids::LayerNewLayerViaCut, canLayerViaCut);
 
     // Select Similar/Linked and Link/Unlink. The engine sets the target and
     // notifies the view; Link and Unlink only touch the transient link sets.
