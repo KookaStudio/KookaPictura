@@ -241,15 +241,7 @@ pub(super) fn begin_brush(
     }
     if let Some(path) = active_mask_target(view.rust()) {
         let mask_cfg = mask_stroke_config(cfg);
-        let begun = view.begin_mask_paint(&path, mask_cfg, label);
-        if begun {
-            tool_recording::begin(
-                label,
-                &mask_cfg.sanitized(),
-                tool_recording::ToolStrokeKind::Mask,
-            );
-        }
-        return begun;
+        return view.begin_mask_paint(&path, mask_cfg, label);
     }
     begin_kind(
         view,
@@ -421,15 +413,7 @@ pub(super) fn begin_eraser(
             ..cfg
         };
         let mask_cfg = mask_stroke_config(mask_cfg);
-        let begun = view.begin_mask_paint(&path, mask_cfg, "Eraser");
-        if begun {
-            tool_recording::begin(
-                "Eraser",
-                &mask_cfg.sanitized(),
-                tool_recording::ToolStrokeKind::Mask,
-            );
-        }
-        return begun;
+        return view.begin_mask_paint(&path, mask_cfg, "Eraser");
     }
     begin(view, "Eraser", cfg, |doc, path, view| {
         // ponytail: the source layer is matched by panel path, as for the
@@ -963,63 +947,38 @@ pub(super) fn begin_kind(
     kind: tool_recording::ToolStrokeKind,
     start: impl FnOnce(&Document, &str, &PictureViewRust) -> Option<Stroke>,
 ) -> bool {
-    let stroke = {
-        let rust = view.rust();
-        let (Some(doc), Some(path)) = (rust.session.doc.as_ref(), rust.layer_target.single())
-        else {
-            return false;
-        };
-        // ponytail: only the Brush, Pencil, and Eraser paint a mask; the other
-        // painting tools refuse rather than write the layer's pixels.
-        if !rust.slot_allows(super::super::document_session::SessionKind::Paint)
-            || rust.session.live.stroke().is_some()
-            || crate::cxxqt_object::helpers::mask_editing(rust)
-            || active_pixel_layer(doc, Some(path)).is_none()
-            || !active_layer_visible(doc, Some(path))
-        {
-            return false;
-        }
-        // Opened only once the stroke can start, so a refused call never leaves
-        // a session for the next tool to report under its title.
-        super::super::helpers::paint_timing::start(label);
-        start(doc, path, rust).map(|mut stroke| {
+    view.as_mut().rust_mut().begin_stroke(
+        crate::cxxqt_object::document_session::SessionKind::Paint,
+        label,
+        &cfg,
+        kind,
+        |rust| {
+            let doc = rust.session.doc.as_ref()?;
+            let path = rust.layer_target.single()?;
+            // ponytail: only the Brush, Pencil, and Eraser paint a mask; the
+            // other painting tools refuse rather than write the layer's pixels.
+            if crate::cxxqt_object::helpers::mask_editing(rust)
+                || active_pixel_layer(doc, Some(path)).is_none()
+                || !active_layer_visible(doc, Some(path))
+            {
+                return None;
+            }
+            // Opened only once the stroke can start, so a refused call never
+            // leaves a session for the next tool to report under its title.
+            super::super::helpers::paint_timing::start(label);
+            let mut stroke = match start(doc, path, rust) {
+                Some(stroke) => stroke,
+                None => {
+                    super::super::helpers::paint_timing::report();
+                    return None;
+                }
+            };
             stroke.set_coverage_clip(stroke_selection_clip(rust));
-            stroke
-        })
-    };
-    let Some(stroke) = stroke else {
-        super::super::helpers::paint_timing::report();
-        return false;
-    };
-    let mut rust = view.as_mut().rust_mut();
-    let paint_pad = rust
-        .session
-        .doc
-        .as_ref()
-        .and_then(|doc| {
-            rust.layer_target
-                .single()
-                .map(|path| super::super::helpers::paint_pad_for(doc, path))
-        })
-        .unwrap_or(0);
-    let session = super::super::document_session::StrokeSession {
-        stroke: Some(stroke),
-        stroke_label: label.to_string(),
-        paint_pad,
-        fade_capture: crate::cxxqt_object::fade::capture(&rust),
-        ..Default::default()
-    };
-    rust.session.live.set_stroke_session(session);
-    // A new stroke opens its own present frame and tile set, exactly as
-    // `begin_paint` does, so the color-replacement and mixer commits decompose
-    // into dirty tiles rather than the whole bounding box.
-    rust.clear_pending_present();
-    let dims = rust.session.doc.as_ref().map(|doc| (doc.width, doc.height));
-    if let Some((width, height)) = dims {
-        rust.session.live.reset_stroke_tiles(width, height);
-    }
-    tool_recording::begin(label, &cfg.sanitized(), kind);
-    true
+            Some(crate::cxxqt_object::document_session::StrokePlan::layer(
+                path, stroke,
+            ))
+        },
+    )
 }
 
 #[cfg(test)]

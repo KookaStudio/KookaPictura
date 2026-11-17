@@ -939,3 +939,100 @@ fn purging_history_keeps_a_clean_document_clean() {
     assert_eq!(view.session.history.current_id(), view.session.saved_id);
     assert!(!view.session.dirty);
 }
+
+#[test]
+fn one_constructor_installs_a_layer_stroke() {
+    use crate::cxxqt_object::document_session::StrokePlan;
+    use crate::cxxqt_object::impl_paint::tool_recording::ToolStrokeKind;
+
+    let mut view = view();
+    let cfg = StrokeConfig {
+        diameter: 4,
+        ..Default::default()
+    };
+    let began = view.begin_stroke(
+        SessionKind::Paint,
+        "Brush",
+        &cfg,
+        ToolStrokeKind::Paint,
+        |rust| {
+            let doc = rust.session.doc.as_ref()?;
+            let stroke = pictura_paint::Stroke::begin_at(doc, "0", cfg).ok()?;
+            Some(StrokePlan::layer("0", stroke))
+        },
+    );
+    assert!(began);
+    let session = view.session.live.stroke_session().expect("live stroke");
+    assert_eq!(session.stroke_label, "Brush");
+    assert_eq!(
+        session.paint_pad,
+        crate::cxxqt_object::helpers::paint_pad_for(
+            view.session.doc.as_ref().expect("document"),
+            "0"
+        )
+    );
+    assert!(session.fade_capture.is_some());
+    assert!(session.pending_present.is_none());
+    assert!(!session.present_flush_due);
+    assert!(session.stroke_tiles.bounds().is_none());
+}
+
+#[test]
+fn one_constructor_installs_a_mask_stroke() {
+    use crate::cxxqt_object::document_session::{MaskStroke, StrokePlan};
+    use crate::cxxqt_object::impl_paint::tool_recording::ToolStrokeKind;
+
+    let mut view = view();
+    let cfg = StrokeConfig {
+        diameter: 4,
+        ..Default::default()
+    };
+    let mask_doc = Document::from_rgba("0", 8, 8, &[255u8; 8 * 8 * 4]);
+    let began = view.begin_stroke(
+        SessionKind::MaskPaint,
+        "Eraser",
+        &cfg,
+        ToolStrokeKind::Mask,
+        |_| {
+            let stroke = pictura_paint::Stroke::begin_at(&mask_doc, "0", cfg).ok()?;
+            Some(StrokePlan::mask(MaskStroke {
+                path: "0".to_string(),
+                baseline: None,
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 8,
+                    right: 8,
+                },
+                document: mask_doc,
+                stroke,
+            }))
+        },
+    );
+    assert!(began);
+    let session = view.session.live.stroke_session().expect("live stroke");
+    assert_eq!(session.stroke_label, "Eraser");
+    assert!(session.mask_stroke.is_some());
+    assert!(session.fade_capture.is_none());
+    assert!(session.pending_present.is_none());
+    assert!(!session.present_flush_due);
+    assert!(session.stroke_tiles.bounds().is_none());
+}
+
+#[test]
+fn a_refused_stroke_begin_leaves_the_live_state_untouched() {
+    use crate::cxxqt_object::impl_paint::tool_recording::ToolStrokeKind;
+
+    let mut view = view();
+    assert!(view.begin_heal(20, 50), "the healing gesture starts");
+    let cfg = StrokeConfig::default();
+    let began = view.begin_stroke(
+        SessionKind::Paint,
+        "Brush",
+        &cfg,
+        ToolStrokeKind::Paint,
+        |_| panic!("a refused begin must not build a stroke"),
+    );
+    assert!(!began);
+    assert_eq!(view.active_session_kind(), Some(SessionKind::Healing));
+}

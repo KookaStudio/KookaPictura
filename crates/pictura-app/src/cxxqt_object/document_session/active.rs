@@ -306,7 +306,6 @@ impl ActiveSession {
         GpuStroke,
         read gpu_stroke,
         read_mut gpu_stroke_mut,
-        set set_gpu_stroke,
         clear clear_gpu_stroke,
     );
     option_payload!(
@@ -314,7 +313,6 @@ impl ActiveSession {
         gpu_placer,
         pictura_paint::spacing::DabPlacer,
         read_mut gpu_placer_mut,
-        set set_gpu_placer,
         clear clear_gpu_placer,
     );
     option_payload!(
@@ -323,7 +321,6 @@ impl ActiveSession {
         super::stroke::PreviewStroke,
         read preview,
         read_mut preview_mut,
-        set set_preview,
         clear clear_preview,
     );
     option_payload!(
