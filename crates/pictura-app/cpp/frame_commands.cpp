@@ -12,6 +12,8 @@
 #include "save_for_web_dialog.h"
 
 #include "import_save_coordinator.h"
+#include "batch_runner.h"
+#include "panels/actions_panel.h"
 
 #include "auto_align_dialog.h"
 #include "auto_blend_dialog.h"
@@ -378,11 +380,44 @@ void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
     registry.setHandler(command_ids::HelpDeveloperDesignSystem,
                         [this]() { showDesignSystemDialog(); });
 
-    const auto saveToRecordedPath = [this](const CommandParams& params) {
-        return saveActiveAsWithRememberedOptions(params.values.value(QStringLiteral("in")).toString());
-    };
-    registry.setExecutor(command_ids::FileSave, saveToRecordedPath);
-    registry.setExecutor(command_ids::FileSaveAs, saveToRecordedPath);
+    registry.setExecutor(command_ids::FileSave, [this](const CommandParams& params) {
+        return saveActiveAsWithRememberedOptions(
+            params.values.value(QStringLiteral("in")).toString());
+    });
+    registry.setExecutor(command_ids::FileSaveAs, [this](const CommandParams& params) {
+        QString path = params.values.value(QStringLiteral("in")).toString();
+        if (const auto redirected =
+                batch().saveAsRedirect(params.values.value(QStringLiteral("as")).toString())) {
+            if (redirected->isEmpty()) {
+                return false;
+            }
+            path = *redirected;
+        }
+        return saveActiveAsWithRememberedOptions(
+            path, params.values.value(QStringLiteral("options")).toObject());
+    });
+    // A recorded Open replays without the open-options dialogs and waits for
+    // the document, so the next step runs on it.
+    registry.setExecutor(command_ids::FileOpen, [this](const CommandParams& params) {
+        const QString path = params.values.value(QStringLiteral("path")).toString();
+        if (path.isEmpty() || !QFileInfo(path).isFile()) {
+            return false;
+        }
+        return openDocumentAtPathOutcome(path, false) == OpenOutcome::Opened;
+    });
+    registry.setHandler(command_ids::FileAutomateBatch, [this]() { batch().showDialog(); });
+    registry.setEnabledProvider(command_ids::FileAutomateBatch, [this]() {
+        ActionsPanel* panel = actionsPanel();
+        if (!panel || panel->isPlaying() || panel->isRecording() || batch().running()) {
+            return false;
+        }
+        for (const auto& set : panel->actionLibraryNames()) {
+            if (!set.second.isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    });
 }
 
 void PicturaMainWindow::showDesignSystemDialog()

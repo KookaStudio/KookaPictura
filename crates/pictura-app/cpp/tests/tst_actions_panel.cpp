@@ -105,6 +105,8 @@ private slots:
     void ae_play_recorded();
     void ae_play_specific();
     void ae_play_stop();
+    void suppressedPlaybackUsesRecordedValues();
+    void suppressedPlaybackStopSteps();
     void ae_play_menu_item();
     void ae_play_path();
     void ae_play_cancel();

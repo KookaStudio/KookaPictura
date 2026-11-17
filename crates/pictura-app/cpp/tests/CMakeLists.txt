@@ -142,6 +142,8 @@ set(PICTURA_QT_TESTS
     tst_profile_warnings
     tst_save_options
     tst_save_format_options
+    tst_batch_dialog
+    tst_batch_run
     tst_save_format_dialogs
     tst_save_gif_copy
     tst_properties_panel

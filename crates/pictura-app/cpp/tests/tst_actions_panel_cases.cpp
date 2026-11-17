@@ -1082,3 +1082,43 @@ void ActionsPanelTest::ae_key_shadow_rebuild()
     registry->setShortcuts(QStringLiteral("edit.fill"), defaults);
     panel_->refresh();
 }
+
+// Batch playback (#618): a dialog-on step runs with its recorded values.
+void ActionsPanelTest::suppressedPlaybackUsesRecordedValues()
+{
+    engine_.setDialogOptions(QStringLiteral("Step One"), 1, true);
+    panel_->refresh();
+    QSignalSpy finished(panel_, &pictura::ActionsPanel::playbackFinished);
+    QVERIFY(panel_->playActionForBatch(QStringLiteral("Set A"), QStringLiteral("Action One"),
+                                       pictura::ActionsPanel::BatchPlayback{}));
+    advanceUntilDone();
+    QCOMPARE(executed_, (QStringList{QStringLiteral("edit.fill"),
+                                     QStringLiteral("layer.flatten.image")}));
+    QCOMPARE(modalFlags_, (QList<bool>{false, false}));
+    QCOMPARE(paramsSeen_.first().value(QStringLiteral("value")).toInt(), 1);
+    QVERIFY(!paramsSeen_.first().contains(QStringLiteral("edited")));
+    QCOMPARE(finished.count(), 1);
+    QVERIFY(finished.first().at(0).toBool());
+}
+
+// Batch playback (#618): a continuing Stop runs on silently; a plain Stop
+// fails the run with its message.
+void ActionsPanelTest::suppressedPlaybackStopSteps()
+{
+    // The fake engine appends inserted steps to the end of the action.
+    selectAndRefresh(engine_.idForName(QStringLiteral("Action One")));
+    QVERIFY(panel_->insertStopForTest(QStringLiteral("Keep going"), true));
+    panel_->refresh();
+    selectAndRefresh(engine_.idForName(QStringLiteral("Action One")));
+    QVERIFY(panel_->insertStopForTest(QStringLiteral("Halt"), false));
+    panel_->refresh();
+    QSignalSpy finished(panel_, &pictura::ActionsPanel::playbackFinished);
+    QVERIFY(panel_->playActionForBatch(QStringLiteral("Set A"), QStringLiteral("Action One"),
+                                       pictura::ActionsPanel::BatchPlayback{}));
+    advanceUntilDone();
+    QVERIFY2(!stopSeen_, "suppressed playback shows no Stop message");
+    QCOMPARE(executed_.size(), 2);
+    QCOMPARE(finished.count(), 1);
+    QVERIFY(!finished.first().at(0).toBool());
+    QCOMPARE(finished.first().at(1).toString(), QStringLiteral("Halt"));
+}

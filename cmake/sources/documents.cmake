@@ -1,6 +1,12 @@
 # documents sources for pictura_shell.
 # Included from the root CMakeLists.txt; keep paths explicit (no globbing).
 list(APPEND PICTURA_SHELL_SOURCES
+    crates/pictura-app/cpp/batch_dialog.cpp
+    crates/pictura-app/cpp/batch_dialog.h
+    crates/pictura-app/cpp/batch_options.cpp
+    crates/pictura-app/cpp/batch_options.h
+    crates/pictura-app/cpp/batch_runner.cpp
+    crates/pictura-app/cpp/batch_runner.h
     crates/pictura-app/cpp/bmp_advanced_modes_dialog.cpp
     crates/pictura-app/cpp/bmp_advanced_modes_dialog.h
     crates/pictura-app/cpp/bmp_options_dialog.cpp

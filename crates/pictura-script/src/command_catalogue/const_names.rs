@@ -21,6 +21,7 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("FileScriptsLayerCompsToFiles", "file.scripts.layer.comps.to.files"),
     ("FileScriptsLayerCompsToPdf", "file.scripts.layer.comps.to.pdf"),
     ("FileScriptsLoadFilesIntoStack", "file.scripts.load.files.into.stack"),
+    ("FileAutomateBatch", "file.automate.batch"),
     ("FileClose", "file.close"),
     ("FileCloseAll", "file.closeAll"),
     ("FileExit", "file.exit"),

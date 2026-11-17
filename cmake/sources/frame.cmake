@@ -12,6 +12,7 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/frame_canvas.cpp
     crates/pictura-app/cpp/frame_canvas.h
     crates/pictura-app/cpp/frame_chrome.cpp
+    crates/pictura-app/cpp/frame_batch.cpp
     crates/pictura-app/cpp/frame_color.cpp
     crates/pictura-app/cpp/frame_commands.cpp
     crates/pictura-app/cpp/frame_guides.cpp

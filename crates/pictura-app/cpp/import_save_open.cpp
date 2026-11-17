@@ -13,6 +13,7 @@
 #include "api/engine_bridge.h"
 #include "api/type_api.h"
 
+#include "command_ids.h"
 #include "dialogs.h"
 #include "document_registry.h"
 #include "loading_card.h"
@@ -23,6 +24,7 @@
 #include <QtCore/QCoreApplication>
 #include <QtCore/QEventLoop>
 #include <QtCore/QFileInfo>
+#include <QtCore/QJsonObject>
 #include <QtCore/QTimer>
 #include <QtGui/QPalette>
 #include <QtWidgets/QApplication>
@@ -77,6 +79,10 @@ void ImportSaveCoordinator::wireOpenSignals(PictureView* view)
 bool ImportSaveCoordinator::confirmProfileForOpen(PictureView* view, const QString& path)
 {
     if (!view || path.isEmpty()) {
+        return true;
+    }
+    if (suppressProfileWarnings_) {
+        pictura::set_open_policy_override(*view, 0);
         return true;
     }
     const QStringList probe = pictura::probe_file_profile(path);
@@ -193,6 +199,11 @@ void ImportSaveCoordinator::finishOpen(quint64 token, OpenOutcome outcome, const
         return;
     }
     finishedOpens_.insert(token);
+    const QString recordPath = recordOpenPaths_.take(token);
+    if (outcome == OpenOutcome::Opened && !recordPath.isEmpty()) {
+        recordCommand(command_ids::FileOpen,
+                      QJsonObject{{QStringLiteral("path"), recordPath}});
+    }
     reportFailureTokens_.remove(token);
     openFailureMessages_.remove(token);
     if (cursorTokens_.remove(token)) {
@@ -512,6 +523,15 @@ quint64 ImportSaveCoordinator::startOpenDocumentAtPath(const QString& path, bool
     }
     if (reportFailure && token != 0) {
         reportFailureTokens_.insert(token);
+    }
+    return token;
+}
+
+quint64 ImportSaveCoordinator::startUserOpen(const QString& path, bool reportFailure)
+{
+    const quint64 token = startOpenDocumentAtPath(path, true, reportFailure);
+    if (token != 0 && !finishedOpens_.contains(token)) {
+        recordOpenPaths_.insert(token, QFileInfo(path).absoluteFilePath());
     }
     return token;
 }

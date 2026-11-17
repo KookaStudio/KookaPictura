@@ -6,6 +6,7 @@
 
 pub mod action;
 pub mod atn;
+pub mod batch;
 pub mod command;
 pub mod command_catalogue;
 pub mod error;
