@@ -69,6 +69,7 @@ private slots:
     void selectionDragDifferentSizeFits();
     void selectionDragSourceUnchanged();
     void selectionDragOntoSourceIgnored();
+    void selectionDragInvalidSourceIgnored();
     void selectionDragPreparationRestoresSource();
 
 private:
@@ -492,6 +493,27 @@ void SelectionSaveLoadTest::selectionDragOntoSourceIgnored()
     QVERIFY2(!dragSelectionOver(bar, source, bar->tabRect(0).center(), true), "own tab drop");
     QCOMPARE(source->selection_coverage(8, 8), 255);
     QCOMPARE(source->history_count(), history);
+}
+
+void SelectionSaveLoadTest::selectionDragInvalidSourceIgnored()
+{
+    pictura::PictureView* source = newDoc(16, 16);
+    QVERIFY(source);
+    QVERIFY(source->select_rect(4, 4, 8, 8, QStringLiteral("new"), 0.0));
+    pictura::PictureView* target = newDoc(16, 16);
+    QVERIFY(target);
+    window_->setActiveDocumentIndex(0);
+    window_->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
+    auto* bar = window_->findChild<QTabBar*>(QStringLiteral("documentTabBar"));
+    QVERIFY(bar && bar->count() == 2);
+    const int targetHistory = target->history_count();
+    QVERIFY2(!dragSelectionOver(bar, reinterpret_cast<const void*>(quintptr(1)),
+                                bar->tabRect(1).center(), true),
+             "an unknown source is ignored");
+    QCOMPARE(window_->activeView(), source);
+    QCOMPARE(target->selection_coverage(8, 8), 0);
+    QCOMPARE(target->history_count(), targetHistory);
 }
 
 void SelectionSaveLoadTest::selectionDragPreparationRestoresSource()

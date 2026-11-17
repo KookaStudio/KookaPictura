@@ -143,6 +143,7 @@ private slots:
     void duplicateChannelOntoNewButton();
     void dragChannelOntoAnotherDocument();
     void dragChannelToDifferentSizeFits();
+    void dragChannelInvalidSourceIgnored();
     void duplicateChannelAtCapRefused();
 
 private:
@@ -1035,6 +1036,34 @@ void ChannelsPanelTest::dragChannelToDifferentSizeFits()
     QCOMPARE(static_cast<unsigned char>(fitted.at(16 * 32 + 16)), 255);
     QCOMPARE(static_cast<unsigned char>(fitted.at(0)), 0);
     QCOMPARE(static_cast<unsigned char>(fitted.at(32 * 32 - 1)), 0);
+}
+
+void ChannelsPanelTest::dragChannelInvalidSourceIgnored()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("BadChannelSource"), 16, 16, QStringLiteral("rgb"),
+                                 8, QStringLiteral("white")));
+    pictura::PictureView* source = window_->activeView();
+    QVERIFY(source);
+    addNamedAlpha(source, QStringLiteral("Hair"), 2, 2, 8, 8);
+    QVERIFY(window_->newDocument(QStringLiteral("BadChannelTarget"), 16, 16, QStringLiteral("rgb"),
+                                 8, QStringLiteral("white")));
+    pictura::PictureView* target = window_->activeView();
+    QVERIFY(target);
+    window_->setActiveDocumentIndex(0);
+    window_->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
+    auto* bar = window_->findChild<QTabBar*>(QStringLiteral("documentTabBar"));
+    QVERIFY(bar && bar->count() == 2);
+    const int targetChannels = target->selection_channel_count();
+    const int targetHistory = target->history_count();
+    std::unique_ptr<QMimeData> mime(pictura::makeChannelDragMime(
+        reinterpret_cast<const void*>(quintptr(1)), 4, 0, 0x7, QStringLiteral("Hair")));
+    QVERIFY(mime);
+    QVERIFY2(!dragMimeOver(bar, mime.get(), bar->tabRect(1).center(), true),
+             "an unknown source is ignored");
+    QCOMPARE(window_->activeView(), source);
+    QCOMPARE(target->selection_channel_count(), targetChannels);
+    QCOMPARE(target->history_count(), targetHistory);
 }
 
 void ChannelsPanelTest::duplicateChannelAtCapRefused()

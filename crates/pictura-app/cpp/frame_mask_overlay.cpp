@@ -39,6 +39,14 @@ void PicturaMainWindow::syncMaskOverlay(PictureView* view, ImageView* canvas)
         ? panels_->channelsPanel()->shownAlphas()
         : QList<int>();
     if (!alphas.isEmpty() && view && view->has_document()) {
+        QString key = QStringLiteral("alpha:");
+        for (int alpha : alphas) {
+            key += QString::number(alpha) + QLatin1Char(',');
+        }
+        key += QString::number(view->canvas_revision());
+        if (canvas->property(kMaskOverlayKey).toString() == key) {
+            return;
+        }
         int width = 0;
         int height = 0;
         std::vector<std::uint8_t> transparency;
@@ -69,14 +77,6 @@ void PicturaMainWindow::syncMaskOverlay(PictureView* view, ImageView* canvas)
             }
         }
         if (width > 0 && height > 0 && int(transparency.size()) == width * height) {
-            QString key = QStringLiteral("alpha:");
-            for (int alpha : alphas) {
-                key += QString::number(alpha) + QLatin1Char(',');
-            }
-            key += QString::number(view->canvas_revision());
-            if (canvas->property(kMaskOverlayKey).toString() == key) {
-                return;
-            }
             canvas->setProperty(kMaskOverlayKey, key);
             QImage overlay(width, height, QImage::Format_RGBA8888);
             for (int y = 0; y < height; ++y) {

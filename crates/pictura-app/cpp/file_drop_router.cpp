@@ -91,17 +91,34 @@ bool FileDropRouter::otherDocumentAt(const QPoint& globalPos, const PictureView*
     return false;
 }
 
+bool FileDropRouter::isOpenView(const void* view) const
+{
+    if (!view || !frame_) {
+        return false;
+    }
+    for (int i = 0; i < frame_->documentCount(); ++i) {
+        if (static_cast<const void*>(frame_->viewAt(i)) == view) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool FileDropRouter::routeLayerDrag(QObject* watched, QEvent* event)
 {
     auto* drag = static_cast<QDropEvent*>(event);
     const QMimeData* mime = drag->mimeData();
-    const void* source = layerDragSource(mime);
-    if (!mime->hasFormat(kLayerMimeType) || !source) {
+    if (!mime->hasFormat(kLayerMimeType)) {
         return false;
     }
     auto* bar = qobject_cast<QTabBar*>(watched);
     if (!bar && !qobject_cast<ImageView*>(watched)) {
         return false;
+    }
+    const void* source = layerDragSource(mime);
+    if (!isOpenView(source)) {
+        drag->ignore();
+        return true;
     }
     // Hovering a tab brings its document forward, as CS6 does, so the drop can
     // land on its tab or its canvas. The source tab is activated too, so a drag
@@ -160,9 +177,13 @@ bool FileDropRouter::routeChannelDrag(QObject* watched, QEvent* event)
     if (!qobject_cast<QTabBar*>(watched) && !qobject_cast<ImageView*>(watched)) {
         return false;
     }
-    auto* source = static_cast<PictureView*>(const_cast<void*>(channelDragSource(mime)));
+    const auto* source = static_cast<const PictureView*>(channelDragSource(mime));
+    if (!isOpenView(source)) {
+        drag->ignore();
+        return true;
+    }
     PictureView* target = dragTarget(watched, event);
-    if (!source || !target || source == target || !source->has_document()
+    if (!target || source == target || !source->has_document()
         || !target->has_document()) {
         drag->ignore();
         return true;
@@ -205,9 +226,13 @@ bool FileDropRouter::routeSelectionDrag(QObject* watched, QEvent* event)
     if (!qobject_cast<QTabBar*>(watched) && !qobject_cast<ImageView*>(watched)) {
         return false;
     }
-    auto* source = static_cast<PictureView*>(const_cast<void*>(selectionDragSource(mime)));
+    const auto* source = static_cast<const PictureView*>(selectionDragSource(mime));
+    if (!isOpenView(source)) {
+        drag->ignore();
+        return true;
+    }
     PictureView* target = dragTarget(watched, event);
-    if (!source || !target || source == target || !source->has_document()
+    if (!target || source == target || !source->has_document()
         || !target->has_document()) {
         drag->ignore();
         return true;

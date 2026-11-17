@@ -37,6 +37,9 @@ public:
                                 QWidget* within);
 
 private:
+    // Whether `view` is one of the frame's open document views. Drag MIME data
+    // carries a raw address, so it is validated before any dereference.
+    bool isOpenView(const void* view) const;
     // The Layers-panel drag branch; false when `event` carries no layer drag.
     bool routeLayerDrag(QObject* watched, QEvent* event);
     // The Channels-panel and selection-outline drag branches.
