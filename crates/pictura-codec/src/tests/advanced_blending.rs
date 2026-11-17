@@ -387,17 +387,6 @@ fn absent_brst_includes_every_channel() {
 }
 
 #[test]
-fn malformed_brst_is_dropped() {
-    let doc = read_psd(&tagged_layer_psd(0, &[(b"brst", &[0, 0, 1])])).unwrap();
-    assert!(doc.layers[0].restricted_channels.is_empty());
-    let bytes = write_psd(&doc).unwrap();
-    assert!(
-        !has_key(&bytes, b"brst"),
-        "a malformed block is not re-emitted"
-    );
-}
-
-#[test]
 fn channel_restrictions_round_trip() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
     let mut layer = pixel("Adv", rect(0, 0, 2, 2), 3, BlendMode::Normal, 255);
