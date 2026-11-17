@@ -5,7 +5,9 @@
 #include "layer_style_dialog.h"
 
 #include "api/layers_bridge.h"
+#include "panels/angle_dial.h"
 
+#include <QtCore/QSignalBlocker>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QFormLayout>
@@ -13,8 +15,11 @@
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QRadioButton>
+#include <QtWidgets/QSlider>
+#include <QtWidgets/QSpinBox>
 #include <QtWidgets/QVBoxLayout>
 
+#include <cmath>
 #include <utility>
 
 namespace pictura {
@@ -64,6 +69,53 @@ QCheckBox* check(const QString& name, const QString& label)
 }
 
 } // namespace
+
+void LayerStyleDialog::bindGlobalLight(QWidget* root, QCheckBox* box,
+                                       const QString& angleKey, const QString& altitudeKey)
+{
+    const auto sync = [this, root, box, angleKey, altitudeKey]() {
+        const bool global = box->isChecked();
+        const double angleValue = layer_style_global_angle(*view_);
+        const double altitudeValue = layer_style_global_altitude(*view_);
+        const int globalAngle =
+            std::isfinite(angleValue) ? int(std::lround(angleValue)) : 30;
+        const int globalAltitude =
+            std::isfinite(altitudeValue) ? int(std::lround(altitudeValue)) : 30;
+        for (const QString& key : {angleKey, altitudeKey}) {
+            if (key.isEmpty()) {
+                continue;
+            }
+            const bool angleField = key == angleKey;
+            int shown = int(std::lround(value(key)));
+            if (global) {
+                shown = angleField ? (globalAngle > 180 ? globalAngle - 360 : globalAngle)
+                                   : globalAltitude;
+            } else if (angleField) {
+                shown = ((shown % 360) + 360) % 360;
+                if (shown > 180) {
+                    shown -= 360;
+                }
+            }
+            if (auto* spin = root->findChild<QSpinBox*>(key)) {
+                const QSignalBlocker block(spin);
+                spin->setValue(shown);
+                spin->setEnabled(!global);
+            }
+            if (auto* dial = root->findChild<AngleDial*>(key + QStringLiteral(".dial"))) {
+                const QSignalBlocker block(dial);
+                dial->setAngle(shown);
+                dial->setEnabled(!global);
+            }
+            if (auto* slider = root->findChild<QSlider*>(key + QStringLiteral(".slider"))) {
+                const QSignalBlocker block(slider);
+                slider->setValue(shown);
+                slider->setEnabled(!global);
+            }
+        }
+    };
+    connect(box, &QCheckBox::toggled, this, [sync](bool) { sync(); });
+    sync();
+}
 
 QWidget* LayerStyleDialog::buildBlendingOptionsPage()
 {
@@ -133,6 +185,8 @@ QWidget* LayerStyleDialog::buildBevelPage()
     shading->addRow(QString(), global);
     shading->addRow(tr("Altitude:"),
                     sliderRow(QStringLiteral("bevel.altitude"), 0, 90, QStringLiteral("°")));
+    bindGlobalLight(page.widget, global, QStringLiteral("bevel.angle"),
+                    QStringLiteral("bevel.altitude"));
     for (const auto& [label, prefix] :
          {std::pair{tr("Highlight Mode:"), QStringLiteral("bevel.highlight")},
           std::pair{tr("Shadow Mode:"), QStringLiteral("bevel.shadow")}}) {
@@ -176,6 +230,7 @@ QWidget* LayerStyleDialog::buildShadowPage(const QString& key, bool inner)
     structure->addRow(tr("Angle:"), angleRow(k("angle")));
     QCheckBox* global = check(k("useGlobalLight"), tr("Use Global Light"));
     bindCheck(global, k("useGlobalLight"));
+    bindGlobalLight(page.widget, global, k("angle"));
     structure->addRow(QString(), global);
     structure->addRow(tr("Distance:"), distanceRow(k("distance")));
     // CS6 calls the same slider Choke on an inner shadow: it eats into the

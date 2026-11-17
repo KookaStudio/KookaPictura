@@ -9,8 +9,9 @@
 //! unpadded.
 //!
 //! ponytail: the block carries no satin/stroke/gradient/pattern record, no
-//! contour, noise, anti-alias or document global-light resource, and no
-//! gradient inner glow; the bevel renders only as `Inner` + `Smooth`; and the
+//! contour, noise or anti-alias, and no gradient inner glow; the bevel renders
+//! only as `Inner` + `Smooth`; the document global light is resolved by
+//! `light::effective`; and the
 //! legacy `intensity` slot is read as libpsd's `spread`/`choke` (psd-tools and
 //! libpsd disagree on the underlying blur split, but the body size is the
 //! same). Structural faults return `None`, a malformed record is skipped, and

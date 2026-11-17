@@ -25,6 +25,7 @@ constexpr unsigned kEveryKind = kAllKinds | Shape | SmartObject;
 enum class RowDynamic {
     None,
     RasterizeLayer,
+    RasterizeStyle,
     ClippingToggle,
     Link,
     AddMaskSubmenu,
@@ -103,7 +104,8 @@ const RowAction kRowActions[] = {
      RowDynamic::None},
     {"rasterizeLayer", "Rasterize Layer", SmartObject | Adjustment, 5, nullptr,
      RowDynamic::RasterizeLayer},
-    {"rasterizeStyle", "Rasterize Layer Style", kEveryKind, 5, nullptr, RowDynamic::None},
+    {"rasterizeStyle", "Rasterize Layer Style", kEveryKind, 5,
+     command_ids::LayerRasterizeLayerStyle, RowDynamic::RasterizeStyle},
     // 6. Masks and clipping.
     {"addLayerMask", "Add Layer Mask", Pixel | Group | Adjustment, 6, nullptr,
      RowDynamic::AddMaskSubmenu},
@@ -200,6 +202,10 @@ QVector<ResolvedRowAction> resolveRowActions(const LayerRowNode& row, const RowF
         case RowDynamic::None:
             action.commandId = entry.commandId ? QString::fromLatin1(entry.commandId) : QString();
             action.enabled = entry.commandId != nullptr;
+            break;
+        case RowDynamic::RasterizeStyle:
+            action.commandId = QString::fromLatin1(command_ids::LayerRasterizeLayerStyle);
+            action.enabled = facts.canRasterizeStyle;
             break;
         case RowDynamic::RasterizeLayer: {
             const char* command = command_ids::LayerRasterizeLayer;

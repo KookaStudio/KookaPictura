@@ -15,9 +15,9 @@
 //! (which needs the Stroke effect's band) renders nothing; edge contour (`MpgS`), gloss
 //! contour (`TrnS`), contour range (`Inpr`), anti-alias (`AntA`,
 //! `antialiasGloss`), texture (`useTexture`, `InvT`, `Algn`, `Scl `, `Ptrn`),
-//! `useShape` and `showInDialog` are decoded/ignored; the effective
-//! angle/altitude is the stored `lagl`/`Lald`, not the global-light resource
-//! (1037); `scale = size · depth/100` and the `dot(N,L) - sin(alt)`
+//! `useShape` and `showInDialog` are decoded/ignored; the light comes from
+//! `light::effective` (global when `uglg` is on); `scale = size · depth/100`
+//! and the `dot(N,L) - sin(alt)`
 //! flat-offset are ungrounded model choices; the build region pads by the blur
 //! supports only; `Scale Effects`, the exact inter-effect order and the
 //! highlight/shadow order are not modelled.

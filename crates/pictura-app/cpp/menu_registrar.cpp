@@ -716,7 +716,7 @@ void MenuRegistrar::registerLayerCommands()
 
     // Rasterize. Fill Content and Type each need a current layer of that kind;
     // Layer tries type then fill; All Layers needs a document. Shape/Vector
-    // Mask/Layer Style/Video/3D have no handler and stay disabled.
+    // Mask/Video/3D have no handler and stay disabled.
     const auto currentFillPath = [this]() -> QString {
         PictureView* view = activeView();
         const QString path = layerAnchor();

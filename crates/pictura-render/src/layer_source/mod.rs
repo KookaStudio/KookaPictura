@@ -600,6 +600,8 @@ fn pass_key_hash(layer: &Layer, doc: &Document) -> u64 {
     let mut hasher = DefaultHasher::new();
     key::content_key(layer, doc).hash(&mut hasher);
     key::effect_digest(layer).hash(&mut hasher);
+    doc.global_light.angle.hash(&mut hasher);
+    doc.global_light.altitude.hash(&mut hasher);
     hasher.finish()
 }
 

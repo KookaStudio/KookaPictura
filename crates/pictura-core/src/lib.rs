@@ -13,6 +13,7 @@ mod crs;
 mod digest;
 mod document_composite;
 pub mod edition;
+mod global_light;
 mod guides;
 pub mod hdr;
 pub mod homography;
@@ -45,6 +46,7 @@ pub use annotations::{
 pub use crs::CrsSettings;
 pub use digest::content_digest;
 pub use edition::{Edition, Feature};
+pub use global_light::GlobalLight;
 pub use guides::{guide_near, Guide, GuideOrientation};
 pub use hdr::{validate_hdr_toning_params, HdrToningParams};
 pub use homography::Homography;
@@ -241,7 +243,13 @@ pub struct Document {
     pub annotations: Annotations,
     /// Guides in placement order; they ride the history snapshot. Read from and written to the PSD grid-and-guides resource (1032).
     pub guides: Vec<Guide>,
-    /// The Work Path the Pen tool group draws; it rides the history snapshot. Read from and written to the PSD Work Path resource (1025).
+    /// The document-wide light angle and altitude, in degrees. Effects with
+    /// `Use Global Light` read it; it rides the history snapshot and is read
+    /// from and written to the PSD image resources 1037 (angle) and 1049
+    /// (altitude).
+    pub global_light: GlobalLight,
+    /// The Work Path the Pen tool group draws; it rides the history snapshot.
+    /// Read from and written to the PSD Work Path resource (1025).
     pub work_path: path::VectorPath,
     /// The saved paths the Paths panel lists above the Work Path, in panel order; they ride the history snapshot.
     /// Read from and written to the PSD saved-path resources (2000-2997).
@@ -298,6 +306,7 @@ impl Document {
             slices: Vec::new(),
             annotations: Annotations::default(),
             guides: Vec::new(),
+            global_light: GlobalLight::default(),
             work_path: path::VectorPath::default(),
             saved_paths: Vec::new(),
             text_styles: TextStyleSheet::default(),

@@ -35,6 +35,7 @@ mod error;
 mod exif;
 mod filter_effects;
 mod ghostscript;
+mod global_light;
 mod guide_resources;
 mod icc;
 mod icc_convert;
@@ -105,6 +106,7 @@ pub use error::PsdError;
 pub use exif::{exif_tag_name, parse_exif, Exif, ExifValue};
 pub use filter_effects::remove_filter_mask;
 pub use ghostscript::{sniff_vector, Ghostscript, Raster, RasterError, VectorKind};
+pub use global_light::resolve_global_light;
 pub use icc::{
     assign_cmyk_profile, assign_document_profile, buffer_to_srgb, convert_document,
     convert_document_with, document_cmyk_profile, embed_document_icc, profile_description,

@@ -678,6 +678,28 @@ fn flatten_empty_tree_yields_white_background() {
 }
 
 #[test]
+fn merge_uses_the_document_global_light() {
+    let mut doc = Document::new(20, 20, ColorMode::Rgb, BitDepth::Eight);
+    doc.global_light = pictura_core::GlobalLight {
+        angle: 90,
+        altitude: 30,
+    };
+    let base = solid("base", rect(20, 20), 255, 255, 255, 255);
+    let mut top = solid("top", at(4, 4, 12, 12), 255, 0, 0, 255);
+    crate::set_layer_style_value(&mut top, "dropShadow.on", 1.0);
+    crate::set_layer_style_value(&mut top, "dropShadow.distance", 4.0);
+    crate::set_layer_style_value(&mut top, "dropShadow.size", 0.0);
+    doc.layers = pictura_core::LayerStack::from_layers(vec![base, top]);
+    let before = crate::composite_rgba(&doc);
+    let outcome = merge_scope(&mut doc, MergeScope::Down("1")).expect("merges");
+    assert_eq!(outcome.path, "0");
+    let after = crate::composite_rgba(&doc);
+    for (a, b) in before.data.iter().zip(after.data.iter()) {
+        assert!(a.abs_diff(*b) <= 2, "merge bake pixel {a} vs {b}");
+    }
+}
+
+#[test]
 fn merge_scope_on_empty_document_is_refused() {
     let mut doc = doc_with(4, 4, Vec::new());
     assert_eq!(

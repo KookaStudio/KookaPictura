@@ -177,6 +177,7 @@ inline constexpr char LayerRasterizeLayer[] = "layer.rasterize.layer";
 inline constexpr char LayerRasterizeAllLayers[] = "layer.rasterize.allLayers";
 inline constexpr char LayerRasterizeSmartObject[] = "layer.rasterize.smartObject";
 inline constexpr char LayerRasterizeVectorMask[] = "layer.rasterize.vectorMask";
+inline constexpr char LayerRasterizeLayerStyle[] = "layer.rasterize.layer.style";
 inline constexpr char LayerCopyShapeAttributes[] = "layer.copyShapeAttributes";
 inline constexpr char LayerPasteShapeAttributes[] = "layer.pasteShapeAttributes";
 inline constexpr char LayerSmartObjectConvertTo[] = "layer.smartObject.convertTo";

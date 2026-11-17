@@ -38,6 +38,34 @@ pub mod ffi {
         /// The ten effect dialog keys, in CS6 list order.
         fn layer_style_effect_names() -> QStringList;
 
+        /// The document's global-light angle in degrees; NaN without a document.
+        fn layer_style_global_angle(view: &PictureView) -> f64;
+
+        /// The document's global-light altitude in degrees; NaN without a document.
+        fn layer_style_global_altitude(view: &PictureView) -> f64;
+
+        /// Set the document's global light, recording one "Global Light" state
+        /// when either value changes. False when refused or unchanged.
+        fn layer_style_set_global_light(
+            view: Pin<&mut PictureView>,
+            angle: i32,
+            altitude: i32,
+        ) -> bool;
+
+        /// Whether the layer at `path` has a style this command can bake.
+        fn layer_style_can_rasterize(view: &PictureView, path: &QString) -> bool;
+
+        /// Bake the layer's style into its pixels and remove the style block,
+        /// recording one "Rasterize Layer Style" state. False when refused.
+        fn rasterize_layer_style(view: Pin<&mut PictureView>, path: &QString) -> bool;
+
+        /// Whether the layer at `path` can be exploded into style layers.
+        fn layer_style_can_create_layers(view: &PictureView, path: &QString) -> bool;
+
+        /// Explode the layer's style into pixel layers, recording one
+        /// "Create Layers" state. Returns how many layers were created.
+        fn layer_style_create_layers(view: Pin<&mut PictureView>, path: &QString) -> i32;
+
         /// The value of `key` (`"<effect>.<field>"`, `"<effect>.on"`, `"fx.visible"` or `"blending.<option>"`) on the layer at `path`; colours pack as 0xRRGGBB, blend modes and choices are indices. NaN for an unknown key or path.
         fn layer_style_value(view: &PictureView, path: &QString, key: &QString) -> f64;
 

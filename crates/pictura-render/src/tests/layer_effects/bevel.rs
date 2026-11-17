@@ -45,6 +45,19 @@ fn compose(bevel: Layer) -> PixelBuffer {
     );
     composite_rgba(&doc(12, 12, vec![backdrop, bevel]))
 }
+fn compose_with_light(bevel: Layer, angle: i32, altitude: i32) -> PixelBuffer {
+    let backdrop = solid(
+        "Backdrop",
+        full(12, 12),
+        (255, 255, 255),
+        255,
+        BlendMode::Normal,
+        255,
+    );
+    let mut d = doc(12, 12, vec![backdrop, bevel]);
+    d.global_light = pictura_core::GlobalLight { angle, altitude };
+    composite_rgba(&d)
+}
 
 #[derive(Clone)]
 struct BevelSpec {
@@ -56,6 +69,7 @@ struct BevelSpec {
     depth: f64,
     size: f64,
     soften: f64,
+    global: bool,
     angle: f64,
     altitude: f64,
     hi_blend: Vec<u8>,
@@ -77,6 +91,7 @@ impl Default for BevelSpec {
             depth: 100.0,
             size: 4.0,
             soften: 0.0,
+            global: false,
             angle: 120.0,
             altitude: 30.0,
             hi_blend: b"Scrn".to_vec(),
@@ -104,7 +119,7 @@ fn bevel_block(spec: &BevelSpec) -> LayerBlock {
             (b"Sftn".to_vec(), unit(spec.soften, PXL)),
             (b"lagl".to_vec(), unit(spec.angle, ANG)),
             (b"Lald".to_vec(), unit(spec.altitude, ANG)),
-            (b"uglg".to_vec(), DescValue::Bool(false)),
+            (b"uglg".to_vec(), DescValue::Bool(spec.global)),
             (b"hglM".to_vec(), enumerated(b"BlnM", &spec.hi_blend)),
             (
                 b"hglC".to_vec(),
@@ -922,4 +937,26 @@ fn bevel_fixture_decodes_and_composites() {
 
 pub(super) fn parallel_layer() -> Layer {
     spec_bevel(&BevelSpec::default())
+}
+
+#[test]
+fn global_light_bevel_angle() {
+    let spec = BevelSpec {
+        global: true,
+        ..Default::default()
+    };
+    let at_zero = compose_with_light(spec_bevel(&spec), 0, 30);
+    let at_180 = compose_with_light(spec_bevel(&spec), 180, 30);
+    assert_ne!(at_zero, at_180, "the global angle moves the bevel light");
+}
+
+#[test]
+fn global_light_altitude_lights_a_bevel() {
+    let spec = BevelSpec {
+        global: true,
+        ..Default::default()
+    };
+    let low = compose_with_light(spec_bevel(&spec), 120, 10);
+    let high = compose_with_light(spec_bevel(&spec), 120, 75);
+    assert_ne!(low, high, "the global altitude changes the shading");
 }

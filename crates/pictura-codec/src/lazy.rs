@@ -436,6 +436,7 @@ pub fn read_psd_lazy(
     crate::path_resources::resolve_paths(&mut doc);
     crate::guide_resources::resolve_guides(&mut doc);
     crate::layer_comps::resolve(&mut doc);
+    crate::global_light::resolve_global_light(&mut doc);
     // The Background flag is inferred from the name (the reader's `derive_background`):
     // a bottom layer of that name with transparency is not opaque.
     let usable = doc.source_icc.is_none()

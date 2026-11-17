@@ -177,6 +177,7 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("LayerRasterizeAllLayers", "layer.rasterize.allLayers"),
     ("LayerRasterizeSmartObject", "layer.rasterize.smartObject"),
     ("LayerRasterizeVectorMask", "layer.rasterize.vectorMask"),
+    ("LayerRasterizeLayerStyle", "layer.rasterize.layer.style"),
     ("LayerCopyShapeAttributes", "layer.copyShapeAttributes"),
     ("LayerPasteShapeAttributes", "layer.pasteShapeAttributes"),
     ("LayerSmartObjectConvertTo", "layer.smartObject.convertTo"),

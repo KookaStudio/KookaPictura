@@ -1,6 +1,6 @@
 // Layer > Layer Style: the Layer Style dialog on each effect, Copy / Paste /
-// Clear Layer Style, Scale Effects, and Hide / Show All Effects.
-// ponytail: Global Light and Create Layers stay disabled stubs.
+// Clear Layer Style, Scale Effects, Global Light, Create Layers, Rasterize
+// Layer Style, and Hide / Show All Effects.
 
 
 #include "menu_registrar.h"
@@ -13,10 +13,13 @@
 #include "panel_host.h"
 #include "tools.h"
 
+#include "dialogs.h"
+#include "global_light_dialog.h"
 #include "layer_style_dialog.h"
 
 #include <QtWidgets/QInputDialog>
 
+#include <cmath>
 #include <utility>
 
 #include "api/layers_bridge.h"
@@ -77,6 +80,52 @@ void MenuRegistrar::wireLayerStyleMenu()
             canEdit);
     }
 
+    wire(
+        QString::fromLatin1(command_ids::LayerStyleGlobalLight),
+        [this]() {
+            PictureView* view = activeView();
+            if (!view || !view->has_document()) {
+                return;
+            }
+            GlobalLightDialog dialog(
+                int(std::lround(layer_style_global_angle(*view))),
+                int(std::lround(layer_style_global_altitude(*view))), dialogParent());
+            if (runDialog(dialog, dialogParent()) == QDialog::Accepted && dialog.dirty()) {
+                layer_style_set_global_light(*view, dialog.angle(), dialog.altitude());
+            }
+        },
+        [this]() {
+            PictureView* view = activeView();
+            return view && view->has_document();
+        });
+    wire(
+        QString::fromLatin1(command_ids::LayerRasterizeLayerStyle),
+        [this, current]() {
+            PictureView* view = activeView();
+            const QString path = current();
+            if (view && layer_style_can_rasterize(*view, path)) {
+                rasterize_layer_style(*view, path);
+                refresh();
+            }
+        },
+        [this, current]() {
+            PictureView* view = activeView();
+            return view && view->has_document() && layer_style_can_rasterize(*view, current());
+        });
+    wire(
+        QString::fromLatin1(command_ids::LayerStyleCreateLayers),
+        [this, current]() {
+            PictureView* view = activeView();
+            const QString path = current();
+            if (view && layer_style_can_create_layers(*view, path)) {
+                layer_style_create_layers(*view, path);
+                refresh();
+            }
+        },
+        [this, current]() {
+            PictureView* view = activeView();
+            return view && view->has_document() && layer_style_can_create_layers(*view, current());
+        });
     wire(
         QString::fromLatin1(command_ids::LayerStyleCopyLayerStyle),
         [this, current]() {

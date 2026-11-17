@@ -66,6 +66,7 @@ pub(super) fn without_merged_image(
         slices: Vec::new(),
         annotations: Default::default(),
         guides: Vec::new(),
+        global_light: pictura_core::GlobalLight::default(),
         work_path: Default::default(),
         saved_paths: Vec::new(),
         text_styles: Default::default(),

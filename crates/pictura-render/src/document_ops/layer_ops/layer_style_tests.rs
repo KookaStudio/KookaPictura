@@ -83,6 +83,7 @@ fn drop_shadow_authors_a_decodable_effect_that_renders() {
     let layer = square(&mut d);
     set(layer, "dropShadow.on", 1.0);
     set(layer, "dropShadow.opacity", 100.0);
+    set(layer, "dropShadow.useGlobalLight", 0.0);
     set(layer, "dropShadow.angle", 90.0);
     set(layer, "dropShadow.distance", 3.0);
     set(layer, "dropShadow.size", 0.0);
@@ -428,4 +429,394 @@ fn a_pattern_overlay_embeds_its_built_in_pattern() {
         Some(3.0)
     );
     assert_eq!(crate::composite_rgba(&reopened).data, before.data);
+}
+
+#[test]
+fn global_light_setter_normalises_and_clamps() {
+    let mut d = doc();
+    assert!(set_document_global_light(&mut d, 370, 95));
+    assert_eq!(
+        d.global_light,
+        pictura_core::GlobalLight {
+            angle: 10,
+            altitude: 90
+        }
+    );
+    assert!(!set_document_global_light(&mut d, 10, 90), "unchanged");
+    assert!(set_document_global_light(&mut d, -10, -5));
+    assert_eq!(
+        d.global_light,
+        pictura_core::GlobalLight {
+            angle: 350,
+            altitude: 0
+        }
+    );
+}
+
+#[test]
+fn global_light_setter_ignores_unchanged() {
+    let mut d = doc();
+    assert!(!set_document_global_light(&mut d, 30, 30));
+    assert_eq!(d.global_light, pictura_core::GlobalLight::default());
+}
+
+#[test]
+fn rasterize_layer_style_bakes_and_clears() {
+    let mut d = doc();
+    let layer = square(&mut d);
+    set(layer, "dropShadow.on", 1.0);
+    set(layer, "dropShadow.useGlobalLight", 0.0);
+    set(layer, "dropShadow.angle", 90.0);
+    set(layer, "dropShadow.distance", 3.0);
+    set(layer, "dropShadow.size", 0.0);
+    layer.source_channels = Some(pictura_core::SourceChannels {
+        depth: BitDepth::Sixteen,
+        rect: layer.rect,
+        planes: Vec::new(),
+        working_idents: [0; 3],
+    });
+    let before = crate::composite_rgba(&d);
+    assert!(crate::rasterize_layer_style(&mut d, "1"));
+    assert!(!crate::has_layer_style(resolve_path(&d, "1").unwrap()));
+    assert!(resolve_path(&d, "1").unwrap().source_channels.is_none());
+    let after = crate::composite_rgba(&d);
+    for (a, b) in before.data.iter().zip(after.data.iter()) {
+        assert!(a.abs_diff(*b) <= 2, "bake pixel {a} vs {b}");
+    }
+    assert_ne!(rgb(&d, 5, 10), [255, 255, 255], "the shadow is baked");
+}
+
+#[test]
+fn rasterize_layer_style_fill_cases() {
+    let mut d = doc();
+    let layer = square(&mut d);
+    set(layer, "dropShadow.on", 1.0);
+    set(layer, "dropShadow.useGlobalLight", 0.0);
+    set(layer, "dropShadow.angle", 90.0);
+    set(layer, "dropShadow.distance", 3.0);
+    set(layer, "dropShadow.size", 0.0);
+    set(layer, "blending.fillOpacity", 50.0);
+    let before = crate::composite_rgba(&d);
+    assert!(crate::rasterize_layer_style(&mut d, "1"));
+    let after = crate::composite_rgba(&d);
+    for (a, b) in before.data.iter().zip(after.data.iter()) {
+        assert!(a.abs_diff(*b) <= 2, "fill bake pixel {a} vs {b}");
+    }
+    assert_eq!(resolve_path(&d, "1").unwrap().fill, 255);
+}
+
+#[test]
+fn rasterize_layer_style_global_light() {
+    let mut d = doc();
+    d.global_light.angle = 90;
+    let layer = square(&mut d);
+    set(layer, "dropShadow.on", 1.0);
+    set(layer, "dropShadow.angle", 0.0);
+    set(layer, "dropShadow.distance", 3.0);
+    set(layer, "dropShadow.size", 0.0);
+    let before = crate::composite_rgba(&d);
+    assert!(crate::rasterize_layer_style(&mut d, "1"));
+    let after = crate::composite_rgba(&d);
+    for (a, b) in before.data.iter().zip(after.data.iter()) {
+        assert!(a.abs_diff(*b) <= 2, "global-light bake pixel {a} vs {b}");
+    }
+}
+
+#[test]
+fn rasterize_layer_style_pattern_overlay() {
+    let mut d = doc();
+    assert!(set_document_layer_style_value(
+        &mut d,
+        "1",
+        "patternOverlay.pattern",
+        0.0
+    ));
+    set(square(&mut d), "patternOverlay.on", 1.0);
+    let before = crate::composite_rgba(&d);
+    assert!(crate::rasterize_layer_style(&mut d, "1"));
+    let after = crate::composite_rgba(&d);
+    for (a, b) in before.data.iter().zip(after.data.iter()) {
+        assert!(a.abs_diff(*b) <= 2, "pattern bake pixel {a} vs {b}");
+    }
+}
+
+#[test]
+fn rasterize_layer_style_keeps_vector_mask() {
+    let mut d = doc();
+    let layer = square(&mut d);
+    set(layer, "colorOverlay.on", 1.0);
+    let p = |x: i32, y: i32| [x * 256, y * 256];
+    layer.vector_mask = Some(pictura_core::VectorMask {
+        subpaths: vec![pictura_core::VectorSubpath {
+            closed: true,
+            operation: 1,
+            fill_rule: pictura_core::VectorFillRule::EvenOdd,
+            points: vec![p(4, 4), p(8, 4), p(4, 8)],
+        }],
+        ..Default::default()
+    });
+    let before = crate::composite_rgba(&d);
+    assert!(crate::rasterize_layer_style(&mut d, "1"));
+    assert!(resolve_path(&d, "1").unwrap().vector_mask.is_some());
+    let after = crate::composite_rgba(&d);
+    for (a, b) in before.data.iter().zip(after.data.iter()) {
+        assert!(a.abs_diff(*b) <= 2, "vector-mask bake pixel {a} vs {b}");
+    }
+}
+
+#[test]
+fn rasterize_layer_style_bakes_hidden_layers_without_destroying_them() {
+    let mut d = doc();
+    let layer = square(&mut d);
+    set(layer, "colorOverlay.on", 1.0);
+    layer.visible = false;
+    assert!(crate::rasterize_layer_style(&mut d, "1"));
+    let layer = resolve_path(&d, "1").unwrap();
+    assert!(!layer.visible, "the layer stays hidden");
+    assert!(!crate::has_layer_style(layer));
+    assert!(
+        crate::channel_plane(layer, -1).is_some_and(|alpha| alpha.iter().any(|&v| v > 0)),
+        "the hidden layer's pixels survive"
+    );
+}
+
+#[test]
+fn rasterize_layer_style_refuses() {
+    let mut d = doc();
+    assert!(!crate::can_rasterize_layer_style(&d, "1"), "unstyled");
+
+    let layer = square(&mut d);
+    set(layer, "dropShadow.on", 0.0);
+    assert!(
+        !crate::can_rasterize_layer_style(&d, "1"),
+        "only disabled effects"
+    );
+    set(square(&mut d), "dropShadow.on", 1.0);
+    assert!(crate::can_rasterize_layer_style(&d, "1"));
+
+    let fill = crate::add_solid_fill(&mut d, "1", [0, 255, 0, 255]);
+    assert!(!fill.is_empty());
+    assert!(!crate::can_rasterize_layer_style(&d, &fill), "fill layer");
+    let group = crate::add_group_in(&mut d, "1", "Group");
+    assert!(!group.is_empty());
+    assert!(!crate::can_rasterize_layer_style(&d, &group), "group");
+
+    let layer = crate::resolve_path_mut(&mut d, "1").unwrap();
+    layer.background = true;
+    assert!(!crate::can_rasterize_layer_style(&d, "1"), "background");
+    layer.background = false;
+    layer.blending_ranges = vec![1u8].into();
+    assert!(
+        !crate::can_rasterize_layer_style(&d, "1"),
+        "customized Blend If"
+    );
+    layer.blending_ranges = pictura_core::Plane::default();
+    layer.knockout = pictura_core::Knockout::Shallow;
+    assert!(!crate::can_rasterize_layer_style(&d, "1"), "knockout");
+    layer.knockout = pictura_core::Knockout::None;
+
+    let mut clipped = doc();
+    set(square(&mut clipped), "dropShadow.on", 1.0);
+    clipped
+        .layers
+        .push(pictura_core::Layer {
+            clipping: true,
+            ..Default::default()
+        })
+        .unwrap();
+    assert!(
+        !crate::can_rasterize_layer_style(&clipped, "1"),
+        "clipped run above"
+    );
+}
+
+#[test]
+fn create_style_layers_recomposes_identically() {
+    let mut d = doc();
+    let layer = square(&mut d);
+    set(layer, "dropShadow.on", 1.0);
+    set(layer, "dropShadow.useGlobalLight", 0.0);
+    set(layer, "dropShadow.angle", 90.0);
+    set(layer, "dropShadow.distance", 3.0);
+    set(layer, "bevel.on", 1.0);
+    set(layer, "colorOverlay.on", 1.0);
+    set(layer, "innerGlow.on", 1.0);
+    set(layer, "stroke.on", 1.0);
+    let before = crate::composite_rgba(&d);
+    let (created, base_path) = crate::create_style_layers_with_base(&mut d, "1");
+    assert_eq!(
+        created.len(),
+        6,
+        "one below (drop shadow) and five above (bevel two, color, inner glow, stroke)"
+    );
+    assert_eq!(base_path, "2");
+    let base = resolve_path(&d, &base_path).unwrap();
+    assert!(!crate::has_layer_style(base));
+    let after = crate::composite_rgba(&d);
+    for (a, b) in before.data.iter().zip(after.data.iter()) {
+        assert!(a.abs_diff(*b) <= 4, "create-layers pixel {a} vs {b}");
+    }
+}
+
+#[test]
+fn create_style_layers_inherits_base_state() {
+    let mut d = doc();
+    let layer = square(&mut d);
+    layer.opacity = 128;
+    layer.visible = false;
+    layer.mask = Some(pictura_core::LayerMask {
+        rect: layer.rect,
+        data: Some(vec![255u8; 16].into()),
+        ..Default::default()
+    });
+    set(layer, "colorOverlay.on", 1.0);
+    let created = crate::create_style_layers(&mut d, "1");
+    assert_eq!(created.len(), 1);
+    let produced = resolve_path(&d, &created[0]).unwrap();
+    assert_eq!(produced.opacity, 128);
+    assert_eq!(produced.fill, 255);
+    assert!(!produced.visible, "a hidden base yields hidden layers");
+    assert!(produced.mask.is_none());
+    let base = resolve_path(&d, "1").unwrap();
+    assert!(!base.visible);
+    assert!(base.mask.is_some());
+    assert_eq!(base.fill, 255);
+}
+
+#[test]
+fn create_style_layers_above_order() {
+    let mut d = doc();
+    assert!(set_document_layer_style_value(
+        &mut d,
+        "1",
+        "patternOverlay.pattern",
+        0.0
+    ));
+    let layer = square(&mut d);
+    set(layer, "patternOverlay.on", 1.0);
+    set(layer, "colorOverlay.on", 1.0);
+    set(layer, "innerGlow.on", 1.0);
+    set(layer, "stroke.on", 1.0);
+    let created = crate::create_style_layers(&mut d, "1");
+    assert_eq!(created.len(), 4);
+    for (index, name) in ["Pattern Overlay", "Color Overlay", "Inner Glow", "Stroke"]
+        .iter()
+        .enumerate()
+    {
+        assert_eq!(resolve_path(&d, &created[index]).unwrap().name, *name);
+    }
+}
+
+#[test]
+fn create_style_layers_global_light() {
+    let mut d = doc();
+    d.global_light.angle = 90;
+    let layer = square(&mut d);
+    set(layer, "dropShadow.on", 1.0);
+    set(layer, "dropShadow.angle", 0.0);
+    set(layer, "dropShadow.distance", 3.0);
+    set(layer, "dropShadow.size", 0.0);
+    let before = crate::composite_rgba(&d);
+    let created = crate::create_style_layers(&mut d, "1");
+    assert_eq!(created.len(), 1);
+    let after = crate::composite_rgba(&d);
+    for (a, b) in before.data.iter().zip(after.data.iter()) {
+        assert!(a.abs_diff(*b) <= 4, "global-light create pixel {a} vs {b}");
+    }
+}
+
+#[test]
+fn create_style_layers_names_and_modes() {
+    let mut d = doc();
+    let layer = square(&mut d);
+    set(layer, "dropShadow.on", 1.0);
+    set(layer, "outerGlow.on", 1.0);
+    set(layer, "innerGlow.on", 1.0);
+    let created = crate::create_style_layers(&mut d, "1");
+    assert_eq!(created.len(), 3);
+    let mut names: Vec<String> = created
+        .iter()
+        .map(|path| resolve_path(&d, path).unwrap().name.clone())
+        .collect();
+    names.sort();
+    names.dedup();
+    assert_eq!(names.len(), created.len(), "names are unique");
+    assert_eq!(resolve_path(&d, &created[0]).unwrap().name, "Drop Shadow");
+    assert_eq!(resolve_path(&d, &created[1]).unwrap().name, "Outer Glow");
+    assert_eq!(
+        resolve_path(&d, &created[0]).unwrap().blend,
+        pictura_core::BlendMode::Multiply
+    );
+    assert_eq!(
+        resolve_path(&d, &created[1]).unwrap().blend,
+        pictura_core::BlendMode::Screen
+    );
+}
+
+#[test]
+fn create_style_layers_pillow_four_passes() {
+    let mut inner = doc();
+    let layer = square(&mut inner);
+    set(layer, "bevel.on", 1.0);
+    assert_eq!(
+        crate::create_style_layers(&mut inner, "1").len(),
+        2,
+        "an Inner bevel has two passes"
+    );
+
+    let mut pillow = doc();
+    let layer = square(&mut pillow);
+    set(layer, "bevel.on", 1.0);
+    set(layer, "bevel.style", 3.0);
+    assert_eq!(
+        crate::create_style_layers(&mut pillow, "1").len(),
+        4,
+        "a Pillow bevel has four passes"
+    );
+}
+
+#[test]
+fn create_style_layers_refuses() {
+    let mut d = doc();
+    assert!(crate::create_style_layers(&mut d, "1").is_empty());
+
+    let layer = square(&mut d);
+    set(layer, "dropShadow.on", 0.0);
+    assert!(crate::create_style_layers(&mut d, "1").is_empty());
+    set(square(&mut d), "dropShadow.on", 1.0);
+    assert!(crate::can_create_style_layers(&d, "1"));
+
+    let fill = crate::add_solid_fill(&mut d, "1", [0, 255, 0, 255]);
+    assert!(!crate::can_create_style_layers(&d, &fill), "fill layer");
+    let group = crate::add_group_in(&mut d, "1", "Group");
+    assert!(!crate::can_create_style_layers(&d, &group), "group");
+
+    let mut background = doc();
+    set(square(&mut background), "dropShadow.on", 1.0);
+    background.layers[1].background = true;
+    assert!(!crate::can_create_style_layers(&background, "1"));
+
+    let mut clipped = doc();
+    set(square(&mut clipped), "dropShadow.on", 1.0);
+    clipped.layers[1].clipping = true;
+    assert!(!crate::can_create_style_layers(&clipped, "1"));
+
+    let mut smart = doc();
+    assert!(crate::convert_to_smart_object(&mut smart, "1"));
+    let layer = crate::resolve_path_mut(&mut smart, "1").unwrap();
+    set(layer, "dropShadow.on", 1.0);
+    assert!(
+        !crate::can_rasterize_layer_style(&smart, "1"),
+        "smart object"
+    );
+
+    let mut run = doc();
+    set(square(&mut run), "dropShadow.on", 1.0);
+    run.layers
+        .push(pictura_core::Layer {
+            clipping: true,
+            ..Default::default()
+        })
+        .unwrap();
+    assert!(!crate::can_create_style_layers(&run, "1"));
 }
