@@ -153,7 +153,7 @@ fn crop_mask(mask: &LayerMask, lrect: PsdRect, lw: u32, lh: u32) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, LockFlags};
+    use pictura_core::{BitDepth, Channel, ColorMode, Document, LockFlags};
     use pictura_select::Selection;
 
     fn state() -> PictureViewRust {

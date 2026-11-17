@@ -154,12 +154,12 @@ fn a_walk_across_a_mask_move_reports_the_composite() {
 #[test]
 fn a_document_channel_edit_reports_no_rectangle() {
     let mut live = masked_doc();
-    live.channels_mut().push(Channel {
+    live.channels.push(Channel {
         id: 0,
         data: vec![0u8; 512 * 512].into(),
     });
     let mut stack = Stack::opened(&mut live);
-    live.channels_mut()[0].data.as_mut_slice()[3] = 9;
+    live.channels[0].data.as_mut_slice()[3] = 9;
     stack.capture(&mut live, "Channel");
     let edited = live.clone();
     assert_eq!(

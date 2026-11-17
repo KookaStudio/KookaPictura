@@ -391,20 +391,23 @@ fn admitted_content_preserves_parameters_and_bytes() {
     cube_bytes.extend_from_slice(b"LUT_3D_SIZE 3\n");
     let raw = crate::layer_content::encode_color_lookup(&cube_bytes, "Later Header");
     let mut document = lookup_document(&raw.data, 1);
-    document.layers.push(crate::layer_from_parts(LayerParts {
-        name: "Fill".into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 1,
-            right: 1,
-        },
-        adjustment: Some(AdjustmentData {
-            key: *b"SoCo",
-            data: vec![10, 20, 30, 255].into(),
-        }),
-        ..Default::default()
-    }));
+    document
+        .layers
+        .push(crate::layer_from_parts(LayerParts {
+            name: "Fill".into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 1,
+                right: 1,
+            },
+            adjustment: Some(AdjustmentData {
+                key: *b"SoCo",
+                data: vec![10, 20, 30, 255].into(),
+            }),
+            ..Default::default()
+        }))
+        .expect("valid fill layer");
     let bytes = crate::write_psd(&document).unwrap();
     let reopened = crate::read_psd_within_options(
         &bytes,

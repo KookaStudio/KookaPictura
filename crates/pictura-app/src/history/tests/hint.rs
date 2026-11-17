@@ -165,7 +165,7 @@ fn document_channel_hint_matches() {
     open(&mut h1, &mut doc);
     open(&mut h2, &mut plain);
     doc.channels[0].data.as_mut_slice()[2 * 16 + 2] = 200;
-    plain.channels_mut()[0].data.as_mut_slice()[2 * 16 + 2] = 200;
+    plain.channels[0].data.as_mut_slice()[2 * 16 + 2] = 200;
     h1.capture_live_with(
         &mut doc,
         &None,
@@ -175,8 +175,8 @@ fn document_channel_hint_matches() {
     );
     h2.capture_live(&mut plain, &None, &LayerTarget::default(), "Edit");
     assert_eq!(
-        captured(&h1).channels()[0].data.as_slice(),
-        captured(&h2).channels()[0].data.as_slice()
+        captured(&h1).channels[0].data.as_slice(),
+        captured(&h2).channels[0].data.as_slice()
     );
 }
 

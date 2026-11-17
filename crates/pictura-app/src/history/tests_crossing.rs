@@ -82,10 +82,10 @@ fn crossing_a_segment_reports_the_changed_tile() {
 #[test]
 fn crossing_a_segment_with_a_changed_channel_stays_bounded() {
     let mut live = document();
-    live.set_channels(vec![Channel {
+    live.channels = vec![Channel {
         id: 3,
         data: vec![0; (SIDE * SIDE) as usize].into(),
-    }]);
+    }];
     let (mut selection, mut target) = (None, LayerTarget::default());
     let mut history = History::default();
     history.capture_live(&mut live, &selection, &target, "Open");

@@ -57,7 +57,7 @@ fn opening_a_document_shares_tiles_with_history() {
     );
 
     let before = live.clone();
-    flip(live.layers[0].channels_mut()[0].data, w, h, 0, 0x55);
+    flip(&mut live.layers[0].channels_mut()[0].data, w, h, 0, 0x55);
     history.capture_live(&mut live, &selection, &target, "Paint");
 
     let mut selection = None;
@@ -78,7 +78,7 @@ fn a_capture_scans_only_changed_tiles() {
     let target = LayerTarget::default();
     history.capture_live(&mut live, &selection, &target, "Open");
 
-    flip(live.layers[0].channels_mut()[0].data, w, h, 0, 0x11);
+    flip(&mut live.layers[0].channels_mut()[0].data, w, h, 0, 0x11);
     history.capture_live(&mut live, &selection, &target, "Paint");
 
     let layer = last_delta(&history)
@@ -184,7 +184,7 @@ fn untouched_tile_keeps_its_arc() {
         .data
         .clone();
 
-    flip(live.layers[0].channels_mut()[0].data, w, h, 0, 0x33);
+    flip(&mut live.layers[0].channels_mut()[0].data, w, h, 0, 0x33);
     history.capture_live(&mut live, &selection, &target, "Paint");
 
     let current = &history.current.as_ref().unwrap().doc.layers[0].channels()[0].data;
@@ -212,7 +212,7 @@ fn a_stroke_path_materializes_no_plane_and_scans_only_touched_tiles() {
     let target = LayerTarget::default();
     history.capture_live(&mut live, &selection, &target, "Open");
 
-    flip(live.layers[0].channels_mut()[0].data, w, h, 0, 0x66);
+    flip(&mut live.layers[0].channels_mut()[0].data, w, h, 0, 0x66);
 
     pictura_core::reset_materializations();
     history.capture_live(&mut live, &selection, &target, "Paint");
