@@ -880,6 +880,9 @@ void PicturaMainWindow::refresh()
     if (toolbox_) {
         toolbox_->refreshToolAvailability();
     }
+    if (optionsBar_) {
+        optionsBar_->refreshDocumentFacts();
+    }
     syncBrushTipPreview();
     if (DocWindow* active = documents_->activeWindow()) {
         forEachCanvas(*active->doc,

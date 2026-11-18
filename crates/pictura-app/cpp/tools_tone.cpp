@@ -1,23 +1,11 @@
-// The toning tools' shared controller behavior: the 32-bpc document gate, the
-// Dodge/Burn Airbrush toggle, and the painting-mode quick keys. Part of
+// The toning tools' shared controller behavior: the Dodge/Burn Airbrush
+// toggle and the painting-mode quick keys. The document availability gate
+// lives in tool_catalog.cpp with the other per-document rules. Part of
 // ToolController; split from tools.cpp to keep that file under its size cap.
 
 #include "tools.h"
 
-#include "api/view_bridge.h"
-
 namespace pictura {
-
-bool toolAllowedForDocument(ToolId id, const PictureView* view)
-{
-    if (!view || !view->has_document()) {
-        return true;
-    }
-    if (id == ToolId::Dodge || id == ToolId::Burn || id == ToolId::Sponge) {
-        return view->document_depth_bits() != 32;
-    }
-    return true;
-}
 
 bool ToolController::toggleAirbrush()
 {

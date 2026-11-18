@@ -75,6 +75,7 @@ set(PICTURA_QT_TESTS
     tst_damage_bounds
     tst_fill_layer_editor
     tst_align_distribute
+    tst_color_replacement
     tst_options_bars_parity
     tst_transform_options
     tst_transform_controls

@@ -221,7 +221,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [ ] Shape gradient and pattern fill and stroke, dashed stroke, path
       operations, fill-pixels options, snap-to-pixels, and proportional
       geometry (#546)
-- [ ] The full Color Replacement mode list, and disabling it on Bitmap, Indexed
+- [x] The full Color Replacement mode list, and disabling it on Bitmap, Indexed
       and Multichannel (#547)
 - [x] Grayscale Sponge, the airbrush toggle, quick keys, and 32-bpc
       availability (#548)

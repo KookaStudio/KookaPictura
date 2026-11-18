@@ -4,6 +4,8 @@
 
 #include "options_bar.h"
 
+#include "api/document_bridge.h"
+#include "api/paint_bridge.h"
 #include "icons.h"
 #include "paint_tip.h"
 #include "panels/brush_preset_picker.h"
@@ -77,6 +79,28 @@ QComboBox* addCombo(QHBoxLayout* layout, QWidget* page, const QString& label,
     }
     layout->addWidget(combo);
     return combo;
+}
+
+// The engine's CS6 paint-mode list, filtered to what a document of `depthBits`
+// offers. The mode index rides in the item data so filtering never renumbers
+// the options; an unavailable stored mode falls back to Color, then Normal.
+void populateColorReplacementModes(QComboBox* combo, int mode, int depthBits)
+{
+    const QSignalBlocker blocker(combo);
+    combo->clear();
+    for (int index = 0; index < color_replacement_mode_count(); ++index) {
+        if (color_replacement_mode_allowed(index, depthBits)) {
+            combo->addItem(color_replacement_mode_name(index), index);
+        }
+    }
+    int current = combo->findData(mode);
+    if (current < 0) {
+        current = combo->findData(23);
+    }
+    if (current < 0 && combo->count() > 0) {
+        current = 0;
+    }
+    combo->setCurrentIndex(current);
 }
 
 } // namespace
@@ -195,11 +219,12 @@ QWidget* OptionsBar::buildColorReplacementPage(ToolId id)
     };
 
     auto* mode = addCombo(layout, page, QStringLiteral("Mode:"),
-                          QStringLiteral("optionsColorReplaceMode"),
-                          {"Hue", "Saturation", "Color", "Luminosity"});
-    mode->setCurrentIndex(initial.mode);
-    connect(mode, &QComboBox::currentIndexChanged, this,
-            [update](int i) { update([i](ColorReplaceOptions& o) { o.mode = i; }); });
+                          QStringLiteral("optionsColorReplaceMode"), {});
+    colorReplaceMode_ = mode;
+    populateColorReplacementModes(mode, initial.mode, 8);
+    connect(mode, &QComboBox::currentIndexChanged, this, [update, mode](int) {
+        update([mode](ColorReplaceOptions& o) { o.mode = mode->currentData().toInt(); });
+    });
 
     auto* sampling = addCombo(layout, page, QStringLiteral("Sampling:"),
                               QStringLiteral("optionsColorReplaceSampling"),
@@ -235,6 +260,26 @@ QWidget* OptionsBar::buildColorReplacementPage(ToolId id)
 
     layout->addStretch(1);
     return page;
+}
+
+void OptionsBar::refreshDocumentFacts()
+{
+    PictureView* view = controller_ ? controller_->view() : nullptr;
+    const int depth = view && view->has_document() ? image_depth_bits(*view) : 8;
+    if (depth == colorReplaceDepth_) {
+        return;
+    }
+    colorReplaceDepth_ = depth;
+    if (!colorReplaceMode_ || !colorReplace_) {
+        return;
+    }
+    ColorReplaceOptions options = colorReplace_->get();
+    populateColorReplacementModes(colorReplaceMode_, options.mode, depth);
+    const int mode = colorReplaceMode_->currentData().toInt();
+    if (mode != options.mode) {
+        options.mode = mode;
+        colorReplace_->set(options);
+    }
 }
 
 // CS6's Mixer Brush bar: the brush tip, the Current Brush Load swatch (Load /

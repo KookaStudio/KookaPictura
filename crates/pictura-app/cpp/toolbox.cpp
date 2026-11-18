@@ -385,10 +385,12 @@ Toolbox::Toolbox(ToolController* controller, ColorState* colors, QWidget* parent
     for (int g = 1; g <= 23; ++g) {
         QList<ToolId> members;
         bool anyImplemented = false;
+        bool anyEnabled = false;
         for (ToolId id : allToolIds()) {
             if (toolInfo(id).group == g && toolInEdition(id)) {
                 members << id;
-                anyImplemented = anyImplemented || available(id);
+                anyImplemented = anyImplemented || toolAvailable(id);
+                anyEnabled = anyEnabled || available(id);
             }
         }
         if (members.isEmpty()) {
@@ -410,7 +412,7 @@ Toolbox::Toolbox(ToolController* controller, ColorState* colors, QWidget* parent
                 action->setData(int(member));
                 action->setEnabled(available(member));
                 action->setToolTip(available(member) ? enabledTooltip(info)
-                                                         : disabledTooltip(info));
+                                                     : disabledTooltip(info));
                 if (!toolShortcut(member).isNull()) {
                     action->setShortcut(QKeySequence(QString(toolShortcut(member))));
                     action->setShortcutVisibleInContextMenu(true);
@@ -445,7 +447,7 @@ Toolbox::Toolbox(ToolController* controller, ColorState* colors, QWidget* parent
         button->setFixedSize(slotSize_);
         button->setCheckable(true);
         button->setAutoRaise(true);
-        button->setEnabled(anyImplemented);
+        button->setEnabled(anyEnabled);
         button->setHasFlyout(members.size() > 1);
 
         button->onMenu = [this, g]() { showSlotMenu(g); };
@@ -1025,34 +1027,15 @@ void Toolbox::refreshSlot(int group)
     button->setChecked(controller_ && controller_->activeTool() == id);
 }
 
-void Toolbox::refreshToolShortcuts()
-{
-    // A single-tool group has no flyout; its entry is null.
-    for (QMenu* menu : std::as_const(slotMenuByGroup_)) {
-        if (!menu) {
-            continue;
-        }
-        for (QAction* action : menu->actions()) {
-            const ToolId member = ToolId(action->data().toInt());
-            const ToolInfo& info = toolInfo(member);
-            const QChar key = toolShortcut(member);
-            action->setShortcut(key.isNull() ? QKeySequence() : QKeySequence(QString(key)));
-            action->setToolTip(available(member) ? enabledTooltip(info)
-                                                 : disabledTooltip(info));
-        }
-    }
-    for (auto it = slotButtonByGroup_.cbegin(); it != slotButtonByGroup_.cend(); ++it) {
-        refreshSlot(it.key());
-    }
-}
-
 void Toolbox::refreshToolAvailability()
 {
     PictureView* view = controller_ ? controller_->view() : nullptr;
+    const QString mode = view && view->has_document() ? image_mode(*view) : QString();
     const int depth = view && view->has_document() ? view->document_depth_bits() : 0;
-    if (depth == documentDepth_) {
+    if (mode == documentMode_ && depth == documentDepth_) {
         return;
     }
+    documentMode_ = mode;
     documentDepth_ = depth;
     for (auto it = slotButtonByGroup_.cbegin(); it != slotButtonByGroup_.cend(); ++it) {
         const int group = it.key();
@@ -1076,6 +1059,27 @@ void Toolbox::refreshToolAvailability()
             }
         }
         refreshSlot(group);
+    }
+}
+
+void Toolbox::refreshToolShortcuts()
+{
+    // A single-tool group has no flyout; its entry is null.
+    for (QMenu* menu : std::as_const(slotMenuByGroup_)) {
+        if (!menu) {
+            continue;
+        }
+        for (QAction* action : menu->actions()) {
+            const ToolId member = ToolId(action->data().toInt());
+            const ToolInfo& info = toolInfo(member);
+            const QChar key = toolShortcut(member);
+            action->setShortcut(key.isNull() ? QKeySequence() : QKeySequence(QString(key)));
+            action->setToolTip(available(member) ? enabledTooltip(info)
+                                                 : disabledTooltip(info));
+        }
+    }
+    for (auto it = slotButtonByGroup_.cbegin(); it != slotButtonByGroup_.cend(); ++it) {
+        refreshSlot(it.key());
     }
 }
 

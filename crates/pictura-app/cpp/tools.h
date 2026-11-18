@@ -135,8 +135,9 @@ bool toolInEdition(ToolId id);
 // Implemented and allowed by the selected edition. Standard hides the
 // Extended-only tools (the Count tool and the 3D rig); Extended shows them.
 bool toolAvailable(ToolId id);
-// Implemented, allowed by the edition, and allowed by the active document
-// (the toning tools are unavailable at 32 bpc).
+// Implemented, allowed by the edition, and allowed by the active document:
+// Color Replacement is unavailable on Bitmap, Indexed, and Multichannel; the
+// toning tools are unavailable at 32 bpc.
 bool toolAllowedForDocument(ToolId id, const PictureView* view);
 // The painting brushes (the B group, the S stamps, the Y history brushes, the
 // Eraser and Background Eraser, and the retouch tools): they share the size ring, the `[` / `]` keys, and the paint

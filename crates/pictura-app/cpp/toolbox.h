@@ -112,8 +112,9 @@ public:
     // Re-read every tool's letter into the slot tooltips and flyout rows after
     // the shortcut editor changed them.
     void refreshToolShortcuts();
-    // Re-read the active document's depth and disable the tools it refuses
-    // (the toning tools at 32 bpc). Called from the frame refresh.
+    // Re-read the active document's mode and depth and disable the tools they
+    // refuse (Color Replacement on flat modes; the toning tools at 32 bpc).
+    // Called from the frame refresh.
     void refreshToolAvailability();
 
     // Self-test hooks.
@@ -187,6 +188,8 @@ private:
     QTimer* paintMaskClick_ = nullptr;
     QMenu* openSlotMenu_ = nullptr;
     QToolButton* openSlotButton_ = nullptr;
+    // The `image_mode` name the slots were last gated against.
+    QString documentMode_;
     QSize slotSize_ { 36, 28 };
     QSize iconSize_ { 24, 20 };
     int columns_ = 1;

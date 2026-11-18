@@ -605,13 +605,13 @@ void ToolController::emitSelectionCommitted() { emit selectionCommitted(); }
 
 void ToolController::bindCanvas(ImageView* canvas)
 {
+    // A document switch or mode conversion can make the active tool
+    // unavailable; Move is always allowed.
+    if (!toolAllowedForDocument(active_, view())) {
+        setActiveTool(ToolId::Move);
+    }
     if (canvas_ == canvas) {
         boundView_ = view();
-        // A document switch or depth conversion can make the active tool
-        // unavailable; Move is always allowed.
-        if (!toolAllowedForDocument(active_, view())) {
-            setActiveTool(ToolId::Move);
-        }
         // The canvas pointer is unchanged, but the active layer's visibility or
         // identity may have changed under it; re-assert the cursor without
         // waiting for the next mouse move.
@@ -634,9 +634,6 @@ void ToolController::bindCanvas(ImageView* canvas)
     setCurrentNote(-1);
     if (!canvas_) {
         return;
-    }
-    if (!toolAllowedForDocument(active_, view())) {
-        setActiveTool(ToolId::Move);
     }
     connect(canvas_, &ImageView::mousePressed, this, &ToolController::handlePressed);
     connect(canvas_, &ImageView::pointerPressure, this, &ToolController::setPressure);

@@ -6,6 +6,7 @@
 
 #include "tool_handler.h"
 
+#include "api/document_bridge.h"
 #include "api/paint_api.h"
 #include "paint_tip.h"
 #include "pictura_debug_timing.h"
@@ -38,6 +39,11 @@ public:
     {
         PictureView* v = ctx.view();
         if (!v) {
+            return true;
+        }
+        if (!color_replacement_available(image_mode(*v))) {
+            ctx.refused(QObject::tr("The Color Replacement tool is not available in "
+                                    "Bitmap, Indexed, or Multichannel mode."));
             return true;
         }
         // Alt samples the replacement colour, as with the Brush.
