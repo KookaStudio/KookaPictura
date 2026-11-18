@@ -60,9 +60,8 @@ pub(in crate::cxxqt_object) fn save_start_rust(
     }
     // Held by the worker until its write lands, so other edits see the room
     // the save is using.
-    let Ok(reservation) = pictura_core::memory::governor().reserve(
-        super::super::super::helpers::memory_gate::save_bytes(doc_ref),
-        "a save",
+    let Some(reservation) = super::super::super::helpers::save_gate::reserve_save(
+        &super::super::super::helpers::save_gate::save_cost(doc_ref),
     ) else {
         return false;
     };
@@ -96,24 +95,23 @@ pub(in crate::cxxqt_object) fn save_start_rust(
         if !embed {
             pictura_codec::remove_document_profile(doc.to_mut());
         }
-        let written = if psb {
-            pictura_codec::write_psb_cached(&doc, &cache)
-        } else {
-            pictura_codec::write_psd_cached(&doc, &cache)
-        };
-        let Ok(bytes) = written else {
-            return false;
-        };
-        // A tile lost while encoding wrote defaults in its place.
-        if pictura_core::memory::eviction::unreadable_reads() != unreadable_before
-            && crate::history::unreadable_tiles(&doc) > 0
-        {
-            return false;
-        }
-        if delay > 0 {
-            std::thread::sleep(Duration::from_millis(delay));
-        }
-        super::super::super::helpers::safe_io::write_atomically(&worker_path, &bytes, false).is_ok()
+        let psb = psb || pictura_codec::writes_psb(&doc);
+        // The file streams into the temp file a band of rows at a time (#1320).
+        super::super::super::helpers::safe_io::write_atomically_with(&worker_path, false, |out| {
+            pictura_codec::write_psd_to(out, &doc, psb, Some(&cache))
+                .map_err(|e| std::io::Error::other(e.to_string()))?;
+            // A tile lost while encoding wrote defaults in its place.
+            if pictura_core::memory::eviction::unreadable_reads() != unreadable_before
+                && crate::history::unreadable_tiles(&doc) > 0
+            {
+                return Err(std::io::Error::other("tiles lost while encoding"));
+            }
+            if delay > 0 {
+                std::thread::sleep(Duration::from_millis(delay));
+            }
+            Ok(())
+        })
+        .is_ok()
     });
     rust.save_job = Some(SaveJob {
         handle,

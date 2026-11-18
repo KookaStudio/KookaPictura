@@ -90,7 +90,12 @@ fn streamed_file_equals_in_memory_encode() {
     psb.is_psb = true;
     docs.push(("psb".into(), psb));
     let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-    for name in ["gray.psd", "rgb16_layered.psd", "rgb32_layered.psd", "masked.psd"] {
+    for name in [
+        "gray.psd",
+        "rgb16_layered.psd",
+        "rgb32_layered.psd",
+        "masked.psd",
+    ] {
         let bytes = std::fs::read(fixtures.join(name)).expect("fixture");
         docs.push((name.into(), pictura_codec::read_psd(&bytes).expect("reads")));
     }

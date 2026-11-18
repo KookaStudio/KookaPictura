@@ -109,6 +109,13 @@ impl qobject::PictureView {
             let Some(doc) = session.doc.as_mut() else {
                 return false;
             };
+            super::super::helpers::memory_gate::clear();
+            // ponytail: Qt's encoders take the whole image; the gate counts it.
+            let Some(_reservation) = super::super::helpers::save_gate::reserve_save(
+                &super::super::helpers::save_gate::qt_raster_cost(doc),
+            ) else {
+                return false;
+            };
             if dirty {
                 pictura_render::refresh_native_composite(doc);
             }
@@ -185,7 +192,6 @@ impl qobject::PictureView {
             false
         };
         let dirty = self.rust().session.dirty;
-        let gpu_compute = self.rust().gpu_compute;
         let mut rust = self.as_mut().rust_mut();
         let Some(doc_ref) = rust.session.doc.as_ref() else {
             return false;
@@ -202,9 +208,9 @@ impl qobject::PictureView {
         let vanishing =
             super::super::filter_tools::store_planes(rust.session.vanishing_planes.as_ref(), &doc);
         pictura_codec::set_vanishing_point_data(&mut doc, vanishing.as_deref());
-        let Ok(_reservation) = pictura_core::memory::governor().reserve(
-            super::super::helpers::memory_gate::save_bytes(&doc),
-            "a save",
+        super::super::helpers::memory_gate::clear();
+        let Some(_reservation) = super::super::helpers::save_gate::reserve_save(
+            &super::super::helpers::save_gate::raster_save_cost(&doc, kind, &options),
         ) else {
             return false;
         };
@@ -219,7 +225,7 @@ impl qobject::PictureView {
                 | pictura_codec::SaveKind::Dcs
         ) && source_mode == ColorMode::Rgb;
         doc.composite
-            .replace(save_composite(&doc, gpu_compute, srgb))
+            .replace(save_composite(&doc, srgb))
             .expect("valid composite");
         if embed_tiff {
             let mode = doc.source.mode().unwrap_or(doc.mode);
@@ -285,25 +291,89 @@ impl qobject::PictureView {
     }
 }
 
-/// The composite a save writer consumes. sRGB-only writers convert a profiled
-/// working-space composite; TIFF/Raw retain the working/mode samples.
-pub(super) fn save_composite(
+/// The composite a save writer consumes, composited a band at a time into a
+/// tiled planar buffer (#1320): uniform tiles cost nothing and dense ones can
+/// be packed or spilled while the writer reads them. sRGB-only writers convert
+/// a profiled working-space composite band by band; TIFF/Raw retain the
+/// working/mode samples. A layerless document keeps its stored channel layout.
+pub(in crate::cxxqt_object) fn save_composite(
     doc: &pictura_core::Document,
-    gpu_compute: bool,
     srgb: bool,
 ) -> pictura_core::PixelBuffer {
-    let buffer = current_buffer(doc, gpu_compute);
-    if srgb && doc.source.working_profile().is_some() {
-        pictura_codec::buffer_to_srgb(doc, &buffer).into_owned()
+    let convert = srgb && doc.source.working_profile().is_some();
+    let (w, h) = (doc.width as usize, doc.height as usize);
+    let channels = if doc.layers.is_empty() {
+        doc.composite.channels as usize
     } else {
-        buffer
+        4
+    };
+    let mut data = pictura_core::Plane::filled(w, h, channels.max(1), 0u8);
+    let mut put = |offset: usize, band: &pictura_core::PixelBuffer| {
+        let band = if convert {
+            pictura_codec::buffer_to_srgb(doc, band)
+        } else {
+            std::borrow::Cow::Borrowed(band)
+        };
+        let rows = band.height as usize;
+        let n = w * rows;
+        let mut samples = vec![0u8; n];
+        for c in 0..channels.min(band.channels as usize) {
+            band.data.read_into(c * n, &mut samples);
+            let top = c * h + offset;
+            data.write_rect_from(0..w, top..top + rows, w, &samples);
+        }
+        data.settle();
+    };
+    let rows = pictura_render::band_rows(w) as usize;
+    if doc.layers.is_empty() {
+        if !convert {
+            return doc.composite.buffer().clone();
+        }
+        let mut band_data = Vec::new();
+        for y0 in (0..h).step_by(rows.max(1)) {
+            let band_rows = rows.min(h - y0);
+            band_data.clear();
+            let mut plane = vec![0u8; w * band_rows];
+            for c in 0..channels {
+                doc.composite.data.read_rect_into(
+                    0..w,
+                    c * h + y0..c * h + y0 + band_rows,
+                    w,
+                    &mut plane,
+                );
+                band_data.extend_from_slice(&plane);
+            }
+            let band = pictura_core::PixelBuffer {
+                width: doc.width,
+                height: band_rows as u32,
+                channels: channels as u8,
+                data: std::mem::take(&mut band_data).into(),
+            };
+            put(y0, &band);
+        }
+    } else {
+        let whole = pictura_core::PsdRect {
+            top: 0,
+            left: 0,
+            bottom: h as i32,
+            right: w as i32,
+        };
+        pictura_render::stream_composite(doc, whole, rows as u32, |offset, band| {
+            put(offset as usize, &band)
+        });
+    }
+    pictura_core::PixelBuffer {
+        width: doc.width,
+        height: doc.height,
+        channels: channels.max(1) as u8,
+        data,
     }
 }
 
 /// Write `path` as a single-frame GIF89a. The retained Indexed source is used
 /// only while it still expands to the current composite; otherwise the 8-bit
 /// sRGB composite is quantized with the remembered palette settings.
-fn write_gif(rust: &mut PictureViewRust, path: &str) -> bool {
+pub(in crate::cxxqt_object) fn write_gif(rust: &mut PictureViewRust, path: &str) -> bool {
     let gpu_compute = rust.gpu_compute;
     let dirty = rust.session.dirty;
     let options = rust.save_gif_options.unwrap_or_default();
@@ -316,6 +386,13 @@ fn write_gif(rust: &mut PictureViewRust, path: &str) -> bool {
         if doc.width == 0 || doc.height == 0 || doc.width > 65_535 || doc.height > 65_535 {
             return false;
         }
+        super::super::helpers::memory_gate::clear();
+        // ponytail: the quantizer reads every pixel at once; the gate counts it.
+        let Some(_reservation) = super::super::helpers::save_gate::reserve_save(
+            &super::super::helpers::save_gate::gif_cost(doc),
+        ) else {
+            return false;
+        };
         // A tile lost from scratch reads back as defaults; committing those
         // bytes would overwrite a good GIF with a damaged one (#1217).
         if crate::history::unreadable_tiles(doc) > 0 {
@@ -383,11 +460,37 @@ mod tests {
     fn save_composite_converts_profiled_rgb_for_srgb_writers() {
         let mut doc = pictura_core::Document::from_rgba("srgb", 1, 1, &[200, 100, 50, 255]);
         pictura_codec::assign_document_profile(&mut doc, &pictura_codec::Profile::adobe_rgb());
-        let native = save_composite(&doc, false, false);
-        let srgb = save_composite(&doc, false, true);
+        let native = save_composite(&doc, false);
+        let srgb = save_composite(&doc, true);
         assert_ne!(native.data, srgb.data, "the working profile is converted");
         let expected = pictura_codec::buffer_to_srgb(&doc, &native).into_owned();
         assert_eq!(srgb.data, expected.data);
+    }
+
+    #[test]
+    fn save_composite_equals_the_whole_composite() {
+        let (w, h) = (37u32, 300u32);
+        let rgba: Vec<u8> = (0..w * h * 4).map(|i| (i * 7 % 251) as u8).collect();
+        let mut doc = pictura_core::Document::from_rgba("Layer 0", w, h, &rgba);
+        let mut top = doc.layers[0].clone();
+        top.opacity = 100;
+        for channel in top.channels_mut() {
+            let flipped: Vec<u8> = channel.data.iter().copied().rev().collect();
+            channel.data = flipped.into();
+        }
+        doc.layers.push(top).expect("a second layer");
+        pictura_codec::assign_document_profile(&mut doc, &pictura_codec::Profile::adobe_rgb());
+        let whole = current_buffer(&doc, false);
+        for srgb in [false, true] {
+            let expected = if srgb {
+                pictura_codec::buffer_to_srgb(&doc, &whole).into_owned()
+            } else {
+                whole.clone()
+            };
+            let banded = save_composite(&doc, srgb);
+            assert_eq!(banded.channels, expected.channels);
+            assert_eq!(banded.data.to_vec(), expected.data.to_vec(), "srgb {srgb}");
+        }
     }
 
     static NEXT: AtomicU64 = AtomicU64::new(1);

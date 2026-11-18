@@ -110,8 +110,10 @@ impl EncodeCache {
 
     /// Fix the byte budget, or hand it back to the governor with `None`.
     pub fn set_budget(&self, bytes: Option<u64>) {
-        self.budget_override
-            .store(bytes.unwrap_or(GOVERNED).min(GOVERNED - 1), Ordering::Relaxed);
+        self.budget_override.store(
+            bytes.unwrap_or(GOVERNED).min(GOVERNED - 1),
+            Ordering::Relaxed,
+        );
     }
 
     /// The bytes the cache may hold: the fixed budget, else the smaller of
@@ -120,7 +122,9 @@ impl EncodeCache {
         match self.budget_override.load(Ordering::Relaxed) {
             GOVERNED => pictura_core::memory::governor()
                 .ceiling()
-                .map_or(CACHE_CAP, |ceiling| (ceiling / CEILING_SHARE).min(CACHE_CAP)),
+                .map_or(CACHE_CAP, |ceiling| {
+                    (ceiling / CEILING_SHARE).min(CACHE_CAP)
+                }),
             fixed => fixed,
         }
     }

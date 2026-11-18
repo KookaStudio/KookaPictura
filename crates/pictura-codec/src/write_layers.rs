@@ -16,9 +16,9 @@ use crate::error::PsdError;
 use crate::write::{
     layer_retained, native_plane, native_plane_rows, write_channel_stream, write_tag, PlaneBytes,
 };
-use crate::write_stream::Sink;
 use crate::write_cache::{ChannelKey, EncodeCache};
 use crate::write_indexed::index_layer_plane;
+use crate::write_stream::Sink;
 
 /// A flat record in on-disk order, borrowing the model layer it came from.
 struct OutRecord<'a> {

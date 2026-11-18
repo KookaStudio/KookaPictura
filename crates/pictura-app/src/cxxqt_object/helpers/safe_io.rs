@@ -15,6 +15,17 @@ pub(in crate::cxxqt_object) fn write_atomically(
     bytes: &[u8],
     sync: bool,
 ) -> std::io::Result<()> {
+    write_atomically_with(path, sync, |out| out.write_all(bytes))
+}
+
+/// [`write_atomically`] for a writer that streams into the temp file through
+/// `write` (#1320): a failure there, or in the flush, sync or rename, removes
+/// the temp file and leaves `path` as it was.
+pub(in crate::cxxqt_object) fn write_atomically_with(
+    path: &str,
+    sync: bool,
+    write: impl FnOnce(&mut std::io::BufWriter<std::fs::File>) -> std::io::Result<()>,
+) -> std::io::Result<()> {
     let tmp = format!(
         "{path}.{:016x}.tmp",
         u64::from_le_bytes(pictura_codec::os_random())
@@ -25,8 +36,10 @@ pub(in crate::cxxqt_object) fn write_atomically(
         .write(true)
         .create_new(true)
         .open(&tmp)
-        .and_then(|mut file| {
-            file.write_all(bytes)?;
+        .and_then(|file| {
+            let mut out = std::io::BufWriter::new(file);
+            write(&mut out)?;
+            let file = out.into_inner().map_err(|e| e.into_error())?;
             if sync {
                 file.sync_all()?;
             }
@@ -71,6 +84,29 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    // [sps_error_no_file]
+    #[test]
+    fn write_atomically_with_keeps_the_target_on_error() {
+        let dir = scratch("stream-error");
+        let target = dir.join("doc.psd");
+        std::fs::write(&target, b"previous").unwrap();
+        let path = target.to_string_lossy().into_owned();
+        let failed = write_atomically_with(&path, true, |out| {
+            out.write_all(&[7u8; 100_000])?;
+            Err(std::io::Error::other("encode failed"))
+        });
+        assert!(failed.is_err());
+        assert_eq!(std::fs::read(&target).unwrap(), b"previous");
+        let names: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(names, vec![std::ffi::OsString::from("doc.psd")]);
+        write_atomically_with(&path, false, |out| out.write_all(b"next")).unwrap();
+        assert_eq!(std::fs::read(&target).unwrap(), b"next");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn leftovers(dir: &Path) -> Vec<String> {

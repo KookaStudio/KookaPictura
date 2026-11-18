@@ -58,9 +58,8 @@ mod region_level;
 mod smart_source;
 pub use region_level::{
     band_rows, composite_channels, composite_region, composite_region_level, composite_tiled,
-    composite_tiled_channels, keep_channels_tiled,
-    level_size, premultiply_planar, region_level, region_level_chunked, stream_composite,
-    ChunkConvert, Level0Source,
+    composite_tiled_channels, keep_channels_tiled, level_size, premultiply_planar, region_level,
+    region_level_chunked, stream_composite, ChunkConvert, Level0Source,
 };
 mod tile_pyramid;
 pub use tile_pyramid::{

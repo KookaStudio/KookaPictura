@@ -22,7 +22,7 @@ pub use flat::{convert_to_bitmap, convert_to_indexed, indexed_exact_available, B
 use std::borrow::Cow;
 
 use pictura_codec::{ConversionOptions, Profile};
-use pictura_core::{BitDepth, ColorMode, Document, PixelBuffer};
+use pictura_core::{BitDepth, ColorMode, Document};
 use pictura_ops::OpsError;
 
 /// The mode the document is in for the user: the recorded source mode when one
@@ -220,8 +220,8 @@ pub fn convert_bit_depth(doc: &mut Document, out: BitDepth) -> Result<(), OpsErr
 /// color planes, so the display alpha plane is dropped; any other document is
 /// borrowed unchanged.
 pub fn save_view(doc: &Document) -> Cow<'_, Document> {
-    let drops_alpha = !(doc.source.mode().is_none() && doc.channels.is_empty())
-        && doc.mode == ColorMode::Rgb;
+    let drops_alpha =
+        !(doc.source.mode().is_none() && doc.channels.is_empty()) && doc.mode == ColorMode::Rgb;
     if doc.composite.merged_output()
         && !doc.composite_is_authoritative()
         && !crate::DocumentComposite::is_stored(doc)

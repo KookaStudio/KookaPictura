@@ -50,9 +50,9 @@ const BASELINE: &[(&str, usize)] = &[
     ("snapshot_restore", 102_945),
     ("move_layer", 61_123),
     ("free_transform", 1_059_476),
-    // The merged image is composited band by band into tiles (#1216); the
-    // peak is the save job's copy, a band's compositor canvas and the file.
-    ("save_psd", 128_845_134),
+    // Lowered by #1320: the file streams into its temp file a band of rows at
+    // a time, so the peak is the merged image's tiles and a compositor band.
+    ("save_psd", 68_675_858),
     // Lowered by #1218: 8-bit raw and RLE layer channels are indexed and
     // decoded on first read, so the open holds no layer tiles.
     ("open_psd", 56_221_921),
@@ -84,6 +84,13 @@ const STREAMED: &[&str] = &[
 /// it materialized, with both steps in one pool of [`THREADS`] threads. The
 /// pool exists before the reset, so its own bookkeeping is not counted.
 fn measure<T>(setup: impl FnOnce() -> T + Send, run: impl FnOnce(&mut T) + Send) -> (usize, u64) {
+    // A worker the scenario spawns (the save job) runs its parallel work on the
+    // global pool; fix that at the same count, or its per-thread buffers
+    // follow the machine's cores (#1320). Already built is fine: each test is
+    // its own process under nextest.
+    let _ = rayon::ThreadPoolBuilder::new()
+        .num_threads(THREADS)
+        .build_global();
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(THREADS)
         .build()
@@ -640,7 +647,45 @@ fn estimates_cover_the_measured_peaks() {
     let peak = measure(|| with_stroke(side), sc::snapshot_restore).0;
     check("snapshot_restore", peak, estimate);
 
-    let estimate = gate::save_bytes(&doc(&with_square(side)));
+    use crate::cxxqt_object::helpers::save_gate;
+    use pictura_codec::{SaveKind, SaveOptions};
+    let estimate = save_gate::save_cost(&doc(&with_square(side))).working;
     let peak = measure(|| with_square(side), |v| sc::save_psd(v, &file)).0;
     check("save_psd", peak, estimate);
+
+    // The raster saves write the tiled composite they build as spillable
+    // tiles; the heap holds them here, so the check counts both.
+    let bmp8 = SaveOptions {
+        bmp_depth: 8,
+        ..SaveOptions::default()
+    };
+    for (name, kind, options, path) in [
+        (
+            "save_png",
+            SaveKind::Png,
+            SaveOptions::default(),
+            "estimate.png",
+        ),
+        (
+            "save_tiff",
+            SaveKind::Tiff,
+            SaveOptions::default(),
+            "estimate.tif",
+        ),
+        ("save_bmp8", SaveKind::Bmp, bmp8, "estimate.bmp"),
+    ] {
+        let options = options.with_defaults();
+        let cost = save_gate::raster_save_cost(&doc(&with_square(side)), kind, &options);
+        let path = sc::TempFile::new(path);
+        let peak = measure(
+            || with_square(side),
+            |v| sc::save_raster(v, kind, &options, &path),
+        )
+        .0;
+        check(name, peak, cost.working + cost.spillable);
+    }
+    let gif = sc::TempFile::new("estimate.gif");
+    let estimate = save_gate::gif_cost(&doc(&with_square(side))).working;
+    let peak = measure(|| with_square(side), |v| sc::save_gif(v, &gif)).0;
+    check("save_gif", peak, estimate);
 }

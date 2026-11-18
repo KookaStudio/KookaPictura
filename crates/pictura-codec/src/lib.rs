@@ -174,8 +174,8 @@ pub use read::{
     OpenOptions,
 };
 pub use save::{
-    save_document, save_document_with_jpeg, save_document_with_jpeg_guarded, BeforeWrite,
-    JpegEncode, SaveKind, SaveOptions,
+    save_document, save_document_with_jpeg, save_document_with_jpeg_guarded,
+    streams as save_streams, BeforeWrite, JpegEncode, SaveKind, SaveOptions,
 };
 pub use smart_filter::{
     clear_smart_filters, delete_smart_filter, reorder_smart_filters, set_camera_raw_option,

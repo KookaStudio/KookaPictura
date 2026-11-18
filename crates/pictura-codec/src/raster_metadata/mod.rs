@@ -102,6 +102,21 @@ pub fn embed_raster_metadata(
     }
 }
 
+/// For a streamed TIFF of `len` bytes whose IFD0 table is `ifd`: the bytes
+/// [`embed_raster_metadata`] would append and the new IFD0 offset for the
+/// header, or `None` when there is no metadata to embed (#1320).
+pub(crate) fn embed_tiff_tail(
+    len: u64,
+    big: bool,
+    ifd: &[u8],
+    metadata: &RasterMetadata,
+) -> Result<Option<(Vec<u8>, u32)>, PsdError> {
+    if metadata.is_empty() {
+        return Ok(None);
+    }
+    tiff::embed_tail(len, big, ifd, metadata).map(Some)
+}
+
 /// The Photoshop image-resource section a JPEG (APP13) or TIFF (tag 34377)
 /// carries, for a document opened from it; `None` for another format or a
 /// file without one. An ICC profile block is left out: the opened pixels

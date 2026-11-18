@@ -229,12 +229,19 @@ fn copy_entry(
     }
 }
 
-fn write_ifd(out: &mut Vec<u8>, entries: Vec<OutEntry>, order: Order) -> Result<u32, PsdError> {
+/// Append an IFD to `out`, which follows `origin` bytes of file; returns the
+/// IFD's absolute offset.
+fn write_ifd(
+    out: &mut Vec<u8>,
+    origin: usize,
+    entries: Vec<OutEntry>,
+    order: Order,
+) -> Result<u32, PsdError> {
     if entries.len() > u16::MAX as usize {
         return Err(PsdError::Unsupported("too many TIFF entries".into()));
     }
-    let base = align2(out.len());
-    out.resize(base, 0);
+    let base = align2(origin + out.len());
+    out.resize(base - origin, 0);
     let data_base = base + 2 + 12 * entries.len() + 4;
     let mut table = Vec::with_capacity(2 + 12 * entries.len() + 4);
     table.extend_from_slice(&order.u16_bytes(entries.len() as u16));
@@ -265,7 +272,40 @@ fn write_ifd(out: &mut Vec<u8>, entries: Vec<OutEntry>, order: Order) -> Result<
 pub(super) fn embed(bytes: &[u8], metadata: &RasterMetadata) -> Result<Vec<u8>, PsdError> {
     let (destination_order, destination_ifd) = parse_header(bytes)?;
     let destination_entries = read_ifd(bytes, destination_order, destination_ifd)?;
+    let (tail, ifd0_offset) = tail(
+        bytes.len(),
+        destination_order,
+        &destination_entries,
+        metadata,
+    )?;
     let mut out = bytes.to_vec();
+    out.extend_from_slice(&tail);
+    destination_order.put_u32(&mut out[4..8], ifd0_offset);
+    Ok(out)
+}
+
+/// The bytes [`embed`] appends to a TIFF of `len` bytes whose IFD0 table is
+/// `ifd` (starting at its entry count), and the new IFD0's offset, for a writer
+/// that streamed the file (#1320).
+pub(super) fn embed_tail(
+    len: u64,
+    big: bool,
+    ifd: &[u8],
+    metadata: &RasterMetadata,
+) -> Result<(Vec<u8>, u32), PsdError> {
+    let order = if big { Order::Big } else { Order::Little };
+    let len = usize::try_from(len).map_err(|_| PsdError::Unsupported("TIFF size".into()))?;
+    let entries = read_ifd(ifd, order, 0)?;
+    tail(len, order, &entries, metadata)
+}
+
+fn tail(
+    origin: usize,
+    destination_order: Order,
+    destination_entries: &[RawEntry],
+    metadata: &RasterMetadata,
+) -> Result<(Vec<u8>, u32), PsdError> {
+    let mut out = Vec::new();
 
     let exif = metadata.exif.as_deref().and_then(|raw| {
         let raw = raw.strip_prefix(b"Exif\0\0".as_slice()).unwrap_or(raw);
@@ -289,7 +329,7 @@ pub(super) fn embed(bytes: &[u8], metadata: &RasterMetadata) -> Result<Vec<u8>, 
             .filter(|entry| !is_offset_tag(entry.tag))
             .filter_map(|entry| copy_entry(raw, *source_order, destination_order, entry).ok())
             .collect();
-        exif_ifd_offset = Some(write_ifd(&mut out, entries, destination_order)?);
+        exif_ifd_offset = Some(write_ifd(&mut out, origin, entries, destination_order)?);
     }
 
     let mut entries: Vec<OutEntry> = destination_entries
@@ -365,9 +405,8 @@ pub(super) fn embed(bytes: &[u8], metadata: &RasterMetadata) -> Result<Vec<u8>, 
         });
     }
     entries.sort_by_key(|entry| entry.tag);
-    let ifd0_offset = write_ifd(&mut out, entries, destination_order)?;
-    destination_order.put_u32(&mut out[4..8], ifd0_offset);
-    Ok(out)
+    let ifd0_offset = write_ifd(&mut out, origin, entries, destination_order)?;
+    Ok((out, ifd0_offset))
 }
 
 /// IFD0's Photoshop resource block; `None` for a file that is not a TIFF or

@@ -4,7 +4,7 @@ use std::io::{Seek, Write};
 use std::sync::Arc;
 
 use crate::common::*;
-use crate::depth::{apply_prediction, depth_bits, depth_of, output_depth, row_bytes};
+use crate::depth::{depth_bits, depth_of, output_depth, row_bytes};
 use crate::error::PsdError;
 use crate::write_cache::{ChannelKey, CompositeKey, EncodeCache};
 use crate::write_indexed::writes_indexed;
@@ -178,7 +178,11 @@ pub(crate) trait ScanRows {
     /// Rows `y0 .. y0 + rows` into `out` (`rows * row_bytes` long).
     fn read_rows(&self, y0: usize, rows: usize, row_bytes: usize, out: &mut [u8]) {
         let mut scratch = Vec::new();
-        for (i, dst) in out.chunks_exact_mut(row_bytes.max(1)).take(rows).enumerate() {
+        for (i, dst) in out
+            .chunks_exact_mut(row_bytes.max(1))
+            .take(rows)
+            .enumerate()
+        {
             dst.copy_from_slice(self.scan_row(y0 + i, row_bytes, &mut scratch));
         }
     }
@@ -210,21 +214,6 @@ pub(crate) enum PlaneBytes<'a> {
 impl<'a> From<Cow<'a, [u8]>> for PlaneBytes<'a> {
     fn from(bytes: Cow<'a, [u8]>) -> Self {
         PlaneBytes::Bytes(bytes)
-    }
-}
-
-impl PlaneBytes<'_> {
-    /// Append every byte of the plane to `out`.
-    pub(crate) fn extend_into(&self, out: &mut Vec<u8>) {
-        match self {
-            PlaneBytes::Bytes(bytes) => out.extend_from_slice(bytes),
-            PlaneBytes::Rows { width, height, .. } => {
-                let mut scratch = Vec::new();
-                for row in 0..*height {
-                    out.extend_from_slice(self.scan_row(row, *width, &mut scratch));
-                }
-            }
-        }
     }
 }
 
@@ -388,6 +377,7 @@ pub(crate) fn layer_retained(layer: &Layer, depth: u16, id: i16) -> Option<Sampl
 /// compression word is not included. PackBits is byte-wise, so `row_bytes` is
 /// the native row stride (`width` at depth 8, `2 * width` at 16, `4 * width` at
 /// 32).
+#[cfg(test)]
 pub(crate) fn encode_scanlines<P: ScanRows + Sync>(
     planes: &[P],
     row_bytes: usize,
@@ -612,26 +602,21 @@ pub(crate) fn write_layer_mask_tiff_tag(
     let tagged = tagged_layer_key(modes.depth).filter(|_| !doc.layers.is_empty());
     let key = tagged.unwrap_or(b"Layr");
     stream_tag_document(sink, key, false, |sink| {
-        write_layer_info(sink, doc, false, modes.lab, modes.cmyk, modes.indexed, cache)
+        write_layer_info(
+            sink,
+            doc,
+            false,
+            modes.lab,
+            modes.cmyk,
+            modes.indexed,
+            cache,
+        )
     })?;
     if !doc.global_layer_mask.is_empty() {
         write_tag_document_to(sink, b"LMsk", &doc.global_layer_mask, false)?;
     }
     sink.put(&extra)?;
     Ok(true)
-}
-
-/// As [`write_layer_mask_tiff_tag`], into a buffer.
-pub(crate) fn layer_mask_tiff_tag(
-    doc: &Document,
-    cache: Option<&EncodeCache>,
-) -> Result<Option<Vec<u8>>, PsdError> {
-    let mut written = false;
-    let bytes = write_stream::to_vec(|sink| {
-        written = write_layer_mask_tiff_tag(sink, doc, cache)?;
-        Ok(())
-    })?;
-    Ok(written.then_some(bytes))
 }
 
 fn write_tag_document_to(

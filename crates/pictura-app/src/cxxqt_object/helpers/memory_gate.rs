@@ -67,9 +67,15 @@ pub(in crate::cxxqt_object) fn admit_spilling(working: u64, spillable: u64) -> b
     if spillable <= room.saturating_add(scratch_available()) {
         return true;
     }
-    SCRATCH_FULL.set(true);
-    memory::record_refusal("an edit", spillable);
+    refuse_scratch_full("an edit", spillable);
     false
+}
+
+/// Record that `bytes` of spillable output for `purpose` did not fit the room
+/// plus the scratch disks' free space (#1290); it counts as a memory refusal.
+pub(in crate::cxxqt_object) fn refuse_scratch_full(purpose: &'static str, bytes: u64) {
+    SCRATCH_FULL.set(true);
+    memory::record_refusal(purpose, bytes);
 }
 
 /// Whether a commit [`admit_spilling`] admitted can only fit by packing or
@@ -374,22 +380,6 @@ pub(in crate::cxxqt_object) fn snapshot_bytes(doc: &Document, stroking: bool) ->
 /// display tiles the restore rebuilds.
 pub(in crate::cxxqt_object) fn snapshot_restore_bytes(doc: &Document) -> u64 {
     crate::history::tile_table_bytes(doc) + display()
-}
-
-/// The merged image a save composites a band at a time: one band's
-/// compositor canvas and planes (#1216).
-const SAVE_BAND_BYTES: u64 = 160 * 1024 * 1024;
-
-/// Save (M11): the save job's copy, the merged image's dense tiles (at most
-/// the document's own), one composited band, and the encoded file.
-pub(in crate::cxxqt_object) fn save_bytes(doc: &Document) -> u64 {
-    let document = crate::history::document_bytes(doc);
-    let merged = if doc.composite_is_authoritative() {
-        0
-    } else {
-        document.min(4 * canvas(doc))
-    };
-    2 * document + merged + SAVE_BAND_BYTES
 }
 
 /// Whether the last gated edit was refused because it did not fit the

@@ -50,9 +50,11 @@ pub(super) fn write_snapshot(
     cache: &pictura_codec::EncodeCache,
 ) -> std::io::Result<()> {
     pictura_render::refresh_native_composite(&mut doc);
-    let bytes = pictura_codec::write_psd_cached(&pictura_render::save_view(&doc), cache)
-        .map_err(|e| std::io::Error::other(e.to_string()))?;
-    super::super::super::helpers::safe_io::write_atomically(path, &bytes, true)
+    let view = pictura_render::save_view(&doc);
+    super::super::super::helpers::safe_io::write_atomically_with(path, true, |out| {
+        pictura_codec::write_psd_to(out, &view, pictura_codec::writes_psb(&view), Some(cache))
+            .map_err(|e| std::io::Error::other(e.to_string()))
+    })
 }
 
 #[cfg(test)]

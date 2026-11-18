@@ -153,7 +153,9 @@ pub fn keep_channels_tiled(buffer: &PixelBuffer, channels: usize) -> PixelBuffer
         for y0 in (0..h).step_by(rows.max(1)) {
             let ys = c * h + y0..c * h + (y0 + rows).min(h);
             samples.resize(w * ys.len(), 0);
-            buffer.data.read_rect_into(0..w, ys.clone(), w, &mut samples);
+            buffer
+                .data
+                .read_rect_into(0..w, ys.clone(), w, &mut samples);
             data.write_rect_from(0..w, ys, w, &samples);
             data.settle();
         }
