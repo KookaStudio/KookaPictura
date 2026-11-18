@@ -1,5 +1,5 @@
 use super::*;
-use crate::cxxqt_object::{helpers_composite, picture, proofing};
+use crate::cxxqt_object::{helpers_composite, picture};
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 use ffi::PrintRaster;
@@ -75,7 +75,7 @@ pub(super) fn print_output_profile_info(icc: &[u8]) -> QString {
 
 pub(super) fn print_builtin_profile(device: i32) -> Vec<u8> {
     match device {
-        0..=4 => proofing::proof_device_icc(device),
+        0..=4 => proof_device_icc(device),
         _ => Vec::new(),
     }
 }

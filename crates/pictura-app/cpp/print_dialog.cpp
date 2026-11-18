@@ -1,7 +1,7 @@
 #include "print_dialog.h"
 
 #include "api/engine_bridge.h"
-#include "api/printing_bridge.h"
+#include "api/proofing_bridge.h"
 #include "print_job.h"
 #include "proof_setup_dialog.h"
 

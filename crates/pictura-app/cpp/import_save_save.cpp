@@ -6,7 +6,7 @@
 #include "api/document_api.h"
 #include "api/document_bridge.h"
 #include "api/layers_bridge.h"
-#include "api/printing_bridge.h"
+#include "api/proofing_bridge.h"
 
 #include "bmp_options_dialog.h"
 #include "busy_job.h"

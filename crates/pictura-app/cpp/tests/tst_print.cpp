@@ -8,7 +8,6 @@
 #include "frame.h"
 #include "print_dialog.h"
 #include "print_job.h"
-#include "api/printing_bridge.h"
 #include "api/proofing_bridge.h"
 #include "proof_setup_dialog.h"
 
@@ -299,15 +298,23 @@ void PrintTest::invalidManagedProfileBlocksOutput()
     qputenv("XDG_DATA_HOME", dir.path().toUtf8());
     QVERIFY(QDir(dir.path()).mkpath(QStringLiteral("color/icc")));
     const QByteArray profile = pictura::profileBytes(QStringLiteral("builtin:3"));
+    QVERIFY(profile.size() >= 128);
     const QString one = dir.filePath(QStringLiteral("color/icc/one.icc"));
     const QString two = dir.filePath(QStringLiteral("color/icc/two.icc"));
-    for (const auto& entry : {qMakePair(one, profile), qMakePair(two, profile + '\0')}) {
+    // Distinct creator signatures keep both files after ICC byte deduplication.
+    for (const auto& entry : {qMakePair(one, "kp01"), qMakePair(two, "kp02")}) {
+        QByteArray contents = profile;
+        contents.replace(80, 4, entry.second);
         QFile output(entry.first);
         QVERIFY(output.open(QIODevice::WriteOnly));
-        QCOMPARE(output.write(entry.second), entry.second.size());
+        QCOMPARE(output.write(contents), contents.size());
     }
     const auto imported = pictura::describePrintProfile(one);
-    QVERIFY(imported.components == 3 && pictura::describePrintProfile(two).components == 3);
+    const auto other = pictura::describePrintProfile(two);
+    QCOMPARE(imported.components, 3);
+    QCOMPARE(other.components, 3);
+    QVERIFY(!imported.name.isEmpty());
+    QCOMPARE(imported.name, other.name);
     auto& saved = pictura::lastPrintSettings();
     saved = {};
     saved.options = {{QStringLiteral("managed"), true}, {QStringLiteral("profile"), imported.name}};

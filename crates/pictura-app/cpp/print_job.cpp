@@ -1,6 +1,5 @@
 #include "print_job.h"
 
-#include "api/printing_bridge.h"
 #include "api/proofing_bridge.h"
 #include "session.h"
 

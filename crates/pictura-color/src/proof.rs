@@ -154,7 +154,7 @@ pub fn print_gamut_mask_source(
     }
     let icc = setup.device.to_icc();
     let source_icc = source.to_icc();
-    let transform = |alarm| -> Result<Vec<u16>, ColorError> {
+    let transform = |alarm| -> Result<Vec<[u16; 3]>, ColorError> {
         let mut context = ThreadContext::new();
         context.set_alarm_codes([alarm; 16]);
         let display = lcms2::Profile::new_srgb_context(&context);
@@ -166,7 +166,7 @@ pub fn print_gamut_mask_source(
         if setup.bpc {
             flags = flags | Flags::BLACKPOINT_COMPENSATION;
         }
-        let transform: Transform<u8, u16, ThreadContext, DisallowCache> =
+        let transform: Transform<u8, [u16; 3], ThreadContext, DisallowCache> =
             Transform::new_proofing_context(
                 &context,
                 &source,
@@ -179,16 +179,13 @@ pub fn print_gamut_mask_source(
                 flags,
             )
             .map_err(|error| ColorError::Unsupported(error.to_string()))?;
-        let mut output = vec![0; samples.len() / components * 3];
+        let mut output = vec![[0; 3]; samples.len() / components];
         transform.transform_pixels(samples, &mut output);
         Ok(output)
     };
     let a = transform(0x1357)?;
     let b = transform(0xeac0)?;
-    Ok(a.chunks_exact(3)
-        .zip(b.chunks_exact(3))
-        .map(|(a, b)| a != b)
-        .collect())
+    Ok(a.into_iter().zip(b).map(|(a, b)| a != b).collect())
 }
 
 #[cfg(test)]
