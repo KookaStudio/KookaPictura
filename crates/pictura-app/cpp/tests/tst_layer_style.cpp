@@ -258,11 +258,15 @@ void LayerStyleTest::patternOverlayPicksABuiltInPattern()
     QCOMPARE(dialog.effectList()->item(row)->checkState(), Qt::Checked);
     auto* picker = dialog.findChild<QComboBox*>(QStringLiteral("patternOverlay.pattern"));
     QVERIFY(picker);
-    QCOMPARE(picker->count(), 8);
-    QCOMPARE(picker->itemText(0), QStringLiteral("Checkerboard"));
+    QCOMPARE(picker->count(), 10);
+    QVERIFY(picker->findText(QStringLiteral("Pictura Checkerboard")) >= 0);
+    QVERIFY(picker->findText(QStringLiteral("Pictura Diagonal")) >= 0);
+    QCOMPARE(picker->currentText(), QStringLiteral("Checkerboard"));
     // The checkerboard's dark and light squares now show on the white square.
     QVERIFY(at(11, 11) != QRgb(0xffffff) || at(18, 18) != QRgb(0xffffff));
-    picker->setCurrentIndex(1);
+    const int grid = picker->findText(QStringLiteral("Grid"));
+    QVERIFY(grid >= 0);
+    picker->setCurrentIndex(grid);
     QCOMPARE(pictura::layer_style_value(*view_, QStringLiteral("1"),
                                         QStringLiteral("patternOverlay.pattern")),
              1.0);

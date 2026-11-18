@@ -263,10 +263,12 @@ mod tests {
 
     #[test]
     fn csf_tag_limit_is_enforced_on_export() {
-        let mut settings = ColorSettingsFile::default();
-        settings.tags = (0..MAX_TAGS)
-            .map(|i| ((i as u32).to_be_bytes(), vec![0; 8]))
-            .collect();
+        let settings = ColorSettingsFile {
+            tags: (0..MAX_TAGS)
+                .map(|i| ((i as u32).to_be_bytes(), vec![0; 8]))
+                .collect(),
+            ..ColorSettingsFile::default()
+        };
         let mut decoded = decode(&encode(&settings).unwrap()).unwrap();
         decoded.set_intent(Intent::Perceptual);
         assert!(encode(&decoded).is_err());

@@ -507,7 +507,9 @@ void PresetManagerTest::appliesImportedSwatchBrushAndToolOptions()
     auto* button = window->findChild<QToolButton*>(QStringLiteral("optionsToolPreset-brush"));
     QVERIFY(button && button->menu());
     QVERIFY(QMetaObject::invokeMethod(button->menu(), "aboutToShow"));
+    QVERIFY(QMetaObject::invokeMethod(button->menu(), "aboutToShow"));
     const auto actions = button->menu()->actions();
+    QCOMPARE(actions.size(), BrushPresetPicker::additionalPresetCount() + 1);
     const auto choice = std::find_if(actions.cbegin(), actions.cend(), [](QAction* action) {
         return action->text() == QStringLiteral("Test Brush Settings");
     });
