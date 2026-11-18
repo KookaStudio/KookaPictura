@@ -78,8 +78,8 @@ Deeper technical status for PSD/PSB lives in
 - [x] The Save for Web slice HTML and CSS emitter, 2-Up and 4-Up, the
       colour-table editor, and the metadata menu (#629)
 - [x] **Zoomify and Paths to Illustrator** (#630)
-- [ ] Data Sets As Files (#622) and Render Video (deferred Extended-only,
-      codec backend needed) (#630)
+- [x] Data Sets As Files (#622)
+- [ ] Render Video (deferred Extended-only, codec backend needed) (#630)
 - [x] The File Info tabs for IPTC Extension, GPS, Origin, Video, Audio,
       Photoshop and DICOM, and the editing they imply (#631)
 - [ ] Print colour management, proofing, output marks, and persisted defaults
@@ -522,7 +522,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [ ] A scripting host, DOM, ActionManager and notifiers on QuickJS (#620)
 - [ ] A script console, sandbox limits, a security prompt, and the progress
       bridge (#621)
-- [ ] Variables and data-driven graphics (#622)
+- [x] Variables and data-driven graphics (#622)
 - [ ] A Rust C-ABI plug-in loader and the Plug-in manager dialog (#623)
 - [ ] The Mini-Bridge replacement Files panel (#624)
 
