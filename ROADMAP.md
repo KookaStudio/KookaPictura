@@ -89,7 +89,7 @@ Deeper technical status for PSD/PSB lives in
 - [ ] Background Save, a durable crash journal, and PSD 1086/1087 (#637)
 - [ ] Edit Contents and relink for vector smart objects, Paste As, and the
       Files panel (#638)
-- [ ] The Maximize PSD/PSB Compatibility preference (#639)
+- [x] The Maximize PSD/PSB Compatibility preference (#639)
 - [ ] The document-format version policy: `opDocumentVersion`,
       `minReaderVersion` and Version Info 1057 (#640)
 - [ ] The Preset Manager: eight preset types, load, append, replace, reset and
