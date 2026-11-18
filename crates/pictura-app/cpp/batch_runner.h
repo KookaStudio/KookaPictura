@@ -47,7 +47,7 @@ public:
     QString stopError() const { return stopError_; }
     QStringList inputs() const;
 
-    QProgressDialog* progressDialog() const { return progress_; }
+    QProgressDialog* progressDialog() const;
     // Whether this run redirects replayed Save As steps (the override).
     bool redirectsSaveAs() const;
     // The batch path for a Save As step in `format`; empty refuses the save.

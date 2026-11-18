@@ -357,6 +357,11 @@ QString BatchRunner::inputLabel() const
     return input.path.isEmpty() ? input.name : input.path;
 }
 
+QProgressDialog* BatchRunner::progressDialog() const
+{
+    return progress_;
+}
+
 bool BatchRunner::redirectsSaveAs() const
 {
     return running_ && options_.overrideSave
