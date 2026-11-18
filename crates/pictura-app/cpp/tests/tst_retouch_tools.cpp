@@ -7,7 +7,9 @@
 #include "options_bar.h"
 #include "selftest_paint_fixture.h"
 #include "theme.h"
+#include "toolbox.h"
 
+#include <QtGui/QAction>
 #include <QtGui/QPainter>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
@@ -17,6 +19,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+
+#include "api/document_bridge.h"
 
 #include "qt_test_support.h"
 
@@ -53,6 +57,44 @@ QImage withDot(QImage img, double cx, double cy, double radius)
     }
     return img;
 }
+
+// The tone tools' options, restored on scope exit.
+struct ToneState {
+    pictura::ToolController* tools;
+    pictura::ToneOptions dodge;
+    pictura::ToneOptions burn;
+    pictura::ToneOptions sponge;
+
+    explicit ToneState(pictura::ToolController* t)
+        : tools(t)
+        , dodge(t->optionsFor<pictura::ToneGroup>(pictura::ToolId::Dodge)->get())
+        , burn(t->optionsFor<pictura::ToneGroup>(pictura::ToolId::Burn)->get())
+        , sponge(t->optionsFor<pictura::ToneGroup>(pictura::ToolId::Sponge)->get())
+    {
+    }
+    ~ToneState()
+    {
+        tools->optionsFor<pictura::ToneGroup>(pictura::ToolId::Dodge)->set(dodge);
+        tools->optionsFor<pictura::ToneGroup>(pictura::ToolId::Burn)->set(burn);
+        tools->optionsFor<pictura::ToneGroup>(pictura::ToolId::Sponge)->set(sponge);
+    }
+};
+
+// The tone tool's flyout row in the toolbox.
+QAction* toneFlyoutAction(pictura::Toolbox* box, pictura::ToolId id)
+{
+    if (!box) {
+        return nullptr;
+    }
+    for (int group = 1; group <= 23; ++group) {
+        for (QAction* action : box->slotMenuActionsForTest(group)) {
+            if (action->data().toInt() == int(id)) {
+                return action;
+            }
+        }
+    }
+    return nullptr;
+}
 } // namespace
 
 class RetouchToolsTest : public QObject {
@@ -67,6 +109,15 @@ private slots:
     void dodgeTool();
     void burnTool();
     void spongeTool();
+    void airbrushOffStaysStill();
+    void airbrushBuildsWhileHeld();
+    void shiftAltPTogglesToneAirbrush();
+    void rangeQuickKeys();
+    void spongeQuickKeys();
+    void quickKeyIgnoredForOtherTools();
+    void grayscaleSpongeChangesContrast();
+    void thirtyTwoBitDisablesToneTools();
+    void thirtyTwoBitFallsBackToMove();
     void strokeChangingNothingRebuildsNothing();
     void spotHealingClickRemovesADot();
     void brushTipBarIsCompact();
@@ -81,6 +132,8 @@ void RetouchToolsTest::initTestCase()
     QVERIFY(stateHome_.isValid());
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
+    window_->show();
+    window_->activateWindow();
 }
 
 void RetouchToolsTest::blurTool()
@@ -487,6 +540,227 @@ void RetouchToolsTest::spotHealingClickRemovesADot()
     healing->set(options);
     QVERIFY2(committed, "one Spot Healing Brush state");
     QVERIFY2(worst <= 6, qPrintable(QStringLiteral("dot left behind: off by %1").arg(worst)));
+}
+
+void RetouchToolsTest::airbrushOffStaysStill()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(40, 40, QImage::Format_RGB32);
+    seed.fill(QColor(100, 100, 100));
+    Fixture f(frame, seed, QStringLiteral("pictura_tone_airbrush_off"));
+    QVERIFY2(f.ok(), "airbrush fixture");
+    const BrushState brush(f.tools);
+    const ToneState toneState(f.tools);
+    f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(12);
+    frame.setActiveTool(pictura::ToolId::Dodge);
+    auto* tone = f.tools->optionsFor<pictura::ToneGroup>(pictura::ToolId::Dodge);
+    pictura::ToneOptions options = tone->get();
+    options.airbrush = false;
+    tone->set(options);
+
+    const int base = f.view->history_index();
+    f.canvas->mousePressed(QPointF(20, 20), Qt::LeftButton, 0);
+    QTest::qWait(0);
+    const int before = qRed(f.view->sample_argb(20, 20));
+    QTest::qWait(250); // held dabs are time-driven; no signal marks one
+    QCOMPARE(qRed(f.view->sample_argb(20, 20)), before);
+    f.canvas->mouseReleased(QPointF(20, 20));
+    QVERIFY2(f.committedOnce(base, "Dodge"), "one Dodge state");
+}
+
+void RetouchToolsTest::airbrushBuildsWhileHeld()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(40, 40, QImage::Format_RGB32);
+    seed.fill(QColor(100, 100, 100));
+    Fixture f(frame, seed, QStringLiteral("pictura_tone_airbrush_on"));
+    QVERIFY2(f.ok(), "airbrush fixture");
+    const BrushState brush(f.tools);
+    const ToneState toneState(f.tools);
+    f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(12);
+    frame.setActiveTool(pictura::ToolId::Dodge);
+    auto* tone = f.tools->optionsFor<pictura::ToneGroup>(pictura::ToolId::Dodge);
+    pictura::ToneOptions options = tone->get();
+    options.airbrush = true;
+    tone->set(options);
+
+    const int base = f.view->history_index();
+    f.canvas->mousePressed(QPointF(20, 20), Qt::LeftButton, 0);
+    QTest::qWait(0);
+    const int before = qRed(f.view->sample_argb(20, 20));
+    QTest::qWait(250); // held dabs are time-driven; no signal marks one
+    const int after = qRed(f.view->sample_argb(20, 20));
+    f.canvas->mouseReleased(QPointF(20, 20));
+    QVERIFY2(after > before, "Airbrush did not build while held");
+    QVERIFY2(f.committedOnce(base, "Dodge"), "one Dodge state");
+}
+
+void RetouchToolsTest::shiftAltPTogglesToneAirbrush()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(40, 40, QImage::Format_RGB32);
+    seed.fill(QColor(100, 100, 100));
+    Fixture f(frame, seed, QStringLiteral("pictura_tone_airbrush_key"));
+    QVERIFY2(f.ok(), "airbrush fixture");
+    const ToneState toneState(f.tools);
+    frame.setActiveTool(pictura::ToolId::Dodge);
+    auto* tone = f.tools->optionsFor<pictura::ToneGroup>(pictura::ToolId::Dodge);
+    pictura::ToneOptions options = tone->get();
+    options.airbrush = false;
+    tone->set(options);
+    auto* button = frame.findChild<QToolButton*>(QStringLiteral("optionsDodgeAirbrush"));
+    QVERIFY(button);
+    QVERIFY(!button->isChecked());
+
+    QTest::keyClick(window_.get(), Qt::Key_P, Qt::ShiftModifier | Qt::AltModifier);
+    QVERIFY(tone->get().airbrush);
+    QVERIFY(button->isChecked());
+    QTest::keyClick(window_.get(), Qt::Key_P, Qt::ShiftModifier | Qt::AltModifier);
+    QVERIFY(!tone->get().airbrush);
+    QVERIFY(!button->isChecked());
+}
+
+void RetouchToolsTest::rangeQuickKeys()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(40, 40, QImage::Format_RGB32);
+    seed.fill(QColor(100, 100, 100));
+    Fixture f(frame, seed, QStringLiteral("pictura_tone_range_keys"));
+    QVERIFY2(f.ok(), "tone fixture");
+    const ToneState toneState(f.tools);
+    frame.setActiveTool(pictura::ToolId::Dodge);
+    auto* tone = f.tools->optionsFor<pictura::ToneGroup>(pictura::ToolId::Dodge);
+    auto* range = frame.findChild<QComboBox*>(QStringLiteral("optionsDodgeRange"));
+    QVERIFY(tone && range);
+
+    QTest::keyClick(window_.get(), Qt::Key_S, Qt::ShiftModifier | Qt::AltModifier);
+    QCOMPARE(tone->get().range, 0);
+    QCOMPARE(range->currentIndex(), 0);
+    QTest::keyClick(window_.get(), Qt::Key_M, Qt::ShiftModifier | Qt::AltModifier);
+    QCOMPARE(tone->get().range, 1);
+    QCOMPARE(range->currentIndex(), 1);
+    QTest::keyClick(window_.get(), Qt::Key_H, Qt::ShiftModifier | Qt::AltModifier);
+    QCOMPARE(tone->get().range, 2);
+    QCOMPARE(range->currentIndex(), 2);
+}
+
+void RetouchToolsTest::spongeQuickKeys()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(40, 40, QImage::Format_RGB32);
+    seed.fill(QColor(100, 100, 100));
+    Fixture f(frame, seed, QStringLiteral("pictura_tone_sponge_keys"));
+    QVERIFY2(f.ok(), "tone fixture");
+    const ToneState toneState(f.tools);
+    frame.setActiveTool(pictura::ToolId::Sponge);
+    auto* tone = f.tools->optionsFor<pictura::ToneGroup>(pictura::ToolId::Sponge);
+    auto* mode = frame.findChild<QComboBox*>(QStringLiteral("optionsSpongeMode"));
+    QVERIFY(tone && mode);
+
+    QTest::keyClick(window_.get(), Qt::Key_S, Qt::ShiftModifier | Qt::AltModifier);
+    QCOMPARE(tone->get().spongeMode, 1);
+    QCOMPARE(mode->currentIndex(), 1);
+    QTest::keyClick(window_.get(), Qt::Key_D, Qt::ShiftModifier | Qt::AltModifier);
+    QCOMPARE(tone->get().spongeMode, 0);
+    QCOMPARE(mode->currentIndex(), 0);
+}
+
+void RetouchToolsTest::quickKeyIgnoredForOtherTools()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(40, 40, QImage::Format_RGB32);
+    seed.fill(QColor(100, 100, 100));
+    Fixture f(frame, seed, QStringLiteral("pictura_tone_key_ignored"));
+    QVERIFY2(f.ok(), "tone fixture");
+    const ToneState toneState(f.tools);
+    frame.setActiveTool(pictura::ToolId::Brush);
+    auto* dodge = f.tools->optionsFor<pictura::ToneGroup>(pictura::ToolId::Dodge);
+    auto* sponge = f.tools->optionsFor<pictura::ToneGroup>(pictura::ToolId::Sponge);
+    const pictura::ToneOptions d = dodge->get();
+    const pictura::ToneOptions s = sponge->get();
+
+    for (const Qt::Key key : {Qt::Key_S, Qt::Key_M, Qt::Key_H, Qt::Key_D}) {
+        QTest::keyClick(window_.get(), key, Qt::ShiftModifier | Qt::AltModifier);
+    }
+    QCOMPARE(dodge->get().range, d.range);
+    QCOMPARE(dodge->get().spongeMode, d.spongeMode);
+    QCOMPARE(dodge->get().airbrush, d.airbrush);
+    QCOMPARE(sponge->get().range, s.range);
+    QCOMPARE(sponge->get().spongeMode, s.spongeMode);
+    QCOMPARE(sponge->get().airbrush, s.airbrush);
+}
+
+void RetouchToolsTest::grayscaleSpongeChangesContrast()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(40, 40, QImage::Format_RGB32);
+    for (int y = 0; y < seed.height(); ++y) {
+        const int v = y < 20 ? 80 : 180;
+        for (int x = 0; x < seed.width(); ++x) {
+            seed.setPixel(x, y, qRgb(v, v, v));
+        }
+    }
+    Fixture f(frame, seed, QStringLiteral("pictura_sponge_grayscale"));
+    QVERIFY2(f.ok(), "grayscale fixture");
+    QVERIFY(pictura::convert_image_mode(*f.view, QStringLiteral("grayscale")));
+    QCOMPARE(pictura::image_mode(*f.view), QStringLiteral("grayscale"));
+    const BrushState brush(f.tools);
+    const ToneState toneState(f.tools);
+    f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(12);
+
+    frame.setActiveTool(pictura::ToolId::Sponge);
+    auto* tone = f.tools->optionsFor<pictura::ToneGroup>(pictura::ToolId::Sponge);
+    const pictura::ToneOptions saved = tone->get();
+    pictura::ToneOptions options = saved;
+    options.amount = 100;
+    options.vibrance = false;
+    options.spongeMode = 1;
+    tone->set(options);
+
+    const int base = f.view->history_index();
+    f.drag({QPointF(5, 10), QPointF(15, 10), QPointF(25, 10), QPointF(35, 10)});
+    QVERIFY2(f.committedOnce(base, "Sponge"), "one Sponge state");
+    QVERIFY2(qRed(f.view->sample_argb(20, 10)) < 80, "Saturate did not darken a dark grey");
+    f.drag({QPointF(5, 30), QPointF(15, 30), QPointF(25, 30), QPointF(35, 30)});
+    QVERIFY2(qRed(f.view->sample_argb(20, 30)) > 180, "Saturate did not lighten a light grey");
+}
+
+void RetouchToolsTest::thirtyTwoBitDisablesToneTools()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(40, 40, QImage::Format_RGB32);
+    seed.fill(QColor(100, 100, 100));
+    Fixture f(frame, seed, QStringLiteral("pictura_tone_32bpc_off"));
+    QVERIFY2(f.ok(), "32-bpc fixture");
+    QVERIFY(pictura::create_document(*f.view, 40, 40, QStringLiteral("rgb"), 32, 0xffffffu, false,
+                                     72.0, false));
+    QCOMPARE(f.view->document_depth_bits(), 32);
+    window_->refresh();
+    auto* box = window_->findChild<pictura::Toolbox*>();
+    QVERIFY(box);
+    for (const pictura::ToolId id :
+         {pictura::ToolId::Dodge, pictura::ToolId::Burn, pictura::ToolId::Sponge}) {
+        QAction* row = toneFlyoutAction(box, id);
+        QVERIFY2(row, "tone flyout row");
+        QVERIFY2(!row->isEnabled(), "tone flyout row stayed enabled at 32 bpc");
+    }
+    window_->setActiveTool(pictura::ToolId::Dodge);
+    QCOMPARE(window_->activeTool(), pictura::ToolId::Move);
+}
+
+void RetouchToolsTest::thirtyTwoBitFallsBackToMove()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(40, 40, QImage::Format_RGB32);
+    seed.fill(QColor(100, 100, 100));
+    Fixture f(frame, seed, QStringLiteral("pictura_tone_32bpc_fallback"));
+    QVERIFY2(f.ok(), "32-bpc fixture");
+    frame.setActiveTool(pictura::ToolId::Dodge);
+    QCOMPARE(window_->activeTool(), pictura::ToolId::Dodge);
+    QVERIFY(pictura::create_document(*f.view, 40, 40, QStringLiteral("rgb"), 32, 0xffffffu, false,
+                                     72.0, false));
+    window_->refresh();
+    QCOMPARE(window_->activeTool(), pictura::ToolId::Move);
 }
 
 QTEST_MAIN(RetouchToolsTest)

@@ -227,6 +227,17 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
                 }
             });
 
+    // CS6's painting-mode quick keys: Dodge/Burn Range and Sponge Mode. The
+    // controller ignores a key that does not apply to the active tool.
+    for (const Qt::Key key : {Qt::Key_S, Qt::Key_M, Qt::Key_H, Qt::Key_D}) {
+        connect(new QShortcut(QKeySequence(Qt::SHIFT | Qt::ALT | key), this),
+                &QShortcut::activated, this, [this, key]() {
+                    if (tools_) {
+                        tools_->applyToneQuickKey(key);
+                    }
+                });
+    }
+
     // CS6 foreground/background swap. `X` is unassigned in the tool letter
     // catalogue, so it does not collide with the tool-switch shortcuts.
     connect(new QShortcut(QKeySequence(Qt::Key_X), this), &QShortcut::activated, this,

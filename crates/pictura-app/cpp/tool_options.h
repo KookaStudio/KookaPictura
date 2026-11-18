@@ -122,14 +122,15 @@ struct RetouchOptions {
 
 // The Dodge, Burn, and Sponge options bars (each tool keeps its own):
 // `amount` 1-100 % is Dodge and Burn's Exposure and the Sponge's Flow. Dodge
-// and Burn: Range 0 Shadows / 1 Midtones / 2 Highlights, Protect Tones.
-// Sponge: Mode 0 Desaturate / 1 Saturate, Vibrance.
+// and Burn: Range 0 Shadows / 1 Midtones / 2 Highlights, Protect Tones, and
+// Airbrush. Sponge: Mode 0 Desaturate / 1 Saturate, Vibrance.
 struct ToneOptions {
     int amount = 50;
     int range = 1;
     bool protectTones = true;
     int spongeMode = 0;
     bool vibrance = true;
+    bool airbrush = false;
 };
 
 // The Eyedropper options bar: Sample Size in pixels (odd, 1..101; 1 is the

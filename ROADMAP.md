@@ -227,7 +227,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       geometry (#546)
 - [x] The full Color Replacement mode list, and disabling it on Bitmap, Indexed
       and Multichannel (#547)
-- [ ] Grayscale Sponge, the airbrush toggle, quick keys, and 32-bpc
+- [x] Grayscale Sponge, the airbrush toggle, quick keys, and 32-bpc
       availability (#548)
 - [ ] Magic-eraser background conversion, background-eraser edge halo, and pen
       pressure (#549)

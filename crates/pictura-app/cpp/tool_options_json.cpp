@@ -259,6 +259,7 @@ template <typename F> void fields(ToneOptions& o, F&& f)
     f("protectTones", o.protectTones);
     f("spongeMode", o.spongeMode);
     f("vibrance", o.vibrance);
+    f("airbrush", o.airbrush);
 }
 
 // The paint family's shared brush, read through its getters and written back

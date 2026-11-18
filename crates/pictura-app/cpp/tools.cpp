@@ -545,33 +545,6 @@ void ToolController::adjustBrushHardness(int delta)
     paint_->setHardness(paint_->hardness() + delta);
 }
 
-bool ToolController::toggleAirbrush()
-{
-    if (active_ == ToolId::Brush) {
-        paint_->setAirbrush(!paint_->airbrush());
-        return true;
-    }
-    StampGroup* group = optionsFor<StampGroup>(active_);
-    if (!group) {
-        return false;
-    }
-    StampOptions o = group->get();
-    bool* flag = nullptr;
-    if (active_ == ToolId::CloneStamp) {
-        flag = &o.cloneAirbrush;
-    } else if (active_ == ToolId::PatternStamp) {
-        flag = &o.patternAirbrush;
-    } else if (active_ == ToolId::HistoryBrush) {
-        flag = &o.historyAirbrush;
-    }
-    if (!flag) {
-        return false;
-    }
-    *flag = !*flag;
-    group->set(o);
-    return true;
-}
-
 bool ToolController::applyBrushShortcut(int key, quint32 nativeScanCode, bool shift)
 {
     PictureView* v = view();
