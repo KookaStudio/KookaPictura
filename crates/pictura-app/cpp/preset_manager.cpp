@@ -2,8 +2,8 @@
 
 #include "dialogs.h"
 #include "gradient_editor_dialog.h"
+#include "api/layers_bridge.h"
 #include "api/paint_bridge.h"
-#include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
 
 #include <QtCore/QAbstractListModel>
 #include <QtCore/QCoreApplication>

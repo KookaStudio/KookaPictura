@@ -4,9 +4,8 @@
 #include "panels/brush_preset_picker.h"
 #include "layer_style_contour.h"
 #include "session.h"
+#include "api/layers_bridge.h"
 #include "api/paint_bridge.h"
-#include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
-#include "pictura_app/src/cxxqt_object/adjustment_presets.cxxqt.h"
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDebug>

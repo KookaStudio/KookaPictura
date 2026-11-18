@@ -16,7 +16,6 @@
 #include "preset_store.h"
 #include "session.h"
 #include "tools.h"
-#include "pictura_app/src/cxxqt_object/shapes.cxxqt.h"
 
 #include <QtCore/QDir>
 #include <QtCore/QFile>
