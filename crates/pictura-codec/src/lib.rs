@@ -65,6 +65,7 @@ mod pictura_filter;
 mod pictura_raw;
 pub(crate) mod png;
 pub mod preset_library;
+pub mod print_resources;
 mod probe;
 mod profile_probe;
 pub(crate) mod raster_metadata;

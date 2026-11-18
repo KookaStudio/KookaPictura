@@ -13,6 +13,7 @@ mod linearize;
 mod object;
 mod options;
 mod presets;
+mod print;
 mod read;
 mod resample;
 pub mod smart_source;
@@ -34,6 +35,7 @@ pub use options::{
 pub use pictura_color::Intent as PdfIntent;
 pub use pictura_color::Profile as PdfProfile;
 pub use presets::{builtin_preset, BUILTIN_PRESETS};
+pub use print::{write_print_pdf, PrintImage, PrintPage};
 pub use read::{editing_psd, embedded_psd, photoshop_psd, EditingPsd};
 pub use text::{LiveText, PdfFont, PdfGlyph, PdfText, TextPolicy};
 

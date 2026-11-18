@@ -83,7 +83,8 @@ Deeper technical status for PSD/PSB lives in
 - [x] The File Info tabs for IPTC Extension, GPS, Origin, Video, Audio,
       Photoshop and DICOM, and the editing they imply (#631)
 - [ ] Print colour management, proofing, output marks, and persisted defaults
-      (#634)
+      (#634). Implementation is ready for CI and manual Photoshop CS6, Photoshop
+      CC, and physical CUPS acceptance.
 - [ ] The measurement scale and presets, the exporters, and PSD resource 1074
       (#635)
 - [ ] Background Save, a durable crash journal, and PSD 1086/1087 (#637)

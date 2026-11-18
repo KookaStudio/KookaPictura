@@ -20,6 +20,7 @@ pub(in crate::cxxqt_object) struct SaveJob {
     path: String,
     start_history: Option<u64>,
     start_revision: u64,
+    print_revision: u64,
     generation: u64,
     copy: bool,
 }
@@ -86,10 +87,12 @@ fn save_start_with_compatibility(
     let planes = store_planes(session.vanishing_planes.as_ref(), doc_ref);
     let start_history = session.history.current_id();
     let start_revision = session.content_revision;
+    let print_revision = session.print_revision;
     let generation = session.document_generation;
     let cache = Arc::clone(&session.encode_cache);
     pictura_codec::warm_encode_idents(doc_ref);
-    let doc = doc_ref.clone();
+    let mut doc = doc_ref.clone();
+    session.print_resources.apply(&mut doc);
     let delay = rust.save_delay_for_test;
     let psb = suffix == "psb";
     let worker_path = path.to_string();
@@ -137,6 +140,7 @@ fn save_start_with_compatibility(
         path: job_path,
         start_history,
         start_revision,
+        print_revision,
         generation,
         copy,
     });
@@ -240,6 +244,7 @@ pub(in crate::cxxqt_object) fn save_finish_rust(rust: &mut PictureViewRust) -> b
         rust.session.history.current_id(),
         rust.session.content_revision,
     );
+    rust.session.saved_print_revision = job.print_revision;
     if current == (job.start_history, job.start_revision) {
         rust.session.mark_saved();
     }
@@ -766,6 +771,51 @@ mod tests {
         assert!(!rust.session.dirty);
         assert!(std::path::Path::new(&path).is_file());
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn print_metadata_survives_undo_and_concurrent_save() {
+        use pictura_codec::print_resources::{
+            read_print_settings, update_print_settings, PrintResourceEdits,
+        };
+
+        let mut rust = view();
+        let target = crate::layer_target::LayerTarget::default();
+        rust.session.record(&target, "Open");
+        rust.session.mark_saved();
+        rust.session.record(&target, "Image change");
+        let stage = |rust: &mut PictureViewRust, border| {
+            let doc = rust.session.doc.as_ref().unwrap();
+            let mut edited = doc.clone();
+            rust.session.print_resources.apply(&mut edited);
+            let old = read_print_settings(&edited);
+            let mut new = old.clone();
+            new.border = Some(border);
+            update_print_settings(&mut edited, &old, &new).unwrap();
+            let changes = PrintResourceEdits::between(doc, &edited);
+            rust.session.stage_print_resources(changes);
+        };
+        let image_history = rust.session.history.current_id();
+        stage(&mut rust, 4.0);
+        assert_eq!(rust.session.history.current_id(), image_history);
+        let restored = rust.session.history.undo().unwrap();
+        rust.session.doc = Some(restored.doc);
+        assert!(rust.session.derived_dirty());
+        let path = path("print.psb");
+        assert!(save_start_rust(&mut rust, &path, false));
+        stage(&mut rust, 6.0);
+        wait(&rust);
+        assert!(save_finish_rust(&mut rust));
+        assert!(rust.session.dirty);
+        let first = pictura_codec::read_psd(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(read_print_settings(&first).border, Some(4.0));
+        assert!(save_start_rust(&mut rust, &path, false));
+        wait(&rust);
+        assert!(save_finish_rust(&mut rust));
+        assert!(!rust.session.dirty);
+        let second = pictura_codec::read_psd(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(read_print_settings(&second).border, Some(6.0));
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]

@@ -4,6 +4,13 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Print colour management — #634 implemented; acceptance pending**
+  (OpenSpec change `2026-11-18-print-color-management`, archived; capability
+  `interop/print`). Print supports ICC-managed PDF output, hard proofing,
+  shared preview and output marks, local job defaults, and portable PSD/PSB
+  settings. The CMake app and Qt test binaries built at the 80% CPU budget.
+  CI owns subsequent builds and automated tests. The PR checklist covers
+  Photoshop CS6 and CC round-trips and the two physical CUPS checks.
 - **File ▸ Automate ▸ Batch — #618 implemented** (OpenSpec change
   `2026-11-17-file-automate-batch`, archived; capabilities `document/batch-processing`,
   `document/batch-file-naming`, `ui/batch-dialog`, and `document/action-engine`).

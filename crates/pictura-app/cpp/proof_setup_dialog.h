@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QtCore/QStringList>
 #include <QtWidgets/QDialog>
 
 class QCheckBox;
@@ -25,6 +26,7 @@ public:
     explicit ProofSetupDialog(const ProofSetupValues& values, QWidget* parent = nullptr);
 
     ProofSetupValues values() const;
+    void addPrintProfiles(const QStringList& profiles, int selected);
 
     // Test hooks.
     void setDeviceForTest(int device);

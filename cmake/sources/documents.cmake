@@ -64,6 +64,8 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/png_options_dialog.cpp
     crates/pictura-app/cpp/png_options_dialog.h
     crates/pictura-app/cpp/print_dialog.cpp
+    crates/pictura-app/cpp/print_job.cpp
+    crates/pictura-app/cpp/print_page_layout.cpp
     crates/pictura-app/cpp/raw_options_dialog.cpp
     crates/pictura-app/cpp/raw_options_dialog.h
     crates/pictura-app/cpp/save_for_web_color_table.cpp
