@@ -445,9 +445,7 @@ fn save_view_keeps_the_merged_image_tiled() {
     let mut layered = layered_without_composite(w, h);
     layered.channels.push(extra());
     let full = crate::composite_tiled(&layered);
-    let before = pictura_core::materializations();
-    let view = save_view(&layered);
-    assert_eq!(pictura_core::materializations(), before, "merged");
+    let view = pictura_core::assert_no_materialization(|| save_view(&layered));
     assert_eq!(view.composite.channels, 3);
     assert!(view.composite.data.is_tiled());
     assert_eq!(rgb_planes(&view.composite), rgb_planes(&full));
@@ -455,9 +453,7 @@ fn save_view_keeps_the_merged_image_tiled() {
     let mut stored = ramp(w, h);
     stored.channels.push(extra());
     assert_eq!(stored.composite.channels, 4);
-    let before = pictura_core::materializations();
-    let view = save_view(&stored);
-    assert_eq!(pictura_core::materializations(), before, "stored");
+    let view = pictura_core::assert_no_materialization(|| save_view(&stored));
     assert_eq!(view.composite.channels, 3);
     assert!(view.composite.data.is_tiled());
     assert_eq!(rgb_planes(&view.composite), rgb_planes(&stored.composite));
