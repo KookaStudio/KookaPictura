@@ -140,7 +140,7 @@ mod tests {
         let original = doc.layers.get(0).expect("layer").clone();
         let mut second = original.clone();
         second.name = "Layer 1".to_string();
-        second.channels[0].data.as_mut_slice().fill(7);
+        second.channels_mut()[0].data.as_mut_slice().fill(7);
         doc.layers = pictura_core::LayerStack::from_layers(vec![second, original]);
 
         let dir =
@@ -151,7 +151,7 @@ mod tests {
         pictura_codec::warm_encode_idents(&doc);
         write_snapshot(doc.clone(), first.to_str().unwrap(), &cache).expect("first snapshot");
         let before = cache.stats().layers_encoded;
-        doc.layers.get_mut(0).expect("layer").channels[0]
+        doc.layers.get_mut(0).expect("layer").channels_mut()[0]
             .data
             .as_mut_slice()
             .fill(1);
@@ -165,7 +165,7 @@ mod tests {
             .find(|layer| layer.name == "Layer 1")
             .expect("edited layer");
         assert!(edited
-            .channels
+            .channels()
             .iter()
             .find(|channel| channel.id == 0)
             .expect("red channel")

@@ -169,13 +169,16 @@ fn unknown_blend_key_is_none() {
 
 #[test]
 fn extra_block_finds_present_key_and_none_for_absent() {
-    let layer = Layer {
-        extra_blocks: vec![LayerBlock {
-            key: *b"lfx2",
-            data: vec![1, 2, 3, 4].into(),
-        }],
-        ..Default::default()
-    };
+    let layer = crate::Layer::from_parts(
+        crate::LayerParts {
+            extra_blocks: vec![LayerBlock {
+                key: *b"lfx2",
+                data: vec![1, 2, 3, 4].into(),
+            }],
+            ..Default::default()
+        },
+        crate::LayerContent::Pixel,
+    );
     assert_eq!(
         layer.extra_block(b"lfx2").map(|b| b.data.as_slice()),
         Some(&[1, 2, 3, 4][..])
@@ -191,50 +194,54 @@ fn group_vs_pixel_layer() {
         bottom: 4,
         right: 4,
     };
-    let pixel = Layer {
-        name: "Pixel".into(),
-        rect,
-        blend: BlendMode::Normal,
-        opacity: 255,
-        fill: 255,
-        lock: LockFlags::default(),
-        color: ColorLabel::None,
-        clipping: false,
-        visible: true,
-        mask: None,
-        adjustment: None,
-        channels: vec![Channel {
-            id: 0,
-            data: vec![0; 16].into(),
-        }],
-        children: crate::LayerStack::default(),
-        is_group: false,
-        background: false,
-        ..Default::default()
-    };
+    let pixel = crate::Layer::from_parts(
+        crate::LayerParts {
+            name: "Pixel".into(),
+            rect,
+            blend: BlendMode::Normal,
+            opacity: 255,
+            fill: 255,
+            lock: LockFlags::default(),
+            color: ColorLabel::None,
+            clipping: false,
+            visible: true,
+            mask: None,
+            adjustment: None,
+            channels: vec![Channel {
+                id: 0,
+                data: vec![0; 16].into(),
+            }],
+            children: crate::LayerStack::default(),
+            is_group: false,
+            background: false,
+            ..Default::default()
+        },
+        crate::LayerContent::Pixel,
+    );
     assert!(!pixel.is_group());
-    assert_eq!(pixel.channels.len(), 1);
+    assert_eq!(pixel.channels().len(), 1);
 
-    let group = Layer {
-        name: "Group".into(),
-        rect,
-        blend: BlendMode::Normal,
-        opacity: 255,
-        fill: 255,
-        lock: LockFlags::default(),
-        color: ColorLabel::None,
-        clipping: false,
-        visible: true,
-        mask: None,
-        adjustment: None,
-        channels: Vec::new(),
-        children: crate::LayerStack::from_layers(vec![pixel]),
-        is_group: true,
-        background: false,
-        ..Default::default()
-    };
+    let group = crate::Layer::from_parts(
+        crate::LayerParts {
+            name: "Group".into(),
+            rect,
+            blend: BlendMode::Normal,
+            opacity: 255,
+            fill: 255,
+            lock: LockFlags::default(),
+            color: ColorLabel::None,
+            clipping: false,
+            visible: true,
+            mask: None,
+            adjustment: None,
+            channels: Vec::new(),
+            background: false,
+            ..Default::default()
+        },
+        crate::LayerContent::Group(crate::LayerStack::from_layers(vec![pixel])),
+    );
     assert!(group.is_group());
-    assert_eq!(group.children.len(), 1);
+    assert_eq!(group.children().len(), 1);
 }
 
 #[test]
@@ -245,37 +252,43 @@ fn mask_present_and_absent() {
         bottom: 3,
         right: 4,
     };
-    let bare = Layer {
-        name: "bare".into(),
-        rect,
-        blend: BlendMode::Normal,
-        opacity: 255,
-        fill: 255,
-        lock: LockFlags::default(),
-        color: ColorLabel::None,
-        clipping: false,
-        visible: true,
-        mask: None,
-        adjustment: None,
-        channels: Vec::new(),
-        children: crate::LayerStack::default(),
-        is_group: false,
-        background: false,
-        ..Default::default()
-    };
+    let bare = crate::Layer::from_parts(
+        crate::LayerParts {
+            name: "bare".into(),
+            rect,
+            blend: BlendMode::Normal,
+            opacity: 255,
+            fill: 255,
+            lock: LockFlags::default(),
+            color: ColorLabel::None,
+            clipping: false,
+            visible: true,
+            mask: None,
+            adjustment: None,
+            channels: Vec::new(),
+            children: crate::LayerStack::default(),
+            is_group: false,
+            background: false,
+            ..Default::default()
+        },
+        crate::LayerContent::Pixel,
+    );
     assert!(bare.mask.is_none());
 
-    let masked = Layer {
-        mask: Some(LayerMask {
-            rect,
-            default_color: 255,
-            disabled: false,
-            flags: 0,
-            data: Some(vec![255; 4].into()),
-            ..Default::default()
-        }),
-        ..bare
-    };
+    let masked = crate::Layer::from_parts(
+        crate::LayerParts {
+            mask: Some(LayerMask {
+                rect,
+                default_color: 255,
+                disabled: false,
+                flags: 0,
+                data: Some(vec![255; 4].into()),
+                ..Default::default()
+            }),
+            ..crate::LayerParts::from(bare)
+        },
+        crate::LayerContent::Pixel,
+    );
     let mask = masked.mask.expect("mask present");
     assert_eq!(mask.default_color, 255);
     assert_eq!(mask.data.as_deref(), Some(&[255u8, 255, 255, 255][..]));
@@ -311,57 +324,61 @@ fn document_new_has_no_layers_and_keeps_composite() {
 
 #[test]
 fn field_and_method_is_group_agree() {
-    let layer = Layer {
-        name: "g".into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 0,
-            right: 0,
+    let layer = crate::Layer::from_parts(
+        crate::LayerParts {
+            name: "g".into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 0,
+                right: 0,
+            },
+            blend: BlendMode::Normal,
+            opacity: 255,
+            fill: 255,
+            lock: LockFlags::default(),
+            color: ColorLabel::None,
+            clipping: false,
+            visible: true,
+            mask: None,
+            adjustment: None,
+            channels: Vec::new(),
+            background: false,
+            ..Default::default()
         },
-        blend: BlendMode::Normal,
-        opacity: 255,
-        fill: 255,
-        lock: LockFlags::default(),
-        color: ColorLabel::None,
-        clipping: false,
-        visible: true,
-        mask: None,
-        adjustment: None,
-        channels: Vec::new(),
-        children: crate::LayerStack::default(),
-        is_group: true,
-        background: false,
-        ..Default::default()
-    };
+        crate::LayerContent::Group(crate::LayerStack::default()),
+    );
     assert!(layer.is_group());
 }
 
 #[test]
 fn default_layer_attribute_values() {
-    let layer = Layer {
-        name: "d".into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 0,
-            right: 0,
+    let layer = crate::Layer::from_parts(
+        crate::LayerParts {
+            name: "d".into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 0,
+                right: 0,
+            },
+            blend: BlendMode::Normal,
+            opacity: 255,
+            fill: 255,
+            lock: LockFlags::default(),
+            color: ColorLabel::None,
+            clipping: false,
+            visible: true,
+            mask: None,
+            adjustment: None,
+            channels: Vec::new(),
+            children: crate::LayerStack::default(),
+            is_group: false,
+            background: false,
+            ..Default::default()
         },
-        blend: BlendMode::Normal,
-        opacity: 255,
-        fill: 255,
-        lock: LockFlags::default(),
-        color: ColorLabel::None,
-        clipping: false,
-        visible: true,
-        mask: None,
-        adjustment: None,
-        channels: Vec::new(),
-        children: crate::LayerStack::default(),
-        is_group: false,
-        background: false,
-        ..Default::default()
-    };
+        crate::LayerContent::Pixel,
+    );
     assert_eq!(layer.fill, 255);
     assert_eq!(layer.lock.bits(), 0);
     assert_eq!(layer.color, ColorLabel::None);
@@ -404,7 +421,7 @@ fn lock_flags_bits_contains_with_and_all() {
 
 fn channel(layer: &Layer, id: i16) -> &[u8] {
     &layer
-        .channels
+        .channels()
         .iter()
         .find(|c| c.id == id)
         .expect("channel present")
@@ -430,11 +447,11 @@ fn from_rgba_sets_size_mode_depth_and_one_layer() {
         ),
         (0, 0, 3, 2)
     );
-    assert!(layer.smart_object.is_none());
-    assert!(layer.adjustment.is_none());
-    assert!(!layer.is_group);
+    assert!(layer.smart_object().is_none());
+    assert!(layer.adjustment().is_none());
+    assert!(!layer.is_group());
     assert_eq!(
-        layer.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
+        layer.channels().iter().map(|c| c.id).collect::<Vec<_>>(),
         vec![0, 1, 2, -1]
     );
 }
@@ -492,20 +509,23 @@ fn retains_source_depth_tracks_the_retained_store() {
         .source
         .set_native(Some(BitDepth::Sixteen), layered.source.planes().clone())
         .expect("valid source depth");
-    layered.layers = crate::LayerStack::from_layers(vec![Layer {
-        source_channels: Some(SourceChannels {
-            depth: BitDepth::Sixteen,
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 1,
-                right: 1,
-            },
-            planes: vec![(0, Samples::U16(vec![0].into()))],
-            working_idents: [0; 3],
-        }),
-        ..Default::default()
-    }]);
+    layered.layers = crate::LayerStack::from_layers(vec![crate::Layer::from_parts(
+        crate::LayerParts {
+            source_channels: Some(SourceChannels {
+                depth: BitDepth::Sixteen,
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 1,
+                    right: 1,
+                },
+                planes: vec![(0, Samples::U16(vec![0].into()))],
+                working_idents: [0; 3],
+            }),
+            ..Default::default()
+        },
+        crate::LayerContent::Pixel,
+    )]);
     assert!(layered.retains_source_depth());
 }
 
@@ -523,44 +543,45 @@ fn a_cloned_document_shares_its_planes_until_a_write_forks_them() {
 
     assert!(shares(&doc.composite.data, &snapshot.composite.data));
     assert!(shares(
-        &doc.layers[0].channels[0].data,
-        &snapshot.layers[0].channels[0].data
+        &doc.layers[0].channels()[0].data,
+        &snapshot.layers[0].channels()[0].data
     ));
     assert_eq!(doc.composite.data, snapshot.composite.data);
 
     let composite_before = doc.composite.data[0];
-    let plane_before = doc.layers[0].channels[0].data[0];
-    let untouched_before = doc.layers[0].channels[1].data[0];
+    let plane_before = doc.layers[0].channels()[0].data[0];
+    let untouched_before = doc.layers[0].channels()[1].data[0];
 
     doc.composite
         .edit_data(|data| {
             data[0] = !composite_before;
         })
         .expect("pixel edit preserves geometry");
-    doc.layers[0].channels[0].data[0] = !plane_before;
+    doc.layers[0].channels_mut()[0].data[0] = !plane_before;
 
     assert!(!shares(&doc.composite.data, &snapshot.composite.data));
     assert!(!shares(
-        &doc.layers[0].channels[0].data,
-        &snapshot.layers[0].channels[0].data
+        &doc.layers[0].channels()[0].data,
+        &snapshot.layers[0].channels()[0].data
     ));
     assert_eq!(
         snapshot.composite.data[0], composite_before,
         "old bytes survive"
     );
     assert_eq!(
-        snapshot.layers[0].channels[0].data[0], plane_before,
+        snapshot.layers[0].channels()[0].data[0],
+        plane_before,
         "old bytes survive"
     );
     assert_eq!(doc.composite.data[0], !composite_before, "the write landed");
     assert!(
         shares(
-            &doc.layers[0].channels[1].data,
-            &snapshot.layers[0].channels[1].data
+            &doc.layers[0].channels()[1].data,
+            &snapshot.layers[0].channels()[1].data
         ),
         "a plane nobody wrote is still shared"
     );
-    assert_eq!(doc.layers[0].channels[1].data[0], untouched_before);
+    assert_eq!(doc.layers[0].channels()[1].data[0], untouched_before);
 }
 
 #[test]
@@ -810,7 +831,7 @@ fn cow_layer() -> Layer {
         bottom: 2,
         right: 2,
     };
-    Layer {
+    let mut parts = crate::LayerParts {
         rect,
         extra_blocks: vec![LayerBlock {
             key: *b"lfx2",
@@ -852,10 +873,13 @@ fn cow_layer() -> Layer {
             box_bounds: None,
             path: None,
         }),
-        children: LayerStack::from_layers(vec![Layer {
-            name: "child".into(),
-            ..Default::default()
-        }]),
+        children: LayerStack::from_layers(vec![crate::Layer::from_parts(
+            crate::LayerParts {
+                name: "child".into(),
+                ..Default::default()
+            },
+            crate::LayerContent::Pixel,
+        )]),
         source_channels: Some(SourceChannels::new(
             BitDepth::Sixteen,
             rect,
@@ -865,7 +889,19 @@ fn cow_layer() -> Layer {
             ],
         )),
         ..Default::default()
-    }
+    };
+    let smart = Layer::new(crate::LayerContent::SmartObject(std::sync::Arc::new(
+        parts.smart_object.take().unwrap(),
+    )));
+    let text = Layer::new(crate::LayerContent::Text(Some(std::sync::Arc::new(
+        parts.type_tool.take().unwrap(),
+    ))));
+    let mut children = parts.children.as_slice().to_vec();
+    children.extend([smart, text]);
+    Layer::from_parts(
+        parts,
+        crate::LayerContent::Group(LayerStack::from_layers(children)),
+    )
 }
 
 #[test]
@@ -922,16 +958,14 @@ fn a_document_clone_shares_native_samples_and_payload() {
     let a = &doc.layers[0].source_channels.as_ref().unwrap().planes[0].1;
     let b = &clone.layers[0].source_channels.as_ref().unwrap().planes[0].1;
     assert!(matches!((a, b), (Samples::U16(a), Samples::U16(b)) if a.shares(b)));
-    let a = doc.layers[0]
-        .smart_object
-        .as_ref()
+    let a = doc.layers[0].children()[1]
+        .smart_object()
         .unwrap()
         .payload
         .as_ref()
         .unwrap();
-    let b = clone.layers[0]
-        .smart_object
-        .as_ref()
+    let b = clone.layers[0].children()[1]
+        .smart_object()
         .unwrap()
         .payload
         .as_ref()
@@ -943,22 +977,19 @@ fn a_document_clone_shares_native_samples_and_payload() {
 fn a_smart_object_payload_and_raw_section_share() {
     let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
     doc.layer_section_extra = vec![1, 2, 3].into();
-    doc.layers = LayerStack::from_layers(vec![Layer {
-        smart_object: Some(SmartObject::default().with_payload(vec![4, 5, 6])),
-        ..Default::default()
-    }]);
+    doc.layers = LayerStack::from_layers(vec![Layer::new(crate::LayerContent::SmartObject(
+        std::sync::Arc::new(SmartObject::default().with_payload(vec![4, 5, 6])),
+    ))]);
     let clone = doc.clone();
     assert!(doc.layer_section_extra.shares(&clone.layer_section_extra));
     let a = doc.layers[0]
-        .smart_object
-        .as_ref()
+        .smart_object()
         .unwrap()
         .payload
         .as_ref()
         .unwrap();
     let b = clone.layers[0]
-        .smart_object
-        .as_ref()
+        .smart_object()
         .unwrap()
         .payload
         .as_ref()
@@ -970,12 +1001,12 @@ fn a_smart_object_payload_and_raw_section_share() {
 fn a_layer_clone_shares_blocks_and_children() {
     let layer = cow_layer();
     let clone = layer.clone();
-    assert!(layer.extra_blocks[0]
+    assert!(layer.extra_blocks()[0]
         .data
-        .shares(&clone.extra_blocks[0].data));
-    assert!(layer.raw_channels[0]
+        .shares(&clone.extra_blocks()[0].data));
+    assert!(layer.raw_channels()[0]
         .data
-        .shares(&clone.raw_channels[0].data));
+        .shares(&clone.raw_channels()[0].data));
     assert!(layer.blending_ranges.shares(&clone.blending_ranges));
     assert!(layer
         .mask
@@ -992,35 +1023,36 @@ fn a_layer_clone_shares_blocks_and_children() {
         .unwrap()
         .shares(clone.mask.as_ref().unwrap().data.as_ref().unwrap()));
     assert!(layer
-        .adjustment
-        .as_ref()
+        .adjustment()
         .unwrap()
         .data
-        .shares(&clone.adjustment.as_ref().unwrap().data));
-    assert!(layer
-        .smart_object
-        .as_ref()
+        .shares(&clone.adjustment().unwrap().data));
+    assert!(layer.children()[1]
+        .smart_object()
         .unwrap()
         .config_descriptor
-        .shares(&clone.smart_object.as_ref().unwrap().config_descriptor));
-    assert!(layer.smart_object.as_ref().unwrap().smart_filters[0]
+        .shares(
+            &clone.children()[1]
+                .smart_object()
+                .unwrap()
+                .config_descriptor
+        ));
+    assert!(layer.children()[1].smart_object().unwrap().smart_filters[0]
         .options
-        .shares(&clone.smart_object.as_ref().unwrap().smart_filters[0].options));
-    assert!(layer
-        .type_tool
-        .as_ref()
+        .shares(&clone.children()[1].smart_object().unwrap().smart_filters[0].options));
+    assert!(layer.children()[2]
+        .type_tool()
         .unwrap()
         .text_desc
-        .shares(&clone.type_tool.as_ref().unwrap().text_desc));
-    assert!(layer
-        .type_tool
-        .as_ref()
+        .shares(&clone.children()[2].type_tool().unwrap().text_desc));
+    assert!(layer.children()[2]
+        .type_tool()
         .unwrap()
         .warp_desc
-        .shares(&clone.type_tool.as_ref().unwrap().warp_desc));
+        .shares(&clone.children()[2].type_tool().unwrap().warp_desc));
     assert_eq!(
-        layer.children.as_slice().as_ptr(),
-        clone.children.as_slice().as_ptr()
+        layer.children().as_slice().as_ptr(),
+        clone.children().as_slice().as_ptr()
     );
 }
 
@@ -1056,23 +1088,20 @@ fn a_document_clone_shares_preserved_blocks() {
 fn a_written_store_forks_alone() {
     let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
     doc.layer_section_extra = vec![1, 2].into();
-    doc.layers = LayerStack::from_layers(vec![Layer {
-        smart_object: Some(SmartObject::default().with_payload(vec![3, 4])),
-        ..Default::default()
-    }]);
+    doc.layers = LayerStack::from_layers(vec![Layer::new(crate::LayerContent::SmartObject(
+        std::sync::Arc::new(SmartObject::default().with_payload(vec![3, 4])),
+    ))]);
     let clone = doc.clone();
     doc.layer_section_extra.as_mut_slice()[0] = 9;
     assert!(!doc.layer_section_extra.shares(&clone.layer_section_extra));
     let a = doc.layers[0]
-        .smart_object
-        .as_ref()
+        .smart_object()
         .unwrap()
         .payload
         .as_ref()
         .unwrap();
     let b = clone.layers[0]
-        .smart_object
-        .as_ref()
+        .smart_object()
         .unwrap()
         .payload
         .as_ref()

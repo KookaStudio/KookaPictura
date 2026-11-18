@@ -70,7 +70,7 @@ pub fn duplicate_is_content_neutral(doc: &Document, path: &str) -> bool {
 
 /// A pixel layer that replaces its backdrop outright across its rect.
 fn is_plain_opaque(node: &Layer) -> bool {
-    let plain = !node.is_group
+    let plain = !node.is_group()
         && !node.clipping
         && node.visible
         && node.blend == BlendMode::Normal
@@ -79,20 +79,20 @@ fn is_plain_opaque(node: &Layer) -> bool {
         && node.fill == 255
         && node.mask.is_none()
         && node.vector_mask.is_none()
-        && node.adjustment.is_none()
-        && node.smart_object.is_none()
-        && node.type_tool.is_none()
-        && node.raw_channels.is_empty()
+        && !node.has_adjustment_content()
+        && node.smart_object().is_none()
+        && node.type_tool().is_none()
+        && node.raw_channels().is_empty()
         && node.blend_if.is_none()
         && node.knockout == Knockout::None
         && node
-            .extra_blocks
+            .extra_blocks()
             .iter()
             .all(|block| METADATA_BLOCKS.contains(&&block.key));
     if !plain {
         return false;
     }
-    match node.channels.iter().find(|c| c.id == -1) {
+    match node.channels().iter().find(|c| c.id == -1) {
         Some(alpha) => alpha.data.all_eq(255),
         None => node.background,
     }
@@ -103,20 +103,20 @@ fn is_plain_opaque(node: &Layer) -> bool {
 pub(crate) fn layer_is_inert(node: &Layer) -> bool {
     let bare = node.mask.is_none()
         && node.vector_mask.is_none()
-        && node.adjustment.is_none()
-        && node.smart_object.is_none()
-        && node.type_tool.is_none()
-        && node.extra_blocks.is_empty()
-        && node.raw_channels.is_empty()
+        && !node.has_adjustment_content()
+        && node.smart_object().is_none()
+        && node.type_tool().is_none()
+        && node.extra_blocks().is_empty()
+        && node.raw_channels().is_empty()
         && node.blend_if.is_none()
         && node.knockout == Knockout::None;
     if !bare {
         return false;
     }
-    if node.is_group {
-        return node.children.is_empty();
+    if node.is_group() {
+        return node.children().is_empty();
     }
-    node.channels
+    node.channels()
         .iter()
         .find(|c| c.id == -1)
         .is_some_and(|alpha| alpha.data.all_eq(0))
@@ -197,7 +197,7 @@ mod tests {
 
     fn pixel(name: &str, value: u8, alpha: u8) -> Layer {
         let n = (W * H) as usize;
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: name.into(),
             rect: PsdRect {
                 top: 0,
@@ -216,19 +216,19 @@ mod tests {
                 })
                 .to_vec(),
             ..Default::default()
-        }
+        })
     }
 
     fn clipped(name: &str, value: u8) -> Layer {
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             clipping: true,
             blend: BlendMode::Multiply,
-            ..pixel(name, value, 200)
-        }
+            ..pictura_core::LayerParts::from(pixel(name, value, 200))
+        })
     }
 
     fn group(blend: BlendMode, children: Vec<Layer>) -> Layer {
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "group".into(),
             blend,
             opacity: 255,
@@ -237,7 +237,7 @@ mod tests {
             is_group: true,
             children: LayerStack::from_layers(children),
             ..Default::default()
-        }
+        })
     }
 
     fn doc(layers: Vec<Layer>) -> Document {
@@ -305,7 +305,7 @@ mod tests {
 
     fn background() -> Layer {
         let mut layer = pixel("Background", 90, 255);
-        layer.channels.retain(|c| c.id != -1);
+        layer.channels_mut().retain(|c| c.id != -1);
         layer.background = true;
         layer
     }
@@ -362,11 +362,14 @@ mod tests {
         type Tweak = (&'static str, fn(&mut Layer));
         let tweaks: Vec<Tweak> = vec![
             ("translucent", |l| {
-                l.channels.iter_mut().find(|c| c.id == -1).unwrap().data =
-                    vec![200; (W * H) as usize].into();
+                l.channels_mut()
+                    .iter_mut()
+                    .find(|c| c.id == -1)
+                    .unwrap()
+                    .data = vec![200; (W * H) as usize].into();
             }),
             ("one soft pixel", |l| {
-                l.channels
+                l.channels_mut()
                     .iter_mut()
                     .find(|c| c.id == -1)
                     .unwrap()
@@ -380,13 +383,15 @@ mod tests {
             ("clipped", |l| l.clipping = true),
             ("knockout", |l| l.knockout = Knockout::Shallow),
             ("effects", |l| {
-                l.extra_blocks.push(pictura_core::LayerBlock {
-                    key: *b"lfx2",
-                    ..Default::default()
+                pictura_codec::edit_layer(l, |parts| {
+                    parts.extra_blocks.push(pictura_core::LayerBlock {
+                        key: *b"lfx2",
+                        ..Default::default()
+                    })
                 })
             }),
             ("no alpha, not a Background", |l| {
-                l.channels.retain(|c| c.id != -1)
+                l.channels_mut().retain(|c| c.id != -1)
             }),
         ];
         for (name, tweak) in tweaks {
@@ -418,9 +423,11 @@ mod tests {
     #[test]
     fn metadata_blocks_do_not_exclude_a_duplicate() {
         let mut base = pixel("base", 90, 255);
-        base.extra_blocks.push(pictura_core::LayerBlock {
-            key: *b"luni",
-            ..Default::default()
+        pictura_codec::edit_layer(base.as_mut(), |parts| {
+            parts.extra_blocks.push(pictura_core::LayerBlock {
+                key: *b"luni",
+                ..Default::default()
+            })
         });
         let mut d = doc(vec![base]);
         let created = crate::duplicate_paths(&mut d, &["0"]);
@@ -432,7 +439,7 @@ mod tests {
         let mut d = doc(vec![background()]);
         let created = crate::duplicate_paths(&mut d, &["0"]);
         let copy = crate::resolve_path(&d, &created[0]).unwrap();
-        let alpha = copy.channels.iter().find(|c| c.id == -1).unwrap();
+        let alpha = copy.channels().iter().find(|c| c.id == -1).unwrap();
         assert_eq!(alpha.data.len(), (W * H) as usize);
         assert!(alpha.data.iter().all(|&a| a == 255));
     }
@@ -454,10 +461,10 @@ mod tests {
     fn inert_move_out_of_a_run_is_neutral() {
         let before = doc(vec![
             pixel("base", 90, 255),
-            Layer {
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 clipping: true,
-                ..pixel("new", 0, 0)
-            },
+                ..pictura_core::LayerParts::from(pixel("new", 0, 0))
+            }),
             pixel("top", 50, 255),
         ]);
         let (after, moved) = move_to(&before, "1", "2", 0);
@@ -522,10 +529,10 @@ mod tests {
         let before = doc(vec![
             pixel("empty", 0, 0),
             pixel("content", 90, 255),
-            Layer {
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 knockout: Knockout::Deep,
-                ..pixel("knockout", 40, 255)
-            },
+                ..pictura_core::LayerParts::from(pixel("knockout", 40, 255))
+            }),
         ]);
         let (after, moved) = move_to(&before, "0", "2", 0);
         assert_eq!(moved, "2");
@@ -590,10 +597,10 @@ mod tests {
             ],
             vec![
                 pixel("base", 90, 255),
-                Layer {
+                pictura_codec::layer_from_parts(pictura_core::LayerParts {
                     clipping: true,
-                    ..pixel("new", 0, 0)
-                },
+                    ..pictura_core::LayerParts::from(pixel("new", 0, 0))
+                }),
                 pixel("top", 50, 255),
             ],
             vec![group(BlendMode::Normal, Vec::new()), clipped("clip", 40)],
@@ -636,7 +643,7 @@ mod tests {
                 format!("{prefix}/{i}")
             };
             out.push(path.clone());
-            all_paths(&layer.children, &path, out);
+            all_paths(layer.children(), &path, out);
         }
     }
 
@@ -645,10 +652,10 @@ mod tests {
     /// predicate calls neutral must leave the composite byte-identical.
     #[test]
     fn neutral_insertions_preserve_composite() {
-        let knockout = Layer {
+        let knockout = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             knockout: Knockout::Shallow,
-            ..pixel("ko", 30, 180)
-        };
+            ..pictura_core::LayerParts::from(pixel("ko", 30, 180))
+        });
         let stacks = vec![
             vec![
                 pixel("base", 90, 255),
@@ -678,10 +685,12 @@ mod tests {
             for target in &targets {
                 let fresh = [
                     super::super::create::transparent_layer(W, H, "new"),
-                    Layer {
+                    pictura_codec::layer_from_parts(pictura_core::LayerParts {
                         clipping: true,
-                        ..super::super::create::transparent_layer(W, H, "new clip")
-                    },
+                        ..pictura_core::LayerParts::from(super::super::create::transparent_layer(
+                            W, H, "new clip",
+                        ))
+                    }),
                     super::super::create::empty_group("new group"),
                 ];
                 for node in fresh {

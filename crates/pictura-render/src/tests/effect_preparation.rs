@@ -125,9 +125,9 @@ fn banded_nested_effect_builds_overlap() {
             H,
             vec![group("outer", BlendMode::Normal, 255, None, children)],
         );
-        let inner = &d.layers[0].children;
+        let inner = d.layers[0].children();
         let targets = if separate_groups {
-            [&inner[0].children[0], &inner[1].children[0]]
+            [&inner[0].children()[0], &inner[1].children()[0]]
         } else {
             [&inner[0], &inner[1]]
         };
@@ -149,7 +149,7 @@ fn banded_hidden_subtrees_build_no_effects() {
     let guard = Guard::new(&d, vec![]);
     let out = pool(2).install(|| render(&d, true));
     let records = guard.probe.snapshot();
-    for layer in [&d.layers[3], &d.layers[4], &d.layers[4].children[0]] {
+    for layer in [&d.layers[3], &d.layers[4], &d.layers[4].children()[0]] {
         assert_eq!(count(&records, layer, |_| true), 0);
     }
     drop(guard);

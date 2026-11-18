@@ -1,6 +1,8 @@
 #include "tools.h"
 
+#include "api/document_bridge.h"
 #include "api/engine_bridge.h"
+#include "api/paint_bridge.h"
 
 #include <QtCore/QByteArray>
 #include <QtCore/QHash>
@@ -103,6 +105,17 @@ bool toolInEdition(ToolId id)
 }
 
 bool toolAvailable(ToolId id) { return toolInfo(id).implemented && toolInEdition(id); }
+
+bool toolAllowedForDocument(ToolId id, const PictureView* view)
+{
+    if (!view || !view->has_document()) {
+        return true;
+    }
+    if (id == ToolId::ColorReplacement) {
+        return color_replacement_available(image_mode(*view));
+    }
+    return true;
+}
 
 bool isBrushTool(ToolId id)
 {

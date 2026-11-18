@@ -7,9 +7,10 @@
 
 namespace pictura {
 
-bool PicturaMainWindow::saveActiveAsWithRememberedOptions(const QString& path)
+bool PicturaMainWindow::saveActiveAsWithRememberedOptions(const QString& path,
+                                                          const QJsonObject& stepOptions)
 {
-    return importSave_ && importSave_->saveActiveAtPath(path);
+    return importSave_ && importSave_->saveActiveAtPath(path, stepOptions);
 }
 
 bool PicturaMainWindow::saveActiveAsWithOptions(const QString& path, SaveFormatKind hint)

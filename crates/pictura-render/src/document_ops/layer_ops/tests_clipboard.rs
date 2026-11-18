@@ -21,7 +21,7 @@ fn select(x0: usize, y0: usize, x1: usize, y1: usize) -> Plane<u8> {
 
 fn alpha(doc: &pictura_core::Document, index: usize) -> &[u8] {
     &doc.layers[index]
-        .channels
+        .channels()
         .iter()
         .find(|c| c.id == -1)
         .unwrap()
@@ -71,7 +71,7 @@ fn copy_without_a_selection_takes_the_layer_clipped_to_the_canvas() {
 #[test]
 fn copy_refuses_groups_empty_selections_and_transparent_pixels() {
     let mut clear = pixel_layer("clear", 4, 4, 40);
-    clear.channels[3].data.fill(0);
+    clear.channels_mut()[3].data.fill(0);
     let doc = doc_with(vec![pixel_layer("base", 4, 4, 40), clear, empty_group("g")]);
 
     assert!(copy_layer(&doc, "2", None).is_none(), "group");
@@ -96,7 +96,7 @@ fn copy_refuses_groups_empty_selections_and_transparent_pixels() {
 #[test]
 fn copy_replicates_a_grayscale_layer_into_rgb() {
     let mut layer = pixel_layer("gray", 4, 4, 90);
-    layer.channels.retain(|c| c.id == 0 || c.id == -1);
+    layer.channels_mut().retain(|c| c.id == 0 || c.id == -1);
     let doc = doc_with(vec![layer]);
     let clip = copy_layer(&doc, "0", None).unwrap();
 
@@ -181,7 +181,7 @@ fn clear_respects_pixel_and_transparency_locks() {
 #[test]
 fn clear_fills_a_background_toward_white() {
     let mut background = pixel_layer("Background", 4, 4, 40);
-    background.channels.retain(|c| c.id != -1);
+    background.channels_mut().retain(|c| c.id != -1);
     background.lock = LockFlags::default().with(LockFlags::TRANSPARENCY, true);
     let mut doc = doc_with(vec![background]);
 
@@ -192,7 +192,7 @@ fn clear_fills_a_background_toward_white() {
             None => false,
         }
     });
-    let red = &doc.layers[0].channels[0].data;
+    let red = &doc.layers[0].channels()[0].data;
     assert_eq!((red[0], red[1]), (255, 40));
 }
 
@@ -216,7 +216,7 @@ fn paste_inserts_a_layer_above_the_target_with_the_mask_as_alpha() {
     assert!(layer.mask.is_none());
     let plane = |id: i16| {
         layer
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == id)
             .unwrap()
@@ -280,7 +280,7 @@ fn paste_into_and_outside_mask_by_the_selection() {
 #[test]
 fn cut_then_paste_in_place_restores_the_pixels() {
     let mut layer = pixel_layer("base", 4, 4, 40);
-    layer.channels[0].data[5] = 200;
+    layer.channels_mut()[0].data[5] = 200;
     let mut doc = doc_with(vec![layer]);
     let sel = select(1, 1, 3, 3);
 
@@ -306,8 +306,8 @@ fn cut_then_paste_in_place_restores_the_pixels() {
     let pasted = &doc.layers[1];
     assert_eq!(path, "1");
     assert_eq!(pasted.rect, prect(1, 1, 3, 3));
-    assert_eq!(pasted.channels[0].data[0], 200);
-    assert!(pasted.channels[3].data.iter().all(|&a| a == 255));
+    assert_eq!(pasted.channels()[0].data[0], 200);
+    assert!(pasted.channels()[3].data.iter().all(|&a| a == 255));
 }
 
 #[test]

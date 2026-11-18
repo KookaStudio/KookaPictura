@@ -9,7 +9,7 @@
 //! actual SVG text is built by `pictura_codec::svg`; this module only decodes
 //! the engine views the codec cannot reach.
 
-use pictura_adjust::{Adjustment, GradientFillParams, GradientKind, PatternFillParams};
+use pictura_adjust::{GradientFillParams, GradientKind, PatternFillParams};
 use pictura_codec::{
     encode_svg, SvgContent, SvgGradient, SvgGradientStop, SvgNode, SvgOptions, SvgPaint,
     SvgPattern, SvgStroke, SvgStrokePosition,
@@ -100,7 +100,7 @@ fn plan_stack(doc: &Document, stack: &[Layer], raster: &mut Rasterize) -> Plan {
         }
         return Plan::Node(Box::new(SvgNode::plain(raster_content(doc, stack, raster))));
     }
-    if base.is_group {
+    if base.is_group() {
         return plan_group(doc, base, raster);
     }
     Plan::Node(Box::new(leaf_node(doc, base, raster)))
@@ -114,7 +114,7 @@ fn plan_group(doc: &Document, group: &Layer, raster: &mut Rasterize) -> Plan {
         if group.opacity != 255 || masked {
             return Plan::Backdrop;
         }
-        return match walk(doc, &group.children, false, raster) {
+        return match walk(doc, group.children(), false, raster) {
             Some(children) => Plan::Node(Box::new(SvgNode::plain(SvgContent::Group {
                 children,
                 isolated: false,
@@ -126,7 +126,7 @@ fn plan_group(doc: &Document, group: &Layer, raster: &mut Rasterize) -> Plan {
         raster_content(doc, &[normalized(group)], raster)
     } else {
         SvgContent::Group {
-            children: walk(doc, &group.children, true, raster).unwrap_or_default(),
+            children: walk(doc, group.children(), true, raster).unwrap_or_default(),
             isolated: true,
         }
     };
@@ -155,7 +155,7 @@ fn shape_content(doc: &Document, layer: &Layer) -> Option<SvgContent> {
     let subpaths = match crate::layer_shape_paths(layer, doc.width, doc.height) {
         Some(subpaths) => subpaths,
         None => match &fill {
-            Adjustment::GradientFill(_) | Adjustment::PatternFill(_)
+            pictura_core::FillContent::Gradient(_) | pictura_core::FillContent::Pattern(_)
                 if crate::is_fill_content_layer(layer) =>
             {
                 vec![rect_outline(layer.rect)?]
@@ -179,14 +179,13 @@ fn shape_content(doc: &Document, layer: &Layer) -> Option<SvgContent> {
 }
 
 /// The fill paint for a decoded fill, or `None` when SVG cannot express it.
-fn fill_paint(fill: &Adjustment, rect: PsdRect, doc: &Document) -> Option<SvgPaint> {
+fn fill_paint(fill: &pictura_core::FillContent, rect: PsdRect, doc: &Document) -> Option<SvgPaint> {
     match fill {
-        Adjustment::SolidFill(rgba) => Some(SvgPaint::Solid(*rgba)),
-        Adjustment::GradientFill(params) => gradient_paint(params, rect),
-        Adjustment::PatternFill(params) => {
+        pictura_core::FillContent::Solid(rgba) => Some(SvgPaint::Solid(*rgba)),
+        pictura_core::FillContent::Gradient(params) => gradient_paint(params, rect),
+        pictura_core::FillContent::Pattern(params) => {
             Some(SvgPaint::Pattern(pattern_paint(doc, params, rect)))
         }
-        _ => None,
     }
 }
 
@@ -471,11 +470,10 @@ fn styled(layer: &Layer, content: SvgContent) -> SvgNode {
 /// `layer` at full opacity and Normal blend, so its raster does not bake in
 /// what its node's `<g>` applies.
 fn normalized(layer: &Layer) -> Layer {
-    Layer {
-        opacity: 255,
-        blend: BlendMode::Normal,
-        ..layer.clone()
-    }
+    let mut normalized = layer.clone();
+    normalized.opacity = 255;
+    normalized.blend = BlendMode::Normal;
+    normalized
 }
 
 fn raster_content(doc: &Document, layers: &[Layer], raster: &mut Rasterize) -> SvgContent {
@@ -491,7 +489,7 @@ fn raster_content(doc: &Document, layers: &[Layer], raster: &mut Rasterize) -> S
 /// A true adjustment layer, which recolors what lies beneath it. Fill layers
 /// also carry an adjustment block but paint their own pixels.
 fn is_adjustment_layer(layer: &Layer) -> bool {
-    layer.adjustment.is_some() && !crate::is_fill_content_layer(layer)
+    layer.has_adjustment_content() && !crate::is_fill_content_layer(layer)
 }
 
 /// Whether SVG can express `blend`: Normal, pass-through (handled by the group

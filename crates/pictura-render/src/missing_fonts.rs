@@ -24,7 +24,7 @@ pub fn replace_type_fonts(doc: &mut Document, missing: &[&str]) -> usize {
             } else {
                 format!("{prefix}/{i}")
             };
-            walk(&layer.children, &path, missing, out);
+            walk(layer.children(), &path, missing, out);
             let font = crate::type_layer_spec(layer).map(|s| s.character.font_family);
             if font.is_some_and(|f| missing.contains(&f.as_str())) {
                 out.push(path);

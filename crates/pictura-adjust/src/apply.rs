@@ -81,15 +81,6 @@ pub fn apply_with_coverage_in_mode(
             Ok(())
         }
         Adjustment::GradientMap(p) => gradient_map(p, buf, n),
-        Adjustment::GradientFill(_) => Err(AdjustError::Unsupported(
-            "gradient fill is composited, not applied destructively".into(),
-        )),
-        Adjustment::SolidFill(_) => Err(AdjustError::Unsupported(
-            "solid fill is composited, not applied destructively".into(),
-        )),
-        Adjustment::PatternFill(_) => Err(AdjustError::Unsupported(
-            "pattern fill is composited, not applied destructively".into(),
-        )),
         Adjustment::ColorLookup(p) => crate::lut::apply_color_lookup(p, buf),
         Adjustment::ReplaceColor(p) => replace_color(p, buf, n),
         Adjustment::MatchColor(p) => match_color(p, buf, n),

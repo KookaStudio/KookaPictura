@@ -212,8 +212,7 @@ pub(super) fn session_source(
         return None;
     }
     if layer
-        .smart_object
-        .as_ref()
+        .smart_object()
         .is_some_and(|so| so.kind == pictura_core::SmartObjectKind::Embedded)
     {
         let buffer = pictura_render::smart_source_buffer(doc, path)?;
@@ -232,7 +231,7 @@ pub(super) fn session_source(
     let plane = w as usize * h as usize;
     let channel = |id: i16| {
         layer
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == id && c.data.len() == plane)
             .map(|c| c.data.clone())
@@ -614,7 +613,7 @@ mod tests {
         }
         let payload = pictura_codec::write_psd(&payload_doc).expect("payload writes");
 
-        let mut layer = pictura_core::Layer {
+        let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "Smart".into(),
             rect: pictura_core::PsdRect {
                 top: 0,
@@ -631,10 +630,10 @@ mod tests {
                 .with_payload(payload),
             ),
             ..Default::default()
-        };
+        });
         // The baked proxy is the corrected (black) pixels, unlike the source.
         for id in 0..3i16 {
-            layer.channels.push(pictura_core::Channel {
+            layer.channels_mut().push(pictura_core::Channel {
                 id,
                 data: vec![0u8; 4].into(),
             });

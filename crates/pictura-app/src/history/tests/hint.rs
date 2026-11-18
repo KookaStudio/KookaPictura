@@ -290,7 +290,7 @@ fn each_bounded_op_hint_matches() {
         }
     });
     assert_hint_matches(|doc| {
-        doc.layers[0].channels[0].data.as_mut_slice()[16 + 1] = 200;
+        doc.layers[0].channels_mut()[0].data.as_mut_slice()[16 + 1] = 200;
         doc.composite
             .replace(pictura_render::composite_rgba(doc))
             .expect("valid composite");
@@ -334,8 +334,8 @@ fn random_hinted_and_unhinted_captures_match() {
         write_composite(&mut doc, x, y, value);
         write_composite(&mut plain, x, y, value);
         let layer_byte = y * 16 + x;
-        doc.layers[0].channels[0].data.as_mut_slice()[layer_byte] = value;
-        plain.layers[0].channels[0].data.as_mut_slice()[layer_byte] = value;
+        doc.layers[0].channels_mut()[0].data.as_mut_slice()[layer_byte] = value;
+        plain.layers[0].channels_mut()[0].data.as_mut_slice()[layer_byte] = value;
         h1.capture_live_with(
             &mut doc,
             &None,

@@ -632,7 +632,7 @@ mod tests {
         ));
         let dirty = stroke.finish().unwrap();
         assert_eq!(
-            mask_doc.document.layers[0].channels[0].data[36 * 64 + 32],
+            mask_doc.document.layers[0].channels()[0].data[36 * 64 + 32],
             0
         );
         assert!(pictura_render::write_mask_back(

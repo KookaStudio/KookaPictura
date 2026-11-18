@@ -97,7 +97,7 @@ impl AlignEdge {
 /// layer rect when it has no transparency channel. `None` for a group, an
 /// adjustment, or a layer with nothing showing.
 fn content_bounds(layer: &Layer) -> Option<PsdRect> {
-    if layer.is_group || layer.adjustment.is_some() {
+    if layer.is_group() || layer.has_adjustment_content() {
         return None;
     }
     let r = layer.rect;
@@ -105,7 +105,7 @@ fn content_bounds(layer: &Layer) -> Option<PsdRect> {
     if w == 0 || h == 0 {
         return None;
     }
-    let Some(alpha) = layer.channels.iter().find(|c| c.id == -1) else {
+    let Some(alpha) = layer.channels().iter().find(|c| c.id == -1) else {
         return Some(r);
     };
     let local = super::clipboard::coverage_bounds(&alpha.data, w as u32, h as u32)?;
@@ -119,7 +119,7 @@ fn content_bounds(layer: &Layer) -> Option<PsdRect> {
 
 /// Whether [`content_bounds`] would box something, without building the box.
 fn has_content(layer: &Layer) -> bool {
-    if layer.is_group || layer.adjustment.is_some() {
+    if layer.is_group() || layer.has_adjustment_content() {
         return false;
     }
     let (w, h) = (layer.rect.width().max(0), layer.rect.height().max(0));
@@ -127,7 +127,7 @@ fn has_content(layer: &Layer) -> bool {
         return false;
     }
     layer
-        .channels
+        .channels()
         .iter()
         .find(|c| c.id == -1)
         .is_none_or(|alpha| super::clipboard::plane_has_coverage(&alpha.data, w as u32, h as u32))
@@ -251,20 +251,20 @@ mod tests {
         let mut corner = pixel_layer("corner", 4, 4, 0);
         for layer in [&mut empty, &mut corner] {
             let alpha = layer
-                .channels
+                .channels_mut()
                 .iter_mut()
                 .find(|c| c.id == -1)
                 .expect("alpha");
             alpha.data.as_mut_slice().fill(0);
         }
         let alpha = corner
-            .channels
+            .channels_mut()
             .iter_mut()
             .find(|c| c.id == -1)
             .expect("alpha");
         alpha.data.as_mut_slice()[15] = 1;
         let mut no_alpha = pixel_layer("no alpha", 4, 4, 9);
-        no_alpha.channels.retain(|c| c.id != -1);
+        no_alpha.channels_mut().retain(|c| c.id != -1);
         let mut flat = pixel_layer("flat", 4, 4, 9);
         flat.rect.right = flat.rect.left;
         let d = doc_with(vec![
@@ -366,8 +366,8 @@ mod tests {
         let alpha: Vec<u8> = (0..100 * 100)
             .map(|i| u8::from((40..50).contains(&(i % 100)) && (40..50).contains(&(i / 100))) * 255)
             .collect();
-        big.channels.retain(|c| c.id != -1);
-        big.channels.push(Channel {
+        big.channels_mut().retain(|c| c.id != -1);
+        big.channels_mut().push(Channel {
             id: -1,
             data: alpha.into(),
         });

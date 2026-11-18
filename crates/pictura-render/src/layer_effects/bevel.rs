@@ -22,7 +22,6 @@
 //! supports only; `Scale Effects`, the exact inter-effect order and the
 //! highlight/shadow order are not modelled.
 
-use pictura_adjust::Adjustment;
 use pictura_codec::DescValue;
 use pictura_core::{BlendMode, Document, Layer, PsdRect};
 use rayon::prelude::*;
@@ -239,7 +238,7 @@ pub(super) fn build_bevel_emboss(
     doc: &Document,
     bevel: &BevelEmboss,
     build: BuildRegion,
-    fill: Option<&Adjustment>,
+    fill: Option<&pictura_core::FillContent>,
 ) -> Vec<EffectPass> {
     // Stroke Emboss lights only a Stroke effect's band, which is not modelled.
     if bevel.style == BevelStyle::Stroke {

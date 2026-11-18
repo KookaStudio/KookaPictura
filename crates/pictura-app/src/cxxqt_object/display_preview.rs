@@ -44,7 +44,7 @@ impl DisplayPreview {
                 return false;
             };
             match self.kind {
-                PreviewKind::Adjustment => before.adjustment == now.adjustment,
+                PreviewKind::Adjustment => before.adjustment() == now.adjustment(),
                 PreviewKind::Opacity => before.opacity == now.opacity,
                 PreviewKind::Fill => before.fill == now.fill,
             }
@@ -372,7 +372,9 @@ mod tests {
             let index = pictura_render::add_layer(&mut doc, -1, "adjustment");
             let path = index.to_string();
             if let Some(layer) = pictura_render::resolve_path_mut(&mut doc, &path) {
-                layer.adjustment = Some(pictura_render::encode_invert());
+                pictura_codec::edit_layer(layer, |parts| {
+                    parts.adjustment = Some(pictura_render::encode_invert())
+                });
             }
             view.session.doc = Some(doc);
             path

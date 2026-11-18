@@ -286,7 +286,7 @@ pub(super) fn apply_op_active_region(
         pictura_core::layer_bounds::shrink_layer_to(layer, preview.rect);
         restored
     });
-    if layer.is_group || layer.adjustment.is_some() {
+    if layer.is_group() || layer.has_adjustment_content() {
         rust.filter_error = Some("the active layer cannot take a filter".to_string());
         return None;
     }
@@ -446,11 +446,11 @@ pub(super) fn pixel_filter_target(rust: &mut PictureViewRust) -> Option<String> 
         return None;
     }
     // A Smart Object takes Smart Filters only (`filter_tools::smart_apply`).
-    if layer.smart_object.is_some() {
+    if layer.smart_object().is_some() {
         rust.filter_error = Some("the smart object is not directly editable".to_string());
         return None;
     }
-    if layer.is_group || layer.adjustment.is_some() {
+    if layer.is_group() || layer.has_adjustment_content() {
         rust.filter_error = Some("the active layer cannot take a filter".to_string());
         return None;
     }

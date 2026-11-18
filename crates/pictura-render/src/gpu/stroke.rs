@@ -474,46 +474,48 @@ mod tests {
         let n = (w * h) as usize;
         let (r, g, b, a) = rgba;
         {
-            let _ = doc.layers.push(Layer {
-                name: "px".into(),
-                rect: PsdRect {
-                    top: 0,
-                    left: 0,
-                    bottom: h as i32,
-                    right: w as i32,
-                },
-                blend: BlendMode::Normal,
-                opacity: 255,
-                fill: 255,
-                lock: LockFlags::default(),
-                color: ColorLabel::None,
-                clipping: false,
-                visible: true,
-                mask: None,
-                adjustment: None,
-                channels: vec![
-                    Channel {
-                        id: 0,
-                        data: vec![r; n].into(),
+            let _ = doc
+                .layers
+                .push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
+                    name: "px".into(),
+                    rect: PsdRect {
+                        top: 0,
+                        left: 0,
+                        bottom: h as i32,
+                        right: w as i32,
                     },
-                    Channel {
-                        id: 1,
-                        data: vec![g; n].into(),
-                    },
-                    Channel {
-                        id: 2,
-                        data: vec![b; n].into(),
-                    },
-                    Channel {
-                        id: -1,
-                        data: vec![a; n].into(),
-                    },
-                ],
-                children: pictura_core::LayerStack::default(),
-                is_group: false,
-                background: false,
-                ..Default::default()
-            });
+                    blend: BlendMode::Normal,
+                    opacity: 255,
+                    fill: 255,
+                    lock: LockFlags::default(),
+                    color: ColorLabel::None,
+                    clipping: false,
+                    visible: true,
+                    mask: None,
+                    adjustment: None,
+                    channels: vec![
+                        Channel {
+                            id: 0,
+                            data: vec![r; n].into(),
+                        },
+                        Channel {
+                            id: 1,
+                            data: vec![g; n].into(),
+                        },
+                        Channel {
+                            id: 2,
+                            data: vec![b; n].into(),
+                        },
+                        Channel {
+                            id: -1,
+                            data: vec![a; n].into(),
+                        },
+                    ],
+                    children: pictura_core::LayerStack::default(),
+                    is_group: false,
+                    background: false,
+                    ..Default::default()
+                }));
         };
         doc
     }
@@ -522,7 +524,7 @@ mod tests {
         let n = (w * h) as usize;
         let at = |id: i16| {
             layer
-                .channels
+                .channels()
                 .iter()
                 .find(|c| c.id == id)
                 .map(|c| c.data.as_slice())
@@ -714,19 +716,21 @@ mod tests {
         let dabs: Vec<(f32, f32)> = (0..8)
             .map(|i| (16.0 + i as f32 * 5.0, 16.0 + i as f32 * 5.0))
             .collect();
-        let flat = |v: u8| Layer {
-            name: "mask".into(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: h as i32,
-                right: w as i32,
-            },
-            channels: vec![Channel {
-                id: 0,
-                data: vec![v; (w * h) as usize].into(),
-            }],
-            ..Default::default()
+        let flat = |v: u8| {
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
+                name: "mask".into(),
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: h as i32,
+                    right: w as i32,
+                },
+                channels: vec![Channel {
+                    id: 0,
+                    data: vec![v; (w * h) as usize].into(),
+                }],
+                ..Default::default()
+            })
         };
 
         // CPU oracle on the 1-channel mask document.
@@ -745,7 +749,7 @@ mod tests {
         }
         stroke.finish();
         let cpu = doc.layers[0]
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == 0)
             .unwrap()

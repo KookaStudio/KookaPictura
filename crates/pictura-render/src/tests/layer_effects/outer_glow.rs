@@ -30,7 +30,7 @@ fn glow_layer(block: Option<LayerBlock>) -> Layer {
         255,
     );
     if let Some(block) = block {
-        layer.extra_blocks = vec![block];
+        pictura_codec::edit_layer(layer.as_mut(), |parts| parts.extra_blocks = vec![block]);
     }
     layer
 }
@@ -561,7 +561,7 @@ fn outer_glow_fixture_decodes_and_composites() {
     let with_effect = composite_rgba(&d);
     let mut plain = d.clone();
     for l in plain.layers.iter_mut() {
-        l.extra_blocks.clear();
+        pictura_codec::edit_layer(l, |parts| parts.extra_blocks.clear());
     }
     assert_ne!(with_effect, composite_rgba(&plain), "the glow renders");
 }
@@ -571,7 +571,7 @@ fn outer_glow_fixture_decodes_and_composites() {
 #[test]
 fn solid_fill_glow_follows_payload_alpha() {
     let fill = |alpha: u8| {
-        let mut layer = Layer {
+        let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "Solid".into(),
             rect: rect(3, 3, 6, 6),
             adjustment: Some(AdjustmentData {
@@ -579,8 +579,10 @@ fn solid_fill_glow_follows_payload_alpha() {
                 data: vec![255, 0, 0, alpha].into(),
             }),
             ..Default::default()
-        };
-        layer.extra_blocks = vec![glow_block(&GlowSpec::default())];
+        });
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks = vec![glow_block(&GlowSpec::default())]
+        });
         compose(layer)
     };
     assert!(left_strip_changed(&fill(255)) > 0, "an opaque fill glows");
@@ -599,16 +601,18 @@ fn pattern_fill_glow_is_confined_to_the_fill() {
         link_with_layer: true,
         origin: (0, 0),
     };
-    let mut layer = Layer {
+    let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Pattern".into(),
         rect: rect(3, 3, 6, 6),
         adjustment: Some(ptfl(&params)),
         ..Default::default()
-    };
-    layer.extra_blocks = vec![glow_block(&GlowSpec {
-        size: 2.0,
-        ..Default::default()
-    })];
+    });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks = vec![glow_block(&GlowSpec {
+            size: 2.0,
+            ..Default::default()
+        })]
+    });
     let mut d = pattern_fixture_doc();
     let backdrop = solid(
         "Backdrop",
@@ -627,7 +631,7 @@ fn pattern_fill_glow_is_confined_to_the_fill() {
 
 #[test]
 fn channel_less_smart_object_glow_covers_the_layer_rect() {
-    let mut layer = Layer {
+    let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Smart".into(),
         rect: rect(3, 3, 6, 6),
         channels: Vec::new(),
@@ -640,8 +644,10 @@ fn channel_less_smart_object_glow_covers_the_layer_rect() {
             .with_payload(vec![0; 4]),
         ),
         ..Default::default()
-    };
-    layer.extra_blocks = vec![glow_block(&GlowSpec::default())];
+    });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks = vec![glow_block(&GlowSpec::default())]
+    });
     let out = compose(layer);
     assert!(left_strip_changed(&out) > 0, "the layer rect glows");
 }
@@ -682,7 +688,9 @@ fn off_canvas_or_zero_area_glow_is_a_no_op() {
     // Fully off-canvas.
     let mut off = glow_layer(None);
     off.rect = rect(-50, -50, -40, -40);
-    off.extra_blocks = vec![glow_block(&spec)];
+    pictura_codec::edit_layer(off.as_mut(), |parts| {
+        parts.extra_blocks = vec![glow_block(&spec)]
+    });
     assert_eq!(compose(off), backdrop(), "an off-canvas layer is a no-op");
     // Zero area.
     let mut empty = glow_layer(Some(glow_block(&spec)));
@@ -712,7 +720,7 @@ fn softer_and_precise_glow_render_identically() {
 
 #[test]
 fn gpu_reports_the_effect_for_a_glow_fill_layer() {
-    let mut layer = Layer {
+    let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Solid".into(),
         rect: rect(3, 3, 6, 6),
         adjustment: Some(AdjustmentData {
@@ -720,8 +728,10 @@ fn gpu_reports_the_effect_for_a_glow_fill_layer() {
             data: vec![255, 0, 0, 255].into(),
         }),
         ..Default::default()
-    };
-    layer.extra_blocks = vec![glow_block(&GlowSpec::default())];
+    });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks = vec![glow_block(&GlowSpec::default())]
+    });
     let d = doc(9, 9, vec![layer]);
     assert_gpu_accepts_and_matches_cpu(&d);
 }

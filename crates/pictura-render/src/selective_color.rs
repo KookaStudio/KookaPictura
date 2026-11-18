@@ -1,94 +1,12 @@
-//! Selective Color (`selc`) decode and encode.
-//!
-//! Kept out of `composite.rs` so the compositor stays within its file-size
-//! budget, mirroring `curves.rs` and `color_balance.rs`. The layout is the
-//! libpsd/ag-psd/psd-tools three-way agreement: a `u16` version (must be 1), a
-//! `u16` correction method (`0` relative, nonzero absolute), then ten plates of
-//! four big-endian `i16` (cyan, magenta, yellow, black). Plate 0 is reserved and
-//! skipped; plates 1..9 are the ranges reds, yellows, greens, cyans, blues,
-//! magentas, whites, neutrals, blacks.
-//!
-//! ponytail: the reserved plate is ignored on read and written as zeroes; give
-//! it a model only if a file is found that uses it.
+pub use pictura_codec::layer_content::selective_color::*;
 
-use pictura_adjust::{Adjustment, SelectiveColorMethod, SelectiveColorParams, SelectiveRange};
-use pictura_core::AdjustmentData;
-
-use crate::composite::{be_i16, be_u16};
-
-/// The header (version + method) plus ten plates.
-const LEN: usize = 4 + 10 * 8;
-
-/// `selc`: a payload shorter than 84 bytes, a version other than 1, or a range
-/// correction outside `-100..=100` is `None`, never a panic. The reserved plate
-/// is skipped without validation and every byte after offset 84 is ignored.
-pub(crate) fn decode_selective_color(d: &[u8]) -> Option<Adjustment> {
-    if d.len() < LEN || be_u16(d, 0)? != 1 {
-        return None;
-    }
-    let method = if be_u16(d, 2)? == 0 {
-        SelectiveColorMethod::Relative
-    } else {
-        SelectiveColorMethod::Absolute
-    };
-    let mut ranges = [SelectiveRange::default(); 9];
-    for (index, range) in ranges.iter_mut().enumerate() {
-        let at = 12 + index * 8;
-        let values = [
-            be_i16(d, at)?,
-            be_i16(d, at + 2)?,
-            be_i16(d, at + 4)?,
-            be_i16(d, at + 6)?,
-        ];
-        if values.iter().any(|v| !(-100..=100).contains(v)) {
-            return None;
-        }
-        *range = SelectiveRange {
-            c: values[0],
-            m: values[1],
-            y: values[2],
-            k: values[3],
-        };
-    }
-    Some(Adjustment::SelectiveColor(SelectiveColorParams {
-        method,
-        ranges,
-    }))
-}
-
-/// `selc`: version 1, the method (`0` relative, `1` absolute), an 8-byte zero
-/// reserved plate, and the nine range plates in order, each as big-endian
-/// `i16`. Every correction is clamped to `-100..=100`, so the output always
-/// decodes.
-pub fn encode_selective_color(
-    method: SelectiveColorMethod,
-    ranges: &[SelectiveRange; 9],
-) -> AdjustmentData {
-    let mut data = Vec::with_capacity(LEN);
-    data.extend_from_slice(&1u16.to_be_bytes());
-    data.extend_from_slice(&method_code(method).to_be_bytes());
-    data.extend_from_slice(&[0u8; 8]);
-    for range in ranges {
-        for value in [range.c, range.m, range.y, range.k] {
-            data.extend_from_slice(&value.clamp(-100, 100).to_be_bytes());
-        }
-    }
-    AdjustmentData {
-        key: *b"selc",
-        data: data.into(),
-    }
-}
-
-fn method_code(method: SelectiveColorMethod) -> u16 {
-    match method {
-        SelectiveColorMethod::Relative => 0,
-        SelectiveColorMethod::Absolute => 1,
-    }
-}
-
+#[cfg(test)]
+use pictura_core::*;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const LEN: usize = 84;
 
     /// Build an 84-byte payload: version 1, `method`, a reserved plate of
     /// `reserved`, and the nine `ranges`.
@@ -223,9 +141,9 @@ mod tests {
 
     #[test]
     fn non_zero_layer_changes_non_uniform_backdrop() {
-        use pictura_core::{BitDepth, BlendMode, Channel, ColorMode, Document, Layer, PsdRect};
+        use pictura_core::{BitDepth, BlendMode, Channel, ColorMode, Document, PsdRect};
 
-        let base = Layer {
+        let base = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "base".into(),
             rect: PsdRect {
                 top: 0,
@@ -256,10 +174,10 @@ mod tests {
                 },
             ],
             ..Default::default()
-        };
+        });
         let mut ranges = [SelectiveRange::default(); 9];
         ranges[0].m = 50;
-        let adjustment = Layer {
+        let adjustment = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "selective-color".into(),
             blend: BlendMode::Normal,
             opacity: 255,
@@ -269,7 +187,7 @@ mod tests {
                 &ranges,
             )),
             ..Default::default()
-        };
+        });
 
         let mut plain = Document::new(2, 1, ColorMode::Rgb, BitDepth::Eight);
         plain.layers = pictura_core::LayerStack::from_layers(vec![base.clone()]);

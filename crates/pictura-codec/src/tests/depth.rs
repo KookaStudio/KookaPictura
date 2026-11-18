@@ -139,7 +139,7 @@ fn depth16_layer_and_mask_channels_are_narrowed() {
     let layer = &doc.layers[0];
     assert_eq!(
         layer
-            .channels
+            .channels()
             .iter()
             .map(|c| (c.id, c.data[0]))
             .collect::<Vec<_>>(),
@@ -166,7 +166,7 @@ fn depth16_unmodeled_layer_channel_round_trips_at_source_depth() {
     );
     let doc = read_psd(&p).unwrap();
     assert_eq!(doc.source.depth(), Some(BitDepth::Sixteen));
-    let raw = &doc.layers[0].raw_channels;
+    let raw = doc.layers[0].raw_channels();
     assert_eq!(raw.len(), 1);
     assert_eq!(raw[0].id, 3);
     assert_eq!(
@@ -190,7 +190,7 @@ fn depth16_unmodeled_layer_channel_round_trips_at_source_depth() {
     // The narrowed stream round-trips; the save re-emits the native samples, so
     // reading the output narrows back to the same 8-bit stream.
     let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
-    assert_eq!(back.layers[0].raw_channels[0].data, vec![0, 0, 0xab]);
+    assert_eq!(back.layers[0].raw_channels()[0].data, vec![0, 0, 0xab]);
 }
 
 #[test]
@@ -206,9 +206,9 @@ fn depth32_unmodeled_layer_channel_round_trips_at_source_depth() {
     );
     let doc = read_psd(&p).unwrap();
     assert_eq!(doc.source.depth(), Some(BitDepth::ThirtyTwo));
-    assert_eq!(doc.layers[0].raw_channels[0].data, vec![0, 0, 128]);
+    assert_eq!(doc.layers[0].raw_channels()[0].data, vec![0, 0, 128]);
     let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
-    assert_eq!(back.layers[0].raw_channels[0].data, vec![0, 0, 128]);
+    assert_eq!(back.layers[0].raw_channels()[0].data, vec![0, 0, 128]);
 }
 
 #[test]
@@ -537,21 +537,23 @@ fn short_high_depth_lab_cmyk_source_plane_is_a_typed_error() {
             )
             .expect("valid native source");
         {
-            let _ = doc.layers.push(Layer {
-                rect,
-                channels: (0i16..3)
-                    .map(|id| Channel {
-                        id,
-                        data: vec![1].into(),
-                    })
-                    .collect(),
-                source_channels: Some(SourceChannels::new(
-                    bits,
+            let _ = doc
+                .layers
+                .push(crate::layer_from_parts(pictura_core::LayerParts {
                     rect,
-                    vec![(0, Samples::from_bytes(&vec![0u8; native_len], bits))],
-                )),
-                ..Default::default()
-            });
+                    channels: (0i16..3)
+                        .map(|id| Channel {
+                            id,
+                            data: vec![1].into(),
+                        })
+                        .collect(),
+                    source_channels: Some(SourceChannels::new(
+                        bits,
+                        rect,
+                        vec![(0, Samples::from_bytes(&vec![0u8; native_len], bits))],
+                    )),
+                    ..Default::default()
+                }));
         };
         assert!(
             matches!(write_psd(&doc), Err(PsdError::Invalid(_))),
@@ -658,30 +660,34 @@ fn short_high_depth_layer_plane_is_a_typed_error() {
         )
         .expect("valid native source");
     {
-        let _ = doc.layers.push(Layer {
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 2,
-                right: 2,
-            },
-            ..Default::default()
-        });
+        let _ = doc
+            .layers
+            .push(crate::layer_from_parts(pictura_core::LayerParts {
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 2,
+                    right: 2,
+                },
+                ..Default::default()
+            }));
     };
 
     // A modeled color channel with a one-byte plane.
-    doc.layers[0].channels = vec![Channel {
+    *doc.layers[0].channels_mut() = vec![Channel {
         id: 0,
         data: vec![1].into(),
     }];
     assert!(matches!(write_psd(&doc), Err(PsdError::Invalid(_))));
 
     // An unmodeled raw channel with a one-byte plane (after its header).
-    doc.layers[0].channels.clear();
-    doc.layers[0].raw_channels = vec![RawChannel {
-        id: 3,
-        data: vec![0, 0, 1].into(),
-    }];
+    doc.layers[0].channels_mut().clear();
+    crate::edit_layer(doc.layers[0].as_mut(), |parts| {
+        parts.raw_channels = vec![RawChannel {
+            id: 3,
+            data: vec![0, 0, 1].into(),
+        }]
+    });
     assert!(matches!(write_psd(&doc), Err(PsdError::Invalid(_))));
 }
 
@@ -884,7 +890,7 @@ fn profile_conversion_preserves_native_samples() {
     );
     let narrow = plane(0).narrow_to_u8();
     let working = layer
-        .channels
+        .channels()
         .iter()
         .find(|c| c.id == 0)
         .expect("working red");
@@ -984,7 +990,9 @@ fn profile_conversion_leaves_partial_native_layer_unchanged() {
     let layer_channels = [(0i16, r.as_slice()), (1, g.as_slice()), (2, b.as_slice())];
     let p = layered_psd_depth(16, 3, 3, &[&r, &g, &b], &layer_channels);
     let mut doc = read_psd(&p).unwrap();
-    doc.layers[0].channels.retain(|channel| channel.id != 2);
+    doc.layers[0]
+        .channels_mut()
+        .retain(|channel| channel.id != 2);
     let before = doc.layers[0].source_channels.clone();
     assert!(convert_document(&mut doc, &Profile::adobe_rgb()));
     assert_eq!(

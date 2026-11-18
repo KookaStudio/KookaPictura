@@ -1188,124 +1188,49 @@ fn alpha_is_never_modified() {
             reverse: false,
             transparency: Vec::new(),
         }),
-        Adjustment::GradientFill(GradientFillParams {
-            stops: vec![
-                GradientStop {
-                    location: 0,
-                    color: [0, 0, 0],
-                },
-                GradientStop {
-                    location: 4096,
-                    color: [255, 255, 255],
-                },
-            ],
-            reverse: false,
-            kind: GradientKind::Linear,
-            angle_deg: 0.0,
-            scale: 100.0,
+        Adjustment::ShadowsHighlights(ShadowsHighlightsParams {
+            shadows_amount: 20.0,
+            highlights_amount: 10.0,
         }),
-        Adjustment::PatternFill(PatternFillParams {
-            pattern_id: "pictura-pattern".into(),
-            scale: 100.0,
-            link_with_layer: true,
-            origin: (0, 0),
+        Adjustment::Equalize,
+        Adjustment::ColorLookup(ColorLookupParams {
+            kind: ColorLookupKind::ThreeDLut,
+            lookup: Some(Lut3d {
+                size: 2,
+                points: vec![[0.25, 0.5, 0.75]; 8],
+            }),
         }),
-        Adjustment::SolidFill([10, 20, 30, 40]),
+        Adjustment::ReplaceColor(ReplaceColorParams {
+            samples: vec![ReplaceColorSample {
+                x: -1,
+                y: -1,
+                rgb: [10, 20, 30],
+            }],
+            fuzziness: 40.0,
+            localized: false,
+            hue: 10.0,
+            saturation: 10.0,
+            lightness: 10.0,
+        }),
+        Adjustment::MatchColor(MatchColorParams {
+            target: MatchColorStats::ZERO,
+            source: MatchColorStats::ZERO,
+            neutralize: false,
+            luminance: 100.0,
+            color_intensity: 100.0,
+            fade: 0.0,
+        }),
     ];
-    // One entry per `Adjustment` variant: the 17 destructive ones plus the three
-    // refused fills (`SolidFill`, `GradientFill`, `PatternFill`).
     assert_eq!(
         adjustments.len(),
-        20,
+        22,
         "every Adjustment variant is exercised"
     );
     for a in adjustments {
         let mut b = base.clone();
-        match apply(&a, &mut b) {
-            Ok(()) => {}
-            Err(AdjustError::Unsupported(_)) => {
-                assert_eq!(b, base, "{a:?} refused but mutated the buffer");
-            }
-            Err(e) => panic!("{a:?} failed: {e}"),
-        }
+        apply(&a, &mut b).unwrap_or_else(|error| panic!("{a:?} failed: {error}"));
         assert_eq!(&b.data[3 * n..4 * n], &alpha[..], "{a:?} touched alpha");
     }
-}
-
-#[test]
-fn apply_refuses_gradient_fill_without_mutating() {
-    let mut buf = buf3(
-        2,
-        2,
-        &[[10, 20, 30], [40, 50, 60], [70, 80, 90], [100, 110, 120]],
-    );
-    let before = buf.clone();
-    let params = GradientFillParams {
-        stops: vec![
-            GradientStop {
-                location: 0,
-                color: [0, 0, 0],
-            },
-            GradientStop {
-                location: 4096,
-                color: [255, 255, 255],
-            },
-        ],
-        reverse: false,
-        kind: GradientKind::Radial,
-        angle_deg: 45.0,
-        scale: 100.0,
-    };
-    assert!(matches!(
-        apply(&Adjustment::GradientFill(params), &mut buf),
-        Err(AdjustError::Unsupported(_))
-    ));
-    assert_eq!(
-        buf, before,
-        "a refused gradient fill leaves the buffer unchanged"
-    );
-}
-
-#[test]
-fn apply_refuses_pattern_fill_without_mutating() {
-    let mut buf = buf3(
-        2,
-        2,
-        &[[10, 20, 30], [40, 50, 60], [70, 80, 90], [100, 110, 120]],
-    );
-    let before = buf.clone();
-    let params = PatternFillParams {
-        pattern_id: "pictura-pattern".into(),
-        scale: 50.0,
-        link_with_layer: false,
-        origin: (3, 4),
-    };
-    assert!(matches!(
-        apply(&Adjustment::PatternFill(params), &mut buf),
-        Err(AdjustError::Unsupported(_))
-    ));
-    assert_eq!(
-        buf, before,
-        "a refused pattern fill leaves the buffer unchanged"
-    );
-}
-
-#[test]
-fn apply_refuses_solid_fill_without_mutating() {
-    let mut buf = buf3(
-        2,
-        2,
-        &[[10, 20, 30], [40, 50, 60], [70, 80, 90], [100, 110, 120]],
-    );
-    let before = buf.clone();
-    assert!(matches!(
-        apply(&Adjustment::SolidFill([1, 2, 3, 200]), &mut buf),
-        Err(AdjustError::Unsupported(_))
-    ));
-    assert_eq!(
-        buf, before,
-        "a refused solid fill leaves the buffer unchanged"
-    );
 }
 
 #[test]

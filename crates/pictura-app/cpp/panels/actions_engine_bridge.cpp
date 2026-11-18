@@ -1145,4 +1145,16 @@ QString ActionsEngineBridge::palettePath() const
            + QStringLiteral("/Actions Palette.psp");
 }
 
+QString ActionsEngineBridge::validateBatch(const QString& optionsJson) const
+{
+    return engine_ ? engine_->batch_validate(optionsJson)
+                   : QStringLiteral("The action engine is not available.");
+}
+
+bool ActionsEngineBridge::actionReachesCommand(const QString& set, const QString& action,
+                                               const QString& command) const
+{
+    return engine_ && engine_->action_reaches_command(set, action, command);
+}
+
 } // namespace pictura

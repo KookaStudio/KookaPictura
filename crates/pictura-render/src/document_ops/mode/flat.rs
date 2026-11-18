@@ -65,7 +65,7 @@ pub fn convert_to_indexed(doc: &mut Document, options: PaletteOptions) -> Result
         .ok_or_else(|| OpsError::InvalidParams("flattened layer has no RGB planes".into()))?;
     let mut rgba = vec![255u8; n * 4];
     for (c, &i) in pos.iter().enumerate() {
-        for (p, &v) in layer.channels[i].data.iter().enumerate().take(n) {
+        for (p, &v) in layer.channels()[i].data.iter().enumerate().take(n) {
             rgba[p * 4 + c] = v;
         }
     }
@@ -87,7 +87,7 @@ pub fn convert_to_indexed(doc: &mut Document, options: PaletteOptions) -> Result
     }
     let rgb = pictura_codec::indexed_to_rgb(&indexed.indices, &palette);
     for (c, &i) in pos.iter().enumerate() {
-        layer.channels[i].data = rgb[c * n..(c + 1) * n].to_vec().into();
+        layer.channels_mut()[i].data = rgb[c * n..(c + 1) * n].to_vec().into();
     }
     layer.source_channels = Some(SourceChannels::new(
         BitDepth::Eight,
@@ -231,16 +231,16 @@ pub fn convert_to_bitmap(doc: &mut Document, method: BitmapMethod) -> Result<(),
     let gray: Vec<u8> = match planes::color_positions(layer, 3) {
         Some(pos) => {
             let (r, g, b) = (
-                &layer.channels[pos[0]].data,
-                &layer.channels[pos[1]].data,
-                &layer.channels[pos[2]].data,
+                &layer.channels()[pos[0]].data,
+                &layer.channels()[pos[1]].data,
+                &layer.channels()[pos[2]].data,
             );
             (0..w * h)
                 .map(|i| planes::luma_u8(r[i], g[i], b[i]))
                 .collect()
         }
         None => planes::color_positions(layer, 1)
-            .map(|pos| layer.channels[pos[0]].data.to_vec())
+            .map(|pos| layer.channels()[pos[0]].data.to_vec())
             .ok_or_else(|| OpsError::InvalidParams("flattened layer has no gray plane".into()))?,
     };
     let whites = bitmap_whites(&gray, w, method);

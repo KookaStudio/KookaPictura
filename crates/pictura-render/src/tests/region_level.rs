@@ -34,7 +34,7 @@ fn patterned(name: &str, rect: PsdRect, blend: BlendMode, rng: &mut Lcg) -> Laye
     let mut layer = solid(name, rect, (0, 0, 0), 255, blend, 200 + rng.below(56) as u8);
     let (w, h) = (rect.width() as usize, rect.height() as usize);
     let (fx, fy, k) = (rng.below(7) + 1, rng.below(5) + 1, rng.below(251));
-    for (c, channel) in layer.channels.iter_mut().enumerate() {
+    for (c, channel) in layer.channels_mut().iter_mut().enumerate() {
         let data: Vec<u8> = (0..w * h)
             .map(|i| {
                 let (x, y) = ((i % w) as u32, (i / w) as u32);
@@ -348,7 +348,7 @@ fn flatten_composites_by_band() {
     let n = (W * H) as usize;
     for (k, id) in [0i16, 1, 2, -1].into_iter().enumerate() {
         let channel = layer
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == id)
             .expect("a channel");
@@ -382,7 +382,7 @@ fn flatten_composites_by_band() {
         )],
     );
     crate::flatten(&mut flat).expect("flatten");
-    let red = &flat.layers[0].channels[0].data;
+    let red = &flat.layers[0].channels()[0].data;
     assert!(
         red.allocated_bytes() <= 256 * 256,
         "only the tile holding the dot is dense: {} bytes",

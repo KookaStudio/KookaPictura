@@ -107,27 +107,29 @@ pub(super) fn mask_overlay_image(view: &PictureView, max_side: i32) -> QImage {
 #[cfg(test)]
 mod tests {
     use super::{coverage_at, overlay_rgba};
-    use pictura_core::{BitDepth, ColorMode, Document, Layer, LayerMask, PsdRect};
+    use pictura_core::{BitDepth, ColorMode, Document, LayerMask, PsdRect};
 
     /// A 4×2 document whose one layer's mask covers the left 2×2, hiding its
     /// first column; the default colour (255) reveals the rest.
     fn doc() -> Document {
         let mut doc = Document::new(4, 2, ColorMode::Rgb, BitDepth::Eight);
         {
-            let _ = doc.layers.push(Layer {
-                mask: Some(LayerMask {
-                    rect: PsdRect {
-                        top: 0,
-                        left: 0,
-                        bottom: 2,
-                        right: 2,
-                    },
-                    default_color: 255,
-                    data: Some(vec![0u8, 128, 0, 128].into()),
+            let _ = doc
+                .layers
+                .push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
+                    mask: Some(LayerMask {
+                        rect: PsdRect {
+                            top: 0,
+                            left: 0,
+                            bottom: 2,
+                            right: 2,
+                        },
+                        default_color: 255,
+                        data: Some(vec![0u8, 128, 0, 128].into()),
+                        ..Default::default()
+                    }),
                     ..Default::default()
-                }),
-                ..Default::default()
-            });
+                }));
         };
         doc
     }

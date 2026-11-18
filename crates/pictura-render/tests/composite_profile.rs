@@ -37,7 +37,7 @@ fn pixel_layer(
     blend: BlendMode,
 ) -> Layer {
     let n = (w * h) as usize;
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: full(w, h),
         blend,
@@ -63,11 +63,11 @@ fn pixel_layer(
             },
         ],
         ..Default::default()
-    }
+    })
 }
 
 fn without_alpha(mut layer: Layer) -> Layer {
-    layer.channels.retain(|channel| channel.id != -1);
+    layer.channels_mut().retain(|channel| channel.id != -1);
     layer
 }
 
@@ -174,12 +174,12 @@ fn cpu_composite_profile_4000() {
 }
 
 fn adjustment_layer(name: &str, adjustment: pictura_core::AdjustmentData) -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: full(0, 0),
         adjustment: Some(adjustment),
         ..Default::default()
-    }
+    })
 }
 
 /// A standard 33³ identity `.CUBE`, the size a real Color Lookup carries, so

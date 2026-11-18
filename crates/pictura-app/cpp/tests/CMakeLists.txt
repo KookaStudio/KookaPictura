@@ -68,12 +68,14 @@ set(PICTURA_QT_TESTS
     tst_layers_row_menu
     tst_layers_row_model
     tst_layers_preview_coalescing
+    tst_layer_content
     tst_layers_snapshot
     tst_canvas_backdrop
     tst_present_cache
     tst_damage_bounds
     tst_fill_layer_editor
     tst_align_distribute
+    tst_color_replacement
     tst_options_bars_parity
     tst_transform_options
     tst_transform_controls
@@ -143,6 +145,8 @@ set(PICTURA_QT_TESTS
     tst_save_options
     tst_psd_compatibility
     tst_save_format_options
+    tst_batch_dialog
+    tst_batch_run
     tst_save_format_dialogs
     tst_save_gif_copy
     tst_properties_panel

@@ -10,7 +10,7 @@ fn bundled() -> BundledText {
 }
 
 fn type_layer(style: Option<TextStyle>) -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "text".into(),
         rect: PsdRect {
             top: 0,
@@ -35,7 +35,7 @@ fn type_layer(style: Option<TextStyle>) -> Layer {
             path: None,
         }),
         ..Default::default()
-    }
+    })
 }
 
 fn style() -> TextStyle {
@@ -269,9 +269,9 @@ fn render_text_layer_paints_and_clears_the_type_tool() {
     let mut doc = doc_with(type_layer(Some(style())));
     assert!(render_text_layer(&mut doc, "0"));
     let layer = crate::resolve_path(&doc, "0").unwrap();
-    assert!(layer.type_tool.is_none(), "type tool is cleared");
+    assert!(layer.type_tool().is_none(), "type tool is cleared");
     assert!(
-        layer.extra_blocks.iter().all(|b| &b.key != b"TySh"),
+        layer.extra_blocks().iter().all(|b| &b.key != b"TySh"),
         "TySh block is gone"
     );
     let alpha = crate::channel(layer, -1).expect("alpha channel");
@@ -313,9 +313,9 @@ fn materialize_text_rgba_sets_channels_and_clears_the_type_tool() {
     rgba[3] = 40;
     assert!(materialize_text_rgba(&mut doc, "0", &rgba));
     let layer = crate::resolve_path(&doc, "0").unwrap();
-    assert!(layer.type_tool.is_none(), "type tool is cleared");
+    assert!(layer.type_tool().is_none(), "type tool is cleared");
     assert!(
-        layer.extra_blocks.iter().all(|b| &b.key != b"TySh"),
+        layer.extra_blocks().iter().all(|b| &b.key != b"TySh"),
         "TySh block is gone"
     );
     assert_eq!(crate::channel(layer, 0).unwrap()[0], 10);
@@ -579,8 +579,8 @@ fn rasterize_keeps_a_transformed_type_layer_as_shown() {
     let shown = live.layers[0].rect;
     assert!(render_text_layer(&mut doc, "0"));
     let layer = &doc.layers[0];
-    assert!(layer.type_tool.is_none(), "type tool is cleared");
-    assert!(layer.extra_blocks.iter().all(|b| &b.key != b"TySh"));
+    assert!(layer.type_tool().is_none(), "type tool is cleared");
+    assert!(layer.extra_blocks().iter().all(|b| &b.key != b"TySh"));
     assert_eq!(layer.rect, shown, "the stretched, moved rect is kept");
     for id in [0, 1, 2] {
         assert_eq!(

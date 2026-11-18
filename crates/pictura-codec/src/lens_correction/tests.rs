@@ -6,7 +6,7 @@ use crate::descriptor::{self, get_object_item, DescValue};
 use pictura_core::{ColorMode, Document, Layer, LayerBlock, PsdRect, SmartObject, SmartObjectKind};
 
 fn embedded_layer() -> Layer {
-    Layer {
+    crate::layer_from_parts(pictura_core::LayerParts {
         name: "L".into(),
         rect: PsdRect {
             top: 0,
@@ -24,7 +24,7 @@ fn embedded_layer() -> Layer {
             .with_payload(b"8BPS\x00\x01not-a-real-psd".to_vec()),
         ),
         ..Default::default()
-    }
+    })
 }
 
 fn doc_with(layer: Layer) -> Document {
@@ -157,7 +157,7 @@ fn attach_records_the_filter() {
     let mut layer = embedded_layer();
     attach_lens_correction_filter(&mut layer, &slots).expect("attaches");
 
-    let so = layer.smart_object.as_ref().expect("smart object");
+    let so = layer.smart_object().expect("smart object");
     assert_eq!(so.smart_filters.len(), 1);
     assert_eq!(so.smart_filters[0].filter_id, LENS_CORRECTION_FILTER_ID);
     assert_eq!(so.smart_filters[0].name, LENS_CORRECTION_FILTER_NAME);
@@ -167,7 +167,7 @@ fn attach_records_the_filter() {
     );
 
     let back = read_back(layer);
-    let so = back.layers[0].smart_object.as_ref().expect("survives");
+    let so = back.layers[0].smart_object().expect("survives");
     assert_eq!(so.smart_filters.len(), 1);
     assert_eq!(so.smart_filters[0].filter_id, LENS_CORRECTION_FILTER_ID);
     assert_eq!(so.smart_filters[0].name, LENS_CORRECTION_FILTER_NAME);
@@ -204,16 +204,18 @@ fn reattaching_keeps_unmodeled_keys() {
     .with_payload(b"8BPS\x00\x01x".to_vec());
     let mut layer = embedded_layer();
     let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
-    layer.extra_blocks.push(LayerBlock {
-        key: *b"SoLd",
-        data: data.into(),
+    crate::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"SoLd",
+            data: data.into(),
+        })
     });
 
     let new_slots = slots();
     attach_lens_correction_filter(&mut layer, &new_slots).expect("re-attaches");
 
     let back = read_back(layer);
-    let so = back.layers[0].smart_object.as_ref().expect("smart object");
+    let so = back.layers[0].smart_object().expect("smart object");
     assert_eq!(so.smart_filters.len(), 1, "replaced, not duplicated");
     assert_eq!(
         decode_lens_correction_slots(&so.smart_filters[0].options),
@@ -259,15 +261,17 @@ fn a_foreign_filter_id_is_left_alone() {
     .with_payload(b"8BPS\x00\x01x".to_vec());
     let mut layer = embedded_layer();
     let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
-    layer.extra_blocks.push(LayerBlock {
-        key: *b"SoLd",
-        data: data.into(),
+    crate::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"SoLd",
+            data: data.into(),
+        })
     });
 
     attach_lens_correction_filter(&mut layer, &DEFAULT_SLOTS).expect("attaches");
 
     let back = read_back(layer);
-    let so = back.layers[0].smart_object.as_ref().expect("smart object");
+    let so = back.layers[0].smart_object().expect("smart object");
     assert_eq!(so.smart_filters.len(), 2);
     let kept = so
         .smart_filters

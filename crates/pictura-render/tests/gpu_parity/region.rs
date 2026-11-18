@@ -70,7 +70,7 @@ fn alpha_ramp(x: u32, y: u32) -> u8 {
 /// composite's whole-document uploads.
 fn stamp_layers(layers: &mut pictura_core::LayerStack) {
     for layer in layers {
-        for channel in &mut layer.channels {
+        for channel in layer.channels_mut() {
             channel.data.set_stamp(fresh_stamp());
         }
         if let Some(mask) = &mut layer.mask {
@@ -78,7 +78,9 @@ fn stamp_layers(layers: &mut pictura_core::LayerStack) {
                 data.set_stamp(fresh_stamp());
             }
         }
-        stamp_layers(&mut layer.children);
+        if let Some(children) = layer.children_mut() {
+            stamp_layers(children);
+        }
     }
 }
 
@@ -117,7 +119,9 @@ fn region_scenes() -> Vec<(&'static str, Document)> {
     let mut proxied_type = layer("text", BlendMode::Normal, |x, y| {
         (0, 0, 0, alpha_ramp(x, y))
     });
-    proxied_type.type_tool = Some(type_tool());
+    pictura_codec::edit_layer(proxied_type.as_mut(), |parts| {
+        parts.type_tool = Some(type_tool())
+    });
     let mut typed = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
     typed.layers = pictura_core::LayerStack::from_layers(vec![base_layer(), proxied_type]);
 
@@ -412,7 +416,7 @@ fn region_vs_full_timing_4000() {
 /// A full-canvas pixel layer with distinct bytes per seed.
 fn full_layer(w: u32, h: u32, k: u8) -> Layer {
     let n = (w * h) as usize;
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: format!("layer {k}"),
         rect: PsdRect {
             top: 0,
@@ -432,7 +436,7 @@ fn full_layer(w: u32, h: u32, k: u8) -> Layer {
             })
             .collect(),
         ..Default::default()
-    }
+    })
 }
 
 /// Four stamped full-canvas layers; the first carries a sampled mask.

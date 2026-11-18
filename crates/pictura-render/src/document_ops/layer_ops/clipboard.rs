@@ -93,7 +93,13 @@ pub fn copy_layer(doc: &Document, path: &str, selection: Option<&Coverage>) -> O
         None => region,
     };
     let src_w = layer.rect.width() as usize;
-    let plane = |id: i16| layer.channels.iter().find(|c| c.id == id).map(|c| &c.data);
+    let plane = |id: i16| {
+        layer
+            .channels()
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| &c.data)
+    };
     let red = plane(0)?;
     // A grayscale layer has only channel 0; replicate it into G and B.
     let green = plane(1).unwrap_or(red);
@@ -172,7 +178,7 @@ pub fn clear_layer(doc: &mut Document, path: &str, selection: Option<&Coverage>)
     if !has_pixels(layer) || layer_pixel_locked(layer) {
         return false;
     }
-    let has_alpha = layer.channels.iter().any(|c| c.id == -1);
+    let has_alpha = layer.channels().iter().any(|c| c.id == -1);
     if has_alpha && layer_transparency_locked(layer) {
         return false;
     }
@@ -204,7 +210,7 @@ pub fn clear_layer(doc: &mut Document, path: &str, selection: Option<&Coverage>)
         }
     };
     let mut changed = false;
-    for channel in layer.channels.iter_mut() {
+    for channel in layer.channels_mut().iter_mut() {
         // ponytail: a Background clears to white; there is no background
         // swatch to read yet.
         let erase = if has_alpha {
@@ -297,7 +303,7 @@ pub fn paste_clip(
         right: left + w as i32,
     };
     let pixels = clip.masked_rgba();
-    for channel in layer.channels.iter_mut() {
+    for channel in layer.channels_mut().iter_mut() {
         let offset = match channel.id {
             0 => 0,
             1 => 1,
@@ -436,7 +442,9 @@ fn selection_mask(doc: &Document, coverage: &Coverage, invert: bool) -> LayerMas
 }
 
 fn has_pixels(layer: &Layer) -> bool {
-    !layer.is_group && layer.adjustment.is_none() && layer.channels.iter().any(|c| c.id == 0)
+    !layer.is_group()
+        && !layer.has_adjustment_content()
+        && layer.channels().iter().any(|c| c.id == 0)
 }
 
 pub(super) fn canvas(doc: &Document) -> PsdRect {

@@ -59,7 +59,7 @@ fn layer_digest(layer: &pictura_core::Layer) -> u64 {
     let mut h = Fnv(0xcbf2_9ce4_8422_2325);
     let mut row = Vec::new();
     h.rect(layer.rect);
-    for channel in &layer.channels {
+    for channel in layer.channels() {
         h.feed(&channel.id.to_le_bytes());
         h.rows(&channel.data, layer.rect, &mut row);
     }
@@ -84,12 +84,12 @@ mod tests {
             bottom: 6,
             right: 8,
         };
-        let mut layer = Layer {
+        let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             rect,
-            ..Layer::default()
-        };
+            ..Default::default()
+        });
         for id in [-1i16, 0, 1, 2] {
-            layer.channels.push(Channel {
+            layer.channels_mut().push(Channel {
                 id,
                 data: Plane::from(vec![fill; 20]),
             });
@@ -101,17 +101,17 @@ mod tests {
     fn the_digest_sees_every_pixel_and_the_tiling_does_not() {
         let flat = layer(9);
         let mut tiled = layer(9);
-        for channel in &mut tiled.channels {
+        for channel in tiled.channels_mut() {
             assert!(channel.data.tile(5, 4));
         }
         assert_eq!(layer_digest(&flat), layer_digest(&tiled));
         let mut changed = layer(9);
         let mut data = vec![9u8; 20];
         data[19] = 10;
-        changed.channels[2].data = Plane::from(data);
+        changed.channels_mut()[2].data = Plane::from(data);
         assert_ne!(layer_digest(&flat), layer_digest(&changed));
         let mut empty = layer(0);
-        empty.channels[0].data = Plane::default();
+        empty.channels_mut()[0].data = Plane::default();
         assert_ne!(layer_digest(&layer(0)), layer_digest(&empty));
     }
 }

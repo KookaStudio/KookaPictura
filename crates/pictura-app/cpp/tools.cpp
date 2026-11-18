@@ -335,7 +335,7 @@ ToolController::ToolController(QObject* parent)
 
 void ToolController::setActiveTool(ToolId id)
 {
-    if (!toolAvailable(id)) {
+    if (!toolAvailable(id) || !toolAllowedForDocument(id, view())) {
         return;
     }
     if (active_ == id) {
@@ -632,6 +632,11 @@ void ToolController::emitSelectionCommitted() { emit selectionCommitted(); }
 
 void ToolController::bindCanvas(ImageView* canvas)
 {
+    // A document switch or mode conversion can make the active tool
+    // unavailable; Move is always allowed.
+    if (!toolAllowedForDocument(active_, view())) {
+        setActiveTool(ToolId::Move);
+    }
     if (canvas_ == canvas) {
         boundView_ = view();
         // The canvas pointer is unchanged, but the active layer's visibility or

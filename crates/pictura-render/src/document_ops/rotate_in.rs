@@ -28,7 +28,7 @@ const BBOX_SLACK: f64 = 1e-9;
 fn has_vector_mask(layers: &[pictura_core::Layer]) -> bool {
     layers
         .iter()
-        .any(|l| l.vector_mask.is_some() || has_vector_mask(&l.children))
+        .any(|l| l.vector_mask.is_some() || has_vector_mask(l.children()))
 }
 
 /// The document-space similarity about `pivot`: `q = pivot + R(θ)·(p − pivot)`
@@ -463,7 +463,7 @@ fn rotate_layer(
         None => (None, None),
     };
 
-    for channel in &mut layer.channels {
+    for channel in layer.channels_mut() {
         channel.data = rotate_tiled(&channel.data, old_rect, new_rect, 1, rot)?;
     }
     if let Some(store) = layer.source_channels.take() {
@@ -474,7 +474,7 @@ fn rotate_layer(
     layer.rect = new_rect;
     // ponytail: an unmodeled raw on-disk stream cannot be resampled, so it
     // drops (matching the exact orientation remap).
-    layer.raw_channels.clear();
+    layer.discard_raw_channels();
 
     if let Some(mask) = &mut layer.mask {
         let dest = rotated_rect(mask.rect, rot);
@@ -519,7 +519,7 @@ fn rotated_rows(doc: &mut Document, rot: &Rotation, new_h: u32) -> u64 {
         }
     };
     for_each_layer(&mut doc.layers, &mut |layer| {
-        count(layer.rect, layer.channels.len());
+        count(layer.rect, layer.channels().len());
         if let Some(mask) = layer.mask.as_ref().filter(|m| m.data.is_some()) {
             count(mask.rect, 1);
         }
@@ -586,7 +586,7 @@ mod tests {
     }
 
     fn pixel_layer(name: &str, r: PsdRect, n: usize) -> Layer {
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: name.into(),
             rect: r,
             blend: BlendMode::Normal,
@@ -613,7 +613,7 @@ mod tests {
                 },
             ],
             ..Default::default()
-        }
+        })
     }
 
     fn doc() -> Document {
@@ -674,7 +674,7 @@ mod tests {
         assert_eq!(d.composite, crate::composite_rgba(&d));
         for layer in &d.layers {
             let area = (layer.rect.width() * layer.rect.height()) as usize;
-            for channel in &layer.channels {
+            for channel in layer.channels() {
                 assert_eq!(channel.data.len(), area, "{} {}", layer.name, channel.id);
             }
             if let Some(mask) = &layer.mask {

@@ -58,7 +58,7 @@ impl<'a> BucketSource<'a> {
     /// missing layer.
     pub fn layer(doc: &'a Document, path: &str) -> Option<Self> {
         let layer = layer_at(doc, &parse_layer_path(path)?)?;
-        (!layer.is_group && layer.adjustment.is_none()).then_some(Self::Layer(layer))
+        (!layer.is_group() && !layer.has_adjustment_content()).then_some(Self::Layer(layer))
     }
 
     /// Document row `y` from column `left` on, as straight RGBA, into `out`:

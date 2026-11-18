@@ -2,24 +2,30 @@ use super::*;
 use crate::PsdRect;
 
 fn layer(name: &str, clipping: bool) -> Layer {
-    Layer {
-        name: name.into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 1,
-            right: 1,
+    crate::Layer::from_parts(
+        crate::LayerParts {
+            name: name.into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 1,
+                right: 1,
+            },
+            clipping,
+            ..Default::default()
         },
-        clipping,
-        ..Default::default()
-    }
+        crate::LayerContent::Pixel,
+    )
 }
 
 fn background(name: &str) -> Layer {
-    Layer {
-        background: true,
-        ..layer(name, false)
-    }
+    crate::Layer::from_parts(
+        crate::LayerParts {
+            background: true,
+            ..crate::LayerParts::from(layer(name, false))
+        },
+        crate::LayerContent::Pixel,
+    )
 }
 
 fn stack(layers: Vec<Layer>) -> LayerStack {
@@ -29,8 +35,8 @@ fn stack(layers: Vec<Layer>) -> LayerStack {
 #[test]
 fn valid_tree_passes() {
     let mut group = layer("group", false);
-    group.is_group = true;
-    group.children = stack(vec![layer("inner", false), layer("clipped", true)]);
+    group.set_group_children(crate::LayerStack::default());
+    group.set_group_children(stack(vec![layer("inner", false), layer("clipped", true)]));
     let tree = stack(vec![
         background("Background"),
         layer("base", false),
@@ -48,8 +54,8 @@ fn clipped_bottom_is_reported() {
         Err(StackViolation::ClippedBottom(vec![0]))
     );
     let mut group = layer("group", false);
-    group.is_group = true;
-    group.children = stack(vec![layer("clipped", true)]);
+    group.set_group_children(crate::LayerStack::default());
+    group.set_group_children(stack(vec![layer("clipped", true)]));
     let tree = stack(vec![layer("base", false), group]);
     assert_eq!(
         tree.well_formed(),
@@ -75,7 +81,7 @@ fn misplaced_or_duplicate_background_is_reported() {
     );
 
     let mut group = background("group");
-    group.is_group = true;
+    group.set_group_children(crate::LayerStack::default());
     assert_eq!(
         stack(vec![group]).well_formed(),
         Err(StackViolation::BackgroundIsGroup(vec![0]))
@@ -140,15 +146,15 @@ fn move_releases_the_source_run_and_stays_well_formed() {
 fn group_keeps_a_base_run_and_releases_a_removed_base_run() {
     let mut tree = stack(vec![layer("A", false), layer("B", true), layer("C", true)]);
     let mut group = layer("G", false);
-    group.is_group = true;
+    group.set_group_children(crate::LayerStack::default());
     assert!(tree.group(&[], &[0, 1, 2], group).is_ok());
     assert_eq!(tree.len(), 1);
-    assert!(tree[0].children[1].clipping);
+    assert!(tree[0].children()[1].clipping);
     assert_eq!(tree.well_formed(), Ok(()));
 
     let mut tree = stack(vec![layer("A", false), layer("B", true)]);
     let mut group = layer("G", false);
-    group.is_group = true;
+    group.set_group_children(crate::LayerStack::default());
     assert!(tree.group(&[], &[0], group).is_ok());
     assert!(tree[1].clipping, "the group becomes the base");
     assert_eq!(tree.well_formed(), Ok(()));
@@ -202,7 +208,7 @@ fn from_layers_accepts_a_malformed_tree_unchanged() {
 #[test]
 fn malformed_background_is_not_repaired() {
     let mut group = background("group");
-    group.is_group = true;
+    group.set_group_children(crate::LayerStack::default());
     let cases = [
         (
             stack(vec![layer("a", false), background("Background")]),
@@ -260,7 +266,7 @@ fn property_structural_primitives_keep_the_tree_well_formed() {
                     let index = (next() as usize) % len;
                     let _ = tree.group(&[], &[index], {
                         let mut group = layer("group", false);
-                        group.is_group = true;
+                        group.set_group_children(crate::LayerStack::default());
                         group
                     });
                 }
@@ -290,11 +296,11 @@ fn property_structural_primitives_keep_the_tree_well_formed() {
 #[test]
 fn first_edit_normalizes_only_the_touched_container() {
     let mut bad = layer("bad", false);
-    bad.is_group = true;
-    bad.children = stack(vec![layer("clipped", true)]);
+    bad.set_group_children(crate::LayerStack::default());
+    bad.set_group_children(stack(vec![layer("clipped", true)]));
     let mut good = layer("good", false);
-    good.is_group = true;
-    good.children = stack(vec![layer("clipped", true)]);
+    good.set_group_children(crate::LayerStack::default());
+    good.set_group_children(stack(vec![layer("clipped", true)]));
     let mut tree = stack(vec![good, bad]);
     assert!(tree.insert(&[0], 1, layer("top", false)).is_ok());
     assert_eq!(
@@ -305,11 +311,11 @@ fn first_edit_normalizes_only_the_touched_container() {
 #[test]
 fn splice_maps_the_anchor_parent_after_a_removal() {
     let mut g0 = layer("G0", false);
-    g0.is_group = true;
+    g0.set_group_children(crate::LayerStack::default());
     let mut x = layer("X", false);
-    x.is_group = true;
+    x.set_group_children(crate::LayerStack::default());
     let mut g1 = layer("G1", false);
-    g1.is_group = true;
+    g1.set_group_children(crate::LayerStack::default());
     let mut tree = stack(vec![g0, x, g1]);
     let at = tree
         .splice(&[vec![0]], &[1], 0, vec![layer("merged", false)])
@@ -317,7 +323,7 @@ fn splice_maps_the_anchor_parent_after_a_removal() {
     assert_eq!(at, vec![0, 0]);
     assert_eq!(tree.len(), 2);
     assert_eq!(tree[0].name, "X");
-    assert_eq!(tree[0].children[0].name, "merged");
+    assert_eq!(tree[0].children()[0].name, "merged");
     assert_eq!(tree.well_formed(), Ok(()));
 }
 
@@ -340,12 +346,12 @@ fn splice_refusal_leaves_the_tree_unchanged() {
 #[test]
 fn insert_refuses_a_second_nested_background() {
     let mut first = layer("first", false);
-    first.is_group = true;
-    first.children = stack(vec![background("first background")]);
+    first.set_group_children(crate::LayerStack::default());
+    first.set_group_children(stack(vec![background("first background")]));
     let mut tree = stack(vec![first]);
     let mut second = layer("second", false);
-    second.is_group = true;
-    second.children = stack(vec![background("second background")]);
+    second.set_group_children(crate::LayerStack::default());
+    second.set_group_children(stack(vec![background("second background")]));
     let before = tree.clone();
     assert_eq!(
         tree.insert(&[], 1, second),
@@ -357,13 +363,13 @@ fn insert_refuses_a_second_nested_background() {
 #[test]
 fn retain_tree_noop_does_not_normalize_untouched_containers() {
     let mut bad = layer("bad", false);
-    bad.is_group = true;
-    bad.children = stack(vec![layer("clipped", true)]);
+    bad.set_group_children(crate::LayerStack::default());
+    bad.set_group_children(stack(vec![layer("clipped", true)]));
     let mut tree = stack(vec![layer("good", false), bad]);
     let before = tree.clone();
     assert_eq!(tree.retain_tree(&[], &mut |_| true), 0);
     assert_eq!(tree, before);
-    assert!(tree[1].children[0].clipping);
+    assert!(tree[1].children()[0].clipping);
 }
 
 #[test]
@@ -382,27 +388,27 @@ fn retain_tree_releases_every_member_of_a_run() {
 #[test]
 fn move_node_can_leave_a_source_below_the_background() {
     let mut group = layer("G", false);
-    group.is_group = true;
+    group.set_group_children(crate::LayerStack::default());
     let mut tree = stack(vec![layer("below", false), background("Background"), group]);
     assert!(tree.move_node(&[0], &[2], 0).is_ok());
     assert_eq!(tree.len(), 2);
     assert!(tree[0].background);
-    assert_eq!(tree[1].children[0].name, "below");
+    assert_eq!(tree[1].children()[0].name, "below");
     assert_eq!(tree.well_formed(), Ok(()));
 }
 
 #[test]
 fn replace_allows_a_background_only_at_the_container_bottom() {
     let mut group = layer("G", false);
-    group.is_group = true;
-    group.children = stack(vec![background("bg")]);
+    group.set_group_children(crate::LayerStack::default());
+    group.set_group_children(stack(vec![background("bg")]));
     let mut tree = stack(vec![group, layer("top", false)]);
     assert!(tree.replace(&[0], vec![background("bg")]).is_ok());
     assert_eq!(tree.well_formed(), Ok(()));
 
     let mut group = layer("G", false);
-    group.is_group = true;
-    group.children = stack(vec![background("bg")]);
+    group.set_group_children(crate::LayerStack::default());
+    group.set_group_children(stack(vec![background("bg")]));
     let mut tree = stack(vec![layer("a", false), group]);
     let before = tree.clone();
     assert_eq!(
@@ -444,4 +450,37 @@ fn a_clone_shares_and_a_structural_edit_forks() {
     assert_eq!(a.len(), 3);
     assert_eq!(b.len(), 2);
     assert_eq!(b[0].name, "A");
+}
+
+#[test]
+fn empty_stacks_share_storage_and_fork_on_edit() {
+    let mut first = LayerStack::default();
+    let second = LayerStack::default();
+    assert!(std::sync::Arc::ptr_eq(&first.0, &second.0));
+    first.push(Layer::default()).unwrap();
+    assert_eq!(first.len(), 1);
+    assert!(!std::sync::Arc::ptr_eq(&first.0, &second.0));
+    assert!(second.is_empty());
+}
+
+#[test]
+fn grouping_refuses_non_group_content_without_removing_nodes() {
+    let mut tree = stack(vec![layer("first", false), layer("second", false)]);
+    let before = tree.clone();
+    for candidate in [
+        Layer::default(),
+        Layer::new(crate::LayerContent::Adjustment(Some(std::sync::Arc::new(
+            crate::Adjustment::Invert,
+        )))),
+        Layer::new(crate::LayerContent::Fill(std::sync::Arc::new(
+            crate::FillContent::Solid([1, 2, 3, 255]),
+        ))),
+    ] {
+        assert_eq!(
+            tree.group(&[], &[0, 1], candidate),
+            Err(StackError::NotAGroup)
+        );
+        assert_eq!(tree, before);
+        assert_eq!(tree.well_formed(), Ok(()));
+    }
 }

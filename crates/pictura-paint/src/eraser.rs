@@ -90,7 +90,7 @@ impl EraserMode {
 pub fn erases_to_background(layer: &Layer) -> bool {
     layer.background
         || layer_transparency_locked(layer)
-        || !layer.channels.iter().any(|c| c.id == -1)
+        || !layer.channels().iter().any(|c| c.id == -1)
 }
 
 /// Begin an Eraser stroke on the layer at `path`. `cfg` carries the tip,
@@ -285,14 +285,14 @@ impl BackgroundEraser {
 /// Give `layer` an opaque alpha channel when it has none (a Background just
 /// turned into a layer), so erasing can take it away.
 pub fn ensure_alpha(layer: &mut Layer) {
-    if layer.channels.iter().any(|c| c.id == -1) {
+    if layer.channels().iter().any(|c| c.id == -1) {
         return;
     }
     let (w, h) = (
         layer.rect.width().max(0) as usize,
         layer.rect.height().max(0) as usize,
     );
-    layer.channels.push(Channel {
+    layer.channels_mut().push(Channel {
         id: -1,
         data: Plane::filled(w, h, 1, 255),
     });
@@ -332,7 +332,7 @@ pub fn magic_erase(
         bounds.bottom as usize,
     );
     let layer = layer_at_mut(doc, &parse_layer_path(path)?)?;
-    if layer.is_group || layer.adjustment.is_some() {
+    if layer.is_group() || layer.has_adjustment_content() {
         return None;
     }
     let fill = erases_to_background(layer).then_some([background.r, background.g, background.b]);
@@ -355,7 +355,7 @@ pub fn magic_erase(
     let mut dirty: Option<PsdRect> = None;
     for (id, target) in targets {
         let Some(channel) = layer
-            .channels
+            .channels_mut()
             .iter_mut()
             .find(|c| c.id == id && c.data.len() == w * h)
         else {

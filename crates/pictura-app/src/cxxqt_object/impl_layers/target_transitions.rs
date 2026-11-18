@@ -111,11 +111,11 @@ impl qobject::PictureView {
                         .next()
                         .and_then(|segment| segment.parse::<usize>().ok())
                         .unwrap_or(0);
-                    if layer.is_group
+                    if layer.is_group()
                         && !layer.lock.is_all()
                         && !layer.lock.contains(pictura_core::LockFlags::NESTING)
                     {
-                        groups.push((parent, index, layer.children.len()));
+                        groups.push((parent, index, layer.children().len()));
                     } else {
                         survivors.push((parent, index));
                     }
@@ -133,7 +133,7 @@ impl qobject::PictureView {
                         .next()
                         .and_then(|segment| segment.parse::<usize>().ok())
                         .unwrap_or(0);
-                    if !layer.is_group {
+                    if !layer.is_group() {
                         survivors.push((parent, index));
                     }
                 }

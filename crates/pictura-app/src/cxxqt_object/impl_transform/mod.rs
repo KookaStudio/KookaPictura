@@ -134,7 +134,7 @@ fn move_reach(doc: &Document, path: &str) -> Option<PsdRect> {
             return Some(reach);
         }
     }
-    let plain = !layer.is_group && layer.adjustment.is_none() && !layer_has_effects(layer);
+    let plain = !layer.is_group() && !layer.has_adjustment_content() && !layer_has_effects(layer);
     if plain {
         if let Some(content) = pictura_render::content_rect(doc, path) {
             return Some(content);

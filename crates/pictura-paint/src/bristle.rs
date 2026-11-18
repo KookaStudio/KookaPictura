@@ -298,32 +298,35 @@ fn unit(x: u64) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, PsdRect};
+    use pictura_core::{BitDepth, Channel, ColorMode, Document, PsdRect};
 
     fn transparent_doc(w: u32, h: u32) -> Document {
         let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
         let n = (w * h) as usize;
-        let _ = doc.layers.push(Layer {
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: h as i32,
-                right: w as i32,
+        let _ = doc.layers.push(pictura_core::Layer::from_parts(
+            pictura_core::LayerParts {
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: h as i32,
+                    right: w as i32,
+                },
+                channels: [0, 1, 2, -1]
+                    .map(|id| Channel {
+                        id,
+                        data: vec![0; n].into(),
+                    })
+                    .into(),
+                ..Default::default()
             },
-            channels: [0, 1, 2, -1]
-                .map(|id| Channel {
-                    id,
-                    data: vec![0; n].into(),
-                })
-                .into(),
-            ..Default::default()
-        });
+            pictura_core::LayerContent::Pixel,
+        ));
         doc
     }
 
     fn alpha_plane(doc: &Document) -> Vec<u8> {
         doc.layers[0]
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == -1)
             .map(|c| c.data.as_slice().to_vec())

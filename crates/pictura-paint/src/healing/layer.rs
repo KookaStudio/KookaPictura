@@ -34,7 +34,7 @@ pub fn heal_layer(
 ) -> Result<Option<PsdRect>, HealError> {
     let indices = parse_layer_path(path).ok_or(HealError::NoRasterLayer)?;
     let layer = layer_at_mut(doc, &indices).ok_or(HealError::NoRasterLayer)?;
-    if layer.is_group || layer.adjustment.is_some() {
+    if layer.is_group() || layer.has_adjustment_content() {
         return Err(HealError::NoRasterLayer);
     }
     if layer_pixel_locked(layer) {
@@ -45,7 +45,7 @@ pub fn heal_layer(
     let len = (w.max(0) * h.max(0)) as usize;
     let plane = |id: i16| {
         layer
-            .channels
+            .channels()
             .iter()
             .position(|c| c.id == id && c.data.len() == len)
     };
@@ -62,12 +62,12 @@ pub fn heal_layer(
     let ys = (window.top - rect.top) as usize..(window.bottom - rect.top) as usize;
     let mut planes = vec![vec![0u8; ww * wh]; if alpha.is_some() { 4 } else { 3 }];
     for (plane, buf) in [r, g, b].into_iter().zip(planes.iter_mut()) {
-        layer.channels[plane]
+        layer.channels()[plane]
             .data
             .read_rect_into(xs.clone(), ys.clone(), w as usize, buf);
     }
     if let (Some(a), Some(buf)) = (alpha, planes.get_mut(3)) {
-        layer.channels[a]
+        layer.channels()[a]
             .data
             .read_rect_into(xs.clone(), ys.clone(), w as usize, buf);
     }
@@ -115,7 +115,7 @@ pub fn heal_layer(
         }
         let lx = (window.left - rect.left) as usize + xs.start;
         let ly = (window.top - rect.top) as usize + ys.start;
-        layer.channels[plane].data.write_rect_from(
+        layer.channels_mut()[plane].data.write_rect_from(
             lx..lx + stride,
             ly..ly + rows,
             w as usize,
@@ -130,9 +130,12 @@ pub fn heal_layer(
         }
         let lx = (window.left - rect.left) as usize + xs.start;
         let ly = (window.top - rect.top) as usize + ys.start;
-        layer.channels[a]
-            .data
-            .write_rect_from(lx..lx + stride, ly..ly + rows, w as usize, &buf);
+        layer.channels_mut()[a].data.write_rect_from(
+            lx..lx + stride,
+            ly..ly + rows,
+            w as usize,
+            &buf,
+        );
     }
     Ok(Some(PsdRect {
         top: dirty.top + window.top,

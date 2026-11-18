@@ -50,9 +50,10 @@ use std::fmt;
 use std::sync::OnceLock;
 
 use pictura_adjust::Adjustment;
+#[cfg(test)]
+use pictura_core::Layer;
 use pictura_core::{
-    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LockFlags, PixelBuffer,
-    PsdRect,
+    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, LockFlags, PixelBuffer, PsdRect,
 };
 
 mod assemble;
@@ -388,7 +389,7 @@ fn validation_document() -> Document {
                 channels[3].data.as_mut_slice()[i] = a;
             }
         }
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: name.into(),
             rect: PsdRect {
                 top: 0,
@@ -410,7 +411,7 @@ fn validation_document() -> Document {
             is_group: false,
             background: false,
             ..Default::default()
-        }
+        })
     };
     let mut doc = Document::new(N, N, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![
@@ -540,7 +541,7 @@ fn mode_id(mode: BlendMode) -> u32 {
 mod tests {
     use super::*;
     use pictura_core::{
-        BitDepth, Channel, ColorLabel, ColorMode, Document, Layer, LayerMask, LockFlags, PsdRect,
+        BitDepth, Channel, ColorLabel, ColorMode, Document, LayerMask, LockFlags, PsdRect,
         SmartObject, SmartObjectKind,
     };
     use std::time::Instant;
@@ -553,13 +554,13 @@ mod tests {
         // The source is partially transparent and not a flat colour: a device
         // that drops alpha or composites only the first few pixels diverges.
         let alpha = doc.layers[1]
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == -1)
             .expect("the source carries alpha");
         assert!(alpha.data.iter().any(|&a| a != 0 && a != 255));
         let red = doc.layers[1]
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == 0)
             .expect("the source carries red");
@@ -607,27 +608,29 @@ mod tests {
         };
         doc.layers = pictura_core::LayerStack::from_layers(
             (0..2u8)
-                .map(|k| Layer {
-                    rect,
-                    opacity: 200,
-                    fill: 255,
-                    visible: true,
-                    channels: (-1..3)
-                        .map(|id| Channel {
-                            id,
-                            data: (0..(w * h) as usize)
-                                .map(|i| (i * (3 + k as usize) + (id + 1) as usize * 40) as u8)
-                                .collect(),
-                        })
-                        .collect(),
-                    ..Default::default()
+                .map(|k| {
+                    pictura_codec::layer_from_parts(pictura_core::LayerParts {
+                        rect,
+                        opacity: 200,
+                        fill: 255,
+                        visible: true,
+                        channels: (-1..3)
+                            .map(|id| Channel {
+                                id,
+                                data: (0..(w * h) as usize)
+                                    .map(|i| (i * (3 + k as usize) + (id + 1) as usize * 40) as u8)
+                                    .collect(),
+                            })
+                            .collect(),
+                        ..Default::default()
+                    })
                 })
                 .collect(),
         );
         // Stamp every plane, as the history does after each capture.
         let stamp_all = |doc: &mut Document| {
             for layer in &mut doc.layers {
-                for c in &mut layer.channels {
+                for c in layer.channels_mut() {
                     c.data.set_stamp(pictura_core::fresh_stamp());
                 }
             }
@@ -654,11 +657,11 @@ mod tests {
         check(&doc, "blend change");
 
         // A write clears the plane's stamp: the cache must not serve it.
-        doc.layers[1].channels[1].data.as_mut_slice()[100] ^= 0xFF;
+        doc.layers[1].channels_mut()[1].data.as_mut_slice()[100] ^= 0xFF;
         check(&doc, "unstamped edit");
 
         // The history then stamps the new bytes afresh.
-        doc.layers[1].channels[1].data.as_mut_slice()[200] ^= 0xFF;
+        doc.layers[1].channels_mut()[1].data.as_mut_slice()[200] ^= 0xFF;
         stamp_all(&mut doc);
         check(&doc, "restamped edit");
     }
@@ -718,7 +721,7 @@ mod tests {
     }
 
     fn pix_layer(w: u32, h: u32, channels: Vec<Channel>) -> Layer {
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "t".into(),
             rect: px_rect(w, h),
             blend: BlendMode::Normal,
@@ -735,7 +738,7 @@ mod tests {
             is_group: false,
             background: false,
             ..Default::default()
-        }
+        })
     }
 
     fn ramp(n: usize, seed: u8) -> Vec<u8> {
@@ -794,7 +797,7 @@ mod tests {
 
         // A short colour plane cannot cover the intersection -> fallback.
         let mut short = pix_layer(w, h, chans(&[0, 1, 2, -1]));
-        short.channels[0].data.truncate(n - 1);
+        short.channels_mut()[0].data.truncate(n - 1);
         let g = source_geom(region, &short, &doc).unwrap();
         assert!(
             assemble_source_rowwise(&short, &g).is_none(),
@@ -884,21 +887,23 @@ mod tests {
         let payload = pictura_codec::write_psd(&source).expect("payload writes");
 
         let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
-            name: "placed".into(),
-            rect: px_rect(w, h),
-            channels: Vec::new(),
-            smart_object: Some(
-                {
-                    let mut so = SmartObject::default();
-                    so.filename = "source.psd".into();
-                    so.kind = SmartObjectKind::Embedded;
-                    so
-                }
-                .with_payload(payload),
-            ),
-            ..Default::default()
-        }]);
+        doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+            pictura_core::LayerParts {
+                name: "placed".into(),
+                rect: px_rect(w, h),
+                channels: Vec::new(),
+                smart_object: Some(
+                    {
+                        let mut so = SmartObject::default();
+                        so.filename = "source.psd".into();
+                        so.kind = SmartObjectKind::Embedded;
+                        so
+                    }
+                    .with_payload(payload),
+                ),
+                ..Default::default()
+            },
+        )]);
 
         // The cached smart source is accepted; the CPU oracle renders the
         // embedded source rather than the channel-less layer's opaque black.
@@ -934,7 +939,7 @@ mod tests {
                 a[i] = if seed == 0 { 255 } else { 160 };
             }
         }
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: format!("layer{seed}"),
             rect: px_rect(n, n),
             blend,
@@ -968,7 +973,7 @@ mod tests {
             is_group: false,
             background: false,
             ..Default::default()
-        }
+        })
     }
 
     /// The transfer half of the readback only (staging + copy + poll + map), so
@@ -1052,7 +1057,7 @@ mod tests {
                     layer.blend,
                     layer.opacity,
                     layer.fill,
-                    layer.type_tool.is_some(),
+                    crate::text_gamma::applies_to(layer),
                     NO_ADJ,
                     None,
                 );

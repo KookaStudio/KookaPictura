@@ -109,6 +109,9 @@ struct SessionState {
     // The remembered per-format Save As options (jpeg/png/bmp/tiff/gif); an absent
     // key uses the CS6 defaults (`save_format_options.h`).
     QJsonObject saveFormatOptions;
+    // The last accepted File > Automate > Batch options (the batch engine's
+    // `BatchOptions` JSON); empty until the first batch.
+    QJsonObject batchOptions;
     bool guideDashed = false;
     // Crop options bar, persisted across restarts.
     bool cropClassicMode = false;    // Classic vs Modern (default) drag semantics

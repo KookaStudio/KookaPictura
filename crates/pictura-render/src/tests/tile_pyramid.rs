@@ -37,7 +37,7 @@ fn edit(doc: &mut Document, rect: PsdRect) {
     let layer = doc.layers.iter_mut().last().expect("a top layer");
     let lr = layer.rect;
     let w = lr.width() as usize;
-    for channel in layer.channels.iter_mut().take(3) {
+    for channel in layer.channels_mut().iter_mut().take(3) {
         let data = channel.data.as_mut_slice();
         for y in rect.top.max(lr.top)..rect.bottom.min(lr.bottom) {
             for x in rect.left.max(lr.left)..rect.right.min(lr.right) {

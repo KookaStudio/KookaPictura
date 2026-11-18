@@ -41,7 +41,7 @@ fn plane(w: i32, h: i32, seed: u8) -> Vec<u8> {
 
 fn pixel_layer(r: PsdRect) -> Layer {
     let (w, h) = (r.width(), r.height());
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "L".into(),
         rect: r,
         channels: vec![
@@ -63,7 +63,7 @@ fn pixel_layer(r: PsdRect) -> Layer {
             },
         ],
         ..Default::default()
-    }
+    })
 }
 
 fn doc_with(layer: Layer) -> Document {
@@ -73,7 +73,7 @@ fn doc_with(layer: Layer) -> Document {
 }
 
 fn channel(layer: &Layer, id: i16) -> &[u8] {
-    &layer.channels.iter().find(|c| c.id == id).unwrap().data
+    &layer.channels().iter().find(|c| c.id == id).unwrap().data
 }
 
 /// The custom warp that moves the whole box by `(dx, dy)`.
@@ -313,7 +313,12 @@ fn a_projective_box_is_kept_exactly() {
     let r = rect(0, 0, 40, 40);
     let mut layer = pixel_layer(r);
     let gradient: Vec<u8> = (0..1600).map(|i| (i % 40) as u8 * 6).collect();
-    layer.channels.iter_mut().find(|c| c.id == 0).unwrap().data = gradient.into();
+    layer
+        .channels_mut()
+        .iter_mut()
+        .find(|c| c.id == 0)
+        .unwrap()
+        .data = gradient.into();
     let quad = [(0.0, 0.0), (40.0, 8.0), (40.0, 32.0), (0.0, 40.0)];
     let b = bounds(r);
     let mut doc = doc_with(layer);

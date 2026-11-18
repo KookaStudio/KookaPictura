@@ -46,7 +46,9 @@ fn stack_doc(
 }
 
 fn proxy_rgb(rgb: (u8, u8, u8), size: u32) -> Vec<Channel> {
-    solid("proxy", full(size, size), rgb, 255, BlendMode::Normal, 255).channels
+    solid("proxy", full(size, size), rgb, 255, BlendMode::Normal, 255)
+        .channels()
+        .clone()
 }
 
 #[test]
@@ -92,11 +94,13 @@ fn clearing_a_stack_mode_restores_the_proxy() {
         2,
     );
     assert_close(&composite_rgba(&d), 0, 0, [0, 255, 0, 255]);
-    d.layers[0]
-        .smart_object
-        .as_mut()
-        .expect("smart object")
-        .stack_mode = None;
+    pictura_codec::edit_layer(d.layers[0].as_mut(), |parts| {
+        parts
+            .smart_object
+            .as_mut()
+            .expect("smart object")
+            .stack_mode = None;
+    });
     assert_close(&composite_rgba(&d), 0, 0, [255, 0, 0, 255]);
 }
 
@@ -125,10 +129,10 @@ fn stack_mode_applies_smart_filters_after_reduction() {
         ..Default::default()
     };
     assert!(apply_pictura_raw(&mut d, "0", &settings));
-    let so = d.layers[0].smart_object.as_ref().expect("object");
+    let so = d.layers[0].smart_object().expect("object");
     let src = render_smart_source(so, full(2, 2), full(2, 2)).expect("source");
     let expected = pictura_adjust::render_pictura_raw(&src, &settings).expect("filter");
-    for channel in &mut d.layers[0].channels {
+    for channel in d.layers[0].channels_mut() {
         channel.data = vec![7u8; 4].into();
     }
     let out = composite_rgba(&d);
@@ -148,16 +152,15 @@ fn stack_mode_unknown_filter_keeps_the_proxy() {
         proxy_rgb((255, 0, 0), 2),
         2,
     );
-    d.layers[0]
-        .smart_object
-        .as_mut()
-        .expect("object")
-        .smart_filters = vec![pictura_core::SmartFilter {
-        filter_id: 999,
-        name: "unknown".into(),
-        enabled: true,
-        options: Vec::new().into(),
-    }];
+    pictura_codec::edit_layer(d.layers[0].as_mut(), |parts| {
+        parts.smart_object.as_mut().expect("object").smart_filters =
+            vec![pictura_core::SmartFilter {
+                filter_id: 999,
+                name: "unknown".into(),
+                enabled: true,
+                options: Vec::new().into(),
+            }];
+    });
     assert_close(&composite_rgba(&d), 0, 0, [255, 0, 0, 255]);
 }
 
@@ -198,11 +201,11 @@ fn set_stack_mode_refuses_fewer_than_two_frames() {
 fn set_stack_mode_refuses_ineligible_targets() {
     let payload = stack_payload(&[((0, 0, 0), true), ((10, 10, 10), true)], 2);
 
-    let group = pictura_core::Layer {
+    let group = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         is_group: true,
         smart_object: Some(stack_object(payload.clone(), None)),
         ..Default::default()
-    };
+    });
     let mut group_doc = doc(2, 2, vec![group]);
     assert!(!set_smart_object_stack_mode(
         &mut group_doc,
@@ -210,14 +213,14 @@ fn set_stack_mode_refuses_ineligible_targets() {
         Some(pictura_core::StackMode::Mean)
     ));
 
-    let adjustment = pictura_core::Layer {
+    let adjustment = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         adjustment: Some(pictura_core::AdjustmentData {
             key: *b"nvrt",
             data: Vec::new().into(),
         }),
         smart_object: Some(stack_object(payload.clone(), None)),
         ..Default::default()
-    };
+    });
     let mut adjustment_doc = doc(2, 2, vec![adjustment]);
     assert!(!set_smart_object_stack_mode(
         &mut adjustment_doc,
@@ -288,13 +291,13 @@ fn stack_frames_are_visible_top_level_layers() {
         255,
     );
     let top = solid("top", full(2, 2), (0, 0, 255), 255, BlendMode::Normal, 255);
-    let group = pictura_core::Layer {
+    let group = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "group".into(),
         rect: full(2, 2),
         is_group: true,
         children: pictura_core::LayerStack::from_layers(vec![bottom, top]),
         ..Default::default()
-    };
+    });
     let raster = solid(
         "raster",
         full(2, 2),
@@ -381,8 +384,8 @@ fn rasterize_keeps_the_proxy_when_the_stack_does_not_apply() {
         2,
     );
     assert!(rasterize_smart_object(&mut one, "0"));
-    assert_eq!(one.layers[0].channels, proxy);
-    assert!(one.layers[0].smart_object.is_none());
+    assert_eq!(one.layers[0].channels(), &proxy);
+    assert!(one.layers[0].smart_object().is_none());
 
     let proxy = proxy_rgb((255, 0, 0), 2);
     let mut unreadable = stack_doc(
@@ -392,8 +395,8 @@ fn rasterize_keeps_the_proxy_when_the_stack_does_not_apply() {
         2,
     );
     assert!(rasterize_smart_object(&mut unreadable, "0"));
-    assert_eq!(unreadable.layers[0].channels, proxy);
-    assert!(unreadable.layers[0].smart_object.is_none());
+    assert_eq!(unreadable.layers[0].channels(), &proxy);
+    assert!(unreadable.layers[0].smart_object().is_none());
 }
 
 #[test]
@@ -407,10 +410,10 @@ fn rasterize_bakes_the_stack_render() {
     );
     assert!(rasterize_smart_object(&mut d, "0"));
     let layer = &d.layers[0];
-    assert!(layer.smart_object.is_none());
+    assert!(layer.smart_object().is_none());
     let channel = |id: i16| {
         layer
-            .channels
+            .channels()
             .iter()
             .find(|channel| channel.id == id)
             .expect("channel")

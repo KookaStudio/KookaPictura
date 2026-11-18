@@ -166,11 +166,19 @@ bool ImportSaveCoordinator::saveActiveAs(const QString& path, std::optional<bool
         hooks_.updateWindowTitle();
     }
     if (!saveActiveOrigin) {
-        recordCommand(command_ids::FileSaveAs,
-                      QJsonObject{
-                          {QStringLiteral("as"),
-                           path.section(QLatin1Char('.'), -1).toUpper()},
-                          {QStringLiteral("in"), path}});
+        QJsonObject step{{QStringLiteral("as"), path.section(QLatin1Char('.'), -1).toUpper()},
+                         {QStringLiteral("in"), path}};
+        // The step carries the format's options so playback (and Batch) saves
+        // with them rather than whatever is remembered at replay time.
+        const SaveFormatKind kind =
+            lastSaveKinds_.value(view, saveFormatKindForSuffix(QFileInfo(path).suffix()));
+        const QString key = saveFormatKey(kind);
+        if (!key.isEmpty()) {
+            step.insert(QStringLiteral("options"),
+                        saveFormatOptionsToJson(saveFormatOptionsFromJson(saveFormatOptions_))
+                            .value(key));
+        }
+        recordCommand(command_ids::FileSaveAs, step);
     }
     return true;
 }
@@ -323,7 +331,7 @@ bool ImportSaveCoordinator::saveCopyAs(const QString& path, std::optional<bool> 
     return true;
 }
 
-bool ImportSaveCoordinator::saveActiveAtPath(const QString& path)
+bool ImportSaveCoordinator::saveActiveAtPath(const QString& path, const QJsonObject& stepOptions)
 {
     PictureView* view = documents_.activeView();
     if (!view || path.isEmpty()) {
@@ -331,7 +339,15 @@ bool ImportSaveCoordinator::saveActiveAtPath(const QString& path)
     }
     const SaveFormatKind kind = saveFormatKindForSuffix(QFileInfo(path).suffix());
     if (kind != SaveFormatKind::None) {
-        applySaveRasterOptions(*view, kind, saveFormatOptionsFromJson(saveFormatOptions_));
+        // A step's own options overlay the remembered ones for this save only.
+        QJsonObject root = saveFormatOptions_;
+        const QString key = saveFormatKey(kind);
+        QJsonObject format = root.value(key).toObject();
+        for (auto it = stepOptions.begin(); it != stepOptions.end(); ++it) {
+            format.insert(it.key(), it.value());
+        }
+        root.insert(key, format);
+        applySaveRasterOptions(*view, kind, saveFormatOptionsFromJson(root));
         lastSaveKinds_.insert(view, kind);
     }
     return saveActiveAs(path);

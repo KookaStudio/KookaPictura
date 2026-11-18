@@ -31,7 +31,8 @@ pub(crate) struct PlanNode<'a> {
 pub(crate) enum Body {
     Hidden,
     Pixels,
-    Fill(Arc<Adjustment>),
+    Adjustment(Arc<Adjustment>),
+    Fill(Arc<pictura_core::FillContent>),
     UndecodedAdjustment,
     SmartFiltered {
         filtered: Option<CachedBuffer>,
@@ -187,16 +188,21 @@ fn plan_node<'a>(
         Some(layer),
         crate::tests::effect_preparation::probe::Event::Resolve(parallel),
     );
+    #[cfg(test)]
+    if let Some(data) = layer.adjustment() {
+        counters::note_content_resolution(data);
+    }
     let body = match crate::composite_route::content_route(layer) {
         ContentRoute::PassThroughGroup => Body::Group { pass_through: true },
         ContentRoute::IsolatedGroup => Body::Group {
             pass_through: false,
         },
-        ContentRoute::Fill(adjustment) => Body::Fill(Arc::new(adjustment)),
+        ContentRoute::Adjustment(adjustment) => Body::Adjustment(adjustment),
+        ContentRoute::Fill(fill) => Body::Fill(fill),
         ContentRoute::UndecodedAdjustment => Body::UndecodedAdjustment,
         ContentRoute::SmartFiltered => {
             let filtered = crate::layer_source::filtered_source(layer, doc);
-            let filter_base = match (&filtered, layer.smart_object.as_ref()) {
+            let filter_base = match (&filtered, layer.smart_object()) {
                 (Some(cached), Some(so)) => {
                     let has_mask = so
                         .filter_mask
@@ -210,8 +216,7 @@ fn plan_node<'a>(
                 _ => None,
             };
             let source = layer
-                .smart_object
-                .as_ref()
+                .smart_object()
                 .and_then(crate::layer_source::embedded_source);
             let type_raster = crate::layer_source::text_raster(layer);
             Body::SmartFiltered {
@@ -224,8 +229,7 @@ fn plan_node<'a>(
         }
         ContentRoute::SmartSource => Body::SmartSource {
             source: layer
-                .smart_object
-                .as_ref()
+                .smart_object()
                 .and_then(crate::layer_source::embedded_source),
             type_raster: crate::layer_source::text_raster(layer),
             has_proxy: crate::channel_plane(layer, 0).is_some(),
@@ -241,8 +245,8 @@ fn plan_node<'a>(
         Body::Fill(adjustment) => Some(adjustment.as_ref()),
         _ => None,
     };
-    let destructive = fill.is_some_and(|adjustment| !crate::fill::is_fill_kind(adjustment));
-    let passes = (!layer.is_group && !destructive).then(|| {
+    let destructive = matches!(body, Body::Adjustment(_));
+    let passes = (!layer.is_group() && !destructive).then(|| {
         crate::layer_source::effect_passes_with(
             layer,
             doc,
@@ -258,8 +262,8 @@ fn plan_node<'a>(
         passes,
         blend: Some(BlendCtx::new(layer, doc, clip)),
         sources: Some(SourcePlanes::resolve(layer, doc)),
-        children: if layer.is_group {
-            plan_layers(&layer.children, doc, clip, effect_region, parallel)
+        children: if layer.is_group() {
+            plan_layers(layer.children(), doc, clip, effect_region, parallel)
         } else {
             Vec::new()
         },
@@ -356,11 +360,11 @@ pub(crate) mod counters {
         NATIVE_PLANE.reset(layer_key(layer));
     }
 
-    pub(crate) fn note_adjustment(data: &AdjustmentData) {
+    pub(crate) fn note_content_resolution(data: &AdjustmentData) {
         ADJUSTMENT.bump(data.data.ident() as usize);
     }
 
-    pub(crate) fn adjustment_count(data: &AdjustmentData) -> usize {
+    pub(crate) fn content_resolution_count(data: &AdjustmentData) -> usize {
         ADJUSTMENT.get(data.data.ident() as usize)
     }
 

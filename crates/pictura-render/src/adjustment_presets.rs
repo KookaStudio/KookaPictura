@@ -43,6 +43,13 @@ const MAX_NAME_CHARS: usize = 80;
 /// The catalogue kind of `data`'s adjustment, or `None` when it does not
 /// decode.
 pub fn kind_of(data: &AdjustmentData) -> Option<&'static str> {
+    if let Some(fill) = pictura_codec::decode_fill(data) {
+        return Some(match fill {
+            pictura_core::FillContent::Solid(_) => "solid-color",
+            pictura_core::FillContent::Gradient(_) => "gradient",
+            pictura_core::FillContent::Pattern(_) => "pattern",
+        });
+    }
     Some(match decode_adjustment(data)? {
         Adjustment::Levels(_) => "levels",
         Adjustment::Curves(_) => "curves",
@@ -64,9 +71,6 @@ pub fn kind_of(data: &AdjustmentData) -> Option<&'static str> {
         Adjustment::Desaturate => "desaturate",
         Adjustment::Equalize => "equalize",
         Adjustment::Auto(_) => "auto",
-        Adjustment::GradientFill(_) => "gradient",
-        Adjustment::SolidFill(_) => "solid-color",
-        Adjustment::PatternFill(_) => "pattern",
         Adjustment::ReplaceColor(_) => "replace-color",
         Adjustment::MatchColor(_) => "match-color",
     })
@@ -86,8 +90,12 @@ pub fn supports_menu(kind: &str) -> bool {
 /// settings therefore match, which is what the Preset menu needs to name the
 /// current preset.
 pub fn blocks_match(a: &AdjustmentData, b: &AdjustmentData) -> bool {
-    match (decode_adjustment(a), decode_adjustment(b)) {
+    match (pictura_codec::decode_fill(a), pictura_codec::decode_fill(b)) {
         (Some(a), Some(b)) => a == b,
+        (None, None) => match (decode_adjustment(a), decode_adjustment(b)) {
+            (Some(a), Some(b)) => a == b,
+            _ => false,
+        },
         _ => false,
     }
 }
@@ -397,6 +405,17 @@ mod tests {
         assert!(blocks_match(&a, &b));
         let c = crate::set_adjustment_param(&a, "inputBlack", 1.0).unwrap();
         assert!(!blocks_match(&a, &c));
+        let fill = crate::encode_solid_color_fill([10, 20, 30]);
+        let legacy = AdjustmentData {
+            key: *b"SoCo",
+            data: vec![10, 20, 30, 255].into(),
+        };
+        assert!(blocks_match(&fill, &legacy));
+        assert!(!blocks_match(
+            &fill,
+            &crate::encode_solid_color_fill([40, 50, 60])
+        ));
+        assert!(!blocks_match(&fill, &a));
     }
 
     #[test]

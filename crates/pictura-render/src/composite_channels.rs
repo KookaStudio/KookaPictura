@@ -51,13 +51,13 @@ pub(crate) fn region(canvas: &Canvas, node: &PlanNode<'_>) -> Option<PsdRect> {
         right: canvas.ox + canvas.w as i32,
     };
     let layer = node.layer;
-    let destructive = !layer.is_group && crate::layer_effects::is_destructive_adjustment(layer);
-    let mut rect = if layer.is_group || destructive {
+    let destructive = !layer.is_group() && crate::layer_effects::is_destructive_adjustment(layer);
+    let mut rect = if layer.is_group() || destructive {
         whole()
     } else {
         layer.rect
     };
-    if !layer.is_group && !destructive {
+    if !layer.is_group() && !destructive {
         if let Some(passes) = node.passes.as_deref() {
             for pass in passes.below.iter().chain(&passes.fold).chain(&passes.above) {
                 rect = rect.union(pass.rect);

@@ -759,10 +759,7 @@ void PicturaMainWindow::showOpenDialog()
     const QStringList paths = getOpenFileNames(this, tr("Open"),
                                                documentDirectory(activeFilePath()),
                                                openFileFilters());
-    // Start every chosen path; a failure on one must not skip the rest.
-    for (const QString& path : paths) {
-        startOpenDocumentAtPath(path);
-    }
+    openUserPaths(paths);
 }
 
 void PicturaMainWindow::setScreenMode(ScreenMode mode)
@@ -879,6 +876,12 @@ void PicturaMainWindow::refresh()
     presentWindows();
     if (tools_) {
         tools_->bindCanvas(canvas);
+    }
+    if (toolbox_) {
+        toolbox_->refreshToolAvailability();
+    }
+    if (optionsBar_) {
+        optionsBar_->refreshDocumentFacts();
     }
     syncBrushTipPreview();
     if (DocWindow* active = documents_->activeWindow()) {

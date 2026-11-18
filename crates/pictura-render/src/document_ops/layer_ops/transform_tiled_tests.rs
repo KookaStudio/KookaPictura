@@ -122,7 +122,7 @@ fn tiled_resample_matches_the_dense_resampler() {
         Interpolation::Bicubic
     ));
     let layer = resolve_path(&doc, "0").expect("layer");
-    assert!(layer.channels.iter().all(|c| c.data.is_tiled()));
+    assert!(layer.channels().iter().all(|c| c.data.is_tiled()));
 }
 
 fn deep_case<T: Sample + TileSample + std::fmt::Debug>(seed: impl Fn(usize) -> T) {
@@ -181,7 +181,7 @@ fn a_solid_layer_scales_into_uniform_tiles() {
     ));
     let layer = resolve_path(&doc, "0").expect("layer");
     let dense = (layer.rect.width() * layer.rect.height()) as usize;
-    for c in &layer.channels {
+    for c in layer.channels() {
         // Only the edge tiles, where the transparent padding blends in, hold
         // samples; 44 of the 144 tiles of a 3072² plane.
         assert!(

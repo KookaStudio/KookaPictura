@@ -379,7 +379,7 @@ mod tests {
         for name in ["restore.psd", "restore.psb"] {
             let omitted = save_compatible(colored_document(), name, false, false);
             let mut doc = pictura_codec::read_psd(&omitted).unwrap();
-            doc.layers[0].channels[0].data.as_mut_slice().fill(88);
+            doc.layers[0].channels_mut()[0].data.as_mut_slice().fill(88);
             let expected = pictura_render::composite_rgba(&doc);
             let restored = save_compatible(doc, name, true, true);
             let restored = pictura_codec::read_psd(&restored).unwrap();
@@ -579,7 +579,7 @@ mod tests {
         encoded[offset + flag] = 0;
         let mut doc = pictura_codec::read_psd(&encoded).unwrap();
         assert!(!doc.composite.merged_output());
-        doc.layers[0].channels[0].data.as_mut_slice().fill(80);
+        doc.layers[0].channels_mut()[0].data.as_mut_slice().fill(80);
         let output = save_compatible(doc, "adobe.psd", true, true);
         let back = pictura_codec::read_psd(&output).unwrap();
         assert!(back.composite.merged_output());
@@ -599,10 +599,10 @@ mod tests {
         doc.mode = mode;
         let layer = &mut doc.layers[0];
         layer
-            .channels
+            .channels_mut()
             .retain(|channel| channel.id < i16::from(color_count));
         let planes = layer
-            .channels
+            .channels()
             .iter()
             .map(|channel| {
                 let samples = match (depth, channel.id) {
@@ -868,7 +868,7 @@ mod tests {
         let mut doc = Document::from_rgba("Layer 0", 4, 4, &rgba);
         let mut layer = doc.layers.get(0).expect("layer").clone();
         layer.name = "Layer 1".to_string();
-        layer.channels[1].data.as_mut_slice().fill(9);
+        layer.channels_mut()[1].data.as_mut_slice().fill(9);
         let original = doc.layers.get(0).expect("layer").clone();
         doc.layers = LayerStack::from_layers(vec![layer, original]);
         doc.composite

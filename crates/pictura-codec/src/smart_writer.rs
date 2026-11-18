@@ -17,13 +17,13 @@ const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 /// The layer's smart object when the writer must author one: embedded, with a
 /// payload, and no preserved config block to re-emit.
 pub(crate) fn should_author(layer: &Layer) -> Option<&SmartObject> {
-    let so = layer.smart_object.as_ref()?;
+    let so = layer.smart_object()?;
     if so.kind != SmartObjectKind::Embedded || so.payload().is_none() {
         return None;
     }
     let config_keys = [*b"SoLd", *b"SoLE", *b"plLd", *b"PlLd"];
     if layer
-        .extra_blocks
+        .extra_blocks()
         .iter()
         .any(|b| config_keys.contains(&b.key))
     {
@@ -265,7 +265,7 @@ pub(crate) fn collect_authoring(layers: &[Layer]) -> Vec<&SmartObject> {
             if let Some(so) = should_author(layer) {
                 out.push(so);
             }
-            walk(&layer.children, out);
+            walk(layer.children(), out);
         }
     }
     let mut out = Vec::new();

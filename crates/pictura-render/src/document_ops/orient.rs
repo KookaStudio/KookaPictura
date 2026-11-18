@@ -172,7 +172,7 @@ fn transform_document(doc: &mut Document, kind: Kind) -> Result<(), OpsError> {
 
 fn orient_layer(layer: &mut Layer, w: i32, h: i32, kind: Kind) -> Result<(), MemoryError> {
     let old_rect = layer.rect;
-    for channel in &mut layer.channels {
+    for channel in layer.channels_mut() {
         channel.data = geometry_tiled::orient(&channel.data, dims(old_rect), 1, kind.remap())?;
     }
     if let Some(store) = layer.source_channels.take() {
@@ -182,7 +182,7 @@ fn orient_layer(layer: &mut Layer, w: i32, h: i32, kind: Kind) -> Result<(), Mem
     layer.rect = transform_rect(old_rect, w, h, kind);
     // ponytail: the exact remap keeps the native store, but an unmodeled raw
     // on-disk stream still has no resampler and drops.
-    layer.raw_channels.clear();
+    layer.discard_raw_channels();
 
     if let Some(mask) = &mut layer.mask {
         if let Some(data) = &mut mask.data {
@@ -241,7 +241,7 @@ fn orient_rows(doc: &mut Document, kind: Kind) -> u64 {
         total += rows(canvas, store.samples.len() / area);
     }
     for_each_layer(&mut doc.layers, &mut |layer| {
-        total += rows(layer.rect, layer.channels.len());
+        total += rows(layer.rect, layer.channels().len());
         if let Some(mask) = layer.mask.as_ref().filter(|m| m.data.is_some()) {
             total += rows(mask.rect, 1);
         }
@@ -311,7 +311,7 @@ mod tests {
 
     fn pixel_layer(name: &str, r: PsdRect, mask: Option<LayerMask>) -> Layer {
         let n = (r.width().max(0) * r.height().max(0)) as usize;
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: name.into(),
             rect: r,
             blend: BlendMode::Normal,
@@ -345,7 +345,7 @@ mod tests {
             is_group: false,
             background: false,
             ..Default::default()
-        }
+        })
     }
 
     /// Non-square 5×3 document with a full layer, a masked layer and a
@@ -390,7 +390,7 @@ mod tests {
         assert_eq!((doc.width, doc.height), (3, 5));
         for layer in &doc.layers {
             let area = (layer.rect.width() * layer.rect.height()) as usize;
-            for channel in &layer.channels {
+            for channel in layer.channels() {
                 assert_eq!(channel.data.len(), area, "{} {}", layer.name, channel.id);
             }
         }
@@ -415,7 +415,7 @@ mod tests {
         rotate_document(&mut doc, 1).unwrap();
 
         assert_eq!((doc.width, doc.height), (2, 3));
-        assert_eq!(doc.layers[0].channels[0].data, vec![3, 0, 4, 1, 5, 2]);
+        assert_eq!(doc.layers[0].channels()[0].data, vec![3, 0, 4, 1, 5, 2]);
         assert_consistent(&mut doc);
     }
 
@@ -452,12 +452,12 @@ mod tests {
     #[test]
     fn flip_horizontal_mirrors_channel_bytes() {
         let mut doc = sample_doc();
-        assert_eq!(doc.layers[0].channels[0].data, plane(0, 15));
+        assert_eq!(doc.layers[0].channels()[0].data, plane(0, 15));
 
         flip_document(&mut doc, true).unwrap();
 
         let want: Vec<u8> = vec![4, 3, 2, 1, 0, 9, 8, 7, 6, 5, 14, 13, 12, 11, 10];
-        assert_eq!(doc.layers[0].channels[0].data, want);
+        assert_eq!(doc.layers[0].channels()[0].data, want);
         assert_eq!(doc.layers[0].rect, rect(0, 0, 3, 5));
         assert_consistent(&mut doc);
     }

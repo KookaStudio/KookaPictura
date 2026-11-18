@@ -599,7 +599,7 @@ pub(super) fn styled_except(layers: &[Layer], prefix: &str, own: &str) -> bool {
             format!("{prefix}/{i}")
         };
         (path != own && pictura_render::has_layer_style(l))
-            || styled_except(&l.children, &path, own)
+            || styled_except(l.children(), &path, own)
     })
 }
 
@@ -611,9 +611,11 @@ mod tests {
 
     fn styled() -> Layer {
         let mut layer = pixel_layer("styled", 1, 1, (0, 0, 0));
-        layer.extra_blocks.push(LayerBlock {
-            key: *b"lfx2",
-            data: Vec::new().into(),
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks.push(LayerBlock {
+                key: *b"lfx2",
+                data: Vec::new().into(),
+            })
         });
         layer
     }
@@ -622,8 +624,11 @@ mod tests {
     fn a_style_anywhere_but_the_exempt_layer_counts() {
         let plain = pixel_layer("plain", 1, 1, (0, 0, 0));
         let mut group = pixel_layer("group", 1, 1, (0, 0, 0));
-        group.is_group = true;
-        group.children = pictura_core::LayerStack::from_layers(vec![plain.clone(), styled()]);
+        group.set_group_children(pictura_core::LayerStack::default());
+        group.set_group_children(pictura_core::LayerStack::from_layers(vec![
+            plain.clone(),
+            styled(),
+        ]));
         let layers = vec![plain.clone(), group];
         assert!(styled_except(&layers, "", ""), "a nested style is found");
         assert!(

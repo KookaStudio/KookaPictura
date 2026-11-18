@@ -441,7 +441,7 @@ pub fn read_psd_lazy(
     // a bottom layer of that name with transparency is not opaque.
     let usable = doc.source.original_profile().is_none()
         && doc.layers.get(0).is_some_and(|bottom| {
-            bottom.background && bottom.visible && !bottom.channels.iter().any(|c| c.id == -1)
+            bottom.background && bottom.visible && !bottom.channels().iter().any(|c| c.id == -1)
         });
     Ok((doc, preview.filter(|_| usable)))
 }

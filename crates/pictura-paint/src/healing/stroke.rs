@@ -35,7 +35,7 @@ impl HealStroke {
     ) -> Result<Self, HealError> {
         let indices = parse_layer_path(path).ok_or(HealError::NoRasterLayer)?;
         let target = layer_at(doc, &indices).ok_or(HealError::NoRasterLayer)?;
-        if target.is_group || target.adjustment.is_some() {
+        if target.is_group() || target.has_adjustment_content() {
             return Err(HealError::NoRasterLayer);
         }
         if layer_pixel_locked(target) {

@@ -86,7 +86,7 @@ pub(super) fn changed_property_region(
         .zip(before)
         .filter(|(path, before)| property_compositing(doc, path) != **before)
         .try_fold(None, |union: Option<pictura_core::PsdRect>, (path, _)| {
-            if pictura_render::resolve_path(doc, path)?.is_group {
+            if pictura_render::resolve_path(doc, path)?.is_group() {
                 return None;
             }
             let rect = pictura_render::damage::influence(doc, path)?;
@@ -199,7 +199,7 @@ impl qobject::PictureView {
         let value = value.clamp(0, 255) as u8;
         self.as_mut()
             .mutate_layer(i, "Fill Opacity", |layer, background| {
-                if layer.is_group || background || layer.lock.is_all() {
+                if layer.is_group() || background || layer.lock.is_all() {
                     false
                 } else {
                     layer.fill = value;
@@ -407,7 +407,7 @@ impl qobject::PictureView {
                 Some(doc) => (
                     pictura_render::damage::influence(doc, &path),
                     pictura_render::resolve_path(doc, &path)
-                        .map_or(0, |layer| layer.children.len()),
+                        .map_or(0, |layer| layer.children().len()),
                 ),
                 None => (None, 0),
             };
@@ -452,7 +452,7 @@ impl qobject::PictureView {
         let Some(layer) = self.layer(i) else {
             return QImage::default();
         };
-        if layer.is_group || layer.adjustment.is_some() {
+        if layer.is_group() || layer.has_adjustment_content() {
             return QImage::default();
         }
         pictura_core::memory::eviction::transient(|| layer_thumbnail_image(layer, size as u32))
@@ -517,9 +517,9 @@ impl qobject::PictureView {
                             QImage::default()
                         } else if shape {
                             super::shapes::shape_thumbnail(layer, doc, thumb_size)
-                        } else if layer.is_group {
+                        } else if layer.is_group() {
                             QImage::default()
-                        } else if layer.adjustment.is_some() {
+                        } else if layer.has_adjustment_content() {
                             if pictura_render::is_fill_content_layer(layer) {
                                 let decoded = patterns
                                     .get_or_insert_with(|| pictura_codec::decode_patterns(doc));
@@ -580,14 +580,14 @@ impl qobject::PictureView {
                             has_vector_mask: pictura_render::has_vector_mask(doc, &path),
                             vector_mask_linked: pictura_render::vector_mask_linked(doc, &path),
                             vector_mask_disabled: pictura_render::vector_mask_disabled(doc, &path),
-                            has_adjustment: layer.adjustment.is_some(),
+                            has_adjustment: layer.has_adjustment_content(),
                             adjustment_kind: QString::from(adjustment_kind(layer).as_str()),
-                            expandable: layer.is_group,
-                            child_count: layer.children.len() as i32,
+                            expandable: layer.is_group(),
+                            child_count: layer.children().len() as i32,
                             linked: link_sets.contains_key(&path),
                             placed: is_placed_smart_object(layer),
                             shape,
-                            smart_object: layer.smart_object.is_some(),
+                            smart_object: layer.smart_object().is_some(),
                             has_style: pictura_render::has_layer_style(layer),
                             style_effects,
                             style_effects_on,

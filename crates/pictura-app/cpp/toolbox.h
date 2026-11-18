@@ -133,6 +133,10 @@ public:
 
     // Re-derive slot and icon geometry after a live UI scale change.
     void applyUiScale();
+    // Re-evaluate every member after the active document's colour mode changed:
+    // the Color Replacement flyout row is disabled on Bitmap, Indexed, and
+    // Multichannel documents.
+    void refreshToolAvailability();
 
 signals:
     void paintMaskToggled(bool checked);
@@ -141,6 +145,7 @@ signals:
     void columnsChanged(int columns);
 
 private:
+    bool available(ToolId id) const;
     ToolId groupCurrentTool(int group) const;
     void refreshSlot(int group);
     void selectMember(int group, ToolId id);
@@ -183,6 +188,8 @@ private:
     QTimer* paintMaskClick_ = nullptr;
     QMenu* openSlotMenu_ = nullptr;
     QToolButton* openSlotButton_ = nullptr;
+    // The `image_mode` name the slots were last gated against.
+    QString documentMode_;
     QSize slotSize_ { 36, 28 };
     QSize iconSize_ { 24, 20 };
     int columns_ = 1;

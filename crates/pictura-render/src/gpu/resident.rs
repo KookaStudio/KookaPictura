@@ -61,7 +61,7 @@ fn region_key(r: Region) -> (u32, u32, u32, u32) {
 pub(super) fn source_key(layer: &Layer, doc: (u32, u32), gray: bool) -> Option<UploadKey> {
     let mut planes = [None; 4];
     for (slot, id) in planes.iter_mut().zip([0i16, 1, 2, -1]) {
-        if let Some(channel) = layer.channels.iter().find(|c| c.id == id) {
+        if let Some(channel) = layer.channels().iter().find(|c| c.id == id) {
             let stamp = channel.data.stamp();
             if stamp == 0 {
                 return None;
@@ -179,7 +179,7 @@ mod tests {
     }
 
     fn layer() -> Layer {
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             rect: PsdRect {
                 top: 0,
                 left: 0,
@@ -193,11 +193,11 @@ mod tests {
                 })
                 .collect(),
             ..Default::default()
-        }
+        })
     }
 
     fn stamp_all(layer: &mut Layer) {
-        for c in &mut layer.channels {
+        for c in layer.channels_mut() {
             c.data.set_stamp(fresh_stamp());
         }
     }
@@ -216,7 +216,7 @@ mod tests {
         let mut l = layer();
         assert_eq!(source_key(&l, (4, 2), false), None);
         stamp_all(&mut l);
-        l.channels[2].data.as_mut_slice()[0] = 9;
+        l.channels_mut()[2].data.as_mut_slice()[0] = 9;
         assert_eq!(
             source_key(&l, (4, 2), false),
             None,
@@ -243,7 +243,7 @@ mod tests {
             Some(key.clone()),
             "the raw layer rect is in the key"
         );
-        l.channels[0].data.set_stamp(fresh_stamp());
+        l.channels_mut()[0].data.set_stamp(fresh_stamp());
         assert_ne!(
             source_key(&l, (4, 2), false),
             Some(key),

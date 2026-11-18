@@ -8,7 +8,7 @@ use crate::cxxqt_object::{
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QImageFormat};
-use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, LockFlags, PsdRect};
+use pictura_core::{BitDepth, Channel, ColorMode, Document, LockFlags, PsdRect};
 use pictura_paint::{Stroke, StrokeConfig, StrokeSample};
 use pictura_select::{
     quick_mask::{overlay, working_value},
@@ -231,7 +231,7 @@ impl PictureViewRust {
             .stroke_session()
             .and_then(|s| s.quick_mask.as_ref())
         {
-            return stroke.document.layers[0].channels[0]
+            return stroke.document.layers[0].channels()[0]
                 .data
                 .sample(at)
                 .unwrap_or(255);
@@ -265,7 +265,7 @@ impl PictureViewRust {
         document.height = real.height;
         document
             .layers
-            .push(Layer {
+            .push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 name: "Quick Mask".into(),
                 rect: PsdRect {
                     left: 0,
@@ -279,7 +279,7 @@ impl PictureViewRust {
                 }],
                 lock: LockFlags::default().with(LockFlags::TRANSPARENCY, true),
                 ..Default::default()
-            })
+            }))
             .ok()?;
         Some(document)
     }
@@ -288,7 +288,7 @@ impl PictureViewRust {
         document: Document,
         working: bool,
     ) -> bool {
-        let mut data = document.layers[0].channels[0].data.clone();
+        let mut data = document.layers[0].channels()[0].data.clone();
         if working && self.session.quick_mask.selected {
             let (w, h) = (document.width as usize, document.height as usize);
             data.tile(w, h);
@@ -385,7 +385,7 @@ impl PictureViewRust {
             self.session.quick_mask.coverage = Some(Selection {
                 width: ctx.document.width,
                 height: ctx.document.height,
-                data: ctx.document.layers[0].channels[0].data.clone(),
+                data: ctx.document.layers[0].channels()[0].data.clone(),
             });
         }
         if let Some(values) = self.session.quick_mask.pending.take() {
@@ -418,7 +418,7 @@ impl PictureViewRust {
             .live
             .stroke_session()
             .and_then(|s| s.quick_mask.as_ref())
-            .map(|s| &s.document.layers[0].channels[0].data)
+            .map(|s| &s.document.layers[0].channels()[0].data)
             .or_else(|| q.coverage.as_ref().map(|s| &s.data));
         let mut bytes = base.data().to_vec();
         for (oy, row) in bytes

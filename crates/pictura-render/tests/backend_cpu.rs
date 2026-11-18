@@ -1,4 +1,4 @@
-use pictura_core::{BitDepth, BlendMode, Channel, ColorMode, Document, Layer, LockFlags, PsdRect};
+use pictura_core::{BitDepth, BlendMode, Channel, ColorMode, Document, LockFlags, PsdRect};
 use pictura_render::{
     composite, composite_rgba, gpu_available, set_backend, Backend, CompositeRequest, GpuBackend,
 };
@@ -12,7 +12,7 @@ fn document() -> Document {
         })
         .collect();
     channels[3].data.as_mut_slice().fill(255);
-    let layer = Layer {
+    let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "base".into(),
         rect: PsdRect {
             top: 0,
@@ -27,7 +27,7 @@ fn document() -> Document {
         visible: true,
         channels,
         ..Default::default()
-    };
+    });
     let mut doc = Document::new(N, N, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
     doc

@@ -71,6 +71,12 @@ public:
     bool openPath(const QString& path);
     bool openImagePath(const QString& path);
     bool openDocumentAtPath(const QString& path, bool interactive = true);
+    // A user-initiated open (File > Open, Open Recent): a successful open is
+    // recorded as an Open action step.
+    quint64 startUserOpen(const QString& path, bool reportFailure = false);
+    // Batch's Suppress Color Profile Warnings: keep the embedded profile
+    // without the mismatch/missing prompt while set.
+    void setSuppressProfileWarnings(bool suppress) { suppressProfileWarnings_ = suppress; }
     OpenOutcome openDocumentAtPathOutcome(const QString& path, bool interactive = true);
     bool openAsSmartObjectPath(const QString& path);
     bool confirmProfileForOpen(PictureView* view, const QString& path);
@@ -89,8 +95,10 @@ public:
     bool saveActive(bool interactive = true);
     bool saveActiveAs(const QString& path, std::optional<bool> includeMerged = std::nullopt);
     // Save a known path with the remembered options for its suffix (no dialog):
-    // the path used by the control server and recorded-command replay.
-    bool saveActiveAtPath(const QString& path);
+    // the path used by the control server and recorded-command replay. A
+    // recorded Save As step's `stepOptions` overlay the remembered options for
+    // this save without being remembered.
+    bool saveActiveAtPath(const QString& path, const QJsonObject& stepOptions = {});
     bool saveAsWithDialog();
     bool saveActiveAsWithOptions(const QString& path,
                                  SaveFormatKind hint = SaveFormatKind::None);
@@ -261,6 +269,8 @@ private:
     QHash<quint64, QString> openFailureMessages_;
     QSet<quint64> reportFailureTokens_;
     QSet<quint64> finishedOpens_;
+    QHash<quint64, QString> recordOpenPaths_;
+    bool suppressProfileWarnings_ = false;
     // Opens that own a busy-cursor reference (the outer open, not a PDF page).
     QSet<quint64> cursorTokens_;
     quint64 nextOpenToken_ = 1;

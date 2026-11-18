@@ -289,17 +289,17 @@ fn a_depth16_filter_survives_a_psd_round_trip() {
             ..Default::default()
         },
     };
-    let before: Vec<u8> = doc.layers[0].channels[0].data.to_vec();
+    let before: Vec<u8> = doc.layers[0].channels()[0].data.to_vec();
     pictura_render::apply_filter(&mut doc.layers[0], &filter, None, false).expect("filter");
-    let after: Vec<u8> = doc.layers[0].channels[0].data.to_vec();
+    let after: Vec<u8> = doc.layers[0].channels()[0].data.to_vec();
     assert_ne!(before, after, "the filter changed the working plane");
 
     let out = write_psd(&doc).expect("save the filtered document");
     let back = read_psd(&out).expect("re-read the filtered document");
     let saved = back.layers[0]
-        .channels
+        .channels()
         .iter()
-        .find(|c| c.id == doc.layers[0].channels[0].id)
+        .find(|c| c.id == doc.layers[0].channels()[0].id)
         .unwrap();
     assert_eq!(
         saved.data.to_vec(),

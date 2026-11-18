@@ -633,7 +633,7 @@ fn filter_from_kind_maps_family_kinds() {
 fn filter_confines_to_selection_and_skips_adjustment_layer() {
     let mut doc = Document::new(8, 1, ColorMode::Rgb, BitDepth::Eight);
     let mut base = pixel_layer("base", 8, 1, (40, 40, 40));
-    for ch in base.channels.iter_mut().filter(|c| c.id >= 0) {
+    for ch in base.channels_mut().iter_mut().filter(|c| c.id >= 0) {
         ch.data = (0..8).map(|x| if x < 4 { 40u8 } else { 200 }).collect();
     }
     // A topmost adjustment must be skipped in favour of the pixel layer.
@@ -651,7 +651,7 @@ fn filter_confines_to_selection_and_skips_adjustment_layer() {
     let layer = active_pixel_layer_mut(&mut doc, Some("0")).expect("pixel layer");
     assert_eq!(layer.name, "base");
     let before = layer
-        .channels
+        .channels()
         .iter()
         .find(|c| c.id == 0)
         .expect("red channel")
@@ -666,7 +666,7 @@ fn filter_confines_to_selection_and_skips_adjustment_layer() {
     )
     .expect("filter applies");
 
-    let after = &layer.channels.iter().find(|c| c.id == 0).unwrap().data;
+    let after = &layer.channels().iter().find(|c| c.id == 0).unwrap().data;
     assert!(
         after[..4].iter().zip(&before[..4]).any(|(a, b)| a != b),
         "selected pixels should change"
@@ -708,7 +708,7 @@ fn parse_anchor_maps_known_and_rejects_unknown() {
 fn document_ops_wire_parsed_values_and_reject_invalid_params() {
     let mut doc = Document::new(2, 1, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![pixel_layer("base", 2, 1, (0, 0, 0))]);
-    doc.layers[0].channels = vec![
+    doc.layers[0].set_channels(vec![
         Channel {
             id: 0,
             data: vec![255, 0].into(),
@@ -725,7 +725,7 @@ fn document_ops_wire_parsed_values_and_reject_invalid_params() {
             id: -1,
             data: vec![255, 255].into(),
         },
-    ];
+    ]);
     pictura_render::flip_document(&mut doc, true).expect("flips");
     doc.composite
         .replace(pictura_render::composite_rgba(&doc))

@@ -144,18 +144,7 @@ pub(crate) fn composite_adjustment(
 ) {
     // Fill content is generative: it adds color inside the layer's rect instead
     // of transforming the backdrop, so it takes the normal-content path.
-    if let Adjustment::SolidFill(rgba) = adjustment {
-        crate::fill::composite_solid_fill(canvas, layer, doc, *rgba, ctx, over);
-        return;
-    }
-    if let Adjustment::GradientFill(params) = adjustment {
-        crate::fill::composite_gradient_fill(canvas, layer, doc, params, ctx, over);
-        return;
-    }
-    if let Adjustment::PatternFill(params) = adjustment {
-        crate::fill::composite_pattern_fill(canvas, layer, doc, params, ctx, over);
-        return;
-    }
+
     let n = canvas.w * canvas.h;
     if n == 0 {
         return;

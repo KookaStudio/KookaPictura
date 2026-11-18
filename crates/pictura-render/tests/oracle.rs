@@ -110,7 +110,7 @@ fn layer(name: &str, blend: BlendMode, interleaved: &[u8], with_alpha: bool) -> 
             data: a.into(),
         });
     }
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: PsdRect {
             top: 0,
@@ -132,7 +132,7 @@ fn layer(name: &str, blend: BlendMode, interleaved: &[u8], with_alpha: bool) -> 
         is_group: false,
         background: false,
         ..Default::default()
-    }
+    })
 }
 
 /// Rebuild the scene as a document: opaque base below, `mode` source with alpha

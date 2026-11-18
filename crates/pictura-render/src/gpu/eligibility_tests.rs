@@ -7,6 +7,17 @@ use crate::tests::layer_effects::{global_shadow_block, spec_block, ShadowSpec};
 use pictura_codec::CAMERA_RAW_FILTER_ID;
 use pictura_core::{AdjustmentData, Knockout, LayerBlock};
 
+#[test]
+fn gpu_eligibility_consumes_the_resolved_content_route() {
+    every_declining_route_names_its_reason();
+    accepted_routes_do_not_decline();
+    proxied_type_layer_with_gamma_is_eligible();
+    channel_less_type_layer_is_accepted();
+    unrenderable_smart_source_declines();
+    decoded_vector_fill_is_accepted();
+    adjustment_without_a_gpu_kind_declines_at_any_rect();
+}
+
 fn doc_of(layer: Layer) -> Document {
     let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
@@ -26,11 +37,11 @@ fn doc_sized(layer: Layer, width: u32, height: u32) -> Document {
 }
 
 fn pixels() -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         rect: rect(),
         channels: proxy(),
         ..Default::default()
-    }
+    })
 }
 
 fn renderable_type() -> Layer {
@@ -41,10 +52,12 @@ fn renderable_type() -> Layer {
         bottom: 80,
         right: 200,
     };
-    if let Some(type_tool) = layer.type_tool.as_mut() {
-        type_tool.bounds = [0, 0, 200, 80];
-        type_tool.style = Some(crate::tests::composite::type_style());
-    }
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        if let Some(type_tool) = parts.type_tool.as_mut() {
+            type_tool.bounds = [0, 0, 200, 80];
+            type_tool.style = Some(crate::tests::composite::type_style());
+        }
+    });
     layer
 }
 
@@ -63,14 +76,14 @@ fn vector_fill_layer() -> Layer {
     let fill = crate::encode_solid_color_fill([1, 2, 3]);
     let mut data = b"SoCo".to_vec();
     data.extend_from_slice(&fill.data);
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         rect: rect(),
         extra_blocks: vec![LayerBlock {
             key: *b"vscg",
             data: data.into(),
         }],
         ..Default::default()
-    }
+    })
 }
 
 fn reason(err: Result<(), GpuError>) -> String {
@@ -86,14 +99,14 @@ fn plan(doc: &Document) -> Result<Vec<plan::LayerPlan<'_>>, GpuError> {
 
 #[test]
 fn every_declining_route_names_its_reason() {
-    let undecoded_vscg = Layer {
+    let undecoded_vscg = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         rect: rect(),
         extra_blocks: vec![LayerBlock {
             key: *b"vscg",
             data: vec![0xFF; 3].into(),
         }],
         ..Default::default()
-    };
+    });
     let cases = [
         (adjustment(*b"zzzz", vec![1, 2, 3]), "UnsupportedAdjustment"),
         (undecoded_vscg, "UnsupportedAdjustment"),
@@ -172,7 +185,9 @@ fn decoded_vector_fill_is_accepted() {
 #[test]
 fn globally_lit_effects_are_accepted() {
     let mut styled = pixels();
-    styled.extra_blocks.push(global_shadow_block());
+    pictura_codec::edit_layer(&mut styled, |parts| {
+        parts.extra_blocks.push(global_shadow_block())
+    });
     let mut doc = doc_of(styled);
     doc.global_light = pictura_core::GlobalLight {
         angle: 90,
@@ -184,7 +199,9 @@ fn globally_lit_effects_are_accepted() {
 #[test]
 fn effects_and_clipping_are_accepted() {
     let mut styled = pixels();
-    styled.extra_blocks.push(spec_block(&ShadowSpec::default()));
+    pictura_codec::edit_layer(styled.as_mut(), |parts| {
+        parts.extra_blocks.push(spec_block(&ShadowSpec::default()))
+    });
     assert_eq!(reason(check_supported(&doc_of(styled))), "ok");
 
     let mut clipped = pixels();
@@ -238,13 +255,13 @@ fn gpu_declines_each_advanced_blending_toggle() {
 
     let mut child = pixels();
     child.transparency_shapes = false;
-    let group = Layer {
+    let group = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         rect: rect(),
         is_group: true,
         blend: BlendMode::Normal,
         children: pictura_core::LayerStack::from_layers(vec![child]),
         ..Default::default()
-    };
+    });
     assert!(matches!(
         check_supported(&doc_of(group)),
         Err(GpuError::UnsupportedAdvancedBlending)
@@ -273,11 +290,11 @@ fn hidden_clipping_base_suppresses_run() {
 }
 
 fn adjustment_of_kind(kind: &str, rect: PsdRect) -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         rect,
         adjustment: crate::default_adjustment_block(kind, [0; 3], [255; 3]),
         ..Default::default()
-    }
+    })
 }
 
 #[test]
@@ -312,10 +329,10 @@ fn empty_rect_keeps_gpu_adjustments_and_fills_on_the_gpu() {
         ]);
         assert_eq!(reason(check_supported(&doc)), "ok", "{kind}");
     }
-    let fill = Layer {
+    let fill = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         adjustment: Some(crate::encode_solid_color_fill([1, 2, 3])),
         ..Default::default()
-    };
+    });
     let doc = doc_of(fill);
     let plans = plan(&doc).expect("a fill with no area stays on the GPU");
     assert!(matches!(&plans[0].body, plan::Body::Fill(_)));

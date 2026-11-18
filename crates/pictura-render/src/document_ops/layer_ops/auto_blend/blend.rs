@@ -475,7 +475,7 @@ impl Merged {
                     .collect();
                 SourceChannels::new(depth, self.rect, planes)
             });
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name,
             rect: self.rect,
             blend: BlendMode::Normal,
@@ -485,6 +485,6 @@ impl Merged {
             channels,
             source_channels,
             ..Default::default()
-        }
+        })
     }
 }

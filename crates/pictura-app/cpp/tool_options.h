@@ -28,11 +28,12 @@ public:
     virtual ~ToolOptions() = default;
 };
 
-// The Color Replacement options bar: Mode 0 Hue … 3 Luminosity (2 Color),
-// Sampling 0 Continuous / 1 Once / 2 Background Swatch, Limits
-// 0 Discontiguous / 1 Contiguous / 2 Find Edges, Tolerance 0-100 %.
+// The Color Replacement options bar: Mode 0 Normal … 24 Luminosity (23 Color,
+// the engine's CS6 paint list), Sampling 0 Continuous / 1 Once / 2 Background
+// Swatch, Limits 0 Discontiguous / 1 Contiguous / 2 Find Edges, Tolerance
+// 0-100 %.
 struct ColorReplaceOptions {
-    int mode = 2;
+    int mode = 23;
     int sampling = 0;
     int limits = 1;
     int tolerance = 30;

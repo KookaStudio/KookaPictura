@@ -47,12 +47,12 @@ fn stack_layer_at(
     so.kind = SmartObjectKind::Embedded;
     so.stack_mode = mode;
     so.set_payload(payload);
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "stack".into(),
         rect: frame,
         smart_object: Some(so),
         ..Default::default()
-    }
+    })
 }
 
 #[test]
@@ -63,17 +63,19 @@ fn stack_mode_change_invalidates_the_cached_source() {
         Some(pictura_core::StackMode::Median),
         rect(0, 0, 4, 4),
     );
-    let first = embedded_source(layer.smart_object.as_ref().expect("object")).expect("first");
-    let second = embedded_source(layer.smart_object.as_ref().expect("object")).expect("second");
+    let first = embedded_source(layer.smart_object().expect("object")).expect("first");
+    let second = embedded_source(layer.smart_object().expect("object")).expect("second");
     assert!(Arc::ptr_eq(&first, &second));
 
-    layer.smart_object.as_mut().expect("object").stack_mode =
-        Some(pictura_core::StackMode::Maximum);
-    let third = embedded_source(layer.smart_object.as_ref().expect("object")).expect("third");
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.smart_object.as_mut().expect("object").stack_mode =
+            Some(pictura_core::StackMode::Maximum)
+    });
+    let third = embedded_source(layer.smart_object().expect("object")).expect("third");
     assert!(!Arc::ptr_eq(&first, &third));
 
     purge_source_cache();
-    let fresh = embedded_source(layer.smart_object.as_ref().expect("object")).expect("fresh");
+    let fresh = embedded_source(layer.smart_object().expect("object")).expect("fresh");
     assert_eq!(third.data.as_slice(), fresh.data.as_slice());
 }
 
@@ -90,8 +92,10 @@ fn stack_mode_change_invalidates_the_composited_raster() {
     let second = composited_source(&layer, &d, RasterRoute::SmartSource).expect("second");
     assert!(Arc::ptr_eq(&first.buffer, &second.buffer));
 
-    layer.smart_object.as_mut().expect("object").stack_mode =
-        Some(pictura_core::StackMode::Maximum);
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.smart_object.as_mut().expect("object").stack_mode =
+            Some(pictura_core::StackMode::Maximum)
+    });
     let third = composited_source(&layer, &d, RasterRoute::SmartSource).expect("third");
     assert!(!Arc::ptr_eq(&first.buffer, &third.buffer));
 }
@@ -104,7 +108,7 @@ fn stack_frames_keep_the_embed_nesting_bound() {
         4,
         4,
         vec![
-            Layer {
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 name: "nested".into(),
                 rect: rect(0, 0, 4, 4),
                 smart_object: Some({
@@ -114,7 +118,7 @@ fn stack_frames_keep_the_embed_nesting_bound() {
                     so
                 }),
                 ..Default::default()
-            },
+            }),
             solid(
                 "solid",
                 rect(0, 0, 4, 4),
@@ -163,7 +167,7 @@ fn stack_reduction_matches_the_whole_source() {
                 b[i] = v.wrapping_add(20);
             }
         }
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             rect: rect(0, 0, H as i32, W as i32),
             channels: vec![
                 pictura_core::Channel {
@@ -184,7 +188,7 @@ fn stack_reduction_matches_the_whole_source() {
                 },
             ],
             ..Default::default()
-        }
+        })
     };
     let mut first = gradient(0);
     crate::set_layer_style_value(&mut first, "dropShadow.on", 1.0);
@@ -197,7 +201,7 @@ fn stack_reduction_matches_the_whole_source() {
         Some(pictura_core::StackMode::Mean),
         frame_rect,
     );
-    let so = layer.smart_object.as_ref().expect("object");
+    let so = layer.smart_object().expect("object");
     let stacked = crate::render_smart_source(so, frame_rect, frame_rect).expect("stacked");
 
     let decoded = pictura_codec::read_psd(&payload).expect("decoded");

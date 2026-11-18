@@ -38,6 +38,9 @@ pub fn parse_cube(bytes: &[u8]) -> Option<Lut3d> {
             continue;
         }
         size?;
+        if points.len() == 64 * 64 * 64 {
+            return None;
+        }
         let mut parts = line.split_whitespace();
         let mut rgb = [0.0f32; 3];
         for component in &mut rgb {

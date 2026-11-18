@@ -189,7 +189,7 @@ fn shape_commit_profile() {
 /// `layer` with every channel textured, so a band composited from the wrong
 /// rows or columns cannot go unnoticed.
 fn textured(mut layer: Layer, seed: usize) -> Layer {
-    for (c, channel) in layer.channels.iter_mut().enumerate() {
+    for (c, channel) in layer.channels_mut().iter_mut().enumerate() {
         for (i, v) in channel.data.as_mut_slice().iter_mut().enumerate() {
             *v = ((i * (3 + c) + seed * 17 + c * 41) % 256) as u8;
         }
@@ -375,7 +375,7 @@ fn banding_with_a_short_type_layer_equals_one_canvas() {
     let layer = crate::resolve_path_mut(&mut d, &path).expect("type layer");
     layer.blend = BlendMode::Multiply;
     // Without its rasterized proxy the text is rendered while compositing.
-    layer.channels.clear();
+    layer.channels_mut().clear();
     assert!(
         layer.rect.height() > 0 && layer.rect.height() <= 256,
         "{:?}",
@@ -545,12 +545,12 @@ fn smart_source_layer(rect: pictura_core::PsdRect) -> Layer {
         so
     };
     so.set_payload(payload);
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Smart".into(),
         rect,
         smart_object: Some(so),
         ..Default::default()
-    }
+    })
 }
 
 #[test]
@@ -613,9 +613,9 @@ fn pattern_effects_disable_banding_and_stay_identical() {
     assert_eq!(cold.data.as_ref(), warm.data.as_ref());
 
     let mut plain = d.clone();
-    plain.layers[0]
-        .extra_blocks
-        .retain(|block| &block.key != b"lfx2");
+    pictura_codec::edit_layer(plain.layers[0].as_mut(), |parts| {
+        parts.extra_blocks.retain(|block| &block.key != b"lfx2")
+    });
     assert!(
         crate::composite_region::banded(&plain, 300),
         "without the pattern overlay the same tall document is bandable"

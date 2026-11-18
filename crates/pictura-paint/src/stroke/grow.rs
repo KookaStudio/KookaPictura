@@ -32,7 +32,7 @@ impl Saved {
                     data[dst..dst + n].copy_from_slice(&plane[src..src + n]);
                 }
             }
-            if let Some(source) = ch[k].and_then(|i| layer.channels.get(i)) {
+            if let Some(source) = ch[k].and_then(|i| layer.channels().get(i)) {
                 // The layer has already grown, so an old pixel sits at its
                 // grown position; the unsaved tiles' rows are read in place.
                 let stride = new_w as usize;

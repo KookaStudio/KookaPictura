@@ -39,7 +39,7 @@ fn rgba_document() -> Vec<u8> {
 /// display recomposite clamps the layer to 1.0 and halves it).
 fn hdr_layer_psd() -> (std::path::PathBuf, Vec<u8>) {
     use pictura_core::{
-        BlendMode, Channel, Layer, LayerStack, PsdRect, Samples, SourceChannels, SourcePlanes,
+        BlendMode, Channel, LayerStack, PsdRect, Samples, SourceChannels, SourcePlanes,
     };
     let rect = PsdRect {
         top: 0,
@@ -52,7 +52,7 @@ fn hdr_layer_psd() -> (std::path::PathBuf, Vec<u8>) {
         data: vec![value].into(),
     };
     let f32_plane = |value: f32| Samples::F32(vec![value].into());
-    let layer = Layer {
+    let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "HDR".to_string(),
         rect,
         opacity: 128,
@@ -74,7 +74,7 @@ fn hdr_layer_psd() -> (std::path::PathBuf, Vec<u8>) {
             ],
         )),
         ..Default::default()
-    };
+    });
     let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
     doc.source
         .set_native(
@@ -208,7 +208,7 @@ fn open_smart_object_matches_sync() {
     let opened =
         decode_smart_object(path.to_str().unwrap(), false, &|_, _| {}).expect("smart object");
     assert_eq!(opened.doc.layers.len(), 1);
-    assert!(opened.doc.layers[0].smart_object.is_some());
+    assert!(opened.doc.layers[0].smart_object().is_some());
     assert!(matches!(opened.path, OpenedPath::Set(None)));
     assert_eq!(opened.source_format, "psd");
     std::fs::remove_file(path).ok();
@@ -469,8 +469,8 @@ fn an_open_larger_than_the_room_is_admitted_with_scratch() {
     assert!(opened.is_some(), "scratch holds the tiles");
     assert!(!open_refused_for_memory());
     assert_eq!(
-        opened.unwrap().doc.layers[0].channels,
-        doc.layers[0].channels
+        opened.unwrap().doc.layers[0].channels(),
+        doc.layers[0].channels()
     );
 
     pin(Some(available), 0);
@@ -503,7 +503,7 @@ fn lazy_psd() -> std::path::PathBuf {
         .for_each(|px| px[3] = 255);
     let mut doc = Document::from_rgba("Background", LW, LH, &rgba);
     let bottom = doc.layers.get_mut(0).expect("a layer");
-    bottom.channels.retain(|c| c.id != -1);
+    bottom.channels_mut().retain(|c| c.id != -1);
     bottom.background = true;
     let top = Document::from_rgba("Top", 300, 200, &noise(9, 300 * 200 * 4));
     let mut layer = top.layers.get(0).expect("a layer").clone();
@@ -555,10 +555,13 @@ fn whole_rect(w: u32, h: u32) -> pictura_core::PsdRect {
 /// Whether every layer channel tile is still away in the file.
 fn layers_untouched(view: &PictureViewRust) -> bool {
     let doc = view.session.doc.as_ref().expect("document");
-    doc.layers.iter().flat_map(|l| l.channels.iter()).all(|c| {
-        (0..c.data.tile_count())
-            .all(|i| c.data.tile_residency(i) == Some(pictura_core::Residency::Backed))
-    })
+    doc.layers
+        .iter()
+        .flat_map(|l| l.channels().iter())
+        .all(|c| {
+            (0..c.data.tile_count())
+                .all(|i| c.data.tile_residency(i) == Some(pictura_core::Residency::Backed))
+        })
 }
 
 /// The tiles of `level` against a whole rebuild from the layers.
@@ -620,7 +623,7 @@ fn an_edit_replaces_the_merged_preview() {
     {
         let doc = view.session.doc.as_mut().expect("document");
         let top = doc.layers.get_mut(1).expect("the top layer");
-        top.channels[0]
+        top.channels_mut()[0]
             .data
             .write_rect_from(0..50, 0..40, 300, &[250u8; 50 * 40]);
     }
@@ -684,7 +687,7 @@ fn save_over_source_with_backed_tiles() {
     save_to(&lazy, &path);
     for doc in [&mut lazy, &mut eager] {
         let top = doc.layers.get_mut(1).expect("the top layer");
-        top.channels[1]
+        top.channels_mut()[1]
             .data
             .write_rect_from(10..60, 5..45, 300, &[7u8; 50 * 40]);
     }

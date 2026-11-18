@@ -8,7 +8,7 @@ use rayon::prelude::*;
 pub(crate) type LayerPlanes<'a> = [Option<&'a Plane<u8>>; 4];
 
 pub(crate) fn layer_planes(layer: &Layer) -> LayerPlanes<'_> {
-    super::plane_index(layer).map(|k| k.and_then(|k| layer.channels.get(k)).map(|c| &c.data))
+    super::plane_index(layer).map(|k| k.and_then(|k| layer.channels().get(k)).map(|c| &c.data))
 }
 
 /// Columns `x0..x0 + out.len()` of row `y` of `planes` as straight RGBA.
@@ -116,7 +116,7 @@ pub(crate) fn layer_rgba_serial(layer: &Layer) -> RgbaImage {
     let (w, h) = (layer.rect.width().max(0), layer.rect.height().max(0));
     let at = |id: i16, i: usize, missing: u8| {
         layer
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == id)
             .and_then(|c| c.data.as_slice().get(i))

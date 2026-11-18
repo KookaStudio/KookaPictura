@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use pictura_codec::{read_descriptor, read_psd, write_psb, write_psd, DescValue};
 use pictura_core::{
-    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Compression, Document, Layer, LayerBlock,
+    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Compression, Document, LayerBlock,
     LayerMask, LockFlags, PsdRect, SmartObject, SmartObjectKind,
 };
 

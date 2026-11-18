@@ -423,7 +423,8 @@ fn unmodeled_layer_channel_preserves_source_depth() {
         );
         let back = read_psd(&out).unwrap();
         assert_eq!(
-            back.layers[0].raw_channels[0].data, doc.layers[0].raw_channels[0].data,
+            back.layers[0].raw_channels()[0].data,
+            doc.layers[0].raw_channels()[0].data,
             "depth {depth}: the re-read 8-bit stream narrows back unchanged"
         );
 
@@ -546,7 +547,7 @@ fn grouped_depth_fixtures_round_trip_whole() {
             "{name}: a group retains no source channels"
         );
         assert!(
-            group.children[0].source_channels.is_some(),
+            group.children()[0].source_channels.is_some(),
             "{name}: an inner pixel layer retains its channels"
         );
 
@@ -585,7 +586,8 @@ fn layered_depth_layer_channels_re_encode_every_compression() {
             );
             let back = read_psd(&out).unwrap();
             assert_eq!(
-                back.layers[0].channels, doc.layers[0].channels,
+                back.layers[0].channels(),
+                doc.layers[0].channels(),
                 "{name} {kind:?}: color/alpha stable"
             );
             assert_eq!(
@@ -593,7 +595,8 @@ fn layered_depth_layer_channels_re_encode_every_compression() {
                 "{name} {kind:?}: mask stable"
             );
             assert_eq!(
-                back.layers[0].raw_channels, doc.layers[0].raw_channels,
+                back.layers[0].raw_channels(),
+                doc.layers[0].raw_channels(),
                 "{name} {kind:?}: unmodeled stable"
             );
 

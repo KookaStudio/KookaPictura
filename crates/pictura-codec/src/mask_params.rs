@@ -131,7 +131,7 @@ pub(crate) fn write_record(out: &mut Vec<u8>, layer: &Layer) {
             return;
         }
     };
-    let has_real = layer.raw_channels.iter().any(|c| c.id == -3);
+    let has_real = layer.raw_channels().iter().any(|c| c.id == -3);
     let real = if has_real && extra.len() >= REAL_HEADER {
         REAL_HEADER
     } else {

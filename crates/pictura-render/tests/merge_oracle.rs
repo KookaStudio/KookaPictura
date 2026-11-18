@@ -107,7 +107,7 @@ fn layer(name: &str, blend: BlendMode, interleaved: &[u8], with_alpha: bool) -> 
             data: a.into(),
         });
     }
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: PsdRect {
             top: 0,
@@ -129,7 +129,7 @@ fn layer(name: &str, blend: BlendMode, interleaved: &[u8], with_alpha: bool) -> 
         is_group: false,
         background: false,
         ..Default::default()
-    }
+    })
 }
 
 /// A uniform opaque layer of one colour.
@@ -144,7 +144,7 @@ fn uniform(name: &str, blend: BlendMode, colour: (u8, u8, u8)) -> Layer {
 /// A layer's channels as interleaved RGBA8.
 fn interleaved(layer: &Layer) -> Vec<u8> {
     let n = (layer.rect.width() * layer.rect.height()) as usize;
-    let plane = |id: i16| layer.channels.iter().find(|c| c.id == id).unwrap();
+    let plane = |id: i16| layer.channels().iter().find(|c| c.id == id).unwrap();
     let (r, g, b, a) = (plane(0), plane(1), plane(2), plane(-1));
     let mut out = Vec::with_capacity(n * 4);
     for i in 0..n {

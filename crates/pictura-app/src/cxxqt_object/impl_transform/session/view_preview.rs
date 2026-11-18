@@ -81,10 +81,10 @@ pub(super) fn view_preview(
     };
     let layer = pictura_render::resolve_path(doc, path)?;
     let shape = pictura_render::is_shape_layer(layer);
-    if layer.is_group
+    if layer.is_group()
         || layer.is_type()
-        || layer.smart_object.is_some()
-        || (!shape && (layer_has_effects(layer) || layer.adjustment.is_some()))
+        || layer.smart_object().is_some()
+        || (!shape && (layer_has_effects(layer) || layer.has_adjustment_content()))
     {
         return None;
     }
@@ -206,7 +206,7 @@ fn backdrop_pixels(
     let target = pictura_render::resolve_path_mut(&mut hidden, path)?;
     target.visible = false;
     // A hidden layer draws nothing; without its planes the reduction skips it.
-    target.channels.clear();
+    target.channels_mut().clear();
     let (buffer, source) = if level == 0 {
         let (buffer, _) = pictura_render::composite(pictura_render::CompositeRequest::region(
             &hidden,
@@ -248,7 +248,7 @@ pub(super) fn above_patch(
     for (path, _) in &rows[topmost..] {
         if let Some(layer) = pictura_render::resolve_path_mut(&mut above, path) {
             layer.visible = false;
-            layer.channels.clear();
+            layer.channels_mut().clear();
         }
     }
     let visible = visible.intersect(canvas(doc))?;

@@ -4,7 +4,7 @@ use super::*;
 use crate::cxxqt_object::document_session::DocumentSession;
 use crate::cxxqt_object::edit::Edit;
 use crate::cxxqt_object::state::PictureViewRust;
-use pictura_core::{BitDepth, Channel, Layer};
+use pictura_core::{BitDepth, Channel};
 
 #[test]
 fn save_selection_notifies() {
@@ -221,21 +221,25 @@ fn mask_with(value: u8, w: u32, h: u32) -> LayerMask {
 }
 
 fn layer_with_mask(doc: &mut Document, mask: LayerMask) {
-    let _ = doc.layers.push(Layer {
-        name: "M".to_string(),
-        rect: full(doc.width, doc.height),
-        mask: Some(mask),
-        ..Default::default()
-    });
+    let _ = doc
+        .layers
+        .push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
+            name: "M".to_string(),
+            rect: full(doc.width, doc.height),
+            mask: Some(mask),
+            ..Default::default()
+        }));
 }
 
 fn layer_with_mask_rect(doc: &mut Document, rect: PsdRect, mask: LayerMask) {
-    let _ = doc.layers.push(Layer {
-        name: "M".to_string(),
-        rect,
-        mask: Some(mask),
-        ..Default::default()
-    });
+    let _ = doc
+        .layers
+        .push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
+            name: "M".to_string(),
+            rect,
+            mask: Some(mask),
+            ..Default::default()
+        }));
 }
 
 #[test]

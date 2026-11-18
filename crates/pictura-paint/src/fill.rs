@@ -146,7 +146,7 @@ pub(crate) fn fill_layer_within(
     // Clear has no alpha plane to change on an opaque layer; treating the
     // zeroed RGB as a change would dirty a layer the stroke path leaves alone.
     let target = layer_at(doc, &parse_layer_path(path)?)?;
-    if mode == PaintMode::Clear && !target.channels.iter().any(|c| c.id == -1) {
+    if mode == PaintMode::Clear && !target.channels().iter().any(|c| c.id == -1) {
         return None;
     }
     // A Grayscale document's layer carries one colour plane, an RGB one three.
@@ -181,7 +181,7 @@ fn fill_eight_bit(
 ) -> Option<PsdRect> {
     let canvas = (doc.width as i32, doc.height as i32);
     let layer = layer_at_mut(doc, &parse_layer_path(path)?)?;
-    if layer.is_group || layer.adjustment.is_some() || layer_pixel_locked(layer) {
+    if layer.is_group() || layer.has_adjustment_content() || layer_pixel_locked(layer) {
         return None;
     }
     let keep_alpha = layer_transparency_locked(layer);
@@ -220,7 +220,7 @@ fn fill_eight_bit(
     // The R, G, B and alpha planes, each a whole layer long; a missing colour
     // plane refuses the fill, a missing alpha is an opaque layer.
     let mut planes: [Option<&mut [u8]>; 4] = [None, None, None, None];
-    for c in layer.channels.iter_mut() {
+    for c in layer.channels_mut().iter_mut() {
         let Some(k) = slot(c.id) else {
             continue;
         };

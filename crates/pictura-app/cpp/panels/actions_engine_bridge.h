@@ -75,6 +75,9 @@ public:
     double playbackPauseSeconds() const override;
     void setPlaybackOptions(int mode, double pauseSeconds) override;
     void setWindowsPlatform(bool windows) override;
+    QString validateBatch(const QString& optionsJson) const override;
+    bool actionReachesCommand(const QString& set, const QString& action,
+                              const QString& command) const override;
 
 private:
     struct Ref {

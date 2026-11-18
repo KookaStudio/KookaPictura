@@ -125,7 +125,7 @@ pub(super) fn unit_row(
         for (x, value) in out.iter_mut().enumerate() {
             *value = row.unit(x).unwrap_or(default);
         }
-    } else if let Some(channel) = layer.channels.iter().find(|c| c.id == id) {
+    } else if let Some(channel) = layer.channels().iter().find(|c| c.id == id) {
         let data = channel.data.as_slice();
         for (x, value) in out.iter_mut().enumerate() {
             *value = data

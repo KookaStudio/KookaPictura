@@ -211,7 +211,7 @@ pub(super) fn liquify_begin(view: &PictureView) -> bool {
     // Planes are shared, not copied: the modal dialog never edits the layer.
     let channel = |id: i16| {
         layer
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == id && c.data.len() == plane)
             .map(|c| c.data.clone())

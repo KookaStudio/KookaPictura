@@ -12,7 +12,7 @@ use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 use ffi::{PaintDynamics, PaintTip};
-use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, PsdRect};
+use pictura_core::{BitDepth, Channel, ColorMode, Document, PsdRect};
 use pictura_paint::art_history::{ArtHistoryOptions, ArtStyle, STYLE_NAMES};
 use pictura_paint::bristle::{BristleShape, BristleTip};
 use pictura_paint::bucket::{self, BucketSource};
@@ -61,8 +61,31 @@ pub(super) fn begin_color_replacement(
         antialias,
     };
     begin(view, "Color Replacement Tool", cfg, |doc, path, _| {
+        let mode = crate::cxxqt_object::channels::mode_name(doc.document_color_mode());
+        if !color_replacement_available(&QString::from(mode)) {
+            return None;
+        }
         Stroke::begin_kind(doc, path, cfg, StrokeKind::Replace(options)).ok()
     })
+}
+
+pub(super) fn color_replacement_mode_count() -> i32 {
+    ReplaceMode::ALL.len() as i32
+}
+
+pub(super) fn color_replacement_mode_name(index: i32) -> QString {
+    ReplaceMode::from_i32(index).map_or_else(QString::default, |mode| QString::from(mode.name()))
+}
+
+pub(super) fn color_replacement_mode_allowed(index: i32, depth_bits: i32) -> bool {
+    ReplaceMode::from_i32(index).is_some_and(|mode| mode.allowed(depth_bits))
+}
+
+pub(super) fn color_replacement_available(mode: &QString) -> bool {
+    !matches!(
+        mode.to_string().as_str(),
+        "bitmap" | "indexed" | "multichannel"
+    )
 }
 
 pub(super) fn begin_mixer_brush(
@@ -890,21 +913,23 @@ pub(super) fn white_preview(
     let mut doc = Document::new(w as u32, h as u32, ColorMode::Rgb, BitDepth::Eight);
     let n = (w * h) as usize;
     {
-        let _ = doc.layers.push(Layer {
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: h,
-                right: w,
-            },
-            channels: [0, 1, 2, -1]
-                .map(|id| Channel {
-                    id,
-                    data: vec![0; n].into(),
-                })
-                .into(),
-            ..Default::default()
-        });
+        let _ = doc
+            .layers
+            .push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: h,
+                    right: w,
+                },
+                channels: [0, 1, 2, -1]
+                    .map(|id| Channel {
+                        id,
+                        data: vec![0; n].into(),
+                    })
+                    .into(),
+                ..Default::default()
+            }));
     };
     let cfg = StrokeConfig {
         color: Rgba {
@@ -918,7 +943,7 @@ pub(super) fn white_preview(
     paint_stroke(&mut doc, "0", &cfg, samples);
     let plane = |id: i16| {
         doc.layers[0]
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == id)
             .map_or(&[][..], |c| c.data.as_slice())
@@ -1028,5 +1053,22 @@ mod tests {
         );
         assert_eq!((surface.width, surface.height), (16, 16));
         assert_eq!(surface.data[0], [40, 80, 120, 255]);
+    }
+
+    #[test]
+    fn color_replacement_is_unavailable_for_flat_modes() {
+        use cxx_qt_lib::QString;
+        for mode in ["bitmap", "indexed", "multichannel"] {
+            assert!(
+                !super::color_replacement_available(&QString::from(mode)),
+                "{mode}"
+            );
+        }
+        for mode in ["rgb", "grayscale", "cmyk", "lab", "duotone"] {
+            assert!(
+                super::color_replacement_available(&QString::from(mode)),
+                "{mode}"
+            );
+        }
     }
 }

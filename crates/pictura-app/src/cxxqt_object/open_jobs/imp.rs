@@ -259,7 +259,7 @@ pub(in crate::cxxqt_object) fn make_background(layer: &mut Layer) {
     layer.lock = LockFlags::default()
         .with(LockFlags::TRANSPARENCY, true)
         .with(LockFlags::POSITION, true);
-    layer.channels.retain(|channel| channel.id != -1);
+    layer.channels_mut().retain(|channel| channel.id != -1);
 }
 
 /// Apply a raster's embedded RGB ICC profile under the incoming policy. A
