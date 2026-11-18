@@ -4,6 +4,14 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Measurement scale and presets — #635 implemented** (OpenSpec change
+  `2026-11-18-measurement-scale-presets`, archived). Extended supports ruler
+  calibration, named application presets, and calibrated readouts. PSD and PSB
+  use resource 1074 and preserve untouched resource bytes in both editions.
+  Measurement TSV and histogram CSV writers are available for the Measurement
+  Log integration tracked by #510. The local CMake build passed with the 80%
+  CPU budget. Automated verification is deferred to CI, and the Photoshop CS6
+  Extended round trip remains a manual reviewer check.
 - **Print colour management — #634 implemented; acceptance pending**
   (OpenSpec change `2026-11-18-print-color-management`, archived; capability
   `interop/print`). Print supports ICC-managed PDF output, hard proofing,
