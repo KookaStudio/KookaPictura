@@ -17,6 +17,7 @@ use super::{
 };
 use crate::cxxqt_object::edit::Edit;
 use crate::cxxqt_object::helpers::memory_gate;
+use crate::cxxqt_object::pdf_export::import::ffi::VectorPlaceResult;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString};
@@ -28,6 +29,7 @@ const DEFERRED_TRANSFORM_PIXELS: u64 = 4_000_000;
 
 mod preview;
 mod readouts;
+mod selection;
 mod view_preview;
 
 #[cfg(test)]
@@ -39,42 +41,9 @@ use preview::{
 pub(in crate::cxxqt_object) use preview::{
     rendered_transform_group, set_transform_preview_pixels_for_test, transform_preview_layer_at,
 };
+use selection::{lift_coverage, lifts_selection};
 use view_preview::above_patch;
 pub(in crate::cxxqt_object) use view_preview::{MoveView, MoveViewPixels};
-
-/// The selection's coverage when it is document-sized and not empty: Free
-/// Transform then lifts the selected pixels instead of moving the whole layer.
-fn lift_coverage(rust: &super::super::state::PictureViewRust) -> Option<pictura_core::Coverage> {
-    let doc = rust.session.doc.as_ref()?;
-    rust.session
-        .selection
-        .as_ref()
-        .filter(|s| s.width == doc.width && s.height == doc.height)
-        .filter(|s| pictura_render::coverage_bounds(&s.data, doc.width, doc.height).is_some())
-        .map(pictura_select::Selection::coverage)
-}
-
-/// Whether a selection on `path` lifts its pixels for the transform (CS6
-/// transforms the selected pixels, a Background's included; a hidden layer's
-/// does not).
-fn lifts_selection(rust: &PictureViewRust, path: &str) -> bool {
-    rust.session.doc.as_ref().is_some_and(|doc| {
-        pictura_render::resolve_path(doc, path)
-            .is_some_and(|layer| layer.visible && pictura_render::can_lift_selection(layer))
-    }) && selection_covers(rust)
-}
-
-/// Whether [`lift_coverage`] would find a selection, without copying it.
-fn selection_covers(rust: &PictureViewRust) -> bool {
-    let Some(doc) = rust.session.doc.as_ref() else {
-        return false;
-    };
-    rust.session
-        .selection
-        .as_ref()
-        .filter(|s| s.width == doc.width && s.height == doc.height)
-        .is_some_and(|s| pictura_render::plane_has_coverage(&s.data, doc.width, doc.height))
-}
 
 /// Whether `mode` may begin on `path`: the Free Transform target rules, plus
 /// Distort's and Perspective's refusal for editable type (a lifted selection targets pixels, not
@@ -244,8 +213,13 @@ impl qobject::PictureView {
 
     /// Clear the session; a lifted selection's pixels go back where they were.
     pub fn cancel_transform(mut self: Pin<&mut Self>) {
+        if self.rust().pending_vector_place.is_some() {
+            drop(self.as_mut().rust_mut().deferred_transform.take());
+        }
         self.as_mut().drop_transform_session();
         self.as_mut().clear_transform_preview();
+        self.as_mut()
+            .finish_vector_place(VectorPlaceResult::Cancelled);
     }
 
     /// Drop any session, restoring the document from before a lift, or the
@@ -261,7 +235,7 @@ impl qobject::PictureView {
             }
         }
         if let Some((_, before)) = session.and_then(|session| session.lifted) {
-            self.as_mut().rust_mut().session.doc = Some(*before);
+            self.as_mut().rust_mut().session.doc.set(Some(*before));
             self.as_mut().recomposite();
         }
     }
@@ -346,14 +320,25 @@ impl qobject::PictureView {
         if identity || !memory_gate::admit_spilling(cost.working, cost.spillable) {
             self.as_mut().drop_transform_session();
             self.as_mut().clear_transform_preview();
-            return false;
+            return self.as_mut().finish_vector_place(if identity {
+                VectorPlaceResult::Committed
+            } else {
+                VectorPlaceResult::Refused
+            });
         }
         let area = u64::from(orig_rect.width().max(0) as u32)
             * u64::from(orig_rect.height().max(0) as u32);
         // A large engine, or one that will spill tiles to scratch (#1290), runs
         // as a cancellable job (#1278); the session stays live until it lands,
         // so a cancel resumes it.
-        if area >= DEFERRED_TRANSFORM_PIXELS || memory_gate::expects_spill(&cost) {
+        let vector = self.rust().session.doc.as_ref().is_some_and(|doc| {
+            members.iter().any(|(member, _)| {
+                pictura_render::resolve_path(doc, member)
+                    .and_then(|layer| layer.smart_object())
+                    .is_some_and(|object| object.vector_placement.is_some())
+            })
+        });
+        if vector || area >= DEFERRED_TRANSFORM_PIXELS || memory_gate::expects_spill(&cost) {
             let lifted = self
                 .rust()
                 .session
@@ -427,7 +412,7 @@ impl qobject::PictureView {
                     .as_mut()
                     .is_some_and(|doc| pictura_render::merge_lifted(doc, &path));
             if !merged {
-                self.as_mut().rust_mut().session.doc = Some(*before);
+                self.as_mut().rust_mut().session.doc.set(Some(*before));
                 self.as_mut().recomposite();
                 self.as_mut().clear_transform_preview();
                 return false;
@@ -589,7 +574,7 @@ impl qobject::PictureView {
             .rust()
             .session
             .doc
-            .clone()
+            .snapshot()
             .map(|doc| (doc, self.rust().layer_target.clone()));
         let new_path = {
             let mut guard = self.as_mut().rust_mut();
@@ -1051,7 +1036,7 @@ impl PictureViewRust {
             }
         }
         if let Some((_, before)) = outgoing.and_then(|session| session.lifted) {
-            self.session.doc = Some(*before);
+            self.session.doc.set(Some(*before));
         }
         let mut path = path.to_string();
         let mut lifted = None;
@@ -1120,7 +1105,7 @@ impl PictureViewRust {
                 }
             }
             if let Some((_, before)) = lifted {
-                self.session.doc = Some(*before);
+                self.session.doc.set(Some(*before));
             }
             return None;
         };
@@ -1171,7 +1156,11 @@ impl PictureViewRust {
             warp_post: None,
             lifted,
             untrimmed,
-            history_label: "Free Transform".to_string(),
+            history_label: if self.pending_vector_place.is_some() {
+                "Place".to_string()
+            } else {
+                "Free Transform".to_string()
+            },
         })
     }
 
@@ -1184,7 +1173,7 @@ impl PictureViewRust {
             }
         }
         if let Some((_, before)) = session.lifted {
-            self.session.doc = Some(*before);
+            self.session.doc.set(Some(*before));
         }
     }
 }

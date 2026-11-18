@@ -308,7 +308,8 @@ jobs:
 
   qt-headless:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # Cold dependency setup and the build can fill 30 minutes before CTest starts.
+    timeout-minutes: 45
     steps:
       - *checkout
       - *toolchain

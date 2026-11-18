@@ -208,6 +208,41 @@ impl Saved {
     }
 }
 
+pub struct SampledTip {
+    width: usize,
+    height: usize,
+    coverage: Vec<u8>,
+}
+
+impl SampledTip {
+    pub fn new(width: u32, height: u32, coverage: Vec<u8>) -> Option<Self> {
+        let width = width as usize;
+        let height = height as usize;
+        if width == 0 || height == 0 || width.checked_mul(height)? != coverage.len() {
+            return None;
+        }
+        Some(Self {
+            width,
+            height,
+            coverage,
+        })
+    }
+
+    fn coverage(&self, tip: &TipParams, dx: f32, dy: f32) -> f32 {
+        let x = dx * tip.cos - dy * tip.sin;
+        let y = dx * tip.sin + dy * tip.cos;
+        let x = if tip.flip_x { -x } else { x };
+        let y = if tip.flip_y { -y } else { y };
+        let side = self.width.max(self.height) as f32;
+        let px = x * side / (2.0 * tip.radius) + self.width as f32 / 2.0;
+        let py = y * side / (2.0 * tip.round_radius) + self.height as f32 / 2.0;
+        if px < 0.0 || py < 0.0 || px >= self.width as f32 || py >= self.height as f32 {
+            return 0.0;
+        }
+        f32::from(self.coverage[py as usize * self.width + px as usize]) / 255.0
+    }
+}
+
 /// A live stroke. It paints the document handed to each call in place; the
 /// pixels it is about to change are kept in `saved`, which every dab blends
 /// against so the stroke's result does not depend on its own earlier dabs.
@@ -220,6 +255,7 @@ pub struct Stroke {
     locked: bool,
     cfg: StrokeConfig,
     tip: TipParams,
+    sampled_tip: Option<SampledTip>,
     placer: DabPlacer,
     /// The stroke's accumulated and applied coverage, tiled like the layer
     /// and empty until a dab reaches a tile, so their memory follows the
@@ -319,6 +355,7 @@ impl Stroke {
             locked: layer_transparency_locked(target),
             cfg,
             tip: TipParams::new(&cfg),
+            sampled_tip: None,
             placer: DabPlacer::new(cfg.spacing, cfg.diameter as f32),
             scratch,
             applied,
@@ -605,6 +642,7 @@ impl Stroke {
             scratch,
             applied,
             tip,
+            sampled_tip,
             rng,
             dirty,
             dab_dirty,
@@ -623,7 +661,12 @@ impl Stroke {
         // Every pixel a dab writes lies in its bounding box, so saving the
         // boxes first leaves the stencil only saved pixels to read.
         for dab in &placed {
-            let radius = dab_reach(dab.tip.as_ref().unwrap_or(&cfg));
+            let radius = dab_reach(dab.tip.as_ref().unwrap_or(&cfg))
+                * if sampled_tip.is_some() {
+                    std::f32::consts::SQRT_2
+                } else {
+                    1.0
+                };
             saved.save(
                 work_layer,
                 *ch,
@@ -659,7 +702,12 @@ impl Stroke {
             } else {
                 sample_tip
             };
-            let radius = dab_reach(&eff_cfg);
+            let radius = dab_reach(&eff_cfg)
+                * if sampled_tip.is_some() {
+                    std::f32::consts::SQRT_2
+                } else {
+                    1.0
+                };
             let bristle_dab = eff_cfg.bristle.map(|tip| {
                 BristleDab::new(
                     tip,
@@ -682,6 +730,7 @@ impl Stroke {
             let raster = DabRaster {
                 params: &params,
                 bristle: bristle_dab.as_ref(),
+                sampled: sampled_tip.as_ref(),
                 dab_x: dab.x,
                 dab_y: dab.y,
                 flow: dab.flow,
@@ -716,6 +765,10 @@ impl Stroke {
     /// derives the same profile the exact stroke does.
     pub fn tip_params(&self) -> TipParams {
         self.tip
+    }
+
+    pub fn set_sampled_tip(&mut self, tip: SampledTip) {
+        self.sampled_tip = Some(tip);
     }
 
     /// The target layer's pixels in `doc` as a document-sized interleaved

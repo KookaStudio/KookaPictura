@@ -13,6 +13,7 @@
 #include "api/document_bridge.h"
 #include "api/engine_bridge.h"
 #include "api/paint_bridge.h"
+#include "api/proofing_bridge.h"
 
 namespace pictura {
 
@@ -27,11 +28,11 @@ bool activeSaveNeedsDialog(PicturaMainWindow* frame)
     const QString path = frame->activeFilePath();
     PictureView* view = frame->activeView();
     const bool rememberedDcs = view && output_format(*view) == QStringLiteral("dcs");
+    const bool native = PicturaMainWindow::isNativeDocumentPath(path);
     return !path.isEmpty()
         && (PicturaMainWindow::isPdfPath(path)
-            || savePathNeedsFormatDialog(path, view,
-                                         PicturaMainWindow::isNativeDocumentPath(path),
-                                         rememberedDcs));
+            || (view && !native && print_metadata_pending(*view))
+            || savePathNeedsFormatDialog(path, view, native, rememberedDcs));
 }
 
 } // namespace
@@ -175,7 +176,7 @@ QJsonObject ControlServer::methodDocument(const QJsonObject& params)
                 return error(QStringLiteral("refused"),
                              QStringLiteral("this save needs a dialog; use save_as"));
             }
-            applied = frame_->saveActive();
+            applied = frame_->saveActive(false);
         } else {
             applied = frame_->saveActiveAsWithRememberedOptions(path);
         }

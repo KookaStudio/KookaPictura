@@ -14,6 +14,7 @@ use crate::history::{History, Restored, Snapshot};
 use crate::layer_target::LayerTarget;
 use pictura_core::{Document, PsdRect};
 use pictura_select::Selection;
+use std::sync::Arc;
 
 /// The selection state captured at the start of a Quick Selection stroke.
 pub(in crate::cxxqt_object) struct QuickSelectionSnapshot {
@@ -33,7 +34,15 @@ pub(in crate::cxxqt_object) struct QuickSelectionSnapshot {
 pub(in crate::cxxqt_object) struct DocumentSession {
     pub(in crate::cxxqt_object) quick_mask: crate::cxxqt_object::quick_mask::QuickMaskState,
     /// The live document, `None` without one.
-    pub(in crate::cxxqt_object) doc: Option<Document>,
+    pub(in crate::cxxqt_object) doc: SessionDocument,
+    pub(in crate::cxxqt_object) compatibility:
+        crate::cxxqt_object::open_jobs::compatibility::NativeCompatibility,
+    pub(in crate::cxxqt_object) history_compatibility: Vec<(
+        u64,
+        crate::cxxqt_object::open_jobs::compatibility::NativeCompatibility,
+    )>,
+    pub(in crate::cxxqt_object) skipped_xmp_mirror: bool,
+    pub(in crate::cxxqt_object) recheck_compatibility_on_restore: bool,
     /// The live selection.
     pub(in crate::cxxqt_object) selection: Option<Selection>,
     /// Bumped whenever the selection is written. The committed-outline cache
@@ -52,6 +61,11 @@ pub(in crate::cxxqt_object) struct DocumentSession {
     /// The history identity that was current at the last successful save, open,
     /// install, or Revert. `None` means the document has no saved point.
     pub(in crate::cxxqt_object) saved_id: Option<u64>,
+    pub(in crate::cxxqt_object) persisted_metadata_revision: u64,
+    pub(in crate::cxxqt_object) saved_metadata_revision: u64,
+    pub(in crate::cxxqt_object) save_publication_uncertain: bool,
+    pub(in crate::cxxqt_object) recovery:
+        Option<crate::cxxqt_object::impl_core::recovery::RecoveryAttachment>,
     /// Bumped whenever the document's content changed.
     pub(in crate::cxxqt_object) content_revision: u64,
     /// Bumped whenever the view loads or replaces its document, so a panel can
@@ -66,6 +80,10 @@ pub(in crate::cxxqt_object) struct DocumentSession {
     /// The password a protected PDF was opened with, kept in memory only so
     /// Revert can reopen it.
     pub(in crate::cxxqt_object) pdf_password: Option<String>,
+    pub(in crate::cxxqt_object) print_resources:
+        Arc<pictura_codec::print_resources::PrintResourceEdits>,
+    pub(in crate::cxxqt_object) print_revision: u64,
+    pub(in crate::cxxqt_object) saved_print_revision: u64,
     /// The Vanishing Point planes this document's last session kept, so the
     /// dialog reopens on them: read from the file when the document is
     /// installed and written into it by a save. Kept out of the document so
@@ -76,12 +94,93 @@ pub(in crate::cxxqt_object) struct DocumentSession {
     pub(in crate::cxxqt_object) encode_cache: std::sync::Arc<pictura_codec::EncodeCache>,
 }
 
+/// The installed document remains readable during compatibility viewing.
+/// Edit paths share this boundary for in-place access and replacement.
+#[derive(Debug, Default)]
+pub(in crate::cxxqt_object) struct SessionDocument {
+    value: Option<Document>,
+    read_only: bool,
+}
+
+impl SessionDocument {
+    pub(in crate::cxxqt_object) fn as_ref(&self) -> Option<&Document> {
+        self.value.as_ref()
+    }
+
+    pub(in crate::cxxqt_object) fn as_mut(&mut self) -> Option<&mut Document> {
+        if self.read_only {
+            return None;
+        }
+        self.value.as_mut()
+    }
+
+    pub(in crate::cxxqt_object) fn is_some(&self) -> bool {
+        self.value.is_some()
+    }
+
+    pub(in crate::cxxqt_object) fn is_none(&self) -> bool {
+        self.value.is_none()
+    }
+
+    pub(in crate::cxxqt_object) fn snapshot(&self) -> Option<Document> {
+        if self.read_only {
+            return None;
+        }
+        self.value.clone()
+    }
+
+    pub(in crate::cxxqt_object) fn set(&mut self, value: Option<Document>) {
+        if !self.read_only {
+            self.value = value;
+        }
+    }
+
+    pub(in crate::cxxqt_object) fn replace(&mut self, doc: Document) -> Option<Document> {
+        if self.read_only {
+            return None;
+        }
+        self.value.replace(doc)
+    }
+
+    #[cfg(test)]
+    pub(in crate::cxxqt_object) fn take(&mut self) -> Option<Document> {
+        if self.read_only {
+            return None;
+        }
+        self.value.take()
+    }
+}
+
+#[cfg(test)]
+impl PartialEq<Option<Document>> for SessionDocument {
+    fn eq(&self, other: &Option<Document>) -> bool {
+        &self.value == other
+    }
+}
+
 impl DocumentSession {
+    pub(in crate::cxxqt_object) fn read_only(&self) -> bool {
+        self.compatibility.access.is_read_only()
+    }
+
+    pub(in crate::cxxqt_object) fn set_compatibility(
+        &mut self,
+        state: crate::cxxqt_object::open_jobs::compatibility::NativeCompatibility,
+    ) {
+        self.compatibility.deactivate();
+        state.activate();
+        self.doc.read_only = state.access.is_read_only();
+        self.compatibility = state;
+    }
+
     /// A session with `doc` installed and an empty history.
     #[cfg(test)]
     pub(in crate::cxxqt_object) fn with_document(doc: Document) -> Self {
         Self {
-            doc: Some(doc),
+            doc: SessionDocument {
+                value: Some(doc),
+                read_only: false,
+            },
             ..Default::default()
         }
     }
@@ -135,9 +234,13 @@ impl DocumentSession {
         history: History,
         pdf_password: Option<String>,
     ) {
-        self.doc = doc;
+        self.set_compatibility(Default::default());
+        self.doc.set(doc);
         self.history = history;
         self.pdf_password = pdf_password;
+        self.print_resources = Default::default();
+        self.print_revision = 0;
+        self.saved_print_revision = 0;
         self.encode_cache = std::sync::Arc::new(pictura_codec::EncodeCache::new());
         self.document_generation = self.document_generation.wrapping_add(1);
         self.saved_id = self.history.current_id();
@@ -184,6 +287,7 @@ impl DocumentSession {
                 self.content_revision = self.content_revision.wrapping_add(1);
             }
         }
+        self.capture_recovery(false);
         true
     }
 
@@ -212,7 +316,49 @@ impl DocumentSession {
     /// Record the current history state as the saved one and clear `dirty`.
     pub(in crate::cxxqt_object) fn mark_saved(&mut self) {
         self.saved_id = self.history.current_id();
-        self.dirty = false;
+        self.saved_metadata_revision = self.persisted_metadata_revision;
+        self.dirty =
+            self.save_publication_uncertain || self.print_revision != self.saved_print_revision;
+    }
+
+    pub(in crate::cxxqt_object) fn stage_print_resources(
+        &mut self,
+        resources: pictura_codec::print_resources::PrintResourceEdits,
+    ) {
+        self.print_resources = Arc::new(resources);
+        self.print_revision = self.print_revision.wrapping_add(1);
+        self.persisted_metadata_changed();
+    }
+
+    pub(in crate::cxxqt_object) fn persisted_metadata_changed(&mut self) {
+        self.persisted_metadata_revision = self.persisted_metadata_revision.wrapping_add(1);
+        self.dirty = true;
+        self.capture_recovery(false);
+    }
+
+    pub(in crate::cxxqt_object) fn capture_recovery(&self, checkpoint: bool) {
+        let Some(recovery) = &self.recovery else {
+            return;
+        };
+        let document = self
+            .history
+            .current_snapshot()
+            .map(|snapshot| &snapshot.doc)
+            .or(self.doc.as_ref());
+        if let Some(document) = document {
+            recovery.capture(
+                document,
+                self.vanishing_planes.as_ref(),
+                &self.print_resources,
+                &self.encode_cache,
+                crate::cxxqt_object::impl_core::recovery::RecoveryIdentity {
+                    history: self.history.current_id(),
+                    metadata: self.persisted_metadata_revision,
+                    generation: self.document_generation,
+                },
+                checkpoint,
+            );
+        }
     }
 
     /// Forget the saved point and mark the document modified, so a recovered
@@ -231,7 +377,12 @@ impl DocumentSession {
     pub(in crate::cxxqt_object) fn derived_dirty(&self) -> bool {
         match (self.doc.as_ref(), self.saved_id) {
             (None, _) => false,
-            (Some(_), Some(saved)) => self.history.current_id() != Some(saved),
+            (Some(_), Some(saved)) => {
+                self.history.current_id() != Some(saved)
+                    || self.print_revision != self.saved_print_revision
+                    || self.persisted_metadata_revision != self.saved_metadata_revision
+                    || self.save_publication_uncertain
+            }
             (Some(_), None) => true,
         }
     }
@@ -263,20 +414,28 @@ impl DocumentSession {
         ) -> Option<Restored>,
         legacy: impl FnOnce(&mut History) -> Option<Snapshot>,
     ) -> Option<Restored> {
+        let was_read_only = self.doc.read_only;
+        if was_read_only && !self.recheck_compatibility_on_restore {
+            return None;
+        }
+        self.doc.read_only = false;
         let restored = match self.doc.as_mut() {
             Some(doc) => step(&mut self.history, doc, &mut self.selection, target),
             None => legacy(&mut self.history).map(|snapshot| {
-                self.doc = Some(snapshot.doc);
+                self.doc.set(Some(snapshot.doc));
                 self.selection = snapshot.selection;
                 Restored::Everywhere
             }),
-        }?;
+        };
+        self.doc.read_only = was_read_only;
+        let restored = restored?;
         let quick_mask = self
             .history
             .current_snapshot()
             .and_then(|s| s.quick_mask.clone());
         self.restore_quick_mask_selection(quick_mask);
         self.touch_selection();
+        self.capture_recovery(false);
         Some(restored)
     }
 }
@@ -361,7 +520,7 @@ impl PictureViewRust {
     /// to the magnetic gesture it started. A healing, selection-move, path, or
     /// paint begin is refused.
     pub(in crate::cxxqt_object) fn slot_allows(&self, kind: SessionKind) -> bool {
-        self.session.live.allows(kind)
+        !self.session.read_only() && self.session.live.allows(kind)
     }
 
     /// Cancel the live session against the current document without recording
@@ -389,7 +548,7 @@ impl PictureViewRust {
         let presentation = match std::mem::replace(&mut self.session.live, ActiveSession::Idle) {
             ActiveSession::Idle => Presentation::none(),
             ActiveSession::ModePreview(base) => {
-                self.session.doc = Some(*base);
+                self.session.doc.set(Some(*base));
                 if refresh_display {
                     self.composite_into_doc();
                 }
@@ -490,6 +649,10 @@ impl PictureViewRust {
         self.session.quick_selection_snapshot = None;
         self.session.live = ActiveSession::Idle;
         self.path = None;
+        self.session.set_compatibility(Default::default());
+        self.session.history_compatibility.clear();
+        self.session.skipped_xmp_mirror = false;
+        self.session.recheck_compatibility_on_restore = false;
         self.mask_edit_target = None;
         self.mask_solo = None;
         self.mask_overlay = None;
@@ -498,7 +661,13 @@ impl PictureViewRust {
         self.active_path = super::super::paths::ActivePath::Work;
         self.session.pdf_options = None;
         self.session.pdf_password = None;
+        if let Some(recovery) = &self.session.recovery {
+            recovery.retire();
+        }
         self.session.vanishing_planes = None;
+        self.session.persisted_metadata_revision = 0;
+        self.session.saved_metadata_revision = 0;
+        self.session.save_publication_uncertain = false;
         self.isolation = None;
         self.solo_snapshot = None;
         self.expanded_groups.clear();
@@ -531,7 +700,6 @@ impl PictureViewRust {
         self.auto_blend.cancel();
         self.auto_align.cancel();
         self.adjust_jobs.cancel();
-        self.save_job = None;
     }
 
     /// Drop the panel previews that were never committed.
@@ -562,7 +730,7 @@ impl PictureViewRust {
             }
         }
         if let Some((_, before)) = session.lifted {
-            self.session.doc = Some(*before);
+            self.session.doc.set(Some(*before));
             return true;
         }
         false

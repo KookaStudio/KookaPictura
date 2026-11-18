@@ -1,4 +1,5 @@
 use super::impl_core::{DeferredComposite, DeferredTransform};
+use super::pdf_export::import::ffi::VectorPlaceResult;
 use crate::layer_target::LayerTarget;
 use cxx_qt_lib::QImage;
 use pictura_core::PsdRect;
@@ -20,11 +21,22 @@ pub(super) struct CanvasProxy {
 pub(super) type ProofCache =
     RefCell<Option<((i32, i32, bool, bool, bool), pictura_color::ProofPreview)>>;
 
+pub(super) struct PendingVectorPlace {
+    pub doc: pictura_core::Document,
+    pub target: LayerTarget,
+    pub generation: u64,
+    pub history_id: Option<u64>,
+}
+
 /// Backing Rust state for [`super::qobject::PictureView`].
 pub struct PictureViewRust {
     /// The document, the selection, and the history: the state the document
     /// session owns.
     pub(super) session: crate::cxxqt_object::document_session::DocumentSession,
+    pub(super) pending_vector_place: Option<PendingVectorPlace>,
+    pub(super) vector_place_result: VectorPlaceResult,
+    pub(super) variables_dialog: Option<Box<super::variables::VariableSession>>,
+    pub(super) variable_export: Option<Box<super::variables::ExportSession>>,
     /// View > Proof Setup / Proof Colors: application view state, never document
     /// or history state.
     pub(super) proof: super::proofing::ProofState,
@@ -231,13 +243,11 @@ pub struct PictureViewRust {
     /// The Copy Shape Attributes clipboard: the last shape layer's fill and
     /// stroke, pasted onto another shape layer. Session state, never saved.
     pub(super) shape_attributes: Option<pictura_render::ShapeAttributes>,
-    /// The background crash-recovery snapshot write in flight, if any
-    /// (`impl_core/recovery.rs`); its result is whether the file landed.
-    pub(super) recovery_write: Option<std::thread::JoinHandle<bool>>,
     /// The native save worker in flight, if any (`impl_core/save_jobs.rs`).
     pub(super) save_job: Option<super::impl_core::save_jobs::SaveJob>,
     /// Test seam: hold a started save's completion for this many milliseconds.
     pub(super) save_delay_for_test: u64,
+    pub(super) save_sync_failure_for_test: bool,
     /// The adjustment dialog's worker jobs (`image_adjust/jobs.rs`).
     pub(super) adjust_jobs: super::image_adjust::jobs::AdjustJobs,
     /// Set when a loading tab's open is cancelled; the worker's queued result
@@ -257,6 +267,8 @@ impl Default for PictureViewRust {
     fn default() -> Self {
         Self {
             session: Default::default(),
+            pending_vector_place: None,
+            vector_place_result: VectorPlaceResult::Pending,
             proof: Default::default(),
             proof_preview: RefCell::new(None),
             selection_contour_cache: RefCell::new(None),
@@ -303,6 +315,8 @@ impl Default for PictureViewRust {
             last_transform: None,
             transform_controls: false,
             pending_previews: Default::default(),
+            variables_dialog: None,
+            variable_export: None,
             gpu_compute: true,
             color_policy: pictura_codec::Policy::Preserve,
             cmyk_policy: pictura_codec::Policy::Preserve,
@@ -352,9 +366,9 @@ impl Default for PictureViewRust {
             use_default_masks: true,
             add_mask_by_default: true,
             shape_attributes: None,
-            recovery_write: None,
             save_job: None,
             save_delay_for_test: 0,
+            save_sync_failure_for_test: false,
             adjust_jobs: Default::default(),
             open_cancelled: false,
             open_request: 0,

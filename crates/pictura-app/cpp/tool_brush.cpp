@@ -68,7 +68,8 @@ public:
                                             paint_->opacity(), paint_->flow(), paint_->mode(),
                                             aliased_ || paint_->aliased(),
                                             aliased_ && paint_->autoErase(),
-                                            paint_->pressureSize(), paint_->pressureOpacity());
+                                            paint_->pressureSize(), paint_->pressureOpacity(),
+                                            paint_->sampledPreset());
         }
         if (!stroke_) {
             if (edit_refused_for_memory()) {

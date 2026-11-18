@@ -41,6 +41,8 @@ public:
     bool recordToolStrokePayload(const QString& payload);
     void toolStrokeRefused(const QString& message);
     void recordCommand(const QString& commandId, const QJsonObject& params) override;
+    quint64 reserveCommand(const QString& commandId, const QJsonObject& params);
+    void finishReservedCommand(quint64 token, bool saved);
     void setAllowToolRecording(bool on) override;
     bool allowToolRecording() const override;
 
@@ -75,6 +77,9 @@ public:
     double playbackPauseSeconds() const override;
     void setPlaybackOptions(int mode, double pauseSeconds) override;
     void setWindowsPlatform(bool windows) override;
+    QString validateBatch(const QString& optionsJson) const override;
+    bool actionReachesCommand(const QString& set, const QString& action,
+                              const QString& command) const override;
 
 private:
     struct Ref {

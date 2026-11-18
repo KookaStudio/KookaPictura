@@ -139,6 +139,23 @@ public:
     virtual void setPlaybackOptions(int mode, double pauseSeconds) = 0;
     virtual void setWindowsPlatform(bool windows) = 0;
 
+    // File > Automate > Batch: empty when the options JSON can run, else the
+    // diagnostic. An engine without a library validates nothing.
+    virtual QString validateBatch(const QString& optionsJson) const
+    {
+        Q_UNUSED(optionsJson)
+        return {};
+    }
+    // Whether the named action, or one it plays, has an enabled `command` step.
+    virtual bool actionReachesCommand(const QString& set, const QString& action,
+                                      const QString& command) const
+    {
+        Q_UNUSED(set)
+        Q_UNUSED(action)
+        Q_UNUSED(command)
+        return false;
+    }
+
 signals:
     void changed();
     void recordingChanged(bool recording);

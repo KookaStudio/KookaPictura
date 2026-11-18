@@ -11,11 +11,16 @@
 //! and the import bridges share the decode helpers, so Revert, Edit Contents,
 //! the self-test, and the existing tests keep their behaviour.
 
+pub(super) mod compatibility;
 mod imp;
 
 use super::pdf_export::import::ffi::ImportTarget;
 use super::qobject::PictureView;
 pub use super::stack_files::load_files_into_stack;
+pub use compatibility::{
+    compatibility_preview_available, compatibility_reason, native_save_warning,
+    save_compatibility_copy,
+};
 pub use imp::*;
 
 #[cxx_qt::bridge]
@@ -38,6 +43,16 @@ pub mod ffi {
 
     #[namespace = "pictura"]
     extern "Rust" {
+        fn output_path_protected(path: &QString) -> bool;
+        fn compatibility_reason(view: &PictureView) -> QString;
+        fn compatibility_preview_available(view: &PictureView) -> bool;
+        fn save_compatibility_copy(
+            view: Pin<&mut PictureView>,
+            path: &QString,
+            confirmed: bool,
+        ) -> QString;
+        fn native_save_warning(view: &PictureView) -> QString;
+
         /// Start opening `path` as a PSD/PSB on a worker. The view's
         /// `open_finished` signal reports `"ok"` or `"error"`.
         fn open_psd_start(view: Pin<&mut PictureView>, path: &QString);

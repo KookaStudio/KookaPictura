@@ -142,10 +142,11 @@ existing `Swatch N` name.
 
 ### Requirement: Swatches persist across sessions
 
-The Swatches panel's contents SHALL persist in the application session store and
-SHALL be restored on the next launch. A store without swatch data SHALL open the
-default palette; a stored empty panel SHALL stay empty. Saving an unrelated
-setting SHALL preserve the stored swatches.
+The Swatches panel's contents SHALL persist in the authoritative native current
+list and SHALL be restored on the next launch. When both that list and legacy
+swatch data are absent the default palette SHALL open; a stored empty panel
+SHALL stay empty. Legacy session data SHALL migrate without loss. Saving an
+unrelated setting SHALL preserve the stored swatches.
 
 #### Scenario: Added swatches survive a restart [sw_persist_restart]
 
@@ -159,7 +160,7 @@ setting SHALL preserve the stored swatches.
 
 #### Scenario: An older store opens the default palette [sw_persist_default]
 
-- **WHEN** the session store has no swatch data
+- **WHEN** neither the current list nor the legacy session store has swatch data
 - **THEN** the panel holds the default palette
 
 #### Scenario: An unrelated save keeps the swatches [sw_persist_unrelated_save]

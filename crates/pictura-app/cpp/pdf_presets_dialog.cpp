@@ -6,6 +6,8 @@
 #include "api/engine_bridge.h"
 
 #include <QtCore/QDir>
+#include "protected_output.h"
+
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtWidgets/QHBoxLayout>
@@ -21,9 +23,9 @@ namespace {
 
 bool writeText(const QString& path, const QString& text)
 {
-    QFile file(path);
+    pictura::ProtectedOutput file(path);
     return file.open(QIODevice::WriteOnly | QIODevice::Truncate)
-           && file.write(text.toUtf8()) >= 0;
+           && file.write(text.toUtf8()) >= 0 && file.commit();
 }
 
 bool isBuiltin(const QString& name)

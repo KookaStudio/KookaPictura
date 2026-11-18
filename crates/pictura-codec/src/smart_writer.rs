@@ -2,11 +2,12 @@
 //!
 //! A layer that carries an embedded payload but no preserved `SoLd`/`SoLE`/
 //! `plLd`/`PlLd` block gets a freshly built `SoLd` config descriptor and a
-//! document-level `lnk2` record sharing one deterministic uuid. The uuid is a
-//! pure function of the filename and payload, so two layers with the same
-//! embedded source dedupe to one record and the output stays reproducible.
+//! document-level `lnk2` record sharing one uuid. Vector placements carry an
+//! assigned source identity. Legacy embedded objects use a deterministic
+//! identity derived from filename and payload.
 
-use pictura_core::{Layer, SmartObject, SmartObjectKind};
+use pictura_core::warp::Warp;
+use pictura_core::{Homography, Layer, PsdRect, SmartObject, SmartObjectKind};
 
 use crate::descriptor::DescValue;
 
@@ -41,14 +42,26 @@ fn fnv1a(seed: u64, bytes: &[u8]) -> u64 {
     h
 }
 
-/// A deterministic RFC-4122 version-4-shaped uuid over `filename` + payload.
+/// Use an authored vector's source identity or derive a legacy identity from
+/// its filename and payload.
 pub(crate) fn author_uuid(so: &SmartObject) -> String {
+    if so.vector_placement.is_some() && !so.uuid.is_empty() {
+        return so.uuid.clone();
+    }
     let mut data = so.filename.as_bytes().to_vec();
     data.push(0);
     data.extend_from_slice(so.payload().unwrap_or(&[]));
     let mut bytes = [0u8; 16];
     bytes[..8].copy_from_slice(&fnv1a(FNV_OFFSET, &data).to_be_bytes());
     bytes[8..].copy_from_slice(&fnv1a(FNV_OFFSET_ALT, &data).to_be_bytes());
+    format_uuid(bytes)
+}
+
+pub fn new_vector_source_id() -> String {
+    format_uuid(crate::os_random())
+}
+
+fn format_uuid(mut bytes: [u8; 16]) -> String {
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
 
@@ -93,13 +106,184 @@ fn obj(items: Vec<(&[u8], DescValue)>) -> DescValue {
     obj_class(b"null", items)
 }
 
-fn unit_quad() -> DescValue {
+fn quad_value(quad: [(f64, f64); 4]) -> DescValue {
     DescValue::List(
-        [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]
-            .into_iter()
+        quad.into_iter()
+            .flat_map(|(x, y)| [x, y])
             .map(DescValue::Double)
             .collect(),
     )
+}
+
+fn corners([left, top, right, bottom]: [f64; 4]) -> [(f64, f64); 4] {
+    [(left, top), (right, top), (right, bottom), (left, bottom)]
+}
+
+fn rect_bounds(rect: PsdRect) -> [f64; 4] {
+    [rect.left, rect.top, rect.right, rect.bottom].map(f64::from)
+}
+
+fn quad_bounds(quad: [(f64, f64); 4]) -> [f64; 4] {
+    quad.into_iter().fold(
+        [
+            f64::INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NEG_INFINITY,
+        ],
+        |[left, top, right, bottom], (x, y)| {
+            [
+                left.min(x).floor(),
+                top.min(y).floor(),
+                right.max(x).ceil(),
+                bottom.max(y).ceil(),
+            ]
+        },
+    )
+}
+
+fn move_frame(points: &mut [(f64, f64); 4], from: [f64; 4], to: [f64; 4]) -> Option<()> {
+    if from[0] >= from[2] || from[1] >= from[3] {
+        return None;
+    }
+    let sx = (to[2] - to[0]) / (from[2] - from[0]);
+    let sy = (to[3] - to[1]) / (from[3] - from[1]);
+    for (x, y) in points {
+        *x = to[0] + (*x - from[0]) * sx;
+        *y = to[1] + (*y - from[1]) * sy;
+    }
+    Some(())
+}
+
+fn placed_vector_frame(
+    so: &SmartObject,
+    rect: PsdRect,
+    native_bounds: [f64; 4],
+) -> Option<([(f64, f64); 4], Warp)> {
+    let Some((first, rest)) = so.vector_transforms.split_first() else {
+        return Some((corners(rect_bounds(rect)), Warp::none(native_bounds)));
+    };
+    // A first preset warp followed only by homographies fits the standard
+    // descriptor. Other chains keep their full geometry in the private replay.
+    let standard_warp = first.warp.as_ref().filter(|warp| {
+        warp.style.is_preset()
+            && warp.bounds == rect_bounds(first.source)
+            && rest.iter().all(|step| step.warp.is_none())
+    });
+    let mut points = corners(rect_bounds(first.source));
+    let mut frame = rect_bounds(first.source);
+    for (index, step) in so.vector_transforms.iter().enumerate() {
+        let source = rect_bounds(step.source);
+        move_frame(&mut points, frame, source)?;
+        let projected = step.warp.as_ref().map_or(source, |warp| warp.bounds);
+        let transform = Homography::from_quads(corners(projected), step.quad)?;
+        for point in &mut points {
+            if let Some(warp) = &step.warp {
+                if index != 0 || standard_warp.is_none() {
+                    *point = warp.map(point.0, point.1);
+                }
+            }
+            *point = transform.apply(point.0, point.1)?;
+        }
+        frame = step
+            .destination
+            .map_or_else(|| quad_bounds(step.quad), rect_bounds);
+    }
+    move_frame(&mut points, frame, rect_bounds(rect))?;
+    let mut warp = standard_warp
+        .cloned()
+        .unwrap_or_else(|| Warp::none(native_bounds));
+    warp.bounds = native_bounds;
+    Some((points, warp))
+}
+
+fn warp_value(warp: &Warp) -> DescValue {
+    let [left, top, right, bottom] = warp.bounds;
+    obj_class(
+        b"warp",
+        vec![
+            (
+                b"warpStyle",
+                enum_value(b"warpStyle", warp.style.psd_name().as_bytes()),
+            ),
+            (b"warpValue", double(warp.bend)),
+            (b"warpPerspective", double(warp.h_distort)),
+            (b"warpPerspectiveOther", double(warp.v_distort)),
+            (
+                b"warpRotate",
+                enum_value(b"warpRotate", if warp.vertical { b"Vrtc" } else { b"Hrzn" }),
+            ),
+            (
+                b"bounds",
+                obj_class(
+                    b"classFloatRect",
+                    vec![
+                        (b"Top ", double(top)),
+                        (b"Left", double(left)),
+                        (b"Btom", double(bottom)),
+                        (b"Rght", double(right)),
+                    ],
+                ),
+            ),
+            (b"uOrder", long(4)),
+            (b"vOrder", long(4)),
+        ],
+    )
+}
+
+fn size_value(width: f64, height: f64) -> DescValue {
+    obj_class(
+        b"Pnt ",
+        vec![(b"Wdth", double(width)), (b"Hght", double(height))],
+    )
+}
+
+fn placed_geometry(
+    so: &SmartObject,
+    rect: PsdRect,
+    width: f64,
+    height: f64,
+) -> (DescValue, DescValue) {
+    let bounds = [0.0, 0.0, width, height];
+    let (quad, warp) = if so.vector_placement.is_some() {
+        placed_vector_frame(so, rect, bounds)
+            .unwrap_or_else(|| (corners(rect_bounds(rect)), Warp::none(bounds)))
+    } else {
+        (corners([0.0, 0.0, 1.0, 1.0]), Warp::none(bounds))
+    };
+    (quad_value(quad), warp_value(&warp))
+}
+
+pub(crate) fn refresh_authored_vector_geometry(layer: &Layer, data: &[u8]) -> Option<Vec<u8>> {
+    let so = layer
+        .smart_object()
+        .filter(|so| so.authored_vector_placement)?;
+    let placement = so.vector_placement?;
+    let mut descriptor = crate::smart_object::read_layer_data_descriptor(data).ok()?;
+    let DescValue::Object { items, .. } = &mut descriptor else {
+        return None;
+    };
+    let (width, height) = (placement.width_points, placement.height_points);
+    let (quad, warp) = placed_geometry(so, layer.rect, width, height);
+    for (key, value) in [
+        (b"PgNm".as_slice(), long(placement.page as i32)),
+        (b"totalPages", long(placement.page_count as i32)),
+        (b"Crop", long(i32::from(placement.crop))),
+        (b"Trnf", quad.clone()),
+        (b"nonAffineTransform", quad),
+        (b"warp", warp),
+        (b"Sz  ", size_value(width, height)),
+    ] {
+        crate::descriptor::set_object_item(items, key, value);
+    }
+    Some(serialize_sold(&data[..8], &descriptor))
+}
+
+fn serialize_sold(header: &[u8], descriptor: &DescValue) -> Vec<u8> {
+    let mut data = header.to_vec();
+    data.extend_from_slice(&crate::descriptor::write_descriptor(descriptor));
+    data.resize(data.len().next_multiple_of(4), 0);
+    data
 }
 
 /// The `SoLd` block data: `b"soLD"` + outer version 4 + a version-16 descriptor
@@ -122,13 +306,26 @@ pub(crate) fn author_sold_block(
         layer.name.as_str()
     };
 
+    let (width, height, page, page_count, crop, kind) =
+        so.vector_placement
+            .map_or((width, height, 1, 1, 1, 2), |placement| {
+                (
+                    placement.width_points,
+                    placement.height_points,
+                    placement.page as i32,
+                    placement.page_count as i32,
+                    i32::from(placement.crop),
+                    1,
+                )
+            });
+    let (quad, warp) = placed_geometry(so, layer.rect, width, height);
     let mut descriptor = obj(vec![
         (b"Idnt", text(&uuid)),
         (b"placed", text(&uuid)),
         (b"Nm  ", text(name)),
-        (b"PgNm", long(1)),
-        (b"totalPages", long(1)),
-        (b"Crop", long(1)),
+        (b"PgNm", long(page)),
+        (b"totalPages", long(page_count)),
+        (b"Crop", long(crop)),
         (
             b"frameStep",
             obj(vec![(b"numerator", long(0)), (b"denominator", long(600))]),
@@ -139,43 +336,11 @@ pub(crate) fn author_sold_block(
         ),
         (b"frameCount", long(1)),
         (b"Annt", long(16)),
-        (b"Type", long(2)),
-        (b"Trnf", unit_quad()),
-        (b"nonAffineTransform", unit_quad()),
-        (
-            b"warp",
-            obj_class(
-                b"warp",
-                vec![
-                    (b"warpStyle", enum_value(b"warpStyle", b"warpNone")),
-                    (b"warpValue", double(0.0)),
-                    (b"warpPerspective", double(0.0)),
-                    (b"warpPerspectiveOther", double(0.0)),
-                    (b"warpRotate", enum_value(b"warpRotate", b"Hrzn")),
-                    (
-                        b"bounds",
-                        obj_class(
-                            b"classFloatRect",
-                            vec![
-                                (b"Top ", double(0.0)),
-                                (b"Left", double(0.0)),
-                                (b"Btom", double(height)),
-                                (b"Rght", double(width)),
-                            ],
-                        ),
-                    ),
-                    (b"uOrder", long(4)),
-                    (b"vOrder", long(4)),
-                ],
-            ),
-        ),
-        (
-            b"Sz  ",
-            obj_class(
-                b"Pnt ",
-                vec![(b"Wdth", double(width)), (b"Hght", double(height))],
-            ),
-        ),
+        (b"Type", long(kind)),
+        (b"Trnf", quad.clone()),
+        (b"nonAffineTransform", quad),
+        (b"warp", warp),
+        (b"Sz  ", size_value(width, height)),
         (
             b"Rslt",
             DescValue::UnitFloat {
@@ -203,15 +368,7 @@ pub(crate) fn author_sold_block(
         }
     }
 
-    let mut data = b"soLD".to_vec();
-    data.extend_from_slice(&4u32.to_be_bytes());
-    data.extend_from_slice(&crate::descriptor::write_descriptor(&descriptor));
-    // The reference 4-aligns the SoLd data; matching it keeps a same-size filter
-    // edit from changing the block length (see `smart_filter`).
-    while !data.len().is_multiple_of(4) {
-        data.push(0);
-    }
-    data
+    serialize_sold(b"soLD\0\0\0\x04", &descriptor)
 }
 
 fn write_pascal_raw(out: &mut Vec<u8>, value: &str) {

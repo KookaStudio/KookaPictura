@@ -96,6 +96,25 @@ impl qobject::PictureView {
         for (label, value) in pictura_codec::photoshop_rows(doc) {
             rows.push(format!("Photoshop\t{label}\t{value}"));
         }
+        if let Some(info) = pictura_codec::document_version(doc).version_info {
+            for (label, value) in [
+                ("Version Info version", info.version.to_string()),
+                ("Writer", info.writer),
+                ("Reader", info.reader),
+                ("File version", info.file_version.to_string()),
+                (
+                    "Real merged image",
+                    if info.has_real_merged_data {
+                        "Yes"
+                    } else {
+                        "No"
+                    }
+                    .to_owned(),
+                ),
+            ] {
+                rows.push(format!("Photoshop\t{label}\t{value}"));
+            }
+        }
         for (label, value) in pictura_codec::iptc_extension::read_rows(doc) {
             rows.push(format!("IPTC Extension\t{label}\t{value}"));
         }

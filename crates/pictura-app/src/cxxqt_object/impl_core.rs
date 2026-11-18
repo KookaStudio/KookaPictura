@@ -53,7 +53,7 @@ mod display;
 mod document_job;
 pub(in crate::cxxqt_object) use display::{mask_display_plane, mask_region_plane};
 pub(super) use document_job::{DocumentJobs, JobBar, Outcome};
-mod recovery;
+pub(super) mod recovery;
 pub(in crate::cxxqt_object) mod save;
 pub(in crate::cxxqt_object) mod save_jobs;
 
@@ -144,20 +144,47 @@ impl qobject::PictureView {
         ) else {
             return false;
         };
-        let super::open_jobs::OpenedDocument { doc, target, .. } = opened;
+        let super::open_jobs::OpenedDocument {
+            doc,
+            target,
+            compatibility,
+            ..
+        } = opened;
         {
             let mut rust = self.as_mut().rust_mut();
+            let mut history_compatibility = rust.session.history_compatibility.clone();
+            if rust.session.read_only() {
+                if let Some(id) = rust.session.history.current_id() {
+                    history_compatibility.retain(|(old, _)| *old != id);
+                    history_compatibility.push((id, rust.session.compatibility.clone()));
+                }
+            }
+            let recheck_history =
+                !history_compatibility.is_empty() || compatibility.access.is_read_only();
             rust.cancel_active_sessions_report_only();
             rust.clear_document_scoped_state();
+            rust.session.history_compatibility = history_compatibility;
             rust.path = Some(path);
             rust.session.pdf_password = pdf_password;
             rust.session.pdf_options = pdf_options;
             rust.source_format = source_format;
-            rust.session.doc = Some(doc);
+            rust.session.vanishing_planes = super::filter_tools::saved_planes(&doc);
+            rust.session.doc.set(Some(doc));
             rust.layer_target = target;
             let target = rust.layer_target.clone();
+            let recovery = rust.session.recovery.take();
             rust.session.record(&target, "Revert");
+            rust.session.recovery = recovery;
             rust.session.mark_saved();
+            if compatibility.access.is_read_only() {
+                if let Some(id) = rust.session.history.current_id() {
+                    rust.session
+                        .history_compatibility
+                        .push((id, compatibility.clone()));
+                }
+            }
+            rust.session.set_compatibility(compatibility);
+            rust.session.recheck_compatibility_on_restore = recheck_history;
             rust.session.document_generation = rust.session.document_generation.wrapping_add(1);
             rust.reset_pyramid();
         }
@@ -305,7 +332,7 @@ impl qobject::PictureView {
 
     /// Post-open notices joined for the status bar: mode, then depth, then ICC.
     pub fn open_notice(&self) -> QString {
-        let mut out = String::new();
+        let mut out = self.rust().session.compatibility.notice();
         for part in [self.mode_notice(), self.depth_notice(), self.icc_notice()] {
             let part = part.to_string();
             if part.is_empty() {
@@ -398,7 +425,12 @@ impl qobject::PictureView {
         let Some(doc) = self.rust().session.doc.as_ref() else {
             return false;
         };
-        std::fs::write(dest.to_string(), pictura_codec::export_template(doc)).is_ok()
+        super::helpers::safe_io::write_atomically(
+            &dest.to_string(),
+            &pictura_codec::export_template(doc),
+            false,
+        )
+        .is_ok()
     }
 
     /// Apply the XMP template at `path` to the active document with `mode`
@@ -523,6 +555,9 @@ impl qobject::PictureView {
             bottom: doc.height as i32,
             right: doc.width as i32,
         };
+        if rust.session.read_only() {
+            return rust.session.compatibility.image(0, whole);
+        }
         let painting = rust.session.live.stroke().is_some();
         premultiplied_display_image(&super::tiles::display_region(doc, whole, painting))
     }

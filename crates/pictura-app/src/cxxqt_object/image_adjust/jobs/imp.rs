@@ -76,7 +76,7 @@ pub(in crate::cxxqt_object) enum WorkerAdjustRefresh {
 
 /// The pre-preview document and the selection, for a worker.
 pub(super) fn preview_sources(rust: &PictureViewRust) -> Option<(Document, Option<Coverage>)> {
-    let mut doc = rust.session.doc.clone()?;
+    let mut doc = rust.session.doc.snapshot()?;
     if let Some(preview) = rust.session.live.filter_preview() {
         if let Some(layer) = pictura_render::resolve_path_mut(&mut doc, &preview.layer_path) {
             *layer = preview.baseline.original(layer).into_owned();
@@ -419,7 +419,7 @@ mod tests {
         let mut doc = Document::new(32, 24, ColorMode::Rgb, BitDepth::Eight);
         doc.layers = LayerStack::from_layers(vec![pixel_layer("px", 32, 24, (40, 80, 120))]);
         let mut rust = PictureViewRust::default();
-        rust.session.doc = Some(doc);
+        rust.session.doc.set(Some(doc));
         rust.layer_target = crate::layer_target::LayerTarget::only("0");
         rust.gpu_compute = false;
         rust

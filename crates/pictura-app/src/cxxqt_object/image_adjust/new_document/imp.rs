@@ -131,7 +131,7 @@ pub(crate) fn create_document(
         converted
     };
     if !finished {
-        view.as_mut().rust_mut().session.doc = None;
+        view.as_mut().rust_mut().session.doc.set(None);
         return false;
     }
     {

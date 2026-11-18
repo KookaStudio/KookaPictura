@@ -231,7 +231,7 @@ pub(super) fn convert_preview(
     if !pictura_codec::convert_document_with(&mut converted, &dst, options) {
         return false;
     }
-    rust.session.doc = Some(converted);
+    rust.session.doc.set(Some(converted));
     true
 }
 
@@ -257,7 +257,7 @@ pub fn convert_profile_with_options(
     let converted = {
         let mut rust = view.as_mut().rust_mut();
         if let Some(base) = rust.session.live.take_mode_preview() {
-            rust.session.doc = Some(base);
+            rust.session.doc.set(Some(base));
         }
         let Some(doc) = rust.session.doc.as_mut() else {
             return false;

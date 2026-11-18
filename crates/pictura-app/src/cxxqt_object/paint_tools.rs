@@ -15,10 +15,12 @@
 
 pub(super) mod fills;
 mod imp;
+mod patterns;
 
 use super::eyedropper_sample::sample_argb_scoped;
 use super::qobject::PictureView;
 use imp::*;
+use patterns::*;
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -122,10 +124,12 @@ pub mod ffi {
     extern "Rust" {
         /// Begin a Color Replacement stroke on the active pixel layer, painting
         /// `foreground` (`0xAARRGGBB`); `background` is the Background Swatch
-        /// reference. `mode` 0 Hue … 3 Luminosity, `sampling` 0 Continuous /
-        /// 1 Once / 2 Background Swatch, `limits` 0 Discontiguous /
-        /// 1 Contiguous / 2 Find Edges, `tolerance` 0–100 %. False without a
-        /// visible lone pixel layer, when its pixels are locked, or mid-stroke.
+        /// reference. `mode` 0 Normal … 24 Luminosity (23 Color), `sampling`
+        /// 0 Continuous / 1 Once / 2 Background Swatch, `limits` 0
+        /// Discontiguous / 1 Contiguous / 2 Find Edges, `tolerance` 0–100 %.
+        /// False without a visible lone pixel layer, when its pixels are
+        /// locked, mid-stroke, or on a Bitmap, Indexed, or Multichannel
+        /// document.
         fn begin_color_replacement(
             view: Pin<&mut PictureView>,
             foreground: u32,
@@ -137,6 +141,22 @@ pub mod ffi {
             tolerance: i32,
             antialias: bool,
         ) -> bool;
+
+        /// The number of Color Replacement modes (25).
+        fn color_replacement_mode_count() -> i32;
+
+        /// Color Replacement mode `index`'s CS6 menu label, or empty out of
+        /// range.
+        fn color_replacement_mode_name(index: i32) -> QString;
+
+        /// Whether a document of `depth_bits` offers Color Replacement mode
+        /// `index`; false out of range.
+        fn color_replacement_mode_allowed(index: i32, depth_bits: i32) -> bool;
+
+        /// Whether the Color Replacement tool is available in `mode` (an
+        /// `image_mode` name): false for `bitmap`, `indexed`, and
+        /// `multichannel`.
+        fn color_replacement_available(mode: &QString) -> bool;
 
         /// Begin a Mixer Brush stroke with `reservoir` (`0xAARRGGBB`; alpha 0
         /// is a clean brush) on the brush. `wet`, `load`, `mix`, and `flow` are
@@ -197,6 +217,17 @@ pub mod ffi {
             flow: i32,
             mode: &QString,
             pattern: i32,
+            origin_x: i32,
+            origin_y: i32,
+        ) -> bool;
+
+        fn begin_pattern_preset(
+            view: Pin<&mut PictureView>,
+            tip: &PaintTip,
+            opacity: i32,
+            flow: i32,
+            mode: &QString,
+            file: &[u8],
             origin_x: i32,
             origin_y: i32,
         ) -> bool;
@@ -290,6 +321,21 @@ pub mod ffi {
             auto_erase: bool,
             pressure_size: bool,
             pressure_opacity: bool,
+        ) -> bool;
+
+        fn begin_sampled_brush(
+            view: Pin<&mut PictureView>,
+            foreground: u32,
+            background: u32,
+            tip: &PaintTip,
+            opacity: i32,
+            flow: i32,
+            mode: &QString,
+            aliased: bool,
+            auto_erase: bool,
+            pressure_size: bool,
+            pressure_opacity: bool,
+            preset: &[u8],
         ) -> bool;
 
         /// Begin a Background Eraser stroke. `sampling` 0 Continuous / 1 Once
@@ -388,9 +434,11 @@ pub mod ffi {
 
         /// The number of built-in patterns.
         fn stamp_pattern_count() -> i32;
+        fn managed_pattern_count() -> i32;
 
         /// Built-in pattern `index`'s name, or empty out of range.
         fn stamp_pattern_name(index: i32) -> QString;
+        fn stamp_pattern_id(index: i32) -> QString;
 
         /// Built-in pattern `index` as packed RGBA8888, `stamp_pattern_side()`
         /// square; empty out of range.

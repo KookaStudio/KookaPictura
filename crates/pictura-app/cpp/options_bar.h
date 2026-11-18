@@ -9,6 +9,7 @@
 #include "tools.h"
 
 class QButtonGroup;
+class QComboBox;
 class QStackedWidget;
 class QHBoxLayout;
 class QIcon;
@@ -32,6 +33,9 @@ public:
     explicit OptionsBar(ToolController* controller, QWidget* parent = nullptr);
 
     void showTool(ToolId id);
+    // Re-read the active document's bit depth and filter the Color Replacement
+    // Mode menu for a 32-bit document.
+    void refreshDocumentFacts();
     // Show the Free Transform page (appended after the per-tool pages); the
     // frame's `transformChanged` handler switches between the two.
     void showTransform();
@@ -109,8 +113,7 @@ private:
     QWidget* buildRedEyePage(ToolId id);
     QWidget* buildColorReplacementPage(ToolId id);
     QWidget* buildMixerBrushPage(ToolId id);
-    void addBrushTipFields(QHBoxLayout* layout, QWidget* page,
-                           bool withAdditionalPresets = false);
+    void addBrushTipFields(QHBoxLayout* layout, QWidget* page);
     // options_bar_stamp.cpp: Clone Stamp, Pattern Stamp, History Brush, Art
     // History Brush, and Eraser.
     QWidget* buildStampPage(ToolId id);
@@ -194,6 +197,8 @@ private:
     ContentAwareMoveGroup* contentAware_ = nullptr;
     RedEyeGroup* redEye_ = nullptr;
     ColorReplaceGroup* colorReplace_ = nullptr;
+    QComboBox* colorReplaceMode_ = nullptr;
+    int colorReplaceDepth_ = 0;
     MixerGroup* mixer_ = nullptr;
     StampGroup* stamp_ = nullptr;
     EraserGroup* eraser_ = nullptr;

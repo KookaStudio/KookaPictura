@@ -8,7 +8,7 @@
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QObject>
-#include <QtCore/QSaveFile>
+#include "protected_output.h"
 #include <QtCore/QStandardPaths>
 
 #include <functional>
@@ -169,7 +169,7 @@ bool applyChange(const QString& configPath, const ConfigChange& change, QString*
             return fail(QObject::tr("%1 could not be backed up, so it was left alone.").arg(target));
         }
     }
-    QSaveFile file(target);
+    pictura::ProtectedOutput file(target);
     if (!file.open(QIODevice::WriteOnly) || file.write(change.after) != change.after.size()
         || !file.commit()) {
         return fail(QObject::tr("%1 could not be written.").arg(target));

@@ -89,6 +89,7 @@ public:
     void importSystemClipboard();
     bool handleDeleteKey();
     bool replaceSmartObjectContents(const QString& layerPath);
+    bool relinkSmartObjectContents(const QString& layerPath);
     bool exportSmartObjectContents(const QString& layerPath);
     void alignSelectedLayers(int edge, bool toSelection, int alignTo = 0);
     void distributeSelectedLayers(int edge);
@@ -130,6 +131,7 @@ private:
     void wireEditHistory();
     void wireFilterMenu();
     void wireImageMenu();
+    void wireVariablesMenu();
     void wireImageModeMenu();
     void wireImageAdjustments();
     void wireLayerAdjustments();

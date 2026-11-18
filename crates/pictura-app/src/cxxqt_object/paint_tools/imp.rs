@@ -25,7 +25,6 @@ use pictura_paint::eraser::{
 };
 use pictura_paint::focus::{Focus, FocusOptions, RetouchMode};
 use pictura_paint::mixer::MixerOptions;
-use pictura_paint::pattern::{self, PATTERN_NAMES};
 use pictura_paint::replace::{Limits, ReplaceMode, ReplaceOptions, Sampling};
 use pictura_paint::smudge::SmudgeOptions;
 use pictura_paint::spacing::SpacingMode;
@@ -61,8 +60,31 @@ pub(super) fn begin_color_replacement(
         antialias,
     };
     begin(view, "Color Replacement Tool", cfg, |doc, path, _| {
+        let mode = crate::cxxqt_object::channels::mode_name(doc.document_color_mode());
+        if !color_replacement_available(&QString::from(mode)) {
+            return None;
+        }
         Stroke::begin_kind(doc, path, cfg, StrokeKind::Replace(options)).ok()
     })
+}
+
+pub(super) fn color_replacement_mode_count() -> i32 {
+    ReplaceMode::ALL.len() as i32
+}
+
+pub(super) fn color_replacement_mode_name(index: i32) -> QString {
+    ReplaceMode::from_i32(index).map_or_else(QString::default, |mode| QString::from(mode.name()))
+}
+
+pub(super) fn color_replacement_mode_allowed(index: i32, depth_bits: i32) -> bool {
+    ReplaceMode::from_i32(index).is_some_and(|mode| mode.allowed(depth_bits))
+}
+
+pub(super) fn color_replacement_available(mode: &QString) -> bool {
+    !matches!(
+        mode.to_string().as_str(),
+        "bitmap" | "indexed" | "multichannel"
+    )
 }
 
 pub(super) fn begin_mixer_brush(
@@ -216,6 +238,78 @@ pub(super) fn begin_brush(
     pressure_size: bool,
     pressure_opacity: bool,
 ) -> bool {
+    begin_brush_tip(
+        view,
+        foreground,
+        background,
+        tip,
+        opacity,
+        flow,
+        mode,
+        aliased,
+        auto_erase,
+        pressure_size,
+        pressure_opacity,
+        None,
+    )
+}
+
+pub(super) fn begin_sampled_brush(
+    view: Pin<&mut PictureView>,
+    foreground: u32,
+    background: u32,
+    tip: &PaintTip,
+    opacity: i32,
+    flow: i32,
+    mode: &QString,
+    aliased: bool,
+    auto_erase: bool,
+    pressure_size: bool,
+    pressure_opacity: bool,
+    preset: &[u8],
+) -> bool {
+    use pictura_codec::preset_library::{decode, Format, Kind, Payload};
+    let Ok(mut parsed) = decode(Kind::Brushes, Format::Native, preset) else {
+        return false;
+    };
+    let Some(Payload::Brush(brush)) = parsed.library.entries.pop().map(|row| row.payload) else {
+        return false;
+    };
+    let Some(sample) =
+        pictura_paint::stroke::SampledTip::new(brush.width, brush.height, brush.coverage)
+    else {
+        return false;
+    };
+    begin_brush_tip(
+        view,
+        foreground,
+        background,
+        tip,
+        opacity,
+        flow,
+        mode,
+        aliased,
+        auto_erase,
+        pressure_size,
+        pressure_opacity,
+        Some(sample),
+    )
+}
+
+fn begin_brush_tip(
+    view: Pin<&mut PictureView>,
+    foreground: u32,
+    background: u32,
+    tip: &PaintTip,
+    opacity: i32,
+    flow: i32,
+    mode: &QString,
+    aliased: bool,
+    auto_erase: bool,
+    pressure_size: bool,
+    pressure_opacity: bool,
+    sampled: Option<pictura_paint::stroke::SampledTip>,
+) -> bool {
     let mut cfg = stamp_config(tip, opacity, flow, mode);
     cfg.color = rgba_from_argb(foreground);
     cfg.background = rgba_from_argb(background);
@@ -225,7 +319,7 @@ pub(super) fn begin_brush(
     cfg.pressure_opacity = pressure_opacity;
     let label = if aliased { "Pencil" } else { "Brush" };
     if view.rust().session.quick_mask.active {
-        return view.begin_quick_mask_paint(cfg, label);
+        return view.begin_quick_mask_paint_with_tip(cfg, label, sampled);
     }
     crate::cxxqt_object::helpers::memory_gate::clear();
     let fits = {
@@ -241,14 +335,20 @@ pub(super) fn begin_brush(
     }
     if let Some(path) = active_mask_target(view.rust()) {
         let mask_cfg = mask_stroke_config(cfg);
-        return view.begin_mask_paint(&path, mask_cfg, label);
+        return view.begin_mask_paint_with_tip(&path, mask_cfg, label, sampled);
     }
     begin_kind(
         view,
         label,
         cfg,
-        tool_recording::ToolStrokeKind::Paint,
-        |doc, path, _| Stroke::begin_at(doc, path, cfg).ok(),
+        tool_recording::brush_recording_kind(sampled.is_some()),
+        |doc, path, _| {
+            let mut stroke = Stroke::begin_at(doc, path, cfg).ok()?;
+            if let Some(sampled) = sampled {
+                stroke.set_sampled_tip(sampled);
+            }
+            Some(stroke)
+        },
     )
 }
 
@@ -290,26 +390,6 @@ pub(super) fn begin_clone_stamp(
         };
         let anchor = (anchor_x as f32, anchor_y as f32);
         let source = StampSource::transformed(image, (offset_x, offset_y), anchor, transform);
-        Stroke::begin_source(doc, path, cfg, source).ok()
-    })
-}
-
-pub(super) fn begin_pattern_stamp(
-    view: Pin<&mut PictureView>,
-    tip: &PaintTip,
-    opacity: i32,
-    flow: i32,
-    mode: &QString,
-    pattern: i32,
-    origin_x: i32,
-    origin_y: i32,
-) -> bool {
-    let Some(tile) = usize::try_from(pattern).ok().and_then(pattern::tile) else {
-        return false;
-    };
-    let cfg = stamp_config(tip, opacity, flow, mode);
-    begin(view, "Pattern Stamp", cfg, |doc, path, _| {
-        let source = StampSource::pattern(tile, (origin_x, origin_y), doc.width, doc.height)?;
         Stroke::begin_source(doc, path, cfg, source).ok()
     })
 }
@@ -478,7 +558,7 @@ pub(super) fn begin_background_eraser(
     if !begun {
         let mut rust = view.as_mut().rust_mut();
         if let Some(base) = base {
-            rust.session.doc = Some(base);
+            rust.session.doc.set(Some(base));
         }
         return false;
     }
@@ -755,7 +835,7 @@ pub(super) fn magic_erase_at(
     };
     let (edited, dirty) = erased;
     view.as_mut().edit("Magic Eraser", |rust| {
-        rust.session.doc = Some(edited);
+        rust.session.doc.set(Some(edited));
         super::fills::fill_edit(rust, Some(dirty))
     });
     after(&mut view.as_mut().rust_mut());
@@ -764,28 +844,6 @@ pub(super) fn magic_erase_at(
         ..Outcome::default()
     }));
     true
-}
-
-pub(super) fn stamp_pattern_count() -> i32 {
-    PATTERN_NAMES.len() as i32
-}
-
-pub(super) fn stamp_pattern_name(index: i32) -> QString {
-    usize::try_from(index)
-        .ok()
-        .and_then(|i| PATTERN_NAMES.get(i))
-        .map_or_else(QString::default, |name| QString::from(*name))
-}
-
-pub(super) fn stamp_pattern_tile(index: i32) -> Vec<u8> {
-    usize::try_from(index)
-        .ok()
-        .and_then(pattern::tile)
-        .map_or_else(Vec::new, |tile| tile.data.concat())
-}
-
-pub(super) fn stamp_pattern_side() -> i32 {
-    pattern::TILE
 }
 
 pub(super) fn history_brush_source_state(view: &PictureView) -> i32 {
@@ -992,6 +1050,7 @@ pub(super) fn begin_kind(
 #[cfg(test)]
 mod tests {
     use super::composite_surface;
+
     use crate::cxxqt_object::document_session::DocumentSession;
     use crate::cxxqt_object::picture::composites_so_far;
     use crate::cxxqt_object::state::PictureViewRust;
@@ -1030,5 +1089,22 @@ mod tests {
         );
         assert_eq!((surface.width, surface.height), (16, 16));
         assert_eq!(surface.data[0], [40, 80, 120, 255]);
+    }
+
+    #[test]
+    fn color_replacement_is_unavailable_for_flat_modes() {
+        use cxx_qt_lib::QString;
+        for mode in ["bitmap", "indexed", "multichannel"] {
+            assert!(
+                !super::color_replacement_available(&QString::from(mode)),
+                "{mode}"
+            );
+        }
+        for mode in ["rgb", "grayscale", "cmyk", "lab", "duotone"] {
+            assert!(
+                super::color_replacement_available(&QString::from(mode)),
+                "{mode}"
+            );
+        }
     }
 }

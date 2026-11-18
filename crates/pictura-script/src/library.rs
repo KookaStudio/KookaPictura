@@ -660,12 +660,42 @@ impl ActionLibrary {
 
     /// The palette bytes for the whole library.
     pub fn save_bytes(&self) -> Vec<u8> {
+        if self
+            .sets
+            .iter()
+            .flat_map(|set| &set.actions)
+            .flat_map(|action| &action.steps)
+            .any(crate::recorder::pending_step)
+        {
+            let mut sets = self.sets.clone();
+            for action in sets.iter_mut().flat_map(|set| &mut set.actions) {
+                action
+                    .steps
+                    .retain(|step| !crate::recorder::pending_step(step));
+            }
+            return atn::write_psp(&sets);
+        }
         atn::write_psp(&self.sets)
     }
 
     /// One set as `.atn` bytes.
     pub fn set_bytes(&self, set: usize) -> Option<Vec<u8>> {
-        self.sets.get(set).map(atn::write_atn)
+        let set = self.sets.get(set)?;
+        if set
+            .actions
+            .iter()
+            .flat_map(|action| &action.steps)
+            .any(crate::recorder::pending_step)
+        {
+            let mut set = set.clone();
+            for action in &mut set.actions {
+                action
+                    .steps
+                    .retain(|step| !crate::recorder::pending_step(step));
+            }
+            return Some(atn::write_atn(&set));
+        }
+        Some(atn::write_atn(set))
     }
 
     /// Load a palette or action set, replacing the library only on success.

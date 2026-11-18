@@ -16,6 +16,7 @@ FileScriptsExportLayersToFiles	file.scripts.export.layers.to.files
 FileScriptsLayerCompsToFiles	file.scripts.layer.comps.to.files
 FileScriptsLayerCompsToPdf	file.scripts.layer.comps.to.pdf
 FileScriptsLoadFilesIntoStack	file.scripts.load.files.into.stack
+FileAutomateBatch	file.automate.batch
 FileClose	file.close
 FileCloseAll	file.closeAll
 FileExit	file.exit
@@ -63,6 +64,7 @@ EditAssignProfile	edit.assignProfile
 EditConvertProfile	edit.convertProfile
 EditColorSettings	edit.colorSettings
 EditPdfPresets	edit.pdfPresets
+EditPresetManager	edit.presets.preset.manager
 FilterPicturaRaw	filter.picturaRaw
 FilterConvertForSmartFilters	filter.convertForSmartFilters
 FilterLastFilter	filter.last

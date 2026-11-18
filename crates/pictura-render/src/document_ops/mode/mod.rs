@@ -217,11 +217,12 @@ pub fn convert_bit_depth(doc: &mut Document, out: BitDepth) -> Result<(), OpsErr
 /// and no canvas-sized buffer is built for it. The app keeps an RGB composite
 /// as RGBA for display, but a document carrying a source mode (CMYK, Lab,
 /// Indexed, Bitmap, ...) or document-level extra channels is written from three
-/// color planes, so the display alpha plane is dropped; any other document is
-/// borrowed unchanged.
+/// color planes, so the display alpha plane is dropped unless the source signed
+/// it as merged transparency; any other document is borrowed unchanged.
 pub fn save_view(doc: &Document) -> Cow<'_, Document> {
-    let drops_alpha =
-        !(doc.source.mode().is_none() && doc.channels.is_empty()) && doc.mode == ColorMode::Rgb;
+    let drops_alpha = !(doc.source.mode().is_none() && doc.channels.is_empty())
+        && !doc.composite.signed_merged_alpha()
+        && doc.mode == ColorMode::Rgb;
     if doc.composite.merged_output()
         && !doc.composite_is_authoritative()
         && !crate::DocumentComposite::is_stored(doc)

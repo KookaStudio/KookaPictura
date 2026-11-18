@@ -1,6 +1,7 @@
 #include "gradient_map_dialog.h"
 
 #include "dialogs.h"
+#include "preset_store.h"
 
 #include "api/paint_bridge.h"
 #include "api/filters_bridge.h"
@@ -57,21 +58,32 @@ GradientMapDialog::GradientMapDialog(PictureView* view, const QByteArray& block,
     presets_->setToolTip(QStringLiteral("Click to open Gradient picker"));
     presets_->setFixedHeight(kSampleSize.height() + 8);
     auto* menu = new QMenu(presets_);
-    for (int i = 0; i < gradient_preset_count(); ++i) {
-        QPixmap pixmap(32, 16);
-        {
-            QPainter painter(&pixmap);
-            paintGradient(painter, pixmap.rect(), gradientPreset(i, foreground_, background_));
+    auto& store = PresetStore::current();
+    const auto rebuild = [this, menu, &store] {
+        menu->clear();
+        for (const auto& row : store.rows(PresetType::Gradients)) {
+            const auto stops = libraryRamp(row, foreground_, background_);
+            if (stops.isEmpty()) continue;
+            QPixmap pixmap(32, 16);
+            {
+                QPainter painter(&pixmap);
+                paintGradient(painter, pixmap.rect(), stops);
+            }
+            connect(menu->addAction(QIcon(pixmap), row.name), &QAction::triggered, this,
+                [this, name = row.name, stops, smoothness = row.values.value(QStringLiteral("smoothness")).toDouble(100)] {
+                    GradientSpec preset;
+                    preset.name = name;
+                    preset.stops = stops;
+                    preset.smoothness = qBound(0, qRound(smoothness), 100);
+                    preset.noise = spec_.noise;
+                    setSpec(preset);
+                });
         }
-        const QString name(gradient_preset_name(i));
-        connect(menu->addAction(QIcon(pixmap), name), &QAction::triggered, this, [this, i, name]() {
-            GradientSpec preset;
-            preset.name = name;
-            preset.stops = gradientPreset(i, foreground_, background_);
-            preset.noise = spec_.noise;
-            setSpec(preset);
-        });
-    }
+    };
+    rebuild();
+    connect(&store, &PresetStore::changed, this, [rebuild](int type) {
+        if (type == int(PresetType::Gradients)) rebuild();
+    });
     presets_->setMenu(menu);
     mappingRow->addWidget(sample_, 1);
     mappingRow->addWidget(presets_);

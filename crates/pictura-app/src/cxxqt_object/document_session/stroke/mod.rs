@@ -165,7 +165,7 @@ impl PictureViewRust {
         recording: ToolStrokeKind,
         build: impl FnOnce(&PictureViewRust) -> Option<StrokePlan>,
     ) -> bool {
-        if !self.slot_allows(kind) {
+        if self.session.read_only() || !self.slot_allows(kind) {
             return false;
         }
         let Some(plan) = build(self) else {

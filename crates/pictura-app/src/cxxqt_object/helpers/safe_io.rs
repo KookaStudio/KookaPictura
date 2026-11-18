@@ -18,6 +18,100 @@ pub(in crate::cxxqt_object) fn write_atomically(
     write_atomically_with(path, sync, |out| out.write_all(bytes))
 }
 
+#[derive(Debug)]
+pub(in crate::cxxqt_object) enum DurableWriteError {
+    BeforeRename(std::io::Error),
+    AfterRename(std::io::Error),
+}
+
+pub(in crate::cxxqt_object) fn write_durable(
+    path: &Path,
+    bytes: &[u8],
+    sync_parent: impl FnOnce(&Path) -> std::io::Result<()>,
+) -> Result<(), DurableWriteError> {
+    write_durable_with(path, |out| out.write_all(bytes), sync_parent)
+}
+
+/// [`write_durable`] for a writer that streams into the temp file through
+/// `write` (#1320).
+pub(in crate::cxxqt_object) fn write_durable_with(
+    path: &Path,
+    write: impl FnOnce(&mut std::io::BufWriter<std::fs::File>) -> std::io::Result<()>,
+    sync_parent: impl FnOnce(&Path) -> std::io::Result<()>,
+) -> Result<(), DurableWriteError> {
+    let path = path.to_str().ok_or_else(|| {
+        DurableWriteError::BeforeRename(std::io::Error::other("invalid publication path"))
+    })?;
+    write_atomically_with(path, true, write).map_err(DurableWriteError::BeforeRename)?;
+    sync_parent(parent_directory(Path::new(path))).map_err(DurableWriteError::AfterRename)
+}
+
+impl From<DurableWriteError> for std::io::Error {
+    fn from(value: DurableWriteError) -> Self {
+        match value {
+            DurableWriteError::BeforeRename(error) | DurableWriteError::AfterRename(error) => error,
+        }
+    }
+}
+
+#[cfg(not(windows))]
+pub(in crate::cxxqt_object) fn sync_directory(path: &Path) -> std::io::Result<()> {
+    std::fs::File::open(path)?.sync_all()
+}
+
+#[cfg(windows)]
+pub(in crate::cxxqt_object) fn sync_directory(path: &Path) -> std::io::Result<()> {
+    // Durable replacements on Windows use the write-through rename below.
+    std::fs::metadata(path).map(|_| ())
+}
+
+#[cfg(not(windows))]
+fn rename(tmp: &str, path: &str, _sync: bool) -> std::io::Result<()> {
+    std::fs::rename(tmp, path)
+}
+
+#[cfg(windows)]
+fn rename(tmp: &str, path: &str, sync: bool) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn MoveFileExW(existing: *const u16, new: *const u16, flags: u32) -> i32;
+    }
+    if !sync {
+        return std::fs::rename(tmp, path);
+    }
+    let wide = |path: &str| {
+        Path::new(path)
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>()
+    };
+    let existing = wide(tmp);
+    let new = wide(path);
+    const REPLACE_EXISTING: u32 = 1;
+    const WRITE_THROUGH: u32 = 8;
+    // Both paths are live, nul-terminated buffers for the duration of the call.
+    if unsafe {
+        MoveFileExW(
+            existing.as_ptr(),
+            new.as_ptr(),
+            REPLACE_EXISTING | WRITE_THROUGH,
+        )
+    } == 0
+    {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+fn parent_directory(path: &Path) -> &Path {
+    path.parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."))
+}
+
 /// [`write_atomically`] for a writer that streams into the temp file through
 /// `write` (#1320): a failure there, or in the flush, sync or rename, removes
 /// the temp file and leaves `path` as it was.
@@ -26,28 +120,44 @@ pub(in crate::cxxqt_object) fn write_atomically_with(
     sync: bool,
     write: impl FnOnce(&mut std::io::BufWriter<std::fs::File>) -> std::io::Result<()>,
 ) -> std::io::Result<()> {
+    reject_protected_destination(path)?;
     let tmp = format!(
         "{path}.{:016x}.tmp",
         u64::from_le_bytes(pictura_codec::os_random())
     );
     // `create_new` is O_CREAT|O_EXCL: it fails on any existing entry,
     // including a symlink planted at the predictable-looking name.
-    let written = std::fs::OpenOptions::new()
+    let file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(&tmp)
+        .open(&tmp)?;
+    let mut out = std::io::BufWriter::new(file);
+    let written = write(&mut out)
+        .and_then(|()| out.into_inner().map_err(|e| e.into_error()))
         .and_then(|file| {
-            let mut out = std::io::BufWriter::new(file);
-            write(&mut out)?;
-            let file = out.into_inner().map_err(|e| e.into_error())?;
             if sync {
                 file.sync_all()?;
             }
             Ok(())
         });
-    if let Err(e) = written.and_then(|()| std::fs::rename(&tmp, path)) {
+    if let Err(error) = written.and_then(|()| {
+        reject_protected_destination(path)?;
+        rename(&tmp, path, sync)
+    }) {
         let _ = std::fs::remove_file(&tmp);
-        return Err(e);
+        return Err(error);
+    }
+    Ok(())
+}
+
+pub(in crate::cxxqt_object) fn reject_protected_destination(
+    path: impl AsRef<Path>,
+) -> std::io::Result<()> {
+    if crate::cxxqt_object::open_jobs::compatibility::destination_is_protected(path.as_ref()) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "destination is an open read-only source file",
+        ));
     }
     Ok(())
 }
@@ -64,6 +174,29 @@ pub(in crate::cxxqt_object) fn read_capped(path: impl AsRef<Path>, limit: u64) -
         .read_to_end(&mut bytes)
         .ok()?;
     (bytes.len() as u64 <= limit).then_some(bytes)
+}
+
+/// Publish a sibling file `write` streams without replacing an existing destination.
+pub(in crate::cxxqt_object) fn write_new_atomically_with(
+    path: &Path,
+    write: impl FnOnce(&mut std::io::BufWriter<std::fs::File>) -> std::io::Result<()>,
+) -> std::io::Result<()> {
+    reject_protected_destination(path)?;
+    let suffix = u64::from_le_bytes(pictura_codec::os_random());
+    let temporary = path.with_file_name(format!(".pictura-{suffix:016x}.tmp"));
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)?;
+    let mut out = std::io::BufWriter::new(file);
+    let written =
+        write(&mut out).and_then(|()| out.into_inner().map(drop).map_err(|e| e.into_error()));
+    let result = written.and_then(|()| {
+        reject_protected_destination(path)?;
+        std::fs::hard_link(&temporary, path)
+    });
+    let _ = std::fs::remove_file(temporary);
+    result
 }
 
 /// The largest raster file an import reads: no compressed image larger than

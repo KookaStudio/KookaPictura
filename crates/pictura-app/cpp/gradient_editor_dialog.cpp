@@ -1,4 +1,8 @@
 #include "gradient_editor_dialog.h"
+#include "preset_store.h"
+#include <QtCore/QJsonArray>
+#include <QtCore/QMap>
+#include <QtCore/QSet>
 
 #include "color_picker_dialog.h"
 #include "panels/color_swatch_widget.h"
@@ -24,6 +28,7 @@
 #include <QtWidgets/QVBoxLayout>
 
 #include <algorithm>
+#include <iterator>
 
 namespace pictura {
 
@@ -124,6 +129,88 @@ GradientStops gradientPreset(int index, const QColor& foreground, const QColor& 
 {
     return parseGradientStops(
         QString(gradient_preset_map_stops(index, foreground.rgba(), background.rgba())));
+}
+
+GradientStops libraryRamp(const PresetRow& row, const QColor& foreground, const QColor& background)
+{
+    const int index = row.values.value(QStringLiteral("index")).toInt(-1);
+    if (index >= 0) {
+        return gradientPreset(index, foreground, background);
+    }
+    struct Point { QColor color; double midpoint; };
+    QMap<int, Point> colors;
+    QMap<int, QPair<double, double>> opacity;
+    for (const auto& value : row.values.value(QStringLiteral("stops")).toArray()) {
+        const auto stop = value.toObject();
+        const auto color = stop.value(QStringLiteral("color"));
+        const auto rgb = color.toArray();
+        const auto rgba = color.toString() == QStringLiteral("foreground") ? foreground
+            : color.toString() == QStringLiteral("background") ? background
+            : rgb.size() == 3 ? QColor(qBound(0, qRound(rgb[0].toDouble()), 255),
+                                       qBound(0, qRound(rgb[1].toDouble()), 255),
+                                       qBound(0, qRound(rgb[2].toDouble()), 255)) : QColor();
+        if (rgba.isValid()) {
+            colors.insert(qBound(0, stop.value(QStringLiteral("at")).toInt(), kMaxLocation),
+                          {rgba, qBound(.01, stop.value(QStringLiteral("mid")).toDouble(50) / 100.0, .99)});
+        }
+    }
+    for (const auto& value : row.values.value(QStringLiteral("opacity")).toArray()) {
+        const auto stop = value.toObject();
+        opacity.insert(qBound(0, stop.value(QStringLiteral("at")).toInt(), kMaxLocation),
+                       {qBound(0.0, stop.value(QStringLiteral("value")).toDouble() / 100.0, 1.0),
+                        qBound(.01, stop.value(QStringLiteral("mid")).toDouble(50) / 100.0, .99)});
+    }
+    if (colors.isEmpty()) { return {}; }
+    auto tAt = [](int at, int left, int right, double middle) {
+        const double t = double(at - left) / double(right - left);
+        return t <= middle ? .5 * t / middle : .5 + .5 * (t - middle) / (1 - middle);
+    };
+    auto positionsFor = [](const auto& source, auto midpoint) {
+        QSet<int> positions;
+        for (auto it = source.cbegin(); it != source.cend(); ++it) {
+            positions.insert(it.key());
+            const auto next = std::next(it);
+            if (next != source.cend()) {
+                positions.insert(it.key() + qRound((next.key() - it.key()) * midpoint(it.value())));
+            }
+        }
+        return positions;
+    };
+    auto positions = positionsFor(colors, [](const Point& point) { return point.midpoint; });
+    positions.unite(positionsFor(opacity, [](const auto& point) { return point.second; }));
+    positions.insert(0);
+    positions.insert(kMaxLocation);
+    auto sorted = positions.values();
+    std::sort(sorted.begin(), sorted.end());
+    GradientStops result;
+    for (const int at : sorted) {
+        const auto high = colors.upperBound(at);
+        QColor color;
+        if (high == colors.cbegin()) { color = colors.first().color; }
+        else if (high == colors.cend()) { color = colors.last().color; }
+        else {
+            const auto low = std::prev(high);
+            const double t = tAt(at, low.key(), high.key(), low->midpoint);
+            const auto mix = [t](double x, double y) { return x + (y - x) * t; };
+            color = QColor::fromRgbF(mix(low->color.redF(), high->color.redF()),
+                                     mix(low->color.greenF(), high->color.greenF()),
+                                     mix(low->color.blueF(), high->color.blueF()));
+        }
+        if (!opacity.isEmpty()) {
+            const auto hi = opacity.upperBound(at);
+            double alpha;
+            if (hi == opacity.cbegin()) { alpha = opacity.first().first; }
+            else if (hi == opacity.cend()) { alpha = opacity.last().first; }
+            else {
+                const auto lo = std::prev(hi);
+                const auto t = tAt(at, lo.key(), hi.key(), lo->second);
+                alpha = lo->first + (hi->first - lo->first) * t;
+            }
+            color.setAlphaF(qBound(0.0, alpha, 1.0));
+        }
+        result.push_back({at, color});
+    }
+    return result;
 }
 
 GradientStops noiseStops(const NoiseSettings& noise)
@@ -454,21 +541,33 @@ GradientEditorDialog::GradientEditorDialog(const GradientSpec& spec, const QColo
     presetsGrid->setSpacing(4);
     constexpr int kColumns = 10;
     constexpr int kSwatch = 30;
-    for (int i = 0; i < gradient_preset_count(); ++i) {
+    auto& store = PresetStore::current();
+    const auto rebuildPresets = [this, presetsBox, presetsGrid, foreground, background, &store] {
+      while (auto* item = presetsGrid->takeAt(0)) {
+          delete item->widget();
+          delete item;
+      }
+      const auto& rows = store.rows(PresetType::Gradients);
+      for (int i = 0; i < rows.size(); ++i) {
         QPixmap pixmap(kSwatch, kSwatch);
         {
             QPainter painter(&pixmap);
-            paintGradient(painter, pixmap.rect(), gradientPreset(i, foreground, background));
+            paintGradient(painter, pixmap.rect(), libraryRamp(rows.at(i), foreground, background));
         }
         auto* swatch = new QToolButton(presetsBox);
         swatch->setObjectName(QStringLiteral("gradientPreset%1").arg(i));
         swatch->setIcon(QIcon(pixmap));
         swatch->setIconSize(QSize(kSwatch, kSwatch));
-        swatch->setToolTip(QString(gradient_preset_name(i)));
+        swatch->setToolTip(rows.at(i).name);
         swatch->setAutoRaise(true);
         presetsGrid->addWidget(swatch, i / kColumns, i % kColumns);
         connect(swatch, &QToolButton::clicked, this, [this, i]() { choosePreset(i); });
-    }
+      }
+    };
+    rebuildPresets();
+    connect(&store, &PresetStore::changed, this, [rebuildPresets](int type) {
+        if (type == int(PresetType::Gradients)) { rebuildPresets(); }
+    });
     presetsGrid->setColumnStretch(kColumns, 1);
     left->addWidget(presetsBox);
 
@@ -626,7 +725,10 @@ void GradientEditorDialog::setSolidOnly(bool solidOnly)
 
 void GradientEditorDialog::choosePreset(int index)
 {
-    const GradientStops stops = gradientPreset(index, foreground_, background_);
+    const auto& rows = PresetStore::current().rows(PresetType::Gradients);
+    if (index < 0 || index >= rows.size()) { return; }
+    const auto& row = rows.at(index);
+    const GradientStops stops = libraryRamp(row, foreground_, background_);
     if (stops.isEmpty()) {
         return;
     }
@@ -634,7 +736,8 @@ void GradientEditorDialog::choosePreset(int index)
     type_->setCurrentIndex(GradientSpec::Solid);
     bar_->setStops(stops);
     bar_->select(0);
-    name_->setText(QString(gradient_preset_name(index)));
+    name_->setText(row.name);
+    smoothness_->setValue(qBound(0, row.values.value(QStringLiteral("smoothness")).toInt(100), 100));
     loading_ = false;
     emit gradientChanged();
 }

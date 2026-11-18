@@ -9,6 +9,11 @@ use std::path::Path;
 
 use ffi::ImportTarget;
 
+mod vector;
+pub use vector::*;
+mod relink;
+pub use relink::*;
+
 pub(super) fn error_text(error: &RasterError) -> QString {
     let kind = match error {
         RasterError::NoGhostscript => "nogs",

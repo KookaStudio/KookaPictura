@@ -7,6 +7,16 @@ use pictura_core::layer_comp::{CompRecord, LayerComp};
 
 use crate::cxxqt_object::edit::Edit;
 
+fn comp_edits_blocked(view: &PictureView) -> bool {
+    view.rust().modal_transform_blocks_edit()
+        || view
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .is_some_and(|doc| !doc.variables.protected_ids().is_empty())
+}
+
 fn with_comp<R>(
     view: &PictureView,
     index: i32,
@@ -62,7 +72,14 @@ pub(super) fn layer_comp_create(
     comment: &QString,
     record_bits: i32,
 ) -> i32 {
-    if view.rust().modal_transform_blocks_edit() {
+    if view.rust().modal_transform_blocks_edit()
+        || view
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .is_some_and(|doc| !doc.variables.protected_ids().is_empty())
+    {
         return -1;
     }
     let count = view
@@ -128,7 +145,7 @@ pub(super) fn layer_comp_apply(mut view: Pin<&mut PictureView>, id: i32) -> bool
 }
 
 pub(super) fn layer_comp_update(mut view: Pin<&mut PictureView>, id: i32) -> bool {
-    if view.rust().modal_transform_blocks_edit() {
+    if comp_edits_blocked(&view) {
         return false;
     }
     let id = id as u32;
@@ -153,7 +170,7 @@ pub(super) fn layer_comp_update(mut view: Pin<&mut PictureView>, id: i32) -> boo
 }
 
 pub(super) fn layer_comp_delete(mut view: Pin<&mut PictureView>, id: i32) -> bool {
-    if view.rust().modal_transform_blocks_edit() {
+    if comp_edits_blocked(&view) {
         return false;
     }
     let id = id as u32;
@@ -173,7 +190,7 @@ pub(super) fn layer_comp_delete(mut view: Pin<&mut PictureView>, id: i32) -> boo
 }
 
 pub(super) fn layer_comp_rename(mut view: Pin<&mut PictureView>, id: i32, name: &QString) -> bool {
-    if view.rust().modal_transform_blocks_edit() {
+    if comp_edits_blocked(&view) {
         return false;
     }
     let name = name.to_string();
@@ -203,7 +220,7 @@ pub(super) fn layer_comp_set_options(
     comment: &QString,
     record_bits: i32,
 ) -> bool {
-    if view.rust().modal_transform_blocks_edit() {
+    if comp_edits_blocked(&view) {
         return false;
     }
     let name = name.to_string();
@@ -242,7 +259,7 @@ pub(super) fn layer_comp_set_options(
 }
 
 pub(super) fn layer_comp_duplicate(mut view: Pin<&mut PictureView>, id: i32) -> i32 {
-    if view.rust().modal_transform_blocks_edit() {
+    if comp_edits_blocked(&view) {
         return -1;
     }
     let id = id as u32;
@@ -265,7 +282,7 @@ pub(super) fn layer_comp_duplicate(mut view: Pin<&mut PictureView>, id: i32) -> 
 }
 
 pub(super) fn layer_comp_clear_warning(mut view: Pin<&mut PictureView>, id: i32) -> bool {
-    if view.rust().modal_transform_blocks_edit() {
+    if comp_edits_blocked(&view) {
         return false;
     }
     let id = id as u32;
@@ -285,7 +302,7 @@ pub(super) fn layer_comp_clear_warning(mut view: Pin<&mut PictureView>, id: i32)
 }
 
 pub(super) fn layer_comp_clear_all_warnings(mut view: Pin<&mut PictureView>) -> bool {
-    if view.rust().modal_transform_blocks_edit() {
+    if comp_edits_blocked(&view) {
         return false;
     }
     let mut cleared = false;

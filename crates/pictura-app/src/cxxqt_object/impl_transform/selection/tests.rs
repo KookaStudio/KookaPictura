@@ -137,7 +137,7 @@ fn selection_transform_undo_restores_the_mask() {
     let restored = history.undo_live(&mut doc, &mut view.session.selection, &mut target);
     assert!(restored.is_some());
     assert_eq!(view.session.selection, pre);
-    view.session.doc = Some(doc);
+    view.session.doc.set(Some(doc));
 }
 
 #[test]

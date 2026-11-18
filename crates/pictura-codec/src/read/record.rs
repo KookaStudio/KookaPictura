@@ -172,6 +172,8 @@ pub(super) fn read_layer_record(r: &mut Reader, is_psb: bool) -> Result<RawLayer
                     let lsct_key: [u8; 4] = data[8..12].try_into().unwrap();
                     if let Some(m) = BlendMode::from_psd_key(lsct_key) {
                         blend = m;
+                    } else {
+                        blend_key = Some(lsct_key);
                     }
                 }
             }

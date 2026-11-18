@@ -22,7 +22,7 @@ This plan covers `tiled-save-streaming` (#1320): the new capabilities
 
 | Scenario | Steps | Expected | Coverage |
 |---|---|---|---|
-| `sps_identical` | Write each corpus document into a temp file through `write_psd_to`, and encode it with `write_psd`/`write_psb` | Same bytes for every document | `pictura-codec::streamed_file_equals_in_memory_encode` |
+| `sps_identical` | Write each corpus document into a temp file through `write_psd_to`, and encode it with `write_psd`/`write_psb` | Same bytes for every document | `pictura-codec::streamed_file_equals_in_memory_encode`, `pictura-codec::streamed_versioned_write_equals_in_memory_encode` |
 | `sps_golden` | Encode the golden matrix (PSD and PSB × RLE, raw, ZIP, ZIP-with-prediction × layers and composite; a 16-bit source) | SHA-256 of each equals the pinned digest | `pictura-codec::psd_encodes_match_golden_digests` |
 | `sps_bounded` | Write the 4096² three-noise-layer RGB document RLE into a file, with no cache | Heap peak < 64 MiB; file > 100 MiB | `pictura-codec::rle_save_heap_is_bounded` |
 | `sps_zip_bounded` | Same, with ZIP and with ZIP-with-prediction | Heap peak < 64 MiB for each | `pictura-codec::zip_save_heap_is_bounded` |

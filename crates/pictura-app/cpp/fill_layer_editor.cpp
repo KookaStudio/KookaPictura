@@ -58,8 +58,6 @@ bool createFillLayerFromDialog(PictureView& view, const QString& kind, const QCo
     if (kind == QLatin1String("pattern") && !patterns_available(view)) {
         return false;
     }
-    const QStringList patterns = available_pattern_ids(view);
-
     QString payload;
     QString name;
     int color = 0;
@@ -90,9 +88,7 @@ bool createFillLayerFromDialog(PictureView& view, const QString& kind, const QCo
                 return false;
             }
         } else {
-            if (patterns.isEmpty()
-                || !PatternFillDialog::getFill(view, patterns.first() + QStringLiteral("|100|1|0|0"),
-                                               parent, &payload)) {
+            if (!PatternFillDialog::getFill(view, QString(), parent, &payload)) {
                 return false;
             }
         }
@@ -107,10 +103,11 @@ bool createFillLayerFromDialog(PictureView& view, const QString& kind, const QCo
     } else if (kind == QLatin1String("gradient")) {
         payload = QString::fromLatin1(kDefaultGradient);
     } else {
-        if (patterns.isEmpty()) {
+        PatternFillDialog initial(view, QString(), parent);
+        payload = initial.payload();
+        if (payload.isEmpty()) {
             return false;
         }
-        payload = patterns.first() + QStringLiteral("|100|1|0|0");
     }
     const QString created = add_fill_layer(view, kind, payload, layer_selection_anchor(view),
                                           QString(), 0, QStringLiteral("norm"), 255, false);

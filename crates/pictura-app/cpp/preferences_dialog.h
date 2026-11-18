@@ -63,7 +63,9 @@ public:
     void setMemoryUsagePercent(int percent);
     void setGpuComputeEnabled(bool on);
     // File Handling: Automatically Save Recovery Information Every `minutes`.
+    void setSaveInBackground(bool on);
     void setAutoSaveRecovery(bool on, int minutes);
+    void setNativeSaveCompatibility(int choice);
     // Guides, Grid, & Slices: the guide colour and Lines / Dashed Lines style.
     void setGuideAppearance(const QColor& color, bool dashed);
     // Units & Rulers: the ruler unit (a RulerUnit index) and Traditional
@@ -98,7 +100,9 @@ signals:
     void pickerChoiceChanged(int choice);
     void gpuComputeChanged(bool on);
     void memoryUsagePercentChanged(int percent);
+    void saveInBackgroundChanged(bool on);
     void autoSaveRecoveryChanged(bool on, int minutes);
+    void nativeSaveCompatibilityChanged(int choice);
     void guideAppearanceChanged(const QColor& color, bool dashed);
     void rulerUnitChanged(int unit);
     void traditionalPointsChanged(bool on);
@@ -124,6 +128,7 @@ private:
     QComboBox* uiScale_ = nullptr;
     QComboBox* pickerChoice_ = nullptr;
     QComboBox* autoSaveMinutes_ = nullptr;
+    QComboBox* nativeSaveCompatibility_ = nullptr;
     QSpinBox* memoryUsage_ = nullptr;
     QComboBox* guideColor_ = nullptr;
     QComboBox* guideStyle_ = nullptr;

@@ -12,8 +12,8 @@ Snapshot for resuming after a context break. Update after each milestone.
     inside a 256-row band, raw writes bands, ZIP and ZIP-with-prediction feed
     the deflater band by band. `write_psd_to` streams the container, each layer
     channel one at a time with its record length patched; the `Vec` encoders run
-    the same writer over a `Cursor`. The save job and recovery snapshots stream
-    through `safe_io::write_atomically_with`. `save_view` composites the merged
+    the same writer over a `Cursor`. The save job, recovery checkpoints and data set
+    exports stream into their temp files (`safe_io::*_with`). `save_view` composites the merged
     image straight into tiled 3-channel planes (`composite_tiled_channels`,
     `keep_channels_tiled`), so there is no flat RGB copy.
   - **Encode cache.** Byte-budgeted at `min(512 MiB, ceiling / 8)` and the
@@ -42,6 +42,33 @@ Snapshot for resuming after a context break. Update after each milestone.
   - **Slow test.** `zip_save_heap_is_bounded` deflates ~0.5 GB at opt-level 0
     (about 80 s).
 
+- **Print colour management — #634 implemented; acceptance pending**
+  (OpenSpec change `2026-11-18-print-color-management`, archived; capability
+  `interop/print`). Print supports ICC-managed PDF output, hard proofing,
+  shared preview and output marks, local job defaults, and portable PSD/PSB
+  settings. The CMake app and Qt test binaries built at the 80% CPU budget.
+  CI owns subsequent builds and automated tests. The PR checklist covers
+  Photoshop CS6 and CC round-trips and the two physical CUPS checks.
+- **File ▸ Automate ▸ Batch — #618 implemented** (OpenSpec change
+  `2026-11-17-file-automate-batch`, archived; capabilities `document/batch-processing`,
+  `document/batch-file-naming`, `ui/batch-dialog`, and `document/action-engine`).
+  - **Engine.** `pictura-script::batch` holds the Qt-free rules: folder
+    resolution (case-insensitive relative-path order, hidden entries skipped,
+    folder links followed once), the CS6 File Naming tokens, compatibility
+    sanitizing, the unique-field rule, validation, override paths, and the
+    error-log line. `ActionsEngine::batch_validate` validates against the live
+    library.
+  - **Action steps.** `file.open` is an Adobe-verified `Opn ` step recorded by
+    File ▸ Open / Open Recent and replayed without open-options dialogs. Save As
+    steps carry an `options` object; replay overlays it on the remembered
+    options for that save only.
+  - **App.** `BatchRunner` is signal-driven (open token, then
+    `ActionsPanel::playbackFinished`), with suppressed-dialog playback, the
+    Save As redirect on the main window, a progress dialog with Cancel, and
+    the error log. `BatchDialog` embeds `BatchOptionsWidget` (reusable by
+    Create Droplet, #617); the last options persist as `batchOptions`.
+  - **Left.** The Import and Bridge sources (#1406), droplets (#617), and PDF options
+    in Save As steps.
 - **Document source and composite state — #1345 implemented; tests via CI**
   (OpenSpec change `2026-11-17-document-source-state`, archived; capability
   `document/document-source-state`). `Document.source` and `Document.composite`

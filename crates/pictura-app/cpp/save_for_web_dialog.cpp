@@ -9,7 +9,7 @@
 #include <QtCore/QEvent>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
-#include <QtCore/QSaveFile>
+#include "protected_output.h"
 #include <QtCore/QSignalBlocker>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
@@ -846,6 +846,16 @@ bool SaveForWebDialog::writeSlices(const QString& path, int format, int layout,
     const WebSettings& settings = panes_[activePane_];
     const bool wantImages = format != 2;
     const bool wantHtml = format != 1;
+    if (wantHtml && output_path_protected(path)) {
+        return false;
+    }
+    if (wantImages) {
+        for (const SlicePlacement& cell : cells) {
+            if (output_path_protected(dir.filePath(QStringLiteral("images/") + cell.name))) {
+                return false;
+            }
+        }
+    }
     const bool indexed = settings.format == Gif || settings.format == Png8;
     QByteArray packed;
     if (wantImages && indexed) {
@@ -872,7 +882,7 @@ bool SaveForWebDialog::writeSlices(const QString& path, int format, int layout,
             if (data.isEmpty()) {
                 return false;
             }
-            QSaveFile file(dir.filePath(QStringLiteral("images/") + cell.name));
+            pictura::ProtectedOutput file(dir.filePath(QStringLiteral("images/") + cell.name));
             if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size()
                 || !file.commit()) {
                 return false;
@@ -892,7 +902,7 @@ bool SaveForWebDialog::writeSlices(const QString& path, int format, int layout,
         }
         const QString html = web_slice_html(std::move(rustCells), image.width(), image.height(),
                                             title, QStringLiteral("images"), layout);
-        QSaveFile file(path);
+        pictura::ProtectedOutput file(path);
         const QByteArray data = html.toUtf8();
         if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size()
             || !file.commit()) {
@@ -905,7 +915,7 @@ bool SaveForWebDialog::writeSlices(const QString& path, int format, int layout,
 bool SaveForWebDialog::saveTo(const QString& path) const
 {
     const QByteArray data = encoded();
-    QSaveFile file(path);
+    pictura::ProtectedOutput file(path);
     return !data.isEmpty() && file.open(QIODevice::WriteOnly)
         && file.write(data) == data.size() && file.commit();
 }
@@ -977,7 +987,7 @@ bool SaveForWebDialog::saveColorTableForTest(const QString& path) const
     if (data.isEmpty()) {
         return false;
     }
-    QSaveFile file(path);
+    pictura::ProtectedOutput file(path);
     return file.open(QIODevice::WriteOnly) && file.write(data) == data.size() && file.commit();
 }
 
@@ -1004,7 +1014,7 @@ bool SaveForWebDialog::loadColorTableForTest(const QString& path)
 
 bool saveForWebFromView(QWidget* parent, PictureView* view, const QString& documentName)
 {
-    if (!view || !view->has_document()) {
+    if (!view || !view->has_document() || !pictura::compatibility_reason(*view).isEmpty()) {
         return false;
     }
     const int w = view->document_width();

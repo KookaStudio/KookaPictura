@@ -444,6 +444,9 @@ fn write_channel(
 /// bytes) and return the cache keys it used. Each record is written with zero
 /// channel lengths, patched as its channels stream one at a time (#1320); the
 /// rows inside a channel encode in parallel.
+/// `merged_alpha` negates the layer count, Photoshop's marker that the merged
+/// image's first extra channel is its transparency.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn write_layer_info(
     sink: &mut Sink<'_>,
     doc: &Document,
@@ -452,12 +455,19 @@ pub(crate) fn write_layer_info(
     cmyk_mode: bool,
     indexed_mode: bool,
     cache: Option<&EncodeCache>,
+    merged_alpha: bool,
 ) -> Result<Vec<ChannelKey>, PsdError> {
     let plans = layer_plans(doc, psb, lab_mode, cmyk_mode, indexed_mode)?;
     let compression = doc.layer_compression;
     let depth = output_depth(doc)?;
     let start = sink.pos();
-    sink.put(&(plans.len() as i16).to_be_bytes())?;
+    let count = plans.len() as i16;
+    let count = if merged_alpha && !doc.layers.is_empty() {
+        -count
+    } else {
+        count
+    };
+    sink.put(&count.to_be_bytes())?;
     let mut length_fields = Vec::with_capacity(plans.len());
     for plan in &plans {
         let ids: Vec<i16> = plan.channels.iter().map(|c| c.id).collect();
@@ -681,10 +691,13 @@ fn write_extra(
         let mut lsct = Vec::with_capacity(12);
         lsct.extend_from_slice(&section.to_be_bytes());
         lsct.extend_from_slice(b"8BIM");
-        lsct.extend_from_slice(&layer.blend.to_psd_key());
+        lsct.extend_from_slice(&layer.blend_key.unwrap_or_else(|| layer.blend.to_psd_key()));
         write_tag(out, b"lsct", &lsct, psb);
     }
-    let stack_mode = layer.smart_object().and_then(|so| so.stack_mode);
+    let smart_object = layer.smart_object();
+    let stack_mode = smart_object.and_then(|so| so.stack_mode);
+    let vector_placement = smart_object.and_then(|so| so.vector_placement);
+    let vector_transforms = smart_object.map(|so| so.vector_transforms.as_slice());
     // Unmodeled tagged blocks, re-emitted in encounter order; a preserved
     // `PiSt` on an active smart object yields to its modelled marker; at most
     // one unknown marker remains there. Losing candidates keep every marker.
@@ -702,7 +715,15 @@ fn write_extra(
                 continue;
             }
         }
-        if block.key == crate::stack_marker::KEY && layer.smart_object().is_some() {
+        if block.key == crate::vector_marker::KEY && vector_placement.is_some() {
+            continue;
+        }
+        if block.key == crate::vector_transforms::KEY
+            && vector_transforms.is_some_and(|transforms| !transforms.is_empty())
+        {
+            continue;
+        }
+        if block.key == crate::stack_marker::KEY && smart_object.is_some() {
             if stack_mode.is_some() || preserved_stack_marker {
                 continue;
             }
@@ -716,7 +737,15 @@ fn write_extra(
                 }
             }
         } else {
-            write_tag(out, &block.key, &block.data, psb);
+            let geometry = matches!(&block.key, b"SoLd" | b"SoLE")
+                .then(|| crate::smart_writer::refresh_authored_vector_geometry(layer, &block.data))
+                .flatten();
+            write_tag(
+                out,
+                &block.key,
+                geometry.as_deref().unwrap_or(&block.data),
+                psb,
+            );
             if block.key == *b"shmd" {
                 wrote_shmd = true;
             }
@@ -734,6 +763,24 @@ fn write_extra(
     }
     if let Some(data) = source_text {
         write_tag(out, b"TySh", &data, psb);
+    }
+    if let Some(placement) = vector_placement {
+        let authored = smart_object.is_some_and(|so| so.authored_vector_placement)
+            || crate::smart_writer::should_author(layer).is_some();
+        write_tag(
+            out,
+            &crate::vector_marker::KEY,
+            &crate::vector_marker::marker_data(placement, authored),
+            psb,
+        );
+    }
+    if let Some(transforms) = vector_transforms.filter(|steps| !steps.is_empty()) {
+        write_tag(
+            out,
+            &crate::vector_transforms::KEY,
+            &crate::vector_transforms::encode(transforms),
+            psb,
+        );
     }
     // An embedded smart object with no preserved config block is authored here.
     if let Some(so) = crate::smart_writer::should_author(layer) {

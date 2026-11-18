@@ -1,5 +1,6 @@
 use super::*;
 
+use super::super::helpers::safe_io::reject_protected_destination;
 use super::super::picture::picture_rgba;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -41,8 +42,14 @@ pub fn export_image(
     scale: i32,
 ) -> bool {
     let path = path.to_string();
+    if reject_protected_destination(&path).is_err() {
+        return false;
+    }
     let format = format.to_string();
     let rust = view.rust();
+    if rust.session.read_only() {
+        return false;
+    }
     let Some(doc) = rust.session.doc.as_ref() else {
         return false;
     };
@@ -107,6 +114,9 @@ pub(in crate::cxxqt_object) fn write_raster_with_metadata(
         90
     };
     let tmp = format!("{path}.tmp-metadata");
+    if reject_protected_destination(path).is_err() || reject_protected_destination(&tmp).is_err() {
+        return false;
+    }
     if !encode_raster(
         rgba,
         width,
@@ -120,11 +130,15 @@ pub(in crate::cxxqt_object) fn write_raster_with_metadata(
         options.progressive,
         options.matte,
     ) {
-        let _ = std::fs::remove_file(&tmp);
+        if reject_protected_destination(&tmp).is_ok() {
+            let _ = std::fs::remove_file(&tmp);
+        }
         return false;
     }
     if inject_and_rename(&tmp, path, format, metadata).is_err() {
-        let _ = std::fs::remove_file(&tmp);
+        if reject_protected_destination(&tmp).is_ok() {
+            let _ = std::fs::remove_file(&tmp);
+        }
         return false;
     }
     true
@@ -136,6 +150,8 @@ pub(super) fn inject_and_rename(
     format: &str,
     metadata: &pictura_codec::RasterMetadata,
 ) -> std::io::Result<()> {
+    reject_protected_destination(path)?;
+    reject_protected_destination(tmp)?;
     let bytes = std::fs::read(tmp)?;
     let bytes = pictura_codec::embed_raster_metadata(&bytes, format, metadata)
         .map_err(|_| std::io::Error::other("metadata injection"))?;

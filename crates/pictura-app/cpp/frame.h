@@ -23,6 +23,7 @@ class QDialog;
 class QDockWidget;
 class QFrame;
 class QLabel;
+class QProgressBar;
 class QListWidget;
 class QMenu;
 class QMimeData;
@@ -41,6 +42,7 @@ class QWidget;
 namespace pictura {
 class ActionsEngineBridge;
 class ActionsPanel;
+class BatchHost;
 class CommandRegistry;
 class ColorPanel;
 class ChannelsPanel;
@@ -341,10 +343,9 @@ public:
     bool zoomResizesWindows() const { return zoomResizesWindows_; }
     bool newDocument(const QString& name, int width, int height, const QString& mode,
                      int depth, const QString& background);
-    // Start an open and return its token; completion arrives on
-    // `documentOpenFinished`. The loading tab is inserted immediately (or, for
-    // a PDF probe, when the worker finds editing data). `reportFailure` shows
-    // the Open Recent status message on failure.
+    // Start an open and return its token; completion arrives on `documentOpenFinished`.
+    // The loading tab appears at once (a PDF probe: when the worker finds editing data).
+    // `reportFailure` shows the Open Recent status message on failure.
     quint64 startOpenPath(const QString& path);
     quint64 startOpenImagePath(const QString& path);
     quint64 startOpenAsSmartObjectPath(const QString& path);
@@ -362,22 +363,18 @@ public:
     // True when `path`'s suffix routes to the native PSD/PSB reader rather than
     // the Qt image decode edge.
     static bool isNativeDocumentPath(const QString& path);
-    // True when a save to `path` goes through the shared PSD/PSB worker: every
-    // path that is neither a raster writer nor PDF (an unknown or missing
-    // suffix writes a PSD, as `format_for_path` does).
+    // True when a save to `path` goes through the shared PSD/PSB worker: every path that
+    // is neither a raster writer nor PDF (an unknown suffix writes a PSD, as `format_for_path`).
     static bool saveRunsOnWorker(const QString& path);
     bool openAsSmartObjectPath(const QString& path);
-    // Test seam: hold a started open's completion for `ms` milliseconds so the
-    // loading tab, spinner, hover, and cancel are observable.
+    // Test seam: hold an open's completion `ms` ms (loading tab, spinner, hover, cancel).
     void setOpenDelayForTest(int ms);
-    // Pump events until every started open has finished or been cancelled. The
-    // self-test's drop checks need the asynchronous opens to land.
+    // Pump events until every started open has finished or been cancelled (self-test drops).
     void waitForOpensForTest();
     bool isLoadingDocument(int index) const;
     bool editSmartObjectContents(const QString& layerPath);
-    // Replace the embedded source of `layerPath` from a chosen PSD/PSB file, or
-    // write that source to a chosen destination. Both refuse without a
-    // replaceable/exportable target and prompt for the file.
+    // Replace `layerPath`'s embedded source from a chosen PSD/PSB, or write it to a chosen
+    // destination. Both prompt for the file and refuse without a usable target.
     bool replaceSmartObjectContents(const QString& layerPath);
     bool exportSmartObjectContents(const QString& layerPath);
     // Begin a Free Transform session on `path` in the active view and show its
@@ -392,34 +389,31 @@ public:
     // The active document's selected layer paths and current row, from Rust.
     QStringList selectedLayerPaths() const;
     QString layerAnchor() const;
-    // Copy the layer node at `path` of the open document whose address is
-    // `source` into the active document, above its current layer, as one
-    // "Duplicate Layer" state. False when `source` is not another open document
-    // or the bridge refuses the copy.
+    // Copy the layer node at `path` of the open document `source` into the active document,
+    // above its current layer, as one "Duplicate Layer" state. False when `source` is not
+    // another open document or the bridge refuses the copy.
     bool copyLayerFromDocument(const void* source, const QString& path);
-    bool saveActive();
+    bool saveActive(bool interactive = true);
+    bool saveInBackground() const;
     bool saveActiveAs(const QString& path);
-    // Prompt for a Save As path with the format-aware filters (preselecting the
-    // active document's source format) and write through `saveActiveAs`. Warns
-    // before flattening a layered document into a raster format.
+    // Prompt for a Save As path (format-aware filters, source format preselected) and write
+    // through `saveActiveAs`. Warns before flattening a layered document into a raster format.
     bool saveAsWithDialog();
-    // Save a known path with the suffix's remembered options, no dialog.
-    bool saveActiveAsWithRememberedOptions(const QString& path);
+    // Save a known path with remembered options (a step's overlay them), no dialog.
+    bool saveActiveAsWithRememberedOptions(const QString& path,
+                                           const QJsonObject& stepOptions = {});
     // Prompt for a copy path with the same filters as Save As and write it
     // without changing the document's path or modified state.
     bool saveCopyWithDialog();
-    // Prompt for the destination format's options dialog, remember the accepted
-    // settings, and store them on the view. False aborts the save. A format that
-    // opens no dialog returns true.
+    // Prompt for the destination format's options, remember and store them on the view.
+    // False aborts the save; a format that opens no dialog returns true.
     bool promptSaveFormatOptions(const QString& path,
                                  SaveFormatKind hint = SaveFormatKind::None);
     // Save As with a known path: prompt for the format options, then write.
     bool saveActiveAsWithOptions(const QString& path,
                                  SaveFormatKind hint = SaveFormatKind::None);
-    // Test seam: replace the format options dialog. Returns true to proceed with
-    // `options` (possibly edited); false to abort.
-    void setSaveFormatDialogForTest(
-        std::function<bool(SaveFormatKind, SaveFormatOptions&)> hook);
+    // Test seam: replace the format options dialog; true proceeds with (edited) options.
+    void setSaveFormatDialogForTest(std::function<bool(SaveFormatKind, SaveFormatOptions&)> hook);
     void setGifDialogForTest(std::function<bool(PictureView*, SaveFormatOptions&)> hook);
     void setWarningDriverForTest(std::function<bool(const QString&, const QString&)> driver);
     // Test seam: answer the Embed Color Profile dialog and the feature warning.
@@ -433,10 +427,9 @@ public:
     bool savePdfWithDialog(const QString& path, bool copy = false);
     quint64 startOpenPdfPath(const QString& path, bool interactive = true);
     void showPdfPresets();
-    // frame_import.cpp: a generic PDF through the password prompt and the
-    // Import PDF dialog, an EPS through the Rasterize Generic EPS Format
-    // dialog, and File > Open As with a chosen decoder (index into
-    // openAsFileFilters()). Each opened page or image is an untitled document.
+    // frame_import.cpp: a generic PDF through the password prompt and Import PDF dialog, an
+    // EPS through Rasterize Generic EPS Format, and File > Open As with a chosen decoder
+    // (index into openAsFileFilters()). Each opened page or image is an untitled document.
     quint64 startImportEpsPath(const QString& path, bool interactive = true);
     void showOpenAsDialog();
     quint64 startOpenAsPath(const QString& path, int formatIndex);
@@ -444,9 +437,8 @@ public:
     // Test seam: answer the import dialogs (password prompt, Import PDF,
     // Rasterize Generic EPS Format, the warnings box).
     void setImportDialogDriverForTest(std::function<bool(QDialog&)> driver);
-    // Test seams: answer the PDF dialogs (the Save Adobe PDF dialog, the
-    // features warning, the presets manager and its editor) and catch View PDF
-    // After Saving instead of launching the system viewer.
+    // Test seams: answer the PDF dialogs (Save Adobe PDF, features warning, presets manager
+    // and editor) and catch View PDF After Saving instead of launching the system viewer.
     void setPdfDialogDriverForTest(std::function<bool(QDialog&)> driver);
     void setPdfViewerForTest(std::function<void(const QString&)> viewer);
     // Test seam: catch Reveal in File Manager's folder URL instead of opening
@@ -455,10 +447,9 @@ public:
     {
         urlOpener_ = std::move(opener);
     }
-    // Document window test hooks (frame_test.cpp), by document
-    // index and acting on the document's first window: its floating window
-    // (null unless it floats), float or dock it as the menus do, its tab index
-    // (-1 unless tabbed), and its full label.
+    // Document window test hooks (frame_test.cpp), by document index, on its first window:
+    // its floating window (null unless it floats), float or dock it as the menus do, its tab
+    // index (-1 unless tabbed), and its full label.
     DocumentFloatWindow* floatWindowForTest(int index) const;
     bool floatDocumentForTest(int index);
     bool dockDocumentForTest(int index, int tab);
@@ -470,19 +461,17 @@ public:
     DocumentTilePane* tilePaneForTest(int index) const;
     // The tab or header context menu last opened, while it is open.
     QMenu* documentMenuForTest() const;
-    // Window `ordinal` of document `index`, counting its windows in label
-    // order from 0: how many windows the document has, the window's canvas,
-    // full label, tab index (-1 unless tabbed), and floating window (null
-    // unless it floats); activate it.
+    // Window `ordinal` of document `index`, counting its windows in label order from 0: the
+    // window count, the window's canvas, full label, tab index (-1 unless tabbed), and
+    // floating window (null unless it floats); activate it.
     int windowCountForTest(int index) const;
     ImageView* windowCanvasForTest(int index, int ordinal) const;
     QString windowLabelForTest(int index, int ordinal) const;
     int windowTabForTest(int index, int ordinal) const;
     DocumentFloatWindow* windowFloatForTest(int index, int ordinal) const;
     void activateWindowForTest(int index, int ordinal);
-    // While set, a floating window's dock drag (Ctrl+drag, or the carried
-    // window drag) hands its drag data to `hook` instead of running the
-    // blocking `QDrag::exec`.
+    // While set, a floating window's dock drag (Ctrl+drag, or the carried window drag) hands
+    // its drag data to `hook` instead of running the blocking `QDrag::exec`.
     void setWindowDockDragForTest(std::function<void(std::unique_ptr<QMimeData>)> hook);
     bool closeWindow(DocWindow* window, bool interactive = true);
     bool closeDocument(int index, bool interactive);
@@ -492,11 +481,14 @@ public:
     // File > Open Recent, or null before the menu bar is built.
     QMenu* recentMenu() const;
     bool closeActiveDocument(bool interactive);
-    // Cancel every in-flight open (window close, File > Exit). The loading tabs
-    // disappear and their workers' results are discarded.
+    // Cancel every in-flight open (window close, File > Exit), discarding the loading tabs.
     void cancelAllOpens();
     void showNewDocumentDialog();
     void showOpenDialog();
+    void openUserPaths(const QStringList& paths); // File > Open; records Open steps.
+    ActionsPanel* actionsPanel() const;
+    BatchHost& batch(); // File > Automate > Batch.
+    void setSuppressProfileWarnings(bool suppress);
     void showFileInfo();
     // Assign (`convert == false`) or convert to a chosen built-in profile; no-op
     // unless the active view holds an RGB document.
@@ -622,6 +614,7 @@ private:
     std::unique_ptr<MenuRegistrar> menu_;
     std::unique_ptr<PanelHost> panels_;
     std::unique_ptr<ImportSaveCoordinator> importSave_;
+    BatchHost* batch_ = nullptr;
     // Disconnected in the destructor: the focusChanged handler must not run
     // while the window's children are being torn down.
     QMetaObject::Connection spacePanFocusConn_;
@@ -648,6 +641,7 @@ private:
     Toolbox* toolbox_ = nullptr;
     NumericField* zoomField_ = nullptr;
     QLabel* sizeLabel_ = nullptr;
+    QProgressBar* backgroundSaveProgress_ = nullptr;
     ToolHintBar* hintBar_ = nullptr;
     // The rule between the GPU readout and the hint strip; hidden with the strip.
     QFrame* hintSeparator_ = nullptr;

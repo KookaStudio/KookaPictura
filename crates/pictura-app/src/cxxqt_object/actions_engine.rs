@@ -2,11 +2,13 @@
 //! recording cursor, playback cursor, and function-key reservations. Every
 //! structural change emits `changed`; the panel takes one snapshot per refresh.
 
+mod batch_ops;
 mod imp;
 mod library_ops;
 mod session_ops;
 mod snapshot;
 
+use batch_ops::*;
 pub use imp::*;
 
 #[cxx_qt::bridge]
@@ -14,6 +16,54 @@ pub mod ffi {
     unsafe extern "C++" {
         include!("cxx-qt-lib/qstring.h");
         type QString = cxx_qt_lib::QString;
+        include!("cxx-qt-lib/qstringlist.h");
+        type QStringList = cxx_qt_lib::QStringList;
+    }
+
+    // File > Automate > Batch: free functions over the Qt-free batch engine
+    // (`pictura_script::batch`). Options and naming cross as JSON so the C++
+    // dialog mirrors one serde model.
+    #[namespace = "pictura"]
+    extern "Rust" {
+        /// The openable files under `root` in batch order; `extensions` are
+        /// suffixes without the dot.
+        fn batch_resolve_folder(
+            root: &QString,
+            recurse: bool,
+            extensions: &QStringList,
+        ) -> QStringList;
+
+        /// The CS6 File Naming token labels in menu order.
+        fn batch_token_labels() -> QStringList;
+
+        /// The output file name for one input under a naming JSON object.
+        fn batch_render_name(
+            naming_json: &QString,
+            input_name: &QString,
+            ext: &QString,
+            position: i32,
+            year: i32,
+            month: i32,
+            day: i32,
+        ) -> QString;
+
+        /// Whether a naming JSON object has a document-name or serial field.
+        fn batch_naming_has_unique_field(naming_json: &QString) -> bool;
+
+        /// Where an overridden Save As writes for the options JSON, or empty
+        /// when the destination does not redirect it.
+        fn batch_override_save_path(
+            options_json: &QString,
+            input: &QString,
+            ext: &QString,
+            position: i32,
+            year: i32,
+            month: i32,
+            day: i32,
+        ) -> QString;
+
+        /// One error-log line, newline-terminated.
+        fn batch_error_log_line(input: &QString, message: &QString) -> QString;
     }
 
     #[namespace = "pictura"]
@@ -254,6 +304,11 @@ pub mod ffi {
 
         #[qinvokable]
         fn record_command(self: Pin<&mut Self>, id: &QString, params_json: &QString) -> bool;
+        #[qinvokable]
+        fn reserve_command(self: Pin<&mut Self>, id: &QString, params_json: &QString) -> u64;
+
+        #[qinvokable]
+        fn resolve_command(self: Pin<&mut Self>, token: u64, saved: bool);
 
         #[qinvokable]
         fn record_tool_stroke(self: Pin<&mut Self>, payload_json: &QString) -> bool;
@@ -316,5 +371,20 @@ pub mod ffi {
 
         #[qinvokable]
         fn clear_actions(self: Pin<&mut Self>);
+
+        /// Validate Batch options JSON against the library; empty when valid,
+        /// else the diagnostic.
+        #[qinvokable]
+        fn batch_validate(&self, options_json: &QString) -> QString;
+
+        /// Whether the named action, or one it plays, has an enabled step
+        /// running `command`.
+        #[qinvokable]
+        fn action_reaches_command(
+            &self,
+            set: &QString,
+            action: &QString,
+            command: &QString,
+        ) -> bool;
     }
 }

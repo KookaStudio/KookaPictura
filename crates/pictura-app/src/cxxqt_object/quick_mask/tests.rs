@@ -67,7 +67,7 @@ fn quick_mask_blend_respects_polarity() {
                 height: 8,
                 data: vec![128; 64].into(),
             });
-            let before = rust.session.doc.clone();
+            let before = rust.session.doc.snapshot();
             let cfg = StrokeConfig {
                 diameter: 8,
                 hardness: 100,
@@ -155,7 +155,7 @@ fn quick_mask_presentation_avoids_materialization() {
 #[test]
 fn quick_mask_save_keeps_document_data() {
     let mut rust = fixture();
-    let before = rust.session.doc.clone();
+    let before = rust.session.doc.snapshot();
     rust.set_quick_mask_mode(true);
     assert!(rust.begin_quick_mask_paint(
         StrokeConfig {

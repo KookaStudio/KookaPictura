@@ -486,10 +486,26 @@ pub fn ensure_layer_ids(doc: &mut Document, seed: LayerId) -> bool {
         }
     }
     scan(&doc.layers, &mut used, &mut highest);
+    // Reserve room for the next persisted seed as well as every assignment.
+    fn needed(layers: &LayerStack, seen: &mut BTreeSet<LayerId>) -> usize {
+        layers
+            .iter()
+            .map(|layer| {
+                usize::from(!layer_id(layer).is_some_and(|id| seen.insert(id)))
+                    + needed(layer.children(), seen)
+            })
+            .sum()
+    }
+    if !doc.variables.protected_ids().is_empty() {
+        return false;
+    }
     let mut next = seed
         .max(doc.layer_comps.next_layer_id())
         .max(highest.saturating_add(1))
         .max(1);
+    if needed(&doc.layers, &mut BTreeSet::new()) > (u32::MAX - next) as usize {
+        return false;
+    }
 
     fn assign(layers: &mut LayerStack, used: &mut BTreeSet<LayerId>, next: &mut LayerId) -> bool {
         let mut changed = false;

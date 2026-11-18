@@ -9,6 +9,7 @@
 
 mod imp;
 pub(super) mod import;
+pub(super) mod vector_geometry;
 
 use super::qobject::PictureView;
 pub use imp::*;

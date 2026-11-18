@@ -57,6 +57,7 @@ pub(in crate::cxxqt_object) struct DocumentJob {
     worker: Option<JoinHandle<Option<(Document, Outcome)>>>,
     land: Option<Land>,
     after: Option<After>,
+    source_state: Option<(u64, u64, Option<u64>)>,
 }
 
 impl Drop for DocumentJob {
@@ -107,6 +108,43 @@ impl PictureViewRust {
 }
 
 impl qobject::PictureView {
+    pub(in crate::cxxqt_object) fn start_source_job(
+        mut self: Pin<&mut Self>,
+        label: &str,
+        op: impl FnOnce(&mut Document) -> Option<Outcome> + Send + 'static,
+    ) -> bool {
+        if self.rust().document_job_pending() || self.rust().session.live.transform().is_some() {
+            return self.as_mut().rust_mut().note_document_op(None);
+        }
+        self.as_mut().settle_pending_composite();
+        let mut rust = self.as_mut().rust_mut();
+        let state = (
+            rust.session.document_generation,
+            rust.non_preview_revision,
+            rust.session.history.current_id(),
+        );
+        let started = rust.start_document_job(
+            label,
+            JobBar::Busy,
+            op,
+            Box::new(|_, outcome| {
+                if outcome.count == 0 {
+                    Edit::None
+                } else {
+                    Edit::Full
+                }
+            }),
+            None,
+        );
+        if let Some(job) = rust.document_jobs.job.as_mut() {
+            job.source_state = Some(state);
+        }
+        if !started {
+            rust.note_document_op(None);
+        }
+        started
+    }
+
     /// Run a whole-document command: `op` edits the document and returns its
     /// outcome, `None` for a refusal that leaves it unchanged; `land`
     /// finishes the view state on success and names the history edit. On an
@@ -144,6 +182,9 @@ impl qobject::PictureView {
         land: impl FnOnce(&mut PictureViewRust, &Outcome) -> Edit + 'static,
         after: Option<After>,
     ) -> bool {
+        if self.rust().session.read_only() {
+            return false;
+        }
         if self.rust().document_job_wanted() {
             return self.as_mut().rust_mut().start_document_job(
                 label,
@@ -191,7 +232,7 @@ impl qobject::PictureView {
             after,
         } = done;
         self.as_mut().edit(&label, |rust| {
-            rust.session.doc = Some(doc);
+            rust.session.doc.set(Some(doc));
             land(rust, &outcome)
         });
         if let Some(after) = after {
@@ -219,7 +260,7 @@ impl PictureViewRust {
         land: Land,
         after: Option<After>,
     ) -> bool {
-        let Some(mut doc) = self.session.doc.clone() else {
+        let Some(mut doc) = self.session.doc.snapshot() else {
             return false;
         };
         let progress = JobProgress::new();
@@ -244,6 +285,7 @@ impl PictureViewRust {
             worker: Some(worker),
             land: Some(land),
             after,
+            source_state: None,
         });
         true
     }
@@ -252,6 +294,16 @@ impl PictureViewRust {
     /// leave the document and history as they were.
     fn take_document_job(&mut self) -> Option<FinishedJob> {
         let mut job = self.document_jobs.job.take()?;
+        if job.source_state.is_some_and(|state| {
+            state
+                != (
+                    self.session.document_generation,
+                    self.non_preview_revision,
+                    self.session.history.current_id(),
+                )
+        }) {
+            return None;
+        }
         if job.progress.cancelled() {
             // ponytail: an engine that cannot stop early (a tone map) finishes
             // on its detached worker and its result is dropped.

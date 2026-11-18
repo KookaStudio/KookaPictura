@@ -44,7 +44,7 @@ void ImportSaveCoordinator::openRecent(const QString& path)
 {
     // The same routing as File > Open; the completion shows the failure message
     // for a file that could not be read.
-    startOpenDocumentAtPath(path, true, true);
+    startUserOpen(path, true);
 }
 
 } // namespace pictura

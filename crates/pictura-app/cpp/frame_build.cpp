@@ -25,6 +25,8 @@
 #include "fonts.h"
 #include "panels/actions_engine_bridge.h"
 #include "panels/actions_panel.h"
+
+#include <QtWidgets/QProgressBar>
 #include "panels/brush_preset_picker.h"
 #include "panels/numeric_field.h"
 #include "text_input.h"
@@ -524,6 +526,14 @@ void PicturaMainWindow::buildStatusBar()
     bar->addWidget(zoomField_);
     bar->addWidget(makeSeparator());
     bar->addWidget(sizeLabel_);
+    backgroundSaveProgress_ = new QProgressBar(bar);
+    backgroundSaveProgress_->setObjectName(QStringLiteral("backgroundSaveProgress"));
+    backgroundSaveProgress_->setRange(0, 100);
+    backgroundSaveProgress_->setFormat(tr("Saving %p%"));
+    backgroundSaveProgress_->setAccessibleName(tr("Save progress"));
+    backgroundSaveProgress_->setMaximumWidth(180);
+    backgroundSaveProgress_->hide();
+    bar->addWidget(backgroundSaveProgress_);
     bar->addWidget(statusOptionsButton_);
     bar->addWidget(makeSeparator());
     bar->addWidget(backendLabel_);

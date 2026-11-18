@@ -6,6 +6,7 @@
 
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
+#include <QtCore/QJsonObject>
 #include <QtCore/QTemporaryDir>
 #include <QtGui/QImage>
 #include <QtGui/QImageWriter>
@@ -23,6 +24,7 @@
 #include "api/document_bridge.h"
 #include "api/layers_bridge.h"
 #include "cineon_options_dialog.h"
+#include "commands.h"
 #include "dcs_options_dialog.h"
 #include "dialogs.h"
 #include "eps_options_dialog.h"
@@ -52,6 +54,22 @@ void setTypedSaveOptions(pictura::PictureView& view, pictura::SaveFormatKind kin
 }
 
 // The first JPEG frame marker (0xC0 baseline, 0xC2 progressive), or -1.
+// The first value of the first JPEG quantization table: lower is higher quality.
+int firstQuantValue(const QString& path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return -1;
+    }
+    const QByteArray b = file.readAll();
+    for (int i = 0; i + 5 < b.size(); ++i) {
+        if (quint8(b[i]) == 0xFF && quint8(b[i + 1]) == 0xDB) {
+            return quint8(b[i + 5]);
+        }
+    }
+    return -1;
+}
+
 int jpegFrameMarker(const QString& path)
 {
     QFile file(path);
@@ -264,6 +282,9 @@ private slots:
     void dcsFiles();
     void dcsSpotCeiling();
     void plainSaveKind();
+    void saveAsStepRecordsTheConfirmedOptions();
+    void saveAsStepPlaysWithItsOwnOptions();
+    void saveAsStepWithoutOptionsUsesRemembered();
 
 private:
     pictura::PictureView* newView(const QString& background);
@@ -1028,6 +1049,89 @@ void SaveFormatOptionsTest::plainSaveLayeredTiff()
     closeActive();
 }
 
+
+// A recorded Save As step carries the options confirmed in the dialog (#618).
+void SaveFormatOptionsTest::saveAsStepRecordsTheConfirmedOptions()
+{
+    QVERIFY(newView(QStringLiteral("white")));
+    window_->setProfileDialogForTest([](bool, bool&) { return true; });
+    QList<QPair<QString, QJsonObject>> recorded;
+    window_->registry()->setRecordingSink(
+        [&recorded](const QString& id, const pictura::CommandParams& params) {
+            recorded << qMakePair(id, params.values);
+        });
+    window_->setSaveFormatDialogForTest(
+        [](pictura::SaveFormatKind, pictura::SaveFormatOptions& options) {
+            options.jpegQuality = 4;
+            return true;
+        });
+    QVERIFY(window_->saveActiveAsWithOptions(path("recorded.jpg")));
+    window_->setSaveFormatDialogForTest(nullptr);
+    window_->registry()->setRecordingSink(pictura::CommandRecordingSink());
+    QCOMPARE(recorded.size(), 1);
+    QCOMPARE(recorded.first().first, QStringLiteral("file.saveAs"));
+    const QJsonObject step = recorded.first().second;
+    QCOMPARE(step.value(QStringLiteral("as")).toString(), QStringLiteral("JPG"));
+    QCOMPARE(step.value(QStringLiteral("options")).toObject().value(QStringLiteral("quality")).toInt(),
+             4);
+    window_->setProfileDialogForTest(nullptr);
+    closeActive();
+}
+
+// Playing a step with options saves with them and leaves the remembered ones.
+void SaveFormatOptionsTest::saveAsStepPlaysWithItsOwnOptions()
+{
+    QVERIFY(newView(QStringLiteral("white")));
+    window_->setProfileDialogForTest([](bool, bool&) { return true; });
+    window_->setSaveFormatDialogForTest(
+        [](pictura::SaveFormatKind, pictura::SaveFormatOptions& options) {
+            options.jpegQuality = 12;
+            return true;
+        });
+    QVERIFY(window_->saveActiveAsWithOptions(path("remembered12.jpg")));
+
+    pictura::CommandParams params;
+    params.values = QJsonObject{
+        {QStringLiteral("as"), QStringLiteral("JPG")},
+        {QStringLiteral("in"), path("step4.jpg")},
+        {QStringLiteral("options"), QJsonObject{{QStringLiteral("quality"), 4}}}};
+    QVERIFY(window_->registry()->executeRecorded(QStringLiteral("file.saveAs"), params));
+    QVERIFY(firstQuantValue(path("step4.jpg")) > firstQuantValue(path("remembered12.jpg")));
+
+    int seeded = -1;
+    window_->setSaveFormatDialogForTest(
+        [&seeded](pictura::SaveFormatKind, pictura::SaveFormatOptions& options) {
+            seeded = options.jpegQuality;
+            return true;
+        });
+    QVERIFY(window_->saveActiveAsWithOptions(path("after.jpg")));
+    QCOMPARE(seeded, 12);
+    window_->setSaveFormatDialogForTest(nullptr);
+    window_->setProfileDialogForTest(nullptr);
+    closeActive();
+}
+
+// An older step without options saves with the remembered options.
+void SaveFormatOptionsTest::saveAsStepWithoutOptionsUsesRemembered()
+{
+    QVERIFY(newView(QStringLiteral("white")));
+    window_->setProfileDialogForTest([](bool, bool&) { return true; });
+    window_->setSaveFormatDialogForTest(
+        [](pictura::SaveFormatKind, pictura::SaveFormatOptions& options) {
+            options.jpegQuality = 2;
+            return true;
+        });
+    QVERIFY(window_->saveActiveAsWithOptions(path("remembered2.jpg")));
+    window_->setSaveFormatDialogForTest(nullptr);
+
+    pictura::CommandParams params;
+    params.values = QJsonObject{{QStringLiteral("as"), QStringLiteral("JPG")},
+                                {QStringLiteral("in"), path("legacy.jpg")}};
+    QVERIFY(window_->registry()->executeRecorded(QStringLiteral("file.saveAs"), params));
+    QCOMPARE(firstQuantValue(path("legacy.jpg")), firstQuantValue(path("remembered2.jpg")));
+    window_->setProfileDialogForTest(nullptr);
+    closeActive();
+}
 
 QTEST_MAIN(SaveFormatOptionsTest)
 #include "tst_save_format_options.moc"

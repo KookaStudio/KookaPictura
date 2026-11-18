@@ -71,7 +71,9 @@ struct SessionState {
     // Edit > Preferences > File Handling: Automatically Save Recovery
     // Information Every <n> minutes (CS6 choices 5/10/15/30/60, default 10).
     bool autoSaveRecovery = true;
+    bool saveInBackground = true;
     int autoSaveMinutes = 10;
+    int nativeSaveCompatibility = 0; // Always, Ask, Never
     // Agent control: what an agent attached to this window may do. Off, and
     // read-only, until the person says otherwise.
     bool agentControlEnabled = false;
@@ -108,6 +110,9 @@ struct SessionState {
     // The remembered per-format Save As options (jpeg/png/bmp/tiff/gif); an absent
     // key uses the CS6 defaults (`save_format_options.h`).
     QJsonObject saveFormatOptions;
+    // The last accepted File > Automate > Batch options (the batch engine's
+    // `BatchOptions` JSON); empty until the first batch.
+    QJsonObject batchOptions;
     bool guideDashed = false;
     // Crop options bar, persisted across restarts.
     bool cropClassicMode = false;    // Classic vs Modern (default) drag semantics

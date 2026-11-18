@@ -14,9 +14,16 @@
 #include "panel_host.h"
 #include "tools.h"
 
+#include "api/engine_bridge.h"
 #include "api/layers_bridge.h"
 #include "dialogs.h"
+#include "document_command.h"
 #include "panels/layers_panel.h"
+
+#include <QtCore/QDataStream>
+#include <QtCore/QDateTime>
+#include <QtCore/QDir>
+#include <QtCore/QPointer>
 
 namespace pictura {
 
@@ -167,13 +174,22 @@ bool MenuRegistrar::exportSmartObjectContents(const QString& layerPath)
         || !view->layer_can_export_smart_object_contents(layerPath)) {
         return false;
     }
-    QString dest = getSaveFileName(dialogParent(), tr("Export Contents"), activeFilePath(),
-                                   {QStringLiteral("Photoshop (*.PSD)")}, nullptr);
+    QString suffix = vector_smart_object_suffix(*view, layerPath);
+    QString filter = QStringLiteral("Photoshop (*.PSD)");
+    if (suffix == QStringLiteral("ai")) {
+        filter = tr("Illustrator (*.ai)");
+    } else if (suffix == QStringLiteral("pdf")) {
+        filter = tr("PDF (*.pdf)");
+    } else {
+        suffix = QStringLiteral("psd");
+    }
+    QString dest = getSaveFileName(dialogParent(), tr("Export Contents"),
+                                   activeFilePath(), {filter}, nullptr);
     if (dest.isEmpty()) {
         return false;
     }
     if (QFileInfo(dest).suffix().isEmpty()) {
-        dest += QStringLiteral(".psd");
+        dest += QLatin1Char('.') + suffix;
     }
     if (!view->export_smart_object_contents(layerPath, dest)) {
         QMessageBox::warning(dialogParent(), tr("Export Contents"),
@@ -181,6 +197,65 @@ bool MenuRegistrar::exportSmartObjectContents(const QString& layerPath)
         return false;
     }
     return true;
+}
+
+bool MenuRegistrar::relinkSmartObjectContents(const QString& layerPath)
+{
+    const QPointer<PictureView> view(activeView());
+    if (!view || view->transform_session_active()) {
+        return false;
+    }
+    const QString id = relink_source_id(*view, layerPath);
+    if (id.isEmpty()) {
+        return false;
+    }
+    const auto generation = view->document_generation();
+    const auto history = view->history_index();
+    const QString oldLocation = relink_source_location(*view, id);
+    const QString directory = documentDirectory(activeFilePath());
+    const QString source = getOpenFileName(dialogParent(), tr("Relink to File"), directory,
+        {tr("Linked Artwork (*.psd *.psb *.pdf *.ai *.png *.jpg *.jpeg *.tif *.tiff)"),
+         tr("All Files (*)")});
+    if (source.isEmpty()) {
+        return false;
+    }
+    if (!view || view.data() != activeView() || view->document_generation() != generation
+        || view->history_index() != history || relink_source_id(*view, layerPath) != id
+        || relink_source_location(*view, id) != oldLocation) {
+        QMessageBox::warning(dialogParent(), tr("Relink to File"),
+                             tr("The original link changed while choosing a file."));
+        return false;
+    }
+    const QFileInfo info(source);
+    const QString absolute = info.absoluteFilePath();
+    const QString relative = directory.isEmpty() ? QString() : QDir(directory).relativeFilePath(absolute);
+    const QDateTime modified = info.lastModified().toUTC();
+    QByteArray timestamp;
+    if (modified.isValid()) {
+        QDataStream data(&timestamp, QIODevice::WriteOnly);
+        const QDate date = modified.date();
+        const QTime time = modified.time();
+        data << quint32(date.year()) << quint8(date.month()) << quint8(date.day())
+             << quint8(time.hour()) << quint8(time.minute())
+             << (double(time.second()) + double(time.msec()) / 1000.0);
+    }
+    const bool repaired = runSourceCommand(dialogParent(), *view, tr("Relink to File"),
+                                            [&](PictureView& target) {
+        const auto* data = reinterpret_cast<const std::uint8_t*>(timestamp.constData());
+        return start_relink_source(target, id, absolute, relative,
+                                   {data, static_cast<std::size_t>(timestamp.size())});
+    });
+    if (!view) {
+        return false;
+    }
+    if (repaired) {
+        refresh();
+    } else {
+        QMessageBox::warning(dialogParent(), tr("Relink to File"),
+                             tr("Could not repair the link. Choose a readable file that matches "
+                                "the original format, dimensions, and page settings."));
+    }
+    return repaired;
 }
 
 void MenuRegistrar::wireSmartObjectRowMenu()
@@ -198,6 +273,8 @@ void MenuRegistrar::wireSmartObjectRowMenu()
                     replaceSmartObjectContents(path);
                 } else if (action == QLatin1String("export")) {
                     exportSmartObjectContents(path);
+                } else if (action == QLatin1String("relink")) {
+                    relinkSmartObjectContents(path);
                 }
             });
 }

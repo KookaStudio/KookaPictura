@@ -24,7 +24,7 @@ impl PictureViewRust {
             return None;
         }
         let prior = prior.clone();
-        self.session.doc = Some(prior.doc);
+        self.session.doc.set(Some(prior.doc));
         self.session.selection = prior.selection;
         super::metrics::cancel_edit();
         memory_gate::refuse_for_scratch();

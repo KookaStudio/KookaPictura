@@ -108,7 +108,7 @@ impl PictureViewRust {
         let dirty = stroke.dirty().map(|rect| rect.grow(pad));
         let gpu_compute = self.gpu_compute;
         match (session.stroke_base, self.session.doc.as_mut()) {
-            (Some(base), _) => self.session.doc = Some(base),
+            (Some(base), _) => self.session.doc.set(Some(base)),
             (None, Some(doc)) => {
                 stroke.cancel(doc);
                 // The stroke's presents patched a stored composite; put the
@@ -907,7 +907,7 @@ impl qobject::PictureView {
                 // seconds. Only a preview left a level to overwrite.
                 let restored = stroke_base.is_some();
                 if let Some(base) = stroke_base {
-                    self.as_mut().rust_mut().session.doc = Some(base);
+                    self.as_mut().rust_mut().session.doc.set(Some(base));
                 }
                 if restored || previewed {
                     self.as_mut().recomposite();

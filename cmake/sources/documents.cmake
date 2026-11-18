@@ -1,6 +1,12 @@
 # documents sources for pictura_shell.
 # Included from the root CMakeLists.txt; keep paths explicit (no globbing).
 list(APPEND PICTURA_SHELL_SOURCES
+    crates/pictura-app/cpp/batch_dialog.cpp
+    crates/pictura-app/cpp/batch_dialog.h
+    crates/pictura-app/cpp/batch_options.cpp
+    crates/pictura-app/cpp/batch_options.h
+    crates/pictura-app/cpp/batch_runner.cpp
+    crates/pictura-app/cpp/batch_runner.h
     crates/pictura-app/cpp/bmp_advanced_modes_dialog.cpp
     crates/pictura-app/cpp/bmp_advanced_modes_dialog.h
     crates/pictura-app/cpp/bmp_options_dialog.cpp
@@ -26,6 +32,7 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/export_as_dialog.cpp
     crates/pictura-app/cpp/export_as_dialog.h
     crates/pictura-app/cpp/layer_comps_export.cpp
+    crates/pictura-app/cpp/variables_dialog.cpp
     crates/pictura-app/cpp/layer_comps_export.h
     crates/pictura-app/cpp/export_layers_dialog.cpp
     crates/pictura-app/cpp/export_layers_dialog.h
@@ -58,6 +65,8 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/png_options_dialog.cpp
     crates/pictura-app/cpp/png_options_dialog.h
     crates/pictura-app/cpp/print_dialog.cpp
+    crates/pictura-app/cpp/print_job.cpp
+    crates/pictura-app/cpp/print_page_layout.cpp
     crates/pictura-app/cpp/raw_options_dialog.cpp
     crates/pictura-app/cpp/raw_options_dialog.h
     crates/pictura-app/cpp/save_for_web_color_table.cpp

@@ -1,8 +1,4 @@
-// Crash recovery and autosave. While enabled, a timer snapshots every document
-// with unsaved changes into this instance's RecoveryStore session; a save or
-// close drops the snapshot, and a clean exit deletes the session. A launch that
-// finds a session whose owner died offers its documents back as unsaved
-// "-Recovered" tabs.
+// Crash recovery session lifecycle and startup recovery UI.
 
 #include "import_save_coordinator.h"
 
@@ -17,6 +13,7 @@
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QLocale>
+#include <QtCore/QLockFile>
 #include <QtCore/QTimer>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QPushButton>
@@ -31,10 +28,17 @@ void ImportSaveCoordinator::enableRecovery()
     recovery_ = std::make_unique<RecoveryStore>();
     if (!recovery_->open()) {
         recovery_.reset();
+        if (autoSaveRecovery_ && hooks_.showStatus) {
+            hooks_.showStatus(tr("Could not open the crash recovery store."), 8000);
+        }
         return;
     }
-    autosaveTimer_ = new QTimer(this);
-    connect(autosaveTimer_, &QTimer::timeout, this, &ImportSaveCoordinator::autosaveRecovery);
+    if (!autosaveTimer_) {
+        autosaveTimer_ = new QTimer(this);
+        connect(autosaveTimer_, &QTimer::timeout, this, &ImportSaveCoordinator::autosaveRecovery);
+        recoveryStatusTimer_ = new QTimer(this);
+        connect(recoveryStatusTimer_, &QTimer::timeout, this, &ImportSaveCoordinator::pollRecoveryStatus);
+    }
     setAutoSaveRecovery(autoSaveRecovery_, autoSaveMinutes_);
 }
 
@@ -42,26 +46,66 @@ void ImportSaveCoordinator::setAutoSaveRecovery(bool on, int minutes)
 {
     autoSaveRecovery_ = on;
     autoSaveMinutes_ = kAutoSaveMinuteChoices.contains(minutes) ? minutes : 10;
-    if (!autosaveTimer_) {
+    if (!recovery_) {
         return;
     }
     if (on) {
         autosaveTimer_->start(autoSaveMinutes_ * 60 * 1000);
+        recoveryStatusTimer_->start(250);
+        autosaveRecovery();
         return;
     }
     autosaveTimer_->stop();
+    recoveryStatusTimer_->stop();
     for (const DocEntry* entry : documents_.docs()) {
-        dropRecoverySnapshot(entry->view);
+        if (entry->view && !recovery_discard(*entry->view, true) && hooks_.showStatus) {
+            hooks_.showStatus(tr("Could not remove crash recovery data."), 8000);
+        }
     }
+    recoveryWarned_.clear();
 }
 
 void ImportSaveCoordinator::trackRecovery(PictureView* view)
 {
-    recoveryIds_.insert(view, ++recoveryCounter_);
-    recoveryStale_.insert(view);
-    connect(view, &PictureView::changed, this, [this, view] { recoveryStale_.insert(view); });
-    connect(view, &PictureView::regionDamaged, this,
-            [this, view](int, int, int, int) { recoveryStale_.insert(view); });
+    if (!recoveryIds_.contains(view)) {
+        recoveryIds_.insert(view, ++recoveryCounter_);
+    }
+    attachRecovery(view);
+}
+
+void ImportSaveCoordinator::attachRecovery(PictureView* view)
+{
+    if (!view || !recovery_ || !autoSaveRecovery_) {
+        return;
+    }
+    const int index = indexOfView(view);
+    const DocEntry* entry = documents_.docAt(index);
+    if (!entry || entry->loading) {
+        return;
+    }
+    if (!recoveryIds_.contains(view)) {
+        recoveryIds_.insert(view, ++recoveryCounter_);
+    }
+    recovery_track(*view, recovery_->sessionDir(), static_cast<quint32>(recoveryIds_.value(view)),
+                   documents_.documentName(index), entry->path, static_cast<quint32>(autoSaveMinutes_));
+}
+
+void ImportSaveCoordinator::pollRecoveryStatus()
+{
+    for (const DocEntry* entry : documents_.docs()) {
+        PictureView* view = entry->view;
+        if (!view) {
+            continue;
+        }
+        if (recovery_status(*view) == 0) {
+            recoveryWarned_.remove(view);
+        } else if (!recoveryWarned_.contains(view)) {
+            recoveryWarned_.insert(view);
+            if (hooks_.showStatus) {
+                hooks_.showStatus(tr("Crash recovery protection is behind. Save your work."), 8000);
+            }
+        }
+    }
 }
 
 void ImportSaveCoordinator::autosaveRecovery()
@@ -69,57 +113,45 @@ void ImportSaveCoordinator::autosaveRecovery()
     if (!recovery_ || !autoSaveRecovery_) {
         return;
     }
-    for (int i = 0; i < documents_.docs().size(); ++i) {
-        PictureView* view = documents_.docs().at(i)->view;
-        if (!document_api::isDirty(*view)) {
-            dropRecoverySnapshot(view);
-            continue;
-        }
-        // Mid-stroke the document is half painted; the next tick catches it.
-        if (!recoveryStale_.contains(view) || view->is_painting()) {
-            continue;
-        }
-        const int id = recoveryIds_.value(view);
-        if (!recovery_->writeManifest(id, documents_.documentName(i),
-                                      documents_.docs().at(i)->path)) {
-            continue;
-        }
-        if (recovery_write(*view, recovery_->snapshotPath(id))) {
-            recoveryStale_.remove(view);
-            recoverySnapshots_.insert(view);
+    for (const DocEntry* entry : documents_.docs()) {
+        if (entry->view && !entry->loading) {
+            attachRecovery(entry->view);
+            recovery_checkpoint(*entry->view);
         }
     }
 }
 
 void ImportSaveCoordinator::dropRecoverySnapshot(PictureView* view)
 {
-    if (!recoverySnapshots_.remove(view)) {
-        return;
-    }
-    // The write may still be in flight; it must land before its file is deleted.
-    recovery_wait(*view);
-    if (recovery_) {
-        recovery_->remove(recoveryIds_.value(view));
+    if (view && !recovery_discard(*view, false) && hooks_.showStatus) {
+        hooks_.showStatus(tr("Could not remove superseded crash recovery data."), 8000);
     }
 }
 
 void ImportSaveCoordinator::forgetRecovery(PictureView* view)
 {
-    dropRecoverySnapshot(view);
+    if (view && !recovery_discard(*view, true) && hooks_.showStatus) {
+        hooks_.showStatus(tr("Could not remove crash recovery data."), 8000);
+    }
     recoveryIds_.remove(view);
-    recoveryStale_.remove(view);
+    recoveryWarned_.remove(view);
 }
 
 void ImportSaveCoordinator::shutdownRecovery()
 {
-    for (PictureView* view : std::as_const(recoverySnapshots_)) {
-        recovery_wait(*view);
+    if (!recovery_) {
+        return;
     }
-    recoverySnapshots_.clear();
-    if (recovery_) {
-        recovery_->close();
-        recovery_.reset();
+    autosaveTimer_->stop();
+    recoveryStatusTimer_->stop();
+    for (const DocEntry* entry : documents_.docs()) {
+        if (entry->view) {
+            recovery_discard(*entry->view, true);
+        }
     }
+    recoveryWarned_.clear();
+    recovery_->close();
+    recovery_.reset();
 }
 
 QString ImportSaveCoordinator::recoverySessionDirForTest() const
@@ -132,51 +164,52 @@ int ImportSaveCoordinator::recoverOrphans()
     const QString own = recovery_ ? recovery_->sessionDir() : QString();
     int recovered = 0;
     QStringList failures;
-    struct RecoveredDocument {
-        QString session;
-        QString snapshot;
-        QString manifest;
-        PictureView* view = nullptr;
-    };
-    QList<RecoveredDocument> orphanCopies;
-    // Sessions left exactly as they are: a failed snapshot could not be moved
-    // out, or a recovered copy has no new snapshot yet.
-    QSet<QString> keep;
-    // Sessions whose directory stays for a document refused for memory; the
-    // recovered documents' files still go.
-    QSet<QString> retained;
     const QList<OrphanSession> orphans = RecoveryStore::orphans(own);
-    for (const OrphanSession& session : orphans) {
+    for (const OrphanSession& orphan : orphans) {
+        auto lock = RecoveryStore::lockOrphan(orphan.dir);
+        if (!lock) {
+            continue;
+        }
+        const OrphanSession session = RecoveryStore::readLocked(orphan.dir);
+        bool retain = session.preserve;
         for (const RecoverableDocument& doc : session.documents) {
             auto* view = new PictureView(dialogParent_);
             if (hooks_.applyColorSettings) {
                 hooks_.applyColorSettings(view);
             }
-            if (!recovery_open(*view, doc.snapshot)) {
+            const int outcome = doc.versioned ? recovery_open_chain(*view, doc.manifest)
+                                              : (recovery_open(*view, doc.snapshot) ? 1 : 0);
+            if (outcome == 0 || outcome == 3) {
                 delete view;
+                if (outcome == 3) {
+                    retain = true;
+                    failures.append(tr("%1: its recovery data could not be read. It is kept at %2.")
+                                        .arg(doc.name, QDir::toNativeSeparators(doc.manifest)));
+                    continue;
+                }
                 if (open_refused_for_memory()) {
-                    // Memory may be free next time: keep it to be offered again.
-                    retained.insert(session.dir);
+                    retain = true;
                     failures.append(tr("%1: not enough memory to open it. Its snapshot is kept "
                                        "at %2 and will be offered again at the next launch.")
                                         .arg(doc.name, QDir::toNativeSeparators(doc.snapshot)));
                     continue;
                 }
-                const QString quarantined = RecoveryStore::quarantineRoot() + QLatin1Char('/')
-                                            + QFileInfo(session.dir).fileName();
+                const QString quarantined = QDir(RecoveryStore::quarantineRoot())
+                    .filePath(QFileInfo(session.dir).fileName());
                 if (RecoveryStore::quarantine(session.dir, doc)) {
                     failures.append(tr("%1: the snapshot could not be read. It was moved to %2.")
                                         .arg(doc.name, QDir::toNativeSeparators(quarantined)));
                 } else {
-                    // The failed snapshot could not be moved out; keep the whole
-                    // session so neither it nor the recovered copies are lost.
-                    keep.insert(session.dir);
+                    retain = true;
                     failures.append(tr("%1: the snapshot could not be read. It is kept at %2.")
                                         .arg(doc.name, QDir::toNativeSeparators(doc.snapshot)));
                 }
                 continue;
             }
-            // Recovery reopens as tabs whatever Open Documents As Tabs says.
+            if (outcome == 2) {
+                failures.append(tr("%1: part of the journal could not be read. "
+                                   "Recovered up to the last valid edit.").arg(doc.name));
+            }
             const int index = documents_.addDocument(view, QString(), true);
             documents_.docs()[index]->displayName = recoveredDocumentName(doc.name);
             documents_.updateTabTitle(index);
@@ -184,46 +217,26 @@ int ImportSaveCoordinator::recoverOrphans()
                 hooks_.updateWindowTitle();
             }
             ++recovered;
-            orphanCopies.append(
-                {session.dir, doc.snapshot,
-                 session.dir + QLatin1Char('/')
-                     + QFileInfo(doc.snapshot).completeBaseName() + QStringLiteral(".json"),
-                 view});
+            if (recovery_ && autoSaveRecovery_) {
+                attachRecovery(view);
+                recovery_checkpoint(*view);
+                if (recovery_wait(*view) && RecoveryStore::retire(doc)) {
+                    continue;
+                }
+                failures.append(tr("%1: the recovered copy could not be protected. "
+                                   "Its original recovery data was kept.").arg(doc.name));
+            }
+            retain = true;
         }
-    }
-    // Snapshot the recovered documents into this session before the orphaned
-    // copies go, so a second crash before the first tick still has them.
-    autosaveRecovery();
-    QSet<PictureView*> snapshotted;
-    for (const DocEntry* entry : documents_.docs()) {
-        if (recovery_wait(*entry->view)) {
-            snapshotted.insert(entry->view);
-        }
-    }
-    // A snapshot that was never started (autosave off) or did not land must not
-    // cost the only copy: keep its session.
-    for (const RecoveredDocument& doc : orphanCopies) {
-        if (!snapshotted.contains(doc.view) || !recoverySnapshots_.contains(doc.view)) {
-            keep.insert(doc.session);
-        }
-    }
-    for (const RecoveredDocument& doc : orphanCopies) {
-        if (keep.contains(doc.session)) {
-            continue;
-        }
-        QFile::remove(doc.snapshot);
-        QFile::remove(doc.manifest);
-    }
-    for (const OrphanSession& session : orphans) {
-        if (!keep.contains(session.dir) && !retained.contains(session.dir)) {
-            RecoveryStore::discard(session.dir);
+        if (!retain) {
+            RecoveryStore::discardLocked(session.dir);
         }
     }
     if (!failures.isEmpty()) {
         // Window-modal without a nested event loop, so it neither blocks the
         // caller nor outlives the window.
         auto* box = new QMessageBox(QMessageBox::Warning, tr("Recover Documents"),
-                                    tr("Some documents could not be recovered."),
+                                    tr("Some recovery data needs attention."),
                                     QMessageBox::Ok, dialogParent_);
         box->setObjectName(QStringLiteral("recoveryFailures"));
         box->setAttribute(Qt::WA_DeleteOnClose);
@@ -240,7 +253,9 @@ void ImportSaveCoordinator::offerRecovery()
     QStringList rows;
     for (const OrphanSession& session : orphans) {
         if (session.documents.isEmpty()) {
-            RecoveryStore::discard(session.dir);
+            if (!session.preserve) {
+                RecoveryStore::discard(session.dir);
+            }
             continue;
         }
         for (const RecoverableDocument& doc : session.documents) {

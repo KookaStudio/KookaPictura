@@ -4,7 +4,7 @@
 
 #include <QtCore/QBuffer>
 #include <QtCore/QByteArray>
-#include <QtCore/QSaveFile>
+#include "protected_output.h"
 #include <QtCore/QString>
 #include <QtCore/QtGlobal>
 #include <QtGui/QColor>
@@ -112,7 +112,7 @@ bool encode_image_rgba(::rust::Slice<const uint8_t> rgba, int32_t width, int32_t
     // QSaveFile writes to a temp file and renames on commit, so a mid-write
     // failure never truncates an existing file -- the same atomicity the PSD
     // codec path gets from tmp+rename.
-    QSaveFile file(toQString(path));
+    pictura::ProtectedOutput file(toQString(path));
     if (!file.open(QIODevice::WriteOnly)) {
         return false;
     }

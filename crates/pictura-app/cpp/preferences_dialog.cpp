@@ -1,4 +1,6 @@
 #include "preferences_dialog.h"
+#include "preset_store.h"
+#include <QtWidgets/QMessageBox>
 
 #include "canvas_ruler.h"
 #include "panels/color_swatch_widget.h"
@@ -155,6 +157,16 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     importSettings->setObjectName(QStringLiteral("preferencesImportSettings"));
     settingsLayout->addWidget(exportSettings);
     settingsLayout->addWidget(importSettings);
+    auto* resetPresets = new QPushButton(tr("Reset Preset Lists…"), settingsRow);
+    resetPresets->setObjectName(QStringLiteral("preferencesResetPresetLists"));
+    settingsLayout->addWidget(resetPresets);
+    connect(resetPresets, &QPushButton::clicked, this, [this] {
+        if (QMessageBox::question(this, tr("Reset Preset Lists"),
+            tr("Restore the default preset lists? This removes edits to current lists. Saved libraries are kept."))
+            != QMessageBox::Yes) { return; }
+        QString error;
+        if (!PresetStore::current().resetAll(&error)) { QMessageBox::warning(this, tr("Reset Preset Lists"), error); }
+    });
     settingsLayout->addStretch(1);
     generalForm->addRow(tr("Settings"), settingsRow);
     connect(exportSettings, &QPushButton::clicked, this,
@@ -198,6 +210,8 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     auto* fileHandlingPage = new QWidget(this);
     fileHandlingPage->setObjectName(QStringLiteral("preferencesFileHandlingPage"));
     auto* fileHandlingLayout = new QVBoxLayout(fileHandlingPage);
+    makeCheckbox(QStringLiteral("saveInBackground"), tr("Save in Background"), fileHandlingPage)
+        ->setChecked(true);
     auto* autoSaveRow = new QWidget(fileHandlingPage);
     auto* autoSaveLayout = new QHBoxLayout(autoSaveRow);
     autoSaveLayout->setContentsMargins(0, 0, 0, 0);
@@ -212,6 +226,19 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     autoSaveLayout->addWidget(autoSaveMinutes_);
     autoSaveLayout->addStretch(1);
     fileHandlingLayout->addWidget(autoSaveRow);
+    auto* compatibilityRow = new QHBoxLayout;
+    auto* compatibilityLabel = new QLabel(tr("Maximize PSD and PSB File Compatibility:"),
+                                          fileHandlingPage);
+    nativeSaveCompatibility_ = new QComboBox(fileHandlingPage);
+    nativeSaveCompatibility_->setObjectName(QStringLiteral("preferencesNativeSaveCompatibility"));
+    nativeSaveCompatibility_->addItems({tr("Always"), tr("Ask"), tr("Never")});
+    compatibilityLabel->setBuddy(nativeSaveCompatibility_);
+    compatibilityRow->addWidget(compatibilityLabel);
+    compatibilityRow->addWidget(nativeSaveCompatibility_);
+    compatibilityRow->addStretch();
+    fileHandlingLayout->addLayout(compatibilityRow);
+    connect(nativeSaveCompatibility_, &QComboBox::currentIndexChanged,
+            this, &PreferencesDialog::nativeSaveCompatibilityChanged);
     fileHandlingLayout->addStretch(1);
     stack_->addWidget(fileHandlingPage);
     setAutoSaveRecovery(true, 10);
@@ -328,6 +355,8 @@ QCheckBox* PreferencesDialog::makeCheckbox(const QString& key, const QString& la
             emit typeMiddleEasternChanged(on);
         } else if (key == QStringLiteral("missingGlyphProtection")) {
             emit typeMissingGlyphProtectionChanged(on);
+        } else if (key == QStringLiteral("saveInBackground")) {
+            emit saveInBackgroundChanged(on);
         } else if (key == QStringLiteral("autoSaveRecovery")) {
             autoSaveMinutes_->setEnabled(on);
             emit autoSaveRecoveryChanged(on, autoSaveMinutes_->currentData().toInt());
@@ -481,6 +510,19 @@ void PreferencesDialog::setGpuComputeEnabled(bool on)
     if (QCheckBox* box = checkbox(QStringLiteral("useGpuCompute"))) {
         box->setEnabled(on);
     }
+}
+
+void PreferencesDialog::setNativeSaveCompatibility(int choice)
+{
+    const QSignalBlocker blocker(nativeSaveCompatibility_);
+    nativeSaveCompatibility_->setCurrentIndex(choice);
+}
+
+void PreferencesDialog::setSaveInBackground(bool on)
+{
+    QCheckBox* box = checkbox(QStringLiteral("saveInBackground"));
+    const QSignalBlocker blocker(box);
+    box->setChecked(on);
 }
 
 void PreferencesDialog::setAutoSaveRecovery(bool on, int minutes)

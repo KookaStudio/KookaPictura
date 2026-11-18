@@ -243,6 +243,7 @@ impl PictureViewRust {
         }
         if matches!(edit, Edit::Structural { .. } | Edit::Inserted) {
             if let Some(doc) = self.session.doc.as_mut() {
+                doc.prune_variable_bindings();
                 if !doc.layer_comps.is_empty() {
                     let seed = doc.layer_comps.next_layer_id();
                     pictura_core::layer_comp::ensure_layer_ids(doc, seed);
@@ -407,9 +408,12 @@ impl qobject::PictureView {
         f: impl FnOnce(&mut PictureViewRust) -> Edit,
     ) -> Edit {
         self.as_mut().settle_pending_composite();
+        if self.rust().pending_vector_place.is_some() {
+            self.as_mut().cancel_transform();
+        }
         let edit = {
             let mut rust = self.as_mut().rust_mut();
-            if rust.session.doc.is_none() {
+            if rust.session.read_only() || rust.session.doc.is_none() {
                 return Edit::None;
             }
             // Open the record before the mutation, so its time is counted.
@@ -433,6 +437,9 @@ impl qobject::PictureView {
     ) -> Edit {
         self.as_mut().take_over_lazy_move();
         self.as_mut().settle_pending_composite();
+        if self.rust().pending_vector_place.is_some() {
+            self.as_mut().cancel_transform();
+        }
         let edit = {
             let mut rust = self.as_mut().rust_mut();
             if rust.session.doc.is_none() {

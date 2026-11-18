@@ -12,7 +12,7 @@
 #include <QtCore/QFileInfo>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonParseError>
-#include <QtCore/QSaveFile>
+#include "protected_output.h"
 #include <QtCore/QSet>
 #include <QtCore/QStandardPaths>
 #include <QtCore/QTextStream>
@@ -803,6 +803,25 @@ void ActionsEngineBridge::recordCommand(const QString& commandId, const QJsonObj
     }
 }
 
+quint64 ActionsEngineBridge::reserveCommand(const QString& commandId, const QJsonObject& params)
+{
+    if (!engine_) {
+        return 0;
+    }
+    const quint64 token = engine_->reserve_command(
+        commandId, QString::fromUtf8(QJsonDocument(params).toJson(QJsonDocument::Compact)));
+    refreshSignals();
+    return token;
+}
+
+void ActionsEngineBridge::finishReservedCommand(quint64 token, bool saved)
+{
+    if (engine_) {
+        engine_->resolve_command(token, saved);
+        refreshSignals();
+    }
+}
+
 void ActionsEngineBridge::setAllowToolRecording(bool on)
 {
     if (engine_) {
@@ -1034,7 +1053,7 @@ bool ActionsEngineBridge::writeTextDump(const QString& setId, const QString& pat
     if (ref.set < 0) {
         return false;
     }
-    QFile file(path);
+    pictura::ProtectedOutput file(path);
     if (!file.open(QIODevice::WriteOnly)) {
         return false;
     }
@@ -1048,7 +1067,8 @@ bool ActionsEngineBridge::writeTextDump(const QString& setId, const QString& pat
         out << (node.step >= 0 ? "    " : (node.action >= 0 ? "  " : "")) << row.name
             << '\n';
     }
-    return true;
+    out.flush();
+    return out.status() == QTextStream::Ok && file.commit();
 }
 
 bool ActionsEngineBridge::loadLibrary()
@@ -1075,7 +1095,7 @@ bool ActionsEngineBridge::saveLibrary()
         return false;
     }
     const ::rust::Vec<uint8_t> bytes = engine_->palette_bytes();
-    QSaveFile file(path);
+    pictura::ProtectedOutput file(path);
     if (!file.open(QIODevice::WriteOnly)) {
         return false;
     }
@@ -1143,6 +1163,18 @@ QString ActionsEngineBridge::palettePath() const
 {
     return QFileInfo(sessionFilePath()).absolutePath()
            + QStringLiteral("/Actions Palette.psp");
+}
+
+QString ActionsEngineBridge::validateBatch(const QString& optionsJson) const
+{
+    return engine_ ? engine_->batch_validate(optionsJson)
+                   : QStringLiteral("The action engine is not available.");
+}
+
+bool ActionsEngineBridge::actionReachesCommand(const QString& set, const QString& action,
+                                               const QString& command) const
+{
+    return engine_ && engine_->action_reaches_command(set, action, command);
 }
 
 } // namespace pictura

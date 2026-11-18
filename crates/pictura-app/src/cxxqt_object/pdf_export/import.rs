@@ -37,7 +37,69 @@ pub mod ffi {
     }
 
     #[namespace = "pictura"]
+    struct PreparedVectorPdf {
+        error: QString,
+        page: u32,
+        page_count: u32,
+        crop: u8,
+        width_points: f64,
+        height_points: f64,
+        left: i32,
+        top: i32,
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+    }
+
+    #[namespace = "pictura"]
+    #[repr(u8)]
+    enum VectorPlaceResult {
+        Pending,
+        Committed,
+        Cancelled,
+        Refused,
+    }
+
+    #[namespace = "pictura"]
     extern "Rust" {
+        fn vector_pdf_page_count(bytes: &[u8]) -> i32;
+        fn vector_pdf_import_limit() -> u64;
+        fn prepare_vector_pdf(
+            bytes: &[u8],
+            page: u32,
+            crop: u8,
+            canvas_width: u32,
+            canvas_height: u32,
+        ) -> PreparedVectorPdf;
+        fn place_prepared_pdf(
+            view: Pin<&mut PictureView>,
+            source: &PreparedVectorPdf,
+            bytes: &[u8],
+            filename: &QString,
+            smart: bool,
+            label: &QString,
+        ) -> QString;
+        fn vector_place_result(view: &PictureView) -> VectorPlaceResult;
+        fn vector_smart_object_id(view: &PictureView, path: &QString) -> QString;
+        fn vector_smart_object_suffix(view: &PictureView, path: &QString) -> QString;
+        fn vector_edit_revision(view: &PictureView, id: &QString) -> u64;
+        fn start_vector_edit(
+            view: Pin<&mut PictureView>,
+            id: &QString,
+            expected: u64,
+            file: &QString,
+        ) -> bool;
+        fn relink_source_id(view: &PictureView, path: &QString) -> QString;
+        fn relink_source_location(view: &PictureView, id: &QString) -> QString;
+        fn start_relink_source(
+            view: Pin<&mut PictureView>,
+            id: &QString,
+            file: &QString,
+            relative: &QString,
+            timestamp: &[u8],
+        ) -> bool;
+        fn relink_fixture_for_test(path: &QString, vector: bool, filter: bool) -> bool;
+
         /// `pdf` or `eps` from the file's leading bytes; empty for anything else.
         fn vector_sniff(path: &QString) -> QString;
 

@@ -7,6 +7,21 @@
 
 use super::{planes, History};
 use pictura_core::Document;
+use std::collections::HashSet;
+
+/// The bytes of `doc`'s planes, each allocation counted once.
+pub(crate) fn document_bytes(doc: &Document) -> u64 {
+    let mut seen = HashSet::new();
+    let mut bytes = 0u64;
+    planes::each_plane(doc, &mut |p, _, _, _| {
+        for (ptr, len) in p.allocations() {
+            if len > 0 && seen.insert(ptr) {
+                bytes += len as u64;
+            }
+        }
+    });
+    bytes
+}
 
 /// The dense tiles of `doc`'s planes whose samples could not be read back
 /// from the scratch disk (#1217); zero at no cost when none exist anywhere.

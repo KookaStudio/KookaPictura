@@ -111,6 +111,34 @@ fn streamed_file_equals_in_memory_encode() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+// [sps_identical]
+#[test]
+fn streamed_versioned_write_equals_in_memory_encode() {
+    let layered = noise_layers(300);
+    let flat = Document::from_rgba("Layer 0", 300, 300, &noise(5, 300 * 300 * 4));
+    let mut layer_only = layered.clone();
+    layer_only.composite.set_merged_output(false);
+    let cases = [
+        ("layered", &layered, false),
+        ("placeholder", &layer_only, true),
+        ("layer only", &layer_only, false),
+        ("flat", &flat, false),
+    ];
+    for (name, doc, placeholder) in cases {
+        let expected =
+            pictura_codec::write_versioned(doc, false, None, "test", placeholder).expect(name);
+        let mut out = std::io::Cursor::new(Vec::new());
+        let skipped =
+            pictura_codec::write_versioned_to(&mut out, doc, false, None, "test", placeholder)
+                .expect(name);
+        assert!(
+            out.into_inner() == expected.bytes,
+            "{name}: the stream differs from the in-memory encode"
+        );
+        assert_eq!(skipped, expected.skipped_xmp_mirror, "{name}");
+    }
+}
+
 fn bounded_psd_save(compression: Compression) -> (usize, u64) {
     let _lock = MEASURE.lock().unwrap_or_else(|e| e.into_inner());
     let mut doc = noise_layers(SIDE);

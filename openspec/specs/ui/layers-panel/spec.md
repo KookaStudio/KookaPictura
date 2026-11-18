@@ -549,16 +549,18 @@ and acting on that row; it SHALL be enabled only when the row is a convertible
 raster pixel layer, and a successful conversion SHALL select the new smart
 object. A smart-object row SHALL, in addition to the common and pixel commands,
 offer **Reset Transform**, **Convert to Layers**, **New Smart Object via Copy**,
-**Edit Contents**, **Replace Contents…**, and **Export Contents…**, each wired
-to its bridge and acting on that row, plus the not-yet-implemented
-**Relink to File…** and **Convert to Linked…** rows rendered disabled with the
+**Edit Contents**, **Replace Contents…**, **Export Contents…**, and
+**Relink to File…**, each wired to the action for that row.
+**Convert to Linked…** SHALL appear disabled with the
 `— not implemented yet` tooltip. Reset Transform and Convert to Layers SHALL be
 enabled only when the row's embedded source parses as a PSD/PSB document; New
 Smart Object via Copy SHALL be enabled for a non-group, non-adjustment
-`Embedded` smart object with a payload; Edit Contents SHALL be enabled only when
-the row's embedded source parses as a PSD/PSB document; Replace Contents SHALL
-be enabled only for a replaceable `Embedded` object with a payload; and Export
-Contents SHALL be enabled only for a smart object with a non-empty payload. A
+`Embedded` smart object with a payload. Edit Contents SHALL follow the
+eligibility in `compositing/smart-object-layer-actions`. Replace Contents SHALL
+be enabled only for a replaceable `Embedded` object with a payload. Export
+Contents SHALL be enabled only for a smart object with a non-empty payload.
+Relink to File SHALL be enabled only for an external record eligible under
+`interop/smart-object-link-repair`. A
 non-smart row SHALL NOT offer the smart-object-only rows. Each applied action
 SHALL be one undoable step.
 
@@ -675,16 +677,21 @@ buttons, so Move Up/Down SHALL NOT appear in the strip.
 
 #### Scenario: A smart-object row offers its smart-object commands [lpr_smart_rows]
 
-- **WHEN** the user opens the row menu for a smart-object layer
+- **WHEN** the user opens the row menu for an eligible embedded PSD/PSB smart-object layer
 - **THEN** it contains Reset Transform, Convert to Layers, New Smart Object via
   Copy, Edit Contents, Replace Contents…, and Export Contents…, enabled and wired
   to their bridges
 
 #### Scenario: A smart-object row offers the linked rows disabled [lpr_smart_linked]
 
-- **WHEN** the user opens the row menu for a smart-object layer
-- **THEN** it contains Relink to File… and Convert to Linked…, each disabled and
-  showing the `— not implemented yet` tooltip
+- **WHEN** the user opens the row menu for an embedded smart-object layer
+- **THEN** Relink to File… is disabled and Convert to Linked… is disabled
+  with its `— not implemented yet` tooltip
+
+#### Scenario: An eligible external row can be relinked [external_link_row]
+
+- **WHEN** the user opens the row menu for an eligible imported external smart object
+- **THEN** Relink to File… is enabled and invokes repair for the clicked row
 
 #### Scenario: A plain pixel row omits the smart-object commands
 
@@ -724,8 +731,7 @@ buttons, so Move Up/Down SHALL NOT appear in the strip.
 #### Scenario: A group row omits content commands
 
 - **WHEN** the user opens the row menu for a group row
-- **THEN** it does not offer `Export As…`, `Quick Export as PNG`, or fill
-  commands, it offers `Ungroup Layers`, and it offers the layer-mask rows
+- **THEN** it offers `Export As…`, `Quick Export as PNG`, `Ungroup Layers`, and the layer-mask rows, and it does not offer fill commands
 
 #### Scenario: A type row offers rasterize
 

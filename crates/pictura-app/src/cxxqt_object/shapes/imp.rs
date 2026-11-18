@@ -69,6 +69,53 @@ pub(super) fn stroke_of(color: u32, width: f64, align: i32) -> pictura_render::S
     }
 }
 
+fn outlines(spec: &ShapeSpec) -> Option<(ShapeKind, Vec<Subpath>)> {
+    if spec.kind != 5 || spec.custom_preset.is_empty() {
+        return outline(spec).map(|(kind, path)| (kind, vec![path]));
+    }
+    use pictura_codec::preset_library::{decode, Format, Kind, Payload};
+    let mut library = decode(Kind::CustomShapes, Format::Native, &spec.custom_preset)
+        .ok()?
+        .library;
+    let Payload::Shape(preset) = library.entries.pop()?.payload else {
+        return None;
+    };
+    let [top, left, bottom, right] = preset.bounds;
+    let width = f64::from(right.checked_sub(left)?);
+    let height = f64::from(bottom.checked_sub(top)?);
+    let mut paths = preset.paths()?;
+    let (x, y, w, h) = if spec.boxed {
+        (
+            spec.x0.min(spec.x1),
+            spec.y0.min(spec.y1),
+            (spec.x1 - spec.x0).abs(),
+            (spec.y1 - spec.y0).abs(),
+        )
+    } else {
+        shape::drag_rect(
+            (spec.x0, spec.y0),
+            (spec.x1, spec.y1),
+            spec.shift.then_some(width / height),
+            spec.alt,
+        )
+    };
+    if w <= 0.0 || h <= 0.0 || paths.is_empty() {
+        return None;
+    }
+    let map = |(u, v)| (x + u * w / width, y + v * h / height);
+    for path in &mut paths {
+        for point in &mut path.points {
+            point.anchor = map(point.anchor);
+            point.in_handle = point.in_handle.map(map);
+            point.out_handle = point.out_handle.map(map);
+        }
+        if spec.align_edges {
+            *path = shape::align_edges(path);
+        }
+    }
+    Some((ShapeKind::CustomShape, paths))
+}
+
 /// The live origin of a Shape-mode `kind` drawn as `outline`: its box and
 /// clamped radii. Polygons, Lines, and Custom Shapes were not live shapes in
 /// CC 2015, so they have none.
@@ -104,18 +151,28 @@ pub(super) fn label(kind: ShapeKind) -> String {
 }
 
 pub(super) fn shape_outline(spec: &ShapeSpec) -> Vec<f64> {
-    let Some((_, subpath)) = outline(spec) else {
+    let Some((_, subpaths)) = outlines(spec) else {
         return Vec::new();
     };
-    subpath
-        .points
-        .iter()
-        .flat_map(|p| {
+    let mut coordinates = Vec::new();
+    for subpath in subpaths {
+        if !spec.custom_preset.is_empty() {
+            coordinates.extend([
+                f64::NAN,
+                if subpath.closed { 1.0 } else { 0.0 },
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+            ]);
+        }
+        coordinates.extend(subpath.points.iter().flat_map(|p| {
             let (ix, iy) = p.in_handle.unwrap_or(p.anchor);
             let (ox, oy) = p.out_handle.unwrap_or(p.anchor);
             [p.anchor.0, p.anchor.1, ix, iy, ox, oy]
-        })
-        .collect()
+        }));
+    }
+    coordinates
 }
 
 pub(super) fn shape_add_layer(
@@ -123,12 +180,12 @@ pub(super) fn shape_add_layer(
     spec: &ShapeSpec,
     foreground: u32,
 ) -> QString {
-    let Some((kind, subpath)) = outline(spec) else {
+    let Some((kind, subpaths)) = outlines(spec) else {
         return QString::default();
     };
     paint_timing::start("Shape layer");
     let t = std::time::Instant::now();
-    let live = live_shape(spec, kind, &subpath);
+    let live = live_shape(spec, kind, &subpaths[0]);
     let c = rgba_from_argb(foreground);
     let created = {
         let mut rust = view.as_mut().rust_mut();
@@ -143,7 +200,7 @@ pub(super) fn shape_add_layer(
                 &above,
                 [c.r, c.g, c.b, 255],
                 kind.layer_name(),
-                &subpath,
+                &subpaths[0],
                 live.as_ref(),
             ),
             None => String::new(),
@@ -153,6 +210,9 @@ pub(super) fn shape_add_layer(
     if let Some(doc) = view.as_mut().rust_mut().session.doc.as_mut() {
         let (width, height) = (doc.width, doc.height);
         if let Some(layer) = pictura_render::resolve_path_mut(doc, &created) {
+            if subpaths.len() > 1 {
+                pictura_render::set_layer_shape_paths(layer, &subpaths, width, height);
+            }
             if spec.no_fill {
                 pictura_render::set_shape_fill(layer, None);
             }
@@ -220,12 +280,14 @@ pub(super) fn clipped_above(doc: &pictura_core::Document, path: &str) -> bool {
 }
 
 pub(super) fn shape_add_path(mut view: Pin<&mut PictureView>, spec: &ShapeSpec) -> bool {
-    let Some((kind, subpath)) = outline(spec) else {
+    let Some((kind, subpaths)) = outlines(spec) else {
         return false;
     };
     super::super::paths::begin_drawing(view.as_mut());
     let added = super::super::paths::edit(view.as_mut(), |p| {
-        p.add_subpath(subpath);
+        for path in subpaths {
+            p.add_subpath(path);
+        }
     })
     .is_some();
     if added {
@@ -239,7 +301,7 @@ pub(super) fn shape_fill_pixels(
     spec: &ShapeSpec,
     foreground: u32,
 ) -> bool {
-    let Some((kind, subpath)) = outline(spec) else {
+    let Some((kind, subpaths)) = outlines(spec) else {
         return false;
     };
     let paint = BucketPaint::Foreground(rgba_from_argb(foreground));
@@ -250,7 +312,7 @@ pub(super) fn shape_fill_pixels(
             // A layer target is the document: rasterize and fill the shape's
             // own box, not a document-sized mask (#1185).
             let (bounds, mask) =
-                shape::coverage_box(&subpath, t.document_size.0, t.document_size.1)?;
+                shape::paths_coverage_box(&subpaths, t.document_size.0, t.document_size.1)?;
             paint_timing::record("shape_coverage", t0.elapsed());
             return bucket::fill_within(
                 doc,
@@ -264,7 +326,7 @@ pub(super) fn shape_fill_pixels(
                 Alpha::Blend,
             );
         }
-        let mask = shape::coverage(&subpath, t.document_size.0, t.document_size.1);
+        let mask = shape::paths_coverage(&subpaths, t.document_size.0, t.document_size.1);
         paint_timing::record("shape_coverage", t0.elapsed());
         bucket::fill(
             doc,

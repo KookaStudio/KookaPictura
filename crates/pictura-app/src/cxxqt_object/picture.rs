@@ -816,7 +816,7 @@ mod tests {
                 pressure: 1.0,
             }
         ));
-        stroke_view.session.doc = Some(doc);
+        stroke_view.session.doc.set(Some(doc));
         stroke_view.session.live.set_stroke_session(StrokeSession {
             stroke: Some(stroke),
             ..Default::default()

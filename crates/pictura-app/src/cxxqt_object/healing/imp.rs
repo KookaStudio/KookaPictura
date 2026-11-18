@@ -97,7 +97,7 @@ pub(super) fn healing_commit(
     };
     {
         let mut rust = view.as_mut().rust_mut();
-        rust.session.doc = Some(outcome.document);
+        rust.session.doc.set(Some(outcome.document));
     }
     view.as_mut()
         .edit(label, |_| Edit::regions(vec![outcome.dirty], true));
