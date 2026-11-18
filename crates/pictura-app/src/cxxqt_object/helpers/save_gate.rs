@@ -168,9 +168,9 @@ mod tests {
 
     const GIB: u64 = 1 << 30;
 
-    /// The M24 document: four full-canvas RGB layers and a Background at
+    /// M24's document: four full-canvas RGB layers and a Background at
     /// `side`², every plane tiled (uniform, so the test allocates nothing).
-    fn m24(side: u32) -> Document {
+    fn large_layered(side: u32) -> Document {
         let s = side as usize;
         let layer = |name: &str| {
             let channel = |id| Channel {
@@ -196,7 +196,7 @@ mod tests {
     // [smg_estimate]
     #[test]
     fn save_cost_does_not_scale_with_the_document() {
-        let doc = m24(17000);
+        let doc = large_layered(17000);
         let cost = save_cost(&doc);
         assert!(cost.working < 512 << 20, "working {} B", cost.working);
         // The previous estimate: twice the document's samples, the merged
@@ -209,7 +209,7 @@ mod tests {
     // [smg_admitted]
     #[test]
     fn a_two_gib_host_admits_a_large_save() {
-        let doc = m24(17000);
+        let doc = large_layered(17000);
         set_cgroup_for_test(2 * GIB as i64, (3 * GIB / 2) as i64);
         set_scratch_available_for_test(4 * GIB as i64);
         clear();
@@ -222,7 +222,7 @@ mod tests {
     // [smg_refused]
     #[test]
     fn a_small_host_refuses_the_save() {
-        let doc = m24(17000);
+        let doc = large_layered(17000);
         let working = save_cost(&doc).working;
         // A 1 GiB cgroup leaves 768 MiB under its ceiling; use all but less
         // than the working bytes.
@@ -239,7 +239,7 @@ mod tests {
     // [smg_whole_refused]
     #[test]
     fn a_whole_image_format_is_refused_first() {
-        let doc = m24(4096);
+        let doc = large_layered(4096);
         let options = pictura_codec::SaveOptions::default();
         let tiff = raster_save_cost(&doc, pictura_codec::SaveKind::Tiff, &options);
         let gif = raster_save_cost(&doc, pictura_codec::SaveKind::Gif, &options);
