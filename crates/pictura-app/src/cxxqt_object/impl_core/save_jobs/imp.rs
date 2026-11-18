@@ -803,9 +803,9 @@ mod tests {
         assert!(save_finish_rust(&mut rust));
         let saved = pictura_codec::read_psd(&std::fs::read(&target).unwrap()).unwrap();
         assert!(saved.composite.merged_output());
-        let plane = (saved.width * saved.height) as usize;
-        assert_eq!(saved.composite.data.as_ref(), &expected.data[..3 * plane]);
-        assert_eq!(saved.channels[0].data.as_ref(), &expected.data[3 * plane..]);
+        assert!(saved.composite.signed_merged_alpha());
+        assert_eq!(saved.composite.buffer(), &expected);
+        assert!(saved.channels.is_empty());
         let doc = rust.session.doc.as_mut().unwrap();
         doc.composite.replace(expected).unwrap();
         doc.composite.set_merged_output(false);
