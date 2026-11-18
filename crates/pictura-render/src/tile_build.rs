@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 /// Build `key`'s bytes from `source` (a `size.0`×`size.1` level-0 image), or
 /// from its four cached children in `cache` when they are all there.
-pub fn build_tile(
+pub(crate) fn build_tile(
     cache: Option<&TilePyramid>,
     key: TileKey,
     rect: PsdRect,
@@ -50,7 +50,7 @@ pub fn build_keys(
 /// `local` that lie under it, and built from `source` only where none does.
 /// Every tile built on the way, `key`'s included, goes into `local` and onto
 /// `built`; a tile already current in `local` is returned as it is.
-pub fn build_folded(
+pub(crate) fn build_folded(
     local: &mut TilePyramid,
     key: TileKey,
     source: Level0Source<'_>,
@@ -65,7 +65,11 @@ pub fn build_folded(
         build_tile(None, key, rect, size, source)
     } else {
         let child_level = key.level as usize - 1;
-        let children = local.keys_in(key.source, child_level, child_rect(local, rect, child_level));
+        let children = local.keys_in(
+            key.source,
+            child_level,
+            child_rect(local, rect, child_level),
+        );
         for child in children {
             build_folded(local, child, source, built);
         }

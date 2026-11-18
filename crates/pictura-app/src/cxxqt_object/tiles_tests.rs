@@ -289,25 +289,60 @@ fn a_missing_large_tile_does_not_block() {
     );
 
     // The worker's build, as `start_tile_job` hands it over.
-    let job = {
-        let cache = view.tiles.cache.borrow();
-        TileJob {
-            doc: view.session.doc.snapshot().expect("document"),
-            mask: None,
-            painting: false,
-            preview: None,
-            ticket: cache.ticket(),
-            keys: missing
-                .iter()
-                .map(|&key| (key, cache.tile_rect(key)))
-                .collect(),
-        }
-    };
-    for (key, data) in job.build() {
-        assert!(view.tiles.cache.borrow_mut().install(key, job.ticket, data));
-    }
+    assert_eq!(view.run_tile_job(&missing), missing.len());
     view.tiles.force_async.set(false);
     assert_crop_matches(&view, 0, shown);
+}
+
+// [ctf_worker]
+#[test]
+fn a_worker_folds_the_coarsest_level_from_the_fit_level() {
+    let mut view = view_of(layered(W, H));
+    view.tiles.force_async.set(true);
+    let level_size = |view: &PictureViewRust, level: usize| {
+        let (w, h) = view.tiles.cache.borrow().level_size(level);
+        whole(w, h)
+    };
+    // The canvas's fit level first, through the worker.
+    let fit = 1;
+    let (_, fine) = view.tile_crop(TileSource::Composite, fit as i32, level_size(&view, fit));
+    assert_eq!(view.run_tile_job(&fine), fine.len());
+    let (source, pyramid) = reference(&view);
+    // Change the layers behind the display's back: a job that composited
+    // would show the change, one that folds the cached fit level does not.
+    {
+        let doc = view.session.doc.as_mut().expect("document");
+        let top = doc.layers.iter_mut().last().expect("a top layer");
+        for channel in top.channels_mut().iter_mut().take(3) {
+            for v in channel.data.as_mut_slice() {
+                *v = v.wrapping_add(77);
+            }
+        }
+    }
+    let coarsest = view.display_level_count() as usize - 1;
+    assert!(coarsest >= fit + 2, "a level between");
+    let all = level_size(&view, coarsest);
+    let (_, missing) = view.tile_crop(TileSource::Composite, coarsest as i32, all);
+    assert!(
+        !missing.is_empty(),
+        "the coarsest level is left to a worker"
+    );
+    view.run_tile_job(&missing);
+    for level in fit + 1..coarsest {
+        let cache = view.tiles.cache.borrow();
+        for key in cache.keys_in(TileSource::Composite, level, level_size(&view, level)) {
+            assert!(cache.contains(key), "level {level} cached: {key:?}");
+        }
+    }
+    view.tiles.force_async.set(false);
+    let (crop, missing) = view.tile_crop(TileSource::Composite, coarsest as i32, all);
+    assert!(missing.is_empty());
+    let planes = planes_of(&source).expect("RGBA");
+    assert_eq!(
+        crop.data(),
+        pyramid.crop(planes, coarsest, all).data(),
+        "folded from the fit level, not composited"
+    );
 }
 
 // [tp_sync_small]

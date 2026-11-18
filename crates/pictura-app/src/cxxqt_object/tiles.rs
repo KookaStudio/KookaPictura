@@ -32,8 +32,8 @@ use cxx_qt_lib::QImage;
 use pictura_core::memory::eviction::{self, HotHold};
 use pictura_core::{Document, LayerMask, PixelBuffer, PsdRect};
 use pictura_render::{
-    build_tile, patch_buffer_region, CompositeScope, DocumentComposite, FilterProxy, PyramidLevel,
-    Ticket, TileKey, TilePyramid, TileSource, TILE_SIDE,
+    patch_buffer_region, CompositeScope, DocumentComposite, FilterProxy, PyramidLevel, Ticket,
+    TileKey, TilePyramid, TileSource, TILE_SIDE,
 };
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
@@ -117,61 +117,69 @@ struct TileJob {
     painting: bool,
     preview: Option<pictura_codec::MergedPreview>,
     ticket: Ticket,
-    keys: Vec<(TileKey, PsdRect)>,
+    /// The cache's current tiles as of `ticket`, which coarser keys fold
+    /// from (#1321).
+    local: TilePyramid,
+    keys: Vec<TileKey>,
 }
 
 impl TileJob {
     /// Build the tiles one after another: each tile's composite already runs
     /// on every core, and building them side by side would hold one level-0
     /// chunk per tile at once (over a gigabyte at 17000² fit, #1216).
-    fn build(&self) -> Vec<(TileKey, Arc<[u8]>)> {
-        let size = (self.doc.width, self.doc.height);
-        self.keys
-            .iter()
-            .map(|&(key, rect)| {
-                let data = build_one(
-                    &self.doc,
-                    self.mask.as_ref(),
-                    self.painting,
-                    self.preview.as_ref(),
-                    key,
-                    rect,
-                    size,
-                    None,
-                );
-                (key, data)
-            })
-            .collect()
+    fn build(&mut self) -> Vec<(TileKey, Arc<[u8]>)> {
+        build_keys(
+            &self.doc,
+            self.mask.as_ref(),
+            self.painting,
+            self.preview.as_ref(),
+            &mut self.local,
+            &self.keys,
+        )
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn build_one(
+/// Build `keys` into `local`, finer levels first, folding coarser tiles from
+/// the finer ones at hand; returns every tile built, the levels folded
+/// through included.
+fn build_keys(
     doc: &Document,
     mask: Option<&LayerMask>,
     painting: bool,
     preview: Option<&pictura_codec::MergedPreview>,
-    key: TileKey,
-    rect: PsdRect,
-    size: (u32, u32),
-    cache: Option<&TilePyramid>,
-) -> Arc<[u8]> {
-    match (key.source, mask, preview) {
-        (TileSource::Mask, Some(mask), _) => {
-            let source = |r: PsdRect| mask_region_plane(mask, r);
-            build_tile(cache, key, rect, size, &source)
+    local: &mut TilePyramid,
+    keys: &[TileKey],
+) -> Vec<(TileKey, Arc<[u8]>)> {
+    let mut built = Vec::new();
+    for source in [TileSource::Composite, TileSource::Mask] {
+        let keys: Vec<TileKey> = keys
+            .iter()
+            .copied()
+            .filter(|k| k.source == source)
+            .collect();
+        if keys.is_empty() {
+            continue;
         }
-        (_, _, Some(preview)) if !painting => {
-            let source = |r: PsdRect| {
-                into_rgba_frame(pictura_codec::buffer_to_srgb(doc, &preview.region(r)).into_owned())
-            };
-            build_tile(cache, key, rect, size, &source)
-        }
-        _ => {
-            let source = |r: PsdRect| display_region(doc, r, painting);
-            build_tile(cache, key, rect, size, &source)
-        }
+        built.extend(match (source, mask, preview) {
+            (TileSource::Mask, Some(mask), _) => {
+                let level0 = |r: PsdRect| mask_region_plane(mask, r);
+                pictura_render::build_keys(local, &keys, &level0)
+            }
+            (_, _, Some(preview)) if !painting => {
+                let level0 = |r: PsdRect| {
+                    into_rgba_frame(
+                        pictura_codec::buffer_to_srgb(doc, &preview.region(r)).into_owned(),
+                    )
+                };
+                pictura_render::build_keys(local, &keys, &level0)
+            }
+            _ => {
+                let level0 = |r: PsdRect| display_region(doc, r, painting);
+                pictura_render::build_keys(local, &keys, &level0)
+            }
+        });
     }
+    built
 }
 
 impl PictureViewRust {
@@ -303,38 +311,31 @@ impl PictureViewRust {
         (crop, missing)
     }
 
-    /// Build `keys` on this thread and cache them.
+    /// Build `keys` on this thread and cache them, with every tile folded
+    /// through on the way.
     fn build_now(&self, keys: &[TileKey]) {
         let Some(doc) = self.session.doc.as_ref() else {
             return;
         };
         let t = Instant::now();
-        let mask = self.solo_mask();
-        let painting = self.painting();
-        let size = (doc.width, doc.height);
-        let mut keys = keys.to_vec();
-        // Finer levels first, so a coarser tile can fold its cached children.
-        keys.sort_by_key(|key| key.level);
+        let below = keys.iter().map(|key| key.level as usize).max().unwrap_or(0);
+        let mut local = self.tiles.cache.borrow().snapshot(below);
         let mut hold = eviction::hot();
-        for key in keys {
-            let built = {
-                let cache = self.tiles.cache.borrow();
-                let rect = cache.tile_rect(key);
-                let preview = self.tiles.preview.borrow();
-                build_one(
-                    doc,
-                    mask,
-                    painting,
-                    preview.as_ref(),
-                    key,
-                    rect,
-                    size,
-                    Some(&cache),
-                )
-            };
-            self.tiles.cache.borrow_mut().insert(key, built);
-        }
+        let built = build_keys(
+            doc,
+            self.solo_mask(),
+            self.painting(),
+            self.tiles.preview.borrow().as_ref(),
+            &mut local,
+            keys,
+        );
         hold.close();
+        {
+            let mut cache = self.tiles.cache.borrow_mut();
+            for (key, data) in built {
+                cache.insert(key, data);
+            }
+        }
         self.keep_view_hold(self.tiles.view_key.get(), hold);
         paint_timing::record("tiles_build_sync", t.elapsed());
     }
@@ -787,30 +788,31 @@ impl qobject::PictureView {
             return;
         };
         let soloed = rust.mask_solo_active();
-        let (keys, ticket) = {
+        let (keys, ticket, local) = {
             let cache = rust.tiles.cache.borrow();
             // A mask key queued before solo ended has no mask to build from.
-            let keys: Vec<(TileKey, PsdRect)> = rust
+            let keys: Vec<TileKey> = rust
                 .tiles
                 .wanted
                 .borrow_mut()
                 .drain()
                 .filter(|&key| key.source == TileSource::Composite || soloed)
                 .filter(|&key| !cache.contains(key) && (key.level as usize) < cache.level_count())
-                .map(|key| (key, cache.tile_rect(key)))
                 .collect();
-            (keys, cache.ticket())
+            if keys.is_empty() {
+                return;
+            }
+            let below = keys.iter().map(|key| key.level as usize).max().unwrap_or(0);
+            (keys, cache.ticket(), cache.snapshot(below))
         };
-        if keys.is_empty() {
-            return;
-        }
         let view_key = rust.tiles.view_key.get();
-        let job = TileJob {
+        let mut job = TileJob {
             doc: doc.clone(),
             mask: rust.solo_mask().cloned(),
             painting: rust.painting(),
             preview: rust.tiles.preview.borrow().clone(),
             ticket,
+            local,
             keys,
         };
         rust.tiles.in_flight.set(true);
@@ -1046,18 +1048,17 @@ impl PictureViewRust {
         let Some(doc) = self.session.doc.snapshot() else {
             return 0;
         };
-        let job = {
+        let mut job = {
             let cache = self.tiles.cache.borrow();
+            let below = keys.iter().map(|key| key.level as usize).max().unwrap_or(0);
             TileJob {
                 doc,
                 mask: self.solo_mask().cloned(),
                 painting: self.painting(),
                 preview: self.tiles.preview.borrow().clone(),
                 ticket: cache.ticket(),
-                keys: keys
-                    .iter()
-                    .map(|&key| (key, cache.tile_rect(key)))
-                    .collect(),
+                local: cache.snapshot(below),
+                keys: keys.to_vec(),
             }
         };
         let mut hold = eviction::hot();

@@ -63,7 +63,7 @@ pub use region_level::{
     region_level_chunked, stream_composite, ChunkConvert, Level0Source,
 };
 mod tile_build;
-pub use tile_build::{build_folded, build_keys, build_tile};
+pub use tile_build::build_keys;
 mod tile_pyramid;
 pub use tile_pyramid::{
     interleave, level_count, Ticket, TileKey, TilePyramid, TileSource, TileStats, TILE_SIDE,

@@ -213,7 +213,10 @@ impl TilePyramid {
                 return false;
             }
             let up = scale_down(self.tile_rect(*finer), (key.level - finer.level) as usize);
-            up.left < rect.right && rect.left < up.right && up.top < rect.bottom && rect.top < up.bottom
+            up.left < rect.right
+                && rect.left < up.right
+                && up.top < rect.bottom
+                && rect.top < up.bottom
         })
     }
 

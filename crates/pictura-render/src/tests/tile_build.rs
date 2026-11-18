@@ -57,12 +57,19 @@ fn the_coarsest_level_folds_from_a_cached_finer_level() {
         let data = build_folded(&mut local, key, &source, &mut built);
         assert_eq!(data, direct(&doc, &local, key), "{key:?}");
     }
-    assert!(asked.lock().expect("unpoisoned").is_empty(), "no level-0 read");
+    assert!(
+        asked.lock().expect("unpoisoned").is_empty(),
+        "no level-0 read"
+    );
     for (key, data) in &built {
         assert_eq!(*data, direct(&doc, &local, *key), "{key:?}");
     }
     let between = built.iter().filter(|(key, _)| key.level == 2).count();
-    assert_eq!(between, level_keys(&local, 2).len(), "level 2 folded through");
+    assert_eq!(
+        between,
+        level_keys(&local, 2).len(),
+        "level 2 folded through"
+    );
 }
 
 // [ctf_partial]
@@ -158,5 +165,9 @@ fn stale_tiles_are_not_folded_from() {
     let mut built = Vec::new();
     let data = build_folded(&mut local, key, &counted(&doc, &asked), &mut built);
     assert!(!asked.into_inner().expect("unpoisoned").is_empty());
-    assert_eq!(data, direct(&doc, &local, key), "built from the edited document");
+    assert_eq!(
+        data,
+        direct(&doc, &local, key),
+        "built from the edited document"
+    );
 }
