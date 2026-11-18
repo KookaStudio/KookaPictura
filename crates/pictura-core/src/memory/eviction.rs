@@ -609,7 +609,7 @@ pub fn refresh_urgency() {
 
 /// Hand freed heap back to the kernel: glibc keeps freed 64 KiB tiles in its
 /// arenas, so without this RSS would not fall.
-fn trim() {
+pub fn trim() {
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     // SAFETY: malloc_trim only releases free heap memory.
     unsafe {

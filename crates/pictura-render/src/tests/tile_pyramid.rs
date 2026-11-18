@@ -3,6 +3,7 @@
 use super::*;
 use crate::composite_region;
 use crate::region_level::tests::{seeded_doc, H, W};
+use crate::tile_build::build_tile;
 use pictura_core::{Document, PsdRect};
 
 const TILE_BYTES: u64 = (TILE_SIDE * TILE_SIDE * 4) as u64;

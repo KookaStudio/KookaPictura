@@ -389,3 +389,63 @@ fn flatten_composites_by_band() {
         red.allocated_bytes()
     );
 }
+
+// [ctf_halve]
+#[test]
+fn interior_halving_matches_the_general_rule() {
+    let mut rng = Lcg(31);
+    // (left, top, width, height, level width, level height): whole, odd,
+    // clipped by the level, clipped by the region, at an inner origin.
+    let cases = [
+        (0, 0, 8, 6, 8, 6),
+        (0, 0, 7, 5, 7, 5),
+        (0, 0, 10, 10, 9, 7),
+        (4, 2, 9, 7, 100, 100),
+        (4, 2, 9, 7, 12, 8),
+        (6, 4, 1, 1, 7, 5),
+        (2, 2, 33, 18, 35, 19),
+    ];
+    for (left, top, w, h, lw, lh) in cases {
+        let data: Vec<u8> = (0..w * h * 4).map(|_| rng.below(256) as u8).collect();
+        let region = Region {
+            left,
+            top,
+            width: w,
+            height: h,
+            data: data.clone(),
+        };
+        let halved = region.halved(lw, lh);
+        for oy in 0..halved.height as i32 {
+            for ox in 0..halved.width as i32 {
+                let (gx, gy) = (halved.left + ox, halved.top + oy);
+                let mut sum = [0u32; 4];
+                let mut n = 0;
+                for sy in 2 * gy..2 * gy + 2 {
+                    for sx in 2 * gx..2 * gx + 2 {
+                        let inside = sx < lw as i32
+                            && sy < lh as i32
+                            && sx < left + w as i32
+                            && sy < top + h as i32;
+                        if inside {
+                            let o = ((sy - top) as usize * w as usize + (sx - left) as usize) * 4;
+                            for (slot, v) in sum.iter_mut().zip(&data[o..o + 4]) {
+                                *slot += u32::from(*v);
+                            }
+                            n += 1;
+                        }
+                    }
+                }
+                let o = (oy as usize * halved.width as usize + ox as usize) * 4;
+                for (c, total) in sum.iter().enumerate() {
+                    let want = (total + n / 2).checked_div(n).unwrap_or(0);
+                    assert_eq!(
+                        u32::from(halved.data[o + c]),
+                        want,
+                        "case {:?} pixel ({ox}, {oy}) channel {c}",
+                        (left, top, w, h, lw, lh)
+                    );
+                }
+            }
+        }
+    }
+}

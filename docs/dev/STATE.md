@@ -215,6 +215,26 @@ Snapshot for resuming after a context break. Update after each milestone.
     a surviving `frame_menus*.cpp`, and growth past `frame.h` 760 lines or
     `frame_includes.h` 60 include lines.
 
+- **Fit-to-screen first paint — #1321 complete** (OpenSpec change
+  `coarse-tile-folding`; capability `compositing/coarse-tile-folding`).
+  - **Folding.** `pictura-render/src/tile_build.rs` (`build_tile` and
+    `from_children` moved there) adds `build_keys`: finer levels first, a key
+    with a current finer tile under it folds one level at a time from those
+    tiles (`build_folded`), and a run of fresh adjacent keys of one row
+    builds as one strip. `TileJob` carries `TilePyramid::snapshot` taken with
+    its ticket and lands the levels it folded through; `build_now` uses the
+    same builder. The Navigator's coarsest level now folds from the fit level.
+  - **Strips.** A fit tile read a 4096-wide footprint while the merged
+    preview decodes 17000-wide bands into its 32 MiB LRU, so each band was
+    decoded about four times, serially (found by gdb sampling).
+    `MergedPreview::region` also decodes a band's channels side by side.
+    `Region::halved` has an interior fast path (same bytes).
+  - **Results** (M12 17000², master `bb911b80` vs branch, medians of three):
+    3837 → 2263 ms (24 % of the eager 9433 ms), CPU 11.0 → 5.5 s; peak
+    647 → 724 MiB, RSS after 588 → 677 MiB with `eviction::trim` after each
+    tile job. The extra memory is glibc thread arenas keeping freed strip
+    chunks (owner accepted; #1423).
+
 - **Lazy, file-backed PSD open — #1218 complete, closes #1318** (OpenSpec
   change `lazy-backed-open`; capabilities `codec/lazy-psd-open` and
   `document/source-backed-tiles`).

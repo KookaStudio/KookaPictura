@@ -562,11 +562,16 @@ impl MergedPreview {
         };
         let n = x1.saturating_sub(x0);
         // Zeroed pages straight from the allocator, written once. A band at a
-        // time, so at most one band per channel is held beside the cache.
+        // time, so at most one band per channel is held beside the cache; its
+        // channels decode side by side (#1321).
         let data = Plane::build(plane * 4, |data| {
+            use rayon::prelude::*;
             for band in bands {
-                let rows: Vec<Option<Arc<[u8]>>> =
-                    self.channels.iter().map(|c| c.band(band).ok()).collect();
+                let rows: Vec<Option<Arc<[u8]>>> = self
+                    .channels
+                    .par_iter()
+                    .map(|c| c.band(band).ok())
+                    .collect();
                 if rows.iter().any(Option::is_none) {
                     continue;
                 }
