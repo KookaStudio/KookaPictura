@@ -319,6 +319,9 @@ void ExportAsDialog::buildUi()
     quality_->setRange(1, 100);
     quality_->setValue(90);
     fileForm->addRow(qualityLabel_, quality_);
+    lossless_ = new QCheckBox(tr("Lossless"), fileBox);
+    lossless_->setObjectName(QStringLiteral("exportAsLossless"));
+    fileForm->addRow(QString(), lossless_);
     right->addWidget(fileBox);
 
     auto* sizeBox = new QGroupBox(tr("Image Size"), this);
@@ -413,6 +416,7 @@ void ExportAsDialog::buildUi()
     connect(resample_, &QComboBox::currentIndexChanged, this, changed);
     connect(transparency_, &QCheckBox::toggled, this, changed);
     connect(quality_, &QSpinBox::valueChanged, this, changed);
+    connect(lossless_, &QCheckBox::toggled, this, changed);
     connect(width_, &QSpinBox::valueChanged, this, [this](int w) {
         const int entry = currentEntry();
         if (constrain_->isChecked() && entry >= 0) {
@@ -508,12 +512,14 @@ void ExportAsDialog::syncCanvasToImage()
 void ExportAsDialog::refreshFormatControls()
 {
     const Format format = Format(format_->currentIndex());
-    // WebP export is lossless (the engine has no lossy encoder), so its quality
-    // control stays off even though the format carries alpha.
-    const bool lossy = format == Jpg;
-    const bool alpha = format == Png || format == Png8 || format == Gif || format == Webp;
+    const bool webp = format == Webp;
+    // WebP defaults to lossy quality 90; checking Lossless switches it to VP8L
+    // and turns the quality control off.
+    const bool lossy = format == Jpg || (webp && !lossless_->isChecked());
+    const bool alpha = format == Png || format == Png8 || format == Gif || webp;
     quality_->setEnabled(lossy);
     qualityLabel_->setEnabled(lossy);
+    lossless_->setVisible(webp);
     transparency_->setEnabled(alpha);
 }
 
@@ -583,8 +589,10 @@ QByteArray ExportAsDialog::encodedAs(int entry, Format format) const
         // Qt's WebP writer is an optional plugin, so encode through the engine.
         const QImage source = transparency_->isChecked() ? image : over(image, matte);
         const QImage rgba = rgbaOf(source);
-        const ::rust::Vec<std::uint8_t> bytes =
-            webp_encode(bytesOf(rgba), rgba.width(), rgba.height());
+        const bool lossless = lossless_->isChecked();
+        const int quality = lossless ? -1 : quality_->value();
+        const ::rust::Vec<std::uint8_t> bytes = webp_encode(
+            bytesOf(rgba), rgba.width(), rgba.height(), quality, lossless);
         out = QByteArray(reinterpret_cast<const char*>(bytes.data()), qsizetype(bytes.size()));
         break;
     }

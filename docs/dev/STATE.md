@@ -4,6 +4,13 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **WebP lossy export — #807 implemented; verification via CI** (OpenSpec change
+  `webp-lossy-export`, archived; capability `interop/raster-export` modified).
+  `pictura_codec::encode_webp_lossy` uses the pure-Rust `gamut-webp` VP8 encoder
+  with `VP8X`/`ALPH` alpha; `encode_webp` stays the lossless VP8L path. Export As
+  gains a Lossless checkbox and enables Quality for JPG and lossy WebP (default
+  quality 90); Save As `.webp` stays lossless. Tests: codec units, the
+  ImageMagick oracle, `tst_export_as`, and `tst_webp`.
 - **Streamed saves — #1320 complete** (OpenSpec change `tiled-save-streaming`;
   capabilities `codec/streamed-psd-save`, `codec/streamed-raster-save`,
   `document/save-memory-gate`, and `codec/psd-encode-cache` modified).

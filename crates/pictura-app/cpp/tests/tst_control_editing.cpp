@@ -47,6 +47,7 @@ private slots:
     void layerDigestSeesEveryPixel();
     void activeLayerIsSetByPath();
     void exportLeavesTheDocumentAlone();
+    void exportWebpModes();
     void exportIsGatedLikeASave();
     void historyListsAndJumps();
     void staleUndoIsRefused();
@@ -332,6 +333,40 @@ void ControlEditingTest::exportLeavesTheDocumentAlone()
     QCOMPARE(history_api::count(view()), states);
 }
 
+void ControlEditingTest::exportWebpModes()
+{
+    const QString lossyPath = dir_.filePath(QStringLiteral("control-lossy.webp"));
+    const QString losslessPath = dir_.filePath(QStringLiteral("control-lossless.webp"));
+    const int index = window_->activeDocumentIndex();
+    const QString before = window_->activeFilePath();
+    const bool dirty = window_->isDocumentDirty(index);
+    const int states = history_api::count(view());
+
+    QVERIFY(succeeded(call(QStringLiteral("export_webp"),
+                           {{QStringLiteral("path"), lossyPath},
+                            {QStringLiteral("quality"), 10}})));
+    QVERIFY(succeeded(call(QStringLiteral("export_webp"),
+                           {{QStringLiteral("path"), losslessPath},
+                            {QStringLiteral("lossless"), true}})));
+
+    QFile lossy(lossyPath);
+    QVERIFY(lossy.open(QIODevice::ReadOnly));
+    const QByteArray lossyBytes = lossy.readAll();
+    QVERIFY(lossyBytes.startsWith(QByteArrayLiteral("RIFF")));
+    QVERIFY(lossyBytes.contains(QByteArrayLiteral("VP8 ")));
+    QVERIFY(!lossyBytes.contains(QByteArrayLiteral("VP8L")));
+
+    QFile lossless(losslessPath);
+    QVERIFY(lossless.open(QIODevice::ReadOnly));
+    const QByteArray losslessBytes = lossless.readAll();
+    QVERIFY(losslessBytes.startsWith(QByteArrayLiteral("RIFF")));
+    QVERIFY(losslessBytes.contains(QByteArrayLiteral("VP8L")));
+
+    QCOMPARE(window_->activeFilePath(), before);
+    QCOMPARE(window_->isDocumentDirty(index), dirty);
+    QCOMPARE(history_api::count(view()), states);
+}
+
 void ControlEditingTest::exportIsGatedLikeASave()
 {
     pictura::ControlPolicy policy;
@@ -339,12 +374,17 @@ void ControlEditingTest::exportIsGatedLikeASave()
     policy.allowEdit = true;
     server_->setPolicy(policy);
     const QString path = dir_.filePath(QStringLiteral("gated.png"));
+    const QString webpPath = dir_.filePath(QStringLiteral("gated.webp"));
     ControlClient client(*server_);
     const QJsonObject response =
         client.call(QStringLiteral("export_png"), {{QStringLiteral("path"), path}});
+    const QJsonObject webpResponse =
+        client.call(QStringLiteral("export_webp"), {{QStringLiteral("path"), webpPath}});
     server_->setPolicy({});
     QCOMPARE(errorCode(response), QStringLiteral("refused"));
+    QCOMPARE(errorCode(webpResponse), QStringLiteral("refused"));
     QVERIFY(!QFile::exists(path));
+    QVERIFY(!QFile::exists(webpPath));
 }
 
 void ControlEditingTest::historyListsAndJumps()

@@ -410,6 +410,33 @@ QJsonObject ControlServer::methodExportPng(const QJsonObject& params)
     return ok({{QStringLiteral("path"), path}});
 }
 
+QJsonObject ControlServer::methodExportWebp(const QJsonObject& params)
+{
+    PictureView* view = frame_->activeView();
+    if (!view || !view->has_document()) {
+        return error(QStringLiteral("no_document"), QStringLiteral("no active document"));
+    }
+    const QString path = params.value(QStringLiteral("path")).toString();
+    if (path.isEmpty()) {
+        return error(QStringLiteral("invalid_param"), QStringLiteral("path is required"));
+    }
+    if (const QString problem = pathProblem(path, true); !problem.isEmpty()) {
+        return error(QStringLiteral("invalid_param"), problem);
+    }
+    if (output_path_protected(path)) {
+        return error(QStringLiteral("refused"),
+                     QStringLiteral("destination is an open read-only source file"));
+    }
+    const int quality = params.value(QStringLiteral("quality")).toInt(90);
+    const bool lossless = params.value(QStringLiteral("lossless")).toBool(false);
+    if (!export_webp(*view, path, quality, lossless)) {
+        return error(QStringLiteral("io_error"), QStringLiteral("export failed"));
+    }
+    return ok({{QStringLiteral("path"), path},
+               {QStringLiteral("quality"), quality},
+               {QStringLiteral("lossless"), lossless}});
+}
+
 QJsonObject ControlServer::methodHistory(const QJsonObject& params)
 {
     PictureView* view = frame_->activeView();

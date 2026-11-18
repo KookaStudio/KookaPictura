@@ -222,7 +222,7 @@ pub use web::{
     ColorTable, Dither, Indexed, MetadataLevel, PaletteOptions, PaletteSort, SliceCell,
     SliceHtmlOptions, SliceLayout, WebMetadata,
 };
-pub use webp::{decode_webp, encode_webp};
+pub use webp::{decode_webp, encode_webp, encode_webp_lossy};
 pub use write::{
     write_native_compatibility_cached, write_psb, write_psb_cached, write_psd, write_psd_cached,
     write_psd_to, write_versioned, write_versioned_to, writes_psb, VersionedWrite,

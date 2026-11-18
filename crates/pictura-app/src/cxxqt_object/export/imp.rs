@@ -5,15 +5,53 @@ use super::super::picture::picture_rgba;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 
-/// Encode packed RGBA8888 as a lossless WebP container; empty on refusal.
+/// Encode packed RGBA8888 as a WebP container; empty on refusal.
 ///
 /// The Export As dialog previews and writes per-entry bytes in memory, so this
 /// exposes the engine encoder directly rather than the path-based save edge.
-pub fn webp_encode(rgba: &[u8], width: i32, height: i32) -> Vec<u8> {
+/// `lossless` or a negative `quality` selects the lossless VP8L encoder; any
+/// other quality selects lossy VP8 on the 0-100 scale.
+pub fn webp_encode(rgba: &[u8], width: i32, height: i32, quality: i32, lossless: bool) -> Vec<u8> {
     if width <= 0 || height <= 0 {
         return Vec::new();
     }
-    pictura_codec::encode_webp(rgba, width as u32, height as u32).unwrap_or_default()
+    let encoded = if lossless || quality < 0 {
+        pictura_codec::encode_webp(rgba, width as u32, height as u32)
+    } else {
+        pictura_codec::encode_webp_lossy(
+            rgba,
+            width as u32,
+            height as u32,
+            quality.clamp(0, 100) as u8,
+        )
+    };
+    encoded.unwrap_or_default()
+}
+
+/// Flatten the composite and write it as WebP: lossless VP8L when `lossless`
+/// or `quality` is negative, otherwise lossy VP8. Writes atomically.
+pub fn export_webp(view: &PictureView, path: &QString, quality: i32, lossless: bool) -> bool {
+    let path = path.to_string();
+    if reject_protected_destination(&path).is_err() {
+        return false;
+    }
+    let rust = view.rust();
+    if rust.session.read_only() {
+        return false;
+    }
+    let Some(doc) = rust.session.doc.as_ref() else {
+        return false;
+    };
+    let rgba = picture_rgba(doc, rust, true);
+    let encoded = if lossless || quality < 0 {
+        pictura_codec::encode_webp(&rgba, doc.width, doc.height)
+    } else {
+        pictura_codec::encode_webp_lossy(&rgba, doc.width, doc.height, quality.clamp(0, 100) as u8)
+    };
+    let Some(bytes) = encoded else {
+        return false;
+    };
+    super::super::helpers::safe_io::write_atomically(&path, &bytes, false).is_ok()
 }
 
 pub fn output_format(view: &PictureView) -> QString {

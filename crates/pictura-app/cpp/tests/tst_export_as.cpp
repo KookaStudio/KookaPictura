@@ -36,6 +36,25 @@ QImage picture()
     return image;
 }
 
+// A detailed 64 x 48 field with deterministic noise, where lossy coding wins.
+QImage photo()
+{
+    QImage image(64, 48, QImage::Format_RGBA8888);
+    unsigned seed = 0x12345678u;
+    for (int y = 0; y < image.height(); ++y) {
+        for (int x = 0; x < image.width(); ++x) {
+            seed = seed * 1664525u + 1013904223u;
+            const int noise = int((seed >> 24) & 0xffu);
+            const int base = (x * 2 + y * 3) % 256;
+            image.setPixel(x, y,
+                           qRgba(qBound(0, base + noise / 2, 255),
+                                 qBound(0, base + noise, 255),
+                                 qBound(0, base - noise / 3, 255), 255));
+        }
+    }
+    return image;
+}
+
 pictura::ExportEntry entry(const QString& name, const QImage& image)
 {
     return {name, QStringLiteral("pixel"), image};
@@ -74,6 +93,8 @@ private slots:
     void formatsAndControls();
     void png8AndGif();
     void webpExport();
+    void webpQualityControls();
+    void webpLossyIsSmallerThanLossless();
     void imageSizeAndCanvas();
     void layerList();
     void saveToBytes();
@@ -122,11 +143,12 @@ void ExportAsTest::formatsAndControls()
     QVERIFY(!child<QCheckBox>(dialog, "exportAsTransparency")->isEnabled());
     QVERIFY(!child<QSpinBox>(dialog, "exportAsQuality")->isEnabled());
 
-    // WebP: transparency on (it carries alpha), quality off (lossless engine).
+    // WebP: transparency on (it carries alpha), lossy by default.
     format->setCurrentIndex(pictura::ExportAsDialog::Webp);
     QCOMPARE(dialog.suffix(), QStringLiteral("webp"));
     QVERIFY(child<QCheckBox>(dialog, "exportAsTransparency")->isEnabled());
-    QVERIFY(!child<QSpinBox>(dialog, "exportAsQuality")->isEnabled());
+    QVERIFY(child<QSpinBox>(dialog, "exportAsQuality")->isEnabled());
+    QVERIFY(!child<QCheckBox>(dialog, "exportAsLossless")->isHidden());
 }
 
 // WebP export encodes through the engine, so it works without the optional Qt
@@ -144,13 +166,89 @@ void ExportAsTest::webpExport()
     QVERIFY(bytes.size() > 12);
     QCOMPARE(bytes.left(4), QByteArrayLiteral("RIFF"));
     QCOMPARE(bytes.mid(8, 4), QByteArrayLiteral("WEBP"));
+    // The default is lossy, not the old VP8L stream.
+    QVERIFY(bytes.contains(QByteArrayLiteral("VP8 ")));
+    QVERIFY(!bytes.contains(QByteArrayLiteral("VP8L")));
 
-    // A matching suffix writes exactly the encoded bytes.
+    // A matching suffix writes a WebP in the same mode. The lossy encoder's
+    // compressed alpha is not byte-stable across runs, so compare the container
+    // and chunks rather than the whole payload.
     const QString path = dir.filePath(QStringLiteral("out.webp"));
     QVERIFY(dialog.saveTo(0, path));
     QFile file(path);
     QVERIFY(file.open(QIODevice::ReadOnly));
-    QCOMPARE(file.readAll(), bytes);
+    const QByteArray written = file.readAll();
+    QVERIFY(written.size() > 12);
+    QCOMPARE(written.left(4), QByteArrayLiteral("RIFF"));
+    QCOMPARE(written.mid(8, 4), QByteArrayLiteral("WEBP"));
+    QVERIFY(written.contains(QByteArrayLiteral("VP8 ")));
+    QVERIFY(!written.contains(QByteArrayLiteral("VP8L")));
+
+    // The lossless path stays byte-stable, so the exact-write contract still
+    // applies there.
+    child<QCheckBox>(dialog, "exportAsLossless")->setChecked(true);
+    const QByteArray exact = dialog.encoded(0);
+    const QString exactPath = dir.filePath(QStringLiteral("out-lossless.webp"));
+    QVERIFY(dialog.saveTo(0, exactPath));
+    QFile exactFile(exactPath);
+    QVERIFY(exactFile.open(QIODevice::ReadOnly));
+    QCOMPARE(exactFile.readAll(), exact);
+}
+
+void ExportAsTest::webpQualityControls()
+{
+    pictura::ExportAsDialog dialog(entries());
+    auto* format = child<QComboBox>(dialog, "exportAsFormat");
+    auto* quality = child<QSpinBox>(dialog, "exportAsQuality");
+    auto* lossless = child<QCheckBox>(dialog, "exportAsLossless");
+    auto* transparency = child<QCheckBox>(dialog, "exportAsTransparency");
+    QVERIFY(format && quality && lossless && transparency);
+
+    format->setCurrentIndex(pictura::ExportAsDialog::Webp);
+    QVERIFY(!lossless->isChecked());
+    QVERIFY(!lossless->isHidden());
+    QCOMPARE(quality->value(), 90);
+    QVERIFY(quality->isEnabled());
+    QVERIFY(transparency->isEnabled());
+
+    lossless->setChecked(true);
+    QVERIFY(!quality->isEnabled());
+    QVERIFY(transparency->isEnabled());
+    const QByteArray exact = dialog.encoded(0);
+    QVERIFY(exact.contains(QByteArrayLiteral("VP8L")));
+    QVERIFY(!exact.contains(QByteArrayLiteral("VP8 ")));
+
+    format->setCurrentIndex(pictura::ExportAsDialog::Png);
+    QVERIFY(lossless->isHidden());
+    QVERIFY(!quality->isEnabled());
+
+    format->setCurrentIndex(pictura::ExportAsDialog::Jpg);
+    QVERIFY(quality->isEnabled());
+    QVERIFY(!transparency->isEnabled());
+}
+
+void ExportAsTest::webpLossyIsSmallerThanLossless()
+{
+    QVector<pictura::ExportEntry> noisy;
+    noisy.append(entry(QStringLiteral("photo"), photo()));
+    pictura::ExportAsDialog dialog(noisy);
+    auto* format = child<QComboBox>(dialog, "exportAsFormat");
+    auto* quality = child<QSpinBox>(dialog, "exportAsQuality");
+    auto* lossless = child<QCheckBox>(dialog, "exportAsLossless");
+    format->setCurrentIndex(pictura::ExportAsDialog::Webp);
+
+    const QByteArray high = dialog.encoded(0);
+    quality->setValue(10);
+    const QByteArray low = dialog.encoded(0);
+    lossless->setChecked(true);
+    const QByteArray exact = dialog.encoded(0);
+
+    QVERIFY2(low.size() < high.size(),
+             qPrintable(QStringLiteral("q10 %1, q90 %2").arg(low.size()).arg(high.size())));
+    QVERIFY2(high.size() < exact.size(),
+             qPrintable(QStringLiteral("q90 %1, lossless %2")
+                            .arg(high.size())
+                            .arg(exact.size())));
 }
 
 void ExportAsTest::png8AndGif()

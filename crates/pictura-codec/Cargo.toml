@@ -22,6 +22,11 @@ rayon = "1"
 # Qt's optional `qt6-imageformats` plugin. This is the pure-Rust crate the
 # `image` meta-crate delegates to for WebP.
 image-webp = "0.2"
+# Lossy VP8 encode with alpha (#807). Pure Rust, `#![forbid(unsafe_code)]`,
+# MIT OR Apache-2.0, so it avoids a bundled `libwebp` C build and keeps WebP
+# independent of Qt's optional plugin. `gamut-core` supplies its image types.
+gamut-webp = "0.3"
+gamut-core = "2"
 # JPEG 2000 codestream encoding for the PDF writer. 0.11 is a pure-Rust port of
 # OpenJPEG (no native library), so `/JPXDecode` does not depend on a Qt or KDE
 # image plugin.

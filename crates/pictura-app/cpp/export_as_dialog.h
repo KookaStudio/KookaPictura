@@ -28,8 +28,8 @@ struct ExportEntry {
 };
 
 // The CC Export As dialog: a layer list, a preview with zoom, File Settings
-// (Format plus Transparency/Quality), Image Size (linked W/H/Scale + Resample),
-// Canvas Size (+ Reset), and a bounded output-size estimate.
+// (Format plus Transparency/Quality/Lossless), Image Size (linked W/H/Scale +
+// Resample), Canvas Size (+ Reset), and a bounded output-size estimate.
 class ExportAsDialog : public QDialog {
     Q_OBJECT
 
@@ -74,6 +74,7 @@ private:
     QCheckBox* transparency_ = nullptr;
     QSpinBox* quality_ = nullptr;
     QLabel* qualityLabel_ = nullptr;
+    QCheckBox* lossless_ = nullptr;
     QSpinBox* width_ = nullptr;
     QSpinBox* height_ = nullptr;
     QSpinBox* scale_ = nullptr;
