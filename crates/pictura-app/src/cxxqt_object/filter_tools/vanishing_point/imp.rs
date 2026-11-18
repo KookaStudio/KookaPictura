@@ -350,12 +350,10 @@ pub(super) fn vp_finish(mut view: Pin<&mut PictureView>, keep: bool, render_grid
         Some(kept) => kept != &planes,
         None => !planes.is_empty(),
     };
-    // No history state records the planes, so the change has no saved point
-    // to step back to: the document stays modified until it is saved.
-    if changed {
-        session.mark_unsaved();
-    }
     session.vanishing_planes = Some(planes.clone());
+    if changed {
+        session.persisted_metadata_changed();
+    }
     if edit.is_empty() {
         0
     } else {

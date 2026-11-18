@@ -175,6 +175,7 @@ void ImportSaveCoordinator::finishLoadedDocument(int index)
     const quint64 token = entry->token;
     PictureView* view = entry->view;
     documents_.finishLoadingDocument(index);
+    trackRecovery(view);
     if (!recentPath.isEmpty()) {
         rememberRecent(recentPath);
     }

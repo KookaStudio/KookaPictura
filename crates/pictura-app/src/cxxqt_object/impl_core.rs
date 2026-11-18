@@ -53,7 +53,7 @@ mod display;
 mod document_job;
 pub(in crate::cxxqt_object) use display::{mask_display_plane, mask_region_plane};
 pub(super) use document_job::{DocumentJobs, JobBar, Outcome};
-mod recovery;
+pub(super) mod recovery;
 mod save;
 pub(in crate::cxxqt_object) mod save_jobs;
 
@@ -168,10 +168,13 @@ impl qobject::PictureView {
             rust.session.pdf_password = pdf_password;
             rust.session.pdf_options = pdf_options;
             rust.source_format = source_format;
+            rust.session.vanishing_planes = super::filter_tools::saved_planes(&doc);
             rust.session.doc.set(Some(doc));
             rust.layer_target = target;
             let target = rust.layer_target.clone();
+            let recovery = rust.session.recovery.take();
             rust.session.record(&target, "Revert");
+            rust.session.recovery = recovery;
             rust.session.mark_saved();
             if compatibility.access.is_read_only() {
                 if let Some(id) = rust.session.history.current_id() {

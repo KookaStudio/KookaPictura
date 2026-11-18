@@ -14,6 +14,11 @@ bool PicturaMainWindow::saveActive(bool interactive)
     return importSave_ && importSave_->saveActive(interactive);
 }
 
+bool PicturaMainWindow::saveInBackground() const
+{
+    return importSave_ && importSave_->saveInBackground();
+}
+
 bool PicturaMainWindow::saveActiveAs(const QString& path)
 {
     return importSave_ && importSave_->saveActiveAs(path);

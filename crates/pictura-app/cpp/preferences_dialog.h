@@ -63,6 +63,7 @@ public:
     void setMemoryUsagePercent(int percent);
     void setGpuComputeEnabled(bool on);
     // File Handling: Automatically Save Recovery Information Every `minutes`.
+    void setSaveInBackground(bool on);
     void setAutoSaveRecovery(bool on, int minutes);
     void setNativeSaveCompatibility(int choice);
     // Guides, Grid, & Slices: the guide colour and Lines / Dashed Lines style.
@@ -99,6 +100,7 @@ signals:
     void pickerChoiceChanged(int choice);
     void gpuComputeChanged(bool on);
     void memoryUsagePercentChanged(int percent);
+    void saveInBackgroundChanged(bool on);
     void autoSaveRecoveryChanged(bool on, int minutes);
     void nativeSaveCompatibilityChanged(int choice);
     void guideAppearanceChanged(const QColor& color, bool dashed);

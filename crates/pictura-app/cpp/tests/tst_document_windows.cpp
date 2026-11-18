@@ -106,6 +106,8 @@ private slots:
     void commandsTargetActiveDocument();
     void noDocumentsDisablesCommands();
     void closeDirtyCancelKeepsTab();
+    void closeDirtyDiscardClosesTab();
+    void closeDirtySaveClosesTab();
     void ctrlTabCyclesTabs();
     void ctrlTabWraps();
     void ctrlTabLeavesPanels();
@@ -304,6 +306,34 @@ void DocumentWindowsTest::closeDirtyCancelKeepsTab()
     QCOMPARE(window_->documentCount(), 1);
     QCOMPARE(bar->count(), 1);
     QVERIFY(window_->isDocumentDirty(0));
+}
+
+void DocumentWindowsTest::closeDirtyDiscardClosesTab()
+{
+    QVERIFY(newDoc(QStringLiteral("Discard"), 16, 16));
+    invertAction(*window_)->trigger();
+    QVERIFY(window_->isDocumentDirty(0));
+    const int prompts = nonInteractiveUnsavedPromptCount();
+    setNonInteractiveUnsavedChoice(UnsavedChoice::Discard);
+    QVERIFY(window_->closeDocument(0, true));
+    QCOMPARE(window_->documentCount(), 0);
+    QCOMPARE(nonInteractiveUnsavedPromptCount(), prompts + 1);
+}
+
+void DocumentWindowsTest::closeDirtySaveClosesTab()
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("close.psd"));
+    QVERIFY(newDoc(QStringLiteral("Save"), 16, 16));
+    QVERIFY(window_->saveActiveAs(path));
+    invertAction(*window_)->trigger();
+    QVERIFY(window_->isDocumentDirty(0));
+    setNonInteractiveUnsavedChoice(UnsavedChoice::Save);
+    QVERIFY(window_->closeDocument(0, true));
+    QCOMPARE(window_->documentCount(), 0);
+    PictureView reopened;
+    QVERIFY(document_api::open(reopened, path));
+    QCOMPARE(QColor(reopened.composite_argb(8, 8)), QColor(Qt::black));
 }
 
 void DocumentWindowsTest::ctrlTabCyclesTabs()

@@ -14,6 +14,7 @@ use crate::history::{History, Restored, Snapshot};
 use crate::layer_target::LayerTarget;
 use pictura_core::{Document, PsdRect};
 use pictura_select::Selection;
+use std::sync::Arc;
 
 /// The selection state captured at the start of a Quick Selection stroke.
 pub(in crate::cxxqt_object) struct QuickSelectionSnapshot {
@@ -60,6 +61,11 @@ pub(in crate::cxxqt_object) struct DocumentSession {
     /// The history identity that was current at the last successful save, open,
     /// install, or Revert. `None` means the document has no saved point.
     pub(in crate::cxxqt_object) saved_id: Option<u64>,
+    pub(in crate::cxxqt_object) persisted_metadata_revision: u64,
+    pub(in crate::cxxqt_object) saved_metadata_revision: u64,
+    pub(in crate::cxxqt_object) save_publication_uncertain: bool,
+    pub(in crate::cxxqt_object) recovery:
+        Option<crate::cxxqt_object::impl_core::recovery::RecoveryAttachment>,
     /// Bumped whenever the document's content changed.
     pub(in crate::cxxqt_object) content_revision: u64,
     /// Bumped whenever the view loads or replaces its document, so a panel can
@@ -74,7 +80,8 @@ pub(in crate::cxxqt_object) struct DocumentSession {
     /// The password a protected PDF was opened with, kept in memory only so
     /// Revert can reopen it.
     pub(in crate::cxxqt_object) pdf_password: Option<String>,
-    pub(in crate::cxxqt_object) print_resources: pictura_codec::print_resources::PrintResourceEdits,
+    pub(in crate::cxxqt_object) print_resources:
+        Arc<pictura_codec::print_resources::PrintResourceEdits>,
     pub(in crate::cxxqt_object) print_revision: u64,
     pub(in crate::cxxqt_object) saved_print_revision: u64,
     /// The Vanishing Point planes this document's last session kept, so the
@@ -280,6 +287,7 @@ impl DocumentSession {
                 self.content_revision = self.content_revision.wrapping_add(1);
             }
         }
+        self.capture_recovery(false);
         true
     }
 
@@ -308,16 +316,49 @@ impl DocumentSession {
     /// Record the current history state as the saved one and clear `dirty`.
     pub(in crate::cxxqt_object) fn mark_saved(&mut self) {
         self.saved_id = self.history.current_id();
-        self.dirty = self.print_revision != self.saved_print_revision;
+        self.saved_metadata_revision = self.persisted_metadata_revision;
+        self.dirty =
+            self.save_publication_uncertain || self.print_revision != self.saved_print_revision;
     }
 
     pub(in crate::cxxqt_object) fn stage_print_resources(
         &mut self,
         resources: pictura_codec::print_resources::PrintResourceEdits,
     ) {
-        self.print_resources = resources;
+        self.print_resources = Arc::new(resources);
         self.print_revision = self.print_revision.wrapping_add(1);
-        self.refresh_dirty();
+        self.persisted_metadata_changed();
+    }
+
+    pub(in crate::cxxqt_object) fn persisted_metadata_changed(&mut self) {
+        self.persisted_metadata_revision = self.persisted_metadata_revision.wrapping_add(1);
+        self.dirty = true;
+        self.capture_recovery(false);
+    }
+
+    pub(in crate::cxxqt_object) fn capture_recovery(&self, checkpoint: bool) {
+        let Some(recovery) = &self.recovery else {
+            return;
+        };
+        let document = self
+            .history
+            .current_snapshot()
+            .map(|snapshot| &snapshot.doc)
+            .or(self.doc.as_ref());
+        if let Some(document) = document {
+            recovery.capture(
+                document,
+                self.vanishing_planes.as_ref(),
+                &self.print_resources,
+                &self.encode_cache,
+                crate::cxxqt_object::impl_core::recovery::RecoveryIdentity {
+                    history: self.history.current_id(),
+                    metadata: self.persisted_metadata_revision,
+                    generation: self.document_generation,
+                },
+                checkpoint,
+            );
+        }
     }
 
     /// Forget the saved point and mark the document modified, so a recovered
@@ -339,6 +380,8 @@ impl DocumentSession {
             (Some(_), Some(saved)) => {
                 self.history.current_id() != Some(saved)
                     || self.print_revision != self.saved_print_revision
+                    || self.persisted_metadata_revision != self.saved_metadata_revision
+                    || self.save_publication_uncertain
             }
             (Some(_), None) => true,
         }
@@ -392,6 +435,7 @@ impl DocumentSession {
             .and_then(|s| s.quick_mask.clone());
         self.restore_quick_mask_selection(quick_mask);
         self.touch_selection();
+        self.capture_recovery(false);
         Some(restored)
     }
 }
@@ -617,7 +661,13 @@ impl PictureViewRust {
         self.active_path = super::super::paths::ActivePath::Work;
         self.session.pdf_options = None;
         self.session.pdf_password = None;
+        if let Some(recovery) = &self.session.recovery {
+            recovery.retire();
+        }
         self.session.vanishing_planes = None;
+        self.session.persisted_metadata_revision = 0;
+        self.session.saved_metadata_revision = 0;
+        self.session.save_publication_uncertain = false;
         self.isolation = None;
         self.solo_snapshot = None;
         self.expanded_groups.clear();
@@ -650,7 +700,6 @@ impl PictureViewRust {
         self.auto_blend.cancel();
         self.auto_align.cancel();
         self.adjust_jobs.cancel();
-        self.save_job = None;
     }
 
     /// Drop the panel previews that were never committed.

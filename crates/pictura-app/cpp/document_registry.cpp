@@ -532,7 +532,11 @@ void DocumentRegistry::updateTabTitle(int index)
         }
         const int tab = tabOf(window);
         if (tab >= 0) {
-            tabs_->setTabText(tab, documentTabText(label, dirty, metrics));
+            QString text = documentTabText(label, dirty, metrics);
+            if (doc->saveProgress >= 0) {
+                text += QStringLiteral("  %1%").arg(doc->saveProgress);
+            }
+            tabs_->setTabText(tab, text);
             tabs_->setTabToolTip(tab, reason.isEmpty() ? label : label + u'\n' + reason);
         }
     }

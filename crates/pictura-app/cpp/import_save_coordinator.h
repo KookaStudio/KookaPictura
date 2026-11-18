@@ -46,6 +46,9 @@ public:
         std::function<void()> updateWindowTitle;
         std::function<void(const QString& message, int timeoutMs)> showStatus;
         std::function<void(const QString& commandId, const QJsonObject& values)> recordCommand;
+        std::function<quint64(const QString& commandId, const QJsonObject& values)> reserveRecording;
+        std::function<void(quint64 token, bool saved)> finishRecording;
+        std::function<void()> updateSaveProgress;
         // Persist the whole session when available; without it the coordinator
         // rewrites only its own slice of the stored state.
         std::function<void()> saveSession;
@@ -92,16 +95,23 @@ public:
     static bool isPdfPath(const QString& path);
 
     // Save / close.
-    bool saveActive(bool interactive = true);
-    bool saveActiveAs(const QString& path, std::optional<bool> includeMerged = std::nullopt);
+    bool saveActive(bool interactive = true, bool backgroundAllowed = false);
+    bool saveActiveAs(const QString& path, bool backgroundAllowed = false,
+                      std::optional<bool> includeMerged = std::nullopt);
     // Save a known path with the remembered options for its suffix (no dialog):
     // the path used by the control server and recorded-command replay. A
     // recorded Save As step's `stepOptions` overlay the remembered options for
     // this save without being remembered.
     bool saveActiveAtPath(const QString& path, const QJsonObject& stepOptions = {});
-    bool saveAsWithDialog();
+    bool saveAsWithDialog(bool backgroundAllowed = false);
     bool saveActiveAsWithOptions(const QString& path,
-                                 SaveFormatKind hint = SaveFormatKind::None);
+                                 SaveFormatKind hint = SaveFormatKind::None,
+                                 bool backgroundAllowed = false);
+    bool saveInBackground() const { return saveInBackground_; }
+    void setSaveInBackground(bool on) { saveInBackground_ = on; }
+    bool resolvePendingSave(PictureView* view);
+    bool saveResolutionNeedsPrompt(PictureView* view) const;
+    void acknowledgeSaveResolution(PictureView* view);
     bool saveCopyWithDialog();
     bool saveCopyAs(const QString& path, std::optional<bool> includeMerged = std::nullopt);
     bool saveCopyAsWithOptions(const QString& path,
@@ -257,6 +267,8 @@ private:
     void alertMissingFonts(PictureView* view);
     void onAboutToRemoveDocument(int index);
 
+    void attachRecovery(PictureView* view);
+    void pollRecoveryStatus();
     void dropRecoverySnapshot(PictureView* view);
     void forgetRecovery(PictureView* view);
     void recordCommand(const char* id, const QJsonObject& values);
@@ -289,6 +301,24 @@ private:
     int openCount_ = 0;
     int openDelayForTest_ = 0;
 
+    struct PendingSave {
+        QString path;
+        QString destination;
+        quint64 recordingToken = 0;
+    };
+    bool canStartNativeSave(PictureView* view, const QString& destination);
+    bool startBackgroundSave(PictureView* view, const QString& path,
+                             std::optional<bool> includeMerged);
+    void pollBackgroundSaves();
+    bool finishBackgroundSave(PictureView* view);
+    bool applySaveResult(PictureView* view, const QString& path, int outcome,
+                         bool background = false);
+    QHash<PictureView*, PendingSave> backgroundSaves_;
+    QSet<PictureView*> unresolvedSaveFailures_;
+    QSet<QString> synchronousDestinations_;
+    QTimer* saveTimer_ = nullptr;
+    bool saveInBackground_ = true;
+
     QJsonObject saveFormatOptions_;
     QHash<PictureView*, SaveFormatKind> lastSaveKinds_;
     std::function<bool(SaveFormatKind, SaveFormatOptions&)> saveFormatDialogForTest_;
@@ -306,8 +336,8 @@ private:
     std::unique_ptr<RecoveryStore> recovery_;
     QTimer* autosaveTimer_ = nullptr;
     QHash<PictureView*, int> recoveryIds_;
-    QSet<PictureView*> recoveryStale_;
-    QSet<PictureView*> recoverySnapshots_;
+    QTimer* recoveryStatusTimer_ = nullptr;
+    QSet<PictureView*> recoveryWarned_;
     int recoveryCounter_ = 0;
     bool autoSaveRecovery_ = true;
     int autoSaveMinutes_ = 10;

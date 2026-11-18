@@ -803,6 +803,25 @@ void ActionsEngineBridge::recordCommand(const QString& commandId, const QJsonObj
     }
 }
 
+quint64 ActionsEngineBridge::reserveCommand(const QString& commandId, const QJsonObject& params)
+{
+    if (!engine_) {
+        return 0;
+    }
+    const quint64 token = engine_->reserve_command(
+        commandId, QString::fromUtf8(QJsonDocument(params).toJson(QJsonDocument::Compact)));
+    refreshSignals();
+    return token;
+}
+
+void ActionsEngineBridge::finishReservedCommand(quint64 token, bool saved)
+{
+    if (engine_) {
+        engine_->resolve_command(token, saved);
+        refreshSignals();
+    }
+}
+
 void ActionsEngineBridge::setAllowToolRecording(bool on)
 {
     if (engine_) {

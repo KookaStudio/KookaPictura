@@ -69,6 +69,11 @@ void PicturaMainWindow::connectRecoveryPreferences(PreferencesDialog* dialog)
     if (!dialog || !importSave_) {
         return;
     }
+    dialog->setSaveInBackground(importSave_->saveInBackground());
+    connect(dialog, &PreferencesDialog::saveInBackgroundChanged, this, [this](bool on) {
+        importSave_->setSaveInBackground(on);
+        saveSession();
+    });
     dialog->setAutoSaveRecovery(importSave_->autoSaveRecovery(),
                                 importSave_->autoSaveMinutes());
     dialog->setNativeSaveCompatibility(importSave_->nativeSaveCompatibility());

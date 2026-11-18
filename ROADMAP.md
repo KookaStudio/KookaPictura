@@ -87,7 +87,7 @@ Deeper technical status for PSD/PSB lives in
       CC, and physical CUPS acceptance.
 - [ ] The measurement scale and presets, the exporters, and PSD resource 1074
       (#635)
-- [ ] Background Save, a durable crash journal, and PSD 1086/1087 (#637)
+- [x] Background Save, a durable crash journal, and PSD 1086/1087 (#637)
 - [x] Vector Smart Object placement and Edit Contents, PDF Paste As, and
       repair of supported external Smart Object links (#638)
 - [ ] Editable Illustrator clipboard paste as Paths or Shape Layer (#638)
