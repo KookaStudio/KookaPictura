@@ -519,7 +519,11 @@ void DocumentRegistry::updateTabTitle(int index)
     const QFontMetrics metrics(tabs_->tabBar()->font());
     const bool dirty = !doc->loading && isDocumentDirty(index);
     for (const DocWindow* window : doc->windows) {
-        const QString label = fullLabel(window);
+        QString label = fullLabel(window);
+        const QString reason = doc->view ? pictura::compatibility_reason(*doc->view) : QString();
+        if (!reason.isEmpty()) {
+            label += tr(" (Read-only)");
+        }
         if (window->floating) {
             window->floating->setLabel(label, dirty);
         }
@@ -529,7 +533,7 @@ void DocumentRegistry::updateTabTitle(int index)
         const int tab = tabOf(window);
         if (tab >= 0) {
             tabs_->setTabText(tab, documentTabText(label, dirty, metrics));
-            tabs_->setTabToolTip(tab, label);
+            tabs_->setTabToolTip(tab, reason.isEmpty() ? label : label + u'\n' + reason);
         }
     }
     emit documentStateChanged(index);

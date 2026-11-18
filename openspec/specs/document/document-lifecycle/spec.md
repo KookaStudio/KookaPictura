@@ -94,7 +94,7 @@ successful open SHALL leave the document unmodified with its path recorded.
 
 ### Requirement: Save and Save As
 
-The system SHALL write the active document in its current output format, chosen
+For an editable document, the system SHALL write the active document in its current output format, chosen
 by the save path's extension, writing atomically so a failed write never
 truncates an existing file. A `psd` path SHALL write the document's composite
 and layer tree through the PSD codec; a `psb` path SHALL force a version-2 PSB
@@ -649,3 +649,29 @@ through the synchronous API SHALL write the same bytes as the worker path.
 
 - **WHEN** two identical documents are saved, one through the synchronous API and one through a held worker save
 - **THEN** the two files are byte-identical
+
+### Requirement: Compatibility read-only state protects the opened document
+
+When the document version policy requires read-only access, the document SHALL remain inspectable and identify its read-only state and reason. It SHALL use the source merged image when the image is present, decodable, and carries real merged data. When a faithful preview is unavailable, the application SHALL explain that limitation. Browsing and viewport navigation SHALL remain available.
+
+Read-only access restricts the ordinary editing, Save and Save As flows for that document. Document changes and ordinary saves SHALL be refused across menu, direct tool, action playback, and programmatic application entry points. A refused operation SHALL leave file bytes, document content, path, modified state, and history unchanged. Opening or reverting to an editable document SHALL restore the normal lifecycle for that document.
+
+#### Scenario: Read-only documents reject mutations and ordinary saves [dvp_read_only_guards]
+- **WHEN** a read-only document is targeted by a menu edit, a canvas edit, an action step, an app save API, or Save or Save As
+- **THEN** nothing is edited or written and the file, path, modified state, and history are unchanged
+
+#### Scenario: Compatibility view uses available original merged pixels [dvp_preview]
+- **WHEN** read-only documents open with a real usable merge and without one
+- **THEN** the first shows the original merged image, and the second reports that a faithful preview is unavailable
+
+#### Scenario: Document replacement refreshes access [dvp_replace]
+- **WHEN** an editable document replaces a read-only session through open or revert
+- **THEN** editing and saves follow the replacement document's policy
+
+#### Scenario: Every output protects the compatibility source [dvp_output_source_guard]
+- **WHEN** any output operation, including control-server `export_png` or an operation from a different active tab, targets the source path or a filesystem alias of any open read-only compatibility document
+- **THEN** the operation refuses before writing and leaves source bytes and session unchanged; unrelated output destinations retain their ordinary behavior subject to their own copy restrictions
+
+#### Scenario: Source composite becomes unavailable [dvp_source_decode_failure]
+- **WHEN** source-backed merged pixels cannot be decoded because data is corrupt or the source changes after open
+- **THEN** viewing reports the limitation and a compatibility copy fails with a reason without creating or modifying its destination

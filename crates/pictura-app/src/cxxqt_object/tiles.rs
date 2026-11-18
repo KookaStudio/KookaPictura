@@ -342,6 +342,9 @@ impl PictureViewRust {
     /// A premultiplied display image of `rect` of `level` of the composite,
     /// for the panels and dialogs, and the keys left to a worker.
     pub(crate) fn display_crop_keys(&self, level: i32, rect: PsdRect) -> (QImage, Vec<TileKey>) {
+        if self.session.read_only() {
+            return (self.session.compatibility.image(level, rect), Vec::new());
+        }
         if !self.level_meets(level, rect) {
             return (QImage::default(), Vec::new());
         }
@@ -1040,7 +1043,7 @@ impl PictureViewRust {
     /// install them: a large document's tile job run inline for tests and
     /// profiles. Returns how many landed.
     pub(in crate::cxxqt_object) fn run_tile_job(&self, keys: &[TileKey]) -> usize {
-        let Some(doc) = self.session.doc.clone() else {
+        let Some(doc) = self.session.doc.snapshot() else {
             return 0;
         };
         let job = {

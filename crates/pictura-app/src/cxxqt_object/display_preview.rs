@@ -357,7 +357,7 @@ mod tests {
             let mut doc = view.session.doc.take().expect("doc");
             let path =
                 pictura_render::add_raster_layer_from_rgba(&mut doc, "small", 2, 2, &[0u8; 16]);
-            view.session.doc = Some(doc);
+            view.session.doc.set(Some(doc));
             path
         };
         view.begin_display_preview(vec![bounded], PreviewKind::Opacity);
@@ -376,7 +376,7 @@ mod tests {
                     parts.adjustment = Some(pictura_render::encode_invert())
                 });
             }
-            view.session.doc = Some(doc);
+            view.session.doc.set(Some(doc));
             path
         };
         view.begin_display_preview(vec![path], PreviewKind::Adjustment);

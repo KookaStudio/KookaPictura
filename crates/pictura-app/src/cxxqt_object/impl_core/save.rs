@@ -25,8 +25,16 @@ impl qobject::PictureView {
     }
 
     fn save_with_intent(mut self: Pin<&mut Self>, path: &QString, intent: SaveIntent) -> bool {
+        if self.rust().session.read_only() {
+            return false;
+        }
         self.as_mut().settle_pending_composite();
         let path_string = path.to_string();
+        self.as_mut().rust_mut().session.skipped_xmp_mirror = false;
+        if super::super::open_jobs::compatibility::destination_is_protected(Path::new(&path_string))
+        {
+            return false;
+        }
         if Path::new(&path_string)
             .extension()
             .is_none_or(|extension| extension.is_empty())
@@ -498,7 +506,7 @@ mod tests {
         assert!(!pictura_codec::gif_indexed_source_is_current(&transparent));
 
         let mut rust = PictureViewRust::default();
-        rust.session.doc = Some(doc);
+        rust.session.doc.set(Some(doc));
         rust.session.dirty = true;
         let target = path("indexed.gif");
         assert!(write_gif(&mut rust, &target));
@@ -510,7 +518,7 @@ mod tests {
     fn gif_refuses_unreadable_tiles() {
         use crate::cxxqt_object::scratch_rollback::tests::{dense_doc, lose_tiles};
         let mut rust = PictureViewRust::default();
-        rust.session.doc = Some(dense_doc());
+        rust.session.doc.set(Some(dense_doc()));
         rust.session.dirty = true;
         lose_tiles(rust.session.doc.as_ref().unwrap());
         super::super::super::helpers::memory_gate::clear();
@@ -535,7 +543,7 @@ mod tests {
         doc.layers[0].channels_mut()[0].data.as_mut_slice()[0] ^= 0xFF;
         assert!(!pictura_codec::indexed_source_is_current(&doc));
         let mut rust = PictureViewRust::default();
-        rust.session.doc = Some(doc);
+        rust.session.doc.set(Some(doc));
         rust.session.dirty = true;
         write(&mut rust, "edited.gif");
     }
@@ -543,7 +551,7 @@ mod tests {
     #[test]
     fn gif_bytes_quantize_the_composite() {
         let mut rust = PictureViewRust::default();
-        rust.session.doc = Some(rgb_doc(8, 8));
+        rust.session.doc.set(Some(rgb_doc(8, 8)));
         rust.session.dirty = true;
         write(&mut rust, "quantized.gif");
     }
@@ -551,7 +559,7 @@ mod tests {
     #[test]
     fn gif_bytes_reject_oversized_dimensions() {
         let mut rust = PictureViewRust::default();
-        rust.session.doc = Some(rgb_doc(70_000, 1));
+        rust.session.doc.set(Some(rgb_doc(70_000, 1)));
         rust.session.dirty = true;
         let target = path("wide.gif");
         assert!(!write_gif(&mut rust, &target));
@@ -561,7 +569,7 @@ mod tests {
     #[test]
     fn gif_write_failure_preserves_previous_file() {
         let mut rust = PictureViewRust::default();
-        rust.session.doc = Some(rgb_doc(4, 4));
+        rust.session.doc.set(Some(rgb_doc(4, 4)));
         rust.session.dirty = true;
         let dir = path("locked.gif");
         std::fs::create_dir_all(&dir).unwrap();

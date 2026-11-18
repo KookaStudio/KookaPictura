@@ -400,6 +400,10 @@ QJsonObject ControlServer::methodExportPng(const QJsonObject& params)
     if (const QString problem = pathProblem(path, true); !problem.isEmpty()) {
         return error(QStringLiteral("invalid_param"), problem);
     }
+    if (output_path_protected(path)) {
+        return error(QStringLiteral("refused"),
+                     QStringLiteral("destination is an open read-only source file"));
+    }
     if (!export_image(*view, path, QStringLiteral("PNG"), -1, 100)) {
         return error(QStringLiteral("io_error"), QStringLiteral("export failed"));
     }

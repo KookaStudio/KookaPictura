@@ -413,7 +413,7 @@ impl qobject::PictureView {
         }
         let edit = {
             let mut rust = self.as_mut().rust_mut();
-            if rust.session.doc.is_none() {
+            if rust.session.read_only() || rust.session.doc.is_none() {
                 return Edit::None;
             }
             // Open the record before the mutation, so its time is counted.

@@ -122,7 +122,7 @@ impl qobject::PictureView {
             if !pictura_render::translate_layer_mask(&mut candidate, &path, dx, dy) {
                 return Edit::None;
             }
-            rust.session.doc = Some(candidate);
+            rust.session.doc.set(Some(candidate));
             Edit::regions(vec![canvas], false)
         });
         if matches!(outcome, Edit::None) {

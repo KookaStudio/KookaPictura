@@ -484,25 +484,25 @@ pub(crate) fn channel_stream(
 /// source document was a PSB or a dimension exceeds the PSD limit.
 pub fn write_psd(doc: &Document) -> Result<Vec<u8>, PsdError> {
     let psb = doc.is_psb || doc.width > MAX_DIM_PSD || doc.height > MAX_DIM_PSD;
-    write_container(doc, psb, None, false)
+    write_container(doc, psb, None, false, None).map(|result| result.bytes)
 }
 
 /// Serialize a [`Document`] into a version-2 PSB regardless of its dimensions.
 pub fn write_psb(doc: &Document) -> Result<Vec<u8>, PsdError> {
-    write_container(doc, true, None, false)
+    write_container(doc, true, None, false, None).map(|result| result.bytes)
 }
 
 /// As [`write_psd`], reusing encoded layer channels and the composite block from
 /// `cache`. The bytes equal an uncached encode.
 pub fn write_psd_cached(doc: &Document, cache: &EncodeCache) -> Result<Vec<u8>, PsdError> {
     let psb = doc.is_psb || doc.width > MAX_DIM_PSD || doc.height > MAX_DIM_PSD;
-    write_container(doc, psb, Some(cache), false)
+    write_container(doc, psb, Some(cache), false, None).map(|result| result.bytes)
 }
 
 /// As [`write_psb`], reusing encoded layer channels and the composite block from
 /// `cache`. The bytes equal an uncached encode.
 pub fn write_psb_cached(doc: &Document, cache: &EncodeCache) -> Result<Vec<u8>, PsdError> {
-    write_container(doc, true, Some(cache), false)
+    write_container(doc, true, Some(cache), false, None).map(|result| result.bytes)
 }
 
 /// Write an interactive native save with Photoshop's compatibility marker and
@@ -513,7 +513,31 @@ pub fn write_native_compatibility_cached(
     force_psb: bool,
 ) -> Result<Vec<u8>, PsdError> {
     let psb = force_psb || doc.is_psb || doc.width > MAX_DIM_PSD || doc.height > MAX_DIM_PSD;
-    write_container(doc, psb, Some(cache), true)
+    write_container(doc, psb, Some(cache), true, None).map(|result| result.bytes)
+}
+
+pub struct VersionedWrite {
+    pub bytes: Vec<u8>,
+    pub skipped_xmp_mirror: bool,
+}
+
+/// Serialize an application save with version metadata. For interactive saves,
+/// `compatibility_placeholder` writes a placeholder when the real merge is omitted.
+pub fn write_versioned(
+    doc: &Document,
+    force_psb: bool,
+    cache: Option<&EncodeCache>,
+    writer_version: &str,
+    compatibility_placeholder: bool,
+) -> Result<VersionedWrite, PsdError> {
+    let psb = force_psb || doc.is_psb || doc.width > MAX_DIM_PSD || doc.height > MAX_DIM_PSD;
+    write_container(
+        doc,
+        psb,
+        cache,
+        compatibility_placeholder,
+        Some(writer_version),
+    )
 }
 
 struct LayerMaskParts {
@@ -547,21 +571,35 @@ fn layer_mask_parts(
     if !authoring.is_empty() {
         extra.extend_from_slice(&crate::smart_writer::author_lnk2_bytes(&authoring, psb));
     }
-    let extra = crate::filter_effects::author_filter_masks(
+    let mut extra = crate::filter_effects::author_filter_masks(
         &extra,
         &doc.layers,
         u32::from(doc.composite.channels),
         psb,
     );
+    if merged_alpha
+        && doc.layers.is_empty()
+        && !crate::compatibility::has_merged_transparency_marker(&extra, psb)
+    {
+        let key = match depth {
+            16 => b"Mt16",
+            32 => b"Mt32",
+            _ => b"Mtrn",
+        };
+        write_tag_document(&mut extra, key, &[], psb);
+    }
     if doc.layers.is_empty() && doc.global_layer_mask.is_empty() && extra.is_empty() {
         return Ok(None);
     }
     let (mut info, keys) = write_layer_info(doc, psb, lab_mode, cmyk_mode, indexed_mode, cache)?;
-    if merged_alpha && info.len() >= 2 {
+    if merged_alpha && !doc.layers.is_empty() && info.len() >= 2 {
         let count = i16::from_be_bytes([info[0], info[1]]);
         if count > 0 {
             info[..2].copy_from_slice(&(-count).to_be_bytes());
         }
+    }
+    if merged_alpha && doc.layers.is_empty() {
+        info.clear();
     }
     let mut tagged = Vec::new();
     if let Some(key) = tagged_layer_key(depth).filter(|_| !doc.layers.is_empty()) {
@@ -581,15 +619,7 @@ fn layer_mask_parts(
 /// mask + tagged layer block + document blocks), or an empty vector when the
 /// document has nothing to write there. The PSD container prepends the section
 /// length.
-pub(crate) fn layer_mask_section(
-    doc: &Document,
-    psb: bool,
-    cache: Option<&EncodeCache>,
-) -> Result<(Vec<u8>, Vec<ChannelKey>), PsdError> {
-    layer_mask_section_with_alpha(doc, psb, cache, false)
-}
-
-fn layer_mask_section_with_alpha(
+fn layer_mask_section(
     doc: &Document,
     psb: bool,
     cache: Option<&EncodeCache>,
@@ -642,8 +672,9 @@ fn write_container(
     doc: &Document,
     psb: bool,
     cache: Option<&EncodeCache>,
-    compatibility: bool,
-) -> Result<Vec<u8>, PsdError> {
+    compatibility_placeholder: bool,
+    writer_version: Option<&str>,
+) -> Result<VersionedWrite, PsdError> {
     if doc.depth != BitDepth::Eight {
         return Err(PsdError::Unsupported("write supports 8-bit only".into()));
     }
@@ -752,30 +783,33 @@ fn write_container(
             crate::guide_resources::output_resources(doc, mode_code),
         ),
     );
-    let resources = if (compatibility && !merged)
+    let (resources, skipped_xmp_mirror) = if let Some(version) = writer_version {
+        crate::document_version::resources_for_versioned_write(&resources, merged, version)?
+    } else if (compatibility_placeholder && !merged)
         || (merged && crate::compatibility::has_real_merged_data(&resources) == Some(false))
     {
-        crate::compatibility::set_real_merged_data(&resources, merged)
+        (
+            crate::compatibility::set_real_merged_data(&resources, merged),
+            false,
+        )
     } else {
-        resources
+        (resources, false)
     };
     let resources = crate::variable_resources::output(doc, resources)?;
     out.extend_from_slice(&(resources.len() as u32).to_be_bytes());
     out.extend_from_slice(&resources);
 
     // The layer-and-mask section body is shared with the layered-TIFF writer.
-    let merged_alpha = (compatibility || doc.composite.signed_merged_alpha())
+    let signed_alpha = doc.composite.signed_merged_alpha();
+    let merged_alpha = (writer_version.is_some()
+        || signed_alpha
+        || compatibility_placeholder && !doc.layers.is_empty())
         && merged
         && mode_code == MODE_RGB
         && doc.source.mode().is_none()
         && doc.composite.channels == 4
-        && !doc.layers.is_empty()
-        && (doc.channels.is_empty() || doc.composite.signed_merged_alpha());
-    let (body, used_layer_keys) = if merged_alpha {
-        layer_mask_section_with_alpha(doc, psb, cache, true)?
-    } else {
-        layer_mask_section(doc, psb, cache)?
-    };
+        && (doc.channels.is_empty() || signed_alpha);
+    let (body, used_layer_keys) = layer_mask_section(doc, psb, cache, merged_alpha)?;
     if body.is_empty() {
         if psb {
             out.extend_from_slice(&0u64.to_be_bytes()); // zero-length layer/mask section
@@ -797,7 +831,7 @@ fn write_container(
         if let Some(cache) = cache {
             cache.prune(&used_layer_keys, None);
         }
-        if compatibility {
+        if compatibility_placeholder {
             if doc.layers.is_empty() || !doc.channels.is_empty() {
                 return Err(PsdError::Invalid(
                     "placeholder would discard image data".into(),
@@ -812,7 +846,10 @@ fn write_container(
                 psb,
             );
         }
-        return Ok(out);
+        return Ok(VersionedWrite {
+            bytes: out,
+            skipped_xmp_mirror,
+        });
     }
 
     let width = doc.width as usize;
@@ -844,7 +881,10 @@ fn write_container(
         if let Some(bytes) = cache.get_composite(key) {
             out.extend_from_slice(&bytes);
             cache.prune(&used_layer_keys, Some(key));
-            return Ok(out);
+            return Ok(VersionedWrite {
+                bytes: out,
+                skipped_xmp_mirror,
+            });
         }
     }
     let block_start = out.len();
@@ -945,5 +985,8 @@ fn write_container(
     } else if let Some(cache) = cache {
         cache.prune(&used_layer_keys, None);
     }
-    Ok(out)
+    Ok(VersionedWrite {
+        bytes: out,
+        skipped_xmp_mirror,
+    })
 }

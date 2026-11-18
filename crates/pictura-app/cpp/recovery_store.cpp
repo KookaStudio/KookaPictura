@@ -9,7 +9,7 @@
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QLockFile>
-#include <QtCore/QSaveFile>
+#include "protected_output.h"
 
 #include <optional>
 
@@ -112,7 +112,7 @@ bool RecoveryStore::writeManifest(int id, const QString& name, const QString& or
     QJsonObject obj;
     obj.insert(QStringLiteral("name"), name);
     obj.insert(QStringLiteral("originalPath"), originalPath);
-    QSaveFile file(manifestPath(dir_, id));
+    pictura::ProtectedOutput file(manifestPath(dir_, id));
     if (!file.open(QIODevice::WriteOnly)) {
         return false;
     }

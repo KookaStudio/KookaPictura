@@ -15,26 +15,42 @@ pub(in crate::cxxqt_object) fn write_atomically(
     bytes: &[u8],
     sync: bool,
 ) -> std::io::Result<()> {
+    reject_protected_destination(path)?;
     let tmp = format!(
         "{path}.{:016x}.tmp",
         u64::from_le_bytes(pictura_codec::os_random())
     );
     // `create_new` is O_CREAT|O_EXCL: it fails on any existing entry,
     // including a symlink planted at the predictable-looking name.
-    let written = std::fs::OpenOptions::new()
+    let mut file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(&tmp)
-        .and_then(|mut file| {
-            file.write_all(bytes)?;
-            if sync {
-                file.sync_all()?;
-            }
-            Ok(())
-        });
-    if let Err(e) = written.and_then(|()| std::fs::rename(&tmp, path)) {
+        .open(&tmp)?;
+    let written = file.write_all(bytes).and_then(|()| {
+        if sync {
+            file.sync_all()?;
+        }
+        Ok(())
+    });
+    drop(file);
+    if let Err(e) = written.and_then(|()| {
+        reject_protected_destination(path)?;
+        std::fs::rename(&tmp, path)
+    }) {
         let _ = std::fs::remove_file(&tmp);
         return Err(e);
+    }
+    Ok(())
+}
+
+pub(in crate::cxxqt_object) fn reject_protected_destination(
+    path: impl AsRef<Path>,
+) -> std::io::Result<()> {
+    if crate::cxxqt_object::open_jobs::compatibility::destination_is_protected(path.as_ref()) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "destination is an open read-only source file",
+        ));
     }
     Ok(())
 }
@@ -58,6 +74,7 @@ pub(in crate::cxxqt_object) fn write_new_atomically(
     path: &Path,
     bytes: &[u8],
 ) -> std::io::Result<()> {
+    reject_protected_destination(path)?;
     let suffix = u64::from_le_bytes(pictura_codec::os_random());
     let temporary = path.with_file_name(format!(".pictura-{suffix:016x}.tmp"));
     let mut file = std::fs::OpenOptions::new()
@@ -66,7 +83,10 @@ pub(in crate::cxxqt_object) fn write_new_atomically(
         .open(&temporary)?;
     let written = file.write_all(bytes);
     drop(file);
-    let result = written.and_then(|()| std::fs::hard_link(&temporary, path));
+    let result = written.and_then(|()| {
+        reject_protected_destination(path)?;
+        std::fs::hard_link(&temporary, path)
+    });
     let _ = std::fs::remove_file(temporary);
     result
 }

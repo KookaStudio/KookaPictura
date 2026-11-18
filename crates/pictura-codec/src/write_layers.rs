@@ -724,7 +724,7 @@ fn write_extra(
         let mut lsct = Vec::with_capacity(12);
         lsct.extend_from_slice(&section.to_be_bytes());
         lsct.extend_from_slice(b"8BIM");
-        lsct.extend_from_slice(&layer.blend.to_psd_key());
+        lsct.extend_from_slice(&layer.blend_key.unwrap_or_else(|| layer.blend.to_psd_key()));
         write_tag(out, b"lsct", &lsct, psb);
     }
     let smart_object = layer.smart_object();

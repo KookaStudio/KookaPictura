@@ -114,7 +114,7 @@ pub(super) fn parse(text: &QString) -> Value {
 
 pub(super) fn print_document_settings(view: &PictureView) -> QString {
     let session = &view.rust().session;
-    let Some(doc) = &session.doc else {
+    let Some(doc) = session.doc.as_ref() else {
         return QString::default();
     };
     let mut copy = doc.clone();
@@ -137,7 +137,10 @@ pub(super) fn print_document_settings_update(
     let new = to_portable(&parse(new));
     let binding = view.as_ref();
     let session = &binding.rust().session;
-    let Some(doc) = &session.doc else {
+    if commit && session.read_only() {
+        return QString::from("This document is read-only.");
+    }
+    let Some(doc) = session.doc.as_ref() else {
         return QString::from("There is no document to print.");
     };
     let mut copy = doc.clone();

@@ -110,6 +110,9 @@ fn pdf_save_impl(
     options: &QString,
     copy: bool,
 ) -> QString {
+    if view.rust().session.read_only() {
+        return QString::from("A read-only compatibility document cannot be saved as PDF.");
+    }
     let path = path.to_string();
     let Some(mut options) = parse(options) else {
         return QString::from("The PDF settings could not be read.");

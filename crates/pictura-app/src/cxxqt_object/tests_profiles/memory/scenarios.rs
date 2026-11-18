@@ -165,7 +165,7 @@ fn apply_fill(
     };
     let mut edited = doc.clone();
     let rect = edit(&mut edited, bounds, selection.as_ref()).expect("the fill changes pixels");
-    view.session.doc = Some(edited);
+    view.session.doc.set(Some(edited));
     view.refresh_regions(&[rect]);
     record(view, label);
 }
@@ -295,7 +295,7 @@ pub(super) fn snapshot_restore_edit(view: &mut PictureViewRust) {
         .add_snapshot("Benchmark", snapshot, target);
     let snapshot = view.session.history.snapshot(0).expect("the snapshot");
     view.cancel_active_sessions_report_only();
-    view.session.doc = Some(snapshot.doc);
+    view.session.doc.set(Some(snapshot.doc));
     view.session.set_selection(snapshot.selection);
     record(view, "Benchmark");
 }

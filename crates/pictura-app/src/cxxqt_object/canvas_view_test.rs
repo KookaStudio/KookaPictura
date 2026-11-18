@@ -198,7 +198,7 @@ fn a_region_repair_matches_a_rebuild() {
     doc.composite
         .edit(|buffer| blit_region(buffer, &changed, rect))
         .expect("blit preserves geometry");
-    rust.session.doc = Some(doc);
+    rust.session.doc.set(Some(doc));
     rust.apply_refreshed_region(rect.left, rect.top, rect, crop_buffer(&changed, rect));
     assert_tiles_match_a_rebuild(&rust);
 }
@@ -253,7 +253,7 @@ fn a_region_repair_writes_the_cached_tile_in_place() {
     doc.composite
         .edit(|buffer| blit_region(buffer, &changed, rect))
         .expect("blit preserves geometry");
-    rust.session.doc = Some(doc);
+    rust.session.doc.set(Some(doc));
     rust.apply_refreshed_region(rect.left, rect.top, rect, crop_buffer(&changed, rect));
 
     let after = rust
@@ -287,7 +287,7 @@ fn the_display_after_a_region_refresh_matches_a_full_recomposite() {
     doc.composite
         .edit(|buffer| blit_region(buffer, &changed, rect))
         .expect("blit preserves geometry");
-    rust.session.doc = Some(doc);
+    rust.session.doc.set(Some(doc));
     rust.apply_refreshed_region(rect.left, rect.top, rect, crop_buffer(&changed, rect));
 
     assert!(
@@ -777,7 +777,7 @@ fn reset_pyramid_rebuilds_and_clears_damage() {
         .composite
         .replace(varied_rgba(600, 400, 31))
         .expect("valid composite");
-    rust.session.doc = Some(restored);
+    rust.session.doc.set(Some(restored));
     rust.reset_pyramid();
     assert_eq!(rust.damage, CanvasDamage::default(), "reset clears damage");
     assert_tiles_match_a_rebuild(&rust);
@@ -1089,7 +1089,7 @@ fn a_region_repair_writes_only_its_tiles() {
     doc.composite
         .edit(|buffer| blit_region(buffer, &crop_into(&patch, rect, w, h), rect))
         .expect("blit preserves geometry");
-    view.session.doc = Some(doc);
+    view.session.doc.set(Some(doc));
     view.apply_refreshed_region(rect.left, rect.top, rect, patch.clone());
 
     let after = view

@@ -5,6 +5,8 @@
 #include "api/engine_bridge.h"
 
 #include <QtCore/QDir>
+#include "protected_output.h"
+
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QSignalBlocker>
@@ -517,12 +519,11 @@ bool PdfSaveDialog::savePresetAs(const QString& name)
     if (!QDir().mkpath(presetsDir_)) {
         return false;
     }
-    QFile file(presetsDir_ + QLatin1Char('/') + trimmed + QStringLiteral(".joboptions"));
+    pictura::ProtectedOutput file(presetsDir_ + QLatin1Char('/') + trimmed + QStringLiteral(".joboptions"));
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)
-        || file.write(pdf_preset_text(options_).toUtf8()) < 0) {
+        || file.write(pdf_preset_text(options_).toUtf8()) < 0 || !file.commit()) {
         return false;
     }
-    file.close();
     int index = presetCombo_->findText(trimmed);
     if (index < 0) {
         presetCombo_->addItem(trimmed);

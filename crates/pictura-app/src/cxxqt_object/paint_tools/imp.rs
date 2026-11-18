@@ -558,7 +558,7 @@ pub(super) fn begin_background_eraser(
     if !begun {
         let mut rust = view.as_mut().rust_mut();
         if let Some(base) = base {
-            rust.session.doc = Some(base);
+            rust.session.doc.set(Some(base));
         }
         return false;
     }
@@ -835,7 +835,7 @@ pub(super) fn magic_erase_at(
     };
     let (edited, dirty) = erased;
     view.as_mut().edit("Magic Eraser", |rust| {
-        rust.session.doc = Some(edited);
+        rust.session.doc.set(Some(edited));
         super::fills::fill_edit(rust, Some(dirty))
     });
     after(&mut view.as_mut().rust_mut());

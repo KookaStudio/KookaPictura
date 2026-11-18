@@ -14,6 +14,7 @@ use crate::descriptor::{self, get_object_item, read_unicode_string, skip_descrip
 use crate::error::PsdError;
 
 mod external_link;
+pub(crate) use external_link::validate_external_link_records;
 mod placed_source;
 pub use external_link::{
     external_link_location, repair_external_link, repairable_external_link, ExternalLinkReplacement,

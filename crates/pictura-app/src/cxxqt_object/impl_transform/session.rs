@@ -235,7 +235,7 @@ impl qobject::PictureView {
             }
         }
         if let Some((_, before)) = session.and_then(|session| session.lifted) {
-            self.as_mut().rust_mut().session.doc = Some(*before);
+            self.as_mut().rust_mut().session.doc.set(Some(*before));
             self.as_mut().recomposite();
         }
     }
@@ -412,7 +412,7 @@ impl qobject::PictureView {
                     .as_mut()
                     .is_some_and(|doc| pictura_render::merge_lifted(doc, &path));
             if !merged {
-                self.as_mut().rust_mut().session.doc = Some(*before);
+                self.as_mut().rust_mut().session.doc.set(Some(*before));
                 self.as_mut().recomposite();
                 self.as_mut().clear_transform_preview();
                 return false;
@@ -574,7 +574,7 @@ impl qobject::PictureView {
             .rust()
             .session
             .doc
-            .clone()
+            .snapshot()
             .map(|doc| (doc, self.rust().layer_target.clone()));
         let new_path = {
             let mut guard = self.as_mut().rust_mut();
@@ -1036,7 +1036,7 @@ impl PictureViewRust {
             }
         }
         if let Some((_, before)) = outgoing.and_then(|session| session.lifted) {
-            self.session.doc = Some(*before);
+            self.session.doc.set(Some(*before));
         }
         let mut path = path.to_string();
         let mut lifted = None;
@@ -1105,7 +1105,7 @@ impl PictureViewRust {
                 }
             }
             if let Some((_, before)) = lifted {
-                self.session.doc = Some(*before);
+                self.session.doc.set(Some(*before));
             }
             return None;
         };
@@ -1173,7 +1173,7 @@ impl PictureViewRust {
             }
         }
         if let Some((_, before)) = session.lifted {
-            self.session.doc = Some(*before);
+            self.session.doc.set(Some(*before));
         }
     }
 }

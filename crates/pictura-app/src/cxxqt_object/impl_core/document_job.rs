@@ -182,6 +182,9 @@ impl qobject::PictureView {
         land: impl FnOnce(&mut PictureViewRust, &Outcome) -> Edit + 'static,
         after: Option<After>,
     ) -> bool {
+        if self.rust().session.read_only() {
+            return false;
+        }
         if self.rust().document_job_wanted() {
             return self.as_mut().rust_mut().start_document_job(
                 label,
@@ -229,7 +232,7 @@ impl qobject::PictureView {
             after,
         } = done;
         self.as_mut().edit(&label, |rust| {
-            rust.session.doc = Some(doc);
+            rust.session.doc.set(Some(doc));
             land(rust, &outcome)
         });
         if let Some(after) = after {
@@ -257,7 +260,7 @@ impl PictureViewRust {
         land: Land,
         after: Option<After>,
     ) -> bool {
-        let Some(mut doc) = self.session.doc.clone() else {
+        let Some(mut doc) = self.session.doc.snapshot() else {
             return false;
         };
         let progress = JobProgress::new();

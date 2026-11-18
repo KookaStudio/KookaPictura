@@ -28,6 +28,7 @@ mod compatibility;
 mod crs_xmp;
 mod depth;
 mod descriptor;
+mod document_version;
 mod duotone;
 mod engine_data;
 mod engine_data_encode;
@@ -112,6 +113,11 @@ pub use color_mode::{
 };
 pub use crs_xmp::set_crs_property;
 pub use descriptor::{write_descriptor, DescValue};
+pub use document_version::{
+    document_version, native_merged_has_transparency, unsupported_document_feature,
+    DocumentVersion, DocumentVersionStamp, VersionAccess, VersionInfo, CURRENT_DOCUMENT_VERSION,
+    PICTURA_WRITER_NAME, VERSION_INFO,
+};
 pub use duotone::{parse_duotone, DuotoneInk, DuotoneSpec, InkColor};
 pub use engine_data::{extract_fonts, extract_style, parse_engine_data, EngineValue};
 pub use engine_data_encode::encode_engine_data;
@@ -156,6 +162,7 @@ pub use pictura_raw::{
     decode_pictura_raw_settings, encode_pictura_raw_fltr, pictura_raw_from_text,
     pictura_raw_to_text, replace_smart_filter, CAMERA_RAW_FILTER_ID, CAMERA_RAW_FILTER_NAME,
 };
+pub use read::read_psd_layer_structure;
 pub use smart_object::{
     can_bake_smart_filter_blending, external_link_location, read_placed_source,
     repair_external_link, repairable_external_link, ExternalLinkReplacement, PlacedSource,
@@ -215,6 +222,7 @@ pub use web::{
 pub use webp::{decode_webp, encode_webp};
 pub use write::{
     write_native_compatibility_cached, write_psb, write_psb_cached, write_psd, write_psd_cached,
+    write_versioned, VersionedWrite,
 };
 pub use write_cache::{warm_encode_idents, EncodeCache, EncodeStats};
 pub use write_indexed::{gif_indexed_source_is_current, indexed_source_is_current};

@@ -262,7 +262,7 @@ fn history_presents_current_tiles() {
     assert_presented_levels_match(&view);
 
     // A named-snapshot restore replaces the document as a whole.
-    view.session.doc = Some(snapshot.doc);
+    view.session.doc.set(Some(snapshot.doc));
     view.reset_pyramid();
     assert_presented_levels_match(&view);
 }
@@ -292,7 +292,7 @@ fn a_missing_large_tile_does_not_block() {
     let job = {
         let cache = view.tiles.cache.borrow();
         TileJob {
-            doc: view.session.doc.clone().expect("document"),
+            doc: view.session.doc.snapshot().expect("document"),
             mask: None,
             painting: false,
             preview: None,
@@ -375,7 +375,7 @@ fn solo_mask_restore_presents_visible_tiles() {
     let target = view.layer_target.clone();
     view.session.record(&target, "Open");
     let snapshot = view.named_snapshot().expect("a snapshot");
-    view.session.doc = Some(snapshot.doc);
+    view.session.doc.set(Some(snapshot.doc));
     view.reset_pyramid();
     view.refresh_mask_solo();
     assert!(

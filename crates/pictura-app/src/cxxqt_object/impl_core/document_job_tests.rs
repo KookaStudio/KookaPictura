@@ -51,7 +51,7 @@ fn land(view: &mut PictureViewRust) -> bool {
         land,
         after,
     } = done;
-    view.session.doc = Some(doc);
+    view.session.doc.set(Some(doc));
     let edit = land(view, &outcome);
     view.apply_edit(&label, edit);
     if let Some(after) = after {

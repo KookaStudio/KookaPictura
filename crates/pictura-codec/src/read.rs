@@ -111,7 +111,31 @@ pub fn read_psd_within_options(
     options: &OpenOptions,
     budget: ImageBudget,
 ) -> Result<Document, PsdError> {
-    let mut doc = read_container(bytes, options, &mut DecodeBudget::new(budget), &mut None)?;
+    read_psd_with_image_policy(bytes, options, budget, false)
+}
+
+/// Read the layer structure independently of an unusable merged image.
+pub fn read_psd_layer_structure(
+    bytes: &[u8],
+    options: &OpenOptions,
+    budget: ImageBudget,
+) -> Result<Document, PsdError> {
+    read_psd_with_image_policy(bytes, options, budget, true)
+}
+
+fn read_psd_with_image_policy(
+    bytes: &[u8],
+    options: &OpenOptions,
+    budget: ImageBudget,
+    skip_image_data: bool,
+) -> Result<Document, PsdError> {
+    let mut doc = read_container(
+        bytes,
+        options,
+        &mut DecodeBudget::new(budget),
+        &mut None,
+        skip_image_data,
+    )?;
     resolve_document_resources(&mut doc);
     Ok(doc)
 }
@@ -128,6 +152,7 @@ pub(crate) fn read_container(
     options: &OpenOptions,
     budget: &mut DecodeBudget,
     preview: &mut Option<crate::MergedPreview>,
+    skip_image_data: bool,
 ) -> Result<Document, PsdError> {
     let mut r = Reader::new(bytes);
     let sig = r.u32()?;
@@ -139,7 +164,7 @@ pub(crate) fn read_container(
     let is_psb = match version {
         VERSION_PSD => false,
         VERSION_PSB => true,
-        v => return Err(PsdError::Unsupported(format!("PSD version {v}"))),
+        v => return Err(PsdError::NativeVersion(v)),
     };
 
     r.skip(6)?; // reserved
@@ -278,7 +303,7 @@ pub(crate) fn read_container(
         global_layer_mask,
         layer_section_extra,
     };
-    if r.remaining() == 0 && layered {
+    if skip_image_data || r.remaining() == 0 && layered {
         // The blank stand-in is tiled zeros, which hold no allocation.
         let blank = PixelBuffer {
             width,
@@ -625,6 +650,8 @@ fn read_layer_section(
         if let Some(read) = tagged {
             (layers, layer_compression, merged_alpha) = read;
         }
+        merged_alpha |=
+            crate::compatibility::has_merged_transparency_marker(&layer_section_extra, is_psb);
     }
     Ok((
         layers,

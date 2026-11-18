@@ -88,7 +88,7 @@ fn bucket_fill_profile() {
     ms("fill", t.elapsed());
     drop(mask);
     let t = Instant::now();
-    view.session.doc = Some(edited);
+    view.session.doc.set(Some(edited));
     ms("adopt", t.elapsed());
     let t = Instant::now();
     paint_timing::start("refresh regions");

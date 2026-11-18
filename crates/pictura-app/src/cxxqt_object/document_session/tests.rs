@@ -88,7 +88,9 @@ fn geometry_selection_clear_discards_quick_mask_and_clip() {
     assert!(view.set_quick_mask_mode(true));
     view.session
         .set_selection(Some(Selection::rect(8, 8, 3, 3, 2, 2)));
-    view.session.doc = Some(Document::new(16, 16, ColorMode::Rgb, BitDepth::Eight));
+    view.session
+        .doc
+        .set(Some(Document::new(16, 16, ColorMode::Rgb, BitDepth::Eight)));
     let revision = view.session.selection_revision;
     let history = view.session.history.count();
 

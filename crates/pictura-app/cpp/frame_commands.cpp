@@ -223,6 +223,12 @@ void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
                            command_ids::FileCloseAll, command_ids::FileInfo}) {
         registry.setEnabledProvider(id, hasDocument);
     }
+    for (const char* id : {command_ids::FileSave, command_ids::FileSaveAs}) {
+        registry.setEnabledProvider(id, [this]() {
+            PictureView* view = activeView();
+            return view && view->has_document() && pictura::compatibility_reason(*view).isEmpty();
+        });
+    }
     registry.setEnabledProvider(command_ids::FilePlace, [this]() {
         PictureView* view = activeView();
         return view && view->has_document() && !view->transform_session_active();

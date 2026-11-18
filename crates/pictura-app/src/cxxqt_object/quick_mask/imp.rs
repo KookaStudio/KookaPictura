@@ -91,7 +91,7 @@ pub(in crate::cxxqt_object) fn quick_mask_set(
         .take()
     {
         let mut rust = view.as_mut().rust_mut();
-        rust.session.doc = Some(doc);
+        rust.session.doc.set(Some(doc));
         rust.layer_target = target;
         rust.reset_pyramid();
     }

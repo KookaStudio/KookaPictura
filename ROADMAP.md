@@ -92,7 +92,7 @@ Deeper technical status for PSD/PSB lives in
       repair of supported external Smart Object links (#638)
 - [ ] Editable Illustrator clipboard paste as Paths or Shape Layer (#638)
 - [x] The Maximize PSD/PSB Compatibility preference (#639)
-- [ ] The document-format version policy: `opDocumentVersion`,
+- [x] The document-format version policy: `opDocumentVersion`,
       `minReaderVersion` and Version Info 1057 (#640)
 - [x] **Preset Manager** for eight preset types, with library loading,
       discovery, current lists in settings backup, and native Save Set. Imports

@@ -5,6 +5,7 @@ set(PICTURA_QT_TESTS
     tst_gpu_backend
     tst_offthread_jobs
     tst_open_save
+    tst_document_version_policy
     tst_multi_file_open
     tst_place_fit
     tst_place_sequence
