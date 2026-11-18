@@ -21,15 +21,15 @@ pub(super) struct ImportOptions {
 }
 
 fn utf16(bytes: &[u8], little: bool) -> Result<String, String> {
-    let units = bytes.chunks_exact(2);
-    if !units.remainder().is_empty() {
+    let (units, remainder) = bytes.as_chunks::<2>();
+    if !remainder.is_empty() {
         return Err("Invalid UTF-16 byte count".into());
     }
-    char::decode_utf16(units.map(|b| {
+    char::decode_utf16(units.iter().copied().map(|unit| {
         if little {
-            u16::from_le_bytes([b[0], b[1]])
+            u16::from_le_bytes(unit)
         } else {
-            u16::from_be_bytes([b[0], b[1]])
+            u16::from_be_bytes(unit)
         }
     }))
     .collect::<Result<String, _>>()
@@ -37,17 +37,18 @@ fn utf16(bytes: &[u8], little: bool) -> Result<String, String> {
 }
 
 fn utf32(bytes: &[u8], little: bool) -> Result<String, String> {
-    let units = bytes.chunks_exact(4);
-    if !units.remainder().is_empty() {
+    let (units, remainder) = bytes.as_chunks::<4>();
+    if !remainder.is_empty() {
         return Err("Invalid UTF-32 byte count".into());
     }
     units
-        .map(|b| {
-            let bytes = [b[0], b[1], b[2], b[3]];
+        .iter()
+        .copied()
+        .map(|unit| {
             char::from_u32(if little {
-                u32::from_le_bytes(bytes)
+                u32::from_le_bytes(unit)
             } else {
-                u32::from_be_bytes(bytes)
+                u32::from_be_bytes(unit)
             })
             .ok_or_else(|| "Invalid UTF-32 text".into())
         })
