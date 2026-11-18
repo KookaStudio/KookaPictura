@@ -8,6 +8,7 @@
 #include <QtCore/QEventLoop>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
+#include <QtCore/QRegularExpression>
 #include <QtCore/QTemporaryDir>
 #include <QtCore/QTimer>
 #include <QtGui/QColor>
@@ -416,8 +417,10 @@ void OffthreadJobsTest::backgroundSaveAcceptsInputAndShowsProgress()
     QCOMPARE(QColor(second->composite_argb(8, 8)), QColor(Qt::black));
     auto* tabs = window_->findChild<QTabBar*>(QStringLiteral("documentTabBar"));
     const int originTab = window_->tabOfDocumentForTest(origin);
-    QVERIFY(tabs && originTab >= 0 && tabs->tabText(originTab).contains(QLatin1Char('%')));
-    QTRY_VERIFY(!tabs->tabText(originTab).contains(QLatin1Char('%')));
+    const QRegularExpression saveSuffix(QStringLiteral("  [0-9]{1,2}%$"));
+    QVERIFY(tabs && originTab >= 0);
+    QVERIFY(saveSuffix.match(tabs->tabText(originTab)).hasMatch());
+    QTRY_VERIFY(!saveSuffix.match(tabs->tabText(originTab)).hasMatch());
 }
 
 void OffthreadJobsTest::backgroundSaveAsCompletesOnOrigin()

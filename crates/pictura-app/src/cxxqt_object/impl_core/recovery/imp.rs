@@ -132,11 +132,12 @@ pub(super) fn recovery_open_chain(mut view: Pin<&mut PictureView>, manifest: &QS
     opened.history = history;
     opened.target = target;
     opened.preview = None;
-    let mut rust = view.as_mut().rust_mut();
-    open_jobs::apply_opened(&mut rust, opened);
-    rust.path = None;
-    rust.session.mark_unsaved();
-    drop(rust);
+    {
+        let mut rust = view.as_mut().rust_mut();
+        open_jobs::apply_opened(&mut rust, opened);
+        rust.path = None;
+        rust.session.mark_unsaved();
+    }
     view.session_cancelled();
     if partial {
         2
