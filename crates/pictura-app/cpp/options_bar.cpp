@@ -1070,6 +1070,7 @@ void OptionsBar::showTool(ToolId id)
     if (!stack_) {
         return;
     }
+    refreshDocumentFacts();
     stack_->setCurrentIndex(static_cast<int>(id));
     updateStackPolicies();
     // Re-seed the Crop W/H fields for their mode (ratio values or pixels).

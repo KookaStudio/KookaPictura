@@ -93,13 +93,13 @@ int pictura::runColorReplacementChecks(pictura::PicturaMainWindow& frame)
     QComboBox* mode = combo("optionsColorReplaceMode");
     QComboBox* sampling = combo("optionsColorReplaceSampling");
     QComboBox* limits = combo("optionsColorReplaceLimits");
-    bool bar = mode && sampling && limits && mode->currentIndex() == 2
+    bool bar = mode && sampling && limits && mode->currentData().toInt() == 23
         && sampling->currentIndex() == 0 && limits->currentIndex() == 1;
     if (bar) {
-        mode->setCurrentIndex(3);
-        bar = f.tools->optionsFor<ColorReplaceGroup>(ToolId::ColorReplacement)->get().mode == 3;
-        mode->setCurrentIndex(2);
-        bar = bar && f.tools->optionsFor<ColorReplaceGroup>(ToolId::ColorReplacement)->get().mode == 2;
+        mode->setCurrentIndex(mode->findData(24));
+        bar = f.tools->optionsFor<ColorReplaceGroup>(ToolId::ColorReplacement)->get().mode == 24;
+        mode->setCurrentIndex(mode->findData(23));
+        bar = bar && f.tools->optionsFor<ColorReplaceGroup>(ToolId::ColorReplacement)->get().mode == 23;
     }
 
     const QColor foreground = f.tools->foreground();

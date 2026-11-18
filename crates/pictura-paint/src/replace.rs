@@ -1,8 +1,7 @@
 //! Colour replacement, the engine behind the Color Replacement tool
-//! (`docs/03-tools/color-replacement.md`). A dab paints the foreground only
-//! onto pixels that resemble a sampled reference colour, and only the part of
-//! them the Mode affects: under Color the pixel keeps its luminosity, so
-//! recoloured material keeps its shading.
+//! (`docs/03-tools/color-replacement.md`). A dab paints the foreground onto
+//! pixels that resemble a sampled reference colour through the selected CS6
+//! paint mode: under Color the pixel keeps its luminosity, other modes blend.
 //!
 //! What gets replaced depends on what is already there, so unlike a Brush
 //! stroke this applies per dab straight into the layer, with a record of the
@@ -16,13 +15,38 @@
 
 use crate::healing::RgbaImage;
 use crate::{tip_coverage, Rgba, StrokeConfig};
-use pictura_core::nonseparable::{lum, sat, set_lum, set_sat};
-use pictura_core::PsdRect;
+use pictura_core::blend::blend as core_blend;
+use pictura_core::nonseparable::lum;
+use pictura_core::{BlendMode, PsdRect};
 use std::collections::VecDeque;
 
-/// Which part of the pixel the replacement affects. CS6's Mode menu.
+/// Which part of the pixel the replacement affects. CS6's paint-mode list, in
+/// menu order (`docs/03-tools/brush-and-pencil.md`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum ReplaceMode {
+    Normal,
+    Dissolve,
+    /// Paint only on transparency, which replacement never writes: a no-op.
+    Behind,
+    /// Erase matched pixels to transparency; the one mode that drops alpha.
+    Clear,
+    Darken,
+    Multiply,
+    ColorBurn,
+    LinearBurn,
+    Lighten,
+    Screen,
+    ColorDodge,
+    LinearDodge,
+    Overlay,
+    SoftLight,
+    HardLight,
+    VividLight,
+    LinearLight,
+    PinLight,
+    HardMix,
+    Difference,
+    Exclusion,
     Hue,
     Saturation,
     /// Hue and saturation, keeping the pixel's brightness; the spec's advised
@@ -33,24 +57,123 @@ pub enum ReplaceMode {
 }
 
 impl ReplaceMode {
-    /// 0 Hue, 1 Saturation, 2 Color, 3 Luminosity (the menu order).
+    pub const ALL: [ReplaceMode; 25] = [
+        ReplaceMode::Normal,
+        ReplaceMode::Dissolve,
+        ReplaceMode::Behind,
+        ReplaceMode::Clear,
+        ReplaceMode::Darken,
+        ReplaceMode::Multiply,
+        ReplaceMode::ColorBurn,
+        ReplaceMode::LinearBurn,
+        ReplaceMode::Lighten,
+        ReplaceMode::Screen,
+        ReplaceMode::ColorDodge,
+        ReplaceMode::LinearDodge,
+        ReplaceMode::Overlay,
+        ReplaceMode::SoftLight,
+        ReplaceMode::HardLight,
+        ReplaceMode::VividLight,
+        ReplaceMode::LinearLight,
+        ReplaceMode::PinLight,
+        ReplaceMode::HardMix,
+        ReplaceMode::Difference,
+        ReplaceMode::Exclusion,
+        ReplaceMode::Hue,
+        ReplaceMode::Saturation,
+        ReplaceMode::Color,
+        ReplaceMode::Luminosity,
+    ];
+
+    /// The menu index in [`ReplaceMode::ALL`].
     pub fn from_i32(v: i32) -> Option<ReplaceMode> {
-        [
-            ReplaceMode::Hue,
-            ReplaceMode::Saturation,
-            ReplaceMode::Color,
-            ReplaceMode::Luminosity,
-        ]
-        .get(usize::try_from(v).ok()?)
-        .copied()
+        Self::ALL.get(usize::try_from(v).ok()?).copied()
+    }
+
+    /// The CS6 menu label.
+    pub fn name(self) -> &'static str {
+        match self {
+            ReplaceMode::Normal => "Normal",
+            ReplaceMode::Dissolve => "Dissolve",
+            ReplaceMode::Behind => "Behind",
+            ReplaceMode::Clear => "Clear",
+            ReplaceMode::Darken => "Darken",
+            ReplaceMode::Multiply => "Multiply",
+            ReplaceMode::ColorBurn => "Color Burn",
+            ReplaceMode::LinearBurn => "Linear Burn",
+            ReplaceMode::Lighten => "Lighten",
+            ReplaceMode::Screen => "Screen",
+            ReplaceMode::ColorDodge => "Color Dodge",
+            ReplaceMode::LinearDodge => "Linear Dodge (Add)",
+            ReplaceMode::Overlay => "Overlay",
+            ReplaceMode::SoftLight => "Soft Light",
+            ReplaceMode::HardLight => "Hard Light",
+            ReplaceMode::VividLight => "Vivid Light",
+            ReplaceMode::LinearLight => "Linear Light",
+            ReplaceMode::PinLight => "Pin Light",
+            ReplaceMode::HardMix => "Hard Mix",
+            ReplaceMode::Difference => "Difference",
+            ReplaceMode::Exclusion => "Exclusion",
+            ReplaceMode::Hue => "Hue",
+            ReplaceMode::Saturation => "Saturation",
+            ReplaceMode::Color => "Color",
+            ReplaceMode::Luminosity => "Luminosity",
+        }
+    }
+
+    /// Whether a document of `depth_bits` offers this mode. Only 32-bit
+    /// documents restrict the paint list.
+    pub fn allowed(self, depth_bits: i32) -> bool {
+        depth_bits != 32
+            || matches!(
+                self,
+                ReplaceMode::Normal
+                    | ReplaceMode::Dissolve
+                    | ReplaceMode::Darken
+                    | ReplaceMode::Multiply
+                    | ReplaceMode::Lighten
+                    | ReplaceMode::LinearDodge
+                    | ReplaceMode::Difference
+                    | ReplaceMode::Hue
+                    | ReplaceMode::Saturation
+                    | ReplaceMode::Color
+                    | ReplaceMode::Luminosity
+            )
+    }
+
+    fn blend_mode(self) -> Option<BlendMode> {
+        Some(match self {
+            ReplaceMode::Normal => BlendMode::Normal,
+            ReplaceMode::Dissolve => BlendMode::Dissolve,
+            ReplaceMode::Darken => BlendMode::Darken,
+            ReplaceMode::Multiply => BlendMode::Multiply,
+            ReplaceMode::ColorBurn => BlendMode::ColorBurn,
+            ReplaceMode::LinearBurn => BlendMode::LinearBurn,
+            ReplaceMode::Lighten => BlendMode::Lighten,
+            ReplaceMode::Screen => BlendMode::Screen,
+            ReplaceMode::ColorDodge => BlendMode::ColorDodge,
+            ReplaceMode::LinearDodge => BlendMode::LinearDodge,
+            ReplaceMode::Overlay => BlendMode::Overlay,
+            ReplaceMode::SoftLight => BlendMode::SoftLight,
+            ReplaceMode::HardLight => BlendMode::HardLight,
+            ReplaceMode::VividLight => BlendMode::VividLight,
+            ReplaceMode::LinearLight => BlendMode::LinearLight,
+            ReplaceMode::PinLight => BlendMode::PinLight,
+            ReplaceMode::HardMix => BlendMode::HardMix,
+            ReplaceMode::Difference => BlendMode::Difference,
+            ReplaceMode::Exclusion => BlendMode::Exclusion,
+            ReplaceMode::Hue => BlendMode::Hue,
+            ReplaceMode::Saturation => BlendMode::Saturation,
+            ReplaceMode::Color => BlendMode::Color,
+            ReplaceMode::Luminosity => BlendMode::Luminosity,
+            ReplaceMode::Behind | ReplaceMode::Clear => return None,
+        })
     }
 
     fn blend(self, base: [f32; 3], paint: [f32; 3]) -> [f32; 3] {
-        match self {
-            ReplaceMode::Hue => set_lum(set_sat(paint, sat(base)), lum(base)),
-            ReplaceMode::Saturation => set_lum(set_sat(base, sat(paint)), lum(base)),
-            ReplaceMode::Color => set_lum(paint, lum(base)),
-            ReplaceMode::Luminosity => set_lum(base, lum(paint)),
+        match self.blend_mode() {
+            Some(mode) => core_blend(mode, base, paint),
+            None => base,
         }
     }
 }
@@ -186,6 +309,11 @@ impl ColorReplacer {
         cy: f32,
         paint: Rgba,
     ) -> Option<PsdRect> {
+        // Behind paints only on transparency, and replacement never touches a
+        // transparent pixel, so the dab has nothing to do.
+        if self.options.mode == ReplaceMode::Behind {
+            return None;
+        }
         let region = dab_bounds(img, cfg, cx, cy)?;
         let centre = (cx.floor() as i32, cy.floor() as i32);
         let inside = |(x, y): (i32, i32)| {
@@ -250,7 +378,12 @@ impl ColorReplacer {
                         .round()
                         .clamp(0.0, 255.0) as u8
                 };
-                img.set(x, y, [out(0), out(1), out(2), base[3]]);
+                let alpha = if self.options.mode == ReplaceMode::Clear {
+                    (base[3] as f32 * (1.0 - weight)).round().clamp(0.0, 255.0) as u8
+                } else {
+                    base[3]
+                };
+                img.set(x, y, [out(0), out(1), out(2), alpha]);
                 // Partly covered pixels stay open for the rest of the stroke.
                 if weight >= 0.995 {
                     self.done[index] = true;
@@ -587,12 +720,80 @@ mod tests {
     }
 
     #[test]
-    fn menus_round_trip_through_their_integers() {
-        assert_eq!(ReplaceMode::from_i32(0), Some(ReplaceMode::Hue));
-        assert_eq!(ReplaceMode::from_i32(3), Some(ReplaceMode::Luminosity));
-        assert_eq!(ReplaceMode::from_i32(4), None);
+    fn every_cs6_paint_mode_round_trips() {
+        assert_eq!(ReplaceMode::ALL.len(), 25);
+        for (index, mode) in ReplaceMode::ALL.iter().enumerate() {
+            assert_eq!(ReplaceMode::from_i32(index as i32), Some(*mode));
+        }
+        assert_eq!(ReplaceMode::from_i32(25), None);
+        assert_eq!(ReplaceMode::from_i32(-1), None);
+        assert_eq!(ReplaceMode::default(), ReplaceMode::Color);
+        assert_eq!(ReplaceMode::ALL[0].name(), "Normal");
+        assert_eq!(ReplaceMode::ALL[2].name(), "Behind");
+        assert_eq!(ReplaceMode::ALL[23].name(), "Color");
+        assert_eq!(ReplaceMode::ALL[24].name(), "Luminosity");
         assert_eq!(Sampling::from_i32(2), Some(Sampling::BackgroundSwatch));
         assert_eq!(Limits::from_i32(2), Some(Limits::FindEdges));
         assert_eq!(Limits::from_i32(-1), None);
+    }
+
+    #[test]
+    fn normal_and_multiply_apply_the_blend() {
+        let base = [0.5, 0.25, 0.75];
+        let paint = [1.0, 0.0, 0.5];
+        assert_eq!(ReplaceMode::Normal.blend(base, paint), paint);
+        assert_eq!(ReplaceMode::Multiply.blend(base, paint), [0.5, 0.0, 0.375]);
+    }
+
+    #[test]
+    fn behind_leaves_opaque_pixels_and_clear_erases_them() {
+        let mut img = image(20, 20, |_, _| [100, 150, 200, 255]);
+        let behind = ReplaceOptions {
+            mode: ReplaceMode::Behind,
+            ..options(255)
+        };
+        replace(&mut img, behind, 10, (10.0, 10.0), rgba(255, 0, 0));
+        assert_eq!(
+            img.get(10, 10),
+            [100, 150, 200, 255],
+            "Behind painted an opaque pixel"
+        );
+
+        let clear = ReplaceOptions {
+            mode: ReplaceMode::Clear,
+            ..options(255)
+        };
+        replace(&mut img, clear, 10, (10.0, 10.0), rgba(255, 0, 0));
+        assert_eq!(img.get(10, 10), [100, 150, 200, 0], "Clear kept the alpha");
+    }
+
+    #[test]
+    fn thirty_two_bit_documents_offer_the_subset() {
+        let allowed: Vec<ReplaceMode> = ReplaceMode::ALL
+            .iter()
+            .copied()
+            .filter(|mode| mode.allowed(32))
+            .collect();
+        assert_eq!(
+            allowed,
+            vec![
+                ReplaceMode::Normal,
+                ReplaceMode::Dissolve,
+                ReplaceMode::Darken,
+                ReplaceMode::Multiply,
+                ReplaceMode::Lighten,
+                ReplaceMode::LinearDodge,
+                ReplaceMode::Difference,
+                ReplaceMode::Hue,
+                ReplaceMode::Saturation,
+                ReplaceMode::Color,
+                ReplaceMode::Luminosity,
+            ]
+        );
+        assert!(!ReplaceMode::ColorBurn.allowed(32));
+        for mode in ReplaceMode::ALL {
+            assert!(mode.allowed(8), "{mode:?}");
+            assert!(mode.allowed(16), "{mode:?}");
+        }
     }
 }
