@@ -26,7 +26,7 @@
 #include <QtCore/QBuffer>
 #include <QtCore/QDataStream>
 #include <QtCore/QFile>
-#include <QtCore/QSaveFile>
+#include "protected_output.h"
 #include <QtCore/QSignalBlocker>
 
 namespace pictura {
@@ -334,7 +334,7 @@ void MatchColorDialog::saveStatistics()
     if (path.isEmpty()) {
         return;
     }
-    QSaveFile file(path);
+    pictura::ProtectedOutput file(path);
     if (!file.open(QIODevice::WriteOnly) || !writeStatistics(&file, sourceStats_)) {
         file.cancelWriting();
         return;

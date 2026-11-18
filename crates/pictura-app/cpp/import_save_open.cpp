@@ -291,6 +291,8 @@ void ImportSaveCoordinator::reportOpenFailure(int index, const QString& status)
         } else if (openFailureMessages_.contains(entry.token)) {
             const QString source = entry.path.isEmpty() ? entry.recentPath : entry.path;
             reportImportError(source, openFailureMessages_.value(entry.token));
+        } else if (status.startsWith(QStringLiteral("error:")) && hooks_.showStatus) {
+            hooks_.showStatus(message, 6000);
         } else if (reportFailureTokens_.contains(entry.token) && hooks_.showStatus) {
             hooks_.showStatus(
                 tr("Could not open %1").arg(documents_.documentName(index)), 4000);

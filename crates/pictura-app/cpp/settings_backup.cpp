@@ -15,7 +15,7 @@
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonParseError>
 #include <QtCore/QRect>
-#include <QtCore/QSaveFile>
+#include "protected_output.h"
 #include <QtCore/QSet>
 #include <QtCore/QStandardPaths>
 #include <QtCore/QStringList>
@@ -127,7 +127,7 @@ bool writeJsonObject(const QString& path, const QJsonObject& object, bool pretty
         setError(error, message("The settings folder could not be created."));
         return false;
     }
-    QSaveFile file(path);
+    pictura::ProtectedOutput file(path);
     if (!file.open(QIODevice::WriteOnly)) {
         setError(error, message("The settings file could not be opened for writing."));
         return false;
@@ -150,7 +150,7 @@ bool writeFileBytes(const QString& path, const QByteArray& bytes, QString* error
         setError(error, message("The settings folder could not be created."));
         return false;
     }
-    QSaveFile file(path);
+    pictura::ProtectedOutput file(path);
     if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size()) {
         file.cancelWriting();
         setError(error, message("A preset file could not be written."));

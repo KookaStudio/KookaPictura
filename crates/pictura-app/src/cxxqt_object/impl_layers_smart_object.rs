@@ -328,7 +328,7 @@ impl qobject::PictureView {
 /// Write `bytes` to `dest` byte-for-byte, returning true only when the write
 /// succeeds.
 pub(crate) fn write_source_to_path(dest: &str, bytes: &[u8]) -> bool {
-    std::fs::write(dest, bytes).is_ok()
+    super::helpers::safe_io::write_atomically(dest, bytes, false).is_ok()
 }
 
 #[cfg(test)]

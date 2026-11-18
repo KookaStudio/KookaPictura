@@ -12,7 +12,7 @@
 #include <QtCore/QFileInfo>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonParseError>
-#include <QtCore/QSaveFile>
+#include "protected_output.h"
 #include <QtCore/QSet>
 #include <QtCore/QStandardPaths>
 #include <QtCore/QTextStream>
@@ -1034,7 +1034,7 @@ bool ActionsEngineBridge::writeTextDump(const QString& setId, const QString& pat
     if (ref.set < 0) {
         return false;
     }
-    QFile file(path);
+    pictura::ProtectedOutput file(path);
     if (!file.open(QIODevice::WriteOnly)) {
         return false;
     }
@@ -1048,7 +1048,8 @@ bool ActionsEngineBridge::writeTextDump(const QString& setId, const QString& pat
         out << (node.step >= 0 ? "    " : (node.action >= 0 ? "  " : "")) << row.name
             << '\n';
     }
-    return true;
+    out.flush();
+    return out.status() == QTextStream::Ok && file.commit();
 }
 
 bool ActionsEngineBridge::loadLibrary()
@@ -1075,7 +1076,7 @@ bool ActionsEngineBridge::saveLibrary()
         return false;
     }
     const ::rust::Vec<uint8_t> bytes = engine_->palette_bytes();
-    QSaveFile file(path);
+    pictura::ProtectedOutput file(path);
     if (!file.open(QIODevice::WriteOnly)) {
         return false;
     }

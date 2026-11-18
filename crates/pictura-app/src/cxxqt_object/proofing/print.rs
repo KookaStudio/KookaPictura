@@ -32,7 +32,7 @@ fn rgb_raster(width: u32, height: u32, samples: Vec<u8>) -> PrintRaster {
 }
 
 pub(super) fn print_document_description(view: &PictureView) -> QString {
-    let Some(doc) = &view.rust().session.doc else {
+    let Some(doc) = view.rust().session.doc.as_ref() else {
         return QString::default();
     };
     let metadata = pictura_codec::read_metadata(doc);
@@ -47,7 +47,7 @@ pub(super) fn print_document_description(view: &PictureView) -> QString {
 
 pub(super) fn print_source_preview(view: &PictureView, max_side: u32) -> PrintRaster {
     let view = view.rust();
-    let Some(doc) = &view.session.doc else {
+    let Some(doc) = view.session.doc.as_ref() else {
         return empty_raster("There is no document to print.");
     };
     let buffer = picture::preview_picture(doc, view, max_side.max(1));
@@ -406,7 +406,7 @@ pub(super) fn print_document_raster(
     settings: &QString,
 ) -> PrintRaster {
     let view = view.rust();
-    let Some(doc) = &view.session.doc else {
+    let Some(doc) = view.session.doc.as_ref() else {
         return empty_raster("There is no document to print.");
     };
     let settings = parse(settings);
@@ -510,7 +510,7 @@ pub(super) fn print_document_preview(
     settings: &QString,
 ) -> PrintRaster {
     let view = view.rust();
-    let Some(doc) = &view.session.doc else {
+    let Some(doc) = view.session.doc.as_ref() else {
         return empty_raster("There is no document to print.");
     };
     let reduced = picture::preview_picture(doc, view, max_side.max(1));

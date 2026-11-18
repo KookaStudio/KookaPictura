@@ -616,7 +616,7 @@ pub(in crate::cxxqt_object) fn commit_finish(
             return Err(());
         }
     };
-    rust.session.doc = Some(committed.doc);
+    rust.session.doc.set(Some(committed.doc));
     if job.last_filter.is_some() {
         rust.last_filter = job.last_filter;
     }
@@ -661,7 +661,7 @@ pub(in crate::cxxqt_object) fn commit_finish(
 pub(in crate::cxxqt_object) fn test_commit_finish(
     rust: &mut PictureViewRust,
 ) -> Option<Presentation> {
-    let doc = rust.session.doc.clone()?;
+    let doc = rust.session.doc.snapshot()?;
     let history = std::mem::take(&mut rust.session.history);
     let handle = std::thread::spawn(move || Committed {
         doc,

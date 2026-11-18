@@ -73,6 +73,12 @@ bool ImportSaveCoordinator::saveActive(bool interactive)
         return false;
     }
     PictureView* view = documents_.viewAt(index);
+    if (view && !pictura::compatibility_reason(*view).isEmpty()) {
+        if (hooks_.showStatus) {
+            hooks_.showStatus(view->open_notice(), 6000);
+        }
+        return false;
+    }
     for (const SmartObjectEditSession& session : editSessions_) {
         if (session.editor != view) {
             continue;
@@ -167,7 +173,7 @@ bool ImportSaveCoordinator::saveActiveAs(const QString& path, std::optional<bool
 {
     const int index = documents_.activeIndex();
     PictureView* view = documents_.viewAt(index);
-    if (!view || path.isEmpty()) {
+    if (!view || path.isEmpty() || !pictura::compatibility_reason(*view).isEmpty()) {
         return false;
     }
     const QString name = QFileInfo(path).fileName();
@@ -212,6 +218,9 @@ bool ImportSaveCoordinator::saveActiveAs(const QString& path, std::optional<bool
                             .value(key));
         }
         recordCommand(command_ids::FileSaveAs, step);
+    }
+    if (!pictura::native_save_warning(*view).isEmpty() && hooks_.showStatus) {
+        hooks_.showStatus(pictura::native_save_warning(*view), 0);
     }
     return true;
 }
@@ -296,6 +305,39 @@ bool ImportSaveCoordinator::saveCopyWithDialog()
     if (!view || !view->has_document()) {
         return false;
     }
+    if (!pictura::compatibility_reason(*view).isEmpty()) {
+        if (!pictura::compatibility_preview_available(*view)) {
+            if (hooks_.showStatus) {
+                hooks_.showStatus(view->open_notice(), 6000);
+            }
+            return false;
+        }
+        const QString title = tr("Save a Copy");
+        const QStringList filters = {tr("PNG (*.PNG)")};
+        QString selected = filters.front();
+        QString path = getSaveFileName(dialogParent_, title, documents_.activeFilePath(),
+                                       filters, &selected);
+        if (path.isEmpty()) {
+            return false;
+        }
+        if (QFileInfo(path).suffix().isEmpty()) {
+            path += QStringLiteral(".png");
+        }
+        const QString text = tr("Save the original merged image as a PNG? The copy will have no "
+                                "editable layers or document features.");
+        const bool confirmed = warningDriverForTest_
+            ? warningDriverForTest_(title, text)
+            : QMessageBox::warning(dialogParent_, title, text, QMessageBox::Save | QMessageBox::Cancel)
+                == QMessageBox::Save;
+        if (!confirmed) {
+            return false;
+        }
+        const QString failure = pictura::save_compatibility_copy(*view, path, confirmed);
+        if (!failure.isEmpty() && hooks_.showStatus) {
+            hooks_.showStatus(failure, 6000);
+        }
+        return failure.isEmpty();
+    }
     const QStringList& filters = saveFileFilters();
     const int sourceIndex = defaultSaveFilterIndex(view);
     QString selected = filters.at(sourceIndex);
@@ -361,6 +403,9 @@ bool ImportSaveCoordinator::saveCopyAs(const QString& path, std::optional<bool> 
         }
         return false;
     }
+    if (!pictura::native_save_warning(*view).isEmpty() && hooks_.showStatus) {
+        hooks_.showStatus(pictura::native_save_warning(*view), 0);
+    }
     return true;
 }
 
@@ -389,7 +434,7 @@ bool ImportSaveCoordinator::saveActiveAtPath(const QString& path, const QJsonObj
 bool ImportSaveCoordinator::saveAsWithDialog()
 {
     PictureView* view = documents_.activeView();
-    if (!view || !view->has_document()) {
+    if (!view || !view->has_document() || !pictura::compatibility_reason(*view).isEmpty()) {
         return false;
     }
     const QStringList& filters = saveFileFilters();
@@ -746,6 +791,9 @@ bool ImportSaveCoordinator::revertActive()
     documents_.updateTabTitle(index);
     if (hooks_.requestRefresh) {
         hooks_.requestRefresh();
+    }
+    if (!view->open_notice().isEmpty() && hooks_.showStatus) {
+        hooks_.showStatus(view->open_notice(), 0);
     }
     return true;
 }

@@ -432,6 +432,7 @@ pub fn read_psd_lazy(
         options,
         &mut crate::budget::DecodeBudget::new(budget),
         &mut preview,
+        false,
     )?;
     crate::read::resolve_document_resources(&mut doc);
     // The Background flag is inferred from the name (the reader's `derive_background`):

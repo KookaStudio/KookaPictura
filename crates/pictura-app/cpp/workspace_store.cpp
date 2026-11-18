@@ -9,7 +9,7 @@
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QJsonParseError>
-#include <QtCore/QSaveFile>
+#include "protected_output.h"
 #include <QtCore/QSet>
 #include <QtCore/QStringList>
 
@@ -39,7 +39,7 @@ QJsonObject readObject(const QString& path)
 
 bool writeObject(const QString& path, const QJsonObject& obj)
 {
-    QSaveFile file(path);
+    pictura::ProtectedOutput file(path);
     if (!file.open(QIODevice::WriteOnly)) {
         return false;
     }

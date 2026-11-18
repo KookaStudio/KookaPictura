@@ -37,7 +37,7 @@ pub(super) fn with_file() -> Document {
 
 pub(super) fn install(doc: Document) -> PictureViewRust {
     let mut view = PictureViewRust::default();
-    view.session.doc = Some(doc);
+    view.session.doc.set(Some(doc));
     view.session.record(&view.layer_target, "Open");
     view
 }

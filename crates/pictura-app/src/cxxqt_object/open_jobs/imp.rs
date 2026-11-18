@@ -18,6 +18,12 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use super::compatibility::{native_access, source_pixels, NativeCompatibility};
+
+pub(super) fn output_path_protected(path: &QString) -> bool {
+    super::compatibility::destination_is_protected(Path::new(&path.to_string()))
+}
+
 /// What an open does to the view's file path.
 pub(in crate::cxxqt_object) enum OpenedPath {
     /// Assign this path (a document open, or a path-less import).
@@ -34,6 +40,7 @@ pub(in crate::cxxqt_object) struct OpenedDocument {
     pub(in crate::cxxqt_object) pdf_password: Option<String>,
     /// The file's merged image, shown until the first edit (#1218).
     pub(in crate::cxxqt_object) preview: Option<pictura_codec::MergedPreview>,
+    pub(in crate::cxxqt_object) compatibility: NativeCompatibility,
 }
 
 /// A PDF probe's outcome.
@@ -108,6 +115,7 @@ pub(in crate::cxxqt_object) fn apply_opened(rust: &mut PictureViewRust, opened: 
     );
     // After the replace, whose display reset drops any preview.
     *rust.tiles.preview.get_mut() = opened.preview;
+    rust.session.set_compatibility(opened.compatibility);
     let OpenedPath::Set(path) = opened.path;
     rust.path = path;
     rust.source_format = opened.source_format;
@@ -164,7 +172,7 @@ pub(in crate::cxxqt_object) fn decode_psd(
     gpu: bool,
     progress: &dyn Fn(u8, &str),
 ) -> Option<OpenedDocument> {
-    decode_psd_with(path, open_options(policy), open_budget(), gpu, progress)
+    decode_psd_with(path, open_options(policy), open_budget(), gpu, progress).ok()
 }
 
 /// Whether the last PSD open was refused because its decode did not fit the
@@ -200,7 +208,7 @@ pub(super) fn decode_psd_with(
     (budget, bounded): (pictura_codec::ImageBudget, bool),
     gpu: bool,
     progress: &dyn Fn(u8, &str),
-) -> Option<OpenedDocument> {
+) -> Result<OpenedDocument, pictura_codec::PsdError> {
     OPEN_REFUSED_FOR_MEMORY.store(false, Ordering::Relaxed);
     progress(5, "Reading file");
     // The file stays open behind the document: its 8-bit raw and RLE layer
@@ -208,10 +216,11 @@ pub(super) fn decode_psd_with(
     // positioned reads on this platform) the open decodes everything.
     let pin = pictura_codec::SourcePin::open(path).ok();
     let bytes = match pin.as_ref().map(|pin| pin.map()) {
-        Some(mapped) => mapped.ok()?,
-        None => pictura_codec::MappedFile::open(path).ok()?,
-    };
-    options.source = pin;
+        Some(mapped) => mapped,
+        None => pictura_codec::MappedFile::open(path),
+    }
+    .map_err(|error| pictura_codec::PsdError::Invalid(error.to_string()))?;
+    options.source = pin.clone();
     progress(25, "Decoding");
     let (mut doc, preview) = match pictura_codec::read_psd_lazy(&bytes, &options, budget) {
         Ok(read) => read,
@@ -219,15 +228,57 @@ pub(super) fn decode_psd_with(
             // The codec names a budget refusal "… exceeds the decode budget".
             let memory = bounded && error.to_string().contains("decode budget");
             OPEN_REFUSED_FOR_MEMORY.store(memory, Ordering::Relaxed);
-            return None;
+            if memory
+                || matches!(
+                    error,
+                    pictura_codec::PsdError::NativeVersion(_)
+                        | pictura_codec::PsdError::BadSignature(_)
+                )
+            {
+                return Err(error);
+            }
+            let Some(doc) = pictura_codec::read_psd_layer_structure(&bytes, &options, budget)
+                .ok()
+                .filter(|doc| {
+                    native_access(doc, &pictura_codec::document_version(doc)).is_read_only()
+                })
+            else {
+                return Err(error);
+            };
+            (doc, None)
         }
     };
+    let version = pictura_codec::document_version(&doc);
+    let access = native_access(&doc, &version);
+    let compatibility = if access.is_read_only() {
+        let has_real_merge = version
+            .version_info
+            .as_ref()
+            .is_some_and(|info| info.has_real_merged_data)
+            || version.version_info.is_none() && doc.layers.is_empty();
+        let merged_alpha = pictura_codec::native_merged_has_transparency(&bytes, doc.is_psb);
+        let pixels = if !has_real_merge || !doc.composite.merged_output() {
+            None
+        } else if let Some(pixels) = source_pixels(&doc, merged_alpha) {
+            Some(pixels)
+        } else {
+            options.skip_layered_merged = false;
+            pictura_codec::read_psd_within_options(&bytes, &options, budget)
+                .ok()
+                .and_then(|source| source_pixels(&source, merged_alpha))
+        };
+        NativeCompatibility::new(access, Path::new(path), pin, pixels)
+    } else {
+        NativeCompatibility::new(access, Path::new(path), None, None)
+    };
     progress(65, "Compositing");
-    store_opened_composite(&mut doc, gpu);
+    if !compatibility.access.is_read_only() {
+        store_opened_composite(&mut doc, gpu);
+    }
     progress(90, "Preparing layers");
     let target = LayerTarget::for_opened(&doc, None);
     let history = history_for(&mut doc, &target, "Open");
-    Some(OpenedDocument {
+    Ok(OpenedDocument {
         preview,
         doc,
         history,
@@ -235,6 +286,7 @@ pub(super) fn decode_psd_with(
         path: OpenedPath::Set(Some(path.to_string())),
         source_format: "psd".to_string(),
         pdf_password: None,
+        compatibility,
     })
 }
 
@@ -383,6 +435,7 @@ pub(in crate::cxxqt_object) fn decode_image_with_options(
         path: OpenedPath::Set(Some(path.to_string())),
         source_format: format_for_path(path),
         pdf_password: None,
+        compatibility: NativeCompatibility::default(),
     })
 }
 
@@ -450,6 +503,7 @@ pub(in crate::cxxqt_object) fn decode_smart_object(
         path: OpenedPath::Set(None),
         source_format: "psd".to_string(),
         pdf_password: None,
+        compatibility: NativeCompatibility::default(),
     })
 }
 
@@ -476,6 +530,7 @@ pub(super) fn decode_pdf_psd(
         path: OpenedPath::Set(Some(path.to_string())),
         source_format: "pdf".to_string(),
         pdf_password: (!password.is_empty()).then(|| password.to_string()),
+        compatibility: NativeCompatibility::default(),
     })
 }
 
@@ -651,6 +706,7 @@ pub(in crate::cxxqt_object) fn imported_document(
         path: OpenedPath::Set(None),
         source_format: "psd".to_string(),
         pdf_password: None,
+        compatibility: NativeCompatibility::default(),
     })
 }
 
@@ -749,6 +805,7 @@ pub(in crate::cxxqt_object) fn imported_native_document(
         path: OpenedPath::Set(None),
         source_format: "psd".to_string(),
         pdf_password: None,
+        compatibility: NativeCompatibility::default(),
     })
 }
 
@@ -867,9 +924,12 @@ pub fn open_psd_start(mut view: Pin<&mut PictureView>, path: &QString) {
     OPEN_REFUSED_FOR_MEMORY.store(false, Ordering::Relaxed);
     start(&mut view, move |progress| {
         match decode_psd_with(&path, options, budget, gpu, progress) {
-            Some(opened) => (Some(opened), "ok".to_string(), Vec::new()),
-            None if open_refused_for_memory() => (None, "error:memory".to_string(), Vec::new()),
-            None => (None, "error".to_string(), Vec::new()),
+            Ok(opened) => (Some(opened), "ok".to_string(), Vec::new()),
+            Err(_) if open_refused_for_memory() => (None, "error:memory".to_string(), Vec::new()),
+            Err(error @ pictura_codec::PsdError::NativeVersion(_)) => {
+                (None, format!("error:{error}"), Vec::new())
+            }
+            Err(_) => (None, "error".to_string(), Vec::new()),
         }
     });
 }

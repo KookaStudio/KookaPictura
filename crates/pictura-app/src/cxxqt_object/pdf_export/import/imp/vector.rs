@@ -146,7 +146,7 @@ pub fn place_prepared_pdf(
         view.as_mut().settle_pending_composite();
         {
             let mut rust = view.as_mut().rust_mut();
-            let Some(doc) = rust.session.doc.clone() else {
+            let Some(doc) = rust.session.doc.snapshot() else {
                 return QString::default();
             };
             if rust.pending_vector_place.is_some() {
@@ -198,7 +198,7 @@ impl PictureView {
         }
         {
             let mut rust = self.as_mut().rust_mut();
-            rust.session.doc = Some(before.doc);
+            rust.session.doc.set(Some(before.doc));
             rust.layer_target = before.target;
         }
         self.as_mut().recomposite();

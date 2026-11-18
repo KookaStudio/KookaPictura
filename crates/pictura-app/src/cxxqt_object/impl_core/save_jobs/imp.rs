@@ -16,7 +16,7 @@ fn can_omit_merged(doc: &pictura_core::Document) -> bool {
 
 /// The live native-save worker and the document identity it snapshotted.
 pub(in crate::cxxqt_object) struct SaveJob {
-    handle: std::thread::JoinHandle<bool>,
+    handle: std::thread::JoinHandle<Option<bool>>,
     path: String,
     start_history: Option<u64>,
     start_revision: u64,
@@ -40,6 +40,12 @@ fn save_start_with_compatibility(
     compatibility: Option<bool>,
 ) -> bool {
     super::super::super::helpers::memory_gate::clear();
+    rust.session.skipped_xmp_mirror = false;
+    if rust.session.read_only()
+        || super::super::super::open_jobs::compatibility::destination_is_protected(Path::new(path))
+    {
+        return false;
+    }
     if rust
         .save_job
         .as_ref()
@@ -114,26 +120,30 @@ fn save_start_with_compatibility(
         if !embed {
             pictura_codec::remove_document_profile(doc.to_mut());
         }
-        let written = if compatibility.is_some() {
-            pictura_codec::write_native_compatibility_cached(&doc, &cache, psb)
-        } else if psb {
-            pictura_codec::write_psb_cached(&doc, &cache)
-        } else {
-            pictura_codec::write_psd_cached(&doc, &cache)
-        };
-        let Ok(bytes) = written else {
-            return false;
-        };
+        let written = pictura_codec::write_versioned(
+            &doc,
+            psb,
+            Some(&cache),
+            env!("CARGO_PKG_VERSION"),
+            compatibility.is_some(),
+        )
+        .ok()?;
         // A tile lost while encoding wrote defaults in its place.
         if pictura_core::memory::eviction::unreadable_reads() != unreadable_before
             && crate::history::unreadable_tiles(&doc) > 0
         {
-            return false;
+            return None;
         }
         if delay > 0 {
             std::thread::sleep(Duration::from_millis(delay));
         }
-        super::super::super::helpers::safe_io::write_atomically(&worker_path, &bytes, false).is_ok()
+        super::super::super::helpers::safe_io::write_atomically(
+            &worker_path,
+            &written.bytes,
+            false,
+        )
+        .ok()?;
+        Some(written.skipped_xmp_mirror)
     });
     rust.save_job = Some(SaveJob {
         handle,
@@ -225,17 +235,15 @@ pub(in crate::cxxqt_object) fn save_finish_rust(rust: &mut PictureViewRust) -> b
     let Some(job) = rust.save_job.take() else {
         return true;
     };
-    let Ok(written) = job.handle.join() else {
+    let Ok(Some(skipped_xmp_mirror)) = job.handle.join() else {
         return false;
     };
-    if !written {
-        return false;
-    }
     if rust.session.document_generation != job.generation {
         // The snapshot was written, but this is a different document: report
         // "not applied" so the frame keeps the replacement's path and title.
         return false;
     }
+    rust.session.skipped_xmp_mirror = skipped_xmp_mirror;
     if job.copy {
         return true;
     }
@@ -307,7 +315,7 @@ mod tests {
         let rgba = vec![200u8; 8 * 8 * 4];
         let doc = Document::from_rgba("Layer 0", 8, 8, &rgba);
         let mut rust = PictureViewRust::default();
-        rust.session.doc = Some(doc);
+        rust.session.doc.set(Some(doc));
         rust.session.dirty = true;
         rust
     }
@@ -330,7 +338,7 @@ mod tests {
 
     fn save_compatible(doc: Document, name: &str, include: bool, dirty: bool) -> Vec<u8> {
         let mut rust = PictureViewRust::default();
-        rust.session.doc = Some(doc);
+        rust.session.doc.set(Some(doc));
         rust.session.dirty = dirty;
         let target = path(name);
         assert!(save_start_with_compatibility(
@@ -450,7 +458,7 @@ mod tests {
             assert_eq!(reopened.channels[0].data.as_ref(), &[37; 64]);
             reopened.composite.detach_plane();
             let mut rust = PictureViewRust::default();
-            rust.session.doc = Some(reopened);
+            rust.session.doc.set(Some(reopened));
             let target = path(name);
             assert!(save_start_rust(&mut rust, &target, false));
             assert!(save_finish_rust(&mut rust));
@@ -469,7 +477,7 @@ mod tests {
         let mut doc = pictura_codec::read_psd(&encoded).unwrap();
         doc.composite.detach_plane();
         let mut rust = PictureViewRust::default();
-        rust.session.doc = Some(doc);
+        rust.session.doc.set(Some(doc));
         let target = path("legacy.psd");
         assert!(save_start_rust(&mut rust, &target, false));
         assert!(save_finish_rust(&mut rust));
@@ -487,7 +495,8 @@ mod tests {
             id: 0,
             data: vec![37; 64 * 64].into(),
         });
-        let marker = frame_image_resource(1057, "", &[0, 0, 0, 1, 1]);
+        let version_info = [0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
+        let marker = frame_image_resource(1057, "", &version_info);
         source.image_resources = encode_image_resources(std::slice::from_ref(&marker)).into();
         let mut encoded = pictura_codec::write_psd(&pictura_render::save_view(&source)).unwrap();
         let offset = encoded
@@ -501,7 +510,7 @@ mod tests {
         assert_eq!(doc.channels[0].data.as_ref(), &[37; 64 * 64]);
         doc.composite.detach_plane();
         let mut rust = PictureViewRust::default();
-        rust.session.doc = Some(doc);
+        rust.session.doc.set(Some(doc));
         let target = path("with-channel.psd");
         assert!(save_start_rust(&mut rust, &target, false));
         assert!(save_finish_rust(&mut rust));
@@ -664,6 +673,15 @@ mod tests {
     fn native_depth_save_regressions() {
         use pictura_core::{Channel, Samples, SourcePlanes};
 
+        fn psd_layer_section_and_image(bytes: &[u8]) -> (&[u8], &[u8]) {
+            let end = |start: usize| {
+                start + 4 + u32::from_be_bytes(bytes[start..start + 4].try_into().unwrap()) as usize
+            };
+            let layers = end(end(26));
+            let image = end(layers);
+            (&bytes[layers..image], &bytes[image..])
+        }
+
         let mut doc = native_layered(ColorMode::Rgb, BitDepth::Sixteen);
         assert!(pictura_render::restore_native_composite(&mut doc));
         let unchanged =
@@ -710,14 +728,24 @@ mod tests {
             }))
             .unwrap();
         let expected = pictura_codec::write_psd(&converted).unwrap();
+        let saved = save_compatible(converted, "converted.psd", true, true);
+        assert_eq!(&saved[..26], &expected[..26]);
         assert_eq!(
-            save_compatible(converted, "converted.psd", true, true),
-            expected
+            psd_layer_section_and_image(&saved),
+            psd_layer_section_and_image(&expected)
         );
 
         doc.layers = LayerStack::default();
         let expected = pictura_codec::write_psd(&doc).unwrap();
-        assert_eq!(save_compatible(doc, "native.psd", true, true), expected);
+        let saved = save_compatible(doc, "native.psd", true, true);
+        assert_eq!(&saved[..26], &expected[..26]);
+        assert_eq!(
+            psd_layer_section_and_image(&saved).1,
+            psd_layer_section_and_image(&expected).1
+        );
+        let reopened = pictura_codec::read_psd(&saved).unwrap();
+        assert!(reopened.composite.signed_merged_alpha());
+        assert!(reopened.channels.is_empty());
     }
 
     #[test]
@@ -732,6 +760,35 @@ mod tests {
             .all(|resource| resource.id != 1057));
         doc.composite.detach_plane();
         assert!(pictura_codec::write_psd(&doc).is_err());
+    }
+
+    #[test]
+    fn native_save_stamps_document_versions() {
+        for (name, native_version) in [("version.psd", 1), ("version.psb", 2)] {
+            let mut rust = view();
+            let target = path(name);
+            assert!(save_start_rust(&mut rust, &target, false));
+            wait(&rust);
+            assert!(save_finish_rust(&mut rust));
+            let bytes = std::fs::read(&target).unwrap();
+            assert_eq!(bytes[5], native_version);
+            let doc = pictura_codec::read_psd(&bytes).unwrap();
+            let read = pictura_codec::document_version(&doc);
+            let stamp = read.stamp.unwrap();
+            assert_eq!(
+                stamp.op_document_version,
+                pictura_codec::CURRENT_DOCUMENT_VERSION
+            );
+            assert_eq!(stamp.min_reader_version, stamp.op_document_version);
+            assert_eq!(stamp.writer_version, env!("CARGO_PKG_VERSION"));
+            assert_eq!(read.access, pictura_codec::VersionAccess::Editable);
+            assert!(read.version_info.unwrap().has_real_merged_data);
+            let packet = pictura_codec::read_metadata(&doc).xmp;
+            assert!(packet.contains("opDocumentVersion"));
+            assert!(packet.contains("minReaderVersion"));
+            assert!(packet.contains("writerVersion"));
+            let _ = std::fs::remove_file(target);
+        }
     }
 
     #[test]
@@ -799,7 +856,7 @@ mod tests {
         stage(&mut rust, 4.0);
         assert_eq!(rust.session.history.current_id(), image_history);
         let restored = rust.session.history.undo().unwrap();
-        rust.session.doc = Some(restored.doc);
+        rust.session.doc.set(Some(restored.doc));
         assert!(rust.session.derived_dirty());
         let path = path("print.psb");
         assert!(save_start_rust(&mut rust, &path, false));
@@ -822,7 +879,7 @@ mod tests {
     fn save_refuses_unreadable_tiles() {
         use crate::cxxqt_object::scratch_rollback::tests::{dense_doc, lose_tiles};
         let mut rust = PictureViewRust::default();
-        rust.session.doc = Some(dense_doc());
+        rust.session.doc.set(Some(dense_doc()));
         rust.session.dirty = true;
         lose_tiles(rust.session.doc.as_ref().unwrap());
         let path = path("unreadable.psd");
@@ -850,7 +907,7 @@ mod tests {
     fn an_edit_during_the_save_keeps_the_document_modified() {
         let mut rust = view();
         let path = path("stale.psd");
-        let snapshot = rust.session.doc.clone().expect("document");
+        let snapshot = rust.session.doc.snapshot().expect("document");
         assert!(save_start_rust(&mut rust, &path, false));
         rust.session.content_revision = rust.session.content_revision.wrapping_add(1);
         wait(&rust);
@@ -858,7 +915,15 @@ mod tests {
         assert!(rust.session.dirty);
         assert_eq!(rust.path.as_deref(), Some(path.as_str()));
         let written = std::fs::read(&path).expect("saved file");
-        let expected = pictura_codec::write_psd(&snapshot).expect("snapshot bytes");
+        let expected = pictura_codec::write_versioned(
+            &snapshot,
+            false,
+            None,
+            env!("CARGO_PKG_VERSION"),
+            false,
+        )
+        .expect("snapshot bytes")
+        .bytes;
         assert_eq!(written, expected, "the file holds the pre-edit snapshot");
         let _ = std::fs::remove_file(&path);
     }
@@ -869,7 +934,9 @@ mod tests {
         rust.path = Some("original.psd".to_string());
         let path = path("replaced.psd");
         assert!(save_start_rust(&mut rust, &path, false));
-        rust.session.doc = Some(Document::from_rgba("Other", 4, 4, &[1u8; 4 * 4 * 4]));
+        rust.session
+            .doc
+            .set(Some(Document::from_rgba("Other", 4, 4, &[1u8; 4 * 4 * 4])));
         rust.session.document_generation = rust.session.document_generation.wrapping_add(1);
         wait(&rust);
         assert!(!save_finish_rust(&mut rust));
@@ -907,7 +974,10 @@ mod tests {
         assert!(save_finish_rust(&mut rust));
         let written = std::fs::read(&path).expect("saved file");
         let doc = rust.session.doc.as_ref().expect("document");
-        let expected = pictura_codec::write_psd(doc).expect("fresh encode");
+        let expected =
+            pictura_codec::write_versioned(doc, false, None, env!("CARGO_PKG_VERSION"), false)
+                .expect("fresh encode")
+                .bytes;
         assert_eq!(written, expected);
         let _ = std::fs::remove_file(&path);
     }
@@ -932,7 +1002,7 @@ mod tests {
         doc.mode = ColorMode::Rgb;
         doc.depth = BitDepth::Eight;
         let mut rust = PictureViewRust::default();
-        rust.session.doc = Some(doc);
+        rust.session.doc.set(Some(doc));
         rust.session.dirty = true;
         let path = path("layers.psd");
         assert!(save_start_rust(&mut rust, &path, false));

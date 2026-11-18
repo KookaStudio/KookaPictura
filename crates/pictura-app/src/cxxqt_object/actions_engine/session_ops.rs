@@ -498,7 +498,11 @@ impl super::ffi::ActionsEngine {
         let Some(bytes) = index(set).and_then(|set| this.library.set_bytes(set)) else {
             return false;
         };
-        match std::fs::write(path.to_string().as_str(), bytes) {
+        match crate::cxxqt_object::helpers::safe_io::write_atomically(
+            &path.to_string(),
+            &bytes,
+            false,
+        ) {
             Ok(()) => true,
             Err(err) => {
                 this.last_error = err.to_string();

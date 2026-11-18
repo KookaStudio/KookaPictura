@@ -163,7 +163,7 @@ fn evaluate(
 fn install_evaluation(rust: &mut PictureViewRust, result: Option<Document>) -> Edit {
     match result {
         Some(doc) => {
-            rust.session.doc = Some(doc);
+            rust.session.doc.set(Some(doc));
             Edit::Full
         }
         None => Edit::None,
@@ -205,7 +205,8 @@ fn blocked(rust: &PictureViewRust) -> bool {
 
 pub(in crate::cxxqt_object) fn variables_available(view: &PictureView, group: &QString) -> bool {
     let rust = view.rust();
-    !blocked(rust)
+    !rust.session.read_only()
+        && !blocked(rust)
         && rust
             .session
             .doc
@@ -439,13 +440,16 @@ fn execute(mut view: Pin<&mut PictureView>, action: &str, input: &Json) -> Resul
         view.as_mut().rust_mut().variable_export = None;
         return Ok(String::new());
     }
+    if view.rust().session.read_only() {
+        return Err("This document is read-only".into());
+    }
     if blocked(view.rust()) {
         return Err("Finish the current document edit first".into());
     }
     match action {
         "begin" => {
             let rust = view.rust();
-            let draft = rust.session.doc.clone().ok_or("No active document")?;
+            let draft = rust.session.doc.snapshot().ok_or("No active document")?;
             let session = VariableSession {
                 draft,
                 stamp: stamp(rust),
@@ -471,7 +475,7 @@ fn execute(mut view: Pin<&mut PictureView>, action: &str, input: &Json) -> Resul
                 .rust()
                 .session
                 .doc
-                .clone()
+                .snapshot()
                 .ok_or("No active document")?;
             if import_sets(&mut next, Path::new(text(input, "path")), options(input)?)? {
                 view.as_mut().edit("Import Variable Data Sets", |rust| {

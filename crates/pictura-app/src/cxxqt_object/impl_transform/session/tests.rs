@@ -12,7 +12,9 @@ use pictura_render::Interpolation;
 #[test]
 fn the_selection_test_agrees_with_the_lift_coverage() {
     let mut rust = PictureViewRust::default();
-    rust.session.doc = Some(Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight));
+    rust.session
+        .doc
+        .set(Some(Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight)));
     let mut corner = vec![0u8; 64];
     corner[63] = 1;
     let cases = [

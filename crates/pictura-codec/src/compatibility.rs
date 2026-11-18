@@ -1,9 +1,20 @@
+use crate::common::Reader;
 use crate::common::COMPRESSION_RLE;
 use crate::depth::row_bytes;
 use crate::image_resources::{decode_section, frame_image_resource};
 use crate::write::encode_packbits_row;
 
 const VERSION_INFO: u16 = 1057;
+
+pub(crate) fn has_merged_transparency_marker(extra: &[u8], psb: bool) -> bool {
+    let mut reader = Reader::new(extra);
+    while let Some((key, _, _, _)) = crate::filter_effects::next_block(&mut reader, psb) {
+        if matches!(&key, b"Mtrn" | b"Mt16" | b"Mt32") {
+            return true;
+        }
+    }
+    false
+}
 
 pub(crate) fn has_real_merged_data(resources: &[u8]) -> Option<bool> {
     decode_section(resources)

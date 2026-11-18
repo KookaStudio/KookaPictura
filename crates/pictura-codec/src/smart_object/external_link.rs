@@ -154,6 +154,16 @@ pub fn repairable_external_link(extra: &[u8], uuid: &str, psb: bool) -> bool {
     find_external_link(extra, uuid, psb).is_some()
 }
 
+pub(crate) fn validate_external_link_records(data: &[u8]) -> Option<()> {
+    let mut records = Reader::new(data);
+    while records.remaining() != 0 {
+        let size = usize::try_from(records.u64().ok()?).ok()?;
+        ExternalRecord::read(records.take(size).ok()?)?;
+        records.skip((4 - size % 4) % 4).ok()?;
+    }
+    Some(())
+}
+
 /// The location stored in a recognized external record. This is display
 /// metadata and is never opened by the codec.
 pub fn external_link_location(extra: &[u8], uuid: &str, psb: bool) -> Option<String> {

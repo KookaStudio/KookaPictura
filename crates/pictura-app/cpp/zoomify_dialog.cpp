@@ -10,7 +10,7 @@
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QFileInfo>
 #include <QtCore/QPointer>
-#include <QtCore/QSaveFile>
+#include "protected_output.h"
 #include <QtCore/QVector>
 #include <QtCore/QThread>
 #include <QtGui/QImage>
@@ -76,9 +76,18 @@ struct JobState {
     QString error;
 };
 
+QString tilePath(const QString& folder, const TileJob& job)
+{
+    return folder + QStringLiteral("/TileGroup")
+        + QString::number(pictura::zoomify_group_for(job.ordinal))
+        + QStringLiteral("/") + QString::number(job.tier)
+        + QStringLiteral("-") + QString::number(job.x) + QStringLiteral("-")
+        + QString::number(job.y) + QStringLiteral(".jpg");
+}
+
 bool writeText(const QString& path, const QString& text)
 {
-    QSaveFile file(path);
+    pictura::ProtectedOutput file(path);
     if (!file.open(QIODevice::WriteOnly)) {
         return false;
     }
@@ -186,7 +195,7 @@ QString ZoomifyDialog::templateName() const
 bool zoomifyExport(PictureView* view, const QString& folder, int baseWidth, int baseHeight,
                    int quality, bool* cancelled, QWidget* parent)
 {
-    if (!view || !view->has_document()) {
+    if (!view || !view->has_document() || !pictura::compatibility_reason(*view).isEmpty()) {
         return false;
     }
     const int documentWidth = view->document_width();
@@ -231,8 +240,15 @@ bool zoomifyExport(PictureView* view, const QString& folder, int baseWidth, int 
 
     const QString properties = zoomify_properties(baseWidth, baseHeight);
     const QString html = zoomify_html(baseWidth, baseHeight);
-    if (properties.isEmpty() || html.isEmpty()) {
+    if (properties.isEmpty() || html.isEmpty()
+        || output_path_protected(folder + QStringLiteral("/ImageProperties.xml"))
+        || output_path_protected(folder + QStringLiteral("/index.html"))) {
         return false;
+    }
+    for (const TileJob& job : state->tiles) {
+        if (output_path_protected(tilePath(folder, job))) {
+            return false;
+        }
     }
 
     const QPointer<PictureView> viewGuard(view);
@@ -287,19 +303,17 @@ bool zoomifyExport(PictureView* view, const QString& folder, int baseWidth, int 
                     QPainter painter(&flattened);
                     painter.drawImage(0, 0, tile);
                 }
-                const QString group = folder + QStringLiteral("/TileGroup")
-                    + QString::number(pictura::zoomify_group_for(job.ordinal));
+                const QString path = tilePath(folder, job);
+                const QString group = QFileInfo(path).absolutePath();
                 if (!QDir().mkpath(group)) {
                     state->failed = true;
                     state->error = group;
                     return false;
                 }
-                const QString path = group + QStringLiteral("/") + QString::number(job.tier)
-                    + QStringLiteral("-") + QString::number(job.x) + QStringLiteral("-")
-                    + QString::number(job.y) + QStringLiteral(".jpg");
-                QImageWriter writer(path, QByteArrayLiteral("JPEG"));
+                pictura::ProtectedOutput file(path);
+                QImageWriter writer(&file, QByteArrayLiteral("JPEG"));
                 writer.setQuality(quality);
-                if (!writer.write(flattened)) {
+                if (!file.open(QIODevice::WriteOnly) || !writer.write(flattened) || !file.commit()) {
                     state->failed = true;
                     state->error = path;
                     return false;
@@ -331,7 +345,7 @@ bool zoomifyExport(PictureView* view, const QString& folder, int baseWidth, int 
 
 bool zoomifyExportFromView(QWidget* parent, PictureView* view)
 {
-    if (!view || !view->has_document()) {
+    if (!view || !view->has_document() || !pictura::compatibility_reason(*view).isEmpty()) {
         return false;
     }
     ZoomifyDialog dialog(view->document_width(), view->document_height(), defaultFolder(view),

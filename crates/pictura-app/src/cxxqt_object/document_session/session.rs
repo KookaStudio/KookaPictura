@@ -33,7 +33,15 @@ pub(in crate::cxxqt_object) struct QuickSelectionSnapshot {
 pub(in crate::cxxqt_object) struct DocumentSession {
     pub(in crate::cxxqt_object) quick_mask: crate::cxxqt_object::quick_mask::QuickMaskState,
     /// The live document, `None` without one.
-    pub(in crate::cxxqt_object) doc: Option<Document>,
+    pub(in crate::cxxqt_object) doc: SessionDocument,
+    pub(in crate::cxxqt_object) compatibility:
+        crate::cxxqt_object::open_jobs::compatibility::NativeCompatibility,
+    pub(in crate::cxxqt_object) history_compatibility: Vec<(
+        u64,
+        crate::cxxqt_object::open_jobs::compatibility::NativeCompatibility,
+    )>,
+    pub(in crate::cxxqt_object) skipped_xmp_mirror: bool,
+    pub(in crate::cxxqt_object) recheck_compatibility_on_restore: bool,
     /// The live selection.
     pub(in crate::cxxqt_object) selection: Option<Selection>,
     /// Bumped whenever the selection is written. The committed-outline cache
@@ -79,12 +87,93 @@ pub(in crate::cxxqt_object) struct DocumentSession {
     pub(in crate::cxxqt_object) encode_cache: std::sync::Arc<pictura_codec::EncodeCache>,
 }
 
+/// The installed document remains readable during compatibility viewing.
+/// Edit paths share this boundary for in-place access and replacement.
+#[derive(Debug, Default)]
+pub(in crate::cxxqt_object) struct SessionDocument {
+    value: Option<Document>,
+    read_only: bool,
+}
+
+impl SessionDocument {
+    pub(in crate::cxxqt_object) fn as_ref(&self) -> Option<&Document> {
+        self.value.as_ref()
+    }
+
+    pub(in crate::cxxqt_object) fn as_mut(&mut self) -> Option<&mut Document> {
+        if self.read_only {
+            return None;
+        }
+        self.value.as_mut()
+    }
+
+    pub(in crate::cxxqt_object) fn is_some(&self) -> bool {
+        self.value.is_some()
+    }
+
+    pub(in crate::cxxqt_object) fn is_none(&self) -> bool {
+        self.value.is_none()
+    }
+
+    pub(in crate::cxxqt_object) fn snapshot(&self) -> Option<Document> {
+        if self.read_only {
+            return None;
+        }
+        self.value.clone()
+    }
+
+    pub(in crate::cxxqt_object) fn set(&mut self, value: Option<Document>) {
+        if !self.read_only {
+            self.value = value;
+        }
+    }
+
+    pub(in crate::cxxqt_object) fn replace(&mut self, doc: Document) -> Option<Document> {
+        if self.read_only {
+            return None;
+        }
+        self.value.replace(doc)
+    }
+
+    #[cfg(test)]
+    pub(in crate::cxxqt_object) fn take(&mut self) -> Option<Document> {
+        if self.read_only {
+            return None;
+        }
+        self.value.take()
+    }
+}
+
+#[cfg(test)]
+impl PartialEq<Option<Document>> for SessionDocument {
+    fn eq(&self, other: &Option<Document>) -> bool {
+        &self.value == other
+    }
+}
+
 impl DocumentSession {
+    pub(in crate::cxxqt_object) fn read_only(&self) -> bool {
+        self.compatibility.access.is_read_only()
+    }
+
+    pub(in crate::cxxqt_object) fn set_compatibility(
+        &mut self,
+        state: crate::cxxqt_object::open_jobs::compatibility::NativeCompatibility,
+    ) {
+        self.compatibility.deactivate();
+        state.activate();
+        self.doc.read_only = state.access.is_read_only();
+        self.compatibility = state;
+    }
+
     /// A session with `doc` installed and an empty history.
     #[cfg(test)]
     pub(in crate::cxxqt_object) fn with_document(doc: Document) -> Self {
         Self {
-            doc: Some(doc),
+            doc: SessionDocument {
+                value: Some(doc),
+                read_only: false,
+            },
             ..Default::default()
         }
     }
@@ -138,7 +227,8 @@ impl DocumentSession {
         history: History,
         pdf_password: Option<String>,
     ) {
-        self.doc = doc;
+        self.set_compatibility(Default::default());
+        self.doc.set(doc);
         self.history = history;
         self.pdf_password = pdf_password;
         self.print_resources = Default::default();
@@ -281,14 +371,21 @@ impl DocumentSession {
         ) -> Option<Restored>,
         legacy: impl FnOnce(&mut History) -> Option<Snapshot>,
     ) -> Option<Restored> {
+        let was_read_only = self.doc.read_only;
+        if was_read_only && !self.recheck_compatibility_on_restore {
+            return None;
+        }
+        self.doc.read_only = false;
         let restored = match self.doc.as_mut() {
             Some(doc) => step(&mut self.history, doc, &mut self.selection, target),
             None => legacy(&mut self.history).map(|snapshot| {
-                self.doc = Some(snapshot.doc);
+                self.doc.set(Some(snapshot.doc));
                 self.selection = snapshot.selection;
                 Restored::Everywhere
             }),
-        }?;
+        };
+        self.doc.read_only = was_read_only;
+        let restored = restored?;
         let quick_mask = self
             .history
             .current_snapshot()
@@ -379,7 +476,7 @@ impl PictureViewRust {
     /// to the magnetic gesture it started. A healing, selection-move, path, or
     /// paint begin is refused.
     pub(in crate::cxxqt_object) fn slot_allows(&self, kind: SessionKind) -> bool {
-        self.session.live.allows(kind)
+        !self.session.read_only() && self.session.live.allows(kind)
     }
 
     /// Cancel the live session against the current document without recording
@@ -407,7 +504,7 @@ impl PictureViewRust {
         let presentation = match std::mem::replace(&mut self.session.live, ActiveSession::Idle) {
             ActiveSession::Idle => Presentation::none(),
             ActiveSession::ModePreview(base) => {
-                self.session.doc = Some(*base);
+                self.session.doc.set(Some(*base));
                 if refresh_display {
                     self.composite_into_doc();
                 }
@@ -508,6 +605,10 @@ impl PictureViewRust {
         self.session.quick_selection_snapshot = None;
         self.session.live = ActiveSession::Idle;
         self.path = None;
+        self.session.set_compatibility(Default::default());
+        self.session.history_compatibility.clear();
+        self.session.skipped_xmp_mirror = false;
+        self.session.recheck_compatibility_on_restore = false;
         self.mask_edit_target = None;
         self.mask_solo = None;
         self.mask_overlay = None;
@@ -580,7 +681,7 @@ impl PictureViewRust {
             }
         }
         if let Some((_, before)) = session.lifted {
-            self.session.doc = Some(*before);
+            self.session.doc.set(Some(*before));
             return true;
         }
         false

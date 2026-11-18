@@ -343,7 +343,7 @@ fn time_move(doc: Document, source: &str) -> (f64, String, &'static str) {
         gpu_compute: false,
         ..Default::default()
     };
-    let before_doc = view.session.doc.clone();
+    let before_doc = view.session.doc.snapshot();
     let before = before_doc
         .as_ref()
         .and_then(|doc| pictura_render::damage::influence(doc, source));

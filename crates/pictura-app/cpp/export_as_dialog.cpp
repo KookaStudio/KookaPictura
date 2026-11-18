@@ -7,7 +7,7 @@
 
 #include <QtCore/QBuffer>
 #include <QtCore/QFileInfo>
-#include <QtCore/QSaveFile>
+#include "protected_output.h"
 #include <QtCore/QSet>
 #include <QtCore/QSignalBlocker>
 #include <QtCore/QTimer>
@@ -161,7 +161,7 @@ QString uniqueExportBase(const QString& name, QSet<QString>& used)
 bool writeSvgFile(const QString& path, const QString& svg)
 {
     const QByteArray data = svg.toUtf8();
-    QSaveFile file(path);
+    pictura::ProtectedOutput file(path);
     return file.open(QIODevice::WriteOnly) && file.write(data) == data.size() && file.commit();
 }
 
@@ -620,7 +620,7 @@ QString ExportAsDialog::suffix() const
 bool ExportAsDialog::saveTo(int entry, const QString& path) const
 {
     const QByteArray data = encodedAs(entry, formatForPath(path, Format(format_->currentIndex())));
-    QSaveFile file(path);
+    pictura::ProtectedOutput file(path);
     return !data.isEmpty() && file.open(QIODevice::WriteOnly) && file.write(data) == data.size()
         && file.commit();
 }
@@ -691,7 +691,7 @@ void ExportAsDialog::refreshPreview()
 
 bool exportAsFromView(QWidget* parent, PictureView* view)
 {
-    if (!view || !view->has_document()) {
+    if (!view || !view->has_document() || !pictura::compatibility_reason(*view).isEmpty()) {
         return false;
     }
     const int width = view->document_width();
@@ -823,7 +823,7 @@ bool exportAsFromView(QWidget* parent, PictureView* view)
 
 bool quickExportPngFromView(QWidget* parent, PictureView* view)
 {
-    if (!view || !view->has_document()) {
+    if (!view || !view->has_document() || !pictura::compatibility_reason(*view).isEmpty()) {
         return false;
     }
     const QString source = document_api::filePath(*view);
