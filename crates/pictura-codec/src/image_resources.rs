@@ -866,10 +866,9 @@ mod recovery_tests {
             let matches: Vec<_> = blocks.iter().filter(|block| block.id == id).collect();
             assert_eq!(matches.len(), 1);
             let data = &matches[0].data;
-            let units: Vec<u16> = data[4..]
-                .chunks_exact(2)
-                .map(|chunk| u16::from_be_bytes([chunk[0], chunk[1]]))
-                .collect();
+            let (pairs, remainder) = data[4..].as_chunks::<2>();
+            assert!(remainder.is_empty());
+            let units: Vec<u16> = pairs.iter().copied().map(u16::from_be_bytes).collect();
             assert_eq!(units.last(), Some(&0));
             assert_eq!(
                 u32::from_be_bytes(data[..4].try_into().unwrap()) as usize,

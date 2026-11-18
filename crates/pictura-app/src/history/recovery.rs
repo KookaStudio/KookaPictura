@@ -9,6 +9,7 @@ use super::planes::{each_plane, each_plane_mut, hollow};
 
 const MAX_DELTA_BYTES: usize = 32 * 1024 * 1024;
 const CHUNK_SIDE: usize = 256;
+const LAYER_PLANE: usize = 1 << 31;
 
 fn pixel_layout_supported(doc: &Document) -> bool {
     doc.mode == ColorMode::Rgb
@@ -37,6 +38,7 @@ pub(crate) fn recovery_delta(before: &Document, after: &Document) -> Option<Vec<
     {
         return None;
     }
+    let layer_start = 1 + before.channels.len();
     let before = pixel_planes(before);
     let after = pixel_planes(after);
     if before.len() != after.len() {
@@ -56,13 +58,20 @@ pub(crate) fn recovery_delta(before: &Document, after: &Document) -> Option<Vec<
         if width.checked_mul(*height)? != new.len() {
             return None;
         }
+        // PSD can decode merged transparency as an extra document channel.
+        // Layer addresses start at the first layer plane in either document.
+        let address = if index < layer_start {
+            index
+        } else {
+            LAYER_PLANE | (index - layer_start)
+        };
         if new.tile_count() > 0 {
             for tile in 0..new.tile_count() {
                 if !old.shares_tile(tile, new) {
                     let (x, y, w, h) = new.tile_rect(tile)?;
                     let mut pixels = vec![0; w.checked_mul(h)?];
                     new.read_rect_into(x..x + w, y..y + h, *width, &mut pixels);
-                    push_rect(&mut output, [index, *width, *height, x, y, w, h], &pixels)?;
+                    push_rect(&mut output, [address, *width, *height, x, y, w, h], &pixels)?;
                 }
             }
         } else {
@@ -75,7 +84,7 @@ pub(crate) fn recovery_delta(before: &Document, after: &Document) -> Option<Vec<
                     old.read_rect_into(x..x + w, y..y + h, *width, &mut a);
                     new.read_rect_into(x..x + w, y..y + h, *width, &mut b);
                     if a != b {
-                        push_rect(&mut output, [index, *width, *height, x, y, w, h], &b)?;
+                        push_rect(&mut output, [address, *width, *height, x, y, w, h], &b)?;
                     }
                 }
             }
@@ -108,6 +117,7 @@ struct Replacement<'a> {
 
 pub(crate) fn apply_recovery_delta(doc: &mut Document, mut bytes: &[u8]) -> io::Result<()> {
     let invalid = || io::Error::new(io::ErrorKind::InvalidData, "invalid recovery tile layout");
+    let layer_start = 1 + doc.channels.len();
     let planes = pixel_planes(doc);
     let mut replacements = Vec::new();
     while !bytes.is_empty() {
@@ -116,7 +126,14 @@ pub(crate) fn apply_recovery_delta(doc: &mut Document, mut bytes: &[u8]) -> io::
             let start = i * 4;
             u32::from_le_bytes(header[start..start + 4].try_into().unwrap()) as usize
         };
-        let (index, width, height) = (offset(0), offset(1), offset(2));
+        let (address, width, height) = (offset(0), offset(1), offset(2));
+        let index = if address & LAYER_PLANE != 0 {
+            layer_start
+                .checked_add(address & !LAYER_PLANE)
+                .ok_or_else(invalid)?
+        } else {
+            address
+        };
         let (x, y, w, h) = (offset(3), offset(4), offset(5), offset(6));
         let (plane, plane_width, plane_height) = planes.get(index).ok_or_else(invalid)?;
         if index == 0
@@ -167,4 +184,32 @@ pub(crate) fn apply_recovery_delta(doc: &mut Document, mut bytes: &[u8]) -> io::
         index += 1;
     });
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recovery_delta_keeps_layer_addresses_after_psd_round_trip() {
+        let before = Document::from_rgba("Layer", 1, 1, &[10, 20, 30, 255]);
+        assert!(before.channels.is_empty());
+        let mut after = before.clone();
+        after.layers[0].channels_mut()[2].data[0] = 90;
+        let delta = recovery_delta(&before, &after).unwrap();
+        assert!(!delta.is_empty());
+
+        let checkpoint = pictura_codec::write_psd(&before).unwrap();
+        let mut reopened = pictura_codec::read_psd(&checkpoint).unwrap();
+        assert_eq!(reopened.channels.len(), 1);
+        apply_recovery_delta(&mut reopened, &delta).unwrap();
+        let rgb: Vec<_> = reopened.layers[0]
+            .channels()
+            .iter()
+            .filter(|channel| (0..3).contains(&channel.id))
+            .map(|channel| (channel.id, channel.data[0]))
+            .collect();
+        assert_eq!(rgb, [(0, 10), (1, 20), (2, 90)]);
+        assert_eq!(reopened.channels[0].data[0], 255);
+    }
 }

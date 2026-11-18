@@ -414,9 +414,10 @@ void OffthreadJobsTest::backgroundSaveAcceptsInputAndShowsProgress()
     QVERIFY(!bar->isVisible());
     invert(*window_);
     QCOMPARE(QColor(second->composite_argb(8, 8)), QColor(Qt::black));
-    auto* tabs = window_->findChild<QTabBar*>();
-    QVERIFY(tabs && tabs->tabText(origin).contains(QLatin1Char('%')));
-    QTRY_VERIFY(!tabs->tabText(origin).contains(QLatin1Char('%')));
+    auto* tabs = window_->findChild<QTabBar*>(QStringLiteral("documentTabBar"));
+    const int originTab = window_->tabOfDocumentForTest(origin);
+    QVERIFY(tabs && originTab >= 0 && tabs->tabText(originTab).contains(QLatin1Char('%')));
+    QTRY_VERIFY(!tabs->tabText(originTab).contains(QLatin1Char('%')));
 }
 
 void OffthreadJobsTest::backgroundSaveAsCompletesOnOrigin()
@@ -608,13 +609,16 @@ void OffthreadJobsTest::backgroundSaveRecordingKeepsDispatchOrder()
     QVERIFY(recorder->startRecording(first, -1));
     pictura::save_set_delay(*view, 400);
     command(*window_, pictura::command_ids::FileSave);
-    invert(*window_);
+    const int layers = view->layer_count();
+    command(*window_, pictura::command_ids::LayerDuplicateLayer);
+    QCOMPARE(view->layer_count(), layers + 1);
     recorder->stopRecording();
     QVERIFY(recorder->startRecording(second, -1));
     QTRY_COMPARE(pictura::save_progress(*view), -1);
     pictura::save_set_sync_failure(*view, true);
     command(*window_, pictura::command_ids::FileSave);
-    invert(*window_);
+    command(*window_, pictura::command_ids::LayerDuplicateLayer);
+    QCOMPARE(view->layer_count(), layers + 2);
     recorder->stopRecording();
     QTRY_COMPARE(pictura::save_progress(*view), -1);
     pictura::save_set_sync_failure(*view, false);
@@ -633,16 +637,16 @@ void OffthreadJobsTest::backgroundSaveRecordingKeepsDispatchOrder()
             secondCommands.append(row.commandId);
         }
     }
-    QCOMPARE(firstCommands, (QStringList{QStringLiteral("file.save"),
-                                         QStringLiteral("image.adjustments.invert")}));
-    QCOMPARE(secondCommands, QStringList{QStringLiteral("image.adjustments.invert")});
+    const QString duplicate = QString::fromLatin1(pictura::command_ids::LayerDuplicateLayer);
+    QCOMPARE(firstCommands, (QStringList{QStringLiteral("file.save"), duplicate}));
+    QCOMPARE(secondCommands, QStringList{duplicate});
     recorder->setDocumentFacts(true, true, QStringLiteral("rgb"), false);
     QVERIFY(recorder->startPlayback(firstSteps));
     const auto save = recorder->playbackNext();
     QCOMPARE(save.commandId, QStringLiteral("file.save"));
     QCOMPARE(save.params.value(QStringLiteral("in")).toString(), path);
     const auto edit = recorder->playbackNext();
-    QCOMPARE(edit.commandId, QStringLiteral("image.adjustments.invert"));
+    QCOMPARE(edit.commandId, duplicate);
     recorder->cancelPlayback();
 }
 

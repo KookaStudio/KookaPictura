@@ -659,6 +659,7 @@ void RecoveryTest::journalTailFailureRecoversValidPrefix()
     waitForWrites(*window);
     const QString crashed = fakeCrashedSession(window->recoverySessionDirForTest());
     QFile journal(artifact(crashed, QStringLiteral("*.journal")));
+    QVERIFY(journal.size() > 0);
     QVERIFY(journal.open(QIODevice::Append));
     QCOMPARE(journal.write("torn"), 4);
     journal.close();
