@@ -781,7 +781,10 @@ Snapshot for resuming after a context break. Update after each milestone.
   M1–M12's heap peak at 4250² against recorded baselines × 1.10 (nextest
   only; `*_heap_peak_full` reports 17000²). `layer_op free_transform` and
   `document new background_layer` were added to the control server for the
-  catalogue. Runs at 6G and above need a machine with at least 16 GB.
+  catalogue. Runs at 6G and above need a machine with at least 16 GB;
+  #1224 recorded `6G`, `8G` and `unlimited` (M1–M24 at 17000²) on a 29 GiB
+  Ryzen 7 255: every scenario ok, M24's Free Transform the largest peak (6432
+  MiB unlimited, held to 5954 MiB under 6G).
 - **Content-sized pixel layers** (#1208, OpenSpec change
   `grow-pixel-layers`). A new pixel layer stores a 0×0 rect with no planes, so
   Add Layer (M2) adds no pixel bytes. `pictura_core::layer_bounds::grow_layer_to`
