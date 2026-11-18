@@ -64,6 +64,7 @@ mod paths;
 mod pdf_export;
 mod picture;
 mod presentation;
+mod printing;
 mod proofing;
 mod quick_mask;
 mod save_format;
@@ -1019,7 +1020,6 @@ pub mod qobject {
         #[qinvokable]
         fn cancel_paint(self: Pin<&mut Self>);
 
-        /// Whether a paint stroke is currently active.
         #[qinvokable]
         fn is_painting(&self) -> bool;
 

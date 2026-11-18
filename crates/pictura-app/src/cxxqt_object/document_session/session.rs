@@ -66,6 +66,9 @@ pub(in crate::cxxqt_object) struct DocumentSession {
     /// The password a protected PDF was opened with, kept in memory only so
     /// Revert can reopen it.
     pub(in crate::cxxqt_object) pdf_password: Option<String>,
+    pub(in crate::cxxqt_object) print_resources: pictura_codec::print_resources::PrintResourceEdits,
+    pub(in crate::cxxqt_object) print_revision: u64,
+    pub(in crate::cxxqt_object) saved_print_revision: u64,
     /// The Vanishing Point planes this document's last session kept, so the
     /// dialog reopens on them: read from the file when the document is
     /// installed and written into it by a save. Kept out of the document so
@@ -138,6 +141,9 @@ impl DocumentSession {
         self.doc = doc;
         self.history = history;
         self.pdf_password = pdf_password;
+        self.print_resources = Default::default();
+        self.print_revision = 0;
+        self.saved_print_revision = 0;
         self.encode_cache = std::sync::Arc::new(pictura_codec::EncodeCache::new());
         self.document_generation = self.document_generation.wrapping_add(1);
         self.saved_id = self.history.current_id();
@@ -212,7 +218,16 @@ impl DocumentSession {
     /// Record the current history state as the saved one and clear `dirty`.
     pub(in crate::cxxqt_object) fn mark_saved(&mut self) {
         self.saved_id = self.history.current_id();
-        self.dirty = false;
+        self.dirty = self.print_revision != self.saved_print_revision;
+    }
+
+    pub(in crate::cxxqt_object) fn stage_print_resources(
+        &mut self,
+        resources: pictura_codec::print_resources::PrintResourceEdits,
+    ) {
+        self.print_resources = resources;
+        self.print_revision = self.print_revision.wrapping_add(1);
+        self.refresh_dirty();
     }
 
     /// Forget the saved point and mark the document modified, so a recovered
@@ -231,7 +246,10 @@ impl DocumentSession {
     pub(in crate::cxxqt_object) fn derived_dirty(&self) -> bool {
         match (self.doc.as_ref(), self.saved_id) {
             (None, _) => false,
-            (Some(_), Some(saved)) => self.history.current_id() != Some(saved),
+            (Some(_), Some(saved)) => {
+                self.history.current_id() != Some(saved)
+                    || self.print_revision != self.saved_print_revision
+            }
             (Some(_), None) => true,
         }
     }

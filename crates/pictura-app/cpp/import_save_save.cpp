@@ -6,6 +6,7 @@
 #include "api/document_api.h"
 #include "api/document_bridge.h"
 #include "api/layers_bridge.h"
+#include "api/printing_bridge.h"
 
 #include "bmp_options_dialog.h"
 #include "busy_job.h"
@@ -100,6 +101,24 @@ bool ImportSaveCoordinator::saveActive(bool interactive)
         return true;
     }
     QString path = documents_.documentPath(index);
+    if (view && print_metadata_pending(*view) && !isNativeDocumentPath(path)) {
+        const QStringList filters = saveFileFilters().mid(0, 2);
+        QString selected = filters.first();
+        QString target = getSaveFileName(dialogParent_, tr("Save Print Settings As"),
+                                         documents_.activeFilePath(), filters, &selected);
+        if (target.isEmpty()) {
+            return false;
+        }
+        target = pathForSaveFilter(target, filters.indexOf(selected) == 1 ? 1 : 0, 0);
+        if (!isNativeDocumentPath(target)) {
+            return false;
+        }
+        const bool saved = saveActiveAs(target);
+        if (saved) {
+            record();
+        }
+        return saved;
+    }
     if (!path.isEmpty() && isPdfPath(path)) {
         const bool saved = savePdfWithDialog(path);
         if (saved) {

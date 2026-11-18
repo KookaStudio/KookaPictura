@@ -64,6 +64,12 @@ ProofSetupValues ProofSetupDialog::values() const
     return values;
 }
 
+void ProofSetupDialog::addPrintProfiles(const QStringList& profiles, int selected)
+{
+    device_->addItems(profiles);
+    device_->setCurrentIndex(qBound(0, selected, device_->count() - 1));
+}
+
 void ProofSetupDialog::setDeviceForTest(int device)
 {
     device_->setCurrentIndex(qBound(0, device, device_->count() - 1));

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QtCore/QJsonObject>
+#include <QtCore/QPointer>
 #include <QtGui/QImage>
 #include <QtGui/QPageSize>
 #include <QtPrintSupport/QPrinter>
@@ -13,6 +15,7 @@ class QLabel;
 class QPrinter;
 class QPushButton;
 class QSpinBox;
+class QVBoxLayout;
 
 namespace pictura {
 
@@ -28,8 +31,10 @@ struct PrintSettings {
     // An invalid QPageSize means the destination's default paper.
     QPageSize pageSize;
     QPrinter::PaperSource paperSource = QPrinter::Auto;
+    QJsonObject options{};
 };
 PrintSettings& lastPrintSettings();
+PrintSettings readPrintSettings();
 
 // Point `printer` at `settings`: a CUPS queue, or a PDF at `pdfPath` when the
 // settings name no printer.
@@ -39,18 +44,12 @@ void configurePrinter(QPrinter& printer, const PrintSettings& settings, const QS
 // Fit Media). False when the printer cannot be painted on.
 bool printImage(QPrinter& printer, const QImage& image);
 
-// File > Print (WF-013): a page preview, Printer Setup (printer or Save as
-// PDF, copies, Print Settings for the CUPS dialog, portrait / landscape),
-// Color Management, and Cancel / Done / Print. Ported from photorust's
-// PrintDialog.
-// ponytail: printer-managed colour only (Photoshop Manages Colors and
-// Separations, Match Print Colors, and Gamut Warning are shown disabled); no
-// Position and Size fields, Print Selected Area, output marks, or Description.
 class PrintDialog : public QDialog {
     Q_OBJECT
 
 public:
     explicit PrintDialog(const QImage& image, QWidget* parent = nullptr);
+    explicit PrintDialog(PictureView& view, QWidget* parent = nullptr);
 
     PrintSettings settings() const;
     // Where Save as PDF writes; defaults to a file dialog (tests replace it).
@@ -58,14 +57,20 @@ public:
     // The page-setup dialog; tests replace it to pick a size without a printer.
     void setPageSetupProvider(std::function<bool(QPrinter&)> provider);
     QImage pagePreviewForTest() const { return preview_; }
+    void setStatus(const QString& message);
 
 private:
+    PrintDialog(const QImage& image, PictureView* view, QWidget* parent);
     void populatePrinters();
+    void addColorControls(QVBoxLayout* layout);
+    void addOutputControls(QVBoxLayout* layout);
+    void populateProfiles();
+    void updateOptions();
     void updatePreview();
     void print();
-    // The selected destination's paper size in inches, before orientation.
-    QSizeF paperInches() const;
+    bool acceptSettings(const PrintSettings& chosen, bool commit);
 
+    QPointer<PictureView> view_;
     QImage image_;
     QImage preview_;
     std::function<QString()> pdfPath_;
@@ -79,7 +84,23 @@ private:
     QPushButton* landscape_ = nullptr;
     QLabel* previewLabel_ = nullptr;
     QLabel* pageSize_ = nullptr;
+    QLabel* status_ = nullptr;
+    QLabel* colorHint_ = nullptr;
+    QComboBox* handling_ = nullptr;
+    QComboBox* profile_ = nullptr;
+    QComboBox* intent_ = nullptr;
+    QPushButton* openProfile_ = nullptr;
+    QCheckBox* blackPoint_ = nullptr;
+    QCheckBox* hardProof_ = nullptr;
+    QPushButton* proofSetup_ = nullptr;
+    QPushButton* cupsSetup_ = nullptr;
+    QCheckBox* matchColors_ = nullptr;
+    QCheckBox* gamut_ = nullptr;
     QCheckBox* paperWhite_ = nullptr;
+    QJsonObject options_;
+    QJsonObject initialOptions_;
+    QString filename_;
+    QString description_;
 };
 
 // The active document's flattened sRGB image, or a null image.
