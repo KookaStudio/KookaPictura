@@ -102,6 +102,9 @@ bool ImportSaveCoordinator::saveActive(bool interactive)
     }
     QString path = documents_.documentPath(index);
     if (view && print_metadata_pending(*view) && !isNativeDocumentPath(path)) {
+        if (!interactive) {
+            return false;
+        }
         const QStringList filters = saveFileFilters().mid(0, 2);
         QString selected = filters.first();
         QString target = getSaveFileName(dialogParent_, tr("Save Print Settings As"),
@@ -113,7 +116,11 @@ bool ImportSaveCoordinator::saveActive(bool interactive)
         if (!isNativeDocumentPath(target)) {
             return false;
         }
-        const bool saved = saveActiveAs(target);
+        const auto includeMerged = chooseMergedImage(target, *view);
+        if (!includeMerged.has_value()) {
+            return false;
+        }
+        const bool saved = saveActiveAs(target, includeMerged);
         if (saved) {
             record();
         }

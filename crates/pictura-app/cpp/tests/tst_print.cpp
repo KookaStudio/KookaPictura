@@ -687,6 +687,9 @@ void PrintTest::pendingPrintMetadataRequiresNativeSave()
         return psd;
     });
     const auto reset = qScopeGuard([] { pictura::setSaveFileNameProviderForTest(nullptr); });
+    QVERIFY(!window->saveActive(false));
+    QVERIFY(seen.isEmpty());
+    QVERIFY(pictura::print_metadata_pending(view));
     QVERIFY(window->saveActive());
     QCOMPARE(seen.size(), 2);
     QVERIFY(QFile::exists(psd));
