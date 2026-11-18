@@ -70,6 +70,8 @@ pub enum BatchError {
         "The file naming must include a document name, serial number, or serial letter so files are not overwritten."
     )]
     NoUniqueField,
+    #[error("The extension must be the last File Naming field.")]
+    ExtensionNotLast,
     #[error("Choose a file to log errors to.")]
     MissingErrorLog,
     #[error(
@@ -99,6 +101,11 @@ pub fn validate(options: &BatchOptions, library: &ActionLibrary) -> Result<(), B
         }
         if !options.naming.has_unique_field() {
             return Err(BatchError::NoUniqueField);
+        }
+        // ponytail: saves pick the format from the file suffix, so a name like
+        // `a.png001` cannot be written; CS6 saves it in the step's format.
+        if !options.naming.extension_is_last() {
+            return Err(BatchError::ExtensionNotLast);
         }
     }
     if options.errors == ErrorPolicy::Log && options.error_log.trim().is_empty() {

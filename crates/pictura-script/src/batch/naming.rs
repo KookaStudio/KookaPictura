@@ -126,6 +126,22 @@ impl FileNaming {
             .collect()
     }
 
+    /// No extension field, or one that is the last non-empty field.
+    pub fn extension_is_last(&self) -> bool {
+        let fields: Vec<NamingField> = self
+            .parsed()
+            .into_iter()
+            .filter(|field| !matches!(field, NamingField::Empty))
+            .collect();
+        match fields
+            .iter()
+            .rposition(|field| matches!(field, NamingField::Extension { .. }))
+        {
+            Some(index) => index + 1 == fields.len(),
+            None => true,
+        }
+    }
+
     /// At least one document-name, serial-number, or serial-letter field.
     pub fn has_unique_field(&self) -> bool {
         self.parsed().iter().any(NamingField::is_unique)

@@ -197,6 +197,30 @@ fn validate_rejects_a_scheme_without_a_unique_field() {
 }
 
 #[test]
+fn validate_rejects_an_extension_before_other_fields() {
+    let tree = TempTree::new("extension-last");
+    let library = library_with(vec![action("A", vec![])]);
+    let mut options = options_for(&tree.0, "A");
+    options.destination = BatchDestination::Folder;
+    options.destination_folder = options.source_folder.clone();
+    options.naming = naming(&["Document Name", "extension", "3 Digit Serial Number"]);
+    assert_eq!(
+        validate(&options, &library),
+        Err(BatchError::ExtensionNotLast)
+    );
+    options.naming = naming(&[
+        "Document Name",
+        "3 Digit Serial Number",
+        "",
+        "extension",
+        "",
+    ]);
+    assert_eq!(validate(&options, &library), Ok(()));
+    options.naming = naming(&["Document Name", "3 Digit Serial Number"]);
+    assert_eq!(validate(&options, &library), Ok(()));
+}
+
+#[test]
 fn validate_rejects_a_missing_action() {
     let tree = TempTree::new("action");
     let library = library_with(vec![action("A", vec![])]);
