@@ -483,7 +483,7 @@ mod tests {
             data: vec![37; 64 * 64].into(),
         });
         let marker = frame_image_resource(1057, "", &[0, 0, 0, 1, 1]);
-        source.image_resources = encode_image_resources(&[marker.clone()]).into();
+        source.image_resources = encode_image_resources(std::slice::from_ref(&marker)).into();
         let mut encoded = pictura_codec::write_psd(&pictura_render::save_view(&source)).unwrap();
         let offset = encoded
             .windows(marker.raw.len())
@@ -567,7 +567,7 @@ mod tests {
             .unwrap();
         let version_info = [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
         let marker = frame_image_resource(1057, "", &version_info);
-        doc.image_resources = encode_image_resources(&[marker.clone()]).into();
+        doc.image_resources = encode_image_resources(std::slice::from_ref(&marker)).into();
         let mut encoded = pictura_codec::write_psd(&doc).unwrap();
         let mut real_marker = marker.raw.clone();
         let flag = real_marker.len() - marker.data.len() - marker.data.len() % 2 + 4;
