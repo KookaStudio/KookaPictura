@@ -131,6 +131,7 @@ private:
     void wireEditHistory();
     void wireFilterMenu();
     void wireImageMenu();
+    void wireVariablesMenu();
     void wireImageModeMenu();
     void wireImageAdjustments();
     void wireLayerAdjustments();

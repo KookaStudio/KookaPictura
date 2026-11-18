@@ -759,6 +759,7 @@ fn write_container(
     } else {
         resources
     };
+    let resources = crate::variable_resources::output(doc, resources)?;
     out.extend_from_slice(&(resources.len() as u32).to_be_bytes());
     out.extend_from_slice(&resources);
 

@@ -112,11 +112,16 @@ pub fn read_psd_within_options(
     budget: ImageBudget,
 ) -> Result<Document, PsdError> {
     let mut doc = read_container(bytes, options, &mut DecodeBudget::new(budget), &mut None)?;
-    crate::path_resources::resolve_paths(&mut doc);
-    crate::guide_resources::resolve_guides(&mut doc);
-    crate::layer_comps::resolve(&mut doc);
-    crate::global_light::resolve_global_light(&mut doc);
+    resolve_document_resources(&mut doc);
     Ok(doc)
+}
+
+pub(crate) fn resolve_document_resources(doc: &mut Document) {
+    crate::path_resources::resolve_paths(doc);
+    crate::guide_resources::resolve_guides(doc);
+    crate::variable_resources::resolve(doc);
+    crate::layer_comps::resolve(doc);
+    crate::global_light::resolve_global_light(doc);
 }
 pub(crate) fn read_container(
     bytes: &[u8],

@@ -237,16 +237,23 @@ pub fn duplicate_layer(doc: &mut Document, index: i32) -> i32 {
     let source = index as usize;
     let mut copy = doc.layers[source].clone();
     copy.name = format!("{} copy", copy.name);
-    pictura_core::layer_comp::clear_layer_id(&mut copy);
-    pictura_codec::edit_layer(copy.as_mut(), |parts| {
-        parts.extra_blocks.retain(|block| block.key != *b"shmd")
-    });
+    clear_copied_layer_identity(&mut copy);
     if copy.background {
         release_background(&mut copy);
     }
     match doc.layers.insert(&[], source + 1, copy) {
         Ok(()) => (source + 1) as i32,
         Err(_) => -1,
+    }
+}
+
+pub(super) fn clear_copied_layer_identity(layer: &mut Layer) {
+    pictura_core::layer_comp::clear_layer_id(layer);
+    pictura_codec::edit_layer(layer, |parts| {
+        parts.extra_blocks.retain(|block| block.key != *b"shmd")
+    });
+    for child in layer.children_iter_mut() {
+        clear_copied_layer_identity(child);
     }
 }
 
@@ -571,7 +578,10 @@ pub(super) fn release_background(layer: &mut Layer) {
 /// already the Background, and the document has no Background yet.
 pub fn can_background_from_layer(doc: &Document, path: &str) -> bool {
     resolve_path(doc, path).is_some_and(|layer| {
-        !layer.is_group() && !layer.has_adjustment_content() && !layer.background
+        !layer.is_group()
+            && !layer.has_adjustment_content()
+            && !layer.background
+            && !doc.variables.protects_layer(layer)
     }) && !doc.layers.has_background()
 }
 
@@ -613,6 +623,7 @@ pub fn background_from_layer(doc: &mut Document, path: &str) -> bool {
                 parts.extra_blocks.retain(|block| block.key != *b"shmd")
             });
         }
+        doc.prune_variable_bindings();
     }
     promoted
 }

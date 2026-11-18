@@ -94,7 +94,7 @@ public:
     // A zoomed-out filter dialog's preview: `picture`, a reduced render of the
     // document rect `area`, drawn over the document there until cleared. The
     // document itself is untouched.
-    void setFilterPreview(const QImage& picture, const QRect& area);
+    void setFilterPreview(const QImage& picture, const QRect& area, bool replaceComposite = false);
     void clearFilterPreview();
     bool filterPreviewShownForTest() const { return !filterPreview_.isNull(); }
 
@@ -722,6 +722,7 @@ private:
     void paintFilterPreview(QPainter& painter);
     QImage filterPreview_;
     QRect filterPreviewArea_;
+    bool filterPreviewReplacesComposite_ = false;
     void paintMaskOverlay(QPainter& painter);
     QImage maskOverlay_;
     QRect maskOverlayArea_;

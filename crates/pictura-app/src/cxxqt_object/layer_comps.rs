@@ -5,6 +5,9 @@
 mod imp;
 
 use super::qobject::PictureView;
+use super::variables::{
+    variables_available, variables_command, variables_preview, variables_state,
+};
 use imp::*;
 
 #[cxx_qt::bridge]
@@ -20,6 +23,14 @@ pub mod ffi {
 
     #[namespace = "pictura"]
     extern "Rust" {
+        fn variables_available(view: &PictureView, group: &QString) -> bool;
+        fn variables_state(view: &PictureView, draft: bool) -> QString;
+        fn variables_command(
+            view: Pin<&mut PictureView>,
+            action: &QString,
+            payload: &QString,
+        ) -> QString;
+        fn variables_preview(view: &PictureView, payload: &QString) -> Vec<u8>;
         fn layer_comp_count(view: &PictureView) -> i32;
         fn layer_comp_id(view: &PictureView, index: i32) -> i32;
         fn layer_comp_name(view: &PictureView, index: i32) -> QString;

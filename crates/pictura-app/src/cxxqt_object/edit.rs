@@ -243,6 +243,7 @@ impl PictureViewRust {
         }
         if matches!(edit, Edit::Structural { .. } | Edit::Inserted) {
             if let Some(doc) = self.session.doc.as_mut() {
+                doc.prune_variable_bindings();
                 if !doc.layer_comps.is_empty() {
                     let seed = doc.layer_comps.next_layer_id();
                     pictura_core::layer_comp::ensure_layer_ids(doc, seed);

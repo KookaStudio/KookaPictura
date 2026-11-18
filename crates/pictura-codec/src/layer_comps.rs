@@ -284,6 +284,7 @@ pub(crate) fn resolve(doc: &mut Document) {
         .find(|resource| resource.id == COMPS_RESOURCE);
     let seed = seed_from_resources(doc);
     doc.layer_comps.set_next_layer_id(seed);
+    let protected = doc.variables.protected_ids().clone();
 
     let Some(resource) = resource else {
         doc.layer_comps.mark_parsed();
@@ -297,7 +298,7 @@ pub(crate) fn resolve(doc: &mut Document) {
     }
     doc.layer_comps.dirty = false;
     doc.layer_comps.base_dirty = false;
-    doc.layer_comps.mark_parsed();
+    doc.layer_comps.parsed = protected.is_empty();
     if !doc.layer_comps.is_empty() {
         ensure_layer_ids(doc, seed);
     }
@@ -308,16 +309,18 @@ pub(crate) fn resolve(doc: &mut Document) {
         anchors: &mut Vec<(u32, PositionAnchor)>,
     ) {
         for layer in layers.iter() {
-            if let Some(block) = layer.extra_block(b"shmd") {
-                let entries = read_shmd_entries(block.data.as_slice());
-                if let Some((_, base, variants)) = entries
-                    .iter()
-                    .find(|(key, _)| key == b"cmls")
-                    .and_then(|(_, data)| read_cmls(data))
-                {
-                    let id = layer_id(layer).unwrap_or(0);
-                    read_layer_state(doc, layer, &variants, base, id);
-                    anchors.push((id, base));
+            if !layer_id(layer).is_some_and(|id| doc.variables.protected_ids().contains_key(&id)) {
+                if let Some(block) = layer.extra_block(b"shmd") {
+                    let entries = read_shmd_entries(block.data.as_slice());
+                    if let Some((_, base, variants)) = entries
+                        .iter()
+                        .find(|(key, _)| key == b"cmls")
+                        .and_then(|(_, data)| read_cmls(data))
+                    {
+                        let id = layer_id(layer).unwrap_or(0);
+                        read_layer_state(doc, layer, &variants, base, id);
+                        anchors.push((id, base));
+                    }
                 }
             }
             walk(doc, layer.children(), anchors);
@@ -416,7 +419,8 @@ fn comp_descriptor(store: &LayerCompStore) -> DescValue {
 /// Replace/remove resource 1065 and refresh resource 1044 after identity
 /// assignment. `section` is the image-resource section the writer will emit.
 pub(crate) fn output_resources(doc: &Document, section: Vec<u8>) -> Vec<u8> {
-    if !doc.layer_comps.dirty && !doc.layer_comps.ids_dirty {
+    let variable_seed = doc.variables.dirty() && !doc.variables.definitions().is_empty();
+    if !doc.layer_comps.dirty && !doc.layer_comps.ids_dirty && !variable_seed {
         return section;
     }
     let mut section = section;
@@ -428,7 +432,7 @@ pub(crate) fn output_resources(doc: &Document, section: Vec<u8>) -> Vec<u8> {
         };
         section = output_resource(section, COMPS_RESOURCE, data.as_deref());
     }
-    if doc.layer_comps.ids_dirty {
+    if doc.layer_comps.ids_dirty || variable_seed {
         let seed = doc
             .layer_comps
             .next_layer_id()

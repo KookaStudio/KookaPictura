@@ -299,14 +299,16 @@ mod type_channels;
 mod type_layer;
 mod type_path;
 mod type_warp;
+mod variable_pixels;
 pub use type_box::TypePlacement;
 pub use type_layer::{
     add_type_layer, apply_type_style, has_type_layers, re_render_type_layers, render_type,
-    replace_type_layer, type_layer_at, type_layer_spec, type_layers_editable, type_mask,
-    type_placement,
+    replace_type_layer, replace_variable_text, type_layer_at, type_layer_spec,
+    type_layers_editable, type_mask, type_placement,
 };
 pub use type_path::{overflow_point as type_path_overflow_point, path_hit_at, PathHit};
 pub use type_warp::{type_warp_refusal, WarpRefusal};
+pub use variable_pixels::{place_pixels, replace_variable_pixels};
 
 pub use pictura_ops::{Anchor, Resample};
 

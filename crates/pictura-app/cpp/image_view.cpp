@@ -615,7 +615,9 @@ void ImageView::paintEvent(QPaintEvent* event)
     // Sampled like the canvas, so a preview does not change the image's quality.
     painter.setRenderHint(QPainter::SmoothPixmapTransform, smoothSamplingForZoom(zoom_));
     const bool basePatch = movePreviewActive_ && moveBasePos_.has_value();
-    if (transformActive_ && !basePatch && !moveBase_.isNull()) {
+    if (filterPreviewReplacesComposite_ && !filterPreview_.isNull()) {
+        presentCacheRebuiltLastPaint_ = false;
+    } else if (transformActive_ && !basePatch && !moveBase_.isNull()) {
         // Free Transform: the base is fixed; the layer is drawn under the live
         // similarity transform about its original centre.
         painter.drawImage(QPointF(0.0, 0.0), moveBase_);

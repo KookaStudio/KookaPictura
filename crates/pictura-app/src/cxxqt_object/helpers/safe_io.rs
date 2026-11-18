@@ -53,6 +53,24 @@ pub(in crate::cxxqt_object) fn read_capped(path: impl AsRef<Path>, limit: u64) -
     (bytes.len() as u64 <= limit).then_some(bytes)
 }
 
+/// Publish a complete sibling file without replacing an existing destination.
+pub(in crate::cxxqt_object) fn write_new_atomically(
+    path: &Path,
+    bytes: &[u8],
+) -> std::io::Result<()> {
+    let suffix = u64::from_le_bytes(pictura_codec::os_random());
+    let temporary = path.with_file_name(format!(".pictura-{suffix:016x}.tmp"));
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)?;
+    let written = file.write_all(bytes);
+    drop(file);
+    let result = written.and_then(|()| std::fs::hard_link(&temporary, path));
+    let _ = std::fs::remove_file(temporary);
+    result
+}
+
 /// The largest raster file an import reads: no compressed image larger than
 /// its own decoded budget is plausible.
 pub(in crate::cxxqt_object) fn import_file_limit() -> u64 {

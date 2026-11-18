@@ -35,6 +35,8 @@ pub struct PictureViewRust {
     pub(super) session: crate::cxxqt_object::document_session::DocumentSession,
     pub(super) pending_vector_place: Option<PendingVectorPlace>,
     pub(super) vector_place_result: VectorPlaceResult,
+    pub(super) variables_dialog: Option<Box<super::variables::VariableSession>>,
+    pub(super) variable_export: Option<Box<super::variables::ExportSession>>,
     /// View > Proof Setup / Proof Colors: application view state, never document
     /// or history state.
     pub(super) proof: super::proofing::ProofState,
@@ -315,6 +317,8 @@ impl Default for PictureViewRust {
             last_transform: None,
             transform_controls: false,
             pending_previews: Default::default(),
+            variables_dialog: None,
+            variable_export: None,
             gpu_compute: true,
             color_policy: pictura_codec::Policy::Preserve,
             cmyk_policy: pictura_codec::Policy::Preserve,
