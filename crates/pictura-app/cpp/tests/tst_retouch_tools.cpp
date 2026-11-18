@@ -562,7 +562,7 @@ void RetouchToolsTest::airbrushOffStaysStill()
     f.canvas->mousePressed(QPointF(20, 20), Qt::LeftButton, 0);
     QTest::qWait(0);
     const int before = qRed(f.view->sample_argb(20, 20));
-    QTest::qWait(250);
+    QTest::qWait(250); // held dabs are time-driven; no signal marks one
     QCOMPARE(qRed(f.view->sample_argb(20, 20)), before);
     f.canvas->mouseReleased(QPointF(20, 20));
     QVERIFY2(f.committedOnce(base, "Dodge"), "one Dodge state");
@@ -588,7 +588,7 @@ void RetouchToolsTest::airbrushBuildsWhileHeld()
     f.canvas->mousePressed(QPointF(20, 20), Qt::LeftButton, 0);
     QTest::qWait(0);
     const int before = qRed(f.view->sample_argb(20, 20));
-    QTest::qWait(250);
+    QTest::qWait(250); // held dabs are time-driven; no signal marks one
     const int after = qRed(f.view->sample_argb(20, 20));
     f.canvas->mouseReleased(QPointF(20, 20));
     QVERIFY2(after > before, "Airbrush did not build while held");
