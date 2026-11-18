@@ -619,7 +619,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       unedited tile drops back to the file instead of scratch, and the file's
       merged image is the first picture until the first edit (#1218, #1318).
       `crates/pictura-codec/src/lazy.rs`.
-- [ ] Fit-to-screen first paint without rebuilding every level from level 0
+- [x] Fit-to-screen first paint without rebuilding every level from level 0
       (#1321)
 - [x] **Streamed saves** — the PSD/PSB and row-based raster writers stream a
       band of rows at a time into the temp file, and the save gate reserves

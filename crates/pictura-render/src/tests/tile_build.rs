@@ -171,3 +171,23 @@ fn stale_tiles_are_not_folded_from() {
         "built from the edited document"
     );
 }
+
+// [ctf_strip]
+#[test]
+fn a_tile_row_reads_its_source_as_one_strip() {
+    let doc = seeded_doc(25);
+    let mut local = TilePyramid::new(W, H, u64::MAX);
+    let mut keys = level_keys(&local, 2);
+    keys.reverse();
+    let asked = Mutex::new(Vec::new());
+    let built = build_keys(&mut local, &keys, &counted(&doc, &asked));
+    assert_eq!(built.len(), keys.len());
+    for (key, data) in &built {
+        assert_eq!(*data, direct(&doc, &local, *key), "{key:?}");
+    }
+    let asked = asked.into_inner().expect("unpoisoned");
+    assert!(
+        asked.iter().all(|r| r.left == 0 && r.right == W as i32),
+        "whole rows: {asked:?}"
+    );
+}

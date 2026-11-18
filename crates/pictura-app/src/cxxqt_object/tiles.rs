@@ -826,6 +826,9 @@ impl qobject::PictureView {
             let ticket = job.ticket;
             // Before landing, so a write does not fork tiles nobody reads.
             drop(job);
+            // A whole-row strip's chunk buffers come from the thread arenas,
+            // which keep them after they are freed (#1321).
+            eviction::trim();
             qt_thread
                 .queue(move |view| view.land_tiles(ticket, built, view_key, hold))
                 .ok();

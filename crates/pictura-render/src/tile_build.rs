@@ -30,7 +30,10 @@ pub(crate) fn build_tile(
 }
 
 /// Build `keys` of one source, finer levels first, so a coarser key folds
-/// from the finer ones built before it. Returns every tile built, the levels
+/// from the finer ones built before it. A run of adjacent keys in one tile
+/// row with no finer tile under any of them is built as one strip, so a
+/// source that decodes whole rows (the merged preview's bands) reads each
+/// row once rather than once per tile. Returns every tile built, the levels
 /// folded through included, each once.
 pub fn build_keys(
     local: &mut TilePyramid,
@@ -38,12 +41,70 @@ pub fn build_keys(
     source: Level0Source<'_>,
 ) -> Vec<(TileKey, Arc<[u8]>)> {
     let mut keys = keys.to_vec();
-    keys.sort_by_key(|key| key.level);
+    keys.sort_by_key(|key| (key.level, key.ty, key.tx));
+    keys.dedup();
     let mut built = Vec::new();
+    let mut run: Vec<TileKey> = Vec::new();
     for key in keys {
-        build_folded(local, key, source, &mut built);
+        if local.current(key).is_some() {
+            continue;
+        }
+        if key.level > 0 && local.any_finer_under(key) {
+            build_strip(local, &run, source, &mut built);
+            run.clear();
+            build_folded(local, key, source, &mut built);
+            continue;
+        }
+        let joins = run.last().is_some_and(|last| {
+            last.level == key.level && last.ty == key.ty && last.tx + 1 == key.tx
+        });
+        if !joins {
+            build_strip(local, &run, source, &mut built);
+            run.clear();
+        }
+        run.push(key);
     }
+    build_strip(local, &run, source, &mut built);
     built
+}
+
+/// Build `run` (adjacent keys of one row and level) from one read of the
+/// rectangle they cover, each tile cut from it.
+fn build_strip(
+    local: &mut TilePyramid,
+    run: &[TileKey],
+    source: Level0Source<'_>,
+    built: &mut Vec<(TileKey, Arc<[u8]>)>,
+) {
+    let (Some(&first), Some(&last)) = (run.first(), run.last()) else {
+        return;
+    };
+    let strip = PsdRect {
+        right: local.tile_rect(last).right,
+        ..local.tile_rect(first)
+    };
+    let level = first.level as usize;
+    let (straight, reduced);
+    let data: &[u8] = if level == 0 {
+        straight = crate::tile_pyramid::interleave(&source(strip));
+        &straight
+    } else {
+        reduced = region_level(source, local.size(), strip, level);
+        reduced.data()
+    };
+    let sw = strip.width() as usize * 4;
+    for &key in run {
+        let tile = local.tile_rect(key);
+        let tw = tile.width() as usize * 4;
+        let x = (tile.left - strip.left) as usize * 4;
+        let mut bytes = Vec::with_capacity(tw * tile.height() as usize);
+        for y in 0..tile.height() as usize {
+            bytes.extend_from_slice(&data[y * sw + x..y * sw + x + tw]);
+        }
+        let bytes: Arc<[u8]> = bytes.into();
+        local.insert(key, Arc::clone(&bytes));
+        built.push((key, bytes));
+    }
 }
 
 /// `key`'s bytes, folded one level at a time from the current finer tiles of

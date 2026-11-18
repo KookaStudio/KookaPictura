@@ -437,7 +437,7 @@ fn interior_halving_matches_the_general_rule() {
                 }
                 let o = (oy as usize * halved.width as usize + ox as usize) * 4;
                 for (c, total) in sum.iter().enumerate() {
-                    let want = if n == 0 { 0 } else { (total + n / 2) / n };
+                    let want = (total + n / 2).checked_div(n).unwrap_or(0);
                     assert_eq!(
                         u32::from(halved.data[o + c]),
                         want,

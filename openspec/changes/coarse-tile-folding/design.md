@@ -48,15 +48,54 @@ level comes in the next job and folds from them through the levels between.
 If the coarsest level is asked for first, it is built from level 0 as today,
 and the fit level after it as well.
 
-## 3. Cheaper halving
+## 3. Strips and side-by-side channels
+
+Sampling the M12 open (gdb, after the folding above) showed one worker thread
+in `decode_packbits` with the rayon pool idle. A fit-level tile reads a
+4096-wide footprint, but the merged preview decodes whole 17000-wide bands
+into a 32 MiB LRU that holds about two band rows, so each band was decoded
+once per tile column of the row, about four times, channel after channel.
+
+- `build_keys` builds a run of adjacent keys of one level and row with no
+  finer tile under them as one strip (`region_level` over the run's
+  rectangle, then a copy per tile). The level-0 source is asked for whole
+  rows, so each band decodes about once. The bytes are the per-tile build's:
+  `region_level` is exact for any aligned rectangle.
+- `MergedPreview::region` decodes a band's channels side by side
+  (`par_iter`). It holds the same bands as before, one per channel; the
+  every-core band decode #1218 dropped held a chunk's bands at once.
+
+## 4. Cheaper halving
 
 `Region::halved` sums a block without bounds checks when the whole 2×2 block
 lies inside the level and the region; the edge pixels keep the general loop.
 Same rounding, same bytes. (The display sources' `into_owned` was suspected
 too, but a `PixelBuffer` clone shares its `Arc` storage: no copy to save.)
 
-## 4. Measurement
+## 5. Heap trim after a tile job
 
-M12 at 17000² (`scripts/memory_scenarios.py`), first fit-to-screen picture,
-before and after on the same binary. The 25 % target is best effort (owner,
-2026-11-18); the result goes in the PR and `docs/dev/STATE.md`.
+A whole-row strip's chunk buffers (about 31 MiB at 17000 wide) sit just under
+glibc's largest mmap threshold, so they come from the thread arenas, which
+keep them after they are freed. A tile job ends with
+`pictura_core::memory::eviction::trim` (`malloc_trim`, already run after each
+eviction pass), on the worker. It brings the resident size after the open
+down about 40 MiB but not the peak (owner decision, 2026-11-18: ship the
+strips with the trim; the retention is a follow-up). Chunks one band tall
+kept the peak at master's but took 4.4 s; rounding chunk rows up did not
+help.
+
+## 6. Measurement
+
+M12 at 17000² (`scripts/profile-tools.py --scenarios M12 --peak`), master
+`bb911b80` and this branch built side by side, runs alternated, load average
+about 10 from other work; medians of three:
+
+| Build | Total | Of eager 9433 ms | Peak | RSS after |
+|---|---|---|---|---|
+| master | 3837 ms | 41 % | 647 MiB | 588 MiB |
+| folding and halving only | ~3650 ms | ~39 % | ~637 MiB | ~same |
+| this change | 2263 ms | 24 % | 724 MiB | 677 MiB |
+
+The app's CPU time over the open fell from 11.0 s to 5.5 s (`/proc` stat,
+same runs' setup). The 25 % target is met; peak memory is 77 MiB above
+master's (glibc arenas, §5) and under half the eager open's 1540 MiB.

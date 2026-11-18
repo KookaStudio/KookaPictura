@@ -35,6 +35,18 @@ and the synchronous path SHALL follow this rule alike.
 - **WHEN** a large document's fit level is cached and the canvas asks a worker for the coarsest level
 - **THEN** the landed coarsest tiles equal a whole rebuild, the composite is not read, and the levels between are cached as well
 
+### Requirement: Adjacent fresh tiles of one row build as one strip
+
+A build SHALL build a run of adjacent tiles of one level and tile row, none
+of which has a finer current tile under it, from one read of the rectangle
+the run covers, and cut each tile from it. Each tile SHALL equal its own
+direct build, byte for byte.
+
+#### Scenario: A tile row reads its source as one strip [ctf_strip]
+
+- **WHEN** one build is asked for every tile of a level with nothing cached
+- **THEN** every tile equals its direct build, and every rectangle the level-0 source is asked for spans the whole width of the level
+
 ### Requirement: Halving takes an interior fast path with the same bytes
 
 The 2×2 halving of a premultiplied region SHALL produce the same bytes

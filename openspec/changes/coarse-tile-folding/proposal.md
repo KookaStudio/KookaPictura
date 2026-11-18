@@ -18,6 +18,9 @@ folds a tile from its four cached children; the worker never does.
   under them read the level-0 source.
 - The worker gets a snapshot of the current cached tiles with its ticket, and
   lands the intermediate tiles it folded through.
+- Adjacent fresh tiles of one row build as one strip, so the merged
+  preview decodes each band once instead of once per tile column, and it
+  decodes a band's three channels side by side.
 - The 2×2 halving takes a fast path for blocks wholly inside the level (the
   same bytes).
 
