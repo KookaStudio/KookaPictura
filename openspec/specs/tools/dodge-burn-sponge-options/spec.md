@@ -80,8 +80,9 @@ The Dodge, Burn, and Sponge tools SHALL be unavailable on 32-bpc documents. The
 toolbox flyout rows SHALL be disabled, `setActiveTool` SHALL refuse them, and an
 active tone tool SHALL switch to Move when a document switch or depth conversion
 makes it unavailable. The engine SHALL refuse to start a tone stroke on a
-32-bpc document even when called directly. 8- and 16-bpc documents SHALL keep
-the tools available.
+32-bpc document even when called directly. The 32-bpc gate SHALL be independent
+of the engine's existing 8-bit tone path; 8-bpc documents SHALL keep the tools
+available.
 
 #### Scenario: A 32-bpc document disables the tone tools [tone_32bpc_disabled]
 
