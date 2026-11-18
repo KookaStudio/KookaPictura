@@ -57,6 +57,8 @@ mod lens_correction;
 mod live_shape;
 mod mapped;
 mod mask_params;
+pub mod measurement_export;
+mod measurement_scale_resource;
 mod metadata;
 mod path_resources;
 mod patterns;

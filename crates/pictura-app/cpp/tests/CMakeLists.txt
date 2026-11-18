@@ -90,6 +90,7 @@ set(PICTURA_QT_TESTS
     tst_transform_selection
     tst_command_tree
     tst_edition_gating
+    tst_measurement_scale
     tst_toolbar_shape
     tst_command_bus
     tst_merge_commands

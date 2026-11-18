@@ -29,6 +29,7 @@ mod layer_content;
 mod layer_stack;
 pub use layer_content::{Layer, LayerContent, LayerKind, LayerParts};
 pub mod mask_ops;
+mod measurement_scale;
 pub mod memory;
 pub mod nonseparable;
 pub mod path;
@@ -61,6 +62,7 @@ pub use guides::{guide_near, Guide, GuideOrientation};
 pub use hdr::{validate_hdr_toning_params, HdrToningParams};
 pub use homography::Homography;
 pub use layer_stack::{LayerStack, StackError, StackViolation};
+pub use measurement_scale::{DocumentMeasurementScale, MeasurementScale};
 pub use pixel_buffer::PixelBuffer;
 pub use plane::assert_no_materialization;
 pub use plane::{fresh_stamp, materializations, reset_materializations, Plane};
@@ -202,6 +204,7 @@ pub struct Document {
     pub color_mode_data: Plane<u8>,
     /// Verbatim image-resource section bytes, preserved for lossless re-save.
     pub image_resources: Plane<u8>,
+    pub measurement_scale: DocumentMeasurementScale,
     /// Global layer mask payload, preserved verbatim for lossless re-save.
     pub global_layer_mask: Plane<u8>,
     /// Bytes after the global layer mask up to the layer-section end, preserved verbatim for lossless re-save.
@@ -257,6 +260,7 @@ impl Document {
             channels: Vec::new(),
             color_mode_data: Plane::default(),
             image_resources: Plane::default(),
+            measurement_scale: DocumentMeasurementScale::default(),
             global_layer_mask: Plane::default(),
             layer_section_extra: Plane::default(),
             slices: Vec::new(),

@@ -178,3 +178,28 @@ fn live_type_and_high_depth_refuse() {
     assert_eq!(d, before);
     assert!(perspective_crop_refusal(&doc(8, 8, 10)).is_none());
 }
+
+#[test]
+fn perspective_crop_invalidates_only_non_isometric_calibration() {
+    use pictura_core::{DocumentMeasurementScale, MeasurementScale};
+    let scale = MeasurementScale::new(50, 1.0, "mm").unwrap();
+    let mut warped = doc(16, 16, 255);
+    warped.measurement_scale = DocumentMeasurementScale::Applied(scale.clone());
+    let distorted = [(0.0, 0.0), (16.0, 0.0), (15.0, 16.0), (0.0, 16.0)];
+    assert!(perspective_crop_sized(&mut warped, distorted, 16, 16));
+    assert!(warped.measurement_scale.needs_recalibration());
+    let mut rigid = doc(16, 16, 255);
+    rigid.measurement_scale = DocumentMeasurementScale::Applied(scale.clone());
+    let rotated = [(20.0, 3.0), (20.0, 19.0), (4.0, 19.0), (4.0, 3.0)];
+    assert!(perspective_crop_sized(&mut rigid, rotated, 16, 16));
+    assert_eq!(rigid.measurement_scale.custom(), Some(&scale));
+    assert!(!perspective_crop(&mut rigid, [(0.0, 0.0); 4]));
+    assert_eq!(rigid.measurement_scale.custom(), Some(&scale));
+    let mut opaque = doc(16, 16, 255);
+    opaque.measurement_scale = DocumentMeasurementScale::Opaque;
+    assert!(perspective_crop_sized(&mut opaque, distorted, 16, 16));
+    assert_eq!(
+        opaque.measurement_scale,
+        DocumentMeasurementScale::OpaqueResampled
+    );
+}

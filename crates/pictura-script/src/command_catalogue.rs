@@ -16,7 +16,9 @@ pub fn command_edition(id: &str) -> Edition {
         | "view.show.3d.axis"
         | "view.show.count"
         | "window.panels.3d"
-        | "window.panels.measurement.log" => Edition::Extended,
+        | "window.panels.measurement.log"
+        | "image.analysis.set.measurement.scale.default"
+        | "image.analysis.set.measurement.scale.custom" => Edition::Extended,
         id if id.starts_with("layer.smart.objects.stack.mode.") => Edition::Extended,
         _ => Edition::Standard,
     }
@@ -331,6 +333,8 @@ mod tests {
             .collect();
         let expected: std::collections::BTreeSet<&str> = [
             "edit.preferences.3d",
+            "image.analysis.set.measurement.scale.custom",
+            "image.analysis.set.measurement.scale.default",
             "layer.rasterize.3d",
             "layer.smart.objects.stack.mode.entropy",
             "layer.smart.objects.stack.mode.kurtosis",

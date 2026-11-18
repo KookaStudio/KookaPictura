@@ -84,6 +84,8 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("ImageTrim", "image.trim"),
     ("ImageRevealAll", "image.revealAll"),
     ("ImageDuplicate", "image.duplicate"),
+    ("ImageAnalysisSetMeasurementScaleDefault", "image.analysis.set.measurement.scale.default"),
+    ("ImageAnalysisSetMeasurementScaleCustom", "image.analysis.set.measurement.scale.custom"),
     ("ImageModeBitmap", "image.mode.bitmap"),
     ("ImageModeGrayscale", "image.mode.grayscale"),
     ("ImageModeIndexed", "image.mode.indexed.color"),

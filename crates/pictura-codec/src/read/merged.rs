@@ -66,6 +66,7 @@ pub(super) fn without_merged_image(
         channels,
         color_mode_data: color_mode_data.into(),
         image_resources: image_resources.into(),
+        measurement_scale: Default::default(),
         global_layer_mask: global_layer_mask.into(),
         layer_section_extra: layer_section_extra.into(),
         slices: Vec::new(),

@@ -146,6 +146,7 @@ pub(crate) fn resolve_document_resources(doc: &mut Document) {
     crate::variable_resources::resolve(doc);
     crate::layer_comps::resolve(doc);
     crate::global_light::resolve_global_light(doc);
+    crate::measurement_scale_resource::resolve(doc);
 }
 pub(crate) fn read_container(
     bytes: &[u8],

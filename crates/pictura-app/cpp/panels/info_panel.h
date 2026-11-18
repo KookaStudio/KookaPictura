@@ -8,6 +8,7 @@ class QColor;
 class QEvent;
 class QGridLayout;
 class QLabel;
+class QMenu;
 class QToolButton;
 class QVBoxLayout;
 
@@ -29,6 +30,7 @@ public:
     // The active tool and its keyboard hints, shown as their own readout row.
     void setToolInfo(const QString& name, const QStringList& hints);
     void refresh();
+    void updatePanelMenu(QMenu* menu);
 
     QString samplerTextForTest() const;
     QString colorBlockTextForTest(int index = 0) const;
@@ -100,6 +102,8 @@ private:
     Readout* position_ = nullptr;
     Readout* size_ = nullptr;
     QLabel* docLabel_ = nullptr;
+    QLabel* scaleLabel_ = nullptr;
+    bool showScale_ = false;
     QLabel* samplersLabel_ = nullptr;
     QLabel* toolLabel_ = nullptr;
     QString toolName_;

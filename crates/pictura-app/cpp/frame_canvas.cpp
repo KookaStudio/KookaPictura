@@ -16,8 +16,12 @@
 #include "pictura_debug_timing.h"
 
 #include "api/document_bridge.h"
+#include "api/paint_bridge.h"
 
 #include <QtCore/QStringList>
+#include <QtCore/QTimer>
+
+#include <memory>
 
 namespace pictura {
 
@@ -115,6 +119,54 @@ void PicturaMainWindow::wireDocument(DocEntry& doc)
 {
     PictureView* view = doc.view;
     connect(view, &PictureView::changed, this, &PicturaMainWindow::refresh);
+    struct ScaleNotice {
+        bool invalidated = false;
+        bool pending = false;
+        bool shown = false;
+    };
+    const auto notice = std::make_shared<ScaleNotice>();
+    notice->invalidated = measurement_scale_needs_recalibration(*view);
+    const QString message = edition_is_extended()
+        ? tr("Pixels changed. Recalibrate the measurement scale.")
+        : tr("Pixels changed. Recalibrate the measurement scale in Extended.");
+    const auto deliverNotice = [this, view, notice, message]() {
+        if (view == activeView() && notice->pending) {
+            statusBar()->showMessage(message, 8000);
+            notice->pending = false;
+            notice->shown = true;
+        }
+    };
+    connect(view, &PictureView::changed, view, [this, view, notice, message, deliverNotice]() {
+        const bool invalidated = measurement_scale_needs_recalibration(*view);
+        if (invalidated && !notice->invalidated) {
+            notice->pending = true;
+        } else if (!invalidated) {
+            notice->pending = false;
+            if (notice->shown && statusBar()->currentMessage() == message) {
+                statusBar()->clearMessage();
+            }
+            notice->shown = false;
+        }
+        notice->invalidated = invalidated;
+        deliverNotice();
+    });
+    connect(documents_.get(), &DocumentRegistry::activeDocumentChanged, view,
+            [this, view, notice, message, deliverNotice]() {
+        if (view != activeView() && notice->shown) {
+            if (statusBar()->currentMessage() == message) {
+                statusBar()->clearMessage();
+            }
+            notice->shown = false;
+        }
+        if (view == activeView() && notice->pending) {
+            QTimer::singleShot(0, view, deliverNotice);
+        }
+    });
+    connect(view, &QObject::destroyed, this, [this, notice, message]() {
+        if (notice->shown && statusBar()->currentMessage() == message) {
+            statusBar()->clearMessage();
+        }
+    });
     // A notifying edit already refreshed the panels that subscribe to it. Scope
     // the marker to the active view so a background document's notification
     // cannot suppress the active panels' refresh.

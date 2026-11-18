@@ -72,6 +72,8 @@ QList<PanelGroup*> PanelHost::buildPanels(const SessionState& state)
 
     infoPanel_ = new InfoPanel(shell_);
     infoPanel_->setObjectName(QStringLiteral("infoPanel"));
+    setPanelMenuHook(QStringLiteral("infoPanel"),
+                     [this](QMenu* menu) { infoPanel_->updatePanelMenu(menu); });
 
     histogramPanel_ = new HistogramPanel(shell_);
     histogramPanel_->setObjectName(QStringLiteral("histogramPanel"));
