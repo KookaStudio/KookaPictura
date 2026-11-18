@@ -1,8 +1,8 @@
 //! Independent ImageMagick oracle for the native WebP codec.
 //!
 //! A lossless WebP we encode is decoded by `magick` and compared to the source
-//! pixel for pixel; a lossy WebP `magick` writes is decoded by us and compared
-//! to the source within a lossy tolerance.
+//! pixel for pixel; a lossy WebP we encode and one `magick` writes are decoded
+//! and compared to the source within a lossy tolerance.
 //!
 //! Needs `magick` (ImageMagick 7); self-skips with a message otherwise.
 
@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use pictura_codec::{decode_webp, encode_webp, ImageBudget};
+use pictura_codec::{decode_webp, encode_webp, encode_webp_lossy, ImageBudget};
 use pictura_testkit::compare;
 
 fn magick_available() -> bool {
@@ -115,6 +115,20 @@ fn magick_decodes_our_lossless_webp_exactly() {
     let decoded = magick_decode_webp(&webp);
     let diff = compare(&decoded, &rgba, 0).expect("compare");
     assert!(diff.is_empty(), "lossless webp differs: {diff:?}");
+}
+
+#[test]
+fn magick_decodes_our_lossy_webp_within_tolerance() {
+    if !magick_available() {
+        eprintln!("skipping: magick not available");
+        return;
+    }
+    let (rgba, w, h) = opaque_picture();
+    let webp = encode_webp_lossy(&rgba, w, h, 90).expect("encode");
+    let decoded = magick_decode_webp(&webp);
+    assert_eq!(decoded.len(), rgba.len(), "decoded byte length");
+    let diff = compare(&decoded, &rgba, 48).expect("compare");
+    assert!(diff.is_empty(), "lossy webp differs: {diff:?}");
 }
 
 #[test]

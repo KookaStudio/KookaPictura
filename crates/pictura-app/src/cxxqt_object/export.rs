@@ -85,8 +85,16 @@ pub mod ffi {
             scale: i32,
         ) -> bool;
 
-        /// Encode packed RGBA8888 as a lossless WebP container; empty on refusal.
-        fn webp_encode(rgba: &[u8], width: i32, height: i32) -> Vec<u8>;
+        /// Encode packed RGBA8888 as a WebP container; `lossless` or a negative
+        /// `quality` selects VP8L, otherwise lossy VP8 at `quality` (0-100).
+        /// Empty on refusal.
+        fn webp_encode(
+            rgba: &[u8],
+            width: i32,
+            height: i32,
+            quality: i32,
+            lossless: bool,
+        ) -> Vec<u8>;
 
         /// Store the format options the next raster save of this document uses.
         fn set_save_raster_options(
