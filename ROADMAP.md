@@ -87,8 +87,9 @@ Deeper technical status for PSD/PSB lives in
 - [ ] The measurement scale and presets, the exporters, and PSD resource 1074
       (#635)
 - [ ] Background Save, a durable crash journal, and PSD 1086/1087 (#637)
-- [ ] Edit Contents and relink for vector smart objects, Paste As, and the
-      Files panel (#638)
+- [x] Vector Smart Object placement and Edit Contents, PDF Paste As, and
+      repair of supported external Smart Object links (#638)
+- [ ] Editable Illustrator clipboard paste as Paths or Shape Layer (#638)
 - [x] The Maximize PSD/PSB Compatibility preference (#639)
 - [ ] The document-format version policy: `opDocumentVersion`,
       `minReaderVersion` and Version Info 1057 (#640)

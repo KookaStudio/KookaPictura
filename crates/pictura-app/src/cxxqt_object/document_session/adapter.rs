@@ -13,6 +13,11 @@ impl qobject::PictureView {
     /// every panel at once; a tool switch with nothing live stays cheap (#1145).
     pub fn cancel_active_session(mut self: Pin<&mut Self>) -> bool {
         let had_session = self.rust().has_active_session();
+        if self.rust().pending_vector_place.is_some() {
+            self.as_mut().cancel_transform();
+            self.as_mut().session_cancelled();
+            return true;
+        }
         let presentation = self.as_mut().rust_mut().cancel_active_sessions();
         let changed = presentation.has_display_change();
         self.as_mut().present(presentation);

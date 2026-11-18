@@ -15,6 +15,7 @@ mod options;
 mod presets;
 mod read;
 mod resample;
+pub mod smart_source;
 mod text;
 mod xmp;
 

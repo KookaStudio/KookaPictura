@@ -9,12 +9,21 @@
 #include "memory_refusal.h"
 
 #include <QtCore/QEventLoop>
+#include <QtCore/QFile>
 #include <QtCore/QPointer>
 #include <QtCore/QSet>
+#include <QtCore/QThread>
 #include <QtWidgets/QAbstractButton>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QDialog>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QToolButton>
+#include <QtWidgets/QDialogButtonBox>
+#include <QtWidgets/QFormLayout>
+
+#include <cstddef>
+#include <cstdint>
+#include <memory>
 
 namespace pictura {
 
@@ -22,10 +31,59 @@ namespace {
 
 enum class TransformWait { Settled, Aborted };
 
+::rust::Slice<const std::uint8_t> pdfBytes(const QByteArray& bytes)
+{
+    return {reinterpret_cast<const std::uint8_t*>(bytes.constData()),
+            static_cast<std::size_t>(bytes.size())};
+}
+
+template <typename Work>
+auto prepareOnWorker(Work work)
+{
+    decltype(work()) result{};
+    QEventLoop loop;
+    std::unique_ptr<QThread> worker(QThread::create([&]() { result = work(); }));
+    QObject::connect(worker.get(), &QThread::finished, &loop, &QEventLoop::quit);
+    worker->start();
+    loop.exec(QEventLoop::ExcludeUserInputEvents);
+    worker->wait();
+    return result;
+}
+
+bool chooseVectorPage(PicturaMainWindow& frame, int pageCount, int& page, int& crop)
+{
+    QDialog dialog(&frame);
+    dialog.setObjectName(QStringLiteral("vectorPlaceOptions"));
+    dialog.setWindowTitle(PicturaMainWindow::tr("Place Vector Artwork"));
+    auto* layout = new QFormLayout(&dialog);
+    auto* pages = new QComboBox(&dialog);
+    pages->setObjectName(QStringLiteral("vectorPlacePage"));
+    for (int index = 1; index <= pageCount; ++index) {
+        pages->addItem(QString::number(index));
+    }
+    layout->addRow(PicturaMainWindow::tr("Page"), pages);
+    auto* boxes = new QComboBox(&dialog);
+    boxes->setObjectName(QStringLiteral("vectorPlaceCrop"));
+    boxes->addItems({PicturaMainWindow::tr("Bounding Box"), PicturaMainWindow::tr("Media Box"),
+                     PicturaMainWindow::tr("Crop Box"), PicturaMainWindow::tr("Bleed Box"),
+                     PicturaMainWindow::tr("Trim Box"), PicturaMainWindow::tr("Art Box")});
+    boxes->setCurrentIndex(2);
+    layout->addRow(PicturaMainWindow::tr("Crop To"), boxes);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addRow(buttons);
+    if (runDialog(dialog, &frame) != QDialog::Accepted) {
+        return false;
+    }
+    page = pages->currentIndex() + 1;
+    crop = boxes->currentIndex();
+    return true;
+}
+
 TransformWait waitForTransform(PicturaMainWindow& frame, const QPointer<PictureView>& view,
                                bool* cancelled)
 {
-    *cancelled = false;
     if (!view || !view->transform_session_active()) {
         return TransformWait::Settled;
     }
@@ -36,14 +94,16 @@ TransformWait waitForTransform(PicturaMainWindow& frame, const QPointer<PictureV
     // dragged off the control (released) is not a cancel and cannot latch.
     QObject latch;
     bool cancelledNow = false;
-    if (ImageView* canvas = frame.imageView()) {
-        QObject::connect(canvas, &ImageView::transformCancelRequested, &latch,
-                         [&cancelledNow]() { cancelledNow = true; });
-    }
-    if (QToolButton* button =
-            frame.findChild<QToolButton*>(QStringLiteral("optionsTransformCancel"))) {
-        QObject::connect(button, &QToolButton::clicked, &latch,
-                         [&cancelledNow]() { cancelledNow = true; });
+    if (cancelled) {
+        if (ImageView* canvas = frame.imageView()) {
+            QObject::connect(canvas, &ImageView::transformCancelRequested, &latch,
+                             [&cancelledNow]() { cancelledNow = true; });
+        }
+        if (QToolButton* button =
+                frame.findChild<QToolButton*>(QStringLiteral("optionsTransformCancel"))) {
+            QObject::connect(button, &QToolButton::clicked, &latch,
+                             [&cancelledNow]() { cancelledNow = true; });
+        }
     }
 
     QEventLoop loop;
@@ -59,7 +119,9 @@ TransformWait waitForTransform(PicturaMainWindow& frame, const QPointer<PictureV
     loop.exec();
     poll.stop();
 
-    *cancelled = cancelledNow;
+    if (cancelled) {
+        *cancelled = cancelledNow;
+    }
     if (!view || frame.activeView() != view.data() || QApplication::closingDown()) {
         return TransformWait::Aborted;
     }
@@ -102,6 +164,28 @@ void showFailureSummary(PicturaMainWindow& frame, const QStringList& failures)
 
 } // namespace
 
+QString importPdfArtwork(PictureView& view, const QByteArray& bytes,
+                         const QString& filename, bool smart, unsigned int page,
+                         unsigned char crop, const QString& label, QString& error)
+{
+    const QPointer<PictureView> target(&view);
+    const auto generation = view.document_generation();
+    const auto width = static_cast<unsigned int>(view.document_width());
+    const auto height = static_cast<unsigned int>(view.document_height());
+    const PreparedVectorPdf prepared = prepareOnWorker([&]() {
+        return prepare_vector_pdf(pdfBytes(bytes), page, crop, width, height);
+    });
+    if (!target || target->document_generation() != generation
+        || target->transform_session_active()) {
+        return {};
+    }
+    if (!prepared.error.isEmpty()) {
+        error = prepared.error;
+        return {};
+    }
+    return place_prepared_pdf(*target, prepared, pdfBytes(bytes), filename, smart, label);
+}
+
 void placeDocuments(PicturaMainWindow& frame, const QStringList& paths)
 {
     PictureView* active = frame.activeView();
@@ -136,10 +220,52 @@ void placeDocuments(PicturaMainWindow& frame, const QStringList& paths)
         }
         const QString& path = paths.at(index);
         const bool psd = PicturaMainWindow::isNativeDocumentPath(path);
-        if (!psd && !frame.confirmProfileForOpen(view.data(), path)) {
-            continue;
+        const QFileInfo info(path);
+        const QString suffix = info.suffix().toLower();
+        const bool vector = !psd && (suffix == QStringLiteral("pdf") || suffix == QStringLiteral("ai")
+                                    || vector_sniff(path) == QStringLiteral("pdf"));
+        QString created;
+        if (vector) {
+            QFile file(path);
+            const auto limit = vector_pdf_import_limit();
+            if (!file.open(QIODevice::ReadOnly) || file.size() < 0
+                || quint64(file.size()) > limit) {
+                failures.append(path);
+                continue;
+            }
+            const QByteArray bytes = file.read(qint64(limit) + 1);
+            const int pageCount =
+                prepareOnWorker([&]() { return vector_pdf_page_count(pdfBytes(bytes)); });
+            if (pageCount == 0) {
+                failures.append(path);
+                continue;
+            }
+            if (!view || frame.activeView() != view.data()) {
+                aborted = true;
+                break;
+            }
+            const auto generation = view->document_generation();
+            int page = 1;
+            int crop = 2;
+            if (!chooseVectorPage(frame, pageCount, page, crop)) {
+                continue;
+            }
+            if (!view || frame.activeView() != view.data()
+                || view->document_generation() != generation) {
+                aborted = true;
+                break;
+            }
+            QString error;
+            created = importPdfArtwork(*view, bytes, info.fileName(), true,
+                                       static_cast<unsigned int>(page),
+                                       static_cast<unsigned char>(crop),
+                                       QStringLiteral("Place"), error);
+        } else {
+            if (!psd && !frame.confirmProfileForOpen(view.data(), path)) {
+                continue;
+            }
+            created = psd ? view->place_smart_object(path) : view->place_image(path);
         }
-        const QString created = psd ? view->place_smart_object(path) : view->place_image(path);
         if (created.isEmpty()) {
             failures.append(path);
             continue;
@@ -148,20 +274,38 @@ void placeDocuments(PicturaMainWindow& frame, const QStringList& paths)
         const bool transforming = frame.beginFreeTransform(created);
         frame.selectLayerPath(created);
         if (!transforming) {
+            if (vector) {
+                view->cancel_transform();
+                failures.append(path);
+            }
             continue;
         }
 
         bool cancelled = false;
-        if (waitForTransform(frame, view, &cancelled) == TransformWait::Aborted) {
+        if (waitForTransform(frame, view, vector ? nullptr : &cancelled) == TransformWait::Aborted) {
+            if (vector && view) {
+                view->cancel_transform();
+            }
             aborted = true;
             break;
+        }
+        if (vector) {
+            const auto result = vector_place_result(*view);
+            if (result == VectorPlaceResult::Pending) {
+                view->cancel_transform();
+            }
+            if (result == VectorPlaceResult::Refused) {
+                failures.append(path);
+                continue;
+            }
+            cancelled = result != VectorPlaceResult::Committed;
         }
         if (!cancelled) {
             continue;
         }
         // Escape/Cancel removes the placement, but only when the history still
         // points at this item's "Place" state; an undo already removed it.
-        if (view->history_index() == placeState
+        if (!vector && view->history_index() == placeState
             && view->history_label(placeState) == QStringLiteral("Place")) {
             if (!view->undo()) {
                 reportMemoryRefusal(&frame, PicturaMainWindow::tr("cancel the placement"));

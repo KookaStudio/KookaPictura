@@ -206,6 +206,9 @@ set(PICTURA_QT_TESTS
     tst_smart_filter_apply
     tst_layers_effects
     tst_smart_object_actions
+    tst_vector_smart_object
+    tst_vector_paste
+    tst_smart_object_relink
     tst_edit_shortcuts
     tst_workspaces
     tst_floating_workspaces

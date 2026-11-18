@@ -80,7 +80,9 @@ mod type_plain;
 mod type_shape;
 mod type_tool;
 mod type_write;
+mod vector_marker;
 mod vector_mask;
+mod vector_transforms;
 mod web;
 mod webp;
 mod write;
@@ -152,6 +154,11 @@ pub use pictura_raw::{
     decode_pictura_raw_settings, encode_pictura_raw_fltr, pictura_raw_from_text,
     pictura_raw_to_text, replace_smart_filter, CAMERA_RAW_FILTER_ID, CAMERA_RAW_FILTER_NAME,
 };
+pub use smart_object::{
+    can_bake_smart_filter_blending, external_link_location, read_placed_source,
+    repair_external_link, repairable_external_link, ExternalLinkReplacement, PlacedSource,
+};
+pub use smart_writer::new_vector_source_id;
 // Re-exported so the app's profile commands can name a `Profile` without adding
 // a direct dependency on `pictura-color`.
 pub use lazy::{read_psd_lazy, MergedPreview, SourcePin};
@@ -182,7 +189,9 @@ pub use smart_filter::{
     clear_smart_filters, delete_smart_filter, reorder_smart_filters, set_camera_raw_option,
     set_filter_mask_enabled, set_smart_filter_enabled, set_smart_filters_enabled,
 };
-pub use smart_object::{layer_references_smart_source, remove_linked_source};
+pub use smart_object::{
+    layer_references_smart_source, remove_linked_source, replace_embedded_payload,
+};
 pub use svg::{
     blend_css, ellipse_element, encode_svg, image_element, path_data, path_element, rect_element,
     rounded_rect_element, subpath_data, text_element, SvgContent, SvgGradient, SvgGradientStop,

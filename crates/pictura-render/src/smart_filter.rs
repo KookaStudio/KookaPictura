@@ -70,23 +70,21 @@ pub fn apply_smart_filter_chain(
     }
     let mut out = base.clone();
     for filter in filters.iter().filter(|f| f.enabled) {
-        if let Some(op) = decode_smart_filter(filter) {
-            out = apply_op(&out, op);
+        if let Some(filtered) = decode_smart_filter(filter).and_then(|op| apply_op(&out, op)) {
+            out = filtered;
         }
     }
     out
 }
 
-fn apply_op(base: &PixelBuffer, op: SmartFilterOp) -> PixelBuffer {
+fn apply_op(base: &PixelBuffer, op: SmartFilterOp) -> Option<PixelBuffer> {
     match op {
-        SmartFilterOp::CameraRaw(settings) => {
-            render_pictura_raw(base, &settings).unwrap_or_else(|_| base.clone())
-        }
+        SmartFilterOp::CameraRaw(settings) => render_pictura_raw(base, &settings).ok(),
         SmartFilterOp::LensCorrection(params) => {
             let mut out = base.clone();
             pictura_filters::apply(&Filter::LensCorrection { params: *params }, &mut out)
                 .map(|()| out)
-                .unwrap_or_else(|_| base.clone())
+                .ok()
         }
         SmartFilterOp::Filters(filters) => apply_filters(base, &filters),
     }
@@ -95,11 +93,11 @@ fn apply_op(base: &PixelBuffer, op: SmartFilterOp) -> PixelBuffer {
 /// `filters` applied in order to `base` through the destructive path on a
 /// scratch layer, so the alpha handling matches a destructive apply. CPU only:
 /// the composite is a golden oracle, and GPU is an accelerator.
-fn apply_filters(base: &PixelBuffer, filters: &[Filter]) -> PixelBuffer {
+fn apply_filters(base: &PixelBuffer, filters: &[Filter]) -> Option<PixelBuffer> {
     let (w, h) = (base.width as usize, base.height as usize);
     let plane = w * h;
     if base.channels != 4 || base.data.len() != 4 * plane {
-        return base.clone();
+        return None;
     }
     let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         rect: PsdRect {
@@ -117,9 +115,7 @@ fn apply_filters(base: &PixelBuffer, filters: &[Filter]) -> PixelBuffer {
         });
     }
     for filter in filters {
-        if crate::filter::apply_filter(&mut layer, filter, None, false).is_err() {
-            return base.clone();
-        }
+        crate::filter::apply_filter(&mut layer, filter, None, false).ok()?;
     }
     let mut out = base.clone();
     for (c, id) in [0i16, 1, 2, -1].into_iter().enumerate() {
@@ -129,7 +125,38 @@ fn apply_filters(base: &PixelBuffer, filters: &[Filter]) -> PixelBuffer {
             }
         }
     }
-    out
+    Some(out)
+}
+
+/// Bake a fresh source into a portable layer preview. Every active filter
+/// must succeed before a caller replaces an existing baked preview.
+pub fn bake_smart_source_preview(layer: &Layer, channels: Vec<Channel>) -> Option<Vec<Channel>> {
+    let object = layer.smart_object()?;
+    if !pictura_codec::can_bake_smart_filter_blending(object) {
+        return None;
+    }
+    let mut filters = object.smart_filters.iter().filter(|filter| filter.enabled);
+    if !object.smart_filters_enabled || filters.clone().next().is_none() {
+        return Some(channels);
+    }
+    let width = u32::try_from(layer.rect.width()).ok()?;
+    let height = u32::try_from(layer.rect.height()).ok()?;
+    let mut base = PixelBuffer::zeroed(width, height, 4);
+    let plane = base.pixel_count();
+    for (index, id) in [0, 1, 2, -1].into_iter().enumerate() {
+        let channel = channels.iter().find(|channel| channel.id == id)?;
+        if channel.data.len() != plane {
+            return None;
+        }
+        channel
+            .data
+            .read_into(0, &mut base.data[index * plane..(index + 1) * plane]);
+    }
+    let filtered = filters.try_fold(base.clone(), |input, filter| {
+        apply_op(&input, decode_smart_filter(filter)?)
+    })?;
+    let masked = mix_filter_mask(&base, filtered, object, [layer.rect.left, layer.rect.top]);
+    Some(crate::type_channels::type_channels(&masked))
 }
 
 /// Apply the chain to `base`, then mix it back through the smart object's
@@ -144,6 +171,15 @@ pub(crate) fn apply_masked_chain(
     origin: [i32; 2],
 ) -> PixelBuffer {
     let filtered = apply_smart_filter_chain(base, &so.smart_filters, so.smart_filters_enabled);
+    mix_filter_mask(base, filtered, so, origin)
+}
+
+fn mix_filter_mask(
+    base: &PixelBuffer,
+    mut filtered: PixelBuffer,
+    so: &SmartObject,
+    origin: [i32; 2],
+) -> PixelBuffer {
     if so
         .filter_mask
         .as_ref()
@@ -153,7 +189,6 @@ pub(crate) fn apply_masked_chain(
         return filtered;
     }
     let plane = base.width as usize * base.height as usize;
-    let mut out = filtered.clone();
     for by in 0..base.height as usize {
         for bx in 0..base.width as usize {
             let m = mask_value(so, origin[0] + bx as i32, origin[1] + by as i32);
@@ -164,11 +199,11 @@ pub(crate) fn apply_masked_chain(
             for c in 0..4 {
                 let b = f32::from(base.data[c * plane + i]);
                 let f = f32::from(filtered.data[c * plane + i]);
-                out.data[c * plane + i] = (b + (f - b) * m).round().clamp(0.0, 255.0) as u8;
+                filtered.data[c * plane + i] = (b + (f - b) * m).round().clamp(0.0, 255.0) as u8;
             }
         }
     }
-    out
+    filtered
 }
 
 /// The mask coverage at document pixel `(x, y)`, `1.0` when the filter applies.
@@ -179,8 +214,11 @@ pub(crate) fn mask_value(so: &SmartObject, x: i32, y: i32) -> f32 {
         return 1.0;
     };
     let (w, h) = (mask.rect.width(), mask.rect.height());
-    let (mx, my) = (x - mask.rect.left, y - mask.rect.top);
-    if w <= 0 || h <= 0 || mx < 0 || my < 0 || mx >= w || my >= h {
+    let (mx, my) = (
+        i64::from(x) - i64::from(mask.rect.left),
+        i64::from(y) - i64::from(mask.rect.top),
+    );
+    if mx < 0 || my < 0 || mx >= i64::from(w) || my >= i64::from(h) {
         return if so.filter_mask_extend_with_white {
             1.0
         } else {

@@ -940,6 +940,42 @@ fn layer_can_edit_smart_object_contents_eligibility() {
     let valid = smart(Some(payload.clone()));
     let before = valid.clone();
     assert!(pictura_render::can_edit_smart_object_contents(&valid, "0"));
+    let psb = pictura_codec::write_psb(&Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight))
+        .expect("PSB payload writes");
+    assert!(pictura_render::can_edit_smart_object_contents(
+        &smart(Some(psb)),
+        "0"
+    ));
+    for (name, filetype) in [("a.pdf", *b"PDF "), ("a.ai", *b"AI  ")] {
+        let pdf = pictura_codec::illustrator::write_pdf(4, 4, &[]);
+        let mut vector = smart(Some(pdf));
+        pictura_codec::edit_layer(&mut vector.layers[0], |parts| {
+            let object = parts.smart_object.as_mut().unwrap();
+            object.filename = name.to_owned();
+            object.filetype = filetype;
+            object.vector_placement = Some(pictura_core::VectorPlacement {
+                page: 1,
+                page_count: 1,
+                crop: 2,
+                width_points: 4.0,
+                height_points: 4.0,
+            });
+        });
+        assert!(pictura_render::can_edit_smart_object_contents(&vector, "0"));
+        pictura_codec::edit_layer(&mut vector.layers[0], |parts| {
+            parts
+                .smart_object
+                .as_mut()
+                .unwrap()
+                .set_payload(vec![0, 1, 2]);
+        });
+        assert!(!pictura_render::can_edit_smart_object_contents(
+            &vector, "0"
+        ));
+    }
+    let mut plain = valid.clone();
+    pictura_codec::edit_layer(&mut plain.layers[0], |parts| parts.smart_object = None);
+    assert!(!pictura_render::can_edit_smart_object_contents(&plain, "0"));
 
     assert!(!pictura_render::can_edit_smart_object_contents(
         &smart(Some(vec![0, 1, 2, 3])),

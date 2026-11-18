@@ -886,8 +886,6 @@ void MenuRegistrar::registerLayerCommands()
                                       return !currentExportableSmartPath().isEmpty();
                                   });
 
-    // Edit Contents needs the current layer to be an embedded PSD/PSB source,
-    // so it can open as an ordinary document in an untitled editor tab.
     const auto currentEditableSmartPath = [this]() -> QString {
         PictureView* view = activeView();
         const QString path = layerAnchor();

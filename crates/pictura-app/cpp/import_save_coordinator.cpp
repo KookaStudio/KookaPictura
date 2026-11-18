@@ -4,12 +4,16 @@
 
 #include "import_save_coordinator.h"
 
+#include "api/view_bridge.h"
 #include "dialogs.h"
 #include "document_registry.h"
 #include "session.h"
 
 #include <QtCore/QFileInfo>
 #include <QtCore/QTemporaryDir>
+#include <QtWidgets/QDialog>
+
+#include <utility>
 
 namespace pictura {
 
@@ -32,6 +36,9 @@ ImportSaveCoordinator::~ImportSaveCoordinator()
         delete session.temp;
     }
     editSessions_.clear();
+    for (const auto& session : std::exchange(vectorEditSessions_, {})) {
+        delete session.dialog.data();
+    }
 }
 
 void ImportSaveCoordinator::saveState(SessionState& state) const
@@ -80,6 +87,15 @@ void ImportSaveCoordinator::onAboutToRemoveDocument(int index)
         if (session.editor == entry->view || session.origin == entry->view) {
             delete session.temp;
             editSessions_.removeAt(i);
+        }
+    }
+    for (int i = vectorEditSessions_.size() - 1; i >= 0; --i) {
+        const auto session = vectorEditSessions_.at(i);
+        if (session.origin == entry->view) {
+            if (session.dialog) {
+                session.dialog->reject();
+            }
+            vectorEditSessions_.removeAt(i);
         }
     }
     forgetRecovery(entry->view);

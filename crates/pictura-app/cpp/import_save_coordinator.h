@@ -192,6 +192,10 @@ public:
     {
         importDialogDriver_ = std::move(driver);
     }
+    void setVectorEditorLauncherForTest(std::function<bool(const QString&)> launcher)
+    {
+        vectorEditorLauncher_ = std::move(launcher);
+    }
 
 Q_SIGNALS:
     void documentOpenFinished(quint64 token, int outcome, const QString& error);
@@ -219,6 +223,12 @@ private:
         QString filename;
         QTemporaryDir* temp = nullptr;
     };
+
+    struct VectorEditSession {
+        QPointer<PictureView> origin;
+        QPointer<QDialog> dialog;
+    };
+    bool editVectorContents(PictureView& origin, const QString& layerPath, const QString& suffix);
 
     quint64 nextOpenToken();
     int indexOfView(PictureView* view) const;
@@ -256,6 +266,8 @@ private:
     Hooks hooks_;
 
     QList<SmartObjectEditSession> editSessions_;
+    QList<VectorEditSession> vectorEditSessions_;
+    std::function<bool(const QString&)> vectorEditorLauncher_;
     // PDF probes that have no tab yet, keyed by their temporary view.
     QHash<PictureView*, PdfProbe> pdfProbes_;
     // Views whose open signals are already wired (a PDF probe's view becomes a

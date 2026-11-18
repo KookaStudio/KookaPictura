@@ -340,7 +340,14 @@ pub fn content_rect(doc: &Document, path: &str) -> Option<PsdRect> {
 /// The bounds [`trim_to_content`] trims `layer` to; `None` when it would not
 /// trim (see there).
 fn trim_bounds(layer: &Layer) -> Option<PsdRect> {
-    if layer.mask.is_some() || layer.is_group() || layer.is_type() {
+    if layer.mask.is_some()
+        || layer.is_group()
+        || layer.is_type()
+        || layer.smart_object().is_some_and(|object| {
+            object.vector_placement.is_some()
+                || object.kind == pictura_core::SmartObjectKind::External
+        })
+    {
         return None;
     }
     let alpha = layer.channels().iter().find(|c| c.id == -1)?;

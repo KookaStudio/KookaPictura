@@ -56,11 +56,10 @@ fn embedded_smart_doc() -> Document {
 /// Run psd-tools over `bytes`, asserting `PSD.read` and `PSDImage.open` both
 /// succeed, and return its stdout.
 fn psd_tools_reads(tag: &str, bytes: &[u8]) -> String {
-    let dir = scratch_dir(tag);
-    let path = dir.join("doc.psb");
-    std::fs::write(&path, bytes).unwrap();
-
-    let script = r#"
+    psd_tools_inspect(
+        tag,
+        bytes,
+        r#"
 import sys
 from psd_tools import PSDImage
 from psd_tools.psd import PSD
@@ -71,7 +70,14 @@ so = image[0].smart_object
 print(so.kind)
 print(so.filename)
 print(len(so.data))
-"#;
+"#,
+    )
+}
+
+fn psd_tools_inspect(tag: &str, bytes: &[u8], script: &str) -> String {
+    let dir = scratch_dir(tag);
+    let path = dir.join("doc.psb");
+    std::fs::write(&path, bytes).unwrap();
     let out = Command::new("python3")
         .arg("-c")
         .arg(script)
@@ -121,6 +127,153 @@ fn psd_tools_parses_authored_smart_object_in_psb() {
     let bytes = write_psb(&embedded_smart_doc()).unwrap();
     let stdout = psd_tools_reads("psb-authored-smart-object", &bytes);
     assert_embedded_smart_object(&stdout);
+}
+
+#[test]
+fn vector_source_round_trips_with_its_preview_and_selection() {
+    let mut doc = embedded_smart_doc();
+    let pdf = pictura_codec::illustrator::write_pdf(4, 4, &[]);
+    let selection = pictura_core::VectorPlacement {
+        page: 1,
+        page_count: 1,
+        crop: 2,
+        width_points: 4.0,
+        height_points: 4.0,
+    };
+    let original = &mut doc.layers[0];
+    let source_rect = original.rect;
+    pictura_codec::edit_layer(original, |parts| {
+        let object = parts.smart_object.as_mut().unwrap();
+        object.uuid = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa".into();
+        object.filename = "vector.ai".into();
+        object.filetype = *b"AI  ";
+        object.vector_placement = Some(selection);
+        object
+            .vector_transforms
+            .push(pictura_core::VectorTransform {
+                source: source_rect,
+                destination: Some(source_rect),
+                quad: [(0.0, 0.0), (4.0, 0.0), (5.0, 5.0), (0.0, 4.0)],
+                warp: Some(pictura_core::warp::Warp::preset(
+                    pictura_core::warp::WarpStyle::Arc,
+                    20.0,
+                    [0.0, 0.0, 4.0, 4.0],
+                )),
+            });
+        object.set_payload(pdf.clone());
+    });
+    let shared = original.clone();
+    let mut independent = original.clone();
+    let independent_id = "22222222-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    pictura_codec::edit_layer(&mut independent, |parts| {
+        parts.smart_object.as_mut().unwrap().uuid = independent_id.into();
+    });
+    doc.layers.push(shared).unwrap();
+    doc.layers.push(independent).unwrap();
+
+    for bytes in [write_psd(&doc).unwrap(), write_psb(&doc).unwrap()] {
+        let restored = pictura_codec::read_psd(&bytes).unwrap();
+        assert_eq!(restored.layers.len(), 3);
+        for (layer, original) in restored.layers.iter().zip(doc.layers.iter()) {
+            let object = layer.smart_object().unwrap();
+            assert_eq!(object.uuid, original.smart_object().unwrap().uuid);
+            assert_eq!(object.filename, "vector.ai");
+            assert_eq!(object.filetype, *b"AI  ");
+            assert_eq!(object.vector_placement, Some(selection));
+            assert_eq!(
+                object.vector_transforms,
+                original.smart_object().unwrap().vector_transforms
+            );
+            assert_eq!(object.payload(), Some(pdf.as_slice()));
+            assert_eq!(layer.channels(), original.channels());
+        }
+        if psd_tools_available() {
+            let stdout = psd_tools_reads("vector-smart-object", &bytes);
+            let lines = stdout.lines().collect::<Vec<_>>();
+            assert_eq!(lines, vec!["data", "vector.ai", &pdf.len().to_string()]);
+        }
+    }
+}
+
+#[test]
+fn authored_vector_placement_descriptor_oracle() {
+    if !psd_tools_available() {
+        eprintln!("skipping: python3 + psd-tools not available");
+        return;
+    }
+    let mut doc = embedded_smart_doc();
+    let layer = &mut doc.layers[0];
+    layer.rect = PsdRect {
+        left: 3,
+        top: 2,
+        right: 7,
+        bottom: 6,
+    };
+    let payload = pictura_codec::illustrator::write_pdf(8, 4, &[]);
+    pictura_codec::edit_layer(layer, |parts| {
+        let object = parts.smart_object.as_mut().unwrap();
+        object.set_payload(payload);
+        object.filename = "source.ai".into();
+        object.filetype = *b"AI  ";
+        object.vector_placement = Some(pictura_core::VectorPlacement {
+            page: 1,
+            page_count: 1,
+            crop: 4,
+            width_points: 8.0,
+            height_points: 4.0,
+        });
+    });
+    let inspect = r#"
+import sys
+from psd_tools import PSDImage
+from psd_tools.constants import Tag
+desc = PSDImage.open(sys.argv[1])[0].tagged_blocks.get_data(Tag.SMART_OBJECT_LAYER_DATA1).data
+assert desc[b'PgNm'].value == 1 and desc[b'totalPages'].value == 1
+assert desc[b'Crop'].value == 4
+assert desc[b'Sz  '][b'Wdth'].value == 8 and desc[b'Sz  '][b'Hght'].value == 4
+quad = tuple(v.value for v in desc[b'Trnf'])
+assert quad == tuple(v.value for v in desc[b'nonAffineTransform'])
+print(' '.join(f'{v:.8g}' for v in quad))
+print(desc[b'warp'][b'warpStyle'].enum.decode('ascii'))
+print(f"{desc[b'warp'][b'warpValue'].value:.8g}")
+"#;
+    let original = write_psd(&doc).unwrap();
+    assert_eq!(
+        psd_tools_inspect("vector-place-initial-geometry", &original, inspect).trim(),
+        "3 2 7 2 7 6 3 6\nwarpNone\n0"
+    );
+    let mut reopened = read_psd(&original).unwrap();
+    let layer = &mut reopened.layers[0];
+    let source = layer.rect;
+    pictura_codec::edit_layer(layer, |parts| {
+        let object = parts.smart_object.as_mut().unwrap();
+        assert!(object.authored_vector_placement);
+        assert!(object.vector_transforms.is_empty());
+        object
+            .vector_transforms
+            .push(pictura_core::VectorTransform {
+                source,
+                destination: Some(source),
+                quad: [(7.0, 2.0), (7.0, 6.0), (3.0, 6.0), (3.0, 2.0)],
+                warp: Some(pictura_core::warp::Warp::preset(
+                    pictura_core::warp::WarpStyle::Arc,
+                    20.0,
+                    [3.0, 2.0, 7.0, 6.0],
+                )),
+            });
+    });
+    layer.rect.left += 6;
+    layer.rect.right += 6;
+    let resaved = write_psb(&reopened).unwrap();
+    assert_eq!(
+        psd_tools_inspect("vector-place-resaved-geometry", &resaved, inspect).trim(),
+        "13 2 13 6 9 6 9 2\nwarpArc\n20"
+    );
+    let restored = read_psd(&resaved).unwrap();
+    assert_eq!(
+        restored.layers[0].smart_object().unwrap().vector_transforms,
+        reopened.layers[0].smart_object().unwrap().vector_transforms
+    );
 }
 
 /// CRITICAL-1 regression: an odd-length tagged block is declared even with its

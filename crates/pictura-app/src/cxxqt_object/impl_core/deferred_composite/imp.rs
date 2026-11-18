@@ -7,6 +7,7 @@ use super::super::super::helpers::layer_has_effects;
 use super::super::super::helpers_composite::{composite_regions, RegionComposite};
 use super::super::super::qobject::PictureView;
 use super::super::super::{metrics, qobject, PictureViewRust};
+use crate::cxxqt_object::pdf_export::import::ffi::VectorPlaceResult;
 use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::{CxxQtType, Threading};
@@ -423,10 +424,37 @@ impl qobject::PictureView {
     /// Land a finished transform job: one history state and the deferred
     /// composite on success; nothing after a cancel, whose session resumes.
     pub(in crate::cxxqt_object) fn transform_commit_finish(mut self: Pin<&mut Self>) -> bool {
+        let placing = self.rust().pending_vector_place.is_some();
+        if placing
+            && self
+                .rust()
+                .deferred_transform
+                .as_ref()
+                .is_some_and(|job| job.progress.cancelled())
+        {
+            self.as_mut().cancel_transform();
+            return false;
+        }
         let Some((label, edit)) = self.as_mut().rust_mut().land_transform() else {
+            if placing {
+                drop(self.as_mut().rust_mut().session.live.take_transform());
+                self.as_mut().clear_transform_preview();
+                self.as_mut()
+                    .finish_vector_place(VectorPlaceResult::Refused);
+            }
             return false;
         };
-        self.as_mut().commit_transform_edit(&label, true, |_| edit);
+        if placing {
+            if !self
+                .as_mut()
+                .finish_vector_place(VectorPlaceResult::Committed)
+            {
+                self.as_mut().clear_transform_preview();
+                return false;
+            }
+        } else {
+            self.as_mut().commit_transform_edit(&label, true, |_| edit);
+        }
         if !self.rust().move_composite_pending() {
             self.as_mut().move_committed();
         }

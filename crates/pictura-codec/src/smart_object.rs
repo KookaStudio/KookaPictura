@@ -13,6 +13,13 @@ use crate::descriptor::DescValue;
 use crate::descriptor::{self, get_object_item, read_unicode_string, skip_descriptor_block};
 use crate::error::PsdError;
 
+mod external_link;
+mod placed_source;
+pub use external_link::{
+    external_link_location, repair_external_link, repairable_external_link, ExternalLinkReplacement,
+};
+pub use placed_source::{read_placed_source, PlacedSource};
+
 /// One record from a document-level `lnkD`/`lnk2`/`lnk3`/`lnkE` list.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct LinkedRecord {
@@ -139,6 +146,20 @@ fn build_smart_object(
                 .map(Into::into);
             so.crs = so.crs_xmp.as_deref().map(crate::crs_xmp::parse_crs);
             if let Some(payload) = record.payload.clone() {
+                if crate::sniff_vector(&payload) == Some(crate::VectorKind::Pdf) {
+                    if let Some(source) = read_placed_source(&so.config_descriptor) {
+                        if let Some(crop) = source.crop {
+                            so.vector_placement = Some(pictura_core::VectorPlacement {
+                                page: source.page,
+                                page_count: source.page_count,
+                                crop,
+                                width_points: source.width,
+                                height_points: source.height,
+                            });
+                            so.vector_transforms.extend(source.transform);
+                        }
+                    }
+                }
                 so.set_payload(payload);
             }
         }
@@ -221,6 +242,50 @@ fn parse_filter_fx(items: &[(Vec<u8>, DescValue)]) -> (Vec<SmartFilter>, FilterF
         })
         .collect();
     (filters, flags)
+}
+
+/// A refreshed proxy can bake the modeled filter operators and mask, but
+/// cannot use a preserved filter's opacity or blend mode yet.
+pub fn can_bake_smart_filter_blending(object: &SmartObject) -> bool {
+    if !object.smart_filters_enabled || object.config_descriptor.is_empty() {
+        return true;
+    }
+    let Ok(DescValue::Object { items, .. }) = read_layer_data_descriptor(&object.config_descriptor)
+    else {
+        return false;
+    };
+    let filters = match get_object_item(&items, b"filterFX") {
+        None => return true,
+        Some(DescValue::Object { items, .. }) => get_object_item(items, b"filterFXList"),
+        _ => return false,
+    };
+    let Some(DescValue::List(filters)) = filters else {
+        return false;
+    };
+    filters.iter().all(|filter| {
+        let DescValue::Object { items, .. } = filter else {
+            return false;
+        };
+        if !bool_item(items, b"enab", true) {
+            return true;
+        }
+        let blend = match get_object_item(items, b"blendOptions") {
+            None => return true,
+            Some(DescValue::Object { items, .. }) => items,
+            _ => return false,
+        };
+        let normal = match get_object_item(blend, b"Md  ") {
+            None => true,
+            Some(DescValue::Enum { value, .. }) => value == b"Nrml",
+            _ => false,
+        };
+        let opaque = match get_object_item(blend, b"Opct") {
+            None => true,
+            Some(DescValue::UnitFloat { unit, value }) => unit == b"#Prc" && *value == 100.0,
+            _ => false,
+        };
+        normal && opaque
+    })
 }
 
 /// Read a bool item, falling back to `default` when missing or the wrong type.
@@ -462,7 +527,7 @@ fn remove_linked_records(data: &[u8], uuid: &str) -> Option<Vec<u8>> {
 /// the preserved top-level tagged blocks, keeping every other byte verbatim
 /// (padding and framing included). Returns `Some` only when a record's payload
 /// was rewritten, `None` otherwise.
-pub(crate) fn replace_embedded_payload(
+pub fn replace_embedded_payload(
     layer_section_extra: &[u8],
     uuid: &str,
     new_payload: &[u8],
@@ -590,7 +655,7 @@ fn splice_payload(block: &[u8], new_payload: &[u8]) -> Option<Vec<u8>> {
 // ---------------------------------------------------------------------------
 
 /// `SoLd`/`SoLE`: `soLD` + outer version + a version-16 `DescriptorBlock`.
-fn read_layer_data_descriptor(data: &[u8]) -> Result<DescValue, PsdError> {
+pub(crate) fn read_layer_data_descriptor(data: &[u8]) -> Result<DescValue, PsdError> {
     let mut r = Reader::new(data);
     let _kind = r.take(4)?;
     let _version = r.u32()?;

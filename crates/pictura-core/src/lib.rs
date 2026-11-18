@@ -762,6 +762,12 @@ pub struct SmartObject {
     /// 4-byte creator code stored in the record (e.g. `8BIM`).
     pub creator: [u8; 4],
     pub kind: SmartObjectKind,
+    pub vector_placement: Option<VectorPlacement>,
+    /// Whether Pictura authored the vector placement's standard descriptor.
+    pub authored_vector_placement: bool,
+    /// Placement geometry. For external links, these are local transforms
+    /// applied after the placement in the imported descriptor.
+    pub vector_transforms: Vec<VectorTransform>,
     /// Raw `SoLd`/`SoLE`/`plLd`/`PlLd` block data, kept verbatim.
     pub config_descriptor: Plane<u8>,
     /// Embedded source bytes; `Some` only for [`SmartObjectKind::Embedded`].
@@ -806,6 +812,9 @@ impl Default for SmartObject {
             filetype: [0; 4],
             creator: [0; 4],
             kind: SmartObjectKind::default(),
+            vector_placement: None,
+            authored_vector_placement: false,
+            vector_transforms: Vec::new(),
             config_descriptor: Plane::default(),
             payload: None,
             payload_digest: 0,
@@ -832,6 +841,9 @@ impl PartialEq for SmartObject {
             && self.filetype == other.filetype
             && self.creator == other.creator
             && self.kind == other.kind
+            && self.vector_placement == other.vector_placement
+            && self.authored_vector_placement == other.authored_vector_placement
+            && self.vector_transforms == other.vector_transforms
             && self.config_descriptor == other.config_descriptor
             && self.payload == other.payload
             && self.crs_xmp == other.crs_xmp
@@ -844,6 +856,25 @@ impl PartialEq for SmartObject {
             && self.filter_mask == other.filter_mask
             && self.stack_mode == other.stack_mode
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct VectorPlacement {
+    pub page: u32,
+    pub page_count: u32,
+    pub crop: u8,
+    pub width_points: f64,
+    pub height_points: f64,
+}
+
+/// One placement-space transform, retained so a refreshed source can be
+/// rendered into the same geometry without transforming the layer's masks.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VectorTransform {
+    pub source: PsdRect,
+    pub destination: Option<PsdRect>,
+    pub quad: [(f64, f64); 4],
+    pub warp: Option<warp::Warp>,
 }
 
 impl SmartObject {

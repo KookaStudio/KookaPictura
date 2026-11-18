@@ -1,4 +1,5 @@
 use super::impl_core::{DeferredComposite, DeferredTransform};
+use super::pdf_export::import::ffi::VectorPlaceResult;
 use crate::layer_target::LayerTarget;
 use cxx_qt_lib::QImage;
 use pictura_core::PsdRect;
@@ -20,11 +21,20 @@ pub(super) struct CanvasProxy {
 pub(super) type ProofCache =
     RefCell<Option<((i32, i32, bool, bool, bool), pictura_color::ProofPreview)>>;
 
+pub(super) struct PendingVectorPlace {
+    pub doc: pictura_core::Document,
+    pub target: LayerTarget,
+    pub generation: u64,
+    pub history_id: Option<u64>,
+}
+
 /// Backing Rust state for [`super::qobject::PictureView`].
 pub struct PictureViewRust {
     /// The document, the selection, and the history: the state the document
     /// session owns.
     pub(super) session: crate::cxxqt_object::document_session::DocumentSession,
+    pub(super) pending_vector_place: Option<PendingVectorPlace>,
+    pub(super) vector_place_result: VectorPlaceResult,
     /// View > Proof Setup / Proof Colors: application view state, never document
     /// or history state.
     pub(super) proof: super::proofing::ProofState,
@@ -257,6 +267,8 @@ impl Default for PictureViewRust {
     fn default() -> Self {
         Self {
             session: Default::default(),
+            pending_vector_place: None,
+            vector_place_result: VectorPlaceResult::Pending,
             proof: Default::default(),
             proof_preview: RefCell::new(None),
             selection_contour_cache: RefCell::new(None),
