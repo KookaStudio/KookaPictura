@@ -220,42 +220,37 @@ pub fn convert_bit_depth(doc: &mut Document, out: BitDepth) -> Result<(), OpsErr
 /// color planes, so the display alpha plane is dropped; any other document is
 /// borrowed unchanged.
 pub fn save_view(doc: &Document) -> Cow<'_, Document> {
-    let doc: Cow<'_, Document> = if doc.composite.merged_output()
+    let drops_alpha = !(doc.source.mode().is_none() && doc.channels.is_empty())
+        && doc.mode == ColorMode::Rgb;
+    if doc.composite.merged_output()
         && !doc.composite_is_authoritative()
         && !crate::DocumentComposite::is_stored(doc)
     {
+        // The merged image is composited straight into the tiled planes the
+        // writer reads, without the alpha it drops (#1320).
         let mut merged = doc.clone();
         merged
             .composite
-            .replace(crate::composite_tiled(doc))
+            .replace(crate::composite_tiled_channels(
+                doc,
+                if drops_alpha { 3 } else { 4 },
+            ))
             .expect("valid composite");
-        Cow::Owned(merged)
-    } else {
-        Cow::Borrowed(doc)
-    };
+        return Cow::Owned(merged);
+    }
     let plane = doc.width as usize * doc.height as usize;
-    if (doc.source.mode().is_none() && doc.channels.is_empty())
-        || doc.mode != ColorMode::Rgb
+    if !drops_alpha
         || doc.composite.channels != 4
         || doc.composite.width != doc.width
         || doc.composite.height != doc.height
         || doc.composite.data.len() != 4 * plane
     {
-        return doc;
+        return Cow::Borrowed(doc);
     }
-    let mut trimmed = doc.into_owned();
-    // ponytail: the three colour planes are copied into one flat buffer; a
-    // tiled composite is read plane by plane, so it is not materialized whole.
-    let mut rgb = vec![0u8; 3 * plane];
-    trimmed.composite.data.read_into(0, &mut rgb);
+    let mut trimmed = doc.clone();
     trimmed
         .composite
-        .replace(PixelBuffer {
-            width: trimmed.width,
-            height: trimmed.height,
-            channels: 3,
-            data: rgb.into(),
-        })
+        .replace(crate::keep_channels_tiled(&doc.composite, 3))
         .expect("valid composite");
     // ponytail: the trimmed plane is fresh each save, so the composite cache
     // key (the plane ident) changes and a document with extras re-encodes its

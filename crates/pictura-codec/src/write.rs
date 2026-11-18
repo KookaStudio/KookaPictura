@@ -1,5 +1,6 @@
 use pictura_core::*;
 use std::borrow::Cow;
+use std::io::{Seek, Write};
 use std::sync::Arc;
 
 use crate::common::*;
@@ -8,6 +9,7 @@ use crate::error::PsdError;
 use crate::write_cache::{ChannelKey, CompositeKey, EncodeCache};
 use crate::write_indexed::writes_indexed;
 use crate::write_layers::write_layer_info;
+use crate::write_stream::{self, Sink};
 
 // ---------------------------------------------------------------------------
 // Layer and mask information section — writing
@@ -173,6 +175,13 @@ pub(crate) trait ScanRows {
     fn byte_len(&self) -> usize;
     /// Row `row`, `row_bytes` long: borrowed, or copied into `scratch`.
     fn scan_row<'s>(&'s self, row: usize, row_bytes: usize, scratch: &'s mut Vec<u8>) -> &'s [u8];
+    /// Rows `y0 .. y0 + rows` into `out` (`rows * row_bytes` long).
+    fn read_rows(&self, y0: usize, rows: usize, row_bytes: usize, out: &mut [u8]) {
+        let mut scratch = Vec::new();
+        for (i, dst) in out.chunks_exact_mut(row_bytes.max(1)).take(rows).enumerate() {
+            dst.copy_from_slice(self.scan_row(y0 + i, row_bytes, &mut scratch));
+        }
+    }
 }
 
 impl<T: AsRef<[u8]> + ?Sized> ScanRows for &T {
@@ -252,6 +261,23 @@ impl ScanRows for PlaneBytes<'_> {
                 let y = first_row + row;
                 plane.read_rect_into(0..row_bytes, y..y + 1, *width, scratch);
                 scratch
+            }
+        }
+    }
+
+    fn read_rows(&self, y0: usize, rows: usize, row_bytes: usize, out: &mut [u8]) {
+        match self {
+            PlaneBytes::Bytes(bytes) => {
+                out.copy_from_slice(&bytes[y0 * row_bytes..(y0 + rows) * row_bytes]);
+            }
+            PlaneBytes::Rows {
+                plane,
+                first_row,
+                width,
+                ..
+            } => {
+                let y = first_row + y0;
+                plane.read_rect_into(0..row_bytes, y..y + rows, *width, out);
             }
         }
     }
@@ -362,129 +388,86 @@ pub(crate) fn layer_retained(layer: &Layer, depth: u16, id: i16) -> Option<Sampl
 /// compression word is not included. PackBits is byte-wise, so `row_bytes` is
 /// the native row stride (`width` at depth 8, `2 * width` at 16, `4 * width` at
 /// 32).
-pub(crate) fn encode_scanlines<P: ScanRows>(
+pub(crate) fn encode_scanlines<P: ScanRows + Sync>(
     planes: &[P],
     row_bytes: usize,
     height: usize,
     psb: bool,
 ) -> Result<Vec<u8>, PsdError> {
-    let plane_len = row_bytes
-        .checked_mul(height)
-        .ok_or_else(|| PsdError::Invalid("RLE plane size overflow".into()))?;
-    let count_width = if psb { 4 } else { 2 };
-    let mut counts = Vec::with_capacity(planes.len() * height * count_width);
-    let mut rows = Vec::new();
-    let mut packed = Vec::with_capacity(row_bytes + row_bytes / 128 + 1);
-    let mut scratch = Vec::new();
-    for plane in planes {
-        if plane.byte_len() != plane_len {
-            return Err(PsdError::Invalid("RLE plane length mismatch".into()));
-        }
-        for row in 0..height {
-            packed.clear();
-            encode_packbits_row(plane.scan_row(row, row_bytes, &mut scratch), &mut packed);
-            // The PSD maximum width (30 000) cannot reach the u16 limit, so the
-            // guard only fires for a PSB row approaching u32; it errs rather
-            // than truncate. ponytail: one uncompressed row, not the whole plane.
-            if psb {
-                if packed.len() > u32::MAX as usize {
-                    return Err(PsdError::Invalid(
-                        "RLE scanline exceeds u32 byte count".into(),
-                    ));
-                }
-                counts.extend_from_slice(&(packed.len() as u32).to_be_bytes());
-            } else {
-                if packed.len() > u16::MAX as usize {
-                    return Err(PsdError::Invalid(
-                        "RLE scanline exceeds u16 byte count".into(),
-                    ));
-                }
-                counts.extend_from_slice(&(packed.len() as u16).to_be_bytes());
-            }
-            rows.extend_from_slice(&packed);
-        }
-    }
-    counts.extend_from_slice(&rows);
-    Ok(counts)
+    write_stream::to_vec(|sink| {
+        write_stream::write_payload(
+            sink,
+            Compression::Rle,
+            planes,
+            row_bytes,
+            row_bytes,
+            height,
+            8,
+            psb,
+        )
+    })
 }
 
 /// Concatenate the native-depth `planes` (`width` pixels by `height` rows each,
 /// plane-major) and zlib-wrap the result. When `predict`, apply the forward
 /// depth-specific per-row delta first (the inverse of the reader's
 /// `undo_prediction`); no scanline count table.
-pub(crate) fn zip_scanlines<P: ScanRows>(
+pub(crate) fn zip_scanlines<P: ScanRows + Sync>(
     planes: &[P],
     width: usize,
     height: usize,
     predict: bool,
     depth: u16,
 ) -> Result<Vec<u8>, PsdError> {
-    let plane_len = row_bytes(width, depth)
-        .checked_mul(height)
-        .ok_or_else(|| PsdError::Invalid("ZIP plane size overflow".into()))?;
-    // ponytail: ZIP deflates one contiguous payload, so the planes are
-    // gathered first; RLE, the default, streams row by row.
-    let stride = row_bytes(width, depth);
-    let mut data = Vec::with_capacity(planes.len() * plane_len);
-    let mut scratch = Vec::new();
-    for plane in planes {
-        if plane.byte_len() != plane_len {
-            return Err(PsdError::Invalid("ZIP plane length mismatch".into()));
-        }
-        for row in 0..height {
-            data.extend_from_slice(plane.scan_row(row, stride, &mut scratch));
-        }
-    }
-    if predict {
-        apply_prediction(&mut data, width, planes.len() * height, depth);
-    }
-    use flate2::write::ZlibEncoder;
-    use std::io::Write;
-    let mut enc = ZlibEncoder::new(Vec::new(), flate2::Compression::default());
-    enc.write_all(&data)
-        .map_err(|_| PsdError::Invalid("ZIP encode".into()))?;
-    enc.finish()
-        .map_err(|_| PsdError::Invalid("ZIP encode".into()))
+    let kind = if predict {
+        Compression::ZipPrediction
+    } else {
+        Compression::Zip
+    };
+    write_stream::to_vec(|sink| {
+        write_stream::write_payload(
+            sink,
+            kind,
+            planes,
+            width,
+            row_bytes(width, depth),
+            height,
+            depth,
+            false,
+        )
+    })
 }
 
-/// The complete on-disk layer-channel stream for one engine-encoded plane: the
-/// compression word followed by the payload for `kind` at `depth`. `plane` is
-/// the native-depth plane (`row_bytes(width, depth) * height` bytes).
-pub(crate) fn channel_stream(
+/// Write the complete on-disk layer-channel stream for one engine-encoded
+/// plane: the compression word followed by the payload for `kind` at `depth`.
+/// `plane` is the native-depth plane (`row_bytes(width, depth) * height`
+/// bytes).
+pub(crate) fn write_channel_stream(
+    sink: &mut write_stream::Sink<'_>,
     kind: Compression,
     width: usize,
     height: usize,
     plane: &PlaneBytes<'_>,
     depth: u16,
     psb: bool,
-) -> Result<Vec<u8>, PsdError> {
-    let stride = row_bytes(width, depth);
-    let plane = std::slice::from_ref(plane);
-    let mut out = Vec::with_capacity(2 + plane[0].byte_len());
-    out.extend_from_slice(&kind.to_code().to_be_bytes());
-    match kind {
-        Compression::Rle => out.extend_from_slice(&encode_scanlines(plane, stride, height, psb)?),
-        Compression::Raw => {
-            if plane[0].byte_len() != stride * height {
-                return Err(PsdError::Invalid("raw channel length mismatch".into()));
-            }
-            plane[0].extend_into(&mut out);
-        }
-        Compression::Zip => {
-            out.extend_from_slice(&zip_scanlines(plane, width, height, false, depth)?)
-        }
-        Compression::ZipPrediction => {
-            out.extend_from_slice(&zip_scanlines(plane, width, height, true, depth)?)
-        }
-    }
-    Ok(out)
+) -> Result<(), PsdError> {
+    sink.put(&kind.to_code().to_be_bytes())?;
+    write_stream::write_payload(
+        sink,
+        kind,
+        std::slice::from_ref(plane),
+        width,
+        row_bytes(width, depth),
+        height,
+        depth,
+        psb,
+    )
 }
 
 /// Serialize a [`Document`] into a valid PSD, or into a version-2 PSB when the
 /// source document was a PSB or a dimension exceeds the PSD limit.
 pub fn write_psd(doc: &Document) -> Result<Vec<u8>, PsdError> {
-    let psb = doc.is_psb || doc.width > MAX_DIM_PSD || doc.height > MAX_DIM_PSD;
-    write_container(doc, psb, None)
+    write_container(doc, writes_psb(doc), None)
 }
 
 /// Serialize a [`Document`] into a version-2 PSB regardless of its dimensions.
@@ -495,8 +478,7 @@ pub fn write_psb(doc: &Document) -> Result<Vec<u8>, PsdError> {
 /// As [`write_psd`], reusing encoded layer channels and the composite block from
 /// `cache`. The bytes equal an uncached encode.
 pub fn write_psd_cached(doc: &Document, cache: &EncodeCache) -> Result<Vec<u8>, PsdError> {
-    let psb = doc.is_psb || doc.width > MAX_DIM_PSD || doc.height > MAX_DIM_PSD;
-    write_container(doc, psb, Some(cache))
+    write_container(doc, writes_psb(doc), Some(cache))
 }
 
 /// As [`write_psb`], reusing encoded layer channels and the composite block from
@@ -505,29 +487,33 @@ pub fn write_psb_cached(doc: &Document, cache: &EncodeCache) -> Result<Vec<u8>, 
     write_container(doc, true, Some(cache))
 }
 
-struct LayerMaskParts {
-    info: Vec<u8>,
-    tagged: Vec<u8>,
-    global_mask: Vec<u8>,
-    extra: Vec<u8>,
-    keys: Vec<ChannelKey>,
+/// The output depth and the synthesized layer modes `doc` writes.
+struct LayerModes {
+    depth: u16,
+    lab: bool,
+    cmyk: bool,
+    indexed: bool,
 }
 
-fn layer_mask_parts(
-    doc: &Document,
-    psb: bool,
-    cache: Option<&EncodeCache>,
-) -> Result<Option<LayerMaskParts>, PsdError> {
+fn layer_modes(doc: &Document) -> Result<LayerModes, PsdError> {
     let plane = doc.width as usize * doc.height as usize;
     let bitmap_mode = crate::write_bitmap::writes_bitmap(doc);
     let depth = if bitmap_mode { 1 } else { output_depth(doc)? };
-    let lab_mode = doc.source.mode() == Some(ColorMode::Lab)
-        && doc.composite.channels == 3
-        && (depth != 8 || doc.source.depth().is_none());
-    let cmyk_mode = doc.source.mode() == Some(ColorMode::Cmyk)
-        && doc.composite.channels == 3
-        && (depth != 8 || doc.source.depth().is_none());
-    let indexed_mode = writes_indexed(doc, depth, plane);
+    Ok(LayerModes {
+        depth,
+        lab: doc.source.mode() == Some(ColorMode::Lab)
+            && doc.composite.channels == 3
+            && (depth != 8 || doc.source.depth().is_none()),
+        cmyk: doc.source.mode() == Some(ColorMode::Cmyk)
+            && doc.composite.channels == 3
+            && (depth != 8 || doc.source.depth().is_none()),
+        indexed: writes_indexed(doc, depth, plane),
+    })
+}
+
+/// The document-level tagged blocks after the layer section, or `None` when
+/// the document has nothing to write in the layer-and-mask section.
+fn layer_section_extra(doc: &Document, psb: bool) -> Option<Vec<u8>> {
     let extra =
         crate::type_path::encode_text_paths(&doc.layers, &doc.layer_section_extra, doc.is_psb);
     let mut extra = reframe_document_extra(&extra, doc.is_psb, psb);
@@ -541,74 +527,122 @@ fn layer_mask_parts(
         u32::from(doc.composite.channels),
         psb,
     );
-    if doc.layers.is_empty() && doc.global_layer_mask.is_empty() && extra.is_empty() {
-        return Ok(None);
-    }
-    let (info, keys) = write_layer_info(doc, psb, lab_mode, cmyk_mode, indexed_mode, cache)?;
-    let mut tagged = Vec::new();
-    if let Some(key) = tagged_layer_key(depth).filter(|_| !doc.layers.is_empty()) {
-        write_tag_document(&mut tagged, key, &info, psb);
-    }
-    let info = if tagged.is_empty() { info } else { Vec::new() };
-    Ok(Some(LayerMaskParts {
-        info,
-        tagged,
-        global_mask: doc.global_layer_mask.to_vec(),
-        extra,
-        keys,
-    }))
+    (!(doc.layers.is_empty() && doc.global_layer_mask.is_empty() && extra.is_empty()))
+        .then_some(extra)
 }
 
-/// Build the layer-and-mask section body (layer info length + info + global
-/// mask + tagged layer block + document blocks), or an empty vector when the
-/// document has nothing to write there. The PSD container prepends the section
-/// length.
-pub(crate) fn layer_mask_section(
+/// A document-level tagged block whose data `body` streams into the sink: the
+/// length is patched afterwards and the block padded to 4 bytes, as
+/// [`write_tag_document`] frames it.
+fn stream_tag_document<T>(
+    sink: &mut Sink<'_>,
+    key: &[u8; 4],
+    psb: bool,
+    body: impl FnOnce(&mut Sink<'_>) -> Result<T, PsdError>,
+) -> Result<T, PsdError> {
+    sink.put(b"8BIM")?;
+    sink.put(key)?;
+    let wide = psb && is_psb_big_key(key);
+    let len_at = sink.len_placeholder(wide)?;
+    let start = sink.pos();
+    let out = body(sink)?;
+    let len = sink.pos() - start;
+    sink.patch_len(len_at, len, wide)?;
+    sink.zeros(((4 - len % 4) % 4) as usize)?;
+    Ok(out)
+}
+
+/// Write the layer-and-mask section, its length first; a zero length when the
+/// document has nothing to write there. Returns the cache keys it used.
+fn write_layer_mask_section(
+    sink: &mut Sink<'_>,
     doc: &Document,
     psb: bool,
     cache: Option<&EncodeCache>,
-) -> Result<(Vec<u8>, Vec<ChannelKey>), PsdError> {
-    let Some(parts) = layer_mask_parts(doc, psb, cache)? else {
-        return Ok((Vec::new(), Vec::new()));
+) -> Result<Vec<ChannelKey>, PsdError> {
+    let section_at = sink.len_placeholder(psb)?;
+    let Some(extra) = layer_section_extra(doc, psb) else {
+        return Ok(Vec::new());
     };
-    let mut body = Vec::new();
-    if psb {
-        body.extend_from_slice(&(parts.info.len() as u64).to_be_bytes());
+    let start = sink.pos();
+    let modes = layer_modes(doc)?;
+    let tagged = tagged_layer_key(modes.depth).filter(|_| !doc.layers.is_empty());
+    let keys = if let Some(key) = tagged {
+        // The 16/32-bit layout leaves the classic layer info empty and carries
+        // it in a document-level tagged block after the global mask.
+        sink.zeros(if psb { 8 } else { 4 })?;
+        put_global_mask(sink, doc)?;
+        stream_tag_document(sink, key, psb, |sink| {
+            write_layer_info(sink, doc, psb, modes.lab, modes.cmyk, modes.indexed, cache)
+        })?
     } else {
-        body.extend_from_slice(&(parts.info.len() as u32).to_be_bytes());
-    }
-    body.extend_from_slice(&parts.info);
-    body.extend_from_slice(&(parts.global_mask.len() as u32).to_be_bytes());
-    body.extend_from_slice(&parts.global_mask);
-    body.extend_from_slice(&parts.tagged);
-    body.extend_from_slice(&parts.extra);
-    Ok((body, parts.keys))
+        let info_at = sink.len_placeholder(psb)?;
+        let info_start = sink.pos();
+        let keys = write_layer_info(sink, doc, psb, modes.lab, modes.cmyk, modes.indexed, cache)?;
+        sink.patch_len(info_at, sink.pos() - info_start, psb)?;
+        put_global_mask(sink, doc)?;
+        keys
+    };
+    sink.put(&extra)?;
+    sink.patch_len(section_at, sink.pos() - start, psb)?;
+    Ok(keys)
 }
 
-/// Build the Photoshop ImageSourceData (tag 37724) payload for a layered TIFF.
-/// The PSD layer section is authored big-endian, so callers must write the TIFF
-/// container big-endian: the magic, block signatures, and lengths then share
-/// one byte order. Photoshop documents are big-endian too, so the layer data is
-/// reused without a conversion pass.
+fn put_global_mask(sink: &mut Sink<'_>, doc: &Document) -> Result<(), PsdError> {
+    sink.put(&(doc.global_layer_mask.len() as u32).to_be_bytes())?;
+    sink.put(&doc.global_layer_mask)
+}
+
+/// Write the Photoshop ImageSourceData (tag 37724) payload for a layered TIFF;
+/// `false` when the document has nothing to write there. The PSD layer section
+/// is authored big-endian, so callers must write the TIFF container big-endian:
+/// the magic, block signatures, and lengths then share one byte order.
+/// Photoshop documents are big-endian too, so the layer data is reused without
+/// a conversion pass.
+pub(crate) fn write_layer_mask_tiff_tag(
+    sink: &mut Sink<'_>,
+    doc: &Document,
+    cache: Option<&EncodeCache>,
+) -> Result<bool, PsdError> {
+    let Some(extra) = layer_section_extra(doc, false) else {
+        return Ok(false);
+    };
+    let modes = layer_modes(doc)?;
+    sink.put(b"Adobe Photoshop Document Data Block\0")?;
+    let tagged = tagged_layer_key(modes.depth).filter(|_| !doc.layers.is_empty());
+    let key = tagged.unwrap_or(b"Layr");
+    stream_tag_document(sink, key, false, |sink| {
+        write_layer_info(sink, doc, false, modes.lab, modes.cmyk, modes.indexed, cache)
+    })?;
+    if !doc.global_layer_mask.is_empty() {
+        write_tag_document_to(sink, b"LMsk", &doc.global_layer_mask, false)?;
+    }
+    sink.put(&extra)?;
+    Ok(true)
+}
+
+/// As [`write_layer_mask_tiff_tag`], into a buffer.
 pub(crate) fn layer_mask_tiff_tag(
     doc: &Document,
     cache: Option<&EncodeCache>,
 ) -> Result<Option<Vec<u8>>, PsdError> {
-    let Some(parts) = layer_mask_parts(doc, false, cache)? else {
-        return Ok(None);
-    };
-    let mut out = Vec::new();
-    out.extend_from_slice(b"Adobe Photoshop Document Data Block\0");
-    if !parts.tagged.is_empty() {
-        out.extend_from_slice(&parts.tagged);
-    } else if !parts.info.is_empty() {
-        write_tag_document(&mut out, b"Layr", &parts.info, false);
-    }
-    if !parts.global_mask.is_empty() {
-        write_tag_document(&mut out, b"LMsk", &parts.global_mask, false);
-    }
-    out.extend_from_slice(&parts.extra);
-    Ok(Some(out))
+    let mut written = false;
+    let bytes = write_stream::to_vec(|sink| {
+        written = write_layer_mask_tiff_tag(sink, doc, cache)?;
+        Ok(())
+    })?;
+    Ok(written.then_some(bytes))
+}
+
+fn write_tag_document_to(
+    sink: &mut Sink<'_>,
+    key: &[u8; 4],
+    data: &[u8],
+    psb: bool,
+) -> Result<(), PsdError> {
+    let mut out = Vec::with_capacity(data.len() + 16);
+    write_tag_document(&mut out, key, data, psb);
+    sink.put(&out)
 }
 
 fn write_container(
@@ -616,6 +650,34 @@ fn write_container(
     psb: bool,
     cache: Option<&EncodeCache>,
 ) -> Result<Vec<u8>, PsdError> {
+    write_stream::to_vec(|sink| write_container_to(sink, doc, psb, cache))
+}
+
+/// Write `doc` as a PSD (or a version-2 PSB when `psb`) into `out` at its
+/// current position, streaming the layer channels and the composite one band
+/// of rows at a time (#1320). The bytes equal [`write_psd`]'s for the same
+/// document; on an error `out` holds a partial file the caller discards.
+pub fn write_psd_to<W: Write + Seek>(
+    out: &mut W,
+    doc: &Document,
+    psb: bool,
+    cache: Option<&EncodeCache>,
+) -> Result<(), PsdError> {
+    let mut sink = Sink::new(out)?;
+    write_container_to(&mut sink, doc, psb, cache)
+}
+
+/// Whether [`write_psd`] writes `doc` as a version-2 PSB.
+pub fn writes_psb(doc: &Document) -> bool {
+    doc.is_psb || doc.width > MAX_DIM_PSD || doc.height > MAX_DIM_PSD
+}
+
+fn write_container_to(
+    sink: &mut Sink<'_>,
+    doc: &Document,
+    psb: bool,
+    cache: Option<&EncodeCache>,
+) -> Result<(), PsdError> {
     if doc.depth != BitDepth::Eight {
         return Err(PsdError::Unsupported("write supports 8-bit only".into()));
     }
@@ -698,23 +760,24 @@ fn write_container(
     }
     crate::write_bitmap::validate_extra_channels(doc, bitmap_mode)?;
 
-    let mut out = Vec::with_capacity(26 + 12 + 2 + doc.composite.data.len());
-    out.extend_from_slice(&SIGNATURE.to_be_bytes());
-    out.extend_from_slice(&(if psb { VERSION_PSB } else { VERSION_PSD }).to_be_bytes());
-    out.extend_from_slice(&[0u8; 6]); // reserved
-    out.extend_from_slice(&(channels as u16).to_be_bytes());
-    out.extend_from_slice(&doc.height.to_be_bytes());
-    out.extend_from_slice(&doc.width.to_be_bytes());
-    out.extend_from_slice(&depth.to_be_bytes()); // depth
-    out.extend_from_slice(&mode_code.to_be_bytes());
+    let mut header = Vec::with_capacity(26);
+    header.extend_from_slice(&SIGNATURE.to_be_bytes());
+    header.extend_from_slice(&(if psb { VERSION_PSB } else { VERSION_PSD }).to_be_bytes());
+    header.extend_from_slice(&[0u8; 6]); // reserved
+    header.extend_from_slice(&(channels as u16).to_be_bytes());
+    header.extend_from_slice(&doc.height.to_be_bytes());
+    header.extend_from_slice(&doc.width.to_be_bytes());
+    header.extend_from_slice(&depth.to_be_bytes()); // depth
+    header.extend_from_slice(&mode_code.to_be_bytes());
+    sink.put(&header)?;
     // An Indexed output re-emits the retained palette (the read consumed
     // `color_mode_data`); every other mode replays the preserved section.
     let color_mode_data: &[u8] = match (indexed_mode, doc.source.palette_ref()) {
         (true, Some(palette)) => palette,
         _ => &doc.color_mode_data,
     };
-    out.extend_from_slice(&(color_mode_data.len() as u32).to_be_bytes());
-    out.extend_from_slice(color_mode_data);
+    sink.put(&(color_mode_data.len() as u32).to_be_bytes())?;
+    sink.put(color_mode_data)?;
     let resources = crate::layer_comps::resources_for_output(
         doc,
         crate::global_light::with_document_global_light(
@@ -722,25 +785,14 @@ fn write_container(
             crate::guide_resources::output_resources(doc, mode_code),
         ),
     );
-    out.extend_from_slice(&(resources.len() as u32).to_be_bytes());
-    out.extend_from_slice(&resources);
+    sink.put(&(resources.len() as u32).to_be_bytes())?;
+    sink.put(&resources)?;
 
-    // The layer-and-mask section body is shared with the layered-TIFF writer.
-    let (body, used_layer_keys) = layer_mask_section(doc, psb, cache)?;
-    if body.is_empty() {
-        if psb {
-            out.extend_from_slice(&0u64.to_be_bytes()); // zero-length layer/mask section
-        } else {
-            out.extend_from_slice(&0u32.to_be_bytes()); // zero-length layer/mask section
-        }
-    } else {
-        if psb {
-            out.extend_from_slice(&(body.len() as u64).to_be_bytes());
-        } else {
-            out.extend_from_slice(&(body.len() as u32).to_be_bytes());
-        }
-        out.extend_from_slice(&body);
+    if let Some(cache) = cache {
+        cache.fit_budget();
     }
+    // The layer-and-mask section body is shared with the layered-TIFF writer.
+    let used_layer_keys = write_layer_mask_section(sink, doc, psb, cache)?;
 
     // "Maximize Compatibility" off: the source ended after the layer section, so
     // emit no image-data section; the reader then reports no merged composite.
@@ -748,7 +800,7 @@ fn write_container(
         if let Some(cache) = cache {
             cache.prune(&used_layer_keys, None);
         }
-        return Ok(out);
+        return Ok(());
     }
 
     let width = doc.width as usize;
@@ -778,16 +830,19 @@ fn write_container(
     });
     if let (Some(cache), Some(key)) = (cache, composite_key.as_ref()) {
         if let Some(bytes) = cache.get_composite(key) {
-            out.extend_from_slice(&bytes);
+            sink.put(&bytes)?;
             cache.prune(&used_layer_keys, Some(key));
-            return Ok(out);
+            return Ok(());
         }
+        sink.begin_capture(cache.capture_limit());
     }
-    let block_start = out.len();
-    out.extend_from_slice(&doc.composite_compression.to_code().to_be_bytes());
+    sink.put(&doc.composite_compression.to_code().to_be_bytes())?;
     // The Lab, CMYK, or Indexed output re-emits retained planes exactly when
     // they are unchanged, and otherwise re-encodes from the working RGB into a
     // temp buffer (Indexed never re-encodes: an edit already chose the RGB mode).
+    // ponytail: those, Bitmap, flat Duotone/Multichannel and 16/32-bit planes are
+    // built whole from the retained native stores, which are flat anyway; only
+    // the 8-bit working planes are read a band at a time.
     let lab_composite = lab_mode.then(|| lab_composite_planes(doc, depth, plane));
     let cmyk_composite =
         cmyk_mode.then(|| crate::write_cmyk::cmyk_composite_planes(doc, depth, plane));
@@ -856,30 +911,24 @@ fn write_container(
         }
         planes
     };
-    match doc.composite_compression {
-        Compression::Rle => out.extend_from_slice(&encode_scanlines(
-            &planes,
-            row_bytes(width, depth),
-            height,
-            psb,
-        )?),
-        Compression::Raw => {
-            for plane in &planes {
-                plane.extend_into(&mut out);
-            }
-        }
-        Compression::Zip => {
-            out.extend_from_slice(&zip_scanlines(&planes, width, height, false, depth)?)
-        }
-        Compression::ZipPrediction => {
-            out.extend_from_slice(&zip_scanlines(&planes, width, height, true, depth)?)
-        }
-    }
+    write_stream::write_payload(
+        sink,
+        doc.composite_compression,
+        &planes,
+        width,
+        row_bytes(width, depth),
+        height,
+        depth,
+        psb,
+    )?;
+    let captured = composite_key.as_ref().and_then(|_| sink.end_capture());
     if let (Some(cache), Some(key)) = (cache, composite_key.as_ref()) {
-        cache.put_composite(key.clone(), Arc::from(&out[block_start..]));
+        if let Some(bytes) = captured {
+            cache.put_composite(key.clone(), Arc::from(bytes));
+        }
         cache.prune(&used_layer_keys, Some(key));
     } else if let Some(cache) = cache {
         cache.prune(&used_layer_keys, None);
     }
-    Ok(out)
+    Ok(())
 }

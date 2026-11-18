@@ -105,8 +105,15 @@ pub fn composite_channels(doc: &Document, rect: PsdRect) -> [Plane<u8>; 4] {
 /// [`composite_channels`] does: a PSD writer's merged image without a
 /// canvas-sized allocation for its uniform areas.
 pub fn composite_tiled(doc: &Document) -> PixelBuffer {
+    composite_tiled_channels(doc, 4)
+}
+
+/// [`composite_tiled`] keeping only the first `channels` (1–4) of red, green,
+/// blue and alpha, so a writer that drops the alpha never holds it (#1320).
+pub fn composite_tiled_channels(doc: &Document, channels: usize) -> PixelBuffer {
+    let channels = channels.clamp(1, 4);
     let (w, h) = (doc.width as usize, doc.height as usize);
-    let mut data = Plane::filled(w, h, 4, 0u8);
+    let mut data = Plane::filled(w, h, channels, 0u8);
     if w > 0 && h > 0 {
         let whole = PsdRect {
             top: 0,
@@ -117,7 +124,7 @@ pub fn composite_tiled(doc: &Document) -> PixelBuffer {
         stream_composite(doc, whole, band_rows(w), |offset, band| {
             let n = band.width as usize * band.height as usize;
             let mut samples = vec![0u8; n];
-            for c in 0..4 {
+            for c in 0..channels {
                 band.data.read_into(c * n, &mut samples);
                 let top = c * h + offset as usize;
                 data.write_rect_from(0..w, top..top + band.height as usize, w, &samples);
@@ -128,7 +135,33 @@ pub fn composite_tiled(doc: &Document) -> PixelBuffer {
     PixelBuffer {
         width: doc.width,
         height: doc.height,
-        channels: 4,
+        channels: channels as u8,
+        data,
+    }
+}
+
+/// The first `channels` planes of a planar `buffer`, copied band by band into
+/// a tiled plane (#1320): a uniform tile stays one value, and no flat copy of
+/// the planes is made.
+pub fn keep_channels_tiled(buffer: &PixelBuffer, channels: usize) -> PixelBuffer {
+    let channels = channels.clamp(1, buffer.channels.max(1) as usize);
+    let (w, h) = (buffer.width as usize, buffer.height as usize);
+    let mut data = Plane::filled(w, h, channels, 0u8);
+    let rows = band_rows(w) as usize;
+    let mut samples = Vec::new();
+    for c in 0..channels {
+        for y0 in (0..h).step_by(rows.max(1)) {
+            let ys = c * h + y0..c * h + (y0 + rows).min(h);
+            samples.resize(w * ys.len(), 0);
+            buffer.data.read_rect_into(0..w, ys.clone(), w, &mut samples);
+            data.write_rect_from(0..w, ys, w, &samples);
+            data.settle();
+        }
+    }
+    PixelBuffer {
+        width: buffer.width,
+        height: buffer.height,
+        channels: channels as u8,
         data,
     }
 }

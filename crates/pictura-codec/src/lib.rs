@@ -88,6 +88,7 @@ mod write_cmyk;
 mod write_duotone;
 mod write_indexed;
 mod write_layers;
+mod write_stream;
 pub mod xmp;
 pub mod zoomify;
 
@@ -200,7 +201,9 @@ pub use web::{
     SliceHtmlOptions, SliceLayout, WebMetadata,
 };
 pub use webp::{decode_webp, encode_webp};
-pub use write::{write_psb, write_psb_cached, write_psd, write_psd_cached};
+pub use write::{
+    write_psb, write_psb_cached, write_psd, write_psd_cached, write_psd_to, writes_psb,
+};
 pub use write_cache::{warm_encode_idents, EncodeCache, EncodeStats};
 pub use write_indexed::{gif_indexed_source_is_current, indexed_source_is_current};
 pub use xmp::{parse_xmp, patch_xmp, patch_xmp_values, to_xmp_packet, XmpField, XmpProperties};

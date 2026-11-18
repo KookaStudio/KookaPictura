@@ -426,6 +426,43 @@ fn an_extra_channel_saves_without_a_duplicate_alpha_plane() {
     assert_eq!(back.channels[0].data.to_vec(), alpha);
 }
 
+/// The first three planes of `buffer`, read without materializing it.
+fn rgb_planes(buffer: &PixelBuffer) -> Vec<u8> {
+    let n = buffer.width as usize * buffer.height as usize;
+    let mut rgb = vec![0u8; 3 * n];
+    buffer.data.read_into(0, &mut rgb);
+    rgb
+}
+
+// [sps_merged_tiled]
+#[test]
+fn save_view_keeps_the_merged_image_tiled() {
+    let (w, h) = (301u32, 530u32);
+    let extra = || Channel {
+        id: 0,
+        data: vec![7u8; (w * h) as usize].into(),
+    };
+    let mut layered = layered_without_composite(w, h);
+    layered.channels.push(extra());
+    let full = crate::composite_tiled(&layered);
+    let before = pictura_core::materializations();
+    let view = save_view(&layered);
+    assert_eq!(pictura_core::materializations(), before, "merged");
+    assert_eq!(view.composite.channels, 3);
+    assert!(view.composite.data.is_tiled());
+    assert_eq!(rgb_planes(&view.composite), rgb_planes(&full));
+
+    let mut stored = ramp(w, h);
+    stored.channels.push(extra());
+    assert_eq!(stored.composite.channels, 4);
+    let before = pictura_core::materializations();
+    let view = save_view(&stored);
+    assert_eq!(pictura_core::materializations(), before, "stored");
+    assert_eq!(view.composite.channels, 3);
+    assert!(view.composite.data.is_tiled());
+    assert_eq!(rgb_planes(&view.composite), rgb_planes(&stored.composite));
+}
+
 #[test]
 fn an_rgba_document_without_extra_channels_keeps_its_alpha_plane() {
     let rgba = [10u8, 20, 30, 255, 40, 50, 60, 0];
