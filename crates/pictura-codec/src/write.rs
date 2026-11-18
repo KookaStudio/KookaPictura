@@ -886,6 +886,7 @@ fn write_container_to(
         ),
     );
     let merged = doc.composite.merged_output();
+    let resources = crate::measurement_scale_resource::resources_for_output(doc, resources);
     let (resources, skipped_xmp_mirror) = if let Some(version) = writer_version {
         crate::document_version::resources_for_versioned_write(&resources, merged, version)?
     } else if (compatibility_placeholder && !merged)

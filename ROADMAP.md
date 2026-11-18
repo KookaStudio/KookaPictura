@@ -85,8 +85,8 @@ Deeper technical status for PSD/PSB lives in
 - [ ] Print colour management, proofing, output marks, and persisted defaults
       (#634). Implementation is ready for CI and manual Photoshop CS6, Photoshop
       CC, and physical CUPS acceptance.
-- [ ] The measurement scale and presets, the exporters, and PSD resource 1074
-      (#635)
+- [x] Measurement scale and presets, measurement TSV and histogram CSV writers,
+      and PSD/PSB resource 1074 (#635)
 - [x] Background Save, a durable crash journal, and PSD 1086/1087 (#637)
 - [x] Vector Smart Object placement and Edit Contents, PDF Paste As, and
       repair of supported external Smart Object links (#638)
@@ -227,7 +227,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       geometry (#546)
 - [x] The full Color Replacement mode list, and disabling it on Bitmap, Indexed
       and Multichannel (#547)
-- [ ] Grayscale Sponge, the airbrush toggle, quick keys, and 32-bpc
+- [x] Grayscale Sponge, the airbrush toggle, quick keys, and 32-bpc
       availability (#548)
 - [ ] Magic-eraser background conversion, background-eraser edge halo, and pen
       pressure (#549)

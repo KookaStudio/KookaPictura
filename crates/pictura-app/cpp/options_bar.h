@@ -13,6 +13,7 @@ class QComboBox;
 class QStackedWidget;
 class QHBoxLayout;
 class QIcon;
+class QLabel;
 class QMenu;
 class QResizeEvent;
 class QToolButton;
@@ -39,6 +40,7 @@ public:
     // Show the Free Transform page (appended after the per-tool pages); the
     // frame's `transformChanged` handler switches between the two.
     void showTransform();
+    void refreshRulerReadout();
     // Enable the Move tool's Align and Distribute buttons (the frame decides
     // from the selected layers and the selection).
     void setAlignEnabled(bool align, bool distribute);
@@ -185,6 +187,7 @@ private:
     void syncPerspectiveButtons();
 
     ToolController* controller_ = nullptr;
+    QLabel* rulerReadout_ = nullptr;
     // The family option groups, resolved once from the handlers' ports; the
     // pages write these directly (the group setters clamp and notify).
     PaintOptions* paint_ = nullptr;

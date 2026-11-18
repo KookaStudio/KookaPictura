@@ -12,6 +12,7 @@
 #include <memory>
 
 class QAction;
+class QDialog;
 class QMenu;
 class QMenuBar;
 class QUrl;
@@ -94,6 +95,7 @@ public:
     void alignSelectedLayers(int edge, bool toSelection, int alignTo = 0);
     void distributeSelectedLayers(int edge);
     void updateAlignControls();
+    void refreshMeasurementScaleChecks();
     void updateUiSizeMenu();
 
     QStringList selectedLayerPaths() const;
@@ -132,6 +134,10 @@ private:
     void wireFilterMenu();
     void wireImageMenu();
     void wireVariablesMenu();
+    void wireMeasurementScale();
+    void buildMeasurementScaleMenu();
+    void reloadMeasurementScalePresets();
+    void openMeasurementScaleDialog();
     void wireImageModeMenu();
     void wireImageAdjustments();
     void wireLayerAdjustments();
@@ -167,6 +173,8 @@ private:
     ToolController* tools_ = nullptr;
     QMenuBar* menuBar_ = nullptr;
     QPointer<QMenu> documentMenu_;
+    QPointer<QMenu> measurementScaleMenu_;
+    QPointer<QDialog> measurementScaleDialog_;
     QPointer<ColorRangeDialog> colorRangeDialog_;
     QPointer<ReplaceColorDialog> replaceColorDialog_;
     QList<QAction*> recentActions_;

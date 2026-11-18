@@ -42,6 +42,14 @@ Snapshot for resuming after a context break. Update after each milestone.
   - **Slow test.** `zip_save_heap_is_bounded` deflates ~0.5 GB at opt-level 0
     (about 80 s).
 
+- **Measurement scale and presets — #635 implemented** (OpenSpec change
+  `2026-11-18-measurement-scale-presets`, archived). Extended supports ruler
+  calibration, named application presets, and calibrated readouts. PSD and PSB
+  use resource 1074 and preserve untouched resource bytes in both editions.
+  Measurement TSV and histogram CSV writers are available for the Measurement
+  Log integration tracked by #510. The local CMake build passed with the 80%
+  CPU budget. Automated verification is deferred to CI, and the Photoshop CS6
+  Extended round trip remains a manual reviewer check.
 - **Print colour management — #634 implemented; acceptance pending**
   (OpenSpec change `2026-11-18-print-color-management`, archived; capability
   `interop/print`). Print supports ICC-managed PDF output, hard proofing,
@@ -49,6 +57,12 @@ Snapshot for resuming after a context break. Update after each milestone.
   settings. The CMake app and Qt test binaries built at the 80% CPU budget.
   CI owns subsequent builds and automated tests. The PR checklist covers
   Photoshop CS6 and CC round-trips and the two physical CUPS checks.
+- **Dodge/Burn/Sponge options — #548 implemented** (OpenSpec change
+  `2026-11-18-dodge-burn-sponge-airbrush`, archived; capability
+  `tools/dodge-burn-sponge-options`).
+  Airbrush builds while held; `Shift+Alt+P` toggles Dodge/Burn; the painting
+  quick keys set Range/Mode; Grayscale documents use the single grey plane;
+  32-bpc documents disable the three tools and fall back to Move.
 - **File ▸ Automate ▸ Batch — #618 implemented** (OpenSpec change
   `2026-11-17-file-automate-batch`, archived; capabilities `document/batch-processing`,
   `document/batch-file-naming`, `ui/batch-dialog`, and `document/action-engine`).

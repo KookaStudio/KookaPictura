@@ -1031,10 +1031,12 @@ void Toolbox::refreshToolAvailability()
 {
     PictureView* view = controller_ ? controller_->view() : nullptr;
     const QString mode = view && view->has_document() ? image_mode(*view) : QString();
-    if (mode == documentMode_) {
+    const int depth = view && view->has_document() ? view->document_depth_bits() : 0;
+    if (mode == documentMode_ && depth == documentDepth_) {
         return;
     }
     documentMode_ = mode;
+    documentDepth_ = depth;
     for (auto it = slotButtonByGroup_.cbegin(); it != slotButtonByGroup_.cend(); ++it) {
         const int group = it.key();
         bool anyEnabled = false;
@@ -1072,8 +1074,8 @@ void Toolbox::refreshToolShortcuts()
             const ToolInfo& info = toolInfo(member);
             const QChar key = toolShortcut(member);
             action->setShortcut(key.isNull() ? QKeySequence() : QKeySequence(QString(key)));
-            action->setToolTip(toolAvailable(member) ? enabledTooltip(info)
-                                                     : disabledTooltip(info));
+            action->setToolTip(available(member) ? enabledTooltip(info)
+                                                 : disabledTooltip(info));
         }
     }
     for (auto it = slotButtonByGroup_.cbegin(); it != slotButtonByGroup_.cend(); ++it) {

@@ -112,6 +112,10 @@ public:
     // Re-read every tool's letter into the slot tooltips and flyout rows after
     // the shortcut editor changed them.
     void refreshToolShortcuts();
+    // Re-read the active document's mode and depth and disable the tools they
+    // refuse (Color Replacement on flat modes; the toning tools at 32 bpc).
+    // Called from the frame refresh.
+    void refreshToolAvailability();
 
     // Self-test hooks.
     void openSlotFlyoutForTest(int group);
@@ -133,10 +137,6 @@ public:
 
     // Re-derive slot and icon geometry after a live UI scale change.
     void applyUiScale();
-    // Re-evaluate every member after the active document's colour mode changed:
-    // the Color Replacement flyout row is disabled on Bitmap, Indexed, and
-    // Multichannel documents.
-    void refreshToolAvailability();
 
 signals:
     void paintMaskToggled(bool checked);
@@ -193,6 +193,7 @@ private:
     QSize slotSize_ { 36, 28 };
     QSize iconSize_ { 24, 20 };
     int columns_ = 1;
+    int documentDepth_ = -1;
     bool shiftKeyForToolSwitch_ = true;
 };
 

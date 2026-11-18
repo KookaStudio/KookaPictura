@@ -1,5 +1,8 @@
 use super::*;
 
+mod scale;
+pub(super) use scale::*;
+
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;

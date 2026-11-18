@@ -817,6 +817,7 @@ void PicturaMainWindow::setScreenMode(ScreenMode mode)
     syncScreenModeWindows();
     if (menu_) {
         menu_->commands()->refresh();
+        menu_->refreshMeasurementScaleChecks();
     }
     if (toolbox_) {
         toolbox_->setActiveScreenMode(static_cast<int>(mode));
@@ -901,11 +902,15 @@ void PicturaMainWindow::refresh()
 
     panels_->schedulePanelRefresh();
     updateStatus();
+    if (optionsBar_ && activeTool() == ToolId::Ruler) {
+        optionsBar_->refreshRulerReadout();
+    }
     // A session can end without a transformChanged (a document switch).
     syncTransformLock();
     if (menu_) {
         pictura::ScopedTimer registryTimer("cxx_registry_refresh");
         menu_->commands()->refresh();
+        menu_->refreshMeasurementScaleChecks();
     }
     panels_->setRegistryRefreshPending(false);
     if (menu_) {
@@ -1026,7 +1031,9 @@ void PicturaMainWindow::updateStatus()
         if (view && view->has_document()) {
             const int width = view->document_width();
             const int height = view->document_height();
-            if (statusReadout_ == QStringLiteral("dimensions")) {
+            if (statusReadout_ == QStringLiteral("measurementScale")) {
+                text = measurement_scale_text(*view);
+            } else if (statusReadout_ == QStringLiteral("dimensions")) {
                 text = QStringLiteral("W %1  H %2").arg(width).arg(height);
             } else {
                 // ponytail: 72 ppi is the PSD default; wire to document

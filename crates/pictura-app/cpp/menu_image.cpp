@@ -36,6 +36,7 @@ void MenuRegistrar::wireImageMenu()
 {
     wireImageModeMenu();
     wireVariablesMenu();
+    wireMeasurementScale();
 
     commands_->setHandler(command_ids::ImageCrop, [this]() {
         if (tools_ && tools_->hasPendingCrop()) {

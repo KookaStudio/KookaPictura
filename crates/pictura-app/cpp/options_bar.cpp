@@ -7,6 +7,7 @@
 #include "preset_store.h"
 
 #include "api/paint_bridge.h"
+#include "api/engine_bridge.h"
 
 #include <QtCore/QPointer>
 #include <QtCore/QSignalBlocker>
@@ -639,6 +640,30 @@ void OptionsBar::addMagneticFields(QHBoxLayout* layout, QWidget* page, Selection
     layout->addWidget(pressure);
 }
 
+void OptionsBar::refreshRulerReadout()
+{
+    if (!rulerReadout_) {
+        return;
+    }
+    const PictureView* view = controller_ ? controller_->view() : nullptr;
+    const auto values = view ? ruler_measurement(*view) : ::rust::Vec<double>();
+    QStringList fields;
+    const char* names[] = {"X", "Y", "W", "H", "A", "D1"};
+    for (int i = 0; i < 6; ++i) {
+        const QString value = values.size() == 6
+            ? QString::number(values[i], 'f', 1) + (i == 4 ? QStringLiteral("°") : QString())
+            : QString();
+        fields << QStringLiteral("%1: %2").arg(QLatin1String(names[i]), value);
+    }
+    if (view && edition_is_extended()) {
+        const QString length = calibrated_ruler_length(*view);
+        if (!length.isEmpty()) {
+            fields << tr("Length %1").arg(length);
+        }
+    }
+    rulerReadout_->setText(fields.join(QStringLiteral("   ")));
+}
+
 // The annotation tools' bars, as photorust ports them: the Ruler's X, Y, W, H,
 // A, D1 readout (pixels and degrees), then Clear for every tool.
 // ponytail: no Sample Size for samplers, Straighten for the Ruler, or Author
@@ -651,26 +676,14 @@ QWidget* OptionsBar::buildAnnotationPage(ToolId id)
     layout->addWidget(toolButton(id, page));
 
     if (id == ToolId::Ruler) {
-        auto* readout = new QLabel(page);
-        readout->setObjectName(QStringLiteral("optionsRulerReadout"));
-        readout->setTextInteractionFlags(Qt::TextSelectableByMouse);
-        layout->addWidget(readout);
-        const auto update = [this, readout]() {
-            PictureView* v = controller_ ? controller_->view() : nullptr;
-            const ::rust::Vec<double> m = v ? ruler_measurement(*v) : ::rust::Vec<double>();
-            QStringList fields;
-            const char* names[] = {"X", "Y", "W", "H", "A", "D1"};
-            for (int i = 0; i < 6; ++i) {
-                const QString value = m.size() == 6
-                    ? QString::number(m[i], 'f', 1) + (i == 4 ? QStringLiteral("°") : QString())
-                    : QString();
-                fields << QStringLiteral("%1: %2").arg(QLatin1String(names[i]), value);
-            }
-            readout->setText(fields.join(QStringLiteral("   ")));
-        };
-        update();
+        rulerReadout_ = new QLabel(page);
+        rulerReadout_->setObjectName(QStringLiteral("optionsRulerReadout"));
+        rulerReadout_->setTextFormat(Qt::PlainText);
+        rulerReadout_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        layout->addWidget(rulerReadout_);
+        refreshRulerReadout();
         if (controller_) {
-            connect(controller_, &ToolController::rulerChanged, readout, update);
+            connect(controller_, &ToolController::rulerChanged, this, &OptionsBar::refreshRulerReadout);
         }
     }
 

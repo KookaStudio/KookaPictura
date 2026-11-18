@@ -65,6 +65,9 @@ pub fn resize_document(
 
     next.width = width;
     next.height = height;
+    if (width, height) != (old_w, old_h) {
+        next.measurement_scale.invalidate_for_resample();
+    }
     *doc = next;
     Ok(())
 }

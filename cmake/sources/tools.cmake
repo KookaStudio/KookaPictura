@@ -49,4 +49,5 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/tools_guides.cpp
     crates/pictura-app/cpp/tools_marquee.cpp
     crates/pictura-app/cpp/tools_selection_move.cpp
+    crates/pictura-app/cpp/tools_tone.cpp
 )

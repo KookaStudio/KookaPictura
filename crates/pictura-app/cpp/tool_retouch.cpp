@@ -15,6 +15,8 @@
 #include "api/paint_bridge.h"
 
 #include <QtCore/QObject>
+#include <QtCore/QTimer>
+#include <QtGui/QGuiApplication>
 
 #include <memory>
 #include <optional>
@@ -35,6 +37,19 @@ public:
         addOptions(paint_.get());
         addOptions(retouch_.get());
         addOptions(tone_.get());
+        holdTimer_.setInterval(kAirbrushHoldDabMs);
+        QObject::connect(&holdTimer_, &QTimer::timeout, &holdTimer_, [this] {
+            if (stroke_) {
+                stroke_->hold();
+            }
+        });
+        // A release can be lost with the focus; stop building now.
+        QObject::connect(qGuiApp, &QGuiApplication::applicationStateChanged, &holdTimer_,
+                         [this](Qt::ApplicationState state) {
+                             if (state != Qt::ApplicationActive) {
+                                 holdTimer_.stop();
+                             }
+                         });
     }
 
     bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
@@ -58,6 +73,9 @@ public:
         ctx.setDragging(true);
         ctx.setDragCommitted(false);
         stroke_->dab(imagePos.x(), imagePos.y());
+        if ((id_ == ToolId::Dodge || id_ == ToolId::Burn) && tone_->get().airbrush) {
+            holdTimer_.start();
+        }
         return true;
     }
 
@@ -75,10 +93,31 @@ public:
             return;
         }
         ctx.setDragging(false);
+        holdTimer_.stop();
         if (stroke_) {
             stroke_->finish();
             stroke_.reset();
         }
+    }
+
+    void onDeactivate(ToolServices& ctx) override
+    {
+        holdTimer_.stop();
+        if (stroke_) {
+            stroke_->finish();
+            stroke_.reset();
+        }
+        ctx.setDragging(false);
+    }
+
+    void onSessionCancelled(ToolServices& ctx) override
+    {
+        holdTimer_.stop();
+        if (stroke_) {
+            stroke_->abandon();
+            stroke_.reset();
+        }
+        ctx.setDragging(false);
     }
 
 private:
@@ -88,7 +127,7 @@ private:
             const ToneOptions o = tone_->get();
             const int tool = id_ == ToolId::Burn ? 1 : id_ == ToolId::Sponge ? 2 : 0;
             return begin_tone(v, paintTip(*paint_), tool, o.amount, o.range, o.protectTones,
-                              o.spongeMode, o.vibrance);
+                              o.spongeMode, o.vibrance, o.airbrush);
         }
         const RetouchOptions o = retouch_->get();
         if (id_ == ToolId::Smudge) {
@@ -101,6 +140,7 @@ private:
 
     ToolId id_;
     std::optional<paint_api::Stroke> stroke_;
+    QTimer holdTimer_;
     std::shared_ptr<PaintOptions> paint_;
     std::shared_ptr<RetouchGroup> retouch_;
     std::shared_ptr<ToneGroup> tone_;
