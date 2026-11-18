@@ -175,13 +175,13 @@ pub fn warm_encode_idents(doc: &Document) {
     }
     fn walk(layers: &[pictura_core::Layer]) {
         for layer in layers {
-            for channel in &layer.channels {
+            for channel in layer.channels() {
                 channel.data.ident();
             }
             if let Some(data) = layer.mask.as_ref().and_then(|mask| mask.data.as_ref()) {
                 data.ident();
             }
-            walk(&layer.children);
+            walk(layer.children());
         }
     }
     walk(&doc.layers);
@@ -200,7 +200,7 @@ mod tests {
         let doc = Document::from_rgba(name, width, height, &rgba);
         let mut layer = doc.layers.get(0).expect("from_rgba layer").clone();
         layer.name = name.to_string();
-        for channel in &mut layer.channels {
+        for channel in layer.channels_mut() {
             channel.data.as_mut_slice().fill(value);
         }
         layer
@@ -237,7 +237,7 @@ mod tests {
         let cache = EncodeCache::new();
         let before = crate::write_psd_cached(&doc, &cache).expect("cold encode");
         let stats = cache.stats();
-        doc.layers.get_mut(1).expect("second layer").channels[0]
+        doc.layers.get_mut(1).expect("second layer").channels_mut()[0]
             .data
             .as_mut_slice()
             .fill(41);
@@ -302,7 +302,7 @@ mod tests {
         let cache = EncodeCache::new();
         crate::write_psd_cached(&doc, &cache).expect("cold encode");
         let before = cache.stats();
-        doc.layers.get_mut(10).expect("layer").channels[1]
+        doc.layers.get_mut(10).expect("layer").channels_mut()[1]
             .data
             .as_mut_slice()
             .fill(9);
@@ -317,7 +317,7 @@ mod tests {
         let layer = doc.layers.get(0).expect("fixture layer");
         let ids = [0i16, 1, 2].map(|id| {
             layer
-                .channels
+                .channels()
                 .iter()
                 .find(|channel| channel.id == id)
                 .map(|channel| channel.data.ident())
@@ -347,7 +347,7 @@ mod tests {
         let mut layer = doc.layers.get(0).expect("fixture layer").clone();
         let ids = [0i16, 1, 2].map(|id| {
             layer
-                .channels
+                .channels()
                 .iter()
                 .find(|channel| channel.id == id)
                 .map(|channel| channel.data.ident())
@@ -361,7 +361,7 @@ mod tests {
         let retained: Vec<Vec<u8>> = (0..4)
             .map(|id| crate::color_mode::layer_retained_8(&layer, 8, id).expect("retained"))
             .collect();
-        layer.channels[0].data.as_mut_slice().fill(7);
+        layer.channels_mut()[0].data.as_mut_slice().fill(7);
         let profile = crate::icc::cmyk_profile_from_resources(&doc);
         crate::write_cmyk::reset_forward_conversions();
         let planes = crate::write_cmyk::cmyk_layer_color_planes(&layer, 8, profile.as_ref());
@@ -379,18 +379,23 @@ mod tests {
         let height = 4000;
         let rgba = vec![128u8; width * height * 4];
         let mut doc = Document::new(width as u32, height as u32, ColorMode::Rgb, BitDepth::Eight);
-        doc.composite = pictura_core::PixelBuffer {
-            width: width as u32,
-            height: height as u32,
-            channels: 4,
-            data: rgba.into(),
-        };
+        doc.composite
+            .replace(pictura_core::PixelBuffer {
+                width: width as u32,
+                height: height as u32,
+                channels: 4,
+                data: rgba.into(),
+            })
+            .expect("valid composite");
         let base = layer("Layer 0", width as u32, height as u32, 30);
         let layers: Vec<Layer> = (0..20)
             .map(|i| {
                 let mut layer = base.clone();
                 layer.name = format!("Layer {i}");
-                layer.channels[0].data.as_mut_slice().fill((i * 11) as u8);
+                layer.channels_mut()[0]
+                    .data
+                    .as_mut_slice()
+                    .fill((i * 11) as u8);
                 layer
             })
             .collect();
@@ -400,7 +405,7 @@ mod tests {
         crate::write_psd_cached(&doc, &cache).expect("cold encode");
         let cold = cold.elapsed();
         let before = cache.stats().layers_encoded;
-        doc.layers.get_mut(10).expect("layer").channels[0]
+        doc.layers.get_mut(10).expect("layer").channels_mut()[0]
             .data
             .as_mut_slice()
             .fill(1);

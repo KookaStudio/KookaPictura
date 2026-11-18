@@ -1,7 +1,7 @@
 //! Hue/Saturation's colour ranges and lightness.
 
 use super::{buf3, px3};
-use crate::{apply, Adjustment, HueRange, HueSaturationParams};
+use crate::{apply, hue_range_weight, Adjustment, HueRange, HueSaturationParams};
 
 fn reds(saturation: i16, lightness: i16) -> HueRange {
     HueRange {
@@ -18,11 +18,11 @@ fn reds(saturation: i16, lightness: i16) -> HueRange {
 #[test]
 fn a_band_wraps_through_zero_and_ramps_linearly() {
     let red = reds(0, 0);
-    assert_eq!(red.weight(0.0), 1.0);
-    assert_eq!(red.weight(350.0), 1.0);
-    assert_eq!(red.weight(330.0), 0.5);
-    assert_eq!(red.weight(30.0), 0.5);
-    assert_eq!(red.weight(120.0), 0.0);
+    assert_eq!(hue_range_weight(&red, 0.0), 1.0);
+    assert_eq!(hue_range_weight(&red, 350.0), 1.0);
+    assert_eq!(hue_range_weight(&red, 330.0), 0.5);
+    assert_eq!(hue_range_weight(&red, 30.0), 0.5);
+    assert_eq!(hue_range_weight(&red, 120.0), 0.0);
 }
 
 #[test]

@@ -56,6 +56,7 @@ fn metrics_on_and_off_composite_identically() {
             .as_ref()
             .expect("document")
             .composite
+            .buffer()
             .clone()
     };
     let on = run(true);

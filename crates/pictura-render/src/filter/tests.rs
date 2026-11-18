@@ -16,7 +16,7 @@ fn step_layer(w: i32, h: i32, alpha: u8) -> Layer {
     let plane: Vec<u8> = (0..n)
         .map(|i| if (i as i32 % w) < w / 2 { 40 } else { 200 })
         .collect();
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "px".into(),
         rect: rect(0, 0, h, w),
         blend: BlendMode::Normal,
@@ -50,11 +50,11 @@ fn step_layer(w: i32, h: i32, alpha: u8) -> Layer {
         is_group: false,
         background: false,
         ..Default::default()
-    }
+    })
 }
 
 fn chan(layer: &Layer, id: i16) -> &[u8] {
-    &layer.channels.iter().find(|c| c.id == id).unwrap().data
+    &layer.channels().iter().find(|c| c.id == id).unwrap().data
 }
 
 /// A non-uniform colour layer (the step in [`step_layer`] cannot expose a
@@ -62,7 +62,12 @@ fn chan(layer: &Layer, id: i16) -> &[u8] {
 fn varied_layer(w: i32, h: i32) -> Layer {
     let n = (w * h) as usize;
     let mut layer = step_layer(w, h, 255);
-    for (c, ch) in layer.channels.iter_mut().filter(|c| c.id >= 0).enumerate() {
+    for (c, ch) in layer
+        .channels_mut()
+        .iter_mut()
+        .filter(|c| c.id >= 0)
+        .enumerate()
+    {
         let plane: Vec<u8> = (0..n)
             .map(|i| {
                 let x = (i % w as usize) as u32;
@@ -123,7 +128,7 @@ fn mask_confines_change_to_left_half() {
     apply_filter(
         &mut layer,
         &Filter::GaussianBlur { radius: 2.0 },
-        Some(&mask),
+        Some(&mask.edit_coverage().expect("valid mask geometry")),
         false,
     )
     .unwrap();
@@ -156,18 +161,33 @@ fn disabled_mask_reports_full_coverage() {
         ..Default::default()
     };
     assert_eq!(
-        coverage(Some(&mask), 0, 0),
+        coverage(
+            Some(&mask.edit_coverage().expect("valid mask geometry")),
+            0,
+            0
+        ),
         255,
         "disabled mask must not gate"
     );
-    assert_eq!(coverage(Some(&mask), 3, 3), 255);
+    assert_eq!(
+        coverage(
+            Some(&mask.edit_coverage().expect("valid mask geometry")),
+            3,
+            3
+        ),
+        255
+    );
 
     let enabled = LayerMask {
         disabled: false,
         ..mask
     };
     assert_eq!(
-        coverage(Some(&enabled), 1, 1),
+        coverage(
+            Some(&enabled.edit_coverage().expect("valid mask geometry")),
+            1,
+            1
+        ),
         0,
         "enabled mask still gates"
     );
@@ -176,7 +196,7 @@ fn disabled_mask_reports_full_coverage() {
 #[test]
 fn missing_color_channel_is_invalid_params() {
     let mut layer = step_layer(4, 4, 255);
-    layer.channels.retain(|c| c.id != 2);
+    layer.channels_mut().retain(|c| c.id != 2);
     let err = apply_filter(&mut layer, &Filter::Sharpen, None, false).unwrap_err();
     assert!(matches!(err, FilterError::InvalidParams(_)), "{err:?}");
 }
@@ -184,7 +204,7 @@ fn missing_color_channel_is_invalid_params() {
 #[test]
 fn wrong_length_channel_is_invalid_params() {
     let mut layer = step_layer(4, 4, 255);
-    for c in &mut layer.channels {
+    for c in layer.channels_mut() {
         if c.id == 1 {
             c.data.truncate(3);
         }
@@ -227,10 +247,10 @@ fn pixel_locked_layer_is_refused_and_unchanged() {
 
 #[test]
 fn a_pixel_locked_empty_layer_still_refuses_a_filter() {
-    let mut layer = Layer {
+    let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         lock: LockFlags::default().with(LockFlags::PIXELS, true),
-        ..Layer::default()
-    };
+        ..Default::default()
+    });
     let err = apply_filter(
         &mut layer,
         &Filter::GaussianBlur { radius: 2.0 },
@@ -245,7 +265,7 @@ fn a_pixel_locked_empty_layer_still_refuses_a_filter() {
 fn transparency_lock_keeps_alpha_and_skips_clear_pixels() {
     let (w, h) = (4usize, 4usize);
     let mut layer = step_layer(w as i32, h as i32, 255);
-    for c in &mut layer.channels {
+    for c in layer.channels_mut() {
         if c.id == -1 {
             c.data[w + 1] = 0;
             c.data[w + 2] = 180;
@@ -312,7 +332,7 @@ fn region_apply_matches_full_inside_and_leaves_the_rest() {
 fn unlocked_layer_filters_its_transparency() {
     let (w, h) = (8usize, 8usize);
     let mut layer = step_layer(w as i32, h as i32, 255);
-    for c in &mut layer.channels {
+    for c in layer.channels_mut() {
         if c.id == -1 {
             for i in 0..w * h {
                 c.data[i] = if i % w < w / 2 { 255 } else { 0 };
@@ -403,7 +423,7 @@ fn value_kernels() -> Vec<Filter> {
 /// The right half of `layer` fully transparent, the left half opaque.
 fn half_clear(mut layer: Layer) -> Layer {
     let w = layer.rect.width() as usize;
-    for c in &mut layer.channels {
+    for c in layer.channels_mut() {
         if c.id == -1 {
             for i in 0..c.data.len() {
                 if i % w >= w / 2 {
@@ -495,7 +515,7 @@ fn cpu_preferred_kernels_skip_the_gpu() {
         let mut cpu = gpu.clone();
         apply_filter(&mut gpu, &filter, None, true).unwrap();
         apply_filter(&mut cpu, &filter, None, false).unwrap();
-        assert_eq!(gpu.channels, cpu.channels, "{filter:?}");
+        assert_eq!(gpu.channels(), cpu.channels(), "{filter:?}");
     }
 }
 
@@ -807,7 +827,12 @@ fn moving_kernels_move_a_soft_layer_edge() {
             }
         })
         .collect();
-    layer.channels.iter_mut().find(|c| c.id == -1).unwrap().data = alpha.clone().into();
+    layer
+        .channels_mut()
+        .iter_mut()
+        .find(|c| c.id == -1)
+        .unwrap()
+        .data = alpha.clone().into();
     for filter in moving_kernels() {
         let mut out = layer.clone();
         apply_filter(&mut out, &filter, None, false).unwrap();
@@ -944,7 +969,7 @@ fn hdr_toning_apron_covers_its_blur_support() {
 fn an_adjustment_changes_colour_inside_the_region_and_never_alpha() {
     let (w, h) = (8usize, 8usize);
     let mut layer = step_layer(w as i32, h as i32, 255);
-    for c in &mut layer.channels {
+    for c in layer.channels_mut() {
         if c.id == -1 {
             for i in 0..w * h {
                 c.data[i] = if i % w < w / 2 { 255 } else { 90 };
@@ -974,7 +999,7 @@ fn an_adjustment_changes_colour_inside_the_region_and_never_alpha() {
 fn auto_tone_uses_selection_histogram() {
     let w = 100usize;
     let mut layer = step_layer(w as i32, 1, 255);
-    for ch in layer.channels.iter_mut().filter(|c| c.id >= 0) {
+    for ch in layer.channels_mut().iter_mut().filter(|c| c.id >= 0) {
         for x in 0..w {
             ch.data[x] = if x < w / 2 {
                 (10 + x * 50 / (w / 2 - 1)) as u8
@@ -998,7 +1023,7 @@ fn auto_tone_uses_selection_histogram() {
     apply_adjustment_region(
         &mut layer,
         &Adjustment::Auto(pictura_adjust::AutoKind::Tone),
-        Some(&mask),
+        Some(&mask.edit_coverage().expect("valid mask geometry")),
         rect(0, 0, 1, w as i32),
     )
     .unwrap();
@@ -1038,7 +1063,7 @@ fn position_and_transparency_locks_do_not_block_a_filter() {
 fn grayscale_single_channel_layer_filters_channel_zero() {
     let (w, h) = (32usize, 32usize);
     let mut layer = step_layer(w as i32, h as i32, 123);
-    layer.channels.retain(|c| c.id == 0 || c.id == -1);
+    layer.channels_mut().retain(|c| c.id == 0 || c.id == -1);
     let before = chan(&layer, 0).to_vec();
     let alpha_before = chan(&layer, -1).to_vec();
 
@@ -1056,13 +1081,13 @@ fn grayscale_single_channel_layer_filters_channel_zero() {
         "grayscale plane changes"
     );
     assert_eq!(chan(&layer, -1), alpha_before.as_slice(), "alpha untouched");
-    assert_eq!(layer.channels.len(), 2, "no color planes are added");
+    assert_eq!(layer.channels().len(), 2, "no color planes are added");
 }
 
 #[test]
 fn missing_channel_zero_is_invalid_params() {
     let mut layer = step_layer(4, 4, 255);
-    layer.channels.retain(|c| c.id == -1);
+    layer.channels_mut().retain(|c| c.id == -1);
     let err = apply_filter(&mut layer, &Filter::Sharpen, None, false).unwrap_err();
     assert!(matches!(err, FilterError::InvalidParams(_)), "{err:?}");
 }
@@ -1071,7 +1096,7 @@ fn missing_channel_zero_is_invalid_params() {
 fn mixed_color_and_missing_channel_is_invalid_params() {
     // Channel 1 present but channel 2 absent is malformed, not Grayscale.
     let mut layer = step_layer(4, 4, 255);
-    layer.channels.retain(|c| c.id != 2);
+    layer.channels_mut().retain(|c| c.id != 2);
     let err = apply_filter(&mut layer, &Filter::Sharpen, None, false).unwrap_err();
     assert!(matches!(err, FilterError::InvalidParams(_)), "{err:?}");
 }
@@ -1113,7 +1138,7 @@ fn selection_filters_read_a_tiled_selection() {
     };
     let mut layer = step_layer(w as i32 - 40, h as i32 - 30, 230);
     layer.rect = rect(15, 20, h as i32 - 15, w as i32 - 20);
-    for channel in layer.channels.iter_mut().filter(|c| c.id >= 0) {
+    for channel in layer.channels_mut().iter_mut().filter(|c| c.id >= 0) {
         for value in channel.data.as_mut_slice() {
             *value = value.wrapping_add(next() / 4);
         }
@@ -1123,19 +1148,41 @@ fn selection_filters_read_a_tiled_selection() {
     let (mut got, mut want) = (layer.clone(), layer.clone());
     let tiled_mask = mask(&tiled);
     pictura_core::assert_no_materialization(|| {
-        apply_filter(&mut got, &blur, Some(&tiled_mask), false)
+        apply_filter(
+            &mut got,
+            &blur,
+            Some(&tiled_mask.edit_coverage().expect("valid mask geometry")),
+            false,
+        )
     })
     .unwrap();
-    apply_filter(&mut want, &blur, Some(&mask(&flat)), false).unwrap();
+    apply_filter(
+        &mut want,
+        &blur,
+        Some(&(mask(&flat)).edit_coverage().expect("valid mask geometry")),
+        false,
+    )
+    .unwrap();
     assert_eq!(got, want, "blur");
 
     let auto = Adjustment::Auto(pictura_adjust::AutoKind::Tone);
     let region = layer.rect;
     let (mut got, mut want) = (layer.clone(), layer);
     pictura_core::assert_no_materialization(|| {
-        apply_adjustment_region(&mut got, &auto, Some(&tiled_mask), region)
+        apply_adjustment_region(
+            &mut got,
+            &auto,
+            Some(&tiled_mask.edit_coverage().expect("valid mask geometry")),
+            region,
+        )
     })
     .unwrap();
-    apply_adjustment_region(&mut want, &auto, Some(&mask(&flat)), region).unwrap();
+    apply_adjustment_region(
+        &mut want,
+        &auto,
+        Some(&(mask(&flat)).edit_coverage().expect("valid mask geometry")),
+        region,
+    )
+    .unwrap();
     assert_eq!(got, want, "auto tone");
 }

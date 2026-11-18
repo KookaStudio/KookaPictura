@@ -34,11 +34,11 @@ pub(super) fn web_flattened(view: &PictureView) -> Vec<u8> {
 /// its children for a group (falling back to the group rect when the children
 /// have no area).
 pub(super) fn subtree_bounds(layer: &Layer) -> PsdRect {
-    if !layer.is_group {
+    if !layer.is_group() {
         return layer.rect;
     }
     let mut union: Option<PsdRect> = None;
-    for child in &layer.children {
+    for child in layer.children() {
         let rect = subtree_bounds(child);
         if rect.right <= rect.left || rect.bottom <= rect.top {
             continue;
@@ -466,12 +466,12 @@ mod tests {
     fn layer_flattened_crops_a_group_to_the_child_union() {
         let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
         let mut group = pixel_layer("group", 0, 0, (0, 0, 0));
-        group.is_group = true;
-        group.channels.clear();
-        group.children = pictura_core::LayerStack::from_layers(vec![
+        group.set_group_children(pictura_core::LayerStack::default());
+        group.channels_mut().clear();
+        group.set_group_children(pictura_core::LayerStack::from_layers(vec![
             at(pixel_layer("a", 2, 2, (1, 2, 3)), 1, 1),
             at(pixel_layer("b", 1, 1, (4, 5, 6)), 5, 5),
-        ]);
+        ]));
         doc.layers = pictura_core::LayerStack::from_layers(vec![group]);
         let rgba = layer_flattened_buffer(&doc, 0, false);
         // The union of (1,1)-(3,3) and (5,5)-(6,6) is (1,1)-(6,6): 5 x 5.

@@ -1,6 +1,8 @@
 //! Non-RGB color-mode read tests, split out of `tests.rs` to stay under
 //! the file-size cap.
 
+mod state;
+
 use super::*;
 
 // -- color modes --------------------------------------------------------
@@ -125,7 +127,7 @@ fn bitmap_depth1_raw_expands_black_white() {
     let doc = read_psd(&p).unwrap();
     assert_eq!(doc.mode, ColorMode::Rgb);
     assert_eq!(doc.depth, BitDepth::Eight);
-    assert_eq!(doc.source_mode, Some(ColorMode::Bitmap));
+    assert_eq!(doc.source.mode(), Some(ColorMode::Bitmap));
     assert_eq!(doc.composite.channels, 3);
     assert_eq!(&doc.composite.data[0..8], &[0, 255, 0, 255, 0, 255, 0, 255]);
     assert_eq!(
@@ -178,7 +180,7 @@ fn indexed_depth8_maps_palette_indices() {
     let p = flat_psd_with_data(8, 2, 1, 3, 1, &palette, &[&[0, 1, 2]]);
     let doc = read_psd(&p).unwrap();
     assert_eq!(doc.mode, ColorMode::Rgb);
-    assert_eq!(doc.source_mode, Some(ColorMode::Indexed));
+    assert_eq!(doc.source.mode(), Some(ColorMode::Indexed));
     assert!(doc.color_mode_data.is_empty());
     assert_eq!(&doc.composite.data[0..3], &[0, 10, 200]);
     assert_eq!(&doc.composite.data[3..6], &[0, 20, 100]);
@@ -197,7 +199,7 @@ fn cmyk_depth8_uses_profile_free_formula() {
     );
     let doc = read_psd(&p).unwrap();
     assert_eq!(doc.mode, ColorMode::Rgb);
-    assert_eq!(doc.source_mode, Some(ColorMode::Cmyk));
+    assert_eq!(doc.source.mode(), Some(ColorMode::Cmyk));
     assert_eq!(
         doc.composite.data,
         vec![100, 0, 255, 50, 0, 255, 25, 0, 255]
@@ -209,7 +211,7 @@ fn lab_depth8_neutral_gray_and_white_within_two() {
     let p = flat_psd(8, 9, 3, 2, 1, &[&[200, 255], &[128, 128], &[128, 128]]);
     let doc = read_psd(&p).unwrap();
     assert_eq!(doc.mode, ColorMode::Rgb);
-    assert_eq!(doc.source_mode, Some(ColorMode::Lab));
+    assert_eq!(doc.source.mode(), Some(ColorMode::Lab));
     for i in 0..2 {
         let expected = if i == 0 { 194 } else { 255 };
         for c in 0..3 {
@@ -269,13 +271,13 @@ fn cmyk_layer_converts_to_rgb_and_keeps_transparency() {
     let doc = read_psd(&p).unwrap();
     let layer = &doc.layers[0];
     assert_eq!(
-        layer.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
+        layer.channels().iter().map(|c| c.id).collect::<Vec<_>>(),
         vec![0, 1, 2, -1]
     );
-    assert_eq!(layer.channels[0].data, vec![100]);
-    assert_eq!(layer.channels[1].data, vec![50]);
-    assert_eq!(layer.channels[2].data, vec![25]);
-    assert_eq!(layer.channels[3].data, vec![200]);
+    assert_eq!(layer.channels()[0].data, vec![100]);
+    assert_eq!(layer.channels()[1].data, vec![50]);
+    assert_eq!(layer.channels()[2].data, vec![25]);
+    assert_eq!(layer.channels()[3].data, vec![200]);
 }
 
 #[test]
@@ -289,10 +291,10 @@ fn cmyk_layer_with_wrong_channel_count_is_left_unchanged() {
     let doc = read_psd(&p).unwrap();
     let layer = &doc.layers[0];
     assert_eq!(
-        layer.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
+        layer.channels().iter().map(|c| c.id).collect::<Vec<_>>(),
         vec![0, 1, 2]
     );
-    assert_eq!(layer.channels[0].data, vec![10]);
+    assert_eq!(layer.channels()[0].data, vec![10]);
 }
 
 #[test]
@@ -315,24 +317,32 @@ fn cmyk_layer_leaves_alpha_mask_and_spot_untouched() {
     let layer = &doc.layers[0];
     // The four CMYK color planes become RGB; every non-color channel is intact.
     assert_eq!(
-        layer.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
+        layer.channels().iter().map(|c| c.id).collect::<Vec<_>>(),
         vec![0, 1, 2, -1]
     );
-    assert_eq!(layer.channels[0].data, vec![100]);
-    assert_eq!(layer.channels[1].data, vec![50]);
-    assert_eq!(layer.channels[2].data, vec![25]);
-    assert_eq!(layer.channels[3].data, vec![111], "transparency untouched");
+    assert_eq!(layer.channels()[0].data, vec![100]);
+    assert_eq!(layer.channels()[1].data, vec![50]);
+    assert_eq!(layer.channels()[2].data, vec![25]);
+    assert_eq!(
+        layer.channels()[3].data,
+        vec![111],
+        "transparency untouched"
+    );
     assert_eq!(
         layer.mask.as_ref().and_then(|m| m.data.as_deref()),
         Some(&[222u8][..]),
         "mask channel untouched"
     );
     assert_eq!(
-        layer.raw_channels.iter().map(|c| c.id).collect::<Vec<_>>(),
+        layer
+            .raw_channels()
+            .iter()
+            .map(|c| c.id)
+            .collect::<Vec<_>>(),
         vec![-3]
     );
     assert_eq!(
-        layer.raw_channels[0].data,
+        layer.raw_channels()[0].data,
         vec![0, 0, 123],
         "spot untouched"
     );
@@ -345,14 +355,14 @@ fn bitmap_depth1_layer_color_channel_expands() {
     for (packed, expected) in [(0x80u8, 0u8), (0x00, 255u8)] {
         let p = layered_psd_depth(1, 0, 1, &[&[packed]], &[(0, &[packed])]);
         let doc = read_psd(&p).unwrap();
-        assert_eq!(doc.source_mode, Some(ColorMode::Bitmap));
+        assert_eq!(doc.source.mode(), Some(ColorMode::Bitmap));
         let layer = &doc.layers[0];
         assert_eq!(
-            layer.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
+            layer.channels().iter().map(|c| c.id).collect::<Vec<_>>(),
             vec![0, 1, 2],
             "bitmap layer becomes RGB"
         );
-        for channel in &layer.channels {
+        for channel in layer.channels() {
             assert_eq!(channel.data, vec![expected], "packed {packed:#04x}");
         }
     }
@@ -366,8 +376,12 @@ fn edited_bitmap_composite_falls_back_to_rgb() {
     // so the document writes the working RGB, not an invented 1-bit threshold.
     let p = flat_psd(1, 0, 1, 8, 2, &[&[0xAA, 0xF0]]);
     let mut doc = read_psd(&p).unwrap();
-    assert_eq!(doc.source_mode, Some(ColorMode::Bitmap));
-    doc.composite.data[0] ^= 1;
+    assert_eq!(doc.source.mode(), Some(ColorMode::Bitmap));
+    doc.composite
+        .edit_data(|data| {
+            data[0] ^= 1;
+        })
+        .expect("pixel edit preserves geometry");
 
     let out = write_psd(&doc).unwrap();
     assert_eq!(
@@ -382,7 +396,7 @@ fn edited_bitmap_composite_falls_back_to_rgb() {
     );
     let back = read_psd(&out).unwrap();
     assert_eq!(back.mode, ColorMode::Rgb);
-    assert_eq!(back.source_mode, None);
+    assert_eq!(back.source.mode(), None);
     assert_eq!(back.composite, doc.composite);
 }
 
@@ -392,7 +406,7 @@ fn layered_bitmap_falls_back_to_rgb() {
     // layer writes the working RGB instead of a one-channel Bitmap.
     let p = layered_psd_depth(1, 0, 1, &[&[0x80]], &[(0, &[0x80])]);
     let doc = read_psd(&p).unwrap();
-    assert_eq!(doc.source_mode, Some(ColorMode::Bitmap));
+    assert_eq!(doc.source.mode(), Some(ColorMode::Bitmap));
     assert_eq!(doc.layers.len(), 1);
 
     let out = write_psd(&doc).unwrap();
@@ -403,7 +417,7 @@ fn layered_bitmap_falls_back_to_rgb() {
     );
     let back = read_psd(&out).unwrap();
     assert_eq!(back.mode, ColorMode::Rgb);
-    assert_eq!(back.source_mode, None);
+    assert_eq!(back.source.mode(), None);
 }
 
 #[test]
@@ -425,7 +439,7 @@ fn bitmap_with_a_document_channel_falls_back_to_rgb() {
     );
     let back = read_psd(&out).unwrap();
     assert_eq!(back.mode, ColorMode::Rgb);
-    assert_eq!(back.source_mode, None);
+    assert_eq!(back.source.mode(), None);
 }
 
 #[test]
@@ -464,7 +478,11 @@ fn bitmap_extra_channel_survives_rgb_fallback() {
     // An edit refuses the Bitmap write-back; the packed extra expands to 8-bit.
     let p = flat_psd(1, 0, 2, 8, 2, &[&[0xAA, 0xF0], &[0xF0, 0xAA]]);
     let mut doc = read_psd(&p).unwrap();
-    doc.composite.data[0] ^= 1;
+    doc.composite
+        .edit_data(|data| {
+            data[0] ^= 1;
+        })
+        .expect("pixel edit preserves geometry");
 
     let out = write_psd(&doc).unwrap();
     assert_eq!(
@@ -498,21 +516,6 @@ fn unsupported_depths_and_color_modes_are_rejected() {
 }
 
 #[test]
-fn native_and_constructed_documents_have_no_source_mode() {
-    for (mode, code) in [(ColorMode::Rgb, 3u16), (ColorMode::Grayscale, 1u16)] {
-        let channels = mode.color_channels() as u16;
-        let plane = vec![7u8; channels as usize];
-        let p = flat_psd(8, code, channels, 1, 1, &[&plane]);
-        assert_eq!(read_psd(&p).unwrap().source_mode, None);
-    }
-    assert_eq!(
-        Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight).source_mode,
-        None
-    );
-    assert_eq!(Document::from_rgba("x", 1, 1, &[0u8; 4]).source_mode, None);
-}
-
-#[test]
 fn lab_document_writes_back_as_lab() {
     // An unedited flat Lab composite is retained on read and re-emitted
     // byte-identically on write, so re-reading reproduces the working RGB.
@@ -520,12 +523,13 @@ fn lab_document_writes_back_as_lab() {
     let p = flat_psd(8, 9, 3, 2, 1, &[&[225, 200], &[82, 110], &[114, 100]]);
     let doc = read_psd(&p).unwrap();
     assert_eq!(doc.mode, ColorMode::Rgb);
-    assert_eq!(doc.source_mode, Some(ColorMode::Lab));
+    assert_eq!(doc.source.mode(), Some(ColorMode::Lab));
     // The store is 8-bit Lab, deliberately not a native-depth store.
-    assert!(doc.source_planes.is_some());
+    assert!(doc.source.planes().is_some());
     assert!(!doc.retains_source_depth());
     assert_eq!(
-        doc.source_planes
+        doc.source
+            .planes()
             .as_ref()
             .expect("Lab planes retained")
             .samples
@@ -552,9 +556,10 @@ fn lab_document_writes_back_as_lab() {
 
     let back = read_psd(&out).unwrap();
     assert_eq!(back.mode, ColorMode::Rgb);
-    assert_eq!(back.source_mode, Some(ColorMode::Lab));
+    assert_eq!(back.source.mode(), Some(ColorMode::Lab));
     assert_eq!(
-        back.source_planes
+        back.source
+            .planes()
             .as_ref()
             .expect("re-read Lab planes")
             .samples
@@ -583,11 +588,12 @@ fn cmyk_document_writes_back_as_cmyk() {
     );
     let doc = read_psd(&p).unwrap();
     assert_eq!(doc.mode, ColorMode::Rgb);
-    assert_eq!(doc.source_mode, Some(ColorMode::Cmyk));
-    assert!(doc.source_planes.is_some());
+    assert_eq!(doc.source.mode(), Some(ColorMode::Cmyk));
+    assert!(doc.source.planes().is_some());
     assert!(!doc.retains_source_depth());
     assert_eq!(
-        doc.source_planes
+        doc.source
+            .planes()
             .as_ref()
             .expect("CMYK planes retained")
             .samples
@@ -614,9 +620,10 @@ fn cmyk_document_writes_back_as_cmyk() {
 
     let back = read_psd(&out).unwrap();
     assert_eq!(back.mode, ColorMode::Rgb);
-    assert_eq!(back.source_mode, Some(ColorMode::Cmyk));
+    assert_eq!(back.source.mode(), Some(ColorMode::Cmyk));
     assert_eq!(
-        back.source_planes
+        back.source
+            .planes()
             .as_ref()
             .expect("re-read CMYK planes")
             .samples
@@ -645,11 +652,12 @@ fn cmyk_document_extra_channel_round_trips_at_offset_four() {
     let p = flat_psd(8, 4, 5, 3, 1, &[&c, &m, &y, &k, &extra]);
     let doc = read_psd(&p).unwrap();
     assert_eq!(doc.mode, ColorMode::Rgb);
-    assert_eq!(doc.source_mode, Some(ColorMode::Cmyk));
+    assert_eq!(doc.source.mode(), Some(ColorMode::Cmyk));
     assert_eq!(doc.channels.len(), 1, "one document extra channel");
     assert_eq!(doc.channels[0].data, extra);
     let source_planes = doc
-        .source_planes
+        .source
+        .planes()
         .as_ref()
         .expect("retained")
         .samples
@@ -674,7 +682,7 @@ fn cmyk_document_extra_channel_round_trips_at_offset_four() {
         "the extra channel round-trips unchanged"
     );
     assert_eq!(
-        back.source_planes.as_ref().unwrap().samples.to_bytes(),
+        back.source.planes().as_ref().unwrap().samples.to_bytes(),
         source_planes,
         "the four color planes are re-emitted, not confused with the extra"
     );
@@ -696,7 +704,7 @@ fn cmyk_layer_color_channels_write_back_as_cmyk() {
         ],
     );
     let doc = read_psd(&p).unwrap();
-    assert_eq!(doc.source_mode, Some(ColorMode::Cmyk));
+    assert_eq!(doc.source.mode(), Some(ColorMode::Cmyk));
     let retained = doc.layers[0]
         .source_channels
         .as_ref()
@@ -722,7 +730,7 @@ fn cmyk_layer_color_channels_write_back_as_cmyk() {
     let back = read_psd(&out).unwrap();
     let layer = &back.layers[0];
     assert_eq!(
-        layer.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
+        layer.channels().iter().map(|c| c.id).collect::<Vec<_>>(),
         vec![0, 1, 2, -1],
         "the layer carries four CMYK channels plus transparency"
     );
@@ -730,34 +738,15 @@ fn cmyk_layer_color_channels_write_back_as_cmyk() {
     // round-trip to the same RGB bytes.
     for c in 0..3 {
         assert_eq!(
-            layer.channels[c].data, doc.layers[0].channels[c].data,
+            layer.channels()[c].data,
+            doc.layers[0].channels()[c].data,
             "layer color channel {c} is exact"
         );
     }
-    assert_eq!(layer.channels[3].data, vec![200], "transparency untouched");
-}
-
-#[test]
-fn edited_cmyk_plane_uses_the_exact_inverse() {
-    // An edit replaces the retained plane, so the writer re-encodes with
-    // `rgb_to_cmyk`; K = 255 makes it an exact right-inverse, so the edited RGB
-    // reads back byte-for-byte (unlike the quantizing Lab inverse).
-    let p = flat_psd(8, 4, 4, 1, 1, &[&[128], &[64], &[32], &[200]]);
-    let mut doc = read_psd(&p).unwrap();
-    assert_eq!(doc.composite.data, vec![100, 50, 25]);
-    let edited = [7u8, 200, 123];
-    doc.composite.data[..3].copy_from_slice(&edited);
-
-    let out = write_psd(&doc).unwrap();
-    let back = read_psd(&out).unwrap();
     assert_eq!(
-        back.source_planes.as_ref().unwrap().samples.to_bytes(),
-        crate::color_mode::rgb_to_cmyk(&edited),
-        "an edited plane is re-encoded with rgb_to_cmyk"
-    );
-    assert_eq!(
-        back.composite.data, edited,
-        "the CMYK inverse is exact, not approximate"
+        layer.channels()[3].data,
+        vec![200],
+        "transparency untouched"
     );
 }
 
@@ -772,7 +761,7 @@ fn lab_layer_color_channels_write_back_as_lab() {
     let doc = read_psd(&p).unwrap();
     assert_eq!(
         doc.layers[0]
-            .channels
+            .channels()
             .iter()
             .map(|c| c.id)
             .collect::<Vec<_>>(),
@@ -803,41 +792,22 @@ fn lab_layer_color_channels_write_back_as_lab() {
     let back = read_psd(&out).unwrap();
     let layer = &back.layers[0];
     assert_eq!(
-        layer.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
+        layer.channels().iter().map(|c| c.id).collect::<Vec<_>>(),
         vec![0, 1, 2, -1]
     );
     // The layer's Lab planes were re-emitted exactly, so its color channels
     // round-trip to the same RGB bytes.
     for c in 0..3 {
         assert_eq!(
-            layer.channels[c].data, doc.layers[0].channels[c].data,
+            layer.channels()[c].data,
+            doc.layers[0].channels()[c].data,
             "layer color channel {c} is exact"
         );
     }
-    assert_eq!(layer.channels[3].data, vec![200], "transparency untouched");
-}
-
-#[test]
-fn edited_lab_plane_uses_the_approximate_inverse() {
-    // An edit replaces the retained plane, so the writer re-encodes with
-    // `rgb_to_lab`. ponytail: 8-bit Lab cannot represent saturated colors
-    // exactly, so the re-decoded RGB is approximate (the documented ceiling).
-    let p = flat_psd(8, 9, 3, 1, 1, &[&[225], &[82], &[114]]);
-    let mut doc = read_psd(&p).unwrap();
-    let edited = [0u8, 255, 128];
-    doc.composite.data[..3].copy_from_slice(&edited);
-
-    let out = write_psd(&doc).unwrap();
-    let back = read_psd(&out).unwrap();
     assert_eq!(
-        back.source_planes.as_ref().unwrap().samples.to_bytes(),
-        crate::color_mode::rgb_to_lab(&edited),
-        "an edited plane is re-encoded with rgb_to_lab"
-    );
-    assert_ne!(
-        back.composite.data[..3],
-        edited[..],
-        "the saturated Lab decode is approximate, not exact"
+        layer.channels()[3].data,
+        vec![200],
+        "transparency untouched"
     );
 }
 
@@ -935,24 +905,29 @@ fn grouped_lab_layers_convert_on_read_and_round_trip() {
     );
     let doc = read_psd(&p).unwrap();
     assert_eq!(doc.mode, ColorMode::Rgb);
-    assert_eq!(doc.source_mode, Some(ColorMode::Lab));
+    assert_eq!(doc.source.mode(), Some(ColorMode::Lab));
     assert!(doc.layers[0].is_group());
-    let child = &doc.layers[0].children[0];
+    let child = &doc.layers[0].children()[0];
     assert_eq!(
-        child.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
+        child.channels().iter().map(|c| c.id).collect::<Vec<_>>(),
         vec![0, 1, 2]
     );
     for (c, expected) in [(0usize, 60u8), (1, 246), (2, 246)] {
-        assert_eq!(child.channels[c].data, vec![expected], "nested channel {c}");
+        assert_eq!(
+            child.channels()[c].data,
+            vec![expected],
+            "nested channel {c}"
+        );
     }
 
     // The unedited nested plane survives a save exactly.
     let out = write_psd(&doc).unwrap();
     let back = read_psd(&out).unwrap();
-    let back_child = &back.layers[0].children[0];
+    let back_child = &back.layers[0].children()[0];
     for c in 0..3 {
         assert_eq!(
-            back_child.channels[c].data, child.channels[c].data,
+            back_child.channels()[c].data,
+            child.channels()[c].data,
             "nested channel {c} after save"
         );
     }
@@ -969,14 +944,14 @@ fn grouped_cmyk_layers_convert_on_read() {
     );
     let doc = read_psd(&p).unwrap();
     assert_eq!(doc.mode, ColorMode::Rgb);
-    let child = &doc.layers[0].children[0];
+    let child = &doc.layers[0].children()[0];
     assert_eq!(
-        child.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
+        child.channels().iter().map(|c| c.id).collect::<Vec<_>>(),
         vec![0, 1, 2]
     );
-    assert_eq!(child.channels[0].data, vec![100]);
-    assert_eq!(child.channels[1].data, vec![50]);
-    assert_eq!(child.channels[2].data, vec![25]);
+    assert_eq!(child.channels()[0].data, vec![100]);
+    assert_eq!(child.channels()[1].data, vec![50]);
+    assert_eq!(child.channels()[2].data, vec![25]);
 }
 
 #[test]
@@ -993,8 +968,8 @@ fn sixteen_bit_lab_preserves_source_mode_and_depth() {
     );
     let doc = read_psd(&p).unwrap();
     assert_eq!(doc.mode, ColorMode::Rgb);
-    assert_eq!(doc.source_mode, Some(ColorMode::Lab));
-    assert_eq!(doc.source_depth, Some(BitDepth::Sixteen));
+    assert_eq!(doc.source.mode(), Some(ColorMode::Lab));
+    assert_eq!(doc.source.depth(), Some(BitDepth::Sixteen));
     assert!(
         doc.retains_source_depth(),
         "a 16-bit Lab read retains samples"
@@ -1018,31 +993,35 @@ fn lab_document_without_a_merged_composite_writes_lab() {
     // A layered Lab file with "Maximize Compatibility" off: the read yields no
     // merged composite, but the writer still selects Lab and re-emits the layer.
     let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.source_mode = Some(ColorMode::Lab);
-    doc.merged_composite_present = false;
-    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 1,
-            right: 1,
+    doc.source
+        .set_encoding(Some(ColorMode::Lab), None)
+        .expect("valid source encoding");
+    doc.composite.set_merged_output(false);
+    doc.layers = pictura_core::LayerStack::from_layers(vec![crate::layer_from_parts(
+        pictura_core::LayerParts {
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 1,
+                right: 1,
+            },
+            channels: vec![
+                Channel {
+                    id: 0,
+                    data: vec![60].into(),
+                },
+                Channel {
+                    id: 1,
+                    data: vec![246].into(),
+                },
+                Channel {
+                    id: 2,
+                    data: vec![246].into(),
+                },
+            ],
+            ..Default::default()
         },
-        channels: vec![
-            Channel {
-                id: 0,
-                data: vec![60].into(),
-            },
-            Channel {
-                id: 1,
-                data: vec![246].into(),
-            },
-            Channel {
-                id: 2,
-                data: vec![246].into(),
-            },
-        ],
-        ..Default::default()
-    }]);
+    )]);
 
     let p = write_psd(&doc).unwrap();
     assert_eq!(
@@ -1052,13 +1031,13 @@ fn lab_document_without_a_merged_composite_writes_lab() {
     );
 
     let back = read_psd(&p).unwrap();
-    assert!(!back.merged_composite_present, "no merged composite");
+    assert!(!back.composite.merged_output(), "no merged composite");
     assert_eq!(back.mode, ColorMode::Rgb);
-    assert_eq!(back.source_mode, Some(ColorMode::Lab));
+    assert_eq!(back.source.mode(), Some(ColorMode::Lab));
     let layer = &back.layers[0];
-    assert_eq!(layer.channels[0].data, vec![60]);
-    assert_eq!(layer.channels[1].data, vec![246]);
-    assert_eq!(layer.channels[2].data, vec![246]);
+    assert_eq!(layer.channels()[0].data, vec![60]);
+    assert_eq!(layer.channels()[1].data, vec![246]);
+    assert_eq!(layer.channels()[2].data, vec![246]);
 
     let out = write_psd(&back).unwrap();
     assert_eq!(
@@ -1071,327 +1050,6 @@ fn lab_document_without_a_merged_composite_writes_lab() {
 // -- Indexed write-back -------------------------------------------------
 
 /// The fixture-style palette: index `i` maps to `(i, 255 - i, (i * 7) % 256)`.
-fn indexed_palette() -> [u8; 768] {
-    let mut palette = [0u8; 768];
-    for i in 0..256 {
-        palette[i] = i as u8;
-        palette[256 + i] = (255 - i) as u8;
-        palette[512 + i] = ((i * 7) % 256) as u8;
-    }
-    palette
-}
-
-#[test]
-fn indexed_document_writes_back_as_indexed() {
-    // An unedited flat Indexed composite is retained on read and re-emitted
-    // byte-identically on write, so re-reading reproduces the working RGB.
-    let palette = indexed_palette();
-    let indices = [0u8, 1, 2, 3];
-    let p = flat_psd_with_data(8, 2, 1, 4, 1, &palette, &[&indices]);
-    let doc = read_psd(&p).unwrap();
-    assert_eq!(doc.mode, ColorMode::Rgb);
-    assert_eq!(doc.source_mode, Some(ColorMode::Indexed));
-    assert!(doc.color_mode_data.is_empty(), "palette consumed");
-    assert_eq!(doc.source_palette, Some(palette));
-    assert_eq!(
-        doc.source_planes
-            .as_ref()
-            .expect("index plane retained")
-            .samples
-            .to_bytes(),
-        indices.to_vec(),
-        "the index plane is retained"
-    );
-
-    let out = write_psd(&doc).unwrap();
-    assert_eq!(
-        u16::from_be_bytes(out[12..14].try_into().unwrap()),
-        1,
-        "one index channel"
-    );
-    assert_eq!(
-        u16::from_be_bytes(out[22..24].try_into().unwrap()),
-        8,
-        "output depth stays 8"
-    );
-    assert_eq!(
-        u16::from_be_bytes(out[24..26].try_into().unwrap()),
-        2,
-        "output header color mode is Indexed"
-    );
-    assert_eq!(&out[30..30 + 768], &palette[..], "palette re-emitted");
-
-    let back = read_psd(&out).unwrap();
-    assert_eq!(back.mode, ColorMode::Rgb);
-    assert_eq!(back.source_mode, Some(ColorMode::Indexed));
-    assert_eq!(back.source_palette, Some(palette));
-    assert_eq!(
-        back.source_planes
-            .as_ref()
-            .expect("index retained")
-            .samples
-            .to_bytes(),
-        indices.to_vec(),
-        "the written index plane equals the source exactly"
-    );
-    assert_eq!(
-        back.composite, doc.composite,
-        "re-reading the palette reproduces the working RGB exactly"
-    );
-}
-
-#[test]
-fn indexed_layer_color_channel_writes_back_as_indexed() {
-    let palette = indexed_palette();
-    let p = layered_psd_with_data(8, 2, 1, &palette, &[&[2]], &[(0, &[5]), (-1, &[200])]);
-    let doc = read_psd(&p).unwrap();
-    assert_eq!(doc.source_mode, Some(ColorMode::Indexed));
-    let layer = &doc.layers[0];
-    assert_eq!(
-        layer.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
-        vec![0, 1, 2, -1],
-        "the index layer becomes RGB plus transparency"
-    );
-    let retained = layer.source_channels.as_ref().expect("index retained");
-    assert_eq!(retained.depth, BitDepth::Eight);
-    assert_eq!(retained.planes, vec![(0, Samples::U8(vec![5].into()))]);
-
-    let out = write_psd(&doc).unwrap();
-    assert_eq!(
-        u16::from_be_bytes(out[24..26].try_into().unwrap()),
-        2,
-        "output header color mode is Indexed"
-    );
-
-    let back = read_psd(&out).unwrap();
-    let back_layer = &back.layers[0];
-    assert_eq!(
-        back_layer.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
-        vec![0, 1, 2, -1]
-    );
-    for c in 0..3 {
-        assert_eq!(
-            back_layer.channels[c].data, layer.channels[c].data,
-            "layer color channel {c} is exact"
-        );
-    }
-    assert_eq!(
-        back_layer.channels[3].data,
-        vec![200],
-        "transparency untouched"
-    );
-    assert_eq!(back.composite, doc.composite);
-}
-
-#[test]
-fn grouped_indexed_layer_round_trips() {
-    // A pixel layer nested in a group must have its index channel retained and
-    // re-emitted like a top-level one.
-    let palette = indexed_palette();
-    let p = grouped_psd_with_data(2, 1, &palette, &[&[2]], &[(0, &[5])]);
-    let doc = read_psd(&p).unwrap();
-    assert_eq!(doc.mode, ColorMode::Rgb);
-    assert_eq!(doc.source_mode, Some(ColorMode::Indexed));
-    assert!(doc.layers[0].is_group());
-    let child = &doc.layers[0].children[0];
-    assert_eq!(
-        child.channels.iter().map(|c| c.id).collect::<Vec<_>>(),
-        vec![0, 1, 2]
-    );
-    assert_eq!(
-        child.source_channels.as_ref().unwrap().planes,
-        vec![(0, Samples::U8(vec![5].into()))],
-        "the nested index channel is retained"
-    );
-
-    let out = write_psd(&doc).unwrap();
-    assert_eq!(
-        u16::from_be_bytes(out[24..26].try_into().unwrap()),
-        2,
-        "output header color mode is Indexed"
-    );
-
-    let back = read_psd(&out).unwrap();
-    let back_child = &back.layers[0].children[0];
-    for c in 0..3 {
-        assert_eq!(
-            back_child.channels[c].data, child.channels[c].data,
-            "nested channel {c} after save"
-        );
-    }
-    assert_eq!(back.composite, doc.composite);
-}
-
-#[test]
-fn edited_indexed_composite_falls_back_to_rgb() {
-    // An edit cannot be re-quantized: the whole document writes the working RGB.
-    let palette = indexed_palette();
-    let p = flat_psd_with_data(8, 2, 1, 2, 1, &palette, &[&[1, 2]]);
-    let mut doc = read_psd(&p).unwrap();
-    doc.composite.data[0] ^= 1;
-
-    let out = write_psd(&doc).unwrap();
-    assert_eq!(
-        u16::from_be_bytes(out[24..26].try_into().unwrap()),
-        3,
-        "an edited composite writes RGB, not an invented quantization"
-    );
-    let back = read_psd(&out).unwrap();
-    assert_eq!(back.mode, ColorMode::Rgb);
-    assert_eq!(back.source_mode, None);
-    assert_eq!(back.composite, doc.composite);
-}
-
-#[test]
-fn edited_indexed_layer_falls_back_to_rgb() {
-    // One edited layer flips the document-wide header mode to RGB.
-    let palette = indexed_palette();
-    let p = layered_psd_with_data(8, 2, 1, &palette, &[&[2]], &[(0, &[5]), (-1, &[200])]);
-    let mut doc = read_psd(&p).unwrap();
-    doc.layers[0].channels[0].data[0] ^= 1;
-
-    let out = write_psd(&doc).unwrap();
-    assert_eq!(
-        u16::from_be_bytes(out[24..26].try_into().unwrap()),
-        3,
-        "an edited layer writes the whole document as RGB"
-    );
-    let back = read_psd(&out).unwrap();
-    assert_eq!(back.mode, ColorMode::Rgb);
-    assert_eq!(back.source_mode, None);
-    assert_eq!(
-        back.layers[0].channels[0].data, doc.layers[0].channels[0].data,
-        "the edited layer round-trips in RGB"
-    );
-}
-
-#[test]
-fn indexed_layer_with_raster_mask_round_trips_as_indexed() {
-    // A layer's raster mask (channel -2) is not palette-encoded, so it must ride
-    // through an Indexed save unchanged alongside the re-emitted index channel.
-    let palette = indexed_palette();
-    let p = layered_psd_with_data(8, 2, 1, &palette, &[&[2]], &[(0, &[5]), (-2, &[222])]);
-    let doc = read_psd(&p).unwrap();
-    assert_eq!(doc.source_mode, Some(ColorMode::Indexed));
-    assert_eq!(
-        doc.layers[0].mask.as_ref().and_then(|m| m.data.as_deref()),
-        Some(&[222u8][..]),
-        "the raster mask is read from channel -2"
-    );
-
-    let out = write_psd(&doc).unwrap();
-    assert_eq!(
-        u16::from_be_bytes(out[24..26].try_into().unwrap()),
-        2,
-        "output header color mode is Indexed"
-    );
-
-    let back = read_psd(&out).unwrap();
-    assert_eq!(back.source_mode, Some(ColorMode::Indexed));
-    assert_eq!(
-        back.layers[0].mask.as_ref().and_then(|m| m.data.as_deref()),
-        Some(&[222u8][..]),
-        "the mask bytes survive the Indexed save"
-    );
-    assert_eq!(
-        back.layers[0].source_channels.as_ref().unwrap().planes,
-        vec![(0, Samples::U8(vec![5].into()))],
-        "the index channel is byte-identical"
-    );
-}
-
-#[test]
-fn indexed_document_without_a_merged_composite_writes_indexed() {
-    // "Maximize Compatibility" off: the read retains the palette and each layer
-    // index but no composite plane. The writer must still choose Indexed, skip
-    // the composite requirement, and emit no image-data section.
-    let palette = indexed_palette();
-    let p = layered_psd_with_data(8, 2, 1, &palette, &[&[2]], &[(0, &[5])]);
-    let mut doc = read_psd(&p).unwrap();
-    doc.merged_composite_present = false;
-    doc.source_planes = None;
-
-    let out = write_psd(&doc).unwrap();
-    assert_eq!(
-        u16::from_be_bytes(out[12..14].try_into().unwrap()),
-        1,
-        "one index channel"
-    );
-    assert_eq!(
-        u16::from_be_bytes(out[24..26].try_into().unwrap()),
-        2,
-        "output header color mode is Indexed"
-    );
-    assert_eq!(&out[30..30 + 768], &palette[..], "palette re-emitted");
-
-    let back = read_psd(&out).unwrap();
-    assert!(
-        !back.merged_composite_present,
-        "no image-data section is written"
-    );
-    assert_eq!(back.source_mode, Some(ColorMode::Indexed));
-    assert_eq!(back.source_palette, Some(palette));
-    assert_eq!(
-        back.layers[0].source_channels.as_ref().unwrap().planes,
-        vec![(0, Samples::U8(vec![5].into()))],
-        "the layer index channel is byte-identical"
-    );
-}
-
-#[test]
-fn added_empty_layer_keeps_indexed_on_save() {
-    // An added layer with no RGB color channels (an empty/adjustment layer)
-    // participates in nothing, so the document stays Indexed.
-    let palette = indexed_palette();
-    let p = layered_psd_with_data(8, 2, 1, &palette, &[&[2]], &[(0, &[5]), (-1, &[200])]);
-    let mut doc = read_psd(&p).unwrap();
-    {
-        let _ = doc.layers.push(Layer {
-            name: "adjustment".into(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 1,
-                right: 1,
-            },
-            ..Default::default()
-        });
-    };
-
-    let out = write_psd(&doc).unwrap();
-    assert_eq!(
-        u16::from_be_bytes(out[24..26].try_into().unwrap()),
-        2,
-        "an added empty layer keeps the document Indexed"
-    );
-
-    let back = read_psd(&out).unwrap();
-    assert_eq!(back.source_mode, Some(ColorMode::Indexed));
-    assert_eq!(back.layers.len(), 2, "both layers survive the save");
-    assert_eq!(
-        back.layers[0].source_channels.as_ref().unwrap().planes,
-        vec![(0, Samples::U8(vec![5].into()))],
-        "the original index channel is byte-identical"
-    );
-}
-
-#[test]
-fn short_indexed_composite_data_is_a_typed_error_not_a_panic() {
-    // `write_psd` is public: a short `composite.data` on an otherwise
-    // Indexed-looking document must fall back to RGB and reach the length
-    // validation, never slice out of bounds.
-    let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
-    doc.source_mode = Some(ColorMode::Indexed);
-    doc.source_palette = Some(indexed_palette());
-    doc.composite.channels = 3;
-    doc.composite.data = vec![0u8; 4].into();
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::Eight,
-        width: 2,
-        height: 2,
-        samples: Samples::U8(vec![0u8; 4].into()),
-    });
-    assert!(matches!(write_psd(&doc), Err(PsdError::Invalid(_))));
-}
-
 mod profile;
+
+mod indexed;

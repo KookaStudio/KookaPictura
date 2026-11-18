@@ -101,7 +101,7 @@ fn apply_filters(base: &PixelBuffer, filters: &[Filter]) -> PixelBuffer {
     if base.channels != 4 || base.data.len() != 4 * plane {
         return base.clone();
     }
-    let mut layer = Layer {
+    let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         rect: PsdRect {
             top: 0,
             left: 0,
@@ -109,9 +109,9 @@ fn apply_filters(base: &PixelBuffer, filters: &[Filter]) -> PixelBuffer {
             right: w as i32,
         },
         ..Default::default()
-    };
+    });
     for (c, id) in [0i16, 1, 2, -1].into_iter().enumerate() {
-        layer.channels.push(Channel {
+        layer.channels_mut().push(Channel {
             id,
             data: base.data[c * plane..(c + 1) * plane].to_vec().into(),
         });
@@ -123,7 +123,7 @@ fn apply_filters(base: &PixelBuffer, filters: &[Filter]) -> PixelBuffer {
     }
     let mut out = base.clone();
     for (c, id) in [0i16, 1, 2, -1].into_iter().enumerate() {
-        if let Some(channel) = layer.channels.iter().find(|ch| ch.id == id) {
+        if let Some(channel) = layer.channels().iter().find(|ch| ch.id == id) {
             if channel.data.len() == plane {
                 out.data[c * plane..(c + 1) * plane].copy_from_slice(&channel.data);
             }
@@ -208,7 +208,7 @@ pub(crate) fn composite_smart_filtered_source(
     ctx: &crate::composite_blend::BlendCtx<'_>,
     over: Option<&crate::composite_blend::BlendOverride>,
 ) -> bool {
-    let Some(so) = layer.smart_object.as_ref() else {
+    let Some(so) = layer.smart_object() else {
         return false;
     };
     let region = PsdRect {
@@ -281,7 +281,7 @@ mod tests {
     /// A Lens Correction smart filter carrying `slots`, built through the codec
     /// so the options bytes are the ones a commit would write.
     fn lens_filter(slots: &[f64]) -> SmartFilter {
-        let mut layer = Layer {
+        let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             smart_object: Some(
                 {
                     let mut so = SmartObject::default();
@@ -291,14 +291,9 @@ mod tests {
                 .with_payload(b"8BPS\x00\x01x".to_vec()),
             ),
             ..Default::default()
-        };
+        });
         pictura_codec::attach_lens_correction_filter(&mut layer, slots).expect("attaches");
-        layer
-            .smart_object
-            .as_ref()
-            .expect("smart object")
-            .smart_filters[0]
-            .clone()
+        layer.smart_object().expect("smart object").smart_filters[0].clone()
     }
 
     #[test]
@@ -433,9 +428,21 @@ mod tests {
         for y in 0..4 {
             for x in 0..4 {
                 let i = y * 4 + x;
-                d.composite.data[i] = (x * 60) as u8;
-                d.composite.data[n + i] = (y * 60) as u8;
-                d.composite.data[2 * n + i] = ((x + y) * 30) as u8;
+                d.composite
+                    .edit_data(|data| {
+                        data[i] = (x * 60) as u8;
+                    })
+                    .expect("pixel edit preserves geometry");
+                d.composite
+                    .edit_data(|data| {
+                        data[n + i] = (y * 60) as u8;
+                    })
+                    .expect("pixel edit preserves geometry");
+                d.composite
+                    .edit_data(|data| {
+                        data[2 * n + i] = ((x + y) * 30) as u8;
+                    })
+                    .expect("pixel edit preserves geometry");
             }
         }
         pictura_codec::write_psd(&d).expect("source writes")
@@ -462,7 +469,7 @@ mod tests {
             },
             data: coverage.into(),
         });
-        let masked = Layer {
+        let masked = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             rect: PsdRect {
                 top: 0,
                 left: 0,
@@ -471,22 +478,22 @@ mod tests {
             },
             smart_object: Some(so.clone()),
             ..Default::default()
-        };
+        });
         let mut plain_so = so.clone();
         plain_so.smart_filters.clear();
         plain_so.filter_mask = None;
-        let plain = Layer {
+        let plain = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             rect: masked.rect,
             smart_object: Some(plain_so),
             ..Default::default()
-        };
+        });
         let mut unmasked_so = so;
         unmasked_so.filter_mask = None;
-        let unmasked = Layer {
+        let unmasked = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             rect: masked.rect,
             smart_object: Some(unmasked_so),
             ..Default::default()
-        };
+        });
         let render = |layer: Layer| {
             let mut d = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
             d.layers = LayerStack::from_layers(vec![layer]);
@@ -543,7 +550,7 @@ mod tests {
     /// `base` filtered destructively, as a raster layer.
     fn destructive(base: &PixelBuffer, kinds: &[&str]) -> Vec<u8> {
         let plane = 64;
-        let mut layer = Layer {
+        let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             rect: PsdRect {
                 top: 0,
                 left: 0,
@@ -551,9 +558,9 @@ mod tests {
                 right: 8,
             },
             ..Default::default()
-        };
+        });
         for (c, id) in [0i16, 1, 2, -1].into_iter().enumerate() {
-            layer.channels.push(Channel {
+            layer.channels_mut().push(Channel {
                 id,
                 data: base.data[c * plane..(c + 1) * plane].to_vec().into(),
             });
@@ -567,7 +574,7 @@ mod tests {
         }
         let mut out = Vec::new();
         for id in [0i16, 1, 2, -1] {
-            out.extend_from_slice(&layer.channels.iter().find(|c| c.id == id).unwrap().data);
+            out.extend_from_slice(&layer.channels().iter().find(|c| c.id == id).unwrap().data);
         }
         out
     }

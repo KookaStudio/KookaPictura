@@ -644,7 +644,10 @@ fn composite_channel_mixer_cmyk() {
         255,
     );
     let mut plain_doc = doc(2, 1, vec![base.clone(), patch.clone()]);
-    plain_doc.source_mode = Some(ColorMode::Cmyk);
+    plain_doc
+        .source
+        .set_encoding(Some(ColorMode::Cmyk), None)
+        .expect("valid source encoding");
     let plain = composite_rgba(&plain_doc);
 
     let ink = encode_channel_mixer_ink(
@@ -665,7 +668,10 @@ fn composite_channel_mixer_cmyk() {
             adjustment_layer("channel-mixer", *b"mixr", ink.data.to_vec(), 255, None),
         ],
     );
-    mixed_doc.source_mode = Some(ColorMode::Cmyk);
+    mixed_doc
+        .source
+        .set_encoding(Some(ColorMode::Cmyk), None)
+        .expect("valid source encoding");
     let mixed = composite_rgba(&mixed_doc);
     assert_ne!(
         mixed.data, plain.data,
@@ -687,7 +693,9 @@ fn destructive_channel_mixer_cmyk() {
             255,
         )],
     );
-    d.source_mode = Some(ColorMode::Cmyk);
+    d.source
+        .set_encoding(Some(ColorMode::Cmyk), None)
+        .expect("valid source encoding");
     let mix = CmykMix::for_document(&d).expect("a CMYK context");
     let ink = encode_channel_mixer_ink(
         [
@@ -709,7 +717,7 @@ fn destructive_channel_mixer_cmyk() {
         BlendMode::Normal,
         255,
     );
-    let before = layer.channels[0].data.clone();
+    let before = layer.channels()[0].data.clone();
     apply_adjustment_region_in_mode(
         &mut layer,
         &Adjustment::ChannelMixer(params),
@@ -719,7 +727,7 @@ fn destructive_channel_mixer_cmyk() {
         pictura_adjust::ColorBalanceMode::Rgb,
     )
     .expect("the destructive mix applies");
-    assert_ne!(layer.channels[0].data, before);
+    assert_ne!(layer.channels()[0].data, before);
 }
 
 #[test]
@@ -756,7 +764,9 @@ fn monochrome_channel_mixer_in_cmyk_document() {
             adjustment_layer("channel-mixer", *b"mixr", mono.data.to_vec(), 255, None),
         ],
     );
-    d.source_mode = Some(ColorMode::Cmyk);
+    d.source
+        .set_encoding(Some(ColorMode::Cmyk), None)
+        .expect("valid source encoding");
     let out = composite_rgba(&d);
     for y in 0..1 {
         for x in 0..2 {

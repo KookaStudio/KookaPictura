@@ -37,7 +37,7 @@ pub(in crate::cxxqt_object) struct PreviewStroke {
     /// composite between the mask's extremes instead of laying down colour.
     pub(in crate::cxxqt_object) mask: Option<MaskPreview>,
     /// The active selection, so the preview shows only the selected pixels.
-    pub(in crate::cxxqt_object) clip: Option<pictura_paint::CoverageClip>,
+    pub(in crate::cxxqt_object) clip: Option<pictura_core::Coverage>,
 }
 
 /// What a previewed mask stroke blends between, on the reduced-document grid

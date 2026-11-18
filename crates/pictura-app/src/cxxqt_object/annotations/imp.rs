@@ -176,14 +176,14 @@ pub(super) fn ruler_measurement(view: &PictureView) -> Vec<f64> {
 /// Owned bytes of a layer's channel planes, mask, and every descendant's.
 pub(super) fn layer_plane_bytes(layer: &Layer) -> usize {
     let mut total: usize = layer
-        .channels
+        .channels()
         .iter()
         .map(|channel| channel.data.len())
         .sum();
     if let Some(data) = layer.mask.as_ref().and_then(|mask| mask.data.as_ref()) {
         total += data.len();
     }
-    for child in &layer.children {
+    for child in layer.children() {
         total += layer_plane_bytes(child);
     }
     total

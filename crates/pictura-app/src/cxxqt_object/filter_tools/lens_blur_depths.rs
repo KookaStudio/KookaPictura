@@ -11,7 +11,6 @@ use pictura_core::{Layer, LayerMask, PsdRect};
 use pictura_filters::DepthMap;
 
 use super::super::helpers::active_pixel_layer;
-use super::super::helpers_composite::selection_to_mask;
 use super::super::state::PictureViewRust;
 #[cfg(test)]
 use crate::layer_target::LayerTarget;
@@ -103,8 +102,10 @@ pub(super) fn materialize(rust: &PictureViewRust, source: i32) -> Option<DepthMa
         1 => transparency_plane(layer, lw, lh),
         2 => crop_mask(layer.mask.as_ref()?, lrect, lw, lh),
         3 => {
-            let mask = selection_to_mask(rust.session.selection.as_ref()?, doc);
-            crop_mask(&mask, lrect, lw, lh)
+            let mask = (rust.session.selection.as_ref()?).coverage();
+            let mut out = vec![0; lw as usize * lh as usize];
+            mask.read_rect(lrect, &mut out);
+            out
         }
         _ => return None,
     };
@@ -115,7 +116,7 @@ pub(super) fn materialize(rust: &PictureViewRust, source: i32) -> Option<DepthMa
 fn transparency_plane(layer: &Layer, lw: u32, lh: u32) -> Vec<u8> {
     let n = (lw * lh) as usize;
     layer
-        .channels
+        .channels()
         .iter()
         .find(|c| c.id == -1 && c.data.len() == n)
         .map(|c| c.data.to_vec())
@@ -152,13 +153,13 @@ fn crop_mask(mask: &LayerMask, lrect: PsdRect, lw: u32, lh: u32) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, LockFlags};
+    use pictura_core::{BitDepth, Channel, ColorMode, Document, LockFlags};
     use pictura_select::Selection;
 
     fn state() -> PictureViewRust {
         let mut doc = Document::new(8, 6, ColorMode::Rgb, BitDepth::Eight);
         let n = 48usize;
-        let mut layer = Layer {
+        let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "px".into(),
             rect: PsdRect {
                 top: 0,
@@ -181,7 +182,7 @@ mod tests {
                 },
             ],
             ..Default::default()
-        };
+        });
         layer.lock = LockFlags::default();
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         PictureViewRust {
@@ -199,7 +200,7 @@ mod tests {
 
         let mut alpha = state();
         let layer = &mut alpha.session.doc.as_mut().unwrap().layers[0];
-        layer.channels.push(Channel {
+        layer.channels_mut().push(Channel {
             id: -1,
             data: (0..48u8).collect::<Vec<_>>().into(),
         });
@@ -274,7 +275,7 @@ mod tests {
     fn a_commit_re_materializes_the_source_slot() {
         let mut rust = state();
         let layer = &mut rust.session.doc.as_mut().unwrap().layers[0];
-        layer.channels.push(Channel {
+        layer.channels_mut().push(Channel {
             id: -1,
             data: (0..48u8).collect::<Vec<_>>().into(),
         });

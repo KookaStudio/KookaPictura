@@ -42,13 +42,13 @@ impl WorkImage {
         let height = (f64::from(h) / scale).ceil().max(1.0) as usize;
         let channels: [Option<&[u8]>; 3] = [0, 1, 2].map(|id| {
             layer
-                .channels
+                .channels()
                 .iter()
                 .find(|c| c.id == id && c.data.len() == (w as usize * h as usize))
                 .map(|c| c.data.as_slice())
         });
         let alpha = layer
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == -1 && c.data.len() == (w as usize * h as usize))
             .map(|c| c.data.as_slice());

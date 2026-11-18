@@ -40,7 +40,7 @@ pub fn resolve_path<'a>(doc: &'a Document, path: &str) -> Option<&'a Layer> {
     for &index in &segments {
         let layer = layers.get(index)?;
         node = Some(layer);
-        layers = &layer.children;
+        layers = layer.children();
     }
     node
 }
@@ -54,7 +54,7 @@ pub fn resolve_path_mut<'a>(doc: &'a mut Document, path: &str) -> Option<&'a mut
 
 /// Flatten the whole tree depth-first, topmost-first, as `(path, depth)` rows.
 ///
-/// Each container is walked last index → 0 because `Layer.children` is
+/// Each container is walked last index → 0 because `Layer.children()` is
 /// bottom-first; top-level rows are depth 0.
 pub fn flatten_rows(doc: &Document) -> Vec<(String, u32)> {
     fn walk(layers: &[Layer], prefix: &str, depth: u32, rows: &mut Vec<(String, u32)>) {
@@ -65,8 +65,8 @@ pub fn flatten_rows(doc: &Document) -> Vec<(String, u32)> {
                 format!("{prefix}/{index}")
             };
             rows.push((path.clone(), depth));
-            if layer.is_group {
-                walk(&layer.children, &path, depth + 1, rows);
+            if layer.is_group() {
+                walk(layer.children(), &path, depth + 1, rows);
             }
         }
     }
@@ -99,7 +99,7 @@ pub(super) fn container_mut<'a>(
 pub(super) fn container_of<'a>(doc: &'a Document, parent: &[usize]) -> Option<&'a [Layer]> {
     let mut layers: &'a [Layer] = &doc.layers;
     for &index in parent {
-        layers = &layers.get(index)?.children;
+        layers = layers.get(index)?.children();
     }
     Some(layers)
 }
@@ -114,7 +114,7 @@ pub(super) fn container_of_mut<'a>(
         if index >= layers.len() {
             return None;
         }
-        layers = &mut layers[index].children;
+        layers = layers[index].children_mut()?;
     }
     Some(layers)
 }

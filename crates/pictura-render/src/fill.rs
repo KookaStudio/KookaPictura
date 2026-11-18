@@ -11,60 +11,25 @@
 //! custom-stop approximation. Raise these one at a time when a fixture shows a
 //! real gap.
 
-use pictura_adjust::{
-    Adjustment, GradientFillParams, GradientKind, GradientStop, PatternFillParams,
+use pictura_adjust::{GradientFillParams, GradientKind, GradientStop, PatternFillParams};
+pub use pictura_codec::layer_content::{
+    decode_vector_fill, encode_gradient_fill, encode_gradient_fill_params, encode_pattern_fill,
+    gradient_params_from_desc, pattern_params_from_desc, pattern_params_from_desc_with_link,
 };
-use pictura_codec::{DescValue, PatternPixels};
-use pictura_core::{AdjustmentData, Document, Layer, PixelBuffer};
+use pictura_codec::PatternPixels;
+use pictura_core::FillContent;
+use pictura_core::{Document, Layer, PixelBuffer};
 
-use crate::composite::{blend_into_ctx, desc_item, Canvas};
+use crate::composite::{blend_into_ctx, Canvas};
 use crate::composite_blend::{BlendCtx, BlendOverride};
 
-/// The decoded `GdFl` descriptor, or `None` when it is not a custom-stop
-/// gradient this crate understands. Never panics; every failure is a no-op.
-pub fn decode_gradient_fill(d: &[u8]) -> Option<Adjustment> {
-    let obj = pictura_codec::read_descriptor(d).ok()?;
-    Some(Adjustment::GradientFill(gradient_params_from_desc(&obj)?))
-}
-
-/// The decoded `vscg` vector-fill block, or `None` when it is malformed or an
-/// unknown fill kind. Never panics.
-///
-/// The block is `[4-byte fill key][version-16 descriptor]`. A `Grad` object is a
-/// gradient, a `Ptrn` object a pattern, a `Clr ` object a solid fill; anything
-/// else is `None`, and a version other than 16 is rejected by
-/// [`pictura_codec::read_descriptor`]. The fill decoders are the same ones the
-/// top-level `GdFl`/`PtFl`/`SoCo` blocks use, so the layouts cannot drift.
-///
-/// ponytail: the 4-byte key is consumed but ignored; the descriptor's content is
-/// the dispatch authority, mirroring ag-psd `parseVectorContent`.
-pub fn decode_vector_fill(d: &[u8]) -> Option<Adjustment> {
-    let body = d.get(4..)?;
-    let obj = pictura_codec::read_descriptor(body).ok()?;
-    if desc_item(&obj, b"Grad").is_some() {
-        gradient_params_from_desc(&obj).map(Adjustment::GradientFill)
-    } else if desc_item(&obj, b"Ptrn").is_some() {
-        pattern_params_from_desc(&obj).map(Adjustment::PatternFill)
-    } else if desc_item(&obj, b"Clr ").is_some() {
-        crate::composite::decode_solid_fill(body)
-    } else {
-        None
-    }
-}
-
-/// Whether the layer's fill content is a pattern fill, without decoding an
-/// adjustment block (the key alone decides it). A `vscg` vector fill still
-/// needs its descriptor parsed. A malformed `PtFl` block counts as pattern
-/// content, so the banded path stays conservative and never serves a stale
-/// pattern pass.
 pub(crate) fn is_pattern_fill(layer: &Layer) -> bool {
-    match layer.adjustment.as_ref() {
-        Some(data) => &data.key == b"PtFl",
-        None => layer
-            .extra_block(b"vscg")
-            .and_then(|block| decode_vector_fill(&block.data))
-            .is_some_and(|adjustment| matches!(adjustment, Adjustment::PatternFill(_))),
-    }
+    // Opaque primary pattern blocks retain the established uncached-pass policy.
+    matches!(layer.fill_content(), Some(FillContent::Pattern(_)))
+        || (matches!(
+            layer.content(),
+            pictura_core::LayerContent::Adjustment(None)
+        ) && layer.adjustment().is_some_and(|data| data.key == *b"PtFl"))
 }
 
 /// The layer's decoded fill content: its modeled adjustment block first, else
@@ -75,358 +40,10 @@ pub(crate) fn is_pattern_fill(layer: &Layer) -> bool {
 /// The choice is strict: an adjustment block is consulted on its own, so an
 /// undecodable key is a no-op and never falls through to the `vscg` fill; the
 /// `vscg` block is decoded only when the layer has no adjustment block.
-pub fn decode_layer_fill(layer: &Layer) -> Option<Adjustment> {
-    match layer.adjustment.as_ref() {
-        Some(data) => crate::decode_adjustment(data),
-        None => layer
-            .extra_block(b"vscg")
-            .and_then(|b| decode_vector_fill(&b.data)),
-    }
+pub fn decode_layer_fill(layer: &Layer) -> Option<FillContent> {
+    layer.fill_content().cloned()
 }
 
-/// The gradient fields of an already-read `GdFl`/`GrFl` object. Shared by the
-/// public fill decoder and the gradient-overlay decoder. A `doub` or a unit
-/// float is accepted for the numerics (a `GdFl` carries `doub`, an effect
-/// `GrFl` carries unit floats); a finite `f64` that overflows `f32` rejects.
-pub(crate) fn gradient_params_from_desc(obj: &DescValue) -> Option<GradientFillParams> {
-    if !matches!(obj, DescValue::Object { .. }) {
-        return None;
-    }
-    let angle_deg = match desc_item(obj, b"Angl") {
-        Some(DescValue::Double(v)) if v.is_finite() => as_f32_finite(*v)?,
-        Some(DescValue::UnitFloat { value, .. }) if value.is_finite() => as_f32_finite(*value)?,
-        _ => return None,
-    };
-    let kind = match desc_item(obj, b"Type") {
-        Some(DescValue::Enum { kind, value }) if kind.as_slice() == b"GrdT" => decode_kind(value)?,
-        _ => return None,
-    };
-    let grad = desc_item(obj, b"Grad")?;
-    if !matches!(grad, DescValue::Object { .. }) {
-        return None;
-    }
-    match desc_item(grad, b"GrdF") {
-        Some(DescValue::Enum { kind, value })
-            if kind.as_slice() == b"GrdF" && value.as_slice() == b"CstS" => {}
-        _ => return None,
-    }
-    let stops = decode_stops(desc_item(grad, b"Clrs")?)?;
-    let reverse = match desc_item(obj, b"Rvrs") {
-        Some(DescValue::Bool(b)) => *b,
-        Some(_) => return None,
-        None => false,
-    };
-    let scale = match desc_item(obj, b"Scl ") {
-        Some(DescValue::Double(v)) if v.is_finite() => as_f32_finite(*v)?,
-        Some(DescValue::UnitFloat { value, .. }) if value.is_finite() => as_f32_finite(*value)?,
-        Some(_) => return None,
-        None => 100.0,
-    };
-    Some(GradientFillParams {
-        stops,
-        reverse,
-        kind,
-        angle_deg,
-        scale,
-    })
-}
-
-/// A finite `f32` from an `f64`, or `None` when the cast overflows.
-fn as_f32_finite(value: f64) -> Option<f32> {
-    let v = value as f32;
-    v.is_finite().then_some(v)
-}
-
-/// The decoded `PtFl` descriptor, or `None` when it is not a pattern fill this
-/// crate understands. Never panics; every failure is a no-op.
-pub fn decode_pattern_fill(d: &[u8]) -> Option<Adjustment> {
-    let obj = pictura_codec::read_descriptor(d).ok()?;
-    Some(Adjustment::PatternFill(pattern_params_from_desc(&obj)?))
-}
-
-/// The pattern fields of an already-read `PtFl`/`patternFill` object. Shared by
-/// the public fill decoder and the pattern-overlay decoder (a pure move; the
-/// strict `PtFl` contract is unchanged).
-pub(crate) fn pattern_params_from_desc(obj: &DescValue) -> Option<PatternFillParams> {
-    pattern_params_from_desc_with_link(obj, None)
-}
-
-/// [`pattern_params_from_desc`] with the link flag forced when `Some`.
-///
-/// The overlay pattern links via `Algn`; the stroke pattern links via `Lnkd`
-/// (psd-tools `_PatternMixin`), so the stroke passes its decoded `Lnkd` here.
-/// Forcing it bypasses the helper's `Algn` requirement, so a valid `Lnkd` wins
-/// even when a present-but-wrongly-typed `Algn` would otherwise reject.
-pub(crate) fn pattern_params_from_desc_with_link(
-    obj: &DescValue,
-    link_override: Option<bool>,
-) -> Option<PatternFillParams> {
-    if !matches!(obj, DescValue::Object { .. }) {
-        return None;
-    }
-    let ptrn = desc_item(obj, b"Ptrn")?;
-    let DescValue::Object { class_id, .. } = ptrn else {
-        return None;
-    };
-    if class_id.as_slice() != b"Ptrn" {
-        return None;
-    }
-    let pattern_id = match desc_item(ptrn, b"Idnt") {
-        Some(DescValue::Text(id)) => id.trim_end_matches('\0').to_string(),
-        _ => return None,
-    };
-    let scale = match desc_item(obj, b"Scl ") {
-        Some(DescValue::Double(v)) => *v as f32,
-        Some(DescValue::UnitFloat { value, .. }) => *value as f32,
-        Some(_) => return None,
-        None => 100.0,
-    };
-    if !scale.is_finite() {
-        return None;
-    }
-    let link_with_layer = match link_override {
-        Some(linked) => linked,
-        None => match desc_item(obj, b"Algn") {
-            Some(DescValue::Bool(b)) => *b,
-            Some(_) => return None,
-            None => true,
-        },
-    };
-    Some(PatternFillParams {
-        pattern_id,
-        scale,
-        link_with_layer,
-        origin: decode_origin(obj)?,
-    })
-}
-
-/// The optional `phase` `Pnt ` object's `Hrzn`/`Vrtc` doubles as an integer
-/// pixel origin; absent is `(0, 0)`.
-fn decode_origin(obj: &DescValue) -> Option<(i32, i32)> {
-    let Some(phase) = desc_item(obj, b"phase") else {
-        return Some((0, 0));
-    };
-    if !matches!(phase, DescValue::Object { .. }) {
-        return None;
-    }
-    let axis = |key: &[u8]| -> Option<i32> {
-        match desc_item(phase, key) {
-            None => Some(0),
-            Some(DescValue::Double(v)) if v.is_finite() => Some(v.round() as i32),
-            Some(_) => None,
-        }
-    };
-    Some((axis(b"Hrzn")?, axis(b"Vrtc")?))
-}
-
-fn decode_kind(value: &[u8]) -> Option<GradientKind> {
-    Some(match value {
-        b"Lnr " => GradientKind::Linear,
-        b"Rdl " => GradientKind::Radial,
-        b"Angl" => GradientKind::Angle,
-        b"Rflc" => GradientKind::Reflected,
-        b"Dmnd" => GradientKind::Diamond,
-        _ => return None,
-    })
-}
-
-fn kind_enum(kind: GradientKind) -> &'static [u8] {
-    match kind {
-        GradientKind::Linear => b"Lnr ",
-        GradientKind::Radial => b"Rdl ",
-        GradientKind::Angle => b"Angl",
-        GradientKind::Reflected => b"Rflc",
-        GradientKind::Diamond => b"Dmnd",
-    }
-}
-
-fn decode_stops(value: &DescValue) -> Option<Vec<GradientStop>> {
-    let DescValue::List(items) = value else {
-        return None;
-    };
-    if items.len() < 2 {
-        return None;
-    }
-    let mut stops = Vec::with_capacity(items.len());
-    let mut previous: Option<u16> = None;
-    for item in items {
-        if !matches!(item, DescValue::Object { .. }) {
-            return None;
-        }
-        let clr = desc_item(item, b"Clr ")?;
-        if !matches!(clr, DescValue::Object { .. }) {
-            return None;
-        }
-        let component = |key: &[u8]| match desc_item(clr, key) {
-            Some(DescValue::Double(c)) if c.is_finite() => Some(c.round().clamp(0.0, 255.0) as u8),
-            _ => None,
-        };
-        let color = [
-            component(b"Rd  ")?,
-            component(b"Grn ")?,
-            component(b"Bl  ")?,
-        ];
-        let location = match desc_item(item, b"Lctn") {
-            Some(DescValue::Double(v)) if v.is_finite() && (0.0..=4096.0).contains(v) => {
-                v.round() as u16
-            }
-            Some(DescValue::Long(v)) if (0..=4096).contains(v) => *v as u16,
-            _ => return None,
-        };
-        if previous.is_some_and(|p| location <= p) {
-            return None;
-        }
-        previous = Some(location);
-        stops.push(GradientStop { location, color });
-    }
-    Some(stops)
-}
-
-/// Build a standard PSD `GdFl` descriptor with only custom stops.
-pub fn encode_gradient_fill(
-    kind: GradientKind,
-    stops: &[GradientStop],
-    angle_deg: f32,
-) -> AdjustmentData {
-    encode_gradient_fill_params(&GradientFillParams {
-        stops: stops.to_vec(),
-        reverse: false,
-        kind,
-        angle_deg,
-        scale: 100.0,
-    })
-}
-
-/// Build a standard PSD `GdFl` descriptor carrying every field the decoder
-/// reads. `Rvrs` and `Scl ` are written only when they differ from the decode
-/// defaults, so the default output is byte-identical to
-/// [`encode_gradient_fill`].
-pub fn encode_gradient_fill_params(params: &GradientFillParams) -> AdjustmentData {
-    let grad = DescValue::Object {
-        name: String::new(),
-        class_id: b"Grdn".to_vec(),
-        items: vec![
-            (b"Nm  ".to_vec(), DescValue::Text("Gradient".into())),
-            (
-                b"GrdF".to_vec(),
-                DescValue::Enum {
-                    kind: b"GrdF".to_vec(),
-                    value: b"CstS".to_vec(),
-                },
-            ),
-            (
-                b"Intr".to_vec(),
-                DescValue::Enum {
-                    kind: b"Intp".to_vec(),
-                    value: b"Lnr ".to_vec(),
-                },
-            ),
-            (
-                b"Clrs".to_vec(),
-                DescValue::List(params.stops.iter().map(encode_stop).collect()),
-            ),
-        ],
-    };
-    let mut items = vec![
-        (b"Angl".to_vec(), DescValue::Double(params.angle_deg as f64)),
-        (
-            b"Type".to_vec(),
-            DescValue::Enum {
-                kind: b"GrdT".to_vec(),
-                value: kind_enum(params.kind).to_vec(),
-            },
-        ),
-        (b"Grad".to_vec(), grad),
-    ];
-    if params.reverse {
-        items.push((b"Rvrs".to_vec(), DescValue::Bool(true)));
-    }
-    if params.scale != 100.0 {
-        items.push((b"Scl ".to_vec(), DescValue::Double(params.scale as f64)));
-    }
-    let desc = DescValue::Object {
-        name: String::new(),
-        class_id: b"GdFl".to_vec(),
-        items,
-    };
-    AdjustmentData {
-        key: *b"GdFl",
-        data: pictura_codec::write_descriptor(&desc).into(),
-    }
-}
-
-/// Build a standard PSD `PtFl` descriptor from `params`. The `phase` point is
-/// written only for a non-zero origin, matching the decoder's default.
-pub fn encode_pattern_fill(params: &PatternFillParams) -> AdjustmentData {
-    let ptrn = DescValue::Object {
-        name: String::new(),
-        class_id: b"Ptrn".to_vec(),
-        items: vec![(
-            b"Idnt".to_vec(),
-            DescValue::Text(format!("{}\0", params.pattern_id)),
-        )],
-    };
-    let mut items = vec![
-        (b"Ptrn".to_vec(), ptrn),
-        (b"Scl ".to_vec(), DescValue::Double(params.scale as f64)),
-        (b"Algn".to_vec(), DescValue::Bool(params.link_with_layer)),
-    ];
-    if params.origin != (0, 0) {
-        items.push((
-            b"phase".to_vec(),
-            DescValue::Object {
-                name: String::new(),
-                class_id: b"Pnt ".to_vec(),
-                items: vec![
-                    (b"Hrzn".to_vec(), DescValue::Double(params.origin.0 as f64)),
-                    (b"Vrtc".to_vec(), DescValue::Double(params.origin.1 as f64)),
-                ],
-            },
-        ));
-    }
-    AdjustmentData {
-        key: *b"PtFl",
-        data: pictura_codec::write_descriptor(&DescValue::Object {
-            name: String::new(),
-            class_id: b"PtFl".to_vec(),
-            items,
-        })
-        .into(),
-    }
-}
-
-fn encode_stop(stop: &GradientStop) -> DescValue {
-    let clr = DescValue::Object {
-        name: String::new(),
-        class_id: b"RGBC".to_vec(),
-        items: [b"Rd  ", b"Grn ", b"Bl  "]
-            .into_iter()
-            .zip(stop.color)
-            .map(|(key, c)| (key.to_vec(), DescValue::Double(c as f64)))
-            .collect(),
-    };
-    DescValue::Object {
-        name: String::new(),
-        class_id: b"Clrt".to_vec(),
-        items: vec![
-            (b"Clr ".to_vec(), clr),
-            (
-                b"Type".to_vec(),
-                DescValue::Enum {
-                    kind: b"Clry".to_vec(),
-                    value: b"UsrS".to_vec(),
-                },
-            ),
-            (b"Lctn".to_vec(), DescValue::Double(stop.location as f64)),
-            (b"Mdpn".to_vec(), DescValue::Double(50.0)),
-        ],
-    }
-}
-
-/// Generate the opaque RGBA gradient over a `w × h` layer rect (row-major).
-///
-/// Mirrors psd-tools' `draw_gradient_fill` coordinate convention and the five
-/// kind geometries; alpha is always 255.
 pub fn gradient_rgba(w: i32, h: i32, params: &GradientFillParams) -> Vec<[u8; 4]> {
     gradient_rgba_region(w, h, (0, 0, w.max(0), h.max(0)), params)
 }
@@ -837,7 +454,7 @@ pub fn pattern_preview_rgba(
 /// ponytail: the pattern tile is sampled nearest-neighbour, matching the
 /// compositor's [`Tile`].
 pub(crate) fn fill_coverage_matte(
-    adjustment: &Adjustment,
+    adjustment: &FillContent,
     layer: &Layer,
     doc: &Document,
     region: (i32, i32, i32, i32),
@@ -856,7 +473,7 @@ pub(crate) fn fill_coverage_matte(
         out[(y - ry0) as usize * rw + (x - rx0) as usize] = value;
     };
     match adjustment {
-        Adjustment::SolidFill(rgba) => {
+        pictura_core::FillContent::Solid(rgba) => {
             let alpha = rgba[3] as f32 / 255.0;
             for y in iy0..iy1 {
                 for x in ix0..ix1 {
@@ -865,7 +482,7 @@ pub(crate) fn fill_coverage_matte(
             }
             true
         }
-        Adjustment::GradientFill(_) => {
+        pictura_core::FillContent::Gradient(_) => {
             for y in iy0..iy1 {
                 for x in ix0..ix1 {
                     put(x, y, 1.0);
@@ -873,7 +490,7 @@ pub(crate) fn fill_coverage_matte(
             }
             true
         }
-        Adjustment::PatternFill(params) => {
+        pictura_core::FillContent::Pattern(params) => {
             let patterns = pictura_codec::decode_patterns(doc);
             let pattern = patterns.iter().find(|p| p.pattern_id == params.pattern_id);
             let tile = tile_for(pattern, params);
@@ -885,17 +502,7 @@ pub(crate) fn fill_coverage_matte(
             }
             true
         }
-        _ => false,
     }
-}
-
-/// Whether `adjustment` is generative fill content rather than a tonal or
-/// colour adjustment of the backdrop.
-pub(crate) fn is_fill_kind(adjustment: &Adjustment) -> bool {
-    matches!(
-        adjustment,
-        Adjustment::SolidFill(_) | Adjustment::GradientFill(_) | Adjustment::PatternFill(_)
-    )
 }
 
 /// Rasterize a fill layer's content into the straight-alpha RGBA buffer the GPU
@@ -911,9 +518,6 @@ pub(crate) fn fill_source(
     let adjustment = decode_layer_fill(layer)?;
     // An adjustment layer has an empty rect, so the kind is settled before the
     // no-area case below can pass one off as an empty fill.
-    if !is_fill_kind(&adjustment) {
-        return None;
-    }
     let full_rect = layer.rect;
     let (full_w, full_h) = (full_rect.width(), full_rect.height());
     // A shape's rect is the canvas but its mask is zero outside the mask's
@@ -929,7 +533,7 @@ pub(crate) fn fill_source(
         (PixelBuffer::new(0, 0, 4), false)
     } else {
         match &adjustment {
-            Adjustment::SolidFill(rgba) => {
+            pictura_core::FillContent::Solid(rgba) => {
                 let n = w as usize * h as usize;
                 let data = pictura_core::Plane::build(n * 4, |out| {
                     for (plane, &value) in out.chunks_mut(n).zip(rgba) {
@@ -944,7 +548,7 @@ pub(crate) fn fill_source(
                 };
                 (buf, true)
             }
-            Adjustment::GradientFill(params) => {
+            pictura_core::FillContent::Gradient(params) => {
                 let px = gradient_rgba_region(
                     full_w,
                     full_h,
@@ -958,7 +562,7 @@ pub(crate) fn fill_source(
                 );
                 (rgba_to_planar(&px, w, h), true)
             }
-            Adjustment::PatternFill(params) => {
+            pictura_core::FillContent::Pattern(params) => {
                 let patterns = pictura_codec::decode_patterns(doc);
                 let px = pattern_tile_region(
                     &patterns,
@@ -968,10 +572,10 @@ pub(crate) fn fill_source(
                 );
                 (rgba_to_planar(&px, w, h), false)
             }
-            _ => return None,
         }
     };
     let mut hasher = DefaultHasher::new();
+    layer.content_identity().hash(&mut hasher);
     [
         full_rect.left,
         full_rect.top,
@@ -983,7 +587,7 @@ pub(crate) fn fill_source(
     doc.width.hash(&mut hasher);
     doc.height.hash(&mut hasher);
     doc.mode.hash(&mut hasher);
-    if let Some(data) = layer.adjustment.as_ref() {
+    if let Some(data) = layer.adjustment() {
         data.key.hash(&mut hasher);
         data.data.hash(&mut hasher);
     }
@@ -1010,10 +614,28 @@ fn rgba_to_planar(px: &[[u8; 4]], w: i32, h: i32) -> PixelBuffer {
     buf
 }
 
+pub(crate) fn composite_fill(
+    canvas: &mut Canvas,
+    layer: &Layer,
+    doc: &Document,
+    fill: &FillContent,
+    ctx: &BlendCtx<'_>,
+    over: Option<&BlendOverride>,
+) {
+    match fill {
+        FillContent::Solid(rgba) => composite_solid_fill(canvas, layer, doc, *rgba, ctx, over),
+        FillContent::Gradient(params) => {
+            composite_gradient_fill(canvas, layer, doc, params, ctx, over)
+        }
+        FillContent::Pattern(params) => {
+            composite_pattern_fill(canvas, layer, doc, params, ctx, over)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pictura_adjust::Adjustment;
 
     #[test]
     fn pattern_fill_upload_is_not_retained() {
@@ -1022,7 +644,12 @@ mod tests {
         let layer = doc
             .layers
             .iter()
-            .find(|layer| matches!(decode_layer_fill(layer), Some(Adjustment::PatternFill(_))))
+            .find(|layer| {
+                matches!(
+                    decode_layer_fill(layer),
+                    Some(pictura_core::FillContent::Pattern(_))
+                )
+            })
             .expect("a pattern fill layer");
         let cached = fill_source(layer, &doc).expect("the fill rasterizes");
         assert!(!cached.retain, "a pattern fill is not retained");
@@ -1064,15 +691,22 @@ mod tests {
         let mut layer = doc
             .layers
             .iter()
-            .find(|layer| matches!(decode_layer_fill(layer), Some(Adjustment::PatternFill(_))))
+            .find(|layer| {
+                matches!(
+                    decode_layer_fill(layer),
+                    Some(pictura_core::FillContent::Pattern(_))
+                )
+            })
             .expect("a pattern fill layer")
             .clone();
-        let Some(Adjustment::PatternFill(mut params)) = decode_layer_fill(&layer) else {
+        let Some(pictura_core::FillContent::Pattern(mut params)) = decode_layer_fill(&layer) else {
             unreachable!()
         };
         let first = fill_source(&layer, &doc).expect("first raster");
         params.pattern_id = "pictura-changed".into();
-        layer.adjustment = Some(encode_pattern_fill(&params));
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.adjustment = Some(encode_pattern_fill(&params))
+        });
         let record = pictura_codec::encode_rgb_pattern(
             "changed",
             "pictura-changed",

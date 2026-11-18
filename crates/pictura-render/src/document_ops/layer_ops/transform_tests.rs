@@ -33,7 +33,7 @@ fn channel(id: i16, data: Vec<u8>) -> Channel {
 
 fn pixel_layer(w: u32, h: u32) -> Layer {
     let n = (w * h) as usize;
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "L".into(),
         rect: rect(w as i32, h as i32),
         channels: vec![
@@ -43,7 +43,7 @@ fn pixel_layer(w: u32, h: u32) -> Layer {
             channel(-1, vec![255; n]),
         ],
         ..Default::default()
-    }
+    })
 }
 
 fn doc_with(layer: Layer) -> Document {
@@ -90,7 +90,7 @@ fn scale_two_doubles_rect_and_planes() {
     ));
     let layer = resolve_path(&doc, "0").unwrap();
     assert_eq!((layer.rect.width(), layer.rect.height()), (8, 4));
-    for ch in &layer.channels {
+    for ch in layer.channels() {
         assert_eq!(ch.data.len(), 32, "channel {} plane", ch.id);
     }
 }
@@ -98,10 +98,12 @@ fn scale_two_doubles_rect_and_planes() {
 #[test]
 fn high_depth_transform_move_keeps_and_scale_resamples_the_native_store() {
     let mut layer = pixel_layer(4, 4);
-    layer.raw_channels = vec![RawChannel {
-        id: 3,
-        data: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].into(),
-    }];
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.raw_channels = vec![RawChannel {
+            id: 3,
+            data: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0].into(),
+        }]
+    });
     layer.source_channels = Some(SourceChannels {
         depth: BitDepth::Sixteen,
         rect: rect(4, 4),
@@ -109,13 +111,17 @@ fn high_depth_transform_move_keeps_and_scale_resamples_the_native_store() {
         working_idents: [0; 3],
     });
     let mut doc = doc_with(layer);
-    doc.source_depth = Some(BitDepth::Sixteen);
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::Sixteen,
-        width: 4,
-        height: 4,
-        samples: Samples::U16(vec![0; 3 * 4 * 4].into()),
-    });
+    doc.source
+        .set_native(
+            Some(BitDepth::Sixteen),
+            Some(SourcePlanes {
+                depth: BitDepth::Sixteen,
+                width: 4,
+                height: 4,
+                samples: Samples::U16(vec![0; 3 * 4 * 4].into()),
+            }),
+        )
+        .expect("valid native source");
 
     // A pure integer translation keeps the channel and re-anchors the store.
     assert!(transform_layer(
@@ -125,7 +131,7 @@ fn high_depth_transform_move_keeps_and_scale_resamples_the_native_store() {
     ));
     let moved = resolve_path(&doc, "0").unwrap();
     assert_eq!(
-        moved.raw_channels.len(),
+        moved.raw_channels().len(),
         1,
         "a pure move keeps the unmodeled channel"
     );
@@ -153,7 +159,7 @@ fn high_depth_transform_move_keeps_and_scale_resamples_the_native_store() {
     ));
     let scaled = resolve_path(&doc, "0").unwrap();
     assert!(
-        scaled.raw_channels.is_empty(),
+        scaled.raw_channels().is_empty(),
         "a scale drops the unmodeled raw stream"
     );
     let store = scaled
@@ -200,13 +206,17 @@ fn pure_move_reemits_native_samples_on_save() {
         ],
     ));
     let mut doc = doc_with(layer);
-    doc.source_depth = Some(BitDepth::Sixteen);
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::Sixteen,
-        width: 4,
-        height: 4,
-        samples: Samples::U16(vec![0; 3 * 16].into()),
-    });
+    doc.source
+        .set_native(
+            Some(BitDepth::Sixteen),
+            Some(SourcePlanes {
+                depth: BitDepth::Sixteen,
+                width: 4,
+                height: 4,
+                samples: Samples::U16(vec![0; 3 * 16].into()),
+            }),
+        )
+        .expect("valid native source");
 
     assert!(transform_layer(
         &mut doc,
@@ -235,7 +245,7 @@ fn pure_move_reemits_native_samples_on_save() {
 #[test]
 fn quarter_turn_matches_rotate90_cw() {
     let mut doc = doc_with(pixel_layer(4, 4));
-    let src = doc.layers[0].channels.clone();
+    let src = doc.layers[0].channels().clone();
     assert!(transform_layer(
         &mut doc,
         "0",
@@ -243,7 +253,7 @@ fn quarter_turn_matches_rotate90_cw() {
     ));
     let after = resolve_path(&doc, "0").unwrap();
     assert_eq!(after.rect, rect(4, 4));
-    for (c, ch) in after.channels.iter().enumerate() {
+    for (c, ch) in after.channels().iter().enumerate() {
         let mut buf = pictura_core::PixelBuffer::new(4, 4, 1);
         buf.data.copy_from_slice(&src[c].data);
         let expected = pictura_ops::rotate90_cw(&buf);
@@ -276,7 +286,7 @@ fn forty_five_degrees_uses_the_computed_box_with_zeroed_corners() {
         }
     );
     let w = layer.rect.width() as usize;
-    for ch in &layer.channels {
+    for ch in layer.channels() {
         assert_eq!(ch.data.len(), 36);
         assert_eq!(ch.data[0], 0, "top-left outside channel {}", ch.id);
         assert_eq!(ch.data[w - 1], 0, "top-right outside channel {}", ch.id);
@@ -288,7 +298,7 @@ fn forty_five_degrees_uses_the_computed_box_with_zeroed_corners() {
 #[test]
 fn translation_moves_the_rect_and_copies_source() {
     let mut doc = doc_with(pixel_layer(4, 4));
-    let src = doc.layers[0].channels.clone();
+    let src = doc.layers[0].channels().clone();
     assert!(transform_layer(
         &mut doc,
         "0",
@@ -304,7 +314,7 @@ fn translation_moves_the_rect_and_copies_source() {
             right: 2
         }
     );
-    for (c, ch) in layer.channels.iter().enumerate() {
+    for (c, ch) in layer.channels().iter().enumerate() {
         assert_eq!(ch.data, src[c].data, "channel {} content", ch.id);
     }
 }
@@ -354,50 +364,50 @@ fn refusals_leave_the_document_bit_identical() {
     let cases: Vec<(&str, Document, LayerTransform)> = vec![
         (
             "group",
-            doc_with(Layer {
+            doc_with(pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 is_group: true,
                 ..Default::default()
-            }),
+            })),
             identity(),
         ),
         (
             "adjustment",
-            doc_with(Layer {
+            doc_with(pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 adjustment: Some(pictura_core::AdjustmentData {
                     key: *b"nvrt",
                     data: Vec::new().into(),
                 }),
                 ..Default::default()
-            }),
+            })),
             identity(),
         ),
         (
             "background",
-            doc_with(Layer {
+            doc_with(pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 background: true,
-                ..pixel_layer(2, 2)
-            }),
+                ..pictura_core::LayerParts::from(pixel_layer(2, 2))
+            })),
             identity(),
         ),
         (
             "position-locked",
-            doc_with(Layer {
+            doc_with(pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 lock: pictura_core::LockFlags::default().with(LockFlags::POSITION, true),
-                ..pixel_layer(2, 2)
-            }),
+                ..pictura_core::LayerParts::from(pixel_layer(2, 2))
+            })),
             identity(),
         ),
         (
             "zero-area",
-            doc_with(Layer {
+            doc_with(pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 rect: PsdRect {
                     top: 0,
                     left: 0,
                     bottom: 0,
                     right: 0,
                 },
-                ..pixel_layer(2, 2)
-            }),
+                ..pictura_core::LayerParts::from(pixel_layer(2, 2))
+            })),
             identity(),
         ),
         (
@@ -443,14 +453,14 @@ fn absurd_scale_is_refused_without_panic() {
 
 fn embedded_payload(value: u8) -> Vec<u8> {
     let mut embedded = doc_with(pixel_layer(2, 2));
-    for ch in &mut embedded.layers[0].channels {
+    for ch in embedded.layers[0].channels_mut() {
         ch.data.fill(value);
     }
     pictura_codec::write_psd(&embedded).expect("write embedded source")
 }
 
 fn channel_less_layer(payload: Vec<u8>) -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "SO".into(),
         rect: rect(2, 2),
         channels: Vec::new(),
@@ -463,7 +473,7 @@ fn channel_less_layer(payload: Vec<u8>) -> Layer {
             .with_payload(payload),
         ),
         ..Default::default()
-    }
+    })
 }
 
 #[test]
@@ -475,9 +485,9 @@ fn channel_less_embedded_object_materializes_and_consumes() {
         transform(2.0, 2.0, 0.0, 0.0, 0.0)
     ));
     let layer = resolve_path(&doc, "0").unwrap();
-    assert!(layer.channels.iter().any(|c| c.id == 0));
+    assert!(layer.channels().iter().any(|c| c.id == 0));
     assert_eq!((layer.rect.width(), layer.rect.height()), (4, 4));
-    assert!(layer.smart_object.is_none());
+    assert!(layer.smart_object().is_none());
 }
 
 #[test]
@@ -561,7 +571,7 @@ fn quad_past_horizon_draws_only_the_front_side() {
     let map = super::transform::solve_homography(source, quad).unwrap();
     assert!(transform_layer_quad(&mut doc, "0", quad));
     let layer = resolve_path(&doc, "0").unwrap();
-    let alpha = layer.channels.iter().find(|c| c.id == -1).unwrap();
+    let alpha = layer.channels().iter().find(|c| c.id == -1).unwrap();
     let (w, h) = (layer.rect.width() as usize, layer.rect.height() as usize);
     let (mut drawn, mut behind) = (0, 0);
     for y in 0..h {
@@ -589,7 +599,7 @@ fn quad_out_of_source_pixels_are_zero() {
     let quad = [(0.0, 0.0), (4.0, 0.0), (3.0, 4.0), (1.0, 4.0)];
     assert!(transform_layer_quad(&mut doc, "0", quad));
     let layer = resolve_path(&doc, "0").unwrap();
-    let alpha = layer.channels.iter().find(|c| c.id == -1).unwrap();
+    let alpha = layer.channels().iter().find(|c| c.id == -1).unwrap();
     assert!(alpha.data.contains(&0), "an outside pixel is transparent");
     assert!(alpha.data.contains(&255), "an inside pixel is opaque");
 }
@@ -599,34 +609,34 @@ fn quad_refusals_leave_the_document_bit_identical() {
     let cases: Vec<(&str, Document)> = vec![
         (
             "group",
-            doc_with(Layer {
+            doc_with(pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 is_group: true,
                 ..Default::default()
-            }),
+            })),
         ),
         (
             "adjustment",
-            doc_with(Layer {
+            doc_with(pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 adjustment: Some(pictura_core::AdjustmentData {
                     key: *b"nvrt",
                     data: Vec::new().into(),
                 }),
                 ..Default::default()
-            }),
+            })),
         ),
         (
             "background",
-            doc_with(Layer {
+            doc_with(pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 background: true,
-                ..pixel_layer(2, 2)
-            }),
+                ..pictura_core::LayerParts::from(pixel_layer(2, 2))
+            })),
         ),
         (
             "position-locked",
-            doc_with(Layer {
+            doc_with(pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 lock: pictura_core::LockFlags::default().with(LockFlags::POSITION, true),
-                ..pixel_layer(2, 2)
-            }),
+                ..pictura_core::LayerParts::from(pixel_layer(2, 2))
+            })),
         ),
     ];
     for (name, mut doc) in cases {
@@ -649,8 +659,8 @@ fn quad_channel_less_embedded_object_materializes_and_consumes() {
     let quad = [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)];
     assert!(transform_layer_quad(&mut doc, "0", quad));
     let layer = resolve_path(&doc, "0").unwrap();
-    assert!(layer.channels.iter().any(|c| c.id == 0));
-    assert!(layer.smart_object.is_none());
+    assert!(layer.channels().iter().any(|c| c.id == 0));
+    assert!(layer.smart_object().is_none());
 }
 
 #[test]
@@ -666,7 +676,7 @@ fn quad_one_by_one_does_not_panic() {
 
 fn checker_layer() -> Layer {
     let mut layer = pixel_layer(4, 4);
-    let ch = layer.channels.iter_mut().find(|c| c.id == 0).unwrap();
+    let ch = layer.channels_mut().iter_mut().find(|c| c.id == 0).unwrap();
     for y in 0..4 {
         for x in 0..4 {
             ch.data[y * 4 + x] = if (x + y) % 2 == 0 { 0 } else { 255 };
@@ -700,7 +710,7 @@ fn nearest_scale_replicates_a_checkerboard() {
         Interpolation::Nearest
     ));
     let layer = resolve_path(&doc, "0").unwrap();
-    let ch = layer.channels.iter().find(|c| c.id == 0).unwrap();
+    let ch = layer.channels().iter().find(|c| c.id == 0).unwrap();
     assert_eq!(ch.data.len(), 16 * 16);
     assert!(
         ch.data.iter().all(|&v| v == 0 || v == 255),
@@ -741,17 +751,17 @@ fn quad_interpolation_reaches_the_planes() {
     ));
     assert!(transform_layer_quad(&mut bilinear, "0", quad));
     let nearest_layer = resolve_path(&nearest, "0").unwrap();
-    let ch = nearest_layer.channels.iter().find(|c| c.id == 0).unwrap();
+    let ch = nearest_layer.channels().iter().find(|c| c.id == 0).unwrap();
     assert!(ch.data.iter().all(|&v| v == 0 || v == 255));
     assert_ne!(nearest, bilinear);
 }
 
 #[test]
 fn interpolated_refusal_is_bit_identical() {
-    let mut doc = doc_with(Layer {
+    let mut doc = doc_with(pictura_codec::layer_from_parts(pictura_core::LayerParts {
         background: true,
-        ..pixel_layer(2, 2)
-    });
+        ..pictura_core::LayerParts::from(pixel_layer(2, 2))
+    }));
     let before = doc.clone();
     assert!(!transform_layer_with(
         &mut doc,
@@ -778,7 +788,7 @@ fn crossed_quad_fills_an_hourglass() {
         ),
         (0, 0, 100, 100)
     );
-    let alpha = &layer.channels.iter().find(|c| c.id == -1).unwrap().data;
+    let alpha = &layer.channels().iter().find(|c| c.id == -1).unwrap().data;
     let at = |x: usize, y: usize| alpha[y * 100 + x];
     // Inside the upper and lower triangles.
     assert_eq!(at(50, 10), 255);
@@ -808,7 +818,7 @@ impl super::transform::PlaneMap for Shift {
 /// A tiled 300 × 200 layer with a seeded mask over an offset rect.
 fn tiled_masked_doc() -> Document {
     let mut layer = pixel_layer(300, 200);
-    for c in &mut layer.channels {
+    for c in layer.channels_mut() {
         assert!(c.data.tile(300, 200));
     }
     layer.mask = Some(LayerMask {
@@ -848,7 +858,7 @@ fn an_integer_move_shares_the_source_planes() {
         right: r.right + 37,
     };
     assert_eq!(after.rect, shifted(before.rect));
-    for (a, b) in before.channels.iter().zip(&after.channels) {
+    for (a, b) in before.channels().iter().zip(after.channels()) {
         assert_eq!(a.id, b.id);
         assert!(b.data.shares(&a.data), "channel {} was copied", a.id);
         assert!(a.data == b.data, "channel {}", a.id);
@@ -884,7 +894,7 @@ fn an_integer_move_matches_the_resampled_result() {
             resolve_path(&resampled, "0").expect("layer"),
         );
         assert_eq!(a.rect, b.rect, "{interpolation:?}");
-        for (x, y) in a.channels.iter().zip(&b.channels) {
+        for (x, y) in a.channels().iter().zip(b.channels()) {
             assert!(x.data == y.data, "{interpolation:?} channel {}", x.id);
         }
         let (ma, mb) = (a.mask.as_ref().unwrap(), b.mask.as_ref().unwrap());
@@ -905,7 +915,7 @@ fn a_smoother_move_still_resamples() {
     ));
     let before = resolve_path(&original, "0").expect("layer");
     let after = resolve_path(&doc, "0").expect("layer");
-    for (a, b) in before.channels.iter().zip(&after.channels) {
+    for (a, b) in before.channels().iter().zip(after.channels()) {
         assert!(!b.data.shares(&a.data), "channel {} kept its plane", a.id);
     }
 }
@@ -930,7 +940,7 @@ fn a_failed_resample_allocation_refuses_the_transform() {
         resolve_path(&doc, "0").expect("layer"),
     );
     assert_eq!(a.rect, b.rect);
-    for (x, y) in a.channels.iter().zip(&b.channels) {
+    for (x, y) in a.channels().iter().zip(b.channels()) {
         assert!(x.data == y.data, "channel {}", x.id);
     }
     assert!(a.mask == b.mask);

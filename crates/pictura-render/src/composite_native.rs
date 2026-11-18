@@ -55,7 +55,7 @@ pub(crate) fn mask_alpha_unit(doc: &Document, layer: &Layer, clip: PsdRect, x: i
 /// Masks are valid in any high-depth mode, so `source_mode` is not gated.
 #[cfg(test)]
 fn native_mask_unit(doc: &Document, layer: &Layer, x: i32, y: i32) -> Option<f32> {
-    doc.source_depth?;
+    doc.source.depth()?;
     let mask = layer.mask.as_ref()?;
     // ponytail: a refined mask samples through the 8-bit path, so density and
     // feather quantize a high-depth mask to 8 bits.
@@ -100,7 +100,7 @@ pub(crate) struct NativeMask<'a> {
 /// so the
 /// compositor can resolve it once instead of per pixel.
 pub(crate) fn resolve_native_mask<'a>(doc: &Document, layer: &'a Layer) -> Option<NativeMask<'a>> {
-    doc.source_depth?;
+    doc.source.depth()?;
     let mask = layer.mask.as_ref()?;
     if mask.disabled
         || mask.data.is_none()
@@ -142,18 +142,7 @@ pub(crate) fn composite_adjustment(
 ) {
     // Fill content is generative: it adds color inside the layer's rect instead
     // of transforming the backdrop, so it takes the normal-content path.
-    if let Adjustment::SolidFill(rgba) = adjustment {
-        crate::fill::composite_solid_fill(canvas, layer, doc, *rgba, ctx, over);
-        return;
-    }
-    if let Adjustment::GradientFill(params) = adjustment {
-        crate::fill::composite_gradient_fill(canvas, layer, doc, params, ctx, over);
-        return;
-    }
-    if let Adjustment::PatternFill(params) = adjustment {
-        crate::fill::composite_pattern_fill(canvas, layer, doc, params, ctx, over);
-        return;
-    }
+
     let n = canvas.w * canvas.h;
     if n == 0 {
         return;
@@ -191,7 +180,7 @@ pub(crate) fn composite_adjustment(
     // A document read at 16/32 applies the adjustment to the f32 accumulator
     // at native precision. An adjustment outside `apply_native`'s set falls
     // back to the 8-bit path below.
-    if doc.source_depth.is_some() {
+    if doc.source.depth().is_some() {
         match apply_native_rgb(canvas, adjustment, mode) {
             Ok(adjusted) => {
                 gate_adjusted(canvas, layer, doc, &adjusted, &gated, Some(&gated_over));
@@ -348,7 +337,7 @@ fn gate_adjusted(
 /// and `Samples::F32` at 32, in planar RGBA order with straight alpha clamped to
 /// `[0, 1]`. `None` for a document with no recorded 16/32-bit source depth.
 pub(crate) fn composite_native(doc: &Document) -> Option<Samples> {
-    let depth = doc.source_depth?;
+    let depth = doc.source.depth()?;
     if !matches!(depth, BitDepth::Sixteen | BitDepth::ThirtyTwo) {
         return None;
     }
@@ -414,14 +403,14 @@ fn sample_stride(samples: &Samples) -> Option<usize> {
 /// and extra planes, and `doc.channels`, are left untouched.
 pub fn refresh_native_composite(doc: &mut Document) -> bool {
     if !matches!(
-        doc.source_depth,
+        doc.source.depth(),
         Some(BitDepth::Sixteen | BitDepth::ThirtyTwo)
-    ) || doc.source_mode.is_some()
+    ) || doc.source.mode().is_some()
         || doc.layers.is_empty()
     {
         return false;
     }
-    let Some(store) = doc.source_planes.as_ref() else {
+    let Some(store) = doc.source.planes().as_ref() else {
         return false;
     };
     let store_depth = store.depth;
@@ -441,24 +430,27 @@ pub fn refresh_native_composite(doc: &mut Document) -> bool {
     }
     let native_bytes = native.to_bytes();
     bytes[..cut].copy_from_slice(&native_bytes[..cut]);
-    doc.source_planes.as_mut().expect("checked above").samples =
-        Samples::from_bytes(&bytes, store_depth);
+    doc.source
+        .replace_samples(Samples::from_bytes(&bytes, store_depth))
+        .expect("native refresh preserves source depth");
 
     let narrowed = native.narrow_to_u8();
-    doc.composite = if doc.mode == ColorMode::Rgb {
-        PixelBuffer {
-            width: doc.width,
-            height: doc.height,
-            channels: 4,
-            data: narrowed.into(),
-        }
-    } else {
-        PixelBuffer {
-            width: doc.width,
-            height: doc.height,
-            channels: color_channels as u8,
-            data: narrowed[..plane].to_vec().into(),
-        }
-    };
+    doc.composite
+        .replace(if doc.mode == ColorMode::Rgb {
+            PixelBuffer {
+                width: doc.width,
+                height: doc.height,
+                channels: 4,
+                data: narrowed.into(),
+            }
+        } else {
+            PixelBuffer {
+                width: doc.width,
+                height: doc.height,
+                channels: color_channels as u8,
+                data: narrowed[..plane].to_vec().into(),
+            }
+        })
+        .expect("valid composite");
     true
 }

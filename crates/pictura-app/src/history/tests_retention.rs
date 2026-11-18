@@ -1,18 +1,22 @@
 use super::*;
 use pictura_core::{
-    BitDepth, ColorMode, Document, Layer, LayerStack, Plane, PsdRect, Samples, SmartObject,
+    BitDepth, ColorMode, Document, LayerStack, Plane, PsdRect, Samples, SmartObject,
     SourceChannels, SourcePlanes,
 };
 
 fn depth16_doc() -> Document {
     let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Sixteen);
-    doc.source_depth = Some(BitDepth::Sixteen);
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::Sixteen,
-        width: 2,
-        height: 2,
-        samples: Samples::U16(vec![1; 12].into()),
-    });
+    doc.source
+        .set_native(
+            Some(BitDepth::Sixteen),
+            Some(SourcePlanes {
+                depth: BitDepth::Sixteen,
+                width: 2,
+                height: 2,
+                samples: Samples::U16(vec![1; 12].into()),
+            }),
+        )
+        .expect("valid native source");
     doc.layer_section_extra = vec![1, 2, 3].into();
     let rect = PsdRect {
         top: 0,
@@ -20,7 +24,7 @@ fn depth16_doc() -> Document {
         bottom: 2,
         right: 2,
     };
-    let mut layer = Layer {
+    let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         rect,
         source_channels: Some(SourceChannels::new(
             BitDepth::Sixteen,
@@ -31,8 +35,10 @@ fn depth16_doc() -> Document {
             ],
         )),
         ..Default::default()
-    };
-    layer.smart_object = Some(SmartObject::default().with_payload(vec![9, 9, 9]));
+    });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.smart_object = Some(SmartObject::default().with_payload(vec![9, 9, 9]))
+    });
     doc.layers = LayerStack::from_layers(vec![layer]);
     doc
 }
@@ -82,8 +88,8 @@ fn native_samples_and_selection_are_shared_across_captures() {
         );
         assert!(
             share_samples(
-                &current.doc.source_planes.as_ref().unwrap().samples,
-                &meta.source_planes.as_ref().unwrap().samples
+                &current.doc.source.planes().as_ref().unwrap().samples,
+                &meta.source.planes().as_ref().unwrap().samples
             ),
             "state {k} must share the document native samples"
         );
@@ -111,7 +117,7 @@ fn payloads_and_byte_blocks_are_shared_across_captures() {
         history.capture_live(&mut doc, &selection, &target, &format!("state {i}"));
     }
     let current = history.current.as_ref().expect("current");
-    let current_so = current.doc.layers[0].smart_object.as_ref().unwrap();
+    let current_so = current.doc.layers[0].smart_object().unwrap();
     assert!(
         current_so.payload().is_some(),
         "the fixture must carry an embedded payload"
@@ -122,7 +128,7 @@ fn payloads_and_byte_blocks_are_shared_across_captures() {
             .doc
             .layer_section_extra
             .shares(&meta.layer_section_extra));
-        let meta_so = meta.layers[0].smart_object.as_ref().unwrap();
+        let meta_so = meta.layers[0].smart_object().unwrap();
         assert!(
             meta_so.payload().is_some(),
             "state {k} must keep the embedded payload"
@@ -192,8 +198,7 @@ fn native_edit_undo_restores_old_bytes() {
     let old_sample = u16_plane(&doc, 0).to_vec();
     let old_section = doc.layer_section_extra.to_vec();
     let old_payload = doc.layers[0]
-        .smart_object
-        .as_ref()
+        .smart_object()
         .unwrap()
         .payload()
         .unwrap()
@@ -207,11 +212,13 @@ fn native_edit_undo_restores_old_bytes() {
         plane.as_mut_slice()[0] = 999;
     }
     doc.layer_section_extra.as_mut_slice()[0] = 42;
-    doc.layers[0]
-        .smart_object
-        .as_mut()
-        .unwrap()
-        .set_payload(vec![7, 7, 7]);
+    pictura_codec::edit_layer(&mut doc.layers[0], |parts| {
+        parts
+            .smart_object
+            .as_mut()
+            .unwrap()
+            .set_payload(vec![7, 7, 7]);
+    });
     selection.as_mut().unwrap().data.as_mut_slice()[0] = 0;
     history.capture_live(&mut doc, &selection, &target, "Edit");
     history
@@ -220,7 +227,7 @@ fn native_edit_undo_restores_old_bytes() {
     assert_eq!(u16_plane(&doc, 0).as_slice(), old_sample.as_slice());
     assert_eq!(doc.layer_section_extra.as_slice(), old_section.as_slice());
     assert_eq!(
-        doc.layers[0].smart_object.as_ref().unwrap().payload(),
+        doc.layers[0].smart_object().unwrap().payload(),
         Some(old_payload.as_slice())
     );
     assert_eq!(
@@ -232,13 +239,17 @@ fn native_edit_undo_restores_old_bytes() {
 fn depth16_doc_sized(w: u32, h: u32) -> Document {
     let plane = w as usize * h as usize;
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Sixteen);
-    doc.source_depth = Some(BitDepth::Sixteen);
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::Sixteen,
-        width: w,
-        height: h,
-        samples: Samples::U16(vec![1; plane * 3].into()),
-    });
+    doc.source
+        .set_native(
+            Some(BitDepth::Sixteen),
+            Some(SourcePlanes {
+                depth: BitDepth::Sixteen,
+                width: w,
+                height: h,
+                samples: Samples::U16(vec![1; plane * 3].into()),
+            }),
+        )
+        .expect("valid native source");
     doc.layer_section_extra = vec![0u8; 8 * 1024 * 1024].into();
     let rect = PsdRect {
         top: 0,
@@ -246,7 +257,7 @@ fn depth16_doc_sized(w: u32, h: u32) -> Document {
         bottom: h as i32,
         right: w as i32,
     };
-    let mut layer = Layer {
+    let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         rect,
         source_channels: Some(SourceChannels::new(
             BitDepth::Sixteen,
@@ -254,8 +265,10 @@ fn depth16_doc_sized(w: u32, h: u32) -> Document {
             vec![(0, Samples::U16(vec![1; plane].into()))],
         )),
         ..Default::default()
-    };
-    layer.smart_object = Some(SmartObject::default().with_payload(vec![0u8; 8 * 1024 * 1024]));
+    });
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.smart_object = Some(SmartObject::default().with_payload(vec![0u8; 8 * 1024 * 1024]))
+    });
     doc.layers = LayerStack::from_layers(vec![layer]);
     doc
 }
@@ -294,22 +307,24 @@ fn stamped_doc() -> Document {
             data: vec![9; 4].into(),
         })
         .to_vec();
-    doc.layers = LayerStack::from_layers(vec![Layer {
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 2,
-            right: 2,
+    doc.layers = LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 2,
+                right: 2,
+            },
+            channels,
+            ..Default::default()
         },
-        channels,
-        ..Default::default()
-    }]);
+    )]);
     doc
 }
 
 fn layer_stamps(doc: &Document, layer: usize) -> Vec<u64> {
     doc.layers[layer]
-        .channels
+        .channels()
         .iter()
         .map(|c| c.data.stamp())
         .collect()
@@ -324,7 +339,7 @@ fn a_capture_keeps_the_stamps_of_unchanged_planes() {
     let before = layer_stamps(&doc, 0);
     assert!(before.iter().all(|&stamp| stamp != 0));
 
-    doc.layers.get_mut(0).unwrap().channels[1]
+    doc.layers.get_mut(0).unwrap().channels_mut()[1]
         .data
         .as_mut_slice()[0] = 1;
     history.capture_live(&mut doc, &None, &target, "Edit");
@@ -341,7 +356,7 @@ fn undo_keeps_the_stamps_of_unchanged_planes() {
     let mut doc = stamped_doc();
     let target = LayerTarget::default();
     history.capture_live(&mut doc, &None, &target, "Open");
-    doc.layers.get_mut(0).unwrap().channels[1]
+    doc.layers.get_mut(0).unwrap().channels_mut()[1]
         .data
         .as_mut_slice()[0] = 1;
     history.capture_live(&mut doc, &None, &target, "Edit");
@@ -355,7 +370,7 @@ fn undo_keeps_the_stamps_of_unchanged_planes() {
     assert_eq!(undone[0], edited[0]);
     assert_eq!(undone[2], edited[2]);
     assert_eq!(undone[3], edited[3]);
-    assert_eq!(doc.layers[0].channels[1].data[0], 9);
+    assert_eq!(doc.layers[0].channels()[1].data[0], 9);
 }
 
 #[test]
@@ -393,7 +408,9 @@ fn patterned_doc() -> Document {
         .map(|i| (i as u8).wrapping_mul(31).wrapping_add((i >> 11) as u8))
         .collect();
     let _ = pictura_render::add_raster_layer_from_rgba(&mut doc, "px", SIDE, SIDE, &rgba);
-    doc.composite = pictura_render::composite_rgba(&doc);
+    doc.composite
+        .replace(pictura_render::composite_rgba(&doc))
+        .expect("valid composite");
     doc
 }
 
@@ -407,7 +424,7 @@ fn paint(
 ) {
     let (x, y, w, h) = rect;
     let width = doc.layers[layer].rect.width().max(0) as usize;
-    let plane = &mut doc.layers[layer].channels[channel].data;
+    let plane = &mut doc.layers[layer].channels_mut()[channel].data;
     plane.write_rect_from(x..x + w, y..y + h, width, &vec![value; w * h]);
 }
 
@@ -603,7 +620,7 @@ fn undo_redo_identity_seeded() {
                     1 + rng.below(height.min(300)),
                 );
                 let (x, y) = (rng.below(width - w + 1), rng.below(height - h + 1));
-                let channel = rng.below(live.layers[layer].channels.len());
+                let channel = rng.below(live.layers[layer].channels().len());
                 paint(
                     &mut live,
                     layer,
@@ -640,4 +657,43 @@ fn undo_redo_identity_seeded() {
         );
     }
     assert_eq!(history.held_bytes(), history.recount_held_bytes());
+}
+
+#[test]
+fn history_hollow_reattaches_shared_composite() {
+    let mut doc = Document::from_rgba("pixel", 2, 1, &[1, 2, 3, 255, 4, 5, 6, 255]);
+    doc.composite.set_merged_output(false);
+    doc.channels.push(pictura_core::Channel {
+        id: 0,
+        data: vec![1, 2].into(),
+    });
+    let before = doc.clone();
+    let mut meta = planes::hollow(&doc);
+    assert_eq!(
+        (
+            meta.composite.width,
+            meta.composite.height,
+            meta.composite.channels
+        ),
+        (2, 1, 4)
+    );
+    assert!(!meta.composite.merged_output());
+    assert!(meta.composite.data.is_empty());
+    assert_eq!(
+        planes::plane_kinds(&meta).len(),
+        planes::plane_kinds(&doc).len()
+    );
+    let mut data = Vec::new();
+    planes::each_plane(&before, &mut |p, _, _, _| data.push(p.clone()));
+    let mut index = 0;
+    planes::each_plane_mut(&mut meta, &mut |p, _, _, _| {
+        *p = data[index].clone();
+        index += 1;
+    });
+    assert_eq!(meta, before);
+    assert!(meta.composite.data.shares(&before.composite.data));
+    assert!(meta.channels[0].data.shares(&before.channels[0].data));
+    planes::adopt_metadata(&mut doc, &meta);
+    assert_eq!(doc, before);
+    assert!(doc.composite.data.shares(&before.composite.data));
 }

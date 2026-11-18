@@ -27,7 +27,7 @@ fn layer(name: &str, blend: BlendMode) -> Layer {
             data: vec![255u8; pixels].into(),
         },
     ];
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: PsdRect {
             top: 0,
@@ -41,7 +41,7 @@ fn layer(name: &str, blend: BlendMode) -> Layer {
         visible: true,
         channels,
         ..Default::default()
-    }
+    })
 }
 
 fn scene(blend: BlendMode) -> Document {
@@ -52,7 +52,7 @@ fn scene(blend: BlendMode) -> Document {
 }
 
 fn adjustment_layer(name: &str, adjustment: AdjustmentData) -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: PsdRect {
             top: 0,
@@ -66,7 +66,7 @@ fn adjustment_layer(name: &str, adjustment: AdjustmentData) -> Layer {
         visible: true,
         adjustment: Some(adjustment),
         ..Default::default()
-    }
+    })
 }
 
 #[test]
@@ -120,11 +120,12 @@ fn unsupported_adjustment_falls_back_or_errors() {
 fn document_past_2d_product_limit_returns_too_large() {
     require_gpu();
     let doc = Document {
+        composite: pictura_core::CompositeState::new(PixelBuffer::new(0, 0, 3))
+            .expect("valid composite"),
         width: u32::MAX,
         height: u32::MAX,
         mode: ColorMode::Rgb,
         depth: BitDepth::Eight,
-        composite: PixelBuffer::new(0, 0, 3),
         layers: LayerStack::default(),
         channels: Vec::new(),
         ..Default::default()
@@ -140,19 +141,21 @@ fn the_region_estimate_counts_every_upload() {
     let plans = plan::plan_stack(&doc, None).expect("plannable");
     assert_eq!(region_host_bytes(&plans, SIZE, SIZE), 64 * (16 + 2 * 5));
     let mut grouped = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
-    grouped.layers = LayerStack::from_layers(vec![Layer {
-        name: "group".into(),
-        is_group: true,
-        visible: true,
-        opacity: 255,
-        fill: 255,
-        blend: BlendMode::Normal,
-        children: LayerStack::from_layers(vec![
-            layer("a", BlendMode::Normal),
-            layer("b", BlendMode::Normal),
-        ]),
-        ..Default::default()
-    }]);
+    grouped.layers = LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            name: "group".into(),
+            is_group: true,
+            visible: true,
+            opacity: 255,
+            fill: 255,
+            blend: BlendMode::Normal,
+            children: LayerStack::from_layers(vec![
+                layer("a", BlendMode::Normal),
+                layer("b", BlendMode::Normal),
+            ]),
+            ..Default::default()
+        },
+    )]);
     let plans = plan::plan_stack(&grouped, None).expect("plannable");
     let per_pixel = region_host_bytes(&plans, 1, 1) - 16;
     assert!(per_pixel >= 2 * 5, "both children counted: {per_pixel}");

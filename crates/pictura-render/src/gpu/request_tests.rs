@@ -18,7 +18,7 @@ fn gradient(name: &str, blend: BlendMode, alpha: u8) -> Layer {
             b.push(((x + y) * 16) as u8);
         }
     }
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: PsdRect {
             top: 0,
@@ -49,7 +49,7 @@ fn gradient(name: &str, blend: BlendMode, alpha: u8) -> Layer {
             },
         ],
         ..Default::default()
-    }
+    })
 }
 
 fn fixture() -> Document {
@@ -69,7 +69,7 @@ fn fixture() -> Document {
     });
 
     let child = gradient("child", BlendMode::Normal, 255);
-    let group = Layer {
+    let group = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "group".into(),
         rect: PsdRect {
             top: 0,
@@ -84,9 +84,9 @@ fn fixture() -> Document {
         children: LayerStack::from_layers(vec![child]),
         is_group: true,
         ..Default::default()
-    };
+    });
 
-    let adjustment = Layer {
+    let adjustment = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "invert".into(),
         rect: PsdRect {
             top: 0,
@@ -100,7 +100,7 @@ fn fixture() -> Document {
         visible: true,
         adjustment: Some(crate::encode_invert()),
         ..Default::default()
-    };
+    });
 
     let mut doc = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = LayerStack::from_layers(vec![
@@ -189,7 +189,9 @@ fn request_matrix_matches_the_oracles() {
     }
 
     let mut deep = doc.clone();
-    deep.source_depth = Some(BitDepth::ThirtyTwo);
+    deep.source
+        .set_native(Some(BitDepth::ThirtyTwo), deep.source.planes().clone())
+        .expect("valid source depth");
     let (deep_region, backend) =
         crate::composite(crate::CompositeRequest::region(&deep, region, true));
     assert_eq!(backend, Backend::Cpu, "32-bit region backend");

@@ -18,7 +18,7 @@ pub(super) fn mask_rgba_seed(document: &Document) -> Vec<u8> {
     let data = document
         .layers
         .first()
-        .and_then(|layer| layer.channels.iter().find(|c| c.id == 0))
+        .and_then(|layer| layer.channels().iter().find(|c| c.id == 0))
         .map(|c| c.data.as_slice());
     let mut seed = vec![0u8; n * 4];
     for i in 0..n {

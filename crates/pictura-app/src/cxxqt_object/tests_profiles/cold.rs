@@ -17,7 +17,7 @@ use crate::cxxqt_object::impl_core::{
 };
 use crate::cxxqt_object::metrics;
 use crate::cxxqt_object::open_jobs::{apply_opened, decode_psd};
-use pictura_core::{BitDepth, ColorMode, Document, Layer, LayerMask, LayerStack, PsdRect};
+use pictura_core::{BitDepth, ColorMode, Document, LayerMask, LayerStack, PsdRect};
 use pictura_render::cold_profile::{Cohort, Report, PRIMARY, REGION, REPEATED_FULL};
 
 const CHILD: &str = "cxxqt_object::tests_profiles::cold::first_full_edit_child";
@@ -34,7 +34,7 @@ fn full(w: u32, h: u32) -> PsdRect {
 
 fn scene(w: u32, h: u32) -> Document {
     let background = pixel_layer("Background", w, h, (240, 240, 240));
-    let group = Layer {
+    let group = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "group".into(),
         rect: full(w, h),
         is_group: true,
@@ -43,7 +43,7 @@ fn scene(w: u32, h: u32) -> Document {
             pixel_layer("group-b", w, h, (200, 120, 40)),
         ]),
         ..Default::default()
-    };
+    });
     let mut base = pixel_layer("base", w, h, (255, 255, 255));
     base.name = "base".to_string();
     let mut clipped = pixel_layer("clipped", w, h, (10, 200, 80));
@@ -87,13 +87,13 @@ fn compatible_target(doc: &Document) -> Result<usize, String> {
         .rev()
         .find(|(_, layer)| {
             layer.visible
-                && !layer.is_group
+                && !layer.is_group()
                 && !layer.clipping
                 && layer.lock.bits() == 0
                 && layer.opacity < 255
                 && layer.rect.width() > 0
                 && layer.rect.height() > 0
-                && layer.adjustment.is_none()
+                && !layer.has_adjustment_content()
         })
         .map(|(index, _)| index)
         .ok_or_else(|| "requested profile input has no compatible edit target".to_string())

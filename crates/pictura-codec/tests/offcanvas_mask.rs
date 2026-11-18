@@ -22,7 +22,12 @@ fn offcanvas_mask_round_trips_at_native_depth() {
             for psb in [false, true] {
                 let rgba = [32, 64, 192, 255].repeat(12 * 8);
                 let mut doc = Document::from_rgba("Mask", 12, 8, &rgba);
-                doc.source_depth = (depth != BitDepth::Eight).then_some(depth);
+                doc.source
+                    .set_native(
+                        (depth != BitDepth::Eight).then_some(depth),
+                        doc.source.planes().clone(),
+                    )
+                    .expect("valid source depth");
                 let mut mask = LayerMask {
                     rect: PsdRect {
                         left: -30,

@@ -44,14 +44,14 @@ pub(in crate::cxxqt_object) use view_preview::{MoveView, MoveViewPixels};
 
 /// The selection's coverage when it is document-sized and not empty: Free
 /// Transform then lifts the selected pixels instead of moving the whole layer.
-fn lift_coverage(rust: &super::super::state::PictureViewRust) -> Option<pictura_core::Plane<u8>> {
+fn lift_coverage(rust: &super::super::state::PictureViewRust) -> Option<pictura_core::Coverage> {
     let doc = rust.session.doc.as_ref()?;
     rust.session
         .selection
         .as_ref()
         .filter(|s| s.width == doc.width && s.height == doc.height)
         .filter(|s| pictura_render::coverage_bounds(&s.data, doc.width, doc.height).is_some())
-        .map(|s| s.data.clone())
+        .map(pictura_select::Selection::coverage)
 }
 
 /// Whether a selection on `path` lifts its pixels for the transform (CS6
@@ -1058,7 +1058,7 @@ impl PictureViewRust {
         let mut untrimmed: Vec<(String, PsdRect)> = Vec::new();
         let mut members: Vec<(String, PsdRect)> = Vec::new();
         if lift {
-            let coverage = lift_coverage(self).unwrap_or_default();
+            let coverage = lift_coverage(self)?;
             let doc = self.session.doc.as_mut()?;
             let before = Box::new(doc.clone());
             let floating = pictura_render::lift_selection(doc, &path, &coverage);

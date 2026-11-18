@@ -450,7 +450,7 @@ pub(super) fn write(
         && ((options.tiff_transparency && raster.alpha)
             || !matches!(raster.mode, ColorMode::Rgb | ColorMode::Grayscale)
             || doc.depth != BitDepth::Eight
-            || doc.source_depth.is_some()
+            || doc.source.depth().is_some()
             || raster.width > 30_000
             || raster.height > 30_000)
     {

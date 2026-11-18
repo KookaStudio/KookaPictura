@@ -217,6 +217,32 @@ mod tests {
     }
 
     #[test]
+    fn save_absent_composite_preserves_merged_output_policy() {
+        let mut rust = view();
+        let expected = pictura_render::composite_rgba(rust.session.doc.as_ref().unwrap());
+        rust.session.doc.as_mut().unwrap().composite.detach_plane();
+        assert!(pictura_codec::write_psd(rust.session.doc.as_ref().unwrap()).is_err());
+        let target = path("absent.psd");
+        assert!(save_start_rust(&mut rust, &target, false));
+        wait(&rust);
+        assert!(save_finish_rust(&mut rust));
+        let saved = pictura_codec::read_psd(&std::fs::read(&target).unwrap()).unwrap();
+        assert!(saved.composite.merged_output());
+        let plane = (saved.width * saved.height) as usize;
+        assert_eq!(saved.composite.data.as_ref(), &expected.data[..3 * plane]);
+        assert_eq!(saved.channels[0].data.as_ref(), &expected.data[3 * plane..]);
+        let doc = rust.session.doc.as_mut().unwrap();
+        doc.composite.replace(expected).unwrap();
+        doc.composite.set_merged_output(false);
+        assert!(save_start_rust(&mut rust, &target, false));
+        wait(&rust);
+        assert!(save_finish_rust(&mut rust));
+        let saved = pictura_codec::read_psd(&std::fs::read(&target).unwrap()).unwrap();
+        assert!(!saved.composite.merged_output());
+        let _ = std::fs::remove_file(target);
+    }
+
+    #[test]
     fn a_started_save_finishes_writes_and_clears_modified() {
         let mut rust = view();
         let path = path("save.psd");
@@ -329,15 +355,17 @@ mod tests {
         let mut doc = Document::from_rgba("Layer 0", 4, 4, &rgba);
         let mut layer = doc.layers.get(0).expect("layer").clone();
         layer.name = "Layer 1".to_string();
-        layer.channels[1].data.as_mut_slice().fill(9);
+        layer.channels_mut()[1].data.as_mut_slice().fill(9);
         let original = doc.layers.get(0).expect("layer").clone();
         doc.layers = LayerStack::from_layers(vec![layer, original]);
-        doc.composite = pictura_core::PixelBuffer {
-            width: 4,
-            height: 4,
-            channels: 4,
-            data: vec![10u8; 4 * 4 * 4].into(),
-        };
+        doc.composite
+            .replace(pictura_core::PixelBuffer {
+                width: 4,
+                height: 4,
+                channels: 4,
+                data: vec![10u8; 4 * 4 * 4].into(),
+            })
+            .expect("valid composite");
         doc.mode = ColorMode::Rgb;
         doc.depth = BitDepth::Eight;
         let mut rust = PictureViewRust::default();

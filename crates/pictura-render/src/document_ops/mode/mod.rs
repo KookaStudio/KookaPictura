@@ -28,20 +28,13 @@ use pictura_ops::OpsError;
 /// The mode the document is in for the user: the recorded source mode when one
 /// is carried, else the working mode.
 pub fn document_color_mode(doc: &Document) -> ColorMode {
-    doc.source_mode.unwrap_or(doc.mode)
+    doc.document_color_mode()
 }
 
 /// The depth the document is in for the user: 1 for a Bitmap, the retained
 /// native depth when a store carries one, else 8.
 pub fn document_bit_depth(doc: &Document) -> BitDepth {
-    if doc.source_mode == Some(ColorMode::Bitmap) {
-        return BitDepth::One;
-    }
-    if doc.retains_source_depth() {
-        doc.source_depth.unwrap_or(BitDepth::Eight)
-    } else {
-        BitDepth::Eight
-    }
+    doc.document_bit_depth()
 }
 
 /// Whether `Image > Mode > target` is available: the IMG-004 conversion matrix
@@ -142,7 +135,7 @@ pub fn convert_mode_with_profiles(
         }
         _ => super::materialize_composite(doc),
     }
-    if doc.layers.is_empty() && doc.source_mode == Some(ColorMode::Bitmap) {
+    if doc.layers.is_empty() && doc.source.mode() == Some(ColorMode::Bitmap) {
         planes::background_from_composite(doc);
     }
     planes::drop_source_state(doc);
@@ -151,7 +144,9 @@ pub fn convert_mode_with_profiles(
         ColorMode::Rgb => planes::expand_gray(doc),
         _ => {
             planes::expand_gray(doc);
-            doc.source_planes = None;
+            doc.source
+                .replace_planes(None)
+                .expect("valid source planes");
             planes::drop_layer_stores(doc);
             planes::encode_document(doc, target, working_cmyk, options, encoded);
             if target == ColorMode::Cmyk {
@@ -164,7 +159,9 @@ pub fn convert_mode_with_profiles(
     if depth != BitDepth::Eight && !doc.retains_source_depth() {
         planes::ensure_stores(doc);
         planes::restore_depth(doc, depth);
-        doc.source_depth = Some(depth);
+        doc.source
+            .set_native(Some(depth), doc.source.planes().clone())
+            .expect("valid source depth");
     }
     Ok(())
 }
@@ -184,24 +181,32 @@ pub fn convert_bit_depth(doc: &mut Document, out: BitDepth) -> Result<(), OpsErr
         )));
     }
     if out == BitDepth::Eight {
-        if doc.source_mode.is_some() {
+        if doc.source.mode().is_some() {
             planes::restore_depth(doc, BitDepth::Eight);
         } else {
-            doc.source_planes = None;
+            doc.source
+                .replace_planes(None)
+                .expect("valid source planes");
             planes::drop_layer_stores(doc);
         }
-        doc.source_depth = None;
+        doc.source
+            .set_native(None, doc.source.planes().clone())
+            .expect("valid source depth");
         return Ok(());
     }
     if stream::streams_source(doc) {
         // The composite and its 8-bit store in one banded pass (#1274).
         let (composite, store) = stream::composite_with_store(doc);
-        doc.composite = composite;
-        doc.source_planes = Some(store);
+        doc.composite.replace(composite).expect("valid composite");
+        doc.source
+            .set_native(Some(store.depth), Some(store))
+            .expect("valid source planes");
     }
     planes::ensure_stores(doc);
     planes::restore_depth(doc, out);
-    doc.source_depth = Some(out);
+    doc.source
+        .set_native(Some(out), doc.source.planes().clone())
+        .expect("valid source depth");
     Ok(())
 }
 
@@ -215,18 +220,21 @@ pub fn convert_bit_depth(doc: &mut Document, out: BitDepth) -> Result<(), OpsErr
 /// color planes, so the display alpha plane is dropped; any other document is
 /// borrowed unchanged.
 pub fn save_view(doc: &Document) -> Cow<'_, Document> {
-    let doc: Cow<'_, Document> = if doc.merged_composite_present
+    let doc: Cow<'_, Document> = if doc.composite.merged_output()
         && !doc.composite_is_authoritative()
         && !crate::DocumentComposite::is_stored(doc)
     {
         let mut merged = doc.clone();
-        merged.composite = crate::composite_tiled(doc);
+        merged
+            .composite
+            .replace(crate::composite_tiled(doc))
+            .expect("valid composite");
         Cow::Owned(merged)
     } else {
         Cow::Borrowed(doc)
     };
     let plane = doc.width as usize * doc.height as usize;
-    if (doc.source_mode.is_none() && doc.channels.is_empty())
+    if (doc.source.mode().is_none() && doc.channels.is_empty())
         || doc.mode != ColorMode::Rgb
         || doc.composite.channels != 4
         || doc.composite.width != doc.width
@@ -240,12 +248,15 @@ pub fn save_view(doc: &Document) -> Cow<'_, Document> {
     // tiled composite is read plane by plane, so it is not materialized whole.
     let mut rgb = vec![0u8; 3 * plane];
     trimmed.composite.data.read_into(0, &mut rgb);
-    trimmed.composite = PixelBuffer {
-        width: trimmed.width,
-        height: trimmed.height,
-        channels: 3,
-        data: rgb.into(),
-    };
+    trimmed
+        .composite
+        .replace(PixelBuffer {
+            width: trimmed.width,
+            height: trimmed.height,
+            channels: 3,
+            data: rgb.into(),
+        })
+        .expect("valid composite");
     // ponytail: the trimmed plane is fresh each save, so the composite cache
     // key (the plane ident) changes and a document with extras re-encodes its
     // merged block every save; keying on the source composite ident is the

@@ -102,6 +102,12 @@ const BORDER_MAX: u32 = 200;
 const SMOOTH_MAX: u32 = 100;
 
 impl Selection {
+    /// A shared read-only document-coordinate view of this selection.
+    pub fn coverage(&self) -> pictura_core::Coverage {
+        pictura_core::Coverage::for_canvas(&self.data, self.width, self.height)
+            .expect("selection coverage geometry is valid")
+    }
+
     /// An empty mask: every tile `Empty`, nothing allocated (#1214).
     pub fn none(width: u32, height: u32) -> Self {
         Self::of(
@@ -623,7 +629,7 @@ pub fn selection_from_layer_alpha(layer: &Layer, width: u32, height: u32) -> Sel
     let mut data = vec![0u8; width as usize * height as usize];
     let rect = layer.rect;
     let alpha = layer
-        .channels
+        .channels()
         .iter()
         .find(|channel| channel.id == -1)
         .map(|channel| channel.data.as_slice());
@@ -694,3 +700,6 @@ pub fn selection_from_mask(mask: &LayerMask, width: u32, height: u32) -> Selecti
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod coverage_tests;

@@ -6,7 +6,7 @@ use crate::fill_uniform::slot;
 use crate::replace::grow;
 use crate::stroke::{blend_pixel, layer_at, layer_at_mut, parse_layer_path};
 use crate::{PaintMode, Rgba};
-use pictura_core::mask_ops::TiledMask;
+use pictura_core::Coverage;
 use pictura_core::{
     layer_pixel_locked, layer_transparency_locked, BitDepth, ColorMode, Document, PsdRect, Sample,
 };
@@ -55,8 +55,8 @@ pub(crate) enum Row<'a, T> {
 /// once (#1214).
 #[derive(Clone, Copy, Default)]
 pub(crate) struct Through<'a> {
-    pub(crate) selection: Option<&'a TiledMask>,
-    pub(crate) mask: Option<&'a TiledMask>,
+    pub(crate) selection: Option<&'a Coverage>,
+    pub(crate) mask: Option<&'a Coverage>,
     pub(crate) solid: bool,
 }
 
@@ -88,7 +88,14 @@ pub(crate) fn fill_layer(
     // An unknown source's reach is the layer's own rect: this entry does not
     // grow the layer. The boxed entries pass their damage box instead.
     let within = layer_at(doc, &parse_layer_path(path)?).map(|layer| layer.rect);
-    let selection = selection.map(|s| TiledMask::from(s.to_vec()));
+    let selection = match selection {
+        Some(s) => Some(Coverage::for_canvas(
+            &s.to_vec().into(),
+            doc.width,
+            doc.height,
+        )?),
+        None => None,
+    };
     let through = Through {
         selection: selection.as_ref(),
         ..Through::default()
@@ -116,14 +123,6 @@ pub(crate) fn fill_layer_within(
         return None;
     }
     let canvas = (doc.width as i32, doc.height as i32);
-    let n = (canvas.0 * canvas.1) as usize;
-    if [through.selection, through.mask]
-        .iter()
-        .flatten()
-        .any(|m| m.len() < n)
-    {
-        return None;
-    }
     // `within` is the box the source may damage. An edit outside a small layer
     // grows it to that box (#1208); a grow the governor refuses leaves the
     // layer alone and the fill is refused.
@@ -147,7 +146,7 @@ pub(crate) fn fill_layer_within(
     // Clear has no alpha plane to change on an opaque layer; treating the
     // zeroed RGB as a change would dirty a layer the stroke path leaves alone.
     let target = layer_at(doc, &parse_layer_path(path)?)?;
-    if mode == PaintMode::Clear && !target.channels.iter().any(|c| c.id == -1) {
+    if mode == PaintMode::Clear && !target.channels().iter().any(|c| c.id == -1) {
         return None;
     }
     // A Grayscale document's layer carries one colour plane, an RGB one three.
@@ -182,7 +181,7 @@ fn fill_eight_bit(
 ) -> Option<PsdRect> {
     let canvas = (doc.width as i32, doc.height as i32);
     let layer = layer_at_mut(doc, &parse_layer_path(path)?)?;
-    if layer.is_group || layer.adjustment.is_some() || layer_pixel_locked(layer) {
+    if layer.is_group() || layer.has_adjustment_content() || layer_pixel_locked(layer) {
         return None;
     }
     let keep_alpha = layer_transparency_locked(layer);
@@ -221,7 +220,7 @@ fn fill_eight_bit(
     // The R, G, B and alpha planes, each a whole layer long; a missing colour
     // plane refuses the fill, a missing alpha is an opaque layer.
     let mut planes: [Option<&mut [u8]>; 4] = [None, None, None, None];
-    for c in layer.channels.iter_mut() {
+    for c in layer.channels_mut().iter_mut() {
         let Some(k) = slot(c.id) else {
             continue;
         };
@@ -358,15 +357,8 @@ impl Pass<'_> {
 }
 
 /// Columns `x0..x1` of document row `y` of `mask`.
-fn mask_row(mask: &TiledMask, canvas_width: i32, y: i32, (x0, x1): (i32, i32)) -> Vec<u8> {
-    let mut out = vec![0; (x1 - x0).max(0) as usize];
-    mask.read_rect_into(
-        x0 as usize..x1 as usize,
-        y as usize..y as usize + 1,
-        canvas_width as usize,
-        &mut out,
-    );
-    out
+fn mask_row(mask: &Coverage, _canvas_width: i32, y: i32, (x0, x1): (i32, i32)) -> Vec<u8> {
+    mask.row(x0, y, (x1 - x0).max(0) as usize)
 }
 
 /// Lay the source down over the target's planes, in the given brush mode,
@@ -435,7 +427,7 @@ pub(crate) fn fill_planes<T: Sample + PartialEq + Send + Sync>(
             let mut last = None;
             // Each row copies the spans it needs; without a mask there is
             // nothing to copy.
-            let span = |mask: Option<&TiledMask>| mask.map(|m| mask_row(m, canvas.0, y, (x0, x1)));
+            let span = |mask: Option<&Coverage>| mask.map(|m| mask_row(m, canvas.0, y, (x0, x1)));
             let (selected, covered) = (span(pass.through.selection), span(pass.through.mask));
             for x in x0..x1 {
                 let k = (x - x0) as usize;

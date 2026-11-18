@@ -13,7 +13,9 @@ fn view(side: u32) -> PictureViewRust {
         pixel_layer("under", side, side, (120, 170, 220)),
         pixel_layer("over", side, side, (220, 90, 40)),
     ]);
-    doc.composite = pictura_render::composite_rgba(&doc);
+    doc.composite
+        .replace(pictura_render::composite_rgba(&doc))
+        .expect("valid composite");
     let mut view = PictureViewRust {
         session: DocumentSession::with_document(doc),
         gpu_compute: false,
@@ -103,7 +105,7 @@ fn a_replaced_document_drops_the_move_composite() {
     assert!(!view.move_composite_pending());
 
     let replacement = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
-    let composite = replacement.composite.clone();
+    let composite = replacement.composite.buffer().clone();
     view.session.doc = Some(replacement);
     let revision = view.canvas_revision;
 
@@ -289,8 +291,11 @@ fn a_deferred_whole_landing_skips_the_display_conversion() {
         pixel_layer("under", side, side, (120, 170, 220)),
         pixel_layer("over", side, side, (220, 90, 40)),
     ]);
-    doc.document_icc = Some(pictura_color::Profile::adobe_rgb().to_icc().into());
-    doc.composite = pictura_render::composite_rgba(&doc);
+    doc.source
+        .set_working_profile(Some(pictura_color::Profile::adobe_rgb().to_icc().into()));
+    doc.composite
+        .replace(pictura_render::composite_rgba(&doc))
+        .expect("valid composite");
     let mut view = PictureViewRust {
         session: DocumentSession::with_document(doc),
         gpu_compute: false,

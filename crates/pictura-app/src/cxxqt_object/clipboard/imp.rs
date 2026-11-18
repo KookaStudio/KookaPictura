@@ -6,7 +6,7 @@ use crate::cxxqt_object::state::PictureViewRust;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_core::Plane;
+use pictura_core::Coverage;
 use pictura_render::{Clip, PasteMode};
 use std::sync::Mutex;
 
@@ -91,13 +91,13 @@ pub(super) fn copy_layer_from_document(
 
 /// The active selection's coverage plane, when it matches the document: a
 /// tile-sharing clone, never a contiguous copy (#1268).
-pub(in crate::cxxqt_object) fn clip_selection(rust: &PictureViewRust) -> Option<Plane<u8>> {
+pub(in crate::cxxqt_object) fn clip_selection(rust: &PictureViewRust) -> Option<Coverage> {
     let doc = rust.session.doc.as_ref()?;
     rust.session
         .selection
         .as_ref()
         .filter(|s| s.width == doc.width && s.height == doc.height)
-        .map(|s| s.data.clone())
+        .map(pictura_select::Selection::coverage)
 }
 
 /// The clip `Copy`/`Copy Merged` would take, without storing it.
@@ -202,7 +202,14 @@ pub(super) fn clipboard_paste(
     let into_bounds = selection
         .as_ref()
         .filter(|_| mode == PasteMode::Into)
-        .and_then(|s| pictura_render::coverage_bounds(s, width, height));
+        .and_then(|s| {
+            s.covered_bounds(pictura_core::PsdRect {
+                left: 0,
+                top: 0,
+                right: width as i32,
+                bottom: height as i32,
+            })
+        });
     let origin = match kind {
         // Plain paste and Paste in Place keep the copied pixels' position.
         PasteKind::Plain | PasteKind::InPlace => (clip.rect.left, clip.rect.top),
@@ -256,3 +263,6 @@ pub(super) fn clipboard_paste(
     view.as_mut().edit(label, |_| outcome);
     QString::from(created.as_str())
 }
+
+#[cfg(test)]
+mod coverage_tests;

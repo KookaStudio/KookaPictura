@@ -20,13 +20,13 @@ fn rgb_or_gray(doc: &Document) -> bool {
 
 /// 8-bit RGB or Grayscale.
 pub(in crate::cxxqt_object) fn document_supported(doc: &Document) -> bool {
-    doc.source_depth.unwrap_or(doc.depth) == BitDepth::Eight && rgb_or_gray(doc)
+    doc.source.depth().unwrap_or(doc.depth) == BitDepth::Eight && rgb_or_gray(doc)
 }
 
 /// 8- or 16-bit RGB or Grayscale.
 pub(in crate::cxxqt_object) fn lens_supported(doc: &Document) -> bool {
     matches!(
-        doc.source_depth.unwrap_or(doc.depth),
+        doc.source.depth().unwrap_or(doc.depth),
         BitDepth::Eight | BitDepth::Sixteen
     ) && rgb_or_gray(doc)
 }

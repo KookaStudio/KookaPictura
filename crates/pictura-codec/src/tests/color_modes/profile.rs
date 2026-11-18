@@ -59,8 +59,8 @@ fn cmyk_profile_read_uses_embedded() {
     let doc = read_psd_with_options(&psd, &profile_options(Policy::Preserve)).expect("reads");
     assert_eq!(doc.composite.data.to_vec(), expected_rgb(&[10, 20, 30, 40]));
     assert_eq!(resource_1039(&doc).as_deref(), Some(profile.as_slice()));
-    assert!(doc.document_icc.is_none());
-    assert!(doc.source_icc.is_none());
+    assert!(doc.source.working_profile().is_none());
+    assert!(doc.source.original_profile().is_none());
 }
 
 #[test]
@@ -96,12 +96,15 @@ fn cmyk_profile_policy_convert() {
     let embedded = Profile::coated_cmyk().to_icc();
     let psd = cmyk_pixel_psd(Some(&embedded));
     let doc = read_psd_with_options(&psd, &profile_options(Policy::Convert)).expect("reads");
-    assert_eq!(doc.source_icc.as_deref(), Some(embedded.as_slice()));
+    assert_eq!(
+        doc.source.original_profile().as_deref(),
+        Some(embedded.as_slice())
+    );
     let tagged = resource_1039(&doc).expect("working profile");
     let parsed = Profile::from_icc(&tagged).expect("parses");
     assert_eq!(parsed.description(), Profile::coated_cmyk().description());
     let working = Profile::coated_cmyk();
-    let stored = doc.source_planes.as_ref().expect("retained planes");
+    let stored = doc.source.planes().as_ref().expect("retained planes");
     let expected = pictura_color::convert_space(
         &working,
         &working,
@@ -121,8 +124,8 @@ fn cmyk_profile_policy_off() {
     let psd = cmyk_pixel_psd(Some(&Profile::coated_cmyk().to_icc()));
     let doc = read_psd_with_options(&psd, &profile_options(Policy::Off)).expect("reads");
     assert!(resource_1039(&doc).is_none());
-    assert!(doc.document_icc.is_none());
-    assert!(doc.source_icc.is_none());
+    assert!(doc.source.working_profile().is_none());
+    assert!(doc.source.original_profile().is_none());
     assert_eq!(doc.composite.data.to_vec(), cmyk_to_rgb(&[10, 20, 30, 40]));
 }
 
@@ -134,7 +137,7 @@ fn cmyk_profile_write_keeps_profile() {
     let written = write_psd(&doc).expect("writes");
     let out = read_psd_with_options(&written, &profile_options(Policy::Preserve)).expect("reads");
     assert_eq!(resource_1039(&out).as_deref(), Some(profile.as_slice()));
-    assert_eq!(out.source_planes, doc.source_planes);
+    assert_eq!(out.source.planes(), doc.source.planes());
 }
 
 #[test]
@@ -142,7 +145,11 @@ fn cmyk_profile_write_reencodes() {
     let profile = Profile::coated_cmyk().to_icc();
     let psd = cmyk_pixel_psd(Some(&profile));
     let mut doc = read_psd_with_options(&psd, &profile_options(Policy::Preserve)).expect("reads");
-    doc.composite.data[..3].copy_from_slice(&[200, 50, 100]);
+    doc.composite
+        .edit_data(|data| {
+            data[..3].copy_from_slice(&[200, 50, 100]);
+        })
+        .expect("pixel edit preserves geometry");
     let written = write_psd(&doc).expect("writes");
     let out = read_psd_with_options(&written, &profile_options(Policy::Preserve)).expect("reads");
     for (a, b) in [200u8, 50, 100].iter().zip(&out.composite.data[..3]) {
@@ -165,7 +172,7 @@ fn cmyk_profile_fixture_matches_lcms2() {
     assert_eq!(doc.composite.data.to_vec(), expected);
     for id in 0..3i16 {
         let channel = doc.layers[0]
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == id)
             .expect("layer channel");
@@ -218,7 +225,9 @@ fn convert_normalized_cmyk_keeps_working_profile() {
 #[test]
 fn convert_options_match_lcms2() {
     let mut doc = Document::new(2, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite.data = vec![40, 80, 120, 220, 30, 90].into();
+    doc.composite
+        .replace_data(vec![40, 80, 120, 220, 30, 90].into())
+        .expect("valid composite plane");
     let original = doc.composite.data.to_vec();
     let options = ConversionOptions {
         intent: Intent::Perceptual,
@@ -256,7 +265,9 @@ fn convert_options_match_lcms2() {
 #[test]
 fn convert_srgb_to_adobe_matches_lcms2() {
     let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite.data = vec![30, 140, 210].into();
+    doc.composite
+        .replace_data(vec![30, 140, 210].into())
+        .expect("valid composite plane");
     let options = ConversionOptions {
         dither: false,
         ..ConversionOptions::default()
@@ -309,7 +320,9 @@ fn convert_refuses_non_rgb() {
 
 fn flat_cmyk_document() -> Document {
     let mut doc = Document::new(1, 1, ColorMode::Cmyk, BitDepth::Eight);
-    doc.composite.data = vec![10, 20, 30, 40].into();
+    doc.composite
+        .replace_data(vec![10, 20, 30, 40].into())
+        .expect("valid composite plane");
     doc
 }
 
@@ -352,7 +365,7 @@ fn cmyk_profile_committed_fixture_matches_lcms2() {
     let bytes = std::fs::read(path).expect("profile-bearing fixture");
     let doc = read_psd_with_options(&bytes, &profile_options(Policy::Preserve))
         .expect("profile-bearing fixture reads");
-    let stored = doc.source_planes.as_ref().expect("retained CMYK planes");
+    let stored = doc.source.planes().as_ref().expect("retained CMYK planes");
     let Samples::U8(values) = &stored.samples else {
         panic!("8-bit CMYK store");
     };
@@ -389,7 +402,7 @@ fn native_layer_rgb(doc: &Document) -> Vec<u8> {
     (0i16..3)
         .map(|id| {
             doc.layers[0]
-                .channels
+                .channels()
                 .iter()
                 .find(|c| c.id == id)
                 .expect("layer color channel")
@@ -408,8 +421,8 @@ fn convert_does_not_reinterpret_native_cmyk_layers_as_rgb() {
         .collect();
     let psd = with_icc(layered_psd_depth(16, 4, 4, &composite, &layer), &profile);
     let doc = read_psd_with_options(&psd, &profile_options(Policy::Preserve)).expect("reads");
-    assert_eq!(doc.source_mode, Some(ColorMode::Cmyk));
-    assert_eq!(doc.source_depth, Some(BitDepth::Sixteen));
+    assert_eq!(doc.source.mode(), Some(ColorMode::Cmyk));
+    assert_eq!(doc.source.depth(), Some(BitDepth::Sixteen));
     assert_eq!(
         native_layer_rgb(&doc),
         doc.composite.data[..3].to_vec(),

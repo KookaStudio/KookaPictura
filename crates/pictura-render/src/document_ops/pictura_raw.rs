@@ -27,10 +27,10 @@ pub fn apply_pictura_raw(doc: &mut Document, path: &str, settings: &PicturaRawSe
     let Some(layer) = resolve_path(doc, path) else {
         return false;
     };
-    if layer.is_group || layer.adjustment.is_some() {
+    if layer.is_group() || layer.has_adjustment_content() {
         return false;
     }
-    let Some(so) = layer.smart_object.as_ref() else {
+    let Some(so) = layer.smart_object() else {
         return false;
     };
     if so.kind != SmartObjectKind::Embedded {
@@ -71,9 +71,9 @@ pub fn can_apply_pictura_raw_destructive(doc: &Document, path: &str) -> bool {
     let Some(layer) = resolve_path(doc, path) else {
         return false;
     };
-    if layer.is_group
-        || layer.adjustment.is_some()
-        || layer.smart_object.is_some()
+    if layer.is_group()
+        || layer.has_adjustment_content()
+        || layer.smart_object().is_some()
         || layer_pixel_locked(layer)
         || layer.rect.width() <= 0
         || layer.rect.height() <= 0
@@ -89,7 +89,7 @@ fn has_color_channels(layer: &Layer, color_channels: usize) -> bool {
     let plane = layer.rect.width() as usize * layer.rect.height() as usize;
     let ok = |id: i16| {
         layer
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == id)
             .is_some_and(|c| c.data.len() >= plane)
@@ -143,7 +143,7 @@ fn raster_source(layer: &Layer, color_channels: usize) -> Option<PixelBuffer> {
     let plane = w.checked_mul(h)?;
     let read = |id: i16| -> Option<&[u8]> {
         layer
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == id)
             .map(|c| c.data.as_slice())
@@ -176,7 +176,7 @@ fn write_color_channels(layer: &mut Layer, src: &PixelBuffer, color_channels: us
     let plane = src.width as usize * src.height as usize;
     let planes: i16 = if color_channels <= 1 { 1 } else { 3 };
     for id in 0..planes {
-        let Some(channel) = layer.channels.iter_mut().find(|c| c.id == id) else {
+        let Some(channel) = layer.channels_mut().iter_mut().find(|c| c.id == id) else {
             continue;
         };
         let n = plane.min(channel.data.len());
@@ -189,7 +189,7 @@ fn write_color_channels(layer: &mut Layer, src: &PixelBuffer, color_channels: us
 pub(super) fn write_proxy(layer: &mut Layer, src: &PixelBuffer, color_channels: usize) {
     let plane = src.width as usize * src.height as usize;
     let existing_alpha = layer
-        .channels
+        .channels()
         .iter()
         .find(|c| c.id == -1)
         .map(|c| c.data.to_vec());
@@ -212,7 +212,7 @@ pub(super) fn write_proxy(layer: &mut Layer, src: &PixelBuffer, color_channels: 
         id: -1,
         data: alpha,
     });
-    layer.channels = channels;
+    layer.set_channels(channels);
 }
 
 /// Render a downscaled preview of the layer at `path` with `settings` applied,
@@ -230,7 +230,7 @@ pub fn preview_pictura_raw(
     max_dim: i32,
 ) -> Option<PixelBuffer> {
     let layer = resolve_path(doc, path)?;
-    if layer.is_group || layer.adjustment.is_some() {
+    if layer.is_group() || layer.has_adjustment_content() {
         return None;
     }
     let rect = layer.rect;
@@ -244,8 +244,7 @@ pub fn preview_pictura_raw(
     );
 
     let src = match layer
-        .smart_object
-        .as_ref()
+        .smart_object()
         .filter(|so| so.kind == SmartObjectKind::Embedded)
     {
         // Render the payload scaled to the preview size, not the full layer rect.
@@ -284,7 +283,7 @@ fn raster_preview_buffer(doc: &Document, layer: &Layer, pw: u32, ph: u32) -> Pix
     let color = doc.mode.color_channels() as usize;
     let read = |id: i16| -> Option<&[u8]> {
         layer
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == id)
             .map(|c| c.data.as_ref())
@@ -342,7 +341,7 @@ mod tests {
     }
 
     fn raster_layer(alpha: Option<u8>) -> Layer {
-        let mut layer = Layer {
+        let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "Layer".to_string(),
             rect: PsdRect {
                 top: 0,
@@ -351,15 +350,15 @@ mod tests {
                 right: 2,
             },
             ..Default::default()
-        };
+        });
         for id in 0..3i16 {
-            layer.channels.push(Channel {
+            layer.channels_mut().push(Channel {
                 id,
                 data: vec![128u8; 4].into(),
             });
         }
         if let Some(a) = alpha {
-            layer.channels.push(Channel {
+            layer.channels_mut().push(Channel {
                 id: -1,
                 data: vec![a; 4].into(),
             });
@@ -394,12 +393,14 @@ mod tests {
             bottom: 40,
             right: 80,
         };
-        layer.channels = (0..3)
-            .map(|id| Channel {
-                id,
-                data: vec![10u8; 80 * 40].into(),
-            })
-            .collect();
+        layer.set_channels(
+            (0..3)
+                .map(|id| Channel {
+                    id,
+                    data: vec![10u8; 80 * 40].into(),
+                })
+                .collect(),
+        );
         let mut doc = Document::new(80, 40, ColorMode::Rgb, BitDepth::Eight);
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         let buffer = preview_pictura_raw(&doc, "0", &PicturaRawSettings::default(), 16).unwrap();
@@ -414,7 +415,7 @@ mod tests {
 
     fn channel_of(doc: &Document, id: i16) -> Vec<u8> {
         doc.layers[0]
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == id)
             .map(|c| c.data.to_vec())
@@ -431,7 +432,7 @@ mod tests {
             &rgb_settings()
         ));
         assert_ne!(channel_of(&doc, 0), before, "pixels change");
-        assert!(doc.layers[0].smart_object.is_none(), "no smart object");
+        assert!(doc.layers[0].smart_object().is_none(), "no smart object");
         assert_eq!(channel_of(&doc, -1), vec![200u8; 4], "alpha preserved");
     }
 
@@ -443,24 +444,29 @@ mod tests {
         assert!(!apply_pictura_raw_destructive(&mut missing, "9", &settings));
 
         let mut group = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
-        group.layers = pictura_core::LayerStack::from_layers(vec![Layer {
-            name: "g".into(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 2,
-                right: 2,
-            },
-            is_group: true,
-            ..Default::default()
-        }]);
+        group.layers =
+            pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+                pictura_core::LayerParts {
+                    name: "g".into(),
+                    rect: PsdRect {
+                        top: 0,
+                        left: 0,
+                        bottom: 2,
+                        right: 2,
+                    },
+                    is_group: true,
+                    ..Default::default()
+                },
+            )]);
         assert!(!apply_pictura_raw_destructive(&mut group, "0", &settings));
 
         let mut smart = destructive_doc(None);
-        smart.layers[0].smart_object = Some({
-            let mut so = SmartObject::default();
-            so.kind = SmartObjectKind::Embedded;
-            so
+        pictura_codec::edit_layer(smart.layers[0].as_mut(), |parts| {
+            parts.smart_object = Some({
+                let mut so = SmartObject::default();
+                so.kind = SmartObjectKind::Embedded;
+                so
+            })
         });
         assert!(!apply_pictura_raw_destructive(&mut smart, "0", &settings));
 
@@ -473,9 +479,11 @@ mod tests {
         assert!(!apply_pictura_raw_destructive(&mut cmyk, "0", &settings));
 
         let mut adjustment = destructive_doc(None);
-        adjustment.layers[0].adjustment = Some(AdjustmentData {
-            key: *b"adj?",
-            data: Vec::new().into(),
+        pictura_codec::edit_layer(adjustment.layers[0].as_mut(), |parts| {
+            parts.adjustment = Some(AdjustmentData {
+                key: *b"adj?",
+                data: Vec::new().into(),
+            })
         });
         assert!(!apply_pictura_raw_destructive(
             &mut adjustment,
@@ -486,12 +494,12 @@ mod tests {
         // The shared eligibility check is false for a channel-less layer and for
         // a layer whose color plane is shorter than its rect, matching the op.
         let mut empty = destructive_doc(None);
-        empty.layers[0].channels.clear();
+        empty.layers[0].channels_mut().clear();
         assert!(!can_apply_pictura_raw_destructive(&empty, "0"));
         assert!(!apply_pictura_raw_destructive(&mut empty, "0", &settings));
 
         let mut short = destructive_doc(None);
-        short.layers[0].channels.retain(|c| c.id != 0);
+        short.layers[0].channels_mut().retain(|c| c.id != 0);
         assert!(!can_apply_pictura_raw_destructive(&short, "0"));
     }
 
@@ -506,7 +514,7 @@ mod tests {
         ));
         assert!(doc.layers[0].background, "still the Background");
         assert!(
-            doc.layers[0].channels.iter().all(|c| c.id != -1),
+            doc.layers[0].channels().iter().all(|c| c.id != -1),
             "no alpha added"
         );
     }
@@ -514,20 +522,22 @@ mod tests {
     #[test]
     fn destructive_apply_handles_grayscale() {
         let mut doc = Document::new(2, 2, ColorMode::Grayscale, BitDepth::Eight);
-        doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
-            name: "L".into(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 2,
-                right: 2,
+        doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+            pictura_core::LayerParts {
+                name: "L".into(),
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 2,
+                    right: 2,
+                },
+                channels: vec![Channel {
+                    id: 0,
+                    data: vec![128u8; 4].into(),
+                }],
+                ..Default::default()
             },
-            channels: vec![Channel {
-                id: 0,
-                data: vec![128u8; 4].into(),
-            }],
-            ..Default::default()
-        }]);
+        )]);
         assert!(apply_pictura_raw_destructive(
             &mut doc,
             "0",
@@ -535,7 +545,11 @@ mod tests {
         ));
         assert_ne!(channel_of(&doc, 0), vec![128u8; 4]);
         assert_eq!(
-            doc.layers[0].channels.iter().filter(|c| c.id >= 0).count(),
+            doc.layers[0]
+                .channels()
+                .iter()
+                .filter(|c| c.id >= 0)
+                .count(),
             1,
             "no color channels added"
         );
@@ -552,7 +566,9 @@ mod tests {
             (0..3).map(|id| (id as i16, native.clone())).collect(),
         ));
         let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
-        doc.source_depth = Some(BitDepth::Sixteen);
+        doc.source
+            .set_native(Some(BitDepth::Sixteen), doc.source.planes().clone())
+            .expect("valid source depth");
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
         assert!(apply_pictura_raw_destructive(

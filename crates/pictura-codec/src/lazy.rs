@@ -439,9 +439,9 @@ pub fn read_psd_lazy(
     crate::global_light::resolve_global_light(&mut doc);
     // The Background flag is inferred from the name (the reader's `derive_background`):
     // a bottom layer of that name with transparency is not opaque.
-    let usable = doc.source_icc.is_none()
+    let usable = doc.source.original_profile().is_none()
         && doc.layers.get(0).is_some_and(|bottom| {
-            bottom.background && bottom.visible && !bottom.channels.iter().any(|c| c.id == -1)
+            bottom.background && bottom.visible && !bottom.channels().iter().any(|c| c.id == -1)
         });
     Ok((doc, preview.filter(|_| usable)))
 }

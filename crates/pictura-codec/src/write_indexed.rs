@@ -10,7 +10,7 @@ use crate::write::{composite_retained, layer_retained};
 /// has exactly one each of ids `0`/`1`/`2` of equal length. `None` otherwise.
 fn layer_rgb_planes(layer: &Layer) -> Option<Vec<&[u8]>> {
     let positions: Vec<usize> = layer
-        .channels
+        .channels()
         .iter()
         .enumerate()
         .filter(|(_, c)| c.id >= 0 && c.id < 3)
@@ -19,17 +19,17 @@ fn layer_rgb_planes(layer: &Layer) -> Option<Vec<&[u8]>> {
     if positions.len() != 3 {
         return None;
     }
-    let plane = layer.channels[positions[0]].data.len();
+    let plane = layer.channels()[positions[0]].data.len();
     if positions
         .iter()
-        .any(|&i| layer.channels[i].data.len() != plane)
+        .any(|&i| layer.channels()[i].data.len() != plane)
     {
         return None;
     }
     Some(
         positions
             .iter()
-            .map(|&i| layer.channels[i].data.as_slice())
+            .map(|&i| layer.channels()[i].data.as_slice())
             .collect(),
     )
 }
@@ -40,7 +40,7 @@ fn layer_rgb_planes(layer: &Layer) -> Option<Vec<&[u8]>> {
 fn indexed_layers_unchanged(layers: &[Layer], palette: &[u8; 768], depth: u16) -> bool {
     layers.iter().all(|layer| {
         if layer.is_group() {
-            return indexed_layers_unchanged(&layer.children, palette, depth);
+            return indexed_layers_unchanged(layer.children(), palette, depth);
         }
         let Some(rgb) = layer_rgb_planes(layer) else {
             return true;
@@ -59,19 +59,19 @@ fn indexed_layers_unchanged(layers: &[Layer], palette: &[u8; 768], depth: u16) -
 /// makes this false, so the save falls back to the working RGB rather than
 /// inventing an RGB-to-palette quantization.
 fn writes_indexed_impl(doc: &Document, depth: u16, plane: usize, allow_opaque_rgba: bool) -> bool {
-    if depth != 8 || doc.source_depth.is_some() || doc.source_mode != Some(ColorMode::Indexed) {
+    if depth != 8 || doc.source.depth().is_some() || doc.source.mode() != Some(ColorMode::Indexed) {
         return false;
     }
     let composite_channels = doc.composite.channels;
     if composite_channels != 3 && !(allow_opaque_rgba && composite_channels == 4) {
         return false;
     }
-    let Some(palette) = doc.source_palette else {
+    let Some(palette) = doc.source.palette() else {
         return false;
     };
     // A file with "Maximize Compatibility" off carries no merged composite, so
     // there is no composite plane to check; the layers still must reconstruct.
-    if doc.merged_composite_present {
+    if doc.composite.merged_output() {
         let Some(index) = composite_retained(doc, depth, 0).map(|s| s.to_bytes()) else {
             return false;
         };

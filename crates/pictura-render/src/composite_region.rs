@@ -99,13 +99,13 @@ fn pattern_driven(layer: &pictura_core::Layer) -> bool {
     if !layer.visible {
         return false;
     }
-    if !layer.is_group {
+    if !layer.is_group() {
         let effects = crate::layer_source::decoded_effects(layer);
         if crate::layer_effects::reads_pattern(layer, &effects) {
             return true;
         }
     }
-    layer.children.iter().any(pattern_driven)
+    layer.children().iter().any(pattern_driven)
 }
 
 /// Composite `[x0, x0+rw) × [y0, y0+rh)` a band of rows at a time, the bands in
@@ -409,7 +409,7 @@ fn plain(node: &PlanNode<'_>) -> bool {
             passes.below.is_empty() && passes.fold.is_empty() && passes.above.is_empty()
         })
         && !node.layer.clipping
-        && node.layer.smart_object.is_none()
+        && node.layer.smart_object().is_none()
 }
 
 /// Whether `node` is a plain layer whose every sample in `region` blends at
@@ -471,7 +471,7 @@ mod tests {
     ) -> Layer {
         let rows = (bottom - top) as usize;
         let ids: &[i16] = if alpha { &[0, 1, 2, -1] } else { &[0, 1, 2] };
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "layer".into(),
             rect: PsdRect {
                 top,
@@ -494,7 +494,7 @@ mod tests {
                 })
                 .collect(),
             ..Default::default()
-        }
+        })
     }
 
     fn noise(x: usize, y: usize, c: usize) -> u8 {
@@ -589,7 +589,7 @@ mod tests {
     fn truncated() -> Document {
         let mut doc = covered(true);
         let alpha = doc.layers[2]
-            .channels
+            .channels_mut()
             .iter_mut()
             .find(|c| c.id == -1)
             .expect("an alpha channel");
@@ -625,7 +625,7 @@ mod tests {
             covered(false),
             truncated(),
         ] {
-            let opaque_bottom = doc.layers[0].channels.len() == 3;
+            let opaque_bottom = doc.layers[0].channels().len() == 3;
             assert!(banded(&doc, H));
             let whole = composite_rgba_region(&doc, 0, 0, W, H);
             let whole = whole.data.as_slice();

@@ -130,7 +130,9 @@ pub(crate) fn valid_size(width: u32, height: u32) -> Result<(), pictura_ops::Ops
 /// its composite is then authoritative.
 pub(crate) fn materialize_composite(doc: &mut pictura_core::Document) {
     if !doc.layers.is_empty() && !crate::DocumentComposite::is_stored(doc) {
-        doc.composite = crate::composite_tiled(doc);
+        doc.composite
+            .replace(crate::composite_tiled(doc))
+            .expect("valid composite");
     }
 }
 
@@ -142,7 +144,7 @@ pub(crate) fn materialize_composite(doc: &mut pictura_core::Document) {
 /// the document size (there are then no reliable source pixels).
 pub(crate) fn materialize_merged_composite(doc: &mut pictura_core::Document) {
     if !doc.layers.is_empty()
-        || !doc.merged_composite_present
+        || !doc.composite.merged_output()
         || doc.width == 0
         || doc.height == 0
         || doc.composite.width != doc.width
@@ -179,18 +181,20 @@ pub(crate) fn materialize_merged_composite(doc: &mut pictura_core::Document) {
         id: -1,
         data: alpha.unwrap_or_else(|| vec![255; plane]).into(),
     });
-    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_core::Layer {
-        name: "Background".to_string(),
-        rect: pictura_core::PsdRect {
-            top: 0,
-            left: 0,
-            bottom: doc.height as i32,
-            right: doc.width as i32,
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            name: "Background".to_string(),
+            rect: pictura_core::PsdRect {
+                top: 0,
+                left: 0,
+                bottom: doc.height as i32,
+                right: doc.width as i32,
+            },
+            channels,
+            background: true,
+            ..Default::default()
         },
-        channels,
-        background: true,
-        ..Default::default()
-    }]);
+    )]);
 }
 
 /// Visit each layer depth-first, groups before their children.
@@ -200,7 +204,9 @@ pub(crate) fn for_each_layer(
 ) {
     for layer in layers {
         f(layer);
-        for_each_layer(&mut layer.children, f);
+        if let Some(children) = layer.children_mut() {
+            for_each_layer(children, f);
+        }
     }
 }
 
@@ -240,7 +246,9 @@ mod tests {
         let rgba = vec![200u8; 4 * 4 * 4];
         let mut doc = Document::from_rgba("base", 4, 4, &rgba);
         doc.layers[0].background = true;
-        doc.composite = crate::composite_rgba(&doc);
+        doc.composite
+            .replace(crate::composite_rgba(&doc))
+            .expect("valid composite");
         doc
     }
 
@@ -254,13 +262,15 @@ mod tests {
             data[3 * n + i] = (40 + i * 13) as u8;
         }
         let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-        doc.composite = PixelBuffer {
-            width: 4,
-            height: 4,
-            channels: 4,
-            data: data.into(),
-        };
-        doc.merged_composite_present = true;
+        doc.composite
+            .replace(PixelBuffer {
+                width: 4,
+                height: 4,
+                channels: 4,
+                data: data.into(),
+            })
+            .expect("valid composite");
+        doc.composite.set_merged_output(true);
         doc
     }
 
@@ -312,7 +322,7 @@ mod tests {
         ];
         for (name, op) in ops {
             let mut doc = layered();
-            let before = doc.composite.clone();
+            let before = doc.composite.buffer().clone();
             op(&mut doc);
             assert_eq!(doc.composite, before, "{name} must not composite");
         }
@@ -322,19 +332,21 @@ mod tests {
     fn materializing_a_loaded_merged_document_uses_its_alpha_channel() {
         let mut doc = merged_only();
         let plane = 16;
-        doc.composite = PixelBuffer {
-            width: 4,
-            height: 4,
-            channels: 3,
-            data: doc.composite.data[..3 * plane].to_vec().into(),
-        };
+        doc.composite
+            .replace(PixelBuffer {
+                width: 4,
+                height: 4,
+                channels: 3,
+                data: doc.composite.data[..3 * plane].to_vec().into(),
+            })
+            .expect("valid composite");
         doc.channels = vec![pictura_core::Channel {
             id: 0,
             data: vec![7u8; plane].into(),
         }];
         materialize_merged_composite(&mut doc);
         let alpha = doc.layers[0]
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == -1)
             .expect("alpha channel");
@@ -360,7 +372,7 @@ mod tests {
             let layer = &doc.layers[0];
             assert!(layer.background, "{name}: Background flag");
             let alpha = layer
-                .channels
+                .channels()
                 .iter()
                 .find(|c| c.id == -1)
                 .unwrap_or_else(|| panic!("{name}: alpha channel"));
@@ -368,7 +380,9 @@ mod tests {
                 alpha.data.iter().any(|&v| v < 255),
                 "{name}: alpha values preserved"
             );
-            doc.composite = crate::composite_rgba(&doc);
+            doc.composite
+                .replace(crate::composite_rgba(&doc))
+                .expect("valid composite");
             assert!(
                 doc.composite.data.iter().any(|&v| v != 0),
                 "{name}: pixels survive"

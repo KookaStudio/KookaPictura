@@ -17,8 +17,9 @@ fn preview_ticks(kind: PreviewKind, level: u32, rect: PsdRect) -> (f64, f64, f64
         layers.push(helpers::adjustment_layer("curves", None).expect("curves"));
     }
     doc.layers = pictura_core::LayerStack::from_layers(layers);
-    doc.composite =
-        pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0;
+    doc.composite
+        .replace(pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0)
+        .expect("valid composite");
     let target = if kind == PreviewKind::Adjustment {
         "8".to_string()
     } else {
@@ -57,11 +58,13 @@ fn preview_ticks(kind: PreviewKind, level: u32, rect: PsdRect) -> (f64, f64, f64
                         } else {
                             vec![(0, 0), (128, 96), (255, 255)]
                         };
-                        layer.adjustment = pictura_render::set_curve_points(
-                            layer.adjustment.as_ref().expect("adjustment"),
-                            0,
-                            &points,
-                        );
+                        pictura_codec::edit_layer(layer, |parts| {
+                            parts.adjustment = pictura_render::set_curve_points(
+                                parts.adjustment.as_ref().expect("adjustment"),
+                                0,
+                                &points,
+                            )
+                        });
                     }
                     PreviewKind::Opacity => {
                         layer.opacity = if i % 2 == 0 { 128 } else { 200 };

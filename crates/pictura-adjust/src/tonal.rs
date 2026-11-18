@@ -1,3 +1,4 @@
+use crate::types::levels_lut;
 use pictura_core::PixelBuffer;
 
 use crate::common::{
@@ -14,8 +15,8 @@ use crate::types::{
 // ---------------------------------------------------------------------------
 
 pub(crate) fn levels(p: &LevelsParams, buf: &mut PixelBuffer, n: usize) -> Result<(), AdjustError> {
-    let composite = p.composite().lut()?;
-    let channel = |c: &Option<LevelsChannel>| c.as_ref().map(LevelsChannel::lut).transpose();
+    let composite = levels_lut(&p.composite())?;
+    let channel = |c: &Option<LevelsChannel>| c.as_ref().map(levels_lut).transpose();
     let (red, green, blue) = (channel(&p.red)?, channel(&p.green)?, channel(&p.blue)?);
     {
         let (r, g, b) = planes_mut(buf, n);

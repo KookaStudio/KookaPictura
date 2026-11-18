@@ -19,8 +19,9 @@ fn document() -> Document {
         pixel_layer("Background", W, H, (30, 60, 90)),
         pixel_layer("Layer 1", W, H, (90, 60, 30)),
     ]);
-    doc.composite =
-        pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0;
+    doc.composite
+        .replace(pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0)
+        .expect("valid composite");
     doc
 }
 
@@ -61,7 +62,7 @@ fn retouch_stroke_start_profile() {
     );
     measure!("smudge_sample_all", {
         let rect = doc.layers[0].rect;
-        let sampled = surface_from_composite_rect(&doc.composite, rect);
+        let sampled = surface_from_composite_rect(doc.composite.buffer(), rect);
         Stroke::begin_smudge(&doc, "0", cfg, SmudgeOptions::default(), Some(sampled))
             .expect("smudge")
     });

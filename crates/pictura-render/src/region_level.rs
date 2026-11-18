@@ -2,7 +2,7 @@
 //!
 //! A level-`k` pixel `x` stands for the level-0 columns
 //! `[x·2^k, (x+1)·2^k)` clipped to the document, folded one level at a time
-//! by [`crate::ViewPyramid`]'s rule: premultiply, then the rounded average of
+//! by the reduced-level pixel rule: premultiply, then the rounded average of
 //! each 2×2 block that lies inside the level. So a level-`k` rectangle is the
 //! level-0 rectangle `rect·2^k` composited and halved `k` times, with the
 //! block test made against the whole level's size. The level-0 footprint's
@@ -11,7 +11,7 @@
 //! rebuild sees.
 
 use crate::composite_region::{composite_rgba_region, stream_region};
-use crate::view_pyramid::PyramidLevel;
+use crate::pyramid_level::PyramidLevel;
 use pictura_core::{Document, PixelBuffer, Plane, PsdRect, TILE};
 
 /// The most level-0 pixels one streamed chunk composites.
@@ -144,7 +144,7 @@ pub fn band_rows(width: usize) -> u32 {
 pub type Level0Source<'a> = &'a (dyn Fn(PsdRect) -> PixelBuffer + Sync);
 
 /// `rect` of `level` (in that level's pixels) as premultiplied interleaved
-/// RGBA, byte-identical to the same crop of a [`crate::ViewPyramid`] rebuilt
+/// RGBA, byte-identical to the same crop of a the independent whole-rebuild reference rebuilt
 /// from the whole composite after `convert`. Level 0 is the premultiplied
 /// crop. Anything outside the level is transparent. The level-0 footprint is
 /// composited in chunks, so the working memory is one chunk and the output.
@@ -265,7 +265,7 @@ fn level0(doc: &Document, rect: PsdRect) -> PixelBuffer {
 /// A layerless document's embedded composite, cropped chunk by chunk to
 /// four-channel RGBA (a missing alpha plane is opaque).
 fn stream_layerless(doc: &Document, rect: PsdRect, rows: u32, mut f: impl FnMut(u32, PixelBuffer)) {
-    let source = &doc.composite;
+    let source = doc.composite.buffer();
     let (w, h) = (source.width as usize, source.height as usize);
     let channels = usize::from(source.channels);
     let rw = rect.width().max(0) as usize;

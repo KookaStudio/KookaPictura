@@ -57,7 +57,7 @@ fn opening_a_document_shares_tiles_with_history() {
     );
 
     let before = live.clone();
-    flip(&mut live.layers[0].channels[0].data, w, h, 0, 0x55);
+    flip(&mut live.layers[0].channels_mut()[0].data, w, h, 0, 0x55);
     history.capture_live(&mut live, &selection, &target, "Paint");
 
     let mut selection = None;
@@ -78,7 +78,7 @@ fn a_capture_scans_only_changed_tiles() {
     let target = LayerTarget::default();
     history.capture_live(&mut live, &selection, &target, "Open");
 
-    flip(&mut live.layers[0].channels[0].data, w, h, 0, 0x11);
+    flip(&mut live.layers[0].channels_mut()[0].data, w, h, 0, 0x11);
     history.capture_live(&mut live, &selection, &target, "Paint");
 
     let layer = last_delta(&history)
@@ -103,12 +103,12 @@ fn a_contiguous_write_collapses_tile_sharing() {
     let target = LayerTarget::default();
     history.capture_live(&mut live, &selection, &target, "Open");
 
-    let plane = &mut live.layers[0].channels[0].data;
+    let plane = &mut live.layers[0].channels_mut()[0].data;
     plane.tile(w as usize, h as usize);
     assert_eq!(plane.tile_count(), 3, "600 rows of 256-row tiles");
     // A whole-plane write flattens the plane: nothing is shared any more.
     plane.as_mut_slice()[0] ^= 0x77;
-    let theirs = &history.current.as_ref().expect("current").doc.layers[0].channels[0].data;
+    let theirs = &history.current.as_ref().expect("current").doc.layers[0].channels()[0].data;
     assert!(!plane.shares(theirs));
 
     history.capture_live(&mut live, &selection, &target, "Paint");
@@ -134,13 +134,13 @@ fn a_live_write_forks_only_touched_tiles() {
     let target = LayerTarget::default();
     history.capture_live(&mut live, &selection, &target, "Open");
 
-    let before = history.current.as_ref().unwrap().doc.layers[0].channels[0]
+    let before = history.current.as_ref().unwrap().doc.layers[0].channels()[0]
         .data
         .clone();
-    let plane = &mut live.layers[0].channels[0].data;
+    let plane = &mut live.layers[0].channels_mut()[0].data;
     flip(plane, w, h, TILE, 0x22);
 
-    let current = &history.current.as_ref().unwrap().doc.layers[0].channels[0].data;
+    let current = &history.current.as_ref().unwrap().doc.layers[0].channels()[0].data;
     assert!(
         plane.shares_tile(0, current),
         "the untouched tile stays shared"
@@ -161,7 +161,7 @@ fn a_written_tile_is_not_shared_with_history() {
     assert!(pictura_render::add_layer(&mut live, -1, "added") >= 0);
     history.capture_live(&mut live, &selection, &target, "New Layer");
 
-    let plane = &mut live.layers[0].channels[0].data;
+    let plane = &mut live.layers[0].channels_mut()[0].data;
     flip(plane, w, h, TILE, 0x44);
     let theirs = history_planes(&history);
     assert!(
@@ -180,15 +180,15 @@ fn untouched_tile_keeps_its_arc() {
     let selection = None;
     let target = LayerTarget::default();
     history.capture_live(&mut live, &selection, &target, "Open");
-    let opened = history.current.as_ref().unwrap().doc.layers[0].channels[0]
+    let opened = history.current.as_ref().unwrap().doc.layers[0].channels()[0]
         .data
         .clone();
 
-    flip(&mut live.layers[0].channels[0].data, w, h, 0, 0x33);
+    flip(&mut live.layers[0].channels_mut()[0].data, w, h, 0, 0x33);
     history.capture_live(&mut live, &selection, &target, "Paint");
 
-    let current = &history.current.as_ref().unwrap().doc.layers[0].channels[0].data;
-    let live_plane = &live.layers[0].channels[0].data;
+    let current = &history.current.as_ref().unwrap().doc.layers[0].channels()[0].data;
+    let live_plane = &live.layers[0].channels()[0].data;
     for i in 1..current.tile_count() {
         assert!(
             current.shares_tile(i, &opened),
@@ -212,7 +212,7 @@ fn a_stroke_path_materializes_no_plane_and_scans_only_touched_tiles() {
     let target = LayerTarget::default();
     history.capture_live(&mut live, &selection, &target, "Open");
 
-    flip(&mut live.layers[0].channels[0].data, w, h, 0, 0x66);
+    flip(&mut live.layers[0].channels_mut()[0].data, w, h, 0, 0x66);
 
     pictura_core::reset_materializations();
     history.capture_live(&mut live, &selection, &target, "Paint");

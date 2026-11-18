@@ -85,10 +85,10 @@ pub fn delete_cropped_pixels(doc: &mut Document) -> usize {
     for_each_layer(&mut doc.layers, &mut |layer| {
         let rect = layer.rect;
         let live = layer.is_type()
-            || layer.smart_object.is_some()
+            || layer.smart_object().is_some()
             || layer.vector_mask.is_some()
             || layer.source_channels.is_some();
-        if layer.is_group || layer.channels.is_empty() || live || rect.is_empty() {
+        if layer.is_group() || layer.channels().is_empty() || live || rect.is_empty() {
             return;
         }
         let keep = rect.intersect(canvas);
@@ -96,7 +96,7 @@ pub fn delete_cropped_pixels(doc: &mut Document) -> usize {
             return;
         }
         let keep = keep.unwrap_or_default();
-        for channel in &mut layer.channels {
+        for channel in layer.channels_mut() {
             channel.data = trim_plane(&channel.data, rect, keep).into();
         }
         if let Some(mask) = &mut layer.mask {
@@ -108,7 +108,7 @@ pub fn delete_cropped_pixels(doc: &mut Document) -> usize {
             }
         }
         layer.rect = keep;
-        layer.raw_channels.clear();
+        layer.discard_raw_channels();
         trimmed += 1;
     });
     trimmed
@@ -143,13 +143,15 @@ pub(crate) fn offset_layer(layer: &mut Layer, dx: i32, dy: i32) {
     if let Some(mask) = &mut layer.mask {
         mask.rect = offset_rect(mask.rect, dx, dy);
     }
-    if let Some(tool) = layer.type_tool.as_mut() {
-        if let Some(path) = tool.path.as_mut() {
-            path.subpath.translate(f64::from(dx), f64::from(dy));
+    pictura_codec::edit_layer(layer, |parts| {
+        if let Some(tool) = parts.type_tool.as_mut() {
+            if let Some(path) = tool.path.as_mut() {
+                path.subpath.translate(f64::from(dx), f64::from(dy));
+            }
+            tool.transform[4] += f64::from(dx);
+            tool.transform[5] += f64::from(dy);
         }
-        tool.transform[4] += f64::from(dx);
-        tool.transform[5] += f64::from(dy);
-    }
+    });
     pictura_core::layer_comp::bump_layer_anchor(layer, dx, dy);
 }
 
@@ -262,7 +264,7 @@ pub fn translate_layer_active(doc: &mut Document, dx: i32, dy: i32, gpu_enabled:
     let (composite, _) = crate::composite_request::composite(
         crate::composite_request::CompositeRequest::whole(doc, gpu_enabled),
     );
-    doc.composite = composite;
+    doc.composite.replace(composite).expect("valid composite");
     true
 }
 
@@ -279,7 +281,7 @@ pub fn translate_layer_index(doc: &mut Document, index: usize, dx: i32, dy: i32)
     let Some(layer) = doc.layers.get_mut(index) else {
         return false;
     };
-    if layer.is_group || layer.adjustment.is_some() {
+    if layer.is_group() || layer.has_adjustment_content() {
         return false;
     }
     if layer_move_locked(layer) {
@@ -306,7 +308,7 @@ pub fn translate_layer_path(doc: &mut Document, path: &str, dx: i32, dy: i32) ->
         let (fx, fy) = (f64::from(dx), f64::from(dy));
         return map_shape_layer(doc, path, Some((fx, fy)), |x, y| Some((x + fx, y + fy)));
     }
-    if layer.is_group || layer.adjustment.is_some() {
+    if layer.is_group() || layer.has_adjustment_content() {
         return false;
     }
     if layer_move_locked(layer) {
@@ -319,7 +321,7 @@ fn topmost_pixel_layer(layers: &mut pictura_core::LayerStack) -> Option<&mut Lay
     layers
         .iter_mut()
         .rev()
-        .find(|l| l.adjustment.is_none() && !l.is_group)
+        .find(|l| !l.has_adjustment_content() && !l.is_group())
 }
 
 #[cfg(test)]
@@ -346,7 +348,7 @@ mod tests {
     fn pixel_layer(name: &str, r: PsdRect, mask: Option<LayerMask>) -> Layer {
         let n = (r.width().max(0) * r.height().max(0)) as usize;
         let ramp = |offset: u8| (0..n).map(|i| (i as u8).wrapping_add(offset)).collect();
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: name.into(),
             rect: r,
             blend: BlendMode::Normal,
@@ -380,7 +382,7 @@ mod tests {
             is_group: false,
             background: false,
             ..Default::default()
-        }
+        })
     }
 
     fn sample_doc() -> Document {
@@ -403,7 +405,9 @@ mod tests {
         assert_eq!(doc.channels[0].data, vec![5, 6, 9, 10]);
         assert_eq!(doc.layers[0].rect, rect(-1, -1, 3, 3));
 
-        doc.composite = crate::composite_rgba(&doc);
+        doc.composite
+            .replace(crate::composite_rgba(&doc))
+            .expect("valid composite");
         // The layer rect moved to (-1,-1), so doc (0,0) samples local (1,1) = 5.
         let plane = 4usize;
         assert_eq!(doc.composite.width, 2);
@@ -420,7 +424,9 @@ mod tests {
         assert_eq!((doc.width, doc.height), (1, 1));
         assert_eq!(doc.channels[0].data, vec![15]);
         assert_eq!(doc.layers[0].rect, rect(-3, -3, 1, 1));
-        doc.composite = crate::composite_rgba(&doc);
+        doc.composite
+            .replace(crate::composite_rgba(&doc))
+            .expect("valid composite");
         assert_eq!(doc.composite.data[0], 15, "old (3,3) becomes the origin");
     }
 
@@ -482,7 +488,9 @@ mod tests {
 
         assert!(translate_layer(&mut doc, 1, 1));
         assert_eq!(doc.layers[0].rect, rect(1, 1, 5, 5));
-        doc.composite = crate::composite_rgba(&doc);
+        doc.composite
+            .replace(crate::composite_rgba(&doc))
+            .expect("valid composite");
 
         let plane = 16usize;
         // Doc (1,1) now samples layer local (0,0); doc (2,1) samples local (1,0).
@@ -499,7 +507,10 @@ mod tests {
         let mut oracle = sample_doc();
         assert!(translate_layer_active(&mut active, 1, 1, false));
         assert!(translate_layer(&mut oracle, 1, 1));
-        oracle.composite = crate::composite_rgba(&oracle);
+        oracle
+            .composite
+            .replace(crate::composite_rgba(&oracle))
+            .expect("valid composite");
         assert_eq!(active, oracle);
         assert_eq!(active.composite.data, oracle.composite.data);
     }
@@ -507,7 +518,7 @@ mod tests {
     #[test]
     fn translate_layer_rect_shifts_without_recompositing() {
         let mut doc = sample_doc();
-        let before = doc.composite.clone();
+        let before = doc.composite.buffer().clone();
         let mask = LayerMask {
             rect: full(4, 4),
             default_color: 255,
@@ -527,27 +538,29 @@ mod tests {
     #[test]
     fn translate_layer_rejects_non_pixel_layers() {
         let mut doc = sample_doc();
-        doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
-            name: "adj".into(),
-            rect: full(4, 4),
-            blend: BlendMode::Normal,
-            opacity: 255,
-            fill: 255,
-            lock: LockFlags::default(),
-            color: ColorLabel::None,
-            clipping: false,
-            visible: true,
-            mask: None,
-            adjustment: Some(pictura_core::AdjustmentData {
-                key: *b"nvrt",
-                data: vec![].into(),
-            }),
-            channels: Vec::new(),
-            children: pictura_core::LayerStack::default(),
-            is_group: false,
-            background: false,
-            ..Default::default()
-        }]);
+        doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+            pictura_core::LayerParts {
+                name: "adj".into(),
+                rect: full(4, 4),
+                blend: BlendMode::Normal,
+                opacity: 255,
+                fill: 255,
+                lock: LockFlags::default(),
+                color: ColorLabel::None,
+                clipping: false,
+                visible: true,
+                mask: None,
+                adjustment: Some(pictura_core::AdjustmentData {
+                    key: *b"nvrt",
+                    data: vec![].into(),
+                }),
+                channels: Vec::new(),
+                children: pictura_core::LayerStack::default(),
+                is_group: false,
+                background: false,
+                ..Default::default()
+            },
+        )]);
         let before = doc.clone();
         assert!(!translate_layer(&mut doc, 2, 2));
         assert_eq!(doc, before);
@@ -579,13 +592,17 @@ mod tests {
     #[test]
     fn crop_rebases_the_retained_store() {
         let mut doc = sample_doc();
-        doc.source_depth = Some(BitDepth::Sixteen);
-        doc.source_planes = Some(SourcePlanes {
-            depth: BitDepth::Sixteen,
-            width: 4,
-            height: 4,
-            samples: Samples::U16((0..16).map(|i| i as u16).collect()),
-        });
+        doc.source
+            .set_native(
+                Some(BitDepth::Sixteen),
+                Some(SourcePlanes {
+                    depth: BitDepth::Sixteen,
+                    width: 4,
+                    height: 4,
+                    samples: Samples::U16((0..16).map(|i| i as u16).collect()),
+                }),
+            )
+            .expect("valid native source");
         doc.layers[0].source_channels = Some(SourceChannels {
             depth: BitDepth::Sixteen,
             rect: doc.layers[0].rect,
@@ -595,7 +612,7 @@ mod tests {
 
         assert!(crop_document(&mut doc, 1, 1, 2, 2));
 
-        let store = doc.source_planes.as_ref().unwrap();
+        let store = doc.source.planes().as_ref().unwrap();
         assert_eq!((store.width, store.height), (2, 2));
         assert_eq!(store.samples, Samples::U16(vec![5, 6, 9, 10].into()));
         assert_eq!(
@@ -625,7 +642,9 @@ mod tests {
             },
             None,
         )]);
-        doc.composite = crate::composite_rgba(&doc);
+        doc.composite
+            .replace(crate::composite_rgba(&doc))
+            .expect("valid composite");
 
         let full = Instant::now();
         let _ = crate::composite_request::composite(
@@ -672,8 +691,8 @@ mod tests {
         let kept = &doc.layers[0];
         assert_eq!(kept.rect, full(4, 4));
         // Old pixel (x=2, y=3) is the new top-left: ramp index 3*8+2.
-        assert_eq!(kept.channels[0].data.len(), 16);
-        assert_eq!(kept.channels[0].data[0], 26);
+        assert_eq!(kept.channels()[0].data.len(), 16);
+        assert_eq!(kept.channels()[0].data[0], 26);
         let mask = kept.mask.as_ref().unwrap();
         assert_eq!(
             (mask.rect, mask.data.as_ref().unwrap()[0]),
@@ -685,7 +704,7 @@ mod tests {
             rect(0, 0, 0, 0),
             "an off-canvas layer loses its pixels"
         );
-        assert!(off.channels.iter().all(|c| c.data.is_empty()));
+        assert!(off.channels().iter().all(|c| c.data.is_empty()));
         assert_eq!(delete_cropped_pixels(&mut doc), 0, "nothing left to trim");
     }
 

@@ -4,12 +4,11 @@
 //! canvas shows rather than what the document holds. The document is untouched
 //! until OK filters it at full resolution.
 
-use super::super::helpers_composite::selection_to_mask;
 use super::super::state::{CanvasProxy, PictureViewRust};
 #[cfg(test)]
 use crate::layer_target::LayerTarget;
 use cxx_qt_lib::{QList, QString, QStringList};
-use pictura_core::{Document, LayerMask, PixelBuffer, PsdRect};
+use pictura_core::{Coverage, Document, PixelBuffer, PsdRect};
 
 /// Resolve a stack: each kind takes the next `arity` slots of `params`.
 pub(in crate::cxxqt_object) fn resolve_stack(
@@ -143,7 +142,7 @@ fn proxy_render(
 /// selection as a canvas-sized coverage mask.
 pub(in crate::cxxqt_object) fn pre_preview_sources(
     rust: &PictureViewRust,
-) -> Option<(Document, Option<LayerMask>)> {
+) -> Option<(Document, Option<Coverage>)> {
     let mut doc = rust.session.doc.clone()?;
     // An open section preview has written into the live layer; the work starts
     // from the pixels before it, as the commit does.
@@ -153,11 +152,7 @@ pub(in crate::cxxqt_object) fn pre_preview_sources(
             *layer = original;
         }
     }
-    let mask = rust
-        .session
-        .selection
-        .as_ref()
-        .map(|s| selection_to_mask(s, &doc));
+    let mask = rust.session.selection.as_ref().map(|s| s.coverage());
     Some((doc, mask))
 }
 
@@ -247,7 +242,7 @@ mod tests {
     fn striped() -> PictureViewRust {
         let mut doc = Document::new(128, 128, ColorMode::Rgb, BitDepth::Eight);
         let mut layer = pixel_layer("px", 128, 128, (0, 0, 0));
-        for ch in layer.channels.iter_mut().filter(|c| c.id >= 0) {
+        for ch in layer.channels_mut().iter_mut().filter(|c| c.id >= 0) {
             ch.data = (0..128 * 128)
                 .map(|i| {
                     if (i % 128 + i / 128) % 8 < 4 {
@@ -269,7 +264,7 @@ mod tests {
     }
 
     fn red(rust: &PictureViewRust) -> Vec<u8> {
-        rust.session.doc.as_ref().unwrap().layers[0].channels[0]
+        rust.session.doc.as_ref().unwrap().layers[0].channels()[0]
             .data
             .to_vec()
     }
@@ -300,7 +295,7 @@ mod tests {
         let whole = rect(0, 0, 128, 128);
         let first = canvas_proxy_buffer(&mut rust, &blur, whole, 0.5).expect("proxy");
         // A change the key does not see is not picked up: the copy was reused.
-        rust.session.doc.as_mut().unwrap().layers[0].channels[0]
+        rust.session.doc.as_mut().unwrap().layers[0].channels_mut()[0]
             .data
             .as_mut_slice()
             .fill(0);
@@ -462,9 +457,9 @@ mod tests {
         let mut rust = stacked((255, 0, 0), (0, 0, 255));
         let doc = rust.session.doc.as_mut().unwrap();
         let mut group = pixel_layer("group", 8, 8, (0, 0, 0));
-        group.is_group = true;
-        group.channels.clear();
-        group.children = std::mem::take(&mut doc.layers);
+        group.set_group_children(pictura_core::LayerStack::default());
+        group.channels_mut().clear();
+        group.set_group_children(std::mem::take(&mut doc.layers));
         doc.layers = pictura_core::LayerStack::from_layers(vec![group]);
         rust.layer_target = LayerTarget::only("0/1");
         let shown = pane(&mut rust);

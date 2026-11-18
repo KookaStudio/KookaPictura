@@ -408,7 +408,10 @@ fn tiff_jpeg_limits() {
     let alpha = rgba_doc(&[1, 2, 3, 4], 1, 1);
     assert!(tiff::write(&alpha, &raster(&alpha), &o, None).is_err());
     let mut depth = rgba_doc(&[1, 2, 3, 255], 1, 1);
-    depth.source_depth = Some(BitDepth::Sixteen);
+    depth
+        .source
+        .set_native(Some(BitDepth::Sixteen), depth.source.planes().clone())
+        .expect("valid source depth");
     assert!(tiff::write(&depth, &raster(&depth), &o, None).is_err());
     let cmyk = Document::new(1, 1, ColorMode::Cmyk, BitDepth::Eight);
     assert!(tiff::write(&cmyk, &raster(&cmyk), &o, None).is_err());
@@ -511,19 +514,24 @@ fn tiff_mode_photometric() {
         (ColorMode::Lab, 8),
     ] {
         let mut doc = Document::new(1, 1, mode, BitDepth::Eight);
-        doc.composite = pictura_core::PixelBuffer::new(1, 1, mode.color_channels());
+        doc.composite
+            .replace(pictura_core::PixelBuffer::new(1, 1, mode.color_channels()))
+            .expect("valid composite");
         let bytes = tiff::write(&doc, &raster(&doc), &opts(), None).unwrap();
         assert_eq!(tiff_tag(&bytes, 262).unwrap()[0], tag);
     }
     let mut doc = Document::new(1, 1, ColorMode::Indexed, BitDepth::Eight);
-    doc.source_mode = Some(ColorMode::Indexed);
-    doc.source_palette = Some([0; 768]);
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::Eight,
-        width: 1,
-        height: 1,
-        samples: Samples::U8(vec![0].into()),
-    });
+    doc.source
+        .set_encoding(Some(ColorMode::Indexed), Some([0; 768]))
+        .expect("valid source encoding");
+    doc.source
+        .replace_planes(Some(SourcePlanes {
+            depth: BitDepth::Eight,
+            width: 1,
+            height: 1,
+            samples: Samples::U8(vec![0].into()),
+        }))
+        .expect("valid source planes");
     let bytes = tiff::write(&doc, &raster(&doc), &opts(), None).unwrap();
     assert_eq!(tiff_tag(&bytes, 262).unwrap()[0], 3);
     assert!(tiff_tag(&bytes, 320).is_some());
@@ -599,14 +607,17 @@ fn gif89a_structure() {
 #[test]
 fn gif_indexed_plane() {
     let mut doc = Document::new(1, 1, ColorMode::Indexed, BitDepth::Eight);
-    doc.source_mode = Some(ColorMode::Indexed);
-    doc.source_palette = Some([0; 768]);
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::Eight,
-        width: 1,
-        height: 1,
-        samples: Samples::U8(vec![0].into()),
-    });
+    doc.source
+        .set_encoding(Some(ColorMode::Indexed), Some([0; 768]))
+        .expect("valid source encoding");
+    doc.source
+        .replace_planes(Some(SourcePlanes {
+            depth: BitDepth::Eight,
+            width: 1,
+            height: 1,
+            samples: Samples::U8(vec![0].into()),
+        }))
+        .expect("valid source planes");
     let bytes = write_gif(&raster(&doc), &opts()).unwrap();
     assert!(bytes.starts_with(b"GIF89a"));
 }
@@ -954,7 +965,10 @@ fn save_refuses_invalid() {
     let doc = Document::new(0, 0, ColorMode::Rgb, BitDepth::Eight);
     assert!(Raster::from_document(&doc).is_err());
     let mut short = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
-    short.composite.data = vec![0u8; 3].into();
+    let before = short.clone();
+    assert!(short.composite.replace_data(vec![0u8; 3].into()).is_err());
+    assert_eq!(short, before);
+    short.composite.detach_plane();
     assert!(Raster::from_document(&short).is_err());
 }
 

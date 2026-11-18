@@ -184,10 +184,14 @@ fn preview_blend_honours_the_selection_clip() {
         },
     );
     // The left column is selected; the right column is not.
-    p.clip = Some(pictura_paint::CoverageClip {
-        data: pictura_core::Plane::from(vec![255u8, 0, 255, 0]),
-        width: 2,
-    });
+    p.clip = Some(
+        pictura_core::Coverage::for_canvas(
+            &pictura_core::Plane::from(vec![255u8, 0, 255, 0]),
+            2,
+            2,
+        )
+        .unwrap(),
+    );
 
     let out = preview_blend(&p, rect(2, 2));
     assert_eq!(
@@ -320,7 +324,7 @@ fn a_mask_present_leaves_the_composite_unchanged() {
         data: vec![3u8; 4 * 4 * 4].into(),
     };
     let before = seed_marker.clone();
-    doc.composite = seed_marker;
+    doc.composite.replace(seed_marker).expect("valid composite");
 
     let mask_doc = Document::from_rgba("0", 4, 4, &[0u8; 64]);
     let stroke =

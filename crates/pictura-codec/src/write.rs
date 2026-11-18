@@ -328,7 +328,7 @@ pub(crate) fn native_plane<'a>(
 /// The retained native plane at `index` (composite color channels then document
 /// extras) when the document's store matches the output `depth` and canvas.
 pub(crate) fn composite_retained(doc: &Document, depth: u16, index: usize) -> Option<Samples> {
-    let store = doc.source_planes.as_ref()?;
+    let store = doc.source.planes().as_ref()?;
     if depth_of(Some(store.depth)) != depth
         || store.width != doc.width
         || store.height != doc.height
@@ -521,12 +521,12 @@ fn layer_mask_parts(
     let plane = doc.width as usize * doc.height as usize;
     let bitmap_mode = crate::write_bitmap::writes_bitmap(doc);
     let depth = if bitmap_mode { 1 } else { output_depth(doc)? };
-    let lab_mode = doc.source_mode == Some(ColorMode::Lab)
+    let lab_mode = doc.source.mode() == Some(ColorMode::Lab)
         && doc.composite.channels == 3
-        && (depth != 8 || doc.source_depth.is_none());
-    let cmyk_mode = doc.source_mode == Some(ColorMode::Cmyk)
+        && (depth != 8 || doc.source.depth().is_none());
+    let cmyk_mode = doc.source.mode() == Some(ColorMode::Cmyk)
         && doc.composite.channels == 3
-        && (depth != 8 || doc.source_depth.is_none());
+        && (depth != 8 || doc.source.depth().is_none());
     let indexed_mode = writes_indexed(doc, depth, plane);
     let extra =
         crate::type_path::encode_text_paths(&doc.layers, &doc.layer_section_extra, doc.is_psb);
@@ -631,15 +631,15 @@ fn write_container(
     // retained native planes (see `lab_composite_planes`). At depth 8 a
     // construct with no recorded depth still fires; a 16/32 doc does because it
     // retained a native store, hence `depth != 8`.
-    let lab_mode = doc.source_mode == Some(ColorMode::Lab)
+    let lab_mode = doc.source.mode() == Some(ColorMode::Lab)
         && doc.composite.channels == 3
-        && (depth != 8 || doc.source_depth.is_none());
+        && (depth != 8 || doc.source.depth().is_none());
     // A CMYK source writes header mode CMYK with four color channels: an 8-bit
     // read re-encodes the working RGB, and a 16/32-bit read re-emits the
     // retained native planes.
-    let cmyk_mode = doc.source_mode == Some(ColorMode::Cmyk)
+    let cmyk_mode = doc.source.mode() == Some(ColorMode::Cmyk)
         && doc.composite.channels == 3
-        && (depth != 8 || doc.source_depth.is_none());
+        && (depth != 8 || doc.source.depth().is_none());
     // An 8-bit Indexed source writes header mode Indexed with one index channel
     // and the retained palette, but only while the composite and every pixel
     // layer still expand to the working RGB; an edit falls back to RGB.
@@ -709,7 +709,7 @@ fn write_container(
     out.extend_from_slice(&mode_code.to_be_bytes());
     // An Indexed output re-emits the retained palette (the read consumed
     // `color_mode_data`); every other mode replays the preserved section.
-    let color_mode_data: &[u8] = match (indexed_mode, doc.source_palette.as_ref()) {
+    let color_mode_data: &[u8] = match (indexed_mode, doc.source.palette_ref()) {
         (true, Some(palette)) => palette,
         _ => &doc.color_mode_data,
     };
@@ -744,7 +744,7 @@ fn write_container(
 
     // "Maximize Compatibility" off: the source ended after the layer section, so
     // emit no image-data section; the reader then reports no merged composite.
-    if !doc.merged_composite_present {
+    if !doc.composite.merged_output() {
         if let Some(cache) = cache {
             cache.prune(&used_layer_keys, None);
         }
@@ -754,7 +754,7 @@ fn write_container(
     let width = doc.width as usize;
     let height = doc.height as usize;
     let cacheable_composite = cache.is_some()
-        && doc.source_mode.is_none()
+        && doc.source.mode().is_none()
         && depth == 8
         && !lab_mode
         && !cmyk_mode

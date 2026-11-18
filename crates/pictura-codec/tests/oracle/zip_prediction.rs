@@ -134,7 +134,7 @@ print(",".join(str(int(round(v * 255))) for v in arr[..., 0].flatten()))
         .map(|s| s.parse().unwrap())
         .collect();
     let ours = read_psd(&psd).unwrap();
-    assert_eq!(ours.layers[0].channels[0].data, expected);
+    assert_eq!(ours.layers[0].channels()[0].data, expected);
     assert_eq!(
         got, expected,
         "psd-tools decodes the ZIP-prediction channel"

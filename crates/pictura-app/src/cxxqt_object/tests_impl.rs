@@ -173,7 +173,7 @@ fn visibility_region_profile_4000() {
     let t = std::time::Instant::now();
     let rendered = current_buffer(&full, false);
     DocumentComposite::new(&mut full).store(&rendered);
-    let _ = buffer_to_image(&full.composite);
+    let _ = buffer_to_image(full.composite.buffer());
     ms("full recomposite", t.elapsed());
 
     println!("visibility_profile backend: {backend:?}");
@@ -633,7 +633,7 @@ fn filter_from_kind_maps_family_kinds() {
 fn filter_confines_to_selection_and_skips_adjustment_layer() {
     let mut doc = Document::new(8, 1, ColorMode::Rgb, BitDepth::Eight);
     let mut base = pixel_layer("base", 8, 1, (40, 40, 40));
-    for ch in base.channels.iter_mut().filter(|c| c.id >= 0) {
+    for ch in base.channels_mut().iter_mut().filter(|c| c.id >= 0) {
         ch.data = (0..8).map(|x| if x < 4 { 40u8 } else { 200 }).collect();
     }
     // A topmost adjustment must be skipped in favour of the pixel layer.
@@ -647,11 +647,11 @@ fn filter_confines_to_selection_and_skips_adjustment_layer() {
         height: 1,
         data: vec![255, 255, 255, 0, 0, 0, 0, 0].into(),
     };
-    let mask = selection_to_mask(&selection, &doc);
+    let mask = selection.coverage();
     let layer = active_pixel_layer_mut(&mut doc, Some("0")).expect("pixel layer");
     assert_eq!(layer.name, "base");
     let before = layer
-        .channels
+        .channels()
         .iter()
         .find(|c| c.id == 0)
         .expect("red channel")
@@ -666,7 +666,7 @@ fn filter_confines_to_selection_and_skips_adjustment_layer() {
     )
     .expect("filter applies");
 
-    let after = &layer.channels.iter().find(|c| c.id == 0).unwrap().data;
+    let after = &layer.channels().iter().find(|c| c.id == 0).unwrap().data;
     assert!(
         after[..4].iter().zip(&before[..4]).any(|(a, b)| a != b),
         "selected pixels should change"
@@ -708,7 +708,7 @@ fn parse_anchor_maps_known_and_rejects_unknown() {
 fn document_ops_wire_parsed_values_and_reject_invalid_params() {
     let mut doc = Document::new(2, 1, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![pixel_layer("base", 2, 1, (0, 0, 0))]);
-    doc.layers[0].channels = vec![
+    doc.layers[0].set_channels(vec![
         Channel {
             id: 0,
             data: vec![255, 0].into(),
@@ -725,9 +725,11 @@ fn document_ops_wire_parsed_values_and_reject_invalid_params() {
             id: -1,
             data: vec![255, 255].into(),
         },
-    ];
+    ]);
     pictura_render::flip_document(&mut doc, true).expect("flips");
-    doc.composite = pictura_render::composite_rgba(&doc);
+    doc.composite
+        .replace(pictura_render::composite_rgba(&doc))
+        .expect("valid composite");
     let plane = 2usize;
     assert_eq!(
         [
@@ -803,7 +805,11 @@ fn move_profile(n: u32) {
     };
 
     let mut doc = Document::new(n, n, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite.data.fill(255);
+    doc.composite
+        .edit_data(|data| {
+            data.fill(255);
+        })
+        .expect("pixel edit preserves geometry");
     doc.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("base", n, n, (255, 255, 255)),
         pixel_layer("top", n, n, (200, 100, 50)),
@@ -864,7 +870,7 @@ fn move_profile(n: u32) {
 
     // 4-channel composite, as the app transaction leaves it for the commit path.
     let t = std::time::Instant::now();
-    let _ = buffer_to_image(&moved.composite);
+    let _ = buffer_to_image(moved.composite.buffer());
     ms("buffer_to_image", t.elapsed());
     let t = std::time::Instant::now();
     let mut history = History::default();
@@ -888,7 +894,7 @@ fn move_profile(n: u32) {
     let t = std::time::Instant::now();
     let _ = current_buffer(&doc, true);
     ms("sample_argb(before: composite)", t.elapsed());
-    let cached = buffer_to_image(&doc.composite);
+    let cached = buffer_to_image(doc.composite.buffer());
     let t = std::time::Instant::now();
     let _ = cached.pixel_color(0, 0);
     ms("sample_argb(after: cached)", t.elapsed());
@@ -911,7 +917,7 @@ fn move_profile(n: u32) {
                 let (buffer, _backend) =
                     composite(CompositeRequest::region(&preview, preview_rect, true));
                 preview.layers[index].visible = true;
-                let mut base_buffer = preview.composite.clone();
+                let mut base_buffer = preview.composite.buffer().clone();
                 patch_buffer_region(&mut base_buffer, &buffer, x0, y0);
                 buffer_to_image(&base_buffer)
             }
@@ -927,7 +933,12 @@ fn move_profile(n: u32) {
 
     // begin_move_preview with the moved layer covering only a sub-rectangle.
     let mut partial = Document::new(n, n, ColorMode::Rgb, BitDepth::Eight);
-    partial.composite.data.fill(255);
+    partial
+        .composite
+        .edit_data(|data| {
+            data.fill(255);
+        })
+        .expect("pixel edit preserves geometry");
     partial.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("base", n, n, (255, 255, 255)),
         pixel_layer("top", 512, 512, (200, 100, 50)),
@@ -953,7 +964,7 @@ fn move_profile(n: u32) {
             let request = CompositeRequest::region(&partial_preview, partial_rect, true);
             let (buffer, _backend) = composite(request);
             partial_preview.layers[pindex].visible = true;
-            let mut base_buffer = partial_preview.composite.clone();
+            let mut base_buffer = partial_preview.composite.buffer().clone();
             patch_buffer_region(&mut base_buffer, &buffer, x0, y0);
             buffer_to_image(&base_buffer)
         }
@@ -999,7 +1010,7 @@ fn move_profile(n: u32) {
         },
         "Move Layer",
     );
-    let _ = buffer_to_image(&committed.composite);
+    let _ = buffer_to_image(committed.composite.buffer());
     ms("commit_move(bridge-equivalent)", t.elapsed());
     assert!(committed_ok);
 
@@ -1022,7 +1033,7 @@ fn move_profile_1024() {
 /// Prints `m34 undo_profile ...` lines and no pass/fail budget, because the
 /// reference machine is not pinned. The real `PictureView::undo` is a
 /// C++-constructed QObject, so this replays the exact display body
-/// (`buffer_to_image(&snapshot.doc.composite)`) against the same helpers.
+/// (`buffer_to_image(snapshot.doc.composite.buffer())`) against the same helpers.
 #[test]
 #[ignore = "4000x4000 undo profile; run explicitly with --ignored --nocapture"]
 fn undo_profile_4000() {
@@ -1053,7 +1064,7 @@ fn undo_profile_4000() {
 
     // New undo display path: the snapshot already holds the composite.
     let t = std::time::Instant::now();
-    let _ = buffer_to_image(&doc.composite);
+    let _ = buffer_to_image(doc.composite.buffer());
     ms("new buffer_to_image(snapshot.composite)", t.elapsed());
     // The remaining per-snapshot undo cost: the whole-document clone.
     let t = std::time::Instant::now();
@@ -1070,129 +1081,5 @@ fn undo_profile_4000() {
 
     println!("undo_profile composite backend: {backend:?}");
 }
-/// The bridge QObject is C++-constructed (cxx-qt 0.10 exposes no Rust
-/// constructor), so this replays the public `convert_profile(1)` + `undo()`
-/// sequence against the same codec and `History` and checks the restored bytes.
-#[test]
-fn convert_profile_is_byte_reversible_through_history() {
-    let mut doc = Document::new(2, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite.data = vec![200, 10, 100, 20, 50, 30].into();
-    doc.layers =
-        pictura_core::LayerStack::from_layers(vec![pixel_layer("base", 2, 1, (200, 100, 50))]);
-    let original = doc.clone();
-    let mut history = History::default();
-    history.capture(
-        Snapshot {
-            quick_mask: None,
-            doc: doc.clone(),
-            selection: None,
-        },
-        "Open",
-    );
-    assert!(pictura_codec::convert_document(
-        &mut doc,
-        &pictura_codec::Profile::adobe_rgb()
-    ));
-    let adobe = Some(pictura_codec::Profile::adobe_rgb().to_icc().into());
-    assert_eq!(doc.document_icc, adobe);
-    assert_ne!(
-        doc.composite, original.composite,
-        "convert changes the composite"
-    );
-    assert_ne!(
-        doc.layers, original.layers,
-        "convert changes the layer pixels"
-    );
-    history.capture(
-        Snapshot {
-            quick_mask: None,
-            doc: doc.clone(),
-            selection: None,
-        },
-        "Convert to Profile",
-    );
 
-    assert_eq!(history.depth(), 1, "exactly one undo step");
-    let restored = history.undo().expect("one undo step");
-    assert_eq!(restored.doc.composite, original.composite);
-    assert_eq!(restored.doc.layers, original.layers);
-    assert_eq!(restored.doc.document_icc, original.document_icc);
-    assert!(restored.doc.document_icc.is_none());
-}
-/// Bridge-equivalent byte-level check for `assign_profile(1)` + `undo()`:
-/// assign leaves every pixel byte untouched, then undo restores the working
-/// profile and the image-resource section exactly.
-#[test]
-fn assign_profile_retags_and_is_reversible_through_history() {
-    let mut doc = Document::new(2, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite.data = vec![200, 10, 100, 20, 50, 30].into();
-    doc.layers =
-        pictura_core::LayerStack::from_layers(vec![pixel_layer("base", 2, 1, (200, 100, 50))]);
-    let original = doc.clone();
-    let mut history = History::default();
-    history.capture(
-        Snapshot {
-            quick_mask: None,
-            doc: doc.clone(),
-            selection: None,
-        },
-        "Open",
-    );
-    pictura_codec::assign_document_profile(&mut doc, &pictura_codec::Profile::adobe_rgb());
-    let adobe = Some(pictura_codec::Profile::adobe_rgb().to_icc().into());
-    assert_eq!(
-        doc.composite, original.composite,
-        "assign leaves the composite bytes untouched"
-    );
-    assert_eq!(
-        doc.layers, original.layers,
-        "assign leaves the layer bytes untouched"
-    );
-    assert_eq!(doc.document_icc, adobe);
-    assert_ne!(
-        doc.image_resources, original.image_resources,
-        "assign writes resource 1039"
-    );
-    history.capture(
-        Snapshot {
-            quick_mask: None,
-            doc: doc.clone(),
-            selection: None,
-        },
-        "Assign Profile",
-    );
-
-    assert_eq!(history.depth(), 1, "exactly one undo step");
-    let restored = history.undo().expect("one undo step");
-    assert_eq!(restored.doc.composite, original.composite);
-    assert_eq!(restored.doc.layers, original.layers);
-    assert_eq!(restored.doc.document_icc, original.document_icc);
-    assert_eq!(restored.doc.image_resources, original.image_resources);
-}
-
-/// The first frame `open` builds (and `File > Revert`, which reuses `open`) must
-/// show the working-space conversion, not the raw embedded-space composite: an
-/// Adobe RGB document displays through `buffer_to_srgb`, so its first frame
-/// differs from the untagged one.
-#[test]
-fn open_first_frame_converts_the_document_profile() {
-    let mut doc = Document::new(2, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite.data = vec![200, 10, 100, 20, 50, 30].into();
-    doc.layers =
-        pictura_core::LayerStack::from_layers(vec![pixel_layer("base", 2, 1, (200, 100, 50))]);
-    doc.document_icc = Some(pictura_codec::Profile::adobe_rgb().to_icc().into());
-
-    let rendered = current_buffer(&doc, false);
-    let converted = pictura_codec::buffer_to_srgb(&doc, &rendered);
-    assert_ne!(
-        *converted, rendered,
-        "an Adobe RGB document must be converted for display"
-    );
-    let first_frame = buffer_to_image(&converted);
-    let raw_frame = buffer_to_image(&rendered);
-    assert_ne!(
-        first_frame.pixel_color(0, 0),
-        raw_frame.pixel_color(0, 0),
-        "the displayed first frame must not be the embedded-space pixels"
-    );
-}
+mod document_profile;

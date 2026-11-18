@@ -29,7 +29,7 @@ fn rect(w: u32, h: u32, x: i32, y: i32) -> PsdRect {
 
 fn pixel(name: &str, rect: PsdRect, rgb: (u8, u8, u8), alpha: u8, blend: BlendMode) -> Layer {
     let n = (rect.width() * rect.height()) as usize;
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect,
         blend,
@@ -52,7 +52,7 @@ fn pixel(name: &str, rect: PsdRect, rgb: (u8, u8, u8), alpha: u8, blend: BlendMo
             })
             .to_vec(),
         ..Default::default()
-    }
+    })
 }
 
 fn curves() -> AdjustmentData {
@@ -63,12 +63,12 @@ fn curves() -> AdjustmentData {
     fixture
         .layers
         .iter()
-        .find_map(|layer| layer.adjustment.clone())
+        .find_map(|layer| layer.adjustment().cloned())
         .expect("curves fixture has an adjustment layer")
 }
 
 fn adjustment(name: &str, data: AdjustmentData) -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: rect(0, 0, 0, 0),
         blend: BlendMode::Normal,
@@ -78,7 +78,7 @@ fn adjustment(name: &str, data: AdjustmentData) -> Layer {
         adjustment: Some(data),
         channels: Vec::new(),
         ..Default::default()
-    }
+    })
 }
 
 fn scene() -> Document {

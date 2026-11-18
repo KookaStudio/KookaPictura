@@ -204,7 +204,7 @@ impl qobject::PictureView {
                     return false;
                 }
                 (
-                    selection.data.clone(),
+                    selection.coverage(),
                     selection.translate(dx, dy),
                     0,
                     move_dirty_rect(selection, dx, dy),
@@ -256,7 +256,7 @@ impl qobject::PictureView {
             }
             (
                 path.to_string(),
-                selection_to_mask(&selection, doc),
+                selection.coverage(),
                 selection.translate(dx, dy),
                 move_dirty_rect(&selection, dx, dy),
             )
@@ -1139,7 +1139,7 @@ fn selection_duplicate_preview(
 ) -> Option<(QImage, QImage, i32)> {
     pictura_render::resolve_path(doc, path)?;
     let copy_path = layer_above(path)?;
-    let mask = selection_to_mask(selection, doc);
+    let mask = selection.coverage();
     let mut preview = doc.clone();
     if !pictura_render::move_selection_content(&mut preview, path, &mask, 0, 0, true) {
         return None;

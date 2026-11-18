@@ -4,7 +4,7 @@
 //! operation on flat copies of those planes byte for byte.
 
 use super::*;
-use pictura_core::{assert_no_materialization, Plane};
+use pictura_core::{assert_no_materialization, Coverage, Plane};
 
 const W: u32 = 24;
 const H: u32 = 200;
@@ -18,7 +18,7 @@ fn varied(n: usize, seed: usize) -> Vec<u8> {
 fn varied_layer(r: PsdRect) -> Layer {
     let (w, h) = (r.width() as usize, r.height() as usize);
     let mut layer = solid("varied", r, (0, 0, 0), 255, BlendMode::Normal, 255);
-    for (k, channel) in layer.channels.iter_mut().enumerate() {
+    for (k, channel) in layer.channels_mut().iter_mut().enumerate() {
         let mut data = varied(w * h, k);
         if channel.id == -1 {
             for (i, a) in data.iter_mut().enumerate() {
@@ -67,7 +67,7 @@ fn diverged(d: Document) -> (Document, Vec<Plane<u8>>, Document) {
     let mut held = Vec::new();
     for layer in banded.layers.iter_mut() {
         let w = layer.rect.width() as usize;
-        for channel in &mut layer.channels {
+        for channel in layer.channels_mut() {
             diverge_plane(&mut channel.data, w, &mut held);
         }
         if let Some(mask) = layer.mask.as_mut() {
@@ -79,7 +79,7 @@ fn diverged(d: Document) -> (Document, Vec<Plane<u8>>, Document) {
     }
     let mut flat = banded.clone();
     for layer in flat.layers.iter_mut() {
-        for channel in &mut layer.channels {
+        for channel in layer.channels_mut() {
             channel.data = channel.data.as_slice().to_vec().into();
         }
         if let Some(data) = layer.mask.as_mut().and_then(|m| m.data.as_mut()) {
@@ -93,7 +93,7 @@ fn assert_same_layers(a: &Document, b: &Document) {
     assert_eq!(a.layers.len(), b.layers.len());
     for (x, y) in a.layers.iter().zip(b.layers.iter()) {
         assert_eq!(x.rect, y.rect, "{}", x.name);
-        for (cx, cy) in x.channels.iter().zip(&y.channels) {
+        for (cx, cy) in x.channels().iter().zip(y.channels()) {
             assert_eq!(cx.id, cy.id);
             assert!(cx.data == cy.data, "{} channel {}", x.name, cx.id);
         }
@@ -147,12 +147,7 @@ fn moving_selected_content_merges_into_diverged_rows_in_place() {
             coverage[y * W as usize + x] = 255;
         }
     }
-    let selection = LayerMask {
-        rect: full(W, H),
-        default_color: 0,
-        data: Some(coverage.into()),
-        ..Default::default()
-    };
+    let selection = Coverage::new(full(W, H), coverage.into(), 0).unwrap();
     let moved = assert_no_materialization(|| {
         crate::move_selection_content(&mut banded, "1", &selection, 2, 70, false)
     });

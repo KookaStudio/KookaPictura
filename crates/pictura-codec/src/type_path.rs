@@ -22,44 +22,72 @@ use crate::engine_data::{as_list, get, parse_engine_data, EngineValue};
 use crate::engine_data_encode::encode_engine_data;
 
 /// Every type tool in document order (bottom-first, depth-first), which is the
-/// order `TextFrameSet` entries use.
+/// order `TextFrameSet` entries use. Losing type definitions retain entries.
 fn text_tools<'a>(layers: &'a LayerStack, out: &mut Vec<&'a TypeTool>) {
     for layer in layers.iter() {
-        if let Some(tool) = layer.type_tool.as_ref() {
+        if let Some(tool) = layer.type_tool().or_else(|| layer.fallback_type_tool()) {
             out.push(tool);
         }
-        if !layer.children.is_empty() {
-            text_tools(&layer.children, out);
-        }
+        text_tools(layer.children(), out);
     }
 }
 
-fn assign_paths(layers: &mut LayerStack, paths: &mut impl Iterator<Item = Option<TextPath>>) {
+fn assign_paths(
+    layers: &mut LayerStack,
+    paths: &mut impl Iterator<Item = Option<TextPath>>,
+    budget: &mut crate::budget::DecodeBudget,
+) -> Result<(), crate::PsdError> {
     for layer in layers.iter_mut() {
-        if let Some(tool) = layer.type_tool.as_mut() {
-            tool.path = paths.next().flatten();
+        if layer
+            .type_tool()
+            .or_else(|| layer.fallback_type_tool())
+            .is_some()
+        {
+            crate::stage_content::edit_layer_staged(layer, budget, |parts| {
+                parts.type_tool.as_mut().expect("checked").path = paths.next().flatten();
+                Ok(())
+            })?;
         }
-        assign_paths(&mut layer.children, paths);
+        if let Some(children) = layer.children_mut() {
+            assign_paths(children, paths, budget)?;
+        }
     }
+    Ok(())
 }
 
 /// Apply the `Txt2` paths to the document's text layers, in text-layer order.
+#[cfg(test)]
 pub(crate) fn resolve_text_paths(layers: &mut LayerStack, extra: &[u8], is_psb: bool) {
+    resolve_text_paths_within(
+        layers,
+        extra,
+        is_psb,
+        &mut crate::budget::DecodeBudget::default(),
+    )
+    .expect("text paths fit the default budget");
+}
+
+pub(crate) fn resolve_text_paths_within(
+    layers: &mut LayerStack,
+    extra: &[u8],
+    is_psb: bool,
+    budget: &mut crate::budget::DecodeBudget,
+) -> Result<(), crate::PsdError> {
     let Some(data) = find_block(extra, b"Txt2", is_psb) else {
-        return;
+        return Ok(());
     };
     let Ok(root) = parse_engine_data(data) else {
-        return;
+        return Ok(());
     };
     let Some(resource) = resource_dict(&root) else {
-        return;
+        return Ok(());
     };
     let Some(frame_set) = get(resource, "8").or_else(|| get(resource, "TextFrameSet")) else {
-        return;
+        return Ok(());
     };
     let entries = frame_set_entries(frame_set);
     let mut paths = entries.iter().map(entry_path);
-    assign_paths(layers, &mut paths);
+    assign_paths(layers, &mut paths, budget)
 }
 
 /// Rewrite the `Txt2` block's `TextFrameSet` from the layers' paths, preserving
@@ -475,29 +503,29 @@ mod tests {
             start: 0.0,
         };
         let layers = doc_with(vec![
-            Layer {
+            crate::layer_from_parts(pictura_core::LayerParts {
                 type_tool: Some(tool(Some(on_path.clone()))),
                 ..Default::default()
-            },
-            Layer {
+            }),
+            crate::layer_from_parts(pictura_core::LayerParts {
                 type_tool: Some(tool(Some(area.clone()))),
                 ..Default::default()
-            },
+            }),
         ]);
         let extra = encode_text_paths(&layers, &[], false);
         let mut read = doc_with(vec![
-            Layer {
+            crate::layer_from_parts(pictura_core::LayerParts {
                 type_tool: Some(tool(None)),
                 ..Default::default()
-            },
-            Layer {
+            }),
+            crate::layer_from_parts(pictura_core::LayerParts {
                 type_tool: Some(tool(None)),
                 ..Default::default()
-            },
+            }),
         ]);
         resolve_text_paths(&mut read, &extra, false);
-        let first = read[0].type_tool.as_ref().unwrap().path.as_ref().unwrap();
-        let second = read[1].type_tool.as_ref().unwrap().path.as_ref().unwrap();
+        let first = read[0].type_tool().unwrap().path.as_ref().unwrap();
+        let second = read[1].type_tool().unwrap().path.as_ref().unwrap();
         assert_eq!(first.kind, TextPathKind::OnPath);
         assert!((first.start - 50.0).abs() < 0.5);
         assert_eq!(second.kind, TextPathKind::Area);
@@ -525,7 +553,7 @@ mod tests {
         };
         let mut doc = Document::new(200, 40, ColorMode::Rgb, BitDepth::Eight);
         doc.layers
-            .push(Layer {
+            .push(crate::layer_from_parts(pictura_core::LayerParts {
                 name: "Hi".into(),
                 rect,
                 channels: [0, 1, 2, -1]
@@ -541,13 +569,12 @@ mod tests {
                 }],
                 type_tool: Some(tool),
                 ..Default::default()
-            })
+            }))
             .expect("push the type layer");
         let bytes = crate::write_psd(&doc).expect("writes");
         let back = crate::read_psd(&bytes).expect("reads");
         let restored = back.layers[0]
-            .type_tool
-            .as_ref()
+            .type_tool()
             .and_then(|tool| tool.path.as_ref())
             .expect("the path survives");
         assert_eq!(restored.kind, TextPathKind::OnPath);
@@ -566,21 +593,160 @@ mod tests {
         let mut block = Vec::new();
         write_block(&mut block, b"Txt2", engine, false);
         let mut layers = doc_with(vec![
-            Layer {
+            crate::layer_from_parts(pictura_core::LayerParts {
                 type_tool: Some(tool(None)),
                 ..Default::default()
-            },
-            Layer {
+            }),
+            crate::layer_from_parts(pictura_core::LayerParts {
                 type_tool: Some(tool(None)),
                 ..Default::default()
-            },
+            }),
         ]);
         resolve_text_paths(&mut layers, &block, false);
-        let first = layers[0].type_tool.as_ref().unwrap().path.as_ref().unwrap();
+        let first = layers[0].type_tool().unwrap().path.as_ref().unwrap();
         assert_eq!(first.kind, TextPathKind::OnPath);
         assert!((first.start - 15.0).abs() < 0.5);
-        let second = layers[1].type_tool.as_ref().unwrap().path.as_ref().unwrap();
+        let second = layers[1].type_tool().unwrap().path.as_ref().unwrap();
         assert_eq!(second.kind, TextPathKind::Area);
         assert!(second.subpath.closed);
+    }
+    #[test]
+    fn preserved_type_paths_keep_serialized_order() {
+        use pictura_core::{
+            BitDepth, ColorMode, Document, Layer, LayerBlock, LayerKind, LayerParts, SmartObject,
+            SmartObjectKind, TypeSpec,
+        };
+        let paths: Vec<_> = [10.0, 40.0, 70.0, 100.0, 130.0]
+            .into_iter()
+            .map(|start| TextPath {
+                kind: TextPathKind::OnPath,
+                subpath: rect_subpath(200.0, 0.0, false),
+                start,
+            })
+            .collect();
+        let tools: Vec<_> = paths
+            .iter()
+            .enumerate()
+            .map(|(i, path)| {
+                let mut spec = TypeSpec::new(format!("text {i}"), "Liberation Sans", 12.0);
+                spec.path = Some(path.clone());
+                crate::author_type_tool(&spec, [0.0, -12.0, 100.0, 10.0], None, None)
+            })
+            .collect();
+        let raw: Vec<_> = tools
+            .iter()
+            .map(|tool| {
+                let mut bytes = crate::encode_type_tool(tool);
+                bytes.resize(bytes.len() + (bytes.len() & 1), 0);
+                bytes
+            })
+            .collect();
+        let all_text = LayerStack::from_layers(
+            tools
+                .iter()
+                .map(|tool| {
+                    crate::layer_from_parts(LayerParts {
+                        type_tool: Some(tool.clone()),
+                        ..Default::default()
+                    })
+                })
+                .collect(),
+        );
+        let global = encode_text_paths(&all_text, &[], false);
+        let payload =
+            crate::write_psd(&Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight)).unwrap();
+        let candidate = |i: usize| {
+            let mut empty = tools[i].clone();
+            empty.path = None;
+            LayerParts {
+                name: format!("text {i}"),
+                type_tool: Some(empty),
+                extra_blocks: vec![LayerBlock {
+                    key: *b"TySh",
+                    data: raw[i].clone().into(),
+                }],
+                ..Default::default()
+            }
+        };
+        let mut layers = Vec::new();
+        for i in [0, 2, 3, 4] {
+            let mut parts = candidate(i);
+            match i {
+                0 => {
+                    parts.is_group = true;
+                    parts.children =
+                        LayerStack::from_layers(vec![crate::layer_from_parts(candidate(1))]);
+                }
+                2 => {
+                    let mut so = SmartObject::default().with_payload(payload.clone());
+                    so.kind = SmartObjectKind::Embedded;
+                    parts.smart_object = Some(so);
+                }
+                3 => parts.adjustment = Some(crate::encode_solid_color_fill([10, 20, 30])),
+                _ => {}
+            }
+            layers.push(crate::layer_from_parts(parts));
+        }
+        let mut layers = LayerStack::from_layers(layers);
+        resolve_text_paths(&mut layers, &global, false);
+        let assert_paths = |layers: &LayerStack| {
+            let ordered = [
+                &layers[0],
+                &layers[0].children()[0],
+                &layers[1],
+                &layers[2],
+                &layers[3],
+            ];
+            for (i, layer) in ordered.into_iter().enumerate() {
+                let restored = layer
+                    .type_tool()
+                    .or_else(|| layer.fallback_type_tool())
+                    .unwrap()
+                    .path
+                    .as_ref()
+                    .unwrap();
+                assert_eq!(restored.kind, paths[i].kind);
+                assert!(
+                    (restored.start - paths[i].start).abs() < 0.5,
+                    "path entry {i} shifted"
+                );
+                assert_eq!(
+                    layer.extra_block(b"TySh").unwrap().data.as_slice(),
+                    raw[i].as_slice()
+                );
+            }
+        };
+        assert_paths(&layers);
+        let mut doc = Document::new(200, 40, ColorMode::Rgb, BitDepth::Eight);
+        doc.layers = layers;
+        doc.layer_section_extra = global.into();
+        for bytes in [
+            crate::write_psd(&doc).unwrap(),
+            crate::write_psb(&doc).unwrap(),
+        ] {
+            let first = crate::read_psd(&bytes).unwrap();
+            assert_eq!(
+                first.layers.iter().map(Layer::kind).collect::<Vec<_>>(),
+                [
+                    LayerKind::Group,
+                    LayerKind::SmartObject,
+                    LayerKind::Fill,
+                    LayerKind::Text,
+                ]
+            );
+            assert_paths(&first.layers);
+            let again = if first.is_psb {
+                crate::write_psb(&first)
+            } else {
+                crate::write_psd(&first)
+            }
+            .unwrap();
+            let second = crate::read_psd(&again).unwrap();
+            assert_paths(&second.layers);
+            assert_eq!(
+                find_block(&first.layer_section_extra, b"Txt2", first.is_psb),
+                find_block(&second.layer_section_extra, b"Txt2", second.is_psb),
+            );
+        }
     }
 }

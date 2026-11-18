@@ -14,7 +14,7 @@
 
 use pictura_adjust::{tone_map, ExposureGamma, HdrToneMap};
 use pictura_core::{
-    BitDepth, Channel, ColorMode, Document, Layer, LayerStack, PixelBuffer, PsdRect, Samples,
+    BitDepth, Channel, ColorMode, Document, LayerStack, PixelBuffer, PsdRect, Samples,
     SourceChannels, SourcePlanes,
 };
 use pictura_ops::OpsError;
@@ -35,12 +35,12 @@ pub fn convert_depth(
     out: BitDepth,
     method: HdrToneMap,
 ) -> Result<(), OpsError> {
-    if doc.source_depth != Some(BitDepth::ThirtyTwo) {
+    if doc.source.depth() != Some(BitDepth::ThirtyTwo) {
         return Err(OpsError::InvalidParams(
             "HDR conversion needs a 32-bit source".into(),
         ));
     }
-    if doc.source_mode.is_some() {
+    if doc.source.mode().is_some() {
         return Err(OpsError::Unsupported(
             "HDR conversion is limited to a native Grayscale/RGB source".into(),
         ));
@@ -110,14 +110,17 @@ pub fn convert_depth(
     // The working model stays 8-bit (`write_psd` rejects a non-8 working depth);
     // the converted store and `source_depth` are what a save re-emits.
     doc.depth = BitDepth::Eight;
-    doc.source_depth = store.as_ref().map(|_| BitDepth::Sixteen);
-    doc.source_planes = store;
-    doc.composite = PixelBuffer {
-        width: doc.width,
-        height: doc.height,
-        channels: color_channels as u8,
-        data: composite.into(),
-    };
+    doc.source
+        .set_native(store.as_ref().map(|_| BitDepth::Sixteen), store)
+        .expect("valid source depth");
+    doc.composite
+        .replace(PixelBuffer {
+            width: doc.width,
+            height: doc.height,
+            channels: color_channels as u8,
+            data: composite.into(),
+        })
+        .expect("valid composite");
     drop_layer_source(&mut doc.layers);
     flatten_converted(doc, display_alpha.as_deref());
     Ok(())
@@ -155,7 +158,7 @@ fn flatten_converted(doc: &mut Document, display_alpha: Option<&[u8]>) {
         bottom: doc.height as i32,
         right: doc.width as i32,
     };
-    let source_channels = doc.source_planes.as_ref().and_then(|store| {
+    let source_channels = doc.source.planes().as_ref().and_then(|store| {
         let mut planes: Vec<(i16, Samples)> = (0..colors)
             .filter_map(|c| {
                 store
@@ -176,14 +179,16 @@ fn flatten_converted(doc: &mut Document, display_alpha: Option<&[u8]>) {
         planes.push((-1, native_alpha));
         Some(SourceChannels::new(store.depth, rect, planes))
     });
-    doc.layers = LayerStack::from_layers(vec![Layer {
-        name: "Background".to_string(),
-        rect,
-        channels,
-        source_channels,
-        background: true,
-        ..Default::default()
-    }]);
+    doc.layers = LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            name: "Background".to_string(),
+            rect,
+            channels,
+            source_channels,
+            background: true,
+            ..Default::default()
+        },
+    )]);
 }
 
 /// Convert a 32-bit Grayscale/RGB `doc` with the Exposure & Gamma method.
@@ -204,7 +209,7 @@ pub fn convert_depth_exposure_gamma(
 /// stale store falls back to the current composite. A document with layers is
 /// recomposited at native depth; a layerless document reads its composite.
 fn source_samples(doc: &Document, color_len: usize) -> Result<Vec<f32>, OpsError> {
-    if let Some(Samples::F32(v)) = doc.source_planes.as_ref().map(|s| &s.samples) {
+    if let Some(Samples::F32(v)) = doc.source.planes().as_ref().map(|s| &s.samples) {
         if v.len() >= color_len && store_matches_composite(doc, &v[..color_len]) {
             return Ok(v.to_vec());
         }
@@ -265,6 +270,8 @@ fn current_composite_samples(doc: &Document, color_len: usize) -> Result<Vec<f32
 fn drop_layer_source(layers: &mut pictura_core::LayerStack) {
     for layer in layers {
         layer.source_channels = None;
-        drop_layer_source(&mut layer.children);
+        if let Some(children) = layer.children_mut() {
+            drop_layer_source(children);
+        }
     }
 }

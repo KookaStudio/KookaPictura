@@ -14,41 +14,44 @@ const RED: Rgba = Rgba {
 fn layer(rect: PsdRect, rgba: (u8, u8, u8, u8)) -> Layer {
     let n = (rect.width().max(0) * rect.height().max(0)) as usize;
     let (r, g, b, a) = rgba;
-    Layer {
-        name: "px".into(),
-        rect,
-        blend: BlendMode::Normal,
-        opacity: 255,
-        fill: 255,
-        lock: LockFlags::default(),
-        color: ColorLabel::None,
-        clipping: false,
-        visible: true,
-        mask: None,
-        adjustment: None,
-        channels: vec![
-            Channel {
-                id: 0,
-                data: vec![r; n].into(),
-            },
-            Channel {
-                id: 1,
-                data: vec![g; n].into(),
-            },
-            Channel {
-                id: 2,
-                data: vec![b; n].into(),
-            },
-            Channel {
-                id: -1,
-                data: vec![a; n].into(),
-            },
-        ],
-        children: pictura_core::LayerStack::default(),
-        is_group: false,
-        background: false,
-        ..Default::default()
-    }
+    pictura_core::Layer::from_parts(
+        pictura_core::LayerParts {
+            name: "px".into(),
+            rect,
+            blend: BlendMode::Normal,
+            opacity: 255,
+            fill: 255,
+            lock: LockFlags::default(),
+            color: ColorLabel::None,
+            clipping: false,
+            visible: true,
+            mask: None,
+            adjustment: None,
+            channels: vec![
+                Channel {
+                    id: 0,
+                    data: vec![r; n].into(),
+                },
+                Channel {
+                    id: 1,
+                    data: vec![g; n].into(),
+                },
+                Channel {
+                    id: 2,
+                    data: vec![b; n].into(),
+                },
+                Channel {
+                    id: -1,
+                    data: vec![a; n].into(),
+                },
+            ],
+            children: pictura_core::LayerStack::default(),
+            is_group: false,
+            background: false,
+            ..Default::default()
+        },
+        pictura_core::LayerContent::Pixel,
+    )
 }
 
 fn doc(layer: Layer) -> Document {
@@ -57,7 +60,7 @@ fn doc(layer: Layer) -> Document {
     doc
 }
 
-fn selection(width: u32, height: u32, inside: impl Fn(i32, i32) -> bool) -> CoverageClip {
+fn selection(width: u32, height: u32, inside: impl Fn(i32, i32) -> bool) -> Coverage {
     let mut data = vec![0u8; (width * height) as usize];
     for y in 0..height as i32 {
         for x in 0..width as i32 {
@@ -66,10 +69,7 @@ fn selection(width: u32, height: u32, inside: impl Fn(i32, i32) -> bool) -> Cove
             }
         }
     }
-    CoverageClip {
-        data: Plane::from(data),
-        width,
-    }
+    Coverage::for_canvas(&Plane::from(data), width, height).unwrap()
 }
 
 fn pixel(doc: &Document, x: i32, y: i32) -> (u8, u8, u8, u8) {
@@ -149,10 +149,9 @@ fn a_partial_selection_scales_the_paint() {
         },
         WHITE,
     ));
-    let mut clip = selection(8, 8, |_, _| false);
     let mut data = vec![0u8; 64];
     data[4 * 8 + 4] = 128;
-    clip.data = Plane::from(data);
+    let clip = Coverage::for_canvas(&Plane::from(data), 8, 8).unwrap();
     let mut stroke = Stroke::begin_at(&doc, "0", brush(8)).expect("stroke begins");
     stroke.set_coverage_clip(Some(clip));
     assert!(stroke.sample(
@@ -283,31 +282,34 @@ fn a_clip_follows_the_layer_document_position() {
 
 #[test]
 fn a_grown_layer_keeps_the_document_space_clip() {
-    let empty = Layer {
-        name: "px".into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 0,
-            right: 0,
-        },
-        channels: [0i16, 1, 2, -1]
-            .into_iter()
-            .map(|id| Channel {
-                id,
-                data: Plane::default(),
-            })
-            .collect(),
-        ..layer(
-            PsdRect {
+    let empty = pictura_core::Layer::from_parts(
+        pictura_core::LayerParts {
+            name: "px".into(),
+            rect: PsdRect {
                 top: 0,
                 left: 0,
                 bottom: 0,
                 right: 0,
             },
-            WHITE,
-        )
-    };
+            channels: [0i16, 1, 2, -1]
+                .into_iter()
+                .map(|id| Channel {
+                    id,
+                    data: Plane::default(),
+                })
+                .collect(),
+            ..pictura_core::LayerParts::from(layer(
+                PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 0,
+                    right: 0,
+                },
+                WHITE,
+            ))
+        },
+        pictura_core::LayerContent::Pixel,
+    );
     let mut doc = doc(empty);
     let mut stroke = Stroke::begin_at(&doc, "0", brush(6)).expect("stroke begins");
     stroke.set_coverage_clip(Some(selection(16, 16, |x, y| {

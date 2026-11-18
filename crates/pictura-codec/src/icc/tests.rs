@@ -28,7 +28,9 @@ fn xmp_resource(data: &[u8]) -> Vec<u8> {
 
 fn rgb_document() -> Document {
     let mut doc = Document::new(2, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite.data = vec![200, 10, 100, 20, 50, 30].into();
+    doc.composite
+        .replace_data(vec![200, 10, 100, 20, 50, 30].into())
+        .expect("valid composite plane");
     doc
 }
 
@@ -40,7 +42,10 @@ fn non_srgb_profile_converts_and_drops_the_resource() {
     let original = doc.composite.data.clone();
 
     let out = apply_icc(doc);
-    assert_eq!(out.source_icc.as_deref(), Some(profile.as_slice()));
+    assert_eq!(
+        out.source.original_profile().as_deref(),
+        Some(profile.as_slice())
+    );
     assert_ne!(out.composite.data, original, "pixels were converted");
     assert!(
         decode_image_resources(&out)
@@ -55,14 +60,18 @@ fn non_srgb_profile_converts_and_drops_the_resource() {
 fn cmyk_document_is_left_to_color_mode_pass() {
     let profile = Profile::coated_cmyk().to_icc();
     let mut doc = Document::new(1, 1, ColorMode::Cmyk, BitDepth::Eight);
-    doc.source_mode = Some(ColorMode::Cmyk);
-    doc.composite.data = vec![10, 20, 30, 40].into();
+    doc.source
+        .set_encoding(Some(ColorMode::Cmyk), None)
+        .expect("valid source encoding");
+    doc.composite
+        .replace_data(vec![10, 20, 30, 40].into())
+        .expect("valid composite plane");
     doc.image_resources = icc_resource(&profile).into();
     let before = doc.composite.data.to_vec();
     let out = apply_icc_policy(doc, Policy::Convert);
     assert_eq!(out.composite.data.to_vec(), before);
     assert_eq!(out.image_resources, icc_resource(&profile));
-    assert!(out.source_icc.is_none());
+    assert!(out.source.original_profile().is_none());
 }
 
 #[test]
@@ -74,7 +83,7 @@ fn srgb_profile_is_left_untouched() {
     let original = doc.composite.data.clone();
 
     let out = apply_icc(doc);
-    assert!(out.source_icc.is_none());
+    assert!(out.source.original_profile().is_none());
     assert_eq!(out.composite.data, original);
     assert_eq!(out.image_resources, section);
 }
@@ -85,7 +94,7 @@ fn undecodable_profile_is_ignored() {
     doc.image_resources = icc_resource(b"not an ICC profile").into();
     let original = doc.composite.data.clone();
     let out = apply_icc(doc);
-    assert!(out.source_icc.is_none());
+    assert!(out.source.original_profile().is_none());
     assert_eq!(out.composite.data, original);
 }
 
@@ -95,36 +104,43 @@ fn a_layer_with_incomplete_color_channels_is_skipped() {
     let mut doc = rgb_document();
     doc.image_resources = icc_resource(&profile).into();
     {
-        let _ = doc.layers.push(Layer {
-            name: "partial".into(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 1,
-                right: 2,
-            },
-            channels: vec![Channel {
-                id: 0,
-                data: vec![1, 2].into(),
-            }],
-            ..Default::default()
-        });
+        let _ = doc
+            .layers
+            .push(crate::layer_from_parts(pictura_core::LayerParts {
+                name: "partial".into(),
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 1,
+                    right: 2,
+                },
+                channels: vec![Channel {
+                    id: 0,
+                    data: vec![1, 2].into(),
+                }],
+                ..Default::default()
+            }));
     };
-    let original = doc.layers[0].channels[0].data.clone();
+    let original = doc.layers[0].channels()[0].data.clone();
     let out = apply_icc(doc);
-    assert_eq!(out.layers[0].channels[0].data, original);
+    assert_eq!(out.layers[0].channels()[0].data, original);
 }
 
 #[test]
 fn grayscale_document_is_left_untouched() {
     let profile = Profile::adobe_rgb().to_icc();
     let mut doc = Document::new(2, 1, ColorMode::Grayscale, BitDepth::Eight);
-    doc.composite.data = vec![10, 200].into();
+    doc.composite
+        .replace_data(vec![10, 200].into())
+        .expect("valid composite plane");
     let section = icc_resource(&profile);
     doc.image_resources = section.clone().into();
 
     let out = apply_icc(doc);
-    assert!(out.source_icc.is_none(), "grayscale is not converted");
+    assert!(
+        out.source.original_profile().is_none(),
+        "grayscale is not converted"
+    );
     assert_eq!(out.composite.data, vec![10, 200]);
     assert_eq!(out.image_resources, section, "the profile is kept");
 }
@@ -153,7 +169,7 @@ fn malformed_section_is_a_noop() {
     doc.image_resources = b"not a resource section".to_vec().into();
     let original = doc.composite.data.clone();
     let out = apply_icc(doc);
-    assert!(out.source_icc.is_none());
+    assert!(out.source.original_profile().is_none());
     assert_eq!(out.composite.data, original);
 }
 
@@ -163,37 +179,39 @@ fn layer_channels_are_selected_by_id_not_storage_order() {
     let mut doc = rgb_document();
     doc.image_resources = icc_resource(&profile).into();
     {
-        let _ = doc.layers.push(Layer {
-            name: "bgr".into(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 1,
-                right: 1,
-            },
-            // Stored G, B, R; id-based selection must convert [R, G, B].
-            channels: vec![
-                Channel {
-                    id: 1,
-                    data: vec![10].into(),
+        let _ = doc
+            .layers
+            .push(crate::layer_from_parts(pictura_core::LayerParts {
+                name: "bgr".into(),
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 1,
+                    right: 1,
                 },
-                Channel {
-                    id: 2,
-                    data: vec![20].into(),
-                },
-                Channel {
-                    id: 0,
-                    data: vec![30].into(),
-                },
-            ],
-            ..Default::default()
-        });
+                // Stored G, B, R; id-based selection must convert [R, G, B].
+                channels: vec![
+                    Channel {
+                        id: 1,
+                        data: vec![10].into(),
+                    },
+                    Channel {
+                        id: 2,
+                        data: vec![20].into(),
+                    },
+                    Channel {
+                        id: 0,
+                        data: vec![30].into(),
+                    },
+                ],
+                ..Default::default()
+            }));
     };
 
     let out = apply_icc(doc);
     let id = |id: i16| {
         out.layers[0]
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == id)
             .expect("channel")
@@ -214,8 +232,8 @@ fn assign_leaves_composite_and_layers_byte_identical() {
     let before = doc.clone();
     assign_document_profile(&mut doc, &Profile::adobe_rgb());
     assert_eq!(doc.composite, before.composite);
-    assert_eq!(doc.layers[0].channels, before.layers[0].channels);
-    assert!(doc.document_icc.is_some());
+    assert_eq!(doc.layers[0].channels(), before.layers[0].channels());
+    assert!(doc.source.working_profile().is_some());
 }
 
 #[test]
@@ -229,7 +247,10 @@ fn assign_frames_a_1039_block_for_a_non_srgb_profile() {
         .find(|r| r.id == ICC_PROFILE)
         .expect("a 1039 block is framed");
     assert_eq!(icc.data, profile);
-    assert_eq!(doc.document_icc.as_deref(), Some(profile.as_slice()));
+    assert_eq!(
+        doc.source.working_profile().as_deref(),
+        Some(profile.as_slice())
+    );
 }
 
 #[test]
@@ -237,9 +258,9 @@ fn assigning_srgb_removes_1039_and_clears_document_icc() {
     let profile = Profile::adobe_rgb().to_icc();
     let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
     doc.image_resources = icc_resource(&profile).into();
-    doc.document_icc = Some(profile.into());
+    doc.source.set_working_profile(Some(profile.into()));
     assign_document_profile(&mut doc, &Profile::srgb());
-    assert!(doc.document_icc.is_none());
+    assert!(doc.source.working_profile().is_none());
     assert!(decode_image_resources(&doc)
         .iter()
         .all(|r| r.id != ICC_PROFILE));
@@ -265,7 +286,7 @@ fn convert_changes_pixels_and_tags_destination() {
     let before = doc.composite.data.clone();
     assert!(convert_document(&mut doc, &Profile::adobe_rgb()));
     assert_ne!(doc.composite.data, before, "the composite was converted");
-    assert!(doc.document_icc.is_some());
+    assert!(doc.source.working_profile().is_some());
     assert!(decode_image_resources(&doc)
         .iter()
         .any(|r| r.id == ICC_PROFILE));
@@ -275,30 +296,32 @@ fn convert_changes_pixels_and_tags_destination() {
 fn convert_with_incomplete_layer_channels_is_not_an_error() {
     let mut doc = rgb_document();
     {
-        let _ = doc.layers.push(Layer {
-            name: "partial".into(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 1,
-                right: 2,
-            },
-            channels: vec![Channel {
-                id: 0,
-                data: vec![1, 2].into(),
-            }],
-            ..Default::default()
-        });
+        let _ = doc
+            .layers
+            .push(crate::layer_from_parts(pictura_core::LayerParts {
+                name: "partial".into(),
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 1,
+                    right: 2,
+                },
+                channels: vec![Channel {
+                    id: 0,
+                    data: vec![1, 2].into(),
+                }],
+                ..Default::default()
+            }));
     };
-    let before = doc.layers[0].channels[0].data.clone();
+    let before = doc.layers[0].channels()[0].data.clone();
     assert!(convert_document(&mut doc, &Profile::adobe_rgb()));
-    assert_eq!(doc.layers[0].channels[0].data, before);
+    assert_eq!(doc.layers[0].channels()[0].data, before);
 }
 
 #[test]
 fn buffer_to_srgb_is_identity_without_a_document_profile() {
     let doc = rgb_document();
-    let converted = buffer_to_srgb(&doc, &doc.composite);
+    let converted = buffer_to_srgb(&doc, doc.composite.buffer());
     assert!(
         matches!(converted, Cow::Borrowed(_)),
         "an unprofiled document borrows its composite without a copy"
@@ -310,8 +333,9 @@ fn buffer_to_srgb_is_identity_without_a_document_profile() {
 fn buffer_to_srgb_converts_a_profiled_document() {
     let mut doc = rgb_document();
     let before = doc.composite.data.clone();
-    doc.document_icc = Some(Profile::adobe_rgb().to_icc().into());
-    let out = buffer_to_srgb(&doc, &doc.composite);
+    doc.source
+        .set_working_profile(Some(Profile::adobe_rgb().to_icc().into()));
+    let out = buffer_to_srgb(&doc, doc.composite.buffer());
     assert_ne!(out.data, before);
     assert_eq!(out.channels, doc.composite.channels);
 }
@@ -319,28 +343,34 @@ fn buffer_to_srgb_converts_a_profiled_document() {
 #[test]
 fn buffer_to_srgb_reuses_the_transform_and_follows_profile_changes() {
     let mut doc = rgb_document();
-    doc.composite.data = (0..doc.composite.data.len())
-        .map(|i| (i * 7 % 251) as u8)
-        .collect();
-    doc.document_icc = Some(Profile::adobe_rgb().to_icc().into());
+    doc.composite
+        .replace_data(
+            (0..doc.composite.data.len())
+                .map(|i| (i * 7 % 251) as u8)
+                .collect(),
+        )
+        .expect("valid composite plane");
+    doc.source
+        .set_working_profile(Some(Profile::adobe_rgb().to_icc().into()));
 
-    let first = buffer_to_srgb(&doc, &doc.composite).into_owned();
-    let second = buffer_to_srgb(&doc, &doc.composite).into_owned();
+    let first = buffer_to_srgb(&doc, doc.composite.buffer()).into_owned();
+    let second = buffer_to_srgb(&doc, doc.composite.buffer()).into_owned();
     assert_eq!(first.data, second.data, "repeated conversions agree");
 
     // The cached path equals a conversion that re-parses the profile.
-    let src = Profile::from_icc(doc.document_icc.as_deref().unwrap()).unwrap();
-    let fresh = convert_buffer(&doc.composite, &src, &Profile::srgb()).unwrap();
+    let src = Profile::from_icc(doc.source.working_profile().as_deref().unwrap()).unwrap();
+    let fresh = convert_buffer(doc.composite.buffer(), &src, &Profile::srgb()).unwrap();
     assert_eq!(first.data, fresh.data, "cached path equals a fresh parse");
 
     // Changing the working profile invalidates the cached transform.
-    doc.document_icc = Some(Profile::pro_photo().to_icc().into());
-    let changed = buffer_to_srgb(&doc, &doc.composite).into_owned();
+    doc.source
+        .set_working_profile(Some(Profile::pro_photo().to_icc().into()));
+    let changed = buffer_to_srgb(&doc, doc.composite.buffer()).into_owned();
     assert_ne!(changed.data, first.data, "a new profile is used");
 }
 
 fn rgb_layer(name: &str) -> Layer {
-    Layer {
+    crate::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: PsdRect {
             top: 0,
@@ -363,25 +393,28 @@ fn rgb_layer(name: &str) -> Layer {
             },
         ],
         ..Default::default()
-    }
+    })
 }
 
 #[test]
 fn convert_reaches_pixel_layers_nested_in_groups() {
     let mut doc = rgb_document();
     let child = rgb_layer("child");
-    let before = child.channels[0].data.clone();
+    let before = child.channels()[0].data.clone();
     {
-        let _ = doc.layers.push(Layer {
-            name: "group".into(),
-            is_group: true,
-            children: pictura_core::LayerStack::from_layers(vec![child]),
-            ..Default::default()
-        });
+        let _ = doc
+            .layers
+            .push(crate::layer_from_parts(pictura_core::LayerParts {
+                name: "group".into(),
+                is_group: true,
+                children: pictura_core::LayerStack::from_layers(vec![child]),
+                ..Default::default()
+            }));
     };
     assert!(convert_document(&mut doc, &Profile::adobe_rgb()));
     assert_ne!(
-        doc.layers[0].children[0].channels[0].data, before,
+        doc.layers[0].children()[0].channels()[0].data,
+        before,
         "the nested layer was converted"
     );
 }
@@ -392,17 +425,19 @@ fn read_conversion_reaches_pixel_layers_nested_in_groups() {
     let mut doc = rgb_document();
     doc.image_resources = icc_resource(&profile).into();
     let child = rgb_layer("child");
-    let before = child.channels[0].data.clone();
+    let before = child.channels()[0].data.clone();
     {
-        let _ = doc.layers.push(Layer {
-            name: "group".into(),
-            is_group: true,
-            children: pictura_core::LayerStack::from_layers(vec![child]),
-            ..Default::default()
-        });
+        let _ = doc
+            .layers
+            .push(crate::layer_from_parts(pictura_core::LayerParts {
+                name: "group".into(),
+                is_group: true,
+                children: pictura_core::LayerStack::from_layers(vec![child]),
+                ..Default::default()
+            }));
     };
     let out = apply_icc(doc);
-    assert_ne!(out.layers[0].children[0].channels[0].data, before);
+    assert_ne!(out.layers[0].children()[0].channels()[0].data, before);
 }
 
 #[test]
@@ -421,7 +456,10 @@ fn assign_preserves_an_unparsed_resource_tail() {
     assert!(decode_image_resources(&doc)
         .iter()
         .any(|r| r.id == ICC_PROFILE));
-    assert_eq!(doc.document_icc.as_deref(), Some(profile.as_slice()));
+    assert_eq!(
+        doc.source.working_profile().as_deref(),
+        Some(profile.as_slice())
+    );
 }
 
 #[test]
@@ -440,13 +478,15 @@ fn read_conversion_preserves_an_unparsed_resource_tail() {
     assert!(decode_image_resources(&out)
         .iter()
         .all(|r| r.id != ICC_PROFILE));
-    assert!(out.document_icc.is_none());
+    assert!(out.source.working_profile().is_none());
 }
 
 #[test]
 fn convert_document_is_a_noop_for_a_grayscale_document() {
     let mut doc = Document::new(2, 1, ColorMode::Grayscale, BitDepth::Eight);
-    doc.composite.data = vec![10, 200].into();
+    doc.composite
+        .replace_data(vec![10, 200].into())
+        .expect("valid composite plane");
     let before = doc.clone();
     assert!(!convert_document(&mut doc, &Profile::adobe_rgb()));
     assert_eq!(doc, before);
@@ -456,7 +496,7 @@ fn convert_document_is_a_noop_for_a_grayscale_document() {
 fn assign_document_profile_is_a_noop_for_a_grayscale_document() {
     let mut doc = Document::new(2, 1, ColorMode::Grayscale, BitDepth::Eight);
     assign_document_profile(&mut doc, &Profile::adobe_rgb());
-    assert!(doc.document_icc.is_none());
+    assert!(doc.source.working_profile().is_none());
     assert!(doc.image_resources.is_empty());
 }
 
@@ -464,9 +504,9 @@ fn assign_document_profile_is_a_noop_for_a_grayscale_document() {
 fn assign_then_convert_back_to_srgb_leaves_it_untagged() {
     let mut doc = Document::from_rgba("px", 2, 1, &[10, 20, 30, 255, 40, 50, 60, 255]);
     assign_document_profile(&mut doc, &Profile::adobe_rgb());
-    assert!(doc.document_icc.is_some());
+    assert!(doc.source.working_profile().is_some());
     assert!(convert_document(&mut doc, &Profile::srgb()));
-    assert!(doc.document_icc.is_none());
+    assert!(doc.source.working_profile().is_none());
     assert!(decode_image_resources(&doc)
         .iter()
         .all(|r| r.id != ICC_PROFILE));
@@ -490,8 +530,11 @@ fn policy_preserve_keeps_the_embedded_profile_and_pixels() {
         .find(|r| r.id == ICC_PROFILE)
         .expect("resource 1039 is kept");
     assert_eq!(icc.data.as_slice(), embedded);
-    assert_eq!(preserved.document_icc.as_deref(), Some(embedded.as_slice()));
-    assert!(preserved.source_icc.is_none());
+    assert_eq!(
+        preserved.source.working_profile().as_deref(),
+        Some(embedded.as_slice())
+    );
+    assert!(preserved.source.original_profile().is_none());
 }
 
 #[test]
@@ -501,13 +544,16 @@ fn policy_convert_is_the_read_normalisation_and_drops_the_profile() {
     let preserved = crate::read_psd_with(raw, Policy::Preserve).expect("parses");
 
     assert_ne!(converted.composite.data, preserved.composite.data);
-    assert!(converted.source_icc.is_some());
-    assert!(converted.document_icc.is_none());
+    assert!(converted.source.original_profile().is_some());
+    assert!(converted.source.working_profile().is_none());
     assert!(!has_icc(&decode_image_resources(&converted)));
 
     let legacy = crate::read_psd(raw).expect("parses");
     assert_eq!(legacy.composite.data, converted.composite.data);
-    assert_eq!(legacy.source_icc, converted.source_icc);
+    assert_eq!(
+        legacy.source.original_profile(),
+        converted.source.original_profile()
+    );
 }
 
 #[test]
@@ -518,8 +564,8 @@ fn policy_off_untags_and_leaves_pixels_byte_identical() {
 
     assert_eq!(off.composite.data, preserved.composite.data);
     assert!(!has_icc(&decode_image_resources(&off)));
-    assert!(off.document_icc.is_none());
-    assert!(off.source_icc.is_none());
+    assert!(off.source.working_profile().is_none());
+    assert!(off.source.original_profile().is_none());
 }
 
 #[test]
@@ -530,8 +576,8 @@ fn policy_leaves_a_profile_less_file_unchanged() {
         let doc = crate::read_psd_with(raw, policy).expect("parses");
         assert_eq!(doc.composite.data, baseline.composite.data, "{policy:?}");
         assert_eq!(doc.layers, baseline.layers, "{policy:?}");
-        assert!(doc.document_icc.is_none(), "{policy:?}");
-        assert!(doc.source_icc.is_none(), "{policy:?}");
+        assert!(doc.source.working_profile().is_none(), "{policy:?}");
+        assert!(doc.source.original_profile().is_none(), "{policy:?}");
     }
 }
 
@@ -547,8 +593,8 @@ fn policy_leaves_an_srgb_profile_unchanged() {
         let out = apply_icc_policy(doc, policy);
         assert_eq!(out.composite.data, original, "{policy:?}");
         assert_eq!(out.image_resources, section, "{policy:?}");
-        assert!(out.document_icc.is_none(), "{policy:?}");
-        assert!(out.source_icc.is_none(), "{policy:?}");
+        assert!(out.source.working_profile().is_none(), "{policy:?}");
+        assert!(out.source.original_profile().is_none(), "{policy:?}");
     }
 }
 
@@ -557,15 +603,17 @@ fn policy_leaves_a_grayscale_document_unchanged() {
     let profile = Profile::adobe_rgb().to_icc();
     for policy in [Policy::Preserve, Policy::Convert, Policy::Off] {
         let mut doc = Document::new(2, 1, ColorMode::Grayscale, BitDepth::Eight);
-        doc.composite.data = vec![10, 200].into();
+        doc.composite
+            .replace_data(vec![10, 200].into())
+            .expect("valid composite plane");
         let section = icc_resource(&profile);
         doc.image_resources = section.clone().into();
 
         let out = apply_icc_policy(doc, policy);
         assert_eq!(out.composite.data, vec![10, 200], "{policy:?}");
         assert_eq!(out.image_resources, section, "{policy:?}");
-        assert!(out.source_icc.is_none(), "{policy:?}");
-        assert!(out.document_icc.is_none(), "{policy:?}");
+        assert!(out.source.original_profile().is_none(), "{policy:?}");
+        assert!(out.source.working_profile().is_none(), "{policy:?}");
     }
 }
 
@@ -578,8 +626,8 @@ fn policy_leaves_an_undecodable_profile_unchanged() {
 
         let out = apply_icc_policy(doc, policy);
         assert_eq!(out.image_resources, original, "{policy:?}");
-        assert!(out.source_icc.is_none(), "{policy:?}");
-        assert!(out.document_icc.is_none(), "{policy:?}");
+        assert!(out.source.original_profile().is_none(), "{policy:?}");
+        assert!(out.source.working_profile().is_none(), "{policy:?}");
     }
 }
 
@@ -595,8 +643,8 @@ fn policy_preserve_rejects_a_profile_the_pixels_cannot_transform() {
     let resources = doc.image_resources.clone();
 
     let out = apply_icc_policy(doc, Policy::Preserve);
-    assert!(out.document_icc.is_none());
-    assert!(out.source_icc.is_none());
+    assert!(out.source.working_profile().is_none());
+    assert!(out.source.original_profile().is_none());
     assert_eq!(out.composite.data, composite);
     assert_eq!(out.image_resources, resources, "1039 is left in place");
 }
@@ -609,8 +657,8 @@ fn policy_leaves_a_cmyk_fixture_unchanged() {
         let doc = crate::read_psd_with(raw, policy).expect("parses");
         assert_eq!(doc.composite.data, baseline.composite.data, "{policy:?}");
         assert_eq!(doc.image_resources, baseline.image_resources, "{policy:?}");
-        assert!(doc.document_icc.is_none(), "{policy:?}");
-        assert!(doc.source_icc.is_none(), "{policy:?}");
+        assert!(doc.source.working_profile().is_none(), "{policy:?}");
+        assert!(doc.source.original_profile().is_none(), "{policy:?}");
     }
 }
 
@@ -620,9 +668,15 @@ use crate::common::{MODE_CMYK, MODE_GRAYSCALE, MODE_LAB, MODE_RGB};
 /// `source_depth` set for a 16/32-bit read that retained no planes.
 fn converted_cmyk_document(source_depth: Option<BitDepth>) -> Document {
     let mut doc = Document::new(2, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.source_mode = Some(ColorMode::Cmyk);
-    doc.source_depth = source_depth;
-    doc.composite.data = vec![200, 10, 100, 20, 50, 30].into();
+    doc.source
+        .set_encoding(Some(ColorMode::Cmyk), None)
+        .expect("valid source encoding");
+    doc.source
+        .set_native(source_depth, doc.source.planes().clone())
+        .expect("valid source depth");
+    doc.composite
+        .replace_data(vec![200, 10, 100, 20, 50, 30].into())
+        .expect("valid composite plane");
     doc
 }
 
@@ -762,8 +816,8 @@ fn read_sixteen_bit_cmyk_then_write_keeps_cmyk_and_its_profile() {
     let convert = crate::read_psd(&psd).expect("parses");
     let preserve = crate::read_psd_with(&psd, Policy::Preserve).expect("parses");
     for (policy, doc) in [("convert", convert), ("preserve", preserve)] {
-        assert_eq!(doc.source_mode, Some(ColorMode::Cmyk), "{policy}");
-        assert_eq!(doc.source_depth, Some(BitDepth::Sixteen), "{policy}");
+        assert_eq!(doc.source.mode(), Some(ColorMode::Cmyk), "{policy}");
+        assert_eq!(doc.source.depth(), Some(BitDepth::Sixteen), "{policy}");
         assert_eq!(doc.mode, ColorMode::Rgb, "{policy}");
         assert!(
             decode_section(doc.image_resources.to_vec())
@@ -792,8 +846,8 @@ fn read_sixteen_bit_lab_then_write_keeps_lab_and_its_profile() {
     let convert = crate::read_psd(&psd).expect("parses");
     let preserve = crate::read_psd_with(&psd, Policy::Preserve).expect("parses");
     for (policy, doc) in [("convert", convert), ("preserve", preserve)] {
-        assert_eq!(doc.source_mode, Some(ColorMode::Lab), "{policy}");
-        assert_eq!(doc.source_depth, Some(BitDepth::Sixteen), "{policy}");
+        assert_eq!(doc.source.mode(), Some(ColorMode::Lab), "{policy}");
+        assert_eq!(doc.source.depth(), Some(BitDepth::Sixteen), "{policy}");
         assert_eq!(doc.mode, ColorMode::Rgb, "{policy}");
         assert!(
             decode_section(doc.image_resources.to_vec())
@@ -818,7 +872,9 @@ fn read_sixteen_bit_lab_then_write_keeps_lab_and_its_profile() {
 #[test]
 fn grayscale_output_keeps_a_matching_gray_profile() {
     let mut doc = Document::new(2, 1, ColorMode::Grayscale, BitDepth::Eight);
-    doc.composite.data = vec![10, 200].into();
+    doc.composite
+        .replace_data(vec![10, 200].into())
+        .expect("valid composite plane");
     let section = icc_resource(&profiled(b"GRAY"));
     doc.image_resources = section.clone().into();
 
@@ -843,14 +899,16 @@ fn parallel_display_transform_matches_serial() {
         *v = (i as u32).wrapping_mul(2_654_435_761) as u8;
     }
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite.data = data.into();
-    doc.document_icc = Some(profile.clone().into());
+    doc.composite
+        .replace_data(data.into())
+        .expect("valid composite plane");
+    doc.source.set_working_profile(Some(profile.clone().into()));
 
     super::FORCE_SERIAL.store(true, Ordering::Relaxed);
-    let serial = buffer_to_srgb(&doc, &doc.composite).into_owned();
+    let serial = buffer_to_srgb(&doc, doc.composite.buffer()).into_owned();
     super::FORCE_SERIAL.store(false, Ordering::Relaxed);
     let before = super::PARALLEL_RUNS.load(Ordering::Relaxed);
-    let parallel = buffer_to_srgb(&doc, &doc.composite).into_owned();
+    let parallel = buffer_to_srgb(&doc, doc.composite.buffer()).into_owned();
     assert!(
         super::PARALLEL_RUNS.load(Ordering::Relaxed) > before,
         "the parallel branch must run"
@@ -866,19 +924,21 @@ fn parallel_display_transform_matches_serial() {
         *v = (i as u32).wrapping_mul(40_503) as u8;
     }
     let mut doc4 = doc.clone();
-    doc4.composite = PixelBuffer {
-        width: w,
-        height: h,
-        channels: 4,
-        data: data4.into(),
-    };
+    doc4.composite
+        .replace(PixelBuffer {
+            width: w,
+            height: h,
+            channels: 4,
+            data: data4.into(),
+        })
+        .expect("valid composite");
     let alpha = doc4.composite.data[3 * n..].to_vec();
 
     super::FORCE_SERIAL.store(true, Ordering::Relaxed);
-    let serial = buffer_to_srgb(&doc4, &doc4.composite).into_owned();
+    let serial = buffer_to_srgb(&doc4, doc4.composite.buffer()).into_owned();
     super::FORCE_SERIAL.store(false, Ordering::Relaxed);
     let before = super::PARALLEL_RUNS.load(Ordering::Relaxed);
-    let parallel = buffer_to_srgb(&doc4, &doc4.composite).into_owned();
+    let parallel = buffer_to_srgb(&doc4, doc4.composite.buffer()).into_owned();
     assert!(
         super::PARALLEL_RUNS.load(Ordering::Relaxed) > before,
         "the parallel branch must run"
@@ -907,17 +967,20 @@ fn display_transform_speedup_profile() {
         *v = (i as u32).wrapping_mul(2_654_435_761) as u8;
     }
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite.data = data.into();
-    doc.document_icc = Some(Profile::adobe_rgb().to_icc().into());
+    doc.composite
+        .replace_data(data.into())
+        .expect("valid composite plane");
+    doc.source
+        .set_working_profile(Some(Profile::adobe_rgb().to_icc().into()));
 
     super::FORCE_SERIAL.store(true, Ordering::Relaxed);
     let start = Instant::now();
-    let serial = buffer_to_srgb(&doc, &doc.composite).into_owned();
+    let serial = buffer_to_srgb(&doc, doc.composite.buffer()).into_owned();
     let serial_time = start.elapsed();
     super::FORCE_SERIAL.store(false, Ordering::Relaxed);
 
     let start = Instant::now();
-    let parallel = buffer_to_srgb(&doc, &doc.composite).into_owned();
+    let parallel = buffer_to_srgb(&doc, doc.composite.buffer()).into_owned();
     let parallel_time = start.elapsed();
     assert_eq!(serial.data, parallel.data, "outputs must match");
 
@@ -925,4 +988,22 @@ fn display_transform_speedup_profile() {
         "pictura perf: display transform 4000x3000 serial={serial_time:?} parallel={parallel_time:?} speedup={:.2}x",
         serial_time.as_secs_f64() / parallel_time.as_secs_f64()
     );
+}
+
+#[test]
+fn assigning_working_profile_preserves_converted_source() {
+    let raw = include_bytes!("../../tests/fixtures/icc_profile.psd");
+    let mut doc = crate::read_psd_with(raw, Policy::Convert).unwrap();
+    let before = doc.clone();
+    let original = before.source.original_profile().as_ref().unwrap();
+    assign_document_profile(&mut doc, &Profile::adobe_rgb());
+    assert_eq!(
+        doc.source.original_profile(),
+        before.source.original_profile()
+    );
+    assert!(original.shares(doc.source.original_profile().as_ref().unwrap()));
+    assert!(doc.source.working_profile().is_some());
+    assert!(doc.composite.data.shares(&before.composite.data));
+    assert_eq!(doc.layers, before.layers);
+    assert_eq!(doc.composite.data, before.composite.data);
 }

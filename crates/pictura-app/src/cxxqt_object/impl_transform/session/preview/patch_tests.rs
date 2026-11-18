@@ -29,9 +29,9 @@ fn styled_doc() -> Document {
     pictura_render::set_layer_style_value(&mut child, "dropShadow.on", 1.0);
     pictura_render::set_layer_style_value(&mut child, "dropShadow.size", 4.0);
     let mut group = at(pixel_layer("group", 12, 9, (0, 0, 0)), 150, 120);
-    group.is_group = true;
-    group.channels.clear();
-    group.children = LayerStack::from_layers(vec![child]);
+    group.set_group_children(pictura_core::LayerStack::default());
+    group.channels_mut().clear();
+    group.set_group_children(LayerStack::from_layers(vec![child]));
     doc.layers = LayerStack::from_layers(vec![base, styled, group]);
     doc
 }

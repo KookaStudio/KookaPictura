@@ -11,7 +11,9 @@ fn selection(side: u32, coverage: u8) -> Selection {
 
 fn snapshot(side: u32, seed: u8, mask: Option<Option<Selection>>) -> Snapshot {
     let mut doc = Document::new(side, side, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite.data = vec![seed; (side * side * 3) as usize].into();
+    doc.composite
+        .replace_data(vec![seed; (side * side * 3) as usize].into())
+        .expect("valid composite plane");
     Snapshot {
         doc,
         selection: Some(selection(side, seed)),

@@ -180,7 +180,9 @@ fn display_conversion_premultiplies_and_straight_helpers_do_not() {
 #[test]
 fn a_region_repair_matches_a_rebuild() {
     let mut doc = Document::new(600, 400, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite = varied_rgba(600, 400, 0);
+    doc.composite
+        .replace(varied_rgba(600, 400, 0))
+        .expect("valid composite");
     let mut rust = view_of(doc.clone());
     assert_tiles_match_a_rebuild(&rust);
 
@@ -193,7 +195,9 @@ fn a_region_repair_matches_a_rebuild() {
         right: 260,
     };
     let changed = varied_rgba(600, 400, 77);
-    blit_region(&mut doc.composite, &changed, rect);
+    doc.composite
+        .edit(|buffer| blit_region(buffer, &changed, rect))
+        .expect("blit preserves geometry");
     rust.session.doc = Some(doc);
     rust.apply_refreshed_region(rect.left, rect.top, rect, crop_buffer(&changed, rect));
     assert_tiles_match_a_rebuild(&rust);
@@ -202,11 +206,13 @@ fn a_region_repair_matches_a_rebuild() {
 #[test]
 fn the_display_carries_the_document_profile_conversion() {
     let mut doc = Document::new(16, 16, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite = varied_rgba(16, 16, 4);
+    doc.composite
+        .replace(varied_rgba(16, 16, 4))
+        .expect("valid composite");
     pictura_codec::assign_document_profile(&mut doc, &pictura_codec::Profile::adobe_rgb());
 
     let converted = display_region(&doc, whole(16, 16), false);
-    let raw = pictura_render::rgba_frame(&doc.composite);
+    let raw = pictura_render::rgba_frame(doc.composite.buffer());
     assert_ne!(
         converted.data, raw.data,
         "a non-identity profile must convert the frame"
@@ -222,7 +228,9 @@ fn the_display_carries_the_document_profile_conversion() {
 #[test]
 fn a_region_repair_writes_the_cached_tile_in_place() {
     let mut doc = Document::new(400, 300, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite = varied_rgba(400, 300, 0);
+    doc.composite
+        .replace(varied_rgba(400, 300, 0))
+        .expect("valid composite");
     let mut rust = view_of(doc.clone());
     shown(&rust, 0);
     let before = {
@@ -242,7 +250,9 @@ fn a_region_repair_writes_the_cached_tile_in_place() {
         right: 120,
     };
     let changed = varied_rgba(400, 300, 9);
-    blit_region(&mut doc.composite, &changed, rect);
+    doc.composite
+        .edit(|buffer| blit_region(buffer, &changed, rect))
+        .expect("blit preserves geometry");
     rust.session.doc = Some(doc);
     rust.apply_refreshed_region(rect.left, rect.top, rect, crop_buffer(&changed, rect));
 
@@ -260,7 +270,9 @@ fn a_region_repair_writes_the_cached_tile_in_place() {
 #[test]
 fn the_display_after_a_region_refresh_matches_a_full_recomposite() {
     let mut doc = Document::new(64, 48, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite = varied_rgba(64, 48, 1);
+    doc.composite
+        .replace(varied_rgba(64, 48, 1))
+        .expect("valid composite");
     let mut rust = view_of(doc.clone());
     shown(&rust, 0);
     let revision = rust.canvas_revision;
@@ -272,7 +284,9 @@ fn the_display_after_a_region_refresh_matches_a_full_recomposite() {
         right: 24,
     };
     let changed = varied_rgba(64, 48, 21);
-    blit_region(&mut doc.composite, &changed, rect);
+    doc.composite
+        .edit(|buffer| blit_region(buffer, &changed, rect))
+        .expect("blit preserves geometry");
     rust.session.doc = Some(doc);
     rust.apply_refreshed_region(rect.left, rect.top, rect, crop_buffer(&changed, rect));
 
@@ -294,12 +308,13 @@ fn the_display_after_a_region_refresh_matches_a_full_recomposite() {
 
 #[test]
 fn histogram_source_level_is_bounded_and_size_independent() {
-    // The Histogram panel reads the coarsest pyramid level. Its long side is
-    // always at most 512, whatever the document size, so the binning cost does
-    // not grow with the document.
-    for (w, h) in [(513u32, 513u32), (4000, 3000), (8000, 100)] {
+    // Thin documents can stop at level 0; the panel bounds binning only after
+    // reading the coarsest available source.
+    for (w, h) in [(513u32, 513u32), (4000, 3000), (8000, 100), (4096, 2)] {
         let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-        doc.composite = varied_rgba(w, h, 3);
+        doc.composite
+            .replace(varied_rgba(w, h, 3))
+            .expect("valid composite");
         let rust = view_of(doc);
 
         let levels = rust.display_level_count();
@@ -307,10 +322,11 @@ fn histogram_source_level_is_bounded_and_size_independent() {
         let (lw, lh) = rust
             .display_level_size(levels - 1)
             .expect("coarsest level size");
-        assert!(
-            lw <= 512 && lh <= 512,
-            "coarsest level {lw}x{lh} for a {w}x{h} document"
-        );
+        if h == 2 {
+            assert_eq!((levels, lw, lh), (1, 4096, 2));
+        } else {
+            assert!(lw <= 512 && lh <= 512, "coarsest level {lw}x{lh}");
+        }
 
         let (crop, missing) = rust.display_crop_keys(levels - 1, whole(lw, lh));
         assert!(missing.is_empty());
@@ -320,11 +336,58 @@ fn histogram_source_level_is_bounded_and_size_independent() {
 }
 
 #[test]
+fn panel_reads_stay_bounded() {
+    let (w, h) = (4000, 4000);
+    let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
+    let mut layer = super::tests::pixel_layer("sample", 1, 1, (10, 20, 30));
+    layer.rect = whole(w, h);
+    for channel in layer.channels_mut() {
+        let value = match channel.id {
+            0 => 10,
+            1 => 20,
+            2 => 30,
+            _ => 255,
+        };
+        channel.data = pictura_core::Plane::filled(w as usize, h as usize, 1, value);
+    }
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+    let view = view_of(doc);
+    let (_, missing) = view.tile_crop(TileSource::Composite, 0, whole(256, 256));
+    assert!(missing.is_empty());
+    let doc = view.session.doc.as_ref().expect("document");
+    let before = super::picture::composites_so_far();
+    for (x, expected_composites) in [(100, 0), (3000, 1)] {
+        let sample = super::picture::picture_region(
+            doc,
+            &view,
+            PsdRect {
+                top: 100,
+                left: x,
+                bottom: 101,
+                right: x + 1,
+            },
+        );
+        assert_eq!((sample.width, sample.height), (1, 1));
+        assert_eq!(sample.data.as_slice(), &[10, 20, 30, 255]);
+        assert_eq!(
+            super::picture::composites_so_far() - before,
+            expected_composites
+        );
+    }
+    assert!(!pictura_render::DocumentComposite::is_stored(doc));
+    assert!(view.tile_stats().resident_bytes < u64::from(w) * u64::from(h));
+    assert!(doc.layers[0]
+        .channels()
+        .iter()
+        .all(|c| !c.data.is_mirrored()));
+}
+
+#[test]
 fn mid_stroke_tiles_match_a_full_recomposite_of_the_working_document() {
     use pictura_paint::{Stroke, StrokeConfig, StrokeSample};
 
-    let rgba = vec![40u8; 128 * 128 * 4];
-    let mut doc = Document::from_rgba("paint", 128, 128, &rgba);
+    let rgba = vec![40u8; 600 * 400 * 4];
+    let mut doc = Document::from_rgba("paint", 600, 400, &rgba);
     let mut stroke = Stroke::begin_at(&doc, "0", StrokeConfig::default()).expect("begin stroke");
     assert!(stroke.sample(
         &mut doc,
@@ -334,6 +397,16 @@ fn mid_stroke_tiles_match_a_full_recomposite_of_the_working_document() {
             pressure: 1.0,
         }
     ));
+    for (x, y) in [(72.0, 65.0), (80.0, 67.0)] {
+        assert!(stroke.sample(
+            &mut doc,
+            StrokeSample {
+                x,
+                y,
+                pressure: 1.0,
+            }
+        ));
+    }
     let rect = stroke.take_dirty().expect("a dab dirties a region");
 
     let session = crate::cxxqt_object::document_session::StrokeSession {
@@ -393,9 +466,9 @@ fn a_mid_stroke_named_snapshot_shares_the_painted_tiles() {
         "a layered RGB snapshot composites nothing (#1216)"
     );
     assert!(
-        snapshot.doc.layers[0].channels[0]
+        snapshot.doc.layers[0].channels()[0]
             .data
-            .shares(&live.layers[0].channels[0].data),
+            .shares(&live.layers[0].channels()[0].data),
         "a snapshot shares its tiles with the document instead of copying them (#1215)"
     );
 }
@@ -403,7 +476,9 @@ fn a_mid_stroke_named_snapshot_shares_the_painted_tiles() {
 #[test]
 fn a_level_zero_damage_crop_matches_the_cached_crop_rect() {
     let mut doc = Document::new(200, 160, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite = varied_rgba(200, 160, 9);
+    doc.composite
+        .replace(varied_rgba(200, 160, 9))
+        .expect("valid composite");
     let rust = view_of(doc);
     let cached = PsdRect {
         top: 18,
@@ -451,7 +526,10 @@ fn a_picture_region_after_a_refresh_reads_the_current_composite() {
         right: 40,
     };
     let paint = rust.session.doc.as_mut().expect("document");
-    paint.layers[0].channels[1].data.as_mut_slice().fill(200);
+    paint.layers[0].channels_mut()[1]
+        .data
+        .as_mut_slice()
+        .fill(200);
     assert!(rust.refresh_display_rect(rect).is_some());
 
     let doc = rust.session.doc.as_ref().expect("the document survives");
@@ -575,7 +653,7 @@ fn content_move_region_fixture() -> (Document, PixelBuffer, PixelBuffer, PsdRect
     let mut picture = before.clone();
 
     let selection = rect_selection(64, 64, 12, 10, 40, 36);
-    let mask = selection_to_mask(&selection, &doc);
+    let mask = selection.coverage();
     let (dx, dy) = (9, 6);
     assert!(pictura_render::move_selection_content(
         &mut doc, &path, &mask, dx, dy, false
@@ -653,7 +731,9 @@ fn layer_move_region_refresh_equals_a_full_recomposite() {
 #[test]
 fn a_level0_crop_outside_the_level_is_null_and_a_partial_one_is_not() {
     let mut doc = Document::new(100, 100, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite = varied_rgba(100, 100, 2);
+    doc.composite
+        .replace(varied_rgba(100, 100, 2))
+        .expect("valid composite");
     let rust = view_of(doc);
 
     let outside = PsdRect {
@@ -679,7 +759,9 @@ fn reset_pyramid_rebuilds_and_clears_damage() {
     // `recomposite`, `undo`, `redo`, `history_jump`, `history_restore_snapshot`,
     // and the move-preview path all route through `reset_pyramid`.
     let mut doc = Document::new(600, 400, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite = varied_rgba(600, 400, 0);
+    doc.composite
+        .replace(varied_rgba(600, 400, 0))
+        .expect("valid composite");
     let mut rust = view_of(doc);
     assert_eq!(rust.damage, CanvasDamage::default());
     assert_tiles_match_a_rebuild(&rust);
@@ -691,7 +773,10 @@ fn reset_pyramid_rebuilds_and_clears_damage() {
         right: 5,
     });
     let mut restored = Document::new(600, 400, ColorMode::Rgb, BitDepth::Eight);
-    restored.composite = varied_rgba(600, 400, 31);
+    restored
+        .composite
+        .replace(varied_rgba(600, 400, 31))
+        .expect("valid composite");
     rust.session.doc = Some(restored);
     rust.reset_pyramid();
     assert_eq!(rust.damage, CanvasDamage::default(), "reset clears damage");
@@ -701,7 +786,9 @@ fn reset_pyramid_rebuilds_and_clears_damage() {
 #[test]
 fn display_accessors_report_levels_and_damage() {
     let mut doc = Document::new(1500, 700, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite = varied_rgba(1500, 700, 5);
+    doc.composite
+        .replace(varied_rgba(1500, 700, 5))
+        .expect("valid composite");
     let mut rust = view_of(doc);
 
     assert_eq!(rust.display_level_count(), 3);
@@ -806,7 +893,9 @@ fn the_preview_snapshots_the_presented_level_and_stays_small() {
     );
 
     let mut doc = Document::new(900, 600, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite = varied_rgba(900, 600, 3);
+    doc.composite
+        .replace(varied_rgba(900, 600, 3))
+        .expect("valid composite");
     let rust = view_of(doc);
     let snapshot = rust.level_snapshot(1).expect("level 1 exists");
     assert_eq!(snapshot.data(), &shown(&rust, 1)[..], "the level's bytes");
@@ -847,7 +936,9 @@ fn reset_pyramid_drops_a_live_preview() {
     use super::document_session::{PreviewStroke, StrokeSession};
 
     let mut doc = Document::new(600, 600, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite = varied_rgba(600, 600, 1);
+    doc.composite
+        .replace(varied_rgba(600, 600, 1))
+        .expect("valid composite");
     let mut rust = view_of(doc);
     let preview = rust.level_snapshot(1).and_then(|snapshot| {
         PreviewStroke::new(
@@ -924,7 +1015,10 @@ fn a_whole_document_region_refresh_repairs_the_cached_tiles() {
     let frame = view.frame_revision;
 
     let doc = view.session.doc.as_mut().expect("document");
-    doc.layers[0].channels[0].data.as_mut_slice().fill(200);
+    doc.layers[0].channels_mut()[0]
+        .data
+        .as_mut_slice()
+        .fill(200);
     assert_eq!(view.refresh_regions(&[whole(w, h)]), Some(whole(w, h)));
 
     let doc = view.session.doc.as_ref().expect("document");
@@ -973,7 +1067,9 @@ fn no_full_resolution_frame_is_kept() {
 fn a_region_repair_writes_only_its_tiles() {
     let (w, h) = (300u32, 400u32);
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite = varied_rgba(w, h, 0);
+    doc.composite
+        .replace(varied_rgba(w, h, 0))
+        .expect("valid composite");
     let mut view = view_of(doc.clone());
     shown(&view, 0);
     let below = view
@@ -990,7 +1086,9 @@ fn a_region_repair_writes_only_its_tiles() {
         right: 60,
     };
     let patch = varied_rgba(30, 50, 5);
-    blit_region(&mut doc.composite, &crop_into(&patch, rect, w, h), rect);
+    doc.composite
+        .edit(|buffer| blit_region(buffer, &crop_into(&patch, rect, w, h), rect))
+        .expect("blit preserves geometry");
     view.session.doc = Some(doc);
     view.apply_refreshed_region(rect.left, rect.top, rect, patch.clone());
 

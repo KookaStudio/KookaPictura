@@ -245,13 +245,16 @@ fn editing_payload(
         payload.layers = pictura_core::LayerStack::default();
         payload.global_layer_mask.clear();
         payload.layer_section_extra.clear();
-        payload.merged_composite_present = true;
-        payload.composite = PixelBuffer {
-            width: composite.width,
-            height: composite.height,
-            channels: color as u8,
-            data: planes.into(),
-        };
+        payload.composite.set_merged_output(true);
+        payload
+            .composite
+            .replace(PixelBuffer {
+                width: composite.width,
+                height: composite.height,
+                channels: color as u8,
+                data: planes.into(),
+            })
+            .expect("valid composite");
     }
     let spots = crate::image_resources::spot_channel_indices(doc);
     let keep = |index: usize| {
@@ -337,10 +340,11 @@ fn build(
             }
             // The retained source planes still hold the type's pixels; the
             // background is encoded from its own samples.
-            let without_type = Document {
-                source_planes: None,
-                ..doc.clone()
-            };
+            let mut without_type = doc.clone();
+            without_type
+                .source
+                .replace_planes(None)
+                .expect("removing retained planes preserves source state");
             image::build_raster(&without_type, background, options, ppi, proof)?
         }
         None => image::build_raster(doc, composite, options, ppi, proof)?,

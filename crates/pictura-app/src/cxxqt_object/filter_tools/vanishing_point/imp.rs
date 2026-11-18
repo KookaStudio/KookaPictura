@@ -408,12 +408,21 @@ mod tests {
         let rgb32 = Document::new(4, 4, ColorMode::Rgb, BitDepth::ThirtyTwo);
         let lab8 = Document::new(4, 4, ColorMode::Lab, BitDepth::Eight);
         let mut read16 = rgb8.clone();
-        read16.source_depth = Some(BitDepth::Sixteen);
+        read16
+            .source
+            .set_native(Some(BitDepth::Sixteen), read16.source.planes().clone())
+            .expect("valid source depth");
         let mut read32 = rgb8.clone();
-        read32.source_depth = Some(BitDepth::ThirtyTwo);
+        read32
+            .source
+            .set_native(Some(BitDepth::ThirtyTwo), read32.source.planes().clone())
+            .expect("valid source depth");
         // A CMYK conversion keeps RGB working planes.
         let mut converted = rgb8.clone();
-        converted.source_mode = Some(ColorMode::Cmyk);
+        converted
+            .source
+            .set_encoding(Some(ColorMode::Cmyk), None)
+            .expect("valid source encoding");
         assert!(depth_refusal("adaptive-wide-angle", Some(&converted)).is_some());
         for ok in [&rgb8, &gray8, &rgb16, &gray16, &read16] {
             assert!(depth_refusal("lens-correction", Some(ok)).is_none());

@@ -15,12 +15,14 @@ use pictura_select::Selection;
 fn doc() -> Document {
     let mut doc = Document::new(16, 16, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = LayerStack::from_layers(vec![pixel_layer("px", 16, 16, (255, 0, 0))]);
-    doc.composite = PixelBuffer {
-        width: 16,
-        height: 16,
-        channels: 4,
-        data: vec![0u8; 16 * 16 * 4].into(),
-    };
+    doc.composite
+        .replace(PixelBuffer {
+            width: 16,
+            height: 16,
+            channels: 4,
+            data: vec![0u8; 16 * 16 * 4].into(),
+        })
+        .expect("valid composite");
     doc
 }
 
@@ -98,7 +100,7 @@ fn selection_transform_keeps_layer_bytes() {
         .unwrap()
         .layers
         .iter()
-        .flat_map(|layer| layer.channels.iter().map(|channel| channel.data.to_vec()))
+        .flat_map(|layer| layer.channels().iter().map(|channel| channel.data.to_vec()))
         .collect();
     assert!(view.begin_selection_transform());
     scale_session(&mut view, 1.5);
@@ -110,7 +112,7 @@ fn selection_transform_keeps_layer_bytes() {
         .unwrap()
         .layers
         .iter()
-        .flat_map(|layer| layer.channels.iter().map(|channel| channel.data.to_vec()))
+        .flat_map(|layer| layer.channels().iter().map(|channel| channel.data.to_vec()))
         .collect();
     assert_eq!(after, before);
 }

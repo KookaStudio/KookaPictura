@@ -23,7 +23,9 @@ fn masked_doc() -> Document {
         density: 255,
         ..Default::default()
     });
-    doc.composite = pictura_render::composite_rgba(&doc);
+    doc.composite
+        .replace(pictura_render::composite_rgba(&doc))
+        .expect("valid composite");
     doc
 }
 
@@ -31,7 +33,9 @@ fn paint_mask(doc: &mut Document, x: usize, y: usize) {
     let mask = doc.layers[0].mask.as_mut().expect("mask");
     let stride = mask.rect.width() as usize;
     mask.data.as_mut().expect("mask data").as_mut_slice()[y * stride + x] = 0;
-    doc.composite = pictura_render::composite_rgba(doc);
+    doc.composite
+        .replace(pictura_render::composite_rgba(doc))
+        .expect("valid composite");
 }
 
 struct Stack {
@@ -105,7 +109,9 @@ fn a_moved_mask_reports_the_composite() {
     let mask = live.layers[0].mask.as_mut().expect("mask");
     mask.rect.left += 8;
     mask.rect.right += 8;
-    live.composite = pictura_render::composite_rgba(&live);
+    live.composite
+        .replace(pictura_render::composite_rgba(&live))
+        .expect("valid composite");
     stack.capture(&mut live, "Move Mask");
     paint_mask(&mut live, 70, 10);
     stack.capture(&mut live, "Mask");
@@ -126,7 +132,9 @@ fn a_walk_across_a_mask_move_reports_the_composite() {
         let mask = live.layers[0].mask.as_mut().expect("mask");
         mask.rect.left += delta;
         mask.rect.right += delta;
-        live.composite = pictura_render::composite_rgba(&live);
+        live.composite
+            .replace(pictura_render::composite_rgba(&live))
+            .expect("valid composite");
         stack.capture(&mut live, "Move Mask");
     }
     let start = live.clone();
@@ -172,7 +180,9 @@ fn undoing_a_masked_delete_stays_bounded() {
     let mut stack = Stack::opened(&mut live);
     let before = live.clone();
     assert!(live.layers.remove(&[0]).is_some());
-    live.composite = pictura_render::composite_rgba(&live);
+    live.composite
+        .replace(pictura_render::composite_rgba(&live))
+        .expect("valid composite");
     stack.capture(&mut live, "Delete Layer");
     assert!(matches!(
         stack.undo(&mut live),
@@ -191,7 +201,9 @@ fn a_jump_lands_on_an_exact_stored_composite() {
     stack.capture(&mut live, "New Layer");
     pictura_render::resize_document(&mut live, 256, 256, pictura_render::Resample::Nearest)
         .expect("resize");
-    live.composite = pictura_render::composite_rgba(&live);
+    live.composite
+        .replace(pictura_render::composite_rgba(&live))
+        .expect("valid composite");
     stack.capture(&mut live, "Image Size");
     for state in [0, 3, 1, 3, 2, 0] {
         stack
@@ -211,7 +223,9 @@ fn an_undo_after_a_whole_jump_stays_bounded() {
     let mut stack = Stack::opened(&mut live);
     pictura_render::resize_document(&mut live, 256, 256, pictura_render::Resample::Nearest)
         .expect("resize");
-    live.composite = pictura_render::composite_rgba(&live);
+    live.composite
+        .replace(pictura_render::composite_rgba(&live))
+        .expect("valid composite");
     stack.capture(&mut live, "Image Size");
     let restored = stack
         .history

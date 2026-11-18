@@ -9,9 +9,14 @@ mod annotations;
 pub mod blend;
 pub mod blur;
 pub mod channels;
+mod coverage;
+pub use coverage::Coverage;
+mod content_params;
 mod crs;
+pub use content_params::*;
 mod digest;
 mod document_composite;
+mod document_source;
 pub mod edition;
 mod global_light;
 mod guides;
@@ -20,7 +25,9 @@ pub mod homography;
 pub mod job;
 pub mod layer_bounds;
 pub mod layer_comp;
+mod layer_content;
 mod layer_stack;
+pub use layer_content::{Layer, LayerContent, LayerKind, LayerParts};
 pub mod mask_ops;
 pub mod memory;
 pub mod nonseparable;
@@ -45,6 +52,8 @@ pub use annotations::{
 };
 pub use crs::CrsSettings;
 pub use digest::content_digest;
+pub use document_composite::CompositeState;
+pub use document_source::{DocumentStateError, SourceState};
 pub use edition::{Edition, Feature};
 pub use global_light::GlobalLight;
 pub use guides::{guide_near, Guide, GuideOrientation};
@@ -170,48 +179,8 @@ pub struct Document {
     pub height: u32,
     pub mode: ColorMode,
     pub depth: BitDepth,
-    /// The header color mode of the file this document was read from, when that
-    /// mode was normalized to the working mode on read. `None` for a Grayscale
-    /// or RGB file and for a constructed document.
-    pub source_mode: Option<ColorMode>,
-    /// The header bit depth of the file this document was read from when it was
-    /// not 8-bit. `None` for an 8-bit file, a depth-1 Bitmap file (whose mode
-    /// `source_mode` records), and a constructed document; `Some(16/32)` for a
-    /// 16/32-bit file of any mode, including a converted CMYK/Lab read. A
-    /// Grayscale/RGB 16/32-bit read also retains native planes and re-emits this
-    /// depth on save; a converted mode records it for the notice but retains no
-    /// samples and still saves 8-bit.
-    pub source_depth: Option<BitDepth>,
-    /// Retained source planes of the composite color channels and the document
-    /// extra channels, re-emitted on save when the plane is unchanged. Set for a
-    /// 16/32-bit Grayscale or RGB read (native-depth samples) and for an 8-bit
-    /// Lab read (the Lab color planes, so an unedited Lab file saves exactly).
-    /// `None` for an 8-bit RGB/Grayscale read, a constructed document, and a
-    /// 16/32-bit converted mode.
-    pub source_planes: Option<SourcePlanes>,
-    /// The 768-byte Indexed palette (256 red, then green, then blue) read from an
-    /// Indexed file, retained so an unchanged document can re-emit it. `None` for
-    /// every other mode, an RGB/Grayscale read, and a constructed document.
-    /// Deliberately separate from `color_mode_data`, which stays cleared on an
-    /// Indexed read (normalization consumes the palette).
-    pub source_palette: Option<[u8; 768]>,
-    /// The embedded ICC profile bytes of the file this document was read from,
-    /// when it was converted to the sRGB working space on read. `None` for a
-    /// file with no decodable non-sRGB profile and for a constructed document.
-    /// Deliberately not re-emitted on save: the profile is removed from
-    /// `image_resources` so the converted sRGB pixels are not mis-tagged.
-    pub source_icc: Option<Plane<u8>>,
-    /// The ICC bytes of the working profile the stored composite and layer color
-    /// numbers are in. `None` means the sRGB working space. Set by an
-    /// assign/convert command, or by a Preserve incoming-policy read that kept the
-    /// embedded non-sRGB profile; distinct from `source_icc`, which records a
-    /// profile a read converted away.
-    pub document_icc: Option<Plane<u8>>,
-    pub composite: PixelBuffer,
-    /// True when the file carried a merged composite image-data section. False
-    /// when the file ended after the layer section (maximize-compatibility off),
-    /// in which case `composite` is a zero-filled placeholder, not authoritative.
-    pub merged_composite_present: bool,
+    pub source: SourceState,
+    pub composite: CompositeState,
     /// Compression observed for the composite image-data section on read; RLE for
     /// a constructed document. Re-emitted on save to preserve the source encoding.
     pub composite_compression: Compression,
@@ -277,14 +246,8 @@ impl Document {
             height,
             mode,
             depth,
-            source_mode: None,
-            source_depth: None,
-            source_planes: None,
-            source_palette: None,
-            source_icc: None,
-            document_icc: None,
-            composite,
-            merged_composite_present: true,
+            source: SourceState::default(),
+            composite: CompositeState::new(composite).expect("valid initial composite"),
             composite_compression: Compression::Rle,
             layer_compression: Compression::Rle,
             is_psb: false,
@@ -349,23 +312,28 @@ impl Document {
                 composite[c * plane + i] = value;
             }
         }
-        doc.composite = PixelBuffer {
-            width,
-            height,
-            channels: 4,
-            data: composite.into(),
-        };
-        doc.layers = LayerStack::from_layers(vec![Layer {
-            name: name.to_string(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: height as i32,
-                right: width as i32,
+        doc.composite
+            .replace(PixelBuffer {
+                width,
+                height,
+                channels: 4,
+                data: composite.into(),
+            })
+            .expect("valid composite");
+        doc.layers = LayerStack::from_layers(vec![crate::Layer::from_parts(
+            crate::LayerParts {
+                name: name.to_string(),
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: height as i32,
+                    right: width as i32,
+                },
+                channels,
+                ..Default::default()
             },
-            channels,
-            ..Default::default()
-        }]);
+            crate::LayerContent::Pixel,
+        )]);
         doc
     }
 
@@ -374,7 +342,8 @@ impl Document {
     /// an 8-bit Lab read, whose retained store is 8-bit) and a constructed
     /// document, which still save 8-bit.
     pub fn retains_source_depth(&self) -> bool {
-        self.source_planes
+        self.source
+            .planes()
             .as_ref()
             .is_some_and(|store| store.depth != BitDepth::Eight)
             || retains_source_depth(&self.layers)
@@ -393,11 +362,11 @@ impl Document {
     /// the compositor reads, or its edit never reaches the display.
     #[inline]
     pub fn authoritative_plane<'a>(&self, layer: &'a Layer, id: i16) -> Option<&'a Samples> {
-        let depth = self.source_depth?;
+        let depth = self.source.depth()?;
         if !matches!(depth, BitDepth::Sixteen | BitDepth::ThirtyTwo) {
             return None;
         }
-        if self.source_mode.is_some() {
+        if self.source.mode().is_some() {
             return None;
         }
         let store = layer.source_channels.as_ref()?;
@@ -415,7 +384,7 @@ fn retains_source_depth(layers: &[Layer]) -> bool {
         l.source_channels
             .as_ref()
             .is_some_and(|store| store.depth != BitDepth::Eight)
-            || retains_source_depth(&l.children)
+            || retains_source_depth(l.children())
     })
 }
 
@@ -954,26 +923,6 @@ impl LayerMask {
     }
 }
 
-impl Default for LayerMask {
-    fn default() -> Self {
-        Self {
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 0,
-                right: 0,
-            },
-            default_color: 0,
-            disabled: false,
-            flags: 0,
-            data: None,
-            extra: Plane::default(),
-            density: 255,
-            feather_bits: 0,
-        }
-    }
-}
-
 /// PSD `lclr` sheet color. Values match psd-tools `SheetColorType`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -1060,144 +1009,6 @@ pub fn layer_pixel_locked(layer: &Layer) -> bool {
 /// True when a layer's `TRANSPARENCY` lock forbids an alpha-changing edit.
 pub fn layer_transparency_locked(layer: &Layer) -> bool {
     layer.lock.contains(LockFlags::TRANSPARENCY)
-}
-
-/// A pixel layer or a group (`is_group`). Groups carry `children`, bottom-first
-/// like everything else. `rect` is the layer bounds; for groups it may be empty.
-///
-/// An adjustment layer carries `adjustment` and, in PSD, no color channels (its
-/// mask still uses channel `-2`). `adjustment` is opaque to this crate.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Layer {
-    pub name: String,
-    pub rect: PsdRect,
-    pub blend: BlendMode,
-    pub opacity: u8,
-    pub fill: u8,
-    pub lock: LockFlags,
-    pub color: ColorLabel,
-    pub clipping: bool,
-    pub visible: bool,
-    /// PSD record flag bit 4: the layer's pixel data is irrelevant to the
-    /// document's appearance. Set on shape layers and preserved on save so a re-saved shape layer stays a shape.
-    /// The writer emits bit 3 (`0x08`, "flags valid") with it.
-    pub pixel_data_irrelevant: bool,
-    pub mask: Option<LayerMask>,
-    pub adjustment: Option<AdjustmentData>,
-    pub channels: Vec<Channel>,
-    pub children: LayerStack,
-    pub is_group: bool,
-    /// First-class Background flag. PSD has no background bit; the codec infers it from the bottom
-    /// top-level non-group named `"Background"` and writes that name back for a flagged layer (design D5).
-    pub background: bool,
-    /// Raw blend-mode key, stored only when it does not map to a known [`BlendMode`], preserved for lossless re-save.
-    pub blend_key: Option<[u8; 4]>,
-    /// Raw blending-ranges block bytes, preserved verbatim for lossless re-save.
-    pub blending_ranges: Plane<u8>,
-    /// `knko` knockout mode (`None` when the block is absent).
-    pub knockout: Knockout,
-    /// `clbl` blend clipped elements (CS6 default `true` when absent).
-    pub blend_clipping: bool,
-    /// `infx` blend interior effects as a group (CS6 default `false` when
-    /// absent; a stored byte `1` turns it on).
-    pub blend_interior: bool,
-    /// `tsly` transparency shapes layer (CS6 default `true` when absent).
-    pub transparency_shapes: bool,
-    /// `lmgm` layer mask hides effects (CS6 default `false` when absent).
-    pub layer_mask_hides_effects: bool,
-    /// `vmgm` vector mask hides effects (CS6 default `false` when absent).
-    pub vector_mask_hides_effects: bool,
-    /// `brst` channel numbers excluded from blending, in file order; the writer
-    /// sorts and dedupes them.
-    pub restricted_channels: Vec<u32>,
-    /// Typed Blend If view of `blending_ranges`; `None` when empty or malformed.
-    pub blend_if: Option<BlendIf>,
-    /// Additional-layer-info tagged blocks the engine does not model, preserved verbatim for lossless re-save.
-    pub extra_blocks: Vec<LayerBlock>,
-    /// Layer channels the engine does not decode, kept as full on-disk streams
-    /// for verbatim re-emit.
-    pub raw_channels: Vec<RawChannel>,
-    /// Derived embedded/linked smart-object view; `None` for ordinary layers.
-    pub smart_object: Option<SmartObject>,
-    /// Derived `vmsk`/`vsms` vector-mask view; `None` when absent or unparseable. The
-    /// raw block remains in `extra_blocks` and is the serialization source.
-    pub vector_mask: Option<VectorMask>,
-    /// Derived `TySh` type-tool view; `None` when absent or unparseable. The
-    /// raw block remains in `extra_blocks` and is the serialization source.
-    pub type_tool: Option<TypeTool>,
-    /// The named styles a type layer applies and the run's manual overrides, in
-    /// memory only (a style definition is not written to PSD). Carried on the
-    /// layer so a re-author within a session keeps them.
-    pub applied_character_style: Option<String>,
-    pub applied_paragraph_style: Option<String>,
-    pub type_overrides: StyleOverrides,
-    /// Retained source channel samples, re-emitted on save when the layer has
-    /// not moved: native `16`/`32`-bit samples for a Grayscale/RGB read, or the
-    /// 8-bit Lab color planes for a Lab read.
-    pub source_channels: Option<SourceChannels>,
-}
-
-impl Default for Layer {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 0,
-                right: 0,
-            },
-            blend: BlendMode::Normal,
-            opacity: 255,
-            fill: 255,
-            lock: LockFlags::default(),
-            color: ColorLabel::None,
-            clipping: false,
-            visible: true,
-            pixel_data_irrelevant: false,
-            mask: None,
-            adjustment: None,
-            channels: Vec::new(),
-            children: LayerStack::default(),
-            is_group: false,
-            background: false,
-            blend_key: None,
-            blending_ranges: Plane::default(),
-            knockout: Knockout::None,
-            blend_clipping: true,
-            blend_interior: false,
-            transparency_shapes: true,
-            layer_mask_hides_effects: false,
-            vector_mask_hides_effects: false,
-            restricted_channels: Vec::new(),
-            blend_if: None,
-            extra_blocks: Vec::new(),
-            raw_channels: Vec::new(),
-            smart_object: None,
-            vector_mask: None,
-            type_tool: None,
-            applied_character_style: None,
-            applied_paragraph_style: None,
-            type_overrides: StyleOverrides::default(),
-            source_channels: None,
-        }
-    }
-}
-
-impl Layer {
-    pub fn is_group(&self) -> bool {
-        self.is_group
-    }
-
-    /// The preserved additional-layer-information block keyed `key`, if any.
-    pub fn extra_block(&self, key: &[u8; 4]) -> Option<&LayerBlock> {
-        self.extra_blocks.iter().find(|b| &b.key == key)
-    }
-
-    /// A type layer: any preserved `TySh` (type tool) block is present.
-    pub fn is_type(&self) -> bool {
-        self.extra_block(b"TySh").is_some()
-    }
 }
 
 #[cfg(test)]

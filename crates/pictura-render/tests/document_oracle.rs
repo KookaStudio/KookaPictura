@@ -42,7 +42,7 @@ fn plane(base: u8, n: usize) -> Vec<u8> {
 
 fn pixel_layer(name: &str, r: PsdRect, mask: Option<LayerMask>) -> Layer {
     let n = (r.width().max(0) * r.height().max(0)) as usize;
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: r,
         blend: BlendMode::Normal,
@@ -76,11 +76,11 @@ fn pixel_layer(name: &str, r: PsdRect, mask: Option<LayerMask>) -> Layer {
         is_group: false,
         background: false,
         ..Default::default()
-    }
+    })
 }
 
 fn group(name: &str, children: Vec<Layer>) -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: rect(0, 0, 0, 0),
         blend: BlendMode::PassThrough,
@@ -97,7 +97,7 @@ fn group(name: &str, children: Vec<Layer>) -> Layer {
         is_group: true,
         background: false,
         ..Default::default()
-    }
+    })
 }
 
 /// Non-square 6×4 document: a full layer, a masked layer, and a group with one
@@ -122,7 +122,9 @@ fn sample_doc() -> Document {
         id: -1,
         data: plane(0, 24).into(),
     }];
-    doc.composite = composite_rgba(&doc);
+    doc.composite
+        .replace(composite_rgba(&doc))
+        .expect("valid composite");
     doc
 }
 
@@ -133,7 +135,9 @@ fn plain_doc() -> Document {
         pixel_layer("bottom", rect(0, 0, 6, 8), None),
         pixel_layer("top", rect(0, 0, 3, 4), None),
     ]);
-    doc.composite = composite_rgba(&doc);
+    doc.composite
+        .replace(composite_rgba(&doc))
+        .expect("valid composite");
     doc
 }
 
@@ -160,7 +164,7 @@ fn flattened(layers: &[Layer]) -> Vec<(String, PsdRect)> {
     fn walk(layers: &[Layer], out: &mut Vec<(String, PsdRect)>) {
         for layer in layers {
             out.push((layer.name.clone(), layer.rect));
-            walk(&layer.children, out);
+            walk(layer.children(), out);
         }
     }
     let mut out = Vec::new();
@@ -170,8 +174,14 @@ fn flattened(layers: &[Layer]) -> Vec<(String, PsdRect)> {
 
 /// Composite consistency plus structural survival through `write_psd`/`read_psd`.
 fn assert_structural_oracle(doc: &mut Document, label: &str, before: &PixelBuffer) {
-    assert_eq!(&doc.composite, before, "{label}: engine must not composite");
-    doc.composite = composite_rgba(doc);
+    assert_eq!(
+        doc.composite.buffer(),
+        before,
+        "{label}: engine must not composite"
+    );
+    doc.composite
+        .replace(composite_rgba(doc))
+        .expect("valid composite");
     assert_eq!(
         doc.composite,
         composite_rgba(doc),
@@ -197,7 +207,7 @@ fn assert_structural_oracle(doc: &mut Document, label: &str, before: &PixelBuffe
 #[test]
 fn resize_document_preserves_structure_and_composite() {
     let mut doc = sample_doc();
-    let before = doc.composite.clone();
+    let before = doc.composite.buffer().clone();
     resize_document(&mut doc, 12, 8, Resample::Nearest).unwrap();
     assert_eq!((doc.width, doc.height), (12, 8));
     assert_structural_oracle(&mut doc, "resize_document", &before);
@@ -213,13 +223,15 @@ fn merged_only() -> Document {
         data[2 * plane + i] = (i * 3) as u8;
         data[3 * plane + i] = (40 + i * 13) as u8;
     }
-    doc.composite = PixelBuffer {
-        width: 4,
-        height: 4,
-        channels: 4,
-        data: data.into(),
-    };
-    doc.merged_composite_present = true;
+    doc.composite
+        .replace(PixelBuffer {
+            width: 4,
+            height: 4,
+            channels: 4,
+            data: data.into(),
+        })
+        .expect("valid composite");
+    doc.composite.set_merged_output(true);
     doc
 }
 
@@ -235,7 +247,9 @@ fn a_merged_only_document_keeps_its_pixels_and_saves() {
         }
         assert_eq!(doc.layers.len(), 1, "{kind}: materialized Background");
         assert!(doc.layers[0].background, "{kind}: Background flag");
-        doc.composite = composite_rgba(&doc);
+        doc.composite
+            .replace(composite_rgba(&doc))
+            .expect("valid composite");
         let back = round_trip(&doc);
         check_dims(&back, doc.width, doc.height).unwrap();
         assert_eq!(back.layers.len(), 1, "{kind}: saved layer");
@@ -246,7 +260,7 @@ fn a_merged_only_document_keeps_its_pixels_and_saves() {
 #[test]
 fn resize_canvas_document_preserves_structure_and_composite() {
     let mut doc = sample_doc();
-    let before = doc.composite.clone();
+    let before = doc.composite.buffer().clone();
     resize_canvas_document(&mut doc, 8, 6, Anchor::Center).unwrap();
     assert_eq!((doc.width, doc.height), (8, 6));
     assert_structural_oracle(&mut doc, "resize_canvas_document", &before);
@@ -255,7 +269,7 @@ fn resize_canvas_document_preserves_structure_and_composite() {
 #[test]
 fn rotate_document_preserves_structure_and_composite() {
     let mut doc = sample_doc();
-    let before = doc.composite.clone();
+    let before = doc.composite.buffer().clone();
     rotate_document(&mut doc, 1).unwrap();
     assert_eq!((doc.width, doc.height), (4, 6));
     assert_structural_oracle(&mut doc, "rotate_document", &before);
@@ -264,7 +278,7 @@ fn rotate_document_preserves_structure_and_composite() {
 #[test]
 fn flip_document_preserves_structure_and_composite() {
     let mut doc = sample_doc();
-    let before = doc.composite.clone();
+    let before = doc.composite.buffer().clone();
     flip_document(&mut doc, true).expect("flips");
     assert_structural_oracle(&mut doc, "flip_document", &before);
 }
@@ -289,9 +303,11 @@ fn rotate_document_in_matches_rotate_in_kernel() {
     let mut doc = Document::new(6, 4, ColorMode::Rgb, BitDepth::Eight);
     doc.layers =
         pictura_core::LayerStack::from_layers(vec![pixel_layer("only", rect(0, 0, 4, 6), None)]);
-    doc.composite = composite_rgba(&doc);
-    let before = doc.layers[0].channels[0].data.to_vec();
-    let before_composite = doc.composite.clone();
+    doc.composite
+        .replace(composite_rgba(&doc))
+        .expect("valid composite");
+    let before = doc.layers[0].channels()[0].data.to_vec();
+    let before_composite = doc.composite.buffer().clone();
 
     assert!(rotate_document_in(&mut doc, 30.0, (3.0, 2.0)));
     assert_structural_oracle(&mut doc, "rotate_document_in", &before_composite);
@@ -300,7 +316,7 @@ fn rotate_document_in_matches_rotate_in_kernel() {
     src.data.copy_from_slice(&before);
     let want = pictura_ops::rotate_arbitrary(&src, 30.0, [0, 0, 0, 0]).unwrap();
     assert_eq!(
-        &doc.layers[0].channels[0].data[..],
+        &doc.layers[0].channels()[0].data[..],
         &want.data[..],
         "rotated channel must match the oracled rotate_in kernel exactly"
     );
@@ -336,7 +352,7 @@ fn flip_twice_is_identity() {
 fn canvas_grow_then_shrink_opposite_anchor_restores_dimensions() {
     let mut doc = sample_doc();
     let (w0, h0) = (doc.width, doc.height);
-    let before = doc.composite.clone();
+    let before = doc.composite.buffer().clone();
     resize_canvas_document(&mut doc, w0 + 2, h0 + 2, Anchor::TopLeft).unwrap();
     resize_canvas_document(&mut doc, w0, h0, Anchor::BottomRight).unwrap();
     assert_eq!((doc.width, doc.height), (w0, h0));
@@ -364,7 +380,9 @@ fn canvas_center_grow_then_shrink_restores_document() {
 fn dimension_check_bites() {
     let mut doc = sample_doc();
     resize_document(&mut doc, 12, 8, Resample::Nearest).unwrap();
-    doc.composite = composite_rgba(&doc);
+    doc.composite
+        .replace(composite_rgba(&doc))
+        .expect("valid composite");
     let back = round_trip(&doc);
 
     assert!(check_dims(&back, 12, 8).is_ok(), "correct size must pass");
@@ -447,7 +465,9 @@ fn assert_psd_tools_sees(doc: &Document, tag: &str) {
 fn psd_tools_sees_resized_document() {
     let mut doc = plain_doc();
     resize_document(&mut doc, 16, 12, Resample::Nearest).unwrap();
-    doc.composite = composite_rgba(&doc);
+    doc.composite
+        .replace(composite_rgba(&doc))
+        .expect("valid composite");
     assert_psd_tools_sees(&doc, "resized");
 }
 
@@ -455,7 +475,9 @@ fn psd_tools_sees_resized_document() {
 fn psd_tools_sees_rotated_document() {
     let mut doc = plain_doc();
     rotate_document(&mut doc, 1).unwrap();
-    doc.composite = composite_rgba(&doc);
+    doc.composite
+        .replace(composite_rgba(&doc))
+        .expect("valid composite");
     assert_psd_tools_sees(&doc, "rotated");
 }
 
@@ -567,11 +589,13 @@ fn rotate_document_in_matches_imagemagick_central_region() {
 
     let mut layer = pixel_layer("only", rect(0, 0, h as i32, w as i32), None);
     for c in 0..3usize {
-        layer.channels[c].data = planar[c * plane..(c + 1) * plane].to_vec().into();
+        layer.channels_mut()[c].data = planar[c * plane..(c + 1) * plane].to_vec().into();
     }
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
-    doc.composite = composite_rgba(&doc);
+    doc.composite
+        .replace(composite_rgba(&doc))
+        .expect("valid composite");
 
     let (reference, (iw, ih)) = oracle_rotate(&planar, "16x16", "30");
     assert!(
@@ -587,7 +611,7 @@ fn rotate_document_in_matches_imagemagick_central_region() {
     let rplane = (doc.width * doc.height) as usize;
     let mut rotated = vec![0u8; rplane * 3];
     for c in 0..3usize {
-        rotated[c * rplane..(c + 1) * rplane].copy_from_slice(&doc.layers[0].channels[c].data);
+        rotated[c * rplane..(c + 1) * rplane].copy_from_slice(&doc.layers[0].channels()[c].data);
     }
 
     // Isolate: the doc-side must equal the oracled kernel exactly.

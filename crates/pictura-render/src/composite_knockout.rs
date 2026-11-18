@@ -81,7 +81,7 @@ fn knockout_base(
 
 /// Whether `layer` or any descendant carries a non-`None` knockout (recursive).
 pub(crate) fn has_knockout(layer: &Layer) -> bool {
-    layer.knockout != Knockout::None || layer.children.iter().any(has_knockout)
+    layer.knockout != Knockout::None || layer.children().iter().any(has_knockout)
 }
 
 /// Composite `node`; a knockout with an effective base routes through

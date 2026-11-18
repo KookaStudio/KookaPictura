@@ -1,7 +1,7 @@
 //! Decode a layer's preserved `vmsk`/`vsms` block into the derived
 //! [`pictura_core::VectorMask`] view, and author one from a Work Path outline.
 //!
-//! The raw block stays in `Layer.extra_blocks` and is the source of truth for
+//! The raw block stays in `Layer.extra_blocks()` and is the source of truth for
 //! re-emission; this module only parses and flattens it. A malformed block
 //! leaves the view unset rather than failing the document.
 
@@ -30,7 +30,7 @@ pub(crate) fn resolve_vector_masks(layers: &mut LayerStack, width: u32, height: 
             && layer.mask.as_ref().is_some_and(|mask| {
                 mask.flags & crate::mask_params::FLAG_USER_MASK_FROM_RENDER != 0
             })
-            && !layer.raw_channels.iter().any(|channel| channel.id == -3);
+            && !layer.raw_channels().iter().any(|channel| channel.id == -3);
         // The reader leaves the mask record's vector density and feather on a
         // placeholder view.
         // ponytail: a suppressed path's vector density/feather is normalized on
@@ -49,7 +49,9 @@ pub(crate) fn resolve_vector_masks(layers: &mut LayerStack, width: u32, height: 
                     view
                 })
         };
-        resolve_vector_masks(&mut layer.children, width, height);
+        if let Some(children) = layer.children_mut() {
+            resolve_vector_masks(children, width, height);
+        }
     }
 }
 
@@ -339,13 +341,13 @@ mod tests {
     use pictura_core::{Document, Layer, LayerBlock, LayerMask, PsdRect, RawChannel};
 
     fn mask_layer(data: Vec<u8>) -> Layer {
-        Layer {
+        crate::layer_from_parts(pictura_core::LayerParts {
             extra_blocks: vec![LayerBlock {
                 key: *b"vmsk",
                 data: data.into(),
             }],
             ..Default::default()
-        }
+        })
     }
 
     fn resolve(data: Vec<u8>) -> Option<VectorMask> {
@@ -355,13 +357,13 @@ mod tests {
     }
 
     fn mask_layer_with(key: &[u8; 4], data: Vec<u8>) -> Layer {
-        Layer {
+        crate::layer_from_parts(pictura_core::LayerParts {
             extra_blocks: vec![LayerBlock {
                 key: *key,
                 data: data.into(),
             }],
             ..Default::default()
-        }
+        })
     }
 
     fn resolve_layer(layer: Layer) -> Option<VectorMask> {
@@ -415,25 +417,26 @@ mod tests {
         mask_flags: u8,
         raw_ids: &[i16],
     ) -> Option<VectorMask> {
-        let mut layers = LayerStack::from_layers(vec![Layer {
-            pixel_data_irrelevant,
-            mask: Some(LayerMask {
-                flags: mask_flags,
+        let mut layers =
+            LayerStack::from_layers(vec![crate::layer_from_parts(pictura_core::LayerParts {
+                pixel_data_irrelevant,
+                mask: Some(LayerMask {
+                    flags: mask_flags,
+                    ..Default::default()
+                }),
+                raw_channels: raw_ids
+                    .iter()
+                    .map(|&id| RawChannel {
+                        id,
+                        data: Vec::new().into(),
+                    })
+                    .collect(),
+                extra_blocks: vec![LayerBlock {
+                    key: *b"vmsk",
+                    data: header(3, 0).into(),
+                }],
                 ..Default::default()
-            }),
-            raw_channels: raw_ids
-                .iter()
-                .map(|&id| RawChannel {
-                    id,
-                    data: Vec::new().into(),
-                })
-                .collect(),
-            extra_blocks: vec![LayerBlock {
-                key: *b"vmsk",
-                data: header(3, 0).into(),
-            }],
-            ..Default::default()
-        }]);
+            })]);
         resolve_vector_masks(&mut layers, 8, 8);
         layers[0].vector_mask.take()
     }
@@ -631,9 +634,11 @@ mod tests {
         let vmsk = rectangle_body(&[(1, 1), (1, 3), (3, 3), (3, 1)]);
         let vsms = rectangle_body(&[(2, 2), (2, 6), (6, 6), (6, 2)]);
         let mut layer = mask_layer_with(b"vmsk", vmsk);
-        layer.extra_blocks.push(LayerBlock {
-            key: *b"vsms",
-            data: vsms.into(),
+        crate::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks.push(LayerBlock {
+                key: *b"vsms",
+                data: vsms.into(),
+            })
         });
 
         let mask = resolve_layer(layer).expect("decodes");
@@ -680,9 +685,11 @@ mod tests {
         let vmsk = rectangle_body(&[(1, 1), (1, 3), (3, 3), (3, 1)]);
         let bad = header(2, 0);
         let mut layer = mask_layer_with(b"vmsk", vmsk.clone());
-        layer.extra_blocks.push(LayerBlock {
-            key: *b"vsms",
-            data: bad.clone().into(),
+        crate::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks.push(LayerBlock {
+                key: *b"vsms",
+                data: bad.clone().into(),
+            })
         });
 
         let (mask, layer) = resolve_layer_with_blocks(layer);
@@ -711,9 +718,11 @@ mod tests {
         let bad = header(2, 0);
         let vsms = rectangle_body(&[(1, 1), (1, 5), (5, 5), (5, 1)]);
         let mut layer = mask_layer_with(b"vmsk", bad.clone());
-        layer.extra_blocks.push(LayerBlock {
-            key: *b"vsms",
-            data: vsms.clone().into(),
+        crate::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks.push(LayerBlock {
+                key: *b"vsms",
+                data: vsms.clone().into(),
+            })
         });
 
         let (mask, layer) = resolve_layer_with_blocks(layer);
@@ -742,12 +751,14 @@ mod tests {
         let mut doc = Document::from_rgba("Base", 8, 8, &[255; 8 * 8 * 4]);
         // The reader reconstructs an RGB merged composite with three planes;
         // match that here so whole-document equality can hold.
-        doc.composite = pictura_core::PixelBuffer {
-            width: 8,
-            height: 8,
-            channels: 3,
-            data: vec![255u8; 8 * 8 * 3].into(),
-        };
+        doc.composite
+            .replace(pictura_core::PixelBuffer {
+                width: 8,
+                height: 8,
+                channels: 3,
+                data: vec![255u8; 8 * 8 * 3].into(),
+            })
+            .expect("valid composite");
         let mut shape = doc.layers[0].clone();
         shape.name = "Shape".into();
         shape.rect = PsdRect {
@@ -756,10 +767,12 @@ mod tests {
             bottom: 8,
             right: 8,
         };
-        shape.extra_blocks = vec![LayerBlock {
-            key: *b"vsms",
-            data: data.clone().into(),
-        }];
+        crate::edit_layer(shape.as_mut(), |parts| {
+            parts.extra_blocks = vec![LayerBlock {
+                key: *b"vsms",
+                data: data.clone().into(),
+            }]
+        });
         shape.vector_mask = crate::decode_vector_mask(&data, 8, 8);
         let _ = doc.layers.push(shape);
 

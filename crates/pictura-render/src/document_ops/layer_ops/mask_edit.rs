@@ -7,10 +7,11 @@
 //! single layer is transparency-locked so opacity stays 255 while its colour
 //! plane carries the coverage.
 
-use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, LockFlags, Plane, PsdRect};
+use pictura_core::{BitDepth, Channel, ColorMode, Coverage, Document, LockFlags, PsdRect};
 
-use super::clipboard::coverage_bounds;
 use super::paths::{resolve_path, resolve_path_mut};
+#[cfg(test)]
+use pictura_core::Plane;
 
 /// A layer's raster mask as a standalone document: `document` is a canvas-sized
 /// grayscale image whose one layer's colour plane is the coverage, and `rect`
@@ -58,16 +59,18 @@ pub fn mask_document_coverage(doc: &Document, path: &str) -> Option<MaskDocument
     let mut document = Document::new(0, 0, ColorMode::Grayscale, BitDepth::Eight);
     document.width = doc.width;
     document.height = doc.height;
-    document.layers = pictura_core::LayerStack::from_layers(vec![Layer {
-        name: "Mask".into(),
-        rect,
-        channels: vec![Channel {
-            id: 0,
-            data: coverage,
-        }],
-        lock: LockFlags::default().with(LockFlags::TRANSPARENCY, true),
-        ..Default::default()
-    }]);
+    document.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            name: "Mask".into(),
+            rect,
+            channels: vec![Channel {
+                id: 0,
+                data: coverage,
+            }],
+            lock: LockFlags::default().with(LockFlags::TRANSPARENCY, true),
+            ..Default::default()
+        },
+    )]);
     Some(MaskDocument { document, rect })
 }
 
@@ -87,7 +90,7 @@ pub fn write_mask_back(
     let Some(source) = edited
         .layers
         .first()
-        .and_then(|l| l.channels.iter().find(|c| c.id == 0))
+        .and_then(|l| l.channels().iter().find(|c| c.id == 0))
     else {
         return false;
     };
@@ -125,7 +128,7 @@ pub fn write_mask_back(
 pub fn move_mask_selection_content(
     doc: &mut Document,
     path: &str,
-    coverage: &Plane<u8>,
+    coverage: &Coverage,
     dx: i32,
     dy: i32,
     duplicate: bool,
@@ -137,12 +140,7 @@ pub fn move_mask_selection_content(
     let Some(canvas) = super::mask_domain::canvas(doc) else {
         return false;
     };
-    let w = doc.width as usize;
-    let h = doc.height;
-    if coverage.len() != w * h as usize {
-        return false;
-    }
-    let Some(bounds) = coverage_bounds(coverage, doc.width, h) else {
+    let Some(bounds) = coverage.covered_bounds(canvas) else {
         return false;
     };
     let Some(dest) = super::mask_domain::translated(bounds, dx, dy) else {
@@ -159,9 +157,7 @@ pub fn move_mask_selection_content(
     };
     if !duplicate {
         for y in bounds.top..bounds.bottom {
-            let Some(row) = coverage_row(coverage, y, bounds, w) else {
-                return false;
-            };
+            let row = coverage.row(bounds.left, y, bounds.width() as usize);
             for x in bounds.left..bounds.right {
                 let selected = row[(x - bounds.left) as usize];
                 if selected != 0
@@ -179,9 +175,7 @@ pub fn move_mask_selection_content(
         }
     }
     for y in bounds.top..bounds.bottom {
-        let Some(row) = coverage_row(coverage, y, bounds, w) else {
-            return false;
-        };
+        let row = coverage.row(bounds.left, y, bounds.width() as usize);
         for x in bounds.left..bounds.right {
             let selected = row[(x - bounds.left) as usize];
             if selected == 0 {
@@ -197,17 +191,6 @@ pub fn move_mask_selection_content(
     }
     pending.publish(layer);
     true
-}
-
-/// Row `y` of a `w`-wide coverage plane over `bounds`' columns.
-fn coverage_row(
-    coverage: &Plane<u8>,
-    y: i32,
-    bounds: PsdRect,
-    w: usize,
-) -> Option<std::borrow::Cow<'_, [u8]>> {
-    let xs = bounds.left as usize..bounds.right as usize;
-    coverage.row_span(y as usize, xs, w)
 }
 
 /// `top` over `bottom` with `alpha` (`0..=255`), in straight 8-bit coverage.
@@ -265,7 +248,7 @@ mod tests {
         let mask = mask_document(&doc, "0").unwrap();
         assert_eq!(mask.rect, doc.layers[0].mask.as_ref().unwrap().rect);
         let red = mask.document.layers[0]
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == 0)
             .unwrap();
@@ -280,7 +263,7 @@ mod tests {
         let mut doc = masked_doc();
         let mut edited = mask_document(&doc, "0").unwrap().document;
         edited.layers[0]
-            .channels
+            .channels_mut()
             .iter_mut()
             .find(|c| c.id == 0)
             .unwrap()
@@ -306,7 +289,7 @@ mod tests {
         use crate::document_ops::layer_ops::{add_layer_mask, LayerMaskKind};
 
         let mut doc = masked_doc();
-        doc.layers[0].is_group = true;
+        doc.layers[0].set_group_children(pictura_core::LayerStack::default());
         doc.layers[0].rect = PsdRect {
             top: 0,
             left: 0,
@@ -324,7 +307,7 @@ mod tests {
             .expect("group mask document")
             .document;
         edited.layers[0]
-            .channels
+            .channels_mut()
             .iter_mut()
             .find(|c| c.id == 0)
             .unwrap()
@@ -339,7 +322,7 @@ mod tests {
         doc.layers[0].mask.as_mut().unwrap().data = None;
         let mut edited = mask_document(&doc, "0").unwrap().document;
         edited.layers[0]
-            .channels
+            .channels_mut()
             .iter_mut()
             .find(|c| c.id == 0)
             .unwrap()
@@ -353,14 +336,16 @@ mod tests {
         let doc = masked_doc();
         let mask = mask_document_coverage(&doc, "0").unwrap();
         let layer = &mask.document.layers[0];
-        assert_eq!(layer.channels.len(), 1, "one coverage channel");
-        assert_eq!(layer.channels[0].id, 0);
-        assert_eq!(layer.channels[0].data.len(), 16);
-        assert_eq!(layer.channels[0].data[0], 0, "the coverage is mirrored");
-        assert_eq!(layer.channels[0].data[2], 255);
+        assert_eq!(layer.channels().len(), 1, "one coverage channel");
+        assert_eq!(layer.channels()[0].id, 0);
+        assert_eq!(layer.channels()[0].data.len(), 16);
+        assert_eq!(layer.channels()[0].data[0], 0, "the coverage is mirrored");
+        assert_eq!(layer.channels()[0].data[2], 255);
         let source = resolve_path(&doc, "0").unwrap().mask.as_ref().unwrap();
         assert!(
-            layer.channels[0].data.shares(source.data.as_ref().unwrap()),
+            layer.channels()[0]
+                .data
+                .shares(source.data.as_ref().unwrap()),
             "the stroke start shares the mask's plane instead of copying it"
         );
         assert!(mask.document.composite.data.is_empty(), "no composite");
@@ -418,7 +403,7 @@ mod tests {
 
         let channel0 = |d: &Document| {
             d.layers[0]
-                .channels
+                .channels()
                 .iter()
                 .find(|c| c.id == 0)
                 .expect("coverage channel")
@@ -501,9 +486,15 @@ mod tests {
         let canvas = doc.width as usize * doc.height as usize;
         if coverage.len() == canvas {
             let coverage = Plane::from(coverage.to_vec());
-            return super::move_mask_selection_content(
-                doc, path, &coverage, dx, dy, duplicate, background,
-            );
+            return {
+                let (width, height) = (doc.width, doc.height);
+                match pictura_core::Coverage::for_canvas(&(coverage), width, height) {
+                    Some(coverage) => super::move_mask_selection_content(
+                        doc, path, &coverage, dx, dy, duplicate, background,
+                    ),
+                    None => false,
+                }
+            };
         }
         let Some(mask) = resolve_path(doc, path).and_then(|l| l.mask.as_ref()) else {
             return false;
@@ -512,9 +503,15 @@ mod tests {
         let h = mask.rect.height().max(0) as usize;
         if coverage.len() != w * h {
             let coverage = Plane::from(coverage.to_vec());
-            return super::move_mask_selection_content(
-                doc, path, &coverage, dx, dy, duplicate, background,
-            );
+            return {
+                let (width, height) = (doc.width, doc.height);
+                match pictura_core::Coverage::for_canvas(&(coverage), width, height) {
+                    Some(coverage) => super::move_mask_selection_content(
+                        doc, path, &coverage, dx, dy, duplicate, background,
+                    ),
+                    None => false,
+                }
+            };
         }
         let mut expanded = vec![0; canvas];
         for y in 0..h {
@@ -526,18 +523,30 @@ mod tests {
             }
         }
         let expanded = Plane::from(expanded);
-        super::move_mask_selection_content(doc, path, &expanded, dx, dy, duplicate, background)
+        {
+            let (width, height) = (doc.width, doc.height);
+            match pictura_core::Coverage::for_canvas(&(expanded), width, height) {
+                Some(coverage) => super::move_mask_selection_content(
+                    doc, path, &coverage, dx, dy, duplicate, background,
+                ),
+                None => false,
+            }
+        }
     }
 
     #[test]
     fn move_mask_selection_translates_and_fills_background() {
         let mut doc = masked_with(mask_rect(0, 0, 4, 1), Some(vec![0, 64, 128, 255]), 255);
-        let channels = doc.layers[0].channels.clone();
+        let channels = doc.layers[0].channels().clone();
         assert!(move_mask_selection_content(
             &mut doc, "0", &[255; 4], 1, 0, false, 255
         ));
         assert_eq!(coverage(&doc), vec![0, 0, 64, 128, 255]);
-        assert_eq!(doc.layers[0].channels, channels, "layer pixels untouched");
+        assert_eq!(
+            doc.layers[0].channels(),
+            &channels,
+            "layer pixels untouched"
+        );
         assert!(doc.layers[0].mask.is_some());
     }
 
@@ -588,12 +597,12 @@ mod tests {
     #[test]
     fn move_mask_selection_leaves_pixels_and_mask_metadata_unchanged() {
         let mut doc = masked_with(mask_rect(2, 3, 4, 2), Some(vec![0; 8]), 0);
-        let channels = doc.layers[0].channels.clone();
+        let channels = doc.layers[0].channels().clone();
         let rect = doc.layers[0].mask.as_ref().unwrap().rect;
         assert!(move_mask_selection_content(
             &mut doc, "0", &[255; 8], 1, 0, false, 0
         ));
-        assert_eq!(doc.layers[0].channels, channels);
+        assert_eq!(doc.layers[0].channels(), &channels);
         let mask = doc.layers[0].mask.as_ref().unwrap();
         assert_eq!(mask.rect, mask_rect(0, 0, rect.right + 1, rect.bottom));
         assert_eq!(mask.default_color, 0);
@@ -667,8 +676,8 @@ mod tests {
     #[test]
     fn move_mask_selection_works_on_a_group_mask() {
         let mut group = pixel_layer("group", 4, 1, 0);
-        group.is_group = true;
-        group.channels.clear();
+        group.set_group_children(pictura_core::LayerStack::default());
+        group.channels_mut().clear();
         group.mask = Some(LayerMask {
             rect: mask_rect(0, 0, 4, 1),
             default_color: 0,
@@ -762,7 +771,7 @@ mod tests {
         assert!(move_mask_selection_content(
             &mut doc, "0", coverage, dx, dy, duplicate, 7
         ));
-        mask_document_coverage(&doc, "0").unwrap().document.layers[0].channels[0]
+        mask_document_coverage(&doc, "0").unwrap().document.layers[0].channels()[0]
             .data
             .to_vec()
     }

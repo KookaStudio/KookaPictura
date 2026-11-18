@@ -13,6 +13,8 @@ name = "cold_compare"
 path = "src/bin/cold_compare.rs"
 
 [features]
+# Cross-crate tests opt in; ordinary renderer and application builds exclude the oracle.
+test-oracle = []
 # Test-only: let the GPU probe accept a software (CPU-type) device so the GPU
 # parity tests run on lavapipe (Linux) or WARP (Windows) in CI. Never enable it
 # in a manifest.

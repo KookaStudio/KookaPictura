@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use pictura_adjust::{GradientKind, GradientStop, PatternFillParams};
 use pictura_core::shape::{outline_in_box, ShapeKind, ShapeOptions};
-use pictura_core::{BitDepth, BlendMode, ColorMode, Document, Layer};
+use pictura_core::{BitDepth, BlendMode, ColorMode, Document};
 use pictura_testkit::compare;
 
 // A unique path per call: nextest runs one binary's tests in parallel threads.
@@ -103,13 +103,15 @@ fn vector_document() -> Document {
     );
     let grouped = doc.layers.pop().unwrap();
     {
-        let _ = doc.layers.push(Layer {
-            name: "Group".into(),
-            is_group: true,
-            opacity: 160,
-            children: pictura_core::LayerStack::from_layers(vec![grouped]),
-            ..Default::default()
-        });
+        let _ = doc
+            .layers
+            .push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
+                name: "Group".into(),
+                is_group: true,
+                opacity: 160,
+                children: pictura_core::LayerStack::from_layers(vec![grouped]),
+                ..Default::default()
+            }));
     };
     let ellipse = &mut doc.layers[1];
     ellipse.blend = BlendMode::Multiply;
@@ -126,32 +128,36 @@ fn add_gradient_shape(
     let outline = outline_in_box(ShapeOptions::new(ShapeKind::Rectangle, 0.0, 3), rect).unwrap();
     let path = pictura_render::add_shape_layer(doc, "", [0, 0, 0, 255], "Gradient", &outline, None);
     let layer = pictura_render::resolve_path_mut(doc, &path).unwrap();
-    layer.adjustment = Some(pictura_render::encode_gradient_fill(
-        kind,
-        &[
-            GradientStop {
-                location: 0,
-                color: [255, 30, 20],
-            },
-            GradientStop {
-                location: 4096,
-                color: [20, 40, 230],
-            },
-        ],
-        angle,
-    ));
+    pictura_codec::edit_layer(layer, |parts| {
+        parts.adjustment = Some(pictura_render::encode_gradient_fill(
+            kind,
+            &[
+                GradientStop {
+                    location: 0,
+                    color: [255, 30, 20],
+                },
+                GradientStop {
+                    location: 4096,
+                    color: [20, 40, 230],
+                },
+            ],
+            angle,
+        ))
+    });
 }
 
 fn add_pattern_shape(doc: &mut Document, rect: (f64, f64, f64, f64)) {
     let outline = outline_in_box(ShapeOptions::new(ShapeKind::Rectangle, 0.0, 3), rect).unwrap();
     let path = pictura_render::add_shape_layer(doc, "", [0, 0, 0, 255], "Pattern", &outline, None);
     let layer = pictura_render::resolve_path_mut(doc, &path).unwrap();
-    layer.adjustment = Some(pictura_render::encode_pattern_fill(&PatternFillParams {
-        pattern_id: "oracle-checker".into(),
-        scale: 100.0,
-        link_with_layer: true,
-        origin: (0, 0),
-    }));
+    pictura_codec::edit_layer(layer, |parts| {
+        parts.adjustment = Some(pictura_render::encode_pattern_fill(&PatternFillParams {
+            pattern_id: "oracle-checker".into(),
+            scale: 100.0,
+            link_with_layer: true,
+            origin: (0, 0),
+        }))
+    });
 }
 
 fn add_stroked_shape(doc: &mut Document, rect: (f64, f64, f64, f64)) {

@@ -14,6 +14,8 @@ pub(crate) mod composite;
 mod composite_ctx;
 mod composite_kernel;
 mod composite_plan;
+mod content_routes;
+mod content_transitions;
 pub(crate) mod effect_preparation;
 mod gradient_fill;
 pub(crate) mod layer_effects;
@@ -56,7 +58,7 @@ pub(crate) fn solid(
     let w = r.width().max(0) as usize;
     let h = r.height().max(0) as usize;
     let n = w * h;
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: r,
         blend,
@@ -90,7 +92,7 @@ pub(crate) fn solid(
         is_group: false,
         background: false,
         ..Default::default()
-    }
+    })
 }
 
 fn group(
@@ -100,7 +102,7 @@ fn group(
     mask: Option<LayerMask>,
     children: Vec<Layer>,
 ) -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: rect(0, 0, 0, 0),
         blend,
@@ -117,7 +119,7 @@ fn group(
         is_group: true,
         background: false,
         ..Default::default()
-    }
+    })
 }
 
 pub(crate) fn doc(w: u32, h: u32, layers: Vec<Layer>) -> Document {
@@ -163,7 +165,7 @@ fn adjustment_layer(
     opacity: u8,
     mask: Option<LayerMask>,
 ) -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: rect(0, 0, 0, 0),
         blend: BlendMode::Normal,
@@ -180,7 +182,7 @@ fn adjustment_layer(
         is_group: false,
         background: false,
         ..Default::default()
-    }
+    })
 }
 
 fn rgb(buf: &PixelBuffer, x: u32, y: u32) -> [u8; 3] {

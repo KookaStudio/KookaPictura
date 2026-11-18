@@ -175,8 +175,8 @@ fn walk(
             format!("{parent}/{index}")
         };
         let visible = ancestors_visible && layer.visible;
-        if layer.is_group {
-            walk(&layer.children, &path, visible, visible_only, prefix, out);
+        if layer.is_group() {
+            walk(layer.children(), &path, visible, visible_only, prefix, out);
         } else if !visible_only || visible {
             out.push((path, sanitize_name(&format!("{prefix}{}", layer.name))));
         }
@@ -221,10 +221,17 @@ pub(crate) fn scratch_document(source: &Document, layer: &Layer, gpu_compute: bo
     scratch.global_light = source.global_light;
     scratch.layer_section_extra = source.layer_section_extra.clone();
     scratch.is_psb = source.is_psb;
-    scratch.source_mode = source.source_mode;
-    scratch.source_depth = None;
-    scratch.source_palette = source.source_palette;
-    scratch.document_icc = source.document_icc.clone();
+    scratch
+        .source
+        .set_encoding(source.source.mode(), source.source.palette())
+        .expect("valid source encoding");
+    scratch
+        .source
+        .set_native(None, scratch.source.planes().clone())
+        .expect("valid source depth");
+    scratch
+        .source
+        .set_working_profile(source.source.working_profile().clone());
     scratch.image_resources = source.image_resources.clone();
     scratch.color_mode_data = source.color_mode_data.clone();
     scratch.text_styles = source.text_styles.clone();
@@ -232,31 +239,39 @@ pub(crate) fn scratch_document(source: &Document, layer: &Layer, gpu_compute: bo
     only.visible = true;
     only.source_channels = None;
     scratch.layers = LayerStack::from_layers(vec![only]);
-    scratch.composite = pictura_render::composite(pictura_render::CompositeRequest::whole(
-        &scratch,
-        gpu_compute,
-    ))
-    .0;
+    scratch
+        .composite
+        .replace(
+            pictura_render::composite(pictura_render::CompositeRequest::whole(
+                &scratch,
+                gpu_compute,
+            ))
+            .0,
+        )
+        .expect("valid composite");
     if scratch.mode == ColorMode::Grayscale && scratch.composite.channels == 4 {
         let plane = scratch.composite.pixel_count();
         let data = scratch.composite.data.to_vec();
         let mut normalized = vec![0u8; plane * 2];
         normalized[..plane].copy_from_slice(&data[..plane]);
         normalized[plane..].copy_from_slice(&data[3 * plane..4 * plane]);
-        scratch.composite = pictura_core::PixelBuffer {
-            width: scratch.composite.width,
-            height: scratch.composite.height,
-            channels: 2,
-            data: normalized.into(),
-        };
+        scratch
+            .composite
+            .replace(pictura_core::PixelBuffer {
+                width: scratch.composite.width,
+                height: scratch.composite.height,
+                channels: 2,
+                data: normalized.into(),
+            })
+            .expect("valid composite");
     }
-    scratch.merged_composite_present = true;
+    scratch.composite.set_merged_output(true);
     scratch
 }
 
 fn effective_icc(doc: &Document) -> Vec<u8> {
     let expected = doc.mode.color_channels();
-    if let Some(icc) = doc.document_icc.as_ref() {
+    if let Some(icc) = doc.source.working_profile().as_ref() {
         if pictura_codec::Profile::from_icc(icc)
             .is_ok_and(|profile| profile.channels() == Some(expected))
         {
@@ -280,7 +295,7 @@ fn apply_icc(doc: &mut Document, include: bool) {
 }
 
 fn raster_file(doc: &Document, format: &str, include_icc: bool, path: &str) -> bool {
-    let buffer = &doc.composite;
+    let buffer = doc.composite.buffer();
     let rgba = super::super::helpers_composite::buffer_to_rgba_bytes(buffer);
     let mut metadata = pictura_codec::raster_metadata(doc);
     if include_icc {
@@ -305,11 +320,16 @@ fn pdf_file(doc: &Document, include_icc: bool, path: &str) -> bool {
     let mut editing = doc.clone();
     apply_icc(&mut editing, include_icc);
     let mut page = editing.clone();
-    page.source_mode = None;
-    page.source_depth = None;
-    page.source_planes = None;
-    page.source_palette = None;
-    page.source_icc = None;
+    page.source
+        .set_encoding(None, None)
+        .expect("valid source encoding");
+    page.source
+        .set_native(None, None)
+        .expect("valid native source");
+    page.source
+        .set_encoding(page.source.mode(), None)
+        .expect("valid source encoding");
+    page.source.set_original_profile(None);
     let mut options = pictura_codec::pdf::PdfOptions {
         preserve_editing: true,
         layers: true,
@@ -342,7 +362,7 @@ fn pdf_file(doc: &Document, include_icc: bool, path: &str) -> bool {
         proof: None,
         editing_doc: Some(&editing),
     };
-    match pictura_codec::pdf::write_pdf(&page, &page.composite, &options, &env) {
+    match pictura_codec::pdf::write_pdf(&page, page.composite.buffer(), &options, &env) {
         Ok(bytes) => super::super::helpers::safe_io::write_atomically(path, &bytes, false).is_ok(),
         Err(_) => false,
     }
@@ -404,7 +424,7 @@ mod tests {
     use pictura_core::{AdjustmentData, Plane, PsdRect};
 
     fn layer(name: &str) -> Layer {
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: name.to_string(),
             rect: PsdRect {
                 top: 0,
@@ -413,16 +433,16 @@ mod tests {
                 right: 10,
             },
             ..Default::default()
-        }
+        })
     }
 
     fn group(children: Vec<Layer>) -> Layer {
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "Group".to_string(),
             is_group: true,
             children: LayerStack::from_layers(children),
             ..Default::default()
-        }
+        })
     }
 
     fn doc(layers: Vec<Layer>) -> Document {
@@ -465,9 +485,11 @@ mod tests {
     #[test]
     fn export_layers_adjustment_is_a_target() {
         let mut adjustment = layer("Adjustment");
-        adjustment.adjustment = Some(AdjustmentData {
-            key: *b"inv ",
-            data: Plane::default(),
+        pictura_codec::edit_layer(adjustment.as_mut(), |parts| {
+            parts.adjustment = Some(AdjustmentData {
+                key: *b"inv ",
+                data: Plane::default(),
+            })
         });
         let doc = doc(vec![adjustment]);
         assert_eq!(collect_targets(&doc, false, "").len(), 1);
@@ -540,7 +562,10 @@ mod tests {
     #[test]
     fn export_layers_cmyk_projection_keeps_the_alpha() {
         let mut source = doc(vec![layer("a")]);
-        source.source_mode = Some(ColorMode::Cmyk);
+        source
+            .source
+            .set_encoding(Some(ColorMode::Cmyk), None)
+            .expect("valid source encoding");
         let scratch = scratch_document(&source, &source.layers[0], false);
         assert_eq!(scratch.composite.channels, 4);
     }
@@ -567,7 +592,10 @@ mod tests {
             data[i] = 64;
             data[plane + i] = 128;
         }
-        scratch.composite.data = data.into();
+        scratch
+            .composite
+            .replace_data(data.into())
+            .expect("valid composite plane");
         apply_icc(&mut scratch, false);
 
         let psd = pictura_codec::write_psd(&scratch).expect("PSD writes");
@@ -589,12 +617,12 @@ mod tests {
     fn export_layers_icc_option_embeds_and_strips() {
         let mut scratch = scratch_document(&doc(vec![layer("a")]), &layer("a"), false);
         apply_icc(&mut scratch, true);
-        assert!(scratch.document_icc.is_some());
+        assert!(scratch.source.working_profile().is_some());
         assert!(pictura_codec::decode_image_resources(&scratch)
             .iter()
             .any(|resource| resource.id == pictura_codec::ICC_PROFILE));
         apply_icc(&mut scratch, false);
-        assert!(scratch.document_icc.is_none());
+        assert!(scratch.source.working_profile().is_none());
         assert!(pictura_codec::decode_image_resources(&scratch)
             .iter()
             .all(|resource| resource.id != pictura_codec::ICC_PROFILE));
@@ -617,7 +645,7 @@ mod tests {
         assert_eq!(scratch.layers.len(), 1);
         assert_eq!(scratch.layers[0].rect, hidden.rect);
         assert!(scratch.layers[0].visible);
-        assert!(scratch.merged_composite_present);
+        assert!(scratch.composite.merged_output());
         assert_eq!(
             (scratch.composite.width, scratch.composite.height),
             (10, 10)

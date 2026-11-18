@@ -743,7 +743,7 @@ impl Gpu {
                         layer.blend,
                         layer.opacity,
                         layer.fill,
-                        layer.type_tool.is_some(),
+                        crate::text_gamma::applies_to(layer),
                         NO_ADJ,
                         None,
                     );
@@ -760,7 +760,7 @@ impl Gpu {
                     layer.blend,
                     layer.opacity,
                     layer.fill,
-                    layer.type_tool.is_some(),
+                    crate::text_gamma::applies_to(layer),
                     NO_ADJ,
                     None,
                 );
@@ -775,7 +775,7 @@ impl Gpu {
                     layer.blend,
                     layer.opacity,
                     255,
-                    layer.type_tool.is_some(),
+                    crate::text_gamma::applies_to(layer),
                     *adj,
                     None,
                 );
@@ -791,7 +791,7 @@ impl Gpu {
                     layer.blend,
                     layer.opacity,
                     255,
-                    layer.type_tool.is_some(),
+                    crate::text_gamma::applies_to(layer),
                     (kind, 0, 0, 0),
                     Some(lut),
                 );
@@ -821,7 +821,7 @@ impl Gpu {
                     layer.blend,
                     layer.opacity,
                     255,
-                    layer.type_tool.is_some(),
+                    crate::text_gamma::applies_to(layer),
                     NO_ADJ,
                     None,
                 );

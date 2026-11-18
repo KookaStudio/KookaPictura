@@ -6,13 +6,19 @@ fn hint_doc() -> Document {
     let mut d = Document::new(16, 16, ColorMode::Rgb, BitDepth::Eight);
     let rgba = vec![128u8; 16 * 16 * 4];
     let _ = pictura_render::add_raster_layer_from_rgba(&mut d, "px", 16, 16, &rgba);
-    d.composite = pictura_render::composite_rgba(&d);
+    d.composite
+        .replace(pictura_render::composite_rgba(&d))
+        .expect("valid composite");
     d
 }
 
 fn write_composite(doc: &mut Document, x: usize, y: usize, value: u8) {
     let width = doc.width as usize;
-    doc.composite.data.as_mut_slice()[y * width + x] = value;
+    doc.composite
+        .edit_data(|data| {
+            data.as_mut_slice()[y * width + x] = value;
+        })
+        .expect("pixel edit preserves geometry");
 }
 
 fn open(history: &mut History, doc: &mut Document) {
@@ -62,7 +68,9 @@ fn hinted_capture_skips_outside_tiles() {
     let mut doc = Document::new(512, 512, ColorMode::Rgb, BitDepth::Eight);
     let rgba = vec![128u8; 512 * 512 * 4];
     let _ = pictura_render::add_raster_layer_from_rgba(&mut doc, "px", 512, 512, &rgba);
-    doc.composite = pictura_render::composite_rgba(&doc);
+    doc.composite
+        .replace(pictura_render::composite_rgba(&doc))
+        .expect("valid composite");
     let initial = doc.composite.data.as_slice().to_vec();
     let mut history = History::default();
     open(&mut history, &mut doc);
@@ -148,7 +156,9 @@ fn document_channel_hint_matches() {
         id: 0,
         data: vec![0u8; 16 * 16].into(),
     });
-    doc.composite = pictura_render::composite_rgba(&doc);
+    doc.composite
+        .replace(pictura_render::composite_rgba(&doc))
+        .expect("valid composite");
     let mut plain = doc.clone();
     let mut h1 = History::default();
     let mut h2 = History::default();
@@ -187,7 +197,9 @@ fn hint_layers_doc() -> Document {
         density: 255,
         ..Default::default()
     });
-    d.composite = pictura_render::composite_rgba(&d);
+    d.composite
+        .replace(pictura_render::composite_rgba(&d))
+        .expect("valid composite");
     d
 }
 
@@ -216,27 +228,35 @@ fn each_bounded_op_hint_matches() {
     assert_hint_matches(|doc| {
         let before = pictura_render::damage::influence(doc, "1");
         doc.layers[1].visible = false;
-        doc.composite = pictura_render::composite_rgba(doc);
+        doc.composite
+            .replace(pictura_render::composite_rgba(doc))
+            .expect("valid composite");
         before.map(|rect| vec![rect])
     });
     assert_hint_matches(|doc| {
         let before = pictura_render::damage::influence(doc, "1");
         assert_eq!(pictura_render::delete_paths(doc, &["1"]), 1);
-        doc.composite = pictura_render::composite_rgba(doc);
+        doc.composite
+            .replace(pictura_render::composite_rgba(doc))
+            .expect("valid composite");
         before.map(|rect| vec![rect])
     });
     assert_hint_matches(|doc| {
         let before = pictura_render::damage::influence(doc, "1");
         let created = pictura_render::duplicate_layer(doc, 1);
         let after = pictura_render::damage::influence(doc, &created.to_string());
-        doc.composite = pictura_render::composite_rgba(doc);
+        doc.composite
+            .replace(pictura_render::composite_rgba(doc))
+            .expect("valid composite");
         pictura_render::damage::union(before, after).map(|rect| vec![rect])
     });
     assert_hint_matches(|doc| {
         let before = pictura_render::damage::influence_paths(doc, &["1", "2"]);
         let group = pictura_render::group_paths(doc, &["1", "2"]).expect("group");
         let after = pictura_render::damage::influence(doc, &group);
-        doc.composite = pictura_render::composite_rgba(doc);
+        doc.composite
+            .replace(pictura_render::composite_rgba(doc))
+            .expect("valid composite");
         match (before, after) {
             (Some(mut rects), Some(after)) => {
                 rects.push(after);
@@ -249,14 +269,18 @@ fn each_bounded_op_hint_matches() {
         let before = pictura_render::damage::influence(doc, "1");
         assert!(pictura_render::move_path(doc, "1", 1));
         let after = pictura_render::damage::influence(doc, "2");
-        doc.composite = pictura_render::composite_rgba(doc);
+        doc.composite
+            .replace(pictura_render::composite_rgba(doc))
+            .expect("valid composite");
         pictura_render::damage::union(before, after).map(|rect| vec![rect])
     });
     assert_hint_matches(|doc| {
         let before = pictura_render::damage::influence_paths(doc, &["1", "2"]);
         assert!(pictura_render::set_opacity_paths(doc, &["1", "2"], 128) > 0);
         let after = pictura_render::damage::influence_paths(doc, &["1", "2"]);
-        doc.composite = pictura_render::composite_rgba(doc);
+        doc.composite
+            .replace(pictura_render::composite_rgba(doc))
+            .expect("valid composite");
         match (before, after) {
             (Some(mut rects), Some(after)) => {
                 rects.extend(after);
@@ -266,8 +290,10 @@ fn each_bounded_op_hint_matches() {
         }
     });
     assert_hint_matches(|doc| {
-        doc.layers[0].channels[0].data.as_mut_slice()[16 + 1] = 200;
-        doc.composite = pictura_render::composite_rgba(doc);
+        doc.layers[0].channels_mut()[0].data.as_mut_slice()[16 + 1] = 200;
+        doc.composite
+            .replace(pictura_render::composite_rgba(doc))
+            .expect("valid composite");
         Some(vec![hint_rect()])
     });
     assert_hint_matches(|doc| {
@@ -279,7 +305,9 @@ fn each_bounded_op_hint_matches() {
             .as_mut()
             .expect("mask data")
             .as_mut_slice()[4 + 1] = 20;
-        doc.composite = pictura_render::composite_rgba(doc);
+        doc.composite
+            .replace(pictura_render::composite_rgba(doc))
+            .expect("valid composite");
         Some(vec![hint_rect()])
     });
 }
@@ -306,8 +334,8 @@ fn random_hinted_and_unhinted_captures_match() {
         write_composite(&mut doc, x, y, value);
         write_composite(&mut plain, x, y, value);
         let layer_byte = y * 16 + x;
-        doc.layers[0].channels[0].data.as_mut_slice()[layer_byte] = value;
-        plain.layers[0].channels[0].data.as_mut_slice()[layer_byte] = value;
+        doc.layers[0].channels_mut()[0].data.as_mut_slice()[layer_byte] = value;
+        plain.layers[0].channels_mut()[0].data.as_mut_slice()[layer_byte] = value;
         h1.capture_live_with(
             &mut doc,
             &None,

@@ -10,7 +10,7 @@
 //! scale inside the proxy, so a preview over such layers is approximate beyond
 //! the filter itself; scale them too if a gallery preview over one matters.
 
-use pictura_core::{Document, Layer, LayerMask, PixelBuffer, Plane, PsdRect};
+use pictura_core::{Coverage, Document, Layer, LayerMask, PixelBuffer, Plane, PsdRect};
 use pictura_filters::{Filter, FilterError};
 use rayon::prelude::*;
 
@@ -19,7 +19,7 @@ use crate::document_ops::for_each_layer;
 
 pub struct FilterProxy {
     doc: Document,
-    selection: Option<LayerMask>,
+    selection: Option<Coverage>,
 }
 
 /// A raster mask's reduced coverage and the reduced composites at its two
@@ -43,7 +43,7 @@ impl FilterProxy {
     /// reduced alongside. `None` for an empty region.
     pub fn new(
         doc: &Document,
-        selection: Option<&LayerMask>,
+        selection: Option<&Coverage>,
         region: PsdRect,
         scale: f64,
     ) -> Option<Self> {
@@ -58,21 +58,31 @@ impl FilterProxy {
         let mut proxy = doc.clone();
         proxy.width = full.width() as u32;
         proxy.height = full.height() as u32;
-        proxy.source_planes = None;
+        proxy
+            .source
+            .replace_planes(None)
+            .expect("valid source planes");
         proxy.channels.clear();
         for_each_layer(&mut proxy.layers, &mut |layer| reduce_layer(layer, &map));
         // A layerless document composites from its flat image; a layered one
         // composites its layers, so the reduced composite is unused.
-        proxy.composite = if proxy.layers.is_empty() {
-            reduce_flat(&doc.composite, &map, full)
-        } else {
-            PixelBuffer::new(
-                full.width() as u32,
-                full.height() as u32,
-                doc.composite.channels,
-            )
-        };
-        let selection = selection.map(|mask| reduce_mask(mask, &map));
+        proxy
+            .composite
+            .replace(if proxy.layers.is_empty() {
+                reduce_flat(doc.composite.buffer(), &map, full)
+            } else {
+                PixelBuffer::new(
+                    full.width() as u32,
+                    full.height() as u32,
+                    doc.composite.channels,
+                )
+            })
+            .expect("valid composite");
+        let selection = selection.and_then(|coverage| {
+            let data = coverage.plane_within(region)?;
+            let (rect, samples) = map.plane(&data, 0, region)?;
+            Coverage::new(rect, samples.into(), coverage.outside())
+        });
         Some(Self {
             doc: proxy,
             selection,
@@ -107,6 +117,7 @@ impl FilterProxy {
             let route = match content_route(layer) {
                 ContentRoute::PassThroughGroup
                 | ContentRoute::IsolatedGroup
+                | ContentRoute::Adjustment(_)
                 | ContentRoute::UndecodedAdjustment
                 | ContentRoute::Pixels => true,
                 ContentRoute::Fill(_) => !crate::document_ops::is_fill_content_layer(layer),
@@ -115,7 +126,7 @@ impl FilterProxy {
                 | ContentRoute::TypeSource
                 | ContentRoute::UndecodedVectorFill => false,
             };
-            !effects && route && layer.children.iter().all(faithful)
+            !effects && route && layer.children().iter().all(faithful)
         }
         doc.layers.iter().all(faithful)
     }
@@ -296,7 +307,7 @@ fn reduce_flat(flat: &PixelBuffer, map: &Map, full: PsdRect) -> PixelBuffer {
 fn reduce_layer(layer: &mut Layer, map: &Map) {
     let rect = layer.rect;
     let mut reduced = None;
-    for channel in &mut layer.channels {
+    for channel in layer.channels_mut() {
         match map.plane(&channel.data, 0, rect) {
             Some((r, samples)) => {
                 channel.data = samples.into();
@@ -325,7 +336,7 @@ fn reduce_layer(layer: &mut Layer, map: &Map) {
         // full-size path.
         vector.set_feather(vector.feather() * map.scale);
     }
-    layer.raw_channels.clear();
+    layer.discard_raw_channels();
     layer.source_channels = None;
 }
 
@@ -470,7 +481,7 @@ mod tests {
         let (lw, lh) = (layer_rect.width() as usize, layer_rect.height() as usize);
         let layer = &mut doc.layers[0];
         layer.rect = layer_rect;
-        for channel in &mut layer.channels {
+        for channel in layer.channels_mut() {
             channel.data = (0..lw * lh)
                 .map(|i| if i % lw < lw / 2 { 0 } else { 200 })
                 .collect::<Vec<u8>>()
@@ -486,12 +497,12 @@ mod tests {
         assert!(FilterProxy::reduces_faithfully(&doc));
 
         let mut styled = doc.clone();
-        styled.layers[0]
-            .extra_blocks
-            .push(pictura_core::LayerBlock {
+        pictura_codec::edit_layer(styled.layers[0].as_mut(), |parts| {
+            parts.extra_blocks.push(pictura_core::LayerBlock {
                 key: *b"lfx2",
                 data: vec![0u8; 4].into(),
-            });
+            })
+        });
         assert!(!FilterProxy::reduces_faithfully(&styled));
         styled.layers[0].visible = false;
         assert!(
@@ -499,13 +510,13 @@ mod tests {
             "a hidden styled layer draws nothing"
         );
 
-        let group = pictura_core::Layer {
+        let group = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             is_group: true,
             children: pictura_core::LayerStack::from_layers(vec![
                 crate::composite_route::tests::type_layer(Vec::new()),
             ]),
             ..Default::default()
-        };
+        });
         doc.layers = pictura_core::LayerStack::from_layers(vec![doc.layers[0].clone(), group]);
         assert!(!FilterProxy::reduces_faithfully(&doc), "nested live type");
     }
@@ -516,7 +527,7 @@ mod tests {
         let proxy = FilterProxy::new(&doc, None, rect(0, 0, 100, 80), 0.5).unwrap();
         assert_eq!((proxy.width(), proxy.height()), (50, 40));
         assert_eq!(proxy.doc.layers[0].rect, rect(5, 10, 25, 30));
-        assert_eq!(proxy.doc.layers[0].channels[0].data.len(), 20 * 20);
+        assert_eq!(proxy.doc.layers[0].channels()[0].data.len(), 20 * 20);
         // A region crops: only the part of the layer inside it survives, at
         // region-relative coordinates.
         let crop = FilterProxy::new(&doc, None, rect(30, 0, 100, 40), 1.0).unwrap();
@@ -606,10 +617,16 @@ mod tests {
             data: Some(vec![255u8; 1600].into()),
             ..Default::default()
         };
-        let proxy = FilterProxy::new(&doc, Some(&selection), rect(0, 0, 40, 40), 0.25).unwrap();
+        let proxy = FilterProxy::new(
+            &doc,
+            Some(&selection.edit_coverage().expect("valid mask geometry")),
+            rect(0, 0, 40, 40),
+            0.25,
+        )
+        .unwrap();
         let reduced = proxy.selection.as_ref().unwrap();
-        assert_eq!(reduced.rect, rect(0, 0, 10, 10));
-        assert_eq!(reduced.data.as_ref().unwrap().len(), 100);
+        assert_eq!(reduced.rect(), rect(0, 0, 10, 10));
+        assert_eq!(reduced.row(0, 0, 10), vec![255; 10]);
     }
 
     #[test]

@@ -163,7 +163,7 @@ pub(super) fn solo_paths(
         result.push(parent.to_string());
         current = parent;
     }
-    if pictura_render::resolve_path(doc, path).is_some_and(|layer| layer.is_group) {
+    if pictura_render::resolve_path(doc, path).is_some_and(|layer| layer.is_group()) {
         let prefix = format!("{path}/");
         for (candidate, _) in pictura_render::flatten_rows(doc) {
             if candidate.starts_with(&prefix) && snapshot.get(&candidate).copied().unwrap_or(false)

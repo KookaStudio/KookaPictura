@@ -37,7 +37,7 @@ fn edit(doc: &mut Document, rect: PsdRect) {
     let layer = doc.layers.iter_mut().last().expect("a top layer");
     let lr = layer.rect;
     let w = lr.width() as usize;
-    for channel in layer.channels.iter_mut().take(3) {
+    for channel in layer.channels_mut().iter_mut().take(3) {
         let data = channel.data.as_mut_slice();
         for y in rect.top.max(lr.top)..rect.bottom.min(lr.bottom) {
             for x in rect.left.max(lr.left)..rect.right.min(lr.right) {
@@ -313,9 +313,28 @@ fn level_count_matches_the_view_pyramid() {
             w, h, &planes, &planes, &planes, &planes,
         ));
         assert_eq!(level_count(w, h), pyramid.level_count(), "{w}x{h}");
+        let cache = TilePyramid::new(w, h, u64::MAX);
+        for level in 0..pyramid.level_count() {
+            assert_eq!(cache.level_size(level), pyramid.level_size(level));
+        }
         if n > 4_000_000 {
             break;
         }
+    }
+}
+
+#[test]
+fn thin_images_keep_only_level_zero() {
+    for (w, h) in [(4096, 2), (2, 4096)] {
+        let pixels = vec![0; (w * h) as usize];
+        let reference = crate::ViewPyramid::rebuild(crate::Planes::new(
+            w, h, &pixels, &pixels, &pixels, &pixels,
+        ));
+        let cache = TilePyramid::new(w, h, u64::MAX);
+        assert_eq!(reference.level_count(), 1);
+        assert_eq!(cache.level_count(), 1);
+        assert_eq!(cache.level_size(0), (w, h));
+        assert_eq!(cache.level_size(0), reference.level_size(0));
     }
 }
 

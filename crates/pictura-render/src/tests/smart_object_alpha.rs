@@ -8,9 +8,21 @@ pub(super) fn payload_with_alpha(colors: [[u8; 3]; 4], alpha: [u8; 4]) -> Vec<u8
     let mut d = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
     let plane = 4;
     for (i, c) in colors.iter().enumerate() {
-        d.composite.data[i] = c[0];
-        d.composite.data[plane + i] = c[1];
-        d.composite.data[2 * plane + i] = c[2];
+        d.composite
+            .edit_data(|data| {
+                data[i] = c[0];
+            })
+            .expect("pixel edit preserves geometry");
+        d.composite
+            .edit_data(|data| {
+                data[plane + i] = c[1];
+            })
+            .expect("pixel edit preserves geometry");
+        d.composite
+            .edit_data(|data| {
+                data[2 * plane + i] = c[2];
+            })
+            .expect("pixel edit preserves geometry");
     }
     d.channels = vec![Channel {
         id: -1,
@@ -21,7 +33,11 @@ pub(super) fn payload_with_alpha(colors: [[u8; 3]; 4], alpha: [u8; 4]) -> Vec<u8
 
 fn gray_payload_with_alpha(gray: [u8; 4], alpha: [u8; 4]) -> Vec<u8> {
     let mut d = Document::new(2, 2, ColorMode::Grayscale, BitDepth::Eight);
-    d.composite.data.copy_from_slice(&gray);
+    d.composite
+        .edit_data(|data| {
+            data.copy_from_slice(&gray);
+        })
+        .expect("pixel edit preserves geometry");
     d.channels = vec![Channel {
         id: -1,
         data: alpha.to_vec().into(),
@@ -32,9 +48,21 @@ fn gray_payload_with_alpha(gray: [u8; 4], alpha: [u8; 4]) -> Vec<u8> {
 fn payload_with_two_extras(first: [u8; 4], second: [u8; 4]) -> Vec<u8> {
     let mut d = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
     for i in 0..4 {
-        d.composite.data[i] = 10;
-        d.composite.data[4 + i] = 20;
-        d.composite.data[8 + i] = 30;
+        d.composite
+            .edit_data(|data| {
+                data[i] = 10;
+            })
+            .expect("pixel edit preserves geometry");
+        d.composite
+            .edit_data(|data| {
+                data[4 + i] = 20;
+            })
+            .expect("pixel edit preserves geometry");
+        d.composite
+            .edit_data(|data| {
+                data[8 + i] = 30;
+            })
+            .expect("pixel edit preserves geometry");
     }
     d.channels = vec![
         Channel {

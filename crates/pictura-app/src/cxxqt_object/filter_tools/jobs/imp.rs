@@ -16,7 +16,7 @@ use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QList, QString, QStringList};
-use pictura_core::{Document, Layer, LayerMask, PixelBuffer, PsdRect};
+use pictura_core::{Coverage, Document, Layer, PixelBuffer, PsdRect};
 use pictura_filters::Filter;
 use pictura_render::DocumentComposite;
 use pictura_select::Selection;
@@ -102,7 +102,7 @@ pub(super) fn apply_op(
     doc: &Document,
     path: &str,
     op: &ActiveOp,
-    mask: Option<&LayerMask>,
+    mask: Option<&Coverage>,
     gpu: bool,
 ) -> Result<Layer, String> {
     let mut layer = pictura_render::resolve_path(doc, path)
@@ -146,7 +146,7 @@ pub(super) fn filter_layer(
     doc: &Document,
     path: &str,
     filters: &[Filter],
-    mask: Option<&LayerMask>,
+    mask: Option<&Coverage>,
     gpu: bool,
 ) -> Result<Layer, String> {
     let mut layer = pictura_render::resolve_path(doc, path)
@@ -161,7 +161,7 @@ pub(super) fn filter_layer(
 pub(super) fn exact(
     mut doc: Document,
     request: &Request,
-    mask: Option<LayerMask>,
+    mask: Option<Coverage>,
     gpu: bool,
 ) -> Option<Exact> {
     let layer = filter_layer(&doc, &request.path, &request.filters, mask.as_ref(), gpu).ok()?;
@@ -367,7 +367,7 @@ pub(super) fn commit(
     path: &str,
     op: ActiveOp,
     source: Source,
-    mask: Option<LayerMask>,
+    mask: Option<Coverage>,
     selection: &Option<Selection>,
     label: &str,
     gpu: bool,

@@ -42,7 +42,7 @@ fn plane(value: u8, n: usize) -> Vec<u8> {
 
 fn pixel_layer(w: u32, h: u32, value: u8) -> Layer {
     let n = w as usize * h as usize;
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "base".into(),
         rect: PsdRect {
             top: 0,
@@ -81,7 +81,7 @@ fn pixel_layer(w: u32, h: u32, value: u8) -> Layer {
         is_group: false,
         background: true,
         ..Default::default()
-    }
+    })
 }
 
 fn masked_document() -> Document {
@@ -252,7 +252,13 @@ fn selection_move_drag_costs() {
     report(
         "move_mask_selection_content (release)",
         &mut time(5, || {
-            move_mask_selection_content(&mut doc, "0", &coverage, 37, 41, false, 0)
+            let (width, height) = (doc.width, doc.height);
+            match pictura_core::Coverage::for_canvas(&(coverage), width, height) {
+                Some(coverage) => {
+                    move_mask_selection_content(&mut doc, "0", &coverage, 37, 41, false, 0)
+                }
+                None => false,
+            }
         }),
     );
 }

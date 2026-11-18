@@ -15,12 +15,15 @@ fn plane(values: &[u8]) -> Plane<u8> {
 }
 
 fn layer(rect: PsdRect, rgba: [&[u8]; 4]) -> Layer {
-    let mut layer = Layer {
-        rect,
-        ..Default::default()
-    };
+    let mut layer = pictura_core::Layer::from_parts(
+        pictura_core::LayerParts {
+            rect,
+            ..Default::default()
+        },
+        pictura_core::LayerContent::Pixel,
+    );
     for (id, values) in [0i16, 1, 2, -1].into_iter().zip(rgba) {
-        layer.channels.push(Channel {
+        layer.channels_mut().push(Channel {
             id,
             data: plane(values),
         });
@@ -39,7 +42,7 @@ fn solid(rect: PsdRect, color: [u8; 3], alpha: u8) -> Layer {
 
 fn channel(layer: &Layer, id: i16) -> &[u8] {
     layer
-        .channels
+        .channels()
         .iter()
         .find(|c| c.id == id)
         .expect("channel")
@@ -68,7 +71,7 @@ fn fade_opacity_zero_restores_the_original() {
 #[test]
 fn fade_opacity_zero_is_transparent_outside_the_original_rect() {
     let mut original = solid(rect(0, 0, 1, 1), [10, 20, 30], 255);
-    original.channels.retain(|c| c.id != -1);
+    original.channels_mut().retain(|c| c.id != -1);
     let effected = solid(rect(1, 0, 2, 1), [200, 210, 220], 255);
     let out = fade_layer(
         &original,
@@ -151,11 +154,11 @@ fn fade_alpha_composites_source_over() {
 fn fade_keeps_the_effected_non_color_channels() {
     let mut original = solid(rect(0, 0, 1, 1), [10, 20, 30], 255);
     let mut effected = solid(rect(0, 0, 1, 1), [200, 210, 220], 255);
-    original.channels.push(Channel {
+    original.channels_mut().push(Channel {
         id: -2,
         data: plane(&[10]),
     });
-    effected.channels.push(Channel {
+    effected.channels_mut().push(Channel {
         id: -2,
         data: plane(&[20]),
     });

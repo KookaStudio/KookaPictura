@@ -1,6 +1,6 @@
 //! Layer-effect pass dispatch: replay a cached `EffectPass` on the GPU.
 
-use pictura_core::{Document, Layer};
+use pictura_core::Document;
 
 use super::backend::{Gpu, SrcLayout};
 use super::NO_ADJ;
@@ -57,10 +57,10 @@ impl Gpu {
         let src = self.upload_with("pictura-effect", n * 4, move |start, mut out| {
             out.copy_from_slice(&bytes[start..start + out.len()]);
         });
-        let proxy = Layer {
+        let proxy = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             is_group: true,
             ..Default::default()
-        };
+        });
         let mask = self.build_mask(&proxy, doc);
         let layout = SrcLayout {
             x0: left as u32,

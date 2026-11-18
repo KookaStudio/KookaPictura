@@ -134,7 +134,7 @@ pub(super) fn history_for(doc: &mut Document, target: &LayerTarget, label: &str)
 /// composite what is shown (#1216).
 pub(super) fn store_opened_composite(doc: &mut Document, gpu: bool) {
     let started = std::time::Instant::now();
-    if doc.source_planes.is_some() && doc.merged_composite_present {
+    if doc.source.planes().is_some() && doc.composite.merged_output() {
         crate::cxxqt_object::helpers::paint_timing::record(
             "opening_composite_skipped",
             started.elapsed(),
@@ -259,7 +259,7 @@ pub(in crate::cxxqt_object) fn make_background(layer: &mut Layer) {
     layer.lock = LockFlags::default()
         .with(LockFlags::TRANSPARENCY, true)
         .with(LockFlags::POSITION, true);
-    layer.channels.retain(|channel| channel.id != -1);
+    layer.channels_mut().retain(|channel| channel.id != -1);
 }
 
 /// Apply a raster's embedded RGB ICC profile under the incoming policy. A
@@ -279,12 +279,12 @@ pub(super) fn apply_raster_profile(
         return;
     }
     match policy {
-        Policy::Preserve => doc.document_icc = Some(icc.into()),
+        Policy::Preserve => doc.source.set_working_profile(Some(icc.into())),
         Policy::Convert => {
-            doc.document_icc = Some(icc.clone().into());
+            doc.source.set_working_profile(Some(icc.clone().into()));
             let _ =
                 pictura_codec::convert_document_with(doc, &pictura_codec::Profile::srgb(), options);
-            doc.source_icc = Some(icc.into());
+            doc.source.set_original_profile(Some(icc.into()));
         }
         Policy::Off => {}
     }
@@ -311,7 +311,7 @@ pub(in crate::cxxqt_object) fn convert_placed_rgba(
         return rgba;
     }
     let mut doc = Document::from_rgba("place", width, height, &rgba);
-    doc.document_icc = Some(icc.into());
+    doc.source.set_working_profile(Some(icc.into()));
     if !pictura_codec::convert_document_with(
         &mut doc,
         &pictura_codec::Profile::srgb(),
@@ -319,7 +319,7 @@ pub(in crate::cxxqt_object) fn convert_placed_rgba(
     ) {
         return rgba;
     }
-    super::super::helpers_composite::buffer_to_rgba_bytes(&doc.composite)
+    super::super::helpers_composite::buffer_to_rgba_bytes(doc.composite.buffer())
 }
 
 /// Read and decode a raster through the shared import path.
@@ -686,14 +686,23 @@ pub(in crate::cxxqt_object) fn imported_native_document(
             per_cm: spec.per_cm,
         },
     );
-    doc.source_mode = (native.mode == ColorMode::Cmyk).then_some(ColorMode::Cmyk);
-    doc.source_depth = (native.depth == BitDepth::Sixteen).then_some(BitDepth::Sixteen);
-    doc.source_planes = Some(SourcePlanes {
-        depth: native.depth,
-        width,
-        height,
-        samples: native.samples.clone(),
-    });
+    doc.source
+        .set_encoding(
+            (native.mode == ColorMode::Cmyk).then_some(ColorMode::Cmyk),
+            doc.source.palette(),
+        )
+        .expect("valid source encoding");
+    doc.source
+        .set_native(
+            (native.depth == BitDepth::Sixteen).then_some(BitDepth::Sixteen),
+            Some(SourcePlanes {
+                depth: native.depth,
+                width,
+                height,
+                samples: native.samples.clone(),
+            }),
+        )
+        .expect("valid native source");
     let colours = native.mode.color_channels() as usize;
     let mut planes: Vec<(i16, Samples)> = Vec::with_capacity(colours + 1);
     for c in 0..colours {

@@ -5,14 +5,21 @@
 //! primitives here, which restore the invariants before returning.
 
 use std::ops::{Deref, Index, IndexMut};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use crate::Layer;
 
 /// A bottom-first layer container used for both `Document.layers` and every
-/// group's `Layer.children`.
-#[derive(Debug, Clone, PartialEq, Default)]
+/// group's `Layer.children()`.
+#[derive(Debug, Clone, PartialEq)]
 pub struct LayerStack(Arc<Vec<Layer>>);
+
+impl Default for LayerStack {
+    fn default() -> Self {
+        static EMPTY: OnceLock<Arc<Vec<Layer>>> = OnceLock::new();
+        Self(EMPTY.get_or_init(|| Arc::new(Vec::new())).clone())
+    }
+}
 
 /// The first well-formedness violation found in a tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,6 +49,8 @@ pub enum StackError {
     /// A node carrying the Background flag entered through a primitive other
     /// than `promote_background`, or a group was promoted.
     IllegalBackgroundNode,
+    /// Grouping requires a Group value to receive the selected nodes.
+    NotAGroup,
 }
 
 #[derive(Clone, Copy)]
@@ -119,7 +128,7 @@ impl LayerStack {
                 if *backgrounds > 1 {
                     return Err(StackViolation::MultipleBackgrounds(path.clone()));
                 }
-                if layer.is_group {
+                if layer.is_group() {
                     return Err(StackViolation::BackgroundIsGroup(path.clone()));
                 }
                 if index != 0 {
@@ -135,7 +144,7 @@ impl LayerStack {
             if !layer.clipping {
                 nearest_non_clipped = Some(index);
             }
-            layer.children.check(path, backgrounds)?;
+            layer.children().check(path, backgrounds)?;
             path.pop();
         }
         Ok(())
@@ -150,10 +159,10 @@ impl LayerStack {
         let mut layers = self;
         for &index in parent {
             let layer = layers.get(index)?;
-            if !layer.is_group {
+            if !layer.is_group() {
                 return None;
             }
-            layers = &layer.children;
+            layers = layer.children();
         }
         Some(layers)
     }
@@ -162,10 +171,10 @@ impl LayerStack {
         let mut layers = self;
         for &index in parent {
             let layer = layers.get_mut(index)?;
-            if !layer.is_group {
+            if !layer.is_group() {
                 return None;
             }
-            layers = &mut layer.children;
+            layers = layer.children_mut()?;
         }
         Some(layers)
     }
@@ -184,7 +193,9 @@ impl LayerStack {
         if count_backgrounds_in(&node) > 0 && self.count_backgrounds() > 0 {
             return Err(StackError::SecondBackground);
         }
-        node.children.normalize_tree();
+        if let Some(children) = node.children_mut() {
+            children.normalize_tree();
+        }
         let layers = self.container_mut(parent).ok_or(StackError::NoSuchPath)?;
         if index > layers.len() {
             return Err(StackError::NoSuchPath);
@@ -390,7 +401,9 @@ impl LayerStack {
         }
 
         for node in &mut replacement {
-            node.children.normalize_tree();
+            if let Some(children) = node.children_mut() {
+                children.normalize_tree();
+            }
         }
         let Some(layers) = self.container_mut(post_parent) else {
             *self = backup;
@@ -427,6 +440,9 @@ impl LayerStack {
         if group.background {
             return Err(StackError::IllegalBackgroundNode);
         }
+        if !group.is_group() {
+            return Err(StackError::NotAGroup);
+        }
         let mut indices = indices.to_vec();
         indices.sort_unstable();
         indices.dedup();
@@ -451,8 +467,8 @@ impl LayerStack {
             children.push(layers.vec_mut().remove(index));
         }
         children.reverse();
-        group.children = LayerStack::from_layers(children);
-        group.children.normalize_tree();
+        *group.children_mut().expect("group") = LayerStack::from_layers(children);
+        group.children_mut().expect("group").normalize_tree();
         layers.vec_mut().insert(at, group);
         layers.normalize(None);
         self.debug_check(was_well_formed);
@@ -529,7 +545,9 @@ impl LayerStack {
             } else if !was_clipped {
                 release_run = false;
             }
-            removed_children += layer.children.retain_recursive(predicate);
+            if let Some(children) = layer.children_mut() {
+                removed_children += children.retain_recursive(predicate);
+            }
             kept.push(layer);
         }
         self.0 = Arc::new(kept);
@@ -571,7 +589,7 @@ impl LayerStack {
         let Some(layer) = self.resolve(path) else {
             return Err(StackError::NoSuchPath);
         };
-        if layer.is_group {
+        if layer.is_group() {
             return Err(StackError::IllegalBackgroundNode);
         }
         let (&index, parent) = path.split_last().ok_or(StackError::NoSuchPath)?;
@@ -597,7 +615,7 @@ impl LayerStack {
     fn count_backgrounds(&self) -> usize {
         self.0
             .iter()
-            .map(|layer| usize::from(layer.background) + layer.children.count_backgrounds())
+            .map(|layer| usize::from(layer.background) + layer.children().count_backgrounds())
             .sum()
     }
 
@@ -648,7 +666,9 @@ impl LayerStack {
 
     fn normalize_tree(&mut self) {
         for layer in self.vec_mut() {
-            layer.children.normalize_tree();
+            if let Some(children) = layer.children_mut() {
+                children.normalize_tree();
+            }
         }
         self.normalize(None);
     }
@@ -701,7 +721,7 @@ fn projected_background_floor(container: &[Layer], removed: &[usize]) -> usize {
 }
 
 fn count_backgrounds_in(layer: &Layer) -> usize {
-    usize::from(layer.background) + layer.children.count_backgrounds()
+    usize::from(layer.background) + layer.children().count_backgrounds()
 }
 
 fn post_removal_parent(parent: &[usize], src_parent: &[usize], src_index: usize) -> Vec<usize> {

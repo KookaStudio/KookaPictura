@@ -41,7 +41,7 @@ pub(crate) fn fill_tiled_layer(
     let rect = layer.rect;
     let (w, h) = (rect.width().max(0) as usize, rect.height().max(0) as usize);
     let mut planes: [Option<usize>; 4] = [None; 4];
-    for (ci, c) in layer.channels.iter().enumerate() {
+    for (ci, c) in layer.channels().iter().enumerate() {
         let Some(k) = slot(c.id) else {
             continue;
         };
@@ -57,18 +57,18 @@ pub(crate) fn fill_tiled_layer(
     }
     let first = planes[0]?;
     for &ci in planes.iter().flatten() {
-        if !layer.channels[ci].data.tile(w, h) {
+        if !layer.channels_mut()[ci].data.tile(w, h) {
             return None;
         }
     }
     let region = pass.within;
     let xs = (region.left - rect.left) as usize..(region.right - rect.left) as usize;
     let ys = (region.top - rect.top) as usize..(region.bottom - rect.top) as usize;
-    let tiles = layer.channels[first].data.tiles_in(xs, ys);
+    let tiles = layer.channels()[first].data.tiles_in(xs, ys);
     let mut changed: Option<PsdRect> = None;
     let mut dense = Vec::new();
     for t in tiles {
-        let (lx, ly, tw, th) = layer.channels[first].data.tile_rect(t)?;
+        let (lx, ly, tw, th) = layer.channels()[first].data.tile_rect(t)?;
         let at = PsdRect {
             top: rect.top + ly as i32,
             left: rect.left + lx as i32,
@@ -81,7 +81,7 @@ pub(crate) fn fill_tiled_layer(
             Decision::Write(values) => {
                 for (k, ci) in planes.iter().enumerate() {
                     if let Some(ci) = *ci {
-                        layer.channels[ci].data.set_tile_uniform(t, values[k]);
+                        layer.channels_mut()[ci].data.set_tile_uniform(t, values[k]);
                     }
                 }
                 changed = Some(changed.map_or(at, |c| c.union(at)));
@@ -92,7 +92,7 @@ pub(crate) fn fill_tiled_layer(
         changed = Some(changed.map_or(dirty, |c| c.union(dirty)));
     }
     for &ci in planes.iter().flatten() {
-        layer.channels[ci].data.settle();
+        layer.channels_mut()[ci].data.settle();
     }
     Some(changed)
 }
@@ -118,7 +118,7 @@ fn decide(
         let Some(ci) = *ci else {
             continue;
         };
-        match layer.channels[ci].data.tile_state(t) {
+        match layer.channels()[ci].data.tile_state(t) {
             Some(TileState::Empty) => dst[k] = 0,
             Some(TileState::Uniform(v)) => dst[k] = v,
             _ => return Decision::Dense,
@@ -128,7 +128,7 @@ fn decide(
         at.left as usize..at.right as usize,
         at.top as usize..at.bottom as usize,
     );
-    let over = |mask: Option<&pictura_core::mask_ops::TiledMask>| {
+    let over = |mask: Option<&pictura_core::Coverage>| {
         mask.map_or(Some(255), |m| m.uniform_over(xs.clone(), ys.clone()))
     };
     let (Some(selected), Some(m)) = (over(pass.through.selection), over(pass.through.mask)) else {
@@ -174,7 +174,7 @@ fn fill_dense(
     }
     let rect = layer.rect;
     let mut tiles: [Option<Vec<pictura_core::TileMut<'_, u8>>>; 4] = [None, None, None, None];
-    for (ci, c) in layer.channels.iter_mut().enumerate() {
+    for (ci, c) in layer.channels_mut().iter_mut().enumerate() {
         if let Some(k) = planes.iter().position(|p| *p == Some(ci)) {
             tiles[k] = Some(c.data.tiles_mut_at(dense));
         }

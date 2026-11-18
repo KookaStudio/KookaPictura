@@ -191,10 +191,14 @@ pub(crate) fn convert_retained_cmyk(
     dst: &Profile,
     options: ConversionOptions,
 ) {
-    if let Some(store) = doc.source_planes.as_mut() {
+    if let Some(mut store) = doc.source.planes().clone() {
         if store.depth == BitDepth::Eight {
             convert_cmyk_samples(&mut store.samples, src, dst, options);
         }
+
+        doc.source
+            .replace_planes(Some(store))
+            .expect("valid source planes");
     }
     for_each_source_layer(&mut doc.layers, &mut |layer| {
         let Some(store) = layer.source_channels.as_mut() else {
@@ -230,13 +234,17 @@ pub(crate) fn convert_retained_cmyk(
         }
         write_working_rgb(layer, &converted, dst, options);
     });
-    if let Some(store) = doc.source_planes.as_ref() {
+    if let Some(store) = doc.source.planes().as_ref() {
         if store.depth == BitDepth::Eight {
             let plane = doc.width as usize * doc.height as usize;
             if let Samples::U8(values) = &store.samples {
                 if values.len() == plane * 4 && doc.composite.data.len() >= plane * 3 {
                     if let Some(rgb) = cmyk_to_rgb_with_profile(values, dst, options) {
-                        doc.composite.data[..plane * 3].copy_from_slice(&rgb);
+                        doc.composite
+                            .edit_data(|data| {
+                                data[..plane * 3].copy_from_slice(&rgb);
+                            })
+                            .expect("pixel edit preserves geometry");
                     }
                 }
             }
@@ -264,7 +272,7 @@ fn write_working_rgb(
     };
     let n = rgb.len() / 3;
     for id in 0..3i16 {
-        if let Some(channel) = layer.channels.iter_mut().find(|c| c.id == id) {
+        if let Some(channel) = layer.channels_mut().iter_mut().find(|c| c.id == id) {
             channel.data = rgb[id as usize * n..(id as usize + 1) * n].to_vec().into();
         }
     }
@@ -342,7 +350,9 @@ fn convert_cmyk_planes(
 fn for_each_source_layer(layers: &mut LayerStack, f: &mut impl FnMut(&mut Layer)) {
     for layer in layers {
         f(layer);
-        for_each_source_layer(&mut layer.children, f);
+        if let Some(children) = layer.children_mut() {
+            for_each_source_layer(children, f);
+        }
     }
 }
 
@@ -410,7 +420,7 @@ pub(crate) fn retain_lab_layer_planes(layers: &mut LayerStack, depth: u16) {
     for layer in layers {
         if layer.source_channels.is_none() {
             let planes: Vec<(i16, Samples)> = layer
-                .channels
+                .channels()
                 .iter()
                 .filter(|c| c.id >= 0 && c.id < 3)
                 .map(|c| (c.id, Samples::U8(c.data.clone())))
@@ -420,7 +430,9 @@ pub(crate) fn retain_lab_layer_planes(layers: &mut LayerStack, depth: u16) {
                     Some(SourceChannels::new(BitDepth::Eight, layer.rect, planes));
             }
         }
-        retain_lab_layer_planes(&mut layer.children, depth);
+        if let Some(children) = layer.children_mut() {
+            retain_lab_layer_planes(children, depth);
+        }
     }
 }
 
@@ -436,7 +448,7 @@ pub(crate) fn retain_cmyk_layer_planes(layers: &mut LayerStack, depth: u16) {
     for layer in layers {
         if layer.source_channels.is_none() {
             let planes: Vec<(i16, Samples)> = layer
-                .channels
+                .channels()
                 .iter()
                 .filter(|c| c.id >= 0 && c.id < 4)
                 .map(|c| (c.id, Samples::U8(c.data.clone())))
@@ -446,7 +458,9 @@ pub(crate) fn retain_cmyk_layer_planes(layers: &mut LayerStack, depth: u16) {
                     Some(SourceChannels::new(BitDepth::Eight, layer.rect, planes));
             }
         }
-        retain_cmyk_layer_planes(&mut layer.children, depth);
+        if let Some(children) = layer.children_mut() {
+            retain_cmyk_layer_planes(children, depth);
+        }
     }
 }
 
@@ -461,7 +475,7 @@ pub(crate) fn retain_indexed_layer_planes(layers: &mut LayerStack, depth: u16) {
     for layer in layers {
         if layer.source_channels.is_none() {
             let planes: Vec<(i16, Samples)> = layer
-                .channels
+                .channels()
                 .iter()
                 .filter(|c| c.id == 0)
                 .map(|c| (c.id, Samples::U8(c.data.clone())))
@@ -471,7 +485,9 @@ pub(crate) fn retain_indexed_layer_planes(layers: &mut LayerStack, depth: u16) {
                     Some(SourceChannels::new(BitDepth::Eight, layer.rect, planes));
             }
         }
-        retain_indexed_layer_planes(&mut layer.children, depth);
+        if let Some(children) = layer.children_mut() {
+            retain_indexed_layer_planes(children, depth);
+        }
     }
 }
 
@@ -520,7 +536,7 @@ pub(crate) fn convert_layer_color_channels(
     options: ConversionOptions,
 ) {
     convert_one_layer(layer, mode, palette, cmyk_profile, options);
-    for child in &mut layer.children {
+    for child in layer.children_iter_mut() {
         convert_layer_color_channels(child, mode, palette, cmyk_profile, options);
     }
 }
@@ -539,7 +555,7 @@ fn convert_one_layer(
         return;
     }
     let positions: Vec<usize> = layer
-        .channels
+        .channels()
         .iter()
         .enumerate()
         .filter(|(_, c)| c.id >= 0 && (c.id as usize) < color_channels)
@@ -548,16 +564,16 @@ fn convert_one_layer(
     if positions.len() != color_channels {
         return;
     }
-    let plane = layer.channels[positions[0]].data.len();
+    let plane = layer.channels()[positions[0]].data.len();
     if positions
         .iter()
-        .any(|&i| layer.channels[i].data.len() != plane)
+        .any(|&i| layer.channels()[i].data.len() != plane)
     {
         return;
     }
     let mut planar = Vec::with_capacity(plane * color_channels);
     for &i in &positions {
-        planar.extend_from_slice(&layer.channels[i].data);
+        planar.extend_from_slice(&layer.channels()[i].data);
     }
     let rgb = match mode {
         ColorMode::Indexed => indexed_to_rgb(&planar, palette),
@@ -570,7 +586,7 @@ fn convert_one_layer(
         ColorMode::Grayscale | ColorMode::Rgb | ColorMode::Multichannel => return,
     };
     let others: Vec<Channel> = layer
-        .channels
+        .channels()
         .iter()
         .enumerate()
         .filter(|(i, _)| !positions.contains(i))
@@ -583,10 +599,10 @@ fn convert_one_layer(
         })
         .collect();
     channels.extend(others);
-    layer.channels = channels;
+    *layer.channels_mut() = channels;
     let ids = [0i16, 1, 2].map(|id| {
         layer
-            .channels
+            .channels()
             .iter()
             .find(|channel| channel.id == id)
             .map(|channel| channel.data.ident())

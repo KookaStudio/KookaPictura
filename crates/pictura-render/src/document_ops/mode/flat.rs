@@ -34,8 +34,12 @@ fn refuse(doc: &Document, target: ColorMode) -> OpsError {
 fn flatten(doc: &mut Document) -> Result<(), OpsError> {
     crate::flatten(doc).map_err(|e| OpsError::InvalidParams(format!("{e:?}")))?;
     planes::drop_source_state(doc);
-    doc.source_planes = None;
-    doc.source_depth = None;
+    doc.source
+        .replace_planes(None)
+        .expect("valid source planes");
+    doc.source
+        .set_native(None, doc.source.planes().clone())
+        .expect("valid source depth");
     Ok(())
 }
 
@@ -61,7 +65,7 @@ pub fn convert_to_indexed(doc: &mut Document, options: PaletteOptions) -> Result
         .ok_or_else(|| OpsError::InvalidParams("flattened layer has no RGB planes".into()))?;
     let mut rgba = vec![255u8; n * 4];
     for (c, &i) in pos.iter().enumerate() {
-        for (p, &v) in layer.channels[i].data.iter().enumerate().take(n) {
+        for (p, &v) in layer.channels()[i].data.iter().enumerate().take(n) {
             rgba[p * 4 + c] = v;
         }
     }
@@ -83,28 +87,33 @@ pub fn convert_to_indexed(doc: &mut Document, options: PaletteOptions) -> Result
     }
     let rgb = pictura_codec::indexed_to_rgb(&indexed.indices, &palette);
     for (c, &i) in pos.iter().enumerate() {
-        layer.channels[i].data = rgb[c * n..(c + 1) * n].to_vec().into();
+        layer.channels_mut()[i].data = rgb[c * n..(c + 1) * n].to_vec().into();
     }
     layer.source_channels = Some(SourceChannels::new(
         BitDepth::Eight,
         layer.rect,
         vec![(0, Samples::U8(indexed.indices.clone().into()))],
     ));
-    doc.composite = PixelBuffer {
-        width: w,
-        height: h,
-        channels: 3,
-        data: rgb.into(),
-    };
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::Eight,
-        width: w,
-        height: h,
-        samples: Samples::U8(indexed.indices.into()),
-    });
-    doc.source_mode = Some(ColorMode::Indexed);
-    doc.source_palette = Some(palette);
-    doc.document_icc = None;
+    doc.composite
+        .replace(PixelBuffer {
+            width: w,
+            height: h,
+            channels: 3,
+            data: rgb.into(),
+        })
+        .expect("valid composite");
+    doc.source
+        .replace_planes(Some(SourcePlanes {
+            depth: BitDepth::Eight,
+            width: w,
+            height: h,
+            samples: Samples::U8(indexed.indices.into()),
+        }))
+        .expect("valid source planes");
+    doc.source
+        .set_encoding(Some(ColorMode::Indexed), Some(palette))
+        .expect("valid source encoding");
+    doc.source.set_working_profile(None);
     Ok(())
 }
 
@@ -222,16 +231,16 @@ pub fn convert_to_bitmap(doc: &mut Document, method: BitmapMethod) -> Result<(),
     let gray: Vec<u8> = match planes::color_positions(layer, 3) {
         Some(pos) => {
             let (r, g, b) = (
-                &layer.channels[pos[0]].data,
-                &layer.channels[pos[1]].data,
-                &layer.channels[pos[2]].data,
+                &layer.channels()[pos[0]].data,
+                &layer.channels()[pos[1]].data,
+                &layer.channels()[pos[2]].data,
             );
             (0..w * h)
                 .map(|i| planes::luma_u8(r[i], g[i], b[i]))
                 .collect()
         }
         None => planes::color_positions(layer, 1)
-            .map(|pos| layer.channels[pos[0]].data.to_vec())
+            .map(|pos| layer.channels()[pos[0]].data.to_vec())
             .ok_or_else(|| OpsError::InvalidParams("flattened layer has no gray plane".into()))?,
     };
     let whites = bitmap_whites(&gray, w, method);
@@ -246,19 +255,25 @@ pub fn convert_to_bitmap(doc: &mut Document, method: BitmapMethod) -> Result<(),
     doc.channels.clear();
     pictura_codec::set_alpha_names(doc, &[]);
     doc.mode = ColorMode::Rgb;
-    doc.composite = PixelBuffer {
-        width: doc.width,
-        height: doc.height,
-        channels: 3,
-        data: pictura_codec::bitmap_rows_to_rgb(&packed, w, h).into(),
-    };
-    doc.source_mode = Some(ColorMode::Bitmap);
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::One,
-        width: doc.width,
-        height: doc.height,
-        samples: Samples::U8(packed.into()),
-    });
-    doc.document_icc = None;
+    doc.composite
+        .replace(PixelBuffer {
+            width: doc.width,
+            height: doc.height,
+            channels: 3,
+            data: pictura_codec::bitmap_rows_to_rgb(&packed, w, h).into(),
+        })
+        .expect("valid composite");
+    doc.source
+        .set_encoding(Some(ColorMode::Bitmap), None)
+        .expect("valid source encoding");
+    doc.source
+        .replace_planes(Some(SourcePlanes {
+            depth: BitDepth::One,
+            width: doc.width,
+            height: doc.height,
+            samples: Samples::U8(packed.into()),
+        }))
+        .expect("valid source planes");
+    doc.source.set_working_profile(None);
     Ok(())
 }

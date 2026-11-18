@@ -54,7 +54,10 @@ def plan_rows(plan_text: str) -> list[tuple[str, str]]:
         cells = [c.strip() for c in line.strip("|").split("|")]
         if len(cells) < 2 or set(cells[0]) <= set("-: ") or cells[0].lower() == "scenario":
             continue
-        rows.append((cells[0].strip("`"), cells[-1]))
+        scenario = cells[0]
+        if len(scenario) >= 2 and scenario.startswith("`") and scenario.endswith("`"):
+            scenario = scenario[1:-1]
+        rows.append((scenario, cells[-1]))
     return rows
 
 
@@ -139,6 +142,10 @@ def self_test() -> int:
         ("t_one", "`tst_x::a`, `tst_x::b`"),
         ("Untagged two", "manual: needs a real display"),
     ]
+    title = "A `vscg` solid fill decodes to `SolidFill`"
+    assert plan_rows(f"| {title} | do | manual: fixture |") == [(title, "manual: fixture")]
+    assert plan_rows(f"| `{title}` | do | manual: fixture |") == [(title, "manual: fixture")]
+    assert plan_rows("| `tag` | do | `tst_x::a` |") == [("tag", "`tst_x::a`")]
     known = {("tst_x", "a")}
     exists = lambda a, b: (a, b) in known  # noqa: E731
     assert coverage_errors("`tst_x::a`", exists) == []

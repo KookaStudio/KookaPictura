@@ -95,7 +95,7 @@ fn placed(tile: &planes::TileDelta, origin: PsdRect, reach: i32) -> PsdRect {
 /// Whether two states would display differently with the same composite.
 pub(super) fn display_differs(a: &Document, b: &Document) -> bool {
     (a.width, a.height, a.mode, a.depth) != (b.width, b.height, b.mode, b.depth)
-        || a.document_icc != b.document_icc
+        || a.source.working_profile() != b.source.working_profile()
 }
 
 /// Where a change of layer metadata (opacity, blend, visibility, position,
@@ -119,17 +119,21 @@ pub(super) fn meta_damage(before: &Document, after: &Document) -> Option<Option<
                 format!("{prefix}/{index}")
             };
             out.push((path.clone(), layer));
-            rows(&layer.children, &path, out);
+            rows(layer.children(), &path, out);
         }
     }
     fn same(a: &pictura_core::Layer, b: &pictura_core::Layer) -> bool {
         let (mut a, mut b) = (a.clone(), b.clone());
-        a.children = Default::default();
-        b.children = Default::default();
+        if a.is_group() {
+            a.set_group_children(Default::default());
+        }
+        if b.is_group() {
+            b.set_group_children(Default::default());
+        }
         a == b
     }
     fn shows_nothing(layer: &pictura_core::Layer) -> bool {
-        !layer.is_group && layer.adjustment.is_none() && layer.rect.is_empty()
+        !layer.is_group() && !layer.has_adjustment_content() && layer.rect.is_empty()
     }
     let (mut a, mut b) = (Vec::new(), Vec::new());
     rows(&before.layers, "", &mut a);

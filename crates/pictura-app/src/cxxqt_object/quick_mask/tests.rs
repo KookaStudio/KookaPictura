@@ -315,3 +315,6 @@ fn a_quick_mask_round_trip_keeps_the_tiles() {
         Some(TileState::Uniform(255))
     );
 }
+
+#[path = "tests/coverage.rs"]
+mod coverage;

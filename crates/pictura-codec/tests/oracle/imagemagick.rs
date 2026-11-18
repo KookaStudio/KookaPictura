@@ -9,9 +9,13 @@ fn imagemagick_reads_written_rle() {
     }
 
     let mut doc = Document::new(4, 2, ColorMode::Rgb, BitDepth::Eight);
-    for (i, b) in doc.composite.data.iter_mut().enumerate() {
-        *b = (i * 7 + 1) as u8;
-    }
+    doc.composite
+        .edit_data(|data| {
+            for (i, b) in data.iter_mut().enumerate() {
+                *b = (i * 7 + 1) as u8;
+            }
+        })
+        .expect("pixel edit preserves geometry");
 
     let dir = scratch_dir("psd-rle-magick");
     let path = dir.join("rle.psd");

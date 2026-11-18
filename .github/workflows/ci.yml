@@ -143,7 +143,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs: changes
     if: needs.changes.outputs.cpp_only != 'true'
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - *checkout
       - *toolchain
@@ -194,6 +194,18 @@ jobs:
       - name: Install ag-psd
         run: npm i --no-save --prefix "$RUNNER_TEMP/agpsd" ag-psd@34.1.0
 
+      - name: Verify the renderer oracle is excluded from normal app builds
+        run: |
+          python3 scripts/check-view-oracle.py --self-check
+          for profile in release dev-app; do
+            report="$RUNNER_TEMP/view-oracle-$profile.jsonl"
+            cargo build -p pictura_app --lib --profile "$profile" --message-format=json > "$report"
+            python3 scripts/check-view-oracle.py --profile "$profile" "$report"
+          done
+
+      - name: Renderer tests without the oracle feature
+        run: cargo nextest run -p pictura-render
+
       - name: Test
         run: cargo nextest run --workspace
         env:
@@ -205,6 +217,13 @@ jobs:
         with:
           name: nextest-junit
           path: target/nextest/default/junit.xml
+
+      - name: Upload oracle build reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: view-oracle-build-reports
+          path: ${{ runner.temp }}/view-oracle-*.jsonl
 
   # GPU parity on Mesa's lavapipe: the software Vulkan device the
   # `software-gpu` feature lets the probe accept. The tests it runs are

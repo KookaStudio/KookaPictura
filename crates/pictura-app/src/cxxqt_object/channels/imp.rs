@@ -25,7 +25,7 @@ pub(super) fn channels_mode(view: &PictureView) -> QString {
         .session
         .doc
         .as_ref()
-        .map_or("", |doc| mode_name(doc.source_mode.unwrap_or(doc.mode)));
+        .map_or("", |doc| mode_name(doc.source.mode().unwrap_or(doc.mode)));
     QString::from(name)
 }
 

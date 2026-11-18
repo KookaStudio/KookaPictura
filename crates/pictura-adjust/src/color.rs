@@ -1,5 +1,5 @@
 use pictura_color::model;
-use pictura_core::PixelBuffer;
+use pictura_core::{HueRange, PixelBuffer};
 
 use crate::common::{hsl_to_rgb, luma, map_rgb, rgb_to_hsl};
 use crate::types::{
@@ -53,7 +53,7 @@ pub(crate) fn hue_saturation_rgb(p: &HueSaturationParams, r: f64, g: f64, b: f64
     if !p.ranges.is_empty() {
         let presence = ((r.max(g).max(b) - r.min(g).min(b)) * 4.0).min(1.0);
         for range in &p.ranges {
-            let w = range.weight(h) * presence;
+            let w = hue_range_weight(range, h) * presence;
             dh += w * range.hue as f64;
             ds += w * range.saturation as f64 / 100.0;
             dl += w * range.lightness as f64 / 100.0;
@@ -615,4 +615,26 @@ fn rgb_to_int_hue(r: i32, g: i32, b: i32) -> i32 {
 fn intcmyk_to_rgb(c: i32, m: i32, y: i32, k: i32) -> (u8, u8, u8) {
     let channel = |ink: i32| ((65535 - (ink * (255 - k) + (k << 8))) >> 8) as u8;
     (channel(c), channel(m), channel(y))
+}
+
+/// How strongly the range applies to hue `h` (0..360): 1 inside the
+/// sustain band, linear across each ramp, 0 outside.
+pub fn hue_range_weight(range: &HueRange, h: f64) -> f64 {
+    let from = f64::from(range.begin_ramp);
+    let rel = |v: i16| (f64::from(v) - from).rem_euclid(360.0);
+    let (h, b, c, d) = (
+        (h - from).rem_euclid(360.0),
+        rel(range.begin_sustain),
+        rel(range.end_sustain),
+        rel(range.end_ramp),
+    );
+    if h < b {
+        h / b
+    } else if h <= c {
+        1.0
+    } else if h < d {
+        (d - h) / (d - c)
+    } else {
+        0.0
+    }
 }

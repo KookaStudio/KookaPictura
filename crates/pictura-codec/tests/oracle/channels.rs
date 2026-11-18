@@ -12,9 +12,13 @@ fn psd_tools_sees_written_extra_channel() {
     }
 
     let mut doc = Document::new(4, 2, ColorMode::Rgb, BitDepth::Eight);
-    for (i, b) in doc.composite.data.iter_mut().enumerate() {
-        *b = (i * 9 + 1) as u8;
-    }
+    doc.composite
+        .edit_data(|data| {
+            for (i, b) in data.iter_mut().enumerate() {
+                *b = (i * 9 + 1) as u8;
+            }
+        })
+        .expect("pixel edit preserves geometry");
     let alpha: Vec<u8> = (0..8).map(|i| 200 + i as u8).collect();
     doc.channels = vec![Channel {
         id: 0,
@@ -73,50 +77,54 @@ fn psd_tools_reads_rle_composite_and_layer() {
 
     let mut doc = Document::new(4, 2, ColorMode::Rgb, BitDepth::Eight);
     let composite: Vec<u8> = (0..24).map(|i| (i * 7 + 1) as u8).collect();
-    doc.composite.data = composite.clone().into();
+    doc.composite
+        .replace_data(composite.clone().into())
+        .expect("valid composite plane");
     let planes: Vec<Vec<u8>> = (0..4u8)
         .map(|c| (0..8).map(|i| c * 20 + i).collect())
         .collect();
-    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
-        name: "Rle".into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 2,
-            right: 4,
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            name: "Rle".into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 2,
+                right: 4,
+            },
+            blend: BlendMode::Normal,
+            opacity: 255,
+            fill: 255,
+            lock: LockFlags::default(),
+            color: ColorLabel::None,
+            clipping: false,
+            visible: true,
+            mask: None,
+            adjustment: None,
+            channels: vec![
+                Channel {
+                    id: 0,
+                    data: planes[0].clone().into(),
+                },
+                Channel {
+                    id: 1,
+                    data: planes[1].clone().into(),
+                },
+                Channel {
+                    id: 2,
+                    data: planes[2].clone().into(),
+                },
+                Channel {
+                    id: -1,
+                    data: planes[3].clone().into(),
+                },
+            ],
+            children: pictura_core::LayerStack::default(),
+            is_group: false,
+            background: false,
+            ..Default::default()
         },
-        blend: BlendMode::Normal,
-        opacity: 255,
-        fill: 255,
-        lock: LockFlags::default(),
-        color: ColorLabel::None,
-        clipping: false,
-        visible: true,
-        mask: None,
-        adjustment: None,
-        channels: vec![
-            Channel {
-                id: 0,
-                data: planes[0].clone().into(),
-            },
-            Channel {
-                id: 1,
-                data: planes[1].clone().into(),
-            },
-            Channel {
-                id: 2,
-                data: planes[2].clone().into(),
-            },
-            Channel {
-                id: -1,
-                data: planes[3].clone().into(),
-            },
-        ],
-        children: pictura_core::LayerStack::default(),
-        is_group: false,
-        background: false,
-        ..Default::default()
-    }]);
+    )]);
 
     let dir = scratch_dir("psd-rle-read");
     let path = dir.join("rle.psd");
@@ -166,7 +174,9 @@ fn psd_tools_reads_written_psb_composite() {
 
     let mut doc = Document::new(4, 2, ColorMode::Rgb, BitDepth::Eight);
     let composite: Vec<u8> = (0..24).map(|i| (i * 7 + 1) as u8).collect();
-    doc.composite.data = composite.clone().into();
+    doc.composite
+        .replace_data(composite.clone().into())
+        .expect("valid composite plane");
 
     let dir = scratch_dir("psb-write-read");
     let path = dir.join("written.psb");
@@ -226,65 +236,69 @@ fn psd_tools_reads_written_compression_kinds() {
     ] {
         let mut doc = Document::new(4, 2, ColorMode::Rgb, BitDepth::Eight);
         let composite: Vec<u8> = (0..24).map(|i| (i * 7 + 1) as u8).collect();
-        doc.composite.data = composite.clone().into();
+        doc.composite
+            .replace_data(composite.clone().into())
+            .expect("valid composite plane");
         doc.composite_compression = compression;
         doc.layer_compression = compression;
         let planes: Vec<Vec<u8>> = (0..4u8)
             .map(|c| (0..8).map(|i| c * 20 + i).collect())
             .collect();
         let mask: Vec<u8> = (0..8).map(|i| 30 + i as u8).collect();
-        doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
-            name: "Kind".into(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 2,
-                right: 4,
-            },
-            blend: BlendMode::Normal,
-            opacity: 255,
-            fill: 255,
-            lock: LockFlags::default(),
-            color: ColorLabel::None,
-            clipping: false,
-            visible: true,
-            mask: Some(LayerMask {
+        doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+            pictura_core::LayerParts {
+                name: "Kind".into(),
                 rect: PsdRect {
                     top: 0,
                     left: 0,
                     bottom: 2,
                     right: 4,
                 },
-                default_color: 0,
-                disabled: false,
-                flags: 0,
-                data: Some(mask.clone().into()),
+                blend: BlendMode::Normal,
+                opacity: 255,
+                fill: 255,
+                lock: LockFlags::default(),
+                color: ColorLabel::None,
+                clipping: false,
+                visible: true,
+                mask: Some(LayerMask {
+                    rect: PsdRect {
+                        top: 0,
+                        left: 0,
+                        bottom: 2,
+                        right: 4,
+                    },
+                    default_color: 0,
+                    disabled: false,
+                    flags: 0,
+                    data: Some(mask.clone().into()),
+                    ..Default::default()
+                }),
+                adjustment: None,
+                channels: vec![
+                    Channel {
+                        id: 0,
+                        data: planes[0].clone().into(),
+                    },
+                    Channel {
+                        id: 1,
+                        data: planes[1].clone().into(),
+                    },
+                    Channel {
+                        id: 2,
+                        data: planes[2].clone().into(),
+                    },
+                    Channel {
+                        id: -1,
+                        data: planes[3].clone().into(),
+                    },
+                ],
+                children: pictura_core::LayerStack::default(),
+                is_group: false,
+                background: false,
                 ..Default::default()
-            }),
-            adjustment: None,
-            channels: vec![
-                Channel {
-                    id: 0,
-                    data: planes[0].clone().into(),
-                },
-                Channel {
-                    id: 1,
-                    data: planes[1].clone().into(),
-                },
-                Channel {
-                    id: 2,
-                    data: planes[2].clone().into(),
-                },
-                Channel {
-                    id: -1,
-                    data: planes[3].clone().into(),
-                },
-            ],
-            children: pictura_core::LayerStack::default(),
-            is_group: false,
-            background: false,
-            ..Default::default()
-        }]);
+            },
+        )]);
 
         let bytes = write_psd(&doc).unwrap();
         assert_eq!(bytes, write_psd(&doc).unwrap(), "deterministic ({tag})");

@@ -100,7 +100,7 @@ impl Saved {
         let columns = (width + SAVED_TILE - 1) / SAVED_TILE;
         let rows = (height + SAVED_TILE - 1) / SAVED_TILE;
         let planes = ch.map(|k| {
-            k.and_then(|k| layer.channels.get(k))
+            k.and_then(|k| layer.channels().get(k))
                 .map(|c| vec![0u8; c.data.len()])
         });
         Self {
@@ -135,7 +135,7 @@ impl Saved {
                 let bottom = (top + SAVED_TILE).min(self.height) as usize;
                 for (k, plane) in self.planes.iter_mut().enumerate() {
                     let (Some(plane), Some(src)) =
-                        (plane.as_mut(), ch[k].and_then(|k| layer.channels.get(k)))
+                        (plane.as_mut(), ch[k].and_then(|k| layer.channels().get(k)))
                     else {
                         continue;
                     };
@@ -168,7 +168,7 @@ impl Saved {
                 .zip(ch)
                 .all(|(plane, k)| match (plane, k) {
                     (Some(plane), Some(k)) => layer
-                        .channels
+                        .channels()
                         .get(k)
                         .is_some_and(|c| c.data.len() == plane.len()),
                     (None, None) => true,
@@ -192,7 +192,7 @@ impl Saved {
                 let (Some(plane), Some(k)) = (plane.as_ref(), ch[k]) else {
                     continue;
                 };
-                let Some(dst) = layer.channels.get_mut(k) else {
+                let Some(dst) = layer.channels_mut().get_mut(k) else {
                     continue;
                 };
                 for y in top as usize..bottom {
@@ -257,7 +257,7 @@ pub struct Stroke {
     /// held to.
     serial: bool,
     inverse_grayscale: bool,
-    coverage_clip: Option<CoverageClip>,
+    coverage_clip: Option<Coverage>,
 }
 
 impl Stroke {
@@ -278,7 +278,7 @@ impl Stroke {
         let indices = parse_layer_path(path).ok_or(PaintError::NoRasterLayer)?;
         let cfg = cfg.sanitized();
         let target = layer_at(doc, &indices).ok_or(PaintError::NoRasterLayer)?;
-        if target.is_group || target.adjustment.is_some() {
+        if target.is_group() || target.has_adjustment_content() {
             return Err(PaintError::NoRasterLayer);
         }
         if layer_pixel_locked(target) {
@@ -822,7 +822,7 @@ impl Stroke {
         };
         self.saved.save(layer, ch, left, top, right - 1, bottom - 1);
         let (lwu, lhu) = (lw.max(0) as usize, lh.max(0) as usize);
-        for (idx, c) in layer.channels.iter_mut().enumerate() {
+        for (idx, c) in layer.channels_mut().iter_mut().enumerate() {
             if ch.contains(&Some(idx)) {
                 c.data.tile(lwu, lhu);
             }
@@ -832,7 +832,7 @@ impl Stroke {
         for (row, ly) in (top..bottom).enumerate() {
             let src = (first_row + row) * bw + runner;
             let mut row_changed = false;
-            for (idx, c) in layer.channels.iter_mut().enumerate() {
+            for (idx, c) in layer.channels_mut().iter_mut().enumerate() {
                 let Some(k) = ch.iter().position(|&x| x == Some(idx)) else {
                     continue;
                 };
@@ -1022,14 +1022,14 @@ type PlaneIndex = [Option<usize>; 4];
 /// The plane positions for `layer`; a stroke resolves them once instead of
 /// re-scanning `channels` for every changed pixel.
 fn plane_index(layer: &Layer) -> PlaneIndex {
-    let at = |id| layer.channels.iter().position(|c| c.id == id);
+    let at = |id| layer.channels().iter().position(|c| c.id == id);
     [at(0), at(1), at(2), at(-1)]
 }
 
 /// A layer without an alpha channel (a Background) is opaque.
 fn read_idx(layer: &Layer, ch: PlaneIndex, i: usize) -> (u8, u8, u8, u8) {
     let g = |k: Option<usize>, missing: u8| {
-        k.and_then(|k| layer.channels.get(k))
+        k.and_then(|k| layer.channels().get(k))
             .and_then(|c| c.data.get(i))
             .copied()
             .unwrap_or(missing)
@@ -1045,7 +1045,7 @@ fn read_pixel(layer: &Layer, i: usize) -> (u8, u8, u8, u8) {
 /// the life of a sample.
 fn read_planes(layer: &Layer, ch: PlaneIndex) -> [Option<&[u8]>; 4] {
     let at = |k: Option<usize>| {
-        k.and_then(|k| layer.channels.get(k))
+        k.and_then(|k| layer.channels().get(k))
             .map(|c| c.data.as_slice())
     };
     [at(ch[0]), at(ch[1]), at(ch[2]), at(ch[3])]
@@ -1054,7 +1054,7 @@ fn read_planes(layer: &Layer, ch: PlaneIndex) -> [Option<&[u8]>; 4] {
 #[cfg(test)]
 fn channel_data(layer: &Layer, id: i16) -> Option<&[u8]> {
     layer
-        .channels
+        .channels()
         .iter()
         .find(|c| c.id == id)
         .map(|c| c.data.as_slice())
@@ -1063,7 +1063,7 @@ fn channel_data(layer: &Layer, id: i16) -> Option<&[u8]> {
 #[cfg(test)]
 fn channel_data_mut(layer: &mut Layer, id: i16) -> Option<&mut [u8]> {
     layer
-        .channels
+        .channels_mut()
         .iter_mut()
         .find(|c| c.id == id)
         .map(|c| c.data.as_mut_slice())
@@ -1072,7 +1072,7 @@ fn channel_data_mut(layer: &mut Layer, id: i16) -> Option<&mut [u8]> {
 pub(crate) fn layer_at<'a>(doc: &'a Document, path: &[usize]) -> Option<&'a Layer> {
     let mut node = doc.layers.get(*path.first()?)?;
     for &idx in &path[1..] {
-        node = node.children.get(idx)?;
+        node = node.children().get(idx)?;
     }
     Some(node)
 }
@@ -1080,7 +1080,7 @@ pub(crate) fn layer_at<'a>(doc: &'a Document, path: &[usize]) -> Option<&'a Laye
 pub(crate) fn layer_at_mut<'a>(doc: &'a mut Document, path: &[usize]) -> Option<&'a mut Layer> {
     let mut node = doc.layers.get_mut(*path.first()?)?;
     for &idx in &path[1..] {
-        node = node.children.get_mut(idx)?;
+        node = node.children_mut().expect("group").get_mut(idx)?;
     }
     Some(node)
 }
@@ -1097,7 +1097,7 @@ mod dynamics;
 mod per_dab;
 mod stencil;
 use dynamics::PlacedDab;
-pub use stencil::CoverageClip;
+pub use stencil::Coverage;
 use stencil::Stencil;
 #[cfg(test)]
 mod clip_tests;

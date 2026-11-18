@@ -18,12 +18,14 @@ use pictura_select::Selection;
 fn doc() -> Document {
     let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = LayerStack::from_layers(vec![pixel_layer("px", 8, 8, (255, 0, 0))]);
-    doc.composite = PixelBuffer {
-        width: 8,
-        height: 8,
-        channels: 4,
-        data: vec![0u8; 8 * 8 * 4].into(),
-    };
+    doc.composite
+        .replace(PixelBuffer {
+            width: 8,
+            height: 8,
+            channels: 4,
+            data: vec![0u8; 8 * 8 * 4].into(),
+        })
+        .expect("valid composite");
     doc
 }
 
@@ -32,7 +34,7 @@ fn doc() -> Document {
 fn trimmed_layer() -> pictura_core::Layer {
     let mut layer = pixel_layer("px", 8, 8, (255, 0, 0));
     let alpha = layer
-        .channels
+        .channels_mut()
         .iter_mut()
         .find(|c| c.id == -1)
         .expect("the alpha channel");
@@ -775,8 +777,8 @@ fn a_region_change_can_also_notify() {
 
 fn group_layer(name: &str, children: Vec<pictura_core::Layer>) -> pictura_core::Layer {
     let mut group = pixel_layer(name, 8, 8, (0, 0, 0));
-    group.is_group = true;
-    group.children = LayerStack::from_layers(children);
+    group.set_group_children(pictura_core::LayerStack::default());
+    group.set_group_children(LayerStack::from_layers(children));
     group
 }
 

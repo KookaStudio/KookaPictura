@@ -13,26 +13,7 @@ use rayon::prelude::*;
 use crate::common::{hsl_to_rgb, note_parallel, planes_mut, rgb_to_hsl, serial};
 use crate::types::AdjustError;
 
-/// One eyedropper reading: the document position it was taken at (negative
-/// when it was not read off the canvas) plus its RGB.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ReplaceColorSample {
-    pub x: i32,
-    pub y: i32,
-    pub rgb: [u8; 3],
-}
-
-/// Replace Color's full parameter set. `fuzziness` is `0..=200`; `hue` is
-/// degrees `-180..=180`; `saturation` / `lightness` are `-100..=100`.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ReplaceColorParams {
-    pub samples: Vec<ReplaceColorSample>,
-    pub fuzziness: f64,
-    pub localized: bool,
-    pub hue: f64,
-    pub saturation: f64,
-    pub lightness: f64,
-}
+pub use pictura_core::{ReplaceColorParams, ReplaceColorSample};
 
 /// Spatial falloff width for Localized Color Clusters, as a fraction of the
 /// image diagonal, squared.

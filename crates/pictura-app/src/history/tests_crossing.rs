@@ -1,14 +1,14 @@
 //! A walk across a history segment reports the composite's real change.
 
 use super::*;
-use pictura_core::{BitDepth, Channel, ColorMode, Layer, LayerStack};
+use pictura_core::{BitDepth, Channel, ColorMode, Layer, LayerStack, PixelBuffer};
 
 // Two 256² tiles a side, so one changed tile is a quarter of the document.
 const SIDE: u32 = 512;
 
 fn layer(side: u32) -> Layer {
     let side_i = side as i32;
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "text".into(),
         rect: PsdRect {
             top: 0,
@@ -23,12 +23,19 @@ fn layer(side: u32) -> Layer {
             })
             .collect(),
         ..Default::default()
-    }
+    })
 }
 
 fn document() -> Document {
     let mut doc = Document::new(SIDE, SIDE, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite.data = vec![1; (SIDE * SIDE * 4) as usize].into();
+    doc.composite
+        .replace(PixelBuffer {
+            width: SIDE,
+            height: SIDE,
+            channels: 4,
+            data: vec![1; (SIDE * SIDE * 4) as usize].into(),
+        })
+        .expect("valid RGBA composite");
     doc.layers = LayerStack::from_layers(vec![layer(SIDE)]);
     doc
 }
@@ -45,7 +52,11 @@ fn crossing_a_segment_reports_the_changed_tile() {
     history.capture_live(&mut live, &selection, &target, "Open");
 
     resize_layer(&mut live);
-    live.composite.data[(300 * SIDE + 280) as usize] = 200;
+    live.composite
+        .edit_data(|data| {
+            data[(300 * SIDE + 280) as usize] = 200;
+        })
+        .expect("pixel edit preserves geometry");
     history.capture_live(&mut live, &selection, &target, "Resize");
     assert_eq!(history.anchor_count(), 2);
 
@@ -80,7 +91,11 @@ fn crossing_a_segment_with_a_changed_channel_stays_bounded() {
     history.capture_live(&mut live, &selection, &target, "Open");
 
     resize_layer(&mut live);
-    live.composite.data[0] = 200;
+    live.composite
+        .edit_data(|data| {
+            data[0] = 200;
+        })
+        .expect("pixel edit preserves geometry");
     live.channels[0].data[0] = 255;
     history.capture_live(&mut live, &selection, &target, "Resize");
 
@@ -107,7 +122,9 @@ fn undoing_a_resize_reports_the_whole_document() {
         pictura_render::Resample::Nearest,
     )
     .expect("resize");
-    live.composite = pictura_render::composite_rgba(&live);
+    live.composite
+        .replace(pictura_render::composite_rgba(&live))
+        .expect("valid composite");
     history.capture_live(&mut live, &selection, &target, "Image Size");
 
     assert_eq!(

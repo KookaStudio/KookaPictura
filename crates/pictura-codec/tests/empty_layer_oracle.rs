@@ -36,7 +36,7 @@ fn pixel_layer(name: &str, rect: PsdRect, size: usize) -> Layer {
             data: vec![255u8; size].into(),
         }))
         .collect();
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.to_string(),
         rect,
         blend: BlendMode::Normal,
@@ -53,7 +53,7 @@ fn pixel_layer(name: &str, rect: PsdRect, size: usize) -> Layer {
         is_group: false,
         background: false,
         ..Default::default()
-    }
+    })
 }
 
 fn temp_file(tag: &str) -> std::path::PathBuf {
@@ -198,8 +198,8 @@ fn empty_layer_round_trips() {
     let back = read_psd(&bytes).unwrap();
     assert_eq!(back, doc);
     assert_eq!(back.layers[1].rect, rect(0, 0, 0, 0));
-    assert_eq!(back.layers[1].channels.len(), 4);
-    assert!(back.layers[1].channels.iter().all(|c| c.data.is_empty()));
+    assert_eq!(back.layers[1].channels().len(), 4);
+    assert!(back.layers[1].channels().iter().all(|c| c.data.is_empty()));
 }
 
 #[test]
@@ -209,7 +209,7 @@ fn grown_layer_round_trips() {
     let bytes = write_psd(&doc).unwrap();
     let back = read_psd(&bytes).unwrap();
     assert_eq!(back.layers[0].rect, rect(1, 2, 4, 6));
-    assert_eq!(back.layers[0].channels, doc.layers[0].channels);
+    assert_eq!(back.layers[0].channels(), doc.layers[0].channels());
 }
 
 #[test]

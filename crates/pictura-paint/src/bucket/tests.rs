@@ -9,7 +9,7 @@ const BLACK: [u8; 4] = [0, 0, 0, 255];
 /// Two white rooms with a 2 px black wall between them.
 fn rooms() -> Document {
     let mut d = doc(40, 20, WHITE);
-    for c in &mut d.layers[0].channels[..3] {
+    for c in &mut d.layers[0].channels_mut()[..3] {
         for (i, v) in c.data.iter_mut().enumerate() {
             if (19..21).contains(&(i % 40)) {
                 *v = 0;
@@ -95,17 +95,23 @@ fn selected(w: i32, h: i32, left: i32, top: i32, sw: i32, sh: i32) -> (Document,
 fn the_outside_band_stops_at_the_selections_edge() {
     // An 8×1 row: the selection covers the middle four pixels.
     let (mut d, selection) = selected(8, 1, 2, 0, 4, 1);
-    stroke_selection(
-        &mut d,
-        "0",
-        &selection,
-        bounds_of(&selection, 8),
-        RED,
-        1,
-        StrokeAlign::Outside,
-        PaintMode::Normal,
-        1.0,
-    )
+    {
+        let (width, height) = (d.width, d.height);
+        match pictura_core::Coverage::for_canvas(&(selection), width, height) {
+            Some(coverage) => stroke_selection(
+                &mut d,
+                "0",
+                &coverage,
+                bounds_of(&selection, 8),
+                RED,
+                1,
+                StrokeAlign::Outside,
+                PaintMode::Normal,
+                1.0,
+            ),
+            None => None,
+        }
+    }
     .expect("outside stroke");
     assert_eq!(pixel(&d, 1, 0), [220, 0, 0, 255], "the band's left arm");
     assert_eq!(pixel(&d, 6, 0), [220, 0, 0, 255], "the band's right arm");
@@ -115,17 +121,23 @@ fn the_outside_band_stops_at_the_selections_edge() {
 #[test]
 fn the_inside_band_stops_at_the_selections_edge() {
     let (mut d, selection) = selected(8, 1, 2, 0, 4, 1);
-    stroke_selection(
-        &mut d,
-        "0",
-        &selection,
-        bounds_of(&selection, 8),
-        RED,
-        1,
-        StrokeAlign::Inside,
-        PaintMode::Normal,
-        1.0,
-    )
+    {
+        let (width, height) = (d.width, d.height);
+        match pictura_core::Coverage::for_canvas(&(selection), width, height) {
+            Some(coverage) => stroke_selection(
+                &mut d,
+                "0",
+                &coverage,
+                bounds_of(&selection, 8),
+                RED,
+                1,
+                StrokeAlign::Inside,
+                PaintMode::Normal,
+                1.0,
+            ),
+            None => None,
+        }
+    }
     .expect("inside stroke");
     assert_eq!(pixel(&d, 2, 0), [220, 0, 0, 255], "the band's left arm");
     assert_eq!(pixel(&d, 5, 0), [220, 0, 0, 255], "the band's right arm");
@@ -137,17 +149,23 @@ fn the_inside_band_stops_at_the_selections_edge() {
 fn the_band_does_not_reach_the_canvas_edge() {
     // A 10×10 selection with room to its right on a 24×24 canvas.
     let (mut d, selection) = selected(24, 24, 7, 7, 10, 10);
-    stroke_selection(
-        &mut d,
-        "0",
-        &selection,
-        bounds_of(&selection, 24),
-        RED,
-        2,
-        StrokeAlign::Outside,
-        PaintMode::Normal,
-        1.0,
-    )
+    {
+        let (width, height) = (d.width, d.height);
+        match pictura_core::Coverage::for_canvas(&(selection), width, height) {
+            Some(coverage) => stroke_selection(
+                &mut d,
+                "0",
+                &coverage,
+                bounds_of(&selection, 24),
+                RED,
+                2,
+                StrokeAlign::Outside,
+                PaintMode::Normal,
+                1.0,
+            ),
+            None => None,
+        }
+    }
     .expect("outside stroke");
     assert_eq!(pixel(&d, 5, 12), [220, 0, 0, 255], "the band's left arm");
     assert_eq!(pixel(&d, 17, 12), [220, 0, 0, 255], "the band's right arm");
@@ -174,7 +192,7 @@ fn tolerance_is_inclusive_per_channel() {
     let patched = || {
         let mut d = doc(20, 20, [100, 100, 100, 255]);
         // A patch 20 levels off on one channel only.
-        for (i, v) in d.layers[0].channels[1].data.iter_mut().enumerate() {
+        for (i, v) in d.layers[0].channels_mut()[1].data.iter_mut().enumerate() {
             if i % 20 >= 10 {
                 *v = 120;
             }
@@ -197,7 +215,7 @@ fn transparency_is_not_black() {
     for y in 5..15 {
         for x in 5..15 {
             if x == 5 || x == 14 || y == 5 || y == 14 {
-                d.layers[0].channels[3].data[y * 20 + x] = 255;
+                d.layers[0].channels_mut()[3].data[y * 20 + x] = 255;
             }
         }
     }
@@ -227,7 +245,7 @@ fn an_empty_layer_floods_whole_and_an_enclosed_seed_does_not() {
     for y in 5..15 {
         for x in 5..15 {
             if x == 5 || x == 14 || y == 5 || y == 14 {
-                d.layers[0].channels[3].data[y * 30 + x] = 255;
+                d.layers[0].channels_mut()[3].data[y * 30 + x] = 255;
             }
         }
     }
@@ -292,7 +310,7 @@ fn opacity_and_the_mask_scale_the_fill() {
 #[test]
 fn a_transparency_lock_keeps_the_fill_off_empty_pixels() {
     let mut d = doc(20, 20, [255, 255, 255, 0]);
-    for a in &mut d.layers[0].channels[3].data[..200] {
+    for a in &mut d.layers[0].channels_mut()[3].data[..200] {
         *a = 255;
     }
     lock(&mut d, LockFlags::TRANSPARENCY);
@@ -321,16 +339,22 @@ fn a_pattern_tiles_from_the_document_origin_inside_the_selection() {
     };
     let mut d = doc(6, 2, WHITE);
     let selection = TiledMask::from([255, 255, 255, 255, 0, 0].repeat(2));
-    fill(
-        &mut d,
-        "0",
-        &[255; 12],
-        BucketPaint::Pattern(&tile),
-        PaintMode::Normal,
-        1.0,
-        Some(&selection),
-        Alpha::Blend,
-    )
+    {
+        let (width, height) = (d.width, d.height);
+        match pictura_core::Coverage::for_canvas(&(selection), width, height) {
+            Some(coverage) => fill(
+                &mut d,
+                "0",
+                &[255; 12],
+                BucketPaint::Pattern(&tile),
+                PaintMode::Normal,
+                1.0,
+                Some(&coverage),
+                Alpha::Blend,
+            ),
+            None => None,
+        }
+    }
     .expect("filled");
     assert_eq!(pixel(&d, 0, 0)[0], 10);
     assert_eq!(pixel(&d, 1, 1)[0], 200);
@@ -365,17 +389,23 @@ fn a_selection_stroke_bands_the_edge_where_asked() {
 
     // Outside 1 px: the two pixels just outside the selection take the
     // colour; the selection itself is untouched.
-    stroke_selection(
-        &mut d,
-        "0",
-        &selection,
-        bounds_of(&selection, 8),
-        red,
-        1,
-        StrokeAlign::Outside,
-        PaintMode::Normal,
-        1.0,
-    )
+    {
+        let (width, height) = (d.width, d.height);
+        match pictura_core::Coverage::for_canvas(&(selection), width, height) {
+            Some(coverage) => stroke_selection(
+                &mut d,
+                "0",
+                &coverage,
+                bounds_of(&selection, 8),
+                red,
+                1,
+                StrokeAlign::Outside,
+                PaintMode::Normal,
+                1.0,
+            ),
+            None => None,
+        }
+    }
     .expect("outside stroke");
     assert_eq!(pixel(&d, 1, 0), [220, 0, 0, 255]);
     assert_eq!(pixel(&d, 6, 0), [220, 0, 0, 255]);
@@ -385,17 +415,23 @@ fn a_selection_stroke_bands_the_edge_where_asked() {
     // Inside 1 px: the selection's border takes the colour; its middle and
     // the outside stay white.
     let mut d = doc(8, 1, WHITE);
-    stroke_selection(
-        &mut d,
-        "0",
-        &selection,
-        bounds_of(&selection, 8),
-        red,
-        1,
-        StrokeAlign::Inside,
-        PaintMode::Normal,
-        1.0,
-    )
+    {
+        let (width, height) = (d.width, d.height);
+        match pictura_core::Coverage::for_canvas(&(selection), width, height) {
+            Some(coverage) => stroke_selection(
+                &mut d,
+                "0",
+                &coverage,
+                bounds_of(&selection, 8),
+                red,
+                1,
+                StrokeAlign::Inside,
+                PaintMode::Normal,
+                1.0,
+            ),
+            None => None,
+        }
+    }
     .expect("inside stroke");
     assert_eq!(pixel(&d, 2, 0), [220, 0, 0, 255]);
     assert_eq!(pixel(&d, 5, 0), [220, 0, 0, 255]);
@@ -439,7 +475,7 @@ fn a_boxed_fill_matches_the_document_mask_and_forks_only_its_tiles() {
             Alpha::Blend,
         );
         let mut history = base.clone();
-        for c in &mut history.layers[0].channels {
+        for c in history.layers[0].channels_mut() {
             c.data.tile(w as usize, h as usize);
         }
         let mut got = history.clone();
@@ -456,9 +492,9 @@ fn a_boxed_fill_matches_the_document_mask_and_forks_only_its_tiles() {
         );
         assert_eq!(boxed_dirty, dirty, "origin {origin:?}");
         for (a, b) in got.layers[0]
-            .channels
+            .channels()
             .iter()
-            .zip(&expected.layers[0].channels)
+            .zip(expected.layers[0].channels())
         {
             assert_eq!(
                 a.data.as_slice(),
@@ -468,9 +504,9 @@ fn a_boxed_fill_matches_the_document_mask_and_forks_only_its_tiles() {
             );
         }
         for (a, b) in got.layers[0]
-            .channels
+            .channels()
             .iter()
-            .zip(&history.layers[0].channels)
+            .zip(history.layers[0].channels())
         {
             assert!(a.data.shares_tile(1, &b.data), "tile 1 stayed shared");
             assert!(!a.data.shares_tile(0, &b.data), "tile 0 was written");
@@ -491,7 +527,7 @@ fn noise(w: i32, h: i32, origin: (i32, i32), background: bool) -> Document {
             ((state >> 33) % 3) as u8
         })
         .collect();
-    for c in &mut d.layers[0].channels {
+    for c in d.layers[0].channels_mut() {
         for (v, &k) in c.data.iter_mut().zip(&picks) {
             *v = match (c.id, k) {
                 (-1, 1) => 0,
@@ -690,12 +726,33 @@ fn the_selection_is_a_wall_for_the_contiguous_flood() {
     let source = BucketSource::layer(&d, "0").unwrap();
     let count = |m: &[u8]| m.iter().filter(|&&v| v == 255).count();
     let size = (d.width, d.height);
-    let left = flood(source, size, bounds, Some(&selection), (4, 4), 0, true).unwrap();
+    let left = {
+        let (width, height) = size;
+        match pictura_core::Coverage::for_canvas(&(selection), width, height) {
+            Some(coverage) => flood(source, size, bounds, Some(&coverage), (4, 4), 0, true),
+            None => None,
+        }
+    }
+    .unwrap();
     assert_eq!(count(&left), 36, "the flood crossed the unselected gap");
-    let both = flood(source, size, bounds, Some(&selection), (4, 4), 0, false).unwrap();
+    let both = {
+        let (width, height) = size;
+        match pictura_core::Coverage::for_canvas(&(selection), width, height) {
+            Some(coverage) => flood(source, size, bounds, Some(&coverage), (4, 4), 0, false),
+            None => None,
+        }
+    }
+    .unwrap();
     assert_eq!(count(&both), 36 + 48);
     assert!(
-        flood(source, size, bounds, Some(&selection), (12, 4), 0, true).is_none(),
+        {
+            let (width, height) = size;
+            match pictura_core::Coverage::for_canvas(&(selection), width, height) {
+                Some(coverage) => flood(source, size, bounds, Some(&coverage), (12, 4), 0, true),
+                None => None,
+            }
+        }
+        .is_none(),
         "a seed outside the selection floods nothing"
     );
 }
@@ -718,8 +775,25 @@ fn the_selection_edge_is_not_softened() {
     let bounds = bounds_of(&selection, w);
     let source = BucketSource::layer(&d, "0").unwrap();
     let size = (d.width, d.height);
-    let mask = flood(source, size, bounds, Some(&selection), (5, 5), 0, true).unwrap();
-    let soft = crop(&antialias(mask, size, bounds, Some(&selection)), w, bounds);
+    let mask = {
+        let (width, height) = size;
+        match pictura_core::Coverage::for_canvas(&(selection), width, height) {
+            Some(coverage) => flood(source, size, bounds, Some(&coverage), (5, 5), 0, true),
+            None => None,
+        }
+    }
+    .unwrap();
+    let soft = crop(
+        &{
+            let (width, height) = size;
+            match pictura_core::Coverage::for_canvas(&(selection), width, height) {
+                Some(coverage) => antialias(mask, size, bounds, Some(&coverage)),
+                None => pictura_core::mask_ops::empty_mask(width as usize, height as usize),
+            }
+        },
+        w,
+        bounds,
+    );
     let selected = crop(&selection, w, bounds);
     for (i, (&m, &s)) in soft.iter().zip(&selected).enumerate() {
         if s > 0 {
@@ -764,7 +838,7 @@ fn a_fill_without_a_mask_covers_its_box() {
     );
     assert_eq!(da, Some(bounds));
     assert_eq!(da, db);
-    for (x, y) in a.layers[0].channels.iter().zip(&b.layers[0].channels) {
+    for (x, y) in a.layers[0].channels().iter().zip(b.layers[0].channels()) {
         assert_eq!(x.data.as_slice(), y.data.as_slice());
     }
 }
@@ -842,22 +916,32 @@ fn a_windowed_stroke_equals_the_whole_document_stroke() {
                 let mut got = expected.clone();
                 let dirty_expected =
                     whole_document_stroke(&mut expected, &selection, width, position);
-                let dirty = stroke_selection(
-                    &mut got,
-                    "0",
-                    &TiledMask::from(selection.clone()),
-                    bounds,
-                    RED,
-                    width,
-                    position,
-                    PaintMode::Normal,
-                    1.0,
-                );
+                let dirty = {
+                    let (canvas_width, canvas_height) = (got.width, got.height);
+                    match pictura_core::Coverage::for_canvas(
+                        &(TiledMask::from(selection.clone())),
+                        canvas_width,
+                        canvas_height,
+                    ) {
+                        Some(coverage) => stroke_selection(
+                            &mut got,
+                            "0",
+                            &coverage,
+                            bounds,
+                            RED,
+                            width,
+                            position,
+                            PaintMode::Normal,
+                            1.0,
+                        ),
+                        None => None,
+                    }
+                };
                 assert_eq!(dirty, dirty_expected, "{position:?} {width}");
                 for (a, b) in got.layers[0]
-                    .channels
+                    .channels()
                     .iter()
-                    .zip(&expected.layers[0].channels)
+                    .zip(expected.layers[0].channels())
                 {
                     assert_eq!(a.data.as_slice(), b.data.as_slice(), "{position:?} {width}");
                 }
@@ -870,23 +954,26 @@ fn a_windowed_stroke_equals_the_whole_document_stroke() {
 fn a_bucket_fills_an_empty_layer() {
     use pictura_core::{BitDepth, ColorMode};
     let mut doc = Document::new(16, 16, ColorMode::Rgb, BitDepth::Eight);
-    let _ = doc.layers.push(Layer {
-        name: "empty".into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 0,
-            right: 0,
+    let _ = doc.layers.push(pictura_core::Layer::from_parts(
+        pictura_core::LayerParts {
+            name: "empty".into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 0,
+                right: 0,
+            },
+            channels: [0i16, 1, 2, -1]
+                .into_iter()
+                .map(|id| pictura_core::Channel {
+                    id,
+                    data: Vec::new().into(),
+                })
+                .collect(),
+            ..Default::default()
         },
-        channels: [0i16, 1, 2, -1]
-            .into_iter()
-            .map(|id| pictura_core::Channel {
-                id,
-                data: Vec::new().into(),
-            })
-            .collect(),
-        ..Default::default()
-    });
+        pictura_core::LayerContent::Pixel,
+    ));
     let bounds = PsdRect {
         top: 4,
         left: 4,
@@ -921,17 +1008,20 @@ fn a_whole_canvas_bucket_writes_uniform_tiles() {
     use pictura_core::{BitDepth, ColorMode, TileState};
     let (w, h) = (600u32, 520u32);
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-    let _ = doc.layers.push(Layer {
-        name: "empty".into(),
-        channels: [0i16, 1, 2, -1]
-            .into_iter()
-            .map(|id| pictura_core::Channel {
-                id,
-                data: Vec::new().into(),
-            })
-            .collect(),
-        ..Default::default()
-    });
+    let _ = doc.layers.push(pictura_core::Layer::from_parts(
+        pictura_core::LayerParts {
+            name: "empty".into(),
+            channels: [0i16, 1, 2, -1]
+                .into_iter()
+                .map(|id| pictura_core::Channel {
+                    id,
+                    data: Vec::new().into(),
+                })
+                .collect(),
+            ..Default::default()
+        },
+        pictura_core::LayerContent::Pixel,
+    ));
     let all = PsdRect {
         top: 0,
         left: 0,
@@ -962,7 +1052,7 @@ fn a_whole_canvas_bucket_writes_uniform_tiles() {
     assert_eq!(dirty, Some(all));
     let layer = &doc.layers[0];
     assert_eq!(layer.rect, all);
-    for c in &layer.channels {
+    for c in layer.channels() {
         assert_eq!(c.data.allocated_bytes(), 0, "channel {} holds pixels", c.id);
         for t in 0..c.data.tile_count() {
             assert!(
@@ -1004,29 +1094,39 @@ fn uniform_tiles_are_filled_without_allocating() {
     assert!(tiled.tile(w as usize, h as usize));
     let flat = TiledMask::from(dense);
     let mut base = doc_at((w, h), (0, 0), [90, 140, 200, 255], false);
-    for c in &mut base.layers[0].channels {
+    for c in base.layers[0].channels_mut() {
         c.data.tile(w as usize, h as usize);
     }
     let red = BucketPaint::Foreground(RED);
     let run = |selection: &TiledMask| {
         let mut d = base.clone();
-        let dirty = fill_within(
-            &mut d,
-            "0",
-            bounds,
-            None,
-            red,
-            PaintMode::Normal,
-            0.6,
-            Some(selection),
-            Alpha::Blend,
-        );
+        let dirty = {
+            let (width, height) = (d.width, d.height);
+            match pictura_core::Coverage::for_canvas(selection, width, height) {
+                Some(coverage) => fill_within(
+                    &mut d,
+                    "0",
+                    bounds,
+                    None,
+                    red,
+                    PaintMode::Normal,
+                    0.6,
+                    Some(&coverage),
+                    Alpha::Blend,
+                ),
+                None => None,
+            }
+        };
         (d, dirty)
     };
     let (fast, fast_dirty) = run(&tiled);
     let (slow, slow_dirty) = run(&flat);
     assert_eq!(fast_dirty, slow_dirty);
-    for (a, b) in fast.layers[0].channels.iter().zip(&slow.layers[0].channels) {
+    for (a, b) in fast.layers[0]
+        .channels()
+        .iter()
+        .zip(slow.layers[0].channels())
+    {
         assert!(a.data == b.data, "channel {}", a.id);
         // Tile (1, 1) lies inside the marquee whole.
         let inner = (w as usize).div_ceil(256) + 1;

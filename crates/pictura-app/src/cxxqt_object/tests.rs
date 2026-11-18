@@ -65,7 +65,7 @@ pub(super) fn assert_display_current(view: &super::PictureViewRust) {
 
 pub(super) fn pixel_layer(name: &str, w: u32, h: u32, rgb: (u8, u8, u8)) -> Layer {
     let n = (w * h) as usize;
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: PsdRect {
             top: 0,
@@ -104,20 +104,7 @@ pub(super) fn pixel_layer(name: &str, w: u32, h: u32, rgb: (u8, u8, u8)) -> Laye
         is_group: false,
         background: false,
         ..Default::default()
-    }
-}
-
-#[test]
-fn converts_planar_rgb_to_rgba() {
-    let mut doc = Document::new(2, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite.data = vec![10, 20, 30, 40, 50, 60].into();
-    let image = document_to_image(&doc, false);
-    assert_eq!(image.width(), 2);
-    assert_eq!(image.height(), 1);
-    assert_eq!(image.pixel_color(0, 0).red(), 10);
-    assert_eq!(image.pixel_color(0, 0).green(), 30);
-    assert_eq!(image.pixel_color(0, 0).blue(), 50);
-    assert_eq!(image.pixel_color(0, 0).alpha(), 255);
+    })
 }
 
 #[test]
@@ -139,46 +126,48 @@ fn clamp_region_matches_document_bounds() {
 #[test]
 fn layered_document_composites_with_source_alpha() {
     let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
-        name: "red".into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 1,
-            right: 1,
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            name: "red".into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 1,
+                right: 1,
+            },
+            blend: BlendMode::Normal,
+            opacity: 255,
+            fill: 255,
+            lock: LockFlags::default(),
+            color: ColorLabel::None,
+            clipping: false,
+            visible: true,
+            mask: None,
+            adjustment: None,
+            channels: vec![
+                Channel {
+                    id: 0,
+                    data: vec![255].into(),
+                },
+                Channel {
+                    id: 1,
+                    data: vec![0].into(),
+                },
+                Channel {
+                    id: 2,
+                    data: vec![0].into(),
+                },
+                Channel {
+                    id: -1,
+                    data: vec![255].into(),
+                },
+            ],
+            children: pictura_core::LayerStack::default(),
+            is_group: false,
+            background: false,
+            ..Default::default()
         },
-        blend: BlendMode::Normal,
-        opacity: 255,
-        fill: 255,
-        lock: LockFlags::default(),
-        color: ColorLabel::None,
-        clipping: false,
-        visible: true,
-        mask: None,
-        adjustment: None,
-        channels: vec![
-            Channel {
-                id: 0,
-                data: vec![255].into(),
-            },
-            Channel {
-                id: 1,
-                data: vec![0].into(),
-            },
-            Channel {
-                id: 2,
-                data: vec![0].into(),
-            },
-            Channel {
-                id: -1,
-                data: vec![255].into(),
-            },
-        ],
-        children: pictura_core::LayerStack::default(),
-        is_group: false,
-        background: false,
-        ..Default::default()
-    }]);
+    )]);
 
     let image = document_to_image(&doc, false);
     assert_eq!(image.pixel_color(0, 0).red(), 255);
@@ -190,46 +179,48 @@ fn layered_document_composites_with_source_alpha() {
 #[test]
 fn invert_and_visibility_change_composite() {
     let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
-        name: "red".into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 1,
-            right: 1,
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            name: "red".into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 1,
+                right: 1,
+            },
+            blend: BlendMode::Normal,
+            opacity: 255,
+            fill: 255,
+            lock: LockFlags::default(),
+            color: ColorLabel::None,
+            clipping: false,
+            visible: true,
+            mask: None,
+            adjustment: None,
+            channels: vec![
+                Channel {
+                    id: 0,
+                    data: vec![255].into(),
+                },
+                Channel {
+                    id: 1,
+                    data: vec![0].into(),
+                },
+                Channel {
+                    id: 2,
+                    data: vec![0].into(),
+                },
+                Channel {
+                    id: -1,
+                    data: vec![255].into(),
+                },
+            ],
+            children: pictura_core::LayerStack::default(),
+            is_group: false,
+            background: false,
+            ..Default::default()
         },
-        blend: BlendMode::Normal,
-        opacity: 255,
-        fill: 255,
-        lock: LockFlags::default(),
-        color: ColorLabel::None,
-        clipping: false,
-        visible: true,
-        mask: None,
-        adjustment: None,
-        channels: vec![
-            Channel {
-                id: 0,
-                data: vec![255].into(),
-            },
-            Channel {
-                id: 1,
-                data: vec![0].into(),
-            },
-            Channel {
-                id: 2,
-                data: vec![0].into(),
-            },
-            Channel {
-                id: -1,
-                data: vec![255].into(),
-            },
-        ],
-        children: pictura_core::LayerStack::default(),
-        is_group: false,
-        background: false,
-        ..Default::default()
-    }]);
+    )]);
 
     let before = document_to_image(&doc, false);
     assert_eq!(before.pixel_color(0, 0).red(), 255);
@@ -431,7 +422,7 @@ fn layer_visibility_region_bounds_raster_and_bounded_adjustments() {
     };
     assert_eq!(region(text.clone()), Some(clipped(text_rect)));
     let mut no_proxy = text;
-    no_proxy.channels.clear();
+    no_proxy.channels_mut().clear();
     assert_eq!(region(no_proxy), Some(clipped(text_rect)));
 
     let mask = |t, l, b, r, data: Option<Vec<u8>>, default_color, disabled| LayerMask {
@@ -482,20 +473,24 @@ fn layer_visibility_region_bounds_raster_and_bounded_adjustments() {
     assert_eq!(region(non_zero), None);
 
     let mut group = pixel_layer("group", 4, 4, (0, 0, 0));
-    group.is_group = true;
+    group.set_group_children(pictura_core::LayerStack::default());
     assert_eq!(region(group), None);
 
     let mut effected = pixel_layer("effected", 8, 4, (10, 20, 30));
-    effected.extra_blocks.push(LayerBlock {
-        key: *b"lfx2",
-        data: Vec::new().into(),
+    pictura_codec::edit_layer(effected.as_mut(), |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"lfx2",
+            data: Vec::new().into(),
+        })
     });
     let effected_rect = effected.rect;
     assert_eq!(region(effected), Some(effected_rect));
     let mut legacy = pixel_layer("legacy", 8, 4, (10, 20, 30));
-    legacy.extra_blocks.push(LayerBlock {
-        key: *b"lrFX",
-        data: Vec::new().into(),
+    pictura_codec::edit_layer(legacy.as_mut(), |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"lrFX",
+            data: Vec::new().into(),
+        })
     });
     let legacy_rect = legacy.rect;
     assert_eq!(region(legacy), Some(legacy_rect));
@@ -505,7 +500,7 @@ fn layer_visibility_region_bounds_raster_and_bounded_adjustments() {
 fn visibility_union_falls_back_for_unbounded_layer() {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
     let mut group = pixel_layer("group", 4, 4, (9, 9, 9));
-    group.is_group = true;
+    group.set_group_children(pictura_core::LayerStack::default());
     doc.layers =
         pictura_core::LayerStack::from_layers(vec![pixel_layer("base", 4, 4, (0, 0, 0)), group]);
 
@@ -554,7 +549,7 @@ fn active_layer_visible_tracks_the_active_raster_layer() {
     assert!(active_layer_visible(&doc, Some("")));
     assert!(active_layer_visible(&doc, Some("9")));
     let mut group = pixel_layer("group", 4, 4, (0, 0, 0));
-    group.is_group = true;
+    group.set_group_children(pictura_core::LayerStack::default());
     let _ = doc.layers.push(group);
     assert!(active_layer_visible(&doc, Some("2")));
 }
@@ -597,7 +592,12 @@ fn move_preview_base_preserves_layer_visibility() {
 
     // The full-composite fallback (a missing/mismatched composite).
     let mut no_composite = doc.clone();
-    no_composite.composite.data.clear();
+    no_composite
+        .composite
+        .edit_data(|data| {
+            data.clear();
+        })
+        .expect("pixel edit preserves geometry");
     no_composite.layers[1].visible = false;
     let _ = build_move_preview_base(&mut no_composite, &["1".to_string()], false);
     assert!(
@@ -690,7 +690,7 @@ fn duplicate_move_target_refuses_hidden_and_locked() {
     assert_eq!(target.single(), Some("0"));
 
     let mut group = pixel_layer("group", 8, 8, (0, 0, 0));
-    group.is_group = true;
+    group.set_group_children(pictura_core::LayerStack::default());
     let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![group]);
     assert!(duplicate_move_target(&mut doc, &mut LayerTarget::only("0")).is_none());
@@ -737,34 +737,6 @@ fn move_duplicate_records_one_state_and_undo_restores_the_layer_count() {
 
     let restored = history.undo().expect("undo");
     assert_eq!(restored.doc.layers.len(), 1, "undo removes the clone");
-}
-
-#[test]
-fn selection_becomes_full_frame_mask_that_confines_adjustment() {
-    let mut doc = Document::new(4, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.layers =
-        pictura_core::LayerStack::from_layers(vec![pixel_layer("base", 4, 1, (255, 0, 0))]);
-
-    let selection = Selection {
-        width: 4,
-        height: 1,
-        data: vec![255, 255, 0, 0].into(),
-    };
-    let mask = selection_to_mask(&selection, &doc);
-    assert_eq!(mask.rect.right, 4);
-    assert_eq!(mask.rect.bottom, 1);
-    assert_eq!(mask.data.as_deref(), Some(&[255u8, 255, 0, 0][..]));
-
-    let _ = doc
-        .layers
-        .push(adjustment_layer("invert", Some(mask)).expect("known kind"));
-    let image = document_to_image(&doc, false);
-    // Selected half inverts red -> cyan; unselected half is untouched.
-    assert_eq!(image.pixel_color(0, 0).red(), 0);
-    assert_eq!(image.pixel_color(0, 0).green(), 255);
-    assert_eq!(image.pixel_color(0, 0).blue(), 255);
-    assert_eq!(image.pixel_color(3, 0).red(), 255);
-    assert_eq!(image.pixel_color(3, 0).blue(), 0);
 }
 
 #[test]
@@ -933,9 +905,21 @@ fn layer_can_edit_smart_object_contents_eligibility() {
         let mut src = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
         let n = 4usize;
         for i in 0..n {
-            src.composite.data[i] = 10;
-            src.composite.data[n + i] = 20;
-            src.composite.data[2 * n + i] = 30;
+            src.composite
+                .edit_data(|data| {
+                    data[i] = 10;
+                })
+                .expect("pixel edit preserves geometry");
+            src.composite
+                .edit_data(|data| {
+                    data[n + i] = 20;
+                })
+                .expect("pixel edit preserves geometry");
+            src.composite
+                .edit_data(|data| {
+                    data[2 * n + i] = 30;
+                })
+                .expect("pixel edit preserves geometry");
         }
         pictura_codec::write_psd(&src).expect("payload writes")
     };
@@ -947,7 +931,7 @@ fn layer_can_edit_smart_object_contents_eligibility() {
         if let Some(payload) = payload {
             so.set_payload(payload);
         }
-        layer.smart_object = Some(so);
+        pictura_codec::edit_layer(layer.as_mut(), |parts| parts.smart_object = Some(so));
         let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         doc
@@ -971,19 +955,23 @@ fn layer_can_edit_smart_object_contents_eligibility() {
     ));
 
     let mut grouped = smart(Some(payload.clone()));
-    grouped.layers[0].is_group = true;
+    grouped.layers[0].set_group_children(pictura_core::LayerStack::default());
     assert!(!pictura_render::can_edit_smart_object_contents(
         &grouped, "0"
     ));
 
     let mut external = smart(Some(payload.clone()));
-    external.layers[0].smart_object.as_mut().unwrap().kind = SmartObjectKind::External;
+    pictura_codec::edit_layer(external.layers[0].as_mut(), |parts| {
+        parts.smart_object.as_mut().unwrap().kind = SmartObjectKind::External
+    });
     assert!(!pictura_render::can_edit_smart_object_contents(
         &external, "0"
     ));
 
     let mut adjustment = smart(Some(payload));
-    adjustment.layers[0].adjustment = Some(pictura_render::encode_invert());
+    pictura_codec::edit_layer(adjustment.layers[0].as_mut(), |parts| {
+        parts.adjustment = Some(pictura_render::encode_invert())
+    });
     assert!(!pictura_render::can_edit_smart_object_contents(
         &adjustment,
         "0"
@@ -1011,7 +999,7 @@ fn save_after_edit_serializes_the_current_composite() {
     // a layered RGB document keeps no composite (#1216), so the save
     // composites its merged image from the edited layers.
     let layer = doc.layers.last_mut().unwrap();
-    for ch in layer.channels.iter_mut().filter(|c| c.id >= 0) {
+    for ch in layer.channels_mut().iter_mut().filter(|c| c.id >= 0) {
         for byte in ch.data.iter_mut() {
             *byte = byte.wrapping_add(100);
         }
@@ -1100,7 +1088,14 @@ fn content_move_refused_on_locked_layer() {
         doc.layers[0].lock = LockFlags::default().with(flag, true);
         let before = doc.clone();
         assert!(
-            !pictura_render::move_selection_content(&mut doc, "0", &mask, 2, 0, false),
+            !pictura_render::move_selection_content(
+                &mut doc,
+                "0",
+                &mask.edit_coverage().expect("valid mask geometry"),
+                2,
+                0,
+                false
+            ),
             "flag {flag} refuses the content move"
         );
         assert_eq!(doc, before, "refusal leaves the document unchanged");
@@ -1122,7 +1117,7 @@ fn finalize_import_marks_opaque_import_as_locked_background() {
         "Background locks transparency and position only"
     );
     assert!(
-        !layer.channels.iter().any(|channel| channel.id == -1),
+        !layer.channels().iter().any(|channel| channel.id == -1),
         "the redundant opaque alpha channel is dropped"
     );
 }
@@ -1140,7 +1135,7 @@ fn finalize_import_keeps_non_opaque_import_as_regular_alpha_layer() {
     );
     assert_eq!(layer.lock, LockFlags::default(), "no locks are added");
     assert!(
-        layer.channels.iter().any(|channel| channel.id == -1),
+        layer.channels().iter().any(|channel| channel.id == -1),
         "the real alpha channel is preserved"
     );
 }
@@ -1148,9 +1143,13 @@ fn finalize_import_keeps_non_opaque_import_as_regular_alpha_layer() {
 #[test]
 fn active_layer_resolution_walks_the_tree_to_the_leaf() {
     let mut group = pixel_layer("group", 8, 8, (0, 0, 0));
-    group.is_group = true;
-    group.children =
-        pictura_core::LayerStack::from_layers(vec![pixel_layer("nested", 8, 8, (0, 0, 0))]);
+    group.set_group_children(pictura_core::LayerStack::default());
+    group.set_group_children(pictura_core::LayerStack::from_layers(vec![pixel_layer(
+        "nested",
+        8,
+        8,
+        (0, 0, 0),
+    )]));
     let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![
         pixel_layer("base", 8, 8, (40, 40, 40)),
@@ -1202,7 +1201,7 @@ fn active_layer_resolution_walks_the_tree_to_the_leaf() {
     active_pixel_layer_mut(&mut doc, Some("1/0"))
         .expect("mutable nested target")
         .name = "leaf".to_string();
-    assert_eq!(doc.layers[1].children[0].name, "leaf");
+    assert_eq!(doc.layers[1].children()[0].name, "leaf");
 }
 
 #[test]
@@ -1211,15 +1210,15 @@ fn nested_layer_paint_targets_the_leaf_and_refuses_a_group() {
 
     let nested = pixel_layer("nested", 8, 8, (0, 0, 0));
     let nested_before = nested
-        .channels
+        .channels()
         .iter()
         .find(|c| c.id == 0)
         .unwrap()
         .data
         .clone();
     let mut group = pixel_layer("folder", 8, 8, (0, 0, 0));
-    group.is_group = true;
-    group.children = pictura_core::LayerStack::from_layers(vec![nested]);
+    group.set_group_children(pictura_core::LayerStack::default());
+    group.set_group_children(pictura_core::LayerStack::from_layers(vec![nested]));
     let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
     doc.layers =
         pictura_core::LayerStack::from_layers(vec![group, pixel_layer("base", 8, 8, (10, 20, 30))]);
@@ -1247,8 +1246,8 @@ fn nested_layer_paint_targets_the_leaf_and_refuses_a_group() {
         pressure: 1.0,
     }];
     paint_stroke(&mut doc, "0/0", &cfg, &samples).expect("paint the nested leaf");
-    let nested_after = doc.layers[0].children[0]
-        .channels
+    let nested_after = doc.layers[0].children()[0]
+        .channels()
         .iter()
         .find(|c| c.id == 0)
         .unwrap()
@@ -1291,7 +1290,7 @@ fn placed_smart_object_predicate_accepts_external_and_alias() {
         let mut layer = pixel_layer("placed", 2, 2, (1, 2, 3));
         let mut so = SmartObject::default();
         so.kind = kind;
-        layer.smart_object = Some(so);
+        pictura_codec::edit_layer(layer.as_mut(), |parts| parts.smart_object = Some(so));
         layer
     };
 
@@ -1319,10 +1318,12 @@ fn type_layer_kind_reports_type() {
 
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
     let mut layer = pixel_layer("type", 2, 2, (10, 20, 30));
-    layer.extra_blocks = vec![LayerBlock {
-        key: *b"TySh",
-        data: vec![1, 2, 3, 4].into(),
-    }];
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks = vec![LayerBlock {
+            key: *b"TySh",
+            data: vec![1, 2, 3, 4].into(),
+        }]
+    });
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
     assert_eq!(
         layer_kind_str(&doc, "0", &doc.layers[0]).to_string(),
@@ -1332,47 +1333,6 @@ fn type_layer_kind_reports_type() {
         layer_kind_str(&doc, "0", &pixel_layer("plain", 2, 2, (1, 2, 3))).to_string(),
         "pixel"
     );
-}
-
-#[test]
-fn buffer_to_rgba_bytes_matches_image_pixels() {
-    let gray = PixelBuffer {
-        width: 1,
-        height: 1,
-        channels: 1,
-        data: vec![42].into(),
-    };
-    assert_eq!(buffer_to_rgba_bytes(&gray), vec![42, 42, 42, 255]);
-
-    let gray_alpha = PixelBuffer {
-        width: 1,
-        height: 1,
-        channels: 2,
-        data: vec![10, 200].into(),
-    };
-    assert_eq!(buffer_to_rgba_bytes(&gray_alpha), vec![10, 10, 10, 200]);
-
-    let rgb = PixelBuffer {
-        width: 1,
-        height: 1,
-        channels: 3,
-        data: vec![1, 2, 3].into(),
-    };
-    assert_eq!(buffer_to_rgba_bytes(&rgb), vec![1, 2, 3, 255]);
-
-    let rgba = PixelBuffer {
-        width: 1,
-        height: 1,
-        channels: 4,
-        data: vec![4, 5, 6, 7].into(),
-    };
-    assert_eq!(buffer_to_rgba_bytes(&rgba), vec![4, 5, 6, 7]);
-
-    let image = buffer_to_image(&rgba);
-    assert_eq!(image.pixel_color(0, 0).red(), 4);
-    assert_eq!(image.pixel_color(0, 0).green(), 5);
-    assert_eq!(image.pixel_color(0, 0).blue(), 6);
-    assert_eq!(image.pixel_color(0, 0).alpha(), 7);
 }
 
 #[test]
@@ -1393,4 +1353,7 @@ fn output_format_classification_matches_suffix() {
     assert_eq!(super::PictureViewRust::default().source_format, "psd");
 }
 
+mod image_conversion;
 mod move_memory;
+
+mod coverage;

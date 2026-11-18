@@ -19,38 +19,7 @@ use pictura_core::PixelBuffer;
 use crate::common::{linear_to_srgb, map_rgb, srgb_to_linear};
 use crate::types::AdjustError;
 
-/// Per-channel Lab statistics (mean, then standard deviation) of an image,
-/// a layer, or a selection of one. Computed by [`match_color_stats`].
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct MatchColorStats {
-    pub mean: [f64; 3],
-    pub std: [f64; 3],
-}
-
-impl MatchColorStats {
-    /// Zeroed statistics: no pixel contributed weight. As the *source* the
-    /// kernel short-circuits to an identity (nothing to match); as the
-    /// *target* the flat-channel guard keeps the buffer's contrast and only
-    /// the source's mean transfers.
-    pub const ZERO: MatchColorStats = MatchColorStats {
-        mean: [0.0; 3],
-        std: [0.0; 3],
-    };
-}
-
-/// Match Color's full parameter set: the target's and the source's Lab
-/// statistics plus the four dialog modifiers. `luminance` and
-/// `color_intensity` span `1..=200` percent; `fade` spans `0..=100` percent
-/// of the adjustment withheld (0 is the full match, 100 the identity).
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct MatchColorParams {
-    pub target: MatchColorStats,
-    pub source: MatchColorStats,
-    pub neutralize: bool,
-    pub luminance: f64,
-    pub color_intensity: f64,
-    pub fade: f64,
-}
+pub use pictura_core::{MatchColorParams, MatchColorStats};
 
 /// sRGB (`0..=1`) to CIELAB D65 (`L` in `0..=100`).
 fn rgb_to_lab(rgb: [f64; 3]) -> [f64; 3] {

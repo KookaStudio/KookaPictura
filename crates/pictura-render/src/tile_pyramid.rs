@@ -3,7 +3,7 @@
 //! Nothing here is authoritative: every tile can be rebuilt from its level-0
 //! source (the composite, or a soloed mask). Level-0 tiles hold straight
 //! interleaved RGBA, the source the levels are averaged from; every other
-//! level holds premultiplied RGBA, as [`crate::ViewPyramid`] does. A crop of
+//! level holds premultiplied RGBA, as the independent whole-rebuild reference does. A crop of
 //! any level is byte-identical to the same crop of a whole rebuild.
 //!
 //! Damage either repairs the cached tiles it touches from the region the edit
@@ -15,8 +15,8 @@
 //! (the largest share of any view's footprint, and the cheapest to rebuild a
 //! few of), then unpinned tiles of other levels, least recently used first.
 
+use crate::pyramid_level::{PyramidLevel, SMALLEST_SIDE};
 use crate::region_level::{halve_level, level_size, region_level, Level0Source};
-use crate::view_pyramid::{PyramidLevel, SMALLEST_SIDE};
 use pictura_core::{PixelBuffer, PsdRect};
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};

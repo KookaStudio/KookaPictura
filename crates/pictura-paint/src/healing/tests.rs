@@ -3,9 +3,7 @@
 //! `healing.rs` tests onto this crate's `RgbaImage`/`Document` API.
 
 use super::*;
-use pictura_core::{
-    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LockFlags,
-};
+use pictura_core::{BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, LockFlags};
 
 const BASE: [u8; 4] = [100, 120, 140, 255];
 
@@ -17,7 +15,10 @@ fn patch_layer(
     selection: &[u8],
     options: PatchOptions,
 ) -> Result<Option<PsdRect>, HealError> {
-    super::patch_layer(doc, path, &selection.to_vec().into(), options)
+    match pictura_core::Coverage::for_canvas(&selection.to_vec().into(), doc.width, doc.height) {
+        Some(coverage) => super::patch_layer(doc, path, &coverage, options),
+        None => Ok(None),
+    }
 }
 
 /// [`super::move_layer`] over a flat copy of `selection`.
@@ -27,7 +28,10 @@ fn move_layer(
     selection: &[u8],
     options: MoveOptions,
 ) -> Result<Option<PsdRect>, HealError> {
-    super::move_layer(doc, path, &selection.to_vec().into(), options)
+    match pictura_core::Coverage::for_canvas(&selection.to_vec().into(), doc.width, doc.height) {
+        Some(coverage) => super::move_layer(doc, path, &coverage, options),
+        None => Ok(None),
+    }
 }
 
 fn flat(w: i32, h: i32, px: [u8; 4]) -> RgbaImage {
@@ -394,36 +398,39 @@ fn layer_doc(w: u32, h: u32, rgba: [u8; 4]) -> Document {
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     let n = (w * h) as usize;
     {
-        let _ = doc.layers.push(Layer {
-            name: "px".into(),
-            rect: rect(w as i32, h as i32),
-            blend: BlendMode::Normal,
-            opacity: 255,
-            fill: 255,
-            lock: LockFlags::default(),
-            color: ColorLabel::None,
-            clipping: false,
-            visible: true,
-            channels: vec![
-                Channel {
-                    id: 0,
-                    data: vec![rgba[0]; n].into(),
-                },
-                Channel {
-                    id: 1,
-                    data: vec![rgba[1]; n].into(),
-                },
-                Channel {
-                    id: 2,
-                    data: vec![rgba[2]; n].into(),
-                },
-                Channel {
-                    id: -1,
-                    data: vec![rgba[3]; n].into(),
-                },
-            ],
-            ..Layer::default()
-        });
+        let _ = doc.layers.push(pictura_core::Layer::from_parts(
+            pictura_core::LayerParts {
+                name: "px".into(),
+                rect: rect(w as i32, h as i32),
+                blend: BlendMode::Normal,
+                opacity: 255,
+                fill: 255,
+                lock: LockFlags::default(),
+                color: ColorLabel::None,
+                clipping: false,
+                visible: true,
+                channels: vec![
+                    Channel {
+                        id: 0,
+                        data: vec![rgba[0]; n].into(),
+                    },
+                    Channel {
+                        id: 1,
+                        data: vec![rgba[1]; n].into(),
+                    },
+                    Channel {
+                        id: 2,
+                        data: vec![rgba[2]; n].into(),
+                    },
+                    Channel {
+                        id: -1,
+                        data: vec![rgba[3]; n].into(),
+                    },
+                ],
+                ..Default::default()
+            },
+            pictura_core::LayerContent::Pixel,
+        ));
     };
     doc
 }
@@ -431,7 +438,7 @@ fn layer_doc(w: u32, h: u32, rgba: [u8; 4]) -> Document {
 fn channel(doc: &Document, layer: usize, id: i16, x: i32, y: i32) -> u8 {
     let l = &doc.layers[layer];
     let i = (y * l.rect.width() + x) as usize;
-    l.channels.iter().find(|c| c.id == id).unwrap().data[i]
+    l.channels().iter().find(|c| c.id == id).unwrap().data[i]
 }
 
 #[test]
@@ -443,7 +450,7 @@ fn heal_layer_writes_the_pixels_and_returns_a_document_rect() {
         for y in 12..20 {
             for x in 12..20 {
                 let i = (y * 32 + x) as usize;
-                for c in &mut l.channels[..3] {
+                for c in &mut l.channels_mut()[..3] {
                     c.data[i] = 255;
                 }
             }
@@ -474,11 +481,13 @@ fn heal_layer_writes_the_pixels_and_returns_a_document_rect() {
 fn heal_layer_refuses_a_group_or_bad_path() {
     let mut doc = layer_doc(16, 16, BASE);
     {
-        let _ = doc.layers.push(Layer {
-            name: "group".into(),
-            is_group: true,
-            ..Layer::default()
-        });
+        let _ = doc.layers.push(pictura_core::Layer::from_parts(
+            pictura_core::LayerParts {
+                name: "group".into(),
+                ..Default::default()
+            },
+            pictura_core::LayerContent::Group(Default::default()),
+        ));
     };
     let region = rect(4, 4);
     let op = |img: &mut RgbaImage, local, cov: &[f32]| {
@@ -570,7 +579,7 @@ fn dot(img: &mut RgbaImage, cx: f32, cy: f32, radius: f32) {
 fn image_doc(img: &RgbaImage) -> Document {
     let mut doc = layer_doc(img.width as u32, img.height as u32, BASE);
     for (i, p) in img.data.iter().enumerate() {
-        for (channel, &v) in doc.layers[0].channels[..3].iter_mut().zip(p) {
+        for (channel, &v) in doc.layers[0].channels_mut()[..3].iter_mut().zip(p) {
             channel.data[i] = v;
         }
     }
@@ -588,7 +597,7 @@ fn spot_click(img: &RgbaImage, x: f32, y: f32, diameter: u32, mode: HealMode) ->
         .expect("a populated mask commits");
     let mut out = img.clone();
     for (i, p) in out.data.iter_mut().enumerate() {
-        for (v, channel) in p.iter_mut().zip(&doc.layers[0].channels[..3]) {
+        for (v, channel) in p.iter_mut().zip(&doc.layers[0].channels_mut()[..3]) {
             *v = channel.data[i];
         }
     }
@@ -690,7 +699,7 @@ fn a_spot_gesture_heals_under_its_dab() {
     for y in 14..18 {
         for x in 14..18 {
             let i = (y * 32 + x) as usize;
-            for c in &mut doc.layers[0].channels[..3] {
+            for c in &mut doc.layers[0].channels_mut()[..3] {
                 c.data[i] = 255;
             }
         }
@@ -704,7 +713,7 @@ fn a_spot_gesture_heals_under_its_dab() {
         .unwrap()
         .expect("a populated mask commits");
     assert_eq!(
-        outcome.document.layers[0].channels[0].data[(16 * 32 + 16) as usize],
+        outcome.document.layers[0].channels()[0].data[(16 * 32 + 16) as usize],
         BASE[0]
     );
 }
@@ -728,7 +737,7 @@ fn a_clone_gesture_uses_its_source_offset() {
     for y in 0..h {
         for x in 24..w {
             let i = (y * w + x) as usize;
-            for c in &mut doc.layers[0].channels[..3] {
+            for c in &mut doc.layers[0].channels_mut()[..3] {
                 c.data[i] = 180;
             }
         }
@@ -745,7 +754,7 @@ fn a_clone_gesture_uses_its_source_offset() {
         .unwrap()
         .expect("a populated mask commits");
     // TextureOnly keeps the destination's dark level, not the source's light.
-    let v = outcome.document.layers[0].channels[0].data[(24 * w + 12) as usize];
+    let v = outcome.document.layers[0].channels()[0].data[(24 * w + 12) as usize];
     assert!(v < 120, "clone ignored the destination's level: {v}");
 }
 
@@ -768,7 +777,7 @@ fn paint(doc: &mut Document, (x0, y0, w, h): (i32, i32, i32, i32), rgb: [u8; 3])
     let lw = l.rect.width();
     for y in y0..y0 + h {
         for x in x0..x0 + w {
-            for (c, v) in l.channels[..3].iter_mut().zip(rgb) {
+            for (c, v) in l.channels_mut()[..3].iter_mut().zip(rgb) {
                 c.data[(y * lw + x) as usize] = v;
             }
         }
@@ -860,7 +869,7 @@ fn content_aware_patch_ignores_the_drag() {
         assert!(patch_layer(&mut doc, "0", &mask, options)
             .unwrap()
             .is_some());
-        doc.layers[0].channels.clone()
+        doc.layers[0].channels().clone()
     };
     let a = run(60, 0);
     assert_eq!(a, run(-10, 25));
@@ -955,7 +964,7 @@ fn every_adaptation_fills_the_hole_deterministically() {
                 ..drag(40, false)
             };
             move_layer(&mut doc, "0", &mask, options).unwrap();
-            doc.layers[0].channels.clone()
+            doc.layers[0].channels().clone()
         };
         let a = run();
         assert_eq!(a, run(), "{adaptation:?} is not deterministic");
@@ -1050,7 +1059,7 @@ fn red_eye_ignores_no_red_an_off_canvas_box_or_a_locked_layer() {
         right: 50,
     };
     assert_eq!(red_eye_layer(&mut doc, "0", off, 50, 50).unwrap(), None);
-    assert_eq!(doc.layers[0].channels, before.layers[0].channels);
+    assert_eq!(doc.layers[0].channels(), before.layers[0].channels());
 
     let mut locked = red_eye_doc([220, 30, 30]);
     locked.layers[0].lock = locked.layers[0].lock.with(LockFlags::PIXELS, true);
@@ -1200,7 +1209,11 @@ fn selection_bounds_match_a_serial_scan() {
         }
     }
     mask[3 * 32 + 2] = 128;
-    let (bounds, coverage) = super::patch::selection_coverage(&doc, &mask.into()).unwrap();
+    let (bounds, coverage) = super::patch::selection_coverage(
+        &doc,
+        &pictura_core::Coverage::for_canvas(&mask.into(), 32, 32).unwrap(),
+    )
+    .unwrap();
     assert_eq!(
         bounds,
         PsdRect {
@@ -1223,9 +1236,9 @@ fn red_eye_processes_a_wide_box_like_the_definition() {
             let r = ((x * 7 + y * 3) % 256) as u8;
             let g = ((x * 5 + y * 11) % 256) as u8;
             let b = ((x * 13 + y * 2) % 256) as u8;
-            doc.layers[0].channels[0].data[i] = r;
-            doc.layers[0].channels[1].data[i] = g;
-            doc.layers[0].channels[2].data[i] = b;
+            doc.layers[0].channels_mut()[0].data[i] = r;
+            doc.layers[0].channels_mut()[1].data[i] = g;
+            doc.layers[0].channels_mut()[2].data[i] = b;
         }
     }
     let box_rect = PsdRect {
@@ -1250,10 +1263,10 @@ fn red_eye_processes_a_wide_box_like_the_definition() {
                 && y >= box_rect.top
                 && y < box_rect.bottom;
             let [r, g, b, a] = [
-                before.layers[0].channels[0].data[i],
-                before.layers[0].channels[1].data[i],
-                before.layers[0].channels[2].data[i],
-                before.layers[0].channels[3].data[i],
+                before.layers[0].channels()[0].data[i],
+                before.layers[0].channels()[1].data[i],
+                before.layers[0].channels()[2].data[i],
+                before.layers[0].channels()[3].data[i],
             ];
             let want = if !inside || (r as f32) < (g.max(b).max(1) as f32) * ratio {
                 [r, g, b, a]
@@ -1266,10 +1279,10 @@ fn red_eye_processes_a_wide_box_like_the_definition() {
                 ]
             };
             let got = [
-                doc.layers[0].channels[0].data[i],
-                doc.layers[0].channels[1].data[i],
-                doc.layers[0].channels[2].data[i],
-                doc.layers[0].channels[3].data[i],
+                doc.layers[0].channels()[0].data[i],
+                doc.layers[0].channels()[1].data[i],
+                doc.layers[0].channels()[2].data[i],
+                doc.layers[0].channels()[3].data[i],
             ];
             assert_eq!(got, want, "pixel ({x}, {y})");
         }
@@ -1309,7 +1322,11 @@ fn healing_reads_a_tiled_selection() {
     for options in patches {
         let (mut got, mut want) = (doc.clone(), doc.clone());
         let done = pictura_core::assert_no_materialization(|| {
-            super::patch_layer(&mut got, "0", &tiled, options)
+            let (width, height) = (got.width, got.height);
+            match pictura_core::Coverage::for_canvas(&(tiled), width, height) {
+                Some(coverage) => super::patch_layer(&mut got, "0", &coverage, options),
+                None => Ok(None),
+            }
         });
         assert_eq!(done, patch_layer(&mut want, "0", &mask, options));
         assert!(done.unwrap().is_some());
@@ -1321,9 +1338,15 @@ fn healing_reads_a_tiled_selection() {
     for extend in [false, true] {
         let (mut got, mut want) = (doc.clone(), doc.clone());
         let done = pictura_core::assert_no_materialization(|| {
-            super::move_layer(&mut got, "0", &tiled, drag(40, extend))
+            let (width, height) = (got.width, got.height);
+            match pictura_core::Coverage::for_canvas(&(tiled), width, height) {
+                Some(coverage) => super::move_layer(&mut got, "0", &coverage, drag(40, extend)),
+                None => Ok(None),
+            }
         });
         assert_eq!(done, move_layer(&mut want, "0", &mask, drag(40, extend)));
         assert_eq!(got, want, "extend={extend}");
     }
 }
+
+mod coverage;

@@ -31,7 +31,11 @@ fn convert_layer_8bit(layer: &mut Layer, src: &Profile, dst: &Profile, options: 
     let mut slots = Vec::with_capacity(3);
     let mut planes = Vec::with_capacity(3);
     for id in 0..3i16 {
-        let Some((slot, channel)) = layer.channels.iter().enumerate().find(|(_, c)| c.id == id)
+        let Some((slot, channel)) = layer
+            .channels()
+            .iter()
+            .enumerate()
+            .find(|(_, c)| c.id == id)
         else {
             return;
         };
@@ -40,7 +44,7 @@ fn convert_layer_8bit(layer: &mut Layer, src: &Profile, dst: &Profile, options: 
     }
     if let Some(converted) = convert_planes_with_options(&planes, src, dst, options) {
         for (slot, plane) in slots.into_iter().zip(converted) {
-            layer.channels[slot].data = plane.into();
+            layer.channels_mut()[slot].data = plane.into();
         }
     }
 }
@@ -178,11 +182,11 @@ fn convert_source_planes(
     dst: &Profile,
     options: ConversionOptions,
 ) {
-    if doc.source_mode.is_some() {
+    if doc.source.mode().is_some() {
         return;
     }
     let (width, height) = (doc.width, doc.height);
-    let Some(store) = doc.source_planes.as_mut() else {
+    let Some(mut store) = doc.source.planes().clone() else {
         return;
     };
     if !matches!(store.depth, BitDepth::Sixteen | BitDepth::ThirtyTwo)
@@ -198,15 +202,20 @@ fn convert_source_planes(
     let Some(converted) = convert_native(&planes, store.depth, src, dst, options) else {
         return;
     };
-    for (ch, plane) in converted.iter().enumerate() {
-        let narrow = plane.narrow_to_u8();
-        if let Some(channel) = doc.composite.data.get_mut(ch * n..(ch + 1) * n) {
-            if narrow.len() == channel.len() {
-                channel.copy_from_slice(&narrow);
+    doc.composite.edit_data_slice(|data| {
+        for (ch, plane) in converted.iter().enumerate() {
+            let narrow = plane.narrow_to_u8();
+            if let Some(channel) = data.get_mut(ch * n..(ch + 1) * n) {
+                if narrow.len() == channel.len() {
+                    channel.copy_from_slice(&narrow);
+                }
             }
         }
-    }
+    });
     write_color_planes(&mut store.samples, n, &converted);
+    doc.source
+        .replace_planes(Some(store))
+        .expect("profile conversion preserves source depth");
 }
 
 /// Convert a layer's retained native color planes and sync its 8-bit working
@@ -217,7 +226,7 @@ fn convert_layer_native(
     dst: &Profile,
     options: ConversionOptions,
 ) {
-    let Some(store) = layer.source_channels.as_mut() else {
+    let Some(store) = layer.source_channels.as_ref() else {
         return;
     };
     if !matches!(store.depth, BitDepth::Sixteen | BitDepth::ThirtyTwo) {
@@ -233,7 +242,11 @@ fn convert_layer_native(
     let ids = [0i16, 1, 2];
     let mut slots = Vec::with_capacity(3);
     for id in ids {
-        let Some((slot, channel)) = layer.channels.iter().enumerate().find(|(_, c)| c.id == id)
+        let Some((slot, channel)) = layer
+            .channels()
+            .iter()
+            .enumerate()
+            .find(|(_, c)| c.id == id)
         else {
             return;
         };
@@ -261,13 +274,17 @@ fn convert_layer_native(
     let Some(converted) = convert_native(&planes, store.depth, src, dst, options) else {
         return;
     };
+    let store = layer
+        .source_channels
+        .as_mut()
+        .expect("checked retained store");
     for (id, plane) in ids.iter().zip(&converted) {
         if let Some((_, slot)) = store.planes.iter_mut().find(|(cid, _)| cid == id) {
             *slot = plane.clone();
         }
     }
     for (slot, plane) in slots.into_iter().zip(converted) {
-        layer.channels[slot].data = plane.narrow_to_u8().into();
+        layer.channels_mut()[slot].data = plane.narrow_to_u8().into();
     }
 }
 
@@ -282,7 +299,9 @@ pub(super) fn convert_layers(
 ) {
     for layer in layers {
         convert_layer(layer, src, dst, options, native);
-        convert_layers(&mut layer.children, src, dst, options, native);
+        if let Some(children) = layer.children_mut() {
+            convert_layers(children, src, dst, options, native);
+        }
     }
 }
 

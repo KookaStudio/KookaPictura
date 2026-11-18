@@ -39,6 +39,11 @@ tests) and linked into the C++ executable `pictura` by CMake via `cxx_qt_import_
   line budget (`build_config::bridge_count_within_budget`).
 - Reader heap guards: `tests_profiles/memory/readers.rs` (`output + half a composite` at 4250²).
 
+- `pictura_render::PyramidLevel`, `SMALLEST_SIDE` and `TILE` live in the unconditional
+  `pyramid_level` module. `ViewPyramid` and `Planes` are independent whole-rebuild
+  test references, compiled only for renderer unit tests or `test-oracle`. The
+  app enables that non-default renderer feature only through its dev-dependency.
+
 ## Quick Mask selection and presentation
 
 - Runtime mask coverage is `DocumentSession.quick_mask.coverage` (None means implicit full coverage). While active, `DocumentSession.selection` is the independent temporary editing constraint; entry moves the original selection into coverage, exit replaces the constraint with coverage. Never write mask strokes into the selection slot.

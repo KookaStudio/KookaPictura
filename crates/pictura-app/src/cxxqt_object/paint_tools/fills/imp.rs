@@ -3,7 +3,7 @@ use super::*;
 use super::super::super::helpers::{
     active_layer_visible, active_mask_target, active_pixel_layer, paint_mode_from, rgba_from_argb,
 };
-use super::super::super::helpers_composite::{crop_plane, crop_selection};
+use super::super::super::helpers_composite::crop_selection;
 use super::super::super::PictureViewRust;
 use crate::cxxqt_object::edit::Edit;
 use crate::cxxqt_object::helpers::memory_gate as budget;
@@ -11,7 +11,7 @@ use crate::cxxqt_object::impl_core::{JobBar, Outcome};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_core::mask_ops::TiledMask;
+use pictura_core::Coverage;
 use pictura_core::{Document, Layer, PsdRect};
 use pictura_paint::bucket::{self, BucketPaint, BucketSource};
 use pictura_paint::gradient::{self, GradientOptions, GradientStyle, PRESET_NAMES};
@@ -318,7 +318,7 @@ impl FillTarget {
 pub(crate) fn apply(
     mut view: Pin<&mut PictureView>,
     label: &str,
-    edit: impl FnOnce(&mut Document, &str, &FillTarget, Option<&TiledMask>) -> Option<PsdRect>,
+    edit: impl FnOnce(&mut Document, &str, &FillTarget, Option<&Coverage>) -> Option<PsdRect>,
 ) -> bool {
     budget::clear();
     if blocked(view.rust()) {
@@ -347,7 +347,8 @@ pub(crate) fn apply(
             is_mask: true,
             bounds,
         };
-        if edit(&mut document, "0", &target, clip.map(|s| &s.data)).is_none() {
+        let coverage = clip.map(pictura_select::Selection::coverage);
+        if edit(&mut document, "0", &target, coverage.as_ref()).is_none() {
             return false;
         }
         let changed = view
@@ -368,9 +369,13 @@ pub(crate) fn apply(
         else {
             return false;
         };
-        let selection = rust.session.selection.as_ref().map(|s| &s.data);
+        let selection = rust
+            .session
+            .selection
+            .as_ref()
+            .map(pictura_select::Selection::coverage);
         let mut edited = doc.clone();
-        edit(&mut edited, &path, &target, selection).map(|rect| (edited, rect))
+        edit(&mut edited, &path, &target, selection.as_ref()).map(|rect| (edited, rect))
     };
     let Some((doc, rect)) = edited else {
         return false;
@@ -427,7 +432,7 @@ pub(super) fn apply_job(
     mut view: Pin<&mut PictureView>,
     label: &str,
     gate: impl FnOnce(&Document, &str, &FillTarget) -> bool,
-    edit: impl FnOnce(&mut Document, &str, &FillTarget, Option<&TiledMask>) -> Option<PsdRect>
+    edit: impl FnOnce(&mut Document, &str, &FillTarget, Option<&Coverage>) -> Option<PsdRect>
         + Send
         + 'static,
 ) -> bool {
@@ -467,7 +472,7 @@ pub(super) fn apply_job(
         .session
         .selection
         .as_ref()
-        .map(|s| s.data.clone());
+        .map(pictura_select::Selection::coverage);
     view.document_op(
         label,
         JobBar::Busy,
@@ -503,7 +508,7 @@ pub(super) fn apply_mask(
     mut view: Pin<&mut PictureView>,
     label: &str,
     path: &str,
-    edit: impl FnOnce(&mut Document, &str, &FillTarget, Option<&TiledMask>) -> Option<PsdRect>,
+    edit: impl FnOnce(&mut Document, &str, &FillTarget, Option<&Coverage>) -> Option<PsdRect>,
 ) -> bool {
     let outcome = view.as_mut().edit(label, |rust| {
         let Some(doc) = rust.session.doc.as_ref() else {
@@ -535,11 +540,13 @@ pub(super) fn apply_mask(
                 right: doc_bounds.right - ox,
             },
         };
-        let selection = rust
-            .session
-            .selection
-            .as_ref()
-            .map(|s| TiledMask::from(crop_plane(&s.data, s.width, s.height, mask.rect)));
+        let selection = match rust.session.selection.as_ref() {
+            Some(s) => match s.coverage().rebased(mask.rect.left, mask.rect.top) {
+                Some(coverage) => Some(coverage),
+                None => return Edit::None,
+            },
+            None => None,
+        };
         let mut document = mask.document;
         let Some(dirty) = edit(&mut document, "0", &target, selection.as_ref()) else {
             return Edit::None;
@@ -592,7 +599,7 @@ pub(super) fn styled_except(layers: &[Layer], prefix: &str, own: &str) -> bool {
             format!("{prefix}/{i}")
         };
         (path != own && pictura_render::has_layer_style(l))
-            || styled_except(&l.children, &path, own)
+            || styled_except(l.children(), &path, own)
     })
 }
 
@@ -604,9 +611,11 @@ mod tests {
 
     fn styled() -> Layer {
         let mut layer = pixel_layer("styled", 1, 1, (0, 0, 0));
-        layer.extra_blocks.push(LayerBlock {
-            key: *b"lfx2",
-            data: Vec::new().into(),
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.extra_blocks.push(LayerBlock {
+                key: *b"lfx2",
+                data: Vec::new().into(),
+            })
         });
         layer
     }
@@ -615,8 +624,11 @@ mod tests {
     fn a_style_anywhere_but_the_exempt_layer_counts() {
         let plain = pixel_layer("plain", 1, 1, (0, 0, 0));
         let mut group = pixel_layer("group", 1, 1, (0, 0, 0));
-        group.is_group = true;
-        group.children = pictura_core::LayerStack::from_layers(vec![plain.clone(), styled()]);
+        group.set_group_children(pictura_core::LayerStack::default());
+        group.set_group_children(pictura_core::LayerStack::from_layers(vec![
+            plain.clone(),
+            styled(),
+        ]));
         let layers = vec![plain.clone(), group];
         assert!(styled_except(&layers, "", ""), "a nested style is found");
         assert!(

@@ -21,35 +21,39 @@ fn region_rect((left, top, width, height): (u32, u32, u32, u32)) -> PsdRect {
 fn source_doc() -> Document {
     let mut d = Document::new(200, 200, ColorMode::Rgb, BitDepth::Eight);
     let n = 200 * 200;
-    d.layers = LayerStack::from_layers(vec![Layer {
-        name: "source".into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 200,
-            right: 200,
+    d.layers = LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            name: "source".into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 200,
+                right: 200,
+            },
+            channels: vec![
+                Channel {
+                    id: 0,
+                    data: vec![180u8; n].into(),
+                },
+                Channel {
+                    id: 1,
+                    data: vec![40u8; n].into(),
+                },
+                Channel {
+                    id: 2,
+                    data: vec![10u8; n].into(),
+                },
+                Channel {
+                    id: -1,
+                    data: vec![255u8; n].into(),
+                },
+            ],
+            ..Default::default()
         },
-        channels: vec![
-            Channel {
-                id: 0,
-                data: vec![180u8; n].into(),
-            },
-            Channel {
-                id: 1,
-                data: vec![40u8; n].into(),
-            },
-            Channel {
-                id: 2,
-                data: vec![10u8; n].into(),
-            },
-            Channel {
-                id: -1,
-                data: vec![255u8; n].into(),
-            },
-        ],
-        ..Default::default()
-    }]);
-    d.composite = pictura_render::composite_rgba(&d);
+    )]);
+    d.composite
+        .replace(pictura_render::composite_rgba(&d))
+        .expect("valid composite");
     d
 }
 
@@ -61,12 +65,12 @@ fn smart_source(rect: PsdRect) -> Layer {
         so
     };
     so.set_payload(payload);
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "smart".into(),
         rect,
         smart_object: Some(so),
         ..Default::default()
-    }
+    })
 }
 
 fn smart_filtered_layer() -> Layer {
@@ -93,7 +97,7 @@ fn text_layer() -> Layer {
         },
         ..TextStyle::default()
     };
-    let mut layer = Layer {
+    let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "text".into(),
         rect: PsdRect {
             top: 0,
@@ -114,7 +118,7 @@ fn text_layer() -> Layer {
             path: None,
         }),
         ..Default::default()
-    };
+    });
     pictura_render::set_layer_style_value(&mut layer, "dropShadow.on", 1.0);
     layer.blend = BlendMode::Normal;
     layer
@@ -216,7 +220,7 @@ fn warm_region_is_ten_times_faster() {
 
 fn canvas_styled_layer(size: u32) -> Layer {
     let n = (size as usize) * (size as usize);
-    let mut layer = Layer {
+    let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "canvas-styled".into(),
         rect: PsdRect {
             top: 0,
@@ -243,7 +247,7 @@ fn canvas_styled_layer(size: u32) -> Layer {
             },
         ],
         ..Default::default()
-    };
+    });
     pictura_render::set_layer_style_value(&mut layer, "dropShadow.on", 1.0);
     pictura_render::set_layer_style_value(&mut layer, "dropShadow.size", 20.0);
     layer
@@ -256,7 +260,7 @@ fn canvas_sized_styled_present_is_faster_than_a_full_composite() {
     let mut d = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
     d.layers = LayerStack::from_layers(vec![canvas_styled_layer(SIZE)]);
     // A dab invalidates the pass exactly as a stroke present does.
-    d.layers[0].channels[3].data.as_mut_slice()[100 * SIZE as usize + 100] = 0;
+    d.layers[0].channels_mut()[3].data.as_mut_slice()[100 * SIZE as usize + 100] = 0;
     let start = Instant::now();
     let region = pictura_render::composite(pictura_render::CompositeRequest::region(
         &d,
@@ -303,7 +307,7 @@ const PROFILE_H: u32 = 1500;
 
 fn opaque_pixel_layer(name: &str, size: (u32, u32), rgb: (u8, u8, u8)) -> Layer {
     let n = size.0 as usize * size.1 as usize;
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: PsdRect {
             top: 0,
@@ -331,7 +335,7 @@ fn opaque_pixel_layer(name: &str, size: (u32, u32), rgb: (u8, u8, u8)) -> Layer 
         ],
         blend: BlendMode::Normal,
         ..Default::default()
-    }
+    })
 }
 
 fn polygon_mask(points: &[(i32, i32)]) -> VectorMask {

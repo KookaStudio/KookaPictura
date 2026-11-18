@@ -42,18 +42,13 @@ impl<'a> DocumentComposite<'a> {
     /// RGB, four channels, and document dimensions. Freshness is the writer's
     /// responsibility.
     pub fn is_shape_valid(doc: &Document) -> bool {
-        doc.mode == ColorMode::Rgb
-            && doc.composite.channels == 4
-            && doc.composite.width == doc.width
-            && doc.composite.height == doc.height
+        doc.composite_shape_is_valid()
     }
 
     /// Whether the document holds a stored composite of its own size, in
     /// whatever colour planes its mode keeps.
     pub fn is_stored(doc: &Document) -> bool {
-        doc.composite.width == doc.width
-            && doc.composite.height == doc.height
-            && !doc.composite.data.is_empty()
+        doc.has_stored_composite()
     }
 
     /// Store a rendered full-frame composite.
@@ -80,7 +75,7 @@ impl<'a> DocumentComposite<'a> {
             || self.doc.composite.width != self.doc.width
             || self.doc.composite.height != self.doc.height
         {
-            self.doc.composite = rgba;
+            self.doc.composite.replace(rgba).expect("valid composite");
             return;
         }
         let target = self.doc.composite.channels as usize;
@@ -90,12 +85,15 @@ impl<'a> DocumentComposite<'a> {
             data[c * plane..(c + 1) * plane]
                 .copy_from_slice(&rgba.data[c * plane..(c + 1) * plane]);
         }
-        self.doc.composite = PixelBuffer {
-            width: self.doc.width,
-            height: self.doc.height,
-            channels: target as u8,
-            data: data.into(),
-        };
+        self.doc
+            .composite
+            .replace(PixelBuffer {
+                width: self.doc.width,
+                height: self.doc.height,
+                channels: target as u8,
+                data: data.into(),
+            })
+            .expect("valid composite");
     }
 
     /// Copy a region of a 4-plane rendered buffer into the maintained composite
@@ -110,13 +108,19 @@ impl<'a> DocumentComposite<'a> {
         {
             return;
         }
-        patch_buffer_region(&mut self.doc.composite, region, x0, y0);
+        self.doc
+            .composite
+            .edit(|buffer| patch_buffer_region(buffer, region, x0, y0))
+            .expect("region patch preserves composite geometry");
     }
 
     /// Release a stored composite the document no longer keeps.
     fn drop_stored(&mut self) {
         if !self.doc.composite.data.is_empty() {
-            self.doc.composite = PixelBuffer::new(0, 0, 4);
+            self.doc
+                .composite
+                .replace(PixelBuffer::new(0, 0, 4))
+                .expect("valid composite");
         }
     }
 
@@ -140,11 +144,11 @@ impl<'a> DocumentComposite<'a> {
             CompositeScope::Full => {
                 let full = full_rect(self.doc);
                 if self.doc.layers.is_empty() {
-                    let embedded = self.doc.composite.clone();
+                    let embedded = self.doc.composite.buffer().clone();
                     if write {
                         self.store(&embedded);
                         return vec![Refreshed {
-                            buffer: self.doc.composite.clone(),
+                            buffer: self.doc.composite.buffer().clone(),
                             rect: full,
                             backend: Backend::Cpu,
                         }];
@@ -371,7 +375,7 @@ mod tests {
 
     fn gray_layer(w: u32, h: u32, value: u8) -> Layer {
         let n = (w * h) as usize;
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "gray".into(),
             rect: full(w, h),
             channels: vec![
@@ -385,7 +389,7 @@ mod tests {
                 },
             ],
             ..Default::default()
-        }
+        })
     }
 
     /// The buffer a region refresh of `region` returns, after checking it
@@ -461,13 +465,13 @@ mod tests {
         assert_eq!(d.composite.channels, 1);
         for y in 0..8 {
             for x in 0..8 {
-                assert_eq!(gray_at(&d.composite, x, y), gray_at(&full, x, y));
+                assert_eq!(gray_at(d.composite.buffer(), x, y), gray_at(&full, x, y));
             }
         }
 
-        d.layers[0].channels[0].data.fill(200);
+        d.layers[0].channels_mut()[0].data.fill(200);
         let mutated = crate::composite_rgba(&d);
-        let before = d.composite.clone();
+        let before = d.composite.buffer().clone();
         let region = rect(2, 2, 6, 6);
         DocumentComposite::new(&mut d).refresh(CompositeScope::Regions(vec![region]), false);
         assert_eq!(d.composite.channels, 1);
@@ -475,9 +479,9 @@ mod tests {
             for x in 0..8 {
                 let inside = (2..6).contains(&x) && (2..6).contains(&y);
                 if inside {
-                    assert_eq!(gray_at(&d.composite, x, y), gray_at(&mutated, x, y));
+                    assert_eq!(gray_at(d.composite.buffer(), x, y), gray_at(&mutated, x, y));
                 } else {
-                    assert_eq!(gray_at(&d.composite, x, y), gray_at(&before, x, y));
+                    assert_eq!(gray_at(d.composite.buffer(), x, y), gray_at(&before, x, y));
                 }
             }
         }
@@ -537,9 +541,9 @@ mod tests {
         let plane = 32 * 160;
         let full_before = crate::composite_rgba(&d);
         DocumentComposite::new(&mut d).store(&full_before);
-        let snapshot = d.composite.clone();
+        let snapshot = d.composite.buffer().clone();
         assert!(snapshot.data.shares(&d.composite.data));
-        d.layers[0].channels[0].data.fill(200);
+        d.layers[0].channels_mut()[0].data.fill(200);
         let full = crate::composite_rgba(&d);
         let region = rect(0, 0, 64, 32);
         DocumentComposite::new(&mut d).refresh(CompositeScope::Regions(vec![region]), false);
@@ -552,9 +556,12 @@ mod tests {
             for x in 0..32 {
                 let inside = (0..64).contains(&y);
                 if inside {
-                    assert_eq!(gray_at(&d.composite, x, y), gray_at(&full, x, y));
+                    assert_eq!(gray_at(d.composite.buffer(), x, y), gray_at(&full, x, y));
                 } else {
-                    assert_eq!(gray_at(&d.composite, x, y), gray_at(&snapshot, x, y));
+                    assert_eq!(
+                        gray_at(d.composite.buffer(), x, y),
+                        gray_at(&snapshot, x, y)
+                    );
                 }
             }
         }
@@ -593,7 +600,7 @@ mod tests {
         let mut d = gray_doc(8, 8, 120);
         let seed_marker = marker(&d, 3);
         DocumentComposite::new(&mut d).store(&seed_marker);
-        let before = d.composite.clone();
+        let before = d.composite.buffer().clone();
         let full = crate::composite_rgba(&d);
         let out = DocumentComposite::new(&mut d)
             .render(CompositeScope::Regions(vec![rect(2, 2, 6, 6)]), false);
@@ -608,26 +615,36 @@ mod tests {
     #[test]
     fn a_size_mismatch_is_not_shape_valid() {
         let mut d = doc(8, 8, rgb_layers());
-        d.composite = PixelBuffer::new(4, 4, 4);
+        d.composite
+            .replace(PixelBuffer::new(4, 4, 4))
+            .expect("valid composite");
         assert!(!DocumentComposite::is_shape_valid(&d));
     }
 
     #[test]
     fn a_non_rgb_or_non_four_channel_composite_is_not_shape_valid() {
         let mut gray = Document::new(8, 8, ColorMode::Grayscale, BitDepth::Eight);
-        gray.composite = PixelBuffer::new(8, 8, 4);
+        gray.composite
+            .replace(PixelBuffer::new(8, 8, 4))
+            .expect("valid composite");
         assert!(!DocumentComposite::is_shape_valid(&gray));
 
         let mut rgb = doc(8, 8, rgb_layers());
-        rgb.composite = PixelBuffer::new(8, 8, 3);
+        rgb.composite
+            .replace(PixelBuffer::new(8, 8, 3))
+            .expect("valid composite");
         assert!(!DocumentComposite::is_shape_valid(&rgb));
     }
 
     #[test]
     fn a_layerless_full_refresh_stores_the_embedded_composite() {
         let mut d = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-        d.composite.data.fill(9);
-        let embedded = d.composite.clone();
+        d.composite
+            .edit_data(|data| {
+                data.fill(9);
+            })
+            .expect("pixel edit preserves geometry");
+        let embedded = d.composite.buffer().clone();
         let out = DocumentComposite::new(&mut d).refresh(CompositeScope::Full, false);
         assert_eq!(out.len(), 1);
         assert_eq!(d.composite.channels, 4);
@@ -644,8 +661,12 @@ mod tests {
     #[test]
     fn a_layerless_region_refresh_is_a_noop() {
         let mut d = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-        d.composite.data.fill(9);
-        let before = d.composite.clone();
+        d.composite
+            .edit_data(|data| {
+                data.fill(9);
+            })
+            .expect("pixel edit preserves geometry");
+        let before = d.composite.buffer().clone();
         let out = DocumentComposite::new(&mut d)
             .refresh(CompositeScope::Regions(vec![rect(0, 0, 2, 2)]), false);
         assert!(out.is_empty());
@@ -730,10 +751,13 @@ mod tests {
                 top,
             ],
         );
-        d.layers[0].channels[0].data.fill(200);
+        d.layers[0].channels_mut()[0].data.fill(200);
         let full = crate::composite_rgba(&d);
         let region = rect(2, 2, 6, 6);
         let buffer = region_buffer(&mut d, region);
         assert_region_matches(&buffer, &full, region);
     }
 }
+
+#[cfg(test)]
+mod state_tests;

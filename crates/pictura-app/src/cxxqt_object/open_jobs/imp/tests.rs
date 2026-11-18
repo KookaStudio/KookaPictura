@@ -16,7 +16,11 @@ fn temp_path(extension: &str) -> std::path::PathBuf {
 
 fn white_psd() -> (std::path::PathBuf, Vec<u8>) {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite.data.fill(255);
+    doc.composite
+        .edit_data(|data| {
+            data.fill(255);
+        })
+        .expect("pixel edit preserves geometry");
     let bytes = pictura_codec::write_psd(&doc).expect("write PSD");
     let path = temp_path("psd");
     std::fs::write(&path, &bytes).expect("write fixture");
@@ -35,7 +39,7 @@ fn rgba_document() -> Vec<u8> {
 /// display recomposite clamps the layer to 1.0 and halves it).
 fn hdr_layer_psd() -> (std::path::PathBuf, Vec<u8>) {
     use pictura_core::{
-        BlendMode, Channel, Layer, LayerStack, PsdRect, Samples, SourceChannels, SourcePlanes,
+        BlendMode, Channel, LayerStack, PsdRect, Samples, SourceChannels, SourcePlanes,
     };
     let rect = PsdRect {
         top: 0,
@@ -48,7 +52,7 @@ fn hdr_layer_psd() -> (std::path::PathBuf, Vec<u8>) {
         data: vec![value].into(),
     };
     let f32_plane = |value: f32| Samples::F32(vec![value].into());
-    let layer = Layer {
+    let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "HDR".to_string(),
         rect,
         opacity: 128,
@@ -70,21 +74,27 @@ fn hdr_layer_psd() -> (std::path::PathBuf, Vec<u8>) {
             ],
         )),
         ..Default::default()
-    };
-    let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.source_depth = Some(BitDepth::ThirtyTwo);
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::ThirtyTwo,
-        width: 1,
-        height: 1,
-        samples: Samples::F32(vec![1.0, 1.0, 1.0].into()),
     });
-    doc.composite = pictura_core::PixelBuffer {
-        width: 1,
-        height: 1,
-        channels: 3,
-        data: vec![255, 255, 255].into(),
-    };
+    let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
+    doc.source
+        .set_native(
+            Some(BitDepth::ThirtyTwo),
+            Some(SourcePlanes {
+                depth: BitDepth::ThirtyTwo,
+                width: 1,
+                height: 1,
+                samples: Samples::F32(vec![1.0, 1.0, 1.0].into()),
+            }),
+        )
+        .expect("valid native source");
+    doc.composite
+        .replace(pictura_core::PixelBuffer {
+            width: 1,
+            height: 1,
+            channels: 3,
+            data: vec![255, 255, 255].into(),
+        })
+        .expect("valid composite");
     doc.layers = LayerStack::from_layers(vec![layer]);
     let bytes = pictura_codec::write_psd(&doc).expect("write 32-bit fixture");
     let path = temp_path("psd");
@@ -198,7 +208,7 @@ fn open_smart_object_matches_sync() {
     let opened =
         decode_smart_object(path.to_str().unwrap(), false, &|_, _| {}).expect("smart object");
     assert_eq!(opened.doc.layers.len(), 1);
-    assert!(opened.doc.layers[0].smart_object.is_some());
+    assert!(opened.doc.layers[0].smart_object().is_some());
     assert!(matches!(opened.path, OpenedPath::Set(None)));
     assert_eq!(opened.source_format, "psd");
     std::fs::remove_file(path).ok();
@@ -321,8 +331,11 @@ fn raster_import_policy_preserve() {
         Policy::Preserve,
         pictura_codec::ConversionOptions::default(),
     );
-    assert_eq!(doc.document_icc.as_deref(), Some(icc.as_slice()));
-    assert!(doc.source_icc.is_none());
+    assert_eq!(
+        doc.source.working_profile().as_deref(),
+        Some(icc.as_slice())
+    );
+    assert!(doc.source.original_profile().is_none());
     assert_eq!(doc.composite.data.to_vec(), before);
 }
 
@@ -338,8 +351,11 @@ fn raster_import_policy_convert() {
         Policy::Convert,
         pictura_codec::ConversionOptions::default(),
     );
-    assert_eq!(doc.source_icc.as_deref(), Some(icc.as_slice()));
-    assert!(doc.document_icc.is_none());
+    assert_eq!(
+        doc.source.original_profile().as_deref(),
+        Some(icc.as_slice())
+    );
+    assert!(doc.source.working_profile().is_none());
     assert_ne!(doc.composite.data.to_vec(), before);
 }
 
@@ -355,8 +371,8 @@ fn raster_import_policy_off() {
         Policy::Off,
         pictura_codec::ConversionOptions::default(),
     );
-    assert!(doc.document_icc.is_none());
-    assert!(doc.source_icc.is_none());
+    assert!(doc.source.working_profile().is_none());
+    assert!(doc.source.original_profile().is_none());
     assert_eq!(doc.composite.data.to_vec(), before);
 }
 
@@ -375,8 +391,8 @@ fn raster_import_policy_malformed_profile() {
         Policy::Convert,
         pictura_codec::ConversionOptions::default(),
     );
-    assert!(doc.document_icc.is_none());
-    assert!(doc.source_icc.is_none());
+    assert!(doc.source.working_profile().is_none());
+    assert!(doc.source.original_profile().is_none());
 }
 
 const MIB: u64 = 1024 * 1024;
@@ -453,8 +469,8 @@ fn an_open_larger_than_the_room_is_admitted_with_scratch() {
     assert!(opened.is_some(), "scratch holds the tiles");
     assert!(!open_refused_for_memory());
     assert_eq!(
-        opened.unwrap().doc.layers[0].channels,
-        doc.layers[0].channels
+        opened.unwrap().doc.layers[0].channels(),
+        doc.layers[0].channels()
     );
 
     pin(Some(available), 0);
@@ -487,7 +503,7 @@ fn lazy_psd() -> std::path::PathBuf {
         .for_each(|px| px[3] = 255);
     let mut doc = Document::from_rgba("Background", LW, LH, &rgba);
     let bottom = doc.layers.get_mut(0).expect("a layer");
-    bottom.channels.retain(|c| c.id != -1);
+    bottom.channels_mut().retain(|c| c.id != -1);
     bottom.background = true;
     let top = Document::from_rgba("Top", 300, 200, &noise(9, 300 * 200 * 4));
     let mut layer = top.layers.get(0).expect("a layer").clone();
@@ -499,12 +515,14 @@ fn lazy_psd() -> std::path::PathBuf {
     let plane = (LW * LH) as usize;
     let mut merged = vec![GRAY; plane * 4];
     merged[plane * 3..].fill(255);
-    doc.composite = PixelBuffer {
-        width: LW,
-        height: LH,
-        channels: 4,
-        data: merged.into(),
-    };
+    doc.composite
+        .replace(PixelBuffer {
+            width: LW,
+            height: LH,
+            channels: 4,
+            data: merged.into(),
+        })
+        .expect("valid composite");
     let path = temp_path("psd");
     std::fs::write(&path, pictura_codec::write_psd(&doc).expect("write")).expect("fixture");
     path
@@ -537,10 +555,13 @@ fn whole_rect(w: u32, h: u32) -> pictura_core::PsdRect {
 /// Whether every layer channel tile is still away in the file.
 fn layers_untouched(view: &PictureViewRust) -> bool {
     let doc = view.session.doc.as_ref().expect("document");
-    doc.layers.iter().flat_map(|l| l.channels.iter()).all(|c| {
-        (0..c.data.tile_count())
-            .all(|i| c.data.tile_residency(i) == Some(pictura_core::Residency::Backed))
-    })
+    doc.layers
+        .iter()
+        .flat_map(|l| l.channels().iter())
+        .all(|c| {
+            (0..c.data.tile_count())
+                .all(|i| c.data.tile_residency(i) == Some(pictura_core::Residency::Backed))
+        })
 }
 
 /// The tiles of `level` against a whole rebuild from the layers.
@@ -602,7 +623,7 @@ fn an_edit_replaces_the_merged_preview() {
     {
         let doc = view.session.doc.as_mut().expect("document");
         let top = doc.layers.get_mut(1).expect("the top layer");
-        top.channels[0]
+        top.channels_mut()[0]
             .data
             .write_rect_from(0..50, 0..40, 300, &[250u8; 50 * 40]);
     }
@@ -666,7 +687,7 @@ fn save_over_source_with_backed_tiles() {
     save_to(&lazy, &path);
     for doc in [&mut lazy, &mut eager] {
         let top = doc.layers.get_mut(1).expect("the top layer");
-        top.channels[1]
+        top.channels_mut()[1]
             .data
             .write_rect_from(10..60, 5..45, 300, &[7u8; 50 * 40]);
     }

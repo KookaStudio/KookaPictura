@@ -27,7 +27,7 @@ fn whole(layer: &Layer) -> PsdRect {
 }
 
 fn plane(layer: &Layer, id: i16) -> Vec<u8> {
-    let channel = layer.channels.iter().find(|c| c.id == id).unwrap();
+    let channel = layer.channels().iter().find(|c| c.id == id).unwrap();
     channel.data.to_vec()
 }
 
@@ -44,9 +44,11 @@ fn params(source: &Document, mode: ApplyImageMode) -> ApplyImageParams {
 }
 
 fn run(target: &mut Document, p: &ApplyImageParams, selection: Option<&LayerMask>) {
+    let selection = selection.map(|mask| mask.edit_coverage().expect("valid mask geometry"));
+
     let layer = target.layers.first_mut().unwrap();
     let rect = whole(layer);
-    apply_image_region(layer, p, selection, rect, LAYER).unwrap();
+    apply_image_region(layer, p, selection.as_ref(), rect, LAYER).unwrap();
 }
 
 fn first(target: &Document, id: i16) -> u8 {
@@ -229,7 +231,9 @@ fn section_matches_full_apply() {
 
 fn native_layer(depth: BitDepth, planes: Vec<(i16, Samples)>) -> Document {
     let mut doc = solid(1, 1, [128, 128, 128, 255]);
-    doc.source_depth = Some(depth);
+    doc.source
+        .set_native(Some(depth), doc.source.planes().clone())
+        .expect("valid source depth");
     let layer = doc.layers.first_mut().unwrap();
     layer.source_channels = Some(SourceChannels::new(depth, layer.rect, planes));
     doc

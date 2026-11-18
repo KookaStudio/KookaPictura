@@ -6,28 +6,34 @@ use pictura_core::{CrsSettings, PicturaRawSettings};
 /// preserved `SoLd`, so the writer authors the descriptor from the typed object.
 fn authoring_smart_doc() -> Document {
     let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-    for (i, b) in doc.composite.data.iter_mut().enumerate() {
-        *b = (i * 7 + 1) as u8;
-    }
-    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
-        name: "Smart".into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 4,
-            right: 4,
-        },
-        smart_object: Some(
-            {
-                let mut so = SmartObject::default();
-                so.filename = "source.psb".into();
-                so.kind = SmartObjectKind::Embedded;
-                so
+    doc.composite
+        .edit_data(|data| {
+            for (i, b) in data.iter_mut().enumerate() {
+                *b = (i * 7 + 1) as u8;
             }
-            .with_payload((0..512).map(|i| (i % 251) as u8).collect()),
-        ),
-        ..Default::default()
-    }]);
+        })
+        .expect("pixel edit preserves geometry");
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            name: "Smart".into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 4,
+                right: 4,
+            },
+            smart_object: Some(
+                {
+                    let mut so = SmartObject::default();
+                    so.filename = "source.psb".into();
+                    so.kind = SmartObjectKind::Embedded;
+                    so
+                }
+                .with_payload((0..512).map(|i| (i % 251) as u8).collect()),
+            ),
+            ..Default::default()
+        },
+    )]);
     doc
 }
 

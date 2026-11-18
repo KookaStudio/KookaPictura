@@ -4,7 +4,6 @@ use super::super::filter_map::filter_from_kind_params;
 use super::super::helpers::{active_layer_visible, active_pixel_layer};
 use super::super::helpers_composite::{
     buffer_to_image, buffer_to_rgba_bytes, layer_buffer, premultiplied_display_image,
-    selection_to_mask,
 };
 use super::super::impl_filters::{
     apply_filter_active, apply_filter_active_region, apply_op_active_region, cancel_filter_preview,
@@ -222,10 +221,10 @@ pub(super) fn selected_area_empty(
 ) -> bool {
     let r = layer.rect;
     let (w, h) = (r.width().max(0) as usize, r.height().max(0) as usize);
-    if w == 0 || h == 0 || !layer.channels.iter().any(|c| c.id == 0) {
+    if w == 0 || h == 0 || !layer.channels().iter().any(|c| c.id == 0) {
         return true;
     }
-    let alpha = layer.channels.iter().find(|c| c.id == -1);
+    let alpha = layer.channels().iter().find(|c| c.id == -1);
     let opaque = |x: usize, y: usize| alpha.is_none_or(|a| a.data.get(y * w + x) != Some(&0));
     let selected = |x: usize, y: usize| {
         selection.is_none_or(|s| {
@@ -486,11 +485,7 @@ pub(super) fn filter_gallery_preview(
         bottom: y + h.max(0),
         right: x + w.max(0),
     };
-    let selection = rust
-        .session
-        .selection
-        .as_ref()
-        .map(|s| selection_to_mask(s, doc));
+    let selection = rust.session.selection.as_ref().map(|s| s.coverage());
     let Some(proxy) = pictura_render::FilterProxy::new(doc, selection.as_ref(), region, scale)
     else {
         return QImage::default();

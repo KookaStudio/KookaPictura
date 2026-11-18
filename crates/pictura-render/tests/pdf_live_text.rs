@@ -40,7 +40,9 @@ fn type_doc() -> Document {
     spec.origin = (12.0, 64.0);
     spec.character.fill_color = [1.0, 1.0, 0.0, 0.0];
     assert!(!pictura_render::add_type_layer(&mut doc, "0", &spec).is_empty());
-    doc.composite = pictura_render::composite_rgba(&doc);
+    doc.composite
+        .replace(pictura_render::composite_rgba(&doc))
+        .expect("valid composite");
     doc
 }
 
@@ -79,7 +81,7 @@ fn write_live(doc: &Document, options: &PdfOptions) -> (Vec<u8>, Option<PixelBuf
         }),
         editing_doc: None,
     };
-    let pdf = write_pdf(doc, &doc.composite, &options, &env).expect("writes");
+    let pdf = write_pdf(doc, doc.composite.buffer(), &options, &env).expect("writes");
     (pdf, background)
 }
 
@@ -164,7 +166,7 @@ fn pdf_type_layer_is_live_text() {
     assert!(ops.contains("] TJ"));
 
     assert!(
-        !same_rgb(&image(&pdf), &doc.composite),
+        !same_rgb(&image(&pdf), doc.composite.buffer()),
         "the image no longer holds the type"
     );
     assert!(
@@ -274,11 +276,13 @@ fn pdf_covered_type_stays_in_image() {
     let mut cover = doc.layers[0].clone();
     cover.name = "cover".into();
     let _ = doc.layers.push(cover);
-    doc.composite = pictura_render::composite_rgba(&doc);
+    doc.composite
+        .replace(pictura_render::composite_rgba(&doc))
+        .expect("valid composite");
     let (pdf, background) = write_live(&doc, &options());
     assert!(background.is_none());
     assert!(!page_text(&pdf).contains("/Font"));
-    assert!(same_rgb(&image(&pdf), &doc.composite));
+    assert!(same_rgb(&image(&pdf), doc.composite.buffer()));
 }
 
 // pdf_live_text_opacity
@@ -287,7 +291,9 @@ fn pdf_faded_type_follows_transparency() {
     let mut doc = type_doc();
     let index = doc.layers.iter().position(|l| l.is_type()).unwrap();
     doc.layers[index].opacity = 128;
-    doc.composite = pictura_render::composite_rgba(&doc);
+    doc.composite
+        .replace(pictura_render::composite_rgba(&doc))
+        .expect("valid composite");
     let at = |compatibility| PdfOptions {
         compatibility,
         ..options()

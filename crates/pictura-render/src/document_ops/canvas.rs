@@ -31,7 +31,8 @@ pub fn resize_canvas_document(
     let mut next = doc.clone();
     materialize_merged_composite(&mut next);
     let store = next
-        .source_planes
+        .source
+        .planes()
         .as_ref()
         .filter(|s| s.depth != pictura_core::BitDepth::One);
     let planes = next.channels.len()
@@ -58,7 +59,7 @@ pub fn resize_canvas_document(
     for channel in &mut next.channels {
         channel.data = geometry_tiled::shift(&channel.data, from, 1, to, offset, 0)?;
     }
-    if let Some(store) = &mut next.source_planes {
+    if let Some(mut store) = next.source.planes().clone() {
         // The depth-1 store is a packed plane, not a `width * height` one; it is
         // only re-emitted for an unchanged flat Bitmap, so leave it stale.
         if store.depth != pictura_core::BitDepth::One {
@@ -66,6 +67,10 @@ pub fn resize_canvas_document(
             store.width = width;
             store.height = height;
         }
+
+        next.source
+            .replace_planes(Some(store))
+            .expect("valid source planes");
     }
 
     next.width = width;
@@ -93,9 +98,9 @@ pub fn canvas_plane_bytes(
         bottom: height as i32,
         right: width as i32,
     };
-    let background = doc.layers.iter().find(|l| l.background && !l.is_group);
+    let background = doc.layers.iter().find(|l| l.background && !l.is_group());
     if let Some(layer) = background.filter(|l| offset_rect(l.rect, dx, dy) != canvas) {
-        bytes += layer.channels.len() as u64 * u64::from(width) * u64::from(height);
+        bytes += layer.channels().len() as u64 * u64::from(width) * u64::from(height);
     }
     (bytes, widest)
 }
@@ -134,7 +139,11 @@ pub fn extend_background(
         right: doc.width as i32,
     };
     let gray = doc.mode == pictura_core::ColorMode::Grayscale;
-    let Some(layer) = doc.layers.iter_mut().find(|l| l.background && !l.is_group) else {
+    let Some(layer) = doc
+        .layers
+        .iter_mut()
+        .find(|l| l.background && !l.is_group())
+    else {
         return Ok(false);
     };
     if layer.rect == canvas {
@@ -145,17 +154,17 @@ pub fn extend_background(
     let from = (old.width().max(0) as usize, old.height().max(0) as usize);
     let offset = (i64::from(old.left), i64::from(old.top));
     if let Some(job) = pictura_core::job::current() {
-        job.begin_stage(layer.channels.len() as u64 * to.1 as u64);
+        job.begin_stage(layer.channels().len() as u64 * to.1 as u64);
     }
     let planes = layer
-        .channels
+        .channels()
         .iter()
         .map(|channel| {
             let fill = background_fill(channel.id, color, gray);
             geometry_tiled::shift(&channel.data, from, 1, to, offset, fill)
         })
         .collect::<Result<Vec<_>, _>>()?;
-    for (channel, plane) in layer.channels.iter_mut().zip(planes) {
+    for (channel, plane) in layer.channels_mut().iter_mut().zip(planes) {
         channel.data = plane;
     }
     layer.rect = canvas;
@@ -187,7 +196,11 @@ pub(super) fn extend_background_dense(doc: &mut pictura_core::Document, color: [
         right: doc.width as i32,
     };
     let gray = doc.mode == pictura_core::ColorMode::Grayscale;
-    let Some(layer) = doc.layers.iter_mut().find(|l| l.background && !l.is_group) else {
+    let Some(layer) = doc
+        .layers
+        .iter_mut()
+        .find(|l| l.background && !l.is_group())
+    else {
         return false;
     };
     if layer.rect == canvas {
@@ -196,7 +209,7 @@ pub(super) fn extend_background_dense(doc: &mut pictura_core::Document, color: [
     let old = layer.rect;
     let (width, height) = (canvas.width() as u32, canvas.height() as u32);
     let old_w = old.width().max(0) as usize;
-    for channel in &mut layer.channels {
+    for channel in layer.channels_mut() {
         let fill = background_fill(channel.id, color, gray);
         let mut plane = vec![fill; width as usize * height as usize];
         let x0 = old.left.max(0);
@@ -228,7 +241,7 @@ pub(super) fn rebase_source_planes(
     dx: i32,
     dy: i32,
 ) {
-    let Some(store) = &mut doc.source_planes else {
+    let Some(mut store) = doc.source.planes().clone() else {
         return;
     };
     if store.depth == pictura_core::BitDepth::One {
@@ -247,6 +260,9 @@ pub(super) fn rebase_source_planes(
     );
     store.width = width;
     store.height = height;
+    doc.source
+        .replace_planes(Some(store))
+        .expect("canvas geometry preserves source representation");
 }
 
 /// Top-left of the old canvas within the new one, per anchor.
@@ -337,7 +353,7 @@ mod tests {
 
     fn pixel_layer(name: &str, r: PsdRect, mask: Option<LayerMask>) -> Layer {
         let n = (r.width().max(0) * r.height().max(0)) as usize;
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: name.into(),
             rect: r,
             blend: BlendMode::Normal,
@@ -371,7 +387,7 @@ mod tests {
             is_group: false,
             background: false,
             ..Default::default()
-        }
+        })
     }
 
     fn sample_doc() -> Document {
@@ -393,7 +409,7 @@ mod tests {
         assert!(extend_background(&mut doc, [200, 100, 50]).unwrap());
         let layer = &doc.layers[0];
         assert_eq!(layer.rect, full(6, 4));
-        let at = |id: i16, i: usize| layer.channels.iter().find(|c| c.id == id).unwrap().data[i];
+        let at = |id: i16, i: usize| layer.channels().iter().find(|c| c.id == id).unwrap().data[i];
         assert_eq!(
             (at(0, 0), at(1, 0), at(2, 0)),
             (10, 20, 30),
@@ -472,7 +488,9 @@ mod tests {
         resize_canvas_document(&mut doc, 6, 5, Anchor::MiddleRight).unwrap();
 
         assert_eq!((doc.width, doc.height), (6, 5));
-        doc.composite = crate::composite_rgba(&doc);
+        doc.composite
+            .replace(crate::composite_rgba(&doc))
+            .expect("valid composite");
         assert_eq!(doc.composite, crate::composite_rgba(&doc));
         assert_eq!(doc.composite.width, 6);
         assert_eq!(doc.composite.height, 5);
@@ -521,17 +539,21 @@ mod tests {
     #[test]
     fn canvas_rebases_the_retained_store() {
         let mut doc = sample_doc();
-        doc.source_depth = Some(BitDepth::Sixteen);
-        doc.source_planes = Some(SourcePlanes {
-            depth: BitDepth::Sixteen,
-            width: 4,
-            height: 4,
-            samples: Samples::U16((0..16).map(|i| i as u16).collect()),
-        });
+        doc.source
+            .set_native(
+                Some(BitDepth::Sixteen),
+                Some(SourcePlanes {
+                    depth: BitDepth::Sixteen,
+                    width: 4,
+                    height: 4,
+                    samples: Samples::U16((0..16).map(|i| i as u16).collect()),
+                }),
+            )
+            .expect("valid native source");
 
         resize_canvas_document(&mut doc, 6, 6, Anchor::Center).unwrap();
 
-        let store = doc.source_planes.as_ref().unwrap();
+        let store = doc.source.planes().as_ref().unwrap();
         assert_eq!((store.width, store.height), (6, 6));
         let Samples::U16(v) = &store.samples else {
             panic!("expected a u16 store")

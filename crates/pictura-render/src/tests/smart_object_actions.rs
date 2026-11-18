@@ -19,12 +19,12 @@ fn reset_restores_native_placement_and_keeps_the_object() {
     );
     let mut d = doc(20, 20, vec![layer]);
     assert!(can_reset_smart_object_transform(&d, "0"));
-    let so_before = d.layers[0].smart_object.clone();
+    let so_before = d.layers[0].smart_object().cloned();
 
     assert!(reset_smart_object_transform(&mut d, "0"));
     assert_eq!(d.layers[0].rect, rect(0, 0, 2, 2));
-    assert!(d.layers[0].channels.is_empty());
-    assert_eq!(d.layers[0].smart_object, so_before);
+    assert!(d.layers[0].channels().is_empty());
+    assert_eq!(d.layers[0].smart_object(), so_before.as_ref());
 }
 
 #[test]
@@ -77,14 +77,14 @@ fn convert_to_layers_yields_source_at_the_object_position() {
         )],
     );
     assert!(convert_to_smart_object(&mut d, "0"));
-    let proxy = d.layers[0].channels.clone();
+    let proxy = d.layers[0].channels().clone();
     assert!(can_convert_smart_object_to_layers(&d, "0"));
 
     assert!(convert_smart_object_to_layers(&mut d, "0"));
     assert_eq!(d.layers.len(), 1);
     assert_eq!(d.layers[0].rect, rect(5, 7, 8, 9));
-    assert!(d.layers[0].smart_object.is_none());
-    assert_eq!(d.layers[0].channels, proxy);
+    assert!(d.layers[0].smart_object().is_none());
+    assert_eq!(d.layers[0].channels(), &proxy);
 }
 
 #[test]
@@ -119,7 +119,7 @@ fn convert_to_layers_scales_the_source_stack() {
     assert!(convert_smart_object_to_layers(&mut d, "0"));
     assert_eq!(d.layers.len(), 1);
     assert_eq!(d.layers[0].rect, scaled_rect);
-    let channel = d.layers[0].channels.iter().find(|c| c.id == 0).unwrap();
+    let channel = d.layers[0].channels().iter().find(|c| c.id == 0).unwrap();
     assert_eq!(channel.data.len(), 8 * 8);
 }
 
@@ -139,8 +139,7 @@ fn new_smart_object_via_copy_is_independent() {
     );
     assert!(convert_to_smart_object(&mut d, "0"));
     let original = d.layers[0]
-        .smart_object
-        .as_ref()
+        .smart_object()
         .unwrap()
         .payload()
         .map(<[u8]>::to_vec)
@@ -151,12 +150,12 @@ fn new_smart_object_via_copy_is_independent() {
     assert_eq!(d.layers.len(), 2);
     assert_eq!(d.layers[1].name, "L copy");
     assert_eq!(
-        d.layers[1].smart_object.as_ref().unwrap().payload(),
+        d.layers[1].smart_object().unwrap().payload(),
         Some(original.as_slice())
     );
-    assert!(d.layers[1].smart_object.as_ref().unwrap().uuid.is_empty());
+    assert!(d.layers[1].smart_object().unwrap().uuid.is_empty());
     assert_eq!(
-        d.layers[0].smart_object.as_ref().unwrap().payload(),
+        d.layers[0].smart_object().unwrap().payload(),
         Some(original.as_slice())
     );
 
@@ -169,11 +168,11 @@ fn new_smart_object_via_copy_is_independent() {
         &replacement
     ));
     assert_eq!(
-        d.layers[0].smart_object.as_ref().unwrap().payload(),
+        d.layers[0].smart_object().unwrap().payload(),
         Some(original.as_slice())
     );
     assert_eq!(
-        d.layers[1].smart_object.as_ref().unwrap().payload(),
+        d.layers[1].smart_object().unwrap().payload(),
         Some(replacement.as_slice())
     );
 }
@@ -221,16 +220,16 @@ fn fit_smart_object_scales_an_oversized_source() {
         )],
     );
     let path = place_smart_object(&mut d, "source.psd", &payload).expect("places");
-    let object = d.layers[1].smart_object.clone();
+    let object = d.layers[1].smart_object().cloned();
 
     assert!(fit_smart_object_to_canvas(&mut d, &path));
 
     // 40 × 20 into 10 × 10: scale 0.25, fitted 10 × 5, centred at y = 2.
     assert_eq!(d.layers[1].rect, rect(2, 0, 7, 10));
-    assert!(d.layers[1].channels.is_empty());
-    assert_eq!(d.layers[1].smart_object, object);
+    assert!(d.layers[1].channels().is_empty());
+    assert_eq!(d.layers[1].smart_object(), object.as_ref());
     assert_eq!(
-        d.layers[1].smart_object.as_ref().unwrap().payload(),
+        d.layers[1].smart_object().unwrap().payload(),
         Some(payload.as_slice())
     );
 }
@@ -279,7 +278,7 @@ fn fit_smart_object_does_not_upscale() {
 
     assert_eq!(d.layers[1].rect, rect(0, 0, 3, 4));
     assert_eq!(
-        d.layers[1].smart_object.as_ref().unwrap().payload(),
+        d.layers[1].smart_object().unwrap().payload(),
         Some(payload.as_slice())
     );
 }
@@ -301,15 +300,15 @@ fn transform_smart_object_rect_keeps_the_source() {
     );
     let path = place_smart_object(&mut d, "source.psd", &payload).expect("places");
     assert!(fit_smart_object_to_canvas(&mut d, &path));
-    let object = d.layers[1].smart_object.clone();
+    let object = d.layers[1].smart_object().cloned();
 
     assert!(transform_smart_object_rect(&mut d, &path, rect(0, 0, 8, 8)));
 
     assert_eq!(d.layers[1].rect, rect(0, 0, 8, 8));
-    assert!(d.layers[1].channels.is_empty());
-    assert_eq!(d.layers[1].smart_object, object);
+    assert!(d.layers[1].channels().is_empty());
+    assert_eq!(d.layers[1].smart_object(), object.as_ref());
     assert_eq!(
-        d.layers[1].smart_object.as_ref().unwrap().payload(),
+        d.layers[1].smart_object().unwrap().payload(),
         Some(payload.as_slice())
     );
 }
@@ -365,7 +364,7 @@ fn convert_to_smart_object_keeps_merged_transparency() {
     let mut d = doc(
         2,
         2,
-        vec![Layer {
+        vec![pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "R".into(),
             rect: full(2, 2),
             channels: vec![
@@ -387,7 +386,7 @@ fn convert_to_smart_object_keeps_merged_transparency() {
                 },
             ],
             ..Default::default()
-        }],
+        })],
     );
 
     assert!(convert_to_smart_object(&mut d, "0"));
@@ -398,7 +397,7 @@ fn convert_to_smart_object_keeps_merged_transparency() {
         Some(&alpha[..])
     );
 
-    let object = d.layers[0].smart_object.as_ref().expect("smart object");
+    let object = d.layers[0].smart_object().expect("smart object");
     let rendered = crate::render_smart_source(object, d.layers[0].rect, d.layers[0].rect)
         .expect("embedded source renders");
     assert_eq!(&rendered.data[12..16], &alpha);
@@ -428,11 +427,11 @@ fn transformed_channel_less_smart_object_round_trips_its_rect() {
     let layer = back
         .layers
         .iter()
-        .find(|layer| layer.smart_object.is_some())
+        .find(|layer| layer.smart_object().is_some())
         .expect("placed layer round-trips");
     assert_eq!(layer.rect, rect(0, 0, 6, 6));
     assert_eq!(
-        layer.smart_object.as_ref().unwrap().payload(),
+        layer.smart_object().unwrap().payload(),
         Some(payload.as_slice())
     );
 }
@@ -472,10 +471,12 @@ fn transform_smart_object_rect_refuses_stray_channels() {
             Vec::new(),
         )],
     );
-    raw.layers[0].raw_channels = vec![pictura_core::RawChannel {
-        id: 3,
-        data: vec![0, 0, 0, 0].into(),
-    }];
+    pictura_codec::edit_layer(raw.layers[0].as_mut(), |parts| {
+        parts.raw_channels = vec![pictura_core::RawChannel {
+            id: 3,
+            data: vec![0, 0, 0, 0].into(),
+        }]
+    });
     let before = raw.clone();
     assert!(!can_transform_smart_object_rect(&raw, "0"));
     assert!(!transform_smart_object_rect(
@@ -484,4 +485,93 @@ fn transform_smart_object_rect_refuses_stray_channels() {
         rect(0, 0, 2, 2)
     ));
     assert_eq!(raw, before);
+}
+
+#[test]
+fn losing_smart_object_references_retain_shared_linked_payloads() {
+    use pictura_core::{LayerBlock, LayerKind, LayerParts};
+    let source = payload_of([17, 53, 109]);
+    let object = smart_layer(
+        "active",
+        full(2, 2),
+        embedded(source.clone()),
+        green_proxy(),
+    );
+    let seed = pictura_codec::read_psd(&write_psd(&doc(4, 4, vec![object])).unwrap()).unwrap();
+    let uuid = seed.layers[0].smart_object().unwrap().uuid.clone();
+    assert!(!uuid.is_empty());
+    for key in [*b"SoLd", *b"SoLE", *b"plLd", *b"PlLd"] {
+        let config = if matches!(&key, b"SoLd" | b"SoLE") {
+            LayerBlock {
+                key,
+                data: seed.layers[0].extra_block(b"SoLd").unwrap().data.clone(),
+            }
+        } else {
+            let mut data = b"plcL".to_vec();
+            data.extend_from_slice(&3u32.to_be_bytes());
+            data.push(uuid.len() as u8);
+            data.extend_from_slice(uuid.as_bytes());
+            if !data.len().is_multiple_of(2) {
+                data.push(0);
+            }
+            LayerBlock {
+                key,
+                data: data.into(),
+            }
+        };
+        for kind in [LayerKind::Fill, LayerKind::Adjustment, LayerKind::Group] {
+            for operation in ["rasterize", "replace", "unpack"] {
+                let mut d = seed.clone();
+                let mut parts = LayerParts::from(d.layers[0].clone());
+                parts.name = "preserved".into();
+                parts
+                    .extra_blocks
+                    .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd"));
+                parts.extra_blocks.push(config.clone());
+                match kind {
+                    LayerKind::Fill => {
+                        parts.adjustment = Some(crate::encode_solid_color_fill([3, 5, 7]))
+                    }
+                    LayerKind::Adjustment => parts.adjustment = Some(crate::encode_invert()),
+                    LayerKind::Group => parts.is_group = true,
+                    _ => unreachable!(),
+                }
+                d.layers
+                    .push(pictura_codec::layer_from_parts(parts))
+                    .unwrap();
+                let original_sources = d.layer_section_extra.clone();
+                let changed = match operation {
+                    "rasterize" => rasterize_smart_object(&mut d, "0"),
+                    "replace" => replace_smart_object_contents(
+                        &mut d,
+                        "0",
+                        "replacement.psd",
+                        &payload_of([201, 33, 11]),
+                    ),
+                    _ => convert_smart_object_to_layers(&mut d, "0"),
+                };
+                assert!(changed, "{key:?} {kind:?} {operation}");
+                assert_eq!(
+                    d.layer_section_extra, original_sources,
+                    "{key:?} {kind:?} {operation} dropped a shared record"
+                );
+                let back = pictura_codec::read_psd(&write_psd(&d).unwrap()).unwrap();
+                let retained = back
+                    .layers
+                    .iter()
+                    .find(|layer| layer.name == "preserved")
+                    .unwrap();
+                assert_eq!(retained.kind(), kind);
+                assert_eq!(retained.extra_block(&key), Some(&config));
+                assert!(back
+                    .layer_section_extra
+                    .windows(uuid.len())
+                    .any(|bytes| bytes == uuid.as_bytes()));
+                assert!(back
+                    .layer_section_extra
+                    .windows(source.len())
+                    .any(|bytes| bytes == source.as_slice()));
+            }
+        }
+    }
 }

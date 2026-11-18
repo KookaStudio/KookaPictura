@@ -259,7 +259,7 @@ fn dab_region_pass_is_bounded_and_equal() {
     let layer = &mut d.layers[1];
     let w = layer.rect.width() as usize;
     let alpha = layer
-        .channels
+        .channels_mut()
         .iter_mut()
         .find(|c| c.id == -1)
         .expect("alpha plane");
@@ -469,7 +469,7 @@ fn edited_styled_region_rebuilds_after_warm() {
     let unchanged_before = crate::layer_source::pass_build_count(&d.layers[2], &d);
     let w = d.layers[1].rect.width() as usize;
     let alpha = d.layers[1]
-        .channels
+        .channels_mut()
         .iter_mut()
         .find(|channel| channel.id == -1)
         .expect("alpha plane");

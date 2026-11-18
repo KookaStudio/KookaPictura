@@ -57,7 +57,7 @@ fn original_at_union(original: &Layer, mut out: Layer, union: PsdRect) -> Layer 
         union.width().max(0) as usize,
         union.height().max(0) as usize,
     );
-    for channel in &mut out.channels {
+    for channel in out.channels_mut() {
         if channel.id >= 0 {
             copy_or_fill(channel, &source, w, h, 0);
         } else if channel.id == -1 {
@@ -67,9 +67,9 @@ fn original_at_union(original: &Layer, mut out: Layer, union: PsdRect) -> Layer 
             }
         }
     }
-    if !out.channels.iter().any(|c| c.id == -1) {
+    if !out.channels().iter().any(|c| c.id == -1) {
         if let Some(plane) = alpha {
-            out.channels.push(Channel {
+            out.channels_mut().push(Channel {
                 id: -1,
                 data: plane,
             });
@@ -82,7 +82,7 @@ fn original_at_union(original: &Layer, mut out: Layer, union: PsdRect) -> Layer 
 /// opaque when it has no alpha plane, and transparent outside it. `None` when
 /// the layer is already opaque over the whole union.
 fn union_alpha(source: &Layer, union: PsdRect) -> Option<Plane<u8>> {
-    let source_alpha = source.channels.iter().find(|c| c.id == -1);
+    let source_alpha = source.channels().iter().find(|c| c.id == -1);
     if source.rect == union && source_alpha.is_none() {
         return None;
     }
@@ -108,7 +108,7 @@ fn union_alpha(source: &Layer, union: PsdRect) -> Option<Plane<u8>> {
 }
 
 fn copy_or_fill(channel: &mut Channel, source: &Layer, w: usize, h: usize, default: u8) {
-    match source.channels.iter().find(|c| c.id == channel.id) {
+    match source.channels().iter().find(|c| c.id == channel.id) {
         Some(src) if src.data.len() == channel.data.len() => {
             channel.data = src.data.clone();
         }
@@ -139,7 +139,7 @@ fn composite(
         return;
     }
     let out_color_indices: Vec<usize> = out
-        .channels
+        .channels()
         .iter()
         .enumerate()
         .filter(|(_, c)| c.id >= 0)
@@ -148,10 +148,10 @@ fn composite(
     if out_color_indices.is_empty() {
         return;
     }
-    let source_has_alpha = original.channels.iter().any(|c| c.id == -1)
-        || effected.channels.iter().any(|c| c.id == -1);
-    if source_has_alpha && !out.channels.iter().any(|c| c.id == -1) {
-        out.channels.push(Channel {
+    let source_has_alpha = original.channels().iter().any(|c| c.id == -1)
+        || effected.channels().iter().any(|c| c.id == -1);
+    if source_has_alpha && !out.channels().iter().any(|c| c.id == -1) {
+        out.channels_mut().push(Channel {
             id: -1,
             data: Plane::filled(w, h, 1, 255),
         });
@@ -161,12 +161,12 @@ fn composite(
     let effected_alpha = alpha_plane(effected);
     let original_stride = original.rect.width().max(0) as usize;
     let effected_stride = effected.rect.width().max(0) as usize;
-    let out_alpha_index = out.channels.iter().position(|c| c.id == -1);
+    let out_alpha_index = out.channels().iter().position(|c| c.id == -1);
     // ponytail: the planes are materialized for this pointwise pass. A huge
     // layer pays one contiguous copy per plane; stream the tiles if Fade ever
     // shows up in a profile.
     let mut planes: Vec<&mut [u8]> = out
-        .channels
+        .channels_mut()
         .iter_mut()
         .map(|channel| channel.data.as_mut_slice())
         .collect();
@@ -213,7 +213,7 @@ fn composite(
 
 fn color_planes(layer: &Layer) -> Vec<&[u8]> {
     layer
-        .channels
+        .channels()
         .iter()
         .filter(|c| c.id >= 0)
         .map(|c| c.data.as_slice())
@@ -222,7 +222,7 @@ fn color_planes(layer: &Layer) -> Vec<&[u8]> {
 
 fn alpha_plane(layer: &Layer) -> Option<&[u8]> {
     layer
-        .channels
+        .channels()
         .iter()
         .find(|c| c.id == -1)
         .map(|c| c.data.as_slice())

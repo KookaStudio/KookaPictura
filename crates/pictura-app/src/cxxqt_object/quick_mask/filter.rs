@@ -1,7 +1,6 @@
 use super::*;
 use crate::cxxqt_object::{
     document_session::{ActiveSession, FilterPreviewSession},
-    helpers_composite::selection_to_mask,
     impl_filters::ActiveOp,
 };
 
@@ -27,11 +26,7 @@ impl PictureViewRust {
         let document = self.quick_mask_document(true);
         self.session.quick_mask.coverage = current;
         let mut document = document?;
-        let clip = self
-            .session
-            .selection
-            .as_ref()
-            .map(|s| selection_to_mask(s, &document));
+        let clip = self.session.selection.as_ref().map(|s| s.coverage());
         let layer = document.layers.first_mut()?;
         let rect = layer.rect;
         let result = match op {

@@ -216,9 +216,14 @@ fn native_layer_32(rgb: [f32; 3]) -> Layer {
 fn ctx_high_depth_matches_legacy() {
     let _guard = crate::composite_rows::serial_test_lock();
     let mut d16 = doc(2, 2, vec![native_layer_16((100, 140, 200), 7)]);
-    d16.source_depth = Some(BitDepth::Sixteen);
+    d16.source
+        .set_native(Some(BitDepth::Sixteen), d16.source.planes().clone())
+        .expect("valid source depth");
     let mut d16_missing = doc(2, 2, vec![native_layer_16((100, 140, 200), 7)]);
-    d16_missing.source_depth = Some(BitDepth::Sixteen);
+    d16_missing
+        .source
+        .set_native(Some(BitDepth::Sixteen), d16_missing.source.planes().clone())
+        .expect("valid source depth");
     d16_missing.layers[0]
         .source_channels
         .as_mut()
@@ -226,7 +231,9 @@ fn ctx_high_depth_matches_legacy() {
         .planes
         .retain(|(id, _)| *id != 1);
     let mut d32 = doc(2, 2, vec![native_layer_32([0.4, 0.6, 0.8])]);
-    d32.source_depth = Some(BitDepth::ThirtyTwo);
+    d32.source
+        .set_native(Some(BitDepth::ThirtyTwo), d32.source.planes().clone())
+        .expect("valid source depth");
 
     for d in [&d16, &d16_missing, &d32] {
         crate::composite_blend::set_legacy_source(false);
@@ -284,7 +291,10 @@ fn ctx_masks_match_legacy() {
             native_layer,
         ],
     );
-    native_doc.source_depth = Some(BitDepth::Sixteen);
+    native_doc
+        .source
+        .set_native(Some(BitDepth::Sixteen), native_doc.source.planes().clone())
+        .expect("valid source depth");
 
     for d in [
         masked_scene(Some(plain_raster), None),
@@ -314,7 +324,9 @@ fn ctx_constants_match_legacy() {
         composite_dest: (2000, 64000),
         channel_ranges: vec![((0, 65535), (1000, 60000))],
     });
-    layer.type_tool = type_layer(None).type_tool;
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.type_tool = type_layer(None).type_tool().cloned()
+    });
     let d = doc(
         2,
         2,
@@ -395,20 +407,22 @@ fn ctx_route_callers_match_legacy() {
     let solid_fill = doc(2, 2, vec![base(), solid_fill]);
     let mut gradient = adjustment_layer("gradient", *b"GdFl", Vec::new(), 200, None);
     gradient.rect = full(2, 2);
-    gradient.adjustment = Some(crate::encode_gradient_fill(
-        GradientKind::Linear,
-        &[
-            GradientStop {
-                location: 0,
-                color: [0, 0, 0],
-            },
-            GradientStop {
-                location: 4096,
-                color: [255, 255, 255],
-            },
-        ],
-        0.0,
-    ));
+    pictura_codec::edit_layer(gradient.as_mut(), |parts| {
+        parts.adjustment = Some(crate::encode_gradient_fill(
+            GradientKind::Linear,
+            &[
+                GradientStop {
+                    location: 0,
+                    color: [0, 0, 0],
+                },
+                GradientStop {
+                    location: 4096,
+                    color: [255, 255, 255],
+                },
+            ],
+            0.0,
+        ))
+    });
     let gradient = doc(2, 2, vec![base(), gradient]);
     let pattern = pattern_fixture_doc();
     let smart_source = doc(

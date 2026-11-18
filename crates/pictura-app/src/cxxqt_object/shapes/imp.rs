@@ -212,7 +212,7 @@ pub(super) fn clipped_above(doc: &pictura_core::Document, path: &str) -> bool {
     let siblings = match parent {
         None => &doc.layers,
         Some(parent) => match pictura_render::resolve_path(doc, parent) {
-            Some(layer) => &layer.children,
+            Some(layer) => layer.children(),
             None => return true,
         },
     };

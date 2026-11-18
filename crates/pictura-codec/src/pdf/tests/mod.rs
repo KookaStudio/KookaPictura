@@ -44,7 +44,7 @@ pub(super) fn rgb_doc(w: u32, h: u32, ppi: f64, transparent: Option<usize>) -> D
 
 /// Write `doc` with its own composite.
 pub(super) fn write(doc: &Document, options: &PdfOptions) -> Vec<u8> {
-    write_pdf(doc, &doc.composite, options, &env()).expect("writes")
+    write_pdf(doc, doc.composite.buffer(), options, &env()).expect("writes")
 }
 
 pub(super) fn proof_env() -> PdfEnv<'static> {
@@ -61,7 +61,7 @@ pub(super) fn proof_env() -> PdfEnv<'static> {
 pub(super) fn write_with_env(doc: &Document, options: &PdfOptions, env: &PdfEnv) -> Vec<u8> {
     let mut options = options.clone();
     options.normalize();
-    write_pdf(doc, &doc.composite, &options, env).expect("writes")
+    write_pdf(doc, doc.composite.buffer(), &options, env).expect("writes")
 }
 
 pub(super) fn text(pdf: &[u8]) -> String {
@@ -252,7 +252,9 @@ fn pdf_no_compression_writes_raw() {
 #[test]
 fn pdf_gray_writes_one_component() {
     let mut doc = Document::new(4, 2, ColorMode::Grayscale, BitDepth::Eight);
-    doc.composite.data = (0..8u8).map(|v| v * 30).collect::<Vec<_>>().into();
+    doc.composite
+        .replace_data((0..8u8).map(|v| v * 30).collect::<Vec<_>>().into())
+        .expect("valid composite plane");
     let pdf = write(&doc, &options());
     let (dict, samples) = image(&pdf);
     assert!(dict.contains("/ColorSpace /DeviceGray"));
@@ -261,11 +263,17 @@ fn pdf_gray_writes_one_component() {
 
 pub(super) fn cmyk_doc() -> Document {
     let mut doc = rgb_doc(4, 3, 72.0, None);
-    doc.composite.channels = 3;
     let plane = 12;
-    doc.composite.data = doc.composite.data[..3 * plane].to_vec().into();
+    doc.composite
+        .edit(|buffer| {
+            buffer.channels = 3;
+            buffer.data = buffer.data[..3 * plane].to_vec().into();
+        })
+        .expect("three color planes");
     doc.layers = pictura_core::LayerStack::default();
-    doc.source_mode = Some(ColorMode::Cmyk);
+    doc.source
+        .set_encoding(Some(ColorMode::Cmyk), None)
+        .expect("valid source encoding");
     doc
 }
 
@@ -284,7 +292,9 @@ fn pdf_cmyk_source_writes_device_cmyk() {
 #[test]
 fn pdf_lab_source_writes_lab() {
     let mut doc = cmyk_doc();
-    doc.source_mode = Some(ColorMode::Lab);
+    doc.source
+        .set_encoding(Some(ColorMode::Lab), None)
+        .expect("valid source encoding");
     let pdf = write(&doc, &options());
     let (dict, _) = image(&pdf);
     assert!(dict.contains("/ColorSpace [/Lab <</WhitePoint [0.9642 1 0.8249]"));
@@ -300,20 +310,25 @@ pub(super) fn indexed_doc() -> Document {
     let index: Vec<u8> = (0..12u8).map(|v| v * 20).collect();
     let rgb = crate::color_mode::indexed_to_rgb(&index, &palette);
     let mut doc = Document::new(4, 3, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite = PixelBuffer {
-        width: 4,
-        height: 3,
-        channels: 3,
-        data: rgb.into(),
-    };
-    doc.source_mode = Some(ColorMode::Indexed);
-    doc.source_palette = Some(palette);
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::Eight,
-        width: 4,
-        height: 3,
-        samples: Samples::U8(index.into()),
-    });
+    doc.composite
+        .replace(PixelBuffer {
+            width: 4,
+            height: 3,
+            channels: 3,
+            data: rgb.into(),
+        })
+        .expect("valid composite");
+    doc.source
+        .set_encoding(Some(ColorMode::Indexed), Some(palette))
+        .expect("valid source encoding");
+    doc.source
+        .replace_planes(Some(SourcePlanes {
+            depth: BitDepth::Eight,
+            width: 4,
+            height: 3,
+            samples: Samples::U8(index.into()),
+        }))
+        .expect("valid source planes");
     doc
 }
 
@@ -341,19 +356,25 @@ pub(super) fn bitmap_doc() -> Document {
     }
     let rgb = crate::color_mode::bitmap_rows_to_rgb(&packed, w, h);
     let mut doc = Document::new(w as u32, h as u32, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite = PixelBuffer {
-        width: w as u32,
-        height: h as u32,
-        channels: 3,
-        data: rgb.into(),
-    };
-    doc.source_mode = Some(ColorMode::Bitmap);
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::One,
-        width: w as u32,
-        height: h as u32,
-        samples: Samples::U8(packed.into()),
-    });
+    doc.composite
+        .replace(PixelBuffer {
+            width: w as u32,
+            height: h as u32,
+            channels: 3,
+            data: rgb.into(),
+        })
+        .expect("valid composite");
+    doc.source
+        .set_encoding(Some(ColorMode::Bitmap), None)
+        .expect("valid source encoding");
+    doc.source
+        .replace_planes(Some(SourcePlanes {
+            depth: BitDepth::One,
+            width: w as u32,
+            height: h as u32,
+            samples: Samples::U8(packed.into()),
+        }))
+        .expect("valid source planes");
     doc
 }
 
@@ -370,8 +391,10 @@ fn pdf_bitmap_uses_ccitt_g4() {
 #[test]
 fn pdf_multichannel_is_refused() {
     let mut doc = rgb_doc(2, 2, 72.0, None);
-    doc.source_mode = Some(ColorMode::Multichannel);
-    let err = write_pdf(&doc, &doc.composite, &options(), &env()).unwrap_err();
+    doc.source
+        .set_encoding(Some(ColorMode::Multichannel), None)
+        .expect("valid source encoding");
+    let err = write_pdf(&doc, doc.composite.buffer(), &options(), &env()).unwrap_err();
     assert!(err.to_string().contains("Multichannel"));
 }
 
@@ -379,7 +402,7 @@ fn pdf_multichannel_is_refused() {
 fn pdf_icc_profile_embedding_follows_option() {
     let mut doc = rgb_doc(3, 2, 72.0, None);
     let adobe = pictura_color::Profile::adobe_rgb().to_icc();
-    doc.document_icc = Some(adobe.clone().into());
+    doc.source.set_working_profile(Some(adobe.clone().into()));
     let tagged = write(
         &doc,
         &PdfOptions {
@@ -452,8 +475,12 @@ fn pdf_downsample_below_threshold_keeps_size() {
 fn sixteen_bit_doc() -> (Document, Vec<u16>) {
     let mut doc = rgb_doc(3, 2, 72.0, None);
     doc.layers = pictura_core::LayerStack::default();
-    doc.composite.channels = 3;
-    doc.composite.data = doc.composite.data[..18].to_vec().into();
+    doc.composite
+        .edit(|buffer| {
+            buffer.channels = 3;
+            buffer.data = buffer.data[..18].to_vec().into();
+        })
+        .expect("three color planes");
     let native: Vec<u16> = doc
         .composite
         .data
@@ -461,13 +488,17 @@ fn sixteen_bit_doc() -> (Document, Vec<u16>) {
         .enumerate()
         .map(|(i, &v)| u16::from(v) * 256 + (i as u16 % 200))
         .collect();
-    doc.source_depth = Some(BitDepth::Sixteen);
-    doc.source_planes = Some(SourcePlanes {
-        depth: BitDepth::Sixteen,
-        width: 3,
-        height: 2,
-        samples: Samples::U16(native.clone().into()),
-    });
+    doc.source
+        .set_native(
+            Some(BitDepth::Sixteen),
+            Some(SourcePlanes {
+                depth: BitDepth::Sixteen,
+                width: 3,
+                height: 2,
+                samples: Samples::U16(native.clone().into()),
+            }),
+        )
+        .expect("valid native source");
     (doc, native)
 }
 
@@ -526,12 +557,14 @@ pub(super) fn spot_doc() -> Document {
     let plane = 16;
     // The test document is opaque: a 3-channel composite keeps the embedded
     // PSD's extra channels to the two document channels under test.
-    doc.composite = PixelBuffer {
-        width: 4,
-        height: 4,
-        channels: 3,
-        data: doc.composite.data[..3 * plane].to_vec().into(),
-    };
+    doc.composite
+        .replace(PixelBuffer {
+            width: 4,
+            height: 4,
+            channels: 3,
+            data: doc.composite.data[..3 * plane].to_vec().into(),
+        })
+        .expect("valid composite");
     doc.channels.push(pictura_core::Channel {
         id: 0,
         data: vec![40; plane].into(),
@@ -893,7 +926,10 @@ fn pdf_jpeg_requests_the_quality() {
 fn multi_page_pdf_writes_one_page_per_document() {
     let first = rgb_doc(32, 24, 72.0, None);
     let second = rgb_doc(24, 16, 72.0, None);
-    let pages = [(&first, &first.composite), (&second, &second.composite)];
+    let pages = [
+        (&first, first.composite.buffer()),
+        (&second, second.composite.buffer()),
+    ];
     let pdf = write_pdf_pages(&pages, &PdfOptions::default(), &env()).expect("writes");
     let text = text(&pdf);
     assert!(text.contains("/Count 2"));
@@ -904,7 +940,10 @@ fn multi_page_pdf_writes_one_page_per_document() {
 fn multi_page_pdf_keeps_page_size() {
     let first = rgb_doc(600, 300, 300.0, None);
     let second = rgb_doc(300, 150, 300.0, None);
-    let pages = [(&first, &first.composite), (&second, &second.composite)];
+    let pages = [
+        (&first, first.composite.buffer()),
+        (&second, second.composite.buffer()),
+    ];
     let pdf = write_pdf_pages(&pages, &PdfOptions::default(), &env()).expect("writes");
     let text = text(&pdf);
     assert!(text.contains("144"));
@@ -915,7 +954,10 @@ fn multi_page_pdf_keeps_page_size() {
 fn multi_page_pdf_cross_page_references_are_valid() {
     let first = rgb_doc(8, 8, 72.0, None);
     let second = rgb_doc(8, 8, 72.0, None);
-    let pages = [(&first, &first.composite), (&second, &second.composite)];
+    let pages = [
+        (&first, first.composite.buffer()),
+        (&second, second.composite.buffer()),
+    ];
     let pdf = write_pdf_pages(&pages, &PdfOptions::default(), &env()).expect("writes");
     let text = text(&pdf);
     assert!(text.contains("/Kids"));

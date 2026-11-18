@@ -89,7 +89,9 @@ mod tests {
 
     fn doc(seed: u8) -> Document {
         let mut doc = Document::new(64, 256, ColorMode::Rgb, BitDepth::Eight);
-        doc.composite.data = pattern(seed).into();
+        doc.composite
+            .replace_data(pattern(seed).into())
+            .expect("valid composite plane");
         doc
     }
 
@@ -102,7 +104,9 @@ mod tests {
         let mut live = doc(0);
         history.capture_live(&mut live, &None, &target, "Open");
         for seed in 1..=8u8 {
-            live.composite.data = pattern(seed).into();
+            live.composite
+                .replace_data(pattern(seed).into())
+                .expect("valid composite plane");
             history.capture_live(&mut live, &None, &target, "Edit");
             assert!(
                 history.count() <= 2 || history.held_bytes() as usize <= plane * 5 / 2,
@@ -136,7 +140,9 @@ mod tests {
         let mut live = doc(0);
         history.capture_live(&mut live, &None, &target, "Open");
         for seed in 1..=8u8 {
-            live.composite.data = pattern(seed).into();
+            live.composite
+                .replace_data(pattern(seed).into())
+                .expect("valid composite plane");
             history.capture_live(&mut live, &None, &target, "Edit");
             assert!(history.count() <= 2 || history.held_bytes() as usize <= plane * 5 / 2);
         }
@@ -158,7 +164,9 @@ mod tests {
         let mut live = doc(0);
         history.capture_live(&mut live, &None, &target, "Open");
         for seed in 1..=5u8 {
-            live.composite.data = pattern(seed).into();
+            live.composite
+                .replace_data(pattern(seed).into())
+                .expect("valid composite plane");
             history.capture_live(&mut live, &None, &target, "Edit");
         }
         assert_eq!(history.count(), 6);

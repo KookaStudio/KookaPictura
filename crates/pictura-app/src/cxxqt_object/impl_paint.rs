@@ -285,9 +285,7 @@ fn preview_clip(preview: &PreviewStroke, lx: i32, ly: i32) -> u8 {
     preview.clip.as_ref().map_or(255, |clip| {
         let dx = lx.max(0) as u32 * preview.scale;
         let dy = ly.max(0) as u32 * preview.scale;
-        clip.data
-            .sample(dy as usize * clip.width as usize + dx as usize)
-            .unwrap_or(0)
+        clip.sample(dx as i32, dy as i32)
     })
 }
 

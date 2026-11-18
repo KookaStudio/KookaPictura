@@ -53,7 +53,7 @@ pub fn content_influence(doc: &Document, path: &str) -> Option<PsdRect> {
     let layer = resolve_path(doc, path)?;
     let index: usize = path.rsplit('/').next()?.parse().ok()?;
     let siblings: &[Layer] = match parent_path(path) {
-        Some(parent) => &resolve_path(doc, parent)?.children,
+        Some(parent) => resolve_path(doc, parent)?.children(),
         None => &doc.layers,
     };
     // A clipped member is confined to its base's rendered alpha, so the base's
@@ -91,7 +91,7 @@ pub fn ink_influence(doc: &Document, path: &str) -> Option<PsdRect> {
     let layer = resolve_path(doc, path)?;
     let raster_alone = influence_of(doc, layer) == Some(layer.rect)
         && layer.rect.clip_to(doc.width, doc.height) == Some(rect);
-    if layer.type_tool.is_none() || !raster_alone {
+    if layer.type_tool().is_none() || !raster_alone {
         return Some(rect);
     }
     let Some(ink) = ink_bounds(layer) else {
@@ -108,7 +108,7 @@ fn area(rect: PsdRect) -> u64 {
 fn ink_bounds(layer: &Layer) -> Option<PsdRect> {
     let width = usize::try_from(layer.rect.width()).ok()?;
     let height = usize::try_from(layer.rect.height()).ok()?;
-    let alpha = &layer.channels.iter().find(|c| c.id == -1)?.data;
+    let alpha = &layer.channels().iter().find(|c| c.id == -1)?.data;
     let rows = (0..height).into_par_iter().filter_map(|y| {
         let row = alpha.row(y, width)?;
         let first = row.iter().position(|&a| a != 0)?;
@@ -169,9 +169,9 @@ pub fn union(a: Option<PsdRect>, b: Option<PsdRect>) -> Option<PsdRect> {
 }
 
 fn influence_of(doc: &Document, layer: &Layer) -> Option<PsdRect> {
-    if layer.is_group {
+    if layer.is_group() {
         let mut rect: Option<PsdRect> = None;
-        for child in &layer.children {
+        for child in layer.children() {
             let child = influence_of(doc, child)?;
             rect = Some(match rect {
                 None => child,
@@ -235,7 +235,7 @@ mod tests {
 
     fn pixel_layer(name: &str, at: PsdRect, color: u8, alpha: u8) -> Layer {
         let n = (at.width().max(0) * at.height().max(0)) as usize;
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: name.into(),
             rect: at,
             blend: BlendMode::Normal,
@@ -249,16 +249,16 @@ mod tests {
                 })
                 .to_vec(),
             ..Default::default()
-        }
+        })
     }
 
     fn group(name: &str, children: Vec<Layer>) -> Layer {
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: name.into(),
             is_group: true,
             children: LayerStack::from_layers(children),
             ..Default::default()
-        }
+        })
     }
 
     fn masked(rect: PsdRect, feather: f64) -> LayerMask {
@@ -316,11 +316,11 @@ mod tests {
     fn clipping_run_is_influenced() {
         let d = doc(vec![
             pixel_layer("base", rect(0, 0, 10, 10), 10, 255),
-            Layer {
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 clipping: true,
                 blend: BlendMode::Multiply,
-                ..pixel_layer("clip", rect(5, 5, 20, 20), 200, 200)
-            },
+                ..pictura_core::LayerParts::from(pixel_layer("clip", rect(5, 5, 20, 20), 200, 200))
+            }),
         ]);
         let base = influence(&d, "0").expect("bounded");
         assert!(base.left <= 5 && base.top <= 5 && base.right >= 25 && base.bottom >= H as i32);
@@ -334,14 +334,24 @@ mod tests {
         let mut d = doc(vec![
             pixel_layer("background", rect(0, 0, W as i32, H as i32), 10, 255),
             pixel_layer("base", rect(4, 5, 6, 7), 20, 255),
-            Layer {
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 clipping: true,
-                ..pixel_layer("clip", rect(0, 0, W as i32, H as i32), 30, 255)
-            },
-            Layer {
+                ..pictura_core::LayerParts::from(pixel_layer(
+                    "clip",
+                    rect(0, 0, W as i32, H as i32),
+                    30,
+                    255,
+                ))
+            }),
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 clipping: true,
-                ..pixel_layer("clip2", rect(0, 0, W as i32, H as i32), 40, 255)
-            },
+                ..pictura_core::LayerParts::from(pixel_layer(
+                    "clip2",
+                    rect(0, 0, W as i32, H as i32),
+                    40,
+                    255,
+                ))
+            }),
         ]);
         let base_rect = rect(4, 5, 6, 7);
         let before = influence(&d, "2").expect("bounded before");
@@ -358,10 +368,15 @@ mod tests {
         let mut d = doc(vec![
             pixel_layer("background", rect(0, 0, W as i32, H as i32), 10, 255),
             pixel_layer("base", rect(4, 5, 6, 7), 20, 255),
-            Layer {
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 clipping: true,
-                ..pixel_layer("clip", rect(0, 0, W as i32, H as i32), 30, 255)
-            },
+                ..pictura_core::LayerParts::from(pixel_layer(
+                    "clip",
+                    rect(0, 0, W as i32, H as i32),
+                    30,
+                    255,
+                ))
+            }),
         ]);
         let canvas = rect(0, 0, W as i32, H as i32);
         let before = influence(&d, "1").expect("bounded before");
@@ -378,10 +393,10 @@ mod tests {
         let mut d = doc(vec![
             pixel_layer("background", rect(0, 0, W as i32, H as i32), 10, 255),
             pixel_layer("base", rect(2, 3, 4, 5), 20, 255),
-            Layer {
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 clipping: true,
-                ..pixel_layer("clip", rect(10, 20, 5, 4), 30, 255)
-            },
+                ..pictura_core::LayerParts::from(pixel_layer("clip", rect(10, 20, 5, 4), 30, 255))
+            }),
             pixel_layer("top", rect(0, 0, W as i32, H as i32), 40, 255),
         ]);
         let base_rect = rect(2, 3, 4, 5);
@@ -404,14 +419,19 @@ mod tests {
         let mut d = doc(vec![
             pixel_layer("background", rect(0, 0, W as i32, H as i32), 10, 255),
             pixel_layer("base", rect(4, 5, 6, 7), 20, 255),
-            Layer {
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 clipping: true,
-                ..pixel_layer("member", rect(6, 7, 4, 3), 30, 255)
-            },
-            Layer {
+                ..pictura_core::LayerParts::from(pixel_layer("member", rect(6, 7, 4, 3), 30, 255))
+            }),
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 clipping: true,
-                ..pixel_layer("freed", rect(0, 0, W as i32, H as i32), 40, 255)
-            },
+                ..pictura_core::LayerParts::from(pixel_layer(
+                    "freed",
+                    rect(0, 0, W as i32, H as i32),
+                    40,
+                    255,
+                ))
+            }),
         ]);
         let canvas = rect(0, 0, W as i32, H as i32);
         // The clicked middle member frees itself and the full-canvas member
@@ -454,14 +474,14 @@ mod tests {
     #[test]
     fn unbased_clipped_run_keeps_the_conservative_union() {
         let d = doc(vec![
-            Layer {
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 clipping: true,
-                ..pixel_layer("clip", rect(0, 0, 10, 10), 10, 255)
-            },
-            Layer {
+                ..pictura_core::LayerParts::from(pixel_layer("clip", rect(0, 0, 10, 10), 10, 255))
+            }),
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 clipping: true,
-                ..pixel_layer("clip2", rect(20, 10, 5, 5), 20, 255)
-            },
+                ..pictura_core::LayerParts::from(pixel_layer("clip2", rect(20, 10, 5, 5), 20, 255))
+            }),
         ]);
         assert_eq!(influence(&d, "0"), Some(rect(0, 0, 15, 24)));
     }
@@ -471,10 +491,15 @@ mod tests {
         let d = doc(vec![
             pixel_layer("background", rect(0, 0, W as i32, H as i32), 10, 255),
             pixel_layer("base", rect(4, 5, 10, 8), 20, 255),
-            Layer {
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 clipping: true,
-                ..pixel_layer("clip", rect(0, 0, W as i32, H as i32), 200, 255)
-            },
+                ..pictura_core::LayerParts::from(pixel_layer(
+                    "clip",
+                    rect(0, 0, W as i32, H as i32),
+                    200,
+                    255,
+                ))
+            }),
         ]);
         let damage = influence(&d, "2").expect("bounded");
         let full = crate::composite_rgba(&d);
@@ -548,25 +573,29 @@ mod tests {
 
     #[test]
     fn unmasked_adjustment_is_unbounded() {
-        let d = doc(vec![Layer {
-            name: "adjustment".into(),
-            adjustment: Some(crate::encode_brightness_contrast(10, 0)),
-            rect: rect(0, 0, W as i32, H as i32),
-            ..Default::default()
-        }]);
+        let d = doc(vec![pictura_codec::layer_from_parts(
+            pictura_core::LayerParts {
+                name: "adjustment".into(),
+                adjustment: Some(crate::encode_brightness_contrast(10, 0)),
+                rect: rect(0, 0, W as i32, H as i32),
+                ..Default::default()
+            },
+        )]);
         assert_eq!(influence(&d, "0"), None);
     }
 
     #[test]
     fn feathered_adjustment_is_bounded() {
         let mask = masked(rect(16, 20, 4, 4), 8.0);
-        let d = doc(vec![Layer {
-            name: "adjustment".into(),
-            adjustment: Some(crate::encode_brightness_contrast(10, 0)),
-            rect: rect(0, 0, W as i32, H as i32),
-            mask: Some(mask),
-            ..Default::default()
-        }]);
+        let d = doc(vec![pictura_codec::layer_from_parts(
+            pictura_core::LayerParts {
+                name: "adjustment".into(),
+                adjustment: Some(crate::encode_brightness_contrast(10, 0)),
+                rect: rect(0, 0, W as i32, H as i32),
+                mask: Some(mask),
+                ..Default::default()
+            },
+        )]);
         let damage = influence(&d, "0").expect("bounded");
         assert!(damage.width() > 4 && damage.height() > 4);
         assert!(damage.left < 20 && damage.top < 16);
@@ -584,16 +613,18 @@ mod tests {
         let mut d = doc(vec![
             pixel_layer("bottom", rect(0, 0, W as i32, H as i32), 10, 255),
             pixel_layer("edited", target, 90, 255),
-            Layer {
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 knockout: Knockout::Deep,
-                ..pixel_layer("knockout", rect(4, 4, 8, 8), 20, 128)
-            },
+                ..pictura_core::LayerParts::from(pixel_layer("knockout", rect(4, 4, 8, 8), 20, 128))
+            }),
         ]);
         assert_eq!(influence(&d, "1"), None);
         assert_eq!(content_influence(&d, "1"), Some(target));
 
-        d.composite = crate::composite_rgba(&d);
-        d.layers[1].channels[0].data = vec![200; 36].into();
+        d.composite
+            .replace(crate::composite_rgba(&d))
+            .expect("valid composite");
+        d.layers[1].channels_mut()[0].data = vec![200; 36].into();
         let full = crate::composite_rgba(&d);
         let region = crate::composite::composite_rgba_region(&d, 6, 6, 6, 6);
         for (channel, plane) in region.data.chunks(36).enumerate() {
@@ -637,10 +668,10 @@ mod tests {
     fn knockout_base_change_is_unbounded() {
         let d = doc(vec![
             pixel_layer("bottom", rect(0, 0, W as i32, H as i32), 10, 255),
-            Layer {
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 knockout: Knockout::Shallow,
-                ..pixel_layer("knockout", rect(4, 4, 8, 8), 20, 255)
-            },
+                ..pictura_core::LayerParts::from(pixel_layer("knockout", rect(4, 4, 8, 8), 20, 255))
+            }),
         ]);
         assert_eq!(influence(&d, "0"), None);
     }
@@ -653,13 +684,15 @@ mod tests {
             points: vec![[512, 512], [1024, 512], [1024, 1024], [512, 1024]],
             ..Default::default()
         });
-        let d = doc(vec![Layer {
-            name: "adjustment".into(),
-            adjustment: Some(crate::encode_brightness_contrast(10, 0)),
-            rect: rect(0, 0, W as i32, H as i32),
-            vector_mask: Some(mask),
-            ..Default::default()
-        }]);
+        let d = doc(vec![pictura_codec::layer_from_parts(
+            pictura_core::LayerParts {
+                name: "adjustment".into(),
+                adjustment: Some(crate::encode_brightness_contrast(10, 0)),
+                rect: rect(0, 0, W as i32, H as i32),
+                vector_mask: Some(mask),
+                ..Default::default()
+            },
+        )]);
         assert_eq!(influence(&d, "0"), None);
     }
 
@@ -668,10 +701,10 @@ mod tests {
         let mut d = doc(vec![
             pixel_layer("bottom", rect(0, 0, 10, 10), 10, 255),
             pixel_layer("base", rect(0, 0, 10, 10), 20, 255),
-            Layer {
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 clipping: true,
-                ..pixel_layer("clip", rect(10, 20, 4, 4), 30, 255)
-            },
+                ..pictura_core::LayerParts::from(pixel_layer("clip", rect(10, 20, 4, 4), 30, 255))
+            }),
         ]);
         let damage = influence(&d, "1").expect("bounded");
         assert!(damage.right >= 24 && damage.bottom >= 14);
@@ -732,19 +765,19 @@ mod tests {
         let mut styled = pixel_layer("styled", rect(3, 4, 10, 8), 200, 255);
         crate::set_layer_style_value(&mut styled, "dropShadow.on", 1.0);
         crate::set_layer_style_value(&mut styled, "dropShadow.size", 3.0);
-        let clip = Layer {
+        let clip = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             clipping: true,
-            ..pixel_layer("clip", rect(0, 0, 12, 10), 120, 200)
-        };
+            ..pictura_core::LayerParts::from(pixel_layer("clip", rect(0, 0, 12, 10), 120, 200))
+        });
         let mut masked_layer = pixel_layer("masked", rect(10, 10, 8, 8), 40, 255);
         masked_layer.mask = Some(masked(rect(10, 10, 8, 8), 3.0));
-        let adjustment = Layer {
+        let adjustment = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "adjustment".into(),
             adjustment: Some(crate::encode_brightness_contrast(20, 0)),
             rect: rect(0, 0, W as i32, H as i32),
             mask: Some(masked(rect(24, 16, 5, 5), 0.0)),
             ..Default::default()
-        };
+        });
         doc(vec![
             pixel_layer("bottom", rect(0, 0, W as i32, H as i32), 10, 255),
             styled,
@@ -828,11 +861,11 @@ mod tests {
                     union(before_rect, total(&after, &[&created]))
                 }
                 5 => {
-                    let group_index = (0..len).find(|&i| before.layers[i].is_group);
+                    let group_index = (0..len).find(|&i| before.layers[i].is_group());
                     let Some(group_index) = group_index else {
                         continue;
                     };
-                    let child_count = before.layers[group_index].children.len();
+                    let child_count = before.layers[group_index].children().len();
                     if child_count == 0 {
                         continue;
                     }
@@ -879,7 +912,9 @@ mod tests {
                     let Some(layer) = crate::resolve_path_mut(&mut after, path) else {
                         continue;
                     };
-                    layer.adjustment = Some(crate::encode_brightness_contrast(30, 0));
+                    pictura_codec::edit_layer(layer, |parts| {
+                        parts.adjustment = Some(crate::encode_brightness_contrast(30, 0))
+                    });
                     union(before_rect, total(&after, &[path]))
                 }
                 9 => {

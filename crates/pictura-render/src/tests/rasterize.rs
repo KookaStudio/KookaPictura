@@ -19,12 +19,12 @@ fn authored_solid_fill_is_version16_descriptor() {
     let mut d = doc(2, 2, Vec::new());
     let path = add_solid_fill(&mut d, "", [10, 200, 30, 255]);
     let layer = resolve_path(&d, &path).unwrap();
-    let data = layer.adjustment.as_ref().expect("SoCo block");
+    let data = layer.adjustment().expect("SoCo block");
     assert_eq!(data.key, *b"SoCo");
     assert_eq!(&data.data[0..4], &[0, 0, 0, 16], "version-16 header");
     assert_eq!(
-        decode_adjustment(data),
-        Some(Adjustment::SolidFill([10, 200, 30, 255]))
+        pictura_codec::decode_fill(data),
+        Some(pictura_core::FillContent::Solid([10, 200, 30, 255]))
     );
 
     let out = composite_rgba(&d);
@@ -67,7 +67,7 @@ fn rasterize_bakes_color_and_clears_fill() {
 
     assert!(rasterize_fill_content(&mut d, &path));
     let layer = resolve_path(&d, &path).unwrap();
-    assert!(layer.adjustment.is_none(), "fill data is cleared");
+    assert!(layer.adjustment().is_none(), "fill data is cleared");
     assert_eq!(layer.name, name, "name is kept");
     assert_eq!(crate::channel(layer, 0).unwrap(), &[1, 1, 1, 1]);
     assert_eq!(crate::channel(layer, 1).unwrap(), &[2, 2, 2, 2]);
@@ -101,7 +101,7 @@ fn rasterize_bakes_non_opaque_in_house_fill() {
 
     assert!(rasterize_fill_content(&mut d, "0"));
     let layer = resolve_path(&d, "0").unwrap();
-    assert!(layer.adjustment.is_none(), "fill data is cleared");
+    assert!(layer.adjustment().is_none(), "fill data is cleared");
     assert_eq!(crate::channel(layer, 0).unwrap(), &[10, 10, 10, 10]);
     assert_eq!(crate::channel(layer, 1).unwrap(), &[20, 20, 20, 20]);
     assert_eq!(crate::channel(layer, 2).unwrap(), &[30, 30, 30, 30]);
@@ -195,7 +195,7 @@ fn pattern_fill_is_fill_content_and_rasterizes_to_tiles() {
     let before = composite_rgba(&doc);
     assert!(rasterize_fill_content(&mut doc, "1"));
     let layer = resolve_path(&doc, "1").unwrap();
-    assert!(layer.adjustment.is_none(), "fill data is cleared");
+    assert!(layer.adjustment().is_none(), "fill data is cleared");
 
     let red = crate::channel(layer, 0).unwrap();
     for y in 0..8usize {
@@ -221,16 +221,18 @@ fn pattern_fill_is_fill_content_and_rasterizes_to_tiles() {
 #[test]
 fn pattern_fill_with_missing_pattern_rasterizes_to_placeholder() {
     let mut doc = pattern_fixture_doc();
-    resolve_path_mut(&mut doc, "1").unwrap().adjustment = Some(ptfl(&PatternFillParams {
-        pattern_id: "not-installed".into(),
-        scale: 100.0,
-        link_with_layer: true,
-        origin: (0, 0),
-    }));
+    pictura_codec::edit_layer(resolve_path_mut(&mut doc, "1").unwrap(), |parts| {
+        parts.adjustment = Some(ptfl(&PatternFillParams {
+            pattern_id: "not-installed".into(),
+            scale: 100.0,
+            link_with_layer: true,
+            origin: (0, 0),
+        }))
+    });
 
     assert!(rasterize_fill_content(&mut doc, "1"));
     let layer = resolve_path(&doc, "1").unwrap();
-    assert!(layer.adjustment.is_none(), "fill data is cleared");
+    assert!(layer.adjustment().is_none(), "fill data is cleared");
     assert_eq!(crate::channel(layer, 0).unwrap(), &[128u8; 64]);
     assert_eq!(crate::channel(layer, -1).unwrap(), &[255u8; 64]);
 }
@@ -253,9 +255,9 @@ fn rasterize_all_counts_fill_layers() {
     let second = add_solid_fill(&mut d, &first, [2, 2, 2, 255]);
     let third = add_gradient_fill(&mut d, &second);
     assert_eq!(rasterize_all_layers(&mut d), 3);
-    assert!(resolve_path(&d, &first).unwrap().adjustment.is_none());
-    assert!(resolve_path(&d, &second).unwrap().adjustment.is_none());
-    assert!(resolve_path(&d, &third).unwrap().adjustment.is_none());
+    assert!(resolve_path(&d, &first).unwrap().adjustment().is_none());
+    assert!(resolve_path(&d, &second).unwrap().adjustment().is_none());
+    assert!(resolve_path(&d, &third).unwrap().adjustment().is_none());
     assert_eq!(rasterize_all_layers(&mut d), 0, "already rasterized");
 }
 
@@ -272,7 +274,7 @@ fn gradient_fill_is_fill_content_and_rasterizes_to_ramp() {
 
     assert!(rasterize_fill_content(&mut d, &path));
     let layer = resolve_path(&d, &path).unwrap();
-    assert!(layer.adjustment.is_none(), "fill data is cleared");
+    assert!(layer.adjustment().is_none(), "fill data is cleared");
     let red = crate::channel(layer, 0).unwrap();
     assert!(red.iter().any(|&v| v != red[0]), "non-uniform ramp");
     assert!(red[0] < 8 && red[7] > 247, "black-to-white endpoints");
@@ -329,7 +331,7 @@ fn rasterize_refuses_colour_noise_gradient() {
     );
     assert!(!is_fill_content_layer(resolve_path(&d, "0").unwrap()));
     assert!(!rasterize_fill_content(&mut d, "0"));
-    assert!(resolve_path(&d, "0").unwrap().adjustment.is_some());
+    assert!(resolve_path(&d, "0").unwrap().adjustment().is_some());
 }
 
 #[test]
@@ -347,7 +349,7 @@ fn rasterize_shape_bakes_fill_and_drops_the_shape() {
 
     assert!(rasterize_shape(&mut d, &path));
     let layer = resolve_path(&d, &path).unwrap();
-    assert!(layer.adjustment.is_none(), "fill data is cleared");
+    assert!(layer.adjustment().is_none(), "fill data is cleared");
     assert!(
         layer.extra_block(b"vmsk").is_none(),
         "vector mask is dropped"
@@ -380,13 +382,15 @@ fn a_vsms_shape_layer_is_recognized_and_rasterizes() {
         1,
         "the outline reads from vsms"
     );
-    resolve_path_mut(&mut d, &path)
-        .expect("Shape path")
-        .extra_blocks
-        .push(pictura_core::LayerBlock {
-            key: *b"vstk",
-            data: vec![1, 2, 3].into(),
-        });
+    pictura_codec::edit_layer(
+        resolve_path_mut(&mut d, &path).expect("Shape path"),
+        |parts| {
+            parts.extra_blocks.push(pictura_core::LayerBlock {
+                key: *b"vstk",
+                data: vec![1, 2, 3].into(),
+            })
+        },
+    );
     let before = composite_rgba(&d);
 
     assert!(rasterize_shape(&mut d, &path));
@@ -435,9 +439,11 @@ fn a_pattern_filled_shape_rasterizes_with_the_document_pattern() {
     {
         let layer = resolve_path_mut(&mut d, path).expect("fill layer");
         layer.vector_mask = pictura_codec::decode_vector_mask(&data, width, height);
-        layer.extra_blocks.push(pictura_core::LayerBlock {
-            key: *b"vmsk",
-            data: data.into(),
+        pictura_codec::edit_layer(layer, |parts| {
+            parts.extra_blocks.push(pictura_core::LayerBlock {
+                key: *b"vmsk",
+                data: data.into(),
+            })
         });
     }
     assert!(
@@ -563,32 +569,34 @@ fn rasterize_all_layers_rasterizes_a_type_layer() {
     let mut d = doc(200, 80, Vec::new());
     add_solid_fill(&mut d, "", [1, 1, 1, 255]);
     {
-        let _ = d.layers.push(Layer {
-            name: "text".into(),
-            rect: full(200, 80),
-            type_tool: Some(pictura_core::TypeTool {
-                transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
-                text: "Hi".into(),
-                bounds: [0, 0, 200, 80],
-                text_desc: Vec::new().into(),
-                warp_desc: Vec::new().into(),
-                fonts: Vec::new(),
-                style: Some(pictura_core::TextStyle {
-                    font: Some("Arial".into()),
-                    character: pictura_core::CharacterAttrs {
-                        size: 48.0,
-                        fill_color: [1.0, 0.0, 0.0, 0.0],
-                        ..pictura_core::CharacterAttrs::default()
-                    },
-                    paragraph: pictura_core::ParagraphAttrs::default(),
-                    ..pictura_core::TextStyle::default()
+        let _ = d
+            .layers
+            .push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
+                name: "text".into(),
+                rect: full(200, 80),
+                type_tool: Some(pictura_core::TypeTool {
+                    transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+                    text: "Hi".into(),
+                    bounds: [0, 0, 200, 80],
+                    text_desc: Vec::new().into(),
+                    warp_desc: Vec::new().into(),
+                    fonts: Vec::new(),
+                    style: Some(pictura_core::TextStyle {
+                        font: Some("Arial".into()),
+                        character: pictura_core::CharacterAttrs {
+                            size: 48.0,
+                            fill_color: [1.0, 0.0, 0.0, 0.0],
+                            ..pictura_core::CharacterAttrs::default()
+                        },
+                        paragraph: pictura_core::ParagraphAttrs::default(),
+                        ..pictura_core::TextStyle::default()
+                    }),
+                    vertical: false,
+                    box_bounds: None,
+                    path: None,
                 }),
-                vertical: false,
-                box_bounds: None,
-                path: None,
-            }),
-            ..Default::default()
-        });
+                ..Default::default()
+            }));
     };
     assert_eq!(
         rasterize_all_layers(&mut d),
@@ -596,7 +604,7 @@ fn rasterize_all_layers_rasterizes_a_type_layer() {
         "fill and type both rasterize"
     );
     assert!(
-        resolve_path(&d, "1").unwrap().type_tool.is_none(),
+        resolve_path(&d, "1").unwrap().type_tool().is_none(),
         "the type layer is materialized"
     );
 }

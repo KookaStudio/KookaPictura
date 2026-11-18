@@ -17,8 +17,8 @@ pub(crate) fn packed_plane_len(doc: &Document) -> usize {
 
 /// True when the document was read from a depth-1 Bitmap source.
 pub(crate) fn is_bitmap_source(doc: &Document) -> bool {
-    doc.source_mode == Some(ColorMode::Bitmap)
-        && doc.source_planes.as_ref().map(|s| s.depth) == Some(BitDepth::One)
+    doc.source.mode() == Some(ColorMode::Bitmap)
+        && doc.source.planes().as_ref().map(|s| s.depth) == Some(BitDepth::One)
 }
 
 /// True when `doc` can be written back as a flat, unchanged Bitmap: a depth-1
@@ -30,7 +30,7 @@ pub(crate) fn is_bitmap_source(doc: &Document) -> bool {
 pub(crate) fn writes_bitmap(doc: &Document) -> bool {
     if !is_bitmap_source(doc)
         || doc.composite.channels != 3
-        || !doc.merged_composite_present
+        || !doc.composite.merged_output()
         || !doc.layers.is_empty()
     {
         return false;
@@ -85,7 +85,8 @@ pub(crate) fn validate_extra_channels(doc: &Document, bitmap_mode: bool) -> Resu
 pub(crate) fn bitmap_planes(doc: &Document) -> Result<Vec<Cow<'_, [u8]>>, PsdError> {
     let packed = packed_plane_len(doc);
     let retained = doc
-        .source_planes
+        .source
+        .planes()
         .as_ref()
         .and_then(|store| store.samples.as_u8())
         .ok_or_else(|| PsdError::Invalid("Bitmap packed plane missing".into()))?;

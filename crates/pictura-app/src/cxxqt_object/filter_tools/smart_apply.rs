@@ -28,7 +28,7 @@ pub(in crate::cxxqt_object) fn on_smart_object(rust: &PictureViewRust) -> bool {
             .as_ref()
             .zip(rust.layer_target.single())
             .and_then(|(doc, path)| pictura_render::resolve_path(doc, path))
-            .is_some_and(|layer| layer.smart_object.is_some())
+            .is_some_and(|layer| layer.smart_object().is_some())
 }
 
 /// The path of the embedded Smart Object a Smart Filter can attach to.
@@ -204,7 +204,7 @@ pub(in crate::cxxqt_object) fn edit_begin(
             .doc
             .as_ref()
             .and_then(|doc| pictura_render::resolve_path(doc, path))
-            .and_then(|layer| layer.smart_object.as_ref())
+            .and_then(|layer| layer.smart_object())
             .and_then(|so| so.smart_filters.get(index))
             .is_some_and(|filter| matches!(edit_kind(filter), 3 | 4));
     if editable {
@@ -241,15 +241,18 @@ pub(in crate::cxxqt_object) fn smart_preview(
     restore_preview(rust, &path);
     let layer = pictura_render::resolve_path_mut(rust.session.doc.as_mut()?, &path)?;
     let baseline = PreviewBaseline::Layer(Box::new(layer.clone()));
-    let so = layer.smart_object.as_mut()?;
-    if let Some(index) = editing {
-        so.smart_filters.truncate(index);
-    }
-    so.smart_filters.push(record);
-    if so.filter_mask.is_none() && mask.is_some() {
-        so.filter_mask = mask;
-        so.filter_mask_enabled = true;
-    }
+    layer.smart_object()?;
+    pictura_codec::edit_layer(layer, |parts| {
+        let so = parts.smart_object.as_mut().expect("checked");
+        if let Some(index) = editing {
+            so.smart_filters.truncate(index);
+        }
+        so.smart_filters.push(record);
+        if so.filter_mask.is_none() && mask.is_some() {
+            so.filter_mask = mask;
+            so.filter_mask_enabled = true;
+        }
+    });
     let region = (!layer_has_effects(layer)).then_some(layer.rect);
     rust.session.live.set_filter_preview(FilterPreview {
         layer_path: path,

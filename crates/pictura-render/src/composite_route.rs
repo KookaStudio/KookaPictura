@@ -7,23 +7,21 @@
 //! and knockout are decided by the caller, and Blend If, Dissolve, and text
 //! gamma apply inside the blend; each stays an attribute check.
 
-use pictura_adjust::Adjustment;
+use pictura_core::{Adjustment, FillContent, LayerContent};
 use pictura_core::{BlendMode, Layer};
+use std::sync::Arc;
 
 use crate::smart_filter::decode_smart_filter;
 
-// The decoded adjustment is held by value: this route is built once per layer
-// and consumed immediately, so boxing it would add an allocation on the
-// composite path for no lifetime benefit.
-#[allow(clippy::large_enum_variant)]
-pub(crate) enum ContentRoute {
+pub enum ContentRoute {
     /// A group that recurses onto the running canvas (exact only at opacity
     /// 255 with no mask).
     PassThroughGroup,
     /// A group composited into its own canvas, then blended as one layer.
     IsolatedGroup,
     /// A fill-content or adjustment layer whose block decodes.
-    Fill(Adjustment),
+    Adjustment(Arc<Adjustment>),
+    Fill(Arc<FillContent>),
     /// An adjustment block that does not decode: a CPU no-op.
     UndecodedAdjustment,
     /// A smart object whose enabled filters all decode: the CPU re-renders
@@ -43,7 +41,7 @@ pub(crate) enum ContentRoute {
 /// every enabled filter one this engine models. The group's master switch does
 /// not matter, because the route still re-renders the source.
 pub(crate) fn smart_filters_apply(layer: &Layer) -> bool {
-    let Some(so) = layer.smart_object.as_ref() else {
+    let Some(so) = layer.smart_object() else {
         return false;
     };
     let mut enabled = 0usize;
@@ -60,7 +58,7 @@ pub(crate) fn smart_filters_apply(layer: &Layer) -> bool {
 /// and every enabled Smart Filter decodes. An unknown enabled filter keeps the
 /// normal proxy path so an imported baked result is not double-applied.
 pub(crate) fn stack_source_applies(layer: &Layer) -> bool {
-    let Some(so) = layer.smart_object.as_ref() else {
+    let Some(so) = layer.smart_object() else {
         return false;
     };
     if so.stack_mode.is_none() {
@@ -76,41 +74,44 @@ pub(crate) fn stack_source_applies(layer: &Layer) -> bool {
     crate::layer_source::stack_frame_count(so).is_some_and(|count| count >= 2)
 }
 
-pub(crate) fn content_route(layer: &Layer) -> ContentRoute {
-    if layer.is_group {
-        return if matches!(layer.blend, BlendMode::PassThrough)
-            && layer.opacity == 255
-            && layer.mask.is_none()
-            && layer.vector_mask.is_none()
-        {
-            ContentRoute::PassThroughGroup
-        } else {
-            ContentRoute::IsolatedGroup
-        };
+pub fn content_route(layer: &Layer) -> ContentRoute {
+    match layer.content() {
+        LayerContent::Group(_) => {
+            if matches!(layer.blend, BlendMode::PassThrough)
+                && layer.opacity == 255
+                && layer.mask.is_none()
+                && layer.vector_mask.is_none()
+            {
+                ContentRoute::PassThroughGroup
+            } else {
+                ContentRoute::IsolatedGroup
+            }
+        }
+        LayerContent::Adjustment(Some(value)) => ContentRoute::Adjustment(value.clone()),
+        LayerContent::Adjustment(None) => ContentRoute::UndecodedAdjustment,
+        LayerContent::Fill(value) | LayerContent::Shape(value) => ContentRoute::Fill(value.clone()),
+        LayerContent::SmartObject(_) => {
+            if smart_filters_apply(layer) {
+                ContentRoute::SmartFiltered
+            } else if stack_source_applies(layer) || crate::channel_plane(layer, 0).is_none() {
+                ContentRoute::SmartSource
+            } else if layer.extra_block(b"vscg").is_some() {
+                ContentRoute::UndecodedVectorFill
+            } else {
+                ContentRoute::Pixels
+            }
+        }
+        LayerContent::Text(Some(_)) if crate::channel_plane(layer, 0).is_none() => {
+            ContentRoute::TypeSource
+        }
+        LayerContent::Pixel | LayerContent::Text(_) => {
+            if layer.extra_block(b"vscg").is_some() {
+                ContentRoute::UndecodedVectorFill
+            } else {
+                ContentRoute::Pixels
+            }
+        }
     }
-    if let Some(adjustment) = crate::fill::decode_layer_fill(layer) {
-        return ContentRoute::Fill(adjustment);
-    }
-    if layer.adjustment.is_some() {
-        return ContentRoute::UndecodedAdjustment;
-    }
-    if smart_filters_apply(layer) {
-        return ContentRoute::SmartFiltered;
-    }
-    if stack_source_applies(layer) {
-        return ContentRoute::SmartSource;
-    }
-    let proxy = crate::channel_plane(layer, 0).is_some();
-    if layer.smart_object.is_some() && !proxy {
-        return ContentRoute::SmartSource;
-    }
-    if layer.type_tool.is_some() && !proxy {
-        return ContentRoute::TypeSource;
-    }
-    if layer.extra_block(b"vscg").is_some() {
-        return ContentRoute::UndecodedVectorFill;
-    }
-    ContentRoute::Pixels
 }
 
 #[cfg(test)]
@@ -124,7 +125,7 @@ pub(crate) mod tests {
     /// The CPU content path before the route existed, verbatim: the oracle for
     /// the classification. `UndecodedVectorFill` reaches `composite_pixels`.
     fn legacy_path(layer: &Layer) -> &'static str {
-        if layer.is_group {
+        if layer.is_group() {
             if matches!(layer.blend, BlendMode::PassThrough)
                 && layer.opacity == 255
                 && layer.mask.is_none()
@@ -134,15 +135,20 @@ pub(crate) mod tests {
             } else {
                 "isolated"
             }
-        } else if crate::fill::decode_layer_fill(layer).is_some() {
+        } else if crate::fill::decode_layer_fill(layer).is_some()
+            || layer
+                .adjustment()
+                .and_then(pictura_codec::decode_adjustment)
+                .is_some()
+        {
             "fill"
-        } else if layer.adjustment.is_some() {
+        } else if layer.adjustment().is_some() {
             "no-op"
         } else if smart_filters_apply_legacy(layer) {
             "smart-filtered"
-        } else if layer.smart_object.is_some() && crate::channel_plane(layer, 0).is_none() {
+        } else if layer.smart_object().is_some() && crate::channel_plane(layer, 0).is_none() {
             "smart-source"
-        } else if layer.type_tool.is_some() && crate::channel_plane(layer, 0).is_none() {
+        } else if layer.type_tool().is_some() && crate::channel_plane(layer, 0).is_none() {
             "type-source"
         } else {
             "pixels"
@@ -151,7 +157,7 @@ pub(crate) mod tests {
 
     /// The loop `composite_smart_filtered_source` ran before the predicate.
     fn smart_filters_apply_legacy(layer: &Layer) -> bool {
-        let Some(so) = layer.smart_object.as_ref() else {
+        let Some(so) = layer.smart_object() else {
             return false;
         };
         let mut enabled = 0usize;
@@ -171,7 +177,7 @@ pub(crate) mod tests {
         match route {
             ContentRoute::PassThroughGroup => "pass-through",
             ContentRoute::IsolatedGroup => "isolated",
-            ContentRoute::Fill(_) => "fill",
+            ContentRoute::Fill(_) | ContentRoute::Adjustment(_) => "fill",
             ContentRoute::UndecodedAdjustment => "no-op",
             ContentRoute::SmartFiltered => "smart-filtered",
             ContentRoute::SmartSource => "smart-source",
@@ -208,7 +214,7 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn smart(channels: Vec<Channel>, filters: Vec<SmartFilter>, master: bool) -> Layer {
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             rect: rect(),
             channels,
             smart_object: Some({
@@ -218,11 +224,11 @@ pub(crate) mod tests {
                 so
             }),
             ..Default::default()
-        }
+        })
     }
 
     pub(crate) fn type_layer(channels: Vec<Channel>) -> Layer {
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             rect: rect(),
             channels,
             type_tool: Some(TypeTool {
@@ -238,26 +244,28 @@ pub(crate) mod tests {
                 path: None,
             }),
             ..Default::default()
-        }
+        })
     }
 
     pub(crate) fn adjustment(key: [u8; 4], data: Vec<u8>) -> Layer {
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             rect: rect(),
             adjustment: Some(AdjustmentData {
                 key,
                 data: data.into(),
             }),
             ..Default::default()
-        }
+        })
     }
 
     pub(crate) fn corpus() -> Vec<Layer> {
-        let group = |blend, opacity| Layer {
-            is_group: true,
-            blend,
-            opacity,
-            ..Default::default()
+        let group = |blend, opacity| {
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
+                is_group: true,
+                blend,
+                opacity,
+                ..Default::default()
+            })
         };
         vec![
             group(BlendMode::PassThrough, 255),
@@ -265,14 +273,14 @@ pub(crate) mod tests {
             group(BlendMode::Normal, 255),
             adjustment(*b"nvrt", Vec::new()),
             adjustment(*b"zzzz", vec![1, 2, 3]),
-            Layer {
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 rect: rect(),
                 extra_blocks: vec![LayerBlock {
                     key: *b"vscg",
                     data: vec![0xFF; 3].into(),
                 }],
                 ..Default::default()
-            },
+            }),
             smart(proxy(), vec![filter(CAMERA_RAW_FILTER_ID, true)], true),
             smart(proxy(), vec![filter(CAMERA_RAW_FILTER_ID, true)], false),
             smart(proxy(), vec![filter(CAMERA_RAW_FILTER_ID, false)], true),
@@ -281,11 +289,11 @@ pub(crate) mod tests {
             smart(proxy(), Vec::new(), true),
             type_layer(Vec::new()),
             type_layer(proxy()),
-            Layer {
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 rect: rect(),
                 channels: proxy(),
                 ..Default::default()
-            },
+            }),
         ]
     }
 
@@ -314,7 +322,7 @@ pub(crate) mod tests {
             pictura_core::ColorMode::Rgb,
             pictura_core::BitDepth::Eight,
         );
-        let frame = Layer {
+        let frame = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             rect: PsdRect {
                 top: 0,
                 left: 0,
@@ -322,7 +330,7 @@ pub(crate) mod tests {
                 right: 1,
             },
             ..Default::default()
-        };
+        });
         doc.layers = LayerStack::from_layers(vec![frame.clone(), frame]);
         pictura_codec::write_psd(&doc).expect("two-frame payload")
     }
@@ -330,36 +338,42 @@ pub(crate) mod tests {
     #[test]
     fn a_stack_mode_forces_the_source_route() {
         let mut layer = smart(proxy(), Vec::new(), true);
-        {
-            let so = layer.smart_object.as_mut().expect("object");
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            let so = parts.smart_object.as_mut().expect("object");
             so.kind = pictura_core::SmartObjectKind::Embedded;
             so.set_payload(two_frame_payload());
             so.stack_mode = Some(pictura_core::StackMode::Median);
-        }
+        });
         assert!(stack_source_applies(&layer));
         assert!(matches!(content_route(&layer), ContentRoute::SmartSource));
 
-        layer.smart_object.as_mut().expect("object").smart_filters = vec![filter(1, true)];
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.smart_object.as_mut().expect("object").smart_filters = vec![filter(1, true)]
+        });
         assert!(
             !stack_source_applies(&layer),
             "unknown filter keeps the proxy"
         );
         assert!(matches!(content_route(&layer), ContentRoute::Pixels));
 
-        layer.smart_object.as_mut().expect("object").smart_filters =
-            vec![filter(CAMERA_RAW_FILTER_ID, true)];
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.smart_object.as_mut().expect("object").smart_filters =
+                vec![filter(CAMERA_RAW_FILTER_ID, true)]
+        });
         assert!(stack_source_applies(&layer));
         assert!(matches!(content_route(&layer), ContentRoute::SmartFiltered));
 
-        layer.smart_object.as_mut().expect("object").set_payload(
-            pictura_codec::write_psd(&pictura_core::Document::new(
-                1,
-                1,
-                pictura_core::ColorMode::Rgb,
-                pictura_core::BitDepth::Eight,
-            ))
-            .expect("single payload"),
-        );
+        pictura_codec::edit_layer(layer.as_mut(), |parts| {
+            parts.smart_object.as_mut().expect("object").set_payload(
+                pictura_codec::write_psd(&pictura_core::Document::new(
+                    1,
+                    1,
+                    pictura_core::ColorMode::Rgb,
+                    pictura_core::BitDepth::Eight,
+                ))
+                .expect("single payload"),
+            )
+        });
         assert!(!stack_source_applies(&layer), "one frame keeps the proxy");
     }
 }

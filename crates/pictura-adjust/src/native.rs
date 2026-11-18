@@ -7,6 +7,7 @@
 //! adjustment outside the covered set is refused with [`AdjustError::Unsupported`]
 //! and the store is left unchanged.
 
+use crate::types::levels_map;
 use pictura_core::{BitDepth, PixelBuffer, Sample, Samples};
 
 use pictura_color::model;
@@ -71,7 +72,7 @@ pub fn apply_native_in_mode(
             Ok(())
         }
         Adjustment::Levels(p) => {
-            let f = p.composite().map()?;
+            let f = levels_map(p.composite())?;
             let identity = LevelsChannel {
                 input_black: 0,
                 input_white: 255,
@@ -79,9 +80,9 @@ pub fn apply_native_in_mode(
                 output_black: 0,
                 output_white: 255,
             };
-            let r = p.red.unwrap_or(identity).map()?;
-            let g = p.green.unwrap_or(identity).map()?;
-            let b = p.blue.unwrap_or(identity).map()?;
+            let r = levels_map(p.red.unwrap_or(identity))?;
+            let g = levels_map(p.green.unwrap_or(identity))?;
+            let b = levels_map(p.blue.unwrap_or(identity))?;
             map(samples, width, height, channels, |p| {
                 [f(r(p[0])), f(g(p[1])), f(b(p[2]))]
             });

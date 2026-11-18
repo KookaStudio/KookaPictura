@@ -25,22 +25,24 @@ fn copy_keeps_attributes_and_lands_above_the_selection() {
 #[test]
 fn copy_without_a_selection_goes_on_top_and_groups_carry_children() {
     let mut group = empty_group("G");
-    group.children = pictura_core::LayerStack::from_layers(vec![pixel_layer("child", 4, 4, 7)]);
+    group.set_group_children(pictura_core::LayerStack::from_layers(vec![pixel_layer(
+        "child", 4, 4, 7,
+    )]));
     let src = doc_with(vec![group]);
     let mut dst = doc_with(vec![pixel_layer("a", 4, 4, 1)]);
 
     let created = copy_path_to_document(&src, "0", &mut dst, "");
 
     assert_eq!(created.as_deref(), Some("1"));
-    assert!(dst.layers[1].is_group);
-    assert_eq!(dst.layers[1].children[0].name, "child");
+    assert!(dst.layers[1].is_group());
+    assert_eq!(dst.layers[1].children()[0].name, "child");
 }
 
 #[test]
 fn copy_of_the_background_is_an_ordinary_layer() {
     let mut background = pixel_layer("Background", 4, 4, 255);
     background.background = true;
-    background.channels.retain(|c| c.id != -1);
+    background.channels_mut().retain(|c| c.id != -1);
     let src = doc_with(vec![background]);
     let mut dst = doc_with(vec![pixel_layer("a", 4, 4, 1)]);
 
@@ -48,7 +50,7 @@ fn copy_of_the_background_is_an_ordinary_layer() {
 
     let copy = &dst.layers[created.parse::<usize>().unwrap()];
     assert!(!copy.background && copy.lock == LockFlags::default());
-    assert!(copy.channels.iter().any(|c| c.id == -1), "gains an alpha");
+    assert!(copy.channels().iter().any(|c| c.id == -1), "gains an alpha");
 }
 
 #[test]

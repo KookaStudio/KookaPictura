@@ -474,7 +474,7 @@ console.log(lines.join('\n'));
 fn ag_psd_reads_authored_text_path() {
     use pictura_core::path::{PathPoint, Subpath};
     use pictura_core::{
-        BitDepth, Channel, ColorMode, Document, Layer, LayerBlock, PsdRect, TextPath, TextPathKind,
+        BitDepth, Channel, ColorMode, Document, LayerBlock, PsdRect, TextPath, TextPathKind,
         TypeSpec,
     };
 
@@ -517,7 +517,7 @@ fn ag_psd_reads_authored_text_path() {
     };
     let mut doc = Document::new(160, 80, ColorMode::Rgb, BitDepth::Eight);
     doc.layers
-        .push(Layer {
+        .push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "Path".into(),
             rect,
             channels: [0, 1, 2, -1]
@@ -533,7 +533,7 @@ fn ag_psd_reads_authored_text_path() {
             }],
             type_tool: Some(tool),
             ..Default::default()
-        })
+        }))
         .expect("push the type layer");
     let bytes = pictura_codec::write_psd(&doc).expect("writes");
     let fixture =

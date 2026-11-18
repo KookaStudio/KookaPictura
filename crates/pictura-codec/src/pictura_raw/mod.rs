@@ -10,7 +10,7 @@
 //! `FXid`/`FEid`/`FMsk` render caches are not authored (the baked proxy carries
 //! the pixels).
 
-use pictura_core::{Layer, PicturaRawSettings, SmartFilter, SmartObjectKind};
+use pictura_core::{Layer, LayerParts, PicturaRawSettings, SmartFilter, SmartObjectKind};
 
 use crate::common::Reader;
 use crate::descriptor::{self, get_object_item, get_object_item_mut, set_object_item, DescValue};
@@ -138,19 +138,19 @@ fn filter_item(filter: &SmartFilter) -> DescValue {
 ///    a non-embedded object, or a legacy `plLd`/`PlLd` placed layer (no `SoLd`
 ///    to carry a filter and the writer does not author one beside it).
 pub fn attach_smart_filter(layer: &mut Layer, filter: SmartFilter) -> Result<(), PsdError> {
-    attach(layer, filter, true)
+    crate::stage_content::try_edit_layer(layer, |parts| attach(parts, filter, true))
 }
 
 /// As [`attach_smart_filter`], but always appends a new entry, even when one
 /// with the same `filter_id` exists, to both the preserved `filterFXList` and
 /// the typed `smart_filters`, so their indices stay aligned.
 pub fn append_smart_filter(layer: &mut Layer, filter: SmartFilter) -> Result<(), PsdError> {
-    attach(layer, filter, false)
+    crate::stage_content::try_edit_layer(layer, |parts| attach(parts, filter, false))
 }
 
 /// The shared attach; `replace` merges into a same-id entry instead of
 /// appending.
-fn attach(layer: &mut Layer, filter: SmartFilter, replace: bool) -> Result<(), PsdError> {
+fn attach(layer: &mut LayerParts, filter: SmartFilter, replace: bool) -> Result<(), PsdError> {
     if let Some(block_idx) = config_block_index(layer) {
         return insert_into_config(layer, block_idx, &filter, replace);
     }
@@ -190,7 +190,7 @@ pub fn attach_pictura_raw_filter(
     attach_smart_filter(layer, new_filter(settings))
 }
 
-fn config_block_index(layer: &Layer) -> Option<usize> {
+fn config_block_index(layer: &LayerParts) -> Option<usize> {
     layer
         .extra_blocks
         .iter()
@@ -209,7 +209,7 @@ fn new_filter(settings: &PicturaRawSettings) -> SmartFilter {
 
 /// The group flags the writer authors for a fresh `filterFX` on `layer`:
 /// `(enabled, mask_enabled, mask_linked, extend_with_white)`.
-fn group_flags(layer: &Layer) -> (bool, bool, bool, bool) {
+fn group_flags(layer: &LayerParts) -> (bool, bool, bool, bool) {
     layer
         .smart_object
         .as_ref()
@@ -275,7 +275,7 @@ fn merge_filter_entry(entry: &mut DescValue, filter: &SmartFilter) {
 /// Insert or replace the entry in a preserved `SoLd`/`SoLE` descriptor,
 /// rewriting the block and the layer's typed view consistently.
 fn insert_into_config(
-    layer: &mut Layer,
+    layer: &mut LayerParts,
     block_idx: usize,
     filter: &SmartFilter,
     replace: bool,
@@ -354,8 +354,8 @@ fn insert_into_config(
 /// `SoLd`/`SoLE`) its `blendOptions` and unmodeled keys, while `Fltr`, `Nm  `,
 /// and `filterID` take the new values. An out-of-range index is an error and
 /// leaves the layer unchanged.
-pub fn replace_smart_filter(
-    layer: &mut Layer,
+fn replace_smart_filter_parts(
+    layer: &mut LayerParts,
     index: usize,
     mut filter: SmartFilter,
 ) -> Result<(), PsdError> {
@@ -413,6 +413,16 @@ pub fn replace_smart_filter(
         *slot = filter;
     }
     Ok(())
+}
+
+pub fn replace_smart_filter(
+    layer: &mut Layer,
+    index: usize,
+    filter: SmartFilter,
+) -> Result<(), PsdError> {
+    crate::stage_content::try_edit_layer(layer, |parts| {
+        replace_smart_filter_parts(parts, index, filter)
+    })
 }
 
 pub(crate) fn object(class_id: &[u8], items: Vec<(&[u8], DescValue)>) -> DescValue {

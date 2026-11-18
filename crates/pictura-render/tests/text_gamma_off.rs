@@ -5,7 +5,7 @@ use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, LayerStack, Ps
 
 fn layer(rgb: u8, alpha: Vec<u8>, type_tool: Option<TypeTool>) -> Layer {
     let n = alpha.len();
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "layer".into(),
         rect: PsdRect {
             top: 0,
@@ -29,7 +29,7 @@ fn layer(rgb: u8, alpha: Vec<u8>, type_tool: Option<TypeTool>) -> Layer {
             .collect(),
         type_tool,
         ..Default::default()
-    }
+    })
 }
 
 fn composite(type_tool: Option<TypeTool>) -> Vec<u8> {

@@ -290,7 +290,7 @@ pub(super) fn mask_influence_rect(region: Region, layer: &Layer) -> (i32, i32, i
             content.bottom.min(region_bottom),
         );
     }
-    if layer.is_group || layer.adjustment.is_some() {
+    if layer.is_group() || layer.has_adjustment_content() {
         (
             region.x0 as i32,
             region.y0 as i32,

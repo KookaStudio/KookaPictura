@@ -98,7 +98,7 @@ pub(in crate::cxxqt_object) fn display_region(
     let stored = !painting && doc.composite_is_authoritative() && DocumentComposite::is_stored(doc);
     let raw = if stored {
         crop_planar(
-            &doc.composite,
+            doc.composite.buffer(),
             rect.left,
             rect.top,
             rect.width().max(0) as u32,
@@ -537,7 +537,9 @@ impl PictureViewRust {
             // it as the current picture; the visible tiles rebuild instead.
             if !authoritative {
                 if let Some(doc) = self.session.doc.as_mut() {
-                    doc.composite = PixelBuffer::new(0, 0, 4);
+                    doc.composite
+                        .replace(PixelBuffer::new(0, 0, 4))
+                        .expect("valid composite");
                 }
             }
             self.damage.mark(clipped);

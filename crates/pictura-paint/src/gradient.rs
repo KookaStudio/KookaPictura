@@ -18,6 +18,7 @@
 use crate::fill::{fill_layer_within, pixel_noise, Alpha, Through};
 use crate::healing::RgbaImage;
 use crate::{PaintMode, Rgba};
+#[cfg(test)]
 use pictura_core::mask_ops::TiledMask;
 use pictura_core::{ColorMode, Document, PsdRect};
 use std::borrow::Cow;
@@ -227,7 +228,7 @@ pub fn draw(
     options: &GradientOptions,
     start: (f32, f32),
     end: (f32, f32),
-    selection: Option<&TiledMask>,
+    selection: Option<&pictura_core::Coverage>,
     within: Option<PsdRect>,
 ) -> Option<PsdRect> {
     let axis = (end.0 - start.0, end.1 - start.1);
@@ -531,7 +532,7 @@ mod tests {
             None,
         );
         assert!(drawn.is_some(), "the gradient drew");
-        let plane = doc.layers[0].channels[0].data.as_slice();
+        let plane = doc.layers[0].channels()[0].data.as_slice();
         assert_eq!(plane, &[76, 53, 29]);
     }
 
@@ -693,7 +694,7 @@ mod tests {
         // The same ramp on a 16-bit document: the retained store's
         // transparency plane takes the ramp's alpha.
         let mut d = depth16_doc(32, 4, vec![0; 128], vec![0; 128], vec![0; 128]);
-        d.layers[0].channels.push(Channel {
+        d.layers[0].channels_mut().push(Channel {
             id: -1,
             data: vec![255; 128].into(),
         });
@@ -710,7 +711,7 @@ mod tests {
             None,
         );
         // The plane is 32 px wide: the ramp's ends are (0, 2) and (31, 2).
-        let alpha = &d.layers[0].channels[3].data;
+        let alpha = &d.layers[0].channels()[3].data;
         assert_eq!(alpha[2 * 32], 255, "the ramp's opaque end");
         assert_eq!(alpha[2 * 32 + 31], 0, "the ramp's transparent end");
     }
@@ -745,7 +746,7 @@ mod tests {
     #[test]
     fn a_transparency_lock_confines_the_gradient_to_existing_pixels() {
         let mut d = doc(32, 32, [200, 200, 200, 255]);
-        for a in &mut d.layers[0].channels[3].data[16 * 32..] {
+        for a in &mut d.layers[0].channels_mut()[3].data[16 * 32..] {
             *a = 0;
         }
         lock(&mut d, LockFlags::TRANSPARENCY);
@@ -772,16 +773,22 @@ mod tests {
             .map(|i| if i % 32 < 16 { 255 } else { 0 })
             .collect();
         let black = Gradient::two_stop(BLACK, BLACK);
-        let dirty = draw(
-            &mut d,
-            "0",
-            &black,
-            &GradientOptions::default(),
-            (0.0, 16.0),
-            (31.0, 16.0),
-            Some(&mask),
-            None,
-        )
+        let dirty = {
+            let (width, height) = (d.width, d.height);
+            match pictura_core::Coverage::for_canvas(&(mask), width, height) {
+                Some(coverage) => draw(
+                    &mut d,
+                    "0",
+                    &black,
+                    &GradientOptions::default(),
+                    (0.0, 16.0),
+                    (31.0, 16.0),
+                    Some(&coverage),
+                    None,
+                ),
+                None => None,
+            }
+        }
         .expect("drawn");
         assert_eq!((dirty.left, dirty.right), (0, 16));
         assert_eq!(pixel(&d, 8, 16), BLACK_PX);
@@ -898,7 +905,7 @@ mod tests {
     fn a_boxed_gradient_equals_the_unboxed_one_and_forks_only_its_tiles() {
         let (w, h) = (40, 300);
         let mut base = doc(w, h, [255; 4]);
-        for c in &mut base.layers[0].channels {
+        for c in base.layers[0].channels_mut() {
             c.data.tile(w as usize, h as usize);
         }
         let within = PsdRect {
@@ -917,26 +924,32 @@ mod tests {
         mask.tile(w as usize, h as usize);
         let draw_with = |within| {
             let mut d = base.clone();
-            let dirty = draw(
-                &mut d,
-                "0",
-                &black_white(),
-                &GradientOptions::default(),
-                (0.0, 0.0),
-                (39.0, 299.0),
-                Some(&mask),
-                within,
-            );
+            let dirty = {
+                let (width, height) = (d.width, d.height);
+                match pictura_core::Coverage::for_canvas(&(mask), width, height) {
+                    Some(coverage) => draw(
+                        &mut d,
+                        "0",
+                        &black_white(),
+                        &GradientOptions::default(),
+                        (0.0, 0.0),
+                        (39.0, 299.0),
+                        Some(&coverage),
+                        within,
+                    ),
+                    None => None,
+                }
+            };
             (d, dirty)
         };
         let (whole, dirty) = draw_with(None);
         let (boxed, boxed_dirty) = draw_with(Some(within));
         assert_eq!(boxed_dirty, dirty);
         for ((a, b), c) in boxed.layers[0]
-            .channels
+            .channels()
             .iter()
-            .zip(&whole.layers[0].channels)
-            .zip(&base.layers[0].channels)
+            .zip(whole.layers[0].channels())
+            .zip(base.layers[0].channels())
         {
             assert_eq!(a.data.as_slice(), b.data.as_slice(), "channel {}", a.id);
             assert!(a.data.shares_tile(1, &c.data), "tile 1 stayed shared");

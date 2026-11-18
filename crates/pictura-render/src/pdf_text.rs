@@ -49,7 +49,7 @@ pub fn pdf_live_type(doc: &Document, policy: TextPolicy) -> Option<LiveType> {
 pub fn pdf_type_fonts(doc: &Document) -> Vec<String> {
     fn walk(layers: &[Layer], out: &mut Vec<String>) {
         for layer in layers {
-            walk(&layer.children, out);
+            walk(layer.children(), out);
             let family = crate::type_layer_spec(layer).map(|s| s.character.font_family);
             if let Some(family) = family.filter(|f| !f.is_empty() && !out.contains(f)) {
                 out.push(family);
@@ -77,8 +77,8 @@ impl Found<'_> {
             if !layer.visible || layer.opacity == 0 {
                 continue;
             }
-            if layer.is_group {
-                if !neutral_group(layer) || !self.walk(&mut layer.children) {
+            if layer.is_group() {
+                if !neutral_group(layer) || !self.walk(layer.children_mut().expect("group")) {
                     return false;
                 }
                 continue;
@@ -95,7 +95,7 @@ impl Found<'_> {
     }
 
     fn live_text(&mut self, layer: &Layer) -> Option<PdfText> {
-        let tool = layer.type_tool.as_ref()?;
+        let tool = layer.type_tool()?;
         if layer.blend != BlendMode::Normal
             || layer.clipping
             || layer.mask.is_some()

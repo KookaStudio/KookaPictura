@@ -460,9 +460,10 @@ impl Merged {
             _ => Samples::F32(plane.to_vec().into()),
         };
         let source_channels = doc
-            .source_depth
+            .source
+            .depth()
             .filter(|depth| {
-                doc.source_mode.is_none()
+                doc.source.mode().is_none()
                     && matches!(depth, BitDepth::Sixteen | BitDepth::ThirtyTwo)
             })
             .map(|depth| {
@@ -474,7 +475,7 @@ impl Merged {
                     .collect();
                 SourceChannels::new(depth, self.rect, planes)
             });
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name,
             rect: self.rect,
             blend: BlendMode::Normal,
@@ -484,6 +485,6 @@ impl Merged {
             channels,
             source_channels,
             ..Default::default()
-        }
+        })
     }
 }

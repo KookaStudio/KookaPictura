@@ -91,14 +91,14 @@ pub(super) fn plane_kinds(doc: &Document) -> Vec<PlaneKind> {
                 .mask
                 .as_ref()
                 .map_or(0, pictura_render::mask_feather_reach);
-        out.extend(layer.channels.iter().map(|_| PlaneKind::LayerChannel {
+        out.extend(layer.channels().iter().map(|_| PlaneKind::LayerChannel {
             rect: layer.rect,
             reach,
         }));
         if let Some(mask) = layer.mask.as_ref().filter(|m| m.data.is_some()) {
             out.push(PlaneKind::Mask(mask.rect, reach));
         }
-        for child in &layer.children {
+        for child in layer.children() {
             visit(child, reach, out);
         }
     }
@@ -373,7 +373,7 @@ pub(super) fn composite_change(
 pub(super) fn composite_unchanged(a: &mut Document, b: &mut Document) -> bool {
     tile_planes(a);
     tile_planes(b);
-    let (left, right) = (&a.composite, &b.composite);
+    let (left, right) = (a.composite.buffer(), b.composite.buffer());
     if (left.width, left.height, left.channels) != (right.width, right.height, right.channels) {
         return false;
     }
@@ -713,7 +713,7 @@ pub(super) fn each_plane(
 
 fn each_layer_plane(layer: &Layer, f: &mut impl FnMut(&Plane<u8>, usize, usize, PlanePlacement)) {
     let layer_width = layer.rect.width().max(0) as usize;
-    for channel in &layer.channels {
+    for channel in layer.channels() {
         let width = if layer_width > 0 {
             layer_width
         } else {
@@ -744,7 +744,7 @@ fn each_layer_plane(layer: &Layer, f: &mut impl FnMut(&Plane<u8>, usize, usize, 
             f(data, width, h, placement);
         }
     }
-    for child in &layer.children {
+    for child in layer.children() {
         each_layer_plane(child, &mut *f);
     }
 }
@@ -755,7 +755,11 @@ pub(super) fn each_plane_mut(
 ) {
     let width = doc.width as usize;
     let h = plane_height(doc.composite.data.len(), width);
-    f(&mut doc.composite.data, width, h, PlanePlacement::Composite);
+    let mut composite = doc.composite.detach_plane();
+    f(&mut composite, width, h, PlanePlacement::Composite);
+    doc.composite
+        .attach_plane(composite)
+        .expect("history plane matches retained composite geometry");
     for channel in doc.channels.iter_mut() {
         let h = plane_height(channel.data.len(), width);
         f(&mut channel.data, width, h, PlanePlacement::Canvas);
@@ -769,8 +773,9 @@ fn each_layer_plane_mut(
     layer: &mut Layer,
     f: &mut impl FnMut(&mut Plane<u8>, usize, usize, PlanePlacement),
 ) {
-    let layer_width = layer.rect.width().max(0) as usize;
-    for channel in layer.channels.iter_mut() {
+    let layer_rect = layer.rect;
+    let layer_width = layer_rect.width().max(0) as usize;
+    for channel in layer.channels_mut().iter_mut() {
         let width = if layer_width > 0 {
             layer_width
         } else {
@@ -778,7 +783,7 @@ fn each_layer_plane_mut(
         };
         let h = plane_height(channel.data.len(), width);
         let placement = if layer_width > 0 {
-            PlanePlacement::Rect(layer.rect)
+            PlanePlacement::Rect(layer_rect)
         } else {
             PlanePlacement::Unmapped
         };
@@ -801,7 +806,7 @@ fn each_layer_plane_mut(
             f(data, width, h, placement);
         }
     }
-    for child in layer.children.iter_mut() {
+    for child in layer.children_iter_mut() {
         each_layer_plane_mut(child, &mut *f);
     }
 }

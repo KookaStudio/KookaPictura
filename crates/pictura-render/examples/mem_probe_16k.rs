@@ -40,7 +40,9 @@ fn main() {
     report("baseline");
 
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-    touch(&mut doc.composite.data);
+    doc.composite
+        .edit_data(|data| touch(data))
+        .expect("touch preserves geometry");
     report(&format!(
         "after Document::new (composite {} ch)",
         doc.composite.channels

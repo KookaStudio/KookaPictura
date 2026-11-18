@@ -2,8 +2,7 @@
 //! opaque white.
 
 use pictura_core::{
-    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LockFlags, PixelBuffer,
-    PsdRect,
+    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, LockFlags, PixelBuffer, PsdRect,
 };
 use pictura_render::{composite, composite_rgba, Backend, CompositeRequest};
 
@@ -13,49 +12,55 @@ use crate::common::require_gpu;
 /// one full-size Normal layer whose colour planes and alpha are all 255.
 fn fresh_white_document(w: u32, h: u32) -> Document {
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite.data.fill(255);
+    doc.composite
+        .edit_data(|data| {
+            data.fill(255);
+        })
+        .expect("pixel edit preserves geometry");
     let n = (w as usize) * (h as usize);
     let plane = || vec![255u8; n];
-    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
-        name: "Layer 0".into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: h as i32,
-            right: w as i32,
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            name: "Layer 0".into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: h as i32,
+                right: w as i32,
+            },
+            blend: BlendMode::Normal,
+            opacity: 255,
+            fill: 255,
+            lock: LockFlags::default(),
+            color: ColorLabel::None,
+            clipping: false,
+            visible: true,
+            mask: None,
+            adjustment: None,
+            channels: vec![
+                Channel {
+                    id: 0,
+                    data: plane().into(),
+                },
+                Channel {
+                    id: 1,
+                    data: plane().into(),
+                },
+                Channel {
+                    id: 2,
+                    data: plane().into(),
+                },
+                Channel {
+                    id: -1,
+                    data: plane().into(),
+                },
+            ],
+            children: pictura_core::LayerStack::default(),
+            is_group: false,
+            background: false,
+            ..Default::default()
         },
-        blend: BlendMode::Normal,
-        opacity: 255,
-        fill: 255,
-        lock: LockFlags::default(),
-        color: ColorLabel::None,
-        clipping: false,
-        visible: true,
-        mask: None,
-        adjustment: None,
-        channels: vec![
-            Channel {
-                id: 0,
-                data: plane().into(),
-            },
-            Channel {
-                id: 1,
-                data: plane().into(),
-            },
-            Channel {
-                id: 2,
-                data: plane().into(),
-            },
-            Channel {
-                id: -1,
-                data: plane().into(),
-            },
-        ],
-        children: pictura_core::LayerStack::default(),
-        is_group: false,
-        background: false,
-        ..Default::default()
-    }]);
+    )]);
     doc
 }
 

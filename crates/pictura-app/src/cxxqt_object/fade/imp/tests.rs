@@ -9,7 +9,9 @@ use pictura_render::composite_rgba;
 fn view(color: (u8, u8, u8), mode: ColorMode) -> PictureViewRust {
     let mut doc = Document::new(4, 4, mode, BitDepth::Eight);
     doc.layers = LayerStack::from_layers(vec![pixel_layer("px", 4, 4, color)]);
-    doc.composite = composite_rgba(&doc);
+    doc.composite
+        .replace(composite_rgba(&doc))
+        .expect("valid composite");
     PictureViewRust {
         session: DocumentSession::with_document(doc),
         layer_target: LayerTarget::only("0"),
@@ -20,7 +22,11 @@ fn view(color: (u8, u8, u8), mode: ColorMode) -> PictureViewRust {
 fn set_color(rust: &mut PictureViewRust, color: (u8, u8, u8)) {
     let layer = pictura_render::resolve_path_mut(rust.session.doc.as_mut().unwrap(), "0").unwrap();
     for (id, value) in [0i16, 1, 2].into_iter().zip([color.0, color.1, color.2]) {
-        let channel = layer.channels.iter_mut().find(|c| c.id == id).unwrap();
+        let channel = layer
+            .channels_mut()
+            .iter_mut()
+            .find(|c| c.id == id)
+            .unwrap();
         channel.data = vec![value; 16].into();
     }
 }
@@ -29,7 +35,7 @@ fn color(rust: &PictureViewRust) -> (u8, u8, u8) {
     let layer = pictura_render::resolve_path(rust.session.doc.as_ref().unwrap(), "0").unwrap();
     let plane = |id: i16| {
         layer
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == id)
             .unwrap()
@@ -54,8 +60,8 @@ fn capture_and_record_keep_the_original_and_effect() {
     assert_eq!(opacity(&rust), 100);
     assert_eq!(mode(&rust), BlendMode::Normal);
     let state = rust.fade.as_ref().expect("record");
-    assert_eq!(state.original.channels[0].data.as_slice()[0], 20);
-    assert_eq!(state.effected.channels[0].data.as_slice()[0], 220);
+    assert_eq!(state.original.channels()[0].data.as_slice()[0], 20);
+    assert_eq!(state.effected.channels()[0].data.as_slice()[0], 220);
 }
 
 #[test]

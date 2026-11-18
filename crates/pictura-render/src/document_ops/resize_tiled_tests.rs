@@ -49,7 +49,7 @@ fn dims(r: PsdRect) -> (usize, usize) {
 /// A layer over `r` whose four channels are tiled seeded planes.
 fn layer(name: &str, r: PsdRect, seed: usize) -> Layer {
     let (w, h) = dims(r);
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: r,
         channels: [0, 1, 2, -1]
@@ -60,7 +60,7 @@ fn layer(name: &str, r: PsdRect, seed: usize) -> Layer {
             })
             .collect(),
         ..Default::default()
-    }
+    })
 }
 
 /// A 300 × 200 document: a full-canvas layer, a layer hanging off the
@@ -118,7 +118,7 @@ fn tiled_image_size_matches_the_dense_resampler() {
             });
             assert_eq!((doc.width, doc.height), (w, h));
             for (new, old) in doc.layers.iter().zip(before.layers.iter()) {
-                for (nc, oc) in new.channels.iter().zip(&old.channels) {
+                for (nc, oc) in new.channels().iter().zip(old.channels()) {
                     let what = format!("{} channel {}", new.name, nc.id);
                     assert_dense(&what, &oc.data, dims(old.rect), &nc.data, dims(new.rect), r);
                 }
@@ -193,14 +193,18 @@ fn is_tiled(s: &Samples) -> bool {
 fn deep_document<T: Seeded>(depth: BitDepth) -> Document {
     let mut doc = document();
     doc.depth = depth;
-    doc.source_depth = Some(depth);
+    doc.source
+        .set_native(Some(depth), doc.source.planes().clone())
+        .expect("valid source depth");
     let (w, h) = (doc.width as usize, doc.height as usize);
-    doc.source_planes = Some(SourcePlanes {
-        depth,
-        width: doc.width,
-        height: doc.height,
-        samples: store::<T>(w, h, 3, 11),
-    });
+    doc.source
+        .replace_planes(Some(SourcePlanes {
+            depth,
+            width: doc.width,
+            height: doc.height,
+            samples: store::<T>(w, h, 3, 11),
+        }))
+        .expect("valid source planes");
     let offset = &mut doc.layers[1];
     let (lw, lh) = dims(offset.rect);
     let (mw, mh) = dims(offset.mask.as_ref().unwrap().rect);
@@ -233,8 +237,8 @@ fn assert_deep<T: Seeded>(depth: BitDepth) {
         assert!(bits(now) == bits(&want), "{depth:?} plane {id}");
     }
     let (was, now) = (
-        before.source_planes.as_ref().unwrap(),
-        doc.source_planes.as_ref().unwrap(),
+        before.source.planes().as_ref().unwrap(),
+        doc.source.planes().as_ref().unwrap(),
     );
     assert_eq!((now.width, now.height), (450, 300));
     assert!(is_tiled(&now.samples), "{depth:?} document store not tiled");
@@ -260,7 +264,7 @@ fn a_solid_document_resizes_into_uniform_tiles() {
     let mut doc = Document::from_rgba("solid", side, side, &rgba);
     resize_document(&mut doc, 3072, 3072, Resample::Bilinear).expect("resizes");
     let dense = 3072 * 3072;
-    for c in &doc.layers[0].channels {
+    for c in doc.layers[0].channels() {
         assert!(
             c.data.allocated_bytes() * 4 < dense,
             "channel {}: {} of {dense} bytes",
@@ -282,9 +286,9 @@ fn resized_tiles_spill_and_read_back() {
     let side = 1024;
     let mut doc = Document::new(side as u32, side as u32, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = LayerStack::from_layers(vec![layer("seeded", rect(0, 0, side, side), 1)]);
-    let source = every(&doc.layers[0].channels[0].data);
+    let source = every(&doc.layers[0].channels()[0].data);
     resize_document(&mut doc, 1536, 1536, Resample::Bilinear).expect("resizes");
-    let resized = &doc.layers[0].channels[0].data;
+    let resized = &doc.layers[0].channels()[0].data;
     for _ in 0..6 {
         run_pass(u64::MAX);
     }

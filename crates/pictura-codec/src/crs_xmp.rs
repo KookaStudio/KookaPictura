@@ -207,43 +207,41 @@ pub fn set_crs_property(
             .ok_or_else(|| PsdError::Invalid(format!("no embedded record for uuid {uuid}")))?;
     let new_crs = parse_crs(&new_packet);
 
-    let so = find_smart_object_mut(&mut doc.layers, uuid)
+    let layer = find_smart_layer_mut(&mut doc.layers, uuid)
         .ok_or_else(|| PsdError::Invalid(format!("smart object {uuid} vanished")))?;
-    so.crs_xmp = Some(new_packet.into());
-    so.set_payload(new_payload);
-    so.crs = Some(new_crs);
+    crate::edit_layer(layer, |parts| {
+        let so = parts.smart_object.as_mut().expect("smart layer");
+        so.crs_xmp = Some(new_packet.into());
+        so.set_payload(new_payload);
+        so.crs = Some(new_crs);
+    });
     doc.layer_section_extra = new_section.into();
     Ok(())
 }
 
 fn find_smart_object<'a>(layers: &'a [Layer], uuid: &str) -> Option<&'a SmartObject> {
     for layer in layers {
-        if let Some(so) = layer.smart_object.as_ref() {
+        if let Some(so) = layer.smart_object() {
             if so.uuid == uuid {
                 return Some(so);
             }
         }
-        if let Some(so) = find_smart_object(&layer.children, uuid) {
+        if let Some(so) = find_smart_object(layer.children(), uuid) {
             return Some(so);
         }
     }
     None
 }
 
-fn find_smart_object_mut<'a>(
-    layers: &'a mut LayerStack,
-    uuid: &str,
-) -> Option<&'a mut SmartObject> {
+fn find_smart_layer_mut<'a>(layers: &'a mut LayerStack, uuid: &str) -> Option<&'a mut Layer> {
     for layer in layers.iter_mut() {
-        if layer
-            .smart_object
-            .as_ref()
-            .is_some_and(|so| so.uuid == uuid)
-        {
-            return layer.smart_object.as_mut();
+        if layer.smart_object().is_some_and(|so| so.uuid == uuid) {
+            return Some(layer);
         }
-        if let Some(so) = find_smart_object_mut(&mut layer.children, uuid) {
-            return Some(so);
+        if let Some(children) = layer.children_mut() {
+            if let Some(found) = find_smart_layer_mut(children, uuid) {
+                return Some(found);
+            }
         }
     }
     None
@@ -267,7 +265,7 @@ fn skip_ws(packet: &[u8], mut i: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pictura_core::{BitDepth, Channel, ColorMode, Layer, LayerBlock, PsdRect};
+    use pictura_core::{BitDepth, Channel, ColorMode, LayerBlock, PsdRect};
 
     const UUID: &str = "12345678-1234-1234-1234-123456789abc";
 
@@ -363,10 +361,14 @@ crs:Exposure2012=\"+0.50\" crs:Contrast2012=\"-10\"/></rdf:RDF></x:xmpmeta>"
 
     fn base_doc(section: Vec<u8>) -> Document {
         let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
-        for (i, b) in doc.composite.data.iter_mut().enumerate() {
-            *b = (i * 7 + 1) as u8;
-        }
-        let layer = Layer {
+        doc.composite
+            .edit_data(|data| {
+                for (i, b) in data.iter_mut().enumerate() {
+                    *b = (i * 7 + 1) as u8;
+                }
+            })
+            .expect("pixel edit preserves geometry");
+        let layer = crate::layer_from_parts(pictura_core::LayerParts {
             name: "Smart".into(),
             rect: PsdRect {
                 top: 0,
@@ -397,7 +399,7 @@ crs:Exposure2012=\"+0.50\" crs:Contrast2012=\"-10\"/></rdf:RDF></x:xmpmeta>"
                 data: plld(UUID).into(),
             }],
             ..Default::default()
-        };
+        });
         doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
         crate::smart_object::resolve_smart_objects(&mut doc.layers, &section, false);
         doc.layer_section_extra = section.into();
@@ -577,9 +579,16 @@ crs:Exposure2012=\"+0.50\" crs:Contrast2012=\"-10\"/></rdf:RDF></x:xmpmeta>"
             "patching the CRS packet changes the payload"
         );
 
-        find_smart_object_mut(&mut doc.layers, UUID)
-            .unwrap()
-            .set_payload(b"8BPS\x00\x01replacement".to_vec());
+        crate::edit_layer(
+            find_smart_layer_mut(&mut doc.layers, UUID).unwrap(),
+            |parts| {
+                parts
+                    .smart_object
+                    .as_mut()
+                    .unwrap()
+                    .set_payload(b"8BPS\x00\x01replacement".to_vec());
+            },
+        );
         let replaced = find_smart_object(&doc.layers, UUID)
             .unwrap()
             .payload_digest();

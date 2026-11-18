@@ -454,7 +454,7 @@ fn re_rendering_keeps_every_type_layer_live() {
         .map(|s| s.text)
         .collect();
     assert_eq!(crate::re_render_type_layers(&mut doc), 2);
-    assert!(doc.layers.iter().all(|layer| layer.type_tool.is_some()));
+    assert!(doc.layers.iter().all(|layer| layer.type_tool().is_some()));
     let after: Vec<String> = doc
         .layers
         .iter()

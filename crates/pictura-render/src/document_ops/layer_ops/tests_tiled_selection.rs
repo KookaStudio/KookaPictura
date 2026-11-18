@@ -68,7 +68,7 @@ fn document() -> Document {
         bottom: H as i32 - 15,
         right: W as i32 - 20,
     };
-    for channel in layer.channels.iter_mut() {
+    for channel in layer.channels_mut().iter_mut() {
         for value in channel.data.as_mut_slice() {
             *value = next(&mut state);
         }
@@ -127,30 +127,80 @@ fn clipboard_reads_a_tiled_selection() {
         out
     };
 
-    let copied = assert_no_materialization(|| copy_layer(&doc, "0", Some(&tiled)));
-    assert_eq!(copied, copy_layer(&doc, "0", Some(&flat)));
+    let copied = assert_no_materialization(|| {
+        let (width, height) = (doc.width, doc.height);
+        match pictura_core::Coverage::for_canvas(&(tiled), width, height) {
+            Some(coverage) => copy_layer(&doc, "0", Some(&coverage)),
+            None => None,
+        }
+    });
+    assert_eq!(copied, {
+        let (width, height) = (doc.width, doc.height);
+        match pictura_core::Coverage::for_canvas(&(flat), width, height) {
+            Some(coverage) => copy_layer(&doc, "0", Some(&coverage)),
+            None => None,
+        }
+    });
     assert!(copied.is_some());
-    let merged = assert_no_materialization(|| copy_merged(&doc, &composite, Some(&tiled)));
-    assert_eq!(merged, copy_merged(&doc, &composite, Some(&flat)));
-    let region = assert_no_materialization(|| copy_merged_region(&doc, Some(&tiled), read));
+    let merged = assert_no_materialization(|| {
+        let (width, height) = (doc.width, doc.height);
+        match pictura_core::Coverage::for_canvas(&(tiled), width, height) {
+            Some(coverage) => copy_merged(&doc, &composite, Some(&coverage)),
+            None => None,
+        }
+    });
+    assert_eq!(merged, {
+        let (width, height) = (doc.width, doc.height);
+        match pictura_core::Coverage::for_canvas(&(flat), width, height) {
+            Some(coverage) => copy_merged(&doc, &composite, Some(&coverage)),
+            None => None,
+        }
+    });
+    let region = assert_no_materialization(|| {
+        copy_merged_region(
+            &doc,
+            Some(&pictura_core::Coverage::for_canvas(&tiled, W as u32, H as u32).unwrap()),
+            read,
+        )
+    });
     assert_eq!(region, merged);
 
     let (mut cleared, mut want) = (doc.clone(), doc.clone());
-    assert!(assert_no_materialization(|| clear_layer(
-        &mut cleared,
-        "0",
-        Some(&tiled)
-    )));
-    assert!(clear_layer(&mut want, "0", Some(&flat)));
+    assert!(assert_no_materialization(|| {
+        let (width, height) = (cleared.width, cleared.height);
+        match pictura_core::Coverage::for_canvas(&(tiled), width, height) {
+            Some(coverage) => clear_layer(&mut cleared, "0", Some(&coverage)),
+            None => false,
+        }
+    }));
+    assert!({
+        let (width, height) = (want.width, want.height);
+        match pictura_core::Coverage::for_canvas(&(flat), width, height) {
+            Some(coverage) => clear_layer(&mut want, "0", Some(&coverage)),
+            None => false,
+        }
+    });
     assert_eq!(cleared, want);
 
     let clip = copied.expect("a clip");
     for mode in [PasteMode::Into, PasteMode::Outside] {
         let (mut pasted, mut want) = (doc.clone(), doc.clone());
         let path = assert_no_materialization(|| {
-            paste_clip(&mut pasted, "0", &clip, (5, 7), mode, Some(&tiled))
+            let (width, height) = (pasted.width, pasted.height);
+            match pictura_core::Coverage::for_canvas(&(tiled), width, height) {
+                Some(coverage) => {
+                    paste_clip(&mut pasted, "0", &clip, (5, 7), mode, Some(&coverage))
+                }
+                None => String::new(),
+            }
         });
-        paste_clip(&mut want, "0", &clip, (5, 7), mode, Some(&flat));
+        {
+            let (width, height) = (want.width, want.height);
+            match pictura_core::Coverage::for_canvas(&(flat), width, height) {
+                Some(coverage) => paste_clip(&mut want, "0", &clip, (5, 7), mode, Some(&coverage)),
+                None => String::new(),
+            }
+        };
         assert_eq!(path, "1");
         assert_eq!(pasted, want, "{mode:?}");
     }
@@ -162,17 +212,37 @@ fn layer_ops_read_a_tiled_selection() {
     let doc = document();
 
     let (mut lifted, mut want) = (doc.clone(), doc.clone());
-    let path = assert_no_materialization(|| lift_selection(&mut lifted, "0", &tiled));
-    assert_eq!(path, lift_selection(&mut want, "0", &flat));
+    let path = assert_no_materialization(|| {
+        let (width, height) = (lifted.width, lifted.height);
+        match pictura_core::Coverage::for_canvas(&(tiled), width, height) {
+            Some(coverage) => lift_selection(&mut lifted, "0", &coverage),
+            None => String::new(),
+        }
+    });
+    assert_eq!(path, {
+        let (width, height) = (want.width, want.height);
+        match pictura_core::Coverage::for_canvas(&(flat), width, height) {
+            Some(coverage) => lift_selection(&mut want, "0", &coverage),
+            None => String::new(),
+        }
+    });
     assert_eq!(path, "1");
     assert_eq!(lifted, want, "lift");
 
     for cut in [false, true] {
         let via = |doc: &mut Document, mask: &LayerMask| {
             if cut {
-                layer_via_cut(doc, "0", mask)
+                layer_via_cut(
+                    doc,
+                    "0",
+                    &mask.edit_coverage().expect("valid mask geometry"),
+                )
             } else {
-                layer_via_copy(doc, "0", mask)
+                layer_via_copy(
+                    doc,
+                    "0",
+                    &mask.edit_coverage().expect("valid mask geometry"),
+                )
             }
         };
         let (mut got, mut want) = (doc.clone(), doc.clone());
@@ -185,11 +255,25 @@ fn layer_ops_read_a_tiled_selection() {
     for duplicate in [false, true] {
         let (mut got, mut want) = (doc.clone(), doc.clone());
         assert!(assert_no_materialization(|| {
-            move_mask_selection_content(&mut got, "0", &tiled, 17, -9, duplicate, 0)
+            {
+                let (width, height) = (got.width, got.height);
+                match pictura_core::Coverage::for_canvas(&(tiled), width, height) {
+                    Some(coverage) => {
+                        move_mask_selection_content(&mut got, "0", &coverage, 17, -9, duplicate, 0)
+                    }
+                    None => false,
+                }
+            }
         }));
-        assert!(move_mask_selection_content(
-            &mut want, "0", &flat, 17, -9, duplicate, 0
-        ));
+        assert!({
+            let (width, height) = (want.width, want.height);
+            match pictura_core::Coverage::for_canvas(&(flat), width, height) {
+                Some(coverage) => {
+                    move_mask_selection_content(&mut want, "0", &coverage, 17, -9, duplicate, 0)
+                }
+                None => false,
+            }
+        });
         assert_eq!(got, want, "mask move duplicate={duplicate}");
     }
 }

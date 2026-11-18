@@ -43,9 +43,9 @@ fn checker_layer(name: &str, w: u32, h: u32) -> pictura_core::Layer {
             b[i] = v;
         }
     }
-    layer.channels[0].data = r.into();
-    layer.channels[1].data = g.into();
-    layer.channels[2].data = b.into();
+    layer.channels_mut()[0].data = r.into();
+    layer.channels_mut()[1].data = g.into();
+    layer.channels_mut()[2].data = b.into();
     layer
 }
 
@@ -308,8 +308,14 @@ fn commit_refresh_profile_4000() {
                         .map(|i| pixel_layer(&format!("L{i}"), 4000, 4000, (30, 60, 90)))
                         .collect(),
                 );
-                doc.composite =
-                    pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, gpu)).0;
+                doc.composite
+                    .replace(
+                        pictura_render::composite(pictura_render::CompositeRequest::whole(
+                            &doc, gpu,
+                        ))
+                        .0,
+                    )
+                    .expect("valid composite");
                 let mut rust = PictureViewRust {
                     session: crate::cxxqt_object::document_session::DocumentSession::with_document(
                         doc,
@@ -386,7 +392,7 @@ fn large_brush_profile_4000() {
     let mut forked = doc.clone();
     // `as_mut_slice` goes through `DerefMut`, so it forks a shared plane the
     // way the stroke's first write does; touching no byte keeps it a pure fork.
-    for c in &mut forked.layers[0].channels {
+    for c in forked.layers[0].channels_mut() {
         let _ = c.data.as_mut_slice();
     }
     let fork = t.elapsed();
@@ -455,8 +461,9 @@ fn large_document_stroke_profile() {
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     doc.layers =
         pictura_core::LayerStack::from_layers(vec![pixel_layer("Background", w, h, (30, 60, 90))]);
-    doc.composite =
-        pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0;
+    doc.composite
+        .replace(pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0)
+        .expect("valid composite");
     let mut rust = PictureViewRust {
         session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         ..Default::default()
@@ -616,8 +623,9 @@ fn large_document_structural_edit_profile() {
             .map(|i| pixel_layer(&format!("Layer {i}"), w, h, ((i * 11) as u8, 60, 90)))
             .collect(),
     );
-    doc.composite =
-        pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0;
+    doc.composite
+        .replace(pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0)
+        .expect("valid composite");
     let mut history = History::default();
     let mut selection: Option<Selection> = None;
     let mut target = LayerTarget::default();
@@ -684,7 +692,12 @@ fn large_document_filter_profile() {
     let (w, h) = (16507u32, 16196u32);
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     let mut layer = pixel_layer("Background", w, h, (30, 60, 90));
-    for (c, ch) in layer.channels.iter_mut().filter(|c| c.id >= 0).enumerate() {
+    for (c, ch) in layer
+        .channels_mut()
+        .iter_mut()
+        .filter(|c| c.id >= 0)
+        .enumerate()
+    {
         let plane = ch.data.as_mut_slice();
         for (i, px) in plane.iter_mut().enumerate() {
             let (x, y) = (i % w as usize, i / w as usize);
@@ -692,8 +705,9 @@ fn large_document_filter_profile() {
         }
     }
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
-    doc.composite =
-        pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0;
+    doc.composite
+        .replace(pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0)
+        .expect("valid composite");
     let mut rust = PictureViewRust {
         session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         layer_target: LayerTarget::only("0"),
@@ -894,15 +908,21 @@ fn radial_blur_commit_profile() {
     let (w, h) = (8000u32, 8000u32);
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     let mut layer = pixel_layer("Background", w, h, (30, 60, 90));
-    for (c, ch) in layer.channels.iter_mut().filter(|c| c.id >= 0).enumerate() {
+    for (c, ch) in layer
+        .channels_mut()
+        .iter_mut()
+        .filter(|c| c.id >= 0)
+        .enumerate()
+    {
         for (i, px) in ch.data.as_mut_slice().iter_mut().enumerate() {
             let (x, y) = (i % w as usize, i / w as usize);
             *px = ((x * 7 + y * 13 + c * 53) % 256) as u8;
         }
     }
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
-    doc.composite =
-        pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0;
+    doc.composite
+        .replace(pictura_render::composite(pictura_render::CompositeRequest::whole(&doc, false)).0)
+        .expect("valid composite");
     let mut rust = PictureViewRust {
         session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
         layer_target: LayerTarget::only("0"),
