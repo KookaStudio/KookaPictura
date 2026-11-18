@@ -39,5 +39,5 @@ This plan covers `tiled-save-streaming` (#1320): the new capabilities
 | `smg_admitted` | Pin a 2 GiB cgroup (1.5 GiB used) and 4 GiB scratch; gate that save | Admitted | `pictura-app::a_two_gib_host_admits_a_large_save` |
 | `smg_refused` | Pin a cgroup whose room is below the working bytes; start the save | Refused; memory refusal recorded; no file | `pictura-app::a_small_host_refuses_the_save` |
 | `smg_whole_refused` | Pin room between the TIFF cost and the GIF cost; gate both saves | TIFF admitted; GIF refused as memory | `pictura-app::a_whole_image_format_is_refused_first` |
-| `smg_covers_peak` | Heap-peak harness: PSD, PNG, TIFF and GIF saves at 4250² | Each peak ≤ its estimate | `pictura-app::estimates_cover_the_measured_peaks` |
+| `smg_covers_peak` | Heap-peak harness: PSD, PNG, TIFF, 8-bit BMP and GIF saves at 4250² | Each peak ≤ its estimate | `pictura-app::estimates_cover_the_measured_peaks` |
 | `smg_m24` | `python3 scripts/profile-tools.py --scenarios M24 --size 17000x17000 --digest`, free and with `--memory-max 2G` | Every step ok under 2G, save included; digests `same` | manual: needs multi-GB generated fixtures, a systemd cgroup memory limit and minutes of a real app; run for this change and recorded in `docs/dev/STATE.md` |
