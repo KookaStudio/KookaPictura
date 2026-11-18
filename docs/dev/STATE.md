@@ -4,6 +4,44 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Streamed saves — #1320 complete** (OpenSpec change `tiled-save-streaming`;
+  capabilities `codec/streamed-psd-save`, `codec/streamed-raster-save`,
+  `document/save-memory-gate`, and `codec/psd-encode-cache` modified).
+  - **Native save.** `write_stream.rs` has the seekable `Sink` (placeholders
+    patched once written) and the band encoders: RLE rows encode in parallel
+    inside a 256-row band, raw writes bands, ZIP and ZIP-with-prediction feed
+    the deflater band by band. `write_psd_to` streams the container, each layer
+    channel one at a time with its record length patched; the `Vec` encoders run
+    the same writer over a `Cursor`. The save job and recovery snapshots stream
+    through `safe_io::write_atomically_with`. `save_view` composites the merged
+    image straight into tiled 3-channel planes (`composite_tiled_channels`,
+    `keep_channels_tiled`), so there is no flat RGB copy.
+  - **Encode cache.** Byte-budgeted at `min(512 MiB, ceiling / 8)` and the
+    governor's room; a miss is teed into the cache only within that limit, and
+    the oldest streams go first when the budget drops.
+  - **Raster saves.** `save/rows.rs` (`RasterRows`, the `Pixels` trait shared
+    with the whole-image `Raster`) and `save/stream.rs`: PNG (IDAT length and
+    CRC patched, Adam7 by row), BMP 16/24/32 (bottom band first), TGA (packet
+    carry), Raw (a pass per plane when planar), Cineon. TIFF streams its strips
+    (`tiff_codec.rs`: PackBits and LZW that take input a band at a time), the
+    pyramid pass, the layer section (tag 37724, count patched) and metadata
+    (`embed_tiff_tail`). GIF, EPS, DCS, BMP ≤ 8 bit and CMYK/Lab Raw/TIFF keep
+    the whole image (`ponytail:`). The app's `save_composite` builds the tiled
+    composite band by band, with the sRGB conversion per band.
+  - **Gate.** `helpers/save_gate.rs`: a native save reserves its tile tables,
+    one compositor band and the encoder's rows (M24 at 17000²: ~180 MiB, was
+    ~11 GB) and admits the merged image's tiles against room plus scratch.
+    Engine raster saves are costed per format; Qt JPEG/WebP and GIF are now
+    gated too. GIF's quantizer cost is fitted to its measured peak (30 B/px).
+  - **Results.** 291 golden digests (PSD and raster, recorded from the previous
+    writers) match. `save_psd` heap guard 128.8 → 68.7 MB at 4250²; the heap
+    harness now fixes rayon's global pool at its 4 threads, since the save
+    worker composites on it. M24 at 17000² under `MemoryMax=2G`: open, pan,
+    fill **and save** ok, peak 1948 MiB, pixels the same as uncapped (peak
+    6416 MiB). This closes #1218's last acceptance item.
+  - **Slow test.** `zip_save_heap_is_bounded` deflates ~0.5 GB at opt-level 0
+    (about 80 s).
+
 - **Document source and composite state — #1345 implemented; tests via CI**
   (OpenSpec change `2026-11-17-document-source-state`, archived; capability
   `document/document-source-state`). `Document.source` and `Document.composite`
@@ -165,8 +203,8 @@ Snapshot for resuming after a context break. Update after each milestone.
     first fit-to-screen picture 9433 → 3598 ms (38 %, target 25 %: #1321),
     peak 1540 → 711 MiB. New M24 (open, pan across, fill on `Paint 1`, save)
     under `MemoryMax=2G`: open, pan and fill pass, peak 1792 MiB, pixels the
-    same as uncapped; the save is refused by `save_bytes` (~11 GB, eager or
-    lazy): #1320. Heap guards: `open_psd` 245.9 → 53.6 MiB, `magic_wand` 1.8 →
+    same as uncapped; the save was refused by `save_bytes` (~11 GB, eager or
+    lazy): fixed by #1320. Heap guards: `open_psd` 245.9 → 53.6 MiB, `magic_wand` 1.8 →
     57.7 MiB (its flood now decodes the tiles the open used to).
   - **Local env.** `tst_open_save::rasterSaveKeepsFileInfo` fails on this host
     as it did for #1290. The shared `../.target` had been deleted; recreating
