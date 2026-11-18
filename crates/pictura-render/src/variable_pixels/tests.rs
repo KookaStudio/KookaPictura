@@ -62,9 +62,11 @@ fn variable_pixel_placement_respects_frame() {
         },
     )
     .unwrap();
-    assert!(bytes.chunks_exact(4).any(|p| (1..255).contains(&p[3])));
-    assert!(bytes
-        .chunks_exact(4)
+    let (pixels, remainder) = bytes.as_chunks::<4>();
+    assert!(remainder.is_empty());
+    assert!(pixels.iter().any(|p| (1..255).contains(&p[3])));
+    assert!(pixels
+        .iter()
         .filter(|p| p[3] != 0)
         .all(|p| p[0] == 255 && p[1] == 0));
 }

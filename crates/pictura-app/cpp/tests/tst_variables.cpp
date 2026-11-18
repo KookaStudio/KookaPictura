@@ -1,6 +1,6 @@
 #include <QtTest/QtTest>
 
-#include "api/variables_bridge.h"
+#include "api/layer_comps_bridge.h"
 #include "commands.h"
 #include "frame.h"
 #include "image_view.h"
@@ -99,7 +99,6 @@ void VariablesTest::commandsTrackTemplateState()
     QCOMPARE(send(view, QStringLiteral("commit")), QString());
     QVERIFY(enabled(applyId));
     QVERIFY(enabled(exportId));
-    QVERIFY(view.layer_from_background(QStringLiteral("0")));
     QVERIFY(view.begin_free_transform(QStringLiteral("0")));
     QVERIFY(!pictura::variables_available(view, QStringLiteral("sets")));
     QVERIFY(!send(view, QStringLiteral("apply"), {{"set", 0}}).isEmpty());
@@ -177,7 +176,6 @@ void VariablesTest::previewSwitchAndCancel()
     const auto window = pictura::test::makeMainWindow();
     QVERIFY(startTemplate(*window));
     auto& view = *window->activeView();
-    QVERIFY(view.layer_from_background(QStringLiteral("0")));
     QTemporaryDir directory;
     QImage replacement(16, 8, QImage::Format_RGBA8888);
     replacement.fill(Qt::red);

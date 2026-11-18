@@ -280,7 +280,6 @@ pub mod qobject {
         /// Extents of every view-pyramid level as flat `w,h` pairs; empty without a document.
         #[qinvokable]
         fn display_level_extents(&self) -> Vec<i32>;
-
         /// The outstanding canvas damage as `"x y w h"`, or empty when clean.
         #[qinvokable]
         fn take_canvas_damage(self: Pin<&mut Self>) -> QString;

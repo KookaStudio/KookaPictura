@@ -2,7 +2,6 @@ use super::*;
 use crate::{read_psd, write_psb, write_psd};
 use pictura_core::layer_comp::{set_layer_id, CompRecord, LayerComp};
 use pictura_core::variables::{Placement, ScaleMethod, Value, VariableKind};
-use pictura_core::LayerStack;
 
 fn document() -> Document {
     let mut doc = Document::from_rgba("Tile", 2, 2, &[255; 16]);

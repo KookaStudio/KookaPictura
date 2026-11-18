@@ -1,6 +1,6 @@
 #include "variables_dialog.h"
 
-#include "api/variables_bridge.h"
+#include "api/layer_comps_bridge.h"
 #include "dialogs.h"
 #include "image_view.h"
 

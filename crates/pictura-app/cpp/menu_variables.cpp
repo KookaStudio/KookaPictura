@@ -1,7 +1,7 @@
 #include "menu_registrar.h"
 
 #include "commands.h"
-#include "api/variables_bridge.h"
+#include "api/layer_comps_bridge.h"
 #include "variables_dialog.h"
 
 namespace pictura {
