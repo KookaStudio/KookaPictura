@@ -33,6 +33,7 @@
 #include <QtCore/QJsonDocument>
 #include <QtCore/QTemporaryDir>
 #include <QtWidgets/QMessageBox>
+#include <QtWidgets/QPushButton>
 
 namespace pictura {
 namespace {
@@ -52,7 +53,7 @@ bool saveActiveInProgress()
     return saveActiveOrigin;
 }
 
-bool ImportSaveCoordinator::saveActive()
+bool ImportSaveCoordinator::saveActive(bool interactive)
 {
     SaveActiveOrigin origin;
     const auto record = [this] {
@@ -115,14 +116,21 @@ bool ImportSaveCoordinator::saveActive()
     if (view && kind != SaveFormatKind::None) {
         applySaveRasterOptions(*view, kind, saveFormatOptionsFromJson(saveFormatOptions_));
     }
-    const bool saved = saveActiveAs(path);
+    std::optional<bool> includeMerged;
+    if (interactive && view && saveRunsOnWorker(path)) {
+        includeMerged = chooseMergedImage(path, *view);
+        if (!includeMerged.has_value()) {
+            return false;
+        }
+    }
+    const bool saved = saveActiveAs(path, includeMerged);
     if (saved) {
         record();
     }
     return saved;
 }
 
-bool ImportSaveCoordinator::saveActiveAs(const QString& path)
+bool ImportSaveCoordinator::saveActiveAs(const QString& path, std::optional<bool> includeMerged)
 {
     const int index = documents_.activeIndex();
     PictureView* view = documents_.viewAt(index);
@@ -132,7 +140,11 @@ bool ImportSaveCoordinator::saveActiveAs(const QString& path)
     const QString name = QFileInfo(path).fileName();
     const bool saved = saveRunsOnWorker(path)
         ? runBusyJob(dialogParent_, name, tr("Saving %1…").arg(name),
-                     [view, path] { return document_api::saveStart(*view, path); },
+                     [view, path, includeMerged] {
+                         return includeMerged.has_value()
+                             ? pictura::native_compatibility_save_start(*view, path, false, *includeMerged)
+                             : document_api::saveStart(*view, path);
+                     },
                      [view] { return document_api::saveRunning(*view); },
                      [view] { return document_api::saveFinish(*view); })
         : document_api::save(*view, path);
@@ -171,7 +183,35 @@ bool ImportSaveCoordinator::saveActiveAs(const QString& path)
     return true;
 }
 
-bool ImportSaveCoordinator::confirmSaveProfile(const QString& path, PictureView& view)
+std::optional<bool> ImportSaveCoordinator::chooseMergedImage(const QString& path,
+                                                            const PictureView& view)
+{
+    if (!saveRunsOnWorker(path) || nativeSaveCompatibility_ == NativeSaveCompatibility::Always
+        || !pictura::native_save_can_omit_merged(view)) {
+        return true;
+    }
+    if (nativeSaveCompatibility_ == NativeSaveCompatibility::Never) {
+        return false;
+    }
+    QMessageBox dialog(QMessageBox::Question, tr("Maximize PSD and PSB File Compatibility"),
+                       tr("Include a merged image? Other applications may need it to open this file."),
+                       QMessageBox::Cancel, dialogParent_);
+    auto* include = dialog.addButton(tr("Include Merged Image"), QMessageBox::AcceptRole);
+    auto* omit = dialog.addButton(tr("Omit Merged Image"), QMessageBox::DestructiveRole);
+    dialog.setDefaultButton(include);
+    dialog.setEscapeButton(QMessageBox::Cancel);
+    runDialog(dialog, dialogParent_);
+    if (dialog.clickedButton() == include) {
+        return true;
+    }
+    if (dialog.clickedButton() == omit) {
+        return false;
+    }
+    return std::nullopt;
+}
+
+bool ImportSaveCoordinator::confirmSaveProfile(const QString& path, const PictureView& view,
+                                               std::optional<bool>& choice)
 {
     const QString suffix = QFileInfo(path).suffix().toLower();
     const bool native = suffix == QStringLiteral("psd") || suffix == QStringLiteral("psb");
@@ -187,14 +227,14 @@ bool ImportSaveCoordinator::confirmSaveProfile(const QString& path, PictureView&
         if (!profileDialogForTest_(initial, embed)) {
             return false;
         }
-        pictura::set_save_embed_profile(view, embed);
+        choice = embed;
         return true;
     }
     SaveOptionsDialog options(initial, true, dialogParent_);
     if (runDialog(options, dialogParent_) != QDialog::Accepted) {
         return false;
     }
-    pictura::set_save_embed_profile(view, options.embedProfile());
+    choice = options.embedProfile();
     return true;
 }
 
@@ -247,14 +287,22 @@ bool ImportSaveCoordinator::saveCopyAsWithOptions(const QString& path, SaveForma
     if (!view || !view->has_document()) {
         return false;
     }
+    std::optional<bool> embed;
     if (!confirmFeatureWarning(path, *view, tr("Save a Copy"))
-        || !promptSaveFormatOptions(path, hint) || !confirmSaveProfile(path, *view)) {
+        || !promptSaveFormatOptions(path, hint) || !confirmSaveProfile(path, *view, embed)) {
         return false;
     }
-    return saveCopyAs(path);
+    const auto includeMerged = chooseMergedImage(path, *view);
+    if (!includeMerged.has_value()) {
+        return false;
+    }
+    if (embed.has_value()) {
+        pictura::set_save_embed_profile(*view, *embed);
+    }
+    return saveCopyAs(path, includeMerged);
 }
 
-bool ImportSaveCoordinator::saveCopyAs(const QString& path)
+bool ImportSaveCoordinator::saveCopyAs(const QString& path, std::optional<bool> includeMerged)
 {
     const int index = documents_.activeIndex();
     PictureView* view = documents_.viewAt(index);
@@ -265,7 +313,11 @@ bool ImportSaveCoordinator::saveCopyAs(const QString& path)
     const bool native = saveRunsOnWorker(path);
     const bool saved = native
         ? runBusyJob(dialogParent_, name, tr("Saving %1…").arg(name),
-                     [view, path] { return document_api::saveCopyStart(*view, path); },
+                     [view, path, includeMerged] {
+                         return includeMerged.has_value()
+                             ? pictura::native_compatibility_save_start(*view, path, true, *includeMerged)
+                             : document_api::saveCopyStart(*view, path);
+                     },
                      [view] { return document_api::saveRunning(*view); },
                      [view] { return document_api::saveFinish(*view); })
         : document_api::saveCopy(*view, path);
@@ -375,15 +427,23 @@ bool ImportSaveCoordinator::saveActiveAsWithOptions(const QString& path, SaveFor
     if (!promptSaveFormatOptions(path, kind)) {
         return false;
     }
+    std::optional<bool> embed;
+    if (!confirmSaveProfile(path, *view, embed)) {
+        return false;
+    }
+    const auto includeMerged = chooseMergedImage(path, *view);
+    if (!includeMerged.has_value()) {
+        return false;
+    }
+    if (embed.has_value()) {
+        pictura::set_save_embed_profile(*view, *embed);
+    }
     if (kind != SaveFormatKind::None) {
         lastSaveKinds_.insert(view, kind);
     } else {
         lastSaveKinds_.remove(view);
     }
-    if (!confirmSaveProfile(path, *view)) {
-        return false;
-    }
-    return saveActiveAs(path);
+    return saveActiveAs(path, includeMerged);
 }
 
 bool ImportSaveCoordinator::promptSaveFormatOptions(const QString& path, SaveFormatKind hint)

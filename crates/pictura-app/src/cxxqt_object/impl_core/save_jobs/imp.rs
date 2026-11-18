@@ -10,6 +10,10 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
+fn can_omit_merged(doc: &pictura_core::Document) -> bool {
+    !doc.layers.is_empty() && doc.channels.is_empty()
+}
+
 /// The live native-save worker and the document identity it snapshotted.
 pub(in crate::cxxqt_object) struct SaveJob {
     handle: std::thread::JoinHandle<bool>,
@@ -24,6 +28,15 @@ pub(in crate::cxxqt_object) fn save_start_rust(
     rust: &mut PictureViewRust,
     path: &str,
     copy: bool,
+) -> bool {
+    save_start_with_compatibility(rust, path, copy, None)
+}
+
+fn save_start_with_compatibility(
+    rust: &mut PictureViewRust,
+    path: &str,
+    copy: bool,
+    compatibility: Option<bool>,
 ) -> bool {
     super::super::super::helpers::memory_gate::clear();
     if rust
@@ -86,8 +99,10 @@ pub(in crate::cxxqt_object) fn save_start_rust(
         let _efficiency = pictura_core::scratch::operation();
         let unreadable_before = pictura_core::memory::eviction::unreadable_reads();
         let mut doc = doc;
-        if dirty {
-            pictura_render::refresh_native_composite(&mut doc);
+        if let Some(include) = compatibility {
+            prepare_compatibility_save(&mut doc, include, dirty);
+        } else {
+            prepare_native_save(&mut doc, dirty);
         }
         // A `.psb` path forces a version-2 PSB container; every other native
         // suffix writes a PSD.
@@ -96,7 +111,9 @@ pub(in crate::cxxqt_object) fn save_start_rust(
         if !embed {
             pictura_codec::remove_document_profile(doc.to_mut());
         }
-        let written = if psb {
+        let written = if compatibility.is_some() {
+            pictura_codec::write_native_compatibility_cached(&doc, &cache, psb)
+        } else if psb {
             pictura_codec::write_psb_cached(&doc, &cache)
         } else {
             pictura_codec::write_psd_cached(&doc, &cache)
@@ -124,6 +141,74 @@ pub(in crate::cxxqt_object) fn save_start_rust(
         copy,
     });
     true
+}
+
+pub(in crate::cxxqt_object) fn prepare_native_save(doc: &mut pictura_core::Document, dirty: bool) {
+    if !doc.composite.merged_output() {
+        if !can_omit_merged(doc) {
+            prepare_compatibility_save(doc, true, dirty);
+        } else if !pictura_render::DocumentComposite::is_stored(doc) {
+            let channels = doc.mode.color_channels();
+            doc.composite
+                .replace(pictura_core::PixelBuffer {
+                    width: doc.width,
+                    height: doc.height,
+                    channels,
+                    data: pictura_core::Plane::filled(
+                        doc.width as usize,
+                        doc.height as usize,
+                        channels as usize,
+                        0,
+                    ),
+                })
+                .expect("valid omitted composite geometry");
+        }
+    } else if dirty {
+        pictura_render::refresh_native_composite(doc);
+    }
+}
+
+fn prepare_compatibility_save(doc: &mut pictura_core::Document, include: bool, dirty: bool) {
+    use pictura_core::{PixelBuffer, Plane};
+
+    if !include && can_omit_merged(doc) {
+        // The codec requires a dimensioned buffer even when its pixels are not written.
+        let channels = doc.mode.color_channels();
+        doc.composite
+            .replace(PixelBuffer {
+                width: doc.width,
+                height: doc.height,
+                channels,
+                data: Plane::filled(
+                    doc.width as usize,
+                    doc.height as usize,
+                    channels as usize,
+                    0,
+                ),
+            })
+            .expect("valid omitted composite geometry");
+        doc.composite.set_merged_output(false);
+        return;
+    }
+
+    let restore = !doc.composite.merged_output() && !doc.layers.is_empty();
+    doc.composite.set_merged_output(true);
+    if restore {
+        if !pictura_render::restore_native_composite(doc) {
+            let mut buffer = pictura_render::composite_tiled(doc);
+            if doc.mode == pictura_core::ColorMode::Grayscale {
+                let mut gray = vec![0; doc.width as usize * doc.height as usize];
+                buffer.data.read_into(0, &mut gray);
+                buffer.channels = 1;
+                buffer.data = gray.into();
+            }
+            doc.composite
+                .replace(buffer)
+                .expect("valid restored composite");
+        }
+    } else if dirty {
+        pictura_render::refresh_native_composite(doc);
+    }
 }
 
 pub(in crate::cxxqt_object) fn save_running_rust(rust: &PictureViewRust) -> bool {
@@ -171,6 +256,28 @@ pub(super) fn save_copy_start(mut view: Pin<&mut PictureView>, path: &QString) -
     save_start_rust(&mut view.as_mut().rust_mut(), &path.to_string(), true)
 }
 
+pub(super) fn native_save_can_omit_merged(view: &PictureView) -> bool {
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .is_some_and(can_omit_merged)
+}
+
+pub(super) fn native_compatibility_save_start(
+    mut view: Pin<&mut PictureView>,
+    path: &QString,
+    copy: bool,
+    include: bool,
+) -> bool {
+    view.as_mut().settle_pending_composite();
+    save_start_with_compatibility(
+        &mut view.as_mut().rust_mut(),
+        &path.to_string(),
+        copy,
+        Some(include),
+    )
+}
 pub(super) fn save_running(view: &PictureView) -> bool {
     save_running_rust(view.rust())
 }
@@ -214,6 +321,412 @@ mod tests {
         while save_running_rust(rust) {
             std::thread::yield_now();
         }
+    }
+
+    fn save_compatible(doc: Document, name: &str, include: bool, dirty: bool) -> Vec<u8> {
+        let mut rust = PictureViewRust::default();
+        rust.session.doc = Some(doc);
+        rust.session.dirty = dirty;
+        let target = path(name);
+        assert!(save_start_with_compatibility(
+            &mut rust,
+            &target,
+            false,
+            Some(include)
+        ));
+        assert!(save_finish_rust(&mut rust));
+        let bytes = std::fs::read(&target).unwrap();
+        std::fs::remove_dir_all(std::path::Path::new(&target).parent().unwrap()).unwrap();
+        bytes
+    }
+
+    fn colored_document() -> Document {
+        let rgba: Vec<u8> = (0..4096)
+            .flat_map(|i| [(i % 251) as u8, (i % 173) as u8, 84, 255])
+            .collect();
+        let mut doc = Document::from_rgba("Color", 64, 64, &rgba);
+        let mut hidden = doc.layers[0].clone();
+        hidden.name = "Hidden".into();
+        hidden.visible = false;
+        doc.layers = LayerStack::from_layers(vec![doc.layers[0].clone(), hidden]);
+        doc
+    }
+
+    #[test]
+    fn native_save_respects_merged_output_choice() {
+        for name in ["color.psd", "color.psb"] {
+            let mut source = colored_document();
+            let expected = pictura_render::composite_rgba(&source);
+            source.composite.detach_plane();
+            let include = save_compatible(source.clone(), name, true, false);
+            let omit = save_compatible(source, name, false, false);
+            assert!(omit.len() < include.len());
+            let include = pictura_codec::read_psd(&include).unwrap();
+            let omit = pictura_codec::read_psd(&omit).unwrap();
+            assert!(include.composite.merged_output());
+            assert!(!omit.composite.merged_output());
+            assert_eq!(omit.is_psb, name.ends_with(".psb"));
+            assert_eq!(include.layers, omit.layers);
+            assert_eq!(
+                &include.composite.data[..64 * 64 * 3],
+                &expected.data[..64 * 64 * 3]
+            );
+        }
+    }
+
+    #[test]
+    fn native_save_restores_merged_image() {
+        for name in ["restore.psd", "restore.psb"] {
+            let omitted = save_compatible(colored_document(), name, false, false);
+            let mut doc = pictura_codec::read_psd(&omitted).unwrap();
+            doc.layers[0].channels_mut()[0].data.as_mut_slice().fill(88);
+            let expected = pictura_render::composite_rgba(&doc);
+            let restored = save_compatible(doc, name, true, true);
+            let restored = pictura_codec::read_psd(&restored).unwrap();
+            assert!(restored.composite.merged_output());
+            assert!(restored.channels.is_empty());
+            assert!(can_omit_merged(&restored));
+            assert_eq!(
+                &restored.composite.data[..64 * 64 * 3],
+                &expected.data[..64 * 64 * 3]
+            );
+            assert_eq!(restored.layers.len(), 2);
+        }
+    }
+
+    #[test]
+    fn native_restore_keeps_merged_transparency_separate() {
+        for name in ["transparent.psd", "transparent.psb"] {
+            let rgba = [40, 90, 150, 80].repeat(64);
+            let source = Document::from_rgba("Transparent", 8, 8, &rgba);
+            let omitted = save_compatible(source, name, false, false);
+            let doc = pictura_codec::read_psd(&omitted).unwrap();
+            let expected = pictura_render::composite_rgba(&doc);
+            let restored =
+                pictura_codec::read_psd(&save_compatible(doc, name, true, true)).unwrap();
+            assert!(restored.channels.is_empty());
+            assert!(can_omit_merged(&restored));
+            assert_eq!(restored.composite.channels, 4);
+            assert_eq!(restored.composite.data.as_ref(), expected.data.as_ref());
+        }
+    }
+
+    #[test]
+    fn signed_alpha_survives_direct_and_noninteractive_resave() {
+        for name in ["signed.psd", "signed.psb"] {
+            let source = Document::from_rgba("Transparent", 8, 8, &[40, 90, 150, 80].repeat(64));
+            let encoded = save_compatible(source, name, true, true);
+            let mut signed = pictura_codec::read_psd(&encoded).unwrap();
+            assert!(signed.composite.signed_merged_alpha());
+            signed.channels.push(pictura_core::Channel {
+                id: 0,
+                data: vec![37; 64].into(),
+            });
+            let direct = if name.ends_with(".psb") {
+                pictura_codec::write_psb(&signed).unwrap()
+            } else {
+                pictura_codec::write_psd(&signed).unwrap()
+            };
+            let lazy = pictura_codec::read_psd_with_options(
+                &direct,
+                &pictura_codec::OpenOptions {
+                    skip_layered_merged: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            assert!(lazy.composite.signed_merged_alpha());
+            assert_eq!(lazy.channels.len(), 1);
+            assert_eq!(lazy.channels[0].data.as_ref(), &[37; 64]);
+            let mut reopened = pictura_codec::read_psd(&direct).unwrap();
+            assert!(reopened.composite.signed_merged_alpha());
+            assert_eq!(reopened.composite.data[3 * 64], 80);
+            assert_eq!(reopened.channels.len(), 1);
+            assert_eq!(reopened.channels[0].data.as_ref(), &[37; 64]);
+            reopened.composite.detach_plane();
+            let mut rust = PictureViewRust::default();
+            rust.session.doc = Some(reopened);
+            let target = path(name);
+            assert!(save_start_rust(&mut rust, &target, false));
+            assert!(save_finish_rust(&mut rust));
+            let reopened = pictura_codec::read_psd(&std::fs::read(&target).unwrap()).unwrap();
+            assert!(reopened.composite.signed_merged_alpha());
+            assert_eq!(reopened.composite.data[3 * 64], 80);
+            assert_eq!(reopened.channels.len(), 1);
+            assert_eq!(reopened.channels[0].data.as_ref(), &[37; 64]);
+            std::fs::remove_dir_all(std::path::Path::new(&target).parent().unwrap()).unwrap();
+        }
+    }
+
+    #[test]
+    fn legacy_save_stages_detached_omitted_composite() {
+        let encoded = save_compatible(colored_document(), "omitted.psd", false, false);
+        let mut doc = pictura_codec::read_psd(&encoded).unwrap();
+        doc.composite.detach_plane();
+        let mut rust = PictureViewRust::default();
+        rust.session.doc = Some(doc);
+        let target = path("legacy.psd");
+        assert!(save_start_rust(&mut rust, &target, false));
+        assert!(save_finish_rust(&mut rust));
+        let reopened = pictura_codec::read_psd(&std::fs::read(&target).unwrap()).unwrap();
+        assert!(!reopened.composite.merged_output());
+        assert_eq!(reopened.layers.len(), 2);
+        std::fs::remove_dir_all(std::path::Path::new(&target).parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn legacy_save_preserves_channels_from_marked_placeholder() {
+        use pictura_codec::{encode_image_resources, frame_image_resource};
+        let mut source = colored_document();
+        source.channels.push(pictura_core::Channel {
+            id: 0,
+            data: vec![37; 64 * 64].into(),
+        });
+        let marker = frame_image_resource(1057, "", &[0, 0, 0, 1, 1]);
+        source.image_resources = encode_image_resources(std::slice::from_ref(&marker)).into();
+        let mut encoded = pictura_codec::write_psd(&pictura_render::save_view(&source)).unwrap();
+        let offset = encoded
+            .windows(marker.raw.len())
+            .position(|bytes| bytes == marker.raw)
+            .unwrap();
+        let flag = marker.raw.len() - marker.data.len() - marker.data.len() % 2 + 4;
+        encoded[offset + flag] = 0;
+        let mut doc = pictura_codec::read_psd(&encoded).unwrap();
+        assert!(!doc.composite.merged_output());
+        assert_eq!(doc.channels[0].data.as_ref(), &[37; 64 * 64]);
+        doc.composite.detach_plane();
+        let mut rust = PictureViewRust::default();
+        rust.session.doc = Some(doc);
+        let target = path("with-channel.psd");
+        assert!(save_start_rust(&mut rust, &target, false));
+        assert!(save_finish_rust(&mut rust));
+        let reopened = pictura_codec::read_psd(&std::fs::read(&target).unwrap()).unwrap();
+        assert!(reopened.composite.merged_output());
+        assert_eq!(reopened.channels[0].data.as_ref(), &[37; 64 * 64]);
+        std::fs::remove_dir_all(std::path::Path::new(&target).parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn direct_writer_synchronizes_existing_version_info() {
+        use pictura_codec::{decode_image_resources, encode_image_resources, frame_image_resource};
+        let mut doc = colored_document();
+        let marker = frame_image_resource(1057, "", &[0, 0, 0, 1, 0]);
+        let other = frame_image_resource(1005, "", &[1, 2, 3, 4]);
+        doc.image_resources = encode_image_resources(&[marker, other.clone()]).into();
+        for bytes in [
+            pictura_codec::write_psd(&doc).unwrap(),
+            pictura_codec::write_psb(&doc).unwrap(),
+        ] {
+            let back = pictura_codec::read_psd(&bytes).unwrap();
+            let resources = decode_image_resources(&back);
+            assert_eq!(resources.iter().find(|r| r.id == 1057).unwrap().data[4], 1);
+            assert_eq!(
+                resources.iter().find(|r| r.id == 1005).unwrap().raw,
+                other.raw
+            );
+            assert!(back.composite.merged_output());
+        }
+    }
+
+    #[test]
+    fn native_save_preserves_required_image_data() {
+        for name in ["protected.psd", "protected.psb"] {
+            let flat =
+                Document::with_uniform_composite(8, 8, ColorMode::Grayscale, BitDepth::Eight, 44);
+            let flat = pictura_codec::read_psd(&save_compatible(flat, name, false, false)).unwrap();
+            assert!(flat.composite.merged_output());
+            assert_eq!(flat.composite.data.as_ref(), &[44; 64]);
+
+            let mut layered = colored_document();
+            layered.channels.push(pictura_core::Channel {
+                id: 0,
+                data: vec![37; 64 * 64].into(),
+            });
+            let layered =
+                pictura_codec::read_psd(&save_compatible(layered, name, false, false)).unwrap();
+            assert!(layered.composite.merged_output());
+            assert_eq!(layered.layers.len(), 2);
+            assert_eq!(layered.channels[0].data.as_ref(), &[37; 64 * 64]);
+        }
+    }
+
+    #[test]
+    fn native_save_restores_adobe_omitted_fixture() {
+        use pictura_codec::{decode_image_resources, encode_image_resources, frame_image_resource};
+
+        // Generated from the observed structure of the local Photoshop 2021
+        // reference: resource 1057 with false, plus a white 3-channel RLE image.
+        let mut doc = colored_document();
+        doc.composite
+            .replace(pictura_core::PixelBuffer {
+                width: 64,
+                height: 64,
+                channels: 3,
+                data: vec![255; 64 * 64 * 3].into(),
+            })
+            .unwrap();
+        let version_info = [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
+        let marker = frame_image_resource(1057, "", &version_info);
+        doc.image_resources = encode_image_resources(std::slice::from_ref(&marker)).into();
+        let mut encoded = pictura_codec::write_psd(&doc).unwrap();
+        let mut real_marker = marker.raw.clone();
+        let flag = real_marker.len() - marker.data.len() - marker.data.len() % 2 + 4;
+        real_marker[flag] = 1;
+        let offset = encoded
+            .windows(real_marker.len())
+            .position(|bytes| bytes == real_marker)
+            .unwrap();
+        encoded[offset + flag] = 0;
+        let mut doc = pictura_codec::read_psd(&encoded).unwrap();
+        assert!(!doc.composite.merged_output());
+        doc.layers[0].channels_mut()[0].data.as_mut_slice().fill(80);
+        let output = save_compatible(doc, "adobe.psd", true, true);
+        let back = pictura_codec::read_psd(&output).unwrap();
+        assert!(back.composite.merged_output());
+        assert_eq!(back.composite.data[0], 80);
+        let resource = decode_image_resources(&back)
+            .into_iter()
+            .find(|resource| resource.id == 1057)
+            .unwrap();
+        assert_eq!(resource.data[4], 1);
+    }
+
+    fn native_layered(mode: ColorMode, depth: BitDepth) -> Document {
+        use pictura_core::{PixelBuffer, Samples, SourceChannels};
+
+        let color_count = mode.color_channels();
+        let mut doc = Document::from_rgba("Native", 8, 8, &[100, 100, 100, 255].repeat(64));
+        doc.mode = mode;
+        let layer = &mut doc.layers[0];
+        layer
+            .channels_mut()
+            .retain(|channel| channel.id < i16::from(color_count));
+        let planes = layer
+            .channels()
+            .iter()
+            .map(|channel| {
+                let samples = match (depth, channel.id) {
+                    (BitDepth::Sixteen, -1) => Samples::U16(vec![u16::MAX; 64].into()),
+                    (BitDepth::Sixteen, _) => Samples::U16(vec![25_701; 64].into()),
+                    (BitDepth::ThirtyTwo, -1) => Samples::F32(vec![1.0; 64].into()),
+                    _ => Samples::F32(vec![0.393; 64].into()),
+                };
+                (channel.id, samples)
+            })
+            .collect();
+        layer.source_channels = Some(SourceChannels::new(depth, layer.rect, planes));
+        doc.source.set_native(Some(depth), None).unwrap();
+        doc.composite
+            .replace(PixelBuffer {
+                width: 8,
+                height: 8,
+                channels: color_count,
+                data: vec![100; 64 * usize::from(color_count)].into(),
+            })
+            .unwrap();
+        doc
+    }
+
+    #[test]
+    fn native_save_restores_missing_native_composite() {
+        for mode in [ColorMode::Rgb, ColorMode::Grayscale] {
+            for depth in [BitDepth::Sixteen, BitDepth::ThirtyTwo] {
+                for name in ["native.psd", "native.psb"] {
+                    let source = native_layered(mode, depth);
+                    let encoded = save_compatible(source, name, false, false);
+                    let omitted = pictura_codec::read_psd(&encoded).unwrap();
+                    assert!(!omitted.composite.merged_output());
+                    assert!(omitted.source.planes().is_none());
+                    for dirty in [false, true] {
+                        let mut doc = omitted.clone();
+                        if dirty {
+                            doc.layers[0].name = "Edited".into();
+                        }
+                        let expected = doc.authoritative_plane(&doc.layers[0], 0).unwrap().clone();
+                        let encoded = save_compatible(doc, name, true, dirty);
+                        let restored = pictura_codec::read_psd(&encoded).unwrap();
+                        assert!(restored.composite.merged_output());
+                        assert_eq!(restored.source.depth(), Some(depth));
+                        let native = restored.source.planes().as_ref().unwrap();
+                        assert_eq!(native.samples.slice(0..64).unwrap(), expected);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn native_depth_save_regressions() {
+        use pictura_core::{Channel, Samples, SourcePlanes};
+
+        let mut doc = native_layered(ColorMode::Rgb, BitDepth::Sixteen);
+        assert!(pictura_render::restore_native_composite(&mut doc));
+        let unchanged =
+            pictura_codec::read_psd(&save_compatible(doc.clone(), "native.psd", true, false))
+                .unwrap();
+        assert!(unchanged.channels.is_empty());
+        assert_eq!(unchanged.source.depth(), Some(BitDepth::Sixteen));
+        let edited = save_compatible(doc.clone(), "native.psd", true, true);
+        let native = pictura_codec::read_psd(&edited).unwrap();
+        assert_eq!(
+            native
+                .source
+                .planes()
+                .as_ref()
+                .unwrap()
+                .samples
+                .slice(0..64),
+            doc.source.planes().as_ref().unwrap().samples.slice(0..64)
+        );
+
+        let mut with_channel = doc.clone();
+        with_channel.channels.push(Channel {
+            id: 0,
+            data: vec![98; 64].into(),
+        });
+        let native =
+            pictura_codec::read_psd(&save_compatible(with_channel, "channel.psd", true, true))
+                .unwrap();
+        assert_eq!(native.channels.len(), 1);
+        assert_eq!(native.channels[0].data.as_ref(), &[98; 64]);
+
+        let mut converted = native_layered(ColorMode::Rgb, BitDepth::Sixteen);
+        converted
+            .source
+            .set_encoding(Some(ColorMode::Cmyk), None)
+            .unwrap();
+        converted
+            .source
+            .replace_planes(Some(SourcePlanes {
+                depth: BitDepth::Sixteen,
+                width: 8,
+                height: 8,
+                samples: Samples::U16(vec![25_701; 4 * 64].into()),
+            }))
+            .unwrap();
+        let expected = pictura_codec::write_psd(&converted).unwrap();
+        assert_eq!(
+            save_compatible(converted, "converted.psd", true, true),
+            expected
+        );
+
+        doc.layers = LayerStack::default();
+        let expected = pictura_codec::write_psd(&doc).unwrap();
+        assert_eq!(save_compatible(doc, "native.psd", true, true), expected);
+    }
+
+    #[test]
+    fn native_save_codec_preconditions() {
+        let mut doc = colored_document();
+        doc.composite.set_merged_output(false);
+        let bytes = pictura_codec::write_psd(&doc).unwrap();
+        let omitted = pictura_codec::read_psd(&bytes).unwrap();
+        assert!(!omitted.composite.merged_output());
+        assert!(pictura_codec::decode_image_resources(&omitted)
+            .iter()
+            .all(|resource| resource.id != 1057));
+        doc.composite.detach_plane();
+        assert!(pictura_codec::write_psd(&doc).is_err());
     }
 
     #[test]

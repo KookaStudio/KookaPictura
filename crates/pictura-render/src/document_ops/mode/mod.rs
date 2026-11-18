@@ -235,6 +235,7 @@ pub fn save_view(doc: &Document) -> Cow<'_, Document> {
     };
     let plane = doc.width as usize * doc.height as usize;
     if (doc.source.mode().is_none() && doc.channels.is_empty())
+        || doc.composite.signed_merged_alpha()
         || doc.mode != ColorMode::Rgb
         || doc.composite.channels != 4
         || doc.composite.width != doc.width

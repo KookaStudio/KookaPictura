@@ -175,7 +175,7 @@ QJsonObject ControlServer::methodDocument(const QJsonObject& params)
                 return error(QStringLiteral("refused"),
                              QStringLiteral("this save needs a dialog; use save_as"));
             }
-            applied = frame_->saveActive();
+            applied = frame_->saveActive(false);
         } else {
             applied = frame_->saveActiveAsWithRememberedOptions(path);
         }

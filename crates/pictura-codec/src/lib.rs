@@ -24,6 +24,7 @@ mod advanced_blending;
 mod budget;
 mod color_mode;
 mod common;
+mod compatibility;
 mod crs_xmp;
 mod depth;
 mod descriptor;
@@ -200,7 +201,9 @@ pub use web::{
     SliceHtmlOptions, SliceLayout, WebMetadata,
 };
 pub use webp::{decode_webp, encode_webp};
-pub use write::{write_psb, write_psb_cached, write_psd, write_psd_cached};
+pub use write::{
+    write_native_compatibility_cached, write_psb, write_psb_cached, write_psd, write_psd_cached,
+};
 pub use write_cache::{warm_encode_idents, EncodeCache, EncodeStats};
 pub use write_indexed::{gif_indexed_source_is_current, indexed_source_is_current};
 pub use xmp::{parse_xmp, patch_xmp, patch_xmp_values, to_xmp_packet, XmpField, XmpProperties};

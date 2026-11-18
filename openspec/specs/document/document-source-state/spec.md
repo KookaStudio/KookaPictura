@@ -74,7 +74,7 @@ disable writing the merged image. Shape validity SHALL NOT claim freshness.
 #### Scenario: Merged output is independent of stored pixels [dss_merged_output]
 
 - **WHEN** a layered document has no stored composite but merged-image output enabled, or has a maintained buffer while merged-image output is disabled
-- **THEN** the application picture-save path respectively renders and writes a merged image or omits the image-data section, regardless of buffer residency. Direct codec writers retain their existing composite-buffer preconditions and errors
+- **THEN** the application picture-save path respectively renders and writes a merged image or omits the real merged image, regardless of buffer residency. An explicit app-only write option may emit a fixture-supported placeholder or metadata; direct codec writers retain their existing default of no image-data section. Direct codec writers retain their existing composite-buffer preconditions and errors
 
 ### Requirement: State transitions preserve document data and failure atomicity
 

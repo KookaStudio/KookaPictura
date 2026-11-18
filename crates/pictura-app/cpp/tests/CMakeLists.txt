@@ -143,6 +143,7 @@ set(PICTURA_QT_TESTS
     tst_profile_dialog
     tst_profile_warnings
     tst_save_options
+    tst_psd_compatibility
     tst_save_format_options
     tst_batch_dialog
     tst_batch_run

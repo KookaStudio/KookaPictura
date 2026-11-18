@@ -11,6 +11,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 #include "document_window.h"
 #include "recovery_store.h"
@@ -91,8 +92,8 @@ public:
     static bool isPdfPath(const QString& path);
 
     // Save / close.
-    bool saveActive();
-    bool saveActiveAs(const QString& path);
+    bool saveActive(bool interactive = true);
+    bool saveActiveAs(const QString& path, std::optional<bool> includeMerged = std::nullopt);
     // Save a known path with the remembered options for its suffix (no dialog):
     // the path used by the control server and recorded-command replay. A
     // recorded Save As step's `stepOptions` overlay the remembered options for
@@ -102,10 +103,9 @@ public:
     bool saveActiveAsWithOptions(const QString& path,
                                  SaveFormatKind hint = SaveFormatKind::None);
     bool saveCopyWithDialog();
-    bool saveCopyAs(const QString& path);
+    bool saveCopyAs(const QString& path, std::optional<bool> includeMerged = std::nullopt);
     bool saveCopyAsWithOptions(const QString& path,
                                SaveFormatKind hint = SaveFormatKind::None);
-    bool confirmSaveProfile(const QString& path, PictureView& view);
     bool confirmFeatureWarning(const QString& path, PictureView& view, const QString& title);
     bool promptSaveFormatOptions(const QString& path,
                                  SaveFormatKind hint = SaveFormatKind::None);
@@ -143,6 +143,8 @@ public:
     void setAutoSaveRecovery(bool on, int minutes);
     bool autoSaveRecovery() const { return autoSaveRecovery_; }
     int autoSaveMinutes() const { return autoSaveMinutes_; }
+    int nativeSaveCompatibility() const { return static_cast<int>(nativeSaveCompatibility_); }
+    void setNativeSaveCompatibility(int choice);
     void offerRecovery();
     int recoverOrphans();
     void autosaveRecovery();
@@ -195,6 +197,10 @@ Q_SIGNALS:
     void documentOpenFinished(quint64 token, int outcome, const QString& error);
 
 private:
+    enum class NativeSaveCompatibility { Always, Ask, Never };
+    std::optional<bool> chooseMergedImage(const QString& path, const PictureView& view);
+    bool confirmSaveProfile(const QString& path, const PictureView& view,
+                            std::optional<bool>& embed);
     // A PDF probe that has no tab yet. `token` is the open the caller waits on;
     // `password` is the one already accepted, if any.
     struct PdfProbe {
@@ -293,6 +299,7 @@ private:
     int recoveryCounter_ = 0;
     bool autoSaveRecovery_ = true;
     int autoSaveMinutes_ = 10;
+    NativeSaveCompatibility nativeSaveCompatibility_ = NativeSaveCompatibility::Always;
 };
 
 } // namespace pictura
