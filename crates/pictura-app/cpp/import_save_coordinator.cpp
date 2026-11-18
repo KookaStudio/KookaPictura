@@ -40,6 +40,7 @@ void ImportSaveCoordinator::saveState(SessionState& state) const
     state.saveFormatOptions = saveFormatOptions_;
     state.autoSaveRecovery = autoSaveRecovery_;
     state.autoSaveMinutes = autoSaveMinutes_;
+    state.nativeSaveCompatibility = nativeSaveCompatibility();
 }
 
 void ImportSaveCoordinator::loadState(const SessionState& state)
@@ -49,6 +50,13 @@ void ImportSaveCoordinator::loadState(const SessionState& state)
     saveFormatOptions_ = state.saveFormatOptions;
     autoSaveRecovery_ = state.autoSaveRecovery;
     autoSaveMinutes_ = state.autoSaveMinutes;
+    setNativeSaveCompatibility(state.nativeSaveCompatibility);
+}
+
+void ImportSaveCoordinator::setNativeSaveCompatibility(int choice)
+{
+    nativeSaveCompatibility_ = choice >= 0 && choice <= 2
+        ? static_cast<NativeSaveCompatibility>(choice) : NativeSaveCompatibility::Always;
 }
 
 void ImportSaveCoordinator::recordCommand(const char* id, const QJsonObject& values)

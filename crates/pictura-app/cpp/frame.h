@@ -397,7 +397,7 @@ public:
     // "Duplicate Layer" state. False when `source` is not another open document
     // or the bridge refuses the copy.
     bool copyLayerFromDocument(const void* source, const QString& path);
-    bool saveActive();
+    bool saveActive(bool interactive = true);
     bool saveActiveAs(const QString& path);
     // Prompt for a Save As path with the format-aware filters (preselecting the
     // active document's source format) and write through `saveActiveAs`. Warns

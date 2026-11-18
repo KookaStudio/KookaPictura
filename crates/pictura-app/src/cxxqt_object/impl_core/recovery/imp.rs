@@ -49,7 +49,7 @@ pub(super) fn write_snapshot(
     path: &str,
     cache: &pictura_codec::EncodeCache,
 ) -> std::io::Result<()> {
-    pictura_render::refresh_native_composite(&mut doc);
+    super::super::save_jobs::prepare_native_save(&mut doc, true);
     let bytes = pictura_codec::write_psd_cached(&pictura_render::save_view(&doc), cache)
         .map_err(|e| std::io::Error::other(e.to_string()))?;
     super::super::super::helpers::safe_io::write_atomically(path, &bytes, true)
@@ -95,6 +95,27 @@ mod tests {
         assert_eq!(back.layers[0].name, "Layer 0");
         assert_eq!(back.work_path.subpaths.len(), 1);
         assert_eq!(back.work_path.subpaths[0].points.len(), 2);
+    }
+
+    #[test]
+    fn snapshot_stages_an_omitted_detached_composite() {
+        let mut doc = Document::from_rgba("Layer", 4, 3, &[50, 90, 120, 255].repeat(12));
+        doc.composite.set_merged_output(false);
+        doc.composite.detach_plane();
+        let dir =
+            std::env::temp_dir().join(format!("pictura-recovery-omitted-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("snapshot.psd");
+        write_snapshot(
+            doc,
+            target.to_str().unwrap(),
+            &pictura_codec::EncodeCache::new(),
+        )
+        .unwrap();
+        let reopened = pictura_codec::read_psd(&std::fs::read(&target).unwrap()).unwrap();
+        assert!(!reopened.composite.merged_output());
+        assert_eq!(reopened.layers.len(), 1);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

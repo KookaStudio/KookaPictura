@@ -3,7 +3,9 @@
 //! cap.
 
 use pictura_adjust::{AdjustError, Adjustment, ColorBalanceMode};
-use pictura_core::{BitDepth, ColorMode, Document, Layer, PixelBuffer, PsdRect, Samples};
+use pictura_core::{
+    BitDepth, ColorMode, Document, Layer, PixelBuffer, PsdRect, Samples, SourcePlanes,
+};
 
 use rayon::prelude::*;
 
@@ -413,6 +415,15 @@ fn sample_stride(samples: &Samples) -> Option<usize> {
 /// source-mode, not working RGB), no layers, or no retained source planes. Alpha
 /// and extra planes, and `doc.channels`, are left untouched.
 pub fn refresh_native_composite(doc: &mut Document) -> bool {
+    refresh_native_composite_inner(doc, false)
+}
+
+/// Rebuild a real merged image from retained native layers after omission.
+pub fn restore_native_composite(doc: &mut Document) -> bool {
+    refresh_native_composite_inner(doc, true)
+}
+
+fn refresh_native_composite_inner(doc: &mut Document, restore: bool) -> bool {
     if !matches!(
         doc.source.depth(),
         Some(BitDepth::Sixteen | BitDepth::ThirtyTwo)
@@ -421,29 +432,47 @@ pub fn refresh_native_composite(doc: &mut Document) -> bool {
     {
         return false;
     }
-    let Some(store) = doc.source.planes().as_ref() else {
+    let store = doc.source.planes().as_ref();
+    if store.is_none() && !(restore && doc.retains_source_depth()) {
         return false;
-    };
-    let store_depth = store.depth;
-    let Some(sample_size) = sample_stride(&store.samples) else {
-        return false;
-    };
-    let mut bytes = store.samples.to_bytes();
+    }
     let Some(native) = composite_native(doc) else {
         return false;
     };
 
     let plane = doc.width as usize * doc.height as usize;
     let color_channels = doc.mode.color_channels() as usize;
-    let cut = color_channels * plane * sample_size;
-    if bytes.len() < cut {
-        return false;
+    if let Some(store) = store {
+        let Some(sample_size) = sample_stride(&store.samples) else {
+            return false;
+        };
+        let cut = color_channels * plane * sample_size;
+        let mut bytes = store.samples.to_bytes();
+        if bytes.len() < cut {
+            return false;
+        }
+        bytes[..cut].copy_from_slice(&native.to_bytes()[..cut]);
+        if doc.mode == ColorMode::Rgb && doc.composite.signed_merged_alpha() {
+            let alpha_end = cut + plane * sample_size;
+            if bytes.len() >= alpha_end {
+                bytes[cut..alpha_end].copy_from_slice(&native.to_bytes()[cut..alpha_end]);
+            }
+        }
+        doc.source
+            .replace_samples(Samples::from_bytes(&bytes, store.depth))
+            .expect("native refresh preserves source depth");
+    } else {
+        doc.source
+            .replace_planes(Some(SourcePlanes {
+                depth: doc.source.depth().expect("recorded native depth"),
+                width: doc.width,
+                height: doc.height,
+                samples: native
+                    .slice(0..color_channels * plane)
+                    .expect("native color planes"),
+            }))
+            .expect("valid restored native composite");
     }
-    let native_bytes = native.to_bytes();
-    bytes[..cut].copy_from_slice(&native_bytes[..cut]);
-    doc.source
-        .replace_samples(Samples::from_bytes(&bytes, store_depth))
-        .expect("native refresh preserves source depth");
 
     let narrowed = native.narrow_to_u8();
     doc.composite

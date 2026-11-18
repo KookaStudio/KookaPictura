@@ -42,6 +42,15 @@ pub mod ffi {
         /// path or clearing modified.
         fn save_copy_start(view: Pin<&mut PictureView>, path: &QString) -> bool;
 
+        fn native_save_can_omit_merged(view: &PictureView) -> bool;
+
+        fn native_compatibility_save_start(
+            view: Pin<&mut PictureView>,
+            path: &QString,
+            copy: bool,
+            include: bool,
+        ) -> bool;
+
         /// Whether a started native save is still running.
         fn save_running(view: &PictureView) -> bool;
 

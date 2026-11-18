@@ -212,6 +212,19 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     autoSaveLayout->addWidget(autoSaveMinutes_);
     autoSaveLayout->addStretch(1);
     fileHandlingLayout->addWidget(autoSaveRow);
+    auto* compatibilityRow = new QHBoxLayout;
+    auto* compatibilityLabel = new QLabel(tr("Maximize PSD and PSB File Compatibility:"),
+                                          fileHandlingPage);
+    nativeSaveCompatibility_ = new QComboBox(fileHandlingPage);
+    nativeSaveCompatibility_->setObjectName(QStringLiteral("preferencesNativeSaveCompatibility"));
+    nativeSaveCompatibility_->addItems({tr("Always"), tr("Ask"), tr("Never")});
+    compatibilityLabel->setBuddy(nativeSaveCompatibility_);
+    compatibilityRow->addWidget(compatibilityLabel);
+    compatibilityRow->addWidget(nativeSaveCompatibility_);
+    compatibilityRow->addStretch();
+    fileHandlingLayout->addLayout(compatibilityRow);
+    connect(nativeSaveCompatibility_, &QComboBox::currentIndexChanged,
+            this, &PreferencesDialog::nativeSaveCompatibilityChanged);
     fileHandlingLayout->addStretch(1);
     stack_->addWidget(fileHandlingPage);
     setAutoSaveRecovery(true, 10);
@@ -481,6 +494,12 @@ void PreferencesDialog::setGpuComputeEnabled(bool on)
     if (QCheckBox* box = checkbox(QStringLiteral("useGpuCompute"))) {
         box->setEnabled(on);
     }
+}
+
+void PreferencesDialog::setNativeSaveCompatibility(int choice)
+{
+    const QSignalBlocker blocker(nativeSaveCompatibility_);
+    nativeSaveCompatibility_->setCurrentIndex(choice);
 }
 
 void PreferencesDialog::setAutoSaveRecovery(bool on, int minutes)

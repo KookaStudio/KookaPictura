@@ -72,6 +72,7 @@ struct SessionState {
     // Information Every <n> minutes (CS6 choices 5/10/15/30/60, default 10).
     bool autoSaveRecovery = true;
     int autoSaveMinutes = 10;
+    int nativeSaveCompatibility = 0; // Always, Ask, Never
     // Agent control: what an agent attached to this window may do. Off, and
     // read-only, until the person says otherwise.
     bool agentControlEnabled = false;

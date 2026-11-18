@@ -181,6 +181,8 @@ SessionState loadSession()
     state.showSmartFilterEditMessage =
         obj.value(QStringLiteral("showSmartFilterEditMessage")).toBool(true);
     state.autoSaveRecovery = obj.value(QStringLiteral("autoSaveRecovery")).toBool(true);
+    const int compatibility = obj.value(QStringLiteral("nativeSaveCompatibility")).toInt();
+    state.nativeSaveCompatibility = compatibility >= 0 && compatibility <= 2 ? compatibility : 0;
     state.agentControlEnabled = obj.value(QStringLiteral("agentControlEnabled")).toBool(false);
     state.agentAllowEdit = obj.value(QStringLiteral("agentAllowEdit")).toBool(false);
     state.agentAllowSave = obj.value(QStringLiteral("agentAllowSave")).toBool(false);
@@ -353,6 +355,7 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("showFullScreenMessage"), state.showFullScreenMessage);
     obj.insert(QStringLiteral("showSmartFilterEditMessage"), state.showSmartFilterEditMessage);
     obj.insert(QStringLiteral("autoSaveRecovery"), state.autoSaveRecovery);
+    obj.insert(QStringLiteral("nativeSaveCompatibility"), state.nativeSaveCompatibility);
     obj.insert(QStringLiteral("agentControlEnabled"), state.agentControlEnabled);
     obj.insert(QStringLiteral("agentAllowEdit"), state.agentAllowEdit);
     obj.insert(QStringLiteral("agentAllowSave"), state.agentAllowSave);

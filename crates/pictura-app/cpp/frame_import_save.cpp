@@ -9,9 +9,9 @@
 
 namespace pictura {
 
-bool PicturaMainWindow::saveActive()
+bool PicturaMainWindow::saveActive(bool interactive)
 {
-    return importSave_ && importSave_->saveActive();
+    return importSave_ && importSave_->saveActive(interactive);
 }
 
 bool PicturaMainWindow::saveActiveAs(const QString& path)
