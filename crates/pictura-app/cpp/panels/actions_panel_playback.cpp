@@ -252,9 +252,13 @@ void ActionsPanel::advancePlayback()
     }
     if (!ok) {
         const QString detail = registry_ ? registry_->lastError() : QString();
+        // Recorded steps carry no name of their own; the tree shows the command label.
+        const QModelIndex row = model_->indexForId(step.id);
+        const QString label =
+            step.name.isEmpty() && row.isValid() ? row.data().toString() : step.name;
         reportError(detail.isEmpty()
-                        ? tr("Step %1 (%2) failed.").arg(step.name, step.commandId)
-                        : tr("Step %1 (%2) failed: %3").arg(step.name, step.commandId, detail));
+                        ? tr("Step %1 (%2) failed.").arg(label, step.commandId)
+                        : tr("Step %1 (%2) failed: %3").arg(label, step.commandId, detail));
         finishPlayback();
         return;
     }

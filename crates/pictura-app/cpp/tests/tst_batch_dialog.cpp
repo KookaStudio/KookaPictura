@@ -17,6 +17,7 @@
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QGridLayout>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QSpinBox>
 
@@ -171,6 +172,18 @@ void BatchDialogTest::dialogShowsEveryGroup()
     // CS6's default scheme.
     QCOMPARE(dialog.options().namingFields,
              (QStringList{QStringLiteral("Document Name"), QStringLiteral("extension")}));
+    // The fields read left to right, then top to bottom.
+    auto* grid = qobject_cast<QGridLayout*>(
+        child<QComboBox>(dialog, "namingField0")->parentWidget()->layout()->itemAt(1)->layout());
+    QVERIFY(grid);
+    for (int i = 0; i < pictura::FileNamingWidget::kFieldCount; ++i) {
+        int row = -1, column = -1, rowSpan = 0, columnSpan = 0;
+        grid->getItemPosition(grid->indexOf(dialog.findChild<QComboBox*>(
+                                  QStringLiteral("namingField%1").arg(i))),
+                              &row, &column, &rowSpan, &columnSpan);
+        QCOMPARE(row, i / 2);
+        QCOMPARE(column, i % 2);
+    }
 }
 
 void BatchDialogTest::controlsFollowSourceAndDestination()

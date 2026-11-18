@@ -196,7 +196,8 @@ void BatchRunner::handleOpen(int outcome, const QString& error)
         return;
     }
     if (!opened) {
-        failInput(error.isEmpty() ? tr("Could not open the file.") : error);
+        failInput(error.isEmpty() ? tr("Could not open the file.")
+                                  : tr("Could not open the file: %1").arg(error));
         return;
     }
     play();

@@ -62,8 +62,8 @@ FileNamingWidget::FileNamingWidget(QWidget* parent)
             updateExample();
             emit changed();
         });
-        // Two columns of three, filled down each column as in CS6.
-        grid->addWidget(combo, i % 3, i / 3);
+        // CS6 reads the fields left to right, then top to bottom.
+        grid->addWidget(combo, i / 2, i % 2);
         fields_ << combo;
     }
     layout->addLayout(grid);
