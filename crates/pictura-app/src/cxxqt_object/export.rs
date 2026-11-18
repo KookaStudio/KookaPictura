@@ -96,6 +96,12 @@ pub mod ffi {
             lossless: bool,
         ) -> Vec<u8>;
 
+        /// Flatten the document composite and write it as WebP. `lossless`
+        /// selects VP8L, otherwise lossy VP8 at `quality` (0-100). Never
+        /// changes the document, its path, dirty flag, or history; false
+        /// without writing on refusal.
+        fn export_webp(view: &PictureView, path: &QString, quality: i32, lossless: bool) -> bool;
+
         /// Store the format options the next raster save of this document uses.
         fn set_save_raster_options(
             view: Pin<&mut PictureView>,

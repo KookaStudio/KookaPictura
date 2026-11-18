@@ -35,7 +35,8 @@ bool isSave(const QString& method, const QJsonObject& params)
 
 bool writesFile(const QString& method, const QJsonObject& params)
 {
-    return isSave(method, params) || method == QStringLiteral("export_png");
+    return isSave(method, params) || method == QStringLiteral("export_png")
+        || method == QStringLiteral("export_webp");
 }
 
 // `ownCrop`: the pending crop is the agent's, so it is not the person's to finish.

@@ -188,6 +188,7 @@ private:
     QJsonObject methodLayerDigest(const QJsonObject& params);
     QJsonObject methodSetActiveLayer(const QJsonObject& params);
     QJsonObject methodExportPng(const QJsonObject& params);
+    QJsonObject methodExportWebp(const QJsonObject& params);
     QJsonObject methodHistory(const QJsonObject& params);
     QJsonObject methodCommitCrop(const QJsonObject& params);
 

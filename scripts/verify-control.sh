@@ -59,13 +59,15 @@ if [ ! -S "$sock" ] || [ ! -s "$sock.token" ]; then
     exit 1
 fi
 
-python3 - "$sock" <<'PY'
+python3 - "$sock" "$tmp" <<'PY'
 import base64
 import json
+import os
 import socket
 import sys
 
 sock_path = sys.argv[1]
+export_dir = sys.argv[2]
 with open(sock_path + ".token") as token_file:
     token = token_file.read().strip()
 conn = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -142,6 +144,32 @@ if (shot.get("source_width"), shot.get("source_height")) != (8, 8):
 png = base64.b64decode(shot["base64"])
 if png[:8] != b"\x89PNG\r\n\x1a\n":
     fail("screenshot bytes are not a PNG")
+
+# 6. The control export writes lossy VP8 by default and VP8L on request.
+def webp_chunks(path):
+    data = open(path, "rb").read()
+    if data[:4] != b"RIFF" or data[8:12] != b"WEBP":
+        fail(f"{path} is not a WebP container")
+    chunks = []
+    at = 12
+    while at + 8 <= len(data):
+        fourcc = data[at:at + 4].decode("latin1")
+        size = int.from_bytes(data[at + 4:at + 8], "little")
+        chunks.append(fourcc)
+        at += 8 + size + (size & 1)
+    return chunks
+
+
+lossy_path = os.path.join(export_dir, "control-lossy.webp")
+lossless_path = os.path.join(export_dir, "control-lossless.webp")
+call("export_webp", path=lossy_path, quality=90)
+call("export_webp", path=lossless_path, lossless=True)
+lossy_chunks = webp_chunks(lossy_path)
+lossless_chunks = webp_chunks(lossless_path)
+if "VP8 " not in lossy_chunks or "VP8L" in lossy_chunks:
+    fail(f"lossy export chunks: {lossy_chunks}")
+if "VP8L" not in lossless_chunks or "VP8 " in lossless_chunks:
+    fail(f"lossless export chunks: {lossless_chunks}")
 
 print("verify-control: recipe OK")
 PY

@@ -553,6 +553,7 @@ const QList<ControlServer::MethodRow>& ControlServer::methodTable()
         {"history", &ControlServer::methodHistory, ControlTier::Edit},
         {"commit_crop", &ControlServer::methodCommitCrop, ControlTier::Edit},
         {"export_png", &ControlServer::methodExportPng, ControlTier::Save},
+        {"export_webp", &ControlServer::methodExportWebp, ControlTier::Save},
     };
     return table;
 }
