@@ -6,7 +6,7 @@ use pictura_core::{
 };
 use pictura_render::Interpolation;
 
-pub(super) fn corners(rect: PsdRect) -> [(f64, f64); 4] {
+pub(in crate::cxxqt_object) fn corners(rect: PsdRect) -> [(f64, f64); 4] {
     let (left, top, right, bottom) = (
         f64::from(rect.left),
         f64::from(rect.top),
@@ -16,7 +16,7 @@ pub(super) fn corners(rect: PsdRect) -> [(f64, f64); 4] {
     [(left, top), (right, top), (right, bottom), (left, bottom)]
 }
 
-pub(super) fn channels(raster: &Raster) -> Vec<Channel> {
+pub(in crate::cxxqt_object) fn channels(raster: &Raster) -> Vec<Channel> {
     [0, 1, 2, -1]
         .into_iter()
         .enumerate()
@@ -32,14 +32,17 @@ pub(super) fn channels(raster: &Raster) -> Vec<Channel> {
         .collect()
 }
 
-pub(super) fn install_proxy(layer: &mut Layer, channels: Vec<Channel>) -> Option<()> {
+pub(in crate::cxxqt_object) fn install_proxy(
+    layer: &mut Layer,
+    channels: Vec<Channel>,
+) -> Option<()> {
     layer.set_channels(pictura_render::bake_smart_source_preview(layer, channels)?);
     layer.discard_raw_channels();
     layer.source_channels = None;
     Some(())
 }
 
-pub(super) fn project(
+pub(in crate::cxxqt_object) fn project(
     raster: Raster,
     rect: PsdRect,
     transforms: &[VectorTransform],
@@ -136,13 +139,13 @@ fn reshape(doc: &mut Document, path: &str, rect: PsdRect) -> Option<()> {
         .then_some(())
 }
 
-pub(super) fn size(rect: PsdRect) -> Option<(u32, u32)> {
+pub(in crate::cxxqt_object) fn size(rect: PsdRect) -> Option<(u32, u32)> {
     let width = u32::try_from(rect.right.checked_sub(rect.left)?).ok()?;
     let height = u32::try_from(rect.bottom.checked_sub(rect.top)?).ok()?;
     (width != 0 && height != 0).then_some((width, height))
 }
 
-pub(super) fn render(
+pub(in crate::cxxqt_object) fn render(
     pdf: &SmartPdf,
     page: VectorPlacement,
     rect: PsdRect,
@@ -151,7 +154,7 @@ pub(super) fn render(
     render_projected(pdf, page, rect, transforms, false)
 }
 
-pub(super) fn render_projected(
+pub(in crate::cxxqt_object) fn render_projected(
     pdf: &SmartPdf,
     page: VectorPlacement,
     rect: PsdRect,
@@ -240,7 +243,10 @@ fn project_at_density(
     })
 }
 
-pub(super) fn source_instances<'a>(stack: &'a [Layer], id: &str) -> Vec<&'a Layer> {
+pub(in crate::cxxqt_object) fn source_instances<'a>(
+    stack: &'a [Layer],
+    id: &str,
+) -> Vec<&'a Layer> {
     fn collect<'a>(layers: &'a [Layer], id: &str, result: &mut Vec<&'a Layer>) {
         for layer in layers {
             if layer.smart_object().is_some_and(|object| object.uuid == id) {
@@ -254,7 +260,7 @@ pub(super) fn source_instances<'a>(stack: &'a [Layer], id: &str) -> Vec<&'a Laye
     result
 }
 
-pub(super) fn update_source_instances(
+pub(in crate::cxxqt_object) fn update_source_instances(
     stack: &mut LayerStack,
     id: &str,
     update: &mut impl FnMut(&mut Layer) -> Option<()>,

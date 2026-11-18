@@ -1,6 +1,4 @@
 #include "layers_panel.h"
-#include "api/engine_bridge.h"
-#include "commands.h"
 
 #include "layers_filter_bar.h"
 #include "layers_filter_proxy.h"
@@ -536,35 +534,6 @@ QRect LayersPanel::rowBlendIfRectForTest(const QString& path) const
     }
     const QRect vr = tree_->visualRect(index);
     return delegate_->blendIfRect(QRect(0, 0, vr.width(), vr.height()), index);
-}
-
-bool LayersPanel::performRowActionForTest(const QString& id, const QString& path)
-{
-    if (!registry_ || !view_) {
-        return false;
-    }
-    if (id == QStringLiteral("relinkToFile")) {
-        if (relink_source_id(*view_, path).isEmpty()) {
-            return false;
-        }
-        makeRowAnchor(path);
-        emit smartObjectContentsRequested(QStringLiteral("relink"), path);
-        return true;
-    }
-    static const QHash<QString, const char*> kCommands = {
-        {QStringLiteral("moveUp"), command_ids::PanelLayersMoveUp},
-        {QStringLiteral("moveDown"), command_ids::PanelLayersMoveDown},
-        {QStringLiteral("convertToSmartObject"), command_ids::LayerSmartObjectConvertTo},
-        {QStringLiteral("editContents"), command_ids::LayerSmartObjectEditContents},
-        {QStringLiteral("deleteLayerMask"), command_ids::LayerMaskDelete},
-        {QStringLiteral("clearLayerStyle"), command_ids::LayerStyleClearLayerStyle},
-    };
-    const auto it = kCommands.find(id);
-    if (it == kCommands.end()) {
-        return false;
-    }
-    makeRowAnchor(path);
-    return registry_->dispatch(QString::fromLatin1(it.value()));
 }
 
 void LayersPanel::setFilterEffectForTest(const QString& effect, bool enabled)

@@ -4,7 +4,7 @@ use super::{
 };
 use crate::cxxqt_object::edit::{structural_after, Edit};
 use crate::cxxqt_object::state::{PendingVectorPlace, PictureViewRust};
-use crate::cxxqt_object::{helpers::safe_io, impl_core::Outcome, vector_geometry};
+use crate::cxxqt_object::{helpers::safe_io, impl_core::Outcome, pdf_export::vector_geometry};
 use cxx_qt::CxxQtType;
 use pictura_codec::pdf::smart_source::{self, SmartPdf};
 use pictura_core::{Document, Layer, SmartObject, SmartObjectKind, VectorPlacement};

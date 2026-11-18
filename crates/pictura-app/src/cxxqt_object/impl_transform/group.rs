@@ -10,8 +10,8 @@ use super::geometry::{apply_session_transform, rect_center, source_corners, MapP
 use super::link_members;
 use crate::cxxqt_object::edit::Edit;
 use crate::cxxqt_object::helpers::memory_gate;
+use crate::cxxqt_object::pdf_export::vector_geometry;
 use crate::cxxqt_object::state::PictureViewRust;
-use crate::cxxqt_object::vector_geometry;
 use pictura_codec::pdf::smart_source::SmartPdf;
 use pictura_core::{
     Document, Homography, LockFlags, PsdRect, SmartObjectKind, VectorTransform, TILE,

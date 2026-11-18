@@ -2,7 +2,7 @@ use super::{PictureView, Pin, QString};
 use crate::cxxqt_object::helpers::{decode_import, safe_io};
 use crate::cxxqt_object::helpers_composite::buffer_to_rgba_bytes;
 use crate::cxxqt_object::impl_core::Outcome;
-use crate::cxxqt_object::vector_geometry;
+use crate::cxxqt_object::pdf_export::vector_geometry;
 use cxx_qt::CxxQtType;
 use pictura_codec::pdf::smart_source::{filetype, SmartPdf};
 use pictura_codec::{ExternalLinkReplacement, ImageBudget, ImageFormat, PlacedSource, Raster};

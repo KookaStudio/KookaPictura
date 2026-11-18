@@ -319,10 +319,8 @@ fn read_length_and_key_admitted(
     r: &mut Reader,
     budget: &mut Option<&mut DecodeBudget>,
 ) -> DescriptorResult<Vec<u8>> {
-    let len = r.u32()? as usize;
-    let n = if len == 0 { 4 } else { len };
-    let bytes = r.take(n)?;
-    let mut key = admitted_vec(n, budget, "descriptor key")?;
+    let bytes = read_key_bytes(r)?;
+    let mut key = admitted_vec(bytes.len(), budget, "descriptor key")?;
     key.extend_from_slice(bytes);
     Ok(key)
 }
@@ -368,9 +366,13 @@ fn skip_unicode_string(r: &mut Reader) -> Result<(), PsdError> {
     r.skip(count.checked_mul(2).ok_or_else(size_overflow)?)
 }
 
-fn skip_length_and_key(r: &mut Reader) -> Result<(), PsdError> {
+fn read_key_bytes<'a>(r: &mut Reader<'a>) -> Result<&'a [u8], PsdError> {
     let len = r.u32()? as usize;
-    r.skip(if len == 0 { 4 } else { len })
+    r.take(if len == 0 { 4 } else { len })
+}
+
+fn skip_length_and_key(r: &mut Reader) -> Result<(), PsdError> {
+    read_key_bytes(r).map(|_| ())
 }
 
 /// Skip a `DescriptorBlock` (version header plus body); used by the linked-layer
@@ -392,15 +394,15 @@ pub(crate) fn linked_path_fields(data: &[u8]) -> Option<Vec<(LinkedPath, std::op
     if reader.u32().ok()? != 16 {
         return None;
     }
-    read_unicode_string(&mut reader).ok()?;
-    read_length_and_key(&mut reader).ok()?;
+    skip_unicode_string(&mut reader).ok()?;
+    skip_length_and_key(&mut reader).ok()?;
     let count = reader.u32().ok()?;
     let mut fields = Vec::new();
     let mut full_path = false;
     for _ in 0..count {
-        let key = read_length_and_key(&mut reader).ok()?;
+        let key = read_key_bytes(&mut reader).ok()?;
         let kind: [u8; 4] = reader.take(4).ok()?.try_into().ok()?;
-        let path = match key.as_slice() {
+        let path = match key {
             b"fullPath" => LinkedPath::Full,
             b"originalPath" => LinkedPath::Original,
             b"relPath" => LinkedPath::Relative,
