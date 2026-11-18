@@ -40,20 +40,17 @@ struct PasteDriver {
     bool choicesCorrect = false;
     bool reportedError = false;
 
-    void trigger(QAction& paste, bool pixels = false, bool cancel = false)
+    void trigger(PicturaMainWindow& window, QAction& paste, bool pixels = false, bool cancel = false)
     {
         QTimer timer;
         QObject::connect(&timer, &QTimer::timeout, &timer, [&]() {
-            auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
-            if (!dialog) {
-                return;
-            }
-            if (auto* error = qobject_cast<QMessageBox*>(dialog)) {
+            if (auto* error = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
                 reportedError = true;
                 error->accept();
                 return;
             }
-            if (dialog->objectName() != QStringLiteral("vectorPasteAs")) {
+            auto* dialog = window.findChild<QDialog*>(QStringLiteral("vectorPasteAs"));
+            if (!dialog || !dialog->isVisible()) {
                 return;
             }
             shown = true;
@@ -132,7 +129,7 @@ void VectorPasteTest::offersSupportedDestinations()
     QVERIFY(!action(*window_, command_ids::EditPasteInto)->isEnabled());
     QVERIFY(!action(*window_, command_ids::EditPasteOutside)->isEnabled());
     PasteDriver driver;
-    driver.trigger(*paste, false, true);
+    driver.trigger(*window_, *paste, false, true);
     QVERIFY(driver.shown && driver.choicesCorrect && !driver.reportedError);
 }
 
@@ -144,7 +141,7 @@ void VectorPasteTest::regularPasteIsUnchanged()
     QGuiApplication::clipboard()->setImage(source);
     const int start = view.history_count();
     PasteDriver raster;
-    raster.trigger(*action(*window_, command_ids::EditPaste));
+    raster.trigger(*window_, *action(*window_, command_ids::EditPaste));
     QVERIFY(!raster.shown && !raster.reportedError);
     QCOMPARE(view.history_count(), start + 1);
     QCOMPARE(QColor::fromRgba(view.sample_argb(0, 0)), QColor(Qt::green));
@@ -153,7 +150,7 @@ void VectorPasteTest::regularPasteIsUnchanged()
     action(*window_, command_ids::EditCopy)->trigger();
     QVERIFY(clipboard_has_contents());
     PasteDriver native;
-    native.trigger(*action(*window_, command_ids::EditPaste));
+    native.trigger(*window_, *action(*window_, command_ids::EditPaste));
     QCOMPARE(view.history_count(), start + 2);
     QVERIFY(!native.shown && !native.reportedError);
 }
@@ -167,7 +164,7 @@ void VectorPasteTest::createsLayerDestinations()
     for (const bool pixels : {false, true}) {
         setPdfClipboard(bytes);
         PasteDriver driver;
-        driver.trigger(*action(*window_, command_ids::EditPaste), pixels);
+        driver.trigger(*window_, *action(*window_, command_ids::EditPaste), pixels);
         QVERIFY(driver.shown && driver.choicesCorrect && !driver.reportedError);
         QCOMPARE(view.history_count(), start + (pixels ? 2 : 1));
         const auto row = layers_api::rowAt(view, 0);
@@ -191,11 +188,11 @@ void VectorPasteTest::cancelledOrInvalidPaste()
     const int layers = view.layer_count();
     setPdfClipboard(test::vectorPdf());
     PasteDriver cancelled;
-    cancelled.trigger(*action(*window_, command_ids::EditPaste), false, true);
+    cancelled.trigger(*window_, *action(*window_, command_ids::EditPaste), false, true);
     QVERIFY(cancelled.shown && !cancelled.reportedError);
     setPdfClipboard(QByteArray("%PDF-1.7\n"));
     PasteDriver invalid;
-    invalid.trigger(*action(*window_, command_ids::EditPaste));
+    invalid.trigger(*window_, *action(*window_, command_ids::EditPaste));
     QVERIFY(invalid.reportedError);
     QCOMPARE(view.history_count(), start);
     QCOMPARE(view.layer_count(), layers);

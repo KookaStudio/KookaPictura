@@ -23,7 +23,7 @@ pub(super) fn lifts_selection(rust: &PictureViewRust, path: &str) -> bool {
 }
 
 /// Whether [`lift_coverage`] would find a selection, without copying it.
-fn selection_covers(rust: &PictureViewRust) -> bool {
+pub(super) fn selection_covers(rust: &PictureViewRust) -> bool {
     let Some(doc) = rust.session.doc.as_ref() else {
         return false;
     };

@@ -63,8 +63,7 @@ struct RelinkDriver {
     {
         QTimer timer;
         QObject::connect(&timer, &QTimer::timeout, &timer, [&]() {
-            auto* modal = QApplication::activeModalWidget();
-            if (auto* dialog = qobject_cast<QFileDialog*>(modal); dialog && !picker) {
+            if (auto* dialog = visibleFileDialog(); dialog && !picker) {
                 picker = true;
                 if (duringPicker) {
                     duringPicker();
@@ -74,7 +73,7 @@ struct RelinkDriver {
                 } else {
                     chooseFiles(dialog, {replacement}, &probe);
                 }
-            } else if (auto* error = qobject_cast<QMessageBox*>(modal)) {
+            } else if (auto* error = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
                 warning = true;
                 error->accept();
             }

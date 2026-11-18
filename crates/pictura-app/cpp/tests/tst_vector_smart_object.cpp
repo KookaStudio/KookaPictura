@@ -40,21 +40,22 @@ struct PlaceDriver {
     void run(PicturaMainWindow& window, const QString& path, PlaceResult result)
     {
         QObject::connect(&timer, &QTimer::timeout, &timer, [&]() {
-            if (auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget())) {
-                if (dialog->objectName() == QStringLiteral("vectorPlaceOptions")) {
-                    auto* page = dialog->findChild<QComboBox*>(QStringLiteral("vectorPlacePage"));
-                    auto* crop = dialog->findChild<QComboBox*>(QStringLiteral("vectorPlaceCrop"));
-                    if (page && crop && page->count() > 1) {
-                        chosePage = true;
-                        page->setCurrentIndex(1);
-                        crop->setCurrentIndex(1);
-                    }
-                    dialog->done(result == PlaceResult::CancelPage
-                                     ? QDialog::Rejected : QDialog::Accepted);
-                } else if (auto* error = qobject_cast<QMessageBox*>(dialog)) {
-                    reportedError = true;
-                    error->accept();
+            auto* dialog = window.findChild<QDialog*>(QStringLiteral("vectorPlaceOptions"));
+            if (dialog && dialog->isVisible()) {
+                auto* page = dialog->findChild<QComboBox*>(QStringLiteral("vectorPlacePage"));
+                auto* crop = dialog->findChild<QComboBox*>(QStringLiteral("vectorPlaceCrop"));
+                if (page && crop && page->count() > 1) {
+                    chosePage = true;
+                    page->setCurrentIndex(1);
+                    crop->setCurrentIndex(1);
                 }
+                dialog->done(result == PlaceResult::CancelPage
+                                 ? QDialog::Rejected : QDialog::Accepted);
+                return;
+            }
+            if (auto* error = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
+                reportedError = true;
+                error->accept();
                 return;
             }
             PictureView* view = window.activeView();

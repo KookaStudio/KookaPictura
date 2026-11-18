@@ -42,8 +42,8 @@ pub fn read_placed_source(data: &[u8]) -> Option<PlacedSource> {
                 return None;
             }
             let mut quad = [(0.0, 0.0); 4];
-            for (point, pair) in quad.iter_mut().zip(values.chunks_exact(2)) {
-                *point = (number(&pair[0])?, number(&pair[1])?);
+            for (point, [x, y]) in quad.iter_mut().zip(values.as_chunks::<2>().0) {
+                *point = (number(x)?, number(y)?);
             }
             Homography::from_quads(
                 [(0.0, 0.0), (width, 0.0), (width, height), (0.0, height)],
