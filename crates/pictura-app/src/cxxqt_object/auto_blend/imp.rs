@@ -69,7 +69,7 @@ pub(super) fn auto_blend_start(
         return false;
     }
     let mut rust = view.rust_mut();
-    let Some(doc) = rust.session.doc.clone() else {
+    let Some(doc) = rust.session.doc.snapshot() else {
         return false;
     };
     let options = AutoBlendOptions {

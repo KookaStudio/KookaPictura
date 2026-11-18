@@ -10,6 +10,7 @@
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
+#include <QtCore/QLockFile>
 #include <QtCore/QStandardPaths>
 #include <QtCore/QTemporaryDir>
 #include <QtWidgets/QPushButton>
@@ -18,9 +19,12 @@
 #include "preferences_dialog.h"
 #include "session.h"
 #include "settings_backup.h"
+#include "preset_store.h"
 #include "workspace_store.h"
 
 #include "qt_test_support.h"
+
+#include <QtCore/QDataStream>
 
 namespace {
 
@@ -139,6 +143,11 @@ private slots:
     void corruptPendingIsQuarantined();
     void roundTripRestoresEveryStore();
     void frameStagesImportAndRequestsRestart();
+    void currentPresetListsRoundTrip();
+    void currentPresetListsAbsent();
+    void currentPresetListsInvalid();
+    void currentPresetListsExportFailure();
+    void currentPresetListsRetry();
 
 private:
     QString stateDir() const;
@@ -551,6 +560,137 @@ void SettingsBackupTest::roundTripRestoresEveryStore()
     QCOMPARE(readBytes(pdfDir() + QStringLiteral("/round.joboptions")),
              QByteArrayLiteral("round"));
     QCOMPARE(readBytes(palettePath()), paletteBytes);
+}
+
+void SettingsBackupTest::currentPresetListsRoundTrip()
+{
+    using namespace pictura;
+    PresetStore store;
+    QVERIFY(store.replace(PresetType::Swatches, {}));
+    const auto backup = collectSettingsBackup();
+    const auto original = backup.value(QStringLiteral("currentPresetLists")).toObject();
+    QCOMPARE(original.size(), presetTypeCount);
+    QVERIFY(writeSettingsBackup(backupPath(), backup));
+    QVERIFY(store.replace(PresetType::Swatches, {makeSwatchPreset(QStringLiteral("Later"), Qt::red)}));
+    QVERIFY(store.replace(PresetType::Tools, {makeBuiltinPreset(PresetType::Tools, QStringLiteral("Later"), 2)}));
+    QVERIFY(stageSettingsImport(backupPath()));
+    QVERIFY(applyPendingSettingsImport());
+    QCOMPARE(collectSettingsBackup().value(QStringLiteral("currentPresetLists")).toObject(), original);
+    PresetStore restored;
+    QVERIFY(restored.rows(PresetType::Swatches).isEmpty());
+}
+
+void SettingsBackupTest::currentPresetListsAbsent()
+{
+    using namespace pictura;
+    {
+        test::ScopedStateHome legacyHome;
+        SessionState old;
+        old.swatchesLoaded = true;
+        old.swatches.push_back(QJsonObject{{QStringLiteral("name"), QStringLiteral("Legacy local")},
+                                          {QStringLiteral("color"), QStringLiteral("#421234")}});
+        QVERIFY(saveSession(old));
+        const auto legacyBackup = minimalBackup(QJsonObject{{QStringLiteral("swatches"), QJsonArray{}}});
+        const auto path = stateDir() + QStringLiteral("/legacy-backup.json");
+        QVERIFY(writeSettingsBackup(path, legacyBackup));
+        QVERIFY(stageSettingsImport(path));
+        QVERIFY(applyPendingSettingsImport());
+        PresetStore migrated;
+        QCOMPARE(migrated.rows(PresetType::Swatches).first().name, QStringLiteral("Legacy local"));
+    }
+    PresetStore store;
+    QVERIFY(store.replace(PresetType::Swatches, {makeSwatchPreset(QStringLiteral("Keep"), Qt::blue)}));
+    const auto before = collectSettingsBackup().value(QStringLiteral("currentPresetLists"));
+    auto backup = minimalBackup({});
+    for (const bool addSection : {false, true}) {
+        if (addSection) {
+            backup.insert(QStringLiteral("currentPresetLists"), QJsonObject{});
+        }
+        QVERIFY(writeSettingsBackup(backupPath(), backup));
+        QVERIFY(stageSettingsImport(backupPath()));
+        QVERIFY(applyPendingSettingsImport());
+        QCOMPARE(collectSettingsBackup().value(QStringLiteral("currentPresetLists")), before);
+    }
+}
+
+void SettingsBackupTest::currentPresetListsInvalid()
+{
+    using namespace pictura;
+    QVERIFY(writeSettingsBackup(backupPath(), minimalBackup({})));
+    QVERIFY(stageSettingsImport(backupPath()));
+    const auto previous = readBytes(pendingSettingsImportPath());
+    auto backup = minimalBackup({});
+    backup.insert(QStringLiteral("currentPresetLists"),
+                  QJsonObject{{QStringLiteral("brushes"), QStringLiteral("AA==")}});
+    QVERIFY(writeSettingsBackup(backupPath(), backup));
+    QVERIFY(!stageSettingsImport(backupPath()));
+    QCOMPARE(readBytes(pendingSettingsImportPath()), previous);
+    QFile oversized(backupPath());
+    QVERIFY(oversized.open(QIODevice::ReadWrite));
+    QVERIFY(oversized.resize(256 * 1024 * 1024 + 1));
+    oversized.close();
+    QVERIFY(!stageSettingsImport(backupPath()));
+    QCOMPARE(readBytes(pendingSettingsImportPath()), previous);
+}
+
+void SettingsBackupTest::currentPresetListsExportFailure()
+{
+    using namespace pictura;
+    PresetStore store;
+    QVERIFY(store.replace(PresetType::Swatches, {}));
+    QVERIFY(writeBytes(backupPath(), QByteArrayLiteral("original")));
+    const auto path = stateDir() + QStringLiteral("/preset-current/active.json");
+    QVERIFY(writeJson(path, QJsonObject{{QStringLiteral("swatches"), QStringLiteral("missing.kpset")}}));
+    QString error;
+    QVERIFY(!exportSettingsFile(backupPath(), &error));
+    QVERIFY(!error.isEmpty());
+    QCOMPARE(readBytes(backupPath()), QByteArrayLiteral("original"));
+
+    // Each list is valid by itself. Their combined base64 representation
+    // cannot fit in one settings backup. The opaque bytes can be sparse.
+    const auto directory = QFileInfo(path).absolutePath();
+    const auto sparseSet = [&directory](const QString& name, PresetType type) {
+        constexpr quint32 opaqueSize = 97 * 1024 * 1024;
+        QFile file(directory + QLatin1Char('/') + name);
+        if (!file.open(QIODevice::WriteOnly) || file.write("KPPRESET\0\1", 10) != 10) return false;
+        QDataStream stream(&file);
+        stream << quint8(type) << quint32(1) << quint32(opaqueSize + 12)
+               << quint32(1) << quint8('P') << opaqueSize;
+        if (stream.status() != QDataStream::Ok || !file.seek(file.pos() + opaqueSize)) return false;
+        stream << quint8(0) << quint16(0);
+        return stream.status() == QDataStream::Ok && file.flush();
+    };
+    QVERIFY(sparseSet(QStringLiteral("brushes.kpset"), PresetType::Brushes));
+    QVERIFY(sparseSet(QStringLiteral("gradients.kpset"), PresetType::Gradients));
+    QVERIFY(writeJson(path, QJsonObject{{QStringLiteral("brushes"), QStringLiteral("brushes.kpset")},
+                                      {QStringLiteral("gradients"), QStringLiteral("gradients.kpset")}}));
+    error.clear();
+    QVERIFY(!exportSettingsFile(backupPath(), &error));
+    QVERIFY(error.contains(QStringLiteral("size limit")));
+    QCOMPARE(readBytes(backupPath()), QByteArrayLiteral("original"));
+}
+
+void SettingsBackupTest::currentPresetListsRetry()
+{
+    using namespace pictura;
+    PresetStore store;
+    QVERIFY(store.replace(PresetType::Swatches, {}));
+    QVERIFY(writeSettingsBackup(backupPath(), collectSettingsBackup()));
+    QVERIFY(store.replace(PresetType::Swatches, {makeSwatchPreset(QStringLiteral("Previous"), Qt::blue)}));
+    QVERIFY(stageSettingsImport(backupPath()));
+    const auto manifest = stateDir() + QStringLiteral("/preset-current/active.json");
+    const auto before = readBytes(manifest);
+    QLockFile lock(stateDir() + QStringLiteral("/preset-current/active.lock"));
+    QVERIFY(lock.tryLock());
+    QVERIFY(!applyPendingSettingsImport());
+    QVERIFY(QFileInfo::exists(pendingSettingsImportPath()));
+    QCOMPARE(readBytes(manifest), before);
+    PresetStore old;
+    QCOMPARE(old.rows(PresetType::Swatches).first().name, QStringLiteral("Previous"));
+    lock.unlock();
+    QVERIFY(applyPendingSettingsImport());
+    PresetStore restored;
+    QVERIFY(restored.rows(PresetType::Swatches).isEmpty());
 }
 
 void SettingsBackupTest::frameStagesImportAndRequestsRestart()

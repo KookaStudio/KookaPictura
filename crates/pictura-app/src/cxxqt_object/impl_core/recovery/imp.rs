@@ -1,34 +1,19 @@
 use super::*;
 
-use super::super::super::filter_tools::store_planes;
+mod journal;
+mod store;
+pub(in crate::cxxqt_object) use store::{RecoveryAttachment, RecoveryIdentity};
+
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_core::Document;
-use std::sync::Arc;
-
-pub(super) fn recovery_write(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
-    recovery_wait(view.as_mut());
-    let session = &view.rust().session;
-    let Some(doc_ref) = session.doc.as_ref() else {
-        return false;
-    };
-    pictura_codec::warm_encode_idents(doc_ref);
-    let mut doc = doc_ref.clone();
-    let planes = store_planes(session.vanishing_planes.as_ref(), &doc);
-    pictura_codec::set_vanishing_point_data(&mut doc, planes.as_deref());
-    let path = path.to_string();
-    let cache = Arc::clone(&session.encode_cache);
-    let handle = std::thread::spawn(move || write_snapshot(doc, &path, &cache).is_ok());
-    view.rust_mut().recovery_write = Some(handle);
-    true
-}
 
 pub(super) fn recovery_wait(view: Pin<&mut PictureView>) -> bool {
-    match view.rust_mut().recovery_write.take() {
-        Some(handle) => handle.join().unwrap_or(false),
-        None => true,
-    }
+    view.rust()
+        .session
+        .recovery
+        .as_ref()
+        .is_none_or(RecoveryAttachment::flush)
 }
 
 pub(super) fn recovery_open(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
@@ -41,25 +26,144 @@ pub(super) fn recovery_open(mut view: Pin<&mut PictureView>, path: &QString) -> 
     true
 }
 
-/// Encode `doc` as the native save does and land it at `path` atomically: a
-/// synced sibling temp file renamed into place, so a crash mid-write keeps the
-/// previous snapshot.
-pub(super) fn write_snapshot(
-    mut doc: Document,
-    path: &str,
-    cache: &pictura_codec::EncodeCache,
-) -> std::io::Result<()> {
-    pictura_render::refresh_native_composite(&mut doc);
-    let bytes = pictura_codec::write_psd_cached(&pictura_render::save_view(&doc), cache)
-        .map_err(|e| std::io::Error::other(e.to_string()))?;
-    super::super::super::helpers::safe_io::write_atomically(path, &bytes, true)
+pub(super) fn recovery_track(
+    view: Pin<&mut PictureView>,
+    directory: &QString,
+    id: u32,
+    name: &QString,
+    path: &QString,
+    minutes: u32,
+) {
+    let mut view = view.rust_mut();
+    let session = &mut view.session;
+    if let Some(recovery) = &mut session.recovery {
+        recovery.update(name.to_string(), path.to_string(), minutes);
+        return;
+    }
+    session.recovery = Some(RecoveryAttachment::new(
+        std::path::Path::new(&directory.to_string()),
+        id,
+        name.to_string(),
+        path.to_string(),
+        minutes,
+    ));
+}
+
+pub(super) fn recovery_checkpoint(view: &PictureView) {
+    let session = &view.rust().session;
+    if session.dirty {
+        session.capture_recovery(true);
+    }
+}
+
+pub(super) fn recovery_discard(view: Pin<&mut PictureView>, detach: bool) -> bool {
+    let mut view = view.rust_mut();
+    let session = &mut view.session;
+    let retired = session
+        .recovery
+        .as_ref()
+        .is_none_or(RecoveryAttachment::retire);
+    if detach {
+        session.recovery = None;
+    }
+    retired
+}
+
+pub(super) fn recovery_discard_async(view: Pin<&mut PictureView>) -> bool {
+    view.rust_mut()
+        .session
+        .recovery
+        .as_mut()
+        .is_none_or(RecoveryAttachment::retire_async)
+}
+
+pub(super) fn recovery_status(view: &PictureView) -> i32 {
+    view.rust()
+        .session
+        .recovery
+        .as_ref()
+        .map_or(0, RecoveryAttachment::status)
+}
+
+pub(super) fn recovery_fail_next_for_test(view: &PictureView, fault: i32) {
+    if let Some(recovery) = &view.rust().session.recovery {
+        recovery.fail_next(fault);
+    }
+}
+
+pub(super) fn recovery_open_chain(mut view: Pin<&mut PictureView>, manifest: &QString) -> i32 {
+    use crate::cxxqt_object::open_jobs;
+
+    let manifest = manifest.to_string();
+    let restore = match store::Restore::read(std::path::Path::new(&manifest)) {
+        Ok(restore) => restore,
+        Err(error) => {
+            eprintln!("pictura: cannot read recovery chain: {error}");
+            return 3;
+        }
+    };
+    let policy = view.rust().color_policy;
+    let gpu = view.rust().gpu_compute;
+    let Some(mut opened) = open_jobs::decode_psd(
+        &restore.checkpoint.to_string_lossy(),
+        policy,
+        gpu,
+        &|_, _| {},
+    ) else {
+        return 0;
+    };
+    opened.doc.image_resources = restore.resources.clone();
+    let (_, partial) = match restore.replay(&mut opened.doc) {
+        Ok(replayed) => replayed,
+        Err(error) => {
+            eprintln!("pictura: cannot replay recovery chain: {error}");
+            return 3;
+        }
+    };
+    if !opened.compatibility.access.is_read_only() {
+        let version = pictura_codec::document_version(&opened.doc);
+        opened.compatibility.access =
+            open_jobs::compatibility::native_access(&opened.doc, &version);
+    }
+    pictura_render::refresh_native_composite(&mut opened.doc);
+    let target = crate::layer_target::LayerTarget::for_opened(&opened.doc, None);
+    let mut history = crate::history::History::default();
+    history.capture_live(&mut opened.doc, &None, &target, "Recovered");
+    opened.history = history;
+    opened.target = target;
+    opened.preview = None;
+    {
+        let mut rust = view.as_mut().rust_mut();
+        open_jobs::apply_opened(&mut rust, opened);
+        rust.path = None;
+        rust.session.mark_unsaved();
+    }
+    view.session_cancelled();
+    if partial {
+        2
+    } else {
+        1
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use pictura_core::path::{PathPoint, Subpath};
-    use pictura_core::{BitDepth, ColorMode};
+    use pictura_core::{BitDepth, ColorMode, Document};
+    use std::path::Path;
+
+    fn write_snapshot(
+        doc: Document,
+        path: &str,
+        cache: &pictura_codec::EncodeCache,
+    ) -> std::io::Result<()> {
+        let path = Path::new(path);
+        let root = path.parent().unwrap();
+        let stem = path.file_stem().unwrap().to_str().unwrap();
+        let (filename, bytes) = store::checkpoint_bytes(root, stem, &doc, cache)?;
+        journal::write_synced(&root.join(filename), &bytes)
+    }
 
     #[test]
     fn a_snapshot_round_trips_layers_and_the_work_path() {
@@ -95,6 +199,27 @@ mod tests {
         assert_eq!(back.layers[0].name, "Layer 0");
         assert_eq!(back.work_path.subpaths.len(), 1);
         assert_eq!(back.work_path.subpaths[0].points.len(), 2);
+    }
+
+    #[test]
+    fn snapshot_stages_an_omitted_detached_composite() {
+        let mut doc = Document::from_rgba("Layer", 4, 3, &[50, 90, 120, 255].repeat(12));
+        doc.composite.set_merged_output(false);
+        doc.composite.detach_plane();
+        let dir =
+            std::env::temp_dir().join(format!("pictura-recovery-omitted-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("snapshot.psd");
+        write_snapshot(
+            doc,
+            target.to_str().unwrap(),
+            &pictura_codec::EncodeCache::new(),
+        )
+        .unwrap();
+        let reopened = pictura_codec::read_psd(&std::fs::read(&target).unwrap()).unwrap();
+        assert!(!reopened.composite.merged_output());
+        assert_eq!(reopened.layers.len(), 1);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
@@ -155,3 +280,6 @@ mod tests {
         assert_eq!(cache.stats().layers_encoded - before, 1);
     }
 }
+
+#[cfg(test)]
+mod journal_tests;

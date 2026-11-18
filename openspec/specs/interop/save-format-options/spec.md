@@ -24,7 +24,9 @@ no Save As format, or that has no suffix, SHALL be refused: no file is written
 and the save reports failure, rather than writing another format's bytes under
 that name.
 
-PSD, PSB, WebP, and Photoshop PDF SHALL NOT open a format options dialog.
+WebP and Photoshop PDF SHALL NOT open a format options dialog. PSD and PSB SHALL
+open a compatibility prompt only when Ask applies as specified in
+`interop/psd-psb-compatibility`.
 Cancelling a format options dialog SHALL abort the save: no file is written and
 the document's pixels, path, modified state, and history are unchanged.
 
@@ -85,7 +87,7 @@ the document's pixels, path, modified state, and history are unchanged.
 
 #### Scenario: Native and other formats open no format dialog [save-options-native]
 
-- **WHEN** Save As is confirmed with a `.psd`, `.psb`, `.webp`, or `.pdf` destination
+- **WHEN** Save As targets PSD or PSB with Always or Never, or targets WebP or PDF
 - **THEN** no format options dialog is shown
 
 #### Scenario: Cancelling writes nothing [save-options-cancel]
@@ -97,6 +99,7 @@ the document's pixels, path, modified state, and history are unchanged.
 
 - **WHEN** a save targets a suffix that names no Save As format, or a path with no suffix
 - **THEN** the save reports failure, no file is written, and no PSD bytes are written under that name
+
 ### Requirement: The dialogs present the CS6 controls and remember the last settings
 
 Each format options dialog SHALL present that format's CS6 control set: JPEG
@@ -129,6 +132,7 @@ write `.eps`.
 
 - **WHEN** settings are accepted in a format options dialog and the dialog is opened again
 - **THEN** its controls hold the accepted settings
+
 ### Requirement: Options the encoder can honor take effect
 
 The options the Save As encoder can honor SHALL take effect in the written file:
@@ -236,6 +240,7 @@ Cineon writer packs them into 10-bit code values.
 
 - **WHEN** Photoshop Raw Options is opened on Linux
 - **THEN** the File Type and File Creator controls are disabled with a tooltip
+
 ### Requirement: The JPEG Options dialog previews and estimates the file size
 
 The JPEG Options dialog SHALL show a file-size estimate for the current settings

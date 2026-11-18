@@ -39,6 +39,7 @@ struct DocEntry {
     QString recentPath;
     int untitledNumber = 0;
     bool loading = false;
+    int saveProgress = -1;
     quint64 token = 0;
     OpenKind kind = OpenKind::Psd;
     // The user selected another tab while this one loaded; do not steal the

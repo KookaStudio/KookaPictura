@@ -21,7 +21,7 @@ fn clipboard_coverage_preserves_history() {
     let clip = copy_of(&view, "0", false).unwrap();
     assert_eq!(view.session.history.count(), count);
     let coverage = clip_selection(&view).unwrap();
-    let before = view.session.doc.clone().unwrap();
+    let before = view.session.doc.snapshot().unwrap();
     assert!(pictura_render::clear_layer(
         view.session.doc.as_mut().unwrap(),
         "0",
@@ -29,7 +29,7 @@ fn clipboard_coverage_preserves_history() {
     ));
     view.session.record(&view.layer_target, "Cut");
     assert_eq!(view.session.history.count(), count + 1);
-    let after = view.session.doc.clone().unwrap();
+    let after = view.session.doc.snapshot().unwrap();
     assert_eq!(view.session.history.undo().unwrap().doc, before);
     assert_eq!(view.session.history.redo().unwrap().doc, after);
     let doc = view.session.doc.as_mut().unwrap();

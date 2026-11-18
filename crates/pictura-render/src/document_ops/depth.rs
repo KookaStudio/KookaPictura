@@ -35,6 +35,11 @@ pub fn convert_depth(
     out: BitDepth,
     method: HdrToneMap,
 ) -> Result<(), OpsError> {
+    if !doc.variables.protected_ids().is_empty() {
+        return Err(OpsError::Unsupported(
+            "Flattening would remove ambiguous variable layer IDs".into(),
+        ));
+    }
     if doc.source.depth() != Some(BitDepth::ThirtyTwo) {
         return Err(OpsError::InvalidParams(
             "HDR conversion needs a 32-bit source".into(),
@@ -189,6 +194,7 @@ fn flatten_converted(doc: &mut Document, display_alpha: Option<&[u8]>) {
             ..Default::default()
         },
     )]);
+    doc.prune_variable_bindings();
 }
 
 /// Convert a 32-bit Grayscale/RGB `doc` with the Exposure & Gamma method.

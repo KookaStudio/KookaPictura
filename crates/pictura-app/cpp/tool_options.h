@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QtCore/QByteArray>
 #include <QtCore/QPoint>
 #include <QtCore/QPointF>
 #include <QtCore/QString>
@@ -63,6 +64,7 @@ struct StampOptions {
     int cloneSample = 0;
     bool ignoreAdjustments = false;
     int pattern = 0;
+    QByteArray patternPreset;
     bool patternAligned = true;
     bool cloneAirbrush = false;
     bool patternAirbrush = false;
@@ -200,6 +202,7 @@ struct ShapeOptions {
     double arrowLength = 1000.0;
     double arrowConcavity = 0.0;
     int custom = 0;
+    QByteArray customPreset;
     bool fillEnabled = true;
     QColor fillColor;
     bool strokeEnabled = false;

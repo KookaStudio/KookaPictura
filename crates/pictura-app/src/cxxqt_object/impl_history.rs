@@ -97,6 +97,32 @@ impl PictureViewRust {
         let cancelled = self.cancel_active_sessions_report_only();
         let t = Instant::now();
         let restored = self.session.restore(&mut self.layer_target, step, legacy)?;
+        if self.session.recheck_compatibility_on_restore {
+            let access = self.session.doc.as_ref().map(|doc| {
+                super::open_jobs::compatibility::native_access(
+                    doc,
+                    &pictura_codec::document_version(doc),
+                )
+            });
+            if let Some(access) = access {
+                let state = if access.is_read_only() {
+                    self.session
+                        .history
+                        .current_id()
+                        .and_then(|id| {
+                            self.session
+                                .history_compatibility
+                                .iter()
+                                .find(|(entry, _)| *entry == id)
+                                .map(|(_, state)| state.clone())
+                        })
+                        .unwrap_or_default()
+                } else {
+                    Default::default()
+                };
+                self.session.set_compatibility(state);
+            }
+        }
         if self.session.quick_mask.active {
             self.invalidate_quick_mask();
         }
@@ -145,6 +171,9 @@ impl qobject::PictureView {
     pub fn undo(mut self: Pin<&mut Self>) -> bool {
         memory_gate::clear();
         self.as_mut().settle_pending_composite();
+        if self.rust().pending_vector_place.is_some() {
+            self.as_mut().cancel_transform();
+        }
         if !self.rust().can_undo() || !self.rust().restore_fits() {
             return false;
         }
@@ -158,6 +187,9 @@ impl qobject::PictureView {
     pub fn redo(mut self: Pin<&mut Self>) -> bool {
         memory_gate::clear();
         self.as_mut().settle_pending_composite();
+        if self.rust().pending_vector_place.is_some() {
+            self.as_mut().cancel_transform();
+        }
         if !self.rust().can_redo() || !self.rust().restore_fits() {
             return false;
         }
@@ -247,6 +279,9 @@ impl qobject::PictureView {
     }
 
     pub fn history_add_snapshot(mut self: Pin<&mut Self>, label: &QString) -> bool {
+        if self.rust().session.read_only() {
+            return false;
+        }
         self.as_mut().settle_pending_composite();
         let stroking = self.rust().session.live.stroke().is_some();
         let estimate = self
@@ -272,6 +307,9 @@ impl qobject::PictureView {
     }
 
     pub fn history_restore_snapshot(mut self: Pin<&mut Self>, i: i32) -> bool {
+        if self.rust().session.read_only() {
+            return false;
+        }
         memory_gate::clear();
         self.as_mut().settle_pending_composite();
         if i < 0 {
@@ -292,7 +330,7 @@ impl qobject::PictureView {
         let target = self.rust().session.history.snapshot_target(i as usize);
         let mut rust = self.as_mut().rust_mut();
         rust.cancel_active_sessions_report_only();
-        rust.session.doc = Some(snapshot.doc);
+        rust.session.doc.set(Some(snapshot.doc));
         if let Some(doc) = rust.session.doc.as_mut() {
             pictura_render::prune_layer_comp_warnings(doc);
         }

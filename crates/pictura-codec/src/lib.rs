@@ -24,9 +24,11 @@ mod advanced_blending;
 mod budget;
 mod color_mode;
 mod common;
+mod compatibility;
 mod crs_xmp;
 mod depth;
 mod descriptor;
+mod document_version;
 mod duotone;
 mod engine_data;
 mod engine_data_encode;
@@ -63,6 +65,8 @@ pub mod pdf;
 mod pictura_filter;
 mod pictura_raw;
 pub(crate) mod png;
+pub mod preset_library;
+pub mod print_resources;
 mod probe;
 mod profile_probe;
 pub(crate) mod raster_metadata;
@@ -78,7 +82,10 @@ mod type_plain;
 mod type_shape;
 mod type_tool;
 mod type_write;
+mod variable_resources;
+mod vector_marker;
 mod vector_mask;
+mod vector_transforms;
 mod web;
 mod webp;
 mod write;
@@ -106,6 +113,11 @@ pub use color_mode::{
 };
 pub use crs_xmp::set_crs_property;
 pub use descriptor::{write_descriptor, DescValue};
+pub use document_version::{
+    document_version, native_merged_has_transparency, unsupported_document_feature,
+    DocumentVersion, DocumentVersionStamp, VersionAccess, VersionInfo, CURRENT_DOCUMENT_VERSION,
+    PICTURA_WRITER_NAME, VERSION_INFO,
+};
 pub use duotone::{parse_duotone, DuotoneInk, DuotoneSpec, InkColor};
 pub use engine_data::{extract_fonts, extract_style, parse_engine_data, EngineValue};
 pub use engine_data_encode::encode_engine_data;
@@ -122,10 +134,10 @@ pub use icc::{
 pub use image_resources::{
     alpha_names, decode_image_resources, display_info, document_resolution, encode_image_resources,
     frame_image_resource, set_alpha_names, set_display_info, set_document_resolution,
-    set_vanishing_point_data, spot_channel_indices, vanishing_point_data, ChannelDisplayInfo,
-    ImageResource, Resolution, ALPHA_NAMES_PASCAL, ALPHA_NAMES_UNICODE, DISPLAY_INFO, EXIF_DATA_1,
-    EXIF_DATA_3, ICC_PROFILE, IPTC_NAA, RESOLUTION_INFO, SPOT_CHANNEL_MODE, VANISHING_POINT,
-    VANISHING_POINT_NAME, XMP_METADATA,
+    set_recovery_resources, set_vanishing_point_data, spot_channel_indices, vanishing_point_data,
+    ChannelDisplayInfo, ImageResource, Resolution, ALPHA_NAMES_PASCAL, ALPHA_NAMES_UNICODE,
+    DISPLAY_INFO, EXIF_DATA_1, EXIF_DATA_3, ICC_PROFILE, IPTC_NAA, RESOLUTION_INFO,
+    SPOT_CHANNEL_MODE, VANISHING_POINT, VANISHING_POINT_NAME, XMP_METADATA,
 };
 pub use iptc::{encode_iptc, iptc_field_name, parse_iptc, Iptc};
 pub use lens_correction::{
@@ -140,7 +152,7 @@ pub use metadata::{
     set_xmp_values, xmp_properties, DocumentMetadata, MergeMode,
 };
 pub use patterns::{builtin_patterns, decode_patterns, PatternPixels};
-pub use patterns_write::{add_document_pattern, encode_rgb_pattern};
+pub use patterns_write::{add_document_pattern, encode_rgb_pattern, encode_rgba_pattern};
 pub use pictura_filter::{
     decode_pictura_filter, encode_pictura_filter, FilterStep, FILTER_GALLERY_NAME,
     PICTURA_FILTER_ID,
@@ -150,6 +162,12 @@ pub use pictura_raw::{
     decode_pictura_raw_settings, encode_pictura_raw_fltr, pictura_raw_from_text,
     pictura_raw_to_text, replace_smart_filter, CAMERA_RAW_FILTER_ID, CAMERA_RAW_FILTER_NAME,
 };
+pub use read::read_psd_layer_structure;
+pub use smart_object::{
+    can_bake_smart_filter_blending, external_link_location, read_placed_source,
+    repair_external_link, repairable_external_link, ExternalLinkReplacement, PlacedSource,
+};
+pub use smart_writer::new_vector_source_id;
 // Re-exported so the app's profile commands can name a `Profile` without adding
 // a direct dependency on `pictura-color`.
 pub use lazy::{read_psd_lazy, MergedPreview, SourcePin};
@@ -180,7 +198,9 @@ pub use smart_filter::{
     clear_smart_filters, delete_smart_filter, reorder_smart_filters, set_camera_raw_option,
     set_filter_mask_enabled, set_smart_filter_enabled, set_smart_filters_enabled,
 };
-pub use smart_object::{layer_references_smart_source, remove_linked_source};
+pub use smart_object::{
+    layer_references_smart_source, remove_linked_source, replace_embedded_payload,
+};
 pub use svg::{
     blend_css, ellipse_element, encode_svg, image_element, path_data, path_element, rect_element,
     rounded_rect_element, subpath_data, text_element, SvgContent, SvgGradient, SvgGradientStop,
@@ -200,7 +220,10 @@ pub use web::{
     SliceHtmlOptions, SliceLayout, WebMetadata,
 };
 pub use webp::{decode_webp, encode_webp};
-pub use write::{write_psb, write_psb_cached, write_psd, write_psd_cached};
+pub use write::{
+    write_native_compatibility_cached, write_psb, write_psb_cached, write_psd, write_psd_cached,
+    write_versioned, VersionedWrite,
+};
 pub use write_cache::{warm_encode_idents, EncodeCache, EncodeStats};
 pub use write_indexed::{gif_indexed_source_is_current, indexed_source_is_current};
 pub use xmp::{parse_xmp, patch_xmp, patch_xmp_values, to_xmp_packet, XmpField, XmpProperties};

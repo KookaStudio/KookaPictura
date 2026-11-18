@@ -132,7 +132,9 @@ bool ToolController::beginTransformImpl(const QString& path, const QString& mode
         // session (the same path would otherwise be a begin no-op).
         transformControls_ = false;
         clearControlsBox();
-        v->cancel_transform();
+        if (v->transform_session_active()) {
+            v->cancel_transform();
+        }
     }
     const bool ok = mode.isEmpty() ? v->begin_free_transform(path)
                                    : v->begin_transform_mode(path, mode);

@@ -565,12 +565,29 @@ pub fn type_layer_spec(layer: &pictura_core::Layer) -> Option<TypeSpec> {
 /// ponytail: an opened layer's own `TySh` (several runs, paragraph type) is
 /// replaced by the single-run authored one; its warp is carried by `spec`.
 pub fn replace_type_layer(doc: &mut Document, path: &str, spec: &TypeSpec) -> bool {
+    replace_type_content(doc, path, spec, false)
+}
+
+pub fn replace_variable_text(doc: &mut Document, path: &str, text: &str) -> bool {
+    let Some(mut spec) = crate::resolve_path(doc, path).and_then(type_layer_spec) else {
+        return false;
+    };
+    spec.text = text.into();
+    replace_type_content(doc, path, &spec, true)
+}
+
+fn replace_type_content(
+    doc: &mut Document,
+    path: &str,
+    spec: &TypeSpec,
+    allow_blank: bool,
+) -> bool {
     if !rgb8(doc) {
         return false;
     }
-    let Some((existing, font_name)) = crate::resolve_path(doc, path)
-        .and_then(|layer| layer.type_tool())
-        .map(|tool| {
+    let Some((existing, font_name, rect, bounds)) = crate::resolve_path(doc, path)
+        .and_then(|layer| Some((layer.rect, layer.type_tool()?)))
+        .map(|(rect, tool)| {
             // Only reuse the layer's PostScript name while its family is the
             // spec's; a family change must author the new face, not rename the
             // run back onto the old entry.
@@ -580,14 +597,26 @@ pub fn replace_type_layer(doc: &mut Document, path: &str, spec: &TypeSpec) -> bo
                     .unwrap_or_else(|| style.character.font_family.clone());
                 (family == spec.character.font_family).then(|| postscript.to_string())
             });
-            (tool.text_desc.clone(), name)
+            let bounds = tool.bounds.map(f64::from);
+            (tool.text_desc.clone(), name, rect, bounds)
         })
     else {
         return false;
     };
-    let Some((rect, channels, tool)) = type_content(spec, Some(&existing), font_name.as_deref())
-    else {
-        return false;
+    let (rect, channels, tool) = if allow_blank && spec.text.trim().is_empty() {
+        let rect = PsdRect {
+            right: rect.left,
+            bottom: rect.top,
+            ..rect
+        };
+        let tool =
+            pictura_codec::author_type_tool(spec, bounds, Some(&existing), font_name.as_deref());
+        (rect, Vec::new(), tool)
+    } else {
+        let Some(content) = type_content(spec, Some(&existing), font_name.as_deref()) else {
+            return false;
+        };
+        content
     };
     let Some(layer) = crate::resolve_path_mut(doc, path) else {
         return false;
@@ -595,7 +624,7 @@ pub fn replace_type_layer(doc: &mut Document, path: &str, spec: &TypeSpec) -> bo
     let Some(old) = layer.type_tool() else {
         return false;
     };
-    if layer.name == layer_name(&old.text) {
+    if !spec.text.trim().is_empty() && layer.name == layer_name(&old.text) {
         layer.name = layer_name(&spec.text);
     }
     let applied_character = layer.applied_character_style.clone();
@@ -785,6 +814,23 @@ mod tests {
         assert!(mask.iter().all(|&a| a == 0 || a == 255));
         assert!(mask.contains(&255));
         assert!(type_mask(200, 200, &spec(" \r ", false, 0)).is_none());
+    }
+
+    #[test]
+    fn variable_text_accepts_native_type_layer() {
+        use pictura_core::variables::{Placement, VariableKind};
+        let mut doc = Document::new(300, 200, ColorMode::Rgb, BitDepth::Eight);
+        assert_eq!(add_type_layer(&mut doc, "", &spec("Hello", false, 0)), "0");
+        assert!(doc
+            .bind_variable(&[0], "title", VariableKind::Text, Placement::default())
+            .is_ok());
+        doc.new_data_set(None, "One").unwrap();
+        assert_eq!(
+            doc.variables.value(0, "title"),
+            Some(&pictura_core::variables::Value::Text("Hello".into()))
+        );
+        doc.layers[0].lock = pictura_core::LockFlags::all();
+        assert!(!VariableKind::Text.accepts(&doc.layers[0]));
     }
 
     #[test]

@@ -39,6 +39,9 @@ impl PictureViewRust {
     /// that level): Quick Mask's overlay, the solo mask, or the composite,
     /// and the tiles left to a worker. Nothing but the canvas calls this.
     pub(crate) fn canvas_present_image(&self, level: i32, rect: PsdRect) -> (QImage, Vec<TileKey>) {
+        if self.session.read_only() {
+            return (self.session.compatibility.image(level, rect), Vec::new());
+        }
         if self.session.quick_mask.active {
             return self.quick_mask_crop(level, rect);
         }

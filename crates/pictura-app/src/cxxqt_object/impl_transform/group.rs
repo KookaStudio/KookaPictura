@@ -10,8 +10,12 @@ use super::geometry::{apply_session_transform, rect_center, source_corners, MapP
 use super::link_members;
 use crate::cxxqt_object::edit::Edit;
 use crate::cxxqt_object::helpers::memory_gate;
+use crate::cxxqt_object::pdf_export::vector_geometry;
 use crate::cxxqt_object::state::PictureViewRust;
-use pictura_core::{Document, Homography, LockFlags, PsdRect, TILE};
+use pictura_codec::pdf::smart_source::SmartPdf;
+use pictura_core::{
+    Document, Homography, LockFlags, PsdRect, SmartObjectKind, VectorTransform, TILE,
+};
 use pictura_render::Interpolation;
 use std::sync::Arc;
 
@@ -176,6 +180,154 @@ pub(super) fn transform_group(rust: &PictureViewRust, doc: &Document, path: &str
 /// document-space mesh to every member unchanged.
 #[allow(clippy::too_many_arguments)]
 fn apply_transform_member(
+    doc: &mut Document,
+    path: &str,
+    rect: PsdRect,
+    projective: bool,
+    params: MapParams,
+    interpolation: Interpolation,
+    warp: Option<&pictura_core::warp::Warp>,
+    preview_quad: [(f64, f64); 4],
+    group_map: Option<&Homography>,
+) -> bool {
+    let vector = pictura_render::resolve_path(doc, path)
+        .and_then(|layer| layer.smart_object())
+        .and_then(|object| object.vector_placement);
+    if let Some(page) = vector {
+        let mut candidate = doc.clone();
+        let quad = match member_quad(rect, projective, params, warp, preview_quad, group_map) {
+            Some(quad) => quad,
+            None => return false,
+        };
+        if !transform_member_pixels(
+            &mut candidate,
+            path,
+            rect,
+            projective,
+            params,
+            interpolation,
+            warp,
+            preview_quad,
+            group_map,
+        ) {
+            return false;
+        }
+        let Some(layer) = pictura_render::resolve_path_mut(&mut candidate, path) else {
+            return false;
+        };
+        let move_only = warp.is_none() && whole_pixel_move(&quad, rect);
+        let axis_aligned = warp.is_none()
+            && !projective
+            && params.angle.abs() < 1e-9
+            && params.skew_x == 0.0
+            && params.skew_y == 0.0
+            && params.scale_x > 0.0
+            && params.scale_y > 0.0;
+        if !move_only {
+            let destination = layer.rect;
+            let Some(pixels) = pictura_codec::edit_layer(layer, |parts| {
+                let object = parts.smart_object.as_mut()?;
+                if !axis_aligned || !object.vector_transforms.is_empty() {
+                    if object.vector_transforms.len() >= 256 {
+                        return None;
+                    }
+                    object.vector_transforms.push(VectorTransform {
+                        source: rect,
+                        destination: Some(destination),
+                        quad,
+                        warp: warp.cloned(),
+                    });
+                }
+                let mut pdf = SmartPdf::open(object.payload()?).ok()?;
+                let page = pdf.prepare(page.page, page.crop).ok()?;
+                vector_geometry::render(&pdf, page, destination, &object.vector_transforms)
+            }) else {
+                return false;
+            };
+            if vector_geometry::install_proxy(layer, pixels).is_none() {
+                return false;
+            }
+        }
+        *doc = candidate;
+        return true;
+    }
+    let external = pictura_render::resolve_path(doc, path)
+        .and_then(|layer| layer.smart_object())
+        .filter(|object| object.kind == SmartObjectKind::External);
+    let local = if let Some(object) = external {
+        let Some(quad) = member_quad(rect, projective, params, warp, preview_quad, group_map)
+        else {
+            return false;
+        };
+        if warp.is_none() && whole_pixel_move(&quad, rect) {
+            None
+        } else {
+            if object.vector_transforms.len() >= 256 {
+                return false;
+            }
+            Some(VectorTransform {
+                source: rect,
+                destination: None,
+                quad,
+                warp: warp.cloned(),
+            })
+        }
+    } else {
+        None
+    };
+    let changed = transform_member_pixels(
+        doc,
+        path,
+        rect,
+        projective,
+        params,
+        interpolation,
+        warp,
+        preview_quad,
+        group_map,
+    );
+    if changed {
+        if let Some(mut step) = local {
+            let Some(layer) = pictura_render::resolve_path_mut(doc, path) else {
+                return false;
+            };
+            step.destination = Some(layer.rect);
+            if layer.smart_object().is_none() {
+                return false;
+            }
+            pictura_codec::edit_layer(layer, |parts| {
+                let object = parts.smart_object.as_mut().expect("source checked above");
+                object.vector_transforms.push(step);
+            });
+        }
+    }
+    changed
+}
+
+fn member_quad(
+    rect: PsdRect,
+    projective: bool,
+    params: MapParams,
+    warp: Option<&pictura_core::warp::Warp>,
+    preview_quad: [(f64, f64); 4],
+    group_map: Option<&Homography>,
+) -> Option<[(f64, f64); 4]> {
+    if warp.is_some() {
+        return Some(preview_quad);
+    }
+    if projective {
+        let map = group_map?;
+        let mut quad = source_corners(rect);
+        for p in &mut quad {
+            *p = map.apply(p.0, p.1)?;
+        }
+        return Some(quad);
+    }
+    Some(params.map_quad(rect))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn transform_member_pixels(
     doc: &mut Document,
     path: &str,
     rect: PsdRect,

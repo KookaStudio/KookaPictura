@@ -112,6 +112,7 @@ pub fn modal_ids() -> &'static [&'static str] {
         "edit.auto.blend.layers",
         "edit.keyboardShortcuts",
         "edit.pdfPresets",
+        "edit.presets.preset.manager",
         "edit.assignProfile",
         "edit.convertProfile",
         "edit.colorSettings",

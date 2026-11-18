@@ -199,6 +199,9 @@ pub fn delete_paths_report(doc: &mut Document, paths: &[&str]) -> Vec<String> {
             deleted.push(path);
         }
     }
+    if !deleted.is_empty() {
+        doc.prune_variable_bindings();
+    }
     deleted
 }
 
@@ -217,7 +220,8 @@ pub fn can_delete_paths(doc: &Document, paths: &[&str]) -> bool {
 fn deletable(doc: &Document, segments: &[usize], path: &str) -> bool {
     !is_background(doc, path)
         && !(segments.len() == 1 && doc.layers.len() <= 1)
-        && resolve_path(doc, path).is_some_and(|layer| !layer.lock.is_all())
+        && resolve_path(doc, path)
+            .is_some_and(|layer| !layer.lock.is_all() && !doc.variables.protects_layer(layer))
 }
 
 /// Delete every layer whose effective visibility is off (its own eye and every
@@ -297,10 +301,7 @@ pub fn duplicate_paths(doc: &mut Document, paths: &[&str]) -> Vec<String> {
         .filter_map(|(segments, path)| {
             let mut copy = resolve_path(doc, &path)?.clone();
             copy.name = format!("{} copy", copy.name);
-            pictura_core::layer_comp::clear_layer_id(&mut copy);
-            pictura_codec::edit_layer(copy.as_mut(), |parts| {
-                parts.extra_blocks.retain(|block| block.key != *b"shmd")
-            });
+            super::create::clear_copied_layer_identity(&mut copy);
             if copy.background {
                 release_background(&mut copy);
             }
@@ -376,13 +377,21 @@ pub fn ungroup_paths(doc: &mut Document, paths: &[&str]) -> usize {
         let Some(layer) = resolve_path(doc, &path) else {
             continue;
         };
-        if !layer.is_group() || layer.lock.is_all() || layer.lock.contains(LockFlags::NESTING) {
+        if !layer.is_group()
+            || layer.lock.is_all()
+            || layer.lock.contains(LockFlags::NESTING)
+            || pictura_core::layer_comp::layer_id(layer)
+                .is_some_and(|id| doc.variables.protected_ids().contains_key(&id))
+        {
             continue;
         }
         let children: Vec<Layer> = layer.children().iter().cloned().collect();
         if doc.layers.replace(&segments, children).is_ok() {
             changed += 1;
         }
+    }
+    if changed != 0 {
+        doc.prune_variable_bindings();
     }
     changed
 }

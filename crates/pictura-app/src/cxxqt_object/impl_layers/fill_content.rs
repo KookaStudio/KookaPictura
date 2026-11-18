@@ -53,6 +53,7 @@ pub mod ffi {
         /// The document's pattern ids in decode order, then the built-in ids
         /// not already present.
         fn available_pattern_ids(view: &PictureView) -> QStringList;
+        fn document_pattern_ids(view: &PictureView) -> QStringList;
         /// A `size`-bounded thumbnail for pattern `id`, or a null image.
         fn pattern_thumbnail(view: &PictureView, id: &QString, size: i32) -> QImage;
         /// Create a fill layer of `kind` from the editor payload, anchored at

@@ -1,5 +1,7 @@
 #include "memory_refusal.h"
 #include "layers_panel.h"
+
+#include "api/engine_bridge.h"
 #include "commands.h"
 #include "document_command.h"
 
@@ -543,6 +545,7 @@ void LayersPanel::populateRowMenu(QMenu& menu, const QString& path, int color,
     if (view_) {
         facts.fillContent = view_->layer_is_fill_content(path);
         facts.canRasterizeSmartObject = view_->layer_can_rasterize_smart_object(path);
+        facts.canRelinkSmartObject = row.smartObject && !relink_source_id(*view_, path).isEmpty();
         facts.canReleaseClipping = clipping_can_release(*view_, QStringList{path});
         facts.hasStyle = layer_style_has(*view_, path);
         facts.canRasterizeStyle = layer_style_can_rasterize(*view_, path);
@@ -568,6 +571,15 @@ void LayersPanel::populateRowMenu(QMenu& menu, const QString& path, int color,
         }
         emitted = true;
         for (const ResolvedRowAction& action : *it) {
+            if (action.id == QLatin1String("relinkToFile")) {
+                QAction* relink = menu.addAction(tr("Relink to File…"));
+                relink->setEnabled(action.enabled);
+                connect(relink, &QAction::triggered, this, [this, path] {
+                    makeRowAnchor(path);
+                    emit smartObjectContentsRequested(QStringLiteral("relink"), path);
+                });
+                continue;
+            }
             if (action.submenu) {
                 const bool layerMask = action.id == QLatin1String("addLayerMask");
                 QMenu* sub = menu.addMenu(layerMask ? tr("Add Layer Mask")

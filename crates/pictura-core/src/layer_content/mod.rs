@@ -245,6 +245,8 @@ impl Layer {
                 | b"plLd"
                 | b"vscg"
                 | b"PiSt"
+                | b"PiVs"
+                | b"PiVt"
                 | b"vmsk"
                 | b"vsms"
                 | b"lsct"

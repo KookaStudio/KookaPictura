@@ -21,8 +21,33 @@ pub fn encode_rgb_pattern(
     height: u32,
     rgba: &[u8],
 ) -> Option<Vec<u8>> {
+    encode_pattern(name, id, width, height, rgba, false)
+}
+
+pub fn encode_rgba_pattern(
+    name: &str,
+    id: &str,
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+) -> Option<Vec<u8>> {
+    encode_pattern(name, id, width, height, rgba, true)
+}
+
+fn encode_pattern(
+    name: &str,
+    id: &str,
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+    alpha: bool,
+) -> Option<Vec<u8>> {
     let n = (width as usize).checked_mul(height as usize)?;
-    if n == 0 || rgba.len() != n * 4 || width > i16::MAX as u32 || height > i16::MAX as u32 {
+    if n == 0
+        || n.checked_mul(4)? != rgba.len()
+        || width > i16::MAX as u32
+        || height > i16::MAX as u32
+    {
         return None;
     }
     let id = id.as_bytes();
@@ -45,8 +70,13 @@ pub fn encode_rgb_pattern(
         be32(&mut list, v);
     }
     be32(&mut list, 3);
-    for plane in 0..3 {
-        be32(&mut list, 1); // written
+    for slot in 0..5 {
+        if slot == 3 || (slot == 4 && !alpha) {
+            be32(&mut list, 0);
+            continue;
+        }
+        let plane = slot.min(3);
+        be32(&mut list, 1);
         be32(&mut list, (23 + n) as u32);
         be32(&mut list, 8);
         for v in [0, 0, height, width] {
@@ -56,9 +86,6 @@ pub fn encode_rgb_pattern(
         list.push(0); // raw
         list.extend(rgba.as_chunks::<4>().0.iter().map(|p| p[plane]));
     }
-    // The two alpha-region slots stay unwritten: the pattern is opaque.
-    be32(&mut list, 0);
-    be32(&mut list, 0);
     be32(&mut out, 3);
     be32(&mut out, list.len() as u32);
     out.extend_from_slice(&list);

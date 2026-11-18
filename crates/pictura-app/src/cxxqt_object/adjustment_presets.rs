@@ -3,8 +3,10 @@
 //! `PictureView` declaration list grows).
 
 mod imp;
+mod library;
 
 use imp::*;
+use library::*;
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -13,10 +15,32 @@ pub mod ffi {
         type QString = cxx_qt_lib::QString;
         include!("cxx-qt-lib/qstringlist.h");
         type QStringList = cxx_qt_lib::QStringList;
+        include!("cxx-qt-lib/qimage.h");
+        type QImage = cxx_qt_lib::QImage;
     }
 
     #[namespace = "pictura"]
     extern "Rust" {
+        type ReadPresetSet;
+
+        fn preset_read_set(kind: i32, extension: &QString, bytes: &[u8]) -> Box<ReadPresetSet>;
+        fn preset_set_error(set: &ReadPresetSet) -> QString;
+        fn preset_set_warnings(set: &ReadPresetSet) -> QString;
+        fn preset_set_size(set: &ReadPresetSet) -> i32;
+        fn preset_row_name(set: &ReadPresetSet, index: i32) -> QString;
+        fn preset_row_rgba(set: &ReadPresetSet, index: i32) -> u32;
+        fn preset_row_values(set: &ReadPresetSet, index: i32) -> QString;
+        fn preset_row_preview(set: &ReadPresetSet, index: i32) -> QImage;
+        fn preset_row_bytes(set: &ReadPresetSet, index: i32) -> Vec<u8>;
+        fn preset_encode_set(
+            kind: i32,
+            extension: &QString,
+            rows: &[u8],
+            output: &mut Vec<u8>,
+        ) -> QString;
+        fn preset_make_swatch(name: &QString, argb: u32) -> Vec<u8>;
+        fn preset_make_builtin(kind: i32, name: &QString, index: i32) -> Vec<u8>;
+
         /// The catalogue kind of `block` (`"levels"`, `"curves"`, …), or empty.
         fn adjustment_preset_kind(block: &[u8]) -> QString;
 

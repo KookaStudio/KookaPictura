@@ -26,6 +26,7 @@ enum class RowDynamic {
     None,
     RasterizeLayer,
     RasterizeStyle,
+    Relink,
     ClippingToggle,
     Link,
     AddMaskSubmenu,
@@ -95,7 +96,7 @@ const RowAction kRowActions[] = {
      command_ids::LayerSmartObjectReplaceContents, RowDynamic::None},
     {"exportContents", "Export Contents…", SmartObject, 4,
      command_ids::LayerSmartObjectExportContents, RowDynamic::None},
-    {"relinkToFile", "Relink to File…", SmartObject, 4, nullptr, RowDynamic::None},
+    {"relinkToFile", "Relink to File…", SmartObject, 4, nullptr, RowDynamic::Relink},
     {"convertToLinked", "Convert to Linked…", SmartObject, 4, nullptr, RowDynamic::None},
     // 5. Rasterize.
     {"rasterizeType", "Rasterize Type", Type, 5, command_ids::LayerRasterizeType,
@@ -206,6 +207,9 @@ QVector<ResolvedRowAction> resolveRowActions(const LayerRowNode& row, const RowF
         case RowDynamic::RasterizeStyle:
             action.commandId = QString::fromLatin1(command_ids::LayerRasterizeLayerStyle);
             action.enabled = facts.canRasterizeStyle;
+            break;
+        case RowDynamic::Relink:
+            action.enabled = facts.canRelinkSmartObject;
             break;
         case RowDynamic::RasterizeLayer: {
             const char* command = command_ids::LayerRasterizeLayer;

@@ -5,7 +5,7 @@
 
 #include <QtCore/QDir>
 #include <QtCore/QFileInfo>
-#include <QtCore/QSaveFile>
+#include "protected_output.h"
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QFileDialog>
@@ -95,7 +95,7 @@ bool exportPaths(PictureView* view, const QString& path, const QString& format)
     if (bytes.size() == 0) {
         return false;
     }
-    QSaveFile file(withAiSuffix(path));
+    pictura::ProtectedOutput file(withAiSuffix(path));
     if (!file.open(QIODevice::WriteOnly)) {
         return false;
     }

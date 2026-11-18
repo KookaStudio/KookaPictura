@@ -319,10 +319,8 @@ fn read_length_and_key_admitted(
     r: &mut Reader,
     budget: &mut Option<&mut DecodeBudget>,
 ) -> DescriptorResult<Vec<u8>> {
-    let len = r.u32()? as usize;
-    let n = if len == 0 { 4 } else { len };
-    let bytes = r.take(n)?;
-    let mut key = admitted_vec(n, budget, "descriptor key")?;
+    let bytes = read_key_bytes(r)?;
+    let mut key = admitted_vec(bytes.len(), budget, "descriptor key")?;
     key.extend_from_slice(bytes);
     Ok(key)
 }
@@ -368,15 +366,65 @@ fn skip_unicode_string(r: &mut Reader) -> Result<(), PsdError> {
     r.skip(count.checked_mul(2).ok_or_else(size_overflow)?)
 }
 
-fn skip_length_and_key(r: &mut Reader) -> Result<(), PsdError> {
+fn read_key_bytes<'a>(r: &mut Reader<'a>) -> Result<&'a [u8], PsdError> {
     let len = r.u32()? as usize;
-    r.skip(if len == 0 { 4 } else { len })
+    r.take(if len == 0 { 4 } else { len })
+}
+
+fn skip_length_and_key(r: &mut Reader) -> Result<(), PsdError> {
+    read_key_bytes(r).map(|_| ())
 }
 
 /// Skip a `DescriptorBlock` (version header plus body); used by the linked-layer
 /// parser, which keeps the descriptor bytes opaque.
 pub(crate) fn skip_descriptor_block(r: &mut Reader) -> Result<(), PsdError> {
     read_descriptor(r).map(|_| ())
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LinkedPath {
+    Full,
+    Original,
+    Relative,
+}
+
+/// Locate top-level linked-file path strings without rewriting other fields.
+pub(crate) fn linked_path_fields(data: &[u8]) -> Option<Vec<(LinkedPath, std::ops::Range<usize>)>> {
+    let mut reader = Reader::new(data);
+    if reader.u32().ok()? != 16 {
+        return None;
+    }
+    skip_unicode_string(&mut reader).ok()?;
+    skip_length_and_key(&mut reader).ok()?;
+    let count = reader.u32().ok()?;
+    let mut fields = Vec::new();
+    let mut full_path = false;
+    for _ in 0..count {
+        let key = read_key_bytes(&mut reader).ok()?;
+        let kind: [u8; 4] = reader.take(4).ok()?.try_into().ok()?;
+        let path = match key {
+            b"fullPath" => LinkedPath::Full,
+            b"originalPath" => LinkedPath::Original,
+            b"relPath" => LinkedPath::Relative,
+            _ => {
+                skip_descriptor_value(&mut reader, kind, 1).ok()?;
+                continue;
+            }
+        };
+        if kind != *b"TEXT" {
+            return None;
+        }
+        let start = reader.pos;
+        let text = read_unicode_string(&mut reader).ok()?;
+        if path == LinkedPath::Full {
+            if full_path || text.trim_matches('\0').is_empty() {
+                return None;
+            }
+            full_path = true;
+        }
+        fields.push((path, start..reader.pos));
+    }
+    (full_path && reader.remaining() == 0).then_some(fields)
 }
 
 fn skip_descriptor_value(r: &mut Reader, ostype: [u8; 4], depth: u32) -> Result<(), PsdError> {

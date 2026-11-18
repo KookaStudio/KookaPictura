@@ -245,6 +245,11 @@ protected:
         const StampOptions o = stamp_->get();
         const QPoint origin =
             o.patternAligned ? QPoint() : QPoint(qRound(imagePos.x()), qRound(imagePos.y()));
+        if (!o.patternPreset.isEmpty()) {
+            return begin_pattern_preset(v, paintTip(*paint_), paint_->opacity(), paint_->flow(),
+                paint_->mode(), {reinterpret_cast<const std::uint8_t*>(o.patternPreset.constData()),
+                 size_t(o.patternPreset.size())}, origin.x(), origin.y());
+        }
         return begin_pattern_stamp(v, paintTip(*paint_), paint_->opacity(), paint_->flow(),
                                    paint_->mode(), o.pattern, origin.x(), origin.y());
     }

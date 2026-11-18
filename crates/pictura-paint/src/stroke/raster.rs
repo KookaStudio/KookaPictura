@@ -32,6 +32,7 @@ pub(super) struct Cell<'a> {
 pub(super) struct DabRaster<'a> {
     pub(super) params: &'a TipParams,
     pub(super) bristle: Option<&'a BristleDab>,
+    pub(super) sampled: Option<&'a super::SampledTip>,
     pub(super) dab_x: f32,
     pub(super) dab_y: f32,
     pub(super) flow: f32,
@@ -97,9 +98,14 @@ impl DabRaster<'_> {
         // square bounding box cost nothing. A non-round shape returns the full
         // width and its out-of-support pixels fall to the `cov <= 0.0` filter
         // below.
-        let (xlo, xhi) = match self.bristle {
-            Some(bristle) => (-bristle.reach(), bristle.reach()),
-            None => self.params.x_span(dy)?,
+        let (xlo, xhi) = if self.sampled.is_some() {
+            let reach = self.params.radius * std::f32::consts::SQRT_2;
+            (-reach, reach)
+        } else {
+            match self.bristle {
+                Some(bristle) => (-bristle.reach(), bristle.reach()),
+                None => self.params.x_span(dy)?,
+            }
         };
         let x0 = ((self.dab_x + xlo).floor() as i32).max(cell.x as i32);
         let x1 = ((self.dab_x + xhi).ceil() as i32)
@@ -109,9 +115,13 @@ impl DabRaster<'_> {
         let mut last = 0;
         for lx in x0..=x1 {
             let dx = (lx as f32 + 0.5) - self.dab_x;
-            let cov = match self.bristle {
-                Some(bristle) => bristle.coverage(dx, dy),
-                None => self.params.coverage(dx, dy),
+            let cov = if let Some(sample) = self.sampled {
+                sample.coverage(self.params, dx, dy)
+            } else {
+                match self.bristle {
+                    Some(bristle) => bristle.coverage(dx, dy),
+                    None => self.params.coverage(dx, dy),
+                }
             };
             if cov <= 0.0 {
                 continue;

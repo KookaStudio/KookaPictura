@@ -55,7 +55,7 @@ fn selection_readers_do_not_materialize() {
         return;
     }
     let mut view = view_with_selection();
-    let doc = view.session.doc.clone().expect("document");
+    let doc = view.session.doc.snapshot().expect("document");
     let selection = view.session.selection.clone().expect("a selection");
     let before = pictura_core::materializations();
 

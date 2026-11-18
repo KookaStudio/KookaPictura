@@ -272,9 +272,9 @@ int pictura::runPatternStampChecks(pictura::PicturaMainWindow& frame)
     auto* pattern = frame.findChild<QComboBox*>(QStringLiteral("optionsPatternStampPattern"));
     auto* impressionist =
         frame.findChild<QCheckBox*>(QStringLiteral("optionsPatternImpressionist"));
-    const bool bar = pattern && impressionist && pattern->count() == 8
+    const bool bar = pattern && impressionist && pattern->count() == 10
         && pattern->currentText() == QStringLiteral("Checkerboard")
-        && !pattern->itemIcon(0).isNull() && !impressionist->isEnabled();
+        && !pattern->itemIcon(pattern->currentIndex()).isNull() && !impressionist->isEnabled();
 
     // The checkerboard's 32 px quadrants: light (215) where x < 32 matches
     // y < 32, dark (90) elsewhere.

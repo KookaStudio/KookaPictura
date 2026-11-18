@@ -595,7 +595,7 @@ fn estimates_cover_the_measured_peaks() {
         return;
     }
     let side = GUARD_SIDE;
-    let doc = |view: &PictureViewRust| view.session.doc.clone().expect("document");
+    let doc = |view: &PictureViewRust| view.session.doc.snapshot().expect("document");
     let check = |name: &str, peak: usize, estimate: u64| {
         println!(
             "{name}: heap peak {:.1} MiB, estimate {:.1} MiB",

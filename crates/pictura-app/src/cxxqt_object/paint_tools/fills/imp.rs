@@ -380,7 +380,7 @@ pub(crate) fn apply(
     let Some((doc, rect)) = edited else {
         return false;
     };
-    view.as_mut().rust_mut().session.doc = Some(doc);
+    view.as_mut().rust_mut().session.doc.set(Some(doc));
     refresh_edit(view.as_mut(), Some(rect), "");
     view.as_mut().record(label);
     true

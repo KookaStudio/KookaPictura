@@ -304,6 +304,11 @@ pub mod ffi {
 
         #[qinvokable]
         fn record_command(self: Pin<&mut Self>, id: &QString, params_json: &QString) -> bool;
+        #[qinvokable]
+        fn reserve_command(self: Pin<&mut Self>, id: &QString, params_json: &QString) -> u64;
+
+        #[qinvokable]
+        fn resolve_command(self: Pin<&mut Self>, token: u64, saved: bool);
 
         #[qinvokable]
         fn record_tool_stroke(self: Pin<&mut Self>, payload_json: &QString) -> bool;

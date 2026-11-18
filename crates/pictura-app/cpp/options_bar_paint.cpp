@@ -109,27 +109,8 @@ void populateColorReplacementModes(QComboBox* combo, int mode, int depthBits)
 // controller fields.
 // CS6's brush tip button: the tip with its size beside it; a click opens the
 // Brush Preset picker (Size, Hardness, and the preset grid).
-void OptionsBar::addBrushTipFields(QHBoxLayout* layout, QWidget* page,
-                                   bool withAdditionalPresets)
+void OptionsBar::addBrushTipFields(QHBoxLayout* layout, QWidget* page)
 {
-    // The Brush and Pencil tool buttons list the four added presets; other
-    // brush-using tools (History Brush, stamps, healing, ...) keep the generic
-    // Tool Presets menu.
-    if (withAdditionalPresets) {
-        if (QWidget* first = layout->itemAt(0) ? layout->itemAt(0)->widget() : nullptr) {
-            if (auto* tool = qobject_cast<QToolButton*>(first); tool && tool->menu()) {
-                QMenu* menu = tool->menu();
-                menu->clear();
-                for (int i = 0; i < BrushPresetPicker::additionalPresetCount(); ++i) {
-                    QAction* action = menu->addAction(
-                        QIcon(BrushPresetPicker::additionalPresetIcon(i, 16)),
-                        BrushPresetPicker::additionalPresetName(i));
-                    connect(action, &QAction::triggered, this,
-                            [this, i] { brushPicker()->chooseAdditionalPreset(i); });
-                }
-            }
-        }
-    }
     auto* button = new QToolButton(page);
     button->setObjectName(QStringLiteral("optionsBrushTip"));
     button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
@@ -457,7 +438,7 @@ QWidget* OptionsBar::buildPaintPage(ToolId id)
     layout->setContentsMargins(4, 2, 4, 2);
     layout->addWidget(toolButton(id, page));
 
-    addBrushTipFields(layout, page, true);
+    addBrushTipFields(layout, page);
     auto addField = [&](const QString& label, const QString& name, const QString& suffix, int lo,
                         int hi, int value, std::function<void(int)> setter) {
         auto* field =

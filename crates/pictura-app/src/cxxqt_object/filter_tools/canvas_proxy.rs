@@ -143,7 +143,7 @@ fn proxy_render(
 pub(in crate::cxxqt_object) fn pre_preview_sources(
     rust: &PictureViewRust,
 ) -> Option<(Document, Option<Coverage>)> {
-    let mut doc = rust.session.doc.clone()?;
+    let mut doc = rust.session.doc.snapshot()?;
     // An open section preview has written into the live layer; the work starts
     // from the pixels before it, as the commit does.
     if let Some(preview) = rust.session.live.filter_preview() {

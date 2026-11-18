@@ -23,6 +23,7 @@ class QDialog;
 class QDockWidget;
 class QFrame;
 class QLabel;
+class QProgressBar;
 class QListWidget;
 class QMenu;
 class QMimeData;
@@ -392,7 +393,8 @@ public:
     // above its current layer, as one "Duplicate Layer" state. False when `source` is not
     // another open document or the bridge refuses the copy.
     bool copyLayerFromDocument(const void* source, const QString& path);
-    bool saveActive();
+    bool saveActive(bool interactive = true);
+    bool saveInBackground() const;
     bool saveActiveAs(const QString& path);
     // Prompt for a Save As path (format-aware filters, source format preselected) and write
     // through `saveActiveAs`. Warns before flattening a layered document into a raster format.
@@ -639,6 +641,7 @@ private:
     Toolbox* toolbox_ = nullptr;
     NumericField* zoomField_ = nullptr;
     QLabel* sizeLabel_ = nullptr;
+    QProgressBar* backgroundSaveProgress_ = nullptr;
     ToolHintBar* hintBar_ = nullptr;
     // The rule between the GPU readout and the hint strip; hidden with the strip.
     QFrame* hintSeparator_ = nullptr;

@@ -56,6 +56,7 @@ mod render_session;
 pub use render_session::{RenderSession, DEFAULT_PREVIEW_BUDGET};
 mod region_level;
 mod smart_source;
+pub use layer_source::smart_object_document_pixels;
 pub use region_level::{
     band_rows, composite_channels, composite_region, composite_region_level, composite_tiled,
     level_size, premultiply_planar, region_level, region_level_chunked, stream_composite,
@@ -82,7 +83,7 @@ pub use pyramid_level::{PyramidLevel, SMALLEST_SIDE, TILE};
 pub use view_pyramid::{Planes, ViewPyramid};
 
 mod composite_native;
-pub use composite_native::refresh_native_composite;
+pub use composite_native::{refresh_native_composite, restore_native_composite};
 pub use pictura_adjust::{
     match_color_stats, replace_color_mask, replace_color_result, replace_color_shift_for,
     Adjustment, AutoKind, ColorBalanceMode, ExposureGamma, GradientFillParams, GradientKind,
@@ -182,7 +183,9 @@ pub use filter::{
 };
 
 mod smart_filter;
-pub use smart_filter::{apply_smart_filter_chain, decode_smart_filter, SmartFilterOp};
+pub use smart_filter::{
+    apply_smart_filter_chain, bake_smart_source_preview, decode_smart_filter, SmartFilterOp,
+};
 
 pub mod locks;
 
@@ -200,7 +203,8 @@ pub use document_ops::{
     add_shape_layer, add_slice, add_smart_filter, add_solid_fill, add_vector_mask, align_layers,
     any_effects_visible, apply_auto_align, apply_auto_blend, apply_layer_comp, apply_layer_mask,
     apply_lens_correction, apply_pictura_raw, apply_pictura_raw_destructive, apply_visibility,
-    arrange_path, arrange_path_index, background_from_layer, can_add_smart_filter, can_align,
+    arrange_path, arrange_path_index, background_from_layer, builtin_pattern,
+    builtin_pattern_by_id, builtin_pattern_id, can_add_smart_filter, can_align,
     can_apply_pictura_raw_destructive, can_arrange_path, can_auto_align, can_auto_blend,
     can_background_from_layer, can_convert_depth, can_convert_mode,
     can_convert_smart_object_to_layers, can_convert_to_smart_object, can_create_clipping_mask,
@@ -248,8 +252,8 @@ pub use document_ops::{
     set_blend_paths, set_color_paths, set_document_global_light, set_document_layer_style_value,
     set_fill_paths, set_layer_live_shape, set_layer_mask_density, set_layer_mask_enabled,
     set_layer_mask_feather, set_layer_mask_linked, set_layer_shape_paths, set_layer_style_contour,
-    set_layer_style_gradient, set_layer_style_value, set_lock_paths, set_opacity_paths,
-    set_shape_fill, set_shape_stroke, set_slice, set_smart_object_stack_mode,
+    set_layer_style_gradient, set_layer_style_pattern, set_layer_style_value, set_lock_paths,
+    set_opacity_paths, set_shape_fill, set_shape_stroke, set_slice, set_smart_object_stack_mode,
     set_vector_mask_density, set_vector_mask_enabled, set_vector_mask_feather,
     set_vector_mask_linked, set_visible_paths, shape_bounds, shape_coverage, shape_fill,
     shape_fill_color, shape_layer_rect, shape_stroke, smart_object_source_bytes,
@@ -295,14 +299,16 @@ mod type_channels;
 mod type_layer;
 mod type_path;
 mod type_warp;
+mod variable_pixels;
 pub use type_box::TypePlacement;
 pub use type_layer::{
     add_type_layer, apply_type_style, has_type_layers, re_render_type_layers, render_type,
-    replace_type_layer, type_layer_at, type_layer_spec, type_layers_editable, type_mask,
-    type_placement,
+    replace_type_layer, replace_variable_text, type_layer_at, type_layer_spec,
+    type_layers_editable, type_mask, type_placement,
 };
 pub use type_path::{overflow_point as type_path_overflow_point, path_hit_at, PathHit};
 pub use type_warp::{type_warp_refusal, WarpRefusal};
+pub use variable_pixels::{place_pixels, replace_variable_pixels};
 
 pub use pictura_ops::{Anchor, Resample};
 

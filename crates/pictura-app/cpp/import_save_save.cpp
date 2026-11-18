@@ -6,6 +6,7 @@
 #include "api/document_api.h"
 #include "api/document_bridge.h"
 #include "api/layers_bridge.h"
+#include "api/proofing_bridge.h"
 
 #include "bmp_options_dialog.h"
 #include "busy_job.h"
@@ -13,6 +14,7 @@
 #include "command_ids.h"
 #include "dcs_options_dialog.h"
 #include "dialogs.h"
+#include "document_command.h"
 #include "document_registry.h"
 #include "eps_options_dialog.h"
 #include "gif_options_dialog.h"
@@ -30,9 +32,21 @@
 
 #include <QtCore/QByteArray>
 #include <QtCore/QFileInfo>
+#include <QtCore/QDir>
+#include <QtCore/QScopeGuard>
+#include <QtCore/QTimer>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QTemporaryDir>
+#include <QtCore/QUrl>
+#include <QtGui/QDesktopServices>
+#include <QtWidgets/QDialog>
+#include <QtWidgets/QDialogButtonBox>
+#include <QtWidgets/QLabel>
 #include <QtWidgets/QMessageBox>
+#include <QtWidgets/QPushButton>
+#include <QtWidgets/QVBoxLayout>
+
+#include <algorithm>
 
 namespace pictura {
 namespace {
@@ -45,6 +59,35 @@ struct SaveActiveOrigin {
     ~SaveActiveOrigin() { saveActiveOrigin = false; }
 };
 
+QString destinationKey(const QString& path)
+{
+    const QFileInfo file(path);
+    const QString parent = file.absoluteDir().canonicalPath();
+    const QString key = QDir::cleanPath(QDir(parent.isEmpty() ? file.absolutePath() : parent)
+                                           .filePath(file.fileName()));
+#ifdef Q_OS_WIN
+    return key.toCaseFolded();
+#else
+    return key;
+#endif
+}
+
+QJsonObject saveParameters(const QString& path, bool fromSave)
+{
+    QJsonObject values{{QStringLiteral("in"), path}};
+    if (!fromSave) {
+        values.insert(QStringLiteral("as"), path.section(QLatin1Char('.'), -1).toUpper());
+    }
+    return values;
+}
+
+bool startNativeSave(PictureView& view, const QString& path, std::optional<bool> includeMerged)
+{
+    return includeMerged.has_value()
+        ? pictura::native_compatibility_save_start(view, path, false, *includeMerged)
+        : document_api::saveStart(view, path);
+}
+
 } // namespace
 
 bool saveActiveInProgress()
@@ -52,7 +95,7 @@ bool saveActiveInProgress()
     return saveActiveOrigin;
 }
 
-bool ImportSaveCoordinator::saveActive()
+bool ImportSaveCoordinator::saveActive(bool interactive, bool backgroundAllowed)
 {
     SaveActiveOrigin origin;
     const auto record = [this] {
@@ -64,11 +107,23 @@ bool ImportSaveCoordinator::saveActive()
         return false;
     }
     PictureView* view = documents_.viewAt(index);
+    if (view && !pictura::compatibility_reason(*view).isEmpty()) {
+        if (hooks_.showStatus) {
+            hooks_.showStatus(view->open_notice(), 6000);
+        }
+        return false;
+    }
     for (const SmartObjectEditSession& session : editSessions_) {
         if (session.editor != view) {
             continue;
         }
         const QString file = session.temp->filePath(session.filename);
+        const QString destination = destinationKey(file);
+        if (!canStartNativeSave(view, destination)) {
+            return false;
+        }
+        synchronousDestinations_.insert(destination);
+        const auto release = qScopeGuard([&] { synchronousDestinations_.remove(destination); });
         const QString name = QFileInfo(file).fileName();
         const bool saved = saveRunsOnWorker(file)
             ? runBusyJob(dialogParent_, name, tr("Saving %1…").arg(name),
@@ -92,6 +147,31 @@ bool ImportSaveCoordinator::saveActive()
         return true;
     }
     QString path = documents_.documentPath(index);
+    if (view && print_metadata_pending(*view) && !isNativeDocumentPath(path)) {
+        if (!interactive) {
+            return false;
+        }
+        const QStringList filters = saveFileFilters().mid(0, 2);
+        QString selected = filters.first();
+        QString target = getSaveFileName(dialogParent_, tr("Save Print Settings As"),
+                                         documents_.activeFilePath(), filters, &selected);
+        if (target.isEmpty()) {
+            return false;
+        }
+        target = pathForSaveFilter(target, filters.indexOf(selected) == 1 ? 1 : 0, 0);
+        if (!isNativeDocumentPath(target)) {
+            return false;
+        }
+        const auto includeMerged = chooseMergedImage(target, *view);
+        if (!includeMerged.has_value()) {
+            return false;
+        }
+        const bool saved = saveActiveAs(target, backgroundAllowed, includeMerged);
+        if (saved && !backgroundSaves_.contains(view)) {
+            record();
+        }
+        return saved;
+    }
     if (!path.isEmpty() && isPdfPath(path)) {
         const bool saved = savePdfWithDialog(path);
         if (saved) {
@@ -106,8 +186,8 @@ bool ImportSaveCoordinator::saveActive()
     const bool rememberedDcs = kind == SaveFormatKind::Dcs;
     if (path.isEmpty()
         || savePathNeedsFormatDialog(path, view, isNativeDocumentPath(path), rememberedDcs)) {
-        const bool saved = saveAsWithDialog();
-        if (saved) {
+        const bool saved = saveAsWithDialog(backgroundAllowed);
+        if (saved && !backgroundSaves_.contains(view)) {
             record();
         }
         return saved;
@@ -115,49 +195,221 @@ bool ImportSaveCoordinator::saveActive()
     if (view && kind != SaveFormatKind::None) {
         applySaveRasterOptions(*view, kind, saveFormatOptionsFromJson(saveFormatOptions_));
     }
-    const bool saved = saveActiveAs(path);
-    if (saved) {
+    std::optional<bool> includeMerged;
+    if (interactive && view && saveRunsOnWorker(path)) {
+        includeMerged = chooseMergedImage(path, *view);
+        if (!includeMerged.has_value()) {
+            return false;
+        }
+    }
+    const bool saved = saveActiveAs(path, backgroundAllowed, includeMerged);
+    if (saved && !backgroundSaves_.contains(view)) {
         record();
     }
     return saved;
 }
 
-bool ImportSaveCoordinator::saveActiveAs(const QString& path)
+bool ImportSaveCoordinator::canStartNativeSave(PictureView* view, const QString& destination)
 {
-    const int index = documents_.activeIndex();
-    PictureView* view = documents_.viewAt(index);
-    if (!view || path.isEmpty()) {
+    const bool conflict = backgroundSaves_.contains(view)
+        || synchronousDestinations_.contains(destination)
+        || std::any_of(backgroundSaves_.cbegin(), backgroundSaves_.cend(),
+                       [&](const PendingSave& job) { return job.destination == destination; });
+    if (conflict && hooks_.showStatus) {
+        hooks_.showStatus(tr("A save is already in progress."), 6000);
+    }
+    return !conflict;
+}
+
+bool ImportSaveCoordinator::startBackgroundSave(PictureView* view, const QString& path,
+                                                std::optional<bool> includeMerged)
+{
+    const QString destination = destinationKey(path);
+    if (!canStartNativeSave(view, destination)) {
         return false;
     }
+    if (!startNativeSave(*view, path, includeMerged)) {
+        return applySaveResult(view, path, 0);
+    }
+    const bool fromSave = saveActiveInProgress();
+    const auto id = fromSave ? command_ids::FileSave : command_ids::FileSaveAs;
+    const quint64 token = hooks_.reserveRecording
+        ? hooks_.reserveRecording(QString::fromLatin1(id), saveParameters(path, fromSave)) : 0;
+    backgroundSaves_.insert(view, PendingSave{path, destination, token});
+    if (!saveTimer_) {
+        saveTimer_ = new QTimer(this);
+        saveTimer_->setInterval(16);
+        connect(saveTimer_, &QTimer::timeout, this, &ImportSaveCoordinator::pollBackgroundSaves);
+    }
+    if (DocEntry* doc = documents_.docAt(indexOfView(view))) {
+        doc->saveProgress = 0;
+        documents_.updateTabTitle(indexOfView(view));
+    }
+    if (hooks_.updateSaveProgress) {
+        hooks_.updateSaveProgress();
+    }
+    saveTimer_->start();
+    return true;
+}
+
+void ImportSaveCoordinator::pollBackgroundSaves()
+{
+    const auto saving = backgroundSaves_.keys();
+    for (PictureView* view : saving) {
+        if (!document_api::saveRunning(*view)) {
+            finishBackgroundSave(view);
+            continue;
+        }
+        const int index = indexOfView(view);
+        if (DocEntry* doc = documents_.docAt(index)) {
+            const int percent = qBound(0, save_progress(*view), 99);
+            if (doc->saveProgress != percent) {
+                doc->saveProgress = percent;
+                documents_.updateTabTitle(index);
+                if (hooks_.updateSaveProgress) {
+                    hooks_.updateSaveProgress();
+                }
+            }
+        }
+    }
+}
+
+bool ImportSaveCoordinator::finishBackgroundSave(PictureView* view)
+{
+    const PendingSave job = backgroundSaves_.take(view);
+    if (backgroundSaves_.isEmpty()) {
+        saveTimer_->stop();
+    }
+    const int index = indexOfView(view);
+    if (DocEntry* doc = documents_.docAt(index)) {
+        doc->saveProgress = -1;
+    }
+    const int outcome = save_finish_outcome(*view);
+    if (hooks_.finishRecording && job.recordingToken) {
+        hooks_.finishRecording(job.recordingToken, outcome == 1 || outcome == 3);
+    }
+    const bool saved = applySaveResult(view, job.path, outcome, true);
+    if (!saved && outcome < 3) {
+        unresolvedSaveFailures_.insert(view);
+    }
+    if (index >= 0) {
+        documents_.updateTabTitle(index);
+    }
+    if (hooks_.updateSaveProgress) {
+        hooks_.updateSaveProgress();
+    }
+    return saved;
+}
+
+bool ImportSaveCoordinator::resolvePendingSave(PictureView* view)
+{
+    if (!backgroundSaves_.contains(view)) {
+        return !saveResolutionNeedsPrompt(view);
+    }
+    const QString name = QFileInfo(backgroundSaves_.value(view).path).fileName();
+    saveTimer_->stop();
+    const auto restart = qScopeGuard([this] {
+        if (!backgroundSaves_.isEmpty()) {
+            saveTimer_->start();
+        }
+    });
+    return runBusyJob(dialogParent_, name, tr("Saving %1…").arg(name),
+                      [] { return true; },
+                      [view] { return document_api::saveRunning(*view); },
+                      [this, view] { return finishBackgroundSave(view); });
+}
+
+bool ImportSaveCoordinator::saveResolutionNeedsPrompt(PictureView* view) const
+{
+    return unresolvedSaveFailures_.contains(view);
+}
+
+void ImportSaveCoordinator::acknowledgeSaveResolution(PictureView* view)
+{
+    unresolvedSaveFailures_.remove(view);
+}
+
+bool ImportSaveCoordinator::applySaveResult(PictureView* view, const QString& path, int outcome,
+                                            bool background)
+{
+    const int index = indexOfView(view);
     const QString name = QFileInfo(path).fileName();
-    const bool saved = saveRunsOnWorker(path)
-        ? runBusyJob(dialogParent_, name, tr("Saving %1…").arg(name),
-                     [view, path] { return document_api::saveStart(*view, path); },
-                     [view] { return document_api::saveRunning(*view); },
-                     [view] { return document_api::saveFinish(*view); })
-        : document_api::save(*view, path);
-    if (!saved) {
+    if (outcome == 2) {
+        if (hooks_.showStatus) {
+            hooks_.showStatus(tr("Could not confirm publication of %1. Save the document again.").arg(name),
+                              6000);
+        }
+        return false;
+    }
+    if (outcome >= 3) {
+        return false;
+    }
+    if (outcome != 1) {
         if (!reportMemoryRefusal(dialogParent_, tr("save the document")) && hooks_.showStatus) {
             hooks_.showStatus(tr("Could not save %1.").arg(name), 6000);
         }
         return false;
     }
+    if (index < 0) {
+        return true;
+    }
+    acknowledgeSaveResolution(view);
     documents_.setDocumentPath(index, path);
-    // A stale save leaves the document modified; keep the recovery snapshot so
-    // an edit made during the save is still recoverable.
+    attachRecovery(view);
     if (!document_api::isDirty(*view)) {
-        dropRecoverySnapshot(view);
+        if (background) {
+            if (!recovery_discard_async(*view) && hooks_.showStatus) {
+                hooks_.showStatus(tr("Could not remove superseded crash recovery data."), 8000);
+            }
+        } else {
+            dropRecoverySnapshot(view);
+        }
     }
     documents_.updateTabTitle(index);
     rememberRecent(path);
     if (hooks_.updateWindowTitle) {
         hooks_.updateWindowTitle();
     }
-    if (!saveActiveOrigin) {
-        QJsonObject step{{QStringLiteral("as"), path.section(QLatin1Char('.'), -1).toUpper()},
-                         {QStringLiteral("in"), path}};
-        // The step carries the format's options so playback (and Batch) saves
-        // with them rather than whatever is remembered at replay time.
+    const QString warning = pictura::native_save_warning(*view);
+    if (!warning.isEmpty() && hooks_.showStatus) {
+        hooks_.showStatus(warning, 0);
+    }
+    return true;
+}
+
+bool ImportSaveCoordinator::saveActiveAs(const QString& path, bool backgroundAllowed,
+                                         std::optional<bool> includeMerged)
+{
+    PictureView* view = documents_.activeView();
+    if (!view || path.isEmpty() || !pictura::compatibility_reason(*view).isEmpty()) {
+        return false;
+    }
+    const bool native = saveRunsOnWorker(path);
+    if (backgroundAllowed && saveInBackground_ && native) {
+        return startBackgroundSave(view, path, includeMerged);
+    }
+    const QString destination = destinationKey(path);
+    if (!canStartNativeSave(view, destination)) {
+        return false;
+    }
+    synchronousDestinations_.insert(destination);
+    const auto release = qScopeGuard([&] { synchronousDestinations_.remove(destination); });
+    const QString name = QFileInfo(path).fileName();
+    int outcome = 0;
+    if (native) {
+        runBusyJob(dialogParent_, name, tr("Saving %1…").arg(name),
+                   [view, path, includeMerged] { return startNativeSave(*view, path, includeMerged); },
+                   [view] { return document_api::saveRunning(*view); },
+                   [&] { outcome = save_finish_outcome(*view); return outcome == 1; });
+    } else {
+        outcome = document_api::save(*view, path) ? 1 : 0;
+    }
+    if (!applySaveResult(view, path, outcome)) {
+        return false;
+    }
+    if (!saveActiveInProgress()) {
+        QJsonObject step = saveParameters(path, false);
+        // Preserve the format options for action and Batch playback.
         const SaveFormatKind kind =
             lastSaveKinds_.value(view, saveFormatKindForSuffix(QFileInfo(path).suffix()));
         const QString key = saveFormatKey(kind);
@@ -171,7 +423,35 @@ bool ImportSaveCoordinator::saveActiveAs(const QString& path)
     return true;
 }
 
-bool ImportSaveCoordinator::confirmSaveProfile(const QString& path, PictureView& view)
+std::optional<bool> ImportSaveCoordinator::chooseMergedImage(const QString& path,
+                                                            const PictureView& view)
+{
+    if (!saveRunsOnWorker(path) || nativeSaveCompatibility_ == NativeSaveCompatibility::Always
+        || !pictura::native_save_can_omit_merged(view)) {
+        return true;
+    }
+    if (nativeSaveCompatibility_ == NativeSaveCompatibility::Never) {
+        return false;
+    }
+    QMessageBox dialog(QMessageBox::Question, tr("Maximize PSD and PSB File Compatibility"),
+                       tr("Include a merged image? Other applications may need it to open this file."),
+                       QMessageBox::Cancel, dialogParent_);
+    auto* include = dialog.addButton(tr("Include Merged Image"), QMessageBox::AcceptRole);
+    auto* omit = dialog.addButton(tr("Omit Merged Image"), QMessageBox::DestructiveRole);
+    dialog.setDefaultButton(include);
+    dialog.setEscapeButton(QMessageBox::Cancel);
+    runDialog(dialog, dialogParent_);
+    if (dialog.clickedButton() == include) {
+        return true;
+    }
+    if (dialog.clickedButton() == omit) {
+        return false;
+    }
+    return std::nullopt;
+}
+
+bool ImportSaveCoordinator::confirmSaveProfile(const QString& path, const PictureView& view,
+                                               std::optional<bool>& choice)
 {
     const QString suffix = QFileInfo(path).suffix().toLower();
     const bool native = suffix == QStringLiteral("psd") || suffix == QStringLiteral("psb");
@@ -187,14 +467,14 @@ bool ImportSaveCoordinator::confirmSaveProfile(const QString& path, PictureView&
         if (!profileDialogForTest_(initial, embed)) {
             return false;
         }
-        pictura::set_save_embed_profile(view, embed);
+        choice = embed;
         return true;
     }
     SaveOptionsDialog options(initial, true, dialogParent_);
     if (runDialog(options, dialogParent_) != QDialog::Accepted) {
         return false;
     }
-    pictura::set_save_embed_profile(view, options.embedProfile());
+    choice = options.embedProfile();
     return true;
 }
 
@@ -223,6 +503,39 @@ bool ImportSaveCoordinator::saveCopyWithDialog()
     if (!view || !view->has_document()) {
         return false;
     }
+    if (!pictura::compatibility_reason(*view).isEmpty()) {
+        if (!pictura::compatibility_preview_available(*view)) {
+            if (hooks_.showStatus) {
+                hooks_.showStatus(view->open_notice(), 6000);
+            }
+            return false;
+        }
+        const QString title = tr("Save a Copy");
+        const QStringList filters = {tr("PNG (*.PNG)")};
+        QString selected = filters.front();
+        QString path = getSaveFileName(dialogParent_, title, documents_.activeFilePath(),
+                                       filters, &selected);
+        if (path.isEmpty()) {
+            return false;
+        }
+        if (QFileInfo(path).suffix().isEmpty()) {
+            path += QStringLiteral(".png");
+        }
+        const QString text = tr("Save the original merged image as a PNG? The copy will have no "
+                                "editable layers or document features.");
+        const bool confirmed = warningDriverForTest_
+            ? warningDriverForTest_(title, text)
+            : QMessageBox::warning(dialogParent_, title, text, QMessageBox::Save | QMessageBox::Cancel)
+                == QMessageBox::Save;
+        if (!confirmed) {
+            return false;
+        }
+        const QString failure = pictura::save_compatibility_copy(*view, path, confirmed);
+        if (!failure.isEmpty() && hooks_.showStatus) {
+            hooks_.showStatus(failure, 6000);
+        }
+        return failure.isEmpty();
+    }
     const QStringList& filters = saveFileFilters();
     const int sourceIndex = defaultSaveFilterIndex(view);
     QString selected = filters.at(sourceIndex);
@@ -247,25 +560,43 @@ bool ImportSaveCoordinator::saveCopyAsWithOptions(const QString& path, SaveForma
     if (!view || !view->has_document()) {
         return false;
     }
+    std::optional<bool> embed;
     if (!confirmFeatureWarning(path, *view, tr("Save a Copy"))
-        || !promptSaveFormatOptions(path, hint) || !confirmSaveProfile(path, *view)) {
+        || !promptSaveFormatOptions(path, hint) || !confirmSaveProfile(path, *view, embed)) {
         return false;
     }
-    return saveCopyAs(path);
+    const auto includeMerged = chooseMergedImage(path, *view);
+    if (!includeMerged.has_value()) {
+        return false;
+    }
+    if (embed.has_value()) {
+        pictura::set_save_embed_profile(*view, *embed);
+    }
+    return saveCopyAs(path, includeMerged);
 }
 
-bool ImportSaveCoordinator::saveCopyAs(const QString& path)
+bool ImportSaveCoordinator::saveCopyAs(const QString& path, std::optional<bool> includeMerged)
 {
     const int index = documents_.activeIndex();
     PictureView* view = documents_.viewAt(index);
     if (!view || path.isEmpty()) {
         return false;
     }
+    const QString destination = destinationKey(path);
+    if (!canStartNativeSave(view, destination)) {
+        return false;
+    }
+    synchronousDestinations_.insert(destination);
+    const auto release = qScopeGuard([&] { synchronousDestinations_.remove(destination); });
     const QString name = QFileInfo(path).fileName();
     const bool native = saveRunsOnWorker(path);
     const bool saved = native
         ? runBusyJob(dialogParent_, name, tr("Saving %1…").arg(name),
-                     [view, path] { return document_api::saveCopyStart(*view, path); },
+                     [view, path, includeMerged] {
+                         return includeMerged.has_value()
+                             ? pictura::native_compatibility_save_start(*view, path, true, *includeMerged)
+                             : document_api::saveCopyStart(*view, path);
+                     },
                      [view] { return document_api::saveRunning(*view); },
                      [view] { return document_api::saveFinish(*view); })
         : document_api::saveCopy(*view, path);
@@ -275,6 +606,9 @@ bool ImportSaveCoordinator::saveCopyAs(const QString& path)
             hooks_.showStatus(tr("Could not save a copy of %1.").arg(name), 6000);
         }
         return false;
+    }
+    if (!pictura::native_save_warning(*view).isEmpty() && hooks_.showStatus) {
+        hooks_.showStatus(pictura::native_save_warning(*view), 0);
     }
     return true;
 }
@@ -301,10 +635,10 @@ bool ImportSaveCoordinator::saveActiveAtPath(const QString& path, const QJsonObj
     return saveActiveAs(path);
 }
 
-bool ImportSaveCoordinator::saveAsWithDialog()
+bool ImportSaveCoordinator::saveAsWithDialog(bool backgroundAllowed)
 {
     PictureView* view = documents_.activeView();
-    if (!view || !view->has_document()) {
+    if (!view || !view->has_document() || !pictura::compatibility_reason(*view).isEmpty()) {
         return false;
     }
     const QStringList& filters = saveFileFilters();
@@ -331,10 +665,11 @@ bool ImportSaveCoordinator::saveAsWithDialog()
         }
         return saved;
     }
-    return saveActiveAsWithOptions(path, hint);
+    return saveActiveAsWithOptions(path, hint, backgroundAllowed);
 }
 
-bool ImportSaveCoordinator::saveActiveAsWithOptions(const QString& path, SaveFormatKind hint)
+bool ImportSaveCoordinator::saveActiveAsWithOptions(const QString& path, SaveFormatKind hint,
+                                                    bool backgroundAllowed)
 {
     PictureView* view = documents_.activeView();
     if (!view || !view->has_document()) {
@@ -375,15 +710,23 @@ bool ImportSaveCoordinator::saveActiveAsWithOptions(const QString& path, SaveFor
     if (!promptSaveFormatOptions(path, kind)) {
         return false;
     }
+    std::optional<bool> embed;
+    if (!confirmSaveProfile(path, *view, embed)) {
+        return false;
+    }
+    const auto includeMerged = chooseMergedImage(path, *view);
+    if (!includeMerged.has_value()) {
+        return false;
+    }
+    if (embed.has_value()) {
+        pictura::set_save_embed_profile(*view, *embed);
+    }
     if (kind != SaveFormatKind::None) {
         lastSaveKinds_.insert(view, kind);
     } else {
         lastSaveKinds_.remove(view);
     }
-    if (!confirmSaveProfile(path, *view)) {
-        return false;
-    }
-    return saveActiveAs(path);
+    return saveActiveAs(path, backgroundAllowed, includeMerged);
 }
 
 bool ImportSaveCoordinator::promptSaveFormatOptions(const QString& path, SaveFormatKind hint)
@@ -639,6 +982,9 @@ bool ImportSaveCoordinator::revertActive()
     if (!view) {
         return false;
     }
+    if (backgroundSaves_.contains(view)) {
+        return false;
+    }
     const QString path = document_api::filePath(*view);
     if (path.isEmpty()) {
         return false;
@@ -649,10 +995,15 @@ bool ImportSaveCoordinator::revertActive()
     if (!reloaded) {
         return false;
     }
+    acknowledgeSaveResolution(view);
+    dropRecoverySnapshot(view);
     lastSaveKinds_.remove(view);
     documents_.updateTabTitle(index);
     if (hooks_.requestRefresh) {
         hooks_.requestRefresh();
+    }
+    if (!view->open_notice().isEmpty() && hooks_.showStatus) {
+        hooks_.showStatus(view->open_notice(), 0);
     }
     return true;
 }
@@ -660,7 +1011,9 @@ bool ImportSaveCoordinator::revertActive()
 bool ImportSaveCoordinator::saveAllDocumentsForRestart()
 {
     for (int i = 0; i < documents_.count(); ++i) {
-        if (!documents_.isDocumentDirty(i)) {
+        PictureView* view = documents_.viewAt(i);
+        resolvePendingSave(view);
+        if (!documents_.isDocumentDirty(i) && !saveResolutionNeedsPrompt(view)) {
             continue;
         }
         switch (askUnsaved(dialogParent_, documents_.documentName(i))) {
@@ -668,7 +1021,7 @@ bool ImportSaveCoordinator::saveAllDocumentsForRestart()
             return false;
         case UnsavedChoice::Save:
             documents_.setActiveIndex(i);
-            if (!saveActive()) {
+            if (!saveActive() || documents_.isDocumentDirty(i)) {
                 return false;
             }
             break;
@@ -688,13 +1041,15 @@ bool ImportSaveCoordinator::closeDocument(int index, bool interactive)
         cancelOpen(index);
         return true;
     }
-    if (interactive && documents_.isDocumentDirty(index)) {
+    PictureView* view = documents_.viewAt(index);
+    resolvePendingSave(view);
+    if (interactive && (documents_.isDocumentDirty(index) || saveResolutionNeedsPrompt(view))) {
         switch (askUnsaved(dialogParent_, documents_.documentName(index))) {
         case UnsavedChoice::Cancel:
             return false;
         case UnsavedChoice::Save:
             documents_.setActiveIndex(index);
-            if (!saveActive()) {
+            if (!saveActive() || documents_.isDocumentDirty(index)) {
                 return false;
             }
             break;
@@ -719,6 +1074,10 @@ bool ImportSaveCoordinator::editSmartObjectContents(const QString& layerPath)
         || !origin->layer_can_edit_smart_object_contents(layerPath)) {
         return false;
     }
+    const QString suffix = vector_smart_object_suffix(*origin, layerPath);
+    if (!suffix.isEmpty()) {
+        return editVectorContents(*origin, layerPath, suffix);
+    }
     auto* temp = new QTemporaryDir();
     if (!temp->isValid()) {
         delete temp;
@@ -738,6 +1097,96 @@ bool ImportSaveCoordinator::editSmartObjectContents(const QString& layerPath)
     }
     documents_.addDocument(editor, QString());
     editSessions_.append(SmartObjectEditSession{editor, origin, layerPath, filename, temp});
+    return true;
+}
+
+bool ImportSaveCoordinator::editVectorContents(PictureView& origin, const QString& layerPath,
+                                                const QString& suffix)
+{
+    const QString id = vector_smart_object_id(origin, layerPath);
+    const auto revision = vector_edit_revision(origin, id);
+    const auto generation = origin.document_generation();
+    const auto temp = std::make_shared<QTemporaryDir>();
+    const QString source = temp->filePath(QStringLiteral("contents.") + suffix);
+    if (id.isEmpty() || revision == 0 || !temp->isValid()
+        || !origin.export_smart_object_contents(layerPath, source)) {
+        QMessageBox::warning(dialogParent_, tr("Edit Contents"),
+                             tr("Could not prepare the artwork for editing."));
+        return false;
+    }
+    const bool launched = vectorEditorLauncher_
+        ? vectorEditorLauncher_(source)
+        : QDesktopServices::openUrl(QUrl::fromLocalFile(source));
+    if (!launched) {
+        temp->remove();
+        QMessageBox::warning(dialogParent_, tr("Edit Contents"),
+                             tr("Could not open the artwork in the associated application."));
+        return false;
+    }
+    auto* dialog = new QDialog(dialogParent_);
+    dialog->setObjectName(QStringLiteral("vectorEditContents"));
+    dialog->setWindowTitle(tr("Edit Contents"));
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    auto* layout = new QVBoxLayout(dialog);
+    auto* label = new QLabel(tr("Save the artwork in the external editor, then select Apply."),
+                             dialog);
+    label->setWordWrap(true);
+    layout->addWidget(label);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Apply | QDialogButtonBox::Discard,
+                                         dialog);
+    layout->addWidget(buttons);
+    auto* apply = buttons->button(QDialogButtonBox::Apply);
+    auto* discard = buttons->button(QDialogButtonBox::Discard);
+    apply->setObjectName(QStringLiteral("vectorEditApply"));
+    discard->setObjectName(QStringLiteral("vectorEditDiscard"));
+    connect(discard, &QPushButton::clicked, dialog, &QDialog::reject);
+    connect(dialog, &QDialog::finished, dialog, [temp]() { temp->remove(); });
+
+    const QPointer<PictureView> target(&origin);
+    const QPointer<QDialog> sessionDialog(dialog);
+    const QPointer<QPushButton> applyButton(apply);
+    const QPointer<QWidget> progressParent(dialogParent_);
+    connect(apply, &QPushButton::clicked, dialog,
+            [target, sessionDialog, applyButton, progressParent, id, source, generation,
+             expected = revision]() mutable {
+        if (!target || target->document_generation() != generation) {
+            QMessageBox::warning(sessionDialog, tr("Edit Contents"),
+                                 tr("The original document is no longer available."));
+            return;
+        }
+        applyButton->setEnabled(false);
+        bool closed = false;
+        const auto onClose = QObject::connect(
+            sessionDialog.data(), &QDialog::finished, target.data(), [&closed, target](int) {
+                closed = true;
+                document_job_cancel(*target);
+            });
+        const bool applied = runSourceCommand(progressParent, *target, tr("Edit Contents"),
+                                               [&](PictureView& view) {
+            return start_vector_edit(view, id, expected, source);
+        });
+        QObject::disconnect(onClose);
+        if (closed || !target || !sessionDialog) {
+            return;
+        }
+        if (applyButton) {
+            applyButton->setEnabled(true);
+        }
+        if (applied) {
+            expected = vector_edit_revision(*target, id);
+        } else {
+            QMessageBox::warning(sessionDialog, tr("Edit Contents"),
+                                 tr("Could not apply the edited artwork. Check that the source "
+                                    "still exists and contains the selected page."));
+        }
+    });
+    for (int i = vectorEditSessions_.size() - 1; i >= 0; --i) {
+        if (!vectorEditSessions_.at(i).dialog) {
+            vectorEditSessions_.removeAt(i);
+        }
+    }
+    vectorEditSessions_.append(VectorEditSession{target, sessionDialog});
+    dialog->show();
     return true;
 }
 

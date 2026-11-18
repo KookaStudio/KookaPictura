@@ -5,6 +5,7 @@ set(PICTURA_QT_TESTS
     tst_gpu_backend
     tst_offthread_jobs
     tst_open_save
+    tst_document_version_policy
     tst_multi_file_open
     tst_place_fit
     tst_place_sequence
@@ -136,6 +137,7 @@ set(PICTURA_QT_TESTS
     tst_histogram_panel
     tst_tool_hint_bar
     tst_swatches_panel
+    tst_preset_manager
     tst_color_picker
     tst_eyedropper
     tst_color_settings
@@ -143,6 +145,7 @@ set(PICTURA_QT_TESTS
     tst_profile_dialog
     tst_profile_warnings
     tst_save_options
+    tst_psd_compatibility
     tst_save_format_options
     tst_batch_dialog
     tst_batch_run
@@ -204,6 +207,9 @@ set(PICTURA_QT_TESTS
     tst_smart_filter_apply
     tst_layers_effects
     tst_smart_object_actions
+    tst_vector_smart_object
+    tst_vector_paste
+    tst_smart_object_relink
     tst_edit_shortcuts
     tst_workspaces
     tst_floating_workspaces
@@ -218,6 +224,7 @@ set(PICTURA_QT_TESTS
     tst_panels_parity
     tst_layer_comps_panel
     tst_layer_comps_export
+    tst_variables
     tst_selection_aa
     tst_selection_alt
     tst_selection_move

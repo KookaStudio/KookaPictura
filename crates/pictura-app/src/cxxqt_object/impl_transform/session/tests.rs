@@ -3,6 +3,7 @@ use super::super::geometry::{
     apply_session_transform, pivot_point, rect_center, set_pivot, source_corners, MapParams,
 };
 use super::super::group::{commit_cost, move_commit_cost, warp_strip_bytes};
+use super::selection::selection_covers;
 use super::*;
 use pictura_core::shape::{outline_in_box, ShapeKind, ShapeOptions};
 use pictura_core::{BitDepth, Channel, ColorMode, Document, LockFlags, PsdRect};
@@ -11,7 +12,9 @@ use pictura_render::Interpolation;
 #[test]
 fn the_selection_test_agrees_with_the_lift_coverage() {
     let mut rust = PictureViewRust::default();
-    rust.session.doc = Some(Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight));
+    rust.session
+        .doc
+        .set(Some(Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight)));
     let mut corner = vec![0u8; 64];
     corner[63] = 1;
     let cases = [

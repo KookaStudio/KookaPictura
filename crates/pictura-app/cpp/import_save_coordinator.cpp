@@ -4,12 +4,17 @@
 
 #include "import_save_coordinator.h"
 
+#include "api/document_bridge.h"
+#include "api/view_bridge.h"
 #include "dialogs.h"
 #include "document_registry.h"
 #include "session.h"
 
 #include <QtCore/QFileInfo>
 #include <QtCore/QTemporaryDir>
+#include <QtWidgets/QDialog>
+
+#include <utility>
 
 namespace pictura {
 
@@ -23,15 +28,28 @@ ImportSaveCoordinator::ImportSaveCoordinator(DocumentRegistry& documents,
 {
     connect(&documents_, &DocumentRegistry::aboutToRemoveDocument, this,
             [this](int index) { onAboutToRemoveDocument(index); });
+    connect(&documents_, &DocumentRegistry::documentsChanged, this, [this] {
+        for (const DocEntry* entry : documents_.docs()) {
+            if (entry->view && !entry->loading) {
+                attachRecovery(entry->view);
+            }
+        }
+    });
 }
 
 ImportSaveCoordinator::~ImportSaveCoordinator()
 {
+    for (PictureView* view : backgroundSaves_.keys()) {
+        save_finish_outcome(*view);
+    }
     shutdownRecovery();
     for (const SmartObjectEditSession& session : editSessions_) {
         delete session.temp;
     }
     editSessions_.clear();
+    for (const auto& session : std::exchange(vectorEditSessions_, {})) {
+        delete session.dialog.data();
+    }
 }
 
 void ImportSaveCoordinator::saveState(SessionState& state) const
@@ -39,7 +57,9 @@ void ImportSaveCoordinator::saveState(SessionState& state) const
     state.recent = recent_;
     state.saveFormatOptions = saveFormatOptions_;
     state.autoSaveRecovery = autoSaveRecovery_;
+    state.saveInBackground = saveInBackground_;
     state.autoSaveMinutes = autoSaveMinutes_;
+    state.nativeSaveCompatibility = nativeSaveCompatibility();
 }
 
 void ImportSaveCoordinator::loadState(const SessionState& state)
@@ -48,7 +68,15 @@ void ImportSaveCoordinator::loadState(const SessionState& state)
     setFileDialogRecentPaths(recent_);
     saveFormatOptions_ = state.saveFormatOptions;
     autoSaveRecovery_ = state.autoSaveRecovery;
+    saveInBackground_ = state.saveInBackground;
     autoSaveMinutes_ = state.autoSaveMinutes;
+    setNativeSaveCompatibility(state.nativeSaveCompatibility);
+}
+
+void ImportSaveCoordinator::setNativeSaveCompatibility(int choice)
+{
+    nativeSaveCompatibility_ = choice >= 0 && choice <= 2
+        ? static_cast<NativeSaveCompatibility>(choice) : NativeSaveCompatibility::Always;
 }
 
 void ImportSaveCoordinator::recordCommand(const char* id, const QJsonObject& values)
@@ -74,6 +102,17 @@ void ImportSaveCoordinator::onAboutToRemoveDocument(int index)
             editSessions_.removeAt(i);
         }
     }
+    for (int i = vectorEditSessions_.size() - 1; i >= 0; --i) {
+        const auto session = vectorEditSessions_.at(i);
+        if (session.origin == entry->view) {
+            if (session.dialog) {
+                session.dialog->reject();
+            }
+            vectorEditSessions_.removeAt(i);
+        }
+    }
+    resolvePendingSave(entry->view);
+    acknowledgeSaveResolution(entry->view);
     forgetRecovery(entry->view);
     if (entry->view) {
         openWired_.remove(entry->view);

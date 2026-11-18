@@ -111,18 +111,48 @@ pub fn read_psd_within_options(
     options: &OpenOptions,
     budget: ImageBudget,
 ) -> Result<Document, PsdError> {
-    let mut doc = read_container(bytes, options, &mut DecodeBudget::new(budget), &mut None)?;
-    crate::path_resources::resolve_paths(&mut doc);
-    crate::guide_resources::resolve_guides(&mut doc);
-    crate::layer_comps::resolve(&mut doc);
-    crate::global_light::resolve_global_light(&mut doc);
+    read_psd_with_image_policy(bytes, options, budget, false)
+}
+
+/// Read the layer structure independently of an unusable merged image.
+pub fn read_psd_layer_structure(
+    bytes: &[u8],
+    options: &OpenOptions,
+    budget: ImageBudget,
+) -> Result<Document, PsdError> {
+    read_psd_with_image_policy(bytes, options, budget, true)
+}
+
+fn read_psd_with_image_policy(
+    bytes: &[u8],
+    options: &OpenOptions,
+    budget: ImageBudget,
+    skip_image_data: bool,
+) -> Result<Document, PsdError> {
+    let mut doc = read_container(
+        bytes,
+        options,
+        &mut DecodeBudget::new(budget),
+        &mut None,
+        skip_image_data,
+    )?;
+    resolve_document_resources(&mut doc);
     Ok(doc)
+}
+
+pub(crate) fn resolve_document_resources(doc: &mut Document) {
+    crate::path_resources::resolve_paths(doc);
+    crate::guide_resources::resolve_guides(doc);
+    crate::variable_resources::resolve(doc);
+    crate::layer_comps::resolve(doc);
+    crate::global_light::resolve_global_light(doc);
 }
 pub(crate) fn read_container(
     bytes: &[u8],
     options: &OpenOptions,
     budget: &mut DecodeBudget,
     preview: &mut Option<crate::MergedPreview>,
+    skip_image_data: bool,
 ) -> Result<Document, PsdError> {
     let mut r = Reader::new(bytes);
     let sig = r.u32()?;
@@ -134,7 +164,7 @@ pub(crate) fn read_container(
     let is_psb = match version {
         VERSION_PSD => false,
         VERSION_PSB => true,
-        v => return Err(PsdError::Unsupported(format!("PSD version {v}"))),
+        v => return Err(PsdError::NativeVersion(v)),
     };
 
     r.skip(6)?; // reserved
@@ -225,7 +255,7 @@ pub(crate) fn read_container(
     let resources_len = r.u32()? as usize;
     let image_resources = r.take(resources_len)?.to_vec();
     // Layer and mask information section: 4-byte length (8 in PSB).
-    let (mut layers, global_layer_mask, layer_section_extra, layer_compression) =
+    let (mut layers, global_layer_mask, layer_section_extra, layer_compression, merged_alpha) =
         read_layer_section(
             &mut r,
             is_psb,
@@ -235,6 +265,7 @@ pub(crate) fn read_container(
             budget,
             options.source.as_ref(),
         )?;
+    let merged_alpha = merged_alpha && mode == ColorMode::Rgb;
     // Derive the smart-object view from the preserved bytes; a malformed
     // descriptor or linked-layer record degrades to Unresolved (design D5).
     crate::smart_object::resolve_smart_objects_within(
@@ -257,6 +288,8 @@ pub(crate) fn read_container(
     // section with no merged composite. A file with no layers at all and no
     // trailing data is still malformed and falls through to the truncation error.
     let layered = !layers.is_empty();
+    let real_merged =
+        !layered || crate::compatibility::has_real_merged_data(&image_resources) != Some(false);
     let sections = merged::Sections {
         width,
         height,
@@ -270,7 +303,7 @@ pub(crate) fn read_container(
         global_layer_mask,
         layer_section_extra,
     };
-    if r.remaining() == 0 && layered {
+    if skip_image_data || r.remaining() == 0 && layered {
         // The blank stand-in is tiled zeros, which hold no allocation.
         let blank = PixelBuffer {
             width,
@@ -299,16 +332,17 @@ pub(crate) fn read_container(
     if depth == 1 && matches!(compression, COMPRESSION_ZIP | COMPRESSION_ZIP_PREDICTION) {
         return Err(PsdError::Unsupported("ZIP compression at depth 1".into()));
     }
-    if options.skip_layered_merged
-        && layered
-        && mode == ColorMode::Rgb
-        && depth == 8
+    let skippable_rgb = mode == ColorMode::Rgb && depth == 8;
+    let skip_preview = options.skip_layered_merged && layered && skippable_rgb;
+    let skip_placeholder =
+        !real_merged && (skippable_rgb || (depth >= 8 && header_channels == color_count));
+    if (skip_preview || skip_placeholder)
         && matches!(composite_compression, Compression::Rle | Compression::Raw)
     {
         // Only the extra channels (saved selections, merged transparency)
         // are decoded; the colour planes' bytes are skipped, or indexed as a
         // preview for a lazy open (#1218).
-        if let Some(pin) = &options.source {
+        if let Some(pin) = options.source.as_ref().filter(|_| real_merged) {
             *preview = crate::MergedPreview::index(
                 pin,
                 r.data,
@@ -335,13 +369,32 @@ pub(crate) fn read_container(
             }
             _ => r.take(planar_len(header_channels, stride, height)?)?[colour_bytes..].to_vec(),
         };
-        let doc = merged::without_merged_image(
+        let composite = if real_merged {
+            PixelBuffer::new(0, 0, color_count as u8)
+        } else {
+            PixelBuffer {
+                width: width as u32,
+                height: height as u32,
+                channels: color_count as u8,
+                data: Plane::filled(width, height, color_count, 0),
+            }
+        };
+        let mut doc = merged::without_merged_image(
             sections,
-            PixelBuffer::new(0, 0, color_count as u8),
-            true,
+            composite,
+            real_merged,
             composite_compression,
-            merged::extra_channels(&extras, stride * height),
+            merged::extra_channels(
+                &extras[if merged_alpha && header_channels > color_count {
+                    stride * height
+                } else {
+                    0
+                }..],
+                stride * height,
+            ),
         );
+        doc.composite
+            .set_signed_merged_alpha(merged_alpha && real_merged && header_channels > color_count);
         return Ok(crate::icc::apply_icc_policy_with_options(
             normalize(doc, mode, depth, palette.as_ref(), options, false),
             options.policy,
@@ -394,14 +447,38 @@ pub(crate) fn read_container(
     } else {
         stride * height
     };
-    let source_planes = native.map(|samples| SourcePlanes {
-        depth: store_depth,
-        width: width as u32,
-        height: height as u32,
-        samples,
+    let source_planes = native.map(|samples| {
+        let samples = if merged_alpha && !real_merged && header_channels > color_count {
+            let mut bytes = samples.to_bytes();
+            let start = color_count * stride * height;
+            bytes.drain(start..start + stride * height);
+            Samples::from_bytes(&bytes, store_depth)
+        } else {
+            samples
+        };
+        SourcePlanes {
+            depth: store_depth,
+            width: width as u32,
+            height: height as u32,
+            samples,
+        }
     });
-    let (mut composite, channels) =
-        split_planes(data, color_count, width, height, plane, header_channels)?;
+    let composite_channels =
+        color_count + usize::from(merged_alpha && real_merged && header_channels > color_count);
+    let (mut composite, mut channels) = split_planes(
+        data,
+        composite_channels,
+        width,
+        height,
+        plane,
+        header_channels,
+    )?;
+    if merged_alpha && !real_merged && header_channels > color_count && !channels.is_empty() {
+        channels.remove(0);
+        for (index, channel) in channels.iter_mut().enumerate() {
+            channel.id = index as i16;
+        }
+    }
 
     let bitmap_composite_decoded = mode == ColorMode::Bitmap && depth == 1;
     if bitmap_composite_decoded {
@@ -409,10 +486,21 @@ pub(crate) fn read_container(
             normalize::convert_pixels(composite, mode, depth, None, None, options.conversion);
     }
 
-    let mut doc =
-        merged::without_merged_image(sections, composite, true, composite_compression, channels);
+    if !real_merged {
+        composite.data = Plane::filled(width, height, usize::from(composite.channels), 0);
+    }
+    let keep_native = real_merged || !channels.is_empty();
+    let mut doc = merged::without_merged_image(
+        sections,
+        composite,
+        real_merged,
+        composite_compression,
+        channels,
+    );
+    doc.composite
+        .set_signed_merged_alpha(merged_alpha && real_merged && header_channels > color_count);
     doc.source
-        .replace_planes(source_planes)
+        .replace_planes(source_planes.filter(|_| keep_native))
         .expect("valid source planes");
     Ok(crate::icc::apply_icc_policy_with_options(
         normalize(
@@ -483,7 +571,7 @@ struct RawLayer {
 /// `(layers, global_layer_mask, layer_section_extra, layer_compression)` read
 /// from the section; the compression is `None` when no engine-encoded layer
 /// channel was present.
-type LayerSection = (LayerStack, Vec<u8>, Vec<u8>, Option<Compression>);
+type LayerSection = (LayerStack, Vec<u8>, Vec<u8>, Option<Compression>, bool);
 
 fn read_layer_section(
     r: &mut Reader,
@@ -500,7 +588,7 @@ fn read_layer_section(
         r.u32()? as usize
     };
     if section_len == 0 {
-        return Ok((LayerStack::default(), Vec::new(), Vec::new(), None));
+        return Ok((LayerStack::default(), Vec::new(), Vec::new(), None, false));
     }
     let section_end = r
         .pos
@@ -517,6 +605,7 @@ fn read_layer_section(
     };
     let mut layers = LayerStack::default();
     let mut layer_compression = None;
+    let mut merged_alpha = false;
     if info_len != 0 {
         let info_end = r
             .pos
@@ -525,7 +614,7 @@ fn read_layer_section(
         if info_end > section_end {
             return Err(PsdError::Invalid("layer info exceeds layer section".into()));
         }
-        (layers, layer_compression) = read_layer_info(
+        (layers, layer_compression, merged_alpha) = read_layer_info(
             r,
             is_psb,
             info_end,
@@ -559,14 +648,17 @@ fn read_layer_section(
             budget,
         )?;
         if let Some(read) = tagged {
-            (layers, layer_compression) = read;
+            (layers, layer_compression, merged_alpha) = read;
         }
+        merged_alpha |=
+            crate::compatibility::has_merged_transparency_marker(&layer_section_extra, is_psb);
     }
     Ok((
         layers,
         global_layer_mask,
         layer_section_extra,
         layer_compression,
+        merged_alpha,
     ))
 }
 
@@ -580,7 +672,7 @@ fn read_layer_info(
     retain: bool,
     budget: &mut DecodeBudget,
     source: Option<&std::sync::Arc<crate::SourcePin>>,
-) -> Result<(LayerStack, Option<Compression>), PsdError> {
+) -> Result<(LayerStack, Option<Compression>, bool), PsdError> {
     let count = r.i16()?;
     let n = count.unsigned_abs() as usize;
     let mut raws: Vec<RawLayer> = Vec::new();
@@ -718,7 +810,7 @@ fn read_layer_info(
     r.pos = info_end;
     let mut layers = build_tree(raws)?;
     derive_background(&mut layers);
-    Ok((layers, layer_compression))
+    Ok((layers, layer_compression, count < 0))
 }
 
 /// Charge the allocations one `width` × `height` plane costs while it decodes

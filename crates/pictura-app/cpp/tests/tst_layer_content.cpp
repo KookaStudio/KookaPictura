@@ -399,7 +399,8 @@ void LayerContentTest::typeRowsUseNormalizedIdentity()
     const QString file = dir.filePath(QStringLiteral("type.psd"));
     QVERIFY(pictura::document_api::saveCopy(*view, file));
     QFile input(file); QVERIFY(input.open(QIODevice::ReadOnly));
-    QByteArray bytes = input.readAll(); input.close();
+    const QByteArray original = input.readAll(); input.close();
+    QByteArray bytes = original;
     const auto typeRecord = record(bytes, "TySh"); QVERIFY(typeRecord.extraLength >= 0);
     QVERIFY(typeRecord.channels > 0);
     PictureView parsed; QVERIFY(pictura::document_api::open(parsed, file));
@@ -425,12 +426,12 @@ void LayerContentTest::typeRowsUseNormalizedIdentity()
     QCOMPARE(rowForPath(proxy, path).kind, QStringLiteral("pixel"));
     QCOMPARE(pixels(opaque), pixels(proxy));
     const QString copy = dir.filePath(QStringLiteral("opaque.psd"));
-    QVERIFY(pictura::document_api::saveCopy(opaque, copy));
-    QFile saved(copy); QVERIFY(saved.open(QIODevice::ReadOnly));
-    const auto output = saved.readAll(); const auto outputTag = output.indexOf("TySh");
-    QVERIFY(outputTag >= 0); QCOMPARE(output[outputTag + 8], bytes[tag + 8]);
-    QCOMPARE(tagBytes(output, "TySh"), tagBytes(bytes, "TySh"));
-    const QByteArray conflict = withPrimary(bytes); QVERIFY(!conflict.isEmpty());
+    QVERIFY(pictura::compatibility_reason(opaque).contains(QStringLiteral("type record")));
+    QVERIFY(opaque.add_layer_in(QString()).isEmpty());
+    QVERIFY(!pictura::document_api::saveCopy(opaque, copy));
+    QVERIFY(!QFile::exists(copy));
+    QCOMPARE(readFile(file), bytes);
+    const QByteArray conflict = withPrimary(original); QVERIFY(!conflict.isEmpty());
     const QString conflictingFile = dir.filePath(QStringLiteral("conflict.psd"));
     QFile conflictOutput(conflictingFile); QVERIFY(conflictOutput.open(QIODevice::WriteOnly));
     QCOMPARE(conflictOutput.write(conflict), qint64(conflict.size())); conflictOutput.close();
@@ -445,11 +446,11 @@ void LayerContentTest::typeRowsUseNormalizedIdentity()
     QCOMPARE(prioritizedRow.lockBits & 3, 3);
     const QString conflictCopy = dir.filePath(QStringLiteral("conflict-copy.psd"));
     QVERIFY(pictura::document_api::saveCopy(prioritized, conflictCopy));
-    QCOMPARE(tagBytes(readFile(conflictCopy), "TySh"), tagBytes(bytes, "TySh"));
-    const QString pixel = opaque.add_layer_in(QString());
-    QCOMPARE(rowForPath(opaque, pixel).kind, QStringLiteral("pixel"));
-    QCOMPARE(opaque.layer_kind(pixel.toInt()), QStringLiteral("pixel"));
-    QVERIFY(!opaque.layer_is_type(pixel));
+    QCOMPARE(tagBytes(readFile(conflictCopy), "TySh"), tagBytes(original, "TySh"));
+    const QString pixel = prioritized.add_layer_in(QString());
+    QCOMPARE(rowForPath(prioritized, pixel).kind, QStringLiteral("pixel"));
+    QCOMPARE(prioritized.layer_kind(pixel.toInt()), QStringLiteral("pixel"));
+    QVERIFY(!prioritized.layer_is_type(pixel));
 }
 
 void LayerContentTest::undoRedoRestoresContentAndPreservation()

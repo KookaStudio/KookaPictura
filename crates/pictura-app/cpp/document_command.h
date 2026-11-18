@@ -19,4 +19,7 @@ class PictureView;
 bool runDocumentCommand(QWidget* parent, PictureView& view, const QString& title,
                         const std::function<void()>& command);
 
+bool runSourceCommand(QWidget* parent, PictureView& view, const QString& title,
+                      const std::function<bool(PictureView&)>& start);
+
 } // namespace pictura

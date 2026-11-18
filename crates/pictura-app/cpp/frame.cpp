@@ -1,4 +1,6 @@
 #include "frame_includes.h"
+
+#include <QtWidgets/QProgressBar>
 #include "file_info_dialog.h"
 #include "new_document_dialog.h"
 #include "panels/panel_group.h"
@@ -272,6 +274,13 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
             menu_->commands()->recordCommand(id, CommandParams{values});
         }
     };
+    saveHooks.reserveRecording = [actionsEngine](const QString& id, const QJsonObject& values) {
+        return actionsEngine->reserveCommand(id, values);
+    };
+    saveHooks.finishRecording = [actionsEngine](quint64 token, bool saved) {
+        actionsEngine->finishReservedCommand(token, saved);
+    };
+    saveHooks.updateSaveProgress = [this] { updateStatus(); };
     saveHooks.saveSession = [this]() { saveSession(); };
     saveHooks.foregroundColor = [this]() { return foregroundColor(); };
     saveHooks.backgroundColor = [this]() { return backgroundColor(); };
@@ -994,6 +1003,13 @@ void PicturaMainWindow::updateStatus()
     const bool hasDoc = documents_ && documents_->count() > 0;
     const bool messageShown = statusBar() && !statusBar()->currentMessage().isEmpty();
     const bool showReadouts = hasDoc && !messageShown;
+    if (backgroundSaveProgress_) {
+        const DocEntry* doc = documents_ ? documents_->docAt(activeDocumentIndex()) : nullptr;
+        backgroundSaveProgress_->setVisible(doc && doc->saveProgress >= 0 && !messageShown);
+        if (doc && doc->saveProgress >= 0) {
+            backgroundSaveProgress_->setValue(doc->saveProgress);
+        }
+    }
     ImageView* canvas = imageView();
     if (zoomField_) {
         zoomField_->setVisible(showReadouts);

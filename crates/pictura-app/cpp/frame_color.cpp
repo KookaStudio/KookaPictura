@@ -3,6 +3,7 @@
 
 #include "frame_includes.h"
 #include "color_settings_dialog.h"
+#include "preset_manager.h"
 #include "profile_dialog.h"
 #include "api/document_api.h"
 #include "api/type_api.h"
@@ -13,6 +14,7 @@ namespace pictura {
 
 void PicturaMainWindow::wireColorManagementMenu()
 {
+    commandRegistry()->setHandler(command_ids::EditPresetManager, [this]() { openPresetManager(this); });
     commandRegistry()->setHandler(command_ids::EditAssignProfile, [this]() { showProfileCommand(false); });
     commandRegistry()->setHandler(command_ids::EditConvertProfile, [this]() { showProfileCommand(true); });
     commandRegistry()->setHandler(command_ids::EditColorSettings, [this]() { showColorSettings(); });

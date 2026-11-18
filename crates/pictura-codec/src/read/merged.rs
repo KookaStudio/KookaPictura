@@ -76,6 +76,7 @@ pub(super) fn without_merged_image(
         saved_paths: Vec::new(),
         text_styles: Default::default(),
         layer_comps: Default::default(),
+        variables: Default::default(),
     }
 }
 

@@ -12,6 +12,7 @@ struct LayerRowNode;
 struct RowFacts {
     bool fillContent = false;
     bool canRasterizeSmartObject = false;
+    bool canRelinkSmartObject = false;
     bool canReleaseClipping = false;
     bool hasStyle = false;
     bool canRasterizeStyle = false;

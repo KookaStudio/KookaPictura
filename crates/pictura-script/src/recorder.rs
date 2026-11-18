@@ -1,7 +1,9 @@
 //! The recording session: where steps land, what is recordable, and the
 //! success-only append contract.
 
-use crate::action::{ActionStep, DialogOptions, StepFlags, StepKind, ToolStroke};
+use std::collections::HashMap;
+
+use crate::action::{ActionStep, DialogOptions, EventKey, StepFlags, StepKind, ToolStroke};
 use crate::command::{self, CommandClass, CommandId, CommandParams, DialogMode};
 use crate::error::ActionError;
 use crate::library::ActionLibrary;
@@ -84,6 +86,8 @@ fn make_target(
 #[derive(Clone, Debug, Default)]
 pub struct Recorder {
     target: Option<Target>,
+    pending: HashMap<u64, ActionStep>,
+    next_pending: u64,
 }
 
 impl Recorder {
@@ -155,6 +159,86 @@ impl Recorder {
             return Ok(false);
         }
         self.record(library, command, params)
+    }
+
+    /// Reserve an insertion anchor until an asynchronous command reports its outcome.
+    pub fn reserve_command(
+        &mut self,
+        library: &mut ActionLibrary,
+        command: &CommandId,
+        params: &CommandParams,
+    ) -> Result<Option<u64>, ActionError> {
+        if !self.is_recording() || !self.record(library, command, params)? {
+            return Ok(None);
+        }
+        let target = self.target.as_mut().expect("recording target");
+        let step = &mut library
+            .action_mut(target.set, target.action)
+            .expect("recorded action")
+            .steps[target.insert_at - 1];
+        self.next_pending = self.next_pending.wrapping_add(1).max(1);
+        let token = self.next_pending;
+        let placeholder = ActionStep {
+            flags: StepFlags {
+                enabled: false,
+                ..StepFlags::default()
+            },
+            dialog_options: DialogOptions::NONE,
+            display_name: format!("{} (pending)", step.display_name),
+            kind: StepKind::Unknown {
+                event: pending_key(token),
+                descriptor: None,
+            },
+            imported: None,
+        };
+        self.pending
+            .insert(token, std::mem::replace(step, placeholder));
+        target.anchor = Some(anchor_of(step));
+        Ok(Some(token))
+    }
+
+    pub fn has_pending(&self) -> bool {
+        !self.pending.is_empty()
+    }
+
+    pub fn resolve_command(&mut self, library: &mut ActionLibrary, token: u64, saved: bool) {
+        let Some(step) = self.pending.remove(&token) else {
+            return;
+        };
+        let key = pending_key(token);
+        let found =
+            library.sets().iter().enumerate().find_map(|(set, group)| {
+                group.actions.iter().enumerate().find_map(|(action, item)| {
+                    item.steps.iter().position(|step| matches!(
+                    &step.kind,
+                    StepKind::Unknown { event, .. } if *event == key && pending_step(step)
+                )).map(|index| (set, action, index))
+                })
+            });
+        let Some((set, action, index)) = found else {
+            return;
+        };
+        let steps = &mut library
+            .action_mut(set, action)
+            .expect("reserved action")
+            .steps;
+        if saved {
+            steps[index] = step;
+        } else {
+            steps.remove(index);
+        }
+        if let Some(target) = self.target.as_mut() {
+            if (target.set, target.action) == (set, action) && target.insert_at > index {
+                if !saved {
+                    target.insert_at -= 1;
+                }
+                target.anchor = target
+                    .insert_at
+                    .checked_sub(1)
+                    .and_then(|i| steps.get(i))
+                    .map(anchor_of);
+            }
+        }
     }
 
     /// Append a recordable command. Non-recordable commands return `false` and
@@ -299,4 +383,18 @@ fn insert(
     let index = target.insert_at.min(action.steps.len());
     action.steps.insert(index, step);
     Ok(())
+}
+
+const PENDING_COMMAND_PREFIX: &[u8] = b"Pictura:pending-save:";
+
+fn pending_key(token: u64) -> EventKey {
+    let mut key = PENDING_COMMAND_PREFIX.to_vec();
+    key.extend_from_slice(&token.to_le_bytes());
+    EventKey::Text(key)
+}
+
+pub(crate) fn pending_step(step: &ActionStep) -> bool {
+    step.imported.is_none()
+        && matches!(&step.kind, StepKind::Unknown { event: EventKey::Text(value), .. }
+           if value.starts_with(PENDING_COMMAND_PREFIX) && value.len() == PENDING_COMMAND_PREFIX.len() + 8)
 }

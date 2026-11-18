@@ -15,6 +15,7 @@
 // alignment / arrangement menus are disabled stubs.
 
 #include "options_bar.h"
+#include "preset_store.h"
 
 #include "color_picker_dialog.h"
 #include "icons.h"
@@ -492,10 +493,23 @@ QToolButton* OptionsBar::buildShapePicker(QWidget* page, const ShapeUpdate& upda
     list->setResizeMode(QListView::Adjust);
     list->setMovement(QListView::Static);
     list->setMinimumSize(250, 130);
-    for (int i = 0; i < shape_custom_count(); ++i) {
-        auto* item = new QListWidgetItem(pickerIcon(i, 64), QString(), list);
-        item->setToolTip(shape_custom_name(i));
-    }
+    auto& store = PresetStore::current();
+    const auto rebuild = [list, &store] {
+        const QSignalBlocker block(list);
+        list->clear();
+        for (const auto& row : store.rows(PresetType::CustomShapes)) {
+            const int index = row.values.value(QStringLiteral("index")).toInt(-1);
+            auto* item = new QListWidgetItem(index < 0 ? QIcon(QPixmap::fromImage(row.preview))
+                                                       : pickerIcon(index, 64), QString(), list);
+            item->setToolTip(row.name);
+            item->setData(Qt::UserRole, index);
+            if (index < 0) { item->setData(Qt::UserRole + 1, row.native); }
+        }
+    };
+    rebuild();
+    connect(&store, &PresetStore::changed, list, [rebuild](int type) {
+        if (type == int(PresetType::CustomShapes)) { rebuild(); }
+    });
     auto* gear = new QToolButton(panel);
     gear->setObjectName(QStringLiteral("optionsShapeCustomGear"));
     gear->setIcon(icon(QStringLiteral("view.options")));
@@ -513,17 +527,33 @@ QToolButton* OptionsBar::buildShapePicker(QWidget* page, const ShapeUpdate& upda
     grid->addWidget(gear, 0, 1, Qt::AlignTop);
     addForm(menu, panel);
     button->setMenu(menu);
-    connect(list, &QListWidget::currentRowChanged, this, [update, menu](int row) {
+    connect(list, &QListWidget::currentRowChanged, this, [update, list, menu](int row) {
         if (row >= 0) {
-            update([row](ShapeOptions& o) { o.custom = row; });
+            const int index = list->item(row)->data(Qt::UserRole).toInt();
+            const QByteArray preset = list->item(row)->data(Qt::UserRole + 1).toByteArray();
+            update([index, preset](ShapeOptions& o) { o.custom = qMax(0, index); o.customPreset = preset; });
             menu->close();
         }
     });
     connect(reset, &QAction::triggered, this,
-            [update]() { update([](ShapeOptions& o) { o.custom = 0; }); });
+            [update, &store]() {
+                if (store.reset(PresetType::CustomShapes, false)) {
+                    update([](ShapeOptions& o) { o.custom = 0; o.customPreset.clear(); });
+                }
+            });
     syncs.push_back([button, list](const ShapeOptions& o) {
-        list->setCurrentRow(o.custom);
-        button->setIcon(pickerIcon(o.custom, 48));
+        for (int row = 0; row < list->count(); ++row) {
+            const auto* item = list->item(row);
+            const auto data = item->data(Qt::UserRole + 1).toByteArray();
+            if ((!data.isEmpty() && data == o.customPreset)
+                || (data.isEmpty() && o.customPreset.isEmpty() && item->data(Qt::UserRole).toInt() == o.custom)) {
+                list->setCurrentRow(row);
+                button->setIcon(item->icon());
+                return;
+            }
+        }
+        list->setCurrentRow(-1);
+        button->setIcon(QIcon());
     });
     return button;
 }

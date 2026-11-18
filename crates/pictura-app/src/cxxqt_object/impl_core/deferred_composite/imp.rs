@@ -7,6 +7,7 @@ use super::super::super::helpers::layer_has_effects;
 use super::super::super::helpers_composite::{composite_regions, RegionComposite};
 use super::super::super::qobject::PictureView;
 use super::super::super::{metrics, qobject, PictureViewRust};
+use crate::cxxqt_object::pdf_export::import::ffi::VectorPlaceResult;
 use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::{CxxQtType, Threading};
@@ -136,7 +137,7 @@ impl PictureViewRust {
             Edit::Full | Edit::Structural { damage: None } => vec![self.canvas_rect()],
             _ => return false,
         };
-        let Some(doc) = self.session.doc.clone() else {
+        let Some(doc) = self.session.doc.snapshot() else {
             return false;
         };
         let hint = edit.history_hint().map(<[PsdRect]>::to_vec);
@@ -170,7 +171,7 @@ impl PictureViewRust {
         lifted: bool,
         repeat: Option<RepeatTransform>,
     ) -> bool {
-        let Some(mut doc) = self.session.doc.clone() else {
+        let Some(mut doc) = self.session.doc.snapshot() else {
             return false;
         };
         let progress = JobProgress::new();
@@ -223,7 +224,7 @@ impl PictureViewRust {
         drop(self.session.live.take_transform());
         self.last_transform = job.repeat.take();
         if job.lifted {
-            self.session.doc = Some(done);
+            self.session.doc.set(Some(done));
             // ponytail: CS6 carries the selection border through the
             // transform; it is dropped rather than left outlining old pixels.
             self.session.set_selection(None);
@@ -356,6 +357,9 @@ impl PictureViewRust {
     /// A pending move is an undoable state even though its history entry has
     /// not been captured yet.
     pub(in crate::cxxqt_object) fn can_undo(&self) -> bool {
+        if self.session.read_only() && !self.session.recheck_compatibility_on_restore {
+            return false;
+        }
         let pending = self.deferred_composite.is_some() || self.deferred_transform.is_some();
         self.session.history.can_undo() || (pending && self.session.history.count() > 0)
     }
@@ -363,7 +367,8 @@ impl PictureViewRust {
     /// A new capture would truncate redo, so redo is unavailable while a move
     /// or transform is pending.
     pub(in crate::cxxqt_object) fn can_redo(&self) -> bool {
-        self.deferred_composite.is_none()
+        (!self.session.read_only() || self.session.recheck_compatibility_on_restore)
+            && self.deferred_composite.is_none()
             && self.deferred_transform.is_none()
             && self.session.history.can_redo()
     }
@@ -423,10 +428,37 @@ impl qobject::PictureView {
     /// Land a finished transform job: one history state and the deferred
     /// composite on success; nothing after a cancel, whose session resumes.
     pub(in crate::cxxqt_object) fn transform_commit_finish(mut self: Pin<&mut Self>) -> bool {
+        let placing = self.rust().pending_vector_place.is_some();
+        if placing
+            && self
+                .rust()
+                .deferred_transform
+                .as_ref()
+                .is_some_and(|job| job.progress.cancelled())
+        {
+            self.as_mut().cancel_transform();
+            return false;
+        }
         let Some((label, edit)) = self.as_mut().rust_mut().land_transform() else {
+            if placing {
+                drop(self.as_mut().rust_mut().session.live.take_transform());
+                self.as_mut().clear_transform_preview();
+                self.as_mut()
+                    .finish_vector_place(VectorPlaceResult::Refused);
+            }
             return false;
         };
-        self.as_mut().commit_transform_edit(&label, true, |_| edit);
+        if placing {
+            if !self
+                .as_mut()
+                .finish_vector_place(VectorPlaceResult::Committed)
+            {
+                self.as_mut().clear_transform_preview();
+                return false;
+            }
+        } else {
+            self.as_mut().commit_transform_edit(&label, true, |_| edit);
+        }
         if !self.rust().move_composite_pending() {
             self.as_mut().move_committed();
         }

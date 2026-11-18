@@ -91,7 +91,7 @@ pub(in crate::cxxqt_object) fn quick_mask_set(
         .take()
     {
         let mut rust = view.as_mut().rust_mut();
-        rust.session.doc = Some(doc);
+        rust.session.doc.set(Some(doc));
         rust.layer_target = target;
         rust.reset_pyramid();
     }
@@ -170,6 +170,17 @@ impl PictureView {
         label: &str,
     ) -> bool {
         self.as_mut().rust_mut().begin_quick_mask_paint(cfg, label)
+    }
+
+    pub(in crate::cxxqt_object) fn begin_quick_mask_paint_with_tip(
+        mut self: Pin<&mut Self>,
+        cfg: StrokeConfig,
+        label: &str,
+        tip: Option<pictura_paint::stroke::SampledTip>,
+    ) -> bool {
+        self.as_mut()
+            .rust_mut()
+            .begin_quick_mask_paint_with_tip(cfg, label, tip)
     }
 }
 impl PictureViewRust {
@@ -314,6 +325,15 @@ impl PictureViewRust {
         cfg: StrokeConfig,
         label: &str,
     ) -> bool {
+        self.begin_quick_mask_paint_with_tip(cfg, label, None)
+    }
+
+    fn begin_quick_mask_paint_with_tip(
+        &mut self,
+        cfg: StrokeConfig,
+        label: &str,
+        tip: Option<pictura_paint::stroke::SampledTip>,
+    ) -> bool {
         if !self.session.quick_mask.active
             || self.layer_target.is_empty()
             || !self.slot_allows(SessionKind::MaskPaint)
@@ -327,6 +347,9 @@ impl PictureViewRust {
         let Ok(mut stroke) = Stroke::begin_at(&document, "0", mask_stroke_config(cfg)) else {
             return false;
         };
+        if let Some(tip) = tip {
+            stroke.set_sampled_tip(tip);
+        }
         stroke.set_inverse_grayscale(self.session.quick_mask.selected);
         stroke.set_coverage_clip(self.session.selection.as_ref().map(Selection::coverage));
         let session = StrokeSession {

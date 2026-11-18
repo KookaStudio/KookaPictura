@@ -36,7 +36,8 @@ echo "guard: repo $(pwd)"
 
 # --- 1. .8bf plugin-binary references in tracked crates/ sources ---------------
 echo "check: crates/ references .8bf plugin binaries"
-hits=$(git grep -n -i -e '8bf' -- 'crates/*' || true)
+# The SHC contour signature is 8BFS, distinct from the plug-in extension.
+hits=$(git grep -n -i -w -e '8bf' -- 'crates/*' || true)
 if [ -n "$hits" ]; then
     echo "FAIL: .8bf reference under crates/ (Adobe plugin ABI is a non-goal):"
     echo "$hits"

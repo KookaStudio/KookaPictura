@@ -123,8 +123,8 @@ void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
 
     registry.setHandler(command_ids::FileInfo, [this]() { showFileInfo(); });
 
-    registry.setHandler(command_ids::FileSave, [this]() { saveActive(); });
-    registry.setHandler(command_ids::FileSaveAs, [this]() { saveAsWithDialog(); });
+    registry.setHandler(command_ids::FileSave, [this]() { importSave_->saveActive(true, true); });
+    registry.setHandler(command_ids::FileSaveAs, [this]() { importSave_->saveAsWithDialog(true); });
     registry.setHandler(command_ids::FileSaveCopy, [this]() { saveCopyWithDialog(); });
     wirePdfCommands();
     registry.setHandler(command_ids::FileExportAs,
@@ -171,16 +171,20 @@ void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
     registry.setHandler(command_ids::FileRevert, [this]() {
         const int index = activeDocumentIndex();
         PictureView* view = activeView();
-        if (index < 0 || !view || document_api::filePath(*view).isEmpty()) {
+        if (!view) {
             return;
         }
-        if (isDocumentDirty(index)) {
+        importSave_->resolvePendingSave(view);
+        if (index < 0 || document_api::filePath(*view).isEmpty()) {
+            return;
+        }
+        if (isDocumentDirty(index) || importSave_->saveResolutionNeedsPrompt(view)) {
             switch (askUnsaved(this, documentName(index))) {
             case UnsavedChoice::Cancel:
                 return;
             case UnsavedChoice::Save:
                 setActiveDocumentIndex(index);
-                if (!saveActive()) {
+                if (!saveActive() || isDocumentDirty(index)) {
                     return;
                 }
                 break;
@@ -222,6 +226,12 @@ void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
                            command_ids::FileSaveForWeb, command_ids::FileClose,
                            command_ids::FileCloseAll, command_ids::FileInfo}) {
         registry.setEnabledProvider(id, hasDocument);
+    }
+    for (const char* id : {command_ids::FileSave, command_ids::FileSaveAs}) {
+        registry.setEnabledProvider(id, [this]() {
+            PictureView* view = activeView();
+            return view && view->has_document() && pictura::compatibility_reason(*view).isEmpty();
+        });
     }
     registry.setEnabledProvider(command_ids::FilePlace, [this]() {
         PictureView* view = activeView();

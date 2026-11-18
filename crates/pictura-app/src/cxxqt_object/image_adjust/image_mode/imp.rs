@@ -162,7 +162,7 @@ pub(super) fn commit(
         let base = rust.session.live.take_mode_preview();
         let restored = base.is_some();
         if let Some(base) = base {
-            rust.session.doc = Some(base);
+            rust.session.doc.set(Some(base));
         }
         restored
     };
@@ -261,7 +261,7 @@ pub(super) fn preview_indexed(
         };
         let ok = pictura_render::convert_to_indexed(&mut converted, options).is_ok();
         if ok {
-            rust.session.doc = Some(converted);
+            rust.session.doc.set(Some(converted));
         }
         ok
     };
@@ -306,12 +306,12 @@ pub(super) fn preview_gif_indexed(
             };
             preview.extend_from_slice(&[entry[0], entry[1], entry[2], 255]);
         }
-        rust.session.doc = Some(Document::from_rgba(
+        rust.session.doc.set(Some(Document::from_rgba(
             "GIF Preview",
             doc.width,
             doc.height,
             &preview,
-        ));
+        )));
         true
     };
     if previewed {
@@ -328,7 +328,7 @@ impl super::super::super::state::PictureViewRust {
             return None;
         }
         if self.session.live.mode_preview().is_none() {
-            if let Some(base) = self.session.doc.clone() {
+            if let Some(base) = self.session.doc.snapshot() {
                 self.session.live.set_mode_preview(base);
             }
         }
@@ -340,7 +340,7 @@ impl super::super::super::state::PictureViewRust {
         let Some(base) = self.session.live.take_mode_preview() else {
             return false;
         };
-        self.session.doc = Some(base);
+        self.session.doc.set(Some(base));
         true
     }
 }

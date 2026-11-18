@@ -2,10 +2,12 @@
 
 #include "tool_options.h"
 
+#include <QtCore/QByteArray>
 #include <QtCore/QString>
 
 #include <algorithm>
 #include <functional>
+#include <utility>
 
 namespace pictura {
 
@@ -149,6 +151,8 @@ struct BrushDynamics {
 
 class PaintOptions : public ToolOptions {
 public:
+    const QByteArray& sampledPreset() const { return sampledPreset_; }
+    void setSampledPreset(QByteArray value) { sampledPreset_ = std::move(value); }
     int size() const { return size_; }
     void setSize(int size)
     {
@@ -473,6 +477,7 @@ public:
     std::function<void()> paintSettingsChanged;
 
 private:
+    QByteArray sampledPreset_;
     int size_ = 12;
     int hardness_ = 100;
     int grain_ = 0;

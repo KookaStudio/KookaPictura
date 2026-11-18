@@ -472,6 +472,27 @@ pub fn coverage_box(subpath: &Subpath, width: u32, height: u32) -> Option<(PsdRe
     (!rect.is_empty()).then_some((rect, mask))
 }
 
+pub fn paths_coverage_box(
+    subpaths: &[Subpath],
+    width: u32,
+    height: u32,
+) -> Option<(PsdRect, Vec<u8>)> {
+    let contours = subpaths
+        .iter()
+        .map(|path| path.flatten(COVERAGE_TOLERANCE))
+        .collect::<Vec<_>>();
+    let (rect, mask) = rasterize_box(&contours, width, height, |w| w % 2 != 0)?;
+    (!rect.is_empty()).then_some((rect, mask))
+}
+
+pub fn paths_coverage(subpaths: &[Subpath], width: u32, height: u32) -> Vec<u8> {
+    let contours = subpaths
+        .iter()
+        .map(|path| path.flatten(COVERAGE_TOLERANCE))
+        .collect::<Vec<_>>();
+    rasterize(&contours, width, height, |w| w % 2 != 0)
+}
+
 /// Scanline-fill the implicitly closed `contours`, a pixel sample being inside
 /// where `inside(winding)` holds, into a document-sized mask.
 fn rasterize(

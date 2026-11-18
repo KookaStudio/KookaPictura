@@ -404,6 +404,11 @@ pub(super) fn merged_source(embedded: &Document) -> Option<PixelBuffer> {
     }
 }
 
+/// The decoded Smart Object document at its own size, including merged alpha.
+pub fn smart_object_document_pixels(embedded: &Document) -> Option<PixelBuffer> {
+    merged_source(embedded)
+}
+
 /// The stored merged composite with its first extra merged plane appended as
 /// alpha. `read_psd` splits the merged image data into color planes and
 /// document-level extra planes, so a flattened transparent source carries its

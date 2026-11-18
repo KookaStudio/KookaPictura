@@ -9,6 +9,7 @@ use crate::{BitDepth, ColorMode, Document, DocumentStateError, PixelBuffer, Plan
 pub struct CompositeState {
     buffer: PixelBuffer,
     merged_output: bool,
+    signed_merged_alpha: bool,
 }
 
 impl CompositeState {
@@ -17,6 +18,7 @@ impl CompositeState {
         Ok(Self {
             buffer,
             merged_output: true,
+            signed_merged_alpha: false,
         })
     }
 
@@ -44,6 +46,14 @@ impl CompositeState {
     }
     pub fn set_merged_output(&mut self, enabled: bool) {
         self.merged_output = enabled;
+    }
+
+    /// Whether a decoded PSD identified its first extra plane as merged alpha.
+    pub fn signed_merged_alpha(&self) -> bool {
+        self.signed_merged_alpha
+    }
+    pub fn set_signed_merged_alpha(&mut self, present: bool) {
+        self.signed_merged_alpha = present;
     }
 
     pub fn replace(&mut self, buffer: PixelBuffer) -> Result<(), DocumentStateError> {
@@ -103,6 +113,7 @@ impl Default for CompositeState {
         Self {
             buffer: PixelBuffer::new(0, 0, 3),
             merged_output: true,
+            signed_merged_alpha: false,
         }
     }
 }

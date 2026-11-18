@@ -382,7 +382,9 @@ fn noise_breaks_a_drop_shadow_into_a_fixed_grain() {
 fn a_pattern_overlay_embeds_its_built_in_pattern() {
     let mut d = doc();
     let plain = crate::composite_rgba(&d);
-    assert_eq!(layer_style_pattern_names().len(), 8);
+    let mut patterns = pictura_paint::pattern::PATTERN_NAMES.to_vec();
+    patterns.extend(["Pictura Checkerboard", "Pictura Diagonal"]);
+    assert_eq!(layer_style_pattern_names(), patterns);
     assert!(set_document_layer_style_value(
         &mut d,
         "1",
@@ -402,24 +404,12 @@ fn a_pattern_overlay_embeds_its_built_in_pattern() {
         "the checkerboard shows"
     );
 
-    assert!(set_document_layer_style_value(
-        &mut d,
-        "1",
-        "patternOverlay.pattern",
-        3.0
-    ));
-    assert!(!set_document_layer_style_value(
-        &mut d,
-        "1",
-        "patternOverlay.pattern",
-        3.0
-    ));
-    assert!(!set_document_layer_style_value(
-        &mut d,
-        "1",
-        "patternOverlay.pattern",
-        99.0
-    ));
+    let select_pattern = |doc: &mut Document, index| {
+        set_document_layer_style_value(doc, "1", "patternOverlay.pattern", index)
+    };
+    assert!(select_pattern(&mut d, 3.0));
+    assert!(!select_pattern(&mut d, 3.0));
+    assert!(!select_pattern(&mut d, 99.0));
     assert_eq!(pictura_codec::decode_patterns(&d).len(), 2);
     let before = crate::composite_rgba(&d);
     let reopened = pictura_codec::read_psd(&pictura_codec::write_psd(&d).unwrap()).unwrap();

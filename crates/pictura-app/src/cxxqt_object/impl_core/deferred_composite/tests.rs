@@ -106,7 +106,7 @@ fn a_replaced_document_drops_the_move_composite() {
 
     let replacement = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
     let composite = replacement.composite.buffer().clone();
-    view.session.doc = Some(replacement);
+    view.session.doc.set(Some(replacement));
     let revision = view.canvas_revision;
 
     assert!(view.land_move_composite(job.generation, regions).is_none());
@@ -173,7 +173,12 @@ fn a_pending_composite_is_not_current() {
 #[test]
 fn only_a_large_area_defers() {
     let mut view = PictureViewRust::default();
-    view.session.doc = Some(Document::new(4000, 4000, ColorMode::Rgb, BitDepth::Eight));
+    view.session.doc.set(Some(Document::new(
+        4000,
+        4000,
+        ColorMode::Rgb,
+        BitDepth::Eight,
+    )));
     let whole = PsdRect {
         top: 0,
         left: 0,
@@ -190,7 +195,12 @@ fn only_a_large_area_defers() {
     assert!(view.should_defer_move(&Edit::regions(vec![whole], false)));
     assert!(!view.should_defer_move(&Edit::regions(vec![short], false)));
 
-    view.session.doc = Some(Document::new(3999, 4000, ColorMode::Rgb, BitDepth::Eight));
+    view.session.doc.set(Some(Document::new(
+        3999,
+        4000,
+        ColorMode::Rgb,
+        BitDepth::Eight,
+    )));
     assert!(!view.should_defer_move(&Edit::regions(vec![whole], false)));
 }
 
@@ -200,7 +210,7 @@ fn a_layered_large_move_marks_tiles_instead_of_deferring() {
     let side = 4200;
     let mut doc = Document::new(side, side, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = LayerStack::from_layers(vec![pixel_layer("under", side, side, (120, 170, 220))]);
-    view.session.doc = Some(doc);
+    view.session.doc.set(Some(doc));
     let whole = Edit::regions(
         vec![PsdRect {
             top: 0,
@@ -230,7 +240,7 @@ fn a_mid_sized_layered_move_still_marks_tiles() {
     let side = 4200;
     let mut doc = Document::new(side, side, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = LayerStack::from_layers(vec![pixel_layer("under", side, side, (120, 170, 220))]);
-    view.session.doc = Some(doc);
+    view.session.doc.set(Some(doc));
     // About 5.8 MP: over the display's repair budget, under the deferred
     // composite threshold.
     let mid = Edit::regions(
@@ -256,7 +266,12 @@ fn a_mid_sized_layered_move_still_marks_tiles() {
 #[test]
 fn a_busy_display_does_not_defer() {
     let mut view = PictureViewRust::default();
-    view.session.doc = Some(Document::new(4000, 4000, ColorMode::Rgb, BitDepth::Eight));
+    view.session.doc.set(Some(Document::new(
+        4000,
+        4000,
+        ColorMode::Rgb,
+        BitDepth::Eight,
+    )));
     let whole = Edit::regions(
         vec![PsdRect {
             top: 0,

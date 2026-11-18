@@ -31,7 +31,6 @@
 #include "panels/numeric_field.h"
 #include "panels/panel_column.h"
 #include "preferences_dialog.h"
-#include "recovery_store.h"
 #include "session.h"
 
 #include "api/document_bridge.h"
@@ -128,16 +127,23 @@ QRect globalRect(const QWidget* widget)
     return QRect(widget->mapToGlobal(QPoint(0, 0)), widget->size());
 }
 
-// Move `from`'s snapshots and manifests into a new lock-less session directory,
-// as a crashed instance leaves them.
-void fakeCrashedSession(const QString& from)
+// Copy the checkpoint and its companions into a lock-less session in the
+// same recovery root.
+bool fakeCrashedSession(const QString& from)
 {
-    const QString dir = RecoveryStore::rootPath() + QStringLiteral("/999999-1");
-    QDir().mkpath(dir);
-    for (const QString& name :
-         QDir(from).entryList({QStringLiteral("*.psd"), QStringLiteral("*.json")}, QDir::Files)) {
-        QFile::copy(from + QLatin1Char('/') + name, dir + QLatin1Char('/') + name);
+    const QDir source(from);
+    const QDir crashed(QFileInfo(from).absolutePath() + QStringLiteral("/999999-1"));
+    if (!QDir().mkpath(crashed.path())
+        || source.entryList({QStringLiteral("*.json")}, QDir::Files).isEmpty()) {
+        return false;
     }
+    for (const QString& name : source.entryList(QDir::Files)) {
+        if (name != QStringLiteral("lock")
+            && !QFile::copy(source.filePath(name), crashed.filePath(name))) {
+            return false;
+        }
+    }
+    return true;
 }
 
 // Why the two canvases of one document do not show its current frame, or the
@@ -772,8 +778,8 @@ void DocumentArrangeTest::recoveryReopensAsTabs()
         invert->trigger();
         QVERIFY(before->isDocumentDirty(0));
         before->autosaveRecovery();
-        recovery_wait(*before->viewAt(0));
-        fakeCrashedSession(before->recoverySessionDirForTest());
+        QVERIFY(recovery_wait(*before->viewAt(0)));
+        QVERIFY(fakeCrashedSession(before->recoverySessionDirForTest()));
         prefs->close();
     }
 

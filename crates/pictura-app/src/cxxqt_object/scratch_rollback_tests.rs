@@ -57,7 +57,7 @@ fn an_edit_on_unreadable_tiles_changes_nothing() {
     };
     view.apply_edit("Setup", Edit::Full);
     let states = view.session.history.count();
-    let before = view.session.doc.clone().expect("document");
+    let before = view.session.doc.snapshot().expect("document");
     lose_tiles(&before);
     memory_gate::clear();
     // The "filter": invert the first rows of the layer, reading lost tiles.

@@ -4,6 +4,7 @@
 #include <QtTest/QtTest>
 
 #include "dialogs.h"
+#include "api/layers_bridge.h"
 #include "frame.h"
 
 #include "api/view_bridge.h"
@@ -30,6 +31,11 @@ private slots:
     void rasterOpenKeepsFilePath();
     void chosenFormatWinsOverTypedSuffix();
     void rasterSaveKeepsFileInfo();
+    void untitledSaveRequestsPath();
+    void saveAsDefaultsToImportedFormat();
+    void layeredFlatSaveWarnsAndFlattens();
+    void layeredRasterDefaultsToPsd();
+    void layeredRasterSaveOpensSaveAs();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -136,6 +142,109 @@ void OpenSaveTest::rasterSaveKeepsFileInfo()
         QCOMPARE(fields.value(QStringLiteral("Make")).toString(),
                  QStringLiteral("ACME Cameras"));
     }
+}
+
+namespace {
+
+struct SavePicker {
+    explicit SavePicker(pictura::SaveFileNameProvider provider)
+    {
+        pictura::setSaveFileNameProviderForTest(std::move(provider));
+    }
+    ~SavePicker() { pictura::setSaveFileNameProviderForTest({}); }
+};
+
+bool writePng(const QString& path)
+{
+    QImage image(16, 16, QImage::Format_RGBA8888);
+    image.fill(Qt::white);
+    return image.save(path);
+}
+
+QString selectedSaveFilter(pictura::PicturaMainWindow& window, bool saveAs)
+{
+    QString filter;
+    SavePicker picker([&](QWidget*, const QString&, const QString&, const QStringList&,
+                         QString* selected) {
+        if (selected) {
+            filter = *selected;
+        }
+        return QString();
+    });
+    if (saveAs) {
+        window.saveAsWithDialog();
+    } else {
+        window.saveActive();
+    }
+    return filter;
+}
+
+} // namespace
+
+void OpenSaveTest::untitledSaveRequestsPath()
+{
+    auto window = pictura::test::makeMainWindow();
+    QVERIFY(window->newDocument(QStringLiteral("Untitled"), 16, 16, QStringLiteral("rgb"), 8,
+                                QStringLiteral("white")));
+    QVERIFY(!selectedSaveFilter(*window, false).isEmpty());
+    QVERIFY(window->documentPath(0).isEmpty());
+}
+
+void OpenSaveTest::saveAsDefaultsToImportedFormat()
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("source.png"));
+    QVERIFY(writePng(path));
+    auto window = pictura::test::makeMainWindow();
+    QVERIFY(window->openDocumentAtPath(path));
+    QVERIFY(selectedSaveFilter(*window, true).contains(QStringLiteral("*.PNG")));
+}
+
+void OpenSaveTest::layeredFlatSaveWarnsAndFlattens()
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("flat.png"));
+    auto window = pictura::test::makeMainWindow();
+    QVERIFY(window->newDocument(QStringLiteral("Layered"), 16, 16, QStringLiteral("rgb"), 8,
+                                QStringLiteral("white")));
+    QVERIFY(!window->activeView()->add_solid_fill(0xff2244aau).isEmpty());
+    int warnings = 0;
+    window->setFeatureWarningForTest([&] { ++warnings; return true; });
+    window->setSaveFormatDialogForTest([](auto, auto&) { return true; });
+    SavePicker picker([&](QWidget*, const QString&, const QString&, const QStringList&,
+                         QString* selected) {
+        *selected = QStringLiteral("PNG (*.PNG)");
+        return path;
+    });
+    QVERIFY(window->saveAsWithDialog());
+    QCOMPARE(warnings, 1);
+    QImageReader reader(path);
+    QCOMPARE(reader.format(), QByteArrayLiteral("png"));
+    QCOMPARE(reader.read().pixelColor(8, 8), QColor(0x22, 0x44, 0xaa));
+}
+
+void OpenSaveTest::layeredRasterDefaultsToPsd()
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("source.png"));
+    QVERIFY(writePng(path));
+    auto window = pictura::test::makeMainWindow();
+    QVERIFY(window->openDocumentAtPath(path));
+    QVERIFY(!window->activeView()->add_solid_fill(0xff2244aau).isEmpty());
+    QVERIFY(selectedSaveFilter(*window, true).contains(QStringLiteral("*.PSD")));
+}
+
+void OpenSaveTest::layeredRasterSaveOpensSaveAs()
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("source.png"));
+    QVERIFY(writePng(path));
+    auto window = pictura::test::makeMainWindow();
+    QVERIFY(window->openDocumentAtPath(path));
+    QVERIFY(!window->activeView()->add_solid_fill(0xff2244aau).isEmpty());
+    QVERIFY(selectedSaveFilter(*window, false).contains(QStringLiteral("*.PSD")));
+    QCOMPARE(QImage(path).pixelColor(8, 8), QColor(Qt::white));
+    QVERIFY(window->isDocumentDirty(0));
 }
 
 QTEST_MAIN(OpenSaveTest)

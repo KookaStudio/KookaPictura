@@ -14,7 +14,7 @@ pub(super) fn read_tagged_layer_info(
     depth: u16,
     retain: bool,
     budget: &mut DecodeBudget,
-) -> Result<Option<(LayerStack, Option<Compression>)>, PsdError> {
+) -> Result<Option<(LayerStack, Option<Compression>, bool)>, PsdError> {
     let Some(wanted) = tagged_layer_key(depth) else {
         return Ok(None);
     };

@@ -113,12 +113,13 @@ pub use layer_masks::{
     set_layer_mask_feather, set_layer_mask_linked, LayerMaskKind, MASK_FLAG_UNLINKED,
 };
 pub use layer_style::{
-    any_effects_visible, can_create_style_layers, clear_layer_style, copy_layer_style,
-    create_style_layers, create_style_layers_with_base, has_layer_style, layer_style_contour,
-    layer_style_effect_names, layer_style_gradient, layer_style_pattern_names, layer_style_value,
-    paste_layer_style, scale_layer_effects, set_all_effects_visible, set_document_global_light,
+    any_effects_visible, builtin_pattern, builtin_pattern_by_id, builtin_pattern_id,
+    can_create_style_layers, clear_layer_style, copy_layer_style, create_style_layers,
+    create_style_layers_with_base, has_layer_style, layer_style_contour, layer_style_effect_names,
+    layer_style_gradient, layer_style_pattern_names, layer_style_value, paste_layer_style,
+    scale_layer_effects, set_all_effects_visible, set_document_global_light,
     set_document_layer_style_value, set_layer_style_contour, set_layer_style_gradient,
-    set_layer_style_value, LayerStyle,
+    set_layer_style_pattern, set_layer_style_value, LayerStyle,
 };
 pub(crate) use mask_domain::normalize_layer_mask;
 pub use mask_domain::translate_layer_mask;

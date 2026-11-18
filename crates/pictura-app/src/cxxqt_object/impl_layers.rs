@@ -668,7 +668,7 @@ impl qobject::PictureView {
     pub fn move_layer_path(mut self: Pin<&mut Self>, path: &QString, delta: i32) -> bool {
         let path = path.to_string();
         let edit = self.as_mut().edit("Move Layer", |rust| {
-            let before_doc = rust.session.doc.clone();
+            let before_doc = rust.session.doc.snapshot();
             let before = before_doc
                 .as_ref()
                 .and_then(|doc| pictura_render::damage::influence(doc, &path));
@@ -724,7 +724,7 @@ impl qobject::PictureView {
         let path = path.to_string();
         let target = target.to_string();
         let edit = self.as_mut().edit("Move Layer", |rust| {
-            let before_doc = rust.session.doc.clone();
+            let before_doc = rust.session.doc.snapshot();
             let before = before_doc
                 .as_ref()
                 .and_then(|doc| pictura_render::damage::influence(doc, &path));
