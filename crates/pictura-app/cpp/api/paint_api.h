@@ -5,6 +5,7 @@
 #include <optional>
 
 #include <QtCore/QString>
+#include <QtCore/QByteArray>
 
 namespace pictura {
 class PictureView;
@@ -50,7 +51,7 @@ private:
 std::optional<Stroke> beginBrush(PictureView& view, std::uint32_t foreground,
                                  std::uint32_t background, const PaintTip& tip, int opacity,
                                  int flow, const QString& mode, bool aliased, bool autoErase,
-                                 bool pressureSize, bool pressureOpacity);
+                                 bool pressureSize, bool pressureOpacity, const QByteArray& preset = {});
 
 /// Queue `flush_present` on the next event-loop turn; the migrated `frame.cpp`
 /// next-turn timer. A no-op when nothing is pending, so the chain ends.

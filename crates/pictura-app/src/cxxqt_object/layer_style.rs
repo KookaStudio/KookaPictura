@@ -118,6 +118,18 @@ pub mod ffi {
         /// The built-in patterns a Pattern Overlay offers, in `patternOverlay.pattern` order.
         fn layer_style_pattern_names() -> QStringList;
 
+        fn layer_style_apply_preset(
+            view: Pin<&mut PictureView>,
+            path: &QString,
+            data: &[u8],
+        ) -> bool;
+
+        fn layer_style_apply_pattern(
+            view: Pin<&mut PictureView>,
+            path: &QString,
+            data: &[u8],
+        ) -> bool;
+
         /// Record the live edits as one state named `label`.
         fn layer_style_commit(view: Pin<&mut PictureView>, label: &QString);
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QtCore/QStringList>
+
 #include <QtCore/QPoint>
 #include <QtCore/QString>
 #include <QtGui/QPixmap>
@@ -52,6 +54,7 @@ public:
     static QPixmap tipIcon(const PaintTip& tip, int edge);
 
     int presetCount() const;
+    static QStringList builtInNames();
     // The four presets added for issue #731, for the options bar's quick list.
     static int additionalPresetCount();
     static QString additionalPresetName(int index);
@@ -67,6 +70,7 @@ private:
     void sync();
     void applyPreset(int index);
     void buildGrid();
+    void applyLibraryRow(int index);
     // Place the overlay with its top-left at `globalTopLeft`, clamped to the
     // parent rect (the overlay is an in-window child, not a top-level window).
     void moveWithinParent(const QPoint& globalTopLeft);

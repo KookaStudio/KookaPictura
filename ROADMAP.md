@@ -92,9 +92,11 @@ Deeper technical status for PSD/PSB lives in
 - [ ] The Maximize PSD/PSB Compatibility preference (#639)
 - [ ] The document-format version policy: `opDocumentVersion`,
       `minReaderVersion` and Version Info 1057 (#640)
-- [ ] The Preset Manager: eight preset types, load, append, replace, reset and
-      save-set, and the `.abr`, `.aco`, `.ase`, `.asl`, `.grd`, `.pat`, `.csh`
-      and `.tpl` library formats (#489)
+- [x] **Preset Manager** for eight preset types, with library loading,
+      discovery, current lists in settings backup, and native Save Set. Imports
+      supported `.abr`, `.aco`, `.ase`, `.asl`, `.csh`, `.grd`, `.pat`, `.shc`,
+      and `.tpl` variants. Exports ACO and ASE swatches and provides a standalone
+      `.csf` codec (#489).
 
 ## Layers
 

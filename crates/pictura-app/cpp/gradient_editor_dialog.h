@@ -19,6 +19,7 @@ class QToolButton;
 namespace pictura {
 
 class ColorSwatchWidget;
+struct PresetRow;
 
 // One colour stop; `location` in the PSD's 0..4096. The colour's alpha is
 // the gradient's opacity there.
@@ -47,6 +48,7 @@ void paintGradient(QPainter& painter, const QRect& rect, const GradientStops& st
 // Built-in gradient `index` between `foreground` and `background`; empty out
 // of range.
 GradientStops gradientPreset(int index, const QColor& foreground, const QColor& background);
+GradientStops libraryRamp(const PresetRow& row, const QColor& foreground, const QColor& background);
 GradientStops noiseStops(const NoiseSettings& noise);
 // The ramp `spec` draws and maps: Solid stops with the smoothness baked in,
 // or the Noise gradient.

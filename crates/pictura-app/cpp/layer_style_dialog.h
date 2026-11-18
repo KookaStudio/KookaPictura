@@ -70,6 +70,7 @@ protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
+    void rebuildPages();
     void addFixedPage(const QString& title, QWidget* page);
     void addEffect(const QString& key, const QString& title, QWidget* page);
     void onListChanged();

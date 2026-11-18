@@ -25,7 +25,7 @@ use pictura_paint::eraser::{
 };
 use pictura_paint::focus::{Focus, FocusOptions, RetouchMode};
 use pictura_paint::mixer::MixerOptions;
-use pictura_paint::pattern::{self, PATTERN_NAMES};
+use pictura_paint::pattern;
 use pictura_paint::replace::{Limits, ReplaceMode, ReplaceOptions, Sampling};
 use pictura_paint::smudge::SmudgeOptions;
 use pictura_paint::spacing::SpacingMode;
@@ -239,6 +239,78 @@ pub(super) fn begin_brush(
     pressure_size: bool,
     pressure_opacity: bool,
 ) -> bool {
+    begin_brush_tip(
+        view,
+        foreground,
+        background,
+        tip,
+        opacity,
+        flow,
+        mode,
+        aliased,
+        auto_erase,
+        pressure_size,
+        pressure_opacity,
+        None,
+    )
+}
+
+pub(super) fn begin_sampled_brush(
+    view: Pin<&mut PictureView>,
+    foreground: u32,
+    background: u32,
+    tip: &PaintTip,
+    opacity: i32,
+    flow: i32,
+    mode: &QString,
+    aliased: bool,
+    auto_erase: bool,
+    pressure_size: bool,
+    pressure_opacity: bool,
+    preset: &[u8],
+) -> bool {
+    use pictura_codec::preset_library::{decode, Format, Kind, Payload};
+    let Ok(mut parsed) = decode(Kind::Brushes, Format::Native, preset) else {
+        return false;
+    };
+    let Some(Payload::Brush(brush)) = parsed.library.entries.pop().map(|row| row.payload) else {
+        return false;
+    };
+    let Some(sample) =
+        pictura_paint::stroke::SampledTip::new(brush.width, brush.height, brush.coverage)
+    else {
+        return false;
+    };
+    begin_brush_tip(
+        view,
+        foreground,
+        background,
+        tip,
+        opacity,
+        flow,
+        mode,
+        aliased,
+        auto_erase,
+        pressure_size,
+        pressure_opacity,
+        Some(sample),
+    )
+}
+
+fn begin_brush_tip(
+    view: Pin<&mut PictureView>,
+    foreground: u32,
+    background: u32,
+    tip: &PaintTip,
+    opacity: i32,
+    flow: i32,
+    mode: &QString,
+    aliased: bool,
+    auto_erase: bool,
+    pressure_size: bool,
+    pressure_opacity: bool,
+    sampled: Option<pictura_paint::stroke::SampledTip>,
+) -> bool {
     let mut cfg = stamp_config(tip, opacity, flow, mode);
     cfg.color = rgba_from_argb(foreground);
     cfg.background = rgba_from_argb(background);
@@ -248,7 +320,7 @@ pub(super) fn begin_brush(
     cfg.pressure_opacity = pressure_opacity;
     let label = if aliased { "Pencil" } else { "Brush" };
     if view.rust().session.quick_mask.active {
-        return view.begin_quick_mask_paint(cfg, label);
+        return view.begin_quick_mask_paint_with_tip(cfg, label, sampled);
     }
     crate::cxxqt_object::helpers::memory_gate::clear();
     let fits = {
@@ -264,14 +336,20 @@ pub(super) fn begin_brush(
     }
     if let Some(path) = active_mask_target(view.rust()) {
         let mask_cfg = mask_stroke_config(cfg);
-        return view.begin_mask_paint(&path, mask_cfg, label);
+        return view.begin_mask_paint_with_tip(&path, mask_cfg, label, sampled);
     }
     begin_kind(
         view,
         label,
         cfg,
-        tool_recording::ToolStrokeKind::Paint,
-        |doc, path, _| Stroke::begin_at(doc, path, cfg).ok(),
+        tool_recording::brush_recording_kind(sampled.is_some()),
+        |doc, path, _| {
+            let mut stroke = Stroke::begin_at(doc, path, cfg).ok()?;
+            if let Some(sampled) = sampled {
+                stroke.set_sampled_tip(sampled);
+            }
+            Some(stroke)
+        },
     )
 }
 
@@ -327,8 +405,45 @@ pub(super) fn begin_pattern_stamp(
     origin_x: i32,
     origin_y: i32,
 ) -> bool {
-    let Some(tile) = usize::try_from(pattern).ok().and_then(pattern::tile) else {
+    let Some(pattern) = usize::try_from(pattern)
+        .ok()
+        .and_then(pictura_render::builtin_pattern)
+    else {
         return false;
+    };
+    let tile = pictura_paint::healing::RgbaImage {
+        width: pattern.width as i32,
+        height: pattern.height as i32,
+        data: pattern.rgba.as_chunks::<4>().0.to_vec(),
+    };
+    let cfg = stamp_config(tip, opacity, flow, mode);
+    begin(view, "Pattern Stamp", cfg, |doc, path, _| {
+        let source = StampSource::pattern(tile, (origin_x, origin_y), doc.width, doc.height)?;
+        Stroke::begin_source(doc, path, cfg, source).ok()
+    })
+}
+
+pub(super) fn begin_pattern_preset(
+    view: Pin<&mut PictureView>,
+    tip: &PaintTip,
+    opacity: i32,
+    flow: i32,
+    mode: &QString,
+    file: &[u8],
+    origin_x: i32,
+    origin_y: i32,
+) -> bool {
+    use pictura_codec::preset_library::{decode, Format, Kind, Payload};
+    let Ok(mut set) = decode(Kind::Patterns, Format::Native, file) else {
+        return false;
+    };
+    let Some(Payload::Pattern(pattern)) = set.library.entries.pop().map(|row| row.payload) else {
+        return false;
+    };
+    let tile = pictura_paint::healing::RgbaImage {
+        width: pattern.width as i32,
+        height: pattern.height as i32,
+        data: pattern.rgba.as_chunks::<4>().0.to_vec(),
     };
     let cfg = stamp_config(tip, opacity, flow, mode);
     begin(view, "Pattern Stamp", cfg, |doc, path, _| {
@@ -790,21 +905,44 @@ pub(super) fn magic_erase_at(
 }
 
 pub(super) fn stamp_pattern_count() -> i32 {
-    PATTERN_NAMES.len() as i32
+    pictura_paint::pattern::PATTERN_NAMES.len() as i32
+}
+
+pub(super) fn managed_pattern_count() -> i32 {
+    pictura_render::layer_style_pattern_names().len() as i32
 }
 
 pub(super) fn stamp_pattern_name(index: i32) -> QString {
     usize::try_from(index)
         .ok()
-        .and_then(|i| PATTERN_NAMES.get(i))
-        .map_or_else(QString::default, |name| QString::from(*name))
+        .and_then(|i| pictura_render::layer_style_pattern_names().get(i).copied())
+        .map_or_else(QString::default, QString::from)
+}
+
+pub(super) fn stamp_pattern_id(index: i32) -> QString {
+    if (0..managed_pattern_count()).contains(&index) {
+        QString::from(pictura_render::builtin_pattern_id(index as usize).as_str())
+    } else {
+        QString::default()
+    }
 }
 
 pub(super) fn stamp_pattern_tile(index: i32) -> Vec<u8> {
-    usize::try_from(index)
+    let Some(tile) = usize::try_from(index)
         .ok()
-        .and_then(pattern::tile)
-        .map_or_else(Vec::new, |tile| tile.data.concat())
+        .and_then(pictura_render::builtin_pattern)
+    else {
+        return Vec::new();
+    };
+    let side = pattern::TILE as u32;
+    let mut result = Vec::with_capacity((side * side * 4) as usize);
+    for y in 0..side {
+        for x in 0..side {
+            let at = ((y % tile.height * tile.width + x % tile.width) * 4) as usize;
+            result.extend_from_slice(&tile.rgba[at..at + 4]);
+        }
+    }
+    result
 }
 
 pub(super) fn stamp_pattern_side() -> i32 {
@@ -1015,6 +1153,7 @@ pub(super) fn begin_kind(
 #[cfg(test)]
 mod tests {
     use super::composite_surface;
+
     use crate::cxxqt_object::document_session::DocumentSession;
     use crate::cxxqt_object::picture::composites_so_far;
     use crate::cxxqt_object::state::PictureViewRust;

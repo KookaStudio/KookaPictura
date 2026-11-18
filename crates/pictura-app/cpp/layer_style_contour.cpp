@@ -1,7 +1,9 @@
 #include "layer_style_contour.h"
 
 #include "panels/curve_widget.h"
+#include "preset_store.h"
 
+#include <QtCore/QCoreApplication>
 #include <QtCore/QPointF>
 #include <QtCore/QSignalBlocker>
 #include <QtCore/QStringList>
@@ -18,6 +20,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 
 namespace pictura {
 
@@ -37,6 +40,15 @@ const ContourPreset kPresets[] = {
 };
 
 } // namespace
+
+QStringList builtInContourNames()
+{
+    QStringList names;
+    for (const auto& preset : kPresets) {
+        names.push_back(QCoreApplication::translate("ContourEditorDialog", preset.name));
+    }
+    return names;
+}
 
 std::array<qreal, 256> contourLut(const QString& points)
 {
@@ -137,9 +149,29 @@ ContourEditorDialog::ContourEditorDialog(const QString& points, QWidget* parent)
     preset_ = new QComboBox(this);
     preset_->setObjectName(QStringLiteral("contourPreset"));
     preset_->addItem(tr("Custom"));
-    for (const ContourPreset& preset : kPresets) {
-        preset_->addItem(tr(preset.name));
-    }
+    auto& store = PresetStore::current();
+    const auto rebuild = [this, &store] {
+        const QSignalBlocker block(preset_);
+        while (preset_->count() > 1) {
+            preset_->removeItem(1);
+        }
+        for (const auto& row : store.rows(PresetType::Contours)) {
+            const auto builtIn = row.values.value(QStringLiteral("index")).toInt(-1);
+            const QString text = builtIn >= 0 && builtIn < int(std::size(kPresets))
+                ? QString::fromLatin1(kPresets[builtIn].points)
+                : row.values.value(QStringLiteral("points")).toString();
+            if (!text.isEmpty()) {
+                preset_->addItem(row.name, text);
+            }
+        }
+        preset_->setCurrentIndex(0);
+    };
+    rebuild();
+    connect(&store, &PresetStore::changed, this, [rebuild](int type) {
+        if (type == int(PresetType::Contours)) {
+            rebuild();
+        }
+    });
     top->addWidget(preset_, 1);
     outer->addLayout(top);
 
@@ -174,7 +206,7 @@ ContourEditorDialog::ContourEditorDialog(const QString& points, QWidget* parent)
     });
     connect(preset_, &QComboBox::currentIndexChanged, this, [this](int index) {
         if (index > 0) {
-            curve_->setPointsText(QLatin1String(kPresets[index - 1].points));
+            curve_->setPointsText(preset_->itemData(index).toString());
         }
     });
     connect(curve_, &CurveWidget::curveChanged, this, [this] {

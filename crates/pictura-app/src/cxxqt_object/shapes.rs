@@ -58,6 +58,7 @@ pub mod ffi {
         arrow_length: f64,
         arrow_concavity: f64,
         custom: i32,
+        custom_preset: Vec<u8>,
         align_edges: bool,
         no_fill: bool,
         stroke: bool,

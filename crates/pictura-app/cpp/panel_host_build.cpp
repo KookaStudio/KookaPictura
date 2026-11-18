@@ -37,6 +37,7 @@
 #include "panels/placeholder_panel.h"
 #include "panels/properties_panel.h"
 #include "panels/swatches_panel.h"
+#include "preset_store.h"
 #include "session.h"
 
 #include <QtCore/QDebug>
@@ -67,23 +68,7 @@ QList<PanelGroup*> PanelHost::buildPanels(const SessionState& state)
     swatchesPanel_ = new SwatchesPanel(colorState_, shell_);
     swatchesPanel_->setObjectName(QStringLiteral("swatchesPanel"));
     ColorPickerDialog::setDefaultSwatchGrid(swatchesPanel_->grid());
-    if (state.swatchesLoaded) {
-        QList<Swatch> swatches;
-        for (const QJsonValue& value : state.swatches) {
-            const QJsonObject entry = value.toObject();
-            const QColor color(entry.value(QStringLiteral("color")).toString());
-            if (color.isValid()) {
-                swatches.append({color, entry.value(QStringLiteral("name")).toString()});
-            }
-        }
-        // An intentionally empty array clears the panel; a corrupt non-empty
-        // array keeps the default palette rather than opening blank.
-        if (!swatches.isEmpty() || state.swatches.isEmpty()) {
-            swatchesPanel_->grid()->setSwatches(swatches);
-        }
-    }
-    connect(swatchesPanel_->grid(), &SwatchGrid::countChanged, this,
-            [this]() { requestSessionSave(); });
+    swatchesPanel_->attachPresetStore(PresetStore::current());
 
     infoPanel_ = new InfoPanel(shell_);
     infoPanel_->setObjectName(QStringLiteral("infoPanel"));

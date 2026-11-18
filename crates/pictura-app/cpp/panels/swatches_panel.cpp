@@ -1,19 +1,24 @@
 #include "swatches_panel.h"
 
 #include "color_panel.h"
+#include "preset_manager.h"
+#include "preset_store.h"
 
 #include <QtCore/QEvent>
+#include <QtCore/QScopedValueRollback>
 #include <QtGui/QAction>
 #include <QtGui/QHelpEvent>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QMenu>
+#include <QtWidgets/QMessageBox>
 #include <QtWidgets/QScrollArea>
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QToolTip>
 #include <QtWidgets/QVBoxLayout>
 
+#include <algorithm>
 #include <iterator>
 
 namespace pictura {
@@ -89,6 +94,11 @@ void SwatchGrid::setSwatches(QList<Swatch> swatches)
     update();
     emit countChanged();
     emit currentChanged(current_);
+}
+
+void SwatchGrid::setPresetIds(const QList<quint64>& ids)
+{
+    for (qsizetype i = 0; i < swatches_.size() && i < ids.size(); ++i) swatches_[i].presetId = ids[i];
 }
 
 void SwatchGrid::addSwatch(const Swatch& swatch)
@@ -321,6 +331,60 @@ void SwatchesPanel::addSwatchFromForeground()
 void SwatchesPanel::deleteCurrentSwatch() { grid_->removeSwatch(grid_->current()); }
 
 void SwatchesPanel::resetSwatches() { grid_->setSwatches(SwatchGrid::defaultSwatches()); }
+
+void SwatchesPanel::attachPresetStore(PresetStore& store)
+{
+    presets_ = &store;
+    refreshPresetGrid();
+    connect(&store, &PresetStore::changed, this, [this](int type) {
+        if (type == int(PresetType::Swatches) && !updatingPresets_) {
+            refreshPresetGrid();
+        }
+    });
+    connect(grid_, &SwatchGrid::countChanged, this, [this] {
+        if (updatingPresets_) {
+            return;
+        }
+        const QScopedValueRollback guard(updatingPresets_, true);
+        auto prior = presets_->rows(PresetType::Swatches);
+        PresetRows rows;
+        for (const auto& swatch : grid_->swatches()) {
+            const auto it = std::find_if(prior.begin(), prior.end(), [&](const auto& entry) {
+                return swatch.presetId != 0 && entry.id == swatch.presetId;
+            });
+            if (it == prior.end()) {
+                rows.push_back(makeSwatchPreset(swatch.name, swatch.color));
+            } else {
+                rows.push_back(*it);
+                prior.erase(it);
+            }
+        }
+        QString error;
+        if (!presets_->replace(PresetType::Swatches, std::move(rows), &error)) {
+            refreshPresetGrid();
+            QMessageBox::warning(this, tr("Swatches"), error);
+        } else {
+            QList<quint64> ids;
+            for (const auto& row : presets_->rows(PresetType::Swatches)) ids.push_back(row.id);
+            grid_->setPresetIds(ids);
+        }
+    });
+}
+
+void SwatchesPanel::refreshPresetGrid()
+{
+    const QScopedValueRollback guard(updatingPresets_, true);
+    QList<Swatch> colors;
+    for (const auto& row : presets_->rows(PresetType::Swatches)) {
+        colors.push_back({row.color, row.name, row.id});
+    }
+    grid_->setSwatches(std::move(colors));
+}
+
+void SwatchesPanel::runPresetCommand(const QString& action)
+{
+    openPresetManager(window(), PresetType::Swatches, action);
+}
 
 void SwatchesPanel::showContextMenu(const QPoint& at)
 {

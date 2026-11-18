@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QtCore/QString>
+#include <QtCore/QStringList>
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QPushButton>
 
@@ -10,6 +11,8 @@ class QComboBox;
 class QPaintEvent;
 
 namespace pictura {
+
+QStringList builtInContourNames();
 
 class CurveWidget;
 

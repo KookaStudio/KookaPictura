@@ -17,6 +17,9 @@
 #include <QtWidgets/QToolButton>
 
 #include <functional>
+#include "swatches_panel.h"
+#include "preset_store.h"
+#include <QtCore/QFileInfo>
 
 namespace pictura {
 
@@ -152,12 +155,12 @@ const QList<MenuRow>& rowsForPanel(const QString& panel)
              kid(QStringLiteral("Large Thumbnail")),
              kid(QStringLiteral("Small List")),
              kid(QStringLiteral("Large List")),
-             dis(QStringLiteral("Preset Manager…"), true),
-             dis(QStringLiteral("Load Swatches…")),
-             dis(QStringLiteral("Save Swatches…")),
-             dis(QStringLiteral("Save Swatches For Exchange…")),
-             dis(QStringLiteral("Replace Swatches…")),
-             dis(QStringLiteral("Reset Swatches")),
+             imp(QStringLiteral("Preset Manager…"), QStringLiteral("swatches.manager"), true),
+             imp(QStringLiteral("Load Swatches…"), QStringLiteral("swatches.load")),
+             imp(QStringLiteral("Save Swatches…"), QStringLiteral("swatches.save")),
+             imp(QStringLiteral("Save Swatches For Exchange…"), QStringLiteral("swatches.exchange")),
+             imp(QStringLiteral("Replace Swatches…"), QStringLiteral("swatches.replace")),
+             imp(QStringLiteral("Reset Swatches"), QStringLiteral("swatches.reset")),
              dis(QStringLiteral("(libraries list)"), true),
          }},
         {QStringLiteral("stylesPanel"),
@@ -522,6 +525,13 @@ void PanelGroup::updateHeaderMenu()
     populatePanelMenu(headerMenu_, panel,
                       [this](const QString& id) { runPanelPreference(id); },
                       owningHost() ? owningHost()->commands() : nullptr);
+    if (auto* swatches = qobject_cast<SwatchesPanel*>(tabs_->currentWidget())) {
+        for (const auto& file : discoveredPresetFiles(PresetType::Swatches)) {
+            auto* library = headerMenu_->addMenu(QFileInfo(file).completeBaseName());
+            library->addAction(tr("Append"), swatches, [swatches, file] { swatches->runPresetCommand(QStringLiteral("append:") + file); });
+            library->addAction(tr("Replace"), swatches, [swatches, file] { swatches->runPresetCommand(QStringLiteral("replace:") + file); });
+        }
+    }
     QObject::connect(headerMenu_, &QMenu::aboutToShow, headerMenu_, [this, panel] {
         // The menu is built once; re-read every command's state so a document
         // opened (or a selection changed) since then is reflected.
@@ -563,6 +573,12 @@ void PanelGroup::updateHeaderMenu()
 
 void PanelGroup::runPanelPreference(const QString& actionId)
 {
+    if (actionId.startsWith(QStringLiteral("swatches."))) {
+        if (auto* panel = qobject_cast<SwatchesPanel*>(tabs_->currentWidget())) {
+            panel->runPresetCommand(actionId);
+        }
+        return;
+    }
     if (actionId == QStringLiteral("close")) {
         emit closePanelRequested(currentPanelName());
         return;

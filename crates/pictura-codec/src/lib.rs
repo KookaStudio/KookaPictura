@@ -63,6 +63,7 @@ pub mod pdf;
 mod pictura_filter;
 mod pictura_raw;
 pub(crate) mod png;
+pub mod preset_library;
 mod probe;
 mod profile_probe;
 pub(crate) mod raster_metadata;
@@ -140,7 +141,7 @@ pub use metadata::{
     set_xmp_values, xmp_properties, DocumentMetadata, MergeMode,
 };
 pub use patterns::{builtin_patterns, decode_patterns, PatternPixels};
-pub use patterns_write::{add_document_pattern, encode_rgb_pattern};
+pub use patterns_write::{add_document_pattern, encode_rgb_pattern, encode_rgba_pattern};
 pub use pictura_filter::{
     decode_pictura_filter, encode_pictura_filter, FilterStep, FILTER_GALLERY_NAME,
     PICTURA_FILTER_ID,

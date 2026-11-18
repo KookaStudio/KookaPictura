@@ -31,6 +31,8 @@
 #include <QtCore/QObject>
 #include <QtGui/QPainterPath>
 
+#include <cmath>
+#include <cstdint>
 #include <memory>
 
 namespace pictura {
@@ -164,6 +166,10 @@ private:
         spec.arrow_length = o.arrowLength;
         spec.arrow_concavity = o.arrowConcavity;
         spec.custom = o.custom;
+        if (kind_ == 5) {
+            spec.custom_preset.reserve(size_t(o.customPreset.size()));
+            for (const char value : o.customPreset) { spec.custom_preset.push_back(std::uint8_t(value)); }
+        }
         spec.star = o.star;
         spec.indent = o.indent;
         spec.smooth_corners = o.smoothCorners;
@@ -217,18 +223,24 @@ private:
     {
         const ::rust::Vec<double> k = shape_outline(spec);
         QPainterPath path;
-        const int n = int(k.size() / 6);
-        if (n < 2) {
-            return path;
+        const int length = int(k.size());
+        for (int a = 0; a < length;) {
+            const bool marker = std::isnan(k[a]);
+            const bool closed = !marker || k[a + 1] != 0.0;
+            if (marker) { a += 6; }
+            int end = a;
+            while (end < length && !std::isnan(k[end])) { end += 6; }
+            if (end - a >= 12) {
+                path.moveTo(k[a], k[a + 1]);
+                for (int i = a; i + 6 < end || (closed && i < end); i += 6) {
+                    const int j = i + 6 < end ? i + 6 : a;
+                    path.cubicTo(QPointF(k[i + 4], k[i + 5]), QPointF(k[j + 2], k[j + 3]),
+                                 QPointF(k[j], k[j + 1]));
+                }
+                if (closed) { path.closeSubpath(); }
+            }
+            a = end;
         }
-        path.moveTo(k[0], k[1]);
-        for (int i = 0; i < n; ++i) {
-            const int a = i * 6;
-            const int b = ((i + 1) % n) * 6;
-            path.cubicTo(QPointF(k[a + 4], k[a + 5]), QPointF(k[b + 2], k[b + 3]),
-                         QPointF(k[b], k[b + 1]));
-        }
-        path.closeSubpath();
         return path;
     }
 

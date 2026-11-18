@@ -139,6 +139,18 @@ impl qobject::PictureView {
     ) -> bool {
         self.as_mut().rust_mut().begin_mask_paint(path, cfg, label)
     }
+
+    pub(in super::super) fn begin_mask_paint_with_tip(
+        mut self: Pin<&mut Self>,
+        path: &str,
+        cfg: StrokeConfig,
+        label: &str,
+        tip: Option<pictura_paint::stroke::SampledTip>,
+    ) -> bool {
+        self.as_mut()
+            .rust_mut()
+            .begin_mask_paint_with_tip(path, cfg, label, tip)
+    }
 }
 
 impl PictureViewRust {
@@ -152,12 +164,22 @@ impl PictureViewRust {
         cfg: StrokeConfig,
         label: &str,
     ) -> bool {
+        self.begin_mask_paint_with_tip(path, cfg, label, None)
+    }
+
+    fn begin_mask_paint_with_tip(
+        &mut self,
+        path: &str,
+        cfg: StrokeConfig,
+        label: &str,
+        tip: Option<pictura_paint::stroke::SampledTip>,
+    ) -> bool {
         self.begin_stroke(
             SessionKind::MaskPaint,
             label,
             &cfg,
             crate::cxxqt_object::impl_paint::tool_recording::ToolStrokeKind::Mask,
-            |rust| mask_plan(rust, path, cfg),
+            |rust| mask_plan_with_tip(rust, path, cfg, tip),
         )
     }
 }
@@ -168,6 +190,15 @@ pub(super) fn mask_plan(
     path: &str,
     cfg: StrokeConfig,
 ) -> Option<StrokePlan> {
+    mask_plan_with_tip(rust, path, cfg, None)
+}
+
+fn mask_plan_with_tip(
+    rust: &PictureViewRust,
+    path: &str,
+    cfg: StrokeConfig,
+    tip: Option<pictura_paint::stroke::SampledTip>,
+) -> Option<StrokePlan> {
     let doc = rust.session.doc.as_ref()?;
     if !memory_gate::admit(u64::from(doc.width) * u64::from(doc.height) * 4) {
         return None;
@@ -175,6 +206,10 @@ pub(super) fn mask_plan(
     let mask = pictura_render::mask_document_coverage(doc, path)?;
     let mut stroke = Stroke::begin_at(&mask.document, "0", cfg).ok()?;
     stroke.set_coverage_clip(stroke_selection_clip(rust));
+    let sampled = tip.is_some();
+    if let Some(tip) = tip {
+        stroke.set_sampled_tip(tip);
+    }
     let mask_stroke = MaskStroke {
         path: path.to_string(),
         baseline: pictura_render::resolve_path(doc, path).cloned(),
@@ -182,8 +217,12 @@ pub(super) fn mask_plan(
         document: mask.document,
         stroke,
     };
-    let (gpu, placer, preview) = mask_backend(rust, path, cfg, &mask_stroke);
-    Some(StrokePlan::mask(mask_stroke).with_backend(gpu, placer, preview))
+    if sampled {
+        Some(StrokePlan::mask(mask_stroke))
+    } else {
+        let (gpu, placer, preview) = mask_backend(rust, path, cfg, &mask_stroke);
+        Some(StrokePlan::mask(mask_stroke).with_backend(gpu, placer, preview))
+    }
 }
 
 /// The GPU or reduced-level preview a mask stroke starts with.

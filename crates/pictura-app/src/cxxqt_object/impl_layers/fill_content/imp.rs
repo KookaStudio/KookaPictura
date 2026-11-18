@@ -237,7 +237,8 @@ pub(super) fn set_layer_fill_pattern(
     path: &QString,
     payload: &QString,
 ) -> bool {
-    let Some(params) = parse_pattern(&payload.to_string()) else {
+    let payload = payload.to_string();
+    let Some(params) = parse_pattern(&payload) else {
         return false;
     };
     let fill = FillContent::Pattern(params.clone());
@@ -255,7 +256,7 @@ pub(super) fn set_layer_fill_pattern(
                 return Edit::None;
             }
         }
-        if !ensure_pattern(doc, &params.pattern_id) {
+        if !ensure_payload_pattern(doc, &params.pattern_id, &payload) {
             return Edit::None;
         }
         let Some(layer) = pictura_render::resolve_path_mut(doc, &path) else {
@@ -289,17 +290,25 @@ pub(super) fn patterns_available(view: &PictureView) -> bool {
 }
 
 pub(super) fn available_pattern_ids(view: &PictureView) -> QStringList {
-    let mut ids = QStringList::default();
-    let Some(doc) = view.rust().session.doc.as_ref() else {
-        return ids;
-    };
-    let mut seen: Vec<String> = Vec::new();
-    for pattern in pictura_codec::decode_patterns(doc) {
-        seen.push(pattern.pattern_id.clone());
-        ids.append(QString::from(pattern.pattern_id.as_str()));
+    let mut ids = document_pattern_ids(view);
+    if view.rust().session.doc.is_some() {
+        let names = pictura_render::layer_style_pattern_names();
+        let stamp_count = pictura_paint::pattern::PATTERN_NAMES.len();
+        let builtin = (stamp_count..names.len()).chain(0..stamp_count);
+        for index in builtin {
+            let id = QString::from(pictura_render::builtin_pattern_id(index).as_str());
+            if !ids.iter().any(|existing| existing == &id) {
+                ids.append(id);
+            }
+        }
     }
-    for pattern in pictura_codec::builtin_patterns() {
-        if !seen.iter().any(|id| id == &pattern.pattern_id) {
+    ids
+}
+
+pub(super) fn document_pattern_ids(view: &PictureView) -> QStringList {
+    let mut ids = QStringList::default();
+    if let Some(doc) = view.rust().session.doc.as_ref() {
+        for pattern in pictura_codec::decode_patterns(doc) {
             ids.append(QString::from(pattern.pattern_id.as_str()));
         }
     }
@@ -316,10 +325,7 @@ fn ensure_pattern(doc: &mut Document, id: &str) -> bool {
     {
         return true;
     }
-    let Some(pattern) = pictura_codec::builtin_patterns()
-        .iter()
-        .find(|pattern| pattern.pattern_id == id)
-    else {
+    let Some(pattern) = pictura_render::builtin_pattern_by_id(id) else {
         return false;
     };
     let Some(record) = pictura_codec::encode_rgb_pattern(
@@ -334,6 +340,44 @@ fn ensure_pattern(doc: &mut Document, id: &str) -> bool {
     pictura_codec::add_document_pattern(doc, &pattern.pattern_id, &record)
 }
 
+fn ensure_payload_pattern(doc: &mut Document, id: &str, payload: &str) -> bool {
+    let Some(hex) = payload.split('|').nth(5) else {
+        return ensure_pattern(doc, id);
+    };
+    if hex.len() > 256 * 1024 * 1024 || !hex.len().is_multiple_of(2) {
+        return false;
+    }
+    let unhex = |b: u8| match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        _ => None,
+    };
+    let Some(bytes) = hex
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|pair| Some(16 * unhex(pair[0])? + unhex(pair[1])?))
+        .collect::<Option<Vec<_>>>()
+    else {
+        return false;
+    };
+    use pictura_codec::preset_library::{
+        decode, document_pattern_id, embed_document_pattern, Format, Kind, Payload,
+    };
+    let Ok(mut parsed) = decode(Kind::Patterns, Format::Native, &bytes) else {
+        return false;
+    };
+    let Some(entry) = parsed.library.entries.pop() else {
+        return false;
+    };
+    let Payload::Pattern(pattern) = entry.payload else {
+        return false;
+    };
+    if document_pattern_id(&pattern) != id {
+        return false;
+    }
+    embed_document_pattern(doc, &entry.name, &pattern).is_some()
+}
+
 pub(super) fn pattern_thumbnail(view: &PictureView, id: &QString, size: i32) -> QImage {
     let size = size.clamp(1, 256) as u32;
     let Some(doc) = view.rust().session.doc.as_ref() else {
@@ -341,14 +385,11 @@ pub(super) fn pattern_thumbnail(view: &PictureView, id: &QString, size: i32) -> 
     };
     let id = id.to_string();
     let document_patterns = pictura_codec::decode_patterns(doc);
+    let builtin = pictura_render::builtin_pattern_by_id(&id);
     let Some(pattern) = document_patterns
         .iter()
         .find(|p| p.pattern_id == id)
-        .or_else(|| {
-            pictura_codec::builtin_patterns()
-                .iter()
-                .find(|p| p.pattern_id == id)
-        })
+        .or(builtin.as_ref())
     else {
         return QImage::default();
     };
@@ -486,7 +527,7 @@ pub(super) fn add_fill_layer(
             let Some(id) = payload.split('|').next() else {
                 return Edit::None;
             };
-            if !ensure_pattern(doc, id) {
+            if !ensure_payload_pattern(doc, id, &payload) {
                 return Edit::None;
             }
         }

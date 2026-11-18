@@ -136,6 +136,7 @@ set(PICTURA_QT_TESTS
     tst_histogram_panel
     tst_tool_hint_bar
     tst_swatches_panel
+    tst_preset_manager
     tst_color_picker
     tst_eyedropper
     tst_color_settings

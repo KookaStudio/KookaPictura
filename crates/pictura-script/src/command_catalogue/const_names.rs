@@ -69,6 +69,7 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("EditConvertProfile", "edit.convertProfile"),
     ("EditColorSettings", "edit.colorSettings"),
     ("EditPdfPresets", "edit.pdfPresets"),
+    ("EditPresetManager", "edit.presets.preset.manager"),
     ("FilterPicturaRaw", "filter.picturaRaw"),
     ("FilterConvertForSmartFilters", "filter.convertForSmartFilters"),
     ("FilterLastFilter", "filter.last"),

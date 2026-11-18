@@ -4,6 +4,8 @@ use crate::cxxqt_object::edit::{structural, Edit};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
+use pictura_codec::action_descriptor::{ActionDescriptor, ActionKey, ActionValue};
+use pictura_codec::preset_library::{self, Format, Kind, Payload, Preset};
 use std::sync::Mutex;
 
 /// The app-wide copied style (Copy Layer Style / Paste Layer Style).
@@ -178,9 +180,19 @@ pub(super) fn layer_style_set(
 /// Run one structured style edit with the scalar setter's bounds refresh and
 /// content-revision bump.
 pub(super) fn apply_style_edit(
-    mut view: Pin<&mut PictureView>,
+    view: Pin<&mut PictureView>,
     path: &QString,
     edit: impl FnOnce(&mut pictura_core::Layer) -> bool,
+) -> bool {
+    apply_document_style_edit(view, path, |doc, path| {
+        pictura_render::resolve_path_mut(doc, path).is_some_and(edit)
+    })
+}
+
+fn apply_document_style_edit(
+    mut view: Pin<&mut PictureView>,
+    path: &QString,
+    edit: impl FnOnce(&mut pictura_core::Document, &str) -> bool,
 ) -> bool {
     let path = path.to_string();
     let before = paint_bounds(view.as_ref().get_ref(), &path);
@@ -190,13 +202,134 @@ pub(super) fn apply_style_edit(
         .session
         .doc
         .as_mut()
-        .is_some_and(|doc| pictura_render::resolve_path_mut(doc, &path).is_some_and(edit));
+        .is_some_and(|doc| edit(doc, &path));
     if changed {
         refresh_paint_bounds(view.as_mut(), &path, before);
         let mut rust = view.as_mut().rust_mut();
         rust.session.content_revision = rust.session.content_revision.wrapping_add(1);
     }
     changed
+}
+
+fn native_preset(kind: Kind, data: &[u8]) -> Option<Preset> {
+    let mut import = preset_library::decode(kind, Format::Native, data).ok()?;
+    (import.library.entries.len() == 1).then(|| import.library.entries.remove(0))
+}
+
+fn can_apply_preset(doc: &pictura_core::Document, path: &str) -> bool {
+    pictura_render::resolve_path(doc, path)
+        .is_some_and(|layer| !layer.is_group() && !layer.background)
+}
+
+pub(super) fn layer_style_apply_pattern(
+    view: Pin<&mut PictureView>,
+    path: &QString,
+    data: &[u8],
+) -> bool {
+    let Some(Preset {
+        name,
+        payload: Payload::Pattern(pattern),
+        ..
+    }) = native_preset(Kind::Patterns, data)
+    else {
+        return false;
+    };
+    apply_document_style_edit(view, path, |doc, path| {
+        if !can_apply_preset(doc, path) {
+            return false;
+        }
+        let Some(id) = preset_library::embed_document_pattern(doc, &name, &pattern) else {
+            return false;
+        };
+        let Some(layer) = pictura_render::resolve_path_mut(doc, path) else {
+            return false;
+        };
+        pictura_render::set_layer_style_pattern(layer, &id, &name);
+        true
+    })
+}
+
+fn rewrite_pattern_reference(desc: &mut ActionDescriptor, source: &str, id: Option<&str>) -> bool {
+    let mut found = false;
+    for (key, value) in &mut desc.items {
+        if matches!(&desc.class.id, ActionKey::Code(code) if code == b"Ptrn")
+            && matches!(key, ActionKey::Code(code) if code == b"Idnt")
+        {
+            if let ActionValue::Text(value) = value {
+                if value == source {
+                    found = true;
+                    if let Some(id) = id {
+                        *value = id.into();
+                    }
+                }
+            }
+        }
+        found |= rewrite_pattern_values(value, source, id);
+    }
+    found
+}
+
+fn rewrite_pattern_values(value: &mut ActionValue, source: &str, id: Option<&str>) -> bool {
+    match value {
+        ActionValue::Descriptor(desc) | ActionValue::GlobalObject(desc) => {
+            rewrite_pattern_reference(desc, source, id)
+        }
+        ActionValue::List(values) => values.iter_mut().fold(false, |found, value| {
+            rewrite_pattern_values(value, source, id) | found
+        }),
+        _ => false,
+    }
+}
+
+pub(super) fn layer_style_apply_preset(
+    view: Pin<&mut PictureView>,
+    path: &QString,
+    data: &[u8],
+) -> bool {
+    let Some(Preset {
+        payload: Payload::Style(mut style),
+        opaque,
+        ..
+    }) = native_preset(Kind::Styles, data)
+    else {
+        return false;
+    };
+    let Ok(patterns) = preset_library::style_patterns(&opaque) else {
+        return false;
+    };
+    apply_document_style_edit(view, path, |doc, path| {
+        if !can_apply_preset(doc, path) {
+            return false;
+        }
+        let before = doc.layer_section_extra.clone();
+        for (name, pattern) in &patterns {
+            if !rewrite_pattern_reference(&mut style, &pattern.pattern_id, None) {
+                continue;
+            }
+            let Some(id) = preset_library::embed_document_pattern(doc, name, pattern) else {
+                doc.layer_section_extra = before;
+                return false;
+            };
+            rewrite_pattern_reference(&mut style, &pattern.pattern_id, Some(&id));
+        }
+        let Some(layer) = pictura_render::resolve_path_mut(doc, path) else {
+            return false;
+        };
+        let mut bytes = vec![0, 0, 0, 0, 0, 0, 0, 16];
+        bytes.extend(pictura_codec::action_descriptor::write_action_descriptor(
+            &style, true,
+        ));
+        pictura_codec::edit_layer(layer, |parts| {
+            parts
+                .extra_blocks
+                .retain(|block| !matches!(&block.key, b"lfx2" | b"lrFX" | b"lmfx"));
+            parts.extra_blocks.push(pictura_core::LayerBlock {
+                key: *b"lfx2",
+                data: bytes.into(),
+            });
+        });
+        true
+    })
 }
 
 pub(super) fn layer_style_contour(view: &PictureView, path: &QString, key: &QString) -> QString {

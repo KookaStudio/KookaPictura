@@ -23,7 +23,7 @@ bool hasPendingSettingsImport();
 
 // Build the complete backup from the stores on disk. The frame saves the live
 // session first, so the exported object reflects the current window.
-QJsonObject collectSettingsBackup();
+QJsonObject collectSettingsBackup(QString* error = nullptr);
 
 // Write `backup` atomically to `path`. The file is pretty-printed.
 bool writeSettingsBackup(const QString& path, const QJsonObject& backup,
