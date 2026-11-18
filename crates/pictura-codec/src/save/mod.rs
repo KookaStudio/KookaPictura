@@ -2,19 +2,22 @@
 //! Qt's image writers cannot express (`codec/raster-save-encoders`).
 
 mod eps;
+mod rows;
+mod stream;
 #[cfg(test)]
 mod tests;
 mod tiff;
+mod tiff_codec;
 
 use std::fs;
-use std::io::Write;
+use std::io::{BufWriter, Write};
 use std::path::Path;
 
-use flate2::write::ZlibEncoder;
-use flate2::Compression;
 use pictura_core::{ColorMode, Document, Samples};
 
 use crate::error::PsdError;
+use crate::write_stream::{io_error, Sink};
+use rows::RasterRows;
 
 /// A Save As format the engine writes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -402,71 +405,68 @@ pub fn save_document_with_jpeg_guarded(
     before_write: Option<&BeforeWrite<'_>>,
 ) -> Result<(), PsdError> {
     let options = options.clone().with_defaults();
-    let raster = Raster::from_document(doc)?;
     let check = || before_write.is_none_or(|guard| guard());
+    if streams(kind, doc, &options) {
+        let rows = RasterRows::from_document(doc)?;
+        return write_atomic_with(path, &check, |sink| match kind {
+            SaveKind::Png => stream::write_png(sink, &rows, &options),
+            SaveKind::Bmp => stream::write_bmp(sink, &rows, &options),
+            SaveKind::Tga => stream::write_tga(sink, &rows, &options),
+            SaveKind::Raw => stream::write_raw(sink, &rows, &options),
+            SaveKind::Cineon => stream::write_cineon(sink, &rows),
+            _ => tiff::write_to(sink, doc, &rows, &options, jpeg),
+        });
+    }
+    // ponytail: GIF, EPS and DCS, BMP at 8 bits or fewer (one palette for every
+    // pixel), and CMYK or Lab Raw and TIFF build the whole image first.
+    let raster = Raster::from_document(doc)?;
+    let bytes = match kind {
+        SaveKind::Bmp => write_bmp(&raster, &options)?,
+        SaveKind::Gif => write_gif(&raster, &options)?,
+        SaveKind::Raw => write_raw(&raster, &options)?,
+        SaveKind::Tiff => tiff::write(doc, &raster, &options, jpeg)?,
+        SaveKind::Eps => eps::write(&raster, &options, doc, jpeg)?,
+        SaveKind::Dcs => {
+            return eps::write_dcs_guarded(path, &raster, &options, doc, jpeg, before_write)
+        }
+        SaveKind::Jpeg => return Err(PsdError::Unsupported("JPEG stays on Qt".into())),
+        SaveKind::Png | SaveKind::Tga | SaveKind::Cineon => {
+            unreachable!("row formats stream")
+        }
+    };
+    if !check() {
+        return Err(PsdError::Invalid("save was interrupted".into()));
+    }
+    write_atomic(path, &bytes)
+}
+
+/// Whether `kind` streams `doc` from its composite rows (#1320), rather than
+/// building the whole image.
+pub fn streams(kind: SaveKind, doc: &Document, options: &SaveOptions) -> bool {
+    let separated = matches!(
+        doc.source.mode().unwrap_or(doc.mode),
+        ColorMode::Cmyk | ColorMode::Lab
+    );
     match kind {
-        SaveKind::Png => {
-            let bytes = write_png(&raster, &options)?;
-            if !check() {
-                return Err(PsdError::Invalid("save was interrupted".into()));
-            }
-            write_atomic(path, &bytes)
-        }
-        SaveKind::Bmp => {
-            let bytes = write_bmp(&raster, &options)?;
-            if !check() {
-                return Err(PsdError::Invalid("save was interrupted".into()));
-            }
-            write_atomic(path, &bytes)
-        }
-        SaveKind::Gif => {
-            let bytes = write_gif(&raster, &options)?;
-            if !check() {
-                return Err(PsdError::Invalid("save was interrupted".into()));
-            }
-            write_atomic(path, &bytes)
-        }
-        SaveKind::Tga => {
-            let bytes = write_tga(&raster, &options)?;
-            if !check() {
-                return Err(PsdError::Invalid("save was interrupted".into()));
-            }
-            write_atomic(path, &bytes)
-        }
-        SaveKind::Raw => {
-            let bytes = write_raw(&raster, &options)?;
-            if !check() {
-                return Err(PsdError::Invalid("save was interrupted".into()));
-            }
-            write_atomic(path, &bytes)
-        }
-        SaveKind::Cineon => {
-            let bytes = write_cineon(&raster, &options)?;
-            if !check() {
-                return Err(PsdError::Invalid("save was interrupted".into()));
-            }
-            write_atomic(path, &bytes)
-        }
-        SaveKind::Tiff => {
-            let bytes = tiff::write(doc, &raster, &options, jpeg)?;
-            if !check() {
-                return Err(PsdError::Invalid("save was interrupted".into()));
-            }
-            write_atomic(path, &bytes)
-        }
-        SaveKind::Eps => {
-            let bytes = eps::write(&raster, &options, doc, jpeg)?;
-            if !check() {
-                return Err(PsdError::Invalid("save was interrupted".into()));
-            }
-            write_atomic(path, &bytes)
-        }
-        SaveKind::Dcs => eps::write_dcs_guarded(path, &raster, &options, doc, jpeg, before_write),
-        SaveKind::Jpeg => Err(PsdError::Unsupported("JPEG stays on Qt".into())),
+        SaveKind::Png | SaveKind::Tga | SaveKind::Cineon => true,
+        SaveKind::Bmp => options.bmp_depth > 8,
+        SaveKind::Raw | SaveKind::Tiff => !separated,
+        SaveKind::Gif | SaveKind::Eps | SaveKind::Dcs | SaveKind::Jpeg => false,
     }
 }
 
 fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), PsdError> {
+    write_atomic_with(path, &|| true, |sink| sink.put(bytes))
+}
+
+/// Write `path` through an unpredictable sibling temp file: `write` streams
+/// into it, `check` runs after it, then the file is synced and renamed over
+/// `path`. Any failure removes the temp file and leaves `path` untouched.
+fn write_atomic_with(
+    path: &Path,
+    check: &dyn Fn() -> bool,
+    write: impl FnOnce(&mut Sink<'_>) -> Result<(), PsdError>,
+) -> Result<(), PsdError> {
     let Some(dir) = path.parent() else {
         return Err(PsdError::Invalid("destination has no directory".into()));
     };
@@ -478,20 +478,26 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), PsdError> {
         ".{name}.{:016x}.tmp",
         u64::from_le_bytes(crate::os_random::<8>())
     ));
-    let write = || -> std::io::Result<()> {
-        let mut file = fs::OpenOptions::new()
+    let written = (|| {
+        let file = fs::OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(&tmp)?;
-        file.write_all(bytes)?;
-        file.sync_all()?;
-        fs::rename(&tmp, path)
-    };
-    if let Err(e) = write() {
+            .open(&tmp)
+            .map_err(io_error)?;
+        let mut out = BufWriter::new(file);
+        write(&mut Sink::new(&mut out)?)?;
+        out.flush().map_err(io_error)?;
+        if !check() {
+            return Err(PsdError::Invalid("save was interrupted".into()));
+        }
+        let file = out.into_inner().map_err(|e| io_error(e.into_error()))?;
+        file.sync_all().map_err(io_error)?;
+        fs::rename(&tmp, path).map_err(io_error)
+    })();
+    if written.is_err() {
         let _ = fs::remove_file(&tmp);
-        return Err(PsdError::Invalid(format!("write failed: {e}")));
     }
-    Ok(())
+    written
 }
 
 fn bmp_palette(raster: &Raster, depth: u8) -> Vec<[u8; 4]> {
@@ -521,26 +527,10 @@ fn bmp_palette(raster: &Raster, depth: u8) -> Vec<[u8; 4]> {
     indexed.palette
 }
 
-fn write_bmp(raster: &Raster, options: &SaveOptions) -> Result<Vec<u8>, PsdError> {
+/// The BMP file and info headers, masks and palette; the file size (bytes
+/// 2..6) is left zero for the writer to fill in.
+pub(super) fn bmp_header(w: u32, h: u32, options: &SaveOptions, palette: &[[u8; 4]]) -> Vec<u8> {
     let depth = options.bmp_depth;
-    if options.bmp_os2
-        && (depth == 16 || depth == 32 || options.bmp_flip || options.bmp_advanced != 0)
-    {
-        return Err(PsdError::Unsupported(
-            "OS/2 BMP cannot hold Flip, 16-bit Advanced Modes or 32 bits".into(),
-        ));
-    }
-    if options.bmp_rle && (options.bmp_os2 || (depth != 4 && depth != 8)) {
-        return Err(PsdError::Unsupported(
-            "RLE needs a 4/8-bit Windows BMP".into(),
-        ));
-    }
-    let (w, h) = (raster.width, raster.height);
-    let palette = if depth <= 8 {
-        bmp_palette(raster, depth)
-    } else {
-        Vec::new()
-    };
     let palette_entry = if options.bmp_os2 { 3 } else { 4 };
     let header_size = if options.bmp_os2 { 12 } else { 40 };
     // The three 16-bit Advanced Modes layouts need BI_BITFIELDS masks.
@@ -559,7 +549,7 @@ fn write_bmp(raster: &Raster, options: &SaveOptions) -> Result<Vec<u8>, PsdError
         out.extend_from_slice(&(h as u16).to_le_bytes());
         out.extend_from_slice(&1u16.to_le_bytes());
         out.extend_from_slice(&(depth as u16).to_le_bytes());
-        for p in &palette {
+        for p in palette {
             out.extend_from_slice(&p[..3]);
         }
     } else {
@@ -590,7 +580,7 @@ fn write_bmp(raster: &Raster, options: &SaveOptions) -> Result<Vec<u8>, PsdError
         out.extend_from_slice(&2835i32.to_le_bytes());
         out.extend_from_slice(&(palette.len() as u32).to_le_bytes());
         out.extend_from_slice(&0u32.to_le_bytes());
-        for p in &palette {
+        for p in palette {
             out.extend_from_slice(&[p[2], p[1], p[0], 0]);
         }
         if bits_fields {
@@ -604,6 +594,36 @@ fn write_bmp(raster: &Raster, options: &SaveOptions) -> Result<Vec<u8>, PsdError
             }
         }
     }
+    out
+}
+
+/// Validate the BMP options for `options.bmp_depth`.
+pub(super) fn bmp_check(options: &SaveOptions) -> Result<(), PsdError> {
+    let depth = options.bmp_depth;
+    if options.bmp_os2
+        && (depth == 16 || depth == 32 || options.bmp_flip || options.bmp_advanced != 0)
+    {
+        return Err(PsdError::Unsupported(
+            "OS/2 BMP cannot hold Flip, 16-bit Advanced Modes or 32 bits".into(),
+        ));
+    }
+    if options.bmp_rle && (options.bmp_os2 || (depth != 4 && depth != 8)) {
+        return Err(PsdError::Unsupported(
+            "RLE needs a 4/8-bit Windows BMP".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn write_bmp(raster: &Raster, options: &SaveOptions) -> Result<Vec<u8>, PsdError> {
+    bmp_check(options)?;
+    let depth = options.bmp_depth;
+    let palette = if depth <= 8 {
+        bmp_palette(raster, depth)
+    } else {
+        Vec::new()
+    };
+    let mut out = bmp_header(raster.width, raster.height, options, &palette);
     let rows = bmp_rows(raster, options, depth, &palette);
     if options.bmp_rle {
         let encoded = bmp_rle(&rows, depth, raster.width as usize)?;
@@ -683,55 +703,12 @@ fn bmp_rows(
                     row.push(index_at(y * w + x));
                 }
             }
-            16 => {
-                for x in 0..w {
-                    let i = y * w + x;
-                    let (r, g, b, a) = (
-                        raster.rgba[i * 4],
-                        raster.rgba[i * 4 + 1],
-                        raster.rgba[i * 4 + 2],
-                        raster.rgba[i * 4 + 3],
-                    );
-                    let (r, g, b) = if options.bmp_advanced == 1 {
-                        (r, g, b)
-                    } else {
-                        (over_white(r, a), over_white(g, a), over_white(b, a))
-                    };
-                    let v = match options.bmp_advanced {
-                        1 => {
-                            ((a >> 7) as u16) << 15
-                                | ((r as u16) >> 3) << 10
-                                | ((g as u16) >> 3) << 5
-                                | ((b as u16) >> 3)
-                        }
-                        2 => ((r as u16) >> 3) << 11 | ((g as u16) >> 2) << 5 | ((b as u16) >> 3),
-                        _ => ((r as u16) >> 3) << 10 | ((g as u16) >> 3) << 5 | ((b as u16) >> 3),
-                    };
-                    row.extend_from_slice(&v.to_le_bytes());
-                }
-            }
-            24 => {
-                for x in 0..w {
-                    let i = y * w + x;
-                    let a = raster.rgba[i * 4 + 3];
-                    row.extend_from_slice(&[
-                        over_white(raster.rgba[i * 4 + 2], a),
-                        over_white(raster.rgba[i * 4 + 1], a),
-                        over_white(raster.rgba[i * 4], a),
-                    ]);
-                }
-            }
-            32 => {
-                for x in 0..w {
-                    let i = y * w + x;
-                    row.extend_from_slice(&[
-                        raster.rgba[i * 4 + 2],
-                        raster.rgba[i * 4 + 1],
-                        raster.rgba[i * 4],
-                        raster.rgba[i * 4 + 3],
-                    ]);
-                }
-            }
+            16 | 24 | 32 => bmp_pixels(
+                &raster.rgba[y * w * 4..(y + 1) * w * 4],
+                depth,
+                options.bmp_advanced,
+                &mut row,
+            ),
             _ => {}
         }
         while row.len() % 4 != 0 {
@@ -745,6 +722,35 @@ fn bmp_rows(
         rows.reverse();
     }
     rows
+}
+
+/// One 16-, 24- or 32-bit BMP row from interleaved RGBA, before padding.
+pub(super) fn bmp_pixels(rgba: &[u8], depth: u8, advanced: u8, row: &mut Vec<u8>) {
+    for px in rgba.as_chunks::<4>().0 {
+        let (r, g, b, a) = (px[0], px[1], px[2], px[3]);
+        match depth {
+            16 => {
+                let (r, g, b) = if advanced == 1 {
+                    (r, g, b)
+                } else {
+                    (over_white(r, a), over_white(g, a), over_white(b, a))
+                };
+                let v = match advanced {
+                    1 => {
+                        ((a >> 7) as u16) << 15
+                            | ((r as u16) >> 3) << 10
+                            | ((g as u16) >> 3) << 5
+                            | ((b as u16) >> 3)
+                    }
+                    2 => ((r as u16) >> 3) << 11 | ((g as u16) >> 2) << 5 | ((b as u16) >> 3),
+                    _ => ((r as u16) >> 3) << 10 | ((g as u16) >> 3) << 5 | ((b as u16) >> 3),
+                };
+                row.extend_from_slice(&v.to_le_bytes());
+            }
+            24 => row.extend_from_slice(&[over_white(b, a), over_white(g, a), over_white(r, a)]),
+            _ => row.extend_from_slice(&[b, g, r, a]),
+        }
+    }
 }
 
 fn bmp_rle(rows: &[Vec<u8>], depth: u8, width: usize) -> Result<Vec<u8>, PsdError> {
@@ -773,93 +779,9 @@ fn bmp_rle(rows: &[Vec<u8>], depth: u8, width: usize) -> Result<Vec<u8>, PsdErro
     Ok(out)
 }
 
+#[cfg(test)]
 fn write_png(raster: &Raster, options: &SaveOptions) -> Result<Vec<u8>, PsdError> {
-    let (w, h) = (raster.width, raster.height);
-    let gray = matches!(
-        raster.mode,
-        ColorMode::Grayscale | ColorMode::Bitmap | ColorMode::Duotone
-    );
-    let alpha = raster.alpha;
-    let color_type = if gray {
-        if alpha {
-            4
-        } else {
-            0
-        }
-    } else if alpha {
-        6
-    } else {
-        2
-    };
-    let channels = match color_type {
-        0 => 1,
-        2 => 3,
-        4 => 2,
-        _ => 4,
-    };
-    let mut out = Vec::new();
-    out.extend_from_slice(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]);
-    let mut ihdr = [0u8; 13];
-    ihdr[..4].copy_from_slice(&w.to_be_bytes());
-    ihdr[4..8].copy_from_slice(&h.to_be_bytes());
-    ihdr[8] = 8;
-    ihdr[9] = color_type;
-    ihdr[12] = u8::from(options.png_interlace);
-    write_chunk(&mut out, b"IHDR", &ihdr);
-    let mut raw = Vec::new();
-    if options.png_interlace {
-        for (x0, y0, dx, dy) in adam7() {
-            let pw = w.saturating_sub(x0).div_ceil(dx);
-            let ph = h.saturating_sub(y0).div_ceil(dy);
-            if pw == 0 || ph == 0 {
-                continue;
-            }
-            for py in 0..ph {
-                let y = y0 + py * dy;
-                raw.push(0);
-                for px in 0..pw {
-                    let x = x0 + px * dx;
-                    png_pixel(raster, x, y, gray, alpha, &mut raw);
-                }
-            }
-        }
-    } else {
-        for y in 0..h {
-            raw.push(0);
-            for x in 0..w {
-                png_pixel(raster, x, y, gray, alpha, &mut raw);
-            }
-        }
-    }
-    let _ = channels;
-    let mut encoder = ZlibEncoder::new(
-        Vec::new(),
-        Compression::new(u32::from(options.png_compression.min(9))),
-    );
-    encoder
-        .write_all(&raw)
-        .map_err(|_| PsdError::Invalid("PNG deflate".into()))?;
-    let compressed = encoder
-        .finish()
-        .map_err(|_| PsdError::Invalid("PNG deflate".into()))?;
-    write_chunk(&mut out, b"IDAT", &compressed);
-    write_chunk(&mut out, b"IEND", &[]);
-    Ok(out)
-}
-
-fn png_pixel(raster: &Raster, x: u32, y: u32, gray: bool, alpha: bool, out: &mut Vec<u8>) {
-    let i = (y as usize * raster.width as usize) + x as usize;
-    if gray {
-        out.push(raster.gray[i]);
-        if alpha {
-            out.push(raster.rgba[i * 4 + 3]);
-        }
-    } else {
-        out.extend_from_slice(&raster.rgba[i * 4..i * 4 + 3]);
-        if alpha {
-            out.push(raster.rgba[i * 4 + 3]);
-        }
-    }
+    crate::write_stream::to_vec(|sink| stream::write_png(sink, raster, options))
 }
 
 fn adam7() -> [(u32, u32, u32, u32); 7] {
@@ -885,7 +807,12 @@ fn write_chunk(out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
 }
 
 fn crc32(data: &[u8]) -> u32 {
-    let mut crc = 0xFFFF_FFFFu32;
+    !crc32_update(0xFFFF_FFFF, data)
+}
+
+/// The running PNG CRC-32 register after `data`; the checksum is its
+/// complement.
+pub(super) fn crc32_update(mut crc: u32, data: &[u8]) -> u32 {
     for &byte in data {
         crc ^= u32::from(byte);
         for _ in 0..8 {
@@ -896,7 +823,7 @@ fn crc32(data: &[u8]) -> u32 {
             };
         }
     }
-    !crc
+    crc
 }
 
 fn write_gif(raster: &Raster, options: &SaveOptions) -> Result<Vec<u8>, PsdError> {
@@ -944,122 +871,22 @@ fn write_gif(raster: &Raster, options: &SaveOptions) -> Result<Vec<u8>, PsdError
     Ok(crate::web::encode_gif(&image, options.gif_interlaced))
 }
 
+#[cfg(test)]
 fn write_tga(raster: &Raster, options: &SaveOptions) -> Result<Vec<u8>, PsdError> {
-    let depth = options.tga_depth;
-    if depth != 16 && depth != 24 && depth != 32 {
-        return Err(PsdError::Unsupported("TGA depth".into()));
-    }
-    let (w, h) = (raster.width, raster.height);
-    let mut out = Vec::with_capacity(18 + (w as usize * h as usize * 4));
-    let image_type: u8 = if options.tga_rle { 10 } else { 2 };
-    out.extend_from_slice(&[0, 0, image_type]);
-    out.extend_from_slice(&[0, 0, 0, 0, 0]);
-    out.extend_from_slice(&[0, 0]); // x origin
-    out.extend_from_slice(&[0, 0]); // y origin
-    out.extend_from_slice(&(w as u16).to_le_bytes());
-    out.extend_from_slice(&(h as u16).to_le_bytes());
-    out.push(depth);
-    // Bit 5: top-left origin. Bits 0-3: attribute (alpha) bits per pixel.
-    let attribute_bits = match depth {
-        16 => 1,
-        32 => 8,
-        _ => 0,
-    };
-    out.push(0x20 | attribute_bits);
-    let pixels: Vec<[u8; 4]> = (0..w as usize * h as usize)
-        .map(|i| {
-            let (r, g, b, a) = (
-                raster.rgba[i * 4],
-                raster.rgba[i * 4 + 1],
-                raster.rgba[i * 4 + 2],
-                raster.rgba[i * 4 + 3],
-            );
-            if depth == 16 {
-                let v = ((r as u16 >> 3) << 10)
-                    | ((g as u16 >> 3) << 5)
-                    | (b as u16 >> 3)
-                    | (((a as u16) >> 7) << 15);
-                [v as u8, (v >> 8) as u8, 0, 0]
-            } else if depth == 24 {
-                [over_white(b, a), over_white(g, a), over_white(r, a), 255]
-            } else {
-                [b, g, r, a]
-            }
-        })
-        .collect();
-    if options.tga_rle {
-        for chunk in pixels.chunks(128) {
-            out.push((chunk.len() - 1) as u8);
-            for p in chunk {
-                if depth == 16 {
-                    out.extend_from_slice(&p[..2]);
-                } else if depth == 24 {
-                    out.extend_from_slice(&p[..3]);
-                } else {
-                    out.extend_from_slice(&p[..4]);
-                }
-            }
-        }
-    } else {
-        for p in &pixels {
-            if depth == 16 {
-                out.extend_from_slice(&p[..2]);
-            } else if depth == 24 {
-                out.extend_from_slice(&p[..3]);
-            } else {
-                out.extend_from_slice(&p[..4]);
-            }
-        }
-    }
-    Ok(out)
+    crate::write_stream::to_vec(|sink| stream::write_tga(sink, raster, options))
 }
 
 fn write_raw(raster: &Raster, options: &SaveOptions) -> Result<Vec<u8>, PsdError> {
-    let n = raster.width as usize * raster.height as usize;
-    let planes: Vec<&[u8]> = match raster.mode {
-        ColorMode::Grayscale | ColorMode::Bitmap | ColorMode::Duotone => vec![&raster.gray],
-        ColorMode::Cmyk => vec![
-            &raster.cmyk[..n],
-            &raster.cmyk[n..2 * n],
-            &raster.cmyk[2 * n..3 * n],
-            &raster.cmyk[3 * n..],
-        ],
-        ColorMode::Lab => vec![
-            &raster.lab[..n],
-            &raster.lab[n..2 * n],
-            &raster.lab[2 * n..],
-        ],
-        // The reader normalizes Multichannel to RGB and keeps no plate store,
-        // so Raw cannot truthfully write the mode's channels.
-        ColorMode::Multichannel => {
-            return Err(PsdError::Unsupported(
-                "Raw needs Multichannel planes".into(),
-            ))
-        }
-        _ => vec![
-            &raster.rgb[..n],
-            &raster.rgb[n..2 * n],
-            &raster.rgb[2 * n..],
-        ],
-    };
-    let mut out = vec![0u8; options.raw_header as usize];
-    if options.raw_interleaved {
-        for i in 0..n {
-            for plane in &planes {
-                out.push(plane[i]);
-            }
-        }
-    } else {
-        for plane in &planes {
-            out.extend_from_slice(plane);
-        }
-    }
-    Ok(out)
+    crate::write_stream::to_vec(|sink| stream::write_raw(sink, raster, options))
 }
 
+#[cfg(test)]
 fn write_cineon(raster: &Raster, _options: &SaveOptions) -> Result<Vec<u8>, PsdError> {
-    let (w, h) = (raster.width, raster.height);
-    let n = w as usize * h as usize;
+    crate::write_stream::to_vec(|sink| stream::write_cineon(sink, raster))
+}
+
+/// The 1024-byte Cineon header for a `w` × `h` image of `n` pixels.
+fn cineon_header(w: u32, h: u32, n: usize) -> Vec<u8> {
     let mut out = vec![0u8; 1024];
     let put_u32 = |out: &mut [u8], at: usize, value: u32| {
         out[at..at + 4].copy_from_slice(&value.to_be_bytes());
@@ -1089,14 +916,5 @@ fn write_cineon(raster: &Raster, _options: &SaveOptions) -> Result<Vec<u8>, PsdE
     out[681] = 5;
     out[682] = 0;
     out[683] = 0;
-    let mut packed = Vec::with_capacity(n * 4);
-    for i in 0..n {
-        let r = (u32::from(raster.rgba[i * 4]) * 1023) / 255;
-        let g = (u32::from(raster.rgba[i * 4 + 1]) * 1023) / 255;
-        let b = (u32::from(raster.rgba[i * 4 + 2]) * 1023) / 255;
-        let word = (r << 22) | (g << 12) | (b << 2);
-        packed.extend_from_slice(&word.to_be_bytes());
-    }
-    out.extend_from_slice(&packed);
-    Ok(out)
+    out
 }

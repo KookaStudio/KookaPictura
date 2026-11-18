@@ -97,6 +97,7 @@ mod write_cmyk;
 mod write_duotone;
 mod write_indexed;
 mod write_layers;
+mod write_stream;
 pub mod xmp;
 pub mod zoomify;
 
@@ -193,8 +194,8 @@ pub use read::{
     OpenOptions,
 };
 pub use save::{
-    save_document, save_document_with_jpeg, save_document_with_jpeg_guarded, BeforeWrite,
-    JpegEncode, SaveKind, SaveOptions,
+    save_document, save_document_with_jpeg, save_document_with_jpeg_guarded,
+    streams as save_streams, BeforeWrite, JpegEncode, SaveKind, SaveOptions,
 };
 pub use smart_filter::{
     clear_smart_filters, delete_smart_filter, reorder_smart_filters, set_camera_raw_option,
@@ -224,7 +225,7 @@ pub use web::{
 pub use webp::{decode_webp, encode_webp};
 pub use write::{
     write_native_compatibility_cached, write_psb, write_psb_cached, write_psd, write_psd_cached,
-    write_versioned, VersionedWrite,
+    write_psd_to, write_versioned, write_versioned_to, writes_psb, VersionedWrite,
 };
 pub use write_cache::{warm_encode_idents, EncodeCache, EncodeStats};
 pub use write_indexed::{gif_indexed_source_is_current, indexed_source_is_current};

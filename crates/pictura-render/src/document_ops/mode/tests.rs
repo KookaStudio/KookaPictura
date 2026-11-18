@@ -2,7 +2,7 @@ use super::*;
 use pictura_codec::{
     read_psd, web_safe_palette, write_psd, ColorReduction, Dither, PaletteOptions,
 };
-use pictura_core::{Channel, Samples};
+use pictura_core::{Channel, PixelBuffer, Samples};
 
 /// A one-layer RGB document whose layer and (RGBA) composite hold `pixels`,
 /// as the app keeps it.
@@ -424,6 +424,39 @@ fn an_extra_channel_saves_without_a_duplicate_alpha_plane() {
     assert_eq!(back.composite.data.to_vec(), expected);
     assert_eq!(back.channels.len(), 1);
     assert_eq!(back.channels[0].data.to_vec(), alpha);
+}
+
+/// The first three planes of `buffer`, read without materializing it.
+fn rgb_planes(buffer: &PixelBuffer) -> Vec<u8> {
+    let n = buffer.width as usize * buffer.height as usize;
+    let mut rgb = vec![0u8; 3 * n];
+    buffer.data.read_into(0, &mut rgb);
+    rgb
+}
+
+// [sps_merged_tiled]
+#[test]
+fn save_view_keeps_the_merged_image_tiled() {
+    let (w, h) = (301u32, 530u32);
+    let extra = || Channel {
+        id: 0,
+        data: vec![7u8; (w * h) as usize].into(),
+    };
+    let mut layered = layered_without_composite(w, h);
+    layered.channels.push(extra());
+    let full = crate::composite_tiled(&layered);
+    let view = pictura_core::assert_no_materialization(|| save_view(&layered));
+    assert_eq!(view.composite.channels, 3);
+    assert!(view.composite.data.is_tiled());
+    assert_eq!(rgb_planes(&view.composite), rgb_planes(&full));
+
+    let mut stored = ramp(w, h);
+    stored.channels.push(extra());
+    assert_eq!(stored.composite.channels, 4);
+    let view = pictura_core::assert_no_materialization(|| save_view(&stored));
+    assert_eq!(view.composite.channels, 3);
+    assert!(view.composite.data.is_tiled());
+    assert_eq!(rgb_planes(&view.composite), rgb_planes(&stored.composite));
 }
 
 #[test]

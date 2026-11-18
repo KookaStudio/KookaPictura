@@ -161,8 +161,7 @@ mod tests {
         let path = Path::new(path);
         let root = path.parent().unwrap();
         let stem = path.file_stem().unwrap().to_str().unwrap();
-        let (filename, bytes) = store::checkpoint_bytes(root, stem, &doc, cache)?;
-        journal::write_synced(&root.join(filename), &bytes)
+        store::write_checkpoint(root, stem, &doc, cache).map(drop)
     }
 
     #[test]

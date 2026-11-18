@@ -358,6 +358,30 @@ pub(super) fn save_psd(view: &mut PictureViewRust, file: &TempFile) {
     assert!(save_finish_rust(view), "the save lands");
 }
 
+/// An engine Save As (#1320): the bridge's copy of the document, its banded
+/// composite, and the codec's writer into the file.
+pub(super) fn save_raster(
+    view: &mut PictureViewRust,
+    kind: pictura_codec::SaveKind,
+    options: &pictura_codec::SaveOptions,
+    file: &TempFile,
+) {
+    let mut doc = view.session.doc.snapshot().expect("document");
+    let srgb = kind == pictura_codec::SaveKind::Png;
+    let composite = crate::cxxqt_object::impl_core::save::save_composite(&doc, srgb);
+    doc.composite.replace(composite).expect("valid composite");
+    pictura_codec::save_document(kind, &doc, options, std::path::Path::new(&file.0))
+        .expect("the save lands");
+}
+
+/// A GIF save through the bridge's writer.
+pub(super) fn save_gif(view: &mut PictureViewRust, file: &TempFile) {
+    assert!(
+        crate::cxxqt_object::impl_core::save::write_gif(view, &file.0),
+        "the GIF save lands"
+    );
+}
+
 /// M12's file: a white Background under four layers of seeded opaque discs,
 /// the shape `scripts/gen-large-fixtures.py` writes.
 pub(super) fn write_fixture(side: u32, file: &TempFile) -> String {

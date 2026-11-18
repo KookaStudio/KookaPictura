@@ -15,7 +15,7 @@ pub(in crate::cxxqt_object) fn write_atomically(
     bytes: &[u8],
     sync: bool,
 ) -> std::io::Result<()> {
-    replace(path, bytes, sync)
+    write_atomically_with(path, sync, |out| out.write_all(bytes))
 }
 
 #[derive(Debug)]
@@ -29,10 +29,20 @@ pub(in crate::cxxqt_object) fn write_durable(
     bytes: &[u8],
     sync_parent: impl FnOnce(&Path) -> std::io::Result<()>,
 ) -> Result<(), DurableWriteError> {
+    write_durable_with(path, |out| out.write_all(bytes), sync_parent)
+}
+
+/// [`write_durable`] for a writer that streams into the temp file through
+/// `write` (#1320).
+pub(in crate::cxxqt_object) fn write_durable_with(
+    path: &Path,
+    write: impl FnOnce(&mut std::io::BufWriter<std::fs::File>) -> std::io::Result<()>,
+    sync_parent: impl FnOnce(&Path) -> std::io::Result<()>,
+) -> Result<(), DurableWriteError> {
     let path = path.to_str().ok_or_else(|| {
         DurableWriteError::BeforeRename(std::io::Error::other("invalid publication path"))
     })?;
-    replace(path, bytes, true).map_err(DurableWriteError::BeforeRename)?;
+    write_atomically_with(path, true, write).map_err(DurableWriteError::BeforeRename)?;
     sync_parent(parent_directory(Path::new(path))).map_err(DurableWriteError::AfterRename)
 }
 
@@ -102,23 +112,34 @@ fn parent_directory(path: &Path) -> &Path {
         .unwrap_or_else(|| Path::new("."))
 }
 
-fn replace(path: &str, bytes: &[u8], sync: bool) -> std::io::Result<()> {
+/// [`write_atomically`] for a writer that streams into the temp file through
+/// `write` (#1320): a failure there, or in the flush, sync or rename, removes
+/// the temp file and leaves `path` as it was.
+pub(in crate::cxxqt_object) fn write_atomically_with(
+    path: &str,
+    sync: bool,
+    write: impl FnOnce(&mut std::io::BufWriter<std::fs::File>) -> std::io::Result<()>,
+) -> std::io::Result<()> {
     reject_protected_destination(path)?;
     let tmp = format!(
         "{path}.{:016x}.tmp",
         u64::from_le_bytes(pictura_codec::os_random())
     );
-    let mut file = std::fs::OpenOptions::new()
+    // `create_new` is O_CREAT|O_EXCL: it fails on any existing entry,
+    // including a symlink planted at the predictable-looking name.
+    let file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(&tmp)?;
-    let written = file.write_all(bytes).and_then(|()| {
-        if sync {
-            file.sync_all()?;
-        }
-        Ok(())
-    });
-    drop(file);
+    let mut out = std::io::BufWriter::new(file);
+    let written = write(&mut out)
+        .and_then(|()| out.into_inner().map_err(|e| e.into_error()))
+        .and_then(|file| {
+            if sync {
+                file.sync_all()?;
+            }
+            Ok(())
+        });
     if let Err(error) = written.and_then(|()| {
         reject_protected_destination(path)?;
         rename(&tmp, path, sync)
@@ -155,20 +176,21 @@ pub(in crate::cxxqt_object) fn read_capped(path: impl AsRef<Path>, limit: u64) -
     (bytes.len() as u64 <= limit).then_some(bytes)
 }
 
-/// Publish a complete sibling file without replacing an existing destination.
-pub(in crate::cxxqt_object) fn write_new_atomically(
+/// Publish a sibling file `write` streams without replacing an existing destination.
+pub(in crate::cxxqt_object) fn write_new_atomically_with(
     path: &Path,
-    bytes: &[u8],
+    write: impl FnOnce(&mut std::io::BufWriter<std::fs::File>) -> std::io::Result<()>,
 ) -> std::io::Result<()> {
     reject_protected_destination(path)?;
     let suffix = u64::from_le_bytes(pictura_codec::os_random());
     let temporary = path.with_file_name(format!(".pictura-{suffix:016x}.tmp"));
-    let mut file = std::fs::OpenOptions::new()
+    let file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(&temporary)?;
-    let written = file.write_all(bytes);
-    drop(file);
+    let mut out = std::io::BufWriter::new(file);
+    let written =
+        write(&mut out).and_then(|()| out.into_inner().map(drop).map_err(|e| e.into_error()));
     let result = written.and_then(|()| {
         reject_protected_destination(path)?;
         std::fs::hard_link(&temporary, path)
@@ -195,6 +217,29 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    // [sps_error_no_file]
+    #[test]
+    fn write_atomically_with_keeps_the_target_on_error() {
+        let dir = scratch("stream-error");
+        let target = dir.join("doc.psd");
+        std::fs::write(&target, b"previous").unwrap();
+        let path = target.to_string_lossy().into_owned();
+        let failed = write_atomically_with(&path, true, |out| {
+            out.write_all(&[7u8; 100_000])?;
+            Err(std::io::Error::other("encode failed"))
+        });
+        assert!(failed.is_err());
+        assert_eq!(std::fs::read(&target).unwrap(), b"previous");
+        let names: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(names, vec![std::ffi::OsString::from("doc.psd")]);
+        write_atomically_with(&path, false, |out| out.write_all(b"next")).unwrap();
+        assert_eq!(std::fs::read(&target).unwrap(), b"next");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn leftovers(dir: &Path) -> Vec<String> {

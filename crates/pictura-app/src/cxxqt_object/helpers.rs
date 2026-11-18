@@ -9,6 +9,7 @@ mod geometry_admit;
 pub(super) mod memory_gate;
 pub(super) mod memory_report;
 pub(super) mod safe_io;
+pub(super) mod save_gate;
 
 pub(in crate::cxxqt_object) use geometry_admit::{
     canvas_size_admits, image_size_admits, orient_admits, rotate_admits,

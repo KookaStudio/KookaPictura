@@ -5,8 +5,9 @@
 //! plus every input that changes the encoded bytes. A reused stream is
 //! byte-identical to a fresh encode. The cache is pruned to the keys the latest
 //! successful encode used, so it tracks the live document rather than its edit
-//! history. `ponytail: session-pruned cache, no byte budget; add an LRU budget
-//! if profiling shows memory pressure.`
+//! history. It holds at most its byte budget (#1320): a share of the memory
+//! governor's ceiling, capped; a stream over the budget is written and not
+//! kept.
 
 use pictura_core::Document;
 use std::collections::{HashMap, HashSet};
@@ -51,10 +52,27 @@ pub struct EncodeStats {
     pub entries: u64,
 }
 
+/// The cache's byte budget with no governor ceiling, and its cap.
+const CACHE_CAP: u64 = 512 << 20;
+/// The cache's share of the governor's ceiling: 1 / `CEILING_SHARE`.
+const CEILING_SHARE: u64 = 8;
+/// [`EncodeCache::budget_override`] when the governor sets the budget.
+const GOVERNED: u64 = u64::MAX;
+
 #[derive(Default)]
 struct Inner {
-    channels: HashMap<ChannelKey, Arc<[u8]>>,
-    composite: HashMap<CompositeKey, Arc<[u8]>>,
+    /// Each stream with the insertion order that `fit_budget` evicts by.
+    channels: HashMap<ChannelKey, (u64, Arc<[u8]>)>,
+    composite: HashMap<CompositeKey, (u64, Arc<[u8]>)>,
+    next: u64,
+}
+
+impl Inner {
+    fn resident(&self) -> u64 {
+        let channels: u64 = self.channels.values().map(|(_, b)| b.len() as u64).sum();
+        let composite: u64 = self.composite.values().map(|(_, b)| b.len() as u64).sum();
+        channels + composite
+    }
 }
 
 /// One document session's encoded-channel cache.
@@ -63,6 +81,7 @@ pub struct EncodeCache {
     hits: AtomicU64,
     misses: AtomicU64,
     layers_encoded: AtomicU64,
+    budget_override: AtomicU64,
 }
 
 impl Default for EncodeCache {
@@ -78,6 +97,83 @@ impl EncodeCache {
             hits: AtomicU64::new(0),
             misses: AtomicU64::new(0),
             layers_encoded: AtomicU64::new(0),
+            budget_override: AtomicU64::new(GOVERNED),
+        }
+    }
+
+    /// A cache with a fixed byte budget instead of the governor's share.
+    pub fn with_budget(bytes: u64) -> Self {
+        let cache = Self::new();
+        cache.set_budget(Some(bytes));
+        cache
+    }
+
+    /// Fix the byte budget, or hand it back to the governor with `None`.
+    pub fn set_budget(&self, bytes: Option<u64>) {
+        self.budget_override.store(
+            bytes.unwrap_or(GOVERNED).min(GOVERNED - 1),
+            Ordering::Relaxed,
+        );
+    }
+
+    /// The bytes the cache may hold: the fixed budget, else the smaller of
+    /// [`CACHE_CAP`] and the governor ceiling's share.
+    pub fn budget(&self) -> u64 {
+        match self.budget_override.load(Ordering::Relaxed) {
+            GOVERNED => pictura_core::memory::governor()
+                .ceiling()
+                .map_or(CACHE_CAP, |ceiling| {
+                    (ceiling / CEILING_SHARE).min(CACHE_CAP)
+                }),
+            fixed => fixed,
+        }
+    }
+
+    /// The largest new stream the cache may keep now: what is left of its
+    /// budget, and no more than the governor's room.
+    pub(crate) fn capture_limit(&self) -> usize {
+        let left = self.budget().saturating_sub(self.lock().resident());
+        let left = if self.budget_override.load(Ordering::Relaxed) == GOVERNED {
+            pictura_core::memory::governor()
+                .room()
+                .map_or(left, |room| left.min(room))
+        } else {
+            left
+        };
+        usize::try_from(left).unwrap_or(usize::MAX)
+    }
+
+    /// Drop the oldest streams until the cache fits its budget.
+    pub(crate) fn fit_budget(&self) {
+        let budget = self.budget();
+        let mut inner = self.lock();
+        let mut resident = inner.resident();
+        if resident <= budget {
+            return;
+        }
+        let mut order: Vec<(u64, Option<ChannelKey>, Option<CompositeKey>, u64)> = inner
+            .channels
+            .iter()
+            .map(|(k, (seq, b))| (*seq, Some(*k), None, b.len() as u64))
+            .chain(
+                inner
+                    .composite
+                    .iter()
+                    .map(|(k, (seq, b))| (*seq, None, Some(k.clone()), b.len() as u64)),
+            )
+            .collect();
+        order.sort_by_key(|entry| entry.0);
+        for (_, channel, composite, len) in order {
+            if resident <= budget {
+                break;
+            }
+            if let Some(key) = channel {
+                inner.channels.remove(&key);
+            }
+            if let Some(key) = composite {
+                inner.composite.remove(&key);
+            }
+            resident -= len;
         }
     }
 
@@ -90,7 +186,7 @@ impl EncodeCache {
     pub(crate) fn get_channel(&self, key: &ChannelKey) -> Option<Arc<[u8]>> {
         let inner = self.lock();
         match inner.channels.get(key) {
-            Some(bytes) => {
+            Some((_, bytes)) => {
                 self.hits.fetch_add(1, Ordering::Relaxed);
                 Some(Arc::clone(bytes))
             }
@@ -102,13 +198,16 @@ impl EncodeCache {
     }
 
     pub(crate) fn put_channel(&self, key: ChannelKey, bytes: Arc<[u8]>) {
-        self.lock().channels.insert(key, bytes);
+        let mut inner = self.lock();
+        let seq = inner.next;
+        inner.next += 1;
+        inner.channels.insert(key, (seq, bytes));
     }
 
     pub(crate) fn get_composite(&self, key: &CompositeKey) -> Option<Arc<[u8]>> {
         let inner = self.lock();
         match inner.composite.get(key) {
-            Some(bytes) => {
+            Some((_, bytes)) => {
                 self.hits.fetch_add(1, Ordering::Relaxed);
                 Some(Arc::clone(bytes))
             }
@@ -120,7 +219,10 @@ impl EncodeCache {
     }
 
     pub(crate) fn put_composite(&self, key: CompositeKey, bytes: Arc<[u8]>) {
-        self.lock().composite.insert(key, bytes);
+        let mut inner = self.lock();
+        let seq = inner.next;
+        inner.next += 1;
+        inner.composite.insert(key, (seq, bytes));
     }
 
     pub(crate) fn record_layers_encoded(&self, layers: u64) {
@@ -144,16 +246,7 @@ impl EncodeCache {
 
     pub fn stats(&self) -> EncodeStats {
         let inner = self.lock();
-        let bytes = inner
-            .channels
-            .values()
-            .map(|bytes| bytes.len() as u64)
-            .sum::<u64>()
-            + inner
-                .composite
-                .values()
-                .map(|bytes| bytes.len() as u64)
-                .sum::<u64>();
+        let bytes = inner.resident();
         EncodeStats {
             hits: self.hits.load(Ordering::Relaxed),
             misses: self.misses.load(Ordering::Relaxed),
@@ -261,9 +354,31 @@ mod tests {
         assert!(cache.stats().hits > before.hits, "the warmed clone hits");
     }
 
+    /// [`document`] at a size whose channels span several encode bands.
+    fn tall_document(layers: usize) -> Document {
+        let (width, height) = (300, 600);
+        let mut layers: Vec<Layer> = (0..layers)
+            .map(|i| {
+                let mut layer = layer(&format!("Layer {i}"), width, height, 0);
+                for (c, channel) in layer.channels_mut().iter_mut().enumerate() {
+                    for (p, v) in channel.data.as_mut_slice().iter_mut().enumerate() {
+                        *v = ((p / 7 + p % 13 * c + i) % 251) as u8;
+                    }
+                }
+                layer
+            })
+            .collect();
+        layers.reverse();
+        let rgba = vec![128u8; width as usize * height as usize * 4];
+        let mut doc = Document::from_rgba("Layer 0", width, height, &rgba);
+        doc.layers = LayerStack::from_layers(layers);
+        doc
+    }
+
+    // [pec_parallel_identical]
     #[test]
     fn parallel_encoding_matches_serial() {
-        let doc = document(8);
+        let doc = tall_document(8);
         let parallel = crate::write_psd_cached(&doc, &EncodeCache::new()).expect("parallel encode");
         let serial = rayon::ThreadPoolBuilder::new()
             .num_threads(1)
@@ -274,11 +389,47 @@ mod tests {
         assert_eq!(parallel, serial);
     }
 
+    // [pec_parallel_error]
     #[test]
     fn a_channel_error_fails_the_encode() {
         let row: Vec<u8> = (0..70_000).map(|i| (i % 251) as u8).collect();
         let error = crate::write::encode_scanlines(&[row.as_slice()], 70_000, 1, false);
         assert!(error.is_err(), "an oversized RLE row is rejected");
+    }
+
+    // [pec_budget]
+    #[test]
+    fn a_stream_over_the_budget_is_not_cached() {
+        let doc = tall_document(3);
+        let fresh = crate::write_psd(&doc).expect("uncached encode");
+        // Each 300 × 600 channel packs to tens of kilobytes; 40 KB keeps some
+        // and turns the rest away.
+        let budget = 40_000;
+        let cache = EncodeCache::with_budget(budget);
+        let first = crate::write_psd_cached(&doc, &cache).expect("cold encode");
+        assert!(cache.stats().bytes <= budget, "{:?}", cache.stats());
+        let before = cache.stats();
+        let second = crate::write_psd_cached(&doc, &cache).expect("warm encode");
+        assert!(cache.stats().bytes <= budget);
+        assert!(
+            cache.stats().misses > before.misses,
+            "a stream over the budget misses again"
+        );
+        assert_eq!(first, fresh);
+        assert_eq!(second, fresh);
+    }
+
+    // [pec_budget_trim]
+    #[test]
+    fn a_lower_budget_trims_the_cache() {
+        let doc = tall_document(3);
+        let cache = EncodeCache::with_budget(u64::MAX / 2);
+        crate::write_psd_cached(&doc, &cache).expect("cold encode");
+        let resident = cache.stats().bytes;
+        assert!(resident > 0);
+        cache.set_budget(Some(resident / 2));
+        crate::write_psd_cached(&doc, &cache).expect("warm encode");
+        assert!(cache.stats().bytes <= resident / 2, "{:?}", cache.stats());
     }
 
     #[test]

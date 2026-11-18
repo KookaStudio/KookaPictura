@@ -84,9 +84,8 @@ fn save_start_with_compatibility(
     }
     // Held by the worker until its write lands, so other edits see the room
     // the save is using.
-    let Ok(reservation) = pictura_core::memory::governor().reserve(
-        super::super::super::helpers::memory_gate::save_bytes(doc_ref),
-        "a save",
+    let Some(reservation) = super::super::super::helpers::save_gate::reserve_save(
+        &super::super::super::helpers::save_gate::save_cost(doc_ref),
     ) else {
         return false;
     };
@@ -130,38 +129,46 @@ fn save_start_with_compatibility(
         if !embed {
             pictura_codec::remove_document_profile(doc.to_mut());
         }
-        let Ok(written) = pictura_codec::write_versioned(
-            &doc,
-            psb,
-            Some(&cache),
-            env!("CARGO_PKG_VERSION"),
-            compatibility.is_some(),
-        ) else {
-            return (SaveOutcome::Failed, false);
-        };
-        // A tile lost while encoding wrote defaults in its place.
-        if pictura_core::memory::eviction::unreadable_reads() != unreadable_before
-            && crate::history::unreadable_tiles(&doc) > 0
-        {
-            return (SaveOutcome::Failed, false);
-        }
-        worker_progress.store(85, Ordering::Relaxed);
-        if delay > 0 {
-            std::thread::sleep(Duration::from_millis(delay));
-        }
         use super::super::super::helpers::safe_io::{
-            sync_directory, write_durable, DurableWriteError,
+            sync_directory, write_durable_with, DurableWriteError,
         };
-        let result = write_durable(Path::new(&worker_path), &written.bytes, |parent| {
-            if sync_failure {
-                return Err(std::io::Error::other("directory sync fault"));
-            }
-            sync_directory(parent)
-        });
+        // The file streams into the temp file a band of rows at a time (#1320).
+        let mut skipped_xmp_mirror = false;
+        let result = write_durable_with(
+            Path::new(&worker_path),
+            |out| {
+                skipped_xmp_mirror = pictura_codec::write_versioned_to(
+                    out,
+                    &doc,
+                    psb,
+                    Some(&cache),
+                    env!("CARGO_PKG_VERSION"),
+                    compatibility.is_some(),
+                )
+                .map_err(|e| std::io::Error::other(e.to_string()))?;
+                // A tile lost while encoding wrote defaults in its place.
+                if pictura_core::memory::eviction::unreadable_reads() != unreadable_before
+                    && crate::history::unreadable_tiles(&doc) > 0
+                {
+                    return Err(std::io::Error::other("tiles lost while encoding"));
+                }
+                worker_progress.store(85, Ordering::Relaxed);
+                if delay > 0 {
+                    std::thread::sleep(Duration::from_millis(delay));
+                }
+                Ok(())
+            },
+            |parent| {
+                if sync_failure {
+                    return Err(std::io::Error::other("directory sync fault"));
+                }
+                sync_directory(parent)
+            },
+        );
         match result {
             Ok(()) => {
                 worker_progress.store(100, Ordering::Relaxed);
-                (SaveOutcome::Saved, written.skipped_xmp_mirror)
+                (SaveOutcome::Saved, skipped_xmp_mirror)
             }
             Err(DurableWriteError::AfterRename(_)) => (SaveOutcome::Uncertain, false),
             Err(DurableWriteError::BeforeRename(_)) => (SaveOutcome::Failed, false),

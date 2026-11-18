@@ -3,53 +3,28 @@
 //! Split from `write.rs` so the container/composite writer and the layer writer
 //! stay under the file-size cap. The on-disk order is unchanged: records are
 //! written in a flat group order, then every channel stream in the same order.
-//! Independent layer channels are encoded in parallel; the cache key is the
-//! source plane's identity plus the encoding parameters.
+//! Channels stream one at a time, the rows of each band encoded in parallel
+//! (#1320); the cache key is the source plane's identity plus the encoding
+//! parameters.
 
 use pictura_core::*;
-use rayon::prelude::*;
 use std::borrow::Cow;
-use std::sync::Arc;
 
 use crate::common::*;
 use crate::depth::output_depth;
 use crate::error::PsdError;
 use crate::write::{
-    channel_stream, layer_retained, native_plane, native_plane_rows, write_tag, PlaneBytes,
+    layer_retained, native_plane, native_plane_rows, write_channel_stream, write_tag, PlaneBytes,
 };
 use crate::write_cache::{ChannelKey, EncodeCache};
 use crate::write_indexed::index_layer_plane;
+use crate::write_stream::Sink;
 
 /// A flat record in on-disk order, borrowing the model layer it came from.
 struct OutRecord<'a> {
     layer: Option<&'a Layer>,
     section: u32,
     name: &'a str,
-}
-
-/// A layer channel to emit. Both variants are a complete on-disk stream
-/// (compression word included): `Encoded` is engine-authored channel data,
-/// `Verbatim` is a preserved `Layer.raw_channels()` stream re-emitted unchanged.
-enum OutChannel {
-    Encoded(Arc<[u8]>),
-    Verbatim(Vec<u8>),
-}
-
-impl OutChannel {
-    fn bytes(&self) -> &[u8] {
-        match self {
-            OutChannel::Encoded(data) => data.as_ref(),
-            OutChannel::Verbatim(data) => data.as_slice(),
-        }
-    }
-
-    fn declared_len(&self) -> u64 {
-        self.bytes().len() as u64
-    }
-
-    fn write(&self, out: &mut Vec<u8>) {
-        out.extend_from_slice(self.bytes());
-    }
 }
 
 enum ChannelSource<'a> {
@@ -96,12 +71,6 @@ impl<'a> ChannelPlan<'a> {
 struct LayerPlan<'a> {
     record: OutRecord<'a>,
     channels: Vec<ChannelPlan<'a>>,
-}
-
-struct EncodedChannel {
-    channel: OutChannel,
-    encoded: bool,
-    key: Option<ChannelKey>,
 }
 
 fn flatten(layers: &[Layer]) -> Vec<OutRecord<'_>> {
@@ -426,129 +395,130 @@ fn layer_plans<'a>(
     Ok(plans)
 }
 
-fn encode_channel(
+/// Stream one planned channel into the sink: a cached stream, a fresh encode
+/// (kept in the cache while it fits the cache's limit), or preserved bytes.
+/// Returns whether it was encoded.
+fn write_channel(
+    sink: &mut Sink<'_>,
     cache: Option<&EncodeCache>,
     compression: Compression,
     depth: u16,
     psb: bool,
     channel: &ChannelPlan<'_>,
-) -> Result<EncodedChannel, PsdError> {
-    match &channel.source {
-        ChannelSource::Verbatim(data) => Ok(EncodedChannel {
-            channel: OutChannel::Verbatim(data.clone()),
-            encoded: false,
-            key: None,
-        }),
-        ChannelSource::Encode(data) => {
-            let kind = channel
-                .key
-                .and_then(|key| Compression::from_code(key.compression))
-                .unwrap_or(compression);
-            let psb = channel.key.map(|key| key.psb).unwrap_or(psb);
-            if let (Some(cache), Some(key)) = (cache, channel.key) {
-                if let Some(bytes) = cache.get_channel(&key) {
-                    return Ok(EncodedChannel {
-                        channel: OutChannel::Encoded(bytes),
-                        encoded: false,
-                        key: Some(key),
-                    });
-                }
-                let bytes: Arc<[u8]> =
-                    channel_stream(kind, channel.width, channel.height, data, depth, psb)?.into();
-                cache.put_channel(key, Arc::clone(&bytes));
-                return Ok(EncodedChannel {
-                    channel: OutChannel::Encoded(bytes),
-                    encoded: true,
-                    key: Some(key),
-                });
-            }
-            let bytes: Arc<[u8]> =
-                channel_stream(kind, channel.width, channel.height, data, depth, psb)?.into();
-            Ok(EncodedChannel {
-                channel: OutChannel::Encoded(bytes),
-                encoded: true,
-                key: None,
-            })
+) -> Result<bool, PsdError> {
+    let data = match &channel.source {
+        ChannelSource::Verbatim(data) => {
+            sink.put(data)?;
+            return Ok(false);
         }
+        ChannelSource::Encode(data) => data,
+    };
+    let kind = channel
+        .key
+        .and_then(|key| Compression::from_code(key.compression))
+        .unwrap_or(compression);
+    let psb = channel.key.map(|key| key.psb).unwrap_or(psb);
+    let encode = |sink: &mut Sink<'_>| {
+        write_channel_stream(sink, kind, channel.width, channel.height, data, depth, psb)
+    };
+    match (cache, channel.key) {
+        (Some(cache), Some(key)) => {
+            if let Some(bytes) = cache.get_channel(&key) {
+                sink.put(&bytes)?;
+                return Ok(false);
+            }
+            sink.begin_capture(cache.capture_limit());
+            let written = encode(sink);
+            let captured = sink.end_capture();
+            written?;
+            if let Some(bytes) = captured {
+                cache.put_channel(key, bytes.into());
+            }
+        }
+        _ => encode(sink)?,
     }
+    Ok(true)
 }
 
-/// Write the layer-and-mask section body and return the cache keys it used.
+/// Write the layer info (record count, records, channel data, padded to 4
+/// bytes) and return the cache keys it used. Each record is written with zero
+/// channel lengths, patched as its channels stream one at a time (#1320); the
+/// rows inside a channel encode in parallel.
+/// `merged_alpha` negates the layer count, Photoshop's marker that the merged
+/// image's first extra channel is its transparency.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn write_layer_info(
+    sink: &mut Sink<'_>,
     doc: &Document,
     psb: bool,
     lab_mode: bool,
     cmyk_mode: bool,
     indexed_mode: bool,
     cache: Option<&EncodeCache>,
-) -> Result<(Vec<u8>, Vec<ChannelKey>), PsdError> {
+    merged_alpha: bool,
+) -> Result<Vec<ChannelKey>, PsdError> {
     let plans = layer_plans(doc, psb, lab_mode, cmyk_mode, indexed_mode)?;
-    let tasks: Vec<(usize, usize)> = plans
-        .iter()
-        .enumerate()
-        .flat_map(|(li, plan)| (0..plan.channels.len()).map(move |ci| (li, ci)))
-        .collect();
     let compression = doc.layer_compression;
     let depth = output_depth(doc)?;
-    let results: Vec<Result<EncodedChannel, PsdError>> = tasks
-        .par_iter()
-        .map(|&(li, ci)| encode_channel(cache, compression, depth, psb, &plans[li].channels[ci]))
-        .collect();
-
-    let mut encoded: Vec<Vec<(i16, OutChannel)>> = plans
-        .iter()
-        .map(|plan| Vec::with_capacity(plan.channels.len()))
-        .collect();
-    let mut layer_encoded = vec![false; plans.len()];
-    let mut used = Vec::new();
-    for ((li, ci), result) in tasks.iter().zip(results) {
-        let out = result?;
-        if out.encoded {
-            layer_encoded[*li] = true;
-        }
-        if let Some(key) = out.key {
-            used.push(key);
-        }
-        encoded[*li].push((plans[*li].channels[*ci].id, out.channel));
-    }
-    if let Some(cache) = cache {
-        let count = layer_encoded.iter().filter(|encoded| **encoded).count();
-        cache.record_layers_encoded(count as u64);
-    }
-
-    let mut info = Vec::new();
-    info.extend_from_slice(&(plans.len() as i16).to_be_bytes());
-    for (plan, channels) in plans.iter().zip(&encoded) {
-        write_record(
-            &mut info,
+    let start = sink.pos();
+    let count = plans.len() as i16;
+    let count = if merged_alpha && !doc.layers.is_empty() {
+        -count
+    } else {
+        count
+    };
+    sink.put(&count.to_be_bytes())?;
+    let mut length_fields = Vec::with_capacity(plans.len());
+    for plan in &plans {
+        let ids: Vec<i16> = plan.channels.iter().map(|c| c.id).collect();
+        let mut record = Vec::new();
+        let fields = write_record(
+            &mut record,
             &plan.record,
-            channels,
+            &ids,
             doc.width,
             doc.height,
             psb,
             &doc.layer_comps,
         )?;
+        let at = sink.pos();
+        sink.put(&record)?;
+        length_fields.push(fields.into_iter().map(move |f| at + f).collect::<Vec<_>>());
     }
-    for channels in &encoded {
-        for (_, channel) in channels {
-            channel.write(&mut info);
+    let mut used = Vec::new();
+    let mut layers_encoded = 0;
+    for (plan, fields) in plans.iter().zip(&length_fields) {
+        let mut encoded = false;
+        for (channel, &field) in plan.channels.iter().zip(fields) {
+            let at = sink.pos();
+            encoded |= write_channel(sink, cache, compression, depth, psb, channel)?;
+            sink.patch_len(field, sink.pos() - at, psb)?;
+            if let Some(key) = channel.key {
+                used.push(key);
+            }
         }
+        layers_encoded += u64::from(encoded);
     }
-    while info.len() % 4 != 0 {
-        info.push(0);
+    if let Some(cache) = cache {
+        cache.record_layers_encoded(layers_encoded);
     }
-    Ok((info, used))
+    let len = (sink.pos() - start) as usize;
+    sink.zeros((4 - len % 4) % 4)?;
+    Ok(used)
 }
 
+/// Write one layer record with zero channel lengths; returns the offset of
+/// each channel's length field in `out`, for the caller to patch.
 fn write_record(
     out: &mut Vec<u8>,
     record: &OutRecord,
-    channels: &[(i16, OutChannel)],
+    channels: &[i16],
     doc_width: u32,
     doc_height: u32,
     psb: bool,
     comps: &pictura_core::layer_comp::LayerCompStore,
-) -> Result<(), PsdError> {
+) -> Result<Vec<u64>, PsdError> {
+    let mut fields = Vec::with_capacity(channels.len());
     match record.layer {
         Some(layer) => {
             out.extend_from_slice(&layer.rect.top.to_be_bytes());
@@ -556,13 +526,10 @@ fn write_record(
             out.extend_from_slice(&layer.rect.bottom.to_be_bytes());
             out.extend_from_slice(&layer.rect.right.to_be_bytes());
             out.extend_from_slice(&(channels.len() as u16).to_be_bytes());
-            for (id, channel) in channels {
+            for id in channels {
                 out.extend_from_slice(&id.to_be_bytes());
-                if psb {
-                    out.extend_from_slice(&channel.declared_len().to_be_bytes());
-                } else {
-                    out.extend_from_slice(&(channel.declared_len() as u32).to_be_bytes());
-                }
+                fields.push(out.len() as u64);
+                out.extend_from_slice(if psb { &[0u8; 8][..] } else { &[0u8; 4][..] });
             }
             out.extend_from_slice(b"8BIM");
             // Preserve an unrecognized blend key; a recognized key rides along
@@ -627,7 +594,7 @@ fn write_record(
             out.extend_from_slice(&extra);
         }
     }
-    Ok(())
+    Ok(fields)
 }
 
 /// Placeholder used to reuse [`write_extra`] for the (layer-less) divider record.

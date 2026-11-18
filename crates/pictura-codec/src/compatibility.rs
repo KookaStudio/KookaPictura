@@ -3,6 +3,8 @@ use crate::common::COMPRESSION_RLE;
 use crate::depth::row_bytes;
 use crate::image_resources::{decode_section, frame_image_resource};
 use crate::write::encode_packbits_row;
+use crate::write_stream::Sink;
+use crate::PsdError;
 
 const VERSION_INFO: u16 = 1057;
 
@@ -55,14 +57,14 @@ pub(crate) fn set_real_merged_data(resources: &[u8], present: bool) -> Vec<u8> {
     output
 }
 
-pub(crate) fn append_placeholder(
-    out: &mut Vec<u8>,
+pub(crate) fn put_placeholder(
+    sink: &mut Sink<'_>,
     width: usize,
     height: usize,
     channels: usize,
     depth: u16,
     psb: bool,
-) {
+) -> Result<(), PsdError> {
     // A zero float is uniform at the byte level, keeping even the widest
     // 32-bit PSD scanline within the 16-bit PackBits row-length field.
     let fill = if depth == 32 { 0 } else { 255 };
@@ -71,11 +73,12 @@ pub(crate) fn append_placeholder(
     encode_packbits_row(&row, &mut packed);
     let count = (packed.len() as u32).to_be_bytes();
     let count = if psb { &count[..] } else { &count[2..] };
-    out.extend_from_slice(&COMPRESSION_RLE.to_be_bytes());
+    sink.put(&COMPRESSION_RLE.to_be_bytes())?;
     for _ in 0..height * channels {
-        out.extend_from_slice(count);
+        sink.put(count)?;
     }
     for _ in 0..height * channels {
-        out.extend_from_slice(&packed);
+        sink.put(&packed)?;
     }
+    Ok(())
 }

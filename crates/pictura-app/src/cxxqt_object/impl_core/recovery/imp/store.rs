@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
-use std::io::{self, Read};
+use std::io::{self, Read, Seek as _};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex, OnceLock, Weak};
@@ -15,7 +15,7 @@ use super::journal::{
     SEGMENT_BYTES,
 };
 use crate::cxxqt_object::filter_tools::store_planes;
-use crate::cxxqt_object::helpers::{memory_gate, safe_io};
+use crate::cxxqt_object::helpers::{safe_io, save_gate};
 
 const MAX_QUEUED_COMMITS: usize = 8;
 const MAX_RESOURCES: usize = 64 * 1024 * 1024;
@@ -417,8 +417,8 @@ impl Chain {
             )));
         }
         let raw = input.doc.image_resources.to_vec();
-        let (snapshot, bytes) =
-            checkpoint_bytes(root, &stem, &input.doc, &input.cache).map_err(BeforeRename)?;
+        let snapshot =
+            write_checkpoint(root, &stem, &input.doc, &input.cache).map_err(BeforeRename)?;
         let next = Generation {
             sequence,
             snapshot,
@@ -431,8 +431,7 @@ impl Chain {
             root.join(&next.journal),
         ];
         let publish = || {
-            write_synced(&artifacts[0], &bytes)
-                .and_then(|()| write_synced(&artifacts[1], &raw))
+            write_synced(&artifacts[1], &raw)
                 .and_then(|()| write_synced(&artifacts[2], &[]))
                 .and_then(|()| safe_io::sync_directory(root))
                 .map_err(safe_io::DurableWriteError::BeforeRename)?;
@@ -484,15 +483,17 @@ impl Chain {
     }
 }
 
-pub(super) fn checkpoint_bytes(
+/// Stream the checkpoint of `source` into a synced file under `root` named
+/// from `stem` (#1320); returns the file's name.
+pub(super) fn write_checkpoint(
     root: &Path,
     stem: &str,
     source: &Document,
     cache: &pictura_codec::EncodeCache,
-) -> io::Result<(String, Vec<u8>)> {
+) -> io::Result<String> {
     pictura_codec::warm_encode_idents(source);
     let _memory = pictura_core::memory::governor()
-        .reserve(memory_gate::save_bytes(source), "recovery checkpoint")
+        .reserve(save_gate::save_cost(source).working, "recovery checkpoint")
         .map_err(|_| io::Error::other("not enough memory for recovery checkpoint"))?;
     let before_reads = pictura_core::memory::eviction::unreadable_reads();
     let mut doc = source.clone();
@@ -510,22 +511,30 @@ pub(super) fn checkpoint_bytes(
             &root.join(&filename).to_string_lossy(),
             psb,
         );
-        let bytes = if psb {
-            pictura_codec::write_psb_cached(&native, cache)
-        } else {
-            pictura_codec::write_psd_cached(&native, cache)
-        }
-        .map_err(|error| io::Error::other(error.to_string()))?;
-        if pictura_core::memory::eviction::unreadable_reads() != before_reads
-            && crate::history::unreadable_tiles(&native) != 0
-        {
-            return Err(io::Error::other("a checkpoint tile could not be read"));
-        }
-        if !psb && bytes.len() >= 2 * 1024 * 1024 * 1024 {
+        let path = root.join(&filename);
+        let path = path
+            .to_str()
+            .ok_or_else(|| io::Error::other("invalid recovery path"))?;
+        let mut too_large = false;
+        let written = safe_io::write_atomically_with(path, true, |out| {
+            pictura_codec::write_psd_to(out, &native, psb, Some(cache))
+                .map_err(|error| io::Error::other(error.to_string()))?;
+            if pictura_core::memory::eviction::unreadable_reads() != before_reads
+                && crate::history::unreadable_tiles(&native) != 0
+            {
+                return Err(io::Error::other("a checkpoint tile could not be read"));
+            }
+            too_large = !psb && out.stream_position()? >= 2 * 1024 * 1024 * 1024;
+            if too_large {
+                return Err(io::Error::other("the checkpoint exceeds the PSD size"));
+            }
+            Ok(())
+        });
+        if too_large {
             psb = true;
             continue;
         }
-        return Ok((filename, bytes));
+        return written.map(|()| filename);
     }
 }
 

@@ -621,8 +621,10 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       `crates/pictura-codec/src/lazy.rs`.
 - [ ] Fit-to-screen first paint without rebuilding every level from level 0
       (#1321)
-- [ ] A save estimate that admits large tiled documents under a memory limit
-      (#1320)
+- [x] **Streamed saves** — the PSD/PSB and row-based raster writers stream a
+      band of rows at a time into the temp file, and the save gate reserves
+      what a save holds, so a large tiled document saves under a memory limit
+      (#1320). `crates/pictura-codec/src/write_stream.rs`.
 - [ ] A typed `prefs.toml` store, the config and state split, migration,
       quarantine, and the reset gesture (#641)
 - [ ] `QTranslator` and `.qm`, RTL, and locale number formatting (#642)

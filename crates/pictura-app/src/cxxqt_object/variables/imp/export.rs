@@ -199,7 +199,7 @@ fn write_psd(mut scratch: Document, path: &Path) -> Result<(), ExportError> {
     }
     let _reservation = pictura_core::memory::governor()
         .reserve(
-            crate::cxxqt_object::helpers::memory_gate::save_bytes(&scratch),
+            crate::cxxqt_object::helpers::save_gate::save_cost(&scratch).working,
             "a data set export",
         )
         .map_err(|_| ExportError::Resource("The data set exceeds the save memory budget".into()))?;
@@ -208,8 +208,9 @@ fn write_psd(mut scratch: Document, path: &Path) -> Result<(), ExportError> {
     // The shared save path reconciles native color channels and any retained
     // composite with the new layer content before serializing.
     super::refresh_export_composite(&mut scratch).map_err(ExportError::Resource)?;
-    let bytes = pictura_codec::write_psd(&scratch)
-        .map_err(|error| ExportError::Write(error.to_string()))?;
-    crate::cxxqt_object::helpers::safe_io::write_new_atomically(path, &bytes)
-        .map_err(|error| ExportError::Write(error.to_string()))
+    crate::cxxqt_object::helpers::safe_io::write_new_atomically_with(path, |out| {
+        pictura_codec::write_psd_to(out, &scratch, false, None)
+            .map_err(|error| std::io::Error::other(error.to_string()))
+    })
+    .map_err(|error| ExportError::Write(error.to_string()))
 }
