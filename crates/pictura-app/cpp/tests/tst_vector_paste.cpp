@@ -147,11 +147,12 @@ void VectorPasteTest::regularPasteIsUnchanged()
     QCOMPARE(QColor::fromRgba(view.sample_argb(0, 0)), QColor(Qt::green));
 
     view.select_rect(1, 0, 1, 1, QStringLiteral("new"), 0.0);
+    const int beforeNativePaste = view.history_count();
     action(*window_, command_ids::EditCopy)->trigger();
     QVERIFY(clipboard_has_contents());
     PasteDriver native;
     native.trigger(*window_, *action(*window_, command_ids::EditPaste));
-    QCOMPARE(view.history_count(), start + 2);
+    QCOMPARE(view.history_count(), beforeNativePaste + 1);
     QVERIFY(!native.shown && !native.reportedError);
 }
 
