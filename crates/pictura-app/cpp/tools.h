@@ -135,6 +135,9 @@ bool toolInEdition(ToolId id);
 // Implemented and allowed by the selected edition. Standard hides the
 // Extended-only tools (the Count tool and the 3D rig); Extended shows them.
 bool toolAvailable(ToolId id);
+// Implemented, allowed by the edition, and allowed by the active document
+// (the toning tools are unavailable at 32 bpc).
+bool toolAllowedForDocument(ToolId id, const PictureView* view);
 // The painting brushes (the B group, the S stamps, the Y history brushes, the
 // Eraser and Background Eraser, and the retouch tools): they share the size ring, the `[` / `]` keys, and the paint
 // cursor policy.
@@ -306,9 +309,13 @@ public:
     // (evdev 34/35), so it works on EU/Scandinavian layouts. Guarded to the
     // Brush/Pencil tools; returns false when the key is not a brush bracket.
     bool applyBrushShortcut(int key, quint32 nativeScanCode, bool shift);
+    // The tone painting-mode quick keys: Dodge/Burn `S`/`M`/`H` select
+    // Shadows/Midtones/Highlights, Sponge `S`/`D` select Saturate/Desaturate.
+    // False when the active tool is not a toning tool or the key does not apply.
+    bool applyToneQuickKey(int key);
     // `Shift+Alt+P`: flip the active tool's Airbrush option. The Brush, Clone
-    // Stamp, Pattern Stamp, and History Brush have one; false for every other
-    // tool.
+    // Stamp, Pattern Stamp, History Brush, Dodge, and Burn have one; false for
+    // every other tool.
     bool toggleAirbrush();
 
     void bindCanvas(ImageView* canvas);
@@ -557,6 +564,9 @@ signals:
     // A stamp tool's options changed (the `Shift+Alt+P` Airbrush flip); the
     // stamp options bars re-read their toggles.
     void stampOptionsChanged();
+    // A Dodge/Burn/Sponge option changed (a quick key or `Shift+Alt+P`); the
+    // toning options bar re-reads its controls.
+    void toneOptionsChanged();
     // An Eyedropper option changed (the bar or the canvas context menu); the
     // options bar re-reads its Sample Size / Sample readouts.
     void eyedropperOptionsChanged();

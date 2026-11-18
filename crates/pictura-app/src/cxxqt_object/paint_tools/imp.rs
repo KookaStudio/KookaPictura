@@ -552,6 +552,7 @@ pub(super) fn begin_tone(
     protect_tones: bool,
     sponge: i32,
     vibrance: bool,
+    airbrush: bool,
 ) -> bool {
     let (tone, label) = match tool {
         1 => (Tone::Burn, "Burn"),
@@ -565,6 +566,8 @@ pub(super) fn begin_tone(
         protect_tones,
         sponge: SpongeMode::from_i32(sponge).unwrap_or_default(),
         vibrance,
+        airbrush,
+        grayscale: false,
     };
     let cfg = tip_config(tip);
     begin(view, label, cfg, |doc, path, _| {

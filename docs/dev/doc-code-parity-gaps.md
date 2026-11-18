@@ -142,7 +142,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | TOOL-21 | `custom-shape.md` | `.CSH` libraries, Define Custom Shape, geometry modes, gradient/pattern fill-stroke | MISSING | `options_bar_shape.cpp:506-510,420-431` | #545 |
 | TOOL-22 | `shape-tools.md` | Gradient/pattern fill+stroke, dashed stroke, path ops, fill-pixels options, snap-to-pixels, proportional geometry | MISSING | `options_bar_shape.cpp:281-431`; `shapes.rs:316-333` | #546 |
 | TOOL-23 | `color-replacement.md` | Full mode list + disable on Bitmap/Indexed/Multichannel | DIVERGENT | `replace.rs:25`; `paint_tools.rs:343` | #547 |
-| TOOL-24 | `dodge-burn-sponge.md` | Grayscale Sponge, airbrush toggle, quick keys, 32-bpc availability | PARTIAL | `tone.rs:223-243`; `options_bar_retouch.cpp:93` | #548 |
+| TOOL-24 | `dodge-burn-sponge.md` | Grayscale Sponge, airbrush toggle, quick keys, 32-bpc availability | SHIPPED | `tone.rs`; `tool_retouch.cpp`; `options_bar_retouch.cpp`; `toolbox.cpp` | #548 |
 | TOOL-25 | `eraser-tools.md` | Magic-eraser background convert, background-eraser edge halo, pen pressure | PARTIAL | `eraser.rs:166-332` | #549 |
 | TOOL-26 | `gradient-and-paint-bucket.md` | Gradient/Bucket availability gates, Gradient Editor reachability, Gradient Fill dialog | PARTIAL | `tool_fills.cpp`; `options_bar_fill.cpp:129-131`; `frame_menus.cpp:719-725` | #550 |
 | TOOL-27 | `smudge-blur-sharpen.md` | HDR (16/32-bpc) operation | DIVERGENT | `stroke.rs:395` rejects non-8-bit | #551 |

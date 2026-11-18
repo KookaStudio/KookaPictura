@@ -94,8 +94,9 @@ impl SpongeMode {
 }
 
 /// The toning options bars. `amount` (0.0–1.0) is Dodge and Burn's Exposure
-/// and the Sponge's Flow; `range` and `protect_tones` are Dodge and Burn's,
-/// `sponge` and `vibrance` the Sponge's.
+/// and the Sponge's Flow; `range`, `protect_tones`, and `airbrush` are Dodge and
+/// Burn's, `sponge` and `vibrance` the Sponge's. `grayscale` is set by the
+/// stroke from the document mode and is not an options-bar field.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ToneOptions {
     pub tone: Tone,
@@ -104,6 +105,10 @@ pub struct ToneOptions {
     pub protect_tones: bool,
     pub sponge: SpongeMode,
     pub vibrance: bool,
+    /// Dodge and Burn keep building while the button is held.
+    pub airbrush: bool,
+    /// A Grayscale document: the layer has one grey plane, not RGB.
+    pub grayscale: bool,
 }
 
 impl Default for ToneOptions {
@@ -116,6 +121,8 @@ impl Default for ToneOptions {
             protect_tones: true,
             sponge: SpongeMode::Desaturate,
             vibrance: true,
+            airbrush: false,
+            grayscale: false,
         }
     }
 }
@@ -237,11 +244,22 @@ fn toned(
     amount: f32,
     options: &ToneOptions,
 ) -> Option<[u8; 4]> {
-    // Only the increment over what this stroke already applied.
-    if cover <= *applied || dst[3] == 0 {
+    if dst[3] == 0 {
         return None;
     }
-    let weight = (cover - *applied) * amount;
+    // Airbrush builds with every dab; otherwise only the increment over what
+    // this stroke already applied counts, so overlapping dabs tone once.
+    let weight = if options.airbrush {
+        cover * amount
+    } else {
+        if cover <= *applied {
+            return None;
+        }
+        (cover - *applied) * amount
+    };
+    if weight <= 0.0 {
+        return None;
+    }
     let rgb = [dst[0], dst[1], dst[2]].map(|v| v as f32 / 255.0);
     let lifted = match options.tone {
         Tone::Dodge | Tone::Burn => tone(rgb, weight, options),
@@ -255,13 +273,19 @@ fn toned(
     if out == dst {
         return None;
     }
-    *applied = cover;
+    if !options.airbrush {
+        *applied = cover;
+    }
     Some(out)
 }
 
 /// Dodge and Burn.
 fn tone(rgb: [f32; 3], weight: f32, options: &ToneOptions) -> [f32; 3] {
-    let l = luminance(rgb);
+    let l = if options.grayscale {
+        rgb[0]
+    } else {
+        luminance(rgb)
+    };
     let d = l - options.range.centre();
     let k = weight * EXPOSURE_SCALE * (-(d * d) / (2.0 * RANGE_SIGMA * RANGE_SIGMA)).exp();
     if k <= 0.0 {
@@ -276,6 +300,9 @@ fn tone(rgb: [f32; 3], weight: f32, options: &ToneOptions) -> [f32; 3] {
         } else {
             l * (1.0 - k)
         };
+        if options.grayscale {
+            return [target.clamp(0.0, 1.0), rgb[1], rgb[2]];
+        }
         return shift_luminance(rgb, target);
     }
     // Unprotected, the channels are scaled and whichever saturates first pulls
@@ -291,6 +318,25 @@ fn tone(rgb: [f32; 3], weight: f32, options: &ToneOptions) -> [f32; 3] {
 
 /// The Sponge: the distance from grey (the luminance) scaled down or up.
 fn sponge(rgb: [f32; 3], weight: f32, options: &ToneOptions) -> [f32; 3] {
+    if options.grayscale {
+        // A Grayscale document has one channel: Saturate moves the grey away
+        // from middle grey, Desaturate toward it. Vibrance eases off near the
+        // ends, where there is little contrast left to change.
+        let v = rgb[0];
+        let mut k = weight;
+        if options.vibrance {
+            k *= 4.0 * v * (1.0 - v);
+        }
+        if k <= 0.0 {
+            return rgb;
+        }
+        let scale = match options.sponge {
+            SpongeMode::Desaturate => 1.0 - k,
+            SpongeMode::Saturate => 1.0 + k,
+        };
+        let out = (0.5 + (v - 0.5) * scale).clamp(0.0, 1.0);
+        return [out, rgb[1], rgb[2]];
+    }
     let l = luminance(rgb);
     let max = rgb[0].max(rgb[1]).max(rgb[2]);
     let min = rgb[0].min(rgb[1]).min(rgb[2]);
@@ -342,7 +388,7 @@ fn shift_luminance(rgb: [f32; 3], target: f32) -> [f32; 3] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fill::tests::{doc, pixel};
+    use crate::fill::tests::{doc, gray_doc, pixel};
     use crate::replace::grow;
     use crate::{tip_coverage, Stroke, StrokeSample};
     use pictura_core::Document;
@@ -702,5 +748,123 @@ mod tests {
         );
         assert!(lift(vivid, true) < lift(vivid, false));
         assert_eq!(SpongeMode::from_i32(2), None);
+    }
+
+    /// One dab at (20, 20), then `holds` held dabs before finishing.
+    fn held(d: &Document, options: ToneOptions, holds: usize) -> Document {
+        let cfg = StrokeConfig {
+            diameter: 20,
+            ..StrokeConfig::default()
+        };
+        let mut stroke = Stroke::begin_tone(d, "0", cfg, options).expect("begin");
+        let mut out = d.clone();
+        stroke.sample(
+            &mut out,
+            StrokeSample {
+                x: 20.0,
+                y: 20.0,
+                pressure: 1.0,
+            },
+        );
+        for _ in 0..holds {
+            stroke.hold(&mut out);
+        }
+        stroke.finish();
+        out
+    }
+
+    #[test]
+    fn airbrush_builds_up_while_the_stroke_is_held() {
+        let options = ToneOptions {
+            airbrush: true,
+            ..at(0.5)
+        };
+        let once = pixel(&held(&grey(100), options, 0), 20, 20)[0];
+        let held_on = pixel(&held(&grey(100), options, 12), 20, 20)[0];
+        assert!(
+            held_on > once,
+            "Airbrush did not build: {once} -> {held_on}"
+        );
+
+        let off = ToneOptions {
+            airbrush: false,
+            ..at(0.5)
+        };
+        let still = pixel(&held(&grey(100), off, 0), 20, 20)[0];
+        let held_off = pixel(&held(&grey(100), off, 12), 20, 20)[0];
+        assert_eq!(still, held_off, "Airbrush off kept building");
+    }
+
+    #[test]
+    fn grayscale_sponge_moves_contrast_around_middle_grey() {
+        let dark = |mode| {
+            pixel(
+                &passes(
+                    &gray_doc(40, 40, [80, 0, 0, 255]),
+                    sponge_at(mode, false),
+                    1,
+                ),
+                20,
+                20,
+            )[0]
+        };
+        let light = |mode| {
+            pixel(
+                &passes(
+                    &gray_doc(40, 40, [180, 0, 0, 255]),
+                    sponge_at(mode, false),
+                    1,
+                ),
+                20,
+                20,
+            )[0]
+        };
+
+        assert!(
+            dark(SpongeMode::Saturate) < 80,
+            "Saturate did not darken a dark grey"
+        );
+        assert!(
+            light(SpongeMode::Saturate) > 180,
+            "Saturate did not lighten a light grey"
+        );
+        let toward_dark = dark(SpongeMode::Desaturate);
+        let toward_light = light(SpongeMode::Desaturate);
+        assert!(
+            (81..=128).contains(&toward_dark),
+            "Desaturate missed middle grey from below"
+        );
+        assert!(
+            (128..180).contains(&toward_light),
+            "Desaturate missed middle grey from above"
+        );
+    }
+
+    #[test]
+    fn grayscale_dodge_and_burn_use_the_gray_plane() {
+        let dodge = passes(&gray_doc(40, 40, [100, 0, 0, 255]), at(1.0), 1);
+        let burn = passes(&gray_doc(40, 40, [100, 0, 0, 255]), burn(1.0), 1);
+        let lifted = pixel(&dodge, 20, 20);
+        let darkened = pixel(&burn, 20, 20);
+        assert!(lifted[0] > 100, "Dodge did not lift the grey plane");
+        assert!(darkened[0] < 100, "Burn did not darken the grey plane");
+        assert_eq!((lifted[1], lifted[2]), (0, 0), "Dodge wrote a colour plane");
+        assert_eq!(
+            (darkened[1], darkened[2]),
+            (0, 0),
+            "Burn wrote a colour plane"
+        );
+    }
+
+    #[test]
+    fn thirty_two_bit_documents_refuse_toning() {
+        let deep = Document::new(
+            40,
+            40,
+            pictura_core::ColorMode::Rgb,
+            pictura_core::BitDepth::ThirtyTwo,
+        );
+        let begun = Stroke::begin_tone(&deep, "0", StrokeConfig::default(), ToneOptions::default());
+        assert!(matches!(begun, Err(crate::PaintError::UnsupportedDepth)));
     }
 }

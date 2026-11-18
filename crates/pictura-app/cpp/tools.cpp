@@ -335,7 +335,7 @@ ToolController::ToolController(QObject* parent)
 
 void ToolController::setActiveTool(ToolId id)
 {
-    if (!toolAvailable(id)) {
+    if (!toolAvailable(id) || !toolAllowedForDocument(id, view())) {
         return;
     }
     if (active_ == id) {
@@ -545,33 +545,6 @@ void ToolController::adjustBrushHardness(int delta)
     paint_->setHardness(paint_->hardness() + delta);
 }
 
-bool ToolController::toggleAirbrush()
-{
-    if (active_ == ToolId::Brush) {
-        paint_->setAirbrush(!paint_->airbrush());
-        return true;
-    }
-    StampGroup* group = optionsFor<StampGroup>(active_);
-    if (!group) {
-        return false;
-    }
-    StampOptions o = group->get();
-    bool* flag = nullptr;
-    if (active_ == ToolId::CloneStamp) {
-        flag = &o.cloneAirbrush;
-    } else if (active_ == ToolId::PatternStamp) {
-        flag = &o.patternAirbrush;
-    } else if (active_ == ToolId::HistoryBrush) {
-        flag = &o.historyAirbrush;
-    }
-    if (!flag) {
-        return false;
-    }
-    *flag = !*flag;
-    group->set(o);
-    return true;
-}
-
 bool ToolController::applyBrushShortcut(int key, quint32 nativeScanCode, bool shift)
 {
     PictureView* v = view();
@@ -634,6 +607,11 @@ void ToolController::bindCanvas(ImageView* canvas)
 {
     if (canvas_ == canvas) {
         boundView_ = view();
+        // A document switch or depth conversion can make the active tool
+        // unavailable; Move is always allowed.
+        if (!toolAllowedForDocument(active_, view())) {
+            setActiveTool(ToolId::Move);
+        }
         // The canvas pointer is unchanged, but the active layer's visibility or
         // identity may have changed under it; re-assert the cursor without
         // waiting for the next mouse move.
@@ -656,6 +634,9 @@ void ToolController::bindCanvas(ImageView* canvas)
     setCurrentNote(-1);
     if (!canvas_) {
         return;
+    }
+    if (!toolAllowedForDocument(active_, view())) {
+        setActiveTool(ToolId::Move);
     }
     connect(canvas_, &ImageView::mousePressed, this, &ToolController::handlePressed);
     connect(canvas_, &ImageView::pointerPressure, this, &ToolController::setPressure);

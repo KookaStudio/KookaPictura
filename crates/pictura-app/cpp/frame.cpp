@@ -877,6 +877,9 @@ void PicturaMainWindow::refresh()
     if (tools_) {
         tools_->bindCanvas(canvas);
     }
+    if (toolbox_) {
+        toolbox_->refreshToolAvailability();
+    }
     syncBrushTipPreview();
     if (DocWindow* active = documents_->activeWindow()) {
         forEachCanvas(*active->doc,

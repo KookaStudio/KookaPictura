@@ -14,7 +14,8 @@ use crate::tip::TipParams;
 use crate::tone::{ToneBrush, ToneOptions};
 use crate::{PaintMode, Rgba, StrokeConfig, StrokeSample};
 use pictura_core::{
-    layer_pixel_locked, layer_transparency_locked, BitDepth, Document, Layer, Plane, PsdRect,
+    layer_pixel_locked, layer_transparency_locked, BitDepth, ColorMode, Document, Layer, Plane,
+    PsdRect,
 };
 use raster::{cells, write_back, write_pixel, CellPlanes, DabRaster};
 use std::sync::Arc;
@@ -452,6 +453,10 @@ impl Stroke {
         if doc.depth != BitDepth::Eight {
             return Err(PaintError::UnsupportedDepth);
         }
+        let options = ToneOptions {
+            grayscale: doc.mode == ColorMode::Grayscale,
+            ..options
+        };
         let mut stroke = Stroke::begin_kind(doc, path, cfg, StrokeKind::Paint)?;
         let target = layer_at(doc, &stroke.layer_path).ok_or(PaintError::NoRasterLayer)?;
         let (lazy, pixels) = LazyPixels::new(target);

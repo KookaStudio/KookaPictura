@@ -363,9 +363,10 @@ pub mod ffi {
         /// Begin a toning stroke: `tool` 0 Dodge / 1 Burn / 2 Sponge.
         /// `amount` 0–100 % is Dodge and Burn's Exposure and the Sponge's
         /// Flow. Dodge and Burn: `range` 0 Shadows / 1 Midtones /
-        /// 2 Highlights, `protect_tones` keeps each pixel's colour. Sponge:
-        /// `sponge` 0 Desaturate / 1 Saturate, `vibrance` eases off where
-        /// there is little to do. False as for `begin_focus`.
+        /// 2 Highlights, `protect_tones` keeps each pixel's colour, and
+        /// `airbrush` keeps the effect building while the button is held.
+        /// Sponge: `sponge` 0 Desaturate / 1 Saturate, `vibrance` eases off
+        /// where there is little to do. False as for `begin_focus`.
         fn begin_tone(
             view: Pin<&mut PictureView>,
             tip: &PaintTip,
@@ -375,6 +376,7 @@ pub mod ffi {
             protect_tones: bool,
             sponge: i32,
             vibrance: bool,
+            airbrush: bool,
         ) -> bool;
 
         /// A white stroke with `tip` along an S-curve on transparency, packed

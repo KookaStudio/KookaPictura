@@ -6,6 +6,7 @@
 
 #include "panels/numeric_field.h"
 
+#include <QtCore/QSignalBlocker>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QHBoxLayout>
@@ -143,6 +144,14 @@ QWidget* OptionsBar::buildTonePage(ToolId id)
         update([v](ToneOptions& o) { o.amount = qRound(v); });
     });
 
+    QToolButton* airbrush = nullptr;
+    if (!sponge) {
+        airbrush = addAirbrushToggle(layout, page, name("Airbrush"), initial.airbrush,
+                                     [update](bool on) {
+                                         update([on](ToneOptions& o) { o.airbrush = on; });
+                                     });
+    }
+
     auto* toggle = new QCheckBox(sponge ? QStringLiteral("Vibrance") : QStringLiteral("Protect Tones"),
                                  page);
     toggle->setObjectName(name(sponge ? "Vibrance" : "ProtectTones"));
@@ -151,6 +160,26 @@ QWidget* OptionsBar::buildTonePage(ToolId id)
     connect(toggle, &QCheckBox::toggled, this, [update, sponge](bool on) {
         update([on, sponge](ToneOptions& o) { (sponge ? o.vibrance : o.protectTones) = on; });
     });
+
+    if (controller_) {
+        connect(controller_, &ToolController::toneOptionsChanged, page,
+                [tone, menu, amount, toggle, airbrush, sponge] {
+                    if (!tone) {
+                        return;
+                    }
+                    const ToneOptions o = tone->get();
+                    const QSignalBlocker blockMenu(menu);
+                    const QSignalBlocker blockAmount(amount);
+                    const QSignalBlocker blockToggle(toggle);
+                    menu->setCurrentIndex(sponge ? o.spongeMode : o.range);
+                    amount->setValue(o.amount);
+                    toggle->setChecked(sponge ? o.vibrance : o.protectTones);
+                    if (airbrush) {
+                        const QSignalBlocker blockAirbrush(airbrush);
+                        airbrush->setChecked(o.airbrush);
+                    }
+                });
+    }
 
     layout->addStretch(1);
     return page;

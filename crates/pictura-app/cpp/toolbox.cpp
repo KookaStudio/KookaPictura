@@ -388,7 +388,7 @@ Toolbox::Toolbox(ToolController* controller, ColorState* colors, QWidget* parent
         for (ToolId id : allToolIds()) {
             if (toolInfo(id).group == g && toolInEdition(id)) {
                 members << id;
-                anyImplemented = anyImplemented || toolAvailable(id);
+                anyImplemented = anyImplemented || available(id);
             }
         }
         if (members.isEmpty()) {
@@ -408,8 +408,8 @@ Toolbox::Toolbox(ToolController* controller, ColorState* colors, QWidget* parent
                     menu->addAction(icon(QStringLiteral("tool.") + toolIdName(member)),
                                     QString::fromLatin1(info.label));
                 action->setData(int(member));
-                action->setEnabled(toolAvailable(member));
-                action->setToolTip(toolAvailable(member) ? enabledTooltip(info)
+                action->setEnabled(available(member));
+                action->setToolTip(available(member) ? enabledTooltip(info)
                                                          : disabledTooltip(info));
                 if (!toolShortcut(member).isNull()) {
                     action->setShortcut(QKeySequence(QString(toolShortcut(member))));
@@ -460,7 +460,7 @@ Toolbox::Toolbox(ToolController* controller, ColorState* colors, QWidget* parent
         if (controller_) {
             connect(button, &QToolButton::clicked, this, [this, g]() {
                 const ToolId current = groupCurrentTool(g);
-                if (toolAvailable(current)) {
+                if (available(current)) {
                     controller_->setActiveTool(current);
                 }
             });
@@ -971,22 +971,28 @@ bool Toolbox::handleToolKey(const QChar& key, bool shift)
     ToolId current = groupCurrentTool(group);
     if (toolShortcut(current) != key.toUpper()) {
         for (ToolId id : allToolIds()) {
-            if (toolShortcut(id) == key.toUpper() && toolAvailable(id)) {
+            if (toolShortcut(id) == key.toUpper() && available(id)) {
                 current = id;
                 break;
             }
         }
     }
-    if (!toolAvailable(current)) {
+    if (!available(current)) {
         return false;
     }
     selectMember(group, current);
     return true;
 }
 
+bool Toolbox::available(ToolId id) const
+{
+    return toolAvailable(id)
+        && toolAllowedForDocument(id, controller_ ? controller_->view() : nullptr);
+}
+
 ToolId Toolbox::groupCurrentTool(int group) const
 {
-    if (currentByGroup_.contains(group)) {
+    if (currentByGroup_.contains(group) && available(currentByGroup_.value(group))) {
         return currentByGroup_.value(group);
     }
     ToolId first;
@@ -999,7 +1005,7 @@ ToolId Toolbox::groupCurrentTool(int group) const
             first = id;
             have = true;
         }
-        if (toolAvailable(id)) {
+        if (available(id)) {
             return id;
         }
     }
@@ -1015,7 +1021,7 @@ void Toolbox::refreshSlot(int group)
     const ToolId id = groupCurrentTool(group);
     const ToolInfo& info = toolInfo(id);
     button->setIcon(icon(QStringLiteral("tool.") + toolIdName(id)));
-    button->setToolTip(toolAvailable(id) ? enabledTooltip(info) : disabledTooltip(info));
+    button->setToolTip(available(id) ? enabledTooltip(info) : disabledTooltip(info));
     button->setChecked(controller_ && controller_->activeTool() == id);
 }
 
@@ -1031,8 +1037,8 @@ void Toolbox::refreshToolShortcuts()
             const ToolInfo& info = toolInfo(member);
             const QChar key = toolShortcut(member);
             action->setShortcut(key.isNull() ? QKeySequence() : QKeySequence(QString(key)));
-            action->setToolTip(toolAvailable(member) ? enabledTooltip(info)
-                                                     : disabledTooltip(info));
+            action->setToolTip(available(member) ? enabledTooltip(info)
+                                                 : disabledTooltip(info));
         }
     }
     for (auto it = slotButtonByGroup_.cbegin(); it != slotButtonByGroup_.cend(); ++it) {
@@ -1040,11 +1046,44 @@ void Toolbox::refreshToolShortcuts()
     }
 }
 
+void Toolbox::refreshToolAvailability()
+{
+    PictureView* view = controller_ ? controller_->view() : nullptr;
+    const int depth = view && view->has_document() ? view->document_depth_bits() : 0;
+    if (depth == documentDepth_) {
+        return;
+    }
+    documentDepth_ = depth;
+    for (auto it = slotButtonByGroup_.cbegin(); it != slotButtonByGroup_.cend(); ++it) {
+        const int group = it.key();
+        bool anyEnabled = false;
+        for (ToolId id : allToolIds()) {
+            if (toolInfo(id).group == group && available(id)) {
+                anyEnabled = true;
+                break;
+            }
+        }
+        it.value()->setEnabled(anyEnabled);
+        if (QMenu* menu = slotMenuByGroup_.value(group, nullptr)) {
+            if (menu->objectName() == QStringLiteral("toolFlyoutMenu")) {
+                for (QAction* action : menu->actions()) {
+                    const ToolId member = ToolId(action->data().toInt());
+                    const ToolInfo& info = toolInfo(member);
+                    action->setEnabled(available(member));
+                    action->setToolTip(available(member) ? enabledTooltip(info)
+                                                         : disabledTooltip(info));
+                }
+            }
+        }
+        refreshSlot(group);
+    }
+}
+
 void Toolbox::selectMember(int group, ToolId id)
 {
     currentByGroup_[group] = id;
     refreshSlot(group);
-    if (controller_ && toolAvailable(id)) {
+    if (controller_ && available(id)) {
         controller_->setActiveTool(id);
     }
 }
@@ -1053,7 +1092,7 @@ void Toolbox::cycleGroup(int group, QChar key)
 {
     QList<ToolId> enabled;
     for (ToolId id : allToolIds()) {
-        if (toolInfo(id).group == group && toolAvailable(id)
+        if (toolInfo(id).group == group && available(id)
             && (key.isNull() || toolShortcut(id) == key)) {
             enabled << id;
         }

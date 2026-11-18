@@ -112,6 +112,9 @@ public:
     // Re-read every tool's letter into the slot tooltips and flyout rows after
     // the shortcut editor changed them.
     void refreshToolShortcuts();
+    // Re-read the active document's depth and disable the tools it refuses
+    // (the toning tools at 32 bpc). Called from the frame refresh.
+    void refreshToolAvailability();
 
     // Self-test hooks.
     void openSlotFlyoutForTest(int group);
@@ -141,6 +144,7 @@ signals:
     void columnsChanged(int columns);
 
 private:
+    bool available(ToolId id) const;
     ToolId groupCurrentTool(int group) const;
     void refreshSlot(int group);
     void selectMember(int group, ToolId id);
@@ -186,6 +190,7 @@ private:
     QSize slotSize_ { 36, 28 };
     QSize iconSize_ { 24, 20 };
     int columns_ = 1;
+    int documentDepth_ = -1;
     bool shiftKeyForToolSwitch_ = true;
 };
 
