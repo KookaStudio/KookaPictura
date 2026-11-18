@@ -42,6 +42,7 @@ mod stack_mode;
 mod text_render;
 pub mod tiled_plane;
 mod type_tool;
+pub mod variables;
 mod vector;
 pub mod warp;
 pub use advanced_blending::{BlendIf, Knockout};
@@ -221,6 +222,7 @@ pub struct Document {
     pub text_styles: TextStyleSheet,
     /// Document-level layer comps; they ride the history snapshot and cloning.
     pub layer_comps: layer_comp::LayerCompStore,
+    pub variables: variables::VariableStore,
 }
 impl Document {
     pub fn new(width: u32, height: u32, mode: ColorMode, depth: BitDepth) -> Self {
@@ -265,6 +267,7 @@ impl Document {
             saved_paths: Vec::new(),
             text_styles: TextStyleSheet::default(),
             layer_comps: layer_comp::LayerCompStore::default(),
+            variables: variables::VariableStore::default(),
         }
     }
 

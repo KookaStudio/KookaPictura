@@ -32,6 +32,7 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/export_as_dialog.cpp
     crates/pictura-app/cpp/export_as_dialog.h
     crates/pictura-app/cpp/layer_comps_export.cpp
+    crates/pictura-app/cpp/variables_dialog.cpp
     crates/pictura-app/cpp/layer_comps_export.h
     crates/pictura-app/cpp/export_layers_dialog.cpp
     crates/pictura-app/cpp/export_layers_dialog.h

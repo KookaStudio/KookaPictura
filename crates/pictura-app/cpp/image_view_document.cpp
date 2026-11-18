@@ -59,10 +59,11 @@ bool ImageView::smoothSamplingForZoom(double zoom)
     return zoom < 2.0;
 }
 
-void ImageView::setFilterPreview(const QImage& picture, const QRect& area)
+void ImageView::setFilterPreview(const QImage& picture, const QRect& area, bool replaceComposite)
 {
     filterPreview_ = picture;
     filterPreviewArea_ = area;
+    filterPreviewReplacesComposite_ = replaceComposite;
     update();
 }
 
@@ -73,6 +74,7 @@ void ImageView::clearFilterPreview()
     }
     filterPreview_ = QImage();
     filterPreviewArea_ = QRect();
+    filterPreviewReplacesComposite_ = false;
     update();
 }
 

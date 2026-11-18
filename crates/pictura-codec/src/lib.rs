@@ -80,6 +80,7 @@ mod type_plain;
 mod type_shape;
 mod type_tool;
 mod type_write;
+mod variable_resources;
 mod vector_marker;
 mod vector_mask;
 mod vector_transforms;

@@ -1083,6 +1083,7 @@ dependencies = [
  "pictura-core",
  "pictura-render",
  "pictura-testkit",
+ "quick-xml",
  "rayon",
  "sha2",
  "thiserror 2.0.20",

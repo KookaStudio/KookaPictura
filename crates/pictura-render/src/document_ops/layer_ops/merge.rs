@@ -139,6 +139,9 @@ pub fn flatten(doc: &mut Document) -> Result<MergeOutcome, MergeError> {
     if doc.width == 0 || doc.height == 0 {
         return Err(MergeError::NoDocument);
     }
+    if !doc.variables.protected_ids().is_empty() {
+        return Err(MergeError::InvalidTarget);
+    }
     let replaced = count_layers(&doc.layers);
     let rect = PsdRect {
         top: 0,
@@ -168,6 +171,7 @@ pub fn flatten(doc: &mut Document) -> Result<MergeOutcome, MergeError> {
     );
     result.background = true;
     doc.layers = pictura_core::LayerStack::from_layers(vec![result]);
+    doc.prune_variable_bindings();
 
     Ok(MergeOutcome {
         path: "0".to_string(),
@@ -471,11 +475,20 @@ fn splice_result(
     anchor: &[usize],
     node: Layer,
 ) -> Option<String> {
+    if !doc.variables.protected_ids().is_empty()
+        && remove.iter().any(|segments| {
+            resolve_path(doc, &format_segments(segments))
+                .is_some_and(|layer| doc.variables.protects_layer(layer))
+        })
+    {
+        return None;
+    }
     let (anchor_index, parent) = anchor.split_last()?;
     let path = doc
         .layers
         .splice(remove, parent, *anchor_index, vec![node])
         .ok()?;
+    doc.prune_variable_bindings();
     Some(format_segments(&path))
 }
 

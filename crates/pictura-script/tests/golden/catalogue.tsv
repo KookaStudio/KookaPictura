@@ -14,9 +14,9 @@ file.check.in	File/Check In…	Check In…		0	0
 file.saveForWeb	File/Save for Web & Devices…	Save for Web & Devices…	Ctrl+Alt+Shift+S	1	0
 file.revert	File/Revert…	Revert…	F12	1	0
 file.place	File/Place…	Place…		1	0
-file.import.variable.data.sets	File/Import/Variable Data Sets	Variable Data Sets		0	0
+file.import.variable.data.sets	File/Import/Variable Data Sets	Variable Data Sets		1	0
 file.import.wia.support	File/Import/WIA Support	WIA Support		0	0
-file.export.data.sets.as.files	File/Export/Data Sets As Files…	Data Sets As Files…		0	0
+file.export.data.sets.as.files	File/Export/Data Sets As Files…	Data Sets As Files…		1	0
 file.export.render.video	File/Export/Render Video…	Render Video…		0	0
 file.export.zoomify	File/Export/Zoomify…	Zoomify…		1	0
 file.export.paths.to.illustrator	File/Export/Paths to Illustrator…	Paths to Illustrator…		1	0
@@ -160,9 +160,9 @@ image.flipVertical	Image/Image Rotation/Flip Canvas Vertical	Flip Canvas Vertica
 image.crop	Image/Crop	Crop		1	0
 image.trim	Image/Trim…	Trim…		1	0
 image.duplicate	Image/Duplicate…	Duplicate…		1	0
-image.variables.define	Image/Variables/Define…	Define…		0	0
-image.variables.data.sets	Image/Variables/Data Sets…	Data Sets…		0	0
-image.apply.data.set	Image/Apply Data Set…	Apply Data Set…		0	0
+image.variables.define	Image/Variables/Define…	Define…		1	0
+image.variables.data.sets	Image/Variables/Data Sets…	Data Sets…		1	0
+image.apply.data.set	Image/Apply Data Set…	Apply Data Set…		1	0
 image.trap	Image/Trap…	Trap…		0	0
 image.apply.image	Image/Apply Image…	Apply Image…		1	0
 image.calculations	Image/Calculations…	Calculations…		0	0

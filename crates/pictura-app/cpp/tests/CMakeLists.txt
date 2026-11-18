@@ -223,6 +223,7 @@ set(PICTURA_QT_TESTS
     tst_panels_parity
     tst_layer_comps_panel
     tst_layer_comps_export
+    tst_variables
     tst_selection_aa
     tst_selection_alt
     tst_selection_move

@@ -75,6 +75,7 @@ mod state;
 pub(crate) mod svg_export;
 mod tiles;
 mod type_tools;
+mod variables;
 mod web_export;
 pub use state::PictureViewRust;
 #[cfg(test)]

@@ -29,6 +29,12 @@ pub fn copy_path_to_document(
         return None;
     }
     let mut copy = resolve_path(src, path)?.clone();
+    if !src.variables.definitions().is_empty()
+        || !dst.variables.definitions().is_empty()
+        || !dst.variables.protected_ids().is_empty()
+    {
+        super::create::clear_copied_layer_identity(&mut copy);
+    }
     if copy.background {
         release_background(&mut copy);
     }
