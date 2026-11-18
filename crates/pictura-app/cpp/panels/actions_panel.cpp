@@ -314,12 +314,12 @@ void ActionsPanel::connectEngine()
         emit changed();
     });
     connect(engine_.data(), &ActionsEngineApi::playbackChanged, this, [this](bool playing) {
-        if (!playing && playing_) {
-            playing_ = false;
-            playbackTimer_->stop();
-            playQueue_.clear();
-            playIndex_ = 0;
-            playDepth_ = 0;
+        // The engine reports the end while handing over its last step, so a
+        // run in progress finishes through its own "finished" row; only a run
+        // ended outside the loop (nothing executing or scheduled) ends here.
+        if (!playing && playing_ && !advancingPlayback_ && !playbackTimer_->isActive()) {
+            finishPlayback();
+            return;
         }
         updateToolbar();
         emit changed();

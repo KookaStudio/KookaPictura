@@ -153,6 +153,7 @@ const FILL_PARAMS: &[ParameterSpec] = &[
     param("color", "Clr "),
 ];
 const SAVE_PARAMS: &[ParameterSpec] = &[param("as", "As  "), param("in", "In  ")];
+const OPEN_PARAMS: &[ParameterSpec] = &[param("path", "null")];
 const IMAGE_SIZE_PARAMS: &[ParameterSpec] = &[
     unit_param("width", "Wdth", "#Pxl"),
     unit_param("height", "Hght", "#Pxl"),
@@ -171,6 +172,8 @@ const MODE_PARAMS: &[ParameterSpec] = &[param("mode", "Md  ")];
 /// The Adobe-verified families this release ships.
 #[rustfmt::skip]
 static VERIFIED: &[CommandDefinition] = &[
+    CommandDefinition { id: "file.open", label: "Open", class: CommandClass::AdobeVerified,
+        event: EventId::Adobe("Opn "), parameters: OPEN_PARAMS, dialog: DialogMode::None },
     CommandDefinition { id: "file.save", label: "Save", class: CommandClass::AdobeVerified,
         event: EventId::Adobe("save"), parameters: SAVE_PARAMS, dialog: DialogMode::None },
     CommandDefinition { id: "file.saveAs", label: "Save As…", class: CommandClass::AdobeVerified,
@@ -242,6 +245,7 @@ static EXTRA: &[CommandDefinition] = &[
 #[rustfmt::skip]
 static NON_RECORDABLE: &[&str] = &[
     "file.exit",
+    "file.automate.batch",
     "file.saveCopy",
     "edit.undo", "edit.redo", "edit.stepForward", "edit.stepBackward",
     "edit.purge.undo", "edit.purge.histories", "edit.purge.clipboard", "edit.purge.all",

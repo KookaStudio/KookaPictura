@@ -4,6 +4,26 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **File ▸ Automate ▸ Batch — #618 implemented** (OpenSpec change
+  `2026-11-17-file-automate-batch`, archived; capabilities `document/batch-processing`,
+  `document/batch-file-naming`, `ui/batch-dialog`, and `document/action-engine`).
+  - **Engine.** `pictura-script::batch` holds the Qt-free rules: folder
+    resolution (case-insensitive relative-path order, hidden entries skipped,
+    folder links followed once), the CS6 File Naming tokens, compatibility
+    sanitizing, the unique-field rule, validation, override paths, and the
+    error-log line. `ActionsEngine::batch_validate` validates against the live
+    library.
+  - **Action steps.** `file.open` is an Adobe-verified `Opn ` step recorded by
+    File ▸ Open / Open Recent and replayed without open-options dialogs. Save As
+    steps carry an `options` object; replay overlays it on the remembered
+    options for that save only.
+  - **App.** `BatchRunner` is signal-driven (open token, then
+    `ActionsPanel::playbackFinished`), with suppressed-dialog playback, the
+    Save As redirect on the main window, a progress dialog with Cancel, and
+    the error log. `BatchDialog` embeds `BatchOptionsWidget` (reusable by
+    Create Droplet, #617); the last options persist as `batchOptions`.
+  - **Left.** The Import and Bridge sources (#1406), droplets (#617), and PDF options
+    in Save As steps.
 - **Document source and composite state — #1345 implemented; tests via CI**
   (OpenSpec change `2026-11-17-document-source-state`, archived; capability
   `document/document-source-state`). `Document.source` and `Document.composite`

@@ -619,3 +619,61 @@ fn renaming_an_imported_name_replaces_stale_units() {
         "New Action".encode_utf16().chain([0]).collect::<Vec<_>>()
     );
 }
+
+fn round_trip_single_step(step: ActionStep) -> ActionStep {
+    let mut set = ActionSet::new("Batch");
+    let mut action = Action::new("A");
+    action.steps.push(step);
+    set.actions.push(action);
+    let back = read_atn(&write_atn(&set)).expect("decode");
+    back.actions[0].steps[0].clone()
+}
+
+#[test]
+fn atn_round_trips_an_open_step() {
+    let step = ActionStep::command(
+        "file.open",
+        CommandParams::from_value(json!({"path": "/home/u/pictures/a.png"})),
+    );
+    let raw = codec_read_atn(&write_atn(&{
+        let mut set = ActionSet::new("Batch");
+        let mut action = Action::new("A");
+        action.steps.push(step.clone());
+        set.actions.push(action);
+        set
+    }))
+    .expect("codec");
+    assert_eq!(
+        raw.set.actions[0].steps[0].event_id,
+        RawEventId::Long(*b"Opn ")
+    );
+    let back = round_trip_single_step(step);
+    let StepKind::Command { command, params } = back.kind else {
+        panic!("not a command step: {:?}", back.kind);
+    };
+    assert_eq!(command.as_str(), "file.open");
+    assert_eq!(params.get_str("path"), Some("/home/u/pictures/a.png"));
+}
+
+#[test]
+fn atn_round_trips_save_as_options() {
+    let params = json!({
+        "as": "JPG",
+        "in": "/tmp/out.jpg",
+        "options": {"quality": 4, "format": 2, "scans": 3, "matte": -1, "preview": true}
+    });
+    let back = round_trip_single_step(ActionStep::command(
+        "file.saveAs",
+        CommandParams::from_value(params.clone()),
+    ));
+    let StepKind::Command {
+        command,
+        params: read,
+    } = back.kind
+    else {
+        panic!("not a command step: {:?}", back.kind);
+    };
+    assert_eq!(command.as_str(), "file.saveAs");
+    assert_eq!(read.get("options"), params.get("options"));
+    assert_eq!(read.get_str("in"), Some("/tmp/out.jpg"));
+}

@@ -20,7 +20,7 @@ file.export.data.sets.as.files	File/Export/Data Sets As Files…	Data Sets As Fi
 file.export.render.video	File/Export/Render Video…	Render Video…		0	0
 file.export.zoomify	File/Export/Zoomify…	Zoomify…		1	0
 file.export.paths.to.illustrator	File/Export/Paths to Illustrator…	Paths to Illustrator…		1	0
-file.automate.batch	File/Automate/Batch…	Batch…		0	0
+file.automate.batch	File/Automate/Batch…	Batch…		1	0
 file.automate.conditional.mode.change	File/Automate/Conditional Mode Change…	Conditional Mode Change…		0	0
 file.automate.contact.sheet.ii	File/Automate/Contact Sheet II	Contact Sheet II		0	0
 file.automate.create.droplet	File/Automate/Create Droplet…	Create Droplet…		0	0

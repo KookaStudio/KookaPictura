@@ -25,7 +25,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "file.export.render.video", path: &["File", "Export", "Render Video…"], label: "Render Video…", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "file.export.zoomify", path: &["File", "Export", "Zoomify…"], label: "Zoomify…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "file.export.paths.to.illustrator", path: &["File", "Export", "Paths to Illustrator…"], label: "Paths to Illustrator…", shortcut: "", implemented: true, checkable: false },
-    CommandSpec { id: "file.automate.batch", path: &["File", "Automate", "Batch…"], label: "Batch…", shortcut: "", implemented: false, checkable: false },
+    CommandSpec { id: "file.automate.batch", path: &["File", "Automate", "Batch…"], label: "Batch…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "file.automate.conditional.mode.change", path: &["File", "Automate", "Conditional Mode Change…"], label: "Conditional Mode Change…", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "file.automate.contact.sheet.ii", path: &["File", "Automate", "Contact Sheet II"], label: "Contact Sheet II", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "file.automate.create.droplet", path: &["File", "Automate", "Create Droplet…"], label: "Create Droplet…", shortcut: "", implemented: false, checkable: false },

@@ -10,9 +10,11 @@
 #include <QtCore/QDataStream>
 #include <QtCore/QDir>
 #include <QtCore/QFileInfo>
+#include <QtCore/QJsonDocument>
 #include <QtCore/QItemSelectionModel>
 #include <QtCore/QJsonValue>
 #include <QtCore/QMimeData>
+#include <QtCore/QScopeGuard>
 #include <QtCore/QStandardPaths>
 #include <QtCore/QTimer>
 #include <QtGui/QAction>
@@ -176,6 +178,8 @@ void ActionsPanel::advancePlayback()
     if (!playing_ || !engine_) {
         return;
     }
+    advancingPlayback_ = true;
+    const auto done = qScopeGuard([this] { advancingPlayback_ = false; });
     const ActionNodeRow step = engine_->playbackNext();
     if (step.stepKind == QLatin1String("finished")
         || (step.id.isEmpty() && step.commandId.isEmpty() && step.stepKind.isEmpty())) {
@@ -194,7 +198,14 @@ void ActionsPanel::advancePlayback()
         }
     }
     bool ok = true;
-    if (step.stepKind == QLatin1String("stop")) {
+    if (step.stepKind == QLatin1String("stop") && batchPlayback_) {
+        if (!step.allowContinue) {
+            reportError(step.message.isEmpty() ? tr("Stop step.") : step.message);
+            finishPlayback();
+            return;
+        }
+        engine_->playbackContinue();
+    } else if (step.stepKind == QLatin1String("stop")) {
         if (stopHandler_) {
             ok = stopHandler_(step.message, step.allowContinue);
         } else {
@@ -228,16 +239,26 @@ void ActionsPanel::advancePlayback()
             finishPlayback();
             return;
         }
+    } else if (batchPlayback_ && batch_.overrideOpen
+               && step.commandId == QLatin1String("file.open")) {
+        ok = true;
     } else if (!step.commandId.isEmpty()) {
         QJsonObject params = step.params;
-        const bool modal = effectiveModal(step);
+        const bool modal = !batchPlayback_ && effectiveModal(step);
         ok = executeStep(step, &params, modal);
         if (ok && modal && params != step.params) {
             engine_->editStep(step.id, params);
         }
     }
     if (!ok) {
-        reportError(tr("Step %1 (%2) failed.").arg(step.name, step.commandId));
+        const QString detail = registry_ ? registry_->lastError() : QString();
+        // Recorded steps carry no name of their own; the tree shows the command label.
+        const QModelIndex row = model_->indexForId(step.id);
+        const QString label =
+            step.name.isEmpty() && row.isValid() ? row.data().toString() : step.name;
+        reportError(detail.isEmpty()
+                        ? tr("Step %1 (%2) failed.").arg(label, step.commandId)
+                        : tr("Step %1 (%2) failed: %3").arg(label, step.commandId, detail));
         finishPlayback();
         return;
     }
@@ -255,6 +276,7 @@ void ActionsPanel::finishPlayback()
         return;
     }
     playing_ = false;
+    batchPlayback_ = false;
     playbackTimer_->stop();
     playQueue_.clear();
     playIndex_ = 0;
@@ -264,6 +286,122 @@ void ActionsPanel::finishPlayback()
     }
     updateToolbar();
     emit changed();
+    emit playbackFinished(lastError_.isEmpty(), lastError_);
+}
+
+void ActionsPanel::cancelPlayback()
+{
+    finishPlayback();
+}
+
+QString ActionsPanel::actionIdFor(const QString& setName, const QString& actionName) const
+{
+    if (!engine_) {
+        return {};
+    }
+    const QList<ActionNodeRow> rows = engine_->snapshot();
+    QString setId;
+    for (const ActionNodeRow& row : rows) {
+        if (row.kind == actionKindSet() && row.name == setName) {
+            setId = row.id;
+            break;
+        }
+    }
+    for (const ActionNodeRow& row : rows) {
+        if (!setId.isEmpty() && row.kind == actionKindAction() && row.parentId == setId
+            && row.name == actionName) {
+            return row.id;
+        }
+    }
+    return {};
+}
+
+QList<QPair<QString, QStringList>> ActionsPanel::actionLibraryNames() const
+{
+    QList<QPair<QString, QStringList>> out;
+    if (!engine_) {
+        return out;
+    }
+    const QList<ActionNodeRow> rows = engine_->snapshot();
+    for (const ActionNodeRow& set : rows) {
+        if (set.kind != actionKindSet()) {
+            continue;
+        }
+        QStringList actions;
+        for (const ActionNodeRow& row : rows) {
+            if (row.kind == actionKindAction() && row.parentId == set.id) {
+                actions << row.name;
+            }
+        }
+        out << qMakePair(set.name, actions);
+    }
+    return out;
+}
+
+QPair<QString, QString> ActionsPanel::selectedActionNames() const
+{
+    if (!engine_) {
+        return {};
+    }
+    QHash<QString, ActionNodeRow> byId;
+    for (const ActionNodeRow& row : engine_->snapshot()) {
+        byId.insert(row.id, row);
+    }
+    for (const QString& id : selectedNodeIds()) {
+        ActionNodeRow row = byId.value(id);
+        while (!row.id.isEmpty()
+               && (row.kind == actionKindStep() || row.kind == actionKindParam())) {
+            row = byId.value(row.parentId);
+        }
+        if (row.kind == actionKindAction()) {
+            return qMakePair(byId.value(row.parentId).name, row.name);
+        }
+        if (row.kind == actionKindSet()) {
+            return qMakePair(row.name, QString());
+        }
+    }
+    return {};
+}
+
+QString ActionsPanel::validateBatch(const QJsonObject& options) const
+{
+    if (!engine_) {
+        return tr("The action engine is not available.");
+    }
+    return engine_->validateBatch(
+        QString::fromUtf8(QJsonDocument(options).toJson(QJsonDocument::Compact)));
+}
+
+bool ActionsPanel::actionReachesCommand(const QString& set, const QString& action,
+                                        const QString& command) const
+{
+    return engine_ && engine_->actionReachesCommand(set, action, command);
+}
+
+bool ActionsPanel::playActionForBatch(const QString& setName, const QString& actionName,
+                                      const BatchPlayback& batch)
+{
+    const QString actionId = actionIdFor(setName, actionName);
+    if (actionId.isEmpty()) {
+        lastError_ = tr("The action \u201c%1\u201d is not loaded.").arg(actionName);
+        return false;
+    }
+    lastError_.clear();
+    batchPlayback_ = true;
+    batch_ = batch;
+    if (!playAction(actionId, QString(), false)) {
+        batchPlayback_ = false;
+        if (lastError_.isEmpty()) {
+            lastError_ = tr("The action \u201c%1\u201d could not start.").arg(actionName);
+        }
+        return false;
+    }
+    if (!playing_) {
+        // An action with no included steps finishes at once.
+        batchPlayback_ = false;
+        QTimer::singleShot(0, this, [this] { emit playbackFinished(true, QString()); });
+    }
+    return true;
 }
 
 void ActionsPanel::cancelPlaybackForTest()

@@ -118,6 +118,26 @@ public:
     bool overwriteStepForTest(const QString& stepId);
 
     bool playSelection(bool singleStep = false);
+    // Batch playback (File > Automate > Batch): every step runs with its
+    // recorded values and no dialog; with `overrideOpen`, Open steps succeed
+    // without opening their recorded file. `playbackFinished` reports the end.
+    struct BatchPlayback {
+        bool overrideOpen = false;
+    };
+    bool playActionForBatch(const QString& setName, const QString& actionName,
+                            const BatchPlayback& batch);
+    // Stop after the current step; completed steps stay applied.
+    void cancelPlayback();
+    // The tree id of the named action, or empty.
+    QString actionIdFor(const QString& setName, const QString& actionName) const;
+    // Every set's name with its actions' names, in library order.
+    QList<QPair<QString, QStringList>> actionLibraryNames() const;
+    // The selected set and action names (the action empty for a set row).
+    QPair<QString, QString> selectedActionNames() const;
+    QString validateBatch(const QJsonObject& options) const;
+    bool actionReachesCommand(const QString& set, const QString& action,
+                              const QString& command) const;
+    QString lastError() const { return lastError_; }
     bool playActionForTest(const QString& actionId);
     void advancePlaybackForTest();
     void cancelPlaybackForTest();
@@ -174,6 +194,9 @@ protected:
 
 signals:
     void errorOccurred(const QString& message);
+    // Every playback run ends with exactly one of these; `ok` is false when a
+    // step failed or the run reported an error.
+    void playbackFinished(bool ok, const QString& error);
     void functionKeyWarning(const QString& message);
     void changed();
 
@@ -255,6 +278,9 @@ private:
     bool buttonMode_ = false;
     bool allowToolRecording_ = false;
     bool playing_ = false;
+    bool batchPlayback_ = false;
+    bool advancingPlayback_ = false;
+    BatchPlayback batch_;
     bool persistEnabled_ = true;
     bool applyingSession_ = false;
     bool restoringState_ = false;

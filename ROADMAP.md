@@ -31,7 +31,7 @@ Deeper technical status for PSD/PSB lives in
 | Colour and painting | Shipped — ICC profiles, Assign Profile, Convert to Profile, colour settings, the brush engine |
 | Camera raw files | Open — there is no raw container reader and no demosaic |
 | Panels | 19 of 22 populated; Gradients, Patterns and Styles are placeholders |
-| Automation | The control server, Rust command catalogue, Actions engine and command bus ship; batch, scripting and plug-ins are open |
+| Automation | The control server, Rust command catalogue, Actions engine, command bus and Batch ship; droplets, scripting and plug-ins are open |
 | HDR tone mapping | Shipped — all four conversion methods; the Local Adaptation Toning Curve/Corner is open |
 | Preset manager, Blend-If UI | Open |
 
@@ -506,10 +506,16 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       `crates/pictura-script/src/command_catalogue.rs`,
       `crates/pictura-app/cpp/commands.cpp`.
 - [ ] Create Droplet, the `.opd` format, and the `.desktop` launcher (#617)
-- [ ] The File ▸ Automate ▸ Batch engine and dialog (#618)
+- [x] **File ▸ Automate ▸ Batch** — runs an action over a folder (optionally
+      with subfolders) or the open documents, with the Open and Save As
+      overrides, None / Save and Close / Folder destinations, CS6 File Naming,
+      and Stop or Log error handling; File ▸ Open is now a recordable step and
+      Save As steps carry their format options (#618).
+      `crates/pictura-script/src/batch/`, `crates/pictura-app/cpp/batch_runner.cpp`.
+- [ ] The Batch Import and Bridge sources (#1406)
 - [ ] The remaining Automate commands: Image Processor, Conditional Mode
-      Change, PDF Presentation, Contact Sheet II, Picture Package, Photomerge,
-      Web Photo Gallery and File Naming (#619)
+      Change, PDF Presentation, Contact Sheet II, Picture Package, Photomerge
+      and Web Photo Gallery (#619)
 - [ ] A scripting host, DOM, ActionManager and notifiers on QuickJS (#620)
 - [ ] A script console, sandbox limits, a security prompt, and the progress
       bridge (#621)
