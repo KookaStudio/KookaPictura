@@ -10,6 +10,8 @@ use std::sync::Arc;
 mod budget;
 mod damage;
 mod planes;
+mod recovery;
+pub(crate) use recovery::{apply_recovery_delta, recovery_delta};
 mod styles;
 
 pub(crate) use budget::{document_bytes, tile_table_bytes, unreadable_tiles};

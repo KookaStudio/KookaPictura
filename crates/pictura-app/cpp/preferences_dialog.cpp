@@ -210,6 +210,8 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     auto* fileHandlingPage = new QWidget(this);
     fileHandlingPage->setObjectName(QStringLiteral("preferencesFileHandlingPage"));
     auto* fileHandlingLayout = new QVBoxLayout(fileHandlingPage);
+    makeCheckbox(QStringLiteral("saveInBackground"), tr("Save in Background"), fileHandlingPage)
+        ->setChecked(true);
     auto* autoSaveRow = new QWidget(fileHandlingPage);
     auto* autoSaveLayout = new QHBoxLayout(autoSaveRow);
     autoSaveLayout->setContentsMargins(0, 0, 0, 0);
@@ -353,6 +355,8 @@ QCheckBox* PreferencesDialog::makeCheckbox(const QString& key, const QString& la
             emit typeMiddleEasternChanged(on);
         } else if (key == QStringLiteral("missingGlyphProtection")) {
             emit typeMissingGlyphProtectionChanged(on);
+        } else if (key == QStringLiteral("saveInBackground")) {
+            emit saveInBackgroundChanged(on);
         } else if (key == QStringLiteral("autoSaveRecovery")) {
             autoSaveMinutes_->setEnabled(on);
             emit autoSaveRecoveryChanged(on, autoSaveMinutes_->currentData().toInt());
@@ -512,6 +516,13 @@ void PreferencesDialog::setNativeSaveCompatibility(int choice)
 {
     const QSignalBlocker blocker(nativeSaveCompatibility_);
     nativeSaveCompatibility_->setCurrentIndex(choice);
+}
+
+void PreferencesDialog::setSaveInBackground(bool on)
+{
+    QCheckBox* box = checkbox(QStringLiteral("saveInBackground"));
+    const QSignalBlocker blocker(box);
+    box->setChecked(on);
 }
 
 void PreferencesDialog::setAutoSaveRecovery(bool on, int minutes)

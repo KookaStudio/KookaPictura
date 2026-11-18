@@ -59,6 +59,14 @@ pub mod ffi {
         /// or the document was replaced.
         fn save_finish(view: Pin<&mut PictureView>) -> bool;
 
+        /// Worker phase percentage, or -1 when no job exists.
+        fn save_progress(view: &PictureView) -> i32;
+
+        /// Join and apply the job: 0 failed, 1 saved, 2 uncertain, 3 replaced, 4 failed after replacement.
+        fn save_finish_outcome(view: Pin<&mut PictureView>) -> i32;
+
+        fn save_set_sync_failure(view: Pin<&mut PictureView>, fail: bool);
+
         /// Hold a started save's completion for `ms` milliseconds (test seam).
         fn save_set_delay(view: Pin<&mut PictureView>, ms: u64);
 

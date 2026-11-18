@@ -7,6 +7,7 @@ use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 use std::path::Path;
+use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -16,13 +17,25 @@ fn can_omit_merged(doc: &pictura_core::Document) -> bool {
 
 /// The live native-save worker and the document identity it snapshotted.
 pub(in crate::cxxqt_object) struct SaveJob {
-    handle: std::thread::JoinHandle<Option<bool>>,
+    handle: std::thread::JoinHandle<(SaveOutcome, bool)>,
+    progress: Arc<AtomicI32>,
     path: String,
     start_history: Option<u64>,
     start_revision: u64,
     print_revision: u64,
+    start_metadata: u64,
     generation: u64,
     copy: bool,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+enum SaveOutcome {
+    Failed = 0,
+    Saved = 1,
+    Uncertain = 2,
+    Replaced = 3,
+    ReplacedFailure = 4,
 }
 
 pub(in crate::cxxqt_object) fn save_start_rust(
@@ -45,15 +58,6 @@ fn save_start_with_compatibility(
         || super::super::super::open_jobs::compatibility::destination_is_protected(Path::new(path))
     {
         return false;
-    }
-    if rust
-        .save_job
-        .as_ref()
-        .is_some_and(|job| job.handle.is_finished())
-    {
-        // An abandoned job must not wedge later saves; its write already landed
-        // (or failed) and no caller is left to apply the result.
-        rust.save_job = None;
     }
     if rust.save_job.is_some() {
         return false;
@@ -94,25 +98,31 @@ fn save_start_with_compatibility(
     let start_history = session.history.current_id();
     let start_revision = session.content_revision;
     let print_revision = session.print_revision;
+    let start_metadata = session.persisted_metadata_revision;
     let generation = session.document_generation;
     let cache = Arc::clone(&session.encode_cache);
     pictura_codec::warm_encode_idents(doc_ref);
-    let mut doc = doc_ref.clone();
-    session.print_resources.apply(&mut doc);
+    let doc = doc_ref.clone();
+    let print_resources = session.print_resources.clone();
     let delay = rust.save_delay_for_test;
+    let sync_failure = rust.save_sync_failure_for_test;
     let psb = suffix == "psb";
     let worker_path = path.to_string();
     let job_path = path.to_string();
+    let progress = Arc::new(AtomicI32::new(0));
+    let worker_progress = progress.clone();
     let handle = std::thread::spawn(move || {
         let _reservation = reservation;
         let _efficiency = pictura_core::scratch::operation();
         let unreadable_before = pictura_core::memory::eviction::unreadable_reads();
         let mut doc = doc;
+        print_resources.apply(&mut doc);
         if let Some(include) = compatibility {
             prepare_compatibility_save(&mut doc, include, dirty);
         } else {
             prepare_native_save(&mut doc, dirty);
         }
+        worker_progress.store(30, Ordering::Relaxed);
         // A `.psb` path forces a version-2 PSB container; every other native
         // suffix writes a PSD.
         let mut doc = pictura_render::save_view(&doc);
@@ -120,37 +130,51 @@ fn save_start_with_compatibility(
         if !embed {
             pictura_codec::remove_document_profile(doc.to_mut());
         }
-        let written = pictura_codec::write_versioned(
+        let Ok(written) = pictura_codec::write_versioned(
             &doc,
             psb,
             Some(&cache),
             env!("CARGO_PKG_VERSION"),
             compatibility.is_some(),
-        )
-        .ok()?;
+        ) else {
+            return (SaveOutcome::Failed, false);
+        };
         // A tile lost while encoding wrote defaults in its place.
         if pictura_core::memory::eviction::unreadable_reads() != unreadable_before
             && crate::history::unreadable_tiles(&doc) > 0
         {
-            return None;
+            return (SaveOutcome::Failed, false);
         }
+        worker_progress.store(85, Ordering::Relaxed);
         if delay > 0 {
             std::thread::sleep(Duration::from_millis(delay));
         }
-        super::super::super::helpers::safe_io::write_atomically(
-            &worker_path,
-            &written.bytes,
-            false,
-        )
-        .ok()?;
-        Some(written.skipped_xmp_mirror)
+        use super::super::super::helpers::safe_io::{
+            sync_directory, write_durable, DurableWriteError,
+        };
+        let result = write_durable(Path::new(&worker_path), &written.bytes, |parent| {
+            if sync_failure {
+                return Err(std::io::Error::other("directory sync fault"));
+            }
+            sync_directory(parent)
+        });
+        match result {
+            Ok(()) => {
+                worker_progress.store(100, Ordering::Relaxed);
+                (SaveOutcome::Saved, written.skipped_xmp_mirror)
+            }
+            Err(DurableWriteError::AfterRename(_)) => (SaveOutcome::Uncertain, false),
+            Err(DurableWriteError::BeforeRename(_)) => (SaveOutcome::Failed, false),
+        }
     });
     rust.save_job = Some(SaveJob {
         handle,
+        progress,
         path: job_path,
         start_history,
         start_revision,
         print_revision,
+        start_metadata,
         generation,
         copy,
     });
@@ -231,32 +255,64 @@ pub(in crate::cxxqt_object) fn save_running_rust(rust: &PictureViewRust) -> bool
         .is_some_and(|job| !job.handle.is_finished())
 }
 
-pub(in crate::cxxqt_object) fn save_finish_rust(rust: &mut PictureViewRust) -> bool {
+fn finish(rust: &mut PictureViewRust) -> SaveOutcome {
     let Some(job) = rust.save_job.take() else {
-        return true;
+        return SaveOutcome::Failed;
     };
-    let Ok(Some(skipped_xmp_mirror)) = job.handle.join() else {
-        return false;
-    };
-    if rust.session.document_generation != job.generation {
-        // The snapshot was written, but this is a different document: report
-        // "not applied" so the frame keeps the replacement's path and title.
-        return false;
+    let (outcome, skipped_xmp_mirror) = job.handle.join().unwrap_or((SaveOutcome::Failed, false));
+    let session = &mut rust.session;
+    if session.document_generation != job.generation {
+        return if outcome == SaveOutcome::Saved {
+            SaveOutcome::Replaced
+        } else {
+            SaveOutcome::ReplacedFailure
+        };
     }
-    rust.session.skipped_xmp_mirror = skipped_xmp_mirror;
+    session.skipped_xmp_mirror = skipped_xmp_mirror;
     if job.copy {
-        return true;
+        return outcome;
     }
+    if outcome == SaveOutcome::Uncertain {
+        session.save_publication_uncertain = true;
+        session.dirty = true;
+        session.capture_recovery(true);
+    }
+    if outcome != SaveOutcome::Saved {
+        return outcome;
+    }
+
     rust.path = Some(job.path);
-    let current = (
-        rust.session.history.current_id(),
-        rust.session.content_revision,
-    );
-    rust.session.saved_print_revision = job.print_revision;
-    if current == (job.start_history, job.start_revision) {
-        rust.session.mark_saved();
+    session.saved_id = job.start_history;
+    session.saved_metadata_revision = job.start_metadata;
+    session.saved_print_revision = job.print_revision;
+    let current = session.history.current_id() == job.start_history
+        && session.content_revision == job.start_revision
+        && session.persisted_metadata_revision == job.start_metadata
+        && session.print_revision == job.print_revision;
+    if current {
+        session.save_publication_uncertain = false;
     }
-    true
+    session.dirty = !current || session.save_publication_uncertain;
+    outcome
+}
+
+pub(in crate::cxxqt_object) fn save_finish_rust(rust: &mut PictureViewRust) -> bool {
+    finish(rust) == SaveOutcome::Saved
+}
+
+pub(super) fn save_progress(view: &PictureView) -> i32 {
+    view.rust()
+        .save_job
+        .as_ref()
+        .map_or(-1, |job| job.progress.load(Ordering::Relaxed))
+}
+
+pub(super) fn save_finish_outcome(mut view: Pin<&mut PictureView>) -> i32 {
+    finish(&mut view.as_mut().rust_mut()) as i32
+}
+
+pub(super) fn save_set_sync_failure(mut view: Pin<&mut PictureView>, fail: bool) {
+    view.as_mut().rust_mut().save_sync_failure_for_test = fail;
 }
 
 pub(super) fn save_start(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
@@ -963,6 +1019,29 @@ mod tests {
             .count();
         assert_eq!(leftovers, 0, "a failed save leaves no temp file");
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn native_save_distinguishes_publication_failures() {
+        let mut rust = view();
+        let target = path("publication.psd");
+        rust.path = Some("prior.psd".into());
+        std::fs::write(&target, b"prior snapshot").unwrap();
+        let bad_target = format!("{target}/missing.psd");
+        assert!(save_start_rust(&mut rust, &bad_target, false));
+        wait(&rust);
+        assert!(!save_finish_rust(&mut rust));
+        assert!(!rust.session.save_publication_uncertain);
+        assert_eq!(std::fs::read(&target).unwrap(), b"prior snapshot");
+        rust.save_sync_failure_for_test = true;
+        assert!(save_start_rust(&mut rust, &target, false));
+        wait(&rust);
+        assert!(!save_finish_rust(&mut rust));
+        assert!(rust.session.save_publication_uncertain);
+        assert_eq!(rust.path.as_deref(), Some("prior.psd"));
+        assert!(rust.session.dirty);
+        assert!(pictura_codec::read_psd(&std::fs::read(&target).unwrap()).is_ok());
+        let _ = std::fs::remove_file(target);
     }
 
     #[test]

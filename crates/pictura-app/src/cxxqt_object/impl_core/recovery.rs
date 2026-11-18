@@ -10,6 +10,7 @@ mod imp;
 
 use super::super::qobject::PictureView;
 use imp::*;
+pub(in crate::cxxqt_object) use imp::{RecoveryAttachment, RecoveryIdentity};
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -24,13 +25,26 @@ pub mod ffi {
 
     #[namespace = "pictura"]
     extern "Rust" {
-        /// Start writing the document as a PSD (PSB past the PSD size limit) to `path` on a worker thread, after waiting for any earlier write. The path and dirty flag are untouched. False without a document.
-        fn recovery_write(view: Pin<&mut PictureView>, path: &QString) -> bool;
-
-        /// Wait for the write `recovery_write` started; whether it landed (true when none was pending).
+        /// Flush pending recovery records and wait for the worker's result.
         fn recovery_wait(view: Pin<&mut PictureView>) -> bool;
 
         /// Open the snapshot at `path` as an untitled document with unsaved changes, so Save asks for a destination. False when it cannot be read.
         fn recovery_open(view: Pin<&mut PictureView>, path: &QString) -> bool;
+
+        fn recovery_track(
+            view: Pin<&mut PictureView>,
+            directory: &QString,
+            id: u32,
+            name: &QString,
+            path: &QString,
+            minutes: u32,
+        );
+        fn recovery_checkpoint(view: &PictureView);
+        fn recovery_discard(view: Pin<&mut PictureView>, detach: bool) -> bool;
+        fn recovery_discard_async(view: Pin<&mut PictureView>) -> bool;
+        fn recovery_status(view: &PictureView) -> i32;
+        fn recovery_fail_next_for_test(view: &PictureView, fault: i32);
+        // 0 unreadable checkpoint, 1 restored, 2 partial, 3 keep the source.
+        fn recovery_open_chain(view: Pin<&mut PictureView>, manifest: &QString) -> i32;
     }
 }

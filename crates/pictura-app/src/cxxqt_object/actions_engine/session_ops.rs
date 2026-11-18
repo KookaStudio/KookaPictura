@@ -140,6 +140,33 @@ impl super::ffi::ActionsEngine {
         recorded
     }
 
+    pub fn reserve_command(mut self: Pin<&mut Self>, id: &QString, params_json: &QString) -> u64 {
+        let token = {
+            let this = self.as_mut().rust_mut().get_mut();
+            let Ok(params) = CommandParams::from_json(&params_json.to_string()) else {
+                return 0;
+            };
+            this.recorder
+                .reserve_command(&mut this.library, &CommandId::new(id.to_string()), &params)
+                .ok()
+                .flatten()
+                .unwrap_or(0)
+        };
+        if token != 0 {
+            self.as_mut().changed();
+        }
+        token
+    }
+
+    pub fn resolve_command(mut self: Pin<&mut Self>, token: u64, saved: bool) {
+        {
+            let this = self.as_mut().rust_mut().get_mut();
+            this.recorder
+                .resolve_command(&mut this.library, token, saved);
+        }
+        self.as_mut().changed();
+    }
+
     pub fn record_tool_stroke(mut self: Pin<&mut Self>, payload_json: &QString) -> bool {
         let recorded = {
             let this = self.as_mut().rust_mut().get_mut();
@@ -177,6 +204,10 @@ impl super::ffi::ActionsEngine {
     ) -> bool {
         let started = {
             let this = self.as_mut().rust_mut().get_mut();
+            if this.recorder.has_pending() {
+                this.last_error = "Wait for the pending save before playing actions.".into();
+                return false;
+            }
             if this.recorder.is_recording() {
                 this.last_error = ActionError::RecordingActive.to_string();
                 return false;

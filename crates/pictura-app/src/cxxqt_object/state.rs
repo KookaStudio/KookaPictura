@@ -243,13 +243,11 @@ pub struct PictureViewRust {
     /// The Copy Shape Attributes clipboard: the last shape layer's fill and
     /// stroke, pasted onto another shape layer. Session state, never saved.
     pub(super) shape_attributes: Option<pictura_render::ShapeAttributes>,
-    /// The background crash-recovery snapshot write in flight, if any
-    /// (`impl_core/recovery.rs`); its result is whether the file landed.
-    pub(super) recovery_write: Option<std::thread::JoinHandle<bool>>,
     /// The native save worker in flight, if any (`impl_core/save_jobs.rs`).
     pub(super) save_job: Option<super::impl_core::save_jobs::SaveJob>,
     /// Test seam: hold a started save's completion for this many milliseconds.
     pub(super) save_delay_for_test: u64,
+    pub(super) save_sync_failure_for_test: bool,
     /// The adjustment dialog's worker jobs (`image_adjust/jobs.rs`).
     pub(super) adjust_jobs: super::image_adjust::jobs::AdjustJobs,
     /// Set when a loading tab's open is cancelled; the worker's queued result
@@ -368,9 +366,9 @@ impl Default for PictureViewRust {
             use_default_masks: true,
             add_mask_by_default: true,
             shape_attributes: None,
-            recovery_write: None,
             save_job: None,
             save_delay_for_test: 0,
+            save_sync_failure_for_test: false,
             adjust_jobs: Default::default(),
             open_cancelled: false,
             open_request: 0,

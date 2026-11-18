@@ -817,3 +817,102 @@ mod tests {
         );
     }
 }
+
+/// Add the two recovery-only Adobe resources to an encoding copy. The caller
+/// retains the complete original raw section alongside the checkpoint.
+pub fn set_recovery_resources(document: &mut Document, path: &str, psb: bool) {
+    fn unicode_payload(value: &str) -> Vec<u8> {
+        let units: Vec<_> = value.encode_utf16().chain(std::iter::once(0)).collect();
+        let mut bytes = Vec::with_capacity(4 + 2 * units.len());
+        bytes.extend_from_slice(&(units.len() as u32).to_be_bytes());
+        for unit in units {
+            bytes.extend_from_slice(&unit.to_be_bytes());
+        }
+        bytes
+    }
+
+    let mut resources = decode_image_resources(document);
+    resources.retain(|block| !matches!(block.id, 1086 | 1087));
+    resources.extend([
+        frame_image_resource(1086, "", &unicode_payload(path)),
+        frame_image_resource(1087, "", &unicode_payload(if psb { "PSB" } else { "PSD" })),
+    ]);
+    document.image_resources = encode_image_resources(&resources).into();
+}
+
+#[cfg(test)]
+mod recovery_tests {
+    use super::*;
+
+    #[test]
+    fn recovery_resources_replace_duplicate_blocks() {
+        let mut doc = Document::from_rgba("Layer", 1, 1, &[100, 110, 120, 255]);
+        let keep = frame_image_resource(2999, "Keep", b"opaque");
+        let foreign = frame_image_resource(1086, "", b"original");
+        doc.image_resources = encode_image_resources(&[
+            foreign.clone(),
+            keep.clone(),
+            foreign,
+            frame_image_resource(1087, "", b"foreign"),
+        ])
+        .into();
+        let mut resources = doc.image_resources.to_vec();
+        resources.extend_from_slice(b"unparsed");
+        doc.image_resources = resources.into();
+        set_recovery_resources(&mut doc, "/résumé/🎨.psb", true);
+        let blocks = decode_image_resources(&doc);
+        assert!(blocks.iter().any(|block| block.raw == keep.raw));
+        for (id, expected) in [(1086, "/résumé/🎨.psb"), (1087, "PSB")] {
+            let matches: Vec<_> = blocks.iter().filter(|block| block.id == id).collect();
+            assert_eq!(matches.len(), 1);
+            let data = &matches[0].data;
+            let units: Vec<u16> = data[4..]
+                .chunks_exact(2)
+                .map(|chunk| u16::from_be_bytes([chunk[0], chunk[1]]))
+                .collect();
+            assert_eq!(units.last(), Some(&0));
+            assert_eq!(
+                u32::from_be_bytes(data[..4].try_into().unwrap()) as usize,
+                units.len()
+            );
+            assert_eq!(
+                String::from_utf16(&units[..units.len() - 1]).unwrap(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn ordinary_native_saves_preserve_autosave_resource_bytes() {
+        let original = [
+            frame_image_resource(1086, "foreign path", b"/example"),
+            frame_image_resource(1087, "foreign format", b"arbitrary"),
+            frame_image_resource(1086, "", b"duplicate"),
+        ];
+        for psb in [false, true] {
+            for records in [&original[..], &[][..]] {
+                let mut doc = Document::from_rgba("Layer", 1, 1, &[100, 110, 120, 255]);
+                doc.image_resources = encode_image_resources(records).into();
+                let bytes = if psb {
+                    crate::write_psb(&doc)
+                } else {
+                    crate::write_psd(&doc)
+                }
+                .unwrap();
+                let reopened = crate::read_psd(&bytes).unwrap();
+                let resources: Vec<_> = decode_image_resources(&reopened)
+                    .into_iter()
+                    .filter(|block| matches!(block.id, 1086 | 1087))
+                    .map(|block| block.raw)
+                    .collect();
+                assert_eq!(
+                    resources,
+                    records
+                        .iter()
+                        .map(|block| block.raw.clone())
+                        .collect::<Vec<_>>()
+                );
+            }
+        }
+    }
+}

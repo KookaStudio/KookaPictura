@@ -4,6 +4,7 @@
 
 #include "import_save_coordinator.h"
 
+#include "api/document_bridge.h"
 #include "api/view_bridge.h"
 #include "dialogs.h"
 #include "document_registry.h"
@@ -27,10 +28,20 @@ ImportSaveCoordinator::ImportSaveCoordinator(DocumentRegistry& documents,
 {
     connect(&documents_, &DocumentRegistry::aboutToRemoveDocument, this,
             [this](int index) { onAboutToRemoveDocument(index); });
+    connect(&documents_, &DocumentRegistry::documentsChanged, this, [this] {
+        for (const DocEntry* entry : documents_.docs()) {
+            if (entry->view && !entry->loading) {
+                attachRecovery(entry->view);
+            }
+        }
+    });
 }
 
 ImportSaveCoordinator::~ImportSaveCoordinator()
 {
+    for (PictureView* view : backgroundSaves_.keys()) {
+        save_finish_outcome(*view);
+    }
     shutdownRecovery();
     for (const SmartObjectEditSession& session : editSessions_) {
         delete session.temp;
@@ -46,6 +57,7 @@ void ImportSaveCoordinator::saveState(SessionState& state) const
     state.recent = recent_;
     state.saveFormatOptions = saveFormatOptions_;
     state.autoSaveRecovery = autoSaveRecovery_;
+    state.saveInBackground = saveInBackground_;
     state.autoSaveMinutes = autoSaveMinutes_;
     state.nativeSaveCompatibility = nativeSaveCompatibility();
 }
@@ -56,6 +68,7 @@ void ImportSaveCoordinator::loadState(const SessionState& state)
     setFileDialogRecentPaths(recent_);
     saveFormatOptions_ = state.saveFormatOptions;
     autoSaveRecovery_ = state.autoSaveRecovery;
+    saveInBackground_ = state.saveInBackground;
     autoSaveMinutes_ = state.autoSaveMinutes;
     setNativeSaveCompatibility(state.nativeSaveCompatibility);
 }
@@ -98,6 +111,8 @@ void ImportSaveCoordinator::onAboutToRemoveDocument(int index)
             vectorEditSessions_.removeAt(i);
         }
     }
+    resolvePendingSave(entry->view);
+    acknowledgeSaveResolution(entry->view);
     forgetRecovery(entry->view);
     if (entry->view) {
         openWired_.remove(entry->view);

@@ -6,18 +6,29 @@
 
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QEventLoop>
+#include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QTemporaryDir>
 #include <QtCore/QTimer>
 #include <QtGui/QColor>
 #include <QtGui/QImage>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QCheckBox>
+#include <QtWidgets/QProgressBar>
+#include <QtWidgets/QStatusBar>
+#include <QtWidgets/QTabBar>
 
 #include <functional>
 #include <memory>
 #include <vector>
 
 #include "api/document_api.h"
+#include "command_ids.h"
+#include "commands.h"
+#include "dialogs.h"
+#include "preferences_dialog.h"
+#include "vp_dialog.h"
+#include "panels/actions_panel.h"
 #include "filter_commands.h"
 #include "filter_preview_dialog.h"
 #include "frame.h"
@@ -48,6 +59,20 @@ QByteArray lightnessBlock(double value)
         slice(blockOf("hue-saturation")), QStringLiteral("lightness"), value, false);
     return QByteArray(reinterpret_cast<const char*>(v.data()), qsizetype(v.size()));
 }
+
+class PaintCounter : public QObject {
+public:
+    int paints = 0;
+
+protected:
+    bool eventFilter(QObject*, QEvent* event) override
+    {
+        if (event->type() == QEvent::Paint) {
+            ++paints;
+        }
+        return false;
+    }
+};
 
 struct TimerProbe {
     QElapsedTimer elapsed;
@@ -125,6 +150,18 @@ private slots:
     void initTestCase();
     void cleanup();
     void saveKeepsTheEventLoopLive();
+    void nativeSaveCallersWriteSameBytes();
+    void backgroundSavePreferencePersists();
+    void backgroundSaveAcceptsInputAndShowsProgress();
+    void backgroundSaveAsCompletesOnOrigin();
+    void backgroundSaveUpdatesTheSavedHistoryState();
+    void backgroundSaveRejectsConflictingWrites();
+    void backgroundSaveReportsUnconfirmedPublication();
+    void closeRechecksAfterBackgroundSave();
+    void destructiveActionsResolveBackgroundSave();
+    void uncertainPublicationProtectsCleanState();
+    void metadataOnlyEditDuringSaveRemainsDirty();
+    void backgroundSaveRecordingKeepsDispatchOrder();
     void aCompletedSaveWritesAndClearsModified();
     void aFailedSaveLeavesTheDocumentUntouched();
     void anEditDuringSaveLeavesTheDocumentModified();
@@ -181,7 +218,12 @@ void OffthreadJobsTest::saveKeepsTheEventLoopLive()
     QTest::qWait(20);
     // Start the probe before the call so a regression that encodes in
     // `save_start` would show up as a gap.
+    window_->show();
+    PaintCounter paint;
+    window_->imageView()->installEventFilter(&paint);
     TimerProbe probe;
+    QObject::connect(&probe.timer, &QTimer::timeout, window_->imageView(),
+                     [this] { window_->imageView()->update(); });
     probe.start();
     QVERIFY(pictura::save_start(*view, path));
     QVERIFY(pictura::save_running(*view));
@@ -189,6 +231,8 @@ void OffthreadJobsTest::saveKeepsTheEventLoopLive()
     pumpUntil([&] { return !pictura::save_running(*view); });
     probe.stop();
     QVERIFY2(probe.ticks >= 5, "the event loop kept ticking during the save");
+    QVERIFY(paint.paints > 0);
+    window_->imageView()->removeEventFilter(&paint);
     QVERIFY2(probe.maxGap < 50, "the save stalled the event loop");
     QVERIFY(pictura::save_finish(*view));
     QVERIFY(QFileInfo::exists(path));
@@ -244,6 +288,362 @@ void OffthreadJobsTest::anEditDuringSaveLeavesTheDocumentModified()
     QVERIFY(QFileInfo::exists(path));
     QCOMPARE(pictura::document_api::filePath(*view), path);
     QVERIFY(pictura::document_api::isDirty(*view));
+}
+
+namespace {
+
+using pictura::PictureView;
+using pictura::PicturaMainWindow;
+
+void command(PicturaMainWindow& window, const char* id)
+{
+    window.registry()->refresh();
+    QAction* action = window.registry()->action(QString::fromLatin1(id));
+    Q_ASSERT(action);
+    action->trigger();
+}
+
+void invert(PicturaMainWindow& window)
+{
+    command(window, "image.adjustments.invert");
+}
+
+void chooseSaveAs(PicturaMainWindow& window, const QString& path)
+{
+    pictura::setSaveFileNameProviderForTest(
+        [&path](QWidget*, const QString&, const QString&, const QStringList&, QString* filter) {
+            const QString pattern = QStringLiteral("*.") + QFileInfo(path).suffix();
+            for (const QString& candidate : pictura::saveFileFilters()) {
+                if (candidate.contains(pattern, Qt::CaseInsensitive)) {
+                    *filter = candidate;
+                    break;
+                }
+            }
+            return path;
+        });
+    window.setProfileDialogForTest([](bool, bool&) { return true; });
+    command(window, pictura::command_ids::FileSaveAs);
+    window.setProfileDialogForTest({});
+    pictura::setSaveFileNameProviderForTest({});
+}
+
+QByteArray fileBytes(const QString& path)
+{
+    QFile file(path);
+    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+}
+
+void addVanishingPlane(PictureView& view)
+{
+    pictura::VanishingPointDialog dialog(&view, QStringLiteral("Metadata"));
+    QVERIFY(dialog.ready());
+    const double corners[] = {8, 8, 24, 8, 24, 24, 8, 24};
+    QCOMPARE(pictura::vp_create(rust::Slice<const double>(corners, 8)), 0);
+    dialog.accept();
+}
+
+} // namespace
+
+void OffthreadJobsTest::nativeSaveCallersWriteSameBytes()
+{
+    PictureView* view = newDoc(32, 32);
+    QVERIFY(view);
+    for (const QString& suffix : {QStringLiteral("psd"), QStringLiteral("psb")}) {
+        const QString sync = dir_.filePath(QStringLiteral("sync.") + suffix);
+        const QString async = dir_.filePath(QStringLiteral("async.") + suffix);
+        window_->setProfileDialogForTest([](bool, bool&) { return true; });
+        QVERIFY(window_->saveActiveAsWithOptions(sync));
+        pictura::save_set_delay(*view, 100);
+        chooseSaveAs(*window_, async);
+        QTRY_COMPARE(window_->documentPath(0), async);
+        QVERIFY(!fileBytes(sync).isEmpty());
+        QCOMPARE(fileBytes(sync), fileBytes(async));
+    }
+}
+
+void OffthreadJobsTest::backgroundSavePreferencePersists()
+{
+    pictura::test::ScopedStateHome state;
+    auto first = pictura::test::makeMainWindow();
+    QVERIFY(first->saveInBackground());
+    first->setAutoSaveRecovery(true, 30);
+    first->showPreferences(QStringLiteral("File Handling"));
+    auto* checkbox = first->preferencesDialog()->findChild<QCheckBox*>(QStringLiteral("preferences_saveInBackground"));
+    QVERIFY(checkbox && checkbox->isChecked());
+    checkbox->click();
+    first->saveSessionNow();
+    auto second = pictura::test::makeMainWindow();
+    QVERIFY(!second->saveInBackground());
+    QVERIFY(second->autoSaveRecovery());
+    QCOMPARE(second->autoSaveMinutes(), 30);
+    QVERIFY(second->newDocument(QStringLiteral("Waiting"), 16, 16, QStringLiteral("rgb"), 8,
+                                QStringLiteral("white")));
+    const QString file = dir_.filePath(QStringLiteral("waiting.psd"));
+    QVERIFY(second->saveActiveAs(file));
+    pictura::save_set_delay(*second->activeView(), 400);
+    bool busy = false;
+    QTimer::singleShot(320, second.get(), [&] {
+        busy = second->findChild<QWidget*>(QStringLiteral("jobBusy")) != nullptr;
+    });
+    command(*second, pictura::command_ids::FileSave);
+    QVERIFY(busy);
+    QVERIFY(!pictura::save_running(*second->activeView()));
+}
+
+void OffthreadJobsTest::backgroundSaveAcceptsInputAndShowsProgress()
+{
+    PictureView* first = newDoc(32, 32);
+    QVERIFY(first);
+    const int origin = window_->activeDocumentIndex();
+    const QString path = dir_.filePath(QStringLiteral("editing.psd"));
+    QVERIFY(window_->saveActiveAs(path));
+    PictureView* second = newDoc(32, 32);
+    QVERIFY(second);
+    const int other = window_->activeDocumentIndex();
+    window_->show();
+    window_->setActiveDocumentIndex(origin);
+    pictura::save_set_delay(*first, 700);
+    command(*window_, pictura::command_ids::FileSave);
+    QVERIFY(pictura::save_running(*first));
+    auto* bar = window_->findChild<QProgressBar*>(QStringLiteral("backgroundSaveProgress"));
+    QTRY_VERIFY(bar && bar->isVisible());
+    QVERIFY(bar->value() < 100);
+    invert(*window_);
+    QCOMPARE(QColor(first->composite_argb(8, 8)), QColor(Qt::black));
+    window_->setActiveDocumentIndex(other);
+    QVERIFY(!bar->isVisible());
+    invert(*window_);
+    QCOMPARE(QColor(second->composite_argb(8, 8)), QColor(Qt::black));
+    auto* tabs = window_->findChild<QTabBar*>();
+    QVERIFY(tabs && tabs->tabText(origin).contains(QLatin1Char('%')));
+    QTRY_VERIFY(!tabs->tabText(origin).contains(QLatin1Char('%')));
+}
+
+void OffthreadJobsTest::backgroundSaveAsCompletesOnOrigin()
+{
+    PictureView* first = newDoc(32, 32);
+    QVERIFY(first);
+    const int origin = window_->activeDocumentIndex();
+    PictureView* second = newDoc(32, 32);
+    QVERIFY(second);
+    const int other = window_->activeDocumentIndex();
+    window_->setActiveDocumentIndex(origin);
+    const QString path = dir_.filePath(QStringLiteral("origin.psd"));
+    pictura::save_set_delay(*first, 400);
+    chooseSaveAs(*window_, path);
+    QVERIFY(pictura::save_running(*first));
+    invert(*window_);
+    window_->setActiveDocumentIndex(other);
+    QTRY_COMPARE(window_->documentPath(origin), path);
+    QVERIFY(window_->isDocumentDirty(origin));
+    QVERIFY(window_->documentPath(other).isEmpty());
+    QVERIFY(!window_->isDocumentDirty(other));
+    PictureView reopened;
+    QVERIFY(pictura::document_api::open(reopened, path));
+    QCOMPARE(QColor(reopened.composite_argb(8, 8)), QColor(Qt::white));
+}
+
+void OffthreadJobsTest::backgroundSaveUpdatesTheSavedHistoryState()
+{
+    PictureView* view = newDoc(32, 32);
+    QVERIFY(view);
+    const QString path = dir_.filePath(QStringLiteral("history.psd"));
+    QVERIFY(window_->saveActiveAs(path));
+    invert(*window_);
+    pictura::save_set_delay(*view, 400);
+    command(*window_, pictura::command_ids::FileSave);
+    QVERIFY(view->undo());
+    QVERIFY(!window_->isDocumentDirty(0));
+    QTRY_VERIFY(window_->isDocumentDirty(0));
+    QVERIFY(view->redo());
+    QVERIFY(!window_->isDocumentDirty(0));
+}
+
+void OffthreadJobsTest::backgroundSaveRejectsConflictingWrites()
+{
+    PictureView* first = newDoc(32, 32);
+    QVERIFY(first);
+    const QString path = dir_.filePath(QStringLiteral("claimed.psd"));
+    pictura::save_set_delay(*first, 700);
+    chooseSaveAs(*window_, path);
+    QVERIFY(pictura::save_running(*first));
+    const QString conflict = dir_.filePath(QStringLiteral("second.psd"));
+    chooseSaveAs(*window_, conflict);
+    QVERIFY(!QFileInfo::exists(conflict));
+    QVERIFY(window_->statusBar()->currentMessage().contains(QStringLiteral("progress"), Qt::CaseInsensitive));
+    QVERIFY(newDoc(32, 32));
+    chooseSaveAs(*window_, dir_.filePath(QStringLiteral("./claimed.psd")));
+    QVERIFY(window_->documentPath(1).isEmpty());
+    QVERIFY(window_->statusBar()->currentMessage().contains(QStringLiteral("progress"), Qt::CaseInsensitive));
+    QTRY_COMPARE(window_->documentPath(0), path);
+}
+
+void OffthreadJobsTest::backgroundSaveReportsUnconfirmedPublication()
+{
+    PictureView* view = newDoc(32, 32);
+    QVERIFY(view);
+    invert(*window_);
+    const QString path = dir_.filePath(QStringLiteral("uncertain.psd"));
+    pictura::save_set_sync_failure(*view, true);
+    chooseSaveAs(*window_, path);
+    QTRY_VERIFY(window_->statusBar()->currentMessage().contains(QStringLiteral("could not confirm"),
+                                                               Qt::CaseInsensitive));
+    QVERIFY(QFileInfo::exists(path));
+    QVERIFY(window_->documentPath(0).isEmpty());
+    QVERIFY(window_->isDocumentDirty(0));
+}
+
+void OffthreadJobsTest::closeRechecksAfterBackgroundSave()
+{
+    PictureView* view = newDoc(32, 32);
+    QVERIFY(view);
+    const QString path = dir_.filePath(QStringLiteral("close-edit.psd"));
+    QVERIFY(window_->saveActiveAs(path));
+    pictura::save_set_delay(*view, 250);
+    command(*window_, pictura::command_ids::FileSave);
+    invert(*window_);
+    const auto cancel = pictura::UnsavedChoice::Cancel;
+    pictura::setRequestUnsavedChoice(&cancel);
+    const bool cancelledClose = window_->closeDocument(0, true);
+    pictura::setRequestUnsavedChoice(nullptr);
+    QVERIFY(!cancelledClose);
+    QVERIFY(!pictura::save_running(*view));
+    QVERIFY(window_->isDocumentDirty(0));
+    const auto save = pictura::UnsavedChoice::Save;
+    pictura::setRequestUnsavedChoice(&save);
+    const bool savedClose = window_->closeDocument(0, true);
+    pictura::setRequestUnsavedChoice(nullptr);
+    QVERIFY(savedClose);
+    PictureView reopened;
+    QVERIFY(pictura::document_api::open(reopened, path));
+    QCOMPARE(QColor(reopened.composite_argb(8, 8)), QColor(Qt::black));
+}
+
+void OffthreadJobsTest::destructiveActionsResolveBackgroundSave()
+{
+    PictureView* view = newDoc(32, 32);
+    QVERIFY(view);
+    const QString path = dir_.filePath(QStringLiteral("destructive.psd"));
+    QVERIFY(window_->saveActiveAs(path));
+    pictura::save_set_delay(*view, 250);
+    for (int operation = 0; operation < 3; ++operation) {
+        command(*window_, pictura::command_ids::FileSave);
+        invert(*window_);
+        const auto cancel = pictura::UnsavedChoice::Cancel;
+        pictura::setRequestUnsavedChoice(&cancel);
+        if (operation == 0) {
+            command(*window_, pictura::command_ids::FileRevert);
+        } else if (operation == 1) {
+            window_->saveAllDocumentsForRestart();
+        } else {
+            window_->close();
+        }
+        pictura::setRequestUnsavedChoice(nullptr);
+        QVERIFY(!pictura::save_running(*view));
+        QCOMPARE(window_->documentCount(), 1);
+        QVERIFY(window_->isDocumentDirty(0));
+    }
+}
+
+void OffthreadJobsTest::uncertainPublicationProtectsCleanState()
+{
+    PictureView* view = newDoc(32, 32);
+    QVERIFY(view);
+    const QString path = dir_.filePath(QStringLiteral("protected.psd"));
+    QVERIFY(window_->saveActiveAs(path));
+    window_->enableRecovery();
+    invert(*window_);
+    pictura::save_set_delay(*view, 400);
+    pictura::save_set_sync_failure(*view, true);
+    command(*window_, pictura::command_ids::FileSave);
+    QVERIFY(view->undo());
+    QVERIFY(!window_->isDocumentDirty(0));
+    QTRY_VERIFY(window_->isDocumentDirty(0));
+    QVERIFY(view->redo() && view->undo());
+    QVERIFY(window_->isDocumentDirty(0));
+    const auto cancel = pictura::UnsavedChoice::Cancel;
+    pictura::setRequestUnsavedChoice(&cancel);
+    const bool closed = window_->closeDocument(0, true);
+    pictura::setRequestUnsavedChoice(nullptr);
+    QVERIFY(!closed);
+    pictura::save_set_sync_failure(*view, false);
+    QVERIFY(window_->saveActive());
+    QVERIFY(!window_->isDocumentDirty(0));
+    window_->shutdownRecovery();
+}
+
+void OffthreadJobsTest::metadataOnlyEditDuringSaveRemainsDirty()
+{
+    PictureView* view = newDoc(32, 32);
+    QVERIFY(view);
+    const QString path = dir_.filePath(QStringLiteral("metadata.psd"));
+    QVERIFY(window_->saveActiveAs(path));
+    invert(*window_);
+    const int index = view->history_index();
+    pictura::save_set_delay(*view, 400);
+    command(*window_, pictura::command_ids::FileSave);
+    addVanishingPlane(*view);
+    QCOMPARE(view->history_index(), index);
+    QTRY_COMPARE(pictura::save_progress(*view), -1);
+    QVERIFY(window_->isDocumentDirty(0));
+    QVERIFY(view->undo() && view->redo());
+    QVERIFY(window_->isDocumentDirty(0));
+    QVERIFY(window_->saveActive());
+    QVERIFY(!window_->isDocumentDirty(0));
+}
+
+void OffthreadJobsTest::backgroundSaveRecordingKeepsDispatchOrder()
+{
+    PictureView* view = newDoc(32, 32);
+    QVERIFY(view);
+    const QString path = dir_.filePath(QStringLiteral("recorded.psd"));
+    QVERIFY(window_->saveActiveAs(path));
+    auto* panel = window_->findChild<pictura::ActionsPanel*>();
+    QVERIFY(panel);
+    auto* recorder = panel->engineForTest();
+    QVERIFY(recorder);
+    const QString set = recorder->createSet(QStringLiteral("Save tests"));
+    const QString first = recorder->createAction(set, QStringLiteral("First"), 0, false, false, 0);
+    const QString second = recorder->createAction(set, QStringLiteral("Second"), 0, false, false, 0);
+    QVERIFY(recorder->startRecording(first, -1));
+    pictura::save_set_delay(*view, 400);
+    command(*window_, pictura::command_ids::FileSave);
+    invert(*window_);
+    recorder->stopRecording();
+    QVERIFY(recorder->startRecording(second, -1));
+    QTRY_COMPARE(pictura::save_progress(*view), -1);
+    pictura::save_set_sync_failure(*view, true);
+    command(*window_, pictura::command_ids::FileSave);
+    invert(*window_);
+    recorder->stopRecording();
+    QTRY_COMPARE(pictura::save_progress(*view), -1);
+    pictura::save_set_sync_failure(*view, false);
+
+    QStringList firstSteps;
+    QStringList firstCommands;
+    QStringList secondCommands;
+    for (const auto& row : recorder->snapshot()) {
+        if (row.commandId.isEmpty()) {
+            continue;
+        }
+        if (row.parentId == first) {
+            firstSteps.append(row.id);
+            firstCommands.append(row.commandId);
+        } else if (row.parentId == second) {
+            secondCommands.append(row.commandId);
+        }
+    }
+    QCOMPARE(firstCommands, (QStringList{QStringLiteral("file.save"),
+                                         QStringLiteral("image.adjustments.invert")}));
+    QCOMPARE(secondCommands, QStringList{QStringLiteral("image.adjustments.invert")});
+    recorder->setDocumentFacts(true, true, QStringLiteral("rgb"), false);
+    QVERIFY(recorder->startPlayback(firstSteps));
+    const auto save = recorder->playbackNext();
+    QCOMPARE(save.commandId, QStringLiteral("file.save"));
+    QCOMPARE(save.params.value(QStringLiteral("in")).toString(), path);
+    const auto edit = recorder->playbackNext();
+    QCOMPARE(edit.commandId, QStringLiteral("image.adjustments.invert"));
+    recorder->cancelPlayback();
 }
 
 void OffthreadJobsTest::largeWholeLayerPreviewKeepsTheEventLoopLive()

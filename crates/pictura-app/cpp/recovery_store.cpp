@@ -9,7 +9,7 @@
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QLockFile>
-#include "protected_output.h"
+#include <QtCore/QUuid>
 
 #include <optional>
 
@@ -24,11 +24,6 @@ QString lockPath(const QString& dir)
     return dir + QStringLiteral("/lock");
 }
 
-QString manifestPath(const QString& dir, int id)
-{
-    return dir + QStringLiteral("/%1.json").arg(id);
-}
-
 // A lock is stale only when its owner is gone; age alone must not let a later
 // launch steal a long-running instance's session.
 std::unique_ptr<QLockFile> tryLock(const QString& dir)
@@ -41,18 +36,77 @@ std::unique_ptr<QLockFile> tryLock(const QString& dir)
     return lock;
 }
 
-std::optional<RecoverableDocument> readManifest(const QString& dir, const QString& file)
+void removeLockedDirectory(const QString& path)
 {
-    QFile manifest(dir + QLatin1Char('/') + file);
+    QDir dir(path);
+    for (const QFileInfo& entry : dir.entryInfoList(QDir::AllEntries | QDir::Hidden
+                                                   | QDir::System | QDir::NoDotAndDotDot)) {
+        if (entry.fileName() == QStringLiteral("lock")) {
+            continue;
+        }
+        if (entry.isDir() && !entry.isSymLink()) {
+            if (!QDir(entry.absoluteFilePath()).removeRecursively()) {
+                return;
+            }
+        } else if (!QFile::remove(entry.absoluteFilePath())) {
+            return;
+        }
+    }
+    QFile::remove(lockPath(path));
+    QDir().rmdir(path);
+}
+
+bool validSessionDirectory(const QString& dir)
+{
+    const QFileInfo entry(dir);
+    return entry.isDir() && !entry.isSymLink()
+        && entry.absoluteFilePath() != RecoveryStore::quarantineRoot()
+        && (entry.absolutePath() == RecoveryStore::rootPath()
+            || entry.absolutePath() == RecoveryStore::versionedRootPath());
+}
+
+QString localFile(const QString& dir, const QString& filename)
+{
+    if (filename.isEmpty() || filename == QStringLiteral(".") || filename == QStringLiteral("..")
+        || filename.contains(QLatin1Char('/')) || filename.contains(QLatin1Char('\\'))) {
+        return {};
+    }
+    const QFileInfo info(QDir(dir).filePath(filename));
+    return info.isFile() && !info.isSymLink() ? info.absoluteFilePath() : QString();
+}
+
+std::optional<RecoverableDocument> readManifest(const QString& dir, const QString& file,
+                                                 bool versioned)
+{
+    const QString manifestFile = localFile(dir, file);
+    QFile manifest(manifestFile);
     if (!manifest.open(QIODevice::ReadOnly) || manifest.size() > kMaxManifestBytes) {
         return std::nullopt;
     }
     const QJsonObject obj = QJsonDocument::fromJson(manifest.readAll()).object();
     RecoverableDocument doc;
-    doc.snapshot = dir + QLatin1Char('/') + QFileInfo(file).completeBaseName()
-                   + QStringLiteral(".psd");
-    if (!QFileInfo::exists(doc.snapshot)) {
-        return std::nullopt;
+    doc.manifest = manifestFile;
+    doc.versioned = versioned;
+    if (versioned) {
+        if (obj.value(QStringLiteral("version")).toInt() != 2) {
+            return std::nullopt;
+        }
+        doc.snapshot = localFile(dir, obj.value(QStringLiteral("snapshot")).toString());
+        for (const auto& key : {QStringLiteral("resources"), QStringLiteral("journal")}) {
+            const QString companion = localFile(dir, obj.value(key).toString());
+            if (!companion.isEmpty()) {
+                doc.companions.append(companion);
+            }
+        }
+        if (doc.snapshot.isEmpty()) {
+            // Keep the manifest discoverable. Its chain may still be repairable.
+            doc.snapshot = manifestFile;
+        }
+    } else {
+        doc.snapshot = localFile(dir, QFileInfo(file).completeBaseName() + QStringLiteral(".psd"));
+        if (doc.snapshot.isEmpty()) {
+            return std::nullopt;
+        }
     }
     doc.name = obj.value(QStringLiteral("name")).toString();
     doc.originalPath = obj.value(QStringLiteral("originalPath")).toString();
@@ -74,6 +128,11 @@ QString RecoveryStore::rootPath()
     return QFileInfo(sessionFilePath()).absolutePath() + QStringLiteral("/recovery");
 }
 
+QString RecoveryStore::versionedRootPath()
+{
+    return QFileInfo(sessionFilePath()).absolutePath() + QStringLiteral("/recovery-v2");
+}
+
 QString RecoveryStore::quarantineRoot()
 {
     return rootPath() + QStringLiteral("/quarantine");
@@ -84,9 +143,9 @@ bool RecoveryStore::open()
     if (isOpen()) {
         return true;
     }
-    const QString dir = rootPath() + QStringLiteral("/%1-%2")
-                                         .arg(QCoreApplication::applicationPid())
-                                         .arg(QDateTime::currentMSecsSinceEpoch());
+    const QString dir = versionedRootPath() + QStringLiteral("/%1-%2")
+        .arg(QCoreApplication::applicationPid())
+        .arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
     if (!QDir().mkpath(dir)) {
         return false;
     }
@@ -99,132 +158,112 @@ bool RecoveryStore::open()
     return true;
 }
 
-QString RecoveryStore::snapshotPath(int id) const
-{
-    return dir_ + QStringLiteral("/%1.psd").arg(id);
-}
-
-bool RecoveryStore::writeManifest(int id, const QString& name, const QString& originalPath)
-{
-    if (!isOpen()) {
-        return false;
-    }
-    QJsonObject obj;
-    obj.insert(QStringLiteral("name"), name);
-    obj.insert(QStringLiteral("originalPath"), originalPath);
-    pictura::ProtectedOutput file(manifestPath(dir_, id));
-    if (!file.open(QIODevice::WriteOnly)) {
-        return false;
-    }
-    file.write(QJsonDocument(obj).toJson(QJsonDocument::Compact));
-    return file.commit();
-}
-
-void RecoveryStore::remove(int id)
-{
-    if (!isOpen()) {
-        return;
-    }
-    QFile::remove(snapshotPath(id));
-    QFile::remove(manifestPath(dir_, id));
-}
-
 void RecoveryStore::close()
 {
     if (!isOpen()) {
         return;
     }
-    lock_->unlock();
+    removeLockedDirectory(dir_);
     lock_.reset();
-    QDir(dir_).removeRecursively();
     dir_.clear();
+}
+
+std::unique_ptr<QLockFile> RecoveryStore::lockOrphan(const QString& dir)
+{
+    return validSessionDirectory(dir) ? tryLock(dir) : nullptr;
+}
+
+OrphanSession RecoveryStore::readLocked(const QString& dir)
+{
+    OrphanSession session;
+    session.dir = dir;
+    const bool versioned = QFileInfo(dir).absolutePath() == versionedRootPath();
+    const auto manifests = QDir(dir).entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name);
+    for (const QString& file : manifests) {
+        if (const auto doc = readManifest(dir, file, versioned)) {
+            session.documents.append(*doc);
+        } else if (versioned) {
+            // An older reader or a broken manifest must not trigger empty-session cleanup.
+            session.preserve = true;
+        }
+    }
+    return session;
 }
 
 QList<OrphanSession> RecoveryStore::orphans(const QString& exceptDir)
 {
     QList<OrphanSession> out;
-    const QDir root(rootPath());
     const QString except = QFileInfo(exceptDir).absoluteFilePath();
-    const QString quarantine = QFileInfo(quarantineRoot()).absoluteFilePath();
-    for (const QFileInfo& entry : root.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot)) {
-        const QString dir = entry.absoluteFilePath();
-        if (dir == except || dir == quarantine) {
-            continue;
-        }
-        // Taking the lock proves the owner is gone; release it straight away so
-        // the session stays discoverable until it is recovered or discarded.
-        if (!tryLock(dir)) {
-            continue;
-        }
-        OrphanSession session;
-        session.dir = dir;
-        const QStringList manifests =
-            QDir(dir).entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name);
-        for (const QString& file : manifests) {
-            if (auto doc = readManifest(dir, file)) {
-                session.documents.append(*doc);
+    for (const QString& root : {rootPath(), versionedRootPath()}) {
+        for (const QFileInfo& entry : QDir(root).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+            const QString dir = entry.absoluteFilePath();
+            if (dir != except) {
+                if (auto lock = lockOrphan(dir)) {
+                    out.append(readLocked(dir));
+                }
             }
         }
-        out.append(session);
     }
     return out;
 }
 
 void RecoveryStore::discard(const QString& dir)
 {
-    const QString absolute = QFileInfo(dir).absoluteFilePath();
-    if (QFileInfo(dir).absolutePath() != QFileInfo(rootPath()).absoluteFilePath()
-        || absolute == QFileInfo(quarantineRoot()).absoluteFilePath()) {
-        return;
+    if (auto lock = lockOrphan(dir); lock && !readLocked(dir).preserve) {
+        discardLocked(dir);
     }
-    QDir(dir).removeRecursively();
+}
+
+void RecoveryStore::discardLocked(const QString& dir)
+{
+    if (validSessionDirectory(dir)) {
+        removeLockedDirectory(dir);
+    }
+}
+
+bool RecoveryStore::retire(const RecoverableDocument& doc)
+{
+    if (!QFile::remove(doc.manifest)) {
+        return false;
+    }
+    QFile::remove(doc.snapshot);
+    for (const QString& companion : doc.companions) {
+        QFile::remove(companion);
+    }
+    return true;
 }
 
 bool RecoveryStore::quarantine(const QString& sessionDir, const RecoverableDocument& doc)
 {
-    const QString root = QFileInfo(rootPath()).absoluteFilePath();
-    const QString session = QFileInfo(sessionDir).absoluteFilePath();
-    if (QFileInfo(session).absolutePath() != root
-        || QFileInfo(doc.snapshot).absolutePath() != session) {
+    if (!validSessionDirectory(sessionDir)) {
         return false;
     }
-    const QString manifest = session + QLatin1Char('/')
-                             + QFileInfo(doc.snapshot).completeBaseName()
-                             + QStringLiteral(".json");
-    if (!QFileInfo::exists(manifest)) {
-        return false;
-    }
-    const QString destDir = quarantineRoot() + QLatin1Char('/') + QFileInfo(session).fileName();
-    if (!QFileInfo(destDir).absoluteFilePath().startsWith(
-            QFileInfo(quarantineRoot()).absoluteFilePath() + QLatin1Char('/'))) {
-        return false;
-    }
+    const QString destDir = QDir(quarantineRoot()).filePath(QFileInfo(sessionDir).fileName());
     if (!QDir().mkpath(destDir)) {
         return false;
     }
-    const QString snapshotDest = destDir + QLatin1Char('/') + QFileInfo(doc.snapshot).fileName();
-    const QString manifestDest = destDir + QLatin1Char('/') + QFileInfo(manifest).fileName();
-    // A crash after an earlier copy but before the originals were removed
-    // leaves a stale quarantine copy; the originals are still intact here, so
-    // replacing the stale copy is safe and lets the retry proceed.
-    QFile::remove(snapshotDest);
-    QFile::remove(manifestDest);
-    if (!QFile::copy(doc.snapshot, snapshotDest)) {
-        return false;
+    QStringList files{doc.snapshot, doc.manifest};
+    files.append(doc.companions);
+    QStringList copied;
+    for (const QString& path : files) {
+        const QFileInfo entry(path);
+        const QString target = QDir(destDir).filePath(entry.fileName());
+        if (entry.absolutePath() == sessionDir && !entry.isSymLink()) {
+            QFile::remove(target);
+            if (QFile::copy(path, target)) {
+                copied.append(target);
+                continue;
+            }
+        }
+        break;
     }
-    if (!QFile::copy(manifest, manifestDest)) {
-        QFile::remove(snapshotDest);
-        return false;
+    if (copied.size() == files.size() && retire(doc)) {
+        return true;
     }
-    // Drop the manifest first: if that fails, both originals are intact. A
-    // failed snapshot removal leaves the quarantine copy as the survivor.
-    if (!QFile::remove(manifest)) {
-        QFile::remove(snapshotDest);
-        QFile::remove(manifestDest);
-        return false;
+    for (const QString& path : copied) {
+        QFile::remove(path);
     }
-    QFile::remove(doc.snapshot);
-    return true;
+    return false;
 }
 
 QString recoveredDocumentName(const QString& name)
