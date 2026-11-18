@@ -958,6 +958,7 @@ void MenuRegistrar::buildMenus(QMenuBar* menuBar)
 {
     menuBar_ = menuBar;
     commands_->buildMenuBar(menuBar);
+    buildMeasurementScaleMenu();
     buildUiSizeMenu();
     // The History panel's iconic flyout is a separate top-level Qt::Popup.
     if (QAction* undo = commands_->action(QLatin1String(command_ids::EditUndo))) {

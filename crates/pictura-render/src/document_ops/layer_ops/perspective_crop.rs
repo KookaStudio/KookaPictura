@@ -137,6 +137,21 @@ pub fn perspective_crop_sized(
     doc.source
         .replace_planes(None)
         .expect("valid source planes");
+    let edge = |a: (f64, f64), b: (f64, f64)| (b.0 - a.0, b.1 - a.1);
+    let x = edge(quad[0], quad[1]);
+    let y = edge(quad[0], quad[3]);
+    let opposite = (
+        quad[1].0 + quad[3].0 - quad[0].0,
+        quad[1].1 + quad[3].1 - quad[0].1,
+    );
+    let tolerance = 1e-8 * wf.max(hf).max(1.0);
+    let is_isometry = (x.0.hypot(x.1) - wf).abs() <= tolerance
+        && (y.0.hypot(y.1) - hf).abs() <= tolerance
+        && (x.0 * y.0 + x.1 * y.1).abs() <= tolerance * wf.max(hf)
+        && (quad[2].0 - opposite.0).hypot(quad[2].1 - opposite.1) <= tolerance;
+    if !is_isometry {
+        doc.measurement_scale.invalidate_for_resample();
+    }
     doc.width = w;
     doc.height = h;
     true

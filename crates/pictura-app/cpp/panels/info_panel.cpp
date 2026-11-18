@@ -102,6 +102,14 @@ InfoPanel::InfoPanel(QWidget* parent)
     docLabel_->setObjectName(QStringLiteral("infoDocSize"));
     outer->addWidget(docLabel_);
 
+    if (edition_is_extended()) {
+        scaleLabel_ = new QLabel(this);
+        scaleLabel_->setObjectName(QStringLiteral("infoMeasurementScale"));
+        scaleLabel_->setTextFormat(Qt::PlainText);
+        scaleLabel_->hide();
+        outer->addWidget(scaleLabel_);
+    }
+
     samplersLabel_ = new QLabel(this);
     samplersLabel_->setObjectName(QStringLiteral("infoSamplers"));
     samplersLabel_->setWordWrap(true);
@@ -580,6 +588,34 @@ void InfoPanel::refreshToolLabel()
 
 void InfoPanel::refresh() { refresh(true); }
 
+void InfoPanel::updatePanelMenu(QMenu* menu)
+{
+    if (!scaleLabel_) {
+        return;
+    }
+    for (auto* options : menu->actions()) {
+        if (options->text() != QStringLiteral("Panel Options…")) {
+            continue;
+        }
+        if (!options->menu()) {
+            auto* panelOptions = new QMenu(menu);
+            options->setMenu(panelOptions);
+            options->setEnabled(true);
+            options->setToolTip(QString());
+            auto* scale = panelOptions->addAction(tr("Measurement Scale"));
+            scale->setCheckable(true);
+            scale->setChecked(showScale_);
+            connect(scale, &QAction::toggled, this, [this](bool visible) {
+                showScale_ = visible;
+                refresh();
+            });
+        } else if (!options->menu()->actions().isEmpty()) {
+            options->menu()->actions().front()->setChecked(showScale_);
+        }
+        break;
+    }
+}
+
 void InfoPanel::refresh(bool full)
 {
     if (!view_ || !view_->has_document()) {
@@ -588,6 +624,10 @@ void InfoPanel::refresh(bool full)
         setValues(position_, {});
         setValues(size_, {});
         docLabel_->clear();
+        if (scaleLabel_) {
+            scaleLabel_->clear();
+            scaleLabel_->hide();
+        }
         samplersLabel_->clear();
         samplersLabel_->setVisible(false);
         return;
@@ -647,6 +687,10 @@ void InfoPanel::refresh(bool full)
 
 void InfoPanel::refreshDocumentRows(int width, int height)
 {
+    if (scaleLabel_) {
+        scaleLabel_->setText(measurement_scale_text(*view_));
+        scaleLabel_->setVisible(showScale_);
+    }
     const ::rust::Vec<double> bytes = document_size_bytes(*view_);
     if (bytes.size() == 2) {
         docLabel_->setText(tr("Doc: %1/%2").arg(formatBytes(bytes[0]), formatBytes(bytes[1])));

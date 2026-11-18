@@ -57,6 +57,7 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/menu_layer_ops.cpp
     crates/pictura-app/cpp/menu_layer_style.cpp
     crates/pictura-app/cpp/menu_matting.cpp
+    crates/pictura-app/cpp/menu_measurement_scale.cpp
     crates/pictura-app/cpp/menu_panel_commands.cpp
     crates/pictura-app/cpp/menu_recent.cpp
     crates/pictura-app/cpp/menu_registrar.cpp

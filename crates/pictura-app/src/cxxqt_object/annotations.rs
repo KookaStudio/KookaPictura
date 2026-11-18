@@ -78,6 +78,20 @@ pub mod ffi {
         /// The Ruler readout `[X, Y, W, H, A (degrees), D1]`; empty when there is no line.
         fn ruler_measurement(view: &PictureView) -> Vec<f64>;
 
+        fn measurement_scale_values(view: &PictureView) -> Vec<f64>;
+        fn measurement_scale_units(view: &PictureView) -> QString;
+        fn measurement_scale_text(view: &PictureView) -> QString;
+        fn calibrated_ruler_length(view: &PictureView) -> QString;
+        fn measurement_scale_needs_recalibration(view: &PictureView) -> bool;
+        fn measurement_scale_valid(pixels: i32, logical: f64, units: &QString) -> bool;
+        fn apply_measurement_scale(
+            view: Pin<&mut PictureView>,
+            pixels: i32,
+            logical: f64,
+            units: &QString,
+        ) -> bool;
+        fn reset_measurement_scale(view: Pin<&mut PictureView>) -> bool;
+
         /// The document's `[memory, disk]` byte footprint; empty without a document.
         fn document_size_bytes(view: &PictureView) -> Vec<f64>;
 

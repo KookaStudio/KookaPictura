@@ -469,6 +469,7 @@ void PicturaMainWindow::buildStatusBar()
     zoomField_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
     sizeLabel_ = new QLabel(QStringLiteral("—"), bar);
     sizeLabel_->setObjectName(QStringLiteral("statusSizeLabel"));
+    sizeLabel_->setTextFormat(Qt::PlainText);
 
     // The options button sits with the resolution readout it controls, between
     // Resolution and GPU. Built in visual order so the widget tree matches.
@@ -488,6 +489,15 @@ void PicturaMainWindow::buildStatusBar()
         group->addAction(option);
         connect(option, &QAction::triggered, this, [this, key]() {
             statusReadout_ = key;
+            updateStatus();
+        });
+    }
+    if (edition_is_extended()) {
+        QAction* option = optionsMenu->addAction(tr("Measurement Scale"));
+        option->setCheckable(true);
+        group->addAction(option);
+        connect(option, &QAction::triggered, this, [this]() {
+            statusReadout_ = QStringLiteral("measurementScale");
             updateStatus();
         });
     }
