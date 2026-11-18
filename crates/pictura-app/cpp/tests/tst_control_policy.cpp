@@ -148,11 +148,12 @@ void ControlPolicyTest::editWithoutSaveRefusesSaving()
 void ControlPolicyTest::everyMethodHasATier()
 {
     const QStringList names = pictura::ControlServer::methodNames();
-    QCOMPARE(names.size(), 32);
+    QCOMPARE(names.size(), 33);
     QCOMPARE(server_->tierOf(QStringLiteral("key"), {}), ControlTier::Admin);
     QCOMPARE(server_->tierOf(QStringLiteral("set_unsaved_policy"), {}), ControlTier::Admin);
     QCOMPARE(server_->tierOf(QStringLiteral("status"), {}), ControlTier::Read);
     QCOMPARE(server_->tierOf(QStringLiteral("filter"), {}), ControlTier::Edit);
+    QCOMPARE(server_->tierOf(QStringLiteral("export_webp"), {}), ControlTier::Save);
     QCOMPARE(server_->tierOf(QStringLiteral("document"),
                              {{QStringLiteral("op"), QStringLiteral("save")}}),
              ControlTier::Save);

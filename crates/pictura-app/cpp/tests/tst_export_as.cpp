@@ -170,12 +170,29 @@ void ExportAsTest::webpExport()
     QVERIFY(bytes.contains(QByteArrayLiteral("VP8 ")));
     QVERIFY(!bytes.contains(QByteArrayLiteral("VP8L")));
 
-    // A matching suffix writes exactly the encoded bytes.
+    // A matching suffix writes a WebP in the same mode. The lossy encoder's
+    // compressed alpha is not byte-stable across runs, so compare the container
+    // and chunks rather than the whole payload.
     const QString path = dir.filePath(QStringLiteral("out.webp"));
     QVERIFY(dialog.saveTo(0, path));
     QFile file(path);
     QVERIFY(file.open(QIODevice::ReadOnly));
-    QCOMPARE(file.readAll(), bytes);
+    const QByteArray written = file.readAll();
+    QVERIFY(written.size() > 12);
+    QCOMPARE(written.left(4), QByteArrayLiteral("RIFF"));
+    QCOMPARE(written.mid(8, 4), QByteArrayLiteral("WEBP"));
+    QVERIFY(written.contains(QByteArrayLiteral("VP8 ")));
+    QVERIFY(!written.contains(QByteArrayLiteral("VP8L")));
+
+    // The lossless path stays byte-stable, so the exact-write contract still
+    // applies there.
+    child<QCheckBox>(dialog, "exportAsLossless")->setChecked(true);
+    const QByteArray exact = dialog.encoded(0);
+    const QString exactPath = dir.filePath(QStringLiteral("out-lossless.webp"));
+    QVERIFY(dialog.saveTo(0, exactPath));
+    QFile exactFile(exactPath);
+    QVERIFY(exactFile.open(QIODevice::ReadOnly));
+    QCOMPARE(exactFile.readAll(), exact);
 }
 
 void ExportAsTest::webpQualityControls()
