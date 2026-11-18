@@ -205,7 +205,9 @@ void PrintTest::saveAsPdf()
     const QByteArray contents = pdf.readAll();
     QVERIFY(contents.startsWith("%PDF-"));
     QVERIFY(contents.contains("/MediaBox [0 0 792 612]"));
-    QVERIFY(contents.contains("/Subtype /Image /Width 120 /Height 80"));
+    const QRegularExpression imageDictionary(
+        QStringLiteral(R"(/Subtype\s*/Image\s*/Width\s+120\s*/Height\s+80\b)"));
+    QVERIFY(imageDictionary.match(QString::fromLatin1(contents)).hasMatch());
     QVERIFY(contents.contains("/Im0 Do"));
     QVERIFY(contents.endsWith("%%EOF\n"));
     // Print keeps the settings for next time and for Print One Copy.
