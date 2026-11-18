@@ -1,4 +1,5 @@
 #include "layers_panel.h"
+#include "api/engine_bridge.h"
 #include "commands.h"
 
 #include "layers_filter_bar.h"
@@ -541,6 +542,14 @@ bool LayersPanel::performRowActionForTest(const QString& id, const QString& path
 {
     if (!registry_ || !view_) {
         return false;
+    }
+    if (id == QStringLiteral("relinkToFile")) {
+        if (relink_source_id(*view_, path).isEmpty()) {
+            return false;
+        }
+        makeRowAnchor(path);
+        emit smartObjectContentsRequested(QStringLiteral("relink"), path);
+        return true;
     }
     static const QHash<QString, const char*> kCommands = {
         {QStringLiteral("moveUp"), command_ids::PanelLayersMoveUp},

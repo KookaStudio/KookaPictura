@@ -16,20 +16,28 @@
 #include "api/engine_bridge.h"
 
 #include "fill_dialog.h"
+#include "frame_place.h"
 #include "stroke_dialog.h"
 #include "fade_dialog.h"
 
 #include "api/history_api.h"
 #include "document_command.h"
+#include "dialogs.h"
 #include "memory_refusal.h"
 #include "text_input.h"
 
 
 #include <QtCore/QMimeData>
+#include <QtCore/QPointer>
 #include <QtGui/QClipboard>
 #include <QtGui/QGuiApplication>
 #include <QtGui/QImage>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QDialog>
+#include <QtWidgets/QDialogButtonBox>
+#include <QtWidgets/QMessageBox>
+#include <QtWidgets/QRadioButton>
+#include <QtWidgets/QVBoxLayout>
 
 #include <cstddef>
 #include <cstdint>
@@ -42,6 +50,44 @@ bool systemClipboardHasImage()
 {
     const QMimeData* data = QGuiApplication::clipboard()->mimeData();
     return data && data->hasImage();
+}
+
+const QString kPdfClipboard = QStringLiteral("application/pdf");
+
+bool systemClipboardHasPdf()
+{
+    const QMimeData* mime = QGuiApplication::clipboard()->mimeData();
+    return mime && mime->hasFormat(kPdfClipboard);
+}
+
+bool choosePdfPaste(QWidget* parent, bool& smart)
+{
+    QDialog dialog(parent);
+    dialog.setObjectName(QStringLiteral("vectorPasteAs"));
+    dialog.setWindowTitle(QObject::tr("Paste As"));
+    auto* layout = new QVBoxLayout(&dialog);
+    const auto addChoice = [&](const QString& label, const QString& name, bool available) {
+        auto* choice = new QRadioButton(label, &dialog);
+        choice->setObjectName(name);
+        choice->setEnabled(available);
+        layout->addWidget(choice);
+        return choice;
+    };
+    auto* smartObject = addChoice(QObject::tr("Smart Object"), QStringLiteral("vectorPasteSmart"),
+                                  true);
+    addChoice(QObject::tr("Pixels"), QStringLiteral("vectorPastePixels"), true);
+    addChoice(QObject::tr("Paths"), QStringLiteral("vectorPastePaths"), false);
+    addChoice(QObject::tr("Shape Layer"), QStringLiteral("vectorPasteShape"), false);
+    smartObject->setChecked(true);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons);
+    if (runDialog(dialog, parent) != QDialog::Accepted) {
+        return false;
+    }
+    smart = smartObject->isChecked();
+    return true;
 }
 
 } // namespace
@@ -194,7 +240,33 @@ void MenuRegistrar::registerEditHandlers()
             selectLayerPath(created);
         }
     };
-    commands_->setHandler(command_ids::EditPaste, [paste]() { paste(PasteKind::Plain); });
+    commands_->setHandler(command_ids::EditPaste, [this, paste]() {
+        const QMimeData* data = QGuiApplication::clipboard()->mimeData();
+        if (!data || !data->hasFormat(kPdfClipboard)) {
+            paste(PasteKind::Plain);
+            return;
+        }
+        const QPointer<PictureView> view(activeView());
+        if (!view || !view->has_document() || view->transform_session_active()) {
+            return;
+        }
+        const auto generation = view->document_generation();
+        const QByteArray bytes = data->data(kPdfClipboard);
+        bool smart = true;
+        if (!choosePdfPaste(dialogParent(), smart) || !view
+            || view.data() != activeView() || view->document_generation() != generation) {
+            return;
+        }
+        QString error;
+        const QString path = importPdfArtwork(*view, bytes, tr("Pasted Artwork.pdf"), smart, 1, 2,
+                                              QStringLiteral("Paste"), error);
+        if (!path.isEmpty()) {
+            refresh();
+            selectLayerPath(path);
+        } else if (!error.isEmpty()) {
+            QMessageBox::warning(dialogParent(), tr("Paste As"), error);
+        }
+    });
     commands_->setHandler(command_ids::EditPasteInPlace, [paste]() { paste(PasteKind::InPlace); });
     commands_->setHandler(command_ids::EditPasteInto, [paste]() { paste(PasteKind::Into); });
     commands_->setHandler(command_ids::EditPasteOutside, [paste]() { paste(PasteKind::Outside); });
@@ -334,10 +406,12 @@ void MenuRegistrar::registerEditHandlers()
             id, [hasDocument, currentPath]() { return hasDocument() && !currentPath().isEmpty(); });
     }
     commands_->setEnabledProvider(command_ids::EditCopyMerged, hasDocument);
-    for (const char* id : {command_ids::EditPaste, command_ids::EditPasteInPlace}) {
-        commands_->setEnabledProvider(
-            id, [hasDocument, hasContents]() { return hasDocument() && hasContents(); });
-    }
+    commands_->setEnabledProvider(command_ids::EditPaste, [hasDocument, hasContents]() {
+        return hasDocument() && (hasContents() || systemClipboardHasPdf());
+    });
+    commands_->setEnabledProvider(command_ids::EditPasteInPlace, [hasDocument, hasContents]() {
+        return hasDocument() && hasContents();
+    });
     for (const char* id : {command_ids::EditPasteInto, command_ids::EditPasteOutside}) {
         commands_->setEnabledProvider(id, [this, hasDocument, hasContents]() {
             return hasDocument() && hasContents() && activeView()->has_selection();

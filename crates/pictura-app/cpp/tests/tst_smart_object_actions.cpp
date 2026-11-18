@@ -3,13 +3,17 @@
 
 #include <QtCore/QStringList>
 #include <QtCore/QTemporaryDir>
+#include <QtWidgets/QDialog>
 
+#include "api/engine_bridge.h"
 #include "commands.h"
 #include "frame.h"
+#include "import_save_coordinator.h"
 #include "panels/layers_panel.h"
 #include "api/layers_bridge.h"
 
 #include "qt_test_support.h"
+#include "vector_pdf_fixture.h"
 
 namespace {
 
@@ -32,6 +36,7 @@ private slots:
     void cleanup();
     void rowMenuOffersSmartRows();
     void rowMenuOffersSmartObjectContents();
+    void editContentsDispatchesBySourceKind();
     void commandsRequireASmartObject();
     void backgroundRowConvertsToSmartObject();
     void resetTransformRecordsOneState();
@@ -177,7 +182,7 @@ void SmartObjectActionsTest::rowMenuOffersSmartObjectContents()
     QVERIFY2(panel->rowMenuEnabledForPathForTest(path, QStringLiteral("Export Contents…")),
              "a payload enables Export Contents");
     QVERIFY2(!panel->rowMenuEnabledForPathForTest(path, QStringLiteral("Relink to File…")),
-             "Relink to File is not implemented");
+             "Relink to File requires an eligible external source");
     QVERIFY2(!panel->rowMenuEnabledForPathForTest(path, QStringLiteral("Convert to Linked…")),
              "Convert to Linked is not implemented");
 
@@ -187,6 +192,67 @@ void SmartObjectActionsTest::rowMenuOffersSmartObjectContents()
     const int tabsBefore = window_->documentCount();
     QVERIFY(panel->performRowActionForTest(QStringLiteral("editContents"), path));
     QCOMPARE(window_->documentCount(), tabsBefore + 1);
+}
+
+void SmartObjectActionsTest::editContentsDispatchesBySourceKind()
+{
+    using namespace pictura;
+    QVERIFY(window_->newDocument(QStringLiteral("Edit source kinds"), 100, 50,
+                                  QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    PictureView& view = *window_->activeView();
+    auto* panel = window_->findChild<LayersPanel*>(QStringLiteral("layersPanel"));
+    auto* files = window_->findChild<ImportSaveCoordinator*>();
+    QVERIFY(panel && files);
+    auto* registry = window_->registry();
+    const QString editId = id(command_ids::LayerSmartObjectEditContents);
+    QVERIFY(registry->action(editId));
+    window_->selectLayerPath(layers_api::rowAt(view, 0).path);
+    registry->refresh();
+    QVERIFY(!registry->action(editId)->isEnabled());
+    const int initialTabs = window_->documentCount();
+    registry->dispatch(editId);
+    QCOMPARE(window_->documentCount(), initialTabs);
+
+    const QString psd = makeSmartLayer(&view, panel);
+    QVERIFY(!psd.isEmpty());
+    const int internalHistory = view.history_count();
+    QVERIFY(panel->performRowActionForTest(QStringLiteral("editContents"), psd));
+    QCOMPARE(window_->documentCount(), initialTabs + 1);
+    QVERIFY(window_->activeFilePath().isEmpty());
+    QCOMPARE(window_->activeView()->layer_count(), 1);
+    QCOMPARE(view.history_count(), internalHistory);
+    QVERIFY(window_->closeDocument(window_->activeDocumentIndex(), false));
+
+    if (!test::haveVectorRasterizer()) {
+        return;
+    }
+    const QByteArray bytes = test::vectorPdf();
+    const auto* data = reinterpret_cast<const std::uint8_t*>(bytes.constData());
+    const ::rust::Slice<const std::uint8_t> pdf(data, static_cast<std::size_t>(bytes.size()));
+    const auto rendered = prepare_vector_pdf(pdf, 1, 2, 100, 50);
+    QVERIFY2(rendered.error.isEmpty(), qPrintable(rendered.error));
+    const QString vector = place_prepared_pdf(view, rendered, pdf, QStringLiteral("source.ai"),
+                                              true, QStringLiteral("Paste"));
+    QVERIFY(!vector.isEmpty());
+    window_->selectLayerPath(vector);
+    registry->refresh();
+    QVERIFY(registry->action(editId)->isEnabled());
+    QString launch;
+    files->setVectorEditorLauncherForTest([&launch](const QString& file) {
+        launch = file;
+        return true;
+    });
+    const int vectorHistory = view.history_count();
+    const bool dispatched = registry->dispatch(editId);
+    files->setVectorEditorLauncherForTest({});
+    QVERIFY(dispatched);
+    QCOMPARE(window_->documentCount(), initialTabs);
+    QCOMPARE(view.history_count(), vectorHistory);
+    QVERIFY(launch.endsWith(QStringLiteral(".ai")));
+    QCOMPARE(test::fixtureBytes(launch), bytes);
+    auto* editor = window_->findChild<QDialog*>(QStringLiteral("vectorEditContents"));
+    QVERIFY(editor);
+    editor->reject();
 }
 
 void SmartObjectActionsTest::commandsRequireASmartObject()

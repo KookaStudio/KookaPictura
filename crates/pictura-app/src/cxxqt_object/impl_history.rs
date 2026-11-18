@@ -145,6 +145,9 @@ impl qobject::PictureView {
     pub fn undo(mut self: Pin<&mut Self>) -> bool {
         memory_gate::clear();
         self.as_mut().settle_pending_composite();
+        if self.rust().pending_vector_place.is_some() {
+            self.as_mut().cancel_transform();
+        }
         if !self.rust().can_undo() || !self.rust().restore_fits() {
             return false;
         }
@@ -158,6 +161,9 @@ impl qobject::PictureView {
     pub fn redo(mut self: Pin<&mut Self>) -> bool {
         memory_gate::clear();
         self.as_mut().settle_pending_composite();
+        if self.rust().pending_vector_place.is_some() {
+            self.as_mut().cancel_transform();
+        }
         if !self.rust().can_redo() || !self.rust().restore_fits() {
             return false;
         }

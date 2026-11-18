@@ -252,8 +252,17 @@ pub fn smart_object_source_bytes(doc: &Document, path: &str) -> Option<Vec<u8>> 
 /// not a parseable PSD/PSB (a placed JPEG), returns `false`.
 pub fn can_edit_smart_object_contents(doc: &Document, path: &str) -> bool {
     can_replace_smart_object_contents(doc, path)
-        && smart_object_source_bytes(doc, path)
-            .is_some_and(|bytes| pictura_codec::read_psd(&bytes).is_ok())
+        && resolve_path(doc, path)
+            .and_then(|layer| layer.smart_object())
+            .is_some_and(|object| {
+                object.payload().is_some_and(|bytes| {
+                    if object.vector_placement.is_some() {
+                        pictura_codec::sniff_vector(bytes) == Some(pictura_codec::VectorKind::Pdf)
+                    } else {
+                        pictura_codec::read_psd(bytes).is_ok()
+                    }
+                })
+            })
 }
 
 /// Replace the embedded source of the smart-object layer at `path`.
@@ -279,19 +288,20 @@ pub fn replace_smart_object_contents(
         .unwrap_or_default();
     {
         let layer = resolve_path_mut(doc, path).expect("can_replace_smart_object_contents checked");
-        layer.channels_mut().clear();
         pictura_codec::edit_layer(layer, |parts| {
+            parts.channels.clear();
             parts
                 .extra_blocks
-                .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd"))
-        });
-        pictura_codec::edit_layer(layer, |parts| {
+                .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd"));
             let so = parts.smart_object.as_mut().expect("checked");
             so.set_payload(bytes.to_vec());
             so.filename = filename.to_string();
             so.filetype = *b"8BPB";
             so.creator = *b"8BIM";
             so.uuid.clear();
+            so.vector_placement = None;
+            so.authored_vector_placement = false;
+            so.vector_transforms.clear();
         });
     }
     remove_link_if_unreferenced(doc, &old_uuid);
@@ -776,12 +786,15 @@ pub fn new_smart_object_via_copy(doc: &mut Document, path: &str) -> Option<Strin
     pictura_codec::edit_layer(copy.as_mut(), |parts| {
         parts
             .extra_blocks
-            .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd"))
-    });
-    pictura_codec::edit_layer(copy.as_mut(), |parts| {
+            .retain(|block| !matches!(&block.key, b"SoLd" | b"SoLE" | b"plLd" | b"PlLd"));
         if let Some(so) = parts.smart_object.as_mut() {
             so.config_descriptor.clear();
-            so.uuid.clear();
+            if so.vector_placement.is_some() {
+                so.uuid = pictura_codec::new_vector_source_id();
+                so.authored_vector_placement = true;
+            } else {
+                so.uuid.clear();
+            }
         }
     });
     let (&index, parent) = segments.split_last()?;

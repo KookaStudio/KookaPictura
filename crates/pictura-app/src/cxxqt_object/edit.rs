@@ -407,6 +407,9 @@ impl qobject::PictureView {
         f: impl FnOnce(&mut PictureViewRust) -> Edit,
     ) -> Edit {
         self.as_mut().settle_pending_composite();
+        if self.rust().pending_vector_place.is_some() {
+            self.as_mut().cancel_transform();
+        }
         let edit = {
             let mut rust = self.as_mut().rust_mut();
             if rust.session.doc.is_none() {
@@ -433,6 +436,9 @@ impl qobject::PictureView {
     ) -> Edit {
         self.as_mut().take_over_lazy_move();
         self.as_mut().settle_pending_composite();
+        if self.rust().pending_vector_place.is_some() {
+            self.as_mut().cancel_transform();
+        }
         let edit = {
             let mut rust = self.as_mut().rust_mut();
             if rust.session.doc.is_none() {

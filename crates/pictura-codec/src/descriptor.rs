@@ -379,6 +379,52 @@ pub(crate) fn skip_descriptor_block(r: &mut Reader) -> Result<(), PsdError> {
     read_descriptor(r).map(|_| ())
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LinkedPath {
+    Full,
+    Original,
+    Relative,
+}
+
+/// Locate top-level linked-file path strings without rewriting other fields.
+pub(crate) fn linked_path_fields(data: &[u8]) -> Option<Vec<(LinkedPath, std::ops::Range<usize>)>> {
+    let mut reader = Reader::new(data);
+    if reader.u32().ok()? != 16 {
+        return None;
+    }
+    read_unicode_string(&mut reader).ok()?;
+    read_length_and_key(&mut reader).ok()?;
+    let count = reader.u32().ok()?;
+    let mut fields = Vec::new();
+    let mut full_path = false;
+    for _ in 0..count {
+        let key = read_length_and_key(&mut reader).ok()?;
+        let kind: [u8; 4] = reader.take(4).ok()?.try_into().ok()?;
+        let path = match key.as_slice() {
+            b"fullPath" => LinkedPath::Full,
+            b"originalPath" => LinkedPath::Original,
+            b"relPath" => LinkedPath::Relative,
+            _ => {
+                skip_descriptor_value(&mut reader, kind, 1).ok()?;
+                continue;
+            }
+        };
+        if kind != *b"TEXT" {
+            return None;
+        }
+        let start = reader.pos;
+        let text = read_unicode_string(&mut reader).ok()?;
+        if path == LinkedPath::Full {
+            if full_path || text.trim_matches('\0').is_empty() {
+                return None;
+            }
+            full_path = true;
+        }
+        fields.push((path, start..reader.pos));
+    }
+    (full_path && reader.remaining() == 0).then_some(fields)
+}
+
 fn skip_descriptor_value(r: &mut Reader, ostype: [u8; 4], depth: u32) -> Result<(), PsdError> {
     if depth > MAX_DEPTH {
         return Err(too_deep());

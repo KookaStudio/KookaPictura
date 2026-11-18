@@ -51,6 +51,14 @@ pub(crate) fn layer_from_parts_within(
         if smart.stack_mode.is_none() {
             smart.stack_mode = original_mode;
         }
+        if let Some((placement, authored)) = crate::vector_marker::take_marker(&mut parts) {
+            smart.vector_placement = Some(placement);
+            smart.authored_vector_placement = authored;
+            smart.vector_transforms.clear();
+        }
+        if let Some(transforms) = crate::vector_transforms::take_marker(&mut parts) {
+            smart.vector_transforms = transforms;
+        }
         crate::stage_content::admit_arc::<pictura_core::SmartObject>(
             budget,
             "smart object content",

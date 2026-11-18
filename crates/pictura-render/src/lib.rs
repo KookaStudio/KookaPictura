@@ -56,6 +56,7 @@ mod render_session;
 pub use render_session::{RenderSession, DEFAULT_PREVIEW_BUDGET};
 mod region_level;
 mod smart_source;
+pub use layer_source::smart_object_document_pixels;
 pub use region_level::{
     band_rows, composite_channels, composite_region, composite_region_level, composite_tiled,
     level_size, premultiply_planar, region_level, region_level_chunked, stream_composite,
@@ -182,7 +183,9 @@ pub use filter::{
 };
 
 mod smart_filter;
-pub use smart_filter::{apply_smart_filter_chain, decode_smart_filter, SmartFilterOp};
+pub use smart_filter::{
+    apply_smart_filter_chain, bake_smart_source_preview, decode_smart_filter, SmartFilterOp,
+};
 
 pub mod locks;
 
