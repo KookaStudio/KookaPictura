@@ -16,7 +16,7 @@
 //! few of), then unpinned tiles of other levels, least recently used first.
 
 use crate::pyramid_level::{PyramidLevel, SMALLEST_SIDE};
-use crate::region_level::{halve_level, level_size, region_level, Level0Source};
+use crate::region_level::{halve_level, level_size};
 use pictura_core::{PixelBuffer, PsdRect};
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -194,6 +194,40 @@ impl TilePyramid {
     /// Whether a current (not stale) tile is cached.
     pub fn contains(&self, key: TileKey) -> bool {
         self.tiles.get(&key).is_some_and(|entry| !entry.stale)
+    }
+
+    /// A current tile's bytes, uncounted.
+    pub(crate) fn current(&self, key: TileKey) -> Option<&Arc<[u8]>> {
+        self.tiles
+            .get(&key)
+            .filter(|entry| !entry.stale)
+            .map(|entry| &entry.data)
+    }
+
+    /// Whether a current tile of `key`'s source at a finer level lies under
+    /// `key`: a build can fold from it.
+    pub(crate) fn any_finer_under(&self, key: TileKey) -> bool {
+        let rect = self.tile_rect(key);
+        self.tiles.iter().any(|(finer, entry)| {
+            if entry.stale || finer.source != key.source || finer.level >= key.level {
+                return false;
+            }
+            let up = scale_down(self.tile_rect(*finer), (key.level - finer.level) as usize);
+            up.left < rect.right && rect.left < up.right && up.top < rect.bottom && rect.top < up.bottom
+        })
+    }
+
+    /// The current tiles of the levels under `below`, sharing their bytes,
+    /// in a pyramid of the same size with no budget: what a worker build
+    /// folds from, current as of [`Self::ticket`] taken alongside.
+    pub fn snapshot(&self, below: usize) -> TilePyramid {
+        let mut out = TilePyramid::new(self.width, self.height, u64::MAX);
+        for (key, entry) in &self.tiles {
+            if !entry.stale && (key.level as usize) < below {
+                out.insert(*key, Arc::clone(&entry.data));
+            }
+        }
+        out
     }
 
     /// A current cached tile's bytes, counted as a hit or a miss.
@@ -570,66 +604,6 @@ impl TilePyramid {
     }
 }
 
-/// Build `key`'s bytes from `source` (a `size.0`×`size.1` level-0 image), or
-/// from its four cached children in `cache` when they are all there.
-pub fn build_tile(
-    cache: Option<&TilePyramid>,
-    key: TileKey,
-    rect: PsdRect,
-    size: (u32, u32),
-    source: Level0Source<'_>,
-) -> Arc<[u8]> {
-    let level = key.level as usize;
-    if level == 0 {
-        return interleave(&source(rect)).into();
-    }
-    if let Some(data) = cache.and_then(|cache| from_children(cache, key, rect, size)) {
-        return data.into();
-    }
-    region_level(source, size, rect, level).data().into()
-}
-
-fn from_children(
-    cache: &TilePyramid,
-    key: TileKey,
-    rect: PsdRect,
-    size: (u32, u32),
-) -> Option<Vec<u8>> {
-    let child_level = key.level as usize - 1;
-    let child_rect = PsdRect {
-        top: rect.top * 2,
-        left: rect.left * 2,
-        bottom: (rect.bottom * 2).min(cache.level_size(child_level).1 as i32),
-        right: (rect.right * 2).min(cache.level_size(child_level).0 as i32),
-    };
-    let (cw, ch) = (child_rect.width() as usize, child_rect.height() as usize);
-    let mut joined = vec![0u8; cw * ch * 4];
-    let keys = cache.keys_in(key.source, child_level, child_rect);
-    for child in keys {
-        let entry = cache.tiles.get(&child).filter(|e| !e.stale)?;
-        let tile = cache.tile_rect(child);
-        let mut data = entry.data.to_vec();
-        if child_level == 0 {
-            premultiply_interleaved(&mut data);
-        }
-        let tw = tile.width() as usize * 4;
-        for y in tile.top..tile.bottom {
-            let s = (y - tile.top) as usize * tw;
-            let d =
-                ((y - child_rect.top) as usize * cw + (tile.left - child_rect.left) as usize) * 4;
-            joined[d..d + tw].copy_from_slice(&data[s..s + tw]);
-        }
-    }
-    let (_, halved) = halve_level(
-        &joined,
-        (child_rect.left, child_rect.top),
-        (cw as u32, ch as u32),
-        size,
-        child_level,
-    );
-    Some(halved)
-}
-
 /// Straight planar RGBA as straight interleaved RGBA.
 pub fn interleave(buffer: &PixelBuffer) -> Vec<u8> {
     let plane = buffer.width as usize * buffer.height as usize;
@@ -686,7 +660,7 @@ fn unique(data: &mut Arc<[u8]>) -> &mut [u8] {
     Arc::get_mut(data).expect("a fresh copy is unique")
 }
 
-fn premultiply_interleaved(data: &mut [u8]) {
+pub(crate) fn premultiply_interleaved(data: &mut [u8]) {
     for px in data.as_chunks_mut::<4>().0 {
         let a = u32::from(px[3]);
         for c in px.iter_mut().take(3) {

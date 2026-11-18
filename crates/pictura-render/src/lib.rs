@@ -62,10 +62,11 @@ pub use region_level::{
     composite_tiled_channels, keep_channels_tiled, level_size, premultiply_planar, region_level,
     region_level_chunked, stream_composite, ChunkConvert, Level0Source,
 };
+mod tile_build;
+pub use tile_build::{build_folded, build_keys, build_tile};
 mod tile_pyramid;
 pub use tile_pyramid::{
-    build_tile, interleave, level_count, Ticket, TileKey, TilePyramid, TileSource, TileStats,
-    TILE_SIDE,
+    interleave, level_count, Ticket, TileKey, TilePyramid, TileSource, TileStats, TILE_SIDE,
 };
 mod pyramid_level;
 #[cfg(any(test, feature = "test-oracle"))]

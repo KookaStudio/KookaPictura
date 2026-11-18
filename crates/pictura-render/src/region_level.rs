@@ -415,12 +415,35 @@ impl Region {
         let mut data = vec![0u8; width as usize * height as usize * 4];
         let sw = self.width as usize;
         let src = &self.data;
+        // Source columns and rows past these are outside the level or the
+        // region: a block wholly before them averages all four pixels.
+        let x_end = (lw as i32).min(self.left + sw as i32);
+        let y_end = (lh as i32).min(self.top + self.height as i32);
         if width > 0 {
             data.par_chunks_mut(width as usize * 4)
                 .enumerate()
                 .for_each(|(y, row)| {
                     let gy = top + y as i32;
-                    for (x, px) in row.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+                    let row = row.as_chunks_mut::<4>().0;
+                    let mut whole = 0;
+                    if 2 * gy + 1 < y_end {
+                        whole = ((x_end - 2 * left) / 2).clamp(0, row.len() as i32) as usize;
+                        let r0 = (2 * gy - self.top) as usize * sw * 4;
+                        let r1 = r0 + sw * 4;
+                        // `2 * left - self.left` is 0: the origin is even.
+                        let (a, b) = (&src[r0..r0 + whole * 8], &src[r1..r1 + whole * 8]);
+                        for (x, px) in row[..whole].iter_mut().enumerate() {
+                            let o = x * 8;
+                            for (c, out) in px.iter_mut().enumerate() {
+                                let sum = u32::from(a[o + c])
+                                    + u32::from(a[o + 4 + c])
+                                    + u32::from(b[o + c])
+                                    + u32::from(b[o + 4 + c]);
+                                *out = ((sum + 2) / 4) as u8;
+                            }
+                        }
+                    }
+                    for (x, px) in row.iter_mut().enumerate().skip(whole) {
                         let gx = left + x as i32;
                         let mut sum = [0u32; 4];
                         let mut n = 0u32;

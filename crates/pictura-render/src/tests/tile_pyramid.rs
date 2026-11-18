@@ -1,6 +1,7 @@
 //! The tile pyramid cache: repair, staleness, budget, pressure, counters.
 
 use super::*;
+use crate::build_tile;
 use crate::composite_region;
 use crate::region_level::tests::{seeded_doc, H, W};
 use pictura_core::{Document, PsdRect};
