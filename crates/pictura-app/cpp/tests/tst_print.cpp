@@ -202,8 +202,12 @@ void PrintTest::saveAsPdf()
 
     QFile pdf(path);
     QVERIFY(pdf.open(QIODevice::ReadOnly));
-    QVERIFY(pdf.read(5) == "%PDF-");
-    QVERIFY(pdf.size() > 1000);
+    const QByteArray contents = pdf.readAll();
+    QVERIFY(contents.startsWith("%PDF-"));
+    QVERIFY(contents.contains("/MediaBox [0 0 792 612]"));
+    QVERIFY(contents.contains("/Subtype /Image /Width 120 /Height 80"));
+    QVERIFY(contents.contains("/Im0 Do"));
+    QVERIFY(contents.endsWith("%%EOF\n"));
     // Print keeps the settings for next time and for Print One Copy.
     QCOMPARE(pictura::lastPrintSettings().copies, 2);
     QVERIFY(pictura::lastPrintSettings().landscape);
