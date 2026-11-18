@@ -1,6 +1,6 @@
 #pragma once
 
-#include "pictura_app/src/cxxqt_object/open_jobs.cxxqt.h"
+#include "api/document_bridge.h"
 
 #include <QtCore/QSaveFile>
 

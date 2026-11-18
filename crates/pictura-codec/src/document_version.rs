@@ -297,7 +297,8 @@ pub fn unsupported_document_feature(doc: &Document) -> Option<&'static str> {
             for block in layer.extra_blocks() {
                 match &block.key {
                 b"artb" | b"artd" | b"abdd" => return Some("This document uses an unsupported Photoshop artboard."),
-                b"TySh" if layer.type_tool().is_some() => {}
+                b"TySh" if layer.type_tool().is_some() || layer.fallback_type_tool().is_some() => {}
+                b"TySh" => return Some("A layer contains an unreadable Photoshop type record."),
                 b"vmsk" | b"vsms" if layer.vector_mask.is_some() => {}
                 b"SoLd" | b"SoLE" | b"plLd" | b"PlLd" if layer.smart_object().is_some() => {}
                 b"lfx2" | b"lmfx" | b"lrFX" | b"lyid" | b"shmd" | b"lnsr"
