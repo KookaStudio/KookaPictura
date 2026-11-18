@@ -198,5 +198,8 @@ fn perspective_crop_invalidates_only_non_isometric_calibration() {
     let mut opaque = doc(16, 16, 255);
     opaque.measurement_scale = DocumentMeasurementScale::Opaque;
     assert!(perspective_crop_sized(&mut opaque, distorted, 16, 16));
-    assert_eq!(opaque.measurement_scale, DocumentMeasurementScale::OpaqueResampled);
+    assert_eq!(
+        opaque.measurement_scale,
+        DocumentMeasurementScale::OpaqueResampled
+    );
 }
