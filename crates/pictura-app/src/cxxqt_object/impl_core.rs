@@ -8,7 +8,7 @@ use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString, QStringList};
 use pictura_core::{
-    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LockFlags, PsdRect,
+    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, LockFlags, PsdRect,
 };
 use pictura_render::{CompositeScope, DocumentComposite};
 use std::time::Instant;
@@ -245,29 +245,31 @@ impl qobject::PictureView {
         }
         let mut doc = Document::with_uniform_composite(w, h, mode, BitDepth::Eight, fill);
         {
-            let _ = doc.layers.push(Layer {
-                name: "Layer 0".to_string(),
-                rect: PsdRect {
-                    top: 0,
-                    left: 0,
-                    bottom: height,
-                    right: width,
-                },
-                blend: BlendMode::Normal,
-                opacity: 255,
-                fill: 255,
-                lock: LockFlags::default(),
-                color: ColorLabel::None,
-                clipping: false,
-                visible: true,
-                mask: None,
-                adjustment: None,
-                channels,
-                children: pictura_core::LayerStack::default(),
-                is_group: false,
-                background: false,
-                ..Default::default()
-            });
+            let _ = doc
+                .layers
+                .push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
+                    name: "Layer 0".to_string(),
+                    rect: PsdRect {
+                        top: 0,
+                        left: 0,
+                        bottom: height,
+                        right: width,
+                    },
+                    blend: BlendMode::Normal,
+                    opacity: 255,
+                    fill: 255,
+                    lock: LockFlags::default(),
+                    color: ColorLabel::None,
+                    clipping: false,
+                    visible: true,
+                    mask: None,
+                    adjustment: None,
+                    channels,
+                    children: pictura_core::LayerStack::default(),
+                    is_group: false,
+                    background: false,
+                    ..Default::default()
+                }));
         };
         let gpu_compute = self.rust().gpu_compute;
         DocumentComposite::new(&mut doc).refresh(CompositeScope::Full, gpu_compute);

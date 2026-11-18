@@ -87,7 +87,7 @@ fn embedded_icc_profile_is_applied_and_dropped() {
         .find(|l| l.name == "Base")
         .expect("Base layer");
     let channel = |id: i16| -> u8 {
-        base.channels
+        base.channels()
             .iter()
             .find(|c| c.id == id)
             .unwrap_or_else(|| panic!("layer has channel {id}"))
@@ -176,7 +176,7 @@ fn preserve_keeps_pixels_and_the_profile_through_a_save() {
         .find(|l| l.name == "Base")
         .expect("Base layer");
     let channel = |id: i16| -> u8 {
-        base.channels
+        base.channels()
             .iter()
             .find(|c| c.id == id)
             .unwrap_or_else(|| panic!("layer has channel {id}"))

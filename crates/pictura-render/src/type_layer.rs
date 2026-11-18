@@ -407,7 +407,7 @@ pub fn has_type_layers(doc: &Document) -> bool {
     fn any(layers: &[Layer]) -> bool {
         layers
             .iter()
-            .any(|layer| layer.type_tool.is_some() || any(&layer.children))
+            .any(|layer| layer.type_tool().is_some() || any(layer.children()))
     }
     any(&doc.layers)
 }
@@ -428,7 +428,7 @@ pub fn add_type_layer(doc: &mut Document, selection_path: &str, spec: &TypeSpec)
     let Some((rect, channels, tool)) = type_content(spec, None, None) else {
         return String::new();
     };
-    let layer = pictura_core::Layer {
+    let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: layer_name(&spec.text),
         rect,
         lock: LockFlags::default()
@@ -441,7 +441,7 @@ pub fn add_type_layer(doc: &mut Document, selection_path: &str, spec: &TypeSpec)
         }],
         type_tool: Some(tool),
         ..Default::default()
-    };
+    });
     crate::document_ops::insert_node(doc, selection_path, layer)
 }
 
@@ -460,8 +460,8 @@ pub fn re_render_type_layers(doc: &mut Document) -> usize {
             } else {
                 format!("{prefix}/{i}")
             };
-            walk(&layer.children, &path, out);
-            if layer.type_tool.is_some() {
+            walk(layer.children(), &path, out);
+            if layer.type_tool().is_some() {
                 out.push(path);
             }
         }
@@ -492,15 +492,15 @@ pub fn type_layer_at(doc: &Document, x: f64, y: f64) -> Option<String> {
             } else {
                 format!("{prefix}/{i}")
             };
-            if layer.is_group {
-                return walk(&layer.children, &path, x, y);
+            if layer.is_group() {
+                return walk(layer.children(), &path, x, y);
             }
             let r = layer.rect;
             let inside = x >= f64::from(r.left)
                 && x < f64::from(r.right)
                 && y >= f64::from(r.top)
                 && y < f64::from(r.bottom);
-            (inside && layer.type_tool.as_ref().is_some_and(|t| t.style.is_some())).then_some(path)
+            (inside && layer.type_tool().is_some_and(|t| t.style.is_some())).then_some(path)
         })
     }
     walk(&doc.layers, "", x, y)
@@ -513,7 +513,7 @@ pub fn type_layer_at(doc: &Document, x: f64, y: f64) -> Option<String> {
 ///
 /// ponytail: one style for the whole text (the first run's).
 pub fn type_layer_spec(layer: &pictura_core::Layer) -> Option<TypeSpec> {
-    let tool = layer.type_tool.as_ref()?;
+    let tool = layer.type_tool()?;
     let style = tool.style.as_ref()?;
     let mut character = style.character.clone();
     let postscript = style.font.as_deref();
@@ -569,7 +569,7 @@ pub fn replace_type_layer(doc: &mut Document, path: &str, spec: &TypeSpec) -> bo
         return false;
     }
     let Some((existing, font_name)) = crate::resolve_path(doc, path)
-        .and_then(|layer| layer.type_tool.as_ref())
+        .and_then(|layer| layer.type_tool())
         .map(|tool| {
             // Only reuse the layer's PostScript name while its family is the
             // spec's; a family change must author the new face, not rename the
@@ -592,7 +592,7 @@ pub fn replace_type_layer(doc: &mut Document, path: &str, spec: &TypeSpec) -> bo
     let Some(layer) = crate::resolve_path_mut(doc, path) else {
         return false;
     };
-    let Some(old) = layer.type_tool.as_ref() else {
+    let Some(old) = layer.type_tool() else {
         return false;
     };
     if layer.name == layer_name(&old.text) {
@@ -605,18 +605,20 @@ pub fn replace_type_layer(doc: &mut Document, path: &str, spec: &TypeSpec) -> bo
     // existing overrides through the spec it built with `type_layer_spec`.
     let overrides = spec.overrides.clone();
     layer.rect = rect;
-    layer.channels = channels;
-    layer.raw_channels.clear();
+    layer.set_channels(channels);
+    layer.discard_raw_channels();
     layer.source_channels = None;
     let block = LayerBlock {
         key: *b"TySh",
         data: pictura_codec::encode_type_tool(&tool).into(),
     };
-    match layer.extra_blocks.iter_mut().find(|b| &b.key == b"TySh") {
-        Some(existing) => *existing = block,
-        None => layer.extra_blocks.push(block),
-    }
-    layer.type_tool = Some(tool);
+    pictura_codec::edit_layer(layer, |parts| {
+        match parts.extra_blocks.iter_mut().find(|b| &b.key == b"TySh") {
+            Some(existing) => *existing = block,
+            None => parts.extra_blocks.push(block),
+        }
+        parts.type_tool = Some(tool);
+    });
     layer.applied_character_style = applied_character;
     layer.applied_paragraph_style = applied_paragraph;
     layer.type_overrides = overrides;
@@ -794,7 +796,7 @@ mod tests {
         assert_eq!(layer.name, "Hello");
         assert!(layer.is_type());
         assert_eq!(layer.lock.bits(), 0x03);
-        let tool = layer.type_tool.as_ref().unwrap();
+        let tool = layer.type_tool().unwrap();
         assert_eq!(tool.text, "Hello\rworld");
         assert_eq!(tool.style.as_ref().unwrap().rgba(), [0, 0, 255, 255]);
         let alpha = crate::channel(layer, -1).unwrap();
@@ -971,10 +973,10 @@ mod tests {
         assert_eq!(doc.layers.len(), 1);
         assert!(!layer.visible, "visibility is the caller's");
         assert_eq!(layer.name, "Hello there");
-        assert_eq!(layer.type_tool.as_ref().unwrap().text, "Hello there");
+        assert_eq!(layer.type_tool().unwrap().text, "Hello there");
         assert_eq!(
             layer
-                .extra_blocks
+                .extra_blocks()
                 .iter()
                 .filter(|b| &b.key == b"TySh")
                 .count(),
@@ -1008,7 +1010,7 @@ mod tests {
         assert!(transform_layer(&mut doc, &path, scale));
         let after = &doc.layers[0];
         assert!(after.is_type());
-        let tool = after.type_tool.as_ref().unwrap();
+        let tool = after.type_tool().unwrap();
         assert_eq!(tool.transform[..4], [3.0, 0.0, 0.0, 3.0]);
         assert!((after.rect.width() - 3 * before.rect.width()).abs() <= 4);
         assert!(
@@ -1023,7 +1025,7 @@ mod tests {
         assert_eq!(edited.matrix, [3.0, 0.0, 0.0, 3.0]);
         edited.text = "Sharper".into();
         assert!(replace_type_layer(&mut doc, &path, &edited));
-        assert_eq!(doc.layers[0].type_tool.as_ref().unwrap().transform[0], 3.0);
+        assert_eq!(doc.layers[0].type_tool().unwrap().transform[0], 3.0);
         let turn = LayerTransform {
             scale_x: 1.0,
             scale_y: 1.0,
@@ -1046,7 +1048,7 @@ mod tests {
         );
         let skew = [(l + 20.0, t), (rr + 20.0, t), (rr, b), (l, b)];
         assert!(transform_layer_quad(&mut doc, &path, skew));
-        let tool = doc.layers[0].type_tool.as_ref().unwrap();
+        let tool = doc.layers[0].type_tool().unwrap();
         assert!(doc.layers[0].is_type() && tool.transform[2].abs() > 0.01);
         doc.layers[0].lock = doc.layers[0].lock.with(LockFlags::POSITION, true);
         assert!(!transform_layer(&mut doc, &path, scale));

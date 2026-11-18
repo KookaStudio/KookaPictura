@@ -27,7 +27,7 @@ fn whole(layer: &Layer) -> PsdRect {
 }
 
 fn plane(layer: &Layer, id: i16) -> Vec<u8> {
-    let channel = layer.channels.iter().find(|c| c.id == id).unwrap();
+    let channel = layer.channels().iter().find(|c| c.id == id).unwrap();
     channel.data.to_vec()
 }
 

@@ -498,9 +498,11 @@ fn a_live_vector_mask_without_a_real_user_channel_survives_save() {
         ..Default::default()
     });
     layer.vector_mask = pictura_codec::decode_vector_mask(&data, 8, 8);
-    layer.extra_blocks.push(LayerBlock {
-        key: *b"vmsk",
-        data: data.into(),
+    pictura_codec::edit_layer(layer, |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"vmsk",
+            data: data.into(),
+        })
     });
 
     let back = read_psd(&write_psd(&doc).expect("writes")).expect("re-reads");

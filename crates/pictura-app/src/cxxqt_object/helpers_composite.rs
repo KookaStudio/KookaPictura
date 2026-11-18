@@ -251,7 +251,13 @@ pub(super) fn layer_buffer_within(layer: &Layer, rect: PsdRect) -> Option<PixelB
     );
     let full = lw * lh;
     let plane = width * height;
-    let channel = |id: i16| layer.channels.iter().find(|c| c.id == id).map(|c| &c.data);
+    let channel = |id: i16| {
+        layer
+            .channels()
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| &c.data)
+    };
     let copy = |src: &pictura_core::Plane<u8>, dst: &mut [u8]| {
         for (y, row) in dst.chunks_exact_mut(width).enumerate() {
             if let Some(line) = src.row(y0 + y, lw) {
@@ -302,7 +308,13 @@ pub(super) fn layer_thumbnail_image(layer: &Layer, size: u32) -> Option<QImage> 
     }
     let (width, height) = (width as u32, height as u32);
     let plane = (width * height) as usize;
-    let channel = |id: i16| layer.channels.iter().find(|c| c.id == id).map(|c| &c.data);
+    let channel = |id: i16| {
+        layer
+            .channels()
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| &c.data)
+    };
 
     let gray = channel(1).is_none() && channel(2).is_none();
     let c0 = channel(0)?;
@@ -368,7 +380,13 @@ pub(super) fn layer_pixel(layer: &Layer, x: u32, y: u32) -> Option<[u8; 4]> {
     }
     let plane = (width * height) as usize;
     let at = (y * width + x) as usize;
-    let channel = |id: i16| layer.channels.iter().find(|c| c.id == id).map(|c| &c.data);
+    let channel = |id: i16| {
+        layer
+            .channels()
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| &c.data)
+    };
     let c0 = channel(0)?;
     if c0.len() != plane {
         return None;
@@ -429,11 +447,11 @@ fn collect_hits(
         } else {
             format!("{prefix}/{i}")
         };
-        if layer.is_group {
-            collect_hits(&layer.children, &path, x, y, isolation, limit, out);
+        if layer.is_group() {
+            collect_hits(layer.children(), &path, x, y, isolation, limit, out);
             continue;
         }
-        if layer.adjustment.is_some() {
+        if layer.has_adjustment_content() {
             continue;
         }
         let lx = x - layer.rect.left;
@@ -582,7 +600,7 @@ pub(super) fn fill_thumbnail_image(
     if size == 0 || doc.width == 0 || doc.height == 0 {
         return None;
     }
-    let adjustment = pictura_render::decode_layer_fill(layer)?;
+    let adjustment = layer.fill_content()?;
     let rect = if layer.rect.width() > 0 && layer.rect.height() > 0 {
         layer.rect
     } else {
@@ -595,26 +613,25 @@ pub(super) fn fill_thumbnail_image(
     };
     let (tw, th) = (size, size);
     let rgba: Vec<u8> = match adjustment {
-        pictura_render::Adjustment::SolidFill([r, g, b, a]) => {
+        pictura_core::FillContent::Solid([r, g, b, a]) => {
             let mut out = Vec::with_capacity((tw * th * 4) as usize);
             for _ in 0..(tw * th) {
-                out.extend_from_slice(&[r, g, b, a]);
+                out.extend_from_slice(&[*r, *g, *b, *a]);
             }
             out
         }
-        pictura_render::Adjustment::GradientFill(params) => {
-            pictura_render::gradient_rgba(tw as i32, th as i32, &params)
+        pictura_core::FillContent::Gradient(params) => {
+            pictura_render::gradient_rgba(tw as i32, th as i32, params)
                 .into_iter()
                 .flatten()
                 .collect()
         }
-        pictura_render::Adjustment::PatternFill(params) => {
-            pictura_render::pattern_preview_rgba(patterns, &params, rect, tw, th)
+        pictura_core::FillContent::Pattern(params) => {
+            pictura_render::pattern_preview_rgba(patterns, params, rect, tw, th)
                 .into_iter()
                 .flatten()
                 .collect()
         }
-        _ => return None,
     };
     Some(rgba_image(rgba, tw as i32, th as i32))
 }
@@ -735,7 +752,7 @@ fn truncate_above(layers: &mut pictura_core::LayerStack, path: &[usize]) {
 }
 
 fn strip_adjustments(layers: &mut pictura_core::LayerStack) {
-    layers.retain_tree(&[], &mut |layer| layer.adjustment.is_none());
+    layers.retain_tree(&[], &mut |layer| !layer.has_adjustment_content());
 }
 
 /// Pixels `start .. start + out.len()` of a planar 8-bit buffer (1 = gray,
@@ -966,7 +983,7 @@ mod bundle_tests {
         };
         let mut mask = channel(0, 3).data;
         mask.tile(size, size);
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             rect: rect(size as i32),
             channels: vec![channel(0, 3), channel(1, 5), channel(2, 7), channel(-1, 11)],
             mask: Some(LayerMask {
@@ -975,12 +992,12 @@ mod bundle_tests {
                 ..Default::default()
             }),
             ..Default::default()
-        }
+        })
     }
 
     fn flattened(layer: &Layer) -> Layer {
         let mut flat = layer.clone();
-        for channel in &mut flat.channels {
+        for channel in flat.channels_mut() {
             channel.data = channel.data.as_slice().to_vec().into();
         }
         if let Some(data) = flat.mask.as_mut().and_then(|m| m.data.as_mut()) {
@@ -1008,7 +1025,7 @@ mod bundle_tests {
             assert_eq!(layer_pixel(&layer, x, y), layer_pixel(&flat, x, y));
         }
         let mut gray = layer.clone();
-        gray.channels.retain(|c| c.id == 0);
+        gray.channels_mut().retain(|c| c.id == 0);
         let gray_flat = flattened(&gray);
         for (a, b) in [(&layer, &flat), (&gray, &gray_flat)] {
             assert_eq!(layer_thumbnail_image(a, 32), layer_thumbnail_image(b, 32));

@@ -83,7 +83,7 @@ impl Prepared {
     pub fn publish(self, layer: &mut Layer) {
         layer.mask = Some(self.mask);
         layer.source_channels = self.source;
-        layer.raw_channels.retain(|c| c.id != -2);
+        pictura_codec::edit_layer(layer, |parts| parts.raw_channels.retain(|c| c.id != -2));
     }
 
     pub fn write(&mut self, x: i32, y: i32, value: u8) -> Option<()> {

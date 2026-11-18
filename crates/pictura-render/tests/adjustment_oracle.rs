@@ -103,7 +103,7 @@ fn psd_tools_reads_fixture_channel_mixer_prefix() {
         .iter()
         .find(|l| l.name == "Channel Mixer")
         .expect("Channel Mixer layer");
-    let block = layer.adjustment.as_ref().expect("mixr block");
+    let block = layer.adjustment().expect("mixr block");
     assert_eq!(block.key, *b"mixr");
     assert_eq!(block.data.len(), 44);
 
@@ -160,7 +160,7 @@ fn fixture_curves_decodes() {
         .find(|l| l.name == "Curves")
         .expect("Curves layer");
     assert_eq!(
-        decode_adjustment(composite.adjustment.as_ref().expect("curv block")),
+        decode_adjustment(composite.adjustment().expect("curv block")),
         Some(Adjustment::Curves(CurvesParams {
             points: vec![(0, 0), (64, 32), (192, 224), (255, 255)],
             red: None,
@@ -175,7 +175,7 @@ fn fixture_curves_decodes() {
         .find(|l| l.name == "Curves Channels")
         .expect("Curves Channels layer");
     assert_eq!(
-        decode_adjustment(channels.adjustment.as_ref().expect("curv block")),
+        decode_adjustment(channels.adjustment().expect("curv block")),
         Some(Adjustment::Curves(CurvesParams {
             points: vec![(0, 0), (255, 255)],
             red: Some(vec![(0, 0), (128, 255), (255, 255)]),
@@ -206,7 +206,7 @@ fn psd_tools_reads_fixture_curves_prefix() {
         .iter()
         .find(|l| l.name == "Curves")
         .expect("Curves layer");
-    let block = layer.adjustment.as_ref().expect("curv block");
+    let block = layer.adjustment().expect("curv block");
     assert_eq!(block.key, *b"curv");
 
     let hex: String = block.data.iter().map(|b| format!("{b:02x}")).collect();
@@ -286,7 +286,7 @@ fn fixture_selective_color_decodes() {
         .find(|l| l.name == "Selective Color")
         .expect("Selective Color layer");
     assert_eq!(
-        decode_adjustment(relative.adjustment.as_ref().expect("selc block")),
+        decode_adjustment(relative.adjustment().expect("selc block")),
         Some(Adjustment::SelectiveColor(selective_params(
             SelectiveColorMethod::Relative,
             RELATIVE_PLATES
@@ -299,7 +299,7 @@ fn fixture_selective_color_decodes() {
         .find(|l| l.name == "Selective Color Abs")
         .expect("Selective Color Abs layer");
     assert_eq!(
-        decode_adjustment(absolute.adjustment.as_ref().expect("selc block")),
+        decode_adjustment(absolute.adjustment().expect("selc block")),
         Some(Adjustment::SelectiveColor(selective_params(
             SelectiveColorMethod::Absolute,
             ABSOLUTE_PLATES
@@ -338,7 +338,7 @@ fn psd_tools_reads_fixture_selective_color_prefix() {
         .iter()
         .find(|l| l.name == "Selective Color")
         .expect("Selective Color layer");
-    let block = layer.adjustment.as_ref().expect("selc block");
+    let block = layer.adjustment().expect("selc block");
     assert_eq!(block.key, *b"selc");
 
     let hex: String = block.data.iter().map(|b| format!("{b:02x}")).collect();
@@ -387,7 +387,7 @@ fn fixture_color_lookup_decodes() {
         .iter()
         .find(|l| l.name == "Color Lookup")
         .expect("Color Lookup layer");
-    let block = layer.adjustment.as_ref().expect("clrL block");
+    let block = layer.adjustment().expect("clrL block");
     assert_eq!(block.key, *b"clrL");
     let Some(Adjustment::ColorLookup(params)) = decode_adjustment(block) else {
         panic!("clrL must decode to ColorLookup");
@@ -431,7 +431,7 @@ fn psd_tools_reads_fixture_color_lookup_prefix() {
         .iter()
         .find(|l| l.name == "Color Lookup")
         .expect("Color Lookup layer");
-    let block = layer.adjustment.as_ref().expect("clrL block");
+    let block = layer.adjustment().expect("clrL block");
     let hex: String = block.data.iter().map(|b| format!("{b:02x}")).collect();
 
     let out = Command::new("python3")

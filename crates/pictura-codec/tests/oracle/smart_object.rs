@@ -11,43 +11,45 @@ fn embedded_smart_doc() -> Document {
             }
         })
         .expect("pixel edit preserves geometry");
-    doc.layers = pictura_core::LayerStack::from_layers(vec![Layer {
-        name: "Smart".into(),
-        rect: PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 4,
-            right: 4,
+    doc.layers = pictura_core::LayerStack::from_layers(vec![pictura_codec::layer_from_parts(
+        pictura_core::LayerParts {
+            name: "Smart".into(),
+            rect: PsdRect {
+                top: 0,
+                left: 0,
+                bottom: 4,
+                right: 4,
+            },
+            channels: vec![
+                Channel {
+                    id: 0,
+                    data: vec![10; 16].into(),
+                },
+                Channel {
+                    id: 1,
+                    data: vec![20; 16].into(),
+                },
+                Channel {
+                    id: 2,
+                    data: vec![30; 16].into(),
+                },
+                Channel {
+                    id: -1,
+                    data: vec![255; 16].into(),
+                },
+            ],
+            smart_object: Some(
+                {
+                    let mut so = SmartObject::default();
+                    so.filename = "source.psb".into();
+                    so.kind = SmartObjectKind::Embedded;
+                    so
+                }
+                .with_payload((0..4096).map(|i| (i % 251) as u8).collect()),
+            ),
+            ..Default::default()
         },
-        channels: vec![
-            Channel {
-                id: 0,
-                data: vec![10; 16].into(),
-            },
-            Channel {
-                id: 1,
-                data: vec![20; 16].into(),
-            },
-            Channel {
-                id: 2,
-                data: vec![30; 16].into(),
-            },
-            Channel {
-                id: -1,
-                data: vec![255; 16].into(),
-            },
-        ],
-        smart_object: Some(
-            {
-                let mut so = SmartObject::default();
-                so.filename = "source.psb".into();
-                so.kind = SmartObjectKind::Embedded;
-                so
-            }
-            .with_payload((0..4096).map(|i| (i % 251) as u8).collect()),
-        ),
-        ..Default::default()
-    }]);
+    )]);
     doc
 }
 
@@ -133,16 +135,18 @@ fn psd_tools_parses_block_after_odd_length_block_in_psb() {
     // A 5-byte (odd) and a 6-byte (non-4-multiple) per-layer block precede the
     // authored `SoLd`. With the old external pad the next `8BIM` is misread and
     // the smart object is dropped.
-    doc.layers[0].extra_blocks = vec![
-        LayerBlock {
-            key: *b"zzzz",
-            data: vec![1, 2, 3, 4, 5].into(),
-        },
-        LayerBlock {
-            key: *b"yyyy",
-            data: vec![1, 2, 3, 4, 5, 6].into(),
-        },
-    ];
+    pictura_codec::edit_layer(doc.layers[0].as_mut(), |parts| {
+        parts.extra_blocks = vec![
+            LayerBlock {
+                key: *b"zzzz",
+                data: vec![1, 2, 3, 4, 5].into(),
+            },
+            LayerBlock {
+                key: *b"yyyy",
+                data: vec![1, 2, 3, 4, 5, 6].into(),
+            },
+        ]
+    });
     let bytes = write_psb(&doc).unwrap();
     let stdout = psd_tools_reads("psb-odd-block-then-smart", &bytes);
     assert_embedded_smart_object(&stdout);

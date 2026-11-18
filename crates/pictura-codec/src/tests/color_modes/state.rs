@@ -53,7 +53,10 @@ fn bitmap_without_merged_image_keeps_placeholder_and_output_policy() {
 fn short_indexed_composite_data_is_a_typed_error_not_a_panic() {
     let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
     doc.source
-        .set_encoding(Some(ColorMode::Indexed), Some(indexed_palette()))
+        .set_encoding(
+            Some(ColorMode::Indexed),
+            Some(super::indexed::indexed_palette()),
+        )
         .unwrap();
     doc.source
         .replace_planes(Some(SourcePlanes {

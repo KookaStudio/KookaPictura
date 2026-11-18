@@ -8,7 +8,7 @@ use super::paths::{resolve_path, resolve_path_mut};
 /// path is not a smart object or the object renders normally.
 pub fn smart_object_stack_mode(doc: &Document, path: &str) -> Option<StackMode> {
     resolve_path(doc, path)
-        .and_then(|layer| layer.smart_object.as_ref())
+        .and_then(|layer| layer.smart_object())
         .and_then(|so| so.stack_mode)
 }
 
@@ -23,10 +23,10 @@ pub fn can_set_smart_object_stack_mode(
     let Some(layer) = resolve_path(doc, path) else {
         return false;
     };
-    if layer.is_group || layer.adjustment.is_some() {
+    if layer.is_group() || layer.has_adjustment_content() {
         return false;
     }
-    let Some(so) = layer.smart_object.as_ref() else {
+    let Some(so) = layer.smart_object() else {
         return false;
     };
     match mode {
@@ -53,10 +53,10 @@ pub fn set_smart_object_stack_mode(
     let Some(layer) = resolve_path(doc, path) else {
         return false;
     };
-    if layer.is_group || layer.adjustment.is_some() {
+    if layer.is_group() || layer.has_adjustment_content() {
         return false;
     }
-    let Some(so) = layer.smart_object.as_ref() else {
+    let Some(so) = layer.smart_object() else {
         return false;
     };
     if so.stack_mode == mode {
@@ -71,6 +71,8 @@ pub fn set_smart_object_stack_mode(
     let Some(layer) = resolve_path_mut(doc, path) else {
         return false;
     };
-    layer.smart_object.as_mut().expect("checked").stack_mode = mode;
+    pictura_codec::edit_layer(layer, |parts| {
+        parts.smart_object.as_mut().expect("checked").stack_mode = mode
+    });
     true
 }

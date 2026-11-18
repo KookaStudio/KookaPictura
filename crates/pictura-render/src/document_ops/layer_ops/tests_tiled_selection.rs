@@ -68,7 +68,7 @@ fn document() -> Document {
         bottom: H as i32 - 15,
         right: W as i32 - 20,
     };
-    for channel in layer.channels.iter_mut() {
+    for channel in layer.channels_mut().iter_mut() {
         for value in channel.data.as_mut_slice() {
             *value = next(&mut state);
         }

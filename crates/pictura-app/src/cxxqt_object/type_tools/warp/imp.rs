@@ -39,7 +39,7 @@ pub(super) fn type_layer_is_warped(view: &PictureView, path: &QString) -> bool {
         .doc
         .as_ref()
         .and_then(|doc| pictura_render::resolve_path(doc, &path.to_string()))
-        .and_then(|layer| layer.type_tool.as_ref())
+        .and_then(|layer| layer.type_tool())
         .is_some_and(|tool| !pictura_codec::decode_type_warp(&tool.warp_desc).is_identity())
 }
 

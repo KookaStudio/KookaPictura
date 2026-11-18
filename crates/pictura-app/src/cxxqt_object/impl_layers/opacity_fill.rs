@@ -394,10 +394,10 @@ mod tests {
 
     #[test]
     fn unreducible_content_presents_and_commits_exact_fallback_pixels() {
-        use pictura_core::{Layer, LayerBlock, SmartObject, TypeTool};
+        use pictura_core::{LayerBlock, SmartObject, TypeTool};
 
         let unsupported = [
-            Layer {
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 type_tool: Some(TypeTool {
                     transform: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
                     text: "Hi".into(),
@@ -411,18 +411,18 @@ mod tests {
                     path: None,
                 }),
                 ..Default::default()
-            },
-            Layer {
+            }),
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 smart_object: Some(SmartObject::default()),
                 ..Default::default()
-            },
-            Layer {
+            }),
+            pictura_codec::layer_from_parts(pictura_core::LayerParts {
                 extra_blocks: vec![LayerBlock {
                     key: *b"vscg",
                     data: vec![0xff; 3].into(),
                 }],
                 ..Default::default()
-            },
+            }),
         ];
         for layer in unsupported {
             let mut doc = Document::new(600, 600, ColorMode::Rgb, BitDepth::Eight);

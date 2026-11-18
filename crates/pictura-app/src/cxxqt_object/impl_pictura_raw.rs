@@ -25,7 +25,7 @@ impl qobject::PictureView {
             .doc
             .as_ref()
             .and_then(|doc| pictura_render::resolve_path(doc, &path.to_string()))
-            .and_then(|layer| layer.smart_object.as_ref())
+            .and_then(|layer| layer.smart_object())
             .and_then(|so| {
                 so.smart_filters
                     .iter()

@@ -172,7 +172,7 @@ fn cmyk_profile_fixture_matches_lcms2() {
     assert_eq!(doc.composite.data.to_vec(), expected);
     for id in 0..3i16 {
         let channel = doc.layers[0]
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == id)
             .expect("layer channel");
@@ -402,7 +402,7 @@ fn native_layer_rgb(doc: &Document) -> Vec<u8> {
     (0i16..3)
         .map(|id| {
             doc.layers[0]
-                .channels
+                .channels()
                 .iter()
                 .find(|c| c.id == id)
                 .expect("layer color channel")

@@ -101,7 +101,7 @@ fn clipping_move_doc(clipped_layers: usize, extra_layers: usize) -> Document {
     for i in 0..extra_layers {
         // Full-canvas solid fills: cheap to hold, but each one costs a
         // full-canvas pass, which is what the reported document pays per layer.
-        layers.push(Layer {
+        layers.push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: format!("extra {i}"),
             rect: PsdRect {
                 top: 0,
@@ -115,7 +115,7 @@ fn clipping_move_doc(clipped_layers: usize, extra_layers: usize) -> Document {
                 120,
             ])),
             ..Default::default()
-        });
+        }));
     }
     doc.layers = LayerStack::from_layers(layers);
     // Sized blank composite: the profile measures the edit, not the open.
@@ -258,7 +258,7 @@ fn stroke_capture_profile() {
 fn mask_feather_preview_profile() {
     let mut doc = large_profile_doc();
     let mut layers: Vec<Layer> = doc.layers.as_slice().to_vec();
-    layers.push(Layer {
+    layers.push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "adjustment".into(),
         rect: PsdRect {
             top: 0,
@@ -282,7 +282,7 @@ fn mask_feather_preview_profile() {
             ..Default::default()
         }),
         ..Default::default()
-    });
+    }));
     doc.layers = LayerStack::from_layers(layers);
     let path = doc.layers.len().saturating_sub(1).to_string();
     let before = pictura_render::damage::influence(&doc, &path);

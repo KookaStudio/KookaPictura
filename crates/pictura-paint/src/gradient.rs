@@ -532,7 +532,7 @@ mod tests {
             None,
         );
         assert!(drawn.is_some(), "the gradient drew");
-        let plane = doc.layers[0].channels[0].data.as_slice();
+        let plane = doc.layers[0].channels()[0].data.as_slice();
         assert_eq!(plane, &[76, 53, 29]);
     }
 
@@ -694,7 +694,7 @@ mod tests {
         // The same ramp on a 16-bit document: the retained store's
         // transparency plane takes the ramp's alpha.
         let mut d = depth16_doc(32, 4, vec![0; 128], vec![0; 128], vec![0; 128]);
-        d.layers[0].channels.push(Channel {
+        d.layers[0].channels_mut().push(Channel {
             id: -1,
             data: vec![255; 128].into(),
         });
@@ -711,7 +711,7 @@ mod tests {
             None,
         );
         // The plane is 32 px wide: the ramp's ends are (0, 2) and (31, 2).
-        let alpha = &d.layers[0].channels[3].data;
+        let alpha = &d.layers[0].channels()[3].data;
         assert_eq!(alpha[2 * 32], 255, "the ramp's opaque end");
         assert_eq!(alpha[2 * 32 + 31], 0, "the ramp's transparent end");
     }
@@ -746,7 +746,7 @@ mod tests {
     #[test]
     fn a_transparency_lock_confines_the_gradient_to_existing_pixels() {
         let mut d = doc(32, 32, [200, 200, 200, 255]);
-        for a in &mut d.layers[0].channels[3].data[16 * 32..] {
+        for a in &mut d.layers[0].channels_mut()[3].data[16 * 32..] {
             *a = 0;
         }
         lock(&mut d, LockFlags::TRANSPARENCY);
@@ -905,7 +905,7 @@ mod tests {
     fn a_boxed_gradient_equals_the_unboxed_one_and_forks_only_its_tiles() {
         let (w, h) = (40, 300);
         let mut base = doc(w, h, [255; 4]);
-        for c in &mut base.layers[0].channels {
+        for c in base.layers[0].channels_mut() {
             c.data.tile(w as usize, h as usize);
         }
         let within = PsdRect {
@@ -946,10 +946,10 @@ mod tests {
         let (boxed, boxed_dirty) = draw_with(Some(within));
         assert_eq!(boxed_dirty, dirty);
         for ((a, b), c) in boxed.layers[0]
-            .channels
+            .channels()
             .iter()
-            .zip(&whole.layers[0].channels)
-            .zip(&base.layers[0].channels)
+            .zip(whole.layers[0].channels())
+            .zip(base.layers[0].channels())
         {
             assert_eq!(a.data.as_slice(), b.data.as_slice(), "channel {}", a.id);
             assert!(a.data.shares_tile(1, &c.data), "tile 1 stayed shared");

@@ -65,7 +65,7 @@ fn dimension_change_recomposites_fully() {
 
 #[test]
 fn unbounded_adjustment_recomposites_fully() {
-    let adjustment = Layer {
+    let adjustment = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "adjustment".into(),
         rect: PsdRect {
             top: 0,
@@ -75,9 +75,9 @@ fn unbounded_adjustment_recomposites_fully() {
         },
         adjustment: Some(pictura_render::encode_brightness_contrast(0, 0)),
         ..Default::default()
-    };
+    });
     let mut group = pixel_layer("group", 8, 8, (9, 9, 9));
-    group.is_group = true;
+    group.set_group_children(pictura_core::LayerStack::default());
     let d = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
     let mut d = d;
     d.layers = LayerStack::from_layers(vec![adjustment, group]);
@@ -108,9 +108,11 @@ fn unbounded_effect_recomposites_fully() {
         right: 30,
     };
     knockout.knockout = Knockout::Shallow;
-    knockout.extra_blocks.push(LayerBlock {
-        key: *b"lfx2",
-        data: Vec::new().into(),
+    pictura_codec::edit_layer(knockout.as_mut(), |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"lfx2",
+            data: Vec::new().into(),
+        })
     });
     let mut d = Document::new(64, 64, ColorMode::Rgb, BitDepth::Eight);
     d.layers = LayerStack::from_layers(vec![pixel_layer("base", 64, 64, (0, 0, 0)), knockout]);
@@ -428,8 +430,8 @@ fn group_and_effect_visibility_are_bounded() {
     pictura_render::set_layer_style_value(&mut child, "dropShadow.on", 1.0);
     pictura_render::set_layer_style_value(&mut child, "dropShadow.size", 6.0);
     let mut group = pixel_layer("group", 8, 8, (9, 9, 9));
-    group.is_group = true;
-    group.children = LayerStack::from_layers(vec![child]);
+    group.set_group_children(pictura_core::LayerStack::default());
+    group.set_group_children(LayerStack::from_layers(vec![child]));
     let mut doc = Document::new(64, 64, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = LayerStack::from_layers(vec![group]);
     let bounds = pictura_render::damage::influence(&doc, "0").expect("bounded group");
@@ -444,15 +446,15 @@ fn knockout_or_passthrough_effect_is_unbounded() {
     doc.layers = LayerStack::from_layers(vec![pixel_layer("base", 8, 8, (0, 0, 0)), knockout]);
     assert_eq!(pictura_render::damage::influence(&doc, "1"), None);
 
-    let adjustment = Layer {
+    let adjustment = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "adjustment".into(),
         adjustment: Some(pictura_render::encode_brightness_contrast(10, 0)),
         ..Default::default()
-    };
+    });
     let mut pass = pixel_layer("pass", 8, 8, (9, 9, 9));
-    pass.is_group = true;
+    pass.set_group_children(pictura_core::LayerStack::default());
     pass.blend = pictura_core::BlendMode::PassThrough;
-    pass.children = LayerStack::from_layers(vec![adjustment]);
+    pass.set_group_children(LayerStack::from_layers(vec![adjustment]));
     let mut doc = Document::new(64, 64, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = LayerStack::from_layers(vec![pass]);
     assert_eq!(pictura_render::damage::influence(&doc, "0"), None);
@@ -477,10 +479,10 @@ fn neutral_move_still_yields_inserted() {
     let mut doc = Document::new(8, 8, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = LayerStack::from_layers(vec![
         pixel_layer("base", 8, 8, (0, 0, 0)),
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             clipping: true,
-            ..pixel_layer("clip", 8, 8, (10, 20, 30))
-        },
+            ..pictura_core::LayerParts::from(pixel_layer("clip", 8, 8, (10, 20, 30)))
+        }),
     ]);
     doc.composite
         .replace(pictura_render::composite_rgba(&doc))
@@ -545,7 +547,7 @@ fn shrinking_feather_equals_full_recomposite() {
         feather_bits: feather.to_bits(),
         ..Default::default()
     };
-    let adjustment = Layer {
+    let adjustment = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "adjustment".into(),
         rect: PsdRect {
             top: 0,
@@ -556,7 +558,7 @@ fn shrinking_feather_equals_full_recomposite() {
         adjustment: Some(pictura_render::encode_brightness_contrast(30, 0)),
         mask: Some(mask(8.0)),
         ..Default::default()
-    };
+    });
     let mut doc = Document::new(32, 32, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = LayerStack::from_layers(vec![adjustment]);
     let before = pictura_render::damage::influence(&doc, "0");
@@ -592,7 +594,7 @@ fn assert_pending_preview_forces_full_capture(mask_refine: bool) {
     view.session.record(&LayerTarget::default(), "Open");
     // A pixel outside the edit's region: only a full capture records it.
     if let Some(doc) = view.session.doc.as_mut() {
-        doc.layers[0].channels[0].data.as_mut_slice()[45] = 200;
+        doc.layers[0].channels_mut()[0].data.as_mut_slice()[45] = 200;
     }
     if mask_refine {
         view.pending_previews.mask_refine = Some("Mask Feather");
@@ -600,7 +602,7 @@ fn assert_pending_preview_forces_full_capture(mask_refine: bool) {
         view.pending_previews.opacity_changed = true;
     }
     view.apply_edit("Opacity", Edit::regions(vec![tiny()], true));
-    let live = view.session.doc.as_ref().expect("document").layers[0].channels[0]
+    let live = view.session.doc.as_ref().expect("document").layers[0].channels()[0]
         .data
         .as_slice()
         .to_vec();
@@ -611,7 +613,7 @@ fn assert_pending_preview_forces_full_capture(mask_refine: bool) {
         .expect("state")
         .doc
         .layers[0]
-        .channels[0]
+        .channels()[0]
         .data
         .as_slice()
         .to_vec();
@@ -663,7 +665,7 @@ fn write_layer_dab(doc: &mut Document, path: &str, dab: PsdRect) {
     for y in dab.top..dab.bottom {
         for x in dab.left..dab.right {
             let li = (y - layer.rect.top) as usize * w + (x - layer.rect.left) as usize;
-            for channel in layer.channels.iter_mut() {
+            for channel in layer.channels_mut().iter_mut() {
                 if channel.id == -1 {
                     channel.data.as_mut_slice()[li] = 0;
                 }

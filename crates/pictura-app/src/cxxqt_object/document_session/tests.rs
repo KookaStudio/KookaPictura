@@ -34,7 +34,7 @@ fn doc() -> Document {
 fn trimmed_layer() -> pictura_core::Layer {
     let mut layer = pixel_layer("px", 8, 8, (255, 0, 0));
     let alpha = layer
-        .channels
+        .channels_mut()
         .iter_mut()
         .find(|c| c.id == -1)
         .expect("the alpha channel");
@@ -777,8 +777,8 @@ fn a_region_change_can_also_notify() {
 
 fn group_layer(name: &str, children: Vec<pictura_core::Layer>) -> pictura_core::Layer {
     let mut group = pixel_layer(name, 8, 8, (0, 0, 0));
-    group.is_group = true;
-    group.children = LayerStack::from_layers(children);
+    group.set_group_children(pictura_core::LayerStack::default());
+    group.set_group_children(LayerStack::from_layers(children));
     group
 }
 

@@ -321,7 +321,7 @@ mod tests {
     /// A hard black/white edge down the middle of a 40 px square.
     fn edge() -> Document {
         let mut d = doc(40, 40, WHITE);
-        for c in &mut d.layers[0].channels[..3] {
+        for c in &mut d.layers[0].channels_mut()[..3] {
             for (i, v) in c.data.iter_mut().enumerate() {
                 if i % 40 >= 20 {
                     *v = 0;
@@ -434,7 +434,7 @@ mod tests {
     #[test]
     fn a_layer_edge_softens_outward_without_darkening() {
         let mut d = doc(40, 40, [240, 200, 40, 0]);
-        for (i, a) in d.layers[0].channels[3].data.iter_mut().enumerate() {
+        for (i, a) in d.layers[0].channels_mut()[3].data.iter_mut().enumerate() {
             if i % 40 < 20 {
                 *a = 255;
             }
@@ -465,7 +465,7 @@ mod tests {
         // Two colours of about equal luminosity: nothing to blur in Luminosity.
         let mut d = doc(40, 40, [200, 100, 100, 255]);
         for (c, v) in [(0, 100u8), (1, 160)] {
-            for (i, p) in d.layers[0].channels[c].data.iter_mut().enumerate() {
+            for (i, p) in d.layers[0].channels_mut()[c].data.iter_mut().enumerate() {
                 if i % 40 >= 20 {
                     *p = v;
                 }
@@ -528,7 +528,7 @@ mod tests {
     /// A grey `w`-wide square whose value at column `x` is `f(x)`.
     fn columns(f: impl Fn(usize) -> u8) -> Document {
         let mut d = doc(40, 40, WHITE);
-        for c in &mut d.layers[0].channels[..3] {
+        for c in &mut d.layers[0].channels_mut()[..3] {
             for (i, v) in c.data.iter_mut().enumerate() {
                 *v = f(i % 40);
             }

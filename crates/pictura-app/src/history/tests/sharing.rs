@@ -5,7 +5,7 @@ use super::*;
 
 /// Every byte of the layer's channels, flipped, as a full-canvas fill does.
 fn repaint(doc: &mut Document) {
-    for channel in doc.layers[0].channels.iter_mut() {
+    for channel in doc.layers[0].channels_mut().iter_mut() {
         for v in channel.data.as_mut_slice() {
             *v ^= 0x5a;
         }
@@ -14,9 +14,9 @@ fn repaint(doc: &mut Document) {
 
 fn shares_layer_planes(a: &Document, b: &Document) -> bool {
     a.layers[0]
-        .channels
+        .channels()
         .iter()
-        .zip(&b.layers[0].channels)
+        .zip(b.layers[0].channels())
         .all(|(a, b)| {
             // A swapped plane's tiles have diverged one by one, so they are
             // compared one by one.
@@ -87,7 +87,7 @@ fn a_hinted_capture_shares_its_fully_hinted_tiles() {
     // The hint covers every tile, so each changed tile is taken from live
     // whole, sharing its allocation instead of copying its deltas (#1213).
     assert!(shares_layer_planes(current, &live));
-    assert_eq!(current.layers[0].channels, live.layers[0].channels);
+    assert_eq!(current.layers[0].channels(), live.layers[0].channels());
 
     assert!(history
         .undo_live(&mut live, &mut selection, &mut target)

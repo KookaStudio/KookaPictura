@@ -12,7 +12,7 @@ use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 use ffi::{PaintDynamics, PaintTip};
-use pictura_core::{BitDepth, Channel, ColorMode, Document, Layer, PsdRect};
+use pictura_core::{BitDepth, Channel, ColorMode, Document, PsdRect};
 use pictura_paint::art_history::{ArtHistoryOptions, ArtStyle, STYLE_NAMES};
 use pictura_paint::bristle::{BristleShape, BristleTip};
 use pictura_paint::bucket::{self, BucketSource};
@@ -890,21 +890,23 @@ pub(super) fn white_preview(
     let mut doc = Document::new(w as u32, h as u32, ColorMode::Rgb, BitDepth::Eight);
     let n = (w * h) as usize;
     {
-        let _ = doc.layers.push(Layer {
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: h,
-                right: w,
-            },
-            channels: [0, 1, 2, -1]
-                .map(|id| Channel {
-                    id,
-                    data: vec![0; n].into(),
-                })
-                .into(),
-            ..Default::default()
-        });
+        let _ = doc
+            .layers
+            .push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: h,
+                    right: w,
+                },
+                channels: [0, 1, 2, -1]
+                    .map(|id| Channel {
+                        id,
+                        data: vec![0; n].into(),
+                    })
+                    .into(),
+                ..Default::default()
+            }));
     };
     let cfg = StrokeConfig {
         color: Rgba {
@@ -918,7 +920,7 @@ pub(super) fn white_preview(
     paint_stroke(&mut doc, "0", &cfg, samples);
     let plane = |id: i16| {
         doc.layers[0]
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == id)
             .map_or(&[][..], |c| c.data.as_slice())

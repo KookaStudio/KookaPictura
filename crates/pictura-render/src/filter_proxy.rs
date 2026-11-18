@@ -117,6 +117,7 @@ impl FilterProxy {
             let route = match content_route(layer) {
                 ContentRoute::PassThroughGroup
                 | ContentRoute::IsolatedGroup
+                | ContentRoute::Adjustment(_)
                 | ContentRoute::UndecodedAdjustment
                 | ContentRoute::Pixels => true,
                 ContentRoute::Fill(_) => !crate::document_ops::is_fill_content_layer(layer),
@@ -125,7 +126,7 @@ impl FilterProxy {
                 | ContentRoute::TypeSource
                 | ContentRoute::UndecodedVectorFill => false,
             };
-            !effects && route && layer.children.iter().all(faithful)
+            !effects && route && layer.children().iter().all(faithful)
         }
         doc.layers.iter().all(faithful)
     }
@@ -306,7 +307,7 @@ fn reduce_flat(flat: &PixelBuffer, map: &Map, full: PsdRect) -> PixelBuffer {
 fn reduce_layer(layer: &mut Layer, map: &Map) {
     let rect = layer.rect;
     let mut reduced = None;
-    for channel in &mut layer.channels {
+    for channel in layer.channels_mut() {
         match map.plane(&channel.data, 0, rect) {
             Some((r, samples)) => {
                 channel.data = samples.into();
@@ -335,7 +336,7 @@ fn reduce_layer(layer: &mut Layer, map: &Map) {
         // full-size path.
         vector.set_feather(vector.feather() * map.scale);
     }
-    layer.raw_channels.clear();
+    layer.discard_raw_channels();
     layer.source_channels = None;
 }
 
@@ -480,7 +481,7 @@ mod tests {
         let (lw, lh) = (layer_rect.width() as usize, layer_rect.height() as usize);
         let layer = &mut doc.layers[0];
         layer.rect = layer_rect;
-        for channel in &mut layer.channels {
+        for channel in layer.channels_mut() {
             channel.data = (0..lw * lh)
                 .map(|i| if i % lw < lw / 2 { 0 } else { 200 })
                 .collect::<Vec<u8>>()
@@ -496,12 +497,12 @@ mod tests {
         assert!(FilterProxy::reduces_faithfully(&doc));
 
         let mut styled = doc.clone();
-        styled.layers[0]
-            .extra_blocks
-            .push(pictura_core::LayerBlock {
+        pictura_codec::edit_layer(styled.layers[0].as_mut(), |parts| {
+            parts.extra_blocks.push(pictura_core::LayerBlock {
                 key: *b"lfx2",
                 data: vec![0u8; 4].into(),
-            });
+            })
+        });
         assert!(!FilterProxy::reduces_faithfully(&styled));
         styled.layers[0].visible = false;
         assert!(
@@ -509,13 +510,13 @@ mod tests {
             "a hidden styled layer draws nothing"
         );
 
-        let group = pictura_core::Layer {
+        let group = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             is_group: true,
             children: pictura_core::LayerStack::from_layers(vec![
                 crate::composite_route::tests::type_layer(Vec::new()),
             ]),
             ..Default::default()
-        };
+        });
         doc.layers = pictura_core::LayerStack::from_layers(vec![doc.layers[0].clone(), group]);
         assert!(!FilterProxy::reduces_faithfully(&doc), "nested live type");
     }
@@ -526,7 +527,7 @@ mod tests {
         let proxy = FilterProxy::new(&doc, None, rect(0, 0, 100, 80), 0.5).unwrap();
         assert_eq!((proxy.width(), proxy.height()), (50, 40));
         assert_eq!(proxy.doc.layers[0].rect, rect(5, 10, 25, 30));
-        assert_eq!(proxy.doc.layers[0].channels[0].data.len(), 20 * 20);
+        assert_eq!(proxy.doc.layers[0].channels()[0].data.len(), 20 * 20);
         // A region crops: only the part of the layer inside it survives, at
         // region-relative coordinates.
         let crop = FilterProxy::new(&doc, None, rect(30, 0, 100, 40), 1.0).unwrap();

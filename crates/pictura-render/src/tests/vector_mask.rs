@@ -56,7 +56,7 @@ fn pass_through_group_vector_mask_fixture() {
         .iter()
         .find(|layer| layer.name == "Group A")
         .expect("Group A");
-    assert!(group.is_group, "Group A is a group");
+    assert!(group.is_group(), "Group A is a group");
     assert_eq!(group.blend, BlendMode::PassThrough);
     let mask = group.vector_mask.as_ref().expect("group vector mask");
     assert!(mask.invert && mask.has_fill(), "inverted filled mask");
@@ -118,9 +118,11 @@ fn vmsk(version: u32, selector: u16) -> Vec<u8> {
 
 fn round_trip_with_vmsk(data: Vec<u8>) -> Layer {
     let mut layer = solid("L", full(2, 2), (10, 20, 30), 255, BlendMode::Normal, 255);
-    layer.extra_blocks.push(LayerBlock {
-        key: *b"vmsk",
-        data: data.into(),
+    pictura_codec::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"vmsk",
+            data: data.into(),
+        })
     });
     let bytes = pictura_codec::write_psd(&doc(2, 2, vec![layer])).expect("writes");
     pictura_codec::read_psd(&bytes).expect("re-reads").layers[0].clone()
@@ -266,8 +268,8 @@ fn an_inverted_vsms_mask_hides_its_inside() {
         .position(|layer| layer.name == "Shape")
         .expect("Shape layer");
     d.layers[index].rect = full(8, 8);
-    let data = {
-        let block = d.layers[index]
+    let data = pictura_codec::edit_layer(&mut d.layers[index], |parts| {
+        let block = parts
             .extra_blocks
             .iter_mut()
             .find(|block| block.key == *b"vsms")
@@ -280,7 +282,7 @@ fn an_inverted_vsms_mask_hides_its_inside() {
         flags |= crate::VECTOR_MASK_FLAG_INVERT;
         block.data.as_mut_slice()[4..8].copy_from_slice(&flags.to_be_bytes());
         block.data.clone()
-    };
+    });
     d.layers[index].vector_mask = pictura_codec::decode_vector_mask(&data, 8, 8);
     assert!(
         d.layers[index]

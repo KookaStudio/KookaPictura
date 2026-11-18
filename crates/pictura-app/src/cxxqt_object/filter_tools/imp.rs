@@ -221,10 +221,10 @@ pub(super) fn selected_area_empty(
 ) -> bool {
     let r = layer.rect;
     let (w, h) = (r.width().max(0) as usize, r.height().max(0) as usize);
-    if w == 0 || h == 0 || !layer.channels.iter().any(|c| c.id == 0) {
+    if w == 0 || h == 0 || !layer.channels().iter().any(|c| c.id == 0) {
         return true;
     }
-    let alpha = layer.channels.iter().find(|c| c.id == -1);
+    let alpha = layer.channels().iter().find(|c| c.id == -1);
     let opaque = |x: usize, y: usize| alpha.is_none_or(|a| a.data.get(y * w + x) != Some(&0));
     let selected = |x: usize, y: usize| {
         selection.is_none_or(|s| {

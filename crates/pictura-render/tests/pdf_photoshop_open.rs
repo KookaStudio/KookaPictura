@@ -162,12 +162,12 @@ fn photoshop_pdf_reopens_with_its_layers() {
         .find(|l| l.is_type())
         .expect("the type layer stays a type layer");
     assert_eq!(
-        text.type_tool.as_ref().map(|t| t.text.as_str()),
+        text.type_tool().map(|t| t.text.as_str()),
         Some("PDF FROM PHOTOSHOP")
     );
     assert_eq!(
-        reopened.layers[0].channels[0].data.as_ref(),
-        doc.layers[0].channels[0].data.as_ref(),
+        reopened.layers[0].channels()[0].data.as_ref(),
+        doc.layers[0].channels()[0].data.as_ref(),
         "layer pixels survive"
     );
     // The composite came through predictor 2 intact.

@@ -47,7 +47,7 @@ impl PreviewBaseline {
         );
         let (cw, ch) = (rect.width() as usize, rect.height() as usize);
         let planes = layer
-            .channels
+            .channels()
             .iter()
             .filter(|c| c.data.len() == full)
             .map(|c| {
@@ -91,7 +91,7 @@ impl PreviewBaseline {
             (rect.top - layer_rect.top) as usize,
         );
         for (id, saved) in planes {
-            let Some(channel) = layer.channels.iter_mut().find(|c| c.id == *id) else {
+            let Some(channel) = layer.channels_mut().iter_mut().find(|c| c.id == *id) else {
                 continue;
             };
             let rows = oy * lw..(oy + ch) * lw;

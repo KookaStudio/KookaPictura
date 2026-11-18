@@ -14,7 +14,7 @@ use super::layer_ops::{resolve_path, resolve_path_mut};
 /// smart filter: not a group, no adjustment data, and a typed object.
 pub fn can_add_smart_filter(doc: &Document, path: &str) -> bool {
     resolve_path(doc, path).is_some_and(|layer| {
-        !layer.is_group && layer.adjustment.is_none() && layer.smart_object.is_some()
+        !layer.is_group() && !layer.has_adjustment_content() && layer.smart_object().is_some()
     })
 }
 
@@ -32,7 +32,7 @@ pub fn add_smart_filter(
     let Some(layer) = resolve_path_mut(doc, path) else {
         return false;
     };
-    if layer.is_group || layer.adjustment.is_some() || layer.smart_object.is_none() {
+    if layer.is_group() || layer.has_adjustment_content() || layer.smart_object().is_none() {
         return false;
     }
     pictura_codec::attach_smart_filter(
@@ -50,14 +50,14 @@ pub fn add_smart_filter(
 /// Delete the smart filter at `index` on the layer at `path`.
 pub fn delete_smart_filter(doc: &mut Document, path: &str, index: usize) -> bool {
     resolve_path_mut(doc, path).is_some_and(|layer| {
-        layer.smart_object.is_some() && pictura_codec::delete_smart_filter(layer, index).is_ok()
+        layer.smart_object().is_some() && pictura_codec::delete_smart_filter(layer, index).is_ok()
     })
 }
 
 /// Move the smart filter at `from` to `to` on the layer at `path`.
 pub fn reorder_smart_filters(doc: &mut Document, path: &str, from: usize, to: usize) -> bool {
     resolve_path_mut(doc, path).is_some_and(|layer| {
-        layer.smart_object.is_some()
+        layer.smart_object().is_some()
             && pictura_codec::reorder_smart_filters(layer, from, to).is_ok()
     })
 }
@@ -65,7 +65,7 @@ pub fn reorder_smart_filters(doc: &mut Document, path: &str, from: usize, to: us
 /// Remove every smart filter from the layer at `path`.
 pub fn clear_smart_filters(doc: &mut Document, path: &str) -> bool {
     resolve_path_mut(doc, path).is_some_and(|layer| {
-        layer.smart_object.is_some() && pictura_codec::clear_smart_filters(layer).is_ok()
+        layer.smart_object().is_some() && pictura_codec::clear_smart_filters(layer).is_ok()
     })
 }
 
@@ -73,8 +73,7 @@ pub fn clear_smart_filters(doc: &mut Document, path: &str) -> bool {
 pub fn has_smart_filter_mask(doc: &Document, path: &str) -> bool {
     resolve_path(doc, path).is_some_and(|layer| {
         layer
-            .smart_object
-            .as_ref()
+            .smart_object()
             .is_some_and(|so| so.filter_mask.is_some())
     })
 }
@@ -84,7 +83,7 @@ pub fn has_smart_filter_mask(doc: &Document, path: &str) -> bool {
 /// mask. Returns `false` without mutating when there is no mask.
 pub fn delete_smart_filter_mask(doc: &mut Document, path: &str) -> bool {
     let Some((uuid, placed)) = resolve_path(doc, path)
-        .and_then(|layer| layer.smart_object.as_ref())
+        .and_then(|layer| layer.smart_object())
         .filter(|so| so.filter_mask.is_some())
         .map(|so| (so.uuid.clone(), so.placed_uuid.clone()))
     else {
@@ -101,9 +100,11 @@ pub fn delete_smart_filter_mask(doc: &mut Document, path: &str) -> bool {
     let Some(layer) = resolve_path_mut(doc, path) else {
         return false;
     };
-    if let Some(so) = layer.smart_object.as_mut() {
-        so.filter_mask = None;
-    }
+    pictura_codec::edit_layer(layer, |parts| {
+        if let Some(so) = parts.smart_object.as_mut() {
+            so.filter_mask = None;
+        }
+    });
     true
 }
 
@@ -113,7 +114,7 @@ mod tests {
     use pictura_core::{BitDepth, Channel, ColorMode, Layer, PsdRect};
 
     fn raster_layer() -> Layer {
-        let mut layer = Layer {
+        let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "Layer".to_string(),
             rect: PsdRect {
                 top: 0,
@@ -122,9 +123,9 @@ mod tests {
                 right: 4,
             },
             ..Default::default()
-        };
+        });
         for id in 0..3i16 {
-            layer.channels.push(Channel {
+            layer.channels_mut().push(Channel {
                 id,
                 data: vec![60u8; 16].into(),
             });
@@ -142,8 +143,7 @@ mod tests {
     fn filter_ids(doc: &Document) -> Vec<i32> {
         resolve_path(doc, "0")
             .unwrap()
-            .smart_object
-            .as_ref()
+            .smart_object()
             .unwrap()
             .smart_filters
             .iter()
@@ -188,19 +188,16 @@ mod tests {
     #[test]
     fn delete_smart_filter_mask_clears_the_typed_mask() {
         let mut doc = smart_doc();
-        resolve_path_mut(&mut doc, "0")
-            .unwrap()
-            .smart_object
-            .as_mut()
-            .unwrap()
-            .filter_mask = Some(pictura_core::FilterMask {
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 4,
-                right: 4,
-            },
-            data: vec![255u8; 16].into(),
+        pictura_codec::edit_layer(resolve_path_mut(&mut doc, "0").unwrap(), |parts| {
+            parts.smart_object.as_mut().unwrap().filter_mask = Some(pictura_core::FilterMask {
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 4,
+                    right: 4,
+                },
+                data: vec![255u8; 16].into(),
+            });
         });
         assert!(has_smart_filter_mask(&doc, "0"));
         assert!(delete_smart_filter_mask(&mut doc, "0"));

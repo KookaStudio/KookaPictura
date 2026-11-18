@@ -142,13 +142,13 @@ fn knockout_in_pass_through_group_matches_psd_tools() {
 
     let group = doc.layers.last().expect("top group");
     assert!(
-        group.is_group && group.blend == BlendMode::PassThrough,
+        group.is_group() && group.blend == BlendMode::PassThrough,
         "top layer {:?} must decode as a pass-through group (blend {:?}, group {})",
         group.name,
         group.blend,
-        group.is_group
+        group.is_group()
     );
-    let child = group.children.last().expect("knockout child");
+    let child = group.children().last().expect("knockout child");
     assert_eq!(
         child.knockout,
         Knockout::Deep,
@@ -216,13 +216,13 @@ fn knockout_in_isolated_group_matches_psd_tools() {
 
     let group = doc.layers.last().expect("top group");
     assert!(
-        group.is_group && group.blend != BlendMode::PassThrough,
+        group.is_group() && group.blend != BlendMode::PassThrough,
         "top layer {:?} must decode as an isolated group (blend {:?}, group {})",
         group.name,
         group.blend,
-        group.is_group
+        group.is_group()
     );
-    let child = group.children.last().expect("knockout child");
+    let child = group.children().last().expect("knockout child");
     assert_eq!(
         child.knockout,
         Knockout::Deep,
@@ -292,13 +292,13 @@ fn knockout_shallow_in_pass_through_group_matches_psd_tools() {
 
     let group = doc.layers.last().expect("top group");
     assert!(
-        group.is_group && group.blend == BlendMode::PassThrough,
+        group.is_group() && group.blend == BlendMode::PassThrough,
         "top layer {:?} must decode as a pass-through group (blend {:?}, group {})",
         group.name,
         group.blend,
-        group.is_group
+        group.is_group()
     );
-    let child = group.children.last().expect("knockout child");
+    let child = group.children().last().expect("knockout child");
     assert_eq!(
         child.knockout,
         Knockout::Shallow,

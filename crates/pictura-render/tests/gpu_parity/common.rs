@@ -78,7 +78,7 @@ pub(crate) fn layer(
             a.push(aa);
         }
     }
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: PsdRect {
             top: 0,
@@ -117,12 +117,12 @@ pub(crate) fn layer(
         is_group: false,
         background: false,
         ..Default::default()
-    }
+    })
 }
 
 /// An empty-rect layer with children, for the group dispatch paths.
 pub(crate) fn group(name: &str, blend: BlendMode, opacity: u8, children: Vec<Layer>) -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: PsdRect {
             top: 0,
@@ -144,7 +144,7 @@ pub(crate) fn group(name: &str, blend: BlendMode, opacity: u8, children: Vec<Lay
         is_group: true,
         background: false,
         ..Default::default()
-    }
+    })
 }
 
 /// Opaque gradient backdrop plus a half-transparent gradient source in `mode`.
@@ -179,7 +179,7 @@ pub(crate) fn base_layer() -> Layer {
 
 /// An adjustment layer owns no pixels: an empty rect and no channels.
 pub(crate) fn adjustment_layer(name: &str, adjustment: AdjustmentData) -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: PsdRect {
             top: 0,
@@ -201,7 +201,7 @@ pub(crate) fn adjustment_layer(name: &str, adjustment: AdjustmentData) -> Layer 
         is_group: false,
         background: false,
         ..Default::default()
-    }
+    })
 }
 
 /// A full-size pixel layer for the timing scene (the `layer` helper is fixed at
@@ -223,7 +223,7 @@ pub(crate) fn large_layer(w: u32, h: u32, seed: u32, blend: BlendMode) -> Layer 
             a[i] = if seed == 0 { 255 } else { 160 };
         }
     }
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: format!("layer{seed}"),
         rect: PsdRect {
             top: 0,
@@ -262,7 +262,7 @@ pub(crate) fn large_layer(w: u32, h: u32, seed: u32, blend: BlendMode) -> Layer 
         is_group: false,
         background: false,
         ..Default::default()
-    }
+    })
 }
 
 /// Fail a device-dependent test that has no usable GPU. Such tests are

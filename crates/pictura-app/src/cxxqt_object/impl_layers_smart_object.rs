@@ -135,8 +135,8 @@ impl qobject::PictureView {
             // visually unchanged. A Place must render from the embedded native
             // source so the fit and later scale keep the original pixels.
             if let Some(layer) = pictura_render::resolve_path_mut(doc, &path) {
-                layer.channels.clear();
-                layer.raw_channels.clear();
+                layer.channels_mut().clear();
+                pictura_codec::edit_layer(layer, |parts| parts.raw_channels.clear());
                 layer.source_channels = None;
             }
             pictura_render::fit_smart_object_to_canvas(doc, &path);
@@ -285,7 +285,7 @@ impl qobject::PictureView {
             .doc
             .as_ref()
             .and_then(|doc| pictura_render::resolve_path(doc, &path.to_string()))
-            .and_then(|layer| layer.smart_object.as_ref())
+            .and_then(|layer| layer.smart_object())
             .map(|so| {
                 let kind = match so.kind {
                     SmartObjectKind::Embedded => "embedded",

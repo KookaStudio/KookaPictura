@@ -14,7 +14,7 @@ fn insertion_index(len: usize, above: i32) -> usize {
 /// A raster layer with an empty rect and no pixel planes. The paint, fill and
 /// filter engines grow it when an edit reaches outside it (#1208).
 pub(super) fn empty_pixel_layer(name: &str) -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.to_string(),
         rect: PsdRect {
             top: 0,
@@ -42,13 +42,13 @@ pub(super) fn empty_pixel_layer(name: &str) -> Layer {
         is_group: false,
         background: false,
         ..Default::default()
-    }
+    })
 }
 
 /// A sized raster layer with fully transparent pixels.
 pub(super) fn transparent_layer(width: u32, height: u32, name: &str) -> Layer {
     let pixels = width as usize * height as usize;
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.to_string(),
         rect: PsdRect {
             top: 0,
@@ -87,12 +87,12 @@ pub(super) fn transparent_layer(width: u32, height: u32, name: &str) -> Layer {
         is_group: false,
         background: false,
         ..Default::default()
-    }
+    })
 }
 
 /// An empty group with a Normal blend and an empty bounds rectangle.
 pub(super) fn empty_group(name: &str) -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.to_string(),
         rect: PsdRect {
             top: 0,
@@ -114,7 +114,7 @@ pub(super) fn empty_group(name: &str) -> Layer {
         is_group: true,
         background: false,
         ..Default::default()
-    }
+    })
 }
 
 /// The attributes of a New Layer / New Group dialog request (design D6).
@@ -178,7 +178,7 @@ fn resolved_name(doc: &Document, name: &str, prefix: &str) -> String {
 
 /// Write a straight-alpha RGBA value into a full-rect layer's color channels.
 fn fill_neutral(layer: &mut Layer, rgba: [u8; 4]) {
-    for channel in &mut layer.channels {
+    for channel in layer.channels_mut() {
         let value = match channel.id {
             0 => rgba[0],
             1 => rgba[1],
@@ -204,7 +204,7 @@ pub fn next_layer_name(doc: &Document, prefix: &str) -> String {
             if let Some(n) = suffix {
                 *highest = (*highest).max(n);
             }
-            visit(&layer.children, prefix, highest);
+            visit(layer.children(), prefix, highest);
         }
     }
     visit(&doc.layers, prefix, &mut highest);
@@ -238,7 +238,9 @@ pub fn duplicate_layer(doc: &mut Document, index: i32) -> i32 {
     let mut copy = doc.layers[source].clone();
     copy.name = format!("{} copy", copy.name);
     pictura_core::layer_comp::clear_layer_id(&mut copy);
-    copy.extra_blocks.retain(|block| block.key != *b"shmd");
+    pictura_codec::edit_layer(copy.as_mut(), |parts| {
+        parts.extra_blocks.retain(|block| block.key != *b"shmd")
+    });
     if copy.background {
         release_background(&mut copy);
     }
@@ -268,17 +270,17 @@ pub fn ungroup_layer(doc: &mut Document, index: i32) -> bool {
         return false;
     }
     let at = index as usize;
-    if !doc.layers[at].is_group {
+    if !doc.layers[at].is_group() {
         return false;
     }
-    let children: Vec<Layer> = doc.layers[at].children.iter().cloned().collect();
+    let children: Vec<Layer> = doc.layers[at].children().iter().cloned().collect();
     doc.layers.replace(&[at], children).is_ok()
 }
 
 pub(crate) fn insert_node(doc: &mut Document, selection_path: &str, node: Layer) -> String {
     if let Some(segments) = parse_path(selection_path) {
-        if resolve_path(doc, selection_path).is_some_and(|layer| layer.is_group) {
-            let index = resolve_path(doc, selection_path).map_or(0, |group| group.children.len());
+        if resolve_path(doc, selection_path).is_some_and(|layer| layer.is_group()) {
+            let index = resolve_path(doc, selection_path).map_or(0, |group| group.children().len());
             if doc.layers.insert(&segments, index, node).is_err() {
                 return String::new();
             }
@@ -350,7 +352,7 @@ pub fn add_solid_fill(doc: &mut Document, selection_path: &str, rgba: [u8; 4]) -
         return String::new();
     }
     let name = next_layer_name(doc, "Color Fill");
-    let layer = Layer {
+    let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name,
         rect: PsdRect {
             top: 0,
@@ -375,7 +377,7 @@ pub fn add_solid_fill(doc: &mut Document, selection_path: &str, rgba: [u8; 4]) -
         is_group: false,
         background: false,
         ..Default::default()
-    };
+    });
     insert_node(doc, selection_path, layer)
 }
 
@@ -427,7 +429,7 @@ pub fn add_raster_layer_from_rgba(
         channels[2].data[i] = rgba[at + 2];
         channels[3].data[i] = rgba[at + 3];
     }
-    let layer = Layer {
+    let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.to_string(),
         rect: PsdRect {
             top: 0,
@@ -437,7 +439,7 @@ pub fn add_raster_layer_from_rgba(
         },
         channels,
         ..Default::default()
-    };
+    });
     let index = doc.layers.len();
     if doc.layers.push(layer).is_err() {
         return String::new();
@@ -466,7 +468,7 @@ pub fn add_gradient_fill(doc: &mut Document, selection_path: &str) -> String {
             color: [255, 255, 255],
         },
     ];
-    let layer = Layer {
+    let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name,
         rect: PsdRect {
             top: 0,
@@ -492,7 +494,7 @@ pub fn add_gradient_fill(doc: &mut Document, selection_path: &str) -> String {
         is_group: false,
         background: false,
         ..Default::default()
-    };
+    });
     insert_node(doc, selection_path, layer)
 }
 
@@ -553,12 +555,12 @@ pub fn layer_from_background(doc: &mut Document, path: &str) -> bool {
 pub(super) fn release_background(layer: &mut Layer) {
     layer.background = false;
     layer.lock = LockFlags::default();
-    if !layer.channels.iter().any(|c| c.id == -1) {
+    if !layer.channels().iter().any(|c| c.id == -1) {
         let (w, h) = (
             layer.rect.width().max(0) as usize,
             layer.rect.height().max(0) as usize,
         );
-        layer.channels.push(Channel {
+        layer.channels_mut().push(Channel {
             id: -1,
             data: Plane::filled(w, h, 1, 255),
         });
@@ -568,9 +570,9 @@ pub(super) fn release_background(layer: &mut Layer) {
 /// Whether `path` can become the Background: it is a raster layer that is not
 /// already the Background, and the document has no Background yet.
 pub fn can_background_from_layer(doc: &Document, path: &str) -> bool {
-    resolve_path(doc, path)
-        .is_some_and(|layer| !layer.is_group && layer.adjustment.is_none() && !layer.background)
-        && !doc.layers.has_background()
+    resolve_path(doc, path).is_some_and(|layer| {
+        !layer.is_group() && !layer.has_adjustment_content() && !layer.background
+    }) && !doc.layers.has_background()
 }
 
 pub fn background_from_layer(doc: &mut Document, path: &str) -> bool {
@@ -607,7 +609,9 @@ pub fn background_from_layer(doc: &mut Document, path: &str) -> bool {
     if promoted {
         if let Some(layer) = resolve_path_mut(doc, path) {
             pictura_core::layer_comp::clear_layer_id(layer);
-            layer.extra_blocks.retain(|block| block.key != *b"shmd");
+            pictura_codec::edit_layer(layer, |parts| {
+                parts.extra_blocks.retain(|block| block.key != *b"shmd")
+            });
         }
     }
     promoted
@@ -616,10 +620,10 @@ pub fn background_from_layer(doc: &mut Document, path: &str) -> bool {
 /// Set every fully transparent pixel (`alpha == 0`) to `rgb` at full opacity,
 /// leaving partially transparent pixels alone.
 fn opaque_transparency(layer: &mut Layer, rgb: [u8; 3]) {
-    let Some(alpha_index) = layer.channels.iter().position(|channel| channel.id == -1) else {
+    let Some(alpha_index) = layer.channels().iter().position(|channel| channel.id == -1) else {
         return;
     };
-    let transparent: Vec<usize> = layer.channels[alpha_index]
+    let transparent: Vec<usize> = layer.channels()[alpha_index]
         .data
         .iter()
         .enumerate()
@@ -628,7 +632,7 @@ fn opaque_transparency(layer: &mut Layer, rgb: [u8; 3]) {
     if transparent.is_empty() {
         return;
     }
-    for channel in layer.channels.iter_mut() {
+    for channel in layer.channels_mut().iter_mut() {
         let value = match channel.id {
             0 => rgb[0],
             1 => rgb[1],

@@ -60,10 +60,10 @@ pub(crate) fn tagged_layer_key(depth: u16) -> Option<&'static [u8; 4]> {
 /// content, `GdFl` is gradient fill content, and `PtFl` is pattern fill content:
 /// all three are preserved verbatim here, and only `pictura-render` decodes the
 /// subsets it understands.
-pub(crate) const ADJUSTMENT_KEYS: [[u8; 4]; 22] = [
+pub(crate) const ADJUSTMENT_KEYS: [[u8; 4]; 23] = [
     *b"levl", *b"curv", *b"brit", *b"expA", *b"vibA", *b"hue2", *b"hue ", *b"blwh", *b"phfl",
     *b"blnc", *b"mixr", *b"grdm", *b"gdrm", *b"invr", *b"nvrt", *b"post", *b"thrs", *b"selc",
-    *b"clrL", *b"SoCo", *b"GdFl", *b"PtFl",
+    *b"clrL", *b"SoCo", *b"GdFl", *b"PtFl", *b"shdH",
 ];
 
 pub(crate) fn is_adjustment_key(key: &[u8; 4]) -> bool {

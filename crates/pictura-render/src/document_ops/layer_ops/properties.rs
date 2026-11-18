@@ -53,7 +53,9 @@ pub fn apply_visibility(doc: &mut Document, paths: &[&str]) -> usize {
                 layer.visible = want;
                 changed += 1;
             }
-            changed += walk(&mut layer.children, &path, visible);
+            if let Some(children) = layer.children_mut() {
+                changed += walk(children, &path, visible);
+            }
         }
         changed
     }
@@ -102,7 +104,7 @@ pub fn set_fill_paths(doc: &mut Document, paths: &[&str], value: u8) -> usize {
     edit_paths(
         doc,
         paths,
-        |doc, path, layer| !is_background(doc, path) && !layer.lock.is_all() && !layer.is_group,
+        |doc, path, layer| !is_background(doc, path) && !layer.lock.is_all() && !layer.is_group(),
         |layer| {
             if layer.fill == value {
                 false
@@ -164,7 +166,7 @@ pub fn set_color_paths(doc: &mut Document, paths: &[&str], color: ColorLabel) ->
 /// the group node's own locks untouched. Returns the number of layers changed;
 /// `0` when `path` is not a group or that group has no descendants.
 pub fn lock_group_layers(doc: &mut Document, path: &str) -> usize {
-    if !resolve_path(doc, path).is_some_and(|layer| layer.is_group) {
+    if !resolve_path(doc, path).is_some_and(|layer| layer.is_group()) {
         return 0;
     }
     let prefix = format!("{path}/");
@@ -264,16 +266,16 @@ pub fn select_similar(doc: &Document, path: &str) -> Vec<String> {
 
 /// The [`select_similar`] match key: `(class, adjustment key, blend mode)`.
 fn match_key(layer: &Layer) -> (u8, [u8; 4], BlendMode) {
-    let class = if layer.is_group {
+    let class = if layer.is_group() {
         0
-    } else if layer.adjustment.is_some() {
+    } else if layer.has_adjustment_content() {
         1
     } else if layer.background {
         2
     } else {
         3
     };
-    let adjustment = layer.adjustment.as_ref().map_or([0; 4], |data| data.key);
+    let adjustment = layer.adjustment().map_or([0; 4], |data| data.key);
     (class, adjustment, layer.blend)
 }
 
@@ -296,7 +298,9 @@ pub fn duplicate_paths(doc: &mut Document, paths: &[&str]) -> Vec<String> {
             let mut copy = resolve_path(doc, &path)?.clone();
             copy.name = format!("{} copy", copy.name);
             pictura_core::layer_comp::clear_layer_id(&mut copy);
-            copy.extra_blocks.retain(|block| block.key != *b"shmd");
+            pictura_codec::edit_layer(copy.as_mut(), |parts| {
+                parts.extra_blocks.retain(|block| block.key != *b"shmd")
+            });
             if copy.background {
                 release_background(&mut copy);
             }
@@ -372,10 +376,10 @@ pub fn ungroup_paths(doc: &mut Document, paths: &[&str]) -> usize {
         let Some(layer) = resolve_path(doc, &path) else {
             continue;
         };
-        if !layer.is_group || layer.lock.is_all() || layer.lock.contains(LockFlags::NESTING) {
+        if !layer.is_group() || layer.lock.is_all() || layer.lock.contains(LockFlags::NESTING) {
             continue;
         }
-        let children: Vec<Layer> = layer.children.iter().cloned().collect();
+        let children: Vec<Layer> = layer.children().iter().cloned().collect();
         if doc.layers.replace(&segments, children).is_ok() {
             changed += 1;
         }
@@ -497,7 +501,7 @@ fn move_path_to_dest(
     } else {
         let tgt = parse_path(target)?;
         if mode == 2 {
-            if !resolve_path(doc, target).is_some_and(|layer| layer.is_group) {
+            if !resolve_path(doc, target).is_some_and(|layer| layer.is_group()) {
                 return None;
             }
             (tgt, None)
@@ -544,7 +548,7 @@ fn parent_nesting_locked(doc: &Document, parent: &[usize]) -> bool {
             return false;
         };
         node = Some(layer);
-        layers = &layer.children;
+        layers = layer.children();
     }
     node.is_some_and(|layer| layer.lock.contains(LockFlags::NESTING))
 }

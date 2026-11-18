@@ -600,7 +600,7 @@ mod tests {
     #[test]
     fn toning_never_changes_coverage() {
         let mut d = doc(40, 40, [200, 100, 50, 0]);
-        for (i, a) in d.layers[0].channels[3].data.iter_mut().enumerate() {
+        for (i, a) in d.layers[0].channels_mut()[3].data.iter_mut().enumerate() {
             if i % 40 < 20 {
                 *a = 128;
             }

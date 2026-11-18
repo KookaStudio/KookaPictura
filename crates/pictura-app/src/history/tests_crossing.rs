@@ -8,7 +8,7 @@ const SIDE: u32 = 512;
 
 fn layer(side: u32) -> Layer {
     let side_i = side as i32;
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "text".into(),
         rect: PsdRect {
             top: 0,
@@ -23,7 +23,7 @@ fn layer(side: u32) -> Layer {
             })
             .collect(),
         ..Default::default()
-    }
+    })
 }
 
 fn document() -> Document {

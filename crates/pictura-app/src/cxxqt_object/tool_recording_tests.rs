@@ -153,7 +153,7 @@ fn paint(
 fn pixels(view: &PictureViewRust) -> Vec<u8> {
     let doc = view.session.doc.as_ref().expect("document");
     doc.layers[0]
-        .channels
+        .channels()
         .iter()
         .flat_map(|channel| channel.data.iter().copied())
         .collect()

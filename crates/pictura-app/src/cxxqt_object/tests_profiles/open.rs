@@ -25,7 +25,7 @@ fn large_document_open_profile() {
         history.retained_plane_bytes(),
     );
 
-    let plane = &mut doc.layers[0].channels[0].data;
+    let plane = &mut doc.layers[0].channels_mut()[0].data;
     plane.tile(w as usize, h as usize);
     let v = plane.sample(0).expect("a sample");
     plane.write_rect_from(0..1, 0..1, w as usize, &[v ^ 1]);

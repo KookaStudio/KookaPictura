@@ -114,7 +114,7 @@ fn visible_in_tree(doc: &Document, path: &str) -> bool {
         let Some(layer) = layers.get(index) else {
             return false;
         };
-        layers = &layer.children;
+        layers = layer.children();
         layer.visible
     })
 }
@@ -123,17 +123,17 @@ fn visible_in_tree(doc: &Document, path: &str) -> bool {
 /// mask (inferred; the Help is silent on them).
 fn eligible(doc: &Document, path: &str) -> bool {
     resolve_path(doc, path).is_some_and(|layer| {
-        !layer.is_group
-            && layer.adjustment.is_none()
+        !layer.is_group()
+            && layer.adjustment().is_none()
             && decode_layer_fill(layer).is_none()
-            && layer.type_tool.is_none()
-            && layer.smart_object.is_none()
+            && layer.type_tool().is_none()
+            && layer.smart_object().is_none()
     }) && visible_in_tree(doc, path)
         && super::layer_has_content(doc, path)
 }
 
 fn refused(layer: &Layer) -> bool {
-    layer.background || layer.smart_object.is_some() || layer.clipping
+    layer.background || layer.smart_object().is_some() || layer.clipping
 }
 
 /// The eligible `paths`, bottom of the stack first.

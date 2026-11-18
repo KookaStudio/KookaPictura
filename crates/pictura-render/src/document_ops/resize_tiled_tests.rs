@@ -49,7 +49,7 @@ fn dims(r: PsdRect) -> (usize, usize) {
 /// A layer over `r` whose four channels are tiled seeded planes.
 fn layer(name: &str, r: PsdRect, seed: usize) -> Layer {
     let (w, h) = dims(r);
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: r,
         channels: [0, 1, 2, -1]
@@ -60,7 +60,7 @@ fn layer(name: &str, r: PsdRect, seed: usize) -> Layer {
             })
             .collect(),
         ..Default::default()
-    }
+    })
 }
 
 /// A 300 × 200 document: a full-canvas layer, a layer hanging off the
@@ -118,7 +118,7 @@ fn tiled_image_size_matches_the_dense_resampler() {
             });
             assert_eq!((doc.width, doc.height), (w, h));
             for (new, old) in doc.layers.iter().zip(before.layers.iter()) {
-                for (nc, oc) in new.channels.iter().zip(&old.channels) {
+                for (nc, oc) in new.channels().iter().zip(old.channels()) {
                     let what = format!("{} channel {}", new.name, nc.id);
                     assert_dense(&what, &oc.data, dims(old.rect), &nc.data, dims(new.rect), r);
                 }
@@ -264,7 +264,7 @@ fn a_solid_document_resizes_into_uniform_tiles() {
     let mut doc = Document::from_rgba("solid", side, side, &rgba);
     resize_document(&mut doc, 3072, 3072, Resample::Bilinear).expect("resizes");
     let dense = 3072 * 3072;
-    for c in &doc.layers[0].channels {
+    for c in doc.layers[0].channels() {
         assert!(
             c.data.allocated_bytes() * 4 < dense,
             "channel {}: {} of {dense} bytes",
@@ -286,9 +286,9 @@ fn resized_tiles_spill_and_read_back() {
     let side = 1024;
     let mut doc = Document::new(side as u32, side as u32, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = LayerStack::from_layers(vec![layer("seeded", rect(0, 0, side, side), 1)]);
-    let source = every(&doc.layers[0].channels[0].data);
+    let source = every(&doc.layers[0].channels()[0].data);
     resize_document(&mut doc, 1536, 1536, Resample::Bilinear).expect("resizes");
-    let resized = &doc.layers[0].channels[0].data;
+    let resized = &doc.layers[0].channels()[0].data;
     for _ in 0..6 {
         run_pass(u64::MAX);
     }

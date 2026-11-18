@@ -1,6 +1,5 @@
 //! Group, mask, fill, and adjustment-layer parity tests.
 
-use pictura_adjust::Adjustment;
 use pictura_core::{
     AdjustmentData, BitDepth, BlendMode, Channel, ColorMode, Document, Layer, LayerMask,
     LayerStack, PsdRect, SmartObject, SmartObjectKind, TextStyle, TypeTool, VectorFillRule,
@@ -266,15 +265,15 @@ fn proxy_less_type() -> Layer {
     let mut text = layer("text", BlendMode::Normal, |x, y| {
         (0, 0, 0, alpha_ramp(x, y))
     });
-    text.channels = Vec::new();
-    text.type_tool = Some(type_tool());
+    text.channels_mut().clear();
+    pictura_codec::edit_layer(text.as_mut(), |parts| parts.type_tool = Some(type_tool()));
     text
 }
 
 fn sub_layer(name: &str, rect: PsdRect, color: (u8, u8, u8, u8), blend: BlendMode) -> Layer {
     let n = (rect.width() * rect.height()) as usize;
     let (r, g, b, a) = color;
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect,
         blend,
@@ -297,7 +296,7 @@ fn sub_layer(name: &str, rect: PsdRect, color: (u8, u8, u8, u8), blend: BlendMod
             })
             .to_vec(),
         ..Default::default()
-    }
+    })
 }
 
 fn doc_with(layers: Vec<Layer>) -> Document {
@@ -320,25 +319,31 @@ fn raster_sources_match_cpu() {
     check_scene_parity(&doc, &mut max_delta);
 
     let mut smart = layer("smart", BlendMode::Normal, |_, _| (0, 0, 0, 0));
-    smart.channels = Vec::new();
-    smart.smart_object = Some(embedded_object());
+    smart.channels_mut().clear();
+    pictura_codec::edit_layer(smart.as_mut(), |parts| {
+        parts.smart_object = Some(embedded_object())
+    });
     let doc = doc_with(vec![base_layer(), smart]);
     check_scene_parity(&doc, &mut max_delta);
 
     let mut filtered = layer("filtered", BlendMode::Normal, |_, _| (0, 0, 0, 0));
-    filtered.channels = Vec::new();
-    filtered.smart_object = Some(embedded_object());
+    filtered.channels_mut().clear();
+    pictura_codec::edit_layer(filtered.as_mut(), |parts| {
+        parts.smart_object = Some(embedded_object())
+    });
     pictura_codec::attach_lens_correction_filter(&mut filtered, &lens_slots())
         .expect("lens filter");
-    let so = filtered.smart_object.as_mut().expect("smart object");
-    so.filter_mask_enabled = true;
-    so.filter_mask_extend_with_white = true;
-    so.filter_mask = Some(pictura_core::FilterMask {
-        rect: whole_rect(),
-        data: (0..(SIZE * SIZE))
-            .map(|i| (i * 17) as u8)
-            .collect::<Vec<u8>>()
-            .into(),
+    pictura_codec::edit_layer(&mut filtered, |parts| {
+        let so = parts.smart_object.as_mut().expect("smart object");
+        so.filter_mask_enabled = true;
+        so.filter_mask_extend_with_white = true;
+        so.filter_mask = Some(pictura_core::FilterMask {
+            rect: whole_rect(),
+            data: (0..(SIZE * SIZE))
+                .map(|i| (i * 17) as u8)
+                .collect::<Vec<u8>>()
+                .into(),
+        });
     });
     let doc = doc_with(vec![base_layer(), filtered]);
     check_scene_parity(&doc, &mut max_delta);
@@ -609,8 +614,10 @@ fn clipping_base_fill_and_effects_match_cpu() {
 fn clipping_smart_source_matches_cpu() {
     require_gpu();
     let mut base = layer("smart base", BlendMode::Normal, |_, _| (0, 0, 0, 0));
-    base.channels = Vec::new();
-    base.smart_object = Some(embedded_object_with_transparent_margin());
+    base.set_channels(Vec::new());
+    pictura_codec::edit_layer(base.as_mut(), |parts| {
+        parts.smart_object = Some(embedded_object_with_transparent_margin())
+    });
     let mut clipped = sub_layer("clipped", whole_rect(), (0, 255, 0, 255), BlendMode::Normal);
     clipped.clipping = true;
     let doc = doc_with(vec![base_layer(), base, clipped]);
@@ -641,7 +648,9 @@ fn cached_raster_source_invalidates() {
     let mut doc = doc_with(vec![base_layer(), proxy_less_type()]);
     let (first, backend) = composite(CompositeRequest::whole(&doc, true));
     assert_eq!(backend, Backend::Gpu);
-    doc.layers[1].type_tool.as_mut().expect("type").text = "Changed".into();
+    pictura_codec::edit_layer(doc.layers[1].as_mut(), |parts| {
+        parts.type_tool.as_mut().expect("type").text = "Changed".into()
+    });
     let before = metrics::counters().resident_misses;
     let (second, backend) = composite(CompositeRequest::whole(&doc, true));
     assert_eq!(backend, Backend::Gpu);
@@ -664,13 +673,20 @@ fn pattern_fill_is_not_served_stale() {
     let layer = doc
         .layers
         .iter_mut()
-        .find(|layer| matches!(decode_layer_fill(layer), Some(Adjustment::PatternFill(_))))
+        .find(|layer| {
+            matches!(
+                decode_layer_fill(layer),
+                Some(pictura_core::FillContent::Pattern(_))
+            )
+        })
         .expect("a pattern fill layer");
-    let Some(Adjustment::PatternFill(mut params)) = decode_layer_fill(layer) else {
+    let Some(pictura_core::FillContent::Pattern(mut params)) = decode_layer_fill(layer) else {
         unreachable!()
     };
     params.pattern_id = "pictura-changed".into();
-    layer.adjustment = Some(encode_pattern_fill(&params));
+    pictura_codec::edit_layer(layer, |parts| {
+        parts.adjustment = Some(encode_pattern_fill(&params))
+    });
     let rgba = [255u8; 4 * 4 * 4];
     let record = pictura_codec::encode_rgb_pattern("changed", "pictura-changed", 4, 4, &rgba)
         .expect("pattern encodes");

@@ -516,9 +516,6 @@ fn layout(data: &AdjustmentData, adjustment: &Adjustment, cmyk: bool) -> Option<
             false,
             None,
         )),
-        Adjustment::SolidFill(_) => note("Solid Color"),
-        Adjustment::GradientFill(_) => note("Gradient Fill"),
-        Adjustment::PatternFill(_) => note("Pattern Fill"),
         Adjustment::Desaturate
         | Adjustment::Equalize
         | Adjustment::Auto(_)
@@ -647,8 +644,12 @@ pub fn adjustment_editor(data: &AdjustmentData) -> Option<AdjustmentEditor> {
 
 /// As [`adjustment_editor`], reading the block as a CMYK document when `cmyk`.
 pub fn adjustment_editor_in_mode(data: &AdjustmentData, cmyk: bool) -> Option<AdjustmentEditor> {
-    let adjustment = decode_adjustment(data)?;
-    let (title, groups, specs, curves, note) = layout(data, &adjustment, cmyk)?;
+    let (title, groups, specs, curves, note) = match pictura_codec::decode_fill(data) {
+        Some(pictura_core::FillContent::Solid(_)) => note("Solid Color")?,
+        Some(pictura_core::FillContent::Gradient(_)) => note("Gradient Fill")?,
+        Some(pictura_core::FillContent::Pattern(_)) => note("Pattern Fill")?,
+        None => layout(data, &decode_adjustment(data)?, cmyk)?,
+    };
     let params = specs
         .iter()
         .map(|spec| AdjustmentParam {

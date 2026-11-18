@@ -629,7 +629,7 @@ pub fn selection_from_layer_alpha(layer: &Layer, width: u32, height: u32) -> Sel
     let mut data = vec![0u8; width as usize * height as usize];
     let rect = layer.rect;
     let alpha = layer
-        .channels
+        .channels()
         .iter()
         .find(|channel| channel.id == -1)
         .map(|channel| channel.data.as_slice());

@@ -17,7 +17,7 @@ fn psd_tools_sees_layer_attributes() {
             }
         })
         .expect("pixel edit preserves geometry");
-    let layer = Layer {
+    let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Attrs".into(),
         rect: PsdRect {
             top: 0,
@@ -54,7 +54,7 @@ fn psd_tools_sees_layer_attributes() {
         is_group: false,
         background: false,
         ..Default::default()
-    };
+    });
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
     let dir = scratch_dir("psd-attrs");
@@ -104,7 +104,7 @@ fn psd_tools_sees_background_name_for_flagged_layer() {
     }
 
     let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
-    let layer = Layer {
+    let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Base".into(),
         rect: PsdRect {
             top: 0,
@@ -139,7 +139,7 @@ fn psd_tools_sees_background_name_for_flagged_layer() {
         is_group: false,
         background: true,
         ..Default::default()
-    };
+    });
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
 
     let dir = scratch_dir("psd-background");

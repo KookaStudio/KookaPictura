@@ -169,7 +169,7 @@ fn color_planes(layer: &Layer) -> Result<Vec<i16>, MattingError> {
     let n = w as usize * h as usize;
     let plane_len = |id: i16| {
         layer
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == id)
             .map(|c| c.data.len())
@@ -256,7 +256,7 @@ fn blend(orig: f64, target: f64, cov: u8) -> u8 {
 
 fn channel(layer: &Layer, id: i16) -> Option<&[u8]> {
     layer
-        .channels
+        .channels()
         .iter()
         .find(|c| c.id == id)
         .map(|c| c.data.as_slice())
@@ -264,7 +264,7 @@ fn channel(layer: &Layer, id: i16) -> Option<&[u8]> {
 
 fn channel_mut(layer: &mut Layer, id: i16) -> Option<&mut [u8]> {
     layer
-        .channels
+        .channels_mut()
         .iter_mut()
         .find(|c| c.id == id)
         .map(|c| c.data.as_mut_slice())
@@ -291,7 +291,7 @@ mod tests {
     fn layer(w: i32, h: i32, colour: [u8; 3], alpha: Vec<u8>) -> Layer {
         let n = (w * h) as usize;
         let plane = |v: u8| vec![v; n];
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "px".into(),
             rect: rect(w, h),
             blend: BlendMode::Normal,
@@ -325,7 +325,7 @@ mod tests {
             is_group: false,
             background: false,
             ..Default::default()
-        }
+        })
     }
 
     fn chan(layer: &Layer, id: i16) -> &[u8] {
@@ -408,7 +408,7 @@ mod tests {
         );
 
         let mut no_colour = layer(2, 1, [100, 100, 100], vec![128, 128]);
-        no_colour.channels.retain(|c| c.id == -1);
+        no_colour.channels_mut().retain(|c| c.id == -1);
         assert_eq!(
             remove_matte(&mut no_colour, MatteBackground::Black, None),
             Err(MattingError::Empty)
@@ -420,7 +420,7 @@ mod tests {
         // 5-pixel row: transparent, opaque*3, transparent. Both edge pixels are
         // off-colour; the middle pixel is the interior source.
         let mut l = layer(5, 1, [10, 10, 10], vec![0, 255, 255, 255, 0]);
-        for c in &mut l.channels {
+        for c in l.channels_mut() {
             if c.id == 2 {
                 c.data = vec![10, 10, 200, 10, 200].into();
             }
@@ -438,7 +438,7 @@ mod tests {
         // 10..70 so each band pixel's nearest interior colour is distinct.
         let build = || {
             let mut l = layer(7, 1, [10, 10, 10], vec![0, 255, 255, 255, 255, 255, 0]);
-            for c in &mut l.channels {
+            for c in l.channels_mut() {
                 if c.id == 0 {
                     c.data = vec![10, 20, 30, 40, 50, 60, 70].into();
                 }
@@ -466,7 +466,7 @@ mod tests {
     #[test]
     fn defringe_honours_mask_coverage() {
         let mut l = layer(5, 1, [10, 10, 10], vec![0, 255, 255, 255, 0]);
-        for c in &mut l.channels {
+        for c in l.channels_mut() {
             if c.id == 2 {
                 c.data = vec![10, 10, 200, 10, 200].into();
             }

@@ -10,7 +10,7 @@ use pictura_core::{
 use std::path::PathBuf;
 
 fn embedded_layer() -> Layer {
-    Layer {
+    crate::layer_from_parts(pictura_core::LayerParts {
         name: "L".into(),
         rect: pictura_core::PsdRect {
             top: 0,
@@ -28,7 +28,7 @@ fn embedded_layer() -> Layer {
             .with_payload(b"8BPS\x00\x01not-a-real-psd".to_vec()),
         ),
         ..Default::default()
-    }
+    })
 }
 
 /// A settings value with every modeled tab populated.
@@ -252,7 +252,7 @@ fn attach_authors_then_write_read_round_trips() {
     let settings = full_settings();
     let mut layer = embedded_layer();
     attach_pictura_raw_filter(&mut layer, &settings).expect("attach authors filterFX");
-    let filter = &layer.smart_object.as_ref().unwrap().smart_filters[0];
+    let filter = &layer.smart_object().unwrap().smart_filters[0];
     assert_eq!(filter.filter_id, CAMERA_RAW_FILTER_ID);
     assert_eq!(decode_pictura_raw_settings(&filter.options), settings);
 
@@ -266,8 +266,7 @@ fn attach_authors_then_write_read_round_trips() {
     let bytes = crate::write_psd(&doc).expect("writes");
     let back = crate::read_psd(&bytes).expect("re-reads");
     let filter = &back.layers[0]
-        .smart_object
-        .as_ref()
+        .smart_object()
         .expect("embedded object resolves")
         .smart_filters[0];
     assert_eq!(filter.filter_id, CAMERA_RAW_FILTER_ID);
@@ -288,7 +287,7 @@ fn reattach_without_a_preserved_block_updates_the_typed_filter() {
         ..Default::default()
     };
     attach_pictura_raw_filter(&mut layer, &second).expect("re-attach updates in memory");
-    let filter = &layer.smart_object.as_ref().unwrap().smart_filters[0];
+    let filter = &layer.smart_object().unwrap().smart_filters[0];
     assert_eq!(filter.filter_id, CAMERA_RAW_FILTER_ID);
     assert_eq!(decode_pictura_raw_settings(&filter.options), second);
 }
@@ -305,10 +304,14 @@ fn attach_inserts_into_a_preserved_sold_and_preserves_other_keys() {
     let layer = embedded_layer();
     let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
     let mut layer = layer;
-    layer.smart_object.as_mut().unwrap().uuid = so.uuid.clone();
-    layer.extra_blocks.push(LayerBlock {
-        key: *b"SoLd",
-        data: data.into(),
+    crate::edit_layer(&mut layer, |parts| {
+        parts.smart_object.as_mut().unwrap().uuid = so.uuid.clone();
+    });
+    crate::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"SoLd",
+            data: data.into(),
+        })
     });
 
     let settings = PicturaRawSettings {
@@ -320,7 +323,7 @@ fn attach_inserts_into_a_preserved_sold_and_preserves_other_keys() {
     };
     attach_pictura_raw_filter(&mut layer, &settings).expect("inserts filterFX");
     assert_eq!(
-        decode_pictura_raw_settings(&layer.smart_object.as_ref().unwrap().smart_filters[0].options),
+        decode_pictura_raw_settings(&layer.smart_object().unwrap().smart_filters[0].options),
         settings
     );
 
@@ -336,7 +339,7 @@ fn attach_inserts_into_a_preserved_sold_and_preserves_other_keys() {
     })
     .expect("writes");
     let back = crate::read_psd(&bytes).expect("re-reads");
-    let filter = &back.layers[0].smart_object.as_ref().unwrap().smart_filters[0];
+    let filter = &back.layers[0].smart_object().unwrap().smart_filters[0];
     assert_eq!(filter.filter_id, CAMERA_RAW_FILTER_ID);
     assert_eq!(decode_pictura_raw_settings(&filter.options), settings);
 }
@@ -398,7 +401,7 @@ fn reattach_over_a_preserved_filter_keeps_unmodeled_keys() {
         .layers
         .iter()
         .find(|l| l.name == "Layer 1 copy")
-        .and_then(|l| l.smart_object.as_ref())
+        .and_then(|l| l.smart_object())
         .expect("smart object survives a write");
     assert_eq!(
         so.smart_filters.len(),
@@ -448,9 +451,11 @@ fn reattach_a_generic_filter_replaces_only_its_own_entry() {
     let layer0 = embedded_layer();
     let data = crate::smart_writer::author_sold_block(&so, &layer0, 2, 2);
     let mut layer = layer0;
-    layer.extra_blocks.push(LayerBlock {
-        key: *b"SoLd",
-        data: data.into(),
+    crate::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"SoLd",
+            data: data.into(),
+        })
     });
 
     let replacement = SmartFilter {
@@ -473,7 +478,7 @@ fn reattach_a_generic_filter_replaces_only_its_own_entry() {
         doc
     };
     let back = crate::read_psd(&crate::write_psd(&doc).expect("writes")).expect("re-reads");
-    let so = back.layers[0].smart_object.as_ref().expect("resolves");
+    let so = back.layers[0].smart_object().expect("resolves");
     assert_eq!(so.smart_filters.len(), 1, "still one entry");
     assert_eq!(so.smart_filters[0].name, "Second");
     assert!(!so.smart_filters[0].enabled);
@@ -500,7 +505,7 @@ fn reattach_a_generic_filter_replaces_only_its_own_entry() {
 fn attach_errors_without_a_smart_object() {
     let mut layer = Layer::default();
     assert!(attach_pictura_raw_filter(&mut layer, &full_settings()).is_err());
-    assert!(layer.smart_object.is_none());
+    assert!(layer.smart_object().is_none());
 }
 
 #[test]
@@ -516,7 +521,7 @@ fn fixture_all_eleven_basic_keys_decode() {
         .layers
         .iter()
         .find(|l| l.name == "Layer 1 copy")
-        .and_then(|l| l.smart_object.as_ref())
+        .and_then(|l| l.smart_object())
         .expect("smart object resolved")
         .smart_filters[0];
     assert_eq!(filter.filter_id, CAMERA_RAW_FILTER_ID);
@@ -553,7 +558,7 @@ fn fixture_full_key_map_round_trips_and_preserves_unmodeled() {
         .find(|l| l.name == "Layer 1 copy")
         .expect("Layer 1 copy present");
 
-    let filter = &layer.smart_object.as_ref().unwrap().smart_filters[0];
+    let filter = &layer.smart_object().unwrap().smart_filters[0];
     let settings = decode_pictura_raw_settings(&filter.options);
 
     // Every modeled tab is present in the regenerated fixture.
@@ -605,7 +610,7 @@ fn fixture_full_key_map_round_trips_and_preserves_unmodeled() {
         .layers
         .iter()
         .find(|l| l.name == "Layer 1 copy")
-        .and_then(|l| l.smart_object.as_ref())
+        .and_then(|l| l.smart_object())
         .expect("smart object survives")
         .smart_filters[0];
 
@@ -646,8 +651,7 @@ fn append_stacks_same_id_typed() {
     append_smart_filter(&mut layer, generic("A")).expect("appends");
     append_smart_filter(&mut layer, generic("B")).expect("appends");
     let names: Vec<_> = layer
-        .smart_object
-        .as_ref()
+        .smart_object()
         .unwrap()
         .smart_filters
         .iter()
@@ -659,19 +663,21 @@ fn append_stacks_same_id_typed() {
 #[test]
 fn append_stacks_same_id_preserved() {
     let mut layer = embedded_layer();
-    let so = layer.smart_object.clone().unwrap();
+    let so = layer.smart_object().cloned().unwrap();
     let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
-    layer.extra_blocks.push(LayerBlock {
-        key: *b"SoLd",
-        data: data.into(),
+    crate::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"SoLd",
+            data: data.into(),
+        })
     });
     append_smart_filter(&mut layer, generic("A")).expect("appends");
     append_smart_filter(&mut layer, generic("B")).expect("appends");
-    let so = layer.smart_object.as_ref().unwrap();
+    let so = layer.smart_object().unwrap();
     assert_eq!(so.smart_filters.len(), 2);
 
     let block = &layer
-        .extra_blocks
+        .extra_blocks()
         .iter()
         .find(|b| &b.key == b"SoLd")
         .unwrap()
@@ -704,11 +710,13 @@ fn append_stacks_same_id_preserved() {
 #[test]
 fn replace_keeps_position_flag_and_blend_options() {
     let mut layer = embedded_layer();
-    let so = layer.smart_object.clone().unwrap();
+    let so = layer.smart_object().cloned().unwrap();
     let data = crate::smart_writer::author_sold_block(&so, &layer, 2, 2);
-    layer.extra_blocks.push(LayerBlock {
-        key: *b"SoLd",
-        data: data.into(),
+    crate::edit_layer(layer.as_mut(), |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"SoLd",
+            data: data.into(),
+        })
     });
     append_smart_filter(&mut layer, generic("A")).expect("appends");
     append_smart_filter(&mut layer, generic("B")).expect("appends");
@@ -722,13 +730,13 @@ fn replace_keeps_position_flag_and_blend_options() {
     assert!(replace_smart_filter(&mut layer, 5, replacement.clone()).is_err());
     replace_smart_filter(&mut layer, 0, replacement).expect("replaces");
 
-    let typed = &layer.smart_object.as_ref().unwrap().smart_filters;
+    let typed = &layer.smart_object().unwrap().smart_filters;
     assert_eq!((typed[0].name.as_str(), typed[0].filter_id), ("C", 77));
     assert!(!typed[0].enabled, "the entry keeps its enable flag");
     assert_eq!(typed[1].name, "B");
 
     let block = &layer
-        .extra_blocks
+        .extra_blocks()
         .iter()
         .find(|b| &b.key == b"SoLd")
         .unwrap()

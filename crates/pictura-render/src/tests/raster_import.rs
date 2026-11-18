@@ -26,7 +26,7 @@ fn appends_topmost_native_size_layer() {
     assert_eq!(layer.blend, BlendMode::Normal);
     assert_eq!(layer.opacity, 255);
     assert_eq!(layer.fill, 255);
-    assert!(layer.smart_object.is_none());
+    assert!(layer.smart_object().is_none());
 }
 
 #[test]
@@ -37,7 +37,7 @@ fn pixels_are_planar_and_faithful() {
     let layer = resolve_path(&doc, &path).expect("path resolves");
     let channel = |id: i16| {
         &layer
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == id)
             .expect("channel present")
@@ -64,5 +64,5 @@ fn appended_layer_converts_to_smart_object() {
     let path = add_raster_layer_from_rgba(&mut doc, "img", 2, 2, &[200; 16]);
     assert!(convert_to_smart_object(&mut doc, &path));
     let layer = resolve_path(&doc, &path).expect("path resolves");
-    assert!(layer.smart_object.is_some());
+    assert!(layer.smart_object().is_some());
 }

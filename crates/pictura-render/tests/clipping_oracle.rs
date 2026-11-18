@@ -18,7 +18,7 @@ sys.stdout.write(" ".join(str(v) for px in image.getdata() for v in px))
 
 fn layer(name: &str, rect: PsdRect, rgba: [u8; 4], opacity: u8, clipping: bool) -> Layer {
     let n = (rect.width() * rect.height()) as usize;
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect,
         opacity,
@@ -35,7 +35,7 @@ fn layer(name: &str, rect: PsdRect, rgba: [u8; 4], opacity: u8, clipping: bool) 
             })
             .collect(),
         ..Default::default()
-    }
+    })
 }
 
 fn rect(left: i32, top: i32, right: i32, bottom: i32) -> PsdRect {

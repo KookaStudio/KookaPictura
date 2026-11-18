@@ -246,7 +246,7 @@ pub(super) fn layer_style_set_gradient(
 pub(super) fn layer_style_can_copy(view: &PictureView, path: &QString) -> bool {
     with_layer(view, path, |layer| {
         !layer.background
-            && !layer.is_group
+            && !layer.is_group()
             && (pictura_render::has_layer_style(layer) || !layer.restricted_channels.is_empty())
     })
     .unwrap_or(false)
@@ -490,10 +490,10 @@ mod tests {
         layer.blend_if = Some(view((0, 40000)));
         assert!(layer_is_blend_if_customised(&layer), "narrowed range");
 
-        let raw = Layer {
+        let raw = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             blending_ranges: vec![1, 2, 3].into(),
-            ..Layer::default()
-        };
+            ..Default::default()
+        });
         assert!(
             layer_is_blend_if_customised(&raw),
             "a raw block with no typed view is customised"

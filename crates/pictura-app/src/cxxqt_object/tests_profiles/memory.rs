@@ -215,7 +215,7 @@ fn layer_plane_bytes(view: &PictureViewRust) -> usize {
     let mut seen = std::collections::HashSet::new();
     doc.layers
         .iter()
-        .flat_map(|layer| layer.channels.iter())
+        .flat_map(|layer| layer.channels().iter())
         .flat_map(|channel| channel.data.allocations())
         .filter(|(ptr, _)| seen.insert(*ptr))
         .map(|(_, bytes)| bytes)

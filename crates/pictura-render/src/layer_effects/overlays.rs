@@ -13,7 +13,6 @@
 //! canvas-sized; the exact inter-effect order among the overlays and
 //! Stroke is not modelled.
 
-use pictura_adjust::Adjustment;
 use pictura_adjust::{GradientFillParams, GradientKind, GradientStop, PatternFillParams};
 use pictura_codec::DescValue;
 use pictura_core::{BlendMode, Document, Layer, PsdRect};
@@ -198,7 +197,7 @@ fn coverage(
     doc: &Document,
     opacity: f32,
     build: BuildRegion,
-    fill: Option<&Adjustment>,
+    fill: Option<&pictura_core::FillContent>,
 ) -> Option<Coverage> {
     let (w, h) = (
         doc.width.min(i32::MAX as u32) as i32,
@@ -239,7 +238,7 @@ pub(super) fn build_color_overlay(
     doc: &Document,
     overlay: &ColorOverlay,
     build: BuildRegion,
-    fill: Option<&Adjustment>,
+    fill: Option<&pictura_core::FillContent>,
 ) -> Vec<EffectPass> {
     let Some((region, matte, opacity)) = coverage(layer, doc, overlay.opacity, build, fill) else {
         return Vec::new();
@@ -274,7 +273,7 @@ pub(super) fn build_gradient_overlay(
     doc: &Document,
     overlay: &GradientOverlay,
     build: BuildRegion,
-    fill: Option<&Adjustment>,
+    fill: Option<&pictura_core::FillContent>,
 ) -> Vec<EffectPass> {
     let Some((region, matte, opacity)) = coverage(layer, doc, overlay.opacity, build, fill) else {
         return Vec::new();
@@ -341,7 +340,7 @@ pub(super) fn build_pattern_overlay(
     doc: &Document,
     overlay: &PatternOverlay,
     build: BuildRegion,
-    fill: Option<&Adjustment>,
+    fill: Option<&pictura_core::FillContent>,
 ) -> Vec<EffectPass> {
     let Some((region, matte, opacity)) = coverage(layer, doc, overlay.opacity, build, fill) else {
         return Vec::new();

@@ -44,10 +44,10 @@ pub fn perspective_crop_refusal(doc: &Document) -> Option<&'static str> {
     fn visit(layers: &[pictura_core::Layer], live: &mut bool) {
         for layer in layers {
             *live |= layer.is_type()
-                || layer.type_tool.is_some()
-                || layer.smart_object.is_some()
+                || layer.type_tool().is_some()
+                || layer.smart_object().is_some()
                 || layer.vector_mask.is_some();
-            visit(&layer.children, live);
+            visit(layer.children(), live);
         }
     }
     visit(&doc.layers, &mut live);
@@ -99,18 +99,22 @@ pub fn perspective_crop_sized(
 
     for_each_layer(&mut doc.layers, &mut |layer| {
         let rect = layer.rect;
-        if layer.is_group || layer.channels.is_empty() || rect.width() <= 0 || rect.height() <= 0 {
+        if layer.is_group()
+            || layer.channels().is_empty()
+            || rect.width() <= 0
+            || rect.height() <= 0
+        {
             return;
         }
         // ponytail: a layer without alpha (the Background) fills outside the
         // source with white; there is no background swatch to read yet.
-        let opaque = !layer.channels.iter().any(|c| c.id == -1);
-        for channel in &mut layer.channels {
+        let opaque = !layer.channels().iter().any(|c| c.id == -1);
+        for channel in layer.channels_mut() {
             let outside = if opaque && channel.id >= 0 { 255 } else { 0 };
             channel.data = warp_plane(&channel.data, rect, &map, w, h, outside).into();
         }
         layer.rect = canvas;
-        layer.raw_channels.clear();
+        layer.discard_raw_channels();
         layer.source_channels = None;
         if let Some(mask) = &mut layer.mask {
             if let Some(data) = &mask.data {

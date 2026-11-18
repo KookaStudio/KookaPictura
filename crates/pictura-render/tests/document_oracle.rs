@@ -42,7 +42,7 @@ fn plane(base: u8, n: usize) -> Vec<u8> {
 
 fn pixel_layer(name: &str, r: PsdRect, mask: Option<LayerMask>) -> Layer {
     let n = (r.width().max(0) * r.height().max(0)) as usize;
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: r,
         blend: BlendMode::Normal,
@@ -76,11 +76,11 @@ fn pixel_layer(name: &str, r: PsdRect, mask: Option<LayerMask>) -> Layer {
         is_group: false,
         background: false,
         ..Default::default()
-    }
+    })
 }
 
 fn group(name: &str, children: Vec<Layer>) -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: rect(0, 0, 0, 0),
         blend: BlendMode::PassThrough,
@@ -97,7 +97,7 @@ fn group(name: &str, children: Vec<Layer>) -> Layer {
         is_group: true,
         background: false,
         ..Default::default()
-    }
+    })
 }
 
 /// Non-square 6×4 document: a full layer, a masked layer, and a group with one
@@ -164,7 +164,7 @@ fn flattened(layers: &[Layer]) -> Vec<(String, PsdRect)> {
     fn walk(layers: &[Layer], out: &mut Vec<(String, PsdRect)>) {
         for layer in layers {
             out.push((layer.name.clone(), layer.rect));
-            walk(&layer.children, out);
+            walk(layer.children(), out);
         }
     }
     let mut out = Vec::new();
@@ -306,7 +306,7 @@ fn rotate_document_in_matches_rotate_in_kernel() {
     doc.composite
         .replace(composite_rgba(&doc))
         .expect("valid composite");
-    let before = doc.layers[0].channels[0].data.to_vec();
+    let before = doc.layers[0].channels()[0].data.to_vec();
     let before_composite = doc.composite.buffer().clone();
 
     assert!(rotate_document_in(&mut doc, 30.0, (3.0, 2.0)));
@@ -316,7 +316,7 @@ fn rotate_document_in_matches_rotate_in_kernel() {
     src.data.copy_from_slice(&before);
     let want = pictura_ops::rotate_arbitrary(&src, 30.0, [0, 0, 0, 0]).unwrap();
     assert_eq!(
-        &doc.layers[0].channels[0].data[..],
+        &doc.layers[0].channels()[0].data[..],
         &want.data[..],
         "rotated channel must match the oracled rotate_in kernel exactly"
     );
@@ -589,7 +589,7 @@ fn rotate_document_in_matches_imagemagick_central_region() {
 
     let mut layer = pixel_layer("only", rect(0, 0, h as i32, w as i32), None);
     for c in 0..3usize {
-        layer.channels[c].data = planar[c * plane..(c + 1) * plane].to_vec().into();
+        layer.channels_mut()[c].data = planar[c * plane..(c + 1) * plane].to_vec().into();
     }
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
@@ -611,7 +611,7 @@ fn rotate_document_in_matches_imagemagick_central_region() {
     let rplane = (doc.width * doc.height) as usize;
     let mut rotated = vec![0u8; rplane * 3];
     for c in 0..3usize {
-        rotated[c * rplane..(c + 1) * rplane].copy_from_slice(&doc.layers[0].channels[c].data);
+        rotated[c * rplane..(c + 1) * rplane].copy_from_slice(&doc.layers[0].channels()[c].data);
     }
 
     // Isolate: the doc-side must equal the oracled kernel exactly.

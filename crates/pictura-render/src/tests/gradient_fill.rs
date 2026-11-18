@@ -2,6 +2,16 @@ use super::*;
 use pictura_adjust::{GradientFillParams, GradientKind, GradientStop};
 use pictura_codec::{write_descriptor, DescValue};
 
+#[test]
+fn gradient_fill_output_remains_unchanged() {
+    gradient_fill_layer_composites_ramp_and_differs();
+    gradient_fill_reverse_flips_ramp();
+    gradient_fill_masked_out_is_noop();
+    every_gradient_fill_kind_renders();
+    fixture_gradient_fill_decodes_params_and_ramp();
+    gradient_region_matches_the_full_buffer_slice();
+}
+
 fn desc_object(name: &str, class_id: &[u8], items: Vec<(Vec<u8>, DescValue)>) -> DescValue {
     DescValue::Object {
         name: name.to_string(),
@@ -136,8 +146,8 @@ fn gradient_fill_decodes_all_kinds() {
         GradientKind::Reflected,
         GradientKind::Diamond,
     ] {
-        let decoded = decode_adjustment(&encode_gradient_fill(kind, &bw_stops(), 0.0));
-        let Some(Adjustment::GradientFill(params)) = decoded else {
+        let decoded = pictura_codec::decode_fill(&encode_gradient_fill(kind, &bw_stops(), 0.0));
+        let Some(pictura_core::FillContent::Gradient(params)) = decoded else {
             panic!("{kind:?} did not decode to GradientFill");
         };
         assert_eq!(params.kind, kind);
@@ -155,8 +165,8 @@ fn encoded_gradient_fill_is_version16_and_round_trips() {
     assert_eq!(encoded.key, *b"GdFl");
     assert_eq!(&encoded.data[0..4], &[0, 0, 0, 16], "version-16 header");
     assert_eq!(
-        decode_adjustment(&encoded),
-        Some(Adjustment::GradientFill(GradientFillParams {
+        pictura_codec::decode_fill(&encoded),
+        Some(pictura_core::FillContent::Gradient(GradientFillParams {
             stops: stops.to_vec(),
             reverse: false,
             kind: GradientKind::Linear,
@@ -386,7 +396,8 @@ fn gradient_fill_decode_rejects_malformed() {
 #[test]
 fn gradient_fill_reads_optional_reverse_and_scale() {
     let reversed = gradient_fill_data(GradientKind::Radial, &bw_stops(), 45.0, true, 50.0);
-    let Some(Adjustment::GradientFill(params)) = decode_adjustment(&reversed) else {
+    let Some(pictura_core::FillContent::Gradient(params)) = pictura_codec::decode_fill(&reversed)
+    else {
         panic!("decodes");
     };
     assert!(params.reverse);
@@ -509,8 +520,8 @@ fn fixture_gradient_fill_decodes_params_and_ramp() {
         .find(|l| l.name == "Gradient Fill")
         .expect("Gradient Fill layer");
     assert_eq!(
-        decode_adjustment(fill.adjustment.as_ref().expect("GdFl block")),
-        Some(Adjustment::GradientFill(GradientFillParams {
+        pictura_codec::decode_fill(fill.adjustment().expect("GdFl block")),
+        Some(pictura_core::FillContent::Gradient(GradientFillParams {
             stops: bw_stops().to_vec(),
             reverse: false,
             kind: GradientKind::Linear,
@@ -553,8 +564,8 @@ fn encode_gradient_fill_params_round_trips() {
     };
     let data = crate::encode_gradient_fill_params(&source);
     assert_eq!(
-        decode_adjustment(&data),
-        Some(Adjustment::GradientFill(source))
+        pictura_codec::decode_fill(&data),
+        Some(pictura_core::FillContent::Gradient(source))
     );
 }
 
@@ -571,8 +582,8 @@ fn encode_gradient_fill_params_omits_defaults() {
     assert!(!has_descriptor_item(&data.data, b"Rvrs"));
     assert!(!has_descriptor_item(&data.data, b"Scl "));
     assert_eq!(
-        decode_adjustment(&data),
-        Some(Adjustment::GradientFill(source))
+        pictura_codec::decode_fill(&data),
+        Some(pictura_core::FillContent::Gradient(source))
     );
 }
 

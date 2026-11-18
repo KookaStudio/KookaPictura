@@ -56,7 +56,7 @@ fn every<T: TileSample>(plane: &Plane<T>) -> Vec<T> {
 /// A layer over `r` whose four channels are tiled seeded planes.
 fn layer(name: &str, r: PsdRect, seed: usize) -> Layer {
     let (w, h) = dims(r);
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
         rect: r,
         channels: [0, 1, 2, -1]
@@ -70,7 +70,7 @@ fn layer(name: &str, r: PsdRect, seed: usize) -> Layer {
         opacity: 255,
         fill: 255,
         ..Default::default()
-    }
+    })
 }
 
 /// A seeded 600 × 300 document: a full-canvas Background, an offset layer
@@ -183,21 +183,25 @@ fn tiled_canvas_size_matches_the_dense_paths() {
         let want = extend_channel(&source, W as u32, H as u32, w, h, dx, dy);
         assert!(every(alpha) == want, "alpha at {w}×{h} {anchor:?}");
         for (old, new) in before.layers[1]
-            .channels
+            .channels()
             .iter()
-            .zip(&doc.layers[1].channels)
+            .zip(doc.layers[1].channels())
         {
             assert!(new.data.shares(&old.data), "a layer plane was copied");
         }
 
         let mut dense = doc.clone();
-        for channel in &mut dense.layers[0].channels {
+        for channel in dense.layers[0].channels_mut() {
             channel.data = Plane::from(every(&channel.data));
         }
         assert!(extend_background(&mut doc, [200, 100, 50]).expect("extends"));
         assert!(extend_background_dense(&mut dense, [200, 100, 50]));
         assert_eq!(doc.layers[0].rect, dense.layers[0].rect);
-        for (got, want) in doc.layers[0].channels.iter().zip(&dense.layers[0].channels) {
+        for (got, want) in doc.layers[0]
+            .channels()
+            .iter()
+            .zip(dense.layers[0].channels())
+        {
             assert!(got.data.is_tiled());
             assert!(
                 every(&got.data) == every(&want.data),
@@ -235,7 +239,7 @@ fn a_uniform_extension_holds_no_allocation() {
     resize_canvas_document(&mut doc, 2048, 2048, Anchor::Center).expect("resizes");
     assert!(extend_background(&mut doc, [255, 255, 255]).expect("extends"));
     let dense = 2048 * 2048;
-    for c in &doc.layers[0].channels {
+    for c in doc.layers[0].channels() {
         assert!(
             c.data.allocated_bytes() * 4 < dense,
             "channel {}: {} of {dense} bytes",
@@ -299,7 +303,7 @@ fn tiled_turns_and_flips_match_the_exact_remap() {
         let mut doc = before.clone();
         apply(&mut doc);
         for (old, new) in before.layers.iter().zip(doc.layers.iter()) {
-            for (a, b) in old.channels.iter().zip(&new.channels) {
+            for (a, b) in old.channels().iter().zip(new.channels()) {
                 assert!(b.data.is_tiled(), "{name}: {} {}", new.name, b.id);
                 let want = remapped(&a.data, old.rect, op);
                 assert!(every(&b.data) == want, "{name}: {} {}", new.name, b.id);
@@ -362,7 +366,7 @@ fn check_rotation(before: &Document, angle: f64, pivot: (f64, f64)) {
         rotate_plane_dense(&every(data), from, to, canvas, angle, pivot)
     };
     for (old, new) in before.layers.iter().zip(doc.layers.iter()) {
-        for (a, b) in old.channels.iter().zip(&new.channels) {
+        for (a, b) in old.channels().iter().zip(new.channels()) {
             assert!(b.data.is_tiled(), "{angle}°: {} {}", new.name, b.id);
             let want = dense(&a.data, old.rect, new.rect);
             assert!(
@@ -477,7 +481,7 @@ fn rotated_tiles_spill_and_read_back() {
     let before = doc.clone();
     let pivot = (side as f64 / 2.0, side as f64 / 2.0);
     assert!(rotate_document_in(&mut doc, 15.0, pivot));
-    let rotated = &doc.layers[0].channels[0].data;
+    let rotated = &doc.layers[0].channels()[0].data;
     for _ in 0..6 {
         run_pass(u64::MAX);
     }
@@ -486,7 +490,7 @@ fn rotated_tiles_spill_and_read_back() {
         .count();
     assert!(spilled > 0, "no tile spilled: {:?}", eviction::counts());
     let want = rotate_plane_dense(
-        &every(&before.layers[0].channels[0].data),
+        &every(&before.layers[0].channels()[0].data),
         before.layers[0].rect,
         doc.layers[0].rect,
         (side as u32, side as u32),

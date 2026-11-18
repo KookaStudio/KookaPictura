@@ -125,8 +125,8 @@ pub(super) fn can_transform_target(doc: &Document, path: &str, require_visible: 
                 .is_some_and(|rect| rect.width() > 0 && rect.height() > 0);
     }
     if (require_visible && !layer.visible)
-        || layer.is_group
-        || layer.adjustment.is_some()
+        || layer.is_group()
+        || layer.has_adjustment_content()
         || layer.background
         || layer.lock.contains(LockFlags::POSITION)
         || layer.rect.width() <= 0
@@ -134,7 +134,7 @@ pub(super) fn can_transform_target(doc: &Document, path: &str, require_visible: 
     {
         return false;
     }
-    if layer.channels.iter().any(|c| c.id == 0) {
+    if layer.channels().iter().any(|c| c.id == 0) {
         return true;
     }
     pictura_render::can_materialize_smart_source(layer)

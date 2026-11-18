@@ -175,8 +175,8 @@ fn walk(
             format!("{parent}/{index}")
         };
         let visible = ancestors_visible && layer.visible;
-        if layer.is_group {
-            walk(&layer.children, &path, visible, visible_only, prefix, out);
+        if layer.is_group() {
+            walk(layer.children(), &path, visible, visible_only, prefix, out);
         } else if !visible_only || visible {
             out.push((path, sanitize_name(&format!("{prefix}{}", layer.name))));
         }
@@ -424,7 +424,7 @@ mod tests {
     use pictura_core::{AdjustmentData, Plane, PsdRect};
 
     fn layer(name: &str) -> Layer {
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: name.to_string(),
             rect: PsdRect {
                 top: 0,
@@ -433,16 +433,16 @@ mod tests {
                 right: 10,
             },
             ..Default::default()
-        }
+        })
     }
 
     fn group(children: Vec<Layer>) -> Layer {
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "Group".to_string(),
             is_group: true,
             children: LayerStack::from_layers(children),
             ..Default::default()
-        }
+        })
     }
 
     fn doc(layers: Vec<Layer>) -> Document {
@@ -485,9 +485,11 @@ mod tests {
     #[test]
     fn export_layers_adjustment_is_a_target() {
         let mut adjustment = layer("Adjustment");
-        adjustment.adjustment = Some(AdjustmentData {
-            key: *b"inv ",
-            data: Plane::default(),
+        pictura_codec::edit_layer(adjustment.as_mut(), |parts| {
+            parts.adjustment = Some(AdjustmentData {
+                key: *b"inv ",
+                data: Plane::default(),
+            })
         });
         let doc = doc(vec![adjustment]);
         assert_eq!(collect_targets(&doc, false, "").len(), 1);

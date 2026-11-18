@@ -17,10 +17,11 @@ matching `pictura_adjust::Adjustment` variant: `expA` to
 `Adjustment::ColorBalance(ColorBalanceParams)`, `mixr` to
 `Adjustment::ChannelMixer(ChannelMixerParams)`, `selc` to
 `Adjustment::SelectiveColor(SelectiveColorParams)`, `curv` to
-`Adjustment::Curves(CurvesParams)`, `SoCo` to
-`Adjustment::SolidFill([u8; 4])`, `GdFl` to
-`Adjustment::GradientFill(GradientFillParams)`, and `PtFl` to
-`Adjustment::PatternFill(PatternFillParams)`. The fixed structs `expA` and
+`Adjustment::Curves(CurvesParams)`. The separate `decode_fill` SHALL decode
+`SoCo` to `FillContent::Solid([u8; 4])`, `GdFl` to
+`FillContent::Gradient(GradientFillParams)`, and `PtFl` to
+`FillContent::Pattern(PatternFillParams)`; fills SHALL NOT be returned by
+`decode_adjustment`. The fixed structs `expA` and
 `phfl` SHALL be read as a `u16` version followed by fixed-width fields. The
 descriptor payloads `vibA` and `blwh` SHALL be read as a 4-byte descriptor
 version equal to 16 followed by a descriptor object whose keys carry the slider
@@ -81,7 +82,7 @@ every trailing byte SHALL be ignored. A `curv` payload SHALL decode to
 per-channel curves SHALL be present. A `SoCo` payload SHALL be read in one of
 two forms: a 4-byte straight-alpha RGBA tuple, or a version-16 descriptor whose
 `Clr ` object carries `Rd  `, `Grn `, and `Bl  ` `doub` values on the `0..=255`
-scale. The descriptor form SHALL decode to `Adjustment::SolidFill([r, g, b,
+scale. The descriptor form SHALL decode to `FillContent::Solid([r, g, b,
 255])`, rounding and clamping each component to `0..=255` and forcing alpha to
 255; the 4-byte form SHALL keep its four stored components. A `GdFl` payload
 SHALL be read as a version-16 descriptor whose `Angl` `doub` is the angle in
@@ -186,17 +187,17 @@ default to true.
 #### Scenario: Solid-color fill payload decodes to SolidFill
 
 - **WHEN** a `SoCo` payload is a 4-byte RGBA tuple, or a version-16 descriptor whose `Clr ` object carries `Rd  `/`Grn `/`Bl  ` doubles on the `0..=255` scale
-- **THEN** `decode_adjustment` returns `Adjustment::SolidFill` with those components; the descriptor form forces alpha to 255
+- **THEN** `decode_fill` returns `FillContent::Solid` with those components; the descriptor form forces alpha to 255
 
 #### Scenario: Gradient fill payload decodes to GradientFill
 
 - **WHEN** a `GdFl` descriptor has a finite `Angl`, a `Type` kind, and a `Grad` `Grdn` object whose `GrdF` is `CstS` and whose `Clrs` list holds two `RGBC` stops with strictly increasing `Lctn` in `0..=4096`
-- **THEN** `decode_adjustment` returns `Adjustment::GradientFill` whose `kind` is the decoded kind, whose `angle_deg` is the `Angl` value, whose `reverse` is false and `scale` is 100 when absent, and whose `stops` carry those locations and colours
+- **THEN** `decode_fill` returns `FillContent::Gradient` whose `kind` is the decoded kind, whose `angle_deg` is the `Angl` value, whose `reverse` is false and `scale` is 100 when absent, and whose `stops` carry those locations and colours
 
 #### Scenario: Pattern fill payload decodes to PatternFill
 
 - **WHEN** a `PtFl` descriptor has a `Ptrn` object whose `Idnt` is a pattern id, a finite `Scl `, and an `Algn` flag
-- **THEN** `decode_adjustment` returns `Adjustment::PatternFill` whose `pattern_id` is the id with trailing NULs stripped, whose `scale` is the `Scl ` value, and whose `link_with_layer` is the `Algn` value
+- **THEN** `decode_fill` returns `FillContent::Pattern` whose `pattern_id` is the id with trailing NULs stripped, whose `scale` is the `Scl ` value, and whose `link_with_layer` is the `Algn` value
 
 #### Scenario: Pattern fill defaults are applied
 
@@ -211,12 +212,12 @@ default to true.
 #### Scenario: Malformed gradient fill descriptor is a no-op
 
 - **WHEN** a `GdFl` payload does not parse as a descriptor object, carries a colour-noise `GrdF` (`ClNs`), lacks `Angl`/`Type`/`Grad`/`Clrs`, has fewer than two stops, has non-increasing or out-of-range stop locations, or carries a non-finite angle or colour component
-- **THEN** `decode_adjustment` returns `None` and does not panic
+- **THEN** `decode_fill` returns `None` and does not panic
 
 #### Scenario: Malformed pattern fill descriptor is a no-op
 
 - **WHEN** a `PtFl` payload does not parse as a descriptor object, lacks a `Ptrn` object, has a missing or wrong-typed `Idnt`, or has a non-finite `Scl `
-- **THEN** `decode_adjustment` returns `None` and does not panic
+- **THEN** `decode_fill` returns `None` and does not panic
 
 #### Scenario: Malformed exposure payload is a no-op
 
@@ -266,7 +267,7 @@ default to true.
 #### Scenario: Malformed solid-color descriptor is a no-op
 
 - **WHEN** a `SoCo` payload is neither a 4-byte RGBA tuple nor a version-16 descriptor object whose `Clr ` object carries `Rd  `, `Grn `, and `Bl  ` finite doubles
-- **THEN** `decode_adjustment` returns `None` and does not panic
+- **THEN** `decode_fill` returns `None` and does not panic
 
 ### Requirement: Descriptor payloads are parsed with the shared codec DOM
 
@@ -427,13 +428,13 @@ gradient.
 `pictura-render` SHALL expose `encode_solid_color_fill(color: [u8; 3]) ->
 AdjustmentData` that builds the standard Photoshop `SoCo` block: a version-16
 `DescriptorBlock` whose `Clr ` item is a descriptor object carrying `Rd  `,
-`Grn `, and `Bl  ` `doub` values on the `0..=255` scale. `decode_adjustment` on
-the encoder's output SHALL equal `Adjustment::SolidFill([r, g, b, 255])`.
+`Grn `, and `Bl  ` `doub` values on the `0..=255` scale. `decode_fill` on
+the encoder's output SHALL equal `FillContent::Solid([r, g, b, 255])`.
 
 #### Scenario: Encoded solid fill decodes back
 
-- **WHEN** `encode_solid_color_fill([10, 20, 30])` is passed to `decode_adjustment`
-- **THEN** it returns `Adjustment::SolidFill([10, 20, 30, 255])`
+- **WHEN** `encode_solid_color_fill([10, 20, 30])` is passed to `decode_fill`
+- **THEN** it returns `FillContent::Solid([10, 20, 30, 255])`
 
 #### Scenario: The encoded block is a version-16 descriptor
 
@@ -455,12 +456,12 @@ carries no alpha, an authored fill layer SHALL be opaque.
 #### Scenario: An in-house 4-byte fill still decodes
 
 - **WHEN** a layer carries a 4-byte `SoCo` payload
-- **THEN** `decode_adjustment` returns `Adjustment::SolidFill` with its four stored components
+- **THEN** `decode_fill` returns `FillContent::Solid` with its four stored components
 
 ### Requirement: Gradient fill layers render generatively
 
-The renderer SHALL composite a layer whose adjustment decodes to
-`Adjustment::GradientFill` by generating an opaque colour for every pixel inside
+The renderer SHALL composite a layer whose active fill content is
+`FillContent::Gradient` by generating an opaque colour for every pixel inside
 the layer's rectangle (clamped to the canvas) and blending it through the normal
 layer path, so the layer's mask, opacity, fill, and blend mode apply and pixels
 outside the rectangle are untouched. Generation SHALL follow the psd-tools
@@ -498,14 +499,14 @@ whose `Type` enum (typeID `GrdT`) is the kind, and whose `Grad` object (class
 `Grdn`) carries `GrdF` custom stops (`CstS`), an `Intr` interpolation, and a
 `Clrs` list of `RGBC` stops with `Lctn` on the `0..=4096` scale. The encoder
 SHALL write only custom-stop gradients and SHALL NOT write `Rvrs`/`Scl `.
-`decode_adjustment` on the encoder's output SHALL equal
-`Adjustment::GradientFill` with the input kind, stops, and angle (reverse false,
+`decode_fill` on the encoder's output SHALL equal
+`FillContent::Gradient` with the input kind, stops, and angle (reverse false,
 scale 100).
 
 #### Scenario: Encoded gradient fill decodes back
 
-- **WHEN** `encode_gradient_fill(GradientKind::Linear, &[black@0, white@4096], 0.0)` is passed to `decode_adjustment`
-- **THEN** it returns `Adjustment::GradientFill` with those stops, kind Linear, `angle_deg` 0.0, `reverse` false, and `scale` 100
+- **WHEN** `encode_gradient_fill(GradientKind::Linear, &[black@0, white@4096], 0.0)` is passed to `decode_fill`
+- **THEN** it returns `FillContent::Gradient` with those stops, kind Linear, `angle_deg` 0.0, `reverse` false, and `scale` 100
 
 #### Scenario: The encoded block is a version-16 descriptor
 
@@ -670,8 +671,8 @@ bound.
 
 ### Requirement: Pattern fill layers render by tiling the document pattern
 
-`decode_adjustment` SHALL cause the renderer to composite a `PtFl` pattern fill
-(`Adjustment::PatternFill`) by tiling the referenced pattern over the layer's
+`decode_fill` SHALL cause the renderer to composite a `PtFl` pattern fill
+(`FillContent::Pattern`) by tiling the referenced pattern over the layer's
 rectangle clamped to the canvas, blending
 each in-rect sample at the pattern's alpha through the normal layer path, so the
 layer's mask, opacity, fill, and blend mode apply and pixels outside the
@@ -1127,13 +1128,13 @@ layer SHALL be opaque whatever the foreground's alpha is.
 &GradientFillParams) -> AdjustmentData`. It builds the same version-16 `GdFl`
 descriptor as `encode_gradient_fill`, and in addition SHALL write `Rvrs` (bool)
 when `params.reverse` is true and `Scl ` (double) when `params.scale` differs
-from 100. `decode_adjustment` on its output SHALL equal
-`Adjustment::GradientFill(params)`.
+from 100. `decode_fill` on its output SHALL equal
+`FillContent::Gradient(params)`.
 
 #### Scenario: Reverse and scale survive the round-trip [alf_gradient_full_roundtrip]
 
 - **WHEN** `encode_gradient_fill_params` encodes a Radial gradient at angle 45 with reverse true and scale 60
-- **THEN** `decode_adjustment` returns those stops, kind, angle, reverse, and scale
+- **THEN** `decode_fill` returns those stops, kind, angle, reverse, and scale
 
 #### Scenario: Defaults stay absent [alf_gradient_defaults]
 
@@ -1146,13 +1147,13 @@ from 100. `decode_adjustment` on its output SHALL equal
 &PatternFillParams) -> AdjustmentData`. It builds a version-16 `PtFl`
 descriptor whose `Ptrn` object carries `Idnt` for `params.pattern_id`, plus
 `Scl ` for the scale, `Algn` for `link_with_layer`, and a `phase` point when
-`params.origin` is not `(0, 0)`. `decode_adjustment` on its output SHALL equal
-`Adjustment::PatternFill(params)`.
+`params.origin` is not `(0, 0)`. `decode_fill` on its output SHALL equal
+`FillContent::Pattern(params)`.
 
 #### Scenario: A pattern payload decodes back [alf_pattern_roundtrip]
 
 - **WHEN** `encode_pattern_fill` encodes pattern id `"p1"`, scale 50, link false, and origin `(3, 4)`
-- **THEN** `decode_adjustment` returns those exact pattern params
+- **THEN** `decode_fill` returns those exact pattern params
 
 #### Scenario: The default origin is omitted [alf_pattern_default_origin]
 

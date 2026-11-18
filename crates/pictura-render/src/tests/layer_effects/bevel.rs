@@ -29,7 +29,7 @@ fn bevel_layer(block: Option<LayerBlock>) -> Layer {
         255,
     );
     if let Some(block) = block {
-        layer.extra_blocks = vec![block];
+        pictura_codec::edit_layer(layer.as_mut(), |parts| parts.extra_blocks = vec![block]);
     }
     layer
 }
@@ -719,7 +719,7 @@ fn bevel_is_bounded_to_the_content_rect() {
             255,
         );
         if let Some(block) = block {
-            layer.extra_blocks = vec![block];
+            pictura_codec::edit_layer(layer.as_mut(), |parts| parts.extra_blocks = vec![block]);
         }
         let backdrop = solid(
             "Backdrop",
@@ -981,7 +981,7 @@ fn bevel_fixture_decodes_and_composites() {
     let with_effect = composite_rgba(&d);
     let mut plain = d.clone();
     for l in plain.layers.iter_mut() {
-        l.extra_blocks.clear();
+        pictura_codec::edit_layer(l, |parts| parts.extra_blocks.clear());
     }
     assert_ne!(with_effect, composite_rgba(&plain), "the bevel renders");
 }

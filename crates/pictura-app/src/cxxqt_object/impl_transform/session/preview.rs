@@ -48,10 +48,10 @@ pub(super) fn transform_preview_level(
         return 0;
     };
     if needs_rendered_appearance(layer)
-        || layer.smart_object.is_some()
-        || !layer.channels.iter().any(|c| c.id == 0)
+        || layer.smart_object().is_some()
+        || !layer.channels().iter().any(|c| c.id == 0)
         || layer_has_effects(layer)
-        || layer.is_group
+        || layer.is_group()
         || clipping_group(doc, path).len() > 1
         || layer.rect.intersect(view_preview::canvas(doc)).is_none()
         || !FilterProxy::reduces_faithfully(doc)
@@ -155,7 +155,7 @@ pub(in crate::cxxqt_object) fn transform_preview_layer_at(
 pub(super) fn needs_rendered_appearance(layer: &pictura_core::Layer) -> bool {
     layer.mask.is_some()
         || layer.vector_mask.is_some()
-        || layer.adjustment.is_some()
+        || layer.has_adjustment_content()
         || layer.is_type()
         || pictura_render::is_shape_layer(layer)
         || pictura_render::decode_layer_fill(layer).is_some()
@@ -269,13 +269,15 @@ fn shift_into_region(layer: &mut pictura_core::Layer, dx: i32, dy: i32) {
         }
         vector.rows = Default::default();
     }
-    if let Some(tool) = layer.type_tool.as_mut() {
-        if let Some(path) = tool.path.as_mut() {
-            path.subpath.translate(f64::from(dx), f64::from(dy));
+    pictura_codec::edit_layer(layer, |parts| {
+        if let Some(tool) = parts.type_tool.as_mut() {
+            if let Some(path) = tool.path.as_mut() {
+                path.subpath.translate(f64::from(dx), f64::from(dy));
+            }
+            tool.transform[4] += f64::from(dx);
+            tool.transform[5] += f64::from(dy);
         }
-        tool.transform[4] += f64::from(dx);
-        tool.transform[5] += f64::from(dy);
-    }
+    });
 }
 
 /// Render the layer alone over transparency and crop to its visible rect, so
@@ -289,7 +291,7 @@ pub(super) fn rendered_layer_image(
 ) -> Option<(QImage, i32, i32)> {
     let needs_materialize = {
         let layer = pictura_render::resolve_path(doc, path)?;
-        !layer.channels.iter().any(|c| c.id == 0) && layer.smart_object.is_some()
+        !layer.channels().iter().any(|c| c.id == 0) && layer.smart_object().is_some()
     };
     let mut materialized = None;
     if needs_materialize {
@@ -351,7 +353,7 @@ pub(super) fn clipping_group(doc: &pictura_core::Document, path: &str) -> Vec<St
     };
     let siblings: Option<&[pictura_core::Layer]> = match parent {
         Some(parent) => {
-            pictura_render::resolve_path(doc, parent).map(|layer| layer.children.as_slice())
+            pictura_render::resolve_path(doc, parent).map(|layer| layer.children().as_slice())
         }
         None => Some(doc.layers.as_slice()),
     };
@@ -432,11 +434,12 @@ fn backdrop_patch_rect(
         let layer = pictura_render::resolve_path(doc, path)?;
         // A shape layer reaches its outline box, its effects, and its clipped
         // run; hiding it changes nothing past that reach.
-        let shape = pictura_render::is_shape_layer(layer) && layer.channels.is_empty();
+        let shape = pictura_render::is_shape_layer(layer) && layer.channels().is_empty();
         // Hiding a group, an effect or an adjustment changes at most the pixels
         // that can depend on it, the reach history damage already proves
         // (#1274); `None` (a knockout) keeps the whole backdrop.
-        let reaching = layer_has_effects(layer) || layer.adjustment.is_some() || layer.is_group;
+        let reaching =
+            layer_has_effects(layer) || layer.has_adjustment_content() || layer.is_group();
         // A painted layer's rect can be the whole canvas around a small mark.
         let drawn = if shape {
             pictura_render::damage::content_influence(doc, path)?

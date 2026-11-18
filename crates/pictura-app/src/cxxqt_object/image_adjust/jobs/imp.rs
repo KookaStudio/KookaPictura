@@ -101,7 +101,7 @@ pub(super) fn adjust_preview(
     let mask = selection;
     let mode = pictura_render::document_color_mode(&doc).into();
     let layer = pictura_render::resolve_path_mut(&mut doc, &request.path)?;
-    if layer.is_group || layer.adjustment.is_some() || layer_pixel_locked(layer) {
+    if layer.is_group() || layer.has_adjustment_content() || layer_pixel_locked(layer) {
         return None;
     }
     let rect = layer.rect;
@@ -428,7 +428,7 @@ mod tests {
     #[test]
     fn a_preview_lands_and_cancel_restores() {
         let mut rust = view();
-        let before = rust.session.doc.as_ref().unwrap().layers[0].channels[0]
+        let before = rust.session.doc.as_ref().unwrap().layers[0].channels()[0]
             .data
             .to_vec();
         assert!(preview_start(&mut rust, Adjustment::Invert));
@@ -437,12 +437,12 @@ mod tests {
         }
         assert!(preview_poll(&mut rust).is_some());
         assert_ne!(
-            rust.session.doc.as_ref().unwrap().layers[0].channels[0].data,
+            rust.session.doc.as_ref().unwrap().layers[0].channels()[0].data,
             before
         );
         let _ = preview_cancel(&mut rust);
         assert_eq!(
-            rust.session.doc.as_ref().unwrap().layers[0].channels[0].data,
+            rust.session.doc.as_ref().unwrap().layers[0].channels()[0].data,
             before
         );
         assert!(!rust.session.dirty);

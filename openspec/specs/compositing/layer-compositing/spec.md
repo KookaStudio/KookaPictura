@@ -236,14 +236,14 @@ existing ±1 LSB CPU/GPU parity.
 ### Requirement: Decode a preserved `vscg` block into typed fill content
 
 The compositor SHALL decode a layer's preserved `'vscg'` additional-layer-info
-block into the matching `pictura_adjust::Adjustment` variant when the layer has
+block into the matching `FillContent` variant when the layer has
 no modeled adjustment block. The block SHALL be a big-endian 4-byte fill key
 followed by a big-endian `u32` version that MUST equal `16` and a descriptor. The
 descriptor SHALL be decoded by the same decoders the top-level `'SoCo'`,
 `'GdFl'`, and `'PtFl'` blocks use, dispatching on its content: a `Grad` object
-SHALL decode to `Adjustment::GradientFill`, a `Ptrn` object SHALL decode to
-`Adjustment::PatternFill`, and a `Clr ` object SHALL decode to
-`Adjustment::SolidFill`. The 4-byte key SHALL be consumed but SHALL NOT be the
+SHALL decode to `FillContent::Gradient`, a `Ptrn` object SHALL decode to
+`FillContent::Pattern`, and a `Clr ` object SHALL decode to
+`FillContent::Solid`. The 4-byte key SHALL be consumed but SHALL NOT be the
 dispatch authority, so a block whose key disagrees with its descriptor content
 still decodes by content.
 
@@ -257,14 +257,14 @@ SHALL be derived only.
 
 - **WHEN** a layer carries a `vscg` block whose descriptor holds a `Clr ` object
   with `Rd `/`Grn `/`Bl  ` doubles
-- **THEN** the decoded fill is `Adjustment::SolidFill` with those components and
+- **THEN** the decoded fill is `FillContent::Solid` with those components and
   alpha 255
 
 #### Scenario: A `vscg` gradient fill reuses the gradient decoder
 
 - **WHEN** a layer carries a `vscg` block whose descriptor holds `Angl`, a `Type`
   enum, and a custom-stop `Grad` object
-- **THEN** the decoded fill is `Adjustment::GradientFill` with the same kind,
+- **THEN** the decoded fill is `FillContent::Gradient` with the same kind,
   stops, and angle a top-level `GdFl` block would yield
 
 #### Scenario: A malformed `vscg` block is a no-op

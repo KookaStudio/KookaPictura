@@ -6,7 +6,7 @@ const W: u32 = 8;
 const H: u32 = 160;
 
 fn curves_layer() -> Layer {
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "curves".into(),
         rect: full(W, H),
         adjustment: Some(crate::encode_curves(
@@ -16,17 +16,17 @@ fn curves_layer() -> Layer {
             None,
         )),
         ..Default::default()
-    }
+    })
 }
 
 fn lookup_layer() -> Layer {
     let cube = b"LUT_3D_SIZE 2\n0 0 0\n1 0 0\n0 1 0\n1 1 0\n0 0 1\n1 0 1\n0 1 1\n1 1 1\n";
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "lookup".into(),
         rect: full(W, H),
         adjustment: Some(crate::encode_color_lookup(cube, "identity")),
         ..Default::default()
-    }
+    })
 }
 
 fn smart_filtered_layer() -> Layer {
@@ -39,21 +39,21 @@ fn smart_filtered_layer() -> Layer {
         options: Vec::new().into(),
     }];
     smart.smart_filters_enabled = true;
-    Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "smart".into(),
         rect: full(W, H),
         smart_object: Some(smart),
         ..Default::default()
-    }
+    })
 }
 
 fn fill_with_effect_layer() -> Layer {
-    let mut layer = Layer {
+    let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "fill-effect".into(),
         rect: full(W, H),
         adjustment: Some(crate::encode_solid_color_fill([200, 100, 50])),
         ..Default::default()
-    };
+    });
     crate::set_layer_style_value(&mut layer, "dropShadow.on", 1.0);
     layer
 }
@@ -106,7 +106,7 @@ fn mixed_doc() -> Document {
     );
     crate::add_type_layer(&mut d, "", &TypeSpec::new("Hi", "Liberation Sans", 24.0));
     let top = d.layers.len() - 1;
-    d.layers[top].channels.clear();
+    d.layers[top].channels_mut().clear();
     d
 }
 
@@ -133,15 +133,15 @@ fn banded_composite_resolves_each_layer_once() {
 }
 
 #[test]
-fn adjustment_decodes_once_per_composite() {
+fn content_resolves_once_per_composite() {
     let d = mixed_doc();
     let _ = crate::composite_rgba(&d);
     for layer in &d.layers {
-        if let Some(data) = layer.adjustment.as_ref() {
+        if let Some(data) = layer.adjustment() {
             assert_eq!(
-                counters::adjustment_count(data),
+                counters::content_resolution_count(data),
                 1,
-                "{} decodes once",
+                "{} resolves once",
                 layer.name
             );
         }
@@ -158,19 +158,19 @@ fn sources_resolve_once_per_composite() {
     );
     crate::add_type_layer(&mut d, "", &TypeSpec::new("Hi", "Liberation Sans", 24.0));
     let top = d.layers.len() - 1;
-    d.layers[top].channels.clear();
+    d.layers[top].channels_mut().clear();
     reset(&d);
     crate::purge_source_cache();
     let _ = crate::composite_rgba(&d);
     for layer in &d.layers {
-        if layer.type_tool.is_some() {
+        if layer.type_tool().is_some() {
             assert_eq!(
                 counters::source_lookup_count(layer),
                 1,
                 "the type raster is fetched once"
             );
         }
-        if layer.smart_object.is_some() && crate::composite_route::smart_filters_apply(layer) {
+        if layer.smart_object().is_some() && crate::composite_route::smart_filters_apply(layer) {
             assert_eq!(
                 counters::source_lookup_count(layer),
                 1,
@@ -199,7 +199,7 @@ fn hidden_layer_resolves_nothing() {
         &TypeSpec::new("Hi", "Liberation Sans", 24.0),
     );
     let top = with_hidden.layers.len() - 1;
-    with_hidden.layers[top].channels.clear();
+    with_hidden.layers[top].channels_mut().clear();
     with_hidden.layers[top].visible = false;
 
     reset(&with_hidden);
@@ -243,14 +243,16 @@ fn banded_reuses_resolved_mask_and_native_state() {
 
 #[test]
 fn hidden_pattern_layer_does_not_disable_banding() {
-    let pattern = || Layer {
-        name: "pattern".into(),
-        rect: full(W, H),
-        adjustment: Some(pictura_core::AdjustmentData {
-            key: *b"PtFl",
-            data: Vec::new().into(),
-        }),
-        ..Default::default()
+    let pattern = || {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
+            name: "pattern".into(),
+            rect: full(W, H),
+            adjustment: Some(pictura_core::AdjustmentData {
+                key: *b"PtFl",
+                data: Vec::new().into(),
+            }),
+            ..Default::default()
+        })
     };
     let visible = doc(W, H, vec![base_layer(), pattern()]);
     assert!(!crate::composite_region::banded(&visible, H));
@@ -264,7 +266,7 @@ fn hidden_pattern_layer_does_not_disable_banding() {
 fn banded_composite_does_not_materialize_a_fractured_plane() {
     let mut d = doc(W, H, vec![base_layer(), styled_layer()]);
     let red = d.layers[1]
-        .channels
+        .channels_mut()
         .iter_mut()
         .find(|channel| channel.id == 0)
         .expect("styled layer has a red channel");
@@ -297,14 +299,16 @@ fn content_key_invalidates_on_edit() {
 
     let mut adjustment = doc(W, H, vec![base_layer(), curves_layer()]);
     assert_edit_invalidates(&mut adjustment, 1, |layer| {
-        layer.adjustment.as_mut().expect("curves block").data =
-            crate::encode_curves(&[(0, 0), (128, 90), (255, 255)], None, None, None).data;
+        pictura_codec::edit_layer(layer, |parts| {
+            parts.adjustment.as_mut().expect("curves block").data =
+                crate::encode_curves(&[(0, 0), (128, 90), (255, 255)], None, None, None).data
+        });
     });
 
     let mut channel = doc(W, H, vec![base_layer()]);
     assert_edit_invalidates(&mut channel, 0, |layer| {
         let alpha = layer
-            .channels
+            .channels_mut()
             .iter_mut()
             .find(|channel| channel.id == -1)
             .expect("alpha channel");
@@ -377,19 +381,19 @@ fn clipping_group_reuses_base_content() {
         255,
     );
     clipped.clipping = true;
-    let base = Layer {
+    let base = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "fill".into(),
         rect: full(W, H),
         adjustment: Some(crate::encode_solid_color_fill([200, 100, 50])),
         ..Default::default()
-    };
+    });
     let d = doc(W, H, vec![base_layer(), base, clipped]);
     reset(&d);
     let out = crate::composite_rgba(&d);
     assert_eq!(
-        counters::adjustment_count(d.layers[1].adjustment.as_ref().expect("curves")),
+        counters::content_resolution_count(d.layers[1].adjustment().expect("curves")),
         1,
-        "the clipping base decodes once"
+        "the clipping base resolves once"
     );
     assert_eq!(counters::plan_count(&d.layers[1]), 1);
     crate::purge_source_cache();

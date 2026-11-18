@@ -12,10 +12,10 @@ mod tests {
     use pictura_core::{Layer, LockFlags};
 
     fn with(flag: u8) -> Layer {
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             lock: LockFlags::default().with(flag, true),
             ..Default::default()
-        }
+        })
     }
 
     #[test]

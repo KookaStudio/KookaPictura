@@ -40,6 +40,7 @@ mod composite_plan;
 mod composite_region;
 mod composite_request;
 mod composite_route;
+pub use composite_route::{content_route, ContentRoute};
 mod composite_rows;
 mod document_composite;
 pub use document_composite::{
@@ -75,6 +76,7 @@ pub use composite::{
     encode_threshold,
 };
 pub use composite_request::{composite, CompositeRequest};
+pub use pictura_codec::decode_fill;
 pub use pyramid_level::{PyramidLevel, SMALLEST_SIDE, TILE};
 #[cfg(any(test, feature = "test-oracle"))]
 pub use view_pyramid::{Planes, ViewPyramid};

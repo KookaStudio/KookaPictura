@@ -106,8 +106,8 @@ fn styled_layer_paths(
         } else {
             format!("{prefix}/{i}")
         };
-        if layer.is_group {
-            styled_layer_paths(&layer.children, &path, name, paragraph, out);
+        if layer.is_group() {
+            styled_layer_paths(layer.children(), &path, name, paragraph, out);
             continue;
         }
         let matches = if paragraph {
@@ -123,8 +123,8 @@ fn styled_layer_paths(
 
 fn rename_applied(layers: &mut LayerStack, from: &str, to: &str, paragraph: bool) {
     for layer in layers {
-        if layer.is_group {
-            rename_applied(&mut layer.children, from, to, paragraph);
+        if layer.is_group() {
+            rename_applied(layer.children_mut().expect("group"), from, to, paragraph);
             continue;
         }
         if paragraph {
@@ -139,8 +139,8 @@ fn rename_applied(layers: &mut LayerStack, from: &str, to: &str, paragraph: bool
 
 fn clear_applied(layers: &mut LayerStack, name: &str, paragraph: bool) {
     for layer in layers {
-        if layer.is_group {
-            clear_applied(&mut layer.children, name, paragraph);
+        if layer.is_group() {
+            clear_applied(layer.children_mut().expect("group"), name, paragraph);
             continue;
         }
         if paragraph {

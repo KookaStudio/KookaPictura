@@ -97,7 +97,7 @@ pub(super) fn has_colour(layer: &Layer) -> bool {
     }
     let n = w as usize * h as usize;
     layer
-        .channels
+        .channels()
         .iter()
         .any(|c| c.id == 0 && c.data.len() == n)
 }
@@ -110,7 +110,7 @@ mod tests {
     fn pixel_layer(w: i32, h: i32, colour: [u8; 3], alpha: Vec<u8>) -> Layer {
         let n = (w * h) as usize;
         let plane = |v: u8| vec![v; n];
-        Layer {
+        pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "px".into(),
             rect: PsdRect {
                 top: 0,
@@ -137,7 +137,7 @@ mod tests {
                 },
             ],
             ..Default::default()
-        }
+        })
     }
 
     fn state(layer: Layer) -> PictureViewRust {
@@ -152,7 +152,7 @@ mod tests {
 
     fn red(rust: &PictureViewRust) -> Vec<u8> {
         rust.session.doc.as_ref().unwrap().layers[0]
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == 0)
             .unwrap()
@@ -185,7 +185,7 @@ mod tests {
         // Transparent, semi, semi, transparent; interior colour is index 1.
         let mut rust = state(pixel_layer(4, 1, [10, 10, 10], vec![0, 255, 255, 0]));
         for c in rust.session.doc.as_mut().unwrap().layers[0]
-            .channels
+            .channels_mut()
             .iter_mut()
             .filter(|c| c.id == 0)
         {

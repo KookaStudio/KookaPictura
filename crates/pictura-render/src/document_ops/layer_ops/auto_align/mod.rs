@@ -174,7 +174,7 @@ fn visible_in_tree(doc: &Document, path: &str) -> bool {
         let Some(layer) = layers.get(index) else {
             return false;
         };
-        layers = &layer.children;
+        layers = layer.children();
         layer.visible
     })
 }
@@ -182,12 +182,12 @@ fn visible_in_tree(doc: &Document, path: &str) -> bool {
 /// A raster layer Auto-Align can move.
 fn eligible(doc: &Document, path: &str) -> bool {
     resolve_path(doc, path).is_some_and(|layer| {
-        !layer.is_group
-            && layer.adjustment.is_none()
+        !layer.is_group()
+            && layer.adjustment().is_none()
             && crate::fill::decode_layer_fill(layer).is_none()
-            && layer.type_tool.is_none()
+            && layer.type_tool().is_none()
             && layer.vector_mask.is_none()
-            && layer.smart_object.is_none()
+            && layer.smart_object().is_none()
             && !layer.background
             && !layer.clipping
             && visible_in_tree(doc, path)

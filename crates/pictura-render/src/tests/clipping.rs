@@ -172,7 +172,7 @@ fn inverted_base(alpha: u8, mask: Option<LayerMask>) -> Document {
         255,
     );
     base.mask = mask;
-    let invert = Layer {
+    let invert = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Invert".into(),
         rect: rect(0, 0, 0, 0),
         opacity: 255,
@@ -181,7 +181,7 @@ fn inverted_base(alpha: u8, mask: Option<LayerMask>) -> Document {
         clipping: true,
         adjustment: Some(crate::encode_invert()),
         ..Default::default()
-    };
+    });
     doc(8, 8, vec![base, invert])
 }
 
@@ -343,15 +343,15 @@ fn a_clipped_layer_follows_a_vmsk_shape_base() {
 
     let mut d = vsms_clipped_doc();
     let index = shape_index(&d);
-    let data = {
-        let block = d.layers[index]
+    let data = pictura_codec::edit_layer(&mut d.layers[index], |parts| {
+        let block = parts
             .extra_blocks
             .iter_mut()
             .find(|block| block.key == *b"vsms")
             .expect("Shape vsms block");
         block.key = *b"vmsk";
         block.data.clone()
-    };
+    });
     d.layers[index].vector_mask = pictura_codec::decode_vector_mask(&data, 8, 8);
     assert!(
         d.layers[index].vector_mask.is_some(),

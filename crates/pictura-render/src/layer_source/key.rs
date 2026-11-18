@@ -9,11 +9,12 @@ use super::rect_key;
 
 pub(crate) fn content_key(layer: &Layer, doc: &Document) -> u64 {
     let mut hasher = DefaultHasher::new();
+    layer.content_identity().hash(&mut hasher);
     rect_key(layer.rect).hash(&mut hasher);
     doc.width.hash(&mut hasher);
     doc.height.hash(&mut hasher);
     doc.mode.hash(&mut hasher);
-    for channel in &layer.channels {
+    for channel in layer.channels() {
         channel.id.hash(&mut hasher);
         channel.data.ident().hash(&mut hasher);
     }
@@ -35,19 +36,19 @@ pub(crate) fn content_key(layer: &Layer, doc: &Document) -> u64 {
         mask.density.hash(&mut hasher);
         mask.feather_bits.hash(&mut hasher);
     }
-    if let Some(adjustment) = layer.adjustment.as_ref() {
+    if let Some(adjustment) = layer.adjustment() {
         adjustment.key.hash(&mut hasher);
         adjustment.data.ident().hash(&mut hasher);
     }
-    for block in &layer.extra_blocks {
+    for block in layer.extra_blocks() {
         block.key.hash(&mut hasher);
         block.data.ident().hash(&mut hasher);
     }
-    if let Some(so) = layer.smart_object.as_ref() {
+    if let Some(so) = layer.smart_object() {
         so.payload_digest().hash(&mut hasher);
         chain_hash(so).hash(&mut hasher);
     }
-    if let Some(type_tool) = layer.type_tool.as_ref() {
+    if let Some(type_tool) = layer.type_tool().or_else(|| layer.fallback_type_tool()) {
         text_key(type_tool, layer.rect).hash(&mut hasher);
     }
     text_state_hash().hash(&mut hasher);

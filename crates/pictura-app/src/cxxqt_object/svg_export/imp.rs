@@ -56,7 +56,7 @@ mod tests {
     use pictura_core::{BitDepth, ColorMode, Layer, PsdRect};
 
     fn pixel_layer(name: &str, w: u32, h: u32, rgb: (u8, u8, u8)) -> Layer {
-        let mut layer = Layer {
+        let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: name.to_string(),
             rect: PsdRect {
                 left: 0,
@@ -65,9 +65,9 @@ mod tests {
                 bottom: h as i32,
             },
             ..Default::default()
-        };
+        });
         let n = (w * h) as usize;
-        layer.channels = vec![
+        layer.set_channels(vec![
             pictura_core::Channel {
                 id: 0,
                 data: vec![rgb.0; n].into(),
@@ -84,7 +84,7 @@ mod tests {
                 id: -1,
                 data: vec![255; n].into(),
             },
-        ];
+        ]);
         layer
     }
 

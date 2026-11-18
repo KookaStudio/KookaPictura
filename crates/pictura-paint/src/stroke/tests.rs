@@ -13,46 +13,49 @@ fn layer_doc(w: u32, h: u32, rgba: (u8, u8, u8, u8)) -> Document {
     let n = (w * h) as usize;
     let (r, g, b, a) = rgba;
     {
-        let _ = doc.layers.push(Layer {
-            name: "px".into(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: h as i32,
-                right: w as i32,
+        let _ = doc.layers.push(pictura_core::Layer::from_parts(
+            pictura_core::LayerParts {
+                name: "px".into(),
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: h as i32,
+                    right: w as i32,
+                },
+                blend: BlendMode::Normal,
+                opacity: 255,
+                fill: 255,
+                lock: LockFlags::default(),
+                color: ColorLabel::None,
+                clipping: false,
+                visible: true,
+                mask: None,
+                adjustment: None,
+                channels: vec![
+                    Channel {
+                        id: 0,
+                        data: vec![r; n].into(),
+                    },
+                    Channel {
+                        id: 1,
+                        data: vec![g; n].into(),
+                    },
+                    Channel {
+                        id: 2,
+                        data: vec![b; n].into(),
+                    },
+                    Channel {
+                        id: -1,
+                        data: vec![a; n].into(),
+                    },
+                ],
+                children: pictura_core::LayerStack::default(),
+                is_group: false,
+                background: false,
+                ..Default::default()
             },
-            blend: BlendMode::Normal,
-            opacity: 255,
-            fill: 255,
-            lock: LockFlags::default(),
-            color: ColorLabel::None,
-            clipping: false,
-            visible: true,
-            mask: None,
-            adjustment: None,
-            channels: vec![
-                Channel {
-                    id: 0,
-                    data: vec![r; n].into(),
-                },
-                Channel {
-                    id: 1,
-                    data: vec![g; n].into(),
-                },
-                Channel {
-                    id: 2,
-                    data: vec![b; n].into(),
-                },
-                Channel {
-                    id: -1,
-                    data: vec![a; n].into(),
-                },
-            ],
-            children: pictura_core::LayerStack::default(),
-            is_group: false,
-            background: false,
-            ..Default::default()
-        });
+            pictura_core::LayerContent::Pixel,
+        ));
     };
     doc
 }
@@ -238,7 +241,7 @@ fn transparency_lock_preserves_alpha_per_pixel() {
 #[test]
 fn a_locked_background_without_alpha_takes_paint_as_opaque() {
     let mut doc = layer_doc(32, 32, (255, 255, 255, 255));
-    doc.layers[0].channels.retain(|c| c.id != -1);
+    doc.layers[0].channels_mut().retain(|c| c.id != -1);
     doc.layers[0].lock = LockFlags::default().with(LockFlags::TRANSPARENCY, true);
     let cfg = StrokeConfig {
         color: red(),
@@ -468,7 +471,7 @@ fn noop_stroke_adds_no_history() {
     assert!(paint(&mut doc, &zero, &[sample(8.0, 8.0)]).is_none());
 
     let mut no_alpha = layer_doc(32, 16, BASE);
-    no_alpha.layers[0].channels.retain(|c| c.id != -1);
+    no_alpha.layers[0].channels_mut().retain(|c| c.id != -1);
     let clear = mode_cfg(PaintMode::Clear, 100);
     assert!(paint(&mut no_alpha, &clear, &[sample(8.0, 8.0)]).is_none());
 }
@@ -542,29 +545,30 @@ fn empty_samples_leave_document_unchanged() {
 fn group_only_document_has_no_raster_layer() {
     let mut doc = Document::new(16, 16, ColorMode::Rgb, BitDepth::Eight);
     {
-        let _ = doc.layers.push(Layer {
-            name: "group".into(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 16,
-                right: 16,
+        let _ = doc.layers.push(pictura_core::Layer::from_parts(
+            pictura_core::LayerParts {
+                name: "group".into(),
+                rect: PsdRect {
+                    top: 0,
+                    left: 0,
+                    bottom: 16,
+                    right: 16,
+                },
+                blend: BlendMode::Normal,
+                opacity: 255,
+                fill: 255,
+                lock: LockFlags::default(),
+                color: ColorLabel::None,
+                clipping: false,
+                visible: true,
+                mask: None,
+                adjustment: None,
+                channels: Vec::new(),
+                background: false,
+                ..Default::default()
             },
-            blend: BlendMode::Normal,
-            opacity: 255,
-            fill: 255,
-            lock: LockFlags::default(),
-            color: ColorLabel::None,
-            clipping: false,
-            visible: true,
-            mask: None,
-            adjustment: None,
-            channels: Vec::new(),
-            children: pictura_core::LayerStack::default(),
-            is_group: true,
-            background: false,
-            ..Default::default()
-        });
+            pictura_core::LayerContent::Group(pictura_core::LayerStack::default()),
+        ));
     };
     assert!(matches!(
         Stroke::begin_at(&doc, "0", StrokeConfig::default()),
@@ -836,30 +840,33 @@ fn offset_layer_doc(w: u32, h: u32, rect: PsdRect, rgba: (u8, u8, u8, u8)) -> Do
     let n = (rect.width() * rect.height()) as usize;
     let (r, g, b, a) = rgba;
     {
-        let _ = doc.layers.push(Layer {
-            name: "px".into(),
-            rect,
-            blend: BlendMode::Normal,
-            channels: vec![
-                Channel {
-                    id: 0,
-                    data: vec![r; n].into(),
-                },
-                Channel {
-                    id: 1,
-                    data: vec![g; n].into(),
-                },
-                Channel {
-                    id: 2,
-                    data: vec![b; n].into(),
-                },
-                Channel {
-                    id: -1,
-                    data: vec![a; n].into(),
-                },
-            ],
-            ..Default::default()
-        });
+        let _ = doc.layers.push(pictura_core::Layer::from_parts(
+            pictura_core::LayerParts {
+                name: "px".into(),
+                rect,
+                blend: BlendMode::Normal,
+                channels: vec![
+                    Channel {
+                        id: 0,
+                        data: vec![r; n].into(),
+                    },
+                    Channel {
+                        id: 1,
+                        data: vec![g; n].into(),
+                    },
+                    Channel {
+                        id: 2,
+                        data: vec![b; n].into(),
+                    },
+                    Channel {
+                        id: -1,
+                        data: vec![a; n].into(),
+                    },
+                ],
+                ..Default::default()
+            },
+            pictura_core::LayerContent::Pixel,
+        ));
     };
     doc
 }
@@ -939,7 +946,7 @@ fn textured_doc() -> Document {
         right: -5 + 170,
     };
     let mut doc = offset_layer_doc(160, 170, rect, BASE);
-    for (id, c) in doc.layers[0].channels.iter_mut().enumerate() {
+    for (id, c) in doc.layers[0].channels_mut().iter_mut().enumerate() {
         for (i, v) in c.data.as_mut_slice().iter_mut().enumerate() {
             *v = ((i * (7 + id) + id * 31) % 251) as u8;
         }
@@ -1037,7 +1044,7 @@ fn a_banded_large_dab_matches_the_serial_raster() {
         right: -9 + 420,
     };
     let mut textured = offset_layer_doc(400, 320, rect, BASE);
-    for (id, c) in textured.layers[0].channels.iter_mut().enumerate() {
+    for (id, c) in textured.layers[0].channels_mut().iter_mut().enumerate() {
         for (i, v) in c.data.as_mut_slice().iter_mut().enumerate() {
             *v = ((i * (5 + id) + id * 17) % 253) as u8;
         }
@@ -1177,7 +1184,7 @@ fn cancelling_a_stroke_restores_every_pixel_it_touched() {
 fn a_stroke_refuses_a_layer_restructured_under_it() {
     let mut doc = textured_doc();
     let mut stroke = Stroke::begin_at(&doc, "0", StrokeConfig::default()).expect("begin");
-    doc.layers[0].channels.pop();
+    doc.layers[0].channels_mut().pop();
     let before = doc.clone();
     assert!(
         !stroke.sample(&mut doc, sample(40.0, 40.0)),

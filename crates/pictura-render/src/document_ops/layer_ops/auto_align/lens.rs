@@ -20,7 +20,7 @@ pub(super) fn apply(layer: &mut Layer, params: &LensCorrectionParams) -> bool {
     let n = w * h;
     let channel = |id: i16| {
         layer
-            .channels
+            .channels()
             .iter()
             .find(|c| c.id == id && c.data.len() == n)
             .map(|c| c.data.clone())
@@ -54,7 +54,7 @@ pub(super) fn apply(layer: &mut Layer, params: &LensCorrectionParams) -> bool {
         }
     }
     let write = |layer: &mut Layer, id: i16, data: Vec<u8>| {
-        if let Some(channel) = layer.channels.iter_mut().find(|c| c.id == id) {
+        if let Some(channel) = layer.channels_mut().iter_mut().find(|c| c.id == id) {
             channel.data = data.into();
             true
         } else {
@@ -63,17 +63,17 @@ pub(super) fn apply(layer: &mut Layer, params: &LensCorrectionParams) -> bool {
     };
     let mut changed = false;
     for id in [0i16, 1, 2] {
-        if layer.channels.iter().any(|c| c.id == id) {
+        if layer.channels().iter().any(|c| c.id == id) {
             changed |= write(layer, id, planes[id as usize].clone());
         }
     }
     if !changed {
         return false;
     }
-    if layer.channels.iter().any(|c| c.id == -1) {
+    if layer.channels().iter().any(|c| c.id == -1) {
         write(layer, -1, mask);
     } else if mask.iter().any(|a| *a < 255) {
-        layer.channels.push(Channel {
+        layer.channels_mut().push(Channel {
             id: -1,
             data: mask.into(),
         });

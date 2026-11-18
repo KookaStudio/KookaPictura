@@ -355,7 +355,7 @@ mod tests {
         let mut doc = Document::from_rgba("Layer 0", 4, 4, &rgba);
         let mut layer = doc.layers.get(0).expect("layer").clone();
         layer.name = "Layer 1".to_string();
-        layer.channels[1].data.as_mut_slice().fill(9);
+        layer.channels_mut()[1].data.as_mut_slice().fill(9);
         let original = doc.layers.get(0).expect("layer").clone();
         doc.layers = LayerStack::from_layers(vec![layer, original]);
         doc.composite

@@ -6,7 +6,7 @@
 
 use std::time::Instant;
 
-use pictura_core::{BitDepth, BlendMode, Channel, ColorMode, Document, Layer, PsdRect, TypeTool};
+use pictura_core::{BitDepth, BlendMode, Channel, ColorMode, Document, PsdRect, TypeTool};
 use pictura_render::{
     composite, gpu_available, set_text_gamma, text_gamma, Backend, CompositeRequest,
     DEFAULT_TEXT_GAMMA,
@@ -64,7 +64,7 @@ fn scene(n: u32) -> Document {
             ta[i] = ((x * 7 + y * 13) % 256) as u8;
         }
     }
-    let base = Layer {
+    let base = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "base".into(),
         rect: whole(n),
         blend: BlendMode::Normal,
@@ -78,8 +78,8 @@ fn scene(n: u32) -> Document {
             channel(-1, ba),
         ],
         ..Default::default()
-    };
-    let text = Layer {
+    });
+    let text = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "text".into(),
         rect: whole(n),
         blend: BlendMode::Normal,
@@ -94,7 +94,7 @@ fn scene(n: u32) -> Document {
         ],
         type_tool: Some(type_tool(n)),
         ..Default::default()
-    };
+    });
     let mut doc = Document::new(n, n, ColorMode::Rgb, BitDepth::Eight);
     doc.layers = pictura_core::LayerStack::from_layers(vec![base, text]);
     doc

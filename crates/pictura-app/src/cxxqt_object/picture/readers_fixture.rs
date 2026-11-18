@@ -23,7 +23,7 @@ fn varied(name: &str, r: PsdRect, seed: u32) -> Layer {
     let (w, h) = (r.width() as u32, r.height() as u32);
     let mut layer = super::super::tests::pixel_layer(name, w, h, (0, 0, 0));
     layer.rect = r;
-    for (c, channel) in layer.channels.iter_mut().enumerate() {
+    for (c, channel) in layer.channels_mut().iter_mut().enumerate() {
         let data: Vec<u8> = (0..w * h)
             .map(|i| {
                 let (x, y) = (i % w, i / w);
@@ -48,7 +48,7 @@ pub(in crate::cxxqt_object) fn layered(w: u32, h: u32, profiled: bool) -> Docume
     let mut doc = Document::new(w, h, ColorMode::Rgb, BitDepth::Eight);
     let (wi, hi) = (w as i32, h as i32);
     let mut base = varied("base", rect(11, 7, wi - 13, hi - 5), 3);
-    for channel in &mut base.channels {
+    for channel in base.channels_mut() {
         if channel.id == -1 {
             let n = channel.data.len();
             channel.data = vec![255u8; n].into();

@@ -47,7 +47,7 @@ fn psd_write_is_byte_identical_tiled() {
         .expect("divergence preserves geometry");
     for layer in tiled.layers.iter_mut() {
         let (lw, lh) = (layer.rect.width() as usize, layer.rect.height() as usize);
-        for channel in &mut layer.channels {
+        for channel in layer.channels_mut() {
             diverge(&mut channel.data, lw, lh, &mut held);
         }
         if let Some(data) = layer.mask.as_mut().and_then(|m| m.data.as_mut()) {
@@ -75,7 +75,7 @@ fn reading_fills_tiles() {
     let bytes = write_psd(&Document::from_rgba("white", w, h, &rgba)).expect("write");
     let doc = read_psd(&bytes).expect("read");
     let layer = doc.layers.get(0).expect("a layer");
-    for channel in &layer.channels {
+    for channel in layer.channels() {
         assert!(channel.data.is_tiled(), "channel {} is tiled", channel.id);
         let last = channel.data.tile_count() - 1;
         assert!(
@@ -87,7 +87,12 @@ fn reading_fills_tiles() {
             channel.id
         );
     }
-    let red = &layer.channels.iter().find(|c| c.id == 0).expect("red").data;
+    let red = &layer
+        .channels()
+        .iter()
+        .find(|c| c.id == 0)
+        .expect("red")
+        .data;
     assert_eq!(red.sample(10 * w as usize + 10), Some(200));
     assert!(matches!(red.tile_state(0), Some(TileState::Dense(_))));
 }
