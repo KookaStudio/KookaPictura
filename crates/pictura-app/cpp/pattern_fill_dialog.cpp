@@ -1,11 +1,14 @@
 #include "pattern_fill_dialog.h"
+#include "preset_store.h"
 
 #include "dialogs.h"
 #include "panels/numeric_field.h"
 
 #include "api/layers_bridge.h"
+#include "api/paint_bridge.h"
 
 #include <QtCore/QStringList>
+#include <QtCore/QSet>
 #include <QtGui/QIcon>
 #include <QtGui/QImage>
 #include <QtGui/QPixmap>
@@ -47,16 +50,27 @@ PatternFillDialog::PatternFillDialog(PictureView& view, const QString& payload, 
     list_->setIconSize(QSize(32, 32));
     list_->setGridSize(QSize(72, 56));
     list_->setResizeMode(QListView::Adjust);
-    const QStringList ids = available_pattern_ids(view_);
-    for (const QString& id : ids) {
-        const QImage thumbnail = pattern_thumbnail(view_, id, 32);
-        auto* item = new QListWidgetItem(QIcon(QPixmap::fromImage(thumbnail)), id, list_);
-        if (id == id_) {
-            list_->setCurrentItem(item);
-        }
-        if (id_.isEmpty()) {
-            id_ = id;
-            list_->setCurrentItem(item);
+    QSet<QString> ids;
+    const auto add = [this, &ids](const QString& id, const QString& name,
+                                  const QImage& preview, const QByteArray& native) {
+        if (id.isEmpty() || ids.contains(id)) return;
+        ids.insert(id);
+        auto* item = new QListWidgetItem(QIcon(QPixmap::fromImage(preview)), name, list_);
+        item->setData(Qt::UserRole, id);
+        item->setData(Qt::UserRole + 1, native);
+        if (id == id_) list_->setCurrentItem(item);
+    };
+    for (const auto& id : document_pattern_ids(view_)) {
+        add(id, id, pattern_thumbnail(view_, id, 32), {});
+    }
+    for (const auto& preset : PresetStore::current().rows(PresetType::Patterns)) {
+        const int index = preset.values.value(QStringLiteral("index")).toInt(-1);
+        if (index >= 0) {
+            const QString id = stamp_pattern_id(index);
+            add(id, preset.name, pattern_thumbnail(view_, id, 32), {});
+        } else {
+            const auto id = preset.values.value(QStringLiteral("patternId")).toString();
+            add(id, preset.name, preset.preview, preset.native);
         }
     }
     // An edited layer may name a pattern the document no longer carries; fall
@@ -66,7 +80,7 @@ PatternFillDialog::PatternFillDialog(PictureView& view, const QString& payload, 
     }
     outer->addWidget(list_);
 
-    empty_ = ids.isEmpty();
+    empty_ = list_->count() == 0;
     if (empty_) {
         emptyLabel_ = new QLabel(tr("No patterns are available."), this);
         emptyLabel_->setObjectName(QStringLiteral("fillPatternEmpty"));
@@ -114,15 +128,20 @@ QString PatternFillDialog::payload() const
         return QString();
     }
     QString id = id_;
+    QByteArray native;
     if (const QListWidgetItem* item = list_->currentItem()) {
-        id = item->text();
+        id = item->data(Qt::UserRole).toString();
+        if (id.isEmpty()) { id = item->text(); }
+        native = item->data(Qt::UserRole + 1).toByteArray();
     }
-    return QStringLiteral("%1|%2|%3|%4|%5")
+    QString payload = QStringLiteral("%1|%2|%3|%4|%5")
         .arg(id)
         .arg(scale_->value())
         .arg(link_->isChecked() ? 1 : 0)
         .arg(originX_)
         .arg(originY_);
+    if (!native.isEmpty()) { payload += QLatin1Char('|') + QString::fromLatin1(native.toHex()); }
+    return payload;
 }
 
 bool PatternFillDialog::getFill(PictureView& view, const QString& initial, QWidget* parent,

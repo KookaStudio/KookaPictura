@@ -15,10 +15,12 @@
 
 pub(super) mod fills;
 mod imp;
+mod patterns;
 
 use super::eyedropper_sample::sample_argb_scoped;
 use super::qobject::PictureView;
 use imp::*;
+use patterns::*;
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -219,6 +221,17 @@ pub mod ffi {
             origin_y: i32,
         ) -> bool;
 
+        fn begin_pattern_preset(
+            view: Pin<&mut PictureView>,
+            tip: &PaintTip,
+            opacity: i32,
+            flow: i32,
+            mode: &QString,
+            file: &[u8],
+            origin_x: i32,
+            origin_y: i32,
+        ) -> bool;
+
         /// Begin a History Brush stroke painting the active layer as it was in
         /// the brush source state. False as for `begin_clone_stamp`, or when
         /// the source state has no pixel layer at the active path.
@@ -308,6 +321,21 @@ pub mod ffi {
             auto_erase: bool,
             pressure_size: bool,
             pressure_opacity: bool,
+        ) -> bool;
+
+        fn begin_sampled_brush(
+            view: Pin<&mut PictureView>,
+            foreground: u32,
+            background: u32,
+            tip: &PaintTip,
+            opacity: i32,
+            flow: i32,
+            mode: &QString,
+            aliased: bool,
+            auto_erase: bool,
+            pressure_size: bool,
+            pressure_opacity: bool,
+            preset: &[u8],
         ) -> bool;
 
         /// Begin a Background Eraser stroke. `sampling` 0 Continuous / 1 Once
@@ -406,9 +434,11 @@ pub mod ffi {
 
         /// The number of built-in patterns.
         fn stamp_pattern_count() -> i32;
+        fn managed_pattern_count() -> i32;
 
         /// Built-in pattern `index`'s name, or empty out of range.
         fn stamp_pattern_name(index: i32) -> QString;
+        fn stamp_pattern_id(index: i32) -> QString;
 
         /// Built-in pattern `index` as packed RGBA8888, `stamp_pattern_side()`
         /// square; empty out of range.

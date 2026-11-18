@@ -308,6 +308,26 @@ fn a_cancelled_stroke_is_not_recorded() {
 }
 
 #[test]
+fn sampled_brush_is_not_recorded_as_a_replayable_paint_stroke() {
+    let sink = install(true);
+    tool_recording::begin(
+        "Brush",
+        &brush_config(),
+        tool_recording::brush_recording_kind(true),
+    );
+    tool_recording::sample(4.0, 4.0, 1.0);
+    tool_recording::finish(true);
+    assert!(sink.borrow().steps.is_empty());
+    assert_eq!(
+        sink.borrow().refused,
+        vec![ToolStrokeError::ReplayUnsupported {
+            tool: "Brush".into()
+        }]
+    );
+    reset();
+}
+
+#[test]
 fn native_and_mask_begins_are_refused_instead_of_recorded() {
     for kind in [ToolStrokeKind::Native, ToolStrokeKind::Mask] {
         let sink = install(true);

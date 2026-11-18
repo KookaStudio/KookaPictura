@@ -7,6 +7,7 @@
 #include "image_view.h"
 #include "panels/angle_dial.h"
 #include "panels/color_swatch_widget.h"
+#include "preset_store.h"
 
 #include <QtCore/QSignalBlocker>
 #include <QtCore/QVariant>
@@ -26,6 +27,7 @@
 #include <QtCore/QtMath>
 
 #include <cmath>
+#include <cstdint>
 
 #include "api/layers_bridge.h"
 
@@ -141,9 +143,59 @@ LayerStyleDialog::LayerStyleDialog(PictureView* view, const QString& path, const
     cancel->setObjectName(QStringLiteral("layerStyleCancel"));
     buttons->addWidget(ok);
     buttons->addWidget(cancel);
+    if (!blendingOnly_) {
+        auto* presets = new QComboBox;
+        presets->setObjectName(QStringLiteral("layerStylePreset"));
+        presets->setPlaceholderText(tr("Style Preset"));
+        auto& store = PresetStore::current();
+        const auto refresh = [presets, &store] {
+            presets->clear();
+            for (const auto& entry : store.rows(PresetType::Styles)) {
+                presets->addItem(entry.name, entry.native);
+            }
+            presets->setCurrentIndex(-1);
+            presets->setEnabled(presets->count() > 0);
+        };
+        refresh();
+        connect(&store, &PresetStore::changed, this, [refresh](int type) {
+            if (type == int(PresetType::Styles)) refresh();
+        });
+        connect(presets, &QComboBox::activated, this, [this, presets](int index) {
+            const auto data = presets->itemData(index).toByteArray();
+            presets->setCurrentIndex(-1);
+            if (view_ && layer_style_apply_preset(*view_, path_,
+                    {reinterpret_cast<const std::uint8_t*>(data.constData()), size_t(data.size())})) {
+                dirty_ = true;
+                rebuildPages();
+            }
+        });
+        buttons->addWidget(presets);
+    }
     buttons->addStretch();
     outer->addLayout(buttons);
 
+    rebuildPages();
+    connect(list_, &QListWidget::currentRowChanged, pages_, &QStackedWidget::setCurrentIndex);
+    connect(list_, &QListWidget::itemChanged, this, [this] { onListChanged(); });
+    connect(ok, &QPushButton::clicked, this, &QDialog::accept);
+    connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
+
+    const int row = blendingOnly_ ? 0 : qMax(0, keys_.indexOf(effect));
+    list_->setCurrentRow(row);
+    if (!effect.isEmpty() && !blendingOnly_
+        && value(effect + QStringLiteral(".on")) < 0.5
+        && (list_->item(row)->flags() & Qt::ItemIsUserCheckable)) {
+        list_->item(row)->setCheckState(Qt::Checked);
+    }
+}
+
+void LayerStyleDialog::rebuildPages()
+{
+    const int row = qMax(0, list_->currentRow());
+    const QSignalBlocker block(list_);
+    list_->clear();
+    keys_.clear();
+    while (pages_->count()) delete pages_->widget(0);
     // CS6's order down the list, which is the order the effects apply.
     addFixedPage(tr("Blending Options"), buildBlendingOptionsPage());
     addEffect(QStringLiteral("bevel"), tr("Bevel && Emboss"), buildBevelPage());
@@ -163,18 +215,8 @@ LayerStyleDialog::LayerStyleDialog(PictureView* view, const QString& path, const
     addEffect(QStringLiteral("dropShadow"), tr("Drop Shadow"),
               buildShadowPage(QStringLiteral("dropShadow"), false));
 
-    connect(list_, &QListWidget::currentRowChanged, pages_, &QStackedWidget::setCurrentIndex);
-    connect(list_, &QListWidget::itemChanged, this, [this] { onListChanged(); });
-    connect(ok, &QPushButton::clicked, this, &QDialog::accept);
-    connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
-
-    const int row = blendingOnly_ ? 0 : qMax(0, keys_.indexOf(effect));
     list_->setCurrentRow(row);
-    if (!effect.isEmpty() && !blendingOnly_
-        && value(effect + QStringLiteral(".on")) < 0.5
-        && (list_->item(row)->flags() & Qt::ItemIsUserCheckable)) {
-        list_->item(row)->setCheckState(Qt::Checked);
-    }
+    pages_->setCurrentIndex(row);
 }
 
 int LayerStyleDialog::currentPage() const

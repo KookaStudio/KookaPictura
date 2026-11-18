@@ -1,4 +1,5 @@
 #include "brush_preset_picker.h"
+#include "preset_store.h"
 
 #include "../paint_tip.h"
 #include "../tools.h"
@@ -279,7 +280,10 @@ BrushPresetPicker::BrushPresetPicker(ToolController* controller, QWidget* parent
     connect(hardness_, &QSpinBox::valueChanged, this, setHardness);
     connect(hardnessSlider_, &QSlider::valueChanged, this, setHardness);
     connect(grid_, &QListWidget::itemClicked, this,
-            [this](QListWidgetItem* item) { applyPreset(item->data(Qt::UserRole).toInt()); });
+            [this](QListWidgetItem* item) { applyLibraryRow(item->data(Qt::UserRole).toInt()); });
+    connect(&PresetStore::current(), &PresetStore::changed, this, [this](int type) {
+        if (type == int(PresetType::Brushes)) { buildGrid(); }
+    });
     if (controller_) {
         connect(controller_, &ToolController::brushSizeChanged, this, [this](int) { sync(); });
         connect(controller_, &ToolController::brushTipChanged, this, [this] { sync(); });
@@ -287,7 +291,16 @@ BrushPresetPicker::BrushPresetPicker(ToolController* controller, QWidget* parent
     sync();
 }
 
-int BrushPresetPicker::presetCount() const { return kPresetCount; }
+int BrushPresetPicker::presetCount() const { return int(PresetStore::current().rows(PresetType::Brushes).size()); }
+
+QStringList BrushPresetPicker::builtInNames()
+{
+    QStringList names;
+    for (const auto& preset : kPresets) {
+        names.push_back(QString::fromLatin1(preset.name));
+    }
+    return names;
+}
 
 int BrushPresetPicker::additionalPresetCount() { return kAdditionalCount; }
 
@@ -315,12 +328,22 @@ void BrushPresetPicker::chooseAdditionalPreset(int index)
     applyPreset(kPresetCount - kAdditionalCount + index);
 }
 
-void BrushPresetPicker::choosePresetForTest(int index) { applyPreset(index); }
+void BrushPresetPicker::choosePresetForTest(int index) { applyLibraryRow(index); }
 
 void BrushPresetPicker::buildGrid()
 {
-    for (int i = 0; i < kPresetCount; ++i) {
-        const Preset& preset = kPresets[i];
+    grid_->clear();
+    const auto& rows = PresetStore::current().rows(PresetType::Brushes);
+    for (int i = 0; i < rows.size(); ++i) {
+        const auto& row = rows.at(i);
+        const int index = row.values.value(QStringLiteral("index")).toInt(-1);
+        if (index < 0 || index >= kPresetCount) {
+            auto* item = new QListWidgetItem(QIcon(QPixmap::fromImage(row.preview)), QString(), grid_);
+            item->setData(Qt::UserRole, i);
+            item->setToolTip(row.name);
+            continue;
+        }
+        const Preset& preset = kPresets[index];
         QPixmap cell(kCell, kCell);
         cell.fill(Qt::transparent);
         {
@@ -334,9 +357,34 @@ void BrushPresetPicker::buildGrid()
                              QString::number(preset.size));
         }
         auto* item = new QListWidgetItem(QIcon(cell), QString(), grid_);
-        item->setToolTip(QString::fromLatin1(preset.name));
+        item->setToolTip(row.name);
         item->setData(Qt::UserRole, i);
     }
+}
+
+void BrushPresetPicker::applyLibraryRow(int index)
+{
+    const auto& rows = PresetStore::current().rows(PresetType::Brushes);
+    if (!paint_ || index < 0 || index >= rows.size()) { return; }
+    const auto& row = rows.at(index);
+    const auto values = row.values;
+    const int builtIn = values.value(QStringLiteral("index")).toInt(-1);
+    if (builtIn >= 0) {
+        applyPreset(builtIn);
+    } else {
+        paint_->setSize(qRound(values.value(QStringLiteral("size")).toDouble(25)));
+        paint_->setHardness(100);
+        paint_->setRoundness(qRound(values.value(QStringLiteral("roundness")).toDouble(100)));
+        paint_->setTipAngle(qRound(values.value(QStringLiteral("angle")).toDouble()));
+        paint_->setSpacing(qRound(values.value(QStringLiteral("spacing")).toDouble(25)));
+        paint_->setFlip(false, false);
+        paint_->setGrain(0);
+        paint_->setWetEdges(false);
+        paint_->setBristleEnabled(false);
+        paint_->setSampledPreset(row.native);
+    }
+    current_->setText(row.name);
+    grid_->setCurrentRow(index);
 }
 
 void BrushPresetPicker::applyPreset(int index)
@@ -345,6 +393,7 @@ void BrushPresetPicker::applyPreset(int index)
         return;
     }
     const Preset& p = kPresets[index];
+    paint_->setSampledPreset({});
     paint_->setSize(p.size);
     paint_->setHardness(p.hardness);
     paint_->setRoundness(p.roundness);

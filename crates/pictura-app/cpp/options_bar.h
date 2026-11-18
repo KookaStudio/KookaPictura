@@ -113,8 +113,7 @@ private:
     QWidget* buildRedEyePage(ToolId id);
     QWidget* buildColorReplacementPage(ToolId id);
     QWidget* buildMixerBrushPage(ToolId id);
-    void addBrushTipFields(QHBoxLayout* layout, QWidget* page,
-                           bool withAdditionalPresets = false);
+    void addBrushTipFields(QHBoxLayout* layout, QWidget* page);
     // options_bar_stamp.cpp: Clone Stamp, Pattern Stamp, History Brush, Art
     // History Brush, and Eraser.
     QWidget* buildStampPage(ToolId id);

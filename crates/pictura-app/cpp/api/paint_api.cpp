@@ -93,9 +93,14 @@ void Stroke::abandon()
 std::optional<Stroke> beginBrush(PictureView& view, std::uint32_t foreground,
                                  std::uint32_t background, const PaintTip& tip, int opacity,
                                  int flow, const QString& mode, bool aliased, bool autoErase,
-                                 bool pressureSize, bool pressureOpacity)
+                                 bool pressureSize, bool pressureOpacity, const QByteArray& preset)
 {
     Stroke stroke(view, [&] {
+        if (!preset.isEmpty()) {
+            return begin_sampled_brush(view, foreground, background, tip, opacity, flow, mode, aliased,
+                autoErase, pressureSize, pressureOpacity,
+                {reinterpret_cast<const std::uint8_t*>(preset.constData()), size_t(preset.size())});
+        }
         return begin_brush(view, foreground, background, tip, opacity, flow, mode, aliased,
                            autoErase, pressureSize, pressureOpacity);
     });

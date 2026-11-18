@@ -337,6 +337,14 @@ pub(crate) fn take_tool_stroke_error() -> Option<ToolStrokeError> {
     STATE.with(|state| state.borrow_mut().last_error.take())
 }
 
+pub(crate) fn brush_recording_kind(sampled: bool) -> ToolStrokeKind {
+    if sampled {
+        ToolStrokeKind::Native
+    } else {
+        ToolStrokeKind::Paint
+    }
+}
+
 /// Open a capture after a stroke began. Does nothing while recording is off.
 pub(crate) fn begin(tool: &str, settings: &StrokeConfig, kind: ToolStrokeKind) {
     let refused = STATE.with(|cell| {

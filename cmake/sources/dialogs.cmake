@@ -1,6 +1,8 @@
 # dialogs sources for pictura_shell.
 # Included from the root CMakeLists.txt; keep paths explicit (no globbing).
 list(APPEND PICTURA_SHELL_SOURCES
+    crates/pictura-app/cpp/preset_manager.cpp
+    crates/pictura-app/cpp/preset_manager.h
     crates/pictura-app/cpp/layer_comp_options_dialog.cpp
     crates/pictura-app/cpp/layer_comp_options_dialog.h
     crates/pictura-app/cpp/awa_dialog.cpp

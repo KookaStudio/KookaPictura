@@ -3,6 +3,7 @@
 // from options_bar.cpp along the page seam.
 
 #include "options_bar.h"
+#include "preset_store.h"
 
 #include "commands.h"
 #include "icons.h"
@@ -166,13 +167,37 @@ QWidget* OptionsBar::buildStampPage(ToolId id)
         pattern->setObjectName(QStringLiteral("optionsPatternStampPattern"));
         pattern->setToolTip(QStringLiteral("Pattern"));
         pattern->setIconSize(QSize(20, 20));
-        for (int i = 0; i < stamp_pattern_count(); ++i) {
-            pattern->addItem(patternIcon(i), stamp_pattern_name(i));
-        }
-        pattern->setCurrentIndex(initial.pattern);
+        auto& store = PresetStore::current();
+        auto rebuild = [pattern, this, &store] {
+            const QSignalBlocker block(pattern);
+            pattern->clear();
+            const auto selection = stamp_->get();
+            int current = -1;
+            for (const auto& item : store.rows(PresetType::Patterns)) {
+                const int index = item.values.value(QStringLiteral("index")).toInt(-1);
+                if ((index >= 0 && selection.patternPreset.isEmpty() && index == selection.pattern)
+                    || (index < 0 && selection.patternPreset == item.native)) {
+                    current = pattern->count();
+                }
+                pattern->addItem(index >= 0 ? patternIcon(index) : QIcon(QPixmap::fromImage(item.preview)),
+                                 item.name, index);
+                if (index < 0) { pattern->setItemData(pattern->count() - 1, item.native, Qt::UserRole + 1); }
+            }
+            pattern->setCurrentIndex(current);
+        };
+        rebuild();
         layout->addWidget(pattern);
         connect(pattern, &QComboBox::currentIndexChanged, this,
-                [update](int i) { update([i](StampOptions& o) { o.pattern = i; }); });
+                [update, pattern](int i) {
+                    if (i >= 0) {
+                        const int index = pattern->itemData(i).toInt();
+                        const auto data = pattern->itemData(i, Qt::UserRole + 1).toByteArray();
+                        update([index, data](StampOptions& o) { o.pattern = qMax(0, index); o.patternPreset = data; });
+                    }
+                });
+        connect(&store, &PresetStore::changed, this, [rebuild](int kind) {
+            if (kind == int(PresetType::Patterns)) { rebuild(); }
+        });
     }
 
     auto* aligned = new QCheckBox(QStringLiteral("Aligned"), page);

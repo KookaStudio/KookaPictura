@@ -1,6 +1,7 @@
 #include "settings_backup.h"
 
 #include "dialogs.h"
+#include "preset_store.h"
 #include "session.h"
 #include "workspace_store.h"
 
@@ -92,8 +93,11 @@ bool readFileBytes(const QString& path, QByteArray* out, qint64 maxBytes)
     if (!file.open(QIODevice::ReadOnly)) {
         return false;
     }
+    if (file.size() > maxBytes) {
+        return false;
+    }
     *out = file.read(maxBytes + 1);
-    return out->size() <= maxBytes;
+    return out->size() <= maxBytes && file.error() == QFileDevice::NoError;
 }
 
 QJsonObject readJsonObject(const QString& path, qint64 maxBytes)
@@ -111,8 +115,14 @@ QJsonObject readJsonObject(const QString& path, qint64 maxBytes)
 }
 
 bool writeJsonObject(const QString& path, const QJsonObject& object, bool pretty,
-                     QString* error)
+                     QString* error, qint64 limit = kMaxBackupBytes)
 {
+    const QByteArray bytes =
+        QJsonDocument(object).toJson(pretty ? QJsonDocument::Indented : QJsonDocument::Compact);
+    if (bytes.size() > limit) {
+        setError(error, message("The settings file exceeds the supported import size."));
+        return false;
+    }
     if (!QDir().mkpath(QFileInfo(path).absolutePath())) {
         setError(error, message("The settings folder could not be created."));
         return false;
@@ -122,8 +132,6 @@ bool writeJsonObject(const QString& path, const QJsonObject& object, bool pretty
         setError(error, message("The settings file could not be opened for writing."));
         return false;
     }
-    const QByteArray bytes =
-        QJsonDocument(object).toJson(pretty ? QJsonDocument::Indented : QJsonDocument::Compact);
     if (file.write(bytes) != bytes.size()) {
         file.cancelWriting();
         setError(error, message("The settings file could not be written."));
@@ -433,8 +441,47 @@ bool sanitizePresets(QJsonObject* presets, QString* error)
     return true;
 }
 
+bool decodeCurrentLists(const QJsonObject& backup, PresetSnapshot* lists, QString* error)
+{
+    const auto key = QStringLiteral("currentPresetLists");
+    if (!backup.contains(key)) {
+        return true;
+    }
+    if (!backup.value(key).isObject()) {
+        setError(error, message("The current preset lists section is not an object."));
+        return false;
+    }
+    const auto object = backup.value(key).toObject();
+    int recognized = 0;
+    for (int i = 0; i < presetTypeCount; ++i) {
+        const auto type = PresetType(i);
+        const auto name = presetTypeKey(type);
+        if (!object.contains(name)) {
+            continue;
+        }
+        const auto value = object.value(name);
+        const auto encoded = value.toString().toLatin1();
+        const auto decoded = QByteArray::fromBase64(encoded);
+        if (!value.isString() || decoded.isEmpty() || decoded.toBase64() != encoded) {
+            setError(error, message("A current preset list contains invalid data."));
+            return false;
+        }
+        lists->insert(type, decoded);
+        ++recognized;
+    }
+    if (recognized != object.size()) {
+        setError(error, message("A current preset list has an unknown type."));
+        return false;
+    }
+    return validatePresetSnapshot(*lists, error);
+}
+
 bool sanitizeBackup(const QJsonObject& source, QJsonObject* out, QString* error)
 {
+    PresetSnapshot currentLists;
+    if (!decodeCurrentLists(source, &currentLists, error)) {
+        return false;
+    }
     *out = source;
     out->insert(QStringLiteral("format"), QString::fromLatin1(kSettingsBackupFormat));
 
@@ -565,8 +612,23 @@ bool applyPresets(const QJsonObject& presets, QString* error)
 
 bool applyBackup(const QJsonObject& backup, QString* error)
 {
+    PresetSnapshot currentLists;
+    if (!decodeCurrentLists(backup, &currentLists, error)
+        || !publishPresetSnapshot(currentLists, error)) {
+        return false;
+    }
     if (backup.contains(QStringLiteral("session"))) {
         QJsonObject session = backup.value(QStringLiteral("session")).toObject();
+        if (!currentLists.contains(PresetType::Swatches)) {
+            // Migration has not necessarily run by the time startup applies
+            // a backup. Keep the local fallback for an absent native list.
+            const auto state = loadSession();
+            if (state.swatchesLoaded) {
+                session.insert(QStringLiteral("swatches"), state.swatches);
+            } else {
+                session.remove(QStringLiteral("swatches"));
+            }
+        }
         session.remove(QStringLiteral("writerToken"));
         session.remove(QStringLiteral("writtenAt"));
         if (!writeJsonObject(sessionFilePath(), session, false, error)) {
@@ -601,8 +663,23 @@ bool hasPendingSettingsImport()
     return QFileInfo::exists(pendingSettingsImportPath());
 }
 
-QJsonObject collectSettingsBackup()
+QJsonObject collectSettingsBackup(QString* error)
 {
+    PresetSnapshot currentLists;
+    if (!collectPresetSnapshot(&currentLists, error)) {
+        return {};
+    }
+    QJsonObject current;
+    qsizetype bytes = 0;
+    for (auto it = currentLists.cbegin(); it != currentLists.cend(); ++it) {
+        const auto encodedSize = ((it.value().size() + 2) / 3) * 4;
+        if (encodedSize > kMaxBackupBytes - bytes) {
+            setError(error, message("The current preset lists exceed the supported settings import size."));
+            return {};
+        }
+        bytes += encodedSize;
+        current.insert(presetTypeKey(it.key()), QString::fromLatin1(it.value().toBase64()));
+    }
     QJsonObject backup;
     backup.insert(QStringLiteral("format"), QString::fromLatin1(kSettingsBackupFormat));
     backup.insert(QStringLiteral("formatVersion"), kSettingsBackupFormatVersion);
@@ -617,6 +694,7 @@ QJsonObject collectSettingsBackup()
     backup.insert(QStringLiteral("session"), readJsonObject(sessionFilePath(), kMaxStoreBytes));
     backup.insert(QStringLiteral("workspaces"), collectWorkspaces());
     backup.insert(QStringLiteral("presets"), collectPresets());
+    backup.insert(QStringLiteral("currentPresetLists"), current);
     return backup;
 }
 
@@ -744,7 +822,8 @@ int settingsRestartPromptCountForTest()
 
 bool exportSettingsFile(const QString& path, QString* error)
 {
-    return writeSettingsBackup(path, collectSettingsBackup(), error);
+    const auto backup = collectSettingsBackup(error);
+    return !backup.isEmpty() && writeSettingsBackup(path, backup, error);
 }
 
 bool importSettingsFile(const QString& path, QWidget* parent, QString* error)
@@ -791,7 +870,8 @@ QString backupCurrentSettings(QString* error)
         QStringLiteral("yyyyMMdd-HHmmss-zzz"));
     const QString path = directory + QStringLiteral("/pictura-") + stamp
         + QStringLiteral(".json");
-    if (!writeSettingsBackup(path, collectSettingsBackup(), error)) {
+    const auto backup = collectSettingsBackup(error);
+    if (backup.isEmpty() || !writeSettingsBackup(path, backup, error)) {
         return {};
     }
 

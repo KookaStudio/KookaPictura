@@ -8,6 +8,7 @@
 #include "panels/angle_dial.h"
 #include "gradient_editor_dialog.h"
 #include "layer_style_contour.h"
+#include "preset_store.h"
 
 #include <QtCore/QSignalBlocker>
 #include <QtWidgets/QCheckBox>
@@ -22,6 +23,7 @@
 #include <QtWidgets/QVBoxLayout>
 
 #include <cmath>
+#include <cstdint>
 #include <utility>
 
 namespace pictura {
@@ -419,11 +421,39 @@ QWidget* LayerStyleDialog::buildPatternOverlayPage()
     pattern->addRow(tr("Blend Mode:"), mode);
     pattern->addRow(tr("Opacity:"), sliderRow(QStringLiteral("patternOverlay.opacity"), 0, 100,
                                               QStringLiteral("%")));
-    // The built-in set; a pattern from an opened file that is not one of them
-    // shows no selection until another is picked.
-    QComboBox* picker =
-        combo(QStringLiteral("patternOverlay.pattern"), layer_style_pattern_names());
-    bindChoice(picker, QStringLiteral("patternOverlay.pattern"));
+    const QString key = QStringLiteral("patternOverlay.pattern");
+    QComboBox* picker = combo(key);
+    auto& store = PresetStore::current();
+    const auto refresh = [this, picker, key, &store] {
+        const QSignalBlocker blocker(picker);
+        picker->clear();
+        int selected = -1;
+        const double current = value(key);
+        for (const auto& row : store.rows(PresetType::Patterns)) {
+            const int index = row.values.value(QStringLiteral("index")).toInt(-1);
+            if (index >= 0 && current == index) selected = picker->count();
+            picker->addItem(row.name, row.native);
+            picker->setItemData(picker->count() - 1, index, Qt::UserRole + 1);
+        }
+        picker->setCurrentIndex(selected);
+    };
+    refresh();
+    connect(&store, &PresetStore::changed, picker, [refresh](int type) {
+        if (type == int(PresetType::Patterns)) refresh();
+    });
+    connect(picker, &QComboBox::currentIndexChanged, this, [this, picker, key](int row) {
+        if (row < 0) return;
+        const int builtin = picker->itemData(row, Qt::UserRole + 1).toInt();
+        if (builtin >= 0) {
+            setValue(key, builtin);
+            return;
+        }
+        const auto data = picker->itemData(row).toByteArray();
+        if (view_ && layer_style_apply_pattern(*view_, path_,
+                {reinterpret_cast<const std::uint8_t*>(data.constData()), size_t(data.size())})) {
+            dirty_ = true;
+        }
+    });
     pattern->addRow(tr("Pattern:"), picker);
     pattern->addRow(tr("Scale:"), sliderRow(QStringLiteral("patternOverlay.scale"), 1, 1000,
                                             QStringLiteral("%")));

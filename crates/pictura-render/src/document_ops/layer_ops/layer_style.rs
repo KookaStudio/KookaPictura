@@ -576,15 +576,29 @@ fn set_blending_value(layer: &mut Layer, name: &str, value: f64) -> bool {
     }
 }
 
-/// The built-in patterns a Pattern Overlay offers (the Pattern Stamp's set),
-/// in picker order.
+/// Shared generated patterns in stable index order, starting with the
+/// original Pattern Stamp set.
 pub fn layer_style_pattern_names() -> Vec<&'static str> {
-    pictura_paint::pattern::PATTERN_NAMES.to_vec()
+    pictura_paint::pattern::PATTERN_NAMES
+        .into_iter()
+        .chain(
+            pictura_codec::builtin_patterns()
+                .iter()
+                .map(|pattern| pattern.pattern_id.as_str()),
+        )
+        .collect()
 }
 
 /// The id a built-in pattern is stored under in the document's `Patt` block.
-fn builtin_pattern_id(index: usize) -> String {
-    format!("kooka-builtin-pattern-{index}")
+pub fn builtin_pattern_id(index: usize) -> String {
+    let stamp_count = pictura_paint::pattern::PATTERN_NAMES.len();
+    if index < stamp_count {
+        format!("kooka-builtin-pattern-{index}")
+    } else {
+        pictura_codec::builtin_patterns()
+            .get(index - stamp_count)
+            .map_or_else(String::new, |pattern| pattern.pattern_id.clone())
+    }
 }
 
 /// The built-in pattern a `patternFill` object names, if it is one.
@@ -593,20 +607,41 @@ fn pattern_index(obj: &DescValue) -> Option<usize> {
         return None;
     };
     let id = id.trim_end_matches('\0');
-    (0..pictura_paint::pattern::PATTERN_NAMES.len()).find(|&i| builtin_pattern_id(i) == id)
+    (0..layer_style_pattern_names().len()).find(|&i| builtin_pattern_id(i) == id)
+}
+
+/// The same generated tile for Pattern Stamp, fill layers and pattern effects.
+pub fn builtin_pattern(index: usize) -> Option<pictura_codec::PatternPixels> {
+    let stamp_count = pictura_paint::pattern::PATTERN_NAMES.len();
+    if index >= stamp_count {
+        return pictura_codec::builtin_patterns()
+            .get(index - stamp_count)
+            .cloned();
+    }
+    let tile = pictura_paint::pattern::tile(index)?;
+    Some(pictura_codec::PatternPixels {
+        pattern_id: builtin_pattern_id(index),
+        width: tile.width as u32,
+        height: tile.height as u32,
+        rgba: tile.data.concat(),
+    })
+}
+
+pub fn builtin_pattern_by_id(id: &str) -> Option<pictura_codec::PatternPixels> {
+    let index = (0..layer_style_pattern_names().len()).find(|&i| builtin_pattern_id(i) == id)?;
+    builtin_pattern(index)
 }
 
 /// Make sure built-in pattern `index` is in the document's `Patt` block.
 fn ensure_builtin_pattern(doc: &mut Document, index: usize) -> Option<String> {
-    let tile = pictura_paint::pattern::tile(index)?;
-    let id = builtin_pattern_id(index);
-    let rgba: Vec<u8> = tile.data.concat();
+    let pattern = builtin_pattern(index)?;
+    let id = pattern.pattern_id;
     let record = pictura_codec::encode_rgb_pattern(
-        pictura_paint::pattern::PATTERN_NAMES[index],
+        layer_style_pattern_names()[index],
         &id,
-        tile.width as u32,
-        tile.height as u32,
-        &rgba,
+        pattern.width,
+        pattern.height,
+        &pattern.rgba,
     )?;
     pictura_codec::add_document_pattern(doc, &id, &record);
     Some(id)
@@ -636,8 +671,8 @@ pub fn set_document_layer_style_value(
         let exists = layer_style_value(layer, "patternOverlay.exists") == Some(1.0);
         let index = if pattern_key { value.round() } else { 0.0 };
         if pattern_key || !exists {
-            let names = pictura_paint::pattern::PATTERN_NAMES.len();
-            if !(0.0..names as f64).contains(&index) || (exists && current == Some(index)) {
+            let names = layer_style_pattern_names();
+            if !(0.0..names.len() as f64).contains(&index) || (exists && current == Some(index)) {
                 return false;
             }
             let Some(id) = ensure_builtin_pattern(doc, index as usize) else {
@@ -646,7 +681,7 @@ pub fn set_document_layer_style_value(
             let Some(layer) = resolve_path_mut(doc, path) else {
                 return false;
             };
-            set_pattern(layer, &id, index as usize);
+            set_layer_style_pattern(layer, &id, names[index as usize]);
             changed = true;
         }
         if pattern_key {
@@ -661,7 +696,7 @@ pub fn set_document_layer_style_value(
 
 /// Point the layer's Pattern Overlay at pattern `id`, adding the overlay (off,
 /// at its defaults) when absent.
-fn set_pattern(layer: &mut Layer, id: &str, index: usize) {
+pub fn set_layer_style_pattern(layer: &mut Layer, id: &str, name: &str) {
     let mut items = lfx2_items(layer);
     let Some(effect) = effect_named("patternOverlay") else {
         return;
@@ -678,10 +713,7 @@ fn set_pattern(layer: &mut Layer, id: &str, index: usize) {
             object(
                 b"Ptrn",
                 vec![
-                    (
-                        b"Nm  ".to_vec(),
-                        DescValue::Text(pictura_paint::pattern::PATTERN_NAMES[index].into()),
-                    ),
+                    (b"Nm  ".to_vec(), DescValue::Text(name.into())),
                     (b"Idnt".to_vec(), DescValue::Text(id.into())),
                 ],
             ),

@@ -91,7 +91,7 @@ edit.purge.clipboard	Edit/Purge/Clipboard	Clipboard		1	0
 edit.purge.video.cache	Edit/Purge/Video Cache	Video Cache		0	0
 edit.purge.all	Edit/Purge/All	All		1	0
 edit.pdfPresets	Edit/Adobe PDF Presets…	Adobe PDF Presets…		1	0
-edit.presets.preset.manager	Edit/Presets/Preset Manager…	Preset Manager…		0	0
+edit.presets.preset.manager	Edit/Presets/Preset Manager…	Preset Manager…		1	0
 edit.presets.migrate.presets	Edit/Presets/Migrate Presets…	Migrate Presets…		0	0
 edit.presets.export.presets	Edit/Presets/Export Presets…	Export Presets…		0	0
 edit.presets.import.presets	Edit/Presets/Import Presets…	Import Presets…		0	0

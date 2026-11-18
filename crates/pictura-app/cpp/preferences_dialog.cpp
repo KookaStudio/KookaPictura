@@ -1,4 +1,6 @@
 #include "preferences_dialog.h"
+#include "preset_store.h"
+#include <QtWidgets/QMessageBox>
 
 #include "canvas_ruler.h"
 #include "panels/color_swatch_widget.h"
@@ -155,6 +157,16 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     importSettings->setObjectName(QStringLiteral("preferencesImportSettings"));
     settingsLayout->addWidget(exportSettings);
     settingsLayout->addWidget(importSettings);
+    auto* resetPresets = new QPushButton(tr("Reset Preset Lists…"), settingsRow);
+    resetPresets->setObjectName(QStringLiteral("preferencesResetPresetLists"));
+    settingsLayout->addWidget(resetPresets);
+    connect(resetPresets, &QPushButton::clicked, this, [this] {
+        if (QMessageBox::question(this, tr("Reset Preset Lists"),
+            tr("Restore the default preset lists? This removes edits to current lists. Saved libraries are kept."))
+            != QMessageBox::Yes) { return; }
+        QString error;
+        if (!PresetStore::current().resetAll(&error)) { QMessageBox::warning(this, tr("Reset Preset Lists"), error); }
+    });
     settingsLayout->addStretch(1);
     generalForm->addRow(tr("Settings"), settingsRow);
     connect(exportSettings, &QPushButton::clicked, this,

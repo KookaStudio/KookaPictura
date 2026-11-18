@@ -96,7 +96,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "edit.purge.video.cache", path: &["Edit", "Purge", "Video Cache"], label: "Video Cache", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "edit.purge.all", path: &["Edit", "Purge", "All"], label: "All", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "edit.pdfPresets", path: &["Edit", "Adobe PDF Presets…"], label: "Adobe PDF Presets…", shortcut: "", implemented: true, checkable: false },
-    CommandSpec { id: "edit.presets.preset.manager", path: &["Edit", "Presets", "Preset Manager…"], label: "Preset Manager…", shortcut: "", implemented: false, checkable: false },
+    CommandSpec { id: "edit.presets.preset.manager", path: &["Edit", "Presets", "Preset Manager…"], label: "Preset Manager…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "edit.presets.migrate.presets", path: &["Edit", "Presets", "Migrate Presets…"], label: "Migrate Presets…", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "edit.presets.export.presets", path: &["Edit", "Presets", "Export Presets…"], label: "Export Presets…", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "edit.presets.import.presets", path: &["Edit", "Presets", "Import Presets…"], label: "Import Presets…", shortcut: "", implemented: false, checkable: false },

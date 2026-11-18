@@ -140,6 +140,10 @@ fn parse_patterns_block(data: &[u8], out: &mut Vec<PatternPixels>) {
 }
 
 fn parse_pattern(body: &[u8]) -> Option<PatternPixels> {
+    parse_named_pattern(body).map(|(_, pixels)| pixels)
+}
+
+pub(crate) fn parse_named_pattern(body: &[u8]) -> Option<(String, PatternPixels)> {
     let mut r = Reader::new(body);
     if r.u32().ok()? != 1 {
         return None;
@@ -156,10 +160,11 @@ fn parse_pattern(body: &[u8]) -> Option<PatternPixels> {
     };
     let _vertical = r.i16().ok()?;
     let _horizontal = r.i16().ok()?;
-    let _name = read_unicode_string(&mut r).ok()?;
+    let name = read_unicode_string(&mut r).ok()?;
     let pattern_id = read_pascal_id(&mut r).ok()?;
     let list = parse_channel_list(&mut r, expected_color).ok()?;
-    build_pixels(mode, pattern_id, list)
+    let pixels = build_pixels(mode, pattern_id, list)?;
+    Some((name.trim_end_matches('\0').to_string(), pixels))
 }
 
 /// A `VirtualMemoryArrayList`: a rectangle plus `num_channels + 2` channel

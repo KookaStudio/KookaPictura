@@ -13,11 +13,13 @@ class QToolButton;
 namespace pictura {
 
 class ColorState;
+class PresetStore;
 
 // One colour in the Swatches panel; the name is what the tooltip shows.
 struct Swatch {
     QColor color;
     QString name;
+    quint64 presetId = 0;
 };
 
 // The reflowing grid of colour squares. How many fit on a row follows the
@@ -32,6 +34,7 @@ public:
     void setSwatches(QList<Swatch> swatches);
     void addSwatch(const Swatch& swatch);
     bool removeSwatch(int index);
+    void setPresetIds(const QList<quint64>& ids);
 
     // The next unused "Swatch N" name, counting the names already in the grid.
     QString nextSwatchName() const;
@@ -70,9 +73,6 @@ private:
 // CS6's Swatches panel: the grid and its footer. Click a swatch for the
 // foreground, ctrl-click for the background, alt-click to delete; the empty
 // space past the last swatch adds one from the foreground.
-//
-// ponytail: loading and saving `.aco` libraries is deferred (needs a presets
-// crate that does not exist yet); the footer carries only New and Delete.
 class SwatchesPanel : public QWidget {
     Q_OBJECT
 
@@ -87,13 +87,18 @@ public:
 
     // Restore the built-in default palette.
     void resetSwatches();
+    void attachPresetStore(PresetStore& store);
+    void runPresetCommand(const QString& action);
 
 private:
     void showContextMenu(const QPoint& at);
+    void refreshPresetGrid();
 
     ColorState* state_ = nullptr;
     SwatchGrid* grid_ = nullptr;
     QToolButton* deleteButton_ = nullptr;
+    PresetStore* presets_ = nullptr;
+    bool updatingPresets_ = false;
 };
 
 } // namespace pictura
