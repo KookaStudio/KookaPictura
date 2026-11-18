@@ -141,11 +141,13 @@ fn read_sample(reader: &mut Reader<'_>) -> Result<(String, u32, u32, Vec<u8>), D
         1 => {
             let lengths = reader.take(height as usize * 2)?;
             let mut out = vec![0; pixels];
-            for (size, row) in lengths
-                .chunks_exact(2)
+            for (&size, row) in lengths
+                .as_chunks::<2>()
+                .0
+                .iter()
                 .zip(out.chunks_exact_mut(width as usize))
             {
-                let n = u16::from_be_bytes([size[0], size[1]]) as usize;
+                let n = u16::from_be_bytes(size) as usize;
                 decode_packbits(reader.take(n)?, row)?;
             }
             out

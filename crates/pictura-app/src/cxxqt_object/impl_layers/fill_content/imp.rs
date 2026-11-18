@@ -354,7 +354,9 @@ fn ensure_payload_pattern(doc: &mut Document, id: &str, payload: &str) -> bool {
     };
     let Some(bytes) = hex
         .as_bytes()
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| Some(16 * unhex(pair[0])? + unhex(pair[1])?))
         .collect::<Option<Vec<_>>>()
     else {

@@ -16,8 +16,10 @@
 #include <QtCore/QSignalBlocker>
 #include <QtCore/QThreadPool>
 #include <QtCore/QTimer>
+#include <QtGui/QGuiApplication>
 #include <QtGui/QIcon>
 #include <QtGui/QPainter>
+#include <QtGui/QPalette>
 #include <QtGui/QPixmap>
 #include <QtGui/QPolygon>
 #include <QtWidgets/QComboBox>
@@ -60,7 +62,7 @@ QIcon previewIcon(PresetType type, const PresetRow& row, bool stroke)
     } else if (type == PresetType::Gradients) {
         paintGradient(painter, icon.rect(), libraryRamp(row, Qt::black, Qt::white));
     } else if (type == PresetType::Contours && row.values.contains(QStringLiteral("points"))) {
-        painter.setPen(QPen(QColor(120, 120, 120), 2));
+        painter.setPen(QPen(QGuiApplication::palette().color(QPalette::Text), 2));
         QPolygonF contour;
         for (const auto& pair : row.values.value(QStringLiteral("points")).toString().split(QLatin1Char(' '))) {
             const auto point = pair.split(QLatin1Char(','));
@@ -90,7 +92,7 @@ QIcon previewIcon(PresetType type, const PresetRow& row, bool stroke)
                 painter.drawImage(icon.rect(), preview);
             }
         } else {
-            painter.setPen(QColor(120, 120, 120));
+            painter.setPen(QGuiApplication::palette().color(QPalette::Text));
             painter.drawText(icon.rect(), Qt::AlignCenter, row.name.left(2));
         }
     }

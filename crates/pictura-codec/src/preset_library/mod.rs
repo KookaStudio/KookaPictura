@@ -310,8 +310,11 @@ fn utf16(reader: &mut Reader<'_>, size: usize) -> Result<String, Diagnostic> {
     }
     let bytes = reader.take(size * 2)?;
     let mut units = bytes
-        .chunks_exact(2)
-        .map(|c| u16::from_be_bytes([c[0], c[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .copied()
+        .map(u16::from_be_bytes)
         .collect::<Vec<_>>();
     if units.last() == Some(&0) {
         units.pop();

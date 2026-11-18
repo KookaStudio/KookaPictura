@@ -15,10 +15,12 @@
 
 pub(super) mod fills;
 mod imp;
+mod patterns;
 
 use super::eyedropper_sample::sample_argb_scoped;
 use super::qobject::PictureView;
 use imp::*;
+use patterns::*;
 
 #[cxx_qt::bridge]
 pub mod ffi {

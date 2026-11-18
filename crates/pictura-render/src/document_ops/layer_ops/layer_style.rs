@@ -576,8 +576,8 @@ fn set_blending_value(layer: &mut Layer, name: &str, value: f64) -> bool {
     }
 }
 
-/// The built-in patterns a Pattern Overlay offers (the Pattern Stamp's set),
-/// in picker order.
+/// Shared generated patterns in stable index order, starting with the
+/// original Pattern Stamp set.
 pub fn layer_style_pattern_names() -> Vec<&'static str> {
     pictura_paint::pattern::PATTERN_NAMES
         .into_iter()
