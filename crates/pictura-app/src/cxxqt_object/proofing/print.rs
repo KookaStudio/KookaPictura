@@ -146,8 +146,10 @@ pub(super) fn print_preview_pixels(
     let display = Profile::srgb();
     let mut result = rgba.to_vec();
     let source: Vec<u8> = rgba
-        .chunks_exact(4)
-        .flat_map(|pixel| pixel[..3].iter().copied())
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .flat_map(|&[r, g, b, _]| [r, g, b])
         .collect();
     if settings["hardProof"].as_bool() == Some(true) {
         let Ok(proof) = proof_setup(proof, &settings["proof"]) else {
@@ -168,7 +170,8 @@ pub(super) fn print_preview_pixels(
         ) else {
             return Vec::new();
         };
-        for (rgba, rgb) in result.chunks_exact_mut(4).zip(preview.chunks_exact(3)) {
+        let (pixels, _) = result.as_chunks_mut::<4>();
+        for (rgba, rgb) in pixels.iter_mut().zip(preview.as_chunks::<3>().0) {
             rgba[..3].copy_from_slice(rgb);
         }
         if settings["gamut"].as_bool() == Some(true) {
@@ -182,7 +185,7 @@ pub(super) fn print_preview_pixels(
             let Ok(mask) = print_gamut_mask(&source, &setup) else {
                 return Vec::new();
             };
-            for (pixel, warning) in result.chunks_exact_mut(4).zip(mask) {
+            for (pixel, warning) in pixels.iter_mut().zip(mask) {
                 if warning {
                     pixel[..3].copy_from_slice(&[230, 0, 230]);
                 }
@@ -205,7 +208,7 @@ pub(super) fn print_preview_pixels(
         let Ok(mask) = print_gamut_mask(&source, &setup) else {
             return Vec::new();
         };
-        for (pixel, warning) in result.chunks_exact_mut(4).zip(mask) {
+        for (pixel, warning) in result.as_chunks_mut::<4>().0.iter_mut().zip(mask) {
             if warning {
                 pixel[..3].copy_from_slice(&[230, 0, 230]);
             }
@@ -285,7 +288,9 @@ impl PrintConversion {
     }
 
     fn flatten(&self, rgba: &[u8]) -> Vec<u8> {
-        rgba.chunks_exact(4)
+        rgba.as_chunks::<4>()
+            .0
+            .iter()
             .flat_map(|pixel| {
                 let alpha = u32::from(pixel[3]);
                 std::array::from_fn::<_, 3, _>(|channel| {
@@ -408,7 +413,7 @@ pub(super) fn print_document_raster(
     let native = flat_native_source(doc);
     let working = working_rgb(doc);
     let source = native.as_ref().map_or(&working, |(_, profile, _)| profile);
-    let conversion = match PrintConversion::new(&source, output, proof, &settings) {
+    let conversion = match PrintConversion::new(source, output, proof, &settings) {
         Ok(conversion) => conversion,
         Err(error) => return empty_raster(error),
     };
@@ -489,8 +494,10 @@ fn print_raster_display(raster: &PrintRaster) -> PrintRaster {
         Err(error) => return empty_raster(error.to_string()),
     };
     let rgba = rgb
-        .chunks_exact(3)
-        .flat_map(|pixel| [pixel[0], pixel[1], pixel[2], 255])
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .flat_map(|&[r, g, b]| [r, g, b, 255])
         .collect();
     rgb_raster(raster.width, raster.height, rgba)
 }
@@ -569,7 +576,8 @@ pub(super) fn print_document_preview(
     };
     let mut result = print_raster_display(&conversion.raster(width, height, samples));
     if let Some(mask) = mask {
-        for (pixel, warning) in result.samples.chunks_exact_mut(4).zip(mask) {
+        let (pixels, _) = result.samples.as_chunks_mut::<4>();
+        for (pixel, warning) in pixels.iter_mut().zip(mask) {
             if warning {
                 pixel[..3].copy_from_slice(&[230, 0, 230]);
             }
