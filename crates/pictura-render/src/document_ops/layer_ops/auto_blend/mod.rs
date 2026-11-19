@@ -8,8 +8,8 @@
 //! [`plan_auto_blend`] only reads, so it can run on a worker over a document
 //! clone; [`apply_auto_blend`] installs the result inside one edit.
 //!
-//! ponytail: video and 3D layers are not refused, because the document model has
-//! neither kind (#1110). They blend as the raster layers they load as.
+//! ponytail: a video or 3D layer is detected only by its preserved `PxSD`
+//! block; files that predate the documented key blend as raster content.
 //! ponytail: a layer's vector mask is ignored by the analysis.
 
 mod apply;
@@ -133,7 +133,7 @@ fn eligible(doc: &Document, path: &str) -> bool {
 }
 
 fn refused(layer: &Layer) -> bool {
-    layer.background || layer.smart_object().is_some() || layer.clipping
+    layer.background || layer.smart_object().is_some() || layer.is_video_or_3d() || layer.clipping
 }
 
 /// The eligible `paths`, bottom of the stack first.
@@ -147,8 +147,8 @@ fn targets<'a>(doc: &Document, paths: &[&'a str]) -> Vec<&'a str> {
 }
 
 /// Whether Auto-Blend applies to `paths`: an RGB or Grayscale document, no
-/// Background, Smart Object or clipped layer among them, and two eligible
-/// layers. A Smart Object outside `paths` does not matter.
+/// Background, Smart Object, video/3D or clipped layer among them, and two
+/// eligible layers. A refused layer outside `paths` does not matter.
 pub fn can_auto_blend(doc: &Document, paths: &[&str]) -> bool {
     blendable_mode(doc)
         && paths

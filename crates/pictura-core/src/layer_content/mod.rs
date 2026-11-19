@@ -156,6 +156,13 @@ impl Layer {
     pub fn is_type(&self) -> bool {
         matches!(self.content, LayerContent::Text(_))
     }
+    /// Whether the layer carries Photoshop's `PxSD` pixel-source block, which
+    /// the PSD specification documents as raw data for 3D or video layers.
+    /// Kooka does not model either kind; the block is preserved and the layer
+    /// renders as its raster content.
+    pub fn is_video_or_3d(&self) -> bool {
+        self.extra_block(b"PxSD").is_some()
+    }
     pub fn adjustment_parameters(&self) -> Option<&Adjustment> {
         match &self.content {
             LayerContent::Adjustment(value) => value.as_deref(),

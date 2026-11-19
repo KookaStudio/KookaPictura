@@ -1081,9 +1081,11 @@ Snapshot for resuming after a context break. Update after each milestone.
   follows the base layer; detail and colour follow the sharpest
   (`auto-blend-stack-tone`, `auto-blend-stack-colour`, tuned by eye on one
   photograph pair). Content Aware Fill Transparent Areas is post-CS6 and 8-bit
-  only. All approximated, behavioural parity only. Ceilings: Normal mode at 100 %
-  opacity, a 16 MP mask grid, no merged layer above 100 MP, vector masks ignored,
-  no video or 3D refusal (#1110).
+  only. All approximated, behavioural parity only. A video or 3D layer is refused
+  by detecting the preserved `PxSD` pixel-source block; files without that
+  documented key still blend as raster content (#1110). Ceilings: Normal mode at
+  100 % opacity, a 16 MP mask grid, no merged layer above 100 MP, vector masks
+  ignored.
   `replace_layer_mask` handles the stale `-2` plane for this
   command only (#1111). Auto-Align stays open (#582).
 - **Agent Control works in Flatpak and Snap builds** (#1079, OpenSpec change
