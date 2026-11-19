@@ -4,6 +4,24 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Art History motion — #1238 complete** (OpenSpec change
+  `art-history-motion`; capabilities `tools/art-history-motion`,
+  `tools/stroke-tile-save`, `compositing/region-present-backend`,
+  `compositing/pyramid-repair`, `verification/art-history-motion-profile`).
+  The stall was motion work, not press work. `ArtHistoryBrush::stamp_path`
+  stamps a stroke's tips in one row-parallel pass, with `TipParams` built once
+  and each row clipped to the tip's reach; output is byte-identical to
+  tip-by-tip stamping. `Saved::save` reads each 64 px tile once. The display's
+  region refresh uses the GPU only from 4 MP (`GPU_REGION_PIXELS`); on a
+  Radeon 780M the GPU cost ~1.1 ms per layer per call and lost to the CPU at
+  every side up to 4096. `TilePyramid::repair` skips level 0's straight rows
+  when no level-0 tile is cached, and `interleave` runs in parallel. The
+  profiler pins Art History's options and adds `art-history-textured` and
+  `history-brush-textured`, set up through the new `history` `brush_source`
+  op. At 8000×6000, motion p95 fell from 75 to 9–10 ms (textured) and from 53
+  to 8 ms (uniform), about 1.26× History Brush in the same build. Residuals:
+  first touch of the save planes, area-proportional present, press and
+  release (#1094, #1070).
 - **Merged-preview band buffers — #1423 complete** (OpenSpec change
   `merged-preview-band-buffers`; capability `codec/merged-preview-band-buffers`).
   `MergedPreview::region` allocates each band's rows (`band_buffer`, a zeroed
