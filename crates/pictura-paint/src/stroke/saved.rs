@@ -93,6 +93,7 @@ impl Saved {
             return;
         }
         let w = self.width as usize;
+        let mut tile = Vec::new();
         for ty in y0 / SAVED_TILE..=y1 / SAVED_TILE {
             for tx in x0 / SAVED_TILE..=x1 / SAVED_TILE {
                 let t = (ty * self.columns + tx) as usize;
@@ -109,17 +110,19 @@ impl Saved {
                     else {
                         continue;
                     };
-                    for y in top as usize..bottom {
-                        // Read the tile's row in place: a tiled plane must not
-                        // be materialized just to save one tile row.
-                        let (a, b) = (y * w + left as usize, (y * w + right).min(plane.len()));
+                    // One read per tile, not per row (#1238): a tiled plane
+                    // is never materialized, and a 64-row tile costs one
+                    // lookup instead of 64.
+                    let (xs, ys) = (left as usize..right, top as usize..bottom);
+                    let tw = xs.len();
+                    tile.clear();
+                    tile.resize(tw * ys.len(), 0);
+                    src.data
+                        .read_rect_into(xs.clone(), ys.clone(), w, &mut tile);
+                    for (row, y) in tile.chunks_exact(tw).zip(ys) {
+                        let (a, b) = (y * w + xs.start, (y * w + xs.end).min(plane.len()));
                         if a < b {
-                            src.data.read_rect_into(
-                                left as usize..right,
-                                y..y + 1,
-                                w,
-                                &mut plane[a..b],
-                            );
+                            plane[a..b].copy_from_slice(&row[..b - a]);
                         }
                     }
                 }

@@ -47,6 +47,12 @@ pub(super) const SYNC_PIXELS: u64 = 16_000_000;
 /// document; above it the tiles go stale and only the visible ones rebuild.
 pub(super) const REPAIR_PIXELS: u64 = 4_000_000;
 
+/// The smallest region refresh that composites on the GPU when GPU compute is
+/// on. Measured on a Radeon 780M (#1238): a region composite cost about
+/// 1.1 ms per layer on the GPU at any size, and the CPU won at every side up
+/// to 4096 px, so the floor sits at the repair limit.
+pub(super) const GPU_REGION_PIXELS: u64 = REPAIR_PIXELS;
+
 /// The view's tile cache and its worker queue. The cache sits in a `RefCell`
 /// because the canvas and the panels read crops through `&self`; everything
 /// runs on the GUI thread.
@@ -551,15 +557,16 @@ impl PictureViewRust {
             self.sync_mask_solo_region(clipped);
             return Some(clipped);
         }
+        let gpu = region_on_gpu(gpu_compute, area);
         let t = Instant::now();
         let refreshed = {
             let doc = self.session.doc.as_mut()?;
             let mut composite = DocumentComposite::new(doc);
             let scope = CompositeScope::Regions(vec![aligned]);
             if painting_mask {
-                composite.render(scope, gpu_compute)
+                composite.render(scope, gpu)
             } else {
-                composite.refresh(scope, gpu_compute)
+                composite.refresh(scope, gpu)
             }
         };
         paint_timing::record("rr_composite_region", t.elapsed());
@@ -663,6 +670,14 @@ impl PictureViewRust {
     pub(crate) fn tile_stats(&self) -> pictura_render::TileStats {
         self.tiles.cache.borrow().stats()
     }
+}
+
+/// Whether a region refresh of `area` level-0 pixels composites on the GPU.
+/// A small region pays the GPU's per-layer upload and readback for little
+/// work: below [`GPU_REGION_PIXELS`] the CPU oracle is several times faster
+/// (#1238).
+pub(super) fn region_on_gpu(gpu_compute: bool, area: u64) -> bool {
+    gpu_compute && area >= GPU_REGION_PIXELS
 }
 
 /// `region` (straight planar, covering `clipped`) grown to `aligned` by

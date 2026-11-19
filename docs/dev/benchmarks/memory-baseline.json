@@ -18,7 +18,8 @@
       "4G M12 was re-run alone after a harness fix (an absolute fixture path). The app refused the open: the PSD reader's image budget (#844) allows one document's planes three quarters of MemAvailable, and the fixture decodes to about 5.5 GB of planes. Recorded before the harness had a 'refused' outcome; reclassified from 'crash' with the app's message kept.",
       "Runs under 6G and just below RAM do not fit the 7.3 GiB reference laptop: a 6.3G run froze its desktop. #1224 recorded them on a 29 GiB x86_64 machine instead (6G, 8G, unlimited; each run carries its meta.machine).",
       "4250@1700M is the same catalogue at 4250x4250 (geometry scaled by the side) under MemoryMax=1700M, so later steps have peaks to compare on this machine.",
-      "#1224: 6G, 8G and unlimited are 17000x17000 on an AMD Ryzen 7 255 (16 cores, 29854 MiB, swap on) at commit 832df5af, after the memory governor (#1211) and tiled storage (#1212-#1218, #1320, #1321) landed, and with the catalogue grown to M1-M24. Every scenario is ok in all three. 'unlimited' ran with --force and no MemoryMax scope, about 23 GiB available, other programs closed. Peaks agree across the three runs within about 70 MiB, except M24 (Free Transform), which the governor holds to 5954 MiB under 6G against 6432 MiB unlimited. M1-M13 peak below 800 MiB here, where 4G on the laptop at e7029b38 OOM-killed or refused all of them."
+      "#1224: 6G, 8G and unlimited are 17000x17000 on an AMD Ryzen 7 255 (16 cores, 29854 MiB, swap on) at commit 832df5af, after the memory governor (#1211) and tiled storage (#1212-#1218, #1320, #1321) landed, and with the catalogue grown to M1-M24. Every scenario is ok in all three. 'unlimited' ran with --force and no MemoryMax scope, about 23 GiB available, other programs closed. Peaks agree across the three runs within about 70 MiB, except M24 (Free Transform), which the governor holds to 5954 MiB under 6G against 6432 MiB unlimited. M1-M13 peak below 800 MiB here, where 4G on the laptop at e7029b38 OOM-killed or refused all of them.",
+      "#1224 also recorded the same catalogue on a second host, for cross-machine agreement: `6G@i7-11700K` and `8G@i7-11700K`, plus `host@i7-11700K`, which is MemAvailable less 1.5 GiB rather than unlimited (18707M here). The machine is an 11th Gen Intel i7-11700K (16 cores, 64129 MiB, swap on) at commit 832df5af, recorded while other work ran. Every scenario is ok in all three; peaks agree with the Ryzen runs within 300 MiB (median about 120), so they track the engine, not the host."
     ]
   },
   "runs": {
@@ -984,6 +985,738 @@
           "peak_mb": 6432,
           "peak_added_mb": 5737,
           "rss_mb": 6415
+        }
+      }
+    },
+    "6G@i7-11700K": {
+      "meta": {
+        "document": "new 17000x17000",
+        "width": 17000,
+        "height": 17000,
+        "memory_max": "6G",
+        "machine": {
+          "cpu": "11th Gen Intel(R) Core(TM) i7-11700K @ 3.60GHz",
+          "cores": 16,
+          "mem_total_mib": 64129,
+          "kernel": "7.1.6-arch1-1",
+          "arch": "x86_64",
+          "qt": "6.11.1",
+          "commit": "832df5af081d4c50f0a571f3d421cdb36b195cb7"
+        }
+      },
+      "results": {
+        "M1": {
+          "gesture": "New document",
+          "outcome": "ok",
+          "total_ms": 2521.09,
+          "rss_before_mb": 301,
+          "peak_mb": 388,
+          "peak_added_mb": 86,
+          "rss_mb": 326
+        },
+        "M2": {
+          "gesture": "Add one empty layer",
+          "outcome": "ok",
+          "total_ms": 931.4,
+          "rss_before_mb": 326,
+          "peak_mb": 327,
+          "peak_added_mb": 1,
+          "rss_mb": 327
+        },
+        "M3": {
+          "gesture": "Marquee 1000² at centre, Edit > Fill on Background",
+          "outcome": "ok",
+          "total_ms": 973.5,
+          "rss_before_mb": 531,
+          "peak_mb": 546,
+          "peak_added_mb": 14,
+          "rss_mb": 546
+        },
+        "M4": {
+          "gesture": "Paint Bucket in the marquee on Layer 1",
+          "outcome": "ok",
+          "total_ms": 1270.68,
+          "rss_before_mb": 556,
+          "peak_mb": 571,
+          "peak_added_mb": 15,
+          "rss_mb": 571
+        },
+        "M5": {
+          "gesture": "Paint Bucket on Layer 1, no selection",
+          "outcome": "ok",
+          "total_ms": 3013.26,
+          "rss_before_mb": 646,
+          "peak_mb": 695,
+          "peak_added_mb": 49,
+          "rss_mb": 607
+        },
+        "M6": {
+          "gesture": "Brush 300 px hard, 4000 px stroke",
+          "outcome": "ok",
+          "total_ms": 2332.94,
+          "rss_before_mb": 583,
+          "peak_mb": 679,
+          "peak_added_mb": 95,
+          "rss_mb": 591
+        },
+        "M6x20": {
+          "gesture": "Twenty M6 brush strokes",
+          "outcome": "ok",
+          "total_ms": 9213.49,
+          "rss_before_mb": 542,
+          "peak_mb": 604,
+          "peak_added_mb": 61,
+          "rss_mb": 604
+        },
+        "M7": {
+          "gesture": "Undo x3, redo x3 after M3-M6",
+          "outcome": "ok",
+          "total_ms": 1503.03,
+          "rss_before_mb": 483,
+          "peak_mb": 628,
+          "peak_added_mb": 144,
+          "rss_mb": 628
+        },
+        "M8": {
+          "gesture": "Named snapshot, then restore it",
+          "outcome": "ok",
+          "total_ms": 950.07,
+          "rss_before_mb": 670,
+          "peak_mb": 702,
+          "peak_added_mb": 31,
+          "rss_mb": 696
+        },
+        "M9": {
+          "gesture": "Move the square by 500 px",
+          "outcome": "ok",
+          "total_ms": 1219.24,
+          "rss_before_mb": 631,
+          "peak_mb": 674,
+          "peak_added_mb": 42,
+          "rss_mb": 567
+        },
+        "M10": {
+          "gesture": "Free Transform the square 150 %, 15°",
+          "outcome": "ok",
+          "total_ms": 1380.53,
+          "rss_before_mb": 605,
+          "peak_mb": 643,
+          "peak_added_mb": 37,
+          "rss_mb": 581
+        },
+        "M11": {
+          "gesture": "Save as PSD",
+          "outcome": "ok",
+          "total_ms": 5694.21,
+          "rss_before_mb": 572,
+          "peak_mb": 732,
+          "peak_added_mb": 160,
+          "rss_mb": 650
+        },
+        "M12": {
+          "gesture": "Open the generated 4-layer PSD",
+          "outcome": "ok",
+          "total_ms": 2884.54,
+          "rss_before_mb": 301,
+          "peak_mb": 857,
+          "peak_added_mb": 555,
+          "rss_mb": 762
+        },
+        "M13": {
+          "gesture": "Fit, 100 %, pan across, fit",
+          "outcome": "ok",
+          "total_ms": 966.32,
+          "rss_before_mb": 326,
+          "peak_mb": 338,
+          "peak_added_mb": 11,
+          "rss_mb": 338
+        },
+        "M14": {
+          "gesture": "Warp a full-layer gradient, arc 50 %",
+          "outcome": "ok",
+          "total_ms": 63907.94,
+          "rss_before_mb": 1361,
+          "peak_mb": 5100,
+          "peak_added_mb": 3739,
+          "rss_mb": 3052
+        },
+        "M15": {
+          "gesture": "Image Size of a full-layer gradient to 150 %",
+          "outcome": "ok",
+          "total_ms": 79206.65,
+          "rss_before_mb": 1417,
+          "peak_mb": 3413,
+          "peak_added_mb": 1996,
+          "rss_mb": 3339
+        },
+        "M16": {
+          "gesture": "Canvas Size of a full-layer gradient to 150 %",
+          "outcome": "ok",
+          "total_ms": 17631.02,
+          "rss_before_mb": 1454,
+          "peak_mb": 1647,
+          "peak_added_mb": 193,
+          "rss_mb": 1524
+        },
+        "M17": {
+          "gesture": "Rotate a full-layer gradient 90° CW",
+          "outcome": "ok",
+          "total_ms": 5379.5,
+          "rss_before_mb": 1373,
+          "peak_mb": 2297,
+          "peak_added_mb": 924,
+          "rss_mb": 2215
+        },
+        "M18": {
+          "gesture": "Rotate a full-layer gradient 15°",
+          "outcome": "ok",
+          "total_ms": 45576.82,
+          "rss_before_mb": 1386,
+          "peak_mb": 2628,
+          "peak_added_mb": 1242,
+          "rss_mb": 2402
+        },
+        "M19": {
+          "gesture": "Free Transform a full-layer gradient to 50 %",
+          "outcome": "ok",
+          "total_ms": 11264.52,
+          "rss_before_mb": 1433,
+          "peak_mb": 1879,
+          "peak_added_mb": 445,
+          "rss_mb": 1820
+        },
+        "M20": {
+          "gesture": "Free Transform a full-layer gradient 100 %, 15°",
+          "outcome": "ok",
+          "total_ms": 35873.06,
+          "rss_before_mb": 1325,
+          "peak_mb": 2497,
+          "peak_added_mb": 1171,
+          "rss_mb": 2188
+        },
+        "M21": {
+          "gesture": "Free Transform a full-layer gradient to 150 %",
+          "outcome": "ok",
+          "total_ms": 67598.4,
+          "rss_before_mb": 1286,
+          "peak_mb": 3428,
+          "peak_added_mb": 2142,
+          "rss_mb": 3149
+        },
+        "M22": {
+          "gesture": "Perspective a full-layer gradient, top corners in by 25 %",
+          "outcome": "ok",
+          "total_ms": 30190.58,
+          "rss_before_mb": 1341,
+          "peak_mb": 2327,
+          "peak_added_mb": 985,
+          "rss_mb": 2320
+        },
+        "M23": {
+          "gesture": "Distort a full-layer gradient, top-left corner in by 12.5 %",
+          "outcome": "ok",
+          "total_ms": 71624.46,
+          "rss_before_mb": 1348,
+          "peak_mb": 2406,
+          "peak_added_mb": 1057,
+          "rss_mb": 2121
+        },
+        "M24": {
+          "gesture": "Open the 4-layer PSD, pan across it, fill on one layer, save",
+          "outcome": "ok",
+          "total_ms": 37052.58,
+          "rss_before_mb": 791,
+          "peak_mb": 6048,
+          "peak_added_mb": 5256,
+          "rss_mb": 5341
+        }
+      }
+    },
+    "8G@i7-11700K": {
+      "meta": {
+        "document": "new 17000x17000",
+        "width": 17000,
+        "height": 17000,
+        "memory_max": "8G",
+        "machine": {
+          "cpu": "11th Gen Intel(R) Core(TM) i7-11700K @ 3.60GHz",
+          "cores": 16,
+          "mem_total_mib": 64129,
+          "kernel": "7.1.6-arch1-1",
+          "arch": "x86_64",
+          "qt": "6.11.1",
+          "commit": "832df5af081d4c50f0a571f3d421cdb36b195cb7"
+        }
+      },
+      "results": {
+        "M1": {
+          "gesture": "New document",
+          "outcome": "ok",
+          "total_ms": 2815.3,
+          "rss_before_mb": 301,
+          "peak_mb": 399,
+          "peak_added_mb": 97,
+          "rss_mb": 367
+        },
+        "M2": {
+          "gesture": "Add one empty layer",
+          "outcome": "ok",
+          "total_ms": 932.32,
+          "rss_before_mb": 367,
+          "peak_mb": 368,
+          "peak_added_mb": 1,
+          "rss_mb": 368
+        },
+        "M3": {
+          "gesture": "Marquee 1000² at centre, Edit > Fill on Background",
+          "outcome": "ok",
+          "total_ms": 1497.42,
+          "rss_before_mb": 707,
+          "peak_mb": 725,
+          "peak_added_mb": 17,
+          "rss_mb": 725
+        },
+        "M4": {
+          "gesture": "Paint Bucket in the marquee on Layer 1",
+          "outcome": "ok",
+          "total_ms": 3668.05,
+          "rss_before_mb": 687,
+          "peak_mb": 711,
+          "peak_added_mb": 23,
+          "rss_mb": 693
+        },
+        "M5": {
+          "gesture": "Paint Bucket on Layer 1, no selection",
+          "outcome": "ok",
+          "total_ms": 4376.01,
+          "rss_before_mb": 582,
+          "peak_mb": 653,
+          "peak_added_mb": 71,
+          "rss_mb": 570
+        },
+        "M6": {
+          "gesture": "Brush 300 px hard, 4000 px stroke",
+          "outcome": "ok",
+          "total_ms": 3690.86,
+          "rss_before_mb": 597,
+          "peak_mb": 630,
+          "peak_added_mb": 32,
+          "rss_mb": 630
+        },
+        "M6x20": {
+          "gesture": "Twenty M6 brush strokes",
+          "outcome": "ok",
+          "total_ms": 18308.21,
+          "rss_before_mb": 640,
+          "peak_mb": 685,
+          "peak_added_mb": 44,
+          "rss_mb": 685
+        },
+        "M7": {
+          "gesture": "Undo x3, redo x3 after M3-M6",
+          "outcome": "ok",
+          "total_ms": 2489.62,
+          "rss_before_mb": 642,
+          "peak_mb": 668,
+          "peak_added_mb": 26,
+          "rss_mb": 594
+        },
+        "M8": {
+          "gesture": "Named snapshot, then restore it",
+          "outcome": "ok",
+          "total_ms": 1236.91,
+          "rss_before_mb": 645,
+          "peak_mb": 677,
+          "peak_added_mb": 31,
+          "rss_mb": 677
+        },
+        "M9": {
+          "gesture": "Move the square by 500 px",
+          "outcome": "ok",
+          "total_ms": 1326.53,
+          "rss_before_mb": 607,
+          "peak_mb": 674,
+          "peak_added_mb": 67,
+          "rss_mb": 674
+        },
+        "M10": {
+          "gesture": "Free Transform the square 150 %, 15°",
+          "outcome": "ok",
+          "total_ms": 1603.35,
+          "rss_before_mb": 614,
+          "peak_mb": 702,
+          "peak_added_mb": 88,
+          "rss_mb": 702
+        },
+        "M11": {
+          "gesture": "Save as PSD",
+          "outcome": "ok",
+          "total_ms": 7330.71,
+          "rss_before_mb": 651,
+          "peak_mb": 800,
+          "peak_added_mb": 148,
+          "rss_mb": 744
+        },
+        "M12": {
+          "gesture": "Open the generated 4-layer PSD",
+          "outcome": "ok",
+          "total_ms": 3119.25,
+          "rss_before_mb": 301,
+          "peak_mb": 873,
+          "peak_added_mb": 572,
+          "rss_mb": 794
+        },
+        "M13": {
+          "gesture": "Fit, 100 %, pan across, fit",
+          "outcome": "ok",
+          "total_ms": 971.95,
+          "rss_before_mb": 326,
+          "peak_mb": 337,
+          "peak_added_mb": 11,
+          "rss_mb": 337
+        },
+        "M14": {
+          "gesture": "Warp a full-layer gradient, arc 50 %",
+          "outcome": "ok",
+          "total_ms": 112429.86,
+          "rss_before_mb": 1313,
+          "peak_mb": 4992,
+          "peak_added_mb": 3678,
+          "rss_mb": 4729
+        },
+        "M15": {
+          "gesture": "Image Size of a full-layer gradient to 150 %",
+          "outcome": "ok",
+          "total_ms": 100773.18,
+          "rss_before_mb": 1373,
+          "peak_mb": 3395,
+          "peak_added_mb": 2021,
+          "rss_mb": 3316
+        },
+        "M16": {
+          "gesture": "Canvas Size of a full-layer gradient to 150 %",
+          "outcome": "ok",
+          "total_ms": 11537.41,
+          "rss_before_mb": 1385,
+          "peak_mb": 1589,
+          "peak_added_mb": 204,
+          "rss_mb": 1462
+        },
+        "M17": {
+          "gesture": "Rotate a full-layer gradient 90° CW",
+          "outcome": "ok",
+          "total_ms": 7895.37,
+          "rss_before_mb": 1384,
+          "peak_mb": 2305,
+          "peak_added_mb": 921,
+          "rss_mb": 2215
+        },
+        "M18": {
+          "gesture": "Rotate a full-layer gradient 15°",
+          "outcome": "ok",
+          "total_ms": 58053.74,
+          "rss_before_mb": 1419,
+          "peak_mb": 2506,
+          "peak_added_mb": 1086,
+          "rss_mb": 2505
+        },
+        "M19": {
+          "gesture": "Free Transform a full-layer gradient to 50 %",
+          "outcome": "ok",
+          "total_ms": 24740.46,
+          "rss_before_mb": 1408,
+          "peak_mb": 1827,
+          "peak_added_mb": 418,
+          "rss_mb": 1750
+        },
+        "M20": {
+          "gesture": "Free Transform a full-layer gradient 100 %, 15°",
+          "outcome": "ok",
+          "total_ms": 71691.46,
+          "rss_before_mb": 1373,
+          "peak_mb": 2560,
+          "peak_added_mb": 1186,
+          "rss_mb": 2282
+        },
+        "M21": {
+          "gesture": "Free Transform a full-layer gradient to 150 %",
+          "outcome": "ok",
+          "total_ms": 117405.82,
+          "rss_before_mb": 1328,
+          "peak_mb": 3481,
+          "peak_added_mb": 2153,
+          "rss_mb": 3198
+        },
+        "M22": {
+          "gesture": "Perspective a full-layer gradient, top corners in by 25 %",
+          "outcome": "ok",
+          "total_ms": 43859.22,
+          "rss_before_mb": 1444,
+          "peak_mb": 2359,
+          "peak_added_mb": 914,
+          "rss_mb": 2339
+        },
+        "M23": {
+          "gesture": "Distort a full-layer gradient, top-left corner in by 12.5 %",
+          "outcome": "ok",
+          "total_ms": 39416.32,
+          "rss_before_mb": 1360,
+          "peak_mb": 2358,
+          "peak_added_mb": 998,
+          "rss_mb": 2316
+        },
+        "M24": {
+          "gesture": "Open the 4-layer PSD, pan across it, fill on one layer, save",
+          "outcome": "ok",
+          "total_ms": 22347.71,
+          "rss_before_mb": 802,
+          "peak_mb": 6422,
+          "peak_added_mb": 5619,
+          "rss_mb": 6405
+        }
+      }
+    },
+    "host@i7-11700K": {
+      "meta": {
+        "document": "new 17000x17000",
+        "width": 17000,
+        "height": 17000,
+        "memory_max": "18707M",
+        "machine": {
+          "cpu": "11th Gen Intel(R) Core(TM) i7-11700K @ 3.60GHz",
+          "cores": 16,
+          "mem_total_mib": 64129,
+          "kernel": "7.1.6-arch1-1",
+          "arch": "x86_64",
+          "qt": "6.11.1",
+          "commit": "832df5af081d4c50f0a571f3d421cdb36b195cb7"
+        }
+      },
+      "results": {
+        "M1": {
+          "gesture": "New document",
+          "outcome": "ok",
+          "total_ms": 2602.89,
+          "rss_before_mb": 302,
+          "peak_mb": 389,
+          "peak_added_mb": 86,
+          "rss_mb": 327
+        },
+        "M2": {
+          "gesture": "Add one empty layer",
+          "outcome": "ok",
+          "total_ms": 949.91,
+          "rss_before_mb": 371,
+          "peak_mb": 372,
+          "peak_added_mb": 1,
+          "rss_mb": 372
+        },
+        "M3": {
+          "gesture": "Marquee 1000² at centre, Edit > Fill on Background",
+          "outcome": "ok",
+          "total_ms": 4657.41,
+          "rss_before_mb": 666,
+          "peak_mb": 711,
+          "peak_added_mb": 44,
+          "rss_mb": 610
+        },
+        "M4": {
+          "gesture": "Paint Bucket in the marquee on Layer 1",
+          "outcome": "ok",
+          "total_ms": 2973.35,
+          "rss_before_mb": 560,
+          "peak_mb": 575,
+          "peak_added_mb": 15,
+          "rss_mb": 575
+        },
+        "M5": {
+          "gesture": "Paint Bucket on Layer 1, no selection",
+          "outcome": "ok",
+          "total_ms": 1537.87,
+          "rss_before_mb": 633,
+          "peak_mb": 640,
+          "peak_added_mb": 6,
+          "rss_mb": 640
+        },
+        "M6": {
+          "gesture": "Brush 300 px hard, 4000 px stroke",
+          "outcome": "ok",
+          "total_ms": 3624.78,
+          "rss_before_mb": 641,
+          "peak_mb": 741,
+          "peak_added_mb": 100,
+          "rss_mb": 663
+        },
+        "M6x20": {
+          "gesture": "Twenty M6 brush strokes",
+          "outcome": "ok",
+          "total_ms": 17964.37,
+          "rss_before_mb": 633,
+          "peak_mb": 778,
+          "peak_added_mb": 145,
+          "rss_mb": 703
+        },
+        "M7": {
+          "gesture": "Undo x3, redo x3 after M3-M6",
+          "outcome": "ok",
+          "total_ms": 2365.93,
+          "rss_before_mb": 706,
+          "peak_mb": 705,
+          "peak_added_mb": -1,
+          "rss_mb": 647
+        },
+        "M8": {
+          "gesture": "Named snapshot, then restore it",
+          "outcome": "ok",
+          "total_ms": 1136.44,
+          "rss_before_mb": 802,
+          "peak_mb": 833,
+          "peak_added_mb": 30,
+          "rss_mb": 827
+        },
+        "M9": {
+          "gesture": "Move the square by 500 px",
+          "outcome": "ok",
+          "total_ms": 1567.5,
+          "rss_before_mb": 687,
+          "peak_mb": 734,
+          "peak_added_mb": 46,
+          "rss_mb": 734
+        },
+        "M10": {
+          "gesture": "Free Transform the square 150 %, 15°",
+          "outcome": "ok",
+          "total_ms": 2317.91,
+          "rss_before_mb": 660,
+          "peak_mb": 735,
+          "peak_added_mb": 75,
+          "rss_mb": 707
+        },
+        "M11": {
+          "gesture": "Save as PSD",
+          "outcome": "ok",
+          "total_ms": 10399.41,
+          "rss_before_mb": 634,
+          "peak_mb": 758,
+          "peak_added_mb": 124,
+          "rss_mb": 703
+        },
+        "M12": {
+          "gesture": "Open the generated 4-layer PSD",
+          "outcome": "ok",
+          "total_ms": 3739.73,
+          "rss_before_mb": 302,
+          "peak_mb": 897,
+          "peak_added_mb": 595,
+          "rss_mb": 828
+        },
+        "M13": {
+          "gesture": "Fit, 100 %, pan across, fit",
+          "outcome": "ok",
+          "total_ms": 1022.54,
+          "rss_before_mb": 326,
+          "peak_mb": 338,
+          "peak_added_mb": 11,
+          "rss_mb": 338
+        },
+        "M14": {
+          "gesture": "Warp a full-layer gradient, arc 50 %",
+          "outcome": "ok",
+          "total_ms": 99820.81,
+          "rss_before_mb": 1421,
+          "peak_mb": 5102,
+          "peak_added_mb": 3681,
+          "rss_mb": 3072
+        },
+        "M15": {
+          "gesture": "Image Size of a full-layer gradient to 150 %",
+          "outcome": "ok",
+          "total_ms": 85322.05,
+          "rss_before_mb": 1347,
+          "peak_mb": 3329,
+          "peak_added_mb": 1982,
+          "rss_mb": 3256
+        },
+        "M16": {
+          "gesture": "Canvas Size of a full-layer gradient to 150 %",
+          "outcome": "ok",
+          "total_ms": 6157.25,
+          "rss_before_mb": 1418,
+          "peak_mb": 1565,
+          "peak_added_mb": 146,
+          "rss_mb": 1565
+        },
+        "M17": {
+          "gesture": "Rotate a full-layer gradient 90° CW",
+          "outcome": "ok",
+          "total_ms": 5695.96,
+          "rss_before_mb": 1461,
+          "peak_mb": 2394,
+          "peak_added_mb": 933,
+          "rss_mb": 2293
+        },
+        "M18": {
+          "gesture": "Rotate a full-layer gradient 15°",
+          "outcome": "ok",
+          "total_ms": 42156.86,
+          "rss_before_mb": 1350,
+          "peak_mb": 2554,
+          "peak_added_mb": 1204,
+          "rss_mb": 2347
+        },
+        "M19": {
+          "gesture": "Free Transform a full-layer gradient to 50 %",
+          "outcome": "ok",
+          "total_ms": 12529.22,
+          "rss_before_mb": 1321,
+          "peak_mb": 1718,
+          "peak_added_mb": 396,
+          "rss_mb": 1500
+        },
+        "M20": {
+          "gesture": "Free Transform a full-layer gradient 100 %, 15°",
+          "outcome": "ok",
+          "total_ms": 33306.22,
+          "rss_before_mb": 1317,
+          "peak_mb": 2426,
+          "peak_added_mb": 1108,
+          "rss_mb": 2371
+        },
+        "M21": {
+          "gesture": "Free Transform a full-layer gradient to 150 %",
+          "outcome": "ok",
+          "total_ms": 66385.11,
+          "rss_before_mb": 1381,
+          "peak_mb": 3542,
+          "peak_added_mb": 2161,
+          "rss_mb": 3267
+        },
+        "M22": {
+          "gesture": "Perspective a full-layer gradient, top corners in by 25 %",
+          "outcome": "ok",
+          "total_ms": 29997.29,
+          "rss_before_mb": 1337,
+          "peak_mb": 2242,
+          "peak_added_mb": 904,
+          "rss_mb": 2211
+        },
+        "M23": {
+          "gesture": "Distort a full-layer gradient, top-left corner in by 12.5 %",
+          "outcome": "ok",
+          "total_ms": 36334.23,
+          "rss_before_mb": 1433,
+          "peak_mb": 2435,
+          "peak_added_mb": 1002,
+          "rss_mb": 2166
+        },
+        "M24": {
+          "gesture": "Open the 4-layer PSD, pan across it, fill on one layer, save",
+          "outcome": "ok",
+          "total_ms": 22544.53,
+          "rss_before_mb": 790,
+          "peak_mb": 6486,
+          "peak_added_mb": 5696,
+          "rss_mb": 6469
         }
       }
     }

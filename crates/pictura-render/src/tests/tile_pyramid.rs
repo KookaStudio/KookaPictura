@@ -400,3 +400,74 @@ fn a_stand_in_paints_only_stale_tiles() {
         "a current tile is untouched"
     );
 }
+
+/// Zoomed out, only coarse tiles are cached: the repair halves the region into
+/// them without building level 0's straight rows (#1238), and matches a
+/// rebuild.
+#[test]
+fn a_repair_with_only_coarse_tiles_cached_matches_a_rebuild() {
+    let mut doc = seeded_doc(5);
+    let mut cache = TilePyramid::new(W, H, u64::MAX);
+    {
+        let src = source(&doc);
+        for level in 1..3 {
+            let (lw, lh) = cache.level_size(level);
+            for key in cache.keys_in(TileSource::Composite, level, whole(lw, lh)) {
+                let rect = cache.tile_rect(key);
+                cache.insert(key, build_tile(None, key, rect, (W, H), &src));
+            }
+        }
+    }
+    let top = doc.layers.iter().last().expect("top").rect;
+    let dirty = PsdRect {
+        top: top.top.max(0) + 2,
+        left: top.left.max(0) + 4,
+        bottom: top.top.max(0) + 50,
+        right: top.left.max(0) + 61,
+    };
+    edit(&mut doc, dirty);
+    let aligned = cache.repair_rect(dirty);
+    cache.repair(
+        TileSource::Composite,
+        aligned,
+        &composite_region(&doc, aligned),
+    );
+    let level0 = cache.keys_in(TileSource::Composite, 0, whole(W, H));
+    assert!(
+        level0.iter().all(|&key| cache.get(key).is_none()),
+        "no level-0 tile appears"
+    );
+    let mut fresh = TilePyramid::new(W, H, u64::MAX);
+    fill(&mut fresh, &doc, 3);
+    for level in 1..3 {
+        let (lw, lh) = cache.level_size(level);
+        for key in cache.keys_in(TileSource::Composite, level, whole(lw, lh)) {
+            assert_eq!(
+                cache.get(key).as_deref(),
+                fresh.get(key).as_deref(),
+                "{key:?} equals a rebuild after the repair"
+            );
+        }
+    }
+}
+
+#[test]
+fn interleave_matches_a_serial_copy() {
+    let doc = seeded_doc(3);
+    let rect = PsdRect {
+        top: 3,
+        left: 7,
+        bottom: H as i32 - 5,
+        right: W as i32 - 2,
+    };
+    let planar = composite_region(&doc, rect);
+    let (w, h) = (planar.width as usize, planar.height as usize);
+    let bytes = planar.data.to_vec();
+    let mut serial = vec![0u8; w * h * 4];
+    for c in 0..4 {
+        for i in 0..w * h {
+            serial[i * 4 + c] = bytes[c * w * h + i];
+        }
+    }
+    assert_eq!(interleave(&planar), serial);
+}

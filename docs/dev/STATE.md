@@ -13,6 +13,24 @@ Snapshot for resuming after a context break. Update after each milestone.
   retained 32-bit source store as well as a 32-bit working document, so the
   32-bpc UI gate keeps the tools unavailable. Tests: the `tone_native` units and
   `tst_retouch_tools::sixteenBitDodgeLightsTheCanvas`.
+- **Art History motion — #1238 complete** (OpenSpec change
+  `art-history-motion`; capabilities `tools/art-history-motion`,
+  `tools/stroke-tile-save`, `compositing/region-present-backend`,
+  `compositing/pyramid-repair`, `verification/art-history-motion-profile`).
+  The stall was motion work, not press work. `ArtHistoryBrush::stamp_path`
+  stamps a stroke's tips in one row-parallel pass, with `TipParams` built once
+  and each row clipped to the tip's reach; output is byte-identical to
+  tip-by-tip stamping. `Saved::save` reads each 64 px tile once. The display's
+  region refresh uses the GPU only from 4 MP (`GPU_REGION_PIXELS`); on a
+  Radeon 780M the GPU cost ~1.1 ms per layer per call and lost to the CPU at
+  every side up to 4096. `TilePyramid::repair` skips level 0's straight rows
+  when no level-0 tile is cached, and `interleave` runs in parallel. The
+  profiler pins Art History's options and adds `art-history-textured` and
+  `history-brush-textured`, set up through the new `history` `brush_source`
+  op. At 8000×6000, motion p95 fell from 75 to 9–10 ms (textured) and from 53
+  to 8 ms (uniform), about 1.26× History Brush in the same build. Residuals:
+  first touch of the save planes, area-proportional present, press and
+  release (#1094, #1070).
 - **Merged-preview band buffers — #1423 complete** (OpenSpec change
   `merged-preview-band-buffers`; capability `codec/merged-preview-band-buffers`).
   `MergedPreview::region` allocates each band's rows (`band_buffer`, a zeroed
@@ -804,7 +822,10 @@ Snapshot for resuming after a context break. Update after each milestone.
   catalogue. Runs at 6G and above need a machine with at least 16 GB;
   #1224 recorded `6G`, `8G` and `unlimited` (M1–M24 at 17000²) on a 29 GiB
   Ryzen 7 255: every scenario ok, M24's Free Transform the largest peak (6432
-  MiB unlimited, held to 5954 MiB under 6G).
+  MiB unlimited, held to 5954 MiB under 6G). A second host (i7-11700K, 64 GiB,
+  recorded while other work ran) adds `6G@i7-11700K`, `8G@i7-11700K` and a
+  capped `host@i7-11700K`: every row ok, peaks within 300 MiB of the Ryzen
+  runs.
 - **Content-sized pixel layers** (#1208, OpenSpec change
   `grow-pixel-layers`). A new pixel layer stores a 0×0 rect with no planes, so
   Add Layer (M2) adds no pixel bytes. `pictura_core::layer_bounds::grow_layer_to`
