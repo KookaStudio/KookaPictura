@@ -52,6 +52,7 @@ pub use normalize_content::{edit_layer, layer_from_parts, retire_layer_content};
 mod source_content;
 mod stage_content;
 pub use layer_content::*;
+pub use stage_content::encoded_fill as encode_fill_content;
 mod lazy;
 mod lens_correction;
 mod live_shape;

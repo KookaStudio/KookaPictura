@@ -27,7 +27,10 @@ pub fn add_shape_layer(
 ) -> String {
     let name = next_layer_name(doc, name);
     let (width, height) = (doc.width, doc.height);
-    let created = add_solid_fill(doc, selection_path, rgba);
+    // ponytail: the shape fill model is RGB-only (`shape_fill` returns
+    // `[u8; 3]`), so a translucent shape would lose its alpha on the next fill
+    // edit; keep shapes opaque until the model carries alpha.
+    let created = add_solid_fill(doc, selection_path, [rgba[0], rgba[1], rgba[2], 255]);
     if let Some(layer) = resolve_path_mut(doc, &created) {
         layer.name = name;
         layer.pixel_data_irrelevant = true;

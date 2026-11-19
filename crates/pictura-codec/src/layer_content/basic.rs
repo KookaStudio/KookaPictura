@@ -502,7 +502,8 @@ pub fn encode_photo_filter(
 
 /// `SoCo`: the standard PSD solid-color fill descriptor. `Clr ` is an
 /// `RGBC` object carrying the three components as `doub` values on the
-/// `0..=255` scale. The descriptor has no alpha, so authored fills are opaque.
+/// `0..=255` scale. The descriptor has no alpha, so fills authored through
+/// this encoder are opaque; use `encode_fill_content` when alpha must survive.
 pub fn encode_solid_color_fill(color: [u8; 3]) -> AdjustmentData {
     let clr = DescValue::Object {
         name: String::new(),

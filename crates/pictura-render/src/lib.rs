@@ -78,7 +78,7 @@ pub use composite::{
     encode_threshold,
 };
 pub use composite_request::{composite, CompositeRequest};
-pub use pictura_codec::decode_fill;
+pub use pictura_codec::{decode_fill, encode_fill_content};
 pub use pyramid_level::{PyramidLevel, SMALLEST_SIDE, TILE};
 #[cfg(any(test, feature = "test-oracle"))]
 pub use view_pyramid::{Planes, ViewPyramid};

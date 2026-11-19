@@ -1124,3 +1124,31 @@ fn channel_mixer_monochrome_toggle() {
     assert_eq!(value("1.green"), 100.0);
     assert_eq!(value("2.blue"), 100.0);
 }
+
+#[test]
+fn solid_fill_encoder_preserves_alpha() {
+    let translucent =
+        crate::encode_fill_content(&pictura_core::FillContent::Solid([10, 20, 30, 40]));
+    assert_eq!(translucent.key, *b"SoCo");
+    assert_eq!(translucent.data.as_slice(), &[10u8, 20, 30, 40][..]);
+    assert_eq!(
+        crate::decode_fill(&translucent),
+        Some(pictura_core::FillContent::Solid([10, 20, 30, 40]))
+    );
+
+    let transparent =
+        crate::encode_fill_content(&pictura_core::FillContent::Solid([10, 20, 30, 0]));
+    assert_eq!(transparent.data.as_slice(), &[10u8, 20, 30, 0][..]);
+    assert_eq!(
+        crate::decode_fill(&transparent),
+        Some(pictura_core::FillContent::Solid([10, 20, 30, 0]))
+    );
+
+    let opaque = crate::encode_fill_content(&pictura_core::FillContent::Solid([10, 20, 30, 255]));
+    assert!(opaque.data.len() > 4, "an opaque fill keeps the descriptor");
+    assert_eq!(&opaque.data.as_slice()[..4], &[0, 0, 0, 16], "version 16");
+    assert_eq!(
+        crate::decode_fill(&opaque),
+        Some(pictura_core::FillContent::Solid([10, 20, 30, 255]))
+    );
+}

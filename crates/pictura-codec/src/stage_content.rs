@@ -47,7 +47,11 @@ pub(crate) fn edit_layer_staged<T>(
     Ok(result)
 }
 
-pub(crate) fn encoded_fill(fill: &FillContent) -> AdjustmentData {
+/// Encode a fill for a layer's content payload. An opaque solid takes the
+/// standard version-16 `SoCo` descriptor; any other alpha takes the 4-byte
+/// `[r, g, b, a]` tuple, which the decoder, compositor, and writer all read.
+/// Gradient and pattern fills delegate to their own encoders.
+pub fn encoded_fill(fill: &FillContent) -> AdjustmentData {
     match fill {
         FillContent::Solid(color) if color[3] != 255 => AdjustmentData {
             key: *b"SoCo",
