@@ -1,7 +1,7 @@
 use super::*;
 use pictura_core::{
-    BitDepth, ColorMode, Document, LayerStack, Plane, PsdRect, Samples, SmartObject,
-    SourceChannels, SourcePlanes,
+    BitDepth, Channel, ColorMode, Document, LayerContent, LayerParts, LayerStack, Plane, PsdRect,
+    Samples, SmartObject, SourceChannels, SourcePlanes,
 };
 
 fn depth16_doc() -> Document {
@@ -186,6 +186,89 @@ fn a_native_plane_edit_forks_only_that_plane() {
         share_u16(u16_plane(before, 1), u16_plane(after, 1)),
         "the untouched plane stays shared"
     );
+}
+
+fn tone_depth16_doc() -> Document {
+    let rect = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: 4,
+        right: 4,
+    };
+    let plane = vec![1000u16; 16];
+    let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
+    doc.source
+        .set_native(
+            Some(BitDepth::Sixteen),
+            Some(SourcePlanes {
+                depth: BitDepth::Sixteen,
+                width: 4,
+                height: 4,
+                samples: Samples::U16(vec![1; 48].into()),
+            }),
+        )
+        .expect("valid native source");
+    doc.layers = LayerStack::from_layers(vec![pictura_core::Layer::from_parts(
+        LayerParts {
+            rect,
+            channels: [0i16, 1, 2]
+                .into_iter()
+                .map(|id| Channel {
+                    id,
+                    data: Samples::U16(plane.clone().into()).narrow_to_u8().into(),
+                })
+                .collect(),
+            source_channels: Some(SourceChannels::new(
+                BitDepth::Sixteen,
+                rect,
+                [0i16, 1, 2]
+                    .into_iter()
+                    .map(|id| (id, Samples::U16(plane.clone().into())))
+                    .collect(),
+            )),
+            ..Default::default()
+        },
+        LayerContent::Pixel,
+    )]);
+    doc
+}
+
+#[test]
+fn a_depth16_tone_stroke_undoes_to_the_native_samples() {
+    let mut history = History::default();
+    let mut doc = tone_depth16_doc();
+    let mut selection = Some(Selection::all(4, 4));
+    let mut target = LayerTarget::default();
+    history.capture_live(&mut doc, &selection, &target, "Open");
+    let before = u16_plane(&doc, 0).to_vec();
+    let cfg = pictura_paint::StrokeConfig {
+        diameter: 3,
+        ..Default::default()
+    };
+    let options = pictura_paint::tone::ToneOptions {
+        tone: pictura_paint::tone::Tone::Dodge,
+        amount: 1.0,
+        ..Default::default()
+    };
+    let mut stroke = pictura_paint::Stroke::begin_tone(&doc, "0", cfg, options).expect("begin");
+    stroke.sample(
+        &mut doc,
+        pictura_paint::StrokeSample {
+            x: 2.0,
+            y: 2.0,
+            pressure: 1.0,
+        },
+    );
+    assert!(
+        stroke.finish().is_some(),
+        "the stroke did not change pixels"
+    );
+    history.capture_live(&mut doc, &selection, &target, "Dodge");
+    assert_ne!(u16_plane(&doc, 0).as_slice(), before.as_slice());
+    history
+        .undo_live(&mut doc, &mut selection, &mut target)
+        .expect("undo after a 16-bit tone stroke");
+    assert_eq!(u16_plane(&doc, 0).as_slice(), before.as_slice());
 }
 
 #[test]

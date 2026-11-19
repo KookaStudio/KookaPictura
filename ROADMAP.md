@@ -229,6 +229,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       and Multichannel (#547)
 - [x] Grayscale Sponge, the airbrush toggle, quick keys, and 32-bpc
       availability (#548)
+- [x] 16-bit Dodge, Burn and Sponge operation (#1421)
 - [ ] Magic-eraser background conversion, background-eraser edge halo, and pen
       pressure (#549)
 - [ ] Gradient and Paint Bucket availability gates, Gradient Editor

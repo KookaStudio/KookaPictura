@@ -12,6 +12,7 @@ use crate::spacing::DabPlacer;
 use crate::stamp::StampSource;
 use crate::tip::TipParams;
 use crate::tone::{ToneBrush, ToneOptions};
+use crate::tone_native::NativeToneBrush;
 use crate::{PaintMode, Rgba, StrokeConfig, StrokeSample};
 use pictura_core::{
     layer_pixel_locked, layer_transparency_locked, BitDepth, ColorMode, Document, Layer, Plane,
@@ -62,6 +63,8 @@ enum DabEngine {
     Focus(FocusBrush),
     Smudge(SmudgeBrush),
     Tone(ToneBrush),
+    /// A 16-bpc tone stroke over the layer's retained native planes.
+    ToneNative(NativeToneBrush),
 }
 
 /// A per-dab engine and the layer pixels it edits in place.
@@ -75,141 +78,6 @@ struct PerDab {
 pub struct StrokeOutcome {
     pub document: Document,
     pub dirty: PsdRect,
-}
-
-/// Tile edge of the pre-stroke pixels a stroke keeps: a dab saves the tiles it
-/// is about to write, the first time it reaches them.
-const SAVED_TILE: i32 = 64;
-
-/// The target layer's pre-stroke pixels, saved a tile at a time just before a
-/// dab first writes the tile. The planes are layer-sized but zero-filled by the
-/// allocator, so only the saved tiles ever take memory.
-struct Saved {
-    planes: [Option<Vec<u8>>; 4],
-    tiles: Vec<bool>,
-    columns: i32,
-    /// The target layer's bounds when the stroke began.
-    rect: PsdRect,
-    width: i32,
-    height: i32,
-}
-
-impl Saved {
-    fn new(layer: &Layer, ch: PlaneIndex) -> Self {
-        let width = layer.rect.width().max(0);
-        let height = layer.rect.height().max(0);
-        let columns = (width + SAVED_TILE - 1) / SAVED_TILE;
-        let rows = (height + SAVED_TILE - 1) / SAVED_TILE;
-        let planes = ch.map(|k| {
-            k.and_then(|k| layer.channels().get(k))
-                .map(|c| vec![0u8; c.data.len()])
-        });
-        Self {
-            planes,
-            tiles: vec![false; (columns * rows) as usize],
-            columns,
-            rect: layer.rect,
-            width,
-            height,
-        }
-    }
-
-    /// Save every unsaved tile meeting the layer-local box `[x0, x1] × [y0, y1]`
-    /// (inclusive, clamped to the layer) from `layer`, which still holds them
-    /// unpainted.
-    fn save(&mut self, layer: &Layer, ch: PlaneIndex, x0: i32, y0: i32, x1: i32, y1: i32) {
-        let (x0, y0) = (x0.max(0), y0.max(0));
-        let (x1, y1) = (x1.min(self.width - 1), y1.min(self.height - 1));
-        if x1 < x0 || y1 < y0 {
-            return;
-        }
-        let w = self.width as usize;
-        let mut tile = Vec::new();
-        for ty in y0 / SAVED_TILE..=y1 / SAVED_TILE {
-            for tx in x0 / SAVED_TILE..=x1 / SAVED_TILE {
-                let t = (ty * self.columns + tx) as usize;
-                if self.tiles[t] {
-                    continue;
-                }
-                self.tiles[t] = true;
-                let (left, top) = (tx * SAVED_TILE, ty * SAVED_TILE);
-                let right = (left + SAVED_TILE).min(self.width) as usize;
-                let bottom = (top + SAVED_TILE).min(self.height) as usize;
-                for (k, plane) in self.planes.iter_mut().enumerate() {
-                    let (Some(plane), Some(src)) =
-                        (plane.as_mut(), ch[k].and_then(|k| layer.channels().get(k)))
-                    else {
-                        continue;
-                    };
-                    // One read per tile, not per row (#1238): a tiled plane
-                    // is never materialized, and a 64-row tile costs one
-                    // lookup instead of 64.
-                    let (xs, ys) = (left as usize..right, top as usize..bottom);
-                    let tw = xs.len();
-                    tile.clear();
-                    tile.resize(tw * ys.len(), 0);
-                    src.data
-                        .read_rect_into(xs.clone(), ys.clone(), w, &mut tile);
-                    for (row, y) in tile.chunks_exact(tw).zip(ys) {
-                        let (a, b) = (y * w + xs.start, (y * w + xs.end).min(plane.len()));
-                        if a < b {
-                            plane[a..b].copy_from_slice(&row[..b - a]);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// Whether `layer` still has the planes and bounds this stroke began on. A
-    /// document restructured or a target moved under a live stroke is refused
-    /// rather than painted at stale coordinates or indexed out of bounds.
-    fn fits(&self, layer: &Layer, ch: PlaneIndex) -> bool {
-        layer.rect == self.rect
-            && self
-                .planes
-                .iter()
-                .zip(ch)
-                .all(|(plane, k)| match (plane, k) {
-                    (Some(plane), Some(k)) => layer
-                        .channels()
-                        .get(k)
-                        .is_some_and(|c| c.data.len() == plane.len()),
-                    (None, None) => true,
-                    _ => false,
-                })
-    }
-
-    fn planes(&self) -> [Option<&[u8]>; 4] {
-        [0, 1, 2, 3].map(|k| self.planes[k].as_deref())
-    }
-
-    /// Write every saved tile back into `layer`.
-    fn restore(&self, layer: &mut Layer, ch: PlaneIndex) {
-        let w = self.width as usize;
-        for (t, _) in self.tiles.iter().enumerate().filter(|(_, saved)| **saved) {
-            let (tx, ty) = (t as i32 % self.columns, t as i32 / self.columns);
-            let (left, top) = (tx * SAVED_TILE, ty * SAVED_TILE);
-            let right = (left + SAVED_TILE).min(self.width) as usize;
-            let bottom = (top + SAVED_TILE).min(self.height) as usize;
-            for (k, plane) in self.planes.iter().enumerate() {
-                let (Some(plane), Some(k)) = (plane.as_ref(), ch[k]) else {
-                    continue;
-                };
-                let Some(dst) = layer.channels_mut().get_mut(k) else {
-                    continue;
-                };
-                for y in top as usize..bottom {
-                    let (a, b) = (y * w + left as usize, (y * w + right).min(plane.len()));
-                    if a < b {
-                        dst.data
-                            .write_rect_from(left as usize..right, y..y + 1, w, &plane[a..b]);
-                    }
-                }
-                dst.data.settle();
-            }
-        }
-    }
 }
 
 pub struct SampledTip {
@@ -483,28 +351,58 @@ impl Stroke {
         })
     }
 
-    /// Start a Dodge, Burn, or Sponge stroke. 8-bit documents only.
+    /// Start a Dodge, Burn, or Sponge stroke. 8-bit and 16-bpc documents; a
+    /// 16-bpc layer with an authoritative native store is toned at 16 bits.
     pub fn begin_tone(
         doc: &Document,
         path: &str,
         cfg: StrokeConfig,
         options: ToneOptions,
     ) -> Result<Stroke, PaintError> {
-        if doc.depth != BitDepth::Eight {
+        if !matches!(doc.depth, BitDepth::Eight | BitDepth::Sixteen) {
+            return Err(PaintError::UnsupportedDepth);
+        }
+        if !matches!(
+            doc.source.depth(),
+            None | Some(BitDepth::Eight | BitDepth::Sixteen)
+        ) {
             return Err(PaintError::UnsupportedDepth);
         }
         let options = ToneOptions {
             grayscale: doc.mode == ColorMode::Grayscale,
             ..options
         };
+        let gray = options.grayscale;
+        let native = match crate::fill_native::native_plan(doc, path, gray) {
+            crate::fill_native::NativePlan::Store(BitDepth::Sixteen) => true,
+            crate::fill_native::NativePlan::Store(_) => {
+                return Err(PaintError::UnsupportedDepth);
+            }
+            crate::fill_native::NativePlan::Refused => {
+                return Err(PaintError::UnsupportedDepth);
+            }
+            crate::fill_native::NativePlan::Copy => false,
+        };
         let mut stroke = Stroke::begin_kind(doc, path, cfg, StrokeKind::Paint)?;
         let target = layer_at(doc, &stroke.layer_path).ok_or(PaintError::NoRasterLayer)?;
         let (lazy, pixels) = LazyPixels::new(target);
-        stroke.per_dab = Some(PerDab {
-            engine: DabEngine::Tone(ToneBrush::new(options)),
-            pixels,
-            lazy: Some(lazy),
-        });
+        if native {
+            let ids: &[i16] = if gray { &[0] } else { &[0, 1, 2] };
+            if !stroke.saved.enable_native(target, ids) {
+                return Err(PaintError::UnsupportedDepth);
+            }
+            stroke.per_dab = Some(PerDab {
+                engine: DabEngine::ToneNative(NativeToneBrush::new(options, gray)),
+                pixels,
+                lazy: Some(lazy),
+            });
+        } else {
+            stroke.per_dab = Some(PerDab {
+                engine: DabEngine::Tone(ToneBrush::new(options)),
+                pixels,
+                lazy: Some(lazy),
+            });
+        }
         Ok(stroke)
     }
 
@@ -1166,6 +1064,8 @@ mod grow;
 #[cfg(test)]
 mod hold_tests;
 mod raster;
+mod saved;
+use saved::Saved;
 mod surface;
 #[cfg(test)]
 mod tests;

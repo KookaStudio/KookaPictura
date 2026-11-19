@@ -20,6 +20,7 @@ pub mod stamp;
 pub mod stroke;
 pub mod tip;
 pub mod tone;
+mod tone_native;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Rgba {

@@ -116,6 +116,7 @@ private slots:
     void spongeQuickKeys();
     void quickKeyIgnoredForOtherTools();
     void grayscaleSpongeChangesContrast();
+    void sixteenBitDodgeLightsTheCanvas();
     void thirtyTwoBitDisablesToneTools();
     void thirtyTwoBitFallsBackToMove();
     void strokeChangingNothingRebuildsNothing();
@@ -723,6 +724,28 @@ void RetouchToolsTest::grayscaleSpongeChangesContrast()
     QVERIFY2(qRed(f.view->sample_argb(20, 10)) < 80, "Saturate did not darken a dark grey");
     f.drag({QPointF(5, 30), QPointF(15, 30), QPointF(25, 30), QPointF(35, 30)});
     QVERIFY2(qRed(f.view->sample_argb(20, 30)) > 180, "Saturate did not lighten a light grey");
+}
+
+void RetouchToolsTest::sixteenBitDodgeLightsTheCanvas()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(40, 40, QImage::Format_RGB32);
+    seed.fill(QColor(90, 90, 90));
+    Fixture f(frame, seed, QStringLiteral("pictura_tone_16bpc"));
+    QVERIFY2(f.ok(), "16-bpc fixture");
+    QVERIFY(pictura::create_document(*f.view, 40, 40, QStringLiteral("rgb"), 16, 0x5a5a5a,
+                                     false, 72.0, false));
+    QCOMPARE(f.view->document_depth_bits(), 16);
+    const BrushState brush(f.tools);
+    f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(12);
+    frame.setActiveTool(pictura::ToolId::Dodge);
+    const int base = f.view->history_index();
+    f.drag({QPointF(5, 20), QPointF(15, 20), QPointF(25, 20), QPointF(35, 20)});
+    const int once = qRed(f.view->sample_argb(20, 20));
+    QVERIFY2(f.committedOnce(base, "Dodge"), "one Dodge state");
+    QVERIFY2(once > 90,
+             qPrintable(QStringLiteral("16-bpc Dodge left the canvas at %1").arg(once)));
+    QVERIFY2(qRed(f.view->sample_argb(20, 2)) == 90, "dodged outside the tip");
 }
 
 void RetouchToolsTest::thirtyTwoBitDisablesToneTools()

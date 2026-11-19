@@ -16,6 +16,8 @@ impl Stroke {
         let Some(per) = self.per_dab.as_mut() else {
             return false;
         };
+        let clip = self.coverage_clip.as_ref();
+        let native = matches!(per.engine, DabEngine::ToneNative(_));
         let mut changed = Vec::with_capacity(dabs.len());
         for &(x, y) in dabs {
             if let Some(lazy) = per.lazy.as_mut() {
@@ -27,6 +29,20 @@ impl Stroke {
                 }
                 if let Some(region) = dab_bounds(&per.pixels, &cfg, x, y) {
                     lazy.load(layer, &mut per.pixels, region);
+                }
+            }
+            if native {
+                if let Some(region) = dab_bounds(&per.pixels, &cfg, x, y) {
+                    if let Some(layer) = layer_at_mut(doc, &self.layer_path) {
+                        self.saved.save(
+                            layer,
+                            self.ch,
+                            region.left,
+                            region.top,
+                            region.right - 1,
+                            region.bottom - 1,
+                        );
+                    }
                 }
             }
             let dirty = match &mut per.engine {
@@ -41,21 +57,28 @@ impl Stroke {
                 DabEngine::Focus(brush) => brush.dab(&mut per.pixels, &cfg, x, y),
                 DabEngine::Smudge(brush) => brush.dab(&mut per.pixels, &cfg, x, y),
                 DabEngine::Tone(brush) => brush.dab(&mut per.pixels, &cfg, x, y),
+                DabEngine::ToneNative(brush) => {
+                    let Some(layer) = layer_at_mut(doc, &self.layer_path) else {
+                        return false;
+                    };
+                    brush.dab(layer, &mut per.pixels, &cfg, x, y, clip)
+                }
             };
             changed.extend(dirty);
         }
         if changed.is_empty() {
             return false;
         }
-        let clip = self.coverage_clip.as_ref();
-        stencil::mask_dabs(
-            clip,
-            self.rect,
-            doc,
-            &self.layer_path,
-            &mut per.pixels,
-            &changed,
-        );
+        if !native {
+            stencil::mask_dabs(
+                clip,
+                self.rect,
+                doc,
+                &self.layer_path,
+                &mut per.pixels,
+                &changed,
+            );
+        }
         let ch = self.ch;
         let Some(layer) = layer_at_mut(doc, &self.layer_path).filter(|l| self.saved.fits(l, ch))
         else {
@@ -84,6 +107,11 @@ impl Stroke {
             );
             if let Some(bbox) = bbox {
                 written = Some(written.map_or(bbox, |w| w.union(bbox)));
+            }
+            if native {
+                // A 16-bit change can narrow to the same 8-bit byte; the native
+                // dab still has to commit and refresh its box.
+                written = Some(written.map_or(rect, |w| w.union(rect)));
             }
         }
         let Some(rect) = written else {

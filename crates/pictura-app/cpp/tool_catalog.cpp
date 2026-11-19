@@ -115,8 +115,7 @@ bool toolAllowedForDocument(ToolId id, const PictureView* view)
         return color_replacement_available(image_mode(*view));
     }
     if (id == ToolId::Dodge || id == ToolId::Burn || id == ToolId::Sponge) {
-        // ponytail: the tone engine is still 8-bit only, so 16-bit documents
-        // enable the tools and refuse each stroke; #1421 lifts that limit.
+        // The tone engine runs at 8 and 16 bpc; 32-bpc documents exclude it.
         return view->document_depth_bits() != 32;
     }
     return true;

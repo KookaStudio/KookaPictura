@@ -280,7 +280,7 @@ fn toned(
 }
 
 /// Dodge and Burn.
-fn tone(rgb: [f32; 3], weight: f32, options: &ToneOptions) -> [f32; 3] {
+pub(crate) fn tone(rgb: [f32; 3], weight: f32, options: &ToneOptions) -> [f32; 3] {
     let l = if options.grayscale {
         rgb[0]
     } else {
@@ -317,7 +317,7 @@ fn tone(rgb: [f32; 3], weight: f32, options: &ToneOptions) -> [f32; 3] {
 }
 
 /// The Sponge: the distance from grey (the luminance) scaled down or up.
-fn sponge(rgb: [f32; 3], weight: f32, options: &ToneOptions) -> [f32; 3] {
+pub(crate) fn sponge(rgb: [f32; 3], weight: f32, options: &ToneOptions) -> [f32; 3] {
     if options.grayscale {
         // A Grayscale document has one channel: Saturate moves the grey away
         // from middle grey, Desaturate toward it. Vibrance eases off near the
