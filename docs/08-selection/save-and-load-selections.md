@@ -25,7 +25,7 @@ Two entry points:
   | Control | Meaning |
   |---|---|
   | `Document` | Destination image. Default: the active image (saved to a channel). May be another open image **with the same pixel dimensions**, or a `New` image. |
-  | `Channel` | Destination channel. Default: a new channel. May be any existing channel in the selected image, or a **layer mask** if the image has layers. |
+  | `Channel` | Destination channel. Default: a new channel. May be an extra (alpha or spot) channel in the selected image, or a **layer mask** if the image has layers. Colour channels are not offered: this implementation derives them from the composite and has no destination-layer rule for a write (see `docs/dev/doc-code-parity-gaps.md`). |
   | `Name` | Channel name, shown when saving to a new channel. |
   | Combine operation | When saving into an existing channel: `Replace Channel`, `Add to Channel`, `Subtract From Channel`, `Intersect With Channel`. |
 
@@ -82,11 +82,11 @@ Alpha channels are grayscale masks with the same pixel dimensions as the documen
 | Control | Type | Default | Range / options | Notes |
 |---|---|---|---|---|
 | Save Document | enum | active image | active image / any open same-size image / New | New-image option creates a single-channel grayscale image with the selection as its extra channel; the codec does not write Multichannel, so this is the grayscale+alpha fallback |
-| Save Channel | enum | new channel | new / existing channel / layer mask | Layer mask only if the image has layers |
+| Save Channel | enum | new channel | new / extra channel / layer mask | Layer mask only if the image has layers; colour rows are not destinations |
 | Channel Name | string | `Alpha 1`, `Alpha 2`, … (community) | free text | Sequence-based default |
 | Save operation | enum | Replace existing channel contents | New (implicit) / Replace / Add / Subtract / Intersect | Only when an existing channel is targeted |
 | Load Document | enum | active image | active image / any open same-size image | |
-| Load Channel | enum | first alpha? | document's alpha channels | Exact default not stated |
+| Load Channel | enum | first extra channel, else the first colour row *(inferred)* | document's colour rows, layer masks, and extra channels | CS6's default is not stated in the fetched text |
 | Load Invert | bool | off | on / off | |
 | Load Operation | enum | New Selection | New / Add / Subtract / Intersect | |
 | Max channels | int | — | 56 (colour + alpha + spot) | Sourced |
@@ -151,7 +151,7 @@ Widgets over QML: the Channels panel is a dense list with live thumbnails and mo
 ## Edge cases
 
 - **No selection:** Save Selection is unavailable; Load Selection with `New Selection` still works if a channel is chosen.
-- **No alpha channels:** Load dialog shows only colour/spot channels or is disabled; Save defaults to new channel.
+- **No alpha channels:** the Load dialog still lists the document's colour rows (the composite row where the mode has one, otherwise its plates) and stays usable; Save defaults to a new channel.
 - **Channel count at 56:** New Channel/Save must refuse with a clear error.
 - **Cross-image size mismatch:** dialog must exclude same-dimension-incompatible documents; the drag path is the exception.
 - **Layer mask target:** only valid when the image has layers; Background-only documents exclude it.
@@ -195,7 +195,7 @@ Not used in this pass:
 ## Open questions
 
 - **Save combine arithmetic.** Replace/Add/Subtract/Intersect on soft coverage is not numerically specified. Resolve by comparing soft-channel saves against CS6.
-- **Load default channel.** The Load dialog's default `Channel` selection is not in the fetched text. Resolve from a CS6 UI capture.
+- **Load default channel.** The fetched text does not state CS6's default. This implementation defaults to the first extra channel, else the first colour row; the choice is inferred, not CS6-verified. A CS6 UI capture would confirm it.
 - **Exact default-name sequence.** `Alpha 1`, `Alpha 2`, … is community-reported; confirm numbering after deletions/reloads.
 - **Cross-image drag semantics.** Rescaling and sense handling when dragging a selection between differently sized documents is undocumented. The shipped path uses fit-and-centre with an empty border (`#1332`); a CS6 behavioural study is still needed to confirm parity.
 - **PSD alternate-channel encoding details.** The precise PSD resource keys and sense flags must be pinned in `01-architecture/file-formats.md` against the published Adobe file-format spec, not the Help PDF.
