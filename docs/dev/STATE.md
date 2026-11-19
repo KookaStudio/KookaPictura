@@ -813,7 +813,10 @@ Snapshot for resuming after a context break. Update after each milestone.
   catalogue. Runs at 6G and above need a machine with at least 16 GB;
   #1224 recorded `6G`, `8G` and `unlimited` (M1–M24 at 17000²) on a 29 GiB
   Ryzen 7 255: every scenario ok, M24's Free Transform the largest peak (6432
-  MiB unlimited, held to 5954 MiB under 6G).
+  MiB unlimited, held to 5954 MiB under 6G). A second host (i7-11700K, 64 GiB,
+  recorded while other work ran) adds `6G@i7-11700K`, `8G@i7-11700K` and a
+  capped `host@i7-11700K`: every row ok, peaks within 300 MiB of the Ryzen
+  runs.
 - **Content-sized pixel layers** (#1208, OpenSpec change
   `grow-pixel-layers`). A new pixel layer stores a 0×0 rect with no planes, so
   Add Layer (M2) adds no pixel bytes. `pictura_core::layer_bounds::grow_layer_to`
