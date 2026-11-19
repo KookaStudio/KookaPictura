@@ -9,6 +9,7 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/awa_dialog.h
     crates/pictura-app/cpp/canvas_size_dialog.cpp
     crates/pictura-app/cpp/canvas_size_dialog.h
+    crates/pictura-app/cpp/channels_rows.h
     crates/pictura-app/cpp/design_system_dialog.cpp
     crates/pictura-app/cpp/design_system_dialog.h
     crates/pictura-app/cpp/design_system_dialog_pages.cpp

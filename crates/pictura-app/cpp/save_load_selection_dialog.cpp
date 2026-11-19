@@ -2,6 +2,7 @@
 
 #include "api/layers_bridge.h"
 #include "api/selection_bridge.h"
+#include "channels_rows.h"
 
 #include <QtCore/QSignalBlocker>
 #include <QtWidgets/QCheckBox>
@@ -132,19 +133,48 @@ void SaveLoadSelectionDialog::refreshChannels()
         channel_->addItem(tr("New Channel"), QString::fromLatin1(kNewChannel));
     }
     if (view && view->has_document()) {
-        const QStringList names = channels_alpha_names(*view);
-        for (int i = 0; i < names.size(); ++i) {
-            channel_->addItem(names.at(i), QStringLiteral("alpha:%1").arg(i));
+        const auto addAlphaChannels = [this, view]() {
+            const QStringList names = channels_alpha_names(*view);
+            for (int i = 0; i < names.size(); ++i) {
+                channel_->addItem(names.at(i), QStringLiteral("alpha:%1").arg(i));
+            }
+        };
+        const auto addLayerMasks = [this, view]() {
+            for (const QString& target : selection_mask_targets(*view)) {
+                const int bar = target.indexOf(QLatin1Char('|'));
+                const QString path = bar < 0 ? target : target.left(bar);
+                const QString label = bar < 0 ? target : target.mid(bar + 1);
+                channel_->addItem(label, QStringLiteral("mask:%1").arg(path));
+            }
+        };
+        if (mode_ == Mode::Load) {
+            // The Channels panel's colour rows lead the list. The dialog has no
+            // eye column, so every colour channel counts as visible.
+            const QList<ChannelRowDef> rows = channelsForMode(channels_mode(*view));
+            for (int row = 0; row < rows.size(); ++row) {
+                channel_->addItem(QLatin1String(rows.at(row).name),
+                                  QStringLiteral("color:%1").arg(row));
+            }
+            addLayerMasks();
+            addAlphaChannels();
+        } else {
+            addAlphaChannels();
+            addLayerMasks();
         }
-        for (const QString& target : selection_mask_targets(*view)) {
-            const int bar = target.indexOf(QLatin1Char('|'));
-            const QString path = bar < 0 ? target : target.left(bar);
-            const QString label = bar < 0 ? target : target.mid(bar + 1);
-            channel_->addItem(label, QStringLiteral("mask:%1").arg(path));
+    }
+    int current = 0;
+    if (mode_ == Mode::Load) {
+        // The first extra channel is the inferred default; a document without
+        // one falls back to its first colour row.
+        for (int i = 0; i < channel_->count(); ++i) {
+            if (channel_->itemData(i).toString().startsWith(QLatin1String("alpha:"))) {
+                current = i;
+                break;
+            }
         }
     }
     if (channel_->count() > 0) {
-        channel_->setCurrentIndex(0);
+        channel_->setCurrentIndex(current);
     }
     refreshEnabled();
 }

@@ -1,11 +1,14 @@
 #include <QtTest/QtTest>
 
+#include "command_ids.h"
+#include "commands.h"
 #include "frame.h"
 #include "image_view.h"
 #include "save_load_selection_dialog.h"
 #include "selection_drag.h"
 #include "tools.h"
 #include "api/document_api.h"
+#include "api/document_bridge.h"
 #include "api/layers_bridge.h"
 #include "api/selection_bridge.h"
 
@@ -14,8 +17,12 @@
 #include <QtCore/QCoreApplication>
 #include <QtCore/QMimeData>
 #include <QtCore/QTemporaryDir>
+#include <QtCore/QTimer>
+#include <QtGui/QAction>
+#include <QtGui/QColor>
 #include <QtGui/QDragEnterEvent>
 #include <QtGui/QDropEvent>
+#include <QtGui/QImage>
 #include <QtWidgets/QTabBar>
 
 namespace {
@@ -44,6 +51,20 @@ bool dragSelectionOver(QWidget* target, const void* source, const QPoint& pos, b
     return release.isAccepted();
 }
 
+// A 16 x 16 RGB document filled with one colour, opened from a temporary PNG so
+// the colour-row derivation has a real picture to stream.
+pictura::PictureView* openFlatImage(pictura::PicturaMainWindow& window, const QColor& colour)
+{
+    QTemporaryDir dir;
+    QImage image(16, 16, QImage::Format_RGB32);
+    image.fill(colour);
+    const QString path = dir.filePath(QStringLiteral("flat.png"));
+    if (!image.save(path) || !window.openDocumentAtPath(path)) {
+        return nullptr;
+    }
+    return window.activeView();
+}
+
 } // namespace
 
 class SelectionSaveLoadTest : public QObject {
@@ -57,12 +78,23 @@ private slots:
     void saveDialogNewChannelName();
     void saveDialogExistingChannelOps();
     void saveDialogLayerMaskOps();
+    void saveDialogExcludesColourRows();
     void documentListSameSize();
     void saveDialogNewImage();
     void loadDialogDefaults();
+    void loadDialogDefaultsToExtraChannel();
+    void loadDialogListsColourRows();
+    void loadDialogWithNoSavedChannels();
+    void loadDialogGrayscaleCompositeRow();
+    void loadDialogModeRows();
+    void loadDialogColourRowTarget();
+    void loadColourRowCoverage();
+    void loadColourRowCombines();
+    void loadColourRowCrossDocument();
+    void loadColourRowThroughFrame();
+    void selectLoadEnabledWithoutChannels();
     void loadDialogInvertAndOps();
     void loadDialogCrossDocument();
-    void loadDialogDisabledWithoutSources();
     void channelLimitRefusal();
     void wrongLengthRefused();
     void selectionDragSameSize();
@@ -232,6 +264,28 @@ void SelectionSaveLoadTest::saveDialogLayerMaskOps()
     QCOMPARE(view->selection_coverage(1, 1), 0);
 }
 
+void SelectionSaveLoadTest::saveDialogExcludesColourRows()
+{
+    pictura::PictureView* view = newDoc(16, 16);
+    QVERIFY(view);
+    QVERIFY(channels_new_alpha(*view) >= 0);
+    const QString layer = view->add_layer_in(QString());
+    QVERIFY(!layer.isEmpty());
+    QVERIFY(pictura::layer_mask_add_path(*view, layer, QStringLiteral("reveal-all")));
+    const QList<pictura::SelectionDocument> documents {{view, QStringLiteral("Doc"), true}};
+    pictura::SaveLoadSelectionDialog dialog(pictura::SaveLoadSelectionDialog::Mode::Save, documents,
+                                            window_.get());
+    QCOMPARE(dialog.channelCountForTest(), 3);
+    QCOMPARE(dialog.channelTextForTest(0), QStringLiteral("New Channel"));
+    for (int i = 0; i < dialog.channelCountForTest(); ++i) {
+        const QString text = dialog.channelTextForTest(i);
+        QVERIFY(text != QStringLiteral("RGB"));
+        QVERIFY(text != QStringLiteral("Red"));
+        QVERIFY(text != QStringLiteral("Green"));
+        QVERIFY(text != QStringLiteral("Blue"));
+    }
+}
+
 void SelectionSaveLoadTest::documentListSameSize()
 {
     QVERIFY(newDoc(32, 16));
@@ -304,8 +358,9 @@ void SelectionSaveLoadTest::loadDialogDefaults()
     pictura::SaveLoadSelectionDialog dialog(pictura::SaveLoadSelectionDialog::Mode::Load, documents,
                                             window_.get());
     QCOMPARE(dialog.documentCountForTest(), 1);
-    QCOMPARE(dialog.channelCountForTest(), 1);
-    QCOMPARE(dialog.channelTextForTest(0), QStringLiteral("Hair"));
+    QCOMPARE(dialog.channelCountForTest(), 5);
+    QCOMPARE(dialog.channelTextForTest(0), QStringLiteral("RGB"));
+    QCOMPARE(dialog.channelTextForTest(4), QStringLiteral("Hair"));
     QCOMPARE(dialog.operationTextForTest(0), QStringLiteral("New Selection"));
     QVERIFY(dialog.okEnabledForTest());
     const pictura::SelectionLoadRequest request = dialog.loadRequest();
@@ -313,6 +368,262 @@ void SelectionSaveLoadTest::loadDialogDefaults()
     QCOMPARE(request.target, QStringLiteral("alpha:0"));
     QCOMPARE(request.mode, QStringLiteral("new"));
     QVERIFY(!request.invert);
+}
+
+void SelectionSaveLoadTest::loadDialogDefaultsToExtraChannel()
+{
+    pictura::PictureView* view = newDoc(16, 16);
+    QVERIFY(view);
+    QVERIFY(channels_new_alpha(*view) >= 0);
+    const QString layer = view->add_layer_in(QString());
+    QVERIFY(!layer.isEmpty());
+    QVERIFY(pictura::layer_mask_add_path(*view, layer, QStringLiteral("reveal-all")));
+    const QList<pictura::SelectionDocument> documents {{view, QStringLiteral("Doc"), true}};
+    pictura::SaveLoadSelectionDialog dialog(pictura::SaveLoadSelectionDialog::Mode::Load, documents,
+                                            window_.get());
+    QCOMPARE(dialog.loadRequest().target, QStringLiteral("alpha:0"));
+}
+
+void SelectionSaveLoadTest::loadDialogListsColourRows()
+{
+    pictura::PictureView* view = newDoc(16, 16);
+    QVERIFY(view);
+    QVERIFY(channels_new_alpha(*view) >= 0);
+    const QString layer = view->add_layer_in(QString());
+    QVERIFY(!layer.isEmpty());
+    QVERIFY(pictura::layer_mask_add_path(*view, layer, QStringLiteral("reveal-all")));
+    const QList<pictura::SelectionDocument> documents {{view, QStringLiteral("Doc"), true}};
+    pictura::SaveLoadSelectionDialog dialog(pictura::SaveLoadSelectionDialog::Mode::Load, documents,
+                                            window_.get());
+    QCOMPARE(dialog.channelCountForTest(), 6);
+    QCOMPARE(dialog.channelTextForTest(0), QStringLiteral("RGB"));
+    QCOMPARE(dialog.channelTextForTest(1), QStringLiteral("Red"));
+    QCOMPARE(dialog.channelTextForTest(2), QStringLiteral("Green"));
+    QCOMPARE(dialog.channelTextForTest(3), QStringLiteral("Blue"));
+    QVERIFY(dialog.channelTextForTest(4).contains(QStringLiteral("Mask")));
+    QCOMPARE(dialog.channelTextForTest(5), QStringLiteral("Alpha 1"));
+}
+
+void SelectionSaveLoadTest::loadDialogWithNoSavedChannels()
+{
+    pictura::PictureView* view = newDoc(16, 16);
+    QVERIFY(view);
+    const QList<pictura::SelectionDocument> documents {{view, QStringLiteral("Doc"), true}};
+    pictura::SaveLoadSelectionDialog dialog(pictura::SaveLoadSelectionDialog::Mode::Load, documents,
+                                            window_.get());
+    QCOMPARE(dialog.channelCountForTest(), 4);
+    QVERIFY(dialog.okEnabledForTest());
+    QCOMPARE(dialog.loadRequest().target, QStringLiteral("color:0"));
+}
+
+void SelectionSaveLoadTest::loadDialogGrayscaleCompositeRow()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Gray"), 16, 16, QStringLiteral("grayscale"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view);
+    const QList<pictura::SelectionDocument> documents {{view, QStringLiteral("Doc"), true}};
+    pictura::SaveLoadSelectionDialog dialog(pictura::SaveLoadSelectionDialog::Mode::Load, documents,
+                                            window_.get());
+    QCOMPARE(dialog.channelCountForTest(), 1);
+    QCOMPARE(dialog.channelTextForTest(0), QStringLiteral("Gray"));
+    QCOMPARE(dialog.loadRequest().target, QStringLiteral("color:0"));
+
+    const auto coverage = pictura::color_row_coverage(*view, 0, 0x7);
+    QCOMPARE(int(coverage.size()), 16 * 16);
+    QVERIFY(pictura::load_selection_coverage(*view,
+        ::rust::Slice<const std::uint8_t>(coverage.data(), coverage.size()), 16, 16, false,
+        QStringLiteral("new")));
+    QCOMPARE(view->selection_coverage(8, 8), 255);
+}
+
+void SelectionSaveLoadTest::loadDialogModeRows()
+{
+    const auto checkMode = [this](pictura::PictureView* view, const QStringList& names) {
+        QVERIFY(view);
+        const QList<pictura::SelectionDocument> documents {{view, QStringLiteral("Doc"), true}};
+        pictura::SaveLoadSelectionDialog dialog(pictura::SaveLoadSelectionDialog::Mode::Load,
+                                                documents, window_.get());
+        QCOMPARE(dialog.channelCountForTest(), int(names.size()));
+        for (int i = 0; i < int(names.size()); ++i) {
+            QCOMPARE(dialog.channelTextForTest(i), names.at(i));
+            const auto coverage = pictura::color_row_coverage(*view, i, 0x7);
+            QCOMPARE(int(coverage.size()), 16 * 16);
+        }
+        QCOMPARE(dialog.loadRequest().target, QStringLiteral("color:0"));
+    };
+
+    pictura::PictureView* rgb = newDoc(16, 16);
+    QVERIFY(rgb);
+    checkMode(rgb, {QStringLiteral("RGB"), QStringLiteral("Red"), QStringLiteral("Green"),
+                    QStringLiteral("Blue")});
+
+    QVERIFY(window_->newDocument(QStringLiteral("Gray"), 16, 16, QStringLiteral("grayscale"), 8,
+                                 QStringLiteral("white")));
+    checkMode(window_->activeView(), {QStringLiteral("Gray")});
+
+    pictura::PictureView* cmyk = newDoc(16, 16);
+    QVERIFY(cmyk && pictura::convert_image_mode(*cmyk, QStringLiteral("cmyk")));
+    checkMode(cmyk, {QStringLiteral("CMYK"), QStringLiteral("Cyan"), QStringLiteral("Magenta"),
+                     QStringLiteral("Yellow"), QStringLiteral("Black")});
+
+    pictura::PictureView* lab = newDoc(16, 16);
+    QVERIFY(lab && pictura::convert_image_mode(*lab, QStringLiteral("lab")));
+    checkMode(lab, {QStringLiteral("Lab"), QStringLiteral("Lightness"), QStringLiteral("a"),
+                    QStringLiteral("b")});
+
+    pictura::PictureView* indexed = newDoc(16, 16);
+    QVERIFY(indexed && pictura::convert_to_indexed(*indexed, 1, 256, 0, 0));
+    checkMode(indexed, {QStringLiteral("Index")});
+
+    // Bitmap, Duotone, and Multichannel documents cannot be built by these
+    // fixtures: convert_image_mode() accepts only Grayscale, RGB, CMYK, and Lab,
+    // and the codec has no writer for Multichannel.
+}
+
+void SelectionSaveLoadTest::loadDialogColourRowTarget()
+{
+    pictura::PictureView* view = openFlatImage(*window_, QColor(100, 150, 200));
+    QVERIFY(view);
+    const QList<pictura::SelectionDocument> documents {{view, QStringLiteral("Doc"), true}};
+    pictura::SaveLoadSelectionDialog dialog(pictura::SaveLoadSelectionDialog::Mode::Load, documents,
+                                            window_.get());
+    const QStringList expected {QStringLiteral("color:0"), QStringLiteral("color:1"),
+                                QStringLiteral("color:2"), QStringLiteral("color:3")};
+    for (int i = 0; i < int(expected.size()); ++i) {
+        dialog.setChannelIndexForTest(i);
+        QCOMPARE(dialog.loadRequest().target, expected.at(i));
+    }
+}
+
+void SelectionSaveLoadTest::loadColourRowCoverage()
+{
+    pictura::PictureView* view = openFlatImage(*window_, QColor(100, 150, 200));
+    QVERIFY(view);
+    const int expected[4] = {140, 100, 150, 200};
+    for (int row = 0; row < 4; ++row) {
+        const auto coverage = pictura::color_row_coverage(*view, row, 0x7);
+        QCOMPARE(int(coverage.size()), 16 * 16);
+        QVERIFY(pictura::load_selection_coverage(*view,
+            ::rust::Slice<const std::uint8_t>(coverage.data(), coverage.size()), 16, 16, false,
+            QStringLiteral("new")));
+        QCOMPARE(view->selection_coverage(8, 8), expected[row]);
+    }
+}
+
+void SelectionSaveLoadTest::loadColourRowCombines()
+{
+    pictura::PictureView* view = openFlatImage(*window_, QColor(100, 150, 200));
+    QVERIFY(view);
+    const QByteArray base(16 * 16, char(200));
+    QVERIFY(pictura::load_selection_coverage(*view, coverageSlice(base), 16, 16, false,
+                                             QStringLiteral("new")));
+    const int before = view->history_count();
+    const auto coverage = pictura::color_row_coverage(*view, 1, 0x7);
+    QVERIFY(pictura::load_selection_coverage(*view,
+        ::rust::Slice<const std::uint8_t>(coverage.data(), coverage.size()), 16, 16, false,
+        QStringLiteral("subtract")));
+    QCOMPARE(view->selection_coverage(8, 8), 100);
+    QCOMPARE(view->history_count(), before + 1);
+    QCOMPARE(view->history_label(view->history_index()), QStringLiteral("Load Selection"));
+}
+
+void SelectionSaveLoadTest::loadColourRowCrossDocument()
+{
+    pictura::PictureView* source = openFlatImage(*window_, QColor(100, 150, 200));
+    QVERIFY(source);
+    pictura::PictureView* target = newDoc(16, 16);
+    QVERIFY(target);
+    const int before = target->history_count();
+    const auto coverage = pictura::color_row_coverage(*source, 1, 0x7);
+    QCOMPARE(int(coverage.size()), 16 * 16);
+    QVERIFY(pictura::load_selection_coverage(*target,
+        ::rust::Slice<const std::uint8_t>(coverage.data(), coverage.size()), 16, 16, false,
+        QStringLiteral("new")));
+    QCOMPARE(target->selection_coverage(8, 8), 100);
+    QCOMPARE(target->history_count(), before + 1);
+    QCOMPARE(target->history_label(target->history_index()), QStringLiteral("Load Selection"));
+}
+
+void SelectionSaveLoadTest::loadColourRowThroughFrame()
+{
+    pictura::PictureView* source = openFlatImage(*window_, QColor(100, 150, 200));
+    QVERIFY(source);
+    pictura::PictureView* target = newDoc(16, 16);
+    QVERIFY(target && target != source);
+
+    pictura::CommandRegistry* registry = window_->registry();
+    QVERIFY(registry);
+
+    struct Picked {
+        bool found = false;
+        QString target;
+    };
+    const auto runLoadDialog = [this, registry](int documentIndex, Picked& picked) {
+        // A local timer drives the modal dialog and is stopped before this call
+        // returns, so no callback outlives the stack frame it captures.
+        QTimer driver;
+        driver.setInterval(0);
+        QObject::connect(&driver, &QTimer::timeout,
+                         [this, documentIndex, &picked, &driver]() {
+            auto* dialog = window_->findChild<pictura::SaveLoadSelectionDialog*>();
+            if (!dialog) {
+                return;
+            }
+            driver.stop();
+            if (dialog->channelCountForTest() < 2) {
+                dialog->reject();
+                return;
+            }
+            dialog->setDocumentIndexForTest(documentIndex);
+            dialog->setChannelIndexForTest(1);
+            picked.target = dialog->loadRequest().target;
+            picked.found = true;
+            dialog->accept();
+        });
+        driver.start();
+        registry->refresh();
+        const bool ran =
+            registry->dispatch(QString::fromLatin1(pictura::command_ids::SelectLoad));
+        driver.stop();
+        return ran && picked.found;
+    };
+
+    // Same document: the active source derives its own Red row.
+    window_->setActiveDocumentIndex(0);
+    const int sourceBefore = source->history_count();
+    Picked same;
+    QVERIFY(runLoadDialog(0, same));
+    QVERIFY(same.found);
+    QCOMPARE(same.target, QStringLiteral("color:1"));
+    QCOMPARE(source->selection_coverage(8, 8), 100);
+    QCOMPARE(source->history_count(), sourceBefore + 1);
+    QCOMPARE(source->history_label(source->history_index()), QStringLiteral("Load Selection"));
+
+    // Cross document: the active target loads the source's Red row.
+    window_->setActiveDocumentIndex(1);
+    const int targetBefore = target->history_count();
+    Picked cross;
+    QVERIFY(runLoadDialog(0, cross));
+    QVERIFY(cross.found);
+    QCOMPARE(cross.target, QStringLiteral("color:1"));
+    QCOMPARE(target->selection_coverage(8, 8), 100);
+    QCOMPARE(target->history_count(), targetBefore + 1);
+    QCOMPARE(target->history_label(target->history_index()), QStringLiteral("Load Selection"));
+}
+
+void SelectionSaveLoadTest::selectLoadEnabledWithoutChannels()
+{
+    pictura::PictureView* view = newDoc(16, 16);
+    QVERIFY(view);
+    QCOMPARE(view->selection_channel_count(), 0);
+    QVERIFY(pictura::selection_mask_targets(*view).isEmpty());
+    pictura::CommandRegistry* registry = window_->registry();
+    QVERIFY(registry);
+    registry->refresh();
+    QAction* load = registry->action(QString::fromLatin1(pictura::command_ids::SelectLoad));
+    QVERIFY(load);
+    QVERIFY(load->isEnabled());
 }
 
 void SelectionSaveLoadTest::loadDialogInvertAndOps()
@@ -371,19 +682,9 @@ void SelectionSaveLoadTest::loadDialogCrossDocument()
                                             window_.get());
     QCOMPARE(dialog.documentCountForTest(), 2);
     dialog.setDocumentIndexForTest(0);
-    QCOMPARE(dialog.channelCountForTest(), 1);
-    QCOMPARE(dialog.channelTextForTest(0), QStringLiteral("Hair"));
-}
-
-void SelectionSaveLoadTest::loadDialogDisabledWithoutSources()
-{
-    pictura::PictureView* view = newDoc(16, 16);
-    QVERIFY(view);
-    const QList<pictura::SelectionDocument> documents {{view, QStringLiteral("Doc"), true}};
-    pictura::SaveLoadSelectionDialog dialog(pictura::SaveLoadSelectionDialog::Mode::Load, documents,
-                                            window_.get());
-    QCOMPARE(dialog.channelCountForTest(), 0);
-    QVERIFY(!dialog.okEnabledForTest());
+    QCOMPARE(dialog.channelCountForTest(), 5);
+    QCOMPARE(dialog.channelTextForTest(0), QStringLiteral("RGB"));
+    QCOMPARE(dialog.channelTextForTest(4), QStringLiteral("Hair"));
 }
 
 void SelectionSaveLoadTest::channelLimitRefusal()

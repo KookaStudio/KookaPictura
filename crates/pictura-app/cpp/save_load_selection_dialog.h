@@ -36,8 +36,9 @@ struct SelectionLoadRequest {
 };
 
 // Select > Save/Load Selection (SEL-012): choose a document, an extra channel
-// or raster layer mask, and the combine operation. The frame performs the
-// cross-document transfer and records the history state.
+// or raster layer mask, and the combine operation. Load also lists the
+// document's colour rows. The frame performs the cross-document transfer and
+// records the history state.
 class SaveLoadSelectionDialog : public QDialog {
     Q_OBJECT
 

@@ -164,28 +164,8 @@ void MenuRegistrar::registerSelectHandlers()
         return activeView() && activeView()->has_document()
             && activeView()->has_deselected_selection();
     });
-    commands_->setEnabledProvider(command_ids::SelectLoad, [this]() {
-        PictureView* active = activeView();
-        if (!active || !active->has_document()) {
-            return false;
-        }
-        const int width = active->document_width();
-        const int height = active->document_height();
-        for (int i = 0; i < documentCount(); ++i) {
-            PictureView* view = viewAt(i);
-            if (!view || !view->has_document()) {
-                continue;
-            }
-            if (view->document_width() != width || view->document_height() != height) {
-                continue;
-            }
-            if (view->selection_channel_count() > 0
-                || !selection_mask_targets(*view).isEmpty()) {
-                return true;
-            }
-        }
-        return false;
-    });
+    // Select > Load Selection also lists the document's colour rows, so every
+    // same-size document has a source; `selectHasDoc` above governs it.
     commands_->setEnabledProvider(command_ids::SelectSimilarLayers, [this]() {
         return activeView() && activeView()->has_document() && panels_->layersPanel()
             && !layerAnchor().isEmpty();
