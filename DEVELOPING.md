@@ -643,10 +643,14 @@ bundled because no distro Qt is new enough everywhere (Ubuntu 24.04 ships 6.4).
 The install rules, the desktop file (`packaging/pictura.desktop`), and the icon
 all use the binary's name, `pictura`.
 
-- **AppImage** (`appimage.yml`): packs the AppDir, runs `--headless --self-test`
-  against the AppImage inside a clean `ubuntu:24.04` container (so the runner's
-  Qt cannot hide a missing bundled library), and uploads
-  `KookaPictura-X.Y.Z-x86_64.AppImage`.
+- **AppImage** (`appimage.yml`): a two-leg matrix, x86_64 on `ubuntu-24.04`
+  and aarch64 on the native `ubuntu-24.04-arm` runner. Each leg packs the
+  AppDir, runs `--headless --self-test` against the AppImage inside a clean
+  `ubuntu:24.04` container of its own architecture (so the runner's Qt cannot
+  hide a missing bundled library), and uploads
+  `KookaPictura-X.Y.Z-x86_64.AppImage` / `KookaPictura-X.Y.Z-aarch64.AppImage`.
+  `linux-bundle` picks the linuxdeploy builds and their pinned SHA-256s by
+  `uname -m`. When you bump a linuxdeploy release, re-pin both architectures.
 - **deb / rpm** (`linux-packages.yml`): `packaging/build-packages.sh` moves the
   AppDir to `/opt/kooka-pictura` (the `$ORIGIN` rpath and `qt.conf` keep working),
   links `/usr/bin/pictura`, and installs the desktop entry and icon under

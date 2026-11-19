@@ -25,9 +25,9 @@ clone of every corner of Photoshop. For what is in and out of scope, see
 
 ## Getting it
 
-Prebuilt artifacts are published on the GitHub Releases page: AppImage,
-`.deb`/`.rpm`, snap, Flatpak, Windows portable archive and installer, and an
-Apple Silicon DMG. The macOS DMG is **unsigned and not notarized**; on first
+Prebuilt artifacts are published on the GitHub Releases page: AppImage
+(x86_64 and ARM64), `.deb`/`.rpm`, snap, Flatpak, Windows portable archive and
+installer, and an Apple Silicon DMG. The macOS DMG is **unsigned and not notarized**; on first
 launch allow it in **System Settings → Privacy & Security → Open Anyway**. The
 snap is **unsigned** too; install it with
 `sudo snap install --dangerous ./kooka-pictura_<version>_amd64.snap`.

@@ -6,7 +6,8 @@
   var LINUX = [
     ["rpm", /\.rpm$/i],
     ["deb", /\.deb$/i],
-    ["AppImage", /\.AppImage$/i],
+    ["AppImage", /-x86_64\.AppImage$/i],
+    ["AppImage (ARM64)", /-aarch64\.AppImage$/i],
     ["snap", /\.snap$/i],
     ["flatpak", /\.flatpak$/i]
   ];

@@ -12,6 +12,7 @@
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QStringList>
+#include <QtCore/QSysInfo>
 #include <QtCore/QTemporaryDir>
 #include <QtCore/QUrl>
 #include <QtNetwork/QHostAddress>
@@ -76,6 +77,10 @@ QByteArray releaseFixture()
         QStringLiteral("KookaPictura-0.4.0-x86_64.AppImage"),
         QStringLiteral("https://example.test/KookaPictura-0.4.0-x86_64.AppImage"),
         53590520, 'f'));
+    assets.append(releaseAsset(
+        QStringLiteral("KookaPictura-0.4.0-aarch64.AppImage"),
+        QStringLiteral("https://example.test/KookaPictura-0.4.0-aarch64.AppImage"),
+        52150272, '3'));
     assets.append(releaseAsset(
         QStringLiteral("KookaPictura-0.4.0-x86_64.flatpak"),
         QStringLiteral("https://example.test/KookaPictura-0.4.0-x86_64.flatpak"),
@@ -260,6 +265,7 @@ private slots:
     void parsesReleaseFixture();
     void rejectsMalformedReleaseJson();
     void selectsAppImageAsset();
+    void selectsAarch64AppImageAsset();
     void selectsWindowsSetupAsset();
     void selectsMacDmgAsset();
     void missingAssetFallsBackToReleasePage();
@@ -465,7 +471,7 @@ void AppUpdaterTest::parsesReleaseFixture()
     QCOMPARE(release->htmlUrl,
              QStringLiteral("https://github.com/KookaStudio/KookaPictura/releases/tag/v0.4.0"));
     QVERIFY(release->body.contains(QStringLiteral("Faster update checks")));
-    QCOMPARE(int(release->assets.size()), 8);
+    QCOMPARE(int(release->assets.size()), 9);
     QCOMPARE(int(release->assets.first().sha256.size()), 64);
 }
 
@@ -504,6 +510,19 @@ void AppUpdaterTest::selectsAppImageAsset()
     QCOMPARE(int(asset->sha256.size()), 64);
 }
 
+void AppUpdaterTest::selectsAarch64AppImageAsset()
+{
+    const auto release = pictura::parseReleaseJson(releaseFixture());
+    QVERIFY(release.has_value());
+    for (const QString& architecture : {QStringLiteral("arm64"), QStringLiteral("aarch64")}) {
+        const auto asset
+            = pictura::selectReleaseAsset(*release, PackageMethod::AppImage, architecture);
+        QVERIFY2(asset.has_value(), qPrintable(architecture));
+        QCOMPARE(asset->name, QStringLiteral("KookaPictura-0.4.0-aarch64.AppImage"));
+        QCOMPARE(asset->size, qint64(52150272));
+    }
+}
+
 void AppUpdaterTest::selectsWindowsSetupAsset()
 {
     const auto release = pictura::parseReleaseJson(releaseFixture());
@@ -529,8 +548,10 @@ void AppUpdaterTest::missingAssetFallsBackToReleasePage()
     const auto release = pictura::parseReleaseJson(releaseFixture());
     QVERIFY(release.has_value());
     QVERIFY(!release->htmlUrl.isEmpty());
+    QVERIFY(!pictura::selectReleaseAsset(*release, PackageMethod::Deb, QStringLiteral("aarch64"))
+                 .has_value());
     QVERIFY(!pictura::selectReleaseAsset(*release, PackageMethod::AppImage,
-                                         QStringLiteral("aarch64"))
+                                         QStringLiteral("riscv64"))
                  .has_value());
     QVERIFY(!pictura::selectReleaseAsset(*release, PackageMethod::Development,
                                          QStringLiteral("x86_64"))
@@ -627,7 +648,11 @@ void AppUpdaterTest::checkOnLaunchSendsOneRequest()
     QCOMPARE(server.requestCount(), 1);
     QVERIFY(checker.release().has_value());
     QVERIFY(checker.asset().has_value());
-    QCOMPARE(checker.asset()->name, QStringLiteral("KookaPictura-0.4.0-x86_64.AppImage"));
+    // The checker matches the host CPU, and the fixture carries both AppImages.
+    const QString cpu = QSysInfo::currentCpuArchitecture();
+    const bool arm = cpu == QStringLiteral("arm64") || cpu == QStringLiteral("aarch64");
+    QCOMPARE(checker.asset()->name, arm ? QStringLiteral("KookaPictura-0.4.0-aarch64.AppImage")
+                                        : QStringLiteral("KookaPictura-0.4.0-x86_64.AppImage"));
 }
 
 void AppUpdaterTest::disabledCheckMakesNoRequest()

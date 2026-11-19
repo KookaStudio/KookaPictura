@@ -36,6 +36,12 @@ bool isX86_64(const QString& architecture)
         || lower == QStringLiteral("x64");
 }
 
+bool isAarch64(const QString& architecture)
+{
+    const QString lower = architecture.toLower();
+    return lower == QStringLiteral("arm64") || lower == QStringLiteral("aarch64");
+}
+
 PackageMethod packageMethodFromMarker(const QString& marker)
 {
     const QString value = marker.trimmed().toLower();
@@ -231,6 +237,9 @@ QString packageAssetSuffix(PackageMethod method, const QString& architecture)
         return method == PackageMethod::WindowsSetup
             ? QStringLiteral("-windows-x64-setup.exe")
             : QStringLiteral("-windows-x64-portable.zip");
+    }
+    if (method == PackageMethod::AppImage && isAarch64(architecture)) {
+        return QStringLiteral("-aarch64.AppImage");
     }
     if (method == PackageMethod::Development || !isX86_64(architecture)) {
         return {};

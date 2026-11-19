@@ -1,6 +1,7 @@
 name: appimage
 
-# Builds the x86_64 AppImage for a release tag and attaches it to that release.
+# Builds the x86_64 and aarch64 AppImages for a release tag and attaches them to
+# that release. Each architecture builds natively on its own runner.
 # release-please.yml calls this after it cuts a release (a release created with
 # GITHUB_TOKEN cannot trigger a `release:` workflow). Run it by hand to rebuild
 # or re-upload the asset for an existing tag. The release-please Release PR runs
@@ -40,8 +41,17 @@ permissions:
 
 jobs:
   appimage:
-    runs-on: ubuntu-24.04
+    name: appimage (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
     if: >-
       github.event_name != 'pull_request' ||
       (github.head_ref == 'release-please--branches--master' &&
@@ -64,15 +74,15 @@ jobs:
         env:
           NO_STRIP: "1"
         run: |
-          OUTPUT="KookaPictura-${VERSION#v}-x86_64.AppImage" \
-            ./linuxdeploy-x86_64.AppImage --appdir AppDir --output appimage
+          OUTPUT="KookaPictura-${VERSION#v}-${{ matrix.arch }}.AppImage" \
+            "./linuxdeploy-${{ matrix.arch }}.AppImage" --appdir AppDir --output appimage
 
       # The runner has install-qt-action's Qt on the loader path, which can hide
       # a library linuxdeploy failed to bundle. Run from a clean container with
-      # only the artifact mounted.
+      # only the artifact mounted. The image matches the runner's architecture.
       - name: Smoke-check the packaged binary in a clean container
         run: |
-          appimage=$(ls KookaPictura-*-x86_64.AppImage)
+          appimage=$(ls KookaPictura-*-${{ matrix.arch }}.AppImage)
           # GL/EGL drivers and fontconfig/freetype are host libraries that
           # linuxdeploy deliberately does not bundle; every desktop has them.
           # Nothing else comes from the host.
@@ -85,8 +95,8 @@ jobs:
       - name: Keep the AppImage
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: appimage
-          path: KookaPictura-*-x86_64.AppImage
+          name: appimage-${{ matrix.arch }}
+          path: KookaPictura-*-${{ matrix.arch }}.AppImage
           retention-days: 7
           if-no-files-found: error
 
@@ -101,10 +111,11 @@ jobs:
     steps:
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
-          name: appimage
+          pattern: appimage-*
+          merge-multiple: true
 
       - name: Upload release assets
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release upload "$RELEASE_TAG" KookaPictura-*-x86_64.AppImage --clobber
+        run: gh release upload "$RELEASE_TAG" KookaPictura-*.AppImage --clobber
