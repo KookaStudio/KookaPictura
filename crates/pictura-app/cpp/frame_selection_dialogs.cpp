@@ -38,6 +38,18 @@ QList<int> sameSizeDocumentIndexes(const PicturaMainWindow& frame)
     return indexes;
 }
 
+// A Load source that is a Channels-panel colour row (`color:<row>`), derived
+// from the document's picture rather than a stored channel.
+bool isColourTarget(const QString& target)
+{
+    return target.startsWith(QLatin1String("color:"));
+}
+
+int colourRowOf(const QString& target)
+{
+    return target.mid(QLatin1String("color:").size()).toInt();
+}
+
 } // namespace
 
 QStringList PicturaMainWindow::selectionDocumentLabelsForTest() const
@@ -140,13 +152,24 @@ void PicturaMainWindow::openLoadSelectionDialog()
         return;
     }
     if (request.document == active) {
+        if (isColourTarget(request.target)) {
+            const auto coverage = color_row_coverage(*active, colourRowOf(request.target), 0x7);
+            if (!load_selection_coverage(*active,
+                    ::rust::Slice<const std::uint8_t>(coverage.data(), coverage.size()), width,
+                    height, request.invert, request.mode)) {
+                refuse();
+            }
+            return;
+        }
         if (!load_selection_target(*active, request.target, request.invert, request.mode)) {
             refuse();
         }
         return;
     }
     // ponytail: same full-plane FFI copy as Save Selection.
-    const auto coverage = channel_coverage(*request.document, request.target);
+    const auto coverage = isColourTarget(request.target)
+        ? color_row_coverage(*request.document, colourRowOf(request.target), 0x7)
+        : channel_coverage(*request.document, request.target);
     if (coverage.size() == 0) {
         refuse();
         return;
