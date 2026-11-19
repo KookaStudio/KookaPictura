@@ -525,9 +525,10 @@ unlinked when set and linked when clear. Linking SHALL clear only bit 0;
 unlinking SHALL set only bit 0, preserving every other flags bit and the mask's
 bounds and coverage. Setting the state it already has SHALL report no change
 and leave the document unchanged. A newly created raster mask SHALL be linked
-with bit 0 clear, including masks created by vector-mask rasterization and
-Auto Blend. The raw flags byte SHALL retain its PSD representation through
-save and read; linking SHALL NOT reinterpret the mask's stored coordinates.
+with bit 0 clear, including the default mask a new fill or adjustment layer
+receives, masks created by vector-mask rasterization, and Auto Blend. The raw
+flags byte SHALL retain its PSD representation through save and read; linking
+SHALL NOT reinterpret the mask's stored coordinates.
 
 #### Scenario: Linking clears only bit 0 [pml_link_clears_bit]
 
@@ -543,6 +544,11 @@ save and read; linking SHALL NOT reinterpret the mask's stored coordinates.
 
 - **WHEN** a raster mask is created by an ordinary mask command, vector-mask rasterization, or Auto Blend
 - **THEN** the created mask reads as linked and its flags have bit 0 clear
+
+#### Scenario: A default fill-layer mask is linked [pml_default_fill_mask_linked]
+
+- **WHEN** a fill or adjustment layer is created with the default-mask preference and no active selection
+- **THEN** its reveal-all mask reads as linked and its flags have bit 0 clear
 
 #### Scenario: Repeating the linked state is a no-op [pml_link_noop]
 

@@ -446,11 +446,12 @@ pub(super) fn fill_layer(
                 } else {
                     name.to_string()
                 },
-                pictura_render::encode_solid_color_fill([
+                pictura_render::encode_fill_content(&FillContent::Solid([
                     (value >> 16) as u8,
                     (value >> 8) as u8,
                     value as u8,
-                ]),
+                    255,
+                ])),
             )
         }
         "gradient" => (

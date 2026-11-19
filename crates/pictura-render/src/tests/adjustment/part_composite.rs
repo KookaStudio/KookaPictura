@@ -776,3 +776,66 @@ fn monochrome_channel_mixer_in_cmyk_document() {
         }
     }
 }
+
+#[test]
+fn created_solid_fill_layer_preserves_alpha() {
+    let mut d = doc(2, 2, Vec::new());
+    let path = crate::add_solid_fill(&mut d, "", [10, 20, 30, 40]);
+    assert!(!path.is_empty());
+    let layer = d
+        .layers
+        .iter()
+        .find(|l| l.name == "Color Fill 1")
+        .expect("created layer");
+    assert_eq!(
+        layer.fill_content(),
+        Some(&pictura_core::FillContent::Solid([10, 20, 30, 40]))
+    );
+    assert_eq!(
+        layer.adjustment().map(|a| a.data.as_slice().to_vec()),
+        Some(vec![10, 20, 30, 40]),
+        "a translucent fill takes the native 4-byte payload"
+    );
+    assert_eq!(
+        px(&composite_rgba(&d), 0, 0),
+        [10, 20, 30, 40],
+        "the colour alpha drives the composite"
+    );
+
+    d.composite
+        .replace(composite_rgba(&d))
+        .expect("valid composite");
+    let bytes = pictura_codec::write_psd(&d).expect("writes");
+    let reopened = pictura_codec::read_psd(&bytes).expect("reads");
+    let layer = reopened
+        .layers
+        .iter()
+        .find(|l| l.name == "Color Fill 1")
+        .expect("reopened layer");
+    assert_eq!(
+        layer.fill_content(),
+        Some(&pictura_core::FillContent::Solid([10, 20, 30, 40])),
+        "the alpha survives save and reopen"
+    );
+
+    let mut transparent = doc(2, 2, Vec::new());
+    crate::add_solid_fill(&mut transparent, "", [10, 20, 30, 0]);
+    assert_eq!(
+        px(&composite_rgba(&transparent), 0, 0),
+        [0, 0, 0, 0],
+        "a fully transparent fill leaves the backdrop alone"
+    );
+
+    let mut opaque = doc(2, 2, Vec::new());
+    crate::add_solid_fill(&mut opaque, "", [10, 20, 30, 255]);
+    let layer = opaque
+        .layers
+        .iter()
+        .find(|l| l.name == "Color Fill 1")
+        .expect("opaque layer");
+    assert!(
+        layer.adjustment().is_some_and(|a| a.data.len() > 4),
+        "an opaque fill keeps the standard descriptor"
+    );
+    assert_eq!(px(&composite_rgba(&opaque), 0, 0), [10, 20, 30, 255]);
+}

@@ -303,7 +303,7 @@ fn lmgm_on_uses_the_whole_fill_source_box() {
             255,
         )],
     );
-    let path = crate::add_solid_fill(&mut d, "", [255, 0, 0, 128]);
+    let path = crate::add_solid_fill(&mut d, "", [255, 0, 0, 255]);
     let layer = crate::resolve_path_mut(&mut d, &path).expect("fill layer");
     layer.fill = 128;
     layer.mask = Some(half_mask_rect(rect(0, 0, 12, 6)));

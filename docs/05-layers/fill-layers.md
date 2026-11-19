@@ -122,7 +122,8 @@ rasterize into tiles on demand. *(The following is a design proposal/inferred;
 the Help documents only the controls and behavior.)*
 
 1. **Generate content.** Produce an RGBA tile for the fill layer's bounding box:
-   - **Solid:** every pixel = the fill color at full alpha.
+   - **Solid:** every pixel = the fill color at its alpha (opaque for a
+     CS6-authored fill; a Pictura-authored fill may carry alpha).
    - **Gradient:** evaluate the gradient along the chosen geometry (Linear/Radial/
      Angled/Reflected/Diamond), using `Align With Layer` to size the ramp to the
      layer's bounding box, `Angle` to rotate, `Scale` to stretch, `Reverse` to

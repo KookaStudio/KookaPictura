@@ -350,8 +350,9 @@ pub fn add_layer_full(doc: &mut Document, selection_path: &str, spec: &NewLayerS
 
 /// Insert a solid-color fill-content layer at the [`insert_node`] rule.
 ///
-/// The node is document-sized with no pixel channels; its content lives in an
-/// opaque `SoCo` block holding the standard PSD version-16 descriptor.
+/// The node is document-sized with no pixel channels; its content lives in a
+/// `SoCo` block: the standard version-16 descriptor for an opaque colour, the
+/// 4-byte `[r, g, b, a]` tuple when it is translucent.
 /// Named `"Color Fill N"`. Returns the new path, or empty for a zero-dimension
 /// document. Fill layers carry an adjustment, so the merge check refuses them.
 pub fn add_solid_fill(doc: &mut Document, selection_path: &str, rgba: [u8; 4]) -> String {
@@ -375,10 +376,9 @@ pub fn add_solid_fill(doc: &mut Document, selection_path: &str, rgba: [u8; 4]) -
         clipping: false,
         visible: true,
         mask: None,
-        // ponytail: SoCo descriptor is RGB-only, so the alpha byte is dropped
-        // and the fill is opaque; thread it through if a non-opaque fill is
-        // ever needed.
-        adjustment: Some(crate::encode_solid_color_fill([rgba[0], rgba[1], rgba[2]])),
+        adjustment: Some(crate::encode_fill_content(
+            &pictura_core::FillContent::Solid(rgba),
+        )),
         channels: Vec::new(),
         children: pictura_core::LayerStack::default(),
         is_group: false,
