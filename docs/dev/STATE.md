@@ -4,6 +4,15 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **16-bit tone tools — #1421 implemented** (OpenSpec change
+  `native-depth-tone-tools`, archived; capability `tools/native-depth-tone`).
+  Dodge, Burn, and Sponge now read and write the layer's retained 16-bit native
+  planes and keep the 8-bit channels as their narrowing; Grayscale uses the
+  single native plane, selection coverage is applied at native depth, and a
+  cancelled stroke restores the native tiles. `Stroke::begin_tone` refuses a
+  retained 32-bit source store as well as a 32-bit working document, so the
+  32-bpc UI gate keeps the tools unavailable. Tests: the `tone_native` units and
+  `tst_retouch_tools::sixteenBitDodgeLightsTheCanvas`.
 - **Merged-preview band buffers — #1423 complete** (OpenSpec change
   `merged-preview-band-buffers`; capability `codec/merged-preview-band-buffers`).
   `MergedPreview::region` allocates each band's rows (`band_buffer`, a zeroed
