@@ -15,11 +15,12 @@
 //! seed, so a stroke replays exactly.
 
 use crate::healing::RgbaImage;
-use crate::replace::{dab_bounds, grow};
-use crate::{tip_coverage, StrokeConfig};
+use crate::replace::dab_bounds;
+use crate::tip::TipParams;
+use crate::StrokeConfig;
 use pictura_core::PsdRect;
 use rayon::prelude::*;
-use std::f32::consts::{PI, TAU};
+use std::f32::consts::{PI, SQRT_2, TAU};
 
 /// The Style menu, in CS6's order.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -191,15 +192,17 @@ impl ArtHistoryBrush {
             } else {
                 shape.curl
             };
+            let mut centres = Vec::with_capacity(steps + 1);
             for i in 0..=steps {
                 if i > 0 {
                     heading += turn + (self.next() - 0.5) * 2.0 * shape.jitter;
                     x += step * heading.cos();
                     y += step * heading.sin();
                 }
-                if let Some(d) = self.stamp(img, cfg, x, y, paint) {
-                    dirty = Some(dirty.map_or(d, |r: PsdRect| r.union(d)));
-                }
+                centres.push((x, y));
+            }
+            if let Some(d) = self.stamp_path(img, cfg, &centres, paint) {
+                dirty = Some(dirty.map_or(d, |r: PsdRect| r.union(d)));
             }
         }
         dirty
@@ -230,40 +233,76 @@ impl ArtHistoryBrush {
         (gx.abs() + gy.abs() > 4.0).then(|| gy.atan2(gx) + PI * 0.5)
     }
 
-    /// One tip of `paint` at `(cx, cy)`, over the pixels at Opacity × Flow.
-    fn stamp(
+    /// One stroke: a tip of `paint` at each of `centres` in order, over the
+    /// pixels at Opacity × Flow. Returns the layer-local rectangle changed.
+    ///
+    /// The rows run in parallel, each applying the stroke's tips in order, so
+    /// every pixel sees the same sequence of blends as tip-by-tip stamping
+    /// (#1238).
+    fn stamp_path(
         &self,
         img: &mut RgbaImage,
         cfg: &StrokeConfig,
-        cx: f32,
-        cy: f32,
+        centres: &[(f32, f32)],
         paint: [u8; 4],
     ) -> Option<PsdRect> {
-        let region = dab_bounds(img, cfg, cx, cy)?;
+        let tips: Vec<(f32, f32, PsdRect)> = centres
+            .iter()
+            .filter_map(|&(cx, cy)| Some((cx, cy, dab_bounds(img, cfg, cx, cy)?)))
+            .collect();
+        let bounds = tips.iter().map(|t| t.2).reduce(PsdRect::union)?;
         let strength = cfg.opacity.min(100) as f32 / 100.0 * cfg.flow.min(100) as f32 / 100.0;
-        let mut dirty = None;
-        for y in region.top..region.bottom {
-            for x in region.left..region.right {
-                let tip = tip_coverage(cfg, x as f32 + 0.5 - cx, y as f32 + 0.5 - cy);
-                let a = tip * strength * paint[3] as f32 / 255.0;
-                if a <= 0.0 {
-                    continue;
+        let tip = TipParams::new(cfg);
+        // How far a tip reaches from its centre: a rotated square's corners
+        // reach √2 of its radius, a round or squashed tip no further than it.
+        let reach = tip.radius * if tip.square { SQRT_2 } else { 1.0 };
+        let preserve_alpha = self.preserve_alpha;
+        let width = img.width as usize;
+        img.data[bounds.top as usize * width..bounds.bottom as usize * width]
+            .par_chunks_mut(width)
+            .enumerate()
+            .filter_map(|(i, row)| {
+                let y = bounds.top + i as i32;
+                let mut span: Option<(i32, i32)> = None;
+                for &(cx, cy, region) in &tips {
+                    if y < region.top || y >= region.bottom {
+                        continue;
+                    }
+                    let dy = y as f32 + 0.5 - cy;
+                    // The row's chord of the tip's reach: every pixel past it
+                    // has no coverage.
+                    let half = (reach * reach - dy * dy).max(0.0).sqrt() + 1.0;
+                    let x0 = region.left.max((cx - half).floor() as i32);
+                    let x1 = region.right.min((cx + half).ceil() as i32 + 1);
+                    for x in x0..x1 {
+                        let a = tip.coverage(x as f32 + 0.5 - cx, dy) * strength * paint[3] as f32
+                            / 255.0;
+                        if a <= 0.0 {
+                            continue;
+                        }
+                        let px = &mut row[x as usize];
+                        let dest = *px;
+                        if preserve_alpha && dest[3] == 0 {
+                            continue;
+                        }
+                        let mut out = over(dest, paint, a);
+                        if preserve_alpha {
+                            out[3] = dest[3];
+                        }
+                        if out != dest {
+                            *px = out;
+                            span = Some(span.map_or((x, x), |(l, r)| (l.min(x), r.max(x))));
+                        }
+                    }
                 }
-                let dest = img.get(x, y);
-                if self.preserve_alpha && dest[3] == 0 {
-                    continue;
-                }
-                let mut out = over(dest, paint, a);
-                if self.preserve_alpha {
-                    out[3] = dest[3];
-                }
-                if out != dest {
-                    img.set(x, y, out);
-                    dirty = Some(grow(dirty, x, y));
-                }
-            }
-        }
-        dirty
+                span.map(|(l, r)| PsdRect {
+                    top: y,
+                    left: l,
+                    bottom: y + 1,
+                    right: r + 1,
+                })
+            })
+            .reduce_with(PsdRect::union)
     }
 
     /// SplitMix64 as a float in `0.0..1.0`.
@@ -331,255 +370,5 @@ pub(crate) fn layer_local(source: &RgbaImage, rect: PsdRect) -> RgbaImage {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::stroke::layer_rgba;
-    use crate::{PaintError, Stroke, StrokeSample};
-    use pictura_core::{BitDepth, Channel, ColorMode, Document};
-
-    const W: i32 = 64;
-    const H: i32 = 64;
-    const RED: [u8; 4] = [200, 30, 30, 255];
-    const WHITE: [u8; 4] = [255, 255, 255, 255];
-
-    fn doc(px: [u8; 4]) -> Document {
-        let mut doc = Document::new(W as u32, H as u32, ColorMode::Rgb, BitDepth::Eight);
-        {
-            let _ = doc.layers.push(pictura_core::Layer::from_parts(
-                pictura_core::LayerParts {
-                    rect: PsdRect {
-                        top: 0,
-                        left: 0,
-                        bottom: H,
-                        right: W,
-                    },
-                    channels: [(0, 0), (1, 1), (2, 2), (-1, 3)]
-                        .map(|(id, c)| Channel {
-                            id,
-                            data: vec![px[c]; (W * H) as usize].into(),
-                        })
-                        .into(),
-                    ..Default::default()
-                },
-                pictura_core::LayerContent::Pixel,
-            ));
-        };
-        doc
-    }
-
-    fn surface(px: [u8; 4]) -> RgbaImage {
-        RgbaImage {
-            width: W,
-            height: H,
-            data: vec![px; (W * H) as usize],
-        }
-    }
-
-    fn paint(doc: &Document, source: RgbaImage, options: ArtHistoryOptions) -> Option<Document> {
-        let cfg = StrokeConfig {
-            diameter: 4,
-            ..StrokeConfig::default()
-        };
-        let mut stroke = Stroke::begin_art_history(doc, "0", cfg, source.into(), options).ok()?;
-        let mut out = doc.clone();
-        for x in [24.0, 32.0, 40.0] {
-            stroke.sample(
-                &mut out,
-                StrokeSample {
-                    x,
-                    y: 32.0,
-                    pressure: 1.0,
-                },
-            );
-        }
-        stroke.finish().map(|_| out)
-    }
-
-    fn painted(doc: &Document, colour: [u8; 4]) -> Vec<(i32, i32)> {
-        let img = layer_rgba(&doc.layers[0]);
-        (0..W * H)
-            .map(|i| (i % W, i / W))
-            .filter(|&(x, y)| img.get(x, y) == colour)
-            .collect()
-    }
-
-    #[test]
-    fn strokes_take_their_colour_from_the_source_and_scatter_over_the_area() {
-        let out = paint(&doc(WHITE), surface(RED), ArtHistoryOptions::default()).unwrap();
-        let red = painted(&out, RED);
-        assert!(!red.is_empty(), "nothing painted");
-        // Area 50 reaches beyond the 4 px tip's own track.
-        assert!(red.iter().any(|&(_, y)| (y - 32).abs() > 6), "no scatter");
-    }
-
-    #[test]
-    fn a_high_tolerance_leaves_pixels_that_match_the_source() {
-        let options = ArtHistoryOptions {
-            tolerance: 50,
-            ..ArtHistoryOptions::default()
-        };
-        // Source and layer agree, so nothing has drifted far enough.
-        assert!(paint(&doc(RED), surface(RED), options).is_none());
-        // White is far from red: the gate lets it through.
-        assert!(paint(&doc(WHITE), surface(RED), options).is_some());
-    }
-
-    #[test]
-    fn longer_styles_reach_further_than_dab() {
-        let reach = |style| {
-            let options = ArtHistoryOptions {
-                style,
-                area: 1,
-                ..ArtHistoryOptions::default()
-            };
-            let out = paint(&doc(WHITE), surface(RED), options).unwrap();
-            let red = painted(&out, RED);
-            let spread = |f: fn(&(i32, i32)) -> i32| {
-                red.iter().map(f).max().unwrap() - red.iter().map(f).min().unwrap()
-            };
-            spread(|p| p.0).max(spread(|p| p.1))
-        };
-        assert!(reach(ArtStyle::TightLong) > reach(ArtStyle::Dab));
-    }
-
-    #[test]
-    fn a_seed_replays_and_another_differs() {
-        let at = |seed| {
-            let options = ArtHistoryOptions {
-                seed,
-                ..ArtHistoryOptions::default()
-            };
-            painted(&paint(&doc(WHITE), surface(RED), options).unwrap(), RED)
-        };
-        assert_eq!(at(7), at(7));
-        assert_ne!(at(7), at(8));
-    }
-
-    #[test]
-    fn a_deep_document_is_refused() {
-        let mut deep = doc(WHITE);
-        deep.depth = BitDepth::Sixteen;
-        let cfg = StrokeConfig::default();
-        let begun =
-            Stroke::begin_art_history(&deep, "0", cfg, surface(RED).into(), Default::default());
-        assert!(matches!(begun, Err(PaintError::UnsupportedDepth)));
-    }
-
-    #[test]
-    fn every_style_has_a_name() {
-        for (i, _) in STYLE_NAMES.iter().enumerate() {
-            assert!(ArtStyle::from_i32(i as i32).is_some());
-        }
-        assert!(ArtStyle::from_i32(STYLE_NAMES.len() as i32).is_none());
-    }
-
-    fn layer_local_serial(source: &RgbaImage, rect: PsdRect) -> RgbaImage {
-        let (w, h) = (rect.width().max(0), rect.height().max(0));
-        let mut out = RgbaImage {
-            width: w,
-            height: h,
-            data: vec![[0; 4]; (w * h) as usize],
-        };
-        for y in 0..h {
-            for x in 0..w {
-                let (sx, sy) = (x + rect.left, y + rect.top);
-                if sx >= 0 && sy >= 0 && sx < source.width && sy < source.height {
-                    out.set(x, y, source.get(sx, sy));
-                }
-            }
-        }
-        out
-    }
-
-    #[test]
-    fn layer_local_matches_serial_builder() {
-        let source = surface(RED);
-        for rect in [
-            PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 64,
-                right: 64,
-            },
-            PsdRect {
-                top: 5,
-                left: 7,
-                bottom: 20,
-                right: 30,
-            },
-            PsdRect {
-                top: -4,
-                left: -6,
-                bottom: 10,
-                right: 12,
-            },
-        ] {
-            assert_eq!(
-                layer_local(&source, rect),
-                layer_local_serial(&source, rect),
-                "{rect:?}"
-            );
-        }
-        let empty = RgbaImage {
-            width: 0,
-            height: 0,
-            data: Vec::new(),
-        };
-        let zero = PsdRect {
-            top: 0,
-            left: 0,
-            bottom: 0,
-            right: 0,
-        };
-        assert!(layer_local(&empty, zero).data.is_empty());
-    }
-
-    #[test]
-    fn sampled_surface_matches_two_pass_crop() {
-        let mut buf = pictura_core::PixelBuffer::new(16, 12, 4);
-        buf.data = (0..16 * 12 * 4)
-            .map(|i| (i as u8).wrapping_mul(3))
-            .collect::<Vec<u8>>()
-            .into();
-        for rect in [
-            PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 12,
-                right: 16,
-            },
-            PsdRect {
-                top: 3,
-                left: 2,
-                bottom: 9,
-                right: 11,
-            },
-            PsdRect {
-                top: -2,
-                left: -3,
-                bottom: 5,
-                right: 6,
-            },
-            PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 0,
-                right: 0,
-            },
-            PsdRect {
-                top: 3,
-                left: 2,
-                bottom: 9,
-                right: 2,
-            },
-        ] {
-            let one_pass = crate::stamp::surface_from_composite_rect(&buf, rect);
-            let two_pass = layer_local(&crate::stamp::surface_from_composite(&buf), rect);
-            assert_eq!(one_pass, two_pass, "{rect:?}");
-            if rect.width() == 0 || rect.height() == 0 {
-                assert!(one_pass.data.is_empty(), "{rect:?}");
-                assert!(two_pass.data.is_empty(), "{rect:?}");
-            }
-        }
-    }
-}
+#[path = "art_history/tests.rs"]
+mod tests;

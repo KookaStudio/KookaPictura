@@ -464,6 +464,12 @@ QJsonObject ControlServer::methodHistory(const QJsonObject& params)
             return error(QStringLiteral("invalid_param"), QStringLiteral("no such snapshot"));
         }
         applied = history_api::restoreSnapshot(*view, index);
+    } else if (op == QStringLiteral("brush_source")) {
+        const int index = params.value(QStringLiteral("index")).toInt(-1);
+        if (index < 0 || index >= history_api::count(*view)) {
+            return error(QStringLiteral("invalid_param"), QStringLiteral("no such state"));
+        }
+        applied = history_api::setBrushSource(*view, false, index);
     } else if (op != QStringLiteral("list")) {
         return error(QStringLiteral("invalid_param"), QStringLiteral("unknown op: %1").arg(op));
     }

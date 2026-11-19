@@ -341,9 +341,12 @@ impl TilePyramid {
         let mut data = crate::region_level::premultiply_planar(region);
         let (mut origin, mut size) = ((rect.left, rect.top), (region.width, region.height));
         // Level 0 is stored straight: copy it from the planes, not the
-        // premultiplied rows.
-        let straight = interleave(region);
-        self.patch_level(source, 0, rect, &straight);
+        // premultiplied rows, and only when a level-0 tile is there to take
+        // it (#1238): zoomed out, none is.
+        if self.any_current_in(source, 0, rect) {
+            let straight = interleave(region);
+            self.patch_level(source, 0, rect, &straight);
+        }
         for level in 1..self.levels {
             if !self
                 .tiles
@@ -353,7 +356,7 @@ impl TilePyramid {
                 break;
             }
             let (halved, next) =
-                halve_level(&data, origin, size, (self.width, self.height), level - 1);
+                halve_level(data, origin, size, (self.width, self.height), level - 1);
             data = next;
             origin = (halved.left, halved.top);
             size = (halved.width() as u32, halved.height() as u32);
@@ -553,6 +556,14 @@ impl TilePyramid {
         }
     }
 
+    /// Whether a current tile of `source` at `level` meets `rect` (that
+    /// level's pixels).
+    fn any_current_in(&self, source: TileSource, level: usize, rect: PsdRect) -> bool {
+        self.keys_in(source, level, rect)
+            .into_iter()
+            .any(|key| self.tiles.get(&key).is_some_and(|e| !e.stale))
+    }
+
     /// Write `rows` (interleaved, covering `rect` of `level`) into the cached
     /// tiles of that level it overlaps.
     fn patch_level(&mut self, source: TileSource, level: usize, rect: PsdRect, rows: &[u8]) {
@@ -609,18 +620,25 @@ impl TilePyramid {
 
 /// Straight planar RGBA as straight interleaved RGBA.
 pub fn interleave(buffer: &PixelBuffer) -> Vec<u8> {
-    let plane = buffer.width as usize * buffer.height as usize;
-    let mut out = vec![0u8; plane * 4];
-    let mut row = vec![0u8; buffer.width as usize];
+    use rayon::prelude::*;
     let w = buffer.width as usize;
-    for c in 0..4 {
-        for y in 0..buffer.height as usize {
-            buffer.data.read_into(c * plane + y * w, &mut row);
-            for (x, v) in row.iter().enumerate() {
-                out[(y * w + x) * 4 + c] = *v;
-            }
-        }
+    let plane = w * buffer.height as usize;
+    let mut out = vec![0u8; plane * 4];
+    if w == 0 {
+        return out;
     }
+    // Rows on every core (#1238): a stroke's present interleaves its region.
+    out.par_chunks_mut(w * 4).enumerate().for_each_init(
+        || vec![0u8; w],
+        |row, (y, out)| {
+            for c in 0..4 {
+                buffer.data.read_into(c * plane + y * w, row);
+                for (px, v) in out.as_chunks_mut::<4>().0.iter_mut().zip(row.iter()) {
+                    px[c] = *v;
+                }
+            }
+        },
+    );
     out
 }
 

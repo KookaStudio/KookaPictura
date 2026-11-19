@@ -249,7 +249,7 @@ pub fn region_level_chunked(
 /// Halve a premultiplied level-`level` region of a `width`×`height` document
 /// once, for a caller that holds the four children of a tile.
 pub fn halve_level(
-    data: &[u8],
+    data: Vec<u8>,
     origin: (i32, i32),
     size: (u32, u32),
     doc: (u32, u32),
@@ -260,7 +260,7 @@ pub fn halve_level(
         top: origin.1,
         width: size.0,
         height: size.1,
-        data: data.to_vec(),
+        data,
     };
     let (sw, sh) = level_size(doc.0, doc.1, level);
     let halved = region.halved(sw, sh);
