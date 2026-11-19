@@ -335,6 +335,55 @@ totals, and output is unchanged. (The render crate's GPU counters always count:
 one atomic add per composite or upload. They are only reported.)
 `PICTURA_PAINT_TIMING=1` still prints the per-stroke `[paint-timing]` report.
 
+### Sampling profiles
+
+`perf` and `samply` attach to the single `pictura` process. A release build
+carries no line tables for the application's own code unless the build asks for
+them (only the precompiled standard library brings its own), so build a
+profiling tree with line tables on both sides:
+
+```bash
+cmake -S . -B build-prof -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DBUILD_TESTING=OFF
+CARGO_PROFILE_RELEASE_DEBUG=line-tables-only \
+  python3 scripts/cpu-budget.py exec -- cmake --build build-prof --parallel
+```
+
+`CARGO_PROFILE_RELEASE_DEBUG` is Cargo's release-profile override: it applies to
+that build only, so `Cargo.toml` and every shipped artifact are unchanged. Set it
+on the build command — Corrosion reads the environment when it runs cargo. A
+rebuild without it drops the line tables and recompiles the Rust library in full.
+Use `=2` instead of `line-tables-only` when inlined frames matter: line tables
+give a file and line, while `.debug_info` also lets a report fold an inlined call
+into its caller. Configuring this second tree repoints the repository-root
+`compile_commands.json` symlink at `build-prof`; reconfigure `build`
+afterwards if clangd or Serena should keep using the development tree.
+
+Record with every CPU, on an idle machine, and never under the budget wrapper.
+The helper restricts the process to an affinity slice, parallel crates size
+their pool from that mask, and thread placement and cache topology follow, so a
+budgeted recording describes a smaller machine than the one you ship to.
+
+```bash
+perf record --call-graph dwarf ./build-prof/pictura
+perf report
+samply record ./build-prof/pictura
+```
+
+`perf` (`linux-perf` on Debian/Ubuntu) and `samply` (`cargo install samply` or a
+release download) must be on `PATH`. Sampling also needs `perf_event_open`:
+user-space self-profiling of one process works up to
+`kernel.perf_event_paranoid=2`, and kernel frames need `<=1` or `CAP_PERFMON`.
+Kernel symbols additionally need the matching debuginfo package. Rust emits no
+frame pointers, so ask for `--call-graph dwarf`; the default `fp` unwinds
+nothing useful.
+
+`RelWithDebInfo` compiles C++ at `-O2 -g -DNDEBUG` while packaging uses `-O3`,
+one optimization level apart. Pass
+`-DCMAKE_CXX_FLAGS_RELWITHDEBINFO="-O3 -DNDEBUG -g"` at configure time when the
+profile must match the shipped codegen exactly; `-g` alone changes no
+optimization.
+
 ## Common tasks
 
 - **Change behavior.** Write an OpenSpec change first
@@ -442,10 +491,12 @@ configure warns once with the `-U` command above.
 
 The same optimized development build compiles C++ at `-Og -g1` and, with GCC or
 Clang, behind a precompiled header of the Qt and std headers
-(`crates/pictura-app/cpp/pictura_pch.h`). C++ profiling therefore wants a
-packaging configure (`-DBUILD_TESTING=OFF`). The header can hide a missing
-`#include`; configure a throwaway tree with
-`-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON` to check, as CI does.
+(`crates/pictura-app/cpp/pictura_pch.h`). It already carries line tables for both
+Rust (`dev-app`) and C++ (`-g1`), but it is incremental with many codegen units,
+so a sampling profile of the shipped configuration wants the `BUILD_TESTING=OFF`
+tree built with `CARGO_PROFILE_RELEASE_DEBUG` — see "Sampling profiles" under
+[Profiling](#profiling). The header can hide a missing `#include`; configure a
+throwaway tree with `-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON` to check, as CI does.
 
 The local gates run under a CPU budget of 80% of the allowed CPUs: the budget
 helper applies an affinity slice shared by concurrent worktrees and exports the
