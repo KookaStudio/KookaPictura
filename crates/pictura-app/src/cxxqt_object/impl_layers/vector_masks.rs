@@ -28,9 +28,14 @@ pub mod ffi {
     extern "Rust" {
         /// Add a vector mask of `kind` (`"reveal-all"`, `"hide-all"`,
         /// `"current-path"`) to the active layer; one "Add Vector Mask" state.
-        /// False when the kind is unknown, the layer already has a vector mask,
-        /// or Current Path has no work path.
+        /// Current Path authors the Paths panel's selected saved path or Work
+        /// Path. False when the kind is unknown, the layer already has a vector
+        /// mask, or Current Path has no selected, non-empty path.
         fn vector_mask_add(view: Pin<&mut PictureView>, kind: &QString) -> bool;
+
+        /// Whether Current Path has a path to author: the Paths panel's
+        /// selected saved path or Work Path, non-empty.
+        fn vector_mask_current_path_available(view: &PictureView) -> bool;
 
         /// Add a vector mask of `kind` to the layer at `path`; one
         /// "Add Vector Mask" state. The row menu edits the clicked row.

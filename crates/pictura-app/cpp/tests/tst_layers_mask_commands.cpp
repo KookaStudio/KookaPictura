@@ -15,6 +15,7 @@
 #include "image_view.h"
 #include "mask_display_options_dialog.h"
 #include "panels/layers_panel.h"
+#include "panels/layers_panel_internal.h"
 #include "panels/properties_panel.h"
 #include "refine_edge_dialog.h"
 #include "session.h"
@@ -55,11 +56,16 @@ private slots:
     void trashActsOnTheSelectedRow();
     void groupMaskThumbnailActivates();
     void groupMaskPaintRoundTrip();
+    void currentPathUsesTheSelectedSavedPath();
+    void currentPathNeedsASelectedPath();
+    void vectorThumbnailSelectsTheMaskPath();
 
 private:
     // A white `side`² document with a rasterized fill layer selected; returns
     // the layer's path, empty on failure.
     QString fillLayer(int side);
+    // Draw a closed square from (l, t) to (r, b) on the active path.
+    static void square(pictura::PictureView& view, double l, double t, double r, double b);
 
     pictura::test::ScopedStateHome stateHome_;
     std::unique_ptr<pictura::PicturaMainWindow> window_;
@@ -726,5 +732,90 @@ void LayersMaskCommandsTest::layerMenuApplyAvailability()
     QVERIFY2(!panel_->maskMenuEnabledForPathForTest(group, QStringLiteral("Apply Layer Mask")),
              "the mask-thumbnail menu greys out Apply on a group");
 }
+
+void LayersMaskCommandsTest::square(pictura::PictureView& view, double l, double t, double r,
+                                    double b)
+{
+    for (const QPointF& p : {QPointF(l, t), QPointF(r, t), QPointF(r, b), QPointF(l, b)}) {
+        pictura::path_append_corner(view, p.x(), p.y(), false);
+        pictura::path_commit_anchor(view);
+    }
+    pictura::path_close(view);
+}
+
+// vmask_current_saved
+void LayersMaskCommandsTest::currentPathUsesTheSelectedSavedPath()
+{
+    const QString path = fillLayer(16);
+    QVERIFY(!path.isEmpty());
+    pictura::PictureView* view = window_->activeView();
+    square(*view, 4, 4, 12, 12);
+    QVERIFY(pictura::paths_save_work(*view, QStringLiteral("Outline")) >= 0);
+    QVERIFY(!pictura::paths_has_work_path(*view));
+    QCOMPARE(pictura::paths_active(*view), 0);
+
+    pictura::CommandRegistry* registry = window_->registry();
+    QVERIFY(registry != nullptr);
+    registry->refresh();
+    const QString id = QString::fromLatin1(pictura::command_ids::LayerVectorMaskCurrentPath);
+    QVERIFY2(registry->action(id)->isEnabled(), "a selected saved path enables Current Path");
+    QVERIFY(registry->dispatch(id));
+    QVERIFY(pictura::vector_mask_present_path(*view, path));
+    QCOMPARE(view->sample_argb(1, 1), QColor(Qt::white).rgba());
+    QVERIFY(view->sample_argb(8, 8) != QColor(Qt::white).rgba());
+    registry->refresh();
+    QVERIFY2(!registry->action(id)->isEnabled(), "the layer already has a vector mask");
+}
+
+// vmask_current_none
+void LayersMaskCommandsTest::currentPathNeedsASelectedPath()
+{
+    const QString path = fillLayer(16);
+    QVERIFY(!path.isEmpty());
+    pictura::PictureView* view = window_->activeView();
+    square(*view, 4, 4, 12, 12);
+    QVERIFY(pictura::paths_has_work_path(*view));
+    QVERIFY(pictura::paths_set_active(*view, -2));
+
+    pictura::CommandRegistry* registry = window_->registry();
+    QVERIFY(registry != nullptr);
+    registry->refresh();
+    QVERIFY(!registry->action(QString::fromLatin1(pictura::command_ids::LayerVectorMaskCurrentPath))
+                 ->isEnabled());
+    QVERIFY(!pictura::vector_mask_add(*view, QStringLiteral("current-path")));
+    QVERIFY(!pictura::vector_mask_present_path(*view, path));
+}
+
+// vmask_thumb_selects_row
+void LayersMaskCommandsTest::vectorThumbnailSelectsTheMaskPath()
+{
+    const QString path = fillLayer(16);
+    QVERIFY(!path.isEmpty());
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(pictura::vector_mask_add(*view, QStringLiteral("reveal-all")));
+    QCoreApplication::processEvents();
+    panel_->refresh();
+
+    auto* tree = panel_->findChild<QTreeView*>();
+    QVERIFY(tree && tree->model());
+    const auto matches = tree->model()->match(tree->model()->index(0, 0), pictura::PathRole, path,
+                                              1, Qt::MatchExactly | Qt::MatchRecursive);
+    QVERIFY(!matches.isEmpty());
+    const QRect visual = tree->visualRect(matches.front());
+    auto* delegate = static_cast<pictura::LayerRowDelegate*>(panel_->itemDelegateForTest());
+    const QRect thumb = delegate->vectorMaskThumbRect(
+        QRect(0, 0, visual.width(), visual.height()), matches.front());
+    QVERIFY(!thumb.isEmpty());
+    const QPoint at = panel_->rowViewportRectForTest(path).topLeft() + thumb.center();
+
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier, at);
+    QCoreApplication::processEvents();
+    QCOMPARE(pictura::paths_active(*view), -4);
+    QCOMPARE(pictura::path_subpath_count(*view), 1);
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier, at);
+    QCoreApplication::processEvents();
+    QCOMPARE(pictura::paths_active(*view), -2);
+}
+
 QTEST_MAIN(LayersMaskCommandsTest)
 #include "tst_layers_mask_commands.moc"

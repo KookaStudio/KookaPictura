@@ -170,15 +170,22 @@ void PathsPanel::refresh()
     list_->clear();
     if (view_ && view_->has_document()) {
         PictureView& v = *view_;
+        const QString maskName = paths_vector_mask_name(v);
         const bool layerTarget = path_layer_target(v);
         path_set_layer_target(v, true);
-        if (path_target_is_layer(v)) {
+        // An active vector-mask row is a layer target too; it gets its own row.
+        if (maskName.isEmpty() && path_target_is_layer(v)) {
             const QString name = QString::fromStdString(std::string(path_target_name(v)));
             auto* item = new QListWidgetItem(QIcon(thumbnail(v, targetPath(v))),
                                              tr("%1 Shape Path").arg(name), list_);
             item->setData(Qt::UserRole, kShapeRow);
         }
         path_set_layer_target(v, layerTarget);
+        if (!maskName.isEmpty()) {
+            auto* item = new QListWidgetItem(QIcon(thumbnail(v, outlinePath(v, kMaskRow))),
+                                             tr("%1 Vector Mask").arg(maskName), list_);
+            item->setData(Qt::UserRole, kMaskRow);
+        }
         auto addRow = [&](int row, const QString& name) {
             auto* item = new QListWidgetItem(QIcon(thumbnail(v, outlinePath(v, row))), name,
                                              list_);
@@ -328,10 +335,11 @@ bool PathsPanel::newPath()
 bool PathsPanel::deletePath()
 {
     const int row = selectedRow();
-    if (!view_ || (row != kWorkRow && row < 0)) {
+    if (!view_ || (row != kWorkRow && row != kMaskRow && row < 0)) {
         return false;
     }
-    const bool deleted = paths_delete(*view_, row);
+    // CS6's Delete Path on the vector-mask row deletes the mask itself.
+    const bool deleted = row == kMaskRow ? vector_mask_delete(*view_) : paths_delete(*view_, row);
     refresh();
     return deleted;
 }
@@ -394,7 +402,7 @@ void PathsPanel::updateFooter()
         button->setEnabled(has && row != -2);
     }
     add_->setEnabled(has);
-    remove_->setEnabled(has && (row >= 0 || row == kWorkRow));
+    remove_->setEnabled(has && (row >= 0 || row == kWorkRow || row == kMaskRow));
 }
 
 // CS6 hides every path when the empty part of the panel is clicked.

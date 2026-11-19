@@ -1,8 +1,10 @@
 use super::*;
 
+use crate::cxxqt_object::paths::{active_in, ActivePath};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
+use pictura_core::path::Subpath;
 use pictura_render::VectorMaskKind;
 
 pub(super) fn vector_mask_present_path(view: &PictureView, path: &QString) -> bool {
@@ -21,13 +23,21 @@ pub(super) fn vector_mask_disabled_path(view: &PictureView, path: &QString) -> b
         .is_some_and(|doc| pictura_render::vector_mask_disabled(doc, &path.to_string()))
 }
 
-pub(super) fn kind_from(name: &str) -> Option<VectorMaskKind> {
-    match name {
-        "reveal-all" => Some(VectorMaskKind::RevealAll),
-        "hide-all" => Some(VectorMaskKind::HideAll),
-        "current-path" => Some(VectorMaskKind::CurrentPath),
-        _ => None,
-    }
+/// The Paths panel's selected path, a saved path or the Work Path, as Current
+/// Path authors it; `None` when no such row is selected or it is empty.
+pub(super) fn current_path(view: &PictureView) -> Option<Vec<Subpath>> {
+    let rust = view.rust();
+    let doc = rust.session.doc.as_ref()?;
+    let path = match active_in(doc, rust.active_path) {
+        ActivePath::Work => &doc.work_path,
+        ActivePath::Saved(i) => &doc.saved_paths[i].path,
+        ActivePath::None | ActivePath::VectorMask => return None,
+    };
+    (!path.is_empty()).then(|| path.subpaths.clone())
+}
+
+pub(super) fn vector_mask_current_path_available(view: &PictureView) -> bool {
+    current_path(view).is_some()
 }
 
 pub(super) fn active_path(view: &PictureView) -> Option<String> {
@@ -40,14 +50,23 @@ pub(super) fn one(path: &str) -> QStringList {
     paths
 }
 
-pub(super) fn vector_mask_add(view: Pin<&mut PictureView>, kind: &QString) -> bool {
-    let Some(kind) = kind_from(&kind.to_string()) else {
-        return false;
+/// Add a vector mask of `kind` (`"reveal-all"`, `"hide-all"`,
+/// `"current-path"`) to the layer at `path`.
+fn add(view: Pin<&mut PictureView>, path: &str, kind: &QString) -> bool {
+    let outline;
+    let kind = match kind.to_string().as_str() {
+        "reveal-all" => VectorMaskKind::RevealAll,
+        "hide-all" => VectorMaskKind::HideAll,
+        "current-path" => {
+            let Some(selected) = current_path(&view) else {
+                return false;
+            };
+            outline = selected;
+            VectorMaskKind::Path(&outline)
+        }
+        _ => return false,
     };
-    let Some(path) = active_path(&view) else {
-        return false;
-    };
-    let changed = view.batch_changed(&one(&path), "Add Vector Mask", |doc, paths| {
+    let changed = view.batch_changed(&one(path), "Add Vector Mask", |doc, paths| {
         let mut changed = 0;
         for &path in paths {
             if pictura_render::add_vector_mask(doc, path, kind) {
@@ -59,25 +78,19 @@ pub(super) fn vector_mask_add(view: Pin<&mut PictureView>, kind: &QString) -> bo
     changed > 0
 }
 
+pub(super) fn vector_mask_add(view: Pin<&mut PictureView>, kind: &QString) -> bool {
+    let Some(path) = active_path(&view) else {
+        return false;
+    };
+    add(view, &path, kind)
+}
+
 pub(super) fn vector_mask_add_path(
     view: Pin<&mut PictureView>,
     path: &QString,
     kind: &QString,
 ) -> bool {
-    let Some(kind) = kind_from(&kind.to_string()) else {
-        return false;
-    };
-    let path = path.to_string();
-    let changed = view.batch_changed(&one(&path), "Add Vector Mask", |doc, paths| {
-        let mut changed = 0;
-        for &path in paths {
-            if pictura_render::add_vector_mask(doc, path, kind) {
-                changed += 1;
-            }
-        }
-        changed
-    });
-    changed > 0
+    add(view, &path.to_string(), kind)
 }
 
 pub(super) fn vector_mask_delete(view: Pin<&mut PictureView>) -> bool {

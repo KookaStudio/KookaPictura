@@ -145,7 +145,8 @@ Deeper technical status for PSD/PSB lives in
 - [x] Smart-object Stack Modes (#591)
 - [x] Pattern fill layers using the open document's embedded patterns (#262)
 - [ ] Pattern preset library and `Edit > Define Pattern` (#262, #599)
-- [ ] Vector-mask path authoring (#261)
+- [x] Vector-mask path authoring: Current Path from the selected path, the Paths
+  panel vector-mask row, and the outlined mask thumbnail (#261)
 - [ ] A Blend-If editor UI (#264)
 - [ ] Relink and convert-to-linked for smart objects (#113)
 - [x] The Layers panel thumbnail-size option (#586).

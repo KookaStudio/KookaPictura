@@ -4,7 +4,8 @@
 //! Delete Path, and Fill Path, Stroke Path, and Load Path as a Selection. Free
 //! functions over a [`PictureView`] (their own bridge).
 //!
-//! A row is named by index: `-1` the Work Path, `0..` a saved path, `-2` none.
+//! A row is named by index: `-1` the Work Path, `0..` a saved path, `-4` the
+//! selected layer's vector mask, `-2` none.
 //! Fill / Stroke / Load act on the path the path calls see (`paths::path`),
 //! so the panel can point them at a shape layer's outline with
 //! `path_set_layer_target`.
@@ -38,10 +39,13 @@ pub mod ffi {
         /// Whether the Work Path holds any subpath (CS6 lists it only then).
         fn paths_has_work_path(view: &PictureView) -> bool;
 
-        /// The active row: -1 the Work Path, `0..` a saved path, -2 none.
+        /// The active row: -1 the Work Path, `0..` a saved path, -4 the selected layer's vector mask, -2 none.
         fn paths_active(view: &PictureView) -> i32;
 
-        /// Make row `i` active (-2 hides every path). No history; emits `changed`. False when `i` names no row.
+        /// The selected non-shape layer's name when it has a vector mask (its `-4` row); empty otherwise.
+        fn paths_vector_mask_name(view: &PictureView) -> QString;
+
+        /// Make row `i` active (-2 hides every path, -4 the vector mask). No history; emits `changed`. False when `i` names no row.
         fn paths_set_active(view: Pin<&mut PictureView>, i: i32) -> bool;
 
         /// Row `i`'s outline flattened for a thumbnail: per subpath its point count `n`, then `n` `x, y` pairs (a closed subpath ends on its first point). Empty when `i` names no row.

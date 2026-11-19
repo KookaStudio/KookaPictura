@@ -66,6 +66,9 @@ pub struct PictureViewRust {
     pub(super) path_drag_damage: Option<Option<PsdRect>>,
     /// The Paths panel row the path calls edit when not on a shape layer.
     pub(super) active_path: super::paths::ActivePath,
+    /// The Pen's open subpath on a layer outline, `(layer path, subpath)`:
+    /// the outline is rebuilt from the mask bytes, which keep no session.
+    pub(super) layer_path_editing: Option<(String, usize)>,
     /// Output format remembered from the import source, used to preselect the
     /// Save As filter: a lowercased extension (`"png"`) or `"psd"` when native.
     pub(super) source_format: String,
@@ -281,6 +284,7 @@ impl Default for PictureViewRust {
             path_on_layer: false,
             path_drag_damage: None,
             active_path: super::paths::ActivePath::Work,
+            layer_path_editing: None,
             source_format: "psd".to_string(),
             interop: None,
             mask_edit_target: None,
@@ -386,6 +390,13 @@ impl PictureViewRust {
         // that layer, even when the previous anchor was stale.
         if self.mask_edit_target.as_deref() != target.anchor() {
             self.mask_edit_target = None;
+        }
+        // A vector-mask row stands for its layer: CS6 drops it with the layer.
+        if self.layer_target.single() != target.single() {
+            if self.active_path == super::paths::ActivePath::VectorMask {
+                self.active_path = super::paths::ActivePath::None;
+            }
+            self.layer_path_editing = None;
         }
         self.layer_target = target;
     }

@@ -56,13 +56,17 @@ pub fn layer_shape_paths(layer: &Layer, width: u32, height: u32) -> Option<Vec<S
     if !is_shape_layer(layer) {
         return None;
     }
-    let key = super::vector_masks::effective_key(layer)?;
-    pictura_codec::decode_vector_mask_paths(&layer.extra_block(key)?.data, width, height)
+    super::vector_masks::vector_mask_paths(layer, width, height)
 }
 
-/// Replace the layer's effective vector-mask outline with `subpaths` and rebuild its view.
+/// Replace the layer's effective vector-mask outline with `subpaths` and rebuild
+/// its view, keeping the block's invert, disable, and unlink flags.
 pub fn set_layer_shape_paths(layer: &mut Layer, subpaths: &[Subpath], width: u32, height: u32) {
-    let data = pictura_codec::encode_vector_mask(subpaths, width, height);
+    let mut data = pictura_codec::encode_vector_mask(subpaths, width, height);
+    let flags = super::vector_masks::effective_key(layer)
+        .and_then(|key| layer.extra_block(key))
+        .map_or(0, |block| super::vector_masks::flags_of(&block.data));
+    super::vector_masks::write_flags(&mut data, flags);
     layer.vector_mask = super::vector_masks::keep_params(
         layer.vector_mask.as_ref(),
         pictura_codec::decode_vector_mask(&data, width, height),

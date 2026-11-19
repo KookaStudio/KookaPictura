@@ -50,6 +50,9 @@ private:
     // A row's Qt::UserRole value: a saved path's index, or one of these.
     static constexpr int kWorkRow = -1;
     static constexpr int kShapeRow = -3;
+    // The selected layer's vector mask; the same index the path list bridge
+    // uses for it.
+    static constexpr int kMaskRow = -4;
 
     int selectedRow() const;
     // Run `command` on the selected row's path, pointing the path calls at the

@@ -14,11 +14,13 @@ const VMSK: &[u8; 4] = b"vmsk";
 const VSMS: &[u8; 4] = b"vsms";
 
 /// The vector mask kind [`add_vector_mask`] creates.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VectorMaskKind {
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum VectorMaskKind<'a> {
     RevealAll,
     HideAll,
-    CurrentPath,
+    /// Layer ▸ Vector Mask ▸ Current Path: the outline of the Paths panel's
+    /// selected path, which the caller resolves.
+    Path(&'a [Subpath]),
 }
 
 /// PSD `vmsk` flag word bits (Adobe PSD spec, one-indexed): bit 1 invert, bit 2
@@ -28,7 +30,7 @@ pub const VECTOR_MASK_FLAG_NOT_LINKED: u32 = 0x02;
 pub const VECTOR_MASK_FLAG_DISABLED: u32 = 0x04;
 
 /// The flags word of an encoded `vmsk` block (bytes `4..8`), or 0 when absent.
-fn flags_of(data: &[u8]) -> u32 {
+pub(crate) fn flags_of(data: &[u8]) -> u32 {
     if data.len() < 8 {
         return 0;
     }
@@ -36,7 +38,7 @@ fn flags_of(data: &[u8]) -> u32 {
 }
 
 /// Overwrite an encoded `vmsk` block's flags word.
-fn write_flags(data: &mut [u8], flags: u32) {
+pub(crate) fn write_flags(data: &mut [u8], flags: u32) {
     if data.len() >= 8 {
         data[4..8].copy_from_slice(&flags.to_be_bytes());
     }
@@ -51,6 +53,13 @@ pub(crate) fn effective_key(layer: &Layer) -> Option<&'static [u8; 4]> {
     } else {
         None
     }
+}
+
+/// The layer's vector-mask outline as editable subpaths (document pixels), for
+/// any layer kind; `None` without a mask or when its block is malformed.
+pub fn vector_mask_paths(layer: &Layer, width: u32, height: u32) -> Option<Vec<Subpath>> {
+    let key = effective_key(layer)?;
+    pictura_codec::decode_vector_mask_paths(&layer.extra_block(key)?.data, width, height)
 }
 
 /// Replace (`Some`) or remove (`None`) the layer's `key` block.
@@ -178,19 +187,14 @@ fn rect_subpath(rect: PsdRect) -> Subpath {
 }
 
 /// Add a vector mask to the layer at `path`. Reveal All authors a full-content
-/// rectangle; Hide All authors the same rectangle with the invert flag; Current
-/// Path authors the document's work path. Does nothing and returns false when
-/// the layer already has a vector mask, the path does not resolve, or Current
-/// Path is requested with an empty work path.
+/// rectangle; Hide All authors the same rectangle with the invert flag; `Path`
+/// authors the given outline. Does nothing and returns false when the layer
+/// already has a vector mask, the path does not resolve, or the outline is
+/// empty.
 pub fn add_vector_mask(doc: &mut Document, path: &str, kind: VectorMaskKind) -> bool {
     let (width, height) = (doc.width, doc.height);
     let (subpaths, flags) = match kind {
-        VectorMaskKind::CurrentPath => {
-            if doc.work_path.is_empty() {
-                return false;
-            }
-            (doc.work_path.subpaths.clone(), 0)
-        }
+        VectorMaskKind::Path(subpaths) => (subpaths.to_vec(), 0),
         VectorMaskKind::RevealAll | VectorMaskKind::HideAll => {
             let Some(layer) = resolve_path(doc, path) else {
                 return false;
@@ -433,16 +437,16 @@ mod tests {
     }
 
     #[test]
-    fn current_path_authors_the_work_path() {
+    fn path_kind_authors_the_given_subpaths() {
         let mut doc = doc(4, 4);
-        assert!(!add_vector_mask(&mut doc, "0", VectorMaskKind::CurrentPath));
+        assert!(!add_vector_mask(&mut doc, "0", VectorMaskKind::Path(&[])));
         let corner = |x: f64, y: f64| PathPoint {
             anchor: (x, y),
             in_handle: None,
             out_handle: None,
             smooth: false,
         };
-        doc.work_path.subpaths.push(Subpath {
+        let square = [Subpath {
             points: vec![
                 corner(1.0, 1.0),
                 corner(3.0, 1.0),
@@ -450,11 +454,38 @@ mod tests {
                 corner(1.0, 3.0),
             ],
             closed: true,
-        });
-        assert!(add_vector_mask(&mut doc, "0", VectorMaskKind::CurrentPath));
+        }];
+        assert!(add_vector_mask(
+            &mut doc,
+            "0",
+            VectorMaskKind::Path(&square)
+        ));
         assert!(has_vector_mask(&doc, "0"));
+        assert_eq!(
+            vector_mask_paths(&doc.layers[0], 4, 4).as_deref(),
+            Some(&square[..])
+        );
         assert_eq!(alpha(&composite_rgba(&doc), 0, 0), 0, "outside the path");
         assert_eq!(alpha(&composite_rgba(&doc), 2, 2), 255, "inside the path");
+    }
+
+    #[test]
+    fn rewriting_the_outline_keeps_the_mask_flags() {
+        let mut doc = doc(4, 4);
+        assert!(add_vector_mask(&mut doc, "0", VectorMaskKind::HideAll));
+        assert!(set_vector_mask_enabled(&mut doc, "0", false));
+        assert!(set_vector_mask_linked(&mut doc, "0", false));
+        let mut outline = vector_mask_paths(&doc.layers[0], 4, 4).expect("outline");
+        outline[0].points[0].anchor = (1.0, 1.0);
+        crate::set_layer_shape_paths(&mut doc.layers[0], &outline, 4, 4);
+        let flags = flags_of(&doc.layers[0].extra_block(VMSK).unwrap().data);
+        assert_eq!(
+            flags,
+            VECTOR_MASK_FLAG_INVERT | VECTOR_MASK_FLAG_DISABLED | VECTOR_MASK_FLAG_NOT_LINKED
+        );
+        let view = doc.layers[0].vector_mask.as_ref().expect("view");
+        assert!(view.invert && view.disabled);
+        assert_eq!(vector_mask_paths(&doc.layers[0], 4, 4), Some(outline));
     }
 
     #[test]

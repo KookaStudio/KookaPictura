@@ -2,7 +2,7 @@ use super::*;
 
 use super::super::helpers::{combine_mode_from, feathered, rgba_from_argb};
 use super::super::paint_tools::fills::apply;
-use super::super::paths::{active_in, path, ActivePath};
+use super::super::paths::{active_in, path, vector_mask_layer, ActivePath};
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -65,13 +65,24 @@ pub(super) fn paths_active(view: &PictureView) -> i32 {
         ActivePath::Work if doc.work_path.is_empty() => -2,
         ActivePath::Work => -1,
         ActivePath::Saved(i) => i as i32,
+        ActivePath::VectorMask if vector_mask_layer(rust).is_some() => -4,
+        ActivePath::VectorMask => -2,
     }
+}
+
+pub(super) fn paths_vector_mask_name(view: &PictureView) -> QString {
+    let rust = view.rust();
+    vector_mask_layer(rust)
+        .and_then(|path| pictura_render::resolve_path(rust.session.doc.as_ref()?, &path))
+        .map_or_else(QString::default, |layer| QString::from(layer.name.as_str()))
 }
 
 pub(super) fn paths_set_active(mut view: Pin<&mut PictureView>, i: i32) -> bool {
     let active = match i {
         -2 => ActivePath::None,
         -1 if paths_has_work_path(&view) => ActivePath::Work,
+        -4 if vector_mask_layer(view.rust()).is_some() => ActivePath::VectorMask,
+        -4 => return false,
         _ => match saved_index(&view, i) {
             Some(i) => ActivePath::Saved(i),
             None => return false,
@@ -84,6 +95,7 @@ pub(super) fn paths_set_active(mut view: Pin<&mut PictureView>, i: i32) -> bool 
         }
         rust.path_on_layer = false;
         rust.active_path = active;
+        rust.layer_path_editing = None;
         // Switching rows ends any drawing session, so the Pen starts a new
         // component rather than extending the last one.
         if let Some(doc) = rust.session.doc.as_mut() {
@@ -106,6 +118,16 @@ pub(super) fn paths_outline(view: &PictureView, i: i32) -> Vec<f64> {
     };
     let target = match i {
         -1 => &doc.work_path,
+        -4 => {
+            let mask = vector_mask_layer(view.rust())
+                .and_then(|path| pictura_render::resolve_path(doc, &path))
+                .and_then(|layer| pictura_render::vector_mask_paths(layer, doc.width, doc.height));
+            let mut outline = VectorPath::default();
+            for subpath in mask.unwrap_or_default() {
+                outline.add_subpath(subpath);
+            }
+            return flat_outline(&outline);
+        }
         _ => match saved_index(view, i) {
             Some(i) => &doc.saved_paths[i].path,
             None => return Vec::new(),

@@ -659,6 +659,7 @@ impl PictureViewRust {
         self.layer_target.clear();
         self.path_on_layer = false;
         self.active_path = super::super::paths::ActivePath::Work;
+        self.layer_path_editing = None;
         self.session.pdf_options = None;
         self.session.pdf_password = None;
         if let Some(recovery) = &self.session.recovery {
@@ -753,7 +754,9 @@ impl PictureViewRust {
             match restore {
                 PathRestore::WorkOrSaved { active, path } => {
                     match active {
-                        ActivePath::None | ActivePath::Work => doc.work_path = path,
+                        ActivePath::None | ActivePath::Work | ActivePath::VectorMask => {
+                            doc.work_path = path
+                        }
                         ActivePath::Saved(i) => match doc.saved_paths.get_mut(i) {
                             Some(saved) => saved.path = path,
                             None => return Presentation::none(),
