@@ -241,3 +241,56 @@ fn a_stroke_costs_the_tiles_it_covers_not_the_document_width() {
     assert!(small > 0, "the stroke forked the tiles under it");
     assert_eq!(forked(4096), small, "the fork does not grow with the width");
 }
+
+/// A stroke saves each 64 px tile it reaches in one read (#1238): on a tiled
+/// layer whose edges cut partial tiles, cancelling still restores every pixel,
+/// for the raster path and a per-dab engine alike.
+#[test]
+fn cancelling_on_a_tiled_layer_restores_partial_edge_tiles() {
+    // The layer covers the document, so no dab grows it; 170×150 cuts
+    // partial 64 px tiles on the right and bottom.
+    let (w, h) = (170_usize, 150_usize);
+    let rect = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: h as i32,
+        right: w as i32,
+    };
+    let mut original = offset_layer_doc(w as u32, h as u32, rect, BASE);
+    for (id, channel) in original.layers[0].channels_mut().iter_mut().enumerate() {
+        for (i, v) in channel.data.as_mut_slice().iter_mut().enumerate() {
+            *v = ((i * (7 + id) + id * 31) % 251) as u8;
+        }
+        channel.data.tile(w, h);
+    }
+    let cfg = StrokeConfig {
+        color: red(),
+        diameter: 36,
+        ..StrokeConfig::default()
+    };
+    type Begin = fn(&Document, StrokeConfig) -> Stroke;
+    let cases: [(&str, Begin); 2] = [
+        ("brush", |doc, cfg| {
+            Stroke::begin_at(doc, "0", cfg).expect("begin")
+        }),
+        ("dodge", |doc, cfg| {
+            Stroke::begin_tone(doc, "0", cfg, ToneOptions::default()).expect("begin")
+        }),
+    ];
+    for (name, begin) in cases {
+        let mut doc = original.clone();
+        let mut stroke = begin(&doc, cfg);
+        // Corner to corner, through the partial right and bottom tiles.
+        for i in 0..=24 {
+            let t = i as f32 / 24.0;
+            stroke.sample(&mut doc, sample(10.0 + 155.0 * t, 8.0 + 138.0 * t));
+        }
+        assert_eq!(
+            doc.layers[0].rect, original.layers[0].rect,
+            "{name}: the layer grew, so the stroke saved nothing tile by tile"
+        );
+        assert!(doc != original, "{name}: the stroke painted nothing");
+        stroke.cancel(&mut doc);
+        assert!(doc == original, "{name}: cancel left paint behind");
+    }
+}

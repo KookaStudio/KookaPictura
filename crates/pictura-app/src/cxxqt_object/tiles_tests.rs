@@ -731,3 +731,12 @@ fn a_reduced_stand_in_shows_the_document_in_the_stale_tiles() {
         "where the layer was before the transform"
     );
 }
+
+#[test]
+fn a_small_region_refresh_composites_on_the_cpu() {
+    // A stroke's present: an Art History move's box at 8000×6000 (#1238).
+    assert!(!region_on_gpu(true, 520 * 520));
+    assert!(!region_on_gpu(true, GPU_REGION_PIXELS - 1));
+    assert!(region_on_gpu(true, GPU_REGION_PIXELS));
+    assert!(!region_on_gpu(false, GPU_REGION_PIXELS * 4));
+}

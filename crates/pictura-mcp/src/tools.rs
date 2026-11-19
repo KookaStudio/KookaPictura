@@ -129,7 +129,7 @@ fn edit() -> Value {
 
 fn history() -> Value {
     json!({
-        "op": {"type": "string", "enum": ["list", "jump", "snapshot", "restore"]},
+        "op": {"type": "string", "enum": ["list", "jump", "snapshot", "restore", "brush_source"]},
         "index": {"type": "integer"},
         "label": {"type": "string"},
     })
@@ -167,7 +167,7 @@ const TOOLS: &[Tool] = &[
     Tool { name: "pictura_pointer", method: "pointer", description: "Drive the active tool on the canvas, in image coordinates.", properties: pointer, required: &["op", "space"] },
     Tool { name: "pictura_commit_crop", method: "commit_crop", description: "Apply a crop you started with pictura_pointer.", properties: none, required: &[] },
     Tool { name: "pictura_edit", method: "edit", description: "Undo or redo.", properties: edit, required: &["op"] },
-    Tool { name: "pictura_history", method: "history", description: "List history, jump to a state, or make and restore snapshots.", properties: history, required: &["op"] },
+    Tool { name: "pictura_history", method: "history", description: "List history, jump to a state, make and restore snapshots, or set the History Brush source state.", properties: history, required: &["op"] },
     Tool { name: "pictura_export_png", method: "export_png", description: "Write a flattened PNG. The document is not changed.", properties: export_png, required: &["path"] },
 ];
 

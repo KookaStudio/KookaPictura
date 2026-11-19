@@ -50,6 +50,7 @@ private slots:
     void exportWebpModes();
     void exportIsGatedLikeASave();
     void historyListsAndJumps();
+    void historySetsTheBrushSource();
     void staleUndoIsRefused();
     void staleDocumentIsRefused();
     void eachMutatorAddsOneState_data();
@@ -401,6 +402,26 @@ void ControlEditingTest::historyListsAndJumps()
     QCOMPARE(server_->tierOf(QStringLiteral("history"), {{QStringLiteral("op"), QStringLiteral("list")}}),
              pictura::ControlTier::Read);
     QCOMPARE(server_->tierOf(QStringLiteral("history"), {{QStringLiteral("op"), QStringLiteral("jump")}}),
+             pictura::ControlTier::Edit);
+}
+
+// The profiler's textured Art History case points the History Brush at a
+// later state before drifting the layer (#1238).
+void ControlEditingTest::historySetsTheBrushSource()
+{
+    QVERIFY(succeeded(call(QStringLiteral("adjust_apply"),
+                           {{QStringLiteral("kind"), QStringLiteral("posterize")}})));
+    const int state = history_api::index(view());
+    QVERIFY(state > 0);
+    QVERIFY(succeeded(call(QStringLiteral("history"), {{QStringLiteral("op"), QStringLiteral("brush_source")},
+                                                       {QStringLiteral("index"), state}})));
+    QCOMPARE(history_api::brushSourceState(view()), state);
+    QCOMPARE(history_api::index(view()), state);
+    QCOMPARE(errorCode(call(QStringLiteral("history"), {{QStringLiteral("op"), QStringLiteral("brush_source")},
+                                                        {QStringLiteral("index"), state + 1}})),
+             QStringLiteral("invalid_param"));
+    QCOMPARE(history_api::brushSourceState(view()), state);
+    QCOMPARE(server_->tierOf(QStringLiteral("history"), {{QStringLiteral("op"), QStringLiteral("brush_source")}}),
              pictura::ControlTier::Edit);
 }
 

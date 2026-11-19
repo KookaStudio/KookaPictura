@@ -181,7 +181,7 @@ fn from_children(
         }
     }
     let (_, halved) = halve_level(
-        &joined,
+        joined,
         (child_rect.left, child_rect.top),
         (cw as u32, ch as u32),
         size,

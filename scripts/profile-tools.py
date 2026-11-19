@@ -67,6 +67,11 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import memory_scenarios  # noqa: E402
 
+ART_HISTORY_OPTIONS = {
+    "brush": {"size": 200, "hardness": 100, "opacity": 100, "flow": 100},
+    "artHistory": {"style": 0, "area": 50, "tolerance": 0},
+}
+
 # name -> (tool, tool_options patch, gesture). Sizes are document pixels; a
 # gesture's geometry is in fractions of the document, so a scenario means the
 # same thing at every document size.
@@ -113,7 +118,17 @@ SCENARIOS = {
     "clone-stamp": ("clonestamp", {"brush": {"size": 200}}, "stroke", {"setup": ["source"]}),
     "pattern-stamp": ("patternstamp", {"brush": {"size": 200}}, "stroke"),
     "history-brush": ("historybrush", {"brush": {"size": 200}}, "stroke"),
-    "art-history": ("arthistorybrush", {"brush": {"size": 200}}, "stroke"),
+    # The reference for Art History's motion budget: the same tip, source and
+    # drifted layer as art-history-textured.
+    "history-brush-textured": ("historybrush", {"brush": ART_HISTORY_OPTIONS["brush"]}, "stroke",
+                               {"setup": ["texture"]}),
+    # Art History's options are pinned so a sequence's carry-over cannot change
+    # the work (#1238). On the new white document the source state equals the
+    # layer, so every dab is a no-op: the uniform case times the stroke path
+    # alone. The textured case paints from a textured source onto a layer that
+    # has drifted from it, so every dab really paints.
+    "art-history": ("arthistorybrush", ART_HISTORY_OPTIONS, "stroke"),
+    "art-history-textured": ("arthistorybrush", ART_HISTORY_OPTIONS, "stroke", {"setup": ["texture"]}),
     "background-eraser": ("backgrounderaser", {"brush": {"size": 200}}, "stroke"),
     "magic-eraser": ("magiceraser", {}, "click"),
     "blur": ("blur", {"brush": {"size": 200}}, "stroke"),
@@ -259,6 +274,14 @@ def run_setup(client, step, w, h):
     if step == "source":
         client.call("pointer", op="click", space="image", x=w * 0.1, y=h * 0.1, modifiers="alt")
         return 0
+    if step == "texture":
+        # A textured state as the History Brush source, then a layer that has
+        # drifted from it. Both filters are deterministic.
+        client.call("filter", kind="clouds")
+        index = client.call("history", op="list")[0]["index"]
+        client.call("history", op="brush_source", index=index)
+        client.call("filter", kind="difference-clouds")
+        return 2
     if step in ("shape", "stroked-shape"):
         shape = {"mode": 0, "geometry": 0, "strokeEnabled": step == "stroked-shape", "strokeWidth": 20}
         client.call("set_tool", tool="rectangle")
@@ -799,6 +822,39 @@ def self_check_digest(binary, side=512):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def self_check_motion(binary, side=512):
+    """The Art History motion scenarios (#1238) run their 60 moves, and the
+    textured ones really paint: the stroke records its own history state."""
+    tmp = tempfile.mkdtemp(prefix="pictura-motion-check-")
+    sock = os.path.join(tmp, "control.sock")
+    env = dict(os.environ)
+    env.pop("PICTURA_METRICS", None)
+    app = None
+    try:
+        with open(os.path.join(tmp, "app.log"), "w") as log:
+            app = launch(app_command(binary, sock, os.path.join(tmp, "state")), sock, env, log)
+        client = Client(sock, 120.0)
+        client.call("document", op="new", width=side, height=side, background="white")
+        client.call("status")
+        for name, label in (("art-history", None), ("art-history-textured", "Art History Brush"),
+                            ("history-brush-textured", "History Brush")):
+            seen = {}
+
+            def before_undo(row, seen=seen):
+                seen["states"] = client.call("history", op="list")[0]["states"]
+
+            row = run_scenario(client, name, side, side, 60, before_undo)
+            assert row.get("moves") == 60, (name, row)
+            assert "undo_ms" in row, (name, row)
+            if label:
+                assert seen["states"][-1] == label, (name, seen["states"][-3:])
+            print(f"profile-tools: self-check {name} ok")
+    finally:
+        if app is not None:
+            stop(app)
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def self_check_catalogue(binary, side=512):
     tmp = tempfile.mkdtemp(prefix="pictura-memory-check-")
     env = dict(os.environ)
@@ -829,6 +885,7 @@ def self_check(binary):
         return
     self_check_catalogue(binary)
     self_check_digest(binary)
+    self_check_motion(binary)
     print("profile-tools: self-check OK")
 
 
