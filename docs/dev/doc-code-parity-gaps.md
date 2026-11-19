@@ -326,8 +326,7 @@ Two entries this list used to carry are corrected here:
 ## F. Existing issues already tracking gaps
 
 `#102`/`#103`/`#104`/`#309` crop · `#113` linked smart objects · `#166` smart
-filters · `#167`/`#183` filter bundles · `#172` Quick Mask · `#261` vector-mask
-path authoring · `#262` pattern fill layers · `#263` Edit Adjustment row ·
+filters · `#167`/`#183` filter bundles · `#172` Quick Mask · `#262` pattern fill layers · `#263` Edit Adjustment row ·
 `#264` Blend-If UI · `#305` View Snap ·
 `#306` canvas right-click menus · `#312` Alt-drag duplicate · `#313` picker
 eyedropper · `#319` Color panel · `#344`/`#345`/`#346`/`#347`/`#349`/`#350`/`#351`

@@ -4,6 +4,17 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Vector-mask path authoring — #261 implemented** (OpenSpec change
+  `vector-mask-path-authoring`, archived; capability
+  `ui/vector-mask-path-authoring`). Current Path authors the Paths panel's
+  selected saved path or Work Path (`VectorMaskKind::Path`). A non-shape layer
+  with a vector mask gets a `<layer> Vector Mask` row (`ActivePath::VectorMask`,
+  bridge index `-4`); while it is active every path tool, the Pen included,
+  edits the mask, and the Pen's open subpath survives the mask's re-decode
+  (`layer_path_editing`). The vector-mask thumbnail click activates the row;
+  Delete Path on it deletes the mask. `set_layer_shape_paths` now keeps the
+  flags word. The thumbnail shows hidden grey, revealed white, and the outline
+  in black (the grey is approximated).
 - **16-bit tone tools — #1421 implemented** (OpenSpec change
   `native-depth-tone-tools`, archived; capability `tools/native-depth-tone`).
   Dodge, Burn, and Sponge now read and write the layer's retained 16-bit native
