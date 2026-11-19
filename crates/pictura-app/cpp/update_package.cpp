@@ -238,8 +238,17 @@ QString packageAssetSuffix(PackageMethod method, const QString& architecture)
             ? QStringLiteral("-windows-x64-setup.exe")
             : QStringLiteral("-windows-x64-portable.zip");
     }
-    if (method == PackageMethod::AppImage && isAarch64(architecture)) {
-        return QStringLiteral("-aarch64.AppImage");
+    if (isAarch64(architecture)) {
+        switch (method) {
+        case PackageMethod::AppImage:
+            return QStringLiteral("-aarch64.AppImage");
+        case PackageMethod::Deb:
+            return QStringLiteral("_arm64.deb");
+        case PackageMethod::Rpm:
+            return QStringLiteral("-1.aarch64.rpm");
+        default:
+            return {};
+        }
     }
     if (method == PackageMethod::Development || !isX86_64(architecture)) {
         return {};
@@ -260,7 +269,8 @@ QString packageAssetSuffix(PackageMethod method, const QString& architecture)
     }
 }
 
-QString packageUpdateCommand(PackageMethod method, const QString& version)
+QString packageUpdateCommand(PackageMethod method, const QString& version,
+                             const QString& architecture)
 {
     QString cleanVersion = version.trimmed();
     if (!cleanVersion.isEmpty()
@@ -273,15 +283,15 @@ QString packageUpdateCommand(PackageMethod method, const QString& version)
     case PackageMethod::Snap:
         return QStringLiteral("snap refresh kooka-pictura");
     case PackageMethod::Deb:
-        if (cleanVersion.isEmpty()) {
+    case PackageMethod::Rpm: {
+        const QString suffix = packageAssetSuffix(method, architecture);
+        if (cleanVersion.isEmpty() || suffix.isEmpty()) {
             return {};
         }
-        return QStringLiteral("sudo apt install ./KookaPictura_%1_amd64.deb").arg(cleanVersion);
-    case PackageMethod::Rpm:
-        if (cleanVersion.isEmpty()) {
-            return {};
-        }
-        return QStringLiteral("sudo dnf install ./KookaPictura-%1-1.x86_64.rpm").arg(cleanVersion);
+        return method == PackageMethod::Deb
+            ? QStringLiteral("sudo apt install ./KookaPictura_%1%2").arg(cleanVersion, suffix)
+            : QStringLiteral("sudo dnf install ./KookaPictura-%1%2").arg(cleanVersion, suffix);
+    }
     default:
         return {};
     }

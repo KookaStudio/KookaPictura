@@ -637,7 +637,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] Safe paths and decoder decompression-bomb guards (#646)
 - [ ] Flatpak portal confinement (#647)
 - [x] An aarch64 (ARM64) AppImage, built natively and self-updating (#1419)
-- [ ] aarch64 `.deb` and `.rpm` packages (#1433)
+- [x] aarch64 `.deb` and `.rpm` packages (#1433)
 - [ ] DSSIM, PSNR and ΔE2000, property tests, fuzzing, and Criterion benches
       (#648)
 - [ ] `--version`, an About dialog with the Qt and GPU details, and an update

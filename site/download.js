@@ -4,8 +4,10 @@
   var API = "https://api.github.com/repos/" + REPO + "/releases/latest";
 
   var LINUX = [
-    ["rpm", /\.rpm$/i],
-    ["deb", /\.deb$/i],
+    ["rpm", /\.x86_64\.rpm$/i],
+    ["rpm (ARM64)", /\.aarch64\.rpm$/i],
+    ["deb", /_amd64\.deb$/i],
+    ["deb (ARM64)", /_arm64\.deb$/i],
     ["AppImage", /-x86_64\.AppImage$/i],
     ["AppImage (ARM64)", /-aarch64\.AppImage$/i],
     ["snap", /\.snap$/i],

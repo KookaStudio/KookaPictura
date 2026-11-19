@@ -261,7 +261,8 @@ void UpdatePreferencesTest::flatpakShowsUpdateCommand()
     UpdateBanner banner(&host);
     banner.showUpdate(
         QStringLiteral("0.3.0"), QStringLiteral("0.4.0"), false,
-        pictura::packageUpdateCommand(pictura::PackageMethod::Flatpak, QStringLiteral("0.4.0")));
+        pictura::packageUpdateCommand(pictura::PackageMethod::Flatpak, QStringLiteral("0.4.0"),
+                                      QStringLiteral("x86_64")));
 
     QVERIFY(banner.commandText().contains(QStringLiteral("flatpak update")));
     QCOMPARE(banner.updateButton()->text(), QStringLiteral("Update now"));
@@ -276,7 +277,8 @@ void UpdatePreferencesTest::snapShowsUpdateCommand()
     UpdateBanner banner(&host);
     banner.showUpdate(
         QStringLiteral("0.3.0"), QStringLiteral("0.4.0"), false,
-        pictura::packageUpdateCommand(pictura::PackageMethod::Snap, QStringLiteral("0.4.0")));
+        pictura::packageUpdateCommand(pictura::PackageMethod::Snap, QStringLiteral("0.4.0"),
+                                      QStringLiteral("x86_64")));
 
     QVERIFY(banner.commandText().contains(QStringLiteral("snap refresh")));
     QCOMPARE(banner.updateButton()->text(), QStringLiteral("Update now"));
