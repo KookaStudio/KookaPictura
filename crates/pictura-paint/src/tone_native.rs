@@ -317,6 +317,43 @@ mod tests {
         doc
     }
 
+    /// A 16-bit RGB document whose layer covers `rect`, not the whole canvas.
+    fn depth16_rect_doc(canvas: i32, rect: PsdRect, value: u16) -> Document {
+        let plane = vec![value; (rect.width() * rect.height()) as usize];
+        let mut doc = Document::new(
+            canvas as u32,
+            canvas as u32,
+            ColorMode::Rgb,
+            BitDepth::Eight,
+        );
+        doc.layers = LayerStack::from_layers(vec![Layer::from_parts(
+            LayerParts {
+                rect,
+                channels: [0i16, 1, 2]
+                    .into_iter()
+                    .map(|id| Channel {
+                        id,
+                        data: Samples::U16(plane.clone().into()).narrow_to_u8().into(),
+                    })
+                    .collect(),
+                source_channels: Some(SourceChannels::new(
+                    BitDepth::Sixteen,
+                    rect,
+                    [0i16, 1, 2]
+                        .into_iter()
+                        .map(|id| (id, Samples::U16(plane.clone().into())))
+                        .collect(),
+                )),
+                ..Default::default()
+            },
+            LayerContent::Pixel,
+        )]);
+        doc.source
+            .set_native(Some(BitDepth::Sixteen), doc.source.planes().clone())
+            .expect("valid source depth");
+        doc
+    }
+
     #[test]
     fn a_depth16_dodge_writes_the_native_store() {
         let d = depth16_doc(40, 40, vec![1000; 1600], vec![1000; 1600], vec![1000; 1600]);
@@ -407,6 +444,52 @@ mod tests {
             },
         );
         stroke.cancel(&mut d);
+        assert_eq!(plane16(&d, 0), before);
+    }
+
+    #[test]
+    fn a_depth16_tone_grows_and_cancel_restores_the_native_store() {
+        let rect = PsdRect {
+            top: 10,
+            left: 10,
+            bottom: 30,
+            right: 30,
+        };
+        let mut d = depth16_rect_doc(40, rect, 1000);
+        let before = plane16(&d, 0);
+        let cfg = StrokeConfig {
+            diameter: 20,
+            ..StrokeConfig::default()
+        };
+        let mut stroke = Stroke::begin_tone(&d, "0", cfg, dodge()).expect("begin");
+        stroke.sample(
+            &mut d,
+            StrokeSample {
+                x: 30.0,
+                y: 20.0,
+                pressure: 1.0,
+            },
+        );
+        let grown = d.layers[0].rect;
+        assert!(
+            grown.right > rect.right,
+            "the stroke did not grow the layer"
+        );
+        let store = d.layers[0].source_channels.as_ref().expect("a store");
+        let Samples::U16(plane) = &store.planes[0].1 else {
+            panic!("a u16 store")
+        };
+        let (dx, dy) = (
+            (rect.left - grown.left) as usize,
+            (rect.top - grown.top) as usize,
+        );
+        assert_eq!(
+            plane[dy * grown.width() as usize + dx],
+            1000,
+            "the grow lost the original native sample"
+        );
+        stroke.cancel(&mut d);
+        assert_eq!(d.layers[0].rect, rect);
         assert_eq!(plane16(&d, 0), before);
     }
 
