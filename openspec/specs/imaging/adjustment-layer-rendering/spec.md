@@ -443,15 +443,21 @@ the encoder's output SHALL equal `FillContent::Solid([r, g, b, 255])`.
 
 ### Requirement: Solid-color fill layers author the standard descriptor
 
-The app SHALL author a new solid-color fill layer with the standard `SoCo`
-descriptor rather than the in-house 4-byte form, while the 4-byte payload SHALL
-remain readable for backward compatibility. Because the standard descriptor
-carries no alpha, an authored fill layer SHALL be opaque.
+The app SHALL author a new solid-color fill layer with the payload form that
+preserves the colour it was created with: an opaque fill SHALL use the standard
+`SoCo` descriptor, while a non-opaque fill SHALL use the in-house 4-byte
+`[r, g, b, a]` payload. Both forms SHALL remain readable. A created fill layer
+SHALL composite at the requested colour and alpha.
 
 #### Scenario: A new fill layer carries the standard descriptor
 
-- **WHEN** the app adds a solid-color fill layer
+- **WHEN** the app adds a solid-color fill layer with alpha 255
 - **THEN** its `SoCo` payload is a version-16 descriptor and it composites to the requested colour at full alpha
+
+#### Scenario: A new translucent fill layer keeps its alpha
+
+- **WHEN** a solid-color fill layer is created with the colour `[10, 20, 30, 40]`
+- **THEN** its `SoCo` payload is a 4-byte tuple, it decodes to `FillContent::Solid([10, 20, 30, 40])`, and it composites at 40/255 source alpha
 
 #### Scenario: An in-house 4-byte fill still decodes
 
@@ -1100,8 +1106,10 @@ command runs, so a colour chosen in the toolbox, the Color panel, the Swatches
 panel, or the Eyedropper is the one the new layer is filled with, and both
 creation surfaces create the layer in that same colour. The fill SHALL take
 the foreground and never the background, so the default pair fills black and
-not the background's white. The `SoCo` descriptor carries no alpha, so the new
-layer SHALL be opaque whatever the foreground's alpha is.
+not the background's white. Because both creation surfaces carry a six-digit
+colour payload, the new layer SHALL be opaque whatever the foreground's alpha
+is; the alpha-aware encoder preserves alpha when a caller supplies a translucent
+colour.
 
 #### Scenario: The panel fill menu uses the foreground [scf_panel_foreground]
 
@@ -1247,3 +1255,24 @@ the Layers thumbnail, and the saved PSD resolve the pattern.
 
 - **WHEN** a pattern fill layer is created or edited with a built-in pattern id that the document does not carry
 - **THEN** the document's `Patt` block gains that pattern in the same edit, the fill composites the tiled pattern, and the document round-trips with the pattern
+
+### Requirement: Non-opaque solid fills encode and round-trip
+
+`pictura-render` SHALL expose one solid-fill encoder that selects its payload
+form from the fill's alpha: `FillContent::Solid([r, g, b, 255])` SHALL be
+encoded as the standard version-16 `SoCo` descriptor, and any other alpha SHALL
+be encoded as the 4-byte `[r, g, b, a]` `SoCo` tuple. `decode_fill` on the
+encoder's output SHALL return the same `FillContent::Solid`, alpha included.
+The 4-byte form is in-house: an external PSD reader still opens the file and
+classifies the layer as a solid-color fill, but it is not required to decode the
+payload, and Photoshop does not represent a translucent solid-color fill.
+
+#### Scenario: A non-opaque fill encodes as the 4-byte tuple
+
+- **WHEN** the encoder is asked for `FillContent::Solid([10, 20, 30, 40])`
+- **THEN** the `SoCo` payload is the four bytes `[10, 20, 30, 40]` and `decode_fill` returns `FillContent::Solid([10, 20, 30, 40])`
+
+#### Scenario: An opaque fill still encodes as the descriptor
+
+- **WHEN** the encoder is asked for `FillContent::Solid([10, 20, 30, 255])`
+- **THEN** the `SoCo` payload is a version-16 descriptor and `decode_fill` returns `FillContent::Solid([10, 20, 30, 255])`
