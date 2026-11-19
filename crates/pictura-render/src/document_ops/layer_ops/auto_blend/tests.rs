@@ -4,7 +4,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU32};
 
 use pictura_core::{
-    BitDepth, ColorMode, Document, Layer, PsdRect, Samples, SmartObject, SourceChannels,
+    BitDepth, ColorMode, Document, Layer, LayerBlock, PsdRect, Samples, SmartObject, SourceChannels,
 };
 
 use super::sources::{work_scale, MAX_WORK_PIXELS};
@@ -205,6 +205,43 @@ fn auto_blend_ignores_a_smart_object_outside_the_selection() {
         parts.smart_object = Some(SmartObject::default())
     });
     d.layers.push(smart).expect("a free slot");
+    assert!(can_auto_blend(&d, &["0", "1"]));
+    assert!(!can_auto_blend(&d, &["0", "1", "2"]));
+}
+
+fn mark_video_or_3d(layer: &mut Layer) {
+    pictura_codec::edit_layer(layer, |parts| {
+        parts.extra_blocks.push(LayerBlock {
+            key: *b"PxSD",
+            data: vec![0, 0, 0, 0, 0, 0, 0, 1, 0].into(),
+        })
+    });
+}
+
+#[test]
+fn auto_blend_refuses_video_and_3d_layers() {
+    let mut d = pair();
+    mark_video_or_3d(d.layers[1].as_mut());
+    assert!(d.layers[1].is_video_or_3d());
+    assert!(!can_auto_blend(&d, &["0", "1"]), "video or 3D layer");
+    let before = d.clone();
+    assert!(plan(&d, &["0", "1"], STACK).layers.is_empty());
+    assert_eq!(d, before);
+}
+
+#[test]
+fn auto_blend_ignores_a_video_or_3d_layer_outside_the_selection() {
+    let mut d = pair();
+    let mut video = solid(
+        "Video",
+        full(20, 20),
+        (9, 9, 9),
+        255,
+        BlendMode::Normal,
+        255,
+    );
+    mark_video_or_3d(&mut video);
+    d.layers.push(video).expect("a free slot");
     assert!(can_auto_blend(&d, &["0", "1"]));
     assert!(!can_auto_blend(&d, &["0", "1", "2"]));
 }

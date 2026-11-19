@@ -542,6 +542,21 @@ fn conflicting_content_preserves_psd_and_psb_data() {
 }
 
 #[test]
+fn pixel_source_block_marks_video_and_3d_layers() {
+    let source = LayerBlock {
+        key: *b"PxSD",
+        data: vec![0, 0, 0, 0, 0, 0, 0, 2, 7, 8].into(),
+    };
+    let doc = document(layer(None, vec![source.clone()]));
+    assert!(doc.layers[0].is_video_or_3d());
+    for bytes in [write_psd(&doc).unwrap(), write_psb(&doc).unwrap()] {
+        let back = read_psd(&bytes).unwrap();
+        assert!(back.layers[0].is_video_or_3d());
+        assert_eq!(back.layers[0].extra_block(b"PxSD"), Some(&source));
+    }
+}
+
+#[test]
 fn content_writer_preserves_serialized_baselines() {
     let golden = include_bytes!("fixtures/default_before.psd");
     let doc = read_psd(golden).unwrap();
