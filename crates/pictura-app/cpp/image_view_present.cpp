@@ -18,6 +18,17 @@ void ImageView::dropPresentCache()
     presentCache_.levelRect = QRect();
 }
 
+// A Modern crop content pan draws document point p at offset + (p + c) * zoom,
+// so the content on screen is the viewport rect moved back by c before it is
+// clipped: a document inside a wider viewport still shows the band the offset
+// moves into that margin.
+QRectF ImageView::presentVisibleRect() const
+{
+    return viewportDocumentRect()
+        .translated(-cropContentOffset_)
+        .intersected(QRectF(0.0, 0.0, docSize_.width(), docSize_.height()));
+}
+
 // Reuse the cached crop when the visible rectangle changed at the cached level
 // (a pan, or a zoom step that stays in the band): the overlap is already the
 // right level's pixels, so copy it and crop only the newly exposed band(s). The

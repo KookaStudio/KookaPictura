@@ -234,8 +234,8 @@ Snapshot for resuming after a context break. Update after each milestone.
     magnetic begin, previews and Grayscale ≈ 67 MiB (one band), Similar
     19 MiB. 4250² guards assert `output + half a composite`.
   - **Left (`ponytail:`).** Refine Edge's own f64 work arrays, the clipboard's
-    coverage copy, `ImageView::image()` in the crop content pan, knockout and
-    lifted-transform backdrops, an adjustment layer's whole-canvas patch.
+    coverage copy, knockout and lifted-transform backdrops, an adjustment
+    layer's whole-canvas patch.
 - **Anti-aliased selection raster and 56-channel cap — #614 implemented**
   (OpenSpec change `aa-selection-raster`, archived).
   - `Selection::ellipse_aa` grades the per-row boundary band (including the

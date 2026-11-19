@@ -505,15 +505,8 @@ int ImageView::presentLevelForZoom(double zoom, int levelCount)
 
 QRectF ImageView::visibleDocumentRect() const
 {
-    if (docSize_.isEmpty() || zoom_ <= 0.0) {
-        return QRectF();
-    }
-    const QRectF view = viewRect();
-    const QPointF tl = (view.topLeft() - offset_) / zoom_;
-    const QPointF br = (view.bottomRight() - offset_) / zoom_;
-    const QRectF visible(QPointF(std::min(tl.x(), br.x()), std::min(tl.y(), br.y())),
-                         QPointF(std::max(tl.x(), br.x()), std::max(tl.y(), br.y())));
-    return visible.intersected(QRectF(0.0, 0.0, docSize_.width(), docSize_.height()));
+    return viewportDocumentRect().intersected(
+        QRectF(0.0, 0.0, docSize_.width(), docSize_.height()));
 }
 
 int ImageView::presentLevel() const
@@ -547,7 +540,7 @@ bool ImageView::presentLevelRect(int level, QRect& docRect, QRect& sourceRect) c
     if (levelSize.isEmpty()) {
         return false;
     }
-    const QRectF visible = visibleDocumentRect();
+    const QRectF visible = presentVisibleRect();
     if (visible.isEmpty()) {
         return false;
     }
@@ -663,45 +656,43 @@ void ImageView::paintEvent(QPaintEvent* event)
             about.translate(-c.x(), -c.y());
             painter.setTransform(rotation * about);
         }
-        if (!cropContentOffset_.isNull()) {
-            // Modern content pan: shift the composite, pulled from image() at zoom.
-            if (const QImage composite = image(); !composite.isNull()) {
-                painter.drawImage(QRectF(offset_ + cropContentOffset_ * zoom_,
-                                         QSizeF(composite.size()) * zoom_), composite);
-            }
-        } else if (singleChannel() >= 0 && crop) {
-            const QRectF target(offset_.x() + cropDoc.x() * zoom_,
-                                offset_.y() + cropDoc.y() * zoom_, cropDoc.width() * zoom_,
+        // A Modern content pan draws doc point p at offset + (p + c) * zoom, so
+        // every draw below shifts with the content: the level crop for the
+        // content actually on screen, never the whole document.
+        const QPointF docOrigin = offset_ + cropContentOffset_ * zoom_;
+        if (singleChannel() >= 0 && crop) {
+            const QRectF target(docOrigin.x() + cropDoc.x() * zoom_,
+                                docOrigin.y() + cropDoc.y() * zoom_, cropDoc.width() * zoom_,
                                 cropDoc.height() * zoom_);
             painter.drawImage(target, channelImage(*crop, crop->cacheKey()));
         } else if (singleChannel() >= 0 && !image_.isNull()) {
-            const QRectF visible = visibleDocumentRect();
-            painter.drawImage(QRectF(offset_.x() + visible.x() * zoom_,
-                                     offset_.y() + visible.y() * zoom_, visible.width() * zoom_,
+            const QRectF visible = presentVisibleRect();
+            painter.drawImage(QRectF(docOrigin.x() + visible.x() * zoom_,
+                                     docOrigin.y() + visible.y() * zoom_, visible.width() * zoom_,
                                      visible.height() * zoom_),
                               channelImage(image_, image_.cacheKey()), visible);
         } else if (crop) {
-            const QRectF target(offset_.x() + cropDoc.x() * zoom_,
-                                offset_.y() + cropDoc.y() * zoom_, cropDoc.width() * zoom_,
+            const QRectF target(docOrigin.x() + cropDoc.x() * zoom_,
+                                docOrigin.y() + cropDoc.y() * zoom_, cropDoc.width() * zoom_,
                                 cropDoc.height() * zoom_);
             painter.drawImage(target, *crop);
         } else {
             // No level crop (a live stroke, or no provider): draw only the
             // visible document, not the whole image resampled every paint. The
             // source rect bounds per-paint sampling to the viewport.
-            const QRectF visible = visibleDocumentRect();
+            const QRectF visible = presentVisibleRect();
             if (!visible.isEmpty() && !image_.isNull()) {
-                const QRectF target(offset_.x() + visible.x() * zoom_,
-                                    offset_.y() + visible.y() * zoom_, visible.width() * zoom_,
-                                    visible.height() * zoom_);
+                const QRectF target(docOrigin.x() + visible.x() * zoom_,
+                                    docOrigin.y() + visible.y() * zoom_,
+                                    visible.width() * zoom_, visible.height() * zoom_);
                 painter.drawImage(target, image_, visible);
             } else if (!visible.isEmpty() && levelProvider_.crop) {
                 // A document canvas: level 0, cropped to what is on screen.
                 const QRect area = visible.toAlignedRect();
                 const QImage part =
                     levelProvider_.crop(0, area.x(), area.y(), area.width(), area.height());
-                painter.drawImage(QRectF(offset_.x() + area.x() * zoom_,
-                                         offset_.y() + area.y() * zoom_,
+                painter.drawImage(QRectF(docOrigin.x() + area.x() * zoom_,
+                                         docOrigin.y() + area.y() * zoom_,
                                          area.width() * zoom_, area.height() * zoom_),
                                   part);
             }
