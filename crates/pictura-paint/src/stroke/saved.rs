@@ -3,7 +3,7 @@
 //! planes are the retained store a 16-bit tone dab edits.
 
 use super::PlaneIndex;
-use pictura_core::{BitDepth, Layer, PsdRect, Samples};
+use pictura_core::{BitDepth, Layer, Plane, PsdRect, Samples};
 
 /// Tile edge of the pre-stroke pixels a stroke keeps.
 const SAVED_TILE: i32 = 64;
@@ -227,17 +227,30 @@ impl Saved {
         let Some(store) = layer.source_channels.as_mut() else {
             return;
         };
-        for (slot, id) in native.ids.iter().enumerate() {
-            let Some((_, Samples::U16(dst))) = store.planes.iter_mut().find(|(cid, _)| cid == id)
-            else {
+        // Resolve each native destination once, then walk the saved tiles once
+        // for every plane rather than rescanning the tile grid per plane.
+        let mut dests: Vec<Option<&mut Plane<u16>>> = native.ids.iter().map(|_| None).collect();
+        for (id, samples) in store.planes.iter_mut() {
+            let Some(slot) = native.ids.iter().position(|want| want == id) else {
                 continue;
             };
-            let saved = &native.planes[slot];
-            for (t, _) in self.tiles.iter().enumerate().filter(|(_, saved)| **saved) {
-                let (tx, ty) = (t as i32 % self.columns, t as i32 / self.columns);
-                let (left, top) = (tx * SAVED_TILE, ty * SAVED_TILE);
-                let right = (left + SAVED_TILE).min(self.width) as usize;
-                let bottom = (top + SAVED_TILE).min(self.height) as usize;
+            let Samples::U16(plane) = samples else {
+                continue;
+            };
+            if dests[slot].is_none() {
+                dests[slot] = Some(plane);
+            }
+        }
+        for (t, _) in self.tiles.iter().enumerate().filter(|(_, saved)| **saved) {
+            let (tx, ty) = (t as i32 % self.columns, t as i32 / self.columns);
+            let (left, top) = (tx * SAVED_TILE, ty * SAVED_TILE);
+            let right = (left + SAVED_TILE).min(self.width) as usize;
+            let bottom = (top + SAVED_TILE).min(self.height) as usize;
+            for (slot, dst) in dests.iter_mut().enumerate() {
+                let Some(dst) = dst.as_mut() else {
+                    continue;
+                };
+                let saved = &native.planes[slot];
                 for y in top as usize..bottom {
                     let (a, b) = (y * w + left as usize, (y * w + right).min(saved.len()));
                     if a < b {
