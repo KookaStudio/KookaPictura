@@ -155,8 +155,9 @@ pub(super) fn default_layer_mask(
             },
             default_color: 255,
             disabled: false,
-            flags: 1,
             data: Some(vec![255u8; doc.width as usize * doc.height as usize].into()),
+            // Bit 0 is `MASK_FLAG_UNLINKED`; the remaining `Default` flags (0)
+            // leave a new mask linked, matching `add_layer_mask`.
             ..Default::default()
         })
 }
@@ -955,6 +956,35 @@ mod bundle_tests {
         assert_eq!(mask.rect.width(), 16);
         assert_eq!(mask.data.as_ref().map(|d| d.len()), Some(256));
         assert!(mask_thumbnail_positioned(&mask, doc.width, doc.height, 24).is_some());
+    }
+
+    #[test]
+    fn default_masks_are_linked() {
+        let doc = Document::new(
+            16,
+            16,
+            pictura_core::ColorMode::Rgb,
+            pictura_core::BitDepth::Eight,
+        );
+        let reveal_all = default_layer_mask(&doc, None);
+        assert_eq!(
+            reveal_all.flags & pictura_render::MASK_FLAG_UNLINKED,
+            0,
+            "the reveal-all default is linked"
+        );
+
+        let coverage = pictura_core::Coverage::for_canvas(
+            &pictura_core::Plane::from(vec![255u8; 16 * 16]),
+            16,
+            16,
+        )
+        .expect("canvas coverage");
+        let from_selection = default_layer_mask(&doc, Some(coverage));
+        assert_eq!(
+            from_selection.flags & pictura_render::MASK_FLAG_UNLINKED,
+            0,
+            "the selection default is linked"
+        );
     }
 
     fn rect(size: i32) -> PsdRect {
