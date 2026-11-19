@@ -5,15 +5,25 @@
 #include "api/layers_api.h"
 
 #include <QtCore/QAbstractItemModel>
+#include <QtCore/QByteArray>
 #include <QtCore/QCoreApplication>
 #include <QtCore/QItemSelectionModel>
+#include <QtCore/QMimeData>
+#include <QtCore/QPoint>
+#include <QtCore/QPointF>
 #include <QtCore/QStringList>
+#include <QtGui/QDragEnterEvent>
+#include <QtGui/QDragMoveEvent>
+#include <QtGui/QDropEvent>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QTabBar>
 #include <QtWidgets/QTreeView>
 
 #include "commands.h"
+#include "file_drop_router.h"
 #include "frame.h"
 #include "panels/layers_panel.h"
+#include "panels/layers_panel_internal.h"
 #include "panels/properties_panel.h"
 
 #include "api/layers_bridge.h"
@@ -51,6 +61,46 @@ QString pathNamed(pictura::PictureView& view, const QString& name)
     return {};
 }
 
+int rowOf(pictura::PictureView& view, const QString& path)
+{
+    for (int row = 0; row < pictura::layers_api::rowCount(view); ++row) {
+        if (pictura::layers_api::rowAt(view, row).path == path) {
+            return row;
+        }
+    }
+    return -1;
+}
+
+int countNamed(pictura::PictureView& view, const QString& name)
+{
+    int count = 0;
+    for (int row = 0; row < pictura::layers_api::rowCount(view); ++row) {
+        count += pictura::layers_api::rowAt(view, row).name == name ? 1 : 0;
+    }
+    return count;
+}
+
+// Send a layer drag from `document` over `bar`'s `tab` and release it there.
+bool dropLayerOnTab(QTabBar* bar, const void* document, const QString& path, int tab)
+{
+    if (!bar || tab < 0) {
+        return false;
+    }
+    QMimeData mime;
+    mime.setData(pictura::kLayerMimeType, path.toUtf8());
+    mime.setData(pictura::kLayerSourceMimeType,
+                 QByteArray::number(reinterpret_cast<quintptr>(document)));
+    const QPoint pos = bar->tabRect(tab).center();
+    const auto actions = Qt::MoveAction | Qt::CopyAction;
+    QDragEnterEvent enter(pos, actions, &mime, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(bar, &enter);
+    QDragMoveEvent move(pos, actions, &mime, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(bar, &move);
+    QDropEvent drop(QPointF(pos), actions, &mime, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(bar, &drop);
+    return drop.isAccepted();
+}
+
 } // namespace
 
 class LayerTargetTest : public QObject {
@@ -82,6 +132,7 @@ private slots:
     void reorderKeepsLayerSelected();
     void backgroundFromLayerKeepsTarget();
     void crossDocumentCopySelectsCopy();
+    void crossDocumentMultiCopySelectsCopies();
     void refusedOperationLeavesTarget();
     void undoFirstEditAfterOpen();
     void undoRestoresStructuralTarget();
@@ -123,8 +174,10 @@ void LayerTargetTest::initTestCase()
 
 void LayerTargetTest::cleanup()
 {
-    if (window_ && window_->activeView()) {
-        window_->closeDocument(window_->activeDocumentIndex(), false);
+    if (window_) {
+        while (window_->activeDocumentIndex() >= 0) {
+            window_->closeDocument(window_->activeDocumentIndex(), false);
+        }
     }
     view_ = nullptr;
     panel_ = nullptr;
@@ -447,10 +500,156 @@ void LayerTargetTest::crossDocumentCopySelectsCopy()
     const QString sourcePath = topPath(*view_);
     QVERIFY(newDoc(QStringLiteral("Destination"), 1));
     const int before = view_->layer_count();
-    QVERIFY(window_->copyLayerFromDocument(source, sourcePath));
+    const int history = view_->history_count();
+    QVERIFY(window_->copyLayersFromDocument(source, sourcePath));
     QCOMPARE(view_->layer_count(), before + 1);
     QCOMPARE(pictura::selected_layer_paths(*view_),
              QStringList{topPath(*view_)});
+    QCOMPARE(view_->history_count(), history + 1);
+    QVERIFY(view_->undo());
+    QCOMPARE(view_->layer_count(), before);
+}
+
+// lt_op_cross_document_multi
+void LayerTargetTest::crossDocumentMultiCopySelectsCopies()
+{
+    QVERIFY(newDoc(QStringLiteral("Source"), 2));
+    pictura::PictureView* source = view_;
+    QVERIFY(view_->set_layer_name_path(QStringLiteral("1"), QStringLiteral("Sky")));
+    QVERIFY(view_->set_layer_name_path(QStringLiteral("0"), QStringLiteral("Sea")));
+    panel_->refresh();
+    select({QStringLiteral("1"), QStringLiteral("0")}, QStringLiteral("1"));
+    const int sourceRows = source->layer_count();
+    const QString dragged = QStringLiteral("1");
+
+    window_->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
+    auto* bar = window_->findChild<QTabBar*>(QStringLiteral("documentTabBar"));
+    QVERIFY(bar != nullptr);
+
+    // A panel drag of one selected row crosses the whole selection.
+    QVERIFY(newDoc(QStringLiteral("Destination"), 1));
+    pictura::PictureView* dst = view_;
+    const int dstTab = window_->activeDocumentIndex();
+    const int dstRows = dst->layer_count();
+    const int dstHistory = dst->history_count();
+    QVERIFY(dropLayerOnTab(bar, source, dragged, dstTab));
+    QCOMPARE(dst->layer_count(), dstRows + 2);
+    const QString skyCopy = pathNamed(*dst, QStringLiteral("Sky"));
+    const QString seaCopy = pathNamed(*dst, QStringLiteral("Sea"));
+    QVERIFY(!skyCopy.isEmpty() && !seaCopy.isEmpty());
+    QVERIFY(rowOf(*dst, skyCopy) < rowOf(*dst, seaCopy));
+    QCOMPARE(pictura::selected_layer_paths(*dst), (QStringList{skyCopy, seaCopy}));
+    QCOMPARE(panel_->selectedPaths(), (QStringList{skyCopy, seaCopy}));
+    QCOMPARE(pictura::layer_selection_anchor(*dst), skyCopy);
+    QCOMPARE(dst->history_count(), dstHistory + 1);
+    QCOMPARE(source->layer_count(), sourceRows);
+    QVERIFY(dst->undo());
+    QCOMPARE(dst->layer_count(), dstRows);
+    window_->closeDocument(window_->activeDocumentIndex(), false);
+
+    // A group anchor appends the copies into the group, in source order.
+    QVERIFY(newDoc(QStringLiteral("GroupDestination"), 1));
+    dst = view_;
+    const QString group = dst->add_group_in(QString());
+    QVERIFY(!group.isEmpty());
+    QCOMPARE(pictura::layer_selection_anchor(*dst), group);
+    const int groupRows = pictura::layers_api::rowCount(*dst);
+    const int groupHistory = dst->history_count();
+    QVERIFY(window_->copyLayersFromDocument(source, dragged));
+    QCOMPARE(pictura::layers_api::rowCount(*dst), groupRows + 2);
+    const QString groupSky = pathNamed(*dst, QStringLiteral("Sky"));
+    const QString groupSea = pathNamed(*dst, QStringLiteral("Sea"));
+    QVERIFY(groupSky.startsWith(group + QLatin1Char('/')));
+    QVERIFY(groupSea.startsWith(group + QLatin1Char('/')));
+    QVERIFY(rowOf(*dst, groupSky) < rowOf(*dst, groupSea));
+    QCOMPARE(pictura::layer_selection_anchor(*dst), groupSky);
+    QCOMPARE(dst->history_count(), groupHistory + 1);
+    window_->closeDocument(window_->activeDocumentIndex(), false);
+
+    // An empty destination target appends the copies at the top, in source order.
+    QVERIFY(newDoc(QStringLiteral("EmptyDestination"), 1));
+    dst = view_;
+    pictura::set_layer_target(*dst, {}, {});
+    QVERIFY(pictura::selected_layer_paths(*dst).isEmpty());
+    const int emptyRows = dst->layer_count();
+    const int emptyHistory = dst->history_count();
+    QVERIFY(window_->copyLayersFromDocument(source, dragged));
+    QCOMPARE(dst->layer_count(), emptyRows + 2);
+    const QString topCopy = pathNamed(*dst, QStringLiteral("Sky"));
+    const QString nextCopy = pathNamed(*dst, QStringLiteral("Sea"));
+    QVERIFY(rowOf(*dst, topCopy) < rowOf(*dst, nextCopy));
+    QCOMPARE(pictura::layer_selection_anchor(*dst), topCopy);
+    QCOMPARE(dst->history_count(), emptyHistory + 1);
+    window_->closeDocument(window_->activeDocumentIndex(), false);
+
+    // A mode mismatch refuses the whole multi-layer drop.
+    QVERIFY(window_->newDocument(QStringLiteral("Gray"), 16, 16,
+                                 QStringLiteral("grayscale"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* gray = window_->activeView();
+    const int grayTab = window_->activeDocumentIndex();
+    const int grayRows = gray->layer_count();
+    const int grayHistory = gray->history_count();
+    QVERIFY(!dropLayerOnTab(bar, source, dragged, grayTab));
+    QCOMPARE(gray->layer_count(), grayRows);
+    QCOMPARE(gray->history_count(), grayHistory);
+    QVERIFY(pathNamed(*gray, QStringLiteral("Sky")).isEmpty());
+
+    // A synthetic Smart Filters row is not a layer path: the drop is refused.
+    QVERIFY(newDoc(QStringLiteral("FilterDestination"), 1));
+    dst = view_;
+    const int filterRows = dst->layer_count();
+    const int filterHistory = dst->history_count();
+    QVERIFY(!dropLayerOnTab(bar, source, QStringLiteral("1/@sf/0"),
+                            window_->activeDocumentIndex()));
+    QCOMPARE(dst->layer_count(), filterRows);
+    QCOMPARE(dst->history_count(), filterHistory);
+
+    // A nested sibling anchor inserts above it, inside the group.
+    QVERIFY(newDoc(QStringLiteral("NestedDestination"), 1));
+    dst = view_;
+    const QString nestedGroup = dst->add_group_in(QString());
+    QVERIFY(!nestedGroup.isEmpty());
+    const QString nestedChild = dst->add_layer_in(nestedGroup);
+    QVERIFY(!nestedChild.isEmpty());
+    QCOMPARE(pictura::layer_selection_anchor(*dst), nestedChild);
+    const int nestedRows = pictura::layers_api::rowCount(*dst);
+    QVERIFY(window_->copyLayersFromDocument(source, dragged));
+    QCOMPARE(pictura::layers_api::rowCount(*dst), nestedRows + 2);
+    const QString nestedSky = pathNamed(*dst, QStringLiteral("Sky"));
+    const QString nestedSea = pathNamed(*dst, QStringLiteral("Sea"));
+    QVERIFY(nestedSky.startsWith(nestedGroup + QLatin1Char('/')));
+    QVERIFY(nestedSea.startsWith(nestedGroup + QLatin1Char('/')));
+    QVERIFY(rowOf(*dst, nestedSky) < rowOf(*dst, nestedSea));
+    QVERIFY(rowOf(*dst, nestedSea) < rowOf(*dst, nestedChild));
+    QCOMPARE(pictura::layer_selection_anchor(*dst), nestedSky);
+
+    // A selected group and its child copy once: the child is not duplicated.
+    QVERIFY(newDoc(QStringLiteral("DescendantSource"), 2));
+    pictura::PictureView* descendantSource = view_;
+    QVERIFY(descendantSource->set_layer_name_path(QStringLiteral("1"),
+                                                  QStringLiteral("Sib")));
+    const QString descendantGroup = descendantSource->add_group_in(QString());
+    QVERIFY(!descendantGroup.isEmpty());
+    const QString descendantChild = descendantSource->add_layer_in(descendantGroup);
+    QVERIFY(!descendantChild.isEmpty());
+    QVERIFY(descendantSource->set_layer_name_path(descendantChild, QStringLiteral("Kid")));
+    const QString descendantGroupName = nameAtPath(*descendantSource, descendantGroup);
+    pictura::set_layer_target(*descendantSource,
+                              {descendantGroup, descendantChild, QStringLiteral("1")},
+                              descendantGroup);
+    QVERIFY(newDoc(QStringLiteral("DescendantDestination"), 1));
+    dst = view_;
+    const int descendantRows = dst->layer_count();
+    QVERIFY(window_->copyLayersFromDocument(descendantSource, descendantGroup));
+    QCOMPARE(dst->layer_count(), descendantRows + 2);
+    QCOMPARE(countNamed(*dst, QStringLiteral("Kid")), 1);
+    const QString copiedGroup = pathNamed(*dst, descendantGroupName);
+    QVERIFY(!copiedGroup.isEmpty());
+    QVERIFY(!pathNamed(*dst, QStringLiteral("Sib")).isEmpty());
+    QCOMPARE(pictura::layer_selection_anchor(*dst), copiedGroup);
+    QCOMPARE(pictura::selected_layer_paths(*dst).size(), 2);
 }
 
 // lt_op_refused

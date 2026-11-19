@@ -389,10 +389,12 @@ public:
     // The active document's selected layer paths and current row, from Rust.
     QStringList selectedLayerPaths() const;
     QString layerAnchor() const;
-    // Copy the layer node at `path` of the open document `source` into the active document,
-    // above its current layer, as one "Duplicate Layer" state. False when `source` is not
-    // another open document or the bridge refuses the copy.
-    bool copyLayerFromDocument(const void* source, const QString& path);
+    // Copy the layer `dragged` of the open document `source` into the active
+    // document, above its current layer, as one "Duplicate Layer" state. When
+    // `dragged` belongs to the source's multi-layer target every selected layer
+    // crosses. False when `source` is not another open document or the bridge
+    // refuses the copy.
+    bool copyLayersFromDocument(const void* source, const QString& dragged);
     bool saveActive(bool interactive = true);
     bool saveInBackground() const;
     bool saveActiveAs(const QString& path);

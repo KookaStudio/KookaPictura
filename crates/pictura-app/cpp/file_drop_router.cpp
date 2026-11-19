@@ -12,6 +12,7 @@
 #include "api/view_bridge.h"
 
 #include <QtCore/QEvent>
+#include <algorithm>
 #include <cstddef>
 #include <QtCore/QFileInfo>
 #include <QtCore/QMimeData>
@@ -27,6 +28,26 @@ namespace pictura {
 FileDropRouter::FileDropRouter(PicturaMainWindow* frame)
     : QObject(frame), frame_(frame)
 {
+}
+
+QStringList layerDragCopyPaths(const QStringList& target, const QString& dragged)
+{
+    if (dragged.isEmpty()) {
+        return {};
+    }
+    if (!target.contains(dragged)) {
+        return {dragged};
+    }
+    QStringList paths;
+    for (const QString& path : target) {
+        const bool covered = std::any_of(target.cbegin(), target.cend(), [&path](const QString& other) {
+            return other != path && path.startsWith(other + QLatin1Char('/'));
+        });
+        if (!covered) {
+            paths.append(path);
+        }
+    }
+    return paths.isEmpty() ? QStringList{dragged} : paths;
 }
 
 QStringList FileDropRouter::localPaths(const QMimeData* mime)
@@ -139,8 +160,9 @@ bool FileDropRouter::routeLayerDrag(QObject* watched, QEvent* event)
     if (event->type() == QEvent::Drop) {
         const QStringList paths =
             QString::fromUtf8(mime->data(kLayerMimeType)).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
-        // ponytail: only the dragged row crosses, as the in-panel drop moves only it.
-        if (paths.isEmpty() || !frame_->copyLayerFromDocument(source, paths.first())) {
+        // The frame expands the dragged row to the source document's target;
+        // the payload still carries one path.
+        if (paths.isEmpty() || !frame_->copyLayersFromDocument(source, paths.first())) {
             drag->ignore();
             return true;
         }

@@ -5,7 +5,7 @@ use crate::cxxqt_object::edit::Edit;
 use crate::cxxqt_object::state::PictureViewRust;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
-use cxx_qt_lib::QString;
+use cxx_qt_lib::{QString, QStringList};
 use pictura_core::Coverage;
 use pictura_render::{Clip, PasteMode};
 use std::sync::Mutex;
@@ -61,32 +61,139 @@ pub(super) fn clipboard_purge() {
     *CLIPBOARD.lock().unwrap_or_else(|e| e.into_inner()) = None;
 }
 
-pub(super) fn copy_layer_from_document(
+pub(super) fn copy_layers_from_document(
     mut view: Pin<&mut PictureView>,
     source: &PictureView,
-    path: &QString,
-    selection: &QString,
-) -> QString {
-    let created = {
-        let source = source.rust();
-        let mut rust = view.as_mut().rust_mut();
-        match (source.session.doc.as_ref(), rust.session.doc.as_mut()) {
-            (Some(src), Some(dst)) => pictura_render::copy_path_to_document(
-                src,
-                &path.to_string(),
-                dst,
-                &selection.to_string(),
-            ),
-            _ => None,
+    paths: &QStringList,
+    dest_anchor: &QString,
+    source_anchor: &QString,
+) -> QStringList {
+    let dest_anchor = dest_anchor.to_string();
+    let source_anchor = source_anchor.to_string();
+    // Refuse before `edit`, so a drop that cannot copy does not settle a pending
+    // composite or cancel a vector place on the destination.
+    let resolved = {
+        let Some(src) = source.rust().session.doc.as_ref() else {
+            return QStringList::default();
+        };
+        if view.rust().session.read_only() {
+            return QStringList::default();
         }
+        let Some(dst) = view.rust().session.doc.as_ref() else {
+            return QStringList::default();
+        };
+        if pictura_render::document_color_mode(src) != pictura_render::document_color_mode(dst)
+            || pictura_render::document_bit_depth(src) != pictura_render::document_bit_depth(dst)
+        {
+            return QStringList::default();
+        }
+        let mut resolved: Vec<String> = Vec::new();
+        for path in paths.iter().map(|path| path.to_string()) {
+            if resolved.contains(&path) {
+                continue;
+            }
+            if pictura_render::resolve_path(src, &path).is_some() {
+                resolved.push(path);
+            }
+        }
+        if resolved.is_empty() {
+            return QStringList::default();
+        }
+        // The document's own order is the contract; the target may have been
+        // written by a command, not the panel.
+        let order: std::collections::HashMap<String, usize> = pictura_render::flatten_rows(src)
+            .into_iter()
+            .enumerate()
+            .map(|(index, (path, _))| (path, index))
+            .collect();
+        resolved.sort_by_key(|path| order.get(path).copied().unwrap_or(usize::MAX));
+        resolved
     };
-    let Some(created) = created else {
-        return QString::default();
-    };
-    view.as_mut().rust_mut().select_only_layer(&created);
-    view.as_mut()
-        .edit("Duplicate Layer", |_| Edit::Structural { damage: None });
-    QString::from(created.as_str())
+    let mut created: Vec<String> = Vec::new();
+    view.as_mut().edit("Duplicate Layer", |rust| {
+        let Some(src) = source.rust().session.doc.as_ref() else {
+            return Edit::None;
+        };
+        let Some(dst) = rust.session.doc.as_mut() else {
+            return Edit::None;
+        };
+        // A stale anchor takes `insert_node`'s root-append fallback, so compute
+        // the insertion point for that case too.
+        let anchor = if dest_anchor.is_empty()
+            || pictura_render::resolve_path(dst, &dest_anchor).is_some()
+        {
+            dest_anchor.as_str()
+        } else {
+            ""
+        };
+        // A group or an empty target takes an append, which lands on top; a
+        // sibling takes an insert above it. The insertion point is fixed for the
+        // whole batch, so the source order is recovered by processing the
+        // append case bottom-to-top and the sibling case top-to-bottom.
+        let append = anchor.is_empty()
+            || pictura_render::resolve_path(dst, anchor).is_some_and(|layer| layer.is_group());
+        let (container, base) = if anchor.is_empty() {
+            (String::new(), dst.layers.len())
+        } else if append {
+            let base =
+                pictura_render::resolve_path(dst, anchor).map_or(0, |group| group.children().len());
+            (anchor.to_string(), base)
+        } else if let Some((parent, index)) = anchor.rsplit_once('/') {
+            (parent.to_string(), index.parse::<usize>().unwrap_or(0) + 1)
+        } else {
+            (String::new(), anchor.parse::<usize>().unwrap_or(0) + 1)
+        };
+        let ordered: Vec<&String> = if append {
+            resolved.iter().rev().collect()
+        } else {
+            resolved.iter().collect()
+        };
+        let mut inserted: Vec<(String, String)> = Vec::new();
+        for path in ordered {
+            if let Some(new_path) = pictura_render::copy_path_to_document(src, path, dst, anchor) {
+                inserted.push((path.clone(), new_path));
+            }
+        }
+        if inserted.is_empty() {
+            return Edit::None;
+        }
+        // Every copy lands at the same point, so the final index of the i-th
+        // insertion is base + i for an append and base + (n - 1 - i) above a
+        // sibling (later inserts push the earlier block up).
+        let count = inserted.len();
+        let mut pairs: Vec<(String, String)> = inserted
+            .into_iter()
+            .enumerate()
+            .map(|(i, (source, _))| {
+                let index = if append {
+                    base + i
+                } else {
+                    base + (count - 1 - i)
+                };
+                let path = if container.is_empty() {
+                    index.to_string()
+                } else {
+                    format!("{container}/{index}")
+                };
+                (source, path)
+            })
+            .collect();
+        if append {
+            pairs.reverse();
+        }
+        let finals: Vec<String> = pairs.iter().map(|(_, path)| path.clone()).collect();
+        let active = pairs
+            .iter()
+            .find(|(source, _)| *source == source_anchor)
+            .map(|(_, path)| path.clone())
+            .unwrap_or_else(|| finals.first().cloned().unwrap_or_default());
+        let mut target = rust.layer_target.clone();
+        target.select(finals.clone(), Some(active), rust.session.doc.as_ref());
+        rust.set_layer_target(target);
+        created = finals;
+        Edit::Structural { damage: None }
+    });
+    created.into_iter().map(QString::from).collect()
 }
 
 /// The active selection's coverage plane, when it matches the document: a

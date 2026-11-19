@@ -9,6 +9,7 @@
 #include "panels/actions_engine_bridge.h"
 #include "panels/actions_panel.h"
 #include "panels/color_panel.h"
+#include "panels/layers_panel.h"
 #include "api/document_bridge.h"
 #include "api/layers_bridge.h"
 #include "api/engine_bridge.h"
@@ -1138,7 +1139,7 @@ bool PicturaMainWindow::exportSmartObjectContents(const QString& layerPath)
     return menu_ && menu_->exportSmartObjectContents(layerPath);
 }
 
-bool PicturaMainWindow::copyLayerFromDocument(const void* source, const QString& path)
+bool PicturaMainWindow::copyLayersFromDocument(const void* source, const QString& dragged)
 {
     PictureView* target = activeView();
     PictureView* from = nullptr;
@@ -1149,15 +1150,24 @@ bool PicturaMainWindow::copyLayerFromDocument(const void* source, const QString&
     }
     // The bridge holds the source shared and the target exclusive, so the two
     // must be different documents.
-    if (!target || !from || from == target || path.isEmpty()) {
+    if (!target || !from || from == target || dragged.isEmpty()) {
         return false;
     }
-    const QString selection = layerAnchor();
-    const QString created = copy_layer_from_document(*target, *from, path, selection);
+    const QStringList paths = layerDragCopyPaths(selected_layer_paths(*from), dragged);
+    if (paths.isEmpty()) {
+        return false;
+    }
+    const QStringList created =
+        copy_layers_from_document(*target, *from, paths, layerAnchor(), dragged);
     if (created.isEmpty()) {
         return false;
     }
-    selectLayerPath(created);
+    // The bridge set the target; project it before the timer-driven pass so the
+    // panel shows the copies as soon as the drop returns.
+    if (panels_ && panels_->layersPanel()) {
+        panels_->layersPanel()->refresh();
+    }
+    refresh();
     return true;
 }
 

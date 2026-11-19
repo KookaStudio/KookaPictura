@@ -286,7 +286,8 @@ private:
             canvas->clearSmartGuides();
             v->end_move_preview();
         }
-        const QString path = v->active_layer_path();
+        // The target's anchor, so a multi-layer selection can cross as a drag.
+        const QString path = layer_selection_anchor(*v);
         if (path.isEmpty()) {
             return;
         }
