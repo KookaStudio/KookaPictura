@@ -12,6 +12,12 @@ namespace pictura {
 class PicturaMainWindow;
 class PictureView;
 
+// The layer paths a cross-document drop copies: the whole source target when
+// `dragged` belongs to it, minus any path whose selected ancestor is also in
+// the target; the dragged path alone otherwise. The bridge re-sorts them into
+// the source document's top-to-bottom order.
+QStringList layerDragCopyPaths(const QStringList& target, const QString& dragged);
+
 // Routes an OS file drag over the frame's drop targets: a document ImageView
 // places each file into the active document, every other watched target opens
 // each file as a new tab. A Layers-panel drag from another document copies the

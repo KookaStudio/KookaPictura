@@ -28,6 +28,8 @@ pub mod ffi {
     unsafe extern "C++" {
         include!("cxx-qt-lib/qstring.h");
         type QString = cxx_qt_lib::QString;
+        include!("cxx-qt-lib/qstringlist.h");
+        type QStringList = cxx_qt_lib::QStringList;
 
         include!("pictura_app/src/cxxqt_object.cxxqt.h");
         #[namespace = "pictura"]
@@ -66,12 +68,13 @@ pub mod ffi {
         /// `Purge > Clipboard`: drop the copy. Not undoable.
         fn clipboard_purge();
 
-        /// Deep-copy the layer node at `path` in `source` into `view` by the New Layer insertion rule relative to `selection` — the Layers panel drag onto another document. `source` and `view` must be different documents. One "Duplicate Layer" state; returns the new path, or empty for an unknown path or a different color mode or bit depth.
-        fn copy_layer_from_document(
+        /// Deep-copy each layer at `paths` of `source` into `view` at the New Layer position of `dest_anchor` — the Layers panel drag onto another document. Source order is preserved for a sibling and a group anchor; `source_anchor` picks the active copy (the topmost copy when it was not copied). Duplicates are dropped and all paths resolve before the first insert; `paths` must not contain a node and its selected ancestor. `source` and `view` must be different documents. One "Duplicate Layer" state; returns the new paths in source order, or empty when nothing is copied (unknown paths or a different color mode or bit depth).
+        fn copy_layers_from_document(
             view: Pin<&mut PictureView>,
             source: &PictureView,
-            path: &QString,
-            selection: &QString,
-        ) -> QString;
+            paths: &QStringList,
+            dest_anchor: &QString,
+            source_anchor: &QString,
+        ) -> QStringList;
     }
 }
