@@ -7,7 +7,9 @@
 # dependencies.
 #
 # usage: packaging/build-packages.sh VERSION APPDIR OUTDIR [deb|rpm]...
-# Needs dpkg-deb + dpkg-shlibdeps for deb, rpmbuild for rpm.
+# Needs dpkg-deb + dpkg-shlibdeps for deb, rpmbuild for rpm. The packages take
+# the build host's architecture (amd64/x86_64 or arm64/aarch64); the AppDir must
+# have been built on the same machine.
 set -euo pipefail
 
 version=${1#v}
@@ -54,13 +56,14 @@ mapfile -t elves < <(find "$root$prefix" -type f -exec sh -c \
     'head -c4 "$1" | grep -q "^.ELF" && echo "$1"' _ {} \;)
 
 build_deb() {
-    local pkg=$work/deb
+    local pkg=$work/deb deb_arch
+    deb_arch=$(dpkg --print-architecture)
     cp -a "$root" "$pkg"
     install -d "$pkg$prefix/share/kooka-pictura"
     printf 'deb\n' > "$pkg$prefix/share/kooka-pictura/package-method"
     mkdir -p "$pkg/DEBIAN" "$work/shlibs/debian"
     # dpkg-shlibdeps wants a source package around it; the stub only names one.
-    printf 'Source: %s\n\nPackage: %s\nArchitecture: amd64\n' "$name" "$name" \
+    printf 'Source: %s\n\nPackage: %s\nArchitecture: %s\n' "$name" "$name" "$deb_arch" \
         >"$work/shlibs/debian/control"
     local depends
     depends=$(cd "$work/shlibs" && dpkg-shlibdeps -O --ignore-missing-info \
@@ -69,7 +72,7 @@ build_deb() {
     cat >"$pkg/DEBIAN/control" <<EOF
 Package: $name
 Version: $version
-Architecture: amd64
+Architecture: $deb_arch
 Maintainer: $maintainer
 Installed-Size: $(du -sk --exclude=DEBIAN "$pkg" | cut -f1)
 Depends: $depends
@@ -79,13 +82,14 @@ Homepage: $homepage
 Description: $summary
 $(sed 's/^/ /' <<<"$description")
 EOF
-    dpkg-deb --root-owner-group -Zxz --build "$pkg" "$outdir/KookaPictura_${version}_amd64.deb"
+    dpkg-deb --root-owner-group -Zxz --build "$pkg" "$outdir/KookaPictura_${version}_${deb_arch}.deb"
 }
 
 build_rpm() {
     # The bundled sonames must not leak into Provides, and must not be Required
     # from the host either; everything else rpm's ELF scan finds is a real dep.
-    local bundled
+    local bundled rpm_arch
+    rpm_arch=$(uname -m)
     bundled=$(find "$root$prefix/lib" -name '*.so*' -printf '%f\n' | sort -u |
         sed 's/[.+]/\\&/g' | paste -sd'|')
     mkdir -p "$work/rpm"
@@ -102,7 +106,7 @@ Release: 1
 Summary: $summary
 License: GPL-3.0-or-later
 URL: $homepage
-ExclusiveArch: x86_64
+ExclusiveArch: $rpm_arch
 
 %description
 $description
@@ -122,7 +126,7 @@ EOF
     install -d "$root$prefix/share/kooka-pictura"
     printf 'rpm\n' > "$root$prefix/share/kooka-pictura/package-method"
     rpmbuild -bb --define "_topdir $work/rpm" "$work/rpm/$name.spec"
-    cp "$work"/rpm/RPMS/x86_64/*.rpm "$outdir/KookaPictura-${version}-1.x86_64.rpm"
+    cp "$work"/rpm/RPMS/"$rpm_arch"/*.rpm "$outdir/KookaPictura-${version}-1.${rpm_arch}.rpm"
 }
 
 for format in "$@"; do

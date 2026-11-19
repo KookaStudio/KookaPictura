@@ -88,6 +88,13 @@ QByteArray releaseFixture()
     assets.append(releaseAsset(QStringLiteral("KookaPictura_0.4.0_amd64.deb"),
                                QStringLiteral("https://example.test/KookaPictura_0.4.0_amd64.deb"),
                                39105444, '2'));
+    assets.append(releaseAsset(QStringLiteral("KookaPictura_0.4.0_arm64.deb"),
+                               QStringLiteral("https://example.test/KookaPictura_0.4.0_arm64.deb"),
+                               37748736, '4'));
+    assets.append(releaseAsset(
+        QStringLiteral("KookaPictura-0.4.0-1.aarch64.rpm"),
+        QStringLiteral("https://example.test/KookaPictura-0.4.0-1.aarch64.rpm"),
+        55574528, '5'));
 
     QJsonObject root;
     root.insert(QStringLiteral("tag_name"), QStringLiteral("v0.4.0"));
@@ -266,10 +273,12 @@ private slots:
     void rejectsMalformedReleaseJson();
     void selectsAppImageAsset();
     void selectsAarch64AppImageAsset();
+    void selectsArm64DebAndRpmAssets();
     void selectsWindowsSetupAsset();
     void selectsMacDmgAsset();
     void missingAssetFallsBackToReleasePage();
     void packageCommands();
+    void arm64PackageCommands();
     void debRpmUsesPackageManager();
     void sessionCheckDefault();
     void environmentSettings();
@@ -471,7 +480,7 @@ void AppUpdaterTest::parsesReleaseFixture()
     QCOMPARE(release->htmlUrl,
              QStringLiteral("https://github.com/KookaStudio/KookaPictura/releases/tag/v0.4.0"));
     QVERIFY(release->body.contains(QStringLiteral("Faster update checks")));
-    QCOMPARE(int(release->assets.size()), 9);
+    QCOMPARE(int(release->assets.size()), 11);
     QCOMPARE(int(release->assets.first().sha256.size()), 64);
 }
 
@@ -523,6 +532,30 @@ void AppUpdaterTest::selectsAarch64AppImageAsset()
     }
 }
 
+void AppUpdaterTest::selectsArm64DebAndRpmAssets()
+{
+    const auto release = pictura::parseReleaseJson(releaseFixture());
+    QVERIFY(release.has_value());
+    for (const QString& architecture : {QStringLiteral("arm64"), QStringLiteral("aarch64")}) {
+        const auto deb = pictura::selectReleaseAsset(*release, PackageMethod::Deb, architecture);
+        QVERIFY2(deb.has_value(), qPrintable(architecture));
+        QCOMPARE(deb->name, QStringLiteral("KookaPictura_0.4.0_arm64.deb"));
+        QCOMPARE(deb->size, qint64(37748736));
+        const auto rpm = pictura::selectReleaseAsset(*release, PackageMethod::Rpm, architecture);
+        QVERIFY2(rpm.has_value(), qPrintable(architecture));
+        QCOMPARE(rpm->name, QStringLiteral("KookaPictura-0.4.0-1.aarch64.rpm"));
+        QCOMPARE(rpm->size, qint64(55574528));
+    }
+    const auto x86Deb
+        = pictura::selectReleaseAsset(*release, PackageMethod::Deb, QStringLiteral("x86_64"));
+    QVERIFY(x86Deb.has_value());
+    QCOMPARE(x86Deb->name, QStringLiteral("KookaPictura_0.4.0_amd64.deb"));
+    const auto x86Rpm
+        = pictura::selectReleaseAsset(*release, PackageMethod::Rpm, QStringLiteral("x86_64"));
+    QVERIFY(x86Rpm.has_value());
+    QCOMPARE(x86Rpm->name, QStringLiteral("KookaPictura-0.4.0-1.x86_64.rpm"));
+}
+
 void AppUpdaterTest::selectsWindowsSetupAsset()
 {
     const auto release = pictura::parseReleaseJson(releaseFixture());
@@ -548,7 +581,7 @@ void AppUpdaterTest::missingAssetFallsBackToReleasePage()
     const auto release = pictura::parseReleaseJson(releaseFixture());
     QVERIFY(release.has_value());
     QVERIFY(!release->htmlUrl.isEmpty());
-    QVERIFY(!pictura::selectReleaseAsset(*release, PackageMethod::Deb, QStringLiteral("aarch64"))
+    QVERIFY(!pictura::selectReleaseAsset(*release, PackageMethod::Deb, QStringLiteral("riscv64"))
                  .has_value());
     QVERIFY(!pictura::selectReleaseAsset(*release, PackageMethod::AppImage,
                                          QStringLiteral("riscv64"))
@@ -560,15 +593,16 @@ void AppUpdaterTest::missingAssetFallsBackToReleasePage()
 
 void AppUpdaterTest::packageCommands()
 {
-    QCOMPARE(pictura::packageUpdateCommand(PackageMethod::Flatpak, QStringLiteral("0.4.0")),
+    const QString x86 = QStringLiteral("x86_64");
+    QCOMPARE(pictura::packageUpdateCommand(PackageMethod::Flatpak, QStringLiteral("0.4.0"), x86),
              QStringLiteral("flatpak update io.github.KookaStudio.KookaPictura"));
-    QCOMPARE(pictura::packageUpdateCommand(PackageMethod::Snap, QStringLiteral("0.4.0")),
+    QCOMPARE(pictura::packageUpdateCommand(PackageMethod::Snap, QStringLiteral("0.4.0"), x86),
              QStringLiteral("snap refresh kooka-pictura"));
-    QCOMPARE(pictura::packageUpdateCommand(PackageMethod::Deb, QStringLiteral("v0.4.0")),
+    QCOMPARE(pictura::packageUpdateCommand(PackageMethod::Deb, QStringLiteral("v0.4.0"), x86),
              QStringLiteral("sudo apt install ./KookaPictura_0.4.0_amd64.deb"));
-    QCOMPARE(pictura::packageUpdateCommand(PackageMethod::Rpm, QStringLiteral("0.4.0")),
+    QCOMPARE(pictura::packageUpdateCommand(PackageMethod::Rpm, QStringLiteral("0.4.0"), x86),
              QStringLiteral("sudo dnf install ./KookaPictura-0.4.0-1.x86_64.rpm"));
-    QVERIFY(pictura::packageUpdateCommand(PackageMethod::AppImage, QStringLiteral("0.4.0"))
+    QVERIFY(pictura::packageUpdateCommand(PackageMethod::AppImage, QStringLiteral("0.4.0"), x86)
                 .isEmpty());
 
     QVERIFY(pictura::packageMethodSelfUpdates(PackageMethod::AppImage));
@@ -585,6 +619,23 @@ void AppUpdaterTest::packageCommands()
 
     QCOMPARE(pictura::packageMethodName(PackageMethod::Development),
              QStringLiteral("Development build"));
+}
+
+void AppUpdaterTest::arm64PackageCommands()
+{
+    for (const QString& architecture : {QStringLiteral("arm64"), QStringLiteral("aarch64")}) {
+        QCOMPARE(pictura::packageUpdateCommand(PackageMethod::Deb, QStringLiteral("0.4.0"),
+                                               architecture),
+                 QStringLiteral("sudo apt install ./KookaPictura_0.4.0_arm64.deb"));
+        QCOMPARE(pictura::packageUpdateCommand(PackageMethod::Rpm, QStringLiteral("v0.4.0"),
+                                               architecture),
+                 QStringLiteral("sudo dnf install ./KookaPictura-0.4.0-1.aarch64.rpm"));
+    }
+    const QString riscv = QStringLiteral("riscv64");
+    QVERIFY(pictura::packageUpdateCommand(PackageMethod::Deb, QStringLiteral("0.4.0"), riscv)
+                .isEmpty());
+    QVERIFY(pictura::packageUpdateCommand(PackageMethod::Rpm, QStringLiteral("0.4.0"), riscv)
+                .isEmpty());
 }
 
 void AppUpdaterTest::debRpmUsesPackageManager()

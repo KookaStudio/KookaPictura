@@ -651,15 +651,18 @@ all use the binary's name, `pictura`.
   `KookaPictura-X.Y.Z-x86_64.AppImage` / `KookaPictura-X.Y.Z-aarch64.AppImage`.
   `linux-bundle` picks the linuxdeploy builds and their pinned SHA-256s by
   `uname -m`. When you bump a linuxdeploy release, re-pin both architectures.
-- **deb / rpm** (`linux-packages.yml`): `packaging/build-packages.sh` moves the
+- **deb / rpm** (`linux-packages.yml`): the same x86_64 / aarch64 matrix as the
+  AppImage. `packaging/build-packages.sh` moves the
   AppDir to `/opt/kooka-pictura` (the `$ORIGIN` rpath and `qt.conf` keep working),
   links `/usr/bin/pictura`, and installs the desktop entry and icon under
   `/usr/share`. Dependencies are the host libraries the bundle does not carry:
   `dpkg-shlibdeps` computes the deb's `Depends`, and the rpm's ELF scan runs with
   the bundled sonames excluded from `Requires`/`Provides`. Each package is
-  installed into a clean `ubuntu:24.04` / `fedora:latest` container and
-  self-tested before `KookaPictura_X.Y.Z_amd64.deb` and
-  `KookaPictura-X.Y.Z-1.x86_64.rpm` are uploaded. Both packages install the
+  installed into a clean `ubuntu:24.04` / `fedora:latest` container of its leg's
+  architecture and self-tested before `KookaPictura_X.Y.Z_{amd64,arm64}.deb` and
+  `KookaPictura-X.Y.Z-1.{x86_64,aarch64}.rpm` are uploaded. The script takes the
+  package architecture from the host (`dpkg --print-architecture`, `uname -m`),
+  so it only packages an AppDir built on the same machine. Both packages install the
   license texts under `/usr/share/doc/kooka-pictura/` and the native AppStream
   metainfo (`packaging/pictura.metainfo.xml`) for `pictura.desktop`.
 

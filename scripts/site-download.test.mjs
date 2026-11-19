@@ -38,6 +38,23 @@ test("lists the x86_64 and ARM64 AppImages separately", () => {
   );
 });
 
+test("lists the x86_64 and ARM64 deb and rpm separately", () => {
+  const arm = ["KookaPictura-0.2.0-1.aarch64.rpm", "KookaPictura_0.2.0_arm64.deb"].map(
+    (name) => ({ name, browser_download_url: base + name }),
+  );
+  const p = pickAssets([...arm, ...assets]);
+  const packages = p.linux.filter((l) => /^(rpm|deb)/.test(l.label));
+  assert.deepEqual(
+    packages.map((l) => [l.label, l.name]),
+    [
+      ["rpm", "KookaPictura-0.2.0-1.x86_64.rpm"],
+      ["rpm (ARM64)", "KookaPictura-0.2.0-1.aarch64.rpm"],
+      ["deb", "KookaPictura_0.2.0_amd64.deb"],
+      ["deb (ARM64)", "KookaPictura_0.2.0_arm64.deb"],
+    ],
+  );
+});
+
 test("gives the unsigned snap its install command and no other format one", () => {
   const p = pickAssets(assets);
   const withCommand = p.linux.filter((l) => l.command);

@@ -51,8 +51,9 @@ bool packageMethodUsesPackageManager(PackageMethod method);
 QString packageAssetSuffix(PackageMethod method, const QString& architecture);
 
 // The command a package-manager-owned build should show, or empty when the
-// method has no package-manager command.
-QString packageUpdateCommand(PackageMethod method, const QString& version);
+// method has no package-manager command or the architecture has no package.
+QString packageUpdateCommand(PackageMethod method, const QString& version,
+                             const QString& architecture);
 
 // The elevated command that installs a downloaded deb or rpm package.
 QString packageManagerInstallCommand(PackageMethod method, const QString& packagePath);
