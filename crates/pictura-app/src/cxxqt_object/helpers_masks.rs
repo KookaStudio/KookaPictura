@@ -2,11 +2,15 @@ use super::helpers_composite::{aspect_thumbnail_extent, rgba_image};
 use cxx_qt_lib::QImage;
 use pictura_core::{LayerMask, PsdRect, VectorMask};
 
-/// Downsample a vector mask's coverage into a `size`-bounded extent (long edge
-/// `size`, document aspect clamped to 3:1), replicating the value across RGB
-/// with the white-shows / black-hides convention. An absent,
-/// disabled, or all-open mask is fully white (permissive), matching the
-/// compositor. `ponytail:` CS6 strokes the path outline; this fills coverage.
+/// CS6's hidden-area grey in a vector-mask thumbnail. `ponytail:` matched by
+/// eye; no oracle pins the value.
+const VECTOR_THUMB_HIDDEN: u8 = 0x80;
+
+/// A vector mask's thumbnail in a `size`-bounded extent (long edge `size`,
+/// document aspect clamped to 3:1), as CS6 draws it: white where the mask
+/// reveals, grey where it hides, and the path outline stroked over both in a
+/// 1 px black line. An absent, disabled, or all-open mask has no hidden area,
+/// matching the compositor.
 pub(super) fn vector_mask_thumbnail_image(
     mask: &VectorMask,
     doc_width: u32,
@@ -17,6 +21,17 @@ pub(super) fn vector_mask_thumbnail_image(
         return None;
     }
     let (tw, th) = aspect_thumbnail_extent(doc_width, doc_height, size);
+    let rgba = vector_mask_thumbnail_rgba(mask, doc_width, doc_height, tw, th);
+    Some(rgba_image(rgba, tw as i32, th as i32))
+}
+
+fn vector_mask_thumbnail_rgba(
+    mask: &VectorMask,
+    doc_width: u32,
+    doc_height: u32,
+    tw: u32,
+    th: u32,
+) -> Vec<u8> {
     let clip = PsdRect {
         top: 0,
         left: 0,
@@ -24,26 +39,60 @@ pub(super) fn vector_mask_thumbnail_image(
         right: doc_width as i32,
     };
     let mut rgba = vec![0u8; (tw * th * 4) as usize];
+    let mut put = |tx: u32, ty: u32, value: u8| {
+        let o = ((ty * tw + tx) * 4) as usize;
+        rgba[o..o + 4].copy_from_slice(&[value, value, value, 255]);
+    };
     for ty in 0..th {
         let dy = (ty as u64 * doc_height as u64 / th as u64) as i32;
         for tx in 0..tw {
             let dx = (tx as u64 * doc_width as u64 / tw as u64) as i32;
-            let value = if !mask.has_fill() {
-                255
-            } else {
-                let inside = mask.inside(dx, dy, clip);
-                let show = if mask.invert { !inside } else { inside };
-                if show {
-                    255
-                } else {
-                    0
-                }
-            };
-            let o = ((ty * tw + tx) * 4) as usize;
-            rgba[o..o + 4].copy_from_slice(&[value, value, value, 255]);
+            let show = !mask.has_fill() || mask.inside(dx, dy, clip) != mask.invert;
+            put(tx, ty, if show { 255 } else { VECTOR_THUMB_HIDDEN });
         }
     }
-    Some(rgba_image(rgba, tw as i32, th as i32))
+    // Vertices are 1/256 document pixels; scale them onto the thumbnail.
+    let sx = tw as f64 / (doc_width as f64 * 256.0);
+    let sy = th as f64 / (doc_height as f64 * 256.0);
+    for subpath in &mask.subpaths {
+        let points: Vec<(f64, f64)> = subpath
+            .points
+            .iter()
+            .map(|[x, y]| (*x as f64 * sx, *y as f64 * sy))
+            .collect();
+        let closing = subpath.closed.then(|| (points.last(), points.first()));
+        let segments = points
+            .windows(2)
+            .map(|w| (w[0], w[1]))
+            .chain(closing.and_then(|(a, b)| Some((*a?, *b?))));
+        for (a, b) in segments {
+            stroke_segment(a, b, tw, th, &mut put);
+        }
+    }
+    rgba
+}
+
+/// Mark every thumbnail pixel the segment `a`–`b` passes through (a DDA step
+/// per pixel of its longer axis), clipped to the `tw`×`th` thumbnail.
+fn stroke_segment(
+    a: (f64, f64),
+    b: (f64, f64),
+    tw: u32,
+    th: u32,
+    put: &mut impl FnMut(u32, u32, u8),
+) {
+    let steps = (b.0 - a.0).abs().max((b.1 - a.1).abs()).ceil().max(1.0) as u32;
+    for i in 0..=steps {
+        let t = f64::from(i) / f64::from(steps);
+        let x = (a.0 + (b.0 - a.0) * t).floor();
+        let y = (a.1 + (b.1 - a.1) * t).floor();
+        // The right and bottom canvas edges land one past the last pixel.
+        let x = x.min(f64::from(tw) - 1.0);
+        let y = y.min(f64::from(th) - 1.0);
+        if x >= 0.0 && y >= 0.0 {
+            put(x as u32, y as u32, 0);
+        }
+    }
 }
 
 /// Place a layer mask over the document's
@@ -222,6 +271,37 @@ mod tests {
         assert_eq!((image.width(), image.height()), (24, 8));
         assert_eq!(image.pixel_color(0, 0).red(), 0);
         assert_eq!(image.pixel_color(3, 2).red(), 255);
+    }
+
+    #[test]
+    fn vector_mask_thumbnail_strokes_the_outline() {
+        let corner = |x: f64, y: f64| pictura_core::path::PathPoint {
+            anchor: (x, y),
+            in_handle: None,
+            out_handle: None,
+            smooth: false,
+        };
+        let square = pictura_core::path::Subpath {
+            points: vec![
+                corner(10.0, 10.0),
+                corner(30.0, 10.0),
+                corner(30.0, 30.0),
+                corner(10.0, 30.0),
+            ],
+            closed: true,
+        };
+        let data = pictura_codec::encode_vector_mask(&[square], 40, 40);
+        let mask = pictura_codec::decode_vector_mask(&data, 40, 40).expect("mask");
+        let rgba = vector_mask_thumbnail_rgba(&mask, 40, 40, 40, 40);
+        let red = |x: usize, y: usize| rgba[(y * 40 + x) * 4];
+        assert_eq!(red(20, 20), 255, "revealed");
+        assert_eq!(red(2, 2), VECTOR_THUMB_HIDDEN, "hidden");
+        assert_eq!(red(10, 20), 0, "left edge (the closing segment)");
+        assert_eq!(red(20, 30), 0, "bottom edge");
+        let open = VectorMask::default();
+        assert!(vector_mask_thumbnail_rgba(&open, 40, 40, 40, 40)
+            .chunks(4)
+            .all(|px| px == [255, 255, 255, 255]));
     }
 
     #[test]

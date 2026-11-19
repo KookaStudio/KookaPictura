@@ -282,7 +282,7 @@ void MenuRegistrar::wireVectorMaskActions()
     commands_->setEnabledProvider(command_ids::LayerVectorMaskCurrentPath, [this]() {
         PictureView* view = activeView();
         return view && view->has_document() && !vector_mask_present(*view)
-            && paths_has_work_path(*view);
+            && vector_mask_current_path_available(*view);
     });
 
     const auto simpleVectorAction = [this, whenVectorMask](const char* id, auto action) {

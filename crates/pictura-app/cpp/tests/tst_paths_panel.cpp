@@ -1,5 +1,6 @@
 // The Paths panel (#72): saved paths and the Work Path, the active row's
-// visibility, and Fill Path / Stroke Path / Load Path as a Selection.
+// visibility, Fill Path / Stroke Path / Load Path as a Selection, and a pixel
+// layer's vector-mask row (#261).
 
 #include <QtTest/QtTest>
 
@@ -9,6 +10,8 @@
 #include "api/layers_bridge.h"
 
 #include <QtWidgets/QListWidget>
+
+#include <algorithm>
 
 #include "qt_test_support.h"
 
@@ -31,6 +34,28 @@ void square(pictura::PictureView& v, double l, double t, double r, double b, boo
     pictura::path_close(v);
 }
 
+// A rasterized fill layer above the seed, selected, with a Reveal All vector
+// mask over the canvas; its path, empty on failure.
+QString maskedLayer(pictura::PicturaMainWindow& frame, pictura::PictureView& v)
+{
+    const QString layer = v.add_solid_fill(0xff2244aau);
+    if (layer.isEmpty()) {
+        return {};
+    }
+    pictura::layer_mask_delete_path(v, layer);
+    if (!v.rasterize_fill_content(layer)) {
+        return {};
+    }
+    frame.selectLayerPath(layer);
+    QCoreApplication::processEvents();
+    return pictura::vector_mask_add(v, QStringLiteral("reveal-all")) ? layer : QString();
+}
+
+bool sameOutline(const ::rust::Vec<double>& a, const ::rust::Vec<double>& b)
+{
+    return std::equal(a.begin(), a.end(), b.begin(), b.end());
+}
+
 QStringList rowNames(QListWidget* list)
 {
     QStringList names;
@@ -50,6 +75,11 @@ private slots:
     void savedPathsAndWorkPath();
     void visibilityFollowsTheSelectedRow();
     void fillStrokeAndLoadSelection();
+    void vectorMaskRowFollowsTheLayer();
+    void vectorMaskRowEditsTheMask();
+    void penDrawsIntoTheVectorMask();
+    void savedPathKeepsPriorityOverTheMask();
+    void deletingTheVectorMaskRow();
 
 private:
     pictura::PathsPanel* panel() const
@@ -215,6 +245,152 @@ void PathsPanelTest::fillStrokeAndLoadSelection()
 
     f.tools->setForeground(foreground);
     f.tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(brush);
+}
+
+// vmask_row_listed
+void PathsPanelTest::vectorMaskRowFollowsTheLayer()
+{
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_paths_mask_row_seed"));
+    QVERIFY2(f.ok(), "fixture");
+    pictura::PathsPanel* p = panel();
+    QListWidget* list = p->listForTest();
+    pictura::PictureView& v = *f.view;
+    const QString layer = maskedLayer(f.frame, v);
+    QVERIFY(!layer.isEmpty());
+
+    p->refresh();
+    const QString name = pictura::paths_vector_mask_name(v);
+    QVERIFY(!name.isEmpty());
+    QCOMPARE(rowNames(list), QStringList {name + QStringLiteral(" Vector Mask")});
+    QVERIFY(!pictura::paths_outline(v, -4).empty());
+    // Listing the row does not activate it.
+    QCOMPARE(pictura::path_subpath_count(v), 0);
+
+    f.frame.selectLayerPath(QStringLiteral("0"));
+    QCoreApplication::processEvents();
+    p->refresh();
+    QVERIFY(pictura::paths_vector_mask_name(v).isEmpty());
+    QVERIFY(rowNames(list).isEmpty());
+    QVERIFY(!pictura::paths_set_active(v, -4));
+}
+
+// vmask_row_edit
+void PathsPanelTest::vectorMaskRowEditsTheMask()
+{
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_paths_mask_edit_seed"));
+    QVERIFY2(f.ok(), "fixture");
+    pictura::PathsPanel* p = panel();
+    QListWidget* list = p->listForTest();
+    pictura::PictureView& v = *f.view;
+    const QString layer = maskedLayer(f.frame, v);
+    QVERIFY(!layer.isEmpty());
+    p->refresh();
+    list->setCurrentRow(0);
+    QCOMPARE(pictura::paths_active(v), -4);
+    QCOMPARE(pictura::path_subpath_count(v), 1);
+    QCOMPARE(pictura::path_point_count(v, 0), 4);
+    const QRgb white = QColor(Qt::white).rgba();
+    const QRgb fill = v.sample_argb(10, 10);
+    QVERIFY(fill != white);
+
+    // Pull the top-left corner to the centre: the corner it left is uncovered.
+    const int before = v.history_index();
+    pictura::path_gesture_begin(v);
+    QVERIFY(pictura::path_move_anchor(v, 0, 0, 50, 50));
+    pictura::path_commit_drag(v, "Drag Anchor Point");
+    pictura::path_gesture_end(v);
+    QCOMPARE(v.history_index(), before + 1);
+    QCOMPARE(pictura::path_point(v, 0, 0)[0], 50.0);
+    QCOMPARE(v.sample_argb(10, 10), white);
+    QCOMPARE(v.sample_argb(90, 90), fill);
+    QVERIFY(pictura::vector_mask_present_path(v, layer));
+    QVERIFY(!pictura::paths_has_work_path(v));
+
+    QVERIFY(v.undo());
+    QCOMPARE(pictura::path_point(v, 0, 0)[0], 0.0);
+    QCOMPARE(v.sample_argb(10, 10), fill);
+}
+
+// vmask_pen_adds
+void PathsPanelTest::penDrawsIntoTheVectorMask()
+{
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_paths_mask_pen_seed"));
+    QVERIFY2(f.ok(), "fixture");
+    pictura::PathsPanel* p = panel();
+    pictura::PictureView& v = *f.view;
+    QVERIFY(!maskedLayer(f.frame, v).isEmpty());
+    p->refresh();
+    p->listForTest()->setCurrentRow(0);
+    QCOMPARE(pictura::paths_active(v), -4);
+
+    // Every anchor extends the one new component, across the mask's re-decodes.
+    for (const QPointF& corner : {QPointF(20, 20), QPointF(80, 20), QPointF(50, 80)}) {
+        pictura::path_append_corner(v, corner.x(), corner.y(), false);
+        pictura::path_commit_anchor(v);
+    }
+    QVERIFY(pictura::path_close(v));
+    QCOMPARE(pictura::path_subpath_count(v), 2);
+    QCOMPARE(pictura::path_point_count(v, 1), 3);
+    QVERIFY(pictura::path_subpath_closed(v, 1));
+    QVERIFY(!pictura::paths_has_work_path(v));
+    QCOMPARE(v.history_label(v.history_index()), QStringLiteral("Close Path"));
+}
+
+// vmask_saved_unaffected
+void PathsPanelTest::savedPathKeepsPriorityOverTheMask()
+{
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_paths_mask_saved_seed"));
+    QVERIFY2(f.ok(), "fixture");
+    pictura::PathsPanel* p = panel();
+    pictura::PictureView& v = *f.view;
+    QVERIFY(!maskedLayer(f.frame, v).isEmpty());
+    QVERIFY(pictura::paths_set_active(v, -2));
+    square(v, 10, 10, 40, 40);
+    QVERIFY(p->saveWorkPath(QStringLiteral("Outline")));
+    QCOMPARE(pictura::paths_active(v), 0);
+    const ::rust::Vec<double> mask = pictura::paths_outline(v, -4);
+    QVERIFY(!mask.empty());
+
+    // Path Selection turns the layer target on; a pixel layer's mask is still
+    // not the target while a saved row is active.
+    pictura::path_set_layer_target(v, true);
+    QVERIFY(!pictura::path_target_is_layer(v));
+    pictura::path_gesture_begin(v);
+    QVERIFY(pictura::path_move_subpath(v, 0, 5, 5));
+    pictura::path_commit_drag(v, "Drag Path");
+    pictura::path_gesture_end(v);
+    pictura::path_set_layer_target(v, false);
+    QCOMPARE(pictura::path_point(v, 0, 0)[0], 15.0);
+    QVERIFY(sameOutline(pictura::paths_outline(v, -4), mask));
+}
+
+// vmask_delete_row
+void PathsPanelTest::deletingTheVectorMaskRow()
+{
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(*window_, seed, QStringLiteral("pictura_paths_mask_delete_seed"));
+    QVERIFY2(f.ok(), "fixture");
+    pictura::PathsPanel* p = panel();
+    QListWidget* list = p->listForTest();
+    pictura::PictureView& v = *f.view;
+    const QString layer = maskedLayer(f.frame, v);
+    QVERIFY(!layer.isEmpty());
+    p->refresh();
+    list->setCurrentRow(0);
+    QVERIFY(p->deletePath());
+    QVERIFY(!pictura::vector_mask_present_path(v, layer));
+    QCOMPARE(v.history_label(v.history_index()), QStringLiteral("Delete Vector Mask"));
+    QVERIFY(rowNames(list).isEmpty());
+    QCOMPARE(pictura::paths_active(v), -2);
 }
 
 QTEST_MAIN(PathsPanelTest)

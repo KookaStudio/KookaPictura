@@ -189,8 +189,8 @@ pub use vector_masks::{
     add_vector_mask, delete_vector_mask, has_vector_mask, rasterize_vector_mask,
     set_vector_mask_density, set_vector_mask_enabled, set_vector_mask_feather,
     set_vector_mask_linked, sync_vector_mask_block, vector_mask_disabled, vector_mask_linked,
-    vector_mask_refinement, VectorMaskKind, VECTOR_MASK_FLAG_DISABLED, VECTOR_MASK_FLAG_INVERT,
-    VECTOR_MASK_FLAG_NOT_LINKED,
+    vector_mask_paths, vector_mask_refinement, VectorMaskKind, VECTOR_MASK_FLAG_DISABLED,
+    VECTOR_MASK_FLAG_INVERT, VECTOR_MASK_FLAG_NOT_LINKED,
 };
 pub use via::{layer_via_copy, layer_via_cut};
 pub use warp::transform_layer_warp;

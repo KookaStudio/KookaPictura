@@ -323,6 +323,13 @@ impl VectorPath {
         self.editing
     }
 
+    /// Restore a drawing session onto a path rebuilt from storage (a layer's
+    /// vector mask keeps no session of its own). Only an open subpath can be
+    /// extended; anything else ends the session.
+    pub fn set_editing_subpath(&mut self, sp: Option<usize>) {
+        self.editing = sp.filter(|&sp| self.subpaths.get(sp).is_some_and(|s| !s.closed));
+    }
+
     /// Resume drawing from an open subpath's endpoint (CS6's "extend"). A
     /// press on the first point reverses the subpath so new anchors still
     /// append at the end. Refused for a closed subpath or an interior point.

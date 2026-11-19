@@ -92,6 +92,22 @@ fn resuming_is_refused_on_a_closed_subpath_or_interior_point() {
 }
 
 #[test]
+fn a_restored_session_extends_only_an_open_subpath() {
+    let p = polyline(&[(0.0, 0.0), (10.0, 0.0)]);
+    let mut rebuilt = VectorPath::default();
+    rebuilt.add_subpath(p.subpaths[0].clone());
+    rebuilt.set_editing_subpath(p.editing_subpath());
+    rebuilt.append_corner(10.0, 10.0);
+    assert_eq!(rebuilt.subpaths.len(), 1);
+    assert_eq!(rebuilt.subpaths[0].points.len(), 3);
+    rebuilt.set_editing_subpath(Some(4));
+    assert_eq!(rebuilt.editing_subpath(), None, "an out-of-range subpath");
+    rebuilt.subpaths[0].closed = true;
+    rebuilt.set_editing_subpath(Some(0));
+    assert_eq!(rebuilt.editing_subpath(), None, "a closed subpath");
+}
+
+#[test]
 fn dragging_one_handle_of_a_smooth_point_mirrors_the_angle_not_the_length() {
     let mut p = polyline(&[(0.0, 0.0)]);
     p.update_last_handle(10.0, 0.0, false);

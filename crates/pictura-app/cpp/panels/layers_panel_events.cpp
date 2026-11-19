@@ -317,6 +317,15 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
                                                         : ActiveThumbContent)
                         : (start | ActiveThumbVector);
                     setActiveThumb(rowPath, next);
+                    // The mask's Paths row follows its thumbnail, so the path
+                    // tools edit the vector mask while it is active (CS6).
+                    if (!index.data(LayerRowShapeRole).toBool()) {
+                        if (next & ActiveThumbVector) {
+                            paths_set_active(*view_, -4);
+                        } else if (paths_active(*view_) == -4) {
+                            paths_set_active(*view_, -2);
+                        }
+                    }
                     mask_edit_target_set(*view_, (next & ActiveThumbMask) ? rowPath : QString());
                     mask_solo_set(*view_, QString());
                     syncEditTarget();

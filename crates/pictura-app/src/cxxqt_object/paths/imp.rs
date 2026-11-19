@@ -16,6 +16,9 @@ pub(in crate::cxxqt_object) enum ActivePath {
     Work,
     /// `Document::saved_paths[i]`.
     Saved(usize),
+    /// The selected layer's vector mask (`<layer> Vector Mask`); reads as no
+    /// path while the selected layer has none (see [`layer_target`]).
+    VectorMask,
 }
 
 /// `active` resolved against `doc`: a saved index an undo removed reads as no
@@ -29,7 +32,7 @@ pub(in crate::cxxqt_object) fn active_in(doc: &Document, active: ActivePath) -> 
 
 pub(super) fn active_path_mut(doc: &mut Document, active: ActivePath) -> Option<&mut VectorPath> {
     match active_in(doc, active) {
-        ActivePath::None => None,
+        ActivePath::None | ActivePath::VectorMask => None,
         ActivePath::Work => Some(&mut doc.work_path),
         ActivePath::Saved(i) => Some(&mut doc.saved_paths[i].path),
     }
@@ -39,24 +42,47 @@ pub(super) fn active_path_mut(doc: &mut Document, active: ActivePath) -> Option<
 /// (empty) Work Path replaces the old one, as CS6's Pen does when no row is
 /// selected. No history: the drawing edit records it.
 pub(in crate::cxxqt_object) fn begin_drawing(mut view: Pin<&mut PictureView>) {
+    if layer_target(view.rust()).is_some() {
+        return;
+    }
     let mut rust = view.as_mut().rust_mut();
     let active = rust.active_path;
     let Some(doc) = rust.session.doc.as_mut() else {
         return;
     };
-    if active_in(doc, active) == ActivePath::None {
+    if matches!(
+        active_in(doc, active),
+        ActivePath::None | ActivePath::VectorMask
+    ) {
         doc.work_path = VectorPath::default();
         rust.active_path = ActivePath::Work;
     }
 }
 
-/// The path the tools edit: the active shape layer's outline while the
-/// layer target is on (Path Selection, Direct Selection, the shape tools) and
-/// the active layer is a shape layer; the Work Path otherwise.
-pub(super) fn layer_target(rust: &PictureViewRust) -> Option<String> {
-    let path = rust.layer_target.single().filter(|_| rust.path_on_layer)?;
+/// The layer whose vector-mask outline the tools edit: the selected layer's
+/// vector mask while its Paths row is active (every path tool, the Pen
+/// included), or the active shape layer's outline while the layer target is on
+/// (Path Selection, Direct Selection, the shape tools). `None` edits the active
+/// Paths row.
+pub(in crate::cxxqt_object) fn layer_target(rust: &PictureViewRust) -> Option<String> {
+    let path = rust.layer_target.single()?;
     let layer = pictura_render::resolve_path(rust.session.doc.as_ref()?, path)?;
-    pictura_render::is_shape_layer(layer).then(|| path.to_string())
+    let shape = pictura_render::is_shape_layer(layer);
+    let target = if shape {
+        rust.path_on_layer
+    } else {
+        rust.active_path == ActivePath::VectorMask && layer.vector_mask.is_some()
+    };
+    target.then(|| path.to_string())
+}
+
+/// The selected non-shape layer with a vector mask: the layer the Paths
+/// panel's vector-mask row stands for.
+pub(in crate::cxxqt_object) fn vector_mask_layer(rust: &PictureViewRust) -> Option<String> {
+    let path = rust.layer_target.single()?;
+    let layer = pictura_render::resolve_path(rust.session.doc.as_ref()?, path)?;
+    (!pictura_render::is_shape_layer(layer) && layer.vector_mask.is_some())
+        .then(|| path.to_string())
 }
 
 pub(in crate::cxxqt_object) fn path(view: &PictureView) -> Option<VectorPath> {
@@ -64,15 +90,21 @@ pub(in crate::cxxqt_object) fn path(view: &PictureView) -> Option<VectorPath> {
     let doc = rust.session.doc.as_ref()?;
     let Some(target) = layer_target(rust) else {
         return Some(match active_in(doc, rust.active_path) {
-            ActivePath::None => VectorPath::default(),
+            ActivePath::None | ActivePath::VectorMask => VectorPath::default(),
             ActivePath::Work => doc.work_path.clone(),
             ActivePath::Saved(i) => doc.saved_paths[i].path.clone(),
         });
     };
     let layer = pictura_render::resolve_path(doc, &target)?;
     let mut path = VectorPath::default();
-    for subpath in pictura_render::layer_shape_paths(layer, doc.width, doc.height)? {
+    for subpath in pictura_render::vector_mask_paths(layer, doc.width, doc.height)? {
         path.add_subpath(subpath);
+    }
+    // The outline is rebuilt from the mask bytes, which keep no Pen session.
+    if let Some((layer, sp)) = &rust.layer_path_editing {
+        if *layer == target {
+            path.set_editing_subpath(Some(*sp));
+        }
     }
     Some(path)
 }
@@ -139,6 +171,8 @@ fn edit_target_with<T>(
     let before = path(&view)?;
     let mut after = before.clone();
     let out = edit(&mut after);
+    view.as_mut().rust_mut().layer_path_editing =
+        after.editing_subpath().map(|sp| (target.clone(), sp));
     if after != before {
         // The outline moves in place, so only the layer's reach before and
         // after the edit is recomposited; a drag no longer composites the
@@ -346,7 +380,7 @@ impl PictureViewRust {
             let backup = self.session.doc.as_ref().and_then(|doc| {
                 let (width, height) = (doc.width, doc.height);
                 pictura_render::resolve_path(doc, &target)
-                    .and_then(|layer| pictura_render::layer_shape_paths(layer, width, height))
+                    .and_then(|layer| pictura_render::vector_mask_paths(layer, width, height))
                     .map(
                         |subpaths| super::super::document_session::PathRestore::Layer {
                             target,
@@ -363,7 +397,9 @@ impl PictureViewRust {
         let active = self.active_path;
         let backup = self.session.doc.as_ref().map(|doc| {
             let path = match active_in(doc, active) {
-                ActivePath::None | ActivePath::Work => doc.work_path.clone(),
+                ActivePath::None | ActivePath::Work | ActivePath::VectorMask => {
+                    doc.work_path.clone()
+                }
                 ActivePath::Saved(i) => doc.saved_paths[i].path.clone(),
             };
             super::super::document_session::PathRestore::WorkOrSaved { active, path }

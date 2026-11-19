@@ -44,10 +44,10 @@ pub mod ffi {
         /// Whether the layer target is on (see `path_set_layer_target`).
         fn path_layer_target(view: &PictureView) -> bool;
 
-        /// Whether the path calls currently edit a shape layer's outline.
+        /// Whether the path calls currently edit a layer's outline: a shape layer's, or a vector mask whose Paths row is active.
         fn path_target_is_layer(view: &PictureView) -> bool;
 
-        /// The targeted shape layer's name; empty while the calls edit the Work Path.
+        /// The targeted layer's name; empty while the calls edit a Paths panel path.
         fn path_target_name(view: &PictureView) -> String;
 
         /// Whether the targeted shape layer is still a live shape (it carries its parametric origin).
