@@ -124,6 +124,13 @@ unrelated file.
   `KookaPictura-0.4.0-x86_64.AppImage`
 - **THEN** the selector returns that asset
 
+#### Scenario: An aarch64 AppImage asset is selected [au_select_appimage_aarch64]
+
+- **WHEN** the method is AppImage on aarch64 (reported as `arm64` or `aarch64`)
+  and the release contains both `KookaPictura-0.4.0-x86_64.AppImage` and
+  `KookaPictura-0.4.0-aarch64.AppImage`
+- **THEN** the selector returns the aarch64 asset, never the x86_64 one
+
 #### Scenario: A Windows setup asset is selected [au_select_windows]
 
 - **WHEN** the method is Windows setup on x64 and the release contains

@@ -24,6 +24,20 @@ test("classifies the v0.2.0 assets", () => {
   assert.equal(p.windows.url, base + "KookaPictura-0.2.0-windows-x64-setup.exe");
 });
 
+test("lists the x86_64 and ARM64 AppImages separately", () => {
+  const arm = { name: "KookaPictura-0.2.0-aarch64.AppImage" };
+  arm.browser_download_url = base + arm.name;
+  const p = pickAssets([arm, ...assets]);
+  const appimages = p.linux.filter((l) => l.label.startsWith("AppImage"));
+  assert.deepEqual(
+    appimages.map((l) => [l.label, l.name]),
+    [
+      ["AppImage", "KookaPictura-0.2.0-x86_64.AppImage"],
+      ["AppImage (ARM64)", "KookaPictura-0.2.0-aarch64.AppImage"],
+    ],
+  );
+});
+
 test("gives the unsigned snap its install command and no other format one", () => {
   const p = pickAssets(assets);
   const withCommand = p.linux.filter((l) => l.command);
