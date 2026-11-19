@@ -771,6 +771,12 @@ private:
         int rebuilds = 0;
         QImage crop;
     };
+    // The viewport in document coordinates, unclipped (image_view_document.cpp).
+    QRectF viewportDocumentRect() const;
+    // The document content the present draws: the viewport rect moved back by a
+    // Modern crop content offset, then clipped to the document. Only the present
+    // uses it; the dialogs want the unshifted viewport rect.
+    QRectF presentVisibleRect() const;
     // The level the zoom (and a live preview) selects, or -1 when there is no
     // provider or document to present.
     int presentLevel() const;

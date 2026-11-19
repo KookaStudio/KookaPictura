@@ -146,6 +146,9 @@ private slots:
     void largeDocumentPresentsThroughALevel();
     void panPresentsWithoutResamplingTheDocument();
     void panAndZoomReuseTheLevel0Crop();
+    void cropPanPresentsThroughALevel();
+    void cropPanMatchesAViewPan();
+    void cropPanKeepsTheSingleChannel();
     void panThenZoomFrameTimes();
     void idlePresentLevelIsZoomSelected();
     void level0PatchMatchesFreshCrop();
@@ -607,6 +610,167 @@ void PresentCacheTest::panAndZoomReuseTheLevel0Crop()
     canvas_->setPresentCacheEnabledForTest(true);
     QVERIFY2(samePixels(zoomed, zoomedFresh),
              "the reused zoom present differs from a fresh level-0 crop");
+}
+
+void PresentCacheTest::cropPanPresentsThroughALevel()
+{
+    pictura::ImageView canvas;
+    canvas.resize(800, 600);
+    canvas.show();
+    QCoreApplication::processEvents();
+
+    QSize doc(4000, 3000);
+    QList<QString> requests;
+    QList<QRect> reported;
+    canvas.setLevelProvider(pictura::ImageView::LevelProvider{
+        [&requests](int level, int x, int y, int w, int h) {
+            requests.append(
+                QStringLiteral("%1 %2 %3 %4 %5").arg(level).arg(x).arg(y).arg(w).arg(h));
+            QImage crop(w, h, QImage::Format_ARGB32_Premultiplied);
+            crop.fill(QColor(20 + 40 * level, 30, 30));
+            return crop;
+        },
+        [] { return 2; },
+        [&doc](int level) {
+            return level == 0 ? doc : QSize((doc.width() + 1) / 2, (doc.height() + 1) / 2);
+        },
+        [] { return quint64(0); },
+        [] { return false; },
+        [] { return 0; },
+        [&reported](int, const QRect& rect) { reported.append(rect); }});
+    canvas.setDocument(doc);
+    canvas.setCropContentOffset(QPointF(100.0, 100.0));
+
+    // Every crop is level-space; the viewport is compared in document pixels,
+    // plus presentLevelRect's sampling margin: one level pixel per edge and
+    // whole-pixel floor/ceil rounding.
+    const auto bounded = [&canvas, &doc, &requests](double zoom) {
+        QVERIFY2(!requests.isEmpty(), "the present crops a level");
+        for (const QString& request : requests) {
+            const QStringList parts = request.split(QLatin1Char(' '));
+            const int level = parts.at(0).toInt();
+            const double w = parts.at(3).toDouble();
+            const double h = parts.at(4).toDouble();
+            const double scale = double(1 << level);
+            QVERIFY2(w * scale <= canvas.width() / zoom + 4 * scale + 1
+                         && h * scale <= canvas.height() / zoom + 4 * scale + 1,
+                     qPrintable(QStringLiteral("crop %1 exceeds the viewport").arg(request)));
+            QVERIFY2(!(level == 0 && w == doc.width() && h == doc.height()),
+                     "the paint requested the whole document");
+        }
+        requests.clear();
+    };
+
+    for (const double zoom : {1.0, 0.4}) {
+        canvas.setZoom(zoom, canvas.rect().center());
+        renderCanvas(canvas);
+        bounded(zoom);
+        // Without a level present, the fallback still crops the viewport at level 0.
+        canvas.setPresentLevelCropForTest(false);
+        renderCanvas(canvas);
+        bounded(zoom);
+        canvas.setPresentLevelCropForTest(true);
+    }
+
+    // The presented (and pinned) rectangle follows the content pan.
+    canvas.setZoom(1.0, canvas.rect().center());
+    reported.clear();
+    renderCanvas(canvas);
+    QVERIFY2(!reported.isEmpty(), "the presented view is reported");
+    const QRect withOffset = reported.last();
+    canvas.setCropContentOffset(QPointF());
+    reported.clear();
+    renderCanvas(canvas);
+    QVERIFY2(!reported.isEmpty(), "the presented view is reported");
+    const QRect withoutOffset = reported.last();
+    QCOMPARE(withOffset.topLeft(), withoutOffset.topLeft() - QPoint(100, 100));
+
+    // A document narrower than the viewport: the offset moves content into the
+    // vacated margin, and that band must still be cropped — the whole document
+    // stays presented. Pre-fix this reported (0, 0, 511, 111).
+    doc = QSize(520, 120);
+    canvas.setDocument(doc);
+    canvas.setZoom(1.0, canvas.rect().center());
+    canvas.setCropContentOffset(QPointF(10.0, 10.0));
+    reported.clear();
+    renderCanvas(canvas);
+    QVERIFY2(!reported.isEmpty(), "the presented view is reported");
+    QCOMPARE(reported.last(), QRect(QPoint(0, 0), doc));
+}
+
+void PresentCacheTest::cropPanMatchesAViewPan()
+{
+    for (const double zoom : {1.0, 0.4}) {
+        QVERIFY2(newDoc(4000, 3000), "document fixture");
+        view_->set_gpu_compute(false);
+        // Non-uniform content: a plain white document makes any two draws equal.
+        QVERIFY(replayExactRed(*view_, 200, {QPointF(2000.0, 1500.0)}));
+        setZoom(zoom);
+        renderCanvas(*canvas_);
+
+        canvas_->setCropContentOffset(QPointF(10.0, 10.0));
+        const QImage shifted = renderCanvas(*canvas_);
+        const int builds = canvas_->presentCacheRebuildCount();
+
+        // A content pan is a pan: the present cache patches instead of re-cropping.
+        canvas_->setCropContentOffset(QPointF(20.0, 20.0));
+        const QImage shiftedMore = renderCanvas(*canvas_);
+        QCOMPARE(canvas_->presentCacheRebuildCount(), builds);
+        QVERIFY2(!samePixels(shifted, shiftedMore), "the content moved");
+
+        // The same content through the equivalent view pan.
+        canvas_->setCropContentOffset(QPointF());
+        canvas_->panBy(QPointF(10.0 * zoom, 10.0 * zoom));
+        const QImage panned = renderCanvas(*canvas_);
+        QVERIFY2(samePixels(shifted, panned), "the content pan is the view pan");
+        QCOMPARE(canvas_->presentCacheRebuildCount(), builds);
+
+        // Above 50 % the pan still draws level 0, so it equals the direct draw.
+        if (zoom >= 1.0) {
+            canvas_->setPresentLevelCropForTest(false);
+            const QImage direct = renderCanvas(*canvas_);
+            canvas_->setPresentLevelCropForTest(true);
+            QVERIFY2(samePixels(direct, panned), "the panned present is the direct draw");
+
+            // Profile note for the issue: the removed per-frame work was one
+            // full-document level-0 crop; quote it against a panned frame.
+            QElapsedTimer clock;
+            clock.start();
+            const QImage whole = canvas_->image();
+            const double fullDocMs = double(clock.nsecsElapsed()) / 1e6;
+            clock.restart();
+            renderCanvas(*canvas_);
+            const double panFrameMs = double(clock.nsecsElapsed()) / 1e6;
+            qInfo("pictura profile: crop_pan 4000x3000 full_document_crop_ms=%.2f "
+                  "pan_frame_ms=%.2f whole=%dx%d",
+                  fullDocMs, panFrameMs, whole.width(), whole.height());
+        }
+        QVERIFY(!canvas_->holdsImageForTest());
+
+        window_->closeDocument(window_->activeDocumentIndex(), false);
+    }
+}
+
+void PresentCacheTest::cropPanKeepsTheSingleChannel()
+{
+    QVERIFY2(newDoc(520, 120), "document fixture");
+    view_->set_gpu_compute(false);
+    QVERIFY(replayExactRed(*view_, 100, {QPointF(260.0, 60.0)}));
+    setZoom(1.0);
+
+    // The 520x120 document is centred at 100 %, so the dab sits at the widget centre.
+    const QPoint centre = canvas_->rect().center();
+    const QPoint outsideDab = centre + QPoint(55, 0);  // just past the 50 px radius
+    const QImage composite = renderCanvas(*canvas_);
+    QCOMPARE(composite.pixelColor(centre), QColor(Qt::red));
+    QCOMPARE(composite.pixelColor(outsideDab), QColor(Qt::white));
+
+    // Green: the red dab is black, the background white. The 10 px pan brings the
+    // dab over a point it did not cover, so a black sample proves the channel moved.
+    canvas_->setChannelMask(0x2);
+    canvas_->setCropContentOffset(QPointF(10.0, 10.0));
+    const QImage channel = renderCanvas(*canvas_);
+    QCOMPARE(channel.pixelColor(outsideDab), QColor(Qt::black));
 }
 
 void PresentCacheTest::panThenZoomFrameTimes()

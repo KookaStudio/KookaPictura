@@ -262,6 +262,21 @@ void ImageView::applyInitialView()
     userAdjusted_ = true;
 }
 
+// The viewport in document coordinates, unclipped: a Modern crop content pan
+// moves the document under the viewport, so the present shifts this rect before
+// clipping it (image_view_present.cpp). The dialogs keep visibleDocumentRect().
+QRectF ImageView::viewportDocumentRect() const
+{
+    if (docSize_.isEmpty() || zoom_ <= 0.0) {
+        return QRectF();
+    }
+    const QRectF view = viewRect();
+    const QPointF tl = (view.topLeft() - offset_) / zoom_;
+    const QPointF br = (view.bottomRight() - offset_) / zoom_;
+    return QRectF(QPointF(std::min(tl.x(), br.x()), std::min(tl.y(), br.y())),
+                  QPointF(std::max(tl.x(), br.x()), std::max(tl.y(), br.y())));
+}
+
 void ImageView::centreImage()
 {
     offset_ = QPointF((width() - docSize_.width() * zoom_) / 2.0,
