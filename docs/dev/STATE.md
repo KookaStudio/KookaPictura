@@ -4,6 +4,17 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Merged-preview band buffers — #1423 complete** (OpenSpec change
+  `merged-preview-band-buffers`; capability `codec/merged-preview-band-buffers`).
+  `MergedPreview::region` allocates each band's rows (`band_buffer`, a zeroed
+  `Arc<[u8]>`, no `Vec` copy) and packed read buffer (`fit_packed`, kept from
+  band to band) on the reading thread; the rayon workers only decode into them
+  (`decode_band`). Worker-allocated band buffers stayed in up to 16 glibc
+  arenas after #1321. M12 17000², three runs, master → branch: peak 723–730 →
+  662–663 MiB, RSS after 670–688 → 584 MiB, first paint 2.10–2.31 → 1.99–2.06 s.
+  Measured and dropped: a fixed `M_MMAP_THRESHOLD` (4 MiB: 600 MiB but 4.1 s;
+  16 MiB: 655 MiB, 3.8 s, page faults on fresh strip mappings) and
+  `MALLOC_ARENA_MAX=2` (3.1–3.7 s).
 - **WebP lossy export — #807 implemented; verification via CI** (OpenSpec change
   `webp-lossy-export`, archived; capability `interop/raster-export` modified).
   `pictura_codec::encode_webp_lossy` uses the pure-Rust `gamut-webp` VP8 encoder
@@ -239,8 +250,8 @@ Snapshot for resuming after a context break. Update after each milestone.
   - **Results** (M12 17000², master `bb911b80` vs branch, medians of three):
     3837 → 2263 ms (24 % of the eager 9433 ms), CPU 11.0 → 5.5 s; peak
     647 → 724 MiB, RSS after 588 → 677 MiB with `eviction::trim` after each
-    tile job. The extra memory is glibc thread arenas keeping freed strip
-    chunks (owner accepted; #1423).
+    tile job. The extra memory was band buffers kept in the rayon workers'
+    glibc arenas; #1423 brought the peak back to 662 MiB.
 
 - **Lazy, file-backed PSD open — #1218 complete, closes #1318** (OpenSpec
   change `lazy-backed-open`; capabilities `codec/lazy-psd-open` and

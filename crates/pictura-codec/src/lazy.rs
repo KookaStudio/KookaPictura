@@ -263,21 +263,57 @@ impl ChannelIndex {
         if let Some(hit) = cache().get(self.key, band) {
             return Ok(hit);
         }
+        let mut out = self.band_buffer(band)?;
+        let rows = Arc::get_mut(&mut out).expect("a fresh allocation is unique");
+        self.decode_band(band, &mut Vec::new(), rows)?;
+        cache().put(self.key, band, Arc::clone(&out));
+        Ok(out)
+    }
+
+    /// A zeroed buffer the size of band `band`'s rows.
+    fn band_buffer(&self, band: usize) -> Result<Arc<[u8]>, ()> {
         let r0 = band * TILE;
         let r1 = (r0 + TILE).min(self.height);
         if r0 >= r1 {
             return Err(());
         }
-        let mut out = vec![0u8; (r1 - r0) * self.width];
+        let zeroed = Arc::<[u8]>::new_zeroed_slice((r1 - r0) * self.width);
+        // SAFETY: the allocation is zeroed, and every bit pattern, zero
+        // included, is a valid `u8`.
+        Ok(unsafe { zeroed.assume_init() })
+    }
+
+    /// Grow `packed` to hold band `band`'s packed bytes; returns their
+    /// length (0 for a raw channel).
+    fn fit_packed(&self, band: usize, packed: &mut Vec<u8>) -> Result<usize, ()> {
+        let Rows::Rle(starts) = &self.rows else {
+            return Ok(0);
+        };
+        let r0 = band * TILE;
+        let r1 = (r0 + TILE).min(self.height);
+        let len = usize::try_from(starts[r1] - starts[r0]).map_err(|_| ())?;
+        if packed.len() < len {
+            packed.resize(len, 0);
+        }
+        Ok(len)
+    }
+
+    /// Decode band `band` into `out`, a [`band_buffer`](Self::band_buffer),
+    /// reading an RLE band's packed bytes through `packed`, which grows to
+    /// fit and is kept for the next band.
+    fn decode_band(&self, band: usize, packed: &mut Vec<u8>, out: &mut [u8]) -> Result<(), ()> {
+        let r0 = band * TILE;
+        let r1 = (r0 + TILE).min(self.height);
         match &self.rows {
             Rows::Raw(start) => {
                 let at = start + (r0 * self.width) as u64;
-                self.pin.read_at(at, &mut out)?;
+                self.pin.read_at(at, out)?;
             }
             Rows::Rle(starts) => {
-                let (first, last) = (starts[r0], starts[r1]);
-                let mut packed = vec![0u8; usize::try_from(last - first).map_err(|_| ())?];
-                self.pin.read_at(first, &mut packed)?;
+                let first = starts[r0];
+                let len = self.fit_packed(band, packed)?;
+                let packed = &mut packed[..len];
+                self.pin.read_at(first, packed)?;
                 for (y, row) in (r0..r1).zip(out.chunks_exact_mut(self.width)) {
                     let s = (starts[y] - first) as usize;
                     let e = (starts[y + 1] - first) as usize;
@@ -286,9 +322,7 @@ impl ChannelIndex {
             }
         }
         self.pin.bands_decoded.fetch_add(1, Ordering::Relaxed);
-        let out: Arc<[u8]> = out.into();
-        cache().put(self.key, band, Arc::clone(&out));
-        Ok(out)
+        Ok(())
     }
 
     /// Decode row `y` alone, keeping the last one: a sparse reader samples a
@@ -562,19 +596,13 @@ impl MergedPreview {
         };
         let n = x1.saturating_sub(x0);
         // Zeroed pages straight from the allocator, written once. A band at a
-        // time, so at most one band per channel is held beside the cache; its
-        // channels decode side by side (#1321).
+        // time, so at most one band per channel is held beside the cache.
+        let mut packed: [Vec<u8>; 3] = Default::default();
         let data = Plane::build(plane * 4, |data| {
-            use rayon::prelude::*;
             for band in bands {
-                let rows: Vec<Option<Arc<[u8]>>> = self
-                    .channels
-                    .par_iter()
-                    .map(|c| c.band(band).ok())
-                    .collect();
-                if rows.iter().any(Option::is_none) {
+                let Some(rows) = self.bands(band, &mut packed) else {
                     continue;
-                }
+                };
                 let start = (band * TILE).max(y0);
                 let end = ((band + 1) * TILE).min(y1);
                 for yy in start..end {
@@ -582,7 +610,6 @@ impl MergedPreview {
                     let dst = (yy as i64 - i64::from(rect.top)) as usize * rw
                         + (x0 as i64 - i64::from(rect.left)) as usize;
                     for (c, band_rows) in rows.iter().enumerate() {
-                        let band_rows = band_rows.as_ref().expect("checked");
                         data[c * plane + dst..c * plane + dst + n]
                             .copy_from_slice(&band_rows[src + x0..src + x1]);
                     }
@@ -596,6 +623,45 @@ impl MergedPreview {
             channels: 4,
             data,
         }
+    }
+
+    /// Band `band` of each colour plane, those not cached decoded side by
+    /// side (#1321); `None` when one fails. Their buffers, `packed` included,
+    /// are allocated on this thread and only filled on the workers: a buffer
+    /// a worker allocates stays in that worker's arena after it is freed,
+    /// and every worker keeps its own (#1423).
+    fn bands(&self, band: usize, packed: &mut [Vec<u8>; 3]) -> Option<[Arc<[u8]>; 3]> {
+        use rayon::prelude::*;
+        let mut slots: Vec<(Arc<[u8]>, bool)> = Vec::with_capacity(3);
+        for (c, packed) in self.channels.iter().zip(packed.iter_mut()) {
+            slots.push(match cache().get(c.key, band) {
+                Some(hit) => (hit, true),
+                None => {
+                    c.fit_packed(band, packed).ok()?;
+                    (c.band_buffer(band).ok()?, false)
+                }
+            });
+        }
+        slots
+            .par_iter_mut()
+            .zip(self.channels.par_iter())
+            .zip(packed[..].par_iter_mut())
+            .filter(|((slot, _), _)| !slot.1)
+            .try_for_each(|(((rows, _), c), packed)| {
+                let out = Arc::get_mut(rows).expect("a fresh allocation is unique");
+                c.decode_band(band, packed, out)
+            })
+            .ok()?;
+        let mut rows = slots
+            .into_iter()
+            .zip(self.channels.iter())
+            .map(|((rows, cached), c)| {
+                if !cached {
+                    cache().put(c.key, band, Arc::clone(&rows));
+                }
+                rows
+            });
+        Some([rows.next()?, rows.next()?, rows.next()?])
     }
 }
 
