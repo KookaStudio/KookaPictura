@@ -18,6 +18,18 @@ Snapshot for resuming after a context break. Update after each milestone.
   Auto-Align's work image reads luma premultiplied by alpha. Tests:
   `transform_alpha_tests`, the `kernel` units, and
   `auto_align::tests::work_luma_is_premultiplied_by_alpha`.
+- **Raw demosaic — #397 implemented** (OpenSpec change `raw-demosaic`,
+  archived; capability `codec/raw-demosaic`). Second stage of raw open (#86).
+  `pictura_codec::demosaic(image, method, budget)`
+  (`crates/pictura-codec/src/dng/demosaic/`) turns a `DngImage` into
+  `CameraRgb`: interleaved 16-bit linear camera-native RGB, active-area size,
+  no white balance or matrix (#398), default crop and orientation left to the
+  open route (#400). `Bilinear` averages the nearest same-colour photosites for
+  any RGB repeat pattern; `Ahd` (Hirakawa & Parks 2005, from the paper) runs on
+  2×2 Bayer in 32-row mirrored bands, falling back to bilinear otherwise or
+  under 8 × 8. Each photosite keeps its own sample. Ponytails: Lab from camera
+  RGB as if sRGB, green clamp, no median pass, dense output. Tests:
+  `tests/dng_demosaic.rs`; Leica corpus opt-in via `PICTURA_DNG_CORPUS`.
 - **DNG sensor reader — #396 implemented** (OpenSpec change `dng-raw-reader`,
   archived; capability `codec/dng-raw-reader`). First stage of raw open (#86).
   `pictura_codec::read_dng` (`crates/pictura-codec/src/dng/`) reads classic

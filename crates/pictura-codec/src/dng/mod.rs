@@ -4,17 +4,20 @@
 //! Built from the DNG 1.6 specification and ITU T.81 only. Compression 1
 //! (uncompressed) and 7 (lossless JPEG) are read; deflate, PackBits and lossy
 //! JPEG, linear DNGs, floating-point samples and non-RGB CFAs are refused.
-//! The demosaic (#397) and the colour transform (#398) consume the result.
+//! The demosaic (`demosaic`, #397) and the colour transform (#398) consume
+//! the result.
 
 use rayon::prelude::*;
 
 use crate::error::PsdError;
 use crate::probe::ImageBudget;
 
+mod demosaic;
 mod levels;
 mod ljpeg;
 mod tiff;
 
+pub use demosaic::{demosaic, CameraRgb, DemosaicMethod};
 use levels::{Area, Levels};
 use tiff::{Ifd, Order, Tiff};
 

@@ -118,7 +118,9 @@ pub use color_mode::{
 };
 pub use crs_xmp::set_crs_property;
 pub use descriptor::{write_descriptor, DescValue};
-pub use dng::{read_dng, CfaPattern, DngColor, DngCrop, DngImage};
+pub use dng::{
+    demosaic, read_dng, CameraRgb, CfaPattern, DemosaicMethod, DngColor, DngCrop, DngImage,
+};
 pub use document_version::{
     document_version, native_merged_has_transparency, unsupported_document_feature,
     DocumentVersion, DocumentVersionStamp, VersionAccess, VersionInfo, CURRENT_DOCUMENT_VERSION,
