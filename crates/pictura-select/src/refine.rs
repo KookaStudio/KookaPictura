@@ -20,6 +20,10 @@ use pictura_core::{PixelBuffer, Plane, TILE};
 use crate::source::{ImageSource, PixelReader};
 use crate::{SelectError, Selection};
 
+mod refine_brush;
+pub use refine_brush::RefineDab;
+use refine_brush::{brush_field, usable_dabs};
+
 const MAX_RADIUS: u32 = 100;
 const MAX_AMOUNT: u32 = 100;
 const MAX_SHIFT: i32 = 100;
@@ -120,6 +124,19 @@ impl Default for RefineEdgeSettings {
     }
 }
 
+fn validate_settings(settings: &RefineEdgeSettings) -> Result<(), SelectError> {
+    if settings.radius > MAX_RADIUS
+        || settings.smooth > MAX_AMOUNT
+        || settings.contrast > MAX_AMOUNT
+        || settings.amount > MAX_AMOUNT
+        || settings.feather > MAX_RADIUS
+        || !(-MAX_SHIFT..=MAX_SHIFT).contains(&settings.shift_edge)
+    {
+        return Err(SelectError::InvalidParams("refine settings".into()));
+    }
+    Ok(())
+}
+
 /// Per-pixel radius for the edge band.
 ///
 /// With `smart_radius` off every boundary pixel uses `radius`. With it on the
@@ -150,6 +167,17 @@ fn smart_band_radius(
     // magnitude 0 (soft) -> full radius, magnitude >= 510 (hard) -> radius 1.
     let softness = (1.0 - magnitude / 510.0).clamp(0.0, 1.0);
     ((radius as f64 * (0.15 + 0.85 * softness)).round() as u32).max(1)
+}
+
+/// The band radius a pixel actually uses. A refine dab widens the slider band
+/// (or its smart local radius) to at least the slider radius and the dab
+/// radius; a restore dab leaves the base radius alone.
+fn effective_band_radius(base: u32, slider: u32, dab: u32, refine: bool) -> u32 {
+    if refine {
+        base.max(slider).max(dab)
+    } else {
+        base
+    }
 }
 
 /// Chamfer distance (in pixels) from every pixel to the nearest zero/nonzero
@@ -241,15 +269,18 @@ pub fn refine(
     image: &PixelBuffer,
     settings: &RefineEdgeSettings,
 ) -> Result<Selection, SelectError> {
-    refine_from(mask, ImageSource::Buffer(image), settings)
+    refine_from(mask, ImageSource::Buffer(image), settings, &[])
 }
 
 /// [`refine`] over any [`ImageSource`]: the image is read only inside the edge
-/// band, a tile at a time (#1274).
+/// band, a tile at a time (#1274). `dabs` are refinement-brush strokes in the
+/// pixel space of `mask`; they are applied in order before the global
+/// refinements.
 pub fn refine_from(
     mask: &Selection,
     image: ImageSource<'_>,
     settings: &RefineEdgeSettings,
+    dabs: &[RefineDab],
 ) -> Result<Selection, SelectError> {
     if mask.width != image.width() || mask.height != image.height() {
         return Err(SelectError::SizeMismatch(format!(
@@ -260,32 +291,35 @@ pub fn refine_from(
             image.height()
         )));
     }
-    if settings.radius > MAX_RADIUS
-        || settings.smooth > MAX_AMOUNT
-        || settings.contrast > MAX_AMOUNT
-        || settings.amount > MAX_AMOUNT
-        || settings.feather > MAX_RADIUS
-        || !(-MAX_SHIFT..=MAX_SHIFT).contains(&settings.shift_edge)
-    {
-        return Err(SelectError::InvalidParams("refine settings".into()));
-    }
+    validate_settings(settings)?;
 
+    let (w, h) = (mask.width as usize, mask.height as usize);
+    let dabs = usable_dabs(dabs, w, h);
+    let max_dab_radius = dabs
+        .iter()
+        .map(|d| d.radius.round().max(1.0) as u32)
+        .max()
+        .unwrap_or(0);
     let identity = settings.radius == 0
         && settings.smooth == 0
         && settings.feather == 0
         && settings.contrast == 0
-        && settings.shift_edge == 0;
+        && settings.shift_edge == 0
+        && dabs.is_empty();
     if identity {
         return Ok(mask.clone());
     }
 
-    let (w, h) = (mask.width as usize, mask.height as usize);
     let mut coverage: Vec<f64> = mask.data.iter().map(|&v| v as f64).collect();
 
     // 1. Edge band: re-estimate coverage from the image inside the band, blended
-    // back to the input so the band edge stays continuous.
-    if settings.radius > 0 {
+    // back to the input so the band edge stays continuous. Brush dabs override
+    // the band locally: a refine dab widens it, a restore dab reverts it.
+    if settings.radius > 0 || !dabs.is_empty() {
         let dist = boundary_distance(mask);
+        // A radius-only refine must not pay for the 5 B/px brush field.
+        let brush = (!dabs.is_empty()).then(|| brush_field(&dabs, w, h));
+        let max_radius = settings.radius.max(max_dab_radius);
         let mut reader = PixelReader::new(image);
         // Each pixel depends only on its own inputs, so the band is walked a
         // tile at a time: a tiled image is then fetched about once per tile.
@@ -295,16 +329,24 @@ pub fn refine_from(
             for y in ty * TILE..((ty + 1) * TILE).min(h) {
                 for x in tx * TILE..((tx + 1) * TILE).min(w) {
                     let i = y * w + x;
-                    // A smart radius never exceeds `radius`, so a pixel past it
-                    // is outside the band either way and reads no image.
-                    if dist[i] > settings.radius {
+                    // No refine dab can change a pixel farther than its own
+                    // radius, so nothing outside the widest band reads an image.
+                    if dist[i] > max_radius {
                         continue;
                     }
-                    let r = if settings.smart_radius {
+                    let brush_sign = brush.as_ref().map_or(0, |b| b.0[i]);
+                    if brush_sign < 0 {
+                        coverage[i] = mask.data[i] as f64;
+                        continue;
+                    }
+                    let base = if settings.smart_radius {
                         smart_band_radius(mask, &mut reader, x, y, settings.radius)
                     } else {
                         settings.radius
                     };
+                    let brush_radius = brush.as_ref().map_or(0, |b| b.1[i]);
+                    let r =
+                        effective_band_radius(base, settings.radius, brush_radius, brush_sign > 0);
                     if r == 0 || dist[i] > r {
                         continue;
                     }
@@ -357,6 +399,72 @@ pub fn refine_from(
     }
 
     Ok(sel)
+}
+
+/// The edge band as a coverage mask: the pixels the effective radius reaches,
+/// including radius expanded by refine dabs. A pixel whose last dab was a
+/// restore is not marked.
+pub fn edge_band_from(
+    mask: &Selection,
+    image: ImageSource<'_>,
+    settings: &RefineEdgeSettings,
+    dabs: &[RefineDab],
+) -> Result<Selection, SelectError> {
+    if mask.width != image.width() || mask.height != image.height() {
+        return Err(SelectError::SizeMismatch(format!(
+            "{}x{} vs image {}x{}",
+            mask.width,
+            mask.height,
+            image.width(),
+            image.height()
+        )));
+    }
+    validate_settings(settings)?;
+
+    let (w, h) = (mask.width as usize, mask.height as usize);
+    let dabs = usable_dabs(dabs, w, h);
+    let mut data = vec![0u8; w * h];
+    if settings.radius == 0 && dabs.is_empty() {
+        return Ok(Selection {
+            width: mask.width,
+            height: mask.height,
+            data: data.into(),
+        });
+    }
+
+    let max_dab_radius = dabs
+        .iter()
+        .map(|d| d.radius.round().max(1.0) as u32)
+        .max()
+        .unwrap_or(0);
+    let dist = boundary_distance(mask);
+    let brush = (!dabs.is_empty()).then(|| brush_field(&dabs, w, h));
+    let max_radius = settings.radius.max(max_dab_radius);
+    let mut reader = PixelReader::new(image);
+    for y in 0..h {
+        for x in 0..w {
+            let i = y * w + x;
+            let brush_sign = brush.as_ref().map_or(0, |b| b.0[i]);
+            if dist[i] > max_radius || brush_sign < 0 {
+                continue;
+            }
+            let base = if settings.smart_radius {
+                smart_band_radius(mask, &mut reader, x, y, settings.radius)
+            } else {
+                settings.radius
+            };
+            let brush_radius = brush.as_ref().map_or(0, |b| b.1[i]);
+            let r = effective_band_radius(base, settings.radius, brush_radius, brush_sign > 0);
+            if r > 0 && dist[i] <= r {
+                data[i] = 255;
+            }
+        }
+    }
+    Ok(Selection {
+        width: mask.width,
+        height: mask.height,
+        data: data.into(),
+    })
 }
 
 /// A re-estimated alpha inside the band. The image edge gives a sub-pixel
@@ -568,6 +676,9 @@ pub fn coverage_plane(sel: &Selection) -> Plane<u8> {
 }
 
 #[cfg(test)]
+mod tests_brush;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -602,6 +713,227 @@ mod tests {
         let dist = boundary_distance(&mask);
         assert_eq!(dist[8 * 16 + 3], 1, "one column from the edge is 1 px");
         assert_eq!(dist[8 * 16 + 6], 4, "four columns from the edge is 4 px");
+    }
+
+    #[test]
+    fn brush_stroke_changes_only_its_disk() {
+        let (mask, image) = brush_fixture();
+        let dab = brush_dab(20.0, 12.0, 4.0, false);
+        let out = refine_from(
+            &mask,
+            ImageSource::Buffer(&image),
+            &RefineEdgeSettings::default(),
+            &[dab],
+        )
+        .unwrap();
+        let mut changed = 0;
+        for y in 0..mask.height as usize {
+            for x in 0..mask.width as usize {
+                let i = y * mask.width as usize + x;
+                if out.data[i] == mask.data[i] {
+                    continue;
+                }
+                changed += 1;
+                let dx = x as f64 + 0.5 - dab.x;
+                let dy = y as f64 + 0.5 - dab.y;
+                assert!(
+                    dx * dx + dy * dy <= dab.radius * dab.radius,
+                    "changed pixel {x},{y} escaped the dab"
+                );
+            }
+        }
+        assert!(changed > 0, "the dab must refine something");
+        assert_eq!(out.data[0], mask.data[0], "a far pixel is untouched");
+        let none = refine_from(
+            &mask,
+            ImageSource::Buffer(&image),
+            &RefineEdgeSettings::default(),
+            &[],
+        )
+        .unwrap();
+        assert_eq!(none, mask, "no dabs is still the identity");
+    }
+
+    #[test]
+    fn brush_restore_undoes_refinement_in_order() {
+        let (mask, image) = brush_fixture();
+        let dabs = [
+            brush_dab(20.0, 12.0, 4.0, false),
+            brush_dab(20.0, 12.0, 2.0, true),
+            brush_dab(20.0, 12.0, 1.0, false),
+        ];
+        let out = refine_from(
+            &mask,
+            ImageSource::Buffer(&image),
+            &RefineEdgeSettings::default(),
+            &dabs,
+        )
+        .unwrap();
+        let w = mask.width as usize;
+        assert_ne!(
+            out.data[12 * w + 20],
+            mask.data[12 * w + 20],
+            "the final refine dab refines again"
+        );
+        assert_eq!(
+            out.data[13 * w + 20],
+            mask.data[13 * w + 20],
+            "the restore-only ring is the input"
+        );
+    }
+
+    #[test]
+    fn brush_later_refine_dab_replaces_the_radius() {
+        let (mask, image) = brush_fixture();
+        let settings = RefineEdgeSettings::default();
+        let i = 12 * mask.width as usize + 23;
+        let large = refine_from(
+            &mask,
+            ImageSource::Buffer(&image),
+            &settings,
+            &[brush_dab(22.0, 12.0, 6.0, false)],
+        )
+        .unwrap();
+        let replaced = refine_from(
+            &mask,
+            ImageSource::Buffer(&image),
+            &settings,
+            &[
+                brush_dab(22.0, 12.0, 6.0, false),
+                brush_dab(22.0, 12.0, 2.0, false),
+            ],
+        )
+        .unwrap();
+        assert_ne!(large.data[i], mask.data[i], "the large radius refines");
+        assert_eq!(
+            replaced.data[i], mask.data[i],
+            "the later smaller radius replaces it"
+        );
+
+        let band_large = edge_band_from(
+            &mask,
+            ImageSource::Buffer(&image),
+            &settings,
+            &[brush_dab(22.0, 12.0, 6.0, false)],
+        )
+        .unwrap();
+        let band_replaced = edge_band_from(
+            &mask,
+            ImageSource::Buffer(&image),
+            &settings,
+            &[
+                brush_dab(22.0, 12.0, 6.0, false),
+                brush_dab(22.0, 12.0, 2.0, false),
+            ],
+        )
+        .unwrap();
+        assert_eq!(band_large.data[i], 255);
+        assert_eq!(band_replaced.data[i], 0);
+
+        let band_restored = edge_band_from(
+            &mask,
+            ImageSource::Buffer(&image),
+            &settings,
+            &[
+                brush_dab(22.0, 12.0, 6.0, false),
+                brush_dab(23.0, 12.0, 2.0, true),
+            ],
+        )
+        .unwrap();
+        assert_eq!(band_restored.data[i], 0, "a restore clears the band");
+    }
+
+    #[test]
+    fn brush_invalid_dabs_are_ignored() {
+        let (mask, image) = brush_fixture();
+        let settings = RefineEdgeSettings::default();
+        let valid = brush_dab(20.0, 12.0, 4.0, false);
+        let invalid = [
+            brush_dab(f64::NAN, 12.0, 4.0, false),
+            brush_dab(20.0, f64::INFINITY, 4.0, false),
+            brush_dab(20.0, 12.0, f64::NAN, false),
+            brush_dab(20.0, 12.0, -1.0, false),
+            brush_dab(-1.0, 12.0, 4.0, false),
+            brush_dab(20.0, 12.0, 25.0, false),
+        ];
+        let want = refine_from(&mask, ImageSource::Buffer(&image), &settings, &[valid]).unwrap();
+        let mut all = vec![valid];
+        all.extend_from_slice(&invalid);
+        let got = refine_from(&mask, ImageSource::Buffer(&image), &settings, &all).unwrap();
+        assert_eq!(got, want);
+        let none = refine_from(&mask, ImageSource::Buffer(&image), &settings, &invalid).unwrap();
+        assert_eq!(none, mask, "only invalid dabs is the identity");
+    }
+
+    #[test]
+    fn brush_radius_bounds_changed_pixels() {
+        let (mask, image) = brush_fixture();
+        let dab = brush_dab(20.0, 12.0, 3.0, false);
+        let out = refine_from(
+            &mask,
+            ImageSource::Buffer(&image),
+            &RefineEdgeSettings::default(),
+            &[dab],
+        )
+        .unwrap();
+        let dist = boundary_distance(&mask);
+        let mut changed = 0;
+        for i in 0..out.data.len() {
+            if out.data[i] != mask.data[i] {
+                changed += 1;
+                assert!(
+                    dist[i] <= dab.radius as u32,
+                    "changed pixel {i} escaped the dab radius"
+                );
+            }
+        }
+        assert!(changed > 0);
+    }
+
+    #[test]
+    fn edge_band_matches_the_brush_expanded_radius() {
+        let (mask, image) = brush_fixture();
+        let settings = RefineEdgeSettings {
+            radius: 1,
+            ..Default::default()
+        };
+        let i = 12 * mask.width as usize + 23;
+        let plain = edge_band_from(&mask, ImageSource::Buffer(&image), &settings, &[]).unwrap();
+        assert_eq!(plain.data[i], 0, "the slider radius does not reach");
+        let brushed = edge_band_from(
+            &mask,
+            ImageSource::Buffer(&image),
+            &settings,
+            &[brush_dab(20.0, 12.0, 5.0, false)],
+        )
+        .unwrap();
+        assert_eq!(brushed.data[i], 255, "the dab expands the band");
+        let restored = edge_band_from(
+            &mask,
+            ImageSource::Buffer(&image),
+            &settings,
+            &[
+                brush_dab(20.0, 12.0, 5.0, false),
+                brush_dab(20.0, 12.0, 5.0, true),
+            ],
+        )
+        .unwrap();
+        assert_eq!(restored.data[i], 0, "a restore clears the band");
+    }
+
+    fn brush_fixture() -> (Selection, PixelBuffer) {
+        let mask = rect(24, 24, 4, 4, 20, 20);
+        let image = gray(24, 24, |x, _| (x * 10).min(255) as u8);
+        (mask, image)
+    }
+
+    fn brush_dab(x: f64, y: f64, radius: f64, erase: bool) -> RefineDab {
+        RefineDab {
+            x,
+            y,
+            radius,
+            erase,
+        }
     }
 
     #[test]

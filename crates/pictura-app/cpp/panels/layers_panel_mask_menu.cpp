@@ -16,6 +16,10 @@
 #include "api/layers_bridge.h"
 #include "api/selection_bridge.h"
 
+#include <rust/cxx.h>
+
+#include <vector>
+
 #include <QtGui/QAction>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QCheckBox>
@@ -167,8 +171,10 @@ void LayersPanel::openRefineMask(const QString& path)
     }
     RefineEdgeDialog dialog(view_, this, path);
     if (runPanelDialog(dialog) && view_) {
+        const std::vector<double> dabValues = dialog.dabValues();
+        const ::rust::Slice<const double> dabs(dabValues.data(), dabValues.size());
         refine_mask_apply(*view_, path, dialog.smartRadius(), dialog.radius(), dialog.smooth(),
-                          dialog.feather(), dialog.contrast(), dialog.shiftEdge(),
+                          dialog.feather(), dialog.contrast(), dialog.shiftEdge(), dabs,
                           dialog.decontaminate(), dialog.amount(), dialog.outputTo());
     }
 }

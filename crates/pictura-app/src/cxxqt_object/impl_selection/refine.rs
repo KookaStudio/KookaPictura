@@ -39,6 +39,21 @@ pub mod ffi {
             feather: i32,
             contrast: i32,
             shift_edge: i32,
+            dabs: &[f64],
+            max_side: i32,
+            width: &mut i32,
+            height: &mut i32,
+        ) -> Vec<u8>;
+
+        /// The pixels the edge band would refine (Show Edge), one byte a pixel
+        /// at proxy size, including radius expanded by brush dabs. Empty when
+        /// unavailable.
+        #[allow(clippy::too_many_arguments)]
+        fn refine_edge_band_preview(
+            view: &PictureView,
+            smart_radius: bool,
+            radius: i32,
+            dabs: &[f64],
             max_side: i32,
             width: &mut i32,
             height: &mut i32,
@@ -58,6 +73,7 @@ pub mod ffi {
             feather: i32,
             contrast: i32,
             shift_edge: i32,
+            dabs: &[f64],
             decontaminate: bool,
             amount: i32,
             output: i32,
@@ -78,6 +94,20 @@ pub mod ffi {
             feather: i32,
             contrast: i32,
             shift_edge: i32,
+            dabs: &[f64],
+            max_side: i32,
+            width: &mut i32,
+            height: &mut i32,
+        ) -> Vec<u8>;
+
+        /// As `refine_edge_band_preview`, for the mask of the layer at `path`.
+        #[allow(clippy::too_many_arguments)]
+        fn refine_mask_band_preview(
+            view: &PictureView,
+            path: &QString,
+            smart_radius: bool,
+            radius: i32,
+            dabs: &[f64],
             max_side: i32,
             width: &mut i32,
             height: &mut i32,
@@ -96,6 +126,7 @@ pub mod ffi {
             feather: i32,
             contrast: i32,
             shift_edge: i32,
+            dabs: &[f64],
             decontaminate: bool,
             amount: i32,
             output: i32,

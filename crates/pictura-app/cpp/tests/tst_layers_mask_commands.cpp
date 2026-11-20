@@ -47,6 +47,7 @@ private slots:
     void maskMenuActions();
     void applyNeedsAPixelLayer();
     void refineMask();
+    void refineMaskBrushes();
     void refineMaskOnAFillLayer();
     void rubylithOverlay();
     void rubylithEndsWithItsLayer();
@@ -297,6 +298,41 @@ void LayersMaskCommandsTest::refineMask()
     const quint32 edge = view->sample_argb(32, 32);
     QVERIFY2(edge != shown && edge != hidden, "the feathered edge is partial coverage");
     QCOMPARE(view->sample_argb(4, 32), shown);
+    QVERIFY2(pictura::layer_mask_linked(*view), "the mask stays linked");
+}
+
+// lmc_refine_mask_brush: the Refine Mask entry point commits brush dabs.
+void LayersMaskCommandsTest::refineMaskBrushes()
+{
+    const QString path = fillLayer(64);
+    QVERIFY(!path.isEmpty());
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view->select_rect(0, 0, 32, 64, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::layer_mask_add_path(*view, path, QStringLiteral("reveal-selection")));
+    view->deselect();
+    const quint32 edgeBefore = view->sample_argb(32, 32);
+    const quint32 farBefore = view->sample_argb(4, 32);
+    const int base = view->history_count();
+
+    int recorded = 0;
+    panel_->setDialogDriverForTest([&](QDialog& dialog) {
+        auto* refine = qobject_cast<pictura::RefineEdgeDialog*>(&dialog);
+        auto* canvas = window_->imageView();
+        if (!refine || !canvas) {
+            return false;
+        }
+        const QPoint p = canvas->imageToWidget(QPointF(32.0, 32.0)).toPoint();
+        QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, p);
+        QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier, p);
+        recorded = refine->dabsForTest().size();
+        return true;
+    });
+    QVERIFY(panel_->performMaskActionForTest(QStringLiteral("refineMask"), path));
+    QCOMPARE(recorded, 1);
+    QCOMPARE(view->history_count(), base + 1);
+    QCOMPARE(view->history_label(base), QStringLiteral("Refine Mask"));
+    QVERIFY2(view->sample_argb(32, 32) != edgeBefore, "the dab refines the mask edge");
+    QCOMPARE(view->sample_argb(4, 32), farBefore);
     QVERIFY2(pictura::layer_mask_linked(*view), "the mask stays linked");
 }
 

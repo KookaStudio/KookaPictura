@@ -16,7 +16,9 @@ class QWidget;
 
 namespace pictura {
 
+class ImageView;
 class PictureView;
+class ToolController;
 
 enum class UnsavedChoice { Save, Discard, Cancel };
 enum class TransformDecision;
@@ -39,6 +41,18 @@ void setDialogNavigationKeys(std::function<bool(QKeyEvent*)> handler);
 // sampler) can take a colour from the image. The frame installs its tool
 // controller's sampler state here.
 void setDialogCanvasSampling(std::function<bool()> active);
+
+// While a dialog runs under runDialog and `active` returns true, a hover or
+// left-button input over a canvas reaches it, so a dialog's refinement brush
+// (Refine Edge) can stroke the image.
+void setDialogCanvasBrush(std::function<bool()> active);
+
+// The active tool controller and canvas, resolved by the composition root, so
+// a dialog can arm the canvas brush from either the menu or the Layers panel.
+void setDialogCanvasToolHosts(std::function<ToolController*()> tools,
+                              std::function<ImageView*()> canvas);
+ToolController* dialogCanvasTools();
+ImageView* dialogCanvasView();
 
 // Ctrl++ / Ctrl+- in a dialog with its own preview zoom click `zoomIn` /
 // `zoomOut`. `+` takes Shift on most layouts, so Ctrl+= and Ctrl+Shift+= zoom

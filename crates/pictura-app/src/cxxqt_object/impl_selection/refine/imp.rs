@@ -8,7 +8,10 @@ use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 use pictura_core::{LayerMask, PsdRect};
-use pictura_select::{refine, refine_from, OutputTarget, RefineEdgeSettings, Selection};
+use pictura_select::{
+    edge_band_from, refine_from, ImageSource, OutputTarget, RefineDab, RefineEdgeSettings,
+    Selection,
+};
 
 /// What a refine starts from: the active selection (Refine Edge) or the mask
 /// of the layer at a path (Refine Mask).
@@ -133,6 +136,38 @@ pub(super) fn scale_preview_params(p: EngineParams, factor: f64) -> EngineParams
     }
 }
 
+/// Parse the bridge's flat `(x, y, radius, erase)` quads. A malformed slice is
+/// rejected rather than silently truncated.
+pub(super) fn parse_dabs(values: &[f64]) -> Vec<RefineDab> {
+    if values.len() % 4 != 0 {
+        return Vec::new();
+    }
+    values
+        .chunks_exact(4)
+        .map(|d| RefineDab {
+            x: d[0],
+            y: d[1],
+            radius: d[2],
+            erase: d[3] != 0.0,
+        })
+        .collect()
+}
+
+/// Scale document-space dabs into the preview proxy's pixel space. The proxy
+/// can round its two axes differently, so x and y scale independently; the
+/// radius takes the larger ratio.
+pub(super) fn scale_dabs(dabs: &[RefineDab], x_factor: f64, y_factor: f64) -> Vec<RefineDab> {
+    let radius_factor = x_factor.max(y_factor);
+    dabs.iter()
+        .map(|d| RefineDab {
+            x: d.x * x_factor,
+            y: d.y * y_factor,
+            radius: d.radius * radius_factor,
+            erase: d.erase,
+        })
+        .collect()
+}
+
 pub(super) fn refine_edge_available(view: &PictureView) -> bool {
     let rust = view.rust();
     rust.session.doc.is_some()
@@ -226,6 +261,7 @@ pub(super) fn refine_edge_preview(
     feather: i32,
     contrast: i32,
     shift_edge: i32,
+    dabs: &[f64],
     max_side: i32,
     width: &mut i32,
     height: &mut i32,
@@ -236,7 +272,15 @@ pub(super) fn refine_edge_preview(
         return Vec::new();
     }
     let p = params(smart_radius, radius, smooth, feather, contrast, shift_edge);
-    preview(view, &Source::Selection, p, max_side, width, height)
+    preview(
+        view,
+        &Source::Selection,
+        p,
+        &parse_dabs(dabs),
+        max_side,
+        width,
+        height,
+    )
 }
 
 pub(super) fn refine_mask_available(view: &PictureView, path: &QString) -> bool {
@@ -257,6 +301,7 @@ pub(super) fn refine_mask_preview(
     feather: i32,
     contrast: i32,
     shift_edge: i32,
+    dabs: &[f64],
     max_side: i32,
     width: &mut i32,
     height: &mut i32,
@@ -265,7 +310,15 @@ pub(super) fn refine_mask_preview(
     *height = 0;
     let path = path.to_string();
     let p = params(smart_radius, radius, smooth, feather, contrast, shift_edge);
-    preview(view, &Source::Mask(&path), p, max_side, width, height)
+    preview(
+        view,
+        &Source::Mask(&path),
+        p,
+        &parse_dabs(dabs),
+        max_side,
+        width,
+        height,
+    )
 }
 
 /// The refined coverage of `source`, scaled to fit `max_side`, with its size
@@ -274,6 +327,7 @@ pub(super) fn preview(
     view: &PictureView,
     source: &Source,
     p: EngineParams,
+    dabs: &[RefineDab],
     max_side: i32,
     width: &mut i32,
     height: &mut i32,
@@ -288,11 +342,12 @@ pub(super) fn preview(
     let Some(mask) = source.preview_coverage(view, image.width, image.height) else {
         return Vec::new();
     };
-    let p = scale_preview_params(
-        p,
-        preview_scale(doc.width, doc.height, image.width, image.height),
-    );
-    match refine(&mask, &image, &p.settings()) {
+    let fx = image.width as f64 / doc.width as f64;
+    let fy = image.height as f64 / doc.height as f64;
+    let factor = preview_scale(doc.width, doc.height, image.width, image.height);
+    let p = scale_preview_params(p, factor);
+    let dabs = scale_dabs(dabs, fx, fy);
+    match refine_from(&mask, ImageSource::Buffer(&image), &p.settings(), &dabs) {
         Ok(refined) => {
             *width = refined.width as i32;
             *height = refined.height as i32;
@@ -300,6 +355,88 @@ pub(super) fn preview(
         }
         Err(_) => Vec::new(),
     }
+}
+
+/// The Show Edge band of `source`, at proxy size.
+pub(super) fn band_preview(
+    view: &PictureView,
+    source: &Source,
+    p: EngineParams,
+    dabs: &[RefineDab],
+    max_side: i32,
+    width: &mut i32,
+    height: &mut i32,
+) -> Vec<u8> {
+    *width = 0;
+    *height = 0;
+    let rust = view.rust();
+    let Some(doc) = rust.session.doc.as_ref() else {
+        return Vec::new();
+    };
+    let side = max_side.max(0) as u32;
+    let image = shrink(&preview_picture(doc, rust, side), side);
+    let Some(mask) = source.preview_coverage(view, image.width, image.height) else {
+        return Vec::new();
+    };
+    let fx = image.width as f64 / doc.width as f64;
+    let fy = image.height as f64 / doc.height as f64;
+    let factor = preview_scale(doc.width, doc.height, image.width, image.height);
+    let p = scale_preview_params(p, factor);
+    let dabs = scale_dabs(dabs, fx, fy);
+    match edge_band_from(&mask, ImageSource::Buffer(&image), &p.settings(), &dabs) {
+        Ok(band) => {
+            *width = band.width as i32;
+            *height = band.height as i32;
+            band.coverage_bytes()
+        }
+        Err(_) => Vec::new(),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn refine_edge_band_preview(
+    view: &PictureView,
+    smart_radius: bool,
+    radius: i32,
+    dabs: &[f64],
+    max_side: i32,
+    width: &mut i32,
+    height: &mut i32,
+) -> Vec<u8> {
+    let p = params(smart_radius, radius, 0, 0, 0, 0);
+    band_preview(
+        view,
+        &Source::Selection,
+        p,
+        &parse_dabs(dabs),
+        max_side,
+        width,
+        height,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn refine_mask_band_preview(
+    view: &PictureView,
+    path: &QString,
+    smart_radius: bool,
+    radius: i32,
+    dabs: &[f64],
+    max_side: i32,
+    width: &mut i32,
+    height: &mut i32,
+) -> Vec<u8> {
+    let path = path.to_string();
+    let p = params(smart_radius, radius, 0, 0, 0, 0);
+    band_preview(
+        view,
+        &Source::Mask(&path),
+        p,
+        &parse_dabs(dabs),
+        max_side,
+        width,
+        height,
+    )
 }
 
 /// Write `data` into the layer at `path` as a document-sized raster mask. An
@@ -376,6 +513,7 @@ pub(super) fn refine_edge_apply(
     feather: i32,
     contrast: i32,
     shift_edge: i32,
+    dabs: &[f64],
     decontaminate: bool,
     amount: i32,
     output: i32,
@@ -384,7 +522,15 @@ pub(super) fn refine_edge_apply(
         return false;
     }
     let p = params(smart_radius, radius, smooth, feather, contrast, shift_edge);
-    apply(view, &Source::Selection, p, decontaminate, amount, output)
+    apply(
+        view,
+        &Source::Selection,
+        p,
+        &parse_dabs(dabs),
+        decontaminate,
+        amount,
+        output,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -397,13 +543,22 @@ pub(super) fn refine_mask_apply(
     feather: i32,
     contrast: i32,
     shift_edge: i32,
+    dabs: &[f64],
     decontaminate: bool,
     amount: i32,
     output: i32,
 ) -> bool {
     let path = path.to_string();
     let p = params(smart_radius, radius, smooth, feather, contrast, shift_edge);
-    apply(view, &Source::Mask(&path), p, decontaminate, amount, output)
+    apply(
+        view,
+        &Source::Mask(&path),
+        p,
+        &parse_dabs(dabs),
+        decontaminate,
+        amount,
+        output,
+    )
 }
 
 /// Refine `source` once and write the result to the `output` target; one undo
@@ -413,6 +568,7 @@ pub(super) fn apply(
     mut view: Pin<&mut PictureView>,
     source: &Source,
     p: EngineParams,
+    dabs: &[RefineDab],
     decontaminate: bool,
     amount: i32,
     output: i32,
@@ -439,7 +595,7 @@ pub(super) fn apply(
         // The edge band reads tiles; decontaminating rewrites the picture in
         // place, so it is the one whole buffer (#1274).
         let fetch = sample_tiles(doc, rust);
-        let refined = match refine_from(&coverage, tile_source(doc, &fetch), &settings) {
+        let refined = match refine_from(&coverage, tile_source(doc, &fetch), &settings, dabs) {
             Ok(refined) => refined,
             Err(_) => return false,
         };
@@ -601,6 +757,28 @@ mod tests {
         assert_eq!(p.smooth, 200);
         assert_eq!(p.shift_edge, -100);
         assert!(p.smart_radius);
+    }
+
+    #[test]
+    fn brush_dabs_scale_with_the_preview() {
+        let dabs = [RefineDab {
+            x: 100.0,
+            y: 50.0,
+            radius: 10.0,
+            erase: true,
+        }];
+        let scaled = scale_dabs(&dabs, 0.5, 0.5);
+        assert_eq!(scaled[0].x, 50.0);
+        assert_eq!(scaled[0].y, 25.0);
+        assert_eq!(scaled[0].radius, 5.0);
+        assert!(scaled[0].erase);
+        let thin = scale_dabs(&dabs, 0.05, 1.0);
+        assert_eq!(thin[0].x, 5.0);
+        assert_eq!(thin[0].y, 50.0);
+        assert_eq!(thin[0].radius, 10.0, "the wider axis sets the radius");
+        assert!(parse_dabs(&[1.0, 2.0, 3.0, 1.0]).len() == 1);
+        assert!(parse_dabs(&[1.0, 2.0, 3.0]).is_empty());
+        assert!(parse_dabs(&[1.0, 2.0, 3.0, 4.0, 5.0]).is_empty());
     }
 
     #[test]

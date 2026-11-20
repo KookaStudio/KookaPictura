@@ -288,6 +288,15 @@ public:
                           bool continuous = true);
     bool canvasSamplerActive() const { return bool(canvasSampler_); }
 
+    // While set, hover and left-button canvas input goes to a dialog's
+    // refinement brush instead of the active tool. Positions are in image
+    // space; clear it with an empty handler.
+    enum class CanvasBrushPhase { Hover, Press, Drag, Release };
+    using CanvasBrushHandler =
+        std::function<void(CanvasBrushPhase, const QPointF&, Qt::KeyboardModifiers)>;
+    void setCanvasBrush(CanvasBrushHandler handler);
+    bool canvasBrushActive() const { return bool(canvasBrush_); }
+
     QColor foreground() const override;
     void setForeground(const QColor& color);
     QColor background() const override;
@@ -688,6 +697,9 @@ private:
     // True while a press with an armed `canvasSampler_` has the left button
     // down, so `handleMoved` samples on every move and `handleReleased` ends it.
     bool canvasSampling_ = false;
+    CanvasBrushHandler canvasBrush_;
+    // True while an armed `canvasBrush_` has the left button down.
+    bool canvasBrushDragging_ = false;
     QColor foreground_{Qt::black};
     QColor background_{Qt::white};
     double pressure_ = 1.0;

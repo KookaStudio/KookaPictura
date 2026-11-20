@@ -26,8 +26,8 @@ mod matcher;
 
 mod refine;
 pub use refine::{
-    coverage_plane, decontaminate, decontaminate_into, refine, refine_from, OutputTarget,
-    RefineEdgeSettings, ViewMode,
+    coverage_plane, decontaminate, decontaminate_into, edge_band_from, refine, refine_from,
+    OutputTarget, RefineDab, RefineEdgeSettings, ViewMode,
 };
 
 mod translate;

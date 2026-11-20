@@ -119,6 +119,35 @@ void ImageView::paintMaskOverlay(QPainter& painter)
     painter.restore();
 }
 
+void ImageView::setRefinePreview(const QImage& overlay, const QRect& area)
+{
+    refinePreview_ = overlay;
+    refinePreviewArea_ = area;
+    update();
+}
+
+void ImageView::clearRefinePreview()
+{
+    if (refinePreview_.isNull()) {
+        return;
+    }
+    refinePreview_ = QImage();
+    refinePreviewArea_ = QRect();
+    update();
+}
+
+// Drawn like the mask overlay: document space, under the document clip.
+void ImageView::paintRefinePreview(QPainter& painter)
+{
+    if (refinePreview_.isNull() || refinePreviewArea_.isEmpty()) {
+        return;
+    }
+    painter.save();
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    painter.drawImage(QRectF(refinePreviewArea_), refinePreview_);
+    painter.restore();
+}
+
 QImage ImageView::image() const
 {
     if (!image_.isNull() || docSize_.isEmpty() || !levelProvider_.crop) {
