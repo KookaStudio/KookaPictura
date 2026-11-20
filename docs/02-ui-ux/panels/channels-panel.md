@@ -37,6 +37,9 @@ One or more channels can be selected; selected/active names are highlighted. `Sh
 
 `New Channel` is invoked from the panel bottom button or the panel menu; `Alt`/`Option`-clicking the button opens the options dialog. `Channel Options` (double-click the thumbnail, or the menu) exposes: **Name**, **Color Indicates** (`Masked Areas` / `Selected Areas`, with the Quick Mask button glyph changing accordingly), **Color** (a color field and opacity for the mask overlay — display-only, it does not change protection), and **Spot Color** (converts an alpha channel to a spot color channel; only for existing channels). A new channel's overlay **defaults to red at 50 % opacity** (community/CS6-era sources; the Help describes the options but not their defaults).
 
+The current implementation ships only the two `Color Indicates` radios; Name, Color,
+Opacity, and Spot Color remain #513.
+
 A new alpha channel is the only visible channel until the composite eye is enabled, at which point the mask shows as a color overlay. Painting white removes masked areas, black adds them, and an opacity below 100% (options bar, or painting with a color) produces partial values.
 
 **Spot channels.** A spot channel is created with `Ctrl`/`Cmd`-click the New Channel button, or `New Spot Channel` from the panel menu. Its dialog adds **Solidity** (0–100 %), which simulates on-screen ink density (100 % = fully covering, e.g. metallic; 0 % = transparent, e.g. varnish); Solidity and the color choice affect only on-screen previews and composite prints, not printed separations. An existing alpha channel is converted to a spot channel via `Channel Options > Spot Color`. `Merge Spot Channel` (panel menu) merges a spot channel with the color channels, splitting the spot ink into its CMYK components.
@@ -125,7 +128,7 @@ Widgets (consistent with `ARCH-003`).
 | `ChannelsModel` | `QAbstractItemModel` | Channel rows; roles for kind, visibility, selection, thumbnail, spot swatch. |
 | `ChannelRowDelegate` | `QStyledItemDelegate` | Eye column, thumbnail, name, composite marker, spot colour chip. |
 | `ChannelThumbnailCache` | `QPixmapCache`-backed helper | Preview generation/invalidations. |
-| `ChannelOptionsDialog` | `QDialog` | New/Channel Options: name, Color Indicates, colour+opacity, Spot Color. |
+| `ChannelOptionsDialog` | `QDialog` | New/Channel Options: name, Color Indicates, colour+opacity, Spot Color. The shipped dialog currently offers only the two `Color Indicates` radios; the rest remain #513. |
 | `SplitChannelsAction` / `MergeChannelsDialog` | `QAction` / `QDialog` | Split; merge with mode/channel mapping and `Next` walk. |
 | `SaveSelectionDialog` | `QDialog` | Document/Channel/Name/combine mode (`SEL-012`). |
 | `SpotColorPicker` | `QDialog` | Spot library/colour selection (`CLR-003`). |

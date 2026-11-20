@@ -130,7 +130,7 @@ Following the Quick Mask rule documented in the Help: when a soft mask is conver
 
 ## Rust module mapping
 
-- `pictura_channels` — `ChannelRegistry`, `Channel { id, kind: Colour | Alpha | Spot | Composite, sense, overlay, plane }`.
+- `pictura_channels` — `ChannelRegistry`; the extra-channel plane lives in `pictura_core::Channel`, and the name, sense, and overlay live in the PSD DisplayInfo resource (1077).
 - `pictura-render::apply_image` — `apply_image_planes` (the source reader) and the shared Add/Subtract arithmetic; `pictura-render::calculations` — `calculate(params: CalculationsParams) -> Plane<u8>`; the app owns the three result targets.
 - `pictura_channels::blend` — `add(a, b, scale, offset)`, `subtract(a, b, scale, offset)`, and a dispatch to the shared blend-mode table in `pictura_layers::blend`.
 - `pictura_selection::from_channel` — `channel_to_selection(channel, sense, invert) -> CoverageMask`; the shared 50 % contour rule.
@@ -144,7 +144,7 @@ Data crossing the boundary: `ChannelId`, `DocumentId`, `BlendMode`, `ResultTarge
 | Proposal | Base | Responsibility |
 |---|---|---|
 | `ChannelsPanel` / `ChannelsModel` | `QDockWidget` / `QAbstractItemModel` | Shared with `SEL-012`; channel list, visibility, thumbnails, modifier-click |
-| `ChannelOptionsDialog` | `QDialog` | Masked Areas / Selected Areas / Spot Color / colour+opacity |
+| `ChannelOptionsDialog` | `QDialog` | Masked Areas / Selected Areas / Spot Color / colour+opacity; the shipped dialog currently offers only the two `Color Indicates` radios (the rest remain #513) |
 | `ApplyImageDialog` | `QDialog` | Source image/layer/channel, Invert, Blending, Opacity, Preserve Transparency, Mask group |
 | `CalculationsDialog` | `QDialog` | Two sources, Blending, Opacity, Mask, Result target |
 | `MaskPreviewWidget` | `QWidget` | Live preview of the result; wired to Preview checkboxes |
@@ -155,7 +155,7 @@ Widgets over QML: dialogs and the channels list are dense, precise, keyboard-dri
 
 ## Data-model impact
 
-- **Channel node:** `Channel { id, kind: Colour | Alpha | Spot | Composite, sense: MaskedAreas | SelectedAreas, name, overlay: {color, opacity}, plane: Plane }`. Documents hold colour channels (implicit from colour mode) plus a growable alpha/spot list capped at 56.
+- **Channel node:** the extra-channel plane lives in `pictura_core::Channel { id, data }`; its name, `Masked Areas` / `Selected Areas` sense, and overlay colour/opacity live in the PSD DisplayInfo resource (1077). Documents hold colour channels (implicit from colour mode) plus a growable alpha/spot list capped at 56.
 - **PSD/PSB:** alpha and spot channels serialise in the alternate-channel data; channel name, sense, and order must round-trip. DCS 2.0 preserves spot channels. See `01-architecture/file-formats.md`.
 - **Undo granularity:** editing a channel, Apply Image, and Calculations each produce one history state. Channel-pixel edits require tile snapshots; `Result = Selection` touches only selection state.
 - **Layer masks / filter masks:** stored as alpha channels per the Help; loading their boundaries is a selection source. Cross-ref `05-layers/layer-masks.md`, `05-layers/vector-masks-and-clipping-masks.md`.
@@ -213,5 +213,5 @@ Not used in this pass:
 - **High-bit-depth Scale/Offset scaling.** The documented 0–255 arithmetic must be mapped to 16/32-bit; Adobe does not state the exact scaling. Apply Image and Calculations use `Offset / 255` in the unit domain at every depth and leave 32-bit Add and Subtract unclamped until the result narrows; this is an inference, not verified parity. Calculations reads sources at native precision but narrows every result to 8 bits (channels and selections are 8-bit; a New Document is 8-bit grayscale). Confirm with a high-bit-depth reference.
 - **Apply Image colour-mode rule.** "Single channel but not composite" across differing modes is stated but the exact validation matrix is not. Resolve per colour-mode pair in `01-architecture/color-management.md`.
 - **Spot channel serialisation.** DCS 2.0 and PSD spot-channel encoding details must come from the Adobe file-format spec, not the Help PDF.
-- **Mask sense on PSD round-trip.** Whether the `Masked Areas` / `Selected Areas` flag is stored independently or derived must be confirmed against the file-format spec.
+- **Mask sense on PSD round-trip.** Resolved: the sense is DisplayInfo resource 1077 kind 1 (`Masked Areas`, plane = coverage) or kind 0 (`Selected Areas`, plane = 255 - coverage), with a missing entry read as `Masked Areas`. See `crates/pictura-codec/src/image_resources.rs`.
 - **CS6 Properties-panel parity.** The exact CS6 mask controls (Density, Feather, Delete Mask, Disable/Enable) need a dedicated treatment in `05-layers/layer-masks.md`; confirm the CS5→CS6 UI move before asserting it as CS6 behaviour.

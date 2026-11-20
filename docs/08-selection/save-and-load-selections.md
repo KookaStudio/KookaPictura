@@ -122,7 +122,7 @@ The shipped drag path (`#1332`) scales the source coverage to fit the destinatio
 
 - `pictura_selection::alpha` — `save_selection(doc, mask, target: ChannelRef, combine: Combine)`, `load_selection(doc, source: ChannelRef, invert: bool, combine: Combine)`.
 - `pictura_selection::Combine` — enum `{ Replace, Add, Subtract, Intersect }` shared with `SEL-013` and the channel calculations result modes.
-- `pictura_channels::AlphaChannel` — grayscale plane + metadata (`name`, `sense: MaskedAreas | SelectedAreas`, overlay colour/opacity).
+- `pictura_channels::AlphaChannel` — grayscale plane + metadata (`name`, DisplayInfo-backed `Masked Areas` / `Selected Areas` sense, overlay colour/opacity).
 - `pictura_channels::store` — channel registry with the 56-channel cap and creation-order naming.
 - `pictura_psd` — serialise/parse alternate (alpha) channels in PSD/PSB; enforce the "preserved formats" matrix.
 - Data crossing the boundary: `ChannelId`, `ChannelRef { document, id }`, and a `CoverageMask` for preview. Alpha channel pixel data stays in the core/tile store.
@@ -141,7 +141,7 @@ Widgets over QML: the Channels panel is a dense list with live thumbnails and mo
 
 ## Data-model impact
 
-- **New node type:** `AlphaChannel { id, name, sense, overlay, pixels: Plane }` sibling to colour and spot channels in the document's channel registry.
+- **Channel metadata:** the plane lives in the core extra-channel list; names and the `Masked Areas` / `Selected Areas` sense live in the PSD DisplayInfo resource (1077), with the overlay colour/opacity.
 - **PSD/PSB:** alpha channels serialise in the extra-layer/alternate-channel data; the spec must preserve channel `name`, `sense`, and order. `Masked Areas` / `Selected Areas` semantics affect interpretation on reload. See `01-architecture/file-formats.md`.
 - **Document field:** a "current selection" (`CoverageMask`, optional) distinct from any saved channel; Load replaces or combines it.
 - **Undo granularity:** each Save/Load is a history state. Loading changes only document selection state, so it is cheap to undo; saving into an existing channel modifies channel pixels and must snapshot the prior channel.
@@ -198,6 +198,6 @@ Not used in this pass:
 - **Load default channel.** The fetched text does not state CS6's default. This implementation defaults to the first extra channel, else the first colour row; the choice is inferred, not CS6-verified. A CS6 UI capture would confirm it.
 - **Exact default-name sequence.** `Alpha 1`, `Alpha 2`, … is community-reported; confirm numbering after deletions/reloads.
 - **Cross-image drag semantics.** Rescaling and sense handling when dragging a selection between differently sized documents is undocumented. The shipped path uses fit-and-centre with an empty border (`#1332`); a CS6 behavioural study is still needed to confirm parity.
-- **PSD alternate-channel encoding details.** The precise PSD resource keys and sense flags must be pinned in `01-architecture/file-formats.md` against the published Adobe file-format spec, not the Help PDF.
+- **PSD alternate-channel encoding details.** Resolved: the per-channel sense is DisplayInfo resource 1077 (u32 version, 13-byte entries). Kind 1 is `Masked Areas` (plane = coverage), kind 0 is `Selected Areas` (plane = 255 - coverage), and kind 2 is spot; a missing entry is `Masked Areas`. See `crates/pictura-codec/src/image_resources.rs`.
 - **Layer-mask destination bit depth.** Whether saving into a layer mask honours 16/32-bit precision is unstated. Resolve against a high-bit-depth CS6 document.
 - **Save/Load Selection in 32-bpc.** The Help restricts many selection commands at 32 bpc; whether Save/Load itself is restricted is unclear. Resolve with a CS6 32-bit test.
