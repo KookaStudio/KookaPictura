@@ -164,6 +164,7 @@ private:
     void revealInFileManager(const DocWindow* window);
     void refreshRecentMenu(QMenu* menu);
     void buildUiSizeMenu();
+    void refreshWindowDocumentList(QMenu* menu);
     std::function<void(CommandRegistry&)> registerFrameCommands_;
     Runtime runtime_;
     CommandRegistry* commands_ = nullptr;
@@ -173,11 +174,13 @@ private:
     ToolController* tools_ = nullptr;
     QMenuBar* menuBar_ = nullptr;
     QPointer<QMenu> documentMenu_;
+    QPointer<QMenu> windowMenu_;
     QPointer<QMenu> measurementScaleMenu_;
     QPointer<QDialog> measurementScaleDialog_;
     QPointer<ColorRangeDialog> colorRangeDialog_;
     QPointer<ReplaceColorDialog> replaceColorDialog_;
     QList<QAction*> recentActions_;
+    QList<QAction*> windowDocumentActions_;
     bool clipboardMirrored_ = false;
     bool clipboardExported_ = false;
     bool clipboardSetting_ = false;

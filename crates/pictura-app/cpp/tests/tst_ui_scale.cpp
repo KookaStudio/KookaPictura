@@ -274,6 +274,8 @@ void UiScaleTest::windowMenuControlSitsBelowOptions()
     const int optionsIndex = actions.indexOf(options);
     QVERIFY2(rowIndex >= 0 && optionsIndex >= 0, "row and Options are in the Window menu");
     QVERIFY2(rowIndex > optionsIndex, "the UI size row follows Options");
+    QVERIFY2(rowIndex > 0 && actions.at(rowIndex - 1)->isSeparator(),
+             "a separator separates the UI size row from Options");
     for (int i = rowIndex + 1; i < actions.size(); ++i) {
         QVERIFY2(!actions.at(i)->isVisible(), "the UI size row is the last visible row");
     }

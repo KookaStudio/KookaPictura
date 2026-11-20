@@ -957,9 +957,25 @@ void MenuRegistrar::registerTextCommands()
 void MenuRegistrar::buildMenus(QMenuBar* menuBar)
 {
     menuBar_ = menuBar;
+    // The old menu owns the previous document rows; drop them before the
+    // command registry deletes and rebuilds the menu bar.
+    if (windowMenu_) {
+        for (QAction* action : windowDocumentActions_) {
+            windowMenu_->removeAction(action);
+            delete action;
+        }
+    }
+    windowDocumentActions_.clear();
     commands_->buildMenuBar(menuBar);
     buildMeasurementScaleMenu();
     buildUiSizeMenu();
+    // The open-document list is the Window menu's last section (#923). It is
+    // built per open so labels and host moves need no signal bookkeeping.
+    if (windowMenu_) {
+        QMenu* window = windowMenu_;
+        connect(window, &QMenu::aboutToShow, this,
+                [this, window]() { refreshWindowDocumentList(window); });
+    }
     // The History panel's iconic flyout is a separate top-level Qt::Popup.
     if (QAction* undo = commands_->action(QLatin1String(command_ids::EditUndo))) {
         undo->setShortcutContext(Qt::ApplicationShortcut);
@@ -1055,6 +1071,7 @@ void MenuRegistrar::buildUiSizeMenu()
     if (!windowMenu) {
         return;
     }
+    windowMenu_ = windowMenu;
 
     auto* row = new QWidget(windowMenu);
     row->setObjectName(QStringLiteral("uiSizeControl"));

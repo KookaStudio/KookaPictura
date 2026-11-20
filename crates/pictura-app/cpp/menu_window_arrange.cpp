@@ -1,11 +1,15 @@
-// Window > Arrange command registration. The window operations live in
-// DocumentRegistry; this file wires the command ids to them.
+// Window menu registration: the Arrange commands and the open-document list.
+// The window operations live in DocumentRegistry; this file wires the command
+// ids to them and owns the list's transient actions.
 
 #include "menu_registrar.h"
 
 #include "document_registry.h"
 
 #include "commands.h"
+
+#include <QtGui/QAction>
+#include <QtWidgets/QMenu>
 
 namespace pictura {
 
@@ -76,6 +80,38 @@ void MenuRegistrar::wireWindowArrange()
         QString name = documentDisplayName(*active->doc);
         return label + QLatin1Char(' ') + name.replace(QLatin1Char('&'), QStringLiteral("&&"));
     });
+}
+
+void MenuRegistrar::refreshWindowDocumentList(QMenu* menu)
+{
+    for (QAction* action : windowDocumentActions_) {
+        menu->removeAction(action);
+        delete action;
+    }
+    windowDocumentActions_.clear();
+    if (!documents_ || documents_->windows().isEmpty()) {
+        return;
+    }
+
+    auto* separator = new QAction(menu);
+    separator->setObjectName(QStringLiteral("windowDocumentSeparator"));
+    separator->setSeparator(true);
+    windowDocumentActions_.append(separator);
+    for (DocWindow* window : documents_->windows()) {
+        QString text = fullLabel(window);
+        text.replace(QLatin1Char('&'), QStringLiteral("&&"));
+        auto* entry = new QAction(text, menu);
+        entry->setObjectName(QStringLiteral("windowDocumentEntry"));
+        entry->setCheckable(true);
+        entry->setChecked(window == documents_->activeWindow());
+        connect(entry, &QAction::triggered, this, [this, window]() {
+            if (documents_ && documents_->windows().contains(window)) {
+                documents_->activateDocWindow(window);
+            }
+        });
+        windowDocumentActions_.append(entry);
+    }
+    menu->addActions(windowDocumentActions_);
 }
 
 } // namespace pictura
