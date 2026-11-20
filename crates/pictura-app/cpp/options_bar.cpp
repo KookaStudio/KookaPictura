@@ -135,9 +135,11 @@ OptionsBar::OptionsBar(ToolController* controller, QWidget* parent)
 
     if (controller_) {
         showTool(controller_->activeTool());
-        // A Free Transform session switches the bar to its own page and back;
-        // the Move tool's Show Transform Controls box keeps the Move page. The
-        // page's fields re-read the session on every change.
+        // A Free Transform session switches the bar to its own page and back.
+        // The Move tool's Show Transform Controls box keeps the Move page while
+        // idle or mid-gesture; a released changed gesture becomes a pending
+        // session, so the same switch shows the transform page. The page's
+        // fields re-read the session on every change.
         connect(controller_, &ToolController::transformChanged, this, [this]() {
             if (controller_->transformSessionActive()
                 && !controller_->transformControlsSession()) {

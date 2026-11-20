@@ -263,6 +263,31 @@ pub(super) fn set_pivot(session: &mut TransformSession, x: f64, y: f64) -> bool 
     true
 }
 
+/// Translate the session so the reference point's document position is
+/// `(x, y)`, moving the rendered quad with it. A stored-quad session translates
+/// its quad and pivot directly; every other session translates through
+/// `dx/dy`, which also carries a base-quad session's mapped quad.
+pub(super) fn translate_to(session: &mut TransformSession, x: f64, y: f64) -> bool {
+    if !x.is_finite() || !y.is_finite() {
+        return false;
+    }
+    let (cx, cy) = pivot_point(session);
+    let (dx, dy) = (x - cx, y - cy);
+    if session.quad.is_some() {
+        if let Some(quad) = session.quad.as_mut() {
+            for point in quad.iter_mut() {
+                point.0 += dx;
+                point.1 += dy;
+            }
+        }
+        session.pivot = (session.pivot.0 + dx, session.pivot.1 + dy);
+    } else {
+        session.dx += dx;
+        session.dy += dy;
+    }
+    true
+}
+
 /// `quad` pulled back through the similarity `params`, or `None` when its
 /// linear part is singular.
 pub(super) fn unmap_quad(params: &MapParams, quad: &[(f64, f64); 4]) -> Option<[(f64, f64); 4]> {
@@ -299,6 +324,22 @@ pub(super) fn quad_anchors(quad: &[(f64, f64); 4]) -> [(f64, f64); 9] {
         ((bl.0 + br.0) / 2.0, (bl.1 + br.1) / 2.0),
         br,
     ]
+}
+
+/// The anchor index (0..=8, row-major) the reference point sits on, or -1.
+pub(super) fn pivot_preset(session: &TransformSession) -> i32 {
+    let pivot = pivot_point(session);
+    let anchors = quad_anchors(&session_quad(session));
+    let diagonal = f64::from(session.orig_rect.width())
+        .hypot(f64::from(session.orig_rect.height()))
+        .max(1.0);
+    let tolerance = 1e-6 * diagonal;
+    for (index, (x, y)) in anchors.iter().enumerate() {
+        if (pivot.0 - x).abs() <= tolerance && (pivot.1 - y).abs() <= tolerance {
+            return index as i32;
+        }
+    }
+    -1
 }
 
 /// Whether `(x, y)` hits the reference point within the handle tolerance.
@@ -754,6 +795,42 @@ mod tests {
         assert_eq!(a[5], (4.0, 2.0));
         assert_eq!(a[6], (0.0, 4.0));
         assert_eq!(a[8], (4.0, 4.0));
+    }
+
+    #[test]
+    fn translate_to_moves_a_similarity_quad() {
+        let mut s = session();
+        let before = session_quad(&s);
+        assert!(translate_to(&mut s, 6.0, 7.0));
+        assert_eq!(pivot_point(&s), (6.0, 7.0));
+        let after = session_quad(&s);
+        for (b, a) in before.iter().zip(after.iter()) {
+            assert!((a.0 - (b.0 + 4.0)).abs() < 1e-9);
+            assert!((a.1 - (b.1 + 5.0)).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn translate_to_moves_a_stored_quad() {
+        let mut s = projective();
+        let before = session_quad(&s);
+        assert!(translate_to(&mut s, 6.0, 7.0));
+        assert_eq!(pivot_point(&s), (6.0, 7.0));
+        let after = session_quad(&s);
+        for (b, a) in before.iter().zip(after.iter()) {
+            assert!((a.0 - (b.0 + 4.0)).abs() < 1e-9);
+            assert!((a.1 - (b.1 + 5.0)).abs() < 1e-9);
+        }
+    }
+
+    #[test]
+    fn pivot_preset_finds_the_reference_anchor() {
+        let mut s = session();
+        assert_eq!(pivot_preset(&s), 4);
+        assert!(set_pivot(&mut s, 0.0, 0.0));
+        assert_eq!(pivot_preset(&s), 0);
+        pivot_drag(&mut s, 8.0, 9.0, 1.0);
+        assert_eq!(pivot_preset(&s), -1);
     }
 
     #[test]

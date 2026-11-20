@@ -27,8 +27,15 @@ struct NumericFieldConfig {
     QString objectName;
     // An integer field (decimals == 0) normally rejects a typed fraction; set
     // this to accept one and render it as an integer unless a decimal is typed.
-    // Kept last so positional aggregate initializers stay valid.
     bool allowFractional = false;
+    // A piecewise slider: its first half spans [minimum, sliderMidpoint] and its
+    // second half [sliderMidpoint, maximum]. Used for the scale percentages.
+    bool splitSlider = false;
+    double sliderMidpoint = 100.0;
+    // A slider span narrower than the typed range, centred on the typed range's
+    // midpoint. 0 keeps the full typed range. The X/Y fields use 20,000 so one
+    // slider step is about 100 px.
+    double sliderSpan = 0.0;
 };
 
 // A leading label, a left-aligned text editor, and an optional slider popup.
@@ -73,6 +80,9 @@ private:
     void applyUserValue(double value);
     void commitPending();
     void syncSlider();
+    // The split-slider mapping; the slider's integer range is 0..1000.
+    double sliderValue(int position) const;
+    int sliderPosition(double value) const;
     void layoutInset();
     void reserveWidth();
     void showPopup();

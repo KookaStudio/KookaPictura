@@ -55,6 +55,9 @@ pub mod ffi {
         /// The session target's content rect as "left top right bottom", or
         /// empty without a session.
         fn transform_session_rect(view: &PictureView) -> QString;
+        /// Whether the live transform is the identity (nothing changed); true
+        /// without a session.
+        fn transform_is_identity(view: &PictureView) -> bool;
         /// The layer at `path`'s rect as flat `[left, top, right, bottom]`;
         /// empty when the path does not resolve to a layer.
         fn layer_rect_extents(view: &PictureView, path: &QString) -> Vec<i32>;
@@ -105,6 +108,9 @@ pub mod ffi {
         /// Move the reference point to document-space `(x, y)`, leaving the
         /// rendered quad unchanged.
         fn transform_set_pivot(view: Pin<&mut PictureView>, x: f64, y: f64) -> bool;
+        /// Translate the target so the reference point lands at document-space
+        /// `(x, y)`, moving the rendered quad with it.
+        fn transform_set_position(view: Pin<&mut PictureView>, x: f64, y: f64) -> bool;
         /// Move the reference point to the live quad's anchor `0..=8`.
         fn transform_set_pivot_preset(view: Pin<&mut PictureView>, anchor: i32) -> bool;
         fn transform_set_show_pivot(view: Pin<&mut PictureView>, on: bool);
@@ -118,6 +124,8 @@ pub mod ffi {
         fn transform_set_interpolation(view: Pin<&mut PictureView>, id: &QString) -> bool;
         fn transform_pivot_x(view: &PictureView) -> f64;
         fn transform_pivot_y(view: &PictureView) -> f64;
+        /// The anchor index `0..=8` the reference point sits on, or -1.
+        fn transform_pivot_preset(view: &PictureView) -> i32;
         fn transform_pivot_origin_x(view: &PictureView) -> f64;
         fn transform_pivot_origin_y(view: &PictureView) -> f64;
         fn transform_show_pivot(view: &PictureView) -> bool;

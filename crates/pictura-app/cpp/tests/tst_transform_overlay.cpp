@@ -91,7 +91,8 @@ void TransformOverlayTest::controlsBoxDrawsPastTheDocumentEdge()
                               QStringLiteral("white")));
     pictura::PictureView* view = frame.activeView();
     pictura::ImageView* canvas = frame.imageView();
-    QVERIFY(view && canvas);
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && canvas && tools);
     frame.show();
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
     QCoreApplication::processEvents();
@@ -114,6 +115,10 @@ void TransformOverlayTest::controlsBoxDrawsPastTheDocumentEdge()
     canvas->mousePressed(QPointF(10.0, 8.0), Qt::LeftButton, int(Qt::NoModifier));
     canvas->mouseMoved(QPointF(-10.0, -2.0));
     canvas->mouseReleased(QPointF(-10.0, -2.0));
+    // The released gesture is pending; confirm it so the idle box comes back.
+    QVERIFY(tools->transformPending());
+    tools->commitFreeTransform();
+    QCoreApplication::processEvents();
     QCOMPARE(canvas->controlsBoxForTest().boundingRect(), QRectF(-10, -2, 40, 30));
 
     // The off-canvas corner handle is painted (its centre pixel is the handle

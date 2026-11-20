@@ -3,8 +3,9 @@ use super::*;
 use super::super::super::document_session::{TransformMode, TransformSession, TransformTarget};
 use super::super::super::helpers::memory_gate;
 use super::super::geometry::{
-    hit_test_quad, pivot_point, projective_coefficients, quad_anchors, quad_driven, rect_center,
-    session_quad, set_pivot, source_corners, store_quad, MapParams,
+    hit_test_quad, identity_transform, pivot_point, pivot_preset, projective_coefficients,
+    quad_anchors, quad_driven, rect_center, session_quad, set_pivot, source_corners, store_quad,
+    translate_to, MapParams,
 };
 use super::super::group::transform_group;
 use super::super::mode_switch::{can_set_mode, switch_mode};
@@ -73,6 +74,19 @@ pub(super) fn transform_session_rect(view: &PictureView) -> QString {
             ))
         })
         .unwrap_or_default()
+}
+
+pub(super) fn transform_is_identity(view: &PictureView) -> bool {
+    let Some(session) = view.rust().session.live.transform() else {
+        return true;
+    };
+    identity_transform(
+        session_quad(session),
+        session.orig_rect,
+        MapParams::of(session),
+        session.warp.as_ref(),
+        quad_driven(session),
+    )
 }
 
 pub(super) fn move_group_paths(view: &PictureView) -> QStringList {
@@ -291,6 +305,17 @@ pub(super) fn transform_set_pivot(mut view: Pin<&mut PictureView>, x: f64, y: f6
     set_pivot(session, x, y)
 }
 
+pub(super) fn transform_set_position(mut view: Pin<&mut PictureView>, x: f64, y: f64) -> bool {
+    if !x.is_finite() || !y.is_finite() {
+        return false;
+    }
+    let mut rust = view.as_mut().rust_mut();
+    let Some(session) = rust.session.live.transform_mut() else {
+        return false;
+    };
+    translate_to(session, x, y)
+}
+
 pub(super) fn transform_set_pivot_preset(mut view: Pin<&mut PictureView>, anchor: i32) -> bool {
     if !(0..=8).contains(&anchor) {
         return false;
@@ -456,14 +481,23 @@ pub(super) fn transform_pivot_y(view: &PictureView) -> f64 {
         .map_or(0.0, |s| pivot_point(s).1)
 }
 
-/// The session origin's document position: the initial source-rect centre
-/// carried by the translation. The base of the relative-positioning display.
+pub(super) fn transform_pivot_preset(view: &PictureView) -> i32 {
+    view.rust()
+        .session
+        .live
+        .transform()
+        .map_or(-1, pivot_preset)
+}
+
+/// The session origin: the reference point's document position when the
+/// session began, or the carried origin after a projective mode switch. The
+/// fixed base of the relative-positioning display.
 pub(super) fn transform_pivot_origin_x(view: &PictureView) -> f64 {
     view.rust()
         .session
         .live
         .transform()
-        .map_or(0.0, |s| s.pivot_origin.0 + s.dx)
+        .map_or(0.0, |s| s.pivot_origin.0)
 }
 
 pub(super) fn transform_pivot_origin_y(view: &PictureView) -> f64 {
@@ -471,7 +505,7 @@ pub(super) fn transform_pivot_origin_y(view: &PictureView) -> f64 {
         .session
         .live
         .transform()
-        .map_or(0.0, |s| s.pivot_origin.1 + s.dy)
+        .map_or(0.0, |s| s.pivot_origin.1)
 }
 
 pub(super) fn transform_show_pivot(view: &PictureView) -> bool {

@@ -723,6 +723,10 @@ void LinkedLayersTest::linkedControlsBoxResizesTheSet()
     QCOMPARE(view_->transform_drag_handle(), 2);
     canvas->mouseMoved(QPointF(60.0, 60.0));
     canvas->mouseReleased(QPointF(60.0, 60.0));
+    // A released controls gesture stays pending; confirm it to scale the set.
+    QVERIFY(tools->transformPending());
+    tools->commitFreeTransform();
+    QCoreApplication::processEvents();
 
     const QList<int> afterRed = inkOf(*view_, red);
     const QList<int> afterBlue = inkOf(*view_, blue);

@@ -369,6 +369,7 @@ void ToolController::commitFreeTransform()
         return;
     }
     transformControls_ = false;
+    transform_set_controls(*v, false);
     const bool committed = runTransformCommit(canvas_ ? canvas_->window() : nullptr, *v);
     if (!committed && v->transform_session_active()) {
         // Cancelled from the progress window: the transform ends, as Esc ends it.
@@ -381,25 +382,20 @@ void ToolController::commitFreeTransform()
     }
 }
 
-void ToolController::commitTransformControls(PictureView& v)
+// A Move tool controls gesture that changed the target becomes a pending Free
+// Transform session on release: the idle box gives way to the session overlay
+// with its reference point, and the options bar switches to the transform page
+// with Confirm/Reject. The session is not committed here.
+void ToolController::promoteControlsTransform(PictureView& v)
 {
     transformControls_ = false;
-    const bool committed = runTransformCommit(canvas_ ? canvas_->window() : nullptr, v);
-    if (!committed && v.transform_session_active()) {
-        // Cancelled from the progress window: the gesture's transform ends.
-        v.cancel_transform();
-    }
+    transform_set_controls(v, false);
+    transform_set_show_pivot(v, true);
+    updateTransformOverlay(&v);
     if (canvas_) {
-        if (committed) {
-            canvas_->endTransformOverlay();
-        } else {
-            canvas_->clearTransformPreview();
-        }
+        canvas_->setFocus();
     }
-    if (edit_refused_for_memory()) {
-        refused(transformMemoryRefusalMessage());
-    }
-    syncTransformControls();
+    emit transformChanged();
 }
 
 void ToolController::cancelFreeTransform()
@@ -409,6 +405,7 @@ void ToolController::cancelFreeTransform()
         return;
     }
     transformControls_ = false;
+    transform_set_controls(*v, false);
     v->cancel_transform();
     transformGuideSnap_ = false;
     resetTransformUi();
@@ -435,8 +432,9 @@ void ToolController::resetTransformUi(bool keepPreview)
 // The Move tool's `Show Transform Controls` box. Idle, it is only drawn: the
 // box round the active layer's content (`controls_box_extents`), the layer
 // untouched, so filters and other edits see its full extent. A press on one of
-// its handles starts a Free Transform session for that one gesture, applied on
-// release (`handleReleased`), after which the box is idle again. Hidden for any
+// its handles starts a Free Transform session for that gesture; releasing a
+// changed gesture promotes it to pending with the transform page up, while an
+// identity gesture returns to the idle box (`handleReleased`). Hidden for any
 // other tool, an unchecked box, an active selection, or an untransformable
 // layer; rebuilt when the target layer, its rect, or the history step changed.
 void ToolController::syncTransformControls()
@@ -527,6 +525,17 @@ bool ToolController::setTransformPivot(double x, double y)
 {
     PictureView* v = view();
     if (!v || !transform_set_pivot(*v, x, y)) {
+        return false;
+    }
+    updateTransformOverlay(v);
+    emit transformChanged();
+    return true;
+}
+
+bool ToolController::setTransformPosition(double x, double y)
+{
+    PictureView* v = view();
+    if (!v || !transform_set_position(*v, x, y)) {
         return false;
     }
     updateTransformOverlay(v);

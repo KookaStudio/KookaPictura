@@ -4,8 +4,8 @@
 // #905): the Layer, Image, and Filter menus, the Edit pixel commands, and the
 // Layers panel's editing controls are locked, while its layer list stays
 // selectable and asks "Apply the transformation?" before the active layer
-// moves. The Move tool's controls box commits each gesture on release, so it
-// never locks.
+// moves. The Move tool's controls box is not a transform while idle or mid
+// gesture; a released changed gesture becomes pending and locks like the rest.
 
 #include "frame_includes.h"
 #include "panels/layers_panel.h"

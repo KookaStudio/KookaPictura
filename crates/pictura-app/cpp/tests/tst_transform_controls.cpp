@@ -18,6 +18,7 @@
 #include "selftest_paint_fixture.h"
 
 #include <QtWidgets/QCheckBox>
+#include <QtWidgets/QToolButton>
 #include <QtCore/QCoreApplication>
 #include <QtGui/QAction>
 
@@ -45,7 +46,11 @@ private slots:
 
     void checkingTheBoxShowsControls();
     void boxFollowsTheActiveLayer();
-    void handleDragScalesAndCommits();
+    void handleDragStaysPendingThenCommits();
+    void rejectCancelsThePendingTransform();
+    void identityHandleDragReturnsToIdle();
+    void pendingTransformRefinesTheSameSession();
+    void insideDragMovesWithinThePendingTransform();
     void handlePressPatchesTheBackdrop();
     void previewsKeepTheCanvasPixels();
     void insideDragMovesAndRecordsMove();
@@ -79,6 +84,10 @@ void TransformControlsTest::initTestCase()
 void TransformControlsTest::cleanup()
 {
     if (window_) {
+        // A handle gesture now leaves a pending transform on release.
+        if (auto* tools = window_->findChild<pictura::ToolController*>()) {
+            tools->cancelFreeTransform();
+        }
         // The controller keeps the option across documents; start each test off.
         if (auto* box = window_->findChild<QCheckBox*>(QStringLiteral("optionsMoveTransform"))) {
             box->setChecked(false);
@@ -175,7 +184,7 @@ void TransformControlsTest::boxFollowsTheActiveLayer()
     QCOMPARE(boxRect(*canvas), QStringLiteral("2 2 8 8"));
 }
 
-void TransformControlsTest::handleDragScalesAndCommits()
+void TransformControlsTest::handleDragStaysPendingThenCommits()
 {
     pictura::PicturaMainWindow& frame = *window_;
     const QString layer = beginControls(frame, true);
@@ -183,19 +192,157 @@ void TransformControlsTest::handleDragScalesAndCommits()
     pictura::PictureView* view = frame.activeView();
     pictura::ImageView* canvas = frame.imageView();
     auto* tools = frame.findChild<pictura::ToolController*>();
-    QVERIFY(view && canvas && tools);
+    auto* bar = frame.findChild<pictura::OptionsBar*>(QStringLiteral("optionsBar"));
+    QVERIFY(view && canvas && tools && bar);
 
     const int base = view->history_count();
     canvas->mousePressed(QPointF(10.0, 8.0), Qt::LeftButton, int(Qt::NoModifier));
     canvas->mouseMoved(QPointF(4.0, 2.0));
     canvas->mouseReleased(QPointF(4.0, 2.0));
 
+    // The released gesture is pending, not committed: the transform page shows
+    // with its Confirm/Reject controls and the overlay has the pivot.
+    QCOMPARE(view->history_count(), base);
+    QVERIFY(view->transform_session_active());
+    QVERIFY(tools->transformPending());
+    QVERIFY(!tools->transformControlsSession());
+    QVERIFY(!tools->transformControlsIdleForTest());
+    QCOMPARE(bar->currentPageForTest(), bar->transformPageForTest());
+    QVERIFY(canvas->transformPivotVisibleForTest());
+    QVERIFY(canvas->transformPreviewActive());
+    QVERIFY(boxRect(*canvas).isEmpty());
+
+    // Apply commits the pending gesture as one Free Transform state and brings
+    // the idle controls box back on the resized layer.
+    auto* apply = bar->findChild<QToolButton*>(QStringLiteral("optionsTransformApply"));
+    QVERIFY(apply);
+    apply->click();
     QCOMPARE(view->history_count(), base + 1);
     QCOMPARE(view->history_label(base), QStringLiteral("Free Transform"));
-    // The box returns, idle, on the scaled layer.
-    QVERIFY(tools->transformControlsIdleForTest());
     QVERIFY(!view->transform_session_active());
+    QVERIFY(tools->transformControlsIdleForTest());
+    QCOMPARE(bar->currentPageForTest(), bar->pageForTest(pictura::ToolId::Move));
     QCOMPARE(boxRect(*canvas), QStringLiteral("4 2 30 28"));
+}
+
+void TransformControlsTest::rejectCancelsThePendingTransform()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginControls(frame, true);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    auto* bar = frame.findChild<pictura::OptionsBar*>(QStringLiteral("optionsBar"));
+    QVERIFY(view && canvas && tools && bar);
+
+    const int base = view->history_count();
+    canvas->mousePressed(QPointF(10.0, 8.0), Qt::LeftButton, int(Qt::NoModifier));
+    canvas->mouseMoved(QPointF(4.0, 2.0));
+    canvas->mouseReleased(QPointF(4.0, 2.0));
+    QVERIFY(tools->transformPending());
+
+    auto* cancel = bar->findChild<QToolButton*>(QStringLiteral("optionsTransformCancel"));
+    QVERIFY(cancel);
+    cancel->click();
+    QCOMPARE(view->history_count(), base);
+    QVERIFY(!view->transform_session_active());
+    QVERIFY(tools->transformControlsIdleForTest());
+    QCOMPARE(bar->currentPageForTest(), bar->pageForTest(pictura::ToolId::Move));
+    QCOMPARE(boxRect(*canvas), QStringLiteral("10 8 30 28"));
+}
+
+void TransformControlsTest::identityHandleDragReturnsToIdle()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginControls(frame, true);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    auto* bar = frame.findChild<pictura::OptionsBar*>(QStringLiteral("optionsBar"));
+    QVERIFY(view && canvas && tools && bar);
+
+    const int base = view->history_count();
+    canvas->mousePressed(QPointF(10.0, 8.0), Qt::LeftButton, int(Qt::NoModifier));
+    canvas->mouseReleased(QPointF(10.0, 8.0));
+
+    // A click on a handle leaves no session and no state.
+    QCOMPARE(view->history_count(), base);
+    QVERIFY(!view->transform_session_active());
+    QVERIFY(!tools->transformPending());
+    QVERIFY(tools->transformControlsIdleForTest());
+    QCOMPARE(bar->currentPageForTest(), bar->pageForTest(pictura::ToolId::Move));
+    QCOMPARE(boxRect(*canvas), QStringLiteral("10 8 30 28"));
+}
+
+void TransformControlsTest::pendingTransformRefinesTheSameSession()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginControls(frame, true);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    auto* bar = frame.findChild<pictura::OptionsBar*>(QStringLiteral("optionsBar"));
+    QVERIFY(view && canvas && tools && bar);
+
+    const int base = view->history_count();
+    canvas->mousePressed(QPointF(10.0, 8.0), Qt::LeftButton, int(Qt::NoModifier));
+    canvas->mouseMoved(QPointF(4.0, 2.0));
+    canvas->mouseReleased(QPointF(4.0, 2.0));
+    QVERIFY(tools->transformPending());
+
+    // A second handle drag refines the same pending session. Hide the pivot so
+    // a low zoom cannot turn the press into a pivot drag.
+    tools->setTransformShowPivot(false);
+    canvas->mousePressed(QPointF(30.0, 28.0), Qt::LeftButton, int(Qt::NoModifier));
+    canvas->mouseMoved(QPointF(36.0, 34.0));
+    canvas->mouseReleased(QPointF(36.0, 34.0));
+    QVERIFY(tools->transformPending());
+    QCOMPARE(view->history_count(), base);
+
+    auto* apply = bar->findChild<QToolButton*>(QStringLiteral("optionsTransformApply"));
+    QVERIFY(apply);
+    apply->click();
+    QCOMPARE(view->history_count(), base + 1);
+    QCOMPARE(view->history_label(base), QStringLiteral("Free Transform"));
+    QCOMPARE(boxRect(*canvas), QStringLiteral("4 2 36 34"));
+}
+
+void TransformControlsTest::insideDragMovesWithinThePendingTransform()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginControls(frame, true);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    auto* bar = frame.findChild<pictura::OptionsBar*>(QStringLiteral("optionsBar"));
+    QVERIFY(view && canvas && tools && bar);
+
+    const int base = view->history_count();
+    canvas->mousePressed(QPointF(10.0, 8.0), Qt::LeftButton, int(Qt::NoModifier));
+    canvas->mouseMoved(QPointF(4.0, 2.0));
+    canvas->mouseReleased(QPointF(4.0, 2.0));
+    QVERIFY(tools->transformPending());
+
+    // An inside press moves the target within the same pending transform, not
+    // as a separate Move Layer state. Hide the pivot so it cannot claim the
+    // press at a low zoom.
+    tools->setTransformShowPivot(false);
+    canvas->mousePressed(QPointF(12.0, 20.0), Qt::LeftButton, int(Qt::NoModifier));
+    canvas->mouseMoved(QPointF(17.0, 23.0));
+    canvas->mouseReleased(QPointF(17.0, 23.0));
+    QVERIFY(tools->transformPending());
+    QCOMPARE(view->history_count(), base);
+
+    auto* apply = bar->findChild<QToolButton*>(QStringLiteral("optionsTransformApply"));
+    QVERIFY(apply);
+    apply->click();
+    QCOMPARE(view->history_count(), base + 1);
+    QCOMPARE(view->history_label(base), QStringLiteral("Free Transform"));
+    QCOMPARE(boxRect(*canvas), QStringLiteral("9 5 35 31"));
 }
 
 // [tpr_canvas_patch]
@@ -283,6 +430,8 @@ void TransformControlsTest::previewsKeepTheCanvasPixels()
     QVERIFY(f.canvas->transformPreviewActive());
     QVERIFY2(strip() == before, "a handle drag changed the canvas outside the layer");
     f.canvas->mouseReleased(QPointF(125.0, 125.0));
+    // The released gesture is pending; drop it before the fixture closes.
+    f.tools->cancelFreeTransform();
 }
 
 void TransformControlsTest::insideDragMovesAndRecordsMove()

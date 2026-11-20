@@ -143,15 +143,34 @@ NumericField::NumericField(const QString& label, const NumericFieldConfig& confi
         auto* popupLayout = new QVBoxLayout(popup_);
         popupLayout->setContentsMargins(6, 6, 6, 6);
         slider_ = new JumpSlider(Qt::Horizontal, popup_);
-        slider_->setRange(int(config_.minimum), int(config_.maximum));
-        slider_->setPageStep(int(config_.page));
-        slider_->setValue(int(std::lround(value_)));
+        const bool customSpan = config_.sliderSpan > 0.0;
+        const double midpoint = (config_.minimum + config_.maximum) / 2.0;
+        const int sliderMinimum = customSpan
+            ? int(std::lround(midpoint - config_.sliderSpan / 2.0))
+            : int(config_.minimum);
+        const int sliderMaximum = customSpan
+            ? int(std::lround(midpoint + config_.sliderSpan / 2.0))
+            : int(config_.maximum);
+        slider_->setRange(config_.splitSlider ? 0 : sliderMinimum,
+                          config_.splitSlider ? 1000 : sliderMaximum);
+        int singleStep = 1;
+        int pageStep = int(config_.page);
+        if (config_.splitSlider) {
+            pageStep = 50;
+        } else if (customSpan) {
+            singleStep = std::max(1, int(std::lround(config_.sliderSpan / 200.0)));
+            pageStep = std::max(1, int(std::lround(config_.sliderSpan / 20.0)));
+        }
+        slider_->setSingleStep(singleStep);
+        slider_->setPageStep(pageStep);
+        slider_->setValue(config_.splitSlider ? sliderPosition(value_)
+                                              : int(std::lround(value_)));
         slider_->setMinimumWidth(120);
         popupLayout->addWidget(slider_);
 
         connect(slider_, &QSlider::valueChanged, this, [this](int v) {
             if (!syncing_) {
-                applyUserValue(v);
+                applyUserValue(config_.splitSlider ? sliderValue(v) : double(v));
             }
         });
         connect(slider_, &QSlider::sliderReleased, this, [this] { commitPending(); });
@@ -251,8 +270,36 @@ void NumericField::syncSlider()
         return;
     }
     syncing_ = true;
-    slider_->setValue(int(std::lround(value_)));
+    slider_->setValue(config_.splitSlider ? sliderPosition(value_)
+                                          : int(std::lround(value_)));
     syncing_ = false;
+}
+
+double NumericField::sliderValue(int position) const
+{
+    const double minimum = config_.minimum;
+    const double midpoint = config_.sliderMidpoint;
+    const double maximum = config_.maximum;
+    if (position <= 500) {
+        return minimum + (midpoint - minimum) * double(position) / 500.0;
+    }
+    return midpoint + (maximum - midpoint) * double(position - 500) / 500.0;
+}
+
+int NumericField::sliderPosition(double value) const
+{
+    const double minimum = config_.minimum;
+    const double midpoint = config_.sliderMidpoint;
+    const double maximum = config_.maximum;
+    double position = 0.0;
+    if (value <= midpoint) {
+        if (midpoint > minimum) {
+            position = (value - minimum) / (midpoint - minimum) * 500.0;
+        }
+    } else if (maximum > midpoint) {
+        position = 500.0 + (value - midpoint) / (maximum - midpoint) * 500.0;
+    }
+    return int(std::lround(std::clamp(position, 0.0, 1000.0)));
 }
 
 void NumericField::commitEdit()

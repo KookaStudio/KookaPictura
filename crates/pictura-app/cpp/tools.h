@@ -469,24 +469,25 @@ public:
     // one "Transform Again" state.
     bool repeatTransform();
     void commitFreeTransform();
-    // The Move tool's controls box applies each gesture on release and stays
-    // on the resulting layer.
-    void commitTransformControls(PictureView& v);
+    // A changed Move tool controls gesture becomes a pending Free Transform
+    // session on release (the bar shows Confirm/Reject); an identity gesture
+    // cancels instead.
+    void promoteControlsTransform(PictureView& v);
     void cancelFreeTransform();
     // Clear the transform overlay and the Move controls box after a history
     // restore or document swap cancelled the session in Rust.
     void resetTransformUi(bool keepPreview = false);
     bool transformSessionActive() const;
-    // Whether the Move tool's `Show Transform Controls` box is up (idle, or
-    // mid-gesture as an auto-managed, per-drag-commit session), not a modal
-    // Ctrl+T one.
+    // Whether the Move tool's `Show Transform Controls` box is up: idle, or a
+    // handle gesture in progress. A released changed gesture is a pending modal
+    // transform (`transformControls_` false), not a controls session.
     bool transformControlsSession() const { return transformControls_; }
     // Begin the Move tool's controls-box session directly (the entry point a
     // handle press would take).
     bool beginControlsGestureForTest(PictureView* v) { return beginControlsGesture(v); }
-    // A modal transform (Free Transform, Transform submenu, Warp) is open and
-    // not yet committed: the Layer menu and Layers panel are locked, and a
-    // tool switch asks first. The Move tool's controls box is never pending.
+    // A modal transform (Free Transform, Transform submenu, Warp, or a Move
+    // controls gesture that ended with a change) is open and not yet committed:
+    // the Layer menu and Layers panel are locked, and a tool switch asks first.
     // Asked when a tool switch would leave a pending crop; unset (or headless)
     // behaves as Don't Crop.
     void setCropDecisionPrompt(std::function<CropDecision()> prompt)
@@ -515,6 +516,8 @@ public:
     // The transform options bar's setters: they write through to the session
     // and refresh the canvas overlay and the bar.
     bool setTransformPivot(double x, double y);
+    // Translate the target so the reference point lands at `(x, y)`.
+    bool setTransformPosition(double x, double y);
     bool setTransformPivotPreset(int anchor);
     void setTransformShowPivot(bool on);
     bool setTransformWidth(double pct, bool link);
@@ -714,7 +717,8 @@ private:
     QPointF transformPressPos_;
     QPointF transformStartCorner_;
     bool transformGuideSnap_ = false;
-    // True while the Move tool's controls box is up (idle or mid-gesture).
+    // True while the Move tool's controls box is up (idle or mid-gesture). A
+    // released changed gesture clears it and becomes a pending modal session.
     bool transformControls_ = false;
     // The box is up with no session (`controlsIdle_`): on `controlsPath_`,
     // last built for `controlsKey_` (path, rect, history step).
@@ -727,8 +731,10 @@ private:
     // The pointer shows an idle box handle's cursor.
     bool controlsHandleCursor_ = false;
     void clearControlsBox();
-    // A press grabbed an idle box's handle: start its session (Free
-    // Transform's, which trims the layer to the box). False if it cannot.
+    // A press grabbed an idle box's handle: start its per-gesture session
+    // (Free Transform's, which trims the layer to the box). Releasing a
+    // changed gesture promotes it to pending; an identity gesture cancels.
+    // False if it cannot.
     bool beginControlsGesture(PictureView* v);
     void setHandleCursor(int hit, const QPointF& imagePos, const QPointF& centre);
     int currentNote_ = -1;
