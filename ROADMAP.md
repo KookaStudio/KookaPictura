@@ -447,11 +447,16 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       (no Adobe profiles) and reports the as-shot white balance in kelvin and
       tint; `to_pro_photo` applies it (approximate parity) (#398).
       `crates/pictura-codec/src/dng/camera_color.rs`.
+- [x] **Canon CR2** — `pictura_codec::read_raw` names a raw container by its
+      signature and reads a DNG or a CR2 (sliced lossless JPEG, active area
+      from the maker note, black from the masked border) into the same CFA
+      plane; decode only, no colour matrix yet (#399).
+      `crates/pictura-codec/src/dng/vendor.rs`, `crates/pictura-codec/src/dng/cr2.rs`.
 - [ ] Open camera raw files — there is no File ▸ Open route yet (#400)
 - [ ] X-Trans-tuned demosaic, with the Fuji container (#399)
 - [ ] Deflate, PackBits and lossy-JPEG DNGs, linear DNGs and floating-point
       samples (#396)
-- [ ] Vendor raw containers (#399)
+- [ ] Vendor raw containers: NEF, ARW/ARW2, ORF, RW2 and CR3 (#399)
 - [ ] DNG output (#402)
 - [ ] Camera Raw settings stores — an XMP sidecar or an ACR database (#632)
 - [ ] ACR Workflow Options, ACR preferences, batch raw processing, and Purge

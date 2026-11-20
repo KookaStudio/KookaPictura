@@ -197,6 +197,72 @@ fn diff(bits: &mut Bits, h: &Huffman) -> Result<i32, PsdError> {
     })
 }
 
+fn parse_frame(seg: &[u8]) -> Result<Frame, PsdError> {
+    if seg.len() < 6 {
+        return Err(PsdError::Truncated);
+    }
+    let precision = seg[0] as u32;
+    let height = u16::from_be_bytes([seg[1], seg[2]]) as usize;
+    let width = u16::from_be_bytes([seg[3], seg[4]]) as usize;
+    let n = seg[5] as usize;
+    if !(2..=16).contains(&precision) || !(1..=4).contains(&n) {
+        return Err(invalid("frame header"));
+    }
+    if width == 0 || height == 0 {
+        return Err(PsdError::Unsupported(
+            "lossless JPEG without a height".into(),
+        ));
+    }
+    let mut components = Vec::with_capacity(n);
+    for c in 0..n {
+        let spec = seg.get(6 + 3 * c..9 + 3 * c).ok_or(PsdError::Truncated)?;
+        if spec[1] != 0x11 {
+            return Err(PsdError::Unsupported("subsampled lossless JPEG".into()));
+        }
+        components.push(spec[0]);
+    }
+    Ok(Frame {
+        precision,
+        width,
+        height,
+        components,
+    })
+}
+
+/// The frame header of `data` without decoding it: `(precision, width,
+/// height, components)`, the width counted in samples per component.
+pub(super) fn frame(data: &[u8]) -> Result<(u32, usize, usize, usize), PsdError> {
+    if data.get(..2) != Some(&[0xFF, 0xD8]) {
+        return Err(invalid("missing SOI"));
+    }
+    let mut at = 2usize;
+    loop {
+        while data.get(at) == Some(&0xFF) && data.get(at + 1) == Some(&0xFF) {
+            at += 1;
+        }
+        let marker = match data.get(at..at + 2) {
+            Some([0xFF, m]) => *m,
+            Some(_) => return Err(invalid("expected a marker")),
+            None => return Err(PsdError::Truncated),
+        };
+        at += 2;
+        match marker {
+            0xC3 => {
+                let f = parse_frame(segment(data, at)?)?;
+                return Ok((f.precision, f.width, f.height, f.components.len()));
+            }
+            0xC0..=0xCF if marker != 0xC4 && marker != 0xC8 && marker != 0xCC => {
+                return Err(PsdError::Unsupported(format!(
+                    "JPEG process SOF{}",
+                    marker - 0xC0
+                )));
+            }
+            0xDA | 0xD8 | 0xD9 | 0x01 | 0xD0..=0xD7 => return Err(invalid("scan before frame")),
+            _ => at += segment(data, at)?.len() + 2,
+        }
+    }
+}
+
 fn segment(data: &[u8], at: usize) -> Result<&[u8], PsdError> {
     let len = data
         .get(at..at + 2)
@@ -259,38 +325,11 @@ pub(super) fn decode(
             }
             0xC3 => {
                 let seg = segment(data, at)?;
-                if seg.len() < 6 {
-                    return Err(PsdError::Truncated);
-                }
-                let precision = seg[0] as u32;
-                let height = u16::from_be_bytes([seg[1], seg[2]]) as usize;
-                let width = u16::from_be_bytes([seg[3], seg[4]]) as usize;
-                let n = seg[5] as usize;
-                if !(2..=16).contains(&precision) || !(1..=4).contains(&n) {
-                    return Err(invalid("frame header"));
-                }
-                if width == 0 || height == 0 {
-                    return Err(PsdError::Unsupported(
-                        "lossless JPEG without a height".into(),
-                    ));
-                }
-                let mut components = Vec::with_capacity(n);
-                for c in 0..n {
-                    let spec = seg.get(6 + 3 * c..9 + 3 * c).ok_or(PsdError::Truncated)?;
-                    if spec[1] != 0x11 {
-                        return Err(PsdError::Unsupported("subsampled lossless JPEG".into()));
-                    }
-                    components.push(spec[0]);
-                }
-                if width * height * n > limit {
+                let f = parse_frame(seg)?;
+                if f.width * f.height * f.components.len() > limit {
                     return Err(invalid("frame larger than its tile"));
                 }
-                frame = Some(Frame {
-                    precision,
-                    width,
-                    height,
-                    components,
-                });
+                frame = Some(f);
                 at += seg.len() + 2;
             }
             0xC0..=0xCF if marker != 0xC8 && marker != 0xCC => {
