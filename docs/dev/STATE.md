@@ -18,6 +18,23 @@ Snapshot for resuming after a context break. Update after each milestone.
   Auto-Align's work image reads luma premultiplied by alpha. Tests:
   `transform_alpha_tests`, the `kernel` units, and
   `auto_align::tests::work_luma_is_premultiplied_by_alpha`.
+- **Vendor raw containers — #399 part 1, Canon CR2** (OpenSpec change
+  `vendor-raw-cr2`, archived; capability `codec/vendor-raw-containers`).
+  `pictura_codec::sniff_raw` / `read_raw` (`crates/pictura-codec/src/dng/vendor.rs`)
+  name a container by signature and read DNG or CR2 into the same `DngImage`.
+  CR2 (`dng/cr2.rs`): raw IFD from header offset 12, compression 6 lossless
+  JPEG (1–4 components, `ljpeg::frame` reads the header for the budget; plane
+  size from `ImageWidth`/`ImageLength` or the sensor info, since a 5DS frame
+  row holds two sensor rows), the `0xC640` slices put back into columns, active area from maker-note tag
+  `0x00E0`, black = per-2×2-phase mean of the masked border, white =
+  `2^precision − 1`, RGGB at the sensor corner (odd borders shift it, 450D),
+  Make/Model/Orientation; colour tags empty (decode
+  only — per-camera matrices are a follow-up). sRAW/mRAW refused. Ponytails:
+  precision white, one black per phase. Checked on real EOS 5DS and 450D
+  files. Series order:
+  NEF → ARW → ORF/RW2 → RAF + X-Trans demosaic → CR3. Tests:
+  `tests/raw_cr2.rs` (synthetic `tests/raw/cr2_builder.rs`); real files opt-in
+  via `PICTURA_RAW_CORPUS`.
 - **Camera colour — #398 implemented** (OpenSpec change `camera-colour`,
   archived; capabilities `codec/camera-colour`, `color/colour-temperature`).
   Third stage of raw open (#86). `pictura_codec::as_shot_transform(&DngColor)`
