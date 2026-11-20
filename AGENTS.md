@@ -63,7 +63,8 @@ the wrapped form. Claude Code asks for workspace trust; Codex needs `/hooks`
 trust, re-approved when the hook hash changes. In a linked worktree, Claude Code
 runs the policy from `${CLAUDE_PROJECT_DIR}`, while Codex reads its project hook
 manifest and runs the policy from the main checkout; rebase stale worktrees for
-Claude.
+Claude. The refusal names the wrapper from the policy's own checkout, so a
+stale worktree running main's policy is pointed at main's budgeted wrapper.
 
 Toolchain is pinned by `rust-toolchain.toml` (1.98). Qt is the system Qt 6
 (`qmake6 -query QT_VERSION`). Cargo links with `lld` (`.cargo/config.toml`);
