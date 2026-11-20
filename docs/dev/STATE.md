@@ -4,6 +4,22 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Per-camera colour matrices — #1465 implemented** (OpenSpec change
+  `vendor-camera-matrices`, archived; new capability `codec/camera-matrices`,
+  `codec/vendor-raw-containers` modified). CR2 files now open.
+  `scripts/gen-camera-matrices.py` fits XYZ → camera matrices under CIE A and
+  D65 from rawtoaces-data spectral sensitivities (Apache-2.0, pinned commit;
+  white-constrained least squares over 190 training patches, mean ΔE76 ≈ 2)
+  into the generated `crates/pictura-codec/src/dng/camera_matrices.rs`
+  (14 Canon CR2 bodies plus market-name aliases; the 600D waits for a
+  CFA phase fix in the CR2 reader, #1476). `vendor::camera_color` looks
+  a camera up by `model_key` (kept in step with the script) and fills
+  `DngColor` with illuminants 17/21; unknown cameras stay refused (owner
+  decision, no fallback). `cr2::as_shot_neutral` reads the maker note's
+  `0x4001` as-shot RGGB multipliers by array length / version (observed on 16
+  real CR2s, agreeing with exiftool). New vendor families add body names to
+  the script's `BODIES` and rerun it. Tests: `tests/raw_camera_matrices.rs`,
+  the as-shot rows of `tests/raw_cr2.rs`.
 - **Transform keeps erased pixels erased — #1446 fixed** (OpenSpec change
   `transform-alpha-weighted-colour`, archived; capabilities
   `document/transform-interpolation`, `document/auto-align-layers`). Free
