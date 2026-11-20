@@ -13,6 +13,7 @@ use lcms2::{
     Intent as LcmsIntent, Locale, PixelFormat, Profile as LcmsProfile, ToneCurve, Transform,
 };
 
+pub mod chroma;
 pub mod model;
 pub mod ntsc;
 pub mod proof;
@@ -175,31 +176,13 @@ impl Profile {
 
     /// ProPhoto RGB (ROMM RGB): D50, ROMM primaries, ROMM tone curve.
     pub fn pro_photo() -> Profile {
-        rgb_profile(
-            CIExyY {
-                x: 0.34567,
-                y: 0.35850,
-                Y: 1.0,
-            },
-            CIExyYTRIPLE {
-                Red: CIExyY {
-                    x: 0.7347,
-                    y: 0.2653,
-                    Y: 1.0,
-                },
-                Green: CIExyY {
-                    x: 0.1596,
-                    y: 0.8404,
-                    Y: 1.0,
-                },
-                Blue: CIExyY {
-                    x: 0.0366,
-                    y: 0.0001,
-                    Y: 1.0,
-                },
-            },
-            romm_tone_curve(),
-        )
+        pro_photo_profile(romm_tone_curve())
+    }
+
+    /// ProPhoto primaries and white with a linear tone curve: the camera raw
+    /// colour stage's output space (#398).
+    pub fn linear_pro_photo() -> Profile {
+        pro_photo_profile(ToneCurve::new(1.0))
     }
 
     /// The bundled synthetic coated-offset CMYK output profile
@@ -294,6 +277,34 @@ impl Profile {
         self.description()
             .is_some_and(|d| d.to_ascii_lowercase().contains("srgb"))
     }
+}
+
+fn pro_photo_profile(curve: ToneCurve) -> Profile {
+    rgb_profile(
+        CIExyY {
+            x: 0.34567,
+            y: 0.35850,
+            Y: 1.0,
+        },
+        CIExyYTRIPLE {
+            Red: CIExyY {
+                x: 0.7347,
+                y: 0.2653,
+                Y: 1.0,
+            },
+            Green: CIExyY {
+                x: 0.1596,
+                y: 0.8404,
+                Y: 1.0,
+            },
+            Blue: CIExyY {
+                x: 0.0366,
+                y: 0.0001,
+                Y: 1.0,
+            },
+        },
+        curve,
+    )
 }
 
 fn rgb_profile(white: CIExyY, primaries: CIExyYTRIPLE, curve: ToneCurve) -> Profile {
@@ -529,6 +540,29 @@ mod tests {
             .iter()
             .map(|c| u16::from_ne_bytes(*c))
             .collect()
+    }
+
+    #[test]
+    fn linear_pro_photo_encodes_to_romm() {
+        let img = rgb16(&[[16384, 16384, 16384], [65535, 65535, 65535]]);
+        let out = convert(
+            &Profile::linear_pro_photo(),
+            &Profile::pro_photo(),
+            &img,
+            2,
+            1,
+            3,
+            16,
+            Intent::RelativeColorimetric,
+            false,
+        )
+        .unwrap();
+        let out = rgb16_from_bytes(&out);
+        let grey = (0.25f64.powf(1.0 / 1.8) * 65535.0).round() as i32;
+        for &c in &out[..3] {
+            assert!((c as i32 - grey).abs() <= 2, "{c} vs {grey}");
+        }
+        assert!(out[3..].iter().all(|&c| c >= 65533), "{out:?}");
     }
 
     #[test]
