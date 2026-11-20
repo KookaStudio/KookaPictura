@@ -463,8 +463,28 @@ The wrapper applies the same CPU budget before the opt-in lock
 (`scripts/with-build-lock.sh`): it re-execs once through
 `scripts/cpu-budget.py`, so the command runs in the shared slice with the
 budget's job counts. The wrapper keeps the caller's working directory and
-propagates the command's exit code. The committed opencode plugin refuses a bare
-`cargo`, `cmake`, `ctest`, or `ninja` segment and names the wrapped form.
+propagates the command's exit code. The committed agent guard is one policy,
+`scripts/heavy_command_policy.py`, shared by the opencode plugin,
+`.claude/settings.json`, and `.codex/hooks.json`; each refuses a bare `cargo`,
+`cmake`, `ctest`, or `ninja` segment and names the wrapped form. The policy
+takes `--command` or the hook JSON on stdin, and
+`python3 scripts/heavy_command_policy.py --self-check` proves it.
+
+Trust and worktrees:
+
+- Claude Code asks for the workspace trust dialog before project hooks run, and
+  `claude -p`/SDK sessions treat the folder as trusted. Its hook runs the policy
+  from `${CLAUDE_PROJECT_DIR}`; a worktree on a branch without the commit has no
+  hook until it is rebased.
+- Codex requires `/hooks` review and trust for the project layer; trust is tied
+  to the hook hash, so a policy edit needs re-approval. In a linked worktree
+  Codex reads `.codex/hooks.json` from the main checkout and the hook runs the
+  policy from there.
+- opencode loads `.opencode/plugins/cpu-budget.ts` from the checkout and
+  delegates to the same policy.
+
+`python3 scripts/check-agent-command-guard.py` verifies the three adapters and
+their paths; `scripts/verify-fast.sh` runs it.
 
 A new worktree benefits from `sccache` (see
 [Speeding up local builds](#speeding-up-local-builds)) and needs a one-time

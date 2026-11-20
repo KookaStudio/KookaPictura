@@ -56,8 +56,14 @@ affinity slice shared by concurrent worktrees, and `PICTURA_CPU_BUDGET_PERCENT`
 (1-100) overrides the share. The wrapper applies the same budget: wrap a direct
 heavy command in `scripts/with-build-lock.sh -- <command>`. The build lock stays
 opt-in (`PICTURA_VERIFY_LOCK=1`) and makes the command queue. The committed
-opencode plugin refuses a bare `cargo`, `cmake`, `ctest`, or `ninja` segment and
-names the wrapped form.
+agent guard is one policy, `scripts/heavy_command_policy.py`, shared by the
+opencode plugin, `.claude/settings.json`, and `.codex/hooks.json`; each refuses
+a bare `cargo`, `cmake`, `ctest`, or `ninja` segment before it runs and names
+the wrapped form. Claude Code asks for workspace trust; Codex needs `/hooks`
+trust, re-approved when the hook hash changes. In a linked worktree, Claude Code
+runs the policy from `${CLAUDE_PROJECT_DIR}`, while Codex reads its project hook
+manifest and runs the policy from the main checkout; rebase stale worktrees for
+Claude.
 
 Toolchain is pinned by `rust-toolchain.toml` (1.98). Qt is the system Qt 6
 (`qmake6 -query QT_VERSION`). Cargo links with `lld` (`.cargo/config.toml`);
