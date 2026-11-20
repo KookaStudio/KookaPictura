@@ -252,7 +252,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       `crates/pictura-app/src/cxxqt_object/impl_selection.rs`.
 - [x] Select ▸ Transform Selection (#526)
 - [x] Apply Image (#609)
-- [ ] Calculations (#610)
+- [x] Calculations (#610)
 - [ ] Channel Options — Masked and Selected Areas polarity (#611)
 - [ ] The interactive Refine Radius and Erase brushes (#612)
 - [ ] Color Range Skin Tones, Localized Clusters, Out Of Gamut, previews, and
