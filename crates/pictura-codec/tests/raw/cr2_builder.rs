@@ -19,6 +19,8 @@ pub struct Cr2 {
     /// `ImageWidth` and `ImageLength` (the EOS 5DS layout).
     pub rows_per_frame_row: usize,
     pub ifd0_tags: Vec<(u16, Val)>,
+    /// The maker note's colour data, tag `0x4001`.
+    pub color_data: Option<Vec<u16>>,
 }
 
 impl Cr2 {
@@ -32,6 +34,7 @@ impl Cr2 {
             compression: 6,
             rows_per_frame_row: 1,
             ifd0_tags: Vec::new(),
+            color_data: None,
         }
     }
 }
@@ -60,26 +63,27 @@ pub fn cr2(spec: &Cr2) -> Vec<u8> {
     let plane = &spec.plane;
     let mut out = b"II\x2a\x00\0\0\0\0CR\x02\x00\0\0\0\0".to_vec();
 
-    let mut exif_tags = Vec::new();
+    let mut note_tags = Vec::new();
     if let Some([left, top, right, bottom]) = spec.active {
         let mut info = vec![0u16; 17];
         info[0] = 34;
         info[1] = plane.width as u16;
         info[2] = plane.height as u16;
         info[5..9].copy_from_slice(&[left, top, right, bottom]);
+        note_tags.push((0x00E0, Val::Short(info)));
+    }
+    if let Some(data) = &spec.color_data {
+        note_tags.push((0x4001, Val::Short(data.clone())));
+    }
+    let mut exif_tags = Vec::new();
+    if !note_tags.is_empty() {
+        let count = (2 + 12 * note_tags.len() + 4) as u32;
         let note = IfdSpec {
-            tags: vec![(0x00E0, Val::Short(info))],
+            tags: note_tags,
             ..IfdSpec::default()
         };
         let at = write_ifd(&mut out, &note, false, false) as u32;
-        exif_tags.push((
-            0x927C,
-            Val::At {
-                typ: 7,
-                count: 2 + 12 + 4,
-                at,
-            },
-        ));
+        exif_tags.push((0x927C, Val::At { typ: 7, count, at }));
     }
     let exif = IfdSpec {
         tags: exif_tags,

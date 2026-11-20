@@ -305,3 +305,61 @@ fn cr2_corpus_reads_when_present() {
     }
     assert!(seen > 0, "PICTURA_RAW_CORPUS holds no .CR2 file");
 }
+
+/// Colour data of `len` entries, `version` in entry 0 and `levels` at `at`.
+fn color_data(len: usize, version: i16, at: usize, levels: [u16; 4]) -> Vec<u16> {
+    let mut data = vec![7u16; len];
+    data[0] = version as u16;
+    data[at..at + 4].copy_from_slice(&levels);
+    data
+}
+
+fn as_shot(data: Vec<u16>) -> Option<[f64; 3]> {
+    let mut spec = Cr2::new(noise_plane(32, 16, 4095, 4), 12);
+    spec.color_data = Some(data);
+    read(&cr2(&spec))
+        .expect("CR2 with colour data reads")
+        .color
+        .as_shot_neutral
+}
+
+#[test]
+fn cr2_as_shot_neutral_by_layout() {
+    let levels = [2000, 1000, 1024, 1500];
+    let want = [1012.0 / 2000.0, 1.0, 1012.0 / 1500.0];
+    let mut layouts = vec![(582, 1164, 25), (653, 886, 34)];
+    for (version, at) in [
+        (1, 63),
+        (6, 63),
+        (10, 63),
+        (15, 63),
+        (17, 71),
+        (-3, 71),
+        (33, 85),
+        (48, 105),
+    ] {
+        layouts.push((1400, version, at));
+    }
+    for (len, version, at) in layouts {
+        let got = as_shot(color_data(len, version, at, levels))
+            .unwrap_or_else(|| panic!("{len} entries, version {version}: no neutral"));
+        for (g, w) in got.iter().zip(want) {
+            assert!(
+                (g - w).abs() <= 1e-9,
+                "{len} entries, version {version}: {got:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn unusable_colour_data_leaves_no_neutral() {
+    let levels = [2000, 1000, 1024, 1500];
+    for data in [
+        color_data(1400, 25, 63, levels),
+        color_data(40, 10, 0, [10, 1000, 1024, 1500]),
+        color_data(1400, 10, 63, [0, 1000, 1024, 1500]),
+    ] {
+        assert_eq!(as_shot(data), None);
+    }
+}

@@ -14,6 +14,7 @@ use crate::error::PsdError;
 use crate::probe::ImageBudget;
 
 mod camera_color;
+mod camera_matrices;
 mod cr2;
 mod demosaic;
 mod develop;

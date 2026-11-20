@@ -67,7 +67,9 @@ SHALL be `2^precision − 1` of the JPEG frame. Samples SHALL be normalized as
 DNG samples are, the CFA SHALL be RGGB at the sensor plane's corner and
 reported from the active corner, shifted by the active area's offset,
 the default crop SHALL be the whole active area, make, model and orientation
-SHALL come from IFD0, and the colour tags SHALL be empty.
+SHALL come from IFD0, and the colour tags SHALL be those of
+`codec/camera-matrices`: the camera's fitted matrices when its make and model
+are in the table, and the as-shot neutral from the maker note's colour data.
 
 #### Scenario: Masked border black [cr2_levels]
 
@@ -76,7 +78,7 @@ SHALL come from IFD0, and the colour tags SHALL be empty.
 
 #### Scenario: Camera tags and the demosaic [cr2_tags]
 
-- **WHEN** a CR2 carries make, model and orientation 6
+- **WHEN** a CR2 carries make, model and orientation 6, with a model not in the matrix table and no colour data
 - **THEN** they are reported, the CFA is RGGB for an even active corner and shifted for an odd one, the default crop is the active area, the colour tags are empty, and the demosaic accepts the image
 
 #### Scenario: Hostile files [cr2_hostile]

@@ -1,14 +1,16 @@
 //! Canon CR2 (#399): a little-endian TIFF whose raw IFD, named by the header,
 //! holds the sensor plane as one lossless JPEG strip cut into vertical
 //! slices; one frame row may carry several sensor rows (EOS 5DS). Built from the TIFF and Exif specifications, ITU T.81 and public
-//! write-ups of the CR2 layout; colour is not read (the file has no matrix).
+//! write-ups of the CR2 layout. The file has no colour matrix: colour comes
+//! from the fitted per-camera table (#1465) and the maker note's as-shot white
+//! balance.
 
 use super::levels::{self, Area, Levels};
 use super::tiff::Tiff;
-use super::vendor::{coord, maker_note_ifd, masked_black};
+use super::vendor::{camera_color, coord, maker_note_ifd, masked_black};
 use super::{
-    ljpeg, to_usize, CfaPattern, DngColor, DngCrop, DngImage, Tags, COMPRESSION, IMAGE_LENGTH,
-    IMAGE_WIDTH, MAKE, ORIENTATION, STRIP_BYTE_COUNTS, STRIP_OFFSETS,
+    ljpeg, to_usize, CfaPattern, DngCrop, DngImage, Tags, COMPRESSION, IMAGE_LENGTH, IMAGE_WIDTH,
+    MAKE, ORIENTATION, STRIP_BYTE_COUNTS, STRIP_OFFSETS,
 };
 use crate::error::PsdError;
 use crate::probe::ImageBudget;
@@ -16,6 +18,7 @@ use crate::probe::ImageBudget;
 const MODEL: u16 = 272;
 const SLICES: u16 = 0xC640;
 const SENSOR_INFO: u16 = 0x00E0;
+const COLOR_DATA: u16 = 0x4001;
 const OLD_JPEG: u64 = 6;
 
 fn invalid(what: &str) -> PsdError {
@@ -72,13 +75,9 @@ fn slices(tags: &Tags, width: usize) -> Result<Slices, PsdError> {
 /// The maker note's sensor information (Canon tag `0x00E0`): entries 1–2
 /// are the sensor width and height, 5–8 the active area's inclusive left,
 /// top, right and bottom.
-fn sensor_info(ifd0: &Tags) -> Result<Option<Vec<f64>>, PsdError> {
-    let Some(note) = maker_note_ifd(ifd0)? else {
+fn sensor_info(note: Option<&Tags>) -> Result<Option<Vec<f64>>, PsdError> {
+    let Some(note) = note else {
         return Ok(None);
-    };
-    let note = Tags {
-        tiff: ifd0.tiff,
-        ifd: &note,
     };
     let info = note.reals(SENSOR_INFO)?;
     if info.as_ref().is_some_and(|v| v.len() < 9) {
@@ -162,6 +161,36 @@ fn rggb_from_sensor_corner(area: Area) -> Vec<u8> {
         .collect()
 }
 
+/// The as-shot neutral from the maker note's colour data (Canon tag
+/// `0x4001`): the camera's as-shot RGGB multipliers, at an index named by the
+/// array's length in the two oldest layouts and otherwise by its version in
+/// entry 0 (public write-ups of the layout, confirmed on real files from
+/// the 350D to the 6D Mark II). `None` for any other layout or an unusable
+/// multiplier.
+fn as_shot_neutral(note: Option<&Tags>) -> Result<Option<[f64; 3]>, PsdError> {
+    let Some(data) = note.map(|n| n.reals(COLOR_DATA)).transpose()?.flatten() else {
+        return Ok(None);
+    };
+    let version = data.first().map_or(0, |&v| v as i64 as u16 as i16);
+    let at = match (data.len(), version) {
+        (582, _) => 25,
+        (653, _) => 34,
+        (_, 1..=15) => 63,
+        (_, 16..=19 | i16::MIN..=-1) => 71,
+        (_, 32 | 33) => 85,
+        (_, 34 | 48 | 64..=67) => 105,
+        _ => return Ok(None),
+    };
+    let Some(&[r, g1, g2, b]) = data.get(at..at + 4) else {
+        return Ok(None);
+    };
+    if [r, g1, g2, b].iter().any(|&v| v <= 0.0) {
+        return Ok(None);
+    }
+    let g = (g1 + g2) / 2.0;
+    Ok(Some([g / r, 1.0, g / b]))
+}
+
 /// Reads a CR2's sensor plane, normalized and cropped to its active area.
 // ponytail: white is the frame's precision ceiling, not the camera's
 // saturation (ColorData's per-version white levels are not read), and the
@@ -202,7 +231,9 @@ pub(super) fn read_cr2(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, P
         .ok_or(PsdError::Truncated)?;
 
     let (precision, frame_w, frame_h, components) = ljpeg::frame(data)?;
-    let info = sensor_info(&ifd0)?;
+    let note = maker_note_ifd(&ifd0)?;
+    let note = note.as_ref().map(|ifd| Tags { tiff: &tiff, ifd });
+    let info = sensor_info(note.as_ref())?;
     let (width, height) = plane_size(&tags, info.as_deref(), (frame_w * components, frame_h))?;
     let max = budget.max_dimension as usize;
     if width > max || height > max {
@@ -244,6 +275,7 @@ pub(super) fn read_cr2(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, P
         white: ((1u32 << precision) - 1) as f64,
     };
     let samples = levels::normalize(&plane, width, area, &levels);
+    let (make, model) = (ifd0.ascii(MAKE), ifd0.ascii(MODEL));
     Ok(DngImage {
         width: area.width,
         height: area.height,
@@ -260,8 +292,12 @@ pub(super) fn read_cr2(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, P
             height: area.height as f64,
         },
         orientation: ifd0.uint(ORIENTATION)?.unwrap_or(1).min(8) as u16,
-        make: ifd0.ascii(MAKE),
-        model: ifd0.ascii(MODEL),
-        color: DngColor::default(),
+        color: camera_color(
+            make.as_deref(),
+            model.as_deref(),
+            as_shot_neutral(note.as_ref())?,
+        ),
+        make,
+        model,
     })
 }
