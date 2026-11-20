@@ -99,7 +99,7 @@ impl qobject::PictureView {
         let path = path.to_string();
         let (members, target) = {
             let rust = self.rust();
-            let Some(&id) = rust.link_sets.get(&path) else {
+            let Some(&id) = rust.session.link_sets.get(&path) else {
                 return QStringList::default();
             };
             let Some(doc) = rust.session.doc.as_ref() else {
@@ -110,7 +110,7 @@ impl qobject::PictureView {
             }
             let members: Vec<String> = pictura_render::flatten_rows(doc)
                 .into_iter()
-                .filter(|(candidate, _)| rust.link_sets.get(candidate) == Some(&id))
+                .filter(|(candidate, _)| rust.session.link_sets.get(candidate) == Some(&id))
                 .map(|(candidate, _)| candidate)
                 .collect();
             let mut target = LayerTarget::default();
@@ -132,7 +132,7 @@ impl qobject::PictureView {
     pub fn link_layers(mut self: Pin<&mut Self>, paths: &QStringList, on: bool) -> i32 {
         let owned = list_of_strings(paths);
         let mut rust = self.as_mut().rust_mut();
-        apply_link(&mut rust.link_sets, &owned, on)
+        apply_link(&mut rust.session.link_sets, &owned, on)
     }
 
     /// Whether every listed path resolves to the same non-zero link set. False
@@ -145,7 +145,7 @@ impl qobject::PictureView {
         let rust = self.rust();
         let mut id: Option<u32> = None;
         for path in &owned {
-            let Some(&this) = rust.link_sets.get(path) else {
+            let Some(&this) = rust.session.link_sets.get(path) else {
                 return false;
             };
             match id {
@@ -227,8 +227,8 @@ impl qobject::PictureView {
     /// positional, so any tree edit invalidates them (design D9).
     pub(super) fn clear_link_sets(mut self: Pin<&mut Self>) {
         let rust = &mut *self.as_mut().rust_mut();
-        rust.link_sets.clear();
-        rust.link_remap = None;
+        rust.session.link_sets.clear();
+        rust.session.link_remap = None;
     }
 }
 
@@ -357,14 +357,14 @@ pub(super) fn remap_after_delete(
 
 /// Stash the remapped link sets for the pending structural edit.
 pub(super) fn remap_links_after_insert(rust: &mut PictureViewRust, inserted: &str) {
-    let remapped = remap_after_insert(&rust.link_sets, inserted);
-    rust.link_remap = Some(remapped);
+    let remapped = remap_after_insert(&rust.session.link_sets, inserted);
+    rust.session.link_remap = Some(remapped);
 }
 
 /// Stash the remapped link sets for the pending structural edit.
 pub(super) fn remap_links_after_delete(rust: &mut PictureViewRust, deleted: &[String]) {
-    let remapped = remap_after_delete(&rust.link_sets, deleted);
-    rust.link_remap = Some(remapped);
+    let remapped = remap_after_delete(&rust.session.link_sets, deleted);
+    rust.session.link_remap = Some(remapped);
 }
 
 #[cfg(test)]

@@ -192,12 +192,12 @@ pub(super) fn rendered_move_group(
 /// The paths of `path`'s link set in panel order (topmost-first), or just
 /// `path` when it is not linked.
 pub(super) fn link_members(rust: &PictureViewRust, doc: &Document, path: &str) -> Vec<String> {
-    let Some(&id) = rust.link_sets.get(path) else {
+    let Some(&id) = rust.session.link_sets.get(path) else {
         return vec![path.to_string()];
     };
     let members: Vec<String> = pictura_render::flatten_rows(doc)
         .into_iter()
-        .filter(|(candidate, _)| rust.link_sets.get(candidate) == Some(&id))
+        .filter(|(candidate, _)| rust.session.link_sets.get(candidate) == Some(&id))
         .map(|(candidate, _)| candidate)
         .collect();
     if members.is_empty() {

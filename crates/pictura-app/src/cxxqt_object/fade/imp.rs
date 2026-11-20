@@ -102,7 +102,7 @@ fn record_layers(
     if original == effected {
         return;
     }
-    rust.fade = Some(FadeState {
+    rust.session.fade = Some(FadeState {
         path,
         label: label.to_string(),
         original,
@@ -114,25 +114,30 @@ fn record_layers(
 }
 
 pub(in crate::cxxqt_object) fn clear(rust: &mut PictureViewRust) {
-    rust.fade = None;
+    rust.session.fade = None;
 }
 
 pub(in crate::cxxqt_object) fn available(rust: &PictureViewRust) -> bool {
-    rust.fade.is_some() && !rust.has_active_session() && !rust.modal_transform_blocks_edit()
+    rust.session.fade.is_some() && !rust.has_active_session() && !rust.modal_transform_blocks_edit()
 }
 
 pub(in crate::cxxqt_object) fn name(rust: &PictureViewRust) -> String {
-    rust.fade
+    rust.session
+        .fade
         .as_ref()
         .map_or_else(String::new, |state| state.label.clone())
 }
 
 pub(in crate::cxxqt_object) fn opacity(rust: &PictureViewRust) -> u8 {
-    rust.fade.as_ref().map_or(100, |state| state.opacity)
+    rust.session
+        .fade
+        .as_ref()
+        .map_or(100, |state| state.opacity)
 }
 
 pub(in crate::cxxqt_object) fn mode(rust: &PictureViewRust) -> BlendMode {
-    rust.fade
+    rust.session
+        .fade
         .as_ref()
         .map_or(BlendMode::Normal, |state| state.mode)
 }
@@ -156,7 +161,7 @@ pub(in crate::cxxqt_object) fn preview(
         return None;
     }
     let (path, faded, full) = {
-        let state = rust.fade.as_ref()?;
+        let state = rust.session.fade.as_ref()?;
         let faded = fade_layer(&state.original, &state.effected, &Fade { opacity, mode });
         let full = layer_has_effects(&faded);
         (state.path.clone(), faded, full)
@@ -166,7 +171,7 @@ pub(in crate::cxxqt_object) fn preview(
 
 pub(in crate::cxxqt_object) fn cancel(rust: &mut PictureViewRust) -> Option<(PsdRect, bool)> {
     let (path, current, full) = {
-        let state = rust.fade.as_ref()?;
+        let state = rust.session.fade.as_ref()?;
         let current = state.current.clone();
         let full = layer_has_effects(&current);
         (state.path.clone(), current, full)
@@ -183,7 +188,7 @@ pub(in crate::cxxqt_object) fn apply(
         return None;
     }
     let (path, faded, mut next) = {
-        let state = rust.fade.as_ref()?;
+        let state = rust.session.fade.as_ref()?;
         (
             state.path.clone(),
             fade_layer(&state.original, &state.effected, &Fade { opacity, mode }),
@@ -286,7 +291,7 @@ pub(super) fn fade_apply(mut view: Pin<&mut PictureView>, opacity: i32, mode: &Q
             Edit::regions(vec![region], false)
         }
     });
-    view.as_mut().rust_mut().fade = Some(state);
+    view.as_mut().rust_mut().session.fade = Some(state);
     true
 }
 

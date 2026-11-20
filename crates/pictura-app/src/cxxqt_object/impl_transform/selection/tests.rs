@@ -177,7 +177,10 @@ fn selection_transform_last_target_enables_again() {
     assert!(view.begin_selection_transform());
     scale_session(&mut view, 1.5);
     assert!(view.commit_selection_transform());
-    let repeat = view.last_transform.expect("a repeatable border transform");
+    let repeat = view
+        .session
+        .last_transform
+        .expect("a repeatable border transform");
     assert_eq!(repeat.target, TransformTarget::Selection);
 
     assert!(view.begin_selection_transform());
@@ -188,7 +191,7 @@ fn selection_transform_last_target_enables_again() {
     }
     assert!(view.commit_selection_transform());
     assert!(
-        view.last_transform.is_none(),
+        view.session.last_transform.is_none(),
         "a projective commit is not repeatable"
     );
 }
@@ -215,7 +218,7 @@ fn selection_transform_warp_preview_and_commit() {
     let before = view.session.selection.clone();
     assert!(view.commit_selection_transform());
     assert_ne!(view.session.selection, before);
-    assert!(view.last_transform.is_none());
+    assert!(view.session.last_transform.is_none());
 }
 
 #[test]

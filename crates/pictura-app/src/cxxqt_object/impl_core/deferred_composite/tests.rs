@@ -286,9 +286,9 @@ fn a_busy_display_does_not_defer() {
     assert!(!view.should_defer_move(&whole));
     view.session.live = Default::default();
 
-    view.pending_previews.opacity_changed = true;
+    view.session.pending_previews.opacity_changed = true;
     assert!(!view.should_defer_move(&whole));
-    view.pending_previews.opacity_changed = false;
+    view.session.pending_previews.opacity_changed = false;
 
     view.mask_solo = Some("0".to_string());
     assert!(!view.should_defer_move(&whole));

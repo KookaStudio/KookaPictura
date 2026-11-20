@@ -42,7 +42,7 @@ pub(super) fn finish(mut view: Pin<&mut PictureView>, doc: Document, label: &str
 pub(super) fn trim_image(mut view: Pin<&mut PictureView>) -> bool {
     {
         let rust = view.rust();
-        if rust.has_active_session() || rust.pending_previews.any() {
+        if rust.has_active_session() || rust.session.pending_previews.any() {
             return false;
         }
     }

@@ -92,7 +92,7 @@ pub(super) fn solo_set(mut view: Pin<&mut PictureView>, path: &QString) {
     };
     {
         let rust = &mut *view.as_mut().rust_mut();
-        rust.solo_snapshot = Some(snapshot);
+        rust.session.solo_snapshot = Some(snapshot);
     }
     let paths: QStringList = paths.into_iter().map(QString::from).collect();
     view.as_mut()
@@ -102,7 +102,7 @@ pub(super) fn solo_set(mut view: Pin<&mut PictureView>, path: &QString) {
 pub(super) fn solo_restore(mut view: Pin<&mut PictureView>) {
     let visible: Option<Vec<String>> = {
         let rust = view.rust();
-        rust.solo_snapshot.as_ref().map(|snapshot| {
+        rust.session.solo_snapshot.as_ref().map(|snapshot| {
             snapshot
                 .iter()
                 .filter(|(_, visible)| **visible)
@@ -115,7 +115,7 @@ pub(super) fn solo_restore(mut view: Pin<&mut PictureView>) {
     };
     {
         let rust = &mut *view.as_mut().rust_mut();
-        rust.solo_snapshot = None;
+        rust.session.solo_snapshot = None;
     }
     let visible: QStringList = visible.into_iter().map(QString::from).collect();
     view.as_mut()
@@ -124,11 +124,11 @@ pub(super) fn solo_restore(mut view: Pin<&mut PictureView>) {
 
 pub(super) fn solo_clear(mut view: Pin<&mut PictureView>) {
     let rust = &mut *view.as_mut().rust_mut();
-    rust.solo_snapshot = None;
+    rust.session.solo_snapshot = None;
 }
 
 pub(super) fn solo_active(view: &PictureView) -> bool {
-    view.rust().solo_snapshot.is_some()
+    view.rust().session.solo_snapshot.is_some()
 }
 
 pub(super) fn expansion_set(mut view: Pin<&mut PictureView>, paths: &QStringList) {

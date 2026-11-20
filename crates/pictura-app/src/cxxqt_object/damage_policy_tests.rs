@@ -366,7 +366,7 @@ fn structural_edit_during_live_session_rebuilds() {
 fn structural_edit_with_pending_preview_rebuilds() {
     set_for_this_thread(true);
     let mut view = view(vec![pixel_layer("base", 8, 8, (0, 0, 0))]);
-    view.pending_previews.opacity_changed = true;
+    view.session.pending_previews.opacity_changed = true;
     let before = full_composites();
     view.apply_edit(
         "Delete",
@@ -381,7 +381,7 @@ fn structural_edit_with_pending_preview_rebuilds() {
 fn inserted_edit_with_pending_preview_rebuilds() {
     set_for_this_thread(true);
     let mut view = view(vec![pixel_layer("base", 8, 8, (0, 0, 0))]);
-    view.pending_previews.opacity_changed = true;
+    view.session.pending_previews.opacity_changed = true;
     let before = full_composites();
     let applied = view.apply_edit("New Layer", Edit::Inserted);
     assert_eq!(
@@ -597,9 +597,9 @@ fn assert_pending_preview_forces_full_capture(mask_refine: bool) {
         doc.layers[0].channels_mut()[0].data.as_mut_slice()[45] = 200;
     }
     if mask_refine {
-        view.pending_previews.mask_refine = Some("Mask Feather");
+        view.session.pending_previews.mask_refine = Some("Mask Feather");
     } else {
-        view.pending_previews.opacity_changed = true;
+        view.session.pending_previews.opacity_changed = true;
     }
     view.apply_edit("Opacity", Edit::regions(vec![tiny()], true));
     let live = view.session.doc.as_ref().expect("document").layers[0].channels()[0]

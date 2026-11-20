@@ -198,7 +198,7 @@ fn refresh_export_composite(doc: &mut Document) -> Result<(), String> {
 
 fn blocked(rust: &PictureViewRust) -> bool {
     rust.has_active_session()
-        || rust.pending_previews.any()
+        || rust.session.pending_previews.any()
         || rust.display_preview_active()
         || rust.mask_solo.is_some()
 }

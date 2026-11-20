@@ -431,7 +431,7 @@ impl qobject::PictureView {
             // ponytail: CS6 carries the selection border through the transform;
             // it is dropped here rather than left outlining the old pixels.
             self.as_mut().rust_mut().session.set_selection(None);
-            self.as_mut().rust_mut().last_transform = repeat;
+            self.as_mut().rust_mut().session.last_transform = repeat;
             // A lifted transform changes pixels, not the layer tree, so it
             // keeps the link set; only the pixels moved.
             self.as_mut()
@@ -461,7 +461,7 @@ impl qobject::PictureView {
             .as_mut()
             .is_some_and(|doc| (apply)(doc));
         if changed {
-            self.as_mut().rust_mut().last_transform = repeat;
+            self.as_mut().rust_mut().session.last_transform = repeat;
             let edit = self.rust().session.doc.as_ref().map_or(Edit::Full, |doc| {
                 transform_group_edit(doc, &members, orig_rect)
             });

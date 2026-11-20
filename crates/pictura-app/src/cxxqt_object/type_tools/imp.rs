@@ -697,7 +697,7 @@ pub(super) fn replace(
 /// A preview skips the commit path's check for these, so reach answers for both.
 fn display_is_owned(view: &PictureView) -> bool {
     let rust = view.rust();
-    rust.has_active_session() || rust.pending_previews.any() || rust.mask_solo.is_some()
+    rust.has_active_session() || rust.session.pending_previews.any() || rust.mask_solo.is_some()
 }
 
 /// What hiding, showing or adding the layer at `path` can touch; `None` means
@@ -753,7 +753,7 @@ pub(super) fn content_edit(view: &PictureView, rects: Option<Vec<pictura_core::P
 /// Clear what a structural edit clears; a region edit keeps both by itself.
 pub(super) fn release_positional_state(mut view: Pin<&mut PictureView>) {
     view.as_mut().clear_link_sets();
-    view.as_mut().rust_mut().solo_snapshot = None;
+    view.as_mut().rust_mut().session.solo_snapshot = None;
 }
 
 fn commit_edit(mut view: Pin<&mut PictureView>, rects: Option<Vec<pictura_core::PsdRect>>) {

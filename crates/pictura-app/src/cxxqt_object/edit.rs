@@ -234,7 +234,7 @@ impl PictureViewRust {
     ) -> Presentation {
         // A structural command may have remapped the link sets instead of
         // invalidating them (an insertion or deletion that shifted indices).
-        let link_remap = self.link_remap.take();
+        let link_remap = self.session.link_remap.take();
         if matches!(edit, Edit::None) {
             return Presentation {
                 declaration: Some(edit),
@@ -261,7 +261,7 @@ impl PictureViewRust {
             super::fade::clear(self);
         }
         self.non_preview_revision = self.non_preview_revision.wrapping_add(1);
-        let pending = self.pending_previews.any();
+        let pending = self.session.pending_previews.any();
         let force_full = self.has_active_session() || pending || self.mask_solo.is_some();
         let edit = match edit {
             // A live gesture or a pending preview leaves the stored composite
@@ -300,8 +300,8 @@ impl PictureViewRust {
             self.lazy_move_pending = true;
         }
         if matches!(edit, Edit::Structural { .. } | Edit::Inserted) {
-            self.link_sets = link_remap.unwrap_or_default();
-            self.solo_snapshot = None;
+            self.session.link_sets = link_remap.unwrap_or_default();
+            self.session.solo_snapshot = None;
         }
         // A deferred move captures its history when its composite lands, so a
         // diff never sees the stale composite.
@@ -715,10 +715,10 @@ mod tests {
     #[test]
     fn an_unbounded_structural_outcome_rebuilds() {
         let mut view = view(doc_with_layer());
-        view.link_sets.insert("0".into(), 1);
+        view.session.link_sets.insert("0".into(), 1);
         let presentation = view.apply_edit("Edit", Edit::Structural { damage: None });
         assert_eq!(presentation.rebuild, Rebuild::Sync);
-        assert!(view.link_sets.is_empty());
+        assert!(view.session.link_sets.is_empty());
         present_core(&mut view, &presentation);
         assert_display_current(&view);
     }
@@ -726,7 +726,7 @@ mod tests {
     #[test]
     fn a_bounded_structural_outcome_clears_links_and_uses_a_region() {
         let mut view = view(doc_with_layer());
-        view.link_sets.insert("0".into(), 1);
+        view.session.link_sets.insert("0".into(), 1);
         let rect = PsdRect {
             top: 0,
             left: 0,
@@ -742,7 +742,7 @@ mod tests {
         assert_eq!(presentation.rebuild, Rebuild::None);
         assert!(presentation.notify);
         assert_eq!(presentation.regions, vec![rect]);
-        assert!(view.link_sets.is_empty());
+        assert!(view.session.link_sets.is_empty());
         present_core(&mut view, &presentation);
         assert_display_current(&view);
     }
@@ -750,14 +750,14 @@ mod tests {
     #[test]
     fn an_inserted_outcome_drops_links_without_compositing() {
         let mut view = view(doc_with_layer());
-        view.link_sets.insert("0".into(), 1);
+        view.session.link_sets.insert("0".into(), 1);
         reset_refresh_calls();
         let frame = view.frame_revision;
         let presentation = view.apply_edit("New Layer", Edit::Inserted);
         assert!(presentation.notify);
         assert_eq!(presentation.rebuild, Rebuild::None);
         assert!(presentation.regions.is_empty());
-        assert!(view.link_sets.is_empty());
+        assert!(view.session.link_sets.is_empty());
         present_core(&mut view, &presentation);
         assert_eq!(view.session.history.count(), 1);
         assert_eq!(view.frame_revision, frame, "no display rebuild");
