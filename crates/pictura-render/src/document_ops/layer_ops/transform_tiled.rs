@@ -26,9 +26,11 @@ const WINDOW_PIXELS: usize = 4096;
 
 /// A source plane of `w × h` samples at `rect`, sampled as if surrounded by
 /// `pad` samples of zero (the 8-bit path's transparent edge; 0 clamps to the
-/// edge instead).
+/// edge instead). A colour plane carries its layer's `alpha` plane (same
+/// size), which weights every tap ([`kernel::sample_over_alpha`]).
 pub(super) struct Source<'a, T> {
     pub(super) plane: &'a Plane<T>,
+    pub(super) alpha: Option<&'a Plane<T>>,
     pub(super) w: usize,
     pub(super) h: usize,
     pub(super) pad: usize,
@@ -96,16 +98,26 @@ where
 /// A task's reusable block buffers.
 struct BlockScratch<T> {
     coords: Vec<Option<(f64, f64)>>,
-    window: Vec<T>,
+    windows: Windows<T>,
 }
 
 impl<T> Default for BlockScratch<T> {
     fn default() -> Self {
         Self {
             coords: Vec::new(),
-            window: Vec::new(),
+            windows: Windows {
+                color: Vec::new(),
+                alpha: Vec::new(),
+            },
         }
     }
+}
+
+/// A block's source windows: the sampled plane and, for a colour plane, its
+/// alpha over the same box.
+struct Windows<T> {
+    color: Vec<T>,
+    alpha: Vec<T>,
 }
 
 /// One `bw × rows` block whose top-left pixel's corner is the document point
@@ -152,7 +164,7 @@ fn block<T, M>(
         samples: out,
         stride: out_stride,
     };
-    fill(src, coords, bw, all, out, resolved, &mut scratch.window);
+    fill(src, coords, bw, all, out, resolved, &mut scratch.windows);
 }
 
 /// Where a block's samples go: `samples[y * stride + x]`.
@@ -187,7 +199,7 @@ fn fill<T: Sample + TileSample>(
     area: Area,
     mut out: Out<'_, T>,
     resolved: Interpolation,
-    window: &mut Vec<T>,
+    windows: &mut Windows<T>,
 ) {
     let Some((wx0, wy0, wx1, wy1)) = tap_box(src, coords, stride, area) else {
         return;
@@ -215,16 +227,26 @@ fn fill<T: Sample + TileSample>(
                 },
             )
         };
-        fill(src, coords, stride, a, out.reborrow(), resolved, window);
-        fill(src, coords, stride, b, out, resolved, window);
+        fill(src, coords, stride, a, out.reborrow(), resolved, windows);
+        fill(src, coords, stride, b, out, resolved, windows);
         return;
     }
-    read_window(src, (wx0, wy0, ww, wh), window);
+    let window = (wx0, wy0, ww, wh);
+    read_window(src, src.plane, window, &mut windows.color);
+    if let Some(alpha) = src.alpha {
+        read_window(src, alpha, window, &mut windows.alpha);
+    }
     for y in area.y..area.y + area.h {
         for x in area.x..area.x + area.w {
             if let Some((lx, ly)) = coords[y * stride + x] {
-                out.samples[y * out.stride + x] =
-                    kernel::sample(window, ww, wh, lx - wx0 as f64, ly - wy0 as f64, resolved);
+                let (lx, ly) = (lx - wx0 as f64, ly - wy0 as f64);
+                let color = &windows.color;
+                out.samples[y * out.stride + x] = match src.alpha {
+                    Some(_) => {
+                        kernel::sample_over_alpha(color, &windows.alpha, ww, wh, lx, ly, resolved)
+                    }
+                    None => kernel::sample(color, ww, wh, lx, ly, resolved),
+                };
             }
         }
     }
@@ -266,10 +288,12 @@ fn tap_box<T>(
     ))
 }
 
-/// Fill `window` with the padded plane's `ww × wh` box at `(x0, y0)`: source
-/// samples where the box overlaps the source, zero in the padding.
+/// Fill `window` with `plane`'s (`src`'s geometry) padded `ww × wh` box at
+/// `(x0, y0)`: source samples where the box overlaps the source, zero in the
+/// padding.
 fn read_window<T: TileSample>(
     src: &Source<'_, T>,
+    plane: &Plane<T>,
     (x0, y0, ww, wh): (usize, usize, usize, usize),
     window: &mut Vec<T>,
 ) {
@@ -282,7 +306,7 @@ fn read_window<T: TileSample>(
     }
     for py in y0.max(pad)..(y0 + wh).min(pad + src.h) {
         let at = (py - y0) * ww + (xs.start - x0);
-        src.plane.read_rect_into(
+        plane.read_rect_into(
             xs.start - pad..xs.end - pad,
             py - pad..py - pad + 1,
             src.w,

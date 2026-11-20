@@ -65,16 +65,19 @@ impl WorkImage {
                 return None;
             }
             let at = iy as usize * cw + ix as usize;
-            let a = alpha.is_none_or(|plane| plane[at] > 0);
-            let l = if channels[1].is_some() && channels[2].is_some() {
-                let r = f32::from(channels[0].unwrap_or(color)[at]);
-                let g = f32::from(channels[1].unwrap_or(color)[at]);
-                let b = f32::from(channels[2].unwrap_or(color)[at]);
-                (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
-            } else {
-                f32::from(color[at]) / 255.0
-            };
-            Some((l, a))
+            let coverage = alpha.map_or(1.0, |plane| f32::from(plane[at]) / 255.0);
+            // Luma as the layer renders over black: straight colour at an
+            // anti-aliased edge would step to zero and read as corners (#1446).
+            let l = coverage
+                * if channels[1].is_some() && channels[2].is_some() {
+                    let r = f32::from(channels[0].unwrap_or(color)[at]);
+                    let g = f32::from(channels[1].unwrap_or(color)[at]);
+                    let b = f32::from(channels[2].unwrap_or(color)[at]);
+                    (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
+                } else {
+                    f32::from(color[at]) / 255.0
+                };
+            Some((l, coverage > 0.0))
         };
         let mut luma = vec![0.0f32; width * height];
         let mut mask = vec![false; width * height];
