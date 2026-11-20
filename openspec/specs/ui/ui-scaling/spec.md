@@ -86,10 +86,12 @@ move exactly one step through the choice list. The minus button SHALL be
 disabled at 75 percent, the plus button at 200 percent, and reset at 100
 percent. When the scale changes while the menu is open the menu SHALL resize to
 fit its rows, so the caption and buttons are never clipped. The UI Size row
-SHALL be the last row in the Window menu, placed below the Options item and
-separated from it by a separator. The Enlarge UI Size, Decrease UI Size, and
-Reset UI Size commands SHALL remain available for shortcuts and the shortcut
-editor even though their menu rows are hidden.
+SHALL be placed below the Options item and separated from it by a separator.
+The open-document list, when at least one document is open, SHALL follow the UI
+Size row as the Window menu's last section, separated from the row by a
+separator. The Enlarge UI Size, Decrease UI Size, and Reset UI Size commands
+SHALL remain available for shortcuts and the shortcut editor even though their
+menu rows are hidden.
 
 #### Scenario: One stacked row replaces the separate step items [uis_menu_single_row]
 
@@ -100,9 +102,9 @@ editor even though their menu rows are hidden.
 
 #### Scenario: The row follows Options [uis_menu_below_options]
 
-- **WHEN** the Window menu is opened
-- **THEN** the UI Size row is the last row, below the Options item and separated
-  from it
+- **WHEN** no document is open and the Window menu is opened
+- **THEN** the UI Size row is below the Options item and separated from it, and no
+  document rows or list separator follow it
 
 #### Scenario: The open menu resizes as the scale changes [uis_menu_resize]
 
