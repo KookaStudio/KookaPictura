@@ -44,6 +44,21 @@ Snapshot for resuming after a context break. Update after each milestone.
   Delete Path on it deletes the mask. `set_layer_shape_paths` now keeps the
   flags word. The thumbnail shows hidden grey, revealed white, and the outline
   in black (the grey is approximated).
+- **Color Range extras — #613 implemented** (OpenSpec change
+  `colour-range-extras`; capability `tools/color-range` modified).
+  `pictura_select::color_range` now takes `ColorRangeSettings`: a sample list
+  with positions, the shared Chebyshev/fuzziness kernel with
+  `localization_strength(Range) = 1 - range/100`, Skin Tones, and alpha-zero
+  handling. Out Of Gamut is app-side via `pictura_color::GamutCheck` against
+  the view's proof setup and the document's working ICC. The dialog gains
+  Replace/Add/Subtract droppers with Shift/Alt, Localized + Range, Skin Tones,
+  Selection/Image thumbnails, the five image-window Selection Preview modes
+  (display-only, unproofed matching), the Ctrl/Cmd toggle, and versioned JSON
+  Save/Load; the preview intersects a live selection. Tests: the engine,
+  gamut, and bridge units plus `tst_color_range`. Ceilings: Detect Faces,
+  Alt-click Reset, `.axt` import, Bitmap/Indexed availability, Grayscale
+  behaviour, Properties-panel mask refinement, the no-match warning, and
+  per-session persistence.
 - **16-bit tone tools — #1421 implemented** (OpenSpec change
   `native-depth-tone-tools`, archived; capability `tools/native-depth-tone`).
   Dodge, Burn, and Sponge now read and write the layer's retained 16-bit native
