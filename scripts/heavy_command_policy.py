@@ -12,8 +12,9 @@ message. Exit 0 allows the command (including non-Bash hook input). The hook
 JSON carries the command at tool_input.command, which is what Claude Code and
 Codex send.
 
-The refusal names the wrapper under the current checkout's root, so the hint
-works from a subdirectory or a linked worktree.
+The refusal names the wrapper from the policy's own checkout, so a stale
+worktree that reads the main checkout's policy is still pointed at a budgeted
+wrapper, and the hint works from a subdirectory or a linked worktree.
 """
 from __future__ import annotations
 
@@ -23,11 +24,11 @@ import re
 import shlex
 import subprocess
 import sys
+import tempfile
 from typing import Optional, Sequence
 
 HEAVY_SEGMENT = re.compile(r"^\s*(cargo|cmake|ctest|ninja)\b")
 CHEAP_SEGMENT = re.compile(r"^\s*cargo\s+fmt\b")
-COMPOUND = re.compile(r"[;&|]|\b(?:bash|sh)\s+-c\b")
 EXEMPT = (
     "cpu-budget.py",
     "with-build-lock.sh",
@@ -42,20 +43,8 @@ USAGE = (
 )
 
 
-def repo_root(start: Optional[str] = None) -> str:
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            cwd=start or os.getcwd(),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError:
-        result = None
-    if result is not None and result.returncode == 0 and result.stdout.strip():
-        return result.stdout.strip()
-    return start or os.getcwd()
+def policy_root() -> str:
+    return os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
 
 def wrapper_path(root: str) -> str:
@@ -64,22 +53,57 @@ def wrapper_path(root: str) -> str:
     return os.path.join(root, "scripts", "with-build-lock.sh")
 
 
+def split_segments(command: str) -> list[str]:
+    segments: list[str] = []
+    current: list[str] = []
+    quote = ""
+    escaped = False
+    for char in command:
+        if escaped:
+            current.append(char)
+            escaped = False
+            continue
+        if char == "\\" and quote != "'":
+            current.append(char)
+            escaped = True
+            continue
+        if quote:
+            current.append(char)
+            if char == quote:
+                quote = ""
+            continue
+        if char in "'\"":
+            current.append(char)
+            quote = char
+            continue
+        if char in ";&|\n":
+            segments.append("".join(current))
+            current = []
+            continue
+        current.append(char)
+    segments.append("".join(current))
+    return segments
+
+
 def refusal(command: str, root: Optional[str] = None) -> Optional[str]:
     if not isinstance(command, str) or command.strip() == "":
         return None
     if any(name in command for name in EXEMPT):
         return None
-    # ponytail: segment match only; env-prefixed, absolute-path, and
-    # shell-constructed invocations bypass it. Prose and the wrapper remain the
-    # baseline.
+    # ponytail: quote-aware segment split, not a shell parser; command
+    # substitutions, backticks, and bash -c bodies are not descended into, and
+    # env-prefixed or absolute-path invocations still bypass it. Prose and the
+    # wrapper remain the baseline.
+    segments = split_segments(command)
     heavy = any(
         HEAVY_SEGMENT.match(segment) and not CHEAP_SEGMENT.match(segment)
-        for segment in re.split(r"[;&|\n]", command)
+        for segment in segments
     )
     if not heavy:
         return None
-    wrapper = shlex.quote(wrapper_path(root or repo_root()))
-    if COMPOUND.search(command):
+    wrapper = shlex.quote(wrapper_path(root or policy_root()))
+    compound = sum(1 for segment in segments if segment.strip()) > 1
+    if compound:
         wrapped = f"bash {wrapper} -- bash -c {shlex.quote(command)}"
     else:
         wrapped = f"bash {wrapper} -- {command}"
@@ -128,6 +152,12 @@ def self_check() -> int:
     )
     assert "bash -c" in refusal("git status && cargo test", "/tmp/checkout")
     assert "scripts/with-build-lock.sh" in refusal("cargo build")
+    quoted = "ps -eo pid,comm,args | awk '$2 ~ /^(cmake|ninja)$/ {print}'"
+    assert refusal(quoted) is None, quoted
+    assert refusal("echo 'x; cargo build'") is None
+    assert refusal('echo "x | cargo build"') is None
+    assert refusal(f"{quoted} ; cargo build") is not None
+    assert refusal("ps | cargo build") is not None
     for command in (
         "bash scripts/with-build-lock.sh -- cargo build",
         "python3 scripts/cpu-budget.py exec -- cargo test",
@@ -152,12 +182,15 @@ def self_check() -> int:
         == "cargo build"
     )
 
-    def run(arguments: Sequence[str], stdin_text: str = "") -> subprocess.CompletedProcess:
+    def run(
+        arguments: Sequence[str], stdin_text: str = "", cwd: Optional[str] = None
+    ) -> subprocess.CompletedProcess:
         return subprocess.run(
             [sys.executable, os.path.abspath(__file__), *arguments],
             input=stdin_text,
             capture_output=True,
             text=True,
+            cwd=cwd,
             check=False,
         )
 
@@ -168,6 +201,11 @@ def self_check() -> int:
     )
     direct = run(["--command", "cargo build"])
     assert direct.returncode == 2 and "with-build-lock.sh" in direct.stderr
+    with tempfile.TemporaryDirectory() as outside:
+        foreign = run(["--command", "cargo build"], cwd=outside)
+        expected = os.path.join(policy_root(), "scripts", "with-build-lock.sh")
+        assert foreign.returncode == 2, foreign.returncode
+        assert expected in foreign.stderr, (expected, foreign.stderr)
     for arguments, stdin_text in (
         ([], ""),
         ([], "not json"),
@@ -175,6 +213,7 @@ def self_check() -> int:
         ([], '{"tool_name":"Bash","tool_input":{"command":"bash scripts/with-build-lock.sh -- cargo build"}}'),
         ([], '{"tool_name":"Bash","tool_input":{"command":"cargo fmt --all"}}'),
         (["--command", "git status"], ""),
+        (["--command", quoted], ""),
     ):
         allowed = run(arguments, stdin_text)
         assert allowed.returncode == 0, (arguments, stdin_text, allowed.stderr)
