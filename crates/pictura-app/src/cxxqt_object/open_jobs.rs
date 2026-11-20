@@ -13,6 +13,7 @@
 
 pub(super) mod compatibility;
 mod imp;
+mod raw_open;
 
 use super::pdf_export::import::ffi::ImportTarget;
 use super::qobject::PictureView;
@@ -22,12 +23,20 @@ pub use compatibility::{
     save_compatibility_copy,
 };
 pub use imp::*;
+pub(super) use raw_open::PendingRaw;
+pub use raw_open::{
+    open_raw_develop_start, open_raw_start, raw_as_shot_temperature, raw_as_shot_tint, raw_preview,
+    raw_seed_settings, raw_sniff_path,
+};
 
 #[cxx_qt::bridge]
 pub mod ffi {
     unsafe extern "C++" {
         include!("cxx-qt-lib/qstring.h");
         type QString = cxx_qt_lib::QString;
+
+        include!("cxx-qt-lib/qimage.h");
+        type QImage = cxx_qt_lib::QImage;
 
         include!("cxx-qt-lib/qstringlist.h");
         type QStringList = cxx_qt_lib::QStringList;
@@ -90,6 +99,34 @@ pub mod ffi {
 
         /// Start rasterizing an EPS's bounding box on a worker.
         fn open_eps_start(view: Pin<&mut PictureView>, path: &QString, target: &ImportTarget);
+
+        // Camera raw opens (#400), `raw_open.rs`.
+        /// Whether `path` holds a camera raw container (DNG or CR2), from its
+        /// signature; the extension is not consulted.
+        fn raw_sniff_path(path: &QString) -> bool;
+
+        /// Start decoding the raw file `path` on a worker. `open_finished`
+        /// reports `"raw"` with the source kept on the view, or
+        /// `"error:<reason>"`.
+        fn open_raw_start(view: Pin<&mut PictureView>, path: &QString);
+
+        /// Start developing the kept source with `settings` (Pictura Raw text)
+        /// on a worker; `open_finished` reports `"ok"` with the document
+        /// installed, or `"error:<reason>"`.
+        fn open_raw_develop_start(view: Pin<&mut PictureView>, settings: &QString);
+
+        /// The kept source's seed settings as Pictura Raw text; empty without
+        /// one.
+        fn raw_seed_settings(view: &PictureView) -> QString;
+
+        /// The kept source's as-shot temperature (kelvin) and tint, rounded;
+        /// 0 without one.
+        fn raw_as_shot_temperature(view: &PictureView) -> i32;
+        fn raw_as_shot_tint(view: &PictureView) -> i32;
+
+        /// The kept source developed with `settings` with its long side at most
+        /// `max_dim`; a null image without a source or when it cannot develop.
+        fn raw_preview(view: &PictureView, settings: &QString, max_dim: i32) -> QImage;
 
         /// Mark a started open cancelled; the queued result is dropped.
         fn open_cancel(view: Pin<&mut PictureView>);

@@ -274,7 +274,7 @@ const QStringList& openFileFilters()
 {
     static const QStringList filters = {
         QStringLiteral("All Formats (*.PSD *.PSB *.PNG *.JPG *.JPEG *.JPE *.GIF *.BMP "
-                       "*.TIF *.TIFF *.WEBP *.PDF *.PDP *.AI *.EPS *.EPSF *.PS)"),
+                       "*.TIF *.TIFF *.WEBP *.PDF *.PDP *.AI *.EPS *.EPSF *.PS *.DNG *.CR2)"),
         QStringLiteral("Photoshop (*.PSD)"),
         QStringLiteral("Photoshop Large Format (*.PSB)"),
         QStringLiteral("Images (*.PNG *.JPG *.JPEG *.JPE *.GIF *.BMP *.TIF *.TIFF *.WEBP)"),
@@ -287,6 +287,7 @@ const QStringList& openFileFilters()
         QStringLiteral("Photoshop PDF (*.PDF *.PDP)"),
         QStringLiteral("Generic PDF (*.PDF *.PDP *.AI)"),
         QStringLiteral("Generic EPS (*.EPS *.EPSF *.PS)"),
+        QStringLiteral("Camera Raw (*.DNG *.CR2)"),
         QStringLiteral("All files (*)"),
     };
     return filters;

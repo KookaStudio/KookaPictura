@@ -1,5 +1,6 @@
 #include "acr_preview_pane.h"
 
+#include "api/document_bridge.h"
 #include "api/view_bridge.h"
 
 #include "theme.h"
@@ -81,7 +82,13 @@ bool AcrPreviewPane::highlightClipping() const
 
 void AcrPreviewPane::setSettingsText(const QString& text)
 {
-    image_ = view_ ? view_->pictura_raw_preview(path_, text, kPreviewEdge) : QImage();
+    if (!view_) {
+        image_ = QImage();
+    } else if (rawSource_) {
+        image_ = raw_preview(*view_, text, kPreviewEdge);
+    } else {
+        image_ = view_->pictura_raw_preview(path_, text, kPreviewEdge);
+    }
     update();
 }
 

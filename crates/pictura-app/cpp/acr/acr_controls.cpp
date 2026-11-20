@@ -126,18 +126,42 @@ double AcrSlider::originFraction() const
     return 0.0;
 }
 
+void AcrSlider::setReciprocalScale(bool reciprocal)
+{
+    reciprocal_ = reciprocal && min_ > 0.0;
+    update();
+}
+
+double AcrSlider::fractionForValue(double value) const
+{
+    if (max_ <= min_) {
+        return 0.0;
+    }
+    if (reciprocal_) {
+        return (1.0 / min_ - 1.0 / value) / (1.0 / min_ - 1.0 / max_);
+    }
+    return (value - min_) / (max_ - min_);
+}
+
+double AcrSlider::valueForFraction(double t) const
+{
+    if (reciprocal_ && max_ > min_) {
+        return 1.0 / (1.0 / min_ - t * (1.0 / min_ - 1.0 / max_));
+    }
+    return min_ + t * (max_ - min_);
+}
+
 int AcrSlider::xForValue(double value) const
 {
     const int span = qMax(1, width() - 2 * kHandleHalf);
-    const double t = max_ > min_ ? (value - min_) / (max_ - min_) : 0.0;
-    return kHandleHalf + qRound(t * span);
+    return kHandleHalf + qRound(fractionForValue(value) * span);
 }
 
 double AcrSlider::valueForX(int x) const
 {
     const int span = qMax(1, width() - 2 * kHandleHalf);
     const double t = qBound(0.0, double(x - kHandleHalf) / double(span), 1.0);
-    const double raw = min_ + t * (max_ - min_);
+    const double raw = valueForFraction(t);
     const double step = std::pow(10.0, -decimals_);
     return qBound(min_, qRound(raw / step) * step, max_);
 }

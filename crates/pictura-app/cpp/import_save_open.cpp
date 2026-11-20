@@ -18,6 +18,7 @@
 #include "document_registry.h"
 #include "loading_card.h"
 #include "memory_refusal.h"
+#include "pictura_raw_dialog.h"
 #include "profile_warning_dialog.h"
 #include "type_fonts.h"
 
@@ -147,6 +148,7 @@ void ImportSaveCoordinator::cancelOpen(int index)
     if (!entry.loading) {
         return;
     }
+    rawOpens_.remove(entry.view);
     if (entry.view) {
         open_cancel(*entry.view);
     }
@@ -404,6 +406,21 @@ void ImportSaveCoordinator::onOpenFinished(PictureView* view, const QString& sta
         return;
     }
     const DocEntry entry = *documents_.docAt(index);
+    if (rawOpens_.contains(view)) {
+        if (status == QStringLiteral("raw")) {
+            const bool interactive = rawOpens_.value(view);
+            QTimer::singleShot(0, this, [this, guard, interactive] {
+                if (guard) {
+                    developRawOpen(guard.data(), interactive);
+                }
+            });
+            return;
+        }
+        rawOpens_.remove(view);
+        if (status.startsWith(QStringLiteral("error:")) && status != QStringLiteral("error:memory")) {
+            openFailureMessages_.insert(entry.token, status.mid(6));
+        }
+    }
     if (status == QStringLiteral("ok")) {
         openWarnings_.insert(entry.token, warnings);
         finishLoadedDocument(index);
@@ -486,6 +503,49 @@ quint64 ImportSaveCoordinator::startOpenImagePath(const QString& path)
     return token;
 }
 
+quint64 ImportSaveCoordinator::startOpenRawPath(const QString& path, bool interactive)
+{
+    const quint64 token = nextOpenToken();
+    auto* view = new PictureView(dialogParent_);
+    if (hooks_.applyColorSettings) {
+        hooks_.applyColorSettings(view);
+    }
+    beginOpenCursor();
+    cursorTokens_.insert(token);
+    rawOpens_.insert(view, interactive);
+    // No document path: the result is a new document, so Save never writes
+    // over the raw file. The raw file is still the recent entry.
+    documents_.addLoadingDocument(view, QString(), QFileInfo(path).fileName(), token, path,
+                                  OpenKind::Raster);
+    open_raw_start(*view, path);
+    return token;
+}
+
+void ImportSaveCoordinator::developRawOpen(PictureView* view, bool interactive)
+{
+    const int index = indexOfView(view);
+    if (index < 0 || !documents_.isLoading(index)) {
+        rawOpens_.remove(view);
+        return;
+    }
+    QString settings = raw_seed_settings(*view);
+    if (interactive) {
+        PicturaRawDialog dialog(view,
+                                AcrAsShot{raw_as_shot_temperature(*view), raw_as_shot_tint(*view)},
+                                settings, dialogParent_);
+        // The open's busy cursor must not cover the dialog.
+        QApplication::setOverrideCursor(Qt::ArrowCursor);
+        const bool accepted = runImportDialog(dialog);
+        QApplication::restoreOverrideCursor();
+        if (!accepted) {
+            cancelOpen(indexOfView(view));
+            return;
+        }
+        settings = dialog.settingsText();
+    }
+    open_raw_develop_start(*view, settings);
+}
+
 quint64 ImportSaveCoordinator::startOpenAsSmartObjectPath(const QString& path)
 {
     const quint64 token = nextOpenToken();
@@ -519,6 +579,8 @@ quint64 ImportSaveCoordinator::startOpenDocumentAtPath(const QString& path, bool
         token = startOpenPdfPath(path, interactive);
     } else if (kind == QStringLiteral("eps")) {
         token = startImportEpsPath(path, interactive);
+    } else if (raw_sniff_path(path)) {
+        token = startOpenRawPath(path, interactive);
     } else if (isNativeDocumentPath(path)) {
         token = startOpenPath(path);
     } else {

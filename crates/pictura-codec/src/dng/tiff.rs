@@ -138,6 +138,28 @@ impl<'a> Tiff<'a> {
             .u64([s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7]]))
     }
 
+    /// Whether the IFD at `offset` lists `tag`, reading only its entry table,
+    /// so a file prefix answers even when the values lie beyond it.
+    pub fn lists_tag(&self, offset: u64, tag: u16) -> bool {
+        let Ok(at) = usize::try_from(offset) else {
+            return false;
+        };
+        let (count, first, entry_len) = if self.big {
+            match self.u64_at(at).map(usize::try_from) {
+                Ok(Ok(n)) => (n, at + 8, 20),
+                _ => return false,
+            }
+        } else {
+            match self.u16_at(at) {
+                Ok(n) => (n as usize, at + 2, 12),
+                Err(_) => return false,
+            }
+        };
+        (0..count)
+            .map_while(|i| self.u16_at(first + i * entry_len).ok())
+            .any(|t| t == tag)
+    }
+
     pub fn ifd(&self, offset: u64) -> Result<Ifd, PsdError> {
         let at = usize::try_from(offset).map_err(|_| PsdError::Truncated)?;
         let (count, first, entry_len, inline) = if self.big {

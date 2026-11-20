@@ -19,8 +19,9 @@ const QList<QColor> kTintRamp = {QColor(0x3fae4a), QColor(0xd83f9e)};
 const QList<QColor> kToneRamp = {QColor(0x33, 0x33, 0x33), QColor(0xdd, 0xdd, 0xdd)};
 } // namespace
 
-AcrBasicPanel::AcrBasicPanel(AcrSettings* settings, QWidget* parent)
-    : AcrPanel(settings, parent)
+AcrBasicPanel::AcrBasicPanel(AcrSettings* settings, QWidget* parent,
+                             std::optional<AcrAsShot> asShot)
+    : AcrPanel(settings, parent), asShot_(asShot)
 {
     auto* column = new QVBoxLayout(this);
     column->setContentsMargins(0, 0, 0, 0);
@@ -37,8 +38,17 @@ AcrBasicPanel::AcrBasicPanel(AcrSettings* settings, QWidget* parent)
                   {tr("Fluorescent"), QByteArrayLiteral("Fluo")},
                   {tr("Flash"), QByteArrayLiteral("Flsh")},
                   {tr("Custom"), QByteArrayLiteral("Cst ")}});
-    addSlider(column, acr::Temp, tr("Temperature"), -100.0, 100.0, 0, 0, kTemperatureRamp);
-    addSlider(column, acr::Tint, tr("Tint"), -100.0, 100.0, 0, 0, kTintRamp);
+    if (asShot_) {
+        // ponytail: the colour stage's locus is stated for 1000–15000 K, so
+        // settings above 15000 K render as 15000 K.
+        addSlider(column, acr::Temp, tr("Temperature"), 2000.0, 50000.0, 0,
+                  asShot_->temperature, kTemperatureRamp)
+            ->setReciprocalScale(true);
+        addSlider(column, acr::Tint, tr("Tint"), -150.0, 150.0, 0, asShot_->tint, kTintRamp);
+    } else {
+        addSlider(column, acr::Temp, tr("Temperature"), -100.0, 100.0, 0, 0, kTemperatureRamp);
+        addSlider(column, acr::Tint, tr("Tint"), -100.0, 100.0, 0, 0, kTintRamp);
+    }
 
     addSeparator(column);
 
@@ -79,14 +89,21 @@ void AcrBasicPanel::resetBasic()
         {acr::Whites, false},    {acr::Blacks, false},   {acr::Clarity, false},
         {acr::Vibrance, false},  {acr::Saturation, false},
     };
+    // A raw source's white balance resets to the as-shot values, not 0.
     for (const BasicKey& entry : keys) {
+        int value = 0;
+        if (asShot_ && entry.key == acr::Temp) {
+            value = asShot_->temperature;
+        } else if (asShot_ && entry.key == acr::Tint) {
+            value = asShot_->tint;
+        }
         if (entry.isDouble) {
-            settings_->setDouble(entry.key, 0.0);
+            settings_->setDouble(entry.key, value);
         } else {
-            settings_->setInt(entry.key, 0);
+            settings_->setInt(entry.key, value);
         }
         if (auto* slider = findChild<AcrSlider*>(QString::fromLatin1(entry.key))) {
-            slider->setValue(0.0);
+            slider->setValue(value);
         }
     }
     emit changed();

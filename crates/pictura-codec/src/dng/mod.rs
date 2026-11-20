@@ -16,6 +16,7 @@ use crate::probe::ImageBudget;
 mod camera_color;
 mod cr2;
 mod demosaic;
+mod develop;
 mod levels;
 mod ljpeg;
 mod tiff;
@@ -26,9 +27,12 @@ pub use camera_color::{
     WhiteBalance,
 };
 pub use demosaic::{demosaic, CameraRgb, DemosaicMethod};
+pub use develop::{
+    decode_raw_source, develop_raw, downscale_camera, raw_xmp, DevelopedRgb, RawLook, RawSource,
+};
 use levels::{Area, Levels};
 use tiff::{Ifd, Order, Tiff};
-pub use vendor::{read_raw, sniff_raw, RawFormat};
+pub use vendor::{read_raw, sniff_raw, sniff_raw_prefix, RawFormat};
 
 const NEW_SUBFILE_TYPE: u16 = 254;
 const IMAGE_WIDTH: u16 = 256;

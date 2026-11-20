@@ -36,7 +36,7 @@ pub use match_color::{
     match_color_stats, MatchColorAccumulator, MatchColorParams, MatchColorStats,
 };
 pub use native::{apply_native, apply_native_in_mode};
-pub use pictura_raw::render_pictura_raw;
+pub use pictura_raw::{render_pictura_raw, render_pictura_raw_rgb16};
 pub use replace_color::{
     replace_color_mask, replace_color_result, replace_color_shift_for, ReplaceColorParams,
     ReplaceColorSample,

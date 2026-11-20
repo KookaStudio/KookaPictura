@@ -254,6 +254,10 @@ private:
     void onOpenFinished(PictureView* view, const QString& status,
                         const QStringList& warnings);
     void reportOpenFailure(int index, const QString& status);
+    // Camera raw opens (#400): decode, then the Pictura Raw dialog when
+    // `interactive`, then the develop.
+    quint64 startOpenRawPath(const QString& path, bool interactive);
+    void developRawOpen(PictureView* view, bool interactive);
     void handlePdfProbeFinished(PictureView* view, const PdfProbe& probe,
                                 const QString& status, const QStringList& warnings);
     void startPdfProbe(const QString& path, bool interactive, const QString& password,
@@ -282,6 +286,9 @@ private:
     std::function<bool(const QString&)> vectorEditorLauncher_;
     // PDF probes that have no tab yet, keyed by their temporary view.
     QHash<PictureView*, PdfProbe> pdfProbes_;
+    // Raw opens in flight, keyed by their loading view: whether the open shows
+    // the Pictura Raw dialog.
+    QHash<PictureView*, bool> rawOpens_;
     // Views whose open signals are already wired (a PDF probe's view becomes a
     // tab, so it is wired once).
     QSet<PictureView*> openWired_;

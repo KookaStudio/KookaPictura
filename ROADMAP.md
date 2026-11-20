@@ -452,7 +452,14 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       from the maker note, black from the masked border) into the same CFA
       plane; decode only, no colour matrix yet (#399).
       `crates/pictura-codec/src/dng/vendor.rs`, `crates/pictura-codec/src/dng/cr2.rs`.
-- [ ] Open camera raw files — there is no File ▸ Open route yet (#400)
+- [x] **Open camera raw files** — File ▸ Open recognises a DNG or CR2 by its
+      signature, decodes it, shows Pictura Raw first (absolute white balance,
+      sidecar or embedded `crs:` settings), and opens a 16-bit RGB document
+      (approximate parity) (#400).
+      `crates/pictura-codec/src/dng/develop.rs`,
+      `crates/pictura-app/src/cxxqt_object/open_jobs/raw_open.rs`.
+- [ ] Per-camera colour matrices, so CR2 and other vendor files open (#1465)
+- [ ] Open a raw file as a smart object (Shift+Open Image) (#1466)
 - [ ] X-Trans-tuned demosaic, with the Fuji container (#399)
 - [ ] Deflate, PackBits and lossy-JPEG DNGs, linear DNGs and floating-point
       samples (#396)

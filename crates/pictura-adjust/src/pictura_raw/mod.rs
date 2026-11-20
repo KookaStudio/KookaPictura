@@ -19,6 +19,8 @@ mod split_toning;
 mod tone_curve;
 
 #[cfg(test)]
+mod rgb16_tests;
+#[cfg(test)]
 mod tests;
 
 use pictura_core::{PicturaRawSettings, PixelBuffer};
@@ -81,14 +83,7 @@ pub fn render_pictura_raw(
         p.b[i] = input.data[2 * n + i] as f32 / 255.0;
     }
 
-    basic::apply(&mut p, &settings.basic);
-    tone_curve::apply(&mut p, &settings.tone_curve);
-    detail::apply(&mut p, &settings.detail);
-    hsl::apply(&mut p, &settings.hsl, settings.mode.grayscale);
-    split_toning::apply(&mut p, &settings.split_toning);
-    lens::apply(&mut p, &settings.lens);
-    effects::apply(&mut p, &settings.effects);
-    calibration::apply(&mut p, &settings.calibration);
+    run_stages(&mut p, settings);
 
     let mut out = PixelBuffer::new(input.width, input.height, input.channels);
     for i in 0..n {
@@ -100,6 +95,61 @@ pub fn render_pictura_raw(
         out.data[3 * n..4 * n].copy_from_slice(&input.data[3 * n..4 * n]);
     }
     Ok(out)
+}
+
+/// Apply the Pictura Raw controls to interleaved 16-bit RGB, `width × height
+/// × 3`, with the same stages as [`render_pictura_raw`], so no stage quantizes
+/// through 8 bits.
+pub fn render_pictura_raw_rgb16(
+    width: usize,
+    height: usize,
+    rgb: &[u16],
+    settings: &PicturaRawSettings,
+) -> Result<Vec<u16>, AdjustError> {
+    let n = width * height;
+    if n == 0 {
+        return Err(AdjustError::InvalidParams("empty buffer".into()));
+    }
+    if rgb.len() != n * 3 {
+        return Err(AdjustError::InvalidParams(
+            "buffer length does not match width*height*3".into(),
+        ));
+    }
+    if settings == &PicturaRawSettings::default() {
+        return Ok(rgb.to_vec());
+    }
+    let channel = |c: usize| -> Vec<f32> {
+        rgb.iter()
+            .skip(c)
+            .step_by(3)
+            .map(|&v| v as f32 / 65535.0)
+            .collect()
+    };
+    let mut p = Planes {
+        r: channel(0),
+        g: channel(1),
+        b: channel(2),
+        w: width,
+        h: height,
+    };
+    run_stages(&mut p, settings);
+    let to16 = |v: f32| (v * 65535.0).round().clamp(0.0, 65535.0) as u16;
+    let mut out = Vec::with_capacity(n * 3);
+    for i in 0..n {
+        out.extend([to16(p.r[i]), to16(p.g[i]), to16(p.b[i])]);
+    }
+    Ok(out)
+}
+
+fn run_stages(p: &mut Planes, settings: &PicturaRawSettings) {
+    basic::apply(p, &settings.basic);
+    tone_curve::apply(p, &settings.tone_curve);
+    detail::apply(p, &settings.detail);
+    hsl::apply(p, &settings.hsl, settings.mode.grayscale);
+    split_toning::apply(p, &settings.split_toning);
+    lens::apply(p, &settings.lens);
+    effects::apply(p, &settings.effects);
+    calibration::apply(p, &settings.calibration);
 }
 
 /// Separable box blur with clamped edges, `O(pixels)`. `radius` is the half

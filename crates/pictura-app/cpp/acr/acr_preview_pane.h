@@ -24,6 +24,8 @@ public:
 
     // Re-render from the bridge with `text` as the settings.
     void setSettingsText(const QString& text);
+    // Render the view's pending camera raw source instead of the layer.
+    void setRawSource(bool raw) { rawSource_ = raw; }
 
     const QImage& image() const { return image_; }
     bool shadowClipping() const;
@@ -47,6 +49,7 @@ private:
 
     PictureView* view_ = nullptr;
     QString path_;
+    bool rawSource_ = false;
     QImage image_;
     double zoom_ = 1.0;
     bool fit_ = true;
