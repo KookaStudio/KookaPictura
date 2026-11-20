@@ -18,6 +18,7 @@
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QTabBar>
+#include <QtWidgets/QWidgetAction>
 
 #include "api/document_api.h"
 #include "api/type_api.h"
@@ -83,6 +84,80 @@ QAction* menuAction(const QMenu* menu, const QString& text)
     return nullptr;
 }
 
+QMenu* windowMenu(PicturaMainWindow& window)
+{
+    QWidget* control = window.findChild<QWidget*>(QStringLiteral("uiSizeControl"));
+    if (!control) {
+        return nullptr;
+    }
+    return qobject_cast<QMenu*>(control->parentWidget());
+}
+
+bool triggerCommand(PicturaMainWindow& window, const QString& id)
+{
+    window.registry()->refresh();
+    QAction* action = window.registry()->action(id);
+    if (!action || !action->isEnabled()) {
+        return false;
+    }
+    action->trigger();
+    QCoreApplication::processEvents();
+    return true;
+}
+
+QList<QAction*> documentEntries(QMenu* menu)
+{
+    QList<QAction*> entries;
+    for (QAction* action : menu->actions()) {
+        if (action->objectName() == QLatin1String("windowDocumentEntry")) {
+            entries.append(action);
+        }
+    }
+    return entries;
+}
+
+QStringList documentEntryTexts(QMenu* menu)
+{
+    QStringList texts;
+    for (QAction* action : documentEntries(menu)) {
+        texts << action->text();
+    }
+    return texts;
+}
+
+// A menu label escapes a literal ampersand so it cannot become a mnemonic.
+QString menuLabel(const QString& label)
+{
+    QString text = label;
+    text.replace(QLatin1Char('&'), QStringLiteral("&&"));
+    return text;
+}
+
+QAction* documentEntry(QMenu* menu, const QString& label)
+{
+    for (QAction* action : documentEntries(menu)) {
+        if (action->text() == menuLabel(label)) {
+            return action;
+        }
+    }
+    return nullptr;
+}
+
+QAction* uiSizeRowAction(QMenu* menu)
+{
+    QWidget* control = menu->findChild<QWidget*>(QStringLiteral("uiSizeControl"));
+    if (!control) {
+        return nullptr;
+    }
+    for (QAction* action : menu->actions()) {
+        auto* widgetAction = qobject_cast<QWidgetAction*>(action);
+        if (widgetAction && widgetAction->defaultWidget() == control) {
+            return action;
+        }
+    }
+    return nullptr;
+}
+
 // Press a floating window's header without moving: it activates the window.
 void clickHeader(DocumentFloatWindow* floating)
 {
@@ -127,9 +202,17 @@ private slots:
     void revealOpensContainingFolder();
     void moveDisabledForLoadingTab();
     void consolidateAllToHere();
+    void windowMenuListOrder();
+    void windowMenuFullLabels();
+    void windowMenuChecksActive();
+    void windowMenuActivatesHosts();
+    void windowMenuFollowsChanges();
+    void windowMenuListIsLast();
+    void windowMenuEmptyWithoutDocuments();
 
 private:
     bool newDoc(const QString& name, int width, int height);
+    bool newNamedDoc(const QString& name, int width = 16, int height = 16);
     QTabBar* tabBar() const;
     void closeAll();
     // Open the context menu of tab `tab` and return it; the caller closes it.
@@ -146,6 +229,16 @@ bool DocumentWindowsTest::newDoc(const QString& name, int width, int height)
 {
     return window_->newDocument(name, width, height, QStringLiteral("rgb"), 8,
                                 QStringLiteral("white"));
+}
+
+bool DocumentWindowsTest::newNamedDoc(const QString& name, int width, int height)
+{
+    if (!newDoc(name, width, height)) {
+        return false;
+    }
+    // newDocument keeps the generated Untitled-N name; the labels use `name`.
+    window_->setDocumentNameForTest(window_->documentCount() - 1, name);
+    return true;
 }
 
 QTabBar* DocumentWindowsTest::tabBar() const
@@ -601,6 +694,188 @@ void DocumentWindowsTest::ctrlTabReachesFloat()
     QVERIFY(window_->floatWindowForTest(1)->isAncestorOf(window_->imageView()));
     QTest::keyClick(window_->imageView(), Qt::Key_Tab, Qt::ControlModifier);
     QCOMPARE(window_->activeDocumentIndex(), 0);
+}
+
+void DocumentWindowsTest::windowMenuListOrder()
+{
+    QVERIFY(newNamedDoc(QStringLiteral("A")));
+    QVERIFY(newNamedDoc(QStringLiteral("B")));
+    QVERIFY(newNamedDoc(QStringLiteral("C")));
+    QTabBar* bar = tabBar();
+    QVERIFY(bar != nullptr);
+    bar->moveTab(0, 1);
+    QCoreApplication::processEvents();
+    QVERIFY(window_->floatDocumentForTest(2));
+    QCOMPARE(window_->tabOfDocumentForTest(2), -1);
+
+    QMenu* menu = windowMenu(*window_);
+    QVERIFY(menu != nullptr);
+    emit menu->aboutToShow();
+    QCOMPARE(documentEntryTexts(menu),
+             QStringList({menuLabel(window_->windowLabelForTest(1, 0)),
+                          menuLabel(window_->windowLabelForTest(0, 0)),
+                          menuLabel(window_->windowLabelForTest(2, 0))}));
+
+    QVERIFY(triggerCommand(*window_, QStringLiteral("window.arrange.tile")));
+    emit menu->aboutToShow();
+    QCOMPARE(documentEntryTexts(menu),
+             QStringList({menuLabel(window_->windowLabelForTest(1, 0)),
+                          menuLabel(window_->windowLabelForTest(0, 0)),
+                          menuLabel(window_->windowLabelForTest(2, 0))}));
+}
+
+void DocumentWindowsTest::windowMenuFullLabels()
+{
+    QVERIFY(newNamedDoc(QStringLiteral("A&B")));
+    QVERIFY(triggerCommand(*window_, QStringLiteral("window.arrange.new.window.for.file")));
+    QCOMPARE(window_->documentCount(), 1);
+    QCOMPARE(window_->windowCountForTest(0), 2);
+    QCOMPARE(window_->imageView(), window_->windowCanvasForTest(0, 1));
+    const QString first = window_->windowLabelForTest(0, 0);
+    const QString second = window_->windowLabelForTest(0, 1);
+    QVERIFY2(second.startsWith(QStringLiteral("A&B:2 ")), qPrintable(second));
+    QVERIFY2(!first.startsWith(QStringLiteral("A&B:2")), qPrintable(first));
+
+    QMenu* menu = windowMenu(*window_);
+    QVERIFY(menu != nullptr);
+    emit menu->aboutToShow();
+    QList<QAction*> entries = documentEntries(menu);
+    QCOMPARE(entries.size(), 2);
+    QVERIFY(entries.at(1)->isChecked());
+    QCOMPARE(documentEntryTexts(menu), QStringList({menuLabel(first), menuLabel(second)}));
+}
+
+void DocumentWindowsTest::windowMenuChecksActive()
+{
+    QVERIFY(newNamedDoc(QStringLiteral("A")));
+    QVERIFY(newNamedDoc(QStringLiteral("B")));
+    QCOMPARE(window_->activeDocumentIndex(), 1);
+    QMenu* menu = windowMenu(*window_);
+    QVERIFY(menu != nullptr);
+    emit menu->aboutToShow();
+    QList<QAction*> entries = documentEntries(menu);
+    QCOMPARE(entries.size(), 2);
+    QVERIFY(!entries.at(0)->isChecked());
+    QVERIFY(entries.at(1)->isChecked());
+
+    QTest::keyClick(window_->imageView(), Qt::Key_Tab, Qt::ControlModifier);
+    QCOMPARE(window_->activeDocumentIndex(), 0);
+    emit menu->aboutToShow();
+    entries = documentEntries(menu);
+    QCOMPARE(entries.size(), 2);
+    QVERIFY(entries.at(0)->isChecked());
+    QVERIFY(!entries.at(1)->isChecked());
+}
+
+void DocumentWindowsTest::windowMenuActivatesHosts()
+{
+    QVERIFY(newNamedDoc(QStringLiteral("Tab")));
+    QVERIFY(newNamedDoc(QStringLiteral("Float")));
+    QVERIFY(window_->floatDocumentForTest(1));
+    window_->setActiveDocumentIndex(0);
+    QCOMPARE(window_->activeDocumentIndex(), 0);
+
+    QMenu* menu = windowMenu(*window_);
+    QVERIFY(menu != nullptr);
+    emit menu->aboutToShow();
+    QAction* floating = documentEntry(menu, window_->windowLabelForTest(1, 0));
+    QVERIFY(floating != nullptr);
+    floating->trigger();
+    QCoreApplication::processEvents();
+    QCOMPARE(window_->activeDocumentIndex(), 1);
+
+    emit menu->aboutToShow();
+    QAction* tabbed = documentEntry(menu, window_->windowLabelForTest(0, 0));
+    QVERIFY(tabbed != nullptr);
+    tabbed->trigger();
+    QCoreApplication::processEvents();
+    QCOMPARE(window_->activeDocumentIndex(), 0);
+
+    QVERIFY(triggerCommand(*window_, QStringLiteral("window.arrange.tile")));
+    emit menu->aboutToShow();
+    QAction* pane = documentEntry(menu, window_->windowLabelForTest(1, 0));
+    QVERIFY(pane != nullptr);
+    pane->trigger();
+    QCoreApplication::processEvents();
+    QCOMPARE(window_->activeDocumentIndex(), 1);
+}
+
+void DocumentWindowsTest::windowMenuFollowsChanges()
+{
+    QVERIFY(newNamedDoc(QStringLiteral("A")));
+    QVERIFY(newNamedDoc(QStringLiteral("B")));
+    QVERIFY(newNamedDoc(QStringLiteral("C")));
+    QMenu* menu = windowMenu(*window_);
+    QVERIFY(menu != nullptr);
+    emit menu->aboutToShow();
+    QCOMPARE(documentEntries(menu).size(), 3);
+
+    QVERIFY(newNamedDoc(QStringLiteral("D")));
+
+    window_->setDocumentNameForTest(0, QStringLiteral("Renamed"));
+    QVERIFY(window_->floatDocumentForTest(1));
+    QVERIFY(window_->closeDocument(2, false));
+    QCOMPARE(window_->documentCount(), 3);
+
+    emit menu->aboutToShow();
+    QCOMPARE(documentEntryTexts(menu),
+             QStringList({menuLabel(window_->windowLabelForTest(0, 0)),
+                          menuLabel(window_->windowLabelForTest(2, 0)),
+                          menuLabel(window_->windowLabelForTest(1, 0))}));
+    QVERIFY(documentEntries(menu).at(0)->text().startsWith(QStringLiteral("Renamed ")));
+    QVERIFY(documentEntries(menu).at(1)->text().startsWith(QStringLiteral("D ")));
+}
+
+void DocumentWindowsTest::windowMenuListIsLast()
+{
+    QVERIFY(newNamedDoc(QStringLiteral("A")));
+    QMenu* menu = windowMenu(*window_);
+    QVERIFY(menu != nullptr);
+    emit menu->aboutToShow();
+
+    QAction* row = uiSizeRowAction(menu);
+    QVERIFY(row != nullptr);
+    QAction* options = window_->registry()->action(QStringLiteral("view.options"));
+    QVERIFY(options != nullptr);
+    const QList<QAction*> actions = menu->actions();
+    const int rowIndex = actions.indexOf(row);
+    const int optionsIndex = actions.indexOf(options);
+    QVERIFY2(rowIndex > optionsIndex, "the UI Size row follows Options");
+
+    int firstEntry = -1;
+    for (int i = rowIndex + 1; i < actions.size(); ++i) {
+        if (actions.at(i)->objectName() == QLatin1String("windowDocumentEntry")) {
+            firstEntry = i;
+            break;
+        }
+    }
+    QVERIFY2(firstEntry > rowIndex, "the document list follows the UI Size row");
+    QVERIFY(actions.at(firstEntry - 1)->isSeparator());
+    QCOMPARE(actions.at(firstEntry - 1)->objectName(),
+             QStringLiteral("windowDocumentSeparator"));
+    QVERIFY(actions.at(firstEntry - 1)->isVisible());
+    for (int i = firstEntry; i < actions.size(); ++i) {
+        QCOMPARE(actions.at(i)->objectName(), QStringLiteral("windowDocumentEntry"));
+        QVERIFY(actions.at(i)->isVisible());
+    }
+}
+
+void DocumentWindowsTest::windowMenuEmptyWithoutDocuments()
+{
+    QCOMPARE(window_->documentCount(), 0);
+    QMenu* menu = windowMenu(*window_);
+    QVERIFY(menu != nullptr);
+    emit menu->aboutToShow();
+    QVERIFY(documentEntries(menu).isEmpty());
+
+    QAction* row = uiSizeRowAction(menu);
+    QVERIFY(row != nullptr);
+    const QList<QAction*> actions = menu->actions();
+    const int rowIndex = actions.indexOf(row);
+    QVERIFY(rowIndex >= 0);
+    for (int i = rowIndex + 1; i < actions.size(); ++i) {
+        QVERIFY2(!actions.at(i)->isVisible(), qPrintable(actions.at(i)->text()));
+    }
 }
 
 void DocumentWindowsTest::tabMenuEntries()
