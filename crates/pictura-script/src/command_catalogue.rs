@@ -126,6 +126,7 @@ pub fn modal_ids() -> &'static [&'static str] {
         "edit.preferences.type",
         "edit.preferences.agentControl",
         "image.apply.image",
+        "image.calculations",
         "image.image.size",
         "image.canvas.size",
         "image.rotate.arbitrary",

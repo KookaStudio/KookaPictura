@@ -452,6 +452,21 @@ impl qobject::PictureView {
         !matches!(outcome, Edit::None)
     }
 
+    /// Save a Calculations result as a new alpha channel under one
+    /// "Calculations" state; false at the 56-channel cap.
+    pub(super) fn save_calculations_channel(mut self: Pin<&mut Self>, shape: Selection) -> bool {
+        let outcome = self.as_mut().edit("Calculations", |rust| {
+            save_selection_shape(
+                rust,
+                shape,
+                SelectionTarget::NewChannel,
+                "",
+                CombineMode::New,
+            )
+        });
+        !matches!(outcome, Edit::None)
+    }
+
     /// Restore a selection from the extra channel named `Alpha N`. Kept for
     /// the footer and existing callers; the dialog uses the target form.
     pub fn load_selection(mut self: Pin<&mut Self>, name: &QString) -> bool {

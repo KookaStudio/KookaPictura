@@ -11,7 +11,7 @@ use pictura_render::{
 };
 use std::sync::Arc;
 
-pub(crate) struct ApplyImageSnapshot(Option<Arc<ApplyImagePlanes>>);
+pub(crate) struct ApplyImageSnapshot(pub(super) Option<Arc<ApplyImagePlanes>>);
 
 const SELECTION: i32 = -3;
 const ALPHA_BASE: i32 = 100;
@@ -74,7 +74,7 @@ pub(super) fn apply_image_target_label(view: &PictureView) -> QString {
     }
 }
 
-fn mode_of(mode: &str, scale: f64, offset: i32) -> Option<ApplyImageMode> {
+pub(super) fn mode_of(mode: &str, scale: f64, offset: i32) -> Option<ApplyImageMode> {
     let scale = scale.clamp(1.0, 2.0) as f32;
     let offset = offset.clamp(-255, 255) as f32;
     match mode {
