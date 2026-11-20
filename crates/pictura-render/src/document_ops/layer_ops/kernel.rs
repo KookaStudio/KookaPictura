@@ -272,9 +272,12 @@ pub(super) fn sample_over_alpha<T: Sample>(
             bicubic_taps(w, h, lx, ly, bc, visit)
         }
     }
-    if opaque || std::env::var_os("DEBUG_PLAIN").is_some() {
+    if opaque {
         return sample(color, w, h, lx, ly, interpolation);
     }
+    // `sum_a` is the plain kernel's alpha sample, so a cubic's negative lobes
+    // that drive it to zero or below also leave the pixel fully transparent:
+    // its colour is never seen.
     if sum_a <= 0.0 {
         return T::from_unit(0.0);
     }
@@ -304,6 +307,39 @@ mod tests {
                     sample(&ramp, w, h, lx, ly, method),
                     "{method:?} at ({lx}, {ly})"
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn visible_alpha_keeps_a_flat_colour_under_every_footprint() {
+        // A flat colour over a sparse alpha plane: wherever the resampled alpha
+        // is visible, the weighted colour is that colour, even where the
+        // sharper cubic's negative lobes cancel most of the alpha.
+        let (w, h) = (9usize, 7usize);
+        let color = vec![200u8; w * h];
+        let alpha: Vec<u8> = (0..w * h)
+            .map(|i| match i * 7 % 11 {
+                0 => 255,
+                1 => 90,
+                2 => 20,
+                _ => 0,
+            })
+            .collect();
+        for method in [
+            Interpolation::Bilinear,
+            Interpolation::Bicubic,
+            Interpolation::BicubicSmoother,
+            Interpolation::BicubicSharper,
+        ] {
+            for step in 0..400 {
+                let lx = (step % 20) as f64 * 0.43;
+                let ly = (step / 20) as f64 * 0.33;
+                if sample(&alpha, w, h, lx, ly, method) == 0 {
+                    continue;
+                }
+                let got = sample_over_alpha(&color, &alpha, w, h, lx, ly, method);
+                assert!(got.abs_diff(200) <= 1, "{method:?} at ({lx}, {ly}): {got}");
             }
         }
     }
