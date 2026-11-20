@@ -189,8 +189,9 @@ applies the same budget before the opt-in lock. The command guidance in
 SHALL be shown through `scripts/with-build-lock.sh`. `.env.example` SHALL list
 the percent knob as a commented entry under its external-build-knobs section,
 marked process-environment only. `AGENTS.md` and `DEVELOPING.md` SHALL also name
-the shared agent policy, its Claude Code and Codex hooks, the trust steps, and
-the worktree behavior.
+the shared agent policy, its Claude Code and Codex hooks, the trust steps, the
+worktree behavior, and that the refusal names the wrapper from the policy's
+checkout.
 
 #### Scenario: The documentation names the budget and the wrapper [cb_docs]
 
@@ -199,7 +200,8 @@ the worktree behavior.
 - **THEN** every heavy command form goes through the wrapper, and `AGENTS.md`
   and `DEVELOPING.md` name the default budget, the percent override and its
   valid range, the shared slice across worktrees, the wrapper's budget-and-lock
-  behavior, and the agent guard's trust and worktree behavior
+  behavior, the agent guard's trust and worktree behavior, and the
+  policy-checkout wrapper hint
 
 ### Requirement: The documented command wrapper applies the CPU budget
 
@@ -232,14 +234,17 @@ command whose text names `scripts/cpu-budget.py`,
 `scripts/with-build-lock.sh`, `scripts/verify-fast.sh`,
 `scripts/verify-full.sh`, or `scripts/test-report.sh` SHALL pass, as SHALL a
 command with no heavy segment and a `cargo fmt` segment, which runs no compiler.
+Segments SHALL be split on `;`, `&&`, `||`, `|`, and newline only outside single
+and double quotes, so a quoted operator is data rather than a second command.
 The refusal SHALL name
-`bash <repo-root>/scripts/with-build-lock.sh -- <command>` for a simple command
-or `... -- bash -c '<command>'` for a compound one, where `<repo-root>` is
-resolved from the current checkout so the hint works from a subdirectory or a
-worktree. The opencode plugin SHALL delegate to this policy instead of carrying
-its own matcher. A `--self-check` SHALL prove the allow and refuse cases, both
-input forms, and the git-root resolution, and `scripts/verify-fast.sh` SHALL run
-it.
+`bash <wrapper> -- <command>` for a simple command or
+`bash <wrapper> -- bash -c '<command>'` for a compound one, where `<wrapper>` is
+the `scripts/with-build-lock.sh` of the checkout that contains the policy
+script: relative when the cwd is that checkout, absolute otherwise. The opencode
+plugin SHALL delegate to this policy instead of carrying its own matcher. A
+`--self-check` SHALL prove the allow and refuse cases, both input forms, the
+quoted-operator cases, and the policy-checkout wrapper hint from an unrelated
+cwd, and `scripts/verify-fast.sh` SHALL run it.
 
 #### Scenario: A bare heavy command is refused [cb_agent_refuse]
 
@@ -252,9 +257,18 @@ it.
 
 #### Scenario: The refusal names a checkout-relative wrapper [cb_policy_git_root]
 
-- **WHEN** the policy refuses a command from a subdirectory or a linked worktree
-- **THEN** the refusal names the wrapper under the checkout root rather than a
-  path relative to the current directory
+- **WHEN** the policy refuses a command from an unrelated cwd, a subdirectory,
+  or a linked worktree
+- **THEN** the refusal names the wrapper from the policy's own checkout rather
+  than a wrapper under the caller's cwd
+
+#### Scenario: Quoted operators are data [cb_policy_quotes]
+
+- **WHEN** the command contains a `|` or `;` inside a quoted argument and no
+  unquoted separator before a heavy command
+- **THEN** the policy allows the command
+- **AND** a real unquoted `|`, `&&`, `||`, or `;` before a heavy command still
+  refuses
 
 ### Requirement: A running sccache server is held to the slice
 
