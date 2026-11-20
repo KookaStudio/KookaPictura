@@ -878,11 +878,17 @@ mod tests {
         .unwrap();
         let dist = boundary_distance(&mask);
         let mut changed = 0;
-        for i in 0..out.data.len() {
-            if out.data[i] != mask.data[i] {
+        for (i, ((&out_px, &input_px), &distance)) in out
+            .data
+            .iter()
+            .zip(mask.data.iter())
+            .zip(dist.iter())
+            .enumerate()
+        {
+            if out_px != input_px {
                 changed += 1;
                 assert!(
-                    dist[i] <= dab.radius as u32,
+                    distance <= dab.radius as u32,
                     "changed pixel {i} escaped the dab radius"
                 );
             }
