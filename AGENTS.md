@@ -37,25 +37,27 @@ sources go to `crates/pictura-app/cpp/tests/CMakeLists.txt`.**
 ## Commands
 
 ```bash
-cargo fmt --all                                  # CI runs --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo nextest run --workspace                    # one crate/test: -p <crate> [name]
-cargo test -p pictura-render --test document_oracle       # one integration suite
-cargo test -p pictura-core -- <name> --ignored --nocapture # ignored profiling/GPU
+cargo fmt --all                                  # CI runs --check; no compiler, stays bare
+bash scripts/with-build-lock.sh -- cargo clippy --workspace --all-targets -- -D warnings
+bash scripts/with-build-lock.sh -- cargo nextest run --workspace   # one crate/test: -p <crate> [name]
+bash scripts/with-build-lock.sh -- cargo test -p pictura-render --test document_oracle       # one integration suite
+bash scripts/with-build-lock.sh -- cargo test -p pictura-core -- <name> --ignored --nocapture # ignored profiling/GPU
 bash scripts/test-report.sh                      # nextest + app self-test + Qt JUnit -> unified report
 bash scripts/verify-fast.sh                      # fmt, clippy, test-report, file-size, guard, openspec
 bash scripts/verify-full.sh                      # CMake build first, then verify-fast
-bash scripts/with-build-lock.sh -- <command>     # opt-in lock for a direct cmake/cargo/ctest command
+bash scripts/with-build-lock.sh -- <command>     # applies the CPU budget and the opt-in lock
 openspec validate --all --strict                 # openspec 1.13.2
-cmake -S . -B build -G Ninja && cmake --build build --parallel
+bash scripts/with-build-lock.sh -- bash -c 'cmake -S . -B build -G Ninja && cmake --build build --parallel'
 ./build/pictura --headless --self-test [file.psd]
 ```
 
 Local gates run under a CPU budget of 80% of the allowed CPUs; the budget is an
 affinity slice shared by concurrent worktrees, and `PICTURA_CPU_BUDGET_PERCENT`
-(1-100) overrides the share. The build lock stays opt-in
-(`PICTURA_VERIFY_LOCK=1`); wrap a direct heavy command in
-`scripts/with-build-lock.sh -- <command>` to queue it.
+(1-100) overrides the share. The wrapper applies the same budget: wrap a direct
+heavy command in `scripts/with-build-lock.sh -- <command>`. The build lock stays
+opt-in (`PICTURA_VERIFY_LOCK=1`) and makes the command queue. The committed
+opencode plugin refuses a bare `cargo`, `cmake`, `ctest`, or `ninja` segment and
+names the wrapped form.
 
 Toolchain is pinned by `rust-toolchain.toml` (1.98). Qt is the system Qt 6
 (`qmake6 -query QT_VERSION`). Cargo links with `lld` (`.cargo/config.toml`);
