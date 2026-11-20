@@ -4,6 +4,21 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **DNG sensor reader — #396 implemented** (OpenSpec change `dng-raw-reader`,
+  archived; capability `codec/dng-raw-reader`). First stage of raw open (#86).
+  `pictura_codec::read_dng` (`crates/pictura-codec/src/dng/`) reads classic
+  TIFF or BigTIFF in either byte order, finds the `NewSubFileType` 0 CFA image
+  in IFD0, its SubIFDs or the chain, and decodes strips or tiles: compression 1
+  at 8–16 bits (bit-packed below 16) and 7 (an in-house ITU T.81 lossless JPEG
+  decoder, predictors 1–7, restarts). `LinearizationTable`, the black pattern
+  and deltas, and `WhiteLevel` map samples to 0–65535 over `ActiveArea`; the CFA
+  pattern, default crop, orientation and colour tags are reported for #397/#398.
+  Deflate, PackBits, lossy JPEG, linear DNG, float samples and non-RGB CFAs are
+  refused (`Unsupported`). Declared sizes are charged to `ImageBudget`, and
+  every chunk must hold its samples before the plane is allocated. Tests:
+  `tests/dng_reader.rs` (synthetic DNGs from `tests/dng/builder.rs` and a test
+  lossless JPEG encoder); the user's Leica M9 samples check opt-in through
+  `PICTURA_DNG_CORPUS`. Nothing in the app opens a DNG yet (#400).
 - **Vector-mask path authoring — #261 implemented** (OpenSpec change
   `vector-mask-path-authoring`, archived; capability
   `ui/vector-mask-path-authoring`). Current Path authors the Paths panel's
