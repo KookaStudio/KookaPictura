@@ -36,7 +36,7 @@ mod view_preview;
 use preview::TransformPreview;
 use preview::{
     backdrop_patch, build_transform_preview, moving_layer_image, needs_rendered_appearance,
-    rendered_layer_image, transform_preview_bytes,
+    rendered_layer_image, transform_preview_above, transform_preview_bytes,
 };
 pub(in crate::cxxqt_object) use preview::{
     rendered_transform_group, set_transform_preview_pixels_for_test, transform_preview_layer_at,
@@ -175,7 +175,6 @@ impl qobject::PictureView {
     ) -> bool {
         let mut guard = self.as_mut().rust_mut();
         let rust = &mut *guard;
-        let gpu_compute = rust.gpu_compute;
         // The preview is built before the session opens; one that does not
         // fit is refused rather than left to the OOM killer (#1297).
         let fits = rust.session.doc.as_ref().is_some_and(|doc| {
@@ -187,11 +186,23 @@ impl qobject::PictureView {
             return false;
         }
         let prepared = rust.session.doc.as_ref().and_then(|doc| {
-            build_transform_preview(doc, path, members, orig_rect, gpu_compute, bounded)
+            build_transform_preview(doc, path, members, orig_rect, rust.gpu_compute, bounded)
         });
         let Some(preview) = prepared else {
             return false;
         };
+        let (above_image, above_origin, above_scale) =
+            rust.session.doc.as_ref().map_or((None, None, 1), |doc| {
+                transform_preview_above(
+                    doc,
+                    path,
+                    members,
+                    preview.level,
+                    rust.presented_level,
+                    rust.presented_rect,
+                    rust.gpu_compute,
+                )
+            });
         rust.move_base = Some(preview.base);
         rust.move_base_origin = preview.base_origin;
         rust.move_view = None;
@@ -200,9 +211,9 @@ impl qobject::PictureView {
         rust.transform_preview_level = preview.level;
         rust.move_x = preview.x;
         rust.move_y = preview.y;
-        rust.move_above = None;
-        rust.move_above_origin = None;
-        rust.move_above_scale = 1;
+        rust.move_above = above_image;
+        rust.move_above_origin = above_origin;
+        rust.move_above_scale = above_scale;
         rust.move_above_presented = None;
         rust.move_opacity = preview.opacity;
         rust.move_prepared_revision = rust.session.content_revision;

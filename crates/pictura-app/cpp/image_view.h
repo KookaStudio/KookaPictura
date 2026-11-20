@@ -309,7 +309,8 @@ public:
     // document pixels per pixel of `base` and `layer` (a reduced preview).
     void beginTransformPreview(const QImage& base, const QImage& layer, const QPointF& layerPos,
                                double opacity, std::optional<QPoint> basePos = std::nullopt,
-                               int scale = 1);
+                               int scale = 1, const QImage& above = QImage(),
+                               std::optional<QPoint> abovePos = std::nullopt, int aboveScale = 1);
     // Begin a transform overlay with no moving image: the box, handles, pivot,
     // and a caller-fed selection preview (Transform Selection).
     void beginTransformOverlay();
@@ -695,6 +696,7 @@ private:
     // view scale changed since the last warp.
     void refreshTransformWarp();
     void paintTransformLayer(QPainter& painter);
+    void paintTransformAbove(QPainter& painter);
     // The Free Transform box, handles, rotate knob, and reference point,
     // unclipped by the document rect (image_view_overlays.cpp).
     void paintTransformOverlay(QPainter& painter);

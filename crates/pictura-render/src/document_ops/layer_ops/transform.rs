@@ -50,6 +50,12 @@ pub(super) trait PlaneMap: Sized {
     /// The equivalent map for a plane occupying `rect` (a layer mask): the
     /// similarity map re-centres on the new rect; the projective map is global.
     fn for_rect(&self, rect: PsdRect) -> Self;
+    /// Transparent padding for the source edge. An axis-aligned scale keeps a
+    /// hard edge (the 0.3.0 behaviour); a rotated or skewed edge needs the
+    /// padding so it does not stair-step.
+    fn pad(&self) -> usize {
+        PAD
+    }
 }
 
 /// The document-space similarity map of one source rect.
@@ -112,6 +118,14 @@ impl PlaneMap for Map {
             dy: self.dy,
         }
     }
+
+    fn pad(&self) -> usize {
+        if self.sin.abs() < 1e-12 || self.cos.abs() < 1e-12 {
+            0
+        } else {
+            PAD
+        }
+    }
 }
 
 /// A document-space projective map. Stores the forward homography (source →
@@ -156,6 +170,18 @@ impl PlaneMap for QuadMap {
 
     fn for_rect(&self, _rect: PsdRect) -> Self {
         *self
+    }
+
+    fn pad(&self) -> usize {
+        if self.h[1].abs() < 1e-12
+            && self.h[2].abs() < 1e-12
+            && self.h[3].abs() < 1e-12
+            && self.h[5].abs() < 1e-12
+        {
+            0
+        } else {
+            PAD
+        }
     }
 }
 
@@ -292,7 +318,7 @@ pub(super) fn resample_plane<M: PlaneMap + Sync>(
         alpha,
         w,
         h,
-        pad: PAD,
+        pad: map.pad(),
         rect,
     };
     transform_tiled::resample(&source, map, dest, interpolation)
@@ -1001,6 +1027,32 @@ mod tests {
             .filter(|a| *a != 0 && *a != 255)
             .count();
         assert!(fractional > 0, "the rotated edge is not anti-aliased");
+    }
+
+    #[test]
+    fn an_axis_aligned_scale_keeps_a_hard_edge() {
+        let side = 64u32;
+        let rgba = [0u8, 0, 0, 255].repeat((side * side) as usize);
+        let mut doc = Document::from_rgba("square", side, side, &rgba);
+        assert!(transform_layer_with(
+            &mut doc,
+            "0",
+            LayerTransform {
+                scale_x: 2.0,
+                scale_y: 2.0,
+                angle_radians: 0.0,
+                dx: 0.0,
+                dy: 0.0,
+            },
+            Interpolation::Bicubic,
+        ));
+        let layer = resolve_path(&doc, "0").expect("layer");
+        let alpha = layer.channels().iter().find(|c| c.id == -1).expect("alpha");
+        let fractional = (0..alpha.data.len())
+            .filter_map(|i| alpha.data.sample(i))
+            .filter(|a| *a != 0 && *a != 255)
+            .count();
+        assert_eq!(fractional, 0, "an axis-aligned scale kept a soft edge");
     }
 
     #[test]

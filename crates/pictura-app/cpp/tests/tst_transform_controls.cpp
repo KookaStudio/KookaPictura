@@ -56,6 +56,9 @@ private slots:
     void hiddenLayerRefusesTransforms();
     void ctrlTTakesTheBoxOver();
     void idleBoxLeavesTheLayerAlone();
+    void lowerLayerStaysUnderTheLayersAbove();
+    void topmostLayerBuildsNoAboveImage();
+    void previewEdgeMatchesTheCommittedResample();
 
 private:
     // New document + one filled raster layer selected, Move active; toggles the
@@ -478,6 +481,127 @@ void TransformControlsTest::idleBoxLeavesTheLayerAlone()
     const ::rust::Vec<int32_t> rect = pictura::layer_rect_extents(*view, layer);
     QCOMPARE(int(rect.size()), 4);
     QCOMPARE(QList<int>({rect[0], rect[1], rect[2], rect[3]}), QList<int>({10, 8, 30, 28}));
+}
+
+// [ft_preview_stack] a resized lower layer stays under the layers above it
+void TransformControlsTest::lowerLayerStaysUnderTheLayersAbove()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("TransformStack"), 120, 100, QStringLiteral("rgb"),
+                              8, QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    pictura::ImageView* canvas = frame.imageView();
+    QVERIFY(view && canvas);
+
+    const auto square = [view](int above, const QRect& box, QRgb colour) {
+        const int index = view->add_layer(above);
+        if (index < 0) {
+            return QString();
+        }
+        const QString path = QString::number(index);
+        view->set_active_layer(path);
+        if (!view->select_rect(box.x(), box.y(), box.width(), box.height(),
+                               QStringLiteral("new"), 0.0)
+            || !pictura::edit_fill(*view, colour, -1, QStringLiteral("normal"), 100, false)) {
+            return QString();
+        }
+        view->deselect();
+        return path;
+    };
+    const QString blue = square(0, QRect(20, 20, 40, 40), qRgba(0, 0, 255, 255));
+    QVERIFY2(!blue.isEmpty(), "the lower square");
+    const QString red = square(blue.toInt(), QRect(40, 40, 40, 40), qRgba(255, 0, 0, 255));
+    QVERIFY2(!red.isEmpty(), "the upper square");
+
+    frame.selectLayerPath(blue);
+    frame.setActiveTool(pictura::ToolId::Move);
+    auto* box = frame.findChild<QCheckBox*>(QStringLiteral("optionsMoveTransform"));
+    QVERIFY(box);
+    box->setChecked(true);
+    canvas->setSmartGuidesEnabled(false);
+    QCoreApplication::processEvents();
+
+    // Scale the blue from its bottom-right handle until it covers the red.
+    canvas->mousePressed(QPointF(60.0, 60.0), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY(canvas->transformPreviewActive());
+    QVERIFY2(!view->move_preview_above().isNull(), "the layers above are prepared");
+    canvas->mouseMoved(QPointF(100.0, 100.0));
+
+    const QImage shot = canvas->grab().toImage();
+    const auto at = [&](double x, double y) {
+        return shot.pixelColor(canvas->imageToWidget(QPointF(x, y)).toPoint());
+    };
+    QCOMPARE(at(55.0, 50.0), QColor(Qt::red));   // the layer above stays on top
+    QCOMPARE(at(90.0, 90.0), QColor(Qt::blue));  // the resized content shows
+    canvas->mouseReleased(QPointF(100.0, 100.0));
+}
+
+// [ft_preview_top] the topmost layer prepares no above-layer image
+void TransformControlsTest::topmostLayerBuildsNoAboveImage()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginControls(frame, true);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    pictura::ImageView* canvas = frame.imageView();
+    QVERIFY(view && canvas);
+
+    canvas->setSmartGuidesEnabled(false);
+    canvas->mousePressed(QPointF(30.0, 28.0), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY(canvas->transformPreviewActive());
+    QVERIFY(view->move_preview_above().isNull());
+    canvas->mouseMoved(QPointF(36.0, 34.0));
+    canvas->mouseReleased(QPointF(36.0, 34.0));
+}
+
+// [ft_preview_edge] the live preview anti-aliases the resampled edge
+void TransformControlsTest::previewEdgeMatchesTheCommittedResample()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("PreviewEdge"), 100, 100, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && canvas && tools);
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&frame));
+    const int added = view->add_layer(0);
+    QVERIFY(added > 0);
+    const QString layer = QString::number(added);
+    frame.selectLayerPath(layer);
+    QVERIFY(view->select_rect(20, 20, 40, 40, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::edit_fill(*view, qRgba(0, 0, 0, 255), -1, QStringLiteral("normal"), 100,
+                               false));
+    view->deselect();
+    canvas->setZoom(1.0, QPointF(50.0, 50.0));
+
+    // An axis-aligned scale keeps the hard 0.3.0 edge; a gray intermediate
+    // row is the 0.4.0 regression.
+    QVERIFY(tools->beginFreeTransform(layer));
+    QCoreApplication::processEvents();
+    canvas->mousePressed(QPointF(40.0, 60.0), Qt::LeftButton, int(Qt::NoModifier));
+    canvas->mouseMoved(QPointF(40.0, 87.5));
+    canvas->mouseReleased(QPointF(40.0, 87.5));
+    QVERIFY(canvas->transformPreviewActive());
+    // The box and handles sit on the edge; hide them so the sample is content.
+    canvas->setTransformQuad(QPolygonF());
+    QCoreApplication::processEvents();
+
+    const auto edgeIsHard = [canvas](const QImage& shot) {
+        for (int y = 80; y <= 95; ++y) {
+            const int gray =
+                qGray(shot.pixel(canvas->imageToWidget(QPointF(25.0, y + 0.5)).toPoint()));
+            if (gray != 0 && gray != 255) {
+                return false;
+            }
+        }
+        return true;
+    };
+    QVERIFY2(edgeIsHard(canvas->grab().toImage()), "the preview edge is hard");
+    tools->commitFreeTransform();
+    QCoreApplication::processEvents();
+    QVERIFY2(edgeIsHard(canvas->grab().toImage()), "the committed edge is hard");
 }
 
 QTEST_MAIN(TransformControlsTest)

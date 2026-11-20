@@ -590,6 +590,41 @@ fn hidden(doc: &pictura_core::Document, paths: &[String]) -> pictura_core::Docum
     out
 }
 
+/// The layers above a transform's hidden set over transparency, with their
+/// document-space origin and scale. The set is the linked `members`, or the
+/// target and its clipping run. `None` when the topmost hidden layer is already
+/// the topmost layer.
+pub(super) fn transform_preview_above(
+    doc: &pictura_core::Document,
+    path: &str,
+    members: &[String],
+    preview_level: u32,
+    presented_level: i32,
+    presented_rect: PsdRect,
+    gpu_compute: bool,
+) -> (Option<QImage>, Option<(i32, i32)>, i32) {
+    let hide = if members.len() > 1 {
+        members.to_vec()
+    } else {
+        clipping_group(doc, path)
+    };
+    let visible = if presented_rect.width() > 0 && presented_rect.height() > 0 {
+        presented_rect
+    } else {
+        view_preview::canvas(doc)
+    };
+    let level = if presented_level >= 0 {
+        presented_level as u32
+    } else {
+        preview_level
+    };
+    let level = level.min(MAX_LEVEL);
+    match view_preview::above_patch(doc, &hide, level, visible, gpu_compute) {
+        Some((image, origin)) => (Some(image), Some(origin), 1i32 << level),
+        None => (None, None, 1),
+    }
+}
+
 /// The backdrop under the layers at `paths` as a patch of their bounds and its
 /// document-space origin, for a preview drawn over the live canvas; `None` when
 /// the canvas cannot lie under it, so the whole backdrop has to be built.
