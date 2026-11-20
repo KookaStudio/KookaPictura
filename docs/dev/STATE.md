@@ -4,6 +4,20 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Transform keeps erased pixels erased — #1446 fixed** (OpenSpec change
+  `transform-alpha-weighted-colour`, archived; capabilities
+  `document/transform-interpolation`, `document/auto-align-layers`). Free
+  Transform and Warp resampled a layer's retained native store as-is and
+  narrowed it back over the 8-bit channels, so pixels a brush or eraser stroke
+  had changed (8-bit only) came back after a resize. `prepare_layer` now
+  refreshes each store plane that no longer narrows to its 8-bit plane
+  (`transform_native::current_store`, the PSD writer's rule); converted
+  source-mode stores are left alone. Transform colour resamples weighted by
+  alpha (`kernel::sample_over_alpha`), so erased pixels and the transparent
+  padding no longer darken edges; opaque footprints stay byte-identical.
+  Auto-Align's work image reads luma premultiplied by alpha. Tests:
+  `transform_alpha_tests`, the `kernel` units, and
+  `auto_align::tests::work_luma_is_premultiplied_by_alpha`.
 - **DNG sensor reader — #396 implemented** (OpenSpec change `dng-raw-reader`,
   archived; capability `codec/dng-raw-reader`). First stage of raw open (#86).
   `pictura_codec::read_dng` (`crates/pictura-codec/src/dng/`) reads classic
