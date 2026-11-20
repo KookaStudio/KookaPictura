@@ -139,11 +139,13 @@ pub(super) fn scale_preview_params(p: EngineParams, factor: f64) -> EngineParams
 /// Parse the bridge's flat `(x, y, radius, erase)` quads. A malformed slice is
 /// rejected rather than silently truncated.
 pub(super) fn parse_dabs(values: &[f64]) -> Vec<RefineDab> {
-    if values.len() % 4 != 0 {
+    if !values.len().is_multiple_of(4) {
         return Vec::new();
     }
     values
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|d| RefineDab {
             x: d[0],
             y: d[1],
