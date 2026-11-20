@@ -438,8 +438,13 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       (TIFF or BigTIFF, uncompressed or lossless JPEG) normalized by its levels
       and active area, with its colour tags (#396).
       `crates/pictura-codec/src/dng/`.
-- [ ] Open camera raw files — there is no demosaic, colour transform or
-      File ▸ Open route yet (#397, #398, #400)
+- [x] **Raw demosaic** — `pictura_codec::demosaic` turns the CFA plane into
+      16-bit linear camera RGB, bilinear for any RGB pattern or AHD for Bayer
+      (approximate parity) (#397).
+      `crates/pictura-codec/src/dng/demosaic/`.
+- [ ] Open camera raw files — there is no colour transform or File ▸ Open
+      route yet (#398, #400)
+- [ ] X-Trans-tuned demosaic, with the Fuji container (#399)
 - [ ] Deflate, PackBits and lossy-JPEG DNGs, linear DNGs and floating-point
       samples (#396)
 - [ ] Vendor raw containers (#399)
