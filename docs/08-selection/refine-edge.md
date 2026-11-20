@@ -38,6 +38,8 @@ Keyboard behavior documented in the CS6 key tables: `Ctrl+Alt+R` / `Cmd+Opt+R` o
 
 Refine Edge is the CS6-recommended replacement for the old Extract plug-in: it gives better results and nondestructive processing, because unlike Extract — which permanently erases pixel data — Refine Edge creates selection masks that can be readjusted and fine-tuned later.
 
+**Photoshop CC 2015.5+ (Select and Mask).** CC replaced the dialog with the Select and Mask workspace. The refinement job became the **Refine Edge Brush** (`R`), with **Alt** restoring the original selection while held; the separate **Brush** (`B`) paints the mask directly. **Show Radius** became **Show Edge** (`J`), the view modes gained **Onion Skin** (`O`), and `F`/`Shift+F` cycle them while `X` temporarily disables them. The workspace also adds High Quality Preview, Real-time Refinement, Refine Mode (Color/Object Aware), Refine Hair, presets, and Remember Settings. This implementation keeps the existing dialog surface and models the brush plus Show Edge; the workspace shell and those later controls remain deferred.
+
 ## UI surface
 
 | Location | Type | Shortcut | Notes |
@@ -48,8 +50,8 @@ Refine Edge is the CS6-recommended replacement for the old Extract plug-in: it g
 | Dialog | Combo | `F` / `Shift+F` | View Mode pop-up |
 | Dialog | Checkbox/toggle | `X` | Toggle original image / selection preview |
 | Dialog | Checkbox/toggle | `P` | Toggle original / refined selection |
-| Dialog | Checkbox/toggle | `J` | Toggle radius preview |
-| Dialog | Toggle | `Shift+E` | Switch Refine Radius ↔ Erase Refinements |
+| Dialog | Checkbox/toggle | `J` | Show Edge (the CS6 Show Radius view) |
+| Dialog | Toggle | `Shift+E` | Latch Restore Original (CS6 Erase Refinements); Alt is momentary |
 | Dialog | Brush | `[` / `]` | Refinement-brush size |
 | Dialog | Slider/check | — | Smart Radius |
 | Dialog | Slider/number | — | Radius |
@@ -59,7 +61,7 @@ Refine Edge is the CS6-recommended replacement for the old Extract plug-in: it g
 | Dialog | Slider/number | — | Shift Edge |
 | Dialog | Checkbox + slider | — | Decontaminate Colors (+ Amount) |
 | Dialog | Combo | — | Output To |
-| Canvas | Brush overlay | — | Refinement brush painting over edge region |
+| Canvas | Brush overlay | — | Refine Edge Brush / Restore Original over the edge region; Show Edge band |
 
 ## Parameters & ranges
 
@@ -67,7 +69,7 @@ Refine Edge is the CS6-recommended replacement for the old Extract plug-in: it g
 |---|---|---|---|---|
 | View Mode | enum | Marching Ants *(community)* | Marching Ants / Overlay / On Black / On White / Black & White / On Layers / Reveal Layer | CS6 Help does not enumerate the list |
 | Show Original | toggle | off | on / off | Compare against original selection (`P`) |
-| Show Radius | toggle | off | on / off | Radius preview (`J`) |
+| Show Edge (CS6 Show Radius) | toggle | off | on / off | Refinement-band preview (`J`) |
 | Smart Radius | bool | off | on / off | Auto radius for mixed hard/soft edges |
 | Radius | int px | 0 | CS6 max unverified (community up to ~1000) | Edge-detection band |
 | Smooth | int | 0 | 0–100 *(community)* | Hills/valleys reduction |
@@ -77,7 +79,7 @@ Refine Edge is the CS6-recommended replacement for the old Extract plug-in: it g
 | Decontaminate Colors | bool | off | on / off | Changes pixel color; forces new layer/doc output |
 | Amount | int percent | 50 *(community)* | 0–100% | Decontamination strength |
 | Output To | enum | Selection *(community)* | Selection / Layer Mask / New Layer / New Layer with Layer Mask / New Document / New Document with Layer Mask | Decontaminate constrains this list |
-| Refinement brush size | int px | tool default | bracket-stepped | Refine Radius / Erase Refinements |
+| Refinement brush size | int px (diameter) | 30 | 1–1000, bracket-stepped | Refine Edge Brush / Restore Original; radius is half the size |
 
 Ranges for Radius/Smooth/Feather/Contrast/Shift Edge/Amount are not specified in the fetched CS6 Help text and are marked community-reported; the CS6 Help only describes their direction and meaning.
 
@@ -98,7 +100,7 @@ for each boundary pixel p:
     band(p) = disk(p, r(p))
 ```
 
-The **Radius** defines a search band around the current boundary. Within the band the algorithm re-estimates alpha coverage from the underlying image; outside the band the mask is unchanged. The refinement brushes override the band locally: **Refine Radius** extends refinement into soft regions (hair/fur), **Erase Refinements** removes previously refined detail.
+The **Radius** defines a search band around the current boundary. Within the band the algorithm re-estimates alpha coverage from the underlying image; outside the band the mask is unchanged. The refinement brushes override the band locally (implemented): each dab is a disk in document pixels. A **Refine Edge Brush** dab widens the effective radius to `max(Radius, dab radius)`; a **Restore Original** dab (Alt while held, or a latched `Shift+E`) reverts the input coverage there. Dabs apply in order, so a later refine dab replaces an earlier radius and a later restore clears refinement, and the Show Edge band excludes pixels whose last dab was a restore. The coverage estimate itself stays the approximation below: it nudges partial coverage toward the midpoint by half the local gradient, so brushing is geometrically faithful but does not reproduce Adobe's matting (a refined strand is not claimed).
 
 ### Global refinements (applied after edge estimation)
 
@@ -134,9 +136,10 @@ Because decontamination writes color, CS6 forbids in-place output and requires a
 
 - `pictura_selection::refine::RefineEdgeSettings` — `{ view_mode, show_original, show_radius, smart_radius, radius, smooth, feather, contrast, shift_edge, decontaminate: bool, amount, output_to }`.
 - `pictura_selection::refine::refine(mask: &Mask, image: &Image, settings) -> Mask` — edge estimation + global refinements; operates on tiles with a boundary halo.
-- `pictura_selection::refine::edge_band` — distance transform + disk band extraction; `smart_radius` adaptation.
+- `pictura_selection::refine::RefineDab { x, y, radius, erase }` — one ordered brush dab, in document pixels; the app records them, the preview scales them to the proxy.
+- `pictura_selection::refine::refine_from(mask, image, settings, dabs) -> Mask` — edge estimation + dabs + global refinements; `refine(mask, image, settings)` passes no dabs and keeps the defaults-are-identity contract.
+- `pictura_selection::refine::edge_band_from(mask, image, settings, dabs) -> Mask` — distance transform + disk band extraction with the brush-expanded radius; the Show Edge output.
 - `pictura_selection::refine::decontaminate(image: &Image, alpha: &Mask, amount) -> Image` — foreground estimation; returns a new pixel buffer (never in place).
-- `pictura_selection::refine::refine_brush` — interactive Refine Radius / Erase Refinements state; feeds a local band override.
 - `pictura_selection::output::apply_output(mask, output_to, doc) -> SelectionOutput` — dispatch to selection / layer mask / new layer / new document.
 - `pictura_selection::contour` — reused for the ants view mode (`SEL-001`).
 
@@ -195,7 +198,9 @@ Widgets over QML: the dialog is dense, slider-heavy, keyboard-driven, and shared
 - Given Decontaminate Colors with a new-layer output, edge pixels change color toward nearby fully-selected pixels and the original layer is unchanged.
 - Given `F` / `Shift+F`, the view mode cycles forward/backward through the full list and wraps.
 - Given `X`, `P`, and `J`, the preview toggles original/selection, original/refined, and radius on/off respectively.
-- Given `Shift+E`, the active refinement brush switches; bracket keys change its size.
+- Given a refine dab, coverage changes inside the dab disk and no farther than `max(Radius, dab radius)` from the input 50 % contour; given Restore Original, the input coverage returns under its disk; given Show Edge, the band marks the brush-expanded radius.
+- Given `Shift+E`, Restore Original latches and unlatches; Alt restores only while held; bracket keys change the brush size (30 px default, 1–1000 diameter).
+- Given the geometry above, the estimator's strand-recovery criterion (first bullet) remains unverified; see Open questions.
 - Given Cancel, the document (selection, mask, and pixels) is byte-identical to the pre-dialog state.
 
 ## Sources
@@ -203,6 +208,11 @@ Widgets over QML: the dialog is dense, slider-heavy, keyboard-driven, and shared
 Fetched for this document:
 
 - `https://help.adobe.com/archive/en/photoshop/cs6/photoshop_reference.pdf` — primary CS6 Help corpus. Established: Refine Edge invocation from the options bar and `Select > Refine Edge`; the description of View Mode with **Show Original** and **Show Radius**; the Refine Radius / Erase Refinements tools and `Shift+E` / bracket sizing; Smart Radius; Radius; Smooth; Feather; Contrast; Shift Edge; Decontaminate Colors and the rule that it requires output to a new layer or document, plus **Amount**; Output To (selection or mask on the current layer versus a new layer or document); the Refine Edge key table (`Ctrl+Alt+R`, `F`/`Shift+F`, `X`, `P`, `J`, `Shift+E`); Refine Edge as the replacement for Extract; refining a layer mask from the mask section of the CS6 Properties panel.
+- `https://www.adobe.com/learn/photoshop/web/make-precise-selections-in-select-mask` and `https://helpx.adobe.com/photoshop/using/select-mask.html` — CC Select and Mask: the Refine Edge Brush (`R`), the Brush (`B`), Alt = Restore Original Selection, Show Edge (`J`), `F`/`Shift+F`, `X`, Onion Skin, Refine Mode, Refine Hair, Real-time Refinement, High Quality Preview, and Remember Settings. (Adobe pages returned 403 to direct fetches; the content was read through Adobe Learn excerpts and mirrors.)
+- `https://jkost.com/blog/2021/07/25-shortcuts-and-tips-for-creating-better-selections-in-photoshop.html` — Julieanne Kost (Adobe): the tool letters, Alt toggling “Expands Detection Area” / “Restore Original Selection”, brackets, and the View Mode keys.
+- `https://digitalliteracy.blogs.wesleyan.edu/files/2018/08/PS-How-to-use-selection-tools-2018.pdf` — Adobe CC 2018 guide: the Refine Edge Brush “precisely adjusts the border area in which edge refinement occurs”, Show Edge, and bracket sizing.
+- `https://www.peachpit.com/articles/article.aspx?p=3131580&seqNum=3` — Select and Mask chapter: 20 px / 100 % hardness brush examples and the inside-out brushing guidance.
+- `https://ptgmedia.pearsoncmg.com/imprint_downloads/peachpit/peachpit/bookreg/9780134308135/9780134308135_PS_CC_2015-5_Errata_080916.pdf` — Adobe Classroom in a Book 2015.5 errata: Select and Mask replaced Refine Edge in CC 2015.5.
 - `https://shootdotedit.com/blogs/news/refine-edge-in-photoshop` — community guide. Established (community-reported, not CS6 Help): the full view-mode list with letter shortcuts — Marching Ants (M), Overlay (V), On Black (A), On White (T), Black and White (K), On Layers (Y), Reveal Layer (R) — and the full Output To list — Selection, Layer Mask, New Layer, New Layer With Mask, New Document, New Document With Layer Mask.
 - `https://search.brave.com/search?q=...` / SearXNG result snippets for "Refine Edge CS6 view modes" — corroborated the view-mode names and shortcuts via multiple CS5/CS6-era tutorials (lifewire, photoshopessentials "Selecting Hair with Refine Edge", a 2012 tutorial listing "Reveal Layer … shortcut is R"). These were consulted as snippets, not all fetched.
 
@@ -213,6 +223,9 @@ Not used in this pass:
 - `html.duckduckgo.com` / `search.brave.com` result HTML — JS/anti-bot shells.
 
 ## Open questions
+
+- **Brush interaction (resolved in code).** CS6's Refine Radius / Erase Refinements pair and CC's Refine Edge Brush + Alt restore are modelled as one refine/restore dab pair on the main canvas; the Select and Mask workspace, Onion Skin, the mask Brush, Refine Hair, and the CC refine modes remain deferred.
+- **Strand recovery (open).** The estimator is a gradient nudge, not Adobe's matting; the parity criterion above is not met by measurement. Resolve only with a stronger estimator and a pixel oracle.
 
 - **CS6 novelty.** No fetched CS6 source states that Refine Edge was expanded in CS6 relative to CS5; the Smart-Radius + Decontaminate dialog is documented as a CS5 feature and the CS6 Help is silent on changes. Resolve with a CS5-vs-CS6 dialog/behavior comparison (or the CS6 "What's New" list, which does not mention Refine Edge).
 - **View-mode enumeration and shortcuts in CS6.** The CS6 Help does not list the modes; the community list includes Marching Ants / Overlay / On Black / On White / Black & White / On Layers / Reveal Layer. Whether CS6 has exactly these seven and which letters are bound is unverified. Resolve with a CS6 UI capture.
