@@ -37,7 +37,7 @@ pub(super) struct Entry {
     typ: u16,
     count: usize,
     /// Absolute position of the value bytes, inline or not.
-    at: usize,
+    pub at: usize,
 }
 
 pub(super) struct Ifd {

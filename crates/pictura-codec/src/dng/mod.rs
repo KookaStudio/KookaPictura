@@ -5,7 +5,8 @@
 //! (uncompressed) and 7 (lossless JPEG) are read; deflate, PackBits and lossy
 //! JPEG, linear DNGs, floating-point samples and non-RGB CFAs are refused.
 //! The demosaic (`demosaic`, #397) and the colour transform
-//! (`as_shot_transform`, #398) consume the result.
+//! (`as_shot_transform`, #398) consume the result. Vendor containers (#399,
+//! `vendor.rs`, `cr2.rs`) produce the same `DngImage` through `read_raw`.
 
 use rayon::prelude::*;
 
@@ -13,10 +14,12 @@ use crate::error::PsdError;
 use crate::probe::ImageBudget;
 
 mod camera_color;
+mod cr2;
 mod demosaic;
 mod levels;
 mod ljpeg;
 mod tiff;
+mod vendor;
 
 pub use camera_color::{
     as_shot_transform, to_pro_photo, white_balance_transform, CameraTransform, ProPhotoRgb,
@@ -25,6 +28,7 @@ pub use camera_color::{
 pub use demosaic::{demosaic, CameraRgb, DemosaicMethod};
 use levels::{Area, Levels};
 use tiff::{Ifd, Order, Tiff};
+pub use vendor::{read_raw, sniff_raw, RawFormat};
 
 const NEW_SUBFILE_TYPE: u16 = 254;
 const IMAGE_WIDTH: u16 = 256;

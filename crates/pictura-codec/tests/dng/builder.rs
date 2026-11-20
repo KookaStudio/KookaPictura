@@ -11,6 +11,14 @@ pub enum Val {
     Long(Vec<u32>),
     Rational(Vec<(u32, u32)>),
     SRational(Vec<(i32, i32)>),
+    /// An entry whose value already sits at `at`, written as an offset only.
+    /// Only the CR2 builder points at a maker note this way.
+    #[allow(dead_code)]
+    At {
+        typ: u16,
+        count: u32,
+        at: u32,
+    },
 }
 
 impl Val {
@@ -48,6 +56,7 @@ impl Val {
                 });
                 (10, v.len())
             }
+            Val::At { .. } => unreachable!("written by write_ifd"),
         };
         (typ, count as u64, out)
     }
@@ -96,7 +105,7 @@ fn align(out: &mut Vec<u8>) {
     }
 }
 
-fn write_ifd(out: &mut Vec<u8>, spec: &IfdSpec, be: bool, big: bool) -> u64 {
+pub fn write_ifd(out: &mut Vec<u8>, spec: &IfdSpec, be: bool, big: bool) -> u64 {
     let subs: Vec<u32> = spec
         .subs
         .iter()
@@ -126,6 +135,15 @@ fn write_ifd(out: &mut Vec<u8>, spec: &IfdSpec, be: bool, big: bool) -> u64 {
     let inline = if big { 8 } else { 4 };
     let mut entries = Vec::new();
     for (tag, val) in &tags {
+        if let Val::At { typ, count, at } = *val {
+            let value = if big {
+                u64b(at as u64, be).to_vec()
+            } else {
+                u32b(at, be).to_vec()
+            };
+            entries.push((*tag, typ, count as u64, value));
+            continue;
+        }
         let (typ, count, data) = val.encode(be);
         let value = if data.len() > inline {
             align(out);
