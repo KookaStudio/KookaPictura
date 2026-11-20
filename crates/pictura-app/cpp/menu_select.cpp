@@ -195,8 +195,9 @@ void MenuRegistrar::registerSelectHandlers()
         colorRangeDialog_ = dialog;
         connect(dialog, &QDialog::finished, this, [this, dialog, view](int result) {
             if (result == QDialog::Accepted && activeView() == view) {
-                color_range_apply(*view, dialog->range(), dialog->sampledColor().rgb() & 0xffffffu,
-                                  dialog->fuzziness(), dialog->inverted());
+                color_range_apply(*view, dialog->range(), dialog->samplesString(),
+                                  dialog->fuzziness(), dialog->localized(),
+                                  dialog->localizedRange(), dialog->inverted());
             }
         });
         dialog->show();

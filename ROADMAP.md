@@ -256,7 +256,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 - [x] Calculations (#610)
 - [ ] Channel Options — Masked and Selected Areas polarity (#611)
 - [ ] The interactive Refine Radius and Erase brushes (#612)
-- [ ] Color Range Skin Tones, Localized Clusters, Out Of Gamut, previews, and
+- [x] Color Range Skin Tones, Localized Clusters, Out Of Gamut, previews, and
       save and load (#613)
 - [x] Anti-aliased selection rasterisation for the Elliptical Marquee, the
       lasso tools, and the Magic Wand boundary ramp, and the 56-channel

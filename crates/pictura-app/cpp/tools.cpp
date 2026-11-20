@@ -845,9 +845,11 @@ void ToolController::applyToolPolicy()
     }
 }
 
-void ToolController::setCanvasSampler(std::function<void(const QPointF&)> sampler)
+void ToolController::setCanvasSampler(
+    std::function<void(const QPointF&, Qt::KeyboardModifiers)> sampler, bool continuous)
 {
     canvasSampler_ = std::move(sampler);
+    canvasSamplerContinuous_ = continuous;
     // A replaced or disarmed sampler must not leave a press gesture live.
     canvasSampling_ = false;
     refreshCursor();
@@ -860,7 +862,7 @@ void ToolController::handlePressed(const QPointF& imagePos, int button, int modi
     }
     if (canvasSampler_) {
         canvasSampling_ = true;
-        canvasSampler_(imagePos);
+        canvasSampler_(imagePos, Qt::KeyboardModifiers(modifiers));
         return;
     }
     PictureView* v = view();
@@ -924,10 +926,10 @@ void ToolController::handlePressed(const QPointF& imagePos, int button, int modi
 void ToolController::handleMoved(const QPointF& imagePos)
 {
     if (canvasSampler_) {
-        // A held drag samples continuously; a plain hover only re-asserts the
-        // eyedropper cursor.
-        if (canvasSampling_) {
-            canvasSampler_(imagePos);
+        // A held drag samples continuously when the caller wants it; a plain
+        // hover only re-asserts the eyedropper cursor.
+        if (canvasSampling_ && canvasSamplerContinuous_) {
+            canvasSampler_(imagePos, QGuiApplication::queryKeyboardModifiers());
         }
         refreshCursor();
         return;

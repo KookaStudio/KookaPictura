@@ -18,7 +18,7 @@ pub mod ntsc;
 pub mod proof;
 mod space;
 
-pub use proof::{ProofPreview, ProofSetup};
+pub use proof::{GamutCheck, ProofPreview, ProofSetup};
 use space::space_format;
 pub use space::SpaceTransform;
 

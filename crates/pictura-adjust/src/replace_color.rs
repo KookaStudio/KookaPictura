@@ -7,7 +7,7 @@
 //! renderer's coverage mask, so it is not modelled here; native-depth apply
 //! refuses the operation (the [`crate::native`] catch-all).
 
-use pictura_core::PixelBuffer;
+use pictura_core::{match_weight, spatial_sigma, PixelBuffer};
 use rayon::prelude::*;
 
 use crate::common::{hsl_to_rgb, note_parallel, planes_mut, rgb_to_hsl, serial};
@@ -17,53 +17,18 @@ pub use pictura_core::{ReplaceColorParams, ReplaceColorSample};
 
 /// Spatial falloff width for Localized Color Clusters, as a fraction of the
 /// image diagonal, squared.
-pub(crate) fn sigma_sq(w: u32, h: u32) -> f64 {
-    let diag = ((w as f64) * (w as f64) + (h as f64) * (h as f64))
-        .sqrt()
-        .max(1.0);
-    let sigma = diag * 0.18;
+fn sigma_sq(w: u32, h: u32) -> f64 {
+    let diag = ((w as f64) * (w as f64) + (h as f64) * (h as f64)).sqrt() as f32;
+    let sigma = spatial_sigma(diag) as f64;
     sigma * sigma
 }
 
-/// Selection weight for one pixel: the best match over all samples, so adding
-/// a sample widens the selection rather than averaging it away.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn match_weight(
-    r: u8,
-    g: u8,
-    b: u8,
-    x: i32,
-    y: i32,
-    samples: &[ReplaceColorSample],
-    fuzziness: f64,
-    localized: bool,
-    sigma: f64,
-) -> f64 {
-    let mut best = 0.0f64;
-    for s in samples {
-        let d = (r as i32 - s.rgb[0] as i32)
-            .abs()
-            .max((g as i32 - s.rgb[1] as i32).abs())
-            .max((b as i32 - s.rgb[2] as i32).abs()) as f64;
-        let mut w = if fuzziness <= 0.0 {
-            if d == 0.0 {
-                1.0
-            } else {
-                0.0
-            }
-        } else {
-            (1.0 - d / fuzziness).clamp(0.0, 1.0)
-        };
-        // A sample with no canvas position (the foreground colour the dialog
-        // opens on) has no cluster to stay near.
-        if localized && w > 0.0 && s.x >= 0 && s.y >= 0 {
-            let dx = (x - s.x) as f64;
-            let dy = (y - s.y) as f64;
-            w *= (-(dx * dx + dy * dy) / (2.0 * sigma)).exp();
-        }
-        best = best.max(w);
+fn localization(p: &ReplaceColorParams) -> f64 {
+    if p.localized {
+        1.0
+    } else {
+        0.0
     }
-    best
 }
 
 fn check_params(p: &ReplaceColorParams) -> Result<(), AdjustError> {
@@ -195,7 +160,7 @@ pub(crate) fn replace_color(
                 y as i32,
                 &p.samples,
                 p.fuzziness,
-                p.localized,
+                localization(p),
                 sigma,
             );
             if weight <= 0.0 {
@@ -272,7 +237,7 @@ pub fn replace_color_mask(buf: &PixelBuffer, p: &ReplaceColorParams, size: usize
                     sy as i32,
                     &p.samples,
                     p.fuzziness,
-                    p.localized,
+                    localization(p),
                     sigma,
                 )
             };

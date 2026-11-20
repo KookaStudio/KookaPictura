@@ -1090,7 +1090,8 @@ void ColorPickerDialog::sampleCanvas(ToolController* tools,
         return;
     }
     m_tools = tools;
-    tools->setCanvasSampler([this, colorAt = std::move(colorAt)](const QPointF& imagePos) {
+    tools->setCanvasSampler(
+        [this, colorAt = std::move(colorAt)](const QPointF& imagePos, Qt::KeyboardModifiers) {
         const QColor color = colorAt(imagePos.toPoint());
         if (color.isValid()) {
             m_picker->setColor(color);

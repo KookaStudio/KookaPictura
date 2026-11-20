@@ -137,37 +137,39 @@ impl HardProof {
     }
 }
 
-/// Soft proof in sRGB, with a separate per-pixel gamut mask. Two alarm values
+/// One alarm pass of a gamut check.
+type AlarmTransform = Transform<u8, [u16; 3], ThreadContext, DisallowCache>;
+
+/// A reusable gamut check over interleaved source samples. Two alarm values
 /// distinguish actual alarms from valid pixels with the same colour.
-pub fn print_gamut_mask(srgb: &[u8], setup: &ProofSetup) -> Result<Vec<bool>, ColorError> {
-    print_gamut_mask_source(srgb, &Profile::srgb(), setup)
+pub struct GamutCheck {
+    /// The two proofing transforms; the contexts are kept alive for them.
+    a: AlarmTransform,
+    b: AlarmTransform,
+    _context_a: ThreadContext,
+    _context_b: ThreadContext,
+    components: usize,
 }
 
-pub fn print_gamut_mask_source(
-    samples: &[u8],
-    source: &Profile,
-    setup: &ProofSetup,
-) -> Result<Vec<bool>, ColorError> {
-    let (format, components) = space_format(source)?;
-    if !samples.len().is_multiple_of(components) {
-        return Err(ColorError::Unsupported("incomplete source pixel".into()));
-    }
-    let icc = setup.device.to_icc();
-    let source_icc = source.to_icc();
-    let transform = |alarm| -> Result<Vec<[u16; 3]>, ColorError> {
-        let mut context = ThreadContext::new();
-        context.set_alarm_codes([alarm; 16]);
-        let display = lcms2::Profile::new_srgb_context(&context);
-        let source = lcms2::Profile::new_icc_context(&context, &source_icc)
-            .map_err(|_| ColorError::InvalidProfile)?;
-        let device = lcms2::Profile::new_icc_context(&context, &icc)
-            .map_err(|_| ColorError::InvalidProfile)?;
-        let mut flags = Flags::NO_CACHE | Flags::SOFT_PROOFING | Flags::GAMUT_CHECK;
-        if setup.bpc {
-            flags = flags | Flags::BLACKPOINT_COMPENSATION;
-        }
-        let transform: Transform<u8, [u16; 3], ThreadContext, DisallowCache> =
-            Transform::new_proofing_context(
+impl GamutCheck {
+    /// Build the two alarm transforms for `source` and `setup`.
+    pub fn new(source: &Profile, setup: &ProofSetup) -> Result<Self, ColorError> {
+        let (format, components) = space_format(source)?;
+        let icc = setup.device.to_icc();
+        let source_icc = source.to_icc();
+        let build = |alarm: u16| -> Result<(ThreadContext, AlarmTransform), ColorError> {
+            let mut context = ThreadContext::new();
+            context.set_alarm_codes([alarm; 16]);
+            let display = lcms2::Profile::new_srgb_context(&context);
+            let source = lcms2::Profile::new_icc_context(&context, &source_icc)
+                .map_err(|_| ColorError::InvalidProfile)?;
+            let device = lcms2::Profile::new_icc_context(&context, &icc)
+                .map_err(|_| ColorError::InvalidProfile)?;
+            let mut flags = Flags::NO_CACHE | Flags::SOFT_PROOFING | Flags::GAMUT_CHECK;
+            if setup.bpc {
+                flags = flags | Flags::BLACKPOINT_COMPENSATION;
+            }
+            let transform = Transform::new_proofing_context(
                 &context,
                 &source,
                 format,
@@ -179,13 +181,44 @@ pub fn print_gamut_mask_source(
                 flags,
             )
             .map_err(|error| ColorError::Unsupported(error.to_string()))?;
-        let mut output = vec![[0; 3]; samples.len() / components];
-        transform.transform_pixels(samples, &mut output);
-        Ok(output)
-    };
-    let a = transform(0x1357)?;
-    let b = transform(0xeac0)?;
-    Ok(a.into_iter().zip(b).map(|(a, b)| a != b).collect())
+            Ok((context, transform))
+        };
+        let (context_a, a) = build(0x1357)?;
+        let (context_b, b) = build(0xeac0)?;
+        Ok(Self {
+            a,
+            b,
+            _context_a: context_a,
+            _context_b: context_b,
+            components,
+        })
+    }
+
+    /// Whether each source pixel is outside the proof device's gamut.
+    pub fn mask(&self, samples: &[u8]) -> Result<Vec<bool>, ColorError> {
+        if !samples.len().is_multiple_of(self.components) {
+            return Err(ColorError::Unsupported("incomplete source pixel".into()));
+        }
+        let count = samples.len() / self.components;
+        let mut a = vec![[0u16; 3]; count];
+        let mut b = vec![[0u16; 3]; count];
+        self.a.transform_pixels(samples, &mut a);
+        self.b.transform_pixels(samples, &mut b);
+        Ok(a.into_iter().zip(b).map(|(a, b)| a != b).collect())
+    }
+}
+
+/// Soft proof in sRGB, with a separate per-pixel gamut mask.
+pub fn print_gamut_mask(srgb: &[u8], setup: &ProofSetup) -> Result<Vec<bool>, ColorError> {
+    print_gamut_mask_source(srgb, &Profile::srgb(), setup)
+}
+
+pub fn print_gamut_mask_source(
+    samples: &[u8],
+    source: &Profile,
+    setup: &ProofSetup,
+) -> Result<Vec<bool>, ColorError> {
+    GamutCheck::new(source, setup)?.mask(samples)
 }
 
 #[cfg(test)]
@@ -288,5 +321,27 @@ mod tests {
             ProofSetup::from_device_icc(&[], Intent::RelativeColorimetric, true, false, false),
             Err(ColorError::InvalidProfile)
         ));
+    }
+
+    #[test]
+    fn gamut_check_marks_unprintable_colours() {
+        let check = GamutCheck::new(&Profile::srgb(), &setup(false, false)).expect("gamut check");
+        let mask = check.mask(&[0, 255, 0, 128, 128, 128]).expect("two pixels");
+        assert!(mask[0], "saturated green is outside the coated CMYK gamut");
+        assert!(!mask[1], "neutral grey is in gamut");
+    }
+
+    #[test]
+    fn gamut_check_matches_the_source_wrapper() {
+        let source = Profile::srgb();
+        let setup = setup(false, false);
+        let samples = [
+            255, 0, 0, 0, 255, 0, 0, 0, 255, 128, 128, 128, 240, 220, 200,
+        ];
+        let check = GamutCheck::new(&source, &setup).expect("gamut check");
+        assert_eq!(
+            check.mask(&samples).expect("mask"),
+            print_gamut_mask_source(&samples, &source, &setup).expect("wrapper")
+        );
     }
 }
