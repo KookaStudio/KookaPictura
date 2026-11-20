@@ -226,9 +226,9 @@ wrapper, and the refusal message SHALL name
 `bash scripts/with-build-lock.sh -- bash -c '<command>'` for a compound one. A
 command whose text names `scripts/cpu-budget.py`, `scripts/with-build-lock.sh`,
 `scripts/verify-fast.sh`, `scripts/verify-full.sh`, or
-`scripts/test-report.sh` SHALL pass, as SHALL a command with no heavy segment.
-The matcher SHALL be a pure module with a `node --test` suite, run by
-`scripts/verify-fast.sh`.
+`scripts/test-report.sh` SHALL pass, as SHALL a command with no heavy segment
+and a `cargo fmt` segment, which runs no compiler. The matcher SHALL be a pure
+module with a `node --test` suite, run by `scripts/verify-fast.sh`.
 
 #### Scenario: A bare heavy command is refused [cb_agent_refuse]
 
@@ -236,8 +236,8 @@ The matcher SHALL be a pure module with a `node --test` suite, run by
   wrapper
 - **THEN** the plugin refuses the call before it runs and the message names the
   wrapped form
-- **AND** a command that names a gate or the wrapper, and a non-heavy command,
-  pass
+- **AND** a command that names a gate or the wrapper, `cargo fmt`, and a
+  non-heavy command pass
 
 ### Requirement: A running sccache server is held to the slice
 

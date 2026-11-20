@@ -109,9 +109,10 @@ command.
 
 ## Risks / Trade-offs
 
-- **The plugin misfires on a non-heavy `cargo` subcommand (`cargo fmt`)** →
-  the allowed forms are cheap to type; the guard prioritizes never letting a
-  bare compiler run. `cargo fmt` is the only common false positive.
+- **The matcher is segment-based, not a shell parser** → `cargo fmt` is exempted
+  because it runs no compiler; other cheap `cargo` subcommands and
+  env-prefixed or absolute-path forms are not special-cased. The wrapper and
+  prose carry the baseline.
 - **A shell-constructed or env-prefixed command bypasses the matcher** →
   documented as a residual; the wrapper and prose carry the baseline.
 - **Narrowing a shared server can slow a concurrent build that started outside

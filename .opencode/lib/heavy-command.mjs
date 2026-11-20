@@ -1,4 +1,5 @@
-const HEAVY = /(^|[;&|]\s*)(cargo|cmake|ctest|ninja)\b/m
+const HEAVY_SEGMENT = /^\s*(cargo|cmake|ctest|ninja)\b/
+const CHEAP_SEGMENT = /^\s*cargo\s+fmt\b/
 
 const EXEMPT = [
   "cpu-budget.py",
@@ -19,7 +20,10 @@ export function heavyCommandRefusal(command) {
   if (EXEMPT.some((name) => command.includes(name))) {
     return null
   }
-  if (!HEAVY.test(command)) {
+  const heavy = command
+    .split(/[;&|\n]/)
+    .some((segment) => HEAVY_SEGMENT.test(segment) && !CHEAP_SEGMENT.test(segment))
+  if (!heavy) {
     return null
   }
   const wrapped = COMPOUND.test(command)

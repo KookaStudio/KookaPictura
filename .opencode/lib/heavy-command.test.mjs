@@ -51,8 +51,14 @@ test("wrapped, gate, and non-heavy commands pass", () => {
   }
 })
 
-test("the coarse matcher also refuses cargo fmt", () => {
-  assert.match(refused("cargo fmt --all"), /with-build-lock\.sh/)
+test("cheap cargo fmt segments pass", () => {
+  for (const command of ["cargo fmt --all", "cargo fmt && git status"]) {
+    assert.equal(heavyCommandRefusal(command), null, command)
+  }
+})
+
+test("a cheap segment does not exempt a heavy sibling", () => {
+  assert.match(refused("cargo fmt --all && cargo build"), /with-build-lock\.sh/)
 })
 
 test("empty and non-string input pass", () => {
