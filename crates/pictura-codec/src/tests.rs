@@ -209,6 +209,31 @@ fn multiple_extra_channels_round_trip() {
 }
 
 #[test]
+fn channel_sense_round_trips_through_psd() {
+    use crate::image_resources::{channel_selected_areas, set_channel_selected_areas};
+
+    let mut doc = Document::new(2, 2, ColorMode::Grayscale, BitDepth::Eight);
+    doc.channels = vec![
+        Channel {
+            id: 0,
+            data: vec![10, 20, 30, 40].into(),
+        },
+        Channel {
+            id: 1,
+            data: vec![50, 60, 70, 80].into(),
+        },
+    ];
+    assert!(set_channel_selected_areas(&mut doc, 1, true));
+    assert!(set_channel_selected_areas(&mut doc, 0, false));
+
+    let bytes = write_psd(&doc).unwrap();
+    let back = read_psd(&bytes).unwrap();
+    assert_eq!(back.channels, doc.channels);
+    assert!(!channel_selected_areas(&back, 0));
+    assert!(channel_selected_areas(&back, 1));
+}
+
+#[test]
 fn extra_channel_length_mismatch_is_rejected() {
     let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
     doc.channels = vec![Channel {

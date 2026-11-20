@@ -580,7 +580,7 @@ pub(super) fn spot_doc() -> Document {
     crate::image_resources::set_display_info(
         &mut doc,
         &[
-            crate::image_resources::ChannelDisplayInfo::default(),
+            crate::image_resources::masked_display_info(),
             crate::image_resources::ChannelDisplayInfo {
                 color_space: 1,
                 components: [220, 20, 60, 0],
@@ -614,7 +614,7 @@ fn pdf_spot_payload_keeps_spot_and_alpha() {
     );
     let infos = crate::image_resources::display_info(&reread);
     assert_eq!(infos.len(), 2);
-    assert_eq!(infos[0].mode, 0);
+    assert_eq!(infos[0].mode, crate::image_resources::MASKED_AREAS_MODE);
     assert_eq!(infos[1].mode, crate::image_resources::SPOT_CHANNEL_MODE);
 }
 
@@ -634,7 +634,7 @@ fn pdf_spot_payload_drops_spot_only() {
     );
     let infos = crate::image_resources::display_info(&reread);
     assert_eq!(infos.len(), 1);
-    assert_eq!(infos[0].mode, 0);
+    assert_eq!(infos[0].mode, crate::image_resources::MASKED_AREAS_MODE);
 }
 
 #[test]
@@ -654,6 +654,40 @@ fn pdf_spot_payload_drops_alpha_only() {
     let infos = crate::image_resources::display_info(&reread);
     assert_eq!(infos.len(), 1);
     assert_eq!(infos[0].mode, crate::image_resources::SPOT_CHANNEL_MODE);
+}
+
+#[test]
+fn pdf_preserve_editing_defaults_to_masked() {
+    let mut doc = spot_doc();
+    doc.channels.push(pictura_core::Channel {
+        id: 2,
+        data: vec![90; 16].into(),
+    });
+    crate::image_resources::set_display_info(
+        &mut doc,
+        &[
+            crate::image_resources::masked_display_info(),
+            crate::image_resources::masked_display_info(),
+        ],
+    );
+    // Entry 0 becomes the spot channel; the retained alpha at index 2 has no
+    // entry and must default to Masked, not Selected.
+    let mut info = crate::image_resources::display_info(&doc);
+    info[0].mode = crate::image_resources::SPOT_CHANNEL_MODE;
+    crate::image_resources::set_display_info(&mut doc, &info);
+    let options = PdfOptions {
+        preserve_editing: true,
+        spot_colors: false,
+        alpha_channels: true,
+        ..options()
+    };
+    let psd = super::editing_payload(&doc, doc.composite.buffer(), &options).expect("payload");
+    let reread = crate::read::read_psd(&psd).expect("a PSD");
+    assert_eq!(reread.channels.len(), 2);
+    let infos = crate::image_resources::display_info(&reread);
+    assert_eq!(infos.len(), 2);
+    assert_eq!(infos[0].mode, crate::image_resources::MASKED_AREAS_MODE);
+    assert_eq!(infos[1].mode, crate::image_resources::MASKED_AREAS_MODE);
 }
 
 #[test]

@@ -102,6 +102,7 @@ fn new_alpha(doc: &mut pictura_core::Document) -> Option<usize> {
         id,
         data: vec![0u8; doc.width as usize * doc.height as usize].into(),
     });
+    pictura_codec::append_channel_display_info(doc);
     Some(doc.channels.len() - 1)
 }
 
@@ -153,12 +154,78 @@ fn delete_alpha_with_name(doc: &mut Document, index: usize) -> bool {
     }
     let mut names = pictura_codec::alpha_names(doc);
     doc.channels.remove(index);
+    pictura_codec::remove_channel_display_info(doc, index);
     if index < names.len() {
         names.remove(index);
     }
     names.truncate(doc.channels.len());
     pictura_codec::set_alpha_names(doc, &names);
     true
+}
+
+/// Whether extra channel `index` is `Selected Areas`. A missing entry and a
+/// spot entry are `Masked Areas`.
+pub(super) fn channels_selected_areas(view: &PictureView, index: i32) -> bool {
+    let Some(index) = usize::try_from(index).ok() else {
+        return false;
+    };
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .is_some_and(|doc| pictura_codec::channel_selected_areas(doc, index))
+}
+
+/// Whether extra channel `index` is a spot channel from the PSD DisplayInfo.
+pub(super) fn channels_alpha_is_spot(view: &PictureView, index: i32) -> bool {
+    let Some(index) = usize::try_from(index).ok() else {
+        return false;
+    };
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .is_some_and(|doc| pictura_codec::spot_channel_indices(doc).contains(&index))
+}
+
+/// Toggle one channel's sense in place. Returns `Edit::None` when the sense is
+/// already `selected`, the index is bad, or the channel is a spot entry. The
+/// eligibility check happens before the plane is complemented.
+pub(in crate::cxxqt_object) fn toggle_channel_sense(
+    doc: &mut Document,
+    index: usize,
+    selected: bool,
+) -> Edit {
+    if index >= doc.channels.len() || pictura_codec::channel_selected_areas(doc, index) == selected
+    {
+        return Edit::None;
+    }
+    if !pictura_codec::set_channel_selected_areas(doc, index, selected) {
+        return Edit::None;
+    }
+    for byte in doc.channels[index].data.as_mut_slice() {
+        *byte = 255 - *byte;
+    }
+    Edit::Meta
+}
+
+/// Set extra channel `index` to `selected`; one `Channel Options` state when it
+/// changes. False for a bad index, a spot channel, or no change.
+pub(super) fn channels_set_sense(
+    mut view: Pin<&mut PictureView>,
+    index: i32,
+    selected: bool,
+) -> bool {
+    let Ok(index) = usize::try_from(index) else {
+        return false;
+    };
+    let outcome = view.as_mut().edit("Channel Options", |rust| {
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return Edit::None;
+        };
+        toggle_channel_sense(doc, index, selected)
+    });
+    !matches!(outcome, Edit::None)
 }
 
 fn alpha_display_names(doc: &Document) -> Vec<String> {
@@ -298,5 +365,53 @@ mod tests {
             data: vec![0u8; 4].into(),
         });
         assert_eq!(alpha_display_names(&doc), vec!["A", "C", "Alpha 3"]);
+    }
+
+    #[test]
+    fn new_channel_defaults_to_masked() {
+        let mut doc = doc();
+        let index = new_alpha(&mut doc).expect("new channel");
+        assert!(!pictura_codec::channel_selected_areas(&doc, index));
+        assert!(doc.channels[index].data.iter().all(|&byte| byte == 0));
+    }
+
+    #[test]
+    fn new_channel_keeps_other_senses() {
+        let mut doc = doc();
+        assert!(pictura_codec::set_channel_selected_areas(&mut doc, 1, true));
+        let index = new_alpha(&mut doc).expect("new channel");
+        assert!(pictura_codec::channel_selected_areas(&doc, 1));
+        assert!(!pictura_codec::channel_selected_areas(&doc, index));
+        assert_eq!(pictura_codec::display_info(&doc).len(), 4);
+    }
+
+    #[test]
+    fn delete_channel_shifts_display_info() {
+        let mut doc = doc();
+        pictura_codec::set_display_info(
+            &mut doc,
+            &[
+                pictura_codec::ChannelDisplayInfo {
+                    opacity: 10,
+                    mode: pictura_codec::SELECTED_AREAS_MODE,
+                    ..Default::default()
+                },
+                pictura_codec::ChannelDisplayInfo {
+                    opacity: 20,
+                    mode: pictura_codec::MASKED_AREAS_MODE,
+                    ..Default::default()
+                },
+                pictura_codec::ChannelDisplayInfo {
+                    opacity: 30,
+                    mode: pictura_codec::SPOT_CHANNEL_MODE,
+                    ..Default::default()
+                },
+            ],
+        );
+        assert!(delete_alpha_with_name(&mut doc, 0));
+        let infos = pictura_codec::display_info(&doc);
+        assert_eq!(infos.len(), 2);
+        assert_eq!(infos[0].opacity, 20);
+        assert_eq!(infos[1].opacity, 30);
     }
 }

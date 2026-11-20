@@ -618,6 +618,17 @@ bool ChannelsPanel::eventFilter(QObject* watched, QEvent* event)
                 startChannelDrag(dragged);
                 return true;
             }
+        } else if (event->type() == QEvent::MouseButtonDblClick) {
+            auto* mouse = static_cast<QMouseEvent*>(event);
+            const QPoint pos = widget->mapTo(list_->viewport(), mouse->position().toPoint());
+            const int row = rowAt(pos);
+            const int alpha = alphaIndexAt(row);
+            if (mouse->button() == Qt::LeftButton && alpha >= 0 && view_
+                && !channels_alpha_is_spot(*view_, alpha)) {
+                list_->setCurrentRow(row);
+                emit channelOptionsRequested();
+                return true;
+            }
         } else if (event->type() == QEvent::MouseButtonPress) {
             auto* mouse = static_cast<QMouseEvent*>(event);
             const QPoint pos = widget->mapTo(list_->viewport(), mouse->position().toPoint());

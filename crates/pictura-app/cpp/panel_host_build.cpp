@@ -153,6 +153,11 @@ QList<PanelGroup*> PanelHost::buildPanels(const SessionState& state)
             hooks_.alphaVisibilityChanged();
         }
     });
+    connect(channelsPanel_, &ChannelsPanel::channelOptionsRequested, this, [this]() {
+        if (hooks_.channelOptionsRequested) {
+            hooks_.channelOptionsRequested();
+        }
+    });
 
     pathsPanel_ = new PathsPanel(shell_);
     pathsPanel_->setObjectName(QStringLiteral("pathsPanel"));

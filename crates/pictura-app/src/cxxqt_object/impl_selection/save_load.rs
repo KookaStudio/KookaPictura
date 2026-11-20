@@ -78,6 +78,7 @@ pub(super) fn save_selection_shape(
             let id = doc.channels.iter().map(|c| c.id).max().unwrap_or(0) + 1;
             let index = doc.channels.len();
             doc.channels.push(selection.to_channel(id));
+            pictura_codec::append_channel_display_info(doc);
             let mut names = pictura_codec::alpha_names(doc);
             names.resize(doc.channels.len(), String::new());
             for (i, stored) in names.iter_mut().enumerate() {
@@ -97,14 +98,17 @@ pub(super) fn save_selection_shape(
             let Some(channel) = doc.channels.get(index) else {
                 return Edit::None;
             };
-            let Ok(mut base) = Selection::from_channel(channel, doc.width, doc.height) else {
+            let Ok(base) = Selection::from_channel(channel, doc.width, doc.height) else {
                 return Edit::None;
             };
             let id = channel.id;
+            let selected = pictura_codec::channel_selected_areas(doc, index);
+            let mut base = if selected { base.invert() } else { base };
             if base.combine(&selection, mode.into()).is_err() {
                 return Edit::None;
             }
-            doc.channels[index] = base.to_channel(id);
+            let written = if selected { base.invert() } else { base };
+            doc.channels[index] = written.to_channel(id);
             Edit::Meta
         }
         SelectionTarget::Mask(path) => {
@@ -150,7 +154,12 @@ pub(super) fn selection_from_target(doc: &Document, target: &str) -> Option<Sele
         SelectionTarget::NewChannel => None,
         SelectionTarget::Channel(index) => {
             let channel = doc.channels.get(index)?;
-            Selection::from_channel(channel, doc.width, doc.height).ok()
+            let selection = Selection::from_channel(channel, doc.width, doc.height).ok()?;
+            Some(if pictura_codec::channel_selected_areas(doc, index) {
+                selection.invert()
+            } else {
+                selection
+            })
         }
         SelectionTarget::Mask(path) => {
             let layer = pictura_render::resolve_path(doc, &path)?;

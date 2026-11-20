@@ -239,6 +239,30 @@ fn bitmap_threshold_is_exact_at_mid_gray_and_saves_as_bitmap() {
 }
 
 #[test]
+fn bitmap_conversion_clears_display_info() {
+    let mut doc = rgb_doc(2, 1, &[[0, 0, 0], [255, 255, 255]]);
+    convert_mode(&mut doc, ColorMode::Grayscale).unwrap();
+    doc.channels.push(pictura_core::Channel {
+        id: 0,
+        data: vec![0; 2].into(),
+    });
+    pictura_codec::set_display_info(
+        &mut doc,
+        &[pictura_codec::ChannelDisplayInfo {
+            mode: pictura_codec::SELECTED_AREAS_MODE,
+            ..Default::default()
+        }],
+    );
+    convert_to_bitmap(&mut doc, BitmapMethod::Threshold).expect("converts");
+    assert!(pictura_codec::display_info(&doc).is_empty());
+    doc.channels.push(pictura_core::Channel {
+        id: 0,
+        data: vec![0; 2].into(),
+    });
+    assert!(!pictura_codec::channel_selected_areas(&doc, 0));
+}
+
+#[test]
 fn bitmap_dithers_keep_the_mean_tone() {
     let gray = vec![64u8; 64 * 64];
     for method in [BitmapMethod::Pattern, BitmapMethod::Diffusion] {

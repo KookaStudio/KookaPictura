@@ -160,6 +160,7 @@ set(PICTURA_QT_TESTS
     tst_adjustments_panel
     tst_actions_panel
     tst_channels_panel
+    tst_channel_options
     tst_paths_panel
     tst_icon_assets
     tst_filter_menu
