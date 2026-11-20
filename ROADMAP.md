@@ -434,8 +434,15 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       does not read a camera raw file.
       `crates/pictura-app/cpp/pictura_raw_dialog.cpp`,
       `crates/pictura-adjust/src/pictura_raw/`.
-- [ ] Open camera raw files — there is no raw container reader and no demosaic
-      (#400)
+- [x] **DNG sensor reader** — `pictura_codec::read_dng` reads a DNG's CFA plane
+      (TIFF or BigTIFF, uncompressed or lossless JPEG) normalized by its levels
+      and active area, with its colour tags (#396).
+      `crates/pictura-codec/src/dng/`.
+- [ ] Open camera raw files — there is no demosaic, colour transform or
+      File ▸ Open route yet (#397, #398, #400)
+- [ ] Deflate, PackBits and lossy-JPEG DNGs, linear DNGs and floating-point
+      samples (#396)
+- [ ] Vendor raw containers (#399)
 - [ ] DNG output (#402)
 - [ ] Camera Raw settings stores — an XMP sidecar or an ACR database (#632)
 - [ ] ACR Workflow Options, ACR preferences, batch raw processing, and Purge
