@@ -156,6 +156,7 @@ start_check shell-seams shell_seams_check
 start_check test-plan test_plan_check
 start_check source-fragments source_fragments_check
 start_check cpu-budget python3 scripts/cpu-budget.py --self-check
+start_check heavy-command node --test .opencode/lib/heavy-command.test.mjs
 start_check openspec openspec_check
 
 drain_batch
