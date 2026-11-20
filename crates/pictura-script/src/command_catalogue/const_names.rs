@@ -276,6 +276,7 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("FilePrint", "file.print"),
     ("FilePrintOneCopy", "file.print.one.copy"),
     ("ImageApplyImage", "image.apply.image"),
+    ("ImageCalculations", "image.calculations"),
     ("ImageImageSize", "image.image.size"),
     ("ImageCanvasSize", "image.canvas.size"),
     ("FilterFilterGallery", "filter.filter.gallery"),

@@ -87,6 +87,16 @@ impl ApplyImagePlanes {
     fn rgb(&self, i: usize) -> [f32; 3] {
         self.color.map(|plane| self.value(plane, i))
     }
+
+    /// The plane set's grayscale value at pixel `i`, using the Grayscale
+    /// conversion weights (Rec.601), the same as Image ▸ Mode ▸ Grayscale. A
+    /// single-channel plane reads as its own value; a composite as its
+    /// grayscale conversion.
+    #[inline]
+    pub fn gray(&self, i: usize) -> f32 {
+        let [r, g, b] = self.rgb(i);
+        0.299 * r + 0.587 * g + 0.114 * b
+    }
 }
 
 /// Read `channel` of the merged image (`layer` `None`) or one layer, at the

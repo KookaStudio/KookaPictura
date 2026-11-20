@@ -271,6 +271,7 @@ HelpDeveloperDesignSystem	help.developer.designSystem
 FilePrint	file.print
 FilePrintOneCopy	file.print.one.copy
 ImageApplyImage	image.apply.image
+ImageCalculations	image.calculations
 ImageImageSize	image.image.size
 ImageCanvasSize	image.canvas.size
 FilterFilterGallery	filter.filter.gallery

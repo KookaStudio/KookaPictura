@@ -15,6 +15,7 @@
 #include "api/selection_api.h"
 #include "duplicate_image_dialog.h"
 #include "apply_image_dialog.h"
+#include "calculations_dialog.h"
 #include "canvas_size_dialog.h"
 #include "memory_refusal.h"
 #include "document_command.h"
@@ -155,6 +156,47 @@ void MenuRegistrar::wireImageMenu()
         if (runDialog(dialog, dialogParent()) == QDialog::Accepted) {
             refresh();
         }
+    });
+
+    // Calculations blends two individual channels into a new document, a new
+    // channel, or the selection. The dialog only gathers settings; the handler
+    // owns the write, so Cancel cannot touch the document.
+    const QString calculations = QString::fromLatin1(command_ids::ImageCalculations);
+    commands_->setImplemented(calculations, true);
+    commands_->setEnabledProvider(calculations, [this]() {
+        PictureView* view = activeView();
+        if (!view || !view->has_document()) {
+            return false;
+        }
+        const QString mode = QString(channels_mode(*view));
+        return mode != QLatin1String("indexed") && mode != QLatin1String("bitmap");
+    });
+    commands_->setHandler(calculations, [this]() {
+        PictureView* view = activeView();
+        if (!view || !view->has_document()) {
+            return;
+        }
+        QList<CalculationsDialog::Source> documents;
+        for (int i = 0; i < documentCount(); ++i) {
+            if (viewAt(i)) {
+                documents.append({documentName(i), viewAt(i)});
+            }
+        }
+        CalculationsDialog dialog(view, documents, dialogParent());
+        if (runDialog(dialog, dialogParent()) != QDialog::Accepted) {
+            return;
+        }
+        if (dialog.result() == CalculationsDialog::Result::NewDocument) {
+            auto* target = new PictureView(dialogParent());
+            if (!dialog.apply(target)) {
+                delete target;
+                return;
+            }
+            documents_->addDocument(target, QString());
+        } else if (!dialog.apply(view)) {
+            return;
+        }
+        refresh();
     });
 
     const QString imageSize = QString::fromLatin1(command_ids::ImageImageSize);

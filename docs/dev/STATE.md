@@ -1063,6 +1063,16 @@ Snapshot for resuming after a context break. Update after each milestone.
   the document before the blend and a cancelled preview shrinks it back
   (#1139); high-depth Offset scaling is an inference.
 
+- **Image > Calculations** (#610, OpenSpec change `add-calculations`).
+  `Image ▸ Calculations…` blends two single-channel sources (Gray, colour,
+  Transparency, layer mask, or an alpha channel) through the shared blend
+  table and Add/Subtract, with Opacity, per-source Invert, and an optional
+  mask. `pictura-render/src/calculations.rs` produces one 8-bit plane; the
+  Image menu handler writes the selection or a new alpha channel, or opens a
+  new 8-bit grayscale document. The dialog previews the result as a thumbnail;
+  CS6's canvas preview, the Result default, and the Selection replace rule
+  remain inferred.
+
 - **Brush Airbrush build-up** (#1120, OpenSpec change
   `brush-airbrush-build-up`). The Brush options bar has an Airbrush toggle and
   the Brush panel's **Build-up** row is the same `PaintOptions` flag, so either

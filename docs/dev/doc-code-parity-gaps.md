@@ -233,7 +233,7 @@ Embed/Read Watermark (`#350`/`#351`) shipped as an in-tree approximation
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
 | SEL-1 | `channel-based-masking.md` | Apply Image grows a smaller destination to the document when Preserve Transparency is off (#1139) | SHIPPED | `crates/pictura-app/src/cxxqt_object/impl_filters.rs`; `crates/pictura-render/src/apply_image.rs` | #1139 |
-| SEL-2 | `channel-based-masking.md` | Calculations | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #610 |
+| SEL-2 | `channel-based-masking.md` | Calculations | SHIPPED | `crates/pictura-render/src/calculations.rs`; `crates/pictura-app/cpp/calculations_dialog.cpp`; `crates/pictura-app/src/cxxqt_object/image_apply_image/calculations.rs` | #610 |
 | SEL-3 | `channel-based-masking.md` | Channel Options (Masked/Selected Areas) | MISSING | no polarity model | #611 |
 | SEL-4 | `refine-edge.md` | Interactive Refine Radius/Erase brushes | MISSING | `changes/refine-edge` out of scope | #612 |
 | SEL-5 | `color-range.md` | Skin Tones, Localized Clusters, Out Of Gamut, previews, save/load | MISSING | `color_range.rs:7` | #613 |

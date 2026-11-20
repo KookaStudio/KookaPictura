@@ -131,7 +131,7 @@ Following the Quick Mask rule documented in the Help: when a soft mask is conver
 ## Rust module mapping
 
 - `pictura_channels` — `ChannelRegistry`, `Channel { id, kind: Colour | Alpha | Spot | Composite, sense, overlay, plane }`.
-- `pictura_channels::calc` — `apply_image(doc, params: ApplyImageParams)`, `calculations(docs, params: CalculationsParams, result: ResultTarget)`.
+- `pictura-render::apply_image` — `apply_image_planes` (the source reader) and the shared Add/Subtract arithmetic; `pictura-render::calculations` — `calculate(params: CalculationsParams) -> Plane<u8>`; the app owns the three result targets.
 - `pictura_channels::blend` — `add(a, b, scale, offset)`, `subtract(a, b, scale, offset)`, and a dispatch to the shared blend-mode table in `pictura_layers::blend`.
 - `pictura_selection::from_channel` — `channel_to_selection(channel, sense, invert) -> CoverageMask`; the shared 50 % contour rule.
 - `pictura_selection::mask` — `apply_to_layer_mask(mask, layer)`.
@@ -167,7 +167,7 @@ Widgets over QML: dialogs and the channels list are dense, precise, keyboard-dri
 - **Composite channels in Calculations:** explicitly forbidden; the UI must exclude them.
 - **Dimension mismatch:** Apply Image requires matching pixel dimensions for the source image to appear; Calculations sources must match. Cross-mode images may only share a single channel, not a composite.
 - **No mask on Apply Image / Calculations:** the operation applies everywhere.
-- **`Result = Selection` with no existing selection:** the result becomes the selection; with an existing selection, clarify combine behaviour — the Help states the result is placed in a selection but not how it combines. Open question.
+- **`Result = Selection`:** with no existing selection the result becomes the selection; with an existing selection it replaces it (shipped; inferred from the Help, which does not state the combine rule).
 - **Bitmap/Indexed:** alpha channels and calculations may be unavailable; no colour channels in the usual sense for Indexed. Verify per mode.
 - **CMYK / Lab / Multichannel:** channel names and counts differ; in Multichannel all channels are alpha or spot. Calculations and Apply Image follow the same per-channel maths.
 - **16/32-bit:** Add/Subtract scale/offset documented on 0–255 must be rescaled; 32-bit float must not clamp to `[0,1]` unless the mode says so.
@@ -206,9 +206,11 @@ Not used in this pass:
 
 ## Open questions
 
-- **`Result = Selection` combine behaviour.** The Help says the blended result is placed in a selection but not whether it replaces, adds, subtracts, or intersects an existing selection. Resolve with a CS6 test.
-- **Calculations `Result` default.** The default target (New Document vs New Channel vs Selection) is not stated. Resolve from a CS6 UI capture.
-- **High-bit-depth Scale/Offset scaling.** The documented 0–255 arithmetic must be mapped to 16/32-bit; Adobe does not state the exact scaling. Apply Image uses `Offset / 255` in the unit domain at every depth and leaves 32-bit Add and Subtract unclamped; this is an inference, not verified parity. Confirm with a high-bit-depth reference.
+- **`Result = Selection` combine behaviour.** Shipped as *replace*, the result coverage becoming the live selection; the Help does not state the rule, so this remains inferred until a CS6 test.
+- **Calculations `Result` default.** Shipped as `New Document`; the Help does not state the default, so a CS6 UI capture is still worth taking.
+- **Calculations preview.** Shipped as a dialog thumbnail of the full-resolution blend; CS6 previews on the canvas. A canvas preview needs an arbitrary-plane render path and remains open.
+- **Calculations mask and Opacity base.** Shipped as white-reveals/black-hides mask scaling and Opacity mixing toward Source 1, with the blend read from Source 1; inferred from the Help and community documentation, not a CS6 measurement.
+- **High-bit-depth Scale/Offset scaling.** The documented 0–255 arithmetic must be mapped to 16/32-bit; Adobe does not state the exact scaling. Apply Image and Calculations use `Offset / 255` in the unit domain at every depth and leave 32-bit Add and Subtract unclamped until the result narrows; this is an inference, not verified parity. Calculations reads sources at native precision but narrows every result to 8 bits (channels and selections are 8-bit; a New Document is 8-bit grayscale). Confirm with a high-bit-depth reference.
 - **Apply Image colour-mode rule.** "Single channel but not composite" across differing modes is stated but the exact validation matrix is not. Resolve per colour-mode pair in `01-architecture/color-management.md`.
 - **Spot channel serialisation.** DCS 2.0 and PSD spot-channel encoding details must come from the Adobe file-format spec, not the Help PDF.
 - **Mask sense on PSD round-trip.** Whether the `Masked Areas` / `Selected Areas` flag is stored independently or derived must be confirmed against the file-format spec.

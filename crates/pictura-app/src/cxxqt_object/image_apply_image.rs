@@ -1,13 +1,17 @@
-//! Image > Apply Image (#609). The dialog reads its source and mask once into
-//! opaque snapshots, so a preview on the active document cannot feed back into
-//! its own source, then previews and commits through the shared preview
-//! session. Free functions over a [`PictureView`] (their own bridge).
+//! Image > Apply Image (#609) and Image > Calculations (#610). Both dialogs
+//! read their sources and mask once into opaque snapshots, so a preview on the
+//! active document cannot feed back into its own source; Apply Image previews
+//! and commits through the shared preview session, while Calculations computes
+//! a plane and hands it to the selection, a new channel, or a new document.
+//! Free functions over a [`PictureView`] (their own bridge).
 //!
 //! [`PictureView`]: super::qobject::PictureView
 
+mod calculations;
 mod imp;
 
 use super::qobject::PictureView;
+use calculations::{calculations_apply, calculations_document, calculations_preview};
 use imp::*;
 
 #[cxx_qt::bridge]
@@ -75,6 +79,62 @@ pub mod ffi {
             offset: i32,
             opacity: i32,
             preserve_transparency: bool,
+            mask: &ApplyImageSnapshot,
+            mask_invert: bool,
+        ) -> bool;
+
+        /// Image > Calculations: the full-resolution grayscale blend of the two
+        /// sources through the mask. Empty (and zero dimensions) when a plane
+        /// cannot be read or the sizes differ. `mode` is a PSD blend key,
+        /// `add`, or `subtract`.
+        #[allow(clippy::too_many_arguments)]
+        fn calculations_preview(
+            source1: &ApplyImageSnapshot,
+            invert1: bool,
+            source2: &ApplyImageSnapshot,
+            invert2: bool,
+            mode: &QString,
+            scale: f64,
+            offset: i32,
+            opacity: i32,
+            mask: &ApplyImageSnapshot,
+            mask_invert: bool,
+            width: &mut i32,
+            height: &mut i32,
+        ) -> Vec<u8>;
+
+        /// Commit the blend as the selection or a new alpha channel (`target`
+        /// is `selection` or `channel`) under one "Calculations" state. False
+        /// when refused, including the 56-channel cap.
+        #[allow(clippy::too_many_arguments)]
+        fn calculations_apply(
+            view: Pin<&mut PictureView>,
+            source1: &ApplyImageSnapshot,
+            invert1: bool,
+            source2: &ApplyImageSnapshot,
+            invert2: bool,
+            mode: &QString,
+            scale: f64,
+            offset: i32,
+            opacity: i32,
+            mask: &ApplyImageSnapshot,
+            mask_invert: bool,
+            target: &QString,
+        ) -> bool;
+
+        /// Fill a fresh view with the blend as an 8-bit grayscale document; the
+        /// source documents are untouched. False when refused.
+        #[allow(clippy::too_many_arguments)]
+        fn calculations_document(
+            view: Pin<&mut PictureView>,
+            source1: &ApplyImageSnapshot,
+            invert1: bool,
+            source2: &ApplyImageSnapshot,
+            invert2: bool,
+            mode: &QString,
+            scale: f64,
+            offset: i32,
+            opacity: i32,
             mask: &ApplyImageSnapshot,
             mask_invert: bool,
         ) -> bool;

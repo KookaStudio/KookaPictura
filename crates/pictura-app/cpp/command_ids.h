@@ -276,6 +276,7 @@ inline constexpr char HelpDeveloperDesignSystem[] = "help.developer.designSystem
 inline constexpr char FilePrint[] = "file.print";
 inline constexpr char FilePrintOneCopy[] = "file.print.one.copy";
 inline constexpr char ImageApplyImage[] = "image.apply.image";
+inline constexpr char ImageCalculations[] = "image.calculations";
 inline constexpr char ImageImageSize[] = "image.image.size";
 inline constexpr char ImageCanvasSize[] = "image.canvas.size";
 inline constexpr char FilterFilterGallery[] = "filter.filter.gallery";
