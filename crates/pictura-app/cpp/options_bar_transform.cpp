@@ -154,11 +154,11 @@ QWidget* OptionsBar::buildTransformPage()
     }
     layout->addWidget(locator);
 
-    auto* xField = new NumericField(
-        QStringLiteral("X"),
+    NumericFieldConfig xConfig =
         numericConfig(-1000000.0, 1000000.0, 1.0, 1, QStringLiteral("px"), true,
-                      QStringLiteral("optionsTransformX")),
-        page);
+                      QStringLiteral("optionsTransformX"));
+    xConfig.sliderSpan = 20000.0;
+    auto* xField = new NumericField(QStringLiteral("X"), xConfig, page);
     layout->addWidget(xField);
 
     auto* relative = new QToolButton(page);
@@ -175,15 +175,15 @@ QWidget* OptionsBar::buildTransformPage()
         refreshTransformPage();
     });
 
-    auto* yField = new NumericField(
-        QStringLiteral("Y"),
+    NumericFieldConfig yConfig =
         numericConfig(-1000000.0, 1000000.0, 1.0, 1, QStringLiteral("px"), true,
-                      QStringLiteral("optionsTransformY")),
-        page);
+                      QStringLiteral("optionsTransformY"));
+    yConfig.sliderSpan = 20000.0;
+    auto* yField = new NumericField(QStringLiteral("Y"), yConfig, page);
     layout->addWidget(yField);
 
-    // X/Y move the reference point only; the relative toggle makes them offsets
-    // from the session origin.
+    // X/Y set the reference point's document position and translate the target;
+    // the relative toggle makes them offsets from the fixed session origin.
     connect(xField, &NumericField::valueChanged, this, [this, yField](double value) {
         if (!controller_) {
             return;
@@ -196,7 +196,7 @@ QWidget* OptionsBar::buildTransformPage()
             transformRelative_ ? transform_pivot_origin_x(*v) + value : value;
         const double y = transformRelative_ ? transform_pivot_origin_y(*v) + yField->value()
                                             : yField->value();
-        controller_->setTransformPivot(x, y);
+        controller_->setTransformPosition(x, y);
     });
     connect(yField, &NumericField::valueChanged, this, [this, xField](double value) {
         if (!controller_) {
@@ -210,14 +210,15 @@ QWidget* OptionsBar::buildTransformPage()
                                             : xField->value();
         const double y =
             transformRelative_ ? transform_pivot_origin_y(*v) + value : value;
-        controller_->setTransformPivot(x, y);
+        controller_->setTransformPosition(x, y);
     });
 
-    auto* wField = new NumericField(
-        QStringLiteral("W"),
-        numericConfig(0.1, 10000.0, 1.0, 1, QStringLiteral("%"), true,
-                      QStringLiteral("optionsTransformW")),
-        page);
+    NumericFieldConfig wConfig =
+        numericConfig(0.1, 1000.0, 1.0, 1, QStringLiteral("%"), true,
+                      QStringLiteral("optionsTransformW"));
+    wConfig.splitSlider = true;
+    wConfig.sliderMidpoint = 100.0;
+    auto* wField = new NumericField(QStringLiteral("W"), wConfig, page);
     layout->addWidget(wField);
     connect(wField, &NumericField::valueChanged, this, [this](double value) {
         if (controller_) {
@@ -236,11 +237,12 @@ QWidget* OptionsBar::buildTransformPage()
         link->setIcon(icon(on ? QStringLiteral("layers.link") : QStringLiteral("layers.unlink2")));
     });
 
-    auto* hField = new NumericField(
-        QStringLiteral("H"),
-        numericConfig(0.1, 10000.0, 1.0, 1, QStringLiteral("%"), true,
-                      QStringLiteral("optionsTransformH")),
-        page);
+    NumericFieldConfig hConfig =
+        numericConfig(0.1, 1000.0, 1.0, 1, QStringLiteral("%"), true,
+                      QStringLiteral("optionsTransformH"));
+    hConfig.splitSlider = true;
+    hConfig.sliderMidpoint = 100.0;
+    auto* hField = new NumericField(QStringLiteral("H"), hConfig, page);
     layout->addWidget(hField);
     connect(hField, &NumericField::valueChanged, this, [this](double value) {
         if (controller_) {
@@ -446,6 +448,16 @@ void OptionsBar::refreshTransformPage()
     {
         const QSignalBlocker block(relative);
         relative->setChecked(transformRelative_);
+    }
+    const int activePivot = transform_pivot_preset(*v);
+    for (int i = 0; i < 9; ++i) {
+        auto* cell = transformPage_->findChild<QToolButton*>(
+            QStringLiteral("optionsPivot%1").arg(i));
+        if (!cell) {
+            continue;
+        }
+        cell->setProperty("pivotActive", i == activePivot);
+        cell->setIcon(pivotCellIcon(transformPage_, i == activePivot));
     }
     const double originX = transform_pivot_origin_x(*v);
     const double originY = transform_pivot_origin_y(*v);

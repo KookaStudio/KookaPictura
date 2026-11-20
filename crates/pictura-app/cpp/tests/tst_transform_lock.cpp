@@ -24,6 +24,7 @@
 
 #include <QtCore/QCoreApplication>
 #include <QtGui/QAction>
+#include <QtWidgets/QCheckBox>
 #include <QtWidgets/QTreeView>
 
 namespace {
@@ -70,6 +71,7 @@ private slots:
     void layerClickDontApplyCancels();
     void layerClickCancelKeepsTheTransform();
     void documentEditsDuringPendingTransform();
+    void controlsGesturePendingLocks();
     void maskFillIsRefusedWhilePending();
     void applyCommitsAndSwitches();
     void dontApplyCancelsAndSwitches();
@@ -353,6 +355,52 @@ void TransformLockTest::documentEditsDuringPendingTransform()
                                false));
     QVERIFY(f.tools->transformControlsSession());
     f.tools->cancelFreeTransform();
+}
+
+// A Move tool controls gesture is not pending while it drags; a released
+// changed gesture becomes pending and locks like a modal transform (#1448).
+void TransformLockTest::controlsGesturePendingLocks()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_lock_controls_pending"));
+    QVERIFY(f.ok());
+    const QString layer = beginLayer(f);
+    QVERIFY(!layer.isEmpty());
+    frame.setActiveTool(pictura::ToolId::Move);
+    auto* box = frame.findChild<QCheckBox*>(QStringLiteral("optionsMoveTransform"));
+    QVERIFY(box);
+    box->setChecked(true);
+    QCoreApplication::processEvents();
+    QVERIFY(f.tools->transformControlsSession());
+    QVERIFY(action(frame, pictura::command_ids::EditFill)->isEnabled());
+    QVERIFY(action(frame, pictura::command_ids::LayerNewLayer)->isEnabled());
+    const int base = f.view->history_index();
+
+    f.canvas->setSmartGuidesEnabled(false);
+    f.canvas->mousePressed(QPointF(10.0, 8.0), Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseMoved(QPointF(5.0, 4.0));
+    // Mid-gesture the box is not a pending transform: no lock.
+    QVERIFY(!f.tools->transformPending());
+    QVERIFY(action(frame, pictura::command_ids::EditFill)->isEnabled());
+    QVERIFY(action(frame, pictura::command_ids::LayerNewLayer)->isEnabled());
+    f.canvas->mouseReleased(QPointF(5.0, 4.0));
+
+    // The released gesture is pending: the modal lock applies.
+    QVERIFY(f.view->transform_session_active());
+    QVERIFY(f.tools->transformPending());
+    QVERIFY(frame.layersLockedForTest());
+    QVERIFY(!action(frame, pictura::command_ids::EditFill)->isEnabled());
+    QVERIFY(!action(frame, pictura::command_ids::LayerNewLayer)->isEnabled());
+    QCOMPARE(f.view->history_index(), base);
+
+    // A tool switch asks first; Don't Apply cancels the pending transform.
+    answer(f, pictura::TransformDecision::DontApply);
+    frame.setActiveTool(pictura::ToolId::Brush);
+    QCOMPARE(asked_, 1);
+    QCOMPARE(frame.activeTool(), pictura::ToolId::Brush);
+    QVERIFY(!f.view->transform_session_active());
+    QCOMPARE(f.view->history_index(), base);
+    QVERIFY(!frame.layersLockedForTest());
 }
 
 void TransformLockTest::maskFillIsRefusedWhilePending()

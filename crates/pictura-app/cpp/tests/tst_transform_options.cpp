@@ -18,6 +18,7 @@
 
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QLineEdit>
+#include <QtWidgets/QSlider>
 #include <QtWidgets/QToolButton>
 
 namespace {
@@ -58,6 +59,9 @@ private slots:
     void pivotFollowsMoveAndScale();
     void pivotStaysDuringRotation();
     void relativePositioningOffsetsFromTheOrigin();
+    void xAndYTranslateTheTarget();
+    void xySliderStepsAboutHundredPixels();
+    void widthSliderIsSplitAtHundredPercent();
     void widthLinkScalesBothAxes();
     void angleAndSkewSettersReachTheSession();
     void interpolationComboReachesTheSession();
@@ -84,8 +88,15 @@ void TransformOptionsTest::initTestCase()
 
 void TransformOptionsTest::cleanup()
 {
-    while (window_ && window_->activeDocumentIndex() >= 0) {
-        window_->closeDocument(window_->activeDocumentIndex(), false);
+    if (window_) {
+        // The relative toggle is page state; start each test in absolute mode.
+        if (auto* relative =
+                window_->findChild<QToolButton*>(QStringLiteral("optionsTransformRelative"))) {
+            relative->setChecked(false);
+        }
+        while (window_->activeDocumentIndex() >= 0) {
+            window_->closeDocument(window_->activeDocumentIndex(), false);
+        }
     }
 }
 
@@ -202,6 +213,11 @@ void TransformOptionsTest::pivotLocatorMovesTheReferencePoint()
     // The quad must not move when the pivot does.
     QCOMPARE(pictura::transform_api::quad(*view).toString(),
              QStringLiteral("10.00,8.00 22.00,8.00 22.00,17.00 10.00,17.00"));
+    // The clicked cell is the highlighted one.
+    auto* centre = frame.findChild<QToolButton*>(QStringLiteral("optionsPivot4"));
+    QVERIFY(centre);
+    QVERIFY(cell->property("pivotActive").toBool());
+    QVERIFY(!centre->property("pivotActive").toBool());
 
     // The canvas marker tracks the pivot and hides with the toggle.
     pictura::ImageView* canvas = frame.imageView();
@@ -220,6 +236,13 @@ void TransformOptionsTest::pivotLocatorMovesTheReferencePoint()
     show->click();
     QVERIFY(pictura::transform_show_pivot(*view));
     QVERIFY(canvas->transformPivotVisibleForTest());
+
+    // A pivot dragged between anchors leaves no cell highlighted.
+    canvas->mousePressed(QPointF(10.0, 8.0), Qt::LeftButton, int(Qt::NoModifier));
+    canvas->mouseMoved(QPointF(40.0, 30.0));
+    canvas->mouseReleased(QPointF(40.0, 30.0));
+    QVERIFY(!cell->property("pivotActive").toBool());
+    QVERIFY(!centre->property("pivotActive").toBool());
 
     tools->cancelFreeTransform();
 }
@@ -376,15 +399,136 @@ void TransformOptionsTest::relativePositioningOffsetsFromTheOrigin()
     relative->setChecked(false);
     QVERIFY(std::abs(x->value() - 30.0) < kTolerance);
 
-    // The origin follows the box; relative X stays the source-frame offset.
-    QCOMPARE(view->transform_press(27.0, 22.0, 1.0, false, false), 9);
-    QVERIFY(view->transform_move(32.0, 27.0, 1.0, false, false));
+    // The origin is fixed at the session start; a +5 move adds to the offset.
+    QCOMPARE(view->transform_press(24.0, 10.0, 1.0, false, false), 9);
+    QVERIFY(view->transform_move(29.0, 15.0, 1.0, false, false));
     QVERIFY(view->transform_release());
     QVERIFY(std::abs(pictura::transform_pivot_x(*view) - 35.0) < kTolerance);
     QVERIFY(std::abs(pictura::transform_pivot_y(*view) - 20.0) < kTolerance);
     relative->setChecked(true);
-    QVERIFY2(std::abs(x->value() - 10.0) < kTolerance,
-             "relative X is the offset from the carried origin");
+    QVERIFY2(std::abs(x->value() - 15.0) < kTolerance,
+             "relative X is the offset from the fixed session origin");
+    tools->cancelFreeTransform();
+}
+
+void TransformOptionsTest::xAndYTranslateTheTarget()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && tools);
+    QVERIFY(fillBox(view, QRect(5, 5, 30, 20)));
+    QVERIFY(tools->beginFreeTransform(layer));
+
+    auto* x = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsTransformX"));
+    auto* y = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsTransformY"));
+    auto* relative = frame.findChild<QToolButton*>(QStringLiteral("optionsTransformRelative"));
+    QVERIFY(x && y && relative);
+    relative->setChecked(false);
+    // The box is (5,5)-(35,25), centre (20,15).
+    QVERIFY(std::abs(x->value() - 20.0) < kTolerance);
+    QVERIFY(std::abs(y->value() - 15.0) < kTolerance);
+
+    // Typing a document X translates the object before Apply.
+    typeInto(x, QStringLiteral("30"));
+    QVERIFY(std::abs(pictura::transform_pivot_x(*view) - 30.0) < kTolerance);
+    QVERIFY(std::abs(pictura::transform_pivot_y(*view) - 15.0) < kTolerance);
+    const QPolygonF movedX = pictura::transform_api::quad(*view).corners;
+    QVERIFY(std::abs(movedX.at(0).x() - 15.0) < kTolerance);
+
+    typeInto(y, QStringLiteral("20"));
+    QVERIFY(std::abs(pictura::transform_pivot_x(*view) - 30.0) < kTolerance);
+    QVERIFY(std::abs(pictura::transform_pivot_y(*view) - 20.0) < kTolerance);
+    const QPolygonF moved = pictura::transform_api::quad(*view).corners;
+    QVERIFY(std::abs(moved.at(0).x() - 15.0) < kTolerance);
+    QVERIFY(std::abs(moved.at(0).y() - 10.0) < kTolerance);
+
+    // Apply commits the moved result.
+    const int base = view->history_count();
+    tools->commitFreeTransform();
+    QCOMPARE(view->history_count(), base + 1);
+    const pictura::transform_api::LayerRect rect =
+        pictura::transform_api::layerRect(*view, layer);
+    QVERIFY(rect.valid);
+    QCOMPARE(rect.left, 15);
+    QCOMPARE(rect.top, 10);
+    QCOMPARE(rect.width(), 30);
+    QCOMPARE(rect.height(), 20);
+}
+
+void TransformOptionsTest::xySliderStepsAboutHundredPixels()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && tools);
+    QVERIFY(fillBox(view, QRect(5, 5, 30, 20)));
+    QVERIFY(tools->beginFreeTransform(layer));
+
+    auto* x = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsTransformX"));
+    auto* y = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsTransformY"));
+    auto* relative = frame.findChild<QToolButton*>(QStringLiteral("optionsTransformRelative"));
+    QVERIFY(x && y && relative);
+    relative->setChecked(false);
+    auto* xSlider = x->findChild<QSlider*>();
+    auto* ySlider = y->findChild<QSlider*>();
+    QVERIFY(xSlider && ySlider);
+    QCOMPARE(xSlider->minimum(), -10000);
+    QCOMPARE(xSlider->maximum(), 10000);
+    QCOMPARE(xSlider->singleStep(), 100);
+    QCOMPARE(ySlider->minimum(), -10000);
+    QCOMPARE(ySlider->maximum(), 10000);
+    QCOMPARE(ySlider->singleStep(), 100);
+
+    const double before = pictura::transform_pivot_x(*view);
+    xSlider->setValue(xSlider->value() + xSlider->singleStep());
+    QVERIFY(std::abs(pictura::transform_pivot_x(*view) - (before + 100.0)) < 1e-3);
+
+    // The typed range still reaches beyond the slider span.
+    typeInto(x, QStringLiteral("-50000"));
+    QVERIFY(std::abs(x->value() + 50000.0) < 1e-3);
+    QVERIFY(std::abs(pictura::transform_pivot_x(*view) + 50000.0) < 1e-3);
+    tools->cancelFreeTransform();
+}
+
+void TransformOptionsTest::widthSliderIsSplitAtHundredPercent()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginLayer(frame);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && tools && tools->beginFreeTransform(layer));
+
+    auto* w = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsTransformW"));
+    auto* h = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsTransformH"));
+    QVERIFY(w && h);
+    auto* wSlider = w->findChild<QSlider*>();
+    auto* hSlider = h->findChild<QSlider*>();
+    QVERIFY(wSlider && hSlider);
+    QCOMPARE(wSlider->minimum(), 0);
+    QCOMPARE(wSlider->maximum(), 1000);
+    QCOMPARE(hSlider->maximum(), 1000);
+
+    wSlider->setValue(500);
+    QVERIFY(std::abs(w->value() - 100.0) < 1e-3);
+    QVERIFY(std::abs(pictura::transform_width_pct(*view) - 100.0) < 1e-3);
+
+    wSlider->setValue(250);
+    QVERIFY(std::abs(w->value() - 50.0) < 0.2);
+    QVERIFY(std::abs(pictura::transform_width_pct(*view) - w->value()) < 1e-3);
+
+    wSlider->setValue(1000);
+    QVERIFY(std::abs(w->value() - 1000.0) < 1e-3);
+    QVERIFY(std::abs(pictura::transform_width_pct(*view) - 1000.0) < 1e-3);
+
+    // The typed maximum is 1000 too.
+    typeInto(w, QStringLiteral("1000"));
+    QVERIFY(std::abs(w->value() - 1000.0) < 1e-3);
     tools->cancelFreeTransform();
 }
 

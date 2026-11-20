@@ -1,0 +1,25 @@
+# Test Plan
+
+| Scenario | Steps | Expected result | Coverage |
+|---|---|---|---|
+| `lmtc_handle_drag` | Show the controls box on a 20×20 filled square, drag its top-left handle from (10,8) to (4,2), release, then click Apply. | Release records no state, the session is pending and the bar is the transform page; Apply records one `"Free Transform"` state and the idle box returns at `4 2 30 28`. | `tst_transform_controls::handleDragStaysPendingThenCommits` |
+| `lmtc_handle_drag_linked` | Link two squares, drag the union box's bottom-right handle, release, confirm. | The set is pending on release; Apply scales both members about the anchor, records one state, and keeps the link. | `tst_linked_layers::linkedControlsBoxResizesTheSet` |
+| `lmtc_identity` | Press a handle and release without moving. | No history state, no session, idle box unchanged, Move page. | `tst_transform_controls::identityHandleDragReturnsToIdle` |
+| `lmtc_ctrl_t` | With the idle box up, begin `Ctrl+T`. | Modal session begins, controls session flag is false, bar shows the transform page. | `tst_transform_controls::ctrlTTakesTheBoxOver` |
+| `lmtc_handle_reject` | Drag a handle, release, click Cancel. | No history state, document unchanged, idle box returns, Move page. | `tst_transform_controls::rejectCancelsThePendingTransform` |
+| `lmtc_pending_bar` | Drag a handle and release; then confirm and repeat with cancel. | Pending shows the transform page; both Apply and Cancel return the Move page. | `tst_transform_controls::handleDragStaysPendingThenCommits`, `tst_transform_controls::rejectCancelsThePendingTransform` |
+| `lmtc_pending_pivot` | Check the idle box's pivot visibility, then drag a handle and release. | Idle box has no pivot; the pending session overlay shows the pivot. | `tst_transform_controls::checkingTheBoxShowsControls`, `tst_transform_controls::handleDragStaysPendingThenCommits` |
+| `lmtc_inside_move` | Press inside the idle box and drag it. | One `"Move Layer"` state, the box returns on the moved layer. | `tst_transform_controls::insideDragMovesAndRecordsMove` |
+| `lmtc_click` | Press and release inside the idle box without moving. | No state, box remains. | `tst_transform_controls::clickInsideLeavesTheDocumentAlone` |
+| `lmtc_handle_refine` | Drag one corner, release, drag another corner on the pending session, release, Apply. | Still pending after the second drag, no state until Apply, then exactly one `"Free Transform"` state. | `tst_transform_controls::pendingTransformRefinesTheSameSession` |
+| `lmtc_inside_pending` | Drag a corner, release, press inside the pending box, drag by (5,3), release, Apply. | No state during the inside drag; Apply records one `"Free Transform"` state and the moved box. | `tst_transform_controls::insideDragMovesWithinThePendingTransform` |
+| `lock_layer_menu` | Begin a Free Transform and inspect the Layer menu commands. | The Layer commands are disabled and refuse dispatch until commit. | `tst_transform_lock::layerMenuIsLockedWhilePending` |
+| `lock_layers_panel` | Begin a transform and inspect the Layers panel editing controls. | Editing controls are disabled while the layer list stays interactive; cancel enables them. | `tst_transform_lock::panelEditingControlsLockedWhilePending` |
+| `lock_document_edits` | Dispatch Fill, Stroke, profile, and filter edits under a lifted pending transform. | Every edit is refused and history is unchanged; after commit they work. | `tst_transform_lock::documentEditsDuringPendingTransform` |
+| `lock_controls_box` | Press a Move controls handle and drag, then inspect `Edit > Fill` and a filter. | Both stay enabled while the gesture is in progress. | `tst_transform_lock::controlsGesturePendingLocks` |
+| `lock_controls_pending` | Release a changed controls gesture, then inspect the menus and panel; switch tools. | Menus and panel lock; a tool switch asks and Don't Apply cancels the pending transform. | `tst_transform_lock::controlsGesturePendingLocks` |
+| Beginning a session shows the transform page | Begin `Edit > Free Transform` while the Brush tool is active. | The options bar shows the transform page. | `tst_transform_options::pageSwitchesWithTheSession` |
+| Ending a session restores the tool page | Commit or cancel the session. | The active tool's page returns. | `tst_transform_options::pageSwitchesWithTheSession` |
+| The fields seed from the session | Show the transform page on a fresh 100×50 layer session. | X/Y are the layer centre, W/H are 100%, angle is 0°. | `tst_transform_options::fieldsSeedFromTheSession` |
+| `tob_seed_border` | Begin `Select > Transform Selection` on a 100×50 selection. | X/Y are the selection centre, W/H are 100%, angle is 0°. | `tst_transform_selection::fieldsSeedFromTheSelectionBounds` |
+| `tob_controls_pending` | Drag a Move controls handle, release, then Apply and repeat with Cancel. | The transform page shows while pending; Apply and Cancel both restore the Move page. | `tst_transform_controls::handleDragStaysPendingThenCommits`, `tst_transform_controls::rejectCancelsThePendingTransform` |

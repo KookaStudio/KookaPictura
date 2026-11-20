@@ -500,14 +500,16 @@ impl PictureViewRust {
     /// Whether a **lifted** transform is pending. A non-lifted transform can
     /// accept a document edit: the edit lands in the layer and the transform
     /// commit keeps it. A lifted selection restores its pre-lift snapshot on
-    /// cancel/commit, so an edit made under it would be discarded. The Move
-    /// tool's controls box commits per gesture and never locks.
+    /// cancel/commit, so an edit made under it would be discarded. A Move
+    /// controls gesture does not lock while it is in progress (`transform_controls`
+    /// is true); once it is promoted to pending it locks like a modal transform.
     pub(in crate::cxxqt_object) fn modal_transform_blocks_edit(&self) -> bool {
         self.lifted_transform_is_live() && !self.transform_controls
     }
 
     /// Fill and Stroke refuse any pending transform, lifted or not, matching
-    /// the Edit menu lock. The Move tool's controls box is not a transform.
+    /// the Edit menu lock. A Move controls gesture in progress is not a pending
+    /// transform; a released changed gesture is.
     pub(in crate::cxxqt_object) fn modal_transform_blocks_fill(&self) -> bool {
         self.session.live.transform().is_some() && !self.transform_controls
     }
