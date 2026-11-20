@@ -284,7 +284,8 @@ public:
     // While set, a left press on the canvas samples for a dialog (Color Range)
     // instead of reaching the active tool, under the eyedropper cursor; clear
     // it with an empty function.
-    void setCanvasSampler(std::function<void(const QPointF&)> sampler);
+    void setCanvasSampler(std::function<void(const QPointF&, Qt::KeyboardModifiers)> sampler,
+                          bool continuous = true);
     bool canvasSamplerActive() const { return bool(canvasSampler_); }
 
     QColor foreground() const override;
@@ -679,7 +680,8 @@ private:
     PenGroup* pen_ = nullptr;
     ShapeGroup* shape_ = nullptr;
 
-    std::function<void(const QPointF&)> canvasSampler_;
+    std::function<void(const QPointF&, Qt::KeyboardModifiers)> canvasSampler_;
+    bool canvasSamplerContinuous_ = true;
     // True while a press with an armed `canvasSampler_` has the left button
     // down, so `handleMoved` samples on every move and `handleReleased` ends it.
     bool canvasSampling_ = false;

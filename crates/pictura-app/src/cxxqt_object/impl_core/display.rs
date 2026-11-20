@@ -42,6 +42,11 @@ impl PictureViewRust {
         if self.session.read_only() {
             return (self.session.compatibility.image(level, rect), Vec::new());
         }
+        if let Some(state) = self.color_range_preview.as_ref() {
+            if state.active() {
+                return self.color_range_crop(level, rect, state);
+            }
+        }
         if self.session.quick_mask.active {
             return self.quick_mask_crop(level, rect);
         }

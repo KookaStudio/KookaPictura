@@ -13,7 +13,7 @@ use pictura_core::path::{PathPoint, Subpath};
 use pictura_core::{Channel, Layer, LayerMask, PixelBuffer, Plane, PsdRect};
 
 mod color_range;
-pub use color_range::{color_range, ColorRangeSelect};
+pub use color_range::{color_range, ColorRangeSelect, ColorRangeSettings};
 mod contour;
 pub use contour::{contour, contour_within};
 

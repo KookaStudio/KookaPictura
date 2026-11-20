@@ -325,7 +325,7 @@ void ReplaceColorDialog::cancelPreview()
 void ReplaceColorDialog::refreshSampler()
 {
     if (tools_) {
-        tools_->setCanvasSampler([this](const QPointF& p) { sampleAt(p); });
+        tools_->setCanvasSampler([this](const QPointF& p, Qt::KeyboardModifiers) { sampleAt(p); });
     }
 }
 

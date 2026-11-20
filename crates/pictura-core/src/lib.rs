@@ -11,6 +11,8 @@ pub mod blur;
 pub mod channels;
 mod coverage;
 pub use coverage::Coverage;
+mod color_match;
+pub use color_match::{localization_strength, match_weight, spatial_sigma};
 mod content_params;
 mod crs;
 pub use content_params::*;

@@ -75,7 +75,7 @@ fn intent_from_code(code: i32) -> Intent {
     }
 }
 
-fn setup(state: &ProofState) -> proof::ProofSetup {
+pub(in crate::cxxqt_object) fn setup(state: &ProofState) -> proof::ProofSetup {
     proof::ProofSetup {
         device: device_profile(state.device),
         intent: intent_from_code(state.intent),
