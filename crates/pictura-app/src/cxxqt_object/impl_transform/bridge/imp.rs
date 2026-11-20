@@ -786,7 +786,7 @@ pub(super) fn transform_can_set_mode(view: &PictureView, mode: &QString) -> bool
 }
 
 pub(super) fn transform_repeat(mut view: Pin<&mut PictureView>) -> bool {
-    let Some(last) = view.rust().last_transform else {
+    let Some(last) = view.rust().session.last_transform else {
         return false;
     };
     let mut rust = view.as_mut().rust_mut();
@@ -810,7 +810,7 @@ pub(super) fn transform_repeat(mut view: Pin<&mut PictureView>) -> bool {
 }
 
 pub(super) fn transform_has_repeat(view: &PictureView) -> bool {
-    view.rust().last_transform.is_some()
+    view.rust().session.last_transform.is_some()
 }
 
 pub(super) fn transform_set_history_label(mut view: Pin<&mut PictureView>, label: &QString) {
@@ -858,7 +858,7 @@ pub(super) fn transform_selection_contour_extents(view: &PictureView) -> Vec<f64
 }
 
 pub(super) fn transform_last_target(view: &PictureView) -> QString {
-    match view.rust().last_transform.as_ref() {
+    match view.rust().session.last_transform.as_ref() {
         Some(repeat) if repeat.target == TransformTarget::Selection => QString::from("selection"),
         Some(_) => QString::from("layer"),
         None => QString::default(),

@@ -63,8 +63,8 @@ impl qobject::PictureView {
             self.as_mut().edit("Adjustment", |rust| {
                 // Inserting below the top shifts every later path, so the
                 // path-keyed link sets no longer name the same layers.
-                rust.link_sets.clear();
-                rust.link_remap = None;
+                rust.session.link_sets.clear();
+                rust.session.link_remap = None;
                 rust.select_only_layer(&created);
                 if use_mask {
                     // The created mask becomes the edit target, as CS6 selects
@@ -81,7 +81,7 @@ impl qobject::PictureView {
                 }
                 // A recomposite is not a structural edit, so clear the solo
                 // snapshot explicitly.
-                rust.solo_snapshot = None;
+                rust.session.solo_snapshot = None;
                 outcome
             });
         }

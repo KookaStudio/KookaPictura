@@ -18,7 +18,7 @@ mod transform;
 pub(super) use active::{ActiveSession, PathRestore, SessionKind};
 pub(super) use previews::{FilterPreview, FilterPreviewSession, PreviewBaseline};
 pub(super) use selection::{SelectionGesture, SelectionMoveState};
-pub(super) use session::{DocumentSession, PendingPreviews, QuickSelectionSnapshot};
+pub(super) use session::{DocumentSession, QuickSelectionSnapshot};
 pub(super) use stroke::{
     LayerStrokeFinish, MaskPreview, MaskStroke, MaskStrokeFinish, PreviewSample, PreviewStroke,
     StrokeFinish, StrokePlan, StrokeSession,

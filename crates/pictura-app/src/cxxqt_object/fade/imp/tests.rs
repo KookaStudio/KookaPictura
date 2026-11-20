@@ -59,7 +59,7 @@ fn capture_and_record_keep_the_original_and_effect() {
     assert_eq!(name(&rust), "Gaussian Blur");
     assert_eq!(opacity(&rust), 100);
     assert_eq!(mode(&rust), BlendMode::Normal);
-    let state = rust.fade.as_ref().expect("record");
+    let state = rust.session.fade.as_ref().expect("record");
     assert_eq!(state.original.channels()[0].data.as_slice()[0], 20);
     assert_eq!(state.effected.channels()[0].data.as_slice()[0], 220);
 }
@@ -69,7 +69,7 @@ fn a_no_op_effect_is_not_recorded() {
     let mut rust = view((20, 40, 60), ColorMode::Rgb);
     let capture = capture(&rust).expect("a pixel layer");
     record(&mut rust, capture, "Gaussian Blur");
-    assert!(rust.fade.is_none());
+    assert!(rust.session.fade.is_none());
 }
 
 #[test]
@@ -104,7 +104,7 @@ fn a_pixel_edit_clears_the_record() {
     let mut rust = view((20, 40, 60), ColorMode::Rgb);
     record_filter(&mut rust);
     rust.apply_edit("Fill", Edit::Full);
-    assert!(rust.fade.is_none());
+    assert!(rust.session.fade.is_none());
 }
 
 #[test]
@@ -119,7 +119,7 @@ fn a_document_replacement_clears_the_record() {
         LayerTarget::only("0"),
         None,
     );
-    assert!(rust.fade.is_none());
+    assert!(rust.session.fade.is_none());
     assert!(!available(&rust));
 }
 
@@ -128,7 +128,7 @@ fn a_metadata_edit_keeps_the_record() {
     let mut rust = view((20, 40, 60), ColorMode::Rgb);
     record_filter(&mut rust);
     rust.apply_edit("Rename", Edit::Meta);
-    assert!(rust.fade.is_some());
+    assert!(rust.session.fade.is_some());
 }
 
 #[test]

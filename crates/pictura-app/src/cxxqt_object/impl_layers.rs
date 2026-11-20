@@ -481,7 +481,7 @@ impl qobject::PictureView {
         };
         let thumb = if thumb_size > 0 { thumb_size as u32 } else { 0 };
         let effects = pictura_render::layer_style_effect_names();
-        let link_sets = &self.rust().link_sets;
+        let link_sets = &self.rust().session.link_sets;
         let mut patterns: Option<Vec<pictura_codec::PatternPixels>> = None;
         pictura_render::flatten_rows(doc)
             .into_iter()

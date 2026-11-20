@@ -183,7 +183,7 @@ impl PictureViewRust {
             return false;
         };
         self.session.set_selection(Some(updated));
-        self.last_transform = repeatable_transform(&session);
+        self.session.last_transform = repeatable_transform(&session);
         true
     }
 

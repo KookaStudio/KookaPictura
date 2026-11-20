@@ -24,7 +24,13 @@ pub(super) fn edit(
     commit: bool,
     set: impl FnOnce(&mut Document, &str) -> bool,
 ) -> bool {
-    let pending = view.as_mut().rust_mut().pending_previews.mask_refine.take();
+    let pending = view
+        .as_mut()
+        .rust_mut()
+        .session
+        .pending_previews
+        .mask_refine
+        .take();
     if let Some(other) = pending.filter(|other| *other != label) {
         view.as_mut().edit(other, |_| Edit::Record);
     }
@@ -50,7 +56,11 @@ pub(super) fn edit(
         .and_then(|doc| pictura_render::damage::influence(doc, &path));
     let region = pictura_render::damage::union(before, after).map(|rect| vec![rect]);
     if !commit && (changed || pending) {
-        view.as_mut().rust_mut().pending_previews.mask_refine = Some(label);
+        view.as_mut()
+            .rust_mut()
+            .session
+            .pending_previews
+            .mask_refine = Some(label);
         view.as_mut().preview(|_| match region {
             Some(rects) => Edit::regions(rects, false),
             None => Edit::Full,
@@ -58,12 +68,20 @@ pub(super) fn edit(
     } else if commit && (changed || pending) {
         // An earlier preview already changed the document without a history
         // state, so the commit must not narrow history to this call's region.
-        view.as_mut().rust_mut().pending_previews.mask_refine = Some(label);
+        view.as_mut()
+            .rust_mut()
+            .session
+            .pending_previews
+            .mask_refine = Some(label);
         view.as_mut().edit(label, |_| match region {
             Some(rects) => Edit::regions(rects, true),
             None => Edit::Full,
         });
-        view.as_mut().rust_mut().pending_previews.mask_refine = None;
+        view.as_mut()
+            .rust_mut()
+            .session
+            .pending_previews
+            .mask_refine = None;
     }
     changed
 }

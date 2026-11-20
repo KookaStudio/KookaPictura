@@ -4,11 +4,11 @@
 use super::super::state::PictureViewRust;
 use super::active::SessionKind;
 use super::session::DocumentSession;
-use super::transform::TransformMode;
+use super::transform::{RepeatTransform, TransformMode, TransformTarget};
 use crate::cxxqt_object::impl_filters::{apply_filter_active, cancel_filter_preview};
 use crate::cxxqt_object::presentation::{present_core, Presentation, Rebuild};
 use crate::cxxqt_object::tests::pixel_layer;
-use crate::history::History;
+use crate::history::{History, Snapshot};
 use crate::layer_target::LayerTarget;
 use pictura_core::{BitDepth, ColorMode, Document, LayerStack, LockFlags, PixelBuffer, PsdRect};
 use pictura_paint::StrokeConfig;
@@ -205,8 +205,8 @@ fn a_transform_on_another_target_replaces_the_session() {
 #[test]
 fn a_linked_transform_includes_a_hidden_partner() {
     let mut view = view_with_two_layers();
-    view.link_sets.insert("0".to_string(), 1);
-    view.link_sets.insert("1".to_string(), 1);
+    view.session.link_sets.insert("0".to_string(), 1);
+    view.session.link_sets.insert("1".to_string(), 1);
     if let Some(doc) = view.session.doc.as_mut() {
         if let Some(layer) = pictura_render::resolve_path_mut(doc, "1") {
             layer.visible = false;
@@ -243,8 +243,8 @@ fn a_linked_transform_includes_a_hidden_partner() {
 #[test]
 fn a_linked_transform_skips_a_position_locked_partner() {
     let mut view = view_with_two_layers();
-    view.link_sets.insert("0".to_string(), 1);
-    view.link_sets.insert("1".to_string(), 1);
+    view.session.link_sets.insert("0".to_string(), 1);
+    view.session.link_sets.insert("1".to_string(), 1);
     if let Some(doc) = view.session.doc.as_mut() {
         if let Some(layer) = pictura_render::resolve_path_mut(doc, "1") {
             layer.lock = layer.lock.with(LockFlags::POSITION, true);
@@ -578,9 +578,9 @@ fn replacement_clears_outgoing_state() {
             path: Default::default(),
         });
     view.active_path = crate::cxxqt_object::paths::ActivePath::Saved(0);
-    view.pending_previews.opacity_changed = true;
-    view.pending_previews.fill_changed = true;
-    view.pending_previews.mask_refine = Some("Mask Feather");
+    view.session.pending_previews.opacity_changed = true;
+    view.session.pending_previews.fill_changed = true;
+    view.session.pending_previews.mask_refine = Some("Mask Feather");
     view.session.pdf_options = Some("options".into());
     view.session.pdf_password = Some("secret".into());
     view.save_options = Some(Default::default());
@@ -600,9 +600,9 @@ fn replacement_clears_outgoing_state() {
         view.active_path,
         crate::cxxqt_object::paths::ActivePath::Work
     ));
-    assert!(!view.pending_previews.opacity_changed);
-    assert!(!view.pending_previews.fill_changed);
-    assert!(view.pending_previews.mask_refine.is_none());
+    assert!(!view.session.pending_previews.opacity_changed);
+    assert!(!view.session.pending_previews.fill_changed);
+    assert!(view.session.pending_previews.mask_refine.is_none());
     assert!(view.session.pdf_options.is_none());
     assert!(view.session.pdf_password.is_none());
     assert!(
@@ -872,7 +872,7 @@ fn ungroup_target_selects_the_children() {
 #[test]
 fn document_scoped_state_is_cleared_with_the_document() {
     let mut view = view();
-    view.solo_snapshot = Some(std::collections::HashMap::from([("0".to_string(), true)]));
+    view.session.solo_snapshot = Some(std::collections::HashMap::from([("0".to_string(), true)]));
     view.expanded_groups = vec!["0".to_string()];
     view.replace_document(
         Some(doc()),
@@ -880,8 +880,121 @@ fn document_scoped_state_is_cleared_with_the_document() {
         LayerTarget::only("0"),
         None,
     );
-    assert!(view.solo_snapshot.is_none());
+    assert!(view.session.solo_snapshot.is_none());
     assert!(view.expanded_groups.is_empty());
+}
+
+fn record_fade(view: &mut PictureViewRust) {
+    let capture = crate::cxxqt_object::fade::capture(view).expect("a pixel layer");
+    {
+        let layer =
+            pictura_render::resolve_path_mut(view.session.doc.as_mut().expect("document"), "0")
+                .expect("the target layer");
+        for (id, value) in [0i16, 1, 2].into_iter().zip([0u8, 255, 0]) {
+            let channel = layer
+                .channels_mut()
+                .iter_mut()
+                .find(|channel| channel.id == id)
+                .expect("a colour channel");
+            channel.data = vec![value; 8 * 8].into();
+        }
+    }
+    crate::cxxqt_object::fade::record(view, capture, "Gaussian Blur");
+    assert!(view.session.fade.is_some(), "the fade record is installed");
+}
+
+fn repeat_transform() -> RepeatTransform {
+    RepeatTransform {
+        target: TransformTarget::Layer,
+        scale_x: 1.0,
+        scale_y: 1.0,
+        angle: 0.0,
+        skew_x: 0.0,
+        skew_y: 0.0,
+        dx: 0.0,
+        dy: 0.0,
+        pivot_offset: (0.0, 0.0),
+    }
+}
+
+fn fill_edit_state(view: &mut PictureViewRust) {
+    record_fade(view);
+    view.session.last_transform = Some(repeat_transform());
+    view.session.link_sets.insert("0".into(), 1);
+    view.session
+        .link_remap
+        .replace(std::collections::HashMap::from([("0".into(), 1)]));
+    view.session.solo_snapshot = Some(std::collections::HashMap::from([("0".to_string(), true)]));
+    view.session.pending_previews.opacity_changed = true;
+    view.session.pending_previews.fill_changed = true;
+    view.session.pending_previews.mask_refine = Some("Mask Feather");
+}
+
+fn assert_edit_state_clear(view: &PictureViewRust) {
+    assert!(view.session.fade.is_none(), "Fade must not survive");
+    assert!(view.session.last_transform.is_none());
+    assert!(view.session.link_sets.is_empty());
+    assert!(view.session.link_remap.is_none());
+    assert!(view.session.solo_snapshot.is_none());
+    assert!(!view.session.pending_previews.any());
+    assert!(!crate::cxxqt_object::fade::available(view));
+}
+
+#[test]
+fn snapshot_restore_clears_edit_state() {
+    let mut view = view();
+    fill_edit_state(&mut view);
+    let snapshot = Snapshot {
+        doc: doc(),
+        selection: None,
+        quick_mask: None,
+    };
+
+    let target = view
+        .session
+        .restore_named_snapshot(snapshot, LayerTarget::only("0"), "Snapshot");
+
+    assert_eq!(target.anchor(), Some("0"));
+    assert_edit_state_clear(&view);
+    assert_eq!(view.session.history.count(), 1, "the restore is recorded");
+    assert_eq!(view.session.history.label(0), "Snapshot");
+}
+
+#[test]
+fn replacement_clears_edit_state() {
+    let mut view = view();
+    fill_edit_state(&mut view);
+    let rect = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: 2,
+        right: 2,
+    };
+    view.path_drag_damage = Some(Some(rect));
+    view.move_above = Some(cxx_qt_lib::QImage::default());
+    view.move_above_origin = Some((1, 2));
+    view.move_above_scale = 2;
+    view.move_above_presented = Some((1, rect));
+    view.transform_preview_level = 2;
+    view.smart_filter_edit = Some(("0".into(), 0));
+    view.warp_text_original = Some(("0".into(), pixel_layer("px", 8, 8, (1, 2, 3))));
+
+    view.replace_document(
+        Some(doc()),
+        History::default(),
+        LayerTarget::only("0"),
+        None,
+    );
+
+    assert_edit_state_clear(&view);
+    assert!(view.path_drag_damage.is_none());
+    assert!(view.move_above.is_none());
+    assert!(view.move_above_origin.is_none());
+    assert_eq!(view.move_above_scale, 1);
+    assert!(view.move_above_presented.is_none());
+    assert_eq!(view.transform_preview_level, 0);
+    assert!(view.smart_filter_edit.is_none());
+    assert!(view.warp_text_original.is_none());
 }
 
 #[test]
