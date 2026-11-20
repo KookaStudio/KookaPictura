@@ -69,6 +69,20 @@ Use the Register buttons on the Agent Control page, or add this to the client:
 {"mcpServers": {"pictura": {"command": "/path/to/pictura", "args": ["--mcp"]}}}
 ```
 
+Claude Code, GitHub Copilot CLI, and OpenCode can add it from a terminal:
+
+```bash
+claude mcp add --scope user pictura -- /path/to/pictura --mcp
+copilot mcp add pictura -- /path/to/pictura --mcp
+opencode mcp add pictura -- /path/to/pictura --mcp
+```
+
+OpenCode stores the entry under `mcp`, not `mcpServers`:
+
+```json
+{"mcp": {"pictura": {"type": "local", "command": ["/path/to/pictura", "--mcp"]}}}
+```
+
 Add `--spawn` for a private instance, with `--tier read|edit|save`, `--root DIR`, and
 `--approval allow-all`. `PICTURA_CONTROL_SOCKET` overrides the endpoint.
 
