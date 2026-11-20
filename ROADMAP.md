@@ -442,8 +442,12 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       16-bit linear camera RGB, bilinear for any RGB pattern or AHD for Bayer
       (approximate parity) (#397).
       `crates/pictura-codec/src/dng/demosaic/`.
-- [ ] Open camera raw files — there is no colour transform or File ▸ Open
-      route yet (#398, #400)
+- [x] **Camera colour** — `pictura_codec::as_shot_transform` builds the
+      camera-to-linear-ProPhoto transform from the DNG's own colour matrices
+      (no Adobe profiles) and reports the as-shot white balance in kelvin and
+      tint; `to_pro_photo` applies it (approximate parity) (#398).
+      `crates/pictura-codec/src/dng/camera_color.rs`.
+- [ ] Open camera raw files — there is no File ▸ Open route yet (#400)
 - [ ] X-Trans-tuned demosaic, with the Fuji container (#399)
 - [ ] Deflate, PackBits and lossy-JPEG DNGs, linear DNGs and floating-point
       samples (#396)

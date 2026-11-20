@@ -119,7 +119,9 @@ pub use color_mode::{
 pub use crs_xmp::set_crs_property;
 pub use descriptor::{write_descriptor, DescValue};
 pub use dng::{
-    demosaic, read_dng, CameraRgb, CfaPattern, DemosaicMethod, DngColor, DngCrop, DngImage,
+    as_shot_transform, demosaic, read_dng, to_pro_photo, white_balance_transform, CameraRgb,
+    CameraTransform, CfaPattern, DemosaicMethod, DngColor, DngCrop, DngImage, ProPhotoRgb,
+    WhiteBalance,
 };
 pub use document_version::{
     document_version, native_merged_has_transparency, unsupported_document_feature,

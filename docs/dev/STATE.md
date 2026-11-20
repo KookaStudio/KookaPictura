@@ -18,6 +18,23 @@ Snapshot for resuming after a context break. Update after each milestone.
   Auto-Align's work image reads luma premultiplied by alpha. Tests:
   `transform_alpha_tests`, the `kernel` units, and
   `auto_align::tests::work_luma_is_premultiplied_by_alpha`.
+- **Camera colour — #398 implemented** (OpenSpec change `camera-colour`,
+  archived; capabilities `codec/camera-colour`, `color/colour-temperature`).
+  Third stage of raw open (#86). `pictura_codec::as_shot_transform(&DngColor)`
+  (`crates/pictura-codec/src/dng/camera_color.rs`) follows the DNG 1.6
+  camera-to-XYZ mapping: `ColorMatrix1/2`, `CameraCalibration1/2` and
+  `ForwardMatrix1/2` interpolated in inverse temperature between the
+  calibration illuminants, `AnalogBalance`, `ForwardMatrix` when present else
+  Bradford to D50. It reports the as-shot white balance (kelvin + tint, found by
+  iterating from `AsShotNeutral`, D50 without it); `white_balance_transform`
+  builds any other. `to_pro_photo` white-balances and converts `CameraRgb` in
+  place to 16-bit linear ProPhoto; `Profile::linear_pro_photo()` lets #400 go
+  through lcms2. Shared math in `pictura_color::chroma` (Krystek locus, tint =
+  −3000·Duv, approximate). No `ColorMatrix` → `Unsupported`. Ponytails: locus
+  1000–15000 K, highlights clip neutral, per-channel gamut clip, signatures and
+  `AsShotWhiteXY` not read, `BaselineExposure` left to #400. Pictura Raw's
+  relative Temperature/Tint sliders unchanged until #400. Tests:
+  `tests/dng_camera_colour.rs`, `chroma` units; Leica M9 opt-in (6715 K, 7458 K).
 - **Raw demosaic — #397 implemented** (OpenSpec change `raw-demosaic`,
   archived; capability `codec/raw-demosaic`). Second stage of raw open (#86).
   `pictura_codec::demosaic(image, method, budget)`
