@@ -11,11 +11,12 @@
   preview gap as `FILT-11`; the corrections are listed in §G.
 - **Re-checked:** `#591` shipped `LAY-13` (Extended Stack Modes); the row keeps
   the implementation evidence.
-- **Rows:** 156 gaps — 4 systemic in §B, 152 per-domain in §C.
+- **Rows:** 159 gaps — 4 systemic in §B, 155 per-domain in §C.
 
 This register maps the behavioural contract in `docs/` against the implementation
 in `crates/`. It is the canonical place to see **what is specified but missing,
-partial, or divergent**, and which GitHub issue tracks each gap.
+partial, or divergent**, and which GitHub issue tracks each gap. Aggregate
+feature coverage is in [`PARITY.md`](../../PARITY.md).
 
 `docs/TRACEABILITY.md` is *not* this document: every one of its rows is `draft`
 and it answers "does a spec exist?", not "is it implemented?".
@@ -104,7 +105,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
 | PAN-1 | `panels/adjustments-panel.md` | Adjustments panel icon grid (creation shipped; mode/depth gating and fill-layer presets remain) | PARTIAL | `panels/adjustments_panel.cpp` | #509 |
-| PAN-2 | `panels/measurement-log-panel.md` | Measurement Log panel + measurement engine | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #510 |
+| PAN-2 | `panels/measurement-log-panel.md` | Measurement Log panel, Record Measurements, and its export workflow | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #510 |
 | PAN-3 | `panels/tool-presets-panel.md` | Tool Presets panel + `.tpl` libraries | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #511 |
 | PAN-4 | `layer-styles.md` | Styles panel + `.asl` presets | MISSING | `frame_build.cpp:79` | #512 |
 | PAN-5 | `panels/channels-panel.md` | Spot channels, Split/Merge, Channel Options, Panel Options | MISSING | `panel_group_menu.cpp:90-98` | #513 |
@@ -273,7 +274,7 @@ The Actions panel and engine shipped in `#301` (`crates/pictura-app/cpp/panels/a
 | WF-8 | `camera-raw-workflow.md` | Camera Raw settings stores (XMP sidecar / ACR database) | MISSING | `crs_xmp.rs:1-9` | #632 |
 | WF-9 | `camera-raw-workflow.md` | ACR Workflow Options, ACR preferences, batch, Purge Camera Raw | MISSING | `pictura_raw_dialog.cpp:47-60` | #633 |
 | WF-10 | `printing.md` | Print colour management, proofing, output marks, persist defaults | PARTIAL | `print_dialog.cpp:181-199` | #634 |
-| WF-11 | `measurement-and-count.md` | Measurement scale/presets, exporters, PSD resource 1074 | MISSING | no measurement engine | #635 |
+| WF-11 | `measurement-and-count.md` | Measurement scale/presets, exporters, PSD resource 1074 | SHIPPED | `crates/pictura-app/cpp`; #635 | #635 |
 | WF-12 | `scratch-disks-and-memory.md` | Performance pane (memory, history states, cache level/tile, scratch disks, GPU) + Efficiency/Scratch readouts | MISSING | `preferences_dialog.cpp:172-177` | #636 |
 | WF-13 | `document-lifecycle.md`, `crash-recovery-and-autosave.md` | Background Save, durable crash journal, PSD 1086/1087 | MISSING | `STATE.md:215`; `recovery_store.h:26-29` | #637 |
 | WF-14 | `bridge-and-interop.md` | Edit Contents, relink, Paste As, Files panel | MISSING | `helpers.rs:128` | #638 |

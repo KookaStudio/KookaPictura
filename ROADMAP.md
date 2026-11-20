@@ -18,6 +18,9 @@ items below group those gaps by area; the register holds the detail.
 Deeper technical status for PSD/PSB lives in
 [`docs/dev/psd-support-roadmap.md`](docs/dev/psd-support-roadmap.md).
 
+The quantified comparison against Photoshop CS6 and CC 28.0 is in
+[`PARITY.md`](PARITY.md).
+
 ## At a glance
 
 | Area | Status |
@@ -27,9 +30,9 @@ Deeper technical status for PSD/PSB lives in
 | Tools | 61 of 71 catalogue tools; the ten gaps are the CS6 Extended 3D object and camera tools |
 | Selections | Shipped — marquee, lasso, magnetic lasso, wand, quick selection, Refine Edge, Colour Range, saved selections |
 | Adjustments | Shipped — the classic families, with live preview and adjustment-layer variants |
-| Filters | Shipped — 110 filters across the classic families; three CS6 families have no engine |
+| Filters | Shipped — 110 filters across the classic families; the roadmap names the remaining gaps |
 | Colour and painting | Shipped — ICC profiles, Assign Profile, Convert to Profile, colour settings, the brush engine |
-| Camera raw files | Open — there is no raw container reader and no demosaic |
+| Camera raw files | DNG/CR2 route ships (approximate); per-camera matrices and smart-object open remain (#1465, #1466) |
 | Panels | 19 of 22 populated; Gradients, Patterns and Styles are placeholders |
 | Automation | The control server, Rust command catalogue, Actions engine, command bus and Batch ship; droplets, scripting and plug-ins are open |
 | HDR tone mapping | Shipped — all four conversion methods; the Local Adaptation Toning Curve/Corner is open |
@@ -161,8 +164,9 @@ Deeper technical status for PSD/PSB lives in
 
 ## Tools
 
-The catalogue holds 71 tool slots in 23 toolbox groups, of which 21 are
-built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
+The catalogue holds 71 tool slots in 23 toolbox groups; 61 are built. The ten
+gaps are the CS6 Extended 3D object and camera tools.
+`crates/pictura-app/cpp/tool_catalog.cpp` is the list.
 
 - [x] Move
 - [x] Rectangular and elliptical marquee
@@ -483,7 +487,7 @@ built. `crates/pictura-app/cpp/tool_catalog.cpp` is the list.
       `crates/pictura-app/cpp/toolbox.cpp`.
 - [x] The Adjustments panel icon grid (#509)
 - [ ] Refine the Adjustments panel icon artwork (#819)
-- [ ] The Measurement Log panel and the measurement engine (#510)
+- [ ] The Measurement Log panel (#510)
 - [ ] The Tool Presets panel and `.tpl` libraries (#511)
 - [ ] The Styles panel and `.asl` presets (#512)
 - [ ] Channel panel spot channels, Split and Merge, Channel Options, and Panel
@@ -721,8 +725,8 @@ condition behind each live in
   catalogue but are not built, and there is no 3D panel
 - Video, the timeline, and video layers — exact timeline parity; Render Video
   is deferred Extended-only until a codec backend exists
-- The measurement engine, its Measurement Log panel, and DICOM — the Count tool
-  ships, the rest do not
+- DICOM (Extended) — a separate medical-imaging domain; the Count tool and the
+  measurement scale ship
 - Print fidelity matching Adobe's engine
 - Adobe cloud services (Creative Cloud, Cloud Documents, Behance, Stock)
 - Adobe Camera Raw parity — Pictura Raw is an independent approximation

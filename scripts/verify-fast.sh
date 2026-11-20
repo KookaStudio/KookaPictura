@@ -61,6 +61,9 @@ if [ "$docs_only" -eq 1 ]; then
   bash scripts/check-openspec-archived.sh
   echo "== test plan =="
   python3 scripts/check-test-plan.py
+  echo "== parity =="
+  python3 scripts/check-parity.py --self-check
+  python3 scripts/check-parity.py
   echo "== openspec =="
   openspec validate --all --strict 2>&1 | tail -1
   echo "verify-fast: OK (docs-only)"
@@ -128,6 +131,11 @@ test_plan_check() {
         python3 scripts/check-test-plan.py
 }
 
+parity_check() {
+    python3 scripts/check-parity.py --self-check &&
+        python3 scripts/check-parity.py
+}
+
 source_fragments_check() {
     python3 scripts/check-cmake-source-fragments.py --self-test &&
         python3 scripts/check-cmake-source-fragments.py
@@ -154,6 +162,7 @@ start_check icon-provenance python3 scripts/check-icon-provenance.py
 start_check guard bash scripts/guard.sh
 start_check shell-seams shell_seams_check
 start_check test-plan test_plan_check
+start_check parity parity_check
 start_check source-fragments source_fragments_check
 start_check cpu-budget python3 scripts/cpu-budget.py --self-check
 start_check heavy-policy python3 scripts/heavy_command_policy.py --self-check

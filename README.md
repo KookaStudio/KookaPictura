@@ -78,18 +78,19 @@ Full prerequisites, test commands, and packaging notes are in
   `crates/pictura-render/src/document_ops/layer_ops/transform.rs`.
 - **Pictura Raw.** The built-in raw processor (the equivalent role to Adobe
   Camera Raw, which is an add-on in Photoshop), reached through
-  `Filter > Pictura Raw…`, with nine tabs. It applies to an already-decoded
-  image; opening a camera raw file is not implemented yet.
-  `crates/pictura-app/cpp/pictura_raw_dialog.cpp`.
+  `Filter > Pictura Raw…`, with nine tabs. File > Open opens DNG and CR2
+  files, seeds the processor, and opens a 16-bit RGB document; per-camera
+  matrices and smart-object open remain open (#1465, #1466).
+  `crates/pictura-app/cpp/pictura_raw_dialog.cpp`,
+  `crates/pictura-codec/src/dng/develop.rs`,
+  `crates/pictura-app/src/cxxqt_object/open_jobs/raw_open.rs`.
 - **Adjustments.** The classic families, from Levels and Curves to Match
   Color, with live preview and adjustment-layer variants. Each one that still
   lacks a control names it in the roadmap. `crates/pictura-adjust/src/`.
 - **Filters.** 110 filters across the classic families — blur, sharpen, noise,
   stylize, pixelate, distort, render, sketch, texture, artistic, and brush
   strokes — plus Liquify, Oil Paint, the Blur Gallery, and the Filter Gallery.
-  Three CS6 families have no engine yet — Adaptive Wide Angle, Lens Correction,
-  and Vanishing Point — and the roadmap names them.
-  `crates/pictura-filters/src/`.
+  The roadmap names the remaining gaps. `crates/pictura-filters/src/`.
 - **Selections.** Marquee, ellipse, lasso, magnetic lasso, magic wand, and
   quick selection, with Refine Edge, Color Range, the Modify set, save/load to
   channels, selection-masked edits, and content move.
@@ -147,6 +148,8 @@ Open an issue at
 
 - [`DEVELOPING.md`](DEVELOPING.md) — onboarding, build, test, and architecture.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — provenance, asset, and dependency rules.
+- [`PARITY.md`](PARITY.md) — quantified feature coverage against Photoshop CS6
+  and CC 28.0.
 - [`ROADMAP.md`](ROADMAP.md) — shipped, planned, and not planned.
 - [`docs/README.md`](docs/README.md) — how to read the specification corpus.
 - [`docs/dev/doc-code-parity-gaps.md`](docs/dev/doc-code-parity-gaps.md) — what
