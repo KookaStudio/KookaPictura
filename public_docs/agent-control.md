@@ -3,7 +3,7 @@
 Agent Control lets an AI agent work in Kooka Pictura for you. You can ask it to open a
 photo, try a filter, fix the levels, and export the result. It connects through MCP
 (Model Context Protocol), a standard way for AI tools to use other apps, so it works
-with tools such as Claude Code and Cursor.
+with tools such as Claude Code, GitHub Copilot CLI, OpenCode, and Cursor.
 
 Agent Control is off until you turn it on, and an agent can only look at your work until
 you allow more.
@@ -33,10 +33,14 @@ step it takes appears in the History panel.
 
 ### Set up a client by hand
 
-**Register** covers Claude Code, Cursor, and Claude Desktop on macOS and Windows. For any
-other client, or if you prefer to do it yourself, click **Copy** under **MCP Client
-Configuration** and paste the result into the client's MCP settings. It looks like this,
-with the path to Kooka Pictura on your computer:
+**Register** covers Claude Code, Cursor, and Claude Desktop on macOS and Windows. For
+another client, or if you prefer to do it yourself, use one of the setups below. Replace
+`/path/to/pictura` with the path to Kooka Pictura on your computer. In a Flatpak or Snap
+build, use the Flatpak or Snap command from [Flatpak and Snap](#flatpak-and-snap) in
+place of `/path/to/pictura --mcp`.
+
+The **Copy** button under **MCP Client Configuration** gives the `mcpServers` form used
+by Claude and Copilot:
 
 ```json
 {
@@ -49,14 +53,55 @@ with the path to Kooka Pictura on your computer:
 }
 ```
 
-In Claude Code you can run this instead:
+#### Claude Code
 
 ```bash
 claude mcp add --scope user pictura -- /path/to/pictura --mcp
 ```
 
-To undo a registration, click **Unregister**. Before changing a client's settings file,
-Kooka Pictura saves a copy beside it, with `.pictura-backup-` and the date in its name.
+`--scope user` makes the server available in every project. Leave it off to add it only
+to the current project. `claude mcp list` shows it, and `claude mcp remove pictura`
+removes it. You can also paste the `mcpServers` block above into `~/.claude.json`.
+
+#### GitHub Copilot CLI
+
+```bash
+copilot mcp add pictura -- /path/to/pictura --mcp
+```
+
+Copilot stores the entry in `~/.copilot/mcp-config.json`. `copilot mcp list` shows it,
+and `copilot mcp remove pictura` removes it.
+
+#### OpenCode
+
+```bash
+opencode mcp add pictura -- /path/to/pictura --mcp
+```
+
+OpenCode keeps MCP servers under `mcp`, not `mcpServers`. To add it by hand, put this in
+`opencode.json` in the project, or in `~/.config/opencode/opencode.json` to make it
+available in every project:
+
+```json
+{
+  "mcp": {
+    "pictura": {
+      "type": "local",
+      "command": ["/path/to/pictura", "--mcp"]
+    }
+  }
+}
+```
+
+OpenCode has no remove command, so delete the `pictura` entry to unregister.
+
+#### Other clients
+
+Paste the `mcpServers` block above into the client's MCP settings.
+
+The **Register** buttons undo their own changes with **Unregister**. Before changing a
+client's settings file, Kooka Pictura saves a copy beside it, with `.pictura-backup-` and
+the date in its name.
 
 ## What an agent can do
 
