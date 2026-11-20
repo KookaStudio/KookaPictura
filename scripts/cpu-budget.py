@@ -8,8 +8,8 @@ Usage:
 The budget is max(1, floor(allowed_cpus * percent / 100)); percent defaults to
 80 and is overridden with PICTURA_CPU_BUDGET_PERCENT (1-100). On a platform
 with process-affinity control the helper restricts the process to the lowest
-budget CPUs before exec; everywhere it exports PICTURA_JOBS and the per-tool
-job variables.
+budget CPUs before exec and narrows a running sccache server it can address;
+everywhere it exports PICTURA_JOBS and the per-tool job variables.
 """
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from typing import Iterable, Sequence
 
 DEFAULT_PERCENT = 80
@@ -101,6 +102,34 @@ def apply_slice(budget: int) -> bool:
     return True
 
 
+def sccache_server_pids() -> list[int]:
+    if not os.path.isdir("/proc"):
+        return []
+    pids = []
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit():
+            continue
+        try:
+            raw = open(f"/proc/{entry}/cmdline", "rb").read()
+        except OSError:
+            continue
+        parts = [part.decode("utf-8", "replace") for part in raw.split(b"\0") if part]
+        if parts and os.path.basename(parts[0]) == "sccache" and "--server" in parts[1:]:
+            pids.append(int(entry))
+    return pids
+
+
+def narrow_processes(pids: Iterable[int], cpus: Iterable[int]) -> None:
+    if not hasattr(os, "sched_setaffinity"):
+        return
+    target = set(cpus)
+    for pid in pids:
+        try:
+            os.sched_setaffinity(pid, target)
+        except OSError:
+            pass
+
+
 def export_jobs(budget: int) -> None:
     os.environ["PICTURA_JOBS"] = str(budget)
     for name in JOB_VARIABLES:
@@ -116,7 +145,10 @@ def exec_command(argv: Sequence[str]) -> int:
         if inherited and inherited.isdigit() and int(inherited) > 0:
             budget = int(inherited)
     else:
-        apply_slice(budget)
+        if apply_slice(budget):
+            mask = current_mask()
+            if mask is not None:
+                narrow_processes(sccache_server_pids(), mask)
     export_jobs(budget)
     try:
         os.execvp(argv[0], list(argv))
@@ -223,6 +255,34 @@ def self_check() -> int:
         assert inherited[key] == "3", (key, inherited)
     if parent_mask is not None:
         assert inherited["affinity"] == parent_mask, inherited
+
+    def check_sccache_narrowing(mask: list[int] | None) -> None:
+        if mask is None or not os.path.isdir("/proc"):
+            return
+        target = [mask[0]]
+        stub = subprocess.Popen(
+            [
+                "bash",
+                "-c",
+                'exec -a sccache python3 -c "import time; time.sleep(30)" --server',
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            for _ in range(100):
+                if stub.pid in sccache_server_pids():
+                    break
+                time.sleep(0.01)
+            else:
+                raise AssertionError("stub sccache server was not discovered")
+            narrow_processes([stub.pid], target)
+            assert os.sched_getaffinity(stub.pid) == set(target), stub.pid
+        finally:
+            stub.kill()
+            stub.wait()
+
+    check_sccache_narrowing(parent_mask)
 
     print("cpu-budget: self-check OK")
     return 0

@@ -6,7 +6,7 @@ Run everything from the repo root. Context: `mem:core`.
 
 ```bash
 # C++/Qt app (builds the Rust staticlib through CMake/Corrosion)
-cmake -S . -B build -G Ninja && cmake --build build --parallel
+bash scripts/with-build-lock.sh -- bash -c 'cmake -S . -B build -G Ninja && cmake --build build --parallel'
 
 # Headless self-test (offscreen QPA; implies --self-test when no document is given)
 ./build/pictura --headless --self-test
@@ -27,16 +27,16 @@ bash scripts/guard.sh          # docs guard + milestone-name + file-size checks
 ## Tests
 
 ```bash
-cargo nextest run --workspace                  # preferred; -p <crate> [name] for one crate/test
-cargo test -p pictura-render --test document_oracle          # one integration suite
-cargo test -p pictura-core -- <name> --ignored --nocapture   # ignored profiling/GPU tests
+bash scripts/with-build-lock.sh -- cargo nextest run --workspace   # preferred; -p <crate> [name] for one crate/test
+bash scripts/with-build-lock.sh -- cargo test -p pictura-render --test document_oracle          # one integration suite
+bash scripts/with-build-lock.sh -- cargo test -p pictura-core -- <name> --ignored --nocapture   # ignored profiling/GPU tests
 ```
 
 ## Lint / format
 
 ```bash
-cargo fmt --all          # CI runs --check
-cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all          # CI runs --check; no compiler, stays bare
+bash scripts/with-build-lock.sh -- cargo clippy --workspace --all-targets -- -D warnings
 ```
 
 ## Specs / OpenSpec

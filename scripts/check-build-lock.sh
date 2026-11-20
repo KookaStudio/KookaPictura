@@ -250,6 +250,15 @@ for gate in "$fast" "$full"; do
     [ "$budget_line" -lt "$lock_line" ] || fail "$gate invokes cpu-budget.py after sourcing the lock"
 done
 
+# bl_wrap_budget_order: the wrapper budgets before it sources the lock.
+wrap=scripts/with-build-lock.sh
+wrap_budget_line=$(grep -n 'cpu-budget.py' "$wrap" | cut -d: -f1 | head -1)
+wrap_lock_line=$(grep -n '^\. .*build-lock\.sh' "$wrap" | cut -d: -f1 | head -1)
+[ -n "$wrap_budget_line" ] || fail "$wrap does not invoke cpu-budget.py"
+[ -n "$wrap_lock_line" ] || fail "$wrap does not source build-lock.sh"
+[ "$wrap_budget_line" -lt "$wrap_lock_line" ] \
+    || fail "$wrap invokes cpu-budget.py after sourcing the lock"
+
 # bl_timeout: a bounded wait exits non-zero, names the holder, and leaves no lock.
 export PICTURA_VERIFY_LOCK=1 PICTURA_VERIFY_LOCK_TIMEOUT=1
 hold_async 2
@@ -463,6 +472,23 @@ export PICTURA_VERIFY_LOCK=0
 assert_absent
 export PICTURA_VERIFY_LOCK=1
 
+# bl_wrap_budget_mask: the wrapper re-execs through the budget helper and the
+# child lands in the budget mask.
+unset PICTURA_VERIFY_LOCK
+if python3 -c 'import os, sys; sys.exit(0 if hasattr(os, "sched_getaffinity") and hasattr(os, "sched_setaffinity") else 1)'; then
+    current=$(python3 -c 'import os; print(len(os.sched_getaffinity(0)))')
+    percent=${PICTURA_CPU_BUDGET_PERCENT:-80}
+    expected=$(python3 -c "print(max(1, $current * $percent // 100))")
+    masked=$(env -u PICTURA_CPU_BUDGET_APPLIED -u PICTURA_JOBS "$wrapper" -- \
+        python3 -c 'import os; print(len(os.sched_getaffinity(0)))') \
+        || fail "wrapper budget probe failed"
+    [ "$masked" = "$expected" ] \
+        || fail "wrapper child mask $masked CPUs, want $expected"
+else
+    echo "check-build-lock: SKIP bl_wrap_budget_mask (no process-affinity control)" >&2
+fi
+export PICTURA_VERIFY_LOCK=1
+
 # bl_wrap_dashdash: the documented form strips the leading --; the bare form works.
 ( cd "$sandbox" && "$wrapper" -- true ) || fail "wrapper -- form failed"
 ( cd "$sandbox" && "$wrapper" true ) || fail "wrapper bare form failed"
@@ -508,8 +534,13 @@ for sig in TERM INT; do
 done
 unset PICTURA_VERIFY_LOCK
 
-# bl_wrap_docs: the wrapper is documented for direct heavy commands.
+# bl_wrap_docs: the wrapper is documented for direct heavy commands, and the
+# guidance says it applies the budget.
 grep -q 'with-build-lock.sh' AGENTS.md || fail "AGENTS.md does not name the wrapper"
 grep -q 'with-build-lock.sh' DEVELOPING.md || fail "DEVELOPING.md does not name the wrapper"
+grep -qi 'wrapper applies the same.*budget' AGENTS.md \
+    || fail "AGENTS.md does not say the wrapper applies the budget"
+grep -qi 'wrapper applies the same.*budget' DEVELOPING.md \
+    || fail "DEVELOPING.md does not say the wrapper applies the budget"
 
 echo "check-build-lock: OK"

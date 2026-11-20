@@ -37,8 +37,8 @@ You can also build it from source. Requirements: Rust 1.98, Qt 6, CMake, Ninja,
 and the compiler accepts it.
 
 ```bash
-cmake -S . -B build -G Ninja
-cmake --build build --parallel
+bash scripts/with-build-lock.sh -- cmake -S . -B build -G Ninja
+bash scripts/with-build-lock.sh -- cmake --build build --parallel
 ./build/pictura
 ```
 

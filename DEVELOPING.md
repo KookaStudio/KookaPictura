@@ -83,8 +83,8 @@ owns the behavior you are changing.
 ## Build and run
 
 ```bash
-cmake -S . -B build -G Ninja
-cmake --build build --parallel
+bash scripts/with-build-lock.sh -- cmake -S . -B build -G Ninja
+bash scripts/with-build-lock.sh -- cmake --build build --parallel
 ./build/pictura
 ```
 
@@ -134,7 +134,7 @@ not found on the PATH. An explicit `QMAKE` in the environment is honoured and
 reruns the build script, as it should:
 
 ```bash
-QMAKE=/path/to/qmake cargo build -p pictura_app
+QMAKE=/path/to/qmake bash scripts/with-build-lock.sh -- cargo build -p pictura_app
 ```
 
 ## Architecture and data flow
@@ -230,8 +230,8 @@ Rust tests are std `#[test]` only (no framework); nextest runs them.
 
 ```bash
 cargo fmt --all                                  # CI runs --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo nextest run --workspace                    # one crate/test: -p <crate> [name]
+bash scripts/with-build-lock.sh -- cargo clippy --workspace --all-targets -- -D warnings
+bash scripts/with-build-lock.sh -- cargo nextest run --workspace   # one crate/test: -p <crate> [name]
 
 bash scripts/verify-fast.sh                      # fmt, clippy, test-report, guards, openspec
 bash scripts/verify-full.sh                      # CMake build first, then verify-fast
@@ -252,9 +252,9 @@ either backend, which release builds reject:
 
 ```bash
 # any Vulkan GPU:
-cargo nextest run -p pictura-render --profile gpu --run-ignored all
+bash scripts/with-build-lock.sh -- cargo nextest run -p pictura-render --profile gpu --run-ignored all
 # no GPU (install mesa-vulkan-drivers):
-cargo nextest run -p pictura-render --features software-gpu --profile gpu --run-ignored all
+bash scripts/with-build-lock.sh -- cargo nextest run -p pictura-render --features software-gpu --profile gpu --run-ignored all
 ```
 
 See
@@ -343,10 +343,10 @@ them (only the precompiled standard library brings its own), so build a
 profiling tree with line tables on both sides:
 
 ```bash
-cmake -S . -B build-prof -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-  -DBUILD_TESTING=OFF
+bash scripts/with-build-lock.sh -- cmake -S . -B build-prof -G Ninja \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_TESTING=OFF
 CARGO_PROFILE_RELEASE_DEBUG=line-tables-only \
-  python3 scripts/cpu-budget.py exec -- cmake --build build-prof --parallel
+  bash scripts/with-build-lock.sh -- cmake --build build-prof --parallel
 ```
 
 `CARGO_PROFILE_RELEASE_DEBUG` is Cargo's release-profile override: it applies to
@@ -438,8 +438,8 @@ purpose: `build/`, `compile_commands.json`, the `.serena` index, and cmake
 configure — configure a fresh worktree with:
 
 ```bash
-cmake -S . -B build -G Ninja
-cmake --build build --parallel
+bash scripts/with-build-lock.sh -- cmake -S . -B build -G Ninja
+bash scripts/with-build-lock.sh -- cmake --build build --parallel
 ```
 
 Heavy local verification can be serialized across worktrees. It is **off by
@@ -459,8 +459,12 @@ PICTURA_VERIFY_LOCK=1 scripts/with-build-lock.sh -- cmake --build build --parall
 PICTURA_VERIFY_LOCK=1 scripts/with-build-lock.sh -- cargo nextest run --workspace
 ```
 
-The wrapper keeps the caller's working directory and propagates the command's
-exit code.
+The wrapper applies the same CPU budget before the opt-in lock
+(`scripts/with-build-lock.sh`): it re-execs once through
+`scripts/cpu-budget.py`, so the command runs in the shared slice with the
+budget's job counts. The wrapper keeps the caller's working directory and
+propagates the command's exit code. The committed opencode plugin refuses a bare
+`cargo`, `cmake`, `ctest`, or `ninja` segment and names the wrapped form.
 
 A new worktree benefits from `sccache` (see
 [Speeding up local builds](#speeding-up-local-builds)) and needs a one-time
