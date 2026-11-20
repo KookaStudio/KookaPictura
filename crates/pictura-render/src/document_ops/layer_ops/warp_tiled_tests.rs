@@ -270,13 +270,13 @@ fn deep_case(
             .enumerate()
             .map(|(k, id)| Channel {
                 id: *id,
-                data: seeded(w, h, k).into(),
+                data: planes[k + 1].1.narrow_to_u8().into(),
             })
             .collect(),
         mask: Some(LayerMask {
             rect: r,
             default_color: 0,
-            data: Some(seeded(w, h, 7).into()),
+            data: Some(planes[0].1.narrow_to_u8().into()),
             ..Default::default()
         }),
         source_channels: Some(SourceChannels::new(depth, r, planes.clone())),

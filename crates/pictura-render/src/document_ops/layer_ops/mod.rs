@@ -52,6 +52,8 @@ mod tests_transfer;
 mod tests_via;
 mod transfer;
 mod transform;
+#[cfg(test)]
+mod transform_alpha_tests;
 mod transform_native;
 #[cfg(test)]
 mod transform_oracle;

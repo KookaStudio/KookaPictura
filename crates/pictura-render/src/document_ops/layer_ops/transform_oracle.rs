@@ -10,9 +10,12 @@ use super::transform::PlaneMap;
 
 const PAD: usize = 2;
 
-/// The whole-plane 8-bit resampler the tiled one replaced (#1290).
+/// The whole-plane 8-bit resampler the tiled one replaced (#1290); a colour
+/// plane's taps are weighted by `alpha` (#1446).
+#[allow(clippy::too_many_arguments)]
 pub(super) fn dense_resample_plane<M: PlaneMap + Sync>(
     src: &Plane<u8>,
+    alpha: Option<&Plane<u8>>,
     w: usize,
     h: usize,
     map: &M,
@@ -21,11 +24,16 @@ pub(super) fn dense_resample_plane<M: PlaneMap + Sync>(
     interpolation: Interpolation,
 ) -> Result<Vec<u8>, MemoryError> {
     let (pw, ph) = (w + PAD * 2, h + PAD * 2);
-    let mut padded = memory::try_plane(pw * ph, 0, "a transform")?;
-    for y in 0..h {
-        let dst = (y + PAD) * pw + PAD;
-        src.read_rect_into(0..w, y..y + 1, w, &mut padded[dst..dst + w]);
-    }
+    let pad = |plane: &Plane<u8>| -> Result<Vec<u8>, MemoryError> {
+        let mut padded = memory::try_plane(pw * ph, 0, "a transform")?;
+        for y in 0..h {
+            let dst = (y + PAD) * pw + PAD;
+            plane.read_rect_into(0..w, y..y + 1, w, &mut padded[dst..dst + w]);
+        }
+        Ok(padded)
+    };
+    let padded = pad(src)?;
+    let padded_alpha = alpha.map(pad).transpose()?;
     let (dl, dt, dr, db) = dest;
     let dw = (dr - dl) as usize;
     let dh = (db - dt) as usize;
@@ -51,7 +59,10 @@ pub(super) fn dense_resample_plane<M: PlaneMap + Sync>(
             if lx < 0.0 || ly < 0.0 || lx >= pwf || ly >= phf {
                 continue;
             }
-            *pixel = kernel::sample(&padded, pw, ph, lx, ly, resolved);
+            *pixel = match &padded_alpha {
+                Some(a) => kernel::sample_over_alpha(&padded, a, pw, ph, lx, ly, resolved),
+                None => kernel::sample(&padded, pw, ph, lx, ly, resolved),
+            };
         }
     });
     Ok(out)

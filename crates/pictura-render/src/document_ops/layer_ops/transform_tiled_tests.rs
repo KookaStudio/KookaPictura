@@ -98,11 +98,29 @@ fn tiled_resample_matches_the_dense_resampler() {
     for (name, map) in maps(r) {
         let dest = dest_of(&map, r);
         for interpolation in INTERPOLATIONS {
-            let tiled = resample_plane(&src, w, h, &map, r, dest, interpolation).expect("tiled");
-            let dense =
-                dense_resample_plane(&src, w, h, &map, r, dest, interpolation).expect("dense");
+            let tiled =
+                resample_plane(&src, None, w, h, &map, r, dest, interpolation).expect("tiled");
+            let dense = dense_resample_plane(&src, None, w, h, &map, r, dest, interpolation)
+                .expect("dense");
             assert!(tiled.is_tiled(), "{name} {interpolation:?}");
             assert!(every(&tiled) == dense, "{name} {interpolation:?}");
+        }
+    }
+    // A colour plane weighted by a partly transparent alpha plane.
+    let alpha: Vec<u8> = (0..w * h)
+        .map(|i| [0, 255, 255, 90, 0, 255][(i / 7 + i / w) % 6])
+        .collect();
+    let mut alpha = Plane::from(alpha);
+    assert!(alpha.tile(w, h));
+    for (name, map) in maps(r) {
+        let dest = dest_of(&map, r);
+        for interpolation in INTERPOLATIONS {
+            let tiled = resample_plane(&src, Some(&alpha), w, h, &map, r, dest, interpolation)
+                .expect("tiled");
+            let dense =
+                dense_resample_plane(&src, Some(&alpha), w, h, &map, r, dest, interpolation)
+                    .expect("dense");
+            assert!(every(&tiled) == dense, "weighted {name} {interpolation:?}");
         }
     }
     // The layer op stores what the resampler builds: tiled channels.
@@ -133,6 +151,7 @@ fn deep_case<T: Sample + TileSample + std::fmt::Debug>(seed: impl Fn(usize) -> T
     assert!(plane.tile(w, h));
     let source = Source {
         plane: &plane,
+        alpha: None,
         w,
         h,
         pad: 0,
@@ -206,7 +225,8 @@ fn transformed_tiles_spill_and_read_back() {
     let src = seeded_u8(w, h);
     let map = solve_homography(corners(r), similar(r, 1.0, 10.0)).expect("map");
     let dest = dest_of(&map, r);
-    let tiled = resample_plane(&src, w, h, &map, r, dest, Interpolation::Bilinear).expect("tiled");
+    let tiled =
+        resample_plane(&src, None, w, h, &map, r, dest, Interpolation::Bilinear).expect("tiled");
     for _ in 0..6 {
         run_pass(u64::MAX);
     }
@@ -214,8 +234,8 @@ fn transformed_tiles_spill_and_read_back() {
         .filter(|&i| tiled.tile_residency(i) == Some(Residency::Spilled))
         .count();
     assert!(spilled > 0, "no tile spilled: {:?}", eviction::counts());
-    let dense =
-        dense_resample_plane(&src, w, h, &map, r, dest, Interpolation::Bilinear).expect("dense");
+    let dense = dense_resample_plane(&src, None, w, h, &map, r, dest, Interpolation::Bilinear)
+        .expect("dense");
     assert!(
         every(&tiled) == dense,
         "spilled tiles read back differently"
@@ -288,7 +308,7 @@ fn progress_climbs_while_tiles_spill() {
         spilled: Default::default(),
     };
     let tiled = pictura_core::job::scope(&job, || {
-        resample_plane(&src, w, h, &map, r, dest, Interpolation::Bilinear)
+        resample_plane(&src, None, w, h, &map, r, dest, Interpolation::Bilinear)
     })
     .expect("tiled");
     let seen = map.seen.lock().expect("seen").clone();
@@ -307,8 +327,17 @@ fn progress_climbs_while_tiles_spill() {
         "nothing spilled during the resample: {:?}",
         eviction::counts()
     );
-    let dense = dense_resample_plane(&src, w, h, &map.inner, r, dest, Interpolation::Bilinear)
-        .expect("dense");
+    let dense = dense_resample_plane(
+        &src,
+        None,
+        w,
+        h,
+        &map.inner,
+        r,
+        dest,
+        Interpolation::Bilinear,
+    )
+    .expect("dense");
     assert!(every(&tiled) == dense, "the spilling resample differs");
     let _ = std::fs::remove_dir_all(dir);
 }

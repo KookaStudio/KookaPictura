@@ -270,13 +270,16 @@ fn bounding_box<M: PlaneMap>(map: &M, rect: PsdRect) -> Option<(i32, i32, i32, i
 const PAD: usize = 2;
 
 /// Resample one `w×h` plane into the destination rect, out-of-source → 0, as a
-/// tiled plane built a strip at a time (#1290). Its strip buffer is allocated
-/// fallibly, so a refusal is an error, never an abort.
+/// tiled plane built a strip at a time (#1290). A colour plane passes its
+/// layer's `alpha` plane, which weights its taps (#1446). Its strip buffer is
+/// allocated fallibly, so a refusal is an error, never an abort.
 ///
 /// ponytail: the refusal is recorded on the calling thread, so a deferred
 /// commit's worker reports a generic failure, not the memory message.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn resample_plane<M: PlaneMap + Sync>(
     src: &Plane<u8>,
+    alpha: Option<&Plane<u8>>,
     w: usize,
     h: usize,
     map: &M,
@@ -286,6 +289,7 @@ pub(super) fn resample_plane<M: PlaneMap + Sync>(
 ) -> Result<Plane<u8>, MemoryError> {
     let source = transform_tiled::Source {
         plane: src,
+        alpha,
         w,
         h,
         pad: PAD,
@@ -352,6 +356,7 @@ fn transform_mask<M: PlaneMap + Sync>(
             }
             Some(resample_plane(
                 data,
+                None,
                 w as usize,
                 h as usize,
                 &map,
@@ -461,7 +466,7 @@ pub(super) fn prepare_layer(doc: &Document, path: &str) -> Option<Prepared> {
         w,
         h,
         source_channels,
-        native: layer.source_channels.clone(),
+        native: transform_native::current_store(doc, layer),
         mask: layer.mask.clone(),
         materialize,
         old_uuid,
@@ -605,12 +610,14 @@ where
     if let Some(job) = pictura_core::job::current() {
         job.begin_stage(resample_rows(&prepared, dest));
     }
+    let alpha = prepared.source_channels.iter().find(|c| c.id == -1);
     let resampled: Result<Vec<Channel>, MemoryError> = prepared
         .source_channels
         .iter()
         .map(|c| {
             let data = resample_plane(
                 &c.data,
+                alpha.filter(|_| c.id >= 0).map(|a| &a.data),
                 prepared.w as usize,
                 prepared.h as usize,
                 &map,

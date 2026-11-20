@@ -158,6 +158,7 @@ fn transform_selection_matches_the_dense_oracle() {
     let canvas = rect(0, 0, 32, 32);
     let dense = super::transform_oracle::dense_resample_plane(
         &selection.data,
+        None,
         32,
         32,
         &map,

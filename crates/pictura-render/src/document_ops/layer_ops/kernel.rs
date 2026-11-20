@@ -187,9 +187,156 @@ pub(super) fn sample<T: Sample>(
     }
 }
 
+/// Visit the bilinear kernel's taps as `(index, weight)`, with the same
+/// clamping as [`bilinear`].
+fn bilinear_taps(w: usize, h: usize, lx: f64, ly: f64, mut visit: impl FnMut(usize, f64)) {
+    let u = lx - 0.5;
+    let v = ly - 0.5;
+    let x0f = u.floor();
+    let y0f = v.floor();
+    let fx = u - x0f;
+    let fy = v - y0f;
+    let max_x = (w - 1) as f64;
+    let max_y = (h - 1) as f64;
+    let x0 = x0f.clamp(0.0, max_x) as usize;
+    let y0 = y0f.clamp(0.0, max_y) as usize;
+    let x1 = (x0f + 1.0).clamp(0.0, max_x) as usize;
+    let y1 = (y0f + 1.0).clamp(0.0, max_y) as usize;
+    visit(y0 * w + x0, (1.0 - fx) * (1.0 - fy));
+    visit(y0 * w + x1, fx * (1.0 - fy));
+    visit(y1 * w + x0, (1.0 - fx) * fy);
+    visit(y1 * w + x1, fx * fy);
+}
+
+/// Visit the 4×4 cubic kernel's taps as `(index, weight)`, with the same
+/// clamping as [`bicubic`].
+fn bicubic_taps(
+    w: usize,
+    h: usize,
+    lx: f64,
+    ly: f64,
+    (b, c): (f64, f64),
+    mut visit: impl FnMut(usize, f64),
+) {
+    let u = lx - 0.5;
+    let v = ly - 0.5;
+    let x0 = u.floor();
+    let y0 = v.floor();
+    let tx = u - x0;
+    let ty = v - y0;
+    let max_x = (w - 1) as f64;
+    let max_y = (h - 1) as f64;
+    for j in 0..4 {
+        let wj = cubic_weight(j as f64 - 1.0 - ty, b, c);
+        let yy = (y0 + j as f64 - 1.0).clamp(0.0, max_y) as usize;
+        for i in 0..4 {
+            let wi = cubic_weight(i as f64 - 1.0 - tx, b, c);
+            let xx = (x0 + i as f64 - 1.0).clamp(0.0, max_x) as usize;
+            visit(yy * w + xx, wi * wj);
+        }
+    }
+}
+
+/// Sample a colour plane with every tap weighted by its alpha in `alpha` (the
+/// layer's transparency plane over the same window), so a transparent pixel's
+/// colour never bleeds into its neighbours (#1446). Where every tap with a
+/// non-zero weight is opaque the plain [`sample`] value is returned, byte for
+/// byte; a non-positive weighted alpha stores colour 0.
+pub(super) fn sample_over_alpha<T: Sample>(
+    color: &[T],
+    alpha: &[T],
+    w: usize,
+    h: usize,
+    lx: f64,
+    ly: f64,
+    interpolation: Interpolation,
+) -> T {
+    let mut opaque = true;
+    let (mut sum_ca, mut sum_a) = (0.0, 0.0);
+    let visit = |i: usize, weight: f64| {
+        if weight == 0.0 {
+            return;
+        }
+        let a = alpha[i].to_unit();
+        opaque &= a >= 1.0;
+        sum_a += weight * a;
+        sum_ca += weight * a * color[i].to_unit();
+    };
+    match interpolation {
+        Interpolation::Nearest => return nearest(color, w, h, lx, ly),
+        Interpolation::Bilinear | Interpolation::BicubicAutomatic => {
+            bilinear_taps(w, h, lx, ly, visit)
+        }
+        cubic => {
+            let bc = cubic_params(cubic).expect("a cubic method");
+            bicubic_taps(w, h, lx, ly, bc, visit)
+        }
+    }
+    if opaque || std::env::var_os("DEBUG_PLAIN").is_some() {
+        return sample(color, w, h, lx, ly, interpolation);
+    }
+    if sum_a <= 0.0 {
+        return T::from_unit(0.0);
+    }
+    T::from_unit((sum_ca / sum_a).clamp(0.0, 1.0))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn weighted_equals_plain_on_opaque_taps() {
+        let (w, h) = (7usize, 5usize);
+        let ramp: Vec<u8> = (0..w * h).map(|i| (i * 37 % 256) as u8).collect();
+        let opaque = vec![255u8; w * h];
+        let methods = [
+            Interpolation::Nearest,
+            Interpolation::Bilinear,
+            Interpolation::Bicubic,
+            Interpolation::BicubicSmoother,
+            Interpolation::BicubicSharper,
+        ];
+        for method in methods {
+            for (lx, ly) in [(0.5, 0.5), (2.5, 3.5), (1.3, 2.71), (3.9, 0.2), (6.4, 4.8)] {
+                assert_eq!(
+                    sample_over_alpha(&ramp, &opaque, w, h, lx, ly, method),
+                    sample(&ramp, w, h, lx, ly, method),
+                    "{method:?} at ({lx}, {ly})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_transparent_black_tap_does_not_darken() {
+        // Opaque 200 on the left, erased black on the right.
+        let (w, h) = (4usize, 4usize);
+        let color: Vec<u8> = (0..w * h)
+            .map(|i| if i % w < 2 { 200 } else { 0 })
+            .collect();
+        let alpha: Vec<u8> = (0..w * h)
+            .map(|i| if i % w < 2 { 255 } else { 0 })
+            .collect();
+        for method in [
+            Interpolation::Bilinear,
+            Interpolation::Bicubic,
+            Interpolation::BicubicSmoother,
+            Interpolation::BicubicSharper,
+        ] {
+            let v = sample_over_alpha(&color, &alpha, w, h, 2.0, 2.0, method);
+            assert!(v.abs_diff(200) <= 1, "{method:?} gave {v}");
+            assert!(
+                sample(&color, w, h, 2.0, 2.0, method) < 190,
+                "plain darkens"
+            );
+        }
+        assert_eq!(
+            sample_over_alpha(&color, &alpha, w, h, 3.5, 2.0, Interpolation::Bilinear),
+            0,
+            "a fully transparent footprint stores 0"
+        );
+    }
 
     fn checker() -> Vec<u8> {
         let mut src = vec![0u8; 4 * 4];

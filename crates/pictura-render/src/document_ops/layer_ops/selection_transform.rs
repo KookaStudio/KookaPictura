@@ -165,6 +165,7 @@ pub fn transform_selection(
         };
         resample_plane(
             &selection.data,
+            None,
             width,
             height,
             &map,
@@ -178,6 +179,7 @@ pub fn transform_selection(
         };
         resample_plane(
             &selection.data,
+            None,
             width,
             height,
             &map,

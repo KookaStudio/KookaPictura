@@ -480,3 +480,22 @@ fn applying_one_plan_changes_only_the_targets() {
         .expect("other");
     assert_eq!(after, &before, "unselected layer {other} untouched");
 }
+
+#[test]
+fn work_luma_is_premultiplied_by_alpha() {
+    let mut rgba = Vec::new();
+    for a in [255u8, 128, 0, 255] {
+        rgba.extend([200, 200, 200, a]);
+    }
+    let doc = Document::from_rgba("edge", 4, 1, &rgba);
+    let img = WorkImage::from_layer(&doc.layers[0], None).expect("an image");
+    let full = 200.0 / 255.0;
+    assert!((img.luma[0] - full).abs() < 1e-4, "opaque {}", img.luma[0]);
+    assert!(
+        (img.luma[1] - full * 128.0 / 255.0).abs() < 1e-4,
+        "half-covered {}",
+        img.luma[1]
+    );
+    assert_eq!(img.luma[2], 0.0);
+    assert_eq!(img.alpha, vec![true, true, false, true]);
+}
