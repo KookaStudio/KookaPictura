@@ -19,6 +19,12 @@ namespace pictura::transform_api {
 /// base.
 std::optional<QPoint> previewBaseOrigin(const PictureView& view);
 
+/// Where the preview's above-layer image sits; unset when the moving group is
+/// topmost.
+std::optional<QPoint> previewAboveOrigin(const PictureView& view);
+/// Document pixels per pixel of the above-layer image.
+int previewAboveScale(const PictureView& view);
+
 /// A layer's document-space rectangle; invalid when `path` does not resolve.
 struct LayerRect {
     int left = 0;

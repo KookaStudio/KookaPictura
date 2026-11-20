@@ -8,8 +8,6 @@ use rayon::prelude::*;
 use super::kernel::{self, Interpolation};
 use super::transform::PlaneMap;
 
-const PAD: usize = 2;
-
 /// The whole-plane 8-bit resampler the tiled one replaced (#1290); a colour
 /// plane's taps are weighted by `alpha` (#1446).
 #[allow(clippy::too_many_arguments)]
@@ -23,11 +21,12 @@ pub(super) fn dense_resample_plane<M: PlaneMap + Sync>(
     dest: (i32, i32, i32, i32),
     interpolation: Interpolation,
 ) -> Result<Vec<u8>, MemoryError> {
-    let (pw, ph) = (w + PAD * 2, h + PAD * 2);
+    let padding = map.pad();
+    let (pw, ph) = (w + padding * 2, h + padding * 2);
     let pad = |plane: &Plane<u8>| -> Result<Vec<u8>, MemoryError> {
         let mut padded = memory::try_plane(pw * ph, 0, "a transform")?;
         for y in 0..h {
-            let dst = (y + PAD) * pw + PAD;
+            let dst = (y + padding) * pw + padding;
             plane.read_rect_into(0..w, y..y + 1, w, &mut padded[dst..dst + w]);
         }
         Ok(padded)
@@ -54,8 +53,8 @@ pub(super) fn dense_resample_plane<M: PlaneMap + Sync>(
             let Some((sx, sy)) = map.inverse(qx, qy) else {
                 continue;
             };
-            let lx = sx - rect.left as f64 + PAD as f64;
-            let ly = sy - rect.top as f64 + PAD as f64;
+            let lx = sx - rect.left as f64 + padding as f64;
+            let ly = sy - rect.top as f64 + padding as f64;
             if lx < 0.0 || ly < 0.0 || lx >= pwf || ly >= phf {
                 continue;
             }

@@ -12,6 +12,7 @@
 #include <QtGui/QPainter>
 
 #include <QtGui/QImage>
+#include <QtGui/QPainterPath>
 #include <QtGui/QPolygonF>
 
 #include <algorithm>
@@ -33,6 +34,42 @@ QRgb bilinear(const QImage& image, double x, double y)
     const auto at = [&image](int px, int py) {
         px = std::clamp(px, 0, image.width() - 1);
         py = std::clamp(py, 0, image.height() - 1);
+        return reinterpret_cast<const QRgb*>(image.constScanLine(py))[px];
+    };
+    const QRgb p00 = at(x0, y0);
+    const QRgb p10 = at(x0 + 1, y0);
+    const QRgb p01 = at(x0, y0 + 1);
+    const QRgb p11 = at(x0 + 1, y0 + 1);
+    const auto mix = [fx, fy](int c00, int c10, int c01, int c11) {
+        const double top = c00 + (c10 - c00) * fx;
+        const double bottom = c01 + (c11 - c01) * fx;
+        return int(std::lround(top + (bottom - top) * fy));
+    };
+    return qRgba(mix(qRed(p00), qRed(p10), qRed(p01), qRed(p11)),
+                 mix(qGreen(p00), qGreen(p10), qGreen(p01), qGreen(p11)),
+                 mix(qBlue(p00), qBlue(p10), qBlue(p01), qBlue(p11)),
+                 mix(qAlpha(p00), qAlpha(p10), qAlpha(p01), qAlpha(p11)));
+}
+
+// As `bilinear`, but taps outside `valid` (image pixel coordinates) are
+// transparent. Clamping at the source edge instead would keep the source alpha
+// at 255, so a resized solid layer would get a hard, pixelated edge while the
+// committed resample anti-aliases it (the engine pads with transparent samples
+// for the same reason).
+QRgb bilinearPadded(const QImage& image, double x, double y, const QRectF& valid)
+{
+    const double sx = x - 0.5;
+    const double sy = y - 0.5;
+    const int x0 = int(std::floor(sx));
+    const int y0 = int(std::floor(sy));
+    const double fx = sx - x0;
+    const double fy = sy - y0;
+    const auto at = [&image, &valid](int px, int py) -> QRgb {
+        if (px < 0 || py < 0 || px >= image.width() || py >= image.height()
+            || px + 0.5 < valid.left() || px + 0.5 >= valid.right()
+            || py + 0.5 < valid.top() || py + 0.5 >= valid.bottom()) {
+            return 0;
+        }
         return reinterpret_cast<const QRgb*>(image.constScanLine(py))[px];
     };
     const QRgb p00 = at(x0, y0);
@@ -255,6 +292,18 @@ WarpedTransformPreview warpTransformPreview(const QImage& source, const QPointF&
         : source.convertToFormat(QImage::Format_ARGB32_Premultiplied);
     QImage result(pixels.size(), QImage::Format_ARGB32_Premultiplied);
     result.fill(Qt::transparent);
+    // An axis-aligned scale keeps the hard edge 0.3.0 had; a rotated or skewed
+    // edge pads the source with transparency so it does not stair-step.
+    const bool axisAligned = std::abs(coefficients[2]) < 1e-12
+        && std::abs(coefficients[5]) < 1e-12
+        && ((std::abs(coefficients[1]) < 1e-12 && std::abs(coefficients[3]) < 1e-12)
+            || (std::abs(coefficients[0]) < 1e-12 && std::abs(coefficients[4]) < 1e-12));
+    const bool padded = !crossed && !axisAligned;
+    const QRectF validSource(sourceRect.left() / sourceScale,
+                             sourceRect.top() / sourceScale,
+                             sourceRect.width() / sourceScale,
+                             sourceRect.height() / sourceScale);
+    const double edgeMargin = padded ? sourceScale : 0.0;
     bool any = false;
     for (int y = 0; y < pixels.height(); ++y) {
         QRgb* row = reinterpret_cast<QRgb*>(result.scanLine(y));
@@ -281,16 +330,18 @@ WarpedTransformPreview warpTransformPreview(const QImage& source, const QPointF&
                     continue;
                 }
             }
-            if (sourcePoint.x() < sourceRect.left() || sourcePoint.x() >= sourceRect.right()
-                || sourcePoint.y() < sourceRect.top()
-                || sourcePoint.y() >= sourceRect.bottom()
-                || sourcePoint.x() < 0.0 || sourcePoint.y() < 0.0
-                || sourcePoint.x() >= src.width() * sourceScale
-                || sourcePoint.y() >= src.height() * sourceScale) {
+            // A destination pixel on the transformed edge maps just outside
+            // the source; let the kernel's transparent padding cover it.
+            if (sourcePoint.x() < sourceRect.left() - edgeMargin
+                || sourcePoint.x() >= sourceRect.right() + edgeMargin
+                || sourcePoint.y() < sourceRect.top() - edgeMargin
+                || sourcePoint.y() >= sourceRect.bottom() + edgeMargin) {
                 continue;
             }
-            const QRgb pixel =
-                bilinear(src, sourcePoint.x() / sourceScale, sourcePoint.y() / sourceScale);
+            const QRgb pixel = padded
+                ? bilinearPadded(src, sourcePoint.x() / sourceScale,
+                                 sourcePoint.y() / sourceScale, validSource)
+                : bilinear(src, sourcePoint.x() / sourceScale, sourcePoint.y() / sourceScale);
             if (qAlpha(pixel) == 0) {
                 continue;
             }
@@ -335,6 +386,38 @@ void ImageView::paintTransformLayer(QPainter& painter)
     }
     painter.restore();
     painter.setOpacity(1.0);
+}
+
+void ImageView::paintTransformAbove(QPainter& painter)
+{
+    if (moveAbove_.isNull() || !moveAbovePos_.has_value()) {
+        return;
+    }
+    // Clip to the moving image so the above layers replace it only where the
+    // transform actually paints; elsewhere the base or live canvas already
+    // shows them (#1445).
+    QPainterPath clip;
+    if (transformProjectiveActive_) {
+        if (!transformWarped_.image.isNull()) {
+            clip.addRect(QRectF(moveLayerPos_ + transformWarped_.origin,
+                                QSizeF(transformWarped_.image.size())
+                                    / transformWarped_.scale));
+        } else if (!transformQuad_.isEmpty()) {
+            clip.addPolygon(transformQuad_);
+            clip.closeSubpath();
+        }
+    }
+    if (clip.isEmpty()) {
+        QPainterPath local;
+        local.addRect(QRectF(moveLayerPos_, QSizeF(moveLayer_.size()) * moveScale_));
+        clip = transformPreviewMatrix().map(local);
+    }
+    painter.save();
+    painter.setClipPath(clip, Qt::IntersectClip);
+    painter.drawImage(
+        QRectF(QPointF(*moveAbovePos_), QSizeF(moveAbove_.size()) * moveAboveScale_),
+        moveAbove_);
+    painter.restore();
 }
 
 void ImageView::refreshTransformWarp()

@@ -73,6 +73,20 @@ std::optional<QPoint> previewBaseOrigin(const PictureView& view)
     return QPoint(origin[0], origin[1]);
 }
 
+std::optional<QPoint> previewAboveOrigin(const PictureView& view)
+{
+    const auto origin = move_preview_above_origin(view);
+    if (origin.size() != 2) {
+        return std::nullopt;
+    }
+    return QPoint(origin[0], origin[1]);
+}
+
+int previewAboveScale(const PictureView& view)
+{
+    return move_preview_above_scale(view);
+}
+
 LayerRect layerRect(const PictureView& view, const QString& path)
 {
     const ::rust::Vec<int32_t> extents = layer_rect_extents(view, path);

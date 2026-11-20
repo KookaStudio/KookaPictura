@@ -253,7 +253,9 @@ void ImageView::updateAntsTimer()
 
 void ImageView::beginTransformPreview(const QImage& base, const QImage& layer,
                                       const QPointF& layerPos, double opacity,
-                                      std::optional<QPoint> basePos, int scale)
+                                      std::optional<QPoint> basePos, int scale,
+                                      const QImage& above, std::optional<QPoint> abovePos,
+                                      int aboveScale)
 {
     // A transform session is modal: the paint hover that owns the ring is
     // suspended, so the ring must go with the first transform frame.
@@ -265,9 +267,9 @@ void ImageView::beginTransformPreview(const QImage& base, const QImage& layer,
     moveDelta_ = QPointF();
     moveOpacity_ = opacity;
     moveScale_ = std::max(1, scale);
-    moveAbove_ = QImage();
-    moveAbovePos_.reset();
-    moveAboveScale_ = 1;
+    moveAbove_ = above;
+    moveAbovePos_ = abovePos;
+    moveAboveScale_ = std::max(1, aboveScale);
     movePreviewActive_ = true;
     transformActive_ = true;
     transformScaleX_ = 1.0;
@@ -743,12 +745,13 @@ void ImageView::paintEvent(QPaintEvent* event)
     }
     // A layer below others: draw the layers above the moving group back over
     // the moving image, clipped to it, so the preview keeps the stacking order
-    // (#1250). The overlay covers the presented rect; outside the moving image
-    // the live canvas already shows those layers.
-    // ponytail: clipped to the moving image's box, so a semi-transparent above
-    // layer blends twice where the moving image is itself transparent.
-    if (movePreviewActive_ && !transformActive_ && !moveAbove_.isNull()
-        && moveAbovePos_.has_value()) {
+    // (#1250, #1445). The overlay covers the presented rect; outside the moving
+    // image the live canvas already shows those layers.
+    // ponytail: clipped to the moving image's footprint, so a semi-transparent
+    // above layer blends twice where the moving image is itself transparent.
+    if (transformActive_) {
+        paintTransformAbove(painter);
+    } else if (movePreviewActive_ && !moveAbove_.isNull() && moveAbovePos_.has_value()) {
         painter.save();
         painter.setClipRect(QRectF(moveLayerPos_ + moveDelta_,
                                    QSizeF(moveLayer_.size()) * moveScale_),
