@@ -28,6 +28,7 @@ mod compatibility;
 mod crs_xmp;
 mod depth;
 mod descriptor;
+mod dng;
 mod document_version;
 mod duotone;
 mod engine_data;
@@ -116,6 +117,7 @@ pub use color_mode::{
 };
 pub use crs_xmp::set_crs_property;
 pub use descriptor::{write_descriptor, DescValue};
+pub use dng::{read_dng, CfaPattern, DngColor, DngCrop, DngImage};
 pub use document_version::{
     document_version, native_merged_has_transparency, unsupported_document_feature,
     DocumentVersion, DocumentVersionStamp, VersionAccess, VersionInfo, CURRENT_DOCUMENT_VERSION,
