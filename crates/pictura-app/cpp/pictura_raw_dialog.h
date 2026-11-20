@@ -3,7 +3,10 @@
 #include <QtCore/QString>
 #include <QtWidgets/QDialog>
 
+#include "acr/acr_panels.h"
 #include "acr/acr_settings.h"
+
+#include <optional>
 
 class QTabBar;
 class QTimer;
@@ -24,6 +27,10 @@ class PicturaRawDialog : public QDialog {
 public:
     PicturaRawDialog(PictureView* view, const QString& path, const QString& initialSettings,
                      QWidget* parent = nullptr);
+    // A camera raw open (#400): previews `view`'s pending raw source, with an
+    // absolute white balance that resets to `asShot`.
+    PicturaRawDialog(PictureView* view, const AcrAsShot& asShot, const QString& initialSettings,
+                     QWidget* parent = nullptr);
 
     // The full settings text with the edited values written back.
     QString settingsText() const;
@@ -37,6 +44,9 @@ public:
     AcrHistogram* histogramForTest() const { return histogram_; }
 
 private:
+    PicturaRawDialog(PictureView* view, const QString& path, std::optional<AcrAsShot> asShot,
+                     const QString& initialSettings, QWidget* parent);
+
     void refresh();
     void render();
 

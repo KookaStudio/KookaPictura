@@ -29,6 +29,15 @@ pub fn sniff_raw(bytes: &[u8]) -> Option<RawFormat> {
     ifd0.get(DNG_VERSION).map(|_| RawFormat::Dng)
 }
 
+/// Whether `prefix`, the start of a file, is a supported raw container. Only
+/// IFD0's entry table is read, so the prefix need not hold its values.
+pub fn sniff_raw_prefix(prefix: &[u8]) -> bool {
+    if cr2::is_cr2(prefix) {
+        return true;
+    }
+    Tiff::parse(prefix).is_ok_and(|(tiff, first)| tiff.lists_tag(first, DNG_VERSION))
+}
+
 /// Reads any supported raw container's full-resolution CFA plane, normalized
 /// and cropped to its active area, charging declared sizes to `budget` first.
 pub fn read_raw(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, PsdError> {

@@ -34,6 +34,8 @@ pub struct PictureViewRust {
     /// session owns.
     pub(super) session: crate::cxxqt_object::document_session::DocumentSession,
     pub(super) pending_vector_place: Option<PendingVectorPlace>,
+    /// A decoded camera raw file waiting for the Pictura Raw dialog (#400).
+    pub(super) pending_raw: Option<Box<super::open_jobs::PendingRaw>>,
     pub(super) vector_place_result: VectorPlaceResult,
     pub(super) variables_dialog: Option<Box<super::variables::VariableSession>>,
     pub(super) variable_export: Option<Box<super::variables::ExportSession>>,
@@ -273,6 +275,7 @@ impl Default for PictureViewRust {
         Self {
             session: Default::default(),
             pending_vector_place: None,
+            pending_raw: None,
             vector_place_result: VectorPlaceResult::Pending,
             proof: Default::default(),
             proof_preview: RefCell::new(None),

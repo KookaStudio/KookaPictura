@@ -246,6 +246,7 @@ set(PICTURA_QT_TESTS
     tst_pictura_raw
     tst_acr_settings
     tst_acr_dialog
+    tst_raw_open
     tst_canvas_context_menus
     tst_brush_tip_preview
     tst_brush_outline

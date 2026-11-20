@@ -22,13 +22,28 @@ namespace pictura {
 
 PicturaRawDialog::PicturaRawDialog(PictureView* view, const QString& path,
                                    const QString& initialSettings, QWidget* parent)
+    : PicturaRawDialog(view, path, std::nullopt, initialSettings, parent)
+{
+}
+
+PicturaRawDialog::PicturaRawDialog(PictureView* view, const AcrAsShot& asShot,
+                                   const QString& initialSettings, QWidget* parent)
+    : PicturaRawDialog(view, QString(), asShot, initialSettings, parent)
+{
+}
+
+PicturaRawDialog::PicturaRawDialog(PictureView* view, const QString& path,
+                                   std::optional<AcrAsShot> asShot,
+                                   const QString& initialSettings, QWidget* parent)
     : QDialog(parent), path_(path), settings_(AcrSettings::decode(initialSettings))
 {
+    setObjectName(QStringLiteral("picturaRawDialog"));
     setWindowTitle(QStringLiteral("Pictura Raw"));
 
     auto* outer = new QHBoxLayout(this);
 
     preview_ = new AcrPreviewPane(view, path, this);
+    preview_->setRawSource(asShot.has_value());
     outer->addWidget(preview_, 1);
 
     auto* right = new QVBoxLayout;
@@ -38,7 +53,7 @@ PicturaRawDialog::PicturaRawDialog(PictureView* view, const QString& path,
     tabs_ = new QTabBar(this);
     auto* stack = new QStackedWidget(this);
 
-    auto* basicPanel = new AcrBasicPanel(&settings_, this);
+    auto* basicPanel = new AcrBasicPanel(&settings_, this, asShot);
     auto* toneCurvePanel = new AcrToneCurvePanel(&settings_, this);
     toneCurve_ = toneCurvePanel;
 

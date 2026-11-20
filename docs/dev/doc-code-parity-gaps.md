@@ -280,7 +280,8 @@ The Actions panel and engine shipped in `#301` (`crates/pictura-app/cpp/panels/a
 | WF-15 | `document-lifecycle.md` | Maximize PSD/PSB Compatibility preference | MISSING | writer always emits composite | #639 |
 | WF-16 | `update-and-versioning.md` | Document-format version policy (`opDocumentVersion`/`minReaderVersion`, Version Info 1057) | MISSING | none found | #640 |
 
-Raw file open is tracked by `#400`; DNG output by `#402`.
+Raw file open shipped in `#400` (DNG files; vendor colour matrices and the
+smart-object open remain); DNG output is tracked by `#402`.
 
 ### 11-cross-cutting
 

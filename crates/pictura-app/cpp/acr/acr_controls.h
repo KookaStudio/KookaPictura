@@ -45,6 +45,12 @@ public:
     double value() const;
     void setValue(double value);
     void setRamp(const QList<QColor>& stops);
+    // Place the handle linearly in 1/value (mired for a colour temperature),
+    // so a wide kelvin range keeps daylight off the end of the track. Needs a
+    // positive minimum.
+    void setReciprocalScale(bool reciprocal);
+    double minimum() const { return min_; }
+    double maximum() const { return max_; }
 
 signals:
     void valueChanged();
@@ -63,6 +69,8 @@ private:
     double valueForX(int x) const;
     int xForValue(double value) const;
     double originFraction() const;
+    double fractionForValue(double value) const;
+    double valueForFraction(double t) const;
 
     double min_ = 0.0;
     double max_ = 100.0;
@@ -72,6 +80,7 @@ private:
     bool dragging_ = false;
     bool scrubbing_ = false;
     bool updating_ = false;
+    bool reciprocal_ = false;
     int scrubStartX_ = 0;
     double scrubStartValue_ = 0.0;
     QLabel* label_ = nullptr;

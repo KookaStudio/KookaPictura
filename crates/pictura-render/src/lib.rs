@@ -85,6 +85,7 @@ pub use view_pyramid::{Planes, ViewPyramid};
 
 mod composite_native;
 pub use composite_native::{refresh_native_composite, restore_native_composite};
+pub use pictura_adjust::render_pictura_raw_rgb16;
 pub use pictura_adjust::{
     match_color_stats, replace_color_mask, replace_color_result, replace_color_shift_for,
     Adjustment, AutoKind, ColorBalanceMode, ExposureGamma, GradientFillParams, GradientKind,

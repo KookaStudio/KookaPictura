@@ -18,6 +18,29 @@ Snapshot for resuming after a context break. Update after each milestone.
   Auto-Align's work image reads luma premultiplied by alpha. Tests:
   `transform_alpha_tests`, the `kernel` units, and
   `auto_align::tests::work_luma_is_premultiplied_by_alpha`.
+- **Raw open route — #400 implemented** (OpenSpec change `raw-open-route`,
+  archived; capabilities `codec/raw-develop`, `document/raw-open`, and a
+  requirement added to `codec/pictura-raw`). Last stage of raw open (#86).
+  File ▸ Open (every open-by-path) sniffs a camera raw container from a
+  256 KiB prefix (`raw_sniff_path` → `sniff_raw_prefix`, IFD0's entry table
+  only) before the raster route; the extension is not consulted.
+  `pictura_codec::decode_raw_source` (`dng/develop.rs`) reads, refuses
+  unmappable colour before the AHD demosaic (every CR2 today: "camera colour
+  for … is not supported yet"), and keeps crop, orientation and the as-shot
+  white balance; `develop_raw` does white balance → ProPhoto →
+  `BaselineExposure` → default crop → orientation → lcms2 to 16-bit sRGB (the
+  app's working RGB). The app (`cxxqt_object/open_jobs/raw_open.rs`) keeps a
+  `PendingRaw` on the view after the decode job (status `"raw"`); the
+  coordinator shows the Pictura Raw dialog in raw mode (absolute Temperature
+  2000–50000 K on a reciprocal slider, Tint ±150, reset to as-shot, preview
+  from a ≤1024 px camera copy) or, non-interactively, develops with the seed
+  (as-shot, then `<stem>.xmp` sidecar, else embedded `crs:`). OK develops on a
+  worker (`render_pictura_raw_rgb16` for the other controls) into a new
+  untitled 16-bit RGB document, one "Background" layer, one "Open" state;
+  Cancel opens nothing. Ponytails: locus caps at 15000 K, prefix sniff, `>> 8`
+  display plane, no Workflow Options. Follow-ups: #1465 (vendor matrices),
+  #1466 (open as smart object). Tests: `tests/raw_develop.rs`,
+  `rgb16_tests`, `raw_open/tests.rs`, `tst_raw_open`.
 - **Vendor raw containers — #399 part 1, Canon CR2** (OpenSpec change
   `vendor-raw-cr2`, archived; capability `codec/vendor-raw-containers`).
   `pictura_codec::sniff_raw` / `read_raw` (`crates/pictura-codec/src/dng/vendor.rs`)

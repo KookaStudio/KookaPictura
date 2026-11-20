@@ -26,6 +26,12 @@ const CRS_NAMES: [&str; 11] = [
     "Tint",
 ];
 
+/// The `crs:` Basic controls an XMP packet sets (a raw file's embedded packet
+/// or its `.xmp` sidecar).
+pub fn crs_settings_from_xmp(packet: &[u8]) -> CrsSettings {
+    parse_crs(packet)
+}
+
 /// Lift the fixed property set out of a bounded `crs:` packet. A missing,
 /// non-finite, or unparsable value leaves its field `None`; unknown keys stay in
 /// the raw packet.

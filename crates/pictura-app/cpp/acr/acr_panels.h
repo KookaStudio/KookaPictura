@@ -5,20 +5,32 @@
 
 #include "acr_controls.h"
 
+#include <optional>
+
 class QImage;
 
 namespace pictura {
 
 class AcrParamCurveGraph;
 
+// A camera raw source's as-shot white balance: with one, the Basic panel's
+// Temperature is absolute kelvin and Tint runs ±150 (#400).
+struct AcrAsShot {
+    int temperature = 0;
+    int tint = 0;
+};
+
 class AcrBasicPanel : public AcrPanel {
     Q_OBJECT
 
 public:
-    explicit AcrBasicPanel(AcrSettings* settings, QWidget* parent = nullptr);
+    explicit AcrBasicPanel(AcrSettings* settings, QWidget* parent = nullptr,
+                           std::optional<AcrAsShot> asShot = std::nullopt);
 
 private:
     void resetBasic();
+
+    std::optional<AcrAsShot> asShot_;
 };
 
 class AcrToneCurvePanel : public AcrPanel {
