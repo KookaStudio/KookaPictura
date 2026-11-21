@@ -687,7 +687,10 @@ gaps are the CS6 Extended 3D object and camera tools.
       (#1320). `crates/pictura-codec/src/write_stream.rs`.
 - [x] A typed `prefs.toml` store, the config and state split, migration,
       quarantine, and the reset gesture (#641)
-- [ ] `QTranslator` and `.qm`, RTL, and locale number formatting (#642)
+- [x] Bundled German and Finnish, community translation import, and locale
+      number formatting (#642)
+- [ ] Right-to-left UI layout and languages (#1488)
+- [ ] Investigate switching the interface language without restarting (#1501)
 - [x] Structured Qt and Rust diagnostics with a rotating file sink, plus the
       opt-in History Log in text files and PSD, PSB, JPEG, and TIFF XMP (#643)
 - [ ] Opt-in telemetry and `KOOKA_PICTURA_NO_TELEMETRY` (#644)
