@@ -802,6 +802,11 @@ void ShapeToolsTest::pathOperations()
     QVERIFY2(pictura::path_point_count(*f.view, 0) > points, "the difference adds vertices");
     QVERIFY2(!pictura::workPathOverlay(*f.view, -1).curve.isEmpty(),
              "the Work Path overlay follows the boolean");
+    // The path-only edit reaches the canvas: cutting away the right half
+    // narrows the overlay's curve with the path.
+    QCOMPARE(f.canvas->pathOverlayCurveBoundsForTest().right(), 45.0);
+    draw(QPointF(25, 0), QPointF(50, 50), 2);
+    QCOMPARE(f.canvas->pathOverlayCurveBoundsForTest().right(), 25.0);
 }
 
 // Fill Pixels Mode, Opacity, and Anti-alias.

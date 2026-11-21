@@ -522,6 +522,50 @@ mod tests {
     }
 
     #[test]
+    fn dashes_follow_a_curved_outline() {
+        // A circle of radius 20 about (30, 30): the dash walk must follow its
+        // flattened arc, not the chords between its four anchors (which come
+        // within 20 / sqrt(2) ≈ 14 px of the centre).
+        let mut doc = Document::from_rgba("Background", 60, 60, &[255; 60 * 60 * 4]);
+        let circle = outline_in_box(
+            ShapeOptions::new(ShapeKind::Ellipse, 0.0, 3),
+            (10.0, 10.0, 40.0, 40.0),
+        )
+        .unwrap();
+        let path = add_shape_layer(&mut doc, "", [0, 0, 255, 255], "Ellipse", &circle, None);
+        let layer = resolve_path_mut(&mut doc, &path).unwrap();
+        assert!(set_shape_fill(layer, None));
+        let stroke = ShapeStroke {
+            fill: ShapeStrokeFill::Solid([0, 255, 0]),
+            width: 2,
+            position: StrokePosition::Inside,
+            line: StrokeLine::Dashed,
+        };
+        assert!(set_shape_stroke(layer, Some(&stroke)));
+        let out = crate::composite_rgba(&doc);
+        let plane = (out.width * out.height) as usize;
+        let (mut marked, mut gaps) = (0, 0);
+        for y in 0..60usize {
+            for x in 0..60usize {
+                let i = y * 60 + x;
+                let green = out.data[i] < 128 && out.data[plane + i] > 128;
+                let r = (x as f64 + 0.5 - 30.0).hypot(y as f64 + 0.5 - 30.0);
+                if green {
+                    marked += 1;
+                    assert!(
+                        (16.5..=21.0).contains(&r),
+                        "dash pixel ({x}, {y}) at radius {r:.1}"
+                    );
+                } else if (18.5..=19.5).contains(&r) {
+                    gaps += 1;
+                }
+            }
+        }
+        assert!(marked > 0, "the dashed stroke draws");
+        assert!(gaps > 0, "the dashed stroke has gaps along the arc");
+    }
+
+    #[test]
     fn copy_and_paste_attributes_transfer_gradient_and_pattern() {
         let (mut doc, path) = doc_with_square();
         let stroke = ShapeStroke {
