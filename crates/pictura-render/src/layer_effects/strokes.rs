@@ -441,6 +441,8 @@ fn apply_dash(
         if subpath.points.len() < 2 {
             continue;
         }
+        // `VectorSubpath::points` is already flattened through the Bezier
+        // handles by the codec, so walking consecutive points follows the curve.
         let mut points: Vec<(f64, f64)> = subpath
             .points
             .iter()

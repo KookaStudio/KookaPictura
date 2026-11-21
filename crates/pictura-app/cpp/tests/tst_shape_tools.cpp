@@ -5,6 +5,7 @@
 #include <QtTest/QtTest>
 
 #include "panels/layers_panel.h"
+#include "path_overlay.h"
 #include "panels/numeric_field.h"
 #include "selftest_paint_fixture.h"
 #include "session.h"
@@ -799,6 +800,8 @@ void ShapeToolsTest::pathOperations()
     draw(QPointF(25, 25), QPointF(45, 45), 2);
     QCOMPARE(pictura::path_subpath_count(*f.view), 1);
     QVERIFY2(pictura::path_point_count(*f.view, 0) > points, "the difference adds vertices");
+    QVERIFY2(!pictura::workPathOverlay(*f.view, -1).curve.isEmpty(),
+             "the Work Path overlay follows the boolean");
 }
 
 // Fill Pixels Mode, Opacity, and Anti-alias.

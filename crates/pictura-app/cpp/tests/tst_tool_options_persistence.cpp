@@ -1077,7 +1077,7 @@ void ToolOptionsPersistenceTest::outOfRangeEntriesClamp_data()
     add(QStringLiteral("shape"), QStringLiteral("arrowConcavity"), -100.0, -50.0);
     add(QStringLiteral("shape"), QStringLiteral("strokeWidth"), 999.0, 250.0);
     add(QStringLiteral("shape"), QStringLiteral("strokeAlign"), 9, 2);
-    add(QStringLiteral("shape"), QStringLiteral("geometry"), 9, 2);
+    add(QStringLiteral("shape"), QStringLiteral("geometry"), 9, 3);
     add(QStringLiteral("shape"), QStringLiteral("indent"), 0.0, 1.0);
     add(QStringLiteral("shape"), QStringLiteral("fixedWidth"), 0.0, 0.01);
     add(QStringLiteral("shape"), QStringLiteral("fixedHeight"), -5.0, 0.01);

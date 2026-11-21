@@ -1,7 +1,7 @@
 # Feature parity tracker
 
 Assessed: 2026-11-21
-Pictura commit: 39ea0380
+Pictura commit: 4736b57e
 CS6 baseline: Adobe Photoshop CS6 13.0 (2012), Standard and Extended
 CC baseline: Adobe Photoshop 28.0 (November 2026 release; LTS 27.11.1)
 
@@ -524,7 +524,8 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
 |---|---|---|---|---|---|
-| 2026-11-21 | 39ea0380 | 207/349 (59.3%) | 208/366 (56.8%) | 28.0 | 209/374 (55.9%) |
+| 2026-11-21 | 4736b57e | 207/349 (59.3%) | 208/366 (56.8%) | 28.0 | 209/374 (55.9%) |
+| 2026-11-21 | 39ea0380 | 202/349 (57.9%) | 203/366 (55.5%) | 28.0 | 204/374 (54.5%) |
 | 2026-11-21 | 7ab28fc5 | 192/349 (55.0%) | 193/366 (52.7%) | 28.0 | 194/374 (51.9%) |
 | 2026-11-20 | 89c8ba95 | 191/349 (54.7%) | 192/366 (52.5%) | 28.0 | 193/374 (51.6%) |
 
