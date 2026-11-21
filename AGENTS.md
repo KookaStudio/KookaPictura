@@ -178,8 +178,10 @@ non-trivial changes and works from the CLI, with or without an agent** (the
   pin. Run `openspec update` to regenerate `.opencode/skills/openspec-*` and
   `.opencode/commands/opsx-*` after an upgrade, and commit the diff.
 - Archive a completed change with `openspec archive <name>` to merge its deltas
-  into `openspec/specs/`. Pre-OpenSpec milestone work (m0…m47) is retroactively
-  archived under `openspec/changes/archive/`.
+  into `openspec/specs/`. Before archiving, review `ROADMAP.md` and `PARITY.md`
+  and refresh both trackers in the same PR when feature coverage moved.
+  Pre-OpenSpec milestone work (m0…m47) is retroactively archived under
+  `openspec/changes/archive/`.
 - **Zero-open.** Author, implement, and archive a change in the pull request that
   ships it, so only `archive/` remains under `openspec/changes/`.
   `scripts/check-openspec-archived.sh` (guards workflow + `verify-fast.sh`) fails
@@ -205,6 +207,9 @@ non-trivial changes and works from the CLI, with or without an agent** (the
   `feat: port the healing family from photorust`.
 - **PR titles** — conventional prefix + issue number in parentheses, e.g.
   `feat: port the healing family (#10)`.
+- **Tracker review.** Before opening or updating a PR that ships or removes a
+  feature, and before archiving its OpenSpec change, review `ROADMAP.md` and
+  `PARITY.md`. Include both in the same PR whenever feature coverage changes.
 - **Enforcement** — CI checks PR titles and every PR commit (`pr-conventions`
   workflow, Conventional Commits with the type list above); the title check
   fails on a malformed title. Squash-only merging makes the PR title the commit
@@ -246,9 +251,11 @@ non-trivial changes and works from the CLI, with or without an agent** (the
     `crates/pictura-app/cpp/tests/`, never new `runSelfTest()` checks; the
     self-test only shrinks and retired exit codes are never reused (see
     Verification).
-12. **Roadmap.** A pull request that ships or removes a feature updates
-    `ROADMAP.md` in the same change: shipped items get ticked, and every
-    remaining `[ ]` item links the GitHub issue that tracks it.
+12. **Roadmap and parity.** A pull request that ships or removes a feature
+    updates `ROADMAP.md` and `PARITY.md` in the same change: shipped items get
+    ticked, every remaining `[ ]` item links the GitHub issue that tracks it,
+    and the parity rows, headline, category totals, and baseline history move
+    together.
 
 ## Anti-patterns
 

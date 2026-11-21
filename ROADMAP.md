@@ -32,7 +32,7 @@ The quantified comparison against Photoshop CS6 and CC 28.0 is in
 | Adjustments | Shipped — the classic families, with live preview and adjustment-layer variants |
 | Filters | Shipped — 110 filters across the classic families; the roadmap names the remaining gaps |
 | Colour and painting | Shipped — ICC profiles, Assign Profile, Convert to Profile, colour settings, the brush engine |
-| Camera raw files | DNG/CR2 route ships (approximate); per-camera matrices and smart-object open remain (#1465, #1466) |
+| Camera raw files | DNG/CR2 route ships (approximate); per-camera matrices for 14 Canon bodies ship (#1465); smart-object open (#1466) and vendor containers (#399) remain |
 | Panels | 19 of 22 populated; Gradients, Patterns and Styles are placeholders |
 | Automation | The control server, Rust command catalogue, Actions engine, command bus and Batch ship; droplets, scripting and plug-ins are open |
 | HDR tone mapping | Shipped — all four conversion methods; the Local Adaptation Toning Curve/Corner is open |
@@ -102,6 +102,12 @@ The quantified comparison against Photoshop CS6 and CC 28.0 is in
       supported `.abr`, `.aco`, `.ase`, `.asl`, `.csh`, `.grd`, `.pat`, `.shc`,
       and `.tpl` variants. Exports ACO and ASE swatches and provides a standalone
       `.csf` codec (#489).
+- [ ] PICT, IFF, PCX and SGI read and write (#1503, #1504, #1505, #1506)
+- [ ] OpenEXR, JPEG 2000, HEIC/HEIF and AVIF read and write (#1507, #1508, #1509, #1510)
+- [ ] SVG import (#1511)
+- [ ] Content Credentials (#1512)
+- [ ] Adobe interoperability for editable Photoshop PDFs (#1513)
+- [ ] The remaining Save for Web output settings (#1514)
 
 ## Layers
 
@@ -215,10 +221,13 @@ gaps are the CS6 Extended 3D object and camera tools.
       (#539)
 - [x] Mixer Brush Sample All Layers (#911)
 - [ ] Mixer Brush Load Solid Colors Only and keyboard shortcuts (#540)
+- [ ] Bristle brush preview, tilt projection, and preset keys (#1520)
 - [x] Type on path and area type (#683)
 - [x] Warp text (#684)
 - [x] Gamma blend and missing-font handling (#685)
 - [x] Missing Glyph Protection (#887)
+- [ ] Variable-font axis controls (#1518)
+- [ ] Dynamic text on shapes and paths (#1519)
 - [ ] Path operations, align and arrange, constrained path dragging, the Target
       Path toggle, and segment and marquee multi-select (#542)
 - [ ] Slice style and modifiers, Divide, Combine, Duplicate, the Slice Options
@@ -398,6 +407,9 @@ gaps are the CS6 Extended 3D object and camera tools.
       spread-spectrum carrier (not Digimarc-compatible), with the copyright
       title indicator on detection
 - [x] Edit ▸ Fade, the post-filter opacity and blend mode (#491)
+- [ ] Quick Compare (#1515)
+- [ ] A Clarity and Dehaze adjustment layer (#1516)
+- [ ] A Light adjustment layer (#1517)
 
 ## Colour and painting
 
@@ -509,6 +521,7 @@ gaps are the CS6 Extended 3D object and camera tools.
       `crates/pictura-app/cpp/toolbox.cpp`.
 - [x] The Adjustments panel icon grid (#509)
 - [ ] Refine the Adjustments panel icon artwork (#819)
+- [ ] Fill-layer presets in the Adjustments panel (#1521)
 - [ ] The Measurement Log panel (#510)
 - [ ] The Tool Presets panel and `.tpl` libraries (#511)
 - [ ] The Styles panel and `.asl` presets (#512)

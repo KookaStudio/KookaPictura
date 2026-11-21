@@ -1,7 +1,7 @@
 # Feature parity tracker
 
 Assessed: 2026-11-21
-Pictura commit: 7ab28fc5
+Pictura commit: 39ea0380
 CS6 baseline: Adobe Photoshop CS6 13.0 (2012), Standard and Extended
 CC baseline: Adobe Photoshop 28.0 (November 2026 release; LTS 27.11.1)
 
@@ -11,12 +11,12 @@ This tracker measures feature coverage against a frozen Photoshop baseline. It d
 
 | Baseline | Complete | Partial | Missing | Unknown | Denominator | Coverage | Excluded non-goals |
 |---|---|---|---|---|---|---|---|
-| CS6 Standard | 192 | 83 | 69 | 5 | 349 | 55.0% | 8 |
-| CS6 Standard, in scope | 192 | 83 | 63 | 3 | 341 | 56.3% | 8 |
-| CS6 Extended | 193 | 83 | 85 | 5 | 366 | 52.7% | 23 |
-| CS6 Extended, in scope | 193 | 83 | 64 | 3 | 343 | 56.3% | 23 |
-| CC 28.0 | 194 | 85 | 90 | 5 | 374 | 51.9% | 20 |
-| CC 28.0, in scope | 194 | 85 | 72 | 3 | 354 | 54.8% | 20 |
+| CS6 Standard | 204 | 82 | 60 | 3 | 349 | 58.5% | 8 |
+| CS6 Standard, in scope | 204 | 82 | 54 | 1 | 341 | 59.8% | 8 |
+| CS6 Extended | 205 | 82 | 76 | 3 | 366 | 56.0% | 23 |
+| CS6 Extended, in scope | 205 | 82 | 55 | 1 | 343 | 59.8% | 23 |
+| CC 28.0 | 206 | 84 | 81 | 3 | 374 | 55.1% | 20 |
+| CC 28.0, in scope | 206 | 84 | 63 | 1 | 354 | 58.2% | 20 |
 
 ## Baselines
 
@@ -38,15 +38,15 @@ Coverage is not behavioural or pixel parity with Photoshop. Every Complete row n
 
 | Category | CS6 Standard | CS6 Extended | CC 28.0 |
 |---|---|---|---|
-| Files & interchange | 25/40 (62.5%) | 25/42 (59.5%) | 26/46 (56.5%) |
+| Files & interchange | 27/40 (67.5%) | 27/42 (64.3%) | 28/46 (60.9%) |
 | Layers & compositing | 30/38 (78.9%) | 30/39 (76.9%) | 30/39 (76.9%) |
 | Tools & painting | 34/70 (48.6%) | 35/81 (43.2%) | 35/71 (49.3%) |
-| Selections & masking | 15/22 (68.2%) | 15/22 (68.2%) | 15/22 (68.2%) |
-| Adjustments & filters | 30/55 (54.5%) | 30/55 (54.5%) | 30/64 (46.9%) |
-| Type & vector | 16/17 (94.1%) | 16/17 (94.1%) | 16/19 (84.2%) |
+| Selections & masking | 21/22 (95.5%) | 21/22 (95.5%) | 21/22 (95.5%) |
+| Adjustments & filters | 31/55 (56.4%) | 31/55 (56.4%) | 31/64 (48.4%) |
+| Type & vector | 17/17 (100.0%) | 17/17 (100.0%) | 17/19 (89.5%) |
 | Color & bit depth | 14/29 (48.3%) | 14/29 (48.3%) | 14/29 (48.3%) |
 | Automation & extensibility | 3/18 (16.7%) | 3/18 (16.7%) | 3/22 (13.6%) |
-| Shell, panels & preferences | 25/60 (41.7%) | 25/63 (39.7%) | 25/62 (40.3%) |
+| Shell, panels & preferences | 27/60 (45.0%) | 27/63 (42.9%) | 27/62 (43.5%) |
 
 ## Feature rows
 
@@ -65,28 +65,28 @@ Source list: CS6 and CC supported-format lists plus named File-menu, metadata, p
 | P-FMT-07 | BMP read and write | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src | none | — | — |
 | P-FMT-08 | PDF import through Ghostscript | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src | none | — | — |
 | P-FMT-09 | EPS import through Ghostscript | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src | none | — | — |
-| P-FMT-10 | Photoshop PDF export | Y | Y | Y | Partial | in-scope | crates/pictura-codec/src | none | JPEG 2000, spot colours, proof setup ship; Preserve Photoshop Editing is partial | WF-2 |
+| P-FMT-10 | Photoshop PDF export | Y | Y | Y | Partial | in-scope | crates/pictura-codec/src | none | JPEG 2000, spot colours, proof setup ship; Preserve Photoshop Editing is partial | #1513 |
 | P-FMT-11 | EPS export | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src | none | — | — |
-| P-FMT-12 | SVG export | N/A | N/A | Y | Partial | in-scope | crates/pictura-codec/src/save/mod.rs | none | post-CS6:src:1; src:6; write only | follow-up:SVG import is not implemented |
+| P-FMT-12 | SVG export | N/A | N/A | Y | Partial | in-scope | crates/pictura-codec/src/save/mod.rs | none | post-CS6:src:1; src:6; write only | #1511 |
 | P-FMT-13 | TGA export | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src | none | — | — |
 | P-FMT-14 | Cineon export | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src | none | — | — |
 | P-FMT-15 | DCS export | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src | none | Process-ink-only ceiling | — |
 | P-FMT-16 | Photoshop Raw export | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src | none | 8-bit ceiling | — |
-| P-FMT-17 | PICT read and write | Y | Y | Y | Missing | in-scope | — | none | Legacy Adobe format | follow-up:unimplemented; no issue yet |
-| P-FMT-18 | IFF read and write | Y | Y | Y | Missing | in-scope | — | none | Legacy Adobe format | follow-up:unimplemented; no issue yet |
-| P-FMT-19 | PCX read and write | Y | Y | Y | Missing | in-scope | — | none | Legacy Adobe format | follow-up:unimplemented; no issue yet |
-| P-FMT-20 | SGI read and write | Y | Y | Y | Missing | in-scope | — | none | Legacy Adobe format | follow-up:unimplemented; no issue yet |
-| P-FMT-21 | OpenEXR read and write | Y | Y | Y | Missing | in-scope | — | none | No EXR codec | follow-up:unimplemented; no issue yet |
-| P-FMT-22 | JPEG 2000 file read and write | Y | Y | Y | Missing | in-scope | — | none | JPEG 2000 exists only inside the PDF writer | follow-up:unimplemented; no issue yet |
-| P-FMT-23 | HEIC/HEIF read and write | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:1; src:6 | follow-up:unimplemented; no issue yet |
-| P-FMT-24 | AVIF read and write | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:1; src:6 | follow-up:unimplemented; no issue yet |
+| P-FMT-17 | PICT read and write | Y | Y | Y | Missing | in-scope | — | none | Legacy Adobe format | #1503 |
+| P-FMT-18 | IFF read and write | Y | Y | Y | Missing | in-scope | — | none | Legacy Adobe format | #1504 |
+| P-FMT-19 | PCX read and write | Y | Y | Y | Missing | in-scope | — | none | Legacy Adobe format | #1505 |
+| P-FMT-20 | SGI read and write | Y | Y | Y | Missing | in-scope | — | none | Legacy Adobe format | #1506 |
+| P-FMT-21 | OpenEXR read and write | Y | Y | Y | Missing | in-scope | — | none | No EXR codec | #1507 |
+| P-FMT-22 | JPEG 2000 file read and write | Y | Y | Y | Missing | in-scope | — | none | JPEG 2000 exists only inside the PDF writer | #1508 |
+| P-FMT-23 | HEIC/HEIF read and write | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:1; src:6 | #1509 |
+| P-FMT-24 | AVIF read and write | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:1; src:6 | #1510 |
 | P-FMT-25 | DICOM read and analysis | N/A | Y | Y | Missing | non-goal | — | none | edition:Extended-only; DICOM is an intentional non-goal | non-goal:feasibility:74 |
-| P-FMT-26 | Camera raw open and demosaic | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src/dng/develop.rs; crates/pictura-app/src/cxxqt_object/open_jobs/raw_open.rs | manual:tst_raw_open covers the raw open route | DNG/CR2 File > Open route; approximate parity; per-camera matrices and smart-object open remain | — |
-| P-FMT-27 | DNG output | Y | Y | Y | Missing | in-scope | — | none | No DNG writer | #402 |
+| P-FMT-26 | Camera raw open and demosaic | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src/dng/develop.rs; crates/pictura-app/src/cxxqt_object/open_jobs/raw_open.rs | manual:tst_raw_open covers the raw open route | DNG/CR2 File > Open route; approximate parity; per-camera matrices for 14 Canon bodies ship (#1465); smart-object open remains (#1466) | — |
+| P-FMT-27 | DNG output | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src/dng/write/ | none | Mosaic and linear DNG output with `crs:` settings; JPEG, TIFF and PSD from Save Options remain (#633) | — |
 | P-FMT-28 | Print | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Print colour management, proofing, marks, and persisted defaults remain | #634 |
 | P-FMT-29 | EXIF, IPTC, and XMP metadata | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src | none | — | — |
 | P-FMT-30 | File Info tabs | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src | none | — | — |
-| P-FMT-31 | Save for Web | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Slice names, per-slice optimisation, Web Snap, and saved output settings remain | WF-5 |
+| P-FMT-31 | Save for Web | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Slice names, per-slice optimisation, Web Snap, and saved output settings remain | #1514 |
 | P-FMT-32 | Export As | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-FMT-33 | Zoomify export | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src | none | — | — |
 | P-FMT-34 | Paths to Illustrator | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
@@ -94,14 +94,14 @@ Source list: CS6 and CC supported-format lists plus named File-menu, metadata, p
 | P-FMT-36 | Render Video | Y | Y | Y | Missing | non-goal | — | none | Video is an intentional non-goal | non-goal:feasibility:73 |
 | P-FMT-37 | Place and Open As Smart Object | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-FMT-38 | Load Files into Stack | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
-| P-FMT-39 | Open As | Y | Y | Y | Missing | in-scope | — | none | File menu stub | UI-8 |
+| P-FMT-39 | Open As | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/frame_import.cpp | none | Format-specific Open As through Ghostscript and the raster decoders | — |
 | P-FMT-40 | Background Save and crash journal | Y | Y | Y | Complete | in-scope | crates/pictura-app/src | none | — | — |
 | P-FMT-41 | Maximize PSD/PSB Compatibility preference | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src | none | — | — |
 | P-FMT-42 | Document format version policy | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src | none | — | — |
 | P-FMT-43 | 3D file import (U3D, 3DS, OBJ, KMZ, Collada) | N/A | Y | N/A | Missing | non-goal | — | none | edition:Extended-only; retired:src:3 | non-goal:feasibility:72 |
 | P-FMT-44 | Video frame import | Y | Y | Y | Missing | non-goal | — | none | Video is an intentional non-goal; src:1; src:7 | non-goal:feasibility:73 |
-| P-FMT-45 | Content Credentials | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:4 | follow-up:Content Credentials is not implemented |
-| P-FMT-46 | Per-camera colour matrices for CR2 and vendor raw | Y | Y | Y | Missing | in-scope | — | none | CR2 and other vendor files are refused until per-camera matrices land | #1465 |
+| P-FMT-45 | Content Credentials | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:4 | #1512 |
+| P-FMT-46 | Per-camera colour matrices for CR2 and vendor raw | Y | Y | Y | Partial | in-scope | crates/pictura-codec/src/dng/camera_matrices.rs | none | 14 Canon CR2 bodies fit from spectral sensitivities; other cameras are refused; the EOS 600D CFA phase (#1476) and vendor containers (#399) remain | #1476 |
 | P-FMT-47 | Open a raw file as a Smart Object | Y | Y | Y | Missing | in-scope | — | none | Shift+Open Image raw open is not implemented | #1466 |
 
 ### Layers & compositing
@@ -117,7 +117,7 @@ Source list: named Layer-menu and Layers-panel capabilities.
 | P-LAY-05 | Vector-mask path authoring | Y | Y | Y | Missing | in-scope | — | none | Path authoring is absent | #261 |
 | P-LAY-06 | Clipping masks | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
 | P-LAY-07 | Blend modes and Pass Through | Y | Y | Y | Complete | in-scope | crates/pictura-core/src | none | members:27/27 | — |
-| P-LAY-08 | Layer styles | Y | Y | Y | Partial | in-scope | crates/pictura-render/src | none | members:10/10; Bevel Contour and gradient editor ship, Bevel Texture remains | LAY-3 |
+| P-LAY-08 | Layer styles | Y | Y | Y | Partial | in-scope | crates/pictura-render/src | none | members:10/10; Bevel Contour and gradient editor ship, Bevel Texture remains | #606 |
 | P-LAY-09 | Advanced Blending engine | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
 | P-LAY-10 | Advanced Blending dialog controls | Y | Y | Y | Missing | in-scope | — | none | Engine ships; dialog controls are absent | #695 |
 | P-LAY-11 | Adjustment layers | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
@@ -233,7 +233,7 @@ Source list: CS6 toolbox slots (71 catalogue slots plus the two missing single r
 | P-TOOL-74 | Brush engine | Y | Y | Y | Complete | in-scope | crates/pictura-paint/src | none | — | — |
 | P-TOOL-75 | Brush dynamics | Y | Y | Y | Partial | in-scope | crates/pictura-paint/src | none | Texture and Dual Brush remain; the control model, Shape Dynamics, Scattering, Colour Dynamics, Transfer, Pose, and padlocks ship | SYS-4 |
 | P-TOOL-76 | Sampled, erodible, and airbrush tips | Y | Y | Y | Partial | in-scope | crates/pictura-paint/src | none | Round/elliptical and bristle tips ship; sampled, erodible, and airbrush tips plus Define Brush Preset remain | SYS-5 |
-| P-TOOL-77 | Bristle brushes | Y | Y | Y | Partial | in-scope | crates/pictura-paint/src | none | Engine and presets ship; OpenGL preview, .abr bristle keys, and tilt-driven projection remain | CLR-10 |
+| P-TOOL-77 | Bristle brushes | Y | Y | Y | Partial | in-scope | crates/pictura-paint/src | none | Engine and presets ship; OpenGL preview, .abr bristle keys, and tilt-driven projection remain | #1520 |
 | P-TOOL-78 | Mixer brush engine | Y | Y | Y | Partial | in-scope | crates/pictura-paint/src | none | Load Solid Colors Only and shortcuts remain | #540 |
 | P-TOOL-79 | Brush presets and .abr libraries | Y | Y | Y | Missing | in-scope | — | none | No Brush Presets panel, .abr libraries, or ABR v10 reading | CLR-11 |
 | P-TOOL-80 | Airbrush held dabs | Y | Y | Y | Complete | in-scope | crates/pictura-paint/src | none | 20 dabs/s approximation | #1120 |
@@ -252,18 +252,18 @@ Source list: named Select-menu capabilities and the selection-mask engine.
 | P-SEL-05 | All Layers | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-SEL-06 | Deselect Layers | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-SEL-07 | Similar Layers | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
-| P-SEL-08 | Colour Range | Y | Y | Y | Partial | in-scope | crates/pictura-select/src | none | Skin tones, localised clusters, out-of-gamut, previews, and save/load remain | SEL-5 |
-| P-SEL-09 | Refine Edge | Y | Y | Y | Partial | in-scope | crates/pictura-select/src | none | Interactive Refine Radius and Erase brushes remain | SEL-4 |
+| P-SEL-08 | Colour Range | Y | Y | Y | Complete | in-scope | crates/pictura-select/src | none | Skin tones, localised clusters, out-of-gamut, previews, and save/load ship; Detect Faces, .axt import, and per-session persistence remain | — |
+| P-SEL-09 | Refine Edge | Y | Y | Y | Complete | in-scope | crates/pictura-select/src | none | Interactive Refine Radius and Erase brushes ship; the CC workspace, Onion Skin, mask Brush, and Refine Hair remain | — |
 | P-SEL-10 | Modify: Border, Smooth, Expand, Contract, Feather | Y | Y | Y | Complete | in-scope | crates/pictura-select/src | none | — | — |
 | P-SEL-11 | Grow and Similar | Y | Y | Y | Complete | in-scope | crates/pictura-select/src | none | — | — |
 | P-SEL-12 | Transform Selection | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | #526 |
-| P-SEL-13 | Save Selection | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Selected Areas polarity and 16/32-bit channels remain | SEL-7 |
-| P-SEL-14 | Load Selection | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Selected Areas polarity and 16/32-bit channels remain | SEL-7 |
+| P-SEL-13 | Save Selection | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | Selected Areas polarity ships; 16/32-bit channels remain (#1331) | #1331 |
+| P-SEL-14 | Load Selection | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | Selected Areas polarity ships; 16/32-bit channels remain (#1331) | #1331 |
 | P-SEL-15 | Quick Mask | Y | Y | Y | Complete | in-scope | crates/pictura-select/src | none | — | #172 |
 | P-SEL-16 | Apply Image | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | #609 |
-| P-SEL-17 | Calculations | Y | Y | Y | Missing | in-scope | — | none | No Calculations command | SEL-2 |
-| P-SEL-18 | Channel Options (Masked and Selected Areas) | Y | Y | Y | Missing | in-scope | — | none | No polarity model | SEL-3 |
-| P-SEL-19 | Selection channels and alpha channels | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Combine, layer-mask target, and channel names ship; polarity and depth remain | SEL-7 |
+| P-SEL-17 | Calculations | Y | Y | Y | Complete | in-scope | crates/pictura-render/src/calculations.rs | none | Add, Subtract, Multiply, Darken, and Lighten with channel and mask sources | — |
+| P-SEL-18 | Channel Options (Masked and Selected Areas) | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/frame_selection_dialogs.cpp | none | Masked and Selected Areas polarity, persisted as DisplayInfo 1077 | — |
+| P-SEL-19 | Selection channels and alpha channels | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Combine, layer-mask target, channel names, and polarity ship; 16/32-bit depth remains | #1331 |
 | P-SEL-20 | Anti-aliased selection rasterisation | Y | Y | Y | Complete | in-scope | crates/pictura-select/src | none | Control-server selection ops remain binary | #614 |
 | P-SEL-21 | Selection combine operations | Y | Y | Y | Complete | in-scope | crates/pictura-select/src | none | — | #615 |
 | P-SEL-22 | Cross-image channel duplication and outline drag | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | #1332 |
@@ -314,11 +314,11 @@ Source list: the Image > Adjustments list (23 rows; 25 commands when Auto Tone/C
 | P-FLT-15 | Filter Gallery | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Canvas and Shear previews over an existing Smart Filter chain remain | FILT-11 |
 | P-FLT-16 | Liquify | Y | Y | Y | Complete | in-scope | crates/pictura-filters/src | none | — | — |
 | P-FLT-17 | Oil Paint | Y | Y | Y | Complete | in-scope | crates/pictura-filters/src | none | — | — |
-| P-FLT-18 | Adaptive Wide Angle | Y | Y | Y | Partial | in-scope | crates/pictura-filters/src | none | Auto, lens profiles, Panorama, Smart Filter re-edit, and rotation handles remain | FILT-7 |
-| P-FLT-19 | Lens Correction | Y | Y | Y | Partial | in-scope | crates/pictura-filters/src | none | Save/Load Settings, Set Lens Default, and Alt-drag fringe isolation remain | FILT-9 |
+| P-FLT-18 | Adaptive Wide Angle | Y | Y | Y | Partial | in-scope | crates/pictura-filters/src | none | Auto, lens profiles, Panorama, Smart Filter re-edit, and rotation handles remain | #891 |
+| P-FLT-19 | Lens Correction | Y | Y | Y | Partial | in-scope | crates/pictura-filters/src | none | Save/Load Settings, Set Lens Default, and Alt-drag fringe isolation remain | #933 |
 | P-FLT-20 | Vanishing Point | Y | Y | Y | Complete | in-scope | crates/pictura-filters/src | none | — | #349 |
 | P-FLT-21 | Camera Raw Filter | N/A | N/A | Y | Partial | in-scope | crates/pictura-app/cpp/pictura_raw_dialog.cpp | none | post-CS6:src:1; src:4; Pictura Raw is an independent approximation; Presets is a stub | #633 |
-| P-FLT-22 | Lighting Effects | Y | Y | Y | Unknown | in-scope | crates/pictura-filters/src/render/lighting.rs | none | conflict:11; src:3; Adobe help still lists the filter while the 3D-removal reporting says it was removed | follow-up:resolve Lighting Effects presence in the CC baseline |
+| P-FLT-22 | Lighting Effects | Y | Y | Y | Complete | in-scope | crates/pictura-filters/src/render/lighting.rs | none | Present in the CC 28 filter reference (src:11); the 3D-removal reporting (src:3) covers 3D, not this 2D Render filter | — |
 | P-FLT-23 | Extract and Pattern Maker | Y | Y | Y | Missing | non-goal | — | none | Optional CS6 plug-ins; not a parity target | non-goal:ROADMAP.md:705 |
 | P-FLT-24 | Digimarc watermark | Y | Y | Y | Complete | in-scope | crates/pictura-filters/src | none | Approximate spread-spectrum carrier; not Digimarc-compatible | #350 |
 | P-FLT-25 | Fade | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | #491 |
@@ -334,10 +334,10 @@ Source list: the Image > Adjustments list (23 rows; 25 commands when Auto Tone/C
 | P-FLT-35 | Generate Image and Prompt to Edit | N/A | N/A | Y | Missing | non-goal | — | none | post-CS6:src:4; Adobe cloud/AI service | non-goal:feasibility:76 |
 | P-FLT-36 | Neural Filters and Sky Replacement | N/A | N/A | Y | Missing | non-goal | — | none | post-CS6:src:4; Adobe cloud/AI service | non-goal:feasibility:76 |
 | P-FLT-37 | Generative Upscale, Relight, and Generative Restyle | N/A | N/A | Y | Missing | non-goal | — | none | post-CS6:src:4; Adobe cloud/AI service | non-goal:feasibility:76 |
-| P-FLT-38 | Quick Compare | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:4; no local equivalent | follow-up:Quick Compare is not implemented |
+| P-FLT-38 | Quick Compare | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:4; no local equivalent | #1515 |
 | P-FLT-39 | Enhance Edge and AI Assisted Editor | N/A | N/A | Y | Missing | non-goal | — | none | post-CS6:src:4; Adobe cloud/AI service | non-goal:feasibility:76 |
-| P-FLT-40 | Clarity and Dehaze adjustment layer | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:4 | follow-up:Clarity/Dehaze is not implemented |
-| P-FLT-41 | Light adjustment layer | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:4 | follow-up:Light adjustment layer is not implemented |
+| P-FLT-40 | Clarity and Dehaze adjustment layer | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:4 | #1516 |
+| P-FLT-41 | Light adjustment layer | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:4 | #1517 |
 
 ### Type & vector
 
@@ -358,9 +358,9 @@ Source list: Type menu and Character/Paragraph capabilities plus type on path, w
 | P-TYP-11 | Type colour picker | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TYP-12 | RTL paragraph direction and justification | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | #518 |
 | P-TYP-13 | Faux bold, italic, underline, fractional widths, and tsume | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels | none | — | #517 |
-| P-TYP-14 | Variable fonts | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:4 | follow-up:Variable-font axes are not implemented |
-| P-TYP-15 | OpenType feature UI | Y | Y | Y | Unknown | in-scope | crates/pictura-app/cpp/panels | none | The corpus does not reconcile the feature set against the code | follow-up:Audit the OpenType panel against the type engine |
-| P-TYP-16 | Dynamic text on shapes and paths | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:4 | follow-up:Dynamic text is not implemented |
+| P-TYP-14 | Variable fonts | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:4 | #1518 |
+| P-TYP-15 | OpenType feature UI | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels/character_panel.cpp; crates/pictura-app/cpp/menu_type.cpp; crates/pictura-render/src/type_style.rs | none | The Character panel and the Type menu expose the same ten features the engine shapes; the panel greys per-font support while the Type menu rows gate on the target only | — |
+| P-TYP-16 | Dynamic text on shapes and paths | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:4 | #1519 |
 | P-TYP-17 | Type masks | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
 | P-TYP-18 | Font family picker | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TYP-19 | Type rasterisation | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
@@ -438,7 +438,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 |---|---|---|---|---|---|---|---|---|---|---|
 | P-PAN-01 | Layers panel | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels/layers_panel.cpp | none | — | — |
 | P-PAN-02 | History panel | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/panels | none | History Options, Clear History, purge, and New Document from state remain | #514 |
-| P-PAN-03 | Channels panel | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/panels | none | Spot channels, Split/Merge, Channel Options, and Panel Options remain | #513 |
+| P-PAN-03 | Channels panel | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/panels | none | Spot channels, Split/Merge, and Panel Options remain | #513 |
 | P-PAN-04 | Paths panel | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/panels | none | Make Work Path, clipping-path designation, and thumbnail size remain | #521 |
 | P-PAN-05 | Colour panel | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels | none | — | — |
 | P-PAN-06 | Swatches panel | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/panels | none | Swatch libraries, rename, and display modes remain | #605 |
@@ -447,7 +447,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 | P-PAN-09 | Navigator panel | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/panels | none | Proxy colour, Ctrl-drag positioning, zoom buttons, and typed zoom remain | #520 |
 | P-PAN-10 | Notes panel | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/panels | none | Author/colour options and annotation round-trip remain | #522 |
 | P-PAN-11 | Properties panel | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels | none | — | — |
-| P-PAN-12 | Adjustments panel | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/panels | none | Mode/depth gating, fill-layer presets, and icon artwork remain | #509 |
+| P-PAN-12 | Adjustments panel | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/panels | none | Mode/depth gating, fill-layer presets (#1521), and icon artwork remain | #1521 |
 | P-PAN-13 | Brush panel | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels | none | — | — |
 | P-PAN-14 | Clone Source panel | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/panels | none | Overlay controls remain | #537 |
 | P-PAN-15 | Character panel | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels | none | — | #517 |
@@ -477,14 +477,14 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 | P-PREF-11 | 3D preferences | N/A | Y | N/A | Missing | non-goal | — | none | edition:Extended-only; retired:src:3 | non-goal:feasibility:72 |
 | P-SHELL-01 | Application frame | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/frame.cpp | none | — | — |
 | P-SHELL-02 | Menu customization and enablement matrix | Y | Y | Y | Missing | in-scope | — | none | Edit > Menus, Show All Menu Items, and the enablement matrix remain | UI-5 |
-| P-SHELL-03 | Type menu | Y | Y | Y | Missing | in-scope | — | none | Work Path, Convert to Shape, and Spellcheck remain | UI-6 |
-| P-SHELL-04 | View menu stubs | Y | Y | Y | Missing | in-scope | — | none | Proof Setup, Gamut Warning, Snap To, Lock Slices, Extras, Pixel Aspect Ratio, and 32-bit Preview remain | UI-7 |
-| P-SHELL-05 | File menu stubs | Y | Y | Y | Missing | in-scope | — | none | Open As, Import, Export, Automate, Scripts, and Browse in Bridge remain | UI-8 |
+| P-SHELL-03 | Type menu | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/menu_type.cpp | none | Work path, convert to shape, find/replace, and the option rows ship; Google Fonts (#1442) and Check Spelling (#1443) stay open | #502 |
+| P-SHELL-04 | View menu stubs | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/frame_view.cpp | none | Show/Extras, grid, pixel grid, layer edges, target path, lock/clear slices, 200%, and print size ship; Gamut Warning, Pixel Aspect Ratio, Snap To (#305), and 32-bit Preview (#570) remain | #503 |
+| P-SHELL-05 | File menu stubs | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/frame_commands.cpp | none | Open As, File > Browse, and Statistics ship; the remaining Automate and Scripts leaves stay with #558, #617, #619, #620, and #630 | #504 |
 | P-SHELL-06 | Status bar readouts and options | Y | Y | Y | Missing | in-scope | — | none | Status bar readouts and options popup remain | UI-1 |
 | P-SHELL-07 | Active layer name in the title bar | Y | Y | Y | Missing | in-scope | — | none | Not shown | UI-2 |
 | P-SHELL-08 | Window Arrange: Float, Tile, Cascade, Match, New Window | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | #500 |
 | P-SHELL-09 | Document tabs and tear-out/floating windows | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | #317 |
-| P-SHELL-10 | Open-document list in the Window menu | Y | Y | Y | Missing | in-scope | — | none | Not implemented | #923 |
+| P-SHELL-10 | Open-document list in the Window menu | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/menu_window_arrange.cpp | none | The open-document list at the bottom of the Window menu | #923 |
 | P-SHELL-11 | Workspaces | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | Essentials, Painting, Photography, and Typography | — |
 | P-SHELL-12 | Keyboard shortcuts editor | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Shortcut sets, save/load, workspace assignment, Summarize HTML, and legacy channel shortcuts remain | UI-12 |
 | P-SHELL-13 | Accessibility | Y | Y | Y | Missing | in-scope | — | none | AT-SPI2, QAccessible, high contrast, colour-blind, and reduced-motion support remain | UI-11 |
@@ -506,8 +506,8 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 | Kind | Row | Source |
 |---|---|---|
 | complete workflow | P-FMT-01 | src:1 |
-| partial implementation | P-AUT-03 | AUTO-3 |
-| unknown assessment | P-FLT-22 | conflict:11 |
+| partial implementation | P-FMT-10 | WF-2 |
+| unknown assessment | P-LAY-25 | #813 |
 | intentional non-goal | P-PAN-25 | non-goal:feasibility:73 |
 | CC-only capability | P-LAY-39 | src:4 |
 | retired capability | P-LAY-40 | src:3 |
@@ -517,14 +517,14 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 - **Cross-cutting depth (SYS-2, #490):** bit-depth and colour-mode availability gating is unenforced across filters and adjustments; P-IMG rows and P-FLT rows carry the individual ceilings.
 - **Painting depth (SYS-4, #492; SYS-5, #493):** brush Texture and Dual Brush, sampled/erodible tips, and Define Brush Preset remain; P-TOOL-75 and P-TOOL-76.
 - **Automation (AUTO-4, #619; AUTO-5, #620):** Image Processor, most Automate commands, droplets, and the scripting host remain; P-AUT-04 through P-AUT-13.
-- **CC-only generative and cloud (non-goal:feasibility:76):** Generative Fill/Expand, Generate Image, Neural Filters, Relight, Libraries, Cloud Documents, and UXP remain outside the local product; P-FLT-34 through P-FLT-39 and P-AUT-19 through P-AUT-22.
+- **CC-only generative and cloud (non-goal:feasibility:76):** Generative Fill/Expand, Generate Image, Neural Filters, Relight, Libraries, Cloud Documents, and UXP remain outside the local product; P-FLT-34 through P-FLT-37, P-FLT-39, and P-AUT-19 through P-AUT-22.
 - **Extended-only (non-goal:feasibility:72):** 3D layers, the 3D panel, 3D file import, and the ten 3D tools are missing; P-LAY-40, P-PAN-26, and the P-TOOL 3D rows.
 
 ## Baseline history
 
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
 |---|---|---|---|---|---|
-| 2026-11-21 | 7ab28fc5 | 192/349 (55.0%) | 193/366 (52.7%) | 28.0 | 194/374 (51.9%) |
+| 2026-11-21 | 39ea0380 | 204/349 (58.5%) | 205/366 (56.0%) | 28.0 | 206/374 (55.1%) |
 | 2026-11-20 | 89c8ba95 | 191/349 (54.7%) | 192/366 (52.5%) | 28.0 | 193/374 (51.6%) |
 
 ## Update procedure
