@@ -165,6 +165,7 @@ start_check test-plan test_plan_check
 start_check parity parity_check
 start_check source-fragments source_fragments_check
 start_check cpu-budget python3 scripts/cpu-budget.py --self-check
+start_check agent-cpu-budget python3 scripts/check-agent-cpu-budget.py --self-check
 start_check heavy-policy python3 scripts/heavy_command_policy.py --self-check
 start_check agent-guard python3 scripts/check-agent-command-guard.py
 start_check openspec openspec_check

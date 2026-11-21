@@ -729,6 +729,11 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [ ] Per-tile filter cancellation (#945)
 - [ ] Global bit-depth and colour-mode availability gating (#490)
 
+## Development workflow
+
+- [x] **Opt-in shared agent CPU quota** across worktrees and coding harnesses,
+  with a stable per-user verification lock (#1490).
+
 ## Specification corpus
 
 - [ ] The missing `01-architecture/build-and-packaging.md` spec, and the

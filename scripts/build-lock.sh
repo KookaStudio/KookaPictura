@@ -72,8 +72,20 @@ build_lock_timeout() {
 }
 
 build_lock_dir_path() {
-    printf '%s/kooka-pictura-build-%s.lock' \
-        "${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}" "$(id -u)"
+    local uid root
+    uid=$(id -u) || return 1
+    root=${PICTURA_VERIFY_LOCK_ROOT:-}
+    if [ -z "$root" ]; then
+        root="/run/user/$uid"
+        if [ ! -d "$root" ] || [ ! -O "$root" ] || [ -L "$root" ]; then
+            root=/tmp
+        fi
+    fi
+    case "$root" in
+        /*) ;;
+        *) printf 'build-lock: PICTURA_VERIFY_LOCK_ROOT must be absolute\n' >&2; return 1 ;;
+    esac
+    printf '%s/kooka-pictura-build-%s.lock' "$root" "$uid"
 }
 
 build_lock_branch() {
@@ -144,7 +156,7 @@ build_lock_acquire() {
         return 0
     fi
 
-    dir=$(build_lock_dir_path)
+    dir=$(build_lock_dir_path) || return 1
     timeout=$(build_lock_timeout) || return 1
     self_pid=${BASHPID:-$$}
     owner_text=$(_build_lock_owner_text "$self_pid")

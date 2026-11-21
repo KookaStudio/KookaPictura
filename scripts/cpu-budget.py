@@ -8,7 +8,7 @@ Usage:
 The budget is max(1, floor(allowed_cpus * percent / 100)); percent defaults to
 80 and is overridden with PICTURA_CPU_BUDGET_PERCENT (1-100). On a platform
 with process-affinity control the helper restricts the process to the lowest
-budget CPUs before exec and narrows a running sccache server it can address;
+budget CPUs before exec and in legacy runs narrows an addressable sccache server;
 everywhere it exports PICTURA_JOBS and the per-tool job variables.
 """
 from __future__ import annotations
@@ -18,7 +18,13 @@ import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 from typing import Iterable, Sequence
+
+# These helpers run from linked worktrees without generating local cache files.
+sys.dont_write_bytecode = True
+
+from agent_cpu_budget import agent_slice
 
 DEFAULT_PERCENT = 80
 JOB_VARIABLES = (
@@ -110,11 +116,13 @@ def sccache_server_pids() -> list[int]:
         if not entry.isdigit():
             continue
         try:
-            raw = open(f"/proc/{entry}/cmdline", "rb").read()
+            process = Path("/proc") / entry
+            raw = (process / "cmdline").read_bytes()
         except OSError:
             continue
         parts = [part.decode("utf-8", "replace") for part in raw.split(b"\0") if part]
-        if parts and os.path.basename(parts[0]) == "sccache" and "--server" in parts[1:]:
+        if (parts and os.path.basename(parts[0]) == "sccache"
+                and "--server" in parts[1:] and agent_slice(process / "cgroup") is None):
             pids.append(int(entry))
     return pids
 
@@ -144,11 +152,10 @@ def exec_command(argv: Sequence[str]) -> int:
         inherited = os.environ.get("PICTURA_JOBS")
         if inherited and inherited.isdigit() and int(inherited) > 0:
             budget = int(inherited)
-    else:
-        if apply_slice(budget):
-            mask = current_mask()
-            if mask is not None:
-                narrow_processes(sccache_server_pids(), mask)
+    elif apply_slice(budget) and agent_slice() is None:
+        mask = current_mask()
+        if mask is not None:
+            narrow_processes(sccache_server_pids(), mask)
     export_jobs(budget)
     try:
         os.execvp(argv[0], list(argv))
@@ -257,7 +264,7 @@ def self_check() -> int:
         assert inherited["affinity"] == parent_mask, inherited
 
     def check_sccache_narrowing(mask: list[int] | None) -> None:
-        if mask is None or not os.path.isdir("/proc"):
+        if mask is None or not os.path.isdir("/proc") or agent_slice() is not None:
             return
         target = [mask[0]]
         stub = subprocess.Popen(
