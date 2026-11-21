@@ -184,6 +184,63 @@ pub(super) fn decode_huffman(
     Ok(plane)
 }
 
+/// Unpacks `width × height` 12-bit samples stored as 16-byte groups: ten
+/// samples packed most-significant bit first, then a pad byte. Each row is
+/// whole groups; `data` holds exactly the rows.
+pub(super) fn unpack_padded(data: &[u8], width: usize, height: usize) -> Vec<u16> {
+    let row_bytes = width.div_ceil(10) * 16;
+    let mut plane = Vec::with_capacity(width * height);
+    for src in data.chunks_exact(row_bytes).take(height) {
+        let row = src.as_chunks::<16>().0.iter().flat_map(|group| {
+            group[..15]
+                .as_chunks::<3>()
+                .0
+                .iter()
+                .flat_map(|&[b0, b1, b2]| {
+                    let (b0, b1, b2) = (b0 as u16, b1 as u16, b2 as u16);
+                    [(b0 << 4) | (b1 >> 4), ((b1 & 15) << 8) | b2]
+                })
+        });
+        plane.extend(row.take(width));
+    }
+    plane
+}
+
+/// Unpacks `width × height` samples of `bits` bits packed most-significant bit
+/// first through little-endian 32-bit words, each row starting on a word.
+pub(super) fn unpack_msb_le_words(
+    data: &[u8],
+    bits: u32,
+    width: usize,
+    height: usize,
+) -> Result<Vec<u16>, PsdError> {
+    let row_bytes = (width * bits as usize).div_ceil(8);
+    if !row_bytes.is_multiple_of(4) {
+        return Err(PsdError::Unsupported(
+            "NEF packed rows that end inside a word".into(),
+        ));
+    }
+    if data.len() < row_bytes * height {
+        return Err(PsdError::Truncated);
+    }
+    let mask = (1u64 << bits) - 1;
+    let mut plane = Vec::with_capacity(width * height);
+    for src in data.chunks_exact(row_bytes).take(height) {
+        let mut words = src.as_chunks::<4>().0.iter();
+        let (mut acc, mut have) = (0u64, 0u32);
+        for _ in 0..width {
+            while have < bits {
+                let word = words.next().map_or(0, |&w| u32::from_le_bytes(w));
+                acc = (acc << 32) | word as u64;
+                have += 32;
+            }
+            have -= bits;
+            plane.push(((acc >> have) & mask) as u16);
+        }
+    }
+    Ok(plane)
+}
+
 /// Unpacks `width × height` samples of `bits` bits packed least-significant
 /// bit first, each row starting on a byte.
 pub(super) fn unpack_lsb(
