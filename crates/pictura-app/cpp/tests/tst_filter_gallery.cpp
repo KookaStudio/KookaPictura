@@ -106,6 +106,7 @@ private slots:
     void initTestCase();
     void init();
     void categoriesFollowCs6();
+    void stylizeFiltersFollowCs6();
     void menuEntryIsEnabled();
     void stackPreviewsInThePaneOnly();
     void largePicturePreviewsReduced();
@@ -159,9 +160,29 @@ void FilterGalleryTest::categoriesFollowCs6()
     QCOMPARE(categories.at(2).second.first()->kind, QStringLiteral("diffuse-glow"));
     QCOMPARE(categories.at(2).second.at(1)->kind, QStringLiteral("glass"));
     QCOMPARE(categories.at(3).second.size(), 14);
-    QCOMPARE(categories.at(4).second.size(), 1);
-    QCOMPARE(categories.at(4).second.first()->kind, QStringLiteral("glowing-edges"));
+    QCOMPARE(categories.at(4).second.size(), 9);
+    QCOMPARE(categories.at(4).second.first()->kind, QStringLiteral("diffuse"));
     QCOMPARE(categories.at(5).second.size(), 6);
+}
+
+void FilterGalleryTest::stylizeFiltersFollowCs6()
+{
+    const auto categories = pictura::FilterGalleryDialog::categories();
+    const auto stylize =
+        std::find_if(categories.begin(), categories.end(),
+                     [](const pictura::FilterGalleryDialog::Category& category) {
+                         return category.first == QStringLiteral("Stylize");
+                     });
+    QVERIFY(stylize != categories.end());
+    QStringList kinds;
+    for (const pictura::FilterCommandSpec* spec : stylize->second) {
+        kinds.append(spec->kind);
+    }
+    QCOMPARE(kinds, (QStringList{QStringLiteral("diffuse"), QStringLiteral("emboss"),
+                                 QStringLiteral("extrude"), QStringLiteral("find-edges"),
+                                 QStringLiteral("glowing-edges"), QStringLiteral("solarize"),
+                                 QStringLiteral("tiles"), QStringLiteral("trace-contour"),
+                                 QStringLiteral("wind")}));
 }
 
 void FilterGalleryTest::menuEntryIsEnabled()
@@ -334,7 +355,11 @@ void FilterGalleryTest::thumbnailsRender()
     QVERIFY(apply_filter_params(*view, QStringLiteral("clouds"), {}));
     const QImage sample = pictura::FilterGalleryDialog::thumbnailSample(view->image());
     pictura::FilterGalleryDialog dialog(view);
-    for (const QString& kind : {QStringLiteral("cutout"), QStringLiteral("glowing-edges")}) {
+    for (const QString& kind :
+         {QStringLiteral("cutout"), QStringLiteral("diffuse"), QStringLiteral("emboss"),
+          QStringLiteral("extrude"), QStringLiteral("find-edges"),
+          QStringLiteral("glowing-edges"), QStringLiteral("solarize"), QStringLiteral("tiles"),
+          QStringLiteral("trace-contour"), QStringLiteral("wind")}) {
         auto* thumb = dialog.findChild<QToolButton*>(QStringLiteral("galleryThumb:") + kind);
         QVERIFY(thumb != nullptr);
         QTRY_VERIFY_WITH_TIMEOUT(!thumb->icon().isNull(), 3000);
