@@ -19,7 +19,7 @@ void PicturaMainWindow::openUserPaths(const QStringList& paths)
     // Start every chosen path; a failure on one must not skip the rest.
     for (const QString& path : paths) {
         if (importSave_) {
-            importSave_->startUserOpen(path);
+            importSave_->startUserOpen(path, true);
         }
     }
 }

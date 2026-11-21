@@ -112,6 +112,16 @@ fn parent_directory(path: &Path) -> &Path {
         .unwrap_or_else(|| Path::new("."))
 }
 
+struct RemoveTempOnDrop<'a>(Option<&'a str>);
+
+impl Drop for RemoveTempOnDrop<'_> {
+    fn drop(&mut self) {
+        if let Some(path) = self.0.take() {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
 /// [`write_atomically`] for a writer that streams into the temp file through
 /// `write` (#1320): a failure there, or in the flush, sync or rename, removes
 /// the temp file and leaves `path` as it was.
@@ -131,6 +141,7 @@ pub(in crate::cxxqt_object) fn write_atomically_with(
         .write(true)
         .create_new(true)
         .open(&tmp)?;
+    let mut cleanup = RemoveTempOnDrop(Some(&tmp));
     let mut out = std::io::BufWriter::new(file);
     let written = write(&mut out)
         .and_then(|()| out.into_inner().map_err(|e| e.into_error()))
@@ -140,13 +151,10 @@ pub(in crate::cxxqt_object) fn write_atomically_with(
             }
             Ok(())
         });
-    if let Err(error) = written.and_then(|()| {
-        reject_protected_destination(path)?;
-        rename(&tmp, path, sync)
-    }) {
-        let _ = std::fs::remove_file(&tmp);
-        return Err(error);
-    }
+    written?;
+    reject_protected_destination(path)?;
+    rename(&tmp, path, sync)?;
+    cleanup.0 = None;
     Ok(())
 }
 

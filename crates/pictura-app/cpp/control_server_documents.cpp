@@ -88,10 +88,11 @@ QJsonObject ControlServer::methodDocument(const QJsonObject& params)
         if (const QString problem = pathProblem(path, false); !problem.isEmpty()) {
             return error(QStringLiteral("invalid_param"), problem);
         }
+        bool memoryRefused = false;
         const PicturaMainWindow::OpenOutcome outcome =
-            frame_->openDocumentAtPathOutcome(path, false);
+            frame_->openDocumentAtPathOutcome(path, false, &memoryRefused);
         applied = outcome == PicturaMainWindow::OpenOutcome::Opened;
-        if (!applied && open_refused_for_memory()) {
+        if (outcome == PicturaMainWindow::OpenOutcome::Failed && memoryRefused) {
             return error(QStringLiteral("refused"), QStringLiteral("not enough memory"));
         }
         if (!applied) {

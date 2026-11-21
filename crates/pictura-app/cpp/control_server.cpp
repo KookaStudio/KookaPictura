@@ -100,8 +100,8 @@ ControlServer::ControlServer(PicturaMainWindow* frame, const QString& socketPath
     , socketPath_(socketPath.isEmpty() ? defaultSocketPath() : socketPath)
 {
     connect(frame_, &PicturaMainWindow::documentOpenFinished, this,
-            [this](quint64 token, int outcome, const QString&) {
-                onOpenFinished(token, outcome);
+            [this](quint64 token, int outcome, const QString&, quint32, bool memoryRefused) {
+                onOpenFinished(token, outcome, memoryRefused);
             });
 }
 

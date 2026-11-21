@@ -3,11 +3,14 @@
 #include "adjustment_presets.h"
 
 #include <QtCore/QDebug>
+#include <QtWidgets/QMainWindow>
+#include <QtWidgets/QStatusBar>
 
 #include "api/document_api.h"
 #include "api/document_bridge.h"
 #include "busy_job.h"
 #include "dialogs.h"
+#include "document_window.h"
 #include "image_view.h"
 #include "tools.h"
 
@@ -547,16 +550,32 @@ void AdjustmentDialog::accept()
 {
     // The commit re-applies to the whole layer from the pre-preview pixels.
     cancelPreview();
+    if (view_ && runBusyJob(this, title_,
+                           tr("Applying %1…").arg(title_),
+                           [this] { return image_adjust_apply_start(*view_, slice(block_), title_); },
+                           [this] { return filter_commit_running(*view_); },
+                           [this] { return filter_commit_finish(*view_); })) {
+        previewing_ = false;
+        QDialog::accept();
+        return;
+    }
     if (view_) {
-        if (runBusyJob(this, title_,
-                       QApplication::translate("AdjustmentDialog", "Applying %1…").arg(title_),
-                       [this] { return image_adjust_apply_start(*view_, slice(block_), title_); },
-                       [this] { return filter_commit_running(*view_); },
-                       [this] { return filter_commit_finish(*view_); })) {
-            previewing_ = false;
+        const auto status = OperationStatus(filter_commit_status(*view_));
+        if (status != OperationStatus::Cancelled) {
+            const QString reason = filter_last_error(*view_);
+            const QString message = status == OperationStatus::Panic
+                ? tr("Could not apply %1. The operation stopped unexpectedly.").arg(title_)
+                : reason.isEmpty()
+                    ? tr("Could not apply %1.").arg(title_)
+                    : tr("Could not apply %1: %2").arg(title_, reason);
+            if (auto* parent = parentWidget()) {
+                if (auto* window = qobject_cast<QMainWindow*>(parent->window())) {
+                    window->statusBar()->showMessage(message, 6000);
+                }
+            }
         }
     }
-    QDialog::accept();
+    QDialog::reject();
 }
 
 void AdjustmentDialog::reject()

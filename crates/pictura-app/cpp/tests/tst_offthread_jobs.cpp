@@ -3,6 +3,7 @@
 // synchronous path would produce.
 
 #include <QtTest/QtTest>
+#include <QtCore/QDir>
 
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QEventLoop>
@@ -16,6 +17,7 @@
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QProgressBar>
+#include <QtWidgets/QPushButton>
 #include <QtWidgets/QStatusBar>
 #include <QtWidgets/QTabBar>
 
@@ -24,6 +26,7 @@
 #include <vector>
 
 #include "api/document_api.h"
+#include "adjustment_dialog.h"
 #include "command_ids.h"
 #include "commands.h"
 #include "dialogs.h"
@@ -36,6 +39,7 @@
 #include "image_view.h"
 #include "api/document_bridge.h"
 #include "api/layers_bridge.h"
+#include "api/paint_bridge.h"
 #include "api/filters_bridge.h"
 
 #include "qt_test_support.h"
@@ -158,6 +162,7 @@ private slots:
     void backgroundSaveUpdatesTheSavedHistoryState();
     void backgroundSaveRejectsConflictingWrites();
     void backgroundSaveReportsUnconfirmedPublication();
+    void failedBackgroundSaveIgnoresUnrelatedMemoryRefusal();
     void closeRechecksAfterBackgroundSave();
     void destructiveActionsResolveBackgroundSave();
     void uncertainPublicationProtectsCleanState();
@@ -165,6 +170,10 @@ private slots:
     void backgroundSaveRecordingKeepsDispatchOrder();
     void aCompletedSaveWritesAndClearsModified();
     void aFailedSaveLeavesTheDocumentUntouched();
+    void nativeSaveDistinguishesCodecAndIoErrors();
+    void nativeSavePanicBeforeRenameCleansUp();
+    void nativeSavePanicAfterRenameProtectsDocument();
+    void nativeSaveCopyPanicAfterRename();
     void anEditDuringSaveLeavesTheDocumentModified();
     void largeWholeLayerPreviewKeepsTheEventLoopLive();
     void largeWholeLayerPreviewCancelLeavesTheDocument();
@@ -175,6 +184,9 @@ private slots:
     void adjustmentApplyKeepsTheEventLoopLive();
     void maskAdjustmentPreviewStaysSynchronous();
     void maskAdjustmentApplyStaysOnTheMask();
+    void filterAndAdjustmentPanicsPreserveUndo();
+    void lockedLayerReportsFilterRefusal();
+    void adjustmentDialogOkReportsPanic();
 
 private:
     pictura::PictureView* newDoc(int width, int height);
@@ -309,7 +321,8 @@ void invert(PicturaMainWindow& window)
     command(window, "image.adjustments.invert");
 }
 
-void chooseSaveAs(PicturaMainWindow& window, const QString& path)
+void chooseSaveAs(PicturaMainWindow& window, const QString& path,
+                  const char* id = pictura::command_ids::FileSaveAs)
 {
     pictura::setSaveFileNameProviderForTest(
         [&path](QWidget*, const QString&, const QString&, const QStringList&, QString* filter) {
@@ -323,7 +336,7 @@ void chooseSaveAs(PicturaMainWindow& window, const QString& path)
             return path;
         });
     window.setProfileDialogForTest([](bool, bool&) { return true; });
-    command(window, pictura::command_ids::FileSaveAs);
+    command(window, id);
     window.setProfileDialogForTest({});
     pictura::setSaveFileNameProviderForTest({});
 }
@@ -480,6 +493,28 @@ void OffthreadJobsTest::backgroundSaveRejectsConflictingWrites()
     QVERIFY(window_->documentPath(1).isEmpty());
     QVERIFY(window_->statusBar()->currentMessage().contains(QStringLiteral("progress"), Qt::CaseInsensitive));
     QTRY_COMPARE(window_->documentPath(0), path);
+}
+
+void OffthreadJobsTest::failedBackgroundSaveIgnoresUnrelatedMemoryRefusal()
+{
+    auto* view = newDoc(32, 32);
+    QVERIFY(view);
+    const auto path = dir_.filePath(QStringLiteral("unrelated-refusal.psd"));
+    QVERIFY(window_->saveActiveAs(path));
+    invert(*window_);
+    pictura::save_set_fault_for_test(*view, 3);
+    command(*window_, pictura::command_ids::FileSave);
+    pictura::set_available_memory_for_test(0);
+    view->select_all();
+    const bool filled = pictura::edit_fill(*view, QColor(Qt::red).rgba(), -1,
+                                           QStringLiteral("normal"), 100, false);
+    const bool refused = pictura::edit_refused_for_memory();
+    pictura::set_available_memory_for_test(-1);
+    QVERIFY(!filled);
+    QVERIFY(refused);
+    QTRY_VERIFY_WITH_TIMEOUT(window_->statusBar()->currentMessage().contains(
+                                 QStringLiteral("stopped unexpectedly")), 5000);
+    QVERIFY(!window_->statusBar()->currentMessage().contains(QStringLiteral("not enough memory")));
 }
 
 void OffthreadJobsTest::backgroundSaveReportsUnconfirmedPublication()
@@ -877,6 +912,183 @@ void OffthreadJobsTest::maskAdjustmentPreviewStaysSynchronous()
     QVERIFY(pictura::image_adjust_preview(*view, slice(block), 0, 0, 128, 128));
     pictura::image_adjust_preview_cancel(*view);
     QCOMPARE(pictura::document_api::isDirty(*view), dirty);
+}
+
+void OffthreadJobsTest::nativeSaveDistinguishesCodecAndIoErrors()
+{
+    auto* view = newDoc(32, 32);
+    QVERIFY(view);
+    const auto path = dir_.filePath(QStringLiteral("typed-save.psd"));
+    QVERIFY(window_->saveActiveAs(path));
+    const auto before = fileBytes(path);
+    invert(*window_);
+    for (int fault : {1, 2}) {
+        pictura::save_set_fault_for_test(*view, fault);
+        QVERIFY(!window_->saveActiveAs(path));
+        QCOMPARE(pictura::save_last_result(*view).code, fault == 1 ? 100u : 101u);
+        QCOMPARE(pictura::save_last_result(*view).publication, 0);
+        QCOMPARE(fileBytes(path), before);
+    }
+}
+
+void OffthreadJobsTest::nativeSavePanicBeforeRenameCleansUp()
+{
+    auto* view = newDoc(32, 32);
+    QVERIFY(view);
+    const auto source = dir_.filePath(QStringLiteral("source.psd"));
+    const auto destination = dir_.filePath(QStringLiteral("destination.psd"));
+    QVERIFY(window_->saveActiveAs(destination));
+    QVERIFY(window_->saveActiveAs(source));
+    const auto before = fileBytes(destination);
+    invert(*window_);
+    const int recovery = pictura::recovery_status(*view);
+    const auto temps = QDir(dir_.path()).entryList({QStringLiteral("*.tmp")}, QDir::Files);
+    pictura::save_set_fault_for_test(*view, 3);
+    QVERIFY(!window_->saveActiveAs(destination));
+    QCOMPARE(pictura::save_last_result(*view).code, 6u);
+    QCOMPARE(pictura::save_last_result(*view).publication, 0);
+    QCOMPARE(fileBytes(destination), before);
+    QCOMPARE(window_->documentPath(0), source);
+    QVERIFY(window_->isDocumentDirty(0));
+    QCOMPARE(pictura::recovery_status(*view), recovery);
+    QCOMPARE(QDir(dir_.path()).entryList({QStringLiteral("*.tmp")}, QDir::Files), temps);
+}
+
+void OffthreadJobsTest::nativeSavePanicAfterRenameProtectsDocument()
+{
+    auto* view = newDoc(32, 32);
+    QVERIFY(view);
+    const auto path = dir_.filePath(QStringLiteral("uncertain-save.psd"));
+    QVERIFY(window_->saveActiveAs(path));
+    invert(*window_);
+    pictura::save_set_fault_for_test(*view, 4);
+    QVERIFY(!window_->saveActiveAs(path));
+    QCOMPARE(pictura::save_last_result(*view).code, 6u);
+    QCOMPARE(pictura::save_last_result(*view).publication, 2);
+    QCOMPARE(window_->documentPath(0), path);
+    QVERIFY(window_->isDocumentDirty(0));
+    pictura::PictureView reopened;
+    QVERIFY(pictura::document_api::open(reopened, path));
+    QCOMPARE(reopened.composite_argb(0, 0), view->composite_argb(0, 0));
+    const auto cancel = pictura::UnsavedChoice::Cancel;
+    pictura::setRequestUnsavedChoice(&cancel);
+    const bool closed = window_->closeDocument(0, true);
+    pictura::setRequestUnsavedChoice(nullptr);
+    QVERIFY(!closed);
+    QVERIFY(window_->saveActiveAs(path));
+    QVERIFY(!window_->isDocumentDirty(0));
+}
+
+void OffthreadJobsTest::nativeSaveCopyPanicAfterRename()
+{
+    auto* view = newDoc(32, 32);
+    QVERIFY(view);
+    const auto source = dir_.filePath(QStringLiteral("copy-source.psd"));
+    const auto copy = dir_.filePath(QStringLiteral("uncertain-copy.psd"));
+    QVERIFY(window_->saveActiveAs(source));
+    invert(*window_);
+    const int history = view->history_count();
+    const int recovery = pictura::recovery_status(*view);
+    const auto before = fileBytes(source);
+    pictura::save_set_fault_for_test(*view, 4);
+    chooseSaveAs(*window_, copy, pictura::command_ids::FileSaveCopy);
+    QCOMPARE(pictura::save_last_result(*view).code, 6u);
+    QCOMPARE(pictura::save_last_result(*view).publication, 2);
+    QVERIFY(window_->statusBar()->currentMessage().contains(QStringLiteral("copy")));
+    QCOMPARE(fileBytes(source), before);
+    QCOMPARE(window_->documentPath(0), source);
+    QCOMPARE(view->history_count(), history);
+    QCOMPARE(pictura::recovery_status(*view), recovery);
+    QVERIFY(window_->isDocumentDirty(0));
+    pictura::PictureView reopened;
+    QVERIFY(pictura::document_api::open(reopened, copy));
+    QCOMPARE(reopened.composite_argb(0, 0), view->composite_argb(0, 0));
+}
+
+void OffthreadJobsTest::filterAndAdjustmentPanicsPreserveUndo()
+{
+    auto* view = newDoc(32, 32);
+    QVERIFY(view);
+    invert(*window_);
+    QVERIFY(view->history_add_snapshot(QStringLiteral("Keep")));
+    invert(*window_);
+    QVERIFY(view->undo());
+    const int count = view->history_count();
+    const int index = view->history_index();
+    const bool dirty = window_->isDocumentDirty(0);
+    const auto pixel = view->composite_argb(0, 0);
+
+    for (int stage : {2, 1}) {
+        pictura::filter_set_commit_panic_for_test(*view, stage);
+        if (stage == 2) {
+            QVERIFY(pictura::filter_commit_start(
+                *view, QStringLiteral("gaussian-blur"), {2.0}, QStringLiteral("Blur")));
+        } else {
+            QVERIFY(pictura::image_adjust_apply_start(
+                *view, slice(lightnessBlock(20)), QStringLiteral("Hue/Saturation")));
+        }
+        QTRY_VERIFY_WITH_TIMEOUT(!pictura::filter_commit_running(*view), 5000);
+        QVERIFY(!pictura::filter_commit_finish(*view));
+        QCOMPARE(pictura::filter_commit_status(*view), 6u);
+        QCOMPARE(view->history_count(), count);
+        QCOMPARE(view->history_index(), index);
+        QCOMPARE(view->composite_argb(0, 0), pixel);
+        QCOMPARE(window_->isDocumentDirty(0), dirty);
+        QCOMPARE(pictura::history_snapshot_count(*view), 1);
+        QCOMPARE(pictura::history_snapshot_label(*view, 0), QStringLiteral("Keep"));
+        QVERIFY(view->redo());
+        QVERIFY(view->undo());
+    }
+    QVERIFY(view->history_restore_snapshot(0));
+    QCOMPARE(view->composite_argb(0, 0), pixel);
+    const int afterRestore = view->history_count();
+    QVERIFY(pictura::image_adjust_apply_start(
+        *view, slice(lightnessBlock(20)), QStringLiteral("Hue/Saturation")));
+    QVERIFY(pictura::filter_commit_finish(*view));
+    QCOMPARE(pictura::filter_commit_status(*view), 0u);
+    QCOMPARE(view->history_count(), afterRestore + 1);
+}
+
+void OffthreadJobsTest::lockedLayerReportsFilterRefusal()
+{
+    auto* view = newDoc(32, 32);
+    QVERIFY(view);
+    const QString kind = QStringLiteral("gaussian-blur");
+    QVERIFY(pictura::filter_commit_start(*view, kind, {2.0}, QStringLiteral("Blur")));
+    QVERIFY(pictura::filter_commit_finish(*view));
+    QCOMPARE(view->set_layers_lock({QStringLiteral("0")}, QStringLiteral("pixels"), true), 1);
+    const int count = view->history_count();
+    const auto pixel = view->composite_argb(0, 0);
+    const bool dirty = window_->isDocumentDirty(0);
+    QVERIFY(!pictura::filter_commit_start(*view, kind, {2.0}, QStringLiteral("Blur")));
+    QCOMPARE(pictura::filter_commit_status(*view), 3u);
+    QVERIFY(pictura::filter_last_error(*view).contains(QStringLiteral("pixel-locked")));
+    QVERIFY(!pictura::filter_commit_running(*view));
+    QCOMPARE(view->history_count(), count);
+    QCOMPARE(view->composite_argb(0, 0), pixel);
+    QCOMPARE(window_->isDocumentDirty(0), dirty);
+}
+
+void OffthreadJobsTest::adjustmentDialogOkReportsPanic()
+{
+    auto* view = newDoc(32, 32);
+    QVERIFY(view);
+    const auto pixel = view->composite_argb(0, 0);
+    const int count = view->history_count();
+    auto dialog = pictura::makeAdjustmentDialog(QStringLiteral("hue-saturation"), view,
+        lightnessBlock(20), QRect(0, 0, 32, 32), window_.get());
+    QVERIFY(dialog);
+    auto* ok = dialog->findChild<QPushButton*>(QStringLiteral("adjustmentButtonOK"));
+    QVERIFY(ok);
+    const auto title = dialog->windowTitle();
+    pictura::filter_set_commit_panic_for_test(*view, 1);
+    ok->click();
+    QCOMPARE(pictura::filter_commit_status(*view), 6u);
+    const auto message = window_->statusBar()->currentMessage();
+    QVERIFY(message.contains(title));
+    QVERIFY(!message.contains(QStringLiteral("injected")));
+    QCOMPARE(view->history_count(), count);
+    QCOMPARE(view->composite_argb(0, 0), pixel);
 }
 
 QTEST_MAIN(OffthreadJobsTest)

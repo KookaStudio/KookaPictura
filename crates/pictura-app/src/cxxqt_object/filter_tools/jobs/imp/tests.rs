@@ -240,3 +240,42 @@ fn job_writers_keep_no_composite_for_a_layered_document() {
         }
     }
 }
+
+#[test]
+fn delayed_commit_discards_a_new_live_edit() {
+    let mut rust = striped();
+    rust.filter_jobs.commit_delay_for_test = 100;
+    assert!(commit_start(&mut rust, vec![blur()], "Blur".into(), None));
+    rust.session.doc.as_mut().unwrap().layers[0].name = "Live edit".into();
+    rust.preview_edit(&crate::cxxqt_object::edit::Edit::Meta);
+    assert!(commit_finish(&mut rust).is_err());
+    assert_eq!(
+        rust.filter_jobs.commit_status,
+        ErrorCode::Cancelled.status()
+    );
+    assert_eq!(
+        rust.session.doc.as_ref().unwrap().layers[0].name,
+        "Live edit"
+    );
+}
+
+#[test]
+fn delayed_commit_preserves_a_new_named_snapshot() {
+    let mut rust = striped();
+    rust.filter_jobs.commit_delay_for_test = 100;
+    assert!(commit_start(&mut rust, vec![blur()], "Blur".into(), None));
+    let snapshot = crate::history::Snapshot {
+        doc: rust.session.doc.snapshot().unwrap(),
+        selection: rust.session.selection.clone(),
+        quick_mask: None,
+    };
+    rust.session
+        .history
+        .add_snapshot("New snapshot", snapshot, rust.layer_target.clone());
+    assert!(commit_finish(&mut rust).is_err());
+    assert_eq!(
+        rust.filter_jobs.commit_status,
+        ErrorCode::Cancelled.status()
+    );
+    assert_eq!(rust.session.history.snapshot_label(0), "New snapshot");
+}

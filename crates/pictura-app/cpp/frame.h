@@ -336,8 +336,6 @@ public:
     // opens the Open dialog.
     bool workspaceOpenArmed() const;
 
-    // How an open ended. A user cancel is not a failure: callers must not show
-    // an error for it.
     using OpenOutcome = pictura::OpenOutcome;
 
     // Takes ownership of `view` and adds it as a document window: a tab, or a
@@ -352,23 +350,19 @@ public:
     bool zoomResizesWindows() const { return zoomResizesWindows_; }
     bool newDocument(const QString& name, int width, int height, const QString& mode,
                      int depth, const QString& background);
-    // Start an open and return its token; completion arrives on `documentOpenFinished`.
-    // The loading tab appears at once (a PDF probe: when the worker finds editing data).
-    // `reportFailure` shows the Open Recent status message on failure.
+    // Start an open and return its token for `documentOpenFinished`.
     quint64 startOpenPath(const QString& path);
     quint64 startOpenImagePath(const QString& path);
     quint64 startOpenAsSmartObjectPath(const QString& path);
-    // Route `path` by signature (PDF, EPS) or suffix (PSD/PSB, Qt raster
-    // import). With `interactive` off (agentic control) a PDF or EPS imports
-    // with the dialogs' defaults and no prompt.
+    // Route by signature or suffix. Noninteractive PDF/EPS uses dialog defaults.
     quint64 startOpenDocumentAtPath(const QString& path, bool interactive = true,
                                     bool reportFailure = false);
-    // Synchronous wrappers for the self-test, the control server, and tests:
-    // start the open and pump a local event loop until it finishes.
+    // Synchronous wrappers pump a local event loop until completion.
     bool openPath(const QString& path);
     bool openImagePath(const QString& path);
     bool openDocumentAtPath(const QString& path, bool interactive = true);
-    OpenOutcome openDocumentAtPathOutcome(const QString& path, bool interactive = true);
+    OpenOutcome openDocumentAtPathOutcome(const QString& path, bool interactive = true,
+                                          bool* memoryRefused = nullptr);
     // True when `path`'s suffix routes to the native PSD/PSB reader rather than
     // the Qt image decode edge.
     static bool isNativeDocumentPath(const QString& path);
@@ -378,6 +372,7 @@ public:
     bool openAsSmartObjectPath(const QString& path);
     // Test seam: hold an open's completion `ms` ms (loading tab, spinner, hover, cancel).
     void setOpenDelayForTest(int ms);
+    void setNextNativeOpenPanicForTest();
     // Pump events until every started open has finished or been cancelled (self-test drops).
     void waitForOpensForTest();
     bool isLoadingDocument(int index) const;
@@ -524,9 +519,9 @@ public:
     void updateThemeCornerIcon();
 
 Q_SIGNALS:
-    // Emitted on the GUI thread when a started open ends. `outcome` is
-    // `OpenOutcome`; `error` is the failure message (empty for success/cancel).
-    void documentOpenFinished(quint64 token, int outcome, const QString& error);
+    // GUI-thread completion with an OpenOutcome, status code, and failure detail.
+    void documentOpenFinished(quint64 token, int outcome, const QString& error,
+                              quint32 code, bool memoryRefused);
 
 protected:
     void closeEvent(QCloseEvent* event) override;

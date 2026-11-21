@@ -3,7 +3,7 @@ use super::*;
 use super::super::super::channels::mode_name;
 use crate::cxxqt_object::edit::Edit;
 use crate::cxxqt_object::helpers_composite::{buffer_to_rgba_bytes, current_buffer};
-use crate::cxxqt_object::impl_core::{JobBar, Outcome};
+use crate::cxxqt_object::impl_core::{document_engine_error, JobBar, Outcome};
 use crate::cxxqt_object::save_format::SaveGifOptions;
 use crate::cxxqt_object::PictureViewRust;
 use core::pin::Pin;
@@ -152,10 +152,10 @@ pub(super) fn image_depth_available(view: &PictureView, bits: i32) -> bool {
 /// active layer is re-pointed at it (or cleared for a flat Bitmap).
 pub(super) fn commit(
     mut view: Pin<&mut PictureView>,
-    convert: impl FnOnce(&mut Document) -> bool + Send + 'static,
+    convert: impl FnOnce(&mut Document) -> Result<(), pictura_ops::OpsError> + Send + 'static,
 ) -> bool {
     if view.rust().modal_transform_blocks_edit() {
-        return false;
+        return view.document_preflight_refusal(pictura_error::ErrorCode::Capability);
     }
     let restored = {
         let mut rust = view.as_mut().rust_mut();
@@ -174,7 +174,11 @@ pub(super) fn commit(
     view.as_mut().document_op(
         HISTORY_LABEL,
         JobBar::Busy,
-        move |doc| convert(doc).then(Outcome::default),
+        move |doc| {
+            convert(doc)
+                .map(|()| Some(Outcome::default()))
+                .map_err(document_engine_error)
+        },
         |rust, _| {
             refresh_active_layer(rust);
             Edit::Full
@@ -209,19 +213,17 @@ pub(super) fn convert_image_mode(view: Pin<&mut PictureView>, mode: &QString) ->
             commit(view, move |doc| {
                 let profile = pictura_codec::Profile::from_icc(&icc).ok();
                 pictura_render::convert_mode_with_profiles(doc, mode, profile.as_ref(), options)
-                    .is_ok()
             })
         }
-        _ => false,
+        Some(_) => view.document_preflight_refusal(pictura_error::ErrorCode::Capability),
+        None => view.document_preflight_refusal(pictura_error::ErrorCode::InvalidArg),
     }
 }
 
 pub(super) fn convert_image_depth(view: Pin<&mut PictureView>, bits: i32) -> bool {
     match depth_from_bits(bits) {
-        Some(out) => commit(view, move |doc| {
-            pictura_render::convert_bit_depth(doc, out).is_ok()
-        }),
-        None => false,
+        Some(out) => commit(view, move |doc| pictura_render::convert_bit_depth(doc, out)),
+        None => view.document_preflight_refusal(pictura_error::ErrorCode::InvalidArg),
     }
 }
 
@@ -242,7 +244,7 @@ pub(super) fn convert_to_indexed(
 ) -> bool {
     let options = palette_options(palette, colors, dither, amount);
     commit(view, move |doc| {
-        pictura_render::convert_to_indexed(doc, options).is_ok()
+        pictura_render::convert_to_indexed(doc, options)
     })
 }
 
@@ -356,7 +358,7 @@ pub(super) fn cancel_mode_preview(mut view: Pin<&mut PictureView>) -> bool {
 pub(super) fn convert_to_bitmap(view: Pin<&mut PictureView>, method: i32) -> bool {
     let method = bitmap_method(method);
     commit(view, move |doc| {
-        pictura_render::convert_to_bitmap(doc, method).is_ok()
+        pictura_render::convert_to_bitmap(doc, method)
     })
 }
 

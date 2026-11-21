@@ -65,6 +65,8 @@ pub mod ffi {
         /// refreshed region in. True when it applied (or there was nothing
         /// running); false when the worker refused it.
         fn filter_commit_finish(view: Pin<&mut PictureView>) -> bool;
+        fn filter_commit_status(view: &PictureView) -> u32;
+        fn filter_set_commit_panic_for_test(view: Pin<&mut PictureView>, stage: i32);
 
         /// Ask for the exact preview of `kind`/`params`: the full-resolution
         /// layer filtered on a worker, shown reduced like

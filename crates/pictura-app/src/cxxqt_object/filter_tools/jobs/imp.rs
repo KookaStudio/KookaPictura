@@ -17,9 +17,11 @@ use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QList, QString, QStringList};
 use pictura_core::{Coverage, Document, Layer, PixelBuffer, PsdRect};
-use pictura_filters::Filter;
+use pictura_error::{guard, Error, ErrorCode, OpStatus};
+use pictura_filters::{Filter, FilterError};
 use pictura_render::DocumentComposite;
 use pictura_select::Selection;
+use std::panic::AssertUnwindSafe;
 use std::thread::JoinHandle;
 
 /// The background filter work a document has in flight.
@@ -27,6 +29,8 @@ use std::thread::JoinHandle;
 pub(in crate::cxxqt_object) struct FilterJobs {
     preview: Option<ExactPreview>,
     commit: Option<CommitJob>,
+    pub(in crate::cxxqt_object) commit_status: OpStatus,
+    panic_for_test: i32,
     /// Test seam: hold a finished exact preview before handing it over.
     pub(in crate::cxxqt_object) exact_delay_for_test: u64,
     /// Test seam: hold a finished commit before it lands.
@@ -73,7 +77,8 @@ pub(super) enum Source {
 }
 
 pub(super) struct CommitJob {
-    handle: JoinHandle<Committed>,
+    handle: JoinHandle<Result<Committed, Error>>,
+    source_state: (u64, u64, u64, u64, Option<u64>),
     last_filter: Option<(String, Vec<f64>)>,
 }
 
@@ -81,7 +86,7 @@ pub(super) struct CommitJob {
 pub(super) struct Committed {
     doc: Document,
     history: History,
-    outcome: Result<WorkerRefresh, String>,
+    refresh: WorkerRefresh,
     /// The effect's pre- and post-effect layers, for `Edit > Fade`.
     fade: Option<FadeSnapshot>,
 }
@@ -104,19 +109,18 @@ pub(super) fn apply_op(
     op: &ActiveOp,
     mask: Option<&Coverage>,
     gpu: bool,
-) -> Result<Layer, String> {
+) -> Result<Layer, Error> {
     let mut layer = pictura_render::resolve_path(doc, path)
-        .ok_or("the active layer no longer exists")?
+        .ok_or_else(|| Error::new(ErrorCode::InvalidArg, "the active layer no longer exists"))?
         .clone();
     match op {
         ActiveOp::Filter(filter) => {
-            pictura_render::apply_filter(&mut layer, filter, mask, gpu)
-                .map_err(|e| e.to_string())?;
+            pictura_render::apply_filter(&mut layer, filter, mask, gpu).map_err(commit_error)?;
         }
         ActiveOp::Filters(filters) => {
             for filter in filters {
                 pictura_render::apply_filter(&mut layer, filter, mask, gpu)
-                    .map_err(|e| e.to_string())?;
+                    .map_err(commit_error)?;
             }
         }
         ActiveOp::Adjustment(adjustment) => {
@@ -125,20 +129,28 @@ pub(super) fn apply_op(
             pictura_render::apply_adjustment_region_in_mode(
                 &mut layer, adjustment, mask, rect, None, mode,
             )
-            .map_err(|e| e.to_string())?;
+            .map_err(commit_error)?;
         }
         ActiveOp::ApplyImage(params) => {
             let rect = layer.rect;
             let target = pictura_render::ApplyImageTarget {
                 origin: (0, 0),
                 gray: false,
-                native: pictura_render::apply_image_native(doc, path).map_err(|e| e.to_string())?,
+                native: pictura_render::apply_image_native(doc, path).map_err(commit_error)?,
             };
             pictura_render::apply_image_region(&mut layer, params, mask, rect, target)
-                .map_err(|e| e.to_string())?;
+                .map_err(commit_error)?;
         }
     }
     Ok(layer)
+}
+
+fn commit_error(error: FilterError) -> Error {
+    let code = match &error {
+        FilterError::Unsupported(_) => ErrorCode::Capability,
+        FilterError::InvalidParams(_) | FilterError::Locked => ErrorCode::InvalidArg,
+    };
+    Error::with_source(code, error.to_string(), error)
 }
 
 /// The layer at `path` of `doc` with `filters` applied in order (exact preview).
@@ -296,6 +308,7 @@ pub(in crate::cxxqt_object) fn commit_op_start(
     label: String,
     last_filter: Option<(String, Vec<f64>)>,
 ) -> bool {
+    rust.filter_jobs.commit_status = ErrorCode::InvalidArg.status();
     rust.filter_error = None;
     if rust.modal_transform_blocks_edit() {
         rust.filter_error = Some("a transform is pending".to_string());
@@ -340,27 +353,59 @@ pub(in crate::cxxqt_object) fn commit_op_start(
     };
     let selection = rust.session.selection.clone();
     let target = rust.layer_target.clone();
-    let history = std::mem::take(&mut rust.session.history);
+    let mut history = rust.session.history.clone();
     let gpu = rust.gpu_compute;
     let delay = rust.filter_jobs.commit_delay_for_test;
-    let handle = std::thread::spawn(move || {
-        let committed = commit(
-            doc, history, target, &path, op, source, mask, &selection, &label, gpu,
-        );
+    let panic_for_test = std::mem::take(&mut rust.filter_jobs.panic_for_test);
+    history.panic_after_truncation_for_test = panic_for_test == 2;
+    let handle = std::thread::Builder::new().spawn(move || {
+        // The worker owns this document and a separate history index over shared tiles.
+        let committed = guard(AssertUnwindSafe(|| {
+            commit(
+                doc,
+                history,
+                target,
+                &path,
+                op,
+                source,
+                mask,
+                &selection,
+                &label,
+                gpu,
+                panic_for_test == 1,
+            )
+        }));
         if delay > 0 {
             std::thread::sleep(std::time::Duration::from_millis(delay));
         }
         committed
     });
+    let Ok(handle) = handle else {
+        rust.filter_jobs.commit_status = ErrorCode::Host.status();
+        rust.filter_error = Some("could not start the filter worker".to_string());
+        return false;
+    };
+    rust.filter_jobs.commit_status = ErrorCode::Ok.status();
     rust.filter_jobs.commit = Some(CommitJob {
         handle,
         last_filter,
+        source_state: commit_source_state(rust),
     });
     true
 }
 
+fn commit_source_state(rust: &PictureViewRust) -> (u64, u64, u64, u64, Option<u64>) {
+    (
+        rust.session.document_generation,
+        rust.session.content_revision,
+        rust.non_preview_revision,
+        rust.session.history.revision(),
+        rust.session.history.current_id(),
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
-pub(super) fn commit(
+fn commit(
     mut doc: Document,
     mut history: History,
     target: LayerTarget,
@@ -371,39 +416,31 @@ pub(super) fn commit(
     selection: &Option<Selection>,
     label: &str,
     gpu: bool,
-) -> Committed {
+    panic_in_engine_for_test: bool,
+) -> Result<Committed, Error> {
     let original = pictura_render::resolve_path(&doc, path).cloned();
-    let filtered = match source {
+    let layer = match source {
         Source::Filtered(layer) => Ok(*layer),
-        Source::Pending(handle) => match handle.join().ok().flatten() {
-            Some(exact) => Ok(exact.layer),
-            None => apply_op(&doc, path, &op, mask.as_ref(), gpu),
+        Source::Pending(handle) => match handle.join() {
+            Ok(Some(exact)) => Ok(exact.layer),
+            Ok(None) => apply_op(&doc, path, &op, mask.as_ref(), gpu),
+            Err(payload) => {
+                std::mem::forget(payload);
+                Err(Error::new(
+                    ErrorCode::Panic,
+                    "the filter stopped unexpectedly",
+                ))
+            }
         },
         Source::Filter => apply_op(&doc, path, &op, mask.as_ref(), gpu),
-    };
-    let layer = match filtered {
-        Ok(layer) => layer,
-        Err(error) => {
-            return Committed {
-                doc,
-                history,
-                outcome: Err(error),
-                fade: None,
-            }
-        }
-    };
-    let (rect, effects) = (layer.rect, layer_has_effects(&layer));
-    match pictura_render::resolve_path_mut(&mut doc, path) {
-        Some(slot) => *slot = layer,
-        None => {
-            return Committed {
-                doc,
-                history,
-                outcome: Err("the active layer no longer exists".to_string()),
-                fade: None,
-            }
-        }
+    }?;
+    if panic_in_engine_for_test {
+        panic!("injected panic in adjustment engine work");
     }
+    let (rect, effects) = (layer.rect, layer_has_effects(&layer));
+    let slot = pictura_render::resolve_path_mut(&mut doc, path)
+        .ok_or_else(|| Error::new(ErrorCode::InvalidArg, "the active layer no longer exists"))?;
+    *slot = layer;
     let fade = original
         .zip(pictura_render::resolve_path(&doc, path).cloned())
         .map(|(original, effected)| FadeSnapshot {
@@ -443,12 +480,12 @@ pub(super) fn commit(
         }
     };
     history.capture_live(&mut doc, selection, &target, label);
-    Committed {
+    Ok(Committed {
         doc,
         history,
-        outcome: Ok(refresh),
+        refresh,
         fade,
-    }
+    })
 }
 
 pub(super) fn commit_filters(
@@ -497,6 +534,9 @@ pub(super) fn refuse_commit(mut view: Pin<&mut PictureView>, started: bool) -> b
     if !started {
         {
             let mut rust = view.as_mut().rust_mut();
+            if rust.filter_jobs.commit_status.is_ok() {
+                rust.filter_jobs.commit_status = ErrorCode::InvalidArg.status();
+            }
             let _ = cancel_filter_preview(&mut rust);
         }
         view.as_mut().recomposite();
@@ -510,6 +550,7 @@ pub(super) fn filter_commit_start_inner(
     params: &QList<f64>,
     label: &QString,
 ) -> bool {
+    view.as_mut().rust_mut().filter_jobs.commit_status = ErrorCode::Ok.status();
     let kind = kind.to_string();
     if let Some(reason) = super::super::depth_refusal(&kind, view.rust().session.doc.as_ref()) {
         view.as_mut().rust_mut().filter_error = Some(reason);
@@ -549,6 +590,7 @@ pub(super) fn filter_stack_commit_start_inner(
     params: &QList<f64>,
     label: &QString,
 ) -> bool {
+    view.as_mut().rust_mut().filter_jobs.commit_status = ErrorCode::Ok.status();
     let params: Vec<f64> = params.into_iter().copied().collect();
     let kind_list: Vec<String> = QList::<QString>::from(kinds)
         .iter()
@@ -579,7 +621,9 @@ impl FilterJobs {
     /// Drop every pending preview and commit. Detached workers finish unobserved.
     pub(in crate::cxxqt_object) fn cancel_all(&mut self) {
         self.preview = None;
-        self.commit = None;
+        if self.commit.take().is_some() {
+            self.commit_status = ErrorCode::Cancelled.status();
+        }
     }
 
     /// Whether a started commit is still running on its worker.
@@ -604,18 +648,28 @@ pub(in crate::cxxqt_object) fn commit_finish(
     let Some(job) = rust.filter_jobs.commit.take() else {
         return Ok(None);
     };
-    let Ok(committed) = job.handle.join() else {
-        rust.filter_error = Some("the filter stopped unexpectedly; history was reset".to_string());
+    if commit_source_state(rust) != job.source_state {
+        rust.filter_jobs.commit_status = ErrorCode::Cancelled.status();
         return Err(());
-    };
-    rust.session.history = committed.history;
-    let refresh = match committed.outcome {
-        Ok(refresh) => refresh,
+    }
+    let completed = job.handle.join().unwrap_or_else(|payload| {
+        std::mem::forget(payload);
+        Err(Error::new(
+            ErrorCode::Panic,
+            "the filter stopped unexpectedly",
+        ))
+    });
+    let committed = match completed {
+        Ok(committed) => committed,
         Err(error) => {
-            rust.filter_error = Some(error);
+            rust.filter_jobs.commit_status = error.code().status();
+            rust.filter_error = Some(error.detail().to_owned());
             return Err(());
         }
     };
+    rust.filter_jobs.commit_status = ErrorCode::Ok.status();
+    rust.session.history = committed.history;
+    let refresh = committed.refresh;
     rust.session.doc.set(Some(committed.doc));
     if job.last_filter.is_some() {
         rust.last_filter = job.last_filter;
@@ -662,16 +716,19 @@ pub(in crate::cxxqt_object) fn test_commit_finish(
     rust: &mut PictureViewRust,
 ) -> Option<Presentation> {
     let doc = rust.session.doc.snapshot()?;
-    let history = std::mem::take(&mut rust.session.history);
-    let handle = std::thread::spawn(move || Committed {
-        doc,
-        history,
-        outcome: Ok(WorkerRefresh::Nothing),
-        fade: None,
+    let history = rust.session.history.clone();
+    let handle = std::thread::spawn(move || {
+        Ok(Committed {
+            doc,
+            history,
+            refresh: WorkerRefresh::Nothing,
+            fade: None,
+        })
     });
     rust.filter_jobs.commit = Some(CommitJob {
         handle,
         last_filter: None,
+        source_state: commit_source_state(rust),
     });
     commit_finish(rust).ok().flatten()
 }
@@ -689,7 +746,15 @@ pub(super) fn filter_commit_finish(mut view: Pin<&mut PictureView>) -> bool {
         Ok(Some(presentation)) => view.as_mut().present(presentation),
         Ok(None) => {}
     }
-    true
+    view.rust().filter_jobs.commit_status.is_ok()
+}
+
+pub(super) fn filter_commit_status(view: &PictureView) -> u32 {
+    view.rust().filter_jobs.commit_status.raw()
+}
+
+pub(super) fn filter_set_commit_panic_for_test(mut view: Pin<&mut PictureView>, stage: i32) {
+    view.as_mut().rust_mut().filter_jobs.panic_for_test = stage;
 }
 
 #[allow(clippy::too_many_arguments)]

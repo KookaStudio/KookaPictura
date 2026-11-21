@@ -54,6 +54,7 @@ pub enum Restored {
 ///
 /// ponytail: a delta keeps whole 256² tiles, shared with the planes they came
 /// from; a one-pixel edit keeps its tile. Packing or spilling them is #1217's.
+#[derive(Clone)]
 struct Delta {
     meta: Document,
     tiles: Vec<PlaneDelta>,
@@ -66,6 +67,7 @@ struct Delta {
 /// segment holding the cursor is hollow: its pixels are `current` with the
 /// segment's deltas reverted, so history never holds that state twice. Every
 /// other anchor is full.
+#[derive(Clone)]
 enum Stored {
     Full(Snapshot),
     /// Metadata and selection only; every tracked plane cleared.
@@ -73,6 +75,7 @@ enum Stored {
     Delta(Delta),
 }
 
+#[derive(Clone)]
 struct Entry {
     /// Never reused while the state is retained, so a saved identity cannot
     /// accidentally match a different state after a drop or truncation.
@@ -94,6 +97,7 @@ enum TargetMode {
     Jump,
 }
 
+#[derive(Clone)]
 struct Named {
     id: u64,
     label: String,
@@ -135,8 +139,9 @@ type BrushCache = RefCell<Option<((u64, String), Arc<RgbaImage>)>>;
 /// deltas', full anchors', named snapshots' and the pinned brush source's as
 /// kept. What is kept and not live is what history costs beyond the live
 /// document, and what its budget is checked against.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct History {
+    revision: u64,
     states: Vec<Entry>,
     next_id: u64,
     cursor: usize,
@@ -148,6 +153,7 @@ pub struct History {
     brush_cache: BrushCache,
     current_target: LayerTarget,
     census: TileCensus,
+    pub(crate) panic_after_truncation_for_test: bool,
     /// The byte cap a test sets in place of the host's (see `budget`).
     #[cfg(test)]
     byte_cap: Option<usize>,
@@ -170,6 +176,7 @@ impl History {
     /// [`History::capture_live`] for capturing a live document by reference.
     #[cfg(test)]
     pub fn capture(&mut self, snapshot: Snapshot, label: &str) {
+        self.revision = self.revision.wrapping_add(1);
         let Snapshot {
             mut doc,
             selection,
@@ -191,6 +198,7 @@ impl History {
         target: &LayerTarget,
         label: &str,
     ) {
+        self.revision = self.revision.wrapping_add(1);
         self.capture_live_with(doc, selection, target, label, None);
     }
 
@@ -204,10 +212,14 @@ impl History {
         label: &str,
         hint: Option<&[PsdRect]>,
     ) {
+        self.revision = self.revision.wrapping_add(1);
         if matches!(self.brush_source, BrushSource::State(i) if i > self.cursor) {
             self.pin_source();
         }
         self.truncate_states(self.cursor + 1);
+        if std::mem::take(&mut self.panic_after_truncation_for_test) {
+            panic!("injected panic during filter history capture");
+        }
         let target_before = self.current_target.clone();
         self.current_target = target.clone();
         let fresh_segment = |doc: &mut Document| {
@@ -347,6 +359,7 @@ impl History {
     }
 
     pub fn undo(&mut self) -> Option<Snapshot> {
+        self.revision = self.revision.wrapping_add(1);
         if self.cursor == 0 {
             return None;
         }
@@ -356,6 +369,7 @@ impl History {
     }
 
     pub fn redo(&mut self) -> Option<Snapshot> {
+        self.revision = self.revision.wrapping_add(1);
         if self.cursor + 1 >= self.states.len() {
             return None;
         }
@@ -372,6 +386,7 @@ impl History {
         selection: &mut Option<Selection>,
         target: &mut LayerTarget,
     ) -> Option<Restored> {
+        self.revision = self.revision.wrapping_add(1);
         (self.cursor > 0)
             .then(|| self.restore_live(self.cursor - 1, TargetMode::Undo, doc, selection, target))
     }
@@ -383,6 +398,7 @@ impl History {
         selection: &mut Option<Selection>,
         target: &mut LayerTarget,
     ) -> Option<Restored> {
+        self.revision = self.revision.wrapping_add(1);
         (self.cursor + 1 < self.states.len())
             .then(|| self.restore_live(self.cursor + 1, TargetMode::Redo, doc, selection, target))
     }
@@ -395,6 +411,7 @@ impl History {
         selection: &mut Option<Selection>,
         target: &mut LayerTarget,
     ) -> Option<Restored> {
+        self.revision = self.revision.wrapping_add(1);
         (i < self.states.len())
             .then(|| self.restore_live(i, TargetMode::Jump, doc, selection, target))
     }
@@ -407,6 +424,7 @@ impl History {
     /// the stack restarts at a single anchor. The History Brush's source resets
     /// to the oldest (the kept state); no snapshot survives to point at.
     pub fn purge(&mut self) {
+        self.revision = self.revision.wrapping_add(1);
         self.purge_states();
         self.clear_snapshots();
         self.set_pinned(None);
@@ -419,6 +437,7 @@ impl History {
     /// Drop every undo state but the current one, keeping the named restore
     /// points. The stack restarts at a single anchor.
     pub fn purge_states(&mut self) {
+        self.revision = self.revision.wrapping_add(1);
         if let Some(current) = self.current.as_ref() {
             let label = self.label(self.cursor).to_string();
             let id = self.states.get(self.cursor).map_or(0, |entry| entry.id);
@@ -452,6 +471,7 @@ impl History {
 
     /// Drop the named restore points only. The undo history is untouched.
     pub fn purge_snapshots(&mut self) {
+        self.revision = self.revision.wrapping_add(1);
         self.clear_snapshots();
         if let BrushSource::Snapshot(_) = self.brush_source {
             self.brush_source = BrushSource::Oldest;
@@ -477,6 +497,10 @@ impl History {
         self.cursor
     }
 
+    pub(crate) fn revision(&self) -> u64 {
+        self.revision
+    }
+
     /// Identity of the state at the cursor, or `None` without states.
     pub fn current_id(&self) -> Option<u64> {
         self.states.get(self.cursor).map(|entry| entry.id)
@@ -489,6 +513,7 @@ impl History {
 
     /// Restore state `i` and move the cursor to it, or `None` when out of range.
     pub fn jump(&mut self, i: usize) -> Option<Snapshot> {
+        self.revision = self.revision.wrapping_add(1);
         if i >= self.states.len() {
             return None;
         }
@@ -498,6 +523,7 @@ impl History {
     }
 
     pub fn add_snapshot(&mut self, label: &str, snapshot: Snapshot, target: LayerTarget) {
+        self.revision = self.revision.wrapping_add(1);
         let id = self.next_id;
         self.next_id = self.next_id.wrapping_add(1);
         self.census
@@ -526,6 +552,7 @@ impl History {
 
     /// Attach runtime mask metadata to both representations of the current state.
     pub(crate) fn set_current_quick_mask(&mut self, quick_mask: Option<Option<Selection>>) {
+        self.revision = self.revision.wrapping_add(1);
         let (Some(current), Some(entry)) =
             (self.current.as_mut(), self.states.get_mut(self.cursor))
         else {
@@ -560,6 +587,7 @@ impl History {
     /// Keep the history's idea of the live target current when the user moves
     /// the layer selection without recording a state.
     pub fn set_current_target(&mut self, target: &LayerTarget) {
+        self.revision = self.revision.wrapping_add(1);
         self.current_target = target.clone();
     }
 
@@ -1014,6 +1042,7 @@ impl History {
     /// Point the History Brush at state or snapshot `source`; false (and no
     /// change) when it does not exist.
     pub fn set_brush_source(&mut self, source: BrushSource) -> bool {
+        self.revision = self.revision.wrapping_add(1);
         let exists = match source {
             BrushSource::Oldest => true,
             BrushSource::State(i) => i < self.states.len(),

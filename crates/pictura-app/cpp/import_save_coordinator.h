@@ -66,7 +66,7 @@ public:
 
     // Open entry points. A started open returns its token; completion arrives
     // on documentOpenFinished.
-    quint64 startOpenPath(const QString& path);
+    quint64 startOpenPath(const QString& path, bool reportFailure = true);
     quint64 startOpenImagePath(const QString& path);
     quint64 startOpenAsSmartObjectPath(const QString& path);
     quint64 startOpenDocumentAtPath(const QString& path, bool interactive = true,
@@ -80,12 +80,14 @@ public:
     // Batch's Suppress Color Profile Warnings: keep the embedded profile
     // without the mismatch/missing prompt while set.
     void setSuppressProfileWarnings(bool suppress) { suppressProfileWarnings_ = suppress; }
-    OpenOutcome openDocumentAtPathOutcome(const QString& path, bool interactive = true);
+    OpenOutcome openDocumentAtPathOutcome(const QString& path, bool interactive = true,
+                                          bool* memoryRefused = nullptr);
     bool openAsSmartObjectPath(const QString& path);
     bool confirmProfileForOpen(PictureView* view, const QString& path);
     void wireOpenSignals(PictureView* view);
     void setOpenDelayForTest(int ms) { openDelayForTest_ = ms; }
     int openDelayForTest() const { return openDelayForTest_; }
+    void setNextNativeOpenPanicForTest() { nextNativeOpenPanicForTest_ = true; }
     void waitForOpensForTest();
     void cancelAllOpens();
     void cancelOpenForView(PictureView* view);
@@ -212,7 +214,8 @@ public:
     }
 
 Q_SIGNALS:
-    void documentOpenFinished(quint64 token, int outcome, const QString& error);
+    void documentOpenFinished(quint64 token, int outcome, const QString& error,
+                              quint32 code, bool memoryRefused);
 
 private:
     enum class NativeSaveCompatibility { Always, Ask, Never };
@@ -249,14 +252,15 @@ private:
     void beginOpenCursor();
     void endOpenCursor();
     void finishLoadedDocument(int index);
-    void finishOpen(quint64 token, OpenOutcome outcome, const QString& error = QString());
-    OpenOutcome waitForOpen(quint64 token);
+    void finishOpen(quint64 token, OpenOutcome outcome, const QString& error = QString(),
+                    quint32 code = 0, bool memoryRefused = false);
+    OpenOutcome waitForOpen(quint64 token, bool* memoryRefused = nullptr);
     void cancelOpen(int index);
     void restorePreviousTab(PictureView* view);
     void onOpenDetected(PictureView* view);
     void onOpenProgress(PictureView* view, int percent, const QString& phase);
     void onOpenFinished(PictureView* view, const QString& status,
-                        const QStringList& warnings);
+                        const QStringList& warnings, quint32 code, bool memoryRefused);
     void reportOpenFailure(int index, const QString& status);
     // Camera raw opens (#400): decode, then the Pictura Raw dialog when
     // `interactive`, then the develop.
@@ -318,6 +322,7 @@ private:
     quint64 nextOpenToken_ = 1;
     int openCount_ = 0;
     int openDelayForTest_ = 0;
+    bool nextNativeOpenPanicForTest_ = false;
 
     struct PendingSave {
         QString path;
@@ -330,7 +335,8 @@ private:
     void pollBackgroundSaves();
     bool finishBackgroundSave(PictureView* view);
     bool applySaveResult(PictureView* view, const QString& path, int outcome,
-                         bool background = false);
+                         bool background = false, quint32 code = 0,
+                         bool native = false, int admission = 0);
     QHash<PictureView*, PendingSave> backgroundSaves_;
     QSet<PictureView*> unresolvedSaveFailures_;
     QSet<QString> synchronousDestinations_;

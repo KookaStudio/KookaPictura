@@ -2,7 +2,7 @@ use super::*;
 
 use super::super::super::helpers::{parse_anchor, parse_resample};
 use crate::cxxqt_object::edit::Edit;
-use crate::cxxqt_object::impl_core::{JobBar, Outcome};
+use crate::cxxqt_object::impl_core::{document_engine_error, JobBar, Outcome};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
@@ -61,7 +61,7 @@ pub(super) fn image_size_apply(
     per_cm: bool,
 ) -> bool {
     if view.rust().modal_transform_blocks_edit() {
-        return false;
+        return view.document_preflight_refusal(pictura_error::ErrorCode::Capability);
     }
     let resample = resample.to_string();
     let resample = if resample.is_empty() {
@@ -69,11 +69,11 @@ pub(super) fn image_size_apply(
     } else {
         match parse_resample(&resample) {
             Some(r) => Some(r),
-            None => return false,
+            None => return view.document_preflight_refusal(pictura_error::ErrorCode::InvalidArg),
         }
     };
     if width < 1 || height < 1 || !ppi.is_finite() || ppi <= 0.0 {
-        return false;
+        return view.document_preflight_refusal(pictura_error::ErrorCode::InvalidArg);
     }
     let wanted = Resolution { ppi, per_cm };
     let (resize, needed) = {
@@ -89,10 +89,10 @@ pub(super) fn image_size_apply(
         (resize, needed)
     };
     if resize.is_some() && !image_size_fits_budget(&view, width, height) {
-        return false;
+        return view.document_preflight_refusal(pictura_error::ErrorCode::Host);
     }
     if resize.is_none() && !needed {
-        return false;
+        return view.document_preflight_refusal(pictura_error::ErrorCode::Ok);
     }
     let bar = if resize.is_some() {
         JobBar::Counted
@@ -104,12 +104,13 @@ pub(super) fn image_size_apply(
         bar,
         move |doc| {
             if let Some(resample) = resize {
-                pictura_render::resize_document(doc, width as u32, height as u32, resample).ok()?;
+                pictura_render::resize_document(doc, width as u32, height as u32, resample)
+                    .map_err(document_engine_error)?;
             }
             if needed {
                 set_document_resolution(doc, wanted);
             }
-            Some(Outcome::default())
+            Ok(Some(Outcome::default()))
         },
         move |rust, _| {
             if resize.is_some() {
@@ -131,20 +132,22 @@ pub(super) fn canvas_size_apply(
 ) -> bool {
     crate::cxxqt_object::helpers::memory_gate::clear();
     if view.rust().modal_transform_blocks_edit() {
-        return false;
+        return view.document_preflight_refusal(pictura_error::ErrorCode::Capability);
     }
     let Some(anchor) = parse_anchor(&anchor.to_string()) else {
-        return false;
+        return view.document_preflight_refusal(pictura_error::ErrorCode::InvalidArg);
     };
     if width < 1 || height < 1 {
-        return false;
+        return view.document_preflight_refusal(pictura_error::ErrorCode::InvalidArg);
     }
-    let admitted = view.rust().session.doc.as_ref().is_some_and(|doc| {
-        (width as u32, height as u32) != (doc.width, doc.height)
-            && crate::cxxqt_object::helpers::canvas_size_admits(doc, width, height, anchor)
-    });
-    if !admitted {
-        return false;
+    let Some(doc) = view.rust().session.doc.as_ref() else {
+        return view.document_preflight_refusal(pictura_error::ErrorCode::InvalidArg);
+    };
+    if (width as u32, height as u32) == (doc.width, doc.height) {
+        return view.document_preflight_refusal(pictura_error::ErrorCode::Ok);
+    }
+    if !crate::cxxqt_object::helpers::canvas_size_admits(doc, width, height, anchor) {
+        return view.document_preflight_refusal(pictura_error::ErrorCode::Host);
     }
     view.as_mut().document_op(
         "Canvas Size",
@@ -158,14 +161,14 @@ pub(super) fn canvas_size_apply(
                 job.set_stages(2);
             }
             pictura_render::resize_canvas_document(&mut next, width as u32, height as u32, anchor)
-                .ok()?;
+                .map_err(document_engine_error)?;
             pictura_render::extend_background(
                 &mut next,
                 [(fill >> 16) as u8, (fill >> 8) as u8, fill as u8],
             )
-            .ok()?;
+            .map_err(document_engine_error)?;
             *doc = next;
-            Some(Outcome::default())
+            Ok(Some(Outcome::default()))
         },
         |rust, _| {
             rust.session.clear_geometry_selection();

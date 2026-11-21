@@ -11,11 +11,12 @@ use super::skew::{gesture_free_skew, gesture_skew};
 use super::translate_move_group;
 use super::warp::{refresh_warp_preview, warp_hit_test, warp_move, warp_press};
 use crate::cxxqt_object::edit::Edit;
-use crate::cxxqt_object::impl_core::{JobBar, Outcome};
+use crate::cxxqt_object::impl_core::{document_engine_error, JobBar, Outcome};
 use crate::cxxqt_object::state::PictureViewRust;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
+use pictura_error::ErrorCode;
 
 /// Trim every moved pixel layer to its content after a committed translation.
 /// Only fully transparent padding is dropped, so the composite is unchanged.
@@ -315,24 +316,24 @@ impl PictureViewRust {
 impl qobject::PictureView {
     pub fn resize_image(mut self: Pin<&mut Self>, kind: &QString, width: i32, height: i32) -> bool {
         if self.rust().modal_transform_blocks_edit() {
-            return false;
+            return self.document_preflight_refusal(ErrorCode::Capability);
         }
         let Some(resample) = parse_resample(&kind.to_string()) else {
-            return false;
+            return self.document_preflight_refusal(ErrorCode::InvalidArg);
         };
         if width < 1 || height < 1 {
-            return false;
+            return self.document_preflight_refusal(ErrorCode::InvalidArg);
         }
         if !crate::cxxqt_object::image_adjust::image_size_fits_budget(&self, width, height) {
-            return false;
+            return self.document_preflight_refusal(ErrorCode::Host);
         }
         self.as_mut().document_op(
             "Image Size",
             JobBar::Counted,
             move |doc| {
                 pictura_render::resize_document(doc, width as u32, height as u32, resample)
-                    .ok()
-                    .map(|()| Outcome::default())
+                    .map(|()| Some(Outcome::default()))
+                    .map_err(document_engine_error)
             },
             |rust, _| {
                 rust.session.clear_geometry_selection();
@@ -348,27 +349,27 @@ impl qobject::PictureView {
         height: i32,
     ) -> bool {
         if self.rust().modal_transform_blocks_edit() {
-            return false;
+            return self.document_preflight_refusal(ErrorCode::Capability);
         }
         let Some(anchor) = parse_anchor(&anchor.to_string()) else {
-            return false;
+            return self.document_preflight_refusal(ErrorCode::InvalidArg);
         };
         if width < 1 || height < 1 {
-            return false;
+            return self.document_preflight_refusal(ErrorCode::InvalidArg);
         }
         let admitted = self.rust().session.doc.as_ref().is_some_and(|doc| {
             crate::cxxqt_object::helpers::canvas_size_admits(doc, width, height, anchor)
         });
         if !admitted {
-            return false;
+            return self.document_preflight_refusal(ErrorCode::Host);
         }
         self.as_mut().document_op(
             "Canvas Size",
             JobBar::Busy,
             move |doc| {
                 pictura_render::resize_canvas_document(doc, width as u32, height as u32, anchor)
-                    .ok()
-                    .map(|()| Outcome::default())
+                    .map(|()| Some(Outcome::default()))
+                    .map_err(document_engine_error)
             },
             |rust, _| {
                 rust.session.clear_geometry_selection();
@@ -379,21 +380,21 @@ impl qobject::PictureView {
 
     pub fn rotate_doc(mut self: Pin<&mut Self>, quarter_turns: i32) -> bool {
         if self.rust().modal_transform_blocks_edit() {
-            return false;
+            return self.document_preflight_refusal(ErrorCode::Capability);
         }
         if !(1..=3).contains(&quarter_turns) {
-            return false;
+            return self.document_preflight_refusal(ErrorCode::InvalidArg);
         }
         if !self.rust().orient_admits(quarter_turns as u8) {
-            return false;
+            return self.document_preflight_refusal(ErrorCode::Host);
         }
         self.as_mut().document_op(
             "Rotate",
             JobBar::Counted,
             move |doc| {
                 pictura_render::rotate_document(doc, quarter_turns as u8)
-                    .ok()
-                    .map(|()| Outcome::default())
+                    .map(|()| Some(Outcome::default()))
+                    .map_err(document_engine_error)
             },
             |rust, _| {
                 rust.session.clear_geometry_selection();
@@ -404,18 +405,18 @@ impl qobject::PictureView {
 
     pub fn flip_doc(mut self: Pin<&mut Self>, horizontal: bool) -> bool {
         if self.rust().modal_transform_blocks_edit() {
-            return false;
+            return self.document_preflight_refusal(ErrorCode::Capability);
         }
         if !self.rust().orient_admits(0) {
-            return false;
+            return self.document_preflight_refusal(ErrorCode::Host);
         }
         self.as_mut().document_op(
             "Flip",
             JobBar::Counted,
             move |doc| {
                 pictura_render::flip_document(doc, horizontal)
-                    .ok()
-                    .map(|()| Outcome::default())
+                    .map(|()| Some(Outcome::default()))
+                    .map_err(document_engine_error)
             },
             |rust, _| {
                 rust.session.clear_geometry_selection();
@@ -435,12 +436,12 @@ impl qobject::PictureView {
         gamma: f64,
     ) -> bool {
         if self.rust().modal_transform_blocks_edit() {
-            return false;
+            return self.document_preflight_refusal(ErrorCode::Capability);
         }
         let out = match bits {
             16 => pictura_core::BitDepth::Sixteen,
             8 => pictura_core::BitDepth::Eight,
-            _ => return false,
+            _ => return self.document_preflight_refusal(ErrorCode::InvalidArg),
         };
         let tone = pictura_render::ExposureGamma { exposure_ev, gamma };
         self.as_mut().document_op(
@@ -448,8 +449,8 @@ impl qobject::PictureView {
             JobBar::Busy,
             move |doc| {
                 pictura_render::convert_depth_exposure_gamma(doc, out, tone)
-                    .ok()
-                    .map(|()| Outcome::default())
+                    .map(|()| Some(Outcome::default()))
+                    .map_err(document_engine_error)
             },
             land_hdr_conversion,
         )

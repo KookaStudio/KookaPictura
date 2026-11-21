@@ -36,6 +36,7 @@ pub(crate) struct Sink<'w> {
     start: u64,
     pos: u64,
     capture: Option<Capture>,
+    io_failure: Option<std::io::Error>,
 }
 
 pub(crate) trait WriteSeek: Write + Seek {}
@@ -49,13 +50,28 @@ struct Capture {
 
 impl<'w> Sink<'w> {
     pub(crate) fn new(inner: &'w mut dyn WriteSeek) -> Result<Self, PsdError> {
-        let start = inner.stream_position().map_err(io_error)?;
+        Self::new_with_io(inner).map_err(io_error)
+    }
+
+    pub(crate) fn new_with_io(inner: &'w mut dyn WriteSeek) -> std::io::Result<Self> {
+        let start = inner.stream_position()?;
         Ok(Self {
             inner,
             start,
             pos: start,
             capture: None,
+            io_failure: None,
         })
+    }
+
+    pub(crate) fn take_io_failure(&mut self) -> Option<std::io::Error> {
+        self.io_failure.take()
+    }
+
+    fn record_io_failure(&mut self, error: std::io::Error) -> PsdError {
+        let description = PsdError::Invalid(format!("write failed: {error}"));
+        self.io_failure = Some(error);
+        description
     }
 
     /// Bytes written since the sink was opened.
@@ -64,7 +80,9 @@ impl<'w> Sink<'w> {
     }
 
     pub(crate) fn put(&mut self, bytes: &[u8]) -> Result<(), PsdError> {
-        self.inner.write_all(bytes).map_err(io_error)?;
+        self.inner
+            .write_all(bytes)
+            .map_err(|error| self.record_io_failure(error))?;
         self.pos += bytes.len() as u64;
         if let Some(capture) = &mut self.capture {
             if let Some(buf) = &mut capture.bytes {
@@ -94,9 +112,13 @@ impl<'w> Sink<'w> {
         let end = self.pos;
         self.inner
             .seek(SeekFrom::Start(self.start + at))
-            .map_err(io_error)?;
-        self.inner.write_all(bytes).map_err(io_error)?;
-        self.inner.seek(SeekFrom::Start(end)).map_err(io_error)?;
+            .map_err(|error| self.record_io_failure(error))?;
+        self.inner
+            .write_all(bytes)
+            .map_err(|error| self.record_io_failure(error))?;
+        self.inner
+            .seek(SeekFrom::Start(end))
+            .map_err(|error| self.record_io_failure(error))?;
         if let Some(capture) = &mut self.capture {
             let at = self.start + at;
             if let Some(buf) = &mut capture.bytes {

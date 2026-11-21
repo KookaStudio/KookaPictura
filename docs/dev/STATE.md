@@ -4,6 +4,15 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Operation status and panic boundaries — #645 implemented** (OpenSpec
+  change `error-code-registry`, archived). The Qt-free `pictura-error` crate
+  defines the stable 32-bit `OpStatus` values, canonical message keys, and
+  guarded Rust unwind handling. Native PSD/PSB Open and Save carry typed
+  results owned by each request, including uncertain publication after a save
+  rename. Whole-document and shared filter and adjustment commands stage their
+  edits before publication and discard stale worker results. Coverage lives
+  in the registry tests, `tst_loading_tab`, `tst_control_limits`,
+  `tst_document_jobs`, and `tst_offthread_jobs`.
 - **View menu view state — #503 implemented** (OpenSpec change
   `view-menu-view-state`, archived; capability `ui/view-menu` plus the slice,
   count, note, smart-guide and ruler deltas). Extras/Show/Show Extra Options,

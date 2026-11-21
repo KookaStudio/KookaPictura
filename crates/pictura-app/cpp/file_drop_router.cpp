@@ -326,7 +326,7 @@ bool FileDropRouter::eventFilter(QObject* watched, QEvent* event)
         for (const QString& path : paths) {
             // Start every path; `changed || start(...)` would short-circuit the
             // second and later files.
-            const quint64 token = frame_->startOpenDocumentAtPath(path);
+            const quint64 token = frame_->startOpenDocumentAtPath(path, true, true);
             changed = changed || token != 0;
         }
     }

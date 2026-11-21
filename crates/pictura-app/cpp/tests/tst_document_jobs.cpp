@@ -16,10 +16,13 @@
 #include <functional>
 
 #include "commands.h"
+#include "document_command.h"
+#include "api/document_api.h"
 #include "fill_dialog.h"
 #include "selftest_paint_fixture.h"
 
 #include "api/document_bridge.h"
+#include "api/transform_bridge.h"
 
 #include "qt_test_support.h"
 
@@ -60,6 +63,10 @@ private slots:
     void aLargeGradientRunsAsAJob();
     void cancellingAFillChangesNothing();
     void aSmallGradientFillsAtOnce();
+    void rotationPanicLeavesDocumentAndHistoryIntact();
+    void validationRefusalClearsPreviousResult();
+    void staleOrdinaryWorkerDoesNotPublish();
+    void deferredTransformSettlesBeforeWorkerSnapshot();
 
 private:
     bool dispatch(const char* id);
@@ -190,6 +197,8 @@ void DocumentJobsTest::cancellingAFlattenChangesNothing()
     const Seen seen = run(pictura::command_ids::LayerFlattenImage, true);
     QVERIFY2(seen.window, "the progress window offered Cancel");
     QVERIFY2(clock.elapsed() < 20000, "the cancel ended the held job");
+    QCOMPARE(pictura::document_job_status(*f.view), 4u);
+    QVERIFY(pictura::document_op_result(*f.view).isEmpty());
     QVERIFY(!pictura::document_job_pending(*f.view));
     QCOMPARE(f.view->layer_count(), layers);
     QCOMPARE(f.view->history_count(), count);
@@ -286,6 +295,102 @@ void DocumentJobsTest::aSmallGradientFillsAtOnce()
     QVERIFY2(clock.elapsed() < 800, "the delay seam is never reached");
     QVERIFY(!pictura::document_job_pending(*f.view));
     QVERIFY(f.committedOnce(base, "Gradient"));
+}
+
+void DocumentJobsTest::rotationPanicLeavesDocumentAndHistoryIntact()
+{
+    for (const auto size : {QSize(64, 48), QSize(kWide, kTall)}) {
+        Fixture f(*window_, seed(size.width(), size.height()), QStringLiteral("rotate-panic"));
+        QVERIFY(f.ok());
+        const int history = f.view->history_count();
+        const bool dirty = pictura::document_api::isDirty(*f.view);
+        const auto pixel = f.view->composite_argb(0, 0);
+        pictura::document_job_panic_for_test(*f.view);
+        run(pictura::command_ids::ImageRotate90Cw);
+        QCOMPARE(pictura::document_job_status(*f.view), 6u);
+        QVERIFY(!pictura::document_job_pending(*f.view));
+        QCOMPARE(f.view->document_width(), size.width());
+        QCOMPARE(f.view->document_height(), size.height());
+        QCOMPARE(f.view->composite_argb(0, 0), pixel);
+        QCOMPARE(f.view->history_count(), history);
+        QCOMPARE(pictura::document_api::isDirty(*f.view), dirty);
+        run(pictura::command_ids::ImageRotate90Cw);
+        QCOMPARE(pictura::document_job_status(*f.view), 0u);
+        QCOMPARE(f.view->document_width(), size.height());
+        QCOMPARE(f.view->history_count(), history + 1);
+    }
+}
+
+void DocumentJobsTest::validationRefusalClearsPreviousResult()
+{
+    Fixture f(*window_, seed(64, 48), QStringLiteral("invalid-rotation"));
+    QVERIFY(f.ok());
+    QVERIFY(f.view->duplicate_layer(0) >= 0);
+    QVERIFY(f.view->flatten_image() > 0);
+    QVERIFY(!pictura::document_op_result(*f.view).isEmpty());
+    const int history = f.view->history_count();
+    const bool dirty = pictura::document_api::isDirty(*f.view);
+    QVERIFY(!pictura::runDocumentCommand(window_.get(), *f.view, QStringLiteral("Rotate"),
+                                        [&] { f.view->rotate_doc(0); }));
+    QCOMPARE(pictura::document_job_status(*f.view), 3u);
+    QVERIFY(pictura::document_op_result(*f.view).isEmpty());
+    QCOMPARE(f.view->history_count(), history);
+    QCOMPARE(f.view->document_width(), 64);
+    QCOMPARE(pictura::document_api::isDirty(*f.view), dirty);
+}
+
+void DocumentJobsTest::staleOrdinaryWorkerDoesNotPublish()
+{
+    Fixture f(*window_, seed(kWide, kTall), QStringLiteral("stale-rotation"));
+    QVERIFY(f.ok());
+    pictura::document_job_arm(*f.view, true);
+    const auto stale = pictura::document_job_attempt(*f.view);
+    pictura::document_job_set_delay(*f.view, 150);
+    QVERIFY(f.view->rotate_doc(1));
+    pictura::document_job_arm(*f.view, false);
+    pictura::document_job_edit_source_for_test(*f.view);
+    const auto cancelled = pictura::document_job_finish_for(*f.view, stale);
+    QCOMPARE(cancelled.code, 4u);
+    QVERIFY(!cancelled.applied);
+    QCOMPARE(f.view->document_width(), kWide);
+    QCOMPARE(f.view->layer_name(0), QStringLiteral("Edited while worker ran"));
+
+    pictura::document_job_arm(*f.view, true);
+    const auto replaced = pictura::document_job_attempt(*f.view);
+    QVERIFY(f.view->rotate_doc(1));
+    pictura::document_job_arm(*f.view, false);
+    QVERIFY(pictura::document_api::newDocument(*f.view, 22, 15, QStringLiteral("rgb"), 8,
+                                                QStringLiteral("white")));
+    QVERIFY(f.view->rotate_doc(1));
+    const int history = f.view->history_count();
+    QCOMPARE(pictura::document_job_finish_for(*f.view, replaced).code, 4u);
+    QCOMPARE(pictura::document_job_status(*f.view), 0u);
+    QCOMPARE(f.view->document_width(), 15);
+    QCOMPARE(f.view->history_count(), history);
+}
+
+void DocumentJobsTest::deferredTransformSettlesBeforeWorkerSnapshot()
+{
+    Fixture f(*window_, seed(kWide, kTall), QStringLiteral("transform-before-rotation"));
+    QVERIFY(f.ok());
+    QCOMPARE(f.view->duplicate_layer(0), 1);
+    f.view->set_active_layer(QStringLiteral("1"));
+    QVERIFY(f.view->begin_free_transform(QStringLiteral("1")));
+    QVERIFY(pictura::transform_set_angle(*f.view, 15.0));
+    pictura::transform_set_delay(*f.view, 150);
+    QVERIFY(f.view->commit_transform());
+    QVERIFY(pictura::transform_pending(*f.view));
+    const int before = f.view->history_count();
+    pictura::document_job_arm(*f.view, true);
+    const auto attempt = pictura::document_job_attempt(*f.view);
+    QVERIFY(f.view->rotate_doc(1));
+    pictura::document_job_arm(*f.view, false);
+    const auto result = pictura::document_job_finish_for(*f.view, attempt);
+    QCOMPARE(result.code, 0u);
+    QVERIFY(result.applied);
+    QCOMPARE(f.view->history_count(), before + 2);
+    QCOMPARE(f.view->history_label(before), QStringLiteral("Free Transform"));
+    QCOMPARE(f.view->document_width(), kTall);
 }
 
 QTEST_MAIN(DocumentJobsTest)

@@ -1,6 +1,6 @@
 use super::*;
 
-use super::super::impl_core::{JobBar, Outcome};
+use super::super::impl_core::{document_engine_error, JobBar, Outcome};
 use super::super::impl_transform::land_hdr_conversion;
 use core::pin::Pin;
 use pictura_render::{ExposureGamma, HdrToneMap, LocalAdaptationParams};
@@ -25,7 +25,7 @@ pub(crate) fn convert_depth_method(
     let out = match bits {
         16 => pictura_core::BitDepth::Sixteen,
         8 => pictura_core::BitDepth::Eight,
-        _ => return false,
+        _ => return view.document_preflight_refusal(pictura_error::ErrorCode::InvalidArg),
     };
     let tone = match method {
         0 => HdrToneMap::LocalAdaptation(LocalAdaptationParams {
@@ -42,15 +42,15 @@ pub(crate) fn convert_depth_method(
         1 => HdrToneMap::EqualizeHistogram,
         2 => HdrToneMap::ExposureGamma(ExposureGamma { exposure_ev, gamma }),
         3 => HdrToneMap::HighlightCompression,
-        _ => return false,
+        _ => return view.document_preflight_refusal(pictura_error::ErrorCode::InvalidArg),
     };
     view.as_mut().document_op(
         "HDR Conversion",
         JobBar::Busy,
         move |doc| {
             pictura_render::convert_depth(doc, out, tone)
-                .ok()
-                .map(|()| Outcome::default())
+                .map(|()| Some(Outcome::default()))
+                .map_err(document_engine_error)
         },
         land_hdr_conversion,
     )

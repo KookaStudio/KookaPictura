@@ -534,6 +534,40 @@ pub fn write_versioned_to<W: Write + Seek>(
     )
 }
 
+/// Distinguishes a native encoder refusal from failure of its output stream.
+#[derive(Debug, thiserror::Error)]
+pub enum NativeWriteError {
+    #[error(transparent)]
+    Codec(PsdError),
+    #[error("write failed: {0}")]
+    Io(#[source] std::io::Error),
+}
+
+/// Stream a versioned native save while preserving the underlying I/O failure.
+pub fn write_versioned_to_checked<W: Write + Seek>(
+    out: &mut W,
+    doc: &Document,
+    force_psb: bool,
+    cache: Option<&EncodeCache>,
+    writer_version: &str,
+    compatibility_placeholder: bool,
+) -> Result<bool, NativeWriteError> {
+    let psb = force_psb || writes_psb(doc);
+    let mut sink = Sink::new_with_io(out).map_err(NativeWriteError::Io)?;
+    write_container_to(
+        &mut sink,
+        doc,
+        psb,
+        cache,
+        compatibility_placeholder,
+        Some(writer_version),
+    )
+    .map_err(|error| {
+        sink.take_io_failure()
+            .map_or(NativeWriteError::Codec(error), NativeWriteError::Io)
+    })
+}
+
 /// The output depth and the synthesized layer modes `doc` writes.
 struct LayerModes {
     depth: u16,

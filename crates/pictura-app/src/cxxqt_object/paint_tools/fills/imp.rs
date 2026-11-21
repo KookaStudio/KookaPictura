@@ -548,11 +548,12 @@ pub(super) fn apply_job(
         label,
         JobBar::Busy,
         move |doc| {
-            let rect = edit(doc, &path, &target, selection.as_ref())?;
-            Some(Outcome {
-                rect: Some(rect),
-                ..Outcome::default()
-            })
+            Ok(
+                edit(doc, &path, &target, selection.as_ref()).map(|rect| Outcome {
+                    rect: Some(rect),
+                    ..Outcome::default()
+                }),
+            )
         },
         |rust, outcome| fill_edit(rust, outcome.rect),
     )

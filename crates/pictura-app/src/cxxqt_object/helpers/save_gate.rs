@@ -148,14 +148,27 @@ pub(in crate::cxxqt_object) fn gif_cost(doc: &Document) -> CommitCost {
 /// admit its spillable bytes against the room plus the scratch disks' free
 /// space; `None` records a memory refusal.
 pub(in crate::cxxqt_object) fn reserve_save(cost: &CommitCost) -> Option<Reservation<'static>> {
-    let reservation = memory::governor().reserve(cost.working, "a save").ok()?;
+    reserve_save_checked(cost).ok()
+}
+
+pub(in crate::cxxqt_object) enum SaveAdmission {
+    Memory,
+    ScratchFull,
+}
+
+pub(in crate::cxxqt_object) fn reserve_save_checked(
+    cost: &CommitCost,
+) -> Result<Reservation<'static>, SaveAdmission> {
+    let reservation = memory::governor()
+        .reserve(cost.working, "a save")
+        .map_err(|_| SaveAdmission::Memory)?;
     if let Some(room) = memory::governor().room() {
         if cost.spillable > room.saturating_add(gate::scratch_available()) {
             gate::refuse_scratch_full("a save", cost.spillable);
-            return None;
+            return Err(SaveAdmission::ScratchFull);
         }
     }
-    Some(reservation)
+    Ok(reservation)
 }
 
 #[cfg(test)]

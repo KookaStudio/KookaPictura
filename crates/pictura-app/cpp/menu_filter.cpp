@@ -21,6 +21,7 @@
 #include "digimarc_read_dialog.h"
 #include "filter_commands.h"
 #include "filter_commit.h"
+#include "document_window.h"
 #include "filter_gallery_dialog.h"
 #include "filter_preview_dialog.h"
 #include "lens_correction_dialog.h"
@@ -228,9 +229,14 @@ CommandParams galleryParams(const FilterGalleryDialog& dialog)
 
 void MenuRegistrar::reportFilterRefusal(PictureView* view)
 {
+    const auto status = view ? OperationStatus(filter_commit_status(*view)) : OperationStatus::Host;
+    if (status == OperationStatus::Cancelled) {
+        return;
+    }
     const QString reason = view ? filter_last_error(*view) : QString();
-    const QString message =
-        reason.isEmpty() ? tr("The filter could not be applied.") : reason;
+    const QString message = status == OperationStatus::Panic
+        ? tr("The filter could not be applied. The operation stopped unexpectedly.")
+        : reason.isEmpty() ? tr("The filter could not be applied.") : reason;
     qWarning().noquote() << "filter refused:" << message;
     showStatus(message, 6000);
 }

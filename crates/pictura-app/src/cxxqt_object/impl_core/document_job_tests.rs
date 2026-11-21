@@ -41,7 +41,7 @@ fn wait(view: &PictureViewRust) {
 
 /// What `document_job_finish` does, without the QObject's presentation.
 fn land(view: &mut PictureViewRust) -> bool {
-    let Some(done) = view.take_document_job() else {
+    let Ok(Some(done)) = view.take_document_job() else {
         return view.note_document_op(None);
     };
     let FinishedJob {
@@ -50,6 +50,7 @@ fn land(view: &mut PictureViewRust) -> bool {
         outcome,
         land,
         after,
+        ..
     } = done;
     view.session.doc.set(Some(doc));
     let edit = land(view, &outcome);
@@ -66,8 +67,8 @@ fn rotate(view: &mut PictureViewRust) -> bool {
         JobBar::Counted,
         |doc| {
             pictura_render::rotate_document(doc, 1)
-                .ok()
-                .map(|()| Outcome::default())
+                .map(|()| Some(Outcome::default()))
+                .map_err(document_engine_error)
         },
         Box::new(|_, _| Edit::Full),
         None,
@@ -79,13 +80,13 @@ fn merge_down(view: &mut PictureViewRust) -> bool {
         "Merge Down",
         JobBar::Counted,
         |doc| {
-            let merged =
-                pictura_render::merge_scope(doc, pictura_render::MergeScope::Down("1")).ok()?;
-            Some(Outcome {
+            let merged = pictura_render::merge_scope(doc, pictura_render::MergeScope::Down("1"))
+                .map_err(|_| Error::new(ErrorCode::InvalidArg, "merge refused"))?;
+            Ok(Some(Outcome {
                 path: merged.path,
                 count: merged.replaced,
                 rect: None,
-            })
+            }))
         },
         Box::new(|rust, outcome| {
             let target = rust.merge_target(&outcome.path);
@@ -222,7 +223,7 @@ fn a_document_op_after_runs_only_when_the_command_lands() {
     assert!(view.start_document_job(
         "After",
         JobBar::Busy,
-        |_| Some(Outcome::default()),
+        |_| Ok(Some(Outcome::default())),
         Box::new(|_, _| Edit::Meta),
         Some(Box::new(move |_| seen.set(seen.get() + 1))),
     ));
@@ -236,7 +237,7 @@ fn a_document_op_after_runs_only_when_the_command_lands() {
     assert!(view.start_document_job(
         "After",
         JobBar::Busy,
-        |_| Some(Outcome::default()),
+        |_| Ok(Some(Outcome::default())),
         Box::new(|_, _| Edit::Meta),
         Some(Box::new(move |_| seen.set(seen.get() + 1))),
     ));

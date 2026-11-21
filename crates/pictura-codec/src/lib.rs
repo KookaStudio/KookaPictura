@@ -237,7 +237,8 @@ pub use web::{
 pub use webp::{decode_webp, encode_webp, encode_webp_lossy};
 pub use write::{
     write_native_compatibility_cached, write_psb, write_psb_cached, write_psd, write_psd_cached,
-    write_psd_to, write_versioned, write_versioned_to, writes_psb, VersionedWrite,
+    write_psd_to, write_versioned, write_versioned_to, write_versioned_to_checked, writes_psb,
+    NativeWriteError, VersionedWrite,
 };
 pub use write_cache::{warm_encode_idents, EncodeCache, EncodeStats};
 pub use write_indexed::{gif_indexed_source_is_current, indexed_source_is_current};

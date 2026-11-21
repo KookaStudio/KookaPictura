@@ -1184,6 +1184,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "pictura-error"
+version = "0.4.0"
+dependencies = [
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "pictura-filters"
 version = "0.4.0"
 dependencies = [
@@ -1279,6 +1286,7 @@ dependencies = [
  "pictura-codec",
  "pictura-color",
  "pictura-core",
+ "pictura-error",
  "pictura-filters",
  "pictura-mcp",
  "pictura-ops",

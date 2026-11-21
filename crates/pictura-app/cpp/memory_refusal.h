@@ -14,6 +14,7 @@ QString memoryRefusalMessage(const QString& action);
 // "Could not <action>: image data could not be read back from the scratch
 // disk. …" (#1217)
 QString scratchRefusalMessage(const QString& action);
+QString scratchFullRefusalMessage(const QString& action);
 
 // "Could not <action>: the scratch disks are full. …" after a scratch-full
 // refusal of a spilling commit (#1294), memoryRefusalMessage(action) otherwise.

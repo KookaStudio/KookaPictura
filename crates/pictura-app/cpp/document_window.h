@@ -27,6 +27,15 @@ enum class OpenKind { Psd, Raster, SmartObject, Pdf, PdfPage, Eps };
 // error for it.
 enum class OpenOutcome { Opened, Cancelled, Failed };
 
+// Values from the Rust operation status registry.
+enum class OperationStatus : quint32 {
+    Ok = 0,
+    InvalidArg = 3,
+    Cancelled = 4,
+    Host = 5,
+    Panic = 6,
+};
+
 // The canvas property recording the view `frame_revision` its image came from.
 inline constexpr const char* kFrameRevisionKey = "picturaFrameRevision";
 

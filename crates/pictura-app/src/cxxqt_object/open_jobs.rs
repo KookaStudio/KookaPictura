@@ -66,7 +66,7 @@ pub mod ffi {
 
         /// Start opening `path` as a PSD/PSB on a worker. The view's
         /// `open_finished` signal reports `"ok"` or `"error"`.
-        fn open_psd_start(view: Pin<&mut PictureView>, path: &QString);
+        fn open_psd_start(view: Pin<&mut PictureView>, path: &QString, panic_for_test: bool);
 
         /// Start opening `path` as a raster import on a worker.
         fn open_image_start(view: Pin<&mut PictureView>, path: &QString);
