@@ -43,6 +43,7 @@ pub mod scratch;
 pub mod shape;
 mod stack_mode;
 mod text_render;
+mod text_replace;
 pub mod tiled_plane;
 mod type_tool;
 pub mod variables;
@@ -78,6 +79,7 @@ pub use text_render::{
     layout_lines, FontPolicy, GlyphMask, LayoutLine, LayoutParams, PlacedGlyph, RasterRequest,
     Rasterizer, ShapedGlyph, TextAlign, TextLayout, TextProvenance,
 };
+pub use text_replace::{replace_matches, ReplaceOptions};
 pub use tiled_plane::{
     DenseRef, Residency, SharedTile, TileData, TileDecode, TileMut, TileRect, TileRef, TileSample,
     TileState, TILE,

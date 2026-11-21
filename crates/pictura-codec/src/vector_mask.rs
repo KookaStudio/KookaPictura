@@ -132,10 +132,20 @@ pub(crate) fn decode_path_records(data: &[u8], width: u32, height: u32) -> Optio
 /// union) and its knots, linked where the point is smooth. Coordinates are
 /// 8.24 fractions of the document extent, `(y, x)` as the format orders them.
 pub fn encode_vector_mask(subpaths: &[Subpath], width: u32, height: u32) -> Vec<u8> {
+    encode_vector_mask_with_rule(subpaths, width, height, VectorFillRule::EvenOdd)
+}
+
+/// Author a version-3 mask while retaining Bézier knots and the chosen fill rule.
+pub fn encode_vector_mask_with_rule(
+    subpaths: &[Subpath],
+    width: u32,
+    height: u32,
+    rule: VectorFillRule,
+) -> Vec<u8> {
     let mut out = Vec::with_capacity(8 + RECORD * (1 + subpaths.len() * 5));
     out.extend_from_slice(&3u32.to_be_bytes());
     out.extend_from_slice(&0u32.to_be_bytes());
-    encode_path_records(subpaths, width, height, &mut out);
+    encode_path_records(subpaths, width, height, rule, &mut out);
     out
 }
 
@@ -145,17 +155,23 @@ pub(crate) fn encode_path_records(
     subpaths: &[Subpath],
     width: u32,
     height: u32,
+    rule: VectorFillRule,
     out: &mut Vec<u8>,
 ) {
     out.extend_from_slice(&6u16.to_be_bytes());
     out.extend_from_slice(&[0u8; 24]);
     let fixed = |v: f64, extent: u32| ((v / extent.max(1) as f64) * FIXED_ONE).round() as i32;
+    let fill: u16 = match rule {
+        VectorFillRule::EvenOdd => 0,
+        VectorFillRule::NonZero => 2,
+    };
     for subpath in subpaths {
         let selector: u16 = if subpath.closed { 0 } else { 3 };
         out.extend_from_slice(&selector.to_be_bytes());
         out.extend_from_slice(&(subpath.points.len() as u16).to_be_bytes());
         out.extend_from_slice(&1i16.to_be_bytes());
-        out.extend_from_slice(&[0u8; 20]);
+        out.extend_from_slice(&fill.to_be_bytes());
+        out.extend_from_slice(&[0u8; 18]);
         let (linked, unlinked): (u16, u16) = if subpath.closed { (1, 2) } else { (4, 5) };
         for p in &subpath.points {
             let kind = if p.smooth { linked } else { unlinked };

@@ -295,6 +295,8 @@ void PicturaMainWindow::saveSession()
     prefs.typePlaceholderText = tools_ ? tools_->typePlaceholderText() : true;
     prefs.typeShowAsianOptions = typeShowAsianOptions_;
     prefs.typeMiddleEastern = typeMiddleEastern_;
+    prefs.fontPreviewSize = fontPreviewSize_;
+    prefs.typeDefaults = typeDefaultsJson_;
     prefs.typeMissingGlyphProtection = typeMissingGlyphProtection_;
     prefs.shortcuts.clear();
     const QHash<QString, QList<QKeySequence>> overrides = commandRegistry()->shortcutOverrides();

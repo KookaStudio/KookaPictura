@@ -14,8 +14,10 @@
 #include "api/layers_bridge.h"
 #include "api/paint_bridge.h"
 #include "api/engine_bridge.h"
+#include "api/type_api.h"
 
 #include "fill_dialog.h"
+#include "find_replace_dialog.h"
 #include "frame_place.h"
 #include "stroke_dialog.h"
 #include "fade_dialog.h"
@@ -467,6 +469,43 @@ void MenuRegistrar::registerEditHandlers()
     });
     commands_->setEnabledProvider(command_ids::EditStroke, [this, hasDocument, currentPath]() {
         return hasDocument() && activeView()->has_selection() && !currentPath().isEmpty();
+    });
+
+    const QString findReplace = commandIdForPath(
+        {QStringLiteral("Edit"), QStringLiteral("Find And Replace Text…")});
+    commands_->setImplemented(findReplace, true);
+    const auto canFindReplace = [this, hasDocument]() {
+        const TextSession* session = tools_ ? tools_->textSession() : nullptr;
+        PictureView* view = activeView();
+        return hasDocument() && view && !(session && session->textActive())
+            && !(tools_ && tools_->transformPending())
+            && type_api::hasTypeLayers(*view) && type_api::layersEditable(*view);
+    };
+    commands_->setEnabledProvider(findReplace, canFindReplace);
+    commands_->setHandler(findReplace, [this, canFindReplace]() {
+        if (!canFindReplace()) {
+            return;
+        }
+        PictureView* view = activeView();
+        const QString path = layerAnchor();
+        const bool currentIsType = !path.isEmpty() && view->layer_is_type(path);
+        auto* dialog = new FindReplaceDialog(currentIsType, dialogParent());
+        dialog->setAttribute(Qt::WA_DeleteOnClose);
+        const QPointer<PictureView> guard(view);
+        connect(dialog, &FindReplaceDialog::replaceAllRequested, dialog,
+                [this, dialog, guard, path, canFindReplace]() {
+                    if (!guard || activeView() != guard.data() || !canFindReplace()) {
+                        return;
+                    }
+                    const int changed = type_api::replaceText(
+                        *guard, path, dialog->findText(), dialog->replaceText(),
+                        dialog->searchAllLayers(), dialog->forward(),
+                        dialog->caseSensitive(), dialog->wholeWordOnly());
+                    if (changed > 0) {
+                        refresh();
+                    }
+                });
+        dialog->open();
     });
 }
 

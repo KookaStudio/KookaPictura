@@ -39,7 +39,7 @@ static MISSING_GLYPH_PROTECTION: AtomicBool = AtomicBool::new(true);
 static REGISTRY_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 /// The cache identity of the current font registry.
-pub(crate) fn generation() -> u64 {
+pub fn generation() -> u64 {
     REGISTRY_GENERATION.load(Ordering::Relaxed)
 }
 

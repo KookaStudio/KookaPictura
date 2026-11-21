@@ -49,6 +49,16 @@ LayerType readLayer(const PictureView& view, const QString& path)
     return out;
 }
 
+CharacterSetting layerCharacterSetting(const PictureView& view, const QString& path)
+{
+    return ::pictura::type_layer_character_setting(view, path);
+}
+
+bool layerIsVertical(const PictureView& view, const QString& path)
+{
+    return ::pictura::type_layer_vertical(view, path);
+}
+
 bool isWarped(const PictureView& view, const QString& path)
 {
     return ::pictura::type_layer_is_warped(view, path);
@@ -174,6 +184,52 @@ bool applyStyle(PictureView& view, const QString& path, const QString& name, boo
 {
     registerTypeFallbacks();
     return ::pictura::type_apply_style(view, path, name, paragraph);
+}
+
+bool canOutline(const PictureView& view, const QString& path)
+{
+    registerTypeFallbacks();
+    return ::pictura::type_can_outline(view, path);
+}
+
+bool createWorkPath(PictureView& view, const QString& path)
+{
+    registerTypeFallbacks();
+    return ::pictura::type_create_work_path(view, path);
+}
+
+bool convertToShape(PictureView& view, const QString& path)
+{
+    registerTypeFallbacks();
+    return ::pictura::type_convert_to_shape(view, path);
+}
+
+int updateAllTextLayers(PictureView& view)
+{
+    registerTypeFallbacks();
+    return int(::pictura::type_update_all_text_layers(view));
+}
+
+bool pasteLorem(PictureView& view, const QString& path)
+{
+    registerTypeFallbacks();
+    return ::pictura::type_paste_lorem(view, path);
+}
+
+bool loadDefaults(PictureView& view, const QString& path, const QString& font,
+                  const CharacterSetting& character, const ParagraphSetting& paragraph)
+{
+    registerTypeFallbacks();
+    return ::pictura::type_load_defaults(view, path, font, character, paragraph);
+}
+
+int replaceText(PictureView& view, const QString& path, const QString& find,
+                const QString& replace, bool allLayers, bool forward, bool caseSensitive,
+                bool wholeWord)
+{
+    registerTypeFallbacks();
+    return int(::pictura::type_replace_text(view, path, find, replace, allLayers, forward,
+                                            caseSensitive, wholeWord));
 }
 
 bool createCharacterStyle(PictureView& view, const QString& name, const QString& font,

@@ -104,6 +104,8 @@ void PreferencesStoreTest::mixedLegacyProfileSplits()
         {QStringLiteral("schemaVersion"), 12},
         {QStringLiteral("brightnessLevel"), 3},
         {QStringLiteral("gpuCompute"), false},
+        {QStringLiteral("fontPreviewSize"), 5},
+        {QStringLiteral("typeDefaults"), QStringLiteral("c3R5bGU=")},
         {QStringLiteral("layout"), QStringLiteral("YWJj")},
         {QStringLiteral("recent"), QJsonArray{QStringLiteral("/tmp/recent.psd")}},
         {QStringLiteral("futureStateKey"), 17},
@@ -114,12 +116,16 @@ void PreferencesStoreTest::mixedLegacyProfileSplits()
     const auto prefs = loadPreferences();
     QCOMPARE(prefs.brightnessLevel, 3);
     QVERIFY(!prefs.gpuCompute);
+    QCOMPARE(prefs.fontPreviewSize, 5);
+    QCOMPARE(prefs.typeDefaults, QStringLiteral("c3R5bGU="));
     QCOMPARE(prefs.shortcuts.value(QStringLiteral("file.new")), QStringList{QStringLiteral("Ctrl+Alt+N")});
     QCOMPARE(loadSession().layout, QByteArray("abc"));
     const auto state = readProfileJson(sessionFilePath());
     QCOMPARE(state.value(QStringLiteral("futureStateKey")).toInt(), 17);
     QVERIFY(state.contains(QStringLiteral("recent")));
     QVERIFY(!state.contains(QStringLiteral("brightnessLevel")));
+    QVERIFY(!state.contains(QStringLiteral("fontPreviewSize")));
+    QVERIFY(!state.contains(QStringLiteral("typeDefaults")));
     QVERIFY(!state.contains(QStringLiteral("shortcuts")));
 }
 

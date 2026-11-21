@@ -80,7 +80,7 @@ fn unwarped(spec: &TypeSpec) -> TypeSpec {
     }
 }
 
-fn geometry(spec: &TypeSpec) -> Option<Geometry> {
+fn geometry(spec: &TypeSpec, normalize_winding: bool) -> Option<Geometry> {
     let flat = unwarped(spec);
     // The box relative to the origin, before the matrix: the warp's frame.
     let bounds = type_placement(&flat)?.bounds;
@@ -124,9 +124,20 @@ fn geometry(spec: &TypeSpec) -> Option<Geometry> {
             let (x, y) = (f64::from(p.x), -f64::from(p.y));
             (pen_x + m[0] * x + m[2] * y, pen_y + m[1] * x + m[3] * y)
         };
-        for contour in flatten(outline.points(), outline.verbs(), place, step) {
-            glyphs.push(contour.into_iter().map(to_doc).collect());
+        let mut contours = flatten(outline.points(), outline.verbs(), place, step);
+        for point in contours.iter_mut().flatten() {
+            *point = to_doc(*point);
         }
+        if normalize_winding
+            && crate::type_outline::reverses_winding(
+                contours.iter().map(|c| crate::type_outline::signed_area(c)),
+            )
+        {
+            for contour in &mut contours {
+                contour.reverse();
+            }
+        }
+        glyphs.extend(contours);
     }
     let decorations = crate::type_decor::decorations(&run, &layout, spec.vertical, ascent)
         .into_iter()
@@ -141,13 +152,26 @@ fn geometry(spec: &TypeSpec) -> Option<Geometry> {
             ] {
                 segment(&mut contour, |t| lerp(from, to, t), dist(from, to), step);
             }
-            contour.into_iter().map(to_doc).collect()
+            let mut contour: Contour = contour.into_iter().map(to_doc).collect();
+            if normalize_winding && crate::type_outline::signed_area(&contour) < 0.0 {
+                contour.reverse();
+            }
+            contour
         })
         .collect();
     Some(Geometry {
         glyphs,
         decorations,
     })
+}
+
+type Contours = Vec<Vec<(f64, f64)>>;
+
+/// The warped contours in document pixels, glyphs and decorations apart.
+/// The outline commands share the warp's flattened geometry.
+pub(crate) fn outline_contours(spec: &TypeSpec) -> Option<(Contours, Contours)> {
+    let geometry = geometry(spec, true)?;
+    Some((geometry.glyphs, geometry.decorations))
 }
 
 fn lerp(a: (f64, f64), b: (f64, f64), t: f64) -> (f64, f64) {
@@ -243,7 +267,7 @@ fn flatten(
 /// the unwarped box (the frame the caret and the transform box use).
 pub(crate) fn placement(spec: &TypeSpec) -> Option<TypePlacement> {
     let flat = type_placement(&unwarped(spec))?;
-    let geometry = geometry(spec)?;
+    let geometry = geometry(spec, false)?;
     let mut lo = (f64::MAX, f64::MAX);
     let mut hi = (f64::MIN, f64::MIN);
     for &(x, y) in geometry.points() {
@@ -303,7 +327,7 @@ fn coverage(contours: &[Contour], rect: PsdRect) -> Vec<u8> {
 /// Render warped `spec` over `rect`: planar R, G, B, A, colour premultiplied
 /// by coverage as unwarped type paints it. `None` when nothing inks.
 pub(crate) fn render(spec: &TypeSpec, rect: PsdRect) -> Option<PixelBuffer> {
-    let geometry = geometry(spec)?;
+    let geometry = geometry(spec, false)?;
     let glyphs = coverage(&geometry.glyphs, rect);
     let decorations = coverage(&geometry.decorations, rect);
     let color = spec.rgba().map(|c| f64::from(c) / 255.0);

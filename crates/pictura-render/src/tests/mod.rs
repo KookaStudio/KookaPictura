@@ -31,6 +31,7 @@ mod smart_object_actions;
 mod smart_object_alpha;
 mod smart_object_stack;
 mod text_gamma;
+mod type_shape;
 mod vector_fill;
 mod vector_mask;
 

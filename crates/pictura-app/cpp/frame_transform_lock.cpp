@@ -24,6 +24,21 @@ bool locksDocumentEdit(const CommandSpec& spec)
         || top == QLatin1String("Filter")) {
         return true;
     }
+    if (top == QLatin1String("Type")) {
+        const QString group = spec.path.value(1);
+        return group == QLatin1String("Anti-Alias") || group == QLatin1String("Orientation")
+            || group == QLatin1String("OpenType")
+            || spec.id == QLatin1String(command_ids::TypeCreateWorkPath)
+            || spec.id == QLatin1String(command_ids::TypeConvertToShape)
+            || spec.id == QLatin1String(command_ids::TypeConvertToParagraphText)
+            || spec.id == QLatin1String(command_ids::TypeConvertToPointText)
+            || spec.id == QLatin1String(command_ids::TypeRasterizeTypeLayer)
+            || spec.id == QLatin1String(command_ids::TypeUpdateAllTextLayers)
+            || spec.id == QLatin1String(command_ids::TypeReplaceAllMissingFonts)
+            || spec.id == QLatin1String(command_ids::TypePasteLoremIpsum)
+            || spec.id == QLatin1String(command_ids::TypeWarpText)
+            || spec.id == QLatin1String("type.load.default.type.styles");
+    }
     return spec.id == QLatin1String(command_ids::EditAssignProfile)
         || spec.id == QLatin1String(command_ids::EditConvertProfile)
         || spec.id == QLatin1String(command_ids::EditCut)
@@ -33,7 +48,8 @@ bool locksDocumentEdit(const CommandSpec& spec)
         || spec.id == QLatin1String(command_ids::EditPasteOutside)
         || spec.id == QLatin1String(command_ids::EditClear)
         || spec.id == QLatin1String(command_ids::EditFill)
-        || spec.id == QLatin1String(command_ids::EditStroke);
+        || spec.id == QLatin1String(command_ids::EditStroke)
+        || spec.id == QLatin1String(command_ids::EditFindAndReplaceText);
 }
 
 } // namespace

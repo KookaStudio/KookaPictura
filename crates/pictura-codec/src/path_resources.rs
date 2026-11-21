@@ -102,7 +102,13 @@ pub(crate) fn with_document_paths(doc: &Document, section: Vec<u8>) -> Vec<u8> {
         .collect();
     let records = |path: &VectorPath| {
         let mut out = Vec::new();
-        encode_path_records(&path.subpaths, doc.width, doc.height, &mut out);
+        encode_path_records(
+            &path.subpaths,
+            doc.width,
+            doc.height,
+            pictura_core::VectorFillRule::EvenOdd,
+            &mut out,
+        );
         out
     };
     if !doc.work_path.is_empty() {

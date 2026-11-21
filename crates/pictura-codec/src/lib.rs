@@ -223,9 +223,10 @@ pub use svg::{
 };
 pub use type_plain::type_is_plain;
 pub use type_tool::{decode_type_warp, encode_type_tool};
-pub use type_write::author_type_tool;
+pub use type_write::{author_type_tool, type_tool_has_uniform_runs};
 pub use vector_mask::{
     decode_vector_mask, decode_vector_mask_paths, encode_vector_mask, encode_vector_mask_view,
+    encode_vector_mask_with_rule,
 };
 pub use web::{
     embed_web_metadata, encode_act, encode_gif, encode_wbmp, pack_indexed, palette_delete,

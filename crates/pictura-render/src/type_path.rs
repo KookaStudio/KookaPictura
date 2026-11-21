@@ -171,13 +171,8 @@ pub(crate) fn layout_path(spec: &TypeSpec) -> Option<PathLayout> {
 /// bounding box; on-path type unions the rotated glyph boxes.
 pub(crate) fn placement(spec: &TypeSpec) -> Option<TypePlacement> {
     let path = spec.path.as_ref()?;
-    let flattened = path.subpath.flattened(FLATTEN);
     if path.kind == TextPathKind::Area {
-        let (left, top, right, bottom) = bounds(&flattened.points)?;
-        let (origin, box_bounds) = match spec.box_bounds {
-            Some(box_bounds) => (spec.origin, box_bounds),
-            None => ((left, top), [0.0, 0.0, right - left, bottom - top]),
-        };
+        let (origin, box_bounds) = area_box(spec)?;
         return Some(TypePlacement {
             rect: crate::type_box::flat_rect(
                 (origin.0 + box_bounds[0]) as f32,
@@ -243,6 +238,26 @@ pub(crate) fn placement(spec: &TypeSpec) -> Option<TypePlacement> {
     })
 }
 
+/// The untransformed paragraph box shared by area rendering and its outline.
+pub(crate) fn area_layout_spec(spec: &TypeSpec) -> Option<TypeSpec> {
+    let (origin, box_bounds) = area_box(spec)?;
+    Some(TypeSpec {
+        origin,
+        box_bounds: Some(box_bounds),
+        matrix: TypeSpec::IDENTITY,
+        ..spec.clone()
+    })
+}
+
+fn area_box(spec: &TypeSpec) -> Option<((f64, f64), [f64; 4])> {
+    let path = spec.path.as_ref()?;
+    let (left, top, right, bottom) = bounds(&path.subpath.flattened(FLATTEN).points)?;
+    Some(match spec.box_bounds {
+        Some(box_bounds) => (spec.origin, box_bounds),
+        None => ((left, top), [0.0, 0.0, right - left, bottom - top]),
+    })
+}
+
 /// Render on-path text over `rect`.
 pub(crate) fn render_path(
     spec: &TypeSpec,
@@ -288,12 +303,7 @@ pub(crate) fn render_area(
     rect: pictura_core::PsdRect,
 ) -> Option<pictura_core::PixelBuffer> {
     let path = spec.path.as_ref()?;
-    let mut view_spec = spec.clone();
-    if view_spec.box_bounds.is_none() {
-        let (left, top, right, bottom) = bounds(&path.subpath.flattened(FLATTEN).points)?;
-        view_spec.origin = (left, top);
-        view_spec.box_bounds = Some([0.0, 0.0, right - left, bottom - top]);
-    }
+    let view_spec = area_layout_spec(spec)?;
     let mut buffer = crate::text_render::render_text_buffer(
         &render_view(&view_spec),
         rect.width(),

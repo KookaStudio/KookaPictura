@@ -222,23 +222,24 @@ pub use document_ops::{
     clear_layer_style, clear_slices, clear_smart_filters, clipping_release_paths, content_rect,
     convert_bit_depth, convert_depth, convert_depth_exposure_gamma, convert_for_smart_filters,
     convert_mode, convert_mode_with_profiles, convert_smart_object_to_layers, convert_to_bitmap,
-    convert_to_indexed, convert_to_smart_object, copy_layer, copy_layer_style, copy_merged,
-    copy_merged_region, copy_path_to_document, copy_shape_attributes, coverage_bounds,
-    create_clipping_mask, create_style_layers, create_style_layers_with_base, crop_document,
-    crop_document_grow, defringe, delete_cropped_pixels, delete_hidden_layers, delete_layer_mask,
-    delete_paths, delete_paths_report, delete_smart_filter, delete_smart_filter_mask,
-    delete_vector_mask, distribute_layers, document_bit_depth, document_color_mode,
-    duplicate_is_content_neutral, duplicate_layer, duplicate_paths, extend_background,
-    fit_smart_object_to_canvas, flatten, flatten_rows, flip_document, group_layer, group_paths,
-    has_forced_locks, has_layer_mask, has_layer_style, has_smart_filter_mask, has_vector_mask,
-    hidden_layer_paths, indexed_exact_available, insert_layer, insertion_is_content_neutral,
-    invert_layer_mask, is_background, is_fill_content_layer, is_shape_layer, is_visible_in_panel,
-    layer_comp_anchor, layer_comp_changes, layer_comp_missing_ids, layer_comp_warning,
-    layer_content_bounds, layer_from_background, layer_live_shape, layer_mask_disabled,
-    layer_mask_linked, layer_mask_refinement, layer_shape_paths, layer_style_contour,
-    layer_style_effect_names, layer_style_gradient, layer_style_pattern_names, layer_style_value,
-    layer_via_copy, layer_via_cut, lens_correction_slots, lift_selection, lock_group_layers,
-    mask_document, mask_document_coverage, merge_lifted, merge_scope, move_is_content_neutral,
+    convert_to_indexed, convert_to_smart_object, convert_type_to_shape, copy_layer,
+    copy_layer_style, copy_merged, copy_merged_region, copy_path_to_document,
+    copy_shape_attributes, coverage_bounds, create_clipping_mask, create_style_layers,
+    create_style_layers_with_base, crop_document, crop_document_grow, defringe,
+    delete_cropped_pixels, delete_hidden_layers, delete_layer_mask, delete_paths,
+    delete_paths_report, delete_smart_filter, delete_smart_filter_mask, delete_vector_mask,
+    distribute_layers, document_bit_depth, document_color_mode, duplicate_is_content_neutral,
+    duplicate_layer, duplicate_paths, extend_background, fit_smart_object_to_canvas, flatten,
+    flatten_rows, flip_document, group_layer, group_paths, has_forced_locks, has_layer_mask,
+    has_layer_style, has_smart_filter_mask, has_vector_mask, hidden_layer_paths,
+    indexed_exact_available, insert_layer, insertion_is_content_neutral, invert_layer_mask,
+    is_background, is_fill_content_layer, is_shape_layer, is_visible_in_panel, layer_comp_anchor,
+    layer_comp_changes, layer_comp_missing_ids, layer_comp_warning, layer_content_bounds,
+    layer_from_background, layer_live_shape, layer_mask_disabled, layer_mask_linked,
+    layer_mask_refinement, layer_shape_paths, layer_style_contour, layer_style_effect_names,
+    layer_style_gradient, layer_style_pattern_names, layer_style_value, layer_via_copy,
+    layer_via_cut, lens_correction_slots, lift_selection, lock_group_layers, mask_document,
+    mask_document_coverage, merge_lifted, merge_scope, move_is_content_neutral,
     move_mask_selection_content, move_path, move_path_to, move_path_to_result,
     move_selection_content, neutral_color, new_smart_object_via_copy, next_layer_name,
     open_as_smart_object, oriented_plane_bytes, parent_path, paste_clip, paste_layer_style,
@@ -285,8 +286,8 @@ mod type_style;
 pub use text_render::{materialize_text_rgba, render_text_layer, BundledRasterizer, BundledText};
 mod fonts;
 pub use fonts::{
-    font_family, font_has_outlines, font_postscript_name, missing_glyph_protection,
-    opentype_features, register_font, set_missing_glyph_protection,
+    font_family, font_has_outlines, font_postscript_name, generation as font_registry_generation,
+    missing_glyph_protection, opentype_features, register_font, set_missing_glyph_protection,
 };
 mod missing_fonts;
 pub use missing_fonts::{replace_type_fonts, REPLACEMENT_FONT};
@@ -302,6 +303,7 @@ mod type_paragraph;
 pub use type_paragraph::{type_overflows, type_to_paragraph, type_to_point};
 mod type_channels;
 mod type_layer;
+mod type_outline;
 mod type_path;
 mod type_warp;
 mod variable_pixels;
@@ -310,6 +312,9 @@ pub use type_layer::{
     add_type_layer, apply_type_style, has_type_layers, re_render_type_layers, render_type,
     replace_type_layer, replace_variable_text, type_layer_at, type_layer_spec,
     type_layers_editable, type_mask, type_placement,
+};
+pub use type_outline::{
+    outline_paths as type_outline_paths, outline_refusal as type_outline_refusal, OutlineRefusal,
 };
 pub use type_path::{overflow_point as type_path_overflow_point, path_hit_at, PathHit};
 pub use type_warp::{type_warp_refusal, WarpRefusal};

@@ -56,7 +56,7 @@ edit.pasteSpecial.pasteInto	Edit/Paste Special/Paste Into	Paste Into	Shift+Ctrl+
 edit.pasteSpecial.pasteOutside	Edit/Paste Special/Paste Outside	Paste Outside		1	0
 edit.clear	Edit/Clear	Clear		1	0
 edit.check.spelling	Edit/Check Spelling…	Check Spelling…		0	0
-edit.find.and.replace.text	Edit/Find And Replace Text…	Find And Replace Text…		0	0
+edit.find.and.replace.text	Edit/Find And Replace Text…	Find And Replace Text…		1	0
 edit.fill	Edit/Fill…	Fill…	Shift+F5	1	0
 edit.stroke	Edit/Stroke…	Stroke…		1	0
 edit.seam.aware.scale	Edit/Seam-Aware Scale	Seam-Aware Scale	Alt+Shift+Ctrl+C	0	0
@@ -328,35 +328,44 @@ type.panels.character	Type/Panels/Character	Character		1	1
 type.panels.paragraph	Type/Panels/Paragraph	Paragraph		1	1
 type.panels.characterStyles	Type/Panels/Character Styles	Character Styles		1	1
 type.panels.paragraphStyles	Type/Panels/Paragraph Styles	Paragraph Styles		1	1
-type.anti.alias.none	Type/Anti-Alias/None	None		0	0
-type.anti.alias.sharp	Type/Anti-Alias/Sharp	Sharp		0	0
-type.anti.alias.crisp	Type/Anti-Alias/Crisp	Crisp		0	0
-type.anti.alias.strong	Type/Anti-Alias/Strong	Strong		0	0
-type.anti.alias.smooth	Type/Anti-Alias/Smooth	Smooth		0	0
-type.orientation.horizontal	Type/Orientation/Horizontal	Horizontal		0	0
-type.orientation.vertical	Type/Orientation/Vertical	Vertical		0	0
-type.convert.to.point.text	Type/Convert To Point Text	Convert To Point Text		0	0
-type.convert.to.paragraph.text	Type/Convert To Paragraph Text	Convert To Paragraph Text		0	0
-type.warp.text	Type/Warp Text…	Warp Text…		0	0
-type.rasterize.type.layer	Type/Rasterize Type Layer	Rasterize Type Layer		0	0
-type.create.work.path	Type/Create Work Path	Create Work Path		0	0
-type.convert.to.shape	Type/Convert to Shape	Convert to Shape		0	0
-type.font.preview.size.none	Type/Font Preview Size/None	None		0	0
-type.font.preview.size.small	Type/Font Preview Size/Small	Small		0	0
-type.font.preview.size.medium	Type/Font Preview Size/Medium	Medium		0	0
-type.font.preview.size.large	Type/Font Preview Size/Large	Large		0	0
-type.font.preview.size.extra.large	Type/Font Preview Size/Extra Large	Extra Large		0	0
-type.font.preview.size.huge	Type/Font Preview Size/Huge	Huge		0	0
-type.language.options.middle.eastern.features	Type/Language Options/Middle Eastern features	Middle Eastern features		0	0
-type.language.options.east.asian.features	Type/Language Options/East Asian features	East Asian features		0	0
-type.update.all.text.layers	Type/Update All Text Layers	Update All Text Layers		0	0
-type.replace.all.missing.fonts	Type/Replace All Missing Fonts	Replace All Missing Fonts		0	0
-type.check.spelling	Type/Check Spelling…	Check Spelling…		0	0
-type.find.and.replace.text	Type/Find And Replace Text…	Find And Replace Text…		0	0
-type.paste.lorem.ipsum	Type/Paste Lorem Ipsum	Paste Lorem Ipsum		0	0
-type.load.default.type.styles	Type/Load Default Type Styles	Load Default Type Styles		0	0
-type.save.default.type.styles	Type/Save Default Type Styles	Save Default Type Styles		0	0
-type.extrude.to.3d	Type/Extrude to 3D	Extrude to 3D		0	0
+type.panels.glyphs	Type/Panels/Glyphs	Glyphs		1	1
+type.anti.alias.none	Type/Anti-Alias/None	None		1	1
+type.anti.alias.sharp	Type/Anti-Alias/Sharp	Sharp		1	1
+type.anti.alias.crisp	Type/Anti-Alias/Crisp	Crisp		1	1
+type.anti.alias.strong	Type/Anti-Alias/Strong	Strong		1	1
+type.anti.alias.smooth	Type/Anti-Alias/Smooth	Smooth		1	1
+type.orientation.horizontal	Type/Orientation/Horizontal	Horizontal		1	1
+type.orientation.vertical	Type/Orientation/Vertical	Vertical		1	1
+type.openType.standardLigatures	Type/OpenType/Standard Ligatures	Standard Ligatures		1	1
+type.openType.contextualAlternates	Type/OpenType/Contextual Alternates	Contextual Alternates		1	1
+type.openType.discretionaryLigatures	Type/OpenType/Discretionary Ligatures	Discretionary Ligatures		1	1
+type.openType.swash	Type/OpenType/Swash	Swash		1	1
+type.openType.oldstyle	Type/OpenType/Oldstyle	Oldstyle		1	1
+type.openType.stylisticAlternates	Type/OpenType/Stylistic Alternates	Stylistic Alternates		1	1
+type.openType.titlingAlternates	Type/OpenType/Titling Alternates	Titling Alternates		1	1
+type.openType.ornaments	Type/OpenType/Ornaments	Ornaments		1	1
+type.openType.ordinals	Type/OpenType/Ordinals	Ordinals		1	1
+type.openType.fractions	Type/OpenType/Fractions	Fractions		1	1
+type.convert.to.point.text	Type/Convert To Point Text	Convert To Point Text		1	0
+type.convert.to.paragraph.text	Type/Convert To Paragraph Text	Convert To Paragraph Text		1	0
+type.warp.text	Type/Warp Text…	Warp Text…		1	0
+type.rasterize.type.layer	Type/Rasterize Type Layer	Rasterize Type Layer		1	0
+type.create.work.path	Type/Create Work Path	Create Work Path		1	0
+type.convert.to.shape	Type/Convert to Shape	Convert to Shape		1	0
+type.font.preview.size.none	Type/Font Preview Size/None	None		1	1
+type.font.preview.size.small	Type/Font Preview Size/Small	Small		1	1
+type.font.preview.size.medium	Type/Font Preview Size/Medium	Medium		1	1
+type.font.preview.size.large	Type/Font Preview Size/Large	Large		1	1
+type.font.preview.size.extra.large	Type/Font Preview Size/Extra Large	Extra Large		1	1
+type.font.preview.size.huge	Type/Font Preview Size/Huge	Huge		1	1
+type.language.options.default.features	Type/Language Options/Default features	Default features		1	1
+type.language.options.middle.eastern.features	Type/Language Options/Middle Eastern features	Middle Eastern features		1	1
+type.language.options.east.asian.features	Type/Language Options/East Asian features	East Asian features		1	1
+type.update.all.text.layers	Type/Update All Text Layers	Update All Text Layers		1	0
+type.replace.all.missing.fonts	Type/Replace All Missing Fonts	Replace All Missing Fonts		1	0
+type.paste.lorem.ipsum	Type/Paste Lorem Ipsum	Paste Lorem Ipsum		1	0
+type.load.default.type.styles	Type/Load Default Type Styles	Load Default Type Styles		1	0
+type.save.default.type.styles	Type/Save Default Type Styles	Save Default Type Styles		1	0
 select.all	Select/All	All	Ctrl+A	1	0
 select.deselect	Select/Deselect	Deselect	Ctrl+D	1	0
 select.reselect	Select/Reselect	Reselect	Shift+Ctrl+D	1	0

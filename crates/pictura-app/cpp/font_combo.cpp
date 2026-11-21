@@ -19,6 +19,27 @@ namespace pictura {
 
 namespace {
 
+// Type > Font Preview Size: 0 None, 1 Small, 2 Medium, 3 Large, 4 Extra
+// Large, 5 Huge. None skips the sample; the rest add pixels over the UI font.
+int g_fontPreviewSize = 2;
+
+int previewExtra()
+{
+    switch (fontPreviewSize()) {
+    case 0:
+    case 1:
+        return 0;
+    case 3:
+        return 4;
+    case 4:
+        return 6;
+    case 5:
+        return 10;
+    default:
+        return 2;
+    }
+}
+
 bool hasColorGlyphs(const QRawFont& raw)
 {
     for (const char* tag : {"COLR", "CBDT", "sbix", "SVG "}) {
@@ -31,7 +52,7 @@ bool hasColorGlyphs(const QRawFont& raw)
 
 // CS6's font menu row: the family name in the UI font, so a thin or dotted face
 // reads as clearly as any other, then a short sample in the face itself.
-// ponytail: one preview size; Type > Font Preview Size is not built yet.
+// The sample size follows Type > Font Preview Size.
 class FontRowDelegate : public QStyledItemDelegate {
 public:
     explicit FontRowDelegate(QObject* parent)
@@ -61,7 +82,7 @@ public:
         const int nameWidth = QFontMetrics(ui).horizontalAdvance(family);
         painter->drawText(rect, Qt::AlignVCenter | Qt::TextSingleLine, family);
 
-        const QString sample = sampleFor(family);
+        const QString sample = fontPreviewSize() == 0 ? QString() : sampleFor(family);
         if (!sample.isEmpty()) {
             const QFont face = sampleFont(family, ui);
             const int sampleWidth = QFontMetrics(face).horizontalAdvance(sample);
@@ -82,10 +103,15 @@ public:
     {
         const QFontMetrics metrics(option.font);
         const QString family = index.data(Qt::DisplayRole).toString();
+        const int base = qMax(1, QFontInfo(option.font).pixelSize());
+        const int samplePx = base + previewExtra();
         const int width = 2 + scalable_.actualSize(QSize(16, 16)).width() + 4
             + metrics.horizontalAdvance(family) + kGap
-            + metrics.horizontalAdvance(QStringLiteral("Sample")) * 3 / 2 + kGap;
-        return QSize(width, metrics.height() * 3 / 2);
+            + (fontPreviewSize() == 0
+                   ? 0
+                   : metrics.horizontalAdvance(QStringLiteral("Sample")) * samplePx / base)
+            + kGap;
+        return QSize(width, qMax(metrics.height() * 3 / 2, samplePx + 4));
     }
 
 private:
@@ -94,7 +120,7 @@ private:
     static QFont sampleFont(const QString& family, const QFont& ui)
     {
         QFont face(family);
-        face.setPixelSize(QFontInfo(ui).pixelSize() + 2);
+        face.setPixelSize(QFontInfo(ui).pixelSize() + previewExtra());
         return face;
     }
 
@@ -211,6 +237,16 @@ void useFastFontPreviews(QFontComboBox* combo)
 {
     combo->setItemDelegate(new FontRowDelegate(combo));
     new FreshFamilySearch(combo);
+}
+
+int fontPreviewSize()
+{
+    return g_fontPreviewSize;
+}
+
+void setFontPreviewSize(int size)
+{
+    g_fontPreviewSize = qBound(0, size, 5);
 }
 
 } // namespace pictura

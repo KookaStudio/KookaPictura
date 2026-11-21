@@ -388,7 +388,10 @@ fn type_content(
 }
 
 fn rgb8(doc: &Document) -> bool {
-    doc.mode == ColorMode::Rgb && doc.depth == BitDepth::Eight
+    doc.mode == ColorMode::Rgb
+        && doc.depth == BitDepth::Eight
+        && doc.document_color_mode() == ColorMode::Rgb
+        && doc.document_bit_depth() == BitDepth::Eight
 }
 
 /// Whether type layers in `doc` can be set or re-set: only 8-bit RGB.
@@ -445,10 +448,9 @@ pub fn add_type_layer(doc: &mut Document, selection_path: &str, spec: &TypeSpec)
     crate::document_ops::insert_node(doc, selection_path, layer)
 }
 
-/// Re-set every live type layer from its own spec, keeping its text, transform,
-/// attributes, and applied styles, and recording no history. A process-wide
-/// render setting (Missing Glyph Protection) changes the pixels without
-/// changing the document's type data.
+/// Refresh live type pixels without reauthoring the type data. Imported layers
+/// with distinct style runs keep their stored pixels because the renderer only
+/// reproduces a single style.
 pub fn re_render_type_layers(doc: &mut Document) -> usize {
     if !type_layers_editable(doc) {
         return 0;
@@ -471,10 +473,24 @@ pub fn re_render_type_layers(doc: &mut Document) -> usize {
     paths
         .iter()
         .filter(|path| {
-            let Some(spec) = crate::resolve_path(doc, path).and_then(type_layer_spec) else {
+            let Some(layer) = crate::resolve_path_mut(doc, path) else {
                 return false;
             };
-            replace_type_layer(doc, path, &spec)
+            if !layer
+                .type_tool()
+                .is_some_and(pictura_codec::type_tool_has_uniform_runs)
+            {
+                return false;
+            }
+            let Some((rect, buffer)) = type_layer_spec(layer).and_then(|spec| render_type(&spec))
+            else {
+                return false;
+            };
+            layer.rect = rect;
+            layer.set_channels(crate::type_channels::type_channels(&buffer));
+            layer.discard_raw_channels();
+            layer.source_channels = None;
+            true
         })
         .count()
 }
@@ -560,7 +576,8 @@ pub fn type_layer_spec(layer: &pictura_core::Layer) -> Option<TypeSpec> {
 /// Re-set the type layer at `path` from `spec` in place: new rect, pixels, and
 /// authored `TySh`. A name that was the old text's default
 /// follows the new text; a renamed layer keeps its name. False (unchanged) for
-/// a missing or non-type layer, blank text, or a document that is not 8-bit RGB.
+/// a missing or non-type layer, blanking a nonempty layer, or a document that
+/// is not 8-bit RGB. An existing blank layer can still be restyled.
 ///
 /// ponytail: an opened layer's own `TySh` (several runs, paragraph type) is
 /// replaced by the single-run authored one; its warp is carried by `spec`.
@@ -585,7 +602,7 @@ fn replace_type_content(
     if !rgb8(doc) {
         return false;
     }
-    let Some((existing, font_name, rect, bounds)) = crate::resolve_path(doc, path)
+    let Some((existing, font_name, rect, bounds, was_blank)) = crate::resolve_path(doc, path)
         .and_then(|layer| Some((layer.rect, layer.type_tool()?)))
         .map(|(rect, tool)| {
             // Only reuse the layer's PostScript name while its family is the
@@ -598,12 +615,18 @@ fn replace_type_content(
                 (family == spec.character.font_family).then(|| postscript.to_string())
             });
             let bounds = tool.bounds.map(f64::from);
-            (tool.text_desc.clone(), name, rect, bounds)
+            (
+                tool.text_desc.clone(),
+                name,
+                rect,
+                bounds,
+                tool.text.trim().is_empty(),
+            )
         })
     else {
         return false;
     };
-    let (rect, channels, tool) = if allow_blank && spec.text.trim().is_empty() {
+    let (rect, channels, tool) = if (allow_blank || was_blank) && spec.text.trim().is_empty() {
         let rect = PsdRect {
             right: rect.left,
             bottom: rect.top,
@@ -748,6 +771,10 @@ pub fn transform_type_layer(doc: &mut Document, path: &str, a: [f64; 6]) -> Opti
     }
     Some(replace_type_layer(doc, path, &spec))
 }
+
+#[cfg(test)]
+#[path = "type_layer/refresh_tests.rs"]
+mod refresh_tests;
 
 #[cfg(test)]
 mod tests {

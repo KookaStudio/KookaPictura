@@ -220,6 +220,22 @@ pub(crate) fn existing_engine_tree(text_desc: &[u8]) -> Option<EngineValue> {
     parse_engine_data(engine_data_payload(raw)).ok()
 }
 
+/// Whether this type layer's runs can be reproduced by a single style.
+pub fn type_tool_has_uniform_runs(tool: &TypeTool) -> bool {
+    let Some(root) = existing_engine_tree(&tool.text_desc) else {
+        return false;
+    };
+    ["StyleRun", "ParagraphRun"].into_iter().all(|key| {
+        let Some(EngineValue::List(runs)) =
+            crate::engine_data::path(&root, &["EngineDict", key, "RunArray"])
+        else {
+            return false;
+        };
+        runs.first()
+            .is_some_and(|first| runs.iter().all(|run| run == first))
+    })
+}
+
 /// Overwrite the modelled keys of the parsed tree, preserving every unmodeled
 /// one; collapse style runs to one and rebuild the paragraph runs to match the
 /// text.

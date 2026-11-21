@@ -46,6 +46,8 @@ struct LayerType {
 /// The single read of a layer's type state (replaces the five per-field
 /// crossings the Type tool and the panels ran on every open/refresh).
 LayerType readLayer(const PictureView& view, const QString& path);
+CharacterSetting layerCharacterSetting(const PictureView& view, const QString& path);
+bool layerIsVertical(const PictureView& view, const QString& path);
 /// Whether `path` is type carrying a Warp Text warp (the Layers panel badge).
 bool isWarped(const PictureView& view, const QString& path);
 
@@ -88,6 +90,26 @@ bool updateLayer(PictureView& view, const QString& path, const TypeSpec& spec);
 /// As `updateLayer` without a history state: shows `spec` until it is replaced.
 bool previewLayer(PictureView& view, const QString& path, const TypeSpec& spec);
 bool applyStyle(PictureView& view, const QString& path, const QString& name, bool paragraph);
+
+/// Whether the type layer at `path` has an outline face and at least one glyph.
+bool canOutline(const PictureView& view, const QString& path);
+/// Type > Create Work Path: one state; false (no state) when it does not apply.
+bool createWorkPath(PictureView& view, const QString& path);
+/// Type > Convert to Shape: one state; false (no state) when it does not apply.
+bool convertToShape(PictureView& view, const QString& path);
+/// Type > Update All Text Layers: one state when anything changed.
+int updateAllTextLayers(PictureView& view);
+/// Type > Paste Lorem Ipsum on a selected type layer: one state.
+bool pasteLorem(PictureView& view, const QString& path);
+/// Type > Load Default Type Styles: one state; keeps the layer's text and placement.
+bool loadDefaults(PictureView& view, const QString& path, const QString& font,
+                  const CharacterSetting& character, const ParagraphSetting& paragraph);
+
+/// Edit > Find And Replace Text: one state when anything changed; returns the
+/// number of matches replaced.
+int replaceText(PictureView& view, const QString& path, const QString& find,
+                const QString& replace, bool allLayers, bool forward, bool caseSensitive,
+                bool wholeWord);
 
 /// One character style, resolved against the style sheet.
 struct CharacterStyle {

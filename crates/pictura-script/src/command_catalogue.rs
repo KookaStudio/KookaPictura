@@ -12,7 +12,6 @@ pub fn command_edition(id: &str) -> Edition {
     match id {
         "edit.preferences.3d"
         | "layer.rasterize.3d"
-        | "type.extrude.to.3d"
         | "view.show.3d.axis"
         | "view.show.count"
         | "window.panels.3d"
@@ -115,6 +114,7 @@ pub fn modal_ids() -> &'static [&'static str] {
         "edit.auto.align.layers",
         "edit.auto.blend.layers",
         "edit.keyboardShortcuts",
+        "edit.find.and.replace.text",
         "edit.pdfPresets",
         "edit.presets.preset.manager",
         "edit.assignProfile",
@@ -353,7 +353,6 @@ mod tests {
             "layer.smart.objects.stack.mode.standard.deviation",
             "layer.smart.objects.stack.mode.summation",
             "layer.smart.objects.stack.mode.variance",
-            "type.extrude.to.3d",
             "view.show.3d.axis",
             "view.show.count",
             "window.panels.3d",

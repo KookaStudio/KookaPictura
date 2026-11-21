@@ -21,6 +21,7 @@
 #include "preferences.h"
 #include "quick_mask_ui.h"
 #include "save_format_options.h"
+#include "menu_registrar.h"
 #include "tools.h"
 class QDialog;
 class QDockWidget;
@@ -283,6 +284,10 @@ public:
     void saveSession();
     // Hand a URL to the desktop opener, honouring the test seam.
     void openExternalUrl(const QUrl& url);
+    void wireTypeRuntime(MenuRegistrar::Runtime& runtime);
+    void setTypeShowAsianOptions(bool on);
+    void setTypeMiddleEastern(bool on);
+    void setFontPreviewSize(int size);
     // The per-format Save As options (ImportSaveCoordinator).
     bool runSaveFormatDialog(SaveFormatKind kind, SaveFormatOptions& options);
     void rememberSaveFormatOptions(SaveFormatKind kind, const SaveFormatOptions& options);
@@ -691,6 +696,8 @@ private:
     bool typeShowAsianOptions_ = false;
     bool typeMiddleEastern_ = false;
     bool typeMissingGlyphProtection_ = true;
+    int fontPreviewSize_ = 2;
+    QString typeDefaultsJson_;
     bool gpuAvailable_ = true;
     bool gpuCandidatesAvailable_ = false;
     bool useShiftKeyForToolSwitch_ = true;
@@ -721,6 +728,7 @@ private:
     void setProofColors(bool on);
     QString proofSetupName() const;
     void loadGuideSession(const SessionState& state, const Preferences& prefs);
+    void loadTypePreferences(const Preferences& prefs);
     void prepareCanvasGuides(const DocWindow& window);
     // Give the active document's other windows its guides; the tools keep the
     // active canvas's guides.

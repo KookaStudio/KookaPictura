@@ -229,6 +229,42 @@ pub mod ffi {
         /// Convert the type layer at `path` to paragraph type (`paragraph` true) or point type and record one "Convert To Paragraph Text" / "Convert To Point Text" state; false (no state) when it is not a type layer of the other kind.
         fn type_convert(view: Pin<&mut PictureView>, path: &QString, paragraph: bool) -> bool;
 
+        /// Whether the type layer at `path` has an outline face and at least one glyph; false for a non-type layer or an outline-less face.
+        fn type_can_outline(view: &PictureView, path: &QString) -> bool;
+
+        /// Trace the type layer at `path` into the document's work path and record one "Create Work Path" state; false (no state) for a non-type layer, an outline-less face, or empty text.
+        fn type_create_work_path(view: Pin<&mut PictureView>, path: &QString) -> bool;
+
+        /// Replace the type layer at `path` with a shape layer cut to its outlines and record one "Convert to Shape" state; false (no state) when it is not type, has no outlines, or has empty text.
+        fn type_convert_to_shape(view: Pin<&mut PictureView>, path: &QString) -> bool;
+
+        /// Re-render every type layer and record one "Update All Text Layers" state; returns the number of layers changed, 0 records nothing.
+        fn type_update_all_text_layers(view: Pin<&mut PictureView>) -> i32;
+
+        /// Append the lorem ipsum block to the type layer at `path` and record one "Paste Lorem Ipsum" state; false (no state) for a non-type layer or a non-editable document.
+        fn type_paste_lorem(view: Pin<&mut PictureView>, path: &QString) -> bool;
+
+        /// Apply `character` and `paragraph` to the type layer at `path`, keeping its text and placement, and record one "Load Default Type Styles" state; false (no state) for a non-type layer or a non-editable document.
+        fn type_load_defaults(
+            view: Pin<&mut PictureView>,
+            path: &QString,
+            font: &QString,
+            character: &CharacterSetting,
+            paragraph: &ParagraphSetting,
+        ) -> bool;
+
+        /// Replace every match of `find` with `replace` in the type layer at `path` (or every type layer when `all_layers` is true) and record one "Find And Replace Text" state; returns the number of matches changed, 0 records nothing.
+        fn type_replace_text(
+            view: Pin<&mut PictureView>,
+            path: &QString,
+            find: &QString,
+            replace: &QString,
+            all_layers: bool,
+            forward: bool,
+            case_sensitive: bool,
+            whole_word: bool,
+        ) -> i32;
+
         /// Whether the type layer at `path` is paragraph type; false for point type or a non-type layer.
         fn type_layer_is_paragraph(view: &PictureView, path: &QString) -> bool;
 
@@ -276,6 +312,9 @@ pub mod ffi {
 
         /// The type layer at `path`'s character attribute set; the model defaults for a non-type layer.
         fn type_layer_character_setting(view: &PictureView, path: &QString) -> CharacterSetting;
+
+        /// The stored orientation, without laying out the text.
+        fn type_layer_vertical(view: &PictureView, path: &QString) -> bool;
 
         /// The type layer at `path`'s paragraph attribute set; the model defaults for a non-type layer.
         fn type_layer_paragraph_setting(view: &PictureView, path: &QString) -> ParagraphSetting;
