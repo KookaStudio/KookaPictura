@@ -4,6 +4,29 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Vendor raw containers — Sony ARW, #1470 implemented** (OpenSpec change
+  `vendor-raw-arw`, archived; `codec/vendor-raw-containers`,
+  `codec/camera-matrices` and `document/raw-open` modified). ARW files open.
+  `dng/arw.rs`: a TIFF without `DNGVersion` whose IFD0 `Make` starts `SONY`
+  is ARW (`tiff::ascii_in`, shared with NEF); the raw
+  SubIFD is read uncompressed (16-bit words), ARW2 (compression 32767, one
+  byte per photosite, `arw_decode`: 16-byte blocks of max/min/indices/7-bit
+  deltas, tone curve `0x7010` as the `Levels` linearization table on the
+  14-bit scale) or lossless (compression 7, 512² tiles, each four-component
+  frame sample one 2 × 2 quad — `decode_quad_tiles`; the row-pair placement
+  scrambled the CFA). Levels/WB: raw IFD `0x7310`/`0xC61D`/`0x7313` first,
+  else the SR2 block (IFD0 `0xC634` → SR2Private `0x7200/0x7201/0x7221`,
+  deciphered in-house, `0x7310`/`0x7300`, min of `0x787F`, `0x7313`/GRBG
+  `0x7303`). Area = plane, cut to `0x7038` for padded tiles; crop
+  `0xC61F/0xC620`. Refused: ARW 1.0 (A100: SubIFD points at data), YCbCr
+  small/medium lossless, packed uncompressed. 11 rawtoaces Sony bodies + 3
+  aliases in `gen-camera-matrices.py`. Checked on 27 raw.pixls.us files
+  (A100 … A1): every CFA file reads with matching greens, the A7R II's 12-bit
+  compressed and 14-bit uncompressed shots of one scene agree within 0.5 %,
+  table cameras decode at 3900–5900 K. Open dialog filters list `*.ARW`.
+  Tests: `tests/raw_arw.rs` (synthetic
+  `tests/raw/arw_builder.rs`), Sony rows of `tests/raw_camera_matrices.rs`,
+  `arw_decode` unit tests, `raw_open/tests.rs`, `tst_raw_open`. Series next: ORF/RW2 → RAF + X-Trans → CR3.
 - **Vendor raw containers — #1469 Nikon NEF implemented** (OpenSpec change
   `vendor-raw-nef`, archived; `codec/vendor-raw-containers`,
   `codec/camera-matrices` and `document/raw-open` modified). NEF files open.
