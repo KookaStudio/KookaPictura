@@ -5,18 +5,20 @@
 
 #include "panels/numeric_field.h"
 
+#include <QtCore/QSignalBlocker>
 #include <QtWidgets/QCheckBox>
+#include <QtWidgets/QComboBox>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QStackedWidget>
 #include <QtWidgets/QToolButton>
 
 namespace pictura {
 
-// The Pen bar: Auto Add/Delete (on) and Rubber Band (off; CS6 keeps it in a
-// pop-up). The Freeform Pen bar: Curve Fit (2 px). The Path Selection bar:
-// Show Bounding Box (off).
-// ponytail: no Shape / Path / Pixels mode, path operations, or the Freeform
-// Pen's Magnetic option; the tools always draw the Work Path.
+// The Pen and Freeform Pen bars: Mode (Shape / Path / Pixels). The Pen adds
+// Auto Add/Delete (on) and Rubber Band (off; CS6 keeps it in a pop-up); the
+// Freeform Pen adds Curve Fit (2 px). The Path Selection bar: Show Bounding
+// Box (off).
+// ponytail: no path operations or the Freeform Pen's Magnetic option.
 QWidget* OptionsBar::buildPenPage(ToolId id)
 {
     auto* page = new QWidget(stack_);
@@ -32,6 +34,23 @@ QWidget* OptionsBar::buildPenPage(ToolId id)
             pen_->set(o);
         }
     };
+    if (id != ToolId::PathSelection) {
+        auto* mode = new QComboBox(page);
+        mode->setObjectName(QStringLiteral("optionsPenMode"));
+        mode->setToolTip(QStringLiteral("Pick tool mode"));
+        mode->addItems(
+            {QStringLiteral("Shape"), QStringLiteral("Path"), QStringLiteral("Pixels")});
+        mode->setCurrentIndex(initial.mode);
+        layout->addWidget(mode);
+        connect(mode, &QComboBox::currentIndexChanged, this,
+                [update](int i) { update([i](PenOptions& o) { o.mode = i; }); });
+        if (controller_) {
+            connect(controller_, &ToolController::penOptionsChanged, page, [this, mode]() {
+                const QSignalBlocker block(mode);
+                mode->setCurrentIndex(pen_->get().mode);
+            });
+        }
+    }
     if (id == ToolId::PathSelection) {
         auto* box = new QCheckBox(QStringLiteral("Show Bounding Box"), page);
         box->setObjectName(QStringLiteral("optionsPathShowBoundingBox"));

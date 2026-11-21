@@ -91,6 +91,7 @@ template <typename F> void fields(PenOptions& o, F&& f)
     f("rubberBand", o.rubberBand);
     f("curveFit", o.curveFit);
     f("showBoundingBox", o.showBoundingBox);
+    f("mode", o.mode);
 }
 
 template <typename F> void fields(ShapeOptions& o, F&& f)

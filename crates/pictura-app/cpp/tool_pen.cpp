@@ -7,6 +7,7 @@
 #include "tool_handler.h"
 
 #include "image_view.h"
+#include "paint_options.h"
 #include "path_overlay.h"
 #include "tools.h"
 
@@ -87,9 +88,10 @@ namespace {
 
 class PenToolHandler : public ToolHandler {
 public:
-    PenToolHandler(ToolId id, std::shared_ptr<PenGroup> pen)
+    PenToolHandler(ToolId id, std::shared_ptr<PenGroup> pen, std::shared_ptr<PaintOptions> paint)
         : id_(id)
         , pen_(std::move(pen))
+        , paint_(std::move(paint))
     {
         addOptions(pen_.get());
     }
@@ -115,9 +117,15 @@ public:
         if (PictureView* press = pressView_) {
             path_gesture_end(*press);
         }
-        // Switching tools leaves the subpath being drawn open.
+        // Switching tools leaves the subpath being drawn open. Path mode does
+        // not save here: the user may switch to an anchor tool to keep editing
+        // the same Work Path, and undo must step back the last anchor.
         if (v && v->has_document()) {
-            path_finish(*v);
+            if (path_editing_subpath(*v) >= 0 && pen_->get().mode != 1) {
+                finishPath(ctx, *v);
+            } else {
+                path_finish(*v);
+            }
         }
         reset();
         overClose_ = false;
@@ -295,8 +303,13 @@ public:
             // Ending back near the start closes the loop.
             const bool close = trail.size() > 2
                 && QLineF(trail.first(), imagePos).length() * zoom(ctx) <= 8.0;
-            path_add_freeform(*v, ::rust::Slice<const double>(flat.data(), flat.size()),
-                              pen_->get().curveFit, close);
+            const ::rust::Slice<const double> points(flat.data(), flat.size());
+            if (isPenDrawingTool() && pen_->get().mode == 1) {
+                path_add_freeform_and_save(*v, points, pen_->get().curveFit, close,
+                                           paths_next_name(*v));
+            } else if (path_add_freeform(*v, points, pen_->get().curveFit, close)) {
+                landDrawnPath(ctx, *v);
+            }
             break;
         }
         case Gesture::None:
@@ -349,15 +362,24 @@ private:
     {
         // Ctrl-click away ends the subpath, open.
         if (mods.testFlag(Qt::ControlModifier)) {
-            path_finish(v);
+            if (path_editing_subpath(v) >= 0) {
+                finishPath(ctx, v);
+            } else {
+                path_finish(v);
+            }
             return;
         }
         const int editing = path_editing_subpath(v);
         const ::rust::Vec<std::int32_t> anchor = path_hit_anchor(v, pos.x(), pos.y(), radius);
         if (editing >= 0) {
-            if (anchor.size() == 2 && anchor[0] == editing && anchor[1] == 0
-                && path_close(v)) {
-                return;
+            if (anchor.size() == 2 && anchor[0] == editing && anchor[1] == 0) {
+                const bool closed = isPenDrawingTool() && pen_->get().mode == 1
+                    ? path_close_and_save(v, paths_next_name(v))
+                    : path_close(v);
+                if (closed) {
+                    landDrawnPath(ctx, v);
+                    return;
+                }
             }
         } else if (anchor.size() == 2) {
             // An open subpath's endpoint resumes drawing from it.
@@ -401,9 +423,47 @@ private:
         if (!v || !v->has_document() || path_editing_subpath(*v) < 0) {
             return false;
         }
-        path_finish(*v);
+        finishPath(*ctx_, *v);
         refreshOverlay(*ctx_);
         return true;
+    }
+
+    bool isPenDrawingTool() const { return id_ == ToolId::Pen || id_ == ToolId::FreeformPen; }
+
+    // End the subpath being drawn and route it to the options bar's mode.
+    void finishPath(ToolServices& ctx, PictureView& v)
+    {
+        if (isPenDrawingTool() && pen_->get().mode == 1) {
+            path_finish_and_save(v, paths_next_name(v));
+            return;
+        }
+        path_finish(v);
+        landDrawnPath(ctx, v);
+    }
+
+    // Shape creates a shape layer from the Work Path; Pixels strokes it onto
+    // the active layer. Path mode keeps the Work Path and saves a copy.
+    void landDrawnPath(ToolServices& ctx, PictureView& v)
+    {
+        if (!isPenDrawingTool() || paths_active(v) != -1) {
+            return;
+        }
+        const int mode = pen_->get().mode;
+        if (mode == 0) {
+            const char* label = id_ == ToolId::Pen ? "Pen Tool" : "Freeform Pen";
+            const QString created =
+                shape_add_work_path_layer(v, ctx.foreground().rgba(), label);
+            if (!created.isEmpty()) {
+                ctx.notifyLayerCreated(created);
+            }
+        } else if (mode == 2) {
+            const int size = paint_ ? paint_->size() : 5;
+            const int hardness = paint_ ? paint_->hardness() : 100;
+            const int opacity = paint_ ? paint_->opacity() : 100;
+            const int flow = paint_ ? paint_->flow() : 100;
+            const int spacing = paint_ ? paint_->spacing() : 25;
+            paths_stroke(v, ctx.foreground().rgba(), size, hardness, opacity, flow, spacing);
+        }
     }
 
     void reset()
@@ -472,13 +532,15 @@ private:
     std::array<int, 3> target_{};
     QList<QPointF> trail_;
     std::shared_ptr<PenGroup> pen_;
+    std::shared_ptr<PaintOptions> paint_;
 };
 
 } // namespace
 
-std::unique_ptr<ToolHandler> makePenToolHandler(ToolId id, std::shared_ptr<PenGroup> pen)
+std::unique_ptr<ToolHandler> makePenToolHandler(ToolId id, std::shared_ptr<PenGroup> pen,
+                                                std::shared_ptr<PaintOptions> paint)
 {
-    return std::make_unique<PenToolHandler>(id, std::move(pen));
+    return std::make_unique<PenToolHandler>(id, std::move(pen), std::move(paint));
 }
 
 } // namespace pictura

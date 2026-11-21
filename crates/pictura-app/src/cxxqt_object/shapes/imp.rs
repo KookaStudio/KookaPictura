@@ -244,6 +244,71 @@ pub(super) fn shape_add_layer(
     QString::from(created.as_str())
 }
 
+pub(super) fn shape_add_work_path_layer(
+    mut view: Pin<&mut PictureView>,
+    foreground: u32,
+    label: &str,
+) -> QString {
+    let subpaths = {
+        let rust = view.rust();
+        let Some(doc) = rust.session.doc.as_ref() else {
+            return QString::default();
+        };
+        doc.work_path.subpaths.clone()
+    };
+    if subpaths.iter().all(|subpath| subpath.points.len() < 2) {
+        return QString::default();
+    }
+    paint_timing::start("Pen shape");
+    let t = std::time::Instant::now();
+    let c = rgba_from_argb(foreground);
+    let created = {
+        let mut rust = view.as_mut().rust_mut();
+        let above = rust
+            .layer_target
+            .anchor()
+            .map(str::to_string)
+            .unwrap_or_default();
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return QString::default();
+        };
+        pictura_render::add_shape_layer(
+            doc,
+            &above,
+            [c.r, c.g, c.b, 255],
+            "Shape",
+            &subpaths[0],
+            None,
+        )
+    };
+    if created.is_empty() {
+        paint_timing::report();
+        return QString::default();
+    }
+    let mut reach = None;
+    if let Some(doc) = view.as_mut().rust_mut().session.doc.as_mut() {
+        let (width, height) = (doc.width, doc.height);
+        if let Some(layer) = pictura_render::resolve_path_mut(doc, &created) {
+            if subpaths.len() > 1 {
+                pictura_render::set_layer_shape_paths(layer, &subpaths, width, height);
+            }
+            reach = pictura_render::shape_bounds(layer, width, height)
+                .map(|bounds| shape_reach(bounds, 0));
+        }
+        doc.work_path = VectorPath::default();
+        if clipped_above(doc, &created) {
+            reach = None;
+        }
+    }
+    view.as_mut().rust_mut().select_only_layer(&created);
+    view.as_mut().clear_link_sets();
+    refresh_edit(view.as_mut(), reach, &created);
+    view.as_mut().record(label);
+    paint_timing::record("shape_add_work_path_layer", t.elapsed());
+    paint_timing::report();
+    QString::from(created.as_str())
+}
+
 /// The document pixels a shape with outline `bounds` (`left, top, right,
 /// bottom`) and a stroke `stroke_width` wide can touch: the stroke's whole width
 /// on every side (it may be outside), plus a pixel for the edge's coverage.

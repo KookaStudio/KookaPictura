@@ -12,6 +12,7 @@
 
 #include <QtGui/QKeyEvent>
 #include <QtWidgets/QCheckBox>
+#include <QtWidgets/QComboBox>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QListWidget>
 
@@ -20,6 +21,18 @@
 namespace {
 
 using paint_fixture::Fixture;
+
+// The active tool's own options-bar control: each tool has its own page.
+template <typename T>
+T* visibleChild(pictura::PicturaMainWindow& frame, const QString& name)
+{
+    for (T* child : frame.findChildren<T*>(name)) {
+        if (child->isVisible()) {
+            return child;
+        }
+    }
+    return nullptr;
+}
 
 int points(const Fixture& f, int sp) { return pictura::path_point_count(*f.view, sp); }
 
@@ -46,6 +59,15 @@ void drawSquare(const Fixture& f)
     }
 }
 
+// The existing Pen checks exercise the Work Path, so they opt into Path mode.
+void pathMode(const Fixture& f)
+{
+    auto* group = f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::Pen);
+    pictura::PenOptions o = group->get();
+    o.mode = 1;
+    group->set(o);
+}
+
 } // namespace
 
 class PenToolsTest : public QObject {
@@ -54,6 +76,10 @@ class PenToolsTest : public QObject {
 private slots:
     void initTestCase();
     void penTool();
+    void penModeBar();
+    void penShapeMode();
+    void penPathMode();
+    void penPixelsMode();
     void penAutoAddDelete();
     void freeformPenTool();
     void anchorPointTools();
@@ -84,6 +110,7 @@ void PenToolsTest::penTool()
     seed.fill(Qt::white);
     Fixture f(frame, seed, QStringLiteral("pictura_pen_seed"));
     QVERIFY2(f.ok(), "pen fixture");
+    pathMode(f);
 
     // P and Shift+P cycle the Pen and Freeform Pen.
     frame.show();
@@ -177,6 +204,101 @@ void PenToolsTest::penTool()
     QCOMPARE(points(f, 1), 2);
 }
 
+void PenToolsTest::penModeBar()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_pen_mode_bar"));
+    QVERIFY2(f.ok(), "pen mode fixture");
+    frame.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&frame));
+    f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::Pen)->set({});
+    frame.setActiveTool(pictura::ToolId::Pen);
+
+    auto* mode = visibleChild<QComboBox>(frame, QStringLiteral("optionsPenMode"));
+    QVERIFY2(mode, "pen mode bar");
+    QCOMPARE(mode->count(), 3);
+    QCOMPARE(mode->itemText(0), QStringLiteral("Shape"));
+    QCOMPARE(mode->itemText(1), QStringLiteral("Path"));
+    QCOMPARE(mode->itemText(2), QStringLiteral("Pixels"));
+    QCOMPARE(mode->currentIndex(), 0);
+
+    // The two Pen pages share the mode.
+    mode->setCurrentIndex(1);
+    QCOMPARE(f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::Pen)->get().mode, 1);
+    frame.setActiveTool(pictura::ToolId::FreeformPen);
+    auto* freeform = visibleChild<QComboBox>(frame, QStringLiteral("optionsPenMode"));
+    QVERIFY2(freeform, "freeform mode bar");
+    QCOMPARE(freeform->currentIndex(), 1);
+    freeform->setCurrentIndex(2);
+    QCOMPARE(f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::Pen)->get().mode, 2);
+    QCOMPARE(mode->currentIndex(), 2);
+}
+
+void PenToolsTest::penShapeMode()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_pen_shape_mode"));
+    QVERIFY2(f.ok(), "pen shape fixture");
+    auto* group = f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::Pen);
+    pictura::PenOptions options = group->get();
+    options.mode = 0;
+    group->set(options);
+    frame.setActiveTool(pictura::ToolId::Pen);
+
+    const int layers = f.view->layer_count();
+    drawSquare(f);
+    QCOMPARE(f.view->layer_count(), layers + 1);
+    QVERIFY2(!pictura::paths_has_work_path(*f.view), "shape left a Work Path");
+    QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Pen Tool"));
+    QVERIFY(f.view->sample_argb(30, 30) != QColor(Qt::white).rgba());
+}
+
+void PenToolsTest::penPathMode()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_pen_path_mode"));
+    QVERIFY2(f.ok(), "pen path fixture");
+    auto* group = f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::Pen);
+    pictura::PenOptions options = group->get();
+    options.mode = 1;
+    group->set(options);
+    frame.setActiveTool(pictura::ToolId::Pen);
+
+    const int saved = pictura::paths_saved_count(*f.view);
+    drawSquare(f);
+    QCOMPARE(pictura::paths_saved_count(*f.view), saved + 1);
+    QCOMPARE(pictura::paths_saved_name(*f.view, saved), QStringLiteral("Path 1"));
+    QVERIFY(pictura::paths_has_work_path(*f.view));
+    QCOMPARE(pictura::path_subpath_count(*f.view), 1);
+    QCOMPARE(pictura::path_point_count(*f.view, 0), 4);
+}
+
+void PenToolsTest::penPixelsMode()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_pen_pixels_mode"));
+    QVERIFY2(f.ok(), "pen pixels fixture");
+    auto* group = f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::Pen);
+    pictura::PenOptions options = group->get();
+    options.mode = 2;
+    group->set(options);
+    frame.setActiveTool(pictura::ToolId::Pen);
+
+    const int layers = f.view->layer_count();
+    drawSquare(f);
+    QCOMPARE(f.view->layer_count(), layers);
+    QCOMPARE(f.view->history_label(f.view->history_index()), QStringLiteral("Stroke Path"));
+    QVERIFY(f.view->sample_argb(10, 10) != QColor(Qt::white).rgba());
+}
+
 void PenToolsTest::penAutoAddDelete()
 {
     pictura::PicturaMainWindow& frame = *window_;
@@ -184,6 +306,7 @@ void PenToolsTest::penAutoAddDelete()
     seed.fill(Qt::white);
     Fixture f(frame, seed, QStringLiteral("pictura_pen_auto_seed"));
     QVERIFY2(f.ok(), "pen fixture");
+    pathMode(f);
     frame.setActiveTool(pictura::ToolId::Pen);
     drawSquare(f);
     QCOMPARE(points(f, 0), 4);
@@ -198,7 +321,7 @@ void PenToolsTest::penAutoAddDelete()
     QCOMPARE(points(f, 0), 4);
 
     // Off, the same click starts a new subpath.
-    f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::Pen)->set({false, false, 2.0});
+    f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::Pen)->set({false, false, 2.0, false, 1});
     click(f, QPointF(30, 10));
     QCOMPARE(pictura::path_subpath_count(*f.view), 2);
     f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::Pen)->set({});
@@ -211,6 +334,7 @@ void PenToolsTest::freeformPenTool()
     seed.fill(Qt::white);
     Fixture f(frame, seed, QStringLiteral("pictura_freeform_seed"));
     QVERIFY2(f.ok(), "freeform fixture");
+    pathMode(f);
     frame.setActiveTool(pictura::ToolId::FreeformPen);
     auto* fit = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsFreeformPenCurveFit"));
     QVERIFY2(fit && fit->value() == 2.0, "freeform bar");
@@ -241,9 +365,9 @@ void PenToolsTest::freeformPenTool()
     for (int i = 0; i <= 80; ++i) {
         wave.append(QPointF(10 + i, 80 + 3 * std::sin(i / 4.0)));
     }
-    f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::Pen)->set({true, false, 0.5});
+    f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::Pen)->set({true, false, 0.5, false, 1});
     f.drag(wave);
-    f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::Pen)->set({true, false, 10.0});
+    f.tools->optionsFor<pictura::PenGroup>(pictura::ToolId::Pen)->set({true, false, 10.0, false, 1});
     f.drag(wave);
     QVERIFY2(!pictura::path_subpath_closed(*f.view, 1), "an open stroke closed");
     QVERIFY2(points(f, 1) > points(f, 2), "Curve Fit did not simplify");
@@ -263,6 +387,7 @@ void PenToolsTest::anchorPointTools()
     seed.fill(Qt::white);
     Fixture f(frame, seed, QStringLiteral("pictura_anchor_seed"));
     QVERIFY2(f.ok(), "anchor fixture");
+    pathMode(f);
     frame.setActiveTool(pictura::ToolId::Pen);
     drawSquare(f);
 
@@ -297,6 +422,7 @@ void PenToolsTest::convertPointTool()
     seed.fill(Qt::white);
     Fixture f(frame, seed, QStringLiteral("pictura_convert_seed"));
     QVERIFY2(f.ok(), "convert fixture");
+    pathMode(f);
     frame.setActiveTool(pictura::ToolId::Pen);
     drawSquare(f);
     frame.setActiveTool(pictura::ToolId::ConvertPoint);
@@ -332,6 +458,7 @@ void PenToolsTest::pathsPanelListsTheWorkPath()
     seed.fill(Qt::white);
     Fixture f(frame, seed, QStringLiteral("pictura_paths_panel_seed"));
     QVERIFY2(f.ok(), "paths fixture");
+    pathMode(f);
     auto* panel = frame.findChild<pictura::PathsPanel*>(QStringLiteral("pathsPanel"));
     QVERIFY2(panel, "paths panel");
     QListWidget* list = panel->listForTest();
@@ -364,6 +491,7 @@ void PenToolsTest::ctrlUndoStepsBackAnchorEdits()
     seed.fill(Qt::white);
     Fixture f(frame, seed, QStringLiteral("pictura_pen_undo_seed"));
     QVERIFY2(f.ok(), "pen undo fixture");
+    pathMode(f);
     frame.show();
     QVERIFY(QTest::qWaitForWindowActive(&frame));
     frame.setActiveTool(pictura::ToolId::Pen);
@@ -394,6 +522,7 @@ void PenToolsTest::ctrlUndoCancelsALiveGesture()
     seed.fill(Qt::white);
     Fixture f(frame, seed, QStringLiteral("pictura_pen_gesture_seed"));
     QVERIFY2(f.ok(), "pen gesture fixture");
+    pathMode(f);
     frame.show();
     QVERIFY(QTest::qWaitForWindowActive(&frame));
     frame.setActiveTool(pictura::ToolId::Pen);
@@ -435,6 +564,7 @@ void PenToolsTest::ctrlUndoCancelsAConvertDrag()
     seed.fill(Qt::white);
     Fixture f(frame, seed, QStringLiteral("pictura_convert_undo_seed"));
     QVERIFY2(f.ok(), "convert undo fixture");
+    pathMode(f);
     frame.show();
     QVERIFY(QTest::qWaitForWindowActive(&frame));
     frame.setActiveTool(pictura::ToolId::Pen);
@@ -461,6 +591,7 @@ void PenToolsTest::ctrlUndoCancelsAFreeformTrail()
     seed.fill(Qt::white);
     Fixture f(frame, seed, QStringLiteral("pictura_freeform_undo_seed"));
     QVERIFY2(f.ok(), "freeform undo fixture");
+    pathMode(f);
     frame.show();
     QVERIFY(QTest::qWaitForWindowActive(&frame));
     frame.setActiveTool(pictura::ToolId::FreeformPen);
@@ -485,6 +616,7 @@ void PenToolsTest::enterInFieldKeepsPathActive()
     seed.fill(Qt::white);
     Fixture f(frame, seed, QStringLiteral("pictura_pen_enter"));
     QVERIFY2(f.ok(), "pen enter fixture");
+    pathMode(f);
     frame.show();
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
     frame.activateWindow();
