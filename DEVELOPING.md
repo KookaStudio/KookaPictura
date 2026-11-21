@@ -449,8 +449,13 @@ default**: set `PICTURA_VERIFY_LOCK=1` in your shell or the user-global env file
 instead of running their CMake, cargo, Qt link, and test steps at the same time.
 `PICTURA_VERIFY_LOCK_TIMEOUT` bounds the wait in seconds (default 3600; `0`
 waits without a limit). A docs-only `verify-fast.sh` run never takes the lock.
-The lock lives under `XDG_RUNTIME_DIR` (or `TMPDIR`), so runs that use different
-runtime directories do not serialize against each other.
+The lock lives under the owned `/run/user/<uid>` directory when available,
+with `/tmp` as the portable fallback. Private `XDG_RUNTIME_DIR` and `TMPDIR`
+values do not change the lock path. Run with the lock from a shell that can
+write to that directory and see the other owners' PIDs. In a Codex sandbox
+with private PIDs, use the host execution path for serialized builds. The
+lock self-check uses an explicit
+`PICTURA_VERIFY_LOCK_ROOT` to isolate its fixtures.
 
 Direct heavy commands can take the same lock without going through a gate:
 
@@ -500,6 +505,81 @@ git worktree remove ../kooka-pictura-worktrees/{issue}-{name}
 
 The shared `../.target` survives removal; reclaim it like any `target/` with
 `cargo clean` or `cargo sweep`.
+
+### Opt-in shared CPU quota for coding agents
+
+On Linux with systemd 254 or later and a user manager with cgroup v2 CPU
+delegation, the optional `pictura-agents.slice` limits total CPU time for all
+enrolled processes. Setup uses the regular login user. Routine repository
+commands leave the setting alone. The quota defaults to 80% of online logical
+CPUs. On a 16-CPU workstation the generated `CPUQuota=1280%` means 12.8
+logical CPUs' worth of time, shared across every enrolled worktree and
+harness. The build lock and build job counts are independent of this quota.
+
+From your main checkout, generate and install the unit for your user.
+Choose `--percent N` to use a value from 1 to 100.
+
+```bash
+pictura_budget_tool="$PWD/scripts/agent_cpu_budget.py"
+pictura_user_units="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+pictura_budget_unit=$(mktemp)
+python3 "$pictura_budget_tool" unit > "$pictura_budget_unit" &&
+    install -d "$pictura_user_units" &&
+    install -m 0644 "$pictura_budget_unit" "$pictura_user_units/pictura-agents.slice" &&
+    systemctl --user daemon-reload
+rm -f -- "$pictura_budget_unit"
+```
+
+Use that same absolute helper path from any worktree. Put these launch forms
+in your user aliases or launcher configuration if you use them routinely.
+
+```bash
+python3 "$pictura_budget_tool" run -- opencode
+python3 "$pictura_budget_tool" run -- claude
+python3 "$pictura_budget_tool" run -- codex --no-daemon
+```
+
+The standalone Codex form requires a CLI that supports `--no-daemon`.
+For a persistent local app server, use a dedicated socket. Run the first
+command in a terminal or a user service you own, then run the second in the
+worktree you want to use. A managed client must point to that server for its
+commands to count toward the quota. The running default server can still
+serve other sessions.
+
+```bash
+pictura_budget_socket="/run/user/$(id -u)/pictura-agents/codex.sock"
+python3 "$pictura_budget_tool" run -- codex app-server --listen "unix://$pictura_budget_socket"
+python3 "$pictura_budget_tool" run -- codex --remote "unix://$pictura_budget_socket"
+```
+
+In a shell tool in each harness, run `python3 /absolute/path/to/scripts/agent_cpu_budget.py status`.
+Repeat for both normal and approved shell execution in Codex. Their output
+should name the same `cgroup` and show a finite `cpu.max`. Use `status --pid PID`
+from your login shell to check an already-running worker. Run setup and the
+launcher from the host login session, which has access to the user manager.
+
+The launcher sets `SCCACHE_SERVER_UDS` to its own socket and `SCCACHE_DIR` to
+`~/.cache/pictura-agents/sccache`. When sccache is installed, the launcher
+starts it from the enrolled host scope and verifies its process before
+starting the harness. It requires a version with `SCCACHE_SERVER_UDS`
+support and keeps the dedicated server available while the slice is active.
+Preserve the launcher's cache variables in the harness's shell environment.
+If a sandbox denies Unix socket access, sccache can fall back to direct
+compilation in the slice. Use `status --pid` to check the worker's placement.
+
+For an aggregate smoke test, install the unit temporarily at 1% and start two
+short workers through the launcher from distinct worktrees. A workload that
+uses a fixed small amount of process CPU time keeps the test bounded. Both
+workers should report the same cgroup directory, and `nr_throttled` in that
+directory's `cpu.stat` should rise. Stop the probe workers before updating
+the unit to your chosen percentage. The quota covers CPU time in the slice.
+Memory, disk, GPU usage, and requests sent to external executors have separate
+resource controls.
+
+To opt out, close the enrolled harnesses and app server, stop the
+`pictura-agents.slice` user unit if a background worker is still running, and
+remove the slice file you installed. Run `systemctl --user daemon-reload` and
+restore your usual launch commands.
 
 ## Speeding up local builds
 

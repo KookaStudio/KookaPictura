@@ -5,8 +5,8 @@
 #
 # The lock helper is tested directly; verify-fast.sh/verify-full.sh are
 # inspected statically for placement and marker wiring. Sandboxed
-# HOME/XDG/TMPDIR/KOOKA_ENV_FILE keep it hermetic. Exits non-zero on any failed
-# assertion.
+# HOME, XDG, TMPDIR, KOOKA_ENV_FILE, and a fixture lock root keep it
+# hermetic. Exits non-zero on any failed assertion.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -32,6 +32,7 @@ export XDG_CONFIG_HOME="$HOME/.config"
 export XDG_RUNTIME_DIR="$sandbox/run"
 export TMPDIR="$sandbox/tmp"
 export KOOKA_ENV_FILE="$sandbox/env"
+export PICTURA_VERIFY_LOCK_ROOT="$sandbox"
 unset PICTURA_VERIFY_LOCK PICTURA_VERIFY_LOCK_TIMEOUT PICTURA_VERIFY_LOCK_HELD
 export PICTURA_VERIFY_LOCK_TIMEOUT=10
 mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$XDG_RUNTIME_DIR" "$TMPDIR"
@@ -427,7 +428,9 @@ holder=$HOLDER_PID
 wait_for_lock || fail "wrapper queue holder did not acquire the lock"
 wrap_log="$sandbox/wrap-queue.log"
 wrap_start=$(date +%s)
-( cd "$sandbox" && "$wrapper" -- true ) 2>"$wrap_log" || fail "wrapper queue run failed"
+mkdir -p "$sandbox/private-run" "$sandbox/private-tmp"
+( cd "$sandbox" && XDG_RUNTIME_DIR="$sandbox/private-run" TMPDIR="$sandbox/private-tmp" \
+    "$wrapper" -- true ) 2>"$wrap_log" || fail "wrapper queue run failed"
 wrap_elapsed=$(( $(date +%s) - wrap_start ))
 [ "$wrap_elapsed" -ge 1 ] || fail "wrapper did not wait for the holder"
 grep -q '^  worktree=' "$wrap_log" || fail "wrapper waiting message does not name the holder"
