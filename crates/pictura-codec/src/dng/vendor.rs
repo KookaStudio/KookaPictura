@@ -1,12 +1,12 @@
 //! The camera raw entry point (#399): names a container by its signature and
-//! reads any supported one (DNG, Canon CR2, Nikon NEF) into the same
+//! reads any supported one (DNG, Canon CR2, Nikon NEF, Sony ARW) into the same
 //! normalized CFA image as `read_dng`.
 //! Also the helpers the TIFF-based vendor containers share.
 
 use super::camera_matrices::CAMERAS;
 use super::levels::Area;
 use super::tiff::{Entry, Ifd, Tiff};
-use super::{cr2, nef, read_dng, to_usize, DngColor, DngImage, Tags, DNG_VERSION};
+use super::{arw, cr2, nef, read_dng, to_usize, DngColor, DngImage, Tags, DNG_VERSION};
 use crate::error::PsdError;
 use crate::probe::ImageBudget;
 
@@ -21,10 +21,11 @@ pub enum RawFormat {
     Dng,
     Cr2,
     Nef,
+    Arw,
 }
 
 /// Names the raw container `bytes` hold, from its signature and, for a DNG,
-/// IFD0's `DNGVersion` tag.
+/// IFD0's `DNGVersion` tag, for an ARW its `Make`.
 pub fn sniff_raw(bytes: &[u8]) -> Option<RawFormat> {
     if cr2::is_cr2(bytes) {
         return Some(RawFormat::Cr2);
@@ -34,18 +35,21 @@ pub fn sniff_raw(bytes: &[u8]) -> Option<RawFormat> {
     if ifd0.get(DNG_VERSION).is_some() {
         return Some(RawFormat::Dng);
     }
-    nef::is_nef(&tiff, first).then_some(RawFormat::Nef)
+    nef::is_nef(&tiff, first)
+        .then_some(RawFormat::Nef)
+        .or_else(|| arw::is_arw(&tiff, first).then_some(RawFormat::Arw))
 }
 
 /// Whether `prefix`, the start of a file, is a supported raw container. Only
-/// IFD0's entry table (and, for a NEF, its `Make` value) is read, so the
+/// IFD0's entry table (and, for a NEF or an ARW, its `Make` value) is read, so the
 /// prefix need not hold the other values.
 pub fn sniff_raw_prefix(prefix: &[u8]) -> bool {
     if cr2::is_cr2(prefix) {
         return true;
     }
-    Tiff::parse(prefix)
-        .is_ok_and(|(tiff, first)| tiff.lists_tag(first, DNG_VERSION) || nef::is_nef(&tiff, first))
+    Tiff::parse(prefix).is_ok_and(|(tiff, first)| {
+        tiff.lists_tag(first, DNG_VERSION) || nef::is_nef(&tiff, first) || arw::is_arw(&tiff, first)
+    })
 }
 
 /// Reads any supported raw container's full-resolution CFA plane, normalized
@@ -55,6 +59,7 @@ pub fn read_raw(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, PsdError
         Some(RawFormat::Dng) => read_dng(bytes, budget),
         Some(RawFormat::Cr2) => cr2::read_cr2(bytes, budget),
         Some(RawFormat::Nef) => nef::read_nef(bytes, budget),
+        Some(RawFormat::Arw) => arw::read_arw(bytes, budget),
         None => Err(PsdError::Unsupported("camera raw format".into())),
     }
 }
