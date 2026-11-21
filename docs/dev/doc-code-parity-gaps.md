@@ -204,7 +204,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 |---|---|---|---|---|---|
 | FILT-2 | `noise-filters.md` | Reduce Noise (incl. Advanced per-channel) | SHIPPED | `crates/pictura-app/cpp/reduce_noise_dialog.cpp:32`; `crates/pictura-filters/src/noise/reduce.rs:36` | #593 |
 | FILT-4 | `sharpen-filters.md` | Smart Sharpen Basic/Advanced split + 32-bpc disable | DIVERGENT | `crates/pictura-filters/src/catalogue/rows/render.rs` (Smart Sharpen row) | #595 |
-| FILT-5 | `stylize-filters.md` | 8 Stylize filters missing from the Filter Gallery category | DIVERGENT | `filter_gallery_dialog.cpp:118` | #596 |
+| FILT-5 | `stylize-filters.md` | 8 Stylize filters missing from the Filter Gallery category | SHIPPED | `crates/pictura-filters/src/catalogue/rows/stylize.rs` (gallery ranks 40–48); `crates/pictura-app/cpp/tests/tst_filter_gallery.cpp` | #596 |
 | FILT-6 | `artistic-filters.md` | Colored Pencil document-background paper wiring | PARTIAL | `crates/pictura-filters/src/catalogue/build/paint.rs` (Colored Pencil arm) | #597 |
 | FILT-7 | `adaptive-wide-angle.md` | Adaptive Wide Angle Auto / lens profiles, Panorama, Smart Filter re-edit, rotation handles | PARTIAL | `pictura-filters/src/distort/adaptive_wide_angle/`, `awa_dialog.cpp` | #891 |
 | FILT-9 | `lens-correction.md` | Lens Correction Save/Load Settings, Set Lens Default, and Alt-drag fringe isolation | MISSING | `lens_correction_panels.cpp` (Settings menu) | #933 |
