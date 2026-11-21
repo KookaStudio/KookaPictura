@@ -187,6 +187,7 @@ void FindReplaceTest::nonEditableDisabled()
         QString::fromLatin1(pictura::command_ids::ImageMode16Bits)));
     QCOMPARE(pictura::image_depth_bits(*f.view), 16);
     QVERIFY(f.view->layer_is_type(path));
+    QVERIFY(!pictura::type_api::layersEditable(*f.view));
     f.frame.selectLayerPath(path);
     window_->registry()->refresh();
     QVERIFY(!action->isEnabled());

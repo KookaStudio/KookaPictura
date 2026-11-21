@@ -728,6 +728,7 @@ private:
     void setProofColors(bool on);
     QString proofSetupName() const;
     void loadGuideSession(const SessionState& state, const Preferences& prefs);
+    void loadTypePreferences(const Preferences& prefs);
     void prepareCanvasGuides(const DocWindow& window);
     // Give the active document's other windows its guides; the tools keep the
     // active canvas's guides.

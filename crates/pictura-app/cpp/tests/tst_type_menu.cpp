@@ -21,6 +21,7 @@
 #include "tools.h"
 
 #include <QtCore/QFile>
+#include <QtCore/QSignalBlocker>
 #include <QtCore/QTemporaryDir>
 #include <QtCore/QtEndian>
 #include <QtGui/QAction>
@@ -43,8 +44,8 @@ QImage seed()
     return image;
 }
 
-QString addType(Fixture& f, const QString& text, double size = 40.0,
-                const QString& font = QStringLiteral("Liberation Sans"))
+pictura::type_api::TypeSpec fixtureType(const QString& text, double size,
+                                        const QString& font)
 {
     pictura::TypeSetting setting{};
     setting.x = 30.0;
@@ -53,9 +54,13 @@ QString addType(Fixture& f, const QString& text, double size = 40.0,
     setting.yy = 1.0;
     pictura::CharacterSetting character = pictura::type_api::defaultCharacterSetting();
     character.size = size;
-    const QString path = pictura::type_api::commitLayer(
-        *f.view, {text, font, setting, character,
-                  pictura::type_api::defaultParagraphSetting()});
+    return {text, font, setting, character, pictura::type_api::defaultParagraphSetting()};
+}
+
+QString addType(Fixture& f, const QString& text, double size = 40.0)
+{
+    const auto spec = fixtureType(text, size, QStringLiteral("Liberation Sans"));
+    const QString path = pictura::type_api::commitLayer(*f.view, spec);
     f.frame.selectLayerPath(path);
     f.frame.refresh();
     return path;
@@ -223,9 +228,6 @@ void TypeMenuTest::outlineRefusals()
     Fixture f(*window_, seed(), QStringLiteral("pictura_type_menu_refusal"));
     QVERIFY2(f.ok(), "fixture");
     const QString family = QStringLiteral("Pictura Outline-Less Test");
-    const QString path = addType(f, QStringLiteral("Path"), 40.0, family);
-    QVERIFY(f.view->layer_is_type(path));
-    QVERIFY(action(f, typeId(QStringLiteral("Create Work Path")))->isEnabled());
 
     QFile source(QFINDTESTDATA("../../../pictura-render/assets/LiberationSans-Regular.ttf"));
     QVERIFY(source.open(QIODevice::ReadOnly));
@@ -245,10 +247,23 @@ void TypeMenuTest::outlineRefusals()
         }
     }
     QVERIFY(stripped);
-    QVERIFY(pictura::type_api::registerFont(
-        family, QString(),
-        ::rust::Slice<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(font.constData()),
-                                          static_cast<std::size_t>(font.size()))));
+
+    QString path;
+    {
+        // Author ink through the fallback before the panels can register it
+        // under the fixture family. Then install the outline-less face.
+        const QSignalBlocker block(f.view);
+        const auto spec = fixtureType(QStringLiteral("Path"), 40.0, family);
+        path = pictura::type_api::commitLayer(*f.view, spec);
+        QVERIFY(f.view->layer_is_type(path));
+        QVERIFY(pictura::type_api::canOutline(*f.view, path));
+        const ::rust::Slice<const std::uint8_t> bytes(
+            reinterpret_cast<const std::uint8_t*>(font.constData()),
+            static_cast<std::size_t>(font.size()));
+        QVERIFY(pictura::type_api::registerFont(family, spec.character.font_style, bytes));
+        QVERIFY(!pictura::type_api::canOutline(*f.view, path));
+    }
+    f.frame.selectLayerPath(path);
 
     const int base = f.view->history_index();
     QAction* create = action(f, typeId(QStringLiteral("Create Work Path")));

@@ -13,11 +13,9 @@
 #include "api/layers_bridge.h"
 #include "api/engine_bridge.h"
 #include "api/document_api.h"
-#include "api/type_api.h"
 #include "busy_job.h"
 #include "file_drop_router.h"
 #include "fonts.h"
-#include "font_combo.h"
 #include "frame_canvas.h"
 #include "import_save_coordinator.h"
 #include "menu_registrar.h"
@@ -304,13 +302,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     askMissingOpen_ = prefs.askMissingOpen;
     pickerChoice_ = prefs.pickerChoice;
     ColorPickerDialog::setPickerPreference(pickerChoice_);
-    applyTextGamma(prefs.textGammaEnabled, prefs.textGamma);
-    typeShowAsianOptions_ = prefs.typeShowAsianOptions; typeMiddleEastern_ = prefs.typeMiddleEastern;
-    fontPreviewSize_ = prefs.fontPreviewSize;
-    pictura::setFontPreviewSize(fontPreviewSize_);
-    typeDefaultsJson_ = prefs.typeDefaults;
-    typeMissingGlyphProtection_ = prefs.typeMissingGlyphProtection;
-    pictura::type_api::setMissingGlyphProtection(typeMissingGlyphProtection_);
+    loadTypePreferences(prefs);
     useShiftKeyForToolSwitch_ = prefs.useShiftKeyForToolSwitch;
     openDocumentsAsTabs_ = prefs.openDocumentsAsTabs;
     floatingDocumentDocking_ = prefs.enableFloatingDocumentDocking;

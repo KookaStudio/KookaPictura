@@ -388,7 +388,10 @@ fn type_content(
 }
 
 fn rgb8(doc: &Document) -> bool {
-    doc.mode == ColorMode::Rgb && doc.depth == BitDepth::Eight
+    doc.mode == ColorMode::Rgb
+        && doc.depth == BitDepth::Eight
+        && doc.document_color_mode() == ColorMode::Rgb
+        && doc.document_bit_depth() == BitDepth::Eight
 }
 
 /// Whether type layers in `doc` can be set or re-set: only 8-bit RGB.

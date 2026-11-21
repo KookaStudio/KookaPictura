@@ -217,6 +217,18 @@ void PicturaMainWindow::wireTypeRuntime(MenuRegistrar::Runtime& runtime)
         = [this](const QString& json) { typeDefaultsJson_ = json; saveSession(); };
 }
 
+void PicturaMainWindow::loadTypePreferences(const Preferences& prefs)
+{
+    applyTextGamma(prefs.textGammaEnabled, prefs.textGamma);
+    typeShowAsianOptions_ = prefs.typeShowAsianOptions;
+    typeMiddleEastern_ = prefs.typeMiddleEastern;
+    fontPreviewSize_ = prefs.fontPreviewSize;
+    pictura::setFontPreviewSize(fontPreviewSize_);
+    typeDefaultsJson_ = prefs.typeDefaults;
+    typeMissingGlyphProtection_ = prefs.typeMissingGlyphProtection;
+    type_api::setMissingGlyphProtection(typeMissingGlyphProtection_);
+}
+
 void PicturaMainWindow::setTypeShowAsianOptions(bool on)
 {
     typeShowAsianOptions_ = on;
