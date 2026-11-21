@@ -1,5 +1,6 @@
 file.new	File/New…	New…	Ctrl+N	1	0
 file.open	File/Open...	Open...	Ctrl+O	1	0
+file.browse	File/Browse…	Browse…	Ctrl+Alt+O	1	0
 file.openAs	File/Open As…	Open As…	Ctrl+Alt+Shift+O	1	0
 file.openAsSmartObject	File/Open As Smart Object…	Open As Smart Object…		1	0
 file.open.recent.no.recent.files	File/Open Recent/No Recent Files	No Recent Files		0	0
@@ -35,7 +36,8 @@ file.scripts.layer.comps.to.files	File/Scripts/Layer Comps to Files	Layer Comps 
 file.scripts.layer.comps.to.pdf	File/Scripts/Layer Comps to PDF	Layer Comps to PDF		0	0
 file.scripts.load.files.into.stack	File/Scripts/Load Files into Stack…	Load Files into Stack…		1	0
 file.scripts.script.events.manager	File/Scripts/Script Events Manager	Script Events Manager		0	0
-file.scripts.statistics	File/Scripts/Statistics	Statistics		0	0
+file.scripts.statistics	File/Scripts/Statistics…	Statistics…		1	0
+file.scripts.browse	File/Scripts/Browse…	Browse…		0	0
 file.fileInfo	File/File Info…	File Info…	Ctrl+Alt+Shift+I	1	0
 file.print	File/Print…	Print…	Ctrl+P	0	0
 file.print.one.copy	File/Print One Copy	Print One Copy	Ctrl+Alt+Shift+P	0	0

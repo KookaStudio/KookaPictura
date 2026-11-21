@@ -17,29 +17,6 @@
 
 namespace pictura {
 
-namespace {
-
-// The sources the stack loader can decode: the raster formats Qt reads, WebP,
-// and the native PSD/PSB documents.
-QStringList supportedSuffixes()
-{
-    return {QStringLiteral("psd"),  QStringLiteral("psb"), QStringLiteral("png"),
-            QStringLiteral("jpg"),  QStringLiteral("jpeg"), QStringLiteral("jpe"),
-            QStringLiteral("gif"),  QStringLiteral("bmp"), QStringLiteral("tif"),
-            QStringLiteral("tiff"), QStringLiteral("webp")};
-}
-
-QStringList stackFileFilters()
-{
-    return {QStringLiteral("All Supported (*.PSD *.PSB *.PNG *.JPG *.JPEG *.JPE *.GIF "
-                           "*.BMP *.TIF *.TIFF *.WEBP)"),
-            QStringLiteral("Photoshop (*.PSD *.PSB)"),
-            QStringLiteral("Images (*.PNG *.JPG *.JPEG *.JPE *.GIF *.BMP *.TIF *.TIFF *.WEBP)"),
-            QStringLiteral("All files (*)")};
-}
-
-} // namespace
-
 LoadLayersDialog::LoadLayersDialog(const QStringList& openPaths, const QString& startFolder,
                                    QWidget* parent)
     : QDialog(parent)
@@ -163,8 +140,9 @@ void LoadLayersDialog::setFolder(const QString& folder)
     files_->clear();
     const QDir dir(folder);
     QStringList filters;
-    for (const QString& suffix : supportedSuffixes()) {
+    for (const QString& suffix : stackSourceSuffixes()) {
         filters.append(QStringLiteral("*.") + suffix);
+        filters.append(QStringLiteral("*.") + suffix.toUpper());
     }
     const QStringList names =
         dir.entryList(filters, QDir::Files | QDir::Readable, QDir::Name | QDir::IgnoreCase);
@@ -187,7 +165,7 @@ void LoadLayersDialog::browse()
         return;
     }
     const QStringList chosen = getOpenFileNames(
-        this, tr("Load Files into Stack"), startFolder_, stackFileFilters());
+        this, tr("Load Files into Stack"), startFolder_, stackSourceFilters());
     if (!chosen.isEmpty()) {
         startFolder_ = QFileInfo(chosen.first()).absolutePath();
         addFiles(chosen);

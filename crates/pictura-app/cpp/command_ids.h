@@ -4,6 +4,7 @@
 
 namespace pictura::command_ids {
 inline constexpr char FileOpen[] = "file.open";
+inline constexpr char FileBrowse[] = "file.browse";
 inline constexpr char FileOpenAsSmartObject[] = "file.openAsSmartObject";
 inline constexpr char FileOpenAs[] = "file.openAs";
 inline constexpr char FileNew[] = "file.new";
@@ -21,6 +22,7 @@ inline constexpr char FileScriptsExportLayersToFiles[] = "file.scripts.export.la
 inline constexpr char FileScriptsLayerCompsToFiles[] = "file.scripts.layer.comps.to.files";
 inline constexpr char FileScriptsLayerCompsToPdf[] = "file.scripts.layer.comps.to.pdf";
 inline constexpr char FileScriptsLoadFilesIntoStack[] = "file.scripts.load.files.into.stack";
+inline constexpr char FileScriptsStatistics[] = "file.scripts.statistics";
 inline constexpr char FileAutomateBatch[] = "file.automate.batch";
 inline constexpr char FileClose[] = "file.close";
 inline constexpr char FileCloseAll[] = "file.closeAll";

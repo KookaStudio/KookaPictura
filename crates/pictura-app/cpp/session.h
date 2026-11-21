@@ -114,6 +114,9 @@ struct SessionState {
     // The last accepted File > Automate > Batch options (the batch engine's
     // `BatchOptions` JSON); empty until the first batch.
     QJsonObject batchOptions;
+    // The last accepted File > Scripts > Statistics mode and align choice
+    // (`{"mode": int, "align": bool}`); empty until the first merge.
+    QJsonObject statisticsOptions;
     bool guideDashed = false;
     // Crop options bar, persisted across restarts.
     bool cropClassicMode = false;    // Classic vs Modern (default) drag semantics

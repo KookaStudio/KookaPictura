@@ -272,6 +272,8 @@ public:
     void setPanelsHidden(bool hidden);
     void refresh();
     void saveSession();
+    // Hand a URL to the desktop opener, honouring the test seam.
+    void openExternalUrl(const QUrl& url);
     // The per-format Save As options (ImportSaveCoordinator).
     bool runSaveFormatDialog(SaveFormatKind kind, SaveFormatOptions& options);
     void rememberSaveFormatOptions(SaveFormatKind kind, const SaveFormatOptions& options);
@@ -443,8 +445,8 @@ public:
     // and editor) and catch View PDF After Saving instead of launching the system viewer.
     void setPdfDialogDriverForTest(std::function<bool(QDialog&)> driver);
     void setPdfViewerForTest(std::function<void(const QString&)> viewer);
-    // Test seam: catch Reveal in File Manager's folder URL instead of opening
-    // the desktop file manager.
+    // Test seam: catch a desktop URL (Reveal in File Manager, File > Browse…)
+    // instead of opening it.
     void setUrlOpenerForTest(std::function<void(const QUrl&)> opener)
     {
         urlOpener_ = std::move(opener);

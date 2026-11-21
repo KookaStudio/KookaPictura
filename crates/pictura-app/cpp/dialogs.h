@@ -174,6 +174,11 @@ QString dialogDirectoryFromStored(const QString& stored);
 // folder" tier. Empty document path yields empty so the caller can fall back.
 QString documentDirectory(const QString& documentPath);
 
+// The raster and PSD/PSB formats the image-stack dialogs accept, and their
+// file-dialog filters.
+QStringList stackSourceSuffixes();
+QStringList stackSourceFilters();
+
 // Install rolling type-ahead on a non-editable combo (also used for the Export
 // As "Format" combo, and by tests).
 void installRollingTypeAhead(QComboBox* combo);

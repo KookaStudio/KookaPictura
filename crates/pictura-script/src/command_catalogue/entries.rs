@@ -5,6 +5,7 @@ use super::CommandSpec;
 pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "file.new", path: &["File", "New…"], label: "New…", shortcut: "Ctrl+N", implemented: true, checkable: false },
     CommandSpec { id: "file.open", path: &["File", "Open..."], label: "Open...", shortcut: "Ctrl+O", implemented: true, checkable: false },
+    CommandSpec { id: "file.browse", path: &["File", "Browse…"], label: "Browse…", shortcut: "Ctrl+Alt+O", implemented: true, checkable: false },
     CommandSpec { id: "file.openAs", path: &["File", "Open As…"], label: "Open As…", shortcut: "Ctrl+Alt+Shift+O", implemented: true, checkable: false },
     CommandSpec { id: "file.openAsSmartObject", path: &["File", "Open As Smart Object…"], label: "Open As Smart Object…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "file.open.recent.no.recent.files", path: &["File", "Open Recent", "No Recent Files"], label: "No Recent Files", shortcut: "", implemented: false, checkable: false },
@@ -40,7 +41,8 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "file.scripts.layer.comps.to.pdf", path: &["File", "Scripts", "Layer Comps to PDF"], label: "Layer Comps to PDF", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "file.scripts.load.files.into.stack", path: &["File", "Scripts", "Load Files into Stack…"], label: "Load Files into Stack…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "file.scripts.script.events.manager", path: &["File", "Scripts", "Script Events Manager"], label: "Script Events Manager", shortcut: "", implemented: false, checkable: false },
-    CommandSpec { id: "file.scripts.statistics", path: &["File", "Scripts", "Statistics"], label: "Statistics", shortcut: "", implemented: false, checkable: false },
+    CommandSpec { id: "file.scripts.statistics", path: &["File", "Scripts", "Statistics…"], label: "Statistics…", shortcut: "", implemented: true, checkable: false },
+    CommandSpec { id: "file.scripts.browse", path: &["File", "Scripts", "Browse…"], label: "Browse…", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "file.fileInfo", path: &["File", "File Info…"], label: "File Info…", shortcut: "Ctrl+Alt+Shift+I", implemented: true, checkable: false },
     CommandSpec { id: "file.print", path: &["File", "Print…"], label: "Print…", shortcut: "Ctrl+P", implemented: false, checkable: false },
     CommandSpec { id: "file.print.one.copy", path: &["File", "Print One Copy"], label: "Print One Copy", shortcut: "Ctrl+Alt+Shift+P", implemented: false, checkable: false },

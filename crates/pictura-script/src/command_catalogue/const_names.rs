@@ -4,6 +4,7 @@
 #[rustfmt::skip]
 pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("FileOpen", "file.open"),
+    ("FileBrowse", "file.browse"),
     ("FileOpenAsSmartObject", "file.openAsSmartObject"),
     ("FileOpenAs", "file.openAs"),
     ("FileNew", "file.new"),
@@ -21,6 +22,7 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("FileScriptsLayerCompsToFiles", "file.scripts.layer.comps.to.files"),
     ("FileScriptsLayerCompsToPdf", "file.scripts.layer.comps.to.pdf"),
     ("FileScriptsLoadFilesIntoStack", "file.scripts.load.files.into.stack"),
+    ("FileScriptsStatistics", "file.scripts.statistics"),
     ("FileAutomateBatch", "file.automate.batch"),
     ("FileClose", "file.close"),
     ("FileCloseAll", "file.closeAll"),

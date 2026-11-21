@@ -59,8 +59,8 @@ Legend: **✓** confirmed in the CS6 Help or a CS6-derived reference;
 
 - New… — `Ctrl+N` ✓
 - Open… — `Ctrl+O` ✓
-- Open As… — `Ctrl+Alt+Shift+O` ✓
 - Browse in Bridge… — `Ctrl+Alt+O` ✓ (shortcut sheet)
+- Open As… — `Ctrl+Alt+Shift+O` ✓
 - Open As Smart Object… ✓
 - Open Recent ▸ ✓ (list length set by `File Handling > Recent File List Contains`)
 - Close — `Ctrl+W` ✓
@@ -80,11 +80,14 @@ Legend: **✓** confirmed in the CS6 Help or a CS6-derived reference;
   PDF Presentation ✓; Photomerge… ✓; Picture Package ✓)
 - Scripts ▸ ✓ (Export Layers to Files ✓; Image Processor ✓;
   Layer Comps to Files ✓; Load Files into Stack ✓; Script Events Manager ✓;
-  Statistics ✓)
+  Statistics… ✓; Browse… ✓)
 - File Info… — `Ctrl+Alt+Shift+I` ✓
 - Print… — `Ctrl+P` ✓
 - Print One Copy — `Ctrl+Alt+Shift+P` ✓
 - Exit / Quit — `Ctrl+Q` (Win) / `Cmd+Q` (Mac) ✓
+
+> Linux ships the Bridge entry as `File > Browse…`, which opens the document
+> folder in the desktop file manager; Adobe Bridge is a non-goal.
 
 #### Edit
 

@@ -71,11 +71,12 @@ fn decode_file(path: &str, policy: pictura_codec::Policy) -> Option<Decoded> {
     })
 }
 
-fn build_document(images: &[Decoded], align: bool, smart_object: bool) -> Document {
+fn build_document(images: &[Decoded], align: bool, smart_object: bool) -> (Document, Vec<String>) {
     let width = images.iter().map(|image| image.width).max().unwrap_or(0);
     let height = images.iter().map(|image| image.height).max().unwrap_or(0);
     let mut doc = Document::new(width, height, ColorMode::Rgb, BitDepth::Eight);
     let mut layer_paths = Vec::new();
+    let mut dropped = Vec::new();
     // The first listed file becomes the topmost layer.
     for image in images.iter().rev() {
         let path = pictura_render::add_raster_layer_from_rgba(
@@ -87,6 +88,8 @@ fn build_document(images: &[Decoded], align: bool, smart_object: bool) -> Docume
         );
         if !path.is_empty() {
             layer_paths.push(path);
+        } else {
+            dropped.push(image.path.clone());
         }
     }
     if align && layer_paths.len() >= 2 {
@@ -95,7 +98,7 @@ fn build_document(images: &[Decoded], align: bool, smart_object: bool) -> Docume
     if smart_object {
         let _ = pictura_render::stack_into_smart_object(&mut doc);
     }
-    doc
+    (doc, dropped)
 }
 
 fn align_stack(doc: &mut Document, paths: &[String]) {
@@ -150,11 +153,12 @@ pub fn load_files_into_stack(
         failed.extend(images.into_iter().map(|image| image.path));
         return to_qstringlist(&failed);
     }
-    let mut doc = build_document(&images, align, smart_object);
+    let (mut doc, dropped) = build_document(&images, align, smart_object);
     if doc.layers.is_empty() {
         failed.extend(images.into_iter().map(|image| image.path));
         return to_qstringlist(&failed);
     }
+    failed.extend(dropped);
     let gpu = view.rust().gpu_compute;
     DocumentComposite::new(&mut doc).refresh(CompositeScope::Full, gpu);
     let top = doc.layers.len().saturating_sub(1).to_string();
@@ -224,13 +228,13 @@ mod tests {
             image("big.png", 64, 48, texture(64, 48)),
             image("small.png", 32, 20, texture(32, 20)),
         ];
-        let doc = build_document(&images, false, false);
+        let (doc, _) = build_document(&images, false, false);
         assert_eq!((doc.width, doc.height), (64, 48));
     }
 
     #[test]
     fn first_file_is_topmost() {
-        let doc = build_document(&two_images(), false, false);
+        let (doc, _) = build_document(&two_images(), false, false);
         assert_eq!(doc.layers.len(), 2);
         assert_eq!(doc.layers.last().expect("top").name, "first.png");
         assert_eq!(doc.layers.first().expect("bottom").name, "second.png");
@@ -238,7 +242,7 @@ mod tests {
 
     #[test]
     fn no_align_keeps_positions() {
-        let doc = build_document(&two_images(), false, false);
+        let (doc, _) = build_document(&two_images(), false, false);
         for layer in &doc.layers {
             assert_eq!((layer.rect.left, layer.rect.top), (0, 0));
         }
@@ -265,7 +269,7 @@ mod tests {
 
     #[test]
     fn no_smart_object_keeps_layers() {
-        let doc = build_document(&two_images(), false, false);
+        let (doc, _) = build_document(&two_images(), false, false);
         assert_eq!(doc.layers.len(), 2);
         assert!(doc
             .layers
@@ -275,7 +279,7 @@ mod tests {
 
     #[test]
     fn smart_object_embeds_stack() {
-        let doc = build_document(&two_images(), false, true);
+        let (doc, _) = build_document(&two_images(), false, true);
         assert_eq!(doc.layers.len(), 1);
         let layer = doc.layers.last().expect("smart object");
         assert_eq!(
