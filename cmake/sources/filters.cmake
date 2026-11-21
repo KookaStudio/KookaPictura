@@ -31,6 +31,7 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/gradient_editor_dialog.cpp
     crates/pictura-app/cpp/gradient_editor_dialog.h
     crates/pictura-app/cpp/gradient_fill_dialog.cpp
+    crates/pictura-app/cpp/gradient_stop_bar.cpp
     crates/pictura-app/cpp/gradient_map_dialog.cpp
     crates/pictura-app/cpp/gradient_map_dialog.h
     crates/pictura-app/cpp/gradient_noise_page.cpp

@@ -50,9 +50,11 @@ pub mod ffi {
             height: i32,
         ) -> Vec<u8>;
 
-        /// Gradient tool: draw built-in gradient `preset` over the active
-        /// pixel layer along the drag from `(x0, y0)` to `(x1, y1)` (document
-        /// space), inside the selection when there is one. `style` 0 Linear /
+        /// Gradient tool: draw the edited solid ramp `stops` — or built-in
+        /// gradient `preset` when `stops` is empty — over the active pixel
+        /// layer along the drag from `(x0, y0)` to `(x1, y1)` (document space),
+        /// inside the selection when there is one. `stops` is
+        /// `"at:RRGGBB[AA][:mid] …|at:opacity[:mid] …"`. `style` 0 Linear /
         /// 1 Radial / 2 Angle / 3 Reflected / 4 Diamond; `mode` is a Brush mode
         /// (`"normal"`, …); `opacity` 0–100 %; `transparency` honours the
         /// gradient's own alpha. One "Gradient" state; false when nothing
@@ -61,6 +63,7 @@ pub mod ffi {
         fn draw_gradient(
             view: Pin<&mut PictureView>,
             preset: i32,
+            stops: &QString,
             foreground: u32,
             background: u32,
             style: i32,

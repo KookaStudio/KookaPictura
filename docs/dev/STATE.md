@@ -3958,11 +3958,19 @@ Snapshot for resuming after a context break. Update after each milestone.
   `options_bar_fill.cpp` (Gradient: sample + preset menu redrawn on
   `ToolController::colorsChanged`, five style buttons, Mode, Opacity, Reverse,
   Dither, Transparency; Paint Bucket: Fill, pattern picker, Mode with Clear,
-  Opacity, Tolerance 32, Anti-alias, Contiguous, All Layers). Checked by the
-  Qt Test suite `tst_fill_tools` (first self-test codes 552, 553, now
-  retired); `keys_shown` (116) probes the O group.
-  Ceilings (`ponytail:`): no Gradient Editor or noise gradients; Mode is the
-  Brush modes only; the fill stays within the layer's rectangle.
+  Opacity, Tolerance 32, Anti-alias, Contiguous, All Layers). The sample's main
+  part opens the Gradient Editor (`setSolidOnly`); an accepted spec is stored
+  as JSON in `GradientOptions::gradient` and wins over `preset`, while choosing
+  a preset clears it. The engine's `Gradient` now carries per-stop midpoints
+  and an independent opacity-stop list (`GradientStop`, `GradientOpacityStop`);
+  `GradientStopBar` edits both rows and their midpoint diamonds, and
+  `bakedSolidStops` folds them into the RGBA ramp used by Gradient Map, Gradient
+  Fill, and the layer-style overlay. Checked by `tst_fill_tools`,
+  `tst_image_adjustments`, `tst_layer_style`, and `pictura-paint` gradient
+  tests (first self-test codes 552, 553, now retired); `keys_shown` (116) probes
+  the O group.
+  Ceilings (`ponytail:`): noise gradients stay out of the Gradient tool; Mode is
+  the Brush modes only; the fill stays within the layer's rectangle.
 - **Blur** (change `blur-tool`, issue #26, ported from photorust's
   `core/src/focus.rs`): `pictura_paint::focus::BlurBrush` is a per-dab engine
   (like the Mixer Brush) that moves each covered pixel toward its 3×3 Gaussian

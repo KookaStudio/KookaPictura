@@ -148,6 +148,8 @@ struct EyedropperOptions {
 // 4 Diamond, Mode a Brush mode, Opacity 0-100 %.
 struct GradientOptions {
     int preset = 0;
+    // A Gradient Editor spec in JSON; when non-empty it replaces `preset`.
+    QString gradient;
     int style = 0;
     QString mode = QStringLiteral("normal");
     int opacity = 100;

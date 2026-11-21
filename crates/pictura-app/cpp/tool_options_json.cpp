@@ -224,6 +224,7 @@ template <typename F> void fields(ArtHistoryOptions& o, F&& f)
 template <typename F> void fields(GradientOptions& o, F&& f)
 {
     f("preset", o.preset);
+    f("gradient", o.gradient);
     f("style", o.style);
     f("mode", o.mode);
     f("opacity", o.opacity);

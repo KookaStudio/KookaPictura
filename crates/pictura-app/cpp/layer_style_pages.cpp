@@ -383,7 +383,7 @@ QWidget* LayerStyleDialog::buildGradientOverlayPage()
         dialog.setSolidOnly(true);
         dialog.bar()->setStrictLocations(true);
         if (dialog.exec() == QDialog::Accepted) {
-            GradientStops next = dialog.spec().stops;
+            GradientStops next = bakedSolidStops(dialog.spec());
             for (GradientColorStop& stop : next) {
                 stop.color.setAlpha(255);
             }

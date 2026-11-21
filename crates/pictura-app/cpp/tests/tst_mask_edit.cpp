@@ -1081,7 +1081,7 @@ void MaskEditTest::fillToolsWriteCoverage()
     // The Gradient hides the layer at its black end and keeps it at the white
     // one, all through the mask.
     int base = view->history_count();
-    QVERIFY(pictura::draw_gradient(*view, 0, 0xff000000u, 0xffffffffu, 0,
+    QVERIFY(pictura::draw_gradient(*view, 0, QString(), 0xff000000u, 0xffffffffu, 0,
                                    QStringLiteral("normal"), 100, false, false, true, 0.0, 16.0,
                                    31.0, 16.0));
     QCOMPARE(view->history_label(base), QStringLiteral("Gradient"));

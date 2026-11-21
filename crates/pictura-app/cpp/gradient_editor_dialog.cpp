@@ -1,8 +1,11 @@
 #include "gradient_editor_dialog.h"
 #include "preset_store.h"
 #include <QtCore/QJsonArray>
+#include <QtCore/QJsonDocument>
+#include <QtCore/QJsonObject>
 #include <QtCore/QMap>
 #include <QtCore/QSet>
+#include <QtCore/QStringList>
 
 #include "color_picker_dialog.h"
 #include "panels/color_swatch_widget.h"
@@ -35,35 +38,6 @@ namespace pictura {
 namespace {
 
 constexpr int kMaxLocation = 4096;
-constexpr int kStopWidth = 11;
-constexpr int kStopHeight = 14;
-constexpr int kInset = kStopWidth / 2 + 2;
-// How far below the bar a dragged stop must go to be deleted.
-constexpr int kDragOffDistance = 30;
-
-QColor colorAt(const GradientStops& stops, int location)
-{
-    if (stops.isEmpty()) {
-        return Qt::black;
-    }
-    if (location <= stops.first().location) {
-        return stops.first().color;
-    }
-    for (int i = 1; i < stops.size(); ++i) {
-        const GradientColorStop& a = stops.at(i - 1);
-        const GradientColorStop& b = stops.at(i);
-        if (location <= b.location) {
-            const double t = b.location == a.location
-                                 ? 1.0
-                                 : double(location - a.location) / (b.location - a.location);
-            const auto mix = [t](int x, int y) { return qRound(x + (y - x) * t); };
-            return QColor(mix(a.color.red(), b.color.red()), mix(a.color.green(), b.color.green()),
-                          mix(a.color.blue(), b.color.blue()),
-                          mix(a.color.alpha(), b.color.alpha()));
-        }
-    }
-    return stops.last().color;
-}
 
 } // namespace
 
@@ -186,6 +160,7 @@ GradientStops libraryRamp(const PresetRow& row, const QColor& foreground, const 
     for (const int at : sorted) {
         const auto high = colors.upperBound(at);
         QColor color;
+        int midpoint = 50;
         if (high == colors.cbegin()) { color = colors.first().color; }
         else if (high == colors.cend()) { color = colors.last().color; }
         else {
@@ -195,6 +170,7 @@ GradientStops libraryRamp(const PresetRow& row, const QColor& foreground, const 
             color = QColor::fromRgbF(mix(low->color.redF(), high->color.redF()),
                                      mix(low->color.greenF(), high->color.greenF()),
                                      mix(low->color.blueF(), high->color.blueF()));
+            midpoint = qRound(low->midpoint * 100.0);
         }
         if (!opacity.isEmpty()) {
             const auto hi = opacity.upperBound(at);
@@ -208,7 +184,7 @@ GradientStops libraryRamp(const PresetRow& row, const QColor& foreground, const 
             }
             color.setAlphaF(qBound(0.0, alpha, 1.0));
         }
-        result.push_back({at, color});
+        result.push_back({at, color, midpoint});
     }
     return result;
 }
@@ -220,13 +196,157 @@ GradientStops noiseStops(const NoiseSettings& noise)
         noise.high[1], noise.low[2], noise.high[2], noise.restrictColors, noise.transparency)));
 }
 
+GradientStops bakedSolidStops(const GradientSpec& spec)
+{
+    if (spec.stops.isEmpty()) {
+        return {};
+    }
+    GradientStops colors = spec.stops;
+    std::stable_sort(colors.begin(), colors.end(),
+                     [](const auto& a, const auto& b) { return a.location < b.location; });
+    GradientOpacityStops opacity = spec.opacityStops;
+    if (opacity.isEmpty()) {
+        opacity = gradientOpacityFromColors(colors);
+    }
+    std::stable_sort(opacity.begin(), opacity.end(),
+                     [](const auto& a, const auto& b) { return a.location < b.location; });
+    // A midpoint has no effect at the endpoints alone, so sample inside the
+    // segments when one is off-centre.
+    const bool dense =
+        std::any_of(colors.begin(), colors.end(),
+                    [](const GradientColorStop& s) { return s.midpoint != 50; })
+        || std::any_of(opacity.begin(), opacity.end(),
+                       [](const GradientOpacityStop& s) { return s.midpoint != 50; });
+    QSet<int> positions;
+    if (dense) {
+        for (int at = 0; at <= kMaxLocation; at += 32) {
+            positions.insert(at);
+        }
+        positions.insert(kMaxLocation);
+    }
+    for (const GradientColorStop& stop : colors) {
+        positions.insert(stop.location);
+    }
+    for (const GradientOpacityStop& stop : opacity) {
+        positions.insert(stop.location);
+    }
+    positions.insert(0);
+    positions.insert(kMaxLocation);
+    auto sorted = positions.values();
+    std::sort(sorted.begin(), sorted.end());
+    GradientStops result;
+    for (const int at : sorted) {
+        QColor color = gradientColorAt(colors, at);
+        if (!opacity.isEmpty()) {
+            color.setAlpha(qRound(gradientOpacityAt(opacity, at) * 255.0 / 100.0));
+        }
+        result.push_back({at, color, 50});
+    }
+    return result;
+}
+
 GradientStops resolvedStops(const GradientSpec& spec)
 {
     if (spec.type == GradientSpec::Noise) {
         return noiseStops(spec.noise);
     }
     return parseGradientStops(
-        QString(gradient_smoothed_stops(formatGradientStops(spec.stops), spec.smoothness)));
+        QString(gradient_smoothed_stops(formatGradientStops(bakedSolidStops(spec)),
+                                        spec.smoothness)));
+}
+
+QString formatGradientSpec(const GradientSpec& spec)
+{
+    QJsonObject object;
+    object.insert(QStringLiteral("name"), spec.name);
+    object.insert(QStringLiteral("type"), spec.type);
+    object.insert(QStringLiteral("smoothness"), spec.smoothness);
+    QJsonArray colors;
+    for (const GradientColorStop& stop : spec.stops) {
+        QJsonObject item;
+        item.insert(QStringLiteral("at"), stop.location);
+        item.insert(QStringLiteral("mid"), stop.midpoint);
+        item.insert(QStringLiteral("color"), double(stop.color.rgba()));
+        colors.append(item);
+    }
+    object.insert(QStringLiteral("stops"), colors);
+    QJsonArray opacity;
+    for (const GradientOpacityStop& stop : spec.opacityStops) {
+        QJsonObject item;
+        item.insert(QStringLiteral("at"), stop.location);
+        item.insert(QStringLiteral("mid"), stop.midpoint);
+        item.insert(QStringLiteral("value"), stop.opacity);
+        opacity.append(item);
+    }
+    object.insert(QStringLiteral("opacity"), opacity);
+    return QString::fromUtf8(QJsonDocument(object).toJson(QJsonDocument::Compact));
+}
+
+QString formatGradientSpecStops(const GradientSpec& spec)
+{
+    QStringList colors;
+    for (const GradientColorStop& stop : spec.stops) {
+        QString hex = QStringLiteral("%1").arg(stop.color.rgb() & 0xffffffu, 6, 16,
+                                               QLatin1Char('0'));
+        if (stop.color.alpha() < 255) {
+            hex += QStringLiteral("%1").arg(stop.color.alpha(), 2, 16, QLatin1Char('0'));
+        }
+        if (stop.midpoint != 50) {
+            hex += QStringLiteral(":%1").arg(stop.midpoint);
+        }
+        colors << QStringLiteral("%1:%2").arg(stop.location).arg(hex);
+    }
+    QStringList opacity;
+    for (const GradientOpacityStop& stop : spec.opacityStops) {
+        opacity << QStringLiteral("%1:%2%3")
+                       .arg(stop.location)
+                       .arg(stop.opacity)
+                       .arg(stop.midpoint != 50 ? QStringLiteral(":%1").arg(stop.midpoint)
+                                                : QString());
+    }
+    QString text = colors.join(QLatin1Char(' '));
+    if (!opacity.isEmpty()) {
+        text += QLatin1Char('|') + opacity.join(QLatin1Char(' '));
+    }
+    return text;
+}
+
+GradientSpec parseGradientSpec(const QString& text)
+{
+    GradientSpec spec;
+    const QJsonDocument document = QJsonDocument::fromJson(text.toUtf8());
+    if (!document.isObject()) {
+        return spec;
+    }
+    const QJsonObject object = document.object();
+    spec.name = object.value(QStringLiteral("name")).toString();
+    spec.type = qBound(0, object.value(QStringLiteral("type")).toInt(), 1);
+    spec.smoothness = qBound(0, object.value(QStringLiteral("smoothness")).toInt(100), 100);
+    for (const auto& value : object.value(QStringLiteral("stops")).toArray()) {
+        const QJsonObject item = value.toObject();
+        const int at = item.value(QStringLiteral("at")).toInt(-1);
+        if (at < 0 || at > kMaxLocation) {
+            continue;
+        }
+        const QRgb rgba =
+            static_cast<QRgb>(item.value(QStringLiteral("color")).toDouble());
+        spec.stops.push_back({at, QColor::fromRgba(rgba),
+                              qBound(1, item.value(QStringLiteral("mid")).toInt(50), 99)});
+    }
+    for (const auto& value : object.value(QStringLiteral("opacity")).toArray()) {
+        const QJsonObject item = value.toObject();
+        const int at = item.value(QStringLiteral("at")).toInt(-1);
+        if (at < 0 || at > kMaxLocation) {
+            continue;
+        }
+        spec.opacityStops.push_back(
+            {at, qBound(0, item.value(QStringLiteral("value")).toInt(100), 100),
+             qBound(1, item.value(QStringLiteral("mid")).toInt(50), 99)});
+    }
+    if (spec.stops.size() < 2) {
+        return {};
+    }
+    return spec;
 }
 
 // --- GradientSwatch ---------------------------------------------------------
@@ -264,260 +384,6 @@ void GradientSwatch::paintEvent(QPaintEvent*)
     paintGradient(painter, r, stops_);
     painter.setPen(palette().color(QPalette::Dark));
     painter.drawRect(r);
-}
-
-// --- GradientStopBar --------------------------------------------------------
-
-GradientStopBar::GradientStopBar(QWidget* parent)
-    : QWidget(parent)
-{
-    setObjectName(QStringLiteral("gradientStopBar"));
-    setMinimumHeight(kStopHeight * 2 + 28);
-}
-
-QSize GradientStopBar::sizeHint() const
-{
-    return {380, kStopHeight * 2 + 28};
-}
-
-void GradientStopBar::setStops(const GradientStops& stops)
-{
-    stops_ = stops;
-    std::stable_sort(stops_.begin(), stops_.end(),
-                     [](const auto& a, const auto& b) { return a.location < b.location; });
-    selected_ = stops_.isEmpty() ? -1 : qBound(-1, selected_, int(stops_.size()) - 1);
-    update();
-    emit selectionChanged(selected_);
-}
-
-void GradientStopBar::select(int index)
-{
-    selected_ = qBound(-1, index, int(stops_.size()) - 1);
-    update();
-    emit selectionChanged(selected_);
-}
-
-void GradientStopBar::setStopColor(int index, const QColor& color)
-{
-    if (index < 0 || index >= stops_.size()) {
-        return;
-    }
-    stops_[index].color = color;
-    update();
-    emit stopsChanged();
-}
-
-void GradientStopBar::setStopLocation(int index, int location)
-{
-    if (index < 0 || index >= stops_.size()) {
-        return;
-    }
-    location = qBound(0, location, kMaxLocation);
-    if (strict_) {
-        const int lower = index > 0 ? stops_.at(index - 1).location + 1 : 0;
-        const int upper =
-            index + 1 < stops_.size() ? stops_.at(index + 1).location - 1 : kMaxLocation;
-        location = qBound(lower, location, qMax(lower, upper));
-    }
-    stops_[index].location = location;
-    selected_ = index;
-    sortKeepingSelection();
-    update();
-    emit stopsChanged();
-}
-
-void GradientStopBar::removeStop(int index)
-{
-    if (index < 0 || index >= stops_.size() || stops_.size() <= 2) {
-        return;
-    }
-    stops_.remove(index);
-    selected_ = qMin(index, int(stops_.size()) - 1);
-    update();
-    emit stopsChanged();
-    emit selectionChanged(selected_);
-}
-
-int GradientStopBar::addStop(int location)
-{
-    const int requested = qBound(0, location, kMaxLocation);
-    location = requested;
-    if (strict_) {
-        const auto taken = [this](int value) {
-            return std::any_of(stops_.begin(), stops_.end(), [value](const GradientColorStop& stop) {
-                return stop.location == value;
-            });
-        };
-        if (taken(location)) {
-            bool found = false;
-            for (int offset = 1; offset <= kMaxLocation && !found; ++offset) {
-                const int up = requested + offset;
-                const int down = requested - offset;
-                if (up <= kMaxLocation && !taken(up)) {
-                    location = up;
-                    found = true;
-                } else if (down >= 0 && !taken(down)) {
-                    location = down;
-                    found = true;
-                }
-            }
-            if (!found) {
-                return -1;
-            }
-        }
-    }
-    stops_.append({location, colorAt(stops_, location)});
-    selected_ = int(stops_.size()) - 1;
-    sortKeepingSelection();
-    update();
-    emit stopsChanged();
-    emit selectionChanged(selected_);
-    return selected_;
-}
-
-void GradientStopBar::sortKeepingSelection()
-{
-    if (selected_ < 0) {
-        return;
-    }
-    const GradientColorStop moved = stops_.at(selected_);
-    stops_.remove(selected_);
-    const auto at = std::upper_bound(
-        stops_.begin(), stops_.end(), moved.location,
-        [](int location, const GradientColorStop& stop) { return location < stop.location; });
-    selected_ = int(at - stops_.begin());
-    stops_.insert(selected_, moved);
-}
-
-QRect GradientStopBar::barRect() const
-{
-    return QRect(kInset, kStopHeight + 2, width() - 2 * kInset, height() - 2 * kStopHeight - 4);
-}
-
-int GradientStopBar::stopX(int index) const
-{
-    const QRect bar = barRect();
-    return bar.left() + qRound(double(stops_.at(index).location) * (bar.width() - 1) / kMaxLocation);
-}
-
-int GradientStopBar::stopAt(const QPoint& pos) const
-{
-    const QRect bar = barRect();
-    if (pos.y() <= bar.bottom()) {
-        return -1;
-    }
-    // The selected stop wins a tie, then the nearest.
-    int best = -1;
-    int bestDistance = kStopWidth / 2 + 1;
-    for (int i = 0; i < stops_.size(); ++i) {
-        const int distance = std::abs(stopX(i) - pos.x());
-        if (distance < bestDistance || (distance == bestDistance && i == selected_)) {
-            best = i;
-            bestDistance = distance;
-        }
-    }
-    return best;
-}
-
-int GradientStopBar::locationAt(int x) const
-{
-    const QRect bar = barRect();
-    return qBound(0, qRound(double(x - bar.left()) * kMaxLocation / (bar.width() - 1)),
-                  kMaxLocation);
-}
-
-void GradientStopBar::paintEvent(QPaintEvent*)
-{
-    QPainter painter(this);
-    const QRect bar = barRect();
-    paintGradient(painter, bar, stops_);
-    painter.setPen(palette().color(QPalette::Dark));
-    painter.drawRect(bar.adjusted(0, 0, -1, -1));
-    painter.setRenderHint(QPainter::Antialiasing);
-
-    const auto marker = [&painter](int x, int tipY, int direction, const QColor& fill,
-                                   bool selected) {
-        // A house shape: the point at the bar, the swatch away from it.
-        const int baseY = tipY + direction * kStopHeight;
-        const int shoulderY = tipY + direction * 4;
-        QPainterPath path;
-        path.moveTo(x + 0.5, tipY + 0.5);
-        path.lineTo(x + kStopWidth / 2 + 0.5, shoulderY + 0.5);
-        path.lineTo(x + kStopWidth / 2 + 0.5, baseY + 0.5);
-        path.lineTo(x - kStopWidth / 2 + 0.5, baseY + 0.5);
-        path.lineTo(x - kStopWidth / 2 + 0.5, shoulderY + 0.5);
-        path.closeSubpath();
-        painter.setPen(QPen(selected ? QColor(Qt::black) : QColor(90, 90, 90), 1));
-        painter.setBrush(selected ? QColor(Qt::black) : QColor(240, 240, 240));
-        painter.drawPath(path);
-        const QRectF swatch(x - kStopWidth / 2 + 2.5, std::min(shoulderY, baseY) + 2.5,
-                            kStopWidth - 4, std::abs(baseY - shoulderY) - 4);
-        painter.setPen(Qt::NoPen);
-        QColor opaque = fill;
-        opaque.setAlpha(255);
-        painter.setBrush(opaque);
-        painter.drawRect(swatch);
-    };
-    // The opacity stops: CS6 draws one at each end of a gradient map's ramp.
-    marker(bar.left(), bar.top() - 1, -1, Qt::black, false);
-    marker(bar.right(), bar.top() - 1, -1, Qt::black, false);
-    for (int i = 0; i < stops_.size(); ++i) {
-        if (dragOff_ && i == selected_) {
-            continue;
-        }
-        marker(stopX(i), bar.bottom() + 1, 1, stops_.at(i).color.toRgb(), i == selected_);
-    }
-}
-
-void GradientStopBar::mousePressEvent(QMouseEvent* event)
-{
-    if (event->button() != Qt::LeftButton) {
-        return;
-    }
-    const QPoint pos = event->position().toPoint();
-    const int hit = stopAt(pos);
-    if (hit >= 0) {
-        select(hit);
-        dragging_ = true;
-    } else if (pos.y() > barRect().bottom()) {
-        addStop(locationAt(pos.x()));
-        dragging_ = true;
-    }
-    dragOff_ = false;
-}
-
-void GradientStopBar::mouseMoveEvent(QMouseEvent* event)
-{
-    if (!dragging_ || selected_ < 0) {
-        return;
-    }
-    const QPoint pos = event->position().toPoint();
-    dragOff_ = stops_.size() > 2 && pos.y() > barRect().bottom() + kStopHeight + kDragOffDistance;
-    setStopLocation(selected_, locationAt(pos.x()));
-}
-
-void GradientStopBar::mouseReleaseEvent(QMouseEvent*)
-{
-    if (dragging_ && dragOff_) {
-        dragOff_ = false;
-        removeStop(selected_);
-    }
-    dragging_ = false;
-    dragOff_ = false;
-    update();
-}
-
-void GradientStopBar::mouseDoubleClickEvent(QMouseEvent* event)
-{
-    const int hit = stopAt(event->position().toPoint());
-    if (hit < 0) {
-        return;
-    }
-    const QColor picked =
-        ColorPickerDialog::getColor(stops_.at(hit).color, this, QStringLiteral("Select stop color:"));
-    if (picked.isValid()) {
-        setStopColor(hit, picked);
-    }
 }
 
 // --- GradientEditorDialog ---------------------------------------------------
@@ -612,21 +478,22 @@ GradientEditorDialog::GradientEditorDialog(const GradientSpec& spec, const QColo
         field->setFixedWidth(70);
         return field;
     };
-    auto* opacity = new QSpinBox(this);
-    opacity->setRange(0, 100);
-    opacity->setSuffix(QStringLiteral(" %"));
-    opacity->setFixedWidth(70);
-    QSpinBox* opacityLocation = locationField();
-    auto* opacityDelete = new QPushButton(QStringLiteral("Delete"), this);
-    for (QWidget* w : {static_cast<QWidget*>(opacity), static_cast<QWidget*>(opacityLocation),
-                       static_cast<QWidget*>(opacityDelete)}) {
-        w->setEnabled(false);
-    }
+    opacity_ = new QSpinBox(this);
+    opacity_->setObjectName(QStringLiteral("gradientOpacity"));
+    opacity_->setRange(0, 100);
+    opacity_->setSuffix(QStringLiteral(" %"));
+    opacity_->setFixedWidth(70);
+    opacityLocation_ = locationField();
+    opacityLocation_->setObjectName(QStringLiteral("gradientOpacityLocation"));
+    opacityLocation_->setKeyboardTracking(false);
+    opacityDelete_ = new QPushButton(QStringLiteral("Delete"), this);
+    opacityDelete_->setObjectName(QStringLiteral("gradientOpacityDelete"));
+    opacityDelete_->setAutoDefault(false);
     stopsGrid->addWidget(new QLabel(QStringLiteral("Opacity:"), this), 0, 0);
-    stopsGrid->addWidget(opacity, 0, 1);
+    stopsGrid->addWidget(opacity_, 0, 1);
     stopsGrid->addWidget(new QLabel(QStringLiteral("Location:"), this), 0, 2);
-    stopsGrid->addWidget(opacityLocation, 0, 3);
-    stopsGrid->addWidget(opacityDelete, 0, 4);
+    stopsGrid->addWidget(opacityLocation_, 0, 3);
+    stopsGrid->addWidget(opacityDelete_, 0, 4);
     color_ = new ColorSwatchWidget(this);
     color_->setObjectName(QStringLiteral("gradientStopColor"));
     color_->setFixedSize(60, 22);
@@ -641,6 +508,14 @@ GradientEditorDialog::GradientEditorDialog(const GradientSpec& spec, const QColo
     stopsGrid->addWidget(new QLabel(QStringLiteral("Location:"), this), 1, 2);
     stopsGrid->addWidget(location_, 1, 3);
     stopsGrid->addWidget(delete_, 1, 4);
+    midpoint_ = new QSpinBox(this);
+    midpoint_->setObjectName(QStringLiteral("gradientStopMidpoint"));
+    midpoint_->setRange(1, 99);
+    midpoint_->setSuffix(QStringLiteral(" %"));
+    midpoint_->setFixedWidth(70);
+    midpoint_->setKeyboardTracking(false);
+    stopsGrid->addWidget(new QLabel(QStringLiteral("Midpoint:"), this), 2, 2);
+    stopsGrid->addWidget(midpoint_, 2, 3);
     stopsGrid->setColumnStretch(5, 1);
     solidColumn->addWidget(stopsBox);
     pages_->addWidget(solid);
@@ -670,7 +545,7 @@ GradientEditorDialog::GradientEditorDialog(const GradientSpec& spec, const QColo
     outer->addLayout(buttons);
 
     loading_ = true;
-    bar_->setStops(spec.stops);
+    bar_->setGradient(spec.stops, spec.opacityStops);
     bar_->select(0);
     smoothness_->setValue(spec.smoothness);
     noise_->setSettings(spec.noise);
@@ -686,9 +561,16 @@ GradientEditorDialog::GradientEditorDialog(const GradientSpec& spec, const QColo
     });
     connect(smoothness_, &PercentField::valueChanged, this, &GradientEditorDialog::edited);
     connect(noise_, &GradientNoisePage::changed, this, &GradientEditorDialog::edited);
-    connect(bar_, &GradientStopBar::selectionChanged, this, &GradientEditorDialog::showSelection);
+    connect(bar_, &GradientStopBar::selectionChanged, this,
+            [this](int) { showSelection(); });
+    connect(bar_, &GradientStopBar::opacitySelectionChanged, this,
+            [this](int) { showSelection(); });
     connect(bar_, &GradientStopBar::stopsChanged, this, [this]() {
-        showSelection(bar_->selected());
+        showSelection();
+        edited();
+    });
+    connect(bar_, &GradientStopBar::opacityStopsChanged, this, [this]() {
+        showSelection();
         edited();
     });
     connect(location_, &QSpinBox::valueChanged, this, [this](int percent) {
@@ -696,7 +578,30 @@ GradientEditorDialog::GradientEditorDialog(const GradientSpec& spec, const QColo
             bar_->setStopLocation(bar_->selected(), qRound(percent * kMaxLocation / 100.0));
         }
     });
+    connect(opacityLocation_, &QSpinBox::valueChanged, this, [this](int percent) {
+        if (!loading_) {
+            bar_->setOpacityStopLocation(bar_->selectedOpacity(),
+                                         qRound(percent * kMaxLocation / 100.0));
+        }
+    });
+    connect(opacity_, &QSpinBox::valueChanged, this, [this](int percent) {
+        if (!loading_) {
+            bar_->setOpacityStopValue(bar_->selectedOpacity(), percent);
+        }
+    });
+    connect(midpoint_, &QSpinBox::valueChanged, this, [this](int percent) {
+        if (loading_) {
+            return;
+        }
+        if (bar_->selectedKind() == GradientStopBar::StopKind::Opacity) {
+            bar_->setOpacityStopMidpoint(bar_->selectedOpacity(), percent);
+        } else {
+            bar_->setStopMidpoint(bar_->selected(), percent);
+        }
+    });
     connect(delete_, &QPushButton::clicked, this, [this]() { bar_->removeStop(bar_->selected()); });
+    connect(opacityDelete_, &QPushButton::clicked, this,
+            [this]() { bar_->removeOpacityStop(bar_->selectedOpacity()); });
     connect(color_, &QPushButton::clicked, this, [this]() {
         const int index = bar_->selected();
         if (index < 0) {
@@ -710,7 +615,7 @@ GradientEditorDialog::GradientEditorDialog(const GradientSpec& spec, const QColo
             bar_->setStopColor(index, color);
         }
     });
-    showSelection(bar_->selected());
+    showSelection();
     setMinimumWidth(560);
 }
 
@@ -734,7 +639,7 @@ void GradientEditorDialog::choosePreset(int index)
     }
     loading_ = true;
     type_->setCurrentIndex(GradientSpec::Solid);
-    bar_->setStops(stops);
+    bar_->setGradient(stops, {});
     bar_->select(0);
     name_->setText(row.name);
     smoothness_->setValue(qBound(0, row.values.value(QStringLiteral("smoothness")).toInt(100), 100));
@@ -742,21 +647,41 @@ void GradientEditorDialog::choosePreset(int index)
     emit gradientChanged();
 }
 
-void GradientEditorDialog::showSelection(int index)
+void GradientEditorDialog::showSelection()
 {
-    const bool has = index >= 0 && index < bar_->stops().size();
-    color_->setEnabled(has);
-    location_->setEnabled(has);
-    delete_->setEnabled(has && bar_->stops().size() > 2);
+    const bool color = bar_->selectedKind() == GradientStopBar::StopKind::Color;
+    const int colorIndex = bar_->selected();
+    const int opacityIndex = bar_->selectedOpacity();
+    const bool hasColor = colorIndex >= 0 && colorIndex < bar_->stops().size();
+    const bool hasOpacity = opacityIndex >= 0 && opacityIndex < bar_->opacityStops().size();
+    color_->setEnabled(color && hasColor);
+    location_->setEnabled(color && hasColor);
+    delete_->setEnabled(color && hasColor && bar_->stops().size() > 2);
+    opacity_->setEnabled(!color && hasOpacity);
+    opacityLocation_->setEnabled(!color && hasOpacity);
+    opacityDelete_->setEnabled(!color && hasOpacity && bar_->opacityStops().size() > 2);
+    midpoint_->setEnabled(color ? hasColor : hasOpacity);
     const bool wasLoading = loading_;
     loading_ = true;
-    if (has) {
-        const GradientColorStop& stop = bar_->stops().at(index);
+    if (color && hasColor) {
+        const GradientColorStop& stop = bar_->stops().at(colorIndex);
         location_->setValue(qRound(stop.location * 100.0 / kMaxLocation));
         color_->setColor(stop.color);
-    } else {
+        midpoint_->setValue(stop.midpoint);
+        opacityLocation_->clear();
+        opacity_->setValue(100);
+    } else if (!color && hasOpacity) {
+        const GradientOpacityStop& stop = bar_->opacityStops().at(opacityIndex);
+        opacityLocation_->setValue(qRound(stop.location * 100.0 / kMaxLocation));
+        opacity_->setValue(stop.opacity);
+        midpoint_->setValue(stop.midpoint);
         location_->clear();
         color_->setColor(QColor());
+    } else {
+        location_->clear();
+        opacityLocation_->clear();
+        color_->setColor(QColor());
+        midpoint_->setValue(50);
     }
     loading_ = wasLoading;
 }
@@ -777,6 +702,7 @@ GradientSpec GradientEditorDialog::spec() const
     spec.name = name_->text();
     spec.type = type_->currentIndex();
     spec.stops = bar_->stops();
+    spec.opacityStops = bar_->opacityStops();
     spec.smoothness = qRound(smoothness_->value());
     spec.noise = noise_->settings();
     return spec;

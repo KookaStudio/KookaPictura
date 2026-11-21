@@ -248,7 +248,7 @@ void QuickMaskTest::fillsAndFilterEditCoverage()
     QVERIFY(bucket_fill_at(*view_, 16, 16, 0xff000000u, -1,
         QStringLiteral("normal"), 100, 0, false, true, false));
     QCOMPARE(coverage(16, 16), 0);
-    QVERIFY(draw_gradient(*view_, 0, 0xff000000u, 0xffffffffu, 0,
+    QVERIFY(draw_gradient(*view_, 0, QString(), 0xff000000u, 0xffffffffu, 0,
         QStringLiteral("normal"), 100, false, false, true, 0, 0,
         32, 0));
     const int old = coverage(16, 16);

@@ -28,8 +28,9 @@ crates/pictura-app/cpp/frame_canvas.cpp  QColor(0, 0, 0)  # data
 crates/pictura-app/cpp/frame_canvas.cpp  QColor(255, 255, 255)  # data
 crates/pictura-app/cpp/frame_canvas.cpp  QColor(82, 82, 82)  # data
 crates/pictura-app/cpp/gradient_editor_dialog.cpp  QColor(204, 204, 204)  # data
-crates/pictura-app/cpp/gradient_editor_dialog.cpp  QColor(240, 240, 240)  # data
-crates/pictura-app/cpp/gradient_editor_dialog.cpp  QColor(90, 90, 90)  # data
+crates/pictura-app/cpp/gradient_stop_bar.cpp  QColor(40, 40, 40)  # data: midpoint diamond outline
+crates/pictura-app/cpp/gradient_stop_bar.cpp  QColor(240, 240, 240)  # data
+crates/pictura-app/cpp/gradient_stop_bar.cpp  QColor(90, 90, 90)  # data
 crates/pictura-app/cpp/gradient_noise_page.cpp  QColor(60, 60, 60)  # data
 crates/pictura-app/cpp/image_view.cpp  QColor(204, 204, 204)  # data
 crates/pictura-app/cpp/image_view.cpp  QColor(255, 255, 255)  # data

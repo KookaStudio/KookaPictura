@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QtCore/QPair>
 #include <QtCore/QString>
 #include <QtCore/QVector>
 #include <QtGui/QColor>
@@ -21,20 +22,32 @@ namespace pictura {
 class ColorSwatchWidget;
 struct PresetRow;
 
-// One colour stop; `location` in the PSD's 0..4096. The colour's alpha is
-// the gradient's opacity there.
+// One colour stop; `location` in the PSD's 0..4096. `midpoint` is the percent
+// of the segment to the next stop at which the blend is half way.
 struct GradientColorStop {
     int location;
     QColor color;
+    int midpoint = 50;
 };
 using GradientStops = QVector<GradientColorStop>;
 
-// A Gradient Editor gradient: Solid stops at a smoothness, or Noise.
+// One opacity stop; `location` in 0..4096, `opacity` a percent, `midpoint` the
+// percent of the segment to the next stop at which the blend is half way.
+struct GradientOpacityStop {
+    int location;
+    int opacity = 100;
+    int midpoint = 50;
+};
+using GradientOpacityStops = QVector<GradientOpacityStop>;
+
+// A Gradient Editor gradient: Solid stops (colour and opacity) at a smoothness,
+// or Noise.
 struct GradientSpec {
     enum Type { Solid, Noise };
     QString name;
     int type = Solid;
     GradientStops stops;
+    GradientOpacityStops opacityStops;
     int smoothness = 100;
     NoiseSettings noise;
 };
@@ -42,6 +55,18 @@ struct GradientSpec {
 // The bridge's `"location:RRGGBB[AA] …"` text and back (empty on a bad list).
 QString formatGradientStops(const GradientStops& stops);
 GradientStops parseGradientStops(const QString& text);
+// The Gradient tool's stored spec as JSON and back (a default spec on bad
+// text). Midpoints and opacity stops are preserved.
+QString formatGradientSpec(const GradientSpec& spec);
+GradientSpec parseGradientSpec(const QString& text);
+// The bridge's `"at:RRGGBB[AA][:mid] …|at:opacity[:mid] …"` ramp text.
+QString formatGradientSpecStops(const GradientSpec& spec);
+// Interpolation helpers shared by the ramp editor and the baked solid ramp.
+QColor gradientColorAt(const GradientStops& stops, int location);
+int gradientOpacityAt(const GradientOpacityStops& stops, int location);
+GradientOpacityStops gradientOpacityFromColors(const GradientStops& stops);
+// The solid ramp with midpoints and opacity stops applied, without Smoothness.
+GradientStops bakedSolidStops(const GradientSpec& spec);
 // `stops` across `rect`, left to right, over a checkerboard where they are
 // part transparent.
 void paintGradient(QPainter& painter, const QRect& rect, const GradientStops& stops);
@@ -74,36 +99,52 @@ private:
     GradientStops stops_;
 };
 
-// The Gradient Editor's ramp: the gradient with its colour stops under it.
-// Click a stop to select it and drag it along; drag it well below the bar to
-// delete it (two always remain); click under the bar to add a stop of the
-// colour there; double-click a stop to pick its colour. CS6's opacity stops
-// above the bar are drawn at 100% and do not edit.
+// The Gradient Editor's ramp: colour stops under the bar, opacity stops above
+// it, and a draggable midpoint diamond between each adjacent pair. Click a
+// stop to select it and drag it along; drag it well off its side of the bar to
+// delete it (two always remain); click an empty part of a row to add a stop
+// there; double-click a colour stop to pick its colour.
 class GradientStopBar : public QWidget {
     Q_OBJECT
 
 public:
+    enum class StopKind { Color, Opacity };
+
     explicit GradientStopBar(QWidget* parent = nullptr);
 
     void setStops(const GradientStops& stops);
+    // Derive opacity stops from the colour stops' alpha when `opacity` is empty.
+    void setGradient(const GradientStops& stops, const GradientOpacityStops& opacity);
     const GradientStops& stops() const { return stops_; }
+    const GradientOpacityStops& opacityStops() const { return opacityStops_; }
     int selected() const { return selected_; }
+    int selectedOpacity() const { return selectedOpacity_; }
+    StopKind selectedKind() const { return kind_; }
     void select(int index);
+    void selectOpacity(int index);
     // The stop's colour or location, kept in order; the selection follows it.
     void setStopColor(int index, const QColor& color);
     void setStopLocation(int index, int location);
-    // Keep the locations strictly rising: a moved or added stop is clamped to
-    // its neighbours. The layer-style call site enables this.
+    void setStopMidpoint(int index, int percent);
+    void setOpacityStopValue(int index, int percent);
+    void setOpacityStopLocation(int index, int location);
+    void setOpacityStopMidpoint(int index, int percent);
+    // Keep the colour locations strictly rising: a moved or added stop is
+    // clamped to its neighbours. The layer-style call site enables this.
     void setStrictLocations(bool strict) { strict_ = strict; }
     void removeStop(int index);
-    // A stop at `location` in the gradient's colour there, selected.
+    void removeOpacityStop(int index);
+    // A stop at `location` in the ramp's colour (or opacity) there, selected.
     int addStop(int location);
+    int addOpacityStop(int location);
 
     QSize sizeHint() const override;
 
 signals:
     void stopsChanged();
+    void opacityStopsChanged();
     void selectionChanged(int index);
+    void opacitySelectionChanged(int index);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -113,26 +154,37 @@ protected:
     void mouseDoubleClickEvent(QMouseEvent* event) override;
 
 private:
+    enum class DragKind { None, Color, Opacity, ColorMidpoint, OpacityMidpoint };
+
     QRect barRect() const;
-    int stopX(int index) const;
-    int stopAt(const QPoint& pos) const;
+    int colorStopX(int index) const;
+    int opacityStopX(int index) const;
+    int colorStopAt(const QPoint& pos) const;
+    int opacityStopAt(const QPoint& pos) const;
+    // The midpoint handle under `pos`, as (kind, left stop index), or (-1,-1).
+    QPair<StopKind, int> midpointAt(const QPoint& pos) const;
     int locationAt(int x) const;
     void sortKeepingSelection();
+    void sortKeepingOpacitySelection();
+    void deriveOpacityStops();
 
     GradientStops stops_;
+    GradientOpacityStops opacityStops_;
     int selected_ = -1;
-    bool dragging_ = false;
+    int selectedOpacity_ = -1;
+    StopKind kind_ = StopKind::Color;
+    DragKind dragging_ = DragKind::None;
     bool dragOff_ = false;
     bool strict_ = false;
 };
 
 // CS6's Gradient Editor: the Presets grid, Name, Gradient Type, and either the
-// Solid page (Smoothness, the ramp and its stops, and the Stops group's Color,
-// Location, and Delete for the selected colour stop) or the Noise page, with
-// OK / Cancel down the right. Every edit emits `gradientChanged`, so the
-// caller can preview it. Ported from photorust's GradientEditorDialog.
-// ponytail: no colour-stop midpoints; the opacity stop row, Load… / Save…,
-// and New stay disabled, so an edited gradient is not kept as a preset.
+// Solid page (Smoothness, the ramp with colour and opacity stops and midpoints,
+// and the Stops group) or the Noise page, with OK / Cancel down the right.
+// Every edit emits `gradientChanged`, so the caller can preview it. Ported from
+// photorust's GradientEditorDialog.
+// ponytail: Load… / Save… and New stay disabled, so an edited gradient is not
+// kept as a preset.
 class GradientEditorDialog : public QDialog {
     Q_OBJECT
 
@@ -155,7 +207,7 @@ signals:
     void gradientChanged();
 
 private:
-    void showSelection(int index);
+    void showSelection();
     void edited();
 
     GradientStopBar* bar_ = nullptr;
@@ -167,6 +219,10 @@ private:
     ColorSwatchWidget* color_ = nullptr;
     QSpinBox* location_ = nullptr;
     QPushButton* delete_ = nullptr;
+    QSpinBox* opacity_ = nullptr;
+    QSpinBox* opacityLocation_ = nullptr;
+    QPushButton* opacityDelete_ = nullptr;
+    QSpinBox* midpoint_ = nullptr;
     QColor foreground_;
     QColor background_;
     bool loading_ = false;
