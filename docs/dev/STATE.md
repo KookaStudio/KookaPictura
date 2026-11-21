@@ -4,6 +4,25 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Raw settings stores — #401 implemented** (OpenSpec change
+  `raw-settings-storage`, archived; new capabilities `codec/raw-settings-xmp`
+  and `document/raw-settings-storage`, the seed requirement of
+  `document/raw-open` modified; closes #632). `pictura_raw_from_xmp` /
+  `pictura_raw_to_xmp` (`pictura_raw/xmp.rs`) map every Pictura Raw control
+  to its `crs:` name through the `Fltr` key map (`CRS_KEYS`, curves as
+  `rdf:Seq`, WB labels, PV 6.7/5.7/5.0) and patch a packet in place, leaving
+  an unchanged value's bytes alone and removing unset modelled keys.
+  `raw_open/store.rs` keeps records in `$XDG_DATA_HOME/kooka-pictura/Camera
+  Raw/<sha256>.xmp` or `<stem>.xmp` (Preferences ▸ File Handling ▸ Save Camera
+  Raw Settings In, session `rawSettingsStore`, Database default); the seed
+  reads the preferred store, then the other, then the embedded packet; OK and
+  the new Done button save (temp file + rename), sidecar failure falls back to
+  the database, and the notice joins the open's own status notice. The WB label
+  is derived from the values (the dialog never updates `WBal`). DNGs are never
+  written. Follow-ups: in-DNG settings / Export Settings To XMP (#402), Ignore
+  Sidecar and the ACR preferences dialog (#633). Tests:
+  `tests/raw_settings_xmp.rs`, `raw_open/{tests,store_tests}.rs`,
+  `tst_raw_open`.
 - **Per-camera colour matrices — #1465 implemented** (OpenSpec change
   `vendor-camera-matrices`, archived; new capability `codec/camera-matrices`,
   `codec/vendor-raw-containers` modified). CR2 files now open.
