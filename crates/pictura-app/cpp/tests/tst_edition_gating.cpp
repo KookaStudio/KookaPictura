@@ -47,8 +47,9 @@ void EditionGatingTest::editionGating()
         QVERIFY(pictura::toolAvailable(pictura::ToolId::Count));
         QVERIFY2(labelsForGroup(toolbox, 6).contains(QStringLiteral("Count (Extended)")),
                  "Extended keeps the Count tool");
-        for (const char* id : {"edit.preferences.3d", "layer.rasterize.3d",
-                               "type.extrude.to.3d", "view.show.3d.axis",
+        for (const char* id : {"edit.preferences.3d", "file.scripts.statistics",
+                               "layer.rasterize.3d", "type.extrude.to.3d",
+                               "view.show.3d.axis",
                                "view.show.count", "window.panels.3d",
                                "window.panels.measurement.log",
                                "layer.smart.objects.stack.mode.none",
@@ -82,8 +83,9 @@ void EditionGatingTest::editionGating()
         QVERIFY2(labels.contains(QStringLiteral("Note")), "the rest of the I group stays");
         standard->setActiveTool(pictura::ToolId::Count);
         QCOMPARE(standard->activeTool(), pictura::ToolId::Move);
-        for (const char* id : {"edit.preferences.3d", "layer.rasterize.3d",
-                               "type.extrude.to.3d", "view.show.3d.axis",
+        for (const char* id : {"edit.preferences.3d", "file.scripts.statistics",
+                               "layer.rasterize.3d", "type.extrude.to.3d",
+                               "view.show.3d.axis",
                                "view.show.count", "window.panels.3d",
                                "window.panels.measurement.log",
                                "layer.smart.objects.stack.mode.none",

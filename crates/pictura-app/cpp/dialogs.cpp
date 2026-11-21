@@ -881,6 +881,23 @@ QString documentDirectory(const QString& documentPath)
     return documentPath.isEmpty() ? QString() : QFileInfo(documentPath).absolutePath();
 }
 
+QStringList stackSourceSuffixes()
+{
+    return {QStringLiteral("psd"),  QStringLiteral("psb"), QStringLiteral("png"),
+            QStringLiteral("jpg"),  QStringLiteral("jpeg"), QStringLiteral("jpe"),
+            QStringLiteral("gif"),  QStringLiteral("bmp"), QStringLiteral("tif"),
+            QStringLiteral("tiff"), QStringLiteral("webp")};
+}
+
+QStringList stackSourceFilters()
+{
+    return {QStringLiteral("All Supported (*.PSD *.PSB *.PNG *.JPG *.JPEG *.JPE *.GIF "
+                           "*.BMP *.TIF *.TIFF *.WEBP)"),
+            QStringLiteral("Photoshop (*.PSD *.PSB)"),
+            QStringLiteral("Images (*.PNG *.JPG *.JPEG *.JPE *.GIF *.BMP *.TIF *.TIFF *.WEBP)"),
+            QStringLiteral("All files (*)")};
+}
+
 QString rememberedFileDialogDirectory()
 {
     // Qt persists the dialog's last folder itself, but reconstructs it with

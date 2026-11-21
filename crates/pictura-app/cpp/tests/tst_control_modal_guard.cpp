@@ -4,6 +4,7 @@
 #include <QtTest/QtTest>
 
 #include <QtCore/QJsonObject>
+#include <QtCore/QUrl>
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QProgressDialog>
@@ -69,6 +70,9 @@ void ControlModalGuardTest::initTestCase()
     pictura::setCropPromptInteractive(false);
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
+    // File > Browse… hands a folder to the desktop opener; keep the sweep from
+    // launching the host file manager.
+    window_->setUrlOpenerForTest([](const QUrl&) {});
     server_ = std::make_unique<pictura::ControlServer>(window_.get(), QString());
     ensureDocument();
 }

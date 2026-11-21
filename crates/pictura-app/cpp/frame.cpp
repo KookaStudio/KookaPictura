@@ -158,13 +158,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     menuRuntime.optionsBar = [this]() { return optionsBar_; };
     menuRuntime.dialogParent = [this]() -> QWidget* { return this; };
     menuRuntime.updateWindowTitle = [this]() { updateWindowTitle(); };
-    menuRuntime.openUrl = [this](const QUrl& url) {
-        if (urlOpener_) {
-            urlOpener_(url);
-        } else {
-            QDesktopServices::openUrl(url);
-        }
-    };
+    menuRuntime.openUrl = [this](const QUrl& url) { openExternalUrl(url); };
     menuRuntime.installMenuCornerButtons = [this]() { installMenuCornerButtons(); };
     menuRuntime.closeWindow = [this](DocWindow* window, bool interactive) {
         return closeWindow(window, interactive);
@@ -584,6 +578,15 @@ QString PicturaMainWindow::activeDocumentName() const
 bool PicturaMainWindow::isActiveDirty() const
 {
     return documents_->isActiveDirty();
+}
+
+void PicturaMainWindow::openExternalUrl(const QUrl& url)
+{
+    if (urlOpener_) {
+        urlOpener_(url);
+    } else {
+        QDesktopServices::openUrl(url);
+    }
 }
 
 int PicturaMainWindow::addDocument(PictureView* view, const QString& path, bool asTab)

@@ -18,7 +18,8 @@ pub fn command_edition(id: &str) -> Edition {
         | "window.panels.3d"
         | "window.panels.measurement.log"
         | "image.analysis.set.measurement.scale.default"
-        | "image.analysis.set.measurement.scale.custom" => Edition::Extended,
+        | "image.analysis.set.measurement.scale.custom"
+        | "file.scripts.statistics" => Edition::Extended,
         id if id.starts_with("layer.smart.objects.stack.mode.") => Edition::Extended,
         _ => Edition::Standard,
     }
@@ -99,6 +100,7 @@ pub fn modal_ids() -> &'static [&'static str] {
         "file.scripts.layer.comps.to.files",
         "file.scripts.layer.comps.to.pdf",
         "file.scripts.load.files.into.stack",
+        "file.scripts.statistics",
         "file.automate.batch",
         "file.quickExportPng",
         "file.saveForWeb",
@@ -334,6 +336,7 @@ mod tests {
             .collect();
         let expected: std::collections::BTreeSet<&str> = [
             "edit.preferences.3d",
+            "file.scripts.statistics",
             "image.analysis.set.measurement.scale.custom",
             "image.analysis.set.measurement.scale.default",
             "layer.rasterize.3d",

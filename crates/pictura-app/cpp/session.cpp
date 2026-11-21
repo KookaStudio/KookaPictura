@@ -214,6 +214,7 @@ SessionState loadSession()
     state.pdfOptions = obj.value(QStringLiteral("pdfOptions")).toString();
     state.saveFormatOptions = obj.value(QStringLiteral("saveFormatOptions")).toObject();
     state.batchOptions = obj.value(QStringLiteral("batchOptions")).toObject();
+    state.statisticsOptions = obj.value(QStringLiteral("statisticsOptions")).toObject();
     state.guideDashed = obj.value(QStringLiteral("guideDashed")).toBool(false);
     state.cropClassicMode = obj.value(QStringLiteral("cropClassicMode")).toBool(false);
     state.cropDeletePixels = obj.value(QStringLiteral("cropDeletePixels")).toBool(true);
@@ -385,6 +386,7 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("pdfOptions"), state.pdfOptions);
     obj.insert(QStringLiteral("saveFormatOptions"), state.saveFormatOptions);
     obj.insert(QStringLiteral("batchOptions"), state.batchOptions);
+    obj.insert(QStringLiteral("statisticsOptions"), state.statisticsOptions);
     obj.insert(QStringLiteral("guideDashed"), state.guideDashed);
     obj.insert(QStringLiteral("cropClassicMode"), state.cropClassicMode);
     obj.insert(QStringLiteral("cropDeletePixels"), state.cropDeletePixels);

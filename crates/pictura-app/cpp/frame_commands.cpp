@@ -24,6 +24,7 @@
 #include "gpu_probe.h"
 #include "load_layers_dialog.h"
 #include "memory_refusal.h"
+#include "statistics_dialog.h"
 
 #include "api/engine_bridge.h"
 #include "api/filters_bridge.h"
@@ -34,7 +35,9 @@
 
 #include "panels/layers_panel.h"
 
+#include <QtCore/QDir>
 #include <QtCore/QJsonValue>
+#include <QtCore/QUrl>
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QMessageBox>
 
@@ -92,12 +95,96 @@ void showLoadLayersDialog(PicturaMainWindow& frame)
     }
 }
 
+void showStatisticsDialog(PicturaMainWindow& frame)
+{
+    QStringList openPaths;
+    bool hasUnsavedOpenDocuments = false;
+    for (int index = 0; index < frame.documentCount(); ++index) {
+        const QString path = frame.documentPath(index);
+        if (path.isEmpty() || frame.isDocumentDirty(index)) {
+            hasUnsavedOpenDocuments = true;
+            continue;
+        }
+        openPaths.append(path);
+    }
+
+    SessionState state = pictura::loadSession();
+    const QJsonObject remembered = state.statisticsOptions;
+    const int initialMode = remembered.value(QStringLiteral("mode")).toInt(3);
+    const bool initialAlign = remembered.value(QStringLiteral("align")).toBool(false);
+
+    StatisticsDialog dialog(openPaths, hasUnsavedOpenDocuments, initialMode, initialAlign,
+                            documentDirectory(frame.activeFilePath()), &frame);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    QJsonObject chosen;
+    chosen.insert(QStringLiteral("mode"), dialog.stackModeCode());
+    chosen.insert(QStringLiteral("align"), dialog.alignImages());
+    state.statisticsOptions = chosen;
+    pictura::saveSession(state);
+
+    const QStringList paths = dialog.paths();
+    auto* view = new PictureView(&frame);
+    const QStringList failures =
+        document_api::loadFilesIntoStack(*view, paths, dialog.alignImages(), true);
+    const auto loaded = paths.size() - failures.size();
+    QStringList failedNames;
+    failedNames.reserve(failures.size());
+    for (const QString& path : failures) {
+        failedNames.append(QFileInfo(path).fileName());
+    }
+    const auto reportFailures = [&frame, &failedNames]() {
+        if (failedNames.isEmpty()) {
+            return;
+        }
+        QMessageBox::warning(
+            &frame, PicturaMainWindow::tr("Statistics"),
+            PicturaMainWindow::tr("Could not read the following files:\n%1")
+                .arg(failedNames.join(QLatin1Char('\n'))));
+    };
+    if (loaded < 2 || !view->has_document()) {
+        delete view;
+        if (reportMemoryRefusal(&frame, PicturaMainWindow::tr("merge the files"))) {
+            return;
+        }
+        QMessageBox::warning(
+            &frame, PicturaMainWindow::tr("Statistics"),
+            PicturaMainWindow::tr("Statistics needs at least two readable files."));
+        reportFailures();
+        return;
+    }
+
+    const auto rows = layers_api::snapshot(*view, 0, false).rows;
+    const bool applied = !rows.isEmpty()
+        && set_smart_object_stack_mode(*view, rows.first().path, dialog.stackModeCode());
+    if (!applied) {
+        delete view;
+        QMessageBox::warning(
+            &frame, PicturaMainWindow::tr("Statistics"),
+            PicturaMainWindow::tr("The layers could not be combined into a smart object."));
+        reportFailures();
+        return;
+    }
+
+    frame.addDocument(view, QString());
+    reportFailures();
+}
+
 } // namespace
 
 void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
 {
     registry.setHandler(command_ids::FileNew, [this]() { showNewDocumentDialog(); });
     registry.setHandler(command_ids::FileOpen, [this]() { showOpenDialog(); });
+    registry.setHandler(command_ids::FileBrowse, [this]() {
+        QString folder = documentDirectory(activeFilePath());
+        if (folder.isEmpty()) {
+            folder = QDir::homePath();
+        }
+        openExternalUrl(QUrl::fromLocalFile(folder));
+    });
     registry.setHandler(command_ids::FileOpenAs, [this]() { showOpenAsDialog(); });
     registry.setHandler(command_ids::FileOpenAsSmartObject, [this]() {
         const QString path = getOpenFileName(this, tr("Open As Smart Object"),
@@ -151,6 +238,8 @@ void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
     }
     registry.setHandler(command_ids::FileScriptsLoadFilesIntoStack,
                         [this]() { showLoadLayersDialog(*this); });
+    registry.setHandler(command_ids::FileScriptsStatistics,
+                        [this]() { showStatisticsDialog(*this); });
     // File > Print… and Print One Copy (WF-013).
     const char* const printIds[] = {command_ids::FilePrint, command_ids::FilePrintOneCopy};
     for (int i = 0; i < 2; ++i) {
