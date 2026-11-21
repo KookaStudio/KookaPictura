@@ -16,12 +16,15 @@ Snapshot for resuming after a context break. Update after each milestone.
   (`dng/nef_decode.rs`, `ljpeg::Bits::plain` without byte stuffing; six code
   tables taken as format facts by owner decision, see assets/PROVENANCE.md;
   stepped `0x44 0x20` and listed curves, split row at byte 562); 34713
-  without it: LSB-packed (D850 12-bit uncompressed). `NEFCompression` 8/13/14
+  without it: by exact strip size, LSB-packed (D850 12-bit uncompressed) or
+  16-byte groups of ten MSB samples + a pad byte (D100), else refused. Packed
+  compression 1 is an MSB stream of 32-bit words in file order (word-swapped
+  in little-endian Coolpix NRW). `NEFCompression` 8/13/14
   refused. Black = `0x003D` on a 14-bit scale × `2^(bits−14)`; white
   `2^bits − 1`; whole plane active. As-shot neutral from `0x000C`
   `WB_RBLevels`. 11 Nikon bodies (+ D800, Z 6_2 aliases) in the generated
-  matrix table. Checked on 17 real NEFs (D70, D200, D700, D800E, D850 ×7
-  variants, D3300, D5100 ×2, D7000 ×2, Z f): all read, green phases agree, the
+  matrix table. Checked on 20 real NEFs (D70, D100, D200, D700, D800E, D850 ×7
+  variants, D3300, D5100 ×2, D7000 ×2, D7100, Z f, Coolpix P7100 NRW): all read, green phases agree, the
   six D850 variants agree on phase means, as-shot 4600–5950 K (D5100 tint
   ≈ −66). Tests: `tests/raw_nef.rs` (synthetic `tests/raw/nef_builder.rs`
   with a closed-loop Huffman encoder), `tests/raw_camera_matrices.rs`,
