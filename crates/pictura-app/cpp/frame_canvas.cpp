@@ -55,6 +55,9 @@ void wireCanvasLevelProvider(PictureView* view, ImageView* canvas)
                 levelView->set_presented_view(level, docRect.x(), docRect.y(),
                                               docRect.width(), docRect.height());
             }
+        },
+        [levelView](int level, const QRect& rect) {
+            return levelView ? canvasFrameCrop(*levelView, level, rect) : CanvasFrameCrop{};
         }});
 }
 

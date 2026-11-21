@@ -13,6 +13,8 @@ use std::time::{Duration, Instant};
 
 /// How many committed edits the snapshot keeps.
 const EDIT_RING: usize = 32;
+const FRAME_RING: usize = 1024;
+const CPU_FRAME_BUDGET_MS: f64 = 16.6;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct Phase {
@@ -41,11 +43,49 @@ pub(crate) struct EditRecord {
 }
 
 #[derive(Default)]
+pub(super) struct FrameRecord {
+    pub(super) canvas_id: u64,
+    pub(super) input_count: u32,
+    pub(super) input_ns: u64,
+    pub(super) tile_gather_ns: u64,
+    pub(super) paint_ns: u64,
+    pub(super) interval_ns: Option<u64>,
+    pub(super) gpu_ns: Option<u64>,
+}
+
+impl FrameRecord {
+    fn write_json(&self, out: &mut String) {
+        let ns_to_ms = |ns: u64| ns as f64 / 1_000_000.0;
+        let input_ms = ns_to_ms(self.input_ns);
+        let paint_ms = ns_to_ms(self.paint_ns);
+        let _ = write!(
+            out,
+            "{{\"canvas_id\":{},\"boundary\":\"canvas_paint\",\"input_count\":{},\"input_ms\":{input_ms:.3},\"tile_gather_ms\":{:.3},\"qt_draw_ms\":{:.3},\"paint_ms\":{paint_ms:.3},\"cpu_budget_slack_ms\":{:.3},\"gpu_present_ms\":null",
+            self.canvas_id,
+            self.input_count,
+            ns_to_ms(self.tile_gather_ns),
+            ns_to_ms(self.paint_ns.saturating_sub(self.tile_gather_ns)),
+            CPU_FRAME_BUDGET_MS - input_ms - paint_ms,
+        );
+        if let Some(ns) = self.interval_ns {
+            let _ = write!(out, ",\"interval_ms\":{:.3}", ns_to_ms(ns));
+        }
+        if let Some(ns) = self.gpu_ns {
+            let _ = write!(out, ",\"gpu_composite_ms\":{:.3}", ns_to_ms(ns));
+        }
+        out.push('}');
+    }
+}
+
+#[derive(Default)]
 pub(crate) struct Metrics {
     on: bool,
     phases: Vec<(String, Phase)>,
     edits: VecDeque<EditRecord>,
     open: Option<(EditRecord, Instant)>,
+    frames: Option<VecDeque<FrameRecord>>,
+    frame_records_evicted: u64,
+    frame_generation: u64,
 }
 
 fn add_phase(phases: &mut Vec<(String, Phase)>, label: &str, dt: Duration) {
@@ -67,8 +107,23 @@ impl Metrics {
     pub(crate) fn new(on: bool) -> Self {
         Self {
             on,
+            frame_generation: u64::from(on),
             ..Self::default()
         }
+    }
+
+    fn record_frame(&mut self, record: impl FnOnce() -> FrameRecord) {
+        if !self.on {
+            return;
+        }
+        let frames = self
+            .frames
+            .get_or_insert_with(|| VecDeque::with_capacity(FRAME_RING));
+        if frames.len() == FRAME_RING {
+            frames.pop_front();
+            self.frame_records_evicted += 1;
+        }
+        frames.push_back(record());
     }
 
     pub(crate) fn record_phase(&mut self, label: &str, dt: Duration) {
@@ -202,13 +257,52 @@ impl Metrics {
             }
             out.push_str("}}");
         }
-        out.push_str("]}");
+        out.push_str("],\"frames\":[");
+        if let Some(frames) = &self.frames {
+            for (index, frame) in frames.iter().enumerate() {
+                if index > 0 {
+                    out.push(',');
+                }
+                frame.write_json(&mut out);
+            }
+        }
+        let _ = write!(
+            out,
+            "],\"frame_records_evicted\":{}}}",
+            self.frame_records_evicted
+        );
         if reset {
             self.phases.clear();
             self.edits.clear();
+            if let Some(frames) = &mut self.frames {
+                frames.clear();
+            }
+            self.frame_records_evicted = 0;
+            self.frame_generation += 1;
         }
         Some(out)
     }
+}
+
+pub(super) fn frame_generation() -> u64 {
+    METRICS.with(|m| m.borrow().frame_generation)
+}
+
+pub(super) fn new_frame_sample(
+    blend_ns: Option<u64>,
+) -> Option<std::sync::Arc<pictura_render::FrameTileSample>> {
+    let nanos = blend_ns?;
+    let generation = frame_generation();
+    (generation != 0).then(|| pictura_render::FrameTileSample::new(generation, nanos))
+}
+
+pub(super) fn record_frame(generation: u64, record: FrameRecord) {
+    METRICS.with(|cell| {
+        let mut metrics = cell.borrow_mut();
+        if generation == metrics.frame_generation {
+            metrics.record_frame(|| record);
+        }
+    });
 }
 
 /// `"…"` with the JSON escapes a label can need.

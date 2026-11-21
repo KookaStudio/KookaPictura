@@ -225,7 +225,8 @@ void ImageView::damageRegion(const QRect& damaged)
         // exactly as it was.
         if (!hit.isEmpty()) {
             bool patched = false;
-            QImage part = levelProvider_.crop(level, hit.x(), hit.y(), hit.width(), hit.height());
+            const auto cropped = cropForPaint(level, hit);
+            const QImage& part = cropped.image;
             if (part.size() == hit.size() && part.format() == presentCache_.crop.format()) {
                 const int bpp = std::max(1, presentCache_.crop.depth() / 8);
                 const QPoint origin = presentCache_.levelRect.topLeft();
@@ -234,6 +235,8 @@ void ImageView::damageRegion(const QRect& damaged)
                             + (hit.x() - origin.x()) * bpp,
                         part.constScanLine(row), hit.width() * bpp);
                 }
+                eraseFrameSamples(presentCache_.samples, hit);
+                copyFrameSamples(presentCache_.samples, cropped.samples, hit);
                 presentCache_.revision = levelProvider_.canvasRevision
                     ? levelProvider_.canvasRevision()
                     : quint64(0);
@@ -326,6 +329,40 @@ void ImageView::clampOffset()
     offset_.setY(std::clamp(offset_.y(), range.minY, range.maxY));
 }
 
+QTransform ImageView::viewRotation() const
+{
+    if (rotation_ == 0.0) {
+        return QTransform();
+    }
+    const QPointF centre(width() / 2.0, height() / 2.0);
+    return QTransform::fromTranslate(-centre.x(), -centre.y()) * QTransform().rotate(rotation_)
+        * QTransform::fromTranslate(centre.x(), centre.y());
+}
+
+QRectF ImageView::viewRect() const
+{
+    return viewRotation().inverted().mapRect(QRectF(rect()));
+}
+
+void ImageView::setRotation(double degrees)
+{
+    FrameViewportTiming timing(*this);
+    double normalised = std::fmod(degrees, 360.0);
+    if (normalised <= -180.0) {
+        normalised += 360.0;
+    } else if (normalised > 180.0) {
+        normalised -= 360.0;
+    }
+    if (normalised == rotation_) {
+        return;
+    }
+    timing.changed();
+    rotation_ = normalised;
+    presentCache_.valid = false;
+    update();
+    emit viewChanged();
+}
+
 void ImageView::zoomAt(const QPointF& cursor, int angleDelta)
 {
     const double factor = std::pow(1.0015, angleDelta);
@@ -337,6 +374,8 @@ void ImageView::zoomAt(const QPointF& cursor, int angleDelta)
 
 void ImageView::panBy(const QPointF& delta)
 {
+    FrameViewportTiming timing(*this);
+    timing.changed();
     userAdjusted_ = true;
     pendingSettle_ = false;
     offset_ += delta;
@@ -347,6 +386,8 @@ void ImageView::panBy(const QPointF& delta)
 
 void ImageView::setOffset(const QPointF& offset)
 {
+    FrameViewportTiming timing(*this);
+    timing.changed();
     userAdjusted_ = true;
     pendingSettle_ = false;
     offset_ = offset;
@@ -367,6 +408,8 @@ void ImageView::zoomOut()
 
 void ImageView::setZoom(double zoom, const QPointF& anchor)
 {
+    FrameViewportTiming timing(*this);
+    timing.changed();
     userAdjusted_ = true;
     pendingSettle_ = false;
     const double target = std::clamp(zoom, kMinZoom, kMaxZoom);
@@ -389,10 +432,12 @@ void ImageView::printSize(double ppi)
 
 void ImageView::fitOnScreen()
 {
+    FrameViewportTiming timing(*this);
     userAdjusted_ = false;
     if (docSize_.isEmpty()) {
         return;
     }
+    timing.changed();
     const double fit = std::min(double(width()) / docSize_.width(),
                                 double(height()) / docSize_.height())
                        * 0.95;
@@ -407,6 +452,8 @@ void ImageView::fitOnScreen()
 
 void ImageView::actualPixels()
 {
+    FrameViewportTiming timing(*this);
+    timing.changed();
     // 100% is an explicit user choice: keep it when the workspace scrollbars
     // appear and resize the canvas instead of refitting on the next resize.
     userAdjusted_ = true;

@@ -175,7 +175,7 @@ pub enum Backend {
 /// contains a CPU-only mode; it never panics.
 #[cfg(test)]
 pub(crate) fn composite_gpu(doc: &Document) -> Result<PixelBuffer, GpuError> {
-    composite_gpu_region(doc, 0, 0, doc.width, doc.height)
+    composite_gpu_region(doc, 0, 0, doc.width, doc.height).map(|(pixels, _)| pixels)
 }
 
 /// Composite a document-space region `[x0, x0+rw) × [y0, y0+rh)` on the GPU.
@@ -190,7 +190,7 @@ pub(crate) fn composite_gpu_region(
     y0: u32,
     rw: u32,
     rh: u32,
-) -> Result<PixelBuffer, GpuError> {
+) -> Result<(PixelBuffer, Option<u64>), GpuError> {
     // A stack the GPU cannot composite exactly must report why, even when the
     // device is unusable, so the eligibility check precedes the availability
     // gate.
@@ -224,9 +224,9 @@ fn composite_gpu_region_raw(
     y0: u32,
     rw: u32,
     rh: u32,
-) -> Result<PixelBuffer, GpuError> {
+) -> Result<(PixelBuffer, Option<u64>), GpuError> {
     if rw == 0 || rh == 0 {
-        return Ok(PixelBuffer::new(rw, rh, 4));
+        return Ok((PixelBuffer::new(rw, rh, 4), None));
     }
     // `Gpu::new` checks the device limits first, so an oversized region stays
     // `TooLarge`; it allocates nothing region-sized.
@@ -243,8 +243,7 @@ fn composite_gpu_region_raw(
     for layer_plan in plans {
         gpu.composite_plan(&canvas, layer_plan, doc);
     }
-    let pixels = gpu.read_canvas(&canvas)?;
-    Ok(pixels)
+    gpu.read_canvas(&canvas)
 }
 
 /// The host bytes a region composite may hold at once: 4 a pixel each for the
@@ -347,7 +346,8 @@ fn gpu_composite_verified() -> bool {
             return false;
         };
         let cpu = crate::composite_rgba(&doc);
-        let Ok(gpu) = composite_gpu_region_raw(&doc, &plans, 0, 0, doc.width, doc.height) else {
+        let Ok((gpu, _)) = composite_gpu_region_raw(&doc, &plans, 0, 0, doc.width, doc.height)
+        else {
             backend::record_error("validation composite failed");
             return false;
         };

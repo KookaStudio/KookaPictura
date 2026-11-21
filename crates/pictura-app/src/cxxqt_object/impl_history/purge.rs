@@ -6,10 +6,12 @@
 //!
 //! [`PictureView`]: super::super::qobject::PictureView
 
+mod frame_capture;
 mod imp;
 
 use super::super::qobject::PictureView;
 use super::display::{frame_revision, preview_present_level};
+use frame_capture::*;
 use imp::*;
 
 #[cxx_qt::bridge]
@@ -17,6 +19,8 @@ pub mod ffi {
     unsafe extern "C++" {
         include!("cxx-qt-lib/qstring.h");
         type QString = cxx_qt_lib::QString;
+        include!("cxx-qt-lib/qimage.h");
+        type QImage = cxx_qt_lib::QImage;
 
         include!("pictura_app/src/cxxqt_object.cxxqt.h");
         #[namespace = "pictura"]
@@ -57,5 +61,57 @@ pub mod ffi {
         /// standing in for a pyramid a worker is still building. A GPU stroke
         /// presents the zoom-selected level.
         fn preview_present_level(view: &PictureView) -> i32;
+    }
+
+    #[namespace = "pictura"]
+    struct CanvasFrameMeasurement {
+        canvas_id: u64,
+        input_count: u32,
+        input_ns: u64,
+        tile_gather_ns: u64,
+        paint_ns: u64,
+        interval_ns: i64,
+        gpu_ns: i64,
+    }
+
+    #[namespace = "pictura"]
+    struct FrameCropRect {
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+    }
+
+    #[namespace = "pictura"]
+    extern "Rust" {
+        type FrameCropSamples;
+
+        fn frame_capture_generation() -> u64;
+        fn frame_capture_record(generation: u64, record: CanvasFrameMeasurement);
+        fn frame_samples_new() -> Box<FrameCropSamples>;
+        fn frame_samples_crop(
+            view: &PictureView,
+            level: i32,
+            rect: FrameCropRect,
+            samples: &mut FrameCropSamples,
+        ) -> QImage;
+        fn frame_samples_copy(
+            target: &mut FrameCropSamples,
+            source: &FrameCropSamples,
+            area: FrameCropRect,
+        );
+        fn frame_samples_erase(samples: &mut FrameCropSamples, area: FrameCropRect);
+        fn frame_samples_empty(samples: &FrameCropSamples) -> bool;
+        fn frame_samples_prune_empty(samples: &mut FrameCropSamples, generation: u64) -> bool;
+        fn frame_samples_rects(
+            samples: &mut FrameCropSamples,
+            generation: u64,
+        ) -> Vec<FrameCropRect>;
+        fn frame_samples_take(samples: &FrameCropSamples, index: usize, generation: u64) -> i64;
+        fn frame_samples_seed_for_test(
+            samples: &mut FrameCropSamples,
+            rect: FrameCropRect,
+            ns: u64,
+        );
     }
 }

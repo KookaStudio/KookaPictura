@@ -1,6 +1,8 @@
 # image_view sources for pictura_shell.
 # Included from the root CMakeLists.txt; keep paths explicit (no globbing).
 list(APPEND PICTURA_SHELL_SOURCES
+    crates/pictura-app/cpp/canvas_frame_metrics.cpp
+    crates/pictura-app/cpp/canvas_frame_metrics.h
     crates/pictura-app/cpp/canvas_range.h
     crates/pictura-app/cpp/canvas_ruler.cpp
     crates/pictura-app/cpp/canvas_ruler.h

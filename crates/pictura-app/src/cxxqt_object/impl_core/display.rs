@@ -10,7 +10,7 @@ use crate::cxxqt_object::state::PictureViewRust;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QImage;
 use pictura_core::{LayerMask, PixelBuffer, PsdRect};
-use pictura_render::{TileKey, TileSource};
+use pictura_render::{FrameTileSamples, TileKey, TileSource};
 
 impl qobject::PictureView {
     /// A premultiplied crop of the **canvas display source** at `level` over
@@ -19,6 +19,18 @@ impl qobject::PictureView {
     /// built on a worker. The canvas provider calls this; every other panel
     /// and dialog keeps calling `display_image` so they never see the mask.
     pub fn canvas_display_image(&self, level: i32, x: i32, y: i32, w: i32, h: i32) -> QImage {
+        self.canvas_display_crop(level, x, y, w, h, None)
+    }
+
+    pub(in crate::cxxqt_object) fn canvas_display_crop(
+        &self,
+        level: i32,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        samples: Option<&mut FrameTileSamples>,
+    ) -> QImage {
         if w <= 0 || h <= 0 {
             return QImage::default();
         }
@@ -28,7 +40,7 @@ impl qobject::PictureView {
             bottom: y + h,
             right: x + w,
         };
-        let (image, missing) = self.rust().canvas_present_image(level, rect);
+        let (image, missing) = self.rust().canvas_present_image(level, rect, samples);
         self.request_tiles(missing);
         image
     }
@@ -38,7 +50,12 @@ impl PictureViewRust {
     /// The canvas present image at `level` over `rect` (document pixels at
     /// that level): Quick Mask's overlay, the solo mask, or the composite,
     /// and the tiles left to a worker. Nothing but the canvas calls this.
-    pub(crate) fn canvas_present_image(&self, level: i32, rect: PsdRect) -> (QImage, Vec<TileKey>) {
+    fn canvas_present_image(
+        &self,
+        level: i32,
+        rect: PsdRect,
+        samples: Option<&mut FrameTileSamples>,
+    ) -> (QImage, Vec<TileKey>) {
         if self.session.read_only() {
             return (self.session.compatibility.image(level, rect), Vec::new());
         }
@@ -54,7 +71,7 @@ impl PictureViewRust {
             return (QImage::default(), Vec::new());
         }
         let source = self.canvas_source();
-        let (crop, missing) = self.tile_crop(source, level, rect);
+        let (crop, missing) = self.tile_crop_with_samples(source, level, rect, samples);
         if crop.width() == 0 || crop.height() == 0 {
             return (QImage::default(), missing);
         }

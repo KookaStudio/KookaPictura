@@ -207,10 +207,20 @@ fn crop_rows(
 /// The buffer a wand samples: the composited layer stack when present,
 /// otherwise the embedded PSD composite.
 pub(super) fn current_buffer(doc: &Document, gpu_compute: bool) -> PixelBuffer {
+    current_buffer_with_blend_time(doc, gpu_compute).0
+}
+
+pub(super) fn current_buffer_with_blend_time(
+    doc: &Document,
+    gpu_compute: bool,
+) -> (PixelBuffer, Option<u64>) {
     if doc.layers.is_empty() {
-        doc.composite.buffer().clone()
+        (doc.composite.buffer().clone(), None)
     } else {
-        pictura_render::composite(pictura_render::CompositeRequest::whole(doc, gpu_compute)).0
+        let (buffer, _, blend_ns) = pictura_render::composite_with_blend_time(
+            pictura_render::CompositeRequest::whole(doc, gpu_compute),
+        );
+        (buffer, blend_ns)
     }
 }
 /// Convert the document to a packed RGBA `QImage`.

@@ -715,7 +715,7 @@ gaps are the CS6 Extended 3D object and camera tools.
       (#1180)
 - [x] Visibility toggles patch the Layers row in place instead of rebuilding
       the panel snapshot and thumbnails (#1197)
-- [ ] Frame-budget instrumentation (#941)
+- [x] Frame-budget instrumentation (#941)
 - [x] A tile cache with hit-rate accounting (#942): the viewport presents a
       256² display tile pyramid, with no stored full-resolution composite for
       layered documents (#1216); export, selections, previews, conversions and

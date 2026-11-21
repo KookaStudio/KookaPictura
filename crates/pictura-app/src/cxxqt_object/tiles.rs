@@ -22,7 +22,9 @@
 //! tiles runs through [`PictureViewRust::drop_file_preview`] first.
 
 use super::helpers::paint_timing;
-use super::helpers_composite::{crop_planar, current_buffer, into_rgba_frame, level_display_image};
+use super::helpers_composite::{
+    crop_planar, current_buffer_with_blend_time, into_rgba_frame, level_display_image,
+};
 use super::impl_core::mask_region_plane;
 use super::qobject;
 use super::state::PictureViewRust;
@@ -32,8 +34,8 @@ use cxx_qt_lib::QImage;
 use pictura_core::memory::eviction::{self, HotHold};
 use pictura_core::{Document, LayerMask, PixelBuffer, PsdRect};
 use pictura_render::{
-    patch_buffer_region, CompositeScope, DocumentComposite, FilterProxy, PyramidLevel, Ticket,
-    TileKey, TilePyramid, TileSource, TILE_SIDE,
+    patch_buffer_region, CompositeScope, DocumentComposite, FilterProxy, FrameTileSample,
+    FrameTileSamples, PyramidLevel, Ticket, TileKey, TilePyramid, TileSource, TILE_SIDE,
 };
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
@@ -306,15 +308,35 @@ impl PictureViewRust {
         level: i32,
         rect: PsdRect,
     ) -> (PyramidLevel, Vec<TileKey>) {
+        self.tile_crop_with_samples(source, level, rect, None)
+    }
+
+    pub(super) fn tile_crop_with_samples(
+        &self,
+        source: TileSource,
+        level: i32,
+        rect: PsdRect,
+        mut samples: Option<&mut FrameTileSamples>,
+    ) -> (PyramidLevel, Vec<TileKey>) {
         self.fit_tiles();
         let level = level.max(0) as usize;
-        let (crop, missing) = self.tiles.cache.borrow_mut().crop(source, level, rect);
+        let (crop, missing) = self.tiles.cache.borrow_mut().crop_with_samples(
+            source,
+            level,
+            rect,
+            samples.as_deref_mut(),
+        );
         if missing.is_empty() || !self.tiles_sync() {
             return (crop, missing);
         }
         self.build_now(&missing);
-        let (crop, missing) = self.tiles.cache.borrow_mut().crop(source, level, rect);
-        (crop, missing)
+        if let Some(output) = samples.as_deref_mut() {
+            *output = FrameTileSamples::default();
+        }
+        self.tiles
+            .cache
+            .borrow_mut()
+            .crop_with_samples(source, level, rect, samples)
     }
 
     /// Build `keys` on this thread and cache them, with every tile folded
@@ -427,10 +449,11 @@ impl PictureViewRust {
     /// Fold an already composited straight-sRGB `region` of document rect
     /// `clipped` into the tiles, widening it to the repair alignment from the
     /// display source where it falls short.
-    pub(in crate::cxxqt_object) fn repair_display(
+    fn repair_display(
         &mut self,
         clipped: PsdRect,
         region: PixelBuffer,
+        sample: Option<&Arc<FrameTileSample>>,
     ) {
         self.drop_file_preview();
         self.fit_tiles();
@@ -445,10 +468,12 @@ impl PictureViewRust {
             Some(doc) if aligned != clipped => widen(doc, painting, clipped, region, aligned),
             _ => region,
         };
-        self.tiles
-            .cache
-            .get_mut()
-            .repair(TileSource::Composite, aligned, &buffer);
+        self.tiles.cache.get_mut().repair_with_sample(
+            TileSource::Composite,
+            aligned,
+            &buffer,
+            sample,
+        );
     }
 
     /// Repair a soloed mask's tiles over `clipped` from the mask plane, or mark
@@ -575,16 +600,17 @@ impl PictureViewRust {
             super::impl_core::note_refresh();
         }
         let doc = self.session.doc.as_ref()?;
-        let region = match refreshed.into_iter().next() {
-            Some(refreshed) => {
-                into_rgba_frame(pictura_codec::buffer_to_srgb(doc, &refreshed.buffer).into_owned())
-            }
+        let (region, sample) = match refreshed.into_iter().next() {
+            Some(refreshed) => (
+                into_rgba_frame(pictura_codec::buffer_to_srgb(doc, &refreshed.buffer).into_owned()),
+                super::metrics::new_frame_sample(refreshed.blend_ns),
+            ),
             // A layerless document has nothing to composite: its stored
             // composite is the picture.
-            None => display_region(doc, aligned, false),
+            None => (display_region(doc, aligned, false), None),
         };
         let t = Instant::now();
-        self.apply_refreshed_region(aligned.left, aligned.top, aligned, region);
+        self.apply_display_repair(aligned, region, sample.as_ref());
         paint_timing::record("rr_tiles_repair", t.elapsed());
         Some(clipped)
     }
@@ -598,10 +624,19 @@ impl PictureViewRust {
         clipped: PsdRect,
         srgb: PixelBuffer,
     ) {
+        self.apply_display_repair(clipped, srgb, None);
+    }
+
+    fn apply_display_repair(
+        &mut self,
+        clipped: PsdRect,
+        srgb: PixelBuffer,
+        sample: Option<&Arc<FrameTileSample>>,
+    ) {
         if srgb.width == 0 || srgb.height == 0 {
             return;
         }
-        self.repair_display(clipped, srgb);
+        self.repair_display(clipped, srgb, sample);
         self.damage.mark(clipped);
         self.canvas_revision = self.canvas_revision.wrapping_add(1);
         self.sync_mask_solo_region(clipped);
@@ -987,16 +1022,19 @@ impl PictureViewRust {
             let Some(aligned) = grown.intersect(canvas) else {
                 continue;
             };
-            let pixels = if level == 0 {
-                display_region(doc, aligned, false)
+            let (pixels, sample) = if level == 0 {
+                (display_region(doc, aligned, false), None)
             } else {
                 let Some(proxy) = FilterProxy::new(doc, None, aligned, 1.0 / f64::from(scale))
                 else {
                     return false;
                 };
                 let reduced = proxy.into_document();
-                let buffer = current_buffer(&reduced, gpu_compute);
-                pictura_codec::buffer_to_srgb(&reduced, &buffer).into_owned()
+                let (buffer, blend_ns) = current_buffer_with_blend_time(&reduced, gpu_compute);
+                (
+                    pictura_codec::buffer_to_srgb(&reduced, &buffer).into_owned(),
+                    super::metrics::new_frame_sample(blend_ns),
+                )
             };
             let at = PsdRect {
                 top: aligned.top / scale,
@@ -1004,15 +1042,21 @@ impl PictureViewRust {
                 bottom: aligned.top / scale + pixels.height as i32,
                 right: aligned.left / scale + pixels.width as i32,
             };
-            parts.push((at, pixels));
+            parts.push((at, pixels, sample));
         }
         if parts.is_empty() {
             return true;
         }
         self.fit_tiles();
         let cache = self.tiles.cache.get_mut();
-        for (at, pixels) in &parts {
-            cache.paint_stand_in(TileSource::Composite, level, *at, pixels, 255, false);
+        for (at, pixels, sample) in &parts {
+            cache.paint_stand_in_with_sample(
+                TileSource::Composite,
+                level,
+                *at,
+                pixels,
+                sample.as_ref(),
+            );
         }
         self.canvas_revision = self.canvas_revision.wrapping_add(1);
         true
