@@ -143,7 +143,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | TOOL-19 | `slice-tools.md` | Slice options bar/style/modifiers, Divide/Combine/Duplicate, Slice Options dialog, slices-from-guides | MISSING | `tool_slice.cpp:65-102` | #543 |
 | TOOL-20 | `crop-tool.md` | Crop resampling by W×H×resolution, non-destructive crop/Reveal All, crop shield settings | PARTIAL | `options_bar_crop.cpp:244-375` | #544 |
 | TOOL-21 | `custom-shape.md` | `.CSH` libraries, Define Custom Shape, geometry modes, gradient/pattern fill-stroke | MISSING | `options_bar_shape.cpp:506-510,420-431` | #545 |
-| TOOL-22 | `shape-tools.md` | Gradient/pattern fill+stroke, dashed stroke, path ops, fill-pixels options, snap-to-pixels, proportional geometry | MISSING | `options_bar_shape.cpp:281-431`; `shapes.rs:316-333` | #546 |
+| TOOL-22 | `shape-tools.md` | Gradient/pattern fill+stroke, dashed stroke, path ops, fill-pixels options, snap-to-pixels, proportional geometry | SHIPPED | `options_bar_shape.cpp`; `shape_style.rs`; `layer_effects/strokes.rs`; `tool_shape.cpp`; `tst_shape_tools` | #546 |
 | TOOL-23 | `color-replacement.md` | Full CS6 mode list, 32-bit subset, and Bitmap/Indexed/Multichannel availability gates | SHIPPED | `crates/pictura-app/cpp/tool_colorreplacement.cpp`; `crates/pictura-app/cpp/tool_catalog.cpp`; `tst_color_replacement` | #547 |
 | TOOL-24 | `dodge-burn-sponge.md` | Grayscale Sponge, airbrush toggle, quick keys, 32-bpc availability | SHIPPED | `tone.rs`; `tool_retouch.cpp`; `options_bar_retouch.cpp`; `toolbox.cpp` | #548 |
 | TOOL-25 | `eraser-tools.md` | Magic-eraser background convert, background-eraser edge halo, pen pressure | PARTIAL | `eraser.rs:166-332` | #549 |
