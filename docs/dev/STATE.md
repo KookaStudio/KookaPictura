@@ -23,7 +23,9 @@ Snapshot for resuming after a context break. Update after each milestone.
   refused. Black = `0x003D` on a 14-bit scale × `2^(bits−14)`; white
   `2^bits − 1`; whole plane active. As-shot neutral from `0x000C`
   `WB_RBLevels`. 11 Nikon bodies (+ D800, Z 6_2 aliases) in the generated
-  matrix table. Checked on 20 real NEFs (D70, D100, D200, D700, D800E, D850 ×7
+  matrix table, plus proxy rows (owner decision) for bodies without open
+  sensitivities: D100 → D70 (ICX413), D7100 → D5300 (lower confidence),
+  Coolpix P7100 → PowerShot S90 (ICX685), `PROXIES` in the script. Checked on 20 real NEFs (D70, D100, D200, D700, D800E, D850 ×7
   variants, D3300, D5100 ×2, D7000 ×2, D7100, Z f, Coolpix P7100 NRW): all read, green phases agree, the
   six D850 variants agree on phase means, as-shot 4600–5950 K (D5100 tint
   ≈ −66). Tests: `tests/raw_nef.rs` (synthetic `tests/raw/nef_builder.rs`
