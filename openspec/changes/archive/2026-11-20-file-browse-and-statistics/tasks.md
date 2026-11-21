@@ -34,6 +34,6 @@
 
 ## 7. Integration and archive
 
-- [ ] 7.1 Run one build after all code is complete, then the targeted `ctest -R '^tst_(file_menu|statistics|edition_gating|command_tree|menu_registrar)$'`; verify all pass
+- [x] 7.1 Run one build after all code is complete, then the targeted `ctest -R '^tst_(file_menu|statistics|edition_gating|command_tree|menu_registrar)$'`; verify all pass
 - [ ] 7.2 Run `bash scripts/verify-full.sh`, `python3 scripts/check-cmake-source-fragments.py`, and `openspec validate --all --strict`; verify all pass
 - [x] 7.3 Archive `file-browse-and-statistics` with `openspec archive` and confirm no non-archived change remains
