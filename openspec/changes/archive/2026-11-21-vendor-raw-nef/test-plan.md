@@ -24,8 +24,9 @@ corpus rows read user-supplied camera files, opt-in through
 | `nef_hostile` | Every prefix; 0x0096 of 8 bytes; Huffman data cut short; budget smaller than the plane | Error, no panic | `pictura-codec::hostile_nefs_fail_cleanly` |
 | `nef_corpus` | `PICTURA_RAW_CORPUS=<dir> cargo test -p pictura-codec --test raw_nef corpus` | Each `.NEF` reads or is refused unsupported; non-flat; green means within 5 % | `pictura-codec::nef_corpus_reads_when_present` |
 | `nef_camera_matrices` | Synthetic NEFs naming D850, D800, D800E, Z f, Z 6_2, D4 | Matrices for all but D4; alias pairs equal | `pictura-codec::known_nikon_models_take_fitted_matrices` |
-| `nef_as_shot` | D850 NEF with `WB_RBLevels` (1.9, 1.375, 1, 1); zero red; none | (1/1.9, 1, 1/1.375); decodes 2000–12000 K; others none | `pictura-codec::nef_as_shot_neutral_from_wb_levels` |
+| `nef_as_shot` | D850 NEF with `WB_RBLevels` (1.9, 1.375, 1, 1); zero red; none; D100 colour balance 0100 (581, 436, 256, 256) BE and LE | (1/1.9, 1, 1/1.375); decodes 2000–12000 K; next two none; D100 (256/581, 1, 256/436) | `pictura-codec::nef_as_shot_neutral_from_wb_levels` |
 | `nef_matrices_white` | Every Nikon row's D65 and A neutral through `as_shot_transform` | 6504 K / 2856 K within 2 % | `pictura-codec::fitted_matrices_keep_white_neutral` |
 | `nef_colour_corpus` | `PICTURA_RAW_CORPUS=<dir> cargo test -p pictura-codec --test raw_camera_matrices corpus` | Table cameras decode 2000–12000 K; others refused for camera colour | `pictura-codec::nef_corpus_colour_when_present` |
+| `camera_matrices_proxies` | Synthetic NEFs naming D100, D7100, COOLPIX P7100 | Matrices equal D70's, D5300's, the S90 CR2's | `pictura-codec::proxy_bodies_take_their_siblings_matrices` |
 | `raw_open_sniff` | `raw_sniff_path` on a DNG named `shot.tif`, a plain TIFF, a missing path | Only the DNG is true | `pictura-app::raw_sniff_detects_by_signature` |
 | `raw_open_filter` | Read `openFileFilters()` | "Camera Raw (*.DNG *.CR2 *.NEF)" present; All Formats has all three | `tst_raw_open::openFiltersListCameraRaw` |
