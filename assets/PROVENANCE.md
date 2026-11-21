@@ -153,7 +153,10 @@ Adobe DNG Converter matrix is used. Inputs, none bundled:
 The output holds only the fitted numbers and camera names.
 
 The table seeds Canon CR2 bodies (#1465) and Nikon NEF bodies (#1469), every
-body whose sensitivities rawtoaces-data publishes for those makes.
+body whose sensitivities rawtoaces-data publishes for those makes. Three
+bodies without published sensitivities reuse a sibling's fitted numbers by
+owner decision (#1469): the D100 (D70), D7100 (D5300) and Coolpix P7100
+(PowerShot S90); the basis of each is commented in the generated file.
 
 ## Nikon NEF code tables (`crates/pictura-codec/src/dng/nef_decode.rs`)
 

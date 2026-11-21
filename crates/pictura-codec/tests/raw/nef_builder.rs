@@ -144,6 +144,8 @@ pub struct Nef {
     pub ifd0_tags: Vec<(u16, Val)>,
     pub black: Option<Vec<u16>>,
     pub wb: Option<Vec<(u32, u32)>>,
+    /// Maker-note tag `0x0097`: version `0100` with these R, B, G, G levels.
+    pub color_balance_0100: Option<[u16; 4]>,
     /// Replaces the linearization table's bytes.
     pub lin_bytes: Option<Vec<u8>>,
     /// Overrides the raw IFD's `ImageLength`.
@@ -166,6 +168,7 @@ impl Nef {
             ],
             black: None,
             wb: None,
+            color_balance_0100: None,
             lin_bytes: None,
             height_tag: None,
         }
@@ -382,6 +385,15 @@ pub fn nef(spec: &Nef) -> Vec<u8> {
     }
     if let Some(wb) = &spec.wb {
         note_tags.push((0x000C, Val::Rational(wb.clone())));
+    }
+    if let Some(levels) = spec.color_balance_0100 {
+        let mut blob = b"0100".to_vec();
+        blob.resize(72, 7);
+        for v in levels {
+            blob.extend(if be { v.to_be_bytes() } else { v.to_le_bytes() });
+        }
+        blob.resize(156, 0);
+        note_tags.push((0x0097, Val::Byte(blob)));
     }
     if let Some(c) = spec.nef_compression {
         note_tags.push((0x0093, Val::Short(vec![c])));

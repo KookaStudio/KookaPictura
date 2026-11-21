@@ -474,7 +474,8 @@ gaps are the CS6 Extended 3D object and camera tools.
       (MSB-packed, LSB-packed or 16-bit containers) or Nikon Huffman-coded
       (lossless and lossy, with the maker note's linearization curve), black
       from the maker note, as-shot white balance from `WB_RBLevels`; 11 Nikon
-      bodies take fitted matrices (approximate parity) (#1469).
+      bodies take fitted matrices, and the D100, D7100 and Coolpix P7100 a
+      same-sensor sibling's (approximate parity) (#1469).
       `crates/pictura-codec/src/dng/nef.rs`, `crates/pictura-codec/src/dng/nef_decode.rs`.
 - [x] **Per-camera colour matrices** — vendor raw files without a
       `ColorMatrix` take A and D65 matrices fitted from openly licensed camera

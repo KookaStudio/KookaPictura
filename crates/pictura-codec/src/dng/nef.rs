@@ -26,6 +26,7 @@ const WB_RB_LEVELS: u16 = 0x000C;
 const BLACK_LEVEL: u16 = 0x003D;
 const NEF_COMPRESSION: u16 = 0x0093;
 const LINEARIZATION: u16 = 0x0096;
+const COLOR_BALANCE: u16 = 0x0097;
 const MAX_SUB_IFDS: usize = 16;
 
 fn invalid(what: &str) -> PsdError {
@@ -117,13 +118,27 @@ fn black(note: Option<&Tags>, bits: u32) -> Result<Vec<f64>, PsdError> {
     })
 }
 
-/// The as-shot neutral from the maker note's red and blue multipliers.
+/// The as-shot neutral from the maker note's red and blue multipliers
+/// (`WB_RBLevels`), else from the unencrypted version-`0100` colour balance
+/// (D100): 16-bit R, B, G, G levels at byte 72.
 fn as_shot_neutral(note: Option<&Tags>) -> Result<Option<[f64; 3]>, PsdError> {
-    let levels = note.map(|n| n.reals(WB_RB_LEVELS)).transpose()?.flatten();
-    Ok(match levels.as_deref() {
-        Some([r, b, ..]) if *r > 0.0 && *b > 0.0 => Some([1.0 / r, 1.0, 1.0 / b]),
-        _ => None,
-    })
+    let Some(note) = note else {
+        return Ok(None);
+    };
+    if let Some([r, b, ..]) = note.reals(WB_RB_LEVELS)?.as_deref() {
+        return Ok((*r > 0.0 && *b > 0.0).then(|| [1.0 / r, 1.0, 1.0 / b]));
+    }
+    let balance = note.ifd.get(COLOR_BALANCE).map(|e| note.tiff.raw(e));
+    let Some(levels) = balance
+        .filter(|b| b.starts_with(b"0100"))
+        .and_then(|b| b.get(72..80))
+    else {
+        return Ok(None);
+    };
+    let [r, b, g1, g2] =
+        [0, 1, 2, 3].map(|i| note.tiff.order.u16([levels[2 * i], levels[2 * i + 1]]) as f64);
+    let g = (g1 + g2) / 2.0;
+    Ok((r > 0.0 && b > 0.0 && g > 0.0).then(|| [g / r, 1.0, g / b]))
 }
 
 /// Reads a NEF's sensor plane, normalized; the whole plane is active.

@@ -174,6 +174,19 @@ fn known_nikon_models_take_fitted_matrices() {
 }
 
 #[test]
+fn proxy_bodies_take_their_siblings_matrices() {
+    for (proxy, sibling) in [
+        ("NIKON D100", nikon("NIKON D70")),
+        ("NIKON D7100", nikon("NIKON D5300")),
+        ("COOLPIX P7100", canon("Canon PowerShot S90")),
+    ] {
+        let color = nikon(proxy);
+        assert!(color.color_matrix.iter().all(Option::is_some), "{proxy}");
+        assert_eq!(color.color_matrix, sibling.color_matrix, "{proxy}");
+    }
+}
+
+#[test]
 fn nef_as_shot_neutral_from_wb_levels() {
     let as_shot = |wb: Option<Vec<(u32, u32)>>| {
         let mut spec = nef_spec("NIKON D850");
@@ -192,6 +205,18 @@ fn nef_as_shot_neutral_from_wb_levels() {
     assert!((2000.0..=12000.0).contains(&t), "{t} K");
     assert_eq!(as_shot(Some(vec![(0, 1), (11, 8), (1, 1), (1, 1)])).1, None);
     assert_eq!(as_shot(None).1, None);
+
+    // The D100 keeps its levels in the version-0100 colour balance.
+    for be in [true, false] {
+        let mut spec = nef_spec("NIKON D100");
+        spec.be = be;
+        spec.color_balance_0100 = Some([581, 436, 256, 256]);
+        let image = read_raw(&nef(&spec), &ImageBudget::default()).expect("D100 NEF reads");
+        let neutral = image.color.as_shot_neutral.expect("colour balance neutral");
+        for (got, want) in neutral.iter().zip([256.0 / 581.0, 1.0, 256.0 / 436.0]) {
+            assert!((got - want).abs() <= 1e-9, "{neutral:?}");
+        }
+    }
 }
 
 #[test]
