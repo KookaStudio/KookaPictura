@@ -246,7 +246,7 @@ void ControlServer::run(const QPointer<QLocalSocket>& socket, int id, const QStr
     reply(socket, id, response);
 }
 
-void ControlServer::onOpenFinished(quint64 token, int outcome)
+void ControlServer::onOpenFinished(quint64 token, int outcome, bool memoryRefused)
 {
     if (token == 0 || token != opening_.token) {
         return;
@@ -257,7 +257,7 @@ void ControlServer::onOpenFinished(quint64 token, int outcome)
     if (static_cast<PicturaMainWindow::OpenOutcome>(outcome)
         == PicturaMainWindow::OpenOutcome::Opened) {
         reply(finished.socket, finished.id, documentResult(true));
-    } else if (open_refused_for_memory()) {
+    } else if (memoryRefused && outcome == int(PicturaMainWindow::OpenOutcome::Failed)) {
         reply(finished.socket, finished.id,
               error(QStringLiteral("refused"), QStringLiteral("not enough memory")));
     } else {

@@ -13,6 +13,13 @@ int PicturaMainWindow::indexOfView(PictureView* view) const
     return documents_ ? documents_->indexOfView(view) : -1;
 }
 
+void PicturaMainWindow::setNextNativeOpenPanicForTest()
+{
+    if (importSave_) {
+        importSave_->setNextNativeOpenPanicForTest();
+    }
+}
+
 void PicturaMainWindow::setOpenDelayForTest(int ms)
 {
     if (importSave_) {
@@ -92,9 +99,9 @@ bool PicturaMainWindow::openDocumentAtPath(const QString& path, bool interactive
 }
 
 PicturaMainWindow::OpenOutcome PicturaMainWindow::openDocumentAtPathOutcome(
-    const QString& path, bool interactive)
+    const QString& path, bool interactive, bool* memoryRefused)
 {
-    return importSave_ ? importSave_->openDocumentAtPathOutcome(path, interactive)
+    return importSave_ ? importSave_->openDocumentAtPathOutcome(path, interactive, memoryRefused)
                        : OpenOutcome::Failed;
 }
 

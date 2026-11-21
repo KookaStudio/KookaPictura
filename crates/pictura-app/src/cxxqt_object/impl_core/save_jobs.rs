@@ -17,12 +17,29 @@ pub(in crate::cxxqt_object) use super::deferred_composite::{
     transform_pending, transform_set_delay,
 };
 pub(in crate::cxxqt_object) use super::document_job::{
-    document_job_arm, document_job_cancel, document_job_finish, document_job_pending,
-    document_job_progress, document_job_running, document_job_set_delay, document_op_result,
+    document_job_arm, document_job_attempt, document_job_cancel, document_job_edit_source_for_test,
+    document_job_finish, document_job_finish_for, document_job_panic_for_test,
+    document_job_pending, document_job_progress, document_job_running, document_job_set_delay,
+    document_job_status, document_op_result,
 };
 
 #[cxx_qt::bridge]
 pub mod ffi {
+    #[namespace = "pictura"]
+    #[derive(Clone, Copy, Debug, Default)]
+    struct NativeSaveResult {
+        code: u32,
+        publication: i32,
+        admission: i32,
+        replaced: bool,
+    }
+
+    #[namespace = "pictura"]
+    struct DocumentJobResult {
+        code: u32,
+        applied: bool,
+    }
+
     unsafe extern "C++" {
         include!("cxx-qt-lib/qstring.h");
         type QString = cxx_qt_lib::QString;
@@ -58,6 +75,9 @@ pub mod ffi {
         /// when the same document is still current. False when the worker failed
         /// or the document was replaced.
         fn save_finish(view: Pin<&mut PictureView>) -> bool;
+        fn save_finish_result(view: Pin<&mut PictureView>) -> NativeSaveResult;
+        fn save_last_result(view: &PictureView) -> NativeSaveResult;
+        fn save_set_fault_for_test(view: Pin<&mut PictureView>, fault: i32);
 
         /// Worker phase percentage, or -1 when no job exists.
         fn save_progress(view: &PictureView) -> i32;
@@ -113,6 +133,11 @@ pub mod ffi {
 
         /// Land the job: true when the command applied (or already had).
         fn document_job_finish(view: Pin<&mut PictureView>) -> bool;
+        fn document_job_finish_for(view: Pin<&mut PictureView>, attempt: u64) -> DocumentJobResult;
+        fn document_job_status(view: &PictureView) -> u32;
+        fn document_job_attempt(view: &PictureView) -> u64;
+        fn document_job_panic_for_test(view: Pin<&mut PictureView>);
+        fn document_job_edit_source_for_test(view: Pin<&mut PictureView>);
 
         /// The last applied command's outcome: a merged path, a replaced count.
         fn document_op_result(view: &PictureView) -> QString;

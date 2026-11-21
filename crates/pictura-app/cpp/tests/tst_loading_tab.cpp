@@ -172,6 +172,10 @@ private slots:
     void failureRemovesTab();
     void cancelIsNotFailure();
     void bannerIsGone();
+    void nativeOpenReportsPerRequestErrorKinds();
+    void nativeOpenHonorsFeedbackSuppression();
+    void nativeOpenPanicCompletesAndAllowsRetry();
+    void nativeOpenCancelDiscardsLateFailure();
 
 private:
     QTabBar* tabBar() const;
@@ -780,6 +784,93 @@ void LoadingTabTest::bannerIsGone()
     QVERIFY(!path.isEmpty());
     QVERIFY(window_->openPath(path));
     QVERIFY(window_->findChild<QLabel*>(QStringLiteral("documentOpenBanner")) == nullptr);
+}
+
+void LoadingTabTest::nativeOpenReportsPerRequestErrorKinds()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString malformedPath = dir.filePath(QStringLiteral("malformed.psd"));
+    QFile malformed(malformedPath);
+    QVERIFY(malformed.open(QIODevice::WriteOnly));
+    QCOMPARE(malformed.write("8BPS", 4), 4);
+    malformed.close();
+
+    QSignalSpy completions(window_.get(), &PicturaMainWindow::documentOpenFinished);
+    window_->setOpenDelayForTest(kSpinnerDelayMs);
+    const auto malformedToken = window_->startOpenPath(malformedPath);
+    const auto missingToken = window_->startOpenPath(dir.filePath(QStringLiteral("missing.psd")));
+    QVERIFY(malformedToken && missingToken && malformedToken != missingToken);
+    QTRY_COMPARE_WITH_TIMEOUT(completions.size(), 2, 5000);
+    for (const auto& completion : completions) {
+        const auto token = completion[0].toULongLong();
+        QVERIFY(token == malformedToken || token == missingToken);
+        QCOMPARE(completion[3].toUInt(), token == malformedToken ? 100u : 101u);
+        QVERIFY(completion[2].toString().contains(
+            token == malformedToken ? QStringLiteral("malformed.psd") : QStringLiteral("missing.psd")));
+    }
+    QVERIFY(completions[0][0] != completions[1][0]);
+    QCOMPARE(window_->documentCount(), 0);
+}
+
+void LoadingTabTest::nativeOpenHonorsFeedbackSuppression()
+{
+    QTemporaryDir dir;
+    const auto path = dir.filePath(QStringLiteral("missing.psd"));
+    QSignalSpy completions(window_.get(), &PicturaMainWindow::documentOpenFinished);
+    window_->statusBar()->clearMessage();
+    QVERIFY(window_->startOpenDocumentAtPath(path, false, false));
+    QTRY_COMPARE_WITH_TIMEOUT(completions.size(), 1, 5000);
+    QCOMPARE(completions[0][3].toUInt(), 101u);
+    QVERIFY(window_->statusBar()->currentMessage().isEmpty());
+    QVERIFY(window_->startOpenPath(path));
+    QTRY_COMPARE_WITH_TIMEOUT(completions.size(), 2, 5000);
+    QVERIFY(!window_->statusBar()->currentMessage().isEmpty());
+}
+
+void LoadingTabTest::nativeOpenPanicCompletesAndAllowsRetry()
+{
+    QTemporaryDir dir;
+    const auto original = makePsd(dir, QStringLiteral("original.psd"));
+    const auto next = makePsd(dir, QStringLiteral("next.psd"));
+    QVERIFY(window_->openPath(original));
+    QSignalSpy completions(window_.get(), &PicturaMainWindow::documentOpenFinished);
+    window_->setNextNativeOpenPanicForTest();
+    const auto token = window_->startOpenPath(next);
+    QVERIFY(token != 0);
+    QTRY_COMPARE_WITH_TIMEOUT(completions.size(), 1, 5000);
+    QCOMPARE(completions[0][0].toULongLong(), token);
+    QCOMPARE(completions[0][3].toUInt(), 6u);
+    QVERIFY(!completions[0][2].toString().contains(QStringLiteral("injected native open panic")));
+    QCOMPARE(window_->documentCount(), 1);
+    QCOMPARE(window_->documentPath(window_->activeDocumentIndex()), original);
+    QVERIFY(!QApplication::overrideCursor());
+
+    QVERIFY(window_->startOpenPath(next) != 0);
+    QTRY_COMPARE_WITH_TIMEOUT(completions.size(), 2, 5000);
+    QCOMPARE(completions[1][3].toUInt(), 0u);
+    QCOMPARE(window_->documentCount(), 2);
+}
+
+void LoadingTabTest::nativeOpenCancelDiscardsLateFailure()
+{
+    QTemporaryDir dir;
+    const auto path = makePsd(dir, QStringLiteral("cancel-panic.psd"));
+    QSignalSpy completions(window_.get(), &PicturaMainWindow::documentOpenFinished);
+    window_->setNextNativeOpenPanicForTest();
+    const auto token = window_->startOpenPath(path);
+    QVERIFY(token != 0);
+    QVERIFY(window_->isLoadingDocument(0));
+    window_->closeDocument(0, false);
+    QTRY_COMPARE_WITH_TIMEOUT(completions.size(), 1, 5000);
+    QCOMPARE(completions[0][0].toULongLong(), token);
+    QCOMPARE(completions[0][3].toUInt(), 4u);
+    QVERIFY(completions[0][2].toString().isEmpty());
+    // Let the delayed worker finish so a second completion would be observable.
+    QTest::qWait(kOpenDelayMs + 150);
+    QCOMPARE(completions.size(), 1);
+    QCOMPARE(window_->documentCount(), 0);
+    QVERIFY(window_->statusBar()->currentMessage().isEmpty());
 }
 
 int main(int argc, char* argv[])

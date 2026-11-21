@@ -13,7 +13,9 @@ use pictura_codec::{eps, Ghostscript, Policy, Raster, RasterError, Resolution};
 use pictura_core::{
     BitDepth, ColorMode, Document, Layer, LockFlags, PsdRect, Samples, SourceChannels, SourcePlanes,
 };
+use pictura_error::{guard, Error, ErrorCode};
 use pictura_render::DocumentComposite;
+use std::panic::AssertUnwindSafe;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -165,130 +167,9 @@ pub(super) fn open_options(policy: Policy) -> pictura_codec::OpenOptions {
     }
 }
 
-/// Read and decode a PSD/PSB. `None` when the file is missing or unsupported.
-pub(in crate::cxxqt_object) fn decode_psd(
-    path: &str,
-    policy: Policy,
-    gpu: bool,
-    progress: &dyn Fn(u8, &str),
-) -> Option<OpenedDocument> {
-    decode_psd_with(path, open_options(policy), open_budget(), gpu, progress).ok()
-}
-
-/// Whether the last PSD open was refused because its decode did not fit the
-/// memory governor's room. Set on the open's worker, read on the GUI thread.
-static OPEN_REFUSED_FOR_MEMORY: AtomicBool = AtomicBool::new(false);
-
-pub(in crate::cxxqt_object) fn open_refused_for_memory() -> bool {
-    OPEN_REFUSED_FOR_MEMORY.load(Ordering::Relaxed)
-}
-
-/// The decode budget of an open, read on the calling (GUI) thread, and
-/// whether the governor's room bounded it. Contiguous allocations get two
-/// thirds of the room (the rest is the composite, history and display the open
-/// builds after the decode, #1211). The layer tiles get that plus the scratch
-/// disks' free space, since the evictor can pack and spill them (#1273).
-pub(in crate::cxxqt_object) fn open_budget() -> (pictura_codec::ImageBudget, bool) {
-    let default = pictura_codec::ImageBudget::default();
-    let Some(room) = pictura_core::memory::governor()
-        .room()
-        .map(|room| room / 3 * 2)
-    else {
-        return (default, false);
-    };
-    let mut budget = super::super::helpers::bounded_budget(default, Some(room));
-    budget.max_tiled_bytes =
-        room.saturating_add(super::super::helpers::memory_gate::scratch_available());
-    (budget, true)
-}
-
-pub(super) fn decode_psd_with(
-    path: &str,
-    mut options: pictura_codec::OpenOptions,
-    (budget, bounded): (pictura_codec::ImageBudget, bool),
-    gpu: bool,
-    progress: &dyn Fn(u8, &str),
-) -> Result<OpenedDocument, pictura_codec::PsdError> {
-    OPEN_REFUSED_FOR_MEMORY.store(false, Ordering::Relaxed);
-    progress(5, "Reading file");
-    // The file stays open behind the document: its 8-bit raw and RLE layer
-    // channels are read from it on demand (#1218). Without a pin (no
-    // positioned reads on this platform) the open decodes everything.
-    let pin = pictura_codec::SourcePin::open(path).ok();
-    let bytes = match pin.as_ref().map(|pin| pin.map()) {
-        Some(mapped) => mapped,
-        None => pictura_codec::MappedFile::open(path),
-    }
-    .map_err(|error| pictura_codec::PsdError::Invalid(error.to_string()))?;
-    options.source = pin.clone();
-    progress(25, "Decoding");
-    let (mut doc, preview) = match pictura_codec::read_psd_lazy(&bytes, &options, budget) {
-        Ok(read) => read,
-        Err(error) => {
-            // The codec names a budget refusal "… exceeds the decode budget".
-            let memory = bounded && error.to_string().contains("decode budget");
-            OPEN_REFUSED_FOR_MEMORY.store(memory, Ordering::Relaxed);
-            if memory
-                || matches!(
-                    error,
-                    pictura_codec::PsdError::NativeVersion(_)
-                        | pictura_codec::PsdError::BadSignature(_)
-                )
-            {
-                return Err(error);
-            }
-            let Some(doc) = pictura_codec::read_psd_layer_structure(&bytes, &options, budget)
-                .ok()
-                .filter(|doc| {
-                    native_access(doc, &pictura_codec::document_version(doc)).is_read_only()
-                })
-            else {
-                return Err(error);
-            };
-            (doc, None)
-        }
-    };
-    let version = pictura_codec::document_version(&doc);
-    let access = native_access(&doc, &version);
-    let compatibility = if access.is_read_only() {
-        let has_real_merge = version
-            .version_info
-            .as_ref()
-            .is_some_and(|info| info.has_real_merged_data)
-            || version.version_info.is_none() && doc.layers.is_empty();
-        let merged_alpha = pictura_codec::native_merged_has_transparency(&bytes, doc.is_psb);
-        let pixels = if !has_real_merge || !doc.composite.merged_output() {
-            None
-        } else if let Some(pixels) = source_pixels(&doc, merged_alpha) {
-            Some(pixels)
-        } else {
-            options.skip_layered_merged = false;
-            pictura_codec::read_psd_within_options(&bytes, &options, budget)
-                .ok()
-                .and_then(|source| source_pixels(&source, merged_alpha))
-        };
-        NativeCompatibility::new(access, Path::new(path), pin, pixels)
-    } else {
-        NativeCompatibility::new(access, Path::new(path), None, None)
-    };
-    progress(65, "Compositing");
-    if !compatibility.access.is_read_only() {
-        store_opened_composite(&mut doc, gpu);
-    }
-    progress(90, "Preparing layers");
-    let target = LayerTarget::for_opened(&doc, None);
-    let history = history_for(&mut doc, &target, "Open");
-    Ok(OpenedDocument {
-        preview,
-        doc,
-        history,
-        target,
-        path: OpenedPath::Set(Some(path.to_string())),
-        source_format: "psd".to_string(),
-        pdf_password: None,
-        compatibility,
-    })
-}
+mod native;
+use native::{decode_native, OPEN_REFUSED_FOR_MEMORY};
+pub(in crate::cxxqt_object) use native::{decode_psd, open_budget, open_refused_for_memory};
 
 /// Finish an imported raster document. When every decoded pixel is opaque the
 /// single `from_rgba` layer becomes the locked `Background` and its redundant
@@ -852,6 +733,17 @@ pub(super) fn finish_on_gui(
     status: String,
     warnings: Vec<String>,
 ) {
+    finish_open(qt_thread, request, (result, status, warnings), None);
+}
+
+type OpenResult = (Option<OpenedDocument>, String, Vec<String>);
+
+fn finish_open(
+    qt_thread: CxxQtThread<PictureView>,
+    request: u64,
+    (result, status, warnings): OpenResult,
+    native: Option<(ErrorCode, bool)>,
+) {
     qt_thread
         .queue(move |mut view| {
             {
@@ -861,7 +753,16 @@ pub(super) fn finish_on_gui(
                 }
             }
             view.as_mut().session_cancelled();
-            view.open_finished(QString::from(status.as_str()), warnings_list(warnings));
+            let (code, memory_refused) = native.unwrap_or((ErrorCode::Ok, false));
+            if native.is_some() {
+                OPEN_REFUSED_FOR_MEMORY.store(memory_refused, Ordering::Relaxed);
+            }
+            view.open_finished(
+                QString::from(status.as_str()),
+                warnings_list(warnings),
+                code.status().raw(),
+                memory_refused,
+            );
         })
         .ok();
 }
@@ -882,6 +783,13 @@ pub(super) fn start(
         + Send
         + 'static,
 ) {
+    start_with_status(view, move |progress| (work(progress), None));
+}
+
+fn start_with_status(
+    view: &mut Pin<&mut PictureView>,
+    work: impl FnOnce(&dyn Fn(u8, &str)) -> (OpenResult, Option<(ErrorCode, bool)>) + Send + 'static,
+) {
     let request = view.as_mut().rust_mut().begin_open_request();
     let delay_ms = view.rust().open_delay_for_test;
     let qt_thread = view.as_ref().get_ref().qt_thread();
@@ -890,20 +798,33 @@ pub(super) fn start(
         let phase = phase.to_string();
         progress_thread
             .queue(move |view| {
-                if !view.rust().open_cancelled {
+                if !view.rust().open_cancelled && view.rust().open_request == request {
                     view.open_progress(i32::from(percent), QString::from(phase.as_str()));
                 }
             })
             .ok();
     };
-    std::thread::spawn(move || {
-        let (result, status, warnings) = work(&progress);
+    let failure_thread = qt_thread.clone();
+    let worker = std::thread::Builder::new().spawn(move || {
+        let (result, status) = work(&progress);
         delay(delay_ms);
-        finish_on_gui(qt_thread, request, result, status, warnings);
+        finish_open(qt_thread, request, result, status);
     });
+    if worker.is_err() {
+        finish_open(
+            failure_thread,
+            request,
+            (
+                None,
+                "error:could not start the open worker".to_owned(),
+                Vec::new(),
+            ),
+            Some((ErrorCode::Host, false)),
+        );
+    }
 }
 
-pub fn open_psd_start(mut view: Pin<&mut PictureView>, path: &QString) {
+pub fn open_psd_start(mut view: Pin<&mut PictureView>, path: &QString, panic_for_test: bool) {
     let path = path.to_string();
     let (options, gpu) = {
         let mut rust = view.as_mut().rust_mut();
@@ -921,16 +842,23 @@ pub fn open_psd_start(mut view: Pin<&mut PictureView>, path: &QString) {
         (options, rust.gpu_compute)
     };
     let budget = open_budget();
-    OPEN_REFUSED_FOR_MEMORY.store(false, Ordering::Relaxed);
-    start(&mut view, move |progress| {
-        match decode_psd_with(&path, options, budget, gpu, progress) {
-            Ok(opened) => (Some(opened), "ok".to_string(), Vec::new()),
-            Err(_) if open_refused_for_memory() => (None, "error:memory".to_string(), Vec::new()),
-            Err(error @ pictura_codec::PsdError::NativeVersion(_)) => {
-                (None, format!("error:{error}"), Vec::new())
+    start_with_status(&mut view, move |progress| {
+        let mut memory_refused = false;
+        // The worker owns the decode stage. It only publishes a fully prepared document.
+        let opened = guard(AssertUnwindSafe(|| {
+            let document =
+                decode_native(&path, options, budget, gpu, progress, &mut memory_refused)?;
+            if panic_for_test {
+                panic!("injected native open panic");
             }
-            Err(_) => (None, "error".to_string(), Vec::new()),
-        }
+            Ok(document)
+        }));
+        let (document, status, code) = match opened {
+            Ok(opened) => (Some(opened), "ok".to_owned(), ErrorCode::Ok),
+            Err(error) if memory_refused => (None, "error:memory".to_owned(), error.code()),
+            Err(error) => (None, format!("error:{}", error.detail()), error.code()),
+        };
+        ((document, status, Vec::new()), Some((code, memory_refused)))
     });
 }
 

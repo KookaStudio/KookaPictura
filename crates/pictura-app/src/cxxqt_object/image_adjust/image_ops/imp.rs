@@ -97,10 +97,10 @@ pub(super) fn trim_image(mut view: Pin<&mut PictureView>) -> bool {
 pub(super) fn rotate_document_arbitrary(mut view: Pin<&mut PictureView>, angle_deg: f64) -> bool {
     crate::cxxqt_object::helpers::memory_gate::clear();
     if view.rust().modal_transform_blocks_edit() {
-        return false;
+        return view.document_preflight_refusal(pictura_error::ErrorCode::Capability);
     }
     if !angle_deg.is_finite() || angle_deg == 0.0 || !(-359.99..=359.99).contains(&angle_deg) {
-        return false;
+        return view.document_preflight_refusal(pictura_error::ErrorCode::InvalidArg);
     }
     let admitted = view
         .rust()
@@ -109,7 +109,7 @@ pub(super) fn rotate_document_arbitrary(mut view: Pin<&mut PictureView>, angle_d
         .as_ref()
         .is_some_and(|doc| crate::cxxqt_object::helpers::rotate_admits(doc, angle_deg));
     if !admitted {
-        return false;
+        return view.document_preflight_refusal(pictura_error::ErrorCode::Host);
     }
     // A large document's rotation runs as a cancellable job (#1294).
     view.as_mut().document_op(
@@ -117,7 +117,14 @@ pub(super) fn rotate_document_arbitrary(mut view: Pin<&mut PictureView>, angle_d
         JobBar::Counted,
         move |doc| {
             let pivot = (doc.width as f64 / 2.0, doc.height as f64 / 2.0);
-            pictura_render::rotate_document_in(doc, angle_deg, pivot).then(Outcome::default)
+            pictura_render::rotate_document_in(doc, angle_deg, pivot)
+                .then(|| Some(Outcome::default()))
+                .ok_or_else(|| {
+                    pictura_error::Error::new(
+                        pictura_error::ErrorCode::Capability,
+                        "the document cannot be rotated by this angle",
+                    )
+                })
         },
         |rust, _| {
             rust.session.clear_geometry_selection();

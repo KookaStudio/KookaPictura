@@ -1,0 +1,12 @@
+[package]
+name = "pictura-error"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+doctest = false
+
+[dependencies]
+thiserror.workspace = true

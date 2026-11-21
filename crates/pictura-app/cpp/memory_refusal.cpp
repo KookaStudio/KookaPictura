@@ -26,15 +26,18 @@ QString scratchRefusalMessage(const QString& action)
         .arg(action);
 }
 
+QString scratchFullRefusalMessage(const QString& action)
+{
+    return QCoreApplication::translate("pictura",
+                                       "Could not %1: the scratch disks are full. Free space "
+                                       "on the scratch disks, then try again.")
+        .arg(action);
+}
+
 QString commitRefusalMessage(const QString& action)
 {
-    if (edit_refused_for_scratch_full()) {
-        return QCoreApplication::translate("pictura",
-                                           "Could not %1: the scratch disks are full. Free space "
-                                           "on the scratch disks, then try again.")
-            .arg(action);
-    }
-    return memoryRefusalMessage(action);
+    return edit_refused_for_scratch_full() ? scratchFullRefusalMessage(action)
+                                           : memoryRefusalMessage(action);
 }
 
 namespace {

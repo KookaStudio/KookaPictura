@@ -47,9 +47,7 @@ tab title, or window title. The copy SHALL NOT become the active document or its
 recorded path. A copy SHALL NOT record an action step. The same feature-loss
 warning as Save As SHALL apply before a layered document is written to a format
 that cannot hold it. The command SHALL work for an untitled document, requesting
-a destination path first and leaving the document untitled. A failed write SHALL
-report failure and leave the document and any previous file unchanged, with no
-partial file.
+a destination path first and leaving the document untitled. A pre-rename failed write SHALL report failure and leave the document and any previous file unchanged, with no partial file. A native copy that has been renamed but not durably acknowledged SHALL report uncertain publication with copy-specific feedback; the destination may contain the copy, and the open document and its recovery data SHALL remain unchanged.
 
 #### Scenario: A modified document stays modified [copy-nonmutating-raster]
 
@@ -85,6 +83,11 @@ partial file.
 
 - **WHEN** the copy destination cannot be written and a file already exists there
 - **THEN** the save reports failure, the existing file's bytes are unchanged, the document is unchanged, and no partial file remains
+
+#### Scenario: A native copy panics after rename [os_copy_panic_after_rename]
+
+- **WHEN** a native Save a Copy panics after rename and before durable acknowledgement
+- **THEN** it reports `OP_ERR_PANIC` and uncertain publication with copy-specific feedback, the destination contains the staged copy, and the source path, modified state, history, recovery data and other session state are unchanged
 
 ### Requirement: Read-only compatibility copies use the source composite
 

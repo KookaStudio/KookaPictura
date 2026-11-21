@@ -389,7 +389,15 @@ pub(super) fn image_adjust_apply_start(
     block: &[u8],
     label: &QString,
 ) -> bool {
+    {
+        let mut rust = view.as_mut().rust_mut();
+        rust.filter_error = None;
+        rust.filter_jobs.commit_status = pictura_error::ErrorCode::Ok.status();
+    }
     let Some(adjustment) = decode(block) else {
+        let mut rust = view.as_mut().rust_mut();
+        rust.filter_error = Some("invalid adjustment settings".to_owned());
+        rust.filter_jobs.commit_status = pictura_error::ErrorCode::InvalidArg.status();
         return false;
     };
     if crate::cxxqt_object::helpers::mask_editing(view.rust()) {

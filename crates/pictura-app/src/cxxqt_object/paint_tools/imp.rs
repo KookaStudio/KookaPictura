@@ -800,14 +800,14 @@ pub(super) fn magic_erase_at(
             "Magic Eraser",
             JobBar::Busy,
             move |doc| {
-                erase_magic(
+                Ok(erase_magic(
                     doc, &path, x, y, tolerance, antialias, contiguous, sample_all, stored,
                     opacity, background,
                 )
                 .map(|rect| Outcome {
                     rect: Some(rect),
                     ..Outcome::default()
-                })
+                }))
             },
             |rust, outcome| super::fills::fill_edit(rust, outcome.rect),
             after,

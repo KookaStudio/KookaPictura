@@ -313,7 +313,12 @@ pub fn open_raw_start(mut view: Pin<&mut PictureView>, path: &QString, store: i3
                         Err(reason) => format!("error:{reason}"),
                     }
                 };
-                view.open_finished(QString::from(status.as_str()), QStringList::default());
+                view.open_finished(
+                    QString::from(status.as_str()),
+                    QStringList::default(),
+                    0,
+                    false,
+                );
             })
             .ok();
     });

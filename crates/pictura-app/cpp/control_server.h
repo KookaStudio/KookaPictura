@@ -152,7 +152,7 @@ private:
     void park(const QPointer<QLocalSocket>& socket, int id, const QString& method,
               const QJsonObject& params, const QString& target);
     PendingApproval takePending();
-    void onOpenFinished(quint64 token, int outcome);
+    void onOpenFinished(quint64 token, int outcome, bool memoryRefused);
     void resolveApproval(bool allow);
     void onApprovalTimeout();
     QJsonObject ok(const QJsonObject& result) const;

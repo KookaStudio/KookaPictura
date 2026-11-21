@@ -27,6 +27,12 @@ tests) and linked into the C++ executable `pictura` by CMake via `cxx_qt_import_
 - Qt decodes images at the app boundary to packed RGBA8888 (`cpp/decode_image.cpp`); the engine
   never sees Qt types.
 
+## Operation status (#645)
+
+- `pictura-error` owns the fixed-width operation status registry and guarded Rust result. Qt receives the raw code separately from operation-specific details and outcome.
+- Native Open carries status and memory refusal by request token. Native Save carries publication phase independently of its code and checks the originating document generation. Save a Copy reports uncertainty on the destination without attaching a recovery obligation to the source.
+- Whole-document work stages mutations and checks a worker's source before publishing. The filter and adjustment worker stages an independent history index over shared tile storage, then installs history and pixels together. Catch unwinds inside staged work while the original live state remains recoverable.
+
 ## Reading the picture (#1216, #1274)
 
 - A layered RGB document keeps no stored composite. Readers go through

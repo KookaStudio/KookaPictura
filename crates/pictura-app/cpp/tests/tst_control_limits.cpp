@@ -7,6 +7,8 @@
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QTemporaryDir>
+#include <QtCore/QScopeGuard>
+#include <QtCore/QTimer>
 #include <QtNetwork/QLocalSocket>
 
 #ifndef _WIN32
@@ -18,6 +20,9 @@
 #include "control_server.h"
 #include "frame.h"
 #include "api/view_bridge.h"
+#include "api/engine_bridge.h"
+#include "api/document_api.h"
+#include "api/paint_bridge.h"
 
 #include "qt_test_support.h"
 
@@ -52,6 +57,7 @@ private slots:
     void lassoPointsAreCapped();
     void longNamesAreRefused();
     void uiTreeLimitsAreEnforced();
+    void nativeOpenMemoryRefusalIsPerRequest();
 
 private:
     QJsonObject call(const QString& method, const QJsonObject& params = {});
@@ -213,6 +219,57 @@ void ControlLimitsTest::uiTreeLimitsAreEnforced()
     QVERIFY(call(QStringLiteral("ui_tree"), {{QStringLiteral("max_depth"), 1}})
                 .value(QStringLiteral("ok"))
                 .toBool());
+}
+
+void ControlLimitsTest::nativeOpenMemoryRefusalIsPerRequest()
+{
+    const QString path = dir_.filePath(QStringLiteral("budget.psd"));
+    pictura::PictureView fixture;
+    QVERIFY(pictura::document_api::newDocument(fixture, 32, 32, QStringLiteral("rgb"), 8,
+                                               QStringLiteral("white")));
+    QVERIFY(pictura::document_api::save(fixture, path));
+    const QString missing = dir_.filePath(QStringLiteral("missing.psd"));
+    const QJsonObject params{{QStringLiteral("op"), QStringLiteral("open")},
+                             {QStringLiteral("path"), path}};
+
+    pictura::set_available_memory_for_test(0);
+    window_->setOpenDelayForTest(300);
+    const auto restore = qScopeGuard([&] {
+        pictura::set_available_memory_for_test(-1);
+        window_->setOpenDelayForTest(0);
+    });
+    QSignalSpy completions(window_.get(), &pictura::PicturaMainWindow::documentOpenFinished);
+    QTimer::singleShot(0, window_.get(), [&] { window_->startOpenPath(missing); });
+    QCOMPARE(errorCode(call(QStringLiteral("document"), params)), QStringLiteral("refused"));
+    QTRY_COMPARE_WITH_TIMEOUT(completions.size(), 2, 5000);
+    const auto hasMemoryReason = [](const QList<QVariant>& completion) {
+        return completion[4].toBool();
+    };
+    QVERIFY(hasMemoryReason(completions[0]) != hasMemoryReason(completions[1]));
+
+    completions.clear();
+    pictura::ControlServer network(window_.get(), dir_.filePath(QStringLiteral("budget.sock")));
+    QVERIFY(network.listen());
+    QLocalSocket socket;
+    socket.connectToServer(dir_.filePath(QStringLiteral("budget.sock")));
+    QVERIFY(socket.waitForConnected(5000));
+    const QJsonObject request{{QStringLiteral("id"), 9},
+                              {QStringLiteral("method"), QStringLiteral("document")},
+                              {QStringLiteral("params"), params},
+                              {QStringLiteral("token"), QString::fromLatin1(network.token())}};
+    socket.write(QJsonDocument(request).toJson(QJsonDocument::Compact) + '\n');
+    socket.flush();
+    const int before = window_->documentCount();
+    QTRY_COMPARE_WITH_TIMEOUT(window_->documentCount(), before + 1, 5000);
+    QVERIFY(window_->startOpenPath(missing) != 0);
+    window_->closeDocument(before + 1, false);
+    QTRY_VERIFY_WITH_TIMEOUT(socket.canReadLine(), 5000);
+    QCOMPARE(errorCode(QJsonDocument::fromJson(socket.readLine()).object()),
+             QStringLiteral("refused"));
+    QTRY_COMPARE_WITH_TIMEOUT(completions.size(), 2, 5000);
+    QCOMPARE(completions[0][3].toUInt(), 4u);
+    QVERIFY(!hasMemoryReason(completions[0]));
+    QVERIFY(hasMemoryReason(completions[1]));
 }
 
 QTEST_MAIN(ControlLimitsTest)

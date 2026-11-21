@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/pictura-core",
+    "crates/pictura-error",
     "crates/pictura-codec",
     "crates/pictura-color",
     "crates/pictura-adjust",

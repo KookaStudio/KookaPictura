@@ -47,6 +47,7 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/import_save_recent.cpp
     crates/pictura-app/cpp/import_save_recovery.cpp
     crates/pictura-app/cpp/import_save_save.cpp
+    crates/pictura-app/cpp/import_save_document.cpp
     crates/pictura-app/cpp/menu_adjust.cpp
     crates/pictura-app/cpp/menu_align.cpp
     crates/pictura-app/cpp/menu_document_menus.cpp

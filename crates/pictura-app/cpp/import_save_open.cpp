@@ -31,6 +31,8 @@
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QMessageBox>
 
+#include <utility>
+
 namespace pictura {
 
 quint64 ImportSaveCoordinator::nextOpenToken()
@@ -68,8 +70,9 @@ void ImportSaveCoordinator::wireOpenSignals(PictureView* view)
     openWired_.insert(view);
     connect(view, &PictureView::openDetected, this, [this, view] { onOpenDetected(view); });
     connect(view, &PictureView::openFinished, this,
-            [this, view](const QString& status, const QStringList& warnings) {
-                onOpenFinished(view, status, warnings);
+            [this, view](const QString& status, const QStringList& warnings,
+                         quint32 code, bool memoryRefused) {
+                onOpenFinished(view, status, warnings, code, memoryRefused);
             });
     connect(view, &PictureView::openProgress, this,
             [this, view](int percent, const QString& phase) {
@@ -200,7 +203,8 @@ void ImportSaveCoordinator::waitForOpensForTest()
     }
 }
 
-void ImportSaveCoordinator::finishOpen(quint64 token, OpenOutcome outcome, const QString& error)
+void ImportSaveCoordinator::finishOpen(quint64 token, OpenOutcome outcome, const QString& error,
+                                       quint32 code, bool memoryRefused)
 {
     if (token == 0 || finishedOpens_.contains(token)) {
         return;
@@ -216,11 +220,20 @@ void ImportSaveCoordinator::finishOpen(quint64 token, OpenOutcome outcome, const
     if (cursorTokens_.remove(token)) {
         endOpenCursor();
     }
-    emit documentOpenFinished(token, int(outcome), error);
+    if (outcome == OpenOutcome::Cancelled) {
+        code = quint32(OperationStatus::Cancelled);
+        memoryRefused = false;
+    } else if (outcome == OpenOutcome::Failed && code == 0) {
+        code = quint32(OperationStatus::Host);
+    }
+    emit documentOpenFinished(token, int(outcome), error, code, memoryRefused);
 }
 
-OpenOutcome ImportSaveCoordinator::waitForOpen(quint64 token)
+OpenOutcome ImportSaveCoordinator::waitForOpen(quint64 token, bool* memoryRefused)
 {
+    if (memoryRefused) {
+        *memoryRefused = false;
+    }
     if (token == 0) {
         return OpenOutcome::Failed;
     }
@@ -228,9 +241,12 @@ OpenOutcome ImportSaveCoordinator::waitForOpen(quint64 token)
     QEventLoop loop;
     const QMetaObject::Connection connection =
         connect(this, &ImportSaveCoordinator::documentOpenFinished, &loop,
-                [&](quint64 finished, int result, const QString&) {
+                [&](quint64 finished, int result, const QString&, quint32, bool refused) {
                     if (finished == token) {
                         outcome = static_cast<OpenOutcome>(result);
+                        if (memoryRefused) {
+                            *memoryRefused = refused;
+                        }
                         loop.quit();
                     }
                 });
@@ -383,7 +399,8 @@ void ImportSaveCoordinator::handlePdfProbeFinished(PictureView* view, const PdfP
 }
 
 void ImportSaveCoordinator::onOpenFinished(PictureView* view, const QString& status,
-                                           const QStringList& warnings)
+                                           const QStringList& warnings, quint32 code,
+                                           bool memoryRefused)
 {
     // Deleting the view inside its own signal emission is unsafe. A failure or
     // a probe that falls back removes it on the next event-loop turn; a success
@@ -430,21 +447,34 @@ void ImportSaveCoordinator::onOpenFinished(PictureView* view, const QString& sta
         finishLoadedDocument(index);
         return;
     }
-    QTimer::singleShot(0, this, [this, guard, entry, status] {
+    QString feedback = status;
+    if (entry.kind == OpenKind::Psd && code != 0 && !memoryRefused) {
+        const QString name = documents_.documentName(index);
+        feedback = code == quint32(OperationStatus::Panic)
+            ? tr("Could not open %1. The operation stopped unexpectedly.").arg(name)
+            : tr("Could not open %1: %2").arg(name, status.mid(6));
+    }
+    QTimer::singleShot(0, this, [this, guard, entry, status, feedback, code, memoryRefused] {
         if (!guard) {
-            finishOpen(entry.token, OpenOutcome::Failed, status);
+            finishOpen(entry.token, OpenOutcome::Failed, feedback, code, memoryRefused);
             return;
         }
         const int current = indexOfView(guard.data());
         if (current < 0 || !documents_.isLoading(current)) {
             return;
         }
-        reportOpenFailure(current, status);
+        if (entry.kind != OpenKind::Psd || reportFailureTokens_.contains(entry.token)) {
+            if (feedback != status && hooks_.showStatus) {
+                hooks_.showStatus(feedback, 6000);
+            } else {
+                reportOpenFailure(current, status);
+            }
+        }
         documents_.setTabTrackingSuppressed(true);
         documents_.removeDocument(current);
         documents_.setTabTrackingSuppressed(false);
         restorePreviousTab(entry.previousActiveView);
-        finishOpen(entry.token, OpenOutcome::Failed, status);
+        finishOpen(entry.token, OpenOutcome::Failed, feedback, code, memoryRefused);
     });
 }
 
@@ -469,7 +499,7 @@ void ImportSaveCoordinator::cancelAllOpens()
     }
 }
 
-quint64 ImportSaveCoordinator::startOpenPath(const QString& path)
+quint64 ImportSaveCoordinator::startOpenPath(const QString& path, bool reportFailure)
 {
     const quint64 token = nextOpenToken();
     auto* view = new PictureView(dialogParent_);
@@ -482,9 +512,12 @@ quint64 ImportSaveCoordinator::startOpenPath(const QString& path)
     }
     beginOpenCursor();
     cursorTokens_.insert(token);
+    if (reportFailure) {
+        reportFailureTokens_.insert(token);
+    }
     documents_.addLoadingDocument(view, path, QFileInfo(path).fileName(), token, path,
                                   OpenKind::Psd);
-    open_psd_start(*view, path);
+    open_psd_start(*view, path, std::exchange(nextNativeOpenPanicForTest_, false));
     return token;
 }
 
@@ -616,7 +649,7 @@ quint64 ImportSaveCoordinator::startOpenDocumentAtPath(const QString& path, bool
     } else if (raw_sniff_path(path)) {
         token = startOpenRawPath(path, interactive);
     } else if (isNativeDocumentPath(path)) {
-        token = startOpenPath(path);
+        token = startOpenPath(path, reportFailure);
     } else {
         token = startOpenImagePath(path);
     }
@@ -656,9 +689,10 @@ bool ImportSaveCoordinator::openDocumentAtPath(const QString& path, bool interac
 }
 
 OpenOutcome ImportSaveCoordinator::openDocumentAtPathOutcome(const QString& path,
-                                                             bool interactive)
+                                                             bool interactive, bool* memoryRefused)
 {
-    return waitForOpen(startOpenDocumentAtPath(path, interactive));
+    const bool reportFailure = interactive && isNativeDocumentPath(path);
+    return waitForOpen(startOpenDocumentAtPath(path, interactive, reportFailure), memoryRefused);
 }
 
 } // namespace pictura

@@ -145,14 +145,17 @@ impl qobject::PictureView {
             "Flatten Image",
             JobBar::Counted,
             |doc| {
-                let outcome = pictura_render::flatten(doc)
-                    .ok()
-                    .filter(|o| o.replaced > 0)?;
-                Some(Outcome {
+                let outcome = pictura_render::flatten(doc).map_err(|_| {
+                    pictura_error::Error::new(
+                        pictura_error::ErrorCode::InvalidArg,
+                        "the document selection cannot be merged",
+                    )
+                })?;
+                Ok((outcome.replaced > 0).then_some(Outcome {
                     path: outcome.path,
                     count: outcome.replaced,
                     rect: None,
-                })
+                }))
             },
             |rust, _| {
                 rust.select_only_layer("0");
@@ -258,14 +261,17 @@ impl qobject::PictureView {
             label,
             JobBar::Counted,
             move |doc| {
-                let outcome = pictura_render::merge_scope(doc, scope.scope())
-                    .ok()
-                    .filter(|outcome| outcome.replaced > 0)?;
-                Some(Outcome {
+                let outcome = pictura_render::merge_scope(doc, scope.scope()).map_err(|_| {
+                    pictura_error::Error::new(
+                        pictura_error::ErrorCode::InvalidArg,
+                        "the document selection cannot be merged",
+                    )
+                })?;
+                Ok((outcome.replaced > 0).then_some(Outcome {
                     path: outcome.path,
                     count: outcome.replaced,
                     rect: None,
-                })
+                }))
             },
             move |rust, outcome| {
                 let target = rust.merge_target(&outcome.path);

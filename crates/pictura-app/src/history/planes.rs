@@ -12,6 +12,7 @@ use rayon::prelude::*;
 /// state it leads to is at or below the cursor, the tile after it otherwise. A
 /// walk that moves a materialized state across it swaps the two (see
 /// [`swap_tiles`]), so history keeps each changed tile once.
+#[derive(Clone)]
 pub(super) struct TileDelta {
     /// The tile's index in its plane.
     pub(super) index: usize,
@@ -26,6 +27,7 @@ pub(super) struct TileDelta {
 }
 
 /// The changed tiles of one tracked plane, anchored at the previous state.
+#[derive(Clone)]
 pub(super) struct PlaneDelta {
     pub(super) index: usize,
     pub(super) tiles: Vec<TileDelta>,

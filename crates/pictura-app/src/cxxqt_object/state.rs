@@ -236,6 +236,8 @@ pub struct PictureViewRust {
     pub(super) shape_attributes: Option<pictura_render::ShapeAttributes>,
     /// The native save worker in flight, if any (`impl_core/save_jobs.rs`).
     pub(super) save_job: Option<super::impl_core::save_jobs::SaveJob>,
+    pub(super) last_native_save: super::impl_core::save_jobs::ffi::NativeSaveResult,
+    pub(super) save_fault_for_test: i32,
     /// Test seam: hold a started save's completion for this many milliseconds.
     pub(super) save_delay_for_test: u64,
     pub(super) save_sync_failure_for_test: bool,
@@ -355,6 +357,8 @@ impl Default for PictureViewRust {
             add_mask_by_default: true,
             shape_attributes: None,
             save_job: None,
+            last_native_save: Default::default(),
+            save_fault_for_test: 0,
             save_delay_for_test: 0,
             save_sync_failure_for_test: false,
             adjust_jobs: Default::default(),

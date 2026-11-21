@@ -18,7 +18,7 @@ pub enum Side {
     Live,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct Count {
     bytes: u64,
     kept: u32,
@@ -29,7 +29,7 @@ struct Count {
 ///
 /// Every reported allocation is alive while it is counted (its holder keeps
 /// it), so an address cannot be reused under a stale entry.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct TileCensus {
     counts: HashMap<usize, Count>,
     beyond: u64,

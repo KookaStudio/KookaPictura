@@ -178,10 +178,16 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "historyRestored"]
         fn history_restored(self: Pin<&mut Self>);
-        /// Emitted on the GUI thread when a started document open ends. `status` is `ok`, a PDF probe status, or `error:<message>`; `warnings` are the renderer's recoverable problems (PDF/EPS imports).
+        /// Open completion on the GUI thread, with legacy status text, import warnings, and the request's typed status and memory refusal.
         #[qsignal]
         #[cxx_name = "openFinished"]
-        fn open_finished(self: Pin<&mut Self>, status: QString, warnings: QStringList);
+        fn open_finished(
+            self: Pin<&mut Self>,
+            status: QString,
+            warnings: QStringList,
+            code: u32,
+            memory_refused: bool,
+        );
         /// Emitted on the GUI thread when a PDF probe found editing data, before its PSD decode: the frame creates the loading tab here.
         #[qsignal]
         #[cxx_name = "openDetected"]
@@ -869,7 +875,6 @@ pub mod qobject {
         /// Start a lasso selection with `mode` as [`select_rect`], clearing pending points.
         #[qinvokable]
         fn begin_lasso(self: Pin<&mut Self>, mode: &QString) -> bool;
-
         /// Append a point to the pending lasso path.
         #[qinvokable]
         fn lasso_add_point(self: Pin<&mut Self>, x: i32, y: i32);
@@ -891,17 +896,14 @@ pub mod qobject {
         /// Preview-move the topmost pixel layer by `(dx, dy)` without history or dirty.
         #[qinvokable]
         fn move_preview(self: Pin<&mut Self>, dx: i32, dy: i32) -> bool;
-
         /// Enter move-preview mode for the topmost raster layer; reuses the cached base when unchanged, false without one.
         #[qinvokable]
         fn begin_move_preview(self: Pin<&mut Self>) -> bool;
         #[qinvokable]
         fn begin_move_duplicate(self: Pin<&mut Self>) -> bool;
-
         /// Warm the move-preview cache without entering preview mode; true when valid, false without a document or raster layer.
         #[qinvokable]
         fn prepare_move_preview(self: Pin<&mut Self>) -> bool;
-
         /// Whether the last `begin_move_preview` reused the cached base instead of recomputing it.
         #[qinvokable]
         fn move_preview_cache_hit(&self) -> bool;
@@ -914,19 +916,15 @@ pub mod qobject {
         /// The moved layer's own image; null when not previewing or for a non-raster layer.
         #[qinvokable]
         fn move_preview_layer(&self) -> QImage;
-
         /// The moved layer's document-space left edge.
         #[qinvokable]
         fn move_preview_x(&self) -> i32;
-
         /// The moved layer's document-space top edge.
         #[qinvokable]
         fn move_preview_y(&self) -> i32;
-
         /// The moved layer's opacity in `0..=255`.
         #[qinvokable]
         fn move_preview_opacity(&self) -> i32;
-
         /// Leave preview mode and drop the cached images (no document change).
         #[qinvokable]
         fn end_move_preview(self: Pin<&mut Self>);
@@ -949,12 +947,10 @@ pub mod qobject {
         /// no document or the point is out of bounds.
         #[qinvokable]
         fn sample_argb(self: Pin<&mut Self>, x: i32, y: i32) -> u32;
-
         /// Self-test probe: the stored document composite's pixel at `(x, y)` as
         /// `0xAARRGGBB`, or 0 when there is no document or out of bounds.
         #[qinvokable]
         fn composite_argb(&self, x: i32, y: i32) -> u32;
-
         /// The selected pixels' bounding box as flat `[x, y, w, h]`; empty when nothing is selected.
         #[qinvokable]
         fn selection_bounds_extents(&self) -> Vec<i32>;

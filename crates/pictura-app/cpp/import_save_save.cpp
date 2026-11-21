@@ -52,6 +52,20 @@ namespace pictura {
 namespace {
 
 // Save may route through Save As; only the origin command records the step.
+constexpr int kMemoryAdmission = 1;
+constexpr int kScratchAdmission = 2;
+constexpr int kScratchFullAdmission = 3;
+
+QString nativeAdmissionMessage(int admission, const QString& action)
+{
+    switch (admission) {
+    case kMemoryAdmission: return memoryRefusalMessage(action);
+    case kScratchAdmission: return scratchRefusalMessage(action);
+    case kScratchFullAdmission: return scratchFullRefusalMessage(action);
+    default: return {};
+    }
+}
+
 thread_local bool saveActiveOrigin = false;
 
 struct SaveActiveOrigin {
@@ -229,7 +243,7 @@ bool ImportSaveCoordinator::startBackgroundSave(PictureView* view, const QString
         return false;
     }
     if (!startNativeSave(*view, path, includeMerged)) {
-        return applySaveResult(view, path, 0);
+        return applySaveResult(view, path, 0, true, save_last_result(*view).code, true, save_last_result(*view).admission);
     }
     const bool fromSave = saveActiveInProgress();
     const auto id = fromSave ? command_ids::FileSave : command_ids::FileSaveAs;
@@ -284,11 +298,13 @@ bool ImportSaveCoordinator::finishBackgroundSave(PictureView* view)
     if (DocEntry* doc = documents_.docAt(index)) {
         doc->saveProgress = -1;
     }
-    const int outcome = save_finish_outcome(*view);
+    const auto result = save_finish_result(*view);
+    const int outcome = result.replaced ? (result.publication == 1 ? 3 : 4)
+                                        : result.publication;
     if (hooks_.finishRecording && job.recordingToken) {
         hooks_.finishRecording(job.recordingToken, outcome == 1 || outcome == 3);
     }
-    const bool saved = applySaveResult(view, job.path, outcome, true);
+    const bool saved = applySaveResult(view, job.path, outcome, true, result.code, true, result.admission);
     if (!saved && outcome < 3) {
         unresolvedSaveFailures_.insert(view);
     }
@@ -330,7 +346,7 @@ void ImportSaveCoordinator::acknowledgeSaveResolution(PictureView* view)
 }
 
 bool ImportSaveCoordinator::applySaveResult(PictureView* view, const QString& path, int outcome,
-                                            bool background)
+                                            bool background, quint32 code, bool native, int admission)
 {
     const int index = indexOfView(view);
     const QString name = QFileInfo(path).fileName();
@@ -345,8 +361,15 @@ bool ImportSaveCoordinator::applySaveResult(PictureView* view, const QString& pa
         return false;
     }
     if (outcome != 1) {
-        if (!reportMemoryRefusal(dialogParent_, tr("save the document")) && hooks_.showStatus) {
-            hooks_.showStatus(tr("Could not save %1.").arg(name), 6000);
+        const QString action = tr("save the document");
+        const bool legacyRefusal = !native && reportMemoryRefusal(dialogParent_, action);
+        if (native && admission && hooks_.showStatus) {
+            hooks_.showStatus(nativeAdmissionMessage(admission, action), 6000);
+        } else if (!legacyRefusal && hooks_.showStatus) {
+            const auto message = code == quint32(OperationStatus::Panic)
+                ? tr("Could not save %1. The operation stopped unexpectedly.").arg(name)
+                : tr("Could not save %1.").arg(name);
+            hooks_.showStatus(message, 6000);
         }
         return false;
     }
@@ -396,15 +419,30 @@ bool ImportSaveCoordinator::saveActiveAs(const QString& path, bool backgroundAll
     const auto release = qScopeGuard([&] { synchronousDestinations_.remove(destination); });
     const QString name = QFileInfo(path).fileName();
     int outcome = 0;
+    quint32 code = 0;
+    int admission = 0;
     if (native) {
         runBusyJob(dialogParent_, name, tr("Saving %1…").arg(name),
-                   [view, path, includeMerged] { return startNativeSave(*view, path, includeMerged); },
+                   [view, path, includeMerged, &code, &admission] {
+                       if (startNativeSave(*view, path, includeMerged)) {
+                           return true;
+                       }
+                       code = save_last_result(*view).code;
+                       admission = save_last_result(*view).admission;
+                       return false;
+                   },
                    [view] { return document_api::saveRunning(*view); },
-                   [&] { outcome = save_finish_outcome(*view); return outcome == 1; });
+                   [&] {
+                       const auto result = save_finish_result(*view);
+                       code = result.code;
+                       outcome = result.replaced ? (result.publication == 1 ? 3 : 4)
+                                                 : result.publication;
+                       return outcome == 1;
+                   });
     } else {
         outcome = document_api::save(*view, path) ? 1 : 0;
     }
-    if (!applySaveResult(view, path, outcome)) {
+    if (!applySaveResult(view, path, outcome, false, code, native, admission)) {
         return false;
     }
     if (!saveActiveInProgress()) {
@@ -590,20 +628,40 @@ bool ImportSaveCoordinator::saveCopyAs(const QString& path, std::optional<bool> 
     const auto release = qScopeGuard([&] { synchronousDestinations_.remove(destination); });
     const QString name = QFileInfo(path).fileName();
     const bool native = saveRunsOnWorker(path);
+    NativeSaveResult result{};
     const bool saved = native
         ? runBusyJob(dialogParent_, name, tr("Saving %1…").arg(name),
-                     [view, path, includeMerged] {
-                         return includeMerged.has_value()
+                     [view, path, includeMerged, &result] {
+                         const bool started = includeMerged.has_value()
                              ? pictura::native_compatibility_save_start(*view, path, true, *includeMerged)
                              : document_api::saveCopyStart(*view, path);
+                         if (!started) {
+                             result = save_last_result(*view);
+                         }
+                         return started;
                      },
                      [view] { return document_api::saveRunning(*view); },
-                     [view] { return document_api::saveFinish(*view); })
+                     [view, &result] {
+                         result = save_finish_result(*view);
+                         return result.publication == 1 && !result.replaced;
+                     })
         : document_api::saveCopy(*view, path);
     if (!saved) {
+        if (native && result.publication == 2) {
+            if (hooks_.showStatus) {
+                hooks_.showStatus(tr("Could not confirm publication of the copy %1.").arg(name), 6000);
+            }
+            return false;
+        }
         const QString action = tr("save a copy of %1").arg(name);
-        if (!reportMemoryRefusal(dialogParent_, action) && hooks_.showStatus) {
-            hooks_.showStatus(tr("Could not save a copy of %1.").arg(name), 6000);
+        const bool legacyRefusal = !native && reportMemoryRefusal(dialogParent_, action);
+        if (native && result.admission && hooks_.showStatus) {
+            hooks_.showStatus(nativeAdmissionMessage(result.admission, action), 6000);
+        } else if (!legacyRefusal && hooks_.showStatus) {
+            const auto message = result.code == quint32(OperationStatus::Panic)
+                ? tr("Could not save a copy of %1. The operation stopped unexpectedly.").arg(name)
+                : tr("Could not save a copy of %1.").arg(name);
+            hooks_.showStatus(message, 6000);
         }
         return false;
     }
@@ -973,221 +1031,6 @@ void ImportSaveCoordinator::applySaveRasterOptions(PictureView& view, SaveFormat
     default:
         break;
     }
-}
-
-bool ImportSaveCoordinator::revertActive()
-{
-    const int index = documents_.activeIndex();
-    PictureView* view = documents_.viewAt(index);
-    if (!view) {
-        return false;
-    }
-    if (backgroundSaves_.contains(view)) {
-        return false;
-    }
-    const QString path = document_api::filePath(*view);
-    if (path.isEmpty()) {
-        return false;
-    }
-    // Reload in place through the Rust edge: decode first, preserve history and
-    // file identity, then append one undoable Revert state.
-    const bool reloaded = document_api::revert(*view, path);
-    if (!reloaded) {
-        return false;
-    }
-    acknowledgeSaveResolution(view);
-    dropRecoverySnapshot(view);
-    lastSaveKinds_.remove(view);
-    documents_.updateTabTitle(index);
-    if (hooks_.requestRefresh) {
-        hooks_.requestRefresh();
-    }
-    if (!view->open_notice().isEmpty() && hooks_.showStatus) {
-        hooks_.showStatus(view->open_notice(), 0);
-    }
-    return true;
-}
-
-bool ImportSaveCoordinator::saveAllDocumentsForRestart()
-{
-    for (int i = 0; i < documents_.count(); ++i) {
-        PictureView* view = documents_.viewAt(i);
-        resolvePendingSave(view);
-        if (!documents_.isDocumentDirty(i) && !saveResolutionNeedsPrompt(view)) {
-            continue;
-        }
-        switch (askUnsaved(dialogParent_, documents_.documentName(i))) {
-        case UnsavedChoice::Cancel:
-            return false;
-        case UnsavedChoice::Save:
-            documents_.setActiveIndex(i);
-            if (!saveActive() || documents_.isDocumentDirty(i)) {
-                return false;
-            }
-            break;
-        case UnsavedChoice::Discard:
-            break;
-        }
-    }
-    return true;
-}
-
-bool ImportSaveCoordinator::closeDocument(int index, bool interactive)
-{
-    if (index < 0 || index >= documents_.count()) {
-        return false;
-    }
-    if (documents_.isLoading(index)) {
-        cancelOpen(index);
-        return true;
-    }
-    PictureView* view = documents_.viewAt(index);
-    resolvePendingSave(view);
-    if (interactive && (documents_.isDocumentDirty(index) || saveResolutionNeedsPrompt(view))) {
-        switch (askUnsaved(dialogParent_, documents_.documentName(index))) {
-        case UnsavedChoice::Cancel:
-            return false;
-        case UnsavedChoice::Save:
-            documents_.setActiveIndex(index);
-            if (!saveActive() || documents_.isDocumentDirty(index)) {
-                return false;
-            }
-            break;
-        case UnsavedChoice::Discard:
-            break;
-        }
-    }
-    lastSaveKinds_.remove(documents_.viewAt(index));
-    documents_.removeDocument(index);
-    return true;
-}
-
-bool ImportSaveCoordinator::closeActiveDocument(bool interactive)
-{
-    return closeDocument(documents_.activeIndex(), interactive);
-}
-
-bool ImportSaveCoordinator::editSmartObjectContents(const QString& layerPath)
-{
-    PictureView* origin = documents_.activeView();
-    if (!origin || layerPath.isEmpty()
-        || !origin->layer_can_edit_smart_object_contents(layerPath)) {
-        return false;
-    }
-    const QString suffix = vector_smart_object_suffix(*origin, layerPath);
-    if (!suffix.isEmpty()) {
-        return editVectorContents(*origin, layerPath, suffix);
-    }
-    auto* temp = new QTemporaryDir();
-    if (!temp->isValid()) {
-        delete temp;
-        return false;
-    }
-    const QString filename = QStringLiteral("contents.psd");
-    const QString file = temp->filePath(filename);
-    if (!origin->export_smart_object_contents(layerPath, file)) {
-        delete temp;
-        return false;
-    }
-    auto* editor = new PictureView(dialogParent_);
-    if (!document_api::open(*editor, file)) {
-        delete editor;
-        delete temp;
-        return false;
-    }
-    documents_.addDocument(editor, QString());
-    editSessions_.append(SmartObjectEditSession{editor, origin, layerPath, filename, temp});
-    return true;
-}
-
-bool ImportSaveCoordinator::editVectorContents(PictureView& origin, const QString& layerPath,
-                                                const QString& suffix)
-{
-    const QString id = vector_smart_object_id(origin, layerPath);
-    const auto revision = vector_edit_revision(origin, id);
-    const auto generation = origin.document_generation();
-    const auto temp = std::make_shared<QTemporaryDir>();
-    const QString source = temp->filePath(QStringLiteral("contents.") + suffix);
-    if (id.isEmpty() || revision == 0 || !temp->isValid()
-        || !origin.export_smart_object_contents(layerPath, source)) {
-        QMessageBox::warning(dialogParent_, tr("Edit Contents"),
-                             tr("Could not prepare the artwork for editing."));
-        return false;
-    }
-    const bool launched = vectorEditorLauncher_
-        ? vectorEditorLauncher_(source)
-        : QDesktopServices::openUrl(QUrl::fromLocalFile(source));
-    if (!launched) {
-        temp->remove();
-        QMessageBox::warning(dialogParent_, tr("Edit Contents"),
-                             tr("Could not open the artwork in the associated application."));
-        return false;
-    }
-    auto* dialog = new QDialog(dialogParent_);
-    dialog->setObjectName(QStringLiteral("vectorEditContents"));
-    dialog->setWindowTitle(tr("Edit Contents"));
-    dialog->setAttribute(Qt::WA_DeleteOnClose);
-    auto* layout = new QVBoxLayout(dialog);
-    auto* label = new QLabel(tr("Save the artwork in the external editor, then select Apply."),
-                             dialog);
-    label->setWordWrap(true);
-    layout->addWidget(label);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Apply | QDialogButtonBox::Discard,
-                                         dialog);
-    layout->addWidget(buttons);
-    auto* apply = buttons->button(QDialogButtonBox::Apply);
-    auto* discard = buttons->button(QDialogButtonBox::Discard);
-    apply->setObjectName(QStringLiteral("vectorEditApply"));
-    discard->setObjectName(QStringLiteral("vectorEditDiscard"));
-    connect(discard, &QPushButton::clicked, dialog, &QDialog::reject);
-    connect(dialog, &QDialog::finished, dialog, [temp]() { temp->remove(); });
-
-    const QPointer<PictureView> target(&origin);
-    const QPointer<QDialog> sessionDialog(dialog);
-    const QPointer<QPushButton> applyButton(apply);
-    const QPointer<QWidget> progressParent(dialogParent_);
-    connect(apply, &QPushButton::clicked, dialog,
-            [target, sessionDialog, applyButton, progressParent, id, source, generation,
-             expected = revision]() mutable {
-        if (!target || target->document_generation() != generation) {
-            QMessageBox::warning(sessionDialog, tr("Edit Contents"),
-                                 tr("The original document is no longer available."));
-            return;
-        }
-        applyButton->setEnabled(false);
-        bool closed = false;
-        const auto onClose = QObject::connect(
-            sessionDialog.data(), &QDialog::finished, target.data(), [&closed, target](int) {
-                closed = true;
-                document_job_cancel(*target);
-            });
-        const bool applied = runSourceCommand(progressParent, *target, tr("Edit Contents"),
-                                               [&](PictureView& view) {
-            return start_vector_edit(view, id, expected, source);
-        });
-        QObject::disconnect(onClose);
-        if (closed || !target || !sessionDialog) {
-            return;
-        }
-        if (applyButton) {
-            applyButton->setEnabled(true);
-        }
-        if (applied) {
-            expected = vector_edit_revision(*target, id);
-        } else {
-            QMessageBox::warning(sessionDialog, tr("Edit Contents"),
-                                 tr("Could not apply the edited artwork. Check that the source "
-                                    "still exists and contains the selected page."));
-        }
-    });
-    for (int i = vectorEditSessions_.size() - 1; i >= 0; --i) {
-        if (!vectorEditSessions_.at(i).dialog) {
-            vectorEditSessions_.removeAt(i);
-        }
-    }
-    vectorEditSessions_.append(VectorEditSession{target, sessionDialog});
-    dialog->show();
-    return true;
 }
 
 } // namespace pictura
