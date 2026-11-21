@@ -69,6 +69,11 @@
 
 int main(int argc, char* argv[])
 {
+    if (argc == 2 && std::strcmp(argv[1], "--version") == 0) {
+        std::puts("Kooka Pictura " PICTURA_VERSION);
+        return 0;
+    }
+
     // Hidden child mode: create one backend device and run the validation
     // composite. Handled before QApplication so a driver crash kills only this
     // process.

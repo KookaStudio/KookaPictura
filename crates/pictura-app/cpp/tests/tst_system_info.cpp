@@ -17,6 +17,7 @@
 #include "frame.h"
 #include "system_info.h"
 #include "system_info_dialog.h"
+#include "update_package.h"
 
 #include "qt_test_support.h"
 
@@ -200,7 +201,7 @@ void SystemInfoTest::reportUsesUnavailable()
 
 void SystemInfoTest::dialogCopiesReport()
 {
-    const pictura::SystemInfo info = fixture();
+    const pictura::SystemInfo info = pictura::collectSystemInfo({});
     pictura::SystemInfoDialog dialog(info);
     QCOMPARE(dialog.reportForTest(), pictura::formatSystemInfo(info));
     auto* text = dialog.findChild<QPlainTextEdit*>(QStringLiteral("systemInfoText"));
@@ -209,7 +210,10 @@ void SystemInfoTest::dialogCopiesReport()
     auto* copy = dialog.findChild<QPushButton*>(QStringLiteral("systemInfoCopy"));
     QVERIFY(copy != nullptr);
     copy->click();
-    QCOMPARE(QGuiApplication::clipboard()->text(), dialog.reportForTest());
+    const QString copied = QGuiApplication::clipboard()->text();
+    QCOMPARE(copied, dialog.reportForTest());
+    const QString method = pictura::packageMethodName(pictura::detectPackageMethod());
+    QVERIFY(copied.split(QLatin1Char('\n')).contains(QStringLiteral("Package: %1").arg(method)));
 }
 
 void SystemInfoTest::reopenRefreshesReport()

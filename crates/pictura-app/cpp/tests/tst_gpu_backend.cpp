@@ -561,7 +561,7 @@ void GpuBackendTest::statusBarShowsTheBackendLabel()
 
 void GpuBackendTest::aboutTextNamesBackend()
 {
-    QVERIFY(aboutText(QStringLiteral("GPU (Vulkan)")).contains(QStringLiteral("GPU (Vulkan)")));
+    QVERIFY(aboutText(QStringLiteral("GPU (Vulkan)"), {}).contains(QStringLiteral("GPU (Vulkan)")));
 }
 
 void GpuBackendTest::toggleIsDisabledOnlyWhenNoBackendExists()

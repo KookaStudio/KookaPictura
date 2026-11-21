@@ -435,9 +435,18 @@ QString activeBackendLabel(bool gpuCompute)
     return QString::fromUtf8(label.data(), int(label.size()));
 }
 
-QString aboutText(const QString& backendLabel)
+QString aboutText(const QString& backendLabel, const QStringList& gpuFields)
 {
-    return QStringLiteral("Renderer: %1").arg(backendLabel);
+    const QString unavailable = QCoreApplication::translate("About", "Unavailable");
+    const auto valueOrUnavailable = [&unavailable](const QString& value) {
+        return value.isEmpty() ? unavailable : value;
+    };
+    const QString adapter = gpuFields.value(0).trimmed();
+    const QString driver = (gpuFields.value(3) + QLatin1Char(' ') + gpuFields.value(4)).trimmed();
+    return QCoreApplication::translate(
+               "About", "Renderer: %1\nBuild type: %2\nQt version: %3\nGPU adapter: %4\nGPU driver: %5")
+        .arg(backendLabel, valueOrUnavailable(QStringLiteral(PICTURA_BUILD_TYPE)),
+             QString::fromLatin1(qVersion()), valueOrUnavailable(adapter), valueOrUnavailable(driver));
 }
 
 int runGpuProbeChild(const char* backend)

@@ -86,6 +86,13 @@ jobs:
           $reply = '{"jsonrpc":"2.0","id":1,"method":"ping"}' |
             & "$env:GITHUB_WORKSPACE\stage\bin\pictura.exe" --mcp | Out-String
           if ($reply -notmatch '"result"') { throw "the MCP bridge did not answer: $reply" }
+          $env:QT_QPA_PLATFORM = 'pictura-invalid-qpa'
+          $versionLines = @(& "$env:GITHUB_WORKSPACE\stage\bin\pictura.exe" --version | ForEach-Object { $_ })
+          if ($LASTEXITCODE -ne 0) { throw "--version exited $LASTEXITCODE" }
+          $expectedVersion = (Get-Content -Raw "$env:GITHUB_WORKSPACE\version.txt").Trim()
+          if ($versionLines.Count -ne 1 -or $versionLines[0] -cne "Kooka Pictura $expectedVersion") {
+            throw "Unexpected --version output: $versionLines"
+          }
 
       - name: Pack the portable archive
         shell: pwsh

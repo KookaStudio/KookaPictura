@@ -38,6 +38,7 @@
 #include <QtCore/QDir>
 #include <QtCore/QJsonValue>
 #include <QtCore/QUrl>
+#include <QtGui/QIcon>
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QMessageBox>
 
@@ -450,17 +451,43 @@ void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
     registry.setHandler(command_ids::HelpSubmitIssue, [this]() { submitIssue(); });
 
     registry.setHandler(command_ids::HelpAbout, [this]() {
-        QMessageBox::about(
-            this, tr("About Kooka Pictura"),
+        PictureView probe;
+        const QString diagnostics = aboutText(activeBackendLabel(gpuCompute_), probe.gpu_adapter_info());
+        const QString text =
             tr("Kooka Pictura — an open-source layered image editor for Linux, written in Rust "
                "and Qt.\n\n"
                "Licensed under the GNU GPL v3.0 or later. Built with Qt 6 (LGPLv3) and "
                "open-source Rust crates; see THIRD-PARTY-LICENSES.\n\n"
                "%1\n\n"
-                "Adobe, Photoshop, and Camera Raw are trademarks of Adobe Inc.; "
-                "Kooka Pictura is not affiliated with or endorsed by Adobe.")
-                .arg(aboutText(activeBackendLabel(gpuCompute_)))
-                + QLatin1Char('\n') + QLatin1Char('\n') + aboutVersionText());
+               "Adobe, Photoshop, and Camera Raw are trademarks of Adobe Inc.; "
+               "Kooka Pictura is not affiliated with or endorsed by Adobe.")
+                .arg(diagnostics)
+            + QStringLiteral("\n\n") + aboutVersionText();
+
+        const QString objectName = QStringLiteral("aboutPicturaDialog");
+        if (auto* dialog = findChild<QMessageBox*>(objectName); dialog && dialog->isVisible()) {
+            dialog->setText(text);
+            dialog->raise();
+            dialog->activateWindow();
+            return;
+        }
+
+        auto* dialog = new QMessageBox(QMessageBox::Information, tr("About Kooka Pictura"),
+                                       QString(), QMessageBox::Ok, this);
+        dialog->setObjectName(objectName);
+        dialog->setAttribute(Qt::WA_DeleteOnClose);
+        dialog->setTextFormat(Qt::PlainText);
+        dialog->setText(text);
+        const QIcon icon = dialog->windowIcon();
+        if (!icon.isNull()) {
+            dialog->setIconPixmap(icon.pixmap(icon.actualSize(QSize(64, 64))));
+        }
+#ifdef Q_OS_MACOS
+        dialog->setModal(false);
+        dialog->show();
+#else
+        dialog->exec();
+#endif
     });
 
     // Help > Developer > Design System…: the in-app storybook over the real UI.
