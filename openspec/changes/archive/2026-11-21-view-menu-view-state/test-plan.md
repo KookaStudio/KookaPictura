@@ -1,0 +1,67 @@
+# Test Plan
+
+| Scenario | Steps | Expected result | Coverage |
+|---|---|---|---|
+| `vm_defaults` | Start with an empty state home and open the View menu. | Every Show entry available in the running edition except Grid is checked, Grid is unchecked, samplers are on, Extras is checked, and every listed entry is a member. | `tst_view_menu::defaultsAndPersistence` |
+| `vm_persist` | Hide Guides and Slices, show Grid, turn Extras off, uncheck Notes as a member, hide Count in Extended, save, restart. | Every value, including the Slices, Notes and Count flags, is restored and the menu checkmarks match. | `tst_view_menu::defaultsAndPersistence` |
+| `vm_apply_all` | Open two documents and toggle Layer Edges off. | Both canvases stop drawing the outline and neither document gains a history state. | `tst_view_menu::defaultsAndPersistence` |
+| `vm_apply_all_overlays` | Open two documents with user slices, notes and Count marks in Extended and turn Show > Slices, Show > Notes and Show > Count off. | Both canvases hide the overlays and neither document gains a history state. | `tst_view_menu::defaultsAndPersistence` |
+| `vm_no_document` | Dispatch a Show command, Extras, All, None and a zoom preset with no document. | Each is disabled, nothing changes, and the stored state is unchanged. | `tst_view_menu::defaultsAndPersistence` |
+| `vm_global_commands` | With no document, open Show Extra Options and toggle Lock Slices. | The window opens, the lock flips and persists, and document-scoped commands stay disabled. | `tst_view_menu::globalCommands` |
+| `vm_open_later` | Change state, open another document, and hold an open in flight with `setOpenDelayForTest` while toggling. | The new document receives the state at canvas creation and the in-flight open does not crash. | `tst_view_menu::defaultsAndPersistence` |
+| `vm_edition` | Open Show Extra Options in Standard and Extended. | Standard lists nine entries; Extended lists ten with Count; 3D Axis is absent in both. | `tst_edition_gating::editionGating` |
+| `vm_extras_members` | Enable Guides and Grid, uncheck Grid as a member, turn Extras off. | Guides disappear, Grid stays visible, and both Show checkmarks stay checked. | `tst_view_menu::extrasMembership` |
+| `vm_extras_state` | Turn Extras off and on again. | Checkmarks are unchanged and the previously visible extras return. | `tst_view_menu::extrasMembership` |
+| `vm_all_none` | With Grid unmembered and Extras off, choose All, then None. | All enables every extra and turns Extras on with Grid visible; None disables every extra and clears the sampler flag. | `tst_view_menu::extrasMembership` |
+| `vm_options_window` | Open Show Extra Options, verify the edition's list, uncheck Grid, accept, restart. | Every available entry was checked; Grid is unmembered and the choice persists. | `tst_view_menu::extrasOptionsWindow` |
+| `vm_options_cancel` | Open Show Extra Options, change several checkboxes, cancel. | The membership set is unchanged. | `tst_view_menu::extrasOptionsWindow` |
+| `vm_options_scope` | With Grid enabled but unmembered, turn Extras off, then choose All. | Grid stays visible while Extras is off and becomes visible after All; membership does not restrict All. | `tst_view_menu::extrasMembership` |
+| `vm_selection_edges` | With a selection, hide Selection Edges, then make a different selection. | The first selection keeps its mask but loses the ants; the new selection shows ants again. | `tst_view_menu::selectionEdgesScope` |
+| `vm_selection_edges_no_reset` | Hide Selection Edges, then edit the mask in place, move the selection, Undo/Redo, and update Quick Mask. | The ants stay hidden; only a genuinely new selection shows them. | `tst_view_menu::selectionEdgesScope` |
+| `vm_selection_edges_documents` | With selections in two documents, hide Selection Edges, then make a new selection in one. | Both hide while the flag is off; the new selection re-enables the ants for both. | `tst_view_menu::selectionEdgesScope` |
+| `vm_selection_edges_extras` | With Selection Edges on, turn Extras off, then on. | Ants disappear and return with the Show checkmark still checked. | `tst_view_menu::selectionEdgesScope` |
+| `vm_grid_toggle` | On a 72 ppi document, show Grid with 1 inch and 4 subdivisions, then turn it off. | Major lines are 72 px apart, minor lines every 18 px, and off removes them. | `tst_view_menu::gridOverlay` |
+| `vm_grid_prefs` | Pick Magenta, Dots, 25%, 5 subdivisions, save and reload. | The canvas draws that grid and the stored values match. | `tst_view_menu::gridPreferences` |
+| `vm_grid_percent` | Set the grid to 25% on a 400×200 document. | Major lines sit at 100 px horizontally and 50 px vertically. | `tst_view_menu::gridPreferences` |
+| `vm_grid_extras` | With Grid on, turn Extras off, then on. | The grid disappears and returns with the Show checkmark unchanged. | `tst_view_menu::gridOverlay` |
+| `vm_pixel_grid_threshold` | View at 500% and then 600%. | No pixel grid at 500%; one cell per document pixel at 600%. | `tst_view_menu::pixelGrid` |
+| `vm_pixel_grid_toggle` | At 800%, turn Pixel Grid off, on, then turn Extras off. | The grid disappears, returns, and disappears again with the Show checkmark unchanged. | `tst_view_menu::pixelGrid` |
+| `vm_layer_edges` | Make a small pixel layer active on a larger canvas with Layer Edges on. | The outline matches the layer's content rect, not the canvas. | `tst_view_menu::layerEdges` |
+| `vm_layer_edges_target` | Switch the active layer between two pixel layers at different positions. | The outline follows the new active layer's content bounds. | `tst_view_menu::layerEdges` |
+| `vm_layer_edges_edit` | Grow the active layer's pixels. | The outline updates to the new content rect. | `tst_view_menu::layerEdges` |
+| `vm_target_path` | Create a Work Path, select the Move tool, and enable Target Path. | The path curve is drawn without anchors and handles. | `tst_view_menu::targetPath` |
+| `vm_target_path_off` | Turn Target Path off, on, then turn Extras off. | The curve disappears, returns, and disappears again with the Show checkmark unchanged. | `tst_view_menu::targetPath` |
+| `vm_target_path_edit` | Edit the active path and select another path in the Paths panel. | The persistent curve shows the new target and geometry. | `tst_view_menu::targetPath` |
+| `vm_target_path_path_tool` | Activate the Pen or Path Selection tool with Target Path on. | Only the editing overlay is drawn; no duplicate base curve. | `tst_view_menu::targetPath` |
+| `vm_color_samplers` | With two samplers and Extras on, choose None, then All. | Samplers hide with None and show with All. | `tst_view_menu::colorSamplers` |
+| `vm_color_samplers_extras` | With samplers visible, turn Extras off, then on. | Samplers hide and return with the sampler flag unchanged. | `tst_view_menu::colorSamplers` |
+| `vm_zoom_200` | Set the active canvas to 50% and dispatch View > 200%. | The zoom becomes 2.0. | `tst_view_menu::zoomPresets` |
+| `vm_print_size` | Dispatch View > Print Size on 72 ppi and 300 ppi documents. | The zoom becomes 96 / 72 and 96 / 300. | `tst_view_menu::zoomPresets` |
+| `vm_zoom_no_document` | Open no document and dispatch both presets. | Both commands are disabled and nothing changes. | `tst_view_menu::zoomPresets` |
+| Drawing and undoing a slice | Existing crop_group self-test steps. | The drag records one Slice state, the click none, and Undo restores the auto slice. | manual: covered by the crop_group self-test; the post-undo overlay is also asserted in `tst_view_menu::sliceVisibility` |
+| The overlay follows the tool | With a user slice, select another tool with Show > Slices on, then leave the Slice tool. | The overlay stays visible. | `tst_view_menu::sliceVisibility` |
+| `slice_show_off` | Turn Show > Slices off with another tool active, on, then Extras off. | The overlay hides, returns, and hides again with the checkmark unchanged. | `tst_view_menu::sliceVisibility` |
+| `slice_show_persist` | Turn Show > Slices off, save, reload, and open two documents. | Both canvases keep the overlay hidden with the checkmark cleared. | `tst_view_menu::sliceVisibility` |
+| `slice_lock` | Lock slices; drag a new slice, drag and resize an existing one, press Delete. | Count and rects are unchanged, no history state is recorded, and the overlay stays visible. | `tst_view_menu::sliceLock` |
+| `slice_lock_persist` | Lock slices, save, reload, restart. | Lock Slices is checked and edits stay blocked. | `tst_view_menu::sliceLock` |
+| `slice_clear_locked` | Lock slices and dispatch Clear Slices. | Every user slice is removed in one Clear Slices state. | `tst_view_menu::clearSlices` |
+| `slice_clear` | With two user slices, dispatch Clear Slices and undo. | Only auto slices remain in one state; Undo restores both user slices. | `pictura-render::clear_slices_clears_user_slices_and_keeps_one_auto_slice`, `tst_view_menu::clearSlices` |
+| `slice_clear_disabled` | With only the auto slice, and with no document, inspect Clear Slices. | It is disabled and dispatch changes nothing. | `pictura-render::clear_slices_refuses_without_user_slices`, `tst_view_menu::clearSlices` |
+| Counting objects | Existing healing_tools self-test steps. | The overlay shows two, three, then one mark and each step records one state. | manual: covered by the healing_tools self-test; this change does not alter mark placement |
+| Styling a group | Existing healing_tools self-test steps. | The group stores and draws its colour and sizes. | manual: covered by the healing_tools self-test; this change does not alter group styling |
+| `count_show_gate` | With marks, select another tool and toggle Show > Count, then select the Count tool with Show off. | Marks hide for the other tool and remain visible for the Count tool when Extras is on. | `tst_view_menu::countVisibility` |
+| `count_extras` | With Show > Count on, turn Extras off, then on. | Marks hide and return with the checkmark unchanged. | `tst_view_menu::countVisibility` |
+| `count_tool_extras` | With the Count tool active, turn Extras off, then on. | Marks hide while Extras is off even with the tool active, and return with Extras on. | `tst_view_menu::countVisibility` |
+| Adding and reopening notes | Existing annotation_tools self-test steps. | Each click records one New Note state and the panel shows the clicked note. | manual: covered by the annotation_tools self-test; this change does not alter note placement |
+| Deleting notes | Existing annotation_tools self-test steps. | Alt-click removes one note and Clear All removes the rest. | manual: covered by the annotation_tools self-test; this change does not alter note deletion |
+| `note_show_gate` | With notes, select another tool and toggle Show > Notes, then select the Note tool with Show off. | Glyphs hide for the other tool and remain visible for the Note tool when Extras is on. | `tst_view_menu::noteVisibility` |
+| `note_extras` | With Show > Notes on, turn Extras off, then on. | Glyphs hide and return with the checkmark unchanged. | `tst_view_menu::noteVisibility` |
+| `note_tool_extras` | With the Note tool active, turn Extras off, then on. | Glyphs hide while Extras is off even with the tool active, and return with Extras on. | `tst_view_menu::noteVisibility` |
+| `sg_toggle` | Existing tst_smart_guides case. | Snapping stops while off, resumes while on, and the session stores the choice. | `tst_smart_guides::smartGuidesToggle` |
+| `sg_shortcut` | Existing tst_smart_guides case. | The default shortcut is Ctrl+Shift+;, rendered as Command+Shift+; on macOS. | `tst_smart_guides::smartGuidesToggle` |
+| `sg_extras` | With Smart Guides on, turn Extras off, drag near the document centre, then turn Extras on. | No guide or snap while off, the checkmark stays checked, and snapping returns with Extras on. | `tst_view_menu::smartGuidesExtras` |
+| Clear and new guide | Existing tst_rulers_guides case. | Clear removes both guides in one state and disables itself; New Guide adds one at 12. | `tst_rulers_guides::clearAndNewGuide` |
+| `guides_extras` | With guides shown, turn Extras off, then on. | Guides disappear and return with the Show checkmark unchanged. | `tst_view_menu::guidesExtras` |
+| `guides_place_shows` | Hide guides by the Show toggle or Extras and drag a new guide from a ruler. | The Show toggle is checked, Extras is on, and the new guide is visible. | `tst_view_menu::guidesExtras` |
+| Colour and style apply and persist | Existing tst_rulers_guides case. | The canvas draws Magenta dashed and the stored values match. | `tst_rulers_guides::guidePreferences` |
+| `grid_prefs_group` | Open Guides, Grid, & Slices and change the Grid colour, style, interval and subdivisions. | The controls are enabled, the canvas updates, and the values survive a reload. | `tst_view_menu::gridPreferences` |

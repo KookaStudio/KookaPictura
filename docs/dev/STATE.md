@@ -4,6 +4,14 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **View menu view state — #503 implemented** (OpenSpec change
+  `view-menu-view-state`, archived; capability `ui/view-menu` plus the slice,
+  count, note, smart-guide and ruler deltas). Extras/Show/Show Extra Options,
+  grid and pixel grid, layer edges, the persistent target path, Selection Edges
+  scope, color-sampler gating, Lock/Clear Slices, and View > 200% / Print Size
+  are wired, persisted and applied to every canvas. Tests: `tst_view_menu`, the
+  shared self-test, and the amended Qt suites. Remaining View items: Gamut
+  Warning, Pixel Aspect Ratio, Snap To (#305) and 32-bit Preview Options (#570).
 - **DNG output — #402 implemented** (OpenSpec change `dng-output`,
   archived; new capabilities `codec/dng-writer` and
   `document/raw-save-image`, requirements added to `codec/dng-raw-reader` and

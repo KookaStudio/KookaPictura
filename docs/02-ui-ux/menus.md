@@ -344,9 +344,15 @@ CS6 reworked the 3D engine; each command below is named in the CS6 Help
 - Clear Guides ✓
 - New Guide… ✓
 - Lock Slices ✓
+- Clear Slices ✓
 - Show ▸ ✓ (Selection Edges ✓, Target Path ✓, Layer Edges ✓, 3D Axis ✓,
   Guides ✓, Grid ✓, Count ✓, Smart Guides — `Ctrl+Shift+;` ✓, Slices ✓,
   Notes, Pixel Grid ✓, All ✓, None ✓, Show Extra Options ✓)
+- `Show Extra Options` opens the membership window that selects which extras
+  `View > Extras` (`Ctrl+H`) hides. It lists the implemented Show entries
+  available in the running edition: nine in Standard, ten in Extended (Count
+  is Extended-only); 3D Axis is excluded because this engine has no 3D support
+  and the entry stays disabled.
 - Extras — `Ctrl+H` ✓
 - `Align` / `Align To` — not Photoshop menu items (they belong to Illustrator);
   removed from the CS6 tree
