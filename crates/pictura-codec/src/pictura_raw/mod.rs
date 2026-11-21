@@ -18,9 +18,11 @@ use crate::error::PsdError;
 
 mod codec;
 mod text;
+mod xmp;
 
 pub use codec::{decode_pictura_raw_settings, encode_pictura_raw_fltr};
 pub use text::{pictura_raw_from_text, pictura_raw_to_text};
+pub use xmp::{pictura_raw_from_xmp, pictura_raw_to_xmp, raw_settings_key};
 
 #[cfg(test)]
 mod tests;

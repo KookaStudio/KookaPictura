@@ -74,6 +74,7 @@ struct SessionState {
     bool saveInBackground = true;
     int autoSaveMinutes = 10;
     int nativeSaveCompatibility = 0; // Always, Ask, Never
+    int rawSettingsStore = 0;        // Camera Raw database, sidecar ".xmp" (#401)
     // Agent control: what an agent attached to this window may do. Off, and
     // read-only, until the person says otherwise.
     bool agentControlEnabled = false;

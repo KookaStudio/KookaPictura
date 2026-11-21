@@ -66,6 +66,8 @@ public:
     void setSaveInBackground(bool on);
     void setAutoSaveRecovery(bool on, int minutes);
     void setNativeSaveCompatibility(int choice);
+    // Save Camera Raw Settings In: 0 Camera Raw Database, 1 sidecar files.
+    void setRawSettingsStore(int store);
     // Guides, Grid, & Slices: the guide colour and Lines / Dashed Lines style.
     void setGuideAppearance(const QColor& color, bool dashed);
     // Units & Rulers: the ruler unit (a RulerUnit index) and Traditional
@@ -103,6 +105,7 @@ signals:
     void saveInBackgroundChanged(bool on);
     void autoSaveRecoveryChanged(bool on, int minutes);
     void nativeSaveCompatibilityChanged(int choice);
+    void rawSettingsStoreChanged(int store);
     void guideAppearanceChanged(const QColor& color, bool dashed);
     void rulerUnitChanged(int unit);
     void traditionalPointsChanged(bool on);
@@ -129,6 +132,7 @@ private:
     QComboBox* pickerChoice_ = nullptr;
     QComboBox* autoSaveMinutes_ = nullptr;
     QComboBox* nativeSaveCompatibility_ = nullptr;
+    QComboBox* rawSettingsStore_ = nullptr;
     QSpinBox* memoryUsage_ = nullptr;
     QComboBox* guideColor_ = nullptr;
     QComboBox* guideStyle_ = nullptr;

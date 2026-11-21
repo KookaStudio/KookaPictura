@@ -14,6 +14,7 @@
 #include <QtCore/QTimer>
 #include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QHBoxLayout>
+#include <QtWidgets/QPushButton>
 #include <QtWidgets/QStackedWidget>
 #include <QtWidgets/QTabBar>
 #include <QtWidgets/QVBoxLayout>
@@ -93,6 +94,14 @@ PicturaRawDialog::PicturaRawDialog(PictureView* view, const QString& path,
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     connect(buttons, &QDialogButtonBox::accepted, this, &PicturaRawDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &PicturaRawDialog::reject);
+    if (asShot) {
+        auto* done = buttons->addButton(tr("Done"), QDialogButtonBox::ActionRole);
+        done->setObjectName(QStringLiteral("rawDoneButton"));
+        connect(done, &QPushButton::clicked, this, [this] {
+            saveOnly_ = true;
+            reject();
+        });
+    }
     right->addWidget(buttons);
 
     outer->addLayout(right);

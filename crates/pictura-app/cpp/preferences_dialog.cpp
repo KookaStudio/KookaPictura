@@ -239,6 +239,20 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     fileHandlingLayout->addLayout(compatibilityRow);
     connect(nativeSaveCompatibility_, &QComboBox::currentIndexChanged,
             this, &PreferencesDialog::nativeSaveCompatibilityChanged);
+    // ponytail: CS6 keeps this in the Camera Raw Preferences dialog (#633);
+    // until that exists it sits with the other file-handling choices.
+    auto* rawStoreRow = new QHBoxLayout;
+    auto* rawStoreLabel = new QLabel(tr("Save Camera Raw Settings In:"), fileHandlingPage);
+    rawSettingsStore_ = new QComboBox(fileHandlingPage);
+    rawSettingsStore_->setObjectName(QStringLiteral("preferencesRawSettingsStore"));
+    rawSettingsStore_->addItems({tr("Camera Raw Database"), tr("Sidecar \".XMP\" Files")});
+    rawStoreLabel->setBuddy(rawSettingsStore_);
+    rawStoreRow->addWidget(rawStoreLabel);
+    rawStoreRow->addWidget(rawSettingsStore_);
+    rawStoreRow->addStretch();
+    fileHandlingLayout->addLayout(rawStoreRow);
+    connect(rawSettingsStore_, &QComboBox::currentIndexChanged,
+            this, &PreferencesDialog::rawSettingsStoreChanged);
     fileHandlingLayout->addStretch(1);
     stack_->addWidget(fileHandlingPage);
     setAutoSaveRecovery(true, 10);
@@ -516,6 +530,12 @@ void PreferencesDialog::setNativeSaveCompatibility(int choice)
 {
     const QSignalBlocker blocker(nativeSaveCompatibility_);
     nativeSaveCompatibility_->setCurrentIndex(choice);
+}
+
+void PreferencesDialog::setRawSettingsStore(int store)
+{
+    const QSignalBlocker blocker(rawSettingsStore_);
+    rawSettingsStore_->setCurrentIndex(store == 1 ? 1 : 0);
 }
 
 void PreferencesDialog::setSaveInBackground(bool on)

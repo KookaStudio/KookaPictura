@@ -1,9 +1,11 @@
 // Camera raw opens through File > Open (#400, `document/raw-open`): signature
 // routing, the Pictura Raw dialog before the document, the non-interactive
-// develop, the absolute white balance, and the unsupported-camera refusal. The
-// fixture DNG is written by `raw_fixture.h`. The suite shares one frame, never
-// shown; cleanup() closes its documents and clears the dialog driver and the
-// status message.
+// develop, the absolute white balance, and the unsupported-camera refusal; and
+// the settings stores (#401, `document/raw-settings-storage`). The fixture DNG
+// is written by `raw_fixture.h`. The suite shares one frame, never shown, and
+// points XDG_DATA_HOME at a temporary folder so OK never writes to the user's
+// Camera Raw database; cleanup() closes its documents, clears the dialog
+// driver, the status message and the database, and resets the store.
 
 #include <QtTest/QtTest>
 
@@ -12,12 +14,17 @@
 #include "acr/acr_settings.h"
 #include "dialogs.h"
 #include "frame.h"
+#include "import_save_coordinator.h"
 #include "pictura_raw_dialog.h"
+#include "preferences_dialog.h"
 
 #include "api/document_bridge.h"
 
+#include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QTemporaryDir>
+#include <QtWidgets/QComboBox>
+#include <QtWidgets/QPushButton>
 #include <QtWidgets/QStatusBar>
 
 #include "qt_test_support.h"
@@ -36,6 +43,53 @@ QString writeFile(const QTemporaryDir& dir, const QString& name, const QByteArra
     }
     return path;
 }
+
+QComboBox* rawStoreCombo(PicturaMainWindow& window)
+{
+    window.showPreferences(PreferencesDialog::kFileHandling);
+    return window.preferencesDialog()->findChild<QComboBox*>(
+        QStringLiteral("preferencesRawSettingsStore"));
+}
+
+QByteArray readFile(const QString& path)
+{
+    QFile file(path);
+    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+}
+
+// Whether the process can still create files in `dir` (true for root).
+bool writable(const QString& dir)
+{
+    QFile probe(QDir(dir).filePath(QStringLiteral(".probe")));
+    const bool ok = probe.open(QIODevice::WriteOnly);
+    probe.remove();
+    return ok;
+}
+
+// Restores an environment variable when it goes out of scope.
+class ScopedEnv {
+public:
+    ScopedEnv(const char* name, const QByteArray& value)
+        : name_(name), had_(qEnvironmentVariableIsSet(name)), prior_(qgetenv(name))
+    {
+        qputenv(name, value);
+    }
+    ~ScopedEnv()
+    {
+        if (had_) {
+            qputenv(name_, prior_);
+        } else {
+            qunsetenv(name_);
+        }
+    }
+    ScopedEnv(const ScopedEnv&) = delete;
+    ScopedEnv& operator=(const ScopedEnv&) = delete;
+
+private:
+    const char* name_;
+    bool had_;
+    QByteArray prior_;
+};
 
 // What the dialog driver saw.
 struct Seen {
@@ -63,16 +117,29 @@ private slots:
     void rawDialogShowsAbsoluteSliders();
     void reciprocalSliderSpreadsDaylight();
 
+    void settingsStorePreferencePersists();
+    void okWritesSidecar();
+    void doneWritesDatabaseOnly();
+    void cancelAndNonInteractiveWriteNothing();
+    void unwritableStoresWarnAndOpen();
+
 private:
     std::function<bool(QDialog&)> driver(Seen* seen, bool accept);
+    ImportSaveCoordinator* coordinator() const;
+    QString databaseDir() const;
+    QStringList databaseRecords() const;
 
     test::ScopedStateHome stateHome_;
+    QTemporaryDir dataHome_;
+    std::unique_ptr<ScopedEnv> dataEnv_;
     std::unique_ptr<PicturaMainWindow> window_;
 };
 
 void RawOpenTest::initTestCase()
 {
     QVERIFY(stateHome_.isValid());
+    QVERIFY(dataHome_.isValid());
+    dataEnv_ = std::make_unique<ScopedEnv>("XDG_DATA_HOME", dataHome_.path().toUtf8());
     window_ = test::makeMainWindow();
     QVERIFY(window_ != nullptr);
 }
@@ -94,11 +161,31 @@ void RawOpenTest::cleanup()
     }
     window_->setImportDialogDriverForTest({});
     window_->statusBar()->clearMessage();
+    if (ImportSaveCoordinator* importSave = coordinator()) {
+        importSave->setRawSettingsStore(0);
+    }
+    QDir(databaseDir()).removeRecursively();
 }
 
 void RawOpenTest::cleanupTestCase()
 {
     window_.reset();
+    dataEnv_.reset();
+}
+
+ImportSaveCoordinator* RawOpenTest::coordinator() const
+{
+    return window_ ? window_->findChild<ImportSaveCoordinator*>() : nullptr;
+}
+
+QString RawOpenTest::databaseDir() const
+{
+    return dataHome_.filePath(QStringLiteral("kooka-pictura/Camera Raw"));
+}
+
+QStringList RawOpenTest::databaseRecords() const
+{
+    return QDir(databaseDir()).entryList({QStringLiteral("*.xmp")}, QDir::Files);
 }
 
 std::function<bool(QDialog&)> RawOpenTest::driver(Seen* seen, bool accept)
@@ -227,6 +314,118 @@ void RawOpenTest::reciprocalSliderSpreadsDaylight()
                       QPoint(slider.width() / 2, slider.height() - 8));
     QVERIFY2(slider.value() >= 3500.0 && slider.value() <= 4500.0,
              qPrintable(QString::number(slider.value())));
+}
+
+// raw_store_preference
+void RawOpenTest::settingsStorePreferencePersists()
+{
+    test::ScopedStateHome stateHome;
+    QVERIFY(stateHome.isValid());
+    {
+        auto window = test::makeMainWindow();
+        auto* importSave = window->findChild<ImportSaveCoordinator*>();
+        auto* combo = rawStoreCombo(*window);
+        QVERIFY(importSave && combo);
+        QCOMPARE(importSave->rawSettingsStore(), 0);
+        QCOMPARE(combo->currentIndex(), 0);
+        combo->setCurrentIndex(1);
+        QCOMPARE(importSave->rawSettingsStore(), 1);
+    }
+    auto window = test::makeMainWindow();
+    auto* combo = rawStoreCombo(*window);
+    QVERIFY(combo);
+    QCOMPARE(window->findChild<ImportSaveCoordinator*>()->rawSettingsStore(), 1);
+    QCOMPARE(combo->currentIndex(), 1);
+}
+
+// raw_store_ok_writes
+void RawOpenTest::okWritesSidecar()
+{
+    QTemporaryDir dir;
+    const QString path = writeFile(dir, QStringLiteral("shot.dng"), test::rawDng(16, 12, true));
+    QVERIFY(!path.isEmpty());
+    coordinator()->setRawSettingsStore(1);
+    window_->setImportDialogDriverForTest([](QDialog& dialog) {
+        auto* exposure = dialog.findChild<AcrSlider*>(QString::fromLatin1(acr::Exposure));
+        if (!exposure) {
+            return false;
+        }
+        exposure->setValue(1.0);
+        emit exposure->valueChanged();
+        return true;
+    });
+    QCOMPARE(window_->openDocumentAtPathOutcome(path, true),
+             PicturaMainWindow::OpenOutcome::Opened);
+    QCOMPARE(window_->documentCount(), 1);
+    const QByteArray sidecar = readFile(dir.filePath(QStringLiteral("shot.xmp")));
+    QVERIFY2(sidecar.contains("crs:Exposure2012=\"+1.00\""), sidecar.constData());
+    QVERIFY2(sidecar.contains("crs:WhiteBalance=\"As Shot\""), sidecar.constData());
+    QVERIFY(databaseRecords().isEmpty());
+}
+
+// raw_store_done_writes
+void RawOpenTest::doneWritesDatabaseOnly()
+{
+    QTemporaryDir dir;
+    const QString path = writeFile(dir, QStringLiteral("shot.dng"), test::rawDng(16, 12, true));
+    int doneButtons = 0;
+    window_->setImportDialogDriverForTest([&doneButtons](QDialog& dialog) {
+        auto* done = dialog.findChild<QPushButton*>(QStringLiteral("rawDoneButton"));
+        if (done) {
+            ++doneButtons;
+            done->click();
+        }
+        return false;
+    });
+    QCOMPARE(window_->openDocumentAtPathOutcome(path, true),
+             PicturaMainWindow::OpenOutcome::Cancelled);
+    QCOMPARE(doneButtons, 1);
+    QCOMPARE(window_->documentCount(), 0);
+    QCOMPARE(databaseRecords().size(), 1);
+    QVERIFY(!QFile::exists(dir.filePath(QStringLiteral("shot.xmp"))));
+}
+
+// raw_store_cancel_writes_nothing
+void RawOpenTest::cancelAndNonInteractiveWriteNothing()
+{
+    QTemporaryDir dir;
+    const QString path = writeFile(dir, QStringLiteral("shot.dng"), test::rawDng(16, 12, true));
+    coordinator()->setRawSettingsStore(1);
+    Seen seen;
+    window_->setImportDialogDriverForTest(driver(&seen, false));
+    QCOMPARE(window_->openDocumentAtPathOutcome(path, true),
+             PicturaMainWindow::OpenOutcome::Cancelled);
+    QCOMPARE(window_->openDocumentAtPathOutcome(path, false),
+             PicturaMainWindow::OpenOutcome::Opened);
+    QCOMPARE(seen.rawDialogs, 1);
+    QVERIFY(!QFile::exists(dir.filePath(QStringLiteral("shot.xmp"))));
+    QVERIFY(databaseRecords().isEmpty());
+}
+
+// raw_store_unwritable_warns
+void RawOpenTest::unwritableStoresWarnAndOpen()
+{
+    QTemporaryDir dir;
+    const QString path = writeFile(dir, QStringLiteral("shot.dng"), test::rawDng(16, 12, true));
+    const QString blocker = writeFile(dir, QStringLiteral("not-a-folder"), QByteArray("x"));
+    QVERIFY(!path.isEmpty() && !blocker.isEmpty());
+    const QFileDevice::Permissions normal = QFile::permissions(dir.path());
+    QVERIFY(QFile::setPermissions(dir.path(), QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+    if (writable(dir.path())) {
+        QFile::setPermissions(dir.path(), normal);
+        QSKIP("the process can write to a read-only folder");
+    }
+    ScopedEnv data("XDG_DATA_HOME", blocker.toUtf8());
+    coordinator()->setRawSettingsStore(1);
+    Seen seen;
+    window_->setImportDialogDriverForTest(driver(&seen, true));
+    const auto outcome = window_->openDocumentAtPathOutcome(path, true);
+    const QString message = window_->statusBar()->currentMessage();
+    QFile::setPermissions(dir.path(), normal);
+    QCOMPARE(outcome, PicturaMainWindow::OpenOutcome::Opened);
+    QCOMPARE(window_->documentCount(), 1);
+    QVERIFY2(message.contains(QStringLiteral("not saved")), qPrintable(message));
+    QVERIFY(!QFile::exists(dir.filePath(QStringLiteral("shot.xmp"))));
 }
 
 int main(int argc, char* argv[])

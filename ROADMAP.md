@@ -475,7 +475,15 @@ gaps are the CS6 Extended 3D object and camera tools.
       samples (#396)
 - [ ] Vendor raw containers: NEF, ARW/ARW2, ORF, RW2 and CR3 (#399)
 - [ ] DNG output (#402)
-- [ ] Camera Raw settings stores — an XMP sidecar or an ACR database (#632)
+- [x] **Camera Raw settings stores** — OK and Done in the raw open's Pictura
+      Raw dialog save every tab's settings as `crs:` XMP in a per-user Camera
+      Raw database keyed by the file's content hash or in a `<name>.xmp`
+      sidecar (Preferences ▸ File Handling), falling back to the database on a
+      read-only folder; unknown keys are kept and the raw file is never
+      written (#401, #632).
+      `crates/pictura-codec/src/pictura_raw/xmp.rs`,
+      `crates/pictura-app/src/cxxqt_object/open_jobs/raw_open/store.rs`.
+- [ ] Settings embedded in DNGs and Export Settings To XMP (#402)
 - [ ] ACR Workflow Options, ACR preferences, batch raw processing, and Purge
       Camera Raw (#633)
 - [ ] The Pictura Raw Presets tab is a stub list with no persistence (#633)
