@@ -9,6 +9,8 @@
 - **Re-checked:** `#1358` corrected five rows whose tracking issues had shipped
   since that sweep, narrowed `PAN-15`, and added the remaining Smart-Filter
   preview gap as `FILT-11`; the corrections are listed in §G.
+- **Re-checked:** `#1522` reconciled `ROADMAP.md` and `PARITY.md` with the
+  tree and updated stale register rows. The corrections are listed in §G.
 - **Re-checked:** `#591` shipped `LAY-13` (Extended Stack Modes); the row keeps
   the implementation evidence.
 - **Rows:** 159 gaps — 4 systemic in §B, 155 per-domain in §C.
@@ -104,7 +106,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
-| PAN-1 | `panels/adjustments-panel.md` | Adjustments panel icon grid (creation shipped; mode/depth gating and fill-layer presets remain) | PARTIAL | `panels/adjustments_panel.cpp` | #509 |
+| PAN-1 | `panels/adjustments-panel.md` | Adjustments panel icon grid (creation shipped; mode/depth gating and fill-layer presets remain) | PARTIAL | `panels/adjustments_panel.cpp` | #509, #1521 |
 | PAN-2 | `panels/measurement-log-panel.md` | Measurement Log panel, Record Measurements, and its export workflow | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #510 |
 | PAN-3 | `panels/tool-presets-panel.md` | Tool Presets panel + `.tpl` libraries | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs` | #511 |
 | PAN-4 | `layer-styles.md` | Styles panel + `.asl` presets | MISSING | `frame_build.cpp:79` | #512 |
@@ -142,7 +144,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | TOOL-20 | `crop-tool.md` | Crop resampling by W×H×resolution, non-destructive crop/Reveal All, crop shield settings | PARTIAL | `options_bar_crop.cpp:244-375` | #544 |
 | TOOL-21 | `custom-shape.md` | `.CSH` libraries, Define Custom Shape, geometry modes, gradient/pattern fill-stroke | MISSING | `options_bar_shape.cpp:506-510,420-431` | #545 |
 | TOOL-22 | `shape-tools.md` | Gradient/pattern fill+stroke, dashed stroke, path ops, fill-pixels options, snap-to-pixels, proportional geometry | MISSING | `options_bar_shape.cpp:281-431`; `shapes.rs:316-333` | #546 |
-| TOOL-23 | `color-replacement.md` | Full mode list + disable on Bitmap/Indexed/Multichannel | DIVERGENT | `replace.rs:25`; `paint_tools.rs:343` | #547 |
+| TOOL-23 | `color-replacement.md` | Full CS6 mode list, 32-bit subset, and Bitmap/Indexed/Multichannel availability gates | SHIPPED | `crates/pictura-app/cpp/tool_colorreplacement.cpp`; `crates/pictura-app/cpp/tool_catalog.cpp`; `tst_color_replacement` | #547 |
 | TOOL-24 | `dodge-burn-sponge.md` | Grayscale Sponge, airbrush toggle, quick keys, 32-bpc availability | SHIPPED | `tone.rs`; `tool_retouch.cpp`; `options_bar_retouch.cpp`; `toolbox.cpp` | #548 |
 | TOOL-25 | `eraser-tools.md` | Magic-eraser background convert, background-eraser edge halo, pen pressure | PARTIAL | `eraser.rs:166-332` | #549 |
 | TOOL-26 | `gradient-and-paint-bucket.md` | Gradient/Bucket availability gates and the Gradient Fill dialog | PARTIAL | `tool_fills.cpp`; `frame_menus.cpp:719-725` | #550 |
@@ -225,7 +227,7 @@ Embed/Read Watermark (`#350`/`#351`) shipped as an in-tree approximation
 | CLR-7 | `color-models.md` | Out-of-gamut triangle, 16/32-bit picker fields (CMYK now goes through the working profile in `pictura_color::model`) | PARTIAL | `color_picker_dialog.cpp:714` | #604 |
 | CLR-8 | `swatches-and-libraries.md` | `.aco`/`.ase` libraries, rename, display modes | MISSING | `swatches_panel.h:74` | #605 |
 | CLR-9 | `pattern-presets.md` | Pattern Overlay Snap To Origin + style Texture sub-options | PARTIAL | `layer_style_pages.cpp:297-315` | #606 |
-| CLR-10 | `bristle-brushes.md` | Bristle tip engine, tracks, rasterizer, per-bristle Mixer reservoir, Brush panel controls, and presets ship; OpenGL rotatable preview, `.abr` bristle keys, and tilt-driven projection remain | PARTIAL | `crates/pictura-paint/src/bristle.rs`; `panels/brush_panel.cpp` | #607 |
+| CLR-10 | `bristle-brushes.md` | Bristle tip engine, tracks, rasterizer, per-bristle Mixer reservoir, Brush panel controls, and presets ship; OpenGL rotatable preview, `.abr` bristle keys, and tilt-driven projection remain | PARTIAL | `crates/pictura-paint/src/bristle.rs`; `panels/brush_panel.cpp` | #607, #1520 |
 | CLR-11 | `brush-presets.md` | `.abr` libraries, Brush Presets panel, ABR v10 read | MISSING | `brush_panel.cpp:137-139` | #608 |
 
 ### 08-selection
@@ -264,10 +266,10 @@ The Actions panel and engine shipped in `#301` (`crates/pictura-app/cpp/panels/a
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
 | WF-1 | `save-and-save-as.md` | Save As dialogs and engine writers shipped for JPEG/PNG/BMP/TIFF/GIF/EPS/DCS/Raw/TGA/Cineon, including BMP format/depth/RLE/flip, PNG interlace, TIFF pixel/byte order, pyramid and layer compression; remaining ceilings are the documented DCS process-ink-only and 8-bit Raw/Cineon cases | DONE | `crates/pictura-codec/src/save/`; `crates/pictura-app/cpp/gif_options_dialog.cpp`; `eps_options_dialog.cpp`; `dcs_options_dialog.cpp`; `raw_options_dialog.cpp`; `tga_options_dialog.cpp`; `cineon_options_dialog.cpp` | #958, #625 |
-| WF-2 | `save-and-save-as.md` | Photoshop PDF writer shipped (#626); JPEG 2000, Spot Colors, and Use Proof Setup landed; Preserve Photoshop Editing Capabilities still embeds Pictura's own PSD, not Adobe's layout | PARTIAL | `pictura-codec/src/pdf/options.rs`; `pdf_save_dialog.cpp` | #626 |
+| WF-2 | `save-and-save-as.md` | Photoshop PDF writer shipped (#626); JPEG 2000, Spot Colors, and Use Proof Setup landed; Preserve Photoshop Editing Capabilities still embeds Pictura's own PSD, not Adobe's layout | PARTIAL | `pictura-codec/src/pdf/options.rs`; `pdf_save_dialog.cpp` | #626, #1513 |
 | WF-3 | `open-and-new.md` | Generic PDF/EPS import (Import PDF and Rasterize Generic EPS Format dialogs), Open As, native CMYK/16-bit rendering, Images mode on encrypted PDFs, and inline images shipped (#627) through Ghostscript; the 3D option remains out of scope (see ROADMAP not-planned) | SHIPPED | `pictura-codec/src/pdf/import/mod.rs`; `import_pdf_dialog.cpp`; `frame_import.cpp` | #627 |
 | WF-4 | `save-and-save-as.md` | GIF-via-Indexed on save + Save a Copy | SHIPPED | `crates/pictura-app/cpp/import_save_save.cpp`; `crates/pictura-app/cpp/indexed_color_dialog.cpp`; `crates/pictura-app/src/cxxqt_object/impl_core/save.rs`; `tst_save_gif_copy` | #628 |
-| WF-5 | `web-export-and-slices.md` | Save for Web slice export with HTML/CSS, 4-Up, the colour-table editor, and the metadata levels shipped (#629); still missing: slice names/URLs/alt and Slice Options, per-slice optimization, Selected Slices, link/unlink and Divide/Combine, `.aco` tables, Web Snap, and saved output settings | PARTIAL | `save_for_web_dialog.cpp`; `save_for_web_settings.cpp`; `save_for_web_color_table.cpp`; `save_optimized_dialog.cpp`; `pictura-codec/src/web/html.rs`; `pictura-render/src/document_ops/slices.rs` | #629, #543 |
+| WF-5 | `web-export-and-slices.md` | Save for Web slice export with HTML/CSS, 4-Up, the colour-table editor, and the metadata levels shipped (#629); still missing: slice names/URLs/alt and Slice Options, per-slice optimization, Selected Slices, link/unlink and Divide/Combine, `.aco` tables, Web Snap, and saved output settings | PARTIAL | `save_for_web_dialog.cpp`; `save_for_web_settings.cpp`; `save_for_web_color_table.cpp`; `save_optimized_dialog.cpp`; `pictura-codec/src/web/html.rs`; `pictura-render/src/document_ops/slices.rs` | #629, #543, #1514 |
 | WF-6 | `export-formats.md` | Zoomify and Paths to Illustrator shipped; Export Layers core shipped (shared options/Targa missing); Data Sets As Files and Render Video remain | PARTIAL | `crates/pictura-app/cpp/zoomify_dialog.cpp`; `export_paths_dialog.cpp`; `export_layers_dialog.cpp`; `crates/pictura-codec/src/zoomify.rs`; `illustrator.rs` | #622, #587, #625, #630 |
 | WF-7 | `file-info-and-metadata.md` | Extra tabs (IPTC Extension/GPS/Origin/Photoshop) + editing | SHIPPED | `file_info_dialog.{h,cpp}`; `pictura-codec/src/xmp/tree.rs`; `pictura-codec/src/metadata/iptc_extension.rs`; `pictura-codec/src/exif.rs` | #631 |
 | WF-8 | `camera-raw-workflow.md` | Camera Raw settings stores shipped (#401): content-hash database and `.xmp` sidecar by preference, read-only fallback, every tab as `crs:`; DNG output (#402) embeds the settings in the DNGs it writes; Export Settings To XMP and settings inside an existing DNG remain (#1484), and `Ignore Sidecar ".XMP" Files` with the other ACR preferences (#633) | SHIPPED | `pictura-codec/src/pictura_raw/xmp.rs`; `open_jobs/raw_open/store.rs`; `tst_raw_open` | #632, #401 |
@@ -276,10 +278,10 @@ The Actions panel and engine shipped in `#301` (`crates/pictura-app/cpp/panels/a
 | WF-10 | `printing.md` | Print colour management, proofing, output marks, persist defaults | PARTIAL | `print_dialog.cpp:181-199` | #634 |
 | WF-11 | `measurement-and-count.md` | Measurement scale/presets, exporters, PSD resource 1074 | SHIPPED | `crates/pictura-app/cpp`; #635 | #635 |
 | WF-12 | `scratch-disks-and-memory.md` | Performance pane (memory, history states, cache level/tile, scratch disks, GPU) + Efficiency/Scratch readouts | MISSING | `preferences_dialog.cpp:172-177` | #636 |
-| WF-13 | `document-lifecycle.md`, `crash-recovery-and-autosave.md` | Background Save, durable crash journal, PSD 1086/1087 | MISSING | `STATE.md:215`; `recovery_store.h:26-29` | #637 |
-| WF-14 | `bridge-and-interop.md` | Edit Contents, relink, Paste As, Files panel | MISSING | `helpers.rs:128` | #638 |
-| WF-15 | `document-lifecycle.md` | Maximize PSD/PSB Compatibility preference | MISSING | writer always emits composite | #639 |
-| WF-16 | `update-and-versioning.md` | Document-format version policy (`opDocumentVersion`/`minReaderVersion`, Version Info 1057) | MISSING | none found | #640 |
+| WF-13 | `document-lifecycle.md`, `crash-recovery-and-autosave.md` | Background Save, durable crash journal, PSD 1086/1087 | SHIPPED | `crates/pictura-app/src/history/recovery.rs`; `crates/pictura-codec/src/image_resources.rs` | #637 |
+| WF-14 | `bridge-and-interop.md` | Edit Contents, PDF Paste As, and repair of supported external Smart Object links ship. Editable Illustrator clipboard paste as Paths or Shape Layer and the Files panel remain. | PARTIAL | `crates/pictura-app/src/cxxqt_object/pdf_export/import/imp/vector.rs`; `crates/pictura-app/cpp/panels/layers_row_actions.cpp` | #638, #624 |
+| WF-15 | `document-lifecycle.md` | Maximize PSD/PSB Compatibility preference | SHIPPED | `crates/pictura-app/cpp/import_save_save.cpp`; `tst_psd_compatibility` | #639 |
+| WF-16 | `update-and-versioning.md` | Document-format version policy (`opDocumentVersion`/`minReaderVersion`, Version Info 1057) | SHIPPED | `crates/pictura-codec/src/document_version.rs`; `tst_document_version_policy` | #640 |
 
 Raw file open shipped in `#400` (DNG files; vendor colour matrices and the
 smart-object open remain); DNG output shipped in `#402` (WF-17).
@@ -288,17 +290,17 @@ smart-object open remain); DNG output shipped in `#402` (WF-17).
 
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
-| XC-1 | `preference-storage.md` | Typed `prefs.toml` store, config/state split, migration, quarantine, reset gesture | DIVERGENT | `session.cpp:74-83` | #641 |
+| XC-1 | `preference-storage.md` | Typed `prefs.toml` store, config/state split, migration, quarantine, reset gesture | SHIPPED | `crates/pictura-app/src/prefs.rs` | #641 |
 | XC-2 | `localization.md` | `QTranslator`/`.qm`, RTL, locale number formatting | MISSING | none found | #642 |
 | XC-3 | `logging-and-telemetry.md` | `tracing` + file sink + Qt→Rust bridge + History Log | MISSING | `main.cpp:104-107` | #643 |
 | XC-4 | `logging-and-telemetry.md` | Opt-in telemetry + `KOOKA_PICTURA_NO_TELEMETRY` | MISSING | none found | #644 |
-| XC-5 | `error-handling.md` | Stable error-code registry + FFI `OpStatus`/`catch_unwind` boundaries | MISSING | no `pictura-error` | #645 |
+| XC-5 | `error-handling.md` | Stable error-code registry + FFI `OpStatus`/`catch_unwind` boundaries | SHIPPED | `crates/pictura-error/src/lib.rs` | #645 |
 | XC-6 | `security-and-sandboxing.md` | Safe paths, decoder decompression-bomb guards (guards shipped, sandbox proposed) | SHIPPED | `crates/pictura-codec/src/budget.rs` (#844); `profile_probe.rs` bounded `iCCP`, Ghostscript `-dMaxBitmap`, control `document` path checks in `control_server.cpp` (#646). Not covered here: the out-of-process decode helper is proposal-only; fuzzing is #648 | #646 |
 | XC-7 | `security-and-sandboxing.md` | Flatpak packaging + portal confinement | PARTIAL | `flatpak/io.github.KookaStudio.KookaPictura.yml`; bundle/smoke ship, portal dialogs unproven | #647 |
 | XC-8 | `testing-strategy.md` | DSSIM/PSNR/ΔE2000, property tests, fuzzing, Criterion benches | MISSING | `testkit` abs-diff only | #648 |
-| XC-9 | `update-and-versioning.md` | `--version`, About dialog with Qt/GPU info, update checker | MISSING | `main.cpp` | #649 |
+| XC-9 | `update-and-versioning.md` | `--version`, About dialog with Qt/GPU info, update checker | SHIPPED | `crates/pictura-app/cpp/system_info.cpp`; `frame_system_info.cpp` | #649 |
 | XC-10 | `cs6-editions-and-constraints.md` | Edition gating (Standard/Extended) | SHIPPED | `pictura_core::Edition`; `PICTURA_EDITION` selects Standard/Extended | #650 |
-| XC-11 | `performance-targets.md` | Performance instrumentation (cache/scratch/frame/metrics) | PARTIAL | `pictura-app::metrics` shipped (`PICTURA_METRICS`, control-server `metrics`); frame-budget timing, TileCache, scratch, scheduler and cancellation do not exist yet | #651, #941–#945 |
+| XC-11 | `performance-targets.md` | Performance instrumentation (cache/scratch/frame/metrics) | PARTIAL | `pictura-app::metrics`, frame-budget timing (#941), the tile cache (#942), and scratch paging (#943) ship; the tile scheduler and cancellation (#944/#945) remain | #651, #941–#945 |
 
 ## D. Code ahead of docs (stale specs)
 
@@ -316,11 +318,10 @@ accidental implementation found.
 
 Two entries this list used to carry are corrected here:
 
-- **Linked/embedded objects** (`LAY-024`) — the *app* has no relink or
-  convert-to-linked surface, but the codec is not blind to the feature: it
-  parses and writes the `lnkD`/`lnk2`/`lnk3` linked records
-  (`crates/pictura-codec/src/smart_object.rs:199`). The relink UI is tracked by
-  `#113`; the records are read, not offered.
+- **Linked/embedded objects** (`LAY-024`) — the codec parses and writes
+  `lnkD`/`lnk2`/`lnk3` records (`crates/pictura-codec/src/smart_object.rs:199`).
+  Relink to File repairs supported external links (#638); broader relink and
+  convert-to-linked remain with #113.
 - **Snap and AppImage packaging** — not a non-goal. Both ship alongside
   Flatpak and the native packages (`snap/snapcraft.yaml`,
   `.github/workflows/snap.yml`, `.github/workflows/appimage.yml`).
@@ -394,3 +395,9 @@ Pictura Raw · `#436`/`#437`/`#438` mask/channel click · `#448` slider recompos
   `TOOL-5` (#529), and `FILT-2` (#593). `PAN-15` is narrowed to the remaining
   `00`/`Shift+00` opacity shortcut, and `FILT-11` records the Filter Gallery and
   Shear previews that still ignore an existing Smart Filter chain (#1003).
+- **Corrections from the `#1522` tracker sweep.** Seven rows are now `SHIPPED`
+  (`TOOL-23` #547, `WF-13` #637, `WF-15` #639, `WF-16` #640, `XC-1` #641,
+  `XC-5` #645, `XC-9` #649). `WF-14` records the shipped interop work and the
+  remaining editable Illustrator paste (#638) and Files panel (#624).
+  `XC-11` (#651) records the shipped frame budget, tile cache, and scratch
+  paging, leaving the scheduler and cancellation (#944/#945).

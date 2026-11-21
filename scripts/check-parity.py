@@ -545,9 +545,9 @@ def baseline_history(
             )
     if "28.0" not in history[0].get("cc_version", ""):
         errors.append("baseline history: CC version is not 28.0")
-    dates = [row.get("date") for row in history]
-    if len(dates) != len(set(dates)):
-        errors.append("baseline history: duplicate assessment date")
+    assessments = [(row.get("date"), row.get("commit")) for row in history]
+    if len(assessments) != len(set(assessments)):
+        errors.append("baseline history: duplicate date and Pictura commit")
     return errors
 
 
@@ -707,6 +707,11 @@ def self_check() -> list[str]:
         errors.append("self-check: an empty baseline history was accepted")
     if baseline_history([history_row], "2026-11-20", "98c0b292", headline):
         errors.append("self-check: a valid baseline history was rejected")
+    same_day = dict(history_row, commit="89c8ba95")
+    if baseline_history([history_row, same_day], "2026-11-20", "98c0b292", headline):
+        errors.append("self-check: distinct assessments on the same date were rejected")
+    if not baseline_history([history_row, history_row], "2026-11-20", "98c0b292", headline):
+        errors.append("self-check: a duplicate assessment was accepted")
     bad_history = dict(history_row)
     bad_history["cs6s"] = "0/0 (0.0%)"
     if not baseline_history([bad_history], "2026-11-20", "98c0b292", headline):

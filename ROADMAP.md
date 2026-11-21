@@ -32,7 +32,7 @@ The quantified comparison against Photoshop CS6 and CC 28.0 is in
 | Adjustments | Shipped — the classic families, with live preview and adjustment-layer variants |
 | Filters | Shipped — 110 filters across the classic families; the roadmap names the remaining gaps |
 | Colour and painting | Shipped — ICC profiles, Assign Profile, Convert to Profile, colour settings, the brush engine |
-| Camera raw files | DNG/CR2 route ships (approximate); per-camera matrices and smart-object open remain (#1465, #1466) |
+| Camera raw files | DNG/CR2 route ships (approximate); per-camera matrices for 14 Canon bodies ship (#1465); smart-object open (#1466) and vendor containers (#399) remain |
 | Panels | 19 of 22 populated; Gradients, Patterns and Styles are placeholders |
 | Automation | The control server, Rust command catalogue, Actions engine, command bus and Batch ship; droplets, scripting and plug-ins are open |
 | HDR tone mapping | Shipped — all four conversion methods; the Local Adaptation Toning Curve/Corner is open |
@@ -74,6 +74,7 @@ The quantified comparison against Photoshop CS6 and CC 28.0 is in
       (#626)
 - [x] Native CMYK and 16-bit PDF and EPS rendering, Images mode on encrypted
       PDFs, and inline images (#627)
+- [x] File ▸ Open As lets the user choose the decoder for supported formats (#627)
 - [x] GIF-via-Indexed on save (#628).
       `crates/pictura-app/cpp/gif_options_dialog.cpp`;
       `crates/pictura-codec/src/save/mod.rs`.
@@ -102,6 +103,12 @@ The quantified comparison against Photoshop CS6 and CC 28.0 is in
       supported `.abr`, `.aco`, `.ase`, `.asl`, `.csh`, `.grd`, `.pat`, `.shc`,
       and `.tpl` variants. Exports ACO and ASE swatches and provides a standalone
       `.csf` codec (#489).
+- [ ] PICT, IFF, PCX and SGI read and write (#1503, #1504, #1505, #1506)
+- [ ] OpenEXR, JPEG 2000, HEIC/HEIF and AVIF read and write (#1507, #1508, #1509, #1510)
+- [ ] SVG import (#1511)
+- [ ] Content Credentials (#1512)
+- [ ] Adobe interoperability for editable Photoshop PDFs (#1513)
+- [ ] The remaining Save for Web output settings (#1514)
 
 ## Layers
 
@@ -215,10 +222,13 @@ gaps are the CS6 Extended 3D object and camera tools.
       (#539)
 - [x] Mixer Brush Sample All Layers (#911)
 - [ ] Mixer Brush Load Solid Colors Only and keyboard shortcuts (#540)
+- [ ] Bristle brush preview, tilt projection, and preset keys (#1520)
 - [x] Type on path and area type (#683)
 - [x] Warp text (#684)
 - [x] Gamma blend and missing-font handling (#685)
 - [x] Missing Glyph Protection (#887)
+- [ ] Variable-font axis controls (#1518)
+- [ ] Dynamic text on shapes and paths (#1519)
 - [ ] Path operations, align and arrange, constrained path dragging, the Target
       Path toggle, and segment and marquee multi-select (#542)
 - [ ] Slice style and modifiers, Divide, Combine, Duplicate, the Slice Options
@@ -267,6 +277,7 @@ gaps are the CS6 Extended 3D object and camera tools.
       document cap (#614); control-server selection ops stay binary.
 - [x] Combine operations, the layer-mask target, modifier-click combine on
       saved selections, and channel names (#615)
+- [ ] Native 16/32-bit selection and alpha channels for Save and Load Selection (#1331)
 - [x] Duplicate Channel, channel drags between documents, selection-outline
       drags between documents, and the alpha-channel eye view (#1332)
 - [x] Quick Mask (#172)
@@ -348,7 +359,7 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [x] Adaptive Wide Angle (#346): Fisheye, Perspective and Full Spherical,
       line and polygon constraints, EXIF focal-length prefill
 - [ ] Adaptive Wide Angle Auto and lens profiles, Panorama, Smart Filter
-      re-edit (#891)
+      re-edit, and rotation handles (#891)
 - [x] Lens Correction (#347): Remove Distortion, three fringe sliders,
       Vignette, Vertical/Horizontal Perspective, Angle and Scale; Edge fill
       and Auto Scale; Straighten, Remove Distortion and Move Grid tools;
@@ -360,7 +371,7 @@ gaps are the CS6 Extended 3D object and camera tools.
       by focal length, f-stop, and focus distance with the right-click menu;
       Prefer RAW Profiles; settings carry the resolved coefficients; Search
       Online and Save Online Profile Locally stay disabled
-- [ ] Lens Correction Save/Load Settings and Set Lens Default (#933)
+- [ ] Lens Correction Save/Load Settings, Set Lens Default, and Alt-drag fringe isolation (#933)
 - [x] Lens Correction as a Smart Filter (#934): an embedded Smart Object
       attaches a Lens Correction smart filter instead of filtering the proxy
       destructively, re-opens the dialog prefilled, and renders through the
@@ -398,6 +409,9 @@ gaps are the CS6 Extended 3D object and camera tools.
       spread-spectrum carrier (not Digimarc-compatible), with the copyright
       title indicator on detection
 - [x] Edit ▸ Fade, the post-filter opacity and blend mode (#491)
+- [ ] Quick Compare (#1515)
+- [ ] A Clarity and Dehaze adjustment layer (#1516)
+- [ ] A Light adjustment layer (#1517)
 
 ## Colour and painting
 
@@ -420,7 +434,7 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [x] The out-of-gamut triangle and CMYK to working space (#604)
 - [ ] The 16/32-bit picker fields (#604)
 - [ ] `.aco` and `.ase` swatch libraries, rename, and display modes (#605)
-- [ ] Pattern Overlay Snap To Origin, and the style Texture sub-options (#606)
+- [ ] Pattern Overlay Snap To Origin and the Bevel Texture controls (#606)
 - [x] Bristle brushes (#607)
 - [ ] `.abr` libraries, the Brush Presets panel, and ABR v10 reading (#608)
 - [ ] Brush Texture and Dual Brush; the Control model, Shape Dynamics,
@@ -509,7 +523,8 @@ gaps are the CS6 Extended 3D object and camera tools.
       `crates/pictura-app/cpp/toolbox.cpp`.
 - [x] The Adjustments panel icon grid (#509)
 - [ ] Refine the Adjustments panel icon artwork (#819)
-- [ ] The Measurement Log panel (#510)
+- [ ] Fill-layer presets in the Adjustments panel (#1521)
+- [ ] The Measurement Log panel, Record Measurements, and its export workflow (#510)
 - [ ] The Tool Presets panel and `.tpl` libraries (#511)
 - [ ] The Styles panel and `.asl` presets (#512)
 - [ ] Channel panel spot channels, Split and Merge, and Panel Options (#513)
