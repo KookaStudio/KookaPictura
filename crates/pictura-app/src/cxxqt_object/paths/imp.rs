@@ -4,7 +4,8 @@ use super::super::PictureViewRust;
 use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
-use pictura_core::path::{HandleSide, VectorPath};
+use cxx_qt_lib::QString;
+use pictura_core::path::{HandleSide, NamedPath, VectorPath};
 use pictura_core::{Document, Ruler};
 
 /// The Paths panel row the path calls edit (CS6 shows and edits only the
@@ -351,6 +352,23 @@ pub(super) fn path_commit_anchor(view: Pin<&mut PictureView>) {
     );
 }
 
+/// Copy the Work Path into `doc.saved_paths` under `name`, leaving the Work
+/// Path in place. Returns the saved index, or `None` with no Work Path.
+fn save_work_copy(rust: &mut PictureViewRust, name: &str) -> Option<usize> {
+    let doc = rust.session.doc.as_mut()?;
+    if doc.work_path.is_empty() {
+        return None;
+    }
+    let mut copy = doc.work_path.clone();
+    copy.finish_editing();
+    let name = match name.trim() {
+        "" => format!("Path {}", doc.saved_paths.len() + 1),
+        name => name.to_string(),
+    };
+    doc.saved_paths.push(NamedPath { name, path: copy });
+    Some(doc.saved_paths.len() - 1)
+}
+
 pub(super) fn path_close(mut view: Pin<&mut PictureView>) -> bool {
     let closed = edit(view.as_mut(), VectorPath::close_active_subpath) == Some(true);
     if closed {
@@ -359,8 +377,43 @@ pub(super) fn path_close(mut view: Pin<&mut PictureView>) -> bool {
     closed
 }
 
+pub(super) fn path_close_and_save(mut view: Pin<&mut PictureView>, name: &QString) -> bool {
+    let closed = edit(view.as_mut(), VectorPath::close_active_subpath) == Some(true);
+    if !closed {
+        return false;
+    }
+    {
+        let mut rust = view.as_mut().rust_mut();
+        if rust.active_path == ActivePath::Work {
+            save_work_copy(&mut rust, &name.to_string());
+        }
+    }
+    commit(view, "Close Path");
+    true
+}
+
 pub(super) fn path_finish(view: Pin<&mut PictureView>) {
     edit(view, VectorPath::finish_editing);
+}
+
+pub(super) fn path_finish_and_save(mut view: Pin<&mut PictureView>, name: &QString) -> i32 {
+    let editing = path(&view).is_some_and(|p| p.editing_subpath().is_some());
+    if !editing {
+        return -1;
+    }
+    let saved = {
+        let mut rust = view.as_mut().rust_mut();
+        if rust.active_path == ActivePath::Work {
+            save_work_copy(&mut rust, &name.to_string()).map_or(-1, |i| i as i32)
+        } else {
+            -1
+        }
+    };
+    edit(view.as_mut(), VectorPath::finish_editing);
+    if saved >= 0 {
+        commit(view, "Save Path");
+    }
+    saved
 }
 
 pub(super) fn path_gesture_begin(mut view: Pin<&mut PictureView>) {
@@ -529,26 +582,52 @@ pub(super) fn path_commit_convert(view: Pin<&mut PictureView>) {
     commit(view, "Convert Point");
 }
 
-pub(super) fn path_add_freeform(
-    mut view: Pin<&mut PictureView>,
-    points: &[f64],
-    tolerance: f64,
-    close: bool,
-) -> bool {
+fn add_freeform(view: Pin<&mut PictureView>, points: &[f64], tolerance: f64, close: bool) -> bool {
     let points: Vec<(f64, f64)> = points
         .as_chunks::<2>()
         .0
         .iter()
         .map(|&[x, y]| (x, y))
         .collect();
+    let mut view = view;
     begin_drawing(view.as_mut());
-    let added = edit(view.as_mut(), |p| {
+    edit(view, |p| {
         p.add_freeform(&points, tolerance.clamp(0.5, 10.0), close)
-    }) == Some(true);
+    }) == Some(true)
+}
+
+pub(super) fn path_add_freeform(
+    mut view: Pin<&mut PictureView>,
+    points: &[f64],
+    tolerance: f64,
+    close: bool,
+) -> bool {
+    let added = add_freeform(view.as_mut(), points, tolerance, close);
     if added {
         commit(view, "Freeform Pen");
     }
     added
+}
+
+pub(super) fn path_add_freeform_and_save(
+    mut view: Pin<&mut PictureView>,
+    points: &[f64],
+    tolerance: f64,
+    close: bool,
+    name: &QString,
+) -> bool {
+    let added = add_freeform(view.as_mut(), points, tolerance, close);
+    if !added {
+        return false;
+    }
+    {
+        let mut rust = view.as_mut().rust_mut();
+        if rust.active_path == ActivePath::Work {
+            save_work_copy(&mut rust, &name.to_string());
+        }
+    }
+    commit(view, "Freeform Pen");
+    true
 }
 
 pub(super) fn path_hit_subpath(view: &PictureView, x: f64, y: f64, radius: f64) -> i32 {

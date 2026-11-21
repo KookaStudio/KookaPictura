@@ -94,6 +94,13 @@ pub mod ffi {
         /// Path mode: add the outline to the Work Path as a new closed component. False (no state) without a document or for an empty outline.
         fn shape_add_path(view: Pin<&mut PictureView>, spec: &ShapeSpec) -> bool;
 
+        /// Pen Shape mode: a new shape layer above the active layer from the Work Path's components, filled with `foreground` (`0xAARRGGBB`), and a fresh Work Path; records `label` (e.g. "Pen Tool"). Returns its path; empty (no state) without a Work Path.
+        fn shape_add_work_path_layer(
+            view: Pin<&mut PictureView>,
+            foreground: u32,
+            label: &str,
+        ) -> QString;
+
         /// Fill Pixels mode: paint the anti-aliased outline in `foreground` (`0xAARRGGBB`) onto the active pixel layer, inside the selection when there is one. False (no state) as for `draw_gradient`, or for an empty outline.
         fn shape_fill_pixels(
             view: Pin<&mut PictureView>,

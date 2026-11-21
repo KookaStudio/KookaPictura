@@ -599,6 +599,8 @@ signals:
     void typeOptionsChanged();
     // The shape options changed (the bar, or the active shape layer mirrored).
     void shapeOptionsChanged();
+    // The Pen options changed (the bar).
+    void penOptionsChanged();
     // Rotate View turned the canvas (a drag, the options bar, or Reset View).
     void viewRotationChanged(double degrees);
     // A modal tool session (e.g. Crop) recorded, walked, or discarded a step.

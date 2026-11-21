@@ -58,6 +58,7 @@ class TypeOnPathTest : public QObject {
 
 private slots:
     void initTestCase();
+    void init();
     void clickOnOpenPathStartsOnPath();
     void overflowPlusAtPathEnd();
     void clickInsideClosedPathMakesAreaType();
@@ -78,6 +79,17 @@ void TypeOnPathTest::initTestCase()
     QVERIFY(stateHome_.isValid());
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
+}
+
+void TypeOnPathTest::init()
+{
+    auto* tools = window_->findChild<pictura::ToolController*>();
+    QVERIFY(tools);
+    auto* group = tools->optionsFor<pictura::PenGroup>(pictura::ToolId::Pen);
+    QVERIFY(group);
+    pictura::PenOptions o = group->get();
+    o.mode = 1;
+    group->set(o);
 }
 
 void TypeOnPathTest::showFrame()

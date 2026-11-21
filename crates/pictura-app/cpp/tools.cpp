@@ -138,7 +138,8 @@ std::unique_ptr<ToolHandler> makePaintBucketToolHandler(std::shared_ptr<BucketGr
 std::unique_ptr<ToolHandler> makeRetouchToolHandler(ToolId id, std::shared_ptr<PaintOptions> paint,
                                                     std::shared_ptr<RetouchGroup> retouch,
                                                     std::shared_ptr<ToneGroup> tone);
-std::unique_ptr<ToolHandler> makePenToolHandler(ToolId id, std::shared_ptr<PenGroup> pen);
+std::unique_ptr<ToolHandler> makePenToolHandler(ToolId id, std::shared_ptr<PenGroup> pen,
+                                                std::shared_ptr<PaintOptions> paint);
 std::unique_ptr<ToolHandler> makePathSelectionToolHandler(ToolId id,
                                                           std::shared_ptr<PenGroup> pen);
 std::unique_ptr<ToolHandler> makeShapeToolHandler(ToolId id, std::shared_ptr<ShapeGroup> shape);
@@ -236,6 +237,7 @@ ToolController::ToolController(QObject* parent)
         if (ToolHandler* h = registry_.forTool(active_)) {
             h->onOptionsChanged(*this);
         }
+        emit penOptionsChanged();
     };
     shape->changed = [this]() {
         if (ToolHandler* h = registry_.forTool(active_)) {
@@ -315,7 +317,7 @@ ToolController::ToolController(QObject* parent)
     }
     for (ToolId id : {ToolId::Pen, ToolId::FreeformPen, ToolId::AddAnchorPoint,
                       ToolId::DeleteAnchorPoint, ToolId::ConvertPoint}) {
-        registry_.registerTool(id, makePenToolHandler(id, pen));
+        registry_.registerTool(id, makePenToolHandler(id, pen, paint));
     }
     for (ToolId id : {ToolId::PathSelection, ToolId::DirectSelection}) {
         registry_.registerTool(id, makePathSelectionToolHandler(id, pen));

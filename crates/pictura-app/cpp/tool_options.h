@@ -170,14 +170,16 @@ struct BucketOptions {
     bool allLayers = false;
 };
 
-// The Pen tool group's options: the Pen's Auto Add/Delete and Rubber Band, and
-// the Freeform Pen's Curve Fit (0.5-10 px; Douglas-Peucker tolerance). Path
-// Selection's Show Bounding Box rides along.
+// The Pen tool group's options: Mode 0 Shape / 1 Path / 2 Pixels (Pen and
+// Freeform Pen), the Pen's Auto Add/Delete and Rubber Band, and the Freeform
+// Pen's Curve Fit (0.5-10 px; Douglas-Peucker tolerance). Path Selection's Show
+// Bounding Box rides along.
 struct PenOptions {
     bool autoAddDelete = true;
     bool rubberBand = false;
     double curveFit = 2.0;
     bool showBoundingBox = false;
+    int mode = 0;
 };
 
 // The shape tools' options bar, shared by the six tools: Mode 0 Shape /
@@ -314,6 +316,7 @@ template <typename T> T clampOptions(T value) { return value; }
 inline PenOptions clampOptions(PenOptions options)
 {
     options.curveFit = std::clamp(options.curveFit, 0.5, 10.0);
+    options.mode = std::clamp(options.mode, 0, 2);
     return options;
 }
 

@@ -90,8 +90,14 @@ pub mod ffi {
         /// Close the subpath being drawn and record one "Close Path" state; false (no state) under two points or with nothing being drawn.
         fn path_close(view: Pin<&mut PictureView>) -> bool;
 
+        /// Close the subpath being drawn and, when it is the Work Path, also save a copy named `name`; records one "Close Path" state. False as for `path_close`.
+        fn path_close_and_save(view: Pin<&mut PictureView>, name: &QString) -> bool;
+
         /// End the drawing session, leaving the subpath open. No history.
         fn path_finish(view: Pin<&mut PictureView>);
+
+        /// End the drawing session and, when it is the Work Path, save a copy named `name`; records one "Save Path" state. The saved index, or -1 when nothing was being drawn.
+        fn path_finish_and_save(view: Pin<&mut PictureView>, name: &QString) -> i32;
 
         /// Capture the active path as the live gesture's backup; Edit > Undo
         /// restores it when the gesture is cancelled. No history.
@@ -175,6 +181,15 @@ pub mod ffi {
             points: &[f64],
             tolerance: f64,
             close: bool,
+        ) -> bool;
+
+        /// As `path_add_freeform`, and when it is the Work Path also save a copy named `name`; still one "Freeform Pen" state.
+        fn path_add_freeform_and_save(
+            view: Pin<&mut PictureView>,
+            points: &[f64],
+            tolerance: f64,
+            close: bool,
+            name: &QString,
         ) -> bool;
 
         /// Kind of the layer at `path` (`"0/1"` walks into node 0), or empty.
