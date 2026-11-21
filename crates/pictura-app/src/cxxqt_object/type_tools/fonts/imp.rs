@@ -17,11 +17,12 @@ pub(super) fn type_text_gamma_refresh(view: Pin<&mut PictureView>) {
 }
 
 pub(super) fn type_layers_editable(view: &PictureView) -> bool {
-    view.rust()
-        .session
-        .doc
-        .as_ref()
-        .is_some_and(pictura_render::type_layers_editable)
+    let session = &view.rust().session;
+    !session.read_only()
+        && session
+            .doc
+            .as_ref()
+            .is_some_and(pictura_render::type_layers_editable)
 }
 
 pub(super) fn type_document_has_type(view: &PictureView) -> bool {

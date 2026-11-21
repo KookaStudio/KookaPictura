@@ -161,6 +161,10 @@ fn type_outline_paths_area() {
         r > _rr + 1.0,
         "area outlines trace laid-out glyphs without the render clip"
     );
+    let original_ink = rendered_bounds(&area);
+    area.matrix = [2.0, 0.0, 0.0, 1.0];
+    assert_eq!(rendered_bounds(&area), original_ink);
+    assert_eq!(outline_paths(&area).expect("area outlines"), paths);
 }
 
 #[test]

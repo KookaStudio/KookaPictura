@@ -20,7 +20,8 @@
 | `tm_orientation` | Trigger Vertical, then undo | Orientation changes and restores with one state | `tst_type_menu::orientation` |
 | `tm_row_disabled` | Open the Type menu on a pixel layer | AA and orientation rows are disabled | `tst_type_menu::rowsDisabled` |
 | `tm_rasterize` | Rasterize a type layer | Pixel layer, one Rasterize Type state, command then disabled | `tst_type_menu::rasterizeTypeLayer` |
-| `tm_update_all` | Update all text layers in editable and non-editable documents | Editable re-renders under one state; non-editable/no-type disables | `tst_type_menu::updateAllTextLayers` |
+| `tm_update_all` | Update all text layers in editable and non-editable documents | Reproducible layers re-render under one state; non-editable/no-type disables | `tst_type_menu::updateAllTextLayers` |
+| `tm_update_all_runs` | Update uniform type and imported mixed-run type together | Uniform type re-renders with its descriptor unchanged; mixed-run type keeps its stored pixels and descriptor | `pictura-render::refreshing_type_preserves_descriptors_and_imported_mixed_runs` |
 | `tm_language` | Open Language Options with East Asian on | East Asian checked, Default and Middle Eastern unchecked; the panel follows | `tst_type_menu::languageOptions` |
 | `tm_language_default` | Turn both features on, trigger Default, relaunch | Both off, Default checked, no document state, persisted | `tst_type_menu::languageOptionsPersist` |
 | `tm_font_preview` | Choose Huge, open a family picker | Sample is larger than at Small; the row is checked and persists | `tst_type_menu::fontPreviewSize` |

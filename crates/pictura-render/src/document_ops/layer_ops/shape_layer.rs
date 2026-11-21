@@ -7,7 +7,7 @@
 
 use pictura_codec::LiveShape;
 use pictura_core::path::Subpath;
-use pictura_core::{Document, Layer, LayerBlock, PsdRect};
+use pictura_core::{Document, Layer, LayerBlock, PsdRect, VectorFillRule};
 
 use super::create::{add_solid_fill, next_layer_name};
 use super::paths::resolve_path_mut;
@@ -65,7 +65,17 @@ pub fn layer_shape_paths(layer: &Layer, width: u32, height: u32) -> Option<Vec<S
 /// Replace the layer's effective vector-mask outline with `subpaths` and rebuild
 /// its view, keeping the block's invert, disable, and unlink flags.
 pub fn set_layer_shape_paths(layer: &mut Layer, subpaths: &[Subpath], width: u32, height: u32) {
-    let mut data = pictura_codec::encode_vector_mask(subpaths, width, height);
+    let nonzero = layer.vector_mask.as_ref().is_some_and(|mask| {
+        mask.subpaths
+            .iter()
+            .any(|subpath| subpath.fill_rule == VectorFillRule::NonZero)
+    });
+    let rule = if nonzero {
+        VectorFillRule::NonZero
+    } else {
+        VectorFillRule::EvenOdd
+    };
+    let mut data = pictura_codec::encode_vector_mask_with_rule(subpaths, width, height, rule);
     let flags = super::vector_masks::effective_key(layer)
         .and_then(|key| layer.extra_block(key))
         .map_or(0, |block| super::vector_masks::flags_of(&block.data));

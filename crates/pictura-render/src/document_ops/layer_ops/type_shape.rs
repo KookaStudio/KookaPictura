@@ -1,9 +1,8 @@
 //! `Type > Convert to Shape`: replace a live type layer with a shape layer in
 //! place, keeping its name, stack position, raster mask, blending, and effects.
 
-use pictura_core::{Document, LayerParts, LockFlags, PsdRect};
+use pictura_core::{Document, LayerBlock, LayerParts, PsdRect, VectorFillRule};
 
-use super::shape_layer::set_layer_shape_paths;
 use crate::type_layer::type_layer_spec;
 use crate::type_outline::outline_paths;
 use crate::{encode_solid_color_fill, resolve_path, resolve_path_mut};
@@ -33,7 +32,9 @@ pub fn convert_type_to_shape(doc: &mut Document, path: &str) -> bool {
     let mut parts = LayerParts::from(std::mem::take(layer));
     parts.adjustment = Some(encode_solid_color_fill([rgba[0], rgba[1], rgba[2]]));
     parts.type_tool = None;
-    parts.extra_blocks.retain(|block| &block.key != b"TySh");
+    parts
+        .extra_blocks
+        .retain(|block| !matches!(&block.key, b"TySh" | b"vmsk" | b"vsms" | b"vmgm"));
     parts.applied_character_style = None;
     parts.applied_paragraph_style = None;
     parts.type_overrides = Default::default();
@@ -47,12 +48,14 @@ pub fn convert_type_to_shape(doc: &mut Document, path: &str) -> bool {
         bottom: height as i32,
         right: width as i32,
     };
-    parts.lock = parts
-        .lock
-        .with(LockFlags::TRANSPARENCY, false)
-        .with(LockFlags::PIXELS, false);
+    let mask =
+        pictura_codec::encode_vector_mask_with_rule(&paths, width, height, VectorFillRule::NonZero);
+    parts.vector_mask = pictura_codec::decode_vector_mask(&mask, width, height);
+    parts.vector_mask_hides_effects = false;
+    parts.extra_blocks.push(LayerBlock {
+        key: *b"vmsk",
+        data: mask.into(),
+    });
     *layer = pictura_codec::layer_from_parts(parts);
-    set_layer_shape_paths(layer, &paths, width, height);
-    *layer = pictura_codec::layer_from_parts(LayerParts::from(std::mem::take(layer)));
     true
 }

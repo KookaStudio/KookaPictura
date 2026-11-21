@@ -31,7 +31,7 @@ The five `Type > Anti-Alias` rows and the two `Type > Orientation` rows SHALL be
 
 ### Requirement: Rasterize Type Layer and Update All Text Layers
 
-`Type > Rasterize Type Layer` SHALL dispatch the existing rasterize-type operation and record one `Rasterize Type` state, and SHALL be disabled for a non-type layer or a document whose type layers cannot be re-set. `Type > Update All Text Layers` SHALL re-render every type layer in the document and record one `Update All Text Layers` state, and SHALL be disabled when the document has no type layers or its type layers cannot be re-set.
+`Type > Rasterize Type Layer` SHALL dispatch the existing rasterize-type operation and record one `Rasterize Type` state, and SHALL be disabled for a non-type layer or a document whose type layers cannot be re-set. `Type > Update All Text Layers` SHALL refresh the pixels of type layers that can be reproduced from a single set of character and paragraph attributes, preserving their type data. Imported layers with distinct runs SHALL retain their stored pixels and type data. The command SHALL record one `Update All Text Layers` state when at least one layer is refreshed, and SHALL be disabled when the document has no type layers or its type layers cannot be re-set.
 
 #### Scenario: Rasterize Type Layer dispatches the rasterizer [tm_rasterize]
 
@@ -41,7 +41,12 @@ The five `Type > Anti-Alias` rows and the two `Type > Orientation` rows SHALL be
 #### Scenario: Update All Text Layers re-renders the document [tm_update_all]
 
 - **WHEN** `Type > Update All Text Layers` runs on a document with type layers
-- **THEN** every type layer is re-rendered and one `Update All Text Layers` state is recorded; with no type layers or a non-editable document the command is disabled
+- **THEN** the reproducible type layers are re-rendered and one `Update All Text Layers` state is recorded; with no type layers or a non-editable document the command is disabled
+
+#### Scenario: Updating text preserves imported formatting [tm_update_all_runs]
+
+- **WHEN** `Type > Update All Text Layers` runs on a document containing uniform type and imported type with distinct style runs
+- **THEN** the uniform layer's pixels are refreshed without rewriting its type descriptor, and the mixed-run layer keeps its pixels and type descriptor
 
 ### Requirement: Language Options reflect the Type preferences
 

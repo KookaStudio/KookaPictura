@@ -49,6 +49,16 @@ LayerType readLayer(const PictureView& view, const QString& path)
     return out;
 }
 
+CharacterSetting layerCharacterSetting(const PictureView& view, const QString& path)
+{
+    return ::pictura::type_layer_character_setting(view, path);
+}
+
+bool layerIsVertical(const PictureView& view, const QString& path)
+{
+    return ::pictura::type_layer_vertical(view, path);
+}
+
 bool isWarped(const PictureView& view, const QString& path)
 {
     return ::pictura::type_layer_is_warped(view, path);

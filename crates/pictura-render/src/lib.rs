@@ -286,8 +286,8 @@ mod type_style;
 pub use text_render::{materialize_text_rgba, render_text_layer, BundledRasterizer, BundledText};
 mod fonts;
 pub use fonts::{
-    font_family, font_has_outlines, font_postscript_name, missing_glyph_protection,
-    opentype_features, register_font, set_missing_glyph_protection,
+    font_family, font_has_outlines, font_postscript_name, generation as font_registry_generation,
+    missing_glyph_protection, opentype_features, register_font, set_missing_glyph_protection,
 };
 mod missing_fonts;
 pub use missing_fonts::{replace_type_fonts, REPLACEMENT_FONT};

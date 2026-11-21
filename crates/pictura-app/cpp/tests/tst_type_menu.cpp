@@ -11,15 +11,18 @@
 #include "commands.h"
 #include "font_combo.h"
 #include "import_save_coordinator.h"
+#include "path_overlay.h"
 #include "panels/character_panel.h"
 #include "panels/layers_panel.h"
 #include "panels/panel_column.h"
+#include "preferences_dialog.h"
 #include "selftest_paint_fixture.h"
 #include "tool_sessions.h"
 #include "tools.h"
 
-#include <QtCore/QDir>
 #include <QtCore/QFile>
+#include <QtCore/QTemporaryDir>
+#include <QtCore/QtEndian>
 #include <QtGui/QAction>
 #include <QtWidgets/QAbstractItemDelegate>
 #include <QtWidgets/QFontComboBox>
@@ -40,7 +43,8 @@ QImage seed()
     return image;
 }
 
-QString addType(Fixture& f, const QString& text, double size = 40.0)
+QString addType(Fixture& f, const QString& text, double size = 40.0,
+                const QString& font = QStringLiteral("Liberation Sans"))
 {
     pictura::TypeSetting setting{};
     setting.x = 30.0;
@@ -50,7 +54,7 @@ QString addType(Fixture& f, const QString& text, double size = 40.0)
     pictura::CharacterSetting character = pictura::type_api::defaultCharacterSetting();
     character.size = size;
     const QString path = pictura::type_api::commitLayer(
-        *f.view, {text, QStringLiteral("Liberation Sans"), setting, character,
+        *f.view, {text, font, setting, character,
                   pictura::type_api::defaultParagraphSetting()});
     f.frame.selectLayerPath(path);
     f.frame.refresh();
@@ -119,6 +123,7 @@ private slots:
     void areaOutlines();
     void layersRowParity();
     void sessionGate();
+    void pendingTransformGate();
     void antiAlias();
     void orientation();
     void rowsDisabled();
@@ -194,6 +199,9 @@ void TypeMenuTest::createWorkPath()
     QCOMPARE(f.view->history_index(), base + 1);
     QVERIFY(pictura::paths_has_work_path(*f.view));
     QCOMPARE(pictura::paths_active(*f.view), -1);
+    const auto overlay = pictura::workPathOverlay(*f.view, -1);
+    QVERIFY(!overlay.anchors.isEmpty());
+    QVERIFY(!overlay.curve.isEmpty());
     QVERIFY(pictura::type_api::readLayer(*f.view, path).isType);
 }
 
@@ -214,12 +222,42 @@ void TypeMenuTest::outlineRefusals()
 {
     Fixture f(*window_, seed(), QStringLiteral("pictura_type_menu_refusal"));
     QVERIFY2(f.ok(), "fixture");
-    addType(f, QStringLiteral("Path"));
-    pixelLayer(f);
+    const QString family = QStringLiteral("Pictura Outline-Less Test");
+    const QString path = addType(f, QStringLiteral("Path"), 40.0, family);
+    QVERIFY(f.view->layer_is_type(path));
+    QVERIFY(action(f, typeId(QStringLiteral("Create Work Path")))->isEnabled());
+
+    QFile source(QFINDTESTDATA("../../../pictura-render/assets/LiberationSans-Regular.ttf"));
+    QVERIFY(source.open(QIODevice::ReadOnly));
+    QByteArray font = source.readAll();
+    QVERIFY(font.size() >= 12);
+    const int tables = qFromBigEndian<quint16>(font.constData() + 4);
+    QVERIFY(font.size() >= 12 + 16 * tables);
+    bool stripped = false;
+    for (int i = 0; i < tables; ++i) {
+        const int offset = 12 + 16 * i;
+        if (font.sliced(offset, 4) == "glyf") {
+            font[offset + 3] = 'g';
+            stripped = true;
+        } else if (font.sliced(offset, 4) == "name") {
+            // Keep the stripped face out of the real font's PostScript alias.
+            font[offset + 3] = 'f';
+        }
+    }
+    QVERIFY(stripped);
+    QVERIFY(pictura::type_api::registerFont(
+        family, QString(),
+        ::rust::Slice<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(font.constData()),
+                                          static_cast<std::size_t>(font.size()))));
+
+    const int base = f.view->history_index();
     QAction* create = action(f, typeId(QStringLiteral("Create Work Path")));
     QAction* shape = action(f, typeId(QStringLiteral("Convert to Shape")));
     QVERIFY(create && !create->isEnabled());
     QVERIFY(shape && !shape->isEnabled());
+    window_->registry()->dispatch(create->data().toString());
+    window_->registry()->dispatch(shape->data().toString());
+    QCOMPARE(f.view->history_index(), base);
 }
 
 void TypeMenuTest::convertToShape()
@@ -262,12 +300,14 @@ void TypeMenuTest::convertToShapeRoundTrip()
     QVERIFY2(f.ok(), "fixture");
     const QString path = addType(f, QStringLiteral("Shape"));
     QVERIFY(dispatch(f, typeId(QStringLiteral("Convert to Shape"))));
-    const QString psd
-        = QDir::temp().filePath(QStringLiteral("pictura_type_menu_shape_round.psd"));
-    QFile::remove(psd);
+    QTemporaryDir output;
+    QVERIFY(output.isValid());
+    const QString psd = output.filePath(QStringLiteral("shape.psd"));
     auto* coordinator = window_->findChild<pictura::ImportSaveCoordinator*>();
     QVERIFY(coordinator);
     QVERIFY(coordinator->saveActiveAtPath(psd));
+    QVERIFY(window_->closeActiveDocument(false));
+    f.doc = -1;
     QVERIFY(coordinator->openDocumentAtPath(psd, false));
     coordinator->waitForOpensForTest();
     pictura::PictureView* back = window_->activeView();
@@ -275,8 +315,7 @@ void TypeMenuTest::convertToShapeRoundTrip()
     const auto row = pictura::layers_api::rowForPath(*back, path);
     QVERIFY(row.shape);
     QVERIFY(!pictura::type_api::readLayer(*back, path).isType);
-    window_->closeDocument(window_->activeDocumentIndex(), false);
-    QFile::remove(psd);
+    QVERIFY(window_->closeActiveDocument(false));
 }
 
 void TypeMenuTest::warpedOutlines()
@@ -349,7 +388,35 @@ void TypeMenuTest::sessionGate()
     QVERIFY(!action(f, typeId(QStringLiteral("Create Work Path")))->isEnabled());
     QVERIFY(!action(f, typeSubId(QStringLiteral("Anti-Alias"), QStringLiteral("Crisp")))->isEnabled());
     QVERIFY(action(f, typeId(QStringLiteral("Paste Lorem Ipsum")))->isEnabled());
+    const QString updateAll = QString::fromLatin1(pictura::command_ids::TypeUpdateAllTextLayers);
+    QVERIFY(!action(f, updateAll)->isEnabled());
+    const int base = f.view->history_index();
+    QVERIFY(dispatch(f, updateAll));
+    QCOMPARE(f.view->history_index(), base);
     endTypeSession(f);
+}
+
+void TypeMenuTest::pendingTransformGate()
+{
+    Fixture f(*window_, seed(), QStringLiteral("pictura_type_menu_transform_gate"));
+    QVERIFY2(f.ok(), "fixture");
+    const QString path = addType(f, QStringLiteral("Type"));
+    const QString rasterize = QString::fromLatin1(pictura::command_ids::TypeRasterizeTypeLayer);
+    QVERIFY(action(f, rasterize)->isEnabled());
+    QVERIFY(f.tools->beginFreeTransform(path));
+    const int base = f.view->history_index();
+    for (const char* id : {pictura::command_ids::TypeRasterizeTypeLayer,
+                           pictura::command_ids::TypeConvertToShape,
+                           pictura::command_ids::TypeUpdateAllTextLayers,
+                           pictura::command_ids::EditFindAndReplaceText}) {
+        const QString command = QString::fromLatin1(id);
+        QVERIFY(!action(f, command)->isEnabled());
+        QVERIFY(!dispatch(f, command));
+    }
+    QCOMPARE(f.view->history_index(), base);
+    QVERIFY(f.view->layer_is_type(path));
+    f.tools->cancelFreeTransform();
+    QVERIFY(action(f, rasterize)->isEnabled());
 }
 
 void TypeMenuTest::antiAlias()
@@ -414,14 +481,26 @@ void TypeMenuTest::languageOptions()
     QVERIFY2(f.ok(), "fixture");
     const QString east
         = typeSubId(QStringLiteral("Language Options"), QStringLiteral("East Asian features"));
+    const QString middle
+        = typeSubId(QStringLiteral("Language Options"), QStringLiteral("Middle Eastern features"));
     const QString defaults
         = typeSubId(QStringLiteral("Language Options"), QStringLiteral("Default features"));
+    QVERIFY(dispatch(f, QString::fromLatin1(pictura::command_ids::EditPreferencesType)));
+    auto* preferences = window_->preferencesDialog();
+    QVERIFY(preferences);
+    preferences->reject();
+
     QVERIFY(dispatch(f, east));
+    QVERIFY(dispatch(f, middle));
     QVERIFY(action(f, east)->isChecked());
     QVERIFY(!action(f, defaults)->isChecked());
+    QVERIFY(preferences->checkboxForTest(QStringLiteral("showAsianTextOptions")));
+    QVERIFY(preferences->checkboxForTest(QStringLiteral("middleEastern")));
     QVERIFY(dispatch(f, defaults));
     QVERIFY(action(f, defaults)->isChecked());
     QVERIFY(!action(f, east)->isChecked());
+    QVERIFY(!preferences->checkboxForTest(QStringLiteral("showAsianTextOptions")));
+    QVERIFY(!preferences->checkboxForTest(QStringLiteral("middleEastern")));
 }
 
 void TypeMenuTest::languageOptionsPersist()
@@ -581,9 +660,15 @@ void TypeMenuTest::saveLoadDefaults()
     const QString first = addType(f, QStringLiteral("First"), 48.0);
     QVERIFY(dispatch(f, typeId(QStringLiteral("Save Default Type Styles"))));
     const QString second = addType(f, QStringLiteral("Second"), 24.0);
-    QCOMPARE(pictura::type_api::readLayer(*f.view, second).spec.character.size, 24.0);
+    const auto original = pictura::type_api::readLayer(*f.view, second).spec;
+    QCOMPARE(original.character.size, 24.0);
     QVERIFY(dispatch(f, typeId(QStringLiteral("Load Default Type Styles"))));
-    QCOMPARE(pictura::type_api::readLayer(*f.view, second).spec.character.size, 48.0);
+    const auto loaded = pictura::type_api::readLayer(*f.view, second).spec;
+    QCOMPARE(loaded.character.size, 48.0);
+    QCOMPARE(loaded.text, original.text);
+    QCOMPARE(loaded.setting.x, original.setting.x);
+    QCOMPARE(loaded.setting.y, original.setting.y);
+    QCOMPARE(loaded.setting.vertical, original.setting.vertical);
     QVERIFY(dispatch(f, QString::fromLatin1(pictura::command_ids::EditUndo)));
     QCOMPARE(pictura::type_api::readLayer(*f.view, second).spec.character.size, 24.0);
     QVERIFY(!first.isEmpty());

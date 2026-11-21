@@ -46,6 +46,8 @@ struct LayerType {
 /// The single read of a layer's type state (replaces the five per-field
 /// crossings the Type tool and the panels ran on every open/refresh).
 LayerType readLayer(const PictureView& view, const QString& path);
+CharacterSetting layerCharacterSetting(const PictureView& view, const QString& path);
+bool layerIsVertical(const PictureView& view, const QString& path);
 /// Whether `path` is type carrying a Warp Text warp (the Layers panel badge).
 bool isWarped(const PictureView& view, const QString& path);
 

@@ -53,6 +53,9 @@ pub(crate) fn outline_refusal_with(
 /// The type layer's glyph outlines in document pixels. `None` when the face or
 /// layout is unavailable; an empty vector when the text inks nothing.
 pub fn outline_paths(spec: &TypeSpec) -> Option<Vec<Subpath>> {
+    if !crate::fonts::font_has_outlines(&spec.character.font_family, &spec.character.font_style) {
+        return None;
+    }
     match spec.path.as_ref() {
         Some(path) if path.kind == TextPathKind::OnPath => on_path_paths(spec),
         Some(_) => flat_paths(spec),
@@ -63,25 +66,20 @@ pub fn outline_paths(spec: &TypeSpec) -> Option<Vec<Subpath>> {
 
 /// Point, paragraph, and area type: the flat layout mapped into the document.
 fn flat_paths(spec: &TypeSpec) -> Option<Vec<Subpath>> {
-    let mut layout_spec = spec.clone();
-    if layout_spec
-        .path
-        .as_ref()
-        .is_some_and(|path| path.kind == TextPathKind::Area)
-        && layout_spec.box_bounds.is_none()
-    {
-        let flattened = layout_spec.path.as_ref()?.subpath.flattened(0.25);
-        let (left, top, right, bottom) = path_bounds(&flattened.points)?;
-        layout_spec.origin = (left, top);
-        layout_spec.box_bounds = Some([0.0, 0.0, right - left, bottom - top]);
-    }
-    let (bundled, layout, unmapped) = flat_layout(&layout_spec)?;
+    let area;
+    let layout_spec = if spec.path.is_some() {
+        area = crate::type_path::area_layout_spec(spec)?;
+        &area
+    } else {
+        spec
+    };
+    let (bundled, layout, unmapped) = flat_layout(layout_spec)?;
     let run = RunStyle::of(bundled, &spec.character);
     let ascent = bundled.ascent(spec.character.size as f32);
     let to_doc = |(x, y): (f64, f64)| {
         let u = f64::from(unmapped.left) + x - layout_spec.origin.0;
         let v = f64::from(unmapped.top) + y - layout_spec.origin.1;
-        map(&layout_spec, u, v)
+        map(layout_spec, u, v)
     };
     let mut context = ScaleContext::new();
     let faces = crate::fonts::faces_in_order(bundled);
@@ -108,15 +106,19 @@ fn flat_paths(spec: &TypeSpec) -> Option<Vec<Subpath>> {
         if run.embolden > 0.0 {
             outline.embolden(run.embolden, run.embolden);
         }
-        out.extend(contour_subpaths(outline.points(), outline.verbs(), place));
+        let mut contours = contour_subpaths(outline.points(), outline.verbs(), place);
+        normalize_winding(&mut contours);
+        out.extend(contours);
     }
     for rect in crate::type_decor::decorations(&run, &layout, spec.vertical, ascent) {
         let [x0, y0, x1, y1] = rect.map(f64::from);
         let corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)];
-        out.push(Subpath {
+        let mut decoration = Subpath {
             points: corners.into_iter().map(|p| corner(to_doc(p))).collect(),
             closed: true,
-        });
+        };
+        normalize_winding(std::slice::from_mut(&mut decoration));
+        out.push(decoration);
     }
     Some(out)
 }
@@ -152,7 +154,9 @@ fn on_path_paths(spec: &TypeSpec) -> Option<Vec<Subpath>> {
         if run.embolden > 0.0 {
             outline.embolden(run.embolden, run.embolden);
         }
-        out.extend(contour_subpaths(outline.points(), outline.verbs(), place));
+        let mut contours = contour_subpaths(outline.points(), outline.verbs(), place);
+        normalize_winding(&mut contours);
+        out.extend(contours);
     }
     Some(out)
 }
@@ -172,16 +176,37 @@ fn warped_paths(spec: &TypeSpec) -> Option<Vec<Subpath>> {
     Some(out)
 }
 
-fn path_bounds(points: &[(f64, f64)]) -> Option<(f64, f64, f64, f64)> {
-    let &(first_x, first_y) = points.first()?;
-    let (mut left, mut top, mut right, mut bottom) = (first_x, first_y, first_x, first_y);
-    for &(x, y) in points {
-        left = left.min(x);
-        top = top.min(y);
-        right = right.max(x);
-        bottom = bottom.max(y);
+/// All glyph exteriors must wind the same way for the nonzero fill to union
+/// overlaps. Reversing the whole glyph preserves its interior counters.
+fn normalize_winding(contours: &mut [Subpath]) {
+    if reverses_winding(
+        contours
+            .iter()
+            .map(|contour| signed_area(&contour.flatten(0.25))),
+    ) {
+        for contour in contours {
+            contour.points.reverse();
+            for point in &mut contour.points {
+                std::mem::swap(&mut point.in_handle, &mut point.out_handle);
+            }
+        }
     }
-    (right > left && bottom > top).then_some((left, top, right, bottom))
+}
+
+pub(crate) fn reverses_winding(areas: impl Iterator<Item = f64>) -> bool {
+    areas
+        .max_by(|a, b| a.abs().total_cmp(&b.abs()))
+        .is_some_and(|area| area < 0.0)
+}
+
+pub(crate) fn signed_area(points: &[(f64, f64)]) -> f64 {
+    let Some(&(x, y)) = points.first() else {
+        return 0.0;
+    };
+    points
+        .windows(2)
+        .map(|p| (p[0].0 - x) * (p[1].1 - y) - (p[1].0 - x) * (p[0].1 - y))
+        .sum()
 }
 
 fn corner(anchor: (f64, f64)) -> PathPoint {

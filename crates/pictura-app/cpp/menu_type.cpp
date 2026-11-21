@@ -155,7 +155,7 @@ void MenuRegistrar::wireTypeMenu()
     const auto convertible = [this](bool paragraph) -> QString {
         PictureView* view = activeView();
         const QString path = layerAnchor();
-        if (!view || path.isEmpty() || !type_api::readLayer(*view, path).isType
+        if (!view || path.isEmpty() || !view->layer_is_type(path)
             || type_api::isParagraph(*view, path) != paragraph) {
             return QString();
         }
@@ -197,8 +197,7 @@ void MenuRegistrar::wireOutlineCommands()
         if (!view || path.isEmpty() || !type_api::layersEditable(*view)) {
             return QString();
         }
-        const type_api::LayerType layer = type_api::readLayer(*view, path);
-        return layer.isType ? path : QString();
+        return view->layer_is_type(path) ? path : QString();
     };
     const auto canOutline = [this, target]() {
         PictureView* view = activeView();
@@ -252,8 +251,7 @@ void MenuRegistrar::wireTypeOptions()
         if (!view || path.isEmpty() || !type_api::layersEditable(*view)) {
             return QString();
         }
-        const type_api::LayerType layer = type_api::readLayer(*view, path);
-        return layer.isType ? path : QString();
+        return view->layer_is_type(path) ? path : QString();
     };
 
     const QStringList antiAlias{QStringLiteral("None"), QStringLiteral("Sharp"),
@@ -268,7 +266,7 @@ void MenuRegistrar::wireTypeOptions()
             PictureView* view = activeView();
             const QString path = target();
             return view && !path.isEmpty()
-                && type_api::readLayer(*view, path).spec.character.anti_alias == i;
+                && type_api::layerCharacterSetting(*view, path).anti_alias == i;
         });
         commands_->setHandler(id, [this, target, i]() {
             PictureView* view = activeView();
@@ -294,7 +292,7 @@ void MenuRegistrar::wireTypeOptions()
             PictureView* view = activeView();
             const QString path = target();
             return view && !path.isEmpty()
-                && type_api::readLayer(*view, path).spec.setting.vertical == vertical;
+                && type_api::layerIsVertical(*view, path) == vertical;
         });
         commands_->setHandler(id, [this, target, vertical]() {
             PictureView* view = activeView();
@@ -340,7 +338,7 @@ void MenuRegistrar::wireTypeOptions()
             PictureView* view = activeView();
             const QString path = target();
             return view && !path.isEmpty()
-                && type_api::readLayer(*view, path).spec.character.*(row.field);
+                && type_api::layerCharacterSetting(*view, path).*(row.field);
         });
         commands_->setHandler(id, [this, target, row]() {
             PictureView* view = activeView();
@@ -371,14 +369,14 @@ void MenuRegistrar::wireTypeOptions()
     const QString updateAll = commandIdForPath(
         {QStringLiteral("Type"), QStringLiteral("Update All Text Layers")});
     commands_->setImplemented(updateAll, true);
-    commands_->setEnabledProvider(updateAll, [this, textActive]() {
+    const auto canUpdateAll = [this, textActive]() {
         PictureView* view = activeView();
         return view && !textActive() && type_api::layersEditable(*view)
             && type_api::hasTypeLayers(*view);
-    });
-    commands_->setHandler(updateAll, [this]() {
-        PictureView* view = activeView();
-        if (view && type_api::updateAllTextLayers(*view) > 0) {
+    };
+    commands_->setEnabledProvider(updateAll, canUpdateAll);
+    commands_->setHandler(updateAll, [this, canUpdateAll]() {
+        if (canUpdateAll() && type_api::updateAllTextLayers(*activeView()) > 0) {
             refresh();
         }
     });
@@ -477,7 +475,7 @@ void MenuRegistrar::wireTypeDefaults()
         if (!view || path.isEmpty()) {
             return QString();
         }
-        return type_api::readLayer(*view, path).isType ? path : QString();
+        return view->layer_is_type(path) ? path : QString();
     };
     const auto textActive = [this]() {
         const TextSession* session = tools_ ? tools_->textSession() : nullptr;
@@ -545,7 +543,7 @@ void MenuRegistrar::wireWarpText()
     const auto target = [this]() -> QString {
         PictureView* view = activeView();
         const QString path = layerAnchor();
-        return view && !path.isEmpty() && type_api::readLayer(*view, path).isType ? path : QString();
+        return view && !path.isEmpty() && view->layer_is_type(path) ? path : QString();
     };
     const QString id = QString::fromLatin1(command_ids::TypeWarpText);
     commands_->setImplemented(id, true);

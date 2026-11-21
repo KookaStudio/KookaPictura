@@ -220,6 +220,9 @@ void PicturaMainWindow::wireTypeRuntime(MenuRegistrar::Runtime& runtime)
 void PicturaMainWindow::setTypeShowAsianOptions(bool on)
 {
     typeShowAsianOptions_ = on;
+    if (preferencesDialog_) {
+        preferencesDialog_->setTypeShowAsianOptions(on);
+    }
     if (panels_ && panels_->characterPanel()) {
         panels_->characterPanel()->setShowAsianOptions(on);
     }
@@ -229,6 +232,9 @@ void PicturaMainWindow::setTypeShowAsianOptions(bool on)
 void PicturaMainWindow::setTypeMiddleEastern(bool on)
 {
     typeMiddleEastern_ = on;
+    if (preferencesDialog_) {
+        preferencesDialog_->setTypeMiddleEastern(on);
+    }
     if (panels_ && panels_->paragraphPanel()) {
         panels_->paragraphPanel()->setMiddleEastern(on);
     }

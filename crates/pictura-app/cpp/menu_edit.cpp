@@ -474,26 +474,27 @@ void MenuRegistrar::registerEditHandlers()
     const QString findReplace = commandIdForPath(
         {QStringLiteral("Edit"), QStringLiteral("Find And Replace Text…")});
     commands_->setImplemented(findReplace, true);
-    commands_->setEnabledProvider(findReplace, [this, hasDocument]() {
+    const auto canFindReplace = [this, hasDocument]() {
         const TextSession* session = tools_ ? tools_->textSession() : nullptr;
         PictureView* view = activeView();
         return hasDocument() && view && !(session && session->textActive())
+            && !(tools_ && tools_->transformPending())
             && type_api::hasTypeLayers(*view) && type_api::layersEditable(*view);
-    });
-    commands_->setHandler(findReplace, [this]() {
-        PictureView* view = activeView();
-        if (!view) {
+    };
+    commands_->setEnabledProvider(findReplace, canFindReplace);
+    commands_->setHandler(findReplace, [this, canFindReplace]() {
+        if (!canFindReplace()) {
             return;
         }
+        PictureView* view = activeView();
         const QString path = layerAnchor();
-        const bool currentIsType
-            = !path.isEmpty() && type_api::readLayer(*view, path).isType;
+        const bool currentIsType = !path.isEmpty() && view->layer_is_type(path);
         auto* dialog = new FindReplaceDialog(currentIsType, dialogParent());
         dialog->setAttribute(Qt::WA_DeleteOnClose);
         const QPointer<PictureView> guard(view);
         connect(dialog, &FindReplaceDialog::replaceAllRequested, dialog,
-                [this, dialog, guard, path]() {
-                    if (!guard) {
+                [this, dialog, guard, path, canFindReplace]() {
+                    if (!guard || activeView() != guard.data() || !canFindReplace()) {
                         return;
                     }
                     const int changed = type_api::replaceText(

@@ -1,6 +1,7 @@
 use super::*;
 
 use super::super::helpers::combine_mode_from;
+use super::super::state::TypeOutlineCache;
 use crate::cxxqt_object::edit::{structural, structural_after, Edit};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
@@ -13,8 +14,8 @@ use ffi::{CharacterSetting, CharacterStyleRow, ParagraphSetting, ParagraphStyleR
 use spec::{placement_setting, spec};
 
 use attrs::{
-    character_setting, edited_overrides, paragraph_attrs, paragraph_overrides, paragraph_setting,
-    style_character_overrides,
+    character_attrs, character_setting, edited_overrides, paragraph_attrs, paragraph_overrides,
+    paragraph_setting, style_character_overrides,
 };
 
 pub(super) fn type_default_character_setting() -> CharacterSetting {
@@ -313,9 +314,25 @@ pub(super) fn type_layer_setting(view: &PictureView, path: &QString) -> TypeSett
 }
 
 pub(super) fn type_layer_character_setting(view: &PictureView, path: &QString) -> CharacterSetting {
-    layer_spec(view, path).map_or_else(type_default_character_setting, |s| {
-        character_setting(&s.character)
-    })
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .and_then(|doc| pictura_render::resolve_path(doc, &path.to_string()))
+        .and_then(|layer| layer.type_tool()?.style.as_ref())
+        .map_or_else(type_default_character_setting, |style| {
+            character_setting(&style.character)
+        })
+}
+
+pub(super) fn type_layer_vertical(view: &PictureView, path: &QString) -> bool {
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .and_then(|doc| pictura_render::resolve_path(doc, &path.to_string()))
+        .and_then(|layer| layer.type_tool())
+        .is_some_and(|tool| tool.vertical)
 }
 
 pub(super) fn type_layer_paragraph_setting(view: &PictureView, path: &QString) -> ParagraphSetting {
@@ -683,14 +700,12 @@ pub(super) fn replace(
     if let Some(previous) = previous {
         spec.overrides = edited_overrides(&previous, &spec);
     }
-    !spec.text.trim().is_empty()
-        && view
-            .as_mut()
-            .rust_mut()
-            .session
-            .doc
-            .as_mut()
-            .is_some_and(|doc| pictura_render::replace_type_layer(doc, &path.to_string(), &spec))
+    view.as_mut()
+        .rust_mut()
+        .session
+        .doc
+        .as_mut()
+        .is_some_and(|doc| pictura_render::replace_type_layer(doc, &path.to_string(), &spec))
 }
 
 /// Whether a live session, a pending preview or a soloed mask owns the display.
@@ -780,7 +795,29 @@ pub(super) fn set_shown(mut view: Pin<&mut PictureView>, path: &QString) {
 const LOREM_IPSUM: &str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
 
 pub(super) fn type_can_outline(view: &PictureView, path: &QString) -> bool {
-    layer_spec(view, path).is_some_and(|spec| pictura_render::type_outline_refusal(&spec).is_none())
+    let rust = view.rust();
+    let revision = rust.non_preview_revision;
+    let fonts = (
+        pictura_render::font_registry_generation(),
+        pictura_render::missing_glyph_protection(),
+    );
+    let key = path.to_string();
+    if let Some(cached) =
+        rust.type_outline_cache.borrow().as_ref().filter(|cached| {
+            cached.path == key && cached.revision == revision && cached.fonts == fonts
+        })
+    {
+        return cached.available;
+    }
+    let available = layer_spec(view, path)
+        .is_some_and(|spec| pictura_render::type_outline_refusal(&spec).is_none());
+    *rust.type_outline_cache.borrow_mut() = Some(TypeOutlineCache {
+        path: key,
+        revision,
+        fonts,
+        available,
+    });
+    available
 }
 
 pub(super) fn type_create_work_path(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
@@ -891,9 +928,10 @@ pub(super) fn type_load_defaults(
     {
         return false;
     }
-    let text = QString::from(previous.text.as_str());
-    let setting = placement_setting(&previous);
-    let mut built = super::spec::spec(&text, font, &setting, character, paragraph);
+    let mut built = previous.clone();
+    built.character = character_attrs(character);
+    built.character.font_family = font.to_string();
+    built.paragraph = paragraph_attrs(paragraph);
     built.overrides = edited_overrides(&previous, &built);
     let replaced = view
         .as_mut()

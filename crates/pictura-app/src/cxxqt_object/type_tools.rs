@@ -313,6 +313,9 @@ pub mod ffi {
         /// The type layer at `path`'s character attribute set; the model defaults for a non-type layer.
         fn type_layer_character_setting(view: &PictureView, path: &QString) -> CharacterSetting;
 
+        /// The stored orientation, without laying out the text.
+        fn type_layer_vertical(view: &PictureView, path: &QString) -> bool;
+
         /// The type layer at `path`'s paragraph attribute set; the model defaults for a non-type layer.
         fn type_layer_paragraph_setting(view: &PictureView, path: &QString) -> ParagraphSetting;
 

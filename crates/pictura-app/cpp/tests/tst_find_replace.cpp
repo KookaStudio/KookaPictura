@@ -3,12 +3,14 @@
 
 #include <QtTest/QtTest>
 
+#include "api/document_bridge.h"
 #include "api/history_api.h"
 #include "api/layers_api.h"
 #include "api/type_api.h"
 #include "command_ids.h"
 #include "commands.h"
 #include "find_replace_dialog.h"
+#include "import_save_coordinator.h"
 #include "selftest_paint_fixture.h"
 #include "tool_sessions.h"
 #include "tools.h"
@@ -18,6 +20,7 @@
 #include <QtWidgets/QPushButton>
 
 #include <QtCore/QCoreApplication>
+#include <QtCore/QTemporaryDir>
 #include <QtGui/QAction>
 
 #include "qt_test_support.h"
@@ -165,13 +168,32 @@ void FindReplaceTest::dialogFields()
 
 void FindReplaceTest::nonEditableDisabled()
 {
-    QImage image(100, 100, QImage::Format_RGB32);
-    image.fill(Qt::white);
-    Fixture f(*window_, image, QStringLiteral("pictura_find_no_type"));
+    Fixture f(*window_, seed(), QStringLiteral("pictura_find_noneditable"));
     QVERIFY2(f.ok(), "fixture");
     window_->registry()->refresh();
     QAction* action = window_->registry()->action(findReplaceId());
     QVERIFY(action && !action->isEnabled());
+    const QString path = addType(f, QStringLiteral("cat"));
+    QVERIFY(action->isEnabled());
+
+    f.frame.selectLayerPath(QStringLiteral("0"));
+    pictura::FindReplaceDialog* dialog = open(f);
+    QVERIFY(dialog);
+    setFields(dialog, QStringLiteral("cat"), QStringLiteral("dog"));
+    QVERIFY(!replaceAll(dialog));
+    close(dialog);
+
+    QVERIFY(window_->registry()->dispatch(
+        QString::fromLatin1(pictura::command_ids::ImageMode16Bits)));
+    QCOMPARE(pictura::image_depth_bits(*f.view), 16);
+    QVERIFY(f.view->layer_is_type(path));
+    f.frame.selectLayerPath(path);
+    window_->registry()->refresh();
+    QVERIFY(!action->isEnabled());
+    const int base = f.view->history_index();
+    window_->registry()->dispatch(findReplaceId());
+    QVERIFY(!window_->findChild<pictura::FindReplaceDialog*>());
+    QCOMPARE(f.view->history_index(), base);
 }
 
 void FindReplaceTest::sessionGate()
@@ -186,6 +208,10 @@ void FindReplaceTest::sessionGate()
     window_->registry()->refresh();
     QAction* action = window_->registry()->action(findReplaceId());
     QVERIFY(action && !action->isEnabled());
+    const int base = f.view->history_index();
+    window_->registry()->dispatch(findReplaceId());
+    QVERIFY(!window_->findChild<pictura::FindReplaceDialog*>());
+    QCOMPARE(f.view->history_index(), base);
     f.tools->textSession()->cancelText();
     f.frame.setActiveTool(pictura::ToolId::Move);
 }
@@ -290,6 +316,13 @@ void FindReplaceTest::blankResultKeepsType()
     QVERIFY(pictura::type_api::readLayer(*f.view, path).isType);
     QVERIFY(text(f, path).isEmpty());
     close(dialog);
+    const int base = f.view->history_index();
+    const QString vertical = pictura::commandIdForPath(
+        {QStringLiteral("Type"), QStringLiteral("Orientation"), QStringLiteral("Vertical")});
+    QVERIFY(window_->registry()->dispatch(vertical));
+    QVERIFY(pictura::type_api::readLayer(*f.view, path).spec.setting.vertical);
+    QVERIFY(text(f, path).isEmpty());
+    QCOMPARE(f.view->history_index(), base + 1);
 }
 
 void FindReplaceTest::caseSensitive()
@@ -350,8 +383,24 @@ void FindReplaceTest::roundTripsAsType()
     setFields(dialog, QStringLiteral("cat"), QStringLiteral("dog"));
     QVERIFY(replaceAll(dialog));
     close(dialog);
-    QVERIFY(pictura::type_api::readLayer(*f.view, path).isType);
-    QCOMPARE(text(f, path), QStringLiteral("dog"));
+
+    QTemporaryDir output;
+    QVERIFY(output.isValid());
+    const QString psd = output.filePath(QStringLiteral("replace.psd"));
+    auto* coordinator = window_->findChild<pictura::ImportSaveCoordinator*>();
+    QVERIFY(coordinator);
+    QVERIFY(coordinator->saveActiveAtPath(psd));
+    QVERIFY(window_->closeActiveDocument(false));
+    f.doc = -1;
+    QVERIFY(coordinator->openDocumentAtPath(psd, false));
+    coordinator->waitForOpensForTest();
+    auto* reopened = window_->activeView();
+    QVERIFY(reopened);
+    const auto layer = pictura::type_api::readLayer(*reopened, path);
+    QVERIFY(layer.isType);
+    QCOMPARE(layer.spec.text, QStringLiteral("dog"));
+    QCOMPARE(layer.spec.font, QStringLiteral("Liberation Sans"));
+    QVERIFY(window_->closeActiveDocument(false));
 }
 
 QTEST_MAIN(FindReplaceTest)

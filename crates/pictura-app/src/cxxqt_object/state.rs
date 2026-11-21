@@ -20,6 +20,13 @@ pub(super) struct CanvasProxy {
 pub(super) type ProofCache =
     RefCell<Option<((i32, i32, bool, bool, bool), pictura_color::ProofPreview)>>;
 
+pub(super) struct TypeOutlineCache {
+    pub(super) path: String,
+    pub(super) revision: u64,
+    pub(super) fonts: (u64, bool),
+    pub(super) available: bool,
+}
+
 pub(super) struct PendingVectorPlace {
     pub doc: pictura_core::Document,
     pub target: LayerTarget,
@@ -183,6 +190,7 @@ pub struct PictureViewRust {
     /// Bumped by every committed edit, undo/redo, and non-display preview, so
     /// the session drops a reduced document the gesture no longer matches.
     pub(super) non_preview_revision: u64,
+    pub(super) type_outline_cache: RefCell<Option<TypeOutlineCache>>,
     /// The canvas display as a tile pyramid: the composite's tiles and, while
     /// a mask is soloed, the mask's (#1216). No full-resolution frame is kept.
     pub(super) tiles: super::tiles::DisplayTiles,
@@ -336,6 +344,7 @@ impl Default for PictureViewRust {
                 right: 0,
             },
             non_preview_revision: 0,
+            type_outline_cache: RefCell::new(None),
             tiles: Default::default(),
             deferred_composite: None,
             pending_move_job: None,
