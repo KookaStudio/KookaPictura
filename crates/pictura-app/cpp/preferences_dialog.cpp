@@ -851,7 +851,7 @@ void PreferencesDialog::setGridSettings(const QColor& color, int style, int unit
     const QSignalBlocker blockUnit(gridUnit_);
     const QSignalBlocker blockEvery(gridEvery_);
     const QSignalBlocker blockSubs(gridSubdivisions_);
-    gridColorValue_ = color.isValid() ? color : QColor(0xc0, 0xc0, 0xc0);
+    gridColorValue_ = color.isValid() ? color : QColor(192, 192, 192);
     const int index = gridColor_->findData(gridColorValue_);
     gridColor_->setCurrentIndex(index >= 0 ? index : gridColor_->count() - 1);
     gridStyle_->setCurrentIndex(qBound(0, style, 2));
