@@ -4,6 +4,9 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Feature parity tracker** — `PARITY.md` records CS6 Standard, CS6 Extended,
+  and CC 28.0 coverage; `scripts/check-parity.py` validates the totals.
+  Assessed 2026-11-20 at commit 98c0b292.
 - **Transform keeps erased pixels erased — #1446 fixed** (OpenSpec change
   `transform-alpha-weighted-colour`, archived; capabilities
   `document/transform-interpolation`, `document/auto-align-layers`). Free

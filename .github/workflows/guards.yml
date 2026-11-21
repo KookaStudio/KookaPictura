@@ -28,6 +28,10 @@ jobs:
           git fetch --no-tags --depth=1 origin "$GUARD_BASE"
           python3 scripts/check-test-plan.py --self-test
           python3 scripts/check-test-plan.py
+      - name: Feature parity
+        run: |
+          python3 scripts/check-parity.py --self-check
+          python3 scripts/check-parity.py
       - name: File size
         run: bash scripts/check-file-size.sh
       - name: CMake source fragments
