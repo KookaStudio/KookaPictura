@@ -313,6 +313,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     zoomResizesWindows_ = state.zoomResizesWindows;
     applyShortcutOverrides(state);
     loadGuideSession(state);
+    loadViewSession(state);
     proofDevice_ = state.proofDevice;
     proofIntent_ = state.proofIntent;
     proofBpc_ = state.proofBpc;
@@ -366,6 +367,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     wireMaskOverlay();
     buildTools(state.toolsColumns, state.useShiftKeyForToolSwitch, state.toolOptions);
     menu_->setTools(tools_);
+    wireViewStateSignals();
     if (tools_) {
         tools_->setTypePlaceholderText(state.typePlaceholderText);
         tools_->applyCropOptions(state.cropClassicMode, state.cropDeletePixels, state.cropRatio,
@@ -924,6 +926,7 @@ void PicturaMainWindow::refresh()
     }
     updateTabTitle(index);
     updateWindowTitle();
+    refreshViewOverlays();
     refreshSelectionOverlay();
 }
 
@@ -934,6 +937,8 @@ void PicturaMainWindow::refreshSelectionOverlay()
     if (!view || !active) {
         return;
     }
+    trackSelectionGeneration(active->doc ? active->doc->token : 0,
+                             view->selection_generation());
     if (tools_ && tools_->transformSelectionTarget()) {
         // The live border transform owns the ants; it supplies the preview.
         forEachCanvas(*active->doc,

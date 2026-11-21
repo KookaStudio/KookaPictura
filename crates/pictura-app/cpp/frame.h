@@ -6,6 +6,7 @@
 #include <QtCore/QList>
 #include <QtCore/QPointer>
 #include <QtCore/QPoint>
+#include <QtCore/QRectF>
 #include <QtCore/QSet>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
@@ -311,6 +312,7 @@ public:
     // Mirror the active document's selection outline onto its canvas (or clear
     // it). Called from refresh() and on toolbar selection commits; view-only.
     void refreshSelectionOverlay();
+    void trackSelectionGeneration(quint64 token, quint64 generation);
     // Show the pen-tip model only on the active document's canvas, while the
     // Brush or Pencil tool has a pen-tip preset.
     void syncBrushTipPreview();
@@ -734,6 +736,16 @@ private:
     void syncSiblingGuides();
     void applyGuideViewState();
     void connectGuidePreferences(PreferencesDialog* dialog);
+    // View > Show, Extras, grid, layer edges and target path (frame_view.cpp).
+    void loadViewSession(const SessionState& state);
+    void applyViewState();
+    void refreshViewOverlays();
+    void wireViewStateSignals();
+    void registerViewHandlers();
+    void showExtrasOptions();
+    bool extraMember(const QString& id) const;
+    bool effectiveExtra(const QString& id, bool enabled, bool toolOwns = false) const;
+    bool pathToolActive() const;
     // Units & Rulers: from the preferences page or a ruler's context menu.
     void setRulerUnit(RulerUnit unit);
     // frame_preferences.cpp: the Edit > Preferences leaves.
@@ -767,6 +779,32 @@ private:
     bool smartGuidesVisible_ = true;
     QColor guideColor_{0x4a, 0xff, 0xff};
     bool guideDashed_ = false;
+    // View > Show overlay state and the Extras master (frame_view.cpp).
+    bool selectionEdges_ = true;
+    bool showTargetPath_ = true;
+    bool showLayerEdges_ = true;
+    bool showGrid_ = false;
+    bool showCount_ = true;
+    bool showSlices_ = true;
+    bool showNotes_ = true;
+    bool showPixelGrid_ = true;
+    bool showColorSamplers_ = true;
+    bool extras_ = true;
+    QStringList extrasMembers_;
+    bool lockSlices_ = false;
+    QString gridColor_ = QStringLiteral("#c0c0c0");
+    int gridStyle_ = 0;
+    int gridUnit_ = 1;
+    double gridEvery_ = 1.0;
+    int gridSubdivisions_ = 4;
+    bool viewStateSignalsWired_ = false;
+    struct LayerEdgeCache {
+        QString path;
+        quint64 revision = 0;
+        QRectF rect;
+    };
+    QHash<const DocWindow*, LayerEdgeCache> layerEdgeCache_;
+    QHash<quint64, quint64> selectionGenerations_;
     std::function<void(const QUrl&)> urlOpener_;
 };
 } // namespace pictura

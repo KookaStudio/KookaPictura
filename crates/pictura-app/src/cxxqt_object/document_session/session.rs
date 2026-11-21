@@ -50,6 +50,9 @@ pub(in crate::cxxqt_object) struct DocumentSession {
     /// Bumped whenever the selection is written. The committed-outline cache
     /// keys on it; a history restore counts as a write.
     pub(in crate::cxxqt_object) selection_revision: u64,
+    /// Bumped only when a new selection replaces the old one, so the View menu
+    /// can re-show Selection Edges without reacting to in-place mask edits.
+    pub(in crate::cxxqt_object) selection_generation: u64,
     /// CS6 "last deselected" memory: the selection replaced by Deselect or a
     /// New-mode commit. Restored by `reselect`.
     pub(in crate::cxxqt_object) deselected_selection: Option<Selection>,
@@ -217,19 +220,29 @@ impl DocumentSession {
     /// Replace the live selection and bump its revision.
     pub(in crate::cxxqt_object) fn set_selection(&mut self, selection: Option<Selection>) {
         self.selection = selection;
+        self.selection_generation = self.selection_generation.wrapping_add(1);
         self.touch_selection();
     }
 
     /// Geometry changes invalidate both the editing clip and temporary mask coverage.
     pub(in crate::cxxqt_object) fn clear_geometry_selection(&mut self) {
-        self.set_selection(None);
+        self.set_selection_in_place(None);
         self.quick_mask.coverage = None;
+    }
+
+    /// Replace the live selection without calling it a new selection. Derived
+    /// masks, moves, history restores and Quick Mask transitions use this so the
+    /// View menu keeps hidden Selection Edges hidden.
+    pub(in crate::cxxqt_object) fn set_selection_in_place(&mut self, selection: Option<Selection>) {
+        self.selection = selection;
+        self.touch_selection();
     }
 
     /// Take the live selection, bumping its revision when there was one.
     pub(in crate::cxxqt_object) fn take_selection(&mut self) -> Option<Selection> {
         let selection = self.selection.take();
         if selection.is_some() {
+            self.selection_generation = self.selection_generation.wrapping_add(1);
             self.touch_selection();
         }
         selection
@@ -293,7 +306,7 @@ impl DocumentSession {
         if let Some(doc) = self.doc.as_ref() {
             target.retain_resolving(doc);
         }
-        self.set_selection(snapshot.selection);
+        self.set_selection_in_place(snapshot.selection);
         self.restore_quick_mask_selection(snapshot.quick_mask);
         self.deselected_selection = None;
         self.clear_edit_state();
@@ -701,7 +714,7 @@ impl PictureViewRust {
         self.session.quick_mask.gray = false;
         self.session.quick_mask.pending = None;
         self.session.quick_mask.move_origin = None;
-        self.session.set_selection(None);
+        self.session.set_selection_in_place(None);
         self.session.deselected_selection = None;
         self.session.quick_selection_snapshot = None;
         self.session.live = ActiveSession::Idle;

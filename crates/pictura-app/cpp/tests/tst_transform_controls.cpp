@@ -121,6 +121,11 @@ QString TransformControlsTest::beginControls(pictura::PicturaMainWindow& frame, 
     }
     view->deselect();
     frame.setActiveTool(pictura::ToolId::Move);
+    if (pictura::ImageView* canvas = frame.imageView()) {
+        canvas->setPixelGridVisible(false);
+        canvas->setLayerEdgesVisible(false);
+        canvas->setSlicesVisible(false);
+    }
     auto* box = frame.findChild<QCheckBox*>(QStringLiteral("optionsMoveTransform"));
     if (!box) {
         return QString();

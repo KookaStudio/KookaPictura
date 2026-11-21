@@ -51,6 +51,10 @@ int pictura::runCanvasChecks(pictura::PicturaMainWindow& frame)
         if (ceFill.isEmpty()) {
             return pictura::selfTest().fail(295, "present cache fill");
         }
+        // The seam check measures the document's edge pixels, so keep the
+        // default View overlays from painting over them.
+        ceCanvas->setSlicesVisible(false);
+        ceCanvas->setLayerEdgesVisible(false);
         if (ceCanvas->width() <= 0 || ceCanvas->height() <= 0) {
             frame.resize(800, 600);
             QApplication::processEvents();

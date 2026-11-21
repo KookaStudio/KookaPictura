@@ -395,6 +395,9 @@ public:
     // View > Lock Guides, which stops a press picking one up.
     void refreshGuides();
     void setGuidesLocked(bool on) { guidesLocked_ = on; }
+    // View > Lock Slices: the Slice and Slice Select tools ignore gestures.
+    void setSlicesLocked(bool on) { slicesLocked_ = on; }
+    bool slicesLockedForTest() const { return slicesLocked_; }
     bool guideDragActiveForTest() const { return guideDrag_ >= 0; }
     void beginContentMove(PictureView* v, const QPointF& imagePos, bool duplicate) override;
 
@@ -765,6 +768,7 @@ private:
     bool guideDragVertical_ = false;
     double guideDragStart_ = 0.0;
     bool guidesLocked_ = false;
+    bool slicesLocked_ = false;
     bool guideHover_ = false;
 };
 

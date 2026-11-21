@@ -8,6 +8,7 @@
 
 class QCheckBox;
 class QComboBox;
+class QDoubleSpinBox;
 class QSpinBox;
 class QLabel;
 class QRadioButton;
@@ -70,6 +71,8 @@ public:
     void setRawSettingsStore(int store);
     // Guides, Grid, & Slices: the guide colour and Lines / Dashed Lines style.
     void setGuideAppearance(const QColor& color, bool dashed);
+    // Guides, Grid, & Slices: the live Grid group.
+    void setGridSettings(const QColor& color, int style, int unit, double every, int subdivisions);
     // Units & Rulers: the ruler unit (a RulerUnit index) and Traditional
     // (72.27) rather than PostScript (72) points per inch.
     void setRulerUnit(int unit);
@@ -107,6 +110,8 @@ signals:
     void nativeSaveCompatibilityChanged(int choice);
     void rawSettingsStoreChanged(int store);
     void guideAppearanceChanged(const QColor& color, bool dashed);
+    void gridSettingsChanged(const QColor& color, int style, int unit, double every,
+                             int subdivisions);
     void rulerUnitChanged(int unit);
     void traditionalPointsChanged(bool on);
     void typePlaceholderTextChanged(bool on);
@@ -138,6 +143,13 @@ private:
     QComboBox* guideStyle_ = nullptr;
     ColorSwatchWidget* guideSwatch_ = nullptr;
     QColor guideColorValue_;
+    QComboBox* gridColor_ = nullptr;
+    QComboBox* gridStyle_ = nullptr;
+    QComboBox* gridUnit_ = nullptr;
+    QDoubleSpinBox* gridEvery_ = nullptr;
+    QSpinBox* gridSubdivisions_ = nullptr;
+    ColorSwatchWidget* gridSwatch_ = nullptr;
+    QColor gridColorValue_{0xc0, 0xc0, 0xc0};
     QComboBox* rulerUnit_ = nullptr;
     QRadioButton* postScriptPoints_ = nullptr;
     QRadioButton* traditionalPoints_ = nullptr;

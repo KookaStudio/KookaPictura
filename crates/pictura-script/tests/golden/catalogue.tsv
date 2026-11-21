@@ -501,6 +501,8 @@ filter.digimarc.read.watermark	Filter/Digimarc/Read Watermark	Read Watermark		1	
 filter.extract	Filter/Extract…	Extract…		0	0
 filter.pattern.maker	Filter/Pattern Maker…	Pattern Maker…		0	0
 filter.browse.filters.online	Filter/Browse Filters Online…	Browse Filters Online…		0	0
+view.align	View/Align	Align		0	0
+view.align.to	View/Align To	Align To		0	0
 view.proof.setup.working.cmyk	View/Proof Setup/Working CMYK	Working CMYK		1	1
 view.proof.setup.working.gray	View/Proof Setup/Working Gray	Working Gray		1	1
 view.proof.setup.custom	View/Proof Setup/Custom	Custom		1	0
@@ -513,8 +515,8 @@ view.zoomIn	View/Zoom In	Zoom In	Ctrl++	1	0
 view.zoomOut	View/Zoom Out	Zoom Out	Ctrl+-	1	0
 view.fitOnScreen	View/Fit On Screen	Fit On Screen	Ctrl+0	1	0
 view.actualPixels	View/100%	100%	Ctrl+1	1	0
-view.200	View/200%	200%		0	0
-view.print.size	View/Print Size	Print Size		0	0
+view.200	View/200%	200%		1	0
+view.print.size	View/Print Size	Print Size		1	0
 view.freePan	View/Free Pan	Free Pan		1	1
 view.snapCanvasToWorkspace	View/Snap Canvas To Workspace	Snap Canvas To Workspace		1	1
 view.screenMode.standard	View/Screen Mode/Standard Screen Mode	Standard Screen Mode		1	1
@@ -532,23 +534,23 @@ view.snap.to.none	View/Snap To/None	None		0	0
 view.lockGuides	View/Lock Guides	Lock Guides	Alt+Ctrl+;	1	1
 view.clearGuides	View/Clear Guides	Clear Guides		1	0
 view.newGuide	View/New Guide…	New Guide…		1	0
-view.lock.slices	View/Lock Slices	Lock Slices		0	0
+view.lock.slices	View/Lock Slices	Lock Slices		1	1
+view.clear.slices	View/Clear Slices	Clear Slices		1	0
 view.show.selectionEdges	View/Show/Selection Edges	Selection Edges		1	1
-view.show.target.path	View/Show/Target Path	Target Path		0	0
-view.show.layer.edges	View/Show/Layer Edges	Layer Edges		0	0
+view.show.target.path	View/Show/Target Path	Target Path		1	1
+view.show.layer.edges	View/Show/Layer Edges	Layer Edges		1	1
 view.show.3d.axis	View/Show/3D Axis	3D Axis		0	0
 view.show.guides	View/Show/Guides	Guides	Ctrl+;	1	1
-view.show.grid	View/Show/Grid	Grid		0	0
-view.show.count	View/Show/Count	Count		0	0
+view.show.grid	View/Show/Grid	Grid		1	1
+view.show.count	View/Show/Count	Count		1	1
 view.show.smartGuides	View/Show/Smart Guides	Smart Guides	Ctrl+Shift+;	1	1
-view.show.slices	View/Show/Slices	Slices		0	0
-view.show.notes	View/Show/Notes	Notes		0	0
-view.show.pixel.grid	View/Show/Pixel Grid	Pixel Grid		0	0
-view.show.all	View/Show/All	All		0	0
-view.show.none	View/Show/None	None		0	0
-view.extras	View/Extras	Extras	Ctrl+H	0	0
-view.align	View/Align	Align		0	0
-view.align.to	View/Align To	Align To		0	0
+view.show.slices	View/Show/Slices	Slices		1	1
+view.show.notes	View/Show/Notes	Notes		1	1
+view.show.pixel.grid	View/Show/Pixel Grid	Pixel Grid		1	1
+view.show.all	View/Show/All	All		1	0
+view.show.none	View/Show/None	None		1	0
+view.show.extraOptions	View/Show/Show Extra Options	Show Extra Options		1	0
+view.extras	View/Extras	Extras	Ctrl+H	1	1
 view.toolHints	View/Tool Hints	Tool Hints		1	1
 window.arrange.cascade	Window/Arrange/Cascade	Cascade		1	0
 window.arrange.tile	Window/Arrange/Tile	Tile		1	0

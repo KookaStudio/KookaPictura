@@ -461,7 +461,7 @@ pub(in crate::cxxqt_object) fn land_hdr_conversion(
     rust: &mut crate::cxxqt_object::PictureViewRust,
     _: &Outcome,
 ) -> Edit {
-    rust.session.set_selection(None);
+    rust.session.set_selection_in_place(None);
     if rust
         .session
         .doc

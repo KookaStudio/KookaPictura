@@ -47,6 +47,16 @@ pub fn remove_slice(doc: &mut Document, index: usize) -> bool {
     true
 }
 
+/// Remove every user slice; false when there was none. Auto slices are derived,
+/// so clearing the user store leaves the canvas covered by one auto slice.
+pub fn clear_slices(doc: &mut Document) -> bool {
+    if doc.slices.is_empty() {
+        return false;
+    }
+    doc.slices.clear();
+    true
+}
+
 /// Every slice over the canvas: the user slices clipped to it, plus auto slices
 /// tiling the rest, numbered left to right then top to bottom. An unsliced
 /// document is one auto slice. A user slice entirely off-canvas is skipped but
@@ -420,6 +430,24 @@ mod tests {
         assert!(remove_slice(&mut d, 0));
         assert_eq!(d.slices, vec![rect(50, 50, 10, 10)]);
         assert!(!remove_slice(&mut d, 9));
+    }
+
+    #[test]
+    fn clear_slices_clears_user_slices_and_keeps_one_auto_slice() {
+        let mut d = doc();
+        add_slice(&mut d, rect(10, 10, 20, 20));
+        add_slice(&mut d, rect(40, 40, 20, 20));
+        assert!(clear_slices(&mut d));
+        assert!(d.slices.is_empty());
+        let slices = resolve_slices(&d);
+        assert_eq!(slices.len(), 1);
+        assert_eq!(slices[0].user_index, None);
+    }
+
+    #[test]
+    fn clear_slices_refuses_without_user_slices() {
+        let mut d = doc();
+        assert!(!clear_slices(&mut d));
     }
 
     #[test]

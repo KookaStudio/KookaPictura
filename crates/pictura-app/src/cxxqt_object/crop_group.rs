@@ -103,5 +103,11 @@ pub mod ffi {
 
         /// Delete user slice `index` and record one "Delete Slice" state; false for a bad index or no document.
         fn remove_user_slice(view: Pin<&mut PictureView>, index: i32) -> bool;
+
+        /// Number of user slices (the auto slices are derived and are not counted).
+        fn user_slice_count(view: &PictureView) -> i32;
+
+        /// Remove every user slice and record one "Clear Slices" state; false when there was none.
+        fn clear_user_slices(view: Pin<&mut PictureView>) -> bool;
     }
 }

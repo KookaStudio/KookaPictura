@@ -46,6 +46,9 @@ public:
 
     QListWidget* listForTest() const { return list_; }
 
+signals:
+    void pathTargetChanged();
+
 private:
     // A row's Qt::UserRole value: a saved path's index, or one of these.
     static constexpr int kWorkRow = -1;

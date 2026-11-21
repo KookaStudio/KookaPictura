@@ -57,7 +57,7 @@ impl PictureViewRust {
             return false;
         }
         self.session
-            .set_selection(Some(origin.translate(delta.0, delta.1)));
+            .set_selection_in_place(Some(origin.translate(delta.0, delta.1)));
         true
     }
 

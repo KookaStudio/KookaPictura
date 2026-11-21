@@ -959,14 +959,14 @@ pub mod qobject {
         #[qinvokable]
         fn selection_bounds_extents(&self) -> Vec<i32>;
 
-        /// The marching-ants outline loops encoded as `[n0, x,y, …, n1, …]`
-        /// (loop point counts then integer pixel corners); empty when nothing is
-        /// selected. View-only: no history, no recomposite.
+        /// Marching-ants loops `[n0, x,y, …, n1, …]`; empty without a selection.
         #[qinvokable]
         fn selection_contour_extents(&self) -> Vec<i32>;
 
         #[qinvokable]
         fn selection_revision(&self) -> u64;
+        #[qinvokable]
+        fn selection_generation(&self) -> u64;
         #[qinvokable]
         fn selection_contour_compute_count(&self) -> u64;
         #[qinvokable]

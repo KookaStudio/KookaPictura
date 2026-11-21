@@ -226,7 +226,7 @@ impl qobject::PictureView {
             {
                 let mut rust = self.as_mut().rust_mut();
                 rust.session.live.take_selection_move();
-                rust.session.set_selection(Some(moved_selection));
+                rust.session.set_selection_in_place(Some(moved_selection));
             }
             let outcome = match dirty {
                 Some(rect) => Edit::regions(vec![rect], false),
@@ -275,7 +275,7 @@ impl qobject::PictureView {
         {
             let mut rust = self.as_mut().rust_mut();
             rust.session.live.take_selection_move();
-            rust.session.set_selection(Some(moved_selection));
+            rust.session.set_selection_in_place(Some(moved_selection));
             if duplicate {
                 // `layer_via_copy` inserts the copy directly above the source
                 // in the source's own container.
@@ -378,7 +378,7 @@ impl qobject::PictureView {
         self.as_mut()
             .rust_mut()
             .session
-            .set_selection(Some(modified));
+            .set_selection_in_place(Some(modified));
         self.as_mut().edit(label, |_| Edit::Meta);
         true
     }
@@ -398,7 +398,10 @@ impl qobject::PictureView {
                 Err(_) => return false,
             }
         };
-        self.as_mut().rust_mut().session.set_selection(Some(grown));
+        self.as_mut()
+            .rust_mut()
+            .session
+            .set_selection_in_place(Some(grown));
         self.as_mut().edit("Grow Selection", |_| Edit::Meta);
         true
     }
@@ -421,7 +424,7 @@ impl qobject::PictureView {
         self.as_mut()
             .rust_mut()
             .session
-            .set_selection(Some(matched));
+            .set_selection_in_place(Some(matched));
         self.as_mut().edit("Similar Selection", |_| Edit::Meta);
         true
     }
@@ -1020,6 +1023,11 @@ impl qobject::PictureView {
     /// The selection revision the cached outline is keyed by.
     pub fn selection_revision(&self) -> u64 {
         self.rust().session.selection_revision
+    }
+
+    /// Bumped only when a new selection replaces the old one.
+    pub fn selection_generation(&self) -> u64 {
+        self.rust().session.selection_generation
     }
 
     /// How many times the committed outline has been traced, for the cache test.

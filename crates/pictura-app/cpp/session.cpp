@@ -201,6 +201,29 @@ SessionState loadSession()
     state.guidesVisible = obj.value(QStringLiteral("guidesVisible")).toBool(true);
     state.guidesLocked = obj.value(QStringLiteral("guidesLocked")).toBool(false);
     state.smartGuidesVisible = obj.value(QStringLiteral("smartGuidesVisible")).toBool(true);
+    state.selectionEdges = obj.value(QStringLiteral("selectionEdges")).toBool(true);
+    state.showTargetPath = obj.value(QStringLiteral("showTargetPath")).toBool(true);
+    state.showLayerEdges = obj.value(QStringLiteral("showLayerEdges")).toBool(true);
+    state.showGrid = obj.value(QStringLiteral("showGrid")).toBool(false);
+    state.showCount = obj.value(QStringLiteral("showCount")).toBool(true);
+    state.showSlices = obj.value(QStringLiteral("showSlices")).toBool(true);
+    state.showNotes = obj.value(QStringLiteral("showNotes")).toBool(true);
+    state.showPixelGrid = obj.value(QStringLiteral("showPixelGrid")).toBool(true);
+    state.showColorSamplers = obj.value(QStringLiteral("showColorSamplers")).toBool(true);
+    state.extras = obj.value(QStringLiteral("extras")).toBool(true);
+    state.extrasMembersSet = obj.contains(QStringLiteral("extrasMembers"));
+    for (const QJsonValue& id : obj.value(QStringLiteral("extrasMembers")).toArray()) {
+        state.extrasMembers.append(id.toString());
+    }
+    state.lockSlices = obj.value(QStringLiteral("lockSlices")).toBool(false);
+    state.gridColor = obj.value(QStringLiteral("gridColor")).toString(state.gridColor);
+    state.gridStyle = qBound(0, obj.value(QStringLiteral("gridStyle")).toInt(0), 2);
+    state.gridUnit = qBound(0, obj.value(QStringLiteral("gridUnit")).toInt(1), 6);
+    state.gridEvery = obj.value(QStringLiteral("gridEvery")).toDouble(1.0);
+    if (!(state.gridEvery > 0.0)) {
+        state.gridEvery = 1.0;
+    }
+    state.gridSubdivisions = qMax(1, obj.value(QStringLiteral("gridSubdivisions")).toInt(4));
     state.freePan = obj.value(QStringLiteral("freePan")).toBool(true);
     state.snapCanvasToWorkspace =
         obj.value(QStringLiteral("snapCanvasToWorkspace")).toBool(false);
@@ -374,6 +397,23 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("guidesVisible"), state.guidesVisible);
     obj.insert(QStringLiteral("guidesLocked"), state.guidesLocked);
     obj.insert(QStringLiteral("smartGuidesVisible"), state.smartGuidesVisible);
+    obj.insert(QStringLiteral("selectionEdges"), state.selectionEdges);
+    obj.insert(QStringLiteral("showTargetPath"), state.showTargetPath);
+    obj.insert(QStringLiteral("showLayerEdges"), state.showLayerEdges);
+    obj.insert(QStringLiteral("showGrid"), state.showGrid);
+    obj.insert(QStringLiteral("showCount"), state.showCount);
+    obj.insert(QStringLiteral("showSlices"), state.showSlices);
+    obj.insert(QStringLiteral("showNotes"), state.showNotes);
+    obj.insert(QStringLiteral("showPixelGrid"), state.showPixelGrid);
+    obj.insert(QStringLiteral("showColorSamplers"), state.showColorSamplers);
+    obj.insert(QStringLiteral("extras"), state.extras);
+    obj.insert(QStringLiteral("extrasMembers"), QJsonArray::fromStringList(state.extrasMembers));
+    obj.insert(QStringLiteral("lockSlices"), state.lockSlices);
+    obj.insert(QStringLiteral("gridColor"), state.gridColor);
+    obj.insert(QStringLiteral("gridStyle"), state.gridStyle);
+    obj.insert(QStringLiteral("gridUnit"), state.gridUnit);
+    obj.insert(QStringLiteral("gridEvery"), state.gridEvery);
+    obj.insert(QStringLiteral("gridSubdivisions"), state.gridSubdivisions);
     obj.insert(QStringLiteral("freePan"), state.freePan);
     obj.insert(QStringLiteral("snapCanvasToWorkspace"), state.snapCanvasToWorkspace);
     obj.insert(QStringLiteral("guideColor"), state.guideColor);

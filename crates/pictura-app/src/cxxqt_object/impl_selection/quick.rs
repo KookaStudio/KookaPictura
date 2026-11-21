@@ -243,7 +243,7 @@ impl qobject::PictureView {
             return false;
         };
         self.as_mut().edit("Selection", |rust| {
-            rust.session.set_selection(snapshot.selection);
+            rust.session.set_selection_in_place(snapshot.selection);
             rust.session.deselected_selection = snapshot.deselected;
             Edit::SelectionPreview
         });

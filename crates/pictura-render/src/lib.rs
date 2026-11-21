@@ -219,7 +219,7 @@ pub use document_ops::{
     can_reset_smart_object_transform, can_set_smart_object_stack_mode,
     can_transform_smart_object_rect, canvas_plane_bytes, capture_last_document_state,
     capture_layer_comp, clear_all_layer_comp_warnings, clear_layer, clear_layer_comp_warning,
-    clear_layer_style, clear_smart_filters, clipping_release_paths, content_rect,
+    clear_layer_style, clear_slices, clear_smart_filters, clipping_release_paths, content_rect,
     convert_bit_depth, convert_depth, convert_depth_exposure_gamma, convert_for_smart_filters,
     convert_mode, convert_mode_with_profiles, convert_smart_object_to_layers, convert_to_bitmap,
     convert_to_indexed, convert_to_smart_object, copy_layer, copy_layer_style, copy_merged,

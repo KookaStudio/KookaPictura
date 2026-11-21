@@ -528,6 +528,10 @@ void SelectionPreviewTest::zoomMarqueeStaysUnclipped()
 void SelectionPreviewTest::committedOutlineStaysVisibleAtBorderAcrossPanAndZoom()
 {
     Fixture f(*window_, seed(), QStringLiteral("pictura_sel_preview_border"));
+    f.canvas->setLayerEdgesVisible(false);
+    f.canvas->setSlicesVisible(false);
+    f.canvas->setPixelGridVisible(false);
+
     QVERIFY2(f.ok(), "selection fixture");
     // The backdrop is white too, so a dark pixel near the border can only be
     // the ant dash, never the pasteboard.

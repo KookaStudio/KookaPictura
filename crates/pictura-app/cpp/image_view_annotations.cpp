@@ -23,6 +23,21 @@ void ImageView::setAnnotationOverlay(const QList<QPointF>& samplers, const QList
 
 void ImageView::setCountOverlay(const QList<CountOverlayMark>& marks)
 {
+    if (countOverlay_.size() == marks.size()) {
+        bool same = true;
+        for (qsizetype i = 0; i < marks.size(); ++i) {
+            const CountOverlayMark& a = countOverlay_.at(i);
+            const CountOverlayMark& b = marks.at(i);
+            if (a.pos != b.pos || a.number != b.number || a.color != b.color
+                || a.markerSize != b.markerSize || a.labelSize != b.labelSize) {
+                same = false;
+                break;
+            }
+        }
+        if (same) {
+            return;
+        }
+    }
     countOverlay_ = marks;
     update();
 }
@@ -70,7 +85,7 @@ void ImageView::paintAnnotations(QPainter& painter)
     }
 
     const QColor noteColor(0xe8, 0xc0, 0x3a);
-    for (int i = 0; i < noteOverlay_.size(); ++i) {
+    for (int i = 0; notesVisible_ && i < noteOverlay_.size(); ++i) {
         const QPointF p = toWidget(noteOverlay_.at(i));
         const QRectF page(p.x() - 5, p.y() - 6, 10, 12);
         painter.setPen(QPen(Qt::black, i == currentNote_ ? 2 : 1));
@@ -89,7 +104,7 @@ void ImageView::paintAnnotations(QPainter& painter)
     badgeFont.setPixelSize(9);
     painter.setFont(badgeFont);
     const QFontMetrics metrics(badgeFont);
-    for (int i = 0; i < samplerOverlay_.size(); ++i) {
+    for (int i = 0; samplersVisible_ && i < samplerOverlay_.size(); ++i) {
         const QPointF p = toWidget(samplerOverlay_.at(i));
         for (const QPen& pen : {QPen(Qt::white, 2.5), QPen(samplerColor, 1.2)}) {
             painter.setPen(pen);
@@ -109,6 +124,9 @@ void ImageView::paintAnnotations(QPainter& painter)
     // size, and label size (Photoshop Extended). The disc grows to hold the
     // label so a larger Label Size never clips the number.
     for (const CountOverlayMark& mark : countOverlay_) {
+        if (!countVisible_) {
+            break;
+        }
         const QPointF p = toWidget(mark.pos);
         QFont countFont = painter.font();
         countFont.setPixelSize(mark.labelSize);

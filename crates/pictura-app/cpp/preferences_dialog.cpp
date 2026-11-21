@@ -12,6 +12,7 @@
 #include <QtGui/QPixmap>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QColorDialog>
+#include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QFormLayout>
 #include <QtWidgets/QGridLayout>
@@ -728,29 +729,64 @@ QWidget* PreferencesDialog::buildGuidesPage()
 
     auto* grid = new QGroupBox(tr("Grid"), page);
     auto* gridGrid = new QGridLayout(grid);
-    auto* gridColor = colorCombo(QStringLiteral("preferencesGridColor"), grid);
-    gridColor->setCurrentIndex(gridColor->count() - 1);
-    auto* gridStyle = new QComboBox(grid);
-    gridStyle->addItems({tr("Lines"), tr("Dashed Lines"), tr("Dots")});
-    auto* every = new QComboBox(grid);
-    every->addItems({tr("Pixels"), tr("Inches"), tr("Centimeters"), tr("Millimeters"),
-                     tr("Points"), tr("Picas"), tr("Percent")});
-    every->setCurrentIndex(1);
+    gridColor_ = colorCombo(QStringLiteral("preferencesGridColor"), grid);
+    gridColor_->setCurrentIndex(7); // Light Gray
+    gridColorValue_ = gridColor_->itemData(7).value<QColor>();
+    gridStyle_ = new QComboBox(grid);
+    gridStyle_->setObjectName(QStringLiteral("preferencesGridStyle"));
+    gridStyle_->addItems({tr("Lines"), tr("Dashed Lines"), tr("Dots")});
+    gridUnit_ = new QComboBox(grid);
+    gridUnit_->setObjectName(QStringLiteral("preferencesGridUnit"));
+    gridUnit_->addItems({tr("Pixels"), tr("Inches"), tr("Centimeters"), tr("Millimeters"),
+                         tr("Points"), tr("Picas"), tr("Percent")});
+    gridUnit_->setCurrentIndex(1);
+    gridEvery_ = new QDoubleSpinBox(grid);
+    gridEvery_->setObjectName(QStringLiteral("preferencesGridEvery"));
+    gridEvery_->setRange(0.01, 10000.0);
+    gridEvery_->setDecimals(2);
+    gridEvery_->setValue(1.0);
+    gridSubdivisions_ = new QSpinBox(grid);
+    gridSubdivisions_->setObjectName(QStringLiteral("preferencesGridSubdivisions"));
+    gridSubdivisions_->setRange(1, 100);
+    gridSubdivisions_->setValue(4);
     auto* everyRow = new QHBoxLayout;
-    auto* everyValue = new QLabel(QStringLiteral("1"), grid);
-    everyRow->addWidget(everyValue);
-    everyRow->addWidget(every);
+    everyRow->addWidget(gridEvery_);
+    everyRow->addWidget(gridUnit_);
     gridGrid->addWidget(new QLabel(tr("Color:"), grid), 0, 0, Qt::AlignRight);
-    gridGrid->addWidget(gridColor, 0, 1);
+    gridGrid->addWidget(gridColor_, 0, 1);
     gridGrid->addWidget(new QLabel(tr("Style:"), grid), 1, 0, Qt::AlignRight);
-    gridGrid->addWidget(gridStyle, 1, 1);
+    gridGrid->addWidget(gridStyle_, 1, 1);
     gridGrid->addWidget(new QLabel(tr("Gridline Every:"), grid), 2, 0, Qt::AlignRight);
     gridGrid->addLayout(everyRow, 2, 1);
     gridGrid->addWidget(new QLabel(tr("Subdivisions:"), grid), 3, 0, Qt::AlignRight);
-    gridGrid->addWidget(new QLabel(QStringLiteral("4"), grid), 3, 1);
+    gridGrid->addWidget(gridSubdivisions_, 3, 1);
     gridGrid->setColumnStretch(2, 1);
-    gridGrid->addWidget(swatch(QColor(128, 128, 128), grid), 0, 3, 2, 1);
-    grid->setEnabled(false);
+    gridSwatch_ = swatch(QColor(192, 192, 192), grid);
+    gridGrid->addWidget(gridSwatch_, 0, 3, 2, 1);
+    grid->setEnabled(true);
+    const auto emitGrid = [this]() {
+        if (gridSwatch_) {
+            gridSwatch_->setColor(gridColorValue_);
+        }
+        emit gridSettingsChanged(gridColorValue_, gridStyle_->currentIndex(),
+                                 gridUnit_->currentIndex(), gridEvery_->value(),
+                                 gridSubdivisions_->value());
+    };
+    connect(gridColor_, &QComboBox::activated, this, [this, emitGrid](int index) {
+        QColor color = gridColor_->itemData(index).value<QColor>();
+        if (!color.isValid()) {
+            color = QColorDialog::getColor(gridColorValue_, this, tr("Custom Grid Color"));
+            if (!color.isValid()) {
+                return;
+            }
+        }
+        gridColorValue_ = color;
+        emitGrid();
+    });
+    connect(gridStyle_, &QComboBox::activated, this, [emitGrid](int) { emitGrid(); });
+    connect(gridUnit_, &QComboBox::activated, this, [emitGrid](int) { emitGrid(); });
+    connect(gridEvery_, &QDoubleSpinBox::valueChanged, this, [emitGrid](double) { emitGrid(); });
+    connect(gridSubdivisions_, &QSpinBox::valueChanged, this, [emitGrid](int) { emitGrid(); });
     layout->addWidget(grid);
 
     auto* slices = new QGroupBox(tr("Slices"), page);
@@ -805,6 +841,26 @@ void PreferencesDialog::setGuideAppearance(const QColor& color, bool dashed)
     showGuideColor(color);
     const QSignalBlocker block(guideStyle_);
     guideStyle_->setCurrentIndex(dashed ? 1 : 0);
+}
+
+void PreferencesDialog::setGridSettings(const QColor& color, int style, int unit, double every,
+                                        int subdivisions)
+{
+    const QSignalBlocker blockColor(gridColor_);
+    const QSignalBlocker blockStyle(gridStyle_);
+    const QSignalBlocker blockUnit(gridUnit_);
+    const QSignalBlocker blockEvery(gridEvery_);
+    const QSignalBlocker blockSubs(gridSubdivisions_);
+    gridColorValue_ = color.isValid() ? color : QColor(0xc0, 0xc0, 0xc0);
+    const int index = gridColor_->findData(gridColorValue_);
+    gridColor_->setCurrentIndex(index >= 0 ? index : gridColor_->count() - 1);
+    gridStyle_->setCurrentIndex(qBound(0, style, 2));
+    gridUnit_->setCurrentIndex(qBound(0, unit, 6));
+    gridEvery_->setValue(every > 0.0 ? every : 1.0);
+    gridSubdivisions_->setValue(qMax(1, subdivisions));
+    if (gridSwatch_) {
+        gridSwatch_->setColor(gridColorValue_);
+    }
 }
 
 } // namespace pictura

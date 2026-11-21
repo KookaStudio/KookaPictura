@@ -11,6 +11,7 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/image_view_annotations.cpp
     crates/pictura-app/cpp/image_view_channels.cpp
     crates/pictura-app/cpp/image_view_document.cpp
+    crates/pictura-app/cpp/image_view_grid.cpp
     crates/pictura-app/cpp/image_view_guides.cpp
     crates/pictura-app/cpp/image_view_move.cpp
     crates/pictura-app/cpp/image_view_overlays.cpp

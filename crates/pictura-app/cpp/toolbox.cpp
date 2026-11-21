@@ -768,10 +768,7 @@ QMenu* Toolbox::buildZoomMenu()
         }
         // One image inch (ppi pixels) displays as one logical screen inch.
         // ponytail: a fixed 96 logical DPI, not the monitor's physical DPI.
-        const double ppi = document_ppi(*view);
-        if (ppi > 0.0) {
-            canvas->setZoom(96.0 / ppi, QPointF(canvas->width() / 2.0, canvas->height() / 2.0));
-        }
+        canvas->printSize(document_ppi(*view));
     });
     menu->addSeparator();
     add(tr("Zoom In"), &ImageView::zoomIn);

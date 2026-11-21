@@ -230,7 +230,7 @@ impl PictureViewRust {
             self.session.doc.set(Some(done));
             // ponytail: CS6 carries the selection border through the
             // transform; it is dropped rather than left outlining old pixels.
-            self.session.set_selection(None);
+            self.session.set_selection_in_place(None);
             return Some((job.label.clone(), Edit::Full));
         }
         let mut dirty = job.spec.orig_rect;

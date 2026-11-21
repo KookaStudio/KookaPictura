@@ -201,7 +201,7 @@ impl PictureViewRust {
             }
         } else {
             let coverage = self.session.quick_mask.coverage.take();
-            self.session.set_selection(coverage);
+            self.session.set_selection_in_place(coverage);
             self.session.deselected_selection = self.session.quick_mask.deselected.take();
         }
         self.session.quick_mask.active = active;
