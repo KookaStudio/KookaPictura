@@ -80,6 +80,8 @@ signals:
     void saveOptionsRequested();
     // An alpha channel eye changed: the frame re-syncs the canvas view.
     void alphaVisibilityChanged();
+    // An alpha row was double-clicked: the frame opens Channel Options.
+    void channelOptionsRequested();
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;

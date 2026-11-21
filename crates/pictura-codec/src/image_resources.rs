@@ -195,6 +195,14 @@ pub const DISPLAY_INFO: u16 = 1077;
 /// The DisplayInfo mode that marks a spot channel.
 pub const SPOT_CHANNEL_MODE: u8 = 2;
 
+/// The DisplayInfo mode for a `Masked Areas` channel: white is selected and the
+/// plane is the selection coverage.
+pub const MASKED_AREAS_MODE: u8 = 1;
+
+/// The DisplayInfo mode for a `Selected Areas` channel: white is protected and
+/// the selection coverage is `255 - plane`.
+pub const SELECTED_AREAS_MODE: u8 = 0;
+
 /// One extra channel's stored display information: its on-screen colour and
 /// whether it is an alpha channel or a spot ink.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -202,8 +210,21 @@ pub struct ChannelDisplayInfo {
     pub color_space: u16,
     pub components: [u16; 4],
     pub opacity: u16,
-    /// `0` alpha, `1` inverted alpha, `2` spot.
+    /// `0` selected areas, `1` masked areas, `2` spot. A missing entry is
+    /// masked areas.
     pub mode: u8,
+}
+
+/// A `Masked Areas` entry with the default colour and opacity.
+///
+/// [`ChannelDisplayInfo::default()`] has mode 0, which is `Selected Areas`;
+/// use this helper whenever a missing or newly appended entry must mean
+/// `Masked Areas`.
+pub fn masked_display_info() -> ChannelDisplayInfo {
+    ChannelDisplayInfo {
+        mode: MASKED_AREAS_MODE,
+        ..ChannelDisplayInfo::default()
+    }
 }
 
 /// The document's stored extra-channel display information in channel order.
@@ -271,6 +292,79 @@ pub fn set_display_info(document: &mut Document, entries: &[ChannelDisplayInfo])
     let mut section = encode_image_resources(&kept);
     section.extend_from_slice(&document.image_resources[consumed..]);
     document.image_resources = section.into();
+}
+
+/// Whether extra channel `index` is displayed as `Selected Areas`. A missing
+/// entry and a spot entry are `Masked Areas`.
+pub fn channel_selected_areas(document: &Document, index: usize) -> bool {
+    display_info(document)
+        .get(index)
+        .is_some_and(|entry| entry.mode == SELECTED_AREAS_MODE)
+}
+
+/// Set the colour indication of extra channel `index`, preserving every other
+/// entry's colour, opacity, and mode. Returns false for a bad index or a spot
+/// entry.
+///
+/// When a DisplayInfo resource exists, the entry list is padded to the channel
+/// count with explicit `Masked Areas` entries. A new resource is created only
+/// for a `Selected Areas` change; a Masked change on a document with no
+/// resource is already the default and writes nothing.
+pub fn set_channel_selected_areas(document: &mut Document, index: usize, selected: bool) -> bool {
+    if index >= document.channels.len() {
+        return false;
+    }
+    let mut entries = display_info(document);
+    if entries
+        .get(index)
+        .is_some_and(|entry| entry.mode == SPOT_CHANNEL_MODE)
+    {
+        return false;
+    }
+    if entries.is_empty() {
+        if !selected {
+            return true;
+        }
+        entries = vec![masked_display_info(); document.channels.len()];
+    } else {
+        entries.resize_with(document.channels.len(), masked_display_info);
+    }
+    entries[index].mode = if selected {
+        SELECTED_AREAS_MODE
+    } else {
+        MASKED_AREAS_MODE
+    };
+    set_display_info(document, &entries);
+    true
+}
+
+/// Extend an existing DisplayInfo list to the channel count with `Masked Areas`
+/// entries. A document without a DisplayInfo resource is left untouched.
+pub fn append_channel_display_info(document: &mut Document) {
+    let mut entries = display_info(document);
+    if entries.is_empty() {
+        return;
+    }
+    let len = document.channels.len();
+    if entries.len() >= len {
+        return;
+    }
+    entries.resize_with(len, masked_display_info);
+    set_display_info(document, &entries);
+}
+
+/// Remove extra channel `index` from an existing DisplayInfo list and shift the
+/// following entries. Call after the channel itself is removed.
+pub fn remove_channel_display_info(document: &mut Document, index: usize) {
+    let mut entries = display_info(document);
+    if entries.is_empty() {
+        return;
+    }
+    if index < entries.len() {
+        entries.remove(index);
+    }
+    entries.truncate(document.channels.len());
+    set_display_info(document, &entries);
 }
 
 /// The indices of the document's extra channels whose stored mode is spot.
@@ -565,6 +659,134 @@ mod tests {
             data: vec![0; 4].into(),
         });
         assert_eq!(spot_channel_indices(&doc), vec![1]);
+    }
+
+    fn channel_with(value: u8) -> Channel {
+        Channel {
+            id: 0,
+            data: vec![value; 4].into(),
+        }
+    }
+
+    #[test]
+    fn channel_sense_defaults_to_masked() {
+        let mut doc = document_with(Vec::new());
+        doc.channels.push(channel_with(0));
+        assert!(!channel_selected_areas(&doc, 0));
+        append_channel_display_info(&mut doc);
+        assert!(
+            display_info(&doc).is_empty(),
+            "no DisplayInfo resource is invented"
+        );
+    }
+
+    #[test]
+    fn channel_sense_missing_entry_is_masked() {
+        let mut doc = document_with(Vec::new());
+        doc.channels.push(channel_with(0));
+        doc.channels.push(channel_with(0));
+        set_display_info(
+            &mut doc,
+            &[ChannelDisplayInfo {
+                mode: SELECTED_AREAS_MODE,
+                ..masked_display_info()
+            }],
+        );
+        assert!(channel_selected_areas(&doc, 0));
+        assert!(!channel_selected_areas(&doc, 1));
+    }
+
+    #[test]
+    fn set_channel_sense_pads_the_other_entries_as_masked() {
+        let mut doc = document_with(Vec::new());
+        for _ in 0..3 {
+            doc.channels.push(channel_with(0));
+        }
+        let first = ChannelDisplayInfo {
+            color_space: 2,
+            components: [1, 2, 3, 4],
+            opacity: 77,
+            mode: SELECTED_AREAS_MODE,
+        };
+        set_display_info(&mut doc, &[first]);
+        assert!(set_channel_selected_areas(&mut doc, 2, true));
+        let infos = display_info(&doc);
+        assert_eq!(infos.len(), 3);
+        assert_eq!(infos[0], first);
+        assert_eq!(infos[1].mode, MASKED_AREAS_MODE);
+        assert_eq!(infos[2].mode, SELECTED_AREAS_MODE);
+        assert!(channel_selected_areas(&doc, 2));
+        assert!(!channel_selected_areas(&doc, 1));
+    }
+
+    #[test]
+    fn appending_a_channel_pads_the_display_info_as_masked() {
+        let mut doc = document_with(Vec::new());
+        doc.channels.push(channel_with(0));
+        set_display_info(
+            &mut doc,
+            &[ChannelDisplayInfo {
+                mode: SELECTED_AREAS_MODE,
+                ..masked_display_info()
+            }],
+        );
+        doc.channels.push(channel_with(0));
+        append_channel_display_info(&mut doc);
+        let infos = display_info(&doc);
+        assert_eq!(infos.len(), 2);
+        assert_eq!(infos[0].mode, SELECTED_AREAS_MODE);
+        assert_eq!(infos[1].mode, MASKED_AREAS_MODE);
+    }
+
+    #[test]
+    fn deleting_a_channel_shifts_display_info() {
+        let mut doc = document_with(Vec::new());
+        for _ in 0..3 {
+            doc.channels.push(channel_with(0));
+        }
+        set_display_info(
+            &mut doc,
+            &[
+                ChannelDisplayInfo {
+                    opacity: 10,
+                    mode: SELECTED_AREAS_MODE,
+                    ..ChannelDisplayInfo::default()
+                },
+                ChannelDisplayInfo {
+                    opacity: 20,
+                    mode: MASKED_AREAS_MODE,
+                    ..ChannelDisplayInfo::default()
+                },
+                ChannelDisplayInfo {
+                    opacity: 30,
+                    mode: SPOT_CHANNEL_MODE,
+                    ..ChannelDisplayInfo::default()
+                },
+            ],
+        );
+        doc.channels.remove(0);
+        remove_channel_display_info(&mut doc, 0);
+        let infos = display_info(&doc);
+        assert_eq!(infos.len(), 2);
+        assert_eq!(infos[0].opacity, 20);
+        assert_eq!(infos[0].mode, MASKED_AREAS_MODE);
+        assert_eq!(infos[1].opacity, 30);
+        assert_eq!(infos[1].mode, SPOT_CHANNEL_MODE);
+    }
+
+    #[test]
+    fn set_channel_sense_refuses_spot() {
+        let mut doc = document_with(Vec::new());
+        doc.channels.push(channel_with(0));
+        set_display_info(
+            &mut doc,
+            &[ChannelDisplayInfo {
+                mode: SPOT_CHANNEL_MODE,
+                ..ChannelDisplayInfo::default()
+            }],
+        );
+        assert!(!set_channel_selected_areas(&mut doc, 0, true));
+        assert_eq!(display_info(&doc)[0].mode, SPOT_CHANNEL_MODE);
     }
 
     #[test]

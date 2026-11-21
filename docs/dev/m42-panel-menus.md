@@ -83,7 +83,7 @@ panel is a placeholder in M42; every entry is disabled.
 | Merge Spot Channel(s) | `[disabled]` |
 | Split Channels | `[disabled]` |
 | Merge Channels… | `[disabled]` |
-| Channel Options… | `[disabled]` |
+| Channel Options… | `[impl]` |
 | Panel Options… | `[disabled]` |
 | Close / Close Tab Group | `[tab-menu]` |
 

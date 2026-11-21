@@ -87,6 +87,15 @@ pub mod ffi {
         /// Display name for extra channel `index`, or empty for a bad index.
         fn channels_alpha_name(view: &PictureView, index: i32) -> QString;
 
+        /// Whether extra channel `index` is `Selected Areas`; a missing entry and a spot channel are `Masked Areas`.
+        fn channels_selected_areas(view: &PictureView, index: i32) -> bool;
+
+        /// Whether extra channel `index` is a spot channel from the PSD DisplayInfo.
+        fn channels_alpha_is_spot(view: &PictureView, index: i32) -> bool;
+
+        /// Set extra channel `index` to `Selected Areas` when `selected`, else `Masked Areas`. The plane is complemented so the loaded selection is unchanged; one `Channel Options` state. False for a bad index, a spot channel, or no change.
+        fn channels_set_sense(view: Pin<&mut PictureView>, index: i32, selected: bool) -> bool;
+
         /// The active layer's raster-mask channel name (`"<layer name> Mask"`), or
         /// empty when the active layer carries no raster mask.
         fn channels_active_mask_name(view: &PictureView) -> QString;

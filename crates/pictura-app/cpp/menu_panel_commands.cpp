@@ -79,6 +79,20 @@ void MenuRegistrar::wirePanelMenuCommands()
         return panels_ && panels_->channelsPanel()
             && panels_->channelsPanel()->canDuplicateCurrent();
     });
+    commands_->setHandler(command_ids::PanelChannelsChannelOptions, [this]() {
+        if (runtime_.openChannelOptionsDialog) {
+            runtime_.openChannelOptionsDialog();
+        }
+    });
+    commands_->setEnabledProvider(command_ids::PanelChannelsChannelOptions, [this]() {
+        PictureView* view = activeView();
+        if (!panels_ || !panels_->channelsPanel() || !view || !view->has_document()) {
+            return false;
+        }
+        const int alpha =
+            panels_->channelsPanel()->alphaIndexAt(panels_->channelsPanel()->currentRow());
+        return alpha >= 0 && !channels_alpha_is_spot(*view, alpha);
+    });
     commands_->setHandler(command_ids::PanelLayersMoveUp, [this]() {
         if (panels_->layersPanel()) {
             panels_->layersPanel()->moveAnchor(1);

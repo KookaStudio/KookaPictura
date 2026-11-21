@@ -166,6 +166,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     menuRuntime.openSaveSelectionDialog = [this]() { openSaveSelectionDialog(); };
     menuRuntime.openLoadSelectionDialog = [this]() { openLoadSelectionDialog(); };
     menuRuntime.openDuplicateChannelDialog = [this]() { openDuplicateChannelDialog(); };
+    menuRuntime.openChannelOptionsDialog = [this]() { openChannelOptionsDialog(); };
     menuRuntime.uiScalePercent = [this]() { return uiScalePercent_; };
     menuRuntime.foregroundColor = [this]() { return foregroundColor(); };
     menu_ = std::make_unique<MenuRegistrar>(
@@ -193,6 +194,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     };
     panelHooks.saveSelectionOptions = [this]() { openSaveSelectionDialog(); };
     panelHooks.alphaVisibilityChanged = [this]() { refresh(); };
+    panelHooks.channelOptionsRequested = [this]() { openChannelOptionsDialog(); };
     panelHooks.convertImageMode = [this](const QString& mode) {
         if (menu_) {
             menu_->convertImageMode(mode);

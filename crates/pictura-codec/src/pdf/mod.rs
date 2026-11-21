@@ -285,7 +285,12 @@ fn editing_payload(
         if !infos.is_empty() {
             let kept_infos = retained
                 .iter()
-                .map(|&i| infos.get(i).copied().unwrap_or_default())
+                .map(|&i| {
+                    infos
+                        .get(i)
+                        .copied()
+                        .unwrap_or_else(crate::image_resources::masked_display_info)
+                })
                 .collect::<Vec<_>>();
             crate::image_resources::set_display_info(&mut payload, &kept_infos);
         }

@@ -258,7 +258,7 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [x] Select ▸ Transform Selection (#526)
 - [x] Apply Image (#609)
 - [x] Calculations (#610)
-- [ ] Channel Options — Masked and Selected Areas polarity (#611)
+- [x] Channel Options — Masked and Selected Areas polarity (#611)
 - [x] The interactive Refine Radius and Erase brushes (#612)
 - [x] Color Range Skin Tones, Localized Clusters, Out Of Gamut, previews, and
       save and load (#613)
@@ -512,8 +512,7 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [ ] The Measurement Log panel (#510)
 - [ ] The Tool Presets panel and `.tpl` libraries (#511)
 - [ ] The Styles panel and `.asl` presets (#512)
-- [ ] Channel panel spot channels, Split and Merge, Channel Options, and Panel
-      Options (#513)
+- [ ] Channel panel spot channels, Split and Merge, and Panel Options (#513)
 - [ ] History Options, Clear History and purge, and New Document from state
       (#514)
 - [ ] Histogram view modes, statistics, the source menu, cache and refresh, and

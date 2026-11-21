@@ -9,9 +9,14 @@
 #include "panels/channels_panel.h"
 #include "save_load_selection_dialog.h"
 
+#include "api/layers_bridge.h"
 #include "api/selection_bridge.h"
 
+#include <QtWidgets/QDialog>
+#include <QtWidgets/QDialogButtonBox>
+#include <QtWidgets/QFormLayout>
 #include <QtWidgets/QMessageBox>
+#include <QtWidgets/QRadioButton>
 
 #include <cstddef>
 
@@ -108,6 +113,7 @@ void PicturaMainWindow::openSaveSelectionDialog()
     PictureView* target = request.document ? request.document : active;
     if (target == active) {
         if (save_selection_to(*active, request.target, request.name, request.mode)) {
+            invalidateMaskOverlayFor(active);
             refresh();
         } else {
             refuse();
@@ -116,6 +122,7 @@ void PicturaMainWindow::openSaveSelectionDialog()
     }
     if (save_selection_coverage(*target, bytes, width, height, request.target, request.name,
                                         request.mode)) {
+        invalidateMaskOverlayFor(target);
         refresh();
     } else {
         refuse();
@@ -181,6 +188,49 @@ void PicturaMainWindow::openLoadSelectionDialog()
     } else {
         refuse();
     }
+}
+
+void PicturaMainWindow::openChannelOptionsDialog()
+{
+    PictureView* view = activeView();
+    ChannelsPanel* panel = panels_ ? panels_->channelsPanel() : nullptr;
+    if (!view || !view->has_document() || !panel) {
+        return;
+    }
+    const int alpha = panel->alphaIndexAt(panel->currentRow());
+    if (alpha < 0 || channels_alpha_is_spot(*view, alpha)) {
+        return;
+    }
+
+    QDialog dialog(this);
+    dialog.setObjectName(QStringLiteral("channelOptionsDialog"));
+    dialog.setWindowTitle(tr("Channel Options"));
+    auto* layout = new QFormLayout(&dialog);
+    auto* masked = new QRadioButton(tr("Masked Areas"), &dialog);
+    auto* selected = new QRadioButton(tr("Selected Areas"), &dialog);
+    masked->setObjectName(QStringLiteral("channelOptionsMaskedAreas"));
+    selected->setObjectName(QStringLiteral("channelOptionsSelectedAreas"));
+    const bool selectedAreas = channels_selected_areas(*view, alpha);
+    selected->setChecked(selectedAreas);
+    masked->setChecked(!selectedAreas);
+    layout->addRow(tr("Color Indicates:"), masked);
+    layout->addRow(QString(), selected);
+    auto* buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    buttons->setObjectName(QStringLiteral("channelOptionsButtons"));
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addRow(buttons);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+    if (!channels_set_sense(*view, alpha, selected->isChecked())) {
+        return;
+    }
+    panel->refresh();
+    invalidateMaskOverlay();
+    refresh();
 }
 
 void PicturaMainWindow::openDuplicateChannelDialog()

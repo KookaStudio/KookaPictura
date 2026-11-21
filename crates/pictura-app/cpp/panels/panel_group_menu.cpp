@@ -114,7 +114,7 @@ const QList<MenuRow>& rowsForPanel(const QString& panel)
              dis(QStringLiteral("Merge Spot Channel(s)")),
              dis(QStringLiteral("Split Channels"), true),
              dis(QStringLiteral("Merge Channels…")),
-             dis(QStringLiteral("Channel Options…"), true),
+             imp(QStringLiteral("Channel Options…"), QStringLiteral("channelOptions")),
              dis(QStringLiteral("Panel Options…"), true),
          }},
         {QStringLiteral("pathsPanel"),
@@ -369,6 +369,7 @@ QString panelCommandId(const QString& panel, const QString& action)
     if (panel == QStringLiteral("channelsPanel")) {
         static const QHash<QString, const char*> map = {
             {QStringLiteral("duplicateChannel"), command_ids::PanelChannelsDuplicateChannel},
+            {QStringLiteral("channelOptions"), command_ids::PanelChannelsChannelOptions},
         };
         return map.contains(action) ? QString::fromLatin1(map.value(action)) : QString();
     }

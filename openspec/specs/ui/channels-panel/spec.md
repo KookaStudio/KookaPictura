@@ -154,9 +154,10 @@ Ctrl/Cmd-clicking a Channels-panel row SHALL load that row as the selection with
 New; adding Shift SHALL use Add; adding Alt SHALL use Subtract; adding Shift and
 Alt SHALL use Intersect. The composite row SHALL load the luminance of the
 visible channels (a hidden RGB channel contributing nothing), each colour row
-SHALL load its own grayscale plane, and an alpha row SHALL load its stored
-channel. Each load SHALL record exactly one "Load Selection" history state. A
-plain click SHALL only move the current row and SHALL NOT change the selection.
+SHALL load its own grayscale plane, and an alpha row SHALL load its channel through its
+sense: the stored plane under `Masked Areas` and `255 - plane` under
+`Selected Areas`. Each load SHALL record exactly one "Load Selection" history
+state. A plain click SHALL only move the current row and SHALL NOT change the selection.
 Dragging a row onto the Load Selection button SHALL load it as a New selection.
 Alt/Option-clicking the Save Selection button SHALL open the Save Selection
 dialog instead of saving immediately; a plain click SHALL still save the
@@ -364,9 +365,10 @@ outside a document SHALL do nothing.
 Each alpha-channel row in the Channels panel SHALL have an enabled, checkable
 eye. Clicking an alpha eye SHALL toggle that channel in the canvas view; multiple
 alpha channels MAY be shown at once. The canvas view SHALL draw each shown
-channel as a red 50 % rubylith overlay over the channel's masked (black) area,
-composited so that each additional shown channel deepens the red, and SHALL
-scale the overlay to the document while leaving the composite visible beneath it.
+channel as a red 50 % rubylith overlay over the channel's stored plane's black
+area (masked under `Masked Areas`, selected under `Selected Areas`), composited
+so that each additional shown channel deepens the red, and SHALL scale the
+overlay to the document while leaving the composite visible beneath it.
 Clicking the composite eye or any colour-channel eye SHALL restore the composite
 and clear every shown alpha channel. The alpha view SHALL be display-only: it
 MUST NOT change the channel pixels, the live selection, the history, or the
@@ -377,7 +379,8 @@ SHALL clear the affected entries.
 #### Scenario: The eye shows the channel [cp_alpha_eye_shows]
 
 - **WHEN** an alpha channel's eye is clicked
-- **THEN** the canvas shows a red 50 % overlay over that channel's masked area and the eye is checked
+- **THEN** the canvas shows a red 50 % overlay over that channel's plane-black area (its masked area under `Masked Areas`;
+  its selected area under `Selected Areas`) and the eye is checked
 
 #### Scenario: The eye hides the channel [cp_alpha_eye_toggles]
 
@@ -408,3 +411,45 @@ SHALL clear the affected entries.
 
 - **WHEN** an alpha eye is clicked
 - **THEN** its row becomes the current Channels row
+
+### Requirement: Channel Options command
+
+The Channels panel SHALL enable its menu entry `Channel Options…` only while the current row is an alpha channel row of an open document. It SHALL be disabled when the current row is a colour row, the active layer's mask row, the temporary Quick Mask row, a spot channel row, or when no row is current.
+
+Invoking the command, or double-clicking an alpha channel row, SHALL open a modal dialog titled `Channel Options` whose `Color Indicates:` choice offers `Masked Areas` and `Selected Areas`, initialized from the channel's current sense. Accepting a changed sense SHALL store the new sense, flip the channel plane so the selection it loads is unchanged, refresh the channel's thumbnail and the canvas alpha view, and record exactly one `Channel Options` history state. Accepting the same sense, or cancelling, SHALL leave the document, the channel bytes, the selection, and history unchanged. The dialog SHALL NOT offer a name, colour, opacity, or spot conversion in this change, and it SHALL NOT be available for non-alpha rows.
+
+#### Scenario: The menu entry follows the current row [cp_options_menu_row]
+- **WHEN** the current row is changed between an alpha row, a colour row, the layer-mask row, the Quick Mask row, and a spot channel row
+- **THEN** `Channel Options…` is enabled only for the alpha row
+
+#### Scenario: Double-click opens the dialog [cp_options_double_click]
+- **WHEN** an alpha channel row is double-clicked
+- **THEN** the Channel Options dialog opens with the channel's current sense selected
+
+#### Scenario: Cancelling changes nothing [cp_options_cancel]
+- **WHEN** the dialog is opened and cancelled
+- **THEN** the channel plane, sense, selection, and history are unchanged
+
+#### Scenario: Re-applying the same sense records no state [cp_options_same_sense]
+- **WHEN** the dialog is accepted without changing the current sense
+- **THEN** the channel and history are unchanged
+
+#### Scenario: Accepting flips the plane and keeps the mask [cp_options_apply]
+- **WHEN** a Masked Areas channel is switched to Selected Areas and accepted
+- **THEN** every plane byte is complemented, the loaded selection is unchanged, and history gains exactly one `Channel Options` state
+
+### Requirement: Sense-aware channel display
+
+The Channels panel SHALL render each alpha row's thumbnail from the stored channel plane, so changing a channel's sense inverts its thumbnail while the selection the channel loads stays the same. While an alpha channel is shown on the canvas, its rubylith SHALL continue to cover the stored plane's black area: under `Masked Areas` that is the masked area, and under `Selected Areas` that is the selected area. An accepted change SHALL refresh both the thumbnail and the shown overlay without another eye click. The alpha view SHALL remain display-only, leaving channel pixels, the live selection, history, and the saved document unchanged.
+
+#### Scenario: The thumbnail follows the plane [cp_options_thumbnail]
+- **WHEN** an alpha channel's sense is switched from Masked Areas to Selected Areas
+- **THEN** the row thumbnail shows the complemented plane
+
+#### Scenario: The overlay follows the plane's black area [cp_options_overlay]
+- **WHEN** a Selected Areas alpha channel is shown on the canvas
+- **THEN** the red overlay covers the pixels the channel stores as black, which are its selected pixels
+
+#### Scenario: Toggling a shown channel refreshes its overlay [cp_options_overlay_refresh]
+- **WHEN** the sense of an alpha channel currently shown on the canvas is changed
+- **THEN** the rubylith follows the complemented plane without another eye click

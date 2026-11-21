@@ -8,6 +8,8 @@
 
 #include "api/layers_bridge.h"
 
+#include <QtCore/QVariant>
+
 #include <cstdint>
 #include <vector>
 
@@ -28,6 +30,23 @@ constexpr int kAlphaOverlayOpacity = 50;
 void PicturaMainWindow::wireMaskOverlay()
 {
     connect(panels_->layersPanel(), &LayersPanel::maskDisplayChanged, this, &PicturaMainWindow::refresh);
+}
+
+void PicturaMainWindow::invalidateMaskOverlay()
+{
+    invalidateMaskOverlayFor(activeView());
+}
+
+void PicturaMainWindow::invalidateMaskOverlayFor(PictureView* view)
+{
+    const int index = view ? indexOfView(view) : -1;
+    const DocEntry* doc = index >= 0 && documents_ ? documents_->docAt(index) : nullptr;
+    if (!doc) {
+        return;
+    }
+    forEachCanvas(*doc, [](ImageView* canvas) {
+        canvas->setProperty(kMaskOverlayKey, QVariant());
+    });
 }
 
 void PicturaMainWindow::syncMaskOverlay(PictureView* view, ImageView* canvas)

@@ -508,3 +508,162 @@ fn save_then_load_round_trip() {
     assert_eq!(loaded.data.to_vec(), vec![123; 4]);
     assert_eq!(pictura_codec::alpha_names(doc), vec!["Hair".to_string()]);
 }
+
+#[test]
+fn selected_channel_stores_protection() {
+    let mut doc = test_doc(2, 2);
+    doc.channels = vec![channel_value(0, 4)];
+    assert!(pictura_codec::set_channel_selected_areas(&mut doc, 0, true));
+    let mut rust = test_rust(doc);
+    let outcome = save_selection_shape(
+        &mut rust,
+        selection(200, 2, 2),
+        SelectionTarget::Channel(0),
+        "",
+        CombineMode::New,
+    );
+    assert!(matches!(outcome, Edit::Meta));
+    let doc = rust.session.doc.as_ref().expect("doc");
+    assert_eq!(doc.channels[0].data.to_vec(), vec![55; 4]);
+    assert_eq!(
+        selection_from_target(doc, "alpha:0")
+            .expect("load")
+            .data
+            .to_vec(),
+        vec![200; 4]
+    );
+}
+
+#[test]
+fn same_plane_reads_opposite_under_each_sense() {
+    let mut doc = test_doc(2, 2);
+    doc.channels = vec![channel_value(64, 4), channel_value(64, 4)];
+    assert!(pictura_codec::set_channel_selected_areas(&mut doc, 1, true));
+    assert!(!pictura_codec::channel_selected_areas(&doc, 0));
+    assert_eq!(
+        selection_from_target(&doc, "alpha:0")
+            .expect("masked")
+            .data
+            .to_vec(),
+        vec![64; 4]
+    );
+    assert_eq!(
+        selection_from_target(&doc, "alpha:1")
+            .expect("selected")
+            .data
+            .to_vec(),
+        vec![191; 4]
+    );
+}
+
+#[test]
+fn save_into_selected_channel_writes_protection() {
+    let mut doc = test_doc(2, 2);
+    doc.channels = vec![channel_value(0, 4)];
+    assert!(pictura_codec::set_channel_selected_areas(&mut doc, 0, true));
+    let mut rust = test_rust(doc);
+    let outcome = save_selection_shape(
+        &mut rust,
+        selection(64, 2, 2),
+        SelectionTarget::Channel(0),
+        "",
+        CombineMode::New,
+    );
+    assert!(matches!(outcome, Edit::Meta));
+    let doc = rust.session.doc.as_ref().expect("doc");
+    assert_eq!(doc.channels[0].data.to_vec(), vec![191; 4]);
+    assert_eq!(
+        selection_from_target(doc, "alpha:0")
+            .expect("load")
+            .data
+            .to_vec(),
+        vec![64; 4]
+    );
+}
+
+#[test]
+fn combine_under_selected_channel_uses_canonical_coverage() {
+    let mut doc = test_doc(2, 2);
+    doc.channels = vec![channel_value(127, 4)];
+    assert!(pictura_codec::set_channel_selected_areas(&mut doc, 0, true));
+    let mut rust = test_rust(doc);
+    let outcome = save_selection_shape(
+        &mut rust,
+        selection(64, 2, 2),
+        SelectionTarget::Channel(0),
+        "",
+        CombineMode::Add,
+    );
+    let applied = rust.apply_edit("Save Selection", outcome);
+    assert_eq!(applied.declaration, Some(Edit::Meta));
+    assert_eq!(rust.session.history.count(), 1);
+    let doc = rust.session.doc.as_ref().expect("doc");
+    assert_eq!(doc.channels[0].data.to_vec(), vec![127; 4]);
+    assert_eq!(
+        selection_from_target(doc, "alpha:0")
+            .expect("load")
+            .data
+            .to_vec(),
+        vec![128; 4]
+    );
+}
+
+#[test]
+fn load_selected_channel_applies_sense_before_invert() {
+    let mut doc = test_doc(2, 2);
+    doc.channels = vec![channel_value(64, 4)];
+    assert!(pictura_codec::set_channel_selected_areas(&mut doc, 0, true));
+    let shape = selection_from_target(&doc, "alpha:0").expect("source");
+    assert_eq!(shape.data.to_vec(), vec![191; 4]);
+    assert_eq!(shape.invert().data.to_vec(), vec![64; 4]);
+}
+
+#[test]
+fn load_selected_channel_is_sense_aware() {
+    let mut doc = test_doc(2, 2);
+    doc.channels = vec![channel_value(64, 4)];
+    assert!(pictura_codec::set_channel_selected_areas(&mut doc, 0, true));
+    let shape = selection_from_target(&doc, "alpha:0").expect("source");
+    let mut rust = test_rust(doc);
+    combine_selection(&mut rust, shape, CombineMode::New, false);
+    rust.apply_edit("Load Selection", Edit::Meta);
+    assert_eq!(rust.session.history.count(), 1);
+    assert_eq!(
+        rust.session.selection.expect("selection").data.to_vec(),
+        vec![191; 4]
+    );
+}
+
+#[test]
+fn sense_toggle_preserves_the_selection() {
+    let mut doc = test_doc(2, 2);
+    doc.channels = vec![Channel {
+        id: 0,
+        data: vec![0, 64, 127, 255].into(),
+    }];
+    let before = selection_from_target(&doc, "alpha:0").expect("before");
+    let outcome = crate::cxxqt_object::channels::toggle_channel_sense(&mut doc, 0, true);
+    assert_eq!(outcome, Edit::Meta);
+    assert!(pictura_codec::channel_selected_areas(&doc, 0));
+    assert_eq!(doc.channels[0].data.to_vec(), vec![255, 191, 128, 0]);
+    let after = selection_from_target(&doc, "alpha:0").expect("after");
+    assert_eq!(after.data.to_vec(), before.data.to_vec());
+
+    let mut rust = test_rust(doc);
+    rust.apply_edit("Channel Options", outcome);
+    assert_eq!(rust.session.history.count(), 1);
+}
+
+#[test]
+fn selected_channel_soft_coverage_is_not_quantized() {
+    let mut doc = test_doc(2, 2);
+    doc.channels = vec![channel_value(127, 4)];
+    assert!(pictura_codec::set_channel_selected_areas(&mut doc, 0, true));
+    assert_eq!(
+        selection_from_target(&doc, "alpha:0")
+            .expect("load")
+            .data
+            .to_vec(),
+        vec![128; 4]
+    );
+}

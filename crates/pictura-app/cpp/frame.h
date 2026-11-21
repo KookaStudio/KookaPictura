@@ -132,6 +132,12 @@ public:
     void activateView(PictureView* view);
     // Channels panel > Duplicate Channel… (also a test hook).
     void openDuplicateChannelDialog();
+    // Channels panel > Channel Options… (also a test hook).
+    void openChannelOptionsDialog();
+    // Drop the cached alpha overlay so the next refresh redraws it.
+    void invalidateMaskOverlay();
+    // Drop the cached alpha overlay for `view`'s document on every window.
+    void invalidateMaskOverlayFor(PictureView* view);
     // Creates two documents and drags the last tab before its neighbour through
     // the real tab bar; returns whether the tab windows followed the new visual
     // order while each document kept its index and the active view stayed.

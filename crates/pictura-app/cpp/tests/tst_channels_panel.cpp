@@ -1,6 +1,7 @@
 #include <QtTest/QtTest>
 
 #include "channel_drag.h"
+#include "commands.h"
 #include "duplicate_channel_dialog.h"
 #include "frame.h"
 #include "image_view.h"
@@ -15,13 +16,18 @@
 #include <QtGui/QAction>
 #include <QtGui/QDragEnterEvent>
 #include <QtGui/QDropEvent>
+#include <QtGui/QPixmap>
 #include <QtCore/QMimeData>
 #include <QtWidgets/QApplication>
+#include <QtWidgets/QDialog>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QMenu>
+#include <QtWidgets/QRadioButton>
 #include <QtWidgets/QTabBar>
 #include <QtWidgets/QToolButton>
 
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 
 #include "qt_test_support.h"
@@ -1091,6 +1097,7 @@ void ChannelsPanelTest::duplicateChannelAtCapRefused()
     QCOMPARE(target->selection_channel_count(), 53);
     QCOMPARE(target->history_count(), before);
 }
+
 
 QTEST_MAIN(ChannelsPanelTest)
 #include "tst_channels_panel.moc"

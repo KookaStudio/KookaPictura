@@ -631,6 +631,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "panel.layers.maskOptions", path: &[], label: "Mask Options…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "panel.layers.panelOptions", path: &[], label: "Panel Options…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "panel.channels.duplicateChannel", path: &[], label: "Duplicate Channel…", shortcut: "", implemented: true, checkable: false },
+    CommandSpec { id: "panel.channels.channelOptions", path: &[], label: "Channel Options…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "panel.history.stepForward", path: &[], label: "Step Forward", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "panel.history.stepBackward", path: &[], label: "Step Backward", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "panel.history.newSnapshot", path: &[], label: "New Snapshot…", shortcut: "", implemented: true, checkable: false },
