@@ -615,7 +615,10 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [x] The open-document list at the bottom of the Window menu (#923)
 - [ ] Menu customization: Edit ▸ Menus, Show All Menu Items, and the
       enablement matrix (#501)
-- [ ] The Type menu: work path, convert to shape, and spellcheck (#502)
+- [x] The Type menu: work path, convert to shape, find and replace, and the
+      remaining option rows (#502)
+- [ ] Check Spelling with a bundled dictionary (#1443)
+- [ ] Browse and install Google Fonts from the Type menu (#1442)
 - [x] View ▸ Show/Extras, Show Extra Options, Grid, Pixel Grid, Layer Edges,
       Target Path, Lock/Clear Slices, 200% and Print Size (#503)
 - [ ] The remaining View menu items: Gamut Warning and Pixel Aspect Ratio

@@ -39,7 +39,7 @@ Type-layer editing rules (documented):
 | **Character Styles panel** | `Window > Character Styles`. Create/store/reapply character-level attributes. |
 | **Paragraph Styles panel** | `Window > Paragraph Styles`. New documents start with a **Basic Paragraph** style. |
 | **Style hierarchy** | Manual overrides supersede applied character styles, which supersede applied paragraph styles. |
-| **Default type styles** | `Type > Save/Load Default Type Styles` is documented in the CS6 Help as **Creative Cloud only**, not base CS6 (flagged in Open questions). |
+| **Default type styles** | `Type > Save/Load Default Type Styles` is documented in the CS6 Help as **Creative Cloud only**, not base CS6; the CC-shaped build implements both from the Type menu and saves the defaults in the Type preferences. |
 | **Font preview size** | `Type > Font Preview Size` (CS5 had this in the Type preferences). Font menus show live previews; font-kind icons distinguish OpenType, Type 1, TrueType, Multiple Master. |
 | **Font selection** | Type-ahead: typing a name in the Font Family/Style field jumps to the first font/style beginning with those letters. Duplicate installed fonts are suffixed `(T1)`, `(TT)`, `(OT)`. |
 | **Missing fonts / glyph protection** | An alert on open when fonts are missing; `Type > Replace All Missing Fonts` (in `Layer > Type` in CS5). **Enable Missing Glyph Protection** (Advanced Type preferences, on by default) auto-substitutes a font for non-Roman input. |
@@ -76,7 +76,7 @@ The task brief lists "font search & filtering" as a CS6 type improvement. The CS
 | `Type > Paste Lorem Ipsum` | Menu | n/a | New in CS6 |
 | `Type > Font Preview Size` | Menu | n/a | Moved from Preferences (CS6) |
 | `Type > Replace All Missing Fonts` | Menu | n/a | CS5: `Layer > Type` |
-| `Type > Update All Text Layers` | Menu | n/a | Converts legacy bitmap type to vector |
+| `Type > Update All Text Layers` | Menu | n/a | Re-renders every type layer |
 | `Layer > Rasterize > Type` | Menu | n/a | Destructive |
 | `Edit > Check Spelling` | Dialog | n/a | |
 | `Edit > Find And Replace Text` | Dialog | n/a | |
@@ -109,7 +109,7 @@ The task brief lists "font search & filtering" as a CS6 type improvement. The CS
 | OpenType features | toggles | off | standard/discretionary ligatures, contextual alternates, swash, old style, stylistic/titling alternates, ornaments, ordinals, fractions | Character panel menu |
 | Warp style | enum | None | Arc, Wave, Fish, etc. + Bend / H-Distortion / V-Distortion | `Type > Warp Text` |
 | Blend Text Colors Using Gamma | number (toggle) | 1.45, on | gamma value | Color Settings; global |
-| Font Preview Size | enum | app default | None / Small / Medium / Large | Type menu (CS6) |
+| Font Preview Size | enum | Medium | None / Small / Medium / Large / Extra Large / Huge | Type menu (CS6) |
 
 ## Algorithms & pipeline
 
@@ -187,6 +187,7 @@ Widgets (not QML) is consistent with `ARCH-003`. The interactive text editor is 
 - **Font availability.** Missing fonts alert on open; missing-glyph protection substitutes automatically; outline-less (bitmap) fonts cannot become work paths/shapes and cannot be warped.
 - **Overflow.** Paragraph `+` handle and on-path end `+` marker; converting paragraph→point deletes overflow — must warn/preserve for undo.
 - **Empty type layer.** Zero-length text should not crash layout or path conversion; a Work Path from empty type is empty.
+- **Type menu implementation ceilings.** Outlines use the engine's single-run type model; area-type outlines are not clipped to the area path; warped outlines are polylines; find/replace folds ASCII case only and treats alphanumerics/underscore as word characters; the solid-fill writer stores an opaque fill.
 - **Type on a closed path.** Always horizontal, breaks at boundaries; flipping across the path changes side and reverses reading direction.
 - **RTL / bidi / complex scripts.** Arabic/Hebrew/Indic shaping, contextual forms, Kashida justification, ligatures, diacritics; CS6 documents Middle Eastern and East Asian engines separately. Shaping must not assume LTR.
 - **32-bit / HDR.** The Help notes the Text tool can add 32-bpc type layers to an HDR image.
@@ -232,4 +233,4 @@ Fetched for this document:
 - **Anti-aliasing preset implementation.** No public coverage/hinting algorithm is documented. *Resolves with:* the screenshot-diff harness in `11-cross-cutting/testing-strategy.md`.
 - **Middle Eastern vs East Asian engine selection.** CS6 exposes a choice; how it changes shaping (bidi, joining, Kashida) is only partially documented. *Resolves with:* the CS6 Help Middle Eastern/Hebrew/Arabic sections and reference text.
 - **Font fallback order across scripts** is not specified by CS6 docs. *Resolves with:* `fontconfig` behavior comparison plus reference renders.
-- **Whether `Type > Save/Load Default Type Styles` is base CS6 or Creative Cloud only.** The PDF says Creative Cloud only; the `OVR-002` brief lists styles as a CS6 feature. *Resolves with:* a version/service-release determination recorded in `OVR-002`.
+- **`Type > Save/Load Default Type Styles` is Creative Cloud only in the Help; the CC-shaped build implements it as an owner decision.**

@@ -202,7 +202,7 @@ Legend: **✓** confirmed in the CS6 Help or a CS6-derived reference;
 
 #### Type (new in CS6)
 
-- Panels ▸ ✓ — Character / Paragraph / Character Styles /
+- Panels ▸ ✓ — Character / Paragraph / Glyphs / Character Styles /
   Paragraph Styles (CS6 Help: "access the Character and Paragraph panels
   from the `Type > Panels` menu")
 - Anti-Alias ▸ ✓ (None, Sharp, Crisp, Strong, Smooth)
@@ -217,11 +217,11 @@ Legend: **✓** confirmed in the CS6 Help or a CS6-derived reference;
 - Replace All Missing Fonts ✓ (CS6, moved from `Layer > Type` in CS5)
 - Paste Lorem Ipsum ✓
 - Load Default Type Styles ✓ / Save Default Type Styles ✓
-- Extrude to 3D ✓ (Extended only; also reachable from the Type options bar)
+- Extrude to 3D — omitted in the CC-shaped build (no 3D surface)
 - Check Spelling… / Find And Replace Text… — **not** on the CS6 Type menu;
   they live in `Edit` (`Edit > Check Spelling`, `Edit > Find And Replace Text`) ✓
-- Panels ▸ OpenType options — *(unverified)* whether CS6 exposes an `OpenType`
-  Type submenu or only the Character panel menu
+- OpenType ▸ — the CC-shaped build exposes the ten modeled character features
+  from the Type menu as well as the Character panel menu
 
 #### Select
 

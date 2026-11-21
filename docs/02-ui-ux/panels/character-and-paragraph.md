@@ -71,7 +71,7 @@ The Paragraph panel changes the formatting of columns and paragraphs. Open with 
 - **Paragraph Styles** (`Window > Paragraph Styles`) stores character *and* paragraph attributes. Each new document contains a **Basic Paragraph** style that is applied to new text; it can be edited but **not renamed or deleted**; user-created styles can be renamed and deleted, and a different default style can be chosen.
 - **Hierarchy (sourced):** manual overrides take precedence over applied character styles, which in turn override applied paragraph styles.
 - Create a style from selected text via **New Character Style** / **New Paragraph Style**; create without selecting text via the panel's **Create New Style** icon (select an image layer such as Background to edit a style without applying it). Double-click a style to edit it; editing updates all text using that style.
-- Styles can be saved/loaded as **default type styles**, but the fetched CS6 PDF labels **`Type > Save Default Type Styles` / `Load Default Type Styles` as Creative Cloud only**, not base CS6 (see `03-tools/type-tools.md` Open questions).
+- Styles can be saved/loaded as **default type styles**; the fetched CS6 PDF labels **`Type > Save Default Type Styles` / `Load Default Type Styles` as Creative Cloud only**, and the CC-shaped build implements both from the Type menu.
 
 ### Type options bar
 
@@ -241,5 +241,5 @@ Not used in this pass:
 - **Default composer** (single-line vs. every-line) is not stated. *Resolves with:* a CS6 Paragraph panel menu capture.
 - **Exact ranges** for Baseline Shift, Tracking, and Kerning are given as "signed"/"1/1000 em" but the panel slider/spin bounds are not enumerated. *Resolves with:* a CS6 UI capture.
 - **Where Character/Paragraph styles are serialized** in PSD/XMP is not sourced (`type-tools.md`). *Resolves with:* the Adobe File Formats Specification and CS6-authored PSDs.
-- **Is `Save/Load Default Type Styles` base CS6 or Creative Cloud only?** The PDF says Creative Cloud; the CS6 feature brief lists styles. *Resolves with:* a shipped-CS6 build test and a decision recorded in `OVR-002`.
+- **`Save/Load Default Type Styles` is Creative Cloud only in the Help; the CC-shaped build implements it as an owner decision.**
 - **Which controls are duplicated on the type options bar vs. only in the panels** should be fixed against a CS6 capture; the fetched source gives the options-bar list only secondarily. *Resolves with:* a CS6 screenshot/measurement of the options bar.
