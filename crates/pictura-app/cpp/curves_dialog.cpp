@@ -1,4 +1,5 @@
 #include "curves_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "adjustment_presets.h"
 #include "panels/curve_widget.h"
@@ -38,7 +39,7 @@ CurvesDialog::CurvesDialog(PictureView* view, const QByteArray& block, const QRe
     addPresetRow(layout);
 
     auto* channelRow = new QHBoxLayout;
-    channelRow->addWidget(new QLabel(QStringLiteral("Channel:"), this));
+    channelRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Channel:"), this));
     channel_ = new QComboBox(this);
     channel_->setObjectName(QStringLiteral("curvesChannel"));
     channel_->addItems({QStringLiteral("RGB"), QStringLiteral("Red"), QStringLiteral("Green"),
@@ -57,16 +58,16 @@ CurvesDialog::CurvesDialog(PictureView* view, const QByteArray& block, const QRe
     auto* pointRow = new QHBoxLayout;
     input_ = pointSpin(this, QStringLiteral("curvesInput"));
     output_ = pointSpin(this, QStringLiteral("curvesOutput"));
-    pointRow->addWidget(new QLabel(QStringLiteral("Input:"), this));
+    pointRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Input:"), this));
     pointRow->addWidget(input_);
     pointRow->addSpacing(12);
-    pointRow->addWidget(new QLabel(QStringLiteral("Output:"), this));
+    pointRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Output:"), this));
     pointRow->addWidget(output_);
     pointRow->addStretch(1);
     layout->addLayout(pointRow);
 
     auto* hint = new QLabel(
-        QStringLiteral("Click to add a point · drag off or Ctrl-click or Delete to remove"), this);
+        QCoreApplication::translate("PicturaUi", "Click to add a point · drag off or Ctrl-click or Delete to remove"), this);
     hint->setEnabled(false);
     layout->addWidget(hint);
     layout->addWidget(previewCheck());

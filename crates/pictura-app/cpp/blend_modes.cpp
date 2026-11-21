@@ -2,12 +2,18 @@
 
 #include "api/engine_bridge.h"
 
+#include <QtCore/QCoreApplication>
 #include <QtCore/QSignalBlocker>
 #include <QtCore/QStringList>
 #include <QtGui/QStandardItemModel>
 #include <QtWidgets/QComboBox>
 
 namespace pictura {
+
+QString BlendEntry::displayName() const
+{
+    return QCoreApplication::translate("PicturaBlendModes", name.toUtf8().constData());
+}
 
 const QVector<BlendEntry>& blendModes()
 {
@@ -34,7 +40,7 @@ int blendModeIndex(const QString& key)
 QString blendModeName(const QString& key)
 {
     const int index = blendModeIndex(key);
-    return index >= 0 ? blendModes().at(index).name : key;
+    return index >= 0 ? blendModes().at(index).displayName() : key;
 }
 
 QVector<BlendEntry> allowedBlendModes(const PictureView* view)
@@ -71,7 +77,7 @@ int syncBlendCombo(QComboBox* combo, const PictureView* view, const QString& cur
     bool same = combo->count() == desired.size();
     for (int i = 0; same && i < desired.size(); ++i) {
         same = combo->itemData(i).toString() == desired.at(i).key
-               && combo->itemText(i) == desired.at(i).name;
+               && combo->itemText(i) == desired.at(i).displayName();
     }
     // An appended conflict entry must be disabled, so an enabled one is stale.
     if (same && appendCurrent) {
@@ -85,7 +91,7 @@ int syncBlendCombo(QComboBox* combo, const PictureView* view, const QString& cur
         const QSignalBlocker block(combo);
         combo->clear();
         for (const BlendEntry& entry : desired) {
-            combo->addItem(entry.name, entry.key);
+            combo->addItem(entry.displayName(), entry.key);
         }
         if (appendCurrent) {
             if (auto* model = qobject_cast<QStandardItemModel*>(combo->model())) {

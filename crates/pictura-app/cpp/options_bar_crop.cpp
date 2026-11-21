@@ -2,6 +2,7 @@
 // translation unit under the size cap.
 
 #include "options_bar.h"
+#include <QtCore/QCoreApplication>
 
 #include "color_picker_dialog.h"
 #include "icons.h"
@@ -117,9 +118,9 @@ void buildCropGridMenu(QMenu* menu, QToolButton* button, ToolController* control
         });
     }
     menu->addSeparator();
-    const QStringList shows = {QStringLiteral("Auto Show Overlay"),
-                               QStringLiteral("Always Show Overlay"),
-                               QStringLiteral("Never Show Overlay")};
+    const QStringList shows = {QCoreApplication::translate("PicturaUi", "Auto Show Overlay"),
+                               QCoreApplication::translate("PicturaUi", "Always Show Overlay"),
+                               QCoreApplication::translate("PicturaUi", "Never Show Overlay")};
     for (int mode = 0; mode < shows.size(); ++mode) {
         QAction* action = menu->addAction(shows[mode]);
         QObject::connect(action, &QAction::triggered, menu, [crop, mode]() {
@@ -131,13 +132,13 @@ void buildCropGridMenu(QMenu* menu, QToolButton* button, ToolController* control
         });
     }
     menu->addSeparator();
-    QAction* cycle = menu->addAction(QStringLiteral("Cycle Overlay\tO"));
+    QAction* cycle = menu->addAction(QCoreApplication::translate("PicturaUi", "Cycle Overlay\tO"));
     QObject::connect(cycle, &QAction::triggered, menu, [crop]() {
         if (crop) {
             crop->cycleOverlay();
         }
     });
-    QAction* orient = menu->addAction(QStringLiteral("Cycle Orientation\tShift+O"));
+    QAction* orient = menu->addAction(QCoreApplication::translate("PicturaUi", "Cycle Orientation\tShift+O"));
     QObject::connect(orient, &QAction::triggered, menu, [crop]() {
         if (crop) {
             crop->cycleOverlayOrientation();
@@ -164,17 +165,16 @@ void buildCropSettingsMenu(QMenu* menu, ToolController* controller, CropOptions*
                                           const QString& keyHint, int indent) {
         return addCheckRow(panel, column, name, text, keyHint, indent);
     };
-    QCheckBox* classic = checkRow("cropClassicMode", QStringLiteral("Use Classic Mode"),
+    QCheckBox* classic = checkRow("cropClassicMode", QCoreApplication::translate("PicturaUi", "Use Classic Mode"),
                                   QStringLiteral("P"), kRowInset);
-    classic->setToolTip(QStringLiteral(
-        "Classic: dragging inside moves the crop box. Modern: it moves the content"));
+    classic->setToolTip(QCoreApplication::translate("PicturaUi", "Classic: dragging inside moves the crop box. Modern: it moves the content"));
     QCheckBox* showArea =
-        checkRow("cropShowArea", QStringLiteral("Show Cropped Area"), QStringLiteral("H"), kRowInset);
+        checkRow("cropShowArea", QCoreApplication::translate("PicturaUi", "Show Cropped Area"), QStringLiteral("H"), kRowInset);
     QCheckBox* autoCenter =
-        checkRow("cropAutoCenter", QStringLiteral("Auto Center Preview"), QString(), kRowInset);
+        checkRow("cropAutoCenter", QCoreApplication::translate("PicturaUi", "Auto Center Preview"), QString(), kRowInset);
     addMenuRule(panel, column);
     QCheckBox* shield =
-        checkRow("cropShieldEnabled", QStringLiteral("Enable Crop Shield"), QString(), kRowInset);
+        checkRow("cropShieldEnabled", QCoreApplication::translate("PicturaUi", "Enable Crop Shield"), QString(), kRowInset);
 
     auto* shieldBody = new QWidget(panel);
     shieldBody->setObjectName(QStringLiteral("optionsCropShieldPanel"));
@@ -184,7 +184,7 @@ void buildCropSettingsMenu(QMenu* menu, ToolController* controller, CropOptions*
     grid->setVerticalSpacing(6);
     auto* color = new QComboBox(shieldBody);
     color->setObjectName(QStringLiteral("cropShieldColor"));
-    color->addItems({QStringLiteral("Match Canvas"), QStringLiteral("Custom")});
+    color->addItems({QCoreApplication::translate("PicturaUi", "Match Canvas"), QCoreApplication::translate("PicturaUi", "Custom")});
     auto* swatch = new QToolButton(shieldBody);
     swatch->setObjectName(QStringLiteral("cropShieldSwatch"));
     swatch->setFixedSize(20, 20);
@@ -195,9 +195,9 @@ void buildCropSettingsMenu(QMenu* menu, ToolController* controller, CropOptions*
     opacityConfig.popup = true;
     opacityConfig.objectName = QStringLiteral("cropShieldOpacity");
     opacityConfig.namePrefix = QStringLiteral("cropShieldOpacity");
-    auto* opacity = new NumericField(QStringLiteral("Opacity:"), opacityConfig, shieldBody);
+    auto* opacity = new NumericField(QCoreApplication::translate("PicturaUi", "Opacity:"), opacityConfig, shieldBody);
     opacity->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    auto* colorLabel = new QLabel(QStringLiteral("Color:"), shieldBody);
+    auto* colorLabel = new QLabel(QCoreApplication::translate("PicturaUi", "Color:"), shieldBody);
     colorLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     grid->addWidget(colorLabel, 0, 0);
     grid->addWidget(color, 0, 1);
@@ -205,7 +205,7 @@ void buildCropSettingsMenu(QMenu* menu, ToolController* controller, CropOptions*
     grid->addWidget(opacity, 1, 0, 1, 3);
     column->addWidget(shieldBody);
     QCheckBox* autoAdjust =
-        checkRow("cropShieldAutoAdjust", QStringLiteral("Auto Adjust Opacity"), QString(), 34);
+        checkRow("cropShieldAutoAdjust", QCoreApplication::translate("PicturaUi", "Auto Adjust Opacity"), QString(), 34);
 
     const auto edit = [crop](const std::function<void(CropSettings&)>& change) {
         CropSettings settings = crop->settings();
@@ -217,7 +217,7 @@ void buildCropSettingsMenu(QMenu* menu, ToolController* controller, CropOptions*
         QWidget* owner = menu->parentWidget();
         menu->close();
         const QColor picked = ColorPickerDialog::getColor(
-            crop->settings().shieldColor, owner, QStringLiteral("Crop Shield Color"));
+            crop->settings().shieldColor, owner, QCoreApplication::translate("PicturaUi", "Crop Shield Color"));
         if (picked.isValid()) {
             edit([&picked](CropSettings& s) {
                 s.shieldCustomColor = true;
@@ -309,25 +309,25 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
     // negative-x sentinel and the free `Ratio` entry is (0, 0).
     auto* ratio = new QComboBox(page);
     ratio->setObjectName(QStringLiteral("optionsCropRatio"));
-    ratio->setToolTip(QStringLiteral("Lock the crop box to an aspect ratio"));
+    ratio->setToolTip(QCoreApplication::translate("PicturaUi", "Lock the crop box to an aspect ratio"));
     const auto addPair = [ratio](const QString& label, double w, double h) {
         ratio->addItem(label, QVariant::fromValue(QPointF(w, h)));
     };
     const auto rebuild = [this, ratio, addPair]() {
         const QSignalBlocker block(ratio);
         ratio->clear();
-        addPair(QStringLiteral("Ratio"), 0.0, 0.0);
+        addPair(QCoreApplication::translate("PicturaUi", "Ratio"), 0.0, 0.0);
         ratio->insertSeparator(ratio->count());
         addPair(QStringLiteral("W x H x Resolution"), kResolutionMode, 0.0);
         ratio->insertSeparator(ratio->count());
-        addComboHeader(ratio, QStringLiteral("Original Ratio"));
+        addComboHeader(ratio, QCoreApplication::translate("PicturaUi", "Original Ratio"));
         addPair(QStringLiteral("1 : 1 (Square)"), 1, 1);
         addPair(QStringLiteral("4 : 5 (8 : 10)"), 4, 5);
         addPair(QStringLiteral("5 : 7"), 5, 7);
         addPair(QStringLiteral("2 : 3 (4 : 6)"), 2, 3);
         addPair(QStringLiteral("16 : 9"), 16, 9);
         ratio->insertSeparator(ratio->count());
-        addComboHeader(ratio, QStringLiteral("Front Image"));
+        addComboHeader(ratio, QCoreApplication::translate("PicturaUi", "Front Image"));
         addPair(QStringLiteral("4 x 5 in 300 ppi"), 4, 5);
         addPair(QStringLiteral("8.5 x 11 in 300 ppi"), 8.5, 11);
         addPair(QStringLiteral("1024 x 768 px 92 ppi"), 1024, 768);
@@ -342,8 +342,8 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
             addPair(label, pair.x(), pair.y());
         }
         ratio->insertSeparator(ratio->count());
-        addPair(QStringLiteral("New Crop Preset..."), kNewPreset, 0.0);
-        addPair(QStringLiteral("Delete Crop Preset..."), kDeletePreset, 0.0);
+        addPair(QCoreApplication::translate("PicturaUi", "New Crop Preset..."), kNewPreset, 0.0);
+        addPair(QCoreApplication::translate("PicturaUi", "Delete Crop Preset..."), kDeletePreset, 0.0);
     };
     rebuild();
     layout->addWidget(ratio);
@@ -359,7 +359,7 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
     swap->setObjectName(QStringLiteral("optionsCropSwap"));
     swap->setIcon(icon(QStringLiteral("crop.swap")));
     swap->setIconSize(QSize(18, 18));
-    swap->setToolTip(QStringLiteral("Swap the crop width and height"));
+    swap->setToolTip(QCoreApplication::translate("PicturaUi", "Swap the crop width and height"));
     layout->addWidget(swap);
     auto* height = new NumericField(QString(),
                                     numericConfig(1.0, 100000.0, 1.0, 0, QStringLiteral(" px"),
@@ -388,8 +388,8 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
 
     auto* clear = new QToolButton(page);
     clear->setObjectName(QStringLiteral("optionsCropClear"));
-    clear->setText(QStringLiteral("Clear"));
-    clear->setToolTip(QStringLiteral("Clear the aspect ratio"));
+    clear->setText(QCoreApplication::translate("PicturaUi", "Clear"));
+    clear->setToolTip(QCoreApplication::translate("PicturaUi", "Clear the aspect ratio"));
     layout->addWidget(clear);
 
     // The spirit-level: a checkable toggle that arms the draw-a-horizon line
@@ -399,10 +399,10 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
     spirit->setCheckable(true);
     spirit->setIcon(icon(QStringLiteral("crop.straighten")));
     spirit->setIconSize(QSize(18, 18));
-    spirit->setText(QStringLiteral("Straighten"));
+    spirit->setText(QCoreApplication::translate("PicturaUi", "Straighten"));
     spirit->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     spirit->setToolTip(
-        QStringLiteral("Straighten: drag a line along the horizon (hold Ctrl to invoke)"));
+        QCoreApplication::translate("PicturaUi", "Straighten: drag a line along the horizon (hold Ctrl to invoke)"));
     layout->addWidget(spirit);
     layout->addWidget(separator());
 
@@ -417,24 +417,23 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
         return button;
     };
     auto* gridButton = menuIcon(QStringLiteral("optionsCropGrid"),
-                                CropOptions::overlayIcon(0), QStringLiteral("Crop guide overlay"));
+                                CropOptions::overlayIcon(0), QCoreApplication::translate("PicturaUi", "Crop guide overlay"));
     buildCropGridMenu(gridButton->menu(), gridButton, controller_, controller_ ? crop_ : nullptr);
     layout->addWidget(gridButton);
     // Settings (cog) menu: Classic mode, Show Cropped Area, Auto Center Preview
     // and the crop shield.
     auto* cogButton = menuIcon(QStringLiteral("optionsCropCog"), QStringLiteral("crop.cog"),
-                               QStringLiteral("Crop settings"));
+                               QCoreApplication::translate("PicturaUi", "Crop settings"));
     if (controller_) {
         buildCropSettingsMenu(cogButton->menu(), controller_, crop_);
     }
     layout->addWidget(cogButton);
     layout->addWidget(separator());
 
-    auto* deletePixels = new QCheckBox(QStringLiteral("Delete Cropped Pixels"), page);
+    auto* deletePixels = new QCheckBox(QCoreApplication::translate("PicturaUi", "Delete Cropped Pixels"), page);
     deletePixels->setObjectName(QStringLiteral("optionsCropDelete"));
     deletePixels->setChecked(controller_ ? crop_->deletePixels() : true);
-    deletePixels->setToolTip(QStringLiteral(
-        "Discard the pixels outside the crop rather than keeping them beyond the canvas edge"));
+    deletePixels->setToolTip(QCoreApplication::translate("PicturaUi", "Discard the pixels outside the crop rather than keeping them beyond the canvas edge"));
     layout->addWidget(deletePixels);
     layout->addWidget(separator());
 
@@ -442,19 +441,19 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
     reset->setObjectName(QStringLiteral("optionsCropReset"));
     reset->setIcon(icon(QStringLiteral("edit.undo")));
     reset->setIconSize(QSize(18, 18));
-    reset->setToolTip(QStringLiteral("Reset the crop values"));
+    reset->setToolTip(QCoreApplication::translate("PicturaUi", "Reset the crop values"));
     layout->addWidget(reset);
     auto* cancel = new QToolButton(page);
     cancel->setObjectName(QStringLiteral("optionsCropCancel"));
     cancel->setIcon(icon(QStringLiteral("crop.cancel")));
     cancel->setIconSize(QSize(18, 18));
-    cancel->setToolTip(QStringLiteral("Cancel the crop (Esc)"));
+    cancel->setToolTip(QCoreApplication::translate("PicturaUi", "Cancel the crop (Esc)"));
     layout->addWidget(cancel);
     auto* commit = new QToolButton(page);
     commit->setObjectName(QStringLiteral("optionsCropCommit"));
     commit->setIcon(icon(QStringLiteral("crop.apply")));
     commit->setIconSize(QSize(18, 18));
-    commit->setToolTip(QStringLiteral("Apply the crop (Enter)"));
+    commit->setToolTip(QCoreApplication::translate("PicturaUi", "Apply the crop (Enter)"));
     layout->addWidget(commit);
 
     const auto setResolutionFields = [width, height, resolution, unit](bool on) {
@@ -666,14 +665,14 @@ QWidget* OptionsBar::buildPerspectiveCropPage(ToolId id)
     swap->setObjectName(QStringLiteral("optionsPerspectiveSwap"));
     swap->setIcon(icon(QStringLiteral("crop.swap")));
     swap->setIconSize(QSize(18, 18));
-    swap->setToolTip(QStringLiteral("Swap the output width and height"));
+    swap->setToolTip(QCoreApplication::translate("PicturaUi", "Swap the output width and height"));
     layout->addWidget(swap);
     auto* height = pixelField(QStringLiteral("optionsPerspectiveHeight"));
     height->setBlank(true);
     layout->addWidget(height);
     layout->addWidget(separator());
 
-    layout->addWidget(new QLabel(QStringLiteral("Resolution:"), page));
+    layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Resolution:"), page));
     auto* resolution = new NumericField(
         QString(),
         numericConfig(1.0, 100000.0, 1.0, 0, QString(), false,
@@ -694,13 +693,13 @@ QWidget* OptionsBar::buildPerspectiveCropPage(ToolId id)
         return button;
     };
     auto* front = textButton(QStringLiteral("optionsPerspectiveFrontImage"),
-                             QStringLiteral("Front Image"));
+                             QCoreApplication::translate("PicturaUi", "Front Image"));
     layout->addWidget(front);
-    auto* clear = textButton(QStringLiteral("optionsPerspectiveClear"), QStringLiteral("Clear"));
-    clear->setToolTip(QStringLiteral("Clear the output size fields"));
+    auto* clear = textButton(QStringLiteral("optionsPerspectiveClear"), QCoreApplication::translate("PicturaUi", "Clear"));
+    clear->setToolTip(QCoreApplication::translate("PicturaUi", "Clear the output size fields"));
     layout->addWidget(clear);
     auto* showGrid =
-        textButton(QStringLiteral("optionsPerspectiveShowGrid"), QStringLiteral("Show Grid"));
+        textButton(QStringLiteral("optionsPerspectiveShowGrid"), QCoreApplication::translate("PicturaUi", "Show Grid"));
     showGrid->setCheckable(true);
     showGrid->setChecked(true);
     layout->addWidget(showGrid);
@@ -710,19 +709,19 @@ QWidget* OptionsBar::buildPerspectiveCropPage(ToolId id)
     reset->setObjectName(QStringLiteral("optionsPerspectiveReset"));
     reset->setIcon(icon(QStringLiteral("edit.undo")));
     reset->setIconSize(QSize(18, 18));
-    reset->setToolTip(QStringLiteral("Reset the perspective crop"));
+    reset->setToolTip(QCoreApplication::translate("PicturaUi", "Reset the perspective crop"));
     layout->addWidget(reset);
     auto* cancel = new QToolButton(page);
     cancel->setObjectName(QStringLiteral("optionsPerspectiveCancel"));
     cancel->setIcon(icon(QStringLiteral("crop.cancel")));
     cancel->setIconSize(QSize(18, 18));
-    cancel->setToolTip(QStringLiteral("Cancel the perspective crop (Esc)"));
+    cancel->setToolTip(QCoreApplication::translate("PicturaUi", "Cancel the perspective crop (Esc)"));
     layout->addWidget(cancel);
     auto* apply = new QToolButton(page);
     apply->setObjectName(QStringLiteral("optionsPerspectiveApply"));
     apply->setIcon(icon(QStringLiteral("crop.apply")));
     apply->setIconSize(QSize(18, 18));
-    apply->setToolTip(QStringLiteral("Apply the perspective crop (Enter)"));
+    apply->setToolTip(QCoreApplication::translate("PicturaUi", "Apply the perspective crop (Enter)"));
     layout->addWidget(apply);
 
     const auto setResolutionFields = [resolution, unit](bool on) {

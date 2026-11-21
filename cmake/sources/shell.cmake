@@ -21,6 +21,8 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/layer_style_pages.cpp
     crates/pictura-app/cpp/loading_card.cpp
     crates/pictura-app/cpp/loading_card.h
+    crates/pictura-app/cpp/localization.cpp
+    crates/pictura-app/cpp/localization.h
     crates/pictura-app/cpp/memory_refusal.cpp
     crates/pictura-app/cpp/memory_refusal.h
     crates/pictura-app/cpp/notification_status_bar.cpp

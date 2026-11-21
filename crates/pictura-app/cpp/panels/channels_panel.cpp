@@ -162,7 +162,7 @@ ChannelsPanel::ChannelsPanel(QWidget* parent)
                            "channelsDelete");
     load_->setAcceptDrops(true);
     add_->setAcceptDrops(true);
-    add_->setToolTip(QStringLiteral("Create new channel — drop a channel here to duplicate it"));
+    add_->setToolTip(QCoreApplication::translate("PicturaUi", "Create new channel — drop a channel here to duplicate it"));
     for (QToolButton* button : {load_, save_, add_}) {
         button->installEventFilter(this);
     }
@@ -315,10 +315,10 @@ void ChannelsPanel::rebuild(const QString& mode, const QStringList& alphaNames)
         // instead of being swallowed by the disabled button.
         rows_[i].eye->setAttribute(Qt::WA_TransparentForMouseEvents, !enabled);
         if (alpha) {
-            rows_[i].eye->setToolTip(QStringLiteral("Show this alpha channel on the canvas"));
+            rows_[i].eye->setToolTip(QCoreApplication::translate("PicturaUi", "Show this alpha channel on the canvas"));
         } else if (!live) {
             rows_[i].eye->setToolTip(
-                QStringLiteral("Only the working RGB channels can be hidden"));
+                QCoreApplication::translate("PicturaUi", "Only the working RGB channels can be hidden"));
         }
     }
     mode_ = mode;

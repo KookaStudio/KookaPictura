@@ -121,7 +121,7 @@ add_compile_definitions(_USE_MATH_DEFINES)
 # instead of filtering build logs.
 set(QT_NO_PRIVATE_MODULE_WARNING ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Svg Network PrintSupport GuiPrivate)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Svg Network PrintSupport GuiPrivate LinguistTools)
 
 # Enables BUILD_TESTING (default ON); the Qt Test suites live under cpp/tests.
 include(CTest)
@@ -374,6 +374,19 @@ else()
     set(PICTURA_SHELL_SHARED OFF)
     add_library(pictura_shell STATIC ${PICTURA_SHELL_SOURCES})
 endif()
+
+qt_add_lrelease(
+    TS_FILES
+        translations/pictura_de.ts
+        translations/pictura_fi.ts
+    OPTIONS -nounfinished
+    QM_FILES_OUTPUT_VARIABLE pictura_qm_files
+)
+qt_add_resources(pictura_shell pictura_translations
+    PREFIX "/i18n"
+    BASE "${CMAKE_CURRENT_BINARY_DIR}"
+    FILES ${pictura_qm_files}
+)
 
 # The translation units that include a generated cxx-qt header follow the
 # bridge stamp.

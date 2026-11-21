@@ -1,4 +1,5 @@
 #include "reduce_noise_dialog.h"
+#include <QtCore/QCoreApplication>
 #include "dialogs.h"
 #include "filter_param_controls.h"
 
@@ -76,7 +77,7 @@ ReduceNoiseDialog::ReduceNoiseDialog(PictureView* view, const FilterCommandSpec&
     auto* advancedPage = new QWidget(tabs_);
     auto* advancedLayout = new QVBoxLayout(advancedPage);
     auto* channelRow = new QHBoxLayout;
-    channelRow->addWidget(new QLabel(QStringLiteral("Channel:"), advancedPage));
+    channelRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Channel:"), advancedPage));
     channelRow->addWidget(channel_);
     channelRow->addStretch(1);
     advancedLayout->addLayout(channelRow);
@@ -87,12 +88,12 @@ ReduceNoiseDialog::ReduceNoiseDialog(PictureView* view, const FilterCommandSpec&
     tabs_->addTab(basicPage, QStringLiteral("Basic"));
     tabs_->addTab(advancedPage, QStringLiteral("Advanced"));
 
-    auto* ok = new QPushButton(QStringLiteral("OK"), this);
+    auto* ok = new QPushButton(QCoreApplication::translate("PicturaUi", "OK"), this);
     ok->setDefault(true);
-    auto* cancel = new QPushButton(QStringLiteral("Cancel"), this);
+    auto* cancel = new QPushButton(QCoreApplication::translate("PicturaUi", "Cancel"), this);
     connect(ok, &QPushButton::clicked, this, &QDialog::accept);
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
-    preview_ = new QCheckBox(QStringLiteral("Preview"), this);
+    preview_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Preview"), this);
     preview_->setObjectName(QStringLiteral("filterPreview"));
     preview_->setChecked(true);
     connect(preview_, &QCheckBox::toggled, this, [this](bool on) {

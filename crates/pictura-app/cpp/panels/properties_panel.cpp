@@ -1,4 +1,5 @@
 #include "memory_refusal.h"
+#include <QtCore/QCoreApplication>
 #include "properties_panel.h"
 #include "commands.h"
 #include "document_command.h"
@@ -60,9 +61,9 @@ struct ModeEntry {
 
 // Image ▸ Mode's order; the keys are `image_mode`'s names.
 constexpr ModeEntry kModes[] = {
-    {"bitmap", "Bitmap"},       {"grayscale", "Grayscale"}, {"duotone", "Duotone"},
-    {"indexed", "Indexed Color"}, {"rgb", "RGB Color"},     {"cmyk", "CMYK Color"},
-    {"lab", "Lab Color"},       {"multichannel", "Multichannel"},
+    {"bitmap", QT_TRANSLATE_NOOP("PicturaUi", "Bitmap")},       {"grayscale", QT_TRANSLATE_NOOP("PicturaUi", "Grayscale")}, {"duotone", QT_TRANSLATE_NOOP("PicturaUi", "Duotone")},
+    {"indexed", QT_TRANSLATE_NOOP("PicturaUi", "Indexed Color")}, {"rgb", QT_TRANSLATE_NOOP("PicturaUi", "RGB Color")},     {"cmyk", QT_TRANSLATE_NOOP("PicturaUi", "CMYK Color")},
+    {"lab", QT_TRANSLATE_NOOP("PicturaUi", "Lab Color")},       {"multichannel", QT_TRANSLATE_NOOP("PicturaUi", "Multichannel")},
 };
 
 QByteArray bytes(const ::rust::Vec<std::uint8_t>& v)
@@ -107,7 +108,7 @@ QToolButton* footerButton(QWidget* parent, const QString& iconId, const QString&
 // Mask Density as a percentage over the PSD's 0-255 byte.
 NumericField* densityField(QWidget* parent, const QString& name)
 {
-    return new NumericField(QStringLiteral("Density"),
+    return new NumericField(QCoreApplication::translate("PicturaUi", "Density"),
                             NumericFieldConfig{0.0, 100.0, 1.0, 10.0, 0, QStringLiteral("%"), true,
                                                name, name},
                             parent);
@@ -116,7 +117,7 @@ NumericField* densityField(QWidget* parent, const QString& name)
 // Mask Feather in pixels, to the selection feather's 250 px maximum.
 NumericField* featherField(QWidget* parent, const QString& name)
 {
-    return new NumericField(QStringLiteral("Feather"),
+    return new NumericField(QCoreApplication::translate("PicturaUi", "Feather"),
                             NumericFieldConfig{0.0, 250.0, 0.1, 1.0, 1, QStringLiteral(" px"),
                                                true, name, name},
                             parent);
@@ -166,7 +167,7 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     scroll->setWidget(body);
     layout->addWidget(scroll, 1);
 
-    auto* nothing = new QLabel(QStringLiteral("No Properties"), stack_);
+    auto* nothing = new QLabel(QCoreApplication::translate("PicturaUi", "No Properties"), stack_);
     nothing->setAlignment(Qt::AlignCenter);
     nothing->setEnabled(false);
     stack_->addWidget(nothing);
@@ -240,12 +241,12 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     maskSection_ = new QWidget(layerPage_);
     auto* maskLayout = new QVBoxLayout(maskSection_);
     maskLayout->setContentsMargins(0, 8, 0, 0);
-    auto* maskTitle = new QLabel(QStringLiteral("Mask"), maskSection_);
+    auto* maskTitle = new QLabel(QCoreApplication::translate("PicturaUi", "Mask"), maskSection_);
     QFont maskBold = maskTitle->font();
     maskBold.setBold(true);
     maskTitle->setFont(maskBold);
     maskLayout->addWidget(maskTitle);
-    maskLayout->addWidget(new QLabel(QStringLiteral("Layer Mask"), maskSection_));
+    maskLayout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Layer Mask"), maskSection_));
     auto* maskButtons = new QHBoxLayout();
     const auto maskButton = [this, maskButtons](const QString& iconId, const QString& tip,
                                                 const QString& name) {
@@ -274,8 +275,8 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     maskLayout->addWidget(maskDensity_);
     maskLayout->addWidget(maskFeather_);
     maskInvert_ = new QToolButton(maskSection_);
-    maskInvert_->setText(QStringLiteral("Invert"));
-    maskInvert_->setToolTip(QStringLiteral("Invert the layer mask"));
+    maskInvert_->setText(QCoreApplication::translate("PicturaUi", "Invert"));
+    maskInvert_->setToolTip(QCoreApplication::translate("PicturaUi", "Invert the layer mask"));
     maskInvert_->setObjectName(QStringLiteral("propertiesMaskInvert"));
     maskLayout->addWidget(maskInvert_);
     maskSection_->hide();
@@ -286,7 +287,7 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     vectorMaskSection_ = new QWidget(layerPage_);
     auto* vectorLayout = new QVBoxLayout(vectorMaskSection_);
     vectorLayout->setContentsMargins(0, 8, 0, 0);
-    auto* vectorTitle = new QLabel(QStringLiteral("Vector Mask"), vectorMaskSection_);
+    auto* vectorTitle = new QLabel(QCoreApplication::translate("PicturaUi", "Vector Mask"), vectorMaskSection_);
     QFont vectorBold = vectorTitle->font();
     vectorBold.setBold(true);
     vectorTitle->setFont(vectorBold);
@@ -480,7 +481,7 @@ void PropertiesPanel::buildCanvas(QVBoxLayout* layout)
     canvas_->setObjectName(QStringLiteral("propertiesCanvas"));
     auto* grid = new QGridLayout(canvas_);
     grid->setContentsMargins(0, 8, 0, 0);
-    auto* title = new QLabel(QStringLiteral("Canvas"), canvas_);
+    auto* title = new QLabel(QCoreApplication::translate("PicturaUi", "Canvas"), canvas_);
     QFont bold = title->font();
     bold.setBold(true);
     title->setFont(bold);
@@ -489,7 +490,7 @@ void PropertiesPanel::buildCanvas(QVBoxLayout* layout)
     link_ = new QToolButton(canvas_);
     link_->setObjectName(QStringLiteral("propertiesCanvasLink"));
     link_->setIcon(icon(QStringLiteral("layers.link")));
-    link_->setToolTip(QStringLiteral("Link width and height"));
+    link_->setToolTip(QCoreApplication::translate("PicturaUi", "Link width and height"));
     link_->setCheckable(true);
     link_->setAutoRaise(true);
     width_ = canvasSpin(canvas_, QStringLiteral("propertiesCanvasWidth"));
@@ -507,16 +508,16 @@ void PropertiesPanel::buildCanvas(QVBoxLayout* layout)
     mode_ = new QComboBox(canvas_);
     mode_->setObjectName(QStringLiteral("propertiesCanvasMode"));
     for (const ModeEntry& entry : kModes) {
-        mode_->addItem(QLatin1String(entry.name), QLatin1String(entry.key));
+        mode_->addItem(QCoreApplication::translate("PicturaUi", entry.name), QLatin1String(entry.key));
     }
     depth_ = new QComboBox(canvas_);
     depth_->setObjectName(QStringLiteral("propertiesCanvasDepth"));
     for (int bits : {1, 8, 16, 32}) {
-        depth_->addItem(bits == 1 ? QStringLiteral("1 Bit/Channel")
-                                  : QStringLiteral("%1 Bits/Channel").arg(bits),
+        depth_->addItem(bits == 1 ? QCoreApplication::translate("PicturaUi", "1 Bit/Channel")
+                                  : QCoreApplication::translate("PicturaUi", "%1 Bits/Channel").arg(bits),
                         bits);
     }
-    grid->addWidget(new QLabel(QStringLiteral("Mode"), canvas_), 4, 0, 1, 2);
+    grid->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Mode"), canvas_), 4, 0, 1, 2);
     grid->addWidget(mode_, 4, 2);
     grid->addWidget(depth_, 5, 2);
     grid->setColumnStretch(2, 1);
@@ -573,7 +574,7 @@ void PropertiesPanel::refreshCanvas()
         const QSignalBlocker block(height_);
         height_->setValue(view_->document_height());
     }
-    resolution_->setText(QStringLiteral("Resolution: %1").arg(image_resolution(*view_)));
+    resolution_->setText(QCoreApplication::translate("PicturaUi", "Resolution: %1").arg(image_resolution(*view_)));
 
     const QString mode = image_mode(*view_);
     for (int i = 0; i < mode_->count(); ++i) {
@@ -689,13 +690,13 @@ void PropertiesPanel::showNothing()
     }
     footer_->hide();
     if (view_ && view_->has_document()) {
-        header_->setText(QStringLiteral("Document"));
+        header_->setText(QCoreApplication::translate("PicturaUi", "Document"));
         setPage(LayerPage);
         stack_->hide();
         refreshCanvas();
         return;
     }
-    header_->setText(QStringLiteral("No Properties"));
+    header_->setText(QCoreApplication::translate("PicturaUi", "No Properties"));
     stack_->show();
     setPage(NothingPage);
     canvas_->hide();
@@ -707,7 +708,7 @@ void PropertiesPanel::showLayer(const pictura::layers_api::LayerRow& row)
     if (preset_) {
         preset_->hide();
     }
-    header_->setText(QStringLiteral("Layer Properties"));
+    header_->setText(QCoreApplication::translate("PicturaUi", "Layer Properties"));
     stack_->show();
     setPage(LayerPage);
     footer_->hide();
@@ -723,26 +724,26 @@ void PropertiesPanel::showLayer(const pictura::layers_api::LayerRow& row)
         {QStringLiteral("background"), QStringLiteral("Background")},
         {QStringLiteral("adjustment"), QStringLiteral("Adjustment")}};
     const auto it = kinds.find(kind);
-    info_->addRow(QStringLiteral("Kind:"),
+    info_->addRow(QCoreApplication::translate("PicturaUi", "Kind:"),
                   new QLabel(it != kinds.end() ? it->second : kind, layerPage_));
     const transform_api::LayerRect rect = transform_api::layerRect(*view_, path_);
     if (rect.valid && kind != QStringLiteral("group")) {
-        info_->addRow(QStringLiteral("Size:"),
-                      new QLabel(QStringLiteral("%1 x %2 px")
+        info_->addRow(QCoreApplication::translate("PicturaUi", "Size:"),
+                      new QLabel(QCoreApplication::translate("PicturaUi", "%1 x %2 px")
                                      .arg(rect.width())
                                      .arg(rect.height()),
                                  layerPage_));
-        info_->addRow(QStringLiteral("Position:"),
-                      new QLabel(QStringLiteral("X %1, Y %2").arg(rect.left).arg(rect.top),
+        info_->addRow(QCoreApplication::translate("PicturaUi", "Position:"),
+                      new QLabel(QCoreApplication::translate("PicturaUi", "X %1, Y %2").arg(rect.left).arg(rect.top),
                                  layerPage_));
     }
-    info_->addRow(QStringLiteral("Blend Mode:"),
+    info_->addRow(QCoreApplication::translate("PicturaUi", "Blend Mode:"),
                   new QLabel(blendModeName(row.blend), layerPage_));
     const auto percent = [](int v) { return QStringLiteral("%1%").arg(qRound(v * 100.0 / 255.0)); };
-    info_->addRow(QStringLiteral("Opacity:"),
+    info_->addRow(QCoreApplication::translate("PicturaUi", "Opacity:"),
                   new QLabel(percent(row.opacity), layerPage_));
-    info_->addRow(QStringLiteral("Fill:"), new QLabel(percent(row.fill), layerPage_));
-    info_->addRow(QStringLiteral("Mask:"),
+    info_->addRow(QCoreApplication::translate("PicturaUi", "Fill:"), new QLabel(percent(row.fill), layerPage_));
+    info_->addRow(QCoreApplication::translate("PicturaUi", "Mask:"),
                   new QLabel(row.hasMask ? QStringLiteral("Layer Mask")
                                          : QStringLiteral("None"),
                              layerPage_));
@@ -757,7 +758,7 @@ void PropertiesPanel::showLayer(const pictura::layers_api::LayerRow& row)
     if (lock & 0x04) {
         locks << QStringLiteral("Position");
     }
-    info_->addRow(QStringLiteral("Locks:"),
+    info_->addRow(QCoreApplication::translate("PicturaUi", "Locks:"),
                   new QLabel(locks.isEmpty() ? QStringLiteral("None") : locks.join(QStringLiteral(", ")),
                              layerPage_));
     maskSection_->setVisible(row.hasMask);
@@ -833,8 +834,8 @@ void PropertiesPanel::savePreset()
     if (!saveAdjustmentPreset(kind_, name, block)) {
         if (!presetNameProvider_) {
             QMessageBox::warning(
-                this, QStringLiteral("Save Preset"),
-                QStringLiteral("That preset name is reserved or the preset could not be saved."));
+                this, QCoreApplication::translate("PicturaUi", "Save Preset"),
+                QCoreApplication::translate("PicturaUi", "That preset name is reserved or the preset could not be saved."));
         }
         return;
     }

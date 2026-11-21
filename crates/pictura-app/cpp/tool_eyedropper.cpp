@@ -1,4 +1,5 @@
 #include "tool_handler.h"
+#include <QtCore/QCoreApplication>
 
 #include "image_view.h"
 
@@ -69,8 +70,8 @@ public:
         static const int kSizes[] = {1, 3, 5, 11, 31, 51, 101};
         for (int size : kSizes) {
             const QString label = size == 1
-                ? QObject::tr("Point Sample")
-                : QObject::tr("%1 by %1 Average").arg(size);
+                ? QCoreApplication::translate("PicturaUi", "Point Sample")
+                : QCoreApplication::translate("PicturaUi", "%1 by %1 Average").arg(size);
             QAction* action = sizeMenu->addAction(label);
             action->setCheckable(true);
             action->setChecked(size == current.sampleSize);
@@ -83,13 +84,13 @@ public:
 
         QMenu* sampleMenu = menu->addMenu(QObject::tr("Sample"));
         static const QPair<int, const char*> kScopes[] = {
-            {0, QT_TR_NOOP("Current Layer")},
-            {1, QT_TR_NOOP("Current & Below")},
-            {2, QT_TR_NOOP("All Layers")},
-            {3, QT_TR_NOOP("All Layers No Adjustments")},
-            {4, QT_TR_NOOP("Current & Below No Adjustments")}};
+            {0, QT_TRANSLATE_NOOP("PicturaUi", "Current Layer")},
+            {1, QT_TRANSLATE_NOOP("PicturaUi", "Current & Below")},
+            {2, QT_TRANSLATE_NOOP("PicturaUi", "All Layers")},
+            {3, QT_TRANSLATE_NOOP("PicturaUi", "All Layers No Adjustments")},
+            {4, QT_TRANSLATE_NOOP("PicturaUi", "Current & Below No Adjustments")}};
         for (const auto& scope : kScopes) {
-            QAction* action = sampleMenu->addAction(QObject::tr(scope.second));
+            QAction* action = sampleMenu->addAction(QCoreApplication::translate("PicturaUi", scope.second));
             action->setCheckable(true);
             action->setChecked(scope.first == current.scope);
             QObject::connect(action, &QAction::triggered, menu, [this, id = scope.first]() {

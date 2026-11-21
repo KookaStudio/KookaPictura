@@ -55,6 +55,7 @@
 #include "gpu_probe.h"
 #include "icons.h"
 #include "image_view.h"
+#include "localization.h"
 #include "panels/layers_panel.h"
 #include "panels/panel_column.h"
 #include "panels/panel_group.h"
@@ -320,7 +321,15 @@ int main(int argc, char* argv[])
                              << settingsImportError;
     }
 
-    pictura::PicturaMainWindow frame(nullptr, !selfTest && !headless);
+    if (selfTest) {
+        QLocale::setDefault(QLocale::c());
+        app.setLayoutDirection(Qt::LeftToRight);
+    }
+    const QString startupUiLanguage = selfTest ? QStringLiteral("en") : pictura::loadPreferences().uiLanguage;
+    auto translator = selfTest
+        ? std::unique_ptr<QTranslator>{}
+        : pictura::installUiTranslation(startupUiLanguage);
+    pictura::PicturaMainWindow frame(nullptr, !selfTest && !headless, startupUiLanguage);
     // Crash recovery runs only for an interactive launch: the self-test, a
     // headless run, and control mode must neither write snapshots nor raise the
     // recovery prompt.

@@ -1,4 +1,5 @@
 #include "vp_dialog.h"
+#include <QtCore/QCoreApplication>
 #include "dialogs.h"
 #include "frame.h"
 #include "icons.h"
@@ -81,11 +82,11 @@ VanishingPointDialog::VanishingPointDialog(PictureView* view, const QString& doc
     auto* menuButton = new QToolButton(this);
     menuButton->setObjectName(QStringLiteral("vpMenuButton"));
     menuButton->setText(QStringLiteral("≡"));
-    menuButton->setToolTip(QStringLiteral("Vanishing Point settings and commands"));
+    menuButton->setToolTip(QCoreApplication::translate("PicturaUi", "Vanishing Point settings and commands"));
     menuButton->setPopupMode(QToolButton::InstantPopup);
     auto* menu = new QMenu(menuButton);
     menu->setObjectName(QStringLiteral("vpMenu"));
-    showEdges_ = menu->addAction(QStringLiteral("Show Edges"));
+    showEdges_ = menu->addAction(QCoreApplication::translate("PicturaUi", "Show Edges"));
     showEdges_->setObjectName(QStringLiteral("vpShowEdges"));
     showEdges_->setCheckable(true);
     showEdges_->setChecked(true);
@@ -93,14 +94,14 @@ VanishingPointDialog::VanishingPointDialog(PictureView* view, const QString& doc
     showEdges_->setShortcutContext(Qt::WindowShortcut);
     addAction(showEdges_);
     // CS6 asks for the grid render anew each session.
-    renderGrids_ = menu->addAction(QStringLiteral("Render Grids To Photoshop"));
+    renderGrids_ = menu->addAction(QCoreApplication::translate("PicturaUi", "Render Grids To Photoshop"));
     renderGrids_->setObjectName(QStringLiteral("vpRenderGrids"));
     renderGrids_->setCheckable(true);
     menuButton->setMenu(menu);
 
-    auto* ok = new QPushButton(QStringLiteral("OK"), this);
+    auto* ok = new QPushButton(QCoreApplication::translate("PicturaUi", "OK"), this);
     ok->setDefault(true);
-    auto* cancel = new QPushButton(QStringLiteral("Cancel"), this);
+    auto* cancel = new QPushButton(QCoreApplication::translate("PicturaUi", "Cancel"), this);
     connect(ok, &QPushButton::clicked, this, &QDialog::accept);
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
 
@@ -293,10 +294,10 @@ bool VanishingPointDialog::paste()
         canvas_->refreshAll();
         return true;
     case 1:
-        help_->setText(QStringLiteral("Create a plane before pasting."));
+        help_->setText(QCoreApplication::translate("PicturaUi", "Create a plane before pasting."));
         return false;
     default:
-        help_->setText(QStringLiteral("There is nothing on the clipboard to paste."));
+        help_->setText(QCoreApplication::translate("PicturaUi", "There is nothing on the clipboard to paste."));
         return false;
     }
 }

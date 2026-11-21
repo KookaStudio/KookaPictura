@@ -1,4 +1,5 @@
 #include "picture_frame_dialog.h"
+#include <QtCore/QCoreApplication>
 #include "dialogs.h"
 #include "filter_param_controls.h"
 
@@ -102,12 +103,12 @@ PictureFrameDialog::PictureFrameDialog(PictureView* view, const FilterCommandSpe
     tabs->addTab(basicPage, QStringLiteral("Basic"));
     tabs->addTab(advancedPage, QStringLiteral("Advanced"));
 
-    auto* ok = new QPushButton(QStringLiteral("OK"), this);
+    auto* ok = new QPushButton(QCoreApplication::translate("PicturaUi", "OK"), this);
     ok->setDefault(true);
-    auto* cancel = new QPushButton(QStringLiteral("Cancel"), this);
+    auto* cancel = new QPushButton(QCoreApplication::translate("PicturaUi", "Cancel"), this);
     connect(ok, &QPushButton::clicked, this, &QDialog::accept);
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
-    preview_ = new QCheckBox(QStringLiteral("Preview"), this);
+    preview_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Preview"), this);
     preview_->setObjectName(QStringLiteral("filterPreview"));
     preview_->setChecked(true);
     connect(preview_, &QCheckBox::toggled, this, [this](bool on) {

@@ -2,6 +2,7 @@
 // The window operations live in DocumentRegistry; this file wires the command
 // ids to them and owns the list's transient actions.
 
+#include <QtCore/QCoreApplication>
 #include "menu_registrar.h"
 
 #include "document_registry.h"
@@ -72,7 +73,7 @@ void MenuRegistrar::wireWindowArrange()
         return active && !active->doc->loading;
     });
     commands_->setLabelProvider(kArrangeNewWindow, [this]() {
-        const QString label = tr("New Window For");
+        const QString label = QCoreApplication::translate("PicturaCommands", "New Window For");
         DocWindow* active = documents_ ? documents_->activeWindow() : nullptr;
         if (!active) {
             return label;

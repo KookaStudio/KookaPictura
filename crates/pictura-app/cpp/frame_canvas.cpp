@@ -291,8 +291,8 @@ const QColor kCanvasColors[kCanvasColorCount] = {
     QColor(), QColor(82, 82, 82), QColor(0, 0, 0), QColor(255, 255, 255)};
 // The names the canvas-background menu shows, one per `kCanvasColors` entry.
 const char* const kCanvasColorNames[kCanvasColorCount] = {
-    QT_TR_NOOP("Custom"), QT_TR_NOOP("Dark Gray"), QT_TR_NOOP("Black"),
-    QT_TR_NOOP("White")};
+    QT_TRANSLATE_NOOP("pictura::PicturaMainWindow", "Custom"), QT_TRANSLATE_NOOP("pictura::PicturaMainWindow", "Dark Gray"), QT_TRANSLATE_NOOP("pictura::PicturaMainWindow", "Black"),
+    QT_TRANSLATE_NOOP("pictura::PicturaMainWindow", "White")};
 
 } // namespace
 

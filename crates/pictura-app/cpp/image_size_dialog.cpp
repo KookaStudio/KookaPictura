@@ -1,4 +1,5 @@
 #include "image_size_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "api/document_api.h"
 #include "api/document_bridge.h"
@@ -146,7 +147,7 @@ void addUnits(QComboBox* box, bool percent)
                    QStringLiteral("Centimeters"), QStringLiteral("Millimeters"),
                    QStringLiteral("Points")});
     if (percent) {
-        box->addItem(QStringLiteral("Percent"));
+        box->addItem(QCoreApplication::translate("PicturaUi", "Percent"));
     }
 }
 
@@ -305,14 +306,14 @@ void ImageSizeDialog::buildUi()
 
     auto* right = new QVBoxLayout;
     auto* summaryRow = new QHBoxLayout;
-    summaryRow->addWidget(new QLabel(QStringLiteral("Image Size:"), this));
+    summaryRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Image Size:"), this));
     summary_ = new QLabel(this);
     summary_->setObjectName(QStringLiteral("imageSizeSummary"));
     summaryRow->addWidget(summary_);
     summaryRow->addStretch();
     right->addLayout(summaryRow);
     auto* dimensionsRow = new QHBoxLayout;
-    dimensionsRow->addWidget(new QLabel(QStringLiteral("Dimensions:"), this));
+    dimensionsRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Dimensions:"), this));
     dimensions_ = new QLabel(this);
     dimensions_->setObjectName(QStringLiteral("imageSizeDimensions"));
     dimensionsRow->addWidget(dimensions_);
@@ -320,12 +321,12 @@ void ImageSizeDialog::buildUi()
     right->addLayout(dimensionsRow);
 
     auto* fitRow = new QHBoxLayout;
-    fitRow->addWidget(new QLabel(QStringLiteral("Fit To:"), this));
+    fitRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Fit To:"), this));
     fitTo_ = new QComboBox(this);
     fitTo_->setObjectName(QStringLiteral("imageSizeFitTo"));
-    fitTo_->addItem(QStringLiteral("Original Size"), kFitOriginal);
-    fitTo_->addItem(QStringLiteral("Custom"), kFitCustom);
-    fitTo_->addItem(QStringLiteral("Auto Resolution…"), kFitAutoResolution);
+    fitTo_->addItem(QCoreApplication::translate("PicturaUi", "Original Size"), kFitOriginal);
+    fitTo_->addItem(QCoreApplication::translate("PicturaUi", "Custom"), kFitCustom);
+    fitTo_->addItem(QCoreApplication::translate("PicturaUi", "Auto Resolution…"), kFitAutoResolution);
     fitTo_->insertSeparator(fitTo_->count());
     for (int i = 0; i < int(std::size(kFitPresets)); ++i) {
         fitTo_->addItem(QString::fromUtf8(kFitPresets[i].label), i);
@@ -351,14 +352,14 @@ void ImageSizeDialog::buildUi()
         spin->setMinimumWidth(90);
         return spin;
     };
-    grid->addWidget(new QLabel(QStringLiteral("Width:"), this), 0, 1, Qt::AlignRight);
+    grid->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Width:"), this), 0, 1, Qt::AlignRight);
     width_ = field(QStringLiteral("imageSizeWidth"), 0.001);
     grid->addWidget(width_, 0, 2);
     widthUnit_ = new QComboBox(this);
     widthUnit_->setObjectName(QStringLiteral("imageSizeWidthUnit"));
     addUnits(widthUnit_, true);
     grid->addWidget(widthUnit_, 0, 3);
-    grid->addWidget(new QLabel(QStringLiteral("Height:"), this), 1, 1, Qt::AlignRight);
+    grid->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Height:"), this), 1, 1, Qt::AlignRight);
     height_ = field(QStringLiteral("imageSizeHeight"), 0.001);
     grid->addWidget(height_, 1, 2);
     heightUnit_ = new QComboBox(this);
@@ -367,7 +368,7 @@ void ImageSizeDialog::buildUi()
     grid->addWidget(heightUnit_, 1, 3);
     chain_ = new ChainToggle(this);
     grid->addWidget(chain_, 0, 0, 2, 1);
-    grid->addWidget(new QLabel(QStringLiteral("Resolution:"), this), 2, 1, Qt::AlignRight);
+    grid->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Resolution:"), this), 2, 1, Qt::AlignRight);
     resolutionField_ = field(QStringLiteral("imageSizeResolution"), 1.0);
     resolutionField_->setDecimals(0);
     grid->addWidget(resolutionField_, 2, 2);
@@ -378,7 +379,7 @@ void ImageSizeDialog::buildUi()
     right->addLayout(grid);
 
     auto* resampleRow = new QHBoxLayout;
-    resample_ = new QCheckBox(QStringLiteral("Resample:"), this);
+    resample_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Resample:"), this);
     resample_->setObjectName(QStringLiteral("imageSizeResample"));
     resample_->setChecked(true);
     resampleRow->addWidget(resample_);
@@ -393,9 +394,9 @@ void ImageSizeDialog::buildUi()
     outer->addLayout(right, 1);
 
     auto* buttons = new QVBoxLayout;
-    auto* ok = new QPushButton(QStringLiteral("OK"), this);
+    auto* ok = new QPushButton(QCoreApplication::translate("PicturaUi", "OK"), this);
     ok->setDefault(true);
-    auto* cancel = new QPushButton(QStringLiteral("Cancel"), this);
+    auto* cancel = new QPushButton(QCoreApplication::translate("PicturaUi", "Cancel"), this);
     for (QPushButton* b : {ok, cancel}) {
         b->setMinimumWidth(84);
         buttons->addWidget(b);
@@ -435,7 +436,7 @@ void ImageSizeDialog::syncFields()
 void ImageSizeDialog::updateSummary()
 {
     summary_->setText(imageSizeSummary(bytesPerPixel_ * pixelWidth_ * pixelHeight_));
-    dimensions_->setText(QStringLiteral("%1 px × %2 px").arg(pixelWidth_).arg(pixelHeight_));
+    dimensions_->setText(QCoreApplication::translate("PicturaUi", "%1 px × %2 px").arg(pixelWidth_).arg(pixelHeight_));
 }
 
 void ImageSizeDialog::widthEdited()

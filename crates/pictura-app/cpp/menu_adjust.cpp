@@ -61,7 +61,7 @@ void MenuRegistrar::wireImageAdjustments()
         }
         // CS6 marks every dialog-opening entry with an ellipsis.
         const QString leaf = entry.title;
-        commands_->setLabelProvider(id, [leaf]() { return leaf + QStringLiteral("…"); });
+        commands_->setLabelProvider(id, [leaf]() { return commandDisplayText(leaf + QStringLiteral("…")); });
         commands_->setHandler(id, [this, kind]() {
             PictureView* view = activeView();
             if (!view) {
@@ -84,7 +84,7 @@ void MenuRegistrar::wireImageAdjustments()
         const QString id =
             commandIdForPath({QStringLiteral("Image"), QStringLiteral("Adjustments"), leaf});
         commands_->setImplemented(id, true);
-        commands_->setLabelProvider(id, [leaf]() { return leaf + QStringLiteral("…"); });
+        commands_->setLabelProvider(id, [leaf]() { return commandDisplayText(leaf + QStringLiteral("…")); });
         commands_->setHandler(id, [this]() {
             PictureView* view = activeView();
             if (!view) {
@@ -110,7 +110,7 @@ void MenuRegistrar::wireImageAdjustments()
         const QString id =
             commandIdForPath({QStringLiteral("Image"), QStringLiteral("Adjustments"), leaf});
         commands_->setImplemented(id, true);
-        commands_->setLabelProvider(id, [leaf]() { return leaf + QStringLiteral("…"); });
+        commands_->setLabelProvider(id, [leaf]() { return commandDisplayText(leaf + QStringLiteral("…")); });
         commands_->setHandler(id, [this]() {
             PictureView* view = activeView();
             if (!view || !filter_target_ready(*view)) {
@@ -146,7 +146,7 @@ void MenuRegistrar::wireImageAdjustments()
         const QString id =
             commandIdForPath({QStringLiteral("Image"), QStringLiteral("Adjustments"), leaf});
         commands_->setImplemented(id, true);
-        commands_->setLabelProvider(id, [leaf]() { return leaf + QStringLiteral("…"); });
+        commands_->setLabelProvider(id, [leaf]() { return commandDisplayText(leaf + QStringLiteral("…")); });
         commands_->setHandler(id, [this]() {
             PictureView* view = activeView();
             if (!view || !filter_target_ready(*view)) {
@@ -191,7 +191,7 @@ void MenuRegistrar::wireLayerAdjustments()
         const QString kind = entry.kind;
         commands_->setImplemented(id, true);
         if (entry.layerEllipsis) {
-            commands_->setLabelProvider(id, [leaf]() { return leaf + QStringLiteral("…"); });
+            commands_->setLabelProvider(id, [leaf]() { return commandDisplayText(leaf + QStringLiteral("…")); });
         }
         commands_->setHandler(id, [this, kind]() {
             PictureView* view = activeView();

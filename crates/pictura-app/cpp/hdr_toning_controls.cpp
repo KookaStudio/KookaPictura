@@ -1,4 +1,5 @@
 #include "hdr_toning_controls.h"
+#include <QtCore/QCoreApplication>
 
 #include "panels/jump_slider.h"
 
@@ -95,7 +96,7 @@ HdrToningControls::HdrToningControls(QWidget* parent)
         return row;
     };
 
-    auto* edge = new QGroupBox(QStringLiteral("Edge Glow"));
+    auto* edge = new QGroupBox(QCoreApplication::translate("PicturaUi", "Edge Glow"));
     auto* edgeLayout = new QVBoxLayout(edge);
     edgeLayout->addLayout(makeIntRow(QStringLiteral("Radius:"), QStringLiteral("hdrRadius"), 1, 500,
                                      187, radius_));
@@ -103,7 +104,7 @@ HdrToningControls::HdrToningControls(QWidget* parent)
                                         0.01, 4.0, 4.0, 0.01, strength_));
     outer->addWidget(edge);
 
-    auto* tone = new QGroupBox(QStringLiteral("Tone and Detail"));
+    auto* tone = new QGroupBox(QCoreApplication::translate("PicturaUi", "Tone and Detail"));
     auto* toneLayout = new QVBoxLayout(tone);
     toneLayout->addLayout(makeDoubleRow(QStringLiteral("Gamma:"), QStringLiteral("hdrGamma"), 0.01,
                                         9.99, 0.99, 0.01, gamma_));
@@ -113,7 +114,7 @@ HdrToningControls::HdrToningControls(QWidget* parent)
                                      300, 30, detail_));
     outer->addWidget(tone);
 
-    auto* advanced = new QGroupBox(QStringLiteral("Advanced"));
+    auto* advanced = new QGroupBox(QCoreApplication::translate("PicturaUi", "Advanced"));
     auto* advancedLayout = new QVBoxLayout(advanced);
     advancedLayout->addLayout(
         makeIntRow(QStringLiteral("Shadow:"), QStringLiteral("hdrShadow"), -100, 100, 0, shadow_));

@@ -2,6 +2,7 @@
 // Part of OptionsBar; ported from photorust's MainWindow::addMoveOptions.
 
 #include "options_bar.h"
+#include <QtCore/QCoreApplication>
 
 #include "icons.h"
 
@@ -23,8 +24,22 @@ namespace {
 // Menu order, which is also the engine's edge index (0 Top ... 5 Right).
 constexpr const char* kEdges[] = {"Top",  "VerticalCenter",   "Bottom",
                                   "Left", "HorizontalCenter", "Right"};
-constexpr const char* kEdgeTips[] = {"top edges",  "vertical centers",   "bottom edges",
-                                     "left edges", "horizontal centers", "right edges"};
+constexpr const char* kAlignLabels[] = {
+    QT_TRANSLATE_NOOP("PicturaUi", "Align top edges"),
+    QT_TRANSLATE_NOOP("PicturaUi", "Align vertical centers"),
+    QT_TRANSLATE_NOOP("PicturaUi", "Align bottom edges"),
+    QT_TRANSLATE_NOOP("PicturaUi", "Align left edges"),
+    QT_TRANSLATE_NOOP("PicturaUi", "Align horizontal centers"),
+    QT_TRANSLATE_NOOP("PicturaUi", "Align right edges"),
+};
+constexpr const char* kDistributeLabels[] = {
+    QT_TRANSLATE_NOOP("PicturaUi", "Distribute top edges"),
+    QT_TRANSLATE_NOOP("PicturaUi", "Distribute vertical centers"),
+    QT_TRANSLATE_NOOP("PicturaUi", "Distribute bottom edges"),
+    QT_TRANSLATE_NOOP("PicturaUi", "Distribute left edges"),
+    QT_TRANSLATE_NOOP("PicturaUi", "Distribute horizontal centers"),
+    QT_TRANSLATE_NOOP("PicturaUi", "Distribute right edges"),
+};
 
 } // namespace
 
@@ -38,22 +53,22 @@ QWidget* OptionsBar::buildMovePage(ToolId id)
     layout->setContentsMargins(4, 2, 4, 2);
     layout->addWidget(toolButton(id, page));
 
-    auto* autoSelectOn = new QCheckBox(QStringLiteral("Auto-Select"), page);
+    auto* autoSelectOn = new QCheckBox(QCoreApplication::translate("PicturaUi", "Auto-Select"), page);
     autoSelectOn->setObjectName(QStringLiteral("optionsMoveAutoSelectOn"));
     autoSelectOn->setChecked(controller_ && move_->get().autoSelectOn);
-    autoSelectOn->setToolTip(QStringLiteral("Select the layer under the pointer when the Move "
+    autoSelectOn->setToolTip(QCoreApplication::translate("PicturaUi", "Select the layer under the pointer when the Move "
                                             "tool presses"));
     layout->addWidget(autoSelectOn);
 
     auto* autoSelect = new QComboBox(page);
     autoSelect->setObjectName(QStringLiteral("optionsMoveAutoSelect"));
-    autoSelect->addItem(QStringLiteral("Group"), 0);
-    autoSelect->addItem(QStringLiteral("Layer"), 1);
+    autoSelect->addItem(QCoreApplication::translate("PicturaUi", "Group"), 0);
+    autoSelect->addItem(QCoreApplication::translate("PicturaUi", "Layer"), 1);
     autoSelect->setCurrentIndex(controller_ ? move_->get().autoSelect : 0);
     autoSelect->setEnabled(autoSelectOn->isChecked());
     layout->addWidget(autoSelect);
 
-    auto* transform = new QCheckBox(QStringLiteral("Show Transform Controls"), page);
+    auto* transform = new QCheckBox(QCoreApplication::translate("PicturaUi", "Show Transform Controls"), page);
     transform->setObjectName(QStringLiteral("optionsMoveTransform"));
     transform->setChecked(controller_ && move_->get().showTransformControls);
     layout->addWidget(transform);
@@ -72,8 +87,8 @@ QWidget* OptionsBar::buildMovePage(ToolId id)
             button->setIconSize(QSize(16, 16));
             button->setAutoRaise(true);
             button->setEnabled(false);
-            button->setToolTip(QLatin1String(distribute ? "Distribute " : "Align ")
-                               + QLatin1String(kEdgeTips[edge]));
+            const char* label = distribute ? kDistributeLabels[edge] : kAlignLabels[edge];
+            button->setToolTip(QCoreApplication::translate("PicturaUi", label));
             connect(button, &QToolButton::clicked, this, [this, distribute, edge]() {
                 if (distribute) {
                     emit distributeRequested(edge);
@@ -98,30 +113,29 @@ QWidget* OptionsBar::buildMovePage(ToolId id)
     menuButton->setIcon(icon(QStringLiteral("ellipsis")));
     menuButton->setIconSize(QSize(16, 16));
     menuButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    menuButton->setToolTip(QStringLiteral("Align and distribute options"));
+    menuButton->setToolTip(QCoreApplication::translate("PicturaUi", "Align and distribute options"));
     menuButton->setPopupMode(QToolButton::InstantPopup);
     auto* menu = new QMenu(menuButton);
     for (int edge = 0; edge < 6; ++edge) {
-        QAction* action = menu->addAction(QLatin1String("Align ") + QLatin1String(kEdgeTips[edge]));
+        QAction* action = menu->addAction(QCoreApplication::translate("PicturaUi", kAlignLabels[edge]));
         action->setObjectName(QStringLiteral("moveMenuAlign%1").arg(QLatin1String(kEdges[edge])));
         connect(action, &QAction::triggered, this, [this, edge]() { emit alignRequested(edge); });
     }
     menu->addSeparator();
     for (int edge = 0; edge < 6; ++edge) {
-        QAction* action =
-            menu->addAction(QLatin1String("Distribute ") + QLatin1String(kEdgeTips[edge]));
+        QAction* action = menu->addAction(QCoreApplication::translate("PicturaUi", kDistributeLabels[edge]));
         action->setObjectName(
             QStringLiteral("moveMenuDistribute%1").arg(QLatin1String(kEdges[edge])));
         connect(action, &QAction::triggered, this, [this, edge]() { emit distributeRequested(edge); });
     }
     menu->addSeparator();
-    QAction* header = menu->addAction(QStringLiteral("Align To:"));
+    QAction* header = menu->addAction(QCoreApplication::translate("PicturaUi", "Align To:"));
     header->setEnabled(false);
     auto* alignToGroup = new QActionGroup(menu);
     alignToGroup->setExclusive(true);
-    QAction* toSelectionAction = menu->addAction(QStringLiteral("Selection"));
+    QAction* toSelectionAction = menu->addAction(QCoreApplication::translate("PicturaUi", "Selection"));
     toSelectionAction->setObjectName(QStringLiteral("moveMenuAlignToSelection"));
-    QAction* toCanvasAction = menu->addAction(QStringLiteral("Canvas"));
+    QAction* toCanvasAction = menu->addAction(QCoreApplication::translate("PicturaUi", "Canvas"));
     toCanvasAction->setObjectName(QStringLiteral("moveMenuAlignToCanvas"));
     for (QAction* action : {toSelectionAction, toCanvasAction}) {
         action->setCheckable(true);

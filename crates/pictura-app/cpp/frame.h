@@ -115,7 +115,8 @@ class PicturaMainWindow : public QMainWindow {
     Q_OBJECT
 public:
     enum class ScreenMode { Standard, FullWithMenuBar, Full };
-    explicit PicturaMainWindow(QWidget* parent = nullptr, bool enableUpdateCheck = true);
+    explicit PicturaMainWindow(QWidget* parent = nullptr, bool enableUpdateCheck = true,
+                               const QString& startupUiLanguage = {});
     ~PicturaMainWindow() override;
     // Test hooks.
     CommandRegistry* registry() const;
@@ -639,6 +640,7 @@ private:
     QColor otherForeground_{Qt::white};
     QColor otherBackground_{Qt::black};
     PreferencesDialog* preferencesDialog_ = nullptr;
+    QString startupUiLanguage_;
     HistoryLogSettings historyLog_;
     void restoreHistoryLog(const Preferences& prefs);
     QPointer<DesignSystemDialog> designSystemDialog_;

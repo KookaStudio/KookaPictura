@@ -346,9 +346,8 @@ void MenuRegistrar::wireFilterMenu()
         // The workspace filters' labels already carry it.
         commands_->setLabelProvider(id, [captured]() {
             const QString ellipsis = QStringLiteral("…");
-            return captured.params.isEmpty() || captured.label.endsWith(ellipsis)
-                       ? captured.label
-                       : captured.label + ellipsis;
+            return commandDisplayText(captured.params.isEmpty() || captured.label.endsWith(ellipsis)
+                                          ? captured.label : captured.label + ellipsis);
         });
         // Adaptive Wide Angle and Vanishing Point take 8-bit RGB and
         // Grayscale only, as CS6's 16- and 32-bpc filter lists leave them out;
@@ -436,7 +435,7 @@ void MenuRegistrar::wireFilterMenu()
         PictureView* view = activeView();
         const FilterCommandSpec* spec =
             view ? filterCommandForKind(filter_last_kind(*view)) : nullptr;
-        return spec ? spec->label : QStringLiteral("Last Filter");
+        return commandDisplayText(spec ? spec->label : QStringLiteral("Last Filter"));
     });
     commands_->setExecutor(command_ids::FilterLastFilter,
                            [this](const CommandParams& params) {

@@ -49,6 +49,7 @@ fields! {
     "interface" / "brightnessLevel": i32 = 1;
     "interface" / "themeFamily": i32 = 0;
     "interface" / "uiScalePercent": i32 = 100;
+    "interface" / "uiLanguage": String = "system".into();
     "interface" / "openDocumentsAsTabs": bool = true;
     "interface" / "enableFloatingDocumentDocking": bool = true;
     "performance" / "gpuCompute": bool = true;

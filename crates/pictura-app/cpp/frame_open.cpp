@@ -7,13 +7,15 @@
 #include "dialogs.h"
 #include "import_save_coordinator.h"
 
+#include <QtCore/QCoreApplication>
+
 namespace pictura {
 
 void PicturaMainWindow::showOpenDialog()
 {
-    const QStringList paths = getOpenFileNames(this, tr("Open"),
-                                               documentDirectory(activeFilePath()),
-                                               openFileFilters());
+    const QStringList paths = getOpenFileNames(
+        this, QCoreApplication::translate("PicturaFiles", "Open"),
+        documentDirectory(activeFilePath()), openFileFilters());
     openUserPaths(paths);
 }
 

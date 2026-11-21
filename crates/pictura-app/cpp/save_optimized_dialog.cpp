@@ -1,4 +1,5 @@
 #include "save_optimized_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include <QtCore/QFileInfo>
 #include <QtWidgets/QComboBox>
@@ -23,28 +24,28 @@ SaveOptimizedDialog::SaveOptimizedDialog(const QString& defaultPath, QWidget* pa
     auto* pathRow = new QHBoxLayout;
     path_ = new QLineEdit(defaultPath, this);
     path_->setObjectName(QStringLiteral("saveOptimizedPath"));
-    auto* browse = new QPushButton(QStringLiteral("Browse..."), this);
+    auto* browse = new QPushButton(QCoreApplication::translate("PicturaUi", "Browse..."), this);
     browse->setObjectName(QStringLiteral("saveOptimizedBrowse"));
     pathRow->addWidget(path_, 1);
     pathRow->addWidget(browse);
-    form->addRow(QStringLiteral("File name:"), pathRow);
+    form->addRow(QCoreApplication::translate("PicturaUi", "File name:"), pathRow);
 
     format_ = new QComboBox(this);
     format_->setObjectName(QStringLiteral("saveOptimizedFormat"));
     format_->addItems({QStringLiteral("HTML and Images"), QStringLiteral("Images Only"),
                        QStringLiteral("HTML Only")});
-    form->addRow(QStringLiteral("Format:"), format_);
+    form->addRow(QCoreApplication::translate("PicturaUi", "Format:"), format_);
 
     auto* slices = new QComboBox(this);
     slices->setObjectName(QStringLiteral("saveOptimizedSlices"));
-    slices->addItem(QStringLiteral("All Slices"));
+    slices->addItem(QCoreApplication::translate("PicturaUi", "All Slices"));
     slices->setEnabled(false);
-    form->addRow(QStringLiteral("Slices:"), slices);
+    form->addRow(QCoreApplication::translate("PicturaUi", "Slices:"), slices);
 
     layout_ = new QComboBox(this);
     layout_->setObjectName(QStringLiteral("saveOptimizedLayout"));
     layout_->addItems({QStringLiteral("Table"), QStringLiteral("CSS")});
-    form->addRow(QStringLiteral("Layout:"), layout_);
+    form->addRow(QCoreApplication::translate("PicturaUi", "Layout:"), layout_);
     root->addLayout(form);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel,

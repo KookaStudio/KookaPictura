@@ -1,5 +1,7 @@
 #include "commands.h"
 
+#include <QtCore/QCoreApplication>
+
 #include "pictura_debug_timing.h"
 
 #include "api/engine_bridge.h"
@@ -123,11 +125,23 @@ constexpr int kSeparatorCount = int(sizeof(kSeparators) / sizeof(kSeparators[0])
 
 } // namespace
 
+QString commandDisplayText(const QString& source)
+{
+    const QString translated =
+        QCoreApplication::translate("PicturaCommands", source.toUtf8().constData());
+    if (translated == source && source.endsWith(QChar(u'…'))) {
+        return QCoreApplication::translate("PicturaCommands", source.chopped(1).toUtf8().constData())
+            + QChar(u'…');
+    }
+    return translated;
+}
+
 CommandRegistry::CommandRegistry(QObject* parent) : QObject(parent) {}
 
 void CommandRegistry::add(const CommandSpec& spec)
 {
-    entries_.push_back(Entry{spec, nullptr, bindingList(spec.shortcut), bindingList(spec.shortcut)});
+    entries_.push_back(Entry{spec, nullptr, bindingList(spec.shortcut),
+                             bindingList(spec.shortcut), commandDisplayText(spec.label)});
 }
 
 void CommandRegistry::add(const QString& id, const QStringList& path, const QString& label,
@@ -139,14 +153,15 @@ void CommandRegistry::add(const QString& id, const QStringList& path, const QStr
     spec.label = label;
     spec.shortcut = shortcut;
     spec.implemented = implemented;
-    entries_.push_back(Entry{spec, nullptr, bindingList(shortcut), bindingList(shortcut)});
+    entries_.push_back(Entry{spec, nullptr, bindingList(shortcut),
+                             bindingList(shortcut), commandDisplayText(spec.label)});
 }
 
 void CommandRegistry::addSeparator(const QStringList& path)
 {
     CommandSpec spec;
     spec.path = path;
-    entries_.push_back(Entry{spec, nullptr, {}, {}});
+    entries_.push_back(Entry{spec, nullptr, {}, {}, {}});
 }
 
 void CommandRegistry::setHandler(const QString& id, std::function<void()> handler)
@@ -322,7 +337,7 @@ QAction* CommandRegistry::detachedAction(const QString& id, QObject* parent) con
     }
     auto* action = new QAction(parent);
     action->setText(labelProviders_.contains(id) ? labelProviders_.value(id)()
-                                                 : found->spec.label);
+                                                 : found->displayLabel);
     bool enabled = found->spec.implemented && hasHandler(id);
     if (enabledProviders_.contains(id)) {
         enabled = enabled && enabledProviders_.value(id)();
@@ -368,7 +383,7 @@ void CommandRegistry::applyState(QAction* action) const
         action->setChecked(checkedProviders_.value(spec.id)());
     }
     action->setText(labelProviders_.contains(spec.id) ? labelProviders_.value(spec.id)()
-                                                      : spec.label);
+                                                      : found->displayLabel);
 }
 
 QList<QKeySequence> CommandRegistry::shortcuts(const QString& id) const
@@ -424,6 +439,7 @@ QHash<QString, QList<QKeySequence>> CommandRegistry::shortcutOverrides() const
 void CommandRegistry::buildMenuBar(QMenuBar* menuBar)
 {
     menuBar_ = menuBar;
+    menus_.clear();
     if (!menuBar_) {
         return;
     }
@@ -438,7 +454,6 @@ void CommandRegistry::buildMenuBar(QMenuBar* menuBar)
     }
     shortcutActions_.clear();
 
-    QHash<QString, QMenu*> menus;
     for (Entry& entry : entries_) {
         entry.action = nullptr;
         const QStringList& path = entry.spec.path;
@@ -466,11 +481,12 @@ void CommandRegistry::buildMenuBar(QMenuBar* menuBar)
         QMenu* parent = nullptr;
         QString key;
         for (int i = 0; i < menuCount; ++i) {
-            key = (i == 0) ? path.at(0) : key + QLatin1Char('/') + path.at(i);
-            QMenu* menu = menus.value(key);
+            key = (i == 0) ? path.at(0) : key + QChar(u'\x1f') + path.at(i);
+            QMenu* menu = menus_.value(key);
             if (!menu) {
-                menu = parent ? parent->addMenu(path.at(i)) : menuBar->addMenu(path.at(i));
-                menus.insert(key, menu);
+                const QString title = commandDisplayText(path.at(i));
+                menu = parent ? parent->addMenu(title) : menuBar->addMenu(title);
+                menus_.insert(key, menu);
                 connect(menu, &QMenu::aboutToShow, this, &CommandRegistry::refresh);
             }
             parent = menu;
@@ -484,7 +500,7 @@ void CommandRegistry::buildMenuBar(QMenuBar* menuBar)
             continue;
         }
 
-        QAction* item = parent->addAction(path.last());
+        QAction* item = parent->addAction(entry.displayLabel);
         item->setData(entry.spec.id);
         item->setShortcuts(entry.shortcuts);
         item->setCheckable(entry.spec.checkable);
@@ -494,6 +510,11 @@ void CommandRegistry::buildMenuBar(QMenuBar* menuBar)
     }
 
     refresh();
+}
+
+QMenu* CommandRegistry::menu(const QStringList& canonicalPath) const
+{
+    return menus_.value(canonicalPath.join(QChar(u'\x1f')));
 }
 
 void CommandRegistry::refresh()
@@ -521,7 +542,7 @@ void CommandRegistry::refresh()
         }
 
         const QString text =
-            labelProviders_.contains(spec.id) ? labelProviders_[spec.id]() : spec.label;
+            labelProviders_.contains(spec.id) ? labelProviders_[spec.id]() : entry.displayLabel;
         entry.action->setText(text);
         // Name each command whose providers cost a noticeable share of a
         // refresh, so a provider that scans the document shows up by id.

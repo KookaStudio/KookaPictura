@@ -4,6 +4,7 @@
 // the owner's CC screenshots; the ranges are unverified.
 
 #include "blur_gallery_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include <QtCore/QSignalBlocker>
 #include <QtWidgets/QCheckBox>
@@ -42,7 +43,7 @@ void BlurGalleryDialog::buildPathControls(QWidget* box, QVBoxLayout* controls)
                           kMaxSpeed, 50, 0, QStringLiteral("%"));
     pathTaper_ = addField(controls, box, QStringLiteral("Taper:"), QStringLiteral("pathTaper"), 0,
                           100, 0, 0, QStringLiteral("%"));
-    pathCentered_ = new QCheckBox(QStringLiteral("Centered Blur"), box);
+    pathCentered_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Centered Blur"), box);
     pathCentered_->setObjectName(QStringLiteral("pathCentered"));
     pathCentered_->setChecked(true);
     controls->addWidget(pathCentered_);
@@ -53,10 +54,10 @@ void BlurGalleryDialog::buildPathControls(QWidget* box, QVBoxLayout* controls)
     // ponytail: each end's blur shape follows the path's tangent; only its
     // length (End Point Speed) is editable, so the shape handles are not
     // drawn.
-    pathEditShapes_ = new QCheckBox(QStringLiteral("Edit Blur Shapes"), box);
+    pathEditShapes_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Edit Blur Shapes"), box);
     pathEditShapes_->setObjectName(QStringLiteral("pathEditShapes"));
     pathEditShapes_->setEnabled(false);
-    pathEditShapes_->setToolTip(QStringLiteral("Not implemented yet"));
+    pathEditShapes_->setToolTip(QCoreApplication::translate("PicturaUi", "Not implemented yet"));
     controls->addWidget(pathEditShapes_);
 
     connect(pathPreset_, &QComboBox::currentIndexChanged, this, [this](int index) {
@@ -97,7 +98,7 @@ QWidget* BlurGalleryDialog::buildMotionTab()
                                QStringLiteral("strobeDuration"), 0, 360, 1, 0,
                                QStringLiteral("°"));
     auto* hint =
-        new QLabel(QStringLiteral("Motion Effects apply to Path Blur and Spin Blur."), tab);
+        new QLabel(QCoreApplication::translate("PicturaUi", "Motion Effects apply to Path Blur and Spin Blur."), tab);
     hint->setWordWrap(true);
     hint->setEnabled(false);
     layout->addWidget(hint);
@@ -118,7 +119,7 @@ void BlurGalleryDialog::syncPreset()
     const QSignalBlocker block(pathPreset_);
     const bool custom = strobeStrength_.spin->value() > 0.0;
     if (custom && pathPreset_->count() == kCustomPreset) {
-        pathPreset_->addItem(QStringLiteral("Custom"));
+        pathPreset_->addItem(QCoreApplication::translate("PicturaUi", "Custom"));
     }
     pathPreset_->setCurrentIndex(custom ? kCustomPreset : (rearSync_ ? 1 : 0));
     if (!custom && pathPreset_->count() > kCustomPreset) {

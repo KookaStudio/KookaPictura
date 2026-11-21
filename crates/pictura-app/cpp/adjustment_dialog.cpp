@@ -287,7 +287,7 @@ PresetCombo* AdjustmentDialog::addPresetRow(QVBoxLayout* layout)
 QCheckBox* AdjustmentDialog::previewCheck()
 {
     if (!preview_) {
-        preview_ = new QCheckBox(QStringLiteral("Preview"), this);
+        preview_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Preview"), this);
         preview_->setObjectName(QStringLiteral("adjustmentPreview"));
         preview_->setChecked(true);
         connect(preview_, &QCheckBox::toggled, this, [this](bool on) {
@@ -416,8 +416,8 @@ QHBoxLayout* AdjustmentDialog::bottomButtons(const QStringList& extra)
         }
         row->addWidget(b);
     }
-    auto* cancel = new QPushButton(QStringLiteral("Cancel"), this);
-    auto* ok = new QPushButton(QStringLiteral("OK"), this);
+    auto* cancel = new QPushButton(QCoreApplication::translate("PicturaUi", "Cancel"), this);
+    auto* ok = new QPushButton(QCoreApplication::translate("PicturaUi", "OK"), this);
     for (QPushButton* b : {cancel, ok}) {
         b->setObjectName(QStringLiteral("adjustmentButton") + b->text());
         b->setMinimumWidth(84);

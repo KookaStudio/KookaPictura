@@ -1,4 +1,5 @@
 #include "hdr_toning_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "dialogs.h"
 #include "hdr_toning_controls.h"
@@ -94,13 +95,13 @@ HdrToningDialog::HdrToningDialog(PictureView* view, const QRect& visible, QWidge
     for (const Preset& preset : kPresets) {
         preset_->addItem(QString::fromUtf8(preset.name));
     }
-    preset_->addItem(QStringLiteral("Custom"));
+    preset_->addItem(QCoreApplication::translate("PicturaUi", "Custom"));
     preset_->setCurrentIndex(0);
     preset_->setMinimumWidth(200);
     left->addLayout(labeledRow(QStringLiteral("Preset:"), preset_));
 
     auto* method = new QComboBox;
-    method->addItem(QStringLiteral("Local Adaptation"));
+    method->addItem(QCoreApplication::translate("PicturaUi", "Local Adaptation"));
     method->setEnabled(false);
     left->addLayout(labeledRow(QStringLiteral("Method:"), method));
 
@@ -114,7 +115,7 @@ HdrToningDialog::HdrToningDialog(PictureView* view, const QRect& visible, QWidge
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     connect(buttons, &QDialogButtonBox::accepted, this, &HdrToningDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &HdrToningDialog::reject);
-    preview_ = new QCheckBox(QStringLiteral("Preview"));
+    preview_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Preview"));
     preview_->setObjectName(QStringLiteral("hdrPreview"));
     preview_->setChecked(true);
     auto* right = new QVBoxLayout;

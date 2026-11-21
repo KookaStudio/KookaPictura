@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QtWidgets/QDialog>
+#include <QtCore/QCoreApplication>
 
 class QCheckBox;
 class QRadioButton;
@@ -25,6 +26,7 @@ struct AutoBlendChoice {
 // Edit > Auto-Blend Layers: the blend method, illustrated, Seamless Tones And
 // Colors, and Content Aware Fill Transparent Areas (post-CS6, 8-bit only).
 class AutoBlendDialog : public QDialog {
+    Q_DECLARE_TR_FUNCTIONS(pictura::AutoBlendDialog)
 public:
     explicit AutoBlendDialog(bool allowFill = true, QWidget* parent = nullptr,
                              const AutoBlendChoice& choice = {});

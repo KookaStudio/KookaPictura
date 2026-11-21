@@ -1,4 +1,5 @@
 #include "filter_preview_dialog.h"
+#include <QtCore/QCoreApplication>
 #include "filter_param_controls.h"
 #include "dialogs.h"
 #include "image_view.h"
@@ -229,13 +230,13 @@ FilterPreviewDialog::FilterPreviewDialog(PictureView* view, const FilterCommandS
     }
 
     auto* buttonColumn = new QVBoxLayout;
-    auto* ok = new QPushButton(QStringLiteral("OK"), this);
+    auto* ok = new QPushButton(QCoreApplication::translate("PicturaUi", "OK"), this);
     ok->setDefault(true);
-    auto* cancel = new QPushButton(QStringLiteral("Cancel"), this);
+    auto* cancel = new QPushButton(QCoreApplication::translate("PicturaUi", "Cancel"), this);
     connect(ok, &QPushButton::clicked, this, &QDialog::accept);
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
     if (!previewBelow && spec.livePreview) {
-        preview_ = new QCheckBox(QStringLiteral("Preview"), this);
+        preview_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Preview"), this);
         preview_->setObjectName(QStringLiteral("filterPreview"));
         preview_->setChecked(true);
         connect(preview_, &QCheckBox::toggled, this, [this](bool on) {

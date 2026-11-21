@@ -1,4 +1,5 @@
 #include "replace_color_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "color_picker_dialog.h"
 #include "icons.h"
@@ -103,18 +104,18 @@ void ReplaceColorDialog::buildUi()
                                   QStringLiteral("Subtract from sample"));
     sampleButton_->setChecked(true);
     topRow->addStretch();
-    topRow->addWidget(new QLabel(QStringLiteral("Color:"), this));
+    topRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Color:"), this));
     colorSwatch_ = makeSwatch();
     topRow->addWidget(colorSwatch_);
     left->addLayout(topRow);
 
-    localized_ = new QCheckBox(QStringLiteral("Localized Color Clusters"), this);
+    localized_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Localized Color Clusters"), this);
     localized_->setObjectName(QStringLiteral("replaceColorLocalized"));
     left->addWidget(localized_);
 
     // --- Fuzziness ---------------------------------------------------------
     auto* fuzzRow = new QHBoxLayout;
-    fuzzRow->addWidget(new QLabel(QStringLiteral("Fuzziness:"), this));
+    fuzzRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Fuzziness:"), this));
     fuzzinessSlider_ = new JumpSlider(Qt::Horizontal, this);
     fuzzinessSlider_->setRange(0, 200);
     fuzzinessSlider_->setValue(40);
@@ -136,10 +137,10 @@ void ReplaceColorDialog::buildUi()
 
     auto* modeRow = new QHBoxLayout;
     modeRow->addStretch();
-    selectionButton_ = new QRadioButton(QStringLiteral("Selection"), this);
+    selectionButton_ = new QRadioButton(QCoreApplication::translate("PicturaUi", "Selection"), this);
     selectionButton_->setObjectName(QStringLiteral("replaceColorSelection"));
     selectionButton_->setChecked(true);
-    imageButton_ = new QRadioButton(QStringLiteral("Image"), this);
+    imageButton_ = new QRadioButton(QCoreApplication::translate("PicturaUi", "Image"), this);
     imageButton_->setObjectName(QStringLiteral("replaceColorImage"));
     modeRow->addWidget(selectionButton_);
     modeRow->addWidget(imageButton_);
@@ -173,9 +174,9 @@ void ReplaceColorDialog::buildUi()
     resultSwatch_ = new ColorSwatchWidget(this);
     resultSwatch_->setObjectName(QStringLiteral("replaceColorResult"));
     resultSwatch_->setFixedSize(34, 26);
-    resultSwatch_->setToolTip(QStringLiteral("Click to set the result color"));
+    resultSwatch_->setToolTip(QCoreApplication::translate("PicturaUi", "Click to set the result color"));
     resultCol->addWidget(resultSwatch_);
-    resultCol->addWidget(new QLabel(QStringLiteral("Result"), this));
+    resultCol->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Result"), this));
     grid->addLayout(resultCol, 0, 3, 3, 1, Qt::AlignCenter);
     left->addLayout(grid);
     left->addStretch();
@@ -187,7 +188,7 @@ void ReplaceColorDialog::buildUi()
     connect(buttons, &QDialogButtonBox::accepted, this, &ReplaceColorDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &ReplaceColorDialog::reject);
     btnCol->addWidget(buttons);
-    preview_ = new QCheckBox(QStringLiteral("Preview"), this);
+    preview_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Preview"), this);
     preview_->setObjectName(QStringLiteral("replaceColorPreview"));
     preview_->setChecked(true);
     btnCol->addWidget(preview_);

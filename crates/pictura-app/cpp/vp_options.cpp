@@ -1,4 +1,5 @@
 #include "vp_options.h"
+#include <QtCore/QCoreApplication>
 #include "vp_dialog.h"
 
 #include <QtGui/QPainter>
@@ -49,7 +50,7 @@ QComboBox* healBox(QWidget* page, QHBoxLayout* layout, const QString& name)
     auto* box = new QComboBox(page);
     box->setObjectName(name);
     box->addItems({QStringLiteral("Off"), QStringLiteral("Luminance"), QStringLiteral("On")});
-    layout->addWidget(new QLabel(QStringLiteral("Heal:"), page));
+    layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Heal:"), page));
     layout->addWidget(box);
     layout->addSpacing(6);
     return box;
@@ -67,10 +68,10 @@ VpOptionsBar::VpOptionsBar(QWidget* parent) : QStackedWidget(parent)
     // ponytail: CS6's Grid Size range is not confirmed; 1–1000 is assumed.
     gridSize_ = field(planesPage_, planes, QStringLiteral("Grid Size:"), QStringLiteral("vpGridSize"),
                       1, 1000, 100, QString());
-    gridSize_->setToolTip(QStringLiteral("Grid Size: the spacing of the active plane's grid."));
+    gridSize_->setToolTip(QCoreApplication::translate("PicturaUi", "Grid Size: the spacing of the active plane's grid."));
     angle_ = field(planesPage_, planes, QStringLiteral("Angle:"), QStringLiteral("vpAngle"), 0, 360,
                    0, QStringLiteral("°"));
-    angle_->setToolTip(QStringLiteral("Angle: a related plane's angle to the plane it tore off."));
+    angle_->setToolTip(QCoreApplication::translate("PicturaUi", "Angle: a related plane's angle to the plane it tore off."));
     planes->addStretch(1);
 
     marqueePage_ = new QWidget(this);
@@ -83,7 +84,7 @@ VpOptionsBar::VpOptionsBar(QWidget* parent) : QStackedWidget(parent)
     moveMode_ = new QComboBox(marqueePage_);
     moveMode_->setObjectName(QStringLiteral("vpMoveMode"));
     moveMode_->addItems({QStringLiteral("Destination"), QStringLiteral("Source")});
-    marquee->addWidget(new QLabel(QStringLiteral("Move Mode:"), marqueePage_));
+    marquee->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Move Mode:"), marqueePage_));
     marquee->addWidget(moveMode_);
     marquee->addStretch(1);
     for (QSpinBox* box : {feather_, marqueeOpacity_}) {
@@ -111,7 +112,7 @@ VpOptionsBar::VpOptionsBar(QWidget* parent) : QStackedWidget(parent)
     };
     auto [stampPage, stampRow] = paintPage(QStringLiteral("vpStamp"), &stamp_, false);
     stampPage_ = stampPage;
-    auto* aligned = new QCheckBox(QStringLiteral("Aligned"), stampPage_);
+    auto* aligned = new QCheckBox(QCoreApplication::translate("PicturaUi", "Aligned"), stampPage_);
     aligned->setObjectName(QStringLiteral("vpAligned"));
     aligned->setChecked(true);
     connect(aligned, &QCheckBox::toggled, this, [](bool on) { vp_set_aligned(on); });
@@ -121,9 +122,9 @@ VpOptionsBar::VpOptionsBar(QWidget* parent) : QStackedWidget(parent)
     auto swatch = [this](QWidget* page, QHBoxLayout* layout, const QString& name) {
         auto* button = new QToolButton(page);
         button->setObjectName(name);
-        button->setToolTip(QStringLiteral("Brush Color"));
+        button->setToolTip(QCoreApplication::translate("PicturaUi", "Brush Color"));
         connect(button, &QToolButton::clicked, this, &VpOptionsBar::pickColour);
-        layout->addWidget(new QLabel(QStringLiteral("Brush Color:"), page));
+        layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Brush Color:"), page));
         layout->addWidget(button);
         swatches_.append(button);
     };

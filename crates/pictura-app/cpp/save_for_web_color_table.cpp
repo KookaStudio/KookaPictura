@@ -1,4 +1,5 @@
 #include "save_for_web_color_table.h"
+#include <QtCore/QCoreApplication>
 
 #include <QtCore/QSignalBlocker>
 #include <QtGui/QIcon>
@@ -48,9 +49,9 @@ ColorTableWidget::ColorTableWidget(QWidget* parent)
     QPushButton* unmap = button("colorTableUnmap", QStringLiteral("Unmap"));
     root->addLayout(buttons);
     auto* files = new QHBoxLayout;
-    QPushButton* load = new QPushButton(QStringLiteral("Load..."), this);
+    QPushButton* load = new QPushButton(QCoreApplication::translate("PicturaUi", "Load..."), this);
     load->setObjectName(QStringLiteral("colorTableLoad"));
-    QPushButton* save = new QPushButton(QStringLiteral("Save..."), this);
+    QPushButton* save = new QPushButton(QCoreApplication::translate("PicturaUi", "Save..."), this);
     save->setObjectName(QStringLiteral("colorTableSave"));
     files->addWidget(load);
     files->addWidget(save);

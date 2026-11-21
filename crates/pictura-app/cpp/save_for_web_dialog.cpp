@@ -1,4 +1,5 @@
 #include "save_for_web_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "api/engine_bridge.h"
 #include "dialogs.h"
@@ -171,7 +172,7 @@ void SaveForWebDialog::buildUi()
     auto* top = new QFormLayout;
     preset_ = new QComboBox(this);
     preset_->setObjectName(QStringLiteral("saveForWebPreset"));
-    preset_->addItem(QStringLiteral("[Unnamed]"));
+    preset_->addItem(QCoreApplication::translate("PicturaUi", "[Unnamed]"));
     for (const Preset& p : kPresets) {
         preset_->addItem(QString::fromLatin1(p.name));
     }
@@ -179,8 +180,8 @@ void SaveForWebDialog::buildUi()
     format_->setObjectName(QStringLiteral("saveForWebFormat"));
     format_->addItems({QStringLiteral("GIF"), QStringLiteral("JPEG"), QStringLiteral("PNG-8"),
                        QStringLiteral("PNG-24"), QStringLiteral("WBMP")});
-    top->addRow(QStringLiteral("Preset:"), preset_);
-    top->addRow(QStringLiteral("Format:"), format_);
+    top->addRow(QCoreApplication::translate("PicturaUi", "Preset:"), preset_);
+    top->addRow(QCoreApplication::translate("PicturaUi", "Format:"), format_);
     right->addLayout(top);
 
     settings_ = new QStackedWidget(this);
@@ -202,19 +203,19 @@ void SaveForWebDialog::buildUi()
     ditherAmount_->setObjectName(QStringLiteral("saveForWebDitherAmount"));
     ditherAmount_->setRange(0, 100);
     ditherAmount_->setSuffix(QStringLiteral("%"));
-    transparency_ = new QCheckBox(QStringLiteral("Transparency"), palette);
+    transparency_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Transparency"), palette);
     transparency_->setObjectName(QStringLiteral("saveForWebTransparency"));
-    interlaced_ = new QCheckBox(QStringLiteral("Interlaced"), palette);
+    interlaced_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Interlaced"), palette);
     interlaced_->setObjectName(QStringLiteral("saveForWebInterlaced"));
     matte_ = new QComboBox(palette);
     matte_->setObjectName(QStringLiteral("saveForWebMatte"));
     matte_->addItems({QStringLiteral("White"), QStringLiteral("Black")});
-    pf->addRow(QStringLiteral("Color Reduction:"), reduction_);
-    pf->addRow(QStringLiteral("Colors:"), colors_);
-    pf->addRow(QStringLiteral("Dither:"), dither_);
-    pf->addRow(QStringLiteral("Amount:"), ditherAmount_);
+    pf->addRow(QCoreApplication::translate("PicturaUi", "Color Reduction:"), reduction_);
+    pf->addRow(QCoreApplication::translate("PicturaUi", "Colors:"), colors_);
+    pf->addRow(QCoreApplication::translate("PicturaUi", "Dither:"), dither_);
+    pf->addRow(QCoreApplication::translate("PicturaUi", "Amount:"), ditherAmount_);
     pf->addRow(transparency_);
-    pf->addRow(QStringLiteral("Matte:"), matte_);
+    pf->addRow(QCoreApplication::translate("PicturaUi", "Matte:"), matte_);
     pf->addRow(interlaced_);
     settings_->addWidget(palette);
 
@@ -228,19 +229,19 @@ void SaveForWebDialog::buildUi()
     quality_ = new QSpinBox(jpeg);
     quality_->setObjectName(QStringLiteral("saveForWebQuality"));
     quality_->setRange(0, 100);
-    progressive_ = new QCheckBox(QStringLiteral("Progressive"), jpeg);
+    progressive_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Progressive"), jpeg);
     progressive_->setObjectName(QStringLiteral("saveForWebProgressive"));
-    optimized_ = new QCheckBox(QStringLiteral("Optimized"), jpeg);
+    optimized_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Optimized"), jpeg);
     optimized_->setObjectName(QStringLiteral("saveForWebOptimizedJpeg"));
     jf->addRow(qualityPreset_);
-    jf->addRow(QStringLiteral("Quality:"), quality_);
+    jf->addRow(QCoreApplication::translate("PicturaUi", "Quality:"), quality_);
     jf->addRow(optimized_);
     jf->addRow(progressive_);
     settings_->addWidget(jpeg);
 
     auto* png24 = new QWidget(settings_);
     auto* p24 = new QFormLayout(png24);
-    pngTransparency_ = new QCheckBox(QStringLiteral("Transparency"), png24);
+    pngTransparency_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Transparency"), png24);
     pngTransparency_->setObjectName(QStringLiteral("saveForWebPngTransparency"));
     p24->addRow(pngTransparency_);
     settings_->addWidget(png24);
@@ -255,15 +256,15 @@ void SaveForWebDialog::buildUi()
     wbmpAmount_->setObjectName(QStringLiteral("saveForWebWbmpAmount"));
     wbmpAmount_->setRange(0, 100);
     wbmpAmount_->setSuffix(QStringLiteral("%"));
-    wf->addRow(QStringLiteral("Dither:"), wbmpDither_);
-    wf->addRow(QStringLiteral("Amount:"), wbmpAmount_);
+    wf->addRow(QCoreApplication::translate("PicturaUi", "Dither:"), wbmpDither_);
+    wf->addRow(QCoreApplication::translate("PicturaUi", "Amount:"), wbmpAmount_);
     settings_->addWidget(wbmp);
     right->addWidget(settings_);
 
     colorTable_ = new ColorTableWidget(this);
     right->addWidget(colorTable_);
 
-    auto* sizeBox = new QGroupBox(QStringLiteral("Image Size"), this);
+    auto* sizeBox = new QGroupBox(QCoreApplication::translate("PicturaUi", "Image Size"), this);
     auto* sf = new QFormLayout(sizeBox);
     width_ = new QSpinBox(sizeBox);
     width_->setObjectName(QStringLiteral("saveForWebWidth"));
@@ -280,16 +281,16 @@ void SaveForWebDialog::buildUi()
     width_->setValue(original_.width());
     height_->setValue(original_.height());
     percent_->setValue(100);
-    constrain_ = new QCheckBox(QStringLiteral("Constrain Proportions"), sizeBox);
+    constrain_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Constrain Proportions"), sizeBox);
     constrain_->setChecked(true);
     resample_ = new QComboBox(sizeBox);
     resample_->setObjectName(QStringLiteral("saveForWebResample"));
     resample_->addItems({QStringLiteral("Bicubic"), QStringLiteral("Nearest Neighbor")});
-    sf->addRow(QStringLiteral("W:"), width_);
-    sf->addRow(QStringLiteral("H:"), height_);
-    sf->addRow(QStringLiteral("Percent:"), percent_);
+    sf->addRow(QCoreApplication::translate("PicturaUi", "W:"), width_);
+    sf->addRow(QCoreApplication::translate("PicturaUi", "H:"), height_);
+    sf->addRow(QCoreApplication::translate("PicturaUi", "Percent:"), percent_);
     sf->addRow(constrain_);
-    sf->addRow(QStringLiteral("Quality:"), resample_);
+    sf->addRow(QCoreApplication::translate("PicturaUi", "Quality:"), resample_);
     right->addWidget(sizeBox);
 
     metadata_ = new QComboBox(this);
@@ -298,9 +299,9 @@ void SaveForWebDialog::buildUi()
                          QStringLiteral("Copyright and Contact Info"),
                          QStringLiteral("All Except Camera Info"), QStringLiteral("All")});
     auto* metadataRow = new QFormLayout;
-    metadataRow->addRow(QStringLiteral("Metadata:"), metadata_);
+    metadataRow->addRow(QCoreApplication::translate("PicturaUi", "Metadata:"), metadata_);
     right->addLayout(metadataRow);
-    repopulate_ = new QPushButton(QStringLiteral("Repopulate Views"), this);
+    repopulate_ = new QPushButton(QCoreApplication::translate("PicturaUi", "Repopulate Views"), this);
     repopulate_->setObjectName(QStringLiteral("saveForWebRepopulate"));
     right->addWidget(repopulate_);
     right->addStretch(1);
@@ -615,7 +616,7 @@ void SaveForWebDialog::refresh()
         if (i == 0) {
             views_[0]->setPixmap(QPixmap::fromImage(image.scaled(
                 kPreviewSize, kPreviewSize, Qt::KeepAspectRatio, Qt::SmoothTransformation)));
-            infos_[0]->setText(QStringLiteral("Original\n%1 x %2")
+            infos_[0]->setText(QCoreApplication::translate("PicturaUi", "Original\n%1 x %2")
                                    .arg(image.width())
                                    .arg(image.height()));
             continue;
@@ -627,7 +628,7 @@ void SaveForWebDialog::refresh()
         views_[i]->setPixmap(QPixmap::fromImage(shown.scaled(
             kPreviewSize, kPreviewSize, Qt::KeepAspectRatio, Qt::SmoothTransformation)));
         const double seconds = data.size() * 8.0 / 56600.0;
-        infos_[i]->setText(QStringLiteral("%1\n%2\n%3 sec @ 56.6 Kbps")
+        infos_[i]->setText(QCoreApplication::translate("PicturaUi", "%1\n%2\n%3 sec @ 56.6 Kbps")
                                .arg(formatName(panes_[i].format), sizeText(data.size()))
                                .arg(qMax(1, qRound(seconds))));
         views_[i]->setStyleSheet(i == activePane_

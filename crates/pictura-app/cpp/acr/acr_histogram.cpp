@@ -1,4 +1,5 @@
 #include "acr_histogram.h"
+#include <QtCore/QCoreApplication>
 
 #include "panels/histogram_panel.h"
 
@@ -34,14 +35,14 @@ AcrHistogram::AcrHistogram(QWidget* parent)
     view_ = new HistogramView(this);
     view_->setMinimumHeight(80);
     layout->addWidget(view_);
-    readout_ = new QLabel(QStringLiteral("R: —  G: —  B: —"), this);
+    readout_ = new QLabel(QCoreApplication::translate("PicturaUi", "R: —  G: —  B: —"), this);
     layout->addWidget(readout_);
 }
 
 void AcrHistogram::clear()
 {
     view_->clear();
-    readout_->setText(QStringLiteral("R: —  G: —  B: —"));
+    readout_->setText(QCoreApplication::translate("PicturaUi", "R: —  G: —  B: —"));
 }
 
 void AcrHistogram::setImage(const QImage& image)
@@ -84,7 +85,7 @@ void AcrHistogram::setImage(const QImage& image)
     view_->setSeries(series);
 
     if (count > 0) {
-        readout_->setText(QStringLiteral("R: %1  G: %2  B: %3")
+        readout_->setText(QCoreApplication::translate("PicturaUi", "R: %1  G: %2  B: %3")
                               .arg(sumR / count)
                               .arg(sumG / count)
                               .arg(sumB / count));

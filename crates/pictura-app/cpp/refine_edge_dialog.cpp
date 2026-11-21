@@ -1,4 +1,5 @@
 #include "refine_edge_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "dialogs.h"
 #include "image_view.h"
@@ -78,10 +79,10 @@ RefineEdgeDialog::RefineEdgeDialog(PictureView* view, QWidget* parent, const QSt
     root->setSpacing(8);
 
     // View Mode.
-    auto* viewGroup = new QGroupBox(QStringLiteral("View Mode"), this);
+    auto* viewGroup = new QGroupBox(QCoreApplication::translate("PicturaUi", "View Mode"), this);
     auto* viewLayout = new QVBoxLayout(viewGroup);
     auto* modeRow = new QHBoxLayout;
-    modeRow->addWidget(new QLabel(QStringLiteral("View:"), viewGroup));
+    modeRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "View:"), viewGroup));
     viewMode_ = new QComboBox(viewGroup);
     viewMode_->setObjectName(QStringLiteral("refineViewMode"));
     for (const char* name : kViewModes) {
@@ -89,20 +90,20 @@ RefineEdgeDialog::RefineEdgeDialog(PictureView* view, QWidget* parent, const QSt
     }
     modeRow->addWidget(viewMode_, 1);
     viewLayout->addLayout(modeRow);
-    showRadius_ = new QCheckBox(QStringLiteral("Show Edge (J)"), viewGroup);
+    showRadius_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Show Edge (J)"), viewGroup);
     showRadius_->setObjectName(QStringLiteral("refineShowRadius"));
-    showRadius_->setToolTip(QStringLiteral("The CS6 Show Radius view: the band edge refinement applies to"));
-    showOriginal_ = new QCheckBox(QStringLiteral("Show Original (P)"), viewGroup);
+    showRadius_->setToolTip(QCoreApplication::translate("PicturaUi", "The CS6 Show Radius view: the band edge refinement applies to"));
+    showOriginal_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Show Original (P)"), viewGroup);
     showOriginal_->setObjectName(QStringLiteral("refineShowOriginal"));
     viewLayout->addWidget(showRadius_);
     viewLayout->addWidget(showOriginal_);
     root->addWidget(viewGroup);
 
     // Refinement brush.
-    auto* brushGroup = new QGroupBox(QStringLiteral("Refine Edge Brush"), this);
+    auto* brushGroup = new QGroupBox(QCoreApplication::translate("PicturaUi", "Refine Edge Brush"), this);
     auto* brushLayout = new QVBoxLayout(brushGroup);
     auto* brushRow = new QHBoxLayout;
-    brushRow->addWidget(new QLabel(QStringLiteral("Size:"), brushGroup));
+    brushRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Size:"), brushGroup));
     brushSize_ = new QSpinBox(brushGroup);
     brushSize_->setObjectName(QStringLiteral("refineBrushSize"));
     brushSize_->setRange(kMinBrushSize, kMaxBrushSize);
@@ -112,13 +113,13 @@ RefineEdgeDialog::RefineEdgeDialog(PictureView* view, QWidget* parent, const QSt
     brushRow->addWidget(brushSize_);
     brushRow->addStretch(1);
     brushLayout->addLayout(brushRow);
-    brushRestore_ = new QCheckBox(QStringLiteral("Restore Original (Alt)"), brushGroup);
+    brushRestore_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Restore Original (Alt)"), brushGroup);
     brushRestore_->setObjectName(QStringLiteral("refineBrushRestore"));
     brushRestore_->setToolTip(
-        QStringLiteral("Restore the original selection under the stroke; Shift+E latches it"));
+        QCoreApplication::translate("PicturaUi", "Restore the original selection under the stroke; Shift+E latches it"));
     brushLayout->addWidget(brushRestore_);
     auto* hint = new QLabel(
-        QStringLiteral("Drag on the image to refine. [ ] resizes, Shift+E toggles restore, "
+        QCoreApplication::translate("PicturaUi", "Drag on the image to refine. [ ] resizes, Shift+E toggles restore, "
                        "J shows the edge."),
         brushGroup);
     hint->setWordWrap(true);
@@ -126,9 +127,9 @@ RefineEdgeDialog::RefineEdgeDialog(PictureView* view, QWidget* parent, const QSt
     root->addWidget(brushGroup);
 
     // Edge Detection.
-    auto* detectGroup = new QGroupBox(QStringLiteral("Edge Detection"), this);
+    auto* detectGroup = new QGroupBox(QCoreApplication::translate("PicturaUi", "Edge Detection"), this);
     auto* detectLayout = new QVBoxLayout(detectGroup);
-    smartRadius_ = new QCheckBox(QStringLiteral("Smart Radius"), detectGroup);
+    smartRadius_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Smart Radius"), detectGroup);
     smartRadius_->setObjectName(QStringLiteral("refineSmartRadius"));
     detectLayout->addWidget(smartRadius_);
     radius_ = addSliderRow(detectLayout, detectGroup, QStringLiteral("Radius:"),
@@ -137,7 +138,7 @@ RefineEdgeDialog::RefineEdgeDialog(PictureView* view, QWidget* parent, const QSt
     root->addWidget(detectGroup);
 
     // Adjust Edge.
-    auto* adjustGroup = new QGroupBox(QStringLiteral("Adjust Edge"), this);
+    auto* adjustGroup = new QGroupBox(QCoreApplication::translate("PicturaUi", "Adjust Edge"), this);
     auto* adjustLayout = new QVBoxLayout(adjustGroup);
     smooth_ = addSliderRow(adjustLayout, adjustGroup, QStringLiteral("Smooth:"),
                            QStringLiteral("refineSmooth"), 0, 100, 0, QString(), &smoothSlider_);
@@ -153,22 +154,22 @@ RefineEdgeDialog::RefineEdgeDialog(PictureView* view, QWidget* parent, const QSt
     root->addWidget(adjustGroup);
 
     // Output.
-    auto* outputGroup = new QGroupBox(QStringLiteral("Output"), this);
+    auto* outputGroup = new QGroupBox(QCoreApplication::translate("PicturaUi", "Output"), this);
     auto* outputLayout = new QVBoxLayout(outputGroup);
-    decontaminate_ = new QCheckBox(QStringLiteral("Decontaminate Colors"), outputGroup);
+    decontaminate_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Decontaminate Colors"), outputGroup);
     decontaminate_->setObjectName(QStringLiteral("refineDecontaminate"));
     outputLayout->addWidget(decontaminate_);
     amount_ = addSliderRow(outputLayout, outputGroup, QStringLiteral("Amount:"),
                            QStringLiteral("refineAmount"), 0, 100, 50, QStringLiteral(" %"),
                            &amountSlider_);
     auto* outRow = new QHBoxLayout;
-    outRow->addWidget(new QLabel(QStringLiteral("Output To:"), outputGroup));
+    outRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Output To:"), outputGroup));
     output_ = new QComboBox(outputGroup);
     output_->setObjectName(QStringLiteral("refineOutput"));
-    output_->addItem(QStringLiteral("Selection"));
-    output_->addItem(QStringLiteral("Layer Mask"));
-    output_->addItem(QStringLiteral("New Layer"));
-    output_->addItem(QStringLiteral("New Layer with Layer Mask"));
+    output_->addItem(QCoreApplication::translate("PicturaUi", "Selection"));
+    output_->addItem(QCoreApplication::translate("PicturaUi", "Layer Mask"));
+    output_->addItem(QCoreApplication::translate("PicturaUi", "New Layer"));
+    output_->addItem(QCoreApplication::translate("PicturaUi", "New Layer with Layer Mask"));
     if (mask) {
         output_->setCurrentIndex(1);
     }

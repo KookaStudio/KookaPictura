@@ -1,4 +1,5 @@
 #include "design_system_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "icons.h"
 #include "panels/color_swatch_widget.h"
@@ -312,13 +313,13 @@ QWidget* metricsPage()
 
 QWidget* typographyPage()
 {
-    auto* base = new QLabel(QStringLiteral("Window text - labels, fields, layers"));
+    auto* base = new QLabel(QCoreApplication::translate("PicturaUi", "Window text - labels, fields, layers"));
     auto* bold = heading(QStringLiteral("Bold - sectionTitle, dialogTitle, group box titles"));
-    auto* disabled = new QLabel(QStringLiteral("Disabled text - disabled controls"));
+    auto* disabled = new QLabel(QCoreApplication::translate("PicturaUi", "Disabled text - disabled controls"));
     disabled->setEnabled(false);
     auto* link = new QLabel(QStringLiteral("<a href=\"#\">Link</a>"));
     link->setTextFormat(Qt::RichText);
-    auto* mono = new QLabel(QStringLiteral("0,0 - 1920x1080 - #3b3b3b"));
+    auto* mono = new QLabel(QCoreApplication::translate("PicturaUi", "0,0 - 1920x1080 - #3b3b3b"));
     QFont monoFont = mono->font();
     monoFont.setFamily(QStringLiteral("monospace"));
     mono->setFont(monoFont);
@@ -389,15 +390,15 @@ QWidget* menuBarPage()
 QWidget* menuPage()
 {
     auto* menu = new QMenu;
-    menu->addAction(QStringLiteral("New..."));
-    menu->addAction(QStringLiteral("Open..."));
-    menu->addAction(QStringLiteral("Open as Smart Object..."));
+    menu->addAction(QCoreApplication::translate("PicturaUi", "New..."));
+    menu->addAction(QCoreApplication::translate("PicturaUi", "Open..."));
+    menu->addAction(QCoreApplication::translate("PicturaUi", "Open as Smart Object..."));
     menu->addSeparator();
-    menu->addAction(QStringLiteral("Save"));
-    QAction* disabled = menu->addAction(QStringLiteral("Revert"));
+    menu->addAction(QCoreApplication::translate("PicturaUi", "Save"));
+    QAction* disabled = menu->addAction(QCoreApplication::translate("PicturaUi", "Revert"));
     disabled->setEnabled(false);
     menu->addSeparator();
-    QAction* checkable = menu->addAction(QStringLiteral("Visible"));
+    QAction* checkable = menu->addAction(QCoreApplication::translate("PicturaUi", "Visible"));
     checkable->setCheckable(true);
     checkable->setChecked(true);
     // Render the real QMenu inline as a child widget rather than as a popup.
@@ -416,16 +417,16 @@ QWidget* optionsBarPage()
     bar->setObjectName(QStringLiteral("optionsBar"));
     bar->addWidget(toolButton(QStringLiteral("tool.brush")));
     bar->addSeparator();
-    bar->addWidget(new QLabel(QStringLiteral("Size")));
+    bar->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Size")));
     bar->addWidget(numericField(QStringLiteral("Size:"), 25, QStringLiteral("px")));
-    bar->addWidget(new QLabel(QStringLiteral("Opacity")));
+    bar->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Opacity")));
     bar->addWidget(numericField(QStringLiteral("Opacity:"), 100, QStringLiteral("%")));
     bar->addSeparator();
     auto* combo = new QComboBox;
     combo->addItems({QStringLiteral("Normal"), QStringLiteral("Dissolve"), QStringLiteral("Multiply")});
     bar->addWidget(combo);
     bar->addSeparator();
-    auto* check = new QCheckBox(QStringLiteral("Pressure"));
+    auto* check = new QCheckBox(QCoreApplication::translate("PicturaUi", "Pressure"));
     check->setChecked(true);
     bar->addWidget(check);
     return page({heading(QStringLiteral("QToolBar#optionsBar")),
@@ -474,9 +475,9 @@ QWidget* panelGroupPage()
 {
     auto* group = new PanelGroup;
     auto* first = new QWidget;
-    new QVBoxLayout(first); first->layout()->addWidget(new QLabel(QStringLiteral("Layers pane")));
+    new QVBoxLayout(first); first->layout()->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Layers pane")));
     auto* second = new QWidget;
-    new QVBoxLayout(second); second->layout()->addWidget(new QLabel(QStringLiteral("Channels pane")));
+    new QVBoxLayout(second); second->layout()->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Channels pane")));
     group->addPanel(first, QStringLiteral("Layers"), QIcon());
     group->addPanel(second, QStringLiteral("Channels"), QIcon());
     group->setFixedWidth(240);
@@ -509,7 +510,7 @@ QWidget* floatingPanelPage()
     auto* layout = new QVBoxLayout(panel);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
-    auto* title = new QLabel(QStringLiteral("History"));
+    auto* title = new QLabel(QCoreApplication::translate("PicturaUi", "History"));
     title->setObjectName(QStringLiteral("sectionTitle"));
     title->setContentsMargins(6, 3, 6, 3);
     layout->addWidget(title);
@@ -531,8 +532,8 @@ QWidget* statusBarPage()
 {
     auto* bar = new QStatusBar;
     bar->addWidget(new QLabel(QStringLiteral("100%")));
-    bar->addWidget(new QLabel(QStringLiteral("1920 x 1080 px - 72 ppi")));
-    bar->addPermanentWidget(new QLabel(QStringLiteral("3.2 MB / 5.1 MB")));
+    bar->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "1920 x 1080 px - 72 ppi")));
+    bar->addPermanentWidget(new QLabel(QCoreApplication::translate("PicturaUi", "3.2 MB / 5.1 MB")));
     return page({heading(QStringLiteral("QStatusBar")),
                  note(QStringLiteral("The footer strip on the panel surface; the zoom readout and "
                                      "document info sit left, the size readout right.")),
@@ -543,9 +544,9 @@ QWidget* splitterPage()
 {
     auto* splitter = new QSplitter(Qt::Horizontal);
     auto* left = new QWidget;
-    new QVBoxLayout(left); left->layout()->addWidget(new QLabel(QStringLiteral("panel A")));
+    new QVBoxLayout(left); left->layout()->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "panel A")));
     auto* right = new QWidget;
-    new QVBoxLayout(right); right->layout()->addWidget(new QLabel(QStringLiteral("panel B")));
+    new QVBoxLayout(right); right->layout()->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "panel B")));
     splitter->addWidget(left);
     splitter->addWidget(right);
     splitter->setFixedHeight(120);
@@ -566,19 +567,19 @@ QWidget* pushButtonPage()
         row({pushButton(QStringLiteral("OK")), pushButton(QStringLiteral("Cancel")),
              pushButton(QStringLiteral("Checked"), [](QPushButton* b) { b->setCheckable(true); b->setChecked(true); }),
              pushButton(QStringLiteral("Disabled"), [](QPushButton* b) { b->setEnabled(false); })}),
-        states({stateCell(QStringLiteral("rest"), [] { return new QPushButton(QStringLiteral("OK")); }),
+        states({stateCell(QStringLiteral("rest"), [] { return new QPushButton(QCoreApplication::translate("PicturaUi", "OK")); }),
                 stateCell(QStringLiteral("hover"), [] {
-                    auto* b = new QPushButton(QStringLiteral("OK"));
+                    auto* b = new QPushButton(QCoreApplication::translate("PicturaUi", "OK"));
                     b->setAttribute(Qt::WA_UnderMouse, true);
                     return b;
                 }),
                 stateCell(QStringLiteral("pressed"), [] {
-                    auto* b = new QPushButton(QStringLiteral("OK"));
+                    auto* b = new QPushButton(QCoreApplication::translate("PicturaUi", "OK"));
                     b->setDown(true);
                     return b;
                 }),
                 stateCell(QStringLiteral("disabled"), [] {
-                    auto* b = new QPushButton(QStringLiteral("OK"));
+                    auto* b = new QPushButton(QCoreApplication::translate("PicturaUi", "OK"));
                     b->setEnabled(false);
                     return b;
                 })})});
@@ -655,29 +656,29 @@ QWidget* comboBoxPage()
 
 QWidget* checkBoxPage()
 {
-    auto* checked = new QCheckBox(QStringLiteral("Channels"));
+    auto* checked = new QCheckBox(QCoreApplication::translate("PicturaUi", "Channels"));
     checked->setChecked(true);
-    auto* partial = new QCheckBox(QStringLiteral("Partial"));
+    auto* partial = new QCheckBox(QCoreApplication::translate("PicturaUi", "Partial"));
     partial->setTristate(true);
     partial->setCheckState(Qt::PartiallyChecked);
-    auto* disabled = new QCheckBox(QStringLiteral("Disabled"));
+    auto* disabled = new QCheckBox(QCoreApplication::translate("PicturaUi", "Disabled"));
     disabled->setEnabled(false);
     return page({heading(QStringLiteral("QCheckBox")),
                  note(QStringLiteral("A 13 x 13 indicator, a 2 px radius, input surface fill; checked fills "
                                      "the selection colour, checked-hover fills the link colour.")),
-                 column({new QCheckBox(QStringLiteral("Preview")), checked, partial, disabled}, 4)});
+                 column({new QCheckBox(QCoreApplication::translate("PicturaUi", "Preview")), checked, partial, disabled}, 4)});
 }
 
 QWidget* radioButtonPage()
 {
-    auto* second = new QRadioButton(QStringLiteral("8 bit"));
-    auto* third = new QRadioButton(QStringLiteral("32 bit"));
-    auto* disabled = new QRadioButton(QStringLiteral("Disabled"));
+    auto* second = new QRadioButton(QCoreApplication::translate("PicturaUi", "8 bit"));
+    auto* third = new QRadioButton(QCoreApplication::translate("PicturaUi", "32 bit"));
+    auto* disabled = new QRadioButton(QCoreApplication::translate("PicturaUi", "Disabled"));
     disabled->setEnabled(false);
     return page({heading(QStringLiteral("QRadioButton")),
                  note(QStringLiteral("A 13 x 13 circle (7 px radius) with the same fill rules as the "
                                      "check box; one per named group.")),
-                 column({new QRadioButton(QStringLiteral("16 bit")), second, third, disabled})});
+                 column({new QRadioButton(QCoreApplication::translate("PicturaUi", "16 bit")), second, third, disabled})});
 }
 
 QWidget* sliderPage()
@@ -718,13 +719,13 @@ QWidget* progressBarPage()
 
 QWidget* groupBoxPage()
 {
-    auto* units = new QGroupBox(QStringLiteral("Units"));
+    auto* units = new QGroupBox(QCoreApplication::translate("PicturaUi", "Units"));
     auto* unitsLayout = new QVBoxLayout(units);
-    unitsLayout->addWidget(new QLabel(QStringLiteral("Rulers & type")));
-    auto* disabled = new QGroupBox(QStringLiteral("Units"));
+    unitsLayout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Rulers & type")));
+    auto* disabled = new QGroupBox(QCoreApplication::translate("PicturaUi", "Units"));
     disabled->setEnabled(false);
     auto* disabledLayout = new QVBoxLayout(disabled);
-    disabledLayout->addWidget(new QLabel(QStringLiteral("Disabled group")));
+    disabledLayout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Disabled group")));
     return page({heading(QStringLiteral("QGroupBox")),
                  note(QStringLiteral("A 1 px separator border, a 3 px radius, with the title "
                                      "overlapping the top edge on the panel surface.")),
@@ -750,7 +751,7 @@ QWidget* scrollBarPage()
     auto* content = new QWidget;
     auto* layout = new QVBoxLayout(content);
     for (int i = 0; i < 24; ++i) {
-        layout->addWidget(new QLabel(QStringLiteral("Row %1 - scroll to see the thumb").arg(i + 1)));
+        layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Row %1 - scroll to see the thumb").arg(i + 1)));
     }
     area->setWidget(content);
     return page({heading(QStringLiteral("QScrollBar")),
@@ -775,10 +776,10 @@ QWidget* treeViewPage()
 
 QWidget* tooltipPage()
 {
-    auto* button = new QPushButton(QStringLiteral("Hover for a tooltip"));
-    button->setToolTip(QStringLiteral("A tooltip appears on hover after the style's delay."));
+    auto* button = new QPushButton(QCoreApplication::translate("PicturaUi", "Hover for a tooltip"));
+    button->setToolTip(QCoreApplication::translate("PicturaUi", "A tooltip appears on hover after the style's delay."));
     auto* slot = toolSlot(QStringLiteral("tool.brush"));
-    slot->setToolTip(QStringLiteral("Brush Tool (B)"));
+    slot->setToolTip(QCoreApplication::translate("PicturaUi", "Brush Tool (B)"));
     return page({heading(QStringLiteral("QToolTip")),
                  note(QStringLiteral("The tooltip surface at 80 % with the tooltip content colour and a 1 px border. It is a "
                                      "top-level popup, so hover the controls below to see it live.")),
@@ -838,7 +839,7 @@ QWidget* dialogPage()
     layout->setSpacing(10);
     auto* title = heading(QStringLiteral("Levels"));
     layout->addWidget(title);
-    auto* group = new QGroupBox(QStringLiteral("Input Levels"));
+    auto* group = new QGroupBox(QCoreApplication::translate("PicturaUi", "Input Levels"));
     auto* groupLayout = new QHBoxLayout(group);
     groupLayout->addWidget(numericField(QString(), 0, QString()));
     groupLayout->addWidget(numericField(QString(), 1.0, QString()));
@@ -848,8 +849,8 @@ QWidget* dialogPage()
     auto* buttonsLayout = new QHBoxLayout(buttons);
     buttonsLayout->setContentsMargins(0, 0, 0, 0);
     buttonsLayout->addStretch(1);
-    buttonsLayout->addWidget(new QPushButton(QStringLiteral("Cancel")));
-    buttonsLayout->addWidget(new QPushButton(QStringLiteral("OK")));
+    buttonsLayout->addWidget(new QPushButton(QCoreApplication::translate("PicturaUi", "Cancel")));
+    buttonsLayout->addWidget(new QPushButton(QCoreApplication::translate("PicturaUi", "OK")));
     layout->addWidget(buttons);
     return page({heading(QStringLiteral("Dialog pattern")),
                  note(QStringLiteral("Composed from the primitives: a bold title, a group box of "
@@ -926,7 +927,7 @@ QWidget* dockedColumnPage()
     auto* group = new PanelGroup;
     group->setFixedWidth(220);
     auto* pane = new QWidget;
-    new QVBoxLayout(pane); pane->layout()->addWidget(new QLabel(QStringLiteral("Layers pane")));
+    new QVBoxLayout(pane); pane->layout()->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Layers pane")));
     group->addPanel(pane, QStringLiteral("Layers"), QIcon());
     auto* splitter = new QSplitter(Qt::Horizontal);
     splitter->addWidget(strip);

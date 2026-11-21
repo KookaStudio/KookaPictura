@@ -1,4 +1,5 @@
 #include "gradient_editor_dialog.h"
+#include <QtCore/QCoreApplication>
 #include "preset_store.h"
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
@@ -402,7 +403,7 @@ GradientEditorDialog::GradientEditorDialog(const GradientSpec& spec, const QColo
     auto* left = new QVBoxLayout;
     left->setSpacing(8);
 
-    auto* presetsBox = new QGroupBox(QStringLiteral("Presets"), this);
+    auto* presetsBox = new QGroupBox(QCoreApplication::translate("PicturaUi", "Presets"), this);
     auto* presetsGrid = new QGridLayout(presetsBox);
     presetsGrid->setSpacing(4);
     constexpr int kColumns = 10;
@@ -438,7 +439,7 @@ GradientEditorDialog::GradientEditorDialog(const GradientSpec& spec, const QColo
     left->addWidget(presetsBox);
 
     auto* nameRow = new QHBoxLayout;
-    nameRow->addWidget(new QLabel(QStringLiteral("Name:"), this));
+    nameRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Name:"), this));
     name_ = new QLineEdit(spec.name, this);
     name_->setObjectName(QStringLiteral("gradientName"));
     nameRow->addWidget(name_, 1);
@@ -447,7 +448,7 @@ GradientEditorDialog::GradientEditorDialog(const GradientSpec& spec, const QColo
     auto* rampBox = new QGroupBox(this);
     auto* ramp = new QVBoxLayout(rampBox);
     auto* typeRow = new QHBoxLayout;
-    typeRow->addWidget(new QLabel(QStringLiteral("Gradient Type:"), this));
+    typeRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Gradient Type:"), this));
     type_ = new QComboBox(this);
     type_->setObjectName(QStringLiteral("gradientType"));
     type_->addItems({QStringLiteral("Solid"), QStringLiteral("Noise")});
@@ -460,7 +461,7 @@ GradientEditorDialog::GradientEditorDialog(const GradientSpec& spec, const QColo
     auto* solid = new QWidget(pages_);
     auto* solidColumn = new QVBoxLayout(solid);
     solidColumn->setContentsMargins(0, 0, 0, 0);
-    smoothness_ = new PercentField(QStringLiteral("Smoothness:"), solid);
+    smoothness_ = new PercentField(QCoreApplication::translate("PicturaUi", "Smoothness:"), solid);
     smoothness_->setObjectName(QStringLiteral("gradientSmoothness"));
     auto* smoothRow = new QHBoxLayout;
     smoothRow->addWidget(smoothness_);
@@ -469,7 +470,7 @@ GradientEditorDialog::GradientEditorDialog(const GradientSpec& spec, const QColo
     bar_ = new GradientStopBar(solid);
     solidColumn->addWidget(bar_);
 
-    auto* stopsBox = new QGroupBox(QStringLiteral("Stops"), solid);
+    auto* stopsBox = new QGroupBox(QCoreApplication::translate("PicturaUi", "Stops"), solid);
     auto* stopsGrid = new QGridLayout(stopsBox);
     const auto locationField = [this]() {
         auto* field = new QSpinBox(this);
@@ -486,12 +487,12 @@ GradientEditorDialog::GradientEditorDialog(const GradientSpec& spec, const QColo
     opacityLocation_ = locationField();
     opacityLocation_->setObjectName(QStringLiteral("gradientOpacityLocation"));
     opacityLocation_->setKeyboardTracking(false);
-    opacityDelete_ = new QPushButton(QStringLiteral("Delete"), this);
+    opacityDelete_ = new QPushButton(QCoreApplication::translate("PicturaUi", "Delete"), this);
     opacityDelete_->setObjectName(QStringLiteral("gradientOpacityDelete"));
     opacityDelete_->setAutoDefault(false);
-    stopsGrid->addWidget(new QLabel(QStringLiteral("Opacity:"), this), 0, 0);
+    stopsGrid->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Opacity:"), this), 0, 0);
     stopsGrid->addWidget(opacity_, 0, 1);
-    stopsGrid->addWidget(new QLabel(QStringLiteral("Location:"), this), 0, 2);
+    stopsGrid->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Location:"), this), 0, 2);
     stopsGrid->addWidget(opacityLocation_, 0, 3);
     stopsGrid->addWidget(opacityDelete_, 0, 4);
     color_ = new ColorSwatchWidget(this);
@@ -500,12 +501,12 @@ GradientEditorDialog::GradientEditorDialog(const GradientSpec& spec, const QColo
     location_ = locationField();
     location_->setObjectName(QStringLiteral("gradientStopLocation"));
     location_->setKeyboardTracking(false);
-    delete_ = new QPushButton(QStringLiteral("Delete"), this);
+    delete_ = new QPushButton(QCoreApplication::translate("PicturaUi", "Delete"), this);
     delete_->setObjectName(QStringLiteral("gradientStopDelete"));
     delete_->setAutoDefault(false);
-    stopsGrid->addWidget(new QLabel(QStringLiteral("Color:"), this), 1, 0);
+    stopsGrid->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Color:"), this), 1, 0);
     stopsGrid->addWidget(color_, 1, 1);
-    stopsGrid->addWidget(new QLabel(QStringLiteral("Location:"), this), 1, 2);
+    stopsGrid->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Location:"), this), 1, 2);
     stopsGrid->addWidget(location_, 1, 3);
     stopsGrid->addWidget(delete_, 1, 4);
     midpoint_ = new QSpinBox(this);
@@ -514,7 +515,7 @@ GradientEditorDialog::GradientEditorDialog(const GradientSpec& spec, const QColo
     midpoint_->setSuffix(QStringLiteral(" %"));
     midpoint_->setFixedWidth(70);
     midpoint_->setKeyboardTracking(false);
-    stopsGrid->addWidget(new QLabel(QStringLiteral("Midpoint:"), this), 2, 2);
+    stopsGrid->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Midpoint:"), this), 2, 2);
     stopsGrid->addWidget(midpoint_, 2, 3);
     stopsGrid->setColumnStretch(5, 1);
     solidColumn->addWidget(stopsBox);
@@ -692,7 +693,7 @@ void GradientEditorDialog::edited()
     if (loading_) {
         return;
     }
-    name_->setText(QStringLiteral("Custom"));
+    name_->setText(QCoreApplication::translate("PicturaUi", "Custom"));
     emit gradientChanged();
 }
 

@@ -3,6 +3,7 @@
 // Part of OptionsBar; split from options_bar.cpp along the page seam.
 
 #include "options_bar.h"
+#include <QtCore/QCoreApplication>
 
 #include "panels/numeric_field.h"
 
@@ -41,19 +42,19 @@ QWidget* OptionsBar::buildRetouchPage(ToolId id)
             retouch->set(o);
         }
     };
-    layout->addWidget(new QLabel(QStringLiteral("Mode:"), page));
+    layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Mode:"), page));
     auto* mode = new QComboBox(page);
     mode->setObjectName(name("Mode"));
-    mode->addItems({QStringLiteral("Normal"), QStringLiteral("Darken"), QStringLiteral("Lighten"),
-                    QStringLiteral("Hue"), QStringLiteral("Saturation"), QStringLiteral("Color"),
-                    QStringLiteral("Luminosity")});
+    mode->addItems({QCoreApplication::translate("PicturaUi", "Normal"), QCoreApplication::translate("PicturaUi", "Darken"), QCoreApplication::translate("PicturaUi", "Lighten"),
+                    QCoreApplication::translate("PicturaUi", "Hue"), QCoreApplication::translate("PicturaUi", "Saturation"), QCoreApplication::translate("PicturaUi", "Color"),
+                    QCoreApplication::translate("PicturaUi", "Luminosity")});
     mode->setCurrentIndex(initial.mode);
     layout->addWidget(mode);
     connect(mode, &QComboBox::currentIndexChanged, this,
             [update](int i) { update([i](RetouchOptions& o) { o.mode = i; }); });
 
     auto* strength = new NumericField(
-        QStringLiteral("Strength:"),
+        QCoreApplication::translate("PicturaUi", "Strength:"),
         numericConfig(1, 100, 1, 0, QStringLiteral("%"), true, name("Strength")), page);
     strength->setValue(initial.strength);
     layout->addWidget(strength);
@@ -68,18 +69,18 @@ QWidget* OptionsBar::buildRetouchPage(ToolId id)
         layout->addWidget(box);
         return box;
     };
-    auto* sampleAll = addToggle(QStringLiteral("Sample All Layers"), "SampleAll",
+    auto* sampleAll = addToggle(QCoreApplication::translate("PicturaUi", "Sample All Layers"), "SampleAll",
                                 initial.sampleAllLayers);
     connect(sampleAll, &QCheckBox::toggled, this,
             [update](bool on) { update([on](RetouchOptions& o) { o.sampleAllLayers = on; }); });
     if (id == ToolId::Sharpen) {
         auto* protect =
-            addToggle(QStringLiteral("Protect Detail"), "ProtectDetail", initial.protectDetail);
+            addToggle(QCoreApplication::translate("PicturaUi", "Protect Detail"), "ProtectDetail", initial.protectDetail);
         connect(protect, &QCheckBox::toggled, this,
                 [update](bool on) { update([on](RetouchOptions& o) { o.protectDetail = on; }); });
     } else if (id == ToolId::Smudge) {
         auto* finger =
-            addToggle(QStringLiteral("Finger Painting"), "FingerPainting", initial.fingerPainting);
+            addToggle(QCoreApplication::translate("PicturaUi", "Finger Painting"), "FingerPainting", initial.fingerPainting);
         connect(finger, &QCheckBox::toggled, this,
                 [update](bool on) { update([on](RetouchOptions& o) { o.fingerPainting = on; }); });
     }
@@ -116,17 +117,17 @@ QWidget* OptionsBar::buildTonePage(ToolId id)
     const bool sponge = id == ToolId::Sponge;
     auto* menu = new QComboBox(page);
     if (sponge) {
-        layout->addWidget(new QLabel(QStringLiteral("Mode:"), page));
+        layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Mode:"), page));
         menu->setObjectName(name("Mode"));
-        menu->addItems({QStringLiteral("Desaturate"), QStringLiteral("Saturate")});
+        menu->addItems({QCoreApplication::translate("PicturaUi", "Desaturate"), QCoreApplication::translate("PicturaUi", "Saturate")});
         menu->setCurrentIndex(initial.spongeMode);
         connect(menu, &QComboBox::currentIndexChanged, this,
                 [update](int i) { update([i](ToneOptions& o) { o.spongeMode = i; }); });
     } else {
-        layout->addWidget(new QLabel(QStringLiteral("Range:"), page));
+        layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Range:"), page));
         menu->setObjectName(name("Range"));
         menu->addItems(
-            {QStringLiteral("Shadows"), QStringLiteral("Midtones"), QStringLiteral("Highlights")});
+            {QCoreApplication::translate("PicturaUi", "Shadows"), QCoreApplication::translate("PicturaUi", "Midtones"), QCoreApplication::translate("PicturaUi", "Highlights")});
         menu->setCurrentIndex(initial.range);
         connect(menu, &QComboBox::currentIndexChanged, this,
                 [update](int i) { update([i](ToneOptions& o) { o.range = i; }); });
@@ -134,7 +135,7 @@ QWidget* OptionsBar::buildTonePage(ToolId id)
     layout->addWidget(menu);
 
     auto* amount = new NumericField(
-        sponge ? QStringLiteral("Flow:") : QStringLiteral("Exposure:"),
+        sponge ? QCoreApplication::translate("PicturaUi", "Flow:") : QCoreApplication::translate("PicturaUi", "Exposure:"),
         numericConfig(1, 100, 1, 0, QStringLiteral("%"), true,
                       name(sponge ? "Flow" : "Exposure")),
         page);
@@ -152,7 +153,7 @@ QWidget* OptionsBar::buildTonePage(ToolId id)
                                      });
     }
 
-    auto* toggle = new QCheckBox(sponge ? QStringLiteral("Vibrance") : QStringLiteral("Protect Tones"),
+    auto* toggle = new QCheckBox(sponge ? QCoreApplication::translate("PicturaUi", "Vibrance") : QCoreApplication::translate("PicturaUi", "Protect Tones"),
                                  page);
     toggle->setObjectName(name(sponge ? "Vibrance" : "ProtectTones"));
     toggle->setChecked(sponge ? initial.vibrance : initial.protectTones);

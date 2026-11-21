@@ -1,4 +1,5 @@
 #include "awa_canvas.h"
+#include <QtCore/QCoreApplication>
 
 #include <QtGui/QAction>
 #include <QtGui/QKeyEvent>
@@ -308,7 +309,7 @@ QMenu* AwaCanvas::constraintMenu(int index, QWidget* owner)
         }
         menu->addSeparator();
     }
-    QAction* remove = menu->addAction(QStringLiteral("Delete"));
+    QAction* remove = menu->addAction(QCoreApplication::translate("PicturaUi", "Delete"));
     remove->setObjectName(QStringLiteral("awaDelete"));
     connect(remove, &QAction::triggered, this, [this, index] {
         awa_remove(index);

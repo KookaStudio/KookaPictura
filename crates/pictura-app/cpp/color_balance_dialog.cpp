@@ -1,4 +1,5 @@
 #include "color_balance_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "api/layers_bridge.h"
 
@@ -31,7 +32,7 @@ ColorBalanceDialog::ColorBalanceDialog(PictureView* view, const QByteArray& bloc
     layout->setSpacing(6);
 
     auto* toneRow = new QHBoxLayout;
-    toneRow->addWidget(new QLabel(QStringLiteral("Tone:"), this));
+    toneRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Tone:"), this));
     for (int i = 0; i < 3; ++i) {
         auto* radio = new QRadioButton(
             QStringList{QStringLiteral("Shadows"), QStringLiteral("Midtones"),
@@ -70,7 +71,7 @@ ColorBalanceDialog::ColorBalanceDialog(PictureView* view, const QByteArray& bloc
            {QColor(225, 210, 30), QColor(130, 130, 130), QColor(50, 70, 220)});
     layout->addSpacing(8);
 
-    auto* luminosity = new QCheckBox(QStringLiteral("Preserve Luminosity"), this);
+    auto* luminosity = new QCheckBox(QCoreApplication::translate("PicturaUi", "Preserve Luminosity"), this);
     luminosity->setObjectName(QStringLiteral("preserveLuminosity"));
     luminosity->setChecked(param(QStringLiteral("preserveLuminosity"), 1.0) != 0.0);
     layout->addWidget(luminosity);
@@ -112,15 +113,15 @@ void ColorBalanceDialog::updateReadout()
         return value > 0 ? QStringLiteral("+%1").arg(value) : QString::number(value);
     };
     if (mode_ == QLatin1String("lab")) {
-        readout_->setText(QStringLiteral("A: %1    B: %2")
+        readout_->setText(QCoreApplication::translate("PicturaUi", "A: %1    B: %2")
                               .arg(signedValue(cyanRed - magentaGreen),
                                    signedValue(-yellowBlue)));
     } else if (mode_ == QLatin1String("cmyk")) {
-        readout_->setText(QStringLiteral("C: %1    M: %2    Y: %3")
+        readout_->setText(QCoreApplication::translate("PicturaUi", "C: %1    M: %2    Y: %3")
                               .arg(signedValue(-cyanRed), signedValue(-magentaGreen),
                                    signedValue(-yellowBlue)));
     } else {
-        readout_->setText(QStringLiteral("R: %1    G: %2    B: %3")
+        readout_->setText(QCoreApplication::translate("PicturaUi", "R: %1    G: %2    B: %3")
                               .arg(signedValue(cyanRed), signedValue(magentaGreen),
                                    signedValue(yellowBlue)));
     }

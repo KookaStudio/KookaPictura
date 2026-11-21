@@ -1,4 +1,5 @@
 #include "layer_new_dialog.h"
+#include <QtCore/QCoreApplication>
 #include "blend_modes.h"
 #include "dialogs.h"
 
@@ -22,19 +23,19 @@ LayerNewDialog::LayerNewDialog(bool group, QWidget* parent, PictureView* view)
     nameEdit_ = new QLineEdit(this);
 
     colorCombo_ = new QComboBox(this);
-    colorCombo_->addItem(QStringLiteral("None"), 0);
-    colorCombo_->addItem(QStringLiteral("Red"), 1);
-    colorCombo_->addItem(QStringLiteral("Orange"), 2);
-    colorCombo_->addItem(QStringLiteral("Yellow"), 3);
-    colorCombo_->addItem(QStringLiteral("Green"), 4);
-    colorCombo_->addItem(QStringLiteral("Blue"), 5);
-    colorCombo_->addItem(QStringLiteral("Violet"), 6);
-    colorCombo_->addItem(QStringLiteral("Gray"), 7);
+    colorCombo_->addItem(QCoreApplication::translate("PicturaUi", "None"), 0);
+    colorCombo_->addItem(QCoreApplication::translate("PicturaUi", "Red"), 1);
+    colorCombo_->addItem(QCoreApplication::translate("PicturaUi", "Orange"), 2);
+    colorCombo_->addItem(QCoreApplication::translate("PicturaUi", "Yellow"), 3);
+    colorCombo_->addItem(QCoreApplication::translate("PicturaUi", "Green"), 4);
+    colorCombo_->addItem(QCoreApplication::translate("PicturaUi", "Blue"), 5);
+    colorCombo_->addItem(QCoreApplication::translate("PicturaUi", "Violet"), 6);
+    colorCombo_->addItem(QCoreApplication::translate("PicturaUi", "Gray"), 7);
 
     modeCombo_ = new QComboBox(this);
     modeCombo_->setObjectName(QStringLiteral("layerNewMode"));
     for (const BlendEntry& entry : allowedBlendModes(view)) {
-        modeCombo_->addItem(entry.name, entry.key);
+        modeCombo_->addItem(entry.displayName(), entry.key);
     }
 
     NumericFieldConfig opacityConfig;
@@ -46,9 +47,9 @@ LayerNewDialog::LayerNewDialog(bool group, QWidget* parent, PictureView* view)
     opacitySpin_->setValue(255);
 
     if (!group_) {
-        neutralCheck_ = new QCheckBox(QStringLiteral("Fill With Mode-Neutral Color"), this);
+        neutralCheck_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Fill With Mode-Neutral Color"), this);
         clippingCheck_ =
-            new QCheckBox(QStringLiteral("Use Previous Layer to Create Clipping Mask"), this);
+            new QCheckBox(QCoreApplication::translate("PicturaUi", "Use Previous Layer to Create Clipping Mask"), this);
     }
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -56,10 +57,10 @@ LayerNewDialog::LayerNewDialog(bool group, QWidget* parent, PictureView* view)
     connect(buttons, &QDialogButtonBox::rejected, this, &LayerNewDialog::reject);
 
     auto* form = new QFormLayout(this);
-    form->addRow(QStringLiteral("Name:"), nameEdit_);
-    form->addRow(QStringLiteral("Color:"), colorCombo_);
-    form->addRow(QStringLiteral("Mode:"), modeCombo_);
-    form->addRow(QStringLiteral("Opacity:"), opacitySpin_);
+    form->addRow(QCoreApplication::translate("PicturaUi", "Name:"), nameEdit_);
+    form->addRow(QCoreApplication::translate("PicturaUi", "Color:"), colorCombo_);
+    form->addRow(QCoreApplication::translate("PicturaUi", "Mode:"), modeCombo_);
+    form->addRow(QCoreApplication::translate("PicturaUi", "Opacity:"), opacitySpin_);
     if (neutralCheck_) {
         form->addRow(neutralCheck_);
     }
@@ -100,22 +101,22 @@ LayerNewDialog::LayerNewDialog(const QString& defaultName, QWidget* parent)
     setWindowTitle(QStringLiteral("Layer from Background"));
     nameEdit_ = new QLineEdit(defaultName, this);
     colorCombo_ = new QComboBox(this);
-    colorCombo_->addItem(QStringLiteral("None"), 0);
-    colorCombo_->addItem(QStringLiteral("Red"), 1);
-    colorCombo_->addItem(QStringLiteral("Orange"), 2);
-    colorCombo_->addItem(QStringLiteral("Yellow"), 3);
-    colorCombo_->addItem(QStringLiteral("Green"), 4);
-    colorCombo_->addItem(QStringLiteral("Blue"), 5);
-    colorCombo_->addItem(QStringLiteral("Violet"), 6);
-    colorCombo_->addItem(QStringLiteral("Gray"), 7);
+    colorCombo_->addItem(QCoreApplication::translate("PicturaUi", "None"), 0);
+    colorCombo_->addItem(QCoreApplication::translate("PicturaUi", "Red"), 1);
+    colorCombo_->addItem(QCoreApplication::translate("PicturaUi", "Orange"), 2);
+    colorCombo_->addItem(QCoreApplication::translate("PicturaUi", "Yellow"), 3);
+    colorCombo_->addItem(QCoreApplication::translate("PicturaUi", "Green"), 4);
+    colorCombo_->addItem(QCoreApplication::translate("PicturaUi", "Blue"), 5);
+    colorCombo_->addItem(QCoreApplication::translate("PicturaUi", "Violet"), 6);
+    colorCombo_->addItem(QCoreApplication::translate("PicturaUi", "Gray"), 7);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     connect(buttons, &QDialogButtonBox::accepted, this, &LayerNewDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &LayerNewDialog::reject);
 
     auto* form = new QFormLayout(this);
-    form->addRow(QStringLiteral("Name:"), nameEdit_);
-    form->addRow(QStringLiteral("Color:"), colorCombo_);
+    form->addRow(QCoreApplication::translate("PicturaUi", "Name:"), nameEdit_);
+    form->addRow(QCoreApplication::translate("PicturaUi", "Color:"), colorCombo_);
     form->addRow(buttons);
 }
 

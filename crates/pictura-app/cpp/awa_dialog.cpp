@@ -1,4 +1,5 @@
 #include "awa_dialog.h"
+#include <QtCore/QCoreApplication>
 #include "awa_canvas.h"
 #include "dialogs.h"
 #include "icons.h"
@@ -163,20 +164,20 @@ AdaptiveWideAngleDialog::AdaptiveWideAngleDialog(PictureView* view, const QStrin
         return text.isEmpty() ? QStringLiteral("--") : text;
     };
     auto* camera = new QLabel(
-        QStringLiteral("Camera Model: %1").arg(orDashes(ready_ ? QString(awa_camera_model()) : QString())),
+        QCoreApplication::translate("PicturaUi", "Camera Model: %1").arg(orDashes(ready_ ? QString(awa_camera_model()) : QString())),
         this);
     camera->setObjectName(QStringLiteral("awaCamera"));
     auto* lens = new QLabel(
-        QStringLiteral("Lens Model: %1").arg(orDashes(ready_ ? QString(awa_lens_model()) : QString())),
+        QCoreApplication::translate("PicturaUi", "Lens Model: %1").arg(orDashes(ready_ ? QString(awa_lens_model()) : QString())),
         this);
     lens->setObjectName(QStringLiteral("awaLens"));
-    preview_ = new QCheckBox(QStringLiteral("Preview"), this);
+    preview_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Preview"), this);
     preview_->setObjectName(QStringLiteral("awaPreview"));
     preview_->setChecked(true);
-    showConstraints_ = new QCheckBox(QStringLiteral("Show Constraints"), this);
+    showConstraints_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Show Constraints"), this);
     showConstraints_->setObjectName(QStringLiteral("awaShowConstraints"));
     showConstraints_->setChecked(true);
-    showMesh_ = new QCheckBox(QStringLiteral("Show Mesh"), this);
+    showMesh_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Show Mesh"), this);
     showMesh_->setObjectName(QStringLiteral("awaShowMesh"));
     connect(preview_, &QCheckBox::toggled, canvas_, &AwaCanvas::setPreview);
     connect(showConstraints_, &QCheckBox::toggled, canvas_, &AwaCanvas::setShowConstraints);
@@ -208,9 +209,9 @@ AdaptiveWideAngleDialog::AdaptiveWideAngleDialog(PictureView* view, const QStrin
     centre->addLayout(bottom);
 
     // The options column.
-    auto* ok = new QPushButton(QStringLiteral("OK"), this);
+    auto* ok = new QPushButton(QCoreApplication::translate("PicturaUi", "OK"), this);
     ok->setDefault(true);
-    auto* cancel = new QPushButton(QStringLiteral("Cancel"), this);
+    auto* cancel = new QPushButton(QCoreApplication::translate("PicturaUi", "Cancel"), this);
     connect(ok, &QPushButton::clicked, this, &QDialog::accept);
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
 
@@ -220,13 +221,13 @@ AdaptiveWideAngleDialog::AdaptiveWideAngleDialog(PictureView* view, const QStrin
     correction_->setObjectName(QStringLiteral("awaCorrection"));
     correction_->addItems(
         {QStringLiteral("Fisheye"), QStringLiteral("Perspective"), QStringLiteral("Full Spherical")});
-    correction_->setToolTip(QStringLiteral("Correction: the projection the image was taken with."));
+    correction_->setToolTip(QCoreApplication::translate("PicturaUi", "Correction: the projection the image was taken with."));
     if (auto* model = qobject_cast<QStandardItemModel*>(correction_->model())) {
         // Full Spherical needs a 2:1 panorama.
         model->item(2)->setEnabled(ready_ && awa_full_spherical_allowed());
     }
     auto* correctionRow = new QHBoxLayout;
-    correctionRow->addWidget(new QLabel(QStringLiteral("Correction:"), lensBox));
+    correctionRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Correction:"), lensBox));
     correctionRow->addWidget(correction_, 1);
     lensLayout->addLayout(correctionRow);
 
@@ -234,16 +235,16 @@ AdaptiveWideAngleDialog::AdaptiveWideAngleDialog(PictureView* view, const QStrin
     scale_->setObjectName(QStringLiteral("awaScale"));
     scale_->setRange(50, 150);
     scale_->setValue(100);
-    scale_->setToolTip(QStringLiteral("Scale: scales the image to reduce blank areas."));
+    scale_->setToolTip(QCoreApplication::translate("PicturaUi", "Scale: scales the image to reduce blank areas."));
     focal_ = new QDoubleSpinBox(lensBox);
     focal_->setObjectName(QStringLiteral("awaFocal"));
     focal_->setDecimals(2);
-    focal_->setToolTip(QStringLiteral("Focal Length: the lens's focal length."));
+    focal_->setToolTip(QCoreApplication::translate("PicturaUi", "Focal Length: the lens's focal length."));
     crop_ = new QDoubleSpinBox(lensBox);
     crop_->setObjectName(QStringLiteral("awaCrop"));
     crop_->setDecimals(2);
     crop_->setRange(0.1, 10.0);
-    crop_->setToolTip(QStringLiteral("Crop Factor: the sensor's crop factor."));
+    crop_->setToolTip(QCoreApplication::translate("PicturaUi", "Crop Factor: the sensor's crop factor."));
     lensLayout->addWidget(sliderRow(lensBox, QStringLiteral("Scale"), scale_, 50, 150, 1.0,
                                     QStringLiteral("%")));
     // The session opens with the EXIF lens or the default; Focal Length's
@@ -260,9 +261,9 @@ AdaptiveWideAngleDialog::AdaptiveWideAngleDialog(PictureView* view, const QStrin
     }
     lensLayout->addWidget(
         sliderRow(lensBox, QStringLiteral("Crop Factor"), crop_, 0.1, 10.0, 100.0, QString()));
-    asShot_ = new QCheckBox(QStringLiteral("As Shot"), lensBox);
+    asShot_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "As Shot"), lensBox);
     asShot_->setObjectName(QStringLiteral("awaAsShot"));
-    asShot_->setToolTip(QStringLiteral("As Shot: use the lens information the image carries."));
+    asShot_->setToolTip(QCoreApplication::translate("PicturaUi", "As Shot: use the lens information the image carries."));
     lensLayout->addWidget(asShot_);
 
     if (ready_) {
@@ -291,7 +292,7 @@ AdaptiveWideAngleDialog::AdaptiveWideAngleDialog(PictureView* view, const QStrin
         w->installEventFilter(this);
     }
 
-    auto* detailBox = new QGroupBox(QStringLiteral("Detail"), this);
+    auto* detailBox = new QGroupBox(QCoreApplication::translate("PicturaUi", "Detail"), this);
     auto* detailLayout = new QVBoxLayout(detailBox);
     detail_ = new AwaDetail(detailBox);
     detailLayout->addWidget(detail_);

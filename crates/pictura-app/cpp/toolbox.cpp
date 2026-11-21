@@ -1,4 +1,7 @@
 #include "toolbox.h"
+#include "localization.h"
+
+#include <QtCore/QCoreApplication>
 
 #include "color_picker_dialog.h"
 #include "icons.h"
@@ -154,14 +157,16 @@ private:
 
 QString enabledTooltip(const ToolInfo& info)
 {
-    return QStringLiteral("%1 (%2) — %3")
-        .arg(QString::fromLatin1(info.label), QString(toolShortcut(info.id)),
-             QString::fromLatin1(info.hint));
+    return plainUiTooltip(QCoreApplication::translate("PicturaTools", "%1 (%2) — %3")
+        .arg(QCoreApplication::translate("PicturaTools", info.label),
+             QString(toolShortcut(info.id)),
+             QCoreApplication::translate("PicturaTools", info.hint)));
 }
 
 QString disabledTooltip(const ToolInfo& info)
 {
-    return QStringLiteral("%1 — not implemented yet").arg(QString::fromLatin1(info.label));
+    return plainUiTooltip(QCoreApplication::translate("PicturaTools", "%1 — not implemented yet")
+        .arg(QCoreApplication::translate("PicturaTools", info.label)));
 }
 
 int groupMemberCount(int group)
@@ -408,7 +413,7 @@ Toolbox::Toolbox(ToolController* controller, ColorState* colors, QWidget* parent
                 const ToolInfo& info = toolInfo(member);
                 QAction* action =
                     menu->addAction(icon(QStringLiteral("tool.") + toolIdName(member)),
-                                    QString::fromLatin1(info.label));
+                                    QCoreApplication::translate("PicturaTools", info.label));
                 action->setData(int(member));
                 action->setEnabled(available(member));
                 action->setToolTip(available(member) ? enabledTooltip(info)
@@ -500,7 +505,7 @@ Toolbox::Toolbox(ToolController* controller, ColorState* colors, QWidget* parent
     if (!screenModeIcon.isNull()) {
         screenMode_->setIcon(screenModeIcon);
     } else {
-        screenMode_->setText(QStringLiteral("Screen Mode"));
+        screenMode_->setText(QCoreApplication::translate("PicturaUi", "Screen Mode"));
     }
     screenMode_->setToolTip(tr("Screen Mode"));
 

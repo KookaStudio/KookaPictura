@@ -1,4 +1,5 @@
 #include "photo_filter_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "adjustment_presets.h"
 #include "color_picker_dialog.h"
@@ -52,13 +53,13 @@ PhotoFilterDialog::PhotoFilterDialog(PictureView* view, const QByteArray& block,
     left->setSpacing(8);
     addPresetRow(left);
 
-    use_ = new QGroupBox(QStringLiteral("Use"), this);
+    use_ = new QGroupBox(QCoreApplication::translate("PicturaUi", "Use"), this);
     use_->setObjectName(QStringLiteral("photoFilterUse"));
     auto* use = use_;
     auto* grid = new QGridLayout(use);
-    useFilter_ = new QRadioButton(QStringLiteral("Filter:"), use);
+    useFilter_ = new QRadioButton(QCoreApplication::translate("PicturaUi", "Filter:"), use);
     useFilter_->setObjectName(QStringLiteral("useFilter"));
-    useColor_ = new QRadioButton(QStringLiteral("Color:"), use);
+    useColor_ = new QRadioButton(QCoreApplication::translate("PicturaUi", "Color:"), use);
     useColor_->setObjectName(QStringLiteral("useColor"));
     filter_ = new QComboBox(use);
     filter_->setObjectName(QStringLiteral("filter"));
@@ -83,7 +84,7 @@ PhotoFilterDialog::PhotoFilterDialog(PictureView* view, const QByteArray& block,
     (named >= 0 || rgb < 0.0 ? useFilter_ : useColor_)->setChecked(true);
 
     auto* densityRow = new QHBoxLayout;
-    densityRow->addWidget(new QLabel(QStringLiteral("Density:"), this));
+    densityRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Density:"), this));
     const ParamSpec densityRange = spec(QStringLiteral("density"));
     auto* density = new QSpinBox(this);
     density_ = density;
@@ -102,7 +103,7 @@ PhotoFilterDialog::PhotoFilterDialog(PictureView* view, const QByteArray& block,
     slider->setValue(density->value());
     left->addWidget(slider);
 
-    auto* luminosity = new QCheckBox(QStringLiteral("Preserve Luminosity"), this);
+    auto* luminosity = new QCheckBox(QCoreApplication::translate("PicturaUi", "Preserve Luminosity"), this);
     luminosity_ = luminosity;
     luminosity->setObjectName(QStringLiteral("preserveLuminosity"));
     luminosity->setChecked(param(QStringLiteral("preserveLuminosity"), 1.0) != 0.0);

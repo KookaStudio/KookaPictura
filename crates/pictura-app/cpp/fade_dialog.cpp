@@ -28,7 +28,7 @@ FadeDialog::FadeDialog(PictureView& view, QWidget* parent)
     mode_ = new QComboBox(this);
     mode_->setObjectName(QStringLiteral("fadeMode"));
     for (const BlendEntry& entry : blendModes()) {
-        mode_->addItem(entry.name, entry.key);
+        mode_->addItem(entry.displayName(), entry.key);
     }
     if (auto* model = qobject_cast<QStandardItemModel*>(mode_->model())) {
         for (int i = 0; i < mode_->count(); ++i) {

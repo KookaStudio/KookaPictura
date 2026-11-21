@@ -1,4 +1,7 @@
 #include "new_document_dialog.h"
+#include "localization.h"
+
+#include <QtCore/QCoreApplication>
 
 #include "color_picker_dialog.h"
 #include "dialogs.h"
@@ -44,48 +47,48 @@ struct DocumentType {
 };
 
 const DocumentType kTypes[] = {
-    {"Custom", {}},
-    {"Clipboard", {}},
-    {"Default Photoshop Size", {{"Default Photoshop Size", 1280, 800, Pixels, 72}}},
-    {"U.S. Paper",
-     {{"Letter", 8.5, 11, Inches, 300},
-      {"Legal", 8.5, 14, Inches, 300},
-      {"Tabloid", 11, 17, Inches, 300}}},
-    {"International Paper",
-     {{"A4", 210, 297, Millimeters, 300},
-      {"A3", 297, 420, Millimeters, 300},
-      {"A5", 148, 210, Millimeters, 300},
-      {"B5", 176, 250, Millimeters, 300}}},
-    {"Photo",
-     {{"Portrait, 2 x 3", 2, 3, Inches, 300},
-      {"Portrait, 4 x 6", 4, 6, Inches, 300},
-      {"Portrait, 5 x 7", 5, 7, Inches, 300},
-      {"Portrait, 8 x 10", 8, 10, Inches, 300},
-      {"Landscape, 3 x 2", 3, 2, Inches, 300},
-      {"Landscape, 6 x 4", 6, 4, Inches, 300},
-      {"Landscape, 7 x 5", 7, 5, Inches, 300},
-      {"Landscape, 10 x 8", 10, 8, Inches, 300}}},
-    {"Web",
-     {{"640 x 480", 640, 480, Pixels, 72},
-      {"800 x 600", 800, 600, Pixels, 72},
-      {"1024 x 768", 1024, 768, Pixels, 72},
-      {"1152 x 864", 1152, 864, Pixels, 72},
-      {"1280 x 1024", 1280, 1024, Pixels, 72},
-      {"1366 x 768", 1366, 768, Pixels, 72},
-      {"1440 x 900", 1440, 900, Pixels, 72},
-      {"1600 x 1200", 1600, 1200, Pixels, 72},
-      {"1920 x 1080", 1920, 1080, Pixels, 72}}},
-    {"Mobile & Devices",
-     {{"320 x 480", 320, 480, Pixels, 72},
-      {"640 x 960", 640, 960, Pixels, 72},
-      {"640 x 1136", 640, 1136, Pixels, 72},
-      {"768 x 1024", 768, 1024, Pixels, 72},
-      {"1536 x 2048", 1536, 2048, Pixels, 72}}},
-    {"Film & Video",
-     {{"HDTV 1080p/29.97", 1920, 1080, Pixels, 72},
-      {"HDV/HDTV 720p/29.97", 1280, 720, Pixels, 72},
-      {"NTSC DV", 720, 480, Pixels, 72},
-      {"PAL D1/DV", 720, 576, Pixels, 72}}},
+    {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "Custom"), {}},
+    {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "Clipboard"), {}},
+    {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "Default Photoshop Size"), {{QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "Default Photoshop Size"), 1280, 800, Pixels, 72}}},
+    {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "U.S. Paper"),
+     {{QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "Letter"), 8.5, 11, Inches, 300},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "Legal"), 8.5, 14, Inches, 300},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "Tabloid"), 11, 17, Inches, 300}}},
+    {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "International Paper"),
+     {{QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "A4"), 210, 297, Millimeters, 300},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "A3"), 297, 420, Millimeters, 300},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "A5"), 148, 210, Millimeters, 300},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "B5"), 176, 250, Millimeters, 300}}},
+    {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "Photo"),
+     {{QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "Portrait, 2 x 3"), 2, 3, Inches, 300},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "Portrait, 4 x 6"), 4, 6, Inches, 300},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "Portrait, 5 x 7"), 5, 7, Inches, 300},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "Portrait, 8 x 10"), 8, 10, Inches, 300},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "Landscape, 3 x 2"), 3, 2, Inches, 300},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "Landscape, 6 x 4"), 6, 4, Inches, 300},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "Landscape, 7 x 5"), 7, 5, Inches, 300},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "Landscape, 10 x 8"), 10, 8, Inches, 300}}},
+    {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "Web"),
+     {{QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "640 x 480"), 640, 480, Pixels, 72},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "800 x 600"), 800, 600, Pixels, 72},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "1024 x 768"), 1024, 768, Pixels, 72},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "1152 x 864"), 1152, 864, Pixels, 72},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "1280 x 1024"), 1280, 1024, Pixels, 72},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "1366 x 768"), 1366, 768, Pixels, 72},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "1440 x 900"), 1440, 900, Pixels, 72},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "1600 x 1200"), 1600, 1200, Pixels, 72},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "1920 x 1080"), 1920, 1080, Pixels, 72}}},
+    {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "Mobile & Devices"),
+     {{QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "320 x 480"), 320, 480, Pixels, 72},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "640 x 960"), 640, 960, Pixels, 72},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "640 x 1136"), 640, 1136, Pixels, 72},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "768 x 1024"), 768, 1024, Pixels, 72},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "1536 x 2048"), 1536, 2048, Pixels, 72}}},
+    {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "Film & Video"),
+     {{QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "HDTV 1080p/29.97"), 1920, 1080, Pixels, 72},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "HDV/HDTV 720p/29.97"), 1280, 720, Pixels, 72},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "NTSC DV"), 720, 480, Pixels, 72},
+      {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "PAL D1/DV"), 720, 576, Pixels, 72}}},
 };
 constexpr int kCustomType = 0;
 constexpr int kClipboardType = 1;
@@ -97,31 +100,28 @@ struct Mode {
     int channels;
 };
 const Mode kModes[] = {
-    {"Bitmap", "bitmap", 1}, {"Grayscale", "grayscale", 1}, {"RGB Color", "rgb", 3},
-    {"CMYK Color", "cmyk", 4}, {"Lab Color", "lab", 3},
+    {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "Bitmap"), "bitmap", 1}, {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "Grayscale"), "grayscale", 1}, {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "RGB Color"), "rgb", 3},
+    {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "CMYK Color"), "cmyk", 4}, {QT_TRANSLATE_NOOP("pictura::NewDocumentDialog", "Lab Color"), "lab", 3},
 };
 constexpr int kDepths[] = {1, 8, 16, 32};
 
-const QString kWhite = QStringLiteral("White");
-const QString kBlack = QStringLiteral("Black");
-const QString kBackground = QStringLiteral("Background Color");
-const QString kTransparent = QStringLiteral("Transparent");
-const QString kCustom = QStringLiteral("Custom…");
+enum BackgroundChoice { White, Black, BackgroundColor, Transparent, CustomColor };
 
 constexpr int kLargeSide = 30000;
 
 QString formatSize(double bytes)
 {
     if (bytes < 1024.0) {
-        return QStringLiteral("%1 bytes").arg(qRound(bytes));
+        return QCoreApplication::translate("pictura::NewDocumentDialog", "%1 bytes")
+            .arg(uiNumericLocale().toString(qRound(bytes)));
     }
     if (bytes < 1024.0 * 1024.0) {
-        return QStringLiteral("%1K").arg(bytes / 1024.0, 0, 'f', 1);
+        return QStringLiteral("%1K").arg(uiNumericLocale().toString(bytes / 1024.0, 'f', 1));
     }
     if (bytes < 1024.0 * 1024.0 * 1024.0) {
-        return QStringLiteral("%1M").arg(bytes / (1024.0 * 1024.0), 0, 'f', 2);
+        return QStringLiteral("%1M").arg(uiNumericLocale().toString(bytes / (1024.0 * 1024.0), 'f', 2));
     }
-    return QStringLiteral("%1G").arg(bytes / (1024.0 * 1024.0 * 1024.0), 0, 'f', 2);
+    return QStringLiteral("%1G").arg(uiNumericLocale().toString(bytes / (1024.0 * 1024.0 * 1024.0), 'f', 2));
 }
 
 // Enable only the entries `allowed` keeps.
@@ -144,7 +144,7 @@ NewDocumentDialog::NewDocumentDialog(const QString& name, const QColor& backgrou
     , background_(background)
 {
     setObjectName(QStringLiteral("newDocumentDialog"));
-    setWindowTitle(QStringLiteral("New"));
+    setWindowTitle(tr("New"));
     buildUi();
     name_->setText(name);
     name_->selectAll();
@@ -169,17 +169,17 @@ void NewDocumentDialog::buildUi()
         grid->addWidget(new QLabel(text, this), row, 0);
     };
 
-    label(QStringLiteral("Name:"));
+    label(tr("Name:"));
     name_ = new QLineEdit(this);
     name_->setObjectName(QStringLiteral("newDocName"));
     name_->setMinimumWidth(260);
     grid->addWidget(name_, row++, 1, 1, 2);
 
-    label(QStringLiteral("Document Type:"));
+    label(tr("Document Type:"));
     documentType_ = new QComboBox(this);
     documentType_->setObjectName(QStringLiteral("newDocType"));
     for (const DocumentType& type : kTypes) {
-        documentType_->addItem(QLatin1String(type.name));
+        documentType_->addItem(tr(type.name));
     }
     const QImage clip = QGuiApplication::clipboard()->image();
     clipboardHasImage_ = !clip.isNull();
@@ -188,33 +188,34 @@ void NewDocumentDialog::buildUi()
     }
     grid->addWidget(documentType_, row++, 1, 1, 2);
 
-    label(QStringLiteral("Size:"));
+    label(tr("Size:"));
     size_ = new QComboBox(this);
     size_->setObjectName(QStringLiteral("newDocSize"));
     grid->addWidget(size_, row++, 1, 1, 2);
 
     const auto number = [this](const QString& name) {
         auto* spin = new QDoubleSpinBox(this);
+        spin->setLocale(uiNumericLocale());
         spin->setObjectName(name);
         spin->setRange(0.01, 300000.0);
         spin->setKeyboardTracking(false);
         spin->setMinimumWidth(110);
         return spin;
     };
-    label(QStringLiteral("Width:"));
+    label(tr("Width:"));
     width_ = number(QStringLiteral("newDocWidth"));
     grid->addWidget(width_, row, 1);
     unitCombo_ = new QComboBox(this);
     unitCombo_->setObjectName(QStringLiteral("newDocUnit"));
-    unitCombo_->addItems({QStringLiteral("Pixels"), QStringLiteral("Inches"),
-                          QStringLiteral("Centimeters"), QStringLiteral("Millimeters"),
-                          QStringLiteral("Points"), QStringLiteral("Picas")});
+    unitCombo_->addItems({tr("Pixels"), tr("Inches"),
+                          tr("Centimeters"), tr("Millimeters"),
+                          tr("Points"), tr("Picas")});
     grid->addWidget(unitCombo_, row++, 2);
-    label(QStringLiteral("Height:"));
+    label(tr("Height:"));
     height_ = number(QStringLiteral("newDocHeight"));
     grid->addWidget(height_, row++, 1);
 
-    label(QStringLiteral("Resolution:"));
+    label(tr("Resolution:"));
     resolution_ = number(QStringLiteral("newDocResolution"));
     resolution_->setDecimals(0);
     resolution_->setRange(1.0, 10000.0);
@@ -222,49 +223,50 @@ void NewDocumentDialog::buildUi()
     grid->addWidget(resolution_, row, 1);
     resolutionUnit_ = new QComboBox(this);
     resolutionUnit_->setObjectName(QStringLiteral("newDocResolutionUnit"));
-    resolutionUnit_->addItems({QStringLiteral("Pixels/Inch"), QStringLiteral("Pixels/Centimeter")});
+    resolutionUnit_->addItems({tr("Pixels/Inch"), tr("Pixels/Centimeter")});
     grid->addWidget(resolutionUnit_, row++, 2);
 
-    label(QStringLiteral("Color Mode:"));
+    label(tr("Color Mode:"));
     mode_ = new QComboBox(this);
     mode_->setObjectName(QStringLiteral("newDocMode"));
     for (const Mode& mode : kModes) {
-        mode_->addItem(QLatin1String(mode.label), QLatin1String(mode.key));
+        mode_->addItem(tr(mode.label), QLatin1String(mode.key));
     }
     mode_->setCurrentIndex(2);
     grid->addWidget(mode_, row, 1);
     depth_ = new QComboBox(this);
     depth_->setObjectName(QStringLiteral("newDocDepth"));
     for (int bits : kDepths) {
-        depth_->addItem(QStringLiteral("%1 bit").arg(bits), bits);
+        depth_->addItem(tr("%1 bit").arg(bits), bits);
     }
     depth_->setCurrentIndex(1);
     grid->addWidget(depth_, row++, 2);
 
-    label(QStringLiteral("Background Contents:"));
+    label(tr("Background Contents:"));
     contents_ = new QComboBox(this);
     contents_->setObjectName(QStringLiteral("newDocBackground"));
-    contents_->addItems({kWhite, kBlack, kBackground, kTransparent, kCustom});
+    contents_->addItems({tr("White"), tr("Black"), tr("Background Color"),
+                         tr("Transparent"), tr("Custom…")});
     grid->addWidget(contents_, row++, 1);
     left->addLayout(grid);
     left->addSpacing(8);
 
-    auto* advanced = new QGroupBox(QStringLiteral("Advanced"), this);
+    auto* advanced = new QGroupBox(tr("Advanced"), this);
     auto* advancedGrid = new QGridLayout(advanced);
     advancedGrid->setColumnStretch(1, 1);
-    advancedGrid->addWidget(new QLabel(QStringLiteral("Color Profile:"), advanced), 0, 0);
+    advancedGrid->addWidget(new QLabel(tr("Color Profile:"), advanced), 0, 0);
     auto* profile = new QComboBox(advanced);
     profile->setObjectName(QStringLiteral("newDocProfile"));
-    profile->addItem(QStringLiteral("Working RGB:  sRGB IEC61966-2.1"));
+    profile->addItem(tr("Working RGB:  sRGB IEC61966-2.1"));
     profile->setEnabled(false);
-    profile->setToolTip(QStringLiteral("New documents are created untagged in sRGB."));
+    profile->setToolTip(plainUiTooltip(tr("New documents are created untagged in sRGB.")));
     advancedGrid->addWidget(profile, 0, 1);
-    advancedGrid->addWidget(new QLabel(QStringLiteral("Pixel Aspect Ratio:"), advanced), 1, 0);
+    advancedGrid->addWidget(new QLabel(tr("Pixel Aspect Ratio:"), advanced), 1, 0);
     auto* aspect = new QComboBox(advanced);
     aspect->setObjectName(QStringLiteral("newDocAspect"));
-    aspect->addItem(QStringLiteral("Square Pixels"));
+    aspect->addItem(tr("Square Pixels"));
     aspect->setEnabled(false);
-    aspect->setToolTip(QStringLiteral("Only square pixels are supported."));
+    aspect->setToolTip(plainUiTooltip(tr("Only square pixels are supported.")));
     advancedGrid->addWidget(aspect, 1, 1);
     left->addWidget(advanced);
     left->addStretch();
@@ -278,14 +280,14 @@ void NewDocumentDialog::buildUi()
         right->addWidget(b);
         return b;
     };
-    QPushButton* ok = button(QStringLiteral("OK"), true);
+    QPushButton* ok = button(tr("OK"), true);
     ok->setDefault(true);
-    QPushButton* cancel = button(QStringLiteral("Cancel"), true);
+    QPushButton* cancel = button(tr("Cancel"), true);
     right->addSpacing(16);
-    button(QStringLiteral("Save Preset…"), false);
-    button(QStringLiteral("Delete Preset…"), false);
+    button(tr("Save Preset…"), false);
+    button(tr("Delete Preset…"), false);
     right->addStretch();
-    auto* sizeHeader = new QLabel(QStringLiteral("Image Size:"), this);
+    auto* sizeHeader = new QLabel(tr("Image Size:"), this);
     QFont bold = sizeHeader->font();
     bold.setBold(true);
     sizeHeader->setFont(bold);
@@ -294,6 +296,10 @@ void NewDocumentDialog::buildUi()
     imageSize_->setObjectName(QStringLiteral("newDocImageSize"));
     right->addWidget(imageSize_);
     outer->addLayout(right);
+
+    for (auto* label : findChildren<QLabel*>()) {
+        label->setTextFormat(Qt::PlainText);
+    }
 
     connect(ok, &QPushButton::clicked, this, &NewDocumentDialog::accept);
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
@@ -371,7 +377,7 @@ void NewDocumentDialog::documentTypeChosen(int index)
     size_->clear();
     if (index >= 0 && index < int(std::size(kTypes))) {
         for (const SizePreset& preset : kTypes[index].sizes) {
-            size_->addItem(QLatin1String(preset.name));
+            size_->addItem(tr(preset.name));
         }
     }
     size_->setEnabled(size_->count() > 0);
@@ -472,15 +478,15 @@ void NewDocumentDialog::modeChosen()
 
 void NewDocumentDialog::backgroundChosen()
 {
-    if (contents_->currentText() != kCustom) {
+    if (contents_->currentIndex() != CustomColor) {
         return;
     }
     const QColor picked = ColorPickerDialog::getColor(
-        custom_, this, QStringLiteral("Color Picker (Custom Background Color)"));
+        custom_, this, tr("Color Picker (Custom Background Color)"));
     if (picked.isValid()) {
         custom_ = picked;
     } else {
-        contents_->setCurrentIndex(contents_->findText(kWhite));
+        contents_->setCurrentIndex(White);
     }
 }
 
@@ -499,12 +505,12 @@ NewDocumentSpec NewDocumentDialog::spec() const
     result.height = heightPixels();
     result.mode = mode_->currentData().toString();
     result.depth = depth_->currentData().toInt();
-    const QString contents = contents_->currentText();
-    result.transparent = contents == kTransparent;
-    result.fill = contents == kBlack        ? QColor(Qt::black)
-                  : contents == kBackground ? background_
-                  : contents == kCustom     ? custom_
-                                            : QColor(Qt::white);
+    const int contents = contents_->currentIndex();
+    result.transparent = contents == Transparent;
+    result.fill = contents == Black             ? QColor(Qt::black)
+                  : contents == BackgroundColor ? background_
+                  : contents == CustomColor     ? custom_
+                                                : QColor(Qt::white);
     result.ppi = ppi();
     result.perCm = resolutionUnit_->currentIndex() == 1;
     return result;
@@ -513,11 +519,12 @@ NewDocumentSpec NewDocumentDialog::spec() const
 void NewDocumentDialog::accept()
 {
     if (widthPixels() > kLargeSide || heightPixels() > kLargeSide) {
-        QMessageBox box(QMessageBox::Warning, QStringLiteral("New"),
-                        QStringLiteral("Documents greater than 30,000 pixels in either dimension "
-                                       "may not be compatible with other applications."),
+        QMessageBox box(QMessageBox::Warning, tr("New"),
+                        tr("Documents greater than 30,000 pixels in either dimension "
+                           "may not be compatible with other applications."),
                         QMessageBox::NoButton, this);
-        QPushButton* proceed = box.addButton(QStringLiteral("Continue"), QMessageBox::AcceptRole);
+        box.setTextFormat(Qt::PlainText);
+        QPushButton* proceed = box.addButton(tr("Continue"), QMessageBox::AcceptRole);
         box.addButton(QMessageBox::Cancel);
         runDialog(box, this);
         if (box.clickedButton() != proceed) {

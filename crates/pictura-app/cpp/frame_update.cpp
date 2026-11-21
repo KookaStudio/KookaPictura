@@ -30,6 +30,8 @@ namespace pictura {
 
 namespace {
 
+std::function<bool(const QString&)> appRestartLauncherForTest;
+
 void beginUpdate(PicturaMainWindow& frame);
 void cancelUpdate(PicturaMainWindow& frame);
 void openUpdateReleasePage(PicturaMainWindow& frame);
@@ -268,6 +270,20 @@ void checkForUpdatesManually(PicturaMainWindow& frame)
 }
 
 } // namespace
+
+bool launchAppRestart()
+{
+    const QString imagePath = appImagePath();
+    const QString executable = imagePath.isEmpty()
+        ? QCoreApplication::applicationFilePath() : imagePath;
+    return appRestartLauncherForTest ? appRestartLauncherForTest(executable)
+                                     : QProcess::startDetached(executable, {});
+}
+
+void setAppRestartLauncherForTest(std::function<bool(const QString&)> launcher)
+{
+    appRestartLauncherForTest = std::move(launcher);
+}
 
 UpdateChecker* ensureUpdateChecker(PicturaMainWindow& frame, bool checkForUpdatesOnLaunch)
 {

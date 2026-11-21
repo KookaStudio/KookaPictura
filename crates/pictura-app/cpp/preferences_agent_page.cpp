@@ -41,6 +41,7 @@ QLabel* wrappedLabel(const QString& text, QWidget* parent)
 {
     auto* label = new QLabel(text, parent);
     label->setWordWrap(true);
+    label->setTextFormat(Qt::PlainText);
     return label;
 }
 
@@ -68,6 +69,7 @@ AgentControlPage::AgentControlPage(AgentControl* agent, QWidget* parent)
     enable_->setObjectName(QStringLiteral("agentEnable"));
     status_->setObjectName(QStringLiteral("agentStatus"));
     status_->setWordWrap(true);
+    status_->setTextFormat(Qt::PlainText);
     allowEdit_->setObjectName(QStringLiteral("agentAllowEdit"));
     allowSave_->setObjectName(QStringLiteral("agentAllowSave"));
     approval_->setObjectName(QStringLiteral("agentApproval"));
@@ -91,7 +93,10 @@ AgentControlPage::AgentControlPage(AgentControl* agent, QWidget* parent)
     auto* permissionsForm = new QFormLayout(permissions);
     permissionsForm->addRow(allowEdit_);
     permissionsForm->addRow(allowSave_);
-    permissionsForm->addRow(tr("Approval:"), approval_);
+    auto* approvalLabel = new QLabel(tr("Approval:"), permissions);
+    approvalLabel->setTextFormat(Qt::PlainText);
+    approvalLabel->setBuddy(approval_);
+    permissionsForm->addRow(approvalLabel, approval_);
     permissionsForm->addRow(allowAllWarning_);
     layout->addWidget(permissions);
 

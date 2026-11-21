@@ -7,6 +7,7 @@
 #include "session.h"
 #include "workspace_store.h"
 
+#include <QtCore/QCoreApplication>
 #include <QtCore/QFile>
 #include <QtCore/QRect>
 #include <QtGui/QAction>
@@ -685,7 +686,11 @@ void PanelHost::attachWorkspaceSwitcher()
 void PanelHost::updateWorkspaceSwitcher()
 {
     if (hooks_.setActiveWorkspace) {
-        hooks_.setActiveWorkspace(workspaceStore_.activeWorkspace);
+        const QString& name = workspaceStore_.activeWorkspace;
+        const int index = workspaceIndexOf(name);
+        const bool builtin = index >= 0 && workspaceStore_.workspaces.at(index).kind == kBuiltinKind;
+        hooks_.setActiveWorkspace(builtin
+            ? QCoreApplication::translate("PicturaCommands", name.toUtf8().constData()) : name);
     }
 }
 
@@ -870,16 +875,8 @@ QStringList PanelHost::userWorkspaces() const
 
 QMenu* PanelHost::workspaceMenu() const
 {
-    auto* window = qobject_cast<QMainWindow*>(shell_);
-    if (!window || !window->menuBar()) {
-        return nullptr;
-    }
-    for (QMenu* menu : window->menuBar()->findChildren<QMenu*>()) {
-        if (menu->title() == QStringLiteral("Workspace")) {
-            return menu;
-        }
-    }
-    return nullptr;
+    return commands_ ? commands_->menu({QStringLiteral("Window"), QStringLiteral("Workspace")})
+                     : nullptr;
 }
 
 void PanelHost::refreshWorkspaceMenu(QMenu* menu)

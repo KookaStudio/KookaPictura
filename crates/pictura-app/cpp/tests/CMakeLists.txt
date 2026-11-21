@@ -25,6 +25,7 @@ set(PICTURA_QT_TESTS
     tst_design_system
     tst_design_system_dialog
     tst_ui_scale
+    tst_ui_localization
     tst_edit_clipboard
     tst_history_snapshots
     tst_edit_refresh
@@ -360,6 +361,10 @@ set_property(TEST tst_update_preferences APPEND PROPERTY ENVIRONMENT
 add_dependencies(tst_structured_logging pictura)
 target_compile_definitions(tst_structured_logging PRIVATE
     PICTURA_LOGGING_TEST_EXECUTABLE="$<TARGET_FILE:pictura>")
+
+add_dependencies(tst_ui_localization pictura)
+target_compile_definitions(tst_ui_localization PRIVATE PICTURA_TEST_APP="$<TARGET_FILE:pictura>")
+set_tests_properties(tst_ui_localization PROPERTIES TIMEOUT 240)
 
 # The brush-outline suite maps logical canvas coordinates to QImage device
 # indices; pin the device pixel ratio so the two agree.

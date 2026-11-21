@@ -1,4 +1,5 @@
 #include "acr_panels.h"
+#include <QtCore/QCoreApplication>
 #include "acr_histogram.h"
 #include "acr_settings.h"
 #include "panels/curve_widget.h"
@@ -307,11 +308,11 @@ AcrToneCurvePanel::AcrToneCurvePanel(AcrSettings* settings, QWidget* parent)
         const QVector<QPointF> points = editor->points();
         const int selected = editor->selected();
         if (selected >= 0 && selected < points.size()) {
-            input->setText(QStringLiteral("Input: %1").arg(qRound(points[selected].x() * 255.0)));
-            output->setText(QStringLiteral("Output: %1").arg(qRound(points[selected].y() * 255.0)));
+            input->setText(QCoreApplication::translate("PicturaUi", "Input: %1").arg(qRound(points[selected].x() * 255.0)));
+            output->setText(QCoreApplication::translate("PicturaUi", "Output: %1").arg(qRound(points[selected].y() * 255.0)));
         } else {
-            input->setText(QStringLiteral("Input: —"));
-            output->setText(QStringLiteral("Output: —"));
+            input->setText(QCoreApplication::translate("PicturaUi", "Input: —"));
+            output->setText(QCoreApplication::translate("PicturaUi", "Output: —"));
         }
     });
 }

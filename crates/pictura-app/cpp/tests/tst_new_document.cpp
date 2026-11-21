@@ -4,11 +4,13 @@
 
 #include <QtTest/QtTest>
 
+#include "canvas_ruler.h"
 #include "frame.h"
 #include "new_document_dialog.h"
 
 #include "api/document_bridge.h"
 
+#include <QtCore/QTemporaryDir>
 #include <QtGui/QClipboard>
 #include <QtGui/QImage>
 #include <QtGui/QStandardItemModel>
@@ -38,6 +40,7 @@ private slots:
     void createsEachModeWithOneState();
     void filledContentsMakeTheLockedBackground();
     void clipboardImagePreselectsClipboardType();
+    void localizedWidthSurvivesPsdRoundTrip();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -195,6 +198,42 @@ void NewDocumentTest::clipboardImagePreselectsClipboardType()
         QCOMPARE(dialog.widthPixels(), 1280);
         QCOMPARE(dialog.heightPixels(), 800);
     }
+}
+
+void NewDocumentTest::localizedWidthSurvivesPsdRoundTrip()
+{
+    const pictura::test::ScopedDefaultLocale numbers{QLocale(QLocale::Finnish)};
+    QTemporaryDir output;
+    QVERIFY(output.isValid());
+    QGuiApplication::clipboard()->clear();
+    pictura::NewDocumentDialog dialog(QStringLiteral("Localized width"), Qt::white);
+    auto* units = dialog.findChild<QComboBox*>(QStringLiteral("newDocUnit"));
+    auto* width = dialog.findChild<QDoubleSpinBox*>(QStringLiteral("newDocWidth"));
+    QVERIFY(units && width);
+    units->setCurrentIndex(units->findText(QStringLiteral("Inches")));
+    auto* edit = width->findChild<QLineEdit*>();
+    QVERIFY(edit);
+    edit->selectAll();
+    QTest::keyClicks(edit, QStringLiteral("1,5"));
+    width->interpretText();
+    const auto spec = dialog.spec();
+    QCOMPARE(spec.width, 108);
+    QCOMPARE(spec.ppi, 72.0);
+
+    auto window = pictura::test::makeMainWindow();
+    QVERIFY(window->newDocument(QStringLiteral("Localized width"), spec.width, spec.height,
+                                spec.mode, spec.depth, QStringLiteral("white")));
+    const QString path = output.filePath(QStringLiteral("width.psd"));
+    QVERIFY(window->saveActiveAs(path));
+    QVERIFY(window->closeActiveDocument(false));
+    QVERIFY(window->openPath(path));
+    const auto* view = window->activeView();
+    QVERIFY(view);
+    QCOMPARE(view->document_width(), 108);
+    QCOMPARE(pictura::document_ppi(*view), 72.0);
+    QCOMPARE(pictura::formatRulerLength(view->document_width(), pictura::RulerUnit::Inches,
+                                      pictura::document_ppi(*view), false, 0.0),
+             QStringLiteral("1,500 in"));
 }
 
 QTEST_MAIN(NewDocumentTest)

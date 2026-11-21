@@ -199,7 +199,7 @@ FilterGalleryDialog::FilterGalleryDialog(PictureView* view, QWidget* parent)
     auto* topRow = new QHBoxLayout;
     auto* toggle = new QToolButton(this);
     toggle->setObjectName(QStringLiteral("galleryToggleThumbnails"));
-    toggle->setToolTip(QStringLiteral("Show/hide the filter thumbnails"));
+    toggle->setToolTip(QCoreApplication::translate("PicturaUi", "Show/hide the filter thumbnails"));
     toggle->setCheckable(true);
     toggle->setChecked(true);
     toggle->setAutoRaise(true);
@@ -210,9 +210,9 @@ FilterGalleryDialog::FilterGalleryDialog(PictureView* view, QWidget* parent)
                                    : QStringLiteral("panel.rightOpen")));
     });
     auto* buttons = new QVBoxLayout;
-    auto* ok = new QPushButton(QStringLiteral("OK"), this);
+    auto* ok = new QPushButton(QCoreApplication::translate("PicturaUi", "OK"), this);
     ok->setDefault(true);
-    auto* cancel = new QPushButton(QStringLiteral("Cancel"), this);
+    auto* cancel = new QPushButton(QCoreApplication::translate("PicturaUi", "Cancel"), this);
     connect(ok, &QPushButton::clicked, this, &QDialog::accept);
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
     buttons->addWidget(ok);
@@ -275,12 +275,12 @@ FilterGalleryDialog::FilterGalleryDialog(PictureView* view, QWidget* parent)
     auto* add = new QToolButton(this);
     add->setObjectName(QStringLiteral("galleryNewEffect"));
     add->setIcon(icon(QStringLiteral("layers.newLayer")));
-    add->setToolTip(QStringLiteral("New effect layer"));
+    add->setToolTip(QCoreApplication::translate("PicturaUi", "New effect layer"));
     connect(add, &QToolButton::clicked, this, &FilterGalleryDialog::addEffect);
     auto* remove = new QToolButton(this);
     remove->setObjectName(QStringLiteral("galleryDeleteEffect"));
     remove->setIcon(icon(QStringLiteral("layers.delete")));
-    remove->setToolTip(QStringLiteral("Delete effect layer"));
+    remove->setToolTip(QCoreApplication::translate("PicturaUi", "Delete effect layer"));
     connect(remove, &QToolButton::clicked, this, &FilterGalleryDialog::deleteEffect);
     listButtons->addWidget(add);
     listButtons->addWidget(remove);
@@ -344,7 +344,7 @@ QWidget* FilterGalleryDialog::buildPreview()
     zoomCombo_->setEditable(true);
     zoomCombo_->setInsertPolicy(QComboBox::NoInsert);
     zoomCombo_->setMaxVisibleItems(24);
-    zoomCombo_->setToolTip(QStringLiteral("Zoom level"));
+    zoomCombo_->setToolTip(QCoreApplication::translate("PicturaUi", "Zoom level"));
     for (const ZoomPreset& preset : kZoomPresets) {
         if (preset.text[0] == '\0') {
             zoomCombo_->insertSeparator(zoomCombo_->count());

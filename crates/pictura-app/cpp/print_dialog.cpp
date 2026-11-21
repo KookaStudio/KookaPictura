@@ -1,4 +1,5 @@
 #include "print_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "api/engine_bridge.h"
 #include "api/proofing_bridge.h"
@@ -148,15 +149,15 @@ PrintDialog::PrintDialog(const QImage& image, PictureView* view, QWidget* parent
     previewLabel_->setAlignment(Qt::AlignCenter);
     left->addWidget(previewLabel_);
     left->addSpacing(12);
-    matchColors_ = new QCheckBox(QStringLiteral("Match Print Colors"), this);
+    matchColors_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Match Print Colors"), this);
     matchColors_->setObjectName(QStringLiteral("printMatchColors"));
     matchColors_->setChecked(options_.value(QStringLiteral("match")).toBool());
     left->addWidget(matchColors_);
-    gamut_ = new QCheckBox(QStringLiteral("Gamut Warning"), this);
+    gamut_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Gamut Warning"), this);
     gamut_->setObjectName(QStringLiteral("printGamutWarning"));
     gamut_->setChecked(options_.value(QStringLiteral("gamut")).toBool());
     left->addWidget(gamut_);
-    paperWhite_ = new QCheckBox(QStringLiteral("Show Paper White"), this);
+    paperWhite_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Show Paper White"), this);
     paperWhite_->setObjectName(QStringLiteral("printPaperWhite"));
     paperWhite_->setChecked(options_.value(QStringLiteral("paperWhite")).toBool());
     left->addWidget(paperWhite_);
@@ -166,10 +167,10 @@ PrintDialog::PrintDialog(const QImage& image, PictureView* view, QWidget* parent
     // Right: Printer Setup and Color Management.
     auto* rightContent = new QWidget(this);
     auto* right = new QVBoxLayout(rightContent);
-    auto* setup = new QGroupBox(QStringLiteral("Printer Setup"), this);
+    auto* setup = new QGroupBox(QCoreApplication::translate("PicturaUi", "Printer Setup"), this);
     auto* setupLayout = new QVBoxLayout(setup);
     auto* printerRow = new QHBoxLayout();
-    printerRow->addWidget(new QLabel(QStringLiteral("Printer:"), setup));
+    printerRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Printer:"), setup));
     printer_ = new QComboBox(setup);
     printer_->setObjectName(QStringLiteral("printPrinter"));
     printer_->setMinimumWidth(200);
@@ -177,20 +178,20 @@ PrintDialog::PrintDialog(const QImage& image, PictureView* view, QWidget* parent
     setupLayout->addLayout(printerRow);
 
     auto* copiesRow = new QHBoxLayout();
-    copiesRow->addWidget(new QLabel(QStringLiteral("Copies:"), setup));
+    copiesRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Copies:"), setup));
     copies_ = new QSpinBox(setup);
     copies_->setObjectName(QStringLiteral("printCopies"));
     copies_->setRange(1, 999);
     copiesRow->addWidget(copies_);
     copiesRow->addSpacing(12);
-    printSettings_ = new QPushButton(QStringLiteral("Print Settings…"), setup);
+    printSettings_ = new QPushButton(QCoreApplication::translate("PicturaUi", "Print Settings…"), setup);
     printSettings_->setObjectName(QStringLiteral("printPageSetup"));
     copiesRow->addWidget(printSettings_);
     copiesRow->addStretch();
     setupLayout->addLayout(copiesRow);
 
     auto* layoutRow = new QHBoxLayout();
-    layoutRow->addWidget(new QLabel(QStringLiteral("Layout:"), setup));
+    layoutRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Layout:"), setup));
     portrait_ = new QPushButton(setup);
     landscape_ = new QPushButton(setup);
     portrait_->setObjectName(QStringLiteral("printPortrait"));
@@ -206,7 +207,7 @@ PrintDialog::PrintDialog(const QImage& image, PictureView* view, QWidget* parent
     }
     layoutRow->addStretch();
     setupLayout->addLayout(layoutRow);
-    cupsSetup_ = new QPushButton(QStringLiteral("Configure Managed CUPS Route…"), setup);
+    cupsSetup_ = new QPushButton(QCoreApplication::translate("PicturaUi", "Configure Managed CUPS Route…"), setup);
     setupLayout->addWidget(cupsSetup_);
     right->addWidget(setup);
 
@@ -229,9 +230,9 @@ PrintDialog::PrintDialog(const QImage& image, PictureView* view, QWidget* parent
 
     auto* buttons = new QHBoxLayout();
     buttons->addStretch();
-    auto* cancel = new QPushButton(QStringLiteral("Cancel"), this);
-    auto* done = new QPushButton(QStringLiteral("Done"), this);
-    auto* printButton = new QPushButton(QStringLiteral("Print"), this);
+    auto* cancel = new QPushButton(QCoreApplication::translate("PicturaUi", "Cancel"), this);
+    auto* done = new QPushButton(QCoreApplication::translate("PicturaUi", "Done"), this);
+    auto* printButton = new QPushButton(QCoreApplication::translate("PicturaUi", "Print"), this);
     done->setObjectName(QStringLiteral("printDone"));
     printButton->setObjectName(QStringLiteral("printPrint"));
     printButton->setDefault(true);
@@ -320,7 +321,7 @@ void PrintDialog::populatePrinters()
         printer_->addItem(info.printerName(), info.printerName());
     }
     // Linux / CUPS: with or without a queue, the job can be written as a PDF.
-    printer_->addItem(QStringLiteral("Save as PDF"), QString());
+    printer_->addItem(QCoreApplication::translate("PicturaUi", "Save as PDF"), QString());
 }
 
 void PrintDialog::populateProfiles()
@@ -329,7 +330,7 @@ void PrintDialog::populateProfiles()
     const QString name = options_.value(QStringLiteral("profile")).toString();
     const QSignalBlocker blocker(profile_);
     profile_->clear();
-    profile_->addItem(QStringLiteral("Choose an ICC profile"), QString());
+    profile_->addItem(QCoreApplication::translate("PicturaUi", "Choose an ICC profile"), QString());
     auto profiles = installedPrintProfiles();
     if (!path.isEmpty() && std::none_of(profiles.begin(), profiles.end(),
             [&](const PrintProfile& candidate) { return candidate.path == path; })) {
@@ -354,23 +355,23 @@ void PrintDialog::populateProfiles()
         }
     }
     if (!name.isEmpty()) {
-        profile_->addItem(QStringLiteral("%1 (Unavailable or ambiguous)").arg(name), QString());
+        profile_->addItem(QCoreApplication::translate("PicturaUi", "%1 (Unavailable or ambiguous)").arg(name), QString());
         profile_->setCurrentIndex(profile_->count() - 1);
     }
 }
 
 void PrintDialog::addColorControls(QVBoxLayout* layout)
 {
-    auto* color = new QGroupBox(QStringLiteral("Color Management"), this);
+    auto* color = new QGroupBox(QCoreApplication::translate("PicturaUi", "Color Management"), this);
     auto* form = new QFormLayout(color);
     const QString name = view_ ? document_profile_name(*view_) : QString();
-    form->addRow(QStringLiteral("Document Profile:"), new QLabel(
+    form->addRow(QCoreApplication::translate("PicturaUi", "Document Profile:"), new QLabel(
         name.isEmpty() ? QStringLiteral("sRGB IEC61966-2.1") : name, color));
     handling_ = new QComboBox(color);
     handling_->setObjectName(QStringLiteral("printColorHandling"));
     handling_->addItems({QStringLiteral("Printer Manages Colors"), QStringLiteral("Pictura Manages Colors")});
     handling_->setCurrentIndex(options_.value(QStringLiteral("managed")).toBool() ? 1 : 0);
-    form->addRow(QStringLiteral("Color Handling:"), handling_);
+    form->addRow(QCoreApplication::translate("PicturaUi", "Color Handling:"), handling_);
     auto* profiles = new QWidget(color);
     auto* profileLayout = new QHBoxLayout(profiles);
     profileLayout->setContentsMargins(0, 0, 0, 0);
@@ -379,23 +380,23 @@ void PrintDialog::addColorControls(QVBoxLayout* layout)
     profile_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
     profile_->setMinimumContentsLength(18);
     profileLayout->addWidget(profile_, 1);
-    openProfile_ = new QPushButton(QStringLiteral("Open ICC…"), profiles);
+    openProfile_ = new QPushButton(QCoreApplication::translate("PicturaUi", "Open ICC…"), profiles);
     profileLayout->addWidget(openProfile_);
-    form->addRow(QStringLiteral("Printer Profile:"), profiles);
+    form->addRow(QCoreApplication::translate("PicturaUi", "Printer Profile:"), profiles);
     intent_ = new QComboBox(color);
     intent_->setObjectName(QStringLiteral("printIntent"));
     intent_->addItems({QStringLiteral("Perceptual"), QStringLiteral("Relative Colorimetric"),
                        QStringLiteral("Saturation"), QStringLiteral("Absolute Colorimetric")});
     intent_->setCurrentIndex(qBound(0, options_.value(QStringLiteral("intent")).toInt(1), 3));
-    form->addRow(QStringLiteral("Rendering Intent:"), intent_);
-    blackPoint_ = new QCheckBox(QStringLiteral("Black Point Compensation"), color);
+    form->addRow(QCoreApplication::translate("PicturaUi", "Rendering Intent:"), intent_);
+    blackPoint_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Black Point Compensation"), color);
     blackPoint_->setChecked(options_.value(QStringLiteral("bpc")).toBool(true));
     form->addRow(blackPoint_);
-    hardProof_ = new QCheckBox(QStringLiteral("Hard Proofing"), color);
+    hardProof_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Hard Proofing"), color);
     hardProof_->setObjectName(QStringLiteral("printHardProof"));
     hardProof_->setChecked(options_.value(QStringLiteral("hardProof")).toBool());
-    hardProof_->setToolTip(QStringLiteral("Requires Pictura Manages Colors and a valid printer profile."));
-    proofSetup_ = new QPushButton(QStringLiteral("Proof Setup…"), color);
+    hardProof_->setToolTip(QCoreApplication::translate("PicturaUi", "Requires Pictura Manages Colors and a valid printer profile."));
+    proofSetup_ = new QPushButton(QCoreApplication::translate("PicturaUi", "Proof Setup…"), color);
     proofSetup_->setObjectName(QStringLiteral("printProofSetup"));
     form->addRow(hardProof_, proofSetup_);
     colorHint_ = new QLabel(color);
@@ -485,7 +486,7 @@ void PrintDialog::addColorControls(QVBoxLayout* layout)
 
 void PrintDialog::addOutputControls(QVBoxLayout* layout)
 {
-    auto* output = new QGroupBox(QStringLiteral("Output"), this);
+    auto* output = new QGroupBox(QCoreApplication::translate("PicturaUi", "Output"), this);
     auto* form = new QFormLayout(output);
     const auto addToggle = [&](const char* key, const QString& label) {
         auto* control = new QCheckBox(label, output);
@@ -506,9 +507,9 @@ void PrintDialog::addOutputControls(QVBoxLayout* layout)
     addToggle("centerCrop", QStringLiteral("Center Crop Marks"));
     addToggle("filename", QStringLiteral("Labels"));
     addToggle("description", QStringLiteral("Description"));
-    auto* background = new QPushButton(QStringLiteral("Choose…"), output);
+    auto* background = new QPushButton(QCoreApplication::translate("PicturaUi", "Choose…"), output);
     background->setObjectName(QStringLiteral("printBackground"));
-    form->addRow(QStringLiteral("Background:"), background);
+    form->addRow(QCoreApplication::translate("PicturaUi", "Background:"), background);
     connect(background, &QPushButton::clicked, this, [this]() {
         const auto rgb = options_.value(QStringLiteral("background")).toArray();
         const QColor previous = rgb.size() == 3
@@ -584,7 +585,7 @@ void PrintDialog::updatePreview()
     const auto chosen = settings();
     const auto paper = physicalPrintPage(chosen);
     const QSizeF inches = paper.fullRect(QPageLayout::Inch).size();
-    pageSize_->setText(QStringLiteral("%1 in x %2 in")
+    pageSize_->setText(QCoreApplication::translate("PicturaUi", "%1 in x %2 in")
                            .arg(inches.width(), 0, 'g', 3)
                            .arg(inches.height(), 0, 'g', 3));
     preview_ = QImage(kPreviewWidth, kPreviewHeight, QImage::Format_RGB32);
@@ -636,8 +637,8 @@ bool PrintDialog::acceptSettings(const PrintSettings& chosen, bool commit)
         }
     }
     if (commit && !storePrintSettings(chosen)) {
-        QMessageBox::warning(this, QStringLiteral("Print"),
-                             QStringLiteral("The print defaults could not be saved for the next launch."));
+        QMessageBox::warning(this, QCoreApplication::translate("PicturaUi", "Print"),
+                             QCoreApplication::translate("PicturaUi", "The print defaults could not be saved for the next launch."));
     }
     return true;
 }
@@ -701,7 +702,7 @@ void printOneCopyFromView(QWidget* parent, PictureView* view)
         const QString error = submitPrintJob(chosen, view, {}, {}, printFilename(view),
                                              print_document_description(*view));
         if (!error.isEmpty()) {
-            QMessageBox::warning(parent, QStringLiteral("Print One Copy"), error);
+            QMessageBox::warning(parent, QCoreApplication::translate("PicturaUi", "Print One Copy"), error);
         }
     }, [parent, view](const QString& reason) {
         PrintDialog dialog(*view, parent);

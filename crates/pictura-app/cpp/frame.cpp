@@ -38,7 +38,6 @@
 #include <QtWidgets/QFrame>
 #include <QtGui/QResizeEvent>
 #include <QtGui/QShowEvent>
-#include <QtWidgets/QTabBar>
 
 namespace pictura {
 
@@ -47,7 +46,8 @@ bool launchCreatesScratchDocument(bool selfTest, bool codecLoaded)
     return selfTest && !codecLoaded;
 }
 
-PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
+PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck,
+                                     const QString& startupUiLanguage)
     : QMainWindow(parent)
 {
     installValueInputEnter();
@@ -286,6 +286,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
 
     const auto prefs = loadPreferences();
     preferencesBaseline_ = prefs;
+    startupUiLanguage_ = startupUiLanguage.isNull() ? prefs.uiLanguage : startupUiLanguage;
     const SessionState state = pictura::loadSession();
     restoreHistoryLog(prefs);
     importSave_->loadState(state, prefs);

@@ -1,4 +1,8 @@
 #include "options_bar.h"
+#include <QtCore/QCoreApplication>
+#include "localization.h"
+
+#include <cmath>
 
 #include "color_picker_dialog.h"
 #include "icons.h"
@@ -79,7 +83,7 @@ NumericFieldConfig OptionsBar::numericConfig(double lo, double hi, double step, 
 }
 
 OptionsBar::OptionsBar(ToolController* controller, QWidget* parent)
-    : QToolBar(QStringLiteral("Options"), parent)
+    : QToolBar(QCoreApplication::translate("PicturaUi", "Options"), parent)
     , controller_(controller)
 {
     setObjectName(QStringLiteral("optionsBar"));
@@ -333,7 +337,7 @@ QWidget* OptionsBar::buildCombinePage(ToolId id, bool withTolerance)
     }
 
     if (withTolerance && controller_ && group) {
-        auto* spin = new NumericField(QStringLiteral("Tolerance"),
+        auto* spin = new NumericField(QCoreApplication::translate("PicturaUi", "Tolerance"),
                                       numericConfig(0, 255, 1, 0, QString(), true,
                                                     QStringLiteral("optionsTolerance")),
                                       page);
@@ -347,17 +351,17 @@ QWidget* OptionsBar::buildCombinePage(ToolId id, bool withTolerance)
         // ponytail: the brush pop-up and Refine Edge are deferred; Sample All
         // Layers and Auto-Enhance have no engine behind them, so they are shown
         // checked but disabled rather than as silent no-ops.
-        auto* sample = new QCheckBox(QStringLiteral("Sample All Layers"), page);
+        auto* sample = new QCheckBox(QCoreApplication::translate("PicturaUi", "Sample All Layers"), page);
         sample->setChecked(true);
         sample->setEnabled(false);
         sample->setToolTip(
-            QStringLiteral("Not modelled: the wand samples the visible composite."));
+            QCoreApplication::translate("PicturaUi", "Not modelled: the wand samples the visible composite."));
         layout->addWidget(sample);
-        auto* enhance = new QCheckBox(QStringLiteral("Auto-Enhance"), page);
+        auto* enhance = new QCheckBox(QCoreApplication::translate("PicturaUi", "Auto-Enhance"), page);
         enhance->setChecked(true);
         enhance->setEnabled(false);
         enhance->setToolTip(
-            QStringLiteral("Not modelled: Quick Selection has no edge-flow refinement."));
+            QCoreApplication::translate("PicturaUi", "Not modelled: Quick Selection has no edge-flow refinement."));
         layout->addWidget(enhance);
     }
 
@@ -375,7 +379,7 @@ QWidget* OptionsBar::buildWandPage(ToolId id)
     SelectionOptions* group = selectionGroupFor(id);
     addModeButtons(layout, page, group, true);
 
-    auto* tolerance = new NumericField(QStringLiteral("Tolerance"),
+    auto* tolerance = new NumericField(QCoreApplication::translate("PicturaUi", "Tolerance"),
                                        numericConfig(0, 255, 1, 0, QString(), true,
                                                      QStringLiteral("optionsTolerance")),
                                        page);
@@ -386,7 +390,7 @@ QWidget* OptionsBar::buildWandPage(ToolId id)
                 [group](double value) { group->setTolerance(qRound(value)); });
     }
 
-    auto* contiguous = new QCheckBox(QStringLiteral("Contiguous"), page);
+    auto* contiguous = new QCheckBox(QCoreApplication::translate("PicturaUi", "Contiguous"), page);
     contiguous->setChecked(group ? group->contiguous() : true);
     layout->addWidget(contiguous);
     if (controller_ && group) {
@@ -396,21 +400,21 @@ QWidget* OptionsBar::buildWandPage(ToolId id)
 
     // ponytail: the wand samples the visible composite, so Sample All Layers
     // stays visible but disabled; Anti-alias uses the inferred boundary ramp.
-    auto* antiAlias = new QCheckBox(QStringLiteral("Anti-alias"), page);
+    auto* antiAlias = new QCheckBox(QCoreApplication::translate("PicturaUi", "Anti-alias"), page);
     antiAlias->setObjectName(QStringLiteral("optionsWandAntiAlias"));
     antiAlias->setChecked(group ? group->antiAlias() : true);
     antiAlias->setToolTip(
-        QStringLiteral("Anti-aliased edge (inferred colour-distance coverage)."));
+        QCoreApplication::translate("PicturaUi", "Anti-aliased edge (inferred colour-distance coverage)."));
     layout->addWidget(antiAlias);
     if (controller_ && group) {
         connect(antiAlias, &QCheckBox::toggled, this,
                 [group](bool on) { group->setAntiAlias(on); });
     }
-    auto* sample = new QCheckBox(QStringLiteral("Sample All Layers"), page);
+    auto* sample = new QCheckBox(QCoreApplication::translate("PicturaUi", "Sample All Layers"), page);
     sample->setObjectName(QStringLiteral("optionsWandSampleAllLayers"));
     sample->setChecked(group ? group->sampleAllLayers() : true);
     sample->setEnabled(false);
-    sample->setToolTip(QStringLiteral("Not modelled: the wand samples the visible composite."));
+    sample->setToolTip(QCoreApplication::translate("PicturaUi", "Not modelled: the wand samples the visible composite."));
     layout->addWidget(sample);
 
     addRefineEdgeButton(layout, page);
@@ -456,7 +460,7 @@ QWidget* OptionsBar::buildSelectionPage(ToolId id)
     addModeButtons(layout, page, group, true);
 
     auto* feather = new NumericField(
-        QStringLiteral("Feather"),
+        QCoreApplication::translate("PicturaUi", "Feather"),
         numericConfig(0.0, 250.0, 1.0, 1, QStringLiteral("px"), false,
                       QStringLiteral("optionsFeather")),
         page);
@@ -469,11 +473,11 @@ QWidget* OptionsBar::buildSelectionPage(ToolId id)
 
     const bool isMarquee = id == ToolId::Marquee || id == ToolId::EllipticalMarquee;
     if (isMarquee) {
-        layout->addWidget(new QLabel(QStringLiteral("Style"), page));
+        layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Style"), page));
         auto* styleCombo = new QComboBox(page);
-        styleCombo->addItem(QStringLiteral("Normal"), int(MarqueeStyle::Normal));
-        styleCombo->addItem(QStringLiteral("Fixed Ratio"), int(MarqueeStyle::FixedRatio));
-        styleCombo->addItem(QStringLiteral("Fixed Size"), int(MarqueeStyle::FixedSize));
+        styleCombo->addItem(QCoreApplication::translate("PicturaUi", "Normal"), int(MarqueeStyle::Normal));
+        styleCombo->addItem(QCoreApplication::translate("PicturaUi", "Fixed Ratio"), int(MarqueeStyle::FixedRatio));
+        styleCombo->addItem(QCoreApplication::translate("PicturaUi", "Fixed Size"), int(MarqueeStyle::FixedSize));
         layout->addWidget(styleCombo);
 
         // ponytail: 1:1 and 100x100 are inferred defaults (CS6 Help does not
@@ -494,7 +498,7 @@ QWidget* OptionsBar::buildSelectionPage(ToolId id)
         ratioLayout->addWidget(ratioW);
         ratioLayout->addWidget(new QLabel(QStringLiteral(":"), ratioBox));
         ratioLayout->addWidget(ratioH);
-        ratioBox->setToolTip(QStringLiteral("Inferred default 1:1."));
+        ratioBox->setToolTip(QCoreApplication::translate("PicturaUi", "Inferred default 1:1."));
         layout->addWidget(ratioBox);
 
         auto* sizeBox = new QWidget(page);
@@ -514,7 +518,7 @@ QWidget* OptionsBar::buildSelectionPage(ToolId id)
         sizeLayout->addWidget(new QLabel(QStringLiteral("x"), sizeBox));
         sizeLayout->addWidget(sizeH);
         sizeBox->setToolTip(
-            QStringLiteral("Inferred default 100x100 px; non-pixel units are deferred."));
+            QCoreApplication::translate("PicturaUi", "Inferred default 100x100 px; non-pixel units are deferred."));
         layout->addWidget(sizeBox);
 
         if (controller_ && group) {
@@ -555,11 +559,10 @@ QWidget* OptionsBar::buildSelectionPage(ToolId id)
     }
 
     if (id != ToolId::Marquee) {
-        auto* antiAlias = new QCheckBox(QStringLiteral("Anti-alias"), page);
+        auto* antiAlias = new QCheckBox(QCoreApplication::translate("PicturaUi", "Anti-alias"), page);
         antiAlias->setObjectName(QStringLiteral("optionsSelectionAntiAlias"));
         antiAlias->setChecked(group ? group->antiAlias() : true);
-        antiAlias->setToolTip(QStringLiteral(
-            "Anti-aliased edge (inferred coverage); set before making the selection."));
+        antiAlias->setToolTip(QCoreApplication::translate("PicturaUi", "Anti-aliased edge (inferred coverage); set before making the selection."));
         layout->addWidget(antiAlias);
         if (controller_ && group) {
             connect(antiAlias, &QCheckBox::toggled, this,
@@ -576,11 +579,11 @@ void OptionsBar::addRefineEdgeButton(QHBoxLayout* layout, QWidget* page)
 {
     auto* button = new QToolButton(page);
     button->setObjectName(QStringLiteral("optionsRefineEdge"));
-    button->setText(QStringLiteral("Select and Mask…"));
+    button->setText(QCoreApplication::translate("PicturaUi", "Select and Mask…"));
     button->setToolButtonStyle(Qt::ToolButtonTextOnly);
     button->setAutoRaise(true);
     button->setFocusPolicy(Qt::NoFocus);
-    button->setToolTip(QStringLiteral("Refine Edge (Ctrl+Alt+R)"));
+    button->setToolTip(QCoreApplication::translate("PicturaUi", "Refine Edge (Ctrl+Alt+R)"));
     // The frame enables it when Refine Edge is available (a non-empty
     // selection), matching the Select menu row.
     button->setEnabled(false);
@@ -605,15 +608,15 @@ void OptionsBar::setWarpTextEnabled(bool enabled)
 
 void OptionsBar::addMagneticFields(QHBoxLayout* layout, QWidget* page, SelectionOptions* group)
 {
-    auto* width = new NumericField(QStringLiteral("Width"),
+    auto* width = new NumericField(QCoreApplication::translate("PicturaUi", "Width"),
                                    numericConfig(1, 256, 1, 0, QStringLiteral("px"), true,
                                                  QStringLiteral("optionsMagneticWidth")),
                                    page);
-    auto* contrast = new NumericField(QStringLiteral("Contrast"),
+    auto* contrast = new NumericField(QCoreApplication::translate("PicturaUi", "Contrast"),
                                       numericConfig(1, 100, 1, 0, QStringLiteral("%"), true,
                                                     QStringLiteral("optionsMagneticContrast")),
                                       page);
-    auto* frequency = new NumericField(QStringLiteral("Frequency"),
+    auto* frequency = new NumericField(QCoreApplication::translate("PicturaUi", "Frequency"),
                                        numericConfig(0, 100, 1, 0, QString(), true,
                                                      QStringLiteral("optionsMagneticFrequency")),
                                        page);
@@ -636,9 +639,9 @@ void OptionsBar::addMagneticFields(QHBoxLayout* layout, QWidget* page, Selection
     }
     // ponytail: pen pressure is not read, so Stylus Pressure is shown off and
     // disabled rather than as a silent no-op.
-    auto* pressure = new QCheckBox(QStringLiteral("Stylus Pressure"), page);
+    auto* pressure = new QCheckBox(QCoreApplication::translate("PicturaUi", "Stylus Pressure"), page);
     pressure->setEnabled(false);
-    pressure->setToolTip(QStringLiteral("Not modelled: tablet pressure is not read."));
+    pressure->setToolTip(QCoreApplication::translate("PicturaUi", "Not modelled: tablet pressure is not read."));
     layout->addWidget(pressure);
 }
 
@@ -651,16 +654,18 @@ void OptionsBar::refreshRulerReadout()
     const auto values = view ? ruler_measurement(*view) : ::rust::Vec<double>();
     QStringList fields;
     const char* names[] = {"X", "Y", "W", "H", "A", "D1"};
+    const auto locale = uiNumericLocale();
     for (int i = 0; i < 6; ++i) {
         const QString value = values.size() == 6
-            ? QString::number(values[i], 'f', 1) + (i == 4 ? QStringLiteral("°") : QString())
+            ? locale.toString(values[i], 'f', 1) + (i == 4 ? QStringLiteral("°") : QString())
             : QString();
         fields << QStringLiteral("%1: %2").arg(QLatin1String(names[i]), value);
     }
     if (view && edition_is_extended()) {
-        const QString length = calibrated_ruler_length(*view);
-        if (!length.isEmpty()) {
-            fields << tr("Length %1").arg(length);
+        const double length = calibrated_ruler_length(*view);
+        if (std::isfinite(length)) {
+            fields << tr("Length %1").arg(locale.toString(length, 'g', QLocale::FloatingPointShortest)
+                                          + QLatin1Char(' ') + measurement_scale_units(*view));
         }
     }
     rulerReadout_->setText(fields.join(QStringLiteral("   ")));
@@ -691,10 +696,10 @@ QWidget* OptionsBar::buildAnnotationPage(ToolId id)
 
     auto* clear = new QToolButton(page);
     clear->setObjectName(QStringLiteral("optionsAnnotationClear"));
-    clear->setText(id == ToolId::Note ? QStringLiteral("Clear All") : QStringLiteral("Clear"));
-    clear->setToolTip(id == ToolId::ColorSampler ? QStringLiteral("Delete every color sampler")
-                      : id == ToolId::Note       ? QStringLiteral("Delete every note")
-                                                 : QStringLiteral("Remove the measuring line"));
+    clear->setText(id == ToolId::Note ? QCoreApplication::translate("PicturaUi", "Clear All") : QCoreApplication::translate("PicturaUi", "Clear"));
+    clear->setToolTip(id == ToolId::ColorSampler ? QCoreApplication::translate("PicturaUi", "Delete every color sampler")
+                      : id == ToolId::Note       ? QCoreApplication::translate("PicturaUi", "Delete every note")
+                                                 : QCoreApplication::translate("PicturaUi", "Remove the measuring line"));
     layout->addWidget(clear);
     if (controller_) {
         connect(clear, &QToolButton::clicked, this, [this]() { controller_->clearAnnotations(); });
@@ -717,12 +722,12 @@ QWidget* OptionsBar::buildHealingPage(ToolId id)
     addBrushTipFields(layout, page);
 
     if (id == ToolId::SpotHealingBrush) {
-        layout->addWidget(new QLabel(QStringLiteral("Type"), page));
+        layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Type"), page));
         auto* combo = new QComboBox(page);
         combo->setObjectName(QStringLiteral("optionsSpotHealingType"));
-        combo->addItem(QStringLiteral("Proximity Match"));
-        combo->addItem(QStringLiteral("Create Texture"));
-        combo->addItem(QStringLiteral("Content-Aware"));
+        combo->addItem(QCoreApplication::translate("PicturaUi", "Proximity Match"));
+        combo->addItem(QCoreApplication::translate("PicturaUi", "Create Texture"));
+        combo->addItem(QCoreApplication::translate("PicturaUi", "Content-Aware"));
         if (controller_) {
             combo->setCurrentIndex(healing_->get().spotType);
             connect(combo, &QComboBox::currentIndexChanged, this,
@@ -734,7 +739,7 @@ QWidget* OptionsBar::buildHealingPage(ToolId id)
         }
         layout->addWidget(combo);
     } else {
-        auto* check = new QCheckBox(QStringLiteral("Aligned"), page);
+        auto* check = new QCheckBox(QCoreApplication::translate("PicturaUi", "Aligned"), page);
         check->setObjectName(QStringLiteral("optionsHealingAligned"));
         if (controller_) {
             check->setChecked(healing_->get().aligned);
@@ -774,39 +779,39 @@ QWidget* OptionsBar::buildCountPage(ToolId id)
     auto* eye = new QToolButton(page);
     eye->setObjectName(QStringLiteral("optionsCountVisible"));
     eye->setCheckable(true);
-    eye->setToolTip(QStringLiteral("Toggle count group visibility"));
+    eye->setToolTip(QCoreApplication::translate("PicturaUi", "Toggle count group visibility"));
     layout->addWidget(eye);
 
     auto* addGroup = new QToolButton(page);
     addGroup->setObjectName(QStringLiteral("optionsCountAddGroup"));
     addGroup->setIcon(icon(QStringLiteral("count.newGroup")));
-    addGroup->setToolTip(QStringLiteral("Create a count group"));
+    addGroup->setToolTip(QCoreApplication::translate("PicturaUi", "Create a count group"));
     layout->addWidget(addGroup);
 
     auto* delGroup = new QToolButton(page);
     delGroup->setObjectName(QStringLiteral("optionsCountDeleteGroup"));
     delGroup->setIcon(icon(QStringLiteral("layers.delete")));
-    delGroup->setToolTip(QStringLiteral("Delete the count group"));
+    delGroup->setToolTip(QCoreApplication::translate("PicturaUi", "Delete the count group"));
     layout->addWidget(delGroup);
 
     auto* clear = new QToolButton(page);
     clear->setObjectName(QStringLiteral("optionsCountClear"));
-    clear->setText(QStringLiteral("Clear"));
-    clear->setToolTip(QStringLiteral("Reset the active group's count to 0"));
+    clear->setText(QCoreApplication::translate("PicturaUi", "Clear"));
+    clear->setToolTip(QCoreApplication::translate("PicturaUi", "Reset the active group's count to 0"));
     layout->addWidget(clear);
 
     auto* color = new QToolButton(page);
     color->setObjectName(QStringLiteral("optionsCountColor"));
-    color->setToolTip(QStringLiteral("Count group colour"));
+    color->setToolTip(QCoreApplication::translate("PicturaUi", "Count group colour"));
     layout->addWidget(color);
 
     auto* marker = new NumericField(
-        QStringLiteral("Marker Size"),
+        QCoreApplication::translate("PicturaUi", "Marker Size"),
         numericConfig(1, 10, 1, 0, QString(), true, QStringLiteral("optionsCountMarkerSize")),
         page);
     layout->addWidget(marker);
     auto* label = new NumericField(
-        QStringLiteral("Label Size"),
+        QCoreApplication::translate("PicturaUi", "Label Size"),
         numericConfig(8, 72, 1, 0, QString(), true, QStringLiteral("optionsCountLabelSize")),
         page);
     layout->addWidget(label);
@@ -830,8 +835,8 @@ QWidget* OptionsBar::buildCountPage(ToolId id)
             }
             const bool hasGroup = have && active >= 0 && active < groups;
             total->setText(hasGroup
-                               ? QStringLiteral("Count: %1").arg(count_group_total(*v, active))
-                               : QStringLiteral("Count:"));
+                               ? QCoreApplication::translate("PicturaUi", "Count: %1").arg(count_group_total(*v, active))
+                               : QCoreApplication::translate("PicturaUi", "Count:"));
             const bool visible = hasGroup && count_group_visible(*v, active);
             eye->setChecked(visible);
             eye->setIcon(icon(visible ? QStringLiteral("layers.eyeOn")
@@ -872,7 +877,7 @@ QWidget* OptionsBar::buildCountPage(ToolId id)
             const int n = count_group_count(*v) + 1;
             bool ok = false;
             const QString name = QInputDialog::getText(
-                this, QStringLiteral("Count Group Name"), QStringLiteral("Count Group Name:"),
+                this, QCoreApplication::translate("PicturaUi", "Count Group Name"), QCoreApplication::translate("PicturaUi", "Count Group Name:"),
                 QLineEdit::Normal, QStringLiteral("Count Group %1").arg(n), &ok);
             if (ok && !name.isEmpty()) {
                 count_add_group(*v, name);
@@ -899,7 +904,7 @@ QWidget* OptionsBar::buildCountPage(ToolId id)
             const int active = count_active_group(*v);
             const QColor chosen = ColorPickerDialog::getColor(
                 QColor(QRgb(count_group_color(*v, active))), this,
-                QStringLiteral("Count Group Color"));
+                QCoreApplication::translate("PicturaUi", "Count Group Color"));
             if (chosen.isValid()) {
                 count_set_color(*v, active, chosen.rgb() & 0xffffff);
             }
@@ -938,24 +943,24 @@ QWidget* OptionsBar::buildPatchPage(ToolId id)
     layout->addWidget(toolButton(id, page));
     addModeButtons(layout, page, selectionGroupFor(id), true);
 
-    layout->addWidget(new QLabel(QStringLiteral("Patch:"), page));
+    layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Patch:"), page));
     auto* mode = new QComboBox(page);
     mode->setObjectName(QStringLiteral("optionsPatchMode"));
-    mode->addItem(QStringLiteral("Normal"));
-    mode->addItem(QStringLiteral("Content-Aware"));
+    mode->addItem(QCoreApplication::translate("PicturaUi", "Normal"));
+    mode->addItem(QCoreApplication::translate("PicturaUi", "Content-Aware"));
     layout->addWidget(mode);
 
     auto* direction = new QButtonGroup(page);
     direction->setExclusive(true);
     auto* source = new QToolButton(page);
     source->setObjectName(QStringLiteral("optionsPatchSource"));
-    source->setText(QStringLiteral("Source"));
-    source->setToolTip(QStringLiteral("The selection is the flaw; drag it onto the pixels to "
+    source->setText(QCoreApplication::translate("PicturaUi", "Source"));
+    source->setToolTip(QCoreApplication::translate("PicturaUi", "The selection is the flaw; drag it onto the pixels to "
                                       "repair it with"));
     auto* destination = new QToolButton(page);
     destination->setObjectName(QStringLiteral("optionsPatchDestination"));
-    destination->setText(QStringLiteral("Destination"));
-    destination->setToolTip(QStringLiteral("The selection is good material; drag it onto the "
+    destination->setText(QCoreApplication::translate("PicturaUi", "Destination"));
+    destination->setToolTip(QCoreApplication::translate("PicturaUi", "The selection is good material; drag it onto the "
                                            "area to repair"));
     for (QToolButton* button : {source, destination}) {
         button->setCheckable(true);
@@ -964,15 +969,15 @@ QWidget* OptionsBar::buildPatchPage(ToolId id)
         layout->addWidget(button);
     }
 
-    auto* transparent = new QCheckBox(QStringLiteral("Transparent"), page);
+    auto* transparent = new QCheckBox(QCoreApplication::translate("PicturaUi", "Transparent"), page);
     transparent->setObjectName(QStringLiteral("optionsPatchTransparent"));
-    transparent->setToolTip(QStringLiteral("Transfer only the source's texture, keeping the "
+    transparent->setToolTip(QCoreApplication::translate("PicturaUi", "Transfer only the source's texture, keeping the "
                                            "patched area's own colour"));
     layout->addWidget(transparent);
 
     auto* usePattern = new QToolButton(page);
-    usePattern->setText(QStringLiteral("Use Pattern"));
-    usePattern->setToolTip(QStringLiteral("Use Pattern: not implemented yet"));
+    usePattern->setText(QCoreApplication::translate("PicturaUi", "Use Pattern"));
+    usePattern->setToolTip(QCoreApplication::translate("PicturaUi", "Use Pattern: not implemented yet"));
     usePattern->setEnabled(false);
     layout->addWidget(usePattern);
 
@@ -1022,25 +1027,25 @@ QWidget* OptionsBar::buildContentAwareMovePage(ToolId id)
     layout->addWidget(toolButton(id, page));
     addModeButtons(layout, page, selectionGroupFor(id), true);
 
-    layout->addWidget(new QLabel(QStringLiteral("Mode:"), page));
+    layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Mode:"), page));
     auto* mode = new QComboBox(page);
     mode->setObjectName(QStringLiteral("optionsContentAwareMoveMode"));
-    mode->addItem(QStringLiteral("Move"));
-    mode->addItem(QStringLiteral("Extend"));
+    mode->addItem(QCoreApplication::translate("PicturaUi", "Move"));
+    mode->addItem(QCoreApplication::translate("PicturaUi", "Extend"));
     layout->addWidget(mode);
 
-    layout->addWidget(new QLabel(QStringLiteral("Adaptation:"), page));
+    layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Adaptation:"), page));
     auto* adaptation = new QComboBox(page);
     adaptation->setObjectName(QStringLiteral("optionsContentAwareAdaptation"));
     for (const char* level : {"Very Strict", "Strict", "Medium", "Loose", "Very Loose"}) {
         adaptation->addItem(QString::fromLatin1(level));
     }
-    adaptation->setToolTip(QStringLiteral("How closely the fill reflects the existing image "
+    adaptation->setToolTip(QCoreApplication::translate("PicturaUi", "How closely the fill reflects the existing image "
                                           "patterns"));
     layout->addWidget(adaptation);
 
-    auto* sampleAll = new QCheckBox(QStringLiteral("Sample All Layers"), page);
-    sampleAll->setToolTip(QStringLiteral("Sample All Layers: not implemented yet"));
+    auto* sampleAll = new QCheckBox(QCoreApplication::translate("PicturaUi", "Sample All Layers"), page);
+    sampleAll->setToolTip(QCoreApplication::translate("PicturaUi", "Sample All Layers: not implemented yet"));
     sampleAll->setEnabled(false);
     layout->addWidget(sampleAll);
 

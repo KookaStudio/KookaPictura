@@ -3,6 +3,7 @@
 // Windows. Part of OptionsBar.
 
 #include "options_bar.h"
+#include <QtCore/QCoreApplication>
 
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QHBoxLayout>
@@ -18,7 +19,7 @@ QWidget* OptionsBar::buildHandPage(ToolId id)
     layout->setContentsMargins(4, 2, 4, 2);
     layout->addWidget(toolButton(id, page));
 
-    auto* scrollAll = new QCheckBox(QStringLiteral("Scroll All Windows"), page);
+    auto* scrollAll = new QCheckBox(QCoreApplication::translate("PicturaUi", "Scroll All Windows"), page);
     scrollAll->setObjectName(QStringLiteral("optionsHandScrollAll"));
     scrollAll->setChecked(hand_ && hand_->get().scrollAll);
     layout->addWidget(scrollAll);
@@ -41,11 +42,11 @@ QWidget* OptionsBar::buildZoomPage(ToolId id)
     layout->setContentsMargins(4, 2, 4, 2);
     layout->addWidget(toolButton(id, page));
 
-    auto* resize = new QCheckBox(QStringLiteral("Resize Windows To Fit"), page);
+    auto* resize = new QCheckBox(QCoreApplication::translate("PicturaUi", "Resize Windows To Fit"), page);
     resize->setObjectName(QStringLiteral("optionsZoomResizeToFit"));
     resize->setChecked(zoom_ && zoom_->get().resizeToFit);
     layout->addWidget(resize);
-    auto* zoomAll = new QCheckBox(QStringLiteral("Zoom All Windows"), page);
+    auto* zoomAll = new QCheckBox(QCoreApplication::translate("PicturaUi", "Zoom All Windows"), page);
     zoomAll->setObjectName(QStringLiteral("optionsZoomAllWindows"));
     zoomAll->setChecked(zoom_ && zoom_->get().zoomAll);
     layout->addWidget(zoomAll);

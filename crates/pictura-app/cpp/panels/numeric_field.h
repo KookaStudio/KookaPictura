@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QtCore/QLocale>
 #include <QtCore/QPoint>
 #include <QtCore/QString>
 #include <QtWidgets/QWidget>
@@ -87,6 +88,7 @@ private:
     void reserveWidth();
     void showPopup();
     QString formatValue(double value) const;
+    const QLocale numberLocale_;
 
     NumericFieldConfig config_;
     QLabel* label_ = nullptr;

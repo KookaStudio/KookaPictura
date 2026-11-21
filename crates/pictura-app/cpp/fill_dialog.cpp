@@ -1,4 +1,5 @@
 #include "fill_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "color_picker_dialog.h"
 #include "options_bar.h"
@@ -16,6 +17,13 @@
 #include <QtWidgets/QVBoxLayout>
 
 namespace pictura {
+namespace {
+
+enum class FillContent {
+    None, Foreground, Background, Custom, ContentAware, Pattern, History, Black, Gray, White,
+};
+
+} // namespace
 
 FillDialog::FillDialog(const QColor& foreground, const QColor& background, QWidget* parent)
     : QDialog(parent)
@@ -35,17 +43,17 @@ FillDialog::FillDialog(const QColor& foreground, const QColor& background, QWidg
     contentsRow->addWidget(contentsLabel);
     contents_ = new QComboBox(this);
     contents_->setObjectName(QStringLiteral("fillContents"));
-    contents_->addItem(tr("Foreground Color"));
-    contents_->addItem(tr("Background Color"));
-    contents_->addItem(tr("Color..."));
+    contents_->addItem(tr("Foreground Color"), int(FillContent::Foreground));
+    contents_->addItem(tr("Background Color"), int(FillContent::Background));
+    contents_->addItem(tr("Color..."), int(FillContent::Custom));
     contents_->insertSeparator(3);
-    contents_->addItem(tr("Content-Aware"));
-    contents_->addItem(tr("Pattern"));
-    contents_->addItem(tr("History"));
+    contents_->addItem(tr("Content-Aware"), int(FillContent::ContentAware));
+    contents_->addItem(tr("Pattern"), int(FillContent::Pattern));
+    contents_->addItem(tr("History"), int(FillContent::History));
     contents_->insertSeparator(7);
-    contents_->addItem(tr("Black"));
-    contents_->addItem(tr("50% Gray"));
-    contents_->addItem(tr("White"));
+    contents_->addItem(tr("Black"), int(FillContent::Black));
+    contents_->addItem(tr("50% Gray"), int(FillContent::Gray));
+    contents_->addItem(tr("White"), int(FillContent::White));
     contents_->setMinimumWidth(160);
     if (auto* model = qobject_cast<QStandardItemModel*>(contents_->model())) {
         for (int i : {4, 6}) {
@@ -83,10 +91,10 @@ FillDialog::FillDialog(const QColor& foreground, const QColor& background, QWidg
     modeRow->addWidget(modeLabel);
     mode_ = new QComboBox(blendGroup);
     mode_->setObjectName(QStringLiteral("fillMode"));
-    mode_->addItem(QStringLiteral("Normal"), QStringLiteral("normal"));
-    mode_->addItem(QStringLiteral("Dissolve"), QStringLiteral("dissolve"));
-    mode_->addItem(QStringLiteral("Behind"), QStringLiteral("behind"));
-    mode_->addItem(QStringLiteral("Clear"), QStringLiteral("clear"));
+    mode_->addItem(QCoreApplication::translate("PicturaUi", "Normal"), QStringLiteral("normal"));
+    mode_->addItem(QCoreApplication::translate("PicturaUi", "Dissolve"), QStringLiteral("dissolve"));
+    mode_->addItem(QCoreApplication::translate("PicturaUi", "Behind"), QStringLiteral("behind"));
+    mode_->addItem(QCoreApplication::translate("PicturaUi", "Clear"), QStringLiteral("clear"));
     mode_->setMinimumWidth(140);
     modeRow->addWidget(mode_, 1);
     blendLayout->addLayout(modeRow);
@@ -165,12 +173,12 @@ void FillDialog::buildPatternGrid()
 
 void FillDialog::onContentsChanged(int index)
 {
-    const QString text = contents_->itemText(index);
+    const auto content = static_cast<FillContent>(contents_->itemData(index).toInt());
     if (auto* group = qobject_cast<QGroupBox*>(
             contents_->property("patternGroup").value<QObject*>())) {
-        group->setVisible(text == tr("Pattern"));
+        group->setVisible(content == FillContent::Pattern);
     }
-    if (text == tr("Color...")) {
+    if (content == FillContent::Custom) {
         chooseColor();
     }
 }
@@ -186,32 +194,23 @@ void FillDialog::chooseColor()
     }
 }
 
-bool FillDialog::isPatternFill() const { return contents_->currentText() == tr("Pattern"); }
+bool FillDialog::isPatternFill() const
+{
+    return contents_->currentData().toInt() == int(FillContent::Pattern);
+}
 
 int FillDialog::selectedPatternIndex() const { return selectedPattern_; }
 
 QColor FillDialog::fillColor() const
 {
-    const QString text = contents_->currentText();
-    if (text == tr("Foreground Color")) {
-        return foreground_;
+    switch (static_cast<FillContent>(contents_->currentData().toInt())) {
+    case FillContent::Foreground: return foreground_;
+    case FillContent::Background: return background_;
+    case FillContent::Custom: return customColor_.isValid() ? customColor_ : QColor(Qt::black);
+    case FillContent::Gray: return QColor(128, 128, 128);
+    case FillContent::White: return QColor(Qt::white);
+    default: return QColor(Qt::black);
     }
-    if (text == tr("Background Color")) {
-        return background_;
-    }
-    if (text == tr("Color...")) {
-        return customColor_.isValid() ? customColor_ : QColor(Qt::black);
-    }
-    if (text == tr("Black")) {
-        return QColor(Qt::black);
-    }
-    if (text == tr("50% Gray")) {
-        return QColor(128, 128, 128);
-    }
-    if (text == tr("White")) {
-        return QColor(Qt::white);
-    }
-    return QColor(Qt::black);
 }
 
 QString FillDialog::blendMode() const { return mode_->currentData().toString(); }

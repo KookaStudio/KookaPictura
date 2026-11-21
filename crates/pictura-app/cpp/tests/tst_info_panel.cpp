@@ -2,6 +2,8 @@
 
 #include <QtCore/QFile>
 #include <QtCore/QPointF>
+#include <QtCore/QScopeGuard>
+#include <QtCore/QRegularExpression>
 #include <QtCore/QTemporaryDir>
 #include <QtGui/QImage>
 #include <QtGui/QScreen>
@@ -49,12 +51,17 @@ private slots:
     void labMatchesColorPicker();
     void cmykMatchesColorPicker();
     void cmykReadoutFollowsProfile();
+    void colourAndDocumentSizeUseNumericLocale();
+    void rulerAngleAndLengthUseNumericLocale();
+    void positionAndSizeUseNumericLocale();
+    void customScaleUsesNumericLocale();
 
 private:
     void openDocument(const QString& name);
     // Fill the open document with `rgb` and hover it.
     void hoverColor(QRgb rgb);
 
+    pictura::test::ScopedDefaultLocale baseline_{QLocale::c()};
     pictura::test::ScopedStateHome stateHome_;
     std::unique_ptr<pictura::PicturaMainWindow> window_;
     pictura::PictureView* view_ = nullptr;
@@ -237,7 +244,9 @@ void InfoPanelTest::unitInheritanceAndNoSizeMenu()
     QCOMPARE(panel_->sizeTextForTest(), QStringLiteral("4 × 4"));
 
     // 72 PPI: 4 px = 1.41 mm; the X/Y unit drives the W/H block too.
+    panel_->setCursorPosition(QPointF(2, 2));
     panel_->setMeasurementUnitForTest(0, QStringLiteral("Millimeters"));
+    QCOMPARE(panel_->positionTextForTest(), QStringLiteral("0.71, 0.71"));
     QCOMPARE(panel_->sizeTextForTest(), QStringLiteral("1.41 × 1.41"));
 }
 
@@ -268,9 +277,11 @@ void InfoPanelTest::rulerModeSwapsTopRightBlock()
     QVERIFY2(panel_->rulerTextForTest().contains(QStringLiteral("10.0")), "length readout");
     QCOMPARE(panel_->sizeTextForTest(), QStringLiteral("0 × 10"));
 
+    QVERIFY(view_->select_rect(2, 2, 4, 4, QStringLiteral("new"), 0.0));
     panel_->setRulerMode(false);
     QVERIFY2(panel_->colorBlockTextForTest(1).contains(QStringLiteral("C :")),
              "CMYK block restored");
+    QCOMPARE(panel_->sizeTextForTest(), QStringLiteral("4 × 4"));
 }
 
 void InfoPanelTest::offCanvasBlanksColorReadouts()
@@ -479,6 +490,68 @@ void InfoPanelTest::cmykReadoutFollowsProfile()
                                  .arg(std::lround(inks.k));
     QCOMPARE(panel_->colorBlockTextForTest(0), expected);
     QVERIFY(expected != QStringLiteral("C : 0  M : 0  Y : 0  K : 100"));
+}
+
+void InfoPanelTest::colourAndDocumentSizeUseNumericLocale()
+{
+    const pictura::test::ScopedDefaultLocale numbers{QLocale(QLocale::German)};
+    openDocument(QStringLiteral("Localized numbers"));
+    QVERIFY(panel_ && view_);
+    hoverColor(qRgb(128, 128, 128));
+    panel_->setBitDepthForTest(0, 32);
+    QVERIFY(panel_->colorBlockTextForTest(0).contains(QStringLiteral("R : 0,502")));
+    QVERIFY(panel_->docTextForTest().contains(QRegularExpression(QStringLiteral(R"(\d,\d[KM])"))));
+}
+
+void InfoPanelTest::rulerAngleAndLengthUseNumericLocale()
+{
+    const QLocale locale{QLocale::Finnish};
+    const pictura::test::ScopedDefaultLocale numbers{locale};
+    openDocument(QStringLiteral("Localized ruler"));
+    QVERIFY(panel_ && view_);
+    panel_->setRulerMode(true);
+    const auto restoreMode = qScopeGuard([this] { panel_->setRulerMode(false); });
+    pictura::set_ruler(*view_, 2.0, 3.0, 2.0, 13.0, false);
+    panel_->refresh();
+    QCOMPARE(panel_->rulerTextForTest(), locale.negativeSign() + QStringLiteral("90,0°  10,0"));
+    QCOMPARE(panel_->sizeTextForTest(), QStringLiteral("0 × 10"));
+}
+
+void InfoPanelTest::positionAndSizeUseNumericLocale()
+{
+    const pictura::test::ScopedDefaultLocale numbers{QLocale(QLocale::German)};
+    openDocument(QStringLiteral("Localized position"));
+    QVERIFY(panel_ && view_);
+    QVERIFY(view_->select_rect(2, 2, 4, 4, QStringLiteral("new"), 0.0));
+    panel_->setCursorPosition(QPointF(2, 2));
+    panel_->setMeasurementUnitForTest(0, QStringLiteral("Millimeters"));
+    panel_->refresh();
+    QCOMPARE(panel_->positionTextForTest(), QStringLiteral("0,71, 0,71"));
+    QCOMPARE(panel_->sizeTextForTest(), QStringLiteral("1,41 × 1,41"));
+}
+
+void InfoPanelTest::customScaleUsesNumericLocale()
+{
+    const auto previousEdition = qgetenv("PICTURA_EDITION");
+    qputenv("PICTURA_EDITION", "extended");
+    const auto restoreEdition = qScopeGuard([previousEdition] {
+        if (previousEdition.isNull()) qunsetenv("PICTURA_EDITION");
+        else qputenv("PICTURA_EDITION", previousEdition);
+    });
+    const pictura::test::ScopedDefaultLocale numbers{QLocale(QLocale::Finnish)};
+    auto window = pictura::test::makeMainWindow();
+    QVERIFY(window->newDocument(QStringLiteral("Localized scale"), 16, 16, QStringLiteral("rgb"),
+                                8, QStringLiteral("white")));
+    auto* view = window->activeView();
+    auto* panel = window->findChild<pictura::InfoPanel*>(QStringLiteral("infoPanel"));
+    QVERIFY(view && panel);
+    QVERIFY(pictura::apply_measurement_scale(*view, 50, 1.5, QStringLiteral("µm")));
+    panel->setView(view);
+    panel->refresh();
+    const auto* label = panel->findChild<QLabel*>(QStringLiteral("infoMeasurementScale"));
+    QVERIFY(label);
+    QCOMPARE(label->text(), QStringLiteral("50 px = 1,5 µm"));
+    QCOMPARE(pictura::measurement_scale_values(*view)[1], 1.5);
 }
 
 QTEST_MAIN(InfoPanelTest)

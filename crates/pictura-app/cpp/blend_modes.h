@@ -14,6 +14,8 @@ struct BlendEntry {
     QString key;
     QString name;
     bool hasNeutral = false;
+
+    QString displayName() const;
 };
 
 // The 27 layer modes in engine order, read once from the engine. Shared by the
