@@ -499,6 +499,7 @@ gaps are the CS6 Extended 3D object and camera tools.
       `crates/pictura-app/src/cxxqt_object/open_jobs/raw_open.rs`.
 - [ ] Open a raw file as a smart object (Shift+Open Image) (#1466)
 - [ ] CR2 CFA phase for the EOS 600D, so it takes its colour matrices (#1476)
+- [ ] Colour for the Sony bodies the matrix table does not seed yet (#1525)
 - [ ] X-Trans-tuned demosaic, with the Fuji container (#399)
 - [ ] Deflate, PackBits and lossy-JPEG DNGs and floating-point samples (#396)
 - [ ] Vendor raw containers: ORF, RW2 and CR3 (#399)
