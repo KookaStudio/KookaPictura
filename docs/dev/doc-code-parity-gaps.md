@@ -10,8 +10,7 @@
   since that sweep, narrowed `PAN-15`, and added the remaining Smart-Filter
   preview gap as `FILT-11`; the corrections are listed in §G.
 - **Re-checked:** `#1522` reconciled `ROADMAP.md` and `PARITY.md` with the
-  tree and corrected eight register rows the merged work had passed; the
-  corrections are listed in §G.
+  tree and updated stale register rows. The corrections are listed in §G.
 - **Re-checked:** `#591` shipped `LAY-13` (Extended Stack Modes); the row keeps
   the implementation evidence.
 - **Rows:** 159 gaps — 4 systemic in §B, 155 per-domain in §C.
@@ -145,7 +144,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | TOOL-20 | `crop-tool.md` | Crop resampling by W×H×resolution, non-destructive crop/Reveal All, crop shield settings | PARTIAL | `options_bar_crop.cpp:244-375` | #544 |
 | TOOL-21 | `custom-shape.md` | `.CSH` libraries, Define Custom Shape, geometry modes, gradient/pattern fill-stroke | MISSING | `options_bar_shape.cpp:506-510,420-431` | #545 |
 | TOOL-22 | `shape-tools.md` | Gradient/pattern fill+stroke, dashed stroke, path ops, fill-pixels options, snap-to-pixels, proportional geometry | MISSING | `options_bar_shape.cpp:281-431`; `shapes.rs:316-333` | #546 |
-| TOOL-23 | `color-replacement.md` | Full mode list + disable on Bitmap/Indexed/Multichannel | DIVERGENT | `replace.rs:25`; `paint_tools.rs:343` | #547 |
+| TOOL-23 | `color-replacement.md` | Full CS6 mode list, 32-bit subset, and Bitmap/Indexed/Multichannel availability gates | SHIPPED | `crates/pictura-app/cpp/tool_colorreplacement.cpp`; `crates/pictura-app/cpp/tool_catalog.cpp`; `tst_color_replacement` | #547 |
 | TOOL-24 | `dodge-burn-sponge.md` | Grayscale Sponge, airbrush toggle, quick keys, 32-bpc availability | SHIPPED | `tone.rs`; `tool_retouch.cpp`; `options_bar_retouch.cpp`; `toolbox.cpp` | #548 |
 | TOOL-25 | `eraser-tools.md` | Magic-eraser background convert, background-eraser edge halo, pen pressure | PARTIAL | `eraser.rs:166-332` | #549 |
 | TOOL-26 | `gradient-and-paint-bucket.md` | Gradient/Bucket availability gates and the Gradient Fill dialog | PARTIAL | `tool_fills.cpp`; `frame_menus.cpp:719-725` | #550 |
@@ -280,7 +279,7 @@ The Actions panel and engine shipped in `#301` (`crates/pictura-app/cpp/panels/a
 | WF-11 | `measurement-and-count.md` | Measurement scale/presets, exporters, PSD resource 1074 | SHIPPED | `crates/pictura-app/cpp`; #635 | #635 |
 | WF-12 | `scratch-disks-and-memory.md` | Performance pane (memory, history states, cache level/tile, scratch disks, GPU) + Efficiency/Scratch readouts | MISSING | `preferences_dialog.cpp:172-177` | #636 |
 | WF-13 | `document-lifecycle.md`, `crash-recovery-and-autosave.md` | Background Save, durable crash journal, PSD 1086/1087 | SHIPPED | `crates/pictura-app/src/history/recovery.rs`; `crates/pictura-codec/src/image_resources.rs` | #637 |
-| WF-14 | `bridge-and-interop.md` | Edit Contents, relink and Paste As ship; the Files panel remains | PARTIAL | `crates/pictura-app/src/cxxqt_object/pdf_export/import/imp/vector.rs` | #638, #624 |
+| WF-14 | `bridge-and-interop.md` | Edit Contents, PDF Paste As, and repair of supported external Smart Object links ship. Editable Illustrator clipboard paste as Paths or Shape Layer and the Files panel remain. | PARTIAL | `crates/pictura-app/src/cxxqt_object/pdf_export/import/imp/vector.rs`; `crates/pictura-app/cpp/panels/layers_row_actions.cpp` | #638, #624 |
 | WF-15 | `document-lifecycle.md` | Maximize PSD/PSB Compatibility preference | SHIPPED | `crates/pictura-app/cpp/import_save_save.cpp`; `tst_psd_compatibility` | #639 |
 | WF-16 | `update-and-versioning.md` | Document-format version policy (`opDocumentVersion`/`minReaderVersion`, Version Info 1057) | SHIPPED | `crates/pictura-codec/src/document_version.rs`; `tst_document_version_policy` | #640 |
 
@@ -319,11 +318,10 @@ accidental implementation found.
 
 Two entries this list used to carry are corrected here:
 
-- **Linked/embedded objects** (`LAY-024`) — the *app* has no relink or
-  convert-to-linked surface, but the codec is not blind to the feature: it
-  parses and writes the `lnkD`/`lnk2`/`lnk3` linked records
-  (`crates/pictura-codec/src/smart_object.rs:199`). The relink UI is tracked by
-  `#113`; the records are read, not offered.
+- **Linked/embedded objects** (`LAY-024`) — the codec parses and writes
+  `lnkD`/`lnk2`/`lnk3` records (`crates/pictura-codec/src/smart_object.rs:199`).
+  Relink to File repairs supported external links (#638); broader relink and
+  convert-to-linked remain with #113.
 - **Snap and AppImage packaging** — not a non-goal. Both ship alongside
   Flatpak and the native packages (`snap/snapcraft.yaml`,
   `.github/workflows/snap.yml`, `.github/workflows/appimage.yml`).
@@ -397,8 +395,9 @@ Pictura Raw · `#436`/`#437`/`#438` mask/channel click · `#448` slider recompos
   `TOOL-5` (#529), and `FILT-2` (#593). `PAN-15` is narrowed to the remaining
   `00`/`Shift+00` opacity shortcut, and `FILT-11` records the Filter Gallery and
   Shear previews that still ignore an existing Smart Filter chain (#1003).
-- **Corrections from the `#1522` tracker sweep.** Six rows the tree had passed
-  are now `SHIPPED` (`WF-13` #637, `WF-15` #639, `WF-16` #640, `XC-1` #641,
-  `XC-5` #645, `XC-9` #649); `WF-14` (#638) is narrowed to the remaining Files
-  panel (#624), and `XC-11` (#651) now records the shipped frame budget, tile
-  cache, and scratch paging, leaving the scheduler and cancellation (#944/#945).
+- **Corrections from the `#1522` tracker sweep.** Seven rows are now `SHIPPED`
+  (`TOOL-23` #547, `WF-13` #637, `WF-15` #639, `WF-16` #640, `XC-1` #641,
+  `XC-5` #645, `XC-9` #649). `WF-14` records the shipped interop work and the
+  remaining editable Illustrator paste (#638) and Files panel (#624).
+  `XC-11` (#651) records the shipped frame budget, tile cache, and scratch
+  paging, leaving the scheduler and cancellation (#944/#945).

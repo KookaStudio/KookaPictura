@@ -11,12 +11,12 @@ This tracker measures feature coverage against a frozen Photoshop baseline. It d
 
 | Baseline | Complete | Partial | Missing | Unknown | Denominator | Coverage | Excluded non-goals |
 |---|---|---|---|---|---|---|---|
-| CS6 Standard | 204 | 82 | 60 | 3 | 349 | 58.5% | 8 |
-| CS6 Standard, in scope | 204 | 82 | 54 | 1 | 341 | 59.8% | 8 |
-| CS6 Extended | 205 | 82 | 76 | 3 | 366 | 56.0% | 23 |
-| CS6 Extended, in scope | 205 | 82 | 55 | 1 | 343 | 59.8% | 23 |
-| CC 28.0 | 206 | 84 | 81 | 3 | 374 | 55.1% | 20 |
-| CC 28.0, in scope | 206 | 84 | 63 | 1 | 354 | 58.2% | 20 |
+| CS6 Standard | 202 | 85 | 58 | 4 | 349 | 57.9% | 8 |
+| CS6 Standard, in scope | 202 | 85 | 52 | 2 | 341 | 59.2% | 8 |
+| CS6 Extended | 203 | 85 | 74 | 4 | 366 | 55.5% | 23 |
+| CS6 Extended, in scope | 203 | 85 | 53 | 2 | 343 | 59.2% | 23 |
+| CC 28.0 | 204 | 87 | 79 | 4 | 374 | 54.5% | 20 |
+| CC 28.0, in scope | 204 | 87 | 61 | 2 | 354 | 57.6% | 20 |
 
 ## Baselines
 
@@ -39,10 +39,10 @@ Coverage is not behavioural or pixel parity with Photoshop. Every Complete row n
 | Category | CS6 Standard | CS6 Extended | CC 28.0 |
 |---|---|---|---|
 | Files & interchange | 27/40 (67.5%) | 27/42 (64.3%) | 28/46 (60.9%) |
-| Layers & compositing | 30/38 (78.9%) | 30/39 (76.9%) | 30/39 (76.9%) |
-| Tools & painting | 34/70 (48.6%) | 35/81 (43.2%) | 35/71 (49.3%) |
-| Selections & masking | 21/22 (95.5%) | 21/22 (95.5%) | 21/22 (95.5%) |
-| Adjustments & filters | 31/55 (56.4%) | 31/55 (56.4%) | 31/64 (48.4%) |
+| Layers & compositing | 31/38 (81.6%) | 31/39 (79.5%) | 31/39 (79.5%) |
+| Tools & painting | 35/70 (50.0%) | 36/81 (44.4%) | 36/71 (50.7%) |
+| Selections & masking | 18/22 (81.8%) | 18/22 (81.8%) | 18/22 (81.8%) |
+| Adjustments & filters | 30/55 (54.5%) | 30/55 (54.5%) | 30/64 (46.9%) |
 | Type & vector | 17/17 (100.0%) | 17/17 (100.0%) | 17/19 (89.5%) |
 | Color & bit depth | 14/29 (48.3%) | 14/29 (48.3%) | 14/29 (48.3%) |
 | Automation & extensibility | 3/18 (16.7%) | 3/18 (16.7%) | 3/22 (13.6%) |
@@ -114,7 +114,7 @@ Source list: named Layer-menu and Layers-panel capabilities.
 | P-LAY-02 | Background layer semantics | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
 | P-LAY-03 | Layer masks | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
 | P-LAY-04 | Vector masks (rendering) | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
-| P-LAY-05 | Vector-mask path authoring | Y | Y | Y | Missing | in-scope | — | none | Path authoring is absent | #261 |
+| P-LAY-05 | Vector-mask path authoring | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/menu_layer_ops.cpp | none | Current Path creates the vector mask from the selected path; the Paths panel row and mask thumbnail ship | #261 |
 | P-LAY-06 | Clipping masks | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
 | P-LAY-07 | Blend modes and Pass Through | Y | Y | Y | Complete | in-scope | crates/pictura-core/src | none | members:27/27 | — |
 | P-LAY-08 | Layer styles | Y | Y | Y | Partial | in-scope | crates/pictura-render/src | none | members:10/10; Bevel Contour and gradient editor ship, Bevel Texture remains | #606 |
@@ -138,7 +138,7 @@ Source list: named Layer-menu and Layers-panel capabilities.
 | P-LAY-26 | Ctrl+J duplicate-group semantics | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | #590 |
 | P-LAY-27 | Smart-object stack modes | Y | Y | Y | Complete | in-scope | crates/pictura-core/src | none | — | #591 |
 | P-LAY-28 | Pattern fill layers | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | #262 |
-| P-LAY-29 | Linked smart-object relink and convert | Y | Y | Y | Missing | in-scope | — | none | Records are read but no relink UI | #113 |
+| P-LAY-29 | Linked smart-object relink and convert | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp/panels/layers_row_actions.cpp | none | Relink to File repairs supported external links; broader relink and convert-to-linked remain | #113 |
 | P-LAY-30 | Blend-If editor | Y | Y | Y | Missing | in-scope | — | none | No Blend-If UI | #264 |
 | P-LAY-31 | Export Layers To Files | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Shared Save As options and Targa remain | LAY-9 |
 | P-LAY-32 | Layer-style Global Light, Create Layers, Rasterize | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | #580 |
@@ -181,7 +181,7 @@ Source list: CS6 toolbox slots (71 catalogue slots plus the two missing single r
 | P-TOOL-22 | Red Eye | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-23 | Brush | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-24 | Pencil | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
-| P-TOOL-25 | Color Replacement | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Full mode list and Bitmap/Indexed/Multichannel gating remain | TOOL-23 |
+| P-TOOL-25 | Color Replacement | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/tool_colorreplacement.cpp; crates/pictura-app/cpp/tool_catalog.cpp | none | The full CS6 mode list, 32-bit subset, and Bitmap/Indexed/Multichannel availability gates ship | #547 |
 | P-TOOL-26 | Mixer Brush | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Load Solid Colors Only and keyboard shortcuts remain | TOOL-16 |
 | P-TOOL-27 | Clone Stamp | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-28 | Pattern Stamp | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Cross-document colour-mode rule and Impressionist remain | TOOL-28 |
@@ -252,13 +252,13 @@ Source list: named Select-menu capabilities and the selection-mask engine.
 | P-SEL-05 | All Layers | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-SEL-06 | Deselect Layers | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-SEL-07 | Similar Layers | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
-| P-SEL-08 | Colour Range | Y | Y | Y | Complete | in-scope | crates/pictura-select/src | none | Skin tones, localised clusters, out-of-gamut, previews, and save/load ship; Detect Faces, .axt import, and per-session persistence remain | — |
+| P-SEL-08 | Colour Range | Y | Y | Y | Partial | in-scope | crates/pictura-select/src | none | Skin tones, localised clusters, out-of-gamut, previews, and save/load ship; Detect Faces, .axt import, and per-session persistence remain | SEL-5 |
 | P-SEL-09 | Refine Edge | Y | Y | Y | Complete | in-scope | crates/pictura-select/src | none | Interactive Refine Radius and Erase brushes ship; the CC workspace, Onion Skin, mask Brush, and Refine Hair remain | — |
 | P-SEL-10 | Modify: Border, Smooth, Expand, Contract, Feather | Y | Y | Y | Complete | in-scope | crates/pictura-select/src | none | — | — |
 | P-SEL-11 | Grow and Similar | Y | Y | Y | Complete | in-scope | crates/pictura-select/src | none | — | — |
 | P-SEL-12 | Transform Selection | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | #526 |
-| P-SEL-13 | Save Selection | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | Selected Areas polarity ships; 16/32-bit channels remain (#1331) | #1331 |
-| P-SEL-14 | Load Selection | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | Selected Areas polarity ships; 16/32-bit channels remain (#1331) | #1331 |
+| P-SEL-13 | Save Selection | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Selected Areas polarity ships; 16/32-bit channels remain (#1331) | #1331 |
+| P-SEL-14 | Load Selection | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Selected Areas polarity ships; 16/32-bit channels remain (#1331) | #1331 |
 | P-SEL-15 | Quick Mask | Y | Y | Y | Complete | in-scope | crates/pictura-select/src | none | — | #172 |
 | P-SEL-16 | Apply Image | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | #609 |
 | P-SEL-17 | Calculations | Y | Y | Y | Complete | in-scope | crates/pictura-render/src/calculations.rs | none | Add, Subtract, Multiply, Darken, and Lighten with channel and mask sources | — |
@@ -318,7 +318,7 @@ Source list: the Image > Adjustments list (23 rows; 25 commands when Auto Tone/C
 | P-FLT-19 | Lens Correction | Y | Y | Y | Partial | in-scope | crates/pictura-filters/src | none | Save/Load Settings, Set Lens Default, and Alt-drag fringe isolation remain | #933 |
 | P-FLT-20 | Vanishing Point | Y | Y | Y | Complete | in-scope | crates/pictura-filters/src | none | — | #349 |
 | P-FLT-21 | Camera Raw Filter | N/A | N/A | Y | Partial | in-scope | crates/pictura-app/cpp/pictura_raw_dialog.cpp | none | post-CS6:src:1; src:4; Pictura Raw is an independent approximation; Presets is a stub | #633 |
-| P-FLT-22 | Lighting Effects | Y | Y | Y | Complete | in-scope | crates/pictura-filters/src/render/lighting.rs | none | Present in the CC 28 filter reference (src:11); the 3D-removal reporting (src:3) covers 3D, not this 2D Render filter | — |
+| P-FLT-22 | Lighting Effects | Y | Y | Y | Unknown | in-scope | crates/pictura-filters/src/render/lighting.rs | none | conflict:11; src:3; the general filter reference predates CC 28.0 and the former 3D FAQ now redirects; availability in CC 28.0 is unverified | follow-up:verify the menu and filter in Photoshop CC 28.0 |
 | P-FLT-23 | Extract and Pattern Maker | Y | Y | Y | Missing | non-goal | — | none | Optional CS6 plug-ins; not a parity target | non-goal:ROADMAP.md:705 |
 | P-FLT-24 | Digimarc watermark | Y | Y | Y | Complete | in-scope | crates/pictura-filters/src | none | Approximate spread-spectrum carrier; not Digimarc-compatible | #350 |
 | P-FLT-25 | Fade | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | #491 |
@@ -359,7 +359,7 @@ Source list: Type menu and Character/Paragraph capabilities plus type on path, w
 | P-TYP-12 | RTL paragraph direction and justification | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | #518 |
 | P-TYP-13 | Faux bold, italic, underline, fractional widths, and tsume | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels | none | — | #517 |
 | P-TYP-14 | Variable fonts | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:4 | #1518 |
-| P-TYP-15 | OpenType feature UI | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels/character_panel.cpp; crates/pictura-app/cpp/menu_type.cpp; crates/pictura-render/src/type_style.rs | none | The Character panel and the Type menu expose the same ten features the engine shapes; the panel greys per-font support while the Type menu rows gate on the target only | — |
+| P-TYP-15 | OpenType feature UI | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/panels/character_panel.cpp; crates/pictura-app/cpp/menu_type.cpp; crates/pictura-render/src/type_style.rs | none | The Character panel exposes eight shared toggles with per-font gating; the Type menu adds Oldstyle and Ornaments and gates on the editable target. The engine shapes all ten. | — |
 | P-TYP-16 | Dynamic text on shapes and paths | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:4 | #1519 |
 | P-TYP-17 | Type masks | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
 | P-TYP-18 | Font family picker | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
@@ -524,14 +524,15 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
 |---|---|---|---|---|---|
-| 2026-11-21 | 39ea0380 | 204/349 (58.5%) | 205/366 (56.0%) | 28.0 | 206/374 (55.1%) |
+| 2026-11-21 | 39ea0380 | 202/349 (57.9%) | 203/366 (55.5%) | 28.0 | 204/374 (54.5%) |
+| 2026-11-21 | 7ab28fc5 | 192/349 (55.0%) | 193/366 (52.7%) | 28.0 | 194/374 (51.9%) |
 | 2026-11-20 | 89c8ba95 | 191/349 (54.7%) | 192/366 (52.5%) | 28.0 | 193/374 (51.6%) |
 
 ## Update procedure
 
 - A feature ship or removal updates the affected row, the headline, the category row, and the history in the same pull request that updates `ROADMAP.md`.
 - Row IDs are stable. A new capability receives a new ID; existing rows are never renumbered.
-- A new Photoshop major adds a history row and a new frozen CC baseline. The previous assessment stays in the table.
+- Preserve each assessment in the history, including distinct assessed commits on the same date. A new Photoshop major adds a new frozen CC baseline.
 - The baseline is re-frozen at each assessment; the date and Pictura commit above are part of the record.
 
 ## Sources

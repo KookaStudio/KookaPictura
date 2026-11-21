@@ -74,6 +74,7 @@ The quantified comparison against Photoshop CS6 and CC 28.0 is in
       (#626)
 - [x] Native CMYK and 16-bit PDF and EPS rendering, Images mode on encrypted
       PDFs, and inline images (#627)
+- [x] File ▸ Open As lets the user choose the decoder for supported formats (#627)
 - [x] GIF-via-Indexed on save (#628).
       `crates/pictura-app/cpp/gif_options_dialog.cpp`;
       `crates/pictura-codec/src/save/mod.rs`.
@@ -276,6 +277,7 @@ gaps are the CS6 Extended 3D object and camera tools.
       document cap (#614); control-server selection ops stay binary.
 - [x] Combine operations, the layer-mask target, modifier-click combine on
       saved selections, and channel names (#615)
+- [ ] Native 16/32-bit selection and alpha channels for Save and Load Selection (#1331)
 - [x] Duplicate Channel, channel drags between documents, selection-outline
       drags between documents, and the alpha-channel eye view (#1332)
 - [x] Quick Mask (#172)
@@ -357,7 +359,7 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [x] Adaptive Wide Angle (#346): Fisheye, Perspective and Full Spherical,
       line and polygon constraints, EXIF focal-length prefill
 - [ ] Adaptive Wide Angle Auto and lens profiles, Panorama, Smart Filter
-      re-edit (#891)
+      re-edit, and rotation handles (#891)
 - [x] Lens Correction (#347): Remove Distortion, three fringe sliders,
       Vignette, Vertical/Horizontal Perspective, Angle and Scale; Edge fill
       and Auto Scale; Straighten, Remove Distortion and Move Grid tools;
@@ -369,7 +371,7 @@ gaps are the CS6 Extended 3D object and camera tools.
       by focal length, f-stop, and focus distance with the right-click menu;
       Prefer RAW Profiles; settings carry the resolved coefficients; Search
       Online and Save Online Profile Locally stay disabled
-- [ ] Lens Correction Save/Load Settings and Set Lens Default (#933)
+- [ ] Lens Correction Save/Load Settings, Set Lens Default, and Alt-drag fringe isolation (#933)
 - [x] Lens Correction as a Smart Filter (#934): an embedded Smart Object
       attaches a Lens Correction smart filter instead of filtering the proxy
       destructively, re-opens the dialog prefilled, and renders through the
@@ -432,7 +434,7 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [x] The out-of-gamut triangle and CMYK to working space (#604)
 - [ ] The 16/32-bit picker fields (#604)
 - [ ] `.aco` and `.ase` swatch libraries, rename, and display modes (#605)
-- [ ] Pattern Overlay Snap To Origin, and the style Texture sub-options (#606)
+- [ ] Pattern Overlay Snap To Origin and the Bevel Texture controls (#606)
 - [x] Bristle brushes (#607)
 - [ ] `.abr` libraries, the Brush Presets panel, and ABR v10 reading (#608)
 - [ ] Brush Texture and Dual Brush; the Control model, Shape Dynamics,
@@ -522,7 +524,7 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [x] The Adjustments panel icon grid (#509)
 - [ ] Refine the Adjustments panel icon artwork (#819)
 - [ ] Fill-layer presets in the Adjustments panel (#1521)
-- [ ] The Measurement Log panel (#510)
+- [ ] The Measurement Log panel, Record Measurements, and its export workflow (#510)
 - [ ] The Tool Presets panel and `.tpl` libraries (#511)
 - [ ] The Styles panel and `.asl` presets (#512)
 - [ ] Channel panel spot channels, Split and Merge, and Panel Options (#513)
