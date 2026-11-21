@@ -1,6 +1,6 @@
-//! Camera raw opens (#400): File ▸ Open of a DNG or CR2 decodes on a worker,
-//! leaves the decoded source on the view for the Pictura Raw dialog, then
-//! develops it at full size on a worker into a new 16-bit RGB document.
+//! Camera raw opens (#400): File ▸ Open of a DNG, CR2 or NEF decodes on a
+//! worker, leaves the decoded source on the view for the Pictura Raw dialog,
+//! then develops it at full size on a worker into a new 16-bit RGB document.
 
 mod imp;
 mod save_dng;
