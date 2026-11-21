@@ -12,7 +12,7 @@ fn invalid(what: &str) -> PsdError {
 
 const FAST_BITS: u32 = 9;
 
-struct Huffman {
+pub(super) struct Huffman {
     /// `(code length, symbol)` for every 9-bit prefix; length 0 is a miss.
     fast: Vec<(u8, u8)>,
     maxcode: [i32; 17],
@@ -21,7 +21,7 @@ struct Huffman {
 }
 
 impl Huffman {
-    fn new(counts: &[u8; 16], symbols: Vec<u8>) -> Result<Self, PsdError> {
+    pub(super) fn new(counts: &[u8; 16], symbols: Vec<u8>) -> Result<Self, PsdError> {
         let mut fast = vec![(0u8, 0u8); 1 << FAST_BITS];
         let mut maxcode = [-1i32; 17];
         let mut offset = [0i32; 17];
@@ -58,11 +58,14 @@ impl Huffman {
     }
 }
 
-struct Bits<'a> {
+pub(super) struct Bits<'a> {
     data: &'a [u8],
     pos: usize,
     acc: u64,
     count: u32,
+    /// Whether `FF 00` stands for `FF` and `FF` with any other byte is a
+    /// marker (JPEG), or every byte is data (Nikon NEF).
+    stuffed: bool,
     /// Bytes fed from the data and zero bytes fed past a marker or the end.
     real: u64,
     padded: u64,
@@ -75,15 +78,24 @@ impl<'a> Bits<'a> {
             pos,
             acc: 0,
             count: 0,
+            stuffed: true,
             real: 0,
             padded: 0,
+        }
+    }
+
+    /// A reader of `data` with no byte stuffing and no markers.
+    pub(super) fn plain(data: &'a [u8]) -> Self {
+        Self {
+            stuffed: false,
+            ..Self::new(data, 0)
         }
     }
 
     fn fill(&mut self) {
         while self.count <= 56 {
             let byte = match self.data.get(self.pos) {
-                Some(&0xFF) => match self.data.get(self.pos + 1) {
+                Some(&0xFF) if self.stuffed => match self.data.get(self.pos + 1) {
                     Some(0) => {
                         self.pos += 2;
                         Some(0xFF)
@@ -117,7 +129,7 @@ impl<'a> Bits<'a> {
         ((self.acc >> (self.count - 16)) & 0xFFFF) as u32
     }
 
-    fn take(&mut self, n: u32) -> u32 {
+    pub(super) fn take(&mut self, n: u32) -> u32 {
         if n == 0 {
             return 0;
         }
@@ -128,11 +140,11 @@ impl<'a> Bits<'a> {
         ((self.acc >> self.count) & ((1u64 << n) - 1)) as u32
     }
 
-    fn overran(&self) -> bool {
+    pub(super) fn overran(&self) -> bool {
         (self.real + self.padded) * 8 - self.count as u64 > self.real * 8
     }
 
-    fn decode(&mut self, h: &Huffman) -> Result<u8, PsdError> {
+    pub(super) fn decode(&mut self, h: &Huffman) -> Result<u8, PsdError> {
         let peek = self.peek16();
         let (len, sym) = h.fast[(peek >> (16 - FAST_BITS)) as usize];
         if len > 0 {

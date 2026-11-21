@@ -39,8 +39,9 @@ OUT = (
 
 WAVELENGTHS = range(380, 781, 5)
 
-# Bodies whose raw files the vendor readers open, by rawtoaces-data file stem.
-# Canon bodies that write CR2 (the EOS R and later CR3 bodies wait for #399).
+# Bodies whose raw files the vendor readers open, by rawtoaces-data file stem:
+# Canon bodies that write CR2 (the EOS R and later CR3 bodies wait for #399),
+# and Nikon bodies that write NEF (#1469).
 BODIES = [
     "Canon_Digital_Rebel_XTi",
     "Canon_EOS-1D_X_Mark_II",
@@ -58,6 +59,37 @@ BODIES = [
     # Its alias the EOS 6D Mark II (same sensor) writes CR2.
     "Canon_EOS_RP",
     "Canon_PowerShot_S90",
+    "Nikon_D200",
+    "Nikon_D3300",
+    "Nikon_D5100",
+    "Nikon_D5300",
+    "Nikon_D70",
+    "Nikon_D700",
+    "Nikon_D7000",
+    # Its alias the D800 (same sensor) writes NEF too.
+    "Nikon_D800E",
+    "Nikon_D810",
+    "Nikon_D850",
+    # Its alias the Z 6II (same sensor) writes NEF too.
+    "Nikon_Z_f",
+]
+
+# Bodies with no published sensitivities that take a fitted body's matrices,
+# by owner decision (#1469): (make, Exif model, BODIES stem, why). Approximate.
+PROXIES = [
+    ("Nikon", "NIKON D100", "Nikon_D70", "same 6 MP Sony ICX413 CCD"),
+    (
+        "Nikon",
+        "NIKON D7100",
+        "Nikon_D5300",
+        "same-generation 24 MP APS-C without low-pass filter; lower confidence",
+    ),
+    (
+        "Nikon",
+        "COOLPIX P7100",
+        "Canon_PowerShot_S90",
+        "same 10 MP 1/1.7-inch Sony ICX685 CCD",
+    ),
 ]
 
 HEADER = """\
@@ -198,6 +230,18 @@ def rust_matrix(m: list) -> str:
     return "[\n" + rows + "        ]"
 
 
+def row(make: str, keys: list, fitted: dict) -> str:
+    models = ", ".join(f'"{k}"' for k in keys)
+    return (
+        "    CameraMatrices {\n"
+        f'        make: "{make_key(make)}",\n'
+        f"        models: &[{models}],\n"
+        f"        illuminant_a: {rust_matrix(fitted['A'])},\n"
+        f"        d65: {rust_matrix(fitted['D65'])},\n"
+        "    },\n"
+    )
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         print(__doc__, file=sys.stderr)
@@ -211,6 +255,7 @@ def main() -> int:
     aliases = json.loads((data / "aliases.json").read_text())["data"]["camera"]["model"]
 
     out = [HEADER]
+    by_stem = {}
     for stem in BODIES:
         doc = json.loads((data / f"camera/{stem}_380_780_5.json").read_text())
         make, model = doc["header"]["manufacturer"], doc["header"]["model"]
@@ -228,15 +273,11 @@ def main() -> int:
                 f"{make} {model} {name}: training dE76 mean {mean:.2f} max {worst:.2f}",
                 file=sys.stderr,
             )
-        models = ", ".join(f'"{k}"' for k in sorted(keys))
-        out.append(
-            "    CameraMatrices {\n"
-            f'        make: "{make_key(make)}",\n'
-            f"        models: &[{models}],\n"
-            f"        illuminant_a: {rust_matrix(fitted['A'])},\n"
-            f"        d65: {rust_matrix(fitted['D65'])},\n"
-            "    },\n"
-        )
+        by_stem[stem] = fitted
+        out.append(row(make, sorted(keys), fitted))
+    for make, model, stem, why in PROXIES:
+        out.append(f"    // Proxy of {stem}: {why}.\n")
+        out.append(row(make, [model_key(make, model)], by_stem[stem]))
     out.append("];\n")
     OUT.write_text("".join(out))
     print(f"wrote {OUT}", file=sys.stderr)
