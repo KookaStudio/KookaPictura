@@ -471,10 +471,16 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [ ] Open a raw file as a smart object (Shift+Open Image) (#1466)
 - [ ] CR2 CFA phase for the EOS 600D, so it takes its colour matrices (#1476)
 - [ ] X-Trans-tuned demosaic, with the Fuji container (#399)
-- [ ] Deflate, PackBits and lossy-JPEG DNGs, linear DNGs and floating-point
-      samples (#396)
+- [ ] Deflate, PackBits and lossy-JPEG DNGs and floating-point samples (#396)
 - [ ] Vendor raw containers: NEF, ARW/ARW2, ORF, RW2 and CR3 (#399)
-- [ ] DNG output (#402)
+- [x] **DNG output** — Save Image… in the raw open's Pictura Raw dialog writes
+      a mosaic DNG (lossless-JPEG tiles) or, with Convert to Linear Image, a
+      linear DNG, with the colour tags, crop, orientation, the dialog's
+      settings as `crs:` XMP, a thumbnail and optional JPEG preview developed
+      with them, the original raw file on request, and an ACR compatibility
+      level (approximate version mapping); linear DNGs open again (#402).
+      `crates/pictura-codec/src/dng/write/`,
+      `crates/pictura-app/src/cxxqt_object/open_jobs/raw_open/save_dng.rs`.
 - [x] **Camera Raw settings stores** — OK and Done in the raw open's Pictura
       Raw dialog save every tab's settings as `crs:` XMP in a per-user Camera
       Raw database keyed by the file's content hash or in a `<name>.xmp`
@@ -483,7 +489,9 @@ gaps are the CS6 Extended 3D object and camera tools.
       written (#401, #632).
       `crates/pictura-codec/src/pictura_raw/xmp.rs`,
       `crates/pictura-app/src/cxxqt_object/open_jobs/raw_open/store.rs`.
-- [ ] Settings embedded in DNGs and Export Settings To XMP (#402)
+- [ ] Export Settings To XMP, settings inside existing DNGs and Update DNG
+      Previews (#1484)
+- [ ] JPEG, TIFF and PSD from Save Options, file-naming templates (#633)
 - [ ] ACR Workflow Options, ACR preferences, batch raw processing, and Purge
       Camera Raw (#633)
 - [ ] The Pictura Raw Presets tab is a stub list with no persistence (#633)

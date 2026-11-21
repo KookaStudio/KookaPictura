@@ -25,8 +25,10 @@ pub use compatibility::{
 pub use imp::*;
 pub(super) use raw_open::PendingRaw;
 pub use raw_open::{
-    open_raw_develop_start, open_raw_start, raw_as_shot_temperature, raw_as_shot_tint, raw_preview,
-    raw_save_settings, raw_seed_settings, raw_sniff_path,
+    open_raw_develop_start, open_raw_start, raw_as_shot_temperature, raw_as_shot_tint,
+    raw_dng_default_path, raw_preview, raw_save_dng_cancel, raw_save_dng_finish,
+    raw_save_dng_progress, raw_save_dng_running, raw_save_dng_start, raw_save_settings,
+    raw_seed_settings, raw_sniff_path,
 };
 
 #[cxx_qt::bridge]
@@ -134,6 +136,31 @@ pub mod ffi {
         /// The kept source developed with `settings` with its long side at most
         /// `max_dim`; a null image without a source or when it cannot develop.
         fn raw_preview(view: &PictureView, settings: &QString, max_dim: i32) -> QImage;
+
+        // Save Image (#402), `raw_open/save_dng.rs`.
+        /// The kept source's default DNG path: `<stem>.dng` beside it, or
+        /// `<stem>-<n>.dng` when taken; empty without a source.
+        fn raw_dng_default_path(view: &PictureView) -> QString;
+
+        /// Start writing the kept source as a DNG at `target` with
+        /// `settings` (Pictura Raw text) on a worker. `compatibility` 0–4 is
+        /// Camera Raw 2.4 … 6.6 and later; `preview` 0 None, 1 Medium Size,
+        /// 2 Full Size. `false` without a source or while a save runs.
+        fn raw_save_dng_start(
+            view: Pin<&mut PictureView>,
+            target: &QString,
+            settings: &QString,
+            compatibility: i32,
+            preview: i32,
+            embed_original: bool,
+            linear: bool,
+        ) -> bool;
+        fn raw_save_dng_running(view: &PictureView) -> bool;
+        /// 0–1000; -1 without a save.
+        fn raw_save_dng_progress(view: &PictureView) -> i32;
+        fn raw_save_dng_cancel(view: &PictureView);
+        /// Wait for the save: `"ok"`, `"cancelled"`, or `"error:<reason>"`.
+        fn raw_save_dng_finish(view: Pin<&mut PictureView>) -> QString;
 
         /// Mark a started open cancelled; the queued result is dropped.
         fn open_cancel(view: Pin<&mut PictureView>);

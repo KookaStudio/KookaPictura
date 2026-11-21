@@ -4,6 +4,32 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **DNG output — #402 implemented** (OpenSpec change `dng-output`,
+  archived; new capabilities `codec/dng-writer` and
+  `document/raw-save-image`, requirements added to `codec/dng-raw-reader` and
+  `codec/raw-develop`). `pictura_codec::write_dng` (`dng/write/`) builds a
+  little-endian DNG in memory: IFD0 is a ≤ 256 px 8-bit thumbnail carrying the
+  DNG-wide tags (colour, XMP, `OriginalRawFileName` / `OriginalRawFileData`
+  50827/50828 in ExifTool's fork layout, 64 KiB zlib blocks), SubIFD 0 the
+  full image as 256 × 256 lossless-JPEG tiles (mosaic: normalized 16-bit CFA,
+  coded as two half-width components; linear: three-component `LinearRaw`),
+  SubIFD 1 an optional baseline JPEG preview (`image` crate, already in the
+  lock). The encoder fits a Huffman table per tile (Annex K.2). Compatibility
+  2.4/4.1/4.6/5.4/6.6 → DNG 1.1/1.2/1.2/1.3/1.4 (approximate; ForwardMatrix
+  and PreviewColorSpace dropped below 1.2). `read_linear_dng` (`dng/linear.rs`)
+  reads three-sample linear DNGs and `decode_raw_source` skips the demosaic
+  for them. The raw open's Pictura Raw dialog gains **Save Image…** →
+  `RawSaveOptionsDialog` (folder, name defaulting to a free `<stem>[-n].dng`,
+  Compatibility, JPEG Preview None/Medium/Full, Embed Original, Convert to
+  Linear) → `raw_save_dng_*` job on `PendingRaw` under `runCancellableJob`; the
+  worker re-reads the file and refuses it when its SHA-256 differs, refuses
+  the source as target, and writes temp + rename; the dialog stays open and
+  shows the result; the settings stores are not written. Ponytails: the
+  mosaic stores normalized samples (not raw values), no EXIF copy, no lossy
+  DNG. Follow-ups: #1484 (Export Settings To XMP, in-DNG settings, Update DNG
+  Previews), Save Options formats with #633. Tests: `dng/write/tests.rs`,
+  `tests/dng_linear.rs`, `tests/dng_writer_oracle.rs` (LibRaw + ExifTool),
+  `raw_open/save_dng_tests.rs`, `tst_raw_open`.
 - **Raw settings stores — #401 implemented** (OpenSpec change
   `raw-settings-storage`, archived; new capabilities `codec/raw-settings-xmp`
   and `document/raw-settings-storage`, the seed requirement of
@@ -19,7 +45,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   the new Done button save (temp file + rename), sidecar failure falls back to
   the database, and the notice joins the open's own status notice. The WB label
   is derived from the values (the dialog never updates `WBal`). DNGs are never
-  written. Follow-ups: in-DNG settings / Export Settings To XMP (#402), Ignore
+  written. Follow-ups: in-DNG settings / Export Settings To XMP (#1484), Ignore
   Sidecar and the ACR preferences dialog (#633). Tests:
   `tests/raw_settings_xmp.rs`, `raw_open/{tests,store_tests}.rs`,
   `tst_raw_open`.

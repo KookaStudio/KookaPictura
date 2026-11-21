@@ -37,6 +37,8 @@ pub(in crate::cxxqt_object) struct PendingRaw {
     pub(super) key: String,
     /// The settings record the seed came from, the base of a later save.
     pub(super) record: Option<Vec<u8>>,
+    /// A Save Image running while the dialog is open (#402).
+    pub(super) dng_job: Option<super::save_dng::DngJob>,
 }
 
 pub fn raw_sniff_path(path: &QString) -> bool {
@@ -48,7 +50,7 @@ pub fn raw_sniff_path(path: &QString) -> bool {
         && pictura_codec::sniff_raw_prefix(&prefix)
 }
 
-fn reason(error: PsdError) -> String {
+pub(super) fn reason(error: PsdError) -> String {
     match error {
         PsdError::Unsupported(text) | PsdError::Invalid(text) => text,
         other => other.to_string(),
@@ -82,6 +84,7 @@ pub(super) fn decode_pending(
         seed,
         key,
         record,
+        dng_job: None,
     })
 }
 
@@ -170,7 +173,7 @@ pub(super) fn develop_pixels(
     Ok(developed)
 }
 
-fn to8(v: u16) -> u8 {
+pub(super) fn to8(v: u16) -> u8 {
     ((v as u32 + 128) / 257) as u8
 }
 

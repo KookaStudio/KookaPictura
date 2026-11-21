@@ -271,7 +271,8 @@ The Actions panel and engine shipped in `#301` (`crates/pictura-app/cpp/panels/a
 | WF-5 | `web-export-and-slices.md` | Save for Web slice export with HTML/CSS, 4-Up, the colour-table editor, and the metadata levels shipped (#629); still missing: slice names/URLs/alt and Slice Options, per-slice optimization, Selected Slices, link/unlink and Divide/Combine, `.aco` tables, Web Snap, and saved output settings | PARTIAL | `save_for_web_dialog.cpp`; `save_for_web_settings.cpp`; `save_for_web_color_table.cpp`; `save_optimized_dialog.cpp`; `pictura-codec/src/web/html.rs`; `pictura-render/src/document_ops/slices.rs` | #629, #543 |
 | WF-6 | `export-formats.md` | Zoomify and Paths to Illustrator shipped; Export Layers core shipped (shared options/Targa missing); Data Sets As Files and Render Video remain | PARTIAL | `crates/pictura-app/cpp/zoomify_dialog.cpp`; `export_paths_dialog.cpp`; `export_layers_dialog.cpp`; `crates/pictura-codec/src/zoomify.rs`; `illustrator.rs` | #622, #587, #625, #630 |
 | WF-7 | `file-info-and-metadata.md` | Extra tabs (IPTC Extension/GPS/Origin/Photoshop) + editing | SHIPPED | `file_info_dialog.{h,cpp}`; `pictura-codec/src/xmp/tree.rs`; `pictura-codec/src/metadata/iptc_extension.rs`; `pictura-codec/src/exif.rs` | #631 |
-| WF-8 | `camera-raw-workflow.md` | Camera Raw settings stores shipped (#401): content-hash database and `.xmp` sidecar by preference, read-only fallback, every tab as `crs:`; settings inside a DNG and Export Settings To XMP remain (#402), and `Ignore Sidecar ".XMP" Files` with the other ACR preferences (#633) | SHIPPED | `pictura-codec/src/pictura_raw/xmp.rs`; `open_jobs/raw_open/store.rs`; `tst_raw_open` | #632, #401 |
+| WF-8 | `camera-raw-workflow.md` | Camera Raw settings stores shipped (#401): content-hash database and `.xmp` sidecar by preference, read-only fallback, every tab as `crs:`; DNG output (#402) embeds the settings in the DNGs it writes; Export Settings To XMP and settings inside an existing DNG remain (#1484), and `Ignore Sidecar ".XMP" Files` with the other ACR preferences (#633) | SHIPPED | `pictura-codec/src/pictura_raw/xmp.rs`; `open_jobs/raw_open/store.rs`; `tst_raw_open` | #632, #401 |
+| WF-17 | `camera-raw-workflow.md` | DNG conversion shipped (#402): Save Image… in the raw open's dialog writes mosaic or linear DNGs with colour tags, `crs:` settings, thumbnail and JPEG preview, the embedded original, and a compatibility level (approximate DNG-version mapping); linear DNGs read back; JPEG/TIFF/PSD from Save Options, Workflow Options and lossy DNG remain (#633) | SHIPPED | `pictura-codec/src/dng/write/`; `pictura-codec/src/dng/linear.rs`; `open_jobs/raw_open/save_dng.rs`; `raw_save_options_dialog.cpp`; `tst_raw_open` | #402 |
 | WF-9 | `camera-raw-workflow.md` | ACR Workflow Options, ACR preferences, batch, Purge Camera Raw | MISSING | `pictura_raw_dialog.cpp:47-60` | #633 |
 | WF-10 | `printing.md` | Print colour management, proofing, output marks, persist defaults | PARTIAL | `print_dialog.cpp:181-199` | #634 |
 | WF-11 | `measurement-and-count.md` | Measurement scale/presets, exporters, PSD resource 1074 | SHIPPED | `crates/pictura-app/cpp`; #635 | #635 |
@@ -282,7 +283,7 @@ The Actions panel and engine shipped in `#301` (`crates/pictura-app/cpp/panels/a
 | WF-16 | `update-and-versioning.md` | Document-format version policy (`opDocumentVersion`/`minReaderVersion`, Version Info 1057) | MISSING | none found | #640 |
 
 Raw file open shipped in `#400` (DNG files; vendor colour matrices and the
-smart-object open remain); DNG output is tracked by `#402`.
+smart-object open remain); DNG output shipped in `#402` (WF-17).
 
 ### 11-cross-cutting
 

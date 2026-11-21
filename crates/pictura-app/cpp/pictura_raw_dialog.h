@@ -6,8 +6,10 @@
 #include "acr/acr_panels.h"
 #include "acr/acr_settings.h"
 
+#include <functional>
 #include <optional>
 
+class QLabel;
 class QTabBar;
 class QTimer;
 
@@ -39,6 +41,11 @@ public:
     // is rejected with this set.
     bool saveOnlyRequested() const { return saveOnly_; }
 
+    // How a raw open's Save Image (#402) runs its nested dialogs (Save
+    // Options, the replace question): true when accepted. The coordinator
+    // routes them through its import-dialog runner.
+    void setDialogRunner(std::function<bool(QDialog&)> runner) { runner_ = std::move(runner); }
+
     // Run the dialog modally; on OK fill `out` with the edited settings text.
     static bool get(QWidget* parent, PictureView* view, const QString& path,
                     const QString& initialSettings, QString* out);
@@ -53,7 +60,9 @@ private:
 
     void refresh();
     void render();
+    void saveImage();
 
+    PictureView* view_ = nullptr;
     QString path_;
     AcrSettings settings_;
     QTabBar* tabs_ = nullptr;
@@ -61,6 +70,8 @@ private:
     AcrHistogram* histogram_ = nullptr;
     AcrToneCurvePanel* toneCurve_ = nullptr;
     QTimer* refreshTimer_ = nullptr;
+    QLabel* saveStatus_ = nullptr;
+    std::function<bool(QDialog&)> runner_;
     bool renderPending_ = false;
     bool saveOnly_ = false;
 };

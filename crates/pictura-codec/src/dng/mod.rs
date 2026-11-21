@@ -3,7 +3,9 @@
 //!
 //! Built from the DNG 1.6 specification and ITU T.81 only. Compression 1
 //! (uncompressed) and 7 (lossless JPEG) are read; deflate, PackBits and lossy
-//! JPEG, linear DNGs, floating-point samples and non-RGB CFAs are refused.
+//! JPEG, floating-point samples and non-RGB CFAs are refused. Three-sample
+//! linear DNGs are read by `read_linear_dng` (`linear.rs`); `write/` writes
+//! both kinds (#402).
 //! The demosaic (`demosaic`, #397) and the colour transform
 //! (`as_shot_transform`, #398) consume the result. Vendor containers (#399,
 //! `vendor.rs`, `cr2.rs`) produce the same `DngImage` through `read_raw`.
@@ -19,9 +21,11 @@ mod cr2;
 mod demosaic;
 mod develop;
 mod levels;
+mod linear;
 mod ljpeg;
 mod tiff;
 mod vendor;
+mod write;
 
 pub use camera_color::{
     as_shot_transform, to_pro_photo, white_balance_transform, CameraTransform, ProPhotoRgb,
@@ -32,8 +36,10 @@ pub use develop::{
     decode_raw_source, develop_raw, downscale_camera, raw_xmp, DevelopedRgb, RawLook, RawSource,
 };
 use levels::{Area, Levels};
+pub use linear::{read_linear_dng, LinearDng};
 use tiff::{Ifd, Order, Tiff};
 pub use vendor::{read_raw, sniff_raw, sniff_raw_prefix, RawFormat};
+pub use write::{read_original_raw, write_dng, DngCompatibility, DngPixels, DngRgb8, DngWrite};
 
 const NEW_SUBFILE_TYPE: u16 = 254;
 const IMAGE_WIDTH: u16 = 256;
@@ -330,18 +336,20 @@ fn unpack(
     Ok(())
 }
 
-/// Decodes every strip or tile into a `width × height` raw plane, one band
-/// of tile rows per rayon task.
+/// Decodes every strip or tile into a `width × height` raw plane of `spp`
+/// interleaved samples per pixel, one band of tile rows per rayon task.
 fn decode_plane(
     tiff: &Tiff,
     layout: &Layout,
     compression: u64,
     bits: u32,
-    width: usize,
-    height: usize,
+    (width, height): (usize, usize),
+    spp: usize,
 ) -> Result<Vec<u16>, PsdError> {
     let bytes = tiff.bytes();
-    let (tw, th) = (layout.tile_w, layout.tile_h);
+    // Every width below counts samples, `spp` to a pixel.
+    let (tw, th) = (layout.tile_w * spp, layout.tile_h);
+    let width = width * spp;
     // Every chunk must hold its samples before the plane is allocated: a row
     // of uncompressed bytes per row, or at least one bit per sample (the
     // shortest Huffman code) for lossless JPEG.
@@ -557,7 +565,7 @@ pub fn read_dng(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, PsdError
     let default_crop = default_crop(&tags, area)?;
     let color = color(&ifd0)?;
 
-    let raw_plane = decode_plane(&tiff, &layout, compression, bits, width, height)?;
+    let raw_plane = decode_plane(&tiff, &layout, compression, bits, (width, height), 1)?;
     let samples = levels::normalize(&raw_plane, width, area, &levels);
     Ok(DngImage {
         width: area.width,
