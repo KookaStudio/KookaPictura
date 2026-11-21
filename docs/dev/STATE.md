@@ -13,6 +13,15 @@ Snapshot for resuming after a context break. Update after each milestone.
   edits before publication and discard stale worker results. Coverage lives
   in the registry tests, `tst_loading_tab`, `tst_control_limits`,
   `tst_document_jobs`, and `tst_offthread_jobs`.
+- **Typed preferences store — #641 implemented** (OpenSpec change
+  `typed-prefs-store`, archived into `ui/preference-storage` with preference
+  consumer deltas). Rust stores application preferences in XDG config
+  `prefs.toml`. Window and workflow state stay in XDG state. Migration commits
+  TOML before clearing legacy preference keys. Version 2 settings backups
+  carry portable TOML, and the importer accepts partial version 1 backups.
+  Startup reset coordinates both roots and can recover a partial reset. Test
+  coverage includes `tst_preferences_store`, `tst_preferences_reset`, and
+  `tst_settings_backup`.
 - **View menu view state — #503 implemented** (OpenSpec change
   `view-menu-view-state`, archived; capability `ui/view-menu` plus the slice,
   count, note, smart-guide and ruler deltas). Extras/Show/Show Extra Options,
