@@ -347,6 +347,10 @@ foreach(test_name IN LISTS PICTURA_QT_TESTS)
     endif()
 endforeach()
 
+add_dependencies(tst_update_preferences pictura)
+set_property(TEST tst_update_preferences APPEND PROPERTY ENVIRONMENT
+    "PICTURA_TEST_EXECUTABLE=$<TARGET_FILE:pictura>")
+
 # The brush-outline suite maps logical canvas coordinates to QImage device
 # indices; pin the device pixel ratio so the two agree.
 set_tests_properties(tst_brush_outline PROPERTIES

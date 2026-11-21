@@ -81,7 +81,7 @@ QStringList gpuCandidateNames();
 
 // The five-state label for the status bar and About.
 QString activeBackendLabel(bool gpuCompute);
-QString aboutText(const QString& backendLabel);
+QString aboutText(const QString& backendLabel, const QStringList& gpuFields);
 
 // Child mode: `--gpu-probe <dx12|vulkan>`. Suppresses the Windows dialog and
 // calls the Rust probe. Returns 0 on success, 1 when no adapter exists, 2 when

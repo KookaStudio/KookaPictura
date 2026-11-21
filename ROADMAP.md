@@ -696,8 +696,9 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [x] aarch64 `.deb` and `.rpm` packages (#1433)
 - [ ] DSSIM, PSNR and ΔE2000, property tests, fuzzing, and Criterion benches
       (#648)
-- [ ] `--version`, an About dialog with the Qt and GPU details, and an update
-      checker (#649)
+- [x] `--version` and About diagnostics for the build, Qt runtime, renderer,
+      GPU adapter, and driver (#649). The stable update checker shipped in
+      #1146.
 - [x] Edition gating for Standard and Extended (#650): `PICTURA_EDITION`
       selects the surface (default Extended); Standard hides the Count tool,
       the 3D commands, the Measurement Log and the Count overlay, while the
