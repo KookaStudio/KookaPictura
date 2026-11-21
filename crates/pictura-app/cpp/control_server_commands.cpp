@@ -427,8 +427,26 @@ QJsonObject ControlServer::methodExportWebp(const QJsonObject& params)
         return error(QStringLiteral("refused"),
                      QStringLiteral("destination is an open read-only source file"));
     }
-    const int quality = params.value(QStringLiteral("quality")).toInt(90);
-    const bool lossless = params.value(QStringLiteral("lossless")).toBool(false);
+    int quality = 90;
+    if (params.contains(QStringLiteral("quality"))) {
+        const QJsonValue value = params.value(QStringLiteral("quality"));
+        const double number = value.toDouble();
+        if (!value.isDouble() || !std::isfinite(number) || number < 0.0 || number > 100.0
+            || std::floor(number) != number) {
+            return error(QStringLiteral("invalid_param"),
+                         QStringLiteral("quality must be an integer from 0 through 100"));
+        }
+        quality = int(number);
+    }
+    bool lossless = false;
+    if (params.contains(QStringLiteral("lossless"))) {
+        const QJsonValue value = params.value(QStringLiteral("lossless"));
+        if (!value.isBool()) {
+            return error(QStringLiteral("invalid_param"),
+                         QStringLiteral("lossless must be a boolean"));
+        }
+        lossless = value.toBool();
+    }
     if (!export_webp(*view, path, quality, lossless)) {
         return error(QStringLiteral("io_error"), QStringLiteral("export failed"));
     }

@@ -48,6 +48,7 @@ private slots:
     void activeLayerIsSetByPath();
     void exportLeavesTheDocumentAlone();
     void exportWebpModes();
+    void exportWebpRejectsBadOptions();
     void exportIsGatedLikeASave();
     void historyListsAndJumps();
     void historySetsTheBrushSource();
@@ -344,8 +345,7 @@ void ControlEditingTest::exportWebpModes()
     const int states = history_api::count(view());
 
     QVERIFY(succeeded(call(QStringLiteral("export_webp"),
-                           {{QStringLiteral("path"), lossyPath},
-                            {QStringLiteral("quality"), 10}})));
+                           {{QStringLiteral("path"), lossyPath}})));
     QVERIFY(succeeded(call(QStringLiteral("export_webp"),
                            {{QStringLiteral("path"), losslessPath},
                             {QStringLiteral("lossless"), true}})));
@@ -366,6 +366,24 @@ void ControlEditingTest::exportWebpModes()
     QCOMPARE(window_->activeFilePath(), before);
     QCOMPARE(window_->isDocumentDirty(index), dirty);
     QCOMPARE(history_api::count(view()), states);
+}
+
+void ControlEditingTest::exportWebpRejectsBadOptions()
+{
+    const QString path = dir_.filePath(QStringLiteral("bad-options.webp"));
+    const auto attempt = [this, &path](const QJsonObject& options) {
+        QJsonObject params = options;
+        params.insert(QStringLiteral("path"), path);
+        return errorCode(call(QStringLiteral("export_webp"), params));
+    };
+    QCOMPARE(attempt({{QStringLiteral("quality"), 101}}), QStringLiteral("invalid_param"));
+    QCOMPARE(attempt({{QStringLiteral("quality"), -1}}), QStringLiteral("invalid_param"));
+    QCOMPARE(attempt({{QStringLiteral("quality"), 50.5}}), QStringLiteral("invalid_param"));
+    QCOMPARE(attempt({{QStringLiteral("quality"), QStringLiteral("90")}}),
+             QStringLiteral("invalid_param"));
+    QCOMPARE(attempt({{QStringLiteral("lossless"), QStringLiteral("true")}}),
+             QStringLiteral("invalid_param"));
+    QVERIFY(!QFile::exists(path));
 }
 
 void ControlEditingTest::exportIsGatedLikeASave()

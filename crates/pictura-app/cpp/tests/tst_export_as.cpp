@@ -94,6 +94,7 @@ private slots:
     void png8AndGif();
     void webpExport();
     void webpQualityControls();
+    void webpQualityRange();
     void webpLossyIsSmallerThanLossless();
     void imageSizeAndCanvas();
     void layerList();
@@ -225,6 +226,27 @@ void ExportAsTest::webpQualityControls()
     format->setCurrentIndex(pictura::ExportAsDialog::Jpg);
     QVERIFY(quality->isEnabled());
     QVERIFY(!transparency->isEnabled());
+}
+
+void ExportAsTest::webpQualityRange()
+{
+    QVector<pictura::ExportEntry> noisy;
+    noisy.append(entry(QStringLiteral("photo"), photo()));
+    pictura::ExportAsDialog dialog(noisy);
+    auto* format = child<QComboBox>(dialog, "exportAsFormat");
+    auto* quality = child<QSpinBox>(dialog, "exportAsQuality");
+    QVERIFY(format && quality);
+
+    format->setCurrentIndex(pictura::ExportAsDialog::Webp);
+    QCOMPARE(quality->minimum(), 0);
+    QCOMPARE(quality->maximum(), 100);
+
+    quality->setValue(0);
+    const QByteArray low = dialog.encoded(0);
+    QVERIFY(low.contains(QByteArrayLiteral("VP8 ")));
+    quality->setValue(100);
+    const QByteArray high = dialog.encoded(0);
+    QVERIFY(high.contains(QByteArrayLiteral("VP8 ")));
 }
 
 void ExportAsTest::webpLossyIsSmallerThanLossless()
