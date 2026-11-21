@@ -683,6 +683,7 @@ const QList<PanelToggle>& panelToggles()
         {command_ids::TypePanelsParagraph, "paragraphPanel"},
         {command_ids::TypePanelsParagraphStyles, "paragraphStylesPanel"},
         {command_ids::TypePanelsCharacterStyles, "characterStylesPanel"},
+        {command_ids::TypePanelsGlyphs, "glyphsPanel"},
     };
     return toggles;
 }

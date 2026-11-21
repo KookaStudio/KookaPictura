@@ -776,6 +776,203 @@ pub(super) fn set_shown(mut view: Pin<&mut PictureView>, path: &QString) {
     }
 }
 
+/// The Photoshop filler `Type > Paste Lorem Ipsum` appends.
+const LOREM_IPSUM: &str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
+
+pub(super) fn type_can_outline(view: &PictureView, path: &QString) -> bool {
+    layer_spec(view, path).is_some_and(|spec| pictura_render::type_outline_refusal(&spec).is_none())
+}
+
+pub(super) fn type_create_work_path(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
+    let Some(spec) = layer_spec(view.as_ref().get_ref(), path) else {
+        return false;
+    };
+    let Some(paths) = pictura_render::type_outline_paths(&spec) else {
+        return false;
+    };
+    if paths.is_empty() {
+        return false;
+    }
+    let mut created = false;
+    view.as_mut().edit("Create Work Path", |rust| {
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return Edit::None;
+        };
+        let mut work = pictura_core::path::VectorPath::default();
+        for path in &paths {
+            work.add_subpath(path.clone());
+        }
+        doc.work_path = work;
+        created = true;
+        Edit::Meta
+    });
+    created
+}
+
+pub(super) fn type_convert_to_shape(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
+    let path = path.to_string();
+    let before = reach(view.as_ref().get_ref(), &path);
+    let mut changed = false;
+    view.as_mut().edit("Convert to Shape", |rust| {
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return Edit::None;
+        };
+        changed = pictura_render::convert_type_to_shape(doc, &path);
+        if !changed {
+            return Edit::None;
+        }
+        let after = pictura_render::damage::influence(doc, &path);
+        structural(before, after)
+    });
+    changed
+}
+
+pub(super) fn type_update_all_text_layers(mut view: Pin<&mut PictureView>) -> i32 {
+    let mut changed = 0;
+    view.as_mut().edit("Update All Text Layers", |rust| {
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return Edit::None;
+        };
+        changed = pictura_render::re_render_type_layers(doc);
+        if changed == 0 {
+            Edit::None
+        } else {
+            Edit::Full
+        }
+    });
+    changed as i32
+}
+
+pub(super) fn type_paste_lorem(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
+    let Some(mut spec) = layer_spec(view.as_ref().get_ref(), path) else {
+        return false;
+    };
+    let path = path.to_string();
+    if !view
+        .rust()
+        .session
+        .doc
+        .as_ref()
+        .is_some_and(pictura_render::type_layers_editable)
+    {
+        return false;
+    }
+    spec.text.push_str(LOREM_IPSUM);
+    let replaced = view
+        .as_mut()
+        .rust_mut()
+        .session
+        .doc
+        .as_mut()
+        .is_some_and(|doc| pictura_render::replace_type_layer(doc, &path, &spec));
+    if replaced {
+        view.as_mut().edit("Paste Lorem Ipsum", |_| Edit::Full);
+    }
+    replaced
+}
+
+pub(super) fn type_load_defaults(
+    mut view: Pin<&mut PictureView>,
+    path: &QString,
+    font: &QString,
+    character: &CharacterSetting,
+    paragraph: &ParagraphSetting,
+) -> bool {
+    let Some(previous) = layer_spec(view.as_ref().get_ref(), path) else {
+        return false;
+    };
+    let path = path.to_string();
+    if !view
+        .rust()
+        .session
+        .doc
+        .as_ref()
+        .is_some_and(pictura_render::type_layers_editable)
+    {
+        return false;
+    }
+    let text = QString::from(previous.text.as_str());
+    let setting = placement_setting(&previous);
+    let mut built = super::spec::spec(&text, font, &setting, character, paragraph);
+    built.overrides = edited_overrides(&previous, &built);
+    let replaced = view
+        .as_mut()
+        .rust_mut()
+        .session
+        .doc
+        .as_mut()
+        .is_some_and(|doc| pictura_render::replace_type_layer(doc, &path, &built));
+    if replaced {
+        view.as_mut()
+            .edit("Load Default Type Styles", |_| Edit::Full);
+    }
+    replaced
+}
+
+pub(super) fn type_replace_text(
+    mut view: Pin<&mut PictureView>,
+    path: &QString,
+    find: &QString,
+    replace: &QString,
+    all_layers: bool,
+    forward: bool,
+    case_sensitive: bool,
+    whole_word: bool,
+) -> i32 {
+    let find = find.to_string();
+    let replace = replace.to_string();
+    if find.is_empty() {
+        return 0;
+    }
+    let current = path.to_string();
+    let options = pictura_core::ReplaceOptions {
+        forward,
+        case_sensitive,
+        whole_word,
+    };
+    let mut changed = 0;
+    view.as_mut().edit("Find And Replace Text", |rust| {
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return Edit::None;
+        };
+        if !pictura_render::type_layers_editable(doc) {
+            return Edit::None;
+        }
+        let targets = if all_layers {
+            type_paths(doc)
+        } else if current.is_empty() {
+            Vec::new()
+        } else {
+            vec![current.clone()]
+        };
+        for target in targets {
+            let Some(layer) = pictura_render::resolve_path(doc, &target) else {
+                continue;
+            };
+            if layer.lock.is_all() {
+                continue;
+            }
+            let Some(spec) = pictura_render::type_layer_spec(layer) else {
+                continue;
+            };
+            let (next, count) =
+                pictura_core::replace_matches(&spec.text, &find, &replace, &options);
+            if count == 0 {
+                continue;
+            }
+            if pictura_render::replace_variable_text(doc, &target, &next) {
+                changed += count;
+            }
+        }
+        if changed == 0 {
+            Edit::None
+        } else {
+            Edit::Full
+        }
+    });
+    changed as i32
+}
+
 #[cfg(test)]
 mod header_tests {
     use std::path::Path;

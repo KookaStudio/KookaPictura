@@ -525,8 +525,11 @@ void LayersRowMenuTest::typeRows()
     const QStringList texts = panel_->rowMenuTextsForPathForTest(path);
     QVERIFY(texts.contains(QStringLiteral("Create Work Path")));
     QVERIFY(texts.contains(QStringLiteral("Convert to Shape")));
-    QVERIFY(!panel_->rowMenuEnabledForPathForTest(path, QStringLiteral("Create Work Path")));
-    QVERIFY(!panel_->rowMenuEnabledForPathForTest(path, QStringLiteral("Convert to Shape")));
+    QVERIFY(panel_->rowMenuEnabledForPathForTest(path, QStringLiteral("Create Work Path")));
+    QVERIFY(panel_->rowMenuEnabledForPathForTest(path, QStringLiteral("Convert to Shape")));
+    const QStringList commandIds = panel_->rowMenuCommandIdsForPathForTest(path);
+    QVERIFY(commandIds.contains(QStringLiteral("type.create.work.path")));
+    QVERIFY(commandIds.contains(QStringLiteral("type.convert.to.shape")));
     QVERIFY(!panel_->rowMenuEnabledForPathForTest(path, QStringLiteral("Copy CSS")));
     QVERIFY(!panel_->rowMenuEnabledForPathForTest(path, QStringLiteral("Copy SVG")));
     QVERIFY(panel_->rowMenuEnabledForPathForTest(path, QStringLiteral("Convert to Smart Object")));

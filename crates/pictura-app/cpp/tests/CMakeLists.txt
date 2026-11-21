@@ -133,6 +133,8 @@ set(PICTURA_QT_TESTS
     tst_character_styles_panel
     tst_type_preferences
     tst_warp_text
+    tst_type_menu
+    tst_find_replace
     tst_type_placeholder
     tst_text_gamma_fonts
     tst_shared_widgets

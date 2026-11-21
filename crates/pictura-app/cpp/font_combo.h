@@ -15,4 +15,9 @@ bool isColorFont(const QString& family);
 // garbage, so a list scrolled near one stays blank for seconds.
 void useFastFontPreviews(QFontComboBox* combo);
 
+// Type > Font Preview Size: 0 None, 1 Small, 2 Medium, 3 Large, 4 Extra
+// Large, 5 Huge. Process-wide; the next popup repaint uses the new size.
+int fontPreviewSize();
+void setFontPreviewSize(int size);
+
 } // namespace pictura

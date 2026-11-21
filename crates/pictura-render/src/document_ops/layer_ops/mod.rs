@@ -62,6 +62,7 @@ mod transform_tests;
 mod transform_tiled;
 #[cfg(test)]
 mod transform_tiled_tests;
+mod type_shape;
 mod vector_masks;
 mod via;
 mod warp;
@@ -187,6 +188,7 @@ pub use transform::{
     transform_layer, transform_layer_quad, transform_layer_quad_with, transform_layer_with,
     LayerTransform,
 };
+pub use type_shape::convert_type_to_shape;
 pub use vector_masks::{
     add_vector_mask, delete_vector_mask, has_vector_mask, rasterize_vector_mask,
     set_vector_mask_density, set_vector_mask_enabled, set_vector_mask_feather,

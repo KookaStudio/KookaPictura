@@ -150,6 +150,15 @@ fn geometry(spec: &TypeSpec) -> Option<Geometry> {
     })
 }
 
+type Contours = Vec<Vec<(f64, f64)>>;
+
+/// The warped contours in document pixels, glyphs and decorations apart.
+/// The outline commands share the warp's flattened geometry.
+pub(crate) fn outline_contours(spec: &TypeSpec) -> Option<(Contours, Contours)> {
+    let geometry = geometry(spec)?;
+    Some((geometry.glyphs, geometry.decorations))
+}
+
 fn lerp(a: (f64, f64), b: (f64, f64), t: f64) -> (f64, f64) {
     (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t)
 }

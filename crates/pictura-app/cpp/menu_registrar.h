@@ -53,6 +53,14 @@ public:
         std::function<QWidget*()> dialogParent;
         std::function<int()> uiScalePercent;
         std::function<QColor()> foregroundColor;
+        std::function<bool()> typeShowAsianOptions;
+        std::function<void(bool)> setTypeShowAsianOptions;
+        std::function<bool()> typeMiddleEastern;
+        std::function<void(bool)> setTypeMiddleEastern;
+        std::function<int()> fontPreviewSize;
+        std::function<void(int)> setFontPreviewSize;
+        std::function<QString()> typeDefaultsJson;
+        std::function<void(const QString&)> setTypeDefaultsJson;
         std::function<void()> updateWindowTitle;
         std::function<void(const QUrl&)> openUrl;
         std::function<void()> installMenuCornerButtons;
@@ -152,6 +160,9 @@ private:
     void wireSmartFilterActions();
     void wireTransformMenu();
     void wireTypeMenu();
+    void wireOutlineCommands();
+    void wireTypeOptions();
+    void wireTypeDefaults();
     void wireWarpText();
     void wireReplaceMissingFonts();
     void wirePanelMenuCommands();

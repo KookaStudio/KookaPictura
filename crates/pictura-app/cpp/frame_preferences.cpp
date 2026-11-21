@@ -8,6 +8,8 @@
 #include "api/paint_bridge.h"
 #include "api/type_api.h"
 #include "frame_update.h"
+#include "menu_registrar.h"
+#include "font_combo.h"
 #include "panels/actions_engine_bridge.h"
 #include "preferences_agent_page.h"
 #include "settings_backup.h"
@@ -184,21 +186,9 @@ void PicturaMainWindow::showPreferences(const QString& page)
                     saveSession();
                 });
         connect(preferencesDialog_, &PreferencesDialog::typeShowAsianOptionsChanged, this,
-                [this](bool on) {
-                    typeShowAsianOptions_ = on;
-                    if (panels_->characterPanel()) {
-                        panels_->characterPanel()->setShowAsianOptions(on);
-                    }
-                    saveSession();
-                });
+                [this](bool on) { setTypeShowAsianOptions(on); });
         connect(preferencesDialog_, &PreferencesDialog::typeMiddleEasternChanged, this,
-                [this](bool on) {
-                    typeMiddleEastern_ = on;
-                    if (panels_->paragraphPanel()) {
-                        panels_->paragraphPanel()->setMiddleEastern(on);
-                    }
-                    saveSession();
-                });
+                [this](bool on) { setTypeMiddleEastern(on); });
         connect(preferencesDialog_, &PreferencesDialog::typeMissingGlyphProtectionChanged, this,
                 [this](bool on) {
                     typeMissingGlyphProtection_ = on;
@@ -212,6 +202,44 @@ void PicturaMainWindow::showPreferences(const QString& page)
                 });
     }
     preferencesDialog_->openOn(page);
+}
+
+void PicturaMainWindow::wireTypeRuntime(MenuRegistrar::Runtime& runtime)
+{
+    runtime.typeShowAsianOptions = [this]() { return typeShowAsianOptions_; };
+    runtime.setTypeShowAsianOptions = [this](bool on) { setTypeShowAsianOptions(on); };
+    runtime.typeMiddleEastern = [this]() { return typeMiddleEastern_; };
+    runtime.setTypeMiddleEastern = [this](bool on) { setTypeMiddleEastern(on); };
+    runtime.fontPreviewSize = [this]() { return fontPreviewSize_; };
+    runtime.setFontPreviewSize = [this](int size) { setFontPreviewSize(size); };
+    runtime.typeDefaultsJson = [this]() { return typeDefaultsJson_; };
+    runtime.setTypeDefaultsJson
+        = [this](const QString& json) { typeDefaultsJson_ = json; saveSession(); };
+}
+
+void PicturaMainWindow::setTypeShowAsianOptions(bool on)
+{
+    typeShowAsianOptions_ = on;
+    if (panels_ && panels_->characterPanel()) {
+        panels_->characterPanel()->setShowAsianOptions(on);
+    }
+    saveSession();
+}
+
+void PicturaMainWindow::setTypeMiddleEastern(bool on)
+{
+    typeMiddleEastern_ = on;
+    if (panels_ && panels_->paragraphPanel()) {
+        panels_->paragraphPanel()->setMiddleEastern(on);
+    }
+    saveSession();
+}
+
+void PicturaMainWindow::setFontPreviewSize(int size)
+{
+    fontPreviewSize_ = qBound(0, size, 5);
+    pictura::setFontPreviewSize(fontPreviewSize_);
+    saveSession();
 }
 
 } // namespace pictura

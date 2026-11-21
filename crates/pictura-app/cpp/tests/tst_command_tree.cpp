@@ -2,7 +2,6 @@
 #include "api/layers_api.h"
 #include "api/paint_bridge.h"
 #include <QtTest/QSignalSpy>
-
 #include <QtCore/QCoreApplication>
 #include <QtCore/QStringList>
 #include <QtGui/QAction>
@@ -130,6 +129,7 @@ void CommandTreeTest::modalMetadata()
     QVERIFY(registry->isModal(QString::fromLatin1(pictura::command_ids::ImageImageSize)));
     QVERIFY(registry->isModal(QString::fromLatin1(pictura::command_ids::FileNew)));
     QVERIFY(!registry->isModal(QString::fromLatin1(pictura::command_ids::SelectAll)));
+    QVERIFY(registry->isModal(QString::fromLatin1(pictura::command_ids::EditFindAndReplaceText)));
     QVERIFY(registry->isModal(pictura::commandIdForPath(
         {QStringLiteral("Filter"), QStringLiteral("Blur"), QStringLiteral("Gaussian Blur")})));
     QVERIFY(!registry->isModal(QString::fromLatin1(pictura::command_ids::FilterLastFilter)));

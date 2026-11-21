@@ -49,6 +49,7 @@ empty identifier and emit a warning naming the path.
 #### Scenario: A derived identifier is validated [cr_id_derived_validated]
 - **WHEN** a caller derives a command identifier from a path that the catalogue does not contain
 - **THEN** the bridge returns an empty identifier and emits a warning naming the path
+
 ### Requirement: Full documented top-level menu tree
 The system SHALL present the ten standard CS6 top-level menus -- File, Edit,
 Image, Layer, Type, Select, Filter, View, Window, Help -- in that order.
@@ -116,6 +117,7 @@ selection.
 #### Scenario: Surfaces agree on a dynamic label [cr_dynamic_label_surfaces]
 - **WHEN** the Layer menu, the Layers row menu, and the Layers flyout are opened for a multi-selection
 - **THEN** Duplicate and Delete read the plural labels on all three
+
 ### Requirement: Layer management commands in the command table
 
 The system SHALL declare the layer-management commands in the declarative
@@ -127,10 +129,11 @@ for each implemented command. The declared set SHALL include
 `layer.new.layerViaCopy`, `layer.new.layerViaCut`, `layer.new.groupFromLayers`,
 `layer.delete.hiddenLayers`, `layer.select.similar`, `layer.select.linked`,
 `layer.link.layers`, `layer.unlink.layers`, `layer.hide.layers`,
-`layer.rasterize.fillContent`, `layer.rasterize.layer`, and
-`layer.rasterize.allLayers`. Each command that does not apply to the current
+`layer.rasterize.fillContent`, `layer.rasterize.type`, `layer.rasterize.layer`,
+and `layer.rasterize.allLayers`. Each command that does not apply to the current
 selection or document SHALL be disabled by an enable provider evaluated when the
-menu is opened. The `Type`, `Shape`, `Vector Mask`, `Smart Object`, `Video`, and
+menu is opened. The `Type` rasterize entry SHALL have a handler and SHALL be
+enabled for a type layer. The `Shape`, `Vector Mask`, `Smart Object`, `Video`, and
 `3D` rasterize entries SHALL remain in the table with no handler and SHALL stay
 visible and disabled. Changing a label or shortcut SHALL NOT change an
 identifier.
@@ -147,10 +150,15 @@ identifier.
 - **THEN** that command is greyed rather than hidden, and it becomes enabled
   without rebuilding the menu when it later applies
 
+#### Scenario: The Type rasterize entry is enabled for type [cr_type_rasterize]
+
+- **WHEN** a type layer is current and the Rasterize submenu is opened
+- **THEN** `Type` is enabled and dispatches the type rasterizer
+
 #### Scenario: A kind-less rasterize variant is present but disabled
 
 - **WHEN** the Rasterize submenu is built
-- **THEN** Type, Shape, Vector Mask, Smart Object, Video, and 3D appear with no
+- **THEN** Shape, Vector Mask, Smart Object, Video, and 3D appear with no
   handler and are disabled
 
 ### Requirement: Free Transform command in the command table

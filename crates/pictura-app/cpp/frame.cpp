@@ -1,5 +1,4 @@
 #include "frame_includes.h"
-
 #include <QtWidgets/QProgressBar>
 #include "file_info_dialog.h"
 #include "new_document_dialog.h"
@@ -13,12 +12,12 @@
 #include "api/document_bridge.h"
 #include "api/layers_bridge.h"
 #include "api/engine_bridge.h"
-
 #include "api/document_api.h"
 #include "api/type_api.h"
 #include "busy_job.h"
 #include "file_drop_router.h"
 #include "fonts.h"
+#include "font_combo.h"
 #include "frame_canvas.h"
 #include "import_save_coordinator.h"
 #include "menu_registrar.h"
@@ -168,6 +167,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     menuRuntime.openChannelOptionsDialog = [this]() { openChannelOptionsDialog(); };
     menuRuntime.uiScalePercent = [this]() { return uiScalePercent_; };
     menuRuntime.foregroundColor = [this]() { return foregroundColor(); };
+    wireTypeRuntime(menuRuntime);
     menu_ = std::make_unique<MenuRegistrar>(
         [this](CommandRegistry& registry) { registerFrameCommands(registry); },
         std::move(menuRuntime), this);
@@ -306,6 +306,9 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     ColorPickerDialog::setPickerPreference(pickerChoice_);
     applyTextGamma(prefs.textGammaEnabled, prefs.textGamma);
     typeShowAsianOptions_ = prefs.typeShowAsianOptions; typeMiddleEastern_ = prefs.typeMiddleEastern;
+    fontPreviewSize_ = prefs.fontPreviewSize;
+    pictura::setFontPreviewSize(fontPreviewSize_);
+    typeDefaultsJson_ = prefs.typeDefaults;
     typeMissingGlyphProtection_ = prefs.typeMissingGlyphProtection;
     pictura::type_api::setMissingGlyphProtection(typeMissingGlyphProtection_);
     useShiftKeyForToolSwitch_ = prefs.useShiftKeyForToolSwitch;

@@ -4,6 +4,8 @@
 #include "layers_panel.h"
 
 #include "api/type_api.h"
+#include "command_ids.h"
+#include "commands.h"
 #include "warp_text_dialog.h"
 
 #include "api/view_bridge.h"
@@ -59,8 +61,24 @@ void LayersPanel::addTypeRows(QMenu& menu, const QString& path, bool& emitted)
     }
     emitted = true;
 
-    addUnimplemented(menu, tr("Create Work Path"));
-    addUnimplemented(menu, tr("Convert to Shape"));
+    const auto addCommand = [this, &menu](const char* id, const QString& label) {
+        const QString command = QString::fromLatin1(id);
+        QAction* action = registry_ ? registry_->detachedAction(command, &menu) : nullptr;
+        if (!action) {
+            action = menu.addAction(label);
+            action->setEnabled(false);
+        } else {
+            action->setText(label);
+            connect(action, &QAction::triggered, this, [this, command]() {
+                if (registry_) {
+                    registry_->dispatch(command);
+                }
+            });
+        }
+        menu.addAction(action);
+    };
+    addCommand(command_ids::TypeCreateWorkPath, tr("Create Work Path"));
+    addCommand(command_ids::TypeConvertToShape, tr("Convert to Shape"));
     menu.addSeparator();
 
     const auto update = [this, path](const std::function<void(type_api::TypeSpec&)>& edit) {

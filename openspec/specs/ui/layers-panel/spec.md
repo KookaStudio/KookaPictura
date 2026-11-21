@@ -2797,10 +2797,12 @@ SHALL render unimplemented applicable commands disabled with a
 Type rows SHALL add Horizontal and Vertical orientation, None/Sharp/Crisp/Strong/Smooth
 anti-aliasing, Convert to Point Text or Convert to Paragraph Text, and Warp
 Text…, all wired to the type bridge and acting on the clicked row. They SHALL
-also offer Create Work Path and Convert to Shape disabled, Windows LCD and
+also offer Create Work Path and Convert to Shape, enabled for a type row with
+outline data and disabled for an outline-less face, Windows LCD and
 Windows anti-aliasing disabled, and Copy CSS/Copy SVG, Artboard from Layers…,
 Frame from Layers…, and Convert to Frame disabled. Type rows SHALL offer Quick
-Export as PNG, Export As…, and an enabled Convert to Smart Object.
+Export as PNG, Export As…, and an enabled Convert to Smart Object. The outline
+rows SHALL be absent for non-type rows.
 
 Fill and adjustment rows SHALL offer Add/Delete/Enable/Disable Layer Mask,
 Add/Delete/Enable/Disable Vector Mask, Create/Release Clipping Mask, Merge
@@ -2823,8 +2825,10 @@ Duplicate and Delete labels SHALL be per kind and per selection size:
 
 - **WHEN** the user opens the row menu for a type layer
 - **THEN** Horizontal, Vertical, the five anti-aliasing rows, Convert to
-  Paragraph Text, and Warp Text… are enabled, and Create Work Path, Convert to
-  Shape, Copy CSS, Copy SVG, and the Windows anti-aliasing rows are disabled
+  Paragraph Text, Warp Text…, Create Work Path, and Convert to Shape are enabled
+  for a type row with outline data, Create Work Path and Convert to Shape are
+  disabled for an outline-less face, and Copy CSS, Copy SVG, and the Windows
+  anti-aliasing rows are disabled
 
 #### Scenario: A fill row offers its mask and merge rows
 
