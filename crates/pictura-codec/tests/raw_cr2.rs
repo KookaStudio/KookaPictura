@@ -1,10 +1,11 @@
 //! The vendor raw entry point and the Canon CR2 reader
 //! (`codec/vendor-raw-containers`, #399) against synthetic CR2s written by
-//! `tests/raw/cr2_builder.rs`, and, opt-in, real camera files.
+//! `tests/raw/cr2_builder.rs` (and NEFs for the dispatch), and, opt-in, real
+//! camera files.
 
 use pictura_codec::{
-    demosaic, read_dng, read_raw, sniff_raw, DemosaicMethod, DngImage, ImageBudget, PsdError,
-    RawFormat,
+    demosaic, read_dng, read_raw, sniff_raw, sniff_raw_prefix, DemosaicMethod, DngImage,
+    ImageBudget, PsdError, RawFormat,
 };
 
 #[allow(dead_code)]
@@ -14,9 +15,13 @@ mod builder;
 mod cr2_builder;
 #[path = "dng/ljpeg_encode.rs"]
 mod ljpeg_encode;
+#[allow(dead_code)]
+#[path = "raw/nef_builder.rs"]
+mod nef_builder;
 
 use builder::{dng, noise_plane, Codec, Options, Plane, Val};
 use cr2_builder::{cr2, subsample, Cr2};
+use nef_builder::{nef, Data, Nef};
 
 fn read(bytes: &[u8]) -> Result<DngImage, PsdError> {
     read_raw(bytes, &ImageBudget::default())
@@ -57,6 +62,25 @@ fn raw_containers_dispatch_by_signature() {
     assert_eq!(sniff_raw(&cr2_bytes), Some(RawFormat::Cr2));
     read(&cr2_bytes).expect("CR2 through read_raw");
 
+    for be in [true, false] {
+        let mut spec = Nef::new(noise_plane(32, 16, 16383, 6), 14, Data::Containers);
+        spec.be = be;
+        let nef_bytes = nef(&spec);
+        assert_eq!(sniff_raw(&nef_bytes), Some(RawFormat::Nef));
+        read(&nef_bytes).expect("NEF through read_raw");
+    }
+    for raw in [
+        &dng_bytes,
+        &cr2_bytes,
+        &nef(&Nef::new(
+            noise_plane(32, 16, 4095, 7),
+            12,
+            Data::Containers,
+        )),
+    ] {
+        assert!(sniff_raw_prefix(raw));
+    }
+
     let tiff = dng(
         &plane,
         Options {
@@ -64,9 +88,19 @@ fn raw_containers_dispatch_by_signature() {
             ..Options::default()
         },
     );
+    // A Nikon scanner TIFF: the make, but no SubIFDs.
+    let nikon_tiff = dng(
+        &plane,
+        Options {
+            dng_version: false,
+            ifd0_tags: vec![(271, Val::Ascii("Nikon"))],
+            ..Options::default()
+        },
+    );
     let png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
-    for other in [tiff, png] {
+    for other in [tiff, nikon_tiff, png] {
         assert_eq!(sniff_raw(&other), None);
+        assert!(!sniff_raw_prefix(&other));
         assert!(matches!(read(&other), Err(PsdError::Unsupported(_))));
     }
 }

@@ -39,8 +39,9 @@ OUT = (
 
 WAVELENGTHS = range(380, 781, 5)
 
-# Bodies whose raw files the vendor readers open, by rawtoaces-data file stem.
-# Canon bodies that write CR2 (the EOS R and later CR3 bodies wait for #399).
+# Bodies whose raw files the vendor readers open, by rawtoaces-data file stem:
+# Canon bodies that write CR2 (the EOS R and later CR3 bodies wait for #399),
+# and Nikon bodies that write NEF (#1469).
 BODIES = [
     "Canon_Digital_Rebel_XTi",
     "Canon_EOS-1D_X_Mark_II",
@@ -58,6 +59,19 @@ BODIES = [
     # Its alias the EOS 6D Mark II (same sensor) writes CR2.
     "Canon_EOS_RP",
     "Canon_PowerShot_S90",
+    "Nikon_D200",
+    "Nikon_D3300",
+    "Nikon_D5100",
+    "Nikon_D5300",
+    "Nikon_D70",
+    "Nikon_D700",
+    "Nikon_D7000",
+    # Its alias the D800 (same sensor) writes NEF too.
+    "Nikon_D800E",
+    "Nikon_D810",
+    "Nikon_D850",
+    # Its alias the Z 6II (same sensor) writes NEF too.
+    "Nikon_Z_f",
 ]
 
 HEADER = """\
