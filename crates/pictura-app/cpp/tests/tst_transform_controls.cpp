@@ -728,6 +728,7 @@ void TransformControlsTest::previewEdgeMatchesTheCommittedResample()
     QVERIFY(pictura::edit_fill(*view, qRgba(0, 0, 0, 255), -1, QStringLiteral("normal"), 100,
                                false));
     view->deselect();
+    canvas->setLayerEdgesVisible(false);
     canvas->setZoom(1.0, QPointF(50.0, 50.0));
 
     // An axis-aligned scale keeps the hard 0.3.0 edge; a gray intermediate

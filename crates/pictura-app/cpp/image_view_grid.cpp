@@ -57,12 +57,19 @@ void ImageView::setLayerEdgesVisible(bool on)
 void ImageView::setGrid(bool visible, const QColor& color, int style, double everyX,
                         double everyY, int subdivisions)
 {
+    style = qBound(0, style, 2);
+    subdivisions = std::max(1, subdivisions);
+    if (gridVisible_ == visible && gridColor_ == color && gridStyle_ == style
+        && gridEveryX_ == everyX && gridEveryY_ == everyY
+        && gridSubdivisions_ == subdivisions) {
+        return;
+    }
     gridVisible_ = visible;
     gridColor_ = color;
-    gridStyle_ = qBound(0, style, 2);
+    gridStyle_ = style;
     gridEveryX_ = everyX;
     gridEveryY_ = everyY;
-    gridSubdivisions_ = std::max(1, subdivisions);
+    gridSubdivisions_ = subdivisions;
     update();
 }
 
@@ -154,22 +161,22 @@ void ImageView::paintGrid(QPainter& painter)
         || zoom_ <= 0.0) {
         return;
     }
+    const QRectF docRect(offset_.x(), offset_.y(), docSize_.width() * zoom_,
+                         docSize_.height() * zoom_);
+    const QRectF visible = viewRect().intersected(docRect);
+    if (visible.isEmpty()) {
+        return;
+    }
     painter.save();
     painter.setTransform(viewRotation());
     painter.setClipping(false);
-    const QRectF docRect(offset_.x(), offset_.y(), docSize_.width() * zoom_,
-                         docSize_.height() * zoom_);
     painter.setClipRect(docRect);
     const auto xToWidget = [this](double x) { return x * zoom_ + offset_.x(); };
     const auto yToWidget = [this](double y) { return y * zoom_ + offset_.y(); };
-    const double left = std::max(0.0, -offset_.x() / zoom_);
-    const double top = std::max(0.0, -offset_.y() / zoom_);
-    const double right = std::min(double(docSize_.width()), (width() - offset_.x()) / zoom_);
-    const double bottom = std::min(double(docSize_.height()), (height() - offset_.y()) / zoom_);
-    if (right <= left || bottom <= top) {
-        painter.restore();
-        return;
-    }
+    const double left = (visible.left() - offset_.x()) / zoom_;
+    const double top = (visible.top() - offset_.y()) / zoom_;
+    const double right = (visible.right() - offset_.x()) / zoom_;
+    const double bottom = (visible.bottom() - offset_.y()) / zoom_;
     const Qt::PenStyle style = gridStyle_ == 1 ? Qt::DashLine
         : gridStyle_ == 2 ? Qt::DotLine : Qt::SolidLine;
     QColor minor = gridColor_;
@@ -215,18 +222,22 @@ void ImageView::paintPixelGrid(QPainter& painter)
     if (!pixelGridVisible_ || zoom_ <= 5.0 || docSize_.isEmpty()) {
         return;
     }
+    const QRectF docRect(offset_.x(), offset_.y(), docSize_.width() * zoom_,
+                         docSize_.height() * zoom_);
+    const QRectF visible = viewRect().intersected(docRect);
+    if (visible.isEmpty()) {
+        return;
+    }
     painter.save();
     painter.setTransform(viewRotation());
     painter.setClipping(false);
-    const QRectF docRect(offset_.x(), offset_.y(), docSize_.width() * zoom_,
-                         docSize_.height() * zoom_);
     painter.setClipRect(docRect);
     const auto xToWidget = [this](double x) { return x * zoom_ + offset_.x(); };
     const auto yToWidget = [this](double y) { return y * zoom_ + offset_.y(); };
-    const double left = std::max(0.0, -offset_.x() / zoom_);
-    const double top = std::max(0.0, -offset_.y() / zoom_);
-    const double right = std::min(double(docSize_.width()), (width() - offset_.x()) / zoom_);
-    const double bottom = std::min(double(docSize_.height()), (height() - offset_.y()) / zoom_);
+    const double left = (visible.left() - offset_.x()) / zoom_;
+    const double top = (visible.top() - offset_.y()) / zoom_;
+    const double right = (visible.right() - offset_.x()) / zoom_;
+    const double bottom = (visible.bottom() - offset_.y()) / zoom_;
     painter.setPen(QPen(QColor(90, 90, 90, 110), 0));
     for (int x = int(std::ceil(left)); x <= int(std::floor(right)); ++x) {
         painter.drawLine(QPointF(xToWidget(x), yToWidget(top)),

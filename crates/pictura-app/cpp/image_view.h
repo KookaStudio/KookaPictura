@@ -39,6 +39,7 @@ class QTimer;
 
 namespace pictura {
 enum class RulerUnit;
+class PictureView;
 }
 
 namespace pictura::selection_api {
@@ -273,6 +274,7 @@ public:
     // `closed` is false the loops are drawn as open polylines (the Polygonal
     // Lasso rubber band must not show a phantom closing edge).
     void setSelectionPreview(const QList<QPolygonF>& loops, bool closed = true, bool solid = false);
+    void setTransformedSelectionPreview(const QList<QPolygonF>& loops);
     // Live selection shape: the rubber band, closed and clipped to the canvas.
     void setSelectionShapePreview(const QList<QPolygonF>& loops);
     void clearSelectionPreview();
@@ -281,6 +283,7 @@ public:
     void setSelectionPreviewOrigin(const QPointF& imagePos);
     bool hasSelectionPreviewOriginForTest() const { return previewOriginActive_; }
     bool hasSelectionPreviewForTest() const { return !previewContours_.isEmpty(); }
+    bool selectionPreviewVisible() const;
     bool selectionPreviewOpenForTest() const
     {
         return !previewContours_.isEmpty() && !selectionPreviewClosed_;
@@ -445,8 +448,11 @@ public:
         bool selected = false;
     };
     void setSliceOverlay(const QList<SliceOverlay>& slices, const QRectF& dragging = QRectF());
+    void setDocumentSliceOverlay(const PictureView& view, int selected = -1,
+                                 const QRectF& dragging = {}, const QRectF& preview = {});
     void clearSliceOverlay();
     int sliceOverlayCountForTest() const { return int(sliceOverlay_.size()); }
+    bool sliceDragVisibleForTest() const { return !sliceDrag_.isEmpty(); }
     bool sliceOverlayHasSelectionForTest() const
     {
         return std::any_of(sliceOverlay_.cbegin(), sliceOverlay_.cend(),
@@ -526,6 +532,8 @@ public:
     };
     void setPathOverlay(const PathOverlay& overlay);
     void clearPathOverlay();
+    void setPathOverlayVisible(bool on);
+    bool pathOverlayVisibleForTest() const { return pathOverlayVisible_; }
     // The persistent View > Show > Target Path curve, drawn with any tool; the
     // tool overlay above keeps its anchors and handles.
     void setTargetPathOverlay(const PathOverlay& overlay);
@@ -780,6 +788,7 @@ private:
     QImage refinePreview_;
     QRect refinePreviewArea_;
     PathOverlay pathOverlay_;
+    bool pathOverlayVisible_ = true;
     PathOverlay targetPathOverlay_;
     bool targetPathVisible_ = true;
     QRectF layerEdges_;
@@ -919,6 +928,7 @@ private:
     // The dirty rect the last paint was asked to draw, for the ants test.
     QRect lastPaintRect_;
     QList<QPolygonF> previewContours_;
+    bool previewTransformsSelection_ = false;
     bool selectionPreviewClosed_ = true;
     bool selectionPreviewSolid_ = false;
     bool previewOriginActive_ = false;

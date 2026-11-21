@@ -53,9 +53,9 @@ void PicturaMainWindow::prepareCanvasGuides(const DocWindow& window)
                     return;
                 }
                 // Placing a guide shows hidden guides, as in CS6.
-                if (!guidesVisible_ || !extras_) {
+                if (!effectiveExtra(command_ids::ViewShowGuides, guidesVisible_)) {
                     guidesVisible_ = true;
-                    extras_ = true;
+                    extras_ = extras_ || extraMember(command_ids::ViewShowGuides);
                     applyViewState();
                     saveSession();
                 }
@@ -110,6 +110,8 @@ void PicturaMainWindow::applyGuideViewState()
 
 void PicturaMainWindow::registerGuideHandlers()
 {
+    // Show toggles also set the state that an opening document will inherit.
+    const auto hasDocument = [this]() { return documentCount() > 0; };
     struct Toggle {
         const char* command;
         bool PicturaMainWindow::*flag;
@@ -128,8 +130,8 @@ void PicturaMainWindow::registerGuideHandlers()
         // toggles too; the checked provider then re-syncs the action.
         const bool showToggle = command == command_ids::ViewShowGuides
             || command == command_ids::ViewShowSmartGuides;
-        commandRegistry()->setHandler(command, [this, flag, showToggle]() {
-            if (showToggle && documentCount() == 0) {
+        commandRegistry()->setHandler(command, [this, flag, showToggle, hasDocument]() {
+            if (showToggle && !hasDocument()) {
                 return;
             }
             this->*flag = !(this->*flag);
@@ -138,8 +140,7 @@ void PicturaMainWindow::registerGuideHandlers()
         });
         commandRegistry()->setCheckedProvider(command, [this, flag]() { return this->*flag; });
         if (showToggle) {
-            commandRegistry()->setEnabledProvider(
-                command, [this]() { return documentCount() > 0; });
+            commandRegistry()->setEnabledProvider(command, hasDocument);
         }
     }
 
@@ -162,9 +163,9 @@ void PicturaMainWindow::registerGuideHandlers()
         if (runDialog(dialog, this) != QDialog::Accepted) {
             return;
         }
-        if (!guidesVisible_ || !extras_) {
+        if (!effectiveExtra(command_ids::ViewShowGuides, guidesVisible_)) {
             guidesVisible_ = true;
-            extras_ = true;
+            extras_ = extras_ || extraMember(command_ids::ViewShowGuides);
             applyViewState();
             saveSession();
         }

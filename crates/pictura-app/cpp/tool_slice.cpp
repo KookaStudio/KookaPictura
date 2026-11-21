@@ -21,23 +21,19 @@ namespace {
 // Show every resolved slice on the canvas: user slices solid blue with a
 // numbered badge, auto slices dotted grey, user slice `selected` (a user index,
 // -1 for none) with orange handles, plus `dragging` while one is drawn out.
-void showSlices(ToolServices& ctx, int selected, const QRectF& dragging = QRectF())
+void showSlices(ToolServices& ctx, int selected, const QRectF& dragging = {},
+                const QRectF& preview = {})
 {
     ImageView* canvas = ctx.canvas();
     PictureView* v = ctx.view();
     if (!canvas) {
         return;
     }
-    QList<ImageView::SliceOverlay> overlay;
-    const int count = v && v->has_document() ? slice_count(*v) : 0;
-    for (int i = 0; i < count; ++i) {
-        const ::rust::Vec<std::int32_t> f = slice_at(*v, i);
-        if (f.size() == 6) {
-            overlay.append({QRectF(f[0], f[1], f[2], f[3]), f[4], f[5] >= 0,
-                            f[5] >= 0 && f[5] == selected});
-        }
+    if (v) {
+        canvas->setDocumentSliceOverlay(*v, selected, dragging, preview);
+    } else {
+        canvas->clearSliceOverlay();
     }
-    canvas->setSliceOverlay(overlay, dragging);
 }
 
 int roundInt(double v) { return int(std::lround(v)); }
@@ -59,6 +55,15 @@ public:
     void onDocumentRefreshed(ToolServices& ctx) override
     {
         showSlices(ctx, -1, dragging_ ? drag_ : QRectF());
+    }
+
+    void onSessionCancelled(ToolServices& ctx) override
+    {
+        if (dragging_) {
+            dragging_ = false;
+            drag_ = {};
+            showSlices(ctx, -1);
+        }
     }
 
     bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
@@ -108,7 +113,7 @@ private:
 
 // Slice Select: click a user slice to select it (orange handles); clicking an
 // auto slice or empty canvas deselects. Drag inside the selected slice to move
-// it, or an edge/corner handle to resize it: the document updates live and the
+// it, or an edge/corner handle to resize it: the overlay updates live and the
 // release records one "Edit Slice" state. Delete removes the selected slice
 // ("Delete Slice"); Escape deselects. Ported from photorust's CanvasView.
 class SliceSelectToolHandler : public ToolHandler {
@@ -123,6 +128,7 @@ public:
     {
         grip_ = BoxGrip::None;
         selected_ = -1;
+        preview_ = {};
         if (ImageView* canvas = ctx.canvas()) {
             canvas->clearSliceOverlay();
         }
@@ -135,8 +141,19 @@ public:
         // exists.
         if (selected_ >= 0 && !userRect(ctx, selected_)) {
             selected_ = -1;
+            grip_ = BoxGrip::None;
+            preview_ = {};
         }
-        showSlices(ctx, selected_);
+        showSlices(ctx, selected_, {}, preview_);
+    }
+
+    void onSessionCancelled(ToolServices& ctx) override
+    {
+        if (grip_ != BoxGrip::None) {
+            grip_ = BoxGrip::None;
+            preview_ = {};
+            showSlices(ctx, selected_);
+        }
     }
 
     bool onPress(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
@@ -162,39 +179,37 @@ public:
             }
         }
         start_ = imagePos;
-        moved_ = false;
+        preview_ = {};
         showSlices(ctx, selected_);
         return true;
     }
 
     void onMove(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
-        PictureView* v = ctx.view();
-        if (grip_ == BoxGrip::None || selected_ < 0 || !v) {
+        if (grip_ == BoxGrip::None || selected_ < 0) {
             updateCursor(ctx, imagePos);
             return;
         }
         const QRectF r = dragged(imagePos);
         if (r.width() >= 1.0 && r.height() >= 1.0) {
-            moved_ |= set_user_slice(*v, selected_, roundInt(r.x()), roundInt(r.y()),
-                                     roundInt(r.width()), roundInt(r.height()), false);
-            showSlices(ctx, selected_);
+            preview_ = r;
+            showSlices(ctx, selected_, {}, preview_);
         }
     }
 
-    void onRelease(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers mods) override
+    void onRelease(ToolServices& ctx, const QPointF& imagePos, Qt::KeyboardModifiers) override
     {
         if (grip_ == BoxGrip::None) {
             return;
         }
-        onMove(ctx, imagePos, mods);
         PictureView* v = ctx.view();
         const QRectF r = dragged(imagePos);
-        if (moved_ && v && r.width() >= 1.0 && r.height() >= 1.0 && r != startRect_) {
-            set_user_slice(*v, selected_, roundInt(r.x()), roundInt(r.y()), roundInt(r.width()),
-                           roundInt(r.height()), true);
-        }
         grip_ = BoxGrip::None;
+        preview_ = {};
+        if (v && r.width() >= 1.0 && r.height() >= 1.0 && r != startRect_) {
+            set_user_slice(*v, selected_, roundInt(r.x()), roundInt(r.y()), roundInt(r.width()),
+                           roundInt(r.height()));
+        }
         showSlices(ctx, selected_);
     }
 
@@ -207,6 +222,8 @@ public:
         }
         const int index = selected_;
         selected_ = -1;
+        grip_ = BoxGrip::None;
+        preview_ = {};
         remove_user_slice(*v, index);
         showSlices(*ctx_, selected_);
         return true;
@@ -219,6 +236,8 @@ public:
             return false;
         }
         selected_ = -1;
+        grip_ = BoxGrip::None;
+        preview_ = {};
         showSlices(*ctx_, selected_);
         return true;
     }
@@ -227,11 +246,10 @@ private:
     static std::optional<QRectF> userRect(ToolServices& ctx, int userIndex)
     {
         PictureView* v = ctx.view();
-        const int count = v ? slice_count(*v) : 0;
-        for (int i = 0; i < count; ++i) {
-            const ::rust::Vec<std::int32_t> f = slice_at(*v, i);
-            if (f.size() == 6 && f[5] == userIndex) {
-                return QRectF(f[0], f[1], f[2], f[3]);
+        const auto fields = v ? resolved_slice_fields(*v) : ::rust::Vec<std::int32_t>();
+        for (size_t i = 0; i + 5 < fields.size(); i += 6) {
+            if (fields[i + 5] == userIndex) {
+                return QRectF(fields[i], fields[i + 1], fields[i + 2], fields[i + 3]);
             }
         }
         return std::nullopt;
@@ -240,11 +258,11 @@ private:
     static int userSliceAt(ToolServices& ctx, const QPointF& imagePos)
     {
         PictureView* v = ctx.view();
-        const int count = v ? slice_count(*v) : 0;
-        for (int i = 0; i < count; ++i) {
-            const ::rust::Vec<std::int32_t> f = slice_at(*v, i);
-            if (f.size() == 6 && f[5] >= 0 && QRectF(f[0], f[1], f[2], f[3]).contains(imagePos)) {
-                return f[5];
+        const auto fields = v ? resolved_slice_fields(*v) : ::rust::Vec<std::int32_t>();
+        for (size_t i = 0; i + 5 < fields.size(); i += 6) {
+            const QRectF rect(fields[i], fields[i + 1], fields[i + 2], fields[i + 3]);
+            if (fields[i + 5] >= 0 && rect.contains(imagePos)) {
+                return fields[i + 5];
             }
         }
         return -1;
@@ -282,11 +300,30 @@ private:
     BoxGrip grip_ = BoxGrip::None;
     QPointF start_;
     QRectF startRect_;
-    bool moved_ = false;
+    QRectF preview_;
     ToolServices* ctx_ = nullptr;
 };
 
 } // namespace
+
+bool ToolController::sliceEditingBlocked() const
+{
+    return slicesLocked_ && (active_ == ToolId::Slice || active_ == ToolId::SliceSelect);
+}
+
+void ToolController::setSlicesLocked(bool on)
+{
+    if (slicesLocked_ == on) {
+        return;
+    }
+    slicesLocked_ = on;
+    if (sliceEditingBlocked()) {
+        if (ToolHandler* handler = registry_.forTool(active_)) {
+            handler->onSessionCancelled(*this);
+        }
+        refreshCursor();
+    }
+}
 
 std::unique_ptr<ToolHandler> makeSliceToolHandler()
 {

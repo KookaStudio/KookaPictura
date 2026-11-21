@@ -501,8 +501,6 @@ filter.digimarc.read.watermark	Filter/Digimarc/Read Watermark	Read Watermark		1	
 filter.extract	Filter/Extract…	Extract…		0	0
 filter.pattern.maker	Filter/Pattern Maker…	Pattern Maker…		0	0
 filter.browse.filters.online	Filter/Browse Filters Online…	Browse Filters Online…		0	0
-view.align	View/Align	Align		0	0
-view.align.to	View/Align To	Align To		0	0
 view.proof.setup.working.cmyk	View/Proof Setup/Working CMYK	Working CMYK		1	1
 view.proof.setup.working.gray	View/Proof Setup/Working Gray	Working Gray		1	1
 view.proof.setup.custom	View/Proof Setup/Custom	Custom		1	0

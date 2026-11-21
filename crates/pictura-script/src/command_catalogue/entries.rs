@@ -506,8 +506,6 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "filter.extract", path: &["Filter", "Extract…"], label: "Extract…", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "filter.pattern.maker", path: &["Filter", "Pattern Maker…"], label: "Pattern Maker…", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "filter.browse.filters.online", path: &["Filter", "Browse Filters Online…"], label: "Browse Filters Online…", shortcut: "", implemented: false, checkable: false },
-    CommandSpec { id: "view.align", path: &["View", "Align"], label: "Align", shortcut: "", implemented: false, checkable: false },
-    CommandSpec { id: "view.align.to", path: &["View", "Align To"], label: "Align To", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "view.proof.setup.working.cmyk", path: &["View", "Proof Setup", "Working CMYK"], label: "Working CMYK", shortcut: "", implemented: true, checkable: true },
     CommandSpec { id: "view.proof.setup.working.gray", path: &["View", "Proof Setup", "Working Gray"], label: "Working Gray", shortcut: "", implemented: true, checkable: true },
     CommandSpec { id: "view.proof.setup.custom", path: &["View", "Proof Setup", "Custom"], label: "Custom", shortcut: "", implemented: true, checkable: false },

@@ -101,7 +101,7 @@ impl qobject::PictureView {
         self.as_mut()
             .rust_mut()
             .session
-            .set_selection(Some(inverted));
+            .set_selection_in_place(Some(inverted));
         self.as_mut().edit("Inverse Selection", |_| Edit::Meta);
         true
     }

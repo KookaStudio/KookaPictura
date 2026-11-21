@@ -667,12 +667,13 @@ void SelectionPreviewTest::antsTickRepaintsOnlyTheOutline()
 
     const int ticks = f.canvas->antsTicksForTest();
     QTRY_VERIFY_WITH_TIMEOUT(f.canvas->antsTicksForTest() > ticks, 1000);
-    // lets the tick's update() reach paintEvent; no hook marks that paint
-    QTest::qWait(30);
+    QTRY_VERIFY_WITH_TIMEOUT(
+        !f.canvas->lastPaintRectForTest().isEmpty()
+            && (f.canvas->lastPaintRectForTest().width() < f.canvas->width()
+                || f.canvas->lastPaintRectForTest().height() < f.canvas->height()),
+        1000);
 
     const QRect dirty = f.canvas->lastPaintRectForTest();
-    QVERIFY(!dirty.isEmpty());
-    QVERIFY(dirty.width() < f.canvas->width() || dirty.height() < f.canvas->height());
 
     QRectF selectionBounds;
     for (const QPolygonF& loop : f.canvas->selectionContours()) {

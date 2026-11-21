@@ -192,7 +192,7 @@ void ToolController::updateTransformOverlay(PictureView* v)
         // No moving image: the box and the mapped border are the whole preview.
         canvas_->setTransformWarp(warping ? transform_api::warpOverlay(*v)
                                           : transform_api::WarpOverlay());
-        canvas_->setSelectionPreview(transform_api::selectionContour(*v));
+        canvas_->setTransformedSelectionPreview(transform_api::selectionContour(*v));
         return;
     }
     if (warpStored) {

@@ -15,7 +15,6 @@
 #include "api/engine_bridge.h"
 
 #include "api/document_api.h"
-#include "api/selection_api.h"
 #include "api/type_api.h"
 #include "busy_job.h"
 #include "file_drop_router.h"
@@ -932,26 +931,9 @@ void PicturaMainWindow::refresh()
 
 void PicturaMainWindow::refreshSelectionOverlay()
 {
-    PictureView* view = activeView();
     DocWindow* active = documents_->activeWindow();
-    if (!view || !active) {
-        return;
-    }
-    trackSelectionGeneration(active->doc ? active->doc->token : 0,
-                             view->selection_generation());
-    if (tools_ && tools_->transformSelectionTarget()) {
-        // The live border transform owns the ants; it supplies the preview.
-        forEachCanvas(*active->doc,
-                      [](ImageView* canvas) { canvas->clearSelectionContour(); });
-        return;
-    }
-    if (view->has_selection()) {
-        const selection_api::SelectionContour contour = selection_api::contour(*view);
-        forEachCanvas(*active->doc,
-                      [&contour](ImageView* canvas) { canvas->setSelectionContour(contour); });
-    } else {
-        forEachCanvas(*active->doc,
-                      [](ImageView* canvas) { canvas->clearSelectionContour(); });
+    if (active && active->doc) {
+        refreshDocumentSelection(*active->doc);
     }
 }
 

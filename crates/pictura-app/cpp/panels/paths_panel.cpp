@@ -218,7 +218,6 @@ void PathsPanel::refresh()
     empty_->setVisible(!has);
     updating_ = false;
     updateFooter();
-    emit pathTargetChanged();
 }
 
 int PathsPanel::selectedRow() const
@@ -251,7 +250,6 @@ void PathsPanel::onSelectionChanged()
     // The shape row's outline is the shape layer's own; no panel path is shown.
     paths_set_active(*view_, row == kShapeRow ? -2 : row);
     updateFooter();
-    emit pathTargetChanged();
 }
 
 void PathsPanel::onItemChanged(QListWidgetItem* item)

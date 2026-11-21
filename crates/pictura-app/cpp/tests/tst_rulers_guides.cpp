@@ -210,14 +210,22 @@ void RulersGuidesTest::togglesDuringLoadingDoNotCrash()
         struct RestoreToggles {
             QAction* rulers;
             QAction* guides;
+            bool rulersChecked;
+            bool guidesChecked;
             ~RestoreToggles()
             {
-                rulers->trigger();
-                guides->trigger();
+                if (rulers->isChecked() != rulersChecked) {
+                    rulers->trigger();
+                }
+                if (guides->isChecked() != guidesChecked) {
+                    guides->trigger();
+                }
             }
-        } restore{rulers, guides};
+        } restore{rulers, guides, rulers->isChecked(), guides->isChecked()};
         rulers->trigger();
+        QVERIFY(guides->isEnabled());
         guides->trigger();
+        QCOMPARE(guides->isChecked(), !restore.guidesChecked);
 
         window_->waitForOpensForTest();
         window_->setOpenDelayForTest(0);
@@ -225,7 +233,7 @@ void RulersGuidesTest::togglesDuringLoadingDoNotCrash()
 
         pictura::ImageView* canvas = window_->canvasAt(0);
         QVERIFY(canvas);
-        QVERIFY2(!canvas->guidesVisible(), "the guide toggle reached the completed canvas");
+        QCOMPARE(canvas->guidesVisible(), !restore.guidesChecked);
         pictura::CanvasScrollBars* host = nullptr;
         for (auto* candidate : window_->findChildren<pictura::CanvasScrollBars*>()) {
             if (candidate->view() == canvas) {
