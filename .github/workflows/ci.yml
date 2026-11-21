@@ -314,7 +314,12 @@ jobs:
       - *checkout
       - *toolchain
       - *apt
-      - *qt
+      - name: Install Qt with TIFF support
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.11.1'
+          modules: qtimageformats
+          cache: true
       - *sccache
       - *rustcache
 

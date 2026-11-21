@@ -380,7 +380,7 @@ void HistoryLogTest::reopensHistoryAcrossFormats()
         auto path = fixture.path(QStringLiteral("history") + suffix);
         QVERIFY(fixture.view().save(path));
         QVERIFY(fixture.window->closeActiveDocument(false));
-        QVERIFY(fixture.window->openDocumentAtPath(path, false));
+        QVERIFY2(fixture.window->openDocumentAtPath(path, false), qPrintable(path));
         pictura::FileInfoDialog fileInfo(fixture.view().xmp_rows(),
                                          fixture.view().file_info_edit_fields(),
                                          fixture.view().xmp_packet());
