@@ -693,8 +693,7 @@ void PreferencesDialog::setTraditionalPoints(bool on)
     (on ? traditionalPoints_ : postScriptPoints_)->setChecked(true);
 }
 
-// Guides, Grid, & Slices: the Guides group is live; Smart Guides, Grid, and
-// Slices show CS6's defaults, disabled until those features exist.
+// Guides and Grid are editable. Smart Guides and Slices show their defaults.
 QWidget* PreferencesDialog::buildGuidesPage()
 {
     auto* page = new QWidget(this);
@@ -763,7 +762,6 @@ QWidget* PreferencesDialog::buildGuidesPage()
     gridGrid->setColumnStretch(2, 1);
     gridSwatch_ = swatch(QColor(192, 192, 192), grid);
     gridGrid->addWidget(gridSwatch_, 0, 3, 2, 1);
-    grid->setEnabled(true);
     const auto emitGrid = [this]() {
         if (gridSwatch_) {
             gridSwatch_->setColor(gridColorValue_);
@@ -777,6 +775,8 @@ QWidget* PreferencesDialog::buildGuidesPage()
         if (!color.isValid()) {
             color = QColorDialog::getColor(gridColorValue_, this, tr("Custom Grid Color"));
             if (!color.isValid()) {
+                const int previous = gridColor_->findData(gridColorValue_);
+                gridColor_->setCurrentIndex(previous >= 0 ? previous : gridColor_->count() - 1);
                 return;
             }
         }

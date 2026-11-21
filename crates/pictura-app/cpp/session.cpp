@@ -211,9 +211,12 @@ SessionState loadSession()
     state.showPixelGrid = obj.value(QStringLiteral("showPixelGrid")).toBool(true);
     state.showColorSamplers = obj.value(QStringLiteral("showColorSamplers")).toBool(true);
     state.extras = obj.value(QStringLiteral("extras")).toBool(true);
-    state.extrasMembersSet = obj.contains(QStringLiteral("extrasMembers"));
-    for (const QJsonValue& id : obj.value(QStringLiteral("extrasMembers")).toArray()) {
-        state.extrasMembers.append(id.toString());
+    const QJsonValue extrasMembers = obj.value(QStringLiteral("extrasMembers"));
+    state.extrasMembersSet = extrasMembers.isArray();
+    for (const QJsonValue& id : extrasMembers.toArray()) {
+        if (id.isString()) {
+            state.extrasMembers.append(id.toString());
+        }
     }
     state.lockSlices = obj.value(QStringLiteral("lockSlices")).toBool(false);
     state.gridColor = obj.value(QStringLiteral("gridColor")).toString(state.gridColor);
@@ -407,7 +410,9 @@ bool saveSession(const SessionState& state)
     obj.insert(QStringLiteral("showPixelGrid"), state.showPixelGrid);
     obj.insert(QStringLiteral("showColorSamplers"), state.showColorSamplers);
     obj.insert(QStringLiteral("extras"), state.extras);
-    obj.insert(QStringLiteral("extrasMembers"), QJsonArray::fromStringList(state.extrasMembers));
+    if (state.extrasMembersSet) {
+        obj.insert(QStringLiteral("extrasMembers"), QJsonArray::fromStringList(state.extrasMembers));
+    }
     obj.insert(QStringLiteral("lockSlices"), state.lockSlices);
     obj.insert(QStringLiteral("gridColor"), state.gridColor);
     obj.insert(QStringLiteral("gridStyle"), state.gridStyle);

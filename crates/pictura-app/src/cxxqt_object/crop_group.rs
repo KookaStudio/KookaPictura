@@ -81,6 +81,9 @@ pub mod ffi {
         /// Resolved slice `index` as `[x, y, width, height, number, userIndex]` (`userIndex` -1 for an auto slice); empty when out of range.
         fn slice_at(view: &PictureView, index: i32) -> Vec<i32>;
 
+        /// All resolved slices, packed in the same six-field order as `slice_at`.
+        fn resolved_slice_fields(view: &PictureView) -> Vec<i32>;
+
         /// Add a user slice and record one "Slice" state; its index, or -1 (no state) for an empty rect or without a document.
         fn add_user_slice(
             view: Pin<&mut PictureView>,
@@ -90,7 +93,7 @@ pub mod ffi {
             height: i32,
         ) -> i32;
 
-        /// Move or resize user slice `index`. With `commit` false this is a live drag step (no history, no `changed`); with `commit` true it records one "Edit Slice" state. False for an empty rect, a bad index, or no document.
+        /// Move or resize user slice `index` and record one "Edit Slice" state.
         fn set_user_slice(
             view: Pin<&mut PictureView>,
             index: i32,
@@ -98,7 +101,6 @@ pub mod ffi {
             y: i32,
             width: i32,
             height: i32,
-            commit: bool,
         ) -> bool;
 
         /// Delete user slice `index` and record one "Delete Slice" state; false for a bad index or no document.

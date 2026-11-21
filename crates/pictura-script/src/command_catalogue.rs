@@ -174,6 +174,7 @@ pub fn modal_ids() -> &'static [&'static str] {
         "filter.picturaRaw",
         "filter.digimarc.read.watermark",
         "view.newGuide",
+        "view.show.extraOptions",
         "view.screenMode.fullWithMenuBar",
         "view.screenMode.full",
         "layer.new.layer",

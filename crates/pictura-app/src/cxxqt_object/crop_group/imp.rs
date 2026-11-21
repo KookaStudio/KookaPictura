@@ -213,7 +213,15 @@ pub(super) fn slice_at(view: &PictureView, index: i32) -> Vec<i32> {
     let Some(slice) = usize::try_from(index).ok().and_then(|i| slices.get(i)) else {
         return Vec::new();
     };
-    vec![
+    slice_fields(slice).to_vec()
+}
+
+pub(super) fn resolved_slice_fields(view: &PictureView) -> Vec<i32> {
+    slices(view).iter().flat_map(slice_fields).collect()
+}
+
+fn slice_fields(slice: &pictura_render::Slice) -> [i32; 6] {
+    [
         slice.rect.left,
         slice.rect.top,
         slice.rect.width(),
@@ -257,19 +265,24 @@ pub(super) fn set_user_slice(
     y: i32,
     width: i32,
     height: i32,
-    commit: bool,
 ) -> bool {
     let Ok(index) = usize::try_from(index) else {
         return false;
     };
-    let set = match view.as_mut().rust_mut().session.doc.as_mut() {
-        Some(doc) => pictura_render::set_slice(doc, index, rect_of(x, y, width, height)),
-        None => false,
-    };
-    if set && commit {
-        view.as_mut().edit("Edit Slice", |_| Edit::Meta);
-    }
-    set
+    let rect = rect_of(x, y, width, height);
+    matches!(
+        view.as_mut().edit("Edit Slice", |rust| {
+            let Some(doc) = rust.session.doc.as_mut() else {
+                return Edit::None;
+            };
+            if doc.slices.get(index) == Some(&rect) || !pictura_render::set_slice(doc, index, rect)
+            {
+                return Edit::None;
+            }
+            Edit::Meta
+        }),
+        Edit::Meta
+    )
 }
 
 pub(super) fn user_slice_count(view: &PictureView) -> i32 {
@@ -281,14 +294,21 @@ pub(super) fn user_slice_count(view: &PictureView) -> i32 {
 }
 
 pub(super) fn clear_user_slices(mut view: Pin<&mut PictureView>) -> bool {
-    let cleared = match view.as_mut().rust_mut().session.doc.as_mut() {
-        Some(doc) => pictura_render::clear_slices(doc),
-        None => false,
-    };
-    if cleared {
-        view.as_mut().edit("Clear Slices", |_| Edit::Meta);
-    }
-    cleared
+    matches!(
+        view.as_mut().edit("Clear Slices", |rust| {
+            if rust
+                .session
+                .doc
+                .as_mut()
+                .is_some_and(pictura_render::clear_slices)
+            {
+                Edit::Meta
+            } else {
+                Edit::None
+            }
+        }),
+        Edit::Meta
+    )
 }
 
 pub(super) fn remove_user_slice(mut view: Pin<&mut PictureView>, index: i32) -> bool {

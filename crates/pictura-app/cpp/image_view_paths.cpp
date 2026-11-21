@@ -37,11 +37,19 @@ void ImageView::clearPathOverlay()
     update();
 }
 
+void ImageView::setPathOverlayVisible(bool on)
+{
+    if (pathOverlayVisible_ != on) {
+        pathOverlayVisible_ = on;
+        update();
+    }
+}
+
 // Drawn in widget space so lines and glyphs keep their screen size at any zoom.
 void ImageView::paintPathOverlay(QPainter& painter)
 {
     const PathOverlay& o = pathOverlay_;
-    if (o.curve.isEmpty() && o.anchors.isEmpty() && o.preview.isEmpty()) {
+    if (!pathOverlayVisible_ || (o.curve.isEmpty() && o.anchors.isEmpty() && o.preview.isEmpty())) {
         return;
     }
     const QTransform toWidget = QTransform::fromScale(zoom_, zoom_)

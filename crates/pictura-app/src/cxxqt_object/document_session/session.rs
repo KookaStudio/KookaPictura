@@ -20,6 +20,7 @@ use std::sync::Arc;
 
 /// The selection state captured at the start of a Quick Selection stroke.
 pub(in crate::cxxqt_object) struct QuickSelectionSnapshot {
+    pub(in crate::cxxqt_object) creates_selection: bool,
     pub(in crate::cxxqt_object) selection: Option<Selection>,
     pub(in crate::cxxqt_object) deselected: Option<Selection>,
     /// The reselect memory the stroke's first dab recorded, kept for the rest
@@ -219,9 +220,16 @@ impl DocumentSession {
 
     /// Replace the live selection and bump its revision.
     pub(in crate::cxxqt_object) fn set_selection(&mut self, selection: Option<Selection>) {
-        self.selection = selection;
-        self.selection_generation = self.selection_generation.wrapping_add(1);
-        self.touch_selection();
+        if selection.is_some() {
+            self.mark_new_selection();
+        }
+        self.set_selection_in_place(selection);
+    }
+
+    pub(in crate::cxxqt_object) fn mark_new_selection(&mut self) {
+        if !self.quick_mask.active {
+            self.selection_generation = self.selection_generation.wrapping_add(1);
+        }
     }
 
     /// Geometry changes invalidate both the editing clip and temporary mask coverage.
@@ -242,7 +250,6 @@ impl DocumentSession {
     pub(in crate::cxxqt_object) fn take_selection(&mut self) -> Option<Selection> {
         let selection = self.selection.take();
         if selection.is_some() {
-            self.selection_generation = self.selection_generation.wrapping_add(1);
             self.touch_selection();
         }
         selection

@@ -68,6 +68,9 @@ pub mod ffi {
         /// Point `pt` of subpath `sp` as `[ax, ay, has_in, ix, iy, has_out, ox, oy, smooth]` (flags 0/1); empty when out of range.
         fn path_point(view: &PictureView, sp: i32, pt: i32) -> Vec<f64>;
 
+        /// One row per subpath: point count, closed flag, then packed path_point rows.
+        fn path_overlay_points(view: &PictureView) -> Vec<f64>;
+
         /// The subpath the Pen is extending, or -1 between drawing sessions.
         fn path_editing_subpath(view: &PictureView) -> i32;
 

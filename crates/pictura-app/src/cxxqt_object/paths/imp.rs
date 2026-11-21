@@ -5,7 +5,7 @@ use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_core::path::{HandleSide, NamedPath, VectorPath};
+use pictura_core::path::{HandleSide, NamedPath, PathPoint, VectorPath};
 use pictura_core::{Document, Ruler};
 
 /// The Paths panel row the path calls edit (CS6 shows and edits only the
@@ -281,13 +281,29 @@ pub(super) fn path_point(view: &PictureView, sp: i32, pt: i32) -> Vec<f64> {
     let point = index(sp)
         .zip(index(pt))
         .and_then(|(sp, pt)| path(view)?.subpaths.get(sp)?.points.get(pt).copied());
-    let Some(p) = point else {
+    point.map_or_else(Vec::new, |p| point_fields(&p).to_vec())
+}
+
+pub(super) fn path_overlay_points(view: &PictureView) -> Vec<f64> {
+    let Some(path) = path(view) else {
         return Vec::new();
     };
+    let mut fields = Vec::new();
+    for subpath in &path.subpaths {
+        fields.extend([
+            subpath.points.len() as f64,
+            f64::from(u8::from(subpath.closed)),
+        ]);
+        fields.extend(subpath.points.iter().flat_map(point_fields));
+    }
+    fields
+}
+
+fn point_fields(p: &PathPoint) -> [f64; 9] {
     let flag = |b: bool| if b { 1.0 } else { 0.0 };
     let (ix, iy) = p.in_handle.unwrap_or(p.anchor);
     let (ox, oy) = p.out_handle.unwrap_or(p.anchor);
-    vec![
+    [
         p.anchor.0,
         p.anchor.1,
         flag(p.in_handle.is_some()),

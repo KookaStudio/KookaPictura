@@ -312,7 +312,6 @@ public:
     // Mirror the active document's selection outline onto its canvas (or clear
     // it). Called from refresh() and on toolbar selection commits; view-only.
     void refreshSelectionOverlay();
-    void trackSelectionGeneration(quint64 token, quint64 generation);
     // Show the pen-tip model only on the active document's canvas, while the
     // Brush or Pencil tool has a pen-tip preset.
     void syncBrushTipPreview();
@@ -739,6 +738,11 @@ private:
     // View > Show, Extras, grid, layer edges and target path (frame_view.cpp).
     void loadViewSession(const SessionState& state);
     void applyViewState();
+    void applyCanvasViewState(const DocWindow& window);
+    void applyGridState(const DocWindow& window);
+    void refreshTargetPathOverlay(const DocWindow& window);
+    void refreshLayerEdges(DocEntry& doc);
+    void refreshDocumentSelection(DocEntry& doc);
     void refreshViewOverlays();
     void wireViewStateSignals();
     void registerViewHandlers();
@@ -798,13 +802,6 @@ private:
     double gridEvery_ = 1.0;
     int gridSubdivisions_ = 4;
     bool viewStateSignalsWired_ = false;
-    struct LayerEdgeCache {
-        QString path;
-        quint64 revision = 0;
-        QRectF rect;
-    };
-    QHash<const DocWindow*, LayerEdgeCache> layerEdgeCache_;
-    QHash<quint64, quint64> selectionGenerations_;
     std::function<void(const QUrl&)> urlOpener_;
 };
 } // namespace pictura

@@ -3,7 +3,6 @@
 #include "api/selection_api.h"
 #include "icons.h"
 #include "pictura_debug_timing.h"
-#include "selection_geometry.h"
 #include "text_input.h"
 
 #include <QtCore/QDebug>
@@ -196,59 +195,6 @@ void ImageView::setSelectionContourOffset(const QPointF& offset)
     }
     selectionContourOffset_ = offset;
     update();
-}
-
-void ImageView::setSelectionEdgesVisible(bool on)
-{
-    selectionEdgesVisible_ = on;
-    updateAntsTimer();
-    update();
-}
-
-void ImageView::setSelectionPreview(const QList<QPolygonF>& loops, bool closed, bool solid)
-{
-    previewContours_ = loops;
-    selectionPreviewClosed_ = closed;
-    selectionPreviewSolid_ = solid;
-    updateAntsTimer();
-    update();
-}
-
-void ImageView::setSelectionShapePreview(const QList<QPolygonF>& loops)
-{
-    // The committed outline is traced from the canvas-clipped mask, so it
-    // closes along the border; the live shape is clipped the same way, and the
-    // dash phase keeps animating through setSelectionPreview.
-    setSelectionPreview(clipSelectionShapeToCanvas(loops, docSize_), true, false);
-}
-
-void ImageView::setSelectionPreviewOrigin(const QPointF& imagePos)
-{
-    previewOrigin_ = imagePos;
-    previewOriginActive_ = true;
-    update();
-}
-
-void ImageView::clearSelectionPreview()
-{
-    previewContours_.clear();
-    previewOriginActive_ = false;
-    selectionPreviewClosed_ = true;
-    selectionPreviewSolid_ = false;
-    updateAntsTimer();
-    update();
-}
-
-void ImageView::updateAntsTimer()
-{
-    const bool run = (!selectionContours_.isEmpty() && selectionEdgesVisible_)
-                     || !previewContours_.isEmpty() || !moveOutline_.isEmpty();
-    const bool active = run && isVisible();
-    if (active && !antsTimer_->isActive()) {
-        antsTimer_->start();
-    } else if (!active && antsTimer_->isActive()) {
-        antsTimer_->stop();
-    }
 }
 
 void ImageView::beginTransformPreview(const QImage& base, const QImage& layer,
@@ -812,7 +758,7 @@ void ImageView::paintEvent(QPaintEvent* event)
         painter.restore();
     }
 
-    if (!previewContours_.isEmpty()) {
+    if (selectionPreviewVisible()) {
         // Live tool rubber band, so the selection reads during the drag exactly
         // as it will once committed. An open preview (Polygonal Lasso) is a
         // polyline: no phantom closing edge until it commits. A solid preview

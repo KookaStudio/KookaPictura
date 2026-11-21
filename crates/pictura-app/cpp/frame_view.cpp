@@ -6,8 +6,8 @@
 #include "frame_includes.h"
 
 #include "api/paint_bridge.h"
+#include "api/selection_api.h"
 #include "api/transform_api.h"
-#include "panels/paths_panel.h"
 #include "path_overlay.h"
 #include "show_extras_dialog.h"
 
@@ -95,11 +95,6 @@ void PicturaMainWindow::applyViewState()
     if (tools_) {
         tools_->setSlicesLocked(lockSlices_);
     }
-    const ToolId tool = tools_ ? tools_->activeTool() : ToolId::Move;
-    const bool sliceTool = tool == ToolId::Slice || tool == ToolId::SliceSelect;
-    const bool noteTool = tool == ToolId::Note;
-    const bool countTool = tool == ToolId::Count;
-    const bool pathTool = pathToolActive();
     if (!documents_) {
         return;
     }
@@ -107,62 +102,78 @@ void PicturaMainWindow::applyViewState()
         if (!window || !window->canvas) {
             continue;
         }
-        ImageView* canvas = window->canvas;
-        PictureView* view = window->doc ? window->doc->view : nullptr;
-        canvas->setSelectionEdgesVisible(
-            effectiveExtra(command_ids::ViewShowSelectionEdges, selectionEdges_));
-        canvas->setGuidesVisible(effectiveExtra(command_ids::ViewShowGuides, guidesVisible_));
-        canvas->setSmartGuidesEnabled(
-            effectiveExtra(command_ids::ViewShowSmartGuides, smartGuidesVisible_));
-        canvas->setTargetPathVisible(
-            effectiveExtra(command_ids::ViewShowTargetPath, showTargetPath_) && !pathTool);
-        canvas->setLayerEdgesVisible(
-            effectiveExtra(command_ids::ViewShowLayerEdges, showLayerEdges_));
-        canvas->setPixelGridVisible(
-            effectiveExtra(command_ids::ViewShowPixelGrid, showPixelGrid_));
-        canvas->setSlicesVisible(
-            effectiveExtra(command_ids::ViewShowSlices, showSlices_, sliceTool));
-        canvas->setNotesVisible(
-            effectiveExtra(command_ids::ViewShowNotes, showNotes_, noteTool));
-        canvas->setCountVisible(
-            edition_is_extended()
-            && effectiveExtra(command_ids::ViewShowCount, showCount_, countTool));
-        canvas->setSamplersVisible(showColorSamplers_ && extras_);
-
-        double everyX = gridEvery_;
-        double everyY = gridEvery_;
-        if (view && view->has_document()) {
-            const double ppi = document_ppi(*view);
-            switch (gridUnit_) {
-            case 2:
-                everyX = everyY = gridEvery_ * ppi / 2.54;
-                break;
-            case 3:
-                everyX = everyY = gridEvery_ * ppi / 25.4;
-                break;
-            case 4:
-                everyX = everyY = gridEvery_ * ppi / 72.0;
-                break;
-            case 5:
-                everyX = everyY = gridEvery_ * ppi / 6.0;
-                break;
-            case 6:
-                everyX = view->document_width() * gridEvery_ / 100.0;
-                everyY = view->document_height() * gridEvery_ / 100.0;
-                break;
-            case 0:
-                break;
-            default:
-                everyX = everyY = gridEvery_ * ppi;
-                break;
-            }
-        }
-        canvas->setGrid(effectiveExtra(command_ids::ViewShowGrid, showGrid_),
-                        QColor(gridColor_), gridStyle_, everyX, everyY, gridSubdivisions_);
+        applyCanvasViewState(*window);
+    }
+    for (DocEntry* doc : documents_->docs()) {
+        refreshLayerEdges(*doc);
     }
     if (commandRegistry()) {
         commandRegistry()->refresh();
     }
+}
+
+void PicturaMainWindow::applyCanvasViewState(const DocWindow& window)
+{
+    ImageView* canvas = window.canvas;
+    const ToolId tool = tools_ ? tools_->activeTool() : ToolId::Move;
+    const bool sliceTool = tool == ToolId::Slice || tool == ToolId::SliceSelect;
+    const bool noteTool = tool == ToolId::Note;
+    const bool countTool = tool == ToolId::Count;
+    canvas->setSelectionEdgesVisible(
+        effectiveExtra(command_ids::ViewShowSelectionEdges, selectionEdges_));
+    canvas->setGuidesVisible(effectiveExtra(command_ids::ViewShowGuides, guidesVisible_));
+    canvas->setSmartGuidesEnabled(
+        effectiveExtra(command_ids::ViewShowSmartGuides, smartGuidesVisible_));
+    canvas->setLayerEdgesVisible(
+        effectiveExtra(command_ids::ViewShowLayerEdges, showLayerEdges_));
+    canvas->setPixelGridVisible(
+        effectiveExtra(command_ids::ViewShowPixelGrid, showPixelGrid_));
+    canvas->setSlicesVisible(
+        effectiveExtra(command_ids::ViewShowSlices, showSlices_, sliceTool));
+    canvas->setNotesVisible(
+        effectiveExtra(command_ids::ViewShowNotes, showNotes_, noteTool));
+    canvas->setCountVisible(
+        edition_is_extended()
+        && effectiveExtra(command_ids::ViewShowCount, showCount_, countTool));
+    canvas->setSamplersVisible(showColorSamplers_ && extras_);
+
+    applyGridState(window);
+    refreshTargetPathOverlay(window);
+}
+
+void PicturaMainWindow::applyGridState(const DocWindow& window)
+{
+    PictureView* view = window.doc ? window.doc->view : nullptr;
+    double everyX = gridEvery_;
+    double everyY = gridEvery_;
+    if (view && view->has_document()) {
+        const double ppi = document_ppi(*view);
+        switch (gridUnit_) {
+        case 2:
+            everyX = everyY = gridEvery_ * ppi / 2.54;
+            break;
+        case 3:
+            everyX = everyY = gridEvery_ * ppi / 25.4;
+            break;
+        case 4:
+            everyX = everyY = gridEvery_ * ppi / 72.0;
+            break;
+        case 5:
+            everyX = everyY = gridEvery_ * ppi / 6.0;
+            break;
+        case 6:
+            everyX = view->document_width() * gridEvery_ / 100.0;
+            everyY = view->document_height() * gridEvery_ / 100.0;
+            break;
+        case 0:
+            break;
+        default:
+            everyX = everyY = gridEvery_ * ppi;
+            break;
+        }
+    }
+    window.canvas->setGrid(effectiveExtra(command_ids::ViewShowGrid, showGrid_),
+                           QColor(gridColor_), gridStyle_, everyX, everyY, gridSubdivisions_);
 }
 
 void PicturaMainWindow::refreshViewOverlays()
@@ -174,13 +185,13 @@ void PicturaMainWindow::refreshViewOverlays()
     const bool sliceTool = tool == ToolId::Slice || tool == ToolId::SliceSelect;
     const bool noteTool = tool == ToolId::Note;
     const bool countTool = tool == ToolId::Count;
-    const bool pathTool = pathToolActive();
     for (const DocWindow* window : documents_->windows()) {
         if (!window || !window->canvas || !window->doc || !window->doc->view) {
             continue;
         }
         PictureView* view = window->doc->view;
         ImageView* canvas = window->canvas;
+        applyGridState(*window);
         if (!view->has_document()) {
             canvas->clearSliceOverlay();
             canvas->setAnnotationOverlay({}, {}, -1);
@@ -191,16 +202,7 @@ void PicturaMainWindow::refreshViewOverlays()
         }
 
         if (!(sliceTool && tools_ && tools_->canvas() == canvas)) {
-            QList<ImageView::SliceOverlay> slices;
-            const int count = slice_count(*view);
-            for (int i = 0; i < count; ++i) {
-                const ::rust::Vec<std::int32_t> fields = slice_at(*view, i);
-                if (fields.size() == 6) {
-                    slices.append({QRectF(fields[0], fields[1], fields[2], fields[3]),
-                                   fields[4], fields[5] >= 0, false});
-                }
-            }
-            canvas->setSliceOverlay(slices);
+            canvas->setDocumentSliceOverlay(*view);
         }
 
         QList<QPointF> samplers;
@@ -214,7 +216,8 @@ void PicturaMainWindow::refreshViewOverlays()
                 }
             }
         }
-        canvas->setAnnotationOverlay(samplers, notes, tools_ ? tools_->currentNote() : -1);
+        const bool currentDocument = tools_ && tools_->view() == view;
+        canvas->setAnnotationOverlay(samplers, notes, currentDocument ? tools_->currentNote() : -1);
 
         QList<ImageView::CountOverlayMark> counts;
         const int groups = count_group_count(*view);
@@ -236,36 +239,7 @@ void PicturaMainWindow::refreshViewOverlays()
         }
         canvas->setCountOverlay(counts);
 
-        const bool shapeTarget = paths_active(*view) == -2;
-        const bool hadLayerTarget = path_layer_target(*view);
-        if (shapeTarget && !hadLayerTarget) {
-            path_set_layer_target(*view, true);
-        }
-        canvas->setTargetPathOverlay(workPathOverlay(*view, -2));
-        if (shapeTarget && !hadLayerTarget) {
-            path_set_layer_target(*view, false);
-        }
-
-        const QString active = view->active_layer_path();
-        const quint64 revision = view->canvas_revision();
-        QRectF edges;
-        auto cached = layerEdgeCache_.find(window);
-        if (cached != layerEdgeCache_.end() && cached->path == active
-            && cached->revision == revision) {
-            edges = cached->rect;
-        } else {
-            if (!active.isEmpty()) {
-                const transform_api::LayerRect rect =
-                    transform_api::contentRect(*view, active);
-                if (rect.valid) {
-                    edges = QRectF(rect.left, rect.top, rect.width(), rect.height());
-                }
-            }
-            layerEdgeCache_.insert(window, {active, revision, edges});
-        }
-        canvas->setLayerEdges(edges);
-        canvas->setTargetPathVisible(
-            effectiveExtra(command_ids::ViewShowTargetPath, showTargetPath_) && !pathTool);
+        refreshTargetPathOverlay(*window);
         canvas->setSlicesVisible(
             effectiveExtra(command_ids::ViewShowSlices, showSlices_, sliceTool));
         canvas->setNotesVisible(
@@ -274,6 +248,54 @@ void PicturaMainWindow::refreshViewOverlays()
             edition_is_extended()
             && effectiveExtra(command_ids::ViewShowCount, showCount_, countTool));
     }
+    for (DocEntry* doc : documents_->docs()) {
+        refreshLayerEdges(*doc);
+    }
+}
+
+void PicturaMainWindow::refreshTargetPathOverlay(const DocWindow& window)
+{
+    ImageView* canvas = window.canvas;
+    const bool editingHere = pathToolActive() && tools_->canvas() == canvas;
+    canvas->setPathOverlayVisible(effectiveExtra(command_ids::ViewShowTargetPath, true));
+    const bool visible = effectiveExtra(command_ids::ViewShowTargetPath, showTargetPath_)
+        && !editingHere;
+    canvas->setTargetPathVisible(visible);
+    PictureView* view = window.doc ? window.doc->view : nullptr;
+    if (!visible || !view || !view->has_document()) {
+        return;
+    }
+    const bool shapeTarget = paths_active(*view) == -2;
+    const bool hadLayerTarget = path_layer_target(*view);
+    if (shapeTarget != hadLayerTarget) {
+        path_set_layer_target(*view, shapeTarget);
+    }
+    canvas->setTargetPathOverlay(workPathOverlay(*view, -2));
+    if (shapeTarget != hadLayerTarget) {
+        path_set_layer_target(*view, hadLayerTarget);
+    }
+}
+
+void PicturaMainWindow::refreshLayerEdges(DocEntry& doc)
+{
+    PictureView* view = doc.view;
+    if (!view || !view->has_document()
+        || !effectiveExtra(command_ids::ViewShowLayerEdges, showLayerEdges_)) {
+        return;
+    }
+    const QString active = view->active_layer_path();
+    const quint64 revision = view->canvas_revision();
+    if (!doc.layerEdges || doc.layerEdges->path != active || doc.layerEdges->revision != revision) {
+        QRectF edges;
+        if (!active.isEmpty()) {
+            const auto rect = transform_api::contentRect(*view, active);
+            if (rect.valid) {
+                edges = QRectF(rect.left, rect.top, rect.width(), rect.height());
+            }
+        }
+        doc.layerEdges = DocEntry::LayerEdgeCache{active, revision, edges};
+    }
+    forEachCanvas(doc, [&doc](ImageView* canvas) { canvas->setLayerEdges(doc.layerEdges->rect); });
 }
 
 void PicturaMainWindow::showExtrasOptions()
@@ -313,32 +335,37 @@ void PicturaMainWindow::showExtrasOptions()
 
 void PicturaMainWindow::wireViewStateSignals()
 {
-    if (viewStateSignalsWired_ || !tools_ || !panels_ || !panels_->pathsPanel()) {
+    if (viewStateSignalsWired_ || !tools_) {
         return;
     }
     connect(tools_, &ToolController::activeToolChanged, this,
             [this](ToolId) { refreshViewOverlays(); });
-    connect(panels_->pathsPanel(), &PathsPanel::pathTargetChanged, this,
-            [this]() { refreshViewOverlays(); });
     viewStateSignalsWired_ = true;
     applyViewState();
 }
 
-void PicturaMainWindow::trackSelectionGeneration(quint64 token, quint64 generation)
+void PicturaMainWindow::refreshDocumentSelection(DocEntry& doc)
 {
-    auto known = selectionGenerations_.find(token);
-    if (known == selectionGenerations_.end()) {
-        selectionGenerations_.insert(token, generation);
+    PictureView* view = doc.view;
+    if (!view || !view->has_document()) {
         return;
     }
-    if (*known == generation) {
-        return;
+    const quint64 generation = view->selection_generation();
+    if (doc.selectionGeneration != generation) {
+        doc.selectionGeneration = generation;
+        if (!selectionEdges_) {
+            selectionEdges_ = true;
+            saveSession();
+            applyViewState();
+        }
     }
-    *known = generation;
-    if (!selectionEdges_) {
-        selectionEdges_ = true;
-        saveSession();
-        applyViewState();
+    // A live border transform supplies its own preview on the active canvas.
+    if (view->has_selection()
+        && !(tools_ && tools_->view() == view && tools_->transformSelectionTarget())) {
+        const auto contour = selection_api::contour(*view);
+        forEachCanvas(doc, [&contour](ImageView* canvas) { canvas->setSelectionContour(contour); });
+    } else {
+        forEachCanvas(doc, [](ImageView* canvas) { canvas->clearSelectionContour(); });
     }
 }
 
@@ -348,10 +375,7 @@ void PicturaMainWindow::registerViewHandlers()
     if (!registry) {
         return;
     }
-    const auto hasDocument = [this]() {
-        PictureView* view = activeView();
-        return view && view->has_document();
-    };
+    const auto hasDocument = [this]() { return documentCount() > 0; };
     struct Toggle {
         const char* command;
         bool PicturaMainWindow::*flag;
@@ -371,6 +395,9 @@ void PicturaMainWindow::registerViewHandlers()
     };
     for (const Toggle& toggle : kToggles) {
         const char* command = toggle.command;
+        if (toggle.flag == &PicturaMainWindow::showCount_ && !edition_is_extended()) {
+            continue;
+        }
         bool PicturaMainWindow::*flag = toggle.flag;
         const bool scoped = toggle.documentScoped;
         registry->setHandler(command, [this, flag, scoped, hasDocument]() {
@@ -445,16 +472,20 @@ void PicturaMainWindow::registerViewHandlers()
         return view && view->has_document() && user_slice_count(*view) > 0;
     });
 
-    registry->setHandler(command_ids::View200, [this, hasDocument]() {
-        if (!hasDocument()) {
+    const auto hasReadyCanvas = [this]() {
+        PictureView* view = activeView();
+        return view && view->has_document() && imageView();
+    };
+    registry->setHandler(command_ids::View200, [this, hasReadyCanvas]() {
+        if (!hasReadyCanvas()) {
             return;
         }
         if (ImageView* canvas = imageView()) {
             canvas->setZoom(2.0, QPointF(canvas->width() / 2.0, canvas->height() / 2.0));
         }
     });
-    registry->setHandler(command_ids::ViewPrintSize, [this, hasDocument]() {
-        if (!hasDocument()) {
+    registry->setHandler(command_ids::ViewPrintSize, [this, hasReadyCanvas]() {
+        if (!hasReadyCanvas()) {
             return;
         }
         PictureView* view = activeView();
@@ -462,8 +493,8 @@ void PicturaMainWindow::registerViewHandlers()
             canvas->printSize(document_ppi(*view));
         }
     });
-    registry->setEnabledProvider(command_ids::View200, hasDocument);
-    registry->setEnabledProvider(command_ids::ViewPrintSize, hasDocument);
+    registry->setEnabledProvider(command_ids::View200, hasReadyCanvas);
+    registry->setEnabledProvider(command_ids::ViewPrintSize, hasReadyCanvas);
     wireViewStateSignals();
     applyViewState();
 }

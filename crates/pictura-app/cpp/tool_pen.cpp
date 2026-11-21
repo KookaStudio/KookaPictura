@@ -31,14 +31,19 @@ struct PathPointView {
     QPointF out;
 };
 
+PathPointView pointFromFields(const double* fields)
+{
+    return {QPointF(fields[0], fields[1]), fields[2] > 0.5, QPointF(fields[3], fields[4]),
+            fields[5] > 0.5, QPointF(fields[6], fields[7])};
+}
+
 bool readPoint(const PictureView& v, int sp, int pt, PathPointView& out)
 {
     const ::rust::Vec<double> p = path_point(v, sp, pt);
     if (p.size() != 9) {
         return false;
     }
-    out = {QPointF(p[0], p[1]), p[2] > 0.5, QPointF(p[3], p[4]), p[5] > 0.5,
-           QPointF(p[6], p[7])};
+    out = pointFromFields(p.data());
     return true;
 }
 
@@ -47,15 +52,15 @@ bool readPoint(const PictureView& v, int sp, int pt, PathPointView& out)
 ImageView::PathOverlay workPathOverlay(const PictureView& v, int pointsOf)
 {
     ImageView::PathOverlay overlay;
-    const int subpaths = path_subpath_count(v);
-    for (int sp = 0; sp < subpaths; ++sp) {
-        const int count = path_point_count(v, sp);
+    const auto fields = path_overlay_points(v);
+    size_t field = 0;
+    for (int sp = 0; field < fields.size(); ++sp) {
+        const auto count = qsizetype(fields[field++]);
+        const bool closed = fields[field++] != 0.0;
         QList<PathPointView> points;
-        for (int pt = 0; pt < count; ++pt) {
-            PathPointView p;
-            if (readPoint(v, sp, pt, p)) {
-                points.append(p);
-            }
+        points.reserve(count);
+        for (qsizetype pt = 0; pt < count; ++pt, field += 9) {
+            points.append(pointFromFields(fields.data() + field));
         }
         if (points.isEmpty()) {
             continue;
@@ -72,9 +77,8 @@ ImageView::PathOverlay workPathOverlay(const PictureView& v, int pointsOf)
             }
         }
         overlay.curve.moveTo(points.first().anchor);
-        const int segments = path_subpath_closed(v, sp) ? int(points.size())
-                                                        : int(points.size()) - 1;
-        for (int i = 0; i < segments; ++i) {
+        const qsizetype segments = closed ? count : count - 1;
+        for (qsizetype i = 0; i < segments; ++i) {
             const PathPointView& a = points.at(i);
             const PathPointView& b = points.at((i + 1) % points.size());
             overlay.curve.cubicTo(a.hasOut ? a.out : a.anchor, b.hasIn ? b.in : b.anchor,

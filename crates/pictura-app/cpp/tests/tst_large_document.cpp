@@ -6,6 +6,7 @@
 #include <QtTest/QtTest>
 
 #include <QtCore/QElapsedTimer>
+#include <QtGui/QPainter>
 #include <QtWidgets/QProgressDialog>
 #include <QtWidgets/QPushButton>
 
@@ -602,6 +603,10 @@ void LargeDocumentTest::cancellingATransformEndsIt()
 {
     QImage seed(4200, 4200, QImage::Format_RGB32);
     seed.fill(Qt::white);
+    {
+        QPainter painter(&seed);
+        painter.fillRect(QRect(2800, 2800, 400, 400), Qt::red);
+    }
     Fixture f(*window_, seed, QStringLiteral("pictura_cancelled_transform"));
     QVERIFY2(f.ok(), "cancelled transform fixture");
     QCOMPARE(f.view->duplicate_layer(0), 1);
@@ -615,7 +620,11 @@ void LargeDocumentTest::cancellingATransformEndsIt()
     f.view->transform_release();
     const int count = f.view->history_count();
     const int index = f.view->history_index();
-    const QImage before = f.view->display_image(2, 0, 0, 1050, 1050);
+    // The modal job loop can settle display tiles while the document stays unchanged.
+    constexpr int previewSide = 1050;
+    const QImage before = pictura::preview_image(*f.view, previewSide);
+    QCOMPARE(before.size(), QSize(previewSide, previewSide));
+    QCOMPARE(before.pixel(750, 750), QRgb(kRed));
 
     pictura::transform_set_delay(*f.view, 30000);
     bool clicked = false;
@@ -643,7 +652,7 @@ void LargeDocumentTest::cancellingATransformEndsIt()
     QVERIFY2(!f.canvas->movePreviewActive(), "the transform image is gone");
     QCOMPARE(f.view->history_count(), count);
     QCOMPARE(f.view->history_index(), index);
-    QVERIFY2(f.view->display_image(2, 0, 0, 1050, 1050) == before, "the document is unchanged");
+    QCOMPARE(pictura::preview_image(*f.view, previewSide), before);
 }
 
 // [mcr_transform_antialias]

@@ -53,16 +53,16 @@ pub(super) fn combine_selection_boxed(
     };
     let replaced = matches!(mode, CombineMode::New) && previous_bounds.is_some();
     let previous = rust.session.take_selection();
+    let fresh = matches!(mode, CombineMode::New)
+        || (previous.is_none() && matches!(mode, CombineMode::Add));
     let seed = if replaced {
         rust.session.deselected_selection = previous;
-        rust.session.set_selection(Some(shape));
+        rust.session.set_selection_in_place(Some(shape));
         tight
     } else {
         if !keep_reselect {
             rust.session.deselected_selection = None;
         }
-        let fresh = matches!(mode, CombineMode::New)
-            || (previous.is_none() && matches!(mode, CombineMode::Add));
         let (selection, seed) = match previous {
             // A new shape replaces whatever covered nothing, and a shape
             // added to nothing is itself.
@@ -81,11 +81,18 @@ pub(super) fn combine_selection_boxed(
             }
             None => (Selection::none(shape.width, shape.height), Some(None)),
         };
-        rust.session.set_selection(Some(selection));
+        rust.session.set_selection_in_place(Some(selection));
         seed
     };
     if let Some(bounds) = seed {
         rust.seed_selection_mask_bounds(bounds);
+    }
+    if fresh {
+        if let Some(snapshot) = rust.session.quick_selection_snapshot.as_mut() {
+            snapshot.creates_selection = true;
+        } else {
+            rust.session.mark_new_selection();
+        }
     }
 }
 
@@ -203,6 +210,7 @@ impl qobject::PictureView {
             selection: rust.session.selection.clone(),
             deselected: rust.session.deselected_selection.clone(),
             reselect: None,
+            creates_selection: false,
         };
         rust.session.quick_selection_snapshot = Some(snapshot);
         true
@@ -220,7 +228,9 @@ impl qobject::PictureView {
                 return false;
             };
             let changed = rust.session.selection != snapshot.selection;
-            if !changed {
+            if changed && snapshot.creates_selection {
+                rust.session.mark_new_selection();
+            } else if !changed {
                 rust.session.deselected_selection = snapshot.deselected;
             }
             changed

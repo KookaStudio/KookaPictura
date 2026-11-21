@@ -1,11 +1,13 @@
-// ImageView overlays for the Crop tool group: the crop box, the Perspective
-// Crop quad, and the slice map. Split from image_view.cpp to keep each translation unit small.
+// ImageView's crop, slice and selection preview overlays.
 // Ported from photorust's CanvasView::paintCropQuad / paintSlices.
 
 #include "image_view.h"
 
 #include "crop_grip.h"
+#include "api/transform_bridge.h"
+#include "selection_geometry.h"
 
+#include <QtCore/QTimer>
 #include <QtGui/QFontMetrics>
 #include <QtGui/QPainter>
 #include <QtGui/QPainterPath>
@@ -448,6 +450,95 @@ void ImageView::clearPerspectiveCropQuad()
     perspectiveQuad_.clear();
     perspectiveGridSpacing_ = 0.0;
     update();
+}
+
+void ImageView::setDocumentSliceOverlay(const PictureView& view, int selected,
+                                        const QRectF& dragging, const QRectF& preview)
+{
+    const auto fields = resolved_slice_fields(view);
+    QList<SliceOverlay> overlay;
+    overlay.reserve(qsizetype(fields.size() / 6));
+    for (size_t i = 0; i + 5 < fields.size(); i += 6) {
+        const bool isUser = fields[i + 5] >= 0;
+        const bool isSelected = isUser && fields[i + 5] == selected;
+        const QRectF rect(fields[i], fields[i + 1], fields[i + 2], fields[i + 3]);
+        overlay.append({isSelected && !preview.isEmpty() ? preview : rect,
+                        fields[i + 4], isUser, isSelected});
+    }
+    setSliceOverlay(overlay, dragging);
+}
+
+void ImageView::setSelectionEdgesVisible(bool on)
+{
+    if (selectionEdgesVisible_ == on) {
+        return;
+    }
+    selectionEdgesVisible_ = on;
+    updateAntsTimer();
+    update();
+}
+
+void ImageView::setSelectionPreview(const QList<QPolygonF>& loops, bool closed, bool solid)
+{
+    previewContours_ = loops;
+    previewTransformsSelection_ = false;
+    selectionPreviewClosed_ = closed;
+    selectionPreviewSolid_ = solid;
+    updateAntsTimer();
+    update();
+}
+
+void ImageView::setTransformedSelectionPreview(const QList<QPolygonF>& loops)
+{
+    previewContours_ = loops;
+    previewTransformsSelection_ = true;
+    selectionPreviewClosed_ = true;
+    selectionPreviewSolid_ = false;
+    updateAntsTimer();
+    update();
+}
+
+bool ImageView::selectionPreviewVisible() const
+{
+    return !previewContours_.isEmpty() && (!previewTransformsSelection_ || selectionEdgesVisible_);
+}
+
+void ImageView::setSelectionShapePreview(const QList<QPolygonF>& loops)
+{
+    // The committed outline is traced from the canvas-clipped mask, so it
+    // closes along the border; the live shape is clipped the same way, and the
+    // dash phase keeps animating through setSelectionPreview.
+    setSelectionPreview(clipSelectionShapeToCanvas(loops, docSize_), true, false);
+}
+
+void ImageView::setSelectionPreviewOrigin(const QPointF& imagePos)
+{
+    previewOrigin_ = imagePos;
+    previewOriginActive_ = true;
+    update();
+}
+
+void ImageView::clearSelectionPreview()
+{
+    previewContours_.clear();
+    previewTransformsSelection_ = false;
+    previewOriginActive_ = false;
+    selectionPreviewClosed_ = true;
+    selectionPreviewSolid_ = false;
+    updateAntsTimer();
+    update();
+}
+
+void ImageView::updateAntsTimer()
+{
+    const bool run = (!selectionContours_.isEmpty() && selectionEdgesVisible_)
+                     || selectionPreviewVisible() || !moveOutline_.isEmpty();
+    const bool active = run && isVisible();
+    if (active && !antsTimer_->isActive()) {
+        antsTimer_->start();
+    } else if (!active && antsTimer_->isActive()) {
+        antsTimer_->stop();
+    }
 }
 
 void ImageView::setSliceOverlay(const QList<SliceOverlay>& slices, const QRectF& dragging)

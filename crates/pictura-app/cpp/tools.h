@@ -396,7 +396,7 @@ public:
     void refreshGuides();
     void setGuidesLocked(bool on) { guidesLocked_ = on; }
     // View > Lock Slices: the Slice and Slice Select tools ignore gestures.
-    void setSlicesLocked(bool on) { slicesLocked_ = on; }
+    void setSlicesLocked(bool on);
     bool slicesLockedForTest() const { return slicesLocked_; }
     bool guideDragActiveForTest() const { return guideDrag_ >= 0; }
     void beginContentMove(PictureView* v, const QPointF& imagePos, bool duplicate) override;
@@ -640,6 +640,7 @@ private:
     void dragSelectionToDocument();
     void releaseSelectionMove(const QPointF& imagePos);
     void handlePressed(const QPointF& imagePos, int button, int modifiers);
+    bool sliceEditingBlocked() const;
     // A press while a Free Transform session is live: gesture modifiers,
     // guide snapping, and the Move controls-box handoff.
     bool handleTransformPress(PictureView* v, const QPointF& imagePos,

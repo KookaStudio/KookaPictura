@@ -2,7 +2,10 @@
 
 #include <QtCore/QList>
 #include <QtCore/QPointer>
+#include <QtCore/QRectF>
 #include <QtCore/QString>
+
+#include <optional>
 
 class QFontMetrics;
 class QWidget;
@@ -29,7 +32,15 @@ inline constexpr const char* kFrameRevisionKey = "picturaFrameRevision";
 
 // One open document. The windows that show it hold the per-viewport state.
 struct DocEntry {
+    struct LayerEdgeCache {
+        QString path;
+        quint64 revision;
+        QRectF rect;
+    };
+
     PictureView* view = nullptr;
+    quint64 selectionGeneration = 0;
+    std::optional<LayerEdgeCache> layerEdges;
     QString path;
     // Display name for a path-less import (Open As Smart Object, PDF/EPS
     // import); preferred over the generated Untitled-N name while `path`

@@ -3,6 +3,42 @@
 use pictura_script::command_catalogue::{command_catalogue, command_id_for_path, const_names};
 
 #[test]
+fn view_state_commands_match_their_ui_roles() {
+    use pictura_script::command::{definition, CommandClass};
+    use pictura_script::command_catalogue::{find, modal_ids};
+
+    for id in [
+        "view.200",
+        "view.print.size",
+        "view.extras",
+        "view.lock.slices",
+        "view.show.all",
+        "view.show.none",
+        "view.show.extraOptions",
+        "view.show.target.path",
+        "view.show.layer.edges",
+        "view.show.grid",
+        "view.show.count",
+        "view.show.slices",
+        "view.show.notes",
+        "view.show.pixel.grid",
+    ] {
+        assert_eq!(
+            definition(id).unwrap().class,
+            CommandClass::NonRecordable,
+            "{id}"
+        );
+    }
+    assert_eq!(
+        definition("view.clear.slices").unwrap().class,
+        CommandClass::AppNative
+    );
+    assert!(modal_ids().contains(&"view.show.extraOptions"));
+    assert!(find("view.align").is_none());
+    assert!(find("view.align.to").is_none());
+}
+
+#[test]
 fn golden_catalogue_matches_the_captured_table() {
     let golden = include_str!("golden/catalogue.tsv");
     let rows: Vec<&str> = golden.lines().filter(|line| !line.is_empty()).collect();
@@ -112,7 +148,7 @@ fn every_wired_filter_has_a_definition() {
 #[test]
 fn default_catalogue_shape_is_stable() {
     let catalogue = command_catalogue();
-    assert_eq!(catalogue.len(), 684);
+    assert_eq!(catalogue.len(), 682);
     assert_eq!(
         catalogue.iter().filter(|spec| spec.implemented).count(),
         487

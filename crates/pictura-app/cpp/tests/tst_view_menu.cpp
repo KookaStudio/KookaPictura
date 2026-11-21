@@ -14,6 +14,7 @@
 #include "api/document_bridge.h"
 #include "api/layers_bridge.h"
 #include "api/paint_bridge.h"
+#include "api/selection_bridge.h"
 #include "api/transform_api.h"
 #include "api/transform_bridge.h"
 
@@ -22,10 +23,12 @@
 #include <QtGui/QImage>
 #include <QtGui/QAction>
 #include <QtWidgets/QCheckBox>
+#include <QtWidgets/QColorDialog>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QSpinBox>
 
+#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <memory>
@@ -93,6 +96,26 @@ void activateCombo(QComboBox* combo, int index)
     combo->activated(index);
 }
 
+QImage rotatedGridSample(bool pixelGrid, bool visible)
+{
+    ImageView canvas;
+    canvas.resize(480, 240);
+    canvas.show();
+    QCoreApplication::processEvents();
+    QImage image(480, 480, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    canvas.setImage(image);
+    const QPointF centre(240, 120);
+    const double zoom = pixelGrid ? 6.0 : 1.0;
+    canvas.setZoom(zoom, centre);
+    canvas.setOffset(centre - QPointF(240, 240) * zoom);
+    canvas.setRotation(90);
+    canvas.setPixelGridVisible(pixelGrid && visible);
+    canvas.setGrid(!pixelGrid && visible, Qt::black, 0, 24.0, 24.0, 1);
+    // This strip maps outside the unrotated viewport but inside the document.
+    return canvas.grab().toImage().copy(QRect(16, 16, 40, 120));
+}
+
 class ViewMenuTest : public QObject {
     Q_OBJECT
 
@@ -111,6 +134,7 @@ private slots:
     void gridOverlay();
     void gridPreferences();
     void pixelGrid();
+    void rotatedGrids();
     void layerEdges();
     void targetPath();
     void sliceVisibility();
@@ -167,6 +191,8 @@ void ViewMenuTest::defaultsAndPersistence()
     QVERIFY(action(*window_, pictura::command_ids::ViewExtras)->isChecked());
     QVERIFY(!action(*window_, pictura::command_ids::ViewLockSlices)->isChecked());
     QVERIFY(action(*window_, pictura::command_ids::View200)->isEnabled());
+    QVERIFY(!action(*window_, "view.align"));
+    QVERIFY(!action(*window_, "view.align.to"));
 
     QVERIFY(window_->newDocument(QStringLiteral("Second"), 50, 50,
                                  QStringLiteral("rgb"), 8, QStringLiteral("white")));
@@ -241,20 +267,21 @@ void ViewMenuTest::defaultsAndPersistence()
     seed.fill(Qt::red);
     const QString path = dir.filePath(QStringLiteral("late.png"));
     QVERIFY(seed.save(path));
+    QVERIFY(window_->closeDocument(0, false));
     window_->setOpenDelayForTest(100);
     bool sawLoading = false;
     QObject alive;
     QTimer::singleShot(20, &alive, [&]() {
         if (window_->documentCount() > 0) {
             sawLoading = window_->isLoadingDocument(window_->documentCount() - 1);
-            dispatch(*window_, pictura::command_ids::ViewShowTargetPath);
-            dispatch(*window_, pictura::command_ids::ViewShowTargetPath);
+            action(*window_, pictura::command_ids::ViewShowTargetPath)->trigger();
         }
     });
     QVERIFY(window_->openImagePath(path));
     QVERIFY(sawLoading);
     QTRY_VERIFY_WITH_TIMEOUT(window_->imageView() != nullptr, 5000);
     QTRY_VERIFY_WITH_TIMEOUT(window_->imageView()->gridVisibleForTest(), 5000);
+    QVERIFY(!window_->imageView()->targetPathVisibleForTest());
 }
 
 void ViewMenuTest::extrasMembership()
@@ -294,6 +321,8 @@ void ViewMenuTest::extrasMembership()
 
 void ViewMenuTest::extrasOptionsWindow()
 {
+    QVERIFY(window_->registry()->isModal(
+        QString::fromLatin1(pictura::command_ids::ViewShowExtraOptions)));
     int boxes = -1;
     bool gridFound = false;
     QVERIFY(openExtrasDialog(*window_, [&boxes, &gridFound](ShowExtrasDialog* dialog) {
@@ -333,11 +362,34 @@ void ViewMenuTest::selectionEdgesScope()
     PictureView* view = window_->activeView();
     ImageView* canvas = window_->imageView();
     QVERIFY(view && canvas);
-    view->select_all();
+    QVERIFY(view->select_rect(10, 10, 40, 40, QStringLiteral("new"), 0.0));
     window_->refresh();
     QVERIFY(canvas->selectionEdgesVisible());
 
     QVERIFY(dispatch(*window_, pictura::command_ids::ViewShowSelectionEdges));
+    QVERIFY(!canvas->selectionEdgesVisible());
+
+    QVERIFY(pictura::begin_selection_move(*view));
+    QVERIFY(pictura::preview_selection_move(*view, 4, 3));
+    QVERIFY(pictura::commit_selection_move(*view));
+    QVERIFY(!canvas->selectionEdgesVisible());
+    QVERIFY(view->undo());
+    QVERIFY(view->redo());
+    QVERIFY(!canvas->selectionEdgesVisible());
+    QVERIFY(view->select_rect(60, 60, 5, 5, QStringLiteral("add"), 0.0));
+    QVERIFY(!canvas->selectionEdgesVisible());
+
+    auto* tools = window_->findChild<pictura::ToolController*>();
+    QVERIFY(tools && tools->beginTransformSelection());
+    QVERIFY(canvas->hasSelectionPreviewForTest());
+    QVERIFY(!canvas->selectionPreviewVisible());
+    tools->cancelFreeTransform();
+
+    QVERIFY(pictura::quick_mask_set(*view, true));
+    QVERIFY(!canvas->selectionEdgesVisible());
+    QVERIFY(pictura::quick_mask_set(*view, false));
+    QVERIFY(!canvas->selectionEdgesVisible());
+    QVERIFY(view->invert_selection());
     QVERIFY(!canvas->selectionEdgesVisible());
 
     QVERIFY(view->modify_selection(QStringLiteral("expand"), 1.0));
@@ -350,6 +402,7 @@ void ViewMenuTest::selectionEdgesScope()
     QVERIFY(!canvas->selectionEdgesVisible());
 
     view->deselect();
+    QVERIFY(!canvas->selectionEdgesVisible());
     view->select_all();
     window_->refresh();
     QVERIFY(canvas->selectionEdgesVisible());
@@ -366,9 +419,11 @@ void ViewMenuTest::selectionEdgesScope()
     window_->refresh();
     dispatch(*window_, pictura::command_ids::ViewShowSelectionEdges);
     QVERIFY(!window_->imageView()->selectionEdgesVisible());
-    second->deselect();
-    second->select_all();
-    window_->refresh();
+    window_->setActiveDocumentIndex(0);
+    QVERIFY(!window_->imageView()->selectionEdgesVisible());
+    window_->setActiveDocumentIndex(1);
+    QVERIFY(!window_->imageView()->selectionEdgesVisible());
+    QVERIFY(view->select_rect(15, 15, 35, 35, QStringLiteral("new"), 0.0));
     for (ImageView* item : canvases(*window_)) {
         QVERIFY(item->selectionEdgesVisible());
     }
@@ -396,6 +451,12 @@ void ViewMenuTest::colorSamplers()
 
 void ViewMenuTest::globalCommands()
 {
+    {
+        pictura::test::ScopedStateHome legacyHome;
+        QVERIFY(legacyHome.isValid());
+        QVERIFY(pictura::saveSession(pictura::SessionState{}));
+        QVERIFY(!pictura::loadSession().extrasMembersSet);
+    }
     while (window_->documentCount() > 0) {
         QVERIFY(window_->closeDocument(window_->activeDocumentIndex(), false));
     }
@@ -435,11 +496,17 @@ void ViewMenuTest::gridOverlay()
     QVERIFY(std::abs(canvas->gridEveryYForTest() - 72.0) < 0.01);
     QCOMPARE(canvas->gridSubdivisionsForTest(), 4);
     QCOMPARE(canvas->gridStyleForTest(), 0);
+    QVERIFY(pictura::image_size_apply(*view, QString(), 100, 100, 144.0, false));
+    QCOMPARE(canvas->gridEveryXForTest(), 144.0);
 
     dispatch(*window_, pictura::command_ids::ViewExtras);
     QVERIFY(!canvas->gridVisibleForTest());
     dispatch(*window_, pictura::command_ids::ViewExtras);
     QVERIFY(canvas->gridVisibleForTest());
+    QVERIFY(window_->newDocument(QStringLiteral("Later"), 100, 60,
+                                 QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    QVERIFY(window_->imageView()->gridVisibleForTest());
+    QCOMPARE(window_->imageView()->gridEveryXForTest(), 72.0);
 }
 
 void ViewMenuTest::gridPreferences()
@@ -462,6 +529,13 @@ void ViewMenuTest::gridPreferences()
     QVERIFY(subdivisions->isEnabled());
 
     activateCombo(color, 5); // Magenta
+    QTimer::singleShot(0, dialog, []() {
+        if (auto* picker = qobject_cast<QColorDialog*>(QApplication::activeModalWidget())) {
+            picker->reject();
+        }
+    });
+    activateCombo(color, color->count() - 1);
+    QCOMPARE(color->currentIndex(), 5);
     activateCombo(style, 2); // Dots
     activateCombo(unit, 6);  // Percent
     every->setValue(25.0);
@@ -480,6 +554,9 @@ void ViewMenuTest::gridPreferences()
     QVERIFY(std::abs(canvas->gridEveryXForTest() - 25.0) < 0.01);
     QVERIFY(std::abs(canvas->gridEveryYForTest() - 25.0) < 0.01);
     QCOMPARE(canvas->gridStyleForTest(), 2);
+    QVERIFY(window_->activeView()->resize_image(QStringLiteral("nearest"), 400, 200));
+    QCOMPARE(canvas->gridEveryXForTest(), 100.0);
+    QCOMPARE(canvas->gridEveryYForTest(), 50.0);
 }
 
 void ViewMenuTest::pixelGrid()
@@ -499,6 +576,12 @@ void ViewMenuTest::pixelGrid()
     QVERIFY(!canvas->pixelGridShownForTest());
 }
 
+void ViewMenuTest::rotatedGrids()
+{
+    QVERIFY(rotatedGridSample(false, true) != rotatedGridSample(false, false));
+    QVERIFY(rotatedGridSample(true, true) != rotatedGridSample(true, false));
+}
+
 void ViewMenuTest::layerEdges()
 {
     PictureView* view = window_->activeView();
@@ -512,6 +595,13 @@ void ViewMenuTest::layerEdges()
     view->set_active_layer(QString::number(added));
     window_->refresh();
     QVERIFY(canvas->layerEdgesForTest().isEmpty());
+    QVERIFY(view->begin_paint(0xffff0000u, 0xffffffffu, 8, 100, 100, 0, 100, 100, 25,
+                              QStringLiteral("normal"), false, false));
+    QVERIFY(view->paint_dab(30, 40, 1.0));
+    QVERIFY(view->end_paint());
+    const QRectF painted = canvas->layerEdgesForTest();
+    QVERIFY(painted.contains(QPointF(30, 40)));
+    QVERIFY(painted.width() < view->document_width());
 
     view->set_active_layer(QStringLiteral("0"));
     window_->refresh();
@@ -535,6 +625,20 @@ void ViewMenuTest::targetPath()
     window_->refresh();
     QVERIFY(!canvas->targetPathOverlayForTest().curve.isEmpty());
     QCOMPARE(canvas->pathOverlayAnchorCountForTest(), 0);
+    const QPainterPath original = canvas->targetPathOverlayForTest().curve;
+    const int originalPath = pictura::paths_save_work(*view, QStringLiteral("Original"));
+    QVERIFY(originalPath >= 0);
+    QVERIFY(pictura::paths_new(*view, QStringLiteral("Other")) >= 0);
+    QVERIFY(canvas->targetPathOverlayForTest().curve.isEmpty());
+    QVERIFY(pictura::path_append_corner(*view, 15, 30, false));
+    pictura::path_commit_anchor(*view);
+    QVERIFY(pictura::path_append_corner(*view, 40, 50, false));
+    pictura::path_commit_anchor(*view);
+    pictura::path_finish(*view);
+    const QPainterPath other = canvas->targetPathOverlayForTest().curve;
+    QVERIFY(!other.isEmpty() && other != original);
+    QVERIFY(pictura::paths_set_active(*view, originalPath));
+    QCOMPARE(canvas->targetPathOverlayForTest().curve, original);
 
     dispatch(*window_, pictura::command_ids::ViewShowTargetPath);
     QVERIFY(!canvas->targetPathVisibleForTest());
@@ -547,6 +651,20 @@ void ViewMenuTest::targetPath()
     window_->setActiveTool(pictura::ToolId::Pen);
     QCoreApplication::processEvents();
     QVERIFY(!canvas->targetPathVisibleForTest());
+    QCOMPARE(canvas->pathOverlayAnchorCountForTest(), 2);
+    QVERIFY(dispatch(*window_, "window.arrange.new.window.for.file"));
+    const int document = window_->activeDocumentIndex();
+    QCOMPARE(window_->windowCountForTest(document), 2);
+    ImageView* second = window_->windowCanvasForTest(document, 1);
+    QVERIFY(second && second != canvas);
+    for (ImageView* item : {canvas, second}) {
+        QCOMPARE(item->targetPathVisibleForTest(), item != window_->imageView());
+    }
+    QVERIFY(dispatch(*window_, pictura::command_ids::ViewExtras));
+    for (ImageView* item : {canvas, second}) {
+        QVERIFY(!item->targetPathVisibleForTest());
+        QVERIFY(!item->pathOverlayVisibleForTest());
+    }
 }
 
 void ViewMenuTest::sliceVisibility()
@@ -582,16 +700,63 @@ void ViewMenuTest::sliceLock()
     ImageView* canvas = window_->imageView();
     QVERIFY(view && canvas);
     QVERIFY(pictura::add_user_slice(*view, 0, 0, 32, 24) >= 0);
+    window_->setActiveTool(pictura::ToolId::SliceSelect);
+    canvas->mousePressed(QPointF(16, 12), Qt::LeftButton, 0);
+    canvas->mouseReleased(QPointF(16, 12));
+    QVERIFY(canvas->sliceOverlayHasSelectionForTest());
+    const auto beforeDrag = pictura::resolved_slice_fields(*view);
+    const int history = view->history_index();
+    canvas->mousePressed(QPointF(16, 12), Qt::LeftButton, 0);
+    canvas->mouseMoved(QPointF(27, 31));
+    QVERIFY(dispatch(*window_, pictura::command_ids::ViewLockSlices));
+    canvas->mouseReleased(QPointF(27, 31));
+    canvas->mousePressed(QPointF(16, 12), Qt::LeftButton, 0);
+    canvas->mouseMoved(QPointF(27, 31));
+    canvas->mouseReleased(QPointF(27, 31));
+    canvas->mousePressed(QPointF(32, 12), Qt::LeftButton, 0);
+    canvas->mouseMoved(QPointF(40, 12));
+    canvas->mouseReleased(QPointF(40, 12));
+    QTest::keyClick(canvas, Qt::Key_Delete);
+    const auto afterDrag = pictura::resolved_slice_fields(*view);
+    QCOMPARE(afterDrag.size(), beforeDrag.size());
+    QVERIFY(std::equal(afterDrag.begin(), afterDrag.end(), beforeDrag.begin()));
+    QCOMPARE(view->history_index(), history);
+    QVERIFY(canvas->slicesVisibleForTest());
+    QVERIFY(dispatch(*window_, pictura::command_ids::ViewLockSlices));
+    canvas->mousePressed(QPointF(32, 12), Qt::LeftButton, 0);
+    canvas->mouseMoved(QPointF(40, 12));
+    QVERIFY(dispatch(*window_, pictura::command_ids::ViewLockSlices));
+    QVERIFY(dispatch(*window_, pictura::command_ids::ViewLockSlices));
+    canvas->mouseReleased(QPointF(40, 12));
+    QCOMPARE(view->history_index(), history);
     window_->setActiveTool(pictura::ToolId::Slice);
     const int beforeCount = pictura::user_slice_count(*view);
     const int beforeHistory = view->history_index();
 
+    canvas->mousePressed(QPointF(60, 60), Qt::LeftButton, 0);
+    canvas->mouseMoved(QPointF(80, 80));
+    QVERIFY(canvas->sliceDragVisibleForTest());
     QVERIFY(dispatch(*window_, pictura::command_ids::ViewLockSlices));
+    QVERIFY(!canvas->sliceDragVisibleForTest());
+    canvas->mouseReleased(QPointF(80, 80));
     canvas->mousePressed(QPointF(60, 60), Qt::LeftButton, 0);
     canvas->mouseMoved(QPointF(80, 80));
     canvas->mouseReleased(QPointF(80, 80));
     QCOMPARE(pictura::user_slice_count(*view), beforeCount);
     QCOMPARE(view->history_index(), beforeHistory);
+
+    auto* tools = window_->findChild<pictura::ToolController*>();
+    QVERIFY(tools);
+    using Phase = pictura::ToolController::CanvasBrushPhase;
+    QList<Phase> phases;
+    tools->setCanvasBrush([&phases](Phase phase, const QPointF&, Qt::KeyboardModifiers) {
+        phases.append(phase);
+    });
+    canvas->mousePressed(QPointF(60, 60), Qt::LeftButton, 0);
+    canvas->mouseMoved(QPointF(80, 80));
+    canvas->mouseReleased(QPointF(80, 80));
+    tools->setCanvasBrush({});
+    QVERIFY((phases == QList<Phase>{Phase::Press, Phase::Drag, Phase::Release}));
 
     dispatch(*window_, pictura::command_ids::ViewLockSlices);
     canvas->mousePressed(QPointF(60, 60), Qt::LeftButton, 0);
@@ -605,6 +770,18 @@ void ViewMenuTest::sliceLock()
     QCOMPARE(pictura::user_slice_count(*view), 0);
     window_->saveSession();
     QVERIFY(pictura::loadSession().lockSlices);
+    window_.reset();
+    window_ = pictura::test::makeMainWindow();
+    QVERIFY(window_ && window_->newDocument(QStringLiteral("Restart"), 100, 100,
+                                            QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    QVERIFY(action(*window_, pictura::command_ids::ViewLockSlices)->isChecked());
+    window_->setActiveTool(pictura::ToolId::Slice);
+    canvas = window_->imageView();
+    QVERIFY(canvas);
+    canvas->mousePressed(QPointF(10, 10), Qt::LeftButton, 0);
+    canvas->mouseMoved(QPointF(25, 25));
+    canvas->mouseReleased(QPointF(25, 25));
+    QCOMPARE(pictura::user_slice_count(*window_->activeView()), 0);
 }
 
 void ViewMenuTest::clearSlices()
@@ -733,6 +910,9 @@ void ViewMenuTest::zoomPresets()
 
     QVERIFY(dispatch(*window_, pictura::command_ids::ViewPrintSize));
     QVERIFY(std::abs(canvas->zoom() - 96.0 / pictura::document_ppi(*view)) < 1e-6);
+    QVERIFY(pictura::image_size_apply(*view, QString(), 100, 100, 300.0, false));
+    QVERIFY(dispatch(*window_, pictura::command_ids::ViewPrintSize));
+    QVERIFY(std::abs(canvas->zoom() - 96.0 / 300.0) < 1e-6);
 
     while (window_->documentCount() > 0) {
         QVERIFY(window_->closeDocument(window_->activeDocumentIndex(), false));

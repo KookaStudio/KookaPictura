@@ -85,8 +85,7 @@ void PicturaMainWindow::setupCanvas(DocWindow& window)
     window.canvas->setFreePan(freePan_);
     window.canvas->setSnapToWorkspace(snapCanvasToWorkspace_);
     prepareCanvasGuides(window);
-    refreshViewOverlays();
-    applyViewState();
+    applyCanvasViewState(window);
 
     // Present from the view pyramid: the canvas crops a level instead of
     // scaling the full-resolution image.
@@ -120,7 +119,15 @@ void PicturaMainWindow::wireCanvas(DocWindow& window)
 void PicturaMainWindow::wireDocument(DocEntry& doc)
 {
     PictureView* view = doc.view;
-    connect(view, &PictureView::changed, this, &PicturaMainWindow::refresh);
+    doc.selectionGeneration = view->selection_generation();
+    connect(view, &PictureView::changed, this, [this, view]() {
+        if (view != activeView()) {
+            if (DocEntry* changed = documents_->docAt(indexOfView(view))) {
+                refreshDocumentSelection(*changed);
+            }
+        }
+        refresh();
+    });
     struct ScaleNotice {
         bool invalidated = false;
         bool pending = false;
@@ -215,6 +222,9 @@ void PicturaMainWindow::wireDocument(DocEntry& doc)
             // present track the frame rate, not the input rate.
             paint_api::presentDeferred(*view);
             return;
+        }
+        if (DocEntry* doc = documents_->docAt(index)) {
+            refreshLayerEdges(*doc);
         }
         if (view == activeView()) {
             panels_->setPanelsRefreshedByChanged(false);

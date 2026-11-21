@@ -142,6 +142,21 @@ void SmartGuidesTest::smartGuidesToggle()
     QVERIFY2(smart->isChecked(), "on by default");
     QVERIFY(f.canvas->smartGuidesEnabled());
 
+    QAction* extras = action(frame, pictura::command_ids::ViewExtras);
+    QVERIFY(extras && extras->isChecked());
+    extras->trigger();
+    QVERIFY(smart->isChecked());
+    f.canvas->mousePressed(QPointF(150, 140), Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseMoved(QPointF(178, 148));
+    const bool showedGuide = f.canvas->hasSmartGuidesForTest();
+    const QPointF unsnapped = f.canvas->moveOutlineForTest().center();
+    f.canvas->mouseReleased(QPointF(178, 148));
+    extras->trigger();
+    QVERIFY(f.view->undo());
+    QVERIFY(!showedGuide);
+    QCOMPARE(unsnapped, QPointF(98, 78));
+    QVERIFY(f.canvas->smartGuidesEnabled());
+
     smart->trigger();
     QVERIFY2(!f.canvas->smartGuidesEnabled(), "the menu turns it off");
     QVERIFY2(!pictura::loadSession().smartGuidesVisible, "the choice is saved");
