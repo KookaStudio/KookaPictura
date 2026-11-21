@@ -129,7 +129,7 @@ SHALL keep it, and the window SHALL not bind that key to the tool as well.
 ### Requirement: Changes apply on OK and persist as overrides
 
 The system SHALL apply the pending changes on OK, so the menu actions and
-tool keys use them at once, and discard them on Cancel. The session store
+tool keys use them at once, and discard them on Cancel. The preferences store
 SHALL persist only the shortcuts that differ from the defaults, and SHALL
 reapply them on the next launch.
 
@@ -147,5 +147,5 @@ reapply them on the next launch.
 
 - **WHEN** File > New is given a second binding with OK and the main window
   is recreated
-- **THEN** the new window's action carries both bindings, and the session
+- **THEN** the new window's action carries both bindings, and the preferences
   store holds only that override

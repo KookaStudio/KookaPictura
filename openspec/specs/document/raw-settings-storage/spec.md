@@ -9,7 +9,7 @@ Keeping a raw file's develop settings in the per-user Camera Raw database or a s
 
 Edit ▸ Preferences ▸ File Handling SHALL offer **Save Camera Raw Settings In**
 with **Camera Raw Database** (the default) and **Sidecar ".XMP" Files**, kept
-in the session. The database SHALL hold one XMP record per raw file, named by
+in the application preferences store. The database SHALL hold one XMP record per raw file, named by
 the file's content hash, under `$XDG_DATA_HOME/kooka-pictura/Camera Raw/` (or
 `~/.local/share/…` when the variable is unset). The sidecar SHALL be
 `<stem>.xmp` beside the raw file; an existing `<stem>.XMP` SHALL be used

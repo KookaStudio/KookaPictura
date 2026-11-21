@@ -73,18 +73,18 @@ Compute** checkbox SHALL toggle the preference and reflect the effective value.
 
 ### Requirement: GPU compute preference persists
 
-The `gpuCompute` value SHALL round-trip through the XDG session store
-(`crates/pictura-app/cpp/session.{h,cpp}`). The session store's schema version
-SHALL be bumped to 2. A store without the field MUST load `gpuCompute` as true.
+The requested `gpuCompute` value SHALL round-trip through the preferences
+store. A profile without an override SHALL use the default of true before
+applying backend availability policy.
 
 #### Scenario: Round-trip
 
-- **WHEN** a session with `gpuCompute` false is saved and then loaded
-- **THEN** the loaded `gpuCompute` is false, with the store reporting schema version 2
+- **WHEN** `gpuCompute` is set to false and the preferences store is loaded again
+- **THEN** the loaded `gpuCompute` is false
 
 #### Scenario: Missing field defaults true
 
-- **WHEN** a schema-1 store without a `gpuCompute` field is loaded
+- **WHEN** a legacy schema-1 session without a `gpuCompute` field is migrated and no system setting overrides the default
 - **THEN** `gpuCompute` is true
 
 ### Requirement: Status bar reports the active backend
@@ -155,18 +155,18 @@ lets a later launch retry.
 ### Requirement: An unavailable GPU reads as off
 
 After the startup probe establishes that no GPU candidate is available, the
-effective `gpuCompute` preference SHALL be false even when the session store
+effective `gpuCompute` preference SHALL be false even when the preferences store
 holds true. Preferences > Performance SHALL show **Use GPU Compute** unchecked
-and disabled, and a subsequent session save SHALL record false. A launch whose
+and disabled, and a subsequent save SHALL record false in preferences. A launch whose
 candidate chain ended in safe mode SHALL retain the stored value, keep the toggle
 enabled, and leave the off-and-on reset path intact.
 
 #### Scenario: No candidate leaves the preference off [gb_no_gpu_unchecked]
 
 - **WHEN** a launch has no usable adapter and no safe-mode reset path, and the Performance preferences page is opened
-- **THEN** Use GPU Compute is unchecked and disabled, and saving the session records `gpuCompute` false
+- **THEN** Use GPU Compute is unchecked and disabled, and saving preferences records `gpuCompute` false
 
 #### Scenario: Safe mode keeps the stored preference [gb_safe_mode_stored]
 
 - **WHEN** the candidate chain ended in safe mode and the stored `gpuCompute` is true
-- **THEN** the toggle remains enabled and checked, and saving the session keeps `gpuCompute` true
+- **THEN** the toggle remains enabled and checked, and saving preferences keeps `gpuCompute` true
