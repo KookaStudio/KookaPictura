@@ -31,7 +31,7 @@ pub mod ffi {
         fn auto_align_can(view: &PictureView, paths: &QStringList) -> bool;
 
         /// Start a run on a worker. `projection` is the dialog order, 0 Auto …
-        /// 6 Lens Correction. False when it does not apply or one is running.
+        /// 6 Lens Correction. False when it does not apply or a run is held.
         fn auto_align_start(
             view: Pin<&mut PictureView>,
             paths: &QStringList,

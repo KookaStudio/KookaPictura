@@ -63,6 +63,7 @@ mod path_list;
 mod paths;
 mod pdf_export;
 mod picture;
+mod prepared_job;
 mod presentation;
 mod proofing;
 mod quick_mask;

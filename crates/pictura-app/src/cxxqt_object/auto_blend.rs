@@ -30,7 +30,7 @@ pub mod ffi {
         /// Whether Auto-Blend applies to `paths` in the current document.
         fn auto_blend_can(view: &PictureView, paths: &QStringList) -> bool;
 
-        /// Start a run on a worker. False when it does not apply or one is running.
+        /// Start a run on a worker. False when it does not apply or a run is held.
         fn auto_blend_start(
             view: Pin<&mut PictureView>,
             paths: &QStringList,
