@@ -325,8 +325,9 @@ python3 scripts/profile-tools.py --size 6000x4000 --scenarios new-layer,new-grou
   committed edit, plus a `pictura metrics: phase …` line for each Qt-side
   phase such as `layers_panel_refresh`;
 - answers the control server's `metrics` method with phase totals, GPU counters
-  (resident hits and misses, declines by reason) and the recent edit records;
-  `reset: true` clears them;
+  (resident hits and misses, declines by reason), recent edit records, and up
+  to 1,024 canvas frame records. `reset: true` returns the snapshot before
+  clearing the phase, edit, and frame history;
 - requests device timestamps from the GPU when the device supports them, so
   GPU composites also report `gpu_ms`.
 
@@ -334,6 +335,64 @@ Without the variable it prints nothing and keeps no edit records or phase
 totals, and output is unchanged. (The render crate's GPU counters always count:
 one atomic add per composite or upload. They are only reported.)
 `PICTURA_PAINT_TIMING=1` still prints the per-stroke `[paint-timing]` report.
+
+### Canvas frame captures
+
+On the ARCH-013 reference machine, start the GUI with metrics enabled and a
+private control socket. Open a 6000 × 4000 8-bit RGB document and set up the
+full-HD viewport for the measurement. Leave the document open while collecting
+the snapshot.
+
+```bash
+frame_dir=$(mktemp -d)
+PICTURA_METRICS=1 ./build/pictura --control --control-socket "$frame_dir/control.sock" \
+  --state-home "$frame_dir/state" &
+```
+
+Run the following from the repository root once the document is ready. Pan
+continuously across the document during the five-second capture. Repeat with
+continuous zoom and with the Rotate View tool. Set up the starting viewport for
+each gesture before resetting the capture.
+
+```bash
+python3 - "$frame_dir/control.sock" <<'PY'
+import math
+import runpy
+import sys
+import time
+
+client = runpy.run_path('scripts/profile-tools.py')['Client'](sys.argv[1], 5)
+input('Press Enter when ready for the five-second gesture. ')
+client.call('metrics', reset=True)
+print('Start the gesture', flush=True)
+time.sleep(5)
+snapshot, _ = client.call('metrics')
+if snapshot['frame_records_evicted']:
+    raise SystemExit('Capture overflowed. Close other canvases and repeat.')
+frames = snapshot['frames']
+canvases = {frame['canvas_id'] for frame in frames if frame['input_count']}
+if len(canvases) != 1:
+    raise SystemExit('Use one document canvas for the gesture.')
+canvas_id = canvases.pop()
+intervals = sorted(frame['interval_ms'] for frame in frames
+                   if frame['canvas_id'] == canvas_id and 'interval_ms' in frame)
+if not intervals:
+    raise SystemExit('Capture contains no paint intervals.')
+print(f'{len(intervals)} paint intervals, p95 = {intervals[math.ceil(.95 * len(intervals)) - 1]:.3f} ms')
+for frame in frames:
+    if frame['canvas_id'] == canvas_id and frame['cpu_budget_slack_ms'] < 0:
+        print('over CPU budget', frame)
+PY
+```
+
+`interval_ms` measures successive completions on one canvas and includes gaps
+between paints. The first paint in a capture supplies the baseline. The phase
+fields show active input, tile gather, and Qt draw time. Negative
+`cpu_budget_slack_ms` means input and paint together exceeded 16.6 ms.
+`gpu_composite_ms`, when available, sums the attributable intervals from the
+beginning of the first blend pass through the end of the last. Each excludes
+planar conversion and the readback copy. `gpu_present_ms` is `null` because the
+measurement ends at Qt canvas paint completion.
 
 ### Sampling profiles
 

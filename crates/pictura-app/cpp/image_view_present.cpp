@@ -4,6 +4,7 @@
 // Split from image_view.cpp to keep each translation unit small.
 
 #include "image_view.h"
+#include "pictura_debug_timing.h"
 
 #include <algorithm>
 #include <cstring>
@@ -15,7 +16,16 @@ void ImageView::dropPresentCache()
     presentCache_.valid = false;
     presentCache_.level = -1;
     presentCache_.crop = QImage();
+    presentCache_.samples.reset();
     presentCache_.levelRect = QRect();
+}
+
+CanvasFrameCrop ImageView::cropForPaint(int level, const QRect& rect) const
+{
+    if (metricsEnabled() && levelProvider_.frameCrop) {
+        return levelProvider_.frameCrop(level, rect);
+    }
+    return {levelProvider_.crop(level, rect.x(), rect.y(), rect.width(), rect.height()), {}};
 }
 
 // A Modern crop content pan draws document point p at offset + (p + c) * zoom,
@@ -48,6 +58,8 @@ bool ImageView::patchPresentCache(int level, const QRect& docRect, const QRect& 
     const int bpp = std::max(1, next.depth() / 8);
     const QPoint from = overlap.topLeft() - oldLevel.topLeft();
     const QPoint to = overlap.topLeft() - sourceRect.topLeft();
+    std::shared_ptr<CanvasFrameSamples> samples;
+    copyFrameSamples(samples, presentCache_.samples, overlap);
     for (int row = 0; row < overlap.height(); ++row) {
         std::memcpy(next.scanLine(to.y() + row) + to.x() * bpp,
                     presentCache_.crop.constScanLine(from.y() + row) + from.x() * bpp,
@@ -71,11 +83,12 @@ bool ImageView::patchPresentCache(int level, const QRect& docRect, const QRect& 
         if (area.width() <= 0 || area.height() <= 0) {
             continue;
         }
-        const QImage part =
-            levelProvider_.crop(level, area.x(), area.y(), area.width(), area.height());
+        const auto cropped = cropForPaint(level, area);
+        const QImage& part = cropped.image;
         if (part.isNull() || part.size() != area.size() || part.format() != next.format()) {
             return false;
         }
+        copyFrameSamples(samples, cropped.samples, area);
         const QPoint dst = area.topLeft() - sourceRect.topLeft();
         for (int row = 0; row < area.height(); ++row) {
             std::memcpy(next.scanLine(dst.y() + row) + dst.x() * bpp, part.constScanLine(row),
@@ -83,6 +96,7 @@ bool ImageView::patchPresentCache(int level, const QRect& docRect, const QRect& 
         }
     }
     presentCache_.crop = next;
+    presentCache_.samples = std::move(samples);
     presentCache_.docRect = docRect;
     presentCache_.levelRect = sourceRect;
     return true;
@@ -107,13 +121,14 @@ const QImage* ImageView::presentCrop(int level, const QRect& docRect, const QRec
         }
     }
     ++presentCache_.rebuilds;
-    QImage crop = levelProvider_.crop(level, sourceRect.x(), sourceRect.y(), sourceRect.width(),
-                                      sourceRect.height());
-    if (crop.isNull() || crop.width() <= 0 || crop.height() <= 0) {
+    auto cropped = cropForPaint(level, sourceRect);
+    if (cropped.image.isNull() || cropped.image.width() <= 0 || cropped.image.height() <= 0) {
         presentCache_.valid = false;
+        presentCache_.samples.reset();
         return nullptr;
     }
-    presentCache_.crop = crop;
+    presentCache_.crop = std::move(cropped.image);
+    presentCache_.samples = std::move(cropped.samples);
     presentCache_.key = key;
     presentCache_.revision = revision;
     presentCache_.level = level;

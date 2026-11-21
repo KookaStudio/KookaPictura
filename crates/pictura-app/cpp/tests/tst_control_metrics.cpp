@@ -6,10 +6,12 @@
 
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonObject>
+#include <QtGui/QWheelEvent>
 
 #include "control_server.h"
 #include "frame.h"
 #include "api/view_bridge.h"
+#include "image_view.h"
 
 #include "qt_test_support.h"
 
@@ -18,13 +20,23 @@ class ControlMetricsTest : public QObject {
 
 private slots:
     void initTestCase();
+    void init();
     void snapshotContainsEditRecord();
     void resetClearsTotals();
     void addGroupCreatesGroup();
     void typeOpAddsAndResetsAType();
+    void frameCoalescesViewportInput();
+    void frameCadenceIsPerCanvas();
+    void frameRecordsLateTilesSeparately();
+    void frameScreenshotDoesNotConsumePending();
+    void frameGpuPartialDamage();
+    void frameResetClearsPendingTiming();
 
 private:
     QJsonObject call(const QString& method, const QJsonObject& params = {});
+    QJsonArray frames(bool reset = false);
+    pictura::ImageView* showCanvas();
+    void openFixture(int width, int height);
 
     pictura::test::ScopedStateHome stateHome_;
     std::unique_ptr<pictura::PicturaMainWindow> window_;
@@ -36,9 +48,20 @@ void ControlMetricsTest::initTestCase()
     // Before anything reads the level: the Rust side reads it once.
     qputenv("PICTURA_METRICS", "1");
     QVERIFY(stateHome_.isValid());
+}
+
+void ControlMetricsTest::init()
+{
+    openFixture(32, 32);
+}
+
+void ControlMetricsTest::openFixture(int width, int height)
+{
+    server_.reset();
+    window_.reset();
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
-    QVERIFY(window_->newDocument(QStringLiteral("Metrics"), 32, 32, QStringLiteral("rgb"), 8,
+    QVERIFY(window_->newDocument(QStringLiteral("Metrics"), width, height, QStringLiteral("rgb"), 8,
                                  QStringLiteral("white")));
     server_ = std::make_unique<pictura::ControlServer>(window_.get(), QString());
 }
@@ -129,6 +152,165 @@ void ControlMetricsTest::typeOpAddsAndResetsAType()
                 .value(QStringLiteral("ok"))
                 .toBool());
     QVERIFY(!op(QStringLiteral("nonsense"), QStringLiteral("size"), 96.0));
+}
+
+QJsonArray ControlMetricsTest::frames(bool reset)
+{
+    return call(QStringLiteral("metrics"), {{QStringLiteral("reset"), reset}})
+        .value(QStringLiteral("result")).toObject().value(QStringLiteral("frames")).toArray();
+}
+
+pictura::ImageView* ControlMetricsTest::showCanvas()
+{
+    window_->show();
+    QCoreApplication::processEvents();
+    auto* canvas = window_->imageView();
+    canvas->repaint();
+    frames(true);
+    return canvas;
+}
+
+void ControlMetricsTest::frameCoalescesViewportInput()
+{
+    auto* canvas = showCanvas();
+    canvas->panBy(QPointF(3, 0));
+    const QPointF centre = canvas->rect().center();
+    QWheelEvent wheel(centre, canvas->mapToGlobal(centre.toPoint()), {}, QPoint(0, 120),
+                      Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+    QApplication::sendEvent(canvas, &wheel);
+    canvas->fitOnScreen();
+    canvas->actualPixels();
+    window_->setActiveTool(pictura::ToolId::RotateView);
+    canvas->mousePressed(canvas->widgetToImage(centre + QPointF(40, 0)), Qt::LeftButton, 0);
+    canvas->mouseMoved(canvas->widgetToImage(centre + QPointF(0, 40)));
+    canvas->mouseReleased(canvas->widgetToImage(centre + QPointF(0, 40)));
+    QVERIFY(frames().isEmpty());
+    QTRY_VERIFY(!frames().isEmpty());
+    const auto capture = frames();
+    QCOMPARE(capture.size(), 1);
+    const auto row = capture.first().toObject();
+    QCOMPARE(row.value("input_count").toInt(), 5);
+    const double paint = row.value("paint_ms").toDouble();
+    const double input = row.value("input_ms").toDouble();
+    QVERIFY(qAbs(paint - row.value("tile_gather_ms").toDouble()
+                 - row.value("qt_draw_ms").toDouble()) < 0.002);
+    QVERIFY(qAbs(16.6 - input - paint - row.value("cpu_budget_slack_ms").toDouble()) < 0.002);
+}
+
+void ControlMetricsTest::frameCadenceIsPerCanvas()
+{
+    auto* a = showCanvas();
+    pictura::ImageView b;
+    QImage pixels(32, 32, QImage::Format_RGB32);
+    pixels.fill(Qt::white);
+    b.setImage(pixels);
+    b.show();
+    QCoreApplication::processEvents();
+    qint64 now = 0;
+    a->setFrameClockForTest([&] { return now; });
+    b.setFrameClockForTest([&] { return now; });
+    frames(true);
+    now = 1'000'000;
+    a->repaint();
+    now = 3'000'000;
+    b.repaint();
+    now = 8'000'000;
+    a->repaint();
+    a->setFrameClockForTest({});
+    const auto capture = frames();
+    QCOMPARE(capture.size(), 3);
+    const auto first = capture.at(0).toObject();
+    const auto other = capture.at(1).toObject();
+    const auto last = capture.at(2).toObject();
+    QCOMPARE(last.value("canvas_id"), first.value("canvas_id"));
+    QVERIFY(other.value("canvas_id") != first.value("canvas_id"));
+    QVERIFY(!first.contains("interval_ms") && !other.contains("interval_ms"));
+    QCOMPARE(last.value("interval_ms").toDouble(), 7.0);
+    QCOMPARE(last.value("input_count").toInt(), 0);
+    QCOMPARE(last.value("input_ms").toDouble(), 0.0);
+    QVERIFY(last.value("gpu_present_ms").isNull());
+}
+
+void ControlMetricsTest::frameRecordsLateTilesSeparately()
+{
+    openFixture(4200, 4200);
+    auto* canvas = showCanvas();
+    auto* view = window_->activeView();
+    QSignalSpy settled(view, &pictura::PictureView::pyramid_settled);
+    canvas->setZoom(1.0, canvas->rect().center());
+    canvas->panBy(QPointF(140, 180));
+    canvas->repaint();
+    auto capture = frames();
+    QCOMPARE(capture.size(), 1);
+    QCOMPARE(capture.first().toObject().value("input_count").toInt(), 2);
+    QVERIFY(settled.isEmpty());
+    QTRY_VERIFY(!settled.isEmpty());
+    QTRY_VERIFY(frames().size() >= 2);
+    capture = frames();
+    const auto later = capture.last().toObject();
+    QCOMPARE(later.value("canvas_id"), capture.first().toObject().value("canvas_id"));
+    QCOMPARE(later.value("input_count").toInt(), 0);
+    QVERIFY(later.value("tile_gather_ms").toDouble() <= later.value("paint_ms").toDouble());
+}
+
+void ControlMetricsTest::frameScreenshotDoesNotConsumePending()
+{
+    auto* canvas = showCanvas();
+    for (const auto& scope : {QStringLiteral("window"), QStringLiteral("canvas")}) {
+        frames(true);
+        canvas->repaint();
+        canvas->panBy(QPointF(1, 0));
+        canvas->seedFrameGpuSampleForTest(QRect(0, 0, 32, 32), 1'000'000);
+        QVERIFY(call(QStringLiteral("screenshot"), {{QStringLiteral("scope"), scope}})
+                    .value(QStringLiteral("ok")).toBool());
+        QCOMPARE(frames().size(), 1);
+        canvas->repaint();
+        const auto capture = frames();
+        QCOMPARE(capture.size(), 2);
+        const auto paint = capture.last().toObject();
+        QCOMPARE(paint.value("input_count").toInt(), 1);
+        QCOMPARE(paint.value("gpu_composite_ms").toDouble(), 1.0);
+        QVERIFY(paint.contains("interval_ms"));
+    }
+}
+
+void ControlMetricsTest::frameGpuPartialDamage()
+{
+    auto* canvas = showCanvas();
+    canvas->setZoom(3.0, canvas->rect().center());
+    canvas->setRotation(30.0);
+    canvas->repaint();
+    frames(true);
+    canvas->seedFrameGpuSampleForTest(QRect(5, 5, 3, 3), 2'000'000);
+    canvas->seedFrameGpuSampleForTest(QRect(23, 23, 3, 3), 1'000'000);
+    const QPoint hit = canvas->imageToWidget(QPointF(6, 6)).toPoint();
+    const QPoint miss = canvas->imageToWidget(QPointF(16, 16)).toPoint();
+    canvas->repaint(QRect(miss - QPoint(1, 1), QSize(3, 3)));
+    QVERIFY(!frames().last().toObject().contains("gpu_composite_ms"));
+    canvas->repaint(QRect(hit - QPoint(1, 1), QSize(3, 3)));
+    QCOMPARE(frames().last().toObject().value("gpu_composite_ms").toDouble(), 2.0);
+    canvas->repaint(QRect(hit - QPoint(1, 1), QSize(3, 3)));
+    QVERIFY(!frames().last().toObject().contains("gpu_composite_ms"));
+    const QPoint other = canvas->imageToWidget(QPointF(24, 24)).toPoint();
+    canvas->repaint(QRect(other - QPoint(1, 1), QSize(3, 3)));
+    QCOMPARE(frames().last().toObject().value("gpu_composite_ms").toDouble(), 1.0);
+    canvas->repaint(QRect(other - QPoint(1, 1), QSize(3, 3)));
+    QVERIFY(!frames().last().toObject().contains("gpu_composite_ms"));
+}
+
+void ControlMetricsTest::frameResetClearsPendingTiming()
+{
+    auto* canvas = showCanvas();
+    canvas->repaint();
+    canvas->panBy(QPointF(1, 0));
+    canvas->seedFrameGpuSampleForTest(QRect(0, 0, 32, 32), 1'000'000);
+    QCOMPARE(frames(true).size(), 1);
+    QVERIFY(frames().isEmpty());
+    canvas->repaint();
+    const auto row = frames().last().toObject();
+    QVERIFY(!row.contains("interval_ms"));
+    QVERIFY(!row.contains("gpu_composite_ms"));
+    QCOMPARE(row.value("input_count").toInt(), 0);
 }
 
 QTEST_MAIN(ControlMetricsTest)

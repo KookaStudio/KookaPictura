@@ -1,4 +1,5 @@
 #include "control_server.h"
+#include "canvas_frame_metrics.h"
 
 #include <QtCore/QBuffer>
 #include <QtCore/QJsonArray>
@@ -123,12 +124,14 @@ QJsonObject ControlServer::methodScreenshot(const QJsonObject& params)
     QImage image;
     QSize source;
     if (scope == QStringLiteral("window")) {
+        const FrameCaptureSuppression suppress;
         image = frame_->grab().toImage();
     } else if (scope == QStringLiteral("canvas")) {
         ImageView* canvas = frame_->imageView();
         if (!canvas) {
             return error(QStringLiteral("no_document"), QStringLiteral("no active canvas"));
         }
+        const FrameCaptureSuppression suppress;
         image = canvas->grab().toImage();
     } else if (scope == QStringLiteral("document")) {
         PictureView* view = frame_->activeView();

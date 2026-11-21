@@ -45,14 +45,22 @@ impl<'a> CompositeRequest<'a> {
 /// whole-document request and to the matching slice for a region request. A GPU
 /// result comes from the existing GPU kernel, within ±1 LSB of the CPU oracle.
 pub fn composite(request: CompositeRequest<'_>) -> (PixelBuffer, Backend) {
+    let (pixels, backend, _) = composite_with_blend_time(request);
+    (pixels, backend)
+}
+
+/// Also returns the optional GPU blend-pass interval in nanoseconds.
+pub fn composite_with_blend_time(
+    request: CompositeRequest<'_>,
+) -> (PixelBuffer, Backend, Option<u64>) {
     let doc = request.doc;
     let Some((x0, y0, w, h)) = clamp(request.region, doc) else {
-        return (PixelBuffer::new(0, 0, 4), Backend::Cpu);
+        return (PixelBuffer::new(0, 0, 4), Backend::Cpu, None);
     };
     let whole = x0 == 0 && y0 == 0 && w == doc.width && h == doc.height;
     if request.gpu_enabled && gpu::gpu_available() {
-        if let Ok(buffer) = gpu::composite_gpu_region(doc, x0, y0, w, h) {
-            return (buffer, Backend::Gpu);
+        if let Ok((buffer, blend_ns)) = gpu::composite_gpu_region(doc, x0, y0, w, h) {
+            return (buffer, Backend::Gpu, blend_ns);
         }
     }
     let buffer = if whole {
@@ -60,7 +68,7 @@ pub fn composite(request: CompositeRequest<'_>) -> (PixelBuffer, Backend) {
     } else {
         crate::composite::composite_rgba_region(doc, x0, y0, w, h)
     };
-    (buffer, Backend::Cpu)
+    (buffer, Backend::Cpu, None)
 }
 
 fn clamp(region: Option<PsdRect>, doc: &Document) -> Option<(u32, u32, u32, u32)> {

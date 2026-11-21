@@ -17,6 +17,7 @@
 #include <QtWidgets/QWidget>
 
 #include "api/transform_api.h"
+#include "canvas_frame_metrics.h"
 #include "smart_guides.h"
 #include "theme.h"
 
@@ -24,6 +25,7 @@
 #include <array>
 #include <functional>
 #include <optional>
+#include <utility>
 
 class QPainter;
 
@@ -131,6 +133,7 @@ public:
         // Report the level and document rect about to be presented, so a Rust
         // render session can composite a preview for exactly that frame.
         std::function<void(int level, const QRect& docRect)> reportView;
+        std::function<CanvasFrameCrop(int level, const QRect& rect)> frameCrop = {};
     };
     void setLevelProvider(LevelProvider provider);
 
@@ -667,6 +670,8 @@ public:
     bool presentCacheValidForTest() const { return presentCache_.valid; }
     QImage presentCacheCropForTest() const { return presentCache_.crop.copy(); }
     void setPresentCacheEnabledForTest(bool enabled);
+    void setFrameClockForTest(std::function<qint64()> clock) { frameClockForTest_ = std::move(clock); }
+    void seedFrameGpuSampleForTest(const QRect& rect, quint64 ns);
     void setPresentLevelCropForTest(bool enabled);
 
     // Map a widget-space point to document/image coordinates.
@@ -733,6 +738,24 @@ protected:
     void leaveEvent(QEvent* event) override;
 
 private:
+    friend class FramePaintTiming;
+    friend class FrameViewportTiming;
+
+    struct FrameTimingState {
+        quint64 id = 0;
+        quint64 generation = 0;
+        std::optional<qint64> lastPaint;
+        int inputDepth = 0;
+        qint64 inputStart = 0;
+        quint64 inputNs = 0;
+        quint32 inputCount = 0;
+        bool inputChanged = false;
+    };
+    quint64 prepareFrameTiming();
+    qint64 frameNow() const;
+    std::optional<FrameTimingState> frameTiming_;
+    std::function<qint64()> frameClockForTest_;
+
     // The one brush outline: a circle for the brush tools, a square for the
     // Eraser's Block mode.
     void setBrushOutlineShape(double diameter, const QPointF& imagePos, bool square);
@@ -847,6 +870,7 @@ private:
         bool valid = false;
         int rebuilds = 0;
         QImage crop;
+        std::shared_ptr<CanvasFrameSamples> samples;
     };
     // The viewport in document coordinates, unclipped (image_view_document.cpp).
     QRectF viewportDocumentRect() const;
@@ -865,6 +889,7 @@ private:
     // the visible rectangle changed at the cached level, the overlap is reused
     // and only the newly exposed band is cropped.
     const QImage* presentCrop(int level, const QRect& docRect, const QRect& sourceRect);
+    CanvasFrameCrop cropForPaint(int level, const QRect& rect) const;
     // Rebuild the cached crop from its own overlap plus the newly exposed band
     // for a changed visible rectangle at the same level. False (the caller
     // re-crops whole) when the rectangles do not overlap or a band comes back

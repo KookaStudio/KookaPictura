@@ -15,6 +15,7 @@
 //! (the largest share of any view's footprint, and the cheapest to rebuild a
 //! few of), then unpinned tiles of other levels, least recently used first.
 
+use crate::frame_samples::{FrameTileSample, FrameTileSamples};
 use crate::pyramid_level::{PyramidLevel, SMALLEST_SIDE};
 use crate::region_level::{halve_level, level_size};
 use pictura_core::{PixelBuffer, PsdRect};
@@ -74,6 +75,28 @@ struct Entry {
     /// Damage reached the tile after it was built: it is shown only as a
     /// stand-in until its rebuild lands, and it is evicted first.
     stale: bool,
+    samples: Option<Box<FrameTileSamples>>,
+}
+
+impl Entry {
+    fn record_sample(&mut self, rect: PsdRect, sample: Option<&Arc<FrameTileSample>>) {
+        if sample.is_some() {
+            self.samples
+                .get_or_insert_with(Default::default)
+                .overwrite(rect, sample);
+        } else if let Some(samples) = self.samples.as_mut() {
+            samples.overwrite(rect, None);
+            if samples.is_empty() {
+                self.samples = None;
+            }
+        }
+    }
+
+    fn copy_samples(&self, output: Option<&mut FrameTileSamples>, rect: PsdRect, scale: i32) {
+        if let (Some(output), Some(samples)) = (output, self.samples.as_deref()) {
+            output.copy_clipped_from(samples, rect, scale);
+        }
+    }
 }
 
 /// The tile cache of one document view. See the module notes.
@@ -259,6 +282,7 @@ impl TilePyramid {
                 data,
                 used: self.touch,
                 stale: false,
+                samples: None,
             },
         ) {
             self.stats.resident_bytes -= old.data.len() as u64;
@@ -291,6 +315,7 @@ impl TilePyramid {
         self.epoch = next_epoch();
         for entry in self.tiles.values_mut() {
             entry.stale = true;
+            entry.samples = None;
         }
     }
 
@@ -310,9 +335,11 @@ impl TilePyramid {
         }
         self.stamp(rect);
         for level in 0..self.levels {
-            for key in self.keys_in(source, level, scale_down(rect, level)) {
+            let covered = scale_down(rect, level);
+            for key in self.keys_in(source, level, covered) {
                 if let Some(entry) = self.tiles.get_mut(&key) {
                     entry.stale = true;
+                    entry.record_sample(covered, None);
                 }
             }
         }
@@ -334,6 +361,16 @@ impl TilePyramid {
     /// must be aligned by [`Self::repair_rect`]. A level's cached tiles are
     /// patched; uncached ones stay absent and are built when asked for.
     pub fn repair(&mut self, source: TileSource, rect: PsdRect, region: &PixelBuffer) {
+        self.repair_with_sample(source, rect, region, None);
+    }
+
+    pub fn repair_with_sample(
+        &mut self,
+        source: TileSource,
+        rect: PsdRect,
+        region: &PixelBuffer,
+        sample: Option<&Arc<FrameTileSample>>,
+    ) {
         if rect.width() <= 0 || rect.height() <= 0 {
             return;
         }
@@ -345,7 +382,7 @@ impl TilePyramid {
         // it (#1238): zoomed out, none is.
         if self.any_current_in(source, 0, rect) {
             let straight = interleave(region);
-            self.patch_level(source, 0, rect, &straight);
+            self.patch_level(source, 0, rect, &straight, sample);
         }
         for level in 1..self.levels {
             if !self
@@ -360,7 +397,7 @@ impl TilePyramid {
             data = next;
             origin = (halved.left, halved.top);
             size = (halved.width() as u32, halved.height() as u32);
-            self.patch_level(source, level, halved, &data);
+            self.patch_level(source, level, halved, &data, sample);
         }
     }
 
@@ -374,7 +411,7 @@ impl TilePyramid {
         if rw == 0 || rh == 0 || rows.len() < rw * rh * 4 || level >= self.levels {
             return;
         }
-        self.patch_level(source, level, rect, rows);
+        self.patch_level(source, level, rect, rows, None);
     }
 
     /// Paint `region` (straight planar RGBA covering `rect`, in `level`
@@ -392,6 +429,29 @@ impl TilePyramid {
         opacity: u8,
         over: bool,
     ) {
+        self.paint_stand_in_pixels(source, level, rect, region, (opacity, over), None);
+    }
+
+    pub fn paint_stand_in_with_sample(
+        &mut self,
+        source: TileSource,
+        level: usize,
+        rect: PsdRect,
+        region: &PixelBuffer,
+        sample: Option<&Arc<FrameTileSample>>,
+    ) {
+        self.paint_stand_in_pixels(source, level, rect, region, (255, false), sample);
+    }
+
+    fn paint_stand_in_pixels(
+        &mut self,
+        source: TileSource,
+        level: usize,
+        rect: PsdRect,
+        region: &PixelBuffer,
+        (opacity, over): (u8, bool),
+        sample: Option<&Arc<FrameTileSample>>,
+    ) {
         let (rw, rh) = (region.width as usize, region.height as usize);
         if region.channels != 4
             || level >= self.levels
@@ -408,13 +468,16 @@ impl TilePyramid {
         let straight = level == 0;
         for key in self.keys_in(source, level, rect) {
             let tile = self.tile_rect(key);
+            let Some(hit) = rect.intersect(tile) else {
+                continue;
+            };
             let Some(entry) = self.tiles.get_mut(&key).filter(|e| e.stale) else {
                 continue;
             };
             let tw = tile.width() as usize;
             let data = unique(&mut entry.data);
-            for y in tile.top.max(rect.top)..tile.bottom.min(rect.bottom) {
-                for x in tile.left.max(rect.left)..tile.right.min(rect.right) {
+            for y in hit.top..hit.bottom {
+                for x in hit.left..hit.right {
                     let s = (y - rect.top) as usize * rw + (x - rect.left) as usize;
                     let d = ((y - tile.top) as usize * tw + (x - tile.left) as usize) * 4;
                     let src = [0, 1, 2, 3].map(|c| planes[c * plane + s]);
@@ -427,6 +490,9 @@ impl TilePyramid {
                         premultiplied(src)
                     };
                 }
+            }
+            if !over {
+                entry.record_sample(hit, sample);
             }
         }
     }
@@ -469,6 +535,16 @@ impl TilePyramid {
         level: usize,
         rect: PsdRect,
     ) -> (PyramidLevel, Vec<TileKey>) {
+        self.crop_with_samples(source, level, rect, None)
+    }
+
+    pub fn crop_with_samples(
+        &mut self,
+        source: TileSource,
+        level: usize,
+        rect: PsdRect,
+        mut samples: Option<&mut FrameTileSamples>,
+    ) -> (PyramidLevel, Vec<TileKey>) {
         let (rw, rh) = (rect.width().max(0) as u32, rect.height().max(0) as u32);
         let mut out = PyramidLevel::new(rw, rh);
         let mut missing = Vec::new();
@@ -479,19 +555,31 @@ impl TilePyramid {
             let tile = self.tile_rect(key);
             if let Some(data) = self.get(key) {
                 paste(&mut out, rect, tile, &data, level == 0);
+                if samples.is_some() {
+                    self.tiles[&key].copy_samples(samples.as_deref_mut(), rect, 1);
+                }
                 continue;
             }
             missing.push(key);
             match self.tiles.get(&key) {
-                Some(stale) => paste(&mut out, rect, tile, &stale.data, level == 0),
-                None => self.stand_in(&mut out, rect, key),
+                Some(stale) => {
+                    paste(&mut out, rect, tile, &stale.data, level == 0);
+                    stale.copy_samples(samples.as_deref_mut(), rect, 1);
+                }
+                None => self.stand_in(&mut out, rect, key, samples.as_deref_mut()),
             }
         }
         (out, missing)
     }
 
     /// Fill `key`'s part of `out` from the nearest cached coarser tile.
-    fn stand_in(&mut self, out: &mut PyramidLevel, rect: PsdRect, key: TileKey) {
+    fn stand_in(
+        &mut self,
+        out: &mut PyramidLevel,
+        rect: PsdRect,
+        key: TileKey,
+        samples: Option<&mut FrameTileSamples>,
+    ) {
         let tile = self.tile_rect(key);
         let level = key.level as usize;
         for coarse in level + 1..self.levels {
@@ -522,6 +610,16 @@ impl TilePyramid {
                     dst[d..d + 4].copy_from_slice(&entry.data[s..s + 4]);
                 }
             }
+            entry.copy_samples(
+                samples,
+                PsdRect {
+                    top,
+                    left,
+                    bottom,
+                    right,
+                },
+                1 << shift,
+            );
             return;
         }
     }
@@ -566,7 +664,14 @@ impl TilePyramid {
 
     /// Write `rows` (interleaved, covering `rect` of `level`) into the cached
     /// tiles of that level it overlaps.
-    fn patch_level(&mut self, source: TileSource, level: usize, rect: PsdRect, rows: &[u8]) {
+    fn patch_level(
+        &mut self,
+        source: TileSource,
+        level: usize,
+        rect: PsdRect,
+        rows: &[u8],
+        sample: Option<&Arc<FrameTileSample>>,
+    ) {
         let rw = rect.width().max(0) as usize;
         for key in self.keys_in(source, level, rect) {
             let tile = self.tile_rect(key);
@@ -588,6 +693,15 @@ impl TilePyramid {
                 let d = ((y - tile.top) as usize * tw + (left - tile.left) as usize) * 4;
                 data[d..d + len].copy_from_slice(&rows[s..s + len]);
             }
+            entry.record_sample(
+                PsdRect {
+                    top,
+                    left,
+                    bottom,
+                    right,
+                },
+                sample,
+            );
         }
     }
 

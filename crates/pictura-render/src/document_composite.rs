@@ -23,6 +23,7 @@ pub struct Refreshed {
     pub rect: PsdRect,
     /// The backend that produced the buffer.
     pub backend: Backend,
+    pub blend_ns: Option<u64>,
 }
 
 /// A borrowing facade over the document's maintained composite.
@@ -151,12 +152,14 @@ impl<'a> DocumentComposite<'a> {
                             buffer: self.doc.composite.buffer().clone(),
                             rect: full,
                             backend: Backend::Cpu,
+                            blend_ns: None,
                         }];
                     }
                     return vec![Refreshed {
                         buffer: embedded,
                         rect: full,
                         backend: Backend::Cpu,
+                        blend_ns: None,
                     }];
                 }
                 if write && !self.doc.composite_is_authoritative() {
@@ -164,8 +167,8 @@ impl<'a> DocumentComposite<'a> {
                     self.drop_stored();
                     return Vec::new();
                 }
-                let (buffer, backend) =
-                    crate::composite(crate::CompositeRequest::whole(self.doc, gpu));
+                let (buffer, backend, blend_ns) =
+                    crate::composite_with_blend_time(crate::CompositeRequest::whole(self.doc, gpu));
                 if write {
                     self.store(&buffer);
                 }
@@ -173,6 +176,7 @@ impl<'a> DocumentComposite<'a> {
                     buffer,
                     rect: full,
                     backend,
+                    blend_ns,
                 }]
             }
             CompositeScope::Regions(rects) => {
@@ -190,8 +194,9 @@ impl<'a> DocumentComposite<'a> {
                         bottom: y0 + h as i32,
                         right: x0 + w as i32,
                     };
-                    let (buffer, backend) =
-                        crate::composite(crate::CompositeRequest::region(self.doc, clipped, gpu));
+                    let (buffer, backend, blend_ns) = crate::composite_with_blend_time(
+                        crate::CompositeRequest::region(self.doc, clipped, gpu),
+                    );
                     if write {
                         let whole = (x0, y0, w, h) == (0, 0, self.doc.width, self.doc.height);
                         if whole {
@@ -204,6 +209,7 @@ impl<'a> DocumentComposite<'a> {
                         buffer,
                         rect: clipped,
                         backend,
+                        blend_ns,
                     });
                 }
                 out

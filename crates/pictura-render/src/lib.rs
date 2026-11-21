@@ -64,6 +64,8 @@ pub use region_level::{
 };
 mod tile_build;
 pub use tile_build::build_keys;
+mod frame_samples;
+pub use frame_samples::{FrameTileSample, FrameTileSamples};
 mod tile_pyramid;
 pub use tile_pyramid::{
     interleave, level_count, Ticket, TileKey, TilePyramid, TileSource, TileStats, TILE_SIDE,
@@ -77,7 +79,7 @@ pub use composite::{
     encode_invert, encode_photo_filter, encode_posterize, encode_solid_color_fill,
     encode_threshold,
 };
-pub use composite_request::{composite, CompositeRequest};
+pub use composite_request::{composite, composite_with_blend_time, CompositeRequest};
 pub use pictura_codec::{decode_fill, encode_fill_content};
 pub use pyramid_level::{PyramidLevel, SMALLEST_SIDE, TILE};
 #[cfg(any(test, feature = "test-oracle"))]

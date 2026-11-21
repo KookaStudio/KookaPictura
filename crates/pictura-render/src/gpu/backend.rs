@@ -945,7 +945,10 @@ impl Gpu {
         self.queue.submit(Some(encoder.finish()));
     }
 
-    pub(super) fn read_canvas(&self, canvas: &wgpu::Buffer) -> Result<PixelBuffer, GpuError> {
+    pub(super) fn read_canvas(
+        &self,
+        canvas: &wgpu::Buffer,
+    ) -> Result<(PixelBuffer, Option<u64>), GpuError> {
         // De-interleave on the GPU: the planar pass writes four byte planes into
         // one storage buffer, so the host copies plane slices instead of
         // gathering a channel per pixel. `pw` words per plane (word-aligned by
@@ -1053,11 +1056,13 @@ impl Gpu {
         if device_lost() {
             return Err(GpuError::Readback);
         }
-        if let Some((t, rx)) = timing_rx {
+        let device_ns = timing_rx.and_then(|(t, rx)| {
             if matches!(rx.recv(), Ok(Ok(()))) {
-                self.publish_device_time(t);
+                self.read_device_time(t)
+            } else {
+                None
             }
-        }
+        });
 
         // Each plane is `pw` words; copy exactly `n` bytes of it into the
         // planar `PixelBuffer`, ignoring the tail padding.
@@ -1090,15 +1095,12 @@ impl Gpu {
         if let Ok(mut kept) = devices()?.readback.lock() {
             *kept = Some(staging);
         }
-        Ok(out)
+        Ok((out, device_ns))
     }
 
-    /// Publish the mapped begin/end timestamps as the composite's device time.
-    fn publish_device_time(&self, t: &Timing) {
+    fn read_device_time(&self, t: &Timing) -> Option<u64> {
         let ticks = {
-            let Ok(mapped) = t.readback.slice(..).get_mapped_range() else {
-                return;
-            };
+            let mapped = t.readback.slice(..).get_mapped_range().ok()?;
             let word = |i: usize| {
                 let mut bytes = [0u8; 8];
                 bytes.copy_from_slice(&mapped[i * 8..i * 8 + 8]);
@@ -1109,6 +1111,7 @@ impl Gpu {
         t.readback.unmap();
         let ns = ticks as f64 * f64::from(self.queue.get_timestamp_period());
         crate::metrics::publish_device_ms(ns / 1.0e6);
+        Some(ns as u64)
     }
 
     /// De-interleave packed RGBA8 readback into the planar straight-alpha

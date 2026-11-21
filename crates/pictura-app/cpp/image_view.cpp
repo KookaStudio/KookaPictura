@@ -355,38 +355,6 @@ QPointF ImageView::imageToWidget(const QPointF& imagePos) const
     return viewRotation().map(imagePos * zoom_ + offset_);
 }
 
-QTransform ImageView::viewRotation() const
-{
-    if (rotation_ == 0.0) {
-        return QTransform();
-    }
-    const QPointF centre(width() / 2.0, height() / 2.0);
-    return QTransform::fromTranslate(-centre.x(), -centre.y()) * QTransform().rotate(rotation_)
-        * QTransform::fromTranslate(centre.x(), centre.y());
-}
-
-QRectF ImageView::viewRect() const
-{
-    return viewRotation().inverted().mapRect(QRectF(rect()));
-}
-
-void ImageView::setRotation(double degrees)
-{
-    double normalised = std::fmod(degrees, 360.0);
-    if (normalised <= -180.0) {
-        normalised += 360.0;
-    } else if (normalised > 180.0) {
-        normalised -= 360.0;
-    }
-    if (normalised == rotation_) {
-        return;
-    }
-    rotation_ = normalised;
-    presentCache_.valid = false;
-    update();
-    emit viewChanged();
-}
-
 void ImageView::setCompassVisible(bool visible)
 {
     if (compassVisible_ != visible) {
@@ -511,6 +479,7 @@ void ImageView::paintEvent(QPaintEvent* event)
 {
     lastPaintRect_ = event ? event->rect() : rect();
     pictura::ScopedTimer paintTimer("cxx_paintEvent");
+    FramePaintTiming frameTiming(*this, event);
     QPainter painter(this);
     painter.fillRect(rect(), canvasColor_);
     if (docSize_.isEmpty()) {
@@ -578,6 +547,7 @@ void ImageView::paintEvent(QPaintEvent* event)
         presentCacheRebuiltLastPaint_ = false;
     } else {
         const int before = presentCache_.rebuilds;
+        const qint64 gather = frameTiming.beginGather();
         const int level = presentLevel();
         QRect cropDoc;
         QRect sourceRect;
@@ -586,6 +556,7 @@ void ImageView::paintEvent(QPaintEvent* event)
             levelProvider_.reportView(level, cropDoc);
         }
         const QImage* crop = haveRect ? presentCrop(level, cropDoc, sourceRect) : nullptr;
+        frameTiming.endGather(gather);
         painter.save();
         painter.setTransform(rotation);
         painter.setRenderHint(QPainter::SmoothPixmapTransform,
@@ -613,6 +584,7 @@ void ImageView::paintEvent(QPaintEvent* event)
                                 docOrigin.y() + cropDoc.y() * zoom_, cropDoc.width() * zoom_,
                                 cropDoc.height() * zoom_);
             painter.drawImage(target, channelImage(*crop, crop->cacheKey()));
+            frameTiming.drawSamples(presentCache_.samples, sourceRect, target, painter);
         } else if (singleChannel() >= 0 && !image_.isNull()) {
             const QRectF visible = presentVisibleRect();
             painter.drawImage(QRectF(docOrigin.x() + visible.x() * zoom_,
@@ -624,6 +596,7 @@ void ImageView::paintEvent(QPaintEvent* event)
                                 docOrigin.y() + cropDoc.y() * zoom_, cropDoc.width() * zoom_,
                                 cropDoc.height() * zoom_);
             painter.drawImage(target, *crop);
+            frameTiming.drawSamples(presentCache_.samples, sourceRect, target, painter);
         } else {
             // No level crop (a live stroke, or no provider): draw only the
             // visible document, not the whole image resampled every paint. The
@@ -637,12 +610,16 @@ void ImageView::paintEvent(QPaintEvent* event)
             } else if (!visible.isEmpty() && levelProvider_.crop) {
                 // A document canvas: level 0, cropped to what is on screen.
                 const QRect area = visible.toAlignedRect();
-                const QImage part =
-                    levelProvider_.crop(0, area.x(), area.y(), area.width(), area.height());
-                painter.drawImage(QRectF(docOrigin.x() + area.x() * zoom_,
-                                         docOrigin.y() + area.y() * zoom_,
-                                         area.width() * zoom_, area.height() * zoom_),
-                                  part);
+                const qint64 fallbackGather = frameTiming.beginGather();
+                auto part = cropForPaint(0, area);
+                frameTiming.endGather(fallbackGather);
+                const QRectF target(docOrigin.x() + area.x() * zoom_,
+                                    docOrigin.y() + area.y() * zoom_,
+                                    area.width() * zoom_, area.height() * zoom_);
+                painter.drawImage(target, part.image);
+                if (!part.image.isNull()) {
+                    frameTiming.drawSamples(part.samples, area, target, painter);
+                }
             }
         }
         painter.restore();
@@ -869,6 +846,7 @@ void ImageView::paintEvent(QPaintEvent* event)
 
 void ImageView::wheelEvent(QWheelEvent* event)
 {
+    const FrameViewportTiming timing(*this);
     const QPoint delta = event->angleDelta();
     const Qt::KeyboardModifiers mods = event->modifiers();
     // Shared wheel precedence: a horizontal side-wheel pans horizontally;
@@ -890,6 +868,7 @@ void ImageView::wheelEvent(QWheelEvent* event)
 
 void ImageView::mousePressEvent(QMouseEvent* event)
 {
+    const FrameViewportTiming timing(*this);
     // The workspace snap lock pins a fitting canvas to the centre, so no pan
     // may start; a press that would otherwise pan falls through unhandled.
     const bool panPress =
@@ -939,6 +918,7 @@ void ImageView::mousePressEvent(QMouseEvent* event)
 // tablet's pressure first so the next dab uses it.
 void ImageView::tabletEvent(QTabletEvent* event)
 {
+    const FrameViewportTiming timing(*this);
     switch (event->type()) {
     case QEvent::TabletPress:
         tabletActive_ = true;
@@ -962,6 +942,7 @@ void ImageView::tabletEvent(QTabletEvent* event)
 
 void ImageView::mouseMoveEvent(QMouseEvent* event)
 {
+    const FrameViewportTiming timing(*this);
     const Qt::MouseButtons buttons = event->buttons();
     if (panning_ && (buttons & (Qt::MiddleButton | Qt::LeftButton))) {
         // A screen-space drag moves the turned canvas along with the pointer.
@@ -998,6 +979,7 @@ void ImageView::contextMenuEvent(QContextMenuEvent* event)
 
 void ImageView::mouseReleaseEvent(QMouseEvent* event)
 {
+    const FrameViewportTiming timing(*this);
     if (event->button() == Qt::MiddleButton || event->button() == Qt::LeftButton) {
         const bool wasPanning = panning_;
         panning_ = false;
