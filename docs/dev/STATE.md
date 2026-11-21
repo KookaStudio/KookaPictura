@@ -4,6 +4,17 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Interface localization — #642 implemented** (OpenSpec change
+  `ui-localization`, archived). Pictura bundles German and Finnish catalogs.
+  Preferences → Interface selects the startup language, imports community
+  `.ts` catalogs, and saves the language in `prefs.toml`. Restart Pictura appears
+  when a saved choice differs from the active language. Numeric inputs, rulers,
+  and Info readouts use the system numeric locale independently. Run
+  `scripts/update-translations.py` to refresh the catalogs. Tests include
+  `tst_ui_localization`, `tst_preferences_store`, and localized cases in
+  `tst_new_document`, `tst_rulers_guides`, and `tst_info_panel`.
+  Follow-ups: right-to-left layout and languages (#1488), live language
+  switching investigation (#1501).
 - **Operation status and panic boundaries — #645 implemented** (OpenSpec
   change `error-code-registry`, archived). The Qt-free `pictura-error` crate
   defines the stable 32-bit `OpStatus` values, canonical message keys, and
