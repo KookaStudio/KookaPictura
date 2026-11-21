@@ -343,7 +343,7 @@ gaps are the CS6 Extended 3D object and camera tools.
   `crates/pictura-filters/src/noise/reduce.rs`
 - [x] The Radial Blur Blur Center, honored by the kernel (#594)
 - [ ] The Smart Sharpen Basic and Advanced split, and the 32-bpc disable (#595)
-- [ ] The eight Stylize filters missing from the Filter Gallery category (#596)
+- [x] The eight Stylize filters missing from the Filter Gallery category (#596)
 - [ ] Colored Pencil document-background paper wiring (#597)
 - [x] Adaptive Wide Angle (#346): Fisheye, Perspective and Full Spherical,
       line and polygon constraints, EXIF focal-length prefill

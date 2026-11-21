@@ -411,7 +411,7 @@ pub(crate) const EMBOSS: FilterSpec = FilterSpec {
     alpha: AlphaPolicy::Never,
     apron: ApronPolicy::Fixed(128),
     gpu: GpuPolicy::Unsupported,
-    gallery: None,
+    gallery: Some(41),
     build: crate::catalogue::build::stylize::build_emboss,
     engine: FilterEngine::Ported,
 };
@@ -441,7 +441,7 @@ pub(crate) const EXTRUDE: FilterSpec = FilterSpec {
     alpha: AlphaPolicy::Never,
     apron: ApronPolicy::Fixed(128),
     gpu: GpuPolicy::Unsupported,
-    gallery: None,
+    gallery: Some(42),
     build: crate::catalogue::build::stylize::build_extrude,
     engine: FilterEngine::Ported,
 };
@@ -464,7 +464,7 @@ pub(crate) const FIND_EDGES: FilterSpec = FilterSpec {
     alpha: AlphaPolicy::Never,
     apron: ApronPolicy::Fixed(128),
     gpu: GpuPolicy::Unsupported,
-    gallery: None,
+    gallery: Some(43),
     build: crate::catalogue::build::stylize::build_find_edges,
     engine: FilterEngine::Ported,
 };
@@ -487,7 +487,7 @@ pub(crate) const SOLARIZE: FilterSpec = FilterSpec {
     alpha: AlphaPolicy::Never,
     apron: ApronPolicy::Fixed(128),
     gpu: GpuPolicy::Unsupported,
-    gallery: None,
+    gallery: Some(45),
     build: crate::catalogue::build::stylize::build_solarize,
     engine: FilterEngine::Native,
 };
@@ -510,7 +510,7 @@ pub(crate) const DIFFUSE: FilterSpec = FilterSpec {
     alpha: AlphaPolicy::Never,
     apron: ApronPolicy::Fixed(128),
     gpu: GpuPolicy::Unsupported,
-    gallery: None,
+    gallery: Some(40),
     build: crate::catalogue::build::stylize::build_diffuse,
     engine: FilterEngine::Ported,
 };
@@ -537,7 +537,7 @@ pub(crate) const GLOWING_EDGES: FilterSpec = FilterSpec {
     alpha: AlphaPolicy::Never,
     apron: ApronPolicy::Fixed(128),
     gpu: GpuPolicy::Unsupported,
-    gallery: Some(40),
+    gallery: Some(44),
     build: crate::catalogue::build::stylize::build_glowing_edges,
     engine: FilterEngine::Ported,
 };
@@ -566,7 +566,7 @@ pub(crate) const TILES: FilterSpec = FilterSpec {
     alpha: AlphaPolicy::Never,
     apron: ApronPolicy::Fixed(128),
     gpu: GpuPolicy::Unsupported,
-    gallery: None,
+    gallery: Some(46),
     build: crate::catalogue::build::stylize::build_tiles,
     engine: FilterEngine::Ported,
 };
@@ -592,7 +592,7 @@ pub(crate) const TRACE_CONTOUR: FilterSpec = FilterSpec {
     alpha: AlphaPolicy::Never,
     apron: ApronPolicy::Fixed(128),
     gpu: GpuPolicy::Unsupported,
-    gallery: None,
+    gallery: Some(47),
     build: crate::catalogue::build::stylize::build_trace_contour,
     engine: FilterEngine::Ported,
 };
@@ -618,7 +618,7 @@ pub(crate) const WIND: FilterSpec = FilterSpec {
     alpha: AlphaPolicy::Never,
     apron: ApronPolicy::Fixed(128),
     gpu: GpuPolicy::Unsupported,
-    gallery: None,
+    gallery: Some(48),
     build: crate::catalogue::build::stylize::build_wind,
     engine: FilterEngine::Ported,
 };
@@ -645,7 +645,7 @@ pub(crate) const CRAQUELURE: FilterSpec = FilterSpec {
     alpha: AlphaPolicy::Never,
     apron: ApronPolicy::Fixed(128),
     gpu: GpuPolicy::Unsupported,
-    gallery: Some(41),
+    gallery: Some(49),
     build: crate::catalogue::build::stylize::build_craquelure,
     engine: FilterEngine::Ported,
 };
@@ -674,7 +674,7 @@ pub(crate) const GRAIN: FilterSpec = FilterSpec {
     alpha: AlphaPolicy::Never,
     apron: ApronPolicy::Fixed(128),
     gpu: GpuPolicy::Unsupported,
-    gallery: Some(42),
+    gallery: Some(50),
     build: crate::catalogue::build::stylize::build_grain,
     engine: FilterEngine::Ported,
 };
@@ -702,7 +702,7 @@ pub(crate) const MOSAIC_TILES: FilterSpec = FilterSpec {
     alpha: AlphaPolicy::Never,
     apron: ApronPolicy::Fixed(128),
     gpu: GpuPolicy::Unsupported,
-    gallery: Some(43),
+    gallery: Some(51),
     build: crate::catalogue::build::stylize::build_mosaic_tiles,
     engine: FilterEngine::Ported,
 };
@@ -729,7 +729,7 @@ pub(crate) const PATCHWORK: FilterSpec = FilterSpec {
     alpha: AlphaPolicy::Never,
     apron: ApronPolicy::Fixed(128),
     gpu: GpuPolicy::Unsupported,
-    gallery: Some(44),
+    gallery: Some(52),
     build: crate::catalogue::build::stylize::build_patchwork,
     engine: FilterEngine::Ported,
 };
@@ -758,7 +758,7 @@ pub(crate) const STAINED_GLASS: FilterSpec = FilterSpec {
     alpha: AlphaPolicy::Never,
     apron: ApronPolicy::Fixed(128),
     gpu: GpuPolicy::Unsupported,
-    gallery: Some(45),
+    gallery: Some(53),
     build: crate::catalogue::build::stylize::build_stained_glass,
     engine: FilterEngine::Ported,
 };
@@ -787,7 +787,7 @@ pub(crate) const TEXTURIZER: FilterSpec = FilterSpec {
     alpha: AlphaPolicy::Never,
     apron: ApronPolicy::Fixed(128),
     gpu: GpuPolicy::Unsupported,
-    gallery: Some(46),
+    gallery: Some(54),
     build: crate::catalogue::build::stylize::build_texturizer,
     engine: FilterEngine::Ported,
 };

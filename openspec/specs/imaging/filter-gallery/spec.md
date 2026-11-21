@@ -79,7 +79,7 @@ other icon buttons.
 #### Scenario: Categories follow CS6
 
 - **WHEN** the gallery lists its categories
-- **THEN** Artistic has 15 filters, Brush Strokes 8, Sketch 14, Stylize only Glowing Edges, and Texture 6
+- **THEN** Artistic has 15 filters, Brush Strokes 8, Distort 3, Sketch 14, Stylize 9 (Diffuse, Emboss, Extrude, Find Edges, Glowing Edges, Solarize, Tiles, Trace Contour, Wind in that order), and Texture 6
 
 #### Scenario: Thumbnails show the picture filtered
 
