@@ -10,6 +10,10 @@
 #include "api/layers_bridge.h"
 #include "api/selection_bridge.h"
 
+#include <rust/cxx.h>
+
+#include <vector>
+
 #include "panels/layers_panel.h"
 
 #include "color_range_dialog.h"
@@ -219,10 +223,12 @@ void MenuRegistrar::registerSelectHandlers()
         auto* dialog = new RefineEdgeDialog(view, dialogParent());
         dialog->setAttribute(Qt::WA_DeleteOnClose);
         if (runDialog(*dialog, dialogParent()) == QDialog::Accepted && activeView() == view) {
+            const std::vector<double> dabValues = dialog->dabValues();
+            const ::rust::Slice<const double> dabs(dabValues.data(), dabValues.size());
             refine_edge_apply(*view, dialog->smartRadius(), dialog->radius(),
                               dialog->smooth(), dialog->feather(), dialog->contrast(),
-                              dialog->shiftEdge(), dialog->decontaminate(), dialog->amount(),
-                              dialog->outputTo());
+                              dialog->shiftEdge(), dabs, dialog->decontaminate(),
+                              dialog->amount(), dialog->outputTo());
         }
     };
     commands_->setHandler(refineEdge, openRefineEdge);

@@ -87,7 +87,10 @@ impl PictureViewRust {
     /// display is busy or the edit is not a bounded or full Move.
     fn large_move_area(&self, edit: &Edit) -> Option<u64> {
         let doc = self.session.doc.as_ref()?;
-        if self.has_active_session() || self.pending_previews.any() || self.mask_solo.is_some() {
+        if self.has_active_session()
+            || self.session.pending_previews.any()
+            || self.mask_solo.is_some()
+        {
             return None;
         }
         let canvas = u64::from(doc.width) * u64::from(doc.height);
@@ -222,7 +225,7 @@ impl PictureViewRust {
         let done = job.worker.take()?.join().ok().flatten()?;
         // Committed: the session ends without restoring a lift's `before`.
         drop(self.session.live.take_transform());
-        self.last_transform = job.repeat.take();
+        self.session.last_transform = job.repeat.take();
         if job.lifted {
             self.session.doc.set(Some(done));
             // ponytail: CS6 carries the selection border through the

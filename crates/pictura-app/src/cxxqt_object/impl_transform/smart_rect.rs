@@ -124,7 +124,7 @@ impl qobject::PictureView {
             .as_mut()
             .is_some_and(|doc| pictura_render::transform_smart_object_rect(doc, path, rect));
         if changed {
-            self.as_mut().rust_mut().last_transform = repeat;
+            self.as_mut().rust_mut().session.last_transform = repeat;
             let edit = self.rust().session.doc.as_ref().map_or(Edit::Full, |doc| {
                 transform_group_edit(doc, members, orig_rect)
             });

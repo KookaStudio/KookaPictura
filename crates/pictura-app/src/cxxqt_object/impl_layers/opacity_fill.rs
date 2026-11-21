@@ -25,16 +25,16 @@ fn set_property(doc: &mut Document, refs: &[&str], value: u8, kind: PreviewKind)
 
 fn set_pending(rust: &mut PictureViewRust, kind: PreviewKind, value: bool) {
     match kind {
-        PreviewKind::Opacity => rust.pending_previews.opacity_changed = value,
-        PreviewKind::Fill => rust.pending_previews.fill_changed = value,
+        PreviewKind::Opacity => rust.session.pending_previews.opacity_changed = value,
+        PreviewKind::Fill => rust.session.pending_previews.fill_changed = value,
         PreviewKind::Adjustment => {}
     }
 }
 
 fn pending(rust: &PictureViewRust, kind: PreviewKind) -> bool {
     match kind {
-        PreviewKind::Opacity => rust.pending_previews.opacity_changed,
-        PreviewKind::Fill => rust.pending_previews.fill_changed,
+        PreviewKind::Opacity => rust.session.pending_previews.opacity_changed,
+        PreviewKind::Fill => rust.session.pending_previews.fill_changed,
         PreviewKind::Adjustment => false,
     }
 }

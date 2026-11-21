@@ -105,6 +105,13 @@ public:
     void clearMaskOverlay();
     QImage maskOverlayForTest() const { return maskOverlay_; }
 
+    // A dialog's transient refinement preview (Refine Edge): the refined-mask
+    // outline and the Show Edge band, drawn over the document. Display only.
+    void setRefinePreview(const QImage& overlay, const QRect& area);
+    void clearRefinePreview();
+    QImage refinePreviewForTest() const { return refinePreview_; }
+    bool hasRefinePreviewForTest() const { return !refinePreview_.isNull(); }
+
     // Supplies document crops from the view pyramid so the present path never
     // scales the full-resolution `image()`. `crop` returns a premultiplied crop
     // of `level` at the level-space rect `(x, y, w, h)`; `levelCount`/`levelSize`
@@ -649,6 +656,9 @@ signals:
     void mousePressed(const QPointF& imagePos, int button, int modifiers);
     void mouseMoved(const QPointF& imagePos);
     void mouseReleased(const QPointF& imagePos);
+    // The pointer left the canvas; a hover-only affordance (the Refine Edge
+    // brush ring) drops its state here.
+    void mouseLeft();
     // A tablet event's pressure (0..1), before Qt's synthesized mouse event
     // drives the stroke. A mouse press reports 1.0.
     void pointerPressure(double pressure);
@@ -728,6 +738,9 @@ private:
     void paintMaskOverlay(QPainter& painter);
     QImage maskOverlay_;
     QRect maskOverlayArea_;
+    void paintRefinePreview(QPainter& painter);
+    QImage refinePreview_;
+    QRect refinePreviewArea_;
     PathOverlay pathOverlay_;
     TypeOverlay typeOverlay_;
     QTimer* typeCaretBlink_ = nullptr;

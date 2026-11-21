@@ -30,6 +30,8 @@
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QPushButton>
 
+#include <functional>
+
 namespace pictura {
 
 namespace {
@@ -659,6 +661,27 @@ std::function<bool()>& canvasSampling()
     return active;
 }
 
+std::function<bool()>& canvasBrush()
+{
+    static std::function<bool()> active;
+    return active;
+}
+
+using ToolHostProvider = std::function<ToolController*()>;
+using ViewHostProvider = std::function<ImageView*()>;
+
+ToolHostProvider& canvasTools()
+{
+    static ToolHostProvider tools;
+    return tools;
+}
+
+ViewHostProvider& canvasView()
+{
+    static ViewHostProvider view;
+    return view;
+}
+
 class DialogInputBlocker : public QObject
 {
 public:
@@ -705,7 +728,7 @@ protected:
             return true;
         }
         if (widget->window() != blocked_ || isCanvasNavigation(widget, event)
-            || isCanvasSample(widget, event)) {
+            || isCanvasSample(widget, event) || isCanvasBrush(widget, event)) {
             return QObject::eventFilter(watched, event);
         }
         // Swallow only input addressed to the blocked top-level window; the
@@ -752,6 +775,21 @@ private:
         return false;
     }
 
+    // A hover or left-button press/drag/release over a canvas while a dialog's
+    // refinement brush is armed.
+    static bool isCanvasBrush(QWidget* widget, QEvent* event)
+    {
+        auto* mouse = dynamic_cast<QMouseEvent*>(event);
+        if (!mouse || event->type() == QEvent::MouseButtonDblClick || !canvasBrush()
+            || !canvasBrush()()) {
+            return false;
+        }
+        const bool left = event->type() == QEvent::MouseMove
+                              ? (mouse->buttons() & ~Qt::LeftButton) == Qt::NoButton
+                              : mouse->button() == Qt::LeftButton;
+        return left && overCanvas(widget);
+    }
+
     QPointer<QWidget> blocked_;
 };
 
@@ -773,6 +811,28 @@ void setDialogNavigationKeys(std::function<bool(QKeyEvent*)> handler)
 void setDialogCanvasSampling(std::function<bool()> active)
 {
     canvasSampling() = std::move(active);
+}
+
+void setDialogCanvasBrush(std::function<bool()> active)
+{
+    canvasBrush() = std::move(active);
+}
+
+void setDialogCanvasToolHosts(std::function<ToolController*()> tools,
+                              std::function<ImageView*()> canvas)
+{
+    canvasTools() = std::move(tools);
+    canvasView() = std::move(canvas);
+}
+
+ToolController* dialogCanvasTools()
+{
+    return canvasTools() ? canvasTools()() : nullptr;
+}
+
+ImageView* dialogCanvasView()
+{
+    return canvasView() ? canvasView()() : nullptr;
 }
 
 int runDialog(QDialog& dialog, QWidget* parent)

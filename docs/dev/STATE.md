@@ -20,6 +20,9 @@ Snapshot for resuming after a context break. Update after each milestone.
   real CR2s, agreeing with exiftool). New vendor families add body names to
   the script's `BODIES` and rerun it. Tests: `tests/raw_camera_matrices.rs`,
   the as-shot rows of `tests/raw_cr2.rs`.
+- **Feature parity tracker** — `PARITY.md` records CS6 Standard, CS6 Extended,
+  and CC 28.0 coverage; `scripts/check-parity.py` validates the totals.
+  Assessed 2026-11-20 at commit 98c0b292.
 - **Transform keeps erased pixels erased — #1446 fixed** (OpenSpec change
   `transform-alpha-weighted-colour`, archived; capabilities
   `document/transform-interpolation`, `document/auto-align-layers`). Free
@@ -5366,11 +5369,14 @@ Snapshot for resuming after a context break. Update after each milestone.
   Mask…` options-bar button both open it; OK records one "Refine Edge" state,
   Output To maps to the selection, the active layer's mask, or `layer_via_copy`
   (New Layer / New Layer with Layer Mask), and Decontaminate forces a colour
-  output (the in-place targets are disabled). Tested by `tst_refine_edge` (7
-  cases) and the engine's property tests. Ceilings (`ponytail:`): no interactive
-  Refine Radius / Erase Refinements brush strokes or their local band override,
-  no view-mode keyboard shortcuts (F/X/P/J), no Properties-panel mask entry, and
-  the surface/edge model is a behavioural approximation of a closed algorithm.
+  output (the in-place targets are disabled). The refinement brush is armed on
+  the canvas: Refine Edge Brush, Restore Original (Alt, or a latched Shift+E),
+  `[` / `]` sizing, and `J` Show Edge; its ordered dabs feed the local band and
+  the commit. Tested by `tst_refine_edge` (12 cases),
+  `tst_layers_mask_commands`, and the engine's property tests. Ceilings
+  (`ponytail:`): no view-mode shortcuts (F/X/P), no Properties-panel mask
+  entry, and the estimator is a gradient nudge rather than Adobe's matting, so
+  strand recovery is not claimed.
 - **Canvas right-click context menus** (#306, change
   `canvas-right-click-context-menus`, archived into `ui/canvas-context-menus`):
   `ImageView::contextMenuRequested` routes a right-click to the active tool's

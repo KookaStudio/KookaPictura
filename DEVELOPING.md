@@ -480,6 +480,10 @@ Trust and worktrees:
   to the hook hash, so a policy edit needs re-approval. In a linked worktree
   Codex reads `.codex/hooks.json` from the main checkout and the hook runs the
   policy from there.
+- The refusal resolves `scripts/with-build-lock.sh` from the policy's own
+  checkout, so a Codex session that reads main's policy in a stale worktree is
+  pointed at main's budgeted wrapper, which still runs the command in the
+  worktree.
 - opencode loads `.opencode/plugins/cpu-budget.ts` from the checkout and
   delegates to the same policy.
 

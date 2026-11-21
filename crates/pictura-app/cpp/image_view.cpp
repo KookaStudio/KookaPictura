@@ -763,6 +763,7 @@ void ImageView::paintEvent(QPaintEvent* event)
     }
     paintFilterPreview(painter);
     paintMaskOverlay(painter);
+    paintRefinePreview(painter);
     // Hidden channels (two still shown): zero them with one multiply.
     if (channelMask_ != 0x7 && singleChannel() < 0) {
         painter.setCompositionMode(QPainter::CompositionMode_Multiply);
@@ -1089,6 +1090,7 @@ void ImageView::resizeEvent(QResizeEvent* event)
 void ImageView::leaveEvent(QEvent* event)
 {
     clearBrushOutline();
+    emit mouseLeft();
     QWidget::leaveEvent(event);
 }
 

@@ -5,7 +5,6 @@ use cxx_qt_lib::QImage;
 use pictura_core::PsdRect;
 use pictura_render::CanvasDamage;
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
 
 /// A selection mask's `(Plane::ident, width)`: equal keys hold equal masks.
 pub(super) type MaskKey = (u64, u32);
@@ -92,9 +91,6 @@ pub struct PictureViewRust {
     /// The isolated set while the Layers panel's Selected filter is on: the
     /// panel paths Auto-Select may pick. `None` leaves Auto-Select unscoped.
     pub(super) isolation: Option<Vec<String>>,
-    /// Every layer path's own visibility when the current solo began. The
-    /// snapshot belongs to this document and is dropped by a structural edit.
-    pub(super) solo_snapshot: Option<HashMap<String, bool>>,
     /// The expanded group paths, per document.
     pub(super) expanded_groups: Vec<String>,
     pub(super) move_base: Option<QImage>,
@@ -144,14 +140,9 @@ pub struct PictureViewRust {
     /// until the presented tiles rebuild from the moved layers.
     pub(super) lazy_move_pending: bool,
     pub(super) mask_move_baseline: Option<(String, pictura_core::Layer)>,
-    /// The last committed similarity transform, for `Edit > Transform > Again`.
-    /// Projective and Warp commits clear it (they are not repeatable this way).
-    pub(super) last_transform: Option<super::document_session::RepeatTransform>,
     /// Whether the live transform belongs to the Move tool's per-gesture
     /// controls box. Such a session is never modal and does not lock edits.
     pub(super) transform_controls: bool,
-    /// The panel previews that are applied but not committed yet.
-    pub(super) pending_previews: super::document_session::PendingPreviews,
     pub(super) gpu_compute: bool,
     pub(super) color_policy: pictura_codec::Policy,
     pub(super) cmyk_policy: pictura_codec::Policy,
@@ -211,10 +202,6 @@ pub struct PictureViewRust {
     /// Test seam: hold a started Move composite's result for this many
     /// milliseconds.
     pub(super) move_composite_delay_for_test: u64,
-    pub(super) link_sets: HashMap<String, u32>,
-    /// Link sets a structural command remapped instead of clearing. The edit
-    /// transaction installs them; `None` clears the links as before.
-    pub(super) link_remap: Option<HashMap<String, u32>>,
     /// The Ruler tool's measuring line: view state, never saved or undone.
     pub(super) ruler: Option<pictura_core::Ruler>,
     /// The filter dialog's reduced copy of the canvas.
@@ -228,9 +215,6 @@ pub struct PictureViewRust {
     /// The last committed filter's kind and slot values, for Last Filter and
     /// Last Filter Settings.
     pub(super) last_filter: Option<(String, Vec<f64>)>,
-    /// The last destructive effect's pre-effect and post-effect pixels, for
-    /// `Edit > Fade`. Cleared by any later edit or history restore.
-    pub(super) fade: Option<super::fade::FadeState>,
     /// The Smart Filter being re-edited, `(layer path, index)`: its dialog
     /// previews the chain up to it and OK replaces it in place.
     pub(super) smart_filter_edit: Option<(String, usize)>,
@@ -298,7 +282,6 @@ impl Default for PictureViewRust {
             mask_display: (0xFFFF_0000, 50),
             mask_overlay_revision: 0,
             isolation: None,
-            solo_snapshot: None,
             expanded_groups: Vec::new(),
             move_base: None,
             color_range_preview: None,
@@ -322,9 +305,7 @@ impl Default for PictureViewRust {
             move_drag_active: false,
             lazy_move_pending: false,
             mask_move_baseline: None,
-            last_transform: None,
             transform_controls: false,
-            pending_previews: Default::default(),
             variables_dialog: None,
             variable_export: None,
             gpu_compute: true,
@@ -361,15 +342,12 @@ impl Default for PictureViewRust {
             transform_delay_for_test: 0,
             document_jobs: Default::default(),
             move_composite_delay_for_test: 0,
-            link_sets: HashMap::new(),
-            link_remap: None,
             ruler: None,
             canvas_proxy: None,
             filter_jobs: Default::default(),
             auto_blend: Default::default(),
             auto_align: Default::default(),
             last_filter: None,
-            fade: None,
             smart_filter_edit: None,
             filter_error: None,
             add_copy: true,

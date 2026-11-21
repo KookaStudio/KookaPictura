@@ -172,9 +172,9 @@ pub(super) fn auto_align_finish(mut view: Pin<&mut PictureView>) -> QStringList 
                 if paths.is_empty() {
                     return Edit::None;
                 }
-                rust.link_sets.clear();
-                rust.link_remap = None;
-                rust.solo_snapshot = None;
+                rust.session.link_sets.clear();
+                rust.session.link_remap = None;
+                rust.session.solo_snapshot = None;
                 rust.mask_edit_target = None;
                 Edit::Structural { damage: None }
             });

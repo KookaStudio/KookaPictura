@@ -92,7 +92,7 @@ impl PictureViewRust {
         ) -> Option<Restored>,
         legacy: impl FnOnce(&mut History) -> Option<Snapshot>,
     ) -> Option<ShownRestore> {
-        self.fade = None;
+        self.session.fade = None;
         let had_live_session = self.has_active_session();
         let cancelled = self.cancel_active_sessions_report_only();
         let t = Instant::now();
@@ -327,34 +327,26 @@ impl qobject::PictureView {
             .history
             .snapshot_label(i as usize)
             .to_string();
-        let target = self.rust().session.history.snapshot_target(i as usize);
+        let target = self
+            .rust()
+            .session
+            .history
+            .snapshot_target(i as usize)
+            .unwrap_or_else(|| self.rust().layer_target.clone());
         let mut rust = self.as_mut().rust_mut();
         rust.cancel_active_sessions_report_only();
-        rust.session.doc.set(Some(snapshot.doc));
-        if let Some(doc) = rust.session.doc.as_mut() {
-            pictura_render::prune_layer_comp_warnings(doc);
-        }
-        rust.session.set_selection(snapshot.selection);
-        rust.session
-            .restore_quick_mask_selection(snapshot.quick_mask);
+        let target = rust
+            .session
+            .restore_named_snapshot(snapshot, target, &label);
         if rust.session.quick_mask.active {
             rust.invalidate_quick_mask();
         }
-        if let Some(mut target) = target {
-            if let Some(doc) = rust.session.doc.as_ref() {
-                target.retain_resolving(doc);
-            }
-            rust.set_layer_target(target);
-        }
-        let target = rust.layer_target.clone();
-        rust.session.record(&target, &label);
+        rust.set_layer_target(target);
         rust.mask_edit_target = None;
         rust.active_path = super::paths::ActivePath::Work;
         rust.path_on_layer = false;
         rust.ruler = None;
         rust.canvas_proxy = None;
-        rust.session.deselected_selection = None;
-        rust.session.document_generation = rust.session.document_generation.wrapping_add(1);
         // A named snapshot's composite is exact (see `named_snapshot`), so the
         // restore presents it instead of compositing the layers again.
         let exact = rust

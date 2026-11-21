@@ -5,15 +5,17 @@
 //! history, and it reports what the Qt adapter must present; nothing here
 //! knows about Qt.
 
+use super::super::fade::FadeState;
 use super::super::paths::ActivePath;
 use super::super::presentation::{Presentation, Rebuild};
 use super::super::state::PictureViewRust;
 use super::active::{ActiveSession, PathRestore, SessionKind};
-use super::transform::TransformSession;
+use super::transform::{RepeatTransform, TransformSession};
 use crate::history::{History, Restored, Snapshot};
 use crate::layer_target::LayerTarget;
 use pictura_core::{Document, PsdRect};
 use pictura_select::Selection;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// The selection state captured at the start of a Quick Selection stroke.
@@ -56,6 +58,21 @@ pub(in crate::cxxqt_object) struct DocumentSession {
     pub(in crate::cxxqt_object) quick_selection_snapshot: Option<QuickSelectionSnapshot>,
     /// The recorded states.
     pub(in crate::cxxqt_object) history: History,
+    /// The last destructive effect's pre-effect and post-effect pixels, for
+    /// `Edit > Fade`. Cleared by any later edit or history restore.
+    pub(in crate::cxxqt_object) fade: Option<FadeState>,
+    /// The last committed similarity transform, for `Edit > Transform > Again`.
+    /// Projective and Warp commits clear it (they are not repeatable this way).
+    pub(in crate::cxxqt_object) last_transform: Option<RepeatTransform>,
+    pub(in crate::cxxqt_object) link_sets: HashMap<String, u32>,
+    /// Link sets a structural command remapped instead of clearing. The edit
+    /// transaction installs them; `None` clears the links as before.
+    pub(in crate::cxxqt_object) link_remap: Option<HashMap<String, u32>>,
+    /// Every layer path's own visibility when the current solo began. The
+    /// snapshot belongs to this document and is dropped by a structural edit.
+    pub(in crate::cxxqt_object) solo_snapshot: Option<HashMap<String, bool>>,
+    /// The panel previews that are applied but not committed yet.
+    pub(in crate::cxxqt_object) pending_previews: PendingPreviews,
     /// Whether the document has unsaved changes.
     pub(in crate::cxxqt_object) dirty: bool,
     /// The history identity that was current at the last successful save, open,
@@ -245,6 +262,44 @@ impl DocumentSession {
         self.document_generation = self.document_generation.wrapping_add(1);
         self.saved_id = self.history.current_id();
         self.refresh_dirty();
+    }
+
+    /// Clear the edit state that names or belongs to the outgoing document.
+    /// Both a document replacement and a named-snapshot restore call it, so a
+    /// stale Fade or link set can never survive either path.
+    pub(in crate::cxxqt_object) fn clear_edit_state(&mut self) {
+        self.fade = None;
+        self.last_transform = None;
+        self.link_sets.clear();
+        self.link_remap = None;
+        self.solo_snapshot = None;
+        self.pending_previews = PendingPreviews::default();
+    }
+
+    /// Restore a named snapshot: replace the document, selection, and Quick
+    /// Mask, clear the edit state, and record the restore under `label`. The
+    /// returned target is the incoming one retained against the restored
+    /// document.
+    pub(in crate::cxxqt_object) fn restore_named_snapshot(
+        &mut self,
+        snapshot: Snapshot,
+        mut target: LayerTarget,
+        label: &str,
+    ) -> LayerTarget {
+        self.doc.set(Some(snapshot.doc));
+        if let Some(doc) = self.doc.as_mut() {
+            pictura_render::prune_layer_comp_warnings(doc);
+        }
+        if let Some(doc) = self.doc.as_ref() {
+            target.retain_resolving(doc);
+        }
+        self.set_selection(snapshot.selection);
+        self.restore_quick_mask_selection(snapshot.quick_mask);
+        self.deselected_selection = None;
+        self.clear_edit_state();
+        self.record(&target, label);
+        self.document_generation = self.document_generation.wrapping_add(1);
+        target
     }
 
     /// Capture the live document as a history state under `label`. False
@@ -672,7 +727,7 @@ impl PictureViewRust {
         self.session.saved_metadata_revision = 0;
         self.session.save_publication_uncertain = false;
         self.isolation = None;
-        self.solo_snapshot = None;
+        self.session.clear_edit_state();
         self.expanded_groups.clear();
         self.move_base = None;
         self.move_view = None;
@@ -686,16 +741,19 @@ impl PictureViewRust {
         self.move_prepared_layer.clear();
         self.move_prepared_union = None;
         self.move_preview_cache_hit = false;
-        self.fade = None;
-        self.last_transform = None;
+        self.path_drag_damage = None;
+        self.move_above = None;
+        self.move_above_origin = None;
+        self.move_above_scale = 1;
+        self.move_above_presented = None;
+        self.transform_preview_level = 0;
         self.transform_controls = false;
-        self.clear_pending_previews();
         self.ruler = None;
         self.canvas_proxy = None;
-        self.link_sets.clear();
-        self.link_remap = None;
         self.source_format = "psd".to_string();
         self.filter_error = None;
+        self.smart_filter_edit = None;
+        self.warp_text_original = None;
         self.save_embed_profile = None;
         self.save_raster_options = None;
         self.save_options = None;
@@ -707,9 +765,9 @@ impl PictureViewRust {
 
     /// Drop the panel previews that were never committed.
     pub(in crate::cxxqt_object) fn clear_pending_previews(&mut self) {
-        self.pending_previews.opacity_changed = false;
-        self.pending_previews.fill_changed = false;
-        self.pending_previews.mask_refine = None;
+        self.session.pending_previews.opacity_changed = false;
+        self.session.pending_previews.fill_changed = false;
+        self.session.pending_previews.mask_refine = None;
     }
 
     /// Restore the pre-lift document or the pre-trim layer extent. Returns

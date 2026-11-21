@@ -171,6 +171,16 @@ void MenuRegistrar::registerEditHandlers()
     setDialogCanvasSampling([window = QPointer<MenuRegistrar>(this)]() {
         return window && window->tools_ && window->tools_->canvasSamplerActive();
     });
+    setDialogCanvasBrush([window = QPointer<MenuRegistrar>(this)]() {
+        return window && window->tools_ && window->tools_->canvasBrushActive();
+    });
+    setDialogCanvasToolHosts(
+        [window = QPointer<MenuRegistrar>(this)]() -> ToolController* {
+            return window ? window->tools_ : nullptr;
+        },
+        [window = QPointer<MenuRegistrar>(this)]() -> ImageView* {
+            return window ? window->imageView() : nullptr;
+        });
     // ponytail: a platform that reports our own write asynchronously drops the
     // mirror, so the next paste re-imports our export and Paste in Place loses
     // the source position (it lands at the origin).

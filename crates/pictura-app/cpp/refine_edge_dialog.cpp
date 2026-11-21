@@ -1,9 +1,14 @@
 #include "refine_edge_dialog.h"
 
+#include "dialogs.h"
+#include "image_view.h"
 #include "panels/jump_slider.h"
+#include "tools.h"
 
 #include "api/selection_bridge.h"
 
+#include <QtCore/QLineF>
+#include <QtGui/QShortcut>
 #include <QtGui/QStandardItemModel>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
@@ -21,6 +26,9 @@ namespace pictura {
 namespace {
 
 constexpr int kPreviewSize = 220;
+constexpr int kDefaultBrushSize = 30;
+constexpr int kMinBrushSize = 1;
+constexpr int kMaxBrushSize = 1000;
 
 // CS6's view modes and their stored index (the engine's ViewMode order).
 const char* const kViewModes[] = {
@@ -81,13 +89,41 @@ RefineEdgeDialog::RefineEdgeDialog(PictureView* view, QWidget* parent, const QSt
     }
     modeRow->addWidget(viewMode_, 1);
     viewLayout->addLayout(modeRow);
-    showRadius_ = new QCheckBox(QStringLiteral("Show Radius (J)"), viewGroup);
+    showRadius_ = new QCheckBox(QStringLiteral("Show Edge (J)"), viewGroup);
     showRadius_->setObjectName(QStringLiteral("refineShowRadius"));
+    showRadius_->setToolTip(QStringLiteral("The CS6 Show Radius view: the band edge refinement applies to"));
     showOriginal_ = new QCheckBox(QStringLiteral("Show Original (P)"), viewGroup);
     showOriginal_->setObjectName(QStringLiteral("refineShowOriginal"));
     viewLayout->addWidget(showRadius_);
     viewLayout->addWidget(showOriginal_);
     root->addWidget(viewGroup);
+
+    // Refinement brush.
+    auto* brushGroup = new QGroupBox(QStringLiteral("Refine Edge Brush"), this);
+    auto* brushLayout = new QVBoxLayout(brushGroup);
+    auto* brushRow = new QHBoxLayout;
+    brushRow->addWidget(new QLabel(QStringLiteral("Size:"), brushGroup));
+    brushSize_ = new QSpinBox(brushGroup);
+    brushSize_->setObjectName(QStringLiteral("refineBrushSize"));
+    brushSize_->setRange(kMinBrushSize, kMaxBrushSize);
+    brushSize_->setValue(kDefaultBrushSize);
+    brushSize_->setSuffix(QStringLiteral(" px"));
+    brushSize_->setFixedWidth(78);
+    brushRow->addWidget(brushSize_);
+    brushRow->addStretch(1);
+    brushLayout->addLayout(brushRow);
+    brushRestore_ = new QCheckBox(QStringLiteral("Restore Original (Alt)"), brushGroup);
+    brushRestore_->setObjectName(QStringLiteral("refineBrushRestore"));
+    brushRestore_->setToolTip(
+        QStringLiteral("Restore the original selection under the stroke; Shift+E latches it"));
+    brushLayout->addWidget(brushRestore_);
+    auto* hint = new QLabel(
+        QStringLiteral("Drag on the image to refine. [ ] resizes, Shift+E toggles restore, "
+                       "J shows the edge."),
+        brushGroup);
+    hint->setWordWrap(true);
+    brushLayout->addWidget(hint);
+    root->addWidget(brushGroup);
 
     // Edge Detection.
     auto* detectGroup = new QGroupBox(QStringLiteral("Edge Detection"), this);
@@ -165,9 +201,160 @@ RefineEdgeDialog::RefineEdgeDialog(PictureView* view, QWidget* parent, const QSt
     connect(decontaminate_, &QCheckBox::toggled, this, [this]() { refreshEnabled(); });
     connect(amountSlider_, &QSlider::valueChanged, this, onEdit);
     connect(output_, &QComboBox::currentIndexChanged, this, [this]() { refreshEnabled(); });
+    connect(brushSize_, &QSpinBox::valueChanged, this, [this]() { refreshRing(); });
+
+    // The canvas brush wins over focus changes, so the keys are application
+    // shortcuts while the dialog owns them.
+    const auto addShortcut = [this](const QKeySequence& key, auto action) {
+        auto* shortcut = new QShortcut(key, this);
+        shortcut->setContext(Qt::ApplicationShortcut);
+        connect(shortcut, &QShortcut::activated, this, action);
+    };
+    addShortcut(QKeySequence(Qt::Key_BracketLeft), [this]() { adjustBrush(-1); });
+    addShortcut(QKeySequence(Qt::Key_BracketRight), [this]() { adjustBrush(1); });
+    addShortcut(QKeySequence(QStringLiteral("Shift+E")), [this]() { brushRestore_->toggle(); });
+    addShortcut(QKeySequence(Qt::Key_J), [this]() { showRadius_->toggle(); });
+
+    tools_ = dialogCanvasTools();
+    canvas_ = dialogCanvasView();
+    armBrush();
 
     refreshEnabled();
     refreshPreview();
+}
+
+RefineEdgeDialog::~RefineEdgeDialog() { disarmBrush(); }
+
+void RefineEdgeDialog::done(int result)
+{
+    disarmBrush();
+    QDialog::done(result);
+}
+
+void RefineEdgeDialog::armBrush()
+{
+    if (!tools_) {
+        return;
+    }
+    tools_->setCanvasBrush([this](ToolController::CanvasBrushPhase phase, const QPointF& imagePos,
+                                  Qt::KeyboardModifiers mods) {
+        onCanvasBrush(static_cast<int>(phase), imagePos, mods);
+    });
+    if (canvas_) {
+        connect(canvas_, &ImageView::mouseLeft, this, [this]() {
+            hasHover_ = false;
+            if (canvas_) {
+                canvas_->clearBrushOutline();
+            }
+        });
+    }
+}
+
+void RefineEdgeDialog::disarmBrush()
+{
+    // Re-resolve the hosts: the cached pointers may have outlived their
+    // objects, and only the provider can tell us whether they are still alive.
+    if (tools_) {
+        ToolController* current = dialogCanvasTools();
+        if (current == tools_) {
+            current->setCanvasBrush({});
+        }
+        tools_ = nullptr;
+    }
+    if (canvas_) {
+        ImageView* current = dialogCanvasView();
+        if (current == canvas_) {
+            current->clearRefinePreview();
+            current->clearBrushOutline();
+        }
+        canvas_ = nullptr;
+    }
+}
+
+void RefineEdgeDialog::onCanvasBrush(int phase, const QPointF& imagePos,
+                                     Qt::KeyboardModifiers mods)
+{
+    using Phase = ToolController::CanvasBrushPhase;
+    switch (static_cast<Phase>(phase)) {
+    case Phase::Hover:
+        lastHoverPos_ = imagePos;
+        hasHover_ = true;
+        refreshRing();
+        return;
+    case Phase::Press:
+        strokeActive_ = true;
+        lastDabPos_ = imagePos;
+        lastHoverPos_ = imagePos;
+        hasHover_ = true;
+        addDab(imagePos, mods);
+        break;
+    case Phase::Drag:
+        if (!strokeActive_) {
+            return;
+        }
+        lastHoverPos_ = imagePos;
+        hasHover_ = true;
+        if (QLineF(lastDabPos_, imagePos).length() < std::max(1.0, brushSize() / 8.0)) {
+            refreshRing();
+            return;
+        }
+        addDab(imagePos, mods);
+        break;
+    case Phase::Release:
+        // The press and drags carry the dabs; release only ends the stroke.
+        strokeActive_ = false;
+        return;
+    }
+    refreshRing();
+    refreshPreview();
+}
+
+void RefineEdgeDialog::addDab(const QPointF& imagePos, Qt::KeyboardModifiers mods)
+{
+    RefineBrushDab dab;
+    dab.x = imagePos.x();
+    dab.y = imagePos.y();
+    dab.radius = brushSize() / 2.0;
+    dab.erase = restoreActive(mods);
+    dabs_.append(dab);
+    lastDabPos_ = imagePos;
+}
+
+void RefineEdgeDialog::adjustBrush(int direction)
+{
+    const int current = brushSize_->value();
+    const int step = std::max(1, current / 10);
+    brushSize_->setValue(std::clamp(current + direction * step, kMinBrushSize, kMaxBrushSize));
+}
+
+void RefineEdgeDialog::refreshRing()
+{
+    if (!canvas_ || !hasHover_) {
+        return;
+    }
+    // Space/pan owns the cursor; the brush ring must not fight the open hand.
+    if (canvas_->spacePanForTest() || canvas_->isPanning()) {
+        return;
+    }
+    canvas_->setBrushOutline(brushSize(), lastHoverPos_);
+}
+
+bool RefineEdgeDialog::restoreActive(Qt::KeyboardModifiers mods) const
+{
+    return brushRestore_->isChecked() || mods.testFlag(Qt::AltModifier);
+}
+
+std::vector<double> RefineEdgeDialog::dabValues() const
+{
+    std::vector<double> values;
+    values.reserve(static_cast<size_t>(dabs_.size()) * 4);
+    for (const RefineBrushDab& dab : dabs_) {
+        values.push_back(dab.x);
+        values.push_back(dab.y);
+        values.push_back(dab.radius);
+        values.push_back(dab.erase ? 1.0 : 0.0);
+    }
+    return values;
 }
 
 bool RefineEdgeDialog::smartRadius() const { return smartRadius_->isChecked(); }
@@ -179,6 +366,7 @@ int RefineEdgeDialog::shiftEdge() const { return shift_->value(); }
 bool RefineEdgeDialog::decontaminate() const { return decontaminate_->isChecked(); }
 int RefineEdgeDialog::amount() const { return amount_->value(); }
 int RefineEdgeDialog::outputTo() const { return output_->currentIndex(); }
+int RefineEdgeDialog::brushSize() const { return brushSize_->value(); }
 
 void RefineEdgeDialog::refreshEnabled()
 {
@@ -193,7 +381,8 @@ void RefineEdgeDialog::refreshEnabled()
         if (model) {
             QStandardItem* item = model->item(i);
             if (item) {
-                item->setFlags(decon ? item->flags() & ~Qt::ItemIsEnabled : item->flags() | Qt::ItemIsEnabled);
+                item->setFlags(decon ? item->flags() & ~Qt::ItemIsEnabled
+                                     : item->flags() | Qt::ItemIsEnabled);
             }
         }
     }
@@ -207,18 +396,23 @@ void RefineEdgeDialog::refreshPreview()
     if (!view_) {
         return;
     }
+    const std::vector<double> values = dabValues();
+    const ::rust::Slice<const double> dabs(values.data(), values.size());
     int width = 0;
     int height = 0;
     const ::rust::Vec<uint8_t> coverage =
         maskPath_.isEmpty()
             ? refine_edge_preview(*view_, smartRadius(), radius(), smooth(), feather(),
-                                  contrast(), shiftEdge(), kPreviewSize, width, height)
+                                  contrast(), shiftEdge(), dabs, kPreviewSize, width, height)
             : refine_mask_preview(*view_, maskPath_, smartRadius(), radius(), smooth(),
-                                  feather(), contrast(), shiftEdge(), kPreviewSize, width,
-                                  height);
+                                  feather(), contrast(), shiftEdge(), dabs, kPreviewSize,
+                                  width, height);
     if (width <= 0 || height <= 0 || int(coverage.size()) != width * height) {
         preview_ = QImage();
         previewLabel_->clear();
+        if (canvas_) {
+            canvas_->clearRefinePreview();
+        }
         return;
     }
     // The mask is shown as coverage over black (On Black / Black & White) or
@@ -237,6 +431,75 @@ void RefineEdgeDialog::refreshPreview()
     }
     preview_ = image;
     previewLabel_->setPixmap(QPixmap::fromImage(image));
+
+    if (!canvas_) {
+        return;
+    }
+    // One transient document-space overlay: the green Show Edge band under the
+    // red 50 % refined-mask outline.
+    QImage overlay(width, height, QImage::Format_RGBA8888);
+    overlay.fill(Qt::transparent);
+    if (showRadius_->isChecked()) {
+        const std::vector<double> bandValues = dabValues();
+        const ::rust::Slice<const double> bandDabs(bandValues.data(), bandValues.size());
+        int bandWidth = 0;
+        int bandHeight = 0;
+        const ::rust::Vec<uint8_t> band =
+            maskPath_.isEmpty()
+                ? refine_edge_band_preview(*view_, smartRadius(), radius(), bandDabs,
+                                           kPreviewSize, bandWidth, bandHeight)
+                : refine_mask_band_preview(*view_, maskPath_, smartRadius(), radius(), bandDabs,
+                                           kPreviewSize, bandWidth, bandHeight);
+        if (bandWidth == width && bandHeight == height
+            && int(band.size()) == width * height) {
+            for (int y = 0; y < height; ++y) {
+                uchar* out = overlay.scanLine(y);
+                const uint8_t* row = band.data() + size_t(y) * size_t(width);
+                for (int x = 0; x < width; ++x) {
+                    if (!row[x]) {
+                        continue;
+                    }
+                    uchar* pixel = out + x * 4;
+                    pixel[0] = 0;
+                    pixel[1] = 255;
+                    pixel[2] = 0;
+                    pixel[3] = 64;
+                }
+            }
+        }
+    }
+    for (int y = 0; y < height; ++y) {
+        uchar* out = overlay.scanLine(y);
+        const uint8_t* row = coverage.data() + size_t(y) * size_t(width);
+        for (int x = 0; x < width; ++x) {
+            const bool inside = row[x] >= 128;
+            bool edge = false;
+            if (x > 0) {
+                edge = edge || ((row[x - 1] >= 128) != inside);
+            }
+            if (x + 1 < width) {
+                edge = edge || ((row[x + 1] >= 128) != inside);
+            }
+            if (y > 0) {
+                edge = edge
+                    || ((coverage[size_t(y - 1) * size_t(width) + size_t(x)] >= 128) != inside);
+            }
+            if (y + 1 < height) {
+                edge = edge
+                    || ((coverage[size_t(y + 1) * size_t(width) + size_t(x)] >= 128) != inside);
+            }
+            if (!edge) {
+                continue;
+            }
+            uchar* pixel = out + x * 4;
+            pixel[0] = 255;
+            pixel[1] = 0;
+            pixel[2] = 0;
+            pixel[3] = 255;
+        }
+    }
+    canvas_->setRefinePreview(
+        overlay, QRect(0, 0, view_->document_width(), view_->document_height()));
 }
 
 } // namespace pictura
