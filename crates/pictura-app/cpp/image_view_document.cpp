@@ -379,6 +379,14 @@ void ImageView::setZoom(double zoom, const QPointF& anchor)
     update();
 }
 
+void ImageView::printSize(double ppi)
+{
+    if (ppi <= 0.0) {
+        return;
+    }
+    setZoom(96.0 / ppi, QPointF(width() / 2.0, height() / 2.0));
+}
+
 void ImageView::fitOnScreen()
 {
     userAdjusted_ = false;

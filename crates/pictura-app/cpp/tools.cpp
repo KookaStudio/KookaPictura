@@ -862,6 +862,9 @@ void ToolController::handlePressed(const QPointF& imagePos, int button, int modi
     if (button != Qt::LeftButton) {
         return;
     }
+    if (slicesLocked_ && (active_ == ToolId::Slice || active_ == ToolId::SliceSelect)) {
+        return;
+    }
     if (canvasBrush_) {
         canvasBrushDragging_ = true;
         canvasBrush_(CanvasBrushPhase::Press, imagePos, Qt::KeyboardModifiers(modifiers));
@@ -932,6 +935,9 @@ void ToolController::handlePressed(const QPointF& imagePos, int button, int modi
 
 void ToolController::handleMoved(const QPointF& imagePos)
 {
+    if (slicesLocked_ && (active_ == ToolId::Slice || active_ == ToolId::SliceSelect)) {
+        return;
+    }
     if (canvasBrush_) {
         canvasBrush_(canvasBrushDragging_ ? CanvasBrushPhase::Drag : CanvasBrushPhase::Hover,
                      imagePos, QGuiApplication::queryKeyboardModifiers());
@@ -1034,6 +1040,9 @@ void ToolController::handleModifiers(int modifiers)
 
 void ToolController::handleReleased(const QPointF& imagePos)
 {
+    if (slicesLocked_ && (active_ == ToolId::Slice || active_ == ToolId::SliceSelect)) {
+        return;
+    }
     if (canvasBrush_) {
         canvasBrushDragging_ = false;
         canvasBrush_(CanvasBrushPhase::Release, imagePos,
@@ -1134,6 +1143,9 @@ bool ToolController::handleEscape()
 
 bool ToolController::handleDeletePoint()
 {
+    if (slicesLocked_ && (active_ == ToolId::Slice || active_ == ToolId::SliceSelect)) {
+        return true;
+    }
     if (ToolHandler* h = registry_.forTool(active_)) {
         return h->onDeletePoint();
     }

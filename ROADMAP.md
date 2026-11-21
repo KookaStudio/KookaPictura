@@ -616,8 +616,10 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [ ] Menu customization: Edit ▸ Menus, Show All Menu Items, and the
       enablement matrix (#501)
 - [ ] The Type menu: work path, convert to shape, and spellcheck (#502)
-- [ ] The View menu stubs: Proof Setup and Colors, Gamut Warning, Snap To, Lock
-      Slices, Extras, Pixel Aspect Ratio, and 32-bit Preview Options (#503)
+- [x] View ▸ Show/Extras, Show Extra Options, Grid, Pixel Grid, Layer Edges,
+      Target Path, Lock/Clear Slices, 200% and Print Size (#503)
+- [ ] The remaining View menu items: Gamut Warning and Pixel Aspect Ratio
+      (#503); Snap To (#305); 32-bit Preview Options (#570)
 - [x] File ▸ Scripts ▸ Load Files into Stack: the Load Layers dialog, one
       native-size layer per file on a new canvas, Auto-Align, and the embedded
       smart-object option (#1277)

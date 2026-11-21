@@ -27,7 +27,11 @@ dragged off the canvas as one "Delete Note" state; a dragged note SHALL move as
 one "Move Note" state on release. A note becoming current SHALL show it in the
 Notes panel and make the panel visible. The options bar's Clear All SHALL delete
 every note as one "Delete All Notes" state. The canvas SHALL show every note as
-a note glyph with any tool active, outlining the current one.
+a note glyph with any tool active while `View > Show > Notes` and `View > Extras`
+are both on, outlining the current one. The Note tool itself SHALL keep them
+visible while it is active when Extras is on; Extras SHALL hide them regardless
+of the active tool. `View > Show > Notes` SHALL be a checkable command, on by
+default, persisted in the session, and applied to every canvas.
 
 #### Scenario: Adding and reopening notes
 
@@ -38,3 +42,18 @@ a note glyph with any tool active, outlining the current one.
 
 - **WHEN** a note is Alt-clicked and then Clear All is used
 - **THEN** the note count drops by one and then to zero, and no note is current
+
+#### Scenario: Show gates note glyphs for other tools [note_show_gate]
+
+- **WHEN** notes exist and another tool is active with Show > Notes on, then off
+- **THEN** the glyphs are visible and then hidden, while the Note tool itself keeps them visible
+
+#### Scenario: Extras hides note glyphs [note_extras]
+
+- **WHEN** Show > Notes is on and Extras is turned off, then on
+- **THEN** the glyphs hide and return with the Show checkmark unchanged
+
+#### Scenario: Extras wins over the Note tool [note_tool_extras]
+
+- **WHEN** the Note tool is active with glyphs visible and Extras is turned off, then on
+- **THEN** the glyphs hide while Extras is off even with the Note tool active, and return with Extras on

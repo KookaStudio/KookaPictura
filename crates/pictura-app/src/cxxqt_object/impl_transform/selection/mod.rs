@@ -182,7 +182,7 @@ impl PictureViewRust {
         let Ok(Some(updated)) = result else {
             return false;
         };
-        self.session.set_selection(Some(updated));
+        self.session.set_selection_in_place(Some(updated));
         self.session.last_transform = repeatable_transform(&session);
         true
     }

@@ -856,11 +856,15 @@ void ImageView::paintEvent(QPaintEvent* event)
     // only the rasterised preview above is clipped to the canvas.
     paintTransformOverlay(painter);
 
+    paintGrid(painter);
+    paintPixelGrid(painter);
     paintGuides(painter);
     paintSmartGuides(painter);
     paintCropGroupOverlays(painter);
     paintAnnotations(painter);
     paintPathOverlay(painter);
+    paintTargetPathOverlay(painter);
+    paintLayerEdges(painter);
     paintTypeOverlay(painter);
     paintMoveOutline(painter);
     if (compassVisible_) {

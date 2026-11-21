@@ -41,6 +41,8 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/paragraph_style_dialog_pages.cpp
     crates/pictura-app/cpp/paragraph_text_size_dialog.cpp
     crates/pictura-app/cpp/picture_frame_dialog.cpp
+    crates/pictura-app/cpp/show_extras_dialog.cpp
+    crates/pictura-app/cpp/show_extras_dialog.h
     crates/pictura-app/cpp/picture_frame_dialog.h
     crates/pictura-app/cpp/preferences_agent_page.cpp
     crates/pictura-app/cpp/preferences_agent_page.h

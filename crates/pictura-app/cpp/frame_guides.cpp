@@ -53,9 +53,10 @@ void PicturaMainWindow::prepareCanvasGuides(const DocWindow& window)
                     return;
                 }
                 // Placing a guide shows hidden guides, as in CS6.
-                if (!guidesVisible_) {
+                if (!guidesVisible_ || !extras_) {
                     guidesVisible_ = true;
-                    applyGuideViewState();
+                    extras_ = true;
+                    applyViewState();
                     saveSession();
                 }
                 add_guide(*view, vertical, position);
@@ -94,8 +95,9 @@ void PicturaMainWindow::applyGuideViewState()
         }
         window->host->setRulersVisible(rulersVisible_);
         window->host->setRulerUnit(rulerUnit_, traditionalPoints_);
-        window->canvas->setGuidesVisible(guidesVisible_);
-        window->canvas->setSmartGuidesEnabled(smartGuidesVisible_);
+        window->canvas->setGuidesVisible(effectiveExtra(command_ids::ViewShowGuides, guidesVisible_));
+        window->canvas->setSmartGuidesEnabled(
+            effectiveExtra(command_ids::ViewShowSmartGuides, smartGuidesVisible_));
         window->canvas->setGuideAppearance(guideColor_, guideDashed_);
     }
     if (tools_) {
@@ -124,12 +126,21 @@ void PicturaMainWindow::registerGuideHandlers()
         // Flip the flag rather than read the action, so a control-server
         // dispatch (which runs the handler without toggling the action)
         // toggles too; the checked provider then re-syncs the action.
-        commandRegistry()->setHandler(command, [this, flag]() {
+        const bool showToggle = command == command_ids::ViewShowGuides
+            || command == command_ids::ViewShowSmartGuides;
+        commandRegistry()->setHandler(command, [this, flag, showToggle]() {
+            if (showToggle && documentCount() == 0) {
+                return;
+            }
             this->*flag = !(this->*flag);
             applyGuideViewState();
             saveSession();
         });
         commandRegistry()->setCheckedProvider(command, [this, flag]() { return this->*flag; });
+        if (showToggle) {
+            commandRegistry()->setEnabledProvider(
+                command, [this]() { return documentCount() > 0; });
+        }
     }
 
     commandRegistry()->setHandler(command_ids::ViewClearGuides, [this]() {
@@ -151,9 +162,10 @@ void PicturaMainWindow::registerGuideHandlers()
         if (runDialog(dialog, this) != QDialog::Accepted) {
             return;
         }
-        if (!guidesVisible_) {
+        if (!guidesVisible_ || !extras_) {
             guidesVisible_ = true;
-            applyGuideViewState();
+            extras_ = true;
+            applyViewState();
             saveSession();
         }
         add_guide(*view, dialog.vertical(), dialog.position());
@@ -194,6 +206,18 @@ void PicturaMainWindow::connectGuidePreferences(PreferencesDialog* dialog)
                 guideColor_ = color;
                 guideDashed_ = dashed;
                 applyGuideViewState();
+                saveSession();
+            });
+    dialog->setGridSettings(QColor(gridColor_), gridStyle_, gridUnit_, gridEvery_,
+                            gridSubdivisions_);
+    connect(dialog, &PreferencesDialog::gridSettingsChanged, this,
+            [this](const QColor& color, int style, int unit, double every, int subdivisions) {
+                gridColor_ = color.name();
+                gridStyle_ = qBound(0, style, 2);
+                gridUnit_ = qBound(0, unit, 6);
+                gridEvery_ = every > 0.0 ? every : 1.0;
+                gridSubdivisions_ = qMax(1, subdivisions);
+                applyViewState();
                 saveSession();
             });
 }

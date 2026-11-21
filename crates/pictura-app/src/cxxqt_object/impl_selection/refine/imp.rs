@@ -677,7 +677,7 @@ pub(super) fn apply(
     {
         let mut rust = view.as_mut().rust_mut();
         if target == OutputTarget::Selection {
-            rust.session.set_selection(Some(refined));
+            rust.session.set_selection_in_place(Some(refined));
         }
         if let Some(path) = new_layer_path {
             rust.select_only_layer(&path);

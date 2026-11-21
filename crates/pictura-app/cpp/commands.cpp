@@ -107,7 +107,6 @@ const SeparatorRow kSeparators[] = {
     {{QStringLiteral("View"), QStringLiteral("Rulers")}, {QStringLiteral("View")}},
     {{QStringLiteral("View"), QStringLiteral("Lock Slices")}, {QStringLiteral("View")}},
     {{QStringLiteral("View"), QStringLiteral("Show"), QStringLiteral("Selection Edges")}, {QStringLiteral("View")}},
-    {{QStringLiteral("View"), QStringLiteral("Align")}, {QStringLiteral("View")}},
     {{QStringLiteral("View"), QStringLiteral("Tool Hints")}, {QStringLiteral("View")}},
     {{QStringLiteral("Window"), QStringLiteral("Workspace"), QStringLiteral("New Workspace…")}, {QStringLiteral("Window"), QStringLiteral("Workspace")}},
     {{QStringLiteral("Window"), QStringLiteral("Workspace"), QStringLiteral("Keyboard Shortcuts & Menus…")}, {QStringLiteral("Window"), QStringLiteral("Workspace")}},

@@ -417,19 +417,6 @@ void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
     registry.setCheckedProvider(command_ids::ViewSnapCanvasToWorkspace,
                                 [this]() { return snapCanvasToWorkspace_; });
 
-    registry.setHandler(command_ids::ViewShowSelectionEdges, [this, &registry]() {
-        const QAction* action = registry.action(command_ids::ViewShowSelectionEdges);
-        if (ImageView* canvas = imageView()) {
-            canvas->setSelectionEdgesVisible(action && action->isChecked());
-        }
-    });
-    registry.setEnabledProvider(command_ids::ViewShowSelectionEdges,
-                                [this]() { return documentCount() > 0; });
-    registry.setCheckedProvider(command_ids::ViewShowSelectionEdges, [this]() {
-        ImageView* canvas = imageView();
-        return canvas ? canvas->selectionEdgesVisible() : true;
-    });
-
     const auto stepUiScale = [this](int direction) {
         const QVector<int> choices = Theme::uiScaleChoices();
         int index = choices.indexOf(uiScalePercent_);
@@ -455,6 +442,7 @@ void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
     registerUpdateHandlers(*this);
     registerShortcutHandlers();
     registerGuideHandlers();
+    registerViewHandlers();
     registerProofHandlers();
     registerSearchHandlers();
 

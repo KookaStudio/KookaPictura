@@ -156,6 +156,8 @@ public:
 
     // Set an absolute zoom about a widget-space anchor (clamped to 0.01x..32x).
     void setZoom(double zoom, const QPointF& anchor);
+    // View > Print Size: one image inch at one logical screen inch (96 / ppi).
+    void printSize(double ppi);
 
     // Set the widget-space offset directly, clamped by the reveal margin. The
     // workspace scrollbars use this; every other path goes through clampOffset.
@@ -524,6 +526,38 @@ public:
     };
     void setPathOverlay(const PathOverlay& overlay);
     void clearPathOverlay();
+    // The persistent View > Show > Target Path curve, drawn with any tool; the
+    // tool overlay above keeps its anchors and handles.
+    void setTargetPathOverlay(const PathOverlay& overlay);
+    void setTargetPathVisible(bool on);
+    bool targetPathVisibleForTest() const { return targetPathVisible_; }
+    const PathOverlay& targetPathOverlayForTest() const { return targetPathOverlay_; }
+    // View > Show > Layer Edges: the active layer's content box.
+    void setLayerEdges(const QRectF& rect);
+    void setLayerEdgesVisible(bool on);
+    QRectF layerEdgesForTest() const { return layerEdges_; }
+    bool layerEdgesVisibleForTest() const { return layerEdgesVisible_; }
+    // View > Show > Grid and Pixel Grid.
+    void setGrid(bool visible, const QColor& color, int style, double everyX, double everyY,
+                 int subdivisions);
+    bool gridVisibleForTest() const { return gridVisible_; }
+    int gridStyleForTest() const { return gridStyle_; }
+    QColor gridColorForTest() const { return gridColor_; }
+    double gridEveryXForTest() const { return gridEveryX_; }
+    double gridEveryYForTest() const { return gridEveryY_; }
+    int gridSubdivisionsForTest() const { return gridSubdivisions_; }
+    void setPixelGridVisible(bool on);
+    bool pixelGridVisibleForTest() const { return pixelGridVisible_; }
+    bool pixelGridShownForTest() const { return pixelGridVisible_ && zoom_ > 5.0; }
+    // Show gates for the annotation and slice overlays.
+    void setNotesVisible(bool on);
+    bool notesVisibleForTest() const { return notesVisible_; }
+    void setCountVisible(bool on);
+    bool countVisibleForTest() const { return countVisible_; }
+    void setSamplersVisible(bool on);
+    bool samplersVisibleForTest() const { return samplersVisible_; }
+    void setSlicesVisible(bool on);
+    bool slicesVisibleForTest() const { return slicesVisible_; }
     int pathOverlayAnchorCountForTest() const { return int(pathOverlay_.anchors.size()); }
     bool pathOverlayHasPreviewForTest() const { return !pathOverlay_.preview.isEmpty(); }
     bool pathOverlayAnchorsSolidForTest() const { return pathOverlay_.anchorsSolid; }
@@ -713,6 +747,10 @@ private:
     void paintAnnotations(QPainter& painter);
     void paintGuides(QPainter& painter);
     void paintSmartGuides(QPainter& painter);
+    void paintTargetPathOverlay(QPainter& painter);
+    void paintLayerEdges(QPainter& painter);
+    void paintGrid(QPainter& painter);
+    void paintPixelGrid(QPainter& painter);
     QString formatGuideDistance(double documentPixels) const;
     QList<SmartGuideLine> smartGuideLines_;
     QList<SmartGuideGap> smartGuideGaps_;
@@ -742,6 +780,21 @@ private:
     QImage refinePreview_;
     QRect refinePreviewArea_;
     PathOverlay pathOverlay_;
+    PathOverlay targetPathOverlay_;
+    bool targetPathVisible_ = true;
+    QRectF layerEdges_;
+    bool layerEdgesVisible_ = true;
+    bool gridVisible_ = false;
+    QColor gridColor_{0xc0, 0xc0, 0xc0};
+    int gridStyle_ = 0;
+    double gridEveryX_ = 0.0;
+    double gridEveryY_ = 0.0;
+    int gridSubdivisions_ = 4;
+    bool pixelGridVisible_ = true;
+    bool notesVisible_ = true;
+    bool countVisible_ = true;
+    bool samplersVisible_ = true;
+    bool slicesVisible_ = true;
     TypeOverlay typeOverlay_;
     QTimer* typeCaretBlink_ = nullptr;
     bool typeCaretShown_ = true;

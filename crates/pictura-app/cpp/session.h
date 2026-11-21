@@ -91,6 +91,26 @@ struct SessionState {
     bool guidesLocked = false;
     // View > Show > Smart Guides: alignment guides and snapping while moving.
     bool smartGuidesVisible = true;
+    // View > Show overlay state and the Extras master (frame_view.cpp).
+    bool selectionEdges = true;
+    bool showTargetPath = true;
+    bool showLayerEdges = true;
+    bool showGrid = false;
+    bool showCount = true;
+    bool showSlices = true;
+    bool showNotes = true;
+    bool showPixelGrid = true;
+    bool showColorSamplers = true;
+    bool extras = true;
+    bool extrasMembersSet = false;
+    QStringList extrasMembers;
+    bool lockSlices = false;
+    // Guides, Grid, & Slices: the Grid group.
+    QString gridColor = QStringLiteral("#c0c0c0");
+    int gridStyle = 0;    // 0 Lines, 1 Dashed Lines, 2 Dots
+    int gridUnit = 1;     // 0 Pixels ... 6 Percent, matching the page combo
+    double gridEvery = 1.0;
+    int gridSubdivisions = 4;
     // View > Free Pan: free (default) vs the Photoshop-style constrained pan.
     bool freePan = true;
     // View > Snap Canvas To Workspace: pin a fitting canvas to the centre and

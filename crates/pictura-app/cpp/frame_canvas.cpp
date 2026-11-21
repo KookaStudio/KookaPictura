@@ -85,6 +85,8 @@ void PicturaMainWindow::setupCanvas(DocWindow& window)
     window.canvas->setFreePan(freePan_);
     window.canvas->setSnapToWorkspace(snapCanvasToWorkspace_);
     prepareCanvasGuides(window);
+    refreshViewOverlays();
+    applyViewState();
 
     // Present from the view pyramid: the canvas crops a level instead of
     // scaling the full-resolution image.

@@ -452,8 +452,19 @@ void ImageView::clearPerspectiveCropQuad()
 
 void ImageView::setSliceOverlay(const QList<SliceOverlay>& slices, const QRectF& dragging)
 {
+    const QRectF drag = dragging.normalized();
+    bool same = sliceOverlay_.size() == slices.size() && drag == sliceDrag_;
+    for (qsizetype i = 0; same && i < slices.size(); ++i) {
+        const SliceOverlay& a = sliceOverlay_.at(i);
+        const SliceOverlay& b = slices.at(i);
+        same = a.rect == b.rect && a.number == b.number && a.user == b.user
+            && a.selected == b.selected;
+    }
+    if (same) {
+        return;
+    }
     sliceOverlay_ = slices;
-    sliceDrag_ = dragging.normalized();
+    sliceDrag_ = drag;
     update();
 }
 
@@ -532,7 +543,7 @@ void ImageView::paintCropGroupOverlays(QPainter& painter)
     painter.setTransform(viewRotation());
     painter.setClipping(false);
 
-    if (!sliceOverlay_.isEmpty() || !sliceDrag_.isNull()) {
+    if (slicesVisible_ && (!sliceOverlay_.isEmpty() || !sliceDrag_.isNull())) {
         // CS6 colours: user slices saturated blue and solid, auto slices grey
         // and dotted.
         const QColor userColor(0x2c, 0x6f, 0xd6);

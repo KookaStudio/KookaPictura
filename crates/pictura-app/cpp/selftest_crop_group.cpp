@@ -107,7 +107,7 @@ int pictura::runCropGroupChecks(pictura::PicturaMainWindow& frame)
     view->undo();
     const bool undone = pictura::slice_count(*view) == 1 && canvas->sliceOverlayCountForTest() == 1;
     frame.setActiveTool(pictura::ToolId::Move);
-    const bool hidden = canvas->sliceOverlayCountForTest() == 0;
+    const bool stillVisible = canvas->sliceOverlayCountForTest() == 1;
 
     // Slice Select: select, move, resize from an edge, deselect, delete.
     const auto userSlice0 = [view]() {
@@ -151,15 +151,15 @@ int pictura::runCropGroupChecks(pictura::PicturaMainWindow& frame)
 
     ST_BEGIN("crop_group");
     ST_PASS("crop_group staged=%d cursor=%d discarded=%d degenerate=%d cropped=%d unsliced=%d added=%d "
-            "click=%d undone=%d hidden=%d select=%d/%d/%d/%d/%d",
+            "click=%d undone=%d visible=%d select=%d/%d/%d/%d/%d",
             staged ? 1 : 0, crosshair && cornerCursor ? 1 : 0, discarded ? 1 : 0, degenerateKept ? 1 : 0, cropped ? 1 : 0,
             unsliced ? 1 : 0, added ? 1 : 0, clickNoSlice ? 1 : 0, undone ? 1 : 0,
-            hidden ? 1 : 0, selected ? 1 : 0, moved ? 1 : 0, resized ? 1 : 0,
+            stillVisible ? 1 : 0, selected ? 1 : 0, moved ? 1 : 0, resized ? 1 : 0,
             deselected ? 1 : 0, deleted ? 1 : 0);
     frame.closeDocument(doc, false);
     QFile::remove(seedPath);
     if (!staged || !crosshair || !cornerCursor || !discarded || !degenerateKept || !cropped || !unsliced || !added
-        || !clickNoSlice || !undone || !hidden || !sliceSelect) {
+        || !clickNoSlice || !undone || !stillVisible || !sliceSelect) {
         return pictura::selfTest().fail(532, "crop group");
     }
     return 0;

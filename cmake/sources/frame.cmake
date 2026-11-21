@@ -37,6 +37,7 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/frame_transform_lock.cpp
     crates/pictura-app/cpp/frame_ui_scale.cpp
     crates/pictura-app/cpp/frame_update.cpp
+    crates/pictura-app/cpp/frame_view.cpp
     crates/pictura-app/cpp/frame_update.h
     crates/pictura-app/cpp/import_save_coordinator.cpp
     crates/pictura-app/cpp/import_save_coordinator.h

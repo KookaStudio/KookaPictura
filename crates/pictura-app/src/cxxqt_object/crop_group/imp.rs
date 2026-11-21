@@ -272,6 +272,25 @@ pub(super) fn set_user_slice(
     set
 }
 
+pub(super) fn user_slice_count(view: &PictureView) -> i32 {
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .map_or(0, |doc| doc.slices.len() as i32)
+}
+
+pub(super) fn clear_user_slices(mut view: Pin<&mut PictureView>) -> bool {
+    let cleared = match view.as_mut().rust_mut().session.doc.as_mut() {
+        Some(doc) => pictura_render::clear_slices(doc),
+        None => false,
+    };
+    if cleared {
+        view.as_mut().edit("Clear Slices", |_| Edit::Meta);
+    }
+    cleared
+}
+
 pub(super) fn remove_user_slice(mut view: Pin<&mut PictureView>, index: i32) -> bool {
     let Ok(index) = usize::try_from(index) else {
         return false;

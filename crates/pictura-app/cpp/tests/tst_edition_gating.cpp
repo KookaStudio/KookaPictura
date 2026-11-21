@@ -7,8 +7,12 @@
 
 #include "commands.h"
 #include "frame.h"
+#include "show_extras_dialog.h"
 #include "toolbox.h"
 #include "tools.h"
+
+#include <QtCore/QTimer>
+#include <QtWidgets/QCheckBox>
 
 #include "qt_test_support.h"
 
@@ -35,6 +39,18 @@ void EditionGatingTest::editionGating()
     const auto hasCommand = [](PicturaMainWindow& frame, const char* id) {
         return frame.registry()->action(QString::fromLatin1(id)) != nullptr;
     };
+    const auto extrasCount = [](PicturaMainWindow& frame) {
+        int count = -1;
+        QTimer::singleShot(0, [&frame, &count]() {
+            if (auto* dialog = frame.findChild<pictura::ShowExtrasDialog*>()) {
+                count = int(dialog->findChildren<QCheckBox*>().size());
+                dialog->reject();
+            }
+        });
+        frame.registry()->dispatch(
+            QString::fromLatin1(pictura::command_ids::ViewShowExtraOptions));
+        return count;
+    };
 
     {
         pictura::test::ScopedStateHome extendedHome;
@@ -42,6 +58,7 @@ void EditionGatingTest::editionGating()
         qputenv("PICTURA_EDITION", "extended");
         auto extended = pictura::test::makeMainWindow();
         QVERIFY(extended != nullptr);
+        QCOMPARE(extrasCount(*extended), 10);
         auto* toolbox = extended->findChild<Toolbox*>(QStringLiteral("toolsPanel"));
         QVERIFY(toolbox != nullptr);
         QVERIFY(pictura::toolAvailable(pictura::ToolId::Count));
@@ -74,6 +91,7 @@ void EditionGatingTest::editionGating()
         qputenv("PICTURA_EDITION", "standard");
         auto standard = pictura::test::makeMainWindow();
         QVERIFY(standard != nullptr);
+        QCOMPARE(extrasCount(*standard), 9);
         auto* toolbox = standard->findChild<Toolbox*>(QStringLiteral("toolsPanel"));
         QVERIFY(toolbox != nullptr);
         QVERIFY(!pictura::toolAvailable(pictura::ToolId::Count));

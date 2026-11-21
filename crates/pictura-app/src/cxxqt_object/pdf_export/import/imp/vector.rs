@@ -137,7 +137,7 @@ pub fn place_prepared_pdf(
         let damage = pictura_render::damage::influence(doc, &path);
         rust.select_only_layer(&path);
         if label == "Paste" {
-            rust.session.set_selection(None);
+            rust.session.set_selection_in_place(None);
         }
         created = path;
         structural_after(damage.map(|rect| vec![rect]))

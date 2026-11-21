@@ -226,6 +226,7 @@ set(PICTURA_QT_TESTS
     tst_session_store
     tst_settings_backup
     tst_rulers_guides
+    tst_view_menu
     tst_panels_parity
     tst_layer_comps_panel
     tst_layer_comps_export
