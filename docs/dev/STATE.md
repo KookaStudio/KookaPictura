@@ -185,13 +185,17 @@ Snapshot for resuming after a context break. Update after each milestone.
   Measured and dropped: a fixed `M_MMAP_THRESHOLD` (4 MiB: 600 MiB but 4.1 s;
   16 MiB: 655 MiB, 3.8 s, page faults on fresh strip mappings) and
   `MALLOC_ARENA_MAX=2` (3.1–3.7 s).
-- **WebP lossy export — #807 implemented; verification via CI** (OpenSpec change
-  `webp-lossy-export`, archived; capability `interop/raster-export` modified).
+- **WebP lossy export — #807 implemented** (OpenSpec changes
+  `webp-lossy-export`, `webp-export-control`, and `webp-export-audit`,
+  archived; capabilities `interop/raster-export` and
+  `interop/agentic-control` modified).
   `pictura_codec::encode_webp_lossy` uses the pure-Rust `gamut-webp` VP8 encoder
   with `VP8X`/`ALPH` alpha; `encode_webp` stays the lossless VP8L path. Export As
-  gains a Lossless checkbox and enables Quality for JPG and lossy WebP (default
-  quality 90); Save As `.webp` stays lossless. Tests: codec units, the
-  ImageMagick oracle, `tst_export_as`, and `tst_webp`.
+  gains a Lossless checkbox and enables Quality (0–100) for JPG and lossy WebP
+  (default quality 90); Save As `.webp` stays lossless. The control server's
+  `export_webp` validates its quality and lossless options. Tests: codec units,
+  the ImageMagick oracle, `tst_export_as`, `tst_webp`, and
+  `tst_control_editing`.
 - **Streamed saves — #1320 complete** (OpenSpec change `tiled-save-streaming`;
   capabilities `codec/streamed-psd-save`, `codec/streamed-raster-save`,
   `document/save-memory-gate`, and `codec/psd-encode-cache` modified).
@@ -219,8 +223,9 @@ Snapshot for resuming after a context break. Update after each milestone.
   - **Gate.** `helpers/save_gate.rs`: a native save reserves its tile tables,
     one compositor band and the encoder's rows (M24 at 17000²: ~180 MiB, was
     ~11 GB) and admits the merged image's tiles against room plus scratch.
-    Engine raster saves are costed per format; Qt JPEG/WebP and GIF are now
-    gated too. GIF's quantizer cost is fitted to its measured peak (30 B/px).
+    Engine raster saves are costed per format; Qt JPEG and GIF, and the engine
+    WebP path, are now gated too. GIF's quantizer cost is fitted to its measured
+    peak (30 B/px).
   - **Results.** 291 golden digests (PSD and raster, recorded from the previous
     writers) match. `save_psd` heap guard 128.8 → 68.7 MB at 4250²; the heap
     harness now fixes rayon's global pool at its 4 threads, since the save
@@ -3385,9 +3390,10 @@ Snapshot for resuming after a context break. Update after each milestone.
   enabled and quality off (lossless). Oracle `webp_oracle` (magick decodes our
   lossless output exactly and we decode its lossy output within tolerance), Qt
   Test `tst_webp` (save + reopen round trip, scaled export), and `tst_export_as`
-  (WebP combo entry, controls, in-memory encode) cover it. Ceiling (`//
-  ponytail:`): lossless export only — no pure-Rust lossy WebP encoder exists, so
-  there is no WebP quality control.
+  (WebP combo entry, controls, in-memory encode) cover it. The lossless-only
+  ceiling (`// ponytail:`) was lifted by #807: `encode_webp_lossy` adds the VP8
+  path and Export As exposes the Lossless control; Save As `.webp` stays
+  lossless.
 - **Pictura Raw core** (change `pictura-raw-core`, new capability `pictura-raw`):
   the Camera Raw Filter's 11 PV2012 Basic controls now round-trip and render,
   staying Photoshop's standard smart filter (`filterID 2683`, `"Camera Raw

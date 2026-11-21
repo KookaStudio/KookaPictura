@@ -316,7 +316,7 @@ void ExportAsDialog::buildUi()
     qualityLabel_ = new QLabel(tr("Quality:"), fileBox);
     quality_ = new QSpinBox(fileBox);
     quality_->setObjectName(QStringLiteral("exportAsQuality"));
-    quality_->setRange(1, 100);
+    quality_->setRange(0, 100);
     quality_->setValue(90);
     fileForm->addRow(qualityLabel_, quality_);
     lossless_ = new QCheckBox(tr("Lossless"), fileBox);

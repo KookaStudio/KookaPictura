@@ -36,7 +36,7 @@ A live session is off by default, and read-only until the person grants more. Ba
 |---|---|---|
 | Read | Status, layers, pixels, screenshots, history list, `document open` | Enabled |
 | Edit | Filters, adjustments, selections, layers, canvas pointer | Edit grant |
-| Save | `save`, `save_as`, `export_png` | Edit and Save grants |
+| Save | `save`, `save_as`, `export_png`, `export_webp` | Edit and Save grants |
 | Admin | `key`, window `pointer`, `set_unsaved_policy`, `set_gpu_compute` | Bare `--control` |
 
 `dispatch_command` and `run_command` run only commands on fixed lists.

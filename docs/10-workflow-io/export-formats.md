@@ -123,9 +123,11 @@ settings and a live preview, and this project carries it as a deliberate
    row previews it.
 2. **Preview** — the selected target after sizing and canvasing, with Fit / 1:1
    and zoom controls, and — for a small target — an estimated output size.
-3. **File Settings** — **Format** is PNG, JPG, PNG-8, GIF, or SVG;
-   **Transparency** is offered for PNG, PNG-8, and GIF, **Quality** for JPG. SVG
-   is document-level (see *SVG (CC)* below).
+3. **File Settings** — **Format** is PNG, JPG, PNG-8, GIF, SVG, or WebP;
+   **Transparency** is offered for PNG, PNG-8, GIF, and WebP, **Quality**
+   (0–100) for JPG and for WebP while its **Lossless** control is off. WebP
+   also offers **Lossless**, which defaults off, so WebP defaults to lossy at
+   quality 90. SVG is document-level (see *SVG (CC)* below).
 4. **Image Size** — Width, Height, Scale (percent), and a **Resample** menu
    (Bicubic, Bicubic Automatic, Bicubic Sharper, Bicubic Smoother, Bilinear,
    Nearest Neighbor, Preserve Details).
@@ -137,8 +139,9 @@ settings and a live preview, and this project carries it as a deliberate
    from the layer name).
 
 PNG and JPG are written through the Qt image writers (`WF-003`/`WF-004`); PNG-8
-and GIF through the engine web encoders (`WF-005`, `interop/raster-export`). A
-layer target is the layer rendered alone on transparency, cropped to its bounds.
+and GIF through the engine web encoders (`WF-005`, `interop/raster-export`), and
+WebP through the engine's native lossy or lossless encoder. A layer target is
+the layer rendered alone on transparency, cropped to its bounds.
 `Export As` never changes the document's path, modified state, or history.
 
 ### SVG (CC)
@@ -240,7 +243,7 @@ support list). These belong to the Extended 3D pipeline
 | `File > Export > Send Video Preview To Device` | Command | — | Extended |
 | `File > Export > Zoomify` | Dialog | — | JPEG tiles + HTML |
 | `File > Save For Web & Devices` | Dialog | `Ctrl/Cmd+Shift+Alt+S` *(inferred)* | `WF-005` |
-| `File > Export As` | Dialog | — | CC-only extension: layer list, preview, PNG/JPG/PNG-8/GIF, Image Size, Canvas Size |
+| `File > Export As` | Dialog | — | CC-only extension: layer list, preview, PNG/JPG/PNG-8/GIF/WebP, Image Size, Canvas Size |
 | `File > Save As > Photoshop PDF` | Dialog | — | `WF-003` |
 | `File > Automate > Web Photo Gallery` | Dialog | — | Optional CS5 plug-in / Bridge replacement |
 | `File > New > Device Central` | Button | — | CS5-era mobile preview |
