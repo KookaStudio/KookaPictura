@@ -68,6 +68,14 @@ fn uncompressed_nef_layouts_decode() {
         Data::Msb { rows_per_strip: 5 },
     );
     expect_plane(&spec, "12-bit MSB-first strips");
+    // Little-endian: one strip of rows on whole 32-bit words (Coolpix NRW).
+    let mut spec = Nef::new(
+        noise_plane(40, 9, 4095, 2),
+        12,
+        Data::Msb { rows_per_strip: 9 },
+    );
+    spec.be = false;
+    expect_plane(&spec, "12-bit MSB-first in little-endian words");
     for be in [true, false] {
         let mut spec = Nef::new(noise_plane(40, 16, 16383, 3), 14, Data::Containers);
         spec.be = be;
@@ -76,6 +84,8 @@ fn uncompressed_nef_layouts_decode() {
     let mut spec = Nef::new(noise_plane(40, 16, 4095, 4), 12, Data::Lsb);
     spec.be = false;
     expect_plane(&spec, "12-bit LSB-first under 34713");
+    let spec = Nef::new(noise_plane(37, 9, 4095, 5), 12, Data::Padded);
+    expect_plane(&spec, "12-bit padded groups under 34713 (D100)");
 }
 
 #[test]
@@ -106,6 +116,10 @@ fn nef_variants_are_refused() {
         Data::Msb { rows_per_strip: 8 },
     );
     unsupported(&spec, "10-bit");
+    // A strip larger than any known packing of the rows it claims.
+    let mut spec = Nef::new(noise_plane(32, 8, 4095, 5), 12, Data::Lsb);
+    spec.height_tag = Some(7);
+    unsupported(&spec, "an unknown uncompressed layout");
 }
 
 #[test]

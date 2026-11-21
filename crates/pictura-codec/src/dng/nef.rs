@@ -7,8 +7,10 @@
 //! per-camera table (#1465).
 
 use super::levels::{self, Area, Levels};
-use super::nef_decode::{decode_huffman, linearization, unpack_lsb};
-use super::tiff::{Ifd, Tiff};
+use super::nef_decode::{
+    decode_huffman, linearization, unpack_lsb, unpack_msb_le_words, unpack_padded,
+};
+use super::tiff::{Ifd, Order, Tiff};
 use super::vendor::{camera_color, maker_note_bytes};
 use super::{
     cfa_pattern, decode_plane, layout, to_usize, DngCrop, DngImage, Tags, BITS_PER_SAMPLE,
@@ -201,16 +203,35 @@ pub(super) fn read_nef(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, P
             decode_huffman(data, &lin, bits, width, height)?
         }
         (NIKON_CODED, None) if !sixteen_bit_containers(&tags, width, height)? => {
-            unpack_lsb(strip(&tags)?, bits, width, height)?
+            // The strip's exact size names its packing: LSB-first rows (D850
+            // 12-bit), or 16-byte groups of ten MSB-first 12-bit samples and
+            // a pad byte (D100). Anything else is refused, never guessed.
+            let data = strip(&tags)?;
+            if data.len() == (width * bits as usize).div_ceil(8) * height {
+                unpack_lsb(data, bits, width, height)?
+            } else if bits == 12 && data.len() == width.div_ceil(10) * 16 * height {
+                unpack_padded(data, width, height)
+            } else {
+                return Err(unsupported("uncompressed sample layout"));
+            }
+        }
+        _ if sixteen_bit_containers(&tags, width, height)? => {
+            let layout = layout(&tags, width, height, budget)?;
+            decode_plane(&tiff, &layout, 1, 16, (width, height), 1)?
+        }
+        // Packed samples run most-significant bit first through 32-bit words
+        // in the file's byte order: plain packing in a big-endian file (D200),
+        // word-swapped in a little-endian one (Coolpix P7100 NRW).
+        _ if tiff.order == Order::Big => {
+            let layout = layout(&tags, width, height, budget)?;
+            decode_plane(&tiff, &layout, 1, bits, (width, height), 1)?
         }
         _ => {
-            let container = if sixteen_bit_containers(&tags, width, height)? {
-                16
-            } else {
-                bits
-            };
-            let layout = layout(&tags, width, height, budget)?;
-            decode_plane(&tiff, &layout, 1, container, (width, height), 1)?
+            let rows = tags.uint(ROWS_PER_STRIP)?.unwrap_or(height as u64);
+            if rows < height as u64 {
+                return Err(unsupported("little-endian packed strips"));
+            }
+            unpack_msb_le_words(strip(&tags)?, bits, width, height)?
         }
     };
 

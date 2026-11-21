@@ -15,8 +15,8 @@ corpus rows read user-supplied camera files, opt-in through
 |---|---|---|---|
 | `raw_sniff` | DNG, CR2, NEF, plain TIFF, Nikon-make TIFF without SubIFDs, PNG signature; `sniff_raw`, `sniff_raw_prefix`, `read_raw` | DNG/CR2/NEF named and read; the other three `None`/false and `Unsupported` | `pictura-codec::raw_containers_dispatch_by_signature` |
 | `nef_raw_ifd` | Big-endian NEF: preview SubIFD then CFA SubIFD with pattern 2,1,1,0 | Decoded at the CFA SubIFD's size, CFA BGGR | `pictura-codec::nef_takes_the_cfa_subifd` |
-| `nef_uncompressed` | 12-bit MSB packed, 5-row strips; 14-bit 16-bit containers BE and LE; 34713 12-bit LSB packed | Each equals the plane scaled by its white | `pictura-codec::uncompressed_nef_layouts_decode` |
-| `nef_unsupported` | `NEFCompression` 8, 13, 14; compression 7; 10-bit | `Unsupported` | `pictura-codec::nef_variants_are_refused` |
+| `nef_uncompressed` | 12-bit MSB packed, 5-row strips (BE) and one strip of LE 32-bit words; 14-bit 16-bit containers BE and LE; 34713 12-bit LSB packed; 34713 12-bit padded 16-byte groups (D100) | Each equals the plane scaled by its white | `pictura-codec::uncompressed_nef_layouts_decode` |
+| `nef_unsupported` | `NEFCompression` 8, 13, 14; compression 7; 10-bit; 34713 strip of no known size | `Unsupported` | `pictura-codec::nef_variants_are_refused` |
 | `nef_lossless` | 12 and 14-bit, lossless tables, both byte orders | Exact | `pictura-codec::lossless_nef_decodes_exactly` |
 | `nef_lossy_curve` | 12 and 14-bit planes of curve inputs, stepped `0x44 0x20` curve (257 entries); 12-bit direct `0x44 0x10` curve (683 entries) | Each sample = curve at its input | `pictura-codec::lossy_nef_maps_through_the_curve` |
 | `nef_split` | 12 and 14-bit, split row 6 | Equals the encoder's reconstruction; rows 0–5 exact | `pictura-codec::lossy_nef_switches_tables_at_the_split` |

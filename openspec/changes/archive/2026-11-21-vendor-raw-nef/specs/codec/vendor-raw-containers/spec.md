@@ -30,9 +30,14 @@ the Exif maker note that starts with `Nikon\0` and holds a TIFF header at its
 byte 10, offsets relative to that header. Compression 1 SHALL hold strips of
 16-bit samples in the file's byte order when a strip holds two bytes per
 sample, and otherwise samples packed most-significant bit first at
-`BitsPerSample`. Compression 34713 SHALL be Nikon Huffman coding when the
-maker note carries tag 0x0096, and otherwise one strip laid out as compression
-1 except that packed samples run least-significant bit first. A maker note
+`BitsPerSample` through 32-bit words in the file's byte order; in a
+little-endian file they SHALL be one strip whose rows end on whole words, and
+any other little-endian packing SHALL be refused as unsupported. Compression 34713 SHALL be Nikon Huffman coding when the
+maker note carries tag 0x0096, and otherwise one strip whose exact size names
+its layout: 16-bit containers as for compression 1, rows packed
+least-significant bit first, or, at 12 bits, rows of 16-byte groups each
+holding ten samples packed most-significant bit first and a pad byte; a strip
+matching none SHALL be refused as unsupported. A maker note
 `NEFCompression` (0x0093) of 8 (small) or 13 and 14 (high efficiency), any
 other compression, and bit depths outside 12 to 16 (Huffman: 12 and 14) SHALL
 be refused as unsupported.
@@ -44,12 +49,12 @@ be refused as unsupported.
 
 #### Scenario: Uncompressed layouts [nef_uncompressed]
 
-- **WHEN** NEFs carry a 12-bit plane packed most-significant bit first in five-row strips, a 14-bit plane in 16-bit containers in each byte order, and, under compression 34713 without a linearization table, a 12-bit plane packed least-significant bit first
+- **WHEN** NEFs carry a 12-bit plane packed most-significant bit first in five-row strips of a big-endian file and in one strip of little-endian 32-bit words, a 14-bit plane in 16-bit containers in each byte order, and, under compression 34713 without a linearization table, a 12-bit plane packed least-significant bit first and a 12-bit plane in padded 16-byte groups
 - **THEN** each decodes to its samples scaled by its white
 
 #### Scenario: Refused variants [nef_unsupported]
 
-- **WHEN** NEFs carry `NEFCompression` 8, 13 or 14, compression 7, or a 10-bit plane
+- **WHEN** NEFs carry `NEFCompression` 8, 13 or 14, compression 7, a 10-bit plane, or a compression 34713 strip without a linearization table whose size matches no layout
 - **THEN** reading fails with an unsupported-format error
 
 ### Requirement: Nikon Huffman sensor data is decoded with its linearization curve

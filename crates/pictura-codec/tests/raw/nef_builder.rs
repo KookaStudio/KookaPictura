@@ -117,13 +117,17 @@ impl Lin {
 }
 
 pub enum Data {
-    /// Compression 1, packed most-significant bit first, in strips.
+    /// Compression 1, packed most-significant bit first, in strips; in a
+    /// little-endian file through little-endian 32-bit words.
     Msb { rows_per_strip: usize },
     /// Compression 1, 16-bit containers in the file's byte order.
     Containers,
     /// Compression 34713 without a linearization table, packed
     /// least-significant bit first.
     Lsb,
+    /// Compression 34713 without a linearization table, 12-bit: 16-byte
+    /// groups of ten samples packed most-significant bit first and a zero.
+    Padded,
     /// Compression 34713, Huffman-coded; the plane holds the curve inputs.
     Huffman(Lin),
 }
@@ -336,6 +340,25 @@ fn pack_lsb(plane: &Plane, bits: u8) -> Vec<u8> {
     out
 }
 
+fn pack_padded(plane: &Plane) -> Vec<u8> {
+    let mut out = Vec::new();
+    for row in plane.samples.chunks(plane.width) {
+        for group in row.chunks(10) {
+            let mut w = BitWriter {
+                out: Vec::new(),
+                acc: 0,
+                n: 0,
+            };
+            for k in 0..10 {
+                w.put(group.get(k).copied().unwrap_or(0) as u32, 12);
+            }
+            out.extend(w.finish());
+            out.push(0);
+        }
+    }
+    out
+}
+
 fn containers(plane: &Plane, be: bool) -> Vec<u8> {
     plane
         .samples
@@ -392,17 +415,23 @@ pub fn nef(spec: &Nef) -> Vec<u8> {
             let chunks = (0..plane.height)
                 .step_by(*rows_per_strip)
                 .map(|y0| {
-                    pack_msb(
-                        plane,
-                        spec.bits,
-                        y0..(y0 + rows_per_strip).min(plane.height),
-                    )
+                    let rows = y0..(y0 + rows_per_strip).min(plane.height);
+                    let packed = pack_msb(plane, spec.bits, rows);
+                    if be {
+                        packed
+                    } else {
+                        packed
+                            .chunks(4)
+                            .flat_map(|w| w.iter().rev().copied())
+                            .collect()
+                    }
                 })
                 .collect();
             (1, *rows_per_strip, chunks)
         }
         Data::Containers => (1, plane.height, vec![containers(plane, be)]),
         Data::Lsb => (34713, plane.height, vec![pack_lsb(plane, spec.bits)]),
+        Data::Padded => (34713, plane.height, vec![pack_padded(plane)]),
         Data::Huffman(lin) => (
             34713,
             plane.height,

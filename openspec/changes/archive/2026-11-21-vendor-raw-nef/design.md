@@ -22,11 +22,12 @@ shape counts as absent.
 
 | Compression | Maker note 0x0096 | Layout |
 |---|---|---|
-| 1 | — | strips of 16-bit containers in file order when a strip holds 2 bytes per sample, else packed MSB-first at `BitsPerSample` (the DNG reader's `decode_plane`) |
+| 1 | — | strips of 16-bit containers in file order when a strip holds 2 bytes per sample, else an MSB-first bitstream of 32-bit words in file order: plain packing in a big-endian file (`decode_plane`), word-swapped in a little-endian one (Coolpix P7100 NRW, one strip) |
 | 34713 | present | Nikon Huffman (`nef_decode::decode_huffman`) |
-| 34713 | absent | 16-bit containers as above, else packed LSB-first (D850 12-bit "uncompressed") |
+| 34713 | absent | by exact strip size: 16-bit containers as above, LSB-first rows (D850 12-bit "uncompressed"), or 16-byte groups of ten MSB-first 12-bit samples plus a pad byte (D100); any other size refused |
 
-Observed: D200 12-bit (MSB packed, 11-row strips), D5100/D800E 14-bit (16-bit
+Observed: D100 12-bit (34713, 16-byte groups of ten samples + a zero), P7100
+NRW 12-bit (little-endian words), D200 12-bit (MSB packed, 11-row strips), D5100/D800E 14-bit (16-bit
 big-endian containers), D850 14-bit (16-bit little-endian), D850 12-bit
 uncompressed (34713, LSB-first; its samples are ¼ of the 14-bit file's).
 
