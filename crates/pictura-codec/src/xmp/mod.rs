@@ -23,7 +23,78 @@ const XMPRIGHTS_URI: &str = "http://ns.adobe.com/xap/1.0/rights/";
 const MAX_TOKENS: usize = 8192;
 const MAX_ATTRS: usize = 8192;
 const MAX_DEPTH: usize = 64;
-const MAX_PACKET_BYTES: usize = 8 << 20;
+pub(crate) const MAX_PACKET_BYTES: usize = 8 << 20;
+
+/// The namespace-resolved Photoshop History value, including present empty text.
+pub fn photoshop_history(packet: &str) -> Option<String> {
+    let tree = tree::read(packet, PHOTOSHOP_URI);
+    tree.leaves
+        .into_iter()
+        .find(|leaf| leaf.path == ["History"])
+        .map(|leaf| leaf.value)
+        .or_else(|| {
+            tree.elements
+                .iter()
+                .any(|element| element.path == ["History"])
+                .then(String::new)
+        })
+}
+
+/// Replace History text in place or create the initial packet. Other properties
+/// keep their original bytes. Unsupported property shapes and oversized packets
+/// are refused so the caller can preserve the existing packet.
+pub fn patch_photoshop_history(packet: &str, history: &str) -> Option<String> {
+    let packet = if packet.is_empty() {
+        "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"><rdf:Description rdf:about=\"\"/></rdf:RDF></x:xmpmeta>"
+    } else {
+        packet
+    };
+    if !is_well_formed(packet) || history.is_empty() || escape_xml(history).len() > MAX_VALUE_BYTES
+    {
+        return None;
+    }
+    let existing = tree::read(packet, PHOTOSHOP_URI);
+    let mut leaves = existing
+        .leaves
+        .iter()
+        .filter(|leaf| leaf.path == ["History"]);
+    let old = leaves.next();
+    if leaves.next().is_some()
+        || existing.elements.iter().any(|element| {
+            element.path.first().is_some_and(|key| key == "History")
+                && (element.path.len() != 1 || element.unsafe_)
+        })
+        || existing.leaves.iter().any(|leaf| {
+            leaf.path.first().is_some_and(|key| key == "History") && leaf.path.len() != 1
+        })
+    {
+        return None;
+    }
+    let result =
+        if let Some(leaf) = old.filter(|leaf| packet.as_bytes().get(leaf.span.0) != Some(&b'<')) {
+            let (start, end) = leaf.text_span?;
+            let text = escape_xml(history)
+                .replace('\'', "&#39;")
+                .replace('\t', "&#9;")
+                .replace('\r', "&#13;")
+                .replace('\n', "&#10;");
+            format!("{}{text}{}", &packet[..start], &packet[end..])
+        } else {
+            tree::patch(
+                packet,
+                PHOTOSHOP_URI,
+                &[tree::Update {
+                    path: vec!["History".into()],
+                    shape: tree::Shape::Simple,
+                    values: vec![history.to_owned()],
+                }],
+            )?
+        };
+    (result.len() <= MAX_PACKET_BYTES
+        && is_well_formed(&result)
+        && !tree::read(&result, PHOTOSHOP_URI).malformed)
+        .then_some(result)
+}
 const MAX_VALUE_BYTES: usize = 1 << 20;
 const MAX_ENTITY_RUN: usize = 32;
 

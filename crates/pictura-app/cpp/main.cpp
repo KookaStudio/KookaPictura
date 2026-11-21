@@ -47,6 +47,7 @@
 
 #include "agent_control.h"
 #include "control_server.h"
+#include "diagnostic_logging.h"
 #include "dialog_chrome.h"
 #include "dialogs.h"
 #include "fonts.h"
@@ -67,6 +68,7 @@
 #include "tools.h"
 
 #include "api/view_bridge.h"
+#include "api/engine_bridge.h"
 
 #include "interop.h"
 #include "selftest.h"
@@ -83,6 +85,7 @@ int main(int argc, char* argv[])
     // process.
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--gpu-probe") == 0) {
+            pictura::DiagnosticLogging logging(QString(), false);
             return pictura::runGpuProbeChild(i + 1 < argc ? argv[i + 1] : nullptr);
         }
     }
@@ -99,6 +102,7 @@ int main(int argc, char* argv[])
         }
     }
     if (bridge) {
+        pictura::DiagnosticLogging logging(QString(), false);
         return pictura::AgentControl::runBridge(bridgeArgs);
     }
 
@@ -133,19 +137,14 @@ int main(int argc, char* argv[])
         qputenv("QT_QPA_PLATFORMTHEME", "xdgdesktopportal");
     }
 
+    std::optional<QTemporaryDir> selfTestStateDir;
+    pictura::DiagnosticLogging logging;
     QApplication app(argc, argv);
     QApplication::setWindowIcon(pictura::icon(QStringLiteral("app")));
     // Pin the UI to the bundled Noto Sans so every OS resolves the same family
     // and the weighted chrome (Medium tab labels, etc.) hits a face that exists.
     pictura::applyBundledUiFont();
     pictura::installDialogChrome();
-
-    // Surface Qt's own diagnostics (QRhi logs through qWarning) on stderr so
-    // the interop probe can capture them under xvfb/offscreen.
-    qInstallMessageHandler([](QtMsgType type, const QMessageLogContext&, const QString& message) {
-        std::fprintf(stderr, "qt[%d]: %s\n", static_cast<int>(type), message.toLocal8Bit().constData());
-        std::fflush(stderr);
-    });
 
     const QStringList args = app.arguments();
     bool selfTest = false;
@@ -197,6 +196,7 @@ int main(int argc, char* argv[])
     // The theme dump is a machine-readable read of the token contract; it needs
     // no window, session store, or document.
     if (dumpTheme) {
+        logging.start(QString(), false);
         const auto levelsFor = [](pictura::Theme::ThemeFamily family) {
             QJsonArray levels;
             for (int level = 0; level < pictura::Theme::kLevelCount; ++level) {
@@ -250,7 +250,6 @@ int main(int argc, char* argv[])
     }
 
     // Self-test must use its own profile even when a caller passed --state-home.
-    std::optional<QTemporaryDir> selfTestStateDir;
     if (selfTest) {
         selfTestStateDir.emplace();
         if (!selfTestStateDir->isValid()) {
@@ -264,6 +263,7 @@ int main(int argc, char* argv[])
         }
         isolateProfile(selfTestStateDir->path());
     }
+    logging.start(qEnvironmentVariable("XDG_STATE_HOME"), true);
 
     if (interopProbe) {
         pictura::PictureView probe;
@@ -336,6 +336,16 @@ int main(int argc, char* argv[])
                      &pictura::PicturaMainWindow::cancelAllOpens);
     QObject::connect(&app, &QApplication::aboutToQuit, &frame,
                      &pictura::PicturaMainWindow::saveSession);
+    pictura::history_log_start();
+    QObject::connect(&app, &QApplication::aboutToQuit, &frame, [&frame] {
+        for (int i = 0; i < frame.documentCount(); ++i) {
+            if (const auto* view = frame.viewAt(i); view && view->has_document()) {
+                pictura::history_log_close(frame.documentName(i));
+            }
+        }
+        pictura::history_log_quit();
+        pictura::history_log_shutdown();
+    });
 
     bool codecLoaded = false;
     if (!psdPath.isEmpty()) {

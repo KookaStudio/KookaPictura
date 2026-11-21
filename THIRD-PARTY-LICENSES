@@ -10,7 +10,7 @@ under GPL-3.0 or a commercial license). Kooka Pictura dynamically links
 system Qt; the corresponding source is offered upstream at
 https://code.qt.io/ . Required license texts are under LICENSES/.
 
-Rust dependencies in the resolved graph: 216
+Rust dependencies in the resolved graph: 224
 
 | Crate | Version | License |
 |---|---|---|
@@ -99,6 +99,7 @@ Rust dependencies in the resolved graph: 216
 | `jobserver` | 0.1.35 | MIT OR Apache-2.0 |
 | `jpeg2k` | 0.11.0 | MIT/Apache-2.0 |
 | `js-sys` | 0.3.105 | MIT OR Apache-2.0 |
+| `lazy_static` | 1.5.0 | MIT OR Apache-2.0 |
 | `lcms2` | 6.2.0 | MIT |
 | `lcms2-sys` | 4.0.7 | MIT |
 | `libc` | 0.2.189 | MIT OR Apache-2.0 |
@@ -167,6 +168,7 @@ Rust dependencies in the resolved graph: 216
 | `serde_derive` | 1.0.229 | MIT OR Apache-2.0 |
 | `serde_json` | 1.0.151 | MIT OR Apache-2.0 |
 | `sha2` | 0.10.9 | MIT OR Apache-2.0 |
+| `sharded-slab` | 0.1.7 | MIT |
 | `shlex` | 2.0.1 | MIT OR Apache-2.0 |
 | `simd-adler32` | 0.3.10 | MIT |
 | `skrifa` | 0.44.0 | MIT OR Apache-2.0 |
@@ -182,6 +184,11 @@ Rust dependencies in the resolved graph: 216
 | `thiserror` | 2.0.20 | MIT OR Apache-2.0 |
 | `thiserror-impl` | 1.0.69 | MIT OR Apache-2.0 |
 | `thiserror-impl` | 2.0.20 | MIT OR Apache-2.0 |
+| `thread_local` | 1.1.10 | MIT OR Apache-2.0 |
+| `tracing` | 0.1.44 | MIT |
+| `tracing-core` | 0.1.36 | MIT |
+| `tracing-log` | 0.2.0 | MIT |
+| `tracing-subscriber` | 0.3.23 | MIT |
 | `ttf-parser` | 0.25.1 | MIT OR Apache-2.0 |
 | `typenum` | 1.20.1 | MIT OR Apache-2.0 |
 | `unicode-bidi` | 0.3.18 | MIT OR Apache-2.0 |
@@ -193,6 +200,7 @@ Rust dependencies in the resolved graph: 216
 | `unicode-segmentation` | 1.13.3 | MIT OR Apache-2.0 |
 | `unicode-width` | 0.1.14 | MIT OR Apache-2.0 |
 | `unicode-width` | 0.2.2 | MIT OR Apache-2.0 |
+| `valuable` | 0.1.1 | MIT |
 | `version_check` | 0.9.5 | MIT/Apache-2.0 |
 | `wasip2` | 1.0.4+wasi-0.2.12 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
 | `wasm-bindgen` | 0.2.128 | MIT OR Apache-2.0 |

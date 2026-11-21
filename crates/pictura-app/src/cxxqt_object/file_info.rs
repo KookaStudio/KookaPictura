@@ -292,13 +292,23 @@ impl qobject::PictureView {
         let mut changed = false;
         let mut refused = false;
         if let Some(packet) = raw {
+            use pictura_codec::xmp::photoshop_history;
             let mut rust = self.as_mut().rust_mut();
             let Some(doc) = rust.session.doc.as_mut() else {
                 return false;
             };
+            let before = photoshop_history(&pictura_codec::read_metadata(doc).xmp);
             if !pictura_codec::set_xmp_packet(doc, &packet) {
                 return false;
             }
+            let after = photoshop_history(&packet);
+            if before != after {
+                let marker = rust.session.history.history_marker().0;
+                rust.session
+                    .history
+                    .set_history_epoch_value(marker, before.clone());
+            }
+            rust.session.history_log.raw_history_edit(before, after);
             changed = true;
         }
         {

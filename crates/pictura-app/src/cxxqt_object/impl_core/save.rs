@@ -31,7 +31,11 @@ impl qobject::PictureView {
         self.as_mut().settle_pending_composite();
         let path_string = path.to_string();
         self.as_mut().rust_mut().session.skipped_xmp_mirror = false;
-        if super::super::open_jobs::compatibility::destination_is_protected(Path::new(&path_string))
+        self.as_mut().rust_mut().session.history_log_save_warning = None;
+        if crate::history_log::destination_conflicts(&path_string)
+            || super::super::open_jobs::compatibility::destination_is_protected(Path::new(
+                &path_string,
+            ))
         {
             return false;
         }
@@ -56,12 +60,14 @@ impl qobject::PictureView {
                 &path_string,
                 !commit,
             ) {
+                crate::diagnostic_logging::outcome("document.save", false);
                 return false;
             }
             return super::save_jobs::save_finish_rust(&mut self.as_mut().rust_mut());
         }
         if suffix == "gif" {
             let written = write_gif(self.as_mut().rust_mut().get_mut(), &path_string);
+            crate::diagnostic_logging::outcome("document.save", written);
             if written && commit {
                 let mut rust = self.as_mut().rust_mut();
                 rust.path = Some(path_string);
@@ -85,14 +91,18 @@ impl qobject::PictureView {
         }
         if let Some(kind) = resolved {
             if kind != pictura_codec::SaveKind::Jpeg {
-                return self.save_engine(kind, &path_string, commit);
+                let written = self.save_engine(kind, &path_string, commit);
+                crate::diagnostic_logging::outcome("document.save", written);
+                return written;
             }
         }
         if suffix != "webp" && suffix != "jpg" && suffix != "jpeg" && suffix != "jpe" {
             return false;
         }
         let format = raster_writer_for_suffix(&suffix).unwrap_or("JPG");
-        self.as_mut().save_qt_raster(&path_string, format, commit)
+        let written = self.as_mut().save_qt_raster(&path_string, format, commit);
+        crate::diagnostic_logging::outcome("document.save", written);
+        written
     }
 
     fn save_qt_raster(
@@ -111,7 +121,7 @@ impl qobject::PictureView {
         let gpu_compute = self.rust().gpu_compute;
         let options = self.rust().save_raster_options.unwrap_or_default();
         let keeps_working = format == "JPG";
-        let (rgba, width, height, metadata) = {
+        let (rgba, width, height, metadata, history, omitted) = {
             let mut rust = self.as_mut().rust_mut();
             let session = &mut rust.session;
             let Some(doc) = session.doc.as_mut() else {
@@ -135,6 +145,22 @@ impl qobject::PictureView {
                 buffer_to_rgba_bytes(&srgb)
             };
             let mut metadata = pictura_codec::raster_metadata(doc);
+            let (history, omitted) = if keeps_working {
+                match session
+                    .history_log
+                    .stage_bytes(metadata.xmp.as_deref(), pictura_codec::JPEG_XMP_MAX_BYTES)
+                {
+                    Ok(history) => {
+                        if let Some(staged) = &history {
+                            metadata.xmp = Some(staged.packet().as_bytes().to_vec());
+                        }
+                        (history, false)
+                    }
+                    Err(()) => (None, true),
+                }
+            } else {
+                (None, false)
+            };
             metadata.vanishing_point = store_planes(session.vanishing_planes.as_ref(), doc);
             if keeps_working && embed {
                 metadata.icc = Some(if doc.source.mode() == Some(ColorMode::Cmyk) {
@@ -147,7 +173,14 @@ impl qobject::PictureView {
                         .to_vec()
                 });
             }
-            (rgba, buffer.width, buffer.height, metadata)
+            (
+                rgba,
+                buffer.width,
+                buffer.height,
+                metadata,
+                history,
+                omitted,
+            )
         };
         if !super::super::export::write_raster_with_metadata(
             &rgba,
@@ -160,8 +193,11 @@ impl qobject::PictureView {
         ) {
             return false;
         }
+        let mut view = self.as_mut().rust_mut();
+        view.session.history_log_save_warning =
+            omitted.then_some(crate::history_log::APPEND_OMITTED);
         if commit {
-            let mut view = self.as_mut().rust_mut();
+            acknowledge_raster_history(&mut view, history, path_string);
             view.path = Some(path_string.to_string());
             view.session.mark_saved();
         }
@@ -205,6 +241,14 @@ impl qobject::PictureView {
             return false;
         };
         let mut doc = doc_ref.clone();
+        let (history, omitted) = if kind == pictura_codec::SaveKind::Tiff {
+            match rust.session.history_log.stage_document(&mut doc) {
+                Ok(history) => (history, false),
+                Err(()) => (None, true),
+            }
+        } else {
+            (None, false)
+        };
         if crate::history::unreadable_tiles(&doc) > 0 {
             super::super::helpers::memory_gate::refuse_for_scratch();
             return false;
@@ -283,7 +327,10 @@ impl qobject::PictureView {
         {
             return false;
         }
+        rust.session.history_log_save_warning =
+            omitted.then_some(crate::history_log::APPEND_OMITTED);
         if commit {
+            acknowledge_raster_history(&mut rust, history, path);
             rust.path = Some(path.to_string());
             rust.source_format = if kind == pictura_codec::SaveKind::Dcs {
                 "dcs".to_string()
@@ -297,6 +344,20 @@ impl qobject::PictureView {
         }
         true
     }
+}
+
+fn acknowledge_raster_history(
+    rust: &mut PictureViewRust,
+    staged: Option<crate::history_log::StagedHistory>,
+    path: &str,
+) {
+    let session = &mut rust.session;
+    if let (Some(history), Some(doc)) = (staged, session.doc.as_mut()) {
+        if !session.history_log.acknowledge(doc, history) {
+            session.history_log_save_warning = Some(crate::history_log::REBASE_FAILED);
+        }
+    }
+    session.history_log.set_filename(path);
 }
 
 /// The composite a save writer consumes, composited a band at a time into a

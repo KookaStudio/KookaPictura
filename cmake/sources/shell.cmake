@@ -40,6 +40,7 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/selection_geometry.h
     crates/pictura-app/cpp/session.cpp
     crates/pictura-app/cpp/preferences.cpp
+    crates/pictura-app/cpp/diagnostic_logging.cpp
     crates/pictura-app/cpp/session.h
     crates/pictura-app/cpp/settings_backup.cpp
     crates/pictura-app/cpp/settings_backup.h

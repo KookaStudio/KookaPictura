@@ -328,14 +328,36 @@ pub(super) fn web_metadata(view: &PictureView) -> WebMetadata {
             exif: Vec::new(),
             iptc: Vec::new(),
             xmp: Vec::new(),
+            history_xmp: Vec::new(),
         };
     };
     let metadata = pictura_codec::raster_metadata(doc);
+    let history_xmp = view
+        .rust()
+        .session
+        .history_log
+        .stage_bytes(metadata.xmp.as_deref(), usize::MAX)
+        .ok()
+        .flatten()
+        .map(|staged| staged.packet().as_bytes().to_vec())
+        .unwrap_or_default();
     WebMetadata {
         exif: metadata.exif.unwrap_or_default(),
         iptc: metadata.iptc.unwrap_or_default(),
         xmp: metadata.xmp.unwrap_or_default(),
+        history_xmp,
     }
+}
+
+pub(super) fn web_history_omitted(suffix: &QString, raw: &WebMetadata, level: i32) -> bool {
+    full_xmp(level)
+        && ["jpg", "jpeg", "jpe"].contains(&suffix.to_string().to_ascii_lowercase().as_str())
+        && raw.xmp.len() <= pictura_codec::JPEG_XMP_MAX_BYTES
+        && raw.history_xmp.len() > pictura_codec::JPEG_XMP_MAX_BYTES
+}
+
+fn full_xmp(level: i32) -> bool {
+    matches!(level, 3 | 4)
 }
 
 pub(super) fn web_embed_metadata(
@@ -344,10 +366,18 @@ pub(super) fn web_embed_metadata(
     raw: &WebMetadata,
     level: i32,
 ) -> Vec<u8> {
+    let xmp = if full_xmp(level)
+        && !raw.history_xmp.is_empty()
+        && !web_history_omitted(suffix, raw, level)
+    {
+        &raw.history_xmp
+    } else {
+        &raw.xmp
+    };
     let raw = pictura_codec::WebMetadata {
         exif: (!raw.exif.is_empty()).then(|| raw.exif.clone()),
         iptc: (!raw.iptc.is_empty()).then(|| raw.iptc.clone()),
-        xmp: (!raw.xmp.is_empty()).then(|| raw.xmp.clone()),
+        xmp: (!xmp.is_empty()).then(|| xmp.clone()),
     };
     pictura_codec::embed_web_metadata(
         bytes,

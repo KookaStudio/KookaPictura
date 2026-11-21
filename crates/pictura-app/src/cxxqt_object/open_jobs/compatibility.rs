@@ -332,11 +332,15 @@ pub fn save_compatibility_copy(
 }
 
 pub fn native_save_warning(view: &qobject::PictureView) -> QString {
-    if view.rust().session.skipped_xmp_mirror {
-        QString::from("The document was saved. Its XMP version mirror could not be written.")
-    } else {
-        QString::default()
+    let session = &view.rust().session;
+    let mut messages = Vec::new();
+    if session.skipped_xmp_mirror {
+        messages.push("The document was saved. Its XMP version mirror could not be written.");
     }
+    if let Some(warning) = session.history_log_save_warning {
+        messages.push(warning);
+    }
+    QString::from(messages.join(" "))
 }
 
 #[cfg(test)]

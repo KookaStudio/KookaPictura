@@ -40,6 +40,7 @@ public:
     // The active pane's optimised file for the current settings, and its suffix.
     QByteArray encoded() const;
     QString suffix() const;
+    bool historyLogOmitted() const;
     // The image Image Size makes, before optimisation.
     QImage sized() const;
     // Write `encoded()` to `path`; false on a write failure.
@@ -139,6 +140,7 @@ private:
 // Run the dialog on `view`'s flattened image and, on Save, write the optimised
 // file, or the slice export when the document has user slices. False when
 // cancelled, without a document, or on a write failure.
-bool saveForWebFromView(QWidget* parent, PictureView* view, const QString& documentName);
+bool saveForWebFromView(QWidget* parent, PictureView* view, const QString& documentName,
+                        QString* notice = nullptr);
 
 } // namespace pictura

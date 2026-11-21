@@ -340,7 +340,10 @@ pub(in crate::cxxqt_object) fn route_commit(
     };
     if applied {
         let after = influence(view.rust());
-        view.as_mut().edit(label, |_| structural(before, after));
+        view.as_mut().edit(label, |rust| {
+            rust.session.history_log_detail = crate::history_log::filter_detail(kind, params);
+            structural(before, after)
+        });
     }
     Some(applied)
 }

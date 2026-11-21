@@ -200,6 +200,7 @@ pub use profile_probe::{
 };
 pub use raster_metadata::{
     embed_raster_metadata, raster_image_resources, raster_metadata, RasterMetadata,
+    JPEG_XMP_MAX_BYTES,
 };
 pub use read::{
     read_psd, read_psd_with, read_psd_with_options, read_psd_within, read_psd_within_options,

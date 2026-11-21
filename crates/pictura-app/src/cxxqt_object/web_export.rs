@@ -40,6 +40,7 @@ pub mod ffi {
         exif: Vec<u8>,
         iptc: Vec<u8>,
         xmp: Vec<u8>,
+        history_xmp: Vec<u8>,
     }
 
     unsafe extern "C++" {
@@ -115,6 +116,8 @@ pub mod ffi {
             raw: &WebMetadata,
             level: i32,
         ) -> Vec<u8>;
+
+        fn web_history_omitted(suffix: &QString, raw: &WebMetadata, level: i32) -> bool;
 
         /// All disjoint export slices as repeated `[x, y, width, height, number, userIndex]`.
         fn web_export_slices(view: &PictureView) -> Vec<i32>;

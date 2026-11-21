@@ -929,7 +929,8 @@ void setSaveFileNameProviderForTest(SaveFileNameProvider provider)
 }
 
 QString getSaveFileName(QWidget* parent, const QString& caption, const QString& dir,
-                        const QStringList& filters, QString* selectedFilter)
+                        const QStringList& filters, QString* selectedFilter,
+                        bool confirmOverwrite)
 {
     if (g_saveFileNameForTest) {
         return g_saveFileNameForTest(parent, caption, dir, filters, selectedFilter);
@@ -938,6 +939,7 @@ QString getSaveFileName(QWidget* parent, const QString& caption, const QString& 
                        dir.isEmpty() ? defaultFileDialogDirectory() : dir);
     dialog.setAcceptMode(QFileDialog::AcceptSave);
     dialog.setFileMode(QFileDialog::AnyFile);
+    dialog.setOption(QFileDialog::DontConfirmOverwrite, !confirmOverwrite);
     configureFileDialog(dialog, filters, selectedFilter);
     if (runFileDialog(dialog, parent) != QDialog::Accepted) {
         return QString();

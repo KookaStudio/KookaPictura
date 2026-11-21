@@ -575,6 +575,11 @@ QByteArray SaveForWebDialog::encoded() const
     return encodedForPane(activePane_);
 }
 
+bool SaveForWebDialog::historyLogOmitted() const
+{
+    return web_history_omitted(suffix(), rawMetadata_, metadataLevel_);
+}
+
 QString SaveForWebDialog::suffix() const
 {
     return webSuffix(panes_[activePane_]);
@@ -1012,7 +1017,8 @@ bool SaveForWebDialog::loadColorTableForTest(const QString& path)
     return true;
 }
 
-bool saveForWebFromView(QWidget* parent, PictureView* view, const QString& documentName)
+bool saveForWebFromView(QWidget* parent, PictureView* view, const QString& documentName,
+                        QString* notice)
 {
     if (!view || !view->has_document() || !pictura::compatibility_reason(*view).isEmpty()) {
         return false;
@@ -1029,6 +1035,12 @@ bool saveForWebFromView(QWidget* parent, PictureView* view, const QString& docum
     if (dialog.exec() != QDialog::Accepted) {
         return false;
     }
+    const auto report = [&](bool saved) {
+        if (saved && notice && dialog.historyLogOmitted()) {
+            *notice = QObject::tr("History Log: the JPEG was exported without new history entries.");
+        }
+        return saved;
+    };
     const QString documentBase = QFileInfo(documentName).completeBaseName();
     const ::rust::Vec<std::int32_t> flat = web_export_slices(*view);
     QVector<ExportSlice> slices;
@@ -1046,7 +1058,7 @@ bool saveForWebFromView(QWidget* parent, PictureView* view, const QString& docum
             defaultFileDialogDirectory() + QLatin1Char('/') + documentBase + QLatin1Char('.')
                 + suffix,
             {QStringLiteral("Images (*.%1)").arg(suffix)}, &filter);
-        return !path.isEmpty() && dialog.saveTo(path);
+        return report(!path.isEmpty() && dialog.saveTo(path));
     }
     SaveOptimizedDialog saveDialog(
         defaultFileDialogDirectory() + QLatin1Char('/') + documentBase + QStringLiteral(".html"),
@@ -1057,8 +1069,8 @@ bool saveForWebFromView(QWidget* parent, PictureView* view, const QString& docum
     const QString base = QFileInfo(saveDialog.path()).completeBaseName();
     const QVector<SlicePlacement> cells = SaveForWebDialog::buildSliceCells(
         slices, QSize(w, h), dialog.sized().size(), base, dialog.suffix());
-    return dialog.writeSlices(saveDialog.path(), saveDialog.format(), saveDialog.layout(),
-                              cells, documentBase);
+    return report(dialog.writeSlices(saveDialog.path(), saveDialog.format(), saveDialog.layout(),
+                                     cells, documentBase));
 }
 
 } // namespace pictura

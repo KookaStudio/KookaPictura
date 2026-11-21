@@ -12,6 +12,13 @@ inline const QList<int> kAutoSaveMinuteChoices = {5, 10, 15, 30, 60};
 using CommandShortcutOverrides = QMap<QString, QStringList>;
 using ToolShortcutOverrides = QMap<QString, QString>;
 
+struct HistoryLogSettings {
+    bool enabled = false;
+    int destination = 0;
+    int verbosity = 0;
+    QString path;
+};
+
 struct Preferences {
 #define PICTURA_PREF(Type, name) Type name{};
 #include "preference_fields.inc"

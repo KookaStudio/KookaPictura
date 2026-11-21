@@ -86,6 +86,8 @@ struct Entry {
     target_before: LayerTarget,
     /// The live target after the operation that created this state.
     target_after: LayerTarget,
+    history_marker: u64,
+    history_value: Option<Option<Arc<str>>>,
 }
 
 /// How a restore picks the layer target: an undo reverses one operation, a
@@ -103,6 +105,8 @@ struct Named {
     label: String,
     snapshot: Snapshot,
     target: LayerTarget,
+    history_marker: u64,
+    history_value: Option<Option<Arc<str>>>,
 }
 
 /// The History Brush's source: a state, a named snapshot, or a state the stack
@@ -290,6 +294,7 @@ impl History {
                 }
             },
         };
+        let (history_marker, history_value) = self.history_marker();
         let id = self.next_id;
         self.next_id = self.next_id.wrapping_add(1);
         self.states.push(Entry {
@@ -298,6 +303,8 @@ impl History {
             stored,
             target_before,
             target_after: target.clone(),
+            history_marker,
+            history_value,
         });
         self.cursor = self.states.len() - 1;
         while self.states.len() > MAX_DEPTH + 1 {
@@ -441,6 +448,7 @@ impl History {
         if let Some(current) = self.current.as_ref() {
             let label = self.label(self.cursor).to_string();
             let id = self.states.get(self.cursor).map_or(0, |entry| entry.id);
+            let (history_marker, history_value) = self.history_marker();
             let kept = Snapshot {
                 doc: hollow(&current.doc),
                 selection: current.selection.clone(),
@@ -453,6 +461,8 @@ impl History {
                 stored: Stored::Hollow(kept),
                 target_before: self.current_target.clone(),
                 target_after: self.current_target.clone(),
+                history_marker,
+                history_value,
             }];
             self.cursor = 0;
         } else {
@@ -506,6 +516,42 @@ impl History {
         self.states.get(self.cursor).map(|entry| entry.id)
     }
 
+    pub(crate) fn history_marker(&self) -> (u64, Option<Option<Arc<str>>>) {
+        self.states.get(self.cursor).map_or((0, None), |entry| {
+            (entry.history_marker, entry.history_value.clone())
+        })
+    }
+
+    pub(crate) fn set_history_marker(&mut self, marker: u64, value: Option<Arc<str>>) {
+        if let Some(entry) = self.states.get_mut(self.cursor) {
+            entry.history_marker = marker;
+            entry.history_value = Some(value);
+        }
+    }
+
+    pub(crate) fn set_history_epoch_value(&mut self, marker: u64, value: Option<String>) {
+        let value = value.map(Arc::<str>::from);
+        for entry in &mut self.states {
+            if entry.history_marker == marker {
+                entry.history_value = Some(value.clone());
+            }
+        }
+        for snapshot in &mut self.snapshots {
+            if snapshot.history_marker == marker {
+                snapshot.history_value = Some(value.clone());
+            }
+        }
+    }
+
+    pub(crate) fn snapshot_history_marker(
+        &self,
+        i: usize,
+    ) -> Option<(u64, Option<Option<Arc<str>>>)> {
+        self.snapshots
+            .get(i)
+            .map(|snapshot| (snapshot.history_marker, snapshot.history_value.clone()))
+    }
+
     /// Label of state `i`, or `""` when out of range.
     pub fn label(&self, i: usize) -> &str {
         self.states.get(i).map_or("", |e| e.label.as_str())
@@ -524,6 +570,11 @@ impl History {
 
     pub fn add_snapshot(&mut self, label: &str, snapshot: Snapshot, target: LayerTarget) {
         self.revision = self.revision.wrapping_add(1);
+        let (history_marker, _) = self.history_marker();
+        let history_value = Some(
+            pictura_codec::xmp::photoshop_history(&pictura_codec::read_metadata(&snapshot.doc).xmp)
+                .map(Arc::<str>::from),
+        );
         let id = self.next_id;
         self.next_id = self.next_id.wrapping_add(1);
         self.census
@@ -533,6 +584,8 @@ impl History {
             label: label.to_string(),
             snapshot,
             target,
+            history_marker,
+            history_value,
         });
         while self.snapshots.len() > MAX_SNAPSHOTS {
             match self.brush_source {

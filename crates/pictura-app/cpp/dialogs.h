@@ -146,7 +146,8 @@ QString pathForSaveFilter(const QString& path, int chosenFilter, int fallbackFil
 // supports rolling prefix type-ahead. Return the chosen path (empty = cancel)
 // and set `selectedFilter` to the chosen filter.
 QString getSaveFileName(QWidget* parent, const QString& caption, const QString& dir,
-                        const QStringList& filters, QString* selectedFilter);
+                        const QStringList& filters, QString* selectedFilter,
+                        bool confirmOverwrite = true);
 // Test seam: answer the save path dialog without showing it; empty = cancel.
 using SaveFileNameProvider =
     std::function<QString(QWidget*, const QString&, const QString&, const QStringList&, QString*)>;

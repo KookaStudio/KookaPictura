@@ -6,9 +6,13 @@
 #include <QtGui/QColor>
 #include <QtWidgets/QDialog>
 
+#include "preferences.h"
+
 class QCheckBox;
 class QComboBox;
 class QDoubleSpinBox;
+class QFormLayout;
+class QPushButton;
 class QSpinBox;
 class QLabel;
 class QRadioButton;
@@ -51,6 +55,7 @@ public:
     void setFloatingDocumentDocking(bool on);
     // General: Zoom Resizes Windows.
     void setZoomResizesWindows(bool on);
+    void setHistoryLogSettings(const HistoryLogSettings& settings);
     void setAutoCollapseIconic(bool on);
     void setAutoShowHidden(bool on);
     void setBrightnessLevel(int level);
@@ -91,6 +96,7 @@ public:
     bool checkboxForTest(const QString& key) const;
 
 signals:
+    void historyLogChanged(const HistoryLogSettings& settings);
     void exportSettingsRequested();
     void importSettingsRequested();
     void useShiftKeyForToolSwitchChanged(bool on);
@@ -120,6 +126,15 @@ signals:
     void typeMissingGlyphProtectionChanged(bool on);
 
 private:
+    void addHistoryLogControls(QFormLayout* form, QWidget* page);
+    void updateHistoryLog();
+    bool chooseHistoryLogPath();
+
+    HistoryLogSettings historyLogSettings_;
+    QCheckBox* historyLogEnabled_ = nullptr;
+    QComboBox* historyLogDestination_ = nullptr;
+    QComboBox* historyLogVerbosity_ = nullptr;
+    QPushButton* historyLogChoose_ = nullptr;
     void showPage(const QString& page);
     QCheckBox* makeCheckbox(const QString& key, const QString& label, QWidget* page);
     QCheckBox* checkbox(const QString& key) const;

@@ -2,41 +2,12 @@
 //! equal to the `/Info` entries as PDF/A-1 requires.
 
 use super::options::Standard;
-
-/// A UTC civil time from Unix seconds.
-fn civil(unix: i64) -> (i64, u32, u32, u32, u32, u32) {
-    let days = unix.div_euclid(86_400);
-    let secs = unix.rem_euclid(86_400);
-    // Howard Hinnant's days-from-civil inverse.
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
-    let year = yoe + era * 400 + i64::from(month <= 2);
-    (
-        year,
-        month,
-        day,
-        (secs / 3600) as u32,
-        (secs / 60 % 60) as u32,
-        (secs % 60) as u32,
-    )
-}
+use pictura_core::{utc_date_time, utc_timestamp as xmp_date};
 
 /// `D:YYYYMMDDHHmmSSZ`.
 pub(crate) fn pdf_date(unix: i64) -> String {
-    let (y, mo, d, h, mi, s) = civil(unix);
+    let (y, mo, d, h, mi, s) = utc_date_time(unix);
     format!("D:{y:04}{mo:02}{d:02}{h:02}{mi:02}{s:02}Z")
-}
-
-/// `YYYY-MM-DDTHH:mm:SSZ`.
-pub(crate) fn xmp_date(unix: i64) -> String {
-    let (y, mo, d, h, mi, s) = civil(unix);
-    format!("{y:04}-{mo:02}-{d:02}T{h:02}:{mi:02}:{s:02}Z")
 }
 
 fn escape(text: &str) -> String {

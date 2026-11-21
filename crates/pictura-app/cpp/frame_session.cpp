@@ -298,6 +298,10 @@ void PicturaMainWindow::saveSession()
     prefs.fontPreviewSize = fontPreviewSize_;
     prefs.typeDefaults = typeDefaultsJson_;
     prefs.typeMissingGlyphProtection = typeMissingGlyphProtection_;
+    prefs.historyLogEnabled = historyLog_.enabled;
+    prefs.historyLogDestination = historyLog_.destination;
+    prefs.historyLogVerbosity = historyLog_.verbosity;
+    prefs.historyLogPath = historyLog_.path;
     prefs.shortcuts.clear();
     const QHash<QString, QList<QKeySequence>> overrides = commandRegistry()->shortcutOverrides();
     const QSet<QString> shadowed =

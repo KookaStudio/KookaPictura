@@ -1,14 +1,23 @@
-//! `pictura --gpu-probe` and the app's backend-selection edge.
-//!
-//! A free-function bridge, in its own file, because the probe runs before
-//! `QApplication` and because `cxxqt_object.rs` is at its size ceiling.
+//! Process-wide GPU selection and logging, including startup before QApplication.
 
-mod imp;
+mod gpu_probe;
+mod logging;
 
-use imp::*;
+use crate::cxxqt_object::qobject::PictureView;
+use gpu_probe::*;
+use logging::*;
 
 #[cxx_qt::bridge]
 pub mod ffi {
+    unsafe extern "C++" {
+        include!("cxx-qt-lib/qstring.h");
+        type QString = cxx_qt_lib::QString;
+
+        include!("pictura_app/src/cxxqt_object.cxxqt.h");
+        #[namespace = "pictura"]
+        type PictureView = super::PictureView;
+    }
+
     #[namespace = "pictura"]
     struct GpuProbeReply {
         code: i32,
@@ -36,5 +45,19 @@ pub mod ffi {
         fn gpu_candidates() -> Vec<i32>;
         /// The five-state status label for the status bar and About.
         fn gpu_active_backend_label(gpu_compute: bool) -> String;
+
+        fn diagnostics_start(path: &QString, stall_for_test: bool);
+        fn diagnostics_stop();
+        fn diagnostics_qt(level: i32, category: &str, fatal: bool);
+        fn diagnostics_outcome(event: &str, success: bool);
+        fn diagnostics_dependency_for_test(message: &str);
+        fn history_log_configure(enabled: bool, destination: i32, verbosity: i32, path: &QString);
+        fn history_log_start();
+        fn history_log_document(view: Pin<&mut PictureView>, name: &QString, opened: bool);
+        fn history_log_close(name: &QString);
+        fn history_log_quit();
+        fn history_log_shutdown();
+        fn history_log_take_notice() -> QString;
+        fn history_log_stall_for_test(stalled: bool);
     }
 }

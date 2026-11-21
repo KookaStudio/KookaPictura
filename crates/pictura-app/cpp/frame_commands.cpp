@@ -254,7 +254,11 @@ void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
             id, [this]() { return activeView() && activeView()->has_document(); });
     }
     registry.setHandler(command_ids::FileSaveForWeb, [this]() {
-        saveForWebFromView(this, activeView(), documentName(activeDocumentIndex()));
+        QString notice;
+        saveForWebFromView(this, activeView(), documentName(activeDocumentIndex()), &notice);
+        if (!notice.isEmpty()) {
+            statusBar()->showMessage(notice, 8000);
+        }
     });
     registry.setHandler(command_ids::FileQuickExportPng,
                         [this]() { quickExportPngFromView(this, activeView()); });

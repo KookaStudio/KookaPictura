@@ -39,6 +39,12 @@ serde_json = "1"
 serde = "1"
 # Versioned user preferences preserve native TOML values across rewrites and backups.
 toml = "1.1"
+log = "0.4"
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["registry", "tracing-log"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 # ash is the Vulkan bindings the zero-copy interop probe uses to export raw
 # VkDevice/VkImage handles. wgpu has no Vulkan backend on Apple targets, so it

@@ -33,9 +33,18 @@ QTableWidget* makeRowTable(const QStringList& rows, QWidget* parent)
     table->horizontalHeader()->setStretchLastSection(true);
     table->setHorizontalHeaderLabels({QObject::tr("Field"), QObject::tr("Value")});
     for (int i = 0; i < rows.size(); ++i) {
-        const QStringList parts = rows[i].split(QLatin1Char('\t'));
-        table->setItem(i, 0, new QTableWidgetItem(parts.value(0)));
-        table->setItem(i, 1, new QTableWidgetItem(parts.value(1)));
+        const int separator = rows[i].indexOf(QLatin1Char('\t'));
+        const QString field = separator < 0 ? rows[i] : rows[i].left(separator);
+        const QString value = separator < 0 ? QString() : rows[i].mid(separator + 1);
+        table->setItem(i, 0, new QTableWidgetItem(field));
+        if (field == QStringLiteral("History") && value.contains(QLatin1Char('\n'))) {
+            auto* history = new QPlainTextEdit(value, table);
+            history->setReadOnly(true);
+            table->setCellWidget(i, 1, history);
+            table->setRowHeight(i, history->fontMetrics().lineSpacing() * 6);
+        } else {
+            table->setItem(i, 1, new QTableWidgetItem(value));
+        }
     }
     table->resizeColumnsToContents();
     return table;

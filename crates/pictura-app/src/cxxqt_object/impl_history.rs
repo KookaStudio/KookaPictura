@@ -318,6 +318,11 @@ impl qobject::PictureView {
         let Some(snapshot) = self.rust().session.history.snapshot(i as usize) else {
             return false;
         };
+        let marker = self
+            .rust()
+            .session
+            .history
+            .snapshot_history_marker(i as usize);
         if !memory_gate::admit_fresh(memory_gate::snapshot_restore_bytes(&snapshot.doc)) {
             return false;
         }
@@ -335,9 +340,20 @@ impl qobject::PictureView {
             .unwrap_or_else(|| self.rust().layer_target.clone());
         let mut rust = self.as_mut().rust_mut();
         rust.cancel_active_sessions_report_only();
+        let previous_marker = rust.session.history.history_marker().0;
+        if let Some((version, Some(value))) = &marker {
+            if *version != previous_marker {
+                rust.session
+                    .history_log
+                    .restore_history(value.as_ref().map(|value| value.to_string()));
+            }
+        }
         let target = rust
             .session
             .restore_named_snapshot(snapshot, target, &label);
+        if let Some((version, Some(value))) = marker {
+            rust.session.history.set_history_marker(version, value);
+        }
         if rust.session.quick_mask.active {
             rust.invalidate_quick_mask();
         }

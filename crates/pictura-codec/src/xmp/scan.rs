@@ -109,6 +109,14 @@ pub(super) struct Decoded {
 }
 
 pub(super) fn decode_text(raw: &[u8]) -> Decoded {
+    decode_text_impl(raw, false)
+}
+
+pub(super) fn decode_history_text(raw: &[u8]) -> Decoded {
+    decode_text_impl(raw, true)
+}
+
+fn decode_text_impl(raw: &[u8], numeric: bool) -> Decoded {
     let source = String::from_utf8_lossy(raw);
     let mut out = String::with_capacity(source.len());
     let mut unsafe_ = false;
@@ -134,6 +142,22 @@ pub(super) fn decode_text(raw: &[u8]) -> Decoded {
                     "gt" => out.push('>'),
                     "quot" => out.push('"'),
                     "apos" => out.push('\''),
+                    entity if numeric && entity.starts_with('#') => {
+                        let number = &entity[1..];
+                        let parsed = if let Some(hex) = number.strip_prefix('x') {
+                            u32::from_str_radix(hex, 16)
+                        } else {
+                            number.parse::<u32>()
+                        };
+                        if let Some(ch) = parsed.ok().and_then(char::from_u32) {
+                            out.push(ch);
+                        } else {
+                            unsafe_ = true;
+                            out.push('&');
+                            out.push_str(entity);
+                            out.push(';');
+                        }
+                    }
                     other => {
                         unsafe_ = true;
                         out.push('&');
