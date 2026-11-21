@@ -369,7 +369,7 @@ fn tiled_refine_matches_the_buffer() {
             shift_edge: 15,
             ..Default::default()
         };
-        let got = crate::refine_from(&mask, tiles, &settings).unwrap();
+        let got = crate::refine_from(&mask, tiles, &settings, &[]).unwrap();
         let want = crate::refine(&mask, &img, &settings).unwrap();
         assert!(
             got.data.to_vec() == want.data.to_vec(),

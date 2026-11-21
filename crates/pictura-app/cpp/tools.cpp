@@ -826,8 +826,8 @@ void ToolController::applyToolPolicy()
         return;
     }
     const bool session = transformSessionActive();
-    canvas_->setPanEnabled(!session && active_ == ToolId::Hand);
-    if (!isBrushTool(active_)) {
+    canvas_->setPanEnabled(!session && active_ == ToolId::Hand && !canvasBrush_);
+    if (!isBrushTool(active_) && !canvasBrush_) {
         canvas_->clearBrushOutline();
     }
     if (active_ != ToolId::Eyedropper) {
@@ -858,6 +858,11 @@ void ToolController::setCanvasSampler(
 void ToolController::handlePressed(const QPointF& imagePos, int button, int modifiers)
 {
     if (button != Qt::LeftButton) {
+        return;
+    }
+    if (canvasBrush_) {
+        canvasBrushDragging_ = true;
+        canvasBrush_(CanvasBrushPhase::Press, imagePos, Qt::KeyboardModifiers(modifiers));
         return;
     }
     if (canvasSampler_) {
@@ -925,6 +930,11 @@ void ToolController::handlePressed(const QPointF& imagePos, int button, int modi
 
 void ToolController::handleMoved(const QPointF& imagePos)
 {
+    if (canvasBrush_) {
+        canvasBrush_(canvasBrushDragging_ ? CanvasBrushPhase::Drag : CanvasBrushPhase::Hover,
+                     imagePos, QGuiApplication::queryKeyboardModifiers());
+        return;
+    }
     if (canvasSampler_) {
         // A held drag samples continuously when the caller wants it; a plain
         // hover only re-asserts the eyedropper cursor.
@@ -1012,7 +1022,7 @@ void ToolController::handleMoved(const QPointF& imagePos)
 void ToolController::handleModifiers(int modifiers)
 {
     emit modifiersChanged(modifiers);
-    if (canvasSampler_ || transformSessionActive() || movingSelection_) {
+    if (canvasBrush_ || canvasSampler_ || transformSessionActive() || movingSelection_) {
         return;
     }
     if (ToolHandler* h = registry_.forTool(active_)) {
@@ -1022,6 +1032,12 @@ void ToolController::handleModifiers(int modifiers)
 
 void ToolController::handleReleased(const QPointF& imagePos)
 {
+    if (canvasBrush_) {
+        canvasBrushDragging_ = false;
+        canvasBrush_(CanvasBrushPhase::Release, imagePos,
+                     QGuiApplication::queryKeyboardModifiers());
+        return;
+    }
     if (canvasSampler_) {
         canvasSampling_ = false;
         return;

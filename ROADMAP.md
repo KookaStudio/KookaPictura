@@ -259,7 +259,7 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [x] Apply Image (#609)
 - [x] Calculations (#610)
 - [ ] Channel Options — Masked and Selected Areas polarity (#611)
-- [ ] The interactive Refine Radius and Erase brushes (#612)
+- [x] The interactive Refine Radius and Erase brushes (#612)
 - [x] Color Range Skin Tones, Localized Clusters, Out Of Gamut, previews, and
       save and load (#613)
 - [x] Anti-aliased selection rasterisation for the Elliptical Marquee, the

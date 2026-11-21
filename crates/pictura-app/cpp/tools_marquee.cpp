@@ -45,6 +45,9 @@ void ToolController::refreshCursor(Qt::KeyboardModifiers mods)
         return canvas_->setCursor(canvas_->isPanning() ? Qt::ClosedHandCursor
                                                        : Qt::OpenHandCursor);
     }
+    if (canvasBrush_) {
+        return canvas_->setCursor(Qt::CrossCursor);
+    }
     if (canvasSampler_) {
         const ToolInfo& info = toolInfo(ToolId::Eyedropper);
         const QCursor c = cursor(toolCursorId(ToolId::Eyedropper, Qt::NoModifier), info.hotspotX,
@@ -185,6 +188,24 @@ QRect ToolController::marqueeRectForTest(const QPointF& a, const QPointF& b, int
     return marqueeDragRect(a, b, Qt::KeyboardModifiers(mods), mirror, selection->marqueeStyle(),
                            selection->fixedRatioWidth(), selection->fixedRatioHeight(),
                            selection->fixedSizeWidth(), selection->fixedSizeHeight());
+}
+
+void ToolController::setCanvasBrush(CanvasBrushHandler handler)
+{
+    canvasBrush_ = std::move(handler);
+    canvasBrushDragging_ = false;
+    if (!canvas_) {
+        return;
+    }
+    if (canvasBrush_) {
+        // The Hand tool would otherwise pan instead of letting the brush stroke.
+        canvas_->setPanEnabled(false);
+        canvas_->setCursor(Qt::CrossCursor);
+        return;
+    }
+    canvas_->clearBrushOutline();
+    applyToolPolicy();
+    refreshCursor();
 }
 
 void ToolController::updateBrushOutline(const QPointF& imagePos)
