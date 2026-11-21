@@ -120,9 +120,10 @@ pub use crs_xmp::{crs_settings_from_xmp, set_crs_property};
 pub use descriptor::{write_descriptor, DescValue};
 pub use dng::{
     as_shot_transform, decode_raw_source, demosaic, develop_raw, downscale_camera, raw_xmp,
-    read_dng, read_raw, sniff_raw, sniff_raw_prefix, to_pro_photo, white_balance_transform,
-    CameraRgb, CameraTransform, CfaPattern, DemosaicMethod, DevelopedRgb, DngColor, DngCrop,
-    DngImage, ProPhotoRgb, RawFormat, RawLook, RawSource, WhiteBalance,
+    read_dng, read_linear_dng, read_original_raw, read_raw, sniff_raw, sniff_raw_prefix,
+    to_pro_photo, white_balance_transform, write_dng, CameraRgb, CameraTransform, CfaPattern,
+    DemosaicMethod, DevelopedRgb, DngColor, DngCompatibility, DngCrop, DngImage, DngPixels,
+    DngRgb8, DngWrite, LinearDng, ProPhotoRgb, RawFormat, RawLook, RawSource, WhiteBalance,
 };
 pub use document_version::{
     document_version, native_merged_has_transparency, unsupported_document_feature,

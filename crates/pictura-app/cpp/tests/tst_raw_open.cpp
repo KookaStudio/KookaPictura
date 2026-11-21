@@ -1,7 +1,8 @@
 // Camera raw opens through File > Open (#400, `document/raw-open`): signature
 // routing, the Pictura Raw dialog before the document, the non-interactive
 // develop, the absolute white balance, and the unsupported-camera refusal; and
-// the settings stores (#401, `document/raw-settings-storage`). The fixture DNG
+// the settings stores (#401, `document/raw-settings-storage`); and Save Image
+// (#402, `document/raw-save-image`). The fixture DNG
 // is written by `raw_fixture.h`. The suite shares one frame, never shown, and
 // points XDG_DATA_HOME at a temporary folder so OK never writes to the user's
 // Camera Raw database; cleanup() closes its documents, clears the dialog
@@ -17,13 +18,18 @@
 #include "import_save_coordinator.h"
 #include "pictura_raw_dialog.h"
 #include "preferences_dialog.h"
+#include "raw_save_options_dialog.h"
 
 #include "api/document_bridge.h"
 
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QTemporaryDir>
+#include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QLabel>
+#include <QtWidgets/QLineEdit>
+#include <QtWidgets/QMessageBox>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QStatusBar>
 
@@ -122,6 +128,11 @@ private slots:
     void doneWritesDatabaseOnly();
     void cancelAndNonInteractiveWriteNothing();
     void unwritableStoresWarnAndOpen();
+
+    void saveImageOnlyInRawOpen();
+    void saveOptionsDefaults();
+    void saveImageWritesDng();
+    void declinedReplaceWritesNothing();
 
 private:
     std::function<bool(QDialog&)> driver(Seen* seen, bool accept);
@@ -426,6 +437,132 @@ void RawOpenTest::unwritableStoresWarnAndOpen()
     QCOMPARE(window_->documentCount(), 1);
     QVERIFY2(message.contains(QStringLiteral("not saved")), qPrintable(message));
     QVERIFY(!QFile::exists(dir.filePath(QStringLiteral("shot.xmp"))));
+}
+
+// Drives a raw open's Save Image: `options` sees Save Options and returns
+// whether to accept it, `replace` answers the replace question, and the raw
+// dialog's status is kept in `status`; the raw dialog is then cancelled.
+static std::function<bool(QDialog&)> saveImageDriver(std::function<bool(RawSaveOptionsDialog&)> options,
+                                              bool replace, QString* status, int* rawDialogs)
+{
+    return [=](QDialog& dialog) {
+        if (auto* save = qobject_cast<RawSaveOptionsDialog*>(&dialog)) {
+            return options(*save);
+        }
+        if (auto* box = qobject_cast<QMessageBox*>(&dialog)) {
+            box->button(replace ? QMessageBox::Yes : QMessageBox::No)->click();
+            return true;
+        }
+        if (qobject_cast<PicturaRawDialog*>(&dialog)) {
+            ++*rawDialogs;
+            auto* button = dialog.findChild<QPushButton*>(QStringLiteral("rawSaveImageButton"));
+            if (button) {
+                button->click();
+            }
+            if (auto* label = dialog.findChild<QLabel*>(QStringLiteral("rawSaveStatus"))) {
+                *status = label->text();
+            }
+        }
+        return false;
+    };
+}
+
+// raw_save_button
+void RawOpenTest::saveImageOnlyInRawOpen()
+{
+    QTemporaryDir dir;
+    const QString path = writeFile(dir, QStringLiteral("shot.dng"), test::rawDng(16, 12, true));
+    int buttons = 0;
+    window_->setImportDialogDriverForTest([&buttons](QDialog& dialog) {
+        if (dialog.findChild<QPushButton*>(QStringLiteral("rawSaveImageButton"))) {
+            ++buttons;
+        }
+        return true;
+    });
+    QCOMPARE(window_->openDocumentAtPathOutcome(path, true),
+             PicturaMainWindow::OpenOutcome::Opened);
+    QCOMPARE(buttons, 1);
+    PicturaRawDialog filter(window_->viewAt(0), QString(), QString());
+    QVERIFY(!filter.findChild<QPushButton*>(QStringLiteral("rawSaveImageButton")));
+}
+
+// raw_save_options_defaults
+void RawOpenTest::saveOptionsDefaults()
+{
+    QTemporaryDir dir;
+    const QString path = writeFile(dir, QStringLiteral("shot.dng"), test::rawDng(16, 12, true));
+    QString folder, name, status;
+    int compatibility = -1, preview = -1, rawDialogs = 0;
+    bool embed = true, linear = true;
+    window_->setImportDialogDriverForTest(saveImageDriver(
+        [&](RawSaveOptionsDialog& options) {
+            folder = options.findChild<QLineEdit*>(QStringLiteral("rawSaveFolder"))->text();
+            name = options.findChild<QLineEdit*>(QStringLiteral("rawSaveName"))->text();
+            compatibility = options.compatibility();
+            preview = options.preview();
+            embed = options.embedOriginal();
+            linear = options.linear();
+            return false;
+        },
+        false, &status, &rawDialogs));
+    QCOMPARE(window_->openDocumentAtPathOutcome(path, true),
+             PicturaMainWindow::OpenOutcome::Cancelled);
+    QCOMPARE(rawDialogs, 1);
+    QCOMPARE(QDir::fromNativeSeparators(folder), QFileInfo(path).absolutePath());
+    // The source itself is shot.dng, so the default takes the next free name.
+    QCOMPARE(name, QStringLiteral("shot-1.dng"));
+    QCOMPARE(compatibility, 4);
+    QCOMPARE(preview, 1);
+    QVERIFY(!embed);
+    QVERIFY(!linear);
+    QVERIFY(status.isEmpty());
+}
+
+// raw_save_writes_dng
+void RawOpenTest::saveImageWritesDng()
+{
+    QTemporaryDir dir;
+    const QString path = writeFile(dir, QStringLiteral("shot.dng"), test::rawDng(16, 12, true));
+    QString status;
+    int rawDialogs = 0;
+    window_->setImportDialogDriverForTest(saveImageDriver(
+        [](RawSaveOptionsDialog& options) {
+            options.findChild<QLineEdit*>(QStringLiteral("rawSaveName"))
+                ->setText(QStringLiteral("copy"));
+            options.findChild<QCheckBox*>(QStringLiteral("rawSaveLinear"))->setChecked(true);
+            return true;
+        },
+        false, &status, &rawDialogs));
+    QCOMPARE(window_->openDocumentAtPathOutcome(path, true),
+             PicturaMainWindow::OpenOutcome::Cancelled);
+    QCOMPARE(rawDialogs, 1);
+    const QByteArray written = readFile(dir.filePath(QStringLiteral("copy.dng")));
+    QVERIFY2(written.startsWith(QByteArray("II*\0", 4)), qPrintable(status));
+    QVERIFY2(status.contains(QStringLiteral("copy.dng")), qPrintable(status));
+    QCOMPARE(window_->documentCount(), 0);
+    QVERIFY(databaseRecords().isEmpty());
+}
+
+// raw_save_confirms_replace
+void RawOpenTest::declinedReplaceWritesNothing()
+{
+    QTemporaryDir dir;
+    const QString path = writeFile(dir, QStringLiteral("shot.dng"), test::rawDng(16, 12, true));
+    const QString taken = writeFile(dir, QStringLiteral("taken.dng"), QByteArray("keep"));
+    QString status;
+    int rawDialogs = 0;
+    window_->setImportDialogDriverForTest(saveImageDriver(
+        [](RawSaveOptionsDialog& options) {
+            options.findChild<QLineEdit*>(QStringLiteral("rawSaveName"))
+                ->setText(QStringLiteral("taken.dng"));
+            return true;
+        },
+        false, &status, &rawDialogs));
+    QCOMPARE(window_->openDocumentAtPathOutcome(path, true),
+             PicturaMainWindow::OpenOutcome::Cancelled);
+    QCOMPARE(rawDialogs, 1);
+    QCOMPARE(readFile(taken), QByteArray("keep"));
+    QVERIFY(status.isEmpty());
 }
 
 int main(int argc, char* argv[])

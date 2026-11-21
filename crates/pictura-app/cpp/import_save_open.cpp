@@ -539,6 +539,7 @@ void ImportSaveCoordinator::developRawOpen(PictureView* view, bool interactive)
         PicturaRawDialog dialog(view,
                                 AcrAsShot{raw_as_shot_temperature(*view), raw_as_shot_tint(*view)},
                                 settings, dialogParent_);
+        dialog.setDialogRunner([this](QDialog& nested) { return runImportDialog(nested); });
         // The open's busy cursor must not cover the dialog.
         QApplication::setOverrideCursor(Qt::ArrowCursor);
         const bool accepted = runImportDialog(dialog);

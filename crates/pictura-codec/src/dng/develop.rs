@@ -10,10 +10,11 @@ use rayon::prelude::*;
 use crate::error::PsdError;
 use crate::probe::ImageBudget;
 
+use super::linear::is_linear_dng;
 use super::tiff::Tiff;
 use super::{
-    as_shot_transform, demosaic, read_raw, to_pro_photo, white_balance_transform, CameraRgb,
-    DemosaicMethod, DngColor, DngCrop, DngImage, WhiteBalance,
+    as_shot_transform, demosaic, read_linear_dng, read_raw, to_pro_photo, white_balance_transform,
+    CameraRgb, DemosaicMethod, DngColor, DngCrop, WhiteBalance,
 };
 
 const XMP: u16 = 700;
@@ -65,10 +66,28 @@ pub struct DevelopedRgb {
 
 /// Reads any supported raw container, maps its colour before the (costly)
 /// demosaic so an unsupported camera fails early, then demosaics with AHD.
+/// A linear DNG is already camera RGB and skips the demosaic.
 pub fn decode_raw_source(bytes: &[u8], budget: &ImageBudget) -> Result<RawSource, PsdError> {
+    if is_linear_dng(bytes) {
+        let linear = read_linear_dng(bytes, budget)?;
+        let as_shot = as_shot_transform(&linear.color)
+            .map_err(|error| colour_refusal(&linear.make, &linear.model, error))?
+            .white_balance;
+        return Ok(RawSource {
+            camera: linear.camera,
+            look: RawLook {
+                color: linear.color,
+                crop: linear.default_crop,
+                orientation: linear.orientation,
+            },
+            make: linear.make,
+            model: linear.model,
+            as_shot,
+        });
+    }
     let image = read_raw(bytes, budget)?;
     let as_shot = as_shot_transform(&image.color)
-        .map_err(|error| colour_refusal(&image, error))?
+        .map_err(|error| colour_refusal(&image.make, &image.model, error))?
         .white_balance;
     let camera = demosaic(&image, DemosaicMethod::Ahd, budget)?;
     Ok(RawSource {
@@ -84,13 +103,13 @@ pub fn decode_raw_source(bytes: &[u8], budget: &ImageBudget) -> Result<RawSource
     })
 }
 
-fn colour_refusal(image: &DngImage, error: PsdError) -> PsdError {
+fn colour_refusal(make: &Option<String>, model: &Option<String>, error: PsdError) -> PsdError {
     let reason = match error {
         PsdError::Unsupported(text) | PsdError::Invalid(text) => text,
         other => other.to_string(),
     };
-    let make = image.make.as_deref().map(str::trim).unwrap_or("");
-    let model = image.model.as_deref().map(str::trim).unwrap_or("");
+    let make = make.as_deref().map(str::trim).unwrap_or("");
+    let model = model.as_deref().map(str::trim).unwrap_or("");
     let camera = if model.starts_with(make) {
         model.to_string()
     } else {

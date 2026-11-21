@@ -3,6 +3,9 @@
 //! develops it at full size on a worker into a new 16-bit RGB document.
 
 mod imp;
+mod save_dng;
+#[cfg(test)]
+mod save_dng_tests;
 mod store;
 #[cfg(test)]
 mod store_tests;
@@ -14,4 +17,8 @@ pub(in crate::cxxqt_object) use imp::PendingRaw;
 pub use imp::{
     open_raw_develop_start, open_raw_start, raw_as_shot_temperature, raw_as_shot_tint, raw_preview,
     raw_save_settings, raw_seed_settings, raw_sniff_path,
+};
+pub use save_dng::{
+    raw_dng_default_path, raw_save_dng_cancel, raw_save_dng_finish, raw_save_dng_progress,
+    raw_save_dng_running, raw_save_dng_start,
 };

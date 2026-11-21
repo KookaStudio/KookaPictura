@@ -7,6 +7,7 @@
 #include "acr/acr_settings.h"
 #include "dialogs.h"
 #include "icons.h"
+#include "raw_save_options_dialog.h"
 
 #include "api/view_bridge.h"
 
@@ -14,6 +15,8 @@
 #include <QtCore/QTimer>
 #include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QHBoxLayout>
+#include <QtWidgets/QLabel>
+#include <QtWidgets/QMessageBox>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QStackedWidget>
 #include <QtWidgets/QTabBar>
@@ -36,7 +39,7 @@ PicturaRawDialog::PicturaRawDialog(PictureView* view, const AcrAsShot& asShot,
 PicturaRawDialog::PicturaRawDialog(PictureView* view, const QString& path,
                                    std::optional<AcrAsShot> asShot,
                                    const QString& initialSettings, QWidget* parent)
-    : QDialog(parent), path_(path), settings_(AcrSettings::decode(initialSettings))
+    : QDialog(parent), view_(view), path_(path), settings_(AcrSettings::decode(initialSettings))
 {
     setObjectName(QStringLiteral("picturaRawDialog"));
     setWindowTitle(QStringLiteral("Pictura Raw"));
@@ -95,6 +98,16 @@ PicturaRawDialog::PicturaRawDialog(PictureView* view, const QString& path,
     connect(buttons, &QDialogButtonBox::accepted, this, &PicturaRawDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &PicturaRawDialog::reject);
     if (asShot) {
+        auto* saveImage = new QPushButton(tr("Save Image…"), this);
+        saveImage->setObjectName(QStringLiteral("rawSaveImageButton"));
+        connect(saveImage, &QPushButton::clicked, this, &PicturaRawDialog::saveImage);
+        saveStatus_ = new QLabel(this);
+        saveStatus_->setObjectName(QStringLiteral("rawSaveStatus"));
+        saveStatus_->setWordWrap(true);
+        auto* saveRow = new QHBoxLayout;
+        saveRow->addWidget(saveImage);
+        saveRow->addWidget(saveStatus_, 1);
+        right->addLayout(saveRow);
         auto* done = buttons->addButton(tr("Done"), QDialogButtonBox::ActionRole);
         done->setObjectName(QStringLiteral("rawDoneButton"));
         connect(done, &QPushButton::clicked, this, [this] {
@@ -145,6 +158,19 @@ void PicturaRawDialog::render()
     if (toneCurve_) {
         toneCurve_->setPreviewImage(preview_->image());
     }
+}
+
+void PicturaRawDialog::saveImage()
+{
+    const auto run = runner_ ? runner_ : [this](QDialog& dialog) {
+        if (auto* box = qobject_cast<QMessageBox*>(&dialog)) {
+            box->exec();
+            return true;
+        }
+        return runDialog(dialog, this) == QDialog::Accepted;
+    };
+    const QString message = runRawSaveImage(this, view_, settings_.encode(), run);
+    saveStatus_->setText(message);
 }
 
 QString PicturaRawDialog::settingsText() const

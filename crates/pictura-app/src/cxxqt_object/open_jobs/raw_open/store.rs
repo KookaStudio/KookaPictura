@@ -157,7 +157,7 @@ fn write_record(
 
 /// Write `bytes` beside `path` and rename over it, so a failed write never
 /// leaves a truncated record.
-fn replace_file(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+pub(super) fn replace_file(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     let name = path
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())

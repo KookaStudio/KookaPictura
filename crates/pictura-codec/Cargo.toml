@@ -31,6 +31,9 @@ gamut-core = "2"
 # OpenJPEG (no native library), so `/JPXDecode` does not depend on a Qt or KDE
 # image plugin.
 jpeg2k = "0.11"
+# The DNG writer's embedded JPEG preview (#402). Already in Cargo.lock with
+# its JPEG codec (zune-jpeg), pulled by `jpeg2k`; only that codec is enabled.
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
 # The Photoshop PDF standard security handler (RC4-40 … AES-256): MD5, AES,
 # and SHA-256/384/512 primitives from RustCrypto rather than hand-rolled
 # cryptography; RC4 and CBC chaining are written over them in `pdf/crypt.rs`.
