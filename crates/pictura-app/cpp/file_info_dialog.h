@@ -66,7 +66,6 @@ private:
     QStringList readOnlyRows_;
     QStringList editFields_;
     QString xmp_;
-    QStringList categories_;
     QHash<QString, QStringList> rowsBySection_;
     QHash<QString, QStringList> fieldsBySection_;
     QListWidget* categoryList_ = nullptr;

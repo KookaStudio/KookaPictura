@@ -1,4 +1,5 @@
 #include "gradient_noise_page.h"
+#include <QtCore/QCoreApplication>
 
 #include "gradient_editor_dialog.h"
 #include "panels/percent_field.h"
@@ -157,7 +158,7 @@ GradientNoisePage::GradientNoisePage(QWidget* parent)
     setObjectName(QStringLiteral("gradientNoisePage"));
     auto* column = new QVBoxLayout(this);
     column->setContentsMargins(0, 0, 0, 0);
-    roughness_ = new PercentField(QStringLiteral("Roughness:"), this);
+    roughness_ = new PercentField(QCoreApplication::translate("PicturaUi", "Roughness:"), this);
     roughness_->setObjectName(QStringLiteral("gradientRoughness"));
     auto* roughRow = new QHBoxLayout;
     roughRow->addWidget(roughness_);
@@ -171,7 +172,7 @@ GradientNoisePage::GradientNoisePage(QWidget* parent)
     auto* modelBox = new QGroupBox(this);
     auto* modelGrid = new QGridLayout(modelBox);
     auto* modelRow = new QHBoxLayout;
-    modelRow->addWidget(new QLabel(QStringLiteral("Color Model:"), modelBox));
+    modelRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Color Model:"), modelBox));
     model_ = new QComboBox(modelBox);
     model_->setObjectName(QStringLiteral("gradientNoiseModel"));
     model_->addItems({QStringLiteral("RGB"), QStringLiteral("HSB"), QStringLiteral("LAB")});
@@ -193,13 +194,13 @@ GradientNoisePage::GradientNoisePage(QWidget* parent)
     modelGrid->setColumnStretch(1, 1);
     lower->addWidget(modelBox, 1);
 
-    auto* optionsBox = new QGroupBox(QStringLiteral("Options:"), this);
+    auto* optionsBox = new QGroupBox(QCoreApplication::translate("PicturaUi", "Options:"), this);
     auto* options = new QVBoxLayout(optionsBox);
-    restrict_ = new QCheckBox(QStringLiteral("Restrict Colors"), optionsBox);
+    restrict_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Restrict Colors"), optionsBox);
     restrict_->setObjectName(QStringLiteral("gradientNoiseRestrict"));
-    transparency_ = new QCheckBox(QStringLiteral("Add Transparency"), optionsBox);
+    transparency_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Add Transparency"), optionsBox);
     transparency_->setObjectName(QStringLiteral("gradientNoiseTransparency"));
-    auto* randomize = new QPushButton(QStringLiteral("Randomize"), optionsBox);
+    auto* randomize = new QPushButton(QCoreApplication::translate("PicturaUi", "Randomize"), optionsBox);
     randomize->setObjectName(QStringLiteral("gradientNoiseRandomize"));
     randomize->setAutoDefault(false);
     options->addWidget(restrict_);

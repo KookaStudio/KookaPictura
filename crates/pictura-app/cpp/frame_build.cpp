@@ -602,16 +602,17 @@ void PicturaMainWindow::updateToolHint()
     if (!hintBar_) {
         return;
     }
-    QString fallback = tools_ ? QString::fromLatin1(toolInfo(tools_->activeTool()).hint)
-                              : QStringLiteral("Ready");
+    QString fallback = tools_ ? QCoreApplication::translate("PicturaTools", toolInfo(tools_->activeTool()).hint)
+                              : tr("Ready");
     const QColor foreground = foregroundColor();
     if (foreground.isValid()) {
-        fallback += QStringLiteral("  ·  Foreground %1").arg(foreground.name());
+        fallback += tr("  ·  Foreground %1").arg(foreground.name());
     }
     QList<ToolHint> hints;
     if (tools_) {
         hints = toolHintEntries(tools_->activeTool());
         for (ToolHint& hint : hints) {
+            hint.text = QCoreApplication::translate("PicturaTools", hint.text.toUtf8().constData());
             if (!hint.commandId || !commandRegistry()) {
                 continue;
             }
@@ -629,7 +630,7 @@ void PicturaMainWindow::updateToolHint()
         for (const ToolHint& hint : hints) {
             hintTexts << QStringLiteral("%1 %2").arg(hint.key, hint.text);
         }
-        const QString name = tools_ ? QString::fromLatin1(toolInfo(tools_->activeTool()).name)
+        const QString name = tools_ ? QCoreApplication::translate("PicturaTools", toolInfo(tools_->activeTool()).label)
                                     : QString();
         panels_->infoPanel()->setToolInfo(name, hintTexts);
     }

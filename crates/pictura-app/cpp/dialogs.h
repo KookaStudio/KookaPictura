@@ -95,8 +95,8 @@ void setCropPromptInteractive(bool interactive);
 // Name filters shared by the Open/Save/Place/Open As Smart Object dialogs. One
 // filter per format; patterns are space-separated (Qt splits on spaces, so a
 // comma would become part of the pattern), uppercase for display.
-const QStringList& saveFileFilters();
-const QStringList& openFileFilters();
+QStringList saveFileFilters();
+QStringList openFileFilters();
 // File > Open As: one filter per decoder, in the order `openAsPath` indexes
 // (defined in frame_import.cpp beside the format table).
 const QStringList& openAsFileFilters();
@@ -152,6 +152,8 @@ QString getSaveFileName(QWidget* parent, const QString& caption, const QString& 
 using SaveFileNameProvider =
     std::function<QString(QWidget*, const QString&, const QString&, const QStringList&, QString*)>;
 void setSaveFileNameProviderForTest(SaveFileNameProvider provider);
+using OpenFileNameProvider = SaveFileNameProvider;
+void setOpenFileNameProviderForTest(OpenFileNameProvider provider);
 QString getOpenFileName(QWidget* parent, const QString& caption, const QString& dir,
                         const QStringList& filters, QString* selectedFilter = nullptr);
 // Multi-select variant of getOpenFileName for File > Open: returns every chosen

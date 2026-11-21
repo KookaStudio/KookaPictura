@@ -2,6 +2,7 @@
 // OptionsBar; split from options_bar.cpp along the page seam.
 
 #include "options_bar.h"
+#include <QtCore/QCoreApplication>
 
 #include "gradient_editor_dialog.h"
 #include "panels/numeric_field.h"
@@ -100,14 +101,14 @@ QIcon gradientStyleIcon(int style)
 QComboBox* addFillMode(QHBoxLayout* layout, QWidget* page, const QString& name,
                        const QString& current, bool withClear)
 {
-    layout->addWidget(new QLabel(QStringLiteral("Mode:"), page));
+    layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Mode:"), page));
     auto* mode = new QComboBox(page);
     mode->setObjectName(name);
-    mode->addItem(QStringLiteral("Normal"), QStringLiteral("normal"));
-    mode->addItem(QStringLiteral("Dissolve"), QStringLiteral("dissolve"));
-    mode->addItem(QStringLiteral("Behind"), QStringLiteral("behind"));
+    mode->addItem(QCoreApplication::translate("PicturaUi", "Normal"), QStringLiteral("normal"));
+    mode->addItem(QCoreApplication::translate("PicturaUi", "Dissolve"), QStringLiteral("dissolve"));
+    mode->addItem(QCoreApplication::translate("PicturaUi", "Behind"), QStringLiteral("behind"));
     if (withClear) {
-        mode->addItem(QStringLiteral("Clear"), QStringLiteral("clear"));
+        mode->addItem(QCoreApplication::translate("PicturaUi", "Clear"), QStringLiteral("clear"));
     }
     mode->setCurrentIndex(std::max(0, mode->findData(current)));
     layout->addWidget(mode);
@@ -199,7 +200,7 @@ QWidget* OptionsBar::buildGradientPage(ToolId id)
             paintGradient(painter, pixmap.rect(), resolvedStops(spec));
             painter.end();
             sample->setIcon(QIcon(pixmap));
-            sample->setToolTip(spec.name.isEmpty() ? QStringLiteral("Custom") : spec.name);
+            sample->setToolTip(spec.name.isEmpty() ? QCoreApplication::translate("PicturaUi", "Custom") : spec.name);
         } else {
             const QAction* checked = actions.value(o.preset);
             if (checked) {
@@ -258,7 +259,7 @@ QWidget* OptionsBar::buildGradientPage(ToolId id)
     });
 
     auto* opacity = new NumericField(
-        QStringLiteral("Opacity:"),
+        QCoreApplication::translate("PicturaUi", "Opacity:"),
         numericConfig(0, 100, 1, 0, QStringLiteral("%"), true,
                       QStringLiteral("optionsGradientOpacity")),
         page);
@@ -268,16 +269,16 @@ QWidget* OptionsBar::buildGradientPage(ToolId id)
         update([v](GradientOptions& o) { o.opacity = qRound(v); });
     });
 
-    auto* reverse = addFillToggle(layout, page, QStringLiteral("Reverse"),
+    auto* reverse = addFillToggle(layout, page, QCoreApplication::translate("PicturaUi", "Reverse"),
                                   QStringLiteral("optionsGradientReverse"), initial.reverse);
     connect(reverse, &QCheckBox::toggled, this,
             [update](bool on) { update([on](GradientOptions& o) { o.reverse = on; }); });
-    auto* dither = addFillToggle(layout, page, QStringLiteral("Dither"),
+    auto* dither = addFillToggle(layout, page, QCoreApplication::translate("PicturaUi", "Dither"),
                                  QStringLiteral("optionsGradientDither"), initial.dither);
     connect(dither, &QCheckBox::toggled, this,
             [update](bool on) { update([on](GradientOptions& o) { o.dither = on; }); });
     auto* transparency =
-        addFillToggle(layout, page, QStringLiteral("Transparency"),
+        addFillToggle(layout, page, QCoreApplication::translate("PicturaUi", "Transparency"),
                       QStringLiteral("optionsGradientTransparency"), initial.transparency);
     connect(transparency, &QCheckBox::toggled, this,
             [update](bool on) { update([on](GradientOptions& o) { o.transparency = on; }); });
@@ -307,13 +308,13 @@ QWidget* OptionsBar::buildPaintBucketPage(ToolId id)
 
     auto* fill = new QComboBox(page);
     fill->setObjectName(QStringLiteral("optionsBucketFill"));
-    fill->setToolTip(QStringLiteral("Set source for fill area"));
-    fill->addItems({QStringLiteral("Foreground"), QStringLiteral("Pattern")});
+    fill->setToolTip(QCoreApplication::translate("PicturaUi", "Set source for fill area"));
+    fill->addItems({QCoreApplication::translate("PicturaUi", "Foreground"), QCoreApplication::translate("PicturaUi", "Pattern")});
     fill->setCurrentIndex(initial.fill);
     layout->addWidget(fill);
     auto* pattern = new QComboBox(page);
     pattern->setObjectName(QStringLiteral("optionsBucketPattern"));
-    pattern->setToolTip(QStringLiteral("Pattern"));
+    pattern->setToolTip(QCoreApplication::translate("PicturaUi", "Pattern"));
     pattern->setIconSize(QSize(20, 20));
     for (int i = 0; i < stamp_pattern_count(); ++i) {
         pattern->addItem(patternIcon(i), stamp_pattern_name(i));
@@ -336,7 +337,7 @@ QWidget* OptionsBar::buildPaintBucketPage(ToolId id)
     });
 
     auto* opacity = new NumericField(
-        QStringLiteral("Opacity:"),
+        QCoreApplication::translate("PicturaUi", "Opacity:"),
         numericConfig(0, 100, 1, 0, QStringLiteral("%"), true,
                       QStringLiteral("optionsBucketOpacity")),
         page);
@@ -346,7 +347,7 @@ QWidget* OptionsBar::buildPaintBucketPage(ToolId id)
         update([v](BucketOptions& o) { o.opacity = qRound(v); });
     });
     auto* tolerance = new NumericField(
-        QStringLiteral("Tolerance:"),
+        QCoreApplication::translate("PicturaUi", "Tolerance:"),
         numericConfig(0, 255, 1, 0, QString(), true, QStringLiteral("optionsBucketTolerance")),
         page);
     tolerance->setValue(initial.tolerance);
@@ -355,16 +356,16 @@ QWidget* OptionsBar::buildPaintBucketPage(ToolId id)
         update([v](BucketOptions& o) { o.tolerance = qRound(v); });
     });
 
-    auto* antialias = addFillToggle(layout, page, QStringLiteral("Anti-alias"),
+    auto* antialias = addFillToggle(layout, page, QCoreApplication::translate("PicturaUi", "Anti-alias"),
                                     QStringLiteral("optionsBucketAntialias"), initial.antialias);
     connect(antialias, &QCheckBox::toggled, this,
             [update](bool on) { update([on](BucketOptions& o) { o.antialias = on; }); });
     auto* contiguous =
-        addFillToggle(layout, page, QStringLiteral("Contiguous"),
+        addFillToggle(layout, page, QCoreApplication::translate("PicturaUi", "Contiguous"),
                       QStringLiteral("optionsBucketContiguous"), initial.contiguous);
     connect(contiguous, &QCheckBox::toggled, this,
             [update](bool on) { update([on](BucketOptions& o) { o.contiguous = on; }); });
-    auto* allLayers = addFillToggle(layout, page, QStringLiteral("All Layers"),
+    auto* allLayers = addFillToggle(layout, page, QCoreApplication::translate("PicturaUi", "All Layers"),
                                     QStringLiteral("optionsBucketAllLayers"), initial.allLayers);
     connect(allLayers, &QCheckBox::toggled, this,
             [update](bool on) { update([on](BucketOptions& o) { o.allLayers = on; }); });

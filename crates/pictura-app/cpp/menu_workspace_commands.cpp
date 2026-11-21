@@ -1,6 +1,7 @@
 // Window > Workspace: the built-in presets, Reset, and the user workspace
 // commands. The workspaces themselves live in PanelHost.
 
+#include <QtCore/QCoreApplication>
 #include "menu_registrar.h"
 
 #include "panel_host.h"
@@ -45,7 +46,8 @@ void MenuRegistrar::wireWorkspaceCommands()
         }
     });
     commands_->setLabelProvider(command_ids::WindowWorkspaceReset, [this]() {
-        return tr("Reset ") + (panels_ ? panels_->activeWorkspace() : QString());
+        return QCoreApplication::translate("PicturaCommands", "Reset %1")
+            .arg(panels_ ? panels_->activeWorkspace() : QString());
     });
 
     commands_->setHandler(command_ids::WindowWorkspaceNew, [this]() {

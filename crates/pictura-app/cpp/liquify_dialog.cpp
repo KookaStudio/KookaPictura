@@ -1,4 +1,5 @@
 #include "liquify_dialog.h"
+#include <QtCore/QCoreApplication>
 #include "api/layers_api.h"
 #include "dialogs.h"
 #include "icons.h"
@@ -241,7 +242,7 @@ LiquifyDialog::LiquifyDialog(PictureView* view, const QString& documentName, QWi
     zoomLabel_->setMinimumWidth(56);
     zoomLabel_->setAlignment(Qt::AlignCenter);
     auto* fit = new QToolButton(this);
-    fit->setText(QStringLiteral("Fit in View"));
+    fit->setText(QCoreApplication::translate("PicturaUi", "Fit in View"));
     connect(zoomOut, &QToolButton::clicked, this, [this] { canvas_->zoomBy(0.5); });
     connect(zoomIn, &QToolButton::clicked, this, [this] { canvas_->zoomBy(2.0); });
     connect(fit, &QToolButton::clicked, canvas_, &LiquifyCanvas::fitInView);
@@ -264,21 +265,21 @@ LiquifyDialog::LiquifyDialog(PictureView* view, const QString& documentName, QWi
     connect(redoKey, &QShortcut::activated, this, &LiquifyDialog::redo);
 
     // The options column.
-    auto* ok = new QPushButton(QStringLiteral("OK"), this);
+    auto* ok = new QPushButton(QCoreApplication::translate("PicturaUi", "OK"), this);
     ok->setDefault(true);
-    auto* cancel = new QPushButton(QStringLiteral("Cancel"), this);
+    auto* cancel = new QPushButton(QCoreApplication::translate("PicturaUi", "Cancel"), this);
     connect(ok, &QPushButton::clicked, this, &QDialog::accept);
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
-    loadLast_ = new QPushButton(QStringLiteral("Load Last Mesh"), this);
+    loadLast_ = new QPushButton(QCoreApplication::translate("PicturaUi", "Load Last Mesh"), this);
     loadLast_->setObjectName(QStringLiteral("liquifyLoadLastMesh"));
     loadLast_->setEnabled(ready_ && liquify_last_mesh_id() != 0);
     connect(loadLast_, &QPushButton::clicked, this, [this] { loadMesh(liquify_last_mesh_id()); });
     auto* loadLastKey = new QShortcut(QKeySequence(Qt::Key_M), this);
     connect(loadLastKey, &QShortcut::activated, loadLast_, &QPushButton::click);
-    advanced_ = new QCheckBox(QStringLiteral("Advanced Mode"), this);
+    advanced_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Advanced Mode"), this);
     advanced_->setObjectName(QStringLiteral("liquifyAdvanced"));
 
-    auto* toolBox = new QGroupBox(QStringLiteral("Brush Tool Options"), this);
+    auto* toolBox = new QGroupBox(QCoreApplication::translate("PicturaUi", "Brush Tool Options"), this);
     toolBox->setObjectName(QStringLiteral("liquifyToolOptions"));
     new QVBoxLayout(toolBox);
     size_ = addSliderRow(toolBox, QStringLiteral("Size:"), QStringLiteral("liquifySize"), 1,
@@ -291,7 +292,7 @@ LiquifyDialog::LiquifyDialog(PictureView* view, const QString& documentName, QWi
                          80);
     jitter_ = addSliderRow(toolBox, QStringLiteral("Turbulent Jitter:"),
                            QStringLiteral("liquifyJitter"), 0, 100, 50);
-    stylus_ = new QCheckBox(QStringLiteral("Stylus Pressure"), toolBox);
+    stylus_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Stylus Pressure"), toolBox);
     stylus_->setEnabled(false);
     toolBox->layout()->addWidget(stylus_);
     connect(stylus_, &QCheckBox::toggled, canvas_, &LiquifyCanvas::setStylusPressure);
@@ -301,11 +302,11 @@ LiquifyDialog::LiquifyDialog(PictureView* view, const QString& documentName, QWi
     auto* larger = new QShortcut(QKeySequence(Qt::Key_BracketRight), this);
     connect(larger, &QShortcut::activated, this, [this] { resizeBrush(true); });
 
-    auto* reconstructBox = new QGroupBox(QStringLiteral("Reconstruct Options"), this);
+    auto* reconstructBox = new QGroupBox(QCoreApplication::translate("PicturaUi", "Reconstruct Options"), this);
     auto* reconstructRow = new QHBoxLayout(reconstructBox);
-    reconstruct_ = new QPushButton(QStringLiteral("Reconstruct..."), reconstructBox);
+    reconstruct_ = new QPushButton(QCoreApplication::translate("PicturaUi", "Reconstruct..."), reconstructBox);
     reconstruct_->setObjectName(QStringLiteral("liquifyReconstruct"));
-    auto* restoreAll = new QPushButton(QStringLiteral("Restore All"), reconstructBox);
+    auto* restoreAll = new QPushButton(QCoreApplication::translate("PicturaUi", "Restore All"), reconstructBox);
     restoreAll->setObjectName(QStringLiteral("liquifyRestoreAll"));
     reconstructRow->addWidget(reconstruct_);
     reconstructRow->addWidget(restoreAll);
@@ -315,7 +316,7 @@ LiquifyDialog::LiquifyDialog(PictureView* view, const QString& documentName, QWi
         canvas_->refreshAll();
     });
 
-    maskBox_ = new QGroupBox(QStringLiteral("Mask Options"), this);
+    maskBox_ = new QGroupBox(QCoreApplication::translate("PicturaUi", "Mask Options"), this);
     auto* maskRow = new QHBoxLayout(maskBox_);
     const struct {
         const char* label;
@@ -334,7 +335,7 @@ LiquifyDialog::LiquifyDialog(PictureView* view, const QString& documentName, QWi
         });
     }
 
-    viewBox_ = new QGroupBox(QStringLiteral("View Options"), this);
+    viewBox_ = new QGroupBox(QCoreApplication::translate("PicturaUi", "View Options"), this);
     // One grid, so every label in the group lines up.
     auto* grid = new QGridLayout(viewBox_);
     grid->setColumnStretch(1, 1);
@@ -366,10 +367,10 @@ LiquifyDialog::LiquifyDialog(PictureView* view, const QString& documentName, QWi
         return caption;
     };
 
-    showImage_ = new QCheckBox(QStringLiteral("Show Image"), viewBox_);
+    showImage_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Show Image"), viewBox_);
     showImage_->setObjectName(QStringLiteral("liquifyShowImage"));
     showImage_->setChecked(true);
-    showMesh_ = new QCheckBox(QStringLiteral("Show Mesh"), viewBox_);
+    showMesh_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Show Mesh"), viewBox_);
     showMesh_->setObjectName(QStringLiteral("liquifyShowMesh"));
     auto* showRow = new QHBoxLayout;
     showRow->addWidget(showImage_);
@@ -389,7 +390,7 @@ LiquifyDialog::LiquifyDialog(PictureView* view, const QString& documentName, QWi
     connect(meshColor_, &QComboBox::currentIndexChanged, this, &LiquifyDialog::meshChanged);
 
     rule();
-    showMask_ = new QCheckBox(QStringLiteral("Show Mask"), viewBox_);
+    showMask_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Show Mask"), viewBox_);
     showMask_->setObjectName(QStringLiteral("liquifyShowMask"));
     span(showMask_);
     maskColor_ = colorCombo(QStringLiteral("liquifyMaskColor"), 0); // Red
@@ -398,12 +399,12 @@ LiquifyDialog::LiquifyDialog(PictureView* view, const QString& documentName, QWi
     connect(maskColor_, &QComboBox::currentIndexChanged, this, &LiquifyDialog::showMaskChanged);
 
     rule();
-    showBackdrop_ = new QCheckBox(QStringLiteral("Show Backdrop"), viewBox_);
+    showBackdrop_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Show Backdrop"), viewBox_);
     showBackdrop_->setObjectName(QStringLiteral("liquifyShowBackdrop"));
     span(showBackdrop_);
     backdropUse_ = new QComboBox(viewBox_);
     backdropUse_->setObjectName(QStringLiteral("liquifyBackdropUse"));
-    backdropUse_->addItem(QStringLiteral("All Layers"), QString());
+    backdropUse_->addItem(QCoreApplication::translate("PicturaUi", "All Layers"), QString());
     if (view_) {
         for (const pictura::layers_api::LayerRow& row : pictura::layers_api::rows(*view_)) {
             if (row.kind == QStringLiteral("pixel") || row.kind == QStringLiteral("background")) {
@@ -636,7 +637,7 @@ void LiquifyDialog::backdropChanged(bool refetch)
 void LiquifyDialog::reconstructWithAmount()
 {
     QDialog prompt(this);
-    prompt.setWindowTitle(QStringLiteral("Revert Reconstruction"));
+    prompt.setWindowTitle(QCoreApplication::translate("PicturaUi", "Revert Reconstruction"));
     auto* amount = new QSpinBox(&prompt);
     amount->setObjectName(QStringLiteral("liquifyReconstructAmount"));
     amount->setRange(0, 100);
@@ -646,13 +647,13 @@ void LiquifyDialog::reconstructWithAmount()
     slider->setValue(100);
     connect(slider, &QSlider::valueChanged, amount, &QSpinBox::setValue);
     connect(amount, &QSpinBox::valueChanged, slider, &QSlider::setValue);
-    auto* ok = new QPushButton(QStringLiteral("OK"), &prompt);
+    auto* ok = new QPushButton(QCoreApplication::translate("PicturaUi", "OK"), &prompt);
     ok->setDefault(true);
-    auto* cancel = new QPushButton(QStringLiteral("Cancel"), &prompt);
+    auto* cancel = new QPushButton(QCoreApplication::translate("PicturaUi", "Cancel"), &prompt);
     connect(ok, &QPushButton::clicked, &prompt, &QDialog::accept);
     connect(cancel, &QPushButton::clicked, &prompt, &QDialog::reject);
     auto* row = new QHBoxLayout;
-    row->addWidget(new QLabel(QStringLiteral("Amount:"), &prompt));
+    row->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Amount:"), &prompt));
     row->addWidget(amount);
     auto* buttons = new QVBoxLayout;
     buttons->addWidget(ok);

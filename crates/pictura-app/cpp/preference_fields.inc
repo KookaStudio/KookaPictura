@@ -1,6 +1,7 @@
 PICTURA_PREF(int, brightnessLevel)
 PICTURA_PREF(int, themeFamily)
 PICTURA_PREF(int, uiScalePercent)
+PICTURA_PREF(QString, uiLanguage)
 PICTURA_PREF(bool, openDocumentsAsTabs)
 PICTURA_PREF(bool, enableFloatingDocumentDocking)
 PICTURA_PREF(bool, gpuCompute)

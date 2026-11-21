@@ -491,7 +491,7 @@ void LayerStyleDialog::bindBlendMode(QComboBox* combo, const QString& key)
         entries.append(blendModes().at(currentEngine));
     }
     for (const BlendEntry& entry : entries) {
-        combo->addItem(entry.name, blendModeIndex(entry.key));
+        combo->addItem(entry.displayName(), blendModeIndex(entry.key));
     }
     if (appendCurrent) {
         if (auto* model = qobject_cast<QStandardItemModel*>(combo->model())) {

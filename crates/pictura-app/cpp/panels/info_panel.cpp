@@ -1,4 +1,5 @@
 #include "info_panel.h"
+#include "localization.h"
 
 #include "api/selection_api.h"
 #include "color_models.h"
@@ -43,9 +44,10 @@ QVector<int> cmykPercents(const QColor& color)
 QString formatBytes(double bytes)
 {
     if (bytes >= 1024.0 * 1024.0) {
-        return QStringLiteral("%1M").arg(bytes / (1024.0 * 1024.0), 0, 'f', 1);
+        return uiNumericLocale().toString(bytes / (1024.0 * 1024.0), 'f', 1)
+            + QLatin1Char('M');
     }
-    return QStringLiteral("%1K").arg(bytes / 1024.0, 0, 'f', 1);
+    return uiNumericLocale().toString(bytes / 1024.0, 'f', 1) + QLatin1Char('K');
 }
 
 QString capitaliseFirst(QString text)
@@ -116,6 +118,7 @@ InfoPanel::InfoPanel(QWidget* parent)
     outer->addWidget(samplersLabel_);
 
     toolLabel_ = new QLabel(this);
+    toolLabel_->setTextFormat(Qt::PlainText);
     toolLabel_->setObjectName(QStringLiteral("infoTool"));
     toolLabel_->setWordWrap(true);
     toolLabel_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
@@ -217,7 +220,7 @@ InfoPanel::Readout* InfoPanel::addReadout(QGridLayout* grid, int row, int column
             }
             m->addSeparator();
             for (const int bits : {8, 16, 32}) {
-                QAction* action = m->addAction(QStringLiteral("%1-bit").arg(bits));
+                QAction* action = m->addAction(QCoreApplication::translate("PicturaUi", "%1-bit").arg(bits));
                 action->setCheckable(true);
                 action->setData(-bits);
                 connect(action, &QAction::triggered, this,
@@ -385,7 +388,7 @@ void InfoPanel::setBitDepth(Readout* readout, int bits)
 {
     readout->bits = bits;
     if (readout->footer) {
-        readout->footer->setText(QStringLiteral("%1-bit").arg(bits));
+        readout->footer->setText(QCoreApplication::translate("PicturaUi", "%1-bit").arg(bits));
     }
     refresh();
 }
@@ -409,15 +412,15 @@ void InfoPanel::refreshColorBlock(Readout* readout, const QColor& color)
         break;
     case ColorReadout::Hsb: {
         const int hue = color.hue() < 0 ? 0 : color.hue();
-        setValues(readout, {QString::number(hue),
-                            QString::number(qRound(color.saturationF() * 100.0)),
-                            QString::number(qRound(color.valueF() * 100.0))});
+        setValues(readout, {uiNumericLocale().toString(hue),
+                            uiNumericLocale().toString(qRound(color.saturationF() * 100.0)),
+                            uiNumericLocale().toString(qRound(color.valueF() * 100.0))});
         break;
     }
     case ColorReadout::Cmyk: {
         const QVector<int> cmyk = cmykPercents(color);
-        setValues(readout, {QString::number(cmyk[0]), QString::number(cmyk[1]),
-                            QString::number(cmyk[2]), QString::number(cmyk[3])});
+        setValues(readout, {uiNumericLocale().toString(cmyk[0]), uiNumericLocale().toString(cmyk[1]),
+                            uiNumericLocale().toString(cmyk[2]), uiNumericLocale().toString(cmyk[3])});
         break;
     }
     case ColorReadout::Lab: {
@@ -425,20 +428,20 @@ void InfoPanel::refreshColorBlock(Readout* readout, const QColor& color)
         double a = 0.0;
         double b = 0.0;
         rgbToLab(color, &l, &a, &b);
-        setValues(readout, {QString::number(qRound(l)), QString::number(qRound(a)),
-                            QString::number(qRound(b))});
+        setValues(readout, {uiNumericLocale().toString(qRound(l)), uiNumericLocale().toString(qRound(a)),
+                            uiNumericLocale().toString(qRound(b))});
         break;
     }
     case ColorReadout::TotalInk: {
         const QVector<int> cmyk = cmykPercents(color);
         const int total = cmyk[0] + cmyk[1] + cmyk[2] + cmyk[3];
-        setValues(readout, {QString::number(total)});
+        setValues(readout, {uiNumericLocale().toString(total)});
         break;
     }
     case ColorReadout::Opacity: {
         const int opacity = view_ ? active_layer_opacity(*view_) : -1;
         setValues(readout, opacity >= 0
-                               ? QStringList{QString::number(qRound(opacity / 255.0 * 100.0))}
+                               ? QStringList{uiNumericLocale().toString(qRound(opacity / 255.0 * 100.0))}
                                : QStringList{});
         break;
     }
@@ -451,11 +454,11 @@ QString InfoPanel::formatChannel(int value, int bits) const
 {
     switch (bits) {
     case 16:
-        return QString::number(value * 257);
+        return uiNumericLocale().toString(value * 257);
     case 32:
-        return QString::number(value / 255.0, 'f', 3);
+        return uiNumericLocale().toString(value / 255.0, 'f', 3);
     default:
-        return QString::number(value);
+        return uiNumericLocale().toString(value);
     }
 }
 
@@ -465,19 +468,19 @@ QString InfoPanel::formatMeasure(double value, MeasureUnit unit, double percentB
     const double resolution = ppi > 0.0 ? ppi : 72.0;
     switch (unit) {
     case MeasureUnit::Pixels:
-        return QString::number(qRound(value));
+        return uiNumericLocale().toString(qRound(value));
     case MeasureUnit::Inches:
-        return QString::number(value / resolution, 'f', 2);
+        return uiNumericLocale().toString(value / resolution, 'f', 2);
     case MeasureUnit::Centimeters:
-        return QString::number(value / resolution * 2.54, 'f', 2);
+        return uiNumericLocale().toString(value / resolution * 2.54, 'f', 2);
     case MeasureUnit::Millimeters:
-        return QString::number(value / resolution * 25.4, 'f', 2);
+        return uiNumericLocale().toString(value / resolution * 25.4, 'f', 2);
     case MeasureUnit::Points:
-        return QString::number(value / resolution * 72.0, 'f', 2);
+        return uiNumericLocale().toString(value / resolution * 72.0, 'f', 2);
     case MeasureUnit::Picas:
-        return QString::number(value / resolution * 6.0, 'f', 2);
+        return uiNumericLocale().toString(value / resolution * 6.0, 'f', 2);
     case MeasureUnit::Percent:
-        return percentBase > 0.0 ? QString::number(value / percentBase * 100.0, 'f', 2)
+        return percentBase > 0.0 ? uiNumericLocale().toString(value / percentBase * 100.0, 'f', 2)
                                  : QString();
     }
     return QString();
@@ -662,8 +665,9 @@ void InfoPanel::refresh(bool full)
         // [X, Y, W, H, A, D1]; empty when no measuring line exists.
         const ::rust::Vec<double> m = ruler_measurement(*view_);
         if (m.size() == 6) {
-            setValues(topRight_, {QStringLiteral("%1°").arg(m[4], 0, 'f', 1),
-                                  QString::number(m[5], 'f', 1)});
+            const auto locale = uiNumericLocale();
+            setValues(topRight_, {locale.toString(m[4], 'f', 1) + QChar(u'°'),
+                                  locale.toString(m[5], 'f', 1)});
             setValues(size_, {formatMeasure(m[2], size_->unit, width),
                               formatMeasure(m[3], size_->unit, height)});
         } else {
@@ -688,7 +692,12 @@ void InfoPanel::refresh(bool full)
 void InfoPanel::refreshDocumentRows(int width, int height)
 {
     if (scaleLabel_) {
-        scaleLabel_->setText(measurement_scale_text(*view_));
+        const auto scale = measurement_scale_values(*view_);
+        const auto locale = uiNumericLocale();
+        const QString pixels = locale.toString(scale.size() == 2 ? int(scale[0]) : 1);
+        const QString logical =
+            locale.toString(scale.size() == 2 ? scale[1] : 1.0, 'g', QLocale::FloatingPointShortest);
+        scaleLabel_->setText(tr("%1 px = %2 %3").arg(pixels, logical, measurement_scale_units(*view_)));
         scaleLabel_->setVisible(showScale_);
     }
     const ::rust::Vec<double> bytes = document_size_bytes(*view_);
@@ -701,6 +710,7 @@ void InfoPanel::refreshDocumentRows(int width, int height)
     // CS6 lists the colour samplers below the readouts, numbered as on the
     // canvas; each reads the composite at its pixel.
     QStringList samplers;
+    const auto locale = uiNumericLocale();
     const int count = marker_count(*view_, 0);
     for (int i = 0; i < count; ++i) {
         const ::rust::Vec<std::int32_t> p = marker_at(*view_, 0, i);
@@ -711,13 +721,13 @@ void InfoPanel::refreshDocumentRows(int width, int height)
         const QColor c =
             QColor::fromRgba(QRgb(pixelInside ? view_->composite_argb(p[0], p[1]) : 0));
         samplers << (pixelInside ? QStringLiteral("#%1  %2, %3  R %4  G %5  B %6")
-                                       .arg(i + 1)
-                                       .arg(p[0])
-                                       .arg(p[1])
-                                       .arg(c.red())
-                                       .arg(c.green())
-                                       .arg(c.blue())
-                                 : QStringLiteral("#%1  %2, %3  —").arg(i + 1).arg(p[0]).arg(p[1]));
+                                       .arg(locale.toString(i + 1))
+                                       .arg(locale.toString(p[0]))
+                                       .arg(locale.toString(p[1]))
+                                       .arg(locale.toString(c.red()))
+                                       .arg(locale.toString(c.green()))
+                                       .arg(locale.toString(c.blue()))
+                                 : QStringLiteral("#%1  %2, %3  —").arg(locale.toString(i + 1)).arg(locale.toString(p[0])).arg(locale.toString(p[1])));
     }
     samplersLabel_->setText(samplers.join(QLatin1Char('\n')));
     samplersLabel_->setVisible(!samplers.isEmpty());

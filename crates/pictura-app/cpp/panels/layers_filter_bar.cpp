@@ -27,13 +27,13 @@ struct Dimension {
 };
 
 constexpr Dimension kDimensions[] = {
-    {"name", "Name"},
-    {"kind", "Kind"},
-    {"effect", "Effect"},
-    {"mode", "Mode"},
-    {"attribute", "Attribute"},
-    {"color", "Color"},
-    {"selected", "Selected"},
+    {"name", QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Name")},
+    {"kind", QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Kind")},
+    {"effect", QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Effect")},
+    {"mode", QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Mode")},
+    {"attribute", QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Attribute")},
+    {"color", QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Color")},
+    {"selected", QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Selected")},
 };
 
 struct KindOption {
@@ -42,11 +42,11 @@ struct KindOption {
 };
 
 constexpr KindOption kKinds[] = {
-    {"pixel", "Pixel"},
-    {"adjustment", "Adjustment"},
-    {"group", "Group"},
-    {"background", "Background"},
-    {"type", "Type"},
+    {"pixel", QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Pixel")},
+    {"adjustment", QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Adjustment")},
+    {"group", QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Group")},
+    {"background", QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Background")},
+    {"type", QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Type")},
 };
 
 struct AttributeOption {
@@ -55,11 +55,11 @@ struct AttributeOption {
 };
 
 constexpr AttributeOption kAttributes[] = {
-    {"visible", "Visible"},
-    {"hidden", "Hidden"},
-    {"locked", "Locked"},
-    {"mask", "Has Mask"},
-    {"clipped", "Clipped"},
+    {"visible", QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Visible")},
+    {"hidden", QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Hidden")},
+    {"locked", QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Locked")},
+    {"mask", QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Has Mask")},
+    {"clipped", QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Clipped")},
 };
 
 struct ColorOption {
@@ -68,14 +68,14 @@ struct ColorOption {
 };
 
 constexpr ColorOption kColors[] = {
-    {-1, "None"},
-    {1, "Red"},
-    {2, "Orange"},
-    {3, "Yellow"},
-    {4, "Green"},
-    {5, "Blue"},
-    {6, "Violet"},
-    {7, "Gray"},
+    {-1, QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "None")},
+    {1, QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Red")},
+    {2, QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Orange")},
+    {3, QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Yellow")},
+    {4, QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Green")},
+    {5, QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Blue")},
+    {6, QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Violet")},
+    {7, QT_TRANSLATE_NOOP("pictura::LayerFilterBar", "Gray")},
 };
 
 QWidget* makePage(QWidget* parent)
@@ -190,7 +190,7 @@ LayerFilterBar::LayerFilterBar(QWidget* parent)
     mode_ = new QComboBox(modePage);
     mode_->setObjectName(QStringLiteral("layersFilterMode"));
     for (const BlendEntry& entry : blendModes()) {
-        mode_->addItem(entry.name, entry.key);
+        mode_->addItem(entry.displayName(), entry.key);
     }
     modeLayout->addWidget(mode_);
     stack_->addWidget(modePage);

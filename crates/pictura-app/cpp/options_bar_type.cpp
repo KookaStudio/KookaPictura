@@ -2,6 +2,7 @@
 // Part of OptionsBar; split from options_bar.cpp along the page seam.
 
 #include "options_bar.h"
+#include <QtCore/QCoreApplication>
 
 #include "color_picker_dialog.h"
 #include "commands.h"
@@ -117,18 +118,18 @@ QWidget* OptionsBar::buildTypePage(ToolId id)
     auto* orientation = new QToolButton(page);
     orientation->setObjectName(QStringLiteral("optionsTypeOrientation"));
     orientation->setText(vertical ? QStringLiteral("↕T") : QStringLiteral("↔T"));
-    orientation->setToolTip(QStringLiteral("Toggle text orientation"));
+    orientation->setToolTip(QCoreApplication::translate("PicturaUi", "Toggle text orientation"));
     layout->addWidget(orientation);
 
     auto* family = new QFontComboBox(page);
     family->setObjectName(QStringLiteral("optionsTypeFamily"));
     useFastFontPreviews(family);
-    family->setToolTip(QStringLiteral("Font family"));
+    family->setToolTip(QCoreApplication::translate("PicturaUi", "Font family"));
     layout->addWidget(family);
 
     auto* size = new QComboBox(page);
     size->setObjectName(QStringLiteral("optionsTypeSize"));
-    size->setToolTip(QStringLiteral("Set the font size (px)"));
+    size->setToolTip(QCoreApplication::translate("PicturaUi", "Set the font size (px)"));
     size->setEditable(true);
     size->setInsertPolicy(QComboBox::NoInsert);
     size->setMaxVisibleItems(10);
@@ -144,19 +145,19 @@ QWidget* OptionsBar::buildTypePage(ToolId id)
 
     auto* antialias = new QComboBox(page);
     antialias->setObjectName(QStringLiteral("optionsTypeAntialias"));
-    antialias->setToolTip(QStringLiteral("Anti-aliasing method"));
-    antialias->addItems({QStringLiteral("None"), QStringLiteral("Sharp"), QStringLiteral("Crisp"),
-                         QStringLiteral("Strong"), QStringLiteral("Smooth")});
+    antialias->setToolTip(QCoreApplication::translate("PicturaUi", "Anti-aliasing method"));
+    antialias->addItems({QCoreApplication::translate("PicturaUi", "None"), QCoreApplication::translate("PicturaUi", "Sharp"), QCoreApplication::translate("PicturaUi", "Crisp"),
+                         QCoreApplication::translate("PicturaUi", "Strong"), QCoreApplication::translate("PicturaUi", "Smooth")});
     layout->addWidget(antialias);
 
     auto* align = new QButtonGroup(page);
     const char* const names[] = {"optionsTypeAlignLeft", "optionsTypeAlignRight",
                                  "optionsTypeAlignCenter"};
     const QStringList tips = vertical
-        ? QStringList{QStringLiteral("Top align text"), QStringLiteral("Bottom align text"),
-                      QStringLiteral("Center text")}
-        : QStringList{QStringLiteral("Left align text"), QStringLiteral("Right align text"),
-                      QStringLiteral("Center text")};
+        ? QStringList{QCoreApplication::translate("PicturaUi", "Top align text"), QCoreApplication::translate("PicturaUi", "Bottom align text"),
+                      QCoreApplication::translate("PicturaUi", "Center text")}
+        : QStringList{QCoreApplication::translate("PicturaUi", "Left align text"), QCoreApplication::translate("PicturaUi", "Right align text"),
+                      QCoreApplication::translate("PicturaUi", "Center text")};
     // photorust's options-bar glyph tint: light enough to read on the dark bar
     // (the palette's text colour is not themed yet while the page is built).
     const QColor glyph(0xd4, 0xd4, 0xd4);
@@ -175,7 +176,7 @@ QWidget* OptionsBar::buildTypePage(ToolId id)
 
     auto* color = new QToolButton(page);
     color->setObjectName(QStringLiteral("optionsTypeColor"));
-    color->setToolTip(QStringLiteral("Set the text color"));
+    color->setToolTip(QCoreApplication::translate("PicturaUi", "Set the text color"));
     color->setAutoRaise(true);
     color->setIconSize(QSize(16, 16));
     layout->addWidget(color);
@@ -184,7 +185,7 @@ QWidget* OptionsBar::buildTypePage(ToolId id)
     auto* warp = new QToolButton(page);
     warp->setObjectName(QStringLiteral("optionsWarpText"));
     warp->setIcon(icon(QStringLiteral("options.warpText")));
-    warp->setToolTip(QStringLiteral("Create warped text"));
+    warp->setToolTip(QCoreApplication::translate("PicturaUi", "Create warped text"));
     warp->setAutoRaise(true);
     warp->setEnabled(false);
     layout->addWidget(warp);
@@ -195,7 +196,7 @@ QWidget* OptionsBar::buildTypePage(ToolId id)
     auto* panels = new QToolButton(page);
     panels->setObjectName(QStringLiteral("optionsToggleCharacterPanel"));
     panels->setIcon(icon(QString::fromLatin1(command_ids::WindowPanelsCharacter)));
-    panels->setToolTip(QStringLiteral("Toggle the Character and Paragraph panels"));
+    panels->setToolTip(QCoreApplication::translate("PicturaUi", "Toggle the Character and Paragraph panels"));
     panels->setAutoRaise(true);
     layout->addWidget(panels);
     connect(panels, &QToolButton::clicked, this,
@@ -204,19 +205,19 @@ QWidget* OptionsBar::buildTypePage(ToolId id)
     auto* cancel = new QToolButton(page);
     cancel->setObjectName(QStringLiteral("optionsTypeCancel"));
     cancel->setText(QStringLiteral("✘"));
-    cancel->setToolTip(QStringLiteral("Cancel all current edits (Esc)"));
+    cancel->setToolTip(QCoreApplication::translate("PicturaUi", "Cancel all current edits (Esc)"));
     layout->addWidget(cancel);
     auto* commit = new QToolButton(page);
     commit->setObjectName(QStringLiteral("optionsTypeCommit"));
     commit->setText(QStringLiteral("✓"));
-    commit->setToolTip(QStringLiteral("Commit all current edits (Ctrl+Enter)"));
+    commit->setToolTip(QCoreApplication::translate("PicturaUi", "Commit all current edits (Ctrl+Enter)"));
     layout->addWidget(commit);
 
     // The Panel button opens the Character and Paragraph panels, as CS6's does.
     auto* panel = new QToolButton(page);
     panel->setObjectName(QStringLiteral("optionsTypePanel"));
     panel->setText(QStringLiteral("⧉"));
-    panel->setToolTip(QStringLiteral("Toggle the Character and Paragraph panels"));
+    panel->setToolTip(QCoreApplication::translate("PicturaUi", "Toggle the Character and Paragraph panels"));
     layout->addWidget(panel);
     connect(panel, &QToolButton::clicked, this, [this]() {
         emit panelToggleRequested(QStringLiteral("characterPanel"));
@@ -292,7 +293,7 @@ QWidget* OptionsBar::buildTypePage(ToolId id)
         // A copy, because the preview rewrites the options it was read from.
         const QColor opening = type_->get().color;
         const QColor picked = ColorPickerDialog::getColor(
-            opening, this, QStringLiteral("Text Color"), nullptr, {}, live);
+            opening, this, QCoreApplication::translate("PicturaUi", "Text Color"), nullptr, {}, live);
         if (picked.isValid()) {
             controller_->setForeground(picked);
         }

@@ -9,13 +9,15 @@
 #include "api/paint_bridge.h"
 #include "api/type_api.h"
 #include "frame_update.h"
-#include "menu_registrar.h"
 #include "font_combo.h"
+#include "localization.h"
+#include "menu_registrar.h"
 #include "panels/actions_engine_bridge.h"
 #include "preferences_agent_page.h"
 #include "settings_backup.h"
 #include "update_preferences_page.h"
 
+#include <QtCore/QCoreApplication>
 #include <QtCore/QDir>
 #include <QtCore/QStandardPaths>
 #include <QtCore/QTimer>
@@ -82,6 +84,64 @@ void PicturaMainWindow::showPreferences(const QString& page)
                                           settings.verbosity, settings.path);
                     saveSession();
                 });
+
+        const QString savedLanguage = loadPreferences().uiLanguage;
+        preferencesDialog_->setLanguageChoices(savedLanguage);
+        preferencesDialog_->setLanguageRestartPending(savedLanguage != startupUiLanguage_);
+        connect(preferencesDialog_, &PreferencesDialog::languageSelected, this,
+                [this](const QString& selection) {
+            const auto before = loadPreferences();
+            auto after = before;
+            after.uiLanguage = selection;
+            if (!savePreferences(before, after)) {
+                const QString saved = loadPreferences().uiLanguage;
+                preferencesDialog_->setLanguageChoices(saved);
+                preferencesDialog_->setLanguageRestartPending(saved != startupUiLanguage_);
+                preferencesDialog_->showLanguageStatus(QCoreApplication::translate(
+                    "PicturaFiles", "The language selection could not be saved."));
+                return;
+            }
+            const bool pending = selection != startupUiLanguage_;
+            preferencesDialog_->setLanguageRestartPending(pending);
+            preferencesDialog_->showLanguageStatus(pending ? QCoreApplication::translate(
+                "PicturaFiles", "Restart Kooka Pictura to apply the language change.") : QString());
+        });
+        connect(preferencesDialog_, &PreferencesDialog::languageRestartRequested, this, [this] {
+            if (loadPreferences().uiLanguage == startupUiLanguage_) {
+                preferencesDialog_->setLanguageRestartPending(false);
+                preferencesDialog_->showLanguageStatus({});
+                return;
+            }
+            if (!saveAllDocumentsForRestart()) {
+                return;
+            }
+            saveSession();
+            if (launchAppRestart()) {
+                QCoreApplication::quit();
+            } else {
+                preferencesDialog_->showLanguageStatus(QCoreApplication::translate(
+                    "PicturaFiles", "Pictura could not be restarted."));
+            }
+        });
+        connect(preferencesDialog_, &PreferencesDialog::importTranslationRequested, this, [this] {
+            const QString path = getOpenFileName(
+                preferencesDialog_,
+                QCoreApplication::translate("PicturaFiles", "Import Translation"),
+                QString(),
+                {QCoreApplication::translate("PicturaFiles", "Qt Linguist translations")
+                     + QStringLiteral(" (*.ts)")});
+            if (path.isEmpty()) {
+                return;
+            }
+            QString error;
+            if (importUiTranslation(path, &error).isEmpty()) {
+                preferencesDialog_->showLanguageStatus(error);
+                return;
+            }
+            preferencesDialog_->setLanguageChoices(loadPreferences().uiLanguage);
+            preferencesDialog_->showLanguageStatus(QCoreApplication::translate(
+                "PicturaFiles", "Translation imported. Select it to use it on the next launch."));
+        });
         preferencesDialog_->setShiftKeyForToolSwitch(useShiftKeyForToolSwitch_);
         preferencesDialog_->setOpenDocumentsAsTabs(openDocumentsAsTabs_);
         preferencesDialog_->setFloatingDocumentDocking(floatingDocumentDocking_);

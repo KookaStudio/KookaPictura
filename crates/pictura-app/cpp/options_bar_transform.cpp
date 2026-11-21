@@ -5,6 +5,7 @@
 // canvas overlay and the fields stay in step.
 
 #include "options_bar.h"
+#include <QtCore/QCoreApplication>
 
 #include "icons.h"
 #include "image_view.h"
@@ -108,7 +109,7 @@ QWidget* OptionsBar::buildTransformPage()
     layout->setContentsMargins(4, 2, 4, 2);
 
     layout->addWidget(iconButton(QStringLiteral("optionsTransformIcon"),
-                                 QStringLiteral("tool.move"), QStringLiteral("Free Transform"),
+                                 QStringLiteral("tool.move"), QCoreApplication::translate("PicturaUi", "Free Transform"),
                                  page));
     auto* separator = new QFrame(page);
     separator->setObjectName(QStringLiteral("optionsToolSeparator"));
@@ -120,7 +121,7 @@ QWidget* OptionsBar::buildTransformPage()
 
     auto* showPivot = iconButton(QStringLiteral("optionsTransformShowPivot"),
                                  QStringLiteral("info.crosshair"),
-                                 QStringLiteral("Show Reference Point"), page);
+                                 QCoreApplication::translate("PicturaUi", "Show Reference Point"), page);
     showPivot->setCheckable(true);
     showPivot->setChecked(true);
     layout->addWidget(showPivot);
@@ -144,7 +145,7 @@ QWidget* OptionsBar::buildTransformPage()
         cell->setFixedSize(13, 13);
         cell->setAutoRaise(true);
         cell->setFocusPolicy(Qt::NoFocus);
-        cell->setToolTip(QStringLiteral("Reference point preset"));
+        cell->setToolTip(QCoreApplication::translate("PicturaUi", "Reference point preset"));
         grid->addWidget(cell, i / 3, i % 3);
         connect(cell, &QToolButton::clicked, this, [this, i]() {
             if (controller_) {
@@ -168,7 +169,7 @@ QWidget* OptionsBar::buildTransformPage()
     relative->setCheckable(true);
     relative->setAutoRaise(true);
     relative->setFocusPolicy(Qt::NoFocus);
-    relative->setToolTip(QStringLiteral("Use Relative Positioning For Reference Point"));
+    relative->setToolTip(QCoreApplication::translate("PicturaUi", "Use Relative Positioning For Reference Point"));
     layout->addWidget(relative);
     connect(relative, &QToolButton::toggled, this, [this](bool on) {
         transformRelative_ = on;
@@ -228,7 +229,7 @@ QWidget* OptionsBar::buildTransformPage()
 
     auto* link = iconButton(QStringLiteral("optionsTransformLink"),
                             QStringLiteral("layers.link"),
-                            QStringLiteral("Maintain Aspect Ratio"), page);
+                            QCoreApplication::translate("PicturaUi", "Maintain Aspect Ratio"), page);
     link->setCheckable(true);
     link->setChecked(transformLink_);
     layout->addWidget(link);
@@ -251,7 +252,7 @@ QWidget* OptionsBar::buildTransformPage()
     });
 
     auto* angleField = new NumericField(
-        QStringLiteral("Angle"),
+        QCoreApplication::translate("PicturaUi", "Angle"),
         numericConfig(-360.0, 360.0, 1.0, 1, QStringLiteral("\u00B0"), true,
                       QStringLiteral("optionsTransformAngle")),
         page);
@@ -292,7 +293,7 @@ QWidget* OptionsBar::buildTransformPage()
     for (const InterpolationEntry& entry : kInterpolations) {
         interpolation->addItem(QString::fromLatin1(entry.name), QString::fromLatin1(entry.id));
     }
-    interpolation->setToolTip(QStringLiteral("Interpolation"));
+    interpolation->setToolTip(QCoreApplication::translate("PicturaUi", "Interpolation"));
     layout->addWidget(interpolation);
     connect(interpolation, &QComboBox::currentIndexChanged, this,
             [this, interpolation](int) {
@@ -304,7 +305,7 @@ QWidget* OptionsBar::buildTransformPage()
 
     auto* warp = iconButton(QStringLiteral("optionsTransformWarp"),
                             QStringLiteral("options.warp"),
-                            QStringLiteral("Switch Between Free Transform And Warp Modes"),
+                            QCoreApplication::translate("PicturaUi", "Switch Between Free Transform And Warp Modes"),
                             page);
     warp->setCheckable(true);
     layout->addWidget(warp);
@@ -321,7 +322,7 @@ QWidget* OptionsBar::buildTransformPage()
     });
 
     auto* cancel = iconButton(QStringLiteral("optionsTransformCancel"),
-                              QStringLiteral("crop.cancel"), QStringLiteral("Cancel (Esc)"),
+                              QStringLiteral("crop.cancel"), QCoreApplication::translate("PicturaUi", "Cancel (Esc)"),
                               page);
     layout->addWidget(cancel);
     connect(cancel, &QToolButton::clicked, this, [this]() {
@@ -330,7 +331,7 @@ QWidget* OptionsBar::buildTransformPage()
         }
     });
     auto* apply = iconButton(QStringLiteral("optionsTransformApply"),
-                             QStringLiteral("crop.apply"), QStringLiteral("Apply (Enter)"),
+                             QStringLiteral("crop.apply"), QCoreApplication::translate("PicturaUi", "Apply (Enter)"),
                              page);
     layout->addWidget(apply);
     connect(apply, &QToolButton::clicked, this, [this]() {
@@ -358,7 +359,7 @@ QWidget* OptionsBar::buildWarpFields(QWidget* page)
     for (const WarpStyleEntry& entry : kWarpStyles) {
         style->addItem(QString::fromLatin1(entry.name), QString::fromLatin1(entry.id));
     }
-    style->setToolTip(QStringLiteral("Warp"));
+    style->setToolTip(QCoreApplication::translate("PicturaUi", "Warp"));
     layout->addWidget(style);
     connect(style, &QComboBox::currentIndexChanged, this, [this, style](int) {
         if (controller_) {
@@ -369,7 +370,7 @@ QWidget* OptionsBar::buildWarpFields(QWidget* page)
 
     auto* orientation = iconButton(QStringLiteral("optionsWarpOrientation"),
                                    QStringLiteral("options.warp"),
-                                   QStringLiteral("Change The Warp Orientation"), fields);
+                                   QCoreApplication::translate("PicturaUi", "Change The Warp Orientation"), fields);
     orientation->setCheckable(true);
     layout->addWidget(orientation);
     connect(orientation, &QToolButton::toggled, this, [this](bool on) {
@@ -435,7 +436,7 @@ void OptionsBar::refreshTransformPage()
     const bool freeMode = mode == QStringLiteral("free") || mode == QStringLiteral("scale")
         || mode == QStringLiteral("rotate");
     const QString blockedTip =
-        QStringLiteral("Not editable in Skew, Distort, or Perspective; drag a handle instead.");
+        QCoreApplication::translate("PicturaUi", "Not editable in Skew, Distort, or Perspective; drag a handle instead.");
     wField->setEnabled(freeMode);
     hField->setEnabled(freeMode);
     wField->setToolTip(freeMode ? QString() : blockedTip);

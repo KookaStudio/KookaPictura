@@ -1,4 +1,5 @@
 #include "menu_registrar.h"
+#include <QtCore/QCoreApplication>
 
 #include "menu_registrar_internal.h"
 
@@ -377,8 +378,8 @@ void MenuRegistrar::registerLayerCommands()
         const bool group = view && !path.isEmpty()
             && pictura::layers_api::rowForPath(*view, path).kind == QLatin1String("group");
         const bool fill = view && !path.isEmpty() && view->layer_is_fill_content(path);
-        return (one && !group && !fill) ? QStringLiteral("Merge Down")
-                                        : QStringLiteral("Merge Layers");
+        return (one && !group && !fill) ? QCoreApplication::translate("PicturaCommands", "Merge Down")
+                                        : QCoreApplication::translate("PicturaCommands", "Merge Layers");
     });
 
     commands_->setHandler(command_ids::LayerMergeVisible, [this]() {

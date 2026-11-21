@@ -4,6 +4,7 @@
 #include <QtCore/QJsonObject>
 #include <QtCore/QList>
 #include <QtCore/QObject>
+#include <QtCore/QPointer>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
 #include <QtGui/QKeySequence>
@@ -14,6 +15,7 @@
 #include "command_ids.h"
 
 class QAction;
+class QMenu;
 class QMenuBar;
 
 namespace pictura {
@@ -140,6 +142,7 @@ public:
 
     // Build (or rebuild) `menuBar` from the command table.
     void buildMenuBar(QMenuBar* menuBar);
+    QMenu* menu(const QStringList& canonicalPath) const;
 
     // Re-evaluate enabled/checked/label for every action.
     void refresh();
@@ -182,6 +185,7 @@ private:
         QAction* action = nullptr;
         QList<QKeySequence> shortcuts;
         QList<QKeySequence> defaults;
+        QString displayLabel;
     };
     const Entry* entry(const QString& id) const;
     std::vector<Entry> entries_;
@@ -195,6 +199,7 @@ private:
     QHash<QString, std::function<bool()>> checkedProviders_;
     QHash<QString, std::function<QString()>> labelProviders_;
     QMenuBar* menuBar_ = nullptr;
+    QHash<QString, QPointer<QMenu>> menus_;
     // Commands with no menu path still need an action so their shortcut is
     // live; these are attached to the window, never to the menu bar.
     QList<QAction*> shortcutActions_;
@@ -205,6 +210,7 @@ private:
 // (`pictura_script::command_catalogue`), inserting the C++ menu-layout
 // separators before the command rows they precede.
 void addDefaultCommands(CommandRegistry& registry);
+QString commandDisplayText(const QString& source);
 
 // A Window > Panels (or Type > Panels) command and the panel it toggles.
 struct PanelToggle {

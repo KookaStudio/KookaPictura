@@ -1,4 +1,5 @@
 #include "menu_registrar.h"
+#include <QtCore/QCoreApplication>
 
 #include "menu_registrar_internal.h"
 
@@ -173,16 +174,16 @@ void MenuRegistrar::wirePanelMenuCommands()
     };
     commands_->setLabelProvider(command_ids::LayerDuplicateLayer, [this, rowKind]() {
         if (rowKind() == QLatin1String("group")) {
-            return tr("Duplicate Group…");
+            return QCoreApplication::translate("PicturaCommands", "Duplicate Group…");
         }
-        return selectedLayerPaths().size() > 1 ? tr("Duplicate Layers…")
-                                               : tr("Duplicate Layer…");
+        return selectedLayerPaths().size() > 1 ? QCoreApplication::translate("PicturaCommands", "Duplicate Layers…")
+                                               : QCoreApplication::translate("PicturaCommands", "Duplicate Layer…");
     });
     commands_->setLabelProvider(command_ids::LayerDeleteLayer, [this, rowKind]() {
         if (rowKind() == QLatin1String("group")) {
-            return tr("Delete Group");
+            return QCoreApplication::translate("PicturaCommands", "Delete Group");
         }
-        return selectedLayerPaths().size() > 1 ? tr("Delete Layers") : tr("Delete Layer");
+        return selectedLayerPaths().size() > 1 ? QCoreApplication::translate("PicturaCommands", "Delete Layers") : QCoreApplication::translate("PicturaCommands", "Delete Layer");
     });
 
 

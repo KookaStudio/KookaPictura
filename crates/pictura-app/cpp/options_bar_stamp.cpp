@@ -3,6 +3,7 @@
 // from options_bar.cpp along the page seam.
 
 #include "options_bar.h"
+#include <QtCore/QCoreApplication>
 #include "preset_store.h"
 
 #include "commands.h"
@@ -46,11 +47,11 @@ QToolButton* OptionsBar::addAirbrushToggle(QHBoxLayout* layout, QWidget* page,
 {
     auto* button = new QToolButton(page);
     button->setObjectName(name);
-    button->setText(QStringLiteral("Airbrush"));
+    button->setText(QCoreApplication::translate("PicturaUi", "Airbrush"));
     button->setIcon(icon(QStringLiteral("options.airbrush")));
     button->setIconSize(QSize(20, 20));
     button->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    button->setToolTip(QStringLiteral("Build up paint while the mouse button is held"));
+    button->setToolTip(QCoreApplication::translate("PicturaUi", "Build up paint while the mouse button is held"));
     button->setCheckable(true);
     button->setChecked(on);
     button->setAutoRaise(true);
@@ -82,18 +83,18 @@ void OptionsBar::addStampPaintFields(QHBoxLayout* layout, QWidget* page)
 {
     addBrushTipFields(layout, page);
 
-    layout->addWidget(new QLabel(QStringLiteral("Mode:"), page));
+    layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Mode:"), page));
     auto* mode = new QComboBox(page);
     mode->setObjectName(QStringLiteral("optionsStampMode"));
-    mode->addItem(QStringLiteral("Normal"), QStringLiteral("normal"));
-    mode->addItem(QStringLiteral("Dissolve"), QStringLiteral("dissolve"));
-    mode->addItem(QStringLiteral("Behind"), QStringLiteral("behind"));
+    mode->addItem(QCoreApplication::translate("PicturaUi", "Normal"), QStringLiteral("normal"));
+    mode->addItem(QCoreApplication::translate("PicturaUi", "Dissolve"), QStringLiteral("dissolve"));
+    mode->addItem(QCoreApplication::translate("PicturaUi", "Behind"), QStringLiteral("behind"));
     layout->addWidget(mode);
 
-    addPercentField(layout, page, QStringLiteral("Opacity:"), QStringLiteral("optionsStampOpacity"),
+    addPercentField(layout, page, QCoreApplication::translate("PicturaUi", "Opacity:"), QStringLiteral("optionsStampOpacity"),
                     controller_ ? paint_->opacity() : 100,
                     [this](int v) { paint_->setOpacity(v); });
-    addPercentField(layout, page, QStringLiteral("Flow:"), QStringLiteral("optionsStampFlow"),
+    addPercentField(layout, page, QCoreApplication::translate("PicturaUi", "Flow:"), QStringLiteral("optionsStampFlow"),
                     controller_ ? paint_->flow() : 100, [this](int v) { paint_->setFlow(v); });
 
     if (controller_) {
@@ -155,17 +156,17 @@ QWidget* OptionsBar::buildStampPage(ToolId id)
             connect(button, &QToolButton::clicked, this,
                     [this, panel] { emit panelToggleRequested(panel); });
         };
-        addToggle(command_ids::WindowPanelsCloneSource, QStringLiteral("Toggle the Clone Source panel"),
+        addToggle(command_ids::WindowPanelsCloneSource, QCoreApplication::translate("PicturaUi", "Toggle the Clone Source panel"),
                   QStringLiteral("optionsToggleCloneSourcePanel"),
                   QStringLiteral("cloneSourcePanel"));
-        addToggle(command_ids::WindowPanelsBrush, QStringLiteral("Toggle the Brush panel"),
+        addToggle(command_ids::WindowPanelsBrush, QCoreApplication::translate("PicturaUi", "Toggle the Brush panel"),
                   QStringLiteral("optionsToggleBrushPanel"), QStringLiteral("brushPanel"));
     }
 
     if (!clone) {
         auto* pattern = new QComboBox(page);
         pattern->setObjectName(QStringLiteral("optionsPatternStampPattern"));
-        pattern->setToolTip(QStringLiteral("Pattern"));
+        pattern->setToolTip(QCoreApplication::translate("PicturaUi", "Pattern"));
         pattern->setIconSize(QSize(20, 20));
         auto& store = PresetStore::current();
         auto rebuild = [pattern, this, &store] {
@@ -200,7 +201,7 @@ QWidget* OptionsBar::buildStampPage(ToolId id)
         });
     }
 
-    auto* aligned = new QCheckBox(QStringLiteral("Aligned"), page);
+    auto* aligned = new QCheckBox(QCoreApplication::translate("PicturaUi", "Aligned"), page);
     aligned->setObjectName(clone ? QStringLiteral("optionsCloneAligned")
                                  : QStringLiteral("optionsPatternAligned"));
     aligned->setChecked(clone ? initial.cloneAligned : initial.patternAligned);
@@ -210,14 +211,14 @@ QWidget* OptionsBar::buildStampPage(ToolId id)
     });
 
     if (clone) {
-        layout->addWidget(new QLabel(QStringLiteral("Sample:"), page));
+        layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Sample:"), page));
         auto* sample = new QComboBox(page);
         sample->setObjectName(QStringLiteral("optionsCloneSample"));
-        sample->addItems({QStringLiteral("Current Layer"), QStringLiteral("Current & Below"),
-                          QStringLiteral("All Layers")});
+        sample->addItems({QCoreApplication::translate("PicturaUi", "Current Layer"), QCoreApplication::translate("PicturaUi", "Current & Below"),
+                          QCoreApplication::translate("PicturaUi", "All Layers")});
         sample->setCurrentIndex(initial.cloneSample);
         layout->addWidget(sample);
-        auto* ignore = new QCheckBox(QStringLiteral("Ignore Adjustment Layers"), page);
+        auto* ignore = new QCheckBox(QCoreApplication::translate("PicturaUi", "Ignore Adjustment Layers"), page);
         ignore->setObjectName(QStringLiteral("optionsCloneIgnoreAdjustments"));
         ignore->setChecked(initial.ignoreAdjustments);
         ignore->setVisible(initial.cloneSample == 2);
@@ -229,9 +230,9 @@ QWidget* OptionsBar::buildStampPage(ToolId id)
         connect(ignore, &QCheckBox::toggled, this,
                 [update](bool on) { update([on](StampOptions& o) { o.ignoreAdjustments = on; }); });
     } else {
-        auto* impressionist = new QCheckBox(QStringLiteral("Impressionist"), page);
+        auto* impressionist = new QCheckBox(QCoreApplication::translate("PicturaUi", "Impressionist"), page);
         impressionist->setObjectName(QStringLiteral("optionsPatternImpressionist"));
-        impressionist->setToolTip(QStringLiteral("Impressionist: not implemented yet"));
+        impressionist->setToolTip(QCoreApplication::translate("PicturaUi", "Impressionist: not implemented yet"));
         impressionist->setEnabled(false);
         layout->addWidget(impressionist);
     }
@@ -278,14 +279,14 @@ QWidget* OptionsBar::buildArtHistoryBrushPage(ToolId id)
     layout->addWidget(toolButton(id, page));
     addBrushTipFields(layout, page);
 
-    layout->addWidget(new QLabel(QStringLiteral("Mode:"), page));
+    layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Mode:"), page));
     auto* mode = new QComboBox(page);
     mode->setObjectName(QStringLiteral("optionsArtHistoryMode"));
-    mode->addItem(QStringLiteral("Normal"));
-    mode->setToolTip(QStringLiteral("Blending modes: not implemented yet"));
+    mode->addItem(QCoreApplication::translate("PicturaUi", "Normal"));
+    mode->setToolTip(QCoreApplication::translate("PicturaUi", "Blending modes: not implemented yet"));
     mode->setEnabled(false);
     layout->addWidget(mode);
-    addPercentField(layout, page, QStringLiteral("Opacity:"),
+    addPercentField(layout, page, QCoreApplication::translate("PicturaUi", "Opacity:"),
                     QStringLiteral("optionsArtHistoryOpacity"),
                     controller_ ? paint_->opacity() : 100,
                     [this](int v) { paint_->setOpacity(v); });
@@ -299,7 +300,7 @@ QWidget* OptionsBar::buildArtHistoryBrushPage(ToolId id)
             artHistory_->set(o);
         }
     };
-    layout->addWidget(new QLabel(QStringLiteral("Style:"), page));
+    layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Style:"), page));
     auto* style = new QComboBox(page);
     style->setObjectName(QStringLiteral("optionsArtHistoryStyle"));
     for (int i = 0; i < art_history_style_count(); ++i) {
@@ -311,7 +312,7 @@ QWidget* OptionsBar::buildArtHistoryBrushPage(ToolId id)
             [update](int i) { update([i](ArtHistoryOptions& o) { o.style = i; }); });
 
     auto* area = new NumericField(
-        QStringLiteral("Area:"),
+        QCoreApplication::translate("PicturaUi", "Area:"),
         numericConfig(0, 500, 1, 0, QStringLiteral("px"), true,
                       QStringLiteral("optionsArtHistoryArea")),
         page);
@@ -321,7 +322,7 @@ QWidget* OptionsBar::buildArtHistoryBrushPage(ToolId id)
         update([v](ArtHistoryOptions& o) { o.area = qRound(v); });
     });
     auto* tolerance = new NumericField(
-        QStringLiteral("Tolerance:"),
+        QCoreApplication::translate("PicturaUi", "Tolerance:"),
         numericConfig(0, 100, 1, 0, QStringLiteral("%"), true,
                       QStringLiteral("optionsArtHistoryTolerance")),
         page);
@@ -353,18 +354,18 @@ QWidget* OptionsBar::buildEraserPage(ToolId id)
             eraser_->set(o);
         }
     };
-    layout->addWidget(new QLabel(QStringLiteral("Mode:"), page));
+    layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Mode:"), page));
     auto* mode = new QComboBox(page);
     mode->setObjectName(QStringLiteral("optionsEraserMode"));
-    mode->addItems({QStringLiteral("Brush"), QStringLiteral("Pencil"), QStringLiteral("Block")});
+    mode->addItems({QCoreApplication::translate("PicturaUi", "Brush"), QCoreApplication::translate("PicturaUi", "Pencil"), QCoreApplication::translate("PicturaUi", "Block")});
     mode->setCurrentIndex(initial.mode);
     layout->addWidget(mode);
 
     NumericField* opacity = addPercentField(
-        layout, page, QStringLiteral("Opacity:"), QStringLiteral("optionsEraserOpacity"),
+        layout, page, QCoreApplication::translate("PicturaUi", "Opacity:"), QStringLiteral("optionsEraserOpacity"),
         controller_ ? paint_->opacity() : 100, [this](int v) { paint_->setOpacity(v); });
     NumericField* flow = addPercentField(
-        layout, page, QStringLiteral("Flow:"), QStringLiteral("optionsEraserFlow"),
+        layout, page, QCoreApplication::translate("PicturaUi", "Flow:"), QStringLiteral("optionsEraserFlow"),
         controller_ ? paint_->flow() : 100, [this](int v) { paint_->setFlow(v); });
     const auto strengthFor = [opacity, flow](int m) {
         opacity->setEnabled(m != 2);
@@ -376,7 +377,7 @@ QWidget* OptionsBar::buildEraserPage(ToolId id)
         update([i](EraserOptions& o) { o.mode = i; });
     });
 
-    auto* toHistory = new QCheckBox(QStringLiteral("Erase to History"), page);
+    auto* toHistory = new QCheckBox(QCoreApplication::translate("PicturaUi", "Erase to History"), page);
     toHistory->setObjectName(QStringLiteral("optionsEraseToHistory"));
     toHistory->setChecked(initial.toHistory);
     layout->addWidget(toHistory);

@@ -1,4 +1,5 @@
 #include "hdr_conversion_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "dialogs.h"
 #include "hdr_toning_controls.h"
@@ -32,10 +33,10 @@ HdrConversionDialog::HdrConversionDialog(QWidget* parent)
 
     method_ = new QComboBox(this);
     method_->setObjectName(QStringLiteral("hdrConversionMethod"));
-    method_->addItem(QStringLiteral("Local Adaptation"));
-    method_->addItem(QStringLiteral("Equalize Histogram"));
-    method_->addItem(QStringLiteral("Exposure and Gamma"));
-    method_->addItem(QStringLiteral("Highlight Compression"));
+    method_->addItem(QCoreApplication::translate("PicturaUi", "Local Adaptation"));
+    method_->addItem(QCoreApplication::translate("PicturaUi", "Equalize Histogram"));
+    method_->addItem(QCoreApplication::translate("PicturaUi", "Exposure and Gamma"));
+    method_->addItem(QCoreApplication::translate("PicturaUi", "Highlight Compression"));
     method_->setCurrentIndex(0);
 
     pages_ = new QStackedWidget(this);
@@ -61,8 +62,8 @@ HdrConversionDialog::HdrConversionDialog(QWidget* parent)
     gammaSpin_->setDecimals(2);
     gammaSpin_->setSingleStep(0.1);
     gammaSpin_->setValue(1.0);
-    exposureForm->addRow(QStringLiteral("Exposure (EV):"), exposureSpin_);
-    exposureForm->addRow(QStringLiteral("Gamma:"), gammaSpin_);
+    exposureForm->addRow(QCoreApplication::translate("PicturaUi", "Exposure (EV):"), exposureSpin_);
+    exposureForm->addRow(QCoreApplication::translate("PicturaUi", "Gamma:"), gammaSpin_);
     pages_->addWidget(exposurePage);
 
     pages_->addWidget(note(QStringLiteral("Automatic: compresses highlights into the output range."),
@@ -78,7 +79,7 @@ HdrConversionDialog::HdrConversionDialog(QWidget* parent)
 
     auto* outer = new QVBoxLayout(this);
     auto* methodRow = new QFormLayout;
-    methodRow->addRow(QStringLiteral("Method:"), method_);
+    methodRow->addRow(QCoreApplication::translate("PicturaUi", "Method:"), method_);
     outer->addLayout(methodRow);
     outer->addWidget(pages_, 1);
     outer->addWidget(buttons);

@@ -49,6 +49,7 @@ public:
         int subdivisions = 1;
     };
     static Scale scaleFor(RulerUnit unit, double screenPxPerUnit);
+    static QString formatTickLabel(double distance);
 
     CanvasRuler(Qt::Orientation orientation, QWidget* parent = nullptr);
 

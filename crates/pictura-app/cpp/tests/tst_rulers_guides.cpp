@@ -14,10 +14,13 @@
 #include "preferences.h"
 
 #include "api/document_bridge.h"
+#include "api/paint_bridge.h"
 
+#include <QtCore/QScopeGuard>
 #include <QtCore/QTemporaryDir>
 #include <QtGui/QMouseEvent>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QLabel>
 #include <QtWidgets/QRadioButton>
 
 #include <cmath>
@@ -108,6 +111,8 @@ private slots:
     void guidesSaveInPsd();
     void guidePreferences();
     void unitsPreferences();
+    void rulerLabelsAndMeasurementsUseNumericLocale();
+    void calibratedLengthUsesNumericLocale();
 
 private:
     pictura::test::ScopedStateHome stateHome_;
@@ -494,6 +499,52 @@ void RulersGuidesTest::unitsPreferences()
     QCOMPARE(prefs->currentPageForTest(), pictura::PreferencesDialog::kUnits);
     prefs->close();
     emit top->unitChosen(pictura::RulerUnit::Inches);
+}
+
+void RulersGuidesTest::rulerLabelsAndMeasurementsUseNumericLocale()
+{
+    using pictura::CanvasRuler;
+    using pictura::RulerUnit;
+    const auto scale = CanvasRuler::scaleFor(RulerUnit::Inches, 72.0 * 16.0);
+    QCOMPARE(scale.major, 0.05);
+    const pictura::test::ScopedDefaultLocale baseline{QLocale::c()};
+    const QString periodTick = CanvasRuler::formatTickLabel(scale.major);
+    const QString periodLength =
+        pictura::formatRulerLength(36.0, RulerUnit::Inches, 72.0, false, 0.0);
+    const pictura::test::ScopedDefaultLocale numbers{QLocale(QLocale::Finnish)};
+    QCOMPARE(CanvasRuler::scaleFor(RulerUnit::Inches, 72.0 * 16.0).major, scale.major);
+    QCOMPARE(periodTick, QStringLiteral("0.05"));
+    QCOMPARE(periodLength, QStringLiteral("0.500 in"));
+    QCOMPARE(CanvasRuler::formatTickLabel(scale.major), QStringLiteral("0,05"));
+    QCOMPARE(pictura::formatRulerLength(36.0, RulerUnit::Inches, 72.0, false, 0.0),
+             QStringLiteral("0,500 in"));
+}
+
+void RulersGuidesTest::calibratedLengthUsesNumericLocale()
+{
+    const auto previousEdition = qgetenv("PICTURA_EDITION");
+    qputenv("PICTURA_EDITION", "extended");
+    const auto restoreEdition = qScopeGuard([previousEdition] {
+        if (previousEdition.isNull()) qunsetenv("PICTURA_EDITION");
+        else qputenv("PICTURA_EDITION", previousEdition);
+    });
+    const pictura::test::ScopedDefaultLocale numbers{QLocale(QLocale::German)};
+    auto window = pictura::test::makeMainWindow();
+    QVERIFY(window->newDocument(QStringLiteral("Localized ruler"), 64, 64, QStringLiteral("rgb"),
+                                8, QStringLiteral("white")));
+    auto* view = window->activeView();
+    QVERIFY(view);
+    QVERIFY(pictura::apply_measurement_scale(*view, 50, 1.5, QStringLiteral("µm")));
+    window->setActiveTool(pictura::ToolId::Ruler);
+    auto* canvas = window->imageView();
+    QVERIFY(canvas);
+    emit canvas->mousePressed(QPointF(2, 2), Qt::LeftButton, Qt::NoModifier);
+    emit canvas->mouseMoved(QPointF(52, 2));
+    emit canvas->mouseReleased(QPointF(52, 2));
+    auto* readout = window->findChild<QLabel*>(QStringLiteral("optionsRulerReadout"));
+    QVERIFY(readout);
+    QVERIFY(readout->text().contains(QStringLiteral("1,5 µm")));
+    QCOMPARE(pictura::measurement_scale_values(*view)[1], 1.5);
 }
 
 QTEST_MAIN(RulersGuidesTest)

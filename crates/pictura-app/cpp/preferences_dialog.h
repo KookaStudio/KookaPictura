@@ -16,6 +16,7 @@ class QPushButton;
 class QSpinBox;
 class QLabel;
 class QRadioButton;
+class QPushButton;
 class QListWidget;
 class QStackedWidget;
 
@@ -62,6 +63,9 @@ public:
     void setThemeFamily(int family);
     void setUiScalePercent(int percent);
     int uiScalePercentForTest() const;
+    void setLanguageChoices(const QString& savedChoice);
+    void setLanguageRestartPending(bool pending);
+    void showLanguageStatus(const QString& message);
     void setPickerChoice(int choice);
     int pickerChoice() const;
     void setGpuCompute(bool on);
@@ -99,6 +103,9 @@ signals:
     void historyLogChanged(const HistoryLogSettings& settings);
     void exportSettingsRequested();
     void importSettingsRequested();
+    void importTranslationRequested();
+    void languageSelected(const QString& selection);
+    void languageRestartRequested();
     void useShiftKeyForToolSwitchChanged(bool on);
     void openDocumentsAsTabsChanged(bool on);
     void floatingDocumentDockingChanged(bool on);
@@ -149,6 +156,9 @@ private:
     NumericField* brightness_ = nullptr;
     QComboBox* themeFamily_ = nullptr;
     QComboBox* uiScale_ = nullptr;
+    QComboBox* language_ = nullptr;
+    QLabel* languageStatus_ = nullptr;
+    QPushButton* languageRestart_ = nullptr;
     QComboBox* pickerChoice_ = nullptr;
     QComboBox* autoSaveMinutes_ = nullptr;
     QComboBox* nativeSaveCompatibility_ = nullptr;

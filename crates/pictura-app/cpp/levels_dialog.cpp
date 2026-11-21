@@ -1,4 +1,5 @@
 #include "levels_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "adjustment_presets.h"
 
@@ -177,7 +178,7 @@ LevelsDialog::LevelsDialog(PictureView* view, const QByteArray& block, const QRe
     left->setSpacing(4);
 
     auto* presetRow = new QHBoxLayout;
-    presetRow->addWidget(new QLabel(QStringLiteral("Preset:"), this));
+    presetRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Preset:"), this));
     preset_ = new QComboBox(this);
     preset_->setObjectName(QStringLiteral("levelsPreset"));
     preset_->addItem(QStringLiteral("Default"));
@@ -197,7 +198,7 @@ LevelsDialog::LevelsDialog(PictureView* view, const QByteArray& block, const QRe
 
     auto* channelRow = new QHBoxLayout;
     channelRow->addSpacing(14);
-    channelRow->addWidget(new QLabel(QStringLiteral("Channel:"), this));
+    channelRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Channel:"), this));
     channel_ = new QComboBox(this);
     channel_->setObjectName(QStringLiteral("levelsChannel"));
     channel_->addItems({QStringLiteral("RGB"), QStringLiteral("Red"), QStringLiteral("Green"),
@@ -206,7 +207,7 @@ LevelsDialog::LevelsDialog(PictureView* view, const QByteArray& block, const QRe
     left->addLayout(channelRow);
     left->addSpacing(6);
 
-    left->addWidget(new QLabel(QStringLiteral("Input Levels:"), this));
+    left->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Input Levels:"), this));
     histogram_ = new LevelsStrip(false, 120, this);
     histogram_->setObjectName(QStringLiteral("levelsHistogram"));
     left->addWidget(histogram_);
@@ -236,7 +237,7 @@ LevelsDialog::LevelsDialog(PictureView* view, const QByteArray& block, const QRe
     left->addLayout(inputRow);
     left->addSpacing(10);
 
-    left->addWidget(new QLabel(QStringLiteral("Output Levels:"), this));
+    left->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Output Levels:"), this));
     left->addWidget(new LevelsStrip(true, 16, this));
     output_ = new TriangleSlider(2, this);
     output_->setObjectName(QStringLiteral("levelsOutputSlider"));

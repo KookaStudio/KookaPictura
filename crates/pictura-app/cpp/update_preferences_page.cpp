@@ -29,6 +29,9 @@ UpdatePreferencesPage::UpdatePreferencesPage(UpdateChecker* checker, QWidget* pa
     checkNow_->setObjectName(QStringLiteral("preferencesUpdateCheckNow"));
     result_->setObjectName(QStringLiteral("preferencesUpdateResult"));
     result_->setWordWrap(true);
+    for (auto* label : {version_, package_, result_}) {
+        label->setTextFormat(Qt::PlainText);
+    }
 
     version_->setText(tr("Current version: %1").arg(QStringLiteral(PICTURA_VERSION)));
     package_->setText(

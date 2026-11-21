@@ -2,6 +2,7 @@
 // Part of OptionsBar; split from options_bar.cpp along the page seam.
 
 #include "options_bar.h"
+#include <QtCore/QCoreApplication>
 
 #include "panels/numeric_field.h"
 
@@ -37,9 +38,9 @@ QWidget* OptionsBar::buildPenPage(ToolId id)
     if (id != ToolId::PathSelection) {
         auto* mode = new QComboBox(page);
         mode->setObjectName(QStringLiteral("optionsPenMode"));
-        mode->setToolTip(QStringLiteral("Pick tool mode"));
+        mode->setToolTip(QCoreApplication::translate("PicturaUi", "Pick tool mode"));
         mode->addItems(
-            {QStringLiteral("Shape"), QStringLiteral("Path"), QStringLiteral("Pixels")});
+            {QCoreApplication::translate("PicturaUi", "Shape"), QCoreApplication::translate("PicturaUi", "Path"), QCoreApplication::translate("PicturaUi", "Pixels")});
         mode->setCurrentIndex(initial.mode);
         layout->addWidget(mode);
         connect(mode, &QComboBox::currentIndexChanged, this,
@@ -52,20 +53,20 @@ QWidget* OptionsBar::buildPenPage(ToolId id)
         }
     }
     if (id == ToolId::PathSelection) {
-        auto* box = new QCheckBox(QStringLiteral("Show Bounding Box"), page);
+        auto* box = new QCheckBox(QCoreApplication::translate("PicturaUi", "Show Bounding Box"), page);
         box->setObjectName(QStringLiteral("optionsPathShowBoundingBox"));
         box->setChecked(initial.showBoundingBox);
         layout->addWidget(box);
         connect(box, &QCheckBox::toggled, this,
                 [update](bool on) { update([on](PenOptions& o) { o.showBoundingBox = on; }); });
     } else if (id == ToolId::Pen) {
-        auto* autoAdd = new QCheckBox(QStringLiteral("Auto Add/Delete"), page);
+        auto* autoAdd = new QCheckBox(QCoreApplication::translate("PicturaUi", "Auto Add/Delete"), page);
         autoAdd->setObjectName(QStringLiteral("optionsPenAutoAddDelete"));
         autoAdd->setChecked(initial.autoAddDelete);
         layout->addWidget(autoAdd);
         connect(autoAdd, &QCheckBox::toggled, this,
                 [update](bool on) { update([on](PenOptions& o) { o.autoAddDelete = on; }); });
-        auto* rubber = new QCheckBox(QStringLiteral("Rubber Band"), page);
+        auto* rubber = new QCheckBox(QCoreApplication::translate("PicturaUi", "Rubber Band"), page);
         rubber->setObjectName(QStringLiteral("optionsPenRubberBand"));
         rubber->setChecked(initial.rubberBand);
         layout->addWidget(rubber);
@@ -73,7 +74,7 @@ QWidget* OptionsBar::buildPenPage(ToolId id)
                 [update](bool on) { update([on](PenOptions& o) { o.rubberBand = on; }); });
     } else {
         auto* fit = new NumericField(
-            QStringLiteral("Curve Fit:"),
+            QCoreApplication::translate("PicturaUi", "Curve Fit:"),
             numericConfig(0.5, 10, 0.5, 1, QStringLiteral(" px"), false,
                           QStringLiteral("optionsFreeformPenCurveFit")),
             page);

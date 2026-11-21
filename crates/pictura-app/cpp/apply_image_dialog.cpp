@@ -120,7 +120,7 @@ void ApplyImageDialog::buildUi()
             blending_->addItem(tr("Subtract"), kSubtract);
             continue;
         }
-        blending_->addItem(entry.name, entry.key);
+        blending_->addItem(entry.displayName(), entry.key);
     }
     blending_->setCurrentIndex(blending_->findData(kMultiplyKey));
     blendingForm->addRow(tr("Blending:"), blending_);

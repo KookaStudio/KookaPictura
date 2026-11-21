@@ -63,6 +63,7 @@ void PreferencesStoreTest::freshProfileUsesSeparateRoots()
     QVERIFY(saveSession(state));
     QCOMPARE(loadSession().recent, state.recent);
     QVERIFY(!readProfileFile(preferencesFilePath()).contains("document.psd"));
+    QCOMPARE(loadPreferences().uiLanguage, QStringLiteral("system"));
 }
 
 void PreferencesStoreTest::preferencesReachConsumersAfterRelaunch()
@@ -103,6 +104,7 @@ void PreferencesStoreTest::mixedLegacyProfileSplits()
     QVERIFY(writeProfileJson(sessionFilePath(), {
         {QStringLiteral("schemaVersion"), 12},
         {QStringLiteral("brightnessLevel"), 3},
+        {QStringLiteral("uiLanguage"), QStringLiteral("fi")},
         {QStringLiteral("gpuCompute"), false},
         {QStringLiteral("fontPreviewSize"), 5},
         {QStringLiteral("typeDefaults"), QStringLiteral("c3R5bGU=")},
@@ -115,6 +117,7 @@ void PreferencesStoreTest::mixedLegacyProfileSplits()
     QVERIFY(initializePreferences());
     const auto prefs = loadPreferences();
     QCOMPARE(prefs.brightnessLevel, 3);
+    QCOMPARE(prefs.uiLanguage, QStringLiteral("fi"));
     QVERIFY(!prefs.gpuCompute);
     QCOMPARE(prefs.fontPreviewSize, 5);
     QCOMPARE(prefs.typeDefaults, QStringLiteral("c3R5bGU="));
@@ -124,6 +127,7 @@ void PreferencesStoreTest::mixedLegacyProfileSplits()
     QCOMPARE(state.value(QStringLiteral("futureStateKey")).toInt(), 17);
     QVERIFY(state.contains(QStringLiteral("recent")));
     QVERIFY(!state.contains(QStringLiteral("brightnessLevel")));
+    QVERIFY(!state.contains(QStringLiteral("uiLanguage")));
     QVERIFY(!state.contains(QStringLiteral("fontPreviewSize")));
     QVERIFY(!state.contains(QStringLiteral("typeDefaults")));
     QVERIFY(!state.contains(QStringLiteral("shortcuts")));

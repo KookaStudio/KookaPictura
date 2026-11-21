@@ -4,10 +4,12 @@
 #include "menu_registrar.h"
 
 #include "import_save_coordinator.h"
+#include "localization.h"
 
 #include "commands.h"
 #include <QtGui/QAction>
 
+#include <QtCore/QCoreApplication>
 #include <QtCore/QFileInfo>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QMenuBar>
@@ -16,15 +18,8 @@ namespace pictura {
 
 QMenu* MenuRegistrar::recentMenu() const
 {
-    if (!menuBar_) {
-        return nullptr;
-    }
-    for (QMenu* menu : menuBar_->findChildren<QMenu*>()) {
-        if (menu->title() == QStringLiteral("Open Recent")) {
-            return menu;
-        }
-    }
-    return nullptr;
+    return commands_ ? commands_->menu({QStringLiteral("File"), QStringLiteral("Open Recent")})
+                     : nullptr;
 }
 
 void MenuRegistrar::refreshRecentMenu(QMenu* menu)
@@ -71,7 +66,8 @@ void MenuRegistrar::refreshRecentMenu(QMenu* menu)
     auto* separator = new QAction(menu);
     separator->setSeparator(true);
     recentActions_.append(separator);
-    auto* clear = new QAction(tr("Clear Recent File List"), menu);
+    auto* clear = new QAction(QCoreApplication::translate("PicturaCommands", "Clear Recent File List"), menu);
+    clear->setToolTip(plainUiTooltip(clear->text()));
     connect(clear, &QAction::triggered, this, [this]() {
         if (importSave_) {
             importSave_->setRecentFiles({});

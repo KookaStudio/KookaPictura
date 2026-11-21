@@ -1,4 +1,5 @@
 #include "hue_saturation_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "adjustment_presets.h"
 #include "panels/spectrum_bar.h"
@@ -55,7 +56,7 @@ HueSaturationDialog::HueSaturationDialog(PictureView* view, const QByteArray& bl
     left->setSpacing(6);
 
     auto* presetRow = new QHBoxLayout;
-    presetRow->addWidget(new QLabel(QStringLiteral("Preset:"), this));
+    presetRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Preset:"), this));
     preset_ = new QComboBox(this);
     preset_->setObjectName(QStringLiteral("hueSaturationPreset"));
     for (const Preset& preset : kPresets) {
@@ -95,7 +96,7 @@ HueSaturationDialog::HueSaturationDialog(PictureView* view, const QByteArray& bl
 
     auto* checks = new QHBoxLayout;
     checks->addStretch(1);
-    auto* colorize = new QCheckBox(QStringLiteral("Colorize"), this);
+    auto* colorize = new QCheckBox(QCoreApplication::translate("PicturaUi", "Colorize"), this);
     colorize->setObjectName(QStringLiteral("hueSaturationColorize"));
     colorize->setEnabled(false);
     checks->addWidget(colorize);

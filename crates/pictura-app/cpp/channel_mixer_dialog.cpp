@@ -1,4 +1,5 @@
 #include "channel_mixer_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "adjustment_presets.h"
 
@@ -48,7 +49,7 @@ ChannelMixerDialog::ChannelMixerDialog(PictureView* view, const QByteArray& bloc
     addPresetRow(left);
 
     auto* outputRow = new QHBoxLayout;
-    outputRow->addWidget(new QLabel(QStringLiteral("Output Channel:"), this));
+    outputRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Output Channel:"), this));
     output_ = new QComboBox(this);
     output_->setObjectName(QStringLiteral("outputChannel"));
     output_->setMinimumWidth(110);
@@ -56,7 +57,7 @@ ChannelMixerDialog::ChannelMixerDialog(PictureView* view, const QByteArray& bloc
     outputRow->addStretch(1);
     left->addLayout(outputRow);
 
-    auto* sources = new QGroupBox(QStringLiteral("Source Channels"), this);
+    auto* sources = new QGroupBox(QCoreApplication::translate("PicturaUi", "Source Channels"), this);
     auto* grid = new QGridLayout(sources);
     grid->setColumnStretch(1, 1);
     grid->setVerticalSpacing(4);
@@ -67,7 +68,7 @@ ChannelMixerDialog::ChannelMixerDialog(PictureView* view, const QByteArray& bloc
     }
     auto* totalRow = new QHBoxLayout;
     totalRow->addStretch(1);
-    totalRow->addWidget(new QLabel(QStringLiteral("Total:"), sources));
+    totalRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Total:"), sources));
     totalRow->addSpacing(8);
     total_ = new QLabel(sources);
     total_->setObjectName(QStringLiteral("channelMixerTotal"));
@@ -77,7 +78,7 @@ ChannelMixerDialog::ChannelMixerDialog(PictureView* view, const QByteArray& bloc
     left->addWidget(sources);
 
     if (!cmyk) {
-        monochrome_ = new QCheckBox(QStringLiteral("Monochrome"), this);
+        monochrome_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Monochrome"), this);
         monochrome_->setObjectName(QStringLiteral("monochrome"));
         monochrome_->setChecked(param(QStringLiteral("monochrome")) != 0);
         left->addWidget(monochrome_);

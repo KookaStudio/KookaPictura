@@ -1,4 +1,5 @@
 #include "lens_correction_dialog.h"
+#include <QtCore/QCoreApplication>
 #include "color_picker_dialog.h"
 #include "dialogs.h"
 #include "icons.h"
@@ -123,34 +124,34 @@ LensCorrectionDialog::LensCorrectionDialog(PictureView* view, QWidget* parent)
         }
     }
     const QString camera = (exif.value(0) + QLatin1Char(' ') + exif.value(1)).trimmed();
-    auto* cameraLine = new QLabel(QStringLiteral("Camera Model: %1").arg(orDashes(camera)), this);
+    auto* cameraLine = new QLabel(QCoreApplication::translate("PicturaUi", "Camera Model: %1").arg(orDashes(camera)), this);
     cameraLine->setObjectName(QStringLiteral("lcCamera"));
-    auto* lensLine = new QLabel(QStringLiteral("Lens Model: %1").arg(orDashes(exif.value(2))), this);
+    auto* lensLine = new QLabel(QCoreApplication::translate("PicturaUi", "Lens Model: %1").arg(orDashes(exif.value(2))), this);
     lensLine->setObjectName(QStringLiteral("lcLens"));
     auto* settingsLine = new QLabel(
-        QStringLiteral("Camera Settings: %1")
+        QCoreApplication::translate("PicturaUi", "Camera Settings: %1")
             .arg(exif.value(3).isEmpty() ? QStringLiteral("--mm, f/--, --m") : exif.value(3)),
         this);
     settingsLine->setObjectName(QStringLiteral("lcCameraSettings"));
 
-    preview_ = new QCheckBox(QStringLiteral("Preview"), this);
+    preview_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Preview"), this);
     preview_->setObjectName(QStringLiteral("lcPreview"));
     preview_->setChecked(true);
     connect(preview_, &QCheckBox::toggled, canvas_, &LensCorrectionCanvas::setPreview);
-    showGrid_ = new QCheckBox(QStringLiteral("Show Grid"), this);
+    showGrid_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Show Grid"), this);
     showGrid_->setObjectName(QStringLiteral("lcShowGrid"));
     connect(showGrid_, &QCheckBox::toggled, canvas_, &LensCorrectionCanvas::setShowGrid);
     gridColor_ = new ColorSwatchWidget(this);
     gridColor_->setObjectName(QStringLiteral("lcGridColor"));
     gridColor_->setColor(canvas_->gridColor());
     gridColor_->setFixedSize(24, 16);
-    gridColor_->setToolTip(QStringLiteral("Color: the grid's color."));
+    gridColor_->setToolTip(QCoreApplication::translate("PicturaUi", "Color: the grid's color."));
     connect(gridColor_, &QPushButton::clicked, this, &LensCorrectionDialog::pickGridColor);
     gridSize_ = new QSpinBox(this);
     gridSize_->setObjectName(QStringLiteral("lcGridSize"));
     gridSize_->setRange(4, 1024);
     gridSize_->setValue(canvas_->gridSize());
-    gridSize_->setToolTip(QStringLiteral("Size: the grid's spacing, in pixels."));
+    gridSize_->setToolTip(QCoreApplication::translate("PicturaUi", "Size: the grid's spacing, in pixels."));
     connect(gridSize_, &QSpinBox::valueChanged, canvas_, &LensCorrectionCanvas::setGridSize);
     for (QWidget* w : QList<QWidget*>{preview_, showGrid_, gridColor_, gridSize_}) {
         w->installEventFilter(this);
@@ -169,9 +170,9 @@ LensCorrectionDialog::LensCorrectionDialog(PictureView* view, QWidget* parent)
     bottom->addStretch(1);
     bottom->addWidget(preview_);
     bottom->addWidget(showGrid_);
-    bottom->addWidget(new QLabel(QStringLiteral("Color:"), this));
+    bottom->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Color:"), this));
     bottom->addWidget(gridColor_);
-    bottom->addWidget(new QLabel(QStringLiteral("Size:"), this));
+    bottom->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Size:"), this));
     bottom->addWidget(gridSize_);
     auto* centre = new QVBoxLayout;
     centre->addWidget(help_);
@@ -179,9 +180,9 @@ LensCorrectionDialog::LensCorrectionDialog(PictureView* view, QWidget* parent)
     centre->addLayout(bottom);
 
     // OK / Cancel over the tabs.
-    auto* ok = new QPushButton(QStringLiteral("OK"), this);
+    auto* ok = new QPushButton(QCoreApplication::translate("PicturaUi", "OK"), this);
     ok->setDefault(true);
-    auto* cancel = new QPushButton(QStringLiteral("Cancel"), this);
+    auto* cancel = new QPushButton(QCoreApplication::translate("PicturaUi", "Cancel"), this);
     connect(ok, &QPushButton::clicked, this, &QDialog::accept);
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
     auto_ = new LensAutoPanel(ready_, this);

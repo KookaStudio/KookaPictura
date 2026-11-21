@@ -3,6 +3,7 @@
 // split from options_bar.cpp along the page seam.
 
 #include "options_bar.h"
+#include <QtCore/QCoreApplication>
 
 #include "api/document_bridge.h"
 #include "api/paint_bridge.h"
@@ -116,7 +117,7 @@ void OptionsBar::addBrushTipFields(QHBoxLayout* layout, QWidget* page)
     button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     button->setIconSize(QSize(16, 16));
     button->setAutoRaise(true);
-    button->setToolTip(QStringLiteral("Click to open the Brush Preset picker"));
+    button->setToolTip(QCoreApplication::translate("PicturaUi", "Click to open the Brush Preset picker"));
     layout->addWidget(button);
     if (!controller_) {
         return;
@@ -161,13 +162,13 @@ QWidget* OptionsBar::buildRedEyePage(ToolId id)
                     [setter](double v) { setter(qRound(v)); });
         }
     };
-    addField(QStringLiteral("Pupil Size:"), QStringLiteral("optionsRedEyePupil"),
+    addField(QCoreApplication::translate("PicturaUi", "Pupil Size:"), QStringLiteral("optionsRedEyePupil"),
              controller_ ? redEye_->get().pupil : 50, [this](int v) {
                  RedEyeOptions o = redEye_->get();
                  o.pupil = v;
                  redEye_->set(o);
              });
-    addField(QStringLiteral("Darken Amount:"), QStringLiteral("optionsRedEyeDarken"),
+    addField(QCoreApplication::translate("PicturaUi", "Darken Amount:"), QStringLiteral("optionsRedEyeDarken"),
              controller_ ? redEye_->get().darken : 50, [this](int v) {
                  RedEyeOptions o = redEye_->get();
                  o.darken = v;
@@ -199,7 +200,7 @@ QWidget* OptionsBar::buildColorReplacementPage(ToolId id)
         }
     };
 
-    auto* mode = addCombo(layout, page, QStringLiteral("Mode:"),
+    auto* mode = addCombo(layout, page, QCoreApplication::translate("PicturaUi", "Mode:"),
                           QStringLiteral("optionsColorReplaceMode"), {});
     colorReplaceMode_ = mode;
     populateColorReplacementModes(mode, initial.mode, 8);
@@ -207,14 +208,14 @@ QWidget* OptionsBar::buildColorReplacementPage(ToolId id)
         update([mode](ColorReplaceOptions& o) { o.mode = mode->currentData().toInt(); });
     });
 
-    auto* sampling = addCombo(layout, page, QStringLiteral("Sampling:"),
+    auto* sampling = addCombo(layout, page, QCoreApplication::translate("PicturaUi", "Sampling:"),
                               QStringLiteral("optionsColorReplaceSampling"),
                               {"Continuous", "Once", "Background Swatch"});
     sampling->setCurrentIndex(initial.sampling);
     connect(sampling, &QComboBox::currentIndexChanged, this,
             [update](int i) { update([i](ColorReplaceOptions& o) { o.sampling = i; }); });
 
-    auto* limits = addCombo(layout, page, QStringLiteral("Limits:"),
+    auto* limits = addCombo(layout, page, QCoreApplication::translate("PicturaUi", "Limits:"),
                             QStringLiteral("optionsColorReplaceLimits"),
                             {"Discontiguous", "Contiguous", "Find Edges"});
     limits->setCurrentIndex(initial.limits);
@@ -222,7 +223,7 @@ QWidget* OptionsBar::buildColorReplacementPage(ToolId id)
             [update](int i) { update([i](ColorReplaceOptions& o) { o.limits = i; }); });
 
     auto* tolerance = new NumericField(
-        QStringLiteral("Tolerance:"),
+        QCoreApplication::translate("PicturaUi", "Tolerance:"),
         numericConfig(0, 100, 1, 0, QStringLiteral("%"), true,
                       QStringLiteral("optionsColorReplaceTolerance")),
         page);
@@ -232,7 +233,7 @@ QWidget* OptionsBar::buildColorReplacementPage(ToolId id)
         update([v](ColorReplaceOptions& o) { o.tolerance = qRound(v); });
     });
 
-    auto* antialias = new QCheckBox(QStringLiteral("Anti-alias"), page);
+    auto* antialias = new QCheckBox(QCoreApplication::translate("PicturaUi", "Anti-alias"), page);
     antialias->setObjectName(QStringLiteral("optionsColorReplaceAntialias"));
     antialias->setChecked(initial.antialias);
     layout->addWidget(antialias);
@@ -280,10 +281,10 @@ QWidget* OptionsBar::buildMixerBrushPage(ToolId id)
     load->setObjectName(QStringLiteral("optionsMixerLoad"));
     load->setPopupMode(QToolButton::InstantPopup);
     load->setIconSize(QSize(20, 20));
-    load->setToolTip(QStringLiteral("Current brush load"));
+    load->setToolTip(QCoreApplication::translate("PicturaUi", "Current brush load"));
     auto* loadMenu = new QMenu(load);
-    QAction* loadBrush = loadMenu->addAction(QStringLiteral("Load Brush"));
-    QAction* cleanBrush = loadMenu->addAction(QStringLiteral("Clean Brush"));
+    QAction* loadBrush = loadMenu->addAction(QCoreApplication::translate("PicturaUi", "Load Brush"));
+    QAction* cleanBrush = loadMenu->addAction(QCoreApplication::translate("PicturaUi", "Clean Brush"));
     load->setMenu(loadMenu);
     layout->addWidget(load);
 
@@ -314,11 +315,11 @@ QWidget* OptionsBar::buildMixerBrushPage(ToolId id)
         layout->addWidget(button);
         return button;
     };
-    auto* autoLoad = addToggle(QStringLiteral("Load"), QStringLiteral("optionsMixerAutoLoad"),
-                               QStringLiteral("Load the brush after each stroke"),
+    auto* autoLoad = addToggle(QCoreApplication::translate("PicturaUi", "Load"), QStringLiteral("optionsMixerAutoLoad"),
+                               QCoreApplication::translate("PicturaUi", "Load the brush after each stroke"),
                                initial.loadAfterStroke);
-    auto* autoClean = addToggle(QStringLiteral("Clean"), QStringLiteral("optionsMixerAutoClean"),
-                                QStringLiteral("Clean the brush after each stroke"),
+    auto* autoClean = addToggle(QCoreApplication::translate("PicturaUi", "Clean"), QStringLiteral("optionsMixerAutoClean"),
+                                QCoreApplication::translate("PicturaUi", "Clean the brush after each stroke"),
                                 initial.cleanAfterStroke);
     connect(autoLoad, &QToolButton::toggled, this,
             [update](bool on) { update([on](MixerOptions& o) { o.loadAfterStroke = on; }); });
@@ -327,8 +328,8 @@ QWidget* OptionsBar::buildMixerBrushPage(ToolId id)
 
     auto* preset = new QComboBox(page);
     preset->setObjectName(QStringLiteral("optionsMixerPreset"));
-    preset->setToolTip(QStringLiteral("Useful mixing brush combinations"));
-    preset->addItem(QStringLiteral("Custom"));
+    preset->setToolTip(QCoreApplication::translate("PicturaUi", "Useful mixing brush combinations"));
+    preset->addItem(QCoreApplication::translate("PicturaUi", "Custom"));
     for (const MixerPreset& p : kMixerPresets) {
         preset->addItem(QString::fromLatin1(p.name));
     }
@@ -356,9 +357,9 @@ QWidget* OptionsBar::buildMixerBrushPage(ToolId id)
         layout->addWidget(spins[i]);
     }
 
-    auto* sampleAll = new QCheckBox(QStringLiteral("Sample All Layers"), page);
+    auto* sampleAll = new QCheckBox(QCoreApplication::translate("PicturaUi", "Sample All Layers"), page);
     sampleAll->setObjectName(QStringLiteral("optionsMixerSampleAll"));
-    sampleAll->setToolTip(QStringLiteral("Pick up colour from all visible layers"));
+    sampleAll->setToolTip(QCoreApplication::translate("PicturaUi", "Pick up colour from all visible layers"));
     sampleAll->setChecked(initial.sampleAllLayers);
     layout->addWidget(sampleAll);
     connect(sampleAll, &QCheckBox::toggled, this,
@@ -467,13 +468,13 @@ QWidget* OptionsBar::buildPaintPage(ToolId id)
     };
 
     NumericField* opacityField =
-        addField(QStringLiteral("Opacity"), QStringLiteral("optionsBrushOpacity"),
+        addField(QCoreApplication::translate("PicturaUi", "Opacity"), QStringLiteral("optionsBrushOpacity"),
                  QStringLiteral("%"), 0, 100, controller_ ? paint_->opacity() : 100,
                  [this](int v) { paint_->setOpacity(v); });
     // CS6 puts Always use Pressure for Opacity right after the Opacity field.
     QToolButton* pressureOpacity = addPressure(
         QStringLiteral("optionsBrushPressureOpacity"), QStringLiteral("options.pressureOpacity"),
-        QStringLiteral("Always use Pressure for Opacity. When off, Brush Preset controls "
+        QCoreApplication::translate("PicturaUi", "Always use Pressure for Opacity. When off, Brush Preset controls "
                        "pressure"),
         controller_ ? paint_->pressureOpacity() : false, [this](bool on) {
             if (controller_) {
@@ -481,17 +482,17 @@ QWidget* OptionsBar::buildPaintPage(ToolId id)
             }
         });
     NumericField* flowField =
-        addField(QStringLiteral("Flow"), QStringLiteral("optionsBrushFlow"), QStringLiteral("%"), 0,
+        addField(QCoreApplication::translate("PicturaUi", "Flow"), QStringLiteral("optionsBrushFlow"), QStringLiteral("%"), 0,
                  100, controller_ ? paint_->flow() : 100, [this](int v) { paint_->setFlow(v); });
 
-    layout->addWidget(new QLabel(QStringLiteral("Mode"), page));
+    layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Mode"), page));
     auto* combo = new QComboBox(page);
     combo->setObjectName(QStringLiteral("optionsBrushMode"));
-    combo->addItem(QStringLiteral("Normal"), QStringLiteral("normal"));
-    combo->addItem(QStringLiteral("Dissolve"), QStringLiteral("dissolve"));
-    combo->addItem(QStringLiteral("Behind"), QStringLiteral("behind"));
-    combo->addItem(QStringLiteral("Clear"), QStringLiteral("clear"));
-    combo->addItem(QStringLiteral("Multiply"), QStringLiteral("multiply"));
+    combo->addItem(QCoreApplication::translate("PicturaUi", "Normal"), QStringLiteral("normal"));
+    combo->addItem(QCoreApplication::translate("PicturaUi", "Dissolve"), QStringLiteral("dissolve"));
+    combo->addItem(QCoreApplication::translate("PicturaUi", "Behind"), QStringLiteral("behind"));
+    combo->addItem(QCoreApplication::translate("PicturaUi", "Clear"), QStringLiteral("clear"));
+    combo->addItem(QCoreApplication::translate("PicturaUi", "Multiply"), QStringLiteral("multiply"));
     if (controller_) {
         const int modeIndex = combo->findData(paint_->mode());
         if (modeIndex >= 0) {
@@ -517,7 +518,7 @@ QWidget* OptionsBar::buildPaintPage(ToolId id)
         // CS6 puts Always use Pressure for Size at the far right, after Airbrush.
         pressureSize = addPressure(
             QStringLiteral("optionsBrushPressureSize"), QStringLiteral("options.pressureSize"),
-            QStringLiteral("Always use Pressure for Size. When off, Brush Preset controls "
+            QCoreApplication::translate("PicturaUi", "Always use Pressure for Size. When off, Brush Preset controls "
                            "pressure"),
             controller_ ? paint_->pressureSize() : false, [this](bool on) {
                 if (controller_) {
@@ -557,7 +558,7 @@ QWidget* OptionsBar::buildPaintPage(ToolId id)
     }
 
     if (id == ToolId::Pencil) {
-        auto* check = new QCheckBox(QStringLiteral("Auto Erase"), page);
+        auto* check = new QCheckBox(QCoreApplication::translate("PicturaUi", "Auto Erase"), page);
         if (controller_) {
             check->setChecked(paint_->autoErase());
             connect(check, &QCheckBox::toggled, this,

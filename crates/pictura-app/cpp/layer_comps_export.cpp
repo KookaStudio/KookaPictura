@@ -1,4 +1,5 @@
 #include "layer_comps_export.h"
+#include <QtCore/QCoreApplication>
 
 #include "api/document_api.h"
 #include "api/layer_comps_api.h"
@@ -27,11 +28,6 @@
 namespace pictura {
 
 namespace {
-QString tr(const char* text)
-{
-    return QObject::tr(text);
-}
-
 QString defaultFolder(PictureView* view)
 {
     const QString path = view ? document_api::filePath(*view) : QString();
@@ -54,35 +50,35 @@ public:
     CompsDialog(const QString& folder, const QString& prefix, QWidget* parent)
         : QDialog(parent)
     {
-        setWindowTitle(tr("Layer Comps to Files"));
+        setWindowTitle(QCoreApplication::translate("PicturaUi", "Layer Comps to Files"));
         auto* layout = new QVBoxLayout(this);
         auto* form = new QFormLayout;
         auto* row = new QHBoxLayout;
         folder_ = new QLineEdit(folder, this);
         folder_->setObjectName(QStringLiteral("compsDestination"));
-        auto* browse = new QPushButton(tr("Browse…"), this);
+        auto* browse = new QPushButton(QCoreApplication::translate("PicturaUi", "Browse…"), this);
         row->addWidget(folder_, 1);
         row->addWidget(browse);
-        form->addRow(tr("Destination:"), row);
+        form->addRow(QCoreApplication::translate("PicturaUi", "Destination:"), row);
         prefix_ = new QLineEdit(prefix, this);
         prefix_->setObjectName(QStringLiteral("compsPrefix"));
-        form->addRow(tr("File Name Prefix:"), prefix_);
+        form->addRow(QCoreApplication::translate("PicturaUi", "File Name Prefix:"), prefix_);
         format_ = new QComboBox(this);
         format_->setObjectName(QStringLiteral("compsFormat"));
         for (const char* name : {"PSD", "JPEG", "TIFF", "BMP", "PDF"}) {
             format_->addItem(QString::fromLatin1(name), QString::fromLatin1(name));
         }
-        form->addRow(tr("File Type:"), format_);
-        icc_ = new QCheckBox(tr("Include ICC Profile"), this);
+        form->addRow(QCoreApplication::translate("PicturaUi", "File Type:"), format_);
+        icc_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Include ICC Profile"), this);
         icc_->setObjectName(QStringLiteral("compsIcc"));
         form->addRow(QString(), icc_);
         layout->addLayout(form);
         auto* buttons = new QDialogButtonBox(QDialogButtonBox::Cancel | QDialogButtonBox::Ok, this);
-        buttons->button(QDialogButtonBox::Ok)->setText(tr("Export"));
+        buttons->button(QDialogButtonBox::Ok)->setText(QCoreApplication::translate("PicturaUi", "Export"));
         layout->addWidget(buttons);
         connect(browse, &QPushButton::clicked, this, [this] {
             const QString chosen = QFileDialog::getExistingDirectory(
-                this, tr("Choose Export Folder"), folder_->text());
+                this, QCoreApplication::translate("PicturaUi", "Choose Export Folder"), folder_->text());
             if (!chosen.isEmpty()) {
                 folder_->setText(chosen);
             }
@@ -150,16 +146,16 @@ bool exportLayerComps(PictureView* view, const QString& folder, const QString& p
     const QFileInfo destination(folder);
     if (!destination.isDir() || !destination.isWritable()) {
         if (parent) {
-            QMessageBox::warning(parent, tr("Layer Comps to Files"),
-                                 tr("The destination folder is not writable."));
+            QMessageBox::warning(parent, QCoreApplication::translate("PicturaUi", "Layer Comps to Files"),
+                                 QCoreApplication::translate("PicturaUi", "The destination folder is not writable."));
         }
         return false;
     }
     const QString targetsText = layer_comps_api::exportTargets(*view, prefix);
     if (targetsText.isEmpty()) {
         if (parent) {
-            QMessageBox::information(parent, tr("Layer Comps to Files"),
-                                     tr("This document has no layer comps."));
+            QMessageBox::information(parent, QCoreApplication::translate("PicturaUi", "Layer Comps to Files"),
+                                     QCoreApplication::translate("PicturaUi", "This document has no layer comps."));
         }
         return false;
     }
@@ -181,8 +177,8 @@ bool exportLayerComps(PictureView* view, const QString& folder, const QString& p
     }
     if (state->failed || state->targets.isEmpty()) {
         if (parent && state->failed) {
-            QMessageBox::warning(parent, tr("Layer Comps to Files"),
-                                 tr("Could not write %1.").arg(state->failing));
+            QMessageBox::warning(parent, QCoreApplication::translate("PicturaUi", "Layer Comps to Files"),
+                                 QCoreApplication::translate("PicturaUi", "Could not write %1.").arg(state->failing));
         }
         return false;
     }
@@ -190,7 +186,7 @@ bool exportLayerComps(PictureView* view, const QString& folder, const QString& p
     const QPointer<PictureView> viewGuard(view);
     const QPointer<QWidget> parentGuard(parent);
     return runCancellableJob(
-        parent, tr("Layer Comps to Files"), tr("Writing files…"), [state] { return true; },
+        parent, QCoreApplication::translate("PicturaUi", "Layer Comps to Files"), QCoreApplication::translate("PicturaUi", "Writing files…"), [state] { return true; },
         [state, viewGuard, format, includeIcc] {
             if (state->cancelled || state->failed || state->next >= state->targets.size()) {
                 return false;
@@ -219,8 +215,8 @@ bool exportLayerComps(PictureView* view, const QString& folder, const QString& p
                 return true;
             }
             if (state->failed && parentGuard) {
-                QMessageBox::warning(parentGuard.data(), tr("Layer Comps to Files"),
-                                     tr("Could not write %1.").arg(state->failing));
+                QMessageBox::warning(parentGuard.data(), QCoreApplication::translate("PicturaUi", "Layer Comps to Files"),
+                                     QCoreApplication::translate("PicturaUi", "Could not write %1.").arg(state->failing));
             }
             return false;
         });
@@ -249,8 +245,8 @@ bool exportLayerCompsPdf(PictureView* view, const QString& path, QWidget* parent
     }
     if (layer_comps_api::count(*view) == 0) {
         if (parent) {
-            QMessageBox::information(parent, tr("Layer Comps to PDF"),
-                                     tr("This document has no layer comps."));
+            QMessageBox::information(parent, QCoreApplication::translate("PicturaUi", "Layer Comps to PDF"),
+                                     QCoreApplication::translate("PicturaUi", "This document has no layer comps."));
         }
         return false;
     }
@@ -263,7 +259,7 @@ bool exportLayerCompsPdfFromView(QWidget* parent, PictureView* view)
         return false;
     }
     const QString path = QFileDialog::getSaveFileName(
-        parent, tr("Layer Comps to PDF"), defaultFolder(view), tr("PDF (*.pdf)"));
+        parent, QCoreApplication::translate("PicturaUi", "Layer Comps to PDF"), defaultFolder(view), QCoreApplication::translate("PicturaUi", "PDF (*.pdf)"));
     return !path.isEmpty() && exportLayerCompsPdf(view, path, parent);
 }
 

@@ -2,6 +2,7 @@
 // Sampling Ring. Part of OptionsBar.
 
 #include "options_bar.h"
+#include <QtCore/QCoreApplication>
 
 #include "tools.h"
 
@@ -22,29 +23,29 @@ QWidget* OptionsBar::buildEyedropperPage(ToolId id)
     layout->setContentsMargins(4, 2, 4, 2);
     layout->addWidget(toolButton(id, page));
 
-    layout->addWidget(new QLabel(QStringLiteral("Sample Size:"), page));
+    layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Sample Size:"), page));
     auto* size = new QComboBox(page);
     size->setObjectName(QStringLiteral("optionsEyedropperSize"));
     for (int n = 1; n <= 101; n += 2) {
-        size->addItem(n == 1 ? QStringLiteral("Point Sample")
-                             : QStringLiteral("%1 by %1 Average").arg(n),
+        size->addItem(n == 1 ? QCoreApplication::translate("PicturaUi", "Point Sample")
+                             : QCoreApplication::translate("PicturaUi", "%1 by %1 Average").arg(n),
                       n);
     }
     size->setCurrentIndex(controller_ ? (eyedropper_->get().sampleSize - 1) / 2 : 0);
     layout->addWidget(size);
 
-    layout->addWidget(new QLabel(QStringLiteral("Sample:"), page));
+    layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Sample:"), page));
     auto* sample = new QComboBox(page);
     sample->setObjectName(QStringLiteral("optionsEyedropperSample"));
-    sample->addItem(QStringLiteral("Current Layer"), 0);
-    sample->addItem(QStringLiteral("Current & Below"), 1);
-    sample->addItem(QStringLiteral("All Layers"), 2);
-    sample->addItem(QStringLiteral("All Layers No Adjustments"), 3);
-    sample->addItem(QStringLiteral("Current & Below No Adjustments"), 4);
+    sample->addItem(QCoreApplication::translate("PicturaUi", "Current Layer"), 0);
+    sample->addItem(QCoreApplication::translate("PicturaUi", "Current & Below"), 1);
+    sample->addItem(QCoreApplication::translate("PicturaUi", "All Layers"), 2);
+    sample->addItem(QCoreApplication::translate("PicturaUi", "All Layers No Adjustments"), 3);
+    sample->addItem(QCoreApplication::translate("PicturaUi", "Current & Below No Adjustments"), 4);
     sample->setCurrentIndex(controller_ ? eyedropper_->get().scope : 2);
     layout->addWidget(sample);
 
-    auto* ring = new QCheckBox(QStringLiteral("Show Sampling Ring"), page);
+    auto* ring = new QCheckBox(QCoreApplication::translate("PicturaUi", "Show Sampling Ring"), page);
     ring->setObjectName(QStringLiteral("optionsEyedropperRing"));
     ring->setChecked(controller_ && eyedropper_->get().ring);
     layout->addWidget(ring);

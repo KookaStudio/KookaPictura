@@ -1,4 +1,5 @@
 #include "exposure_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "adjustment_presets.h"
 #include "icons.h"
@@ -77,7 +78,7 @@ ExposureDialog::ExposureDialog(PictureView* view, const QByteArray& block, const
     auto* left = new QVBoxLayout;
 
     auto* presetRow = new QHBoxLayout;
-    presetRow->addWidget(new QLabel(QStringLiteral("Preset:"), this));
+    presetRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Preset:"), this));
     preset_ = new QComboBox(this);
     preset_->setObjectName(QStringLiteral("exposurePreset"));
     for (const Preset& preset : kPresets) {

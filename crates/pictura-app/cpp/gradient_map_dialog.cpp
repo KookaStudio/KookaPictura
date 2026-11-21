@@ -1,4 +1,5 @@
 #include "gradient_map_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "dialogs.h"
 #include "preset_store.h"
@@ -44,18 +45,18 @@ GradientMapDialog::GradientMapDialog(PictureView* view, const QByteArray& block,
     outer->setSpacing(16);
     auto* left = new QVBoxLayout;
 
-    auto* mapping = new QGroupBox(QStringLiteral("Gradient Used for Grayscale Mapping"), this);
+    auto* mapping = new QGroupBox(QCoreApplication::translate("PicturaUi", "Gradient Used for Grayscale Mapping"), this);
     auto* mappingRow = new QHBoxLayout(mapping);
     mappingRow->setSpacing(0);
     sample_ = new QToolButton(mapping);
     sample_->setObjectName(QStringLiteral("gradientMapSample"));
     sample_->setIconSize(kSampleSize);
-    sample_->setToolTip(QStringLiteral("Click to edit the gradient"));
+    sample_->setToolTip(QCoreApplication::translate("PicturaUi", "Click to edit the gradient"));
     presets_ = new QToolButton(mapping);
     presets_->setObjectName(QStringLiteral("gradientMapPresets"));
     presets_->setArrowType(Qt::DownArrow);
     presets_->setPopupMode(QToolButton::InstantPopup);
-    presets_->setToolTip(QStringLiteral("Click to open Gradient picker"));
+    presets_->setToolTip(QCoreApplication::translate("PicturaUi", "Click to open Gradient picker"));
     presets_->setFixedHeight(kSampleSize.height() + 8);
     auto* menu = new QMenu(presets_);
     auto& store = PresetStore::current();
@@ -89,18 +90,18 @@ GradientMapDialog::GradientMapDialog(PictureView* view, const QByteArray& block,
     mappingRow->addWidget(presets_);
     left->addWidget(mapping);
 
-    auto* options = new QGroupBox(QStringLiteral("Gradient Options"), this);
+    auto* options = new QGroupBox(QCoreApplication::translate("PicturaUi", "Gradient Options"), this);
     auto* optionsColumn = new QVBoxLayout(options);
-    dither_ = new QCheckBox(QStringLiteral("Dither"), options);
+    dither_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Dither"), options);
     dither_->setObjectName(QStringLiteral("dither"));
-    reverse_ = new QCheckBox(QStringLiteral("Reverse"), options);
+    reverse_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Reverse"), options);
     reverse_->setObjectName(QStringLiteral("reverse"));
     reverse_->setChecked(gradient_map_reverse(slice(block)));
     // ponytail: the map is not dithered, so Dither stays off-limits; the
     // block's flag is carried through unchanged.
     dither_->setChecked(gradient_map_dither(slice(block)));
     dither_->setEnabled(false);
-    dither_->setToolTip(QStringLiteral("Dithering is not supported yet"));
+    dither_->setToolTip(QCoreApplication::translate("PicturaUi", "Dithering is not supported yet"));
     optionsColumn->addWidget(dither_);
     optionsColumn->addWidget(reverse_);
     left->addWidget(options);

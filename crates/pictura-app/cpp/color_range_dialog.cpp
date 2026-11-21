@@ -1,4 +1,5 @@
 #include "color_range_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "icons.h"
 #include "panels/jump_slider.h"
@@ -60,7 +61,7 @@ ColorRangeDialog::ColorRangeDialog(PictureView* view, ToolController* tools, QWi
     auto* root = new QVBoxLayout(this);
     auto* form = new QGridLayout();
 
-    form->addWidget(new QLabel(QStringLiteral("Select:"), this), 0, 0);
+    form->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Select:"), this), 0, 0);
     select_ = new QComboBox(this);
     select_->setObjectName(QStringLiteral("colorRangeSelect"));
     const QStringList names = selectNames();
@@ -72,11 +73,11 @@ ColorRangeDialog::ColorRangeDialog(PictureView* view, ToolController* tools, QWi
     }
     if (view_ && color_range_out_of_gamut_available(*view_)) {
         select_->insertSeparator(select_->count());
-        select_->addItem(QStringLiteral("Out Of Gamut"), 11);
+        select_->addItem(QCoreApplication::translate("PicturaUi", "Out Of Gamut"), 11);
     }
     form->addWidget(select_, 0, 1, 1, 3);
 
-    form->addWidget(new QLabel(QStringLiteral("Fuzziness:"), this), 1, 0);
+    form->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Fuzziness:"), this), 1, 0);
     fuzziness_ = new QSpinBox(this);
     fuzziness_->setObjectName(QStringLiteral("colorRangeFuzziness"));
     fuzziness_->setRange(0, 200);
@@ -87,7 +88,7 @@ ColorRangeDialog::ColorRangeDialog(PictureView* view, ToolController* tools, QWi
     fuzzinessSlider_->setValue(40);
     form->addWidget(fuzzinessSlider_, 2, 0, 1, 4);
 
-    form->addWidget(new QLabel(QStringLiteral("Color:"), this), 3, 0);
+    form->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Color:"), this), 3, 0);
     swatch_ = new QLabel(this);
     swatch_->setObjectName(QStringLiteral("colorRangeSwatch"));
     swatch_->setFixedSize(44, 18);
@@ -116,7 +117,7 @@ ColorRangeDialog::ColorRangeDialog(PictureView* view, ToolController* tools, QWi
     replaceButton_->setChecked(true);
     form->addLayout(droppers, 3, 2, 1, 2);
 
-    form->addWidget(new QLabel(QStringLiteral("Range:"), this), 4, 0);
+    form->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Range:"), this), 4, 0);
     range_ = new QSpinBox(this);
     range_->setObjectName(QStringLiteral("colorRangeRange"));
     range_->setRange(0, 100);
@@ -126,20 +127,20 @@ ColorRangeDialog::ColorRangeDialog(PictureView* view, ToolController* tools, QWi
     rangeSlider_->setRange(0, 100);
     rangeSlider_->setValue(100);
     form->addWidget(rangeSlider_, 5, 0, 1, 4);
-    localized_ = new QCheckBox(QStringLiteral("Localized Color Clusters"), this);
+    localized_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Localized Color Clusters"), this);
     localized_->setObjectName(QStringLiteral("colorRangeLocalized"));
     form->addWidget(localized_, 6, 0, 1, 4);
     root->addLayout(form);
 
-    invert_ = new QCheckBox(QStringLiteral("Invert"), this);
+    invert_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Invert"), this);
     invert_->setObjectName(QStringLiteral("colorRangeInvert"));
     root->addWidget(invert_);
 
     auto* displayRow = new QHBoxLayout();
-    displayRow->addWidget(new QLabel(QStringLiteral("Display:"), this));
-    selectionButton_ = new QRadioButton(QStringLiteral("Selection"), this);
+    displayRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Display:"), this));
+    selectionButton_ = new QRadioButton(QCoreApplication::translate("PicturaUi", "Selection"), this);
     selectionButton_->setObjectName(QStringLiteral("colorRangeSelection"));
-    imageButton_ = new QRadioButton(QStringLiteral("Image"), this);
+    imageButton_ = new QRadioButton(QCoreApplication::translate("PicturaUi", "Image"), this);
     imageButton_->setObjectName(QStringLiteral("colorRangeImage"));
     selectionButton_->setChecked(true);
     displayRow->addWidget(selectionButton_);
@@ -154,7 +155,7 @@ ColorRangeDialog::ColorRangeDialog(PictureView* view, ToolController* tools, QWi
     root->addWidget(previewLabel_, 1);
 
     auto* previewRow = new QHBoxLayout();
-    previewRow->addWidget(new QLabel(QStringLiteral("Selection Preview:"), this));
+    previewRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Selection Preview:"), this));
     previewMode_ = new QComboBox(this);
     previewMode_->setObjectName(QStringLiteral("colorRangeSelectionPreview"));
     const QStringList previews = {
@@ -168,9 +169,9 @@ ColorRangeDialog::ColorRangeDialog(PictureView* view, ToolController* tools, QWi
     root->addLayout(previewRow);
 
     auto* saveLoad = new QHBoxLayout();
-    auto* saveButton = new QPushButton(QStringLiteral("Save..."), this);
+    auto* saveButton = new QPushButton(QCoreApplication::translate("PicturaUi", "Save..."), this);
     saveButton->setObjectName(QStringLiteral("colorRangeSave"));
-    auto* loadButton = new QPushButton(QStringLiteral("Load..."), this);
+    auto* loadButton = new QPushButton(QCoreApplication::translate("PicturaUi", "Load..."), this);
     loadButton->setObjectName(QStringLiteral("colorRangeLoad"));
     saveLoad->addWidget(saveButton);
     saveLoad->addWidget(loadButton);

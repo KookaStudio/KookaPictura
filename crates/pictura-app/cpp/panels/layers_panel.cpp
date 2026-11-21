@@ -141,7 +141,7 @@ LayersPanel::LayersPanel(ColorState* colors, QWidget* parent)
     blend_ = new QComboBox(body);
     blend_->setObjectName(QStringLiteral("layersBlendCombo"));
     for (const BlendEntry& entry : blendModes()) {
-        blend_->addItem(entry.name, entry.key);
+        blend_->addItem(entry.displayName(), entry.key);
     }
     blend_->setEnabled(false);
     blend_->setSizeAdjustPolicy(QComboBox::AdjustToContents);

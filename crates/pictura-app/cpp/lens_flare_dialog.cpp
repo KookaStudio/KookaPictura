@@ -1,4 +1,5 @@
 #include "lens_flare_dialog.h"
+#include <QtCore/QCoreApplication>
 #include "dialogs.h"
 #include "panels/jump_slider.h"
 
@@ -161,12 +162,12 @@ LensFlareDialog::LensFlareDialog(PictureView* view, const FilterCommandSpec& spe
     pad_->setCenter(QPointF(center.initial.value(0, 0.5), center.initial.value(1, 0.5)));
     pad_->moved = [this] { valuesChanged(true); };
 
-    auto* ok = new QPushButton(QStringLiteral("OK"), this);
+    auto* ok = new QPushButton(QCoreApplication::translate("PicturaUi", "OK"), this);
     ok->setDefault(true);
-    auto* cancel = new QPushButton(QStringLiteral("Cancel"), this);
+    auto* cancel = new QPushButton(QCoreApplication::translate("PicturaUi", "Cancel"), this);
     connect(ok, &QPushButton::clicked, this, &QDialog::accept);
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
-    preview_ = new QCheckBox(QStringLiteral("Preview"), this);
+    preview_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Preview"), this);
     preview_->setObjectName(QStringLiteral("filterPreview"));
     preview_->setChecked(true);
     connect(preview_, &QCheckBox::toggled, this, [this](bool on) {

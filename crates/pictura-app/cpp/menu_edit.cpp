@@ -1,4 +1,5 @@
 #include "menu_registrar.h"
+#include <QtCore/QCoreApplication>
 
 #include "commands.h"
 #include <QtGui/QKeyEvent>
@@ -391,10 +392,11 @@ void MenuRegistrar::registerEditHandlers()
     commands_->setLabelProvider(command_ids::EditFade, [this]() {
         PictureView* view = activeView();
         if (!view) {
-            return QStringLiteral("Fade…");
+            return QCoreApplication::translate("PicturaCommands", "Fade…");
         }
         const QString name = fade_name(*view);
-        return name.isEmpty() ? QStringLiteral("Fade…") : QStringLiteral("Fade %1…").arg(name);
+        return name.isEmpty() ? QCoreApplication::translate("PicturaCommands", "Fade…")
+                              : QCoreApplication::translate("PicturaCommands", "Fade %1…").arg(name);
     });
 
     // Purge drops our copy and, if the system clipboard still holds our export,
@@ -576,21 +578,23 @@ void MenuRegistrar::wireEditHistory()
     });
     commands_->setLabelProvider(command_ids::EditUndo, [this]() {
         if (tools_ && tools_->canToolUndo()) {
-            return QStringLiteral("Undo");
+            return QCoreApplication::translate("PicturaCommands", "Undo");
         }
         PictureView* view = activeView();
         if (!view) {
-            return QStringLiteral("Undo");
+            return QCoreApplication::translate("PicturaCommands", "Undo");
         }
         if (history_api::canUndo(*view)) {
             const int index = history_api::index(*view);
-            return QStringLiteral("Undo %1").arg(history_api::label(*view, index));
+            return QCoreApplication::translate("PicturaCommands", "Undo %1")
+                .arg(commandDisplayText(history_api::label(*view, index)));
         }
         if (history_api::canRedo(*view)) {
             const int index = history_api::index(*view) + 1;
-            return QStringLiteral("Redo %1").arg(history_api::label(*view, index));
+            return QCoreApplication::translate("PicturaCommands", "Redo %1")
+                .arg(commandDisplayText(history_api::label(*view, index)));
         }
-        return QStringLiteral("Undo");
+        return QCoreApplication::translate("PicturaCommands", "Undo");
     });
 
     commands_->setHandler(command_ids::EditRedo, [this]() {

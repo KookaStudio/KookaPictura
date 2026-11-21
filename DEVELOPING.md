@@ -64,6 +64,8 @@ owns the behavior you are changing.
   `qt6-base-private-dev`; the official Qt binaries (and CI's
   `install-qt-action`) already ship them. Configuration fails naming the missing
   package when they are absent.
+- Qt 6 LinguistTools from the same Qt SDK. CMake uses its `lrelease` tool to
+  compile and embed the German and Finnish catalogs.
 - CMake >= 3.24, Ninja, and the `lld` linker (C++ links use `mold` instead when
   the compiler accepts `-fuse-ld=mold`).
 - Little CMS 2 development headers (`liblcms2-dev`). The C++ binary links
@@ -108,6 +110,30 @@ added to the matching fragment. Qt Test sources go to
 instead of a central moc unit. The CMake configure also links
 `compile_commands.json` into the repo root for clangd/Serena C++ navigation; if
 C++ cross-file references look fuzzy, reconfigure.
+
+### Localizing the interface
+
+German and Finnish each have a Qt Linguist source file in `translations/`.
+To refresh their message lists, run the extraction script with the `lupdate`
+from your Qt SDK. It scans the Qt shell and includes labels from the Rust
+command and tool tables.
+
+```bash
+python3 scripts/update-translations.py --lupdate /path/to/qt/bin/lupdate
+```
+
+Add `--check` to check coverage, placeholders, and file patterns without
+updating either catalog.
+
+For a community translation, open a copy of a catalog in Qt Linguist and set
+its target language. Keep the Pictura contexts, English source strings, and
+placeholders, and mark translated messages as finished. Save as a `.ts` file.
+In Pictura, use **Preferences → Interface → Language → Import Translation**,
+select the imported language, and click **Restart Pictura**. The importer
+handles finished, context-based singular messages from the bundled message
+list. Use plain translations in panel, tool-option, and dialog contexts. Other entries
+use the English source text. Built-in catalogs are compiled at build time,
+and importing a community file requires no additional tools.
 
 ### What the build reacts to
 

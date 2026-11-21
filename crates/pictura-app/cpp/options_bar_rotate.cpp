@@ -3,6 +3,7 @@
 // options_bar.cpp along the page seam.
 
 #include "options_bar.h"
+#include <QtCore/QCoreApplication>
 
 #include "panels/angle_dial.h"
 #include "panels/numeric_field.h"
@@ -35,17 +36,17 @@ QWidget* OptionsBar::buildRotateViewPage(ToolId id)
     layout->addWidget(toolButton(id, page));
 
     auto* angle = new NumericField(
-        QStringLiteral("Rotation Angle:"),
+        QCoreApplication::translate("PicturaUi", "Rotation Angle:"),
         numericConfig(-180, 180, 1, 0, QStringLiteral("°"), true,
                       QStringLiteral("optionsRotateAngle")),
         page);
     layout->addWidget(angle);
     auto* dial = new AngleDial(page);
     dial->setObjectName(QStringLiteral("optionsRotateDial"));
-    dial->setToolTip(QStringLiteral("Set Angle of Rotation"));
+    dial->setToolTip(QCoreApplication::translate("PicturaUi", "Set Angle of Rotation"));
     dial->setFixedSize(26, 26);
     layout->addWidget(dial);
-    auto* reset = new QPushButton(QStringLiteral("Reset View"), page);
+    auto* reset = new QPushButton(QCoreApplication::translate("PicturaUi", "Reset View"), page);
     reset->setObjectName(QStringLiteral("optionsRotateReset"));
     layout->addWidget(reset);
     layout->addStretch(1);

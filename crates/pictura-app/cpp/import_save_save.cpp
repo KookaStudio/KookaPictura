@@ -2,6 +2,7 @@
 // sessions. The frame forwards its entry points here.
 
 #include "import_save_coordinator.h"
+#include <QtCore/QCoreApplication>
 
 #include "api/document_api.h"
 #include "api/document_bridge.h"
@@ -471,11 +472,12 @@ std::optional<bool> ImportSaveCoordinator::chooseMergedImage(const QString& path
     if (nativeSaveCompatibility_ == NativeSaveCompatibility::Never) {
         return false;
     }
-    QMessageBox dialog(QMessageBox::Question, tr("Maximize PSD and PSB File Compatibility"),
-                       tr("Include a merged image? Other applications may need it to open this file."),
+    QMessageBox dialog(QMessageBox::Question, QCoreApplication::translate("PicturaFiles", "Maximize PSD and PSB File Compatibility"),
+                       QCoreApplication::translate("PicturaFiles", "Include a merged image? Other applications may need it to open this file."),
                        QMessageBox::Cancel, dialogParent_);
-    auto* include = dialog.addButton(tr("Include Merged Image"), QMessageBox::AcceptRole);
-    auto* omit = dialog.addButton(tr("Omit Merged Image"), QMessageBox::DestructiveRole);
+    dialog.setTextFormat(Qt::PlainText);
+    auto* include = dialog.addButton(QCoreApplication::translate("PicturaFiles", "Include Merged Image"), QMessageBox::AcceptRole);
+    auto* omit = dialog.addButton(QCoreApplication::translate("PicturaFiles", "Omit Merged Image"), QMessageBox::DestructiveRole);
     dialog.setDefaultButton(include);
     dialog.setEscapeButton(QMessageBox::Cancel);
     runDialog(dialog, dialogParent_);
@@ -525,14 +527,15 @@ bool ImportSaveCoordinator::confirmFeatureWarning(const QString& path, PictureVi
     if (featureWarningForTest_) {
         return featureWarningForTest_();
     }
-    const QString text = tr("The chosen format cannot hold all of the document's features. "
+    const QString text = QCoreApplication::translate("PicturaFiles", "The chosen format cannot hold all of the document's features. "
                             "The flattened composite will be written.");
     if (warningDriverForTest_) {
         return warningDriverForTest_(title, text);
     }
-    return QMessageBox::warning(dialogParent_, title, text,
-                                QMessageBox::Save | QMessageBox::Cancel)
-        == QMessageBox::Save;
+    QMessageBox dialog(QMessageBox::Warning, title, text,
+                       QMessageBox::Save | QMessageBox::Cancel, dialogParent_);
+    dialog.setTextFormat(Qt::PlainText);
+    return dialog.exec() == QMessageBox::Save;
 }
 
 bool ImportSaveCoordinator::saveCopyWithDialog()
@@ -702,7 +705,8 @@ bool ImportSaveCoordinator::saveAsWithDialog(bool backgroundAllowed)
     const QStringList& filters = saveFileFilters();
     const int sourceIndex = defaultSaveFilterIndex(view);
     QString selected = filters.at(sourceIndex);
-    QString path = getSaveFileName(dialogParent_, tr("Save As"), documents_.activeFilePath(),
+    QString path = getSaveFileName(dialogParent_, QCoreApplication::translate("PicturaFiles", "Save As"),
+                                   documents_.activeFilePath(),
                                    filters, &selected);
     if (path.isEmpty()) {
         return false;
@@ -743,24 +747,25 @@ bool ImportSaveCoordinator::saveActiveAsWithOptions(const QString& path, SaveFor
         if (warningDriverForTest_) {
             return warningDriverForTest_(title, text);
         }
-        return QMessageBox::warning(dialogParent_, title, text,
-                                    QMessageBox::Save | QMessageBox::Cancel)
-            == QMessageBox::Save;
+        QMessageBox dialog(QMessageBox::Warning, title, text,
+                           QMessageBox::Save | QMessageBox::Cancel, dialogParent_);
+        dialog.setTextFormat(Qt::PlainText);
+        return dialog.exec() == QMessageBox::Save;
     };
-    if (!confirmFeatureWarning(path, *view, tr("Save As"))) {
+    if (!confirmFeatureWarning(path, *view, QCoreApplication::translate("PicturaFiles", "Save As"))) {
         return false;
     }
     if (kind == SaveFormatKind::Dcs) {
         const QString mode = pictura::image_mode(*view);
         if (mode != QStringLiteral("cmyk") && mode != QStringLiteral("multichannel")) {
-            if (!warn(tr("Save As"),
-                      tr("DCS separations need CMYK; the document will be converted."))) {
+            if (!warn(QCoreApplication::translate("PicturaFiles", "Save As"),
+                      QCoreApplication::translate("PicturaFiles", "DCS separations need CMYK; the document will be converted."))) {
                 return false;
             }
         }
         if (!channels_alpha_names(*view).isEmpty()) {
-            if (!warn(tr("Save As"),
-                      tr("DCS cannot carry named spot inks; the extra channels will be omitted."))) {
+            if (!warn(QCoreApplication::translate("PicturaFiles", "Save As"),
+                      QCoreApplication::translate("PicturaFiles", "DCS cannot carry named spot inks; the extra channels will be omitted."))) {
                 return false;
             }
         }

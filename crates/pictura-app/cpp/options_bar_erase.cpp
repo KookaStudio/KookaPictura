@@ -2,6 +2,7 @@
 // Part of OptionsBar; split from options_bar.cpp along the page seam.
 
 #include "options_bar.h"
+#include <QtCore/QCoreApplication>
 
 #include "panels/numeric_field.h"
 
@@ -61,20 +62,20 @@ QWidget* OptionsBar::buildBackgroundEraserPage(ToolId id)
         }
     };
     auto* sampling = addErasePicker(
-        layout, page, QStringLiteral("Sampling:"), QStringLiteral("optionsBackgroundEraseSampling"),
-        {QStringLiteral("Continuous"), QStringLiteral("Once"), QStringLiteral("Background Swatch")},
+        layout, page, QCoreApplication::translate("PicturaUi", "Sampling:"), QStringLiteral("optionsBackgroundEraseSampling"),
+        {QCoreApplication::translate("PicturaUi", "Continuous"), QCoreApplication::translate("PicturaUi", "Once"), QCoreApplication::translate("PicturaUi", "Background Swatch")},
         initial.sampling);
     connect(sampling, &QComboBox::currentIndexChanged, this,
             [update](int i) { update([i](BackgroundEraseOptions& o) { o.sampling = i; }); });
     auto* limits = addErasePicker(
-        layout, page, QStringLiteral("Limits:"), QStringLiteral("optionsBackgroundEraseLimits"),
-        {QStringLiteral("Discontiguous"), QStringLiteral("Contiguous"), QStringLiteral("Find Edges")},
+        layout, page, QCoreApplication::translate("PicturaUi", "Limits:"), QStringLiteral("optionsBackgroundEraseLimits"),
+        {QCoreApplication::translate("PicturaUi", "Discontiguous"), QCoreApplication::translate("PicturaUi", "Contiguous"), QCoreApplication::translate("PicturaUi", "Find Edges")},
         initial.limits);
     connect(limits, &QComboBox::currentIndexChanged, this,
             [update](int i) { update([i](BackgroundEraseOptions& o) { o.limits = i; }); });
 
     auto* tolerance = new NumericField(
-        QStringLiteral("Tolerance:"),
+        QCoreApplication::translate("PicturaUi", "Tolerance:"),
         numericConfig(0, 100, 1, 0, QStringLiteral("%"), true,
                       QStringLiteral("optionsBackgroundEraseTolerance")),
         page);
@@ -85,7 +86,7 @@ QWidget* OptionsBar::buildBackgroundEraserPage(ToolId id)
     });
 
     auto* protect =
-        addEraseToggle(layout, page, QStringLiteral("Protect Foreground Color"),
+        addEraseToggle(layout, page, QCoreApplication::translate("PicturaUi", "Protect Foreground Color"),
                        QStringLiteral("optionsBackgroundEraseProtect"), initial.protectForeground);
     connect(protect, &QCheckBox::toggled, this, [update](bool on) {
         update([on](BackgroundEraseOptions& o) { o.protectForeground = on; });
@@ -114,7 +115,7 @@ QWidget* OptionsBar::buildMagicEraserPage(ToolId id)
         }
     };
     auto* tolerance = new NumericField(
-        QStringLiteral("Tolerance:"),
+        QCoreApplication::translate("PicturaUi", "Tolerance:"),
         numericConfig(0, 255, 1, 0, QString(), true, QStringLiteral("optionsMagicEraseTolerance")),
         page);
     tolerance->setValue(initial.tolerance);
@@ -123,17 +124,17 @@ QWidget* OptionsBar::buildMagicEraserPage(ToolId id)
         update([v](MagicEraseOptions& o) { o.tolerance = qRound(v); });
     });
 
-    auto* antialias = addEraseToggle(layout, page, QStringLiteral("Anti-alias"),
+    auto* antialias = addEraseToggle(layout, page, QCoreApplication::translate("PicturaUi", "Anti-alias"),
                                      QStringLiteral("optionsMagicEraseAntialias"),
                                      initial.antialias);
     connect(antialias, &QCheckBox::toggled, this,
             [update](bool on) { update([on](MagicEraseOptions& o) { o.antialias = on; }); });
-    auto* contiguous = addEraseToggle(layout, page, QStringLiteral("Contiguous"),
+    auto* contiguous = addEraseToggle(layout, page, QCoreApplication::translate("PicturaUi", "Contiguous"),
                                       QStringLiteral("optionsMagicEraseContiguous"),
                                       initial.contiguous);
     connect(contiguous, &QCheckBox::toggled, this,
             [update](bool on) { update([on](MagicEraseOptions& o) { o.contiguous = on; }); });
-    auto* sampleAll = addEraseToggle(layout, page, QStringLiteral("Sample All Layers"),
+    auto* sampleAll = addEraseToggle(layout, page, QCoreApplication::translate("PicturaUi", "Sample All Layers"),
                                      QStringLiteral("optionsMagicEraseSampleAll"),
                                      initial.sampleAllLayers);
     connect(sampleAll, &QCheckBox::toggled, this, [update](bool on) {
@@ -141,7 +142,7 @@ QWidget* OptionsBar::buildMagicEraserPage(ToolId id)
     });
 
     auto* opacity = new NumericField(
-        QStringLiteral("Opacity:"),
+        QCoreApplication::translate("PicturaUi", "Opacity:"),
         numericConfig(0, 100, 1, 0, QStringLiteral("%"), true,
                       QStringLiteral("optionsMagicEraseOpacity")),
         page);

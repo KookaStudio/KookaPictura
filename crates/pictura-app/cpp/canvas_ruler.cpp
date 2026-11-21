@@ -1,4 +1,5 @@
 #include "canvas_ruler.h"
+#include "localization.h"
 
 #include "image_view.h"
 #include "theme.h"
@@ -156,23 +157,29 @@ QString formatRulerLength(double pixels, RulerUnit unit, double ppi, bool tradit
                           double percentBase)
 {
     const double value = pixels / pixelsPerRulerUnit(unit, ppi, traditionalPoints, percentBase);
+    const auto locale = uiNumericLocale();
     switch (unit) {
     case RulerUnit::Pixels:
-        return QStringLiteral("%1 px").arg(qRound(value));
+        return QStringLiteral("%1 px").arg(locale.toString(qRound(value)));
     case RulerUnit::Inches:
-        return QStringLiteral("%1 in").arg(value, 0, 'f', 3);
+        return QStringLiteral("%1 in").arg(locale.toString(value, 'f', 3));
     case RulerUnit::Centimeters:
-        return QStringLiteral("%1 cm").arg(value, 0, 'f', 2);
+        return QStringLiteral("%1 cm").arg(locale.toString(value, 'f', 2));
     case RulerUnit::Millimeters:
-        return QStringLiteral("%1 mm").arg(value, 0, 'f', 1);
+        return QStringLiteral("%1 mm").arg(locale.toString(value, 'f', 1));
     case RulerUnit::Points:
-        return QStringLiteral("%1 pt").arg(value, 0, 'f', 1);
+        return QStringLiteral("%1 pt").arg(locale.toString(value, 'f', 1));
     case RulerUnit::Picas:
-        return QStringLiteral("%1 pica").arg(value, 0, 'f', 2);
+        return QStringLiteral("%1 pica").arg(locale.toString(value, 'f', 2));
     case RulerUnit::Percent:
-        return QStringLiteral("%1%").arg(value, 0, 'f', 1);
+        return QStringLiteral("%1%").arg(locale.toString(value, 'f', 1));
     }
     return QString();
+}
+
+QString CanvasRuler::formatTickLabel(double distance)
+{
+    return uiNumericLocale().toString(std::abs(distance), 'g', 12);
 }
 
 double CanvasRuler::pixelsPerUnit() const
@@ -263,7 +270,7 @@ void CanvasRuler::paintEvent(QPaintEvent*)
             continue;
         }
         // Distance from the origin, unsigned, as CS6 labels both sides of 0.
-        const QString label = QString::number(std::abs(double(k / sub) * scale.major), 'g', 12);
+        const QString label = formatTickLabel(double(k / sub) * scale.major);
         if (horizontal) {
             painter.drawText(QPointF(at + 2, lineHeight), label);
         } else {

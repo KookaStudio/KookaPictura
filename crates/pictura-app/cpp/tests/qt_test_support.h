@@ -5,6 +5,7 @@
 #include <QtCore/QAbstractItemModel>
 #include <QtCore/QByteArray>
 #include <QtCore/QList>
+#include <QtCore/QLocale>
 #include <QtCore/QMetaMethod>
 #include <QtCore/QMetaObject>
 #include <QtCore/QScopedPointer>
@@ -19,6 +20,18 @@
 #include "frame.h"
 
 namespace pictura::test {
+
+class ScopedDefaultLocale {
+public:
+    explicit ScopedDefaultLocale(const QLocale& locale) { QLocale::setDefault(locale); }
+    ~ScopedDefaultLocale() { QLocale::setDefault(previous_); }
+
+    ScopedDefaultLocale(const ScopedDefaultLocale&) = delete;
+    ScopedDefaultLocale& operator=(const ScopedDefaultLocale&) = delete;
+
+private:
+    const QLocale previous_;
+};
 
 // Isolate both profile roots for the lifetime of a test window.
 // Construct it before the window so it outlives the window's session save.

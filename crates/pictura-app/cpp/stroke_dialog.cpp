@@ -1,4 +1,5 @@
 #include "stroke_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "color_picker_dialog.h"
 #include "panels/color_swatch_widget.h"
@@ -80,10 +81,10 @@ StrokeDialog::StrokeDialog(const QColor& initial, QWidget* parent)
     modeRow->addWidget(modeLabel);
     mode_ = new QComboBox(blendGroup);
     mode_->setObjectName(QStringLiteral("strokeMode"));
-    mode_->addItem(QStringLiteral("Normal"), QStringLiteral("normal"));
-    mode_->addItem(QStringLiteral("Dissolve"), QStringLiteral("dissolve"));
-    mode_->addItem(QStringLiteral("Behind"), QStringLiteral("behind"));
-    mode_->addItem(QStringLiteral("Clear"), QStringLiteral("clear"));
+    mode_->addItem(QCoreApplication::translate("PicturaUi", "Normal"), QStringLiteral("normal"));
+    mode_->addItem(QCoreApplication::translate("PicturaUi", "Dissolve"), QStringLiteral("dissolve"));
+    mode_->addItem(QCoreApplication::translate("PicturaUi", "Behind"), QStringLiteral("behind"));
+    mode_->addItem(QCoreApplication::translate("PicturaUi", "Clear"), QStringLiteral("clear"));
     mode_->setMinimumWidth(140);
     modeRow->addWidget(mode_, 1);
     blendLayout->addLayout(modeRow);

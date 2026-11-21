@@ -1,4 +1,5 @@
 #include "glyphs_panel.h"
+#include <QtCore/QCoreApplication>
 
 #include "font_combo.h"
 #include "jump_slider.h"
@@ -30,22 +31,22 @@ struct Block {
 // The blocks the grid looks in: those a CS6-era Latin font fills, then the
 // symbol ranges the panel offers as subsets.
 constexpr Block kBlocks[] = {
-    {"Basic Latin", 0x0020, 0x007E},
-    {"Latin-1 Supplement", 0x00A0, 0x00FF},
-    {"Latin Extended-A", 0x0100, 0x017F},
-    {"Latin Extended-B", 0x0180, 0x024F},
-    {"Greek", 0x0370, 0x03FF},
-    {"Cyrillic", 0x0400, 0x04FF},
-    {"Punctuation", 0x2000, 0x206F},
-    {"Superscripts & Subscripts", 0x2070, 0x209F},
-    {"Currency", 0x20A0, 0x20BF},
-    {"Letterlike Symbols", 0x2100, 0x214F},
-    {"Number Forms", 0x2150, 0x218F},
-    {"Arrows", 0x2190, 0x21FF},
-    {"Mathematical Operators", 0x2200, 0x22FF},
-    {"Geometric Shapes", 0x25A0, 0x25FF},
-    {"Miscellaneous Symbols", 0x2600, 0x26FF},
-    {"Dingbats", 0x2700, 0x27BF},
+    {QT_TRANSLATE_NOOP("PicturaUi", "Basic Latin"), 0x0020, 0x007E},
+    {QT_TRANSLATE_NOOP("PicturaUi", "Latin-1 Supplement"), 0x00A0, 0x00FF},
+    {QT_TRANSLATE_NOOP("PicturaUi", "Latin Extended-A"), 0x0100, 0x017F},
+    {QT_TRANSLATE_NOOP("PicturaUi", "Latin Extended-B"), 0x0180, 0x024F},
+    {QT_TRANSLATE_NOOP("PicturaUi", "Greek"), 0x0370, 0x03FF},
+    {QT_TRANSLATE_NOOP("PicturaUi", "Cyrillic"), 0x0400, 0x04FF},
+    {QT_TRANSLATE_NOOP("PicturaUi", "Punctuation"), 0x2000, 0x206F},
+    {QT_TRANSLATE_NOOP("PicturaUi", "Superscripts & Subscripts"), 0x2070, 0x209F},
+    {QT_TRANSLATE_NOOP("PicturaUi", "Currency"), 0x20A0, 0x20BF},
+    {QT_TRANSLATE_NOOP("PicturaUi", "Letterlike Symbols"), 0x2100, 0x214F},
+    {QT_TRANSLATE_NOOP("PicturaUi", "Number Forms"), 0x2150, 0x218F},
+    {QT_TRANSLATE_NOOP("PicturaUi", "Arrows"), 0x2190, 0x21FF},
+    {QT_TRANSLATE_NOOP("PicturaUi", "Mathematical Operators"), 0x2200, 0x22FF},
+    {QT_TRANSLATE_NOOP("PicturaUi", "Geometric Shapes"), 0x25A0, 0x25FF},
+    {QT_TRANSLATE_NOOP("PicturaUi", "Miscellaneous Symbols"), 0x2600, 0x26FF},
+    {QT_TRANSLATE_NOOP("PicturaUi", "Dingbats"), 0x2700, 0x27BF},
 };
 
 constexpr int kMinGlyphPoints = 10;
@@ -66,24 +67,24 @@ GlyphsPanel::GlyphsPanel(QWidget* parent)
     family_ = new QFontComboBox(this);
     family_->setObjectName(QStringLiteral("glyphsFamily"));
     useFastFontPreviews(family_);
-    family_->setToolTip(QStringLiteral("Show the glyphs of this font family"));
+    family_->setToolTip(QCoreApplication::translate("PicturaUi", "Show the glyphs of this font family"));
     // A font combo asks for a very wide minimum; the panel column must not scroll.
     family_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
     family_->setMinimumContentsLength(10);
     fontRow->addWidget(family_, 2);
     style_ = new QComboBox(this);
     style_->setObjectName(QStringLiteral("glyphsStyle"));
-    style_->setToolTip(QStringLiteral("Show the glyphs of this font style"));
+    style_->setToolTip(QCoreApplication::translate("PicturaUi", "Show the glyphs of this font style"));
     fontRow->addWidget(style_, 1);
     root->addLayout(fontRow);
 
     subset_ = new QComboBox(this);
     subset_->setObjectName(QStringLiteral("glyphsSubset"));
-    subset_->addItem(QStringLiteral("Entire Font"));
+    subset_->addItem(QCoreApplication::translate("PicturaUi", "Entire Font"));
     for (const Block& block : kBlocks) {
-        subset_->addItem(QLatin1String(block.name));
+        subset_->addItem(QCoreApplication::translate("PicturaUi", block.name));
     }
-    subset_->setToolTip(QStringLiteral("Show only part of the font"));
+    subset_->setToolTip(QCoreApplication::translate("PicturaUi", "Show only part of the font"));
     root->addWidget(subset_);
 
     // Icon mode with wrapping reflows the glyphs to the panel's width.
@@ -98,7 +99,7 @@ GlyphsPanel::GlyphsPanel(QWidget* parent)
     grid_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     root->addWidget(grid_, 1);
 
-    hint_ = new QLabel(QStringLiteral("Click in the image with the Type tool before inserting a "
+    hint_ = new QLabel(QCoreApplication::translate("PicturaUi", "Click in the image with the Type tool before inserting a "
                                       "glyph."),
                        this);
     hint_->setObjectName(QStringLiteral("glyphsHint"));
@@ -118,7 +119,7 @@ GlyphsPanel::GlyphsPanel(QWidget* parent)
     zoom_->setRange(kMinGlyphPoints, kMaxGlyphPoints);
     zoom_->setValue(18);
     zoom_->setFixedWidth(90);
-    zoom_->setToolTip(QStringLiteral("Glyph size"));
+    zoom_->setToolTip(QCoreApplication::translate("PicturaUi", "Glyph size"));
     zoomRow->addWidget(zoom_);
     auto* large = new QLabel(QStringLiteral("A"), this);
     QFont largeFont = large->font();
@@ -243,7 +244,7 @@ void GlyphsPanel::rebuildGlyphs()
             item->setTextAlignment(Qt::AlignCenter);
             item->setSizeHint(QSize(cell, cell));
             item->setToolTip(
-                QStringLiteral("U+%1").arg(uint(code), 4, 16, QLatin1Char('0')).toUpper());
+                QCoreApplication::translate("PicturaUi", "U+%1").arg(uint(code), 4, 16, QLatin1Char('0')).toUpper());
         }
     }
 }

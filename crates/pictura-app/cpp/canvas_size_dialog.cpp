@@ -1,4 +1,5 @@
 #include "canvas_size_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "color_picker_dialog.h"
 #include "image_size_dialog.h"
@@ -227,10 +228,10 @@ void CanvasSizeDialog::buildUi()
     currentSize_ = new QLabel(this);
     currentSize_->setObjectName(QStringLiteral("canvasSizeCurrent"));
     currentGrid->addWidget(currentSize_, 0, 0, 1, 2);
-    currentGrid->addWidget(new QLabel(QStringLiteral("Width:"), this), 1, 0, Qt::AlignRight);
+    currentGrid->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Width:"), this), 1, 0, Qt::AlignRight);
     currentWidth_ = new QLabel(this);
     currentGrid->addWidget(currentWidth_, 1, 1);
-    currentGrid->addWidget(new QLabel(QStringLiteral("Height:"), this), 2, 0, Qt::AlignRight);
+    currentGrid->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Height:"), this), 2, 0, Qt::AlignRight);
     currentHeight_ = new QLabel(this);
     currentGrid->addWidget(currentHeight_, 2, 1);
     currentGrid->setColumnStretch(1, 1);
@@ -259,17 +260,17 @@ void CanvasSizeDialog::buildUi()
     };
     addRow(1, QStringLiteral("Width:"), QStringLiteral("canvasSizeWidth"), width_, widthUnit_);
     addRow(2, QStringLiteral("Height:"), QStringLiteral("canvasSizeHeight"), height_, heightUnit_);
-    relative_ = new QCheckBox(QStringLiteral("Relative"), this);
+    relative_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Relative"), this);
     relative_->setObjectName(QStringLiteral("canvasSizeRelative"));
     newGrid->addWidget(relative_, 3, 1);
-    newGrid->addWidget(new QLabel(QStringLiteral("Anchor:"), this), 4, 0,
+    newGrid->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Anchor:"), this), 4, 0,
                        Qt::AlignRight | Qt::AlignTop);
     anchor_ = new AnchorSelector(this);
     newGrid->addWidget(anchor_, 4, 1, 1, 2, Qt::AlignLeft);
     left->addWidget(newBox);
 
     auto* extensionRow = new QHBoxLayout;
-    extensionRow->addWidget(new QLabel(QStringLiteral("Canvas extension color:"), this));
+    extensionRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Canvas extension color:"), this));
     extension_ = new QComboBox(this);
     extension_->setObjectName(QStringLiteral("canvasSizeExtension"));
     extension_->addItems({kForeground, kBackground});
@@ -284,16 +285,16 @@ void CanvasSizeDialog::buildUi()
     swatch_ = new ColorSwatchWidget(this);
     swatch_->setObjectName(QStringLiteral("canvasSizeSwatch"));
     swatch_->setFixedSize(24, 22);
-    swatch_->setToolTip(QStringLiteral("Choose the canvas extension color"));
+    swatch_->setToolTip(QCoreApplication::translate("PicturaUi", "Choose the canvas extension color"));
     extensionRow->addWidget(swatch_);
     left->addLayout(extensionRow);
     left->addStretch();
     outer->addLayout(left, 1);
 
     auto* buttons = new QVBoxLayout;
-    auto* ok = new QPushButton(QStringLiteral("OK"), this);
+    auto* ok = new QPushButton(QCoreApplication::translate("PicturaUi", "OK"), this);
     ok->setDefault(true);
-    auto* cancel = new QPushButton(QStringLiteral("Cancel"), this);
+    auto* cancel = new QPushButton(QCoreApplication::translate("PicturaUi", "Cancel"), this);
     for (QPushButton* b : {ok, cancel}) {
         b->setMinimumWidth(84);
         buttons->addWidget(b);
@@ -379,11 +380,11 @@ void CanvasSizeDialog::updateSwatch()
 
 void CanvasSizeDialog::updateSizes()
 {
-    currentSize_->setText(QStringLiteral("Current Size: %1")
+    currentSize_->setText(QCoreApplication::translate("PicturaUi", "Current Size: %1")
                               .arg(imageSizeSummary(bytesPerPixel_ * pixelWidth_ * pixelHeight_)));
-    currentWidth_->setText(QStringLiteral("%1 Pixels").arg(pixelWidth_));
-    currentHeight_->setText(QStringLiteral("%1 Pixels").arg(pixelHeight_));
-    newSize_->setText(QStringLiteral("New Size: %1")
+    currentWidth_->setText(QCoreApplication::translate("PicturaUi", "%1 Pixels").arg(pixelWidth_));
+    currentHeight_->setText(QCoreApplication::translate("PicturaUi", "%1 Pixels").arg(pixelHeight_));
+    newSize_->setText(QCoreApplication::translate("PicturaUi", "New Size: %1")
                           .arg(imageSizeSummary(bytesPerPixel_ * resultWidth() * resultHeight())));
 }
 

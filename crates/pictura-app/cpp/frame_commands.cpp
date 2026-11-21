@@ -2,6 +2,7 @@
 // receives this registration through its registerFrameCommands callback, so
 // the menu translation units never name PicturaMainWindow.
 
+#include <QtCore/QCoreApplication>
 #include "frame_includes.h"
 #include "export_as_dialog.h"
 #include "export_layers_dialog.h"
@@ -441,7 +442,9 @@ void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
     registry.setEnabledProvider(command_ids::WindowUiReset,
                                 [this]() { return uiScalePercent_ != Theme::kDefaultUiScalePercent; });
     registry.setLabelProvider(command_ids::WindowUiSize,
-                              [this]() { return tr("UI Size: %1%").arg(uiScalePercent_); });
+                              [this]() {
+        return QCoreApplication::translate("PicturaCommands", "UI Size: %1%").arg(uiScalePercent_);
+    });
 
     registerPreferenceHandlers();
     registerUpdateHandlers(*this);

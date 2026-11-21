@@ -37,12 +37,12 @@ pub(in crate::cxxqt_object::annotations) fn measurement_scale_text(view: &Pictur
     )
 }
 
-pub(in crate::cxxqt_object::annotations) fn calibrated_ruler_length(view: &PictureView) -> QString {
-    let Some((scale, ruler)) = custom_scale(view).zip(view.rust().ruler) else {
-        return QString::default();
-    };
-    let length = scale.logical_distance(ruler.measure().distance);
-    QString::from(format!("{length} {}", scale.units()).as_str())
+pub(in crate::cxxqt_object::annotations) fn calibrated_ruler_length(view: &PictureView) -> f64 {
+    custom_scale(view)
+        .zip(view.rust().ruler)
+        .map_or(f64::NAN, |(scale, ruler)| {
+            scale.logical_distance(ruler.measure().distance)
+        })
 }
 
 pub(in crate::cxxqt_object::annotations) fn measurement_scale_needs_recalibration(

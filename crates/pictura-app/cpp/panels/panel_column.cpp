@@ -67,7 +67,7 @@ public:
         setAlignment(Qt::AlignCenter);
         setText(QStringLiteral("\u2022\u2022\u2022"));
         setCursor(Qt::SizeAllCursor);
-        setToolTip(tr("Drag to move the Tools panel"));
+        setToolTip(QObject::tr("Drag to move the Tools panel"));
         setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         setFixedHeight(Theme::scaled(kToolsGripHeight));
     }

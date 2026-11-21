@@ -66,9 +66,9 @@ std::optional<QString> BatchHost::saveAsRedirect(const QString& format)
 void BatchHost::report(const QString& text)
 {
     if (messageHandler_) {
-        messageHandler_(tr("Batch"), text);
+        messageHandler_(QObject::tr("Batch"), text);
     } else {
-        QMessageBox::warning(&frame_, tr("Batch"), text);
+        QMessageBox::warning(&frame_, QObject::tr("Batch"), text);
     }
 }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QtWidgets/QDialog>
+#include <QtCore/QCoreApplication>
 
 class QCheckBox;
 class QRadioButton;
@@ -24,6 +25,7 @@ struct AutoAlignChoice {
 // Edit > Auto-Align Layers: the seven CS6 projections and the Lens Correction
 // sub-options.
 class AutoAlignDialog : public QDialog {
+    Q_DECLARE_TR_FUNCTIONS(pictura::AutoAlignDialog)
 public:
     explicit AutoAlignDialog(QWidget* parent = nullptr, const AutoAlignChoice& choice = {});
 

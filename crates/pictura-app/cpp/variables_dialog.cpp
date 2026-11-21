@@ -1,4 +1,5 @@
 #include "variables_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "api/layer_comps_bridge.h"
 #include "dialogs.h"
@@ -127,6 +128,7 @@ QJsonObject chooseImport(QWidget* parent)
 }
 
 class Editor final : public QDialog {
+    Q_DECLARE_TR_FUNCTIONS(pictura::variable_dialogs::Editor)
 public:
     Editor(PictureView& view, ImageView* canvas, QWidget* parent, bool setsPage)
         : QDialog(parent), view_(view), canvas_(canvas)

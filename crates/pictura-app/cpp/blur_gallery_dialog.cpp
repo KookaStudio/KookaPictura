@@ -1,4 +1,5 @@
 #include "blur_gallery_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "blur_gallery_light_range.h"
 #include "dialogs.h"
@@ -215,7 +216,7 @@ QWidget* BlurGalleryDialog::buildOptionsBar()
     zoomCombo_->setEditable(true);
     zoomCombo_->setInsertPolicy(QComboBox::NoInsert);
     zoomCombo_->setMaxVisibleItems(24);
-    zoomCombo_->setToolTip(QStringLiteral("Zoom level"));
+    zoomCombo_->setToolTip(QCoreApplication::translate("PicturaUi", "Zoom level"));
     for (const ZoomPreset& preset : kZoomPresets) {
         if (preset.text[0] == '\0') {
             zoomCombo_->insertSeparator(zoomCombo_->count());
@@ -252,7 +253,7 @@ QWidget* BlurGalleryDialog::buildOptionsBar()
     row->addWidget(zoomCombo_);
     row->addSpacing(12);
 
-    auto* title = new QLabel(QStringLiteral("Blur Gallery"), bar);
+    auto* title = new QLabel(QCoreApplication::translate("PicturaUi", "Blur Gallery"), bar);
     title->setObjectName(QStringLiteral("dialogTitle"));
     row->addWidget(title);
     row->addSpacing(12);
@@ -263,13 +264,13 @@ QWidget* BlurGalleryDialog::buildOptionsBar()
     row->addWidget(hint_);
     row->addStretch(1);
 
-    preview_ = new QCheckBox(QStringLiteral("Preview"), bar);
+    preview_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Preview"), bar);
     preview_->setObjectName(QStringLiteral("filterPreview"));
     preview_->setChecked(true);
     connect(preview_, &QCheckBox::toggled, this, [this] { scheduleRender(); });
     row->addWidget(preview_);
-    auto* cancel = new QPushButton(QStringLiteral("Cancel"), bar);
-    auto* ok = new QPushButton(QStringLiteral("OK"), bar);
+    auto* cancel = new QPushButton(QCoreApplication::translate("PicturaUi", "Cancel"), bar);
+    auto* ok = new QPushButton(QCoreApplication::translate("PicturaUi", "OK"), bar);
     ok->setDefault(true);
     connect(ok, &QPushButton::clicked, this, &QDialog::accept);
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
@@ -306,7 +307,7 @@ QWidget* BlurGalleryDialog::effectRow(QWidget* parent, const QString& label,
                                 static_cast<QWidget*>(check)}) {
             widget->setEnabled(false);
         }
-        row->setToolTip(QStringLiteral("Not implemented yet"));
+        row->setToolTip(QCoreApplication::translate("PicturaUi", "Not implemented yet"));
         return row;
     }
     effect->check = check;
@@ -377,7 +378,7 @@ QWidget* BlurGalleryDialog::buildBlurToolsPanel()
     layout->setContentsMargins(6, 2, 6, 8);
     layout->setSpacing(3);
 
-    auto* tab = new QLabel(QStringLiteral("Blur Tools"), panel);
+    auto* tab = new QLabel(QCoreApplication::translate("PicturaUi", "Blur Tools"), panel);
     tab->setObjectName(QStringLiteral("sectionTabLabel"));
     layout->addWidget(tab);
 
@@ -402,7 +403,7 @@ QWidget* BlurGalleryDialog::buildBlurToolsPanel()
         const auto mode = BlurGalleryMode(row.mode);
         if (mode == BlurGalleryMode::Path || mode == BlurGalleryMode::Spin) {
             effect->title->setToolTip(
-                QStringLiteral("A post-CS6 (Photoshop CC) effect; the blur is approximated"));
+                QCoreApplication::translate("PicturaUi", "A post-CS6 (Photoshop CC) effect; the blur is approximated"));
         }
         effect->controls = buildEffectControls(panel, mode, name);
         effect->controls->setVisible(false);
@@ -456,7 +457,7 @@ QWidget* BlurGalleryDialog::buildEffectControls(QWidget* parent, BlurGalleryMode
         return box;
     }
     auto* distortionRow = new QHBoxLayout;
-    auto* distortionLabel = new QLabel(QStringLiteral("Distortion:"), box);
+    auto* distortionLabel = new QLabel(QCoreApplication::translate("PicturaUi", "Distortion:"), box);
     distortionSpin_ = makeValueBox(box, QStringLiteral("tiltDistortionSpin"), -100, 100, 0);
     distortionSpin_->setSuffix(QStringLiteral("%"));
     distortionLabel->setBuddy(distortionSpin_);
@@ -468,7 +469,7 @@ QWidget* BlurGalleryDialog::buildEffectControls(QWidget* parent, BlurGalleryMode
     distortionSlider_->setObjectName(QStringLiteral("tiltDistortionSlider"));
     distortionSlider_->setRange(-100, 100);
     controls->addWidget(distortionSlider_);
-    symmetric_ = new QCheckBox(QStringLiteral("Symmetric Distortion"), box);
+    symmetric_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Symmetric Distortion"), box);
     symmetric_->setObjectName(QStringLiteral("tiltSymmetric"));
     controls->addWidget(symmetric_);
     const auto setDistortion = [this](double value, bool symmetric) {
@@ -510,7 +511,7 @@ QWidget* BlurGalleryDialog::buildBokehTab()
     layout->setSpacing(3);
 
     auto* row = new QHBoxLayout;
-    auto* name = new QLabel(QStringLiteral("Bokeh"), tab);
+    auto* name = new QLabel(QCoreApplication::translate("PicturaUi", "Bokeh"), tab);
     name->setObjectName(QStringLiteral("sectionTitle"));
     bokehEnabled_ = new QCheckBox(tab);
     bokehEnabled_->setObjectName(QStringLiteral("bokehEnabled"));
@@ -526,7 +527,7 @@ QWidget* BlurGalleryDialog::buildBokehTab()
                            QStringLiteral("bokehColor"), 0, 100, 40, 0, QStringLiteral(" %"));
 
     layout->addSpacing(4);
-    layout->addWidget(new QLabel(QStringLiteral("Light Range:"), tab));
+    layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Light Range:"), tab));
     bokehRange_ = new LightRangeSlider(tab);
     layout->addWidget(bokehRange_);
     auto* spins = new QHBoxLayout;

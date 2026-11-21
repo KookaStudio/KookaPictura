@@ -1,4 +1,5 @@
 #include "lighting_effects_dialog.h"
+#include <QtCore/QCoreApplication>
 #include "color_picker_dialog.h"
 #include "dialogs.h"
 #include "icons.h"
@@ -187,7 +188,7 @@ QWidget* LightingEffectsDialog::buildOptionsBar()
     glyph->setPixmap(lightGlyph(LightKind::Infinite).pixmap(20, 20));
     row->addWidget(glyph);
     row->addSpacing(6);
-    row->addWidget(new QLabel(QStringLiteral("Presets:"), bar));
+    row->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Presets:"), bar));
     presets_ = new QComboBox(bar);
     presets_->setObjectName(QStringLiteral("lightingPresets"));
     for (const LightingPreset& preset : lightingPresets()) {
@@ -204,7 +205,7 @@ QWidget* LightingEffectsDialog::buildOptionsBar()
     row->addWidget(presets_);
     row->addSpacing(12);
 
-    row->addWidget(new QLabel(QStringLiteral("Lights:"), bar));
+    row->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Lights:"), bar));
     const char* names[] = {"lightingAddSpot", "lightingAddPoint", "lightingAddInfinite"};
     for (int kind = 0; kind < 3; ++kind) {
         auto* add = new QToolButton(bar);
@@ -212,26 +213,26 @@ QWidget* LightingEffectsDialog::buildOptionsBar()
         add->setIcon(lightGlyph(LightKind(kind)));
         add->setIconSize(QSize(20, 20));
         add->setAutoRaise(true);
-        add->setToolTip(QStringLiteral("Add new %1 light").arg(lightKindName(LightKind(kind))));
+        add->setToolTip(QCoreApplication::translate("PicturaUi", "Add new %1 light").arg(lightKindName(LightKind(kind))));
         connect(add, &QToolButton::clicked, this, [this, kind] { addLight(LightKind(kind)); });
         addButtons_[kind] = add;
         row->addWidget(add);
     }
-    auto* reset = new QPushButton(QStringLiteral("Reset"), bar);
+    auto* reset = new QPushButton(QCoreApplication::translate("PicturaUi", "Reset"), bar);
     reset->setObjectName(QStringLiteral("lightingReset"));
-    reset->setToolTip(QStringLiteral("Reset to the Default style"));
+    reset->setToolTip(QCoreApplication::translate("PicturaUi", "Reset to the Default style"));
     connect(reset, &QPushButton::clicked, this, [this] { applyPreset(QStringLiteral("Default")); });
     row->addSpacing(6);
     row->addWidget(reset);
     row->addStretch(1);
 
-    preview_ = new QCheckBox(QStringLiteral("Preview"), bar);
+    preview_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Preview"), bar);
     preview_->setObjectName(QStringLiteral("filterPreview"));
     preview_->setChecked(true);
     connect(preview_, &QCheckBox::toggled, this, [this] { scheduleRender(); });
     row->addWidget(preview_);
-    auto* cancel = new QPushButton(QStringLiteral("Cancel"), bar);
-    auto* ok = new QPushButton(QStringLiteral("OK"), bar);
+    auto* cancel = new QPushButton(QCoreApplication::translate("PicturaUi", "Cancel"), bar);
+    auto* ok = new QPushButton(QCoreApplication::translate("PicturaUi", "OK"), bar);
     ok->setDefault(true);
     connect(ok, &QPushButton::clicked, this, &QDialog::accept);
     connect(cancel, &QPushButton::clicked, this, &QDialog::reject);
@@ -307,7 +308,7 @@ QWidget* LightingEffectsDialog::buildPropertiesPanel()
     auto* title = new QHBoxLayout;
     auto* glyph = new QLabel(panel);
     glyph->setPixmap(lightGlyph(LightKind::Infinite).pixmap(18, 18));
-    auto* name = new QLabel(QStringLiteral("Lighting Effects"), panel);
+    auto* name = new QLabel(QCoreApplication::translate("PicturaUi", "Lighting Effects"), panel);
     name->setObjectName(QStringLiteral("sectionTitle"));
     title->addWidget(glyph);
     title->addWidget(name, 1);
@@ -348,7 +349,7 @@ QWidget* LightingEffectsDialog::buildPropertiesPanel()
                         false);
     intensity_ = makeField(panel, QStringLiteral("Intensity:"), QStringLiteral("lightingIntensity"),
                            -100, 100, &LightingEffectsDialog::setIntensity);
-    addRow(intensity_, color_, new QLabel(QStringLiteral("Color:"), panel));
+    addRow(intensity_, color_, new QLabel(QCoreApplication::translate("PicturaUi", "Color:"), panel));
     hotspot_ = makeField(panel, QStringLiteral("Hotspot:"), QStringLiteral("lightingHotspot"), -100,
                          100, &LightingEffectsDialog::setHotspot);
     addRow(hotspot_, nullptr, nullptr);
@@ -363,7 +364,7 @@ QWidget* LightingEffectsDialog::buildPropertiesPanel()
                            true);
     exposure_ = makeField(panel, QStringLiteral("Exposure:"), QStringLiteral("lightingExposure"),
                           -100, 100, &LightingEffectsDialog::setExposure);
-    addRow(exposure_, colorize_, new QLabel(QStringLiteral("Colorize:"), panel));
+    addRow(exposure_, colorize_, new QLabel(QCoreApplication::translate("PicturaUi", "Colorize:"), panel));
     gloss_ = makeField(panel, QStringLiteral("Gloss:"), QStringLiteral("lightingGloss"), -100, 100,
                        &LightingEffectsDialog::setGloss);
     addRow(gloss_, nullptr, nullptr);
@@ -375,7 +376,7 @@ QWidget* LightingEffectsDialog::buildPropertiesPanel()
     addRow(ambience_, nullptr, nullptr);
 
     auto* textureRow = new QHBoxLayout;
-    auto* textureLabel = new QLabel(QStringLiteral("Texture:"), panel);
+    auto* textureLabel = new QLabel(QCoreApplication::translate("PicturaUi", "Texture:"), panel);
     texture_ = new QComboBox(panel);
     texture_->setObjectName(QStringLiteral("lightingTexture"));
     texture_->addItems({QStringLiteral("None"), QStringLiteral("Red"), QStringLiteral("Green"),
@@ -422,7 +423,7 @@ QWidget* LightingEffectsDialog::buildLightsPanel()
     trash_->setObjectName(QStringLiteral("lightingDelete"));
     trash_->setIcon(icon(QStringLiteral("layers.delete")));
     trash_->setAutoRaise(true);
-    trash_->setToolTip(QStringLiteral("Delete the selected light"));
+    trash_->setToolTip(QCoreApplication::translate("PicturaUi", "Delete the selected light"));
     connect(trash_, &QToolButton::clicked, this, &LightingEffectsDialog::deleteSelectedLight);
     footer->addWidget(trash_);
     layout->addLayout(footer);
@@ -627,7 +628,7 @@ void LightingEffectsDialog::rebuildLightList()
         eye->setAutoRaise(true);
         eye->setIcon(icon(eye->isChecked() ? QStringLiteral("layers.eyeOn")
                                            : QStringLiteral("layers.eyeOff")));
-        eye->setToolTip(QStringLiteral("Show or hide this light"));
+        eye->setToolTip(QCoreApplication::translate("PicturaUi", "Show or hide this light"));
         connect(eye, &QToolButton::toggled, this, [this, eye, i](bool on) {
             if (i < rig_.lights.size()) {
                 rig_.lights[i].on = on;

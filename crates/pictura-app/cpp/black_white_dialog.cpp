@@ -1,4 +1,5 @@
 #include "black_white_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "adjustment_presets.h"
 #include "color_picker_dialog.h"
@@ -68,7 +69,7 @@ BlackWhiteDialog::BlackWhiteDialog(PictureView* view, const QByteArray& block,
     layout->setSpacing(6);
 
     auto* presetRow = new QHBoxLayout;
-    presetRow->addWidget(new QLabel(QStringLiteral("Preset:"), this));
+    presetRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Preset:"), this));
     preset_ = new QComboBox(this);
     preset_->setObjectName(QStringLiteral("blackWhitePreset"));
     preset_->addItem(QLatin1String(kDefault.name));
@@ -97,7 +98,7 @@ BlackWhiteDialog::BlackWhiteDialog(PictureView* view, const QByteArray& block,
     markCustom();
 
     auto* tintRow = new QHBoxLayout;
-    auto* tint = new QCheckBox(QStringLiteral("Tint"), this);
+    auto* tint = new QCheckBox(QCoreApplication::translate("PicturaUi", "Tint"), this);
     tint->setObjectName(QStringLiteral("tint"));
     tint->setChecked(param(QStringLiteral("tint")) != 0.0);
     color_ = swatch(QStringLiteral("tintColor"));

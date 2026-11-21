@@ -15,6 +15,7 @@
 // alignment / arrangement menus are disabled stubs.
 
 #include "options_bar.h"
+#include <QtCore/QCoreApplication>
 #include "preset_store.h"
 
 #include "color_picker_dialog.h"
@@ -94,7 +95,7 @@ QToolButton* disabledMenuButton(QWidget* page, int glyph, const QString& name,
     button->setObjectName(name);
     button->setIcon(pathGlyph(glyph));
     button->setEnabled(false);
-    button->setToolTip(what + QStringLiteral(": not implemented yet"));
+    button->setToolTip(QCoreApplication::translate("PicturaUi", "%1: not implemented yet").arg(what));
     return button;
 }
 
@@ -136,8 +137,8 @@ QWidget* OptionsBar::buildShapePage(ToolId id)
 
     auto* mode = new QComboBox(page);
     mode->setObjectName(QStringLiteral("optionsShapeMode"));
-    mode->setToolTip(QStringLiteral("Pick tool mode"));
-    mode->addItems({QStringLiteral("Shape"), QStringLiteral("Path"), QStringLiteral("Pixels")});
+    mode->setToolTip(QCoreApplication::translate("PicturaUi", "Pick tool mode"));
+    mode->addItems({QCoreApplication::translate("PicturaUi", "Shape"), QCoreApplication::translate("PicturaUi", "Path"), QCoreApplication::translate("PicturaUi", "Pixels")});
     layout->addWidget(mode);
     connect(mode, &QComboBox::currentIndexChanged, this,
             [update](int i) { update([i](ShapeOptions& o) { o.mode = i; }); });
@@ -146,7 +147,7 @@ QWidget* OptionsBar::buildShapePage(ToolId id)
     buildShapeAppearance(page, layout, update, *syncs);
 
     // W / link / H: the active shape layer's size; disabled without one.
-    auto* width = new NumericField(QStringLiteral("W:"),
+    auto* width = new NumericField(QCoreApplication::translate("PicturaUi", "W:"),
                                    numericConfig(0.01, 300000, 1, 2, QStringLiteral(" px"), false,
                                                  QStringLiteral("optionsShapeWidth")),
                                    page);
@@ -154,8 +155,8 @@ QWidget* OptionsBar::buildShapePage(ToolId id)
     link->setObjectName(QStringLiteral("optionsShapeLinkSize"));
     link->setIcon(icon(QStringLiteral("layers.link")));
     link->setCheckable(true);
-    link->setToolTip(QStringLiteral("Link shape width and height"));
-    auto* height = new NumericField(QStringLiteral("H:"),
+    link->setToolTip(QCoreApplication::translate("PicturaUi", "Link shape width and height"));
+    auto* height = new NumericField(QCoreApplication::translate("PicturaUi", "H:"),
                                     numericConfig(0.01, 300000, 1, 2, QStringLiteral(" px"), false,
                                                   QStringLiteral("optionsShapeHeight")),
                                     page);
@@ -190,18 +191,18 @@ QWidget* OptionsBar::buildShapePage(ToolId id)
     });
 
     layout->addWidget(disabledMenuButton(page, 0, QStringLiteral("optionsShapePathOperations"),
-                                         QStringLiteral("Path operations")));
+                                         QCoreApplication::translate("PicturaUi", "Path operations")));
     layout->addWidget(disabledMenuButton(page, 1, QStringLiteral("optionsShapePathAlignment"),
-                                         QStringLiteral("Path alignment")));
+                                         QCoreApplication::translate("PicturaUi", "Path alignment")));
     layout->addWidget(disabledMenuButton(page, 2, QStringLiteral("optionsShapePathArrangement"),
-                                         QStringLiteral("Path arrangement")));
+                                         QCoreApplication::translate("PicturaUi", "Path arrangement")));
 
     layout->addWidget(id == ToolId::Line ? buildArrowheadsButton(page, initial, update)
                                          : buildShapeGeometryButton(id, page, update, *syncs));
 
     if (id == ToolId::RoundedRectangle) {
         auto* radius = new NumericField(
-            QStringLiteral("Radius:"),
+            QCoreApplication::translate("PicturaUi", "Radius:"),
             numericConfig(0, 1000, 1, 0, QStringLiteral(" px"), true,
                           QStringLiteral("optionsShapeRadius")),
             page);
@@ -211,7 +212,7 @@ QWidget* OptionsBar::buildShapePage(ToolId id)
                 [update](double v) { update([v](ShapeOptions& o) { o.radius = v; }); });
     } else if (id == ToolId::Polygon) {
         auto* sides = new NumericField(
-            QStringLiteral("Sides:"),
+            QCoreApplication::translate("PicturaUi", "Sides:"),
             numericConfig(3, 100, 1, 0, QString(), true, QStringLiteral("optionsShapeSides")),
             page);
         sides->setValue(initial.sides);
@@ -220,7 +221,7 @@ QWidget* OptionsBar::buildShapePage(ToolId id)
                 [update](double v) { update([v](ShapeOptions& o) { o.sides = qRound(v); }); });
     } else if (id == ToolId::Line) {
         auto* weight = new NumericField(
-            QStringLiteral("Weight:"),
+            QCoreApplication::translate("PicturaUi", "Weight:"),
             numericConfig(1, 1000, 1, 0, QStringLiteral(" px"), true,
                           QStringLiteral("optionsShapeWeight")),
             page);
@@ -229,13 +230,13 @@ QWidget* OptionsBar::buildShapePage(ToolId id)
         connect(weight, &NumericField::valueChanged, this,
                 [update](double v) { update([v](ShapeOptions& o) { o.weight = v; }); });
     } else if (id == ToolId::CustomShape) {
-        layout->addWidget(new QLabel(QStringLiteral("Shape:"), page));
+        layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Shape:"), page));
         layout->addWidget(buildShapePicker(page, update, *syncs));
     }
 
-    auto* alignEdges = new QCheckBox(QStringLiteral("Align Edges"), page);
+    auto* alignEdges = new QCheckBox(QCoreApplication::translate("PicturaUi", "Align Edges"), page);
     alignEdges->setObjectName(QStringLiteral("optionsShapeAlignEdges"));
-    alignEdges->setToolTip(QStringLiteral("Snap straight horizontal and vertical edges to pixels"));
+    alignEdges->setToolTip(QCoreApplication::translate("PicturaUi", "Snap straight horizontal and vertical edges to pixels"));
     layout->addWidget(alignEdges);
     connect(alignEdges, &QCheckBox::toggled, this,
             [update](bool on) { update([on](ShapeOptions& o) { o.alignEdges = on; }); });
@@ -268,21 +269,21 @@ void OptionsBar::buildShapeAppearance(QWidget* page, QHBoxLayout* layout,
 {
     const auto swatch = [this, page, layout, update](bool fill) {
         auto* label =
-            new QLabel(fill ? QStringLiteral("Fill:") : QStringLiteral("Stroke:"), page);
+            new QLabel(fill ? QCoreApplication::translate("PicturaUi", "Fill:") : QCoreApplication::translate("PicturaUi", "Stroke:"), page);
         auto* button = new QToolButton(page);
         button->setObjectName(fill ? QStringLiteral("optionsShapeFill")
                                    : QStringLiteral("optionsShapeStroke"));
         button->setPopupMode(QToolButton::InstantPopup);
         button->setIconSize(QSize(22, 16));
         auto* menu = new QMenu(button);
-        QAction* none = menu->addAction(QStringLiteral("No Color"));
+        QAction* none = menu->addAction(QCoreApplication::translate("PicturaUi", "No Color"));
         none->setObjectName(button->objectName() + QStringLiteral("None"));
-        QAction* solid = menu->addAction(QStringLiteral("Solid Color..."));
+        QAction* solid = menu->addAction(QCoreApplication::translate("PicturaUi", "Solid Color..."));
         solid->setObjectName(button->objectName() + QStringLiteral("Solid"));
-        for (const QString& unsupported : {QStringLiteral("Gradient"), QStringLiteral("Pattern")}) {
+        for (const QString& unsupported : {QCoreApplication::translate("PicturaUi", "Gradient"), QCoreApplication::translate("PicturaUi", "Pattern")}) {
             QAction* action = menu->addAction(unsupported);
             action->setEnabled(false);
-            action->setToolTip(unsupported + QStringLiteral(": not implemented yet"));
+            action->setToolTip(QCoreApplication::translate("PicturaUi", "%1: not implemented yet").arg(unsupported));
         }
         button->setMenu(menu);
         connect(none, &QAction::triggered, this, [update, fill]() {
@@ -297,7 +298,7 @@ void OptionsBar::buildShapeAppearance(QWidget* page, QHBoxLayout* layout,
             }
             const QColor picked = ColorPickerDialog::getColor(
                 start, button,
-                fill ? QStringLiteral("Fill Color") : QStringLiteral("Stroke Color"));
+                fill ? QCoreApplication::translate("PicturaUi", "Fill Color") : QCoreApplication::translate("PicturaUi", "Stroke Color"));
             if (!picked.isValid()) {
                 return;
             }
@@ -331,7 +332,7 @@ void OptionsBar::buildShapeAppearance(QWidget* page, QHBoxLayout* layout,
         numericConfig(1, 250, 1, 0, QStringLiteral(" px"), true,
                       QStringLiteral("optionsShapeStrokeWidth")),
         page);
-    strokeWidth->setToolTip(QStringLiteral("Set shape stroke width"));
+    strokeWidth->setToolTip(QCoreApplication::translate("PicturaUi", "Set shape stroke width"));
     layout->addWidget(strokeWidth);
     connect(strokeWidth, &NumericField::valueChanged, this,
             [update](double v) { update([v](ShapeOptions& o) { o.strokeWidth = v; }); });
@@ -339,24 +340,24 @@ void OptionsBar::buildShapeAppearance(QWidget* page, QHBoxLayout* layout,
     auto* type = new QToolButton(page);
     type->setObjectName(QStringLiteral("optionsShapeStrokeType"));
     type->setText(QStringLiteral("——"));
-    type->setToolTip(QStringLiteral("Set shape stroke type"));
+    type->setToolTip(QCoreApplication::translate("PicturaUi", "Set shape stroke type"));
     type->setPopupMode(QToolButton::InstantPopup);
     auto* menu = new QMenu(type);
     auto* form = new QWidget(menu);
     auto* grid = new QFormLayout(form);
     auto* line = new QComboBox(form);
     line->setObjectName(QStringLiteral("optionsShapeStrokeLine"));
-    line->addItems({QStringLiteral("Solid"), QStringLiteral("Dashed"), QStringLiteral("Dotted")});
+    line->addItems({QCoreApplication::translate("PicturaUi", "Solid"), QCoreApplication::translate("PicturaUi", "Dashed"), QCoreApplication::translate("PicturaUi", "Dotted")});
     // Dashed and Dotted are listed, disabled (no dash pattern is rendered).
     for (int i = 1; i < 3; ++i) {
         line->setItemData(i, 0, Qt::UserRole - 1);
-        line->setItemData(i, QStringLiteral("Not implemented yet"), Qt::ToolTipRole);
+        line->setItemData(i, QCoreApplication::translate("PicturaUi", "Not implemented yet"), Qt::ToolTipRole);
     }
     auto* align = new QComboBox(form);
     align->setObjectName(QStringLiteral("optionsShapeStrokeAlign"));
-    align->addItems({QStringLiteral("Inside"), QStringLiteral("Center"), QStringLiteral("Outside")});
-    grid->addRow(QStringLiteral("Line:"), line);
-    grid->addRow(QStringLiteral("Align:"), align);
+    align->addItems({QCoreApplication::translate("PicturaUi", "Inside"), QCoreApplication::translate("PicturaUi", "Center"), QCoreApplication::translate("PicturaUi", "Outside")});
+    grid->addRow(QCoreApplication::translate("PicturaUi", "Line:"), line);
+    grid->addRow(QCoreApplication::translate("PicturaUi", "Align:"), align);
     addForm(menu, form);
     type->setMenu(menu);
     layout->addWidget(type);
@@ -377,22 +378,22 @@ QToolButton* OptionsBar::buildShapeGeometryButton(ToolId id, QWidget* page,
     auto* button = new QToolButton(page);
     button->setObjectName(QStringLiteral("optionsShapeGeometry"));
     button->setIcon(icon(QStringLiteral("view.options")));
-    button->setToolTip(QStringLiteral("Set additional shape and path options"));
+    button->setToolTip(QCoreApplication::translate("PicturaUi", "Set additional shape and path options"));
     button->setPopupMode(QToolButton::InstantPopup);
     auto* menu = new QMenu(button);
     auto* form = new QWidget(menu);
     auto* box = new QVBoxLayout(form);
     if (id == ToolId::Polygon) {
-        auto* smoothCorners = new QCheckBox(QStringLiteral("Smooth Corners"), form);
+        auto* smoothCorners = new QCheckBox(QCoreApplication::translate("PicturaUi", "Smooth Corners"), form);
         smoothCorners->setObjectName(QStringLiteral("optionsShapeSmoothCorners"));
-        auto* star = new QCheckBox(QStringLiteral("Star"), form);
+        auto* star = new QCheckBox(QCoreApplication::translate("PicturaUi", "Star"), form);
         star->setObjectName(QStringLiteral("optionsShapeStar"));
         auto* indent = new NumericField(
-            QStringLiteral("Indent Sides By:"),
+            QCoreApplication::translate("PicturaUi", "Indent Sides By:"),
             numericConfig(1, 99, 1, 0, QStringLiteral("%"), true,
                           QStringLiteral("optionsShapeIndent")),
             form);
-        auto* smoothIndents = new QCheckBox(QStringLiteral("Smooth Indents"), form);
+        auto* smoothIndents = new QCheckBox(QCoreApplication::translate("PicturaUi", "Smooth Indents"), form);
         smoothIndents->setObjectName(QStringLiteral("optionsShapeSmoothIndents"));
         box->addWidget(smoothCorners);
         box->addWidget(star);
@@ -415,15 +416,15 @@ QToolButton* OptionsBar::buildShapeGeometryButton(ToolId id, QWidget* page,
             smoothIndents->setEnabled(o.star);
         });
     } else {
-        QString constrained = QStringLiteral("Square");
+        QString constrained = QCoreApplication::translate("PicturaUi", "Square");
         if (id == ToolId::Ellipse) {
-            constrained = QStringLiteral("Circle");
+            constrained = QCoreApplication::translate("PicturaUi", "Circle");
         } else if (id == ToolId::CustomShape) {
-            constrained = QStringLiteral("Defined Proportions");
+            constrained = QCoreApplication::translate("PicturaUi", "Defined Proportions");
         }
         auto* group = new QButtonGroup(form);
-        const QStringList labels = {QStringLiteral("Unconstrained"), constrained,
-                                    QStringLiteral("Fixed Size")};
+        const QStringList labels = {QCoreApplication::translate("PicturaUi", "Unconstrained"), constrained,
+                                    QCoreApplication::translate("PicturaUi", "Fixed Size")};
         for (int i = 0; i < labels.size(); ++i) {
             auto* radio = new QRadioButton(labels[i], form);
             radio->setObjectName(QStringLiteral("optionsShapeGeometry%1").arg(i));
@@ -432,19 +433,19 @@ QToolButton* OptionsBar::buildShapeGeometryButton(ToolId id, QWidget* page,
         }
         auto* size = new QHBoxLayout;
         auto* fixedW = new NumericField(
-            QStringLiteral("W:"),
+            QCoreApplication::translate("PicturaUi", "W:"),
             numericConfig(0.01, 300000, 1, 2, QStringLiteral(" px"), false,
                           QStringLiteral("optionsShapeFixedWidth")),
             form);
         auto* fixedH = new NumericField(
-            QStringLiteral("H:"),
+            QCoreApplication::translate("PicturaUi", "H:"),
             numericConfig(0.01, 300000, 1, 2, QStringLiteral(" px"), false,
                           QStringLiteral("optionsShapeFixedHeight")),
             form);
         size->addWidget(fixedW);
         size->addWidget(fixedH);
         box->addLayout(size);
-        auto* fromCenter = new QCheckBox(QStringLiteral("From Center"), form);
+        auto* fromCenter = new QCheckBox(QCoreApplication::translate("PicturaUi", "From Center"), form);
         fromCenter->setObjectName(QStringLiteral("optionsShapeFromCenter"));
         box->addWidget(fromCenter);
         connect(group, &QButtonGroup::idClicked, this,
@@ -479,7 +480,7 @@ QToolButton* OptionsBar::buildShapePicker(QWidget* page, const ShapeUpdate& upda
 {
     auto* button = new QToolButton(page);
     button->setObjectName(QStringLiteral("optionsShapeCustom"));
-    button->setToolTip(QStringLiteral("Click to open Custom Shape picker"));
+    button->setToolTip(QCoreApplication::translate("PicturaUi", "Click to open Custom Shape picker"));
     button->setIconSize(QSize(24, 24));
     button->setPopupMode(QToolButton::InstantPopup);
     auto* menu = new QMenu(button);
@@ -515,11 +516,11 @@ QToolButton* OptionsBar::buildShapePicker(QWidget* page, const ShapeUpdate& upda
     gear->setIcon(icon(QStringLiteral("view.options")));
     gear->setPopupMode(QToolButton::InstantPopup);
     auto* gearMenu = new QMenu(gear);
-    QAction* reset = gearMenu->addAction(QStringLiteral("Reset Shapes..."));
+    QAction* reset = gearMenu->addAction(QCoreApplication::translate("PicturaUi", "Reset Shapes..."));
     reset->setObjectName(QStringLiteral("optionsShapeCustomReset"));
-    for (const QString& unsupported : {QStringLiteral("Load Shapes..."),
-                                       QStringLiteral("Save Shapes..."),
-                                       QStringLiteral("Replace Shapes...")}) {
+    for (const QString& unsupported : {QCoreApplication::translate("PicturaUi", "Load Shapes..."),
+                                       QCoreApplication::translate("PicturaUi", "Save Shapes..."),
+                                       QCoreApplication::translate("PicturaUi", "Replace Shapes...")}) {
         gearMenu->addAction(unsupported)->setEnabled(false);
     }
     gear->setMenu(gearMenu);
@@ -566,16 +567,16 @@ QToolButton* OptionsBar::buildArrowheadsButton(QWidget* page, const ShapeOptions
     auto* button = new QToolButton(page);
     button->setObjectName(QStringLiteral("optionsShapeArrowheads"));
     button->setIcon(icon(QStringLiteral("view.options")));
-    button->setToolTip(QStringLiteral("Arrowheads"));
+    button->setToolTip(QCoreApplication::translate("PicturaUi", "Arrowheads"));
     button->setPopupMode(QToolButton::InstantPopup);
     auto* menu = new QMenu(button);
     auto* form = new QWidget(menu);
     auto* layout = new QFormLayout(form);
-    layout->addRow(new QLabel(QStringLiteral("Arrowheads"), form));
-    auto* start = new QCheckBox(QStringLiteral("Start"), form);
+    layout->addRow(new QLabel(QCoreApplication::translate("PicturaUi", "Arrowheads"), form));
+    auto* start = new QCheckBox(QCoreApplication::translate("PicturaUi", "Start"), form);
     start->setObjectName(QStringLiteral("optionsShapeArrowStart"));
     start->setChecked(initial.arrowStart);
-    auto* end = new QCheckBox(QStringLiteral("End"), form);
+    auto* end = new QCheckBox(QCoreApplication::translate("PicturaUi", "End"), form);
     end->setObjectName(QStringLiteral("optionsShapeArrowEnd"));
     end->setChecked(initial.arrowEnd);
     layout->addRow(start);
@@ -594,11 +595,11 @@ QToolButton* OptionsBar::buildArrowheadsButton(QWidget* page, const ShapeOptions
             update([v, member](ShapeOptions& o) { o.*member = v; });
         });
     };
-    field(QStringLiteral("Width:"), 10, 1000, initial.arrowWidth,
+    field(QCoreApplication::translate("PicturaUi", "Width:"), 10, 1000, initial.arrowWidth,
           QStringLiteral("optionsShapeArrowWidth"), &ShapeOptions::arrowWidth);
-    field(QStringLiteral("Length:"), 10, 5000, initial.arrowLength,
+    field(QCoreApplication::translate("PicturaUi", "Length:"), 10, 5000, initial.arrowLength,
           QStringLiteral("optionsShapeArrowLength"), &ShapeOptions::arrowLength);
-    field(QStringLiteral("Concavity:"), -50, 50, initial.arrowConcavity,
+    field(QCoreApplication::translate("PicturaUi", "Concavity:"), -50, 50, initial.arrowConcavity,
           QStringLiteral("optionsShapeArrowConcavity"), &ShapeOptions::arrowConcavity);
     addForm(menu, form);
     button->setMenu(menu);

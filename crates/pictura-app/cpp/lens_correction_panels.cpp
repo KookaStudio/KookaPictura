@@ -1,4 +1,5 @@
 #include "lens_correction_panels.h"
+#include <QtCore/QCoreApplication>
 #include "panels/angle_dial.h"
 #include "panels/jump_slider.h"
 
@@ -66,7 +67,7 @@ LensAutoPanel::LensAutoPanel(bool ready, QWidget* parent) : QWidget(parent)
     gray_ = ready && lc_grayscale();
     auto* layout = new QVBoxLayout(this);
 
-    auto* correction = new QGroupBox(QStringLiteral("Correction"), this);
+    auto* correction = new QGroupBox(QCoreApplication::translate("PicturaUi", "Correction"), this);
     auto* correctionLayout = new QVBoxLayout(correction);
     auto check = [&](const QString& name, const QString& text, bool on) {
         auto* box = new QCheckBox(text, correction);
@@ -79,25 +80,25 @@ LensAutoPanel::LensAutoPanel(bool ready, QWidget* parent) : QWidget(parent)
     geometric_ = check(QStringLiteral("lcGeometric"), QStringLiteral("Geometric Distortion"), true);
     chromatic_ = check(QStringLiteral("lcChromatic"), QStringLiteral("Chromatic Aberration"), false);
     vignette_ = check(QStringLiteral("lcVignette"), QStringLiteral("Vignette"), false);
-    geometric_->setToolTip(QStringLiteral("Correct the profile's barrel or pincushion distortion."));
-    chromatic_->setToolTip(QStringLiteral("Correct the profile's color fringing."));
-    vignette_->setToolTip(QStringLiteral("Correct the profile's darkened corners."));
+    geometric_->setToolTip(QCoreApplication::translate("PicturaUi", "Correct the profile's barrel or pincushion distortion."));
+    chromatic_->setToolTip(QCoreApplication::translate("PicturaUi", "Correct the profile's color fringing."));
+    vignette_->setToolTip(QCoreApplication::translate("PicturaUi", "Correct the profile's darkened corners."));
     autoScale_ = check(QStringLiteral("lcAutoScale"), QStringLiteral("Auto Scale Image"), true);
     autoScale_->setToolTip(
-        QStringLiteral("Scale the image so the profile correction leaves no blank area."));
+        QCoreApplication::translate("PicturaUi", "Scale the image so the profile correction leaves no blank area."));
     edge_ = new QComboBox(correction);
     edge_->setObjectName(QStringLiteral("lcEdge"));
     edge_->addItems({QStringLiteral("Edge Extension"), QStringLiteral("Transparency"),
                      QStringLiteral("Black Color"), QStringLiteral("White Color")});
     edge_->setCurrentIndex(1);
-    edge_->setToolTip(QStringLiteral("Edge: how blank areas are filled."));
+    edge_->setToolTip(QCoreApplication::translate("PicturaUi", "Edge: how blank areas are filled."));
     connect(edge_, &QComboBox::currentIndexChanged, this, &LensAutoPanel::emitChanged);
     auto* edgeRow = new QFormLayout;
-    edgeRow->addRow(QStringLiteral("Edge:"), edge_);
+    edgeRow->addRow(QCoreApplication::translate("PicturaUi", "Edge:"), edge_);
     correctionLayout->addLayout(edgeRow);
     layout->addWidget(correction);
 
-    auto* search = new QGroupBox(QStringLiteral("Search Criteria"), this);
+    auto* search = new QGroupBox(QCoreApplication::translate("PicturaUi", "Search Criteria"), this);
     auto* searchLayout = new QFormLayout(search);
     auto combo = [&](const QString& name, const QString& placeholder) {
         auto* box = new QComboBox(search);
@@ -109,19 +110,19 @@ LensAutoPanel::LensAutoPanel(bool ready, QWidget* parent) : QWidget(parent)
     make_ = combo(QStringLiteral("lcMake"), QStringLiteral("Choose a camera make"));
     model_ = combo(QStringLiteral("lcModel"), QStringLiteral("Choose a camera model"));
     lens_ = combo(QStringLiteral("lcLens"), QStringLiteral("Choose a lens model"));
-    searchLayout->addRow(QStringLiteral("Camera Make:"), make_);
-    searchLayout->addRow(QStringLiteral("Camera Model:"), model_);
-    searchLayout->addRow(QStringLiteral("Lens Model:"), lens_);
+    searchLayout->addRow(QCoreApplication::translate("PicturaUi", "Camera Make:"), make_);
+    searchLayout->addRow(QCoreApplication::translate("PicturaUi", "Camera Model:"), model_);
+    searchLayout->addRow(QCoreApplication::translate("PicturaUi", "Lens Model:"), lens_);
     // The Search Criteria pop-up; the list sorts by sensor size unless raw
     // profiles are preferred.
     searchMenu_ = new QToolButton(search);
     searchMenu_->setObjectName(QStringLiteral("lcSearchMenu"));
-    searchMenu_->setText(QStringLiteral("Search Options"));
+    searchMenu_->setText(QCoreApplication::translate("PicturaUi", "Search Options"));
     searchMenu_->setPopupMode(QToolButton::InstantPopup);
     searchMenu_->setToolTip(
-        QStringLiteral("Search Criteria: profiles are sorted by sensor size; prefer raw profiles."));
+        QCoreApplication::translate("PicturaUi", "Search Criteria: profiles are sorted by sensor size; prefer raw profiles."));
     auto* searchOptions = new QMenu(searchMenu_);
-    preferRaw_ = searchOptions->addAction(QStringLiteral("Prefer RAW Profiles"));
+    preferRaw_ = searchOptions->addAction(QCoreApplication::translate("PicturaUi", "Prefer RAW Profiles"));
     preferRaw_->setObjectName(QStringLiteral("lcPreferRaw"));
     preferRaw_->setCheckable(true);
     preferRaw_->setChecked(gPreferRaw);
@@ -133,7 +134,7 @@ LensAutoPanel::LensAutoPanel(bool ready, QWidget* parent) : QWidget(parent)
     searchLayout->addRow(info_);
     layout->addWidget(search);
 
-    auto* profileBox = new QGroupBox(QStringLiteral("Lens Profiles"), this);
+    auto* profileBox = new QGroupBox(QCoreApplication::translate("PicturaUi", "Lens Profiles"), this);
     auto* profileLayout = new QVBoxLayout(profileBox);
     profiles_ = new QListWidget(profileBox);
     profiles_->setObjectName(QStringLiteral("lcProfiles"));
@@ -145,7 +146,7 @@ LensAutoPanel::LensAutoPanel(bool ready, QWidget* parent) : QWidget(parent)
     });
     profileLayout->addWidget(profiles_);
     // The button stays for parity; there is no online profile source.
-    searchOnline_ = new QPushButton(QStringLiteral("Search Online"), profileBox);
+    searchOnline_ = new QPushButton(QCoreApplication::translate("PicturaUi", "Search Online"), profileBox);
     searchOnline_->setObjectName(QStringLiteral("lcSearchOnline"));
     searchOnline_->setEnabled(false);
     searchOnline_->setToolTip(kNoOnline);
@@ -291,10 +292,10 @@ QMenu* LensAutoPanel::subProfileMenu()
         connect(action, &QAction::triggered, this, [this, i] { selectSubProfile(i); });
     }
     if (subs.isEmpty()) {
-        menu->addAction(QStringLiteral("No sub-profiles"))->setEnabled(false);
+        menu->addAction(QCoreApplication::translate("PicturaUi", "No sub-profiles"))->setEnabled(false);
     }
     menu->addSeparator();
-    QAction* save = menu->addAction(QStringLiteral("Save Online Profile Locally"));
+    QAction* save = menu->addAction(QCoreApplication::translate("PicturaUi", "Save Online Profile Locally"));
     save->setObjectName(QStringLiteral("lcSaveOnline"));
     save->setEnabled(false);
     save->setToolTip(kNoOnline);
@@ -398,7 +399,7 @@ LensCustomPanel::LensCustomPanel(bool gray, QWidget* parent) : QWidget(parent)
     }
     connect(settings_, &QComboBox::activated, this, &LensCustomPanel::applySetting);
     auto* settingsRow = new QFormLayout;
-    settingsRow->addRow(QStringLiteral("Settings:"), settings_);
+    settingsRow->addRow(QCoreApplication::translate("PicturaUi", "Settings:"), settings_);
     layout->addLayout(settingsRow);
 
     auto group = [&](const QString& title) {
@@ -410,8 +411,7 @@ LensCustomPanel::LensCustomPanel(bool gray, QWidget* parent) : QWidget(parent)
     QGroupBox* geometry = group(QStringLiteral("Geometric Distortion"));
     addSlider(geometry, QStringLiteral("lcDistortion"), QStringLiteral("Remove Distortion"), -100,
               100, 0, 2)
-        ->setToolTip(QStringLiteral(
-            "Remove Distortion: positive values correct barrel distortion, negative values "
+        ->setToolTip(QCoreApplication::translate("PicturaUi", "Remove Distortion: positive values correct barrel distortion, negative values "
             "pincushion distortion."));
     QGroupBox* fringe = group(QStringLiteral("Chromatic Aberration"));
     const QString fringes[] = {QStringLiteral("Red/Cyan"), QStringLiteral("Green/Magenta"),
@@ -421,7 +421,7 @@ LensCustomPanel::LensCustomPanel(bool gray, QWidget* parent) : QWidget(parent)
     for (int i = 0; i < 3; ++i) {
         addSlider(fringe, fringeNames[i], QStringLiteral("Fix %1 Fringe").arg(fringes[i]), -100,
                   100, 0, 2)
-            ->setToolTip(QStringLiteral("Fix %1 Fringe: scales the channel against the others "
+            ->setToolTip(QCoreApplication::translate("PicturaUi", "Fix %1 Fringe: scales the channel against the others "
                                         "to remove color fringing.")
                              .arg(fringes[i]));
     }
@@ -430,7 +430,7 @@ LensCustomPanel::LensCustomPanel(bool gray, QWidget* parent) : QWidget(parent)
     QGroupBox* vignette = group(QStringLiteral("Vignette"));
     addSlider(vignette, QStringLiteral("lcVignetteAmount"), QStringLiteral("Amount"), -100, 100,
               0, 0)
-        ->setToolTip(QStringLiteral("Vignette Amount: darken or lighten the image's corners."));
+        ->setToolTip(QCoreApplication::translate("PicturaUi", "Vignette Amount: darken or lighten the image's corners."));
     auto* ends = new QHBoxLayout;
     ends->addWidget(new QLabel(QStringLiteral("darken"), vignette));
     ends->addStretch(1);
@@ -439,15 +439,15 @@ LensCustomPanel::LensCustomPanel(bool gray, QWidget* parent) : QWidget(parent)
     addSlider(vignette, QStringLiteral("lcVignetteMidpoint"), QStringLiteral("Midpoint"), 0, 100,
               50, 0)
         ->setToolTip(
-            QStringLiteral("Vignette Midpoint: lower values widen the area the Amount affects."));
+            QCoreApplication::translate("PicturaUi", "Vignette Midpoint: lower values widen the area the Amount affects."));
     QGroupBox* transform = group(QStringLiteral("Transform"));
     addSlider(transform, QStringLiteral("lcVertical"), QStringLiteral("Vertical Perspective"), -100,
               100, 0, 0)
-        ->setToolTip(QStringLiteral("Vertical Perspective: corrects tilting the camera up or "
+        ->setToolTip(QCoreApplication::translate("PicturaUi", "Vertical Perspective: corrects tilting the camera up or "
                                     "down, making vertical lines parallel."));
     addSlider(transform, QStringLiteral("lcHorizontal"), QStringLiteral("Horizontal Perspective"),
               -100, 100, 0, 0)
-        ->setToolTip(QStringLiteral("Horizontal Perspective: corrects turning the camera left or "
+        ->setToolTip(QCoreApplication::translate("PicturaUi", "Horizontal Perspective: corrects turning the camera left or "
                                     "right, making horizontal lines parallel."));
 
     // Angle: CS6's dial points up at 0° and turns clockwise with the value.
@@ -457,7 +457,7 @@ LensCustomPanel::LensCustomPanel(bool gray, QWidget* parent) : QWidget(parent)
     angle->setDecimals(2);
     angle->setWrapping(true);
     angle->setSuffix(QStringLiteral("°"));
-    angle->setToolTip(QStringLiteral("Angle: rotates the image to correct camera tilt."));
+    angle->setToolTip(QCoreApplication::translate("PicturaUi", "Angle: rotates the image to correct camera tilt."));
     dial_ = new AngleDial(transform);
     dial_->setObjectName(QStringLiteral("lcAngleDial"));
     dial_->setFixedSize(32, 32);
@@ -471,7 +471,7 @@ LensCustomPanel::LensCustomPanel(bool gray, QWidget* parent) : QWidget(parent)
         edited();
     });
     auto* angleRow = new QHBoxLayout;
-    angleRow->addWidget(new QLabel(QStringLiteral("Angle:"), transform));
+    angleRow->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Angle:"), transform));
     angleRow->addWidget(dial_);
     angleRow->addStretch(1);
     angleRow->addWidget(angle);
@@ -479,8 +479,7 @@ LensCustomPanel::LensCustomPanel(bool gray, QWidget* parent) : QWidget(parent)
     boxes_.append(angle);
     addSlider(transform, QStringLiteral("lcScale"), QStringLiteral("Scale"), 50, 150, 100, 0,
               QStringLiteral("%"))
-        ->setToolTip(QStringLiteral(
-            "Scale: zooms the image to fill blank areas; the pixel dimensions stay."));
+        ->setToolTip(QCoreApplication::translate("PicturaUi", "Scale: zooms the image to fill blank areas; the pixel dimensions stay."));
     layout->addStretch(1);
 }
 

@@ -1,4 +1,5 @@
 #include "numeric_field.h"
+#include "localization.h"
 
 #include "icons.h"
 #include "jump_slider.h"
@@ -71,6 +72,7 @@ QRect lineEditFrame(const QLineEdit* edit)
 NumericField::NumericField(const QString& label, const NumericFieldConfig& config,
                           QWidget* parent)
     : QWidget(parent)
+    , numberLocale_(uiNumericLocale())
     , config_(config)
     , value_(config.minimum)
 {
@@ -95,14 +97,12 @@ NumericField::NumericField(const QString& label, const NumericFieldConfig& confi
     edit_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     // A fractional-capable integer field (the crop W/H ratio) takes up to six
     // decimals and keeps a typed fraction; a plain integer field rejects one.
-    // The C locale keeps '.' the decimal separator regardless of the user's
-    // locale, matching QString::toDouble and the values the fields emit.
     const int validatorDecimals = config_.allowFractional && config_.decimals == 0
         ? 6
         : config_.decimals;
     auto* validator = new QDoubleValidator(config_.minimum, config_.maximum, validatorDecimals,
                                            edit_);
-    validator->setLocale(QLocale::c());
+    validator->setLocale(numberLocale_);
     validator->setNotation(QDoubleValidator::StandardNotation);
     edit_->setValidator(validator);
     edit_->setText(formatValue(value_));
@@ -220,11 +220,11 @@ QString NumericField::formatValue(double value) const
         // An integer field shows an integer unless it holds a real fraction
         // (a typed decimal), which is kept.
         if (std::isfinite(value) && value == std::floor(value)) {
-            return QString::number(qint64(std::llround(value)));
+            return numberLocale_.toString(qint64(std::llround(value)));
         }
-        return QString::number(value, 'g', 6);
+        return numberLocale_.toString(value, 'g', 6);
     }
-    return QString::number(value, 'f', config_.decimals);
+    return numberLocale_.toString(value, 'f', config_.decimals);
 }
 
 void NumericField::setValue(double value)
@@ -316,12 +316,12 @@ void NumericField::commitEdit()
     }
     blank_ = false;
     bool ok = false;
-    const double entered = edit_->text().toDouble(&ok);
+    const double entered = numberLocale_.toDouble(edit_->text(), &ok);
     if (!ok) {
         edit_->setText(formatValue(value_));
         return;
     }
-    decimalTyped_ = edit_->text().contains(QLatin1Char('.'));
+    decimalTyped_ = edit_->text().contains(numberLocale_.decimalPoint());
     applyUserValue(entered);
     commitPending();
 }
@@ -448,7 +448,10 @@ bool NumericField::eventFilter(QObject* watched, QEvent* event)
             event->accept();
             if (event->type() == QEvent::KeyPress) {
                 bool ok = false;
-                const double typed = edit_->text().toDouble(&ok);
+                const double typed = numberLocale_.toDouble(edit_->text(), &ok);
+                if (ok) {
+                    decimalTyped_ = edit_->text().contains(numberLocale_.decimalPoint());
+                }
                 const double delta = modifierScale(key->modifiers()) * config_.step;
                 applyUserValue((ok ? typed : value_)
                                + (key->key() == Qt::Key_Up ? delta : -delta));

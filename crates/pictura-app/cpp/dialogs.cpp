@@ -1,5 +1,7 @@
 #include "dialogs.h"
 
+#include <QtCore/QCoreApplication>
+
 #include "api/document_api.h"
 #include "image_view.h"
 #include "tools.h"
@@ -168,11 +170,14 @@ UnsavedChoice askUnsaved(QWidget* parent, const QString& documentName)
     }
 
     QMessageBox box(QMessageBox::Warning, QStringLiteral("Kooka Pictura"),
-                    QStringLiteral("Save changes to \"%1\"?").arg(documentName),
+                    QCoreApplication::translate("PicturaUi", "Save changes to \"%1\"?").arg(documentName),
                     QMessageBox::NoButton, parent);
-    QPushButton* saveButton = box.addButton(QStringLiteral("Save"), QMessageBox::AcceptRole);
-    box.addButton(QStringLiteral("Discard"), QMessageBox::DestructiveRole);
-    QPushButton* cancelButton = box.addButton(QStringLiteral("Cancel"), QMessageBox::RejectRole);
+    box.setTextFormat(Qt::PlainText);
+    QPushButton* saveButton = box.addButton(QCoreApplication::translate("PicturaUi", "Save"),
+                                           QMessageBox::AcceptRole);
+    box.addButton(QCoreApplication::translate("PicturaUi", "Discard"), QMessageBox::DestructiveRole);
+    QPushButton* cancelButton = box.addButton(QCoreApplication::translate("PicturaUi", "Cancel"),
+                                             QMessageBox::RejectRole);
     box.setDefaultButton(saveButton);
     box.exec();
 
@@ -200,7 +205,7 @@ TransformDecision askApplyTransform(QWidget* parent)
         return TransformDecision::DontApply;
     }
     QMessageBox box(QMessageBox::Warning, QStringLiteral("Kooka Pictura"),
-                    QStringLiteral("Apply the transformation?"), QMessageBox::NoButton, parent);
+                    QCoreApplication::translate("PicturaUi", "Apply the transformation?"), QMessageBox::NoButton, parent);
     QPushButton* apply = box.addButton(QStringLiteral("Apply"), QMessageBox::AcceptRole);
     QPushButton* cancel = box.addButton(QStringLiteral("Cancel"), QMessageBox::RejectRole);
     box.addButton(QStringLiteral("Don't Apply"), QMessageBox::DestructiveRole);
@@ -231,7 +236,7 @@ CropDecision askCropImage(QWidget* parent)
         return CropDecision::DontCrop;
     }
     QMessageBox box(QMessageBox::Warning, QStringLiteral("Kooka Pictura"),
-                    QStringLiteral("Crop the image?"), QMessageBox::NoButton, parent);
+                    QCoreApplication::translate("PicturaUi", "Crop the image?"), QMessageBox::NoButton, parent);
     QPushButton* crop = box.addButton(QStringLiteral("Crop"), QMessageBox::AcceptRole);
     QPushButton* cancel = box.addButton(QStringLiteral("Cancel"), QMessageBox::RejectRole);
     box.addButton(QStringLiteral("Don't Crop"), QMessageBox::DestructiveRole);
@@ -248,51 +253,54 @@ CropDecision askCropImage(QWidget* parent)
     return CropDecision::DontCrop;
 }
 
-const QStringList& saveFileFilters()
+QStringList saveFileFilters()
 {
-    static const QStringList filters = {
-        QStringLiteral("Photoshop (*.PSD)"),
-        QStringLiteral("Photoshop Large Format (*.PSB)"),
-        QStringLiteral("PNG (*.PNG)"),
-        QStringLiteral("JPEG (*.JPG *.JPEG *.JPE)"),
-        QStringLiteral("TIFF (*.TIF *.TIFF)"),
-        QStringLiteral("WebP (*.WEBP)"),
-        QStringLiteral("BMP (*.BMP)"),
-        QStringLiteral("Photoshop PDF (*.PDF *.PDP)"),
-        QStringLiteral("CompuServe GIF (*.GIF)"),
-        QStringLiteral("Photoshop EPS (*.EPS)"),
-        QStringLiteral("Photoshop DCS (*.EPS)"),
-        QStringLiteral("Photoshop Raw (*.RAW)"),
-        QStringLiteral("Targa (*.TGA *.VDA *.ICB *.VST)"),
-        QStringLiteral("Cineon (*.CIN)"),
-        QStringLiteral("All Formats (*.PSD *.PSB *.PNG *.JPG *.JPEG *.JPE *.TIF *.TIFF "
+    const QString eps = QCoreApplication::translate("PicturaFiles", "Photoshop EPS");
+    QString dcs = QCoreApplication::translate("PicturaFiles", "Photoshop DCS");
+    if (dcs == eps) {
+        dcs += QStringLiteral(" (DCS)");
+    }
+    return {
+        QCoreApplication::translate("PicturaFiles", "Photoshop") + QStringLiteral(" (*.PSD)"),
+        QCoreApplication::translate("PicturaFiles", "Photoshop Large Format") + QStringLiteral(" (*.PSB)"),
+        QCoreApplication::translate("PicturaFiles", "PNG") + QStringLiteral(" (*.PNG)"),
+        QCoreApplication::translate("PicturaFiles", "JPEG") + QStringLiteral(" (*.JPG *.JPEG *.JPE)"),
+        QCoreApplication::translate("PicturaFiles", "TIFF") + QStringLiteral(" (*.TIF *.TIFF)"),
+        QCoreApplication::translate("PicturaFiles", "WebP") + QStringLiteral(" (*.WEBP)"),
+        QCoreApplication::translate("PicturaFiles", "BMP") + QStringLiteral(" (*.BMP)"),
+        QCoreApplication::translate("PicturaFiles", "Photoshop PDF") + QStringLiteral(" (*.PDF *.PDP)"),
+        QCoreApplication::translate("PicturaFiles", "CompuServe GIF") + QStringLiteral(" (*.GIF)"),
+        eps + QStringLiteral(" (*.EPS)"),
+        dcs + QStringLiteral(" (*.EPS)"),
+        QCoreApplication::translate("PicturaFiles", "Photoshop Raw") + QStringLiteral(" (*.RAW)"),
+        QCoreApplication::translate("PicturaFiles", "Targa") + QStringLiteral(" (*.TGA *.VDA *.ICB *.VST)"),
+        QCoreApplication::translate("PicturaFiles", "Cineon") + QStringLiteral(" (*.CIN)"),
+        QCoreApplication::translate("PicturaFiles", "All Formats") + QStringLiteral(" (*.PSD *.PSB *.PNG *.JPG *.JPEG *.JPE *.TIF *.TIFF "
                        "*.WEBP *.BMP *.PDF *.PDP *.GIF *.EPS *.RAW *.TGA *.VDA *.ICB *.VST "
                        "*.CIN)"),
     };
-    return filters;
 }
 
-const QStringList& openFileFilters()
+QStringList openFileFilters()
 {
-    static const QStringList filters = {
-        QStringLiteral("All Formats (*.PSD *.PSB *.PNG *.JPG *.JPEG *.JPE *.GIF *.BMP "
+    return {
+        QCoreApplication::translate("PicturaFiles", "All Formats") + QStringLiteral(" (*.PSD *.PSB *.PNG *.JPG *.JPEG *.JPE *.GIF *.BMP "
                        "*.TIF *.TIFF *.WEBP *.PDF *.PDP *.AI *.EPS *.EPSF *.PS *.DNG *.CR2)"),
-        QStringLiteral("Photoshop (*.PSD)"),
-        QStringLiteral("Photoshop Large Format (*.PSB)"),
-        QStringLiteral("Images (*.PNG *.JPG *.JPEG *.JPE *.GIF *.BMP *.TIF *.TIFF *.WEBP)"),
-        QStringLiteral("PNG (*.PNG)"),
-        QStringLiteral("JPEG (*.JPG *.JPEG *.JPE)"),
-        QStringLiteral("TIFF (*.TIF *.TIFF)"),
-        QStringLiteral("WebP (*.WEBP)"),
-        QStringLiteral("GIF (*.GIF)"),
-        QStringLiteral("BMP (*.BMP)"),
-        QStringLiteral("Photoshop PDF (*.PDF *.PDP)"),
-        QStringLiteral("Generic PDF (*.PDF *.PDP *.AI)"),
-        QStringLiteral("Generic EPS (*.EPS *.EPSF *.PS)"),
-        QStringLiteral("Camera Raw (*.DNG *.CR2)"),
-        QStringLiteral("All files (*)"),
+        QCoreApplication::translate("PicturaFiles", "Photoshop") + QStringLiteral(" (*.PSD)"),
+        QCoreApplication::translate("PicturaFiles", "Photoshop Large Format") + QStringLiteral(" (*.PSB)"),
+        QCoreApplication::translate("PicturaFiles", "Images") + QStringLiteral(" (*.PNG *.JPG *.JPEG *.JPE *.GIF *.BMP *.TIF *.TIFF *.WEBP)"),
+        QCoreApplication::translate("PicturaFiles", "PNG") + QStringLiteral(" (*.PNG)"),
+        QCoreApplication::translate("PicturaFiles", "JPEG") + QStringLiteral(" (*.JPG *.JPEG *.JPE)"),
+        QCoreApplication::translate("PicturaFiles", "TIFF") + QStringLiteral(" (*.TIF *.TIFF)"),
+        QCoreApplication::translate("PicturaFiles", "WebP") + QStringLiteral(" (*.WEBP)"),
+        QCoreApplication::translate("PicturaFiles", "GIF") + QStringLiteral(" (*.GIF)"),
+        QCoreApplication::translate("PicturaFiles", "BMP") + QStringLiteral(" (*.BMP)"),
+        QCoreApplication::translate("PicturaFiles", "Photoshop PDF") + QStringLiteral(" (*.PDF *.PDP)"),
+        QCoreApplication::translate("PicturaFiles", "Generic PDF") + QStringLiteral(" (*.PDF *.PDP *.AI)"),
+        QCoreApplication::translate("PicturaFiles", "Generic EPS") + QStringLiteral(" (*.EPS *.EPSF *.PS)"),
+        QCoreApplication::translate("PicturaFiles", "Camera Raw") + QStringLiteral(" (*.DNG *.CR2)"),
+        QCoreApplication::translate("PicturaFiles", "All files") + QStringLiteral(" (*)"),
     };
-    return filters;
 }
 
 bool documentRequiresLayers(PictureView* view)
@@ -920,12 +928,18 @@ QString defaultFileDialogDirectory()
 namespace {
 
 SaveFileNameProvider g_saveFileNameForTest;
+OpenFileNameProvider g_openFileNameForTest;
 
 } // namespace
 
 void setSaveFileNameProviderForTest(SaveFileNameProvider provider)
 {
     g_saveFileNameForTest = std::move(provider);
+}
+
+void setOpenFileNameProviderForTest(OpenFileNameProvider provider)
+{
+    g_openFileNameForTest = std::move(provider);
 }
 
 QString getSaveFileName(QWidget* parent, const QString& caption, const QString& dir,
@@ -956,6 +970,10 @@ QStringList runOpenFileDialog(QWidget* parent, const QString& caption, const QSt
                               const QStringList& filters, QString* selectedFilter,
                               QFileDialog::FileMode mode)
 {
+    if (g_openFileNameForTest) {
+        const QString selected = g_openFileNameForTest(parent, caption, dir, filters, selectedFilter);
+        return selected.isEmpty() ? QStringList{} : QStringList{selected};
+    }
     QFileDialog dialog(parent, caption,
                        dir.isEmpty() ? defaultFileDialogDirectory() : dir);
     dialog.setAcceptMode(QFileDialog::AcceptOpen);

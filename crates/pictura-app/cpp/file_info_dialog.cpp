@@ -1,5 +1,6 @@
 #include "file_info_dialog.h"
 
+#include <QtCore/QCoreApplication>
 #include <QtCore/QSet>
 #include <QtWidgets/QAbstractItemView>
 #include <QtWidgets/QComboBox>
@@ -24,6 +25,11 @@ namespace pictura {
 
 namespace {
 
+QString metadataLabel(const QString& source)
+{
+    return QCoreApplication::translate("PicturaMetadata", source.toUtf8().constData());
+}
+
 QTableWidget* makeRowTable(const QStringList& rows, QWidget* parent)
 {
     auto* table = new QTableWidget(rows.size(), 2, parent);
@@ -32,12 +38,13 @@ QTableWidget* makeRowTable(const QStringList& rows, QWidget* parent)
     table->verticalHeader()->setVisible(false);
     table->horizontalHeader()->setStretchLastSection(true);
     table->setHorizontalHeaderLabels({QObject::tr("Field"), QObject::tr("Value")});
+    constexpr auto historyField = QT_TRANSLATE_NOOP("PicturaMetadata", "History");
     for (int i = 0; i < rows.size(); ++i) {
         const int separator = rows[i].indexOf(QLatin1Char('\t'));
         const QString field = separator < 0 ? rows[i] : rows[i].left(separator);
         const QString value = separator < 0 ? QString() : rows[i].mid(separator + 1);
-        table->setItem(i, 0, new QTableWidgetItem(field));
-        if (field == QStringLiteral("History") && value.contains(QLatin1Char('\n'))) {
+        table->setItem(i, 0, new QTableWidgetItem(metadataLabel(field)));
+        if (field == QLatin1String(historyField) && value.contains(QLatin1Char('\n'))) {
             auto* history = new QPlainTextEdit(value, table);
             history->setReadOnly(true);
             table->setCellWidget(i, 1, history);
@@ -92,8 +99,16 @@ FileInfoDialog::FileInfoDialog(const QStringList& readOnlyRows, const QStringLis
     setWindowTitle(tr("File Info"));
     setMinimumSize(640, 420);
 
-    categories_ = {tr("Description"), tr("Camera Data"), tr("IPTC"), tr("IPTC Extension"),
-                   tr("GPS Data"), tr("Origin"), tr("Photoshop"), tr("Raw Data")};
+    static constexpr const char* categories[] = {
+        QT_TRANSLATE_NOOP("pictura::FileInfoDialog", "Description"),
+        QT_TRANSLATE_NOOP("pictura::FileInfoDialog", "Camera Data"),
+        QT_TRANSLATE_NOOP("pictura::FileInfoDialog", "IPTC"),
+        QT_TRANSLATE_NOOP("pictura::FileInfoDialog", "IPTC Extension"),
+        QT_TRANSLATE_NOOP("pictura::FileInfoDialog", "GPS Data"),
+        QT_TRANSLATE_NOOP("pictura::FileInfoDialog", "Origin"),
+        QT_TRANSLATE_NOOP("pictura::FileInfoDialog", "Photoshop"),
+        QT_TRANSLATE_NOOP("pictura::FileInfoDialog", "Raw Data"),
+    };
 
     categoryList_ = new QListWidget(this);
     categoryList_->setObjectName(QStringLiteral("fileInfoCategories"));
@@ -101,9 +116,10 @@ FileInfoDialog::FileInfoDialog(const QStringList& readOnlyRows, const QStringLis
 
     stack_ = new QStackedWidget(this);
     stack_->setObjectName(QStringLiteral("fileInfoStack"));
-    for (const QString& category : categories_) {
-        new QListWidgetItem(category, categoryList_);
-        if (category == tr("Raw Data")) {
+    for (const char* name : categories) {
+        new QListWidgetItem(tr(name), categoryList_);
+        const QString category = QString::fromUtf8(name);
+        if (category == QStringLiteral("Raw Data")) {
             stack_->addWidget(buildRawPage());
         } else if (fieldsBySection_.contains(category)) {
             stack_->addWidget(buildEditablePage(category));
@@ -175,7 +191,7 @@ QWidget* FileInfoDialog::buildEditablePage(const QString& section)
             continue;
         }
         seen.insert(id);
-        const QString label = parts.value(1);
+        const QString label = metadataLabel(parts.value(1));
         QStringList values;
         for (const QString& other : fieldsBySection_.value(section)) {
             const QStringList otherParts = other.split(QLatin1Char('\t'));

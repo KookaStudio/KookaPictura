@@ -1,4 +1,7 @@
 #include "preferences_dialog.h"
+#include "localization.h"
+
+#include <QtCore/QCoreApplication>
 #include "preset_store.h"
 #include <QtWidgets/QMessageBox>
 
@@ -35,24 +38,26 @@ const QString PreferencesDialog::kPerformance = QStringLiteral("Performance");
 const QString PreferencesDialog::kUnits = QStringLiteral("Units & Rulers");
 const QString PreferencesDialog::kGuides = QStringLiteral("Guides, Grid, & Slices");
 const QString PreferencesDialog::kType = QStringLiteral("Type");
-const QString PreferencesDialog::kAgentControl = QStringLiteral("Agent Control");
-const QString PreferencesDialog::kUpdates = QStringLiteral("Updates");
+const QString PreferencesDialog::kAgentControl =
+    QString::fromLatin1(QT_TRANSLATE_NOOP("pictura::PreferencesDialog", "Agent Control"));
+const QString PreferencesDialog::kUpdates =
+    QString::fromLatin1(QT_TRANSLATE_NOOP("pictura::PreferencesDialog", "Updates"));
 
 namespace {
 
 // The CS6 pane list; the real pages are the ones present in `realPages_`.
 const char* const kPaneNames[] = {
-    "General",
-    "Interface",
-    "File Handling",
-    "Performance",
-    "Cursors",
-    "Transparency & Gamut",
-    "Units & Rulers",
-    "Guides, Grid, & Slices",
-    "Plug-ins",
-    "Type",
-    "3D",
+    QT_TRANSLATE_NOOP("pictura::PreferencesDialog", "General"),
+    QT_TRANSLATE_NOOP("pictura::PreferencesDialog", "Interface"),
+    QT_TRANSLATE_NOOP("pictura::PreferencesDialog", "File Handling"),
+    QT_TRANSLATE_NOOP("pictura::PreferencesDialog", "Performance"),
+    QT_TRANSLATE_NOOP("pictura::PreferencesDialog", "Cursors"),
+    QT_TRANSLATE_NOOP("pictura::PreferencesDialog", "Transparency & Gamut"),
+    QT_TRANSLATE_NOOP("pictura::PreferencesDialog", "Units & Rulers"),
+    QT_TRANSLATE_NOOP("pictura::PreferencesDialog", "Guides, Grid, & Slices"),
+    QT_TRANSLATE_NOOP("pictura::PreferencesDialog", "Plug-ins"),
+    QT_TRANSLATE_NOOP("pictura::PreferencesDialog", "Type"),
+    QT_TRANSLATE_NOOP("pictura::PreferencesDialog", "3D"),
 };
 
 struct NamedColor {
@@ -64,11 +69,11 @@ struct NamedColor {
 // Preferences screenshot (#294) and Light Blue from its slice swatch.
 // ponytail: the other presets are approximated in the same 74/255 family.
 const NamedColor kGuideColors[] = {
-    {"Light Blue", QColor(74, 113, 255)}, {"Light Red", QColor(255, 74, 74)},
-    {"Green", QColor(74, 255, 74)},       {"Medium Blue", QColor(74, 74, 255)},
-    {"Yellow", QColor(255, 255, 74)},     {"Magenta", QColor(255, 74, 255)},
-    {"Cyan", QColor(74, 255, 255)},       {"Light Gray", QColor(192, 192, 192)},
-    {"Black", QColor(0, 0, 0)},
+    {QT_TRANSLATE_NOOP("pictura::PreferencesDialog", "Light Blue"), QColor(74, 113, 255)}, {QT_TRANSLATE_NOOP("pictura::PreferencesDialog", "Light Red"), QColor(255, 74, 74)},
+    {QT_TRANSLATE_NOOP("pictura::PreferencesDialog", "Green"), QColor(74, 255, 74)},       {QT_TRANSLATE_NOOP("pictura::PreferencesDialog", "Medium Blue"), QColor(74, 74, 255)},
+    {QT_TRANSLATE_NOOP("pictura::PreferencesDialog", "Yellow"), QColor(255, 255, 74)},     {QT_TRANSLATE_NOOP("pictura::PreferencesDialog", "Magenta"), QColor(255, 74, 255)},
+    {QT_TRANSLATE_NOOP("pictura::PreferencesDialog", "Cyan"), QColor(74, 255, 255)},       {QT_TRANSLATE_NOOP("pictura::PreferencesDialog", "Light Gray"), QColor(192, 192, 192)},
+    {QT_TRANSLATE_NOOP("pictura::PreferencesDialog", "Black"), QColor(0, 0, 0)},
 };
 
 QIcon swatchIcon(const QColor& color)
@@ -83,9 +88,11 @@ QComboBox* colorCombo(const QString& objectName, QWidget* parent)
     auto* combo = new QComboBox(parent);
     combo->setObjectName(objectName);
     for (const NamedColor& preset : kGuideColors) {
-        combo->addItem(swatchIcon(preset.color), QString::fromUtf8(preset.name), preset.color);
+        combo->addItem(swatchIcon(preset.color),
+                       QCoreApplication::translate("pictura::PreferencesDialog", preset.name),
+                       preset.color);
     }
-    combo->addItem(QObject::tr("Custom…"));
+    combo->addItem(QCoreApplication::translate("pictura::PreferencesDialog", "Custom…"));
     return combo;
 }
 
@@ -163,9 +170,13 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     resetPresets->setObjectName(QStringLiteral("preferencesResetPresetLists"));
     settingsLayout->addWidget(resetPresets);
     connect(resetPresets, &QPushButton::clicked, this, [this] {
-        if (QMessageBox::question(this, tr("Reset Preset Lists"),
-            tr("Restore the default preset lists? This removes edits to current lists. Saved libraries are kept."))
-            != QMessageBox::Yes) { return; }
+        QMessageBox confirm(QMessageBox::Question, tr("Reset Preset Lists"),
+            tr("Restore the default preset lists? This removes edits to current lists. Saved libraries are kept."),
+            QMessageBox::Yes | QMessageBox::No, this);
+        confirm.setTextFormat(Qt::PlainText);
+        if (confirm.exec() != QMessageBox::Yes) {
+            return;
+        }
         QString error;
         if (!PresetStore::current().resetAll(&error)) { QMessageBox::warning(this, tr("Reset Preset Lists"), error); }
     });
@@ -204,6 +215,37 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     uiScaleLayout->addWidget(uiScale_);
     uiScaleLayout->addStretch(1);
     interfaceLayout->addWidget(uiScaleRow);
+
+    auto* languageRow = new QWidget(interfacePage);
+    auto* languageLayout = new QHBoxLayout(languageRow);
+    auto* languageLabel = new QLabel(tr("Language"), languageRow);
+    language_ = new QComboBox(languageRow);
+    language_->setObjectName(QStringLiteral("preferencesLanguage"));
+    languageLabel->setBuddy(language_);
+    auto* importTranslation = new QPushButton(tr("Import Translation…"), languageRow);
+    importTranslation->setObjectName(QStringLiteral("preferencesImportTranslation"));
+    languageRestart_ = new QPushButton(tr("Restart Pictura"), languageRow);
+    languageRestart_->setObjectName(QStringLiteral("preferencesRestartLanguage"));
+    languageRestart_->hide();
+    languageLayout->addWidget(languageLabel);
+    languageLayout->addWidget(language_);
+    languageLayout->addWidget(languageRestart_);
+    languageLayout->addWidget(importTranslation);
+    languageLayout->addStretch(1);
+    interfaceLayout->addWidget(languageRow);
+    languageStatus_ = new QLabel(interfacePage);
+    languageStatus_->setObjectName(QStringLiteral("preferencesLanguageStatus"));
+    languageStatus_->setWordWrap(true);
+    languageStatus_->hide();
+    interfaceLayout->addWidget(languageStatus_);
+    connect(language_, &QComboBox::activated, this, [this](int index) {
+        const QString selection = language_->itemData(index).toString();
+        emit languageSelected(selection);
+    });
+    connect(importTranslation, &QPushButton::clicked, this,
+            &PreferencesDialog::importTranslationRequested);
+    connect(languageRestart_, &QPushButton::clicked, this,
+            &PreferencesDialog::languageRestartRequested);
     interfaceLayout->addStretch(1);
     stack_->addWidget(interfacePage);
 
@@ -309,7 +351,7 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     // not match the stack's real-page order, so the row maps by name.
     for (const char* name : kPaneNames) {
         const QString pageName = QString::fromUtf8(name);
-        auto* item = new QListWidgetItem(pageName, pageList_);
+        auto* item = new QListWidgetItem(tr(name), pageList_);
         item->setData(Qt::UserRole, pageName);
         if (!realPages_.contains(pageName)) {
             item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
@@ -332,13 +374,39 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     connect(uiScale_, &QComboBox::currentIndexChanged, this,
             [this]() { emit uiScalePercentChanged(uiScale_->currentData().toInt()); });
     pageList_->setCurrentRow(0);
+    for (auto* label : findChildren<QLabel*>()) {
+        if (label->textFormat() == Qt::AutoText) {
+            label->setTextFormat(Qt::PlainText);
+        }
+    }
+}
+
+void PreferencesDialog::setLanguageChoices(const QString& savedChoice)
+{
+    language_->clear();
+    for (const auto& choice : availableUiLanguages()) {
+        language_->addItem(choice.label, choice.selection);
+    }
+    language_->setCurrentIndex(qMax(0, language_->findData(savedChoice)));
+}
+
+void PreferencesDialog::showLanguageStatus(const QString& message)
+{
+    languageStatus_->setText(message);
+    languageStatus_->setVisible(!message.isEmpty());
+}
+
+void PreferencesDialog::setLanguageRestartPending(bool pending)
+{
+    languageRestart_->setVisible(pending);
 }
 
 void PreferencesDialog::addPage(const QString& name, QWidget* page)
 {
     realPages_.append(name);
     stack_->addWidget(page);
-    (new QListWidgetItem(name, pageList_))->setData(Qt::UserRole, name);
+    const QString title = tr(name.toUtf8().constData());
+    (new QListWidgetItem(title, pageList_))->setData(Qt::UserRole, name);
 }
 
 QCheckBox* PreferencesDialog::makeCheckbox(const QString& key, const QString& label,
@@ -621,7 +689,7 @@ QWidget* PreferencesDialog::buildUnitsPage()
     rulerUnit_ = new QComboBox(units);
     rulerUnit_->setObjectName(QStringLiteral("preferencesRulerUnits"));
     for (int i = 0; i < kRulerUnitCount; ++i) {
-        rulerUnit_->addItem(rulerUnitName(RulerUnit(i)));
+        rulerUnit_->addItem(tr(rulerUnitName(RulerUnit(i)).toUtf8().constData()));
     }
     rulerUnit_->setCurrentIndex(int(RulerUnit::Inches));
     auto* typeUnit = new QComboBox(units);
@@ -719,7 +787,7 @@ QWidget* PreferencesDialog::buildGuidesPage()
     auto* smart = new QGroupBox(tr("Smart Guides"), page);
     auto* smartGrid = new QGridLayout(smart);
     auto* smartColor = colorCombo(QStringLiteral("preferencesSmartGuideColor"), smart);
-    smartColor->setCurrentText(QStringLiteral("Magenta"));
+    smartColor->setCurrentIndex(smartColor->findData(QColor(255, 74, 255)));
     smartGrid->addWidget(new QLabel(tr("Color:"), smart), 0, 0, Qt::AlignRight);
     smartGrid->addWidget(smartColor, 0, 1);
     smartGrid->setColumnStretch(2, 1);

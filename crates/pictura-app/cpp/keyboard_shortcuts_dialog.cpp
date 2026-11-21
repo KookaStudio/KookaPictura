@@ -1,4 +1,5 @@
 #include "keyboard_shortcuts_dialog.h"
+#include <QtCore/QCoreApplication>
 
 #include "commands.h"
 #include "tools.h"
@@ -173,29 +174,29 @@ QString helpText()
 const QList<WorkspaceKey>& workspaceKeys()
 {
     static const QList<WorkspaceKey> keys = {
-        {QKeySequence(Qt::Key_BracketLeft), QT_TR_NOOP("Decrease Brush Size")},
-        {QKeySequence(Qt::Key_BracketRight), QT_TR_NOOP("Increase Brush Size")},
-        {QKeySequence(Qt::SHIFT | Qt::Key_BracketLeft), QT_TR_NOOP("Decrease Brush Hardness")},
-        {QKeySequence(Qt::SHIFT | Qt::Key_BracketRight), QT_TR_NOOP("Increase Brush Hardness")},
-        {QKeySequence(Qt::SHIFT | Qt::ALT | Qt::Key_P), QT_TR_NOOP("Toggle Airbrush")},
+        {QKeySequence(Qt::Key_BracketLeft), QT_TRANSLATE_NOOP("pictura::KeyboardShortcutsDialog", "Decrease Brush Size")},
+        {QKeySequence(Qt::Key_BracketRight), QT_TRANSLATE_NOOP("pictura::KeyboardShortcutsDialog", "Increase Brush Size")},
+        {QKeySequence(Qt::SHIFT | Qt::Key_BracketLeft), QT_TRANSLATE_NOOP("pictura::KeyboardShortcutsDialog", "Decrease Brush Hardness")},
+        {QKeySequence(Qt::SHIFT | Qt::Key_BracketRight), QT_TRANSLATE_NOOP("pictura::KeyboardShortcutsDialog", "Increase Brush Hardness")},
+        {QKeySequence(Qt::SHIFT | Qt::ALT | Qt::Key_P), QT_TRANSLATE_NOOP("pictura::KeyboardShortcutsDialog", "Toggle Airbrush")},
         {QKeySequence(Qt::SHIFT | Qt::ALT | Qt::Key_S),
-         QT_TR_NOOP("Dodge/Burn Shadows / Sponge Saturate")},
-        {QKeySequence(Qt::SHIFT | Qt::ALT | Qt::Key_M), QT_TR_NOOP("Dodge/Burn Midtones")},
-        {QKeySequence(Qt::SHIFT | Qt::ALT | Qt::Key_H), QT_TR_NOOP("Dodge/Burn Highlights")},
-        {QKeySequence(Qt::SHIFT | Qt::ALT | Qt::Key_D), QT_TR_NOOP("Sponge Desaturate")},
-        {QKeySequence(Qt::Key_D), QT_TR_NOOP("Default Foreground/Background Colors")},
-        {QKeySequence(Qt::Key_X), QT_TR_NOOP("Switch Foreground/Background Colors")},
-        {QKeySequence(Qt::Key_F), QT_TR_NOOP("Cycle Screen Modes")},
+         QT_TRANSLATE_NOOP("pictura::KeyboardShortcutsDialog", "Dodge/Burn Shadows / Sponge Saturate")},
+        {QKeySequence(Qt::SHIFT | Qt::ALT | Qt::Key_M), QT_TRANSLATE_NOOP("pictura::KeyboardShortcutsDialog", "Dodge/Burn Midtones")},
+        {QKeySequence(Qt::SHIFT | Qt::ALT | Qt::Key_H), QT_TRANSLATE_NOOP("pictura::KeyboardShortcutsDialog", "Dodge/Burn Highlights")},
+        {QKeySequence(Qt::SHIFT | Qt::ALT | Qt::Key_D), QT_TRANSLATE_NOOP("pictura::KeyboardShortcutsDialog", "Sponge Desaturate")},
+        {QKeySequence(Qt::Key_D), QT_TRANSLATE_NOOP("pictura::KeyboardShortcutsDialog", "Default Foreground/Background Colors")},
+        {QKeySequence(Qt::Key_X), QT_TRANSLATE_NOOP("pictura::KeyboardShortcutsDialog", "Switch Foreground/Background Colors")},
+        {QKeySequence(Qt::Key_F), QT_TRANSLATE_NOOP("pictura::KeyboardShortcutsDialog", "Cycle Screen Modes")},
         // CS6's Quick Mask key, kept free for it.
-        {QKeySequence(Qt::Key_Q), QT_TR_NOOP("Quick Mask Mode")},
-        {QKeySequence(Qt::Key_Tab), QT_TR_NOOP("Show/Hide Panels")},
-        {QKeySequence(Qt::SHIFT | Qt::Key_Tab), QT_TR_NOOP("Show/Hide Panels")},
-        {QKeySequence(Qt::CTRL | Qt::Key_Tab), QT_TR_NOOP("Next Document Window")},
-        {QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Tab), QT_TR_NOOP("Previous Document Window")},
-        {QKeySequence(Qt::Key_Delete), QT_TR_NOOP("Delete / Clear")},
-        {QKeySequence(Qt::Key_Backspace), QT_TR_NOOP("Delete / Clear")},
-        {QKeySequence(Qt::SHIFT | Qt::Key_F1), QT_TR_NOOP("Darker Interface")},
-        {QKeySequence(Qt::SHIFT | Qt::Key_F2), QT_TR_NOOP("Lighter Interface")},
+        {QKeySequence(Qt::Key_Q), QT_TRANSLATE_NOOP("pictura::KeyboardShortcutsDialog", "Quick Mask Mode")},
+        {QKeySequence(Qt::Key_Tab), QT_TRANSLATE_NOOP("pictura::KeyboardShortcutsDialog", "Show/Hide Panels")},
+        {QKeySequence(Qt::SHIFT | Qt::Key_Tab), QT_TRANSLATE_NOOP("pictura::KeyboardShortcutsDialog", "Show/Hide Panels")},
+        {QKeySequence(Qt::CTRL | Qt::Key_Tab), QT_TRANSLATE_NOOP("pictura::KeyboardShortcutsDialog", "Next Document Window")},
+        {QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Tab), QT_TRANSLATE_NOOP("pictura::KeyboardShortcutsDialog", "Previous Document Window")},
+        {QKeySequence(Qt::Key_Delete), QT_TRANSLATE_NOOP("pictura::KeyboardShortcutsDialog", "Delete / Clear")},
+        {QKeySequence(Qt::Key_Backspace), QT_TRANSLATE_NOOP("pictura::KeyboardShortcutsDialog", "Delete / Clear")},
+        {QKeySequence(Qt::SHIFT | Qt::Key_F1), QT_TRANSLATE_NOOP("pictura::KeyboardShortcutsDialog", "Darker Interface")},
+        {QKeySequence(Qt::SHIFT | Qt::Key_F2), QT_TRANSLATE_NOOP("pictura::KeyboardShortcutsDialog", "Lighter Interface")},
     };
     return keys;
 }
