@@ -210,6 +210,9 @@ void ImportSaveCoordinator::finishOpen(quint64 token, OpenOutcome outcome, const
         return;
     }
     finishedOpens_.insert(token);
+    if (outcome != OpenOutcome::Cancelled) {
+        diagnostics_outcome("document.open", outcome == OpenOutcome::Opened);
+    }
     const QString recordPath = recordOpenPaths_.take(token);
     if (outcome == OpenOutcome::Opened && !recordPath.isEmpty()) {
         recordCommand(command_ids::FileOpen,

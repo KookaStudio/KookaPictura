@@ -466,3 +466,20 @@ fn metadata_description_fields_parse() {
     );
     assert_eq!(props.usage_terms.as_deref(), Some("Editorial"));
 }
+
+#[test]
+fn history_round_trips_entities_and_rejects_unreadable_length() {
+    let value = "Fish & chips <hot>\nsecond line 'quoted'";
+    let packet = patch_photoshop_history("", value).unwrap();
+    assert_eq!(photoshop_history(&packet).as_deref(), Some(value));
+    let appended = patch_photoshop_history(&packet, &format!("{value}\nnext")).unwrap();
+    assert_eq!(
+        photoshop_history(&appended).as_deref(),
+        Some(format!("{value}\nnext").as_str())
+    );
+    let attribute = "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"><rdf:Description xmlns:photoshop=\"http://ns.adobe.com/photoshop/1.0/\" photoshop:History=\"Fish &amp; chips &lt;hot&gt;&#10;second line &#39;quoted&#39;\"/></rdf:RDF></x:xmpmeta>";
+    assert_eq!(photoshop_history(attribute).as_deref(), Some(value));
+    let patched = patch_photoshop_history(attribute, value).unwrap();
+    assert_eq!(photoshop_history(&patched).as_deref(), Some(value));
+    assert!(patch_photoshop_history(&packet, &"&".repeat(MAX_VALUE_BYTES / 5 + 1)).is_none());
+}

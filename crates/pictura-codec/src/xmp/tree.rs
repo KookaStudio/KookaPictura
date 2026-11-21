@@ -8,8 +8,8 @@
 use std::collections::HashMap;
 
 use super::scan::{
-    decode_text, push_declarations, restore_declarations, scan_packet, split_qname, str_at,
-    tokenize, RawKind,
+    decode_history_text, decode_text, push_declarations, restore_declarations, scan_packet,
+    split_qname, str_at, tokenize, RawKind,
 };
 use super::{escape_xml, prefix_for, MAX_PACKET_BYTES, RDF_URI};
 
@@ -187,7 +187,12 @@ pub fn read(packet: &str, namespace: &str) -> Tree {
                         if attr_uri != namespace {
                             continue;
                         }
-                        let decoded = decode_text(&bytes[attr.value.0..attr.value.1]);
+                        let decoded =
+                            if namespace == super::PHOTOSHOP_URI && attr_local == "History" {
+                                decode_history_text(&bytes[attr.value.0..attr.value.1])
+                            } else {
+                                decode_text(&bytes[attr.value.0..attr.value.1])
+                            };
                         let mut path = desc_path.clone();
                         path.push(attr_local.to_string());
                         tree.leaves.push(Leaf {
@@ -315,7 +320,13 @@ pub fn read(packet: &str, namespace: &str) -> Tree {
                         tree.elements[element].end = tok.end;
                     }
                     if let Some(text) = frame.text {
-                        let value = String::from_utf8_lossy(&text).trim().to_string();
+                        let value = if namespace == super::PHOTOSHOP_URI
+                            && frame.target_path == ["History"]
+                        {
+                            decode_history_text(&text).text
+                        } else {
+                            String::from_utf8_lossy(&text).trim().to_string()
+                        };
                         if !value.is_empty() {
                             tree.leaves.push(Leaf {
                                 path: frame.target_path.clone(),
@@ -537,7 +548,7 @@ pub fn patch(packet: &str, namespace: &str, updates: &[Update]) -> Option<String
                 return None;
             }
             let body = match update.shape {
-                Shape::Simple => values[0].to_string(),
+                Shape::Simple => escape_xml(values[0]),
                 Shape::LangAlt => format!(
                     "<{rdf}:Alt><{rdf}:li xml:lang=\"x-default\">{}</{rdf}:li></{rdf}:Alt>",
                     escape_xml(values[0])

@@ -13,4 +13,4 @@
 #include "pictura_app/src/cxxqt_object/pdf_export/import.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/web_export.cxxqt.h"
 #include "pictura_app/src/decode_bridge.cxxqt.h"
-#include "pictura_app/src/gpu_probe_bridge.cxxqt.h"
+#include "pictura_app/src/app_runtime_bridge.cxxqt.h"

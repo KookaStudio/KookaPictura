@@ -287,6 +287,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     const auto prefs = loadPreferences();
     preferencesBaseline_ = prefs;
     const SessionState state = pictura::loadSession();
+    restoreHistoryLog(prefs);
     importSave_->loadState(state, prefs);
     gpuCompute_ = prefs.gpuCompute;
     set_memory_usage_percent(prefs.memoryUsagePercent);
@@ -335,6 +336,10 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     const auto [gpuAvailable, gpuCandidatesAvailable] = probeFrameGpuAvailability();
     gpuAvailable_ = gpuAvailable;
     gpuCandidatesAvailable_ = gpuCandidatesAvailable;
+    diagnostics_outcome("gpu.initialize", gpuAvailable_);
+    if (!gpuAvailable_) {
+        diagnostics_outcome("gpu.fallback", false);
+    }
     // No candidate means the preference cannot be honored: read it as off so the
     // Preferences checkbox and the session agree with the CPU backend. A
     // safe-mode reset path keeps the stored value so off-and-on can retry.
@@ -756,14 +761,6 @@ void PicturaMainWindow::showFileInfo()
         }
     };
     runDialog(dialog, this);
-}
-
-void PicturaMainWindow::showOpenDialog()
-{
-    const QStringList paths = getOpenFileNames(this, tr("Open"),
-                                               documentDirectory(activeFilePath()),
-                                               openFileFilters());
-    openUserPaths(paths);
 }
 
 void PicturaMainWindow::setScreenMode(ScreenMode mode)

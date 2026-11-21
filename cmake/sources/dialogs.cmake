@@ -49,6 +49,7 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/preferences_agent_page.cpp
     crates/pictura-app/cpp/preferences_agent_page.h
     crates/pictura-app/cpp/preferences_dialog.cpp
+    crates/pictura-app/cpp/preferences_history_log.cpp
     crates/pictura-app/cpp/proof_setup_dialog.cpp
     crates/pictura-app/cpp/proof_setup_dialog.h
     crates/pictura-app/cpp/preferences_dialog.h

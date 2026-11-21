@@ -422,6 +422,21 @@ pub(super) fn photoshop_block(bytes: &[u8]) -> Option<Vec<u8>> {
         .map(|data| data.into_owned())
 }
 
+/// IFD0's standard XMP packet, limited before copying indirect data.
+pub(super) fn xmp_packet(bytes: &[u8]) -> Option<Vec<u8>> {
+    let (order, offset) = parse_header(bytes).ok()?;
+    let entry = read_ifd(bytes, order, offset)
+        .ok()?
+        .into_iter()
+        .find(|entry| {
+            entry.tag == TAG_XMP
+                && matches!(entry.typ, 1 | 7)
+                && entry.count as usize <= crate::xmp::MAX_PACKET_BYTES
+        })?;
+    let data = entry_data(bytes, order, &entry).ok()?;
+    super::valid_xmp(&data).then(|| data.into_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

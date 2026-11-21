@@ -62,6 +62,9 @@ pub(in crate::cxxqt_object) struct DocumentSession {
     pub(in crate::cxxqt_object) quick_selection_snapshot: Option<QuickSelectionSnapshot>,
     /// The recorded states.
     pub(in crate::cxxqt_object) history: History,
+    pub(in crate::cxxqt_object) history_log: crate::history_log::DocumentLog,
+    pub(in crate::cxxqt_object) history_log_detail: Option<String>,
+    pub(in crate::cxxqt_object) history_log_save_warning: Option<&'static str>,
     /// The last destructive effect's pre-effect and post-effect pixels, for
     /// `Edit > Fade`. Cleared by any later edit or history restore.
     pub(in crate::cxxqt_object) fade: Option<FadeState>,
@@ -274,6 +277,9 @@ impl DocumentSession {
         self.set_compatibility(Default::default());
         self.doc.set(doc);
         self.history = history;
+        self.history_log = Default::default();
+        self.history_log_detail = None;
+        self.history_log_save_warning = None;
         self.pdf_password = pdf_password;
         self.print_resources = Default::default();
         self.print_revision = 0;
@@ -351,6 +357,12 @@ impl DocumentSession {
         };
         self.history
             .capture_live_with(doc, &self.selection, target, label, hint);
+        if let Some((marker, value)) = self.history_log.take_marker() {
+            self.history
+                .set_history_marker(marker, value.map(std::sync::Arc::<str>::from));
+        }
+        self.history_log
+            .edit(label, self.history_log_detail.take().as_deref());
         self.history.set_current_quick_mask(
             self.quick_mask
                 .active
@@ -493,6 +505,7 @@ impl DocumentSession {
         if was_read_only && !self.recheck_compatibility_on_restore {
             return None;
         }
+        let previous_marker = self.history.history_marker().0;
         self.doc.read_only = false;
         let restored = match self.doc.as_mut() {
             Some(doc) => step(&mut self.history, doc, &mut self.selection, target),
@@ -504,6 +517,13 @@ impl DocumentSession {
         };
         self.doc.read_only = was_read_only;
         let restored = restored?;
+        let (marker, value) = self.history.history_marker();
+        if marker != previous_marker {
+            if let Some(value) = value {
+                self.history_log
+                    .restore_history(value.map(|value| value.to_string()));
+            }
+        }
         let quick_mask = self
             .history
             .current_snapshot()
@@ -781,6 +801,12 @@ impl PictureViewRust {
         self.auto_blend.cancel();
         self.auto_align.cancel();
         self.adjust_jobs.cancel();
+    }
+
+    pub(crate) fn set_history_log_name(&mut self, name: &str, opened: bool) {
+        if self.session.doc.is_some() {
+            self.session.history_log.set_name(name, opened);
+        }
     }
 
     /// Drop the panel previews that were never committed.

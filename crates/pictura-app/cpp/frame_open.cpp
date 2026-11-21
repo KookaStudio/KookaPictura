@@ -4,9 +4,18 @@
 
 #include "frame_includes.h"
 
+#include "dialogs.h"
 #include "import_save_coordinator.h"
 
 namespace pictura {
+
+void PicturaMainWindow::showOpenDialog()
+{
+    const QStringList paths = getOpenFileNames(this, tr("Open"),
+                                               documentDirectory(activeFilePath()),
+                                               openFileFilters());
+    openUserPaths(paths);
+}
 
 int PicturaMainWindow::indexOfView(PictureView* view) const
 {

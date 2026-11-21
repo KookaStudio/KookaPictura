@@ -67,6 +67,10 @@ fields! {
     "general" / "pickerChoice": i32 = 0;
     "general" / "useShiftKeyForToolSwitch": bool = true;
     "general" / "zoomResizesWindows": bool = false;
+    "general" / "historyLogEnabled": bool = false;
+    "general" / "historyLogDestination": i32 = 0;
+    "general" / "historyLogVerbosity": i32 = 0;
+    "general" / "historyLogPath": String = String::new();
     "updates" / "checkForUpdatesOnLaunch": bool = true;
     "type" / "typePlaceholderText": bool = true;
     "type" / "typeShowAsianOptions": bool = false;
@@ -217,6 +221,7 @@ fn normalize(key: &str, value: Json) -> Result<Json, String> {
         "renderIntent" => Json::from(bounded(0..=3, 1)),
         "pickerChoice" | "rawSettingsStore" => Json::from(bounded(0..=1, 0)),
         "agentApprovalMode" => Json::from(int().clamp(0, 2)),
+        "historyLogDestination" | "historyLogVerbosity" => Json::from(int().clamp(0, 2)),
         "fontPreviewSize" => Json::from(int().clamp(0, 5)),
         "autoSaveMinutes" if ![5, 10, 15, 30, 60].contains(&int()) => Json::from(10),
         _ => value,

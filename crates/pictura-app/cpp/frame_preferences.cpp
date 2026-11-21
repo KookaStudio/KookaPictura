@@ -5,6 +5,7 @@
 #include "panels/character_panel.h"
 #include "panels/paragraph_panel.h"
 #include "agent_control.h"
+#include "api/engine_bridge.h"
 #include "api/paint_bridge.h"
 #include "api/type_api.h"
 #include "frame_update.h"
@@ -17,9 +18,32 @@
 
 #include <QtCore/QDir>
 #include <QtCore/QStandardPaths>
+#include <QtCore/QTimer>
 #include <QtWidgets/QMessageBox>
+#include <QtWidgets/QStatusBar>
 
 namespace pictura {
+
+void PicturaMainWindow::restoreHistoryLog(const Preferences& prefs)
+{
+    historyLog_ = {
+        prefs.historyLogEnabled
+            && (prefs.historyLogDestination == 0 || !prefs.historyLogPath.isEmpty()),
+        prefs.historyLogDestination,
+        prefs.historyLogVerbosity,
+        prefs.historyLogPath,
+    };
+    history_log_configure(historyLog_.enabled, historyLog_.destination,
+                          historyLog_.verbosity, historyLog_.path);
+    auto* notices = new QTimer(this);
+    connect(notices, &QTimer::timeout, this, [this] {
+        const QString notice = history_log_take_notice();
+        if (!notice.isEmpty()) {
+            statusBar()->showMessage(notice, 8000);
+        }
+    });
+    notices->start(250);
+}
 
 // The implemented Preferences leaves; the other CS6 panes stay disabled and
 // are no-ops (their command-tree enablement is unchanged).
@@ -50,6 +74,14 @@ void PicturaMainWindow::showPreferences(const QString& page)
 {
     if (!preferencesDialog_) {
         preferencesDialog_ = new PreferencesDialog(this);
+        preferencesDialog_->setHistoryLogSettings(historyLog_);
+        connect(preferencesDialog_, &PreferencesDialog::historyLogChanged, this,
+                [this](const HistoryLogSettings& settings) {
+                    historyLog_ = settings;
+                    history_log_configure(settings.enabled, settings.destination,
+                                          settings.verbosity, settings.path);
+                    saveSession();
+                });
         preferencesDialog_->setShiftKeyForToolSwitch(useShiftKeyForToolSwitch_);
         preferencesDialog_->setOpenDocumentsAsTabs(openDocumentsAsTabs_);
         preferencesDialog_->setFloatingDocumentDocking(floatingDocumentDocking_);

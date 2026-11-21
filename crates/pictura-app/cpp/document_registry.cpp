@@ -6,6 +6,7 @@
 
 #include "api/document_api.h"
 #include "api/document_bridge.h"
+#include "api/engine_bridge.h"
 #include "canvas_scrollbars.h"
 #include "document_float_window.h"
 #include "document_tile_host.h"
@@ -199,6 +200,9 @@ void DocumentRegistry::setDocumentName(int index, const QString& name)
 {
     if (DocEntry* doc = docAt(index)) {
         doc->displayName = name;
+        if (!doc->loading && doc->view) {
+            history_log_document(*doc->view, documentDisplayName(*doc), false);
+        }
         updateTabTitle(index);
     }
 }
@@ -207,6 +211,9 @@ void DocumentRegistry::setDocumentPath(int index, const QString& path)
 {
     if (DocEntry* doc = docAt(index)) {
         doc->path = path;
+        if (!doc->loading && doc->view) {
+            history_log_document(*doc->view, documentDisplayName(*doc), false);
+        }
     }
 }
 
@@ -292,6 +299,7 @@ int DocumentRegistry::addDocument(PictureView* view, const QString& path, bool a
 
     docs_.append(entry);
     const int index = docs_.size() - 1;
+    history_log_document(*view, documentDisplayName(*entry), !path.isEmpty());
     emit documentsChanged();
     addTabWindow(window);
     installCloseButton(window);
@@ -425,6 +433,7 @@ void DocumentRegistry::finishLoadingDocument(int index)
     }
     DocEntry& entry = *doc;
     entry.loading = false;
+    history_log_document(*entry.view, documentDisplayName(entry), true);
     DocWindow* window = entry.windows.first();
     if (window->card) {
         window->card->hide();
@@ -473,6 +482,9 @@ void DocumentRegistry::removeDocument(int index)
     DocEntry* entry = docAt(index);
     if (!entry) {
         return;
+    }
+    if (!entry->loading && entry->view && entry->view->has_document()) {
+        history_log_close(documentDisplayName(*entry));
     }
     // Owners connected to this signal (frame dialogs, the coordinator's open
     // maps/recovery/sessions, the panel host) clean up before destruction.

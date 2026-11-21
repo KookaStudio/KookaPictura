@@ -7,6 +7,7 @@ use crate::error::PsdError;
 use super::RasterMetadata;
 
 const XMP_SIGNATURE: &[u8] = b"http://ns.adobe.com/xap/1.0/\0";
+pub(super) const XMP_MAX_BYTES: usize = u16::MAX as usize - 2 - XMP_SIGNATURE.len();
 const PHOTOSHOP_SIGNATURE: &[u8] = b"Photoshop 3.0\0";
 /// The most IRB bytes one APP13 segment holds; a longer block runs on in
 /// the next segment, as Photoshop splits it.
@@ -95,10 +96,15 @@ fn push_segment(out: &mut Vec<u8>, marker: u8, payload: &[u8]) -> Result<(), Psd
     Ok(())
 }
 
-/// The IRB of every APP13 Photoshop segment before the scan, joined in file
-/// order; `None` when there is none or the markers are malformed.
-pub(super) fn photoshop_block(bytes: &[u8]) -> Option<Vec<u8>> {
+pub(super) struct JpegResources<'a> {
+    pub(super) photoshop: Option<Vec<u8>>,
+    pub(super) xmp: Option<&'a [u8]>,
+}
+
+/// The joined APP13 resources and the first well-formed standard APP1 XMP packet.
+pub(super) fn resources(bytes: &[u8]) -> Option<JpegResources<'_>> {
     let mut block: Option<Vec<u8>> = None;
+    let mut xmp = None;
     let mut at = 2;
     while at + 4 <= bytes.len() && bytes[at] == 0xFF {
         let marker = bytes[at + 1];
@@ -115,10 +121,17 @@ pub(super) fn photoshop_block(bytes: &[u8]) -> Option<Vec<u8>> {
             if let Some(irb) = payload.strip_prefix(PHOTOSHOP_SIGNATURE) {
                 block.get_or_insert_with(Vec::new).extend_from_slice(irb);
             }
+        } else if marker == 0xE1 && xmp.is_none() {
+            xmp = payload
+                .strip_prefix(XMP_SIGNATURE)
+                .filter(|packet| super::valid_xmp(packet));
         }
         at += 2 + length.max(2);
     }
-    block
+    Some(JpegResources {
+        photoshop: block,
+        xmp,
+    })
 }
 
 fn push_icc(out: &mut Vec<u8>, icc: &[u8]) -> Result<(), PsdError> {
@@ -198,7 +211,10 @@ mod tests {
         let mut plain = vec![0xFF, 0xD8];
         push_segment(&mut plain, 0xE0, b"JFIF\0").expect("app0");
         plain.extend_from_slice(&[0xFF, 0xDA, 0, 2, 0xFF, 0xD9]);
-        assert_eq!(photoshop_block(&plain), None);
+        assert_eq!(
+            resources(&plain).and_then(|metadata| metadata.photoshop),
+            None
+        );
 
         let out = embed(&plain, &metadata).expect("embed");
         assert_eq!(
@@ -206,7 +222,9 @@ mod tests {
             2,
             "split over two APP13 segments"
         );
-        let block = photoshop_block(&out).expect("the block reads back");
+        let block = resources(&out)
+            .and_then(|metadata| metadata.photoshop)
+            .expect("the block reads back");
         assert_eq!(Some(block), metadata.photoshop_block());
     }
 }

@@ -7,6 +7,8 @@
 mod jpeg;
 mod tiff;
 
+pub const JPEG_XMP_MAX_BYTES: usize = jpeg::XMP_MAX_BYTES;
+
 use pictura_core::Document;
 
 use crate::error::PsdError;
@@ -117,25 +119,37 @@ pub(crate) fn embed_tiff_tail(
     tiff::embed_tail(len, big, ifd, metadata).map(Some)
 }
 
-/// The Photoshop image-resource section a JPEG (APP13) or TIFF (tag 34377)
-/// carries, for a document opened from it; `None` for another format or a
-/// file without one. An ICC profile block is left out: the opened pixels
-/// are not converted from it, so it would mis-tag them. Blocks the parser
-/// cannot frame stay byte-for-byte at the end.
+fn valid_xmp(bytes: &[u8]) -> bool {
+    !bytes.is_empty()
+        && bytes.len() <= crate::xmp::MAX_PACKET_BYTES
+        && std::str::from_utf8(bytes).is_ok_and(crate::xmp::is_well_formed)
+}
+
+/// JPEG/TIFF Photoshop resources with the standard container XMP packet in
+/// resource 1060. The imported pixels have their own profile policy, so an ICC
+/// resource in the Photoshop block is left out. Unparsed bytes stay at the end.
 pub fn raster_image_resources(bytes: &[u8]) -> Option<Vec<u8>> {
-    let section = if bytes.starts_with(&[0xFF, 0xD8]) {
-        jpeg::photoshop_block(bytes)?
+    let (section, xmp) = if bytes.starts_with(&[0xFF, 0xD8]) {
+        let resources = jpeg::resources(bytes)?;
+        (resources.photoshop, resources.xmp.map(<[u8]>::to_vec))
     } else {
-        tiff::photoshop_block(bytes)?
+        (tiff::photoshop_block(bytes), tiff::xmp_packet(bytes))
     };
+    if section.is_none() && xmp.is_none() {
+        return None;
+    }
+    let section = section.unwrap_or_default();
     let (resources, consumed) = decode_section(&section);
-    if !resources.iter().any(|r| r.id == ICC_PROFILE) {
+    if xmp.is_none() && !resources.iter().any(|r| r.id == ICC_PROFILE) {
         return Some(section);
     }
-    let kept: Vec<_> = resources
+    let mut kept: Vec<_> = resources
         .into_iter()
-        .filter(|r| r.id != ICC_PROFILE)
+        .filter(|r| r.id != ICC_PROFILE && (xmp.is_none() || r.id != XMP_METADATA))
         .collect();
+    if let Some(packet) = xmp {
+        kept.push(frame_image_resource(XMP_METADATA, "", &packet));
+    }
     let mut out = encode_image_resources(&kept);
     out.extend_from_slice(&section[consumed..]);
     Some(out)
@@ -144,6 +158,27 @@ pub fn raster_image_resources(bytes: &[u8]) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn standard_raster_xmp_round_trips() {
+        let packet = b"<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"><rdf:Description xmlns:p=\"http://ns.adobe.com/photoshop/1.0/\"><p:History>first edit</p:History></rdf:Description></rdf:RDF>";
+        let metadata = RasterMetadata {
+            xmp: Some(packet.to_vec()),
+            ..RasterMetadata::default()
+        };
+        for (format, image) in [
+            ("jpg", &b"\xff\xd8\xff\xd9"[..]),
+            ("tif", &b"II\x2a\0\x08\0\0\0\0\0\0\0\0\0"[..]),
+            ("tif", &b"MM\0\x2a\0\0\0\x08\0\0\0\0\0\0"[..]),
+        ] {
+            let written = embed_raster_metadata(image, format, &metadata).unwrap();
+            let section = raster_image_resources(&written).unwrap();
+            let (resources, _) = decode_section(&section);
+            assert_eq!(resources.len(), 1);
+            assert_eq!(resources[0].id, XMP_METADATA);
+            assert_eq!(resources[0].data.as_slice(), packet);
+        }
+    }
 
     #[test]
     fn raster_open_reads_the_block_without_its_profile() {

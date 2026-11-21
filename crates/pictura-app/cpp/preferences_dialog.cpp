@@ -139,6 +139,7 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
     generalForm->addRow(tr("Theme"), themeFamily_);
     makeCheckbox(QStringLiteral("zoomResizesWindows"), tr("Zoom Resizes Windows"),
                  generalPage);
+    addHistoryLogControls(generalForm, generalPage);
 
     pickerChoice_ = new QComboBox(generalPage);
     pickerChoice_->setObjectName(QStringLiteral("preferencesPickerChoice"));

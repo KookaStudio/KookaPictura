@@ -31,6 +31,8 @@ pub(in crate::cxxqt_object) struct SaveJob {
     start_metadata: u64,
     generation: u64,
     copy: bool,
+    history_log: Option<crate::history_log::StagedHistory>,
+    history_log_omitted: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -61,7 +63,9 @@ fn save_start_with_compatibility(
         ..Default::default()
     };
     rust.session.skipped_xmp_mirror = false;
+    rust.session.history_log_save_warning = None;
     if rust.session.read_only()
+        || crate::history_log::destination_conflicts(path)
         || super::super::super::open_jobs::compatibility::destination_is_protected(Path::new(path))
     {
         return false;
@@ -119,7 +123,11 @@ fn save_start_with_compatibility(
     let generation = session.document_generation;
     let cache = Arc::clone(&session.encode_cache);
     pictura_codec::warm_encode_idents(doc_ref);
-    let doc = doc_ref.clone();
+    let mut doc = doc_ref.clone();
+    let (history_log, history_log_omitted) = match session.history_log.stage_document(&mut doc) {
+        Ok(history) => (history, false),
+        Err(()) => (None, true),
+    };
     let print_resources = session.print_resources.clone();
     let delay = rust.save_delay_for_test;
     let sync_failure = rust.save_sync_failure_for_test;
@@ -260,6 +268,8 @@ fn save_start_with_compatibility(
         start_metadata,
         generation,
         copy,
+        history_log,
+        history_log_omitted,
     });
     true
 }
@@ -355,6 +365,7 @@ fn finish(rust: &mut PictureViewRust) -> NativeSaveResult {
             )),
         )
     });
+    crate::diagnostic_logging::outcome("document.save", outcome == SaveOutcome::Saved);
     let replaced = rust.session.document_generation != job.generation;
     let result = NativeSaveResult {
         code: worker_result
@@ -372,6 +383,8 @@ fn finish(rust: &mut PictureViewRust) -> NativeSaveResult {
     }
     let session = &mut rust.session;
     session.skipped_xmp_mirror = worker_result.unwrap_or(false);
+    session.history_log_save_warning = (outcome == SaveOutcome::Saved && job.history_log_omitted)
+        .then_some(crate::history_log::APPEND_OMITTED);
     if job.copy {
         return result;
     }
@@ -384,6 +397,12 @@ fn finish(rust: &mut PictureViewRust) -> NativeSaveResult {
         return result;
     }
 
+    if let (Some(history), Some(doc)) = (job.history_log, session.doc.as_mut()) {
+        if !session.history_log.acknowledge(doc, history) {
+            session.history_log_save_warning = Some(crate::history_log::REBASE_FAILED);
+        }
+    }
+    session.history_log.set_filename(&job.path);
     rust.path = Some(job.path);
     session.saved_id = job.start_history;
     session.saved_metadata_revision = job.start_metadata;

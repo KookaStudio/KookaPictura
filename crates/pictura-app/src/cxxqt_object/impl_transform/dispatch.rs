@@ -335,7 +335,11 @@ impl qobject::PictureView {
                     .map(|()| Some(Outcome::default()))
                     .map_err(document_engine_error)
             },
-            |rust, _| {
+            move |rust, _| {
+                if crate::history_log::detailed() {
+                    rust.session.history_log_detail =
+                        Some(format!("image.image.size width={width} height={height}"));
+                }
                 rust.session.clear_geometry_selection();
                 Edit::Full
             },

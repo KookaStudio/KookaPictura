@@ -54,7 +54,10 @@ pub(super) fn apply_filter_params(
             None => Edit::Full,
         }
     };
-    view.as_mut().edit("Filter", |_| outcome);
+    view.as_mut().edit("Filter", |rust| {
+        rust.session.history_log_detail = crate::history_log::filter_detail(&kind_s, &params_v);
+        outcome
+    });
     if let Some(capture) = fade_capture {
         let label = super::super::filter_map::descriptor::descriptor(&kind_s)
             .map_or_else(|| kind_s.clone(), |spec| spec.label.to_string());

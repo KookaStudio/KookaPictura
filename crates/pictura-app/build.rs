@@ -155,7 +155,7 @@ fn main() {
             .files([
                 "src/cxxqt_object.rs",
                 "src/decode_bridge.rs",
-                "src/gpu_probe_bridge.rs",
+                "src/app_runtime_bridge.rs",
                 "src/preferences_bridge.rs",
                 "src/cxxqt_object/actions_engine.rs",
                 "src/cxxqt_object/engine_tables.rs",

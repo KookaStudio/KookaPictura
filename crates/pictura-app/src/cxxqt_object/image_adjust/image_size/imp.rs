@@ -113,6 +113,11 @@ pub(super) fn image_size_apply(
             Ok(Some(Outcome::default()))
         },
         move |rust, _| {
+            if crate::history_log::detailed() {
+                rust.session.history_log_detail = Some(format!(
+                    "image.image.size width={width} height={height} resolution={ppi}"
+                ));
+            }
             if resize.is_some() {
                 rust.session.clear_geometry_selection();
                 Edit::Full

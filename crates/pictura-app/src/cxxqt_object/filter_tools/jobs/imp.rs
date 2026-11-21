@@ -80,6 +80,7 @@ pub(super) struct CommitJob {
     handle: JoinHandle<Result<Committed, Error>>,
     source_state: (u64, u64, u64, u64, Option<u64>),
     last_filter: Option<(String, Vec<f64>)>,
+    label: String,
 }
 
 /// A worker's commit: the new document and history, and what to refresh.
@@ -356,6 +357,7 @@ pub(in crate::cxxqt_object) fn commit_op_start(
     let mut history = rust.session.history.clone();
     let gpu = rust.gpu_compute;
     let delay = rust.filter_jobs.commit_delay_for_test;
+    let job_label = label.clone();
     let panic_for_test = std::mem::take(&mut rust.filter_jobs.panic_for_test);
     history.panic_after_truncation_for_test = panic_for_test == 2;
     let handle = std::thread::Builder::new().spawn(move || {
@@ -390,6 +392,7 @@ pub(in crate::cxxqt_object) fn commit_op_start(
         handle,
         last_filter,
         source_state: commit_source_state(rust),
+        label: job_label,
     });
     true
 }
@@ -512,6 +515,10 @@ pub(super) fn commit_filters(
     match region {
         Some(rect) => view.as_mut().refresh_region(rect),
         None => view.as_mut().recomposite(),
+    }
+    if let Some((kind, params)) = &last_filter {
+        view.as_mut().rust_mut().session.history_log_detail =
+            crate::history_log::filter_detail(kind, params);
     }
     view.as_mut().record(&label);
     if last_filter.is_some() {
@@ -671,6 +678,11 @@ pub(in crate::cxxqt_object) fn commit_finish(
     rust.session.history = committed.history;
     let refresh = committed.refresh;
     rust.session.doc.set(Some(committed.doc));
+    let detail = job
+        .last_filter
+        .as_ref()
+        .and_then(|(kind, params)| crate::history_log::filter_detail(kind, params));
+    rust.session.history_log.edit(&job.label, detail.as_deref());
     if job.last_filter.is_some() {
         rust.last_filter = job.last_filter;
     }
@@ -729,6 +741,7 @@ pub(in crate::cxxqt_object) fn test_commit_finish(
         handle,
         last_filter: None,
         source_state: commit_source_state(rust),
+        label: "Filter".into(),
     });
     commit_finish(rust).ok().flatten()
 }

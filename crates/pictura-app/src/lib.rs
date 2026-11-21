@@ -11,11 +11,13 @@ mod build_config;
 #[cfg(test)]
 #[global_allocator]
 static HEAP: pictura_testkit::PeakAlloc = pictura_testkit::PeakAlloc::system();
+mod app_runtime_bridge;
 pub mod cxxqt_object;
 mod decode_bridge;
+mod diagnostic_logging;
 pub mod gpu;
-mod gpu_probe_bridge;
 mod history;
+mod history_log;
 pub(crate) mod layer_target;
 mod mcp_entry;
 mod preferences_bridge;
