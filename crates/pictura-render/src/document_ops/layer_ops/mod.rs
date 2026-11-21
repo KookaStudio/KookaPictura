@@ -167,8 +167,9 @@ pub use shape_layer::{
     shape_layer_rect,
 };
 pub use shape_style::{
-    copy_shape_attributes, paste_shape_attributes, resize_shape, set_shape_fill, set_shape_stroke,
-    shape_bounds, shape_fill, shape_stroke, ShapeAttributes, ShapeStroke,
+    copy_shape_attributes, paste_shape_attributes, resize_shape, set_shape_fill,
+    set_shape_fill_content, set_shape_stroke, shape_bounds, shape_fill, shape_fill_content,
+    shape_stroke, ShapeAttributes, ShapeFill, ShapeStroke, ShapeStrokeFill,
 };
 pub use smart_object::{
     can_convert_smart_object_to_layers, can_convert_to_smart_object,

@@ -39,11 +39,11 @@ fn shapes_doc() -> Document {
     let layer = crate::resolve_path_mut(&mut d, &path).unwrap();
     crate::set_shape_stroke(
         layer,
-        Some(&crate::ShapeStroke {
-            color: [0, 160, 0],
-            width: 4,
-            position: crate::StrokePosition::Outside,
-        }),
+        Some(&crate::ShapeStroke::solid(
+            [0, 160, 0],
+            4,
+            crate::StrokePosition::Outside,
+        )),
     );
     d
 }
@@ -119,11 +119,11 @@ fn shape_layer_region_profile() {
     let layer = crate::resolve_path_mut(&mut d, &path).unwrap();
     crate::set_shape_stroke(
         layer,
-        Some(&crate::ShapeStroke {
-            color: [0, 0, 0],
-            width: 3,
-            position: crate::StrokePosition::Center,
-        }),
+        Some(&crate::ShapeStroke::solid(
+            [0, 0, 0],
+            3,
+            crate::StrokePosition::Center,
+        )),
     );
     time(&d, "4 shapes, one stroked away from the region");
 }

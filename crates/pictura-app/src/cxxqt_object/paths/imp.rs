@@ -299,6 +299,33 @@ pub(super) fn path_overlay_points(view: &PictureView) -> Vec<f64> {
     fields
 }
 
+pub(super) fn path_target_outline(view: &PictureView) -> Vec<f64> {
+    path(view)
+        .map(|path| super::super::shape_coords::encode(&path.subpaths))
+        .unwrap_or_default()
+}
+
+pub(super) fn path_replace_target_outline(mut view: Pin<&mut PictureView>, coords: &[f64]) -> bool {
+    let Some(subpaths) = super::super::shape_coords::decode(coords) else {
+        return false;
+    };
+    begin_drawing(view.as_mut());
+    let Some(before) = path(&view) else {
+        return false;
+    };
+    let mut after = before.clone();
+    after.subpaths = subpaths;
+    after.finish_editing();
+    if after == before {
+        return false;
+    }
+    if edit(view.as_mut(), |path| *path = after).is_none() {
+        return false;
+    }
+    view.as_mut().edit("Path Operation", |_| Edit::Meta);
+    true
+}
+
 fn point_fields(p: &PathPoint) -> [f64; 9] {
     let flag = |b: bool| if b { 1.0 } else { 0.0 };
     let (ix, iy) = p.in_handle.unwrap_or(p.anchor);

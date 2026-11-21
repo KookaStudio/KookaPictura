@@ -294,11 +294,11 @@ fn psd_tools_reads_a_shape_stroke_and_no_fill() {
     );
     let layer = pictura_render::resolve_path_mut(&mut doc, &path).unwrap();
     assert!(pictura_render::set_shape_fill(layer, None));
-    let stroke = pictura_render::ShapeStroke {
-        color: [10, 200, 30],
-        width: 3,
-        position: pictura_render::StrokePosition::Inside,
-    };
+    let stroke = pictura_render::ShapeStroke::solid(
+        [10, 200, 30],
+        3,
+        pictura_render::StrokePosition::Inside,
+    );
     assert!(pictura_render::set_shape_stroke(layer, Some(&stroke)));
     let file = std::env::temp_dir().join(format!("pictura-stroke-{}.psd", std::process::id()));
     std::fs::write(&file, pictura_codec::write_psd(&doc).expect("writes")).expect("write");

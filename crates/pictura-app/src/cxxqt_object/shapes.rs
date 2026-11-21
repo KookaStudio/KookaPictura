@@ -30,8 +30,14 @@ pub mod ffi {
     /// / end, width and length in % of the weight, concavity %); the Custom
     /// Shape's index (kind 4 Line, 5 Custom Shape); `align_edges` snaps
     /// straight edges to the pixel grid. A Shape-mode layer is filled unless
-    /// `no_fill`, and stroked when `stroke` (`stroke_color` `0xAARRGGBB`,
-    /// `stroke_width` px, `stroke_align` 0 inside / 1 centre / 2 outside).
+    /// `no_fill` (`fill_kind` 0 none / 1 solid / 2 gradient / 3 pattern with
+    /// its payload), and stroked when `stroke` (`stroke_kind`, `stroke_color`
+    /// `0xAARRGGBB`, `stroke_width` px, `stroke_align` 0 inside / 1 centre /
+    /// 2 outside, `stroke_line` 0 solid / 1 dashed / 2 dotted). `path_operation`
+    /// 0 new shape / 1 combine / 2 subtract / 3 intersect / 4 exclude,
+    /// `snap_to_pixels`, `proportion` (width / height), the Fill Pixels
+    /// `fill_mode` / `fill_opacity` / `fill_antialias`, and a flat `paths`
+    /// replacement outline complete the spec.
     #[namespace = "pictura"]
     struct ShapeSpec {
         kind: i32,
@@ -61,10 +67,23 @@ pub mod ffi {
         custom_preset: Vec<u8>,
         align_edges: bool,
         no_fill: bool,
+        fill_kind: i32,
+        fill_gradient: Vec<u8>,
+        fill_pattern: Vec<u8>,
         stroke: bool,
+        stroke_kind: i32,
         stroke_color: u32,
+        stroke_gradient: Vec<u8>,
+        stroke_pattern: Vec<u8>,
         stroke_width: f64,
         stroke_align: i32,
+        stroke_line: i32,
+        path_operation: i32,
+        snap_to_pixels: bool,
+        proportion: f64,
+        fill_mode: i32,
+        fill_opacity: f64,
+        fill_antialias: bool,
     }
 
     unsafe extern "C++" {
@@ -119,6 +138,36 @@ pub mod ffi {
 
         /// The active shape layer as `[width, height, fill_on, fill_argb, stroke_on, stroke_argb, stroke_width, stroke_align]` (flags 0/1, colours `0xAARRGGBB`); empty when the active layer is not a shape layer.
         fn shape_active(view: &PictureView) -> Vec<f64>;
+
+        /// The active shape layer's full appearance as JSON: fill/stroke kind (0 none, 1 solid, 2 gradient, 3 pattern), colour, gradient/pattern payload, width, align, and line type; empty without a shape layer.
+        fn shape_active_style(view: &PictureView) -> QString;
+
+        /// Fill the active shape layer from a style kind (`kind` 0 None / 1 Solid / 2 Gradient / 3 Pattern), colour, and payload; one "Change Shape Fill" state. False (no state) when there is no active shape layer or nothing changed.
+        fn shape_set_active_fill_style(
+            view: Pin<&mut PictureView>,
+            kind: i32,
+            argb: u32,
+            gradient: &str,
+            pattern: &str,
+        ) -> bool;
+
+        /// Stroke the active shape layer from a style kind and line type; one "Change Shape Stroke" state. False (no state) as for `shape_set_active_fill_style`.
+        fn shape_set_active_stroke_style(
+            view: Pin<&mut PictureView>,
+            kind: i32,
+            argb: u32,
+            gradient: &str,
+            pattern: &str,
+            width: f64,
+            align: i32,
+            line: i32,
+        ) -> bool;
+
+        /// The active shape layer's outline in the flat anchor/handle form; empty without a shape layer.
+        fn shape_active_outline(view: &PictureView) -> Vec<f64>;
+
+        /// Replace the active shape layer's outline from the flat form; one "Path Operation" state. False (no state) when there is no shape layer or nothing changed.
+        fn shape_replace_active_outline(view: Pin<&mut PictureView>, coords: &[f64]) -> bool;
 
         /// Fill the active shape layer with `argb`, or leave it unfilled (`on` false); one "Change Shape Fill" state. False (no state) when there is no active shape layer or nothing changed.
         fn shape_set_active_fill(view: Pin<&mut PictureView>, on: bool, argb: u32) -> bool;

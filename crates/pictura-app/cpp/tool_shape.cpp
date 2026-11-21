@@ -27,12 +27,16 @@
 
 #include "api/layers_bridge.h"
 
+#include <QtCore/QJsonDocument>
+#include <QtCore/QJsonObject>
 #include <QtCore/QLineF>
 #include <QtCore/QObject>
+#include <QtCore/QVector>
 #include <QtGui/QPainterPath>
 
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <memory>
 
 namespace pictura {
@@ -55,6 +59,111 @@ int shapeKind(ToolId id)
     default:
         return 0;
     }
+}
+
+::rust::Vec<std::uint8_t> bytesOf(const QString& text)
+{
+    ::rust::Vec<std::uint8_t> out;
+    const QByteArray bytes = text.toUtf8();
+    out.reserve(std::size_t(bytes.size()));
+    for (const char value : bytes) {
+        out.push_back(std::uint8_t(value));
+    }
+    return out;
+}
+
+QPainterPath pathFromCoords(const ::rust::Vec<double>& coords)
+{
+    QPainterPath path;
+    const int length = int(coords.size());
+    for (int a = 0; a < length;) {
+        const bool marker = std::isnan(coords[a]);
+        const bool closed = !marker || coords[a + 1] != 0.0;
+        if (marker) {
+            a += 6;
+        }
+        int end = a;
+        while (end < length && !std::isnan(coords[end])) {
+            end += 6;
+        }
+        if (end - a >= 12) {
+            path.moveTo(coords[a], coords[a + 1]);
+            for (int i = a; i + 6 < end || (closed && i < end); i += 6) {
+                const int j = i + 6 < end ? i + 6 : a;
+                path.cubicTo(QPointF(coords[i + 4], coords[i + 5]),
+                             QPointF(coords[j + 2], coords[j + 3]),
+                             QPointF(coords[j], coords[j + 1]));
+            }
+            if (closed) {
+                path.closeSubpath();
+            }
+        }
+        a = end;
+    }
+    return path;
+}
+
+::rust::Vec<double> encodePath(const QPainterPath& path)
+{
+    ::rust::Vec<double> out;
+    int index = 0;
+    while (index < path.elementCount()) {
+        if (path.elementAt(index).type != QPainterPath::MoveToElement) {
+            ++index;
+            continue;
+        }
+        struct Point {
+            QPointF anchor;
+            QPointF in;
+            QPointF out;
+            bool hasIn = false;
+            bool hasOut = false;
+        };
+        QVector<Point> points;
+        const auto start = path.elementAt(index);
+        points.push_back(Point{QPointF(start.x, start.y), {}, {}, false, false});
+        ++index;
+        while (index < path.elementCount()
+               && path.elementAt(index).type != QPainterPath::MoveToElement) {
+            const auto element = path.elementAt(index);
+            if (element.type == QPainterPath::CurveToElement) {
+                if (index + 2 >= path.elementCount()) {
+                    break;
+                }
+                const auto control2 = path.elementAt(index + 1);
+                const auto end = path.elementAt(index + 2);
+                points.last().out = QPointF(element.x, element.y);
+                points.last().hasOut = true;
+                points.push_back(Point{QPointF(end.x, end.y),
+                                       QPointF(control2.x, control2.y), {}, true, false});
+                index += 3;
+                continue;
+            }
+            if (element.type == QPainterPath::LineToElement) {
+                points.push_back(Point{QPointF(element.x, element.y), {}, {}, false, false});
+            }
+            ++index;
+        }
+        const bool closed = points.size() > 2 && points.first().anchor == points.last().anchor;
+        if (closed) {
+            points.pop_back();
+        }
+        out.push_back(std::numeric_limits<double>::quiet_NaN());
+        out.push_back(closed ? 1.0 : 0.0);
+        out.push_back(0.0);
+        out.push_back(0.0);
+        out.push_back(0.0);
+        out.push_back(0.0);
+        for (const Point& point : points) {
+            out.push_back(point.anchor.x());
+            out.push_back(point.anchor.y());
+            out.push_back(point.hasIn ? point.in.x() : point.anchor.x());
+            out.push_back(point.hasIn ? point.in.y() : point.anchor.y());
+            out.push_back(point.hasOut ? point.out.x() : point.anchor.x());
+            out.push_back(point.hasOut ? point.out.y() : point.anchor.y());
+        }
+    }
+    return out;
 }
 
 class ShapeToolHandler : public ToolHandler {
@@ -176,10 +285,25 @@ private:
         spec.smooth_indents = o.smoothIndents;
         spec.align_edges = o.alignEdges;
         spec.no_fill = !o.fillEnabled;
+        spec.fill_kind = o.fillEnabled ? o.fillKind : 0;
+        spec.fill_gradient = bytesOf(o.fillGradient);
+        spec.fill_pattern = bytesOf(o.fillPattern);
         spec.stroke = o.strokeEnabled;
+        spec.stroke_kind = o.strokeKind;
         spec.stroke_color = o.strokeColor.rgba();
+        spec.stroke_gradient = bytesOf(o.strokeGradient);
+        spec.stroke_pattern = bytesOf(o.strokePattern);
         spec.stroke_width = o.strokeWidth;
         spec.stroke_align = o.strokeAlign;
+        spec.stroke_line = o.strokeLine;
+        spec.path_operation = o.pathOperation;
+        spec.snap_to_pixels = o.snapToPixels;
+        spec.proportion = o.geometry == 3 && o.proportionHeight > 0.0
+                              ? o.proportionWidth / o.proportionHeight
+                              : 0.0;
+        spec.fill_mode = o.paintMode;
+        spec.fill_opacity = o.paintOpacity;
+        spec.fill_antialias = o.paintAntialias;
         return spec;
     }
 
@@ -276,9 +400,58 @@ private:
         land(ctx, v, spec);
     }
 
+    // Combine the new outline with the target through Qt's path booleans.
+    // False means "no target and Combine", so the caller creates a new layer.
+    bool applyPathOperation(PictureView& v, const ShapeSpec& spec, int op)
+    {
+        const bool pathMode = shape_->get().mode == 1;
+        const ::rust::Vec<double> existing =
+            pathMode ? path_target_outline(v) : shape_active_outline(v);
+        if (existing.empty() && !pathMode && op == 1) {
+            return false;
+        }
+        const QPainterPath before = existing.empty() ? QPainterPath() : pathFromCoords(existing);
+        const QPainterPath drawn = outlinePath(spec);
+        QPainterPath result;
+        switch (op) {
+        case 1:
+            result = before.isEmpty() ? drawn : before.united(drawn);
+            break;
+        case 2:
+            result = before.subtracted(drawn);
+            break;
+        case 3:
+            result = before.intersected(drawn);
+            break;
+        case 4:
+            result = before.subtracted(drawn).united(drawn.subtracted(before));
+            break;
+        default:
+            return false;
+        }
+        const ::rust::Vec<double> coords = encodePath(result);
+        if (coords.empty()) {
+            return true;
+        }
+        const ::rust::Slice<const double> flat(coords.data(), coords.size());
+        return pathMode ? path_replace_target_outline(v, flat)
+                        : shape_replace_active_outline(v, flat);
+    }
+
     bool land(ToolServices& ctx, PictureView& v, const ShapeSpec& spec)
     {
         const std::uint32_t color = fillColor(ctx).rgba();
+        const int operation = shape_->get().pathOperation;
+        if (operation != 0 && shape_->get().mode != 2) {
+            if (applyPathOperation(v, spec, operation)) {
+                syncFromLayer(ctx);
+                return true;
+            }
+            if (operation != 1) {
+                syncFromLayer(ctx);
+                return false;
+            }
+        }
         switch (shape_->get().mode) {
         case 1:
             return shape_add_path(v, spec);
@@ -310,8 +483,8 @@ private:
         }
     }
 
-    // The active shape layer's size, fill, and stroke into the options, so the
-    // bar shows them; marked so the change is not applied straight back.
+    // The active shape layer's size and full appearance into the options, so
+    // the bar shows them; marked so the change is not applied straight back.
     void syncFromLayer(ToolServices& ctx)
     {
         PictureView* v = ctx.view();
@@ -325,31 +498,48 @@ private:
         if (info.size() == 8) {
             o.activeWidth = info[0];
             o.activeHeight = info[1];
-            o.fillEnabled = info[2] != 0.0;
-            if (o.fillEnabled) {
-                o.fillColor = QColor::fromRgba(QRgb(info[3]));
+            const QJsonObject root =
+                QJsonDocument::fromJson(shape_active_style(*v).toUtf8()).object();
+            const QJsonObject fill = root.value(QStringLiteral("fill")).toObject();
+            const int fillKind = fill.value(QStringLiteral("kind")).toInt(1);
+            o.fillEnabled = fillKind != 0;
+            o.fillKind = qMax(1, fillKind);
+            if (fillKind == 1) {
+                o.fillColor = QColor::fromRgba(QRgb(quint32(fill.value(QStringLiteral("color")).toDouble())));
             }
-            o.strokeEnabled = info[4] != 0.0;
-            if (o.strokeEnabled) {
-                o.strokeColor = QColor::fromRgba(QRgb(info[5]));
-                o.strokeWidth = info[6];
-                o.strokeAlign = int(info[7]);
+            o.fillGradient = fill.value(QStringLiteral("gradient")).toString();
+            o.fillPattern = fill.value(QStringLiteral("pattern")).toString();
+            const QJsonObject stroke = root.value(QStringLiteral("stroke")).toObject();
+            const int strokeKind = stroke.value(QStringLiteral("kind")).toInt(1);
+            o.strokeEnabled = strokeKind != 0;
+            o.strokeKind = qMax(1, strokeKind);
+            if (strokeKind == 1) {
+                o.strokeColor = QColor::fromRgba(QRgb(quint32(stroke.value(QStringLiteral("color")).toDouble())));
             }
+            o.strokeGradient = stroke.value(QStringLiteral("gradient")).toString();
+            o.strokePattern = stroke.value(QStringLiteral("pattern")).toString();
+            o.strokeWidth = stroke.value(QStringLiteral("width")).toDouble(3.0);
+            o.strokeAlign = stroke.value(QStringLiteral("align")).toInt(1);
+            o.strokeLine = stroke.value(QStringLiteral("line")).toInt(0);
         } else {
             o.activeWidth = o.activeHeight = 0.0;
         }
         if (o.activeWidth != before.activeWidth || o.activeHeight != before.activeHeight
-            || o.fillEnabled != before.fillEnabled || o.fillColor != before.fillColor
-            || o.strokeEnabled != before.strokeEnabled || o.strokeColor != before.strokeColor
-            || o.strokeWidth != before.strokeWidth || o.strokeAlign != before.strokeAlign) {
+            || o.fillEnabled != before.fillEnabled || o.fillKind != before.fillKind
+            || o.fillColor != before.fillColor || o.fillGradient != before.fillGradient
+            || o.fillPattern != before.fillPattern
+            || o.strokeEnabled != before.strokeEnabled || o.strokeKind != before.strokeKind
+            || o.strokeColor != before.strokeColor || o.strokeGradient != before.strokeGradient
+            || o.strokePattern != before.strokePattern || o.strokeWidth != before.strokeWidth
+            || o.strokeAlign != before.strokeAlign || o.strokeLine != before.strokeLine) {
             syncing_ = true;
             shape_->set(o);
             syncing_ = false;
         }
     }
 
-    // An options-bar edit of the fill, stroke, or W / H restyles or resizes
-    // the active shape layer; each differing aspect is one history state.
+    // An options-bar edit of the appearance or W / H restyles or resizes the
+    // active shape layer; each differing aspect is one history state.
     void applyToLayer(ToolServices& ctx)
     {
         PictureView* v = ctx.view();
@@ -362,16 +552,18 @@ private:
         }
         const ShapeOptions o = shape_->get();
         const QRgb fill = fillColor(ctx).rgba();
-        if (o.fillEnabled != (info[2] != 0.0) || (o.fillEnabled && fill != QRgb(info[3]))) {
-            shape_set_active_fill(*v, o.fillEnabled, fill);
-        }
-        const QRgb stroke = o.strokeColor.rgba();
-        if (o.strokeEnabled != (info[4] != 0.0)
-            || (o.strokeEnabled
-                && (stroke != QRgb(info[5]) || qRound(o.strokeWidth) != qRound(info[6])
-                    || o.strokeAlign != int(info[7])))) {
-            shape_set_active_stroke(*v, o.strokeEnabled, stroke, o.strokeWidth, o.strokeAlign);
-        }
+        const QByteArray fillGradient = o.fillGradient.toUtf8();
+        const QByteArray fillPattern = o.fillPattern.toUtf8();
+        shape_set_active_fill_style(*v, o.fillEnabled ? o.fillKind : 0, fill,
+                                    ::rust::Str(fillGradient.constData(), size_t(fillGradient.size())),
+                                    ::rust::Str(fillPattern.constData(), size_t(fillPattern.size())));
+        const QByteArray strokeGradient = o.strokeGradient.toUtf8();
+        const QByteArray strokePattern = o.strokePattern.toUtf8();
+        shape_set_active_stroke_style(
+            *v, o.strokeEnabled ? o.strokeKind : 0, o.strokeColor.rgba(),
+            ::rust::Str(strokeGradient.constData(), size_t(strokeGradient.size())),
+            ::rust::Str(strokePattern.constData(), size_t(strokePattern.size())),
+            o.strokeWidth, o.strokeAlign, o.strokeLine);
         if (o.activeWidth > 0.0 && o.activeHeight > 0.0
             && (qAbs(o.activeWidth - info[0]) > 1e-3 || qAbs(o.activeHeight - info[1]) > 1e-3)) {
             shape_resize_active(*v, o.activeWidth, o.activeHeight);

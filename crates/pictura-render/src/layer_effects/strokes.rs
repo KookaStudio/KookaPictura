@@ -43,6 +43,39 @@ pub enum StrokeFill {
     },
 }
 
+/// The authored stroke line type (`Lntp`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StrokeLine {
+    Solid,
+    Dashed,
+    Dotted,
+}
+
+/// An authored dash pattern in pixels (`DshP`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DashPattern {
+    pub on: f64,
+    pub off: f64,
+}
+
+impl DashPattern {
+    /// The pattern a line type implies for a `size`-px stroke.
+    pub fn for_line(line: StrokeLine, size: u32) -> Option<Self> {
+        let width = f64::from(size.max(1));
+        match line {
+            StrokeLine::Solid => None,
+            StrokeLine::Dashed => Some(Self {
+                on: width * 2.0,
+                off: width * 2.0,
+            }),
+            StrokeLine::Dotted => Some(Self {
+                on: (width * 0.5).max(1.0),
+                off: (width * 1.5).max(2.0),
+            }),
+        }
+    }
+}
+
 /// The typed stroke decoded from a layer's `lfx2` block.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Stroke {
@@ -56,6 +89,10 @@ pub struct Stroke {
     pub size: u32,
     /// `Styl` (typeID `FStl`), default Outside.
     pub position: StrokePosition,
+    /// `Lntp`; Solid when absent.
+    pub line: StrokeLine,
+    /// `DshP`; derived from `line` and `size` when the line is not solid.
+    pub dash: Option<DashPattern>,
 }
 
 /// The stroke solid colour from `Clr ` (absent → black), or `None` for a
@@ -89,6 +126,33 @@ fn solid_color(frfx: &DescValue) -> Option<[u8; 3]> {
 /// A missing `lfx2`, a missing or wrongly-typed `FrFX`, an unknown data
 /// version, a wrong-typed or non-finite value, or a parse error is `None`.
 /// Never panics.
+fn decode_line(frfx: &DescValue) -> Option<StrokeLine> {
+    match desc_item(frfx, b"Lntp") {
+        None => Some(StrokeLine::Solid),
+        Some(DescValue::Text(value)) => match value.as_str() {
+            "solid" => Some(StrokeLine::Solid),
+            "dashed" => Some(StrokeLine::Dashed),
+            "dotted" => Some(StrokeLine::Dotted),
+            _ => None,
+        },
+        Some(_) => None,
+    }
+}
+
+fn decode_dash(frfx: &DescValue) -> Option<Option<DashPattern>> {
+    match desc_item(frfx, b"DshP") {
+        None => Some(None),
+        Some(DescValue::Text(value)) => {
+            let (on, off) = value.split_once(',')?;
+            let on: f64 = on.trim().parse().ok()?;
+            let off: f64 = off.trim().parse().ok()?;
+            (on.is_finite() && off.is_finite() && on > 0.0 && off > 0.0)
+                .then_some(Some(DashPattern { on, off }))
+        }
+        Some(_) => None,
+    }
+}
+
 pub fn decode_stroke(layer: &Layer) -> Option<Stroke> {
     let data = &layer.extra_block(b"lfx2")?.data;
     if data.len() < 8 {
@@ -156,14 +220,19 @@ pub fn decode_stroke(layer: &Layer) -> Option<Stroke> {
         }
         Some(_) => return None,
     };
+    let line = decode_line(frfx)?;
+    let size = num_clamped(frfx, b"Sz  ", 3.0, 1.0, MAX_SIZE)?.round() as u32;
+    let dash = decode_dash(frfx)?.or_else(|| DashPattern::for_line(line, size));
     Some(Stroke {
         enabled: bool_or(frfx, b"enab", false)?,
         present: bool_or(frfx, b"present", false)?,
         blend_mode,
         fill,
         opacity: num_clamped(frfx, b"Opct", 100.0, 0.0, MAX_OPACITY)?,
-        size: num_clamped(frfx, b"Sz  ", 3.0, 1.0, MAX_SIZE)?.round() as u32,
+        size,
         position,
+        line,
+        dash,
     })
 }
 
@@ -244,6 +313,10 @@ pub(super) fn build_stroke(
                 .map(|(a, b)| (a - b).clamp(0.0, 1.0))
                 .collect()
         }
+    };
+    let band = match stroke.dash {
+        Some(dash) => apply_dash(layer, &band, (px0, py0, pw, ph), size as f64 + 1.0, dash),
+        None => band,
     };
     // The gradient buffer is generated over the layer rect (aligned) or the
     // document (unaligned); both leave every `padded` sample in range, and the
@@ -344,6 +417,122 @@ pub(super) fn build_stroke(
         }
     }
     vec![writer.finish()]
+}
+
+/// Cut `band` into `dash` gaps along the layer's vector-mask subpaths. A layer
+/// without a vector mask keeps the solid band.
+fn apply_dash(
+    layer: &Layer,
+    band: &[f32],
+    (px0, py0, pw, ph): (i32, i32, usize, usize),
+    radius: f64,
+    dash: DashPattern,
+) -> Vec<f32> {
+    let Some(mask) = layer.vector_mask.as_ref().filter(|mask| !mask.disabled) else {
+        return band.to_vec();
+    };
+    let mut hit = vec![false; pw * ph];
+    let mut any = false;
+    let period = dash.on + dash.off;
+    if period <= 0.0 {
+        return band.to_vec();
+    }
+    for subpath in &mask.subpaths {
+        if subpath.points.len() < 2 {
+            continue;
+        }
+        let mut points: Vec<(f64, f64)> = subpath
+            .points
+            .iter()
+            .map(|p| (p[0] as f64 / 256.0, p[1] as f64 / 256.0))
+            .collect();
+        if subpath.closed && points.first() != points.last() {
+            points.push(points[0]);
+        }
+        let total: f64 = points
+            .windows(2)
+            .map(|pair| (pair[1].0 - pair[0].0).hypot(pair[1].1 - pair[0].1))
+            .sum();
+        if total <= 0.0 {
+            continue;
+        }
+        let mut arc = 0.0;
+        while arc < total {
+            let end = (arc + dash.on).min(total);
+            draw_dash_interval(&points, arc, end, radius, (px0, py0, pw, ph), &mut hit);
+            any = true;
+            arc += period;
+        }
+    }
+    if !any {
+        return band.to_vec();
+    }
+    band.iter()
+        .zip(hit)
+        .map(|(&value, on)| if on { value } else { 0.0 })
+        .collect()
+}
+
+fn draw_dash_interval(
+    points: &[(f64, f64)],
+    start: f64,
+    end: f64,
+    radius: f64,
+    (px0, py0, pw, ph): (i32, i32, usize, usize),
+    hit: &mut [bool],
+) {
+    let mut arc = 0.0;
+    for pair in points.windows(2) {
+        let (a, b) = (pair[0], pair[1]);
+        let length = (b.0 - a.0).hypot(b.1 - a.1);
+        if length <= 0.0 {
+            continue;
+        }
+        let seg_start = arc;
+        arc += length;
+        let lo = start.max(seg_start);
+        let hi = end.min(arc);
+        if hi <= lo {
+            continue;
+        }
+        let t0 = (lo - seg_start) / length;
+        let t1 = (hi - seg_start) / length;
+        let from = (a.0 + (b.0 - a.0) * t0, a.1 + (b.1 - a.1) * t0);
+        let to = (a.0 + (b.0 - a.0) * t1, a.1 + (b.1 - a.1) * t1);
+        draw_capsule(from, to, radius, (px0, py0, pw, ph), hit);
+    }
+}
+
+fn draw_capsule(
+    from: (f64, f64),
+    to: (f64, f64),
+    radius: f64,
+    (px0, py0, pw, ph): (i32, i32, usize, usize),
+    hit: &mut [bool],
+) {
+    let (dx, dy) = (to.0 - from.0, to.1 - from.1);
+    let length2 = dx * dx + dy * dy;
+    if length2 <= 0.0 {
+        return;
+    }
+    let (px1, py1) = (px0 + pw as i32, py0 + ph as i32);
+    let min_x = (from.0.min(to.0) - radius).floor() as i32;
+    let max_x = (from.0.max(to.0) + radius).ceil() as i32;
+    let min_y = (from.1.min(to.1) - radius).floor() as i32;
+    let max_y = (from.1.max(to.1) + radius).ceil() as i32;
+    for y in min_y.max(py0)..=max_y.min(py1 - 1) {
+        for x in min_x.max(px0)..=max_x.min(px1 - 1) {
+            let point = (x as f64 + 0.5, y as f64 + 0.5);
+            let t = ((point.0 - from.0) * dx + (point.1 - from.1) * dy) / length2;
+            if !(0.0..=1.0).contains(&t) {
+                continue;
+            }
+            let distance = (point.0 - (from.0 + dx * t)).hypot(point.1 - (from.1 + dy * t));
+            if distance <= radius {
+                hit[(y - py0) as usize * pw + (x - px0) as usize] = true;
+            }
+        }
+    }
 }
 
 fn rgb_f32(c: [u8; 3]) -> [f32; 3] {

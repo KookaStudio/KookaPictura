@@ -88,6 +88,8 @@ pub struct ShapeOptions {
     pub weight: f64,
     pub arrows: Arrowheads,
     pub custom: usize,
+    /// A fixed width / height ratio for the box tools; `None` is unconstrained.
+    pub proportion: Option<f64>,
 }
 
 /// The Line's arrowheads: at the `start` and / or `end`, `width` and `length`
@@ -129,6 +131,7 @@ impl ShapeOptions {
             weight: 1.0,
             arrows: Arrowheads::default(),
             custom: 0,
+            proportion: None,
         }
     }
 }
@@ -155,7 +158,14 @@ pub fn outline(
         ShapeKind::CustomShape => custom::aspect(options.custom),
         _ => 1.0,
     };
-    outline_in_box(options, drag_rect(from, to, shift.then_some(aspect), alt))
+    let constrain = if shift {
+        Some(aspect)
+    } else if options.kind == ShapeKind::CustomShape {
+        None
+    } else {
+        options.proportion
+    };
+    outline_in_box(options, drag_rect(from, to, constrain, alt))
 }
 
 /// The closed outline of `options.kind` filling the box `(x, y, w, h)`, as the
@@ -621,6 +631,19 @@ mod tests {
 
     fn opts(kind: ShapeKind) -> ShapeOptions {
         ShapeOptions::new(kind, 10.0, 5)
+    }
+
+    #[test]
+    fn proportional_drag_uses_the_ratio() {
+        let mut o = opts(ShapeKind::Rectangle);
+        o.proportion = Some(2.0);
+        let s = outline(o, (0.0, 0.0), (40.0, 10.0), false, false).unwrap();
+        let (l, t, r, b) = bounds(&s);
+        assert!(near(l, 0.0) && near(t, 0.0));
+        assert!(near(r - l, 40.0) && near(b - t, 20.0));
+        let square = outline(o, (0.0, 0.0), (40.0, 10.0), true, false).unwrap();
+        let (l, t, r, b) = bounds(&square);
+        assert!(near(r - l, 40.0) && near(b - t, 40.0), "Shift squares");
     }
 
     fn anchors(s: &Subpath) -> Vec<(f64, f64)> {

@@ -19,12 +19,19 @@
 #include "preset_store.h"
 
 #include "color_picker_dialog.h"
+#include "gradient_fill_dialog.h"
 #include "icons.h"
 #include "panels/numeric_field.h"
+#include "pattern_fill_dialog.h"
 
 #include "api/layers_bridge.h"
 
+#include <QtCore/QJsonDocument>
+#include <QtCore/QJsonObject>
 #include <QtCore/QSignalBlocker>
+#include <QtCore/QStringList>
+#include <QtGui/QLinearGradient>
+#include <QtGui/QActionGroup>
 #include <QtGui/QPainter>
 #include <QtGui/QPixmap>
 #include <QtWidgets/QButtonGroup>
@@ -62,6 +69,36 @@ QIcon swatchIcon(bool on, const QColor& color)
     painter.setPen(QColor(0x40, 0x40, 0x40));
     painter.drawRect(0, 0, 21, 15);
     return QIcon(pixmap);
+}
+
+// A Fill / Stroke swatch for a solid, gradient, or pattern source.
+QIcon appearanceIcon(bool on, int kind, const QColor& color)
+{
+    if (!on) {
+        return swatchIcon(false, color);
+    }
+    if (kind == 2) {
+        QPixmap pixmap(22, 16);
+        QPainter painter(&pixmap);
+        QLinearGradient gradient(0, 0, 22, 0);
+        gradient.setColorAt(0.0, Qt::black);
+        gradient.setColorAt(1.0, Qt::white);
+        painter.fillRect(0, 0, 22, 16, gradient);
+        painter.setPen(QColor(0x40, 0x40, 0x40));
+        painter.drawRect(0, 0, 21, 15);
+        return QIcon(pixmap);
+    }
+    if (kind == 3) {
+        QPixmap pixmap(22, 16);
+        pixmap.fill(Qt::white);
+        QPainter painter(&pixmap);
+        painter.fillRect(0, 0, 11, 8, QColor(0x80, 0x80, 0x80));
+        painter.fillRect(11, 8, 11, 8, QColor(0x80, 0x80, 0x80));
+        painter.setPen(QColor(0x40, 0x40, 0x40));
+        painter.drawRect(0, 0, 21, 15);
+        return QIcon(pixmap);
+    }
+    return swatchIcon(true, color);
 }
 
 // The three path-menu glyphs, drawn rather than shipped: combined squares,
@@ -190,12 +227,43 @@ QWidget* OptionsBar::buildShapePage(ToolId id)
         height->setValue(active ? o.activeHeight : 0.0);
     });
 
-    layout->addWidget(disabledMenuButton(page, 0, QStringLiteral("optionsShapePathOperations"),
-                                         QCoreApplication::translate("PicturaUi", "Path operations")));
+    auto* pathOps = new QToolButton(page);
+    pathOps->setObjectName(QStringLiteral("optionsShapePathOperations"));
+    pathOps->setIcon(pathGlyph(0));
+    pathOps->setToolTip(QCoreApplication::translate("PicturaUi", "Path operations"));
+    pathOps->setPopupMode(QToolButton::InstantPopup);
+    auto* pathOpsMenu = new QMenu(pathOps);
+    auto* pathOpsGroup = new QActionGroup(pathOpsMenu);
+    pathOpsGroup->setExclusive(true);
+    const QStringList operations = {
+        QCoreApplication::translate("PicturaUi", "New Shape"),
+        QCoreApplication::translate("PicturaUi", "Combine Shapes"),
+        QCoreApplication::translate("PicturaUi", "Subtract From Shape Area"),
+        QCoreApplication::translate("PicturaUi", "Intersect Shape Areas"),
+        QCoreApplication::translate("PicturaUi", "Exclude Overlapping Shape Areas"),
+    };
+    QList<QAction*> operationActions;
+    for (int i = 0; i < operations.size(); ++i) {
+        QAction* action = pathOpsMenu->addAction(operations[i]);
+        action->setObjectName(QStringLiteral("optionsShapePathOperations%1").arg(i));
+        action->setCheckable(true);
+        action->setData(i);
+        pathOpsGroup->addAction(action);
+        operationActions.push_back(action);
+        connect(action, &QAction::triggered, this,
+                [update, i]() { update([i](ShapeOptions& o) { o.pathOperation = i; }); });
+    }
+    pathOps->setMenu(pathOpsMenu);
+    layout->addWidget(pathOps);
     layout->addWidget(disabledMenuButton(page, 1, QStringLiteral("optionsShapePathAlignment"),
                                          QCoreApplication::translate("PicturaUi", "Path alignment")));
     layout->addWidget(disabledMenuButton(page, 2, QStringLiteral("optionsShapePathArrangement"),
                                          QCoreApplication::translate("PicturaUi", "Path arrangement")));
+    syncs->push_back([operationActions](const ShapeOptions& o) {
+        if (QAction* action = operationActions.value(o.pathOperation)) {
+            action->setChecked(true);
+        }
+    });
 
     layout->addWidget(id == ToolId::Line ? buildArrowheadsButton(page, initial, update)
                                          : buildShapeGeometryButton(id, page, update, *syncs));
@@ -233,6 +301,45 @@ QWidget* OptionsBar::buildShapePage(ToolId id)
         layout->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Shape:"), page));
         layout->addWidget(buildShapePicker(page, update, *syncs));
     }
+
+    // Fill Pixels mode: the paint blend, opacity, and anti-aliasing CS6 shows
+    // only while the mode selector is on Pixels.
+    auto* pixelsMode = new QComboBox(page);
+    pixelsMode->setObjectName(QStringLiteral("optionsShapePixelsMode"));
+    pixelsMode->setToolTip(QCoreApplication::translate("PicturaUi", "Set the fill blend mode"));
+    pixelsMode->addItem(QCoreApplication::translate("PicturaUi", "Normal"), 0);
+    pixelsMode->addItem(QCoreApplication::translate("PicturaUi", "Dissolve"), 1);
+    pixelsMode->addItem(QCoreApplication::translate("PicturaUi", "Behind"), 2);
+    pixelsMode->addItem(QCoreApplication::translate("PicturaUi", "Clear"), 3);
+    pixelsMode->addItem(QCoreApplication::translate("PicturaUi", "Multiply"), 4);
+    layout->addWidget(pixelsMode);
+    auto* pixelsOpacity = new NumericField(
+        QCoreApplication::translate("PicturaUi", "Opacity:"),
+        numericConfig(0, 100, 1, 0, QStringLiteral("%"), true,
+                      QStringLiteral("optionsShapePixelsOpacity")),
+        page);
+    layout->addWidget(pixelsOpacity);
+    auto* pixelsAntialias =
+        new QCheckBox(QCoreApplication::translate("PicturaUi", "Anti-aliased"), page);
+    pixelsAntialias->setObjectName(QStringLiteral("optionsShapePixelsAntialias"));
+    layout->addWidget(pixelsAntialias);
+    connect(pixelsMode, &QComboBox::currentIndexChanged, this,
+            [update, pixelsMode](int) {
+                update([pixelsMode](ShapeOptions& o) { o.paintMode = pixelsMode->currentData().toInt(); });
+            });
+    connect(pixelsOpacity, &NumericField::valueChanged, this,
+            [update](double v) { update([v](ShapeOptions& o) { o.paintOpacity = qRound(v); }); });
+    connect(pixelsAntialias, &QCheckBox::toggled, this,
+            [update](bool on) { update([on](ShapeOptions& o) { o.paintAntialias = on; }); });
+    syncs->push_back([pixelsMode, pixelsOpacity, pixelsAntialias](const ShapeOptions& o) {
+        const bool pixels = o.mode == 2;
+        pixelsMode->setVisible(pixels);
+        pixelsOpacity->setVisible(pixels);
+        pixelsAntialias->setVisible(pixels);
+        pixelsMode->setCurrentIndex(pixelsMode->findData(o.paintMode));
+        pixelsOpacity->setValue(o.paintOpacity);
+        pixelsAntialias->setChecked(o.paintAntialias);
+    });
 
     auto* alignEdges = new QCheckBox(QCoreApplication::translate("PicturaUi", "Align Edges"), page);
     alignEdges->setObjectName(QStringLiteral("optionsShapeAlignEdges"));
@@ -280,11 +387,10 @@ void OptionsBar::buildShapeAppearance(QWidget* page, QHBoxLayout* layout,
         none->setObjectName(button->objectName() + QStringLiteral("None"));
         QAction* solid = menu->addAction(QCoreApplication::translate("PicturaUi", "Solid Color..."));
         solid->setObjectName(button->objectName() + QStringLiteral("Solid"));
-        for (const QString& unsupported : {QCoreApplication::translate("PicturaUi", "Gradient"), QCoreApplication::translate("PicturaUi", "Pattern")}) {
-            QAction* action = menu->addAction(unsupported);
-            action->setEnabled(false);
-            action->setToolTip(QCoreApplication::translate("PicturaUi", "%1: not implemented yet").arg(unsupported));
-        }
+        QAction* gradient = menu->addAction(QCoreApplication::translate("PicturaUi", "Gradient..."));
+        gradient->setObjectName(button->objectName() + QStringLiteral("Gradient"));
+        QAction* pattern = menu->addAction(QCoreApplication::translate("PicturaUi", "Pattern..."));
+        pattern->setObjectName(button->objectName() + QStringLiteral("Pattern"));
         button->setMenu(menu);
         connect(none, &QAction::triggered, this, [update, fill]() {
             update([fill](ShapeOptions& o) { (fill ? o.fillEnabled : o.strokeEnabled) = false; });
@@ -305,10 +411,54 @@ void OptionsBar::buildShapeAppearance(QWidget* page, QHBoxLayout* layout,
             update([fill, picked](ShapeOptions& s) {
                 if (fill) {
                     s.fillEnabled = true;
+                    s.fillKind = 1;
                     s.fillColor = picked;
                 } else {
                     s.strokeEnabled = true;
+                    s.strokeKind = 1;
                     s.strokeColor = picked;
+                }
+            });
+        });
+        connect(gradient, &QAction::triggered, this, [this, update, fill, button]() {
+            const ShapeOptions o = controller_ ? shape_->get() : ShapeOptions{};
+            QString payload;
+            const QString initial = fill ? o.fillGradient : o.strokeGradient;
+            if (!GradientFillDialog::getFill(initial, button, &payload)) {
+                return;
+            }
+            update([fill, payload](ShapeOptions& s) {
+                if (fill) {
+                    s.fillEnabled = true;
+                    s.fillKind = 2;
+                    s.fillGradient = payload;
+                } else {
+                    s.strokeEnabled = true;
+                    s.strokeKind = 2;
+                    s.strokeGradient = payload;
+                }
+            });
+        });
+        connect(pattern, &QAction::triggered, this, [this, update, fill, button]() {
+            PictureView* view = controller_ ? controller_->view() : nullptr;
+            if (!view) {
+                return;
+            }
+            const ShapeOptions o = controller_ ? shape_->get() : ShapeOptions{};
+            QString payload;
+            const QString initial = fill ? o.fillPattern : o.strokePattern;
+            if (!PatternFillDialog::getFill(*view, initial, button, &payload)) {
+                return;
+            }
+            update([fill, payload](ShapeOptions& s) {
+                if (fill) {
+                    s.fillEnabled = true;
+                    s.fillKind = 3;
+                    s.fillPattern = payload;
+                } else {
+                    s.strokeEnabled = true;
+                    s.strokeKind = 3;
+                    s.strokePattern = payload;
                 }
             });
         });
@@ -323,8 +473,8 @@ void OptionsBar::buildShapeAppearance(QWidget* page, QHBoxLayout* layout,
         if (!fillColor.isValid()) {
             fillColor = controller_ ? controller_->foreground() : QColor(Qt::black);
         }
-        fill->setIcon(swatchIcon(o.fillEnabled, fillColor));
-        stroke->setIcon(swatchIcon(o.strokeEnabled, o.strokeColor));
+        fill->setIcon(appearanceIcon(o.fillEnabled, o.fillKind, fillColor));
+        stroke->setIcon(appearanceIcon(o.strokeEnabled, o.strokeKind, o.strokeColor));
     });
 
     auto* strokeWidth = new NumericField(
@@ -348,11 +498,6 @@ void OptionsBar::buildShapeAppearance(QWidget* page, QHBoxLayout* layout,
     auto* line = new QComboBox(form);
     line->setObjectName(QStringLiteral("optionsShapeStrokeLine"));
     line->addItems({QCoreApplication::translate("PicturaUi", "Solid"), QCoreApplication::translate("PicturaUi", "Dashed"), QCoreApplication::translate("PicturaUi", "Dotted")});
-    // Dashed and Dotted are listed, disabled (no dash pattern is rendered).
-    for (int i = 1; i < 3; ++i) {
-        line->setItemData(i, 0, Qt::UserRole - 1);
-        line->setItemData(i, QCoreApplication::translate("PicturaUi", "Not implemented yet"), Qt::ToolTipRole);
-    }
     auto* align = new QComboBox(form);
     align->setObjectName(QStringLiteral("optionsShapeStrokeAlign"));
     align->addItems({QCoreApplication::translate("PicturaUi", "Inside"), QCoreApplication::translate("PicturaUi", "Center"), QCoreApplication::translate("PicturaUi", "Outside")});
@@ -363,9 +508,12 @@ void OptionsBar::buildShapeAppearance(QWidget* page, QHBoxLayout* layout,
     layout->addWidget(type);
     connect(align, &QComboBox::currentIndexChanged, this,
             [update](int i) { update([i](ShapeOptions& o) { o.strokeAlign = i; }); });
-    syncs.push_back([strokeWidth, align](const ShapeOptions& o) {
+    connect(line, &QComboBox::currentIndexChanged, this,
+            [update](int i) { update([i](ShapeOptions& o) { o.strokeLine = i; }); });
+    syncs.push_back([strokeWidth, align, line](const ShapeOptions& o) {
         strokeWidth->setValue(o.strokeWidth);
         align->setCurrentIndex(o.strokeAlign);
+        line->setCurrentIndex(o.strokeLine);
     });
 }
 
@@ -423,8 +571,11 @@ QToolButton* OptionsBar::buildShapeGeometryButton(ToolId id, QWidget* page,
             constrained = QCoreApplication::translate("PicturaUi", "Defined Proportions");
         }
         auto* group = new QButtonGroup(form);
-        const QStringList labels = {QCoreApplication::translate("PicturaUi", "Unconstrained"), constrained,
-                                    QCoreApplication::translate("PicturaUi", "Fixed Size")};
+        QStringList labels = {QCoreApplication::translate("PicturaUi", "Unconstrained"), constrained,
+                              QCoreApplication::translate("PicturaUi", "Fixed Size")};
+        if (id != ToolId::CustomShape) {
+            labels.push_back(QCoreApplication::translate("PicturaUi", "Proportional"));
+        }
         for (int i = 0; i < labels.size(); ++i) {
             auto* radio = new QRadioButton(labels[i], form);
             radio->setObjectName(QStringLiteral("optionsShapeGeometry%1").arg(i));
@@ -445,18 +596,44 @@ QToolButton* OptionsBar::buildShapeGeometryButton(ToolId id, QWidget* page,
         size->addWidget(fixedW);
         size->addWidget(fixedH);
         box->addLayout(size);
+        auto* ratio = new QHBoxLayout;
+        auto* proportionW = new NumericField(
+            QCoreApplication::translate("PicturaUi", "W:"),
+            numericConfig(0.01, 1000, 1, 2, QString(), true,
+                          QStringLiteral("optionsShapeProportionWidth")),
+            form);
+        auto* proportionH = new NumericField(
+            QCoreApplication::translate("PicturaUi", "H:"),
+            numericConfig(0.01, 1000, 1, 2, QString(), true,
+                          QStringLiteral("optionsShapeProportionHeight")),
+            form);
+        ratio->addWidget(proportionW);
+        ratio->addWidget(proportionH);
+        box->addLayout(ratio);
         auto* fromCenter = new QCheckBox(QCoreApplication::translate("PicturaUi", "From Center"), form);
         fromCenter->setObjectName(QStringLiteral("optionsShapeFromCenter"));
         box->addWidget(fromCenter);
+        QCheckBox* snap = nullptr;
+        if (id == ToolId::Rectangle || id == ToolId::RoundedRectangle) {
+            snap = new QCheckBox(QCoreApplication::translate("PicturaUi", "Snap To Pixels"), form);
+            snap->setObjectName(QStringLiteral("optionsShapeSnapToPixels"));
+            box->addWidget(snap);
+            connect(snap, &QCheckBox::toggled, this,
+                    [update](bool on) { update([on](ShapeOptions& o) { o.snapToPixels = on; }); });
+        }
         connect(group, &QButtonGroup::idClicked, this,
                 [update](int i) { update([i](ShapeOptions& o) { o.geometry = i; }); });
         connect(fixedW, &NumericField::valueChanged, this,
                 [update](double v) { update([v](ShapeOptions& o) { o.fixedWidth = v; }); });
         connect(fixedH, &NumericField::valueChanged, this,
                 [update](double v) { update([v](ShapeOptions& o) { o.fixedHeight = v; }); });
+        connect(proportionW, &NumericField::valueChanged, this,
+                [update](double v) { update([v](ShapeOptions& o) { o.proportionWidth = v; }); });
+        connect(proportionH, &NumericField::valueChanged, this,
+                [update](double v) { update([v](ShapeOptions& o) { o.proportionHeight = v; }); });
         connect(fromCenter, &QCheckBox::toggled, this,
                 [update](bool on) { update([on](ShapeOptions& o) { o.fromCenter = on; }); });
-        syncs.push_back([group, fixedW, fixedH, fromCenter](const ShapeOptions& o) {
+        syncs.push_back([group, fixedW, fixedH, proportionW, proportionH, fromCenter, snap](const ShapeOptions& o) {
             if (QAbstractButton* b = group->button(o.geometry)) {
                 b->setChecked(true);
             }
@@ -464,7 +641,14 @@ QToolButton* OptionsBar::buildShapeGeometryButton(ToolId id, QWidget* page,
             fixedH->setValue(o.fixedHeight);
             fixedW->setEnabled(o.geometry == 2);
             fixedH->setEnabled(o.geometry == 2);
+            proportionW->setValue(o.proportionWidth);
+            proportionH->setValue(o.proportionHeight);
+            proportionW->setEnabled(o.geometry == 3);
+            proportionH->setEnabled(o.geometry == 3);
             fromCenter->setChecked(o.fromCenter);
+            if (snap) {
+                snap->setChecked(o.snapToPixels);
+            }
         });
     }
     addForm(menu, form);

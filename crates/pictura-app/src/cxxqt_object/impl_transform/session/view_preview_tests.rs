@@ -114,11 +114,7 @@ fn a_large_shape_previews_from_the_view_at_its_level() {
 // [mvp_shape_stroke]
 #[test]
 fn a_stroked_shape_preview_scales_its_effect() {
-    let stroke = ShapeStroke {
-        color: [0, 255, 0],
-        width: 20,
-        position: StrokePosition::Inside,
-    };
+    let stroke = ShapeStroke::solid([0, 255, 0], 20, StrokePosition::Inside);
     let (doc, path) = shape_document(Some(stroke));
     let visible = rect(0, 0, 800, 600);
     let preview =

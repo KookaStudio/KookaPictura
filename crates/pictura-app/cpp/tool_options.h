@@ -208,20 +208,39 @@ struct ShapeOptions {
     int custom = 0;
     QByteArray customPreset;
     bool fillEnabled = true;
+    // 1 Solid, 2 Gradient, 3 Pattern.
+    int fillKind = 1;
     QColor fillColor;
+    QString fillGradient;
+    QString fillPattern;
     bool strokeEnabled = false;
+    // 1 Solid, 2 Gradient, 3 Pattern.
+    int strokeKind = 1;
     QColor strokeColor = Qt::black;
+    QString strokeGradient;
+    QString strokePattern;
     double strokeWidth = 3.0;
     int strokeAlign = 1;
+    // 0 Solid, 1 Dashed, 2 Dotted.
+    int strokeLine = 0;
+    // 0 New Shape, 1 Combine, 2 Subtract, 3 Intersect, 4 Exclude.
+    int pathOperation = 0;
     int geometry = 0;
     double fixedWidth = 100.0;
     double fixedHeight = 100.0;
+    double proportionWidth = 1.0;
+    double proportionHeight = 1.0;
     bool fromCenter = false;
+    bool snapToPixels = false;
     bool star = false;
     double indent = 50.0;
     bool smoothCorners = false;
     bool smoothIndents = false;
     bool alignEdges = true;
+    // Fill Pixels mode: 0 Normal, 1 Dissolve, 2 Behind, 3 Clear, 4 Multiply.
+    int paintMode = 0;
+    int paintOpacity = 100;
+    bool paintAntialias = true;
     double activeWidth = 0.0;
     double activeHeight = 0.0;
     bool linkSize = false;
@@ -341,9 +360,17 @@ inline ShapeOptions clampOptions(ShapeOptions options)
     options.custom = std::max(options.custom, 0);
     options.strokeWidth = std::clamp(options.strokeWidth, 1.0, 250.0);
     options.strokeAlign = std::clamp(options.strokeAlign, 0, 2);
-    options.geometry = std::clamp(options.geometry, 0, 2);
+    options.fillKind = std::clamp(options.fillKind, 1, 3);
+    options.strokeKind = std::clamp(options.strokeKind, 1, 3);
+    options.strokeLine = std::clamp(options.strokeLine, 0, 2);
+    options.pathOperation = std::clamp(options.pathOperation, 0, 4);
+    options.geometry = std::clamp(options.geometry, 0, 3);
     options.fixedWidth = std::max(options.fixedWidth, 0.01);
     options.fixedHeight = std::max(options.fixedHeight, 0.01);
+    options.proportionWidth = std::max(options.proportionWidth, 0.01);
+    options.proportionHeight = std::max(options.proportionHeight, 0.01);
+    options.paintMode = std::clamp(options.paintMode, 0, 4);
+    options.paintOpacity = std::clamp(options.paintOpacity, 0, 100);
     options.indent = std::clamp(options.indent, 1.0, 99.0);
     return options;
 }

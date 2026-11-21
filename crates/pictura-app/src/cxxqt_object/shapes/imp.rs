@@ -34,19 +34,33 @@ pub(super) fn outline(spec: &ShapeSpec) -> Option<(ShapeKind, Subpath)> {
             concavity: spec.arrow_concavity,
         },
         custom: spec.custom.max(0) as usize,
+        proportion: (spec.proportion > 0.0).then_some(spec.proportion),
     };
+    let snap =
+        spec.snap_to_pixels && matches!(kind, ShapeKind::Rectangle | ShapeKind::RoundedRectangle);
     let subpath = if spec.boxed {
-        let (x, y) = (spec.x0.min(spec.x1), spec.y0.min(spec.y1));
-        let rect = (x, y, (spec.x1 - spec.x0).abs(), (spec.y1 - spec.y0).abs());
+        let (mut x0, mut y0, mut x1, mut y1) = (spec.x0, spec.y0, spec.x1, spec.y1);
+        if snap {
+            x0 = x0.round();
+            y0 = y0.round();
+            x1 = x1.round();
+            y1 = y1.round();
+        }
+        let (x, y) = (x0.min(x1), y0.min(y1));
+        let rect = (x, y, (x1 - x0).abs(), (y1 - y0).abs());
         shape::outline_in_box(options, rect)?
     } else {
-        shape::outline(
-            options,
-            (spec.x0, spec.y0),
-            (spec.x1, spec.y1),
-            spec.shift,
-            spec.alt,
-        )?
+        let (x0, y0, x1, y1) = if snap {
+            (
+                spec.x0.round(),
+                spec.y0.round(),
+                spec.x1.round(),
+                spec.y1.round(),
+            )
+        } else {
+            (spec.x0, spec.y0, spec.x1, spec.y1)
+        };
+        shape::outline(options, (x0, y0), (x1, y1), spec.shift, spec.alt)?
     };
     let subpath = if spec.align_edges {
         shape::align_edges(&subpath)
@@ -58,15 +72,15 @@ pub(super) fn outline(spec: &ShapeSpec) -> Option<(ShapeKind, Subpath)> {
 
 pub(super) fn stroke_of(color: u32, width: f64, align: i32) -> pictura_render::ShapeStroke {
     let c = rgba_from_argb(color);
-    pictura_render::ShapeStroke {
-        color: [c.r, c.g, c.b],
-        width: width.round().clamp(1.0, 250.0) as u32,
-        position: match align {
+    pictura_render::ShapeStroke::solid(
+        [c.r, c.g, c.b],
+        width.round().clamp(1.0, 250.0) as u32,
+        match align {
             0 => pictura_render::StrokePosition::Inside,
             2 => pictura_render::StrokePosition::Outside,
             _ => pictura_render::StrokePosition::Center,
         },
-    }
+    )
 }
 
 fn outlines(spec: &ShapeSpec) -> Option<(ShapeKind, Vec<Subpath>)> {
@@ -114,6 +128,175 @@ fn outlines(spec: &ShapeSpec) -> Option<(ShapeKind, Vec<Subpath>)> {
         }
     }
     Some((ShapeKind::CustomShape, paths))
+}
+
+fn text(bytes: &[u8]) -> Option<String> {
+    std::str::from_utf8(bytes).ok().map(str::to_string)
+}
+
+fn gradient_from_payload(payload: &str) -> Option<pictura_render::GradientFillParams> {
+    let mut parts = payload.split('|');
+    let kind = match parts.next()? {
+        "linear" => pictura_render::GradientKind::Linear,
+        "radial" => pictura_render::GradientKind::Radial,
+        "angled" => pictura_render::GradientKind::Angle,
+        "reflected" => pictura_render::GradientKind::Reflected,
+        "diamond" => pictura_render::GradientKind::Diamond,
+        _ => return None,
+    };
+    let angle_deg: f32 = parts.next()?.parse().ok()?;
+    let scale: f32 = parts.next()?.parse().ok()?;
+    let reverse = parts.next()? == "1";
+    let stops = parts
+        .next()?
+        .split(',')
+        .filter(|stop| !stop.is_empty())
+        .map(|stop| {
+            let (location, hex) = stop.split_once(':')?;
+            let location: u16 = location.parse().ok()?;
+            let value = u32::from_str_radix(hex.trim_start_matches('#'), 16).ok()?;
+            Some(pictura_render::GradientStop {
+                location,
+                color: [(value >> 16) as u8, (value >> 8) as u8, value as u8],
+            })
+        })
+        .collect::<Option<Vec<_>>>()?;
+    if stops.len() < 2 || !angle_deg.is_finite() || !scale.is_finite() {
+        return None;
+    }
+    Some(pictura_render::GradientFillParams {
+        stops,
+        reverse,
+        kind,
+        angle_deg,
+        scale,
+    })
+}
+
+fn pattern_from_payload(payload: &str) -> Option<pictura_render::PatternFillParams> {
+    let mut parts = payload.split('|');
+    let pattern_id = parts.next()?.to_string();
+    if pattern_id.is_empty() {
+        return None;
+    }
+    let scale: f32 = parts.next()?.parse().ok()?;
+    let link_with_layer = parts.next()? == "1";
+    let x: i32 = parts.next()?.parse().ok()?;
+    let y: i32 = parts.next()?.parse().ok()?;
+    scale
+        .is_finite()
+        .then_some(pictura_render::PatternFillParams {
+            pattern_id,
+            scale,
+            link_with_layer,
+            origin: (x, y),
+        })
+}
+
+fn gradient_payload(params: &pictura_render::GradientFillParams) -> String {
+    let kind = match params.kind {
+        pictura_render::GradientKind::Linear => "linear",
+        pictura_render::GradientKind::Radial => "radial",
+        pictura_render::GradientKind::Angle => "angled",
+        pictura_render::GradientKind::Reflected => "reflected",
+        pictura_render::GradientKind::Diamond => "diamond",
+    };
+    let stops = params
+        .stops
+        .iter()
+        .map(|stop| {
+            format!(
+                "{}:{:02x}{:02x}{:02x}",
+                stop.location, stop.color[0], stop.color[1], stop.color[2]
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{}|{}|{}|{}|{}",
+        kind,
+        params.angle_deg,
+        params.scale,
+        u8::from(params.reverse),
+        stops
+    )
+}
+
+fn pattern_payload(params: &pictura_render::PatternFillParams) -> String {
+    format!(
+        "{}|{}|{}|{}|{}",
+        params.pattern_id,
+        params.scale,
+        u8::from(params.link_with_layer),
+        params.origin.0,
+        params.origin.1
+    )
+}
+
+fn fill_kind(spec: &ShapeSpec) -> i32 {
+    if spec.fill_kind == 0 {
+        if spec.no_fill {
+            0
+        } else {
+            1
+        }
+    } else {
+        spec.fill_kind
+    }
+}
+
+fn fill_from_spec(spec: &ShapeSpec, foreground: u32) -> Option<pictura_render::ShapeFill> {
+    match fill_kind(spec) {
+        2 => gradient_from_payload(&text(&spec.fill_gradient)?)
+            .map(pictura_render::ShapeFill::Gradient),
+        3 => {
+            pattern_from_payload(&text(&spec.fill_pattern)?).map(pictura_render::ShapeFill::Pattern)
+        }
+        0 => None,
+        _ => {
+            let c = rgba_from_argb(foreground);
+            Some(pictura_render::ShapeFill::Solid([c.r, c.g, c.b]))
+        }
+    }
+}
+
+fn stroke_from_spec(spec: &ShapeSpec) -> Option<pictura_render::ShapeStroke> {
+    if !spec.stroke {
+        return None;
+    }
+    let kind = if spec.stroke_kind == 0 {
+        1
+    } else {
+        spec.stroke_kind
+    };
+    let fill = match kind {
+        2 => pictura_render::ShapeStrokeFill::Gradient {
+            params: gradient_from_payload(&text(&spec.stroke_gradient)?)?,
+            align_with_layer: true,
+        },
+        3 => pictura_render::ShapeStrokeFill::Pattern {
+            params: pattern_from_payload(&text(&spec.stroke_pattern)?)?,
+            angle_deg: 0.0,
+        },
+        _ => {
+            let c = rgba_from_argb(spec.stroke_color);
+            pictura_render::ShapeStrokeFill::Solid([c.r, c.g, c.b])
+        }
+    };
+    Some(pictura_render::ShapeStroke {
+        fill,
+        width: spec.stroke_width.round().clamp(1.0, 250.0) as u32,
+        position: match spec.stroke_align {
+            0 => pictura_render::StrokePosition::Inside,
+            2 => pictura_render::StrokePosition::Outside,
+            _ => pictura_render::StrokePosition::Center,
+        },
+        line: match spec.stroke_line {
+            1 => pictura_render::StrokeLine::Dashed,
+            2 => pictura_render::StrokeLine::Dotted,
+            _ => pictura_render::StrokeLine::Solid,
+        },
+    })
 }
 
 /// The live origin of a Shape-mode `kind` drawn as `outline`: its box and
@@ -213,12 +396,10 @@ pub(super) fn shape_add_layer(
             if subpaths.len() > 1 {
                 pictura_render::set_layer_shape_paths(layer, &subpaths, width, height);
             }
-            if spec.no_fill {
-                pictura_render::set_shape_fill(layer, None);
-            }
+            let fill = fill_from_spec(spec, foreground);
+            pictura_render::set_shape_fill_content(layer, fill.as_ref());
             let mut stroke_width = 0;
-            if spec.stroke {
-                let stroke = stroke_of(spec.stroke_color, spec.stroke_width, spec.stroke_align);
+            if let Some(stroke) = stroke_from_spec(spec) {
                 stroke_width = stroke.width as i32;
                 pictura_render::set_shape_stroke(layer, Some(&stroke));
             }
@@ -370,14 +551,30 @@ pub(super) fn shape_fill_pixels(
         return false;
     };
     let paint = BucketPaint::Foreground(rgba_from_argb(foreground));
+    let mode = match spec.fill_mode {
+        1 => PaintMode::Dissolve,
+        2 => PaintMode::Behind,
+        3 => PaintMode::Clear,
+        4 => PaintMode::Multiply,
+        _ => PaintMode::Normal,
+    };
+    let opacity = (spec.fill_opacity / 100.0).clamp(0.0, 1.0) as f32;
+    let harden = |mask: &mut [u8]| {
+        if !spec.fill_antialias {
+            for value in mask {
+                *value = if *value >= 128 { 255 } else { 0 };
+            }
+        }
+    };
     paint_timing::start("Shape pixels");
     let applied = apply(view, &label(kind), |doc, path, t, selection| {
         let t0 = std::time::Instant::now();
         if !t.is_mask {
             // A layer target is the document: rasterize and fill the shape's
             // own box, not a document-sized mask (#1185).
-            let (bounds, mask) =
+            let (bounds, mut mask) =
                 shape::paths_coverage_box(&subpaths, t.document_size.0, t.document_size.1)?;
+            harden(&mut mask);
             paint_timing::record("shape_coverage", t0.elapsed());
             return bucket::fill_within(
                 doc,
@@ -385,21 +582,22 @@ pub(super) fn shape_fill_pixels(
                 bounds,
                 Some(&mask),
                 paint,
-                PaintMode::Normal,
-                1.0,
+                mode,
+                opacity,
                 selection,
                 Alpha::Blend,
             );
         }
-        let mask = shape::paths_coverage(&subpaths, t.document_size.0, t.document_size.1);
+        let mut mask = shape::paths_coverage(&subpaths, t.document_size.0, t.document_size.1);
+        harden(&mut mask);
         paint_timing::record("shape_coverage", t0.elapsed());
         bucket::fill(
             doc,
             path,
             &t.coverage(&mask),
             paint,
-            PaintMode::Normal,
-            1.0,
+            mode,
+            opacity,
             selection,
             Alpha::Blend,
         )
@@ -496,14 +694,200 @@ pub(super) fn shape_active(view: &PictureView) -> Vec<f64> {
         flag(fill.is_some()),
         fill.map_or(0.0, argb),
         flag(stroke.is_some()),
-        stroke.map_or(0.0, |s| argb(s.color)),
-        stroke.map_or(0.0, |s| f64::from(s.width)),
-        stroke.map_or(1.0, |s| match s.position {
+        stroke.as_ref().map_or(0.0, |s| match s.fill {
+            pictura_render::ShapeStrokeFill::Solid(color) => argb(color),
+            _ => 0.0,
+        }),
+        stroke.as_ref().map_or(0.0, |s| f64::from(s.width)),
+        stroke.as_ref().map_or(1.0, |s| match s.position {
             pictura_render::StrokePosition::Inside => 0.0,
             pictura_render::StrokePosition::Center => 1.0,
             pictura_render::StrokePosition::Outside => 2.0,
         }),
     ]
+}
+
+fn active_shape(view: &PictureView) -> Option<(&pictura_core::Document, &Layer)> {
+    let rust = view.rust();
+    let (doc, path) = rust.session.doc.as_ref().zip(rust.layer_target.single())?;
+    let layer = pictura_render::resolve_path(doc, path)
+        .filter(|layer| pictura_render::is_shape_layer(layer))?;
+    Some((doc, layer))
+}
+
+fn style_json(
+    fill: Option<pictura_render::ShapeFill>,
+    stroke: Option<pictura_render::ShapeStroke>,
+) -> String {
+    let fill = match fill {
+        None => serde_json::json!({"kind": 0, "color": 0, "gradient": "", "pattern": ""}),
+        Some(pictura_render::ShapeFill::Solid(color)) => {
+            serde_json::json!({"kind": 1, "color": argb(color), "gradient": "", "pattern": ""})
+        }
+        Some(pictura_render::ShapeFill::Gradient(params)) => serde_json::json!({
+            "kind": 2,
+            "color": 0,
+            "gradient": gradient_payload(&params),
+            "pattern": "",
+        }),
+        Some(pictura_render::ShapeFill::Pattern(params)) => serde_json::json!({
+            "kind": 3,
+            "color": 0,
+            "gradient": "",
+            "pattern": pattern_payload(&params),
+        }),
+    };
+    let stroke = match stroke {
+        None => serde_json::json!({
+            "kind": 0, "color": 0, "gradient": "", "pattern": "",
+            "width": 3, "align": 1, "line": 0,
+        }),
+        Some(stroke) => {
+            let (kind, color, gradient, pattern) = match &stroke.fill {
+                pictura_render::ShapeStrokeFill::Solid(color) => {
+                    (1, argb(*color), String::new(), String::new())
+                }
+                pictura_render::ShapeStrokeFill::Gradient { params, .. } => {
+                    (2, 0.0, gradient_payload(params), String::new())
+                }
+                pictura_render::ShapeStrokeFill::Pattern { params, .. } => {
+                    (3, 0.0, String::new(), pattern_payload(params))
+                }
+            };
+            serde_json::json!({
+                "kind": kind,
+                "color": color,
+                "gradient": gradient,
+                "pattern": pattern,
+                "width": stroke.width,
+                "align": match stroke.position {
+                    pictura_render::StrokePosition::Inside => 0,
+                    pictura_render::StrokePosition::Center => 1,
+                    pictura_render::StrokePosition::Outside => 2,
+                },
+                "line": match stroke.line {
+                    pictura_render::StrokeLine::Solid => 0,
+                    pictura_render::StrokeLine::Dashed => 1,
+                    pictura_render::StrokeLine::Dotted => 2,
+                },
+            })
+        }
+    };
+    serde_json::json!({"fill": fill, "stroke": stroke}).to_string()
+}
+
+pub(super) fn shape_active_style(view: &PictureView) -> QString {
+    let Some((_, layer)) = active_shape(view) else {
+        return QString::default();
+    };
+    QString::from(
+        style_json(
+            pictura_render::shape_fill_content(layer),
+            pictura_render::shape_stroke(layer),
+        )
+        .as_str(),
+    )
+}
+
+pub(super) fn shape_set_active_fill_style(
+    view: Pin<&mut PictureView>,
+    kind: i32,
+    argb: u32,
+    gradient: &str,
+    pattern: &str,
+) -> bool {
+    let fill = match kind {
+        0 => None,
+        2 => gradient_from_payload(gradient).map(pictura_render::ShapeFill::Gradient),
+        3 => pattern_from_payload(pattern).map(pictura_render::ShapeFill::Pattern),
+        _ => {
+            let c = rgba_from_argb(argb);
+            Some(pictura_render::ShapeFill::Solid([c.r, c.g, c.b]))
+        }
+    };
+    edit_active(view, "Change Shape Fill", |layer, _, _| {
+        pictura_render::set_shape_fill_content(layer, fill.as_ref())
+    })
+}
+
+pub(super) fn shape_set_active_stroke_style(
+    view: Pin<&mut PictureView>,
+    kind: i32,
+    argb: u32,
+    gradient: &str,
+    pattern: &str,
+    width: f64,
+    align: i32,
+    line: i32,
+) -> bool {
+    let stroke = match kind {
+        0 => None,
+        _ => {
+            let fill = match kind {
+                2 => gradient_from_payload(gradient).map(|params| {
+                    pictura_render::ShapeStrokeFill::Gradient {
+                        params,
+                        align_with_layer: true,
+                    }
+                }),
+                3 => pattern_from_payload(pattern).map(|params| {
+                    pictura_render::ShapeStrokeFill::Pattern {
+                        params,
+                        angle_deg: 0.0,
+                    }
+                }),
+                _ => {
+                    let c = rgba_from_argb(argb);
+                    Some(pictura_render::ShapeStrokeFill::Solid([c.r, c.g, c.b]))
+                }
+            };
+            let Some(fill) = fill else {
+                return false;
+            };
+            Some(pictura_render::ShapeStroke {
+                fill,
+                width: width.round().clamp(1.0, 250.0) as u32,
+                position: match align {
+                    0 => pictura_render::StrokePosition::Inside,
+                    2 => pictura_render::StrokePosition::Outside,
+                    _ => pictura_render::StrokePosition::Center,
+                },
+                line: match line {
+                    1 => pictura_render::StrokeLine::Dashed,
+                    2 => pictura_render::StrokeLine::Dotted,
+                    _ => pictura_render::StrokeLine::Solid,
+                },
+            })
+        }
+    };
+    edit_active(view, "Change Shape Stroke", |layer, _, _| {
+        pictura_render::set_shape_stroke(layer, stroke.as_ref())
+    })
+}
+
+pub(super) fn shape_active_outline(view: &PictureView) -> Vec<f64> {
+    let Some((doc, layer)) = active_shape(view) else {
+        return Vec::new();
+    };
+    pictura_render::layer_shape_paths(layer, doc.width, doc.height)
+        .map(|paths| super::super::shape_coords::encode(&paths))
+        .unwrap_or_default()
+}
+
+pub(super) fn shape_replace_active_outline(view: Pin<&mut PictureView>, coords: &[f64]) -> bool {
+    let Some(paths) = super::super::shape_coords::decode(coords) else {
+        return false;
+    };
+    edit_active(view, "Path Operation", |layer, width, height| {
+        if pictura_render::layer_shape_paths(layer, width, height).as_deref()
+            == Some(paths.as_slice())
+        {
+            return false;
+        }
+        pictura_render::set_layer_shape_paths(layer, &paths, width, height);
+        pictura_render::set_layer_live_shape(layer, None);
+        true
+    })
 }
 
 pub(super) fn shape_set_active_fill(view: Pin<&mut PictureView>, on: bool, argb: u32) -> bool {
@@ -551,13 +935,25 @@ pub(in crate::cxxqt_object) fn shape_thumbnail(
     doc: &pictura_core::Document,
     size: i32,
 ) -> QImage {
-    let Some([r, g, b, _]) = pictura_render::shape_fill_color(layer) else {
+    let Some(fill) = pictura_render::shape_fill_content(layer) else {
         return QImage::default();
     };
     if size <= 0 || doc.width == 0 || doc.height == 0 {
         return QImage::default();
     }
     let (tw, th) = aspect_thumbnail_extent(doc.width, doc.height, size as u32);
+    let source: Vec<[u8; 4]> = match &fill {
+        pictura_render::ShapeFill::Solid([r, g, b]) => {
+            vec![[*r, *g, *b, 255]; (tw * th) as usize]
+        }
+        pictura_render::ShapeFill::Gradient(params) => {
+            pictura_render::gradient_rgba(tw as i32, th as i32, params)
+        }
+        pictura_render::ShapeFill::Pattern(params) => {
+            let patterns = pictura_codec::decode_patterns(doc);
+            pictura_render::pattern_preview_rgba(&patterns, params, layer.rect, tw, th)
+        }
+    };
     let scale_x = doc.width as f64 / tw as f64;
     let scale_y = doc.height as f64 / th as f64;
     let clip = pictura_core::PsdRect {
@@ -575,8 +971,17 @@ pub(in crate::cxxqt_object) fn shape_thumbnail(
                 continue;
             }
             let a = pictura_render::shape_coverage(layer, clip, x, y);
+            let color = source
+                .get((ty * tw + tx) as usize)
+                .copied()
+                .unwrap_or([0, 0, 0, 255]);
             let o = ((ty * tw + tx) * 4) as usize;
-            rgba[o..o + 4].copy_from_slice(&[r, g, b, a]);
+            rgba[o..o + 4].copy_from_slice(&[
+                color[0],
+                color[1],
+                color[2],
+                (u32::from(color[3]) * u32::from(a) / 255) as u8,
+            ]);
         }
     }
     rgba_image(rgba, tw as i32, th as i32)
@@ -605,7 +1010,7 @@ pub(super) fn shape_copy_attributes(mut view: Pin<&mut PictureView>, path: &QStr
 
 /// Paste the clipboard onto the shape layer at `path`; one state when changed.
 pub(super) fn shape_paste_attributes(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
-    let Some(attributes) = view.rust().shape_attributes else {
+    let Some(attributes) = view.rust().shape_attributes.clone() else {
         return false;
     };
     let path = path.to_string();

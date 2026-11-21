@@ -523,11 +523,11 @@ fn rasterize_shape_keeps_an_outside_stroke_past_a_tight_rect() {
         };
         crate::set_shape_stroke(
             layer,
-            Some(&crate::ShapeStroke {
-                color: [0, 160, 0],
-                width: 4,
-                position: crate::StrokePosition::Outside,
-            }),
+            Some(&crate::ShapeStroke::solid(
+                [0, 160, 0],
+                4,
+                crate::StrokePosition::Outside,
+            )),
         );
     }
     let before = composite_rgba(&d);
