@@ -49,8 +49,9 @@ pub(super) fn is_nef(tiff: &Tiff, first: u64) -> bool {
 }
 
 /// The Nikon maker note: `Nikon\0`, a version, two pad bytes, then a TIFF
-/// whose offsets are relative to its own header at byte 10. Any other maker
-/// note counts as none.
+/// whose offsets are relative to its own header at byte 10. A maker note
+/// without the `Nikon\0` prefix counts as none; a prefixed one whose TIFF
+/// does not parse refuses the file, as a damaged NEF.
 fn nikon_note<'a>(ifd0: &Tags<'_, 'a>) -> Result<Option<(Tiff<'a>, Ifd)>, PsdError> {
     let Some(note) = maker_note_bytes(ifd0)? else {
         return Ok(None);
