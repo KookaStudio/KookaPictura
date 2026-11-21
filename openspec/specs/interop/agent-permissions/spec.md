@@ -48,7 +48,7 @@ window space, SHALL be refused in every restricted session. Outside bare
 ### Requirement: File access is confined and approved
 
 A restricted session SHALL judge the canonical target of `open`, `save`, and
-`save_as`. The state directory and the endpoint directory SHALL be refused in
+`save_as`. The state directory, configuration directory, and endpoint directory SHALL be refused in
 every mode. Manual SHALL ask for a target outside the allowed folders and for any
 overwrite. Auto-approve SHALL ask the same, except for a file the agent made or
 the person approved this session. Allow all SHALL never ask. A headless session
@@ -83,6 +83,11 @@ SHALL refuse wherever a live one would ask.
 
 - **WHEN** each mode judges inside, outside, overwrite, and known targets
 - **THEN** each verdict matches the mode's rule
+
+#### Scenario: Separate configuration root is protected [ap_config_hard_deny]
+
+- **WHEN** restricted live and CLI control attempt open, save, or save_as under a configuration root separate from the state and endpoint roots, including in Allow all mode
+- **THEN** each request is refused, including canonical paths reached through a symlink
 
 ### Requirement: Approval never blocks the application
 
@@ -214,7 +219,7 @@ SHALL withdraw a pending approval.
 ### Requirement: Agent control is off until enabled in every build
 
 The running application SHALL NOT serve a live control endpoint unless agent
-control is enabled in the session store; it SHALL default to off with Read access
+control is enabled in the preferences store; it SHALL default to off with Read access
 only. It SHALL be able to start and stop while running, and SHALL persist its
 settings. A second window SHALL report that another window is serving and SHALL
 leave that endpoint untouched. Flatpak and Snap builds SHALL serve it from a
@@ -223,7 +228,7 @@ permission for it. Crash recovery SHALL stay on during a live session.
 
 #### Scenario: Off by default [ap_off_by_default]
 
-- **WHEN** a session store has no agent control keys
+- **WHEN** a preferences store has no agent control keys
 - **THEN** no endpoint exists
 
 #### Scenario: Started and stopped at runtime [ap_live_start_stop]

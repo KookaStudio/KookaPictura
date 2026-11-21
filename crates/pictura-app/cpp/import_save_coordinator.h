@@ -24,6 +24,8 @@ class QWidget;
 
 namespace pictura {
 
+struct Preferences;
+
 class DocumentRegistry;
 class PictureView;
 class IndexedColorDialog;
@@ -61,8 +63,8 @@ public:
     ~ImportSaveCoordinator() override;
 
     // The session slice this collaborator owns.
-    void saveState(SessionState& state) const;
-    void loadState(const SessionState& state);
+    void saveState(SessionState& state, Preferences& prefs) const;
+    void loadState(const SessionState& state, const Preferences& prefs);
 
     // Open entry points. A started open returns its token; completion arrives
     // on documentOpenFinished.

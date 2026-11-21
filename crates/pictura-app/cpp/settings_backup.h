@@ -8,7 +8,7 @@ class QWidget;
 namespace pictura {
 
 // The `pictura.json` backup format this build writes.
-inline constexpr int kSettingsBackupFormatVersion = 1;
+inline constexpr int kSettingsBackupFormatVersion = 2;
 inline constexpr char kSettingsBackupFormat[] = "pictura-settings";
 
 // $XDG_STATE_HOME/kooka-pictura/pending-settings.json. Written by an import and
@@ -60,6 +60,8 @@ bool importSettingsFile(const QString& path, QWidget* parent = nullptr,
 // Test hooks for the restart prompt. The prompt is non-interactive under Qt
 // Test and still counts as shown.
 void setSettingsRestartPromptInteractive(bool interactive);
+enum class SettingsImportFailure { None, AfterPreferences, RetirePending };
+void setSettingsImportFailureForTest(SettingsImportFailure failure);
 int settingsRestartPromptCountForTest();
 
 } // namespace pictura

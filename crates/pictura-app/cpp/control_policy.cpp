@@ -70,7 +70,8 @@ bool ControlPolicy::grants(ControlTier tier) const
     return false;
 }
 
-QStringList protectedDirectories(const QString& stateFile, const QString& endpoint)
+QStringList protectedDirectories(const QString& stateFile, const QString& endpoint,
+                                 const QString& configDirectory)
 {
     QStringList directories{QFileInfo(QFileInfo(stateFile).absolutePath()).canonicalFilePath()};
 #ifndef _WIN32
@@ -79,6 +80,7 @@ QStringList protectedDirectories(const QString& stateFile, const QString& endpoi
 #else
     Q_UNUSED(endpoint);
 #endif
+    directories.append(canonicalTarget(configDirectory));
     directories.removeAll(QString());
     return directories;
 }

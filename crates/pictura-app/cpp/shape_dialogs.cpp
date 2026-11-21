@@ -5,7 +5,7 @@
 
 #include "shape_dialogs.h"
 
-#include "session.h"
+#include "preferences.h"
 #include "tools.h"
 
 #include <QtWidgets/QCheckBox>
@@ -22,11 +22,11 @@ namespace pictura {
 
 bool confirmLiveShapeToPath(QWidget* parent, bool* asked)
 {
-    SessionState session = loadSession();
+    const auto prefs = loadPreferences();
     if (asked) {
-        *asked = session.confirmLiveShapeToPath;
+        *asked = prefs.confirmLiveShapeToPath;
     }
-    if (!session.confirmLiveShapeToPath) {
+    if (!prefs.confirmLiveShapeToPath) {
         return true;
     }
     QMessageBox box(QMessageBox::Information, QStringLiteral("Kooka Pictura"),
@@ -40,9 +40,10 @@ bool confirmLiveShapeToPath(QWidget* parent, bool* asked)
     box.setCheckBox(dontShow);
     const bool yes = box.exec() == QMessageBox::Yes;
     if (yes && dontShow->isChecked()) {
-        session = loadSession();
-        session.confirmLiveShapeToPath = false;
-        saveSession(session);
+        const auto before = loadPreferences();
+        auto after = before;
+        after.confirmLiveShapeToPath = false;
+        savePreferences(before, after);
     }
     return yes;
 }

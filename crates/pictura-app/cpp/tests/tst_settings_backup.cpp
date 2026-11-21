@@ -17,6 +17,8 @@
 
 #include "frame.h"
 #include "preferences_dialog.h"
+#include "preferences.h"
+#include <QtCore/QScopeGuard>
 #include "session.h"
 #include "settings_backup.h"
 #include "preset_store.h"
@@ -109,6 +111,16 @@ QByteArray readBytes(const QString& path)
     return file.readAll();
 }
 
+bool seedBrightness(int level, bool unknownDate = false)
+{
+    QByteArray toml("schema_version = 1\n");
+    if (unknownDate) {
+        toml += "release_date = 2026-11-21\n";
+    }
+    toml += "[interface]\nbrightnessLevel = " + QByteArray::number(level) + '\n';
+    return writeBytes(pictura::preferencesFilePath(), toml);
+}
+
 QJsonObject minimalBackup(const QJsonObject& session)
 {
     QJsonObject backup;
@@ -148,6 +160,12 @@ private slots:
     void currentPresetListsInvalid();
     void currentPresetListsExportFailure();
     void currentPresetListsRetry();
+    void invalidPreferencesLeavePendingImportIntact();
+    void legacyBackupAppliesPresentPreferencesOnly();
+    void legacyBackupWaitsForMigration();
+    void failedPreferencesImportRetries();
+    void preferenceImportReceiptPreservesLaterEdits();
+    void preferenceImportReceiptsSurviveSharedConfig();
 
 private:
     QString stateDir() const;
@@ -203,6 +221,7 @@ void SettingsBackupTest::initTestCase()
 void SettingsBackupTest::init()
 {
     clearDirectory(stateDir());
+    clearDirectory(QFileInfo(pictura::preferencesFilePath()).absolutePath());
     clearDirectory(dataHome_.path());
     clearDirectory(backupDir_.path());
 }
@@ -232,8 +251,8 @@ void SettingsBackupTest::preferencesOffersBothButtons()
 void SettingsBackupTest::exportCarriesEveryStore()
 {
     QVERIFY(writeJson(pictura::sessionFilePath(),
-                      QJsonObject{{QStringLiteral("brightnessLevel"), 2},
-                                  {QStringLiteral("unknownKey"), QStringLiteral("keep")}}));
+                      QJsonObject{{QStringLiteral("unknownKey"), QStringLiteral("keep")}}));
+    QVERIFY(seedBrightness(2));
     QVERIFY(writeJson(pictura::workspaceStoreDir() + QStringLiteral("/index.json"),
                       QJsonObject{{QStringLiteral("schemaVersion"), 1},
                                   {QStringLiteral("activeWorkspace"), QStringLiteral("w1")},
@@ -254,12 +273,14 @@ void SettingsBackupTest::exportCarriesEveryStore()
     const QJsonObject backup = pictura::collectSettingsBackup();
     QCOMPARE(backup.value(QStringLiteral("format")).toString(),
              QStringLiteral("pictura-settings"));
-    QCOMPARE(backup.value(QStringLiteral("formatVersion")).toInt(), 1);
+    QCOMPARE(backup.value(QStringLiteral("formatVersion")).toInt(), 2);
     QVERIFY(!backup.value(QStringLiteral("appVersion")).toString().isEmpty());
     QVERIFY(!backup.value(QStringLiteral("exportedAt")).toString().isEmpty());
 
     const QJsonObject session = backup.value(QStringLiteral("session")).toObject();
-    QCOMPARE(session.value(QStringLiteral("brightnessLevel")).toInt(), 2);
+    QVERIFY(!session.contains(QStringLiteral("brightnessLevel")));
+    QVERIFY(backup.value(QStringLiteral("preferences")).toString().contains(
+        QStringLiteral("brightnessLevel = 2")));
 
     const QJsonObject workspaces = backup.value(QStringLiteral("workspaces")).toObject();
     QCOMPARE(workspaces.value(QStringLiteral("index"))
@@ -301,8 +322,8 @@ void SettingsBackupTest::exportCarriesEveryStore()
 void SettingsBackupTest::unknownSessionKeysSurvive()
 {
     QVERIFY(writeJson(pictura::sessionFilePath(),
-                      QJsonObject{{QStringLiteral("brightnessLevel"), 4},
-                                  {QStringLiteral("unknownKey"), QStringLiteral("keep")}}));
+                      QJsonObject{{QStringLiteral("unknownKey"), QStringLiteral("keep")}}));
+    QVERIFY(seedBrightness(4));
     const QJsonObject backup = pictura::collectSettingsBackup();
     QVERIFY(pictura::writeSettingsBackup(backupPath(), backup, nullptr));
 
@@ -348,7 +369,7 @@ void SettingsBackupTest::newerFormatIsRefused()
 {
     QVERIFY(writeJson(backupPath(),
                       QJsonObject{{QStringLiteral("format"), QStringLiteral("pictura-settings")},
-                                  {QStringLiteral("formatVersion"), 2}}));
+                                  {QStringLiteral("formatVersion"), 3}}));
     QString error;
     QVERIFY(!pictura::stageSettingsImport(backupPath(), &error));
     QVERIFY(!error.isEmpty());
@@ -383,19 +404,15 @@ void SettingsBackupTest::unsafeNamesAreRefused()
 
 void SettingsBackupTest::importBacksUpCurrentSettings()
 {
-    QVERIFY(writeJson(pictura::sessionFilePath(),
-                      QJsonObject{{QStringLiteral("brightnessLevel"), 2}}));
+    QVERIFY(seedBrightness(2));
     QString error;
     const QString path = pictura::backupCurrentSettings(&error);
     QVERIFY2(!path.isEmpty(), qPrintable(error));
     QVERIFY(QFileInfo::exists(path));
     QCOMPARE(QFileInfo(path).absolutePath(), pictura::settingsBackupDirectory());
     const QJsonObject backup = readJson(path);
-    QCOMPARE(backup.value(QStringLiteral("session"))
-                 .toObject()
-                 .value(QStringLiteral("brightnessLevel"))
-                 .toInt(),
-             2);
+    QVERIFY(backup.value(QStringLiteral("preferences")).toString().contains(
+        QStringLiteral("brightnessLevel = 2")));
 }
 
 void SettingsBackupTest::importSanitizesMachineSpecificValues()
@@ -423,14 +440,13 @@ void SettingsBackupTest::importSanitizesMachineSpecificValues()
 
 void SettingsBackupTest::validImportIsStaged()
 {
-    QVERIFY(writeJson(pictura::sessionFilePath(),
-                      QJsonObject{{QStringLiteral("brightnessLevel"), 1}}));
+    QVERIFY(seedBrightness(1));
     QVERIFY(writeJson(backupPath(),
                       minimalBackup(QJsonObject{{QStringLiteral("brightnessLevel"), 7}})));
 
     QVERIFY(pictura::stageSettingsImport(backupPath(), nullptr));
     QVERIFY(pictura::hasPendingSettingsImport());
-    QCOMPARE(pictura::loadSession().brightnessLevel, 1);
+    QCOMPARE(pictura::loadPreferences().brightnessLevel, 1);
 
     const QJsonObject pending = readJson(pictura::pendingSettingsImportPath());
     QCOMPARE(pending.value(QStringLiteral("session"))
@@ -442,8 +458,7 @@ void SettingsBackupTest::validImportIsStaged()
 
 void SettingsBackupTest::pendingImportAppliesEverySection()
 {
-    QVERIFY(writeJson(pictura::sessionFilePath(),
-                      QJsonObject{{QStringLiteral("brightnessLevel"), 5}}));
+    QVERIFY(seedBrightness(5));
     QVERIFY(writeJson(pictura::workspaceStoreDir() + QStringLiteral("/index.json"),
                       QJsonObject{{QStringLiteral("activeWorkspace"), QStringLiteral("w1")}}));
     QVERIFY(writeJson(pictura::workspaceStoreDir() + QStringLiteral("/w1.json"),
@@ -460,8 +475,7 @@ void SettingsBackupTest::pendingImportAppliesEverySection()
     const QJsonObject backup = pictura::collectSettingsBackup();
     QVERIFY(pictura::writeSettingsBackup(backupPath(), backup, nullptr));
 
-    QVERIFY(writeJson(pictura::sessionFilePath(),
-                      QJsonObject{{QStringLiteral("brightnessLevel"), 1}}));
+    QVERIFY(seedBrightness(1));
     QFile::remove(pictura::workspaceStoreDir() + QStringLiteral("/w1.json"));
     QFile::remove(adjustmentDir() + QStringLiteral("/levels.presets"));
     QFile::remove(actionsDir() + QStringLiteral("/set.atn"));
@@ -472,7 +486,7 @@ void SettingsBackupTest::pendingImportAppliesEverySection()
     QVERIFY(pictura::applyPendingSettingsImport(nullptr));
     QVERIFY(!pictura::hasPendingSettingsImport());
 
-    QCOMPARE(pictura::loadSession().brightnessLevel, 5);
+    QCOMPARE(pictura::loadPreferences().brightnessLevel, 5);
     QVERIFY(QFileInfo::exists(pictura::workspaceStoreDir() + QStringLiteral("/w1.json")));
     QCOMPARE(readBytes(adjustmentDir() + QStringLiteral("/levels.presets")),
              QByteArrayLiteral("levels"));
@@ -484,6 +498,8 @@ void SettingsBackupTest::pendingImportAppliesEverySection()
 
 void SettingsBackupTest::absentSectionsAreLeftAlone()
 {
+    QVERIFY(seedBrightness(2));
+    const auto prefs = readBytes(pictura::preferencesFilePath());
     QVERIFY(writeJson(pictura::workspaceStoreDir() + QStringLiteral("/index.json"),
                       QJsonObject{{QStringLiteral("activeWorkspace"), QStringLiteral("keep")}}));
     QVERIFY(writeJson(pictura::workspaceStoreDir() + QStringLiteral("/keep.json"),
@@ -492,10 +508,11 @@ void SettingsBackupTest::absentSectionsAreLeftAlone()
                        QByteArrayLiteral("keep")));
 
     QVERIFY(writeJson(backupPath(),
-                      minimalBackup(QJsonObject{{QStringLiteral("brightnessLevel"), 3}})));
+                      minimalBackup(QJsonObject{})));
     QVERIFY(pictura::stageSettingsImport(backupPath(), nullptr));
     QVERIFY(pictura::applyPendingSettingsImport(nullptr));
 
+    QCOMPARE(readBytes(pictura::preferencesFilePath()), prefs);
     QVERIFY(QFileInfo::exists(pictura::workspaceStoreDir() + QStringLiteral("/keep.json")));
     QCOMPARE(readBytes(adjustmentDir() + QStringLiteral("/keep.presets")),
              QByteArrayLiteral("keep"));
@@ -504,8 +521,7 @@ void SettingsBackupTest::absentSectionsAreLeftAlone()
 void SettingsBackupTest::corruptPendingIsQuarantined()
 {
     QVERIFY(writeBytes(pictura::pendingSettingsImportPath(), QByteArrayLiteral("not json")));
-    QVERIFY(writeJson(pictura::sessionFilePath(),
-                      QJsonObject{{QStringLiteral("brightnessLevel"), 9}}));
+    QVERIFY(seedBrightness(9));
 
     QString error;
     QVERIFY(!pictura::applyPendingSettingsImport(&error));
@@ -515,14 +531,14 @@ void SettingsBackupTest::corruptPendingIsQuarantined()
         QDir(stateDir()).entryList({QStringLiteral("pending-settings.json.corrupt-*")},
                                    QDir::Files);
     QCOMPARE(quarantined.size(), 1);
-    QCOMPARE(pictura::loadSession().brightnessLevel, 9);
+    QCOMPARE(pictura::loadPreferences().brightnessLevel, 9);
 }
 
 void SettingsBackupTest::roundTripRestoresEveryStore()
 {
     QVERIFY(writeJson(pictura::sessionFilePath(),
-                      QJsonObject{{QStringLiteral("brightnessLevel"), 6},
-                                  {QStringLiteral("unknownKey"), QStringLiteral("keep")}}));
+                      QJsonObject{{QStringLiteral("unknownKey"), QStringLiteral("keep")}}));
+    QVERIFY(seedBrightness(6, true));
     QVERIFY(writeJson(pictura::workspaceStoreDir() + QStringLiteral("/index.json"),
                       QJsonObject{{QStringLiteral("activeWorkspace"), QStringLiteral("w2")}}));
     QVERIFY(writeJson(pictura::workspaceStoreDir() + QStringLiteral("/w2.json"),
@@ -540,6 +556,7 @@ void SettingsBackupTest::roundTripRestoresEveryStore()
     QVERIFY(pictura::writeSettingsBackup(backupPath(), backup, nullptr));
 
     QVERIFY(writeJson(pictura::sessionFilePath(), QJsonObject{}));
+    QVERIFY(seedBrightness(0));
     QFile::remove(pictura::workspaceStoreDir() + QStringLiteral("/w2.json"));
     QFile::remove(adjustmentDir() + QStringLiteral("/curve.presets"));
     QFile::remove(actionsDir() + QStringLiteral("/round.atn"));
@@ -550,7 +567,9 @@ void SettingsBackupTest::roundTripRestoresEveryStore()
     QVERIFY(pictura::applyPendingSettingsImport(nullptr));
 
     const QJsonObject restored = readJson(pictura::sessionFilePath());
-    QCOMPARE(restored.value(QStringLiteral("brightnessLevel")).toInt(), 6);
+    QCOMPARE(pictura::loadPreferences().brightnessLevel, 6);
+    QVERIFY(!restored.contains(QStringLiteral("brightnessLevel")));
+    QVERIFY(readBytes(pictura::preferencesFilePath()).contains("release_date = 2026-11-21"));
     QCOMPARE(restored.value(QStringLiteral("unknownKey")).toString(),
              QStringLiteral("keep"));
     QVERIFY(QFileInfo::exists(pictura::workspaceStoreDir() + QStringLiteral("/w2.json")));
@@ -707,6 +726,158 @@ void SettingsBackupTest::frameStagesImportAndRequestsRestart()
                  .entryList({QStringLiteral("pictura-*.json")}, QDir::Files)
                  .size(),
              1);
+}
+
+void SettingsBackupTest::invalidPreferencesLeavePendingImportIntact()
+{
+    QVERIFY(pictura::initializePreferences());
+    const auto before = readBytes(pictura::preferencesFilePath());
+    QVERIFY(pictura::writePendingSettingsImport(minimalBackup({})));
+    const auto pending = readBytes(pictura::pendingSettingsImportPath());
+    for (const auto value : {QStringLiteral("invalid TOML"),
+                            QStringLiteral("schema_version = 999")}) {
+        auto backup = minimalBackup({});
+        backup.insert(QStringLiteral("formatVersion"), 2);
+        backup.insert(QStringLiteral("preferences"), value);
+        QVERIFY(writeJson(backupPath(), backup));
+        QString error;
+        QVERIFY(!pictura::stageSettingsImport(backupPath(), &error));
+        QVERIFY(!error.isEmpty());
+        QCOMPARE(readBytes(pictura::preferencesFilePath()), before);
+        QCOMPARE(readBytes(pictura::pendingSettingsImportPath()), pending);
+    }
+}
+
+void SettingsBackupTest::legacyBackupAppliesPresentPreferencesOnly()
+{
+    auto before = pictura::loadPreferences();
+    auto after = before;
+    after.typeShowAsianOptions = true;
+    QVERIFY(pictura::savePreferences(before, after));
+    QVERIFY(pictura::writePendingSettingsImport(minimalBackup({
+        {QStringLiteral("brightnessLevel"), 3},
+        {QStringLiteral("useShiftKeyForToolSwitch"), false},
+        {QStringLiteral("recent"), QJsonArray{QCoreApplication::applicationFilePath()}}
+    })));
+    QVERIFY(pictura::applyPendingSettingsImport());
+    QCOMPARE(pictura::loadPreferences().brightnessLevel, 3);
+    QVERIFY(pictura::loadPreferences().typeShowAsianOptions);
+    QVERIFY(!pictura::loadPreferences().useShiftKeyForToolSwitch);
+    QCOMPARE(pictura::loadSession().recent, QStringList{QCoreApplication::applicationFilePath()});
+    QVERIFY(!readJson(pictura::sessionFilePath()).contains(QStringLiteral("brightnessLevel")));
+}
+
+void SettingsBackupTest::legacyBackupWaitsForMigration()
+{
+    QVERIFY(writeBytes(pictura::sessionFilePath(), R"({"brightnessLevel":3,"gpuCompute":false})"));
+    QVERIFY(pictura::writePendingSettingsImport(minimalBackup({
+        {QStringLiteral("typeShowAsianOptions"), true}
+    })));
+    QLockFile lock(pictura::sessionFilePath() + QStringLiteral(".lock"));
+    QVERIFY(lock.tryLock());
+    QVERIFY(!pictura::applyPendingSettingsImport());
+    QVERIFY(pictura::hasPendingSettingsImport());
+    QVERIFY(!QFileInfo::exists(pictura::preferencesFilePath()));
+    lock.unlock();
+    QVERIFY(pictura::applyPendingSettingsImport());
+    const auto restored = pictura::loadPreferences();
+    QCOMPARE(restored.brightnessLevel, 3);
+    QVERIFY(!restored.gpuCompute);
+    QVERIFY(restored.typeShowAsianOptions);
+}
+
+void SettingsBackupTest::failedPreferencesImportRetries()
+{
+    QVERIFY(pictura::initializePreferences());
+    const auto before = readBytes(pictura::preferencesFilePath());
+    QVERIFY(pictura::writePendingSettingsImport(minimalBackup({
+        {QStringLiteral("brightnessLevel"), 3}
+    })));
+    const auto lock = QFileInfo(pictura::preferencesFilePath()).absolutePath()
+        + QStringLiteral("/prefs.lock");
+    QVERIFY(QFile::remove(lock) || !QFileInfo::exists(lock));
+    QVERIFY(QDir().mkdir(lock));
+    QVERIFY(!pictura::applyPendingSettingsImport());
+    QCOMPARE(readBytes(pictura::preferencesFilePath()), before);
+    QVERIFY(pictura::hasPendingSettingsImport());
+    QVERIFY(QDir().rmdir(lock));
+    QVERIFY(pictura::applyPendingSettingsImport());
+    QCOMPARE(pictura::loadPreferences().brightnessLevel, 3);
+}
+
+void SettingsBackupTest::preferenceImportReceiptPreservesLaterEdits()
+{
+    using pictura::SettingsImportFailure;
+    const auto restore = qScopeGuard([] {
+        pictura::setSettingsImportFailureForTest(SettingsImportFailure::None);
+    });
+    for (int version : {1, 2}) {
+        for (auto failure : {SettingsImportFailure::AfterPreferences,
+                             SettingsImportFailure::RetirePending}) {
+            auto backup = minimalBackup({{QStringLiteral("brightnessLevel"), 3}});
+            if (version == 2) {
+                backup.insert(QStringLiteral("formatVersion"), version);
+                backup.remove(QStringLiteral("session"));
+                backup.insert(QStringLiteral("preferences"),
+                              QStringLiteral("schema_version = 1\n[interface]\nbrightnessLevel = 3\n"));
+            }
+            QVERIFY(pictura::writePendingSettingsImport(backup));
+            pictura::setSettingsImportFailureForTest(failure);
+            QVERIFY(!pictura::applyPendingSettingsImport());
+            QVERIFY(pictura::hasPendingSettingsImport());
+            const auto before = pictura::loadPreferences();
+            QCOMPARE(before.brightnessLevel, 3);
+            auto after = before;
+            after.brightnessLevel = 0;
+            QVERIFY(pictura::savePreferences(before, after));
+            pictura::setSettingsImportFailureForTest(SettingsImportFailure::None);
+            QVERIFY(pictura::applyPendingSettingsImport());
+            QCOMPARE(pictura::loadPreferences().brightnessLevel, 0);
+            QVERIFY(!pictura::hasPendingSettingsImport());
+        }
+    }
+}
+
+void SettingsBackupTest::preferenceImportReceiptsSurviveSharedConfig()
+{
+    using pictura::SettingsImportFailure;
+    const auto restoreFailure = qScopeGuard([] {
+        pictura::setSettingsImportFailureForTest(SettingsImportFailure::None);
+    });
+    QTemporaryDir state2;
+    QVERIFY(state2.isValid());
+    const QByteArray state1 = qgetenv("XDG_STATE_HOME");
+    const auto restoreState = qScopeGuard([&] { qputenv("XDG_STATE_HOME", state1); });
+    QVERIFY(writeJson(pictura::pendingSettingsImportPath(),
+                      minimalBackup({{QStringLiteral("brightnessLevel"), 3}})));
+    pictura::setSettingsImportFailureForTest(SettingsImportFailure::AfterPreferences);
+    QVERIFY(!pictura::applyPendingSettingsImport());
+    QVERIFY(pictura::hasPendingSettingsImport());
+    QCOMPARE(pictura::loadPreferences().brightnessLevel, 3);
+
+    qputenv("XDG_STATE_HOME", state2.path().toUtf8());
+    auto next = minimalBackup({});
+    next.insert(QStringLiteral("formatVersion"), 2);
+    next.insert(QStringLiteral("preferences"),
+                QStringLiteral("schema_version = 1\n[interface]\nbrightnessLevel = 2\n"));
+    QVERIFY(pictura::writePendingSettingsImport(next));
+    QVERIFY(!pictura::applyPendingSettingsImport());
+    QCOMPARE(pictura::loadPreferences().brightnessLevel, 2);
+
+    pictura::setSettingsImportFailureForTest(SettingsImportFailure::None);
+    qputenv("XDG_STATE_HOME", state1);
+    QVERIFY(pictura::applyPendingSettingsImport());
+    const auto before = pictura::loadPreferences();
+    QCOMPARE(before.brightnessLevel, 2);
+    auto after = before;
+    after.brightnessLevel = 0;
+    QVERIFY(pictura::savePreferences(before, after));
+
+    qputenv("XDG_STATE_HOME", state2.path().toUtf8());
+    QVERIFY(pictura::applyPendingSettingsImport());
+    QCOMPARE(pictura::loadPreferences().brightnessLevel, 0);
+    const auto exported = pictura::collectSettingsBackup().value(QStringLiteral("preferences")).toString();
+    QVERIFY(!exported.contains(QStringLiteral("import_receipts")));
 }
 
 QTEST_MAIN(SettingsBackupTest)

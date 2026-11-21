@@ -3,6 +3,7 @@
 // the chrome and forwards its entry points to this coordinator.
 
 #include "import_save_coordinator.h"
+#include "preferences.h"
 
 #include "api/document_bridge.h"
 #include "api/view_bridge.h"
@@ -52,27 +53,27 @@ ImportSaveCoordinator::~ImportSaveCoordinator()
     }
 }
 
-void ImportSaveCoordinator::saveState(SessionState& state) const
+void ImportSaveCoordinator::saveState(SessionState& state, Preferences& prefs) const
 {
     state.recent = recent_;
     state.saveFormatOptions = saveFormatOptions_;
-    state.autoSaveRecovery = autoSaveRecovery_;
-    state.saveInBackground = saveInBackground_;
-    state.autoSaveMinutes = autoSaveMinutes_;
-    state.nativeSaveCompatibility = nativeSaveCompatibility();
-    state.rawSettingsStore = rawSettingsStore_;
+    prefs.autoSaveRecovery = autoSaveRecovery_;
+    prefs.saveInBackground = saveInBackground_;
+    prefs.autoSaveMinutes = autoSaveMinutes_;
+    prefs.nativeSaveCompatibility = nativeSaveCompatibility();
+    prefs.rawSettingsStore = rawSettingsStore_;
 }
 
-void ImportSaveCoordinator::loadState(const SessionState& state)
+void ImportSaveCoordinator::loadState(const SessionState& state, const Preferences& prefs)
 {
     recent_ = state.recent;
     setFileDialogRecentPaths(recent_);
     saveFormatOptions_ = state.saveFormatOptions;
-    autoSaveRecovery_ = state.autoSaveRecovery;
-    saveInBackground_ = state.saveInBackground;
-    autoSaveMinutes_ = state.autoSaveMinutes;
-    setNativeSaveCompatibility(state.nativeSaveCompatibility);
-    setRawSettingsStore(state.rawSettingsStore);
+    autoSaveRecovery_ = prefs.autoSaveRecovery;
+    saveInBackground_ = prefs.saveInBackground;
+    autoSaveMinutes_ = prefs.autoSaveMinutes;
+    setNativeSaveCompatibility(prefs.nativeSaveCompatibility);
+    setRawSettingsStore(prefs.rawSettingsStore);
 }
 
 void ImportSaveCoordinator::setNativeSaveCompatibility(int choice)

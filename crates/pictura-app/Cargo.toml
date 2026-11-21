@@ -36,6 +36,9 @@ rayon = "1"
 # The Save As dialogs are authored as JSON in C++; the typed SaveOptions parse
 # that payload here. Already in Cargo.lock through pictura-script.
 serde_json = "1"
+serde = "1"
+# Versioned user preferences preserve native TOML values across rewrites and backups.
+toml = "1.1"
 
 # ash is the Vulkan bindings the zero-copy interop probe uses to export raw
 # VkDevice/VkImage handles. wgpu has no Vulkan backend on Apple targets, so it

@@ -1,4 +1,5 @@
 #include "panel_host.h"
+#include "preferences.h"
 
 #include "api/document_api.h"
 #include "api/engine_bridge.h"
@@ -49,7 +50,7 @@
 
 namespace pictura {
 
-QList<PanelGroup*> PanelHost::buildPanels(const SessionState& state)
+QList<PanelGroup*> PanelHost::buildPanels(const SessionState& state, const Preferences& prefs)
 {
     buildingPanels_ = true;
     layersPanel_ = new LayersPanel(colorState_, shell_);
@@ -183,10 +184,10 @@ QList<PanelGroup*> PanelHost::buildPanels(const SessionState& state)
 
     characterPanel_ = new CharacterPanel(shell_);
     characterPanel_->setObjectName(QStringLiteral("characterPanel"));
-    characterPanel_->setShowAsianOptions(state.typeShowAsianOptions);
+    characterPanel_->setShowAsianOptions(prefs.typeShowAsianOptions);
     paragraphPanel_ = new ParagraphPanel(shell_);
     paragraphPanel_->setObjectName(QStringLiteral("paragraphPanel"));
-    paragraphPanel_->setMiddleEastern(state.typeMiddleEastern);
+    paragraphPanel_->setMiddleEastern(prefs.typeMiddleEastern);
 
     glyphsPanel_ = new GlyphsPanel(shell_);
     glyphsPanel_->setObjectName(QStringLiteral("glyphsPanel"));

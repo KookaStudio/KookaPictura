@@ -67,6 +67,20 @@ tests) and linked into the C++ executable `pictura` by CMake via `cxx_qt_import_
   `frame_{columns,session,menus,build,test}.cpp`; `panels/panel_column.cpp` →
   `panel_column{,_drag,_iconic,_menu,_test}.cpp` + `panel_float.cpp`; etc.).
 
+## Profile persistence
+
+- Rust `src/prefs.rs` owns typed application preferences in
+  `$XDG_CONFIG_HOME/kooka-pictura/prefs.toml`. Qt submits field-level edits through
+  `cpp/preferences.cpp`. Window geometry, dock layout, workspaces, and recents
+  remain state. Test fixtures must isolate both roots.
+- Publish the preferences document before removing legacy keys from session
+  JSON. Session migration and a pending version 1 backup both require a valid
+  base before committing partial preference edits.
+- Profile presence locks cover both config and state roots. Reset registers
+  recovery on both roots before publishing, and startup recovers interrupted
+  publications before loading preferences. Import receipts and the agent
+  recovery guard are local metadata excluded from portable backups.
+
 ## Design system (theme tokens)
 
 - `cpp/theme.{h,cpp}` is the token layer: `Theme::tokens(level)` returns
@@ -97,7 +111,7 @@ tests) and linked into the C++ executable `pictura` by CMake via `cxx_qt_import_
   `scripts/file-size-allowlist.txt` — add new checks to a `selftest_*.cpp`, never grow it.
 - `scripts/report_tests.py` parses both self-test invocations' token streams and merges checks by
   `(suite, name)`.
-- **State isolation**: `main.cpp` points `XDG_STATE_HOME` at a temp dir, so the self-test never
+- **Profile isolation**: `main.cpp` points `XDG_STATE_HOME` and `XDG_CONFIG_HOME` inside a temp dir, so the self-test never
   touches real preferences/recovery state; if that temp dir cannot be created the run aborts
   (exit 199) instead of falling back to the real store. The session store is
   `$XDG_STATE_HOME/kooka-pictura/state.json` (default `~/.local/state/kooka-pictura/state.json`).

@@ -31,6 +31,7 @@
 #include "preferences_dialog.h"
 #include "recovery_store.h"
 #include "session.h"
+#include "preferences.h"
 
 #include "api/document_bridge.h"
 #include "api/layers_bridge.h"
@@ -441,11 +442,11 @@ void RecoveryTest::fileHandlingPreferenceTogglesAutosave()
 
     minutes->setCurrentIndex(minutes->findData(30));
     QCOMPARE(window->autoSaveMinutes(), 30);
-    QCOMPARE(pictura::loadSession().autoSaveMinutes, 30);
+    QCOMPARE(pictura::loadPreferences().autoSaveMinutes, 30);
 
     prefs->setCheckboxForTest(QStringLiteral("autoSaveRecovery"), false);
     QVERIFY(!window->autoSaveRecovery());
-    QVERIFY(!pictura::loadSession().autoSaveRecovery);
+    QVERIFY(!pictura::loadPreferences().autoSaveRecovery);
     QVERIFY2(snapshots(dir).isEmpty(), "turning autosave off drops the snapshots");
     window->autosaveRecovery();
     waitForWrites(*window);

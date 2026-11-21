@@ -3,42 +3,19 @@
 #include <QtCore/QByteArray>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonObject>
-#include <QtCore/QList>
-#include <QtCore/QMap>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
 
 namespace pictura {
-
-// The CS6 autosave interval choices, in minutes.
-inline const QList<int> kAutoSaveMinuteChoices = {5, 10, 15, 30, 60};
 
 // Opaque UI session state persisted across restarts. Not document data.
 struct SessionState {
     QByteArray layout;               // QMainWindow::saveState()
     int layoutRevision = 0;          // chrome revision that wrote `layout`; a
                                      // mismatch discards the layout on restore
-    int brightnessLevel = 1;         // Theme level
-    int themeFamily = 0;             // Theme family: 0 dark / 1 light
-    int uiScalePercent = 100;        // Theme UI scale, normalized on restore
     bool quickMaskSelected = false;
     QString quickMaskColor = QStringLiteral("#ff0000");
     int quickMaskOpacity = 50;
-    bool gpuCompute = true;          // GPU compositing preference
-    int memoryUsagePercent = 60;     // Memory Usage, % of the host's memory (#1211)
-    QStringList scratchVolumes;      // scratch disks in order, at most 4; empty = default (#1217)
-    int colorPolicy = 0;             // incoming RGB profile policy (0 Preserve)
-    int cmykPolicy = 0;              // incoming CMYK profile policy (0 Preserve)
-    int workingCmyk = 0;             // 0 = bundled Photocraft Coated CMYK
-    int renderIntent = 1;            // 0 Perceptual, 1 Relative, 2 Saturation, 3 Absolute
-    bool blackPointCompensation = true;
-    bool useDither = true;
-    bool askMismatchOpen = false;
-    bool askMissingOpen = false;
-    int pickerChoice = 0;            // 0 Adobe, 1 System
-    // Color Settings > More Options: Blend Text Colors Using Gamma (1.00–2.20).
-    bool textGammaEnabled = true;
-    double textGamma = 1.45;
     int layersThumbSize = 2;         // 0 None / 1 Small / 2 Medium / 3 Large
     int layersThumbContents = 0;     // 0 Entire Document / 1 Layer Bounds
     bool layersExpandNewEffects = true;
@@ -46,47 +23,7 @@ struct SessionState {
     bool layersUseDefaultMasksOnFill = true;  // fill layer takes selection mask
     bool layersAddMaskByDefault = true;       // new adjustment gets a mask
     int toolsColumns = 1;            // 1 or 2; out-of-range loads the default
-    bool useShiftKeyForToolSwitch = true;
-    // Interface: Open Documents As Tabs, and Enable Floating Document Window
-    // Docking (a float dropped on the tab strip docks). A store written before
-    // them loads both on.
-    bool openDocumentsAsTabs = true;
-    bool enableFloatingDocumentDocking = true;
-    // General: Zoom Resizes Windows (View zoom fits a floating window). A store
-    // written before it loads off.
-    bool zoomResizesWindows = false;
-    // Edit > Preferences > Updates: check for a newer release on launch. On by
-    // default; the banner's opt-out and the Preferences page turn it off.
-    bool checkForUpdatesOnLaunch = true;
-    // Edit > Preferences > Type: new type starts with selected placeholder text.
-    bool typePlaceholderText = true;
-    // Edit > Preferences > Type: the CS6 type options and glyph protection.
-    bool typeShowAsianOptions = false;
-    bool typeMiddleEastern = false;
-    bool typeMissingGlyphProtection = true;
-    bool confirmLiveShapeToPath = true;  // off after "Don't show again"
-    bool confirmDeleteVectorMask = true;  // off after "Don't show again"
-    bool showFullScreenMessage = true;   // off after "Don't show again"
-    bool showSmartFilterEditMessage = true;  // off after "Don't show again"
-    // Edit > Preferences > File Handling: Automatically Save Recovery
-    // Information Every <n> minutes (CS6 choices 5/10/15/30/60, default 10).
-    bool autoSaveRecovery = true;
-    bool saveInBackground = true;
-    int autoSaveMinutes = 10;
-    int nativeSaveCompatibility = 0; // Always, Ask, Never
-    int rawSettingsStore = 0;        // Camera Raw database, sidecar ".xmp" (#401)
-    // Agent control: what an agent attached to this window may do. Off, and
-    // read-only, until the person says otherwise.
-    bool agentControlEnabled = false;
-    bool agentAllowEdit = false;
-    bool agentAllowSave = false;
-    int agentApprovalMode = 1;  // ApprovalMode; 1 Auto-approve
-    QStringList agentRoots;
-    // View > Rulers / Show > Guides / Lock Guides, and the Guides, Grid, &
-    // Slices guide colour (#rrggbb) and Dashed Lines style.
     bool rulersVisible = false;
-    int rulerUnit = 1;               // RulerUnit; 1 Inches, CS6's default
-    bool traditionalPoints = false;  // Units & Rulers: 72.27 rather than 72 pt/in
     bool guidesVisible = true;
     bool guidesLocked = false;
     // View > Show > Smart Guides: alignment guides and snapping while moving.
@@ -116,7 +53,6 @@ struct SessionState {
     // View > Snap Canvas To Workspace: pin a fitting canvas to the centre and
     // hide the workspace scrollbars. Default off.
     bool snapCanvasToWorkspace = false;
-    QString guideColor = QStringLiteral("#4affff");
     // View > Proof Setup / Proof Colors: application view state (not PSD).
     // device 0 Working CMYK, 1 Working Gray, 2 sRGB, 3 Adobe RGB, 4 ProPhoto.
     int proofDevice = 0;
@@ -137,7 +73,6 @@ struct SessionState {
     // The last accepted File > Scripts > Statistics mode and align choice
     // (`{"mode": int, "align": bool}`); empty until the first merge.
     QJsonObject statisticsOptions;
-    bool guideDashed = false;
     // Crop options bar, persisted across restarts.
     bool cropClassicMode = false;    // Classic vs Modern (default) drag semantics
     bool cropDeletePixels = true;    // discard pixels outside the crop
@@ -169,11 +104,6 @@ struct SessionState {
     bool autoShowHidden = false;
     QJsonArray panelGroups;
     QJsonArray panelColumns;
-    // Edit > Keyboard Shortcuts: only the differences from the default set.
-    // Command id -> its bindings as portable key text (empty: none), and
-    // tool name -> letter (empty: none).
-    QMap<QString, QStringList> shortcuts;
-    QMap<QString, QString> toolShortcuts;
     int schemaVersion = 12;
     QStringList recent;
     QByteArray windowGeometry;       // QMainWindow::saveGeometry(), empty = default
@@ -182,6 +112,11 @@ struct SessionState {
 
 // Path of the session store, $XDG_STATE_HOME/kooka-pictura/state.json.
 QString sessionFilePath();
+
+// The caller holds the session lock for a read-modify-write.
+QJsonObject readSessionObject();
+bool writeSessionObject(const QJsonObject& object);
+void setSessionCommitFailureForTest(bool fail);
 
 // Load the session state, or defaults when the store is missing or corrupt.
 SessionState loadSession();

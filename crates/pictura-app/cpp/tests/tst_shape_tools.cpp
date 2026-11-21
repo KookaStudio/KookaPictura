@@ -8,6 +8,7 @@
 #include "panels/numeric_field.h"
 #include "selftest_paint_fixture.h"
 #include "session.h"
+#include "preferences.h"
 
 #include "api/layers_bridge.h"
 
@@ -359,7 +360,7 @@ void ShapeToolsTest::liveShapes()
         f.drag({QPointF(70, 55), QPointF(75, 60), QPointF(90, 80)});
     }
     QCOMPARE(seen, 3);
-    QVERIFY(!pictura::loadSession().confirmLiveShapeToPath);
+    QVERIFY(!pictura::loadPreferences().confirmLiveShapeToPath);
     frame.setActiveTool(pictura::ToolId::Ellipse);
     f.drag({QPointF(10, 60), QPointF(30, 80), QPointF(50, 90)});
     QVERIFY(pictura::path_target_is_live_shape(*f.view));
@@ -375,9 +376,9 @@ void ShapeToolsTest::liveShapes()
     QVERIFY(!pictura::path_target_is_live_shape(*f.view));
     QCOMPARE(f.view->sample_argb(55, 75), kRed);
 
-    pictura::SessionState session = pictura::loadSession();
+    auto session = pictura::loadPreferences();
     session.confirmLiveShapeToPath = true;
-    QVERIFY(pictura::saveSession(session));
+    QVERIFY(pictura::savePreferences(pictura::loadPreferences(), session));
 }
 
 void ShapeToolsTest::createDialogs()

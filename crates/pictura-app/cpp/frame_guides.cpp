@@ -11,23 +11,23 @@
 
 namespace pictura {
 
-void PicturaMainWindow::loadGuideSession(const SessionState& state)
+void PicturaMainWindow::loadGuideSession(const SessionState& state, const Preferences& prefs)
 {
     rulersVisible_ = state.rulersVisible;
     freePan_ = state.freePan;
     snapCanvasToWorkspace_ = state.snapCanvasToWorkspace;
-    if (state.rulerUnit >= 0 && state.rulerUnit < kRulerUnitCount) {
-        rulerUnit_ = RulerUnit(state.rulerUnit);
+    if (prefs.rulerUnit >= 0 && prefs.rulerUnit < kRulerUnitCount) {
+        rulerUnit_ = RulerUnit(prefs.rulerUnit);
     }
-    traditionalPoints_ = state.traditionalPoints;
+    traditionalPoints_ = prefs.traditionalPoints;
     guidesVisible_ = state.guidesVisible;
     guidesLocked_ = state.guidesLocked;
     smartGuidesVisible_ = state.smartGuidesVisible;
-    const QColor color(state.guideColor);
+    const QColor color(prefs.guideColor);
     if (color.isValid()) {
         guideColor_ = color;
     }
-    guideDashed_ = state.guideDashed;
+    guideDashed_ = prefs.guideDashed;
 }
 
 void PicturaMainWindow::prepareCanvasGuides(const DocWindow& window)

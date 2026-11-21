@@ -30,7 +30,7 @@
 #include "liquify_dialog.h"
 #include "picture_frame_dialog.h"
 #include "reduce_noise_dialog.h"
-#include "session.h"
+#include "preferences.h"
 #include "vp_dialog.h"
 
 #include "api/layers_bridge.h"
@@ -161,8 +161,8 @@ bool commitFilter(QWidget* parent, PictureView* view, const QList<ImageView*>& c
 // it, with the "Don't show again" choice persisted in the session store.
 void noteStackedSmartFilterEdit(QWidget* parent)
 {
-    SessionState session = loadSession();
-    if (!session.showSmartFilterEditMessage) {
+    const auto prefs = loadPreferences();
+    if (!prefs.showSmartFilterEditMessage) {
         return;
     }
     QMessageBox box(QMessageBox::Information, QStringLiteral("Kooka Pictura"),
@@ -176,9 +176,10 @@ void noteStackedSmartFilterEdit(QWidget* parent)
     box.setCheckBox(dontShow);
     box.exec();
     if (dontShow->isChecked()) {
-        session = loadSession();
-        session.showSmartFilterEditMessage = false;
-        saveSession(session);
+        const auto before = loadPreferences();
+        auto after = before;
+        after.showSmartFilterEditMessage = false;
+        savePreferences(before, after);
     }
 }
 

@@ -265,37 +265,38 @@ void PicturaMainWindow::saveSession()
         return;
     }
     SessionState state = pictura::loadSession();
+    auto prefs = preferencesBaseline_;
     state.layout = saveState();
     state.layoutRevision = kLayoutRevision;
     state.windowGeometry = saveGeometry();
     state.windowMaximized = isMaximized();
-    state.brightnessLevel = brightnessLevel_;
-    state.themeFamily = themeFamily_ == 1 ? 1 : 0;
-    state.uiScalePercent = uiScalePercent_;
-    state.gpuCompute = gpuCompute_;
-    state.memoryUsagePercent = memory_usage_percent();
-    state.scratchVolumes = scratch_volumes().split(QLatin1Char('\n'), Qt::SkipEmptyParts);
-    state.colorPolicy = colorPolicy_;
-    state.cmykPolicy = cmykPolicy_;
-    state.workingCmyk = workingCmyk_;
-    state.renderIntent = renderIntent_;
-    state.blackPointCompensation = blackPointCompensation_;
-    state.useDither = useDither_;
-    state.askMismatchOpen = askMismatchOpen_;
-    state.askMissingOpen = askMissingOpen_;
-    state.pickerChoice = pickerChoice_;
-    state.textGammaEnabled = textGammaEnabled_;
-    state.textGamma = textGamma_;
+    prefs.brightnessLevel = brightnessLevel_;
+    prefs.themeFamily = themeFamily_ == 1 ? 1 : 0;
+    prefs.uiScalePercent = uiScalePercent_;
+    prefs.gpuCompute = gpuCompute_;
+    prefs.memoryUsagePercent = memory_usage_percent();
+    prefs.scratchVolumes = scratch_volumes().split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    prefs.colorPolicy = colorPolicy_;
+    prefs.cmykPolicy = cmykPolicy_;
+    prefs.workingCmyk = workingCmyk_;
+    prefs.renderIntent = renderIntent_;
+    prefs.blackPointCompensation = blackPointCompensation_;
+    prefs.useDither = useDither_;
+    prefs.askMismatchOpen = askMismatchOpen_;
+    prefs.askMissingOpen = askMissingOpen_;
+    prefs.pickerChoice = pickerChoice_;
+    prefs.textGammaEnabled = textGammaEnabled_;
+    prefs.textGamma = textGamma_;
     state.toolsColumns = toolbox_ ? toolbox_->columns() : 1;
-    state.useShiftKeyForToolSwitch = useShiftKeyForToolSwitch_;
-    state.openDocumentsAsTabs = openDocumentsAsTabs_;
-    state.enableFloatingDocumentDocking = floatingDocumentDocking_;
-    state.zoomResizesWindows = zoomResizesWindows_;
-    state.typePlaceholderText = tools_ ? tools_->typePlaceholderText() : true;
-    state.typeShowAsianOptions = typeShowAsianOptions_;
-    state.typeMiddleEastern = typeMiddleEastern_;
-    state.typeMissingGlyphProtection = typeMissingGlyphProtection_;
-    state.shortcuts.clear();
+    prefs.useShiftKeyForToolSwitch = useShiftKeyForToolSwitch_;
+    prefs.openDocumentsAsTabs = openDocumentsAsTabs_;
+    prefs.enableFloatingDocumentDocking = floatingDocumentDocking_;
+    prefs.zoomResizesWindows = zoomResizesWindows_;
+    prefs.typePlaceholderText = tools_ ? tools_->typePlaceholderText() : true;
+    prefs.typeShowAsianOptions = typeShowAsianOptions_;
+    prefs.typeMiddleEastern = typeMiddleEastern_;
+    prefs.typeMissingGlyphProtection = typeMissingGlyphProtection_;
+    prefs.shortcuts.clear();
     const QHash<QString, QList<QKeySequence>> overrides = commandRegistry()->shortcutOverrides();
     const QSet<QString> shadowed =
         panels_->actionsPanel() ? panels_->actionsPanel()->shadowedCommandIds()
@@ -308,17 +309,17 @@ void PicturaMainWindow::saveSession()
         for (const QKeySequence& binding : it.value()) {
             bindings << binding.toString(QKeySequence::PortableText);
         }
-        state.shortcuts.insert(it.key(), bindings);
+        prefs.shortcuts.insert(it.key(), bindings);
     }
-    state.toolShortcuts.clear();
+    prefs.toolShortcuts.clear();
     const QMap<ToolId, QChar> toolOverrides = toolShortcutOverrides();
     for (auto it = toolOverrides.cbegin(); it != toolOverrides.cend(); ++it) {
-        state.toolShortcuts.insert(toolIdName(it.key()), it.value().isNull() ? QString()
+        prefs.toolShortcuts.insert(toolIdName(it.key()), it.value().isNull() ? QString()
                                                                              : QString(it.value()));
     }
     state.rulersVisible = rulersVisible_;
-    state.rulerUnit = int(rulerUnit_);
-    state.traditionalPoints = traditionalPoints_;
+    prefs.rulerUnit = int(rulerUnit_);
+    prefs.traditionalPoints = traditionalPoints_;
     state.guidesVisible = guidesVisible_;
     state.guidesLocked = guidesLocked_;
     state.smartGuidesVisible = smartGuidesVisible_;
@@ -345,8 +346,8 @@ void PicturaMainWindow::saveSession()
     state.quickMaskSelected = quickMaskUi_.selected;
     state.quickMaskColor = quickMaskUi_.color.name();
     state.quickMaskOpacity = quickMaskUi_.opacity;
-    state.guideColor = guideColor_.name();
-    state.guideDashed = guideDashed_;
+    prefs.guideColor = guideColor_.name();
+    prefs.guideDashed = guideDashed_;
     state.proofDevice = proofDevice_;
     state.proofIntent = proofIntent_;
     state.proofBpc = proofBpc_;
@@ -364,10 +365,13 @@ void PicturaMainWindow::saveSession()
         state.toolOptions = toolOptionsToJson(*tools_);
     }
     panels_->saveState(state);
-    importSave_->saveState(state);
+    importSave_->saveState(state, prefs);
     state.schemaVersion = 12;
     if (auto* checker = findChild<UpdateChecker*>(QStringLiteral("updateChecker"))) {
-        state.checkForUpdatesOnLaunch = checker->settings().automaticChecksEnabled;
+        prefs.checkForUpdatesOnLaunch = checker->settings().automaticChecksEnabled;
+    }
+    if (savePreferences(preferencesBaseline_, prefs)) {
+        preferencesBaseline_ = std::move(prefs);
     }
     // A refused write means another instance wrote the store after this one
     // launched; leave its workspace snapshot alone too.

@@ -28,6 +28,7 @@
 #include "memory_refusal.h"
 #include "preferences_dialog.h"
 #include "session.h"
+#include "preferences.h"
 #include "tools.h"
 
 #include "api/document_api.h"
@@ -141,7 +142,7 @@ void MemoryGovernorTest::memoryUsageChangeAppliesAndPersists()
     QVERIFY(spin);
     spin->setValue(45);
     QCOMPARE(pictura::memory_usage_percent(), 45);
-    QCOMPARE(pictura::loadSession().memoryUsagePercent, 45);
+    QCOMPARE(pictura::loadPreferences().memoryUsagePercent, 45);
     spin->setValue(60);
     window_->preferencesDialog()->hide();
 }

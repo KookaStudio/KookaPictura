@@ -256,7 +256,7 @@ void checkForUpdatesManually(PicturaMainWindow& frame)
         frame.statusBar()->showMessage(QObject::tr("Update checks are disabled."), 5000);
         return;
     }
-    auto* checker = ensureUpdateChecker(frame, loadSession().checkForUpdatesOnLaunch);
+    auto* checker = ensureUpdateChecker(frame, loadPreferences().checkForUpdatesOnLaunch);
     if (!checker->settings().networkAllowed) {
         frame.statusBar()->showMessage(
             QObject::tr("Update checks are not available in this run."), 5000);
@@ -299,7 +299,7 @@ void scheduleUpdateCheck(PicturaMainWindow& frame)
     if (!frame.updateChecksEnabled()) {
         return;
     }
-    ensureUpdateChecker(frame, loadSession().checkForUpdatesOnLaunch)->checkAutomatically();
+    ensureUpdateChecker(frame, loadPreferences().checkForUpdatesOnLaunch)->checkAutomatically();
 }
 
 void registerUpdateHandlers(PicturaMainWindow& frame)
@@ -310,7 +310,7 @@ void registerUpdateHandlers(PicturaMainWindow& frame)
 
 UpdatePreferencesPage* makeUpdatePreferencesPage(PicturaMainWindow& frame, QWidget* parent)
 {
-    auto* checker = ensureUpdateChecker(frame, loadSession().checkForUpdatesOnLaunch);
+    auto* checker = ensureUpdateChecker(frame, loadPreferences().checkForUpdatesOnLaunch);
     auto* page = new UpdatePreferencesPage(checker, parent);
     QObject::connect(page, &UpdatePreferencesPage::automaticChecksChanged, &frame,
                      [&frame](bool on) { setAutomaticUpdateChecks(frame, on); });

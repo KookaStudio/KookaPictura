@@ -3,7 +3,7 @@
 
 #include "screen_mode_message.h"
 
-#include "session.h"
+#include "preferences.h"
 
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QMessageBox>
@@ -13,8 +13,8 @@ namespace pictura {
 
 bool confirmFullScreenMode(QWidget* parent)
 {
-    SessionState session = loadSession();
-    if (!session.showFullScreenMessage) {
+    const auto prefs = loadPreferences();
+    if (!prefs.showFullScreenMessage) {
         return true;
     }
     QMessageBox box(QMessageBox::NoIcon, QObject::tr("Message"),
@@ -35,9 +35,10 @@ bool confirmFullScreenMode(QWidget* parent)
         return false;
     }
     if (dontShow->isChecked()) {
-        session = loadSession();
-        session.showFullScreenMessage = false;
-        saveSession(session);
+        const auto before = loadPreferences();
+        auto after = before;
+        after.showFullScreenMessage = false;
+        savePreferences(before, after);
     }
     return true;
 }

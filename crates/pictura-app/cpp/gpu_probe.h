@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <utility>
 
 #include <QtCore/QHash>
 #include <QtCore/QString>
@@ -69,6 +70,11 @@ QString selectGpuBackend(GpuBackendCache& cache,
 // Windows: recover the marker, select and pin a backend, and set safe mode on
 // exhaustion. Linux: a no-op (the direct Vulkan path stays).
 void prepareGpuBackend();
+
+// Active adapter availability and whether Preferences can offer a GPU retry.
+std::pair<bool, bool> probeFrameGpuAvailability();
+void setFrameGpuProbeOverrideForTest(std::pair<bool, bool> availability);
+void clearFrameGpuProbeOverrideForTest();
 
 // The backend selected for this launch, or an empty string on Linux/CPU.
 QString selectedGpuBackend();

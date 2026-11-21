@@ -14,6 +14,7 @@
 #include "preferences_dialog.h"
 #include "selftest_paint_fixture.h"
 #include "session.h"
+#include "preferences.h"
 #include "type_fonts.h"
 
 #include "api/view_bridge.h"
@@ -116,13 +117,13 @@ void TypePreferencesTest::defaults()
 
 void TypePreferencesTest::persists()
 {
-    pictura::SessionState state = pictura::loadSession();
+    auto state = pictura::loadPreferences();
     state.typeShowAsianOptions = true;
     state.typeMiddleEastern = true;
     state.typeMissingGlyphProtection = false;
-    QVERIFY(pictura::saveSession(state));
+    QVERIFY(pictura::savePreferences(pictura::loadPreferences(), state));
 
-    const pictura::SessionState loaded = pictura::loadSession();
+    const auto loaded = pictura::loadPreferences();
     QVERIFY(loaded.typeShowAsianOptions);
     QVERIFY(loaded.typeMiddleEastern);
     QVERIFY(!loaded.typeMissingGlyphProtection);

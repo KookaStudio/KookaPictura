@@ -72,7 +72,7 @@ from Preferences.
 #### Scenario: The dialog disables automatic checks [up_dont_check_disables]
 
 - **WHEN** the person unchecks **Check for updates automatically**
-- **THEN** the session stores automatic checks off and the Preferences
+- **THEN** the preferences store records automatic checks as off and the Preferences
   checkbox follows
 
 #### Scenario: The person re-enables checks [up_reenable]

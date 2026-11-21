@@ -21,6 +21,7 @@
 
 #include "api/document_api.h"
 #include "dialogs.h"
+#include "preferences.h"
 #include "qt_test_support.h"
 #include "session.h"
 #include "update_checker.h"
@@ -655,15 +656,17 @@ void AppUpdaterTest::sessionCheckDefault()
     pictura::test::ScopedStateHome stateHome;
     QVERIFY(stateHome.isValid());
 
-    pictura::SessionState state;
-    QVERIFY(state.checkForUpdatesOnLaunch);
-    QCOMPARE(state.schemaVersion, 12);
+    const auto before = pictura::loadPreferences();
+    QVERIFY(before.checkForUpdatesOnLaunch);
 
-    state.checkForUpdatesOnLaunch = false;
-    QVERIFY(pictura::saveSession(state));
-    const pictura::SessionState loaded = pictura::loadSession();
-    QVERIFY(!loaded.checkForUpdatesOnLaunch);
-    QCOMPARE(loaded.schemaVersion, 12);
+    auto preferences = before;
+    preferences.checkForUpdatesOnLaunch = false;
+    QVERIFY(pictura::savePreferences(before, preferences));
+    QVERIFY(!pictura::loadPreferences().checkForUpdatesOnLaunch);
+    QString toml;
+    QVERIFY(pictura::exportPortablePreferences(&toml, nullptr));
+    QVERIFY(toml.startsWith(QStringLiteral("schema_version = 1\n")));
+    QVERIFY(!QFileInfo::exists(pictura::sessionFilePath()));
 }
 
 void AppUpdaterTest::environmentSettings()

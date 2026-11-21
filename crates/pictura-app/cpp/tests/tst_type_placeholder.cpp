@@ -8,6 +8,7 @@
 #include "preferences_dialog.h"
 #include "selftest_paint_fixture.h"
 #include "session.h"
+#include "preferences.h"
 
 #include <memory>
 
@@ -209,9 +210,9 @@ void TypePlaceholderTest::preferenceIsSaved()
     pictura::PreferencesDialog* prefs = openTypePreferences();
     QVERIFY(prefs);
     QVERIFY(prefs->setCheckboxForTest(QStringLiteral("fillPlaceholderText"), false));
-    QVERIFY(!pictura::loadSession().typePlaceholderText);
+    QVERIFY(!pictura::loadPreferences().typePlaceholderText);
     QVERIFY(prefs->setCheckboxForTest(QStringLiteral("fillPlaceholderText"), true));
-    QVERIFY(pictura::loadSession().typePlaceholderText);
+    QVERIFY(pictura::loadPreferences().typePlaceholderText);
 }
 
 QTEST_MAIN(TypePlaceholderTest)

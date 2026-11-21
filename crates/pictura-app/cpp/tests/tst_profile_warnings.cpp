@@ -11,6 +11,7 @@
 #include "frame.h"
 #include "profile_warning_dialog.h"
 #include "session.h"
+#include "preferences.h"
 
 #include "api/document_bridge.h"
 #include "api/paint_bridge.h"
@@ -307,7 +308,7 @@ void ProfileWarningsTest::disabled()
 
 void ProfileWarningsTest::defaultsOff()
 {
-    const pictura::SessionState state;
+    const auto state = pictura::defaultPreferences();
     QVERIFY(!state.askMismatchOpen);
     QVERIFY(!state.askMissingOpen);
     const Fixture fixture = makePsd(QStringLiteral("defaults.psd"), true, false);
@@ -321,11 +322,11 @@ void ProfileWarningsTest::preferenceSurvivesRestart()
 {
     pictura::test::ScopedStateHome stateHome;
     QVERIFY(stateHome.isValid());
-    pictura::SessionState state;
+    auto state = pictura::loadPreferences();
     state.askMismatchOpen = true;
     state.askMissingOpen = true;
-    QVERIFY(pictura::saveSession(state));
-    const pictura::SessionState loaded = pictura::loadSession();
+    QVERIFY(pictura::savePreferences(pictura::loadPreferences(), state));
+    const auto loaded = pictura::loadPreferences();
     QVERIFY(loaded.askMismatchOpen);
     QVERIFY(loaded.askMissingOpen);
 }

@@ -8,6 +8,7 @@
 
 #include "color_settings_dialog.h"
 #include "session.h"
+#include "preferences.h"
 
 #include "api/engine_bridge.h"
 
@@ -85,7 +86,7 @@ void ColorSettingsTest::defaults()
     QVERIFY(values.blackPointCompensation);
     QVERIFY(values.useDither);
     QCOMPARE(values.rgbPolicy, 0);
-    const pictura::SessionState state;
+    const auto state = pictura::defaultPreferences();
     QCOMPARE(state.renderIntent, 1);
     QVERIFY(state.blackPointCompensation);
     QVERIFY(state.useDither);
@@ -107,15 +108,15 @@ void ColorSettingsTest::preferencesSurviveRestart()
 {
     pictura::test::ScopedStateHome stateHome;
     QVERIFY(stateHome.isValid());
-    pictura::SessionState state;
+    auto state = pictura::loadPreferences();
     state.cmykPolicy = 2;
     state.renderIntent = 0;
     state.blackPointCompensation = false;
     state.useDither = false;
     state.askMismatchOpen = true;
     state.pickerChoice = 1;
-    QVERIFY(pictura::saveSession(state));
-    const pictura::SessionState loaded = pictura::loadSession();
+    QVERIFY(pictura::savePreferences(pictura::loadPreferences(), state));
+    const auto loaded = pictura::loadPreferences();
     QCOMPARE(loaded.cmykPolicy, 2);
     QCOMPARE(loaded.renderIntent, 0);
     QCOMPARE(loaded.blackPointCompensation, false);

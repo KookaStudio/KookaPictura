@@ -21,6 +21,7 @@
 #include "panels/color_panel.h"
 #include "panels/swatches_panel.h"
 #include "session.h"
+#include "preferences.h"
 
 #include "api/engine_bridge.h"
 
@@ -356,10 +357,10 @@ void ColorPickerTest::pickerPreferenceSurvivesRestart()
 {
     pictura::test::ScopedStateHome stateHome;
     QVERIFY(stateHome.isValid());
-    pictura::SessionState state;
+    auto state = pictura::loadPreferences();
     state.pickerChoice = 1;
-    QVERIFY(pictura::saveSession(state));
-    QCOMPARE(pictura::loadSession().pickerChoice, 1);
+    QVERIFY(pictura::savePreferences(pictura::loadPreferences(), state));
+    QCOMPARE(pictura::loadPreferences().pickerChoice, 1);
     pictura::ColorPickerDialog::setPickerPreference(0);
 }
 

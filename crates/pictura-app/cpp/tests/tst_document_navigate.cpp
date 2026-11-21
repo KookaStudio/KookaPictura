@@ -20,6 +20,7 @@
 #include "panels/panel_column.h"
 #include "preferences_dialog.h"
 #include "session.h"
+#include "preferences.h"
 #include "tool_options.h"
 #include "tools.h"
 
@@ -449,7 +450,7 @@ void DocumentNavigateTest::handZoomOptionsPersist()
         prefs->close();
     }
 
-    const SessionState state = loadSession();
+    const auto state = loadPreferences();
     QVERIFY(state.zoomResizesWindows);
     auto reloaded = pictura::test::makeMainWindow();
     QVERIFY(reloaded->zoomResizesWindows());

@@ -14,7 +14,7 @@ The Type preferences page SHALL present `Show Asian Text Options` (off by
 default), `Middle Eastern` (off by default), and `Enable Missing Glyph
 Protection` (on by default). The settings SHALL be process-wide: changing one
 SHALL apply to every open document without recording a document history state.
-The settings SHALL be saved with the session and restored on the next start,
+The settings SHALL be saved in the preferences store and restored on the next start,
 with the glyph-protection value applied to the renderer before the first
 document renders.
 

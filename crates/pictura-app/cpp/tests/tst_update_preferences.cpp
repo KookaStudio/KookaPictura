@@ -31,6 +31,7 @@
 #include "gpu_probe.h"
 #include "preferences_dialog.h"
 #include "session.h"
+#include "preferences.h"
 #include "update_banner.h"
 #include "update_package.h"
 #include "update_preferences_page.h"
@@ -375,10 +376,10 @@ void UpdatePreferencesTest::togglePersists()
     QVERIFY(page != nullptr);
 
     page->automaticChecksBox()->setChecked(false);
-    QVERIFY(!pictura::loadSession().checkForUpdatesOnLaunch);
+    QVERIFY(!pictura::loadPreferences().checkForUpdatesOnLaunch);
 
     page->automaticChecksBox()->setChecked(true);
-    QVERIFY(pictura::loadSession().checkForUpdatesOnLaunch);
+    QVERIFY(pictura::loadPreferences().checkForUpdatesOnLaunch);
 }
 
 void UpdatePreferencesTest::checkNowChecks()
@@ -417,7 +418,7 @@ void UpdatePreferencesTest::dontCheckDisablesAutoChecks()
     QTRY_VERIFY_WITH_TIMEOUT(banner->isVisible(), 3000);
 
     banner->automaticChecksBox()->setChecked(false);
-    QVERIFY(!pictura::loadSession().checkForUpdatesOnLaunch);
+    QVERIFY(!pictura::loadPreferences().checkForUpdatesOnLaunch);
 
     window->showPreferences(pictura::PreferencesDialog::kUpdates);
     auto* page = window->preferencesDialog()->findChild<pictura::UpdatePreferencesPage*>();
@@ -441,13 +442,13 @@ void UpdatePreferencesTest::reenableFromPreferences()
     QTRY_VERIFY_WITH_TIMEOUT((banner = window->findChild<pictura::UpdateBanner*>()), 3000);
     QTRY_VERIFY_WITH_TIMEOUT(banner->isVisible(), 3000);
     banner->automaticChecksBox()->setChecked(false);
-    QVERIFY(!pictura::loadSession().checkForUpdatesOnLaunch);
+    QVERIFY(!pictura::loadPreferences().checkForUpdatesOnLaunch);
 
     window->showPreferences(pictura::PreferencesDialog::kUpdates);
     auto* page = window->preferencesDialog()->findChild<pictura::UpdatePreferencesPage*>();
     QVERIFY(page != nullptr);
     page->automaticChecksBox()->setChecked(true);
-    QVERIFY(pictura::loadSession().checkForUpdatesOnLaunch);
+    QVERIFY(pictura::loadPreferences().checkForUpdatesOnLaunch);
 }
 
 void UpdatePreferencesTest::menuEntryChecks()
