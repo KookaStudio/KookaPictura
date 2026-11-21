@@ -2,14 +2,17 @@
 //! reads any supported one into the same normalized CFA image as `read_dng`.
 //! Also the helpers the TIFF-based vendor containers share.
 
+use super::camera_matrices::CAMERAS;
 use super::levels::Area;
 use super::tiff::{Ifd, Tiff};
-use super::{cr2, read_dng, to_usize, DngImage, Tags, DNG_VERSION};
+use super::{cr2, read_dng, to_usize, DngColor, DngImage, Tags, DNG_VERSION};
 use crate::error::PsdError;
 use crate::probe::ImageBudget;
 
 const EXIF_IFD: u16 = 34665;
 const MAKER_NOTE: u16 = 0x927C;
+const ILLUMINANT_A: u16 = 17;
+const ILLUMINANT_D65: u16 = 21;
 
 /// A camera raw container `read_raw` reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,4 +100,51 @@ pub(super) fn coord(value: f64) -> Result<usize, PsdError> {
         return Err(PsdError::Invalid(format!("raw coordinate {value}")));
     }
     to_usize(value as u64)
+}
+
+/// A make reduced for matching: its first word, upper-cased (`NIKON
+/// CORPORATION` → `NIKON`). Kept in step with `scripts/gen-camera-matrices.py`.
+fn make_key(make: &str) -> String {
+    make.split_whitespace().next().unwrap_or("").to_uppercase()
+}
+
+/// A model reduced for matching, so a camera's market names meet one key:
+/// upper-cased, `-` as a space, without a leading make word or the words
+/// `EOS` and `DIGITAL` (`Canon EOS 400D DIGITAL` → `400D`). Kept in step with
+/// `scripts/gen-camera-matrices.py`.
+fn model_key(make: &str, model: &str) -> String {
+    let make = make_key(make);
+    let model = model.to_uppercase().replace('-', " ");
+    let mut words: Vec<&str> = model.split_whitespace().collect();
+    if words.first() == Some(&make.as_str()) {
+        words.remove(0);
+    }
+    words.retain(|w| !matches!(*w, "EOS" | "DIGITAL"));
+    words.join(" ")
+}
+
+/// The colour tags of a raw file that embeds no matrix: its camera's fitted
+/// matrices under illuminants A and D65 when the table knows the camera, none
+/// otherwise, and the as-shot neutral the file recorded.
+pub(super) fn camera_color(
+    make: Option<&str>,
+    model: Option<&str>,
+    as_shot_neutral: Option<[f64; 3]>,
+) -> DngColor {
+    let mut color = DngColor {
+        as_shot_neutral,
+        ..DngColor::default()
+    };
+    let (Some(make), Some(model)) = (make, model) else {
+        return color;
+    };
+    let (make_key, model_key) = (make_key(make), model_key(make, model));
+    if let Some(camera) = CAMERAS
+        .iter()
+        .find(|c| c.make == make_key && c.models.contains(&model_key.as_str()))
+    {
+        color.color_matrix = [Some(camera.illuminant_a), Some(camera.d65)];
+        color.calibration_illuminant = [Some(ILLUMINANT_A), Some(ILLUMINANT_D65)];
+    }
+    color
 }

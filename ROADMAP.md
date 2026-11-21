@@ -454,16 +454,22 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [x] **Canon CR2** — `pictura_codec::read_raw` names a raw container by its
       signature and reads a DNG or a CR2 (sliced lossless JPEG, active area
       from the maker note, black from the masked border) into the same CFA
-      plane; decode only, no colour matrix yet (#399).
+      plane (#399).
       `crates/pictura-codec/src/dng/vendor.rs`, `crates/pictura-codec/src/dng/cr2.rs`.
+- [x] **Per-camera colour matrices** — vendor raw files without a
+      `ColorMatrix` take A and D65 matrices fitted from openly licensed camera
+      spectral sensitivities (14 Canon CR2 bodies; other cameras are refused),
+      and a CR2 reports its as-shot white balance from the maker note
+      (approximate parity) (#1465). `scripts/gen-camera-matrices.py`,
+      `crates/pictura-codec/src/dng/camera_matrices.rs`.
 - [x] **Open camera raw files** — File ▸ Open recognises a DNG or CR2 by its
       signature, decodes it, shows Pictura Raw first (absolute white balance,
       sidecar or embedded `crs:` settings), and opens a 16-bit RGB document
       (approximate parity) (#400).
       `crates/pictura-codec/src/dng/develop.rs`,
       `crates/pictura-app/src/cxxqt_object/open_jobs/raw_open.rs`.
-- [ ] Per-camera colour matrices, so CR2 and other vendor files open (#1465)
 - [ ] Open a raw file as a smart object (Shift+Open Image) (#1466)
+- [ ] CR2 CFA phase for the EOS 600D, so it takes its colour matrices (#1476)
 - [ ] X-Trans-tuned demosaic, with the Fuji container (#399)
 - [ ] Deflate, PackBits and lossy-JPEG DNGs, linear DNGs and floating-point
       samples (#396)
