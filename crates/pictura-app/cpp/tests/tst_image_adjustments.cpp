@@ -40,6 +40,8 @@
 #include <QtWidgets/QStatusBar>
 #include <QtWidgets/QToolButton>
 
+#include <algorithm>
+
 #include "qt_test_support.h"
 
 namespace {
@@ -144,6 +146,7 @@ private slots:
     void blackWhiteMixesTintsAndPresets();
     void gradientMapEditsItsGradient();
     void gradientMapReopensWithItsState();
+    void gradientEditorEditsOpacityAndMidpoint();
     void photoFilterUsesAFilterOrAColor();
     void photoFilterColorPickerSamplesTheImage();
     void curvesEditsEachChannelAndTheSelectedPoint();
@@ -875,6 +878,45 @@ void ImageAdjustmentsTest::gradientMapEditsItsGradient()
     QCOMPARE(view_->history_count(), history + 1);
     QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Gradient Map"));
     QCOMPARE(view_->composite_argb(5, 5), first.rgb());
+}
+
+// The Gradient Editor's opacity row and midpoint field act on the selected
+// stop; the opacity stop reaches the baked ramp.
+void ImageAdjustmentsTest::gradientEditorEditsOpacityAndMidpoint()
+{
+    pictura::GradientSpec spec;
+    spec.name = QStringLiteral("Test");
+    spec.stops = {{0, QColor(Qt::black), 50}, {4096, QColor(Qt::white), 50}};
+    pictura::GradientEditorDialog dialog(spec, Qt::black, Qt::white);
+    auto* bar = dialog.bar();
+    QVERIFY(bar);
+    QCOMPARE(bar->opacityStops().size(), 2);
+
+    const int added = bar->addOpacityStop(2048);
+    QCOMPARE(bar->opacityStops().size(), 3);
+    bar->selectOpacity(added);
+    bar->setOpacityStopValue(added, 0);
+    QCOMPARE(dialog.spec().opacityStops.at(added).opacity, 0);
+    QVERIFY(dialog.findChild<QSpinBox*>(QStringLiteral("gradientOpacity"))->isEnabled());
+    QVERIFY(!dialog.findChild<QWidget*>(QStringLiteral("gradientStopColor"))->isEnabled());
+
+    auto* midpoint = dialog.findChild<QSpinBox*>(QStringLiteral("gradientStopMidpoint"));
+    QVERIFY(midpoint);
+    midpoint->setValue(25);
+    QCOMPARE(dialog.spec().opacityStops.at(added).midpoint, 25);
+    const pictura::GradientStops ramp = pictura::resolvedStops(dialog.spec());
+    const auto middle = std::find_if(ramp.begin(), ramp.end(), [](const auto& stop) {
+        return stop.location == 2048;
+    });
+    QVERIFY(middle != ramp.end());
+    QCOMPARE(middle->color.alpha(), 0);
+
+    bar->select(0);
+    midpoint->setValue(75);
+    QCOMPARE(dialog.spec().stops.at(0).midpoint, 75);
+
+    bar->removeOpacityStop(added);
+    QCOMPARE(bar->opacityStops().size(), 2);
 }
 
 // Gradient Map: reopening a block keeps its opacity, Reverse, and Dither, so

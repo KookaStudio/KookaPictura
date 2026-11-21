@@ -188,7 +188,7 @@ QString GradientFillDialog::payload() const
         .arg(angle_->value())
         .arg(scale_->value())
         .arg(reverse_->isChecked() ? 1 : 0)
-        .arg(formatStops(spec_.stops));
+        .arg(formatStops(bakedSolidStops(spec_)));
 }
 
 bool GradientFillDialog::getFill(const QString& initial, QWidget* parent, QString* out)

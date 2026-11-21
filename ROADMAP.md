@@ -410,7 +410,7 @@ gaps are the CS6 Extended 3D object and camera tools.
       `crates/pictura-app/cpp/panels/swatches_panel.cpp`.
 - [x] **Gradients and patterns.** `crates/pictura-paint/src/gradient.rs`,
       `crates/pictura-paint/src/pattern.rs`.
-- [ ] The Gradient Editor reachable from the Gradient tool, plus opacity stops
+- [x] The Gradient Editor reachable from the Gradient tool, plus opacity stops
       and a midpoint (#598)
 - [ ] Define Pattern, the `.pat` library, and Scripted Patterns (#599)
 - [x] Color-picker gamut and web alerts, and the picker preference (#600)

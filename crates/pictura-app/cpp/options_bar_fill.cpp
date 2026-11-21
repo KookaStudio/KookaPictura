@@ -3,6 +3,7 @@
 
 #include "options_bar.h"
 
+#include "gradient_editor_dialog.h"
 #include "panels/numeric_field.h"
 
 #include "api/paint_bridge.h"
@@ -125,9 +126,9 @@ QCheckBox* addFillToggle(QHBoxLayout* layout, QWidget* page, const QString& labe
 
 } // namespace
 
-// CS6's Gradient bar: the gradient sample with its preset menu, the five style
-// buttons, Mode, Opacity, Reverse, Dither, and Transparency.
-// ponytail: no Gradient Editor; the sample picks among the built-in gradients.
+// CS6's Gradient bar: the gradient sample with its preset menu and the
+// Gradient Editor, the five style buttons, Mode, Opacity, Reverse, Dither, and
+// Transparency.
 QWidget* OptionsBar::buildGradientPage(ToolId id)
 {
     auto* page = new QWidget(stack_);
@@ -144,40 +145,91 @@ QWidget* OptionsBar::buildGradientPage(ToolId id)
             gradient_->set(o);
         }
     };
+    const auto colors = [this] {
+        return QPair<QColor, QColor>(
+            controller_ ? controller_->foreground() : QColor(Qt::black),
+            controller_ ? controller_->background() : QColor(Qt::white));
+    };
+    const auto currentSpec = [this, colors]() {
+        const GradientOptions o = controller_ ? gradient_->get() : GradientOptions{};
+        if (!o.gradient.isEmpty()) {
+            GradientSpec stored = parseGradientSpec(o.gradient);
+            if (!stored.stops.isEmpty()) {
+                return stored;
+            }
+        }
+        const auto [fg, bg] = colors();
+        GradientSpec spec;
+        spec.name = QString(gradient_preset_name(o.preset));
+        spec.stops = gradientPreset(o.preset, fg, bg);
+        spec.smoothness = 100;
+        return spec;
+    };
 
     auto* sample = new QToolButton(page);
     sample->setObjectName(QStringLiteral("optionsGradientSample"));
-    sample->setPopupMode(QToolButton::InstantPopup);
+    sample->setPopupMode(QToolButton::MenuButtonPopup);
     sample->setIconSize(kSampleSize);
     auto* presets = new QMenu(sample);
     auto* group = new QActionGroup(presets);
     for (int i = 0; i < gradient_preset_count(); ++i) {
         QAction* action = presets->addAction(gradient_preset_name(i));
         action->setCheckable(true);
-        action->setChecked(i == initial.preset);
+        action->setChecked(initial.gradient.isEmpty() && i == initial.preset);
         group->addAction(action);
     }
     sample->setMenu(presets);
     layout->addWidget(sample);
     // The first presets follow the foreground and background colours, so the
     // sample and the menu are redrawn when either changes.
-    const auto refresh = [this, sample, presets] {
-        const QColor fg = controller_ ? controller_->foreground() : QColor(Qt::black);
-        const QColor bg = controller_ ? controller_->background() : QColor(Qt::white);
+    const auto refresh = [this, sample, presets, colors, currentSpec] {
+        const auto [fg, bg] = colors();
         const QList<QAction*> actions = presets->actions();
+        const GradientOptions o = controller_ ? gradient_->get() : GradientOptions{};
+        const bool custom = !o.gradient.isEmpty();
         for (int i = 0; i < actions.size(); ++i) {
             actions.at(i)->setIcon(gradientIcon(i, fg, bg));
-            if (actions.at(i)->isChecked()) {
-                sample->setIcon(actions.at(i)->icon());
-                sample->setToolTip(actions.at(i)->text());
+            actions.at(i)->setChecked(!custom && i == o.preset);
+        }
+        if (custom) {
+            const GradientSpec spec = currentSpec();
+            QPixmap pixmap(kSampleSize);
+            pixmap.fill(Qt::transparent);
+            QPainter painter(&pixmap);
+            paintGradient(painter, pixmap.rect(), resolvedStops(spec));
+            painter.end();
+            sample->setIcon(QIcon(pixmap));
+            sample->setToolTip(spec.name.isEmpty() ? QStringLiteral("Custom") : spec.name);
+        } else {
+            const QAction* checked = actions.value(o.preset);
+            if (checked) {
+                sample->setIcon(checked->icon());
+                sample->setToolTip(checked->text());
             }
         }
     };
     refresh();
     connect(group, &QActionGroup::triggered, this, [update, refresh, presets](QAction* action) {
         const int index = presets->actions().indexOf(action);
-        update([index](GradientOptions& o) { o.preset = index; });
+        update([index](GradientOptions& o) {
+            o.preset = index;
+            o.gradient.clear();
+        });
         refresh();
+    });
+    connect(sample, &QToolButton::clicked, this, [this, page, sample, update, refresh, colors,
+                                                  currentSpec]() {
+        const auto [fg, bg] = colors();
+        GradientEditorDialog dialog(currentSpec(), fg, bg, page);
+        dialog.setSolidOnly(true);
+        if (dialog.exec() == QDialog::Accepted) {
+            const GradientSpec next = dialog.spec();
+            update([next](GradientOptions& o) {
+                o.gradient = formatGradientSpec(next);
+                o.preset = -1;
+            });
+            refresh();
+        }
     });
     if (controller_) {
         connect(controller_, &ToolController::colorsChanged, sample, refresh);

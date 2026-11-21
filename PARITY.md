@@ -1,7 +1,7 @@
 # Feature parity tracker
 
-Assessed: 2026-11-20
-Pictura commit: 89c8ba95
+Assessed: 2026-11-21
+Pictura commit: 7ab28fc5
 CS6 baseline: Adobe Photoshop CS6 13.0 (2012), Standard and Extended
 CC baseline: Adobe Photoshop 28.0 (November 2026 release; LTS 27.11.1)
 
@@ -11,12 +11,12 @@ This tracker measures feature coverage against a frozen Photoshop baseline. It d
 
 | Baseline | Complete | Partial | Missing | Unknown | Denominator | Coverage | Excluded non-goals |
 |---|---|---|---|---|---|---|---|
-| CS6 Standard | 191 | 84 | 69 | 5 | 349 | 54.7% | 8 |
-| CS6 Standard, in scope | 191 | 84 | 63 | 3 | 341 | 56.0% | 8 |
-| CS6 Extended | 192 | 84 | 85 | 5 | 366 | 52.5% | 23 |
-| CS6 Extended, in scope | 192 | 84 | 64 | 3 | 343 | 56.0% | 23 |
-| CC 28.0 | 193 | 86 | 90 | 5 | 374 | 51.6% | 20 |
-| CC 28.0, in scope | 193 | 86 | 72 | 3 | 354 | 54.5% | 20 |
+| CS6 Standard | 192 | 83 | 69 | 5 | 349 | 55.0% | 8 |
+| CS6 Standard, in scope | 192 | 83 | 63 | 3 | 341 | 56.3% | 8 |
+| CS6 Extended | 193 | 83 | 85 | 5 | 366 | 52.7% | 23 |
+| CS6 Extended, in scope | 193 | 83 | 64 | 3 | 343 | 56.3% | 23 |
+| CC 28.0 | 194 | 85 | 90 | 5 | 374 | 51.9% | 20 |
+| CC 28.0, in scope | 194 | 85 | 72 | 3 | 354 | 54.8% | 20 |
 
 ## Baselines
 
@@ -44,7 +44,7 @@ Coverage is not behavioural or pixel parity with Photoshop. Every Complete row n
 | Selections & masking | 15/22 (68.2%) | 15/22 (68.2%) | 15/22 (68.2%) |
 | Adjustments & filters | 30/55 (54.5%) | 30/55 (54.5%) | 30/64 (46.9%) |
 | Type & vector | 16/17 (94.1%) | 16/17 (94.1%) | 16/19 (84.2%) |
-| Color & bit depth | 13/29 (44.8%) | 13/29 (44.8%) | 13/29 (44.8%) |
+| Color & bit depth | 14/29 (48.3%) | 14/29 (48.3%) | 14/29 (48.3%) |
 | Automation & extensibility | 3/18 (16.7%) | 3/18 (16.7%) | 3/22 (13.6%) |
 | Shell, panels & preferences | 25/60 (41.7%) | 25/63 (39.7%) | 25/62 (40.3%) |
 
@@ -190,8 +190,8 @@ Source list: CS6 toolbox slots (71 catalogue slots plus the two missing single r
 | P-TOOL-31 | Eraser | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-32 | Background Eraser | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Background conversion, edge halo, and pen pressure remain | TOOL-25 |
 | P-TOOL-33 | Magic Eraser | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
-| P-TOOL-34 | Gradient | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Availability gates, Gradient Editor reachability, and Gradient Fill remain | TOOL-26 |
-| P-TOOL-35 | Paint Bucket | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Availability gates, Gradient Editor reachability, and Gradient Fill remain | TOOL-26 |
+| P-TOOL-34 | Gradient | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Availability gates and Gradient Fill remain | TOOL-26 |
+| P-TOOL-35 | Paint Bucket | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Availability gates remain | TOOL-26 |
 | P-TOOL-36 | Blur | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | 16/32-bit operation remains | TOOL-27 |
 | P-TOOL-37 | Sharpen | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | 16/32-bit operation remains | TOOL-27 |
 | P-TOOL-38 | Smudge | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | 16/32-bit operation remains | TOOL-27 |
@@ -394,7 +394,7 @@ Source list: Image > Mode, Color Settings, picker, and swatch capabilities.
 | P-CLR-21 | HDR colour picker | Y | Y | Y | Missing | in-scope | — | none | Picker is 8-bit only | #602 |
 | P-CLR-22 | 16/32-bit picker fields | Y | Y | Y | Missing | in-scope | — | none | No depth-aware fields | #604 |
 | P-CLR-23 | ACO and ASE swatch libraries | Y | Y | Y | Partial | in-scope | crates/pictura-codec/src | none | Preset Manager imports and exports; the Swatches panel libraries, rename, and display modes remain | #605 |
-| P-CLR-24 | Gradient Editor | Y | Y | Y | Partial | in-scope | crates/pictura-paint/src | none | Reachable from the tool, opacity stops, and midpoint remain | #598 |
+| P-CLR-24 | Gradient Editor | Y | Y | Y | Complete | in-scope | crates/pictura-paint/src | none | — | #598 |
 | P-CLR-25 | Define Pattern and .pat library | Y | Y | Y | Missing | in-scope | — | none | No Define Pattern or pattern library | #599 |
 | P-CLR-26 | Pattern Overlay Snap To Origin and Texture sub-options | Y | Y | Y | Partial | in-scope | crates/pictura-render/src | none | Snap To Origin and Texture remain | #606 |
 | P-CLR-27 | ICC colour management | Y | Y | Y | Complete | in-scope | crates/pictura-color/src | none | — | — |
@@ -524,6 +524,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
 |---|---|---|---|---|---|
+| 2026-11-21 | 7ab28fc5 | 192/349 (55.0%) | 193/366 (52.7%) | 28.0 | 194/374 (51.9%) |
 | 2026-11-20 | 89c8ba95 | 191/349 (54.7%) | 192/366 (52.5%) | 28.0 | 193/374 (51.6%) |
 
 ## Update procedure

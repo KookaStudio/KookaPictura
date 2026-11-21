@@ -142,6 +142,7 @@ const QVector<OptionRow>& optionRows()
                      {QStringLiteral("tolerance"), 1}}},
         {"gradient",
          QJsonObject{{QStringLiteral("preset"), 1},
+                     {QStringLiteral("gradient"), QStringLiteral("{}")},
                      {QStringLiteral("style"), 1},
                      {QStringLiteral("mode"), QStringLiteral("screen")},
                      {QStringLiteral("opacity"), 90},

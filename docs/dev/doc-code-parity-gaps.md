@@ -145,7 +145,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | TOOL-23 | `color-replacement.md` | Full mode list + disable on Bitmap/Indexed/Multichannel | DIVERGENT | `replace.rs:25`; `paint_tools.rs:343` | #547 |
 | TOOL-24 | `dodge-burn-sponge.md` | Grayscale Sponge, airbrush toggle, quick keys, 32-bpc availability | SHIPPED | `tone.rs`; `tool_retouch.cpp`; `options_bar_retouch.cpp`; `toolbox.cpp` | #548 |
 | TOOL-25 | `eraser-tools.md` | Magic-eraser background convert, background-eraser edge halo, pen pressure | PARTIAL | `eraser.rs:166-332` | #549 |
-| TOOL-26 | `gradient-and-paint-bucket.md` | Gradient/Bucket availability gates, Gradient Editor reachability, Gradient Fill dialog | PARTIAL | `tool_fills.cpp`; `options_bar_fill.cpp:129-131`; `frame_menus.cpp:719-725` | #550 |
+| TOOL-26 | `gradient-and-paint-bucket.md` | Gradient/Bucket availability gates and the Gradient Fill dialog | PARTIAL | `tool_fills.cpp`; `frame_menus.cpp:719-725` | #550 |
 | TOOL-27 | `smudge-blur-sharpen.md` | HDR (16/32-bpc) operation | DIVERGENT | `stroke.rs:395` rejects non-8-bit | #551 |
 | TOOL-28 | `clone-stamp-and-pattern-stamp.md` | Cross-document colour-mode rule + Pattern Stamp Impressionist | MISSING | `paint_tools.rs:451`; `tool_stamps.cpp` | #552 |
 | TOOL-29 | `hand-and-zoom.md:76` | `Match All` + `Shift`+click/drag is approximated by the `Shift` forms of Scroll All (Hand drag, location) and Zoom All (Zoom click, zoom) rather than one combined match | DIVERGENT | `frame_document_arrange.cpp:173`; `tool_hand_zoom.cpp:59` | #500 |
@@ -218,7 +218,6 @@ Embed/Read Watermark (`#350`/`#351`) shipped as an in-tree approximation
 
 | ID | Spec | Gap | Status | Evidence | Issue |
 |---|---|---|---|---|---|
-| CLR-1 | `gradient-presets.md` | Gradient Editor reachable from the Gradient tool + opacity stops + midpoint | PARTIAL | `options_bar_fill.cpp:129-131`; `gradient_editor_dialog.cpp:481-484` | #598 |
 | CLR-2 | `pattern-presets.md` | Define Pattern, `.pat` library, Scripted Patterns | MISSING | `crates/pictura-script/src/command_catalogue/entries.rs`; `codec/patterns.rs` | #599 |
 | CLR-3 | `color-picker.md` | Color Libraries (PANTONE) | MISSING | `color_picker_dialog.cpp` libraries disabled | #600 |
 | CLR-4 | `color-picker.md` | HUD colour picker | MISSING | none found | #601 |

@@ -7,6 +7,7 @@
 #include "tool_handler.h"
 
 #include "document_command.h"
+#include "gradient_editor_dialog.h"
 #include "image_view.h"
 #include "tools.h"
 
@@ -84,12 +85,14 @@ public:
         }
         const QPointF end = constrained(imagePos, mods);
         const GradientOptions o = gradient_->get();
+        const GradientSpec spec = o.gradient.isEmpty() ? GradientSpec{} : parseGradientSpec(o.gradient);
+        const QString stops = spec.stops.isEmpty() ? QString() : formatGradientSpecStops(spec);
         const QRgb foreground = ctx.foreground().rgba();
         const QRgb background = ctx.background().rgba();
         // A large document's gradient runs as a job behind a progress window
         // (#1300).
         const bool drawn = runDocumentCommand(jobParent(ctx), *v, QObject::tr("Gradient"), [&] {
-            draw_gradient(*v, o.preset, foreground, background, o.style, o.mode, o.opacity,
+            draw_gradient(*v, o.preset, stops, foreground, background, o.style, o.mode, o.opacity,
                           o.reverse, o.dither, o.transparency, start_.x(), start_.y(), end.x(),
                           end.y());
         });

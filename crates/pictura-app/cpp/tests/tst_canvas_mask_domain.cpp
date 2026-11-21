@@ -727,7 +727,7 @@ void CanvasMaskDomainTest::importedMaskFillTools()
         const QByteArray before = coverage(*v);
         bool changed = false;
         if (operation == 0) { changed = pictura::edit_fill(*v, 0xff000000u, -1, QStringLiteral("normal"), 100, false); }
-        if (operation == 1) { changed = pictura::draw_gradient(*v, 0, 0xff000000u, 0xff000000u, 0, QStringLiteral("normal"), 100, false, false, true, 7, 6, 11, 6); }
+        if (operation == 1) { changed = pictura::draw_gradient(*v, 0, QString(), 0xff000000u, 0xff000000u, 0, QStringLiteral("normal"), 100, false, false, true, 7, 6, 11, 6); }
         if (operation == 2) { changed = pictura::bucket_fill_at(*v, 9, 6, 0xff000000u, -1, QStringLiteral("normal"), 100, 255, false, true, false); }
         if (operation == 3) { changed = pictura::edit_stroke(*v, 0xff000000u, 2, 1, QStringLiteral("normal"), 100); }
         if (operation == 4 || operation == 5) {

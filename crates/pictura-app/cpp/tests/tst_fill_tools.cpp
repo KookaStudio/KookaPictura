@@ -2,11 +2,13 @@
 
 #include <QtTest/QtTest>
 
+#include "gradient_editor_dialog.h"
 #include "panels/numeric_field.h"
 #include "fill_dialog.h"
 #include "stroke_dialog.h"
 #include "selftest_paint_fixture.h"
 
+#include <QtCore/QTimer>
 #include <QtGui/QPainter>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
@@ -46,6 +48,22 @@ struct Colors {
         tools->setBackground(background);
     }
 };
+
+// The Gradient bar's default: the first built-in preset, not an edited ramp.
+void resetGradient(pictura::ToolController* tools)
+{
+    auto group = tools->optionsFor<pictura::GradientGroup>(pictura::ToolId::Gradient);
+    pictura::GradientOptions options = group->get();
+    options.preset = 0;
+    options.gradient.clear();
+    options.style = 0;
+    options.mode = QStringLiteral("normal");
+    options.opacity = 100;
+    options.reverse = false;
+    options.dither = false;
+    options.transparency = true;
+    group->set(options);
+}
 } // namespace
 
 class FillToolsTest : public QObject {
@@ -54,6 +72,10 @@ class FillToolsTest : public QObject {
 private slots:
     void initTestCase();
     void gradientTool();
+    void gradientEditorFromTheSample();
+    void gradientEditorAppliesOpacityAndMidpoint();
+    void gradientEditorCancelKeepsTheRamp();
+    void gradientPresetReplacesTheEditedRamp();
     void paintBucketTool();
     void fillCommand();
     void fillCommandPreservesTransparency();
@@ -187,6 +209,146 @@ void FillToolsTest::gradientTool()
     QVERIFY2(reversed, "reversed");
     QVERIFY2(selected, "selected");
     QVERIFY2(preset, "preset");
+}
+
+void FillToolsTest::gradientEditorFromTheSample()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(40, 40, QImage::Format_RGB32);
+    seed.fill(QColor(0, 128, 0));
+    Fixture f(frame, seed, QStringLiteral("pictura_gradient_editor_open"));
+    if (!f.ok()) {
+        QFAIL("gradient fixture");
+    }
+    const Colors colors(f.tools, Qt::black, Qt::white);
+    resetGradient(f.tools);
+    frame.setActiveTool(pictura::ToolId::Gradient);
+    auto* sample = frame.findChild<QToolButton*>(QStringLiteral("optionsGradientSample"));
+    QVERIFY(sample);
+    bool opened = false;
+    QTimer::singleShot(0, [&opened] {
+        auto* editor = qobject_cast<pictura::GradientEditorDialog*>(
+            QApplication::activeModalWidget());
+        if (!editor) {
+            return;
+        }
+        opened = editor->bar() && editor->bar()->stops().size() >= 2;
+        editor->reject();
+    });
+    sample->click();
+    QVERIFY(opened);
+}
+
+void FillToolsTest::gradientEditorAppliesOpacityAndMidpoint()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(40, 40, QImage::Format_ARGB32);
+    seed.fill(QColor(0, 128, 0, 128));
+    Fixture f(frame, seed, QStringLiteral("pictura_gradient_editor_apply"));
+    if (!f.ok()) {
+        QFAIL("gradient fixture");
+    }
+    const Colors colors(f.tools, Qt::black, Qt::white);
+    resetGradient(f.tools);
+    frame.setActiveTool(pictura::ToolId::Gradient);
+    auto* sample = frame.findChild<QToolButton*>(QStringLiteral("optionsGradientSample"));
+    QVERIFY(sample);
+    QTimer::singleShot(0, [] {
+        auto* editor = qobject_cast<pictura::GradientEditorDialog*>(
+            QApplication::activeModalWidget());
+        if (!editor) {
+            return;
+        }
+        auto* bar = editor->bar();
+        bar->select(0);
+        bar->setStopMidpoint(0, 25);
+        bar->selectOpacity(0);
+        bar->setOpacityStopValue(0, 0);
+        bar->setOpacityStopMidpoint(0, 25);
+        editor->accept();
+    });
+    sample->click();
+
+    const auto options =
+        f.tools->optionsFor<pictura::GradientGroup>(pictura::ToolId::Gradient)->get();
+    QVERIFY(!options.gradient.isEmpty());
+    const pictura::GradientSpec stored = pictura::parseGradientSpec(options.gradient);
+    QVERIFY2(stored.stops.size() >= 2, qPrintable(options.gradient));
+    QCOMPARE(stored.stops.at(0).midpoint, 25);
+    QCOMPARE(stored.opacityStops.value(0).opacity, 0);
+    QCOMPARE(stored.opacityStops.value(0).midpoint, 25);
+    f.drag({QPointF(0, 20), QPointF(39, 20)});
+    QCOMPARE(qAlpha(pictura::sample_argb_scoped(*f.view, 0, 20, 1, 0)), 0);
+    QVERIFY2(qAlpha(pictura::sample_argb_scoped(*f.view, 10, 20, 1, 0)) > 100,
+             "the opacity midpoint did not move the blend");
+}
+
+void FillToolsTest::gradientEditorCancelKeepsTheRamp()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(40, 40, QImage::Format_RGB32);
+    seed.fill(QColor(0, 128, 0));
+    Fixture f(frame, seed, QStringLiteral("pictura_gradient_editor_cancel"));
+    if (!f.ok()) {
+        QFAIL("gradient fixture");
+    }
+    const Colors colors(f.tools, Qt::black, Qt::white);
+    resetGradient(f.tools);
+    frame.setActiveTool(pictura::ToolId::Gradient);
+    auto* sample = frame.findChild<QToolButton*>(QStringLiteral("optionsGradientSample"));
+    QVERIFY(sample);
+    QTimer::singleShot(0, [] {
+        auto* editor = qobject_cast<pictura::GradientEditorDialog*>(
+            QApplication::activeModalWidget());
+        if (!editor) {
+            return;
+        }
+        editor->bar()->setStopColor(0, Qt::red);
+        editor->reject();
+    });
+    sample->click();
+    const auto options =
+        f.tools->optionsFor<pictura::GradientGroup>(pictura::ToolId::Gradient)->get();
+    QVERIFY(options.gradient.isEmpty());
+    QCOMPARE(options.preset, 0);
+    f.drag({QPointF(0, 20), QPointF(39, 20)});
+    QVERIFY(qRed(f.view->sample_argb(10, 20)) < 100);
+}
+
+void FillToolsTest::gradientPresetReplacesTheEditedRamp()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(40, 40, QImage::Format_RGB32);
+    seed.fill(QColor(0, 128, 0));
+    Fixture f(frame, seed, QStringLiteral("pictura_gradient_editor_preset"));
+    if (!f.ok()) {
+        QFAIL("gradient fixture");
+    }
+    const Colors colors(f.tools, Qt::black, Qt::white);
+    resetGradient(f.tools);
+    frame.setActiveTool(pictura::ToolId::Gradient);
+    auto* sample = frame.findChild<QToolButton*>(QStringLiteral("optionsGradientSample"));
+    QVERIFY(sample && sample->menu());
+    QTimer::singleShot(0, [] {
+        auto* editor = qobject_cast<pictura::GradientEditorDialog*>(
+            QApplication::activeModalWidget());
+        if (!editor) {
+            return;
+        }
+        editor->bar()->setStopMidpoint(0, 25);
+        editor->accept();
+    });
+    sample->click();
+    auto group = f.tools->optionsFor<pictura::GradientGroup>(pictura::ToolId::Gradient);
+    QVERIFY(!group->get().gradient.isEmpty());
+
+    sample->menu()->actions().at(3)->trigger();
+    QVERIFY(group->get().gradient.isEmpty());
+    QCOMPARE(group->get().preset, 3);
+    f.drag({QPointF(0, 20), QPointF(39, 20)});
+    QCOMPARE(qRed(f.view->sample_argb(0, 20)), 255);
+    QCOMPARE(qGreen(f.view->sample_argb(39, 20)), 255);
+    resetGradient(f.tools);
 }
 
 void FillToolsTest::paintBucketTool()

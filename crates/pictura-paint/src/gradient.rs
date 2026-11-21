@@ -53,23 +53,60 @@ impl GradientStyle {
     }
 }
 
-/// One stop on the ramp; `position` is 0.0–1.0.
+/// One stop on the ramp; `position` is 0.0–1.0. `midpoint` is the fraction of
+/// the segment to the next stop at which the blend is half way (0.5 is linear).
 #[derive(Clone, Copy, Debug)]
 pub struct GradientStop {
     pub position: f32,
     pub color: Rgba,
+    pub midpoint: f32,
 }
 
 impl GradientStop {
     pub const fn new(position: f32, color: Rgba) -> Self {
-        Self { position, color }
+        Self {
+            position,
+            color,
+            midpoint: 0.5,
+        }
+    }
+
+    pub const fn with_midpoint(mut self, midpoint: f32) -> Self {
+        self.midpoint = midpoint;
+        self
+    }
+}
+
+/// One opacity stop; `opacity` is 0.0–1.0. It interpolates independently of
+/// the colour stops, with its own midpoint.
+#[derive(Clone, Copy, Debug)]
+pub struct GradientOpacityStop {
+    pub position: f32,
+    pub opacity: f32,
+    pub midpoint: f32,
+}
+
+impl GradientOpacityStop {
+    pub const fn new(position: f32, opacity: f32) -> Self {
+        Self {
+            position,
+            opacity,
+            midpoint: 0.5,
+        }
+    }
+
+    pub const fn with_midpoint(mut self, midpoint: f32) -> Self {
+        self.midpoint = midpoint;
+        self
     }
 }
 
 /// A colour ramp. Stops are held in ascending position order, never empty.
+/// `opacity` empty means the colour stops' own alpha is the ramp's alpha.
 #[derive(Clone, Debug)]
 pub struct Gradient {
     pub stops: Vec<GradientStop>,
+    pub opacity: Vec<GradientOpacityStop>,
 }
 
 impl Gradient {
@@ -80,7 +117,17 @@ impl Gradient {
         if stops.is_empty() {
             stops.push(GradientStop::new(0.0, BLACK));
         }
-        Gradient { stops }
+        Gradient {
+            stops,
+            opacity: Vec::new(),
+        }
+    }
+
+    /// Give the ramp an independent opacity-stop list, sorted into place.
+    pub fn with_opacity(mut self, mut opacity: Vec<GradientOpacityStop>) -> Gradient {
+        opacity.sort_by(|a, b| a.position.total_cmp(&b.position));
+        self.opacity = opacity;
+        self
     }
 
     pub fn two_stop(from: Rgba, to: Rgba) -> Gradient {
@@ -99,6 +146,14 @@ impl Gradient {
     /// The renderer dithers the *quantisation* rather than the ramp position;
     /// nudging `t` instead speckles every hard-edged preset.
     fn sample_raw(&self, t: f32) -> [f32; 4] {
+        let mut color = self.sample_color(t);
+        if !self.opacity.is_empty() {
+            color[3] = self.sample_opacity(t) * 255.0;
+        }
+        color
+    }
+
+    fn sample_color(&self, t: f32) -> [f32; 4] {
         let t = t.clamp(0.0, 1.0);
         let first = self.stops[0];
         if t <= first.position {
@@ -115,7 +170,7 @@ impl Gradient {
                 let f = if span <= 1e-6 {
                     0.0
                 } else {
-                    (t - lower.position) / span
+                    bias((t - lower.position) / span, lower.midpoint)
                 };
                 let (from, to) = (channels(lower.color), channels(stop.color));
                 return std::array::from_fn(|i| from[i] + (to[i] - from[i]) * f);
@@ -125,15 +180,54 @@ impl Gradient {
         channels(last.color)
     }
 
+    fn sample_opacity(&self, t: f32) -> f32 {
+        let t = t.clamp(0.0, 1.0);
+        let first = self.opacity[0];
+        if t <= first.position {
+            return first.opacity;
+        }
+        let last = self.opacity[self.opacity.len() - 1];
+        if t >= last.position {
+            return last.opacity;
+        }
+        let mut lower = first;
+        for stop in &self.opacity[1..] {
+            if stop.position >= t {
+                let span = stop.position - lower.position;
+                let f = if span <= 1e-6 {
+                    0.0
+                } else {
+                    bias((t - lower.position) / span, lower.midpoint)
+                };
+                return lower.opacity + (stop.opacity - lower.opacity) * f;
+            }
+            lower = *stop;
+        }
+        last.opacity
+    }
+
     /// The ramp end to start: the options bar's Reverse.
     pub fn reversed(&self) -> Gradient {
         // Reversed before the stable sort, so a hard step stays a step the
-        // other way round.
+        // other way round. A midpoint is measured from the start of its
+        // segment, so it mirrors with the segment.
         Gradient::new(
             self.stops
                 .iter()
                 .rev()
-                .map(|s| GradientStop::new(1.0 - s.position, s.color))
+                .map(|s| {
+                    GradientStop::new(1.0 - s.position, s.color).with_midpoint(1.0 - s.midpoint)
+                })
+                .collect(),
+        )
+        .with_opacity(
+            self.opacity
+                .iter()
+                .rev()
+                .map(|s| {
+                    GradientOpacityStop::new(1.0 - s.position, s.opacity)
+                        .with_midpoint(1.0 - s.midpoint)
+                })
                 .collect(),
         )
     }
@@ -155,9 +249,11 @@ impl Gradient {
                             a: s.color.a,
                         },
                     )
+                    .with_midpoint(s.midpoint)
                 })
                 .collect(),
         )
+        .with_opacity(self.opacity.clone())
     }
 
     /// The ramp as a horizontal strip, for the options bar's sample and the
@@ -339,6 +435,17 @@ fn position_at(
 
 fn channels(c: Rgba) -> [f32; 4] {
     [c.r as f32, c.g as f32, c.b as f32, c.a as f32]
+}
+
+/// Where `f` (0.0–1.0 through a segment) falls when the half-way point is at
+/// `midpoint` instead of 0.5. A 0.5 midpoint is the identity.
+fn bias(f: f32, midpoint: f32) -> f32 {
+    let m = midpoint.clamp(0.01, 0.99);
+    if f <= m {
+        0.5 * f / m
+    } else {
+        0.5 + 0.5 * (f - m) / (1.0 - m)
+    }
 }
 
 fn quantise(c: [f32; 4]) -> Rgba {
@@ -690,6 +797,27 @@ mod tests {
     }
 
     #[test]
+    fn opacity_stops_reach_the_pixels() {
+        let g = Gradient::two_stop(BLACK, WHITE).with_opacity(vec![
+            GradientOpacityStop::new(0.0, 0.0),
+            GradientOpacityStop::new(1.0, 1.0),
+        ]);
+        let mut d = doc(32, 4, [255; 4]);
+        draw(
+            &mut d,
+            "0",
+            &g,
+            &GradientOptions::default(),
+            (0.0, 2.0),
+            (31.0, 2.0),
+            None,
+            None,
+        );
+        assert_eq!(pixel(&d, 0, 2)[3], 0, "the opacity stop's clear end");
+        assert_eq!(pixel(&d, 31, 2)[3], 255, "the opacity stop's opaque end");
+    }
+
+    #[test]
     fn the_ramps_alpha_reaches_the_pixels_at_depth_16() {
         // The same ramp on a 16-bit document: the retained store's
         // transparency plane takes the ramp's alpha.
@@ -899,6 +1027,51 @@ mod tests {
         assert_eq!(r.sample(0.05).a, 0);
         assert_eq!(r.sample(0.15).a, 255);
         assert_eq!(r.sample(0.12).a, 255, "the reversed step blended");
+    }
+
+    #[test]
+    fn midpoint_biases_the_even_mix() {
+        let g = Gradient::new(vec![
+            GradientStop::new(0.0, BLACK).with_midpoint(0.25),
+            GradientStop::new(1.0, WHITE),
+        ]);
+        // The half-way blend sits at the midpoint, not at the segment's centre.
+        assert_eq!(g.sample(0.25).r, 128);
+        assert!(g.sample(0.5).r > 140, "the far side stayed linear");
+    }
+
+    #[test]
+    fn opacity_stops_set_the_alpha() {
+        let g = Gradient::two_stop(BLACK, WHITE).with_opacity(vec![
+            GradientOpacityStop::new(0.0, 0.0),
+            GradientOpacityStop::new(1.0, 1.0),
+        ]);
+        assert_eq!(g.sample(0.0).a, 0);
+        assert_eq!(g.sample(1.0).a, 255);
+        let middle = g.sample(0.5);
+        assert!((middle.a as i32 - 128).abs() <= 1, "alpha {}", middle.a);
+        assert!((middle.r as i32 - 128).abs() <= 1, "colour {}", middle.r);
+    }
+
+    #[test]
+    fn midpoint_and_opacity_survive_reverse() {
+        let g = Gradient::new(vec![
+            GradientStop::new(0.0, BLACK).with_midpoint(0.25),
+            GradientStop::new(1.0, WHITE).with_midpoint(0.75),
+        ])
+        .with_opacity(vec![
+            GradientOpacityStop::new(0.0, 1.0).with_midpoint(0.75),
+            GradientOpacityStop::new(1.0, 0.0).with_midpoint(0.25),
+        ]);
+        let r = g.reversed();
+        assert_eq!(r.stops[0].position, 0.0);
+        assert_eq!(r.stops[0].midpoint, 0.25);
+        assert_eq!(r.stops[1].midpoint, 0.75);
+        assert_eq!(r.opacity[0].position, 0.0);
+        assert_eq!(r.opacity[0].midpoint, 0.75);
+        assert_eq!(r.opacity[1].midpoint, 0.25);
+        assert_eq!(r.sample(0.0).a, 0);
+        assert_eq!(r.sample(1.0).a, 255);
     }
 
     #[test]

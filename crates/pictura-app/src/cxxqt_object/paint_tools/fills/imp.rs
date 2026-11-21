@@ -48,9 +48,74 @@ pub(super) fn gradient_preset_strip(
         })
 }
 
+/// The Gradient tool's full solid ramp:
+/// `"at:RRGGBB[AA][:mid] …|at:opacity[:mid] …"`. The colour list is required;
+/// the opacity list after `|` is optional. Locations are 0..=4096 and a
+/// midpoint is a percent (50 is linear).
+fn parse_gradient_spec(text: &str) -> Option<gradient::Gradient> {
+    let (colors, opacity) = text.split_once('|').unwrap_or((text, ""));
+    let stops = colors
+        .split_whitespace()
+        .map(|item| {
+            let mut parts = item.split(':');
+            let location = parts.next()?.parse::<u16>().ok().filter(|l| *l <= 4096)?;
+            let hex = parts.next()?;
+            let midpoint = parts.next().map_or(Some(0.5), |m| {
+                m.parse::<f32>()
+                    .ok()
+                    .filter(|m| (0.0..=100.0).contains(m))
+                    .map(|m| m / 100.0)
+            })?;
+            let value = u32::from_str_radix(hex, 16).ok()?;
+            let [r, g, b, a] = match hex.len() {
+                6 => (value << 8 | 0xff).to_be_bytes(),
+                8 => value.to_be_bytes(),
+                _ => return None,
+            };
+            Some(
+                gradient::GradientStop::new(
+                    f32::from(location) / 4096.0,
+                    pictura_paint::Rgba { r, g, b, a },
+                )
+                .with_midpoint(midpoint),
+            )
+        })
+        .collect::<Option<Vec<_>>>()?;
+    if stops.is_empty() {
+        return None;
+    }
+    let opacity = if opacity.trim().is_empty() {
+        Vec::new()
+    } else {
+        opacity
+            .split_whitespace()
+            .map(|item| {
+                let mut parts = item.split(':');
+                let location = parts.next()?.parse::<u16>().ok().filter(|l| *l <= 4096)?;
+                let value = parts.next()?.parse::<f32>().ok()?;
+                let midpoint = parts.next().map_or(Some(0.5), |m| {
+                    m.parse::<f32>()
+                        .ok()
+                        .filter(|m| (0.0..=100.0).contains(m))
+                        .map(|m| m / 100.0)
+                })?;
+                Some(
+                    gradient::GradientOpacityStop::new(
+                        f32::from(location) / 4096.0,
+                        (value / 100.0).clamp(0.0, 1.0),
+                    )
+                    .with_midpoint(midpoint),
+                )
+            })
+            .collect::<Option<Vec<_>>>()?
+    };
+    Some(gradient::Gradient::new(stops).with_opacity(opacity))
+}
+
 pub(super) fn draw_gradient(
     view: Pin<&mut PictureView>,
     preset: i32,
+    stops: &QString,
     foreground: u32,
     background: u32,
     style: i32,
@@ -64,12 +129,18 @@ pub(super) fn draw_gradient(
     x1: f64,
     y1: f64,
 ) -> bool {
-    // Built per drag: "Foreground to Background" means the colours as they
+    let text = stops.to_string();
+    // A stored ramp is the user's edited gradient; otherwise the preset is
+    // built per drag so "Foreground to Background" means the colours as they
     // are now.
-    let Some(ramp) = usize::try_from(preset)
-        .ok()
-        .and_then(|i| gradient::preset(i, rgba_from_argb(foreground), rgba_from_argb(background)))
-    else {
+    let ramp = if text.trim().is_empty() {
+        usize::try_from(preset).ok().and_then(|i| {
+            gradient::preset(i, rgba_from_argb(foreground), rgba_from_argb(background))
+        })
+    } else {
+        parse_gradient_spec(&text)
+    };
+    let Some(ramp) = ramp else {
         return false;
     };
     let options = GradientOptions {

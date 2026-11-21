@@ -89,7 +89,7 @@ pictura::ShapeSpec ellipse(double x0, double y0, double x1, double y1)
 
 bool gradient(pictura::PictureView& view, double x0, double x1)
 {
-    return pictura::draw_gradient(view, 0, kRed, 0xFF0000FFu, 0, QStringLiteral("normal"), 100,
+    return pictura::draw_gradient(view, 0, QString(), kRed, 0xFF0000FFu, 0, QStringLiteral("normal"), 100,
                                   false, false, true, x0, 20.0, x1, 20.0);
 }
 

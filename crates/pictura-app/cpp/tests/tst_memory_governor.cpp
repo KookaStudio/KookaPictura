@@ -560,7 +560,7 @@ void MemoryGovernorTest::fillsSpillToScratch()
         QCOMPARE(view->history_label(view->history_index()), QString::fromLatin1(label));
     };
     run("Gradient", [&] {
-        return pictura::draw_gradient(*view, 0, 0xFF000000u, 0xFFFFFFFFu, 0, normal, 100, false,
+        return pictura::draw_gradient(*view, 0, QString(), 0xFF000000u, 0xFFFFFFFFu, 0, normal, 100, false,
                                       false, false, 0.0, 0.0, 4099.0, 4099.0);
     });
     run("Paint Bucket", [&] {
@@ -586,7 +586,7 @@ void MemoryGovernorTest::fillRefusalNamesFullScratchDisks()
     // do not fit 16 MiB of room with no scratch.
     pinRoom(16, 0);
     const bool drawn =
-        pictura::draw_gradient(*view, 0, 0xFF000000u, 0xFFFFFFFFu, 0, QStringLiteral("normal"),
+        pictura::draw_gradient(*view, 0, QString(), 0xFF000000u, 0xFFFFFFFFu, 0, QStringLiteral("normal"),
                                100, false, false, false, 0.0, 0.0, 4099.0, 4099.0);
     const bool full = pictura::edit_refused_for_scratch_full();
     const QString message = pictura::fillMemoryRefusalMessage();
