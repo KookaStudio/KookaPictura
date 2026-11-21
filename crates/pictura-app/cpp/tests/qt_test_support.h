@@ -20,8 +20,7 @@
 
 namespace pictura::test {
 
-// Redirects XDG_STATE_HOME to a throwaway dir for the guard's lifetime so a
-// PicturaMainWindow never reads or writes the developer's real session state.
+// Isolate both profile roots for the lifetime of a test window.
 // Construct it before the window so it outlives the window's session save.
 class ScopedStateHome {
 public:
@@ -29,9 +28,15 @@ public:
         : valid_(dir_.isValid())
         , hadPrior_(qEnvironmentVariableIsSet("XDG_STATE_HOME"))
         , prior_(hadPrior_ ? qgetenv("XDG_STATE_HOME") : QByteArray())
+        , hadConfig_(qEnvironmentVariableIsSet("XDG_CONFIG_HOME"))
+        , config_(hadConfig_ ? qgetenv("XDG_CONFIG_HOME") : QByteArray())
+        , hadSystems_(qEnvironmentVariableIsSet("XDG_CONFIG_DIRS"))
+        , systems_(hadSystems_ ? qgetenv("XDG_CONFIG_DIRS") : QByteArray())
     {
         if (valid_) {
             qputenv("XDG_STATE_HOME", dir_.path().toUtf8());
+            qputenv("XDG_CONFIG_HOME", (dir_.path() + QStringLiteral("/config")).toUtf8());
+            qputenv("XDG_CONFIG_DIRS", (dir_.path() + QStringLiteral("/system")).toUtf8());
         }
     }
 
@@ -45,6 +50,16 @@ public:
         } else {
             qunsetenv("XDG_STATE_HOME");
         }
+        if (hadConfig_) {
+            qputenv("XDG_CONFIG_HOME", config_);
+        } else {
+            qunsetenv("XDG_CONFIG_HOME");
+        }
+        if (hadSystems_) {
+            qputenv("XDG_CONFIG_DIRS", systems_);
+        } else {
+            qunsetenv("XDG_CONFIG_DIRS");
+        }
     }
 
     ScopedStateHome(const ScopedStateHome&) = delete;
@@ -57,6 +72,10 @@ private:
     bool valid_;
     bool hadPrior_;
     QByteArray prior_;
+    bool hadConfig_;
+    QByteArray config_;
+    bool hadSystems_;
+    QByteArray systems_;
 };
 
 inline std::unique_ptr<PicturaMainWindow> makeMainWindow(QWidget* parent = nullptr)

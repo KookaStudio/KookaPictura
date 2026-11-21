@@ -8,6 +8,7 @@
 #include "frame.h"
 #include "panels/panel_column.h"
 #include "session.h"
+#include "preferences.h"
 
 #include "api/engine_bridge.h"
 
@@ -409,38 +410,22 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
         QFile::remove(alphaPath);
 
         // session_color_policy (462): the incoming-profile policy round-trips
-        // through the session store, an out-of-range stored code normalizes to
-        // Preserve, and a fresh SessionState defaults to Preserve.
+        // through preferences and invalid codes normalize to Preserve.
         {
-            pictura::SessionState cpsState = pictura::loadSession();
+            auto cpsState = pictura::loadPreferences();
             cpsState.colorPolicy = 1;
-            const bool cpsSavedConvert = pictura::saveSession(cpsState);
-            const bool cpsRoundConvert = pictura::loadSession().colorPolicy == 1;
+            const bool cpsSavedConvert = pictura::savePreferences(pictura::loadPreferences(), cpsState);
+            const bool cpsRoundConvert = pictura::loadPreferences().colorPolicy == 1;
             cpsState.colorPolicy = 2;
-            const bool cpsSavedOff = pictura::saveSession(cpsState);
-            const bool cpsRoundOff = pictura::loadSession().colorPolicy == 2;
+            const bool cpsSavedOff = pictura::savePreferences(pictura::loadPreferences(), cpsState);
+            const bool cpsRoundOff = pictura::loadPreferences().colorPolicy == 2;
             cpsState.colorPolicy = 0;
-            pictura::saveSession(cpsState);
+            pictura::savePreferences(pictura::loadPreferences(), cpsState);
 
-            const QString cpsPath = pictura::sessionFilePath();
-            QJsonObject cpsRaw;
-            {
-                QFile cpsFile(cpsPath);
-                if (cpsFile.open(QIODevice::ReadOnly)) {
-                    cpsRaw = QJsonDocument::fromJson(cpsFile.readAll()).object();
-                }
-            }
-            cpsRaw.insert(QStringLiteral("colorPolicy"), 7);
-            bool cpsWrote = false;
-            {
-                QFile cpsFile(cpsPath);
-                if (cpsFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-                    cpsWrote = cpsFile.write(QJsonDocument(cpsRaw).toJson()) >= 0;
-                    cpsFile.close();
-                }
-            }
-            const bool cpsNormalized = cpsWrote && pictura::loadSession().colorPolicy == 0;
-            const bool cpsDefault = pictura::SessionState{}.colorPolicy == 0;
+            cpsState.colorPolicy = 7;
+            const bool cpsNormalized = pictura::savePreferences(pictura::loadPreferences(), cpsState)
+                && pictura::loadPreferences().colorPolicy == 0;
+            const bool cpsDefault = pictura::defaultPreferences().colorPolicy == 0;
 
             ST_BEGIN("session_color_policy");
             ST_PASS("session_color_policy convert=%d off=%d normalized=%d default=%d",

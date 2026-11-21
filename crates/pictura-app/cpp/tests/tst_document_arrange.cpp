@@ -32,6 +32,7 @@
 #include "panels/panel_column.h"
 #include "preferences_dialog.h"
 #include "session.h"
+#include "preferences.h"
 
 #include "api/document_bridge.h"
 #include "api/layers_bridge.h"
@@ -731,7 +732,7 @@ void DocumentArrangeTest::prefsPersist()
     QVERIFY(prefs->setCheckboxForTest(kDockingPref, false));
     window_->saveSession();
 
-    const SessionState state = loadSession();
+    const auto state = loadPreferences();
     QVERIFY(!state.openDocumentsAsTabs);
     QVERIFY(!state.enableFloatingDocumentDocking);
     auto reloaded = pictura::test::makeMainWindow();
@@ -750,10 +751,10 @@ void DocumentArrangeTest::prefsDefaultOn()
     file.write(R"({"schemaVersion":10,"toolsColumns":2,"useShiftKeyForToolSwitch":false})");
     file.close();
 
-    const SessionState state = loadSession();
+    const auto state = loadPreferences();
     QVERIFY(state.openDocumentsAsTabs);
     QVERIFY(state.enableFloatingDocumentDocking);
-    QCOMPARE(state.toolsColumns, 2);
+    QCOMPARE(loadSession().toolsColumns, 2);
     QVERIFY(!state.useShiftKeyForToolSwitch);
 }
 

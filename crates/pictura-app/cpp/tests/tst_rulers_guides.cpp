@@ -11,6 +11,7 @@
 #include "preferences_dialog.h"
 #include "selftest_paint_fixture.h"
 #include "session.h"
+#include "preferences.h"
 
 #include "api/document_bridge.h"
 
@@ -178,7 +179,7 @@ void RulersGuidesTest::rulersToggle()
     QCOMPARE(host->verticalRuler()->unit(), pictura::RulerUnit::Percent);
     QCOMPARE(top->pixelsPerUnit(), 0.8);
     QCOMPARE(host->verticalRuler()->pixelsPerUnit(), 0.6);
-    QCOMPARE(pictura::loadSession().rulerUnit, int(pictura::RulerUnit::Percent));
+    QCOMPARE(pictura::loadPreferences().rulerUnit, int(pictura::RulerUnit::Percent));
     emit top->unitChosen(pictura::RulerUnit::Inches);
 
     rulers->trigger();
@@ -437,7 +438,7 @@ void RulersGuidesTest::guidePreferences()
     emit style->activated(1);
     QCOMPARE(f.canvas->guideColor(), QColor(0xff, 0x4a, 0xff));
     QVERIFY(f.canvas->guidesDashed());
-    const pictura::SessionState state = pictura::loadSession();
+    const auto state = pictura::loadPreferences();
     QCOMPARE(state.guideColor, QStringLiteral("#ff4aff"));
     QVERIFY(state.guideDashed);
     prefs->close();
@@ -471,11 +472,11 @@ void RulersGuidesTest::unitsPreferences()
     QCOMPARE(top->unit(), pictura::RulerUnit::Points);
     QCOMPARE(host->verticalRuler()->unit(), pictura::RulerUnit::Points);
     QCOMPARE(top->pixelsPerUnit(), 1.0);
-    QCOMPARE(pictura::loadSession().rulerUnit, int(pictura::RulerUnit::Points));
+    QCOMPARE(pictura::loadPreferences().rulerUnit, int(pictura::RulerUnit::Points));
 
     traditional->setChecked(true);
     QVERIFY(std::abs(top->pixelsPerUnit() - 72.0 / 72.27) < 1e-12);
-    QVERIFY(pictura::loadSession().traditionalPoints);
+    QVERIFY(pictura::loadPreferences().traditionalPoints);
     prefs->findChild<QRadioButton*>(QStringLiteral("preferencesPostScriptPoints"))
         ->setChecked(true);
     QCOMPARE(top->pixelsPerUnit(), 1.0);

@@ -26,8 +26,10 @@
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QMenuBar>
+#include <QtWidgets/QMessageBox>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QSplitter>
+#include <QtWidgets/QStatusBar>
 #include <QtWidgets/QTabBar>
 #include <QtWidgets/QTabWidget>
 #include <QtWidgets/QToolBar>
@@ -56,6 +58,8 @@
 #include "panels/panel_column.h"
 #include "panels/panel_group.h"
 #include "preferences_dialog.h"
+#include "preferences.h"
+#include "profile_startup.h"
 #include "session.h"
 #include "settings_backup.h"
 #include "theme.h"
@@ -236,15 +240,16 @@ int main(int argc, char* argv[])
         selfTest = true;
     }
 
-    // Isolate the session store before the frame restores state (session.cpp
-    // only reads XDG_STATE_HOME). The self-test's temp dir below wins over a
-    // user-supplied --state-home.
+    const auto isolateProfile = [](const QString& root) {
+        const QDir directory(root);
+        qputenv("XDG_STATE_HOME", directory.absolutePath().toUtf8());
+        qputenv("XDG_CONFIG_HOME", directory.absoluteFilePath(QStringLiteral("config")).toUtf8());
+    };
     if (!stateHome.isEmpty()) {
-        qputenv("XDG_STATE_HOME", stateHome.toUtf8());
+        isolateProfile(stateHome);
     }
 
-    // Self-test must not read the user's saved layout: isolate the session store
-    // (session.cpp only reads XDG_STATE_HOME) before the frame restores state.
+    // Self-test must use its own profile even when a caller passed --state-home.
     std::optional<QTemporaryDir> selfTestStateDir;
     if (selfTest) {
         selfTestStateDir.emplace();
@@ -257,7 +262,7 @@ int main(int argc, char* argv[])
             std::fflush(stderr);
             return 199;
         }
-        qputenv("XDG_STATE_HOME", selfTestStateDir->path().toUtf8());
+        isolateProfile(selfTestStateDir->path());
     }
 
     if (interopProbe) {
@@ -277,6 +282,29 @@ int main(int argc, char* argv[])
         std::fprintf(stderr, "pictura interop-probe: qrhi_import=%d\n", result);
         std::fflush(stderr);
         return 0;
+    }
+
+    const bool interactiveProfile = !selfTest && !headless && !control;
+    QString profileWarning;
+    auto profile = pictura::prepareProfile(args, interactiveProfile, &profileWarning);
+    if (!profile) {
+        qWarning().noquote() << "pictura: profile could not be opened:" << profileWarning;
+        if (interactiveProfile) {
+            QMessageBox::warning(nullptr, QObject::tr("Preferences"),
+                                 QObject::tr("The profile could not be opened. %1").arg(profileWarning));
+        }
+        return 2;
+    }
+    if (!profileWarning.isEmpty()) {
+        qWarning().noquote() << "pictura: preferences reset refused:" << profileWarning;
+    }
+    QString preferenceNotice;
+    pictura::initializePreferences(&preferenceNotice);
+    if (!preferenceNotice.isEmpty()) {
+        if (!profileWarning.isEmpty()) {
+            profileWarning += QLatin1Char('\n');
+        }
+        profileWarning += preferenceNotice;
     }
 
     // Select and pin one backend before the frame's startup probe. Linux is a
@@ -333,6 +361,9 @@ int main(int argc, char* argv[])
     // The frame applies the default size (or the stored geometry) in its
     // constructor; resizing here would clobber the restored window geometry.
     frame.show();
+    if (interactiveProfile && !profileWarning.isEmpty()) {
+        frame.statusBar()->showMessage(profileWarning, 15000);
+    }
     if (recovery) {
         QTimer::singleShot(0, &frame, &pictura::PicturaMainWindow::offerRecovery);
         new pictura::AgentControl(&frame);
@@ -383,7 +414,8 @@ int main(int argc, char* argv[])
                 policy.roots.append(QFileInfo(root).canonicalFilePath());
             }
             policy.denied =
-                pictura::protectedDirectories(pictura::sessionFilePath(), controlServer.socketPath());
+                pictura::protectedDirectories(pictura::sessionFilePath(), controlServer.socketPath(),
+                                              pictura::configurationDirectory());
             controlServer.setPolicy(policy);
         }
         if (!controlServer.listen()) {

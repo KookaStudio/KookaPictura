@@ -5,7 +5,7 @@
 #include "canvas_ruler.h"
 #include "panels/color_swatch_widget.h"
 #include "panels/numeric_field.h"
-#include "session.h"
+#include "preferences.h"
 #include "theme.h"
 
 #include <QtCore/QSignalBlocker>

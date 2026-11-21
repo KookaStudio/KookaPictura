@@ -1,3 +1,4 @@
+#include "preferences.h"
 // The panel host seam: panels, columns, toggles and a workspace layout can be
 // driven with a stub shell and no PicturaMainWindow.
 
@@ -95,7 +96,7 @@ void PanelHostTest::buildColumnsToggleAndWorkspace()
 
     // Build the panel set from a fresh session and apply the factory layout.
     pictura::SessionState state;
-    const QList<pictura::PanelGroup*> staged = host.buildPanels(state);
+    const QList<pictura::PanelGroup*> staged = host.buildPanels(state, pictura::loadPreferences());
     QVERIFY(host.panelColumn() != nullptr);
     QVERIFY(host.layersPanel() != nullptr);
     QVERIFY(host.panelObjectNames().contains(QStringLiteral("layersPanel")));

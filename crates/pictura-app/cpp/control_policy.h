@@ -27,9 +27,9 @@ struct ControlPolicy {
     bool grants(ControlTier tier) const;
 };
 
-// What no session may touch in any mode: the app's state, which holds these
-// permissions, and the endpoint's directory, which holds the token.
-QStringList protectedDirectories(const QString& stateFile, const QString& endpoint);
+// Private profile data and endpoint tokens are inaccessible to restricted sessions.
+QStringList protectedDirectories(const QString& stateFile, const QString& endpoint,
+                                 const QString& configDirectory);
 
 // The canonical form of `path`, so a symlinked directory is judged by where it
 // lands. A path that does not exist yet resolves through its parent.

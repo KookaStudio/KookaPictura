@@ -17,6 +17,7 @@
 #include "frame.h"
 #include "panels/layers_panel.h"
 #include "session.h"
+#include "preferences.h"
 #include "api/layers_bridge.h"
 #include "api/filters_bridge.h"
 
@@ -305,7 +306,7 @@ void SmartFilterApplyTest::doubleClickReopensTheFilterDialog()
     poll.stop();
     QVERIFY2(noticed, "the stacked-filters notice was shown");
     QVERIFY2(opened, "the filter's dialog reopened");
-    QVERIFY(!pictura::loadSession().showSmartFilterEditMessage);
+    QVERIFY(!pictura::loadPreferences().showSmartFilterEditMessage);
     QCOMPARE(pictura::layer_smart_filter_count(*view, path), 2);
     QCOMPARE(pictura::layer_smart_filter_name(*view, path, 0), QStringLiteral("Gaussian Blur"));
     QCOMPARE(pictura::layer_smart_filter_name(*view, path, 1), QStringLiteral("Emboss"));

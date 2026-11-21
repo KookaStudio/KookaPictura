@@ -54,6 +54,7 @@
 #include "panels/panel_group.h"
 #include "preferences_dialog.h"
 #include "session.h"
+#include "preferences.h"
 #include "theme.h"
 #include "toolbox.h"
 
@@ -518,16 +519,15 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                 ST_FAIL(29, "screen mode cycle wrong");
             }
 
-            // M16: layout + brightness persist atomically under the self-test's
-            // temp XDG state dir (main.cpp redirects it before the frame exists).
+            // M16: verify layout and brightness using the isolated stores.
             frame.setBrightnessLevel(2); frame.saveSession(); frame.setBrightnessLevel(1);
             const pictura::SessionState loaded = pictura::loadSession();
-            const bool sessionOk = loaded.brightnessLevel == 2
+            const bool sessionOk = pictura::loadPreferences().brightnessLevel == 2
                                    && loaded.layout == frame.saveState();
             ST_BEGIN("session_ok");
             ST_PASS("session_ok=%d bytes=%d level=%d", sessionOk ? 1 : 0,
                          loaded.layout.size(),
-                         loaded.brightnessLevel);
+                         pictura::loadPreferences().brightnessLevel);
             if (!sessionOk) {
                 ST_FAIL(30, "session round-trip wrong");
             }
@@ -1359,19 +1359,18 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_FAIL(70, "gpu backend wrong");
         }
 
-        // 71: the GPU preference round-trips through the session store, and a
-        // fresh SessionState defaults to on.
+        // 71: the requested GPU preference round-trips and defaults to on.
         const bool framePref = gpuView->gpu_compute();
-        pictura::SessionState gpuState = pictura::loadSession();
+        auto gpuState = pictura::loadPreferences();
         gpuState.gpuCompute = false;
-        const bool savedOff = pictura::saveSession(gpuState);
-        const bool offRound = !pictura::loadSession().gpuCompute;
+        const bool savedOff = pictura::savePreferences(pictura::loadPreferences(), gpuState);
+        const bool offRound = !pictura::loadPreferences().gpuCompute;
         gpuState.gpuCompute = true;
-        const bool savedOn = pictura::saveSession(gpuState);
-        const bool onRound = pictura::loadSession().gpuCompute;
-        const bool gpuDefault = pictura::SessionState{}.gpuCompute;
+        const bool savedOn = pictura::savePreferences(pictura::loadPreferences(), gpuState);
+        const bool onRound = pictura::loadPreferences().gpuCompute;
+        const bool gpuDefault = pictura::defaultPreferences().gpuCompute;
         gpuState.gpuCompute = framePref;
-        pictura::saveSession(gpuState);
+        pictura::savePreferences(pictura::loadPreferences(), gpuState);
         ST_BEGIN("session_gpu_off");
         ST_PASS("session gpu_off=%d gpu_on=%d default=%d", (savedOff && offRound) ? 1 : 0,
                      (savedOn && onRound) ? 1 : 0,
@@ -3053,26 +3052,20 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_FAIL(118, "atomic tools column");
         }
 
-        // m40_session (119): the two v4 fields round-trip, and a store lacking
-        // them loads the defaults (one column, Shift required).
         pictura::SessionState toolsPanelState = pictura::loadSession();
         toolsPanelState.toolsColumns = 2;
-        toolsPanelState.useShiftKeyForToolSwitch = false;
-        const bool toolsPanelSaved = pictura::saveSession(toolsPanelState);
+        auto toolsPrefs = pictura::loadPreferences();
+        toolsPrefs.useShiftKeyForToolSwitch = false;
+        const bool toolsPanelSaved = pictura::saveSession(toolsPanelState)
+            && pictura::savePreferences(pictura::loadPreferences(), toolsPrefs);
         const pictura::SessionState toolsPanelReloaded = pictura::loadSession();
         const bool toolsPanelRoundtrip = toolsPanelSaved && toolsPanelReloaded.toolsColumns == 2
-                                  && !toolsPanelReloaded.useShiftKeyForToolSwitch;
-        bool toolsPanelDefaults = false;
-        {
-            QFile store(pictura::sessionFilePath());
-            if (store.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-                store.write("{\"schemaVersion\":3,\"brightnessLevel\":2}");
-                store.close();
-            }
-            const pictura::SessionState toolsPanelMissing = pictura::loadSession();
-            toolsPanelDefaults =
-                toolsPanelMissing.toolsColumns == 1 && toolsPanelMissing.useShiftKeyForToolSwitch;
+                                  && !pictura::loadPreferences().useShiftKeyForToolSwitch;
+        if (QFile legacy(pictura::sessionFilePath()); legacy.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            legacy.write("{\"schemaVersion\":3,\"brightnessLevel\":2}");
         }
+        const bool toolsPanelDefaults = pictura::loadSession().toolsColumns == 1
+                                        && pictura::defaultPreferences().useShiftKeyForToolSwitch;
         ST_BEGIN("session_roundtrip");
         ST_PASS("session roundtrip=%d defaults=%d", toolsPanelRoundtrip ? 1 : 0,
                      toolsPanelDefaults ? 1 : 0);
@@ -3456,7 +3449,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             prefsShift = shiftToggled && prefsToolbox
                             && !prefsToolbox->shiftKeyForToolSwitch();
             frame.saveSession();
-            prefsRoundtrip = !pictura::loadSession().useShiftKeyForToolSwitch;
+            prefsRoundtrip = !pictura::loadPreferences().useShiftKeyForToolSwitch;
             prefs->setCheckboxForTest(QStringLiteral("useShiftKeyForToolSwitch"), true);
             QCoreApplication::processEvents();
             frame.saveSession();
@@ -3511,10 +3504,11 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                             "\"useShiftKeyForToolSwitch\":false}");
                 store.close();
             }
+            QFile::remove(pictura::preferencesFilePath());
             const pictura::SessionState v4 = pictura::loadSession();
             panelColumnDefaults = v4.panelRailMode == QStringLiteral("normal") && v4.railWidth == 0
                           && !v4.autoCollapseIconic && !v4.autoShowHidden;
-            panelColumnV4 = v4.toolsColumns == 2 && !v4.useShiftKeyForToolSwitch;
+            panelColumnV4 = v4.toolsColumns == 2 && !pictura::loadPreferences().useShiftKeyForToolSwitch;
         }
 
         bool panelColumnUnknown = false;

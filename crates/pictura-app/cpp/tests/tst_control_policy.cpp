@@ -1,3 +1,6 @@
+#include "preferences.h"
+#include "session.h"
+
 // Who may do what: permission tiers, the command allowlist, and path verdicts.
 
 #include <QtTest/QtTest>
@@ -49,6 +52,7 @@ class ControlPolicyTest : public QObject {
 
 private slots:
     void initTestCase();
+    void separateConfigRootIsHardDenied();
     void init();
     void cleanup();
     void socketIsUserOnly();
@@ -304,6 +308,37 @@ void ControlPolicyTest::approvalModesDecide()
     policy.live = false;
     const PathVerdict headless = verdict == PathVerdict::Ask ? PathVerdict::Refuse : verdict;
     QCOMPARE(pictura::judgePath(policy, target, true, exists, known), headless);
+}
+
+void ControlPolicyTest::separateConfigRootIsHardDenied()
+{
+    const QString config = pictura::configurationDirectory();
+    QVERIFY(QDir().mkpath(config));
+    const QString target = QDir(config).filePath(QStringLiteral("prefs.toml"));
+    QVERIFY(config != QFileInfo(pictura::sessionFilePath()).absolutePath());
+    QStringList targets{target};
+#ifndef _WIN32
+    const auto alias = dir_.filePath(QStringLiteral("config-link"));
+    QVERIFY(QFile::link(config, alias));
+    targets.append(QDir(alias).filePath(QStringLiteral("prefs.toml")));
+#endif
+    auto policy = restricted(true, true);
+    policy.denied = pictura::protectedDirectories(pictura::sessionFilePath(),
+                                                    dir_.filePath(QStringLiteral("control.sock")),
+                                                    config);
+    for (auto mode : {ApprovalMode::AutoApprove, ApprovalMode::Manual, ApprovalMode::AllowAll}) {
+        policy.approval = mode;
+        server_->setPolicy(policy);
+        ControlClient client(*server_);
+        for (const auto& path : targets) {
+            for (const auto& op : {QStringLiteral("open"), QStringLiteral("save"),
+                                   QStringLiteral("save_as")}) {
+                const auto reply = client.call(QStringLiteral("document"),
+                    {{QStringLiteral("op"), op}, {QStringLiteral("path"), path}});
+                QCOMPARE(errorCode(reply), QStringLiteral("refused"));
+            }
+        }
+    }
 }
 
 QTEST_MAIN(ControlPolicyTest)

@@ -28,7 +28,7 @@
 #include "panels/properties_panel.h"
 #include "theme.h"
 #include "api/layers_bridge.h"
-
+#include "preferences.h"
 #include "preferences_dialog.h"
 #include "session.h"
 #include "tool_hint_bar.h"
@@ -473,9 +473,9 @@ void CommandTreeTest::toolboxInteractions()
     const QImage standardIcon = screenMode->icon().pixmap(16, 16).toImage();
     // The trigger would otherwise raise the full-screen advisory modal; the
     // dialog itself is covered by tst_screen_modes.
-    pictura::SessionState session = pictura::loadSession();
+    auto session = pictura::loadPreferences();
     session.showFullScreenMessage = false;
-    QVERIFY(pictura::saveSession(session));
+    QVERIFY(pictura::savePreferences(pictura::loadPreferences(), session));
     full->trigger();
     QCoreApplication::processEvents();
     QCOMPARE(window_->screenMode(), pictura::PicturaMainWindow::ScreenMode::Full);
@@ -985,7 +985,7 @@ void CommandTreeTest::preferencesPages()
     auto* view = window_->activeView();
     QVERIFY(view && !view->gpu_compute());
     QVERIFY2(view->active_backend() == QStringLiteral("CPU") || view->active_backend() == QStringLiteral("CPU (no GPU)"), "GPU toggle reached the document");
-    QVERIFY(!pictura::loadSession().gpuCompute);
+    QVERIFY(!pictura::loadPreferences().gpuCompute);
     prefs->setGpuComputeEnabled(false); prefs->close();
 }
 

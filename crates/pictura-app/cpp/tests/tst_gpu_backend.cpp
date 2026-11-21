@@ -20,6 +20,7 @@
 #include "gpu_probe.h"
 #include "preferences_dialog.h"
 #include "session.h"
+#include "preferences.h"
 
 #include "qt_test_support.h"
 
@@ -94,6 +95,8 @@ private slots:
     void statusBarShowsTheBackendLabel();
     void aboutTextNamesBackend();
     void toggleIsDisabledOnlyWhenNoBackendExists();
+    void unavailableGpuWritesOffToPreferences();
+    void safeModeKeepsStoredGpuPreference();
     void statusBackendTokenIsLegacy();
 
 private:
@@ -581,7 +584,7 @@ void GpuBackendTest::toggleIsDisabledOnlyWhenNoBackendExists()
         QVERIFY(view != nullptr);
         QVERIFY(!view->gpu_compute());
         window_->saveSessionNow();
-        QVERIFY(!pictura::loadSession().gpuCompute);
+        QVERIFY(!pictura::loadPreferences().gpuCompute);
     }
 }
 
@@ -597,6 +600,39 @@ void GpuBackendTest::statusBackendTokenIsLegacy()
     QVERIFY2(token == QStringLiteral("GPU") || token == QStringLiteral("CPU")
                  || token == QStringLiteral("CPU (no GPU)"),
              qPrintable(token));
+}
+
+void GpuBackendTest::unavailableGpuWritesOffToPreferences()
+{
+    pictura::test::ScopedStateHome isolated;
+    QVERIFY(isolated.isValid());
+    QVERIFY(pictura::loadPreferences().gpuCompute);
+    pictura::setFrameGpuProbeOverrideForTest({false, false});
+    auto window = pictura::test::makeMainWindow();
+    pictura::clearFrameGpuProbeOverrideForTest();
+    window->showPreferences(PreferencesDialog::kPerformance);
+    auto* box = window->findChild<QCheckBox*>(QStringLiteral("preferences_useGpuCompute"));
+    QVERIFY(box);
+    QVERIFY(!box->isEnabled());
+    QVERIFY(!box->isChecked());
+    window->saveSessionNow();
+    QVERIFY(!pictura::loadPreferences().gpuCompute);
+}
+
+void GpuBackendTest::safeModeKeepsStoredGpuPreference()
+{
+    pictura::test::ScopedStateHome isolated;
+    QVERIFY(isolated.isValid());
+    pictura::setFrameGpuProbeOverrideForTest({false, true});
+    auto window = pictura::test::makeMainWindow();
+    pictura::clearFrameGpuProbeOverrideForTest();
+    window->showPreferences(PreferencesDialog::kPerformance);
+    auto* box = window->findChild<QCheckBox*>(QStringLiteral("preferences_useGpuCompute"));
+    QVERIFY(box);
+    QVERIFY(box->isEnabled());
+    QVERIFY(box->isChecked());
+    window->saveSessionNow();
+    QVERIFY(pictura::loadPreferences().gpuCompute);
 }
 
 QTEST_MAIN(GpuBackendTest)

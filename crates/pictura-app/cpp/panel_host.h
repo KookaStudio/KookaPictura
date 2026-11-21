@@ -24,6 +24,8 @@ class QWidget;
 
 namespace pictura {
 
+struct Preferences;
+
 class ActionsEngineBridge;
 class ActionsPanel;
 class AdjustmentsPanel;
@@ -129,7 +131,7 @@ public:
     CharacterStylesPanel* characterStylesPanel() const { return characterStylesPanel_; }
     QList<QWidget*> panelWidgets() const;
 
-    QList<PanelGroup*> buildPanels(const SessionState& state);
+    QList<PanelGroup*> buildPanels(const SessionState& state, const Preferences& prefs);
     bool registerPanel(QWidget* panel, Qt::DockWidgetArea area);
     PanelColumn* createToolsColumn();
     PanelColumn* adoptToolsColumn(PanelColumn* column);

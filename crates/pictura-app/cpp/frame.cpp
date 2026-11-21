@@ -286,32 +286,34 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     connect(importSave_.get(), &ImportSaveCoordinator::documentOpenFinished, this,
             &PicturaMainWindow::documentOpenFinished);
 
+    const auto prefs = loadPreferences();
+    preferencesBaseline_ = prefs;
     const SessionState state = pictura::loadSession();
-    importSave_->loadState(state);
-    gpuCompute_ = state.gpuCompute;
-    set_memory_usage_percent(state.memoryUsagePercent);
-    set_scratch_volumes(state.scratchVolumes.join(QLatin1Char('\n')));
+    importSave_->loadState(state, prefs);
+    gpuCompute_ = prefs.gpuCompute;
+    set_memory_usage_percent(prefs.memoryUsagePercent);
+    set_scratch_volumes(prefs.scratchVolumes.join(QLatin1Char('\n')));
     start_memory_eviction();
-    colorPolicy_ = state.colorPolicy;
-    cmykPolicy_ = state.cmykPolicy;
-    workingCmyk_ = state.workingCmyk;
-    renderIntent_ = state.renderIntent;
-    blackPointCompensation_ = state.blackPointCompensation;
-    useDither_ = state.useDither;
-    askMismatchOpen_ = state.askMismatchOpen;
-    askMissingOpen_ = state.askMissingOpen;
-    pickerChoice_ = state.pickerChoice;
+    colorPolicy_ = prefs.colorPolicy;
+    cmykPolicy_ = prefs.cmykPolicy;
+    workingCmyk_ = prefs.workingCmyk;
+    renderIntent_ = prefs.renderIntent;
+    blackPointCompensation_ = prefs.blackPointCompensation;
+    useDither_ = prefs.useDither;
+    askMismatchOpen_ = prefs.askMismatchOpen;
+    askMissingOpen_ = prefs.askMissingOpen;
+    pickerChoice_ = prefs.pickerChoice;
     ColorPickerDialog::setPickerPreference(pickerChoice_);
-    applyTextGamma(state.textGammaEnabled, state.textGamma);
-    typeShowAsianOptions_ = state.typeShowAsianOptions; typeMiddleEastern_ = state.typeMiddleEastern;
-    typeMissingGlyphProtection_ = state.typeMissingGlyphProtection;
+    applyTextGamma(prefs.textGammaEnabled, prefs.textGamma);
+    typeShowAsianOptions_ = prefs.typeShowAsianOptions; typeMiddleEastern_ = prefs.typeMiddleEastern;
+    typeMissingGlyphProtection_ = prefs.typeMissingGlyphProtection;
     pictura::type_api::setMissingGlyphProtection(typeMissingGlyphProtection_);
-    useShiftKeyForToolSwitch_ = state.useShiftKeyForToolSwitch;
-    openDocumentsAsTabs_ = state.openDocumentsAsTabs;
-    floatingDocumentDocking_ = state.enableFloatingDocumentDocking;
-    zoomResizesWindows_ = state.zoomResizesWindows;
-    applyShortcutOverrides(state);
-    loadGuideSession(state);
+    useShiftKeyForToolSwitch_ = prefs.useShiftKeyForToolSwitch;
+    openDocumentsAsTabs_ = prefs.openDocumentsAsTabs;
+    floatingDocumentDocking_ = prefs.enableFloatingDocumentDocking;
+    zoomResizesWindows_ = prefs.zoomResizesWindows;
+    applyShortcutOverrides(prefs);
+    loadGuideSession(state, prefs);
     loadViewSession(state);
     proofDevice_ = state.proofDevice;
     proofIntent_ = state.proofIntent;
@@ -320,10 +322,10 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     proofSimulateBlack_ = state.proofSimulateBlack;
     proofColors_ = state.proofColors;
     // The family drives the theme chrome built below, so resolve it before the menu bar (and its theme toggle icon) is built.
-    themeFamily_ = state.themeFamily == 1 ? 1 : 0;
+    themeFamily_ = prefs.themeFamily == 1 ? 1 : 0;
     // The application font and every chrome metric built below read the scale,
     // so resolve it before the menu bar, panels, tools, and status bar exist.
-    uiScalePercent_ = Theme::normalizedUiScalePercent(state.uiScalePercent);
+    uiScalePercent_ = Theme::normalizedUiScalePercent(prefs.uiScalePercent);
     Theme::setUiScalePercent(uiScalePercent_);
     applyBundledUiFont();
     // The window predates the application font, so it keeps the default face
@@ -332,21 +334,12 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     // Apply the restored theme before the menus, panels, and tools exist, so
     // they are built under it instead of re-polished by a later application.
     // Its style sheet reads the scale and the application font set above.
-    brightnessLevel_ = Theme::clampLevel(state.brightnessLevel);
+    brightnessLevel_ = Theme::clampLevel(prefs.brightnessLevel);
     Theme::apply(themeFamily_ == 1 ? Theme::ThemeFamily::Light : Theme::ThemeFamily::Dark,
                  brightnessLevel_);
-    // Probe the adapter once so the toggle can be offered without a document.
-    // The marker makes a parent crash during init a one-launch fallback; the
-    // cache records a clean failure so the next launch advances.
-    {
-        PictureView probe;
-        const bool marked = beginDeviceInit();
-        gpuAvailable_ = probe.gpu_available();
-        if (marked) {
-            endDeviceInit(gpuAvailable_);
-        }
-    }
-    gpuCandidatesAvailable_ = gpuAvailable_ || gpuChainHasResetPath();
+    const auto [gpuAvailable, gpuCandidatesAvailable] = probeFrameGpuAvailability();
+    gpuAvailable_ = gpuAvailable;
+    gpuCandidatesAvailable_ = gpuCandidatesAvailable;
     // No candidate means the preference cannot be honored: read it as off so the
     // Preferences checkbox and the session agree with the CPU backend. A
     // safe-mode reset path keeps the stored value so off-and-on can retry.
@@ -355,20 +348,20 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
     }
     menu_->registerHandlers();
     if (updateChecksEnabled_ && !qEnvironmentVariableIsSet("PICTURA_DISABLE_UPDATE_CHECK")) {
-        ensureUpdateChecker(*this, state.checkForUpdatesOnLaunch);
+        ensureUpdateChecker(*this, prefs.checkForUpdatesOnLaunch);
     }
     menu_->buildMenus(menuBar());
-    const QList<PanelGroup*> stagedGroups = panels_->buildPanels(state);
+    const QList<PanelGroup*> stagedGroups = panels_->buildPanels(state, prefs);
     // The Layers row menu's Edit / Replace / Export Contents actions run through
     // the frame, so this is wired here where the panel exists (registerHandlers
     // runs before the panels are built).
     menu_->wireSmartObjectRowMenu();
     wireMaskOverlay();
-    buildTools(state.toolsColumns, state.useShiftKeyForToolSwitch, state.toolOptions);
+    buildTools(state.toolsColumns, prefs.useShiftKeyForToolSwitch, state.toolOptions);
     menu_->setTools(tools_);
     wireViewStateSignals();
     if (tools_) {
-        tools_->setTypePlaceholderText(state.typePlaceholderText);
+        tools_->setTypePlaceholderText(prefs.typePlaceholderText);
         tools_->applyCropOptions(state.cropClassicMode, state.cropDeletePixels, state.cropRatio,
                                  state.cropGridOverlay);
     }
@@ -385,7 +378,7 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck)
         target->setAcceptDrops(true);
         target->installEventFilter(fileDropRouter_);
     }
-    applyBrightness(state.brightnessLevel);
+    applyBrightness(prefs.brightnessLevel);
     panels_->applyPanelSession(state);
     panels_->applyFreshSessionDefault(state, stagedGroups);
     const bool sessionHadLayout = !state.panelColumns.isEmpty() || !state.panelGroups.isEmpty();

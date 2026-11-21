@@ -8,6 +8,7 @@
 #include "api/view_bridge.h"
 
 #include "session.h"
+#include "preferences.h"
 #include "theme.h"
 #include "tool_hint_bar.h"
 
@@ -428,18 +429,18 @@ void SmokeTest::sessionWindowGeometryRoundTrips()
 void SmokeTest::themeFamilyPersists()
 {
     window_->setThemeFamily(1);
-    QCOMPARE(pictura::loadSession().themeFamily, 1);
+    QCOMPARE(pictura::loadPreferences().themeFamily, 1);
     window_->setThemeFamily(0);
-    QCOMPARE(pictura::loadSession().themeFamily, 0);
+    QCOMPARE(pictura::loadPreferences().themeFamily, 0);
 }
 
 // A stored light family is in effect, and the menu-bar theme button shows the
 // moon, from the first build rather than only after a toggle (#417).
 void SmokeTest::lightSessionRestoresFamilyAndIcon()
 {
-    pictura::SessionState state = pictura::loadSession();
+    auto state = pictura::loadPreferences();
     state.themeFamily = 1;
-    QVERIFY(pictura::saveSession(state));
+    QVERIFY(pictura::savePreferences(pictura::loadPreferences(), state));
 
     auto restored = pictura::test::makeMainWindow();
     QVERIFY(restored != nullptr);

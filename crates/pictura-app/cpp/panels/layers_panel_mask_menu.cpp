@@ -11,7 +11,7 @@
 #include "icons.h"
 #include "mask_display_options_dialog.h"
 #include "refine_edge_dialog.h"
-#include "session.h"
+#include "preferences.h"
 
 #include "api/layers_bridge.h"
 #include "api/selection_bridge.h"
@@ -139,8 +139,8 @@ void LayersPanel::deleteFromTrash()
 
 bool LayersPanel::confirmDeleteVectorMask()
 {
-    SessionState session = loadSession();
-    if (!session.confirmDeleteVectorMask) {
+    const auto prefs = loadPreferences();
+    if (!prefs.confirmDeleteVectorMask) {
         return true;
     }
     QMessageBox box(QMessageBox::Warning, QStringLiteral("Kooka Pictura"),
@@ -152,9 +152,10 @@ bool LayersPanel::confirmDeleteVectorMask()
     box.setCheckBox(dontShow);
     const bool ok = dialogDriver_ ? dialogDriver_(box) : box.exec() == QMessageBox::Ok;
     if (ok && dontShow->isChecked()) {
-        session = loadSession();
-        session.confirmDeleteVectorMask = false;
-        saveSession(session);
+        const auto before = loadPreferences();
+        auto after = before;
+        after.confirmDeleteVectorMask = false;
+        savePreferences(before, after);
     }
     return ok;
 }

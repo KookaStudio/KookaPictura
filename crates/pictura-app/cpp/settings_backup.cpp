@@ -1,4 +1,8 @@
 #include "settings_backup.h"
+#include "preferences.h"
+#include "profile_startup.h"
+#include <QtCore/QLockFile>
+#include <QtCore/QUuid>
 
 #include "dialogs.h"
 #include "preset_store.h"
@@ -39,6 +43,10 @@ constexpr qint64 kMaxStoreBytes = 16 * 1024 * 1024;
 constexpr qint64 kMaxPresetBytes = 256 * 1024 * 1024;
 constexpr int kMaxPresetFiles = 10000;
 constexpr int kMaxBackupsKept = 10;
+const QString kImportIdentity = QStringLiteral("pendingImportId");
+SettingsImportFailure gImportFailure = SettingsImportFailure::None;
+
+bool persistPending(const QJsonObject& object, QString* error);
 
 QString stateDirectory()
 {
@@ -485,6 +493,17 @@ bool sanitizeBackup(const QJsonObject& source, QJsonObject* out, QString* error)
     *out = source;
     out->insert(QStringLiteral("format"), QString::fromLatin1(kSettingsBackupFormat));
 
+    if (out->contains(QStringLiteral("preferences"))) {
+        const auto data = out->value(QStringLiteral("preferences"));
+        if (!data.isString()) {
+            setError(error, message("The preferences section is not a TOML string."));
+            return false;
+        }
+        if (!validatePortablePreferences(data.toString(), error)) {
+            return false;
+        }
+    }
+
     if (out->contains(QStringLiteral("session"))) {
         if (!out->value(QStringLiteral("session")).isObject()) {
             setError(error, message("The session section is not an object."));
@@ -613,12 +632,40 @@ bool applyPresets(const QJsonObject& presets, QString* error)
 bool applyBackup(const QJsonObject& backup, QString* error)
 {
     PresetSnapshot currentLists;
-    if (!decodeCurrentLists(backup, &currentLists, error)
-        || !publishPresetSnapshot(currentLists, error)) {
+    if (!decodeCurrentLists(backup, &currentLists, error)) {
+        return false;
+    }
+    const auto sessionData = backup.value(QStringLiteral("session")).toObject();
+    const auto legacy = backup.value(QStringLiteral("formatVersion")).toInt() == 1
+        ? sessionData : QJsonObject{};
+    const auto prefsData = backup.value(QStringLiteral("preferences"));
+    const auto toml = prefsData.toString();
+    if (!applyImportedPreferences(legacy, prefsData.isString() ? &toml : nullptr,
+                                  backup.value(kImportIdentity).toString(), error)) {
+        return false;
+    }
+    if (gImportFailure == SettingsImportFailure::AfterPreferences) {
+        setError(error, message("Settings import stopped after committing preferences."));
+        return false;
+    }
+    if (!publishPresetSnapshot(currentLists, error)) {
         return false;
     }
     if (backup.contains(QStringLiteral("session"))) {
-        QJsonObject session = backup.value(QStringLiteral("session")).toObject();
+        QLockFile sessionLock(sessionFilePath() + QStringLiteral(".lock"));
+        if (!sessionLock.tryLock(1000)) {
+            setError(error, message("The session store is busy."));
+            return false;
+        }
+        auto session = sessionData;
+        removeLegacyPreferenceKeys(session);
+        const bool legacyConverted = !legacy.isEmpty() && session != sessionData;
+        const auto migration = preferenceMigrationMarker();
+        session.remove(migration);
+        if (readSessionObject().value(migration).toBool() || prefsData.isString()
+            || legacyConverted) {
+            session.insert(migration, true);
+        }
         if (!currentLists.contains(PresetType::Swatches)) {
             // Migration has not necessarily run by the time startup applies
             // a backup. Keep the local fallback for an absent native list.
@@ -666,7 +713,9 @@ bool hasPendingSettingsImport()
 QJsonObject collectSettingsBackup(QString* error)
 {
     PresetSnapshot currentLists;
-    if (!collectPresetSnapshot(&currentLists, error)) {
+    QString preferences;
+    if (!exportPortablePreferences(&preferences, error)
+        || !collectPresetSnapshot(&currentLists, error)) {
         return {};
     }
     QJsonObject current;
@@ -691,6 +740,7 @@ QJsonObject collectSettingsBackup(QString* error)
 #endif
     backup.insert(QStringLiteral("exportedAt"),
                   QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
+    backup.insert(QStringLiteral("preferences"), preferences);
     backup.insert(QStringLiteral("session"), readJsonObject(sessionFilePath(), kMaxStoreBytes));
     backup.insert(QStringLiteral("workspaces"), collectWorkspaces());
     backup.insert(QStringLiteral("presets"), collectPresets());
@@ -757,9 +807,34 @@ bool validateSettingsImport(const QString& path, QJsonObject* sanitized, QString
     return sanitizeBackup(backup, sanitized, error);
 }
 
+namespace {
+
+bool persistPending(const QJsonObject& object, QString* error)
+{
+    const auto data = QJsonDocument(object).toJson(QJsonDocument::Compact);
+    if (data.size() > kMaxBackupBytes) {
+        setError(error, message("The settings file exceeds the supported import size."));
+        return false;
+    }
+    return writeProfileFileDurably(pendingSettingsImportPath(), data, error);
+}
+
+} // namespace
+
 bool writePendingSettingsImport(const QJsonObject& sanitized, QString* error)
 {
-    return writeJsonObject(pendingSettingsImportPath(), sanitized, true, error);
+    if (!QDir().mkpath(stateDirectory())) {
+        setError(error, message("The settings folder could not be created."));
+        return false;
+    }
+    QLockFile lock(pendingSettingsImportPath() + QStringLiteral(".lock"));
+    if (!lock.tryLock(1000)) {
+        setError(error, message("The pending import is busy."));
+        return false;
+    }
+    auto backup = sanitized;
+    backup.insert(kImportIdentity, QUuid::createUuid().toString(QUuid::WithoutBraces));
+    return persistPending(backup, error);
 }
 
 bool stageSettingsImport(const QString& path, QString* error)
@@ -774,6 +849,14 @@ bool stageSettingsImport(const QString& path, QString* error)
 bool applyPendingSettingsImport(QString* error)
 {
     const QString pending = pendingSettingsImportPath();
+    if (!QFileInfo::exists(pending)) {
+        return true;
+    }
+    QLockFile lock(pending + QStringLiteral(".lock"));
+    if (!lock.tryLock(1000)) {
+        setError(error, message("The pending import is busy."));
+        return false;
+    }
     if (!QFileInfo::exists(pending)) {
         return true;
     }
@@ -793,14 +876,31 @@ bool applyPendingSettingsImport(QString* error)
         QFile::rename(pending, quarantine);
         return false;
     }
+    auto id = sanitized.value(kImportIdentity).toString();
+    if (QUuid(id).isNull()) {
+        id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        sanitized.insert(kImportIdentity, id);
+        if (!persistPending(sanitized, error)) {
+            return false;
+        }
+    }
     if (!applyBackup(sanitized, error)) {
         return false;
     }
-    if (!QFile::remove(pending)) {
+    if (gImportFailure == SettingsImportFailure::RetirePending) {
         setError(error, message("The pending settings import could not be removed."));
         return false;
     }
+    if (!retireProfileFileDurably(pending, error)) {
+        return false;
+    }
+    retirePreferencesReceipt(id);
     return true;
+}
+
+void setSettingsImportFailureForTest(SettingsImportFailure failure)
+{
+    gImportFailure = failure;
 }
 
 namespace {

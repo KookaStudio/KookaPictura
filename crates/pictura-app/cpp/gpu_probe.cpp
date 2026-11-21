@@ -11,8 +11,10 @@
 #include "protected_output.h"
 
 #include <cstddef>
+#include <optional>
 
 #include "api/engine_bridge.h"
+#include "api/view_bridge.h"
 
 #include "session.h"
 
@@ -33,6 +35,7 @@ const QString kVulkan = QStringLiteral("vulkan");
 
 QString gSelectedBackend;
 bool gChainResetPath = false;
+std::optional<std::pair<bool, bool>> gFrameGpuProbeOverrideForTest;
 
 QString nowIso()
 {
@@ -154,6 +157,32 @@ QString executablePath()
 }
 
 } // namespace
+
+std::pair<bool, bool> probeFrameGpuAvailability()
+{
+    if (gFrameGpuProbeOverrideForTest) {
+        const auto [available, hasResetPath] = *gFrameGpuProbeOverrideForTest;
+        return {available, available || hasResetPath};
+    }
+    // Probe without a document and record crashes during adapter initialization.
+    PictureView probe;
+    const bool marked = beginDeviceInit();
+    const bool available = probe.gpu_available();
+    if (marked) {
+        endDeviceInit(available);
+    }
+    return {available, available || gpuChainHasResetPath()};
+}
+
+void setFrameGpuProbeOverrideForTest(std::pair<bool, bool> availability)
+{
+    gFrameGpuProbeOverrideForTest = availability;
+}
+
+void clearFrameGpuProbeOverrideForTest()
+{
+    gFrameGpuProbeOverrideForTest.reset();
+}
 
 QString gpuBackendFilePath()
 {

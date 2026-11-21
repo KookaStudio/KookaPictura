@@ -7,7 +7,7 @@
 #include "api/paint_bridge.h"
 
 #include "document_registry.h"
-#include "session.h"
+#include "preferences.h"
 
 #include <QtCore/QDir>
 #include <QtCore/QFile>

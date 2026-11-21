@@ -2,7 +2,6 @@
 
 #include <QtCore/QDir>
 #include <QtCore/QFile>
-#include <QtCore/QJsonDocument>
 #include <QtCore/QTimer>
 #include <QtCore/QtEndian>
 #include <QtWidgets/QAbstractButton>
@@ -17,9 +16,10 @@
 #include "control_server.h"
 #include "control_test_client.h"
 #include "import_save_coordinator.h"
+#include "preferences.h"
 #include "preferences_dialog.h"
+#include "prefs_test_support.h"
 #include "qt_test_support.h"
-#include "session.h"
 
 namespace {
 
@@ -133,14 +133,11 @@ void PsdCompatibilityTest::preferencePersists()
             combo->setCurrentIndex(mode + 1);
         }
     }
-    QFile session(pictura::sessionFilePath());
-    QVERIFY(session.open(QIODevice::ReadOnly));
-    QJsonObject invalid = QJsonDocument::fromJson(session.readAll()).object();
-    session.close();
-    invalid.insert(QStringLiteral("nativeSaveCompatibility"), 42);
-    QVERIFY(session.open(QIODevice::WriteOnly | QIODevice::Truncate));
-    QVERIFY(session.write(QJsonDocument(invalid).toJson()) > 0);
-    session.close();
+    const auto path = pictura::preferencesFilePath();
+    auto toml = pictura::test::readProfileFile(path);
+    QVERIFY(toml.contains("nativeSaveCompatibility = 2"));
+    toml.replace("nativeSaveCompatibility = 2", "nativeSaveCompatibility = 42");
+    QVERIFY(pictura::test::writeProfileFile(path, toml));
     auto window = pictura::test::makeMainWindow();
     auto* combo = compatibilityCombo(*window);
     QVERIFY(combo);

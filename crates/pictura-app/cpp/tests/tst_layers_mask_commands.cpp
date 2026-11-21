@@ -19,6 +19,7 @@
 #include "panels/properties_panel.h"
 #include "refine_edge_dialog.h"
 #include "session.h"
+#include "preferences.h"
 
 #include "api/layers_bridge.h"
 
@@ -566,7 +567,7 @@ void LayersMaskCommandsTest::trashDeletesTheVectorMask()
     QVERIFY(!pictura::vector_mask_present(*view));
     QVERIFY(pictura::layer_mask_present(*view));
     QCOMPARE(view->layer_count(), layers);
-    QVERIFY(!pictura::loadSession().confirmDeleteVectorMask);
+    QVERIFY(!pictura::loadPreferences().confirmDeleteVectorMask);
 
     // "Don't show again": the next one goes without asking.
     QVERIFY(pictura::vector_mask_add(*view, QStringLiteral("reveal-all")));
@@ -577,9 +578,9 @@ void LayersMaskCommandsTest::trashDeletesTheVectorMask()
     QVERIFY(!pictura::vector_mask_present(*view));
     QCOMPARE(view->layer_count(), layers);
 
-    pictura::SessionState session = pictura::loadSession();
+    auto session = pictura::loadPreferences();
     session.confirmDeleteVectorMask = true;
-    pictura::saveSession(session);
+    pictura::savePreferences(pictura::loadPreferences(), session);
 }
 
 // lmc_trash_selected_row: in the extended-selection tree the current row can

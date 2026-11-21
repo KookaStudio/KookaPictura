@@ -3,10 +3,9 @@
 #include "frame.h"
 #include "options_bar.h"
 #include "panels/layers_panel.h"
-#include "session.h"
+#include "preferences.h"
 #include "theme.h"
 
-#include <QtCore/QFile>
 #include <QtCore/QPointer>
 #include <QtGui/QPalette>
 #include <QtWidgets/QStatusBar>
@@ -43,12 +42,13 @@ protected:
     }
 };
 
-void writeSession(int family, int level)
+void seedThemePreferences(int family, int level)
 {
-    pictura::SessionState state;
-    state.themeFamily = family;
-    state.brightnessLevel = level;
-    QVERIFY(pictura::saveSession(state));
+    const auto before = pictura::loadPreferences();
+    auto preferences = before;
+    preferences.themeFamily = family;
+    preferences.brightnessLevel = level;
+    QVERIFY(pictura::savePreferences(before, preferences));
 }
 
 } // namespace
@@ -66,19 +66,19 @@ private slots:
     void chromeFontsSurvive();
 
 private:
-    pictura::test::ScopedStateHome stateHome_;
+    std::unique_ptr<pictura::test::ScopedStateHome> stateHome_;
 };
 
 void ThemeApplyTest::init()
 {
-    QVERIFY(stateHome_.isValid());
-    QFile::remove(pictura::sessionFilePath());
+    stateHome_ = std::make_unique<pictura::test::ScopedStateHome>();
+    QVERIFY(stateHome_->isValid());
     pictura::Theme::setUiScalePercent(pictura::Theme::kDefaultUiScalePercent);
 }
 
 void ThemeApplyTest::cleanup()
 {
-    QFile::remove(pictura::sessionFilePath());
+    stateHome_.reset();
 }
 
 void ThemeApplyTest::secondWindowKeepsTheme()
@@ -95,7 +95,7 @@ void ThemeApplyTest::secondWindowKeepsTheme()
 
 void ThemeApplyTest::brightnessStepApplies()
 {
-    writeSession(0, 1);
+    seedThemePreferences(0, 1);
     auto window = pictura::test::makeMainWindow();
     window->show();
     QVERIFY(QTest::qWaitForWindowExposed(window.get()));
@@ -116,7 +116,7 @@ void ThemeApplyTest::chromeBuiltUnderRestoredTheme()
     using pictura::Theme;
     // Start from the other family, so the window has to change the theme.
     Theme::apply(Theme::ThemeFamily::Dark, Theme::kDefaultLevel);
-    writeSession(1, 2);
+    seedThemePreferences(1, 2);
     const QString lightSheet = Theme::styleSheet(Theme::ThemeFamily::Light, 2);
 
     BuildSnapshot snapshot;

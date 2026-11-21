@@ -25,6 +25,7 @@
 #include "api/view_bridge.h"
 
 #include "session.h"
+#include "preferences.h"
 #include "tools.h"
 
 #include "qt_test_support.h"
@@ -70,9 +71,9 @@ QPushButton* buttonWithText(QMessageBox* box, const QString& text)
 
 void setAdvisorySuppressed(bool suppressed)
 {
-    pictura::SessionState state = pictura::loadSession();
+    auto state = pictura::loadPreferences();
     state.showFullScreenMessage = !suppressed;
-    QVERIFY(pictura::saveSession(state));
+    QVERIFY(pictura::savePreferences(pictura::loadPreferences(), state));
 }
 
 void sendKey(QWidget* widget, int key, Qt::KeyboardModifiers mods = Qt::NoModifier)
@@ -202,7 +203,7 @@ void ScreenModesTest::dontShowAgainPersists()
     timer.reset();
     QCOMPARE(seen, 1);
     QCOMPARE(window_->screenMode(), ScreenMode::Full);
-    QVERIFY(!pictura::loadSession().showFullScreenMessage);
+    QVERIFY(!pictura::loadPreferences().showFullScreenMessage);
     // Suppressed: the next request switches without a modal.
     window_->setScreenMode(ScreenMode::Standard);
     window_->requestScreenMode(ScreenMode::FullWithMenuBar);

@@ -18,3 +18,5 @@ mod gpu_probe_bridge;
 mod history;
 pub(crate) mod layer_target;
 mod mcp_entry;
+mod preferences_bridge;
+mod prefs;

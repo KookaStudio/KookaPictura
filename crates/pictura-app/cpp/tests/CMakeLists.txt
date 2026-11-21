@@ -44,6 +44,8 @@ set(PICTURA_QT_TESTS
     tst_control_policy
     tst_control_serial
     tst_preferences_agent
+    tst_preferences_store
+    tst_preferences_reset
     tst_image_ops
     tst_image_rotate
     tst_crop_straighten
@@ -363,3 +365,7 @@ set_tests_properties(tst_quick_mask PROPERTIES TIMEOUT 300)
 # The suites include the generated cxx-qt header, so they follow the bridge
 # stamp like the shell does.
 pictura_depend_on_bridge_stamp(${PICTURA_QT_TEST_SOURCES})
+
+target_compile_definitions(tst_preferences_store PRIVATE
+    PICTURA_TEST_EXECUTABLE="$<TARGET_FILE:pictura>")
+add_dependencies(tst_preferences_store pictura)

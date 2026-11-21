@@ -19,6 +19,7 @@
 #include "frame.h"
 #include "keyboard_shortcuts_dialog.h"
 #include "session.h"
+#include "preferences.h"
 #include "tool_catalogue_golden.h"
 #include "api/engine_bridge.h"
 
@@ -411,10 +412,10 @@ void KeyboardShortcutsTest::staleOverrideKeepsKeyUnambiguous()
 {
     // A store from before the editor checked tool keys: File > Open on
     // Shift+L while the lassos still own L.
-    pictura::SessionState state = pictura::loadSession();
+    auto state = pictura::loadPreferences();
     state.shortcuts = {{kOpen, {QStringLiteral("Shift+L")}}};
     state.toolShortcuts.clear();
-    QVERIFY(pictura::saveSession(state));
+    QVERIFY(pictura::savePreferences(pictura::loadPreferences(), state));
     auto window = pictura::test::makeMainWindow();
     int owners = 0;
     for (const QShortcut* shortcut : window->findChildren<QShortcut*>()) {
@@ -432,7 +433,7 @@ void KeyboardShortcutsTest::staleOverrideKeepsKeyUnambiguous()
     }
     QVERIFY(plainL);
     state.shortcuts.clear();
-    QVERIFY(pictura::saveSession(state));
+    QVERIFY(pictura::savePreferences(pictura::loadPreferences(), state));
 }
 
 void KeyboardShortcutsTest::noticeIsDarkOnYellow()
@@ -523,7 +524,7 @@ void KeyboardShortcutsTest::overridesPersistAcrossLaunch()
         QVERIFY(action);
         QCOMPARE(action->shortcuts(), keys({"Ctrl+N", "Ctrl+Alt+N"}));
     }
-    const pictura::SessionState state = pictura::loadSession();
+    const auto state = pictura::loadPreferences();
     QCOMPARE(state.shortcuts.size(), 1);
     QCOMPARE(state.shortcuts.value(kNew),
              QStringList({QStringLiteral("Ctrl+N"), QStringLiteral("Ctrl+Alt+N")}));

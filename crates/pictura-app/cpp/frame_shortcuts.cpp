@@ -16,9 +16,9 @@ void PicturaMainWindow::registerShortcutHandlers()
 // Runs before the menus and the toolbox are built, so both pick the
 // overrides up as they are created. An id or tool this build no longer has
 // is dropped, losing only its override.
-void PicturaMainWindow::applyShortcutOverrides(const SessionState& state)
+void PicturaMainWindow::applyShortcutOverrides(const Preferences& prefs)
 {
-    for (auto it = state.shortcuts.cbegin(); it != state.shortcuts.cend(); ++it) {
+    for (auto it = prefs.shortcuts.cbegin(); it != prefs.shortcuts.cend(); ++it) {
         QList<QKeySequence> bindings;
         for (const QString& binding : it.value()) {
             const QKeySequence sequence(binding, QKeySequence::PortableText);
@@ -29,7 +29,7 @@ void PicturaMainWindow::applyShortcutOverrides(const SessionState& state)
         commandRegistry()->setShortcuts(it.key(), bindings);
     }
     resetToolShortcuts();
-    for (auto it = state.toolShortcuts.cbegin(); it != state.toolShortcuts.cend(); ++it) {
+    for (auto it = prefs.toolShortcuts.cbegin(); it != prefs.toolShortcuts.cend(); ++it) {
         for (ToolId id : allToolIds()) {
             if (toolIdName(id) == it.key()) {
                 setToolShortcut(id, it.value().isEmpty() ? QChar() : it.value().at(0).toUpper());

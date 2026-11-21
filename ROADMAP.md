@@ -682,7 +682,7 @@ gaps are the CS6 Extended 3D object and camera tools.
       band of rows at a time into the temp file, and the save gate reserves
       what a save holds, so a large tiled document saves under a memory limit
       (#1320). `crates/pictura-codec/src/write_stream.rs`.
-- [ ] A typed `prefs.toml` store, the config and state split, migration,
+- [x] A typed `prefs.toml` store, the config and state split, migration,
       quarantine, and the reset gesture (#641)
 - [ ] `QTranslator` and `.qm`, RTL, and locale number formatting (#642)
 - [ ] `tracing` with a file sink, the Qt-to-Rust bridge, and the History Log

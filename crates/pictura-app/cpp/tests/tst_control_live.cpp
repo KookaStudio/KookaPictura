@@ -1,3 +1,6 @@
+#include "preferences.h"
+#include "session.h"
+
 // A control server in a window a person is using: off by default, and it leaves
 // the person's work and dialogs alone.
 
@@ -32,11 +35,13 @@ class ControlLiveTest : public QObject {
 
 private slots:
     void initTestCase();
+    void separateConfigRootIsHardDenied();
     void init();
     void cleanup();
     void offByDefault();
     void startsAndStopsAtRuntime();
     void settingsPersist();
+    void concurrentRevocationSurvivesUnrelatedEdit();
     void secondWindowDoesNotTakeOver();
     void deadHolderDoesNotBlock();
     void sandboxedBuildsStart();
@@ -144,6 +149,26 @@ void ControlLiveTest::settingsPersist()
     agent_->setParent(nullptr);
     QVERIFY(agent_->settings() == stored);
     QVERIFY(agent_->isRunning());
+}
+
+void ControlLiveTest::concurrentRevocationSurvivesUnrelatedEdit()
+{
+    agent_->apply(enabled());
+    auto current = pictura::loadPreferences();
+    auto revoked = current;
+    revoked.agentAllowEdit = false;
+    revoked.agentRoots.clear();
+    QVERIFY(pictura::savePreferences(current, revoked));
+    auto edited = agent_->settings();
+    edited.allowSave = false;
+    agent_->apply(edited);
+    const auto merged = pictura::loadPreferences();
+    QVERIFY(!merged.agentAllowEdit);
+    QVERIFY(merged.agentRoots.isEmpty());
+    QVERIFY(!merged.agentAllowSave);
+    QVERIFY(!agent_->settings().allowEdit);
+    QVERIFY(agent_->settings().roots.isEmpty());
+    QVERIFY(!agent_->settings().allowSave);
 }
 
 void ControlLiveTest::secondWindowDoesNotTakeOver()
@@ -266,6 +291,37 @@ void ControlLiveTest::openLeavesAPersonsDialogAlone()
     QVERIFY(succeeded(client.read()));
     QVERIFY(dialog.isVisible());
     dialog.reject();
+}
+
+void ControlLiveTest::separateConfigRootIsHardDenied()
+{
+    const QString config = pictura::configurationDirectory();
+    QVERIFY(QDir().mkpath(config));
+    QVERIFY(config != QFileInfo(pictura::sessionFilePath()).absolutePath());
+    QStringList roots{config};
+#ifndef _WIN32
+    const auto alias = dir_.filePath(QStringLiteral("config-link"));
+    QVERIFY(QFile::link(config, alias));
+    roots.append(alias);
+#endif
+    for (auto mode : {pictura::ApprovalMode::AutoApprove, pictura::ApprovalMode::Manual,
+                      pictura::ApprovalMode::AllowAll}) {
+        auto settings = enabled();
+        settings.roots.append(config);
+        settings.approval = mode;
+        agent_->apply(settings);
+        QVERIFY(agent_->server());
+        ControlClient client(*agent_->server());
+        for (const auto& root : roots) {
+            const auto target = QDir(root).filePath(QStringLiteral("prefs.toml"));
+            for (const auto& op : {QStringLiteral("open"), QStringLiteral("save"),
+                                   QStringLiteral("save_as")}) {
+                const auto reply = client.call(QStringLiteral("document"),
+                    {{QStringLiteral("op"), op}, {QStringLiteral("path"), target}});
+                QCOMPARE(errorCode(reply), QStringLiteral("refused"));
+            }
+        }
+    }
 }
 
 QTEST_MAIN(ControlLiveTest)

@@ -2,7 +2,6 @@
 
 #include <QtTest/QtTest>
 
-#include <QtCore/QFile>
 #include <QtGui/QAction>
 #include <QtGui/QFont>
 #include <QtGui/QFontMetrics>
@@ -23,8 +22,8 @@
 #include "fonts.h"
 #include "frame.h"
 #include "image_view.h"
+#include "preferences.h"
 #include "preferences_dialog.h"
-#include "session.h"
 #include "theme.h"
 
 #include "qt_test_support.h"
@@ -52,14 +51,14 @@ private slots:
     void preferencesMirrorScale();
 
 private:
-    pictura::test::ScopedStateHome stateHome_;
+    std::unique_ptr<pictura::test::ScopedStateHome> stateHome_;
     std::unique_ptr<pictura::PicturaMainWindow> window_;
 };
 
 void UiScaleTest::init()
 {
-    QVERIFY(stateHome_.isValid());
-    QFile::remove(pictura::sessionFilePath());
+    stateHome_ = std::make_unique<pictura::test::ScopedStateHome>();
+    QVERIFY(stateHome_->isValid());
     pictura::Theme::setUiScalePercent(pictura::Theme::kDefaultUiScalePercent);
     window_ = pictura::test::makeMainWindow();
     QVERIFY(window_ != nullptr);
@@ -68,6 +67,7 @@ void UiScaleTest::init()
 void UiScaleTest::cleanup()
 {
     window_.reset();
+    stateHome_.reset();
     pictura::Theme::setUiScalePercent(pictura::Theme::kDefaultUiScalePercent);
 }
 
@@ -195,7 +195,7 @@ void UiScaleTest::canvasUnaffectedByScale()
 void UiScaleTest::sessionPersistsScale()
 {
     window_->setUiScalePercent(130);
-    QCOMPARE(pictura::loadSession().uiScalePercent, 130);
+    QCOMPARE(pictura::loadPreferences().uiScalePercent, 130);
     QVERIFY(window_->uiScalePercent() == 130);
 
     window_.reset();

@@ -14,9 +14,11 @@
 #include <QtWidgets/QMainWindow>
 #include <functional>
 #include <memory>
+#include <utility>
 #include "canvas_ruler.h"
 #include "document_registry.h"
 #include "panels/panel_column.h"
+#include "preferences.h"
 #include "quick_mask_ui.h"
 #include "save_format_options.h"
 #include "tools.h"
@@ -658,15 +660,13 @@ private:
     QToolButton* statusOptionsButton_ = nullptr;
     QString statusReadout_ = QStringLiteral("sizes");
     bool hintsVisible_ = true;
-    // View > Free Pan: whether a canvas may pan off-centre when the document
-    // fits the viewport (checked, default) or is pinned to centre. Persisted.
+    // Free Pan allows off-centre panning when the document fits the viewport.
     bool freePan_ = true;
-    // View > Snap Canvas To Workspace: when checked, a canvas whose scaled
-    // document fits the viewport is pinned to the centre, panning is refused,
-    // and the workspace scrollbars hide. Default off. Persisted.
+    // Snap Canvas To Workspace centres a fitting document and hides its scrollbars.
     bool snapCanvasToWorkspace_ = false;
     int brightnessLevel_ = 1;
     int themeFamily_ = 0;
+    Preferences preferencesBaseline_;
     int uiScalePercent_ = 100;
     QToolButton* themeCornerButton_ = nullptr;
     bool gpuCompute_ = true;
@@ -706,24 +706,21 @@ private:
     // columns and the menu bar); transient, so leaving the mode restores the
     // Standard-mode chrome unchanged.
     bool fullScreenChromeShown_ = false;
-    // Crash recovery preferences wiring stays on the frame; the store, timer,
-    // snapshots, and autosave settings live in the coordinator.
+    // The coordinator owns crash recovery and autosave state.
     void connectRecoveryPreferences(PreferencesDialog* dialog);
     // Frame-owned chrome/settings commands, registered through MenuRegistrar's
     // callback so the menu translation units never name PicturaMainWindow.
     void registerFrameCommands(CommandRegistry& registry);
     CommandRegistry* commandRegistry() const;
 
-    // Rulers and guides (frame_guides.cpp): the View commands, each canvas's
-    // rulers and guide look, and the Guides preferences. Global view state,
-    // persisted in the session.
+    // Ruler and guide commands, view state, and preferences (frame_guides.cpp).
     void registerGuideHandlers();
     void registerProofHandlers();
     void applyProofState(PictureView* view);
     void showProofSetupCustom();
     void setProofColors(bool on);
     QString proofSetupName() const;
-    void loadGuideSession(const SessionState& state);
+    void loadGuideSession(const SessionState& state, const Preferences& prefs);
     void prepareCanvasGuides(const DocWindow& window);
     // Give the active document's other windows its guides; the tools keep the
     // active canvas's guides.
@@ -749,10 +746,9 @@ private:
     void setRulerUnit(RulerUnit unit);
     // frame_preferences.cpp: the Edit > Preferences leaves.
     void registerPreferenceHandlers();
-    // frame_shortcuts.cpp: Edit > Keyboard Shortcuts, the saved overrides, and
-    // the per-letter tool shortcuts they rebuild.
+    // Command and tool shortcut overrides (frame_shortcuts.cpp).
     void registerShortcutHandlers();
-    void applyShortcutOverrides(const SessionState& state);
+    void applyShortcutOverrides(const Preferences& prefs);
     void rebuildToolShortcuts();
     void showKeyboardShortcuts();
     QList<QShortcut*> toolKeyShortcuts_;

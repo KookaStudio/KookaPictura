@@ -13,6 +13,7 @@
 #include "control_server.h"
 #include "frame.h"
 #include "session.h"
+#include "preferences.h"
 
 #include "api/engine_bridge.h"
 
@@ -38,7 +39,7 @@ AgentControl::AgentControl(PicturaMainWindow* frame, const QString& endpoint)
     , frame_(frame)
     , endpoint_(endpoint)
 {
-    const SessionState state = loadSession();
+    const auto state = loadPreferences();
     settings_.enabled = state.agentControlEnabled;
     settings_.allowEdit = state.agentAllowEdit;
     settings_.allowSave = state.agentAllowSave;
@@ -120,14 +121,34 @@ void AgentControl::apply(const AgentSettings& settings)
     if (settings == settings_) {
         return;
     }
-    settings_ = settings;
-    SessionState state = loadSession();
+    const auto current = loadPreferences();
+    auto previous = current;
+    previous.agentControlEnabled = settings_.enabled;
+    previous.agentAllowEdit = settings_.allowEdit;
+    previous.agentAllowSave = settings_.allowSave;
+    previous.agentApprovalMode = static_cast<int>(settings_.approval);
+    previous.agentRoots = settings_.roots;
+    auto state = previous;
     state.agentControlEnabled = settings.enabled;
     state.agentAllowEdit = settings.allowEdit;
     state.agentAllowSave = settings.allowSave;
     state.agentApprovalMode = static_cast<int>(settings.approval);
     state.agentRoots = settings.roots;
-    saveSession(state);
+    const bool granting = settings.enabled && !settings_.enabled;
+    const bool saved = savePreferences(previous, state, granting);
+    const auto merged = loadPreferences();
+    settings_.enabled = merged.agentControlEnabled;
+    settings_.allowEdit = merged.agentAllowEdit;
+    settings_.allowSave = merged.agentAllowSave;
+    settings_.approval = static_cast<ApprovalMode>(merged.agentApprovalMode);
+    settings_.roots = merged.agentRoots;
+    if (!saved && !merged.agentRecoveryGuard) {
+        if (settings.enabled != previous.agentControlEnabled) settings_.enabled = settings.enabled;
+        if (settings.allowEdit != previous.agentAllowEdit) settings_.allowEdit = settings.allowEdit;
+        if (settings.allowSave != previous.agentAllowSave) settings_.allowSave = settings.allowSave;
+        if (static_cast<int>(settings.approval) != previous.agentApprovalMode) settings_.approval = settings.approval;
+        if (settings.roots != previous.agentRoots) settings_.roots = settings.roots;
+    }
     sync();
 }
 
@@ -145,7 +166,7 @@ ControlPolicy AgentControl::policy(const QString& endpoint) const
             policy.roots.append(canonical);
         }
     }
-    policy.denied = protectedDirectories(sessionFilePath(), endpoint);
+    policy.denied = protectedDirectories(sessionFilePath(), endpoint, configurationDirectory());
     return policy;
 }
 

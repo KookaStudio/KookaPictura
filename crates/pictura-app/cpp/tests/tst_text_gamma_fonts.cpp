@@ -13,6 +13,7 @@
 #include "panels/layers_panel.h"
 #include "selftest_paint_fixture.h"
 #include "session.h"
+#include "preferences.h"
 #include "type_fonts.h"
 
 #include <QtCore/QTemporaryDir>
@@ -179,7 +180,7 @@ int TextGammaFontsTest::openAsPsd(Fixture& f, const QString& name)
 
 void TextGammaFontsTest::colorSettingsDefaults()
 {
-    const pictura::SessionState fresh;
+    const auto fresh = pictura::defaultPreferences();
     QVERIFY(fresh.textGammaEnabled);
     QCOMPARE(fresh.textGamma, 1.45);
     pictura::ColorSettingsDialog dialog(0);
@@ -210,12 +211,12 @@ void TextGammaFontsTest::colorSettingsAppliesGamma()
     const qint64 off = ink(f);
     QVERIFY2(off < on, "with the gamma off the type's edges are darker");
     QCOMPARE(f.view->history_index(), base);
-    QVERIFY(!pictura::loadSession().textGammaEnabled);
+    QVERIFY(!pictura::loadPreferences().textGammaEnabled);
     QCOMPARE(readColorSettings(), qMakePair(false, 1.45));
     QCOMPARE(ink(f), off);
     runColorSettings(true);
     QCOMPARE(ink(f), on);
-    QVERIFY(pictura::loadSession().textGammaEnabled);
+    QVERIFY(pictura::loadPreferences().textGammaEnabled);
 }
 
 void TextGammaFontsTest::colorSettingsAppliesValue()
@@ -229,7 +230,7 @@ void TextGammaFontsTest::colorSettingsAppliesValue()
     const qint64 at180 = ink(f);
     QVERIFY2(at180 < at145, "a gamma nearer 2.2 thins the type less");
     QCOMPARE(f.view->history_index(), base);
-    QCOMPARE(pictura::loadSession().textGamma, 1.8);
+    QCOMPARE(pictura::loadPreferences().textGamma, 1.8);
     QCOMPARE(readColorSettings(), qMakePair(true, 1.8));
     runColorSettings(true, 1.45);
     QCOMPARE(ink(f), at145);
@@ -237,16 +238,16 @@ void TextGammaFontsTest::colorSettingsAppliesValue()
 
 void TextGammaFontsTest::gammaSessionRoundTrip()
 {
-    pictura::SessionState state = pictura::loadSession();
+    auto state = pictura::loadPreferences();
     state.textGammaEnabled = false;
     state.textGamma = 1.8;
-    QVERIFY(pictura::saveSession(state));
-    const pictura::SessionState loaded = pictura::loadSession();
+    QVERIFY(pictura::savePreferences(pictura::loadPreferences(), state));
+    const auto loaded = pictura::loadPreferences();
     QVERIFY(!loaded.textGammaEnabled);
     QCOMPARE(loaded.textGamma, 1.8);
     state.textGammaEnabled = true;
     state.textGamma = 1.45;
-    QVERIFY(pictura::saveSession(state));
+    QVERIFY(pictura::savePreferences(pictura::loadPreferences(), state));
 }
 
 void TextGammaFontsTest::detectsMissingFonts()
