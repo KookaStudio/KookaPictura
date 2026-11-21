@@ -181,7 +181,11 @@ void ImportSaveCoordinator::finishLoadedDocument(int index)
     if (!recentPath.isEmpty()) {
         rememberRecent(recentPath);
     }
-    const QString notice = document_api::openNotice(*view);
+    QString notice = document_api::openNotice(*view);
+    const QString rawNotice = rawSaveNotices_.take(token);
+    if (!rawNotice.isEmpty()) {
+        notice = notice.isEmpty() ? rawNotice : notice + QLatin1Char(' ') + rawNotice;
+    }
     if (!notice.isEmpty() && hooks_.showStatus) {
         hooks_.showStatus(notice, 0);
     }
@@ -517,7 +521,7 @@ quint64 ImportSaveCoordinator::startOpenRawPath(const QString& path, bool intera
     // over the raw file. The raw file is still the recent entry.
     documents_.addLoadingDocument(view, QString(), QFileInfo(path).fileName(), token, path,
                                   OpenKind::Raster);
-    open_raw_start(*view, path);
+    open_raw_start(*view, path, rawSettingsStore_);
     return token;
 }
 
@@ -530,6 +534,8 @@ void ImportSaveCoordinator::developRawOpen(PictureView* view, bool interactive)
     }
     QString settings = raw_seed_settings(*view);
     if (interactive) {
+        const QString name = documents_.docAt(index)->displayName;
+        const quint64 token = documents_.docAt(index)->token;
         PicturaRawDialog dialog(view,
                                 AcrAsShot{raw_as_shot_temperature(*view), raw_as_shot_tint(*view)},
                                 settings, dialogParent_);
@@ -537,6 +543,9 @@ void ImportSaveCoordinator::developRawOpen(PictureView* view, bool interactive)
         QApplication::setOverrideCursor(Qt::ArrowCursor);
         const bool accepted = runImportDialog(dialog);
         QApplication::restoreOverrideCursor();
+        if (accepted || dialog.saveOnlyRequested()) {
+            saveRawSettings(view, token, name, dialog.settingsText(), !accepted);
+        }
         if (!accepted) {
             cancelOpen(indexOfView(view));
             return;
@@ -544,6 +553,30 @@ void ImportSaveCoordinator::developRawOpen(PictureView* view, bool interactive)
         settings = dialog.settingsText();
     }
     open_raw_develop_start(*view, settings);
+}
+
+void ImportSaveCoordinator::saveRawSettings(PictureView* view, quint64 token, const QString& name,
+                                            const QString& settings, bool saveOnly)
+{
+    const QString status = raw_save_settings(*view, settings, rawSettingsStore_);
+    QString message;
+    if (status.startsWith(QStringLiteral("error:"))) {
+        message = tr("Camera Raw settings for %1 were not saved: %2").arg(name, status.mid(6));
+    } else if (status.startsWith(QStringLiteral("fallback:"))) {
+        message = tr("The sidecar for %1 could not be written, so its Camera Raw settings were "
+                     "saved in the Camera Raw database.")
+                      .arg(name);
+    } else if (saveOnly) {
+        message = tr("Camera Raw settings saved for %1.").arg(name);
+    }
+    if (message.isEmpty()) {
+        return;
+    }
+    if (!saveOnly) {
+        rawSaveNotices_.insert(token, message);
+    } else if (hooks_.showStatus) {
+        hooks_.showStatus(message, 0);
+    }
 }
 
 quint64 ImportSaveCoordinator::startOpenAsSmartObjectPath(const QString& path)

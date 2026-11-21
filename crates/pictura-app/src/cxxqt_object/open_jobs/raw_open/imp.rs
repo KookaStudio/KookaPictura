@@ -1,5 +1,6 @@
 use super::super::compatibility::NativeCompatibility;
 use super::super::imp::{delay, history_for, open_budget, start, OpenedDocument, OpenedPath};
+use super::store::{self, RawStores, Saved, StoreKind};
 use super::PictureView;
 use crate::cxxqt_object::helpers::safe_io;
 use crate::cxxqt_object::helpers_composite::rgba_image;
@@ -11,8 +12,7 @@ use pictura_codec::{
     CameraRgb, DevelopedRgb, ImageBudget, PsdError, RawLook, RawSource, WhiteBalance,
 };
 use pictura_core::{
-    BitDepth, CrsSettings, Document, PicturaRawSettings, PsdRect, Samples, SourceChannels,
-    SourcePlanes,
+    BitDepth, Document, PicturaRawSettings, PsdRect, Samples, SourceChannels, SourcePlanes,
 };
 use pictura_render::DocumentComposite;
 use std::io::Read;
@@ -22,8 +22,6 @@ use std::path::Path;
 const SNIFF_BYTES: u64 = 256 * 1024;
 /// The long side of the preview copy kept beside the full source.
 const PREVIEW_EDGE: usize = 1024;
-/// A sidecar larger than this is not read.
-const SIDECAR_LIMIT: u64 = 4 * 1024 * 1024;
 const MIN_TEMPERATURE: f64 = 2000.0;
 const MAX_TEMPERATURE: f64 = 50000.0;
 const TINT_REACH: f64 = 150.0;
@@ -35,6 +33,10 @@ pub(in crate::cxxqt_object) struct PendingRaw {
     pub(super) preview: CameraRgb,
     pub(super) preview_look: RawLook,
     pub(super) seed: PicturaRawSettings,
+    /// The file's settings-database key (its content hash).
+    pub(super) key: String,
+    /// The settings record the seed came from, the base of a later save.
+    pub(super) record: Option<Vec<u8>>,
 }
 
 pub fn raw_sniff_path(path: &QString) -> bool {
@@ -53,10 +55,12 @@ fn reason(error: PsdError) -> String {
     }
 }
 
-/// Read and decode `path`, keeping a preview copy and the seed settings.
+/// Read and decode `path`, keeping a preview copy and the seed settings from
+/// its record in `stores`, else its embedded XMP.
 pub(super) fn decode_pending(
     path: &str,
     budget: &ImageBudget,
+    stores: &RawStores,
     progress: &dyn Fn(u8, &str),
 ) -> Result<PendingRaw, String> {
     let bytes = safe_io::read_capped(path, safe_io::import_file_limit())
@@ -66,13 +70,18 @@ pub(super) fn decode_pending(
     progress(85, "Preparing preview");
     let preview = pictura_codec::downscale_camera(&source.camera, PREVIEW_EDGE);
     let preview_look = scaled_look(&source.look, &source.camera, &preview);
-    let seed = seed_settings(Path::new(path), &bytes, source.as_shot);
+    let key = pictura_codec::raw_settings_key(&bytes);
+    let record = store::read_record(Path::new(path), &key, stores)
+        .or_else(|| pictura_codec::raw_xmp(&bytes));
+    let seed = seed_settings(record.as_deref(), source.as_shot);
     Ok(PendingRaw {
         path: path.to_string(),
         source,
         preview,
         preview_look,
         seed,
+        key,
+        record,
     })
 }
 
@@ -83,45 +92,38 @@ fn scaled_look(look: &RawLook, full: &CameraRgb, copy: &CameraRgb) -> RawLook {
     )
 }
 
-/// The as-shot white balance, then any `crs:` Basic control the sidecar
-/// `<stem>.xmp` sets, or, without a sidecar, the file's embedded packet.
-pub(super) fn seed_settings(
-    path: &Path,
-    bytes: &[u8],
-    as_shot: WhiteBalance,
-) -> PicturaRawSettings {
-    let mut basic = CrsSettings {
-        temperature: Some(as_shot.temperature.round()),
-        tint: Some(as_shot.tint.round()),
-        ..CrsSettings::default()
-    };
-    let packet = safe_io::read_capped(path.with_extension("xmp"), SIDECAR_LIMIT)
-        .or_else(|| pictura_codec::raw_xmp(bytes));
-    if let Some(packet) = packet {
-        let found = pictura_codec::crs_settings_from_xmp(&packet);
-        let fields = [
-            (&mut basic.exposure, found.exposure),
-            (&mut basic.contrast, found.contrast),
-            (&mut basic.highlights, found.highlights),
-            (&mut basic.shadows, found.shadows),
-            (&mut basic.whites, found.whites),
-            (&mut basic.blacks, found.blacks),
-            (&mut basic.clarity, found.clarity),
-            (&mut basic.vibrance, found.vibrance),
-            (&mut basic.saturation, found.saturation),
-            (&mut basic.temperature, found.temperature),
-            (&mut basic.tint, found.tint),
-        ];
-        for (slot, value) in fields {
-            if value.is_some() {
-                *slot = value;
-            }
-        }
+/// Every control `record` sets, over Temperature and Tint at the rounded
+/// as-shot white balance; a record labelled As Shot keeps the as-shot values.
+pub(super) fn seed_settings(record: Option<&[u8]>, as_shot: WhiteBalance) -> PicturaRawSettings {
+    let mut seed = record
+        .map(pictura_codec::pictura_raw_from_xmp)
+        .unwrap_or_default();
+    let keep_as_shot = seed.mode.white_balance == Some(*b"AsSh");
+    let basic = &mut seed.basic;
+    if keep_as_shot || basic.temperature.is_none() {
+        basic.temperature = Some(as_shot.temperature.round());
     }
-    PicturaRawSettings {
-        basic,
-        ..PicturaRawSettings::default()
+    if keep_as_shot || basic.tint.is_none() {
+        basic.tint = Some(as_shot.tint.round());
     }
+    seed
+}
+
+/// Save `settings` as `pending`'s record in `stores`, labelled with the white
+/// balance its values call for.
+pub(super) fn save_settings(
+    pending: &PendingRaw,
+    settings: &PicturaRawSettings,
+    stores: &RawStores,
+) -> Result<Saved, String> {
+    let labelled = store::with_white_balance_label(settings, pending.source.as_shot);
+    store::save_record(
+        Path::new(&pending.path),
+        &pending.key,
+        pending.record.as_deref(),
+        &labelled,
+        stores,
+    )
 }
 
 /// Split the absolute white balance out of `settings` for the colour stage;
@@ -270,8 +272,9 @@ pub(super) fn develop_document(
     })
 }
 
-pub fn open_raw_start(mut view: Pin<&mut PictureView>, path: &QString) {
+pub fn open_raw_start(mut view: Pin<&mut PictureView>, path: &QString, store: i32) {
     let path = path.to_string();
+    let stores = RawStores::for_user(StoreKind::from_index(store));
     view.as_mut().rust_mut().pending_raw = None;
     let (budget, _) = open_budget();
     let request = view.as_mut().rust_mut().begin_open_request();
@@ -290,7 +293,7 @@ pub fn open_raw_start(mut view: Pin<&mut PictureView>, path: &QString) {
     };
     std::thread::spawn(move || {
         progress(5, "Reading file");
-        let decoded = decode_pending(&path, &budget, &progress);
+        let decoded = decode_pending(&path, &budget, &stores, &progress);
         delay(delay_ms);
         qt_thread
             .queue(move |mut view| {
@@ -330,6 +333,21 @@ pub fn open_raw_develop_start(mut view: Pin<&mut PictureView>, settings: &QStrin
             Err(reason) => (None, format!("error:{reason}"), Vec::new()),
         }
     });
+}
+
+pub fn raw_save_settings(view: &PictureView, settings: &QString, store: i32) -> QString {
+    let settings = pictura_codec::pictura_raw_from_text(&settings.to_string());
+    let Some(pending) = view.rust().pending_raw.as_ref() else {
+        return QString::from("error:the raw file is no longer loaded");
+    };
+    let stores = RawStores::for_user(StoreKind::from_index(store));
+    let status = match save_settings(pending, &settings, &stores) {
+        Ok(Saved::Sidecar) => "sidecar".to_string(),
+        Ok(Saved::Database) => "database".to_string(),
+        Ok(Saved::Fallback(reason)) => format!("fallback:{reason}"),
+        Err(reason) => format!("error:{reason}"),
+    };
+    QString::from(status.as_str())
 }
 
 pub fn raw_seed_settings(view: &PictureView) -> QString {

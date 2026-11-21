@@ -60,6 +60,7 @@ void ImportSaveCoordinator::saveState(SessionState& state) const
     state.saveInBackground = saveInBackground_;
     state.autoSaveMinutes = autoSaveMinutes_;
     state.nativeSaveCompatibility = nativeSaveCompatibility();
+    state.rawSettingsStore = rawSettingsStore_;
 }
 
 void ImportSaveCoordinator::loadState(const SessionState& state)
@@ -71,6 +72,7 @@ void ImportSaveCoordinator::loadState(const SessionState& state)
     saveInBackground_ = state.saveInBackground;
     autoSaveMinutes_ = state.autoSaveMinutes;
     setNativeSaveCompatibility(state.nativeSaveCompatibility);
+    setRawSettingsStore(state.rawSettingsStore);
 }
 
 void ImportSaveCoordinator::setNativeSaveCompatibility(int choice)
@@ -120,6 +122,7 @@ void ImportSaveCoordinator::onAboutToRemoveDocument(int index)
     }
     openSourcePaths_.remove(entry->token);
     openWarnings_.remove(entry->token);
+    rawSaveNotices_.remove(entry->token);
 }
 
 } // namespace pictura

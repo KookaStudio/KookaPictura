@@ -2,6 +2,7 @@
 //! minimal uncompressed DNG written here.
 
 use super::imp::*;
+use super::store::{RawStores, StoreKind};
 use cxx_qt_lib::QString;
 use pictura_codec::ImageBudget;
 use pictura_color::chroma;
@@ -11,7 +12,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 static COUNTER: AtomicU32 = AtomicU32::new(0);
 
 /// A fresh, empty directory for one test's files.
-fn temp_dir() -> PathBuf {
+pub(super) fn temp_dir() -> PathBuf {
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
     let dir = std::env::temp_dir().join(format!("pictura-raw-open-{}-{n}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -19,7 +20,7 @@ fn temp_dir() -> PathBuf {
     dir
 }
 
-const PACKET_4300: &str = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/" crs:Temperature="4300"/></rdf:RDF></x:xmpmeta>"#;
+pub(super) const PACKET_4300: &str = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/" crs:Temperature="4300"/></rdf:RDF></x:xmpmeta>"#;
 
 enum Value {
     Short(Vec<u16>),
@@ -33,7 +34,12 @@ enum Value {
 /// A little-endian, single-IFD, uncompressed 16-bit RGGB DNG, `width ×
 /// height`, a smooth ramp; `ColorMatrix1` (XYZ-D50-to-ProPhoto at D50) when
 /// `with_colour`, and an XMP packet when given.
-fn fixture_dng(width: u32, height: u32, with_colour: bool, xmp: Option<&str>) -> Vec<u8> {
+pub(super) fn fixture_dng(
+    width: u32,
+    height: u32,
+    with_colour: bool,
+    xmp: Option<&str>,
+) -> Vec<u8> {
     let mut samples = Vec::with_capacity((width * height * 2) as usize);
     for y in 0..height {
         for x in 0..width {
@@ -132,15 +138,39 @@ fn fixture_dng(width: u32, height: u32, with_colour: bool, xmp: Option<&str>) ->
     out
 }
 
-fn write(dir: &Path, name: &str, bytes: &[u8]) -> PathBuf {
+pub(super) fn write(dir: &Path, name: &str, bytes: &[u8]) -> PathBuf {
     let path = dir.join(name);
     std::fs::write(&path, bytes).unwrap();
     path
 }
 
+/// Stores with `preferred` first and the database in `dir/db`.
+pub(super) fn stores(dir: &Path, preferred: StoreKind) -> RawStores {
+    RawStores {
+        preferred,
+        database: Some(dir.join("db")),
+    }
+}
+
+pub(super) fn pending_with(path: &Path, stores: &RawStores) -> PendingRaw {
+    decode_pending(
+        path.to_str().unwrap(),
+        &ImageBudget::default(),
+        stores,
+        &|_, _| {},
+    )
+    .expect("fixture decodes")
+}
+
 fn pending(path: &Path) -> PendingRaw {
-    decode_pending(path.to_str().unwrap(), &ImageBudget::default(), &|_, _| {})
-        .expect("fixture decodes")
+    pending_with(path, &stores(path.parent().unwrap(), StoreKind::Database))
+}
+
+/// A packet whose one description carries `attributes`.
+pub(super) fn crs_packet(attributes: &str) -> String {
+    format!(
+        r#"<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/" {attributes}/></rdf:RDF></x:xmpmeta>"#
+    )
 }
 
 #[test]
@@ -248,4 +278,57 @@ fn preview_follows_temperature() {
         r / b.max(1.0)
     };
     assert!(ratio(9000.0) > ratio(3000.0));
+}
+
+#[test]
+fn preferred_store_is_read_first() {
+    let dir = temp_dir();
+    let bytes = fixture_dng(16, 12, true, None);
+    let path = write(&dir, "shot.dng", &bytes);
+    write(
+        &dir,
+        "shot.xmp",
+        crs_packet(r#"crs:Exposure2012="+1.00""#).as_bytes(),
+    );
+    let db = dir.join("db");
+    std::fs::create_dir_all(&db).unwrap();
+    let key = pictura_codec::raw_settings_key(&bytes);
+    write(
+        &db,
+        &format!("{key}.xmp"),
+        crs_packet(r#"crs:Exposure2012="-1.00""#).as_bytes(),
+    );
+    let exposure = |kind| pending_with(&path, &stores(&dir, kind)).seed.basic.exposure;
+    assert_eq!(exposure(StoreKind::Database), Some(-1.0));
+    assert_eq!(exposure(StoreKind::Sidecar), Some(1.0));
+}
+
+#[test]
+fn record_seeds_every_tab() {
+    let dir = temp_dir();
+    let path = write(&dir, "shot.dng", &fixture_dng(16, 12, true, None));
+    write(
+        &dir,
+        "shot.xmp",
+        crs_packet(r#"crs:Sharpness="55" crs:SplitToningShadowHue="210""#).as_bytes(),
+    );
+    let seed = pending(&path).seed;
+    assert_eq!(seed.detail.sharpen_amount, Some(55));
+    assert_eq!(seed.split_toning.shadow_hue, Some(210));
+}
+
+#[test]
+fn as_shot_record_keeps_as_shot_balance() {
+    let dir = temp_dir();
+    let path = write(&dir, "shot.dng", &fixture_dng(16, 12, true, None));
+    write(
+        &dir,
+        "shot.xmp",
+        crs_packet(r#"crs:WhiteBalance="As Shot" crs:Temperature="9000""#).as_bytes(),
+    );
+    let pending = pending(&path);
+    assert_eq!(
+        pending.seed.basic.temperature,
+        Some(pending.source.as_shot.temperature.round())
+    );
 }

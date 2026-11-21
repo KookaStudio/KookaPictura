@@ -77,6 +77,11 @@ void PicturaMainWindow::connectRecoveryPreferences(PreferencesDialog* dialog)
     dialog->setAutoSaveRecovery(importSave_->autoSaveRecovery(),
                                 importSave_->autoSaveMinutes());
     dialog->setNativeSaveCompatibility(importSave_->nativeSaveCompatibility());
+    dialog->setRawSettingsStore(importSave_->rawSettingsStore());
+    connect(dialog, &PreferencesDialog::rawSettingsStoreChanged, this, [this](int store) {
+        importSave_->setRawSettingsStore(store);
+        saveSession();
+    });
     connect(dialog, &PreferencesDialog::nativeSaveCompatibilityChanged, this,
             [this](int choice) {
                 importSave_->setNativeSaveCompatibility(choice);

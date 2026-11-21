@@ -171,7 +171,8 @@ pub use pictura_filter::{
 pub use pictura_raw::{
     append_smart_filter, attach_pictura_raw_filter, attach_smart_filter,
     decode_pictura_raw_settings, encode_pictura_raw_fltr, pictura_raw_from_text,
-    pictura_raw_to_text, replace_smart_filter, CAMERA_RAW_FILTER_ID, CAMERA_RAW_FILTER_NAME,
+    pictura_raw_from_xmp, pictura_raw_to_text, pictura_raw_to_xmp, raw_settings_key,
+    replace_smart_filter, CAMERA_RAW_FILTER_ID, CAMERA_RAW_FILTER_NAME,
 };
 pub use read::read_psd_layer_structure;
 pub use smart_object::{

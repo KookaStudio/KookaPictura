@@ -35,6 +35,10 @@ public:
     // The full settings text with the edited values written back.
     QString settingsText() const;
 
+    // A raw open's Done (#401): save the settings, open nothing. The dialog
+    // is rejected with this set.
+    bool saveOnlyRequested() const { return saveOnly_; }
+
     // Run the dialog modally; on OK fill `out` with the edited settings text.
     static bool get(QWidget* parent, PictureView* view, const QString& path,
                     const QString& initialSettings, QString* out);
@@ -58,6 +62,7 @@ private:
     AcrToneCurvePanel* toneCurve_ = nullptr;
     QTimer* refreshTimer_ = nullptr;
     bool renderPending_ = false;
+    bool saveOnly_ = false;
 };
 
 } // namespace pictura

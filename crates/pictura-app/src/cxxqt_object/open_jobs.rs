@@ -26,7 +26,7 @@ pub use imp::*;
 pub(super) use raw_open::PendingRaw;
 pub use raw_open::{
     open_raw_develop_start, open_raw_start, raw_as_shot_temperature, raw_as_shot_tint, raw_preview,
-    raw_seed_settings, raw_sniff_path,
+    raw_save_settings, raw_seed_settings, raw_sniff_path,
 };
 
 #[cxx_qt::bridge]
@@ -105,10 +105,11 @@ pub mod ffi {
         /// signature; the extension is not consulted.
         fn raw_sniff_path(path: &QString) -> bool;
 
-        /// Start decoding the raw file `path` on a worker. `open_finished`
-        /// reports `"raw"` with the source kept on the view, or
-        /// `"error:<reason>"`.
-        fn open_raw_start(view: Pin<&mut PictureView>, path: &QString);
+        /// Start decoding the raw file `path` on a worker, seeding from its
+        /// settings record with `store` (0 database, 1 sidecar) read first.
+        /// `open_finished` reports `"raw"` with the source kept on the view,
+        /// or `"error:<reason>"`.
+        fn open_raw_start(view: Pin<&mut PictureView>, path: &QString, store: i32);
 
         /// Start developing the kept source with `settings` (Pictura Raw text)
         /// on a worker; `open_finished` reports `"ok"` with the document
@@ -118,6 +119,12 @@ pub mod ffi {
         /// The kept source's seed settings as Pictura Raw text; empty without
         /// one.
         fn raw_seed_settings(view: &PictureView) -> QString;
+
+        /// Save `settings` (Pictura Raw text) as the kept source's settings
+        /// record in `store` (0 database, 1 sidecar, #401): `"sidecar"`,
+        /// `"database"`, `"fallback:<reason>"` (the sidecar could not be
+        /// written; the database holds it), or `"error:<reason>"`.
+        fn raw_save_settings(view: &PictureView, settings: &QString, store: i32) -> QString;
 
         /// The kept source's as-shot temperature (kelvin) and tint, rounded;
         /// 0 without one.

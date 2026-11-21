@@ -155,6 +155,10 @@ public:
     int autoSaveMinutes() const { return autoSaveMinutes_; }
     int nativeSaveCompatibility() const { return static_cast<int>(nativeSaveCompatibility_); }
     void setNativeSaveCompatibility(int choice);
+    // Save Camera Raw Settings In (#401): 0 the Camera Raw database, 1 sidecar
+    // ".xmp" files.
+    int rawSettingsStore() const { return rawSettingsStore_; }
+    void setRawSettingsStore(int store) { rawSettingsStore_ = store == 1 ? 1 : 0; }
     void offerRecovery();
     int recoverOrphans();
     void autosaveRecovery();
@@ -258,6 +262,10 @@ private:
     // `interactive`, then the develop.
     quint64 startOpenRawPath(const QString& path, bool interactive);
     void developRawOpen(PictureView* view, bool interactive);
+    // Write the dialog's settings as the raw file's record and report a
+    // fallback, a failure, or (for Done) the save in the status bar.
+    void saveRawSettings(PictureView* view, quint64 token, const QString& name,
+                         const QString& settings, bool saveOnly);
     void handlePdfProbeFinished(PictureView* view, const PdfProbe& probe,
                                 const QString& status, const QStringList& warnings);
     void startPdfProbe(const QString& path, bool interactive, const QString& password,
@@ -295,6 +303,9 @@ private:
     // Per-open side data that must outlive the tab's removal.
     QHash<quint64, QString> openSourcePaths_;
     QHash<quint64, QStringList> openWarnings_;
+    // A raw open's settings-save fallback or failure, shown with the open's
+    // own notice so that notice does not replace it.
+    QHash<quint64, QString> rawSaveNotices_;
     // A per-open failure message for routes that must not fail silently (Open
     // As's "format mismatch or damaged file.").
     QHash<quint64, QString> openFailureMessages_;
@@ -349,6 +360,7 @@ private:
     bool autoSaveRecovery_ = true;
     int autoSaveMinutes_ = 10;
     NativeSaveCompatibility nativeSaveCompatibility_ = NativeSaveCompatibility::Always;
+    int rawSettingsStore_ = 0;
 };
 
 } // namespace pictura
