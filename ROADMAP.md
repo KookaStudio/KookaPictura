@@ -495,6 +495,7 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [ ] X-Trans-tuned demosaic, with the Fuji container (#399)
 - [ ] Deflate, PackBits and lossy-JPEG DNGs and floating-point samples (#396)
 - [ ] Vendor raw containers: ARW/ARW2, ORF, RW2 and CR3 (#399)
+- [ ] Every Nikon camera opens with colour: verify each layout, colour sources for ~70 bodies, recent models first (#1498)
 - [x] **DNG output** — Save Image… in the raw open's Pictura Raw dialog writes
       a mosaic DNG (lossless-JPEG tiles) or, with Convert to Linear Image, a
       linear DNG, with the colour tags, crop, orientation, the dialog's
