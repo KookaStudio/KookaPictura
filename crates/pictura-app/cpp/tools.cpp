@@ -868,6 +868,7 @@ void ToolController::handlePressed(const QPointF& imagePos, int button, int modi
     if (canvasBrush_) {
         canvasBrushDragging_ = true;
         canvasBrush_(CanvasBrushPhase::Press, imagePos, Qt::KeyboardModifiers(modifiers));
+        return;
     }
     if (canvasSampler_) {
         canvasSampling_ = true;
@@ -940,6 +941,7 @@ void ToolController::handleMoved(const QPointF& imagePos)
     if (canvasBrush_) {
         canvasBrush_(canvasBrushDragging_ ? CanvasBrushPhase::Drag : CanvasBrushPhase::Hover,
                      imagePos, QGuiApplication::queryKeyboardModifiers());
+        return;
     }
     if (canvasSampler_) {
         // A held drag samples continuously when the caller wants it; a plain
@@ -1045,6 +1047,7 @@ void ToolController::handleReleased(const QPointF& imagePos)
         canvasBrushDragging_ = false;
         canvasBrush_(CanvasBrushPhase::Release, imagePos,
                      QGuiApplication::queryKeyboardModifiers());
+        return;
     }
     if (canvasSampler_) {
         canvasSampling_ = false;

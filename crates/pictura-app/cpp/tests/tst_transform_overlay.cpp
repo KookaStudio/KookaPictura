@@ -93,6 +93,9 @@ void TransformOverlayTest::controlsBoxDrawsPastTheDocumentEdge()
     pictura::ImageView* canvas = frame.imageView();
     auto* tools = frame.findChild<pictura::ToolController*>();
     QVERIFY(view && canvas && tools);
+        canvas->setLayerEdgesVisible(false);
+        canvas->setSlicesVisible(false);
+        canvas->setPixelGridVisible(false);
     frame.show();
     QVERIFY(QTest::qWaitForWindowExposed(&frame));
     QCoreApplication::processEvents();

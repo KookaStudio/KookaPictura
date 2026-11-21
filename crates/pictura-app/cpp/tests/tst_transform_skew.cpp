@@ -123,6 +123,13 @@ QString TransformSkewTest::beginLayer(pictura::PicturaMainWindow& frame)
         return QString();
     }
     view->deselect();
+    if (pictura::ImageView* canvas = frame.imageView()) {
+        // These checks read rendered layer colours, not the View overlays.
+        canvas->setLayerEdgesVisible(false);
+        canvas->setSlicesVisible(false);
+        canvas->setPixelGridVisible(false);
+        canvas->setTargetPathVisible(false);
+    }
     return layer;
 }
 
