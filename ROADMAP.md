@@ -622,8 +622,8 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [x] File ▸ Scripts ▸ Load Files into Stack: the Load Layers dialog, one
       native-size layer per file on a new canvas, Auto-Align, and the embedded
       smart-object option (#1277)
-- [ ] The File menu stubs: Open As, Import, Export, Automate, Scripts, and
-      Browse in Bridge (#504)
+- [x] File ▸ Browse… (the Bridge replacement) and File ▸ Scripts ▸ Statistics…;
+      the remaining File-menu leaves are tracked by #558/#617/#619/#620/#630 (#504)
 - [ ] The Cursors, Transparency and Gamut, Plug-ins, Type and 3D preferences
       panes (#505)
 - [ ] The sparse existing panes: General, Interface, File Handling, Performance,

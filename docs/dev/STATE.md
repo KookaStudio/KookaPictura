@@ -65,6 +65,17 @@ Snapshot for resuming after a context break. Update after each milestone.
   real CR2s, agreeing with exiftool). New vendor families add body names to
   the script's `BODIES` and rerun it. Tests: `tests/raw_camera_matrices.rs`,
   the as-shot rows of `tests/raw_cr2.rs`.
+- **File ▸ Browse… and File ▸ Scripts ▸ Statistics… — #504 implemented** (OpenSpec
+  change `file-browse-and-statistics`; capabilities `interop/file-browse`,
+  `interop/image-stack-statistics`, `ui/statistics-dialog`).
+  `File > Browse…` (`Ctrl+Alt+O`) is the Linux Bridge replacement and opens the
+  active document's folder (home when none) through the URL-opener seam.
+  `File > Scripts > Statistics…` is Extended-only: the Image Statistics dialog
+  takes Files/Folder sources, a stack mode, and Auto-Align, loads them through
+  the stack pipeline as one Smart Object, applies the mode, and remembers the
+  last mode/align in the session. `File > Scripts > Browse…` is a disabled row
+  until the scripting host (#620). The remaining File-menu leaves stay with
+  #558/#617/#619/#630.
 - **Feature parity tracker** — `PARITY.md` records CS6 Standard, CS6 Extended,
   and CC 28.0 coverage; `scripts/check-parity.py` validates the totals.
   Assessed 2026-11-20 at commit 98c0b292.
