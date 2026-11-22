@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+"""Run the Pictura OpenCode shell inside the shared resource limits."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+from typing import Sequence
+
+sys.dont_write_bytecode = True
+
+import agent_cpu_budget as budget
+from heavy_command_policy import refusal
+
+SCRIPTS = Path(__file__).resolve().parent
+
+
+def shell_command(arguments: Sequence[str]) -> str | None:
+    words = iter(arguments)
+    for option in words:
+        if option in {"-", "--"} or not option.startswith(("-", "+")):
+            break
+        if option.startswith("--"):
+            if option in {"--init-file", "--rcfile"}:
+                next(words, None)
+        elif option.startswith("-") and "c" in option:
+            return next(words, None)
+        elif option.endswith(("o", "O")):
+            next(words, None)
+    return None
+
+
+def main(arguments: Sequence[str]) -> int:
+    argv = ["/bin/bash", *arguments]
+    command = shell_command(arguments)
+    if command is not None and refusal(command, str(SCRIPTS.parent), managed=True):
+        argv = [sys.executable, str(SCRIPTS / "agent-build.py"), "--", *argv]
+    try:
+        budget.run_in_scope(argv)
+    except (budget.BudgetError, OSError) as error:
+        print(f"opencode-agent-shell: {error}", file=sys.stderr)
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

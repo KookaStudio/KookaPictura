@@ -79,6 +79,37 @@ class AgentQuotaChecks(unittest.TestCase):
         self.assertEqual(execute.call_args.args[2]["PICTURA_AGENT_POLICY"],
                          str(SCRIPTS / "heavy_command_policy.py"))
 
+    def test_opencode_shell_routing(self):
+        entry = runpy.run_path(SCRIPTS / "opencode-agent-shell")["main"]
+        runner = str(SCRIPTS / "agent-build.py")
+        for arguments, queued in (
+            (["-c", "printf '%s' '$HOME'", "shell name", "argument"], False),
+            ([], False),
+            (["-c", "/usr/bin/cargo --version"], True),
+            (["-lc", "set -o pipefail; bash scripts/verify-full.sh | tail -20"], True),
+            (["-e", "-o", "pipefail", "-c", "ctest --help"], True),
+            (["-c", f"python3 {runner} -- pwd"], False),
+            (["-c", f"python3 {runner} -- pwd && ninja --version"], True),
+            (["--", "script.sh", "-c", "cargo --version"], False),
+        ):
+            with mock.patch.object(budget, "run_in_scope") as run:
+                self.assertEqual(entry(arguments), 0)
+            shell = ["/bin/bash", *arguments]
+            expected = [sys.executable, runner, "--", *shell] if queued else shell
+            run.assert_called_once_with(expected)
+
+    def test_opencode_shell_refuses_unavailable_slice(self):
+        entry = runpy.run_path(SCRIPTS / "opencode-agent-shell")["main"]
+        with (
+            mock.patch.object(budget, "agent_slice", return_value=Path("/invalid")),
+            mock.patch.object(budget, "require_limits", side_effect=budget.BudgetError("no CPU quota")),
+            mock.patch.object(budget.os, "execvpe") as execute,
+            contextlib.redirect_stderr(io.StringIO()) as error,
+        ):
+            self.assertEqual(entry(["-c", "never-run"]), 2)
+        execute.assert_not_called()
+        self.assertIn("no CPU quota", error.getvalue())
+
     def test_scope_command(self):
         args = ["/path with spaces/agent", "--arg", "${UNCHANGED}", "left;right"]
         with (
