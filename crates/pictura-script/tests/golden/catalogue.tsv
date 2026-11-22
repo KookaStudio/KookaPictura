@@ -161,6 +161,7 @@ image.flipHorizontal	Image/Image Rotation/Flip Canvas Horizontal	Flip Canvas Hor
 image.flipVertical	Image/Image Rotation/Flip Canvas Vertical	Flip Canvas Vertical		1	0
 image.crop	Image/Crop	Crop		1	0
 image.trim	Image/Trim…	Trim…		1	0
+image.revealAll	Image/Reveal All	Reveal All		1	0
 image.duplicate	Image/Duplicate…	Duplicate…		1	0
 image.variables.define	Image/Variables/Define…	Define…		1	0
 image.variables.data.sets	Image/Variables/Data Sets…	Data Sets…		1	0
