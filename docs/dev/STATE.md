@@ -4,6 +4,17 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Crop resampling and non-destructive Reveal All — #544 implemented**
+  (OpenSpec change `crop-resampling-nondestructive`, archived; new capabilities
+  `tools/crop-resampling` and `tools/non-destructive-crop`). `W x H x Resolution`
+  now carries an output target: the W/H fields are pixel dimensions, the box is
+  locked to their ratio, and a commit crops then resamples to exactly that size
+  with Bicubic and writes the ppi and `px/in`/`px/cm` unit. Straighten commits
+  use the same target. `Image > Reveal All` (`image.revealAll`) grows the canvas
+  to the union of the canvas and every layer rect, mask, and retained native
+  store, so a crop with `Delete Cropped Pixels` off is recoverable in one
+  history state. Tests: `tst_crop_options`, `tst_image_ops`, and the
+  `pictura-render::document_ops::crop` unit tests.
 - **Interface localization — #642 implemented** (OpenSpec change
   `ui-localization`, archived). Pictura bundles German and Finnish catalogs.
   Preferences → Interface selects the startup language, imports community

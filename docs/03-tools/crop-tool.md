@@ -111,11 +111,12 @@ behaviors are marked inferred and tracked under `## Open questions`.
 - **Crop geometry** is a rectangle (plus optional rotation) in document space.
   Commit either (a) copies/crops the retained region into a new canvas, or
   (b) records a non-destructive crop region and hides the remainder.
-- **Non-destructive crop** is behavioral parity only: retain the full layer
-  raster, store the active crop rectangle (and rotation) as layer/canvas
-  metadata, and clip rendering to it. Re-editing reuses the stored region;
-  `Reveal All` clears it. Exact CS6 storage location/keys are not public — see
-  Open questions.
+- **Non-destructive crop** is behavioral parity only: retain each layer's full
+  raster and re-frame the canvas, so the cropped-away pixels still hang off the
+  canvas in the layer rects. `Reveal All` grows the canvas to the union of the
+  canvas and every layer's content (rect, mask, and retained native store),
+  which restores those pixels in one history state. Exact CS6 storage
+  location/keys are not public — see Open questions.
 - **Straighten** computes the angle of the reference line from the horizontal or
   vertical, rotates the image by its negative about the image center, and grows
   the canvas to the bounding box of the rotated image, then crops to the box.
