@@ -253,7 +253,7 @@ pub use document_ops::{
     reorder_smart_filters, replace_layer_mask, replace_smart_object_contents,
     reset_smart_object_transform, resize_canvas_document, resize_document, resize_shape,
     resized_plane_bytes, resolve_export_slices, resolve_path, resolve_path_mut, resolve_slices,
-    restore_last_document_state, reverse_paths, reverse_paths_result, rotate_document,
+    restore_last_document_state, reveal_all, reverse_paths, reverse_paths_result, rotate_document,
     rotate_document_in, rotate_document_in_offset, rotated_plane_bytes, save_view,
     scale_layer_effects, select_similar, selection_transform_point, set_all_effects_visible,
     set_blend_paths, set_color_paths, set_document_global_light, set_document_layer_style_value,

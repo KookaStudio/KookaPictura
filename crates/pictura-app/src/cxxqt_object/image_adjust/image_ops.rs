@@ -37,6 +37,11 @@ pub mod ffi {
         /// One "Trim" state; false when the content already fills the canvas.
         fn trim_image(view: Pin<&mut PictureView>) -> bool;
 
+        /// `Image ▸ Reveal All`: grow the canvas over every layer's content
+        /// outside it, without resampling. One "Reveal All" state; false when
+        /// nothing lies outside the canvas.
+        fn reveal_all(view: Pin<&mut PictureView>) -> bool;
+
         /// The name Image ▸ Duplicate suggests: the source file's base name plus
         /// " copy".
         fn duplicate_name(view: &PictureView) -> QString;

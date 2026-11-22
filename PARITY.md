@@ -11,12 +11,12 @@ This tracker measures feature coverage against a frozen Photoshop baseline. It d
 
 | Baseline | Complete | Partial | Missing | Unknown | Denominator | Coverage | Excluded non-goals |
 |---|---|---|---|---|---|---|---|
-| CS6 Standard | 207 | 80 | 58 | 4 | 349 | 59.3% | 8 |
-| CS6 Standard, in scope | 207 | 80 | 52 | 2 | 341 | 60.7% | 8 |
-| CS6 Extended | 208 | 80 | 74 | 4 | 366 | 56.8% | 23 |
-| CS6 Extended, in scope | 208 | 80 | 53 | 2 | 343 | 60.6% | 23 |
-| CC 28.0 | 209 | 82 | 79 | 4 | 374 | 55.9% | 20 |
-| CC 28.0, in scope | 209 | 82 | 61 | 2 | 354 | 59.0% | 20 |
+| CS6 Standard | 208 | 79 | 58 | 4 | 349 | 59.6% | 8 |
+| CS6 Standard, in scope | 208 | 79 | 52 | 2 | 341 | 61.0% | 8 |
+| CS6 Extended | 209 | 79 | 74 | 4 | 366 | 57.1% | 23 |
+| CS6 Extended, in scope | 209 | 79 | 53 | 2 | 343 | 60.9% | 23 |
+| CC 28.0 | 210 | 81 | 79 | 4 | 374 | 56.1% | 20 |
+| CC 28.0, in scope | 210 | 81 | 61 | 2 | 354 | 59.3% | 20 |
 
 ## Baselines
 
@@ -40,7 +40,7 @@ Coverage is not behavioural or pixel parity with Photoshop. Every Complete row n
 |---|---|---|---|
 | Files & interchange | 27/40 (67.5%) | 27/42 (64.3%) | 28/46 (60.9%) |
 | Layers & compositing | 31/38 (81.6%) | 31/39 (79.5%) | 31/39 (79.5%) |
-| Tools & painting | 40/70 (57.1%) | 41/81 (50.6%) | 41/71 (57.7%) |
+| Tools & painting | 41/70 (58.6%) | 42/81 (51.9%) | 42/71 (59.2%) |
 | Selections & masking | 18/22 (81.8%) | 18/22 (81.8%) | 18/22 (81.8%) |
 | Adjustments & filters | 30/55 (54.5%) | 30/55 (54.5%) | 30/64 (46.9%) |
 | Type & vector | 17/17 (100.0%) | 17/17 (100.0%) | 17/19 (89.5%) |
@@ -165,7 +165,7 @@ Source list: CS6 toolbox slots (71 catalogue slots plus the two missing single r
 | P-TOOL-06 | Magnetic Lasso | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-07 | Magic Wand | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-08 | Quick Selection | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
-| P-TOOL-09 | Crop | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Crop resampling, non-destructive crop, Reveal All, and crop shield settings remain | TOOL-20 |
+| P-TOOL-09 | Crop | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-10 | Perspective Crop | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-11 | Slice | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Slice style and modifiers, Divide/Combine/Duplicate, and the Slice Options dialog remain | TOOL-19 |
 | P-TOOL-12 | Slice Select | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Slice style and modifiers, Divide/Combine/Duplicate, and the Slice Options dialog remain | TOOL-19 |
@@ -524,7 +524,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
 |---|---|---|---|---|---|
-| 2026-11-21 | 4736b57e | 207/349 (59.3%) | 208/366 (56.8%) | 28.0 | 209/374 (55.9%) |
+| 2026-11-21 | 4736b57e | 208/349 (59.6%) | 209/366 (57.1%) | 28.0 | 210/374 (56.1%) |
 | 2026-11-21 | 39ea0380 | 202/349 (57.9%) | 203/366 (55.5%) | 28.0 | 204/374 (54.5%) |
 | 2026-11-21 | 7ab28fc5 | 192/349 (55.0%) | 193/366 (52.7%) | 28.0 | 194/374 (51.9%) |
 | 2026-11-20 | 89c8ba95 | 191/349 (54.7%) | 192/366 (52.5%) | 28.0 | 193/374 (51.6%) |

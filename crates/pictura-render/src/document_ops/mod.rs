@@ -23,7 +23,7 @@ mod smart_filters;
 
 pub use canvas::{canvas_plane_bytes, extend_background, resize_canvas_document};
 pub use crop::{
-    crop_document, crop_document_grow, delete_cropped_pixels, translate_layer,
+    crop_document, crop_document_grow, delete_cropped_pixels, reveal_all, translate_layer,
     translate_layer_active, translate_layer_index, translate_layer_path, translate_layer_rect,
 };
 pub use depth::{convert_depth, convert_depth_exposure_gamma};

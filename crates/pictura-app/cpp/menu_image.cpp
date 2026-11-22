@@ -67,6 +67,12 @@ void MenuRegistrar::wireImageMenu()
             trim_image(*view);
         }
     });
+    commands_->setHandler(command_ids::ImageRevealAll, [this]() {
+        PictureView* view = activeView();
+        if (view) {
+            reveal_all(*view);
+        }
+    });
     commands_->setHandler(command_ids::ImageDuplicate, [this]() {
         PictureView* source = activeView();
         if (!source || !source->has_document()) {
@@ -91,7 +97,8 @@ void MenuRegistrar::wireImageMenu()
     const auto imageEnabled = [this]() {
         return activeView() && activeView()->has_document();
     };
-    for (const char* id : {command_ids::ImageTrim, command_ids::ImageDuplicate}) {
+    for (const char* id : {command_ids::ImageTrim, command_ids::ImageRevealAll,
+                           command_ids::ImageDuplicate}) {
         commands_->setEnabledProvider(id, imageEnabled);
     }
 

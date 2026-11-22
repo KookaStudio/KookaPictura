@@ -65,6 +65,63 @@ fn crop_to_frame(doc: &mut Document, x0: i32, y0: i32, new_w: u32, new_h: u32) -
     true
 }
 
+/// `Image > Reveal All`: grow the canvas to the union of the current canvas and
+/// every layer's content, without resampling. The pixels outside the canvas
+/// were retained by a non-destructive crop, so they reappear unchanged; a
+/// destructive crop trimmed them, leaving the union equal to the canvas.
+///
+/// Content is every non-group layer rect, every mask rect, and every retained
+/// native-store rect, recursively through groups. Returns false (changing
+/// nothing) when nothing lies outside the canvas.
+pub fn reveal_all(doc: &mut Document) -> bool {
+    let canvas = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: doc.height as i32,
+        right: doc.width as i32,
+    };
+    let Some(content) = content_bounds(&doc.layers) else {
+        return false;
+    };
+    let union = canvas.union(content);
+    if union == canvas {
+        return false;
+    }
+    crop_document_grow(
+        doc,
+        union.left,
+        union.top,
+        union.width() as u32,
+        union.height() as u32,
+    )
+}
+
+/// The union of every layer's visible content extent, including group
+/// descendants, masks, and retained native stores.
+fn content_bounds(layers: &[Layer]) -> Option<PsdRect> {
+    fn add(acc: &mut Option<PsdRect>, rect: PsdRect) {
+        if !rect.is_empty() {
+            *acc = Some(acc.map_or(rect, |current| current.union(rect)));
+        }
+    }
+    let mut acc = None;
+    for layer in layers {
+        if !layer.is_group() {
+            add(&mut acc, layer.rect);
+        }
+        if let Some(mask) = &layer.mask {
+            add(&mut acc, mask.rect);
+        }
+        if let Some(store) = &layer.source_channels {
+            add(&mut acc, store.rect);
+        }
+        if let Some(bounds) = content_bounds(layer.children()) {
+            add(&mut acc, bounds);
+        }
+    }
+    acc
+}
+
 /// The Crop tool's "Delete Cropped Pixels": after [`crop_document`], discard
 /// each pixel layer's pixels (and its mask plane) outside the canvas, so they
 /// cannot be revealed by enlarging the canvas again. A layer entirely off the
@@ -668,6 +725,54 @@ mod tests {
         eprintln!(
             "region timing 4000^2 backend={backend:?} full={full_ms:.1}ms region64={region_ms:.3}ms"
         );
+    }
+
+    #[test]
+    fn non_destructive_crop_keeps_the_raster() {
+        let mut doc = sample_doc();
+        assert!(crop_document(&mut doc, 1, 1, 2, 2));
+        let layer = &doc.layers[0];
+        assert_eq!((doc.width, doc.height), (2, 2));
+        assert_eq!(layer.rect, rect(-1, -1, 3, 3));
+        assert_eq!(layer.channels()[0].data.len(), 16, "the plane is intact");
+        assert_eq!(layer.channels()[0].data[0], 0, "old (0,0) is still there");
+    }
+
+    #[test]
+    fn reveal_all_restores_a_non_destructively_cropped_raster() {
+        let mut doc = sample_doc();
+        assert!(crop_document(&mut doc, 1, 1, 2, 2));
+        assert!(reveal_all(&mut doc));
+        assert_eq!((doc.width, doc.height), (4, 4));
+        assert_eq!(doc.layers[0].rect, rect(0, 0, 4, 4));
+        assert_eq!(
+            doc.layers[0].channels()[0].data,
+            (0..16u8).collect::<Vec<_>>()
+        );
+        doc.composite
+            .replace(crate::composite_rgba(&doc))
+            .expect("valid composite");
+        assert_eq!(doc.composite.data[0], 0);
+        assert_eq!(doc.composite.data[3], 3);
+    }
+
+    #[test]
+    fn reveal_all_includes_content_outside_the_canvas() {
+        let mut doc = sample_doc();
+        let off = pixel_layer("off", rect(-3, -2, 0, 1), None);
+        let _ = doc.layers.push(off);
+        assert!(reveal_all(&mut doc));
+        assert_eq!((doc.width, doc.height), (6, 7));
+        assert_eq!(doc.layers[0].rect, rect(3, 2, 7, 6));
+        assert_eq!(doc.layers[1].rect, rect(0, 0, 3, 3));
+    }
+
+    #[test]
+    fn reveal_all_is_a_noop_when_content_is_inside_the_canvas() {
+        let mut doc = sample_doc();
+        let before = doc.clone();
+        assert!(!reveal_all(&mut doc));
+        assert_eq!(doc, before);
     }
 
     #[test]

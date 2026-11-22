@@ -580,6 +580,16 @@ private:
     int magneticFrequency_ = 57;
 };
 
+// The Crop tool's `W x H x Resolution` output target. `width`/`height` above
+// zero arm the mode: the commit resamples the cropped canvas to that pixel size
+// and writes `ppi` with its `perCm` unit.
+struct CropResampleTarget {
+    int width = 0;
+    int height = 0;
+    double ppi = 72.0;
+    bool perCm = false;
+};
+
 // The Crop and Perspective Crop tools' options. `angle` has its own
 // notification (the straighten preview) and `straightenMode` its own (the
 // spirit-level arming); every other field shares `optionsChanged`.
@@ -619,6 +629,21 @@ public:
         if (optionsChanged) {
             optionsChanged();
         }
+    }
+
+    const CropResampleTarget& resampleTarget() const { return resampleTarget_; }
+    bool resampleActive() const
+    {
+        return resampleTarget_.width > 0 && resampleTarget_.height > 0;
+    }
+    // The output-size mode's target; does not notify (the ratio setter does).
+    void setResampleTarget(CropResampleTarget target)
+    {
+        resampleTarget_ = target;
+    }
+    void clearResampleTarget()
+    {
+        resampleTarget_ = CropResampleTarget{};
     }
 
     double angle() const { return angle_; }
@@ -751,6 +776,7 @@ private:
 
     double ratio_ = 0.0;
     bool deletePixels_ = true;
+    CropResampleTarget resampleTarget_;
     double angle_ = 0.0;
     QPointF pivot_;
     bool classicMode_ = false;
