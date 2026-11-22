@@ -81,7 +81,7 @@ Source list: CS6 and CC supported-format lists plus named File-menu, metadata, p
 | P-FMT-23 | HEIC/HEIF read and write | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:1; src:6 | #1509 |
 | P-FMT-24 | AVIF read and write | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:1; src:6 | #1510 |
 | P-FMT-25 | DICOM read and analysis | N/A | Y | Y | Missing | non-goal | — | none | edition:Extended-only; DICOM is an intentional non-goal | non-goal:feasibility:74 |
-| P-FMT-26 | Camera raw open and demosaic | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src/dng/develop.rs; crates/pictura-app/src/cxxqt_object/open_jobs/raw_open.rs | manual:tst_raw_open covers the raw open route | DNG/CR2/NEF File > Open route; approximate parity; per-camera matrices for 14 Canon and 11 Nikon bodies (plus 3 proxies) ship (#1465, #1469); smart-object open remains (#1466) | — |
+| P-FMT-26 | Camera raw open and demosaic | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src/dng/develop.rs; crates/pictura-app/src/cxxqt_object/open_jobs/raw_open.rs | manual:tst_raw_open covers the raw open route | DNG/CR2/NEF/ARW File > Open route; approximate parity; per-camera matrices for 14 Canon, 11 Nikon (plus 3 proxies) and 11 Sony bodies ship (#1465, #1469, #1470); smart-object open remains (#1466) | — |
 | P-FMT-27 | DNG output | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src/dng/write/ | none | Mosaic and linear DNG output with `crs:` settings; JPEG, TIFF and PSD from Save Options remain (#633) | — |
 | P-FMT-28 | Print | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Print colour management, proofing, marks, and persisted defaults remain | #634 |
 | P-FMT-29 | EXIF, IPTC, and XMP metadata | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src | none | — | — |
@@ -101,7 +101,7 @@ Source list: CS6 and CC supported-format lists plus named File-menu, metadata, p
 | P-FMT-43 | 3D file import (U3D, 3DS, OBJ, KMZ, Collada) | N/A | Y | N/A | Missing | non-goal | — | none | edition:Extended-only; retired:src:3 | non-goal:feasibility:72 |
 | P-FMT-44 | Video frame import | Y | Y | Y | Missing | non-goal | — | none | Video is an intentional non-goal; src:1; src:7 | non-goal:feasibility:73 |
 | P-FMT-45 | Content Credentials | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:4 | #1512 |
-| P-FMT-46 | Per-camera colour matrices for CR2 and vendor raw | Y | Y | Y | Partial | in-scope | crates/pictura-codec/src/dng/camera_matrices.rs | none | 14 Canon CR2 and 11 Nikon NEF bodies fit from spectral sensitivities, 3 Nikon bodies by same-sensor proxy; other cameras are refused; the EOS 600D CFA phase (#1476), unseeded Nikon bodies (#1498) and the other vendor containers (#399) remain | follow-up: #1476, #1498 |
+| P-FMT-46 | Per-camera colour matrices for CR2 and vendor raw | Y | Y | Y | Partial | in-scope | crates/pictura-codec/src/dng/camera_matrices.rs | none | 14 Canon CR2, 11 Nikon NEF and 11 Sony ARW bodies (plus 3 Sony same-sensor aliases) fit from spectral sensitivities, 3 Nikon bodies by same-sensor proxy; other cameras are refused; the EOS 600D CFA phase (#1476), unseeded Nikon (#1498) and Sony (#1525) bodies and the other vendor containers (#399) remain | follow-up: #1476, #1498, #1525 |
 | P-FMT-47 | Open a raw file as a Smart Object | Y | Y | Y | Missing | in-scope | — | none | Shift+Open Image raw open is not implemented | #1466 |
 
 ### Layers & compositing

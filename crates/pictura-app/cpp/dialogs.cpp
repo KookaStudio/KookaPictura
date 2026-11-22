@@ -285,7 +285,7 @@ QStringList openFileFilters()
 {
     return {
         QCoreApplication::translate("PicturaFiles", "All Formats") + QStringLiteral(" (*.PSD *.PSB *.PNG *.JPG *.JPEG *.JPE *.GIF *.BMP "
-                       "*.TIF *.TIFF *.WEBP *.PDF *.PDP *.AI *.EPS *.EPSF *.PS *.DNG *.CR2 *.NEF)"),
+                       "*.TIF *.TIFF *.WEBP *.PDF *.PDP *.AI *.EPS *.EPSF *.PS *.DNG *.CR2 *.NEF *.ARW)"),
         QCoreApplication::translate("PicturaFiles", "Photoshop") + QStringLiteral(" (*.PSD)"),
         QCoreApplication::translate("PicturaFiles", "Photoshop Large Format") + QStringLiteral(" (*.PSB)"),
         QCoreApplication::translate("PicturaFiles", "Images") + QStringLiteral(" (*.PNG *.JPG *.JPEG *.JPE *.GIF *.BMP *.TIF *.TIFF *.WEBP)"),
@@ -298,7 +298,7 @@ QStringList openFileFilters()
         QCoreApplication::translate("PicturaFiles", "Photoshop PDF") + QStringLiteral(" (*.PDF *.PDP)"),
         QCoreApplication::translate("PicturaFiles", "Generic PDF") + QStringLiteral(" (*.PDF *.PDP *.AI)"),
         QCoreApplication::translate("PicturaFiles", "Generic EPS") + QStringLiteral(" (*.EPS *.EPSF *.PS)"),
-        QCoreApplication::translate("PicturaFiles", "Camera Raw") + QStringLiteral(" (*.DNG *.CR2 *.NEF)"),
+        QCoreApplication::translate("PicturaFiles", "Camera Raw") + QStringLiteral(" (*.DNG *.CR2 *.NEF *.ARW)"),
         QCoreApplication::translate("PicturaFiles", "All files") + QStringLiteral(" (*)"),
     };
 }

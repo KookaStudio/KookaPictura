@@ -41,7 +41,7 @@ WAVELENGTHS = range(380, 781, 5)
 
 # Bodies whose raw files the vendor readers open, by rawtoaces-data file stem:
 # Canon bodies that write CR2 (the EOS R and later CR3 bodies wait for #399),
-# and Nikon bodies that write NEF (#1469).
+# Nikon bodies that write NEF (#1469) and Sony bodies that write ARW (#1470).
 BODIES = [
     "Canon_Digital_Rebel_XTi",
     "Canon_EOS-1D_X_Mark_II",
@@ -72,6 +72,19 @@ BODIES = [
     "Nikon_D850",
     # Its alias the Z 6II (same sensor) writes NEF too.
     "Nikon_Z_f",
+    "Sony_DSC-RX100M4",
+    "Sony_ILCE-6400",
+    "Sony_ILCE-7CM2",
+    "Sony_ILCE-7M3",
+    "Sony_ILCE-7M4",
+    "Sony_ILCE-7RM2",
+    # Its alias the ILCE-7RM3A (same sensor) writes ARW too.
+    "Sony_ILCE-7RM3",
+    # Its aliases the ILCE-7RM4A and ILCE-7RM5 (same sensor) write ARW too.
+    "Sony_ILCE-7RM4",
+    "Sony_ILCE-7SM2",
+    "Sony_ILCE-7SM3",
+    "Sony_ILCE-9",
 ]
 
 # Bodies with no published sensitivities that take a fitted body's matrices,

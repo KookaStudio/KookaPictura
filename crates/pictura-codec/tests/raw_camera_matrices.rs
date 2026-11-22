@@ -1,11 +1,15 @@
 //! Per-camera colour matrices for vendor raw files (`codec/camera-matrices`,
-//! #1465, #1469) on synthetic CR2s and NEFs, and, opt-in, real camera files.
+//! #1465, #1469, #1470) on synthetic CR2s, NEFs and ARWs, and, opt-in, real
+//! camera files.
 
 use pictura_codec::{
     as_shot_transform, decode_raw_source, read_raw, DngColor, DngImage, ImageBudget, PsdError,
 };
 use pictura_color::chroma::{self, Mat3};
 
+#[allow(dead_code)]
+#[path = "raw/arw_builder.rs"]
+mod arw_builder;
 #[allow(dead_code)]
 #[path = "dng/builder.rs"]
 mod builder;
@@ -18,6 +22,7 @@ mod ljpeg_encode;
 #[path = "raw/nef_builder.rs"]
 mod nef_builder;
 
+use arw_builder::{arw, Arw, Coding};
 use builder::{noise_plane, Val};
 use cr2_builder::{cr2, Cr2};
 use nef_builder::{nef, Data, Nef};
@@ -72,6 +77,33 @@ fn nef_spec(model: &'static str) -> Nef {
 fn nikon(model: &'static str) -> DngColor {
     read_raw(&nef(&nef_spec(model)), &ImageBudget::default())
         .expect("synthetic NEF reads")
+        .color
+}
+
+/// The Exif model names of every Sony camera the table seeds.
+const SONY_MODELS: [&str; 11] = [
+    "DSC-RX100M4",
+    "ILCE-6400",
+    "ILCE-7CM2",
+    "ILCE-7M3",
+    "ILCE-7M4",
+    "ILCE-7RM2",
+    "ILCE-7RM3",
+    "ILCE-7RM4",
+    "ILCE-7SM2",
+    "ILCE-7SM3",
+    "ILCE-9",
+];
+
+fn arw_spec(model: &'static str) -> Arw {
+    let mut spec = Arw::new(noise_plane(32, 16, 16383, 9), Coding::Uncompressed);
+    spec.model = model;
+    spec
+}
+
+fn sony(model: &'static str) -> DngColor {
+    read_raw(&arw(&arw_spec(model)), &ImageBudget::default())
+        .expect("synthetic ARW reads")
         .color
 }
 
@@ -220,11 +252,60 @@ fn nef_as_shot_neutral_from_wb_levels() {
 }
 
 #[test]
+fn known_sony_models_take_fitted_matrices() {
+    for model in SONY_MODELS {
+        let color = sony(model);
+        assert!(
+            color.color_matrix.iter().all(Option::is_some),
+            "{model}: {color:?}"
+        );
+        assert_eq!(
+            color.calibration_illuminant,
+            [Some(17), Some(21)],
+            "{model}"
+        );
+    }
+    for (alias, body) in [
+        ("ILCE-7RM3A", "ILCE-7RM3"),
+        ("ILCE-7RM4A", "ILCE-7RM4"),
+        ("ILCE-7RM5", "ILCE-7RM4"),
+    ] {
+        assert_eq!(sony(alias).color_matrix, sony(body).color_matrix, "{alias}");
+    }
+    assert_ne!(
+        sony("ILCE-7M3").color_matrix,
+        sony("ILCE-7RM3").color_matrix
+    );
+    assert_eq!(sony("ILCE-1").color_matrix, [None, None]);
+}
+
+#[test]
+fn known_camera_arw_decodes() {
+    let bytes = arw(&arw_spec("ILCE-7M3"));
+    let image = read_raw(&bytes, &ImageBudget::default()).expect("ILCE-7M3 ARW reads");
+    let neutral = image
+        .color
+        .as_shot_neutral
+        .expect("WB_RGGBLevels give a neutral");
+    for (got, want) in neutral.iter().zip([1024.0 / 2272.0, 1.0, 1024.0 / 1800.0]) {
+        assert!((got - want).abs() <= 1e-9, "{neutral:?}");
+    }
+    let source = decode_raw_source(&bytes, &ImageBudget::default()).expect("ILCE-7M3 decodes");
+    let want = as_shot_transform(&image.color)
+        .expect("as-shot transform")
+        .white_balance;
+    assert_eq!(source.as_shot, want);
+    let t = source.as_shot.temperature;
+    assert!((2000.0..=12000.0).contains(&t), "{t} K");
+}
+
+#[test]
 fn fitted_matrices_keep_white_neutral() {
     let colors = TABLE_MODELS
         .into_iter()
         .map(|m| (m, canon(m)))
-        .chain(NIKON_MODELS.into_iter().map(|m| (m, nikon(m))));
+        .chain(NIKON_MODELS.into_iter().map(|m| (m, nikon(m))))
+        .chain(SONY_MODELS.into_iter().map(|m| (m, sony(m))));
     for (model, color) in colors {
         let [Some(a), Some(d65)] = color.color_matrix else {
             panic!("{model} has no matrices");
@@ -311,8 +392,7 @@ fn cr2_corpus_colour_when_present() {
     assert!(seen > 0, "PICTURA_RAW_CORPUS holds no .CR2 file");
 }
 
-#[test]
-fn nef_corpus_colour_when_present() {
+fn corpus_colour(ext: &str) {
     let Some(root) = std::env::var_os("PICTURA_RAW_CORPUS") else {
         return;
     };
@@ -321,7 +401,7 @@ fn nef_corpus_colour_when_present() {
         let path = entry.expect("corpus entry").path();
         if !path
             .extension()
-            .is_some_and(|e| e.eq_ignore_ascii_case("nef"))
+            .is_some_and(|e| e.eq_ignore_ascii_case(ext))
         {
             continue;
         }
@@ -355,5 +435,15 @@ fn nef_corpus_colour_when_present() {
             eprintln!("{}: {:?} refused", path.display(), image.model);
         }
     }
-    assert!(seen > 0, "PICTURA_RAW_CORPUS holds no .NEF file");
+    assert!(seen > 0, "PICTURA_RAW_CORPUS holds no .{ext} file");
+}
+
+#[test]
+fn nef_corpus_colour_when_present() {
+    corpus_colour("NEF");
+}
+
+#[test]
+fn arw_corpus_colour_when_present() {
+    corpus_colour("ARW");
 }
