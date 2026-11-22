@@ -3226,3 +3226,22 @@ draggable within its own list, and the synthetic group header SHALL NOT drag.
 - **WHEN** a group row with a child and a styled layer row are shown
 - **THEN** the group row keeps the left nested-layers chevron, and the styled
   layer row draws the right-edge list toggle
+
+### Requirement: Layer name label renders with one elision
+
+The system SHALL paint a layer row's name with a single right-elision to the
+available label band. A name that fits the band SHALL be shown in full, with no
+ellipsis. A name wider than the band SHALL be elided exactly once, ending in a
+single ellipsis. The painted text SHALL be the same text whose width the row's
+`nameRect` reports, so rendering and the inline-rename hit area cannot drift.
+
+#### Scenario: A name that fits is shown in full [lpr_name_fit]
+
+- **WHEN** a layer's name fits the available label band
+- **THEN** the row paints the full name with no ellipsis
+
+#### Scenario: An overlong name elides once [lpr_name_elide]
+
+- **WHEN** a layer's name is wider than the available label band
+- **THEN** the row paints the name right-elided to the band, ending in a single
+  ellipsis
