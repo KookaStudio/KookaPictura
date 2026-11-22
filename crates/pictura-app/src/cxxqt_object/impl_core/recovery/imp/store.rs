@@ -122,17 +122,31 @@ impl RecoveryAttachment {
     ) {
         let mut pending = self.pending.lock().unwrap();
         let epoch = self.status.fetch_add(2, Ordering::AcqRel).wrapping_add(2) & !1;
-        let mut force = force || self.status() != 0;
-        if pending.inputs.len() == MAX_QUEUED_COMMITS {
+        let degraded = self.status() != 0;
+        let force = force || degraded;
+        // The newest state supersedes the queued ones, so coalescing is
+        // ordinary flow control, not degraded protection. A degraded writer
+        // also restarts from the newest state instead of replaying the queue.
+        if degraded || pending.inputs.len() == MAX_QUEUED_COMMITS {
             pending.inputs.clear();
-            self.status.fetch_or(1, Ordering::AcqRel);
-            force = true;
         }
         let bytes = crate::history::document_bytes(doc) + crate::history::tile_table_bytes(doc);
-        let memory = match pictura_core::memory::governor().reserve(bytes, "recovery snapshot") {
+        let governor = pictura_core::memory::governor();
+        let memory = match governor.reserve(bytes, "recovery snapshot") {
             Ok(memory) => memory,
-            Err(_) => {
+            // Queued snapshots can hold the room this one needs; coalescing
+            // them frees it, and the newest state still supersedes them.
+            Err(_) if !pending.inputs.is_empty() => {
                 pending.inputs.clear();
+                match governor.reserve(bytes, "recovery snapshot") {
+                    Ok(memory) => memory,
+                    Err(_) => {
+                        self.status.fetch_or(1, Ordering::AcqRel);
+                        return;
+                    }
+                }
+            }
+            Err(_) => {
                 self.status.fetch_or(1, Ordering::AcqRel);
                 return;
             }
@@ -792,6 +806,114 @@ mod tests {
         assert_eq!(status.load(Ordering::Acquire), 5);
         clear_covered_status(&status, 4);
         assert_eq!(status.load(Ordering::Acquire), 4);
+    }
+
+    #[test]
+    fn coalescing_queued_commits_is_not_degraded() {
+        let root = std::env::temp_dir().join(format!(
+            "pictura-coalesce-{:016x}",
+            u64::from_le_bytes(pictura_codec::os_random())
+        ));
+        fs::create_dir(&root).unwrap();
+        let attachment = RecoveryAttachment::new(&root, 1, "test".into(), "".into(), 10);
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        attachment
+            .writer
+            .tx
+            .send(Work::Hold(entered_tx, release_rx))
+            .unwrap();
+        entered_rx.recv().unwrap();
+        let doc = Document::from_rgba("Layer", 2, 2, &[42; 16]);
+        let cache = Arc::new(pictura_codec::EncodeCache::new());
+        let print_resources = Arc::default();
+        for history in 1..=MAX_QUEUED_COMMITS as u64 + 1 {
+            attachment.capture(
+                &doc,
+                None,
+                &print_resources,
+                &cache,
+                RecoveryIdentity {
+                    history: Some(history),
+                    metadata: 0,
+                    generation: 1,
+                },
+                false,
+            );
+        }
+        assert_eq!(
+            attachment.status(),
+            0,
+            "a full queue coalesces without reporting degraded protection"
+        );
+        release_tx.send(()).unwrap();
+        assert!(attachment.flush());
+        assert_eq!(attachment.status(), 0);
+        assert!(root.join("1.json").exists());
+        drop(attachment);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_degraded_writer_restarts_from_the_newest_state() {
+        let root = std::env::temp_dir().join(format!(
+            "pictura-degraded-{:016x}",
+            u64::from_le_bytes(pictura_codec::os_random())
+        ));
+        fs::create_dir(&root).unwrap();
+        let attachment = RecoveryAttachment::new(&root, 1, "test".into(), "".into(), 10);
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        attachment
+            .writer
+            .tx
+            .send(Work::Hold(entered_tx, release_rx))
+            .unwrap();
+        entered_rx.recv().unwrap();
+        let doc = Document::from_rgba("Layer", 2, 2, &[42; 16]);
+        let cache = Arc::new(pictura_codec::EncodeCache::new());
+        let print_resources = Arc::default();
+        for history in 1..=3 {
+            attachment.capture(
+                &doc,
+                None,
+                &print_resources,
+                &cache,
+                RecoveryIdentity {
+                    history: Some(history),
+                    metadata: 0,
+                    generation: 1,
+                },
+                false,
+            );
+        }
+        attachment.status.fetch_or(1, Ordering::AcqRel);
+        attachment.capture(
+            &doc,
+            None,
+            &print_resources,
+            &cache,
+            RecoveryIdentity {
+                history: Some(4),
+                metadata: 0,
+                generation: 1,
+            },
+            false,
+        );
+        {
+            let pending = attachment.pending.lock().unwrap();
+            assert_eq!(
+                pending.inputs.len(),
+                1,
+                "a degraded writer drops the queue that led to the failure"
+            );
+            assert!(pending.inputs[0].force);
+        }
+        release_tx.send(()).unwrap();
+        assert!(attachment.flush());
+        assert_eq!(attachment.status(), 0);
+        drop(attachment);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
