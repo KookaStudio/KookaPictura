@@ -18,6 +18,7 @@ Run from the repository root: python3 scripts/check-agent-command-guard.py
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import subprocess
 import sys
@@ -107,6 +108,126 @@ await assert.rejects(() => hook("timeout.py"), /fixture timed out/)
         subprocess.run(
             ["node", "--input-type=module", "-", str(path), str(stale)],
             input=javascript, text=True, check=True, timeout=12,
+        )
+
+
+def test_opencode_project_shell() -> None:
+    javascript = """
+import assert from "node:assert/strict"
+import { chmodSync, unlinkSync, writeFileSync } from "node:fs"
+import { join } from "node:path"
+import { pathToFileURL } from "node:url"
+
+const [root, main, linked, unrelated] = process.argv.slice(2)
+const target = join(main, "scripts", "opencode-agent-shell")
+const userSettings = join(root, "xdg", "kooka-pictura", "env")
+const alternateSettings = join(root, "alternate-env")
+const { CpuBudget } = await import(pathToFileURL(join(linked, ".opencode", "plugins", "guard.mjs")))
+const global = await import(pathToFileURL(join(root, "global", "guard.mjs")))
+const active = { directory: join(linked, "subdir"), worktree: linked }
+const input = { tool: "bash" }
+const args = { args: { command: "cargo build && echo retained" } }
+const original = structuredClone(args)
+
+delete process.env.PICTURA_AGENT_POLICY
+delete process.env.KOOKA_ENV_FILE
+process.env.XDG_CONFIG_HOME = join(root, "xdg")
+process.env.HOME = join(root, "home")
+const defaultSettings = join(root, "home", ".config", "kooka-pictura", "env")
+
+async function configure(factory, context) {
+  const plugin = await factory(context)
+  const settings = { shell: "/bin/zsh" }
+  await plugin.config(settings)
+  return { plugin, settings }
+}
+
+const plain = await configure(CpuBudget, active)
+assert.equal(plain.settings.shell, "/bin/zsh")
+process.env.PICTURA_OPENCODE_MANAGED = "1"
+assert.equal((await configure(CpuBudget, active)).settings.shell, "/bin/zsh")
+delete process.env.PICTURA_OPENCODE_MANAGED
+
+writeFileSync(defaultSettings, "PICTURA_OPENCODE_MANAGED=1\\n")
+delete process.env.XDG_CONFIG_HOME
+assert.equal((await configure(CpuBudget, active)).settings.shell, target)
+process.env.XDG_CONFIG_HOME = join(root, "xdg")
+
+writeFileSync(userSettings, 'PICTURA_OPENCODE_MANAGED=0\\nexport PICTURA_OPENCODE_MANAGED="1" # enable\\n')
+const enabled = await configure(CpuBudget, active)
+assert.equal(enabled.settings.shell, target)
+await enabled.plugin["tool.execute.before"](input, args)
+await enabled.plugin["shell.env"]({}, { env: {} })
+assert.deepEqual(args, original)
+
+const enabledGlobal = await configure(global.CpuBudget, active)
+assert.equal(enabledGlobal.settings.shell, target)
+const other = await configure(global.CpuBudget, { directory: unrelated, worktree: unrelated })
+assert.equal(other.settings.shell, "/bin/zsh")
+await other.plugin["shell.env"]({}, { env: {} })
+
+writeFileSync(alternateSettings, "PICTURA_OPENCODE_MANAGED=1\\nPICTURA_OPENCODE_MANAGED=0\\n")
+process.env.KOOKA_ENV_FILE = alternateSettings
+const optedOut = await configure(CpuBudget, active)
+assert.equal(optedOut.settings.shell, "/bin/zsh")
+delete process.env.KOOKA_ENV_FILE
+
+process.env.PICTURA_AGENT_POLICY = join(root, "full-launch-policy.py")
+const full = await configure(CpuBudget, active)
+assert.equal(full.settings.shell, "/bin/zsh")
+await full.plugin["shell.env"]({}, { env: {} })
+delete process.env.PICTURA_AGENT_POLICY
+
+enabled.settings.shell = "/bin/bash"
+await assert.rejects(() => enabled.plugin["tool.execute.before"](input, args), /managed.*shell/i)
+await assert.rejects(() => enabled.plugin["shell.env"]({}, { env: {} }), /managed.*shell/i)
+assert.deepEqual(args, original)
+enabled.settings.shell = target
+
+chmodSync(target, 0o600)
+await assert.rejects(() => enabled.plugin["shell.env"]({}, { env: {} }), /opencode-agent-shell/)
+
+const unconfigured = await CpuBudget(active)
+await assert.rejects(() => unconfigured.config({ shell: "/bin/zsh" }), /opencode-agent-shell/)
+await assert.rejects(() => unconfigured["tool.execute.before"](input, args), /opencode-agent-shell/)
+unlinkSync(target)
+await assert.rejects(() => enabled.plugin["shell.env"]({}, { env: {} }), /opencode-agent-shell/)
+"""
+    if not sys.platform.startswith("linux"):
+        return
+    with tempfile.TemporaryDirectory() as temp:
+        root = Path(temp)
+        main, linked, unrelated = (root / name for name in ("main checkout", "linked", "unrelated"))
+        git_env = {name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
+        git_env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
+        for repository in (main, unrelated):
+            subprocess.run(["git", "init", "--quiet", str(repository)],
+                           env=git_env, check=True, timeout=5)
+        git = ["git", "-C", str(main), "-c", "core.hooksPath=/dev/null"]
+        subprocess.run([
+            *git, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+            "-c", "commit.gpgsign=false", "commit", "--allow-empty", "--quiet", "-m", "fixture",
+        ], env=git_env, check=True, timeout=5)
+        subprocess.run([
+            *git, "worktree", "add", "--quiet", "--detach", str(linked), "HEAD",
+        ], env=git_env, check=True, timeout=5)
+        plugin = (ROOT / ".opencode/plugins/cpu-budget.ts").read_bytes()
+        for checkout in (main, linked):
+            plugin_dir = checkout / ".opencode/plugins"
+            plugin_dir.mkdir(parents=True)
+            (plugin_dir / "guard.mjs").write_bytes(plugin)
+        (linked / "subdir").mkdir()
+        (root / "global").mkdir()
+        (root / "global/guard.mjs").symlink_to(main / ".opencode/plugins/guard.mjs")
+        wrapper = main / "scripts/opencode-agent-shell"
+        wrapper.parent.mkdir()
+        wrapper.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        wrapper.chmod(0o700)
+        for config in (root / "xdg", root / "home/.config"):
+            (config / "kooka-pictura").mkdir(parents=True)
+        subprocess.run(
+            ["node", "--input-type=module", "-", str(root), str(main), str(linked), str(unrelated)],
+            input=javascript, env=git_env, text=True, check=True, timeout=12,
         )
 
 
@@ -249,6 +370,7 @@ def self_check() -> int:
     fails(claude, codex, legacy=True)
     fails(claude, codex, mutated_fast="start_check cpu-budget python3 scripts/cpu-budget.py --self-check")
     test_opencode_policy_failure()
+    test_opencode_project_shell()
     test_managed_policy_segments()
     print("check-agent-command-guard: self-check OK")
     return 0
@@ -273,6 +395,7 @@ def main() -> int:
     if errors:
         return 1
     test_opencode_policy_failure()
+    test_opencode_project_shell()
     test_managed_policy_segments()
     print("check-agent-command-guard: OK")
     return 0
