@@ -574,8 +574,9 @@ Trust and worktrees:
   checkout, so a Codex session that reads main's policy in a stale worktree is
   pointed at main's budgeted wrapper, which still runs the command in the
   worktree.
-- opencode loads `.opencode/plugins/cpu-budget.ts` from the checkout and
-  delegates to the same policy.
+- OpenCode delegates to the same policy. Enrolled OpenCode uses the absolute
+  policy path exported by its launcher. Install the global plugin below so
+  the adapter also runs when the working checkout predates the guard.
 
 `python3 scripts/check-agent-command-guard.py` verifies the three adapters and
 their paths; `scripts/verify-fast.sh` runs it.
@@ -591,21 +592,20 @@ git worktree remove ../kooka-pictura-worktrees/{issue}-{name}
 The shared `../.target` survives removal; reclaim it like any `target/` with
 `cargo clean` or `cargo sweep`.
 
-### Opt-in shared CPU quota for coding agents
+### Managed resource limits for coding agents
 
-On Linux with systemd 254 or later and a user manager with cgroup v2 CPU
-delegation, the optional `pictura-agents.slice` limits total CPU time for all
-enrolled processes. Setup uses the regular login user. Routine repository
-commands leave the setting alone. The quota defaults to 80% of online logical
-CPUs. On a 16-CPU workstation the generated `CPUQuota=1280%` means 12.8
-logical CPUs' worth of time, shared across every enrolled worktree and
-harness. The build lock and build job counts are independent of this quota.
-
-From your main checkout, generate and install the unit for your user.
-Choose `--percent N` to use a value from 1 to 100.
+On Linux with systemd 254 or later and cgroup v2 CPU and memory delegation,
+one `pictura-agents.slice` limits aggregate CPU, memory, and swap use for all
+enrolled executors. The generator defaults to 80% of online logical CPUs,
+a memory pressure threshold of 38% of physical RAM, a hard memory limit of
+50%, and 2 GiB of swap. The launcher checks the actual cgroup limits before
+starting an executor. Install or replace an older CPU-only slice from your
+main checkout as the regular login user.
 
 ```bash
-pictura_budget_tool="$PWD/scripts/agent_cpu_budget.py"
+pictura_agent_root="$PWD"
+pictura_budget_tool="$pictura_agent_root/scripts/agent_cpu_budget.py"
+pictura_agent_build="$pictura_agent_root/scripts/agent-build.py"
 pictura_user_units="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 pictura_budget_unit=$(mktemp)
 python3 "$pictura_budget_tool" unit > "$pictura_budget_unit" &&
@@ -615,14 +615,33 @@ python3 "$pictura_budget_tool" unit > "$pictura_budget_unit" &&
 rm -f -- "$pictura_budget_unit"
 ```
 
-Use that same absolute helper path from any worktree. Put these launch forms
-in your user aliases or launcher configuration if you use them routinely.
+On a 64 GiB, 16-thread workstation, another starting point is
+`unit --percent 62 --memory-high 24G --memory-max 32G --swap-max 2G`.
+That sets the shared CPU ceiling to 9.92 logical CPUs' worth of time. Tune
+memory limits using the peak of a single verification run under the slice.
+
+Use the same absolute helper path from every worktree. Configure your
+terminal aliases and desktop shortcuts to use it. For OpenCode, install the
+adapter in the local server's global plugin directory before starting the
+server. Choose an unused name for the symlink.
+
+```bash
+pictura_opencode_plugins="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins"
+install -d "$pictura_opencode_plugins"
+ln -s "$pictura_agent_root/.opencode/plugins/cpu-budget.ts" \
+    "$pictura_opencode_plugins/pictura-cpu-budget.ts"
+```
 
 ```bash
 python3 "$pictura_budget_tool" run -- opencode
 python3 "$pictura_budget_tool" run -- claude
 python3 "$pictura_budget_tool" run -- codex --no-daemon
 ```
+
+For OpenCode clients that attach to a server, launch the server through
+the helper (`run -- opencode serve`) and point each client at that server.
+Enroll the actual command executor to protect its shell, builds, and tests.
+Restart old executors after replacing the slice configuration.
 
 The standalone Codex form requires a CLI that supports `--no-daemon`.
 For a persistent local app server, use a dedicated socket. Run the first
@@ -637,11 +656,23 @@ python3 "$pictura_budget_tool" run -- codex app-server --listen "unix://$pictura
 python3 "$pictura_budget_tool" run -- codex --remote "unix://$pictura_budget_socket"
 ```
 
-In a shell tool in each harness, run `python3 /absolute/path/to/scripts/agent_cpu_budget.py status`.
-Repeat for both normal and approved shell execution in Codex. Their output
-should name the same `cgroup` and show a finite `cpu.max`. Use `status --pid PID`
-from your login shell to check an already-running worker. Run setup and the
-launcher from the host login session, which has access to the user manager.
+Submit heavy commands from managed OpenCode through the absolute runner.
+The runner keeps the current working directory and takes one slot shared by
+all worktrees. Verification scripts and the existing build wrapper also
+join the queue when invoked from an enrolled shell. A timeout reports the
+holder and exits. Wait for the holder or cancel it through its runner.
+If the runner was killed, use `systemctl --user stop <scope>` on the reported
+job. The job's scope, working directory, and slice memory-event snapshots
+appear in `journalctl --user -t pictura-agent-build`.
+
+```bash
+python3 "$pictura_agent_build" -- bash scripts/verify-full.sh
+```
+
+The managed queue derives ownership from the active job's systemd cgroup.
+`PICTURA_VERIFY_LOCK=0`, `PICTURA_VERIFY_LOCK_HELD=1`, and an alternate
+`PICTURA_VERIFY_LOCK_ROOT` leave managed admission in force. Legacy shells
+continue to use the portable build lock and affinity helper.
 
 The launcher sets `SCCACHE_SERVER_UDS` to its own socket and `SCCACHE_DIR` to
 `~/.cache/pictura-agents/sccache`. When sccache is installed, the launcher
@@ -652,18 +683,29 @@ Preserve the launcher's cache variables in the harness's shell environment.
 If a sandbox denies Unix socket access, sccache can fall back to direct
 compilation in the slice. Use `status --pid` to check the worker's placement.
 
-For an aggregate smoke test, install the unit temporarily at 1% and start two
-short workers through the launcher from distinct worktrees. A workload that
-uses a fixed small amount of process CPU time keeps the test bounded. Both
-workers should report the same cgroup directory, and `nr_throttled` in that
-directory's `cpu.stat` should rise. Stop the probe workers before updating
-the unit to your chosen percentage. The quota covers CPU time in the slice.
-Memory, disk, GPU usage, and requests sent to external executors have separate
-resource controls.
+Run this smoke check from the host login session using two enrolled shells in
+different worktrees.
+
+1. Run `python3 "$pictura_budget_tool" status` in each actual shell executor.
+   Compare the cgroup and finite limits. From the login shell, use
+   `status --pid PID` for the compiler cache daemon when present.
+2. In the first shell, run
+   `python3 "$pictura_agent_build" -- bash -c 'sleep 60 & wait'`.
+   In the second, run
+   `PICTURA_VERIFY_LOCK=0 PICTURA_VERIFY_LOCK_HELD=1 python3 "$pictura_agent_build" -- pwd`.
+   Check that it waits and names the holder. Cancel the first runner with
+   Ctrl+C and check that its scope is empty before the second starts.
+3. In OpenCode connected to the enrolled server from a stale worktree, ask
+   it to execute `cargo --version`. The adapter should refuse it and give the
+   absolute runner path. The same command through that runner should succeed.
+
+The managed host controls local executors. Apply separate limits to remote
+executors and independently launched services.
 
 To opt out, close the enrolled harnesses and app server, stop the
 `pictura-agents.slice` user unit if a background worker is still running, and
-remove the slice file you installed. Run `systemctl --user daemon-reload` and
+remove the slice file you installed. Remove the global plugin symlink if it
+was installed for enrollment only. Run `systemctl --user daemon-reload` and
 restore your usual launch commands.
 
 ## Speeding up local builds

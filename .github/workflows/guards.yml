@@ -40,10 +40,13 @@ jobs:
           python3 scripts/check-cmake-source-fragments.py
       - name: Self-test budget
         run: bash scripts/check-selftest-budget.sh
-      - name: Local agent CPU and verification lock
+      - name: Managed agent resources and verification guards
         run: |
           python3 scripts/cpu-budget.py --self-check
           python3 scripts/check-agent-cpu-budget.py --self-check
+          python3 scripts/check-agent-build.py --self-check
+          python3 scripts/heavy_command_policy.py --self-check
+          python3 scripts/check-agent-command-guard.py
           bash scripts/check-build-lock.sh
       - name: Worktree hook
         run: bash scripts/check-worktree-hook.sh

@@ -205,70 +205,62 @@ checkout.
 
 ### Requirement: The documented command wrapper applies the CPU budget
 
-`scripts/with-build-lock.sh` SHALL apply the local CPU budget before it sources
-`scripts/build-lock.sh` or acquires the lock. When
+Outside a managed slice, `scripts/with-build-lock.sh` SHALL apply the local
+CPU budget before it acquires the portable build lock. When
 `PICTURA_CPU_BUDGET_APPLIED` is unset, it SHALL re-exec itself exactly once
-through `scripts/cpu-budget.py exec` with its original arguments, so the wrapped
-command and its children run in the budget's affinity slice with the budget's
-job counts. The wrapper SHALL keep the caller's working directory and propagate
-the wrapped command's exit code. When the marker is already present it SHALL NOT
-re-exec, and it SHALL require `PICTURA_JOBS` before running the command.
+through `scripts/cpu-budget.py exec` with its original arguments, so the
+wrapped command and its children inherit the affinity slice and job counts.
+The wrapper SHALL preserve the working directory and command exit status.
+When the marker is already present it SHALL use the inherited budget and
+require `PICTURA_JOBS`. Inside the managed slice, the wrapper SHALL use the
+verified managed queue.
 
 #### Scenario: The wrapper re-execs once into the budget [cb_wrap_budget]
 
-- **WHEN** `bash scripts/with-build-lock.sh -- <command>` starts with
-  `PICTURA_CPU_BUDGET_APPLIED` unset
-- **THEN** it re-execs once through the budget helper before sourcing the lock,
-  and the wrapped command's affinity mask is the budget's slice
+- **WHEN** `bash scripts/with-build-lock.sh -- <command>` starts outside the
+  managed slice with `PICTURA_CPU_BUDGET_APPLIED` unset
+- **THEN** the budget helper runs before portable lock acquisition and the
+  wrapped command inherits the budget
 
 ### Requirement: An agent refuses bare heavy commands
 
 The repository SHALL provide one shared policy,
-`scripts/heavy_command_policy.py`, that refuses, before execution, a shell
-command whose segment starts `cargo`, `cmake`, `ctest`, or `ninja` outside a gate
-or wrapper. The policy SHALL accept either a `--command <text>` argument or a
-hook JSON object on standard input with the command at `tool_input.command`,
-SHALL write the refusal reason to standard error and exit 2, and SHALL exit 0
-when the command is allowed, absent, or the input names a non-`Bash` tool. A
-command whose text names `scripts/cpu-budget.py`,
-`scripts/with-build-lock.sh`, `scripts/verify-fast.sh`,
-`scripts/verify-full.sh`, or `scripts/test-report.sh` SHALL pass, as SHALL a
-command with no heavy segment and a `cargo fmt` segment, which runs no compiler.
-Segments SHALL be split on `;`, `&&`, `||`, `|`, and newline only outside single
-and double quotes, so a quoted operator is data rather than a second command.
-The refusal SHALL name
-`bash <wrapper> -- <command>` for a simple command or
-`bash <wrapper> -- bash -c '<command>'` for a compound one, where `<wrapper>` is
-the `scripts/with-build-lock.sh` of the checkout that contains the policy
-script: relative when the cwd is that checkout, absolute otherwise. The opencode
-plugin SHALL delegate to this policy instead of carrying its own matcher. A
-`--self-check` SHALL prove the allow and refuse cases, both input forms, the
-quoted-operator cases, and the policy-checkout wrapper hint from an unrelated
-cwd, and `scripts/verify-fast.sh` SHALL run it.
+`scripts/heavy_command_policy.py`, that refuses bare shell invocations of
+`cargo`, `cmake`, `ctest`, or `ninja` outside an approved runner invocation.
+The policy SHALL accept either a `--command <text>` argument or a hook JSON
+object on standard input with the command at `tool_input.command`. It SHALL
+write the refusal reason to standard error and exit 2, and SHALL exit 0 when
+the command is allowed, absent, or the input names an unrelated tool.
+The legacy entry points and `cargo fmt` SHALL remain usable. The occurrence of
+an entry-point filename in one segment SHALL grant no exemption to a sibling
+segment. Shell operators inside quoted text SHALL be treated as argument data
+unless passed as a shell command string.
+For ordinary legacy calls, the refusal SHALL give a runnable
+`scripts/with-build-lock.sh` invocation from the policy's own checkout,
+relative when the current directory is that checkout and absolute otherwise.
+The OpenCode plugin SHALL delegate to this policy. The policy self-check
+SHALL cover both input forms, quoted operators, and the policy-checkout hint
+from an unrelated directory. The fast gate SHALL run that self-check.
 
 #### Scenario: A bare heavy command is refused [cb_agent_refuse]
 
 - **WHEN** a harness invokes `cargo nextest run --workspace` without a gate or
-  wrapper
-- **THEN** the shared policy writes the refusal to stderr and exits 2, and the
-  adapter blocks the call before it runs
-- **AND** a command that names a gate or the wrapper, `cargo fmt`, `--command`
-  and stdin JSON inputs, and a non-heavy command pass
+  wrapper, or appends a bare heavy command to a wrapped command
+- **THEN** the shared policy writes the refusal to stderr and exits 2
+- **AND** a properly wrapped command, `cargo fmt`, and a non-heavy command pass
 
 #### Scenario: The refusal names a checkout-relative wrapper [cb_policy_git_root]
 
-- **WHEN** the policy refuses a command from an unrelated cwd, a subdirectory,
-  or a linked worktree
-- **THEN** the refusal names the wrapper from the policy's own checkout rather
-  than a wrapper under the caller's cwd
+- **WHEN** the legacy policy refuses a command from an unrelated current
+  directory, a subdirectory, or a linked worktree
+- **THEN** the refusal names the wrapper from the policy's own checkout
 
 #### Scenario: Quoted operators are data [cb_policy_quotes]
 
-- **WHEN** the command contains a `|` or `;` inside a quoted argument and no
-  unquoted separator before a heavy command
+- **WHEN** an ordinary quoted argument includes `|` or `;` and the command
+  contains no unwrapped heavy segment
 - **THEN** the policy allows the command
-- **AND** a real unquoted `|`, `&&`, `||`, or `;` before a heavy command still
-  refuses
+- **AND** it refuses a bare heavy sibling after an unquoted shell separator
 
 ### Requirement: A running sccache server is held to the slice
 

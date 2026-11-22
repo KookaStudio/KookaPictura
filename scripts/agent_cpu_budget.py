@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Generate a user-slice unit and launch work under its cgroup v2 CPU quota."""
+"""Generate a user slice and launch agents under its cgroup v2 resource limits."""
 
 from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import socket
 import stat
@@ -20,7 +21,7 @@ SELF_CGROUP = Path("/proc/self/cgroup")
 
 
 class BudgetError(Exception):
-    """The opted-in budget could not be established."""
+    """The managed resource limits could not be established."""
 
 
 def agent_slice(
@@ -53,12 +54,30 @@ def read_quota(slice_dir: Path) -> tuple[int, int]:
     return quota, period
 
 
-def require_quota(membership: Path = SELF_CGROUP) -> tuple[Path, int, int]:
+def read_memory_limit(slice_dir: Path, name: str, minimum: int) -> int:
+    limit_file = slice_dir / name
+    try:
+        raw = limit_file.read_text(encoding="ascii").strip()
+    except (OSError, UnicodeError) as error:
+        raise BudgetError(f"cannot read limit from {limit_file}: {error}") from error
+    if not raw.isdecimal() or int(raw) < minimum:
+        raise BudgetError(f"{limit_file} has no valid finite limit")
+    return int(raw)
+
+
+def require_limits(
+    membership: Path = SELF_CGROUP,
+) -> tuple[Path, tuple[int, int], int, int, int]:
     slice_dir = agent_slice(membership)
     if slice_dir is None:
         raise BudgetError(f"{membership} is outside {SLICE} or cannot be read")
-    quota, period = read_quota(slice_dir)
-    return slice_dir, quota, period
+    cpu = read_quota(slice_dir)
+    high = read_memory_limit(slice_dir, "memory.high", 1)
+    maximum = read_memory_limit(slice_dir, "memory.max", 1)
+    swap = read_memory_limit(slice_dir, "memory.swap.max", 0)
+    if high > maximum:
+        raise BudgetError(f"{slice_dir / 'memory.high'} exceeds memory.max")
+    return slice_dir, cpu, high, maximum, swap
 
 
 def percent_value(raw: str) -> int:
@@ -67,6 +86,17 @@ def percent_value(raw: str) -> int:
         if 1 <= percent <= 100:
             return percent
     raise argparse.ArgumentTypeError("percentage must be a decimal integer from 1 to 100")
+
+
+def memory_size(raw: str) -> str:
+    if re.fullmatch(r"[1-9][0-9]*(?:[KMGT]|%)?", raw):
+        if not raw.endswith("%") or int(raw[:-1]) <= 100:
+            return raw
+    raise argparse.ArgumentTypeError("expected a positive size such as 24G or 50%")
+
+
+def swap_size(raw: str) -> str:
+    return raw if raw == "0" else memory_size(raw)
 
 
 def cache_environment(
@@ -121,8 +151,9 @@ def start_cache_server(env: dict[str, str], slice_dir: Path) -> None:
 
 
 def execute_in_slice(command: Sequence[str]) -> None:
-    slice_dir, _, _ = require_quota()
+    slice_dir, _, _, _, _ = require_limits()
     env = cache_environment(Path("/run/user") / str(os.getuid()), Path.home(), os.environ)
+    env["PICTURA_AGENT_POLICY"] = str(Path(__file__).resolve().with_name("heavy_command_policy.py"))
     start_cache_server(env, slice_dir)
     os.execvpe(command[0], list(command), env)
 
@@ -144,9 +175,12 @@ def main(argv: Sequence[str]) -> int:
     commands = parser.add_subparsers(dest="action", required=True)
     unit = commands.add_parser("unit", help="print the slice unit for manual installation")
     unit.add_argument("--percent", type=percent_value, default=80, help="share of online CPUs")
+    unit.add_argument("--memory-high", type=memory_size, default="38%", help="memory pressure threshold")
+    unit.add_argument("--memory-max", type=memory_size, default="50%", help="hard memory ceiling")
+    unit.add_argument("--swap-max", type=swap_size, default="2G", help="hard swap ceiling")
     run = commands.add_parser("run", help="start a command under the configured user slice")
     run.add_argument("command", nargs=argparse.REMAINDER, metavar="-- COMMAND [ARG ...]")
-    status = commands.add_parser("status", help="verify a process belongs to the configured slice")
+    status = commands.add_parser("status", help="verify a process belongs to the resource-limited slice")
     status.add_argument("--pid", type=int, help="inspect this PID instead of the status process")
 
     try:
@@ -161,7 +195,9 @@ def main(argv: Sequence[str]) -> int:
             if count is None:
                 raise BudgetError("cannot determine the number of online CPUs")
             print(f"[Unit]\nDescription=Pictura coding agents\n\n"
-                  f"[Slice]\nCPUQuota={count * args.percent}%")
+                  f"[Slice]\nCPUQuota={count * args.percent}%\n"
+                  f"MemoryHigh={args.memory_high}\nMemoryMax={args.memory_max}\n"
+                  f"MemorySwapMax={args.swap_max}")
         elif args.action == "run":
             command = args.command
             if command and command[0] == "--":
@@ -173,8 +209,9 @@ def main(argv: Sequence[str]) -> int:
             if args.pid is not None and args.pid <= 0:
                 status.error("--pid must be positive")
             membership = SELF_CGROUP if args.pid is None else Path(f"/proc/{args.pid}/cgroup")
-            slice_dir, quota, period = require_quota(membership)
-            print(f"cgroup={slice_dir}\ncpu.max={quota} {period}")
+            slice_dir, (quota, period), high, maximum, swap = require_limits(membership)
+            print(f"cgroup={slice_dir}\ncpu.max={quota} {period}\n"
+                  f"memory.high={high}\nmemory.max={maximum}\nmemory.swap.max={swap}")
     except (BudgetError, OSError) as error:
         print(f"agent-cpu-budget: {error}", file=sys.stderr)
         return 2

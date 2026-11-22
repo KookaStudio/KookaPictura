@@ -18,12 +18,96 @@ Run from the repository root: python3 scripts/check-agent-command-guard.py
 from __future__ import annotations
 
 import json
+import shlex
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Optional
 
 ROOT = Path(__file__).resolve().parent.parent
 POLICY = "heavy_command_policy.py"
+
+
+def test_managed_policy_segments() -> None:
+    policy = ROOT / "scripts" / POLICY
+    runner = f"python3 {shlex.quote(str(ROOT / 'scripts' / 'agent-build.py'))} --"
+    for command, refused in (
+        (f"{runner} cargo build", False),
+        (f"{runner} bash -lc 'cargo build && ninja'", False),
+        (f"{runner} true && cargo build", True),
+        (f"cargo build; {runner} true", True),
+        ("echo scripts/with-build-lock.sh && cargo build", True),
+        ("bash scripts/with-build-lock.sh -- cargo build", True),
+        ("python3 scripts/cpu-budget.py exec -- cargo test", True),
+        ("bash -- scripts/verify-full.sh", True),
+        ("setsid nohup env PICTURA_VERIFY_LOCK=0 bash scripts/verify-full.sh", True),
+        ("PICTURA_VERIFY_LOCK_HELD=1 timeout 60 /usr/bin/cmake --build build", True),
+        ("bash -lc 'git status && /usr/bin/ninja -C build'", True),
+        ("bash -euo pipefail -c 'ninja -C build'", True),
+        ("env -S 'PICTURA_VERIFY_LOCK=0 /usr/bin/ninja -C build'", True),
+        ("eval 'cargo build'", True),
+        ("(cargo test)", True),
+        ("echo 'cargo build; ninja -C build' && cargo fmt --all", False),
+    ):
+        result = subprocess.run(
+            [sys.executable, str(policy), "--managed", "--command", command],
+            text=True, capture_output=True, check=False, timeout=5,
+        )
+        assert result.returncode == (2 if refused else 0), (command, result)
+        if refused:
+            assert "agent-build.py" in result.stderr, result.stderr
+
+
+def test_opencode_policy_failure() -> None:
+    javascript = """
+import assert from "node:assert/strict"
+import childProcess from "node:child_process"
+import { syncBuiltinESMExports } from "node:module"
+import { join } from "node:path"
+import { pathToFileURL } from "node:url"
+
+const [fixture, stale] = process.argv.slice(2)
+const outcomes = {
+  "allow.py": { status: 0 },
+  "deny.py": { status: 2, stderr: "refused by fixture" },
+  "unexpected.py": { status: 42 },
+  "timeout.py": { error: new Error("fixture timed out") },
+}
+childProcess.spawnSync = (program, [policy, ...args], options) => {
+  assert.equal(program, "python3")
+  assert.deepEqual(args, ["--managed", "--command", "true"])
+  assert.equal(options.timeout, 5000)
+  const name = Object.keys(outcomes).find((name) => policy === join(fixture, name))
+  assert.ok(name, policy)
+  return outcomes[name]
+}
+syncBuiltinESMExports()
+const { CpuBudget } = await import(pathToFileURL(join(fixture, "guard.mjs")).href)
+const [tool, args] = [{ tool: "bash" }, { args: { command: "true" } }]
+const hook = async (name) => {
+  process.env.PICTURA_AGENT_POLICY = join(fixture, name)
+  const plugin = await CpuBudget({ directory: stale, worktree: stale })
+  return plugin["tool.execute.before"](tool, args)
+}
+await hook("allow.py")
+await assert.rejects(() => hook("deny.py"), /refused by fixture/)
+await assert.rejects(() => hook("missing.py"), /missing.py/)
+await assert.rejects(() => hook("unexpected.py"), /status 42/)
+await assert.rejects(() => hook("timeout.py"), /fixture timed out/)
+"""
+    with tempfile.TemporaryDirectory() as temp:
+        path = Path(temp)
+        (path / "guard.mjs").write_bytes((ROOT / ".opencode/plugins/cpu-budget.ts").read_bytes())
+        for policy in ("allow.py", "deny.py", "unexpected.py", "timeout.py"):
+            (path / policy).touch()
+        stale = path / "stale"
+        (stale / "scripts").mkdir(parents=True)
+        (stale / "scripts" / POLICY).touch()
+        subprocess.run(
+            ["node", "--input-type=module", "-", str(path), str(stale)],
+            input=javascript, text=True, check=True, timeout=12,
+        )
 
 
 def find_handler(
@@ -164,6 +248,8 @@ def self_check() -> int:
     fails(claude, codex, "no policy here")
     fails(claude, codex, legacy=True)
     fails(claude, codex, mutated_fast="start_check cpu-budget python3 scripts/cpu-budget.py --self-check")
+    test_opencode_policy_failure()
+    test_managed_policy_segments()
     print("check-agent-command-guard: self-check OK")
     return 0
 
@@ -186,6 +272,8 @@ def main() -> int:
         print(f"FAIL: {error}")
     if errors:
         return 1
+    test_opencode_policy_failure()
+    test_managed_policy_segments()
     print("check-agent-command-guard: OK")
     return 0
 

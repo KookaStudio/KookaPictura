@@ -3,6 +3,7 @@
 
 Usage:
     python3 scripts/heavy_command_policy.py --command <shell command>
+    python3 scripts/heavy_command_policy.py --managed --command <shell command>
     <hook JSON> | python3 scripts/heavy_command_policy.py
     python3 scripts/heavy_command_policy.py --self-check
 
@@ -27,17 +28,18 @@ import sys
 import tempfile
 from typing import Optional, Sequence
 
-HEAVY_SEGMENT = re.compile(r"^\s*(cargo|cmake|ctest|ninja)\b")
-CHEAP_SEGMENT = re.compile(r"^\s*cargo\s+fmt\b")
-EXEMPT = (
+HEAVY_PROGRAMS = {"cargo", "cmake", "ctest", "ninja"}
+LEGACY_ENTRIES = {
     "cpu-budget.py",
     "with-build-lock.sh",
     "verify-fast.sh",
     "verify-full.sh",
     "test-report.sh",
-)
+}
+SHELLS = {"bash", "sh", "dash", "zsh", "ksh"}
+ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
 USAGE = (
-    "usage: heavy_command_policy.py --command <shell command>\n"
+    "usage: heavy_command_policy.py [--managed] --command <shell command>\n"
     "       <hook JSON> | heavy_command_policy.py\n"
     "       heavy_command_policy.py --self-check"
 )
@@ -85,25 +87,93 @@ def split_segments(command: str) -> list[str]:
     return segments
 
 
-def refusal(command: str, root: Optional[str] = None) -> Optional[str]:
+def command_words(words: list[str]) -> list[str]:
+    while words:
+        head, *tail = words
+        name = os.path.basename(head)
+        if ASSIGNMENT.match(head) or head in {"!", "{", "if", "then", "elif", "else", "do"}:
+            words = tail
+        elif name in {"env", "exec", "nohup", "setsid", "time", "timeout", "command"}:
+            if name == "command" and tail and tail[0] in {"-v", "-V"}:
+                return []
+            while tail and tail[0].startswith("-"):
+                option, *tail = tail
+                if option == "--":
+                    break
+                if name == "env" and option in {"-S", "--split-string"} and tail:
+                    tail = shlex.split(tail[0]) + tail[1:]
+                    continue
+                if (name, option) in {("env", "-u"), ("env", "--unset"),
+                                      ("env", "-C"), ("env", "--chdir"),
+                                      ("timeout", "-k"), ("timeout", "--kill-after"),
+                                      ("timeout", "-s"), ("timeout", "--signal")}:
+                    tail = tail[1:]
+            words = tail[1:] if name == "timeout" else tail
+        else:
+            break
+    return words
+
+
+def uses_heavy_program(segment: str, runner: str, managed: bool, depth: int = 0) -> bool:
+    # This covers common shell forms. The managed cgroup enforces the resource caps.
+    try:
+        words = command_words(shlex.split(segment.lstrip(" \t("), comments=True))
+    except ValueError:
+        return False
+    if not words:
+        return False
+
+    head, *args = words
+    name = os.path.basename(head)
+    if name in HEAVY_PROGRAMS:
+        if name == "cargo" and args and args[0].startswith("+"):
+            args = args[1:]
+        return name != "cargo" or args[:1] != ["fmt"]
+    body = None
+    if name == "eval":
+        body = " ".join(args)
+    if name in SHELLS:
+        while args and args[0].startswith(("-", "+")):
+            option, *args = args
+            if option == "--":
+                break
+            if option.startswith("--"):
+                if option in {"--rcfile", "--init-file"}:
+                    args = args[1:]
+            elif option.startswith("-") and "c" in option:
+                body = args[0] if args else None
+                break
+            elif option.endswith(("o", "O")):
+                args = args[1:]
+    if body is not None:
+        if depth >= 8:
+            return managed
+        return any(uses_heavy_program(part, runner, managed, depth + 1)
+                   for part in split_segments(body))
+    if not managed:
+        return False
+    if name == "python3" and len(args) >= 3 and args[:2] == [runner, "--"]:
+        return False
+    entry = os.path.basename(args[0]) if args and (name in SHELLS or name == "python3") else name
+    return entry in LEGACY_ENTRIES or entry == "agent-build.py"
+
+
+def refusal(command: str, root: Optional[str] = None, *, managed: bool = False) -> Optional[str]:
     if not isinstance(command, str) or command.strip() == "":
         return None
-    if any(name in command for name in EXEMPT):
-        return None
-    # ponytail: quote-aware segment split, not a shell parser; command
-    # substitutions, backticks, and bash -c bodies are not descended into, and
-    # env-prefixed or absolute-path invocations still bypass it. Prose and the
-    # wrapper remain the baseline.
+    root = root or policy_root()
+    runner = os.path.join(root, "scripts", "agent-build.py")
     segments = split_segments(command)
-    heavy = any(
-        HEAVY_SEGMENT.match(segment) and not CHEAP_SEGMENT.match(segment)
-        for segment in segments
-    )
-    if not heavy:
+    if not any(uses_heavy_program(segment, runner, managed) for segment in segments):
         return None
-    wrapper = shlex.quote(wrapper_path(root or policy_root()))
+    if managed:
+        return (
+            "Refused an unqueued heavy command. Submit it to the managed verification queue with:\n"
+            f"  python3 {shlex.quote(runner)} -- bash -c {shlex.quote(command)}"
+        )
+    wrapper = shlex.quote(wrapper_path(root))
     compound = sum(1 for segment in segments if segment.strip()) > 1
-    if compound:
+    if compound or not re.match(r"^\s*(cargo|cmake|ctest|ninja)\b", command):
         wrapped = f"bash {wrapper} -- bash -c {shlex.quote(command)}"
     else:
         wrapped = f"bash {wrapper} -- {command}"
@@ -158,6 +228,8 @@ def self_check() -> int:
     assert refusal('echo "x | cargo build"') is None
     assert refusal(f"{quoted} ; cargo build") is not None
     assert refusal("ps | cargo build") is not None
+    assert refusal("echo scripts/with-build-lock.sh && cargo build") is not None
+    assert refusal("bash scripts/with-build-lock.sh -- cargo build && ninja") is not None
     for command in (
         "bash scripts/with-build-lock.sh -- cargo build",
         "python3 scripts/cpu-budget.py exec -- cargo test",
@@ -222,13 +294,16 @@ def self_check() -> int:
 
 
 def main(argv: Sequence[str]) -> int:
-    if "--self-check" in argv:
+    if list(argv) == ["--self-check"]:
         return self_check()
     if argv and argv[0] in ("-h", "--help"):
         print(USAGE)
         return 0
-    if argv and argv[0] == "--command":
-        if len(argv) < 2:
+    managed = bool(argv and argv[0] == "--managed")
+    if managed:
+        argv = argv[1:]
+    if argv:
+        if len(argv) != 2 or argv[0] != "--command":
             print(USAGE, file=sys.stderr)
             return 2
         command: Optional[str] = argv[1]
@@ -236,7 +311,7 @@ def main(argv: Sequence[str]) -> int:
         command = command_from(sys.stdin.read())
     if command is None:
         return 0
-    message = refusal(command)
+    message = refusal(command, managed=managed)
     if message is None:
         return 0
     print(message, file=sys.stderr)

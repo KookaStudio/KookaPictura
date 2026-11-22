@@ -17,15 +17,15 @@
 set -euo pipefail
 
 script_dir=$(cd "$(dirname "$0")" && pwd)
+# shellcheck source=scripts/build-lock.sh
+. "$script_dir/build-lock.sh"
+build_lock_enter_managed "$script_dir/agent-build.py" bash "$script_dir/verify-fast.sh" "$@"
 if [ -z "${PICTURA_CPU_BUDGET_APPLIED:-}" ]; then
     exec python3 "$script_dir/cpu-budget.py" exec -- \
         bash "$script_dir/$(basename "$0")" "$@"
 fi
 : "${PICTURA_JOBS:?cpu-budget marker set without PICTURA_JOBS; run the gate through scripts/cpu-budget.py}"
 cd "$script_dir/.."
-
-# shellcheck source=scripts/build-lock.sh
-. scripts/build-lock.sh
 
 base=""
 for ref in master main kooka/master kooka/main origin/master origin/main; do
@@ -166,6 +166,7 @@ start_check parity parity_check
 start_check source-fragments source_fragments_check
 start_check cpu-budget python3 scripts/cpu-budget.py --self-check
 start_check agent-cpu-budget python3 scripts/check-agent-cpu-budget.py --self-check
+start_check agent-build python3 scripts/check-agent-build.py --self-check
 start_check heavy-policy python3 scripts/heavy_command_policy.py --self-check
 start_check agent-guard python3 scripts/check-agent-command-guard.py
 start_check openspec openspec_check
