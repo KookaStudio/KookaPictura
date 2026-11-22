@@ -111,6 +111,21 @@ impl<'a> Tiff<'a> {
         }
     }
 
+    /// A classic TIFF reader over bytes without a standard header: a vendor
+    /// magic, or a maker note whose offsets count from its own start.
+    pub fn view(bytes: &'a [u8], order: Order) -> Self {
+        Self {
+            bytes,
+            order,
+            big: false,
+        }
+    }
+
+    /// The first IFD's offset, from the classic header's last four bytes.
+    pub fn first_ifd(&self) -> Result<u64, PsdError> {
+        self.u32_at(4).map(u64::from)
+    }
+
     pub fn bytes(&self) -> &'a [u8] {
         self.bytes
     }

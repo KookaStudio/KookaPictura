@@ -8,7 +8,7 @@
 //! both kinds (#402).
 //! The demosaic (`demosaic`, #397) and the colour transform
 //! (`as_shot_transform`, #398) consume the result. Vendor containers (#399,
-//! `vendor.rs`, `cr2.rs`, `nef.rs`, `arw.rs`) produce the same `DngImage` through
+//! `vendor.rs`, `cr2.rs`, `nef.rs`, `arw.rs`, `orf.rs`) produce the same `DngImage` through
 //! `read_raw`.
 
 use rayon::prelude::*;
@@ -28,6 +28,8 @@ mod linear;
 mod ljpeg;
 mod nef;
 mod nef_decode;
+mod orf;
+mod orf_meta;
 mod tiff;
 mod vendor;
 mod write;

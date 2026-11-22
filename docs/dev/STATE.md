@@ -4,6 +4,19 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Vendor raw containers — Olympus ORF (uncompressed), #1471 implemented**
+  (OpenSpec change `vendor-raw-orf`, archived; `codec/vendor-raw-containers`
+  and `document/raw-open` modified). `dng/orf.rs`: headers `IIRO`/`IIRS`/`MMOR`;
+  IFD0 is the sensor image and the coding follows from strip bytes per
+  photosite (2 = left-aligned words, 1.6 = LSB + pad, 1.5 = MSB, over LE
+  32-bit words under `IIRO`, two interlaced fields under `IIRS`; one shorter strip = compressed, refused).
+  `dng/orf_meta.rs`: the three maker-note generations, ImageProcessing, then
+  RawInfo, then main tags. Colour: the embedded camera → sRGB matrix as
+  ForwardMatrix + ColorMatrix, anchored on 6600 K / fine-weather / as-shot WB
+  (no Olympus in rawtoaces-data; warm tones lean pink on SP-350/510/550).
+  Checked on the 22 uncompressed raw.pixls.us files. Compressed ORF = #1535, blocked on
+  provenance and a patent check: do not write that decoder from a model's
+  memory or search for existing ones. Series next: RW2 → RAF + X-Trans → CR3.
 - **Crop resampling and non-destructive Reveal All — #544 implemented**
   (OpenSpec change `crop-resampling-nondestructive`, archived; new capabilities
   `tools/crop-resampling` and `tools/non-destructive-crop`). `W x H x Resolution`
@@ -37,7 +50,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   table cameras decode at 3900–5900 K. Open dialog filters list `*.ARW`.
   Tests: `tests/raw_arw.rs` (synthetic
   `tests/raw/arw_builder.rs`), Sony rows of `tests/raw_camera_matrices.rs`,
-  `arw_decode` unit tests, `raw_open/tests.rs`, `tst_raw_open`. Series next: ORF/RW2 → RAF + X-Trans → CR3.
+  `arw_decode` unit tests, `raw_open/tests.rs`, `tst_raw_open`.
 - **Vendor raw containers — #1469 Nikon NEF implemented** (OpenSpec change
   `vendor-raw-nef`, archived; `codec/vendor-raw-containers`,
   `codec/camera-matrices` and `document/raw-open` modified). NEF files open.

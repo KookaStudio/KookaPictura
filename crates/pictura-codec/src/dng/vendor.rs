@@ -1,12 +1,12 @@
 //! The camera raw entry point (#399): names a container by its signature and
-//! reads any supported one (DNG, Canon CR2, Nikon NEF, Sony ARW) into the same
-//! normalized CFA image as `read_dng`.
+//! reads any supported one (DNG, Canon CR2, Nikon NEF, Sony ARW, Olympus ORF)
+//! into the same normalized CFA image as `read_dng`.
 //! Also the helpers the TIFF-based vendor containers share.
 
 use super::camera_matrices::CAMERAS;
 use super::levels::Area;
 use super::tiff::{Entry, Ifd, Tiff};
-use super::{arw, cr2, nef, read_dng, to_usize, DngColor, DngImage, Tags, DNG_VERSION};
+use super::{arw, cr2, nef, orf, read_dng, to_usize, DngColor, DngImage, Tags, DNG_VERSION};
 use crate::error::PsdError;
 use crate::probe::ImageBudget;
 
@@ -22,6 +22,7 @@ pub enum RawFormat {
     Cr2,
     Nef,
     Arw,
+    Orf,
 }
 
 /// Names the raw container `bytes` hold, from its signature and, for a DNG,
@@ -29,6 +30,9 @@ pub enum RawFormat {
 pub fn sniff_raw(bytes: &[u8]) -> Option<RawFormat> {
     if cr2::is_cr2(bytes) {
         return Some(RawFormat::Cr2);
+    }
+    if orf::is_orf(bytes) {
+        return Some(RawFormat::Orf);
     }
     let (tiff, first) = Tiff::parse(bytes).ok()?;
     let ifd0 = tiff.ifd(first).ok()?;
@@ -44,7 +48,7 @@ pub fn sniff_raw(bytes: &[u8]) -> Option<RawFormat> {
 /// IFD0's entry table (and, for a NEF or an ARW, its `Make` value) is read, so the
 /// prefix need not hold the other values.
 pub fn sniff_raw_prefix(prefix: &[u8]) -> bool {
-    if cr2::is_cr2(prefix) {
+    if cr2::is_cr2(prefix) || orf::is_orf(prefix) {
         return true;
     }
     Tiff::parse(prefix).is_ok_and(|(tiff, first)| {
@@ -60,12 +64,13 @@ pub fn read_raw(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, PsdError
         Some(RawFormat::Cr2) => cr2::read_cr2(bytes, budget),
         Some(RawFormat::Nef) => nef::read_nef(bytes, budget),
         Some(RawFormat::Arw) => arw::read_arw(bytes, budget),
+        Some(RawFormat::Orf) => orf::read_orf(bytes, budget),
         None => Err(PsdError::Unsupported("camera raw format".into())),
     }
 }
 
 /// The maker note entry of IFD0's Exif IFD.
-fn maker_note(ifd0: &Tags) -> Result<Option<Entry>, PsdError> {
+pub(super) fn maker_note(ifd0: &Tags) -> Result<Option<Entry>, PsdError> {
     let Some(exif) = ifd0.uint(EXIF_IFD)? else {
         return Ok(None);
     };
