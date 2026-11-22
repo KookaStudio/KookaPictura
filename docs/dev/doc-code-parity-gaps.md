@@ -141,7 +141,7 @@ CS6-faithful; the ceilings are marked in-source with `ponytail:` comments.
 | TOOL-16 | `mixer-brush.md` | Load Solid Colors Only, keyboard shortcuts | MISSING | `tool_mixerbrush.cpp:39-41` | #540 |
 | TOOL-18 | `path-selection-tools.md` | Path operations/align/arrange, constrain path dragging, Target Path toggle, segment/marquee multi-select | MISSING | `tool_path_selection.cpp:13-14` | #542 |
 | TOOL-19 | `slice-tools.md` | Slice options bar/style/modifiers, Divide/Combine/Duplicate, Slice Options dialog, slices-from-guides | MISSING | `tool_slice.cpp:65-102` | #543 |
-| TOOL-20 | `crop-tool.md` | Crop resampling by W×H×resolution, non-destructive crop/Reveal All, crop shield settings | PARTIAL | `options_bar_crop.cpp:244-375` | #544 |
+| TOOL-20 | `crop-tool.md` | Crop resampling by W×H×resolution, non-destructive crop/Reveal All, crop shield settings | SHIPPED | `options_bar_crop.cpp`; `tool_crop.cpp`; `crop_group/imp.rs`; `crop.rs`; `menu_image.cpp`; `tst_crop_options`; `tst_image_ops` | #544 |
 | TOOL-21 | `custom-shape.md` | `.CSH` libraries, Define Custom Shape, geometry modes, gradient/pattern fill-stroke | MISSING | `options_bar_shape.cpp:506-510,420-431` | #545 |
 | TOOL-22 | `shape-tools.md` | Gradient/pattern fill+stroke, dashed stroke, path ops, fill-pixels options, snap-to-pixels, proportional geometry | SHIPPED | `options_bar_shape.cpp`; `shape_style.rs`; `layer_effects/strokes.rs`; `tool_shape.cpp`; `tst_shape_tools` | #546 |
 | TOOL-23 | `color-replacement.md` | Full CS6 mode list, 32-bit subset, and Bitmap/Indexed/Multichannel availability gates | SHIPPED | `crates/pictura-app/cpp/tool_colorreplacement.cpp`; `crates/pictura-app/cpp/tool_catalog.cpp`; `tst_color_replacement` | #547 |

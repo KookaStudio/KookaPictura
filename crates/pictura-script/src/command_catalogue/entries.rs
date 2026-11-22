@@ -166,6 +166,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "image.flipVertical", path: &["Image", "Image Rotation", "Flip Canvas Vertical"], label: "Flip Canvas Vertical", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "image.crop", path: &["Image", "Crop"], label: "Crop", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "image.trim", path: &["Image", "Trim…"], label: "Trim…", shortcut: "", implemented: true, checkable: false },
+    CommandSpec { id: "image.revealAll", path: &["Image", "Reveal All"], label: "Reveal All", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "image.duplicate", path: &["Image", "Duplicate…"], label: "Duplicate…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "image.variables.define", path: &["Image", "Variables", "Define…"], label: "Define…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "image.variables.data.sets", path: &["Image", "Variables", "Data Sets…"], label: "Data Sets…", shortcut: "", implemented: true, checkable: false },

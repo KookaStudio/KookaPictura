@@ -13,6 +13,7 @@
 #include "api/layers_bridge.h"
 #include "api/paint_bridge.h"
 #include "api/filters_bridge.h"
+#include "api/transform_bridge.h"
 
 #include "qt_test_support.h"
 
@@ -38,6 +39,10 @@ private slots:
     void trimDocument();
     void trimIsUndoable();
     void trimRefusesALiveSession();
+    void revealAllRestoresCroppedPixels();
+    void revealAllIsOneUndoStep();
+    void revealAllWithNothingOutsideIsANoOp();
+    void revealAllAfterDestructiveCropDoesNothing();
     void imageSizeResamplesAndSetsResolution();
     void imageSizePhysicalUnitsUseInches();
     void imageSizeEstimatesTheStoredMode();
@@ -254,6 +259,107 @@ void ImageOpsTest::trimRefusesALiveSession()
     QCOMPARE(view->is_dirty(), dirty);
     QVERIFY(view->is_painting());
     view->cancel_paint();
+    frame.closeDocument(doc, false);
+}
+
+void ImageOpsTest::revealAllRestoresCroppedPixels()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("Reveal"), 24, 24, QStringLiteral("rgb"), 8,
+                              QStringLiteral("transparent")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+
+    QVERIFY(view->select_rect(3, 2, 5, 4, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::edit_fill(*view, QColor(200, 0, 0).rgba(), -1, QStringLiteral("normal"), 100,
+                               false));
+    view->deselect();
+    QVERIFY(view->crop(3, 2, 5, 4));
+    QCOMPARE(view->document_width(), 5);
+    QCOMPARE(view->document_height(), 4);
+    QCOMPARE(view->sample_argb(0, 0), QColor(200, 0, 0).rgba());
+
+    pictura::CommandRegistry* registry = frame.registry();
+    QVERIFY(registry);
+    const int before = view->history_count();
+    QVERIFY(registry->dispatch(
+        QString::fromLatin1(pictura::command_ids::ImageRevealAll)));
+    QCOMPARE(view->history_count(), before + 1);
+    QCOMPARE(view->history_label(view->history_index()), QStringLiteral("Reveal All"));
+    QCOMPARE(view->document_width(), 24);
+    QCOMPARE(view->document_height(), 24);
+    QCOMPARE(view->sample_argb(3, 2), QColor(200, 0, 0).rgba());
+
+    frame.closeDocument(doc, false);
+}
+
+void ImageOpsTest::revealAllIsOneUndoStep()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("RevealUndo"), 24, 24, QStringLiteral("rgb"), 8,
+                              QStringLiteral("transparent")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+
+    QVERIFY(view->select_rect(3, 2, 5, 4, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::edit_fill(*view, QColor(200, 0, 0).rgba(), -1, QStringLiteral("normal"), 100,
+                               false));
+    view->deselect();
+    QVERIFY(view->crop(3, 2, 5, 4));
+    const int cropped = view->history_index();
+
+    QVERIFY(pictura::reveal_all(*view));
+    QCOMPARE(view->history_index(), cropped + 1);
+    QVERIFY(view->undo());
+    QCOMPARE(view->history_index(), cropped);
+    QCOMPARE(view->document_width(), 5);
+    QCOMPARE(view->document_height(), 4);
+    QCOMPARE(view->sample_argb(0, 0), QColor(200, 0, 0).rgba());
+
+    frame.closeDocument(doc, false);
+}
+
+void ImageOpsTest::revealAllWithNothingOutsideIsANoOp()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("RevealNoop"), 8, 8, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+    const int history = view->history_count();
+
+    QVERIFY(!pictura::reveal_all(*view));
+    QCOMPARE(view->history_count(), history);
+    QCOMPARE(view->document_width(), 8);
+    QCOMPARE(view->document_height(), 8);
+
+    frame.closeDocument(doc, false);
+}
+
+void ImageOpsTest::revealAllAfterDestructiveCropDoesNothing()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("RevealTrimmed"), 24, 24, QStringLiteral("rgb"), 8,
+                              QStringLiteral("transparent")));
+    pictura::PictureView* view = frame.activeView();
+    QVERIFY(view);
+    const int doc = frame.activeDocumentIndex();
+
+    QVERIFY(view->select_rect(3, 2, 5, 4, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::edit_fill(*view, QColor(200, 0, 0).rgba(), -1, QStringLiteral("normal"), 100,
+                               false));
+    view->deselect();
+    QVERIFY(pictura::crop_to(*view, 3, 2, 5, 4, true, -1, QString()));
+    const int history = view->history_count();
+
+    QVERIFY(!pictura::reveal_all(*view));
+    QCOMPARE(view->history_count(), history);
+    QCOMPARE(view->document_width(), 5);
+    QCOMPARE(view->document_height(), 4);
+
     frame.closeDocument(doc, false);
 }
 

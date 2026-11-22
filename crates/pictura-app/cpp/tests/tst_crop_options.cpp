@@ -10,6 +10,7 @@
 #include "session.h"
 #include "tools.h"
 
+#include "api/document_bridge.h"
 #include "api/view_bridge.h"
 
 #include "qt_test_support.h"
@@ -23,6 +24,8 @@
 #include <QtWidgets/QToolButton>
 #include <QtGui/QValidator>
 
+#include <cmath>
+
 class CropOptionsTest : public QObject {
     Q_OBJECT
 
@@ -33,6 +36,12 @@ private slots:
     void ratioFieldsAcceptDecimals();
     void enterInFieldKeepsCropActive();
     void resolutionModeShowsPixels();
+    void resolutionTargetSurvivesABoxDrag();
+    void resolutionSwapExchangesTheTarget();
+    void resolutionCommitResamples();
+    void resolutionCommitWritesPerCm();
+    void straightenCommitResamples();
+    void clearDropsTheResampleTarget();
     void resetRestoresCanvasBox();
     void straightenToggleArmsLineMode();
     void noContentAwareCheckbox();
@@ -261,6 +270,244 @@ void CropOptionsTest::resolutionModeShowsPixels()
     // The fields now show the box's pixel size (the full canvas).
     QCOMPARE(width->value(), 40.0);
     QCOMPARE(height->value(), 24.0);
+
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.closeDocument(doc, false);
+}
+
+void CropOptionsTest::resolutionTargetSurvivesABoxDrag()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("OptTargetDrag"), 40, 24, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(canvas && tools);
+    auto* crop = tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop);
+    const int doc = frame.activeDocumentIndex();
+
+    canvas->actualPixels();
+    crop->setClassicMode(true);
+    frame.setActiveTool(pictura::ToolId::Crop);
+    drag(canvas, QPointF(30, 20), QPointF(10, 10));
+    auto* combo = frame.findChild<QComboBox*>(QStringLiteral("optionsCropRatio"));
+    auto* width = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsCropWidth"));
+    auto* height = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsCropHeight"));
+    QVERIFY(combo && width && height);
+
+    combo->setCurrentIndex(combo->findText(QStringLiteral("W x H x Resolution")));
+    typeInto(width, QStringLiteral("20"));
+    typeInto(height, QStringLiteral("10"));
+    QCOMPARE(crop->resampleTarget().width, 20);
+    QCOMPARE(crop->resampleTarget().height, 10);
+
+    // A handle drag refits the box but does not overwrite the output target.
+    drag(canvas, QPointF(30, 20), QPointF(25, 15));
+    QCOMPARE(width->value(), 20.0);
+    QCOMPARE(height->value(), 10.0);
+    QCOMPARE(crop->resampleTarget().width, 20);
+    QCOMPARE(crop->resampleTarget().height, 10);
+    QVERIFY2(std::abs(crop->ratio() - 2.0) < 1e-6, "the box stays at 2:1");
+
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.closeDocument(doc, false);
+}
+
+void CropOptionsTest::resolutionSwapExchangesTheTarget()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("OptSwap"), 40, 24, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(canvas && tools);
+    auto* crop = tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop);
+    const int doc = frame.activeDocumentIndex();
+
+    canvas->actualPixels();
+    crop->setClassicMode(true);
+    frame.setActiveTool(pictura::ToolId::Crop);
+    drag(canvas, QPointF(30, 20), QPointF(10, 10));
+    auto* combo = frame.findChild<QComboBox*>(QStringLiteral("optionsCropRatio"));
+    auto* width = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsCropWidth"));
+    auto* height = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsCropHeight"));
+    auto* swap = frame.findChild<QToolButton*>(QStringLiteral("optionsCropSwap"));
+    QVERIFY(combo && width && height && swap);
+
+    combo->setCurrentIndex(combo->findText(QStringLiteral("W x H x Resolution")));
+    typeInto(width, QStringLiteral("20"));
+    typeInto(height, QStringLiteral("10"));
+    swap->click();
+    QCOMPARE(width->value(), 10.0);
+    QCOMPARE(height->value(), 20.0);
+    QCOMPARE(crop->resampleTarget().width, 10);
+    QCOMPARE(crop->resampleTarget().height, 20);
+    QVERIFY2(std::abs(crop->ratio() - 0.5) < 1e-6, "the box ratio inverts");
+
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.closeDocument(doc, false);
+}
+
+void CropOptionsTest::resolutionCommitResamples()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("OptResample"), 40, 24, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && canvas && tools);
+    auto* crop = tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop);
+    const int doc = frame.activeDocumentIndex();
+
+    canvas->actualPixels();
+    crop->setClassicMode(true);
+    frame.setActiveTool(pictura::ToolId::Crop);
+    drag(canvas, QPointF(15, 10), QPointF(30, 20));
+    auto* combo = frame.findChild<QComboBox*>(QStringLiteral("optionsCropRatio"));
+    auto* width = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsCropWidth"));
+    auto* height = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsCropHeight"));
+    auto* resolution =
+        frame.findChild<pictura::NumericField*>(QStringLiteral("optionsCropResolution"));
+    QVERIFY(combo && width && height && resolution);
+
+    combo->setCurrentIndex(combo->findText(QStringLiteral("W x H x Resolution")));
+    typeInto(width, QStringLiteral("20"));
+    typeInto(height, QStringLiteral("10"));
+    typeInto(resolution, QStringLiteral("300"));
+    QVERIFY(tools->cropCommitSession()->commitCrop());
+
+    QCOMPARE(view->document_width(), 20);
+    QCOMPARE(view->document_height(), 10);
+    QCOMPARE(pictura::document_ppi(*view), 300.0);
+    QVERIFY(!pictura::document_ppi_per_cm(*view));
+
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.closeDocument(doc, false);
+}
+
+void CropOptionsTest::resolutionCommitWritesPerCm()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("OptPerCm"), 40, 24, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && canvas && tools);
+    auto* crop = tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop);
+    const int doc = frame.activeDocumentIndex();
+
+    canvas->actualPixels();
+    crop->setClassicMode(true);
+    frame.setActiveTool(pictura::ToolId::Crop);
+    drag(canvas, QPointF(15, 10), QPointF(30, 20));
+    auto* combo = frame.findChild<QComboBox*>(QStringLiteral("optionsCropRatio"));
+    auto* width = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsCropWidth"));
+    auto* height = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsCropHeight"));
+    auto* resolution =
+        frame.findChild<pictura::NumericField*>(QStringLiteral("optionsCropResolution"));
+    auto* unit = frame.findChild<QComboBox*>(QStringLiteral("optionsCropUnit"));
+    QVERIFY(combo && width && height && resolution && unit);
+
+    combo->setCurrentIndex(combo->findText(QStringLiteral("W x H x Resolution")));
+    typeInto(width, QStringLiteral("20"));
+    typeInto(height, QStringLiteral("10"));
+    typeInto(resolution, QStringLiteral("300"));
+    unit->setCurrentIndex(1);
+    QVERIFY(crop->resampleActive());
+    QCOMPARE(crop->resampleTarget().width, 20);
+    QCOMPARE(crop->resampleTarget().height, 10);
+    QCOMPARE(crop->resampleTarget().ppi, 300.0);
+    QVERIFY(crop->resampleTarget().perCm);
+    QVERIFY(tools->hasPendingCrop());
+    QVERIFY(tools->cropCommitSession()->commitCrop());
+
+    QCOMPARE(view->document_width(), 20);
+    QCOMPARE(view->document_height(), 10);
+    QCOMPARE(pictura::document_ppi(*view), 300.0);
+    QVERIFY(pictura::document_ppi_per_cm(*view));
+
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.closeDocument(doc, false);
+}
+
+void CropOptionsTest::straightenCommitResamples()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("OptStraightenSize"), 40, 40, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && canvas && tools);
+    auto* crop = tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop);
+    const int doc = frame.activeDocumentIndex();
+
+    canvas->actualPixels();
+    crop->setClassicMode(true);
+    frame.setActiveTool(pictura::ToolId::Crop);
+    drag(canvas, QPointF(5, 5), QPointF(35, 35));
+    auto* combo = frame.findChild<QComboBox*>(QStringLiteral("optionsCropRatio"));
+    auto* width = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsCropWidth"));
+    auto* height = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsCropHeight"));
+    auto* resolution =
+        frame.findChild<pictura::NumericField*>(QStringLiteral("optionsCropResolution"));
+    QVERIFY(combo && width && height && resolution);
+
+    combo->setCurrentIndex(combo->findText(QStringLiteral("W x H x Resolution")));
+    typeInto(width, QStringLiteral("20"));
+    typeInto(height, QStringLiteral("10"));
+    typeInto(resolution, QStringLiteral("300"));
+    crop->setPivot(QPointF(20, 20));
+    crop->setAngle(15.0);
+    QVERIFY(tools->cropCommitSession()->commitCrop());
+
+    QCOMPARE(view->document_width(), 20);
+    QCOMPARE(view->document_height(), 10);
+    QCOMPARE(pictura::document_ppi(*view), 300.0);
+
+    frame.setActiveTool(pictura::ToolId::Move);
+    frame.closeDocument(doc, false);
+}
+
+void CropOptionsTest::clearDropsTheResampleTarget()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("OptClearTarget"), 40, 24, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && canvas && tools);
+    auto* crop = tools->optionsFor<pictura::CropOptions>(pictura::ToolId::Crop);
+    const int doc = frame.activeDocumentIndex();
+
+    canvas->actualPixels();
+    crop->setClassicMode(true);
+    frame.setActiveTool(pictura::ToolId::Crop);
+    drag(canvas, QPointF(30, 20), QPointF(10, 10));
+    auto* combo = frame.findChild<QComboBox*>(QStringLiteral("optionsCropRatio"));
+    auto* clear = frame.findChild<QToolButton*>(QStringLiteral("optionsCropClear"));
+    auto* width = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsCropWidth"));
+    auto* height = frame.findChild<pictura::NumericField*>(QStringLiteral("optionsCropHeight"));
+    QVERIFY(combo && clear && width && height);
+
+    combo->setCurrentIndex(combo->findText(QStringLiteral("W x H x Resolution")));
+    typeInto(width, QStringLiteral("20"));
+    typeInto(height, QStringLiteral("10"));
+    QVERIFY(crop->resampleActive());
+    const QRect box = tools->pendingCropRect();
+    clear->click();
+    QVERIFY(!crop->resampleActive());
+    QVERIFY(width->isBlank());
+    QVERIFY(height->isBlank());
+    QCOMPARE(combo->currentIndex(), 0);
+
+    QVERIFY(tools->cropCommitSession()->commitCrop());
+    QCOMPARE(view->document_width(), box.width());
+    QCOMPARE(view->document_height(), box.height());
+    QCOMPARE(pictura::document_ppi(*view), 72.0);
 
     frame.setActiveTool(pictura::ToolId::Move);
     frame.closeDocument(doc, false);

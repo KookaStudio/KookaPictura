@@ -233,7 +233,7 @@ gaps are the CS6 Extended 3D object and camera tools.
       Path toggle, and segment and marquee multi-select (#542)
 - [ ] Slice style and modifiers, Divide, Combine, Duplicate, the Slice Options
       dialog, and slices from guides (#543)
-- [ ] Crop resampling by W×H×resolution, non-destructive crop and Reveal All,
+- [x] Crop resampling by W×H×resolution, non-destructive crop and Reveal All,
       and the crop shield settings (#544)
 - [ ] `.CSH` libraries, Define Custom Shape, geometry modes, and gradient and
       pattern fill and stroke (#545)

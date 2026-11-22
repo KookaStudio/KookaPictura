@@ -4,6 +4,7 @@ use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
+use pictura_codec::{document_resolution, set_document_resolution, Resolution};
 use pictura_core::{Document, PsdRect};
 
 pub(super) fn perspective_crop_commit(mut view: Pin<&mut PictureView>, quad: &[f64]) -> bool {
@@ -118,6 +119,75 @@ pub(super) fn apply_crop(
     true
 }
 
+/// Resample `doc` to exactly `out_w`×`out_h` with Bicubic and write the
+/// requested resolution. Bicubic is the documented General-preference default;
+/// there is no General interpolation preference to read yet.
+fn write_resample_target(
+    doc: &mut Document,
+    out_w: i32,
+    out_h: i32,
+    ppi: f64,
+    per_cm: bool,
+) -> bool {
+    if out_w < 1 || out_h < 1 || !ppi.is_finite() || ppi <= 0.0 {
+        return false;
+    }
+    if (out_w as u32, out_h as u32) != (doc.width, doc.height)
+        && pictura_render::resize_document(
+            doc,
+            out_w as u32,
+            out_h as u32,
+            pictura_render::Resample::Bicubic,
+        )
+        .is_err()
+    {
+        return false;
+    }
+    let wanted = Resolution { ppi, per_cm };
+    let needed = document_resolution(doc)
+        .is_none_or(|current| (current.ppi - ppi).abs() > 1e-6 || current.per_cm != per_cm);
+    if needed {
+        set_document_resolution(doc, wanted);
+    }
+    true
+}
+
+pub(super) fn crop_to_resampled(
+    mut view: Pin<&mut PictureView>,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+    delete_cropped: bool,
+    fill_rgb: i32,
+    out_w: i32,
+    out_h: i32,
+    ppi: f64,
+    per_cm: bool,
+    label: &QString,
+) -> bool {
+    if width < 1 || height < 1 || out_w < 1 || out_h < 1 || !ppi.is_finite() || ppi <= 0.0 {
+        return false;
+    }
+    {
+        let mut rust = view.as_mut().rust_mut();
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return false;
+        };
+        let mut next = doc.clone();
+        if !apply_crop(&mut next, x, y, width, height, delete_cropped, fill_rgb)
+            || !write_resample_target(&mut next, out_w, out_h, ppi, per_cm)
+        {
+            return false;
+        }
+        *doc = next;
+        // Canvas dimensions changed, so the old selection no longer maps.
+        rust.session.clear_geometry_selection();
+    }
+    view.as_mut().edit(&crop_label(label), |_| Edit::Full);
+    true
+}
+
 pub(super) fn straighten_crop(
     mut view: Pin<&mut PictureView>,
     x: i32,
@@ -157,6 +227,58 @@ pub(super) fn straighten_crop(
         }
         *doc = next;
         // Canvas dimensions changed, so the old selection no longer maps.
+        rust.session.clear_geometry_selection();
+        true
+    };
+    if cropped {
+        view.as_mut().edit(&crop_label(label), |_| Edit::Full);
+    }
+    cropped
+}
+
+pub(super) fn straighten_crop_resampled(
+    mut view: Pin<&mut PictureView>,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+    angle: f64,
+    pivot_x: f64,
+    pivot_y: f64,
+    delete_cropped: bool,
+    fill_rgb: i32,
+    out_w: i32,
+    out_h: i32,
+    ppi: f64,
+    per_cm: bool,
+    label: &QString,
+) -> bool {
+    if width < 1 || height < 1 || out_w < 1 || out_h < 1 || !ppi.is_finite() || ppi <= 0.0 {
+        return false;
+    }
+    let cropped = {
+        let mut rust = view.as_mut().rust_mut();
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return false;
+        };
+        let pivot = (pivot_x, pivot_y);
+        let Some((ox, oy)) =
+            pictura_render::rotate_document_in_offset(doc.width, doc.height, angle, pivot)
+        else {
+            return false;
+        };
+        let mut next = doc.clone();
+        if !pictura_render::rotate_document_in(&mut next, angle, pivot) {
+            return false;
+        }
+        let nx = (x as f64 + ox).round() as i32;
+        let ny = (y as f64 + oy).round() as i32;
+        if !apply_crop(&mut next, nx, ny, width, height, delete_cropped, fill_rgb)
+            || !write_resample_target(&mut next, out_w, out_h, ppi, per_cm)
+        {
+            return false;
+        }
+        *doc = next;
         rust.session.clear_geometry_selection();
         true
     };

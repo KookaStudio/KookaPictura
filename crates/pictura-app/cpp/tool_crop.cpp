@@ -511,12 +511,26 @@ public:
         // History names the commit by its guide overlay, e.g. "Crop: Grid".
         const QString label =
             QStringLiteral("Crop: ") + CropOptions::overlayNames().value(crop_->gridOverlay());
-        const bool ok = crop_->angle() != 0.0
-            ? straighten_crop(*v, rect.x(), rect.y(), rect.width(), rect.height(),
-                              crop_->angle(), crop_->pivot().x(), crop_->pivot().y(),
-                              crop_->deletePixels(), fill, label)
-            : crop_to(*v, rect.x(), rect.y(), rect.width(), rect.height(),
-                      crop_->deletePixels(), fill, label);
+        const bool resample = crop_->resampleActive();
+        const CropResampleTarget& target = crop_->resampleTarget();
+        bool ok = false;
+        if (crop_->angle() != 0.0) {
+            ok = resample
+                ? straighten_crop_resampled(
+                      *v, rect.x(), rect.y(), rect.width(), rect.height(), crop_->angle(),
+                      crop_->pivot().x(), crop_->pivot().y(), crop_->deletePixels(), fill,
+                      target.width, target.height, target.ppi, target.perCm, label)
+                : straighten_crop(*v, rect.x(), rect.y(), rect.width(), rect.height(),
+                                  crop_->angle(), crop_->pivot().x(), crop_->pivot().y(),
+                                  crop_->deletePixels(), fill, label);
+        } else {
+            ok = resample
+                ? crop_to_resampled(*v, rect.x(), rect.y(), rect.width(), rect.height(),
+                                    crop_->deletePixels(), fill, target.width, target.height,
+                                    target.ppi, target.perCm, label)
+                : crop_to(*v, rect.x(), rect.y(), rect.width(), rect.height(),
+                          crop_->deletePixels(), fill, label);
+        }
         if (ok) {
             ctx_->emitSelectionCommitted();
             clearSession(*ctx_);

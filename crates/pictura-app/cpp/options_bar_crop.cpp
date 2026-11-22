@@ -465,11 +465,17 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
     setResolutionFields(false);
 
     if (controller_) {
-        const auto applyFields = [this, width, height]() {
+        const auto applyFields = [this, width, height, resolution, unit]() {
             if (cropResolutionMode_) {
-                if (CropBoxSession* box = cropBox()) {
-                    box->resizeCrop(width->value(), height->value());
-                }
+                const double w = std::max(1.0, width->value());
+                const double h = std::max(1.0, height->value());
+                CropResampleTarget target;
+                target.width = int(std::lround(w));
+                target.height = int(std::lround(h));
+                target.ppi = resolution->value();
+                target.perCm = unit->currentIndex() == 1;
+                crop_->setResampleTarget(target);
+                crop_->setRatio(w / h);
             } else {
                 crop_->setRatio(
                     height->value() > 0.0 ? width->value() / height->value() : 0.0);
@@ -479,13 +485,19 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
                 [applyFields](double) { applyFields(); });
         connect(height, &NumericField::valueChanged, this,
                 [applyFields](double) { applyFields(); });
+        connect(resolution, &NumericField::valueChanged, this,
+                [applyFields](double) { applyFields(); });
+        connect(unit, &QComboBox::currentIndexChanged, this,
+                [applyFields](int) { applyFields(); });
         connect(swap, &QToolButton::clicked, this, [this, width, height]() {
             const double w = width->value();
             const double h = height->value();
             if (cropResolutionMode_) {
-                if (CropBoxSession* box = cropBox()) {
-                    box->resizeCrop(h, w);
-                }
+                CropResampleTarget target = crop_->resampleTarget();
+                target.width = int(std::lround(std::max(1.0, h)));
+                target.height = int(std::lround(std::max(1.0, w)));
+                crop_->setResampleTarget(target);
+                crop_->setRatio(w > 0.0 ? h / w : 0.0);
             } else {
                 crop_->setRatio(w > 0.0 ? h / w : 0.0);
             }
@@ -499,6 +511,7 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
         const auto resetRatio = [this, ratio, width, height]() {
             cropRatioW_ = 0.0;
             cropRatioH_ = 0.0;
+            crop_->clearResampleTarget();
             crop_->setRatio(0.0);
             ratio->setCurrentIndex(0);
             const QSignalBlocker bw(width);
@@ -527,9 +540,9 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
             const QSignalBlocker block(deletePixels);
             deletePixels->setChecked(crop_->deletePixels());
         });
-        // Resample-free resolution: the field defaults to the document's
-        // resolution (CS6's 72 ppi fallback). ponytail: metadata only for now;
-        // the crop engine isolates pixels and does not resample on commit.
+        // The output-size mode's resolution defaults to the document's
+        // resolution (CS6's 72 ppi fallback). The commit resamples to the
+        // target W x H and writes the target resolution.
         const auto defaultPpi = [this]() -> double {
             if (PictureView* v = controller_->view(); v && v->has_document()) {
                 const double ppi = document_ppi(*v);
@@ -540,20 +553,32 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
             return 72.0;
         };
         connect(ratio, &QComboBox::currentIndexChanged, this,
-                [this, ratio, rebuild, setResolutionFields, width, height, resolution, defaultPpi](
-                    int index) {
+                [this, ratio, rebuild, setResolutionFields, width, height, resolution, unit,
+                 defaultPpi](int index) {
                     const QPointF pair = ratio->itemData(index).toPointF();
                     if (pair.x() == kResolutionMode) {
                         cropResolutionMode_ = true;
                         setResolutionFields(true);
                         const QSignalBlocker bw(width);
                         const QSignalBlocker bh(height);
-                        width->setValue(cropBox() ? cropBox()->cropWidth() : 0.0);
-                        height->setValue(cropBox() ? cropBox()->cropHeight() : 0.0);
+                        const double w = cropBox() ? cropBox()->cropWidth() : 0.0;
+                        const double h = cropBox() ? cropBox()->cropHeight() : 0.0;
+                        width->setValue(w);
+                        height->setValue(h);
                         resolution->setValue(defaultPpi());
+                        cropRatioW_ = w;
+                        cropRatioH_ = h;
+                        CropResampleTarget target;
+                        target.width = int(std::lround(std::max(1.0, w)));
+                        target.height = int(std::lround(std::max(1.0, h)));
+                        target.ppi = resolution->value();
+                        target.perCm = unit->currentIndex() == 1;
+                        crop_->setResampleTarget(target);
+                        crop_->setRatio(w > 0.0 && h > 0.0 ? w / h : 0.0);
                         return;
                     }
                     cropResolutionMode_ = false;
+                    crop_->clearResampleTarget();
                     setResolutionFields(false);
                     if (pair.x() == kNewPreset) {
                         bool ok = false;
@@ -616,14 +641,20 @@ QWidget* OptionsBar::buildCropPage(ToolId id)
 
 void OptionsBar::syncCropFields()
 {
-    if (!controller_ || !cropWidthField_ || !cropHeightField_) {
+    if (!controller_ || !crop_ || !cropWidthField_ || !cropHeightField_) {
         return;
     }
     const QSignalBlocker bw(cropWidthField_);
     const QSignalBlocker bh(cropHeightField_);
     if (cropResolutionMode_) {
-        cropWidthField_->setValue(cropBox() ? cropBox()->cropWidth() : 0.0);
-        cropHeightField_->setValue(cropBox() ? cropBox()->cropHeight() : 0.0);
+        const CropResampleTarget& target = crop_->resampleTarget();
+        if (target.width > 0 && target.height > 0) {
+            cropWidthField_->setValue(target.width);
+            cropHeightField_->setValue(target.height);
+        } else {
+            cropWidthField_->setValue(cropBox() ? cropBox()->cropWidth() : 0.0);
+            cropHeightField_->setValue(cropBox() ? cropBox()->cropHeight() : 0.0);
+        }
     } else if (cropRatioW_ > 0.0 && cropRatioH_ > 0.0) {
         cropWidthField_->setValue(cropRatioW_);
         cropHeightField_->setValue(cropRatioH_);

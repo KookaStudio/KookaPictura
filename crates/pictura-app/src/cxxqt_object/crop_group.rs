@@ -48,6 +48,26 @@ pub mod ffi {
             label: &QString,
         ) -> bool;
 
+        /// The Crop tool's output-size commit: as `crop_to`, then resample the
+        /// cropped canvas to exactly `out_w`×`out_h` with Bicubic and write
+        /// `ppi` with its `per_cm` unit. Runs on a copy, so a refusal changes
+        /// nothing. False without a document, for an empty crop or output rect,
+        /// or for a non-positive resolution.
+        fn crop_to_resampled(
+            view: Pin<&mut PictureView>,
+            x: i32,
+            y: i32,
+            width: i32,
+            height: i32,
+            delete_cropped: bool,
+            fill_rgb: i32,
+            out_w: i32,
+            out_h: i32,
+            ppi: f64,
+            per_cm: bool,
+            label: &QString,
+        ) -> bool;
+
         /// The Crop tool's straighten commit: rotate the document about
         /// `(pivot_x, pivot_y)` by `angle` degrees, then crop to the
         /// `width`×`height` box at `(x, y)` (discarding pixels outside when
@@ -66,6 +86,27 @@ pub mod ffi {
             pivot_y: f64,
             delete_cropped: bool,
             fill_rgb: i32,
+            label: &QString,
+        ) -> bool;
+
+        /// As `straighten_crop`, then resample the rotated and cropped canvas to
+        /// exactly `out_w`×`out_h` with Bicubic and write `ppi` with its
+        /// `per_cm` unit. Runs on a copy, so a refusal changes nothing.
+        fn straighten_crop_resampled(
+            view: Pin<&mut PictureView>,
+            x: i32,
+            y: i32,
+            width: i32,
+            height: i32,
+            angle: f64,
+            pivot_x: f64,
+            pivot_y: f64,
+            delete_cropped: bool,
+            fill_rgb: i32,
+            out_w: i32,
+            out_h: i32,
+            ppi: f64,
+            per_cm: bool,
             label: &QString,
         ) -> bool;
 

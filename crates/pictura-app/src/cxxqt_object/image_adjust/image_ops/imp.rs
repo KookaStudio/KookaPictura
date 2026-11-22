@@ -94,6 +94,20 @@ pub(super) fn trim_image(mut view: Pin<&mut PictureView>) -> bool {
     !matches!(edited, Edit::None)
 }
 
+pub(super) fn reveal_all(mut view: Pin<&mut PictureView>) -> bool {
+    let edited = view.as_mut().edit("Reveal All", |rust| {
+        let Some(doc) = rust.session.doc.as_mut() else {
+            return Edit::None;
+        };
+        if !pictura_render::reveal_all(doc) {
+            return Edit::None;
+        }
+        rust.session.clear_geometry_selection();
+        Edit::Full
+    });
+    !matches!(edited, Edit::None)
+}
+
 pub(super) fn rotate_document_arbitrary(mut view: Pin<&mut PictureView>, angle_deg: f64) -> bool {
     crate::cxxqt_object::helpers::memory_gate::clear();
     if view.rust().modal_transform_blocks_edit() {
