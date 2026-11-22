@@ -193,15 +193,18 @@ bool ParagraphStylesPanel::editStyle(int row)
 
     const QString newFamily = dialog.family();
     registerTypeFont(newFamily, dialog.characterSetting().font_style);
-    // The bridge edits by current name; a rename deletes and recreates.
-    const QString newName = dialog.styleName();
-    if (newName == name) {
-        pictura::type_api::editParagraphStyle(*view_, name, newFamily, dialog.characterSetting(),
-                                  dialog.paragraphSetting());
-    } else {
-        pictura::type_api::createParagraphStyle(*view_, newName, newFamily, dialog.characterSetting(),
-                                    dialog.paragraphSetting());
-        pictura::type_api::deleteParagraphStyle(*view_, name);
+    const bool edited = pictura::type_api::editParagraphStyle(
+        *view_, name, dialog.styleName(), newFamily, dialog.characterSetting(),
+        dialog.paragraphSetting());
+    if (!edited) {
+        // Preview may have written the dialog's attributes into the old style;
+        // a refused rename restores them, recording nothing.
+        if (previewed) {
+            registerTypeFont(family, originalCharacter.font_style);
+            pictura::type_api::previewParagraphStyle(*view_, name, family, originalCharacter,
+                                                     originalParagraph);
+        }
+        return false;
     }
     refresh();
     return true;

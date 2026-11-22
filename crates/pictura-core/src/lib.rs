@@ -88,9 +88,9 @@ pub use tiled_plane::{
 };
 pub use type_tool::{
     AntiAlias, CharacterAttrs, CharacterOverrides, CharacterStyle, Composer, Justify, KerningMode,
-    Leading, ParagraphAttrs, ParagraphOverrides, ParagraphStyle, ResolvedStyle, StyleError,
-    StyleOverrides, TextDirection, TextPath, TextPathKind, TextStyle, TextStyleSheet, TypeSpec,
-    TypeTool, BASIC_PARAGRAPH, DEFAULT_LANGUAGE,
+    Leading, NamedStyleAttrs, ParagraphAttrs, ParagraphOverrides, ParagraphStyle, ResolvedStyle,
+    StyleError, StyleOverrides, TextDirection, TextPath, TextPathKind, TextStyle, TextStyleSheet,
+    TypeSpec, TypeTool, BASIC_PARAGRAPH, DEFAULT_LANGUAGE,
 };
 pub use vector::{VectorCoverage, VectorFillRule, VectorMask, VectorSubpath};
 

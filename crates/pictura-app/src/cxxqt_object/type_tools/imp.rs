@@ -561,12 +561,15 @@ pub(super) fn type_edit_character_style(
     let new_name = new_name.to_string();
     let attrs = style_character_overrides(font, character);
     commit_style(view, "Edit Character Style", |doc| {
-        if name != new_name
-            && crate::history::rename_character_style(doc, &name, &new_name).is_err()
-        {
-            return false;
-        }
-        crate::history::edit_character_style(doc, &new_name, attrs).is_ok()
+        pictura_render::edit_named_style(
+            doc,
+            pictura_render::NamedStyleEdit {
+                from: &name,
+                to: &new_name,
+                attrs: pictura_core::NamedStyleAttrs::Character(attrs),
+            },
+        )
+        .is_ok()
     })
 }
 
@@ -628,15 +631,28 @@ pub(super) fn type_create_paragraph_style(
 pub(super) fn type_edit_paragraph_style(
     view: Pin<&mut PictureView>,
     name: &QString,
+    new_name: &QString,
     font: &QString,
     character: &CharacterSetting,
     paragraph: &ParagraphSetting,
 ) -> bool {
     let name = name.to_string();
+    let new_name = new_name.to_string();
     let character = style_character_overrides(font, character);
     let paragraph = paragraph_overrides(&paragraph_attrs(paragraph));
     commit_style(view, "Edit Paragraph Style", |doc| {
-        crate::history::edit_paragraph_style(doc, &name, character, paragraph).is_ok()
+        pictura_render::edit_named_style(
+            doc,
+            pictura_render::NamedStyleEdit {
+                from: &name,
+                to: &new_name,
+                attrs: pictura_core::NamedStyleAttrs::Paragraph {
+                    character,
+                    paragraph,
+                },
+            },
+        )
+        .is_ok()
     })
 }
 
@@ -661,7 +677,7 @@ pub(super) fn type_preview_paragraph_style(
     let character = style_character_overrides(font, character);
     let paragraph = paragraph_overrides(&paragraph_attrs(paragraph));
     preview_style(view, |doc| {
-        crate::history::edit_paragraph_style(doc, &name, character, paragraph).is_ok()
+        crate::history::edit_paragraph_style(doc, &name, &name, character, paragraph).is_ok()
     })
 }
 

@@ -145,8 +145,9 @@ bool previewCharacterStyle(PictureView& view, const QString& name, const QString
 bool deleteCharacterStyle(PictureView& view, const QString& name);
 bool createParagraphStyle(PictureView& view, const QString& name, const QString& font,
                           const CharacterSetting& character, const ParagraphSetting& paragraph);
-bool editParagraphStyle(PictureView& view, const QString& name, const QString& font,
-                        const CharacterSetting& character, const ParagraphSetting& paragraph);
+bool editParagraphStyle(PictureView& view, const QString& name, const QString& newName,
+                        const QString& font, const CharacterSetting& character,
+                        const ParagraphSetting& paragraph);
 bool previewParagraphStyle(PictureView& view, const QString& name, const QString& font,
                            const CharacterSetting& character, const ParagraphSetting& paragraph);
 bool deleteParagraphStyle(PictureView& view, const QString& name);

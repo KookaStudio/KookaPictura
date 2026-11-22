@@ -59,6 +59,7 @@ private slots:
     void createsAndDeletes();
     void editsAndReapplies();
     void renameKeepsApplied();
+    void renameToExistingRestoresPreview();
     void dialogPages();
     void dialogRoundTrips();
     void dialogPreviewRestoresOnCancel();
@@ -270,7 +271,16 @@ void CharacterStylesPanelTest::renameKeepsApplied()
             ->setText(QStringLiteral("Quote 2"));
         dialog->accept();
     });
+    const int base = f.view->history_index();
     QVERIFY(panel->editStyle(0));
+    QVERIFY2(f.committedOnce(base, "Edit Character Style"), "one rename state");
+    QCOMPARE(panel->listForTest()->item(0)->text(), QStringLiteral("Quote 2"));
+
+    QVERIFY(f.view->undo());
+    panel->refresh();
+    QCOMPARE(panel->listForTest()->item(0)->text(), QStringLiteral("Quote"));
+    QVERIFY(f.view->redo());
+    panel->refresh();
     QCOMPARE(panel->listForTest()->item(0)->text(), QStringLiteral("Quote 2"));
 
     // The layer still applies the renamed style: editing it changes the layer.
@@ -279,6 +289,53 @@ void CharacterStylesPanelTest::renameKeepsApplied()
     QVERIFY(pictura::type_api::editCharacterStyle(*f.view, QStringLiteral("Quote 2"),
                                                   QStringLiteral("Quote 2"), QString(), edited));
     QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.size, 60.0);
+}
+
+void CharacterStylesPanelTest::renameToExistingRestoresPreview()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_char_styles_duplicate"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    const QString path = makeTypeLayer(f);
+    QVERIFY2(!path.isEmpty(), "a type layer");
+    auto* panel = frame.findChild<pictura::CharacterStylesPanel*>();
+    QVERIFY(panel);
+    panel->setView(f.view);
+
+    pictura::CharacterSetting c = pictura::type_api::defaultCharacterSetting();
+    c.size = 40.0;
+    QVERIFY(pictura::type_api::createCharacterStyle(*f.view, QStringLiteral("Quote"), QString(), c));
+    c.size = 20.0;
+    QVERIFY(pictura::type_api::createCharacterStyle(*f.view, QStringLiteral("Caption"), QString(), c));
+    panel->refresh();
+    panel->applyRowForTest(0);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.size, 40.0);
+
+    const int base = f.view->history_index();
+    QTimer::singleShot(0, [&] {
+        auto* dialog = frame.findChild<pictura::ParagraphStyleDialog*>();
+        QVERIFY(dialog);
+        if (!dialog) {
+            return;
+        }
+        dialog->findChild<QDoubleSpinBox*>(QStringLiteral("paragraphStyleSize"))->setValue(70.0);
+        dialog->findChild<QLineEdit*>(QStringLiteral("paragraphStyleName"))
+            ->setText(QStringLiteral("Caption"));
+        dialog->accept();
+    });
+    QVERIFY(!panel->editStyle(0));
+
+    QCOMPARE(pictura::type_api::findStyle(pictura::type_api::characterStyles(*f.view),
+                                          QStringLiteral("Quote"))
+                 .character.size,
+             40.0);
+    QCOMPARE(pictura::type_api::findStyle(pictura::type_api::characterStyles(*f.view),
+                                          QStringLiteral("Caption"))
+                 .character.size,
+             20.0);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.size, 40.0);
+    QCOMPARE(f.view->history_index(), base);
 }
 
 void CharacterStylesPanelTest::dialogPages()
