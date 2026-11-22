@@ -101,7 +101,7 @@ Source list: CS6 and CC supported-format lists plus named File-menu, metadata, p
 | P-FMT-43 | 3D file import (U3D, 3DS, OBJ, KMZ, Collada) | N/A | Y | N/A | Missing | non-goal | — | none | edition:Extended-only; retired:src:3 | non-goal:feasibility:72 |
 | P-FMT-44 | Video frame import | Y | Y | Y | Missing | non-goal | — | none | Video is an intentional non-goal; src:1; src:7 | non-goal:feasibility:73 |
 | P-FMT-45 | Content Credentials | N/A | N/A | Y | Missing | in-scope | — | none | post-CS6:src:4 | #1512 |
-| P-FMT-46 | Per-camera colour matrices for CR2 and vendor raw | Y | Y | Y | Partial | in-scope | crates/pictura-codec/src/dng/camera_matrices.rs | none | 14 Canon CR2 and 11 Nikon NEF bodies fit from spectral sensitivities, 3 Nikon bodies by same-sensor proxy; other cameras are refused; the EOS 600D CFA phase (#1476), unseeded Nikon bodies (#1498) and the other vendor containers (#399) remain | #1476, #1498 |
+| P-FMT-46 | Per-camera colour matrices for CR2 and vendor raw | Y | Y | Y | Partial | in-scope | crates/pictura-codec/src/dng/camera_matrices.rs | none | 14 Canon CR2 and 11 Nikon NEF bodies fit from spectral sensitivities, 3 Nikon bodies by same-sensor proxy; other cameras are refused; the EOS 600D CFA phase (#1476), unseeded Nikon bodies (#1498) and the other vendor containers (#399) remain | follow-up: #1476, #1498 |
 | P-FMT-47 | Open a raw file as a Smart Object | Y | Y | Y | Missing | in-scope | — | none | Shift+Open Image raw open is not implemented | #1466 |
 
 ### Layers & compositing
