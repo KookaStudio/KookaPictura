@@ -3,6 +3,7 @@
 use super::*;
 use crate::common::Reader;
 use crate::descriptor::{self, get_object_item, DescValue};
+use crate::smart_filter::{append_smart_filter, attach_smart_filter, object, replace_smart_filter};
 use pictura_core::{
     CameraCalibration, CrsSettings, Detail, Document, Effects, Hsl, Layer, LayerBlock, Lens,
     PicturaRawSettings, RawMode, SmartFilter, SmartObject, SmartObjectKind, SplitToning, ToneCurve,

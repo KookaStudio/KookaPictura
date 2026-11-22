@@ -172,10 +172,9 @@ pub use pictura_filter::{
     PICTURA_FILTER_ID,
 };
 pub use pictura_raw::{
-    append_smart_filter, attach_pictura_raw_filter, attach_smart_filter,
-    decode_pictura_raw_settings, encode_pictura_raw_fltr, pictura_raw_from_text,
-    pictura_raw_from_xmp, pictura_raw_to_text, pictura_raw_to_xmp, raw_settings_key,
-    replace_smart_filter, CAMERA_RAW_FILTER_ID, CAMERA_RAW_FILTER_NAME,
+    attach_pictura_raw_filter, decode_pictura_raw_settings, encode_pictura_raw_fltr,
+    pictura_raw_from_text, pictura_raw_from_xmp, pictura_raw_to_text, pictura_raw_to_xmp,
+    raw_settings_key, CAMERA_RAW_FILTER_ID, CAMERA_RAW_FILTER_NAME,
 };
 pub use read::read_psd_layer_structure;
 pub use smart_object::{
@@ -211,8 +210,9 @@ pub use save::{
     streams as save_streams, BeforeWrite, JpegEncode, SaveKind, SaveOptions,
 };
 pub use smart_filter::{
-    clear_smart_filters, delete_smart_filter, reorder_smart_filters, set_camera_raw_option,
-    set_filter_mask_enabled, set_smart_filter_enabled, set_smart_filters_enabled,
+    append_smart_filter, attach_smart_filter, clear_smart_filters, delete_smart_filter,
+    reorder_smart_filters, replace_smart_filter, set_camera_raw_option, set_filter_mask_enabled,
+    set_smart_filter_enabled, set_smart_filters_enabled,
 };
 pub use smart_object::{
     layer_references_smart_source, remove_linked_source, replace_embedded_payload,

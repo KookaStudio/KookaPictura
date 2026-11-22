@@ -276,14 +276,10 @@ pub(crate) fn refresh_authored_vector_geometry(layer: &Layer, data: &[u8]) -> Op
     ] {
         crate::descriptor::set_object_item(items, key, value);
     }
-    Some(serialize_sold(&data[..8], &descriptor))
-}
-
-fn serialize_sold(header: &[u8], descriptor: &DescValue) -> Vec<u8> {
-    let mut data = header.to_vec();
-    data.extend_from_slice(&crate::descriptor::write_descriptor(descriptor));
-    data.resize(data.len().next_multiple_of(4), 0);
-    data
+    Some(crate::smart_filter::serialize_config(
+        &data[..8],
+        &descriptor,
+    ))
 }
 
 /// The `SoLd` block data: `b"soLD"` + outer version 4 + a version-16 descriptor
@@ -356,7 +352,7 @@ pub(crate) fn author_sold_block(
     ]);
     // A converted embedded object may carry a smart filter (Pictura Raw) that
     // the writer authors into the same `SoLd` descriptor.
-    if let Some(filter_fx) = crate::pictura_raw::author_filter_fx(
+    if let Some(filter_fx) = crate::smart_filter::author_filter_fx(
         &so.smart_filters,
         so.smart_filters_enabled,
         so.filter_mask_enabled,
@@ -368,7 +364,7 @@ pub(crate) fn author_sold_block(
         }
     }
 
-    serialize_sold(b"soLD\0\0\0\x04", &descriptor)
+    crate::smart_filter::serialize_config(b"soLD\0\0\0\x04", &descriptor)
 }
 
 fn write_pascal_raw(out: &mut Vec<u8>, value: &str) {
