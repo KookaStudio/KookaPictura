@@ -195,6 +195,12 @@ pub mod ffi {
             name: &QString,
         ) -> bool;
 
+        /// The targeted path's subpaths in the flat anchor/handle form; empty when there is no target.
+        fn path_target_outline(view: &PictureView) -> Vec<f64>;
+
+        /// Replace the targeted path's subpaths from the flat form; one "Path Operation" state. False (no state) when there is no target or nothing changed.
+        fn path_replace_target_outline(view: Pin<&mut PictureView>, coords: &[f64]) -> bool;
+
         /// Kind of the layer at `path` (`"0/1"` walks into node 0), or empty.
         fn layer_kind_path(view: &PictureView, path: &QString) -> QString;
 

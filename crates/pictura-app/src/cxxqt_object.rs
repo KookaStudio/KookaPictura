@@ -69,6 +69,7 @@ mod quick_mask;
 mod save_format;
 mod scratch_rollback;
 mod selection_move;
+mod shape_coords;
 mod shapes;
 mod stack_files;
 mod state;

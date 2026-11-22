@@ -449,11 +449,7 @@ fn stroked_layer(position: crate::StrokePosition) -> Layer {
     let mut layer = shape_layer([1, 2, 3]);
     crate::set_shape_stroke(
         &mut layer,
-        Some(&crate::ShapeStroke {
-            color: [255, 0, 0],
-            width: 3,
-            position,
-        }),
+        Some(&crate::ShapeStroke::solid([255, 0, 0], 3, position)),
     );
     layer
 }

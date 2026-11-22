@@ -126,7 +126,7 @@ pub use overlays::{
 };
 pub use satin::{decode_satin, Satin};
 pub use shadows::{decode_drop_shadow, decode_inner_shadow, DropShadow, InnerShadow};
-pub use strokes::{decode_stroke, Stroke, StrokeFill, StrokePosition};
+pub use strokes::{decode_stroke, DashPattern, Stroke, StrokeFill, StrokeLine, StrokePosition};
 
 /// Documented Drop Shadow parameter caps (`docs/05-layers/layer-styles.md`).
 const MAX_OPACITY: f32 = 100.0;

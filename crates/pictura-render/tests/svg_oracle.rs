@@ -167,11 +167,11 @@ fn add_stroked_shape(doc: &mut Document, rect: (f64, f64, f64, f64)) {
     let layer = pictura_render::resolve_path_mut(doc, &path).unwrap();
     pictura_render::set_shape_stroke(
         layer,
-        Some(&pictura_render::ShapeStroke {
-            color: [20, 60, 240],
-            width: 3,
-            position: pictura_render::StrokePosition::Outside,
-        }),
+        Some(&pictura_render::ShapeStroke::solid(
+            [20, 60, 240],
+            3,
+            pictura_render::StrokePosition::Outside,
+        )),
     );
 }
 

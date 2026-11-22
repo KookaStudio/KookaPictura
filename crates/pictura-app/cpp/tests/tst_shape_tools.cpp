@@ -5,6 +5,7 @@
 #include <QtTest/QtTest>
 
 #include "panels/layers_panel.h"
+#include "path_overlay.h"
 #include "panels/numeric_field.h"
 #include "selftest_paint_fixture.h"
 #include "session.h"
@@ -12,6 +13,8 @@
 
 #include "api/layers_bridge.h"
 
+#include <QtCore/QJsonDocument>
+#include <QtCore/QJsonObject>
 #include <QtCore/QTimer>
 #include <QtGui/QKeyEvent>
 #include <QtWidgets/QCheckBox>
@@ -151,6 +154,10 @@ private slots:
     void createDialogs();
     void lineAndCustomShape();
     void optionsBar();
+    void fillStrokeOptions();
+    void pathOperations();
+    void fillPixelsOptions();
+    void geometryOptions();
     void shapeLayerActions();
 
 private:
@@ -583,8 +590,10 @@ void ShapeToolsTest::optionsBar()
                              "optionsShapeAlignEdges"}) {
         QVERIFY2(visibleChild<QWidget>(frame, QString::fromLatin1(name)), name);
     }
-    for (const char* name : {"optionsShapePathOperations", "optionsShapePathAlignment",
-                             "optionsShapePathArrangement"}) {
+    auto* pathOps = visibleChild<QToolButton>(frame, QStringLiteral("optionsShapePathOperations"));
+    QVERIFY(pathOps && pathOps->isEnabled());
+    QCOMPARE(pathOps->menu()->actions().size(), 5);
+    for (const char* name : {"optionsShapePathAlignment", "optionsShapePathArrangement"}) {
         auto* stub = visibleChild<QToolButton>(frame, QString::fromLatin1(name));
         QVERIFY2(stub && !stub->isEnabled(), name);
     }
@@ -662,11 +671,215 @@ void ShapeToolsTest::optionsBar()
     f.drag({QPointF(5, 60), QPointF(15, 62), QPointF(25, 64)});
     QCOMPARE(subpathBounds(f, 1), QRectF(5, 60, 20, 20));
 
-    // Dashed and Dotted are listed but disabled.
+    // Dashed and Dotted are live.
     auto* type = visibleChild<QToolButton>(frame, QStringLiteral("optionsShapeStrokeType"));
     auto* line = type->menu()->findChild<QComboBox*>(QStringLiteral("optionsShapeStrokeLine"));
-    QVERIFY(line != nullptr);
-    QCOMPARE(line->itemData(1, Qt::UserRole - 1).toInt(), 0);
+    QVERIFY(line != nullptr && line->isEnabled());
+    QCOMPARE(line->count(), 3);
+    line->setCurrentIndex(1);
+    QCOMPARE(f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get().strokeLine, 1);
+}
+
+// Gradient and pattern Fill/Stroke, appearance mirroring, and dashed gaps.
+void ShapeToolsTest::fillStrokeOptions()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_shape_appearance_seed"));
+    QVERIFY2(f.ok(), "shape appearance fixture");
+    const State state(f.tools);
+    frame.setActiveTool(pictura::ToolId::Rectangle);
+    auto* mode = visibleChild<QComboBox>(frame, QStringLiteral("optionsShapeMode"));
+    QVERIFY(mode != nullptr);
+    mode->setCurrentIndex(0);
+
+    pictura::ShapeOptions o = f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get();
+    o.fillEnabled = true;
+    o.fillKind = 2;
+    o.fillGradient = QStringLiteral("linear|0|100|0|0:ff0000,4096:0000ff");
+    o.strokeEnabled = true;
+    o.strokeKind = 3;
+    o.strokePattern = QStringLiteral("pictura-shape|100|1|0|0");
+    o.strokeWidth = 4;
+    o.strokeLine = 1;
+    f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->set(o);
+
+    int base = f.view->history_index();
+    f.drag({QPointF(10, 10), QPointF(40, 40), QPointF(70, 70)});
+    QVERIFY2(f.committedOnce(base, "Rectangle Tool"), "gradient/pattern shape");
+
+    const QString style = pictura::shape_active_style(*f.view);
+    const QJsonObject root = QJsonDocument::fromJson(style.toUtf8()).object();
+    const QJsonObject fill = root.value(QStringLiteral("fill")).toObject();
+    const QJsonObject stroke = root.value(QStringLiteral("stroke")).toObject();
+    QCOMPARE(fill.value(QStringLiteral("kind")).toInt(), 2);
+    QCOMPARE(stroke.value(QStringLiteral("kind")).toInt(), 3);
+    QCOMPARE(stroke.value(QStringLiteral("line")).toInt(), 1);
+
+    // The bar mirrors the active layer's full appearance.
+    QCOMPARE(f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get().fillKind, 2);
+    QCOMPARE(f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get().strokeKind, 3);
+
+    // A dashed solid stroke leaves gaps on the top edge.
+    o = f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get();
+    o.fillEnabled = false;
+    o.strokeKind = 1;
+    o.strokeColor = Qt::red;
+    o.strokeWidth = 4;
+    o.strokeLine = 1;
+    f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->set(o);
+    f.drag({QPointF(10, 50), QPointF(40, 70), QPointF(70, 90)});
+    bool on = false;
+    bool off = false;
+    for (int x = 10; x < 70; ++x) {
+        if (f.view->sample_argb(x, 50) == kRed) {
+            on = true;
+        } else {
+            off = true;
+        }
+    }
+    QVERIFY2(on && off, "the dashed stroke alternates");
+}
+
+// The five path operations on the active shape layer and the Work Path.
+void ShapeToolsTest::pathOperations()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_shape_path_ops_seed"));
+    QVERIFY2(f.ok(), "path operations fixture");
+    const State state(f.tools);
+    frame.setActiveTool(pictura::ToolId::Rectangle);
+    auto* mode = visibleChild<QComboBox>(frame, QStringLiteral("optionsShapeMode"));
+    QVERIFY(mode != nullptr);
+    mode->setCurrentIndex(0);
+
+    auto draw = [&](const QPointF& from, const QPointF& to, int op) {
+        pictura::ShapeOptions o = f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get();
+        o.pathOperation = op;
+        o.fillEnabled = true;
+        o.fillKind = 1;
+        o.fillColor = Qt::red;
+        f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->set(o);
+        f.drag({from, QPointF((from.x() + to.x()) / 2, (from.y() + to.y()) / 2), to});
+    };
+
+    // Subtract: the overlap shows the layer below.
+    draw(QPointF(5, 5), QPointF(45, 45), 0);
+    int base = f.view->history_index();
+    draw(QPointF(25, 25), QPointF(65, 65), 2);
+    QVERIFY2(f.committedOnce(base, "Path Operation"), "subtract");
+    QCOMPARE(f.view->sample_argb(10, 10), kRed);
+    QCOMPARE(f.view->sample_argb(35, 35), kWhite);
+
+    // Intersect: only the overlap remains.
+    draw(QPointF(5, 55), QPointF(45, 95), 0);
+    draw(QPointF(25, 75), QPointF(65, 95), 3);
+    QCOMPARE(f.view->sample_argb(35, 85), kRed);
+    QCOMPARE(f.view->sample_argb(10, 60), kWhite);
+
+    // Exclude: both rectangles except the overlap.
+    draw(QPointF(55, 5), QPointF(95, 45), 0);
+    draw(QPointF(75, 25), QPointF(95, 65), 4);
+    QCOMPARE(f.view->sample_argb(60, 10), kRed);
+    QCOMPARE(f.view->sample_argb(85, 35), kWhite);
+    QCOMPARE(f.view->sample_argb(85, 55), kRed);
+
+    // Combine with no shape layer active creates one.
+    f.view->set_active_layer(QString::number(0));
+    const int layers = f.view->layer_count();
+    draw(QPointF(10, 10), QPointF(30, 30), 1);
+    QCOMPARE(f.view->layer_count(), layers + 1);
+
+    // Subtract on the Work Path.
+    mode->setCurrentIndex(1);
+    draw(QPointF(5, 5), QPointF(45, 45), 0);
+    const int points = pictura::path_point_count(*f.view, 0);
+    draw(QPointF(25, 25), QPointF(45, 45), 2);
+    QCOMPARE(pictura::path_subpath_count(*f.view), 1);
+    QVERIFY2(pictura::path_point_count(*f.view, 0) > points, "the difference adds vertices");
+    QVERIFY2(!pictura::workPathOverlay(*f.view, -1).curve.isEmpty(),
+             "the Work Path overlay follows the boolean");
+    // The path-only edit reaches the canvas: cutting away the right half
+    // narrows the overlay's curve with the path.
+    QCOMPARE(f.canvas->pathOverlayCurveBoundsForTest().right(), 45.0);
+    draw(QPointF(25, 0), QPointF(50, 50), 2);
+    QCOMPARE(f.canvas->pathOverlayCurveBoundsForTest().right(), 25.0);
+}
+
+// Fill Pixels Mode, Opacity, and Anti-alias.
+void ShapeToolsTest::fillPixelsOptions()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::blue);
+    Fixture f(frame, seed, QStringLiteral("pictura_shape_pixels_seed"));
+    QVERIFY2(f.ok(), "fill pixels fixture");
+    const State state(f.tools);
+    frame.setActiveTool(pictura::ToolId::Rectangle);
+    auto* mode = visibleChild<QComboBox>(frame, QStringLiteral("optionsShapeMode"));
+    QVERIFY(mode != nullptr);
+    mode->setCurrentIndex(2);
+
+    pictura::ShapeOptions o = f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get();
+    o.fillEnabled = true;
+    o.fillKind = 1;
+    o.fillColor = Qt::red;
+    o.paintMode = 0;
+    o.paintOpacity = 50;
+    o.paintAntialias = false;
+    f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->set(o);
+    f.drag({QPointF(20, 20), QPointF(40, 40), QPointF(60, 60)});
+    const QRgb half = f.view->sample_argb(40, 40);
+    QVERIFY2(half != kRed && half != QColor(Qt::blue).rgba(), "half-opacity blend");
+
+    // Multiply over blue turns red into black.
+    o = f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get();
+    o.paintMode = 4;
+    o.paintOpacity = 100;
+    f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->set(o);
+    f.drag({QPointF(20, 70), QPointF(40, 80), QPointF(60, 90)});
+    QCOMPARE(f.view->sample_argb(40, 80), QRgb(0xff000000));
+}
+
+// Snap To Pixels and Proportional geometry.
+void ShapeToolsTest::geometryOptions()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage seed(100, 100, QImage::Format_RGB32);
+    seed.fill(Qt::white);
+    Fixture f(frame, seed, QStringLiteral("pictura_shape_geometry_seed"));
+    QVERIFY2(f.ok(), "geometry fixture");
+    const State state(f.tools);
+    frame.setActiveTool(pictura::ToolId::Rectangle);
+    auto* mode = visibleChild<QComboBox>(frame, QStringLiteral("optionsShapeMode"));
+    QVERIFY(mode != nullptr);
+    mode->setCurrentIndex(1);
+
+    pictura::ShapeOptions o = f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get();
+    o.snapToPixels = true;
+    o.geometry = 0;
+    f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->set(o);
+    f.drag({QPointF(10.4, 10.4), QPointF(25, 20), QPointF(40.4, 30.6)});
+    QCOMPARE(subpathBounds(f, 0), QRectF(10, 10, 30, 21));
+
+    o = f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get();
+    o.snapToPixels = false;
+    o.geometry = 3;
+    o.proportionWidth = 2;
+    o.proportionHeight = 1;
+    f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->set(o);
+    f.drag({QPointF(10, 50), QPointF(30, 55), QPointF(50, 60)});
+    QCOMPARE(subpathBounds(f, 1), QRectF(10, 50, 40, 20));
+
+    // The Square geometry mode still squares the drag.
+    o = f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->get();
+    o.geometry = 1;
+    f.tools->optionsFor<pictura::ShapeGroup>(pictura::ToolId::Rectangle)->set(o);
+    f.drag({QPointF(10, 70), QPointF(30, 75), QPointF(50, 80)});
+    QCOMPARE(subpathBounds(f, 2), QRectF(10, 70, 40, 40));
 }
 
 // Copy/Paste Shape Attributes transfers a shape's fill and stroke to another

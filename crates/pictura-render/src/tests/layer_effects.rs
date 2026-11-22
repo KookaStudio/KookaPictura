@@ -1279,11 +1279,11 @@ fn rasterized_styled_object_bakes_the_effect_reach() {
     let layer = crate::resolve_path_mut(&mut d, &path).unwrap();
     crate::set_shape_stroke(
         layer,
-        Some(&crate::ShapeStroke {
-            color: [0, 160, 0],
-            width: 6,
-            position: crate::StrokePosition::Outside,
-        }),
+        Some(&crate::ShapeStroke::solid(
+            [0, 160, 0],
+            6,
+            crate::StrokePosition::Outside,
+        )),
     );
     layer.rect = rect(30, 30, 50, 50);
     crate::set_layer_style_value(layer, "dropShadow.on", 1.0);

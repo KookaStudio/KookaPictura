@@ -1,7 +1,7 @@
 # Feature parity tracker
 
 Assessed: 2026-11-21
-Pictura commit: 39ea0380
+Pictura commit: 4736b57e
 CS6 baseline: Adobe Photoshop CS6 13.0 (2012), Standard and Extended
 CC baseline: Adobe Photoshop 28.0 (November 2026 release; LTS 27.11.1)
 
@@ -11,12 +11,12 @@ This tracker measures feature coverage against a frozen Photoshop baseline. It d
 
 | Baseline | Complete | Partial | Missing | Unknown | Denominator | Coverage | Excluded non-goals |
 |---|---|---|---|---|---|---|---|
-| CS6 Standard | 202 | 85 | 58 | 4 | 349 | 57.9% | 8 |
-| CS6 Standard, in scope | 202 | 85 | 52 | 2 | 341 | 59.2% | 8 |
-| CS6 Extended | 203 | 85 | 74 | 4 | 366 | 55.5% | 23 |
-| CS6 Extended, in scope | 203 | 85 | 53 | 2 | 343 | 59.2% | 23 |
-| CC 28.0 | 204 | 87 | 79 | 4 | 374 | 54.5% | 20 |
-| CC 28.0, in scope | 204 | 87 | 61 | 2 | 354 | 57.6% | 20 |
+| CS6 Standard | 207 | 80 | 58 | 4 | 349 | 59.3% | 8 |
+| CS6 Standard, in scope | 207 | 80 | 52 | 2 | 341 | 60.7% | 8 |
+| CS6 Extended | 208 | 80 | 74 | 4 | 366 | 56.8% | 23 |
+| CS6 Extended, in scope | 208 | 80 | 53 | 2 | 343 | 60.6% | 23 |
+| CC 28.0 | 209 | 82 | 79 | 4 | 374 | 55.9% | 20 |
+| CC 28.0, in scope | 209 | 82 | 61 | 2 | 354 | 59.0% | 20 |
 
 ## Baselines
 
@@ -40,7 +40,7 @@ Coverage is not behavioural or pixel parity with Photoshop. Every Complete row n
 |---|---|---|---|
 | Files & interchange | 27/40 (67.5%) | 27/42 (64.3%) | 28/46 (60.9%) |
 | Layers & compositing | 31/38 (81.6%) | 31/39 (79.5%) | 31/39 (79.5%) |
-| Tools & painting | 35/70 (50.0%) | 36/81 (44.4%) | 36/71 (50.7%) |
+| Tools & painting | 40/70 (57.1%) | 41/81 (50.6%) | 41/71 (57.7%) |
 | Selections & masking | 18/22 (81.8%) | 18/22 (81.8%) | 18/22 (81.8%) |
 | Adjustments & filters | 30/55 (54.5%) | 30/55 (54.5%) | 30/64 (46.9%) |
 | Type & vector | 17/17 (100.0%) | 17/17 (100.0%) | 17/19 (89.5%) |
@@ -209,12 +209,12 @@ Source list: CS6 toolbox slots (71 catalogue slots plus the two missing single r
 | P-TOOL-50 | Vertical Type Mask | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-51 | Path Selection | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Path operations, align/arrange, constrained dragging, and multi-select remain | TOOL-18 |
 | P-TOOL-52 | Direct Selection | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Path operations, align/arrange, constrained dragging, and multi-select remain | TOOL-18 |
-| P-TOOL-53 | Rectangle | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Gradient/pattern fill and stroke, dashed stroke, path ops, and snap-to-pixels remain | TOOL-22 |
-| P-TOOL-54 | Rounded Rectangle | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Gradient/pattern fill and stroke, dashed stroke, path ops, and snap-to-pixels remain | TOOL-22 |
-| P-TOOL-55 | Ellipse | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Gradient/pattern fill and stroke, dashed stroke, path ops, and snap-to-pixels remain | TOOL-22 |
-| P-TOOL-56 | Polygon | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Gradient/pattern fill and stroke, dashed stroke, path ops, and snap-to-pixels remain | TOOL-22 |
-| P-TOOL-57 | Line | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Gradient/pattern fill and stroke, dashed stroke, path ops, and snap-to-pixels remain | TOOL-22 |
-| P-TOOL-58 | Custom Shape | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | .CSH libraries, Define Custom Shape, geometry modes, and fill/stroke remain | TOOL-21 |
+| P-TOOL-53 | Rectangle | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | Gradient/pattern fill and stroke, dashed stroke, path ops, fill-pixels options, snap-to-pixels, and proportional geometry | TOOL-22 |
+| P-TOOL-54 | Rounded Rectangle | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | Gradient/pattern fill and stroke, dashed stroke, path ops, fill-pixels options, snap-to-pixels, and proportional geometry | TOOL-22 |
+| P-TOOL-55 | Ellipse | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | Gradient/pattern fill and stroke, dashed stroke, path ops, fill-pixels options, snap-to-pixels, and proportional geometry | TOOL-22 |
+| P-TOOL-56 | Polygon | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | Gradient/pattern fill and stroke, dashed stroke, path ops, fill-pixels options, snap-to-pixels, and proportional geometry | TOOL-22 |
+| P-TOOL-57 | Line | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | Gradient/pattern fill and stroke, dashed stroke, path ops, fill-pixels options, snap-to-pixels, and proportional geometry | TOOL-22 |
+| P-TOOL-58 | Custom Shape | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | .CSH libraries, Define Custom Shape, and geometry modes remain | TOOL-21 |
 | P-TOOL-59 | Object Rotate (Extended) | N/A | Y | N/A | Missing | non-goal | — | none | edition:Extended-only; retired:src:3 | non-goal:feasibility:72 |
 | P-TOOL-60 | Object Roll (Extended) | N/A | Y | N/A | Missing | non-goal | — | none | edition:Extended-only; retired:src:3 | non-goal:feasibility:72 |
 | P-TOOL-61 | Object Pan (Extended) | N/A | Y | N/A | Missing | non-goal | — | none | edition:Extended-only; retired:src:3 | non-goal:feasibility:72 |
@@ -524,6 +524,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
 |---|---|---|---|---|---|
+| 2026-11-21 | 4736b57e | 207/349 (59.3%) | 208/366 (56.8%) | 28.0 | 209/374 (55.9%) |
 | 2026-11-21 | 39ea0380 | 202/349 (57.9%) | 203/366 (55.5%) | 28.0 | 204/374 (54.5%) |
 | 2026-11-21 | 7ab28fc5 | 192/349 (55.0%) | 193/366 (52.7%) | 28.0 | 194/374 (51.9%) |
 | 2026-11-20 | 89c8ba95 | 191/349 (54.7%) | 192/366 (52.5%) | 28.0 | 193/374 (51.6%) |

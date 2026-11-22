@@ -431,8 +431,8 @@ void MaskEditTest::colorsFollowTheEditTarget()
     QVERIFY(panel->clickMaskThumbnailForTest(layer));
     QCoreApplication::processEvents();
     QCOMPARE(pictura::mask_edit_target_get(*view), layer);
-    QCOMPARE(colors->foreground(), QColor(Qt::white));
-    QCOMPARE(colors->background(), QColor(Qt::black));
+    QTRY_COMPARE(colors->foreground(), QColor(Qt::white));
+    QTRY_COMPARE(colors->background(), QColor(Qt::black));
 
     // The mask remembers its own pair; the image gets its pair back.
     const QColor maskFg(128, 128, 128);
@@ -440,13 +440,13 @@ void MaskEditTest::colorsFollowTheEditTarget()
     QVERIFY(panel->clickLayerThumbnailForTest(layer));
     QCoreApplication::processEvents();
     QVERIFY(pictura::mask_edit_target_get(*view).isEmpty());
-    QCOMPARE(colors->foreground(), imageFg);
-    QCOMPARE(colors->background(), imageBg);
+    QTRY_COMPARE(colors->foreground(), imageFg);
+    QTRY_COMPARE(colors->background(), imageBg);
 
     QVERIFY(panel->clickMaskThumbnailForTest(layer));
     QCoreApplication::processEvents();
-    QCOMPARE(colors->foreground(), maskFg);
-    QCOMPARE(colors->background(), QColor(Qt::black));
+    QTRY_COMPARE(colors->foreground(), maskFg);
+    QTRY_COMPARE(colors->background(), QColor(Qt::black));
 
     // Closing the document leaves the mask, which restores the image pair.
     frame.closeDocument(doc, false);
@@ -1123,6 +1123,8 @@ void MaskEditTest::fillToolsWriteCoverage()
     spec.y0 = 24;
     spec.x1 = 30;
     spec.y1 = 30;
+    spec.fill_opacity = 100;
+    spec.fill_antialias = true;
     base = view->history_count();
     QVERIFY(pictura::shape_fill_pixels(*view, spec, 0xff000000u));
     QCOMPARE(view->history_label(base), QStringLiteral("Rectangle Tool"));

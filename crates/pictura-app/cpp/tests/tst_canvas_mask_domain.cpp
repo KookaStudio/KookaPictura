@@ -743,6 +743,8 @@ void CanvasMaskDomainTest::importedMaskFillTools()
         if (operation == 6) {
             pictura::ShapeSpec spec{}; spec.kind=0; spec.boxed=true;
             spec.x0=7; spec.y0=4; spec.x1=11; spec.y1=7;
+            spec.fill_opacity = 100;
+            spec.fill_antialias = true;
             changed = pictura::shape_fill_pixels(*v, spec, 0xff000000u);
         }
         QVERIFY2(changed, qPrintable(QString::number(operation)));

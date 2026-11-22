@@ -574,6 +574,7 @@ public:
     bool pathOverlayAnchorsSolidForTest() const { return pathOverlay_.anchorsSolid; }
     int pathOverlayActiveAnchorForTest() const { return pathOverlay_.activeAnchor; }
     QRectF pathOverlayBoundsForTest() const { return pathOverlay_.bounds; }
+    QRectF pathOverlayCurveBoundsForTest() const { return pathOverlay_.curve.boundingRect(); }
 
     // The Type tools' live text (image space) while typing: `image` (the
     // engine's own render, so the preview is the commit) at `topLeft`, and the
