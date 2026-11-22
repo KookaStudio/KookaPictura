@@ -29,8 +29,55 @@ class AgentQuotaChecks(unittest.TestCase):
                 with contextlib.redirect_stdout(io.StringIO()) as output:
                     self.assertEqual(budget.main(["unit", *args]), 0)
                 self.assertIn(f"CPUQuota={expected}\n", output.getvalue())
+                self.assertIn("MemoryHigh=38%\nMemoryMax=50%\nMemorySwapMax=2G\n", output.getvalue())
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(budget.main([
+                    "unit", "--memory-high", "24G", "--memory-max", "32G", "--swap-max", "0",
+                ]), 0)
+            self.assertIn("MemoryHigh=24G\nMemoryMax=32G\nMemorySwapMax=0\n", output.getvalue())
             with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 budget.main(["unit", "--percent", "101"])
+
+    def test_resource_limits(self):
+        with tempfile.TemporaryDirectory() as temp:
+            slice_dir = Path(temp)
+            limits = {"cpu.max": "1000000 100000", "memory.high": "24", "memory.max": "32",
+                      "memory.swap.max": "0"}
+            for filename, value in limits.items():
+                (slice_dir / filename).write_text(value + "\n")
+            with mock.patch.object(budget, "agent_slice", return_value=slice_dir):
+                self.assertEqual(budget.require_limits(), (slice_dir, (1000000, 100000), 24, 32, 0))
+                with contextlib.redirect_stdout(io.StringIO()) as output:
+                    self.assertEqual(budget.main(["status"]), 0)
+                for filename, value in limits.items():
+                    self.assertIn(f"{filename}={value}\n", output.getvalue())
+
+                for filename, invalid in (
+                    ("cpu.max", "max 100000"), ("memory.high", "max"), ("memory.high", "33"),
+                    ("memory.max", "0"), ("memory.swap.max", "max"), ("memory.swap.max", "-1"),
+                ):
+                    (slice_dir / filename).write_text(invalid)
+                    with (
+                        mock.patch.object(budget, "start_cache_server") as start_cache,
+                        mock.patch.object(budget.os, "execvpe") as execute,
+                        contextlib.redirect_stderr(io.StringIO()) as error,
+                    ):
+                        self.assertEqual(budget.main(["_exec", "never-run"]), 2)
+                    self.assertIn(filename, error.getvalue())
+                    start_cache.assert_not_called()
+                    execute.assert_not_called()
+                    (slice_dir / filename).write_text(limits[filename])
+
+    def test_launcher_exports_canonical_policy(self):
+        with (
+            mock.patch.object(budget, "require_limits", return_value=(Path("/enrolled"), (1, 1), 1, 2, 0)),
+            mock.patch.object(budget, "cache_environment", return_value={"PICTURA_AGENT_POLICY": "/stale"}),
+            mock.patch.object(budget, "start_cache_server"),
+            mock.patch.object(budget.os, "execvpe") as execute,
+        ):
+            budget.execute_in_slice(["opencode"])
+        self.assertEqual(execute.call_args.args[2]["PICTURA_AGENT_POLICY"],
+                         str(SCRIPTS / "heavy_command_policy.py"))
 
     def test_scope_command(self):
         args = ["/path with spaces/agent", "--arg", "${UNCHANGED}", "left;right"]

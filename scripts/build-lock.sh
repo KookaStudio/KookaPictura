@@ -16,6 +16,29 @@
 _build_lock_owned=0
 _build_lock_dir=
 _build_lock_self_pid=
+_build_lock_managed=0
+
+build_lock_enter_managed() {
+    local runner=$1 membership
+    shift
+    if [ -r /proc/self/cgroup ]; then
+        membership=$(</proc/self/cgroup) || membership=
+        case "$membership" in
+            0::*/pictura-agents.slice/pictura-agent-build-*.scope|0::*/pictura-agents.slice/pictura-agent-build-*.scope/*)
+                python3 "$runner" --inside || return
+                _build_lock_managed=1
+                return 0
+                ;;
+            0::*/pictura-agents.slice|0::*/pictura-agents.slice/*)
+                exec python3 "$runner" -- "$@"
+                ;;
+        esac
+    fi
+    if [ -n "${PICTURA_AGENT_POLICY:-}" ]; then
+        printf 'agent-build: managed shell is outside pictura-agents.slice or its cgroup cannot be read\n' >&2
+        return 2
+    fi
+}
 
 build_lock_env_file() {
     if [ -n "${KOOKA_ENV_FILE:-}" ]; then
@@ -151,6 +174,7 @@ build_lock_acquire() {
     _build_lock_owned=0
     _build_lock_dir=
 
+    [ "$_build_lock_managed" = 0 ] || return 0
     build_lock_enabled || return 0
     if [ "${PICTURA_VERIFY_LOCK_HELD:-}" = "1" ]; then
         return 0

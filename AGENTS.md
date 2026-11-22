@@ -66,6 +66,12 @@ manifest and runs the policy from the main checkout; rebase stale worktrees for
 Claude. The refusal names the wrapper from the policy's own checkout, so a
 stale worktree running main's policy is pointed at main's budgeted wrapper.
 
+Managed Linux agent sessions use the operator-installed `pictura-agents.slice`
+with shared CPU, memory, and swap limits. Submit heavy work in managed
+OpenCode with `python3 /absolute/main/scripts/agent-build.py -- <command>`.
+The queue is shared across worktrees. A queue timeout ends the attempt.
+See DEVELOPING.md for enrollment and the harmless smoke check.
+
 Toolchain is pinned by `rust-toolchain.toml` (1.98). Qt is the system Qt 6
 (`qmake6 -query QT_VERSION`). Cargo links with `lld` (`.cargo/config.toml`);
 CMake links C++ with mold when the compiler accepts it, otherwise lld, otherwise

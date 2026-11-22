@@ -16,14 +16,14 @@
 set -euo pipefail
 
 script_dir=$(cd "$(dirname "$0")" && pwd)
+# shellcheck source=scripts/build-lock.sh
+. "$script_dir/build-lock.sh"
+build_lock_enter_managed "$script_dir/agent-build.py" bash "$script_dir/with-build-lock.sh" "$@"
 if [ -z "${PICTURA_CPU_BUDGET_APPLIED:-}" ]; then
     exec python3 "$script_dir/cpu-budget.py" exec -- \
         bash "$script_dir/with-build-lock.sh" "$@"
 fi
 : "${PICTURA_JOBS:?cpu-budget marker set without PICTURA_JOBS; run the wrapper directly or through scripts/cpu-budget.py}"
-
-# shellcheck source=scripts/build-lock.sh
-. "$script_dir/build-lock.sh"
 
 if [ "${1:-}" = "--" ]; then
     shift

@@ -8,15 +8,15 @@
 set -euo pipefail
 
 script_dir=$(cd "$(dirname "$0")" && pwd)
+# shellcheck source=scripts/build-lock.sh
+. "$script_dir/build-lock.sh"
+build_lock_enter_managed "$script_dir/agent-build.py" bash "$script_dir/verify-full.sh" "$@"
 if [ -z "${PICTURA_CPU_BUDGET_APPLIED:-}" ]; then
     exec python3 "$script_dir/cpu-budget.py" exec -- \
         bash "$script_dir/$(basename "$0")" "$@"
 fi
 : "${PICTURA_JOBS:?cpu-budget marker set without PICTURA_JOBS; run the gate through scripts/cpu-budget.py}"
 cd "$script_dir/.."
-
-# shellcheck source=scripts/build-lock.sh
-. scripts/build-lock.sh
 
 build_lock_install_traps
 build_lock_acquire || exit 1

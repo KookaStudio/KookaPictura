@@ -242,23 +242,20 @@ grep -q 'build_lock_install_traps' "$full" || fail "verify-full does not install
 grep -q 'PICTURA_VERIFY_LOCK_HELD=1' "$full" || fail "verify-full does not export the nesting marker"
 grep -q '_build_lock_owned' "$full" || fail "verify-full does not gate the marker on ownership"
 
-# bl_budget_order: the CPU budget re-exec precedes the lock source in both gates.
-for gate in "$fast" "$full"; do
-    budget_line=$(grep -n 'cpu-budget.py' "$gate" | cut -d: -f1 | head -1)
-    lock_line=$(grep -n '^\. scripts/build-lock.sh' "$gate" | cut -d: -f1 | head -1)
+# bl_budget_order / bl_wrap_budget_order: route managed jobs on entry and
+# apply per-process affinity before acquiring any portable lock.
+for gate in "$fast" "$full" scripts/with-build-lock.sh scripts/test-report.sh; do
+    managed_line=$(grep -n '^build_lock_enter_managed ' "$gate" | cut -d: -f1 | head -1 || true)
+    budget_line=$(grep -n '^    exec python3 .*cpu-budget\.py' "$gate" | cut -d: -f1 | head -1 || true)
+    [ -n "$managed_line" ] || fail "$gate does not route managed jobs"
     [ -n "$budget_line" ] || fail "$gate does not invoke cpu-budget.py"
-    [ -n "$lock_line" ] || fail "$gate does not source build-lock.sh"
-    [ "$budget_line" -lt "$lock_line" ] || fail "$gate invokes cpu-budget.py after sourcing the lock"
+    [ "$managed_line" -lt "$budget_line" ] || fail "$gate applies affinity before managed routing"
+    if [ "$gate" != scripts/test-report.sh ]; then
+        lock_line=$(grep -n '^build_lock_acquire' "$gate" | cut -d: -f1 | head -1 || true)
+        [ -n "$lock_line" ] || fail "$gate does not acquire the portable lock"
+        [ "$budget_line" -lt "$lock_line" ] || fail "$gate acquires the portable lock before applying affinity"
+    fi
 done
-
-# bl_wrap_budget_order: the wrapper budgets before it sources the lock.
-wrap=scripts/with-build-lock.sh
-wrap_budget_line=$(grep -n 'cpu-budget.py' "$wrap" | cut -d: -f1 | head -1)
-wrap_lock_line=$(grep -n '^\. .*build-lock\.sh' "$wrap" | cut -d: -f1 | head -1)
-[ -n "$wrap_budget_line" ] || fail "$wrap does not invoke cpu-budget.py"
-[ -n "$wrap_lock_line" ] || fail "$wrap does not source build-lock.sh"
-[ "$wrap_budget_line" -lt "$wrap_lock_line" ] \
-    || fail "$wrap invokes cpu-budget.py after sourcing the lock"
 
 # bl_timeout: a bounded wait exits non-zero, names the holder, and leaves no lock.
 export PICTURA_VERIFY_LOCK=1 PICTURA_VERIFY_LOCK_TIMEOUT=1
