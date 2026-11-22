@@ -574,9 +574,9 @@ Trust and worktrees:
   checkout, so a Codex session that reads main's policy in a stale worktree is
   pointed at main's budgeted wrapper, which still runs the command in the
   worktree.
-- The Pictura OpenCode project plugin can apply the managed limits to shell
-  calls after a user opt-in. Explicitly enrolled OpenCode uses the absolute
-  policy path exported by the launcher.
+- OpenCode delegates to the same policy. Enrolled OpenCode uses the absolute
+  policy path exported by its launcher. Install the global plugin below so
+  the adapter also runs when the working checkout predates the guard.
 
 `python3 scripts/check-agent-command-guard.py` verifies the three adapters and
 their paths; `scripts/verify-fast.sh` runs it.
@@ -620,26 +620,10 @@ On a 64 GiB, 16-thread workstation, another starting point is
 That sets the shared CPU ceiling to 9.92 logical CPUs' worth of time. Tune
 memory limits using the peak of a single verification run under the slice.
 
-#### Plain OpenCode in Pictura worktrees
-
-On Linux with OpenCode 1.19, add `PICTURA_OPENCODE_MANAGED=1` to
-`${XDG_CONFIG_HOME:-$HOME/.config}/kooka-pictura/env`, or to the file selected
-by `KOOKA_ENV_FILE`. Update the main checkout and the worktrees you use to
-a revision containing the project plugin and restart their local OpenCode
-sessions. Run `opencode` from each Pictura worktree.
-
-OpenCode checks the original command and starts the project Bash wrapper.
-That wrapper puts the shell and its children inside the shared slice and
-queues recognized heavy work. The same opt-in applies to the main checkout
-and its linked worktrees. Each project outside that Git repository keeps its
-own shell configuration.
-
-#### Explicit full-executor enrollment
-
-Use the same absolute helper path from every worktree when you want to run
-the entire local executor in the slice. For OpenCode worktrees that predate
-the guard, you can also install the adapter in the local server's global
-plugin directory. Choose an unused name for the symlink.
+Use the same absolute helper path from every worktree. Configure your
+terminal aliases and desktop shortcuts to use it. For OpenCode, install the
+adapter in the local server's global plugin directory before starting the
+server. Choose an unused name for the symlink.
 
 ```bash
 pictura_opencode_plugins="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins"
@@ -672,11 +656,11 @@ python3 "$pictura_budget_tool" run -- codex app-server --listen "unix://$pictura
 python3 "$pictura_budget_tool" run -- codex --remote "unix://$pictura_budget_socket"
 ```
 
-In explicitly enrolled OpenCode, submit heavy commands through the absolute
-runner. The runner keeps the current working directory and takes one slot
-shared by all worktrees. Verification scripts and the existing build wrapper
-also join the queue when invoked from an enrolled shell. A timeout reports
-the holder and exits. Wait for the holder or cancel it through its runner.
+Submit heavy commands from managed OpenCode through the absolute runner.
+The runner keeps the current working directory and takes one slot shared by
+all worktrees. Verification scripts and the existing build wrapper also
+join the queue when invoked from an enrolled shell. A timeout reports the
+holder and exits. Wait for the holder or cancel it through its runner.
 If the runner was killed, use `systemctl --user stop <scope>` on the reported
 job. The job's scope, working directory, and slice memory-event snapshots
 appear in `journalctl --user -t pictura-agent-build`.
@@ -711,19 +695,14 @@ different worktrees.
    `PICTURA_VERIFY_LOCK=0 PICTURA_VERIFY_LOCK_HELD=1 python3 "$pictura_agent_build" -- pwd`.
    Check that it waits and names the holder. Cancel the first runner with
    Ctrl+C and check that its scope is empty before the second starts.
-3. In project mode, start plain `opencode` in both worktrees and run the
-   status command from each session. While the first session holds the queue
-   with the sleep probe, ask the second session to run `cargo --version`. It
-   should wait and then print the version. For the explicit launcher on a
-   stale worktree, its guard should instead direct a bare Cargo command to
-   the absolute runner.
+3. In OpenCode connected to the enrolled server from a stale worktree, ask
+   it to execute `cargo --version`. The adapter should refuse it and give the
+   absolute runner path. The same command through that runner should succeed.
 
 The managed host controls local executors. Apply separate limits to remote
 executors and independently launched services.
 
-To turn off project mode, remove `PICTURA_OPENCODE_MANAGED=1` and restart the
-local OpenCode sessions. To remove the host setup, close the enrolled
-harnesses and app server, stop the
+To opt out, close the enrolled harnesses and app server, stop the
 `pictura-agents.slice` user unit if a background worker is still running, and
 remove the slice file you installed. Remove the global plugin symlink if it
 was installed for enrollment only. Run `systemctl --user daemon-reload` and
