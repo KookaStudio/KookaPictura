@@ -1,5 +1,5 @@
 //! Per-camera colour matrices for vendor raw files (`codec/camera-matrices`,
-//! #1465) on synthetic CR2s, and, opt-in, real camera files.
+//! #1465, #1469) on synthetic CR2s and NEFs, and, opt-in, real camera files.
 
 use pictura_codec::{
     as_shot_transform, decode_raw_source, read_raw, DngColor, DngImage, ImageBudget, PsdError,
@@ -14,9 +14,13 @@ mod builder;
 mod cr2_builder;
 #[path = "dng/ljpeg_encode.rs"]
 mod ljpeg_encode;
+#[allow(dead_code)]
+#[path = "raw/nef_builder.rs"]
+mod nef_builder;
 
 use builder::{noise_plane, Val};
 use cr2_builder::{cr2, Cr2};
+use nef_builder::{nef, Data, Nef};
 
 const A_XY: [f64; 2] = [0.44757, 0.40745];
 const D65_XY: [f64; 2] = [0.31271, 0.32902];
@@ -38,6 +42,38 @@ const TABLE_MODELS: [&str; 14] = [
     "Canon PowerShot S90",
     "Canon EOS 6D Mark II",
 ];
+
+/// The Exif model names of every Nikon camera the table seeds.
+const NIKON_MODELS: [&str; 13] = [
+    "NIKON D70",
+    "NIKON D200",
+    "NIKON D700",
+    "NIKON D800",
+    "NIKON D800E",
+    "NIKON D810",
+    "NIKON D850",
+    "NIKON D3300",
+    "NIKON D5100",
+    "NIKON D5300",
+    "NIKON D7000",
+    "NIKON Z f",
+    "NIKON Z 6_2",
+];
+
+fn nef_spec(model: &'static str) -> Nef {
+    let mut spec = Nef::new(noise_plane(32, 16, 16383, 8), 14, Data::Containers);
+    spec.ifd0_tags = vec![
+        (271, Val::Ascii("NIKON CORPORATION")),
+        (272, Val::Ascii(model)),
+    ];
+    spec
+}
+
+fn nikon(model: &'static str) -> DngColor {
+    read_raw(&nef(&nef_spec(model)), &ImageBudget::default())
+        .expect("synthetic NEF reads")
+        .color
+}
 
 fn spec(make: Option<&'static str>, model: Option<&'static str>) -> Cr2 {
     let mut spec = Cr2::new(noise_plane(32, 16, 4095, 4), 12);
@@ -109,9 +145,87 @@ fn unknown_cameras_keep_no_matrices() {
 }
 
 #[test]
+fn known_nikon_models_take_fitted_matrices() {
+    for model in NIKON_MODELS {
+        let color = nikon(model);
+        assert!(
+            color.color_matrix.iter().all(Option::is_some),
+            "{model}: {color:?}"
+        );
+        assert_eq!(
+            color.calibration_illuminant,
+            [Some(17), Some(21)],
+            "{model}"
+        );
+    }
+    assert_eq!(
+        nikon("NIKON D800").color_matrix,
+        nikon("NIKON D800E").color_matrix
+    );
+    assert_eq!(
+        nikon("NIKON Z f").color_matrix,
+        nikon("NIKON Z 6_2").color_matrix
+    );
+    assert_ne!(
+        nikon("NIKON D850").color_matrix,
+        nikon("NIKON Z f").color_matrix
+    );
+    assert_eq!(nikon("NIKON D4").color_matrix, [None, None]);
+}
+
+#[test]
+fn proxy_bodies_take_their_siblings_matrices() {
+    for (proxy, sibling) in [
+        ("NIKON D100", nikon("NIKON D70")),
+        ("NIKON D7100", nikon("NIKON D5300")),
+        ("COOLPIX P7100", canon("Canon PowerShot S90")),
+    ] {
+        let color = nikon(proxy);
+        assert!(color.color_matrix.iter().all(Option::is_some), "{proxy}");
+        assert_eq!(color.color_matrix, sibling.color_matrix, "{proxy}");
+    }
+}
+
+#[test]
+fn nef_as_shot_neutral_from_wb_levels() {
+    let as_shot = |wb: Option<Vec<(u32, u32)>>| {
+        let mut spec = nef_spec("NIKON D850");
+        spec.wb = wb;
+        let bytes = nef(&spec);
+        let image = read_raw(&bytes, &ImageBudget::default()).expect("D850 NEF reads");
+        (bytes, image.color.as_shot_neutral)
+    };
+    let (bytes, neutral) = as_shot(Some(vec![(19, 10), (11, 8), (1, 1), (1, 1)]));
+    let neutral = neutral.expect("WB_RBLevels give a neutral");
+    for (got, want) in neutral.iter().zip([1.0 / 1.9, 1.0, 1.0 / 1.375]) {
+        assert!((got - want).abs() <= 1e-9, "{neutral:?}");
+    }
+    let source = decode_raw_source(&bytes, &ImageBudget::default()).expect("D850 NEF decodes");
+    let t = source.as_shot.temperature;
+    assert!((2000.0..=12000.0).contains(&t), "{t} K");
+    assert_eq!(as_shot(Some(vec![(0, 1), (11, 8), (1, 1), (1, 1)])).1, None);
+    assert_eq!(as_shot(None).1, None);
+
+    // The D100 keeps its levels in the version-0100 colour balance.
+    for be in [true, false] {
+        let mut spec = nef_spec("NIKON D100");
+        spec.be = be;
+        spec.color_balance_0100 = Some([581, 436, 256, 256]);
+        let image = read_raw(&nef(&spec), &ImageBudget::default()).expect("D100 NEF reads");
+        let neutral = image.color.as_shot_neutral.expect("colour balance neutral");
+        for (got, want) in neutral.iter().zip([256.0 / 581.0, 1.0, 256.0 / 436.0]) {
+            assert!((got - want).abs() <= 1e-9, "{neutral:?}");
+        }
+    }
+}
+
+#[test]
 fn fitted_matrices_keep_white_neutral() {
-    for model in TABLE_MODELS {
-        let color = canon(model);
+    let colors = TABLE_MODELS
+        .into_iter()
+        .map(|m| (m, canon(m)))
+        .chain(NIKON_MODELS.into_iter().map(|m| (m, nikon(m))));
+    for (model, color) in colors {
         let [Some(a), Some(d65)] = color.color_matrix else {
             panic!("{model} has no matrices");
         };
@@ -195,4 +309,51 @@ fn cr2_corpus_colour_when_present() {
         seen += 1;
     }
     assert!(seen > 0, "PICTURA_RAW_CORPUS holds no .CR2 file");
+}
+
+#[test]
+fn nef_corpus_colour_when_present() {
+    let Some(root) = std::env::var_os("PICTURA_RAW_CORPUS") else {
+        return;
+    };
+    let mut seen = 0;
+    for entry in std::fs::read_dir(&root).expect("corpus directory") {
+        let path = entry.expect("corpus entry").path();
+        if !path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("nef"))
+        {
+            continue;
+        }
+        seen += 1;
+        let bytes = std::fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        let Ok(image) = read_raw(&bytes, &ImageBudget::default()) else {
+            eprintln!("{}: not read", path.display());
+            continue;
+        };
+        let known = image.color.color_matrix.iter().all(Option::is_some);
+        let decoded = decode_raw_source(&bytes, &ImageBudget::default());
+        if known {
+            let source = decoded.unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            let t = source.as_shot.temperature;
+            assert!((2000.0..=12000.0).contains(&t), "{}: {t} K", path.display());
+            eprintln!(
+                "{}: {:?} neutral {:?} as shot {:.0} K tint {:.1}",
+                path.display(),
+                image.model,
+                image.color.as_shot_neutral,
+                t,
+                source.as_shot.tint
+            );
+        } else {
+            assert!(
+                matches!(&decoded, Err(PsdError::Unsupported(m)) if m.contains("camera colour")),
+                "{}: {:?}",
+                path.display(),
+                decoded.err()
+            );
+            eprintln!("{}: {:?} refused", path.display(), image.model);
+        }
+    }
+    assert!(seen > 0, "PICTURA_RAW_CORPUS holds no .NEF file");
 }

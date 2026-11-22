@@ -138,26 +138,50 @@ impl<'a> Tiff<'a> {
             .u64([s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7]]))
     }
 
-    /// Whether the IFD at `offset` lists `tag`, reading only its entry table,
-    /// so a file prefix answers even when the values lie beyond it.
-    pub fn lists_tag(&self, offset: u64, tag: u16) -> bool {
-        let Ok(at) = usize::try_from(offset) else {
-            return false;
-        };
+    /// The position of `tag`'s entry in the IFD at `offset`, reading only its
+    /// entry table, so a file prefix answers even when the values lie beyond it.
+    fn find_entry(&self, offset: u64, tag: u16) -> Option<usize> {
+        let at = usize::try_from(offset).ok()?;
         let (count, first, entry_len) = if self.big {
-            match self.u64_at(at).map(usize::try_from) {
-                Ok(Ok(n)) => (n, at + 8, 20),
-                _ => return false,
-            }
+            let n = usize::try_from(self.u64_at(at).ok()?).ok()?;
+            (n, at + 8, 20)
         } else {
-            match self.u16_at(at) {
-                Ok(n) => (n as usize, at + 2, 12),
-                Err(_) => return false,
-            }
+            (self.u16_at(at).ok()? as usize, at + 2, 12)
         };
         (0..count)
-            .map_while(|i| self.u16_at(first + i * entry_len).ok())
-            .any(|t| t == tag)
+            .map(|i| first + i * entry_len)
+            .map_while(|p| self.u16_at(p).ok().map(|t| (p, t)))
+            .find(|&(_, t)| t == tag)
+            .map(|(p, _)| p)
+    }
+
+    /// Whether the IFD at `offset` lists `tag`, reading only its entry table.
+    pub fn lists_tag(&self, offset: u64, tag: u16) -> bool {
+        self.find_entry(offset, tag).is_some()
+    }
+
+    /// The ASCII value of `tag` in the IFD at `offset`, reading only that
+    /// entry and its value; `None` when either lies beyond the bytes.
+    pub fn ascii_in(&self, offset: u64, tag: u16) -> Option<String> {
+        let p = self.find_entry(offset, tag)?;
+        if self.u16_at(p + 2).ok()? != 2 {
+            return None;
+        }
+        let (count, value_at, inline) = if self.big {
+            (usize::try_from(self.u64_at(p + 4).ok()?).ok()?, p + 12, 8)
+        } else {
+            (self.u32_at(p + 4).ok()? as usize, p + 8, 4)
+        };
+        let at = if count <= inline {
+            value_at
+        } else if self.big {
+            usize::try_from(self.u64_at(value_at).ok()?).ok()?
+        } else {
+            self.u32_at(value_at).ok()? as usize
+        };
+        let raw = self.slice(at, count).ok()?;
+        let end = raw.iter().position(|&b| b == 0).unwrap_or(raw.len());
+        Some(String::from_utf8_lossy(&raw[..end]).trim().to_string())
     }
 
     pub fn ifd(&self, offset: u64) -> Result<Ifd, PsdError> {

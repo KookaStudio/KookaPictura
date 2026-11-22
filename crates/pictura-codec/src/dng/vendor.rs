@@ -1,11 +1,12 @@
 //! The camera raw entry point (#399): names a container by its signature and
-//! reads any supported one into the same normalized CFA image as `read_dng`.
+//! reads any supported one (DNG, Canon CR2, Nikon NEF) into the same
+//! normalized CFA image as `read_dng`.
 //! Also the helpers the TIFF-based vendor containers share.
 
 use super::camera_matrices::CAMERAS;
 use super::levels::Area;
-use super::tiff::{Ifd, Tiff};
-use super::{cr2, read_dng, to_usize, DngColor, DngImage, Tags, DNG_VERSION};
+use super::tiff::{Entry, Ifd, Tiff};
+use super::{cr2, nef, read_dng, to_usize, DngColor, DngImage, Tags, DNG_VERSION};
 use crate::error::PsdError;
 use crate::probe::ImageBudget;
 
@@ -19,6 +20,7 @@ const ILLUMINANT_D65: u16 = 21;
 pub enum RawFormat {
     Dng,
     Cr2,
+    Nef,
 }
 
 /// Names the raw container `bytes` hold, from its signature and, for a DNG,
@@ -29,16 +31,21 @@ pub fn sniff_raw(bytes: &[u8]) -> Option<RawFormat> {
     }
     let (tiff, first) = Tiff::parse(bytes).ok()?;
     let ifd0 = tiff.ifd(first).ok()?;
-    ifd0.get(DNG_VERSION).map(|_| RawFormat::Dng)
+    if ifd0.get(DNG_VERSION).is_some() {
+        return Some(RawFormat::Dng);
+    }
+    nef::is_nef(&tiff, first).then_some(RawFormat::Nef)
 }
 
 /// Whether `prefix`, the start of a file, is a supported raw container. Only
-/// IFD0's entry table is read, so the prefix need not hold its values.
+/// IFD0's entry table (and, for a NEF, its `Make` value) is read, so the
+/// prefix need not hold the other values.
 pub fn sniff_raw_prefix(prefix: &[u8]) -> bool {
     if cr2::is_cr2(prefix) {
         return true;
     }
-    Tiff::parse(prefix).is_ok_and(|(tiff, first)| tiff.lists_tag(first, DNG_VERSION))
+    Tiff::parse(prefix)
+        .is_ok_and(|(tiff, first)| tiff.lists_tag(first, DNG_VERSION) || nef::is_nef(&tiff, first))
 }
 
 /// Reads any supported raw container's full-resolution CFA plane, normalized
@@ -47,20 +54,31 @@ pub fn read_raw(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, PsdError
     match sniff_raw(bytes) {
         Some(RawFormat::Dng) => read_dng(bytes, budget),
         Some(RawFormat::Cr2) => cr2::read_cr2(bytes, budget),
+        Some(RawFormat::Nef) => nef::read_nef(bytes, budget),
         None => Err(PsdError::Unsupported("camera raw format".into())),
     }
 }
 
-/// The maker note of IFD0's Exif IFD read as a bare IFD at its value, with
-/// offsets relative to the file start (Canon's layout).
-pub(super) fn maker_note_ifd(ifd0: &Tags) -> Result<Option<Ifd>, PsdError> {
+/// The maker note entry of IFD0's Exif IFD.
+fn maker_note(ifd0: &Tags) -> Result<Option<Entry>, PsdError> {
     let Some(exif) = ifd0.uint(EXIF_IFD)? else {
         return Ok(None);
     };
     let exif = ifd0.tiff.ifd(exif)?;
-    exif.get(MAKER_NOTE)
+    Ok(exif.entries.into_iter().find(|e| e.tag == MAKER_NOTE))
+}
+
+/// The maker note read as a bare IFD at its value, with offsets relative to
+/// the file start (Canon's layout).
+pub(super) fn maker_note_ifd(ifd0: &Tags) -> Result<Option<Ifd>, PsdError> {
+    maker_note(ifd0)?
         .map(|note| ifd0.tiff.ifd(note.at as u64))
         .transpose()
+}
+
+/// The maker note's bytes.
+pub(super) fn maker_note_bytes<'a>(ifd0: &Tags<'_, 'a>) -> Result<Option<&'a [u8]>, PsdError> {
+    Ok(maker_note(ifd0)?.map(|note| ifd0.tiff.raw(&note)))
 }
 
 /// The mean of the photosites in `mask` (raw-plane coordinates) for each
