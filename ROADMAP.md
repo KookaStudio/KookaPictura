@@ -781,8 +781,6 @@ gaps are the CS6 Extended 3D object and camera tools.
   with a stable per-user verification lock (#1490).
 - [x] **Managed agent resource guards** with memory and swap limits, a shared
   verification queue, and canonical OpenCode policy enforcement (#1529).
-- [x] **Project-scoped OpenCode enrollment** for plain terminal launches from
-  Pictura worktrees (#1529).
 
 ## Specification corpus
 
