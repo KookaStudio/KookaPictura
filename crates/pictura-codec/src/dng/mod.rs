@@ -8,13 +8,16 @@
 //! both kinds (#402).
 //! The demosaic (`demosaic`, #397) and the colour transform
 //! (`as_shot_transform`, #398) consume the result. Vendor containers (#399,
-//! `vendor.rs`, `cr2.rs`) produce the same `DngImage` through `read_raw`.
+//! `vendor.rs`, `cr2.rs`, `nef.rs`, `arw.rs`) produce the same `DngImage` through
+//! `read_raw`.
 
 use rayon::prelude::*;
 
 use crate::error::PsdError;
 use crate::probe::ImageBudget;
 
+mod arw;
+mod arw_decode;
 mod camera_color;
 mod camera_matrices;
 mod cr2;
@@ -23,6 +26,8 @@ mod develop;
 mod levels;
 mod linear;
 mod ljpeg;
+mod nef;
+mod nef_decode;
 mod tiff;
 mod vendor;
 mod write;

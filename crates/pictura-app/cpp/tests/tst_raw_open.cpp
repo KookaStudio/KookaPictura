@@ -220,10 +220,12 @@ std::function<bool(QDialog&)> RawOpenTest::driver(Seen* seen, bool accept)
 void RawOpenTest::openFiltersListCameraRaw()
 {
     const QStringList& filters = openFileFilters();
-    QVERIFY(filters.contains(QStringLiteral("Camera Raw (*.DNG *.CR2)")));
+    QVERIFY(filters.contains(QStringLiteral("Camera Raw (*.DNG *.CR2 *.NEF *.ARW)")));
     const QString all = filters.first();
     QVERIFY(all.contains(QLatin1String("*.DNG")));
     QVERIFY(all.contains(QLatin1String("*.CR2")));
+    QVERIFY(all.contains(QLatin1String("*.NEF")));
+    QVERIFY(all.contains(QLatin1String("*.ARW")));
 }
 
 // raw_open_dialog_ok

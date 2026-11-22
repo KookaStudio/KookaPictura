@@ -185,8 +185,16 @@ fn raw_sniff_detects_by_signature() {
         .expect("DNGVersion entry");
     plain[at..at + 2].copy_from_slice(&0xC5FFu16.to_le_bytes());
     let tiff = write(&dir, "plain.tif", &plain);
+    // A TIFF whose IFD0 names make SONY is a Sony ARW, whatever its name.
+    let mut sony =
+        b"II*\0\x08\0\0\0\x01\0\x0F\x01\x02\0\x05\0\0\0\x1A\0\0\0\0\0\0\0SONY\0".to_vec();
+    let arw = write(&dir, "sony.tif", &sony);
+    sony[26..30].copy_from_slice(b"SANY");
+    let other = write(&dir, "other.tif", &sony);
     let sniff = |p: &Path| raw_sniff_path(&QString::from(p.to_str().unwrap()));
     assert!(sniff(&dng));
+    assert!(sniff(&arw));
+    assert!(!sniff(&other));
     assert!(!sniff(&tiff));
     assert!(!sniff(&dir.join("missing.dng")));
 }

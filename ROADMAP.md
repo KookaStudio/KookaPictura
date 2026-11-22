@@ -32,7 +32,7 @@ The quantified comparison against Photoshop CS6 and CC 28.0 is in
 | Adjustments | Shipped — the classic families, with live preview and adjustment-layer variants |
 | Filters | Shipped — 110 filters across the classic families; the roadmap names the remaining gaps |
 | Colour and painting | Shipped — ICC profiles, Assign Profile, Convert to Profile, colour settings, the brush engine |
-| Camera raw files | DNG/CR2 route ships (approximate); per-camera matrices for 14 Canon bodies ship (#1465); smart-object open (#1466) and vendor containers (#399) remain |
+| Camera raw files | DNG/CR2/NEF/ARW route ships with fitted per-camera matrices (approximate); smart-object open and the other vendor containers remain (#1466, #399) |
 | Panels | 19 of 22 populated; Gradients, Patterns and Styles are placeholders |
 | Automation | The control server, Rust command catalogue, Actions engine, command bus and Batch ship; droplets, scripting and plug-ins are open |
 | HDR tone mapping | Shipped — all four conversion methods; the Local Adaptation Toning Curve/Corner is open |
@@ -470,13 +470,28 @@ gaps are the CS6 Extended 3D object and camera tools.
       from the maker note, black from the masked border) into the same CFA
       plane (#399).
       `crates/pictura-codec/src/dng/vendor.rs`, `crates/pictura-codec/src/dng/cr2.rs`.
+- [x] **Nikon NEF** — `read_raw` reads a NEF: the CFA SubIFD, uncompressed
+      (MSB-packed, LSB-packed or 16-bit containers) or Nikon Huffman-coded
+      (lossless and lossy, with the maker note's linearization curve), black
+      from the maker note, as-shot white balance from `WB_RBLevels`; 11 Nikon
+      bodies take fitted matrices, and the D100, D7100 and Coolpix P7100 a
+      same-sensor sibling's (approximate parity) (#1469).
+      `crates/pictura-codec/src/dng/nef.rs`, `crates/pictura-codec/src/dng/nef_decode.rs`.
+- [x] **Sony ARW** — `read_raw` names a TIFF with make `SONY` as ARW and reads
+      uncompressed, ARW2 block-compressed (through the tone curve) and
+      lossless-JPEG-tiled sensor planes, with the levels and as-shot white
+      balance from the raw IFD or the deciphered SR2 block; ARW 1.0 and the
+      YCbCr small/medium raws are refused (#1470).
+      `crates/pictura-codec/src/dng/arw.rs`, `crates/pictura-codec/src/dng/arw_decode.rs`.
 - [x] **Per-camera colour matrices** — vendor raw files without a
       `ColorMatrix` take A and D65 matrices fitted from openly licensed camera
-      spectral sensitivities (14 Canon CR2 bodies; other cameras are refused),
+      spectral sensitivities (14 Canon CR2 and 11 Nikon NEF bodies, and 11
+      Sony ARW bodies with 3 same-sensor aliases, #1470; other cameras are
+      refused),
       and a CR2 reports its as-shot white balance from the maker note
       (approximate parity) (#1465). `scripts/gen-camera-matrices.py`,
       `crates/pictura-codec/src/dng/camera_matrices.rs`.
-- [x] **Open camera raw files** — File ▸ Open recognises a DNG or CR2 by its
+- [x] **Open camera raw files** — File ▸ Open recognises a DNG, CR2, NEF or ARW by its
       signature, decodes it, shows Pictura Raw first (absolute white balance,
       sidecar or embedded `crs:` settings), and opens a 16-bit RGB document
       (approximate parity) (#400).
@@ -484,9 +499,11 @@ gaps are the CS6 Extended 3D object and camera tools.
       `crates/pictura-app/src/cxxqt_object/open_jobs/raw_open.rs`.
 - [ ] Open a raw file as a smart object (Shift+Open Image) (#1466)
 - [ ] CR2 CFA phase for the EOS 600D, so it takes its colour matrices (#1476)
+- [ ] Colour for the Sony bodies the matrix table does not seed yet (#1525)
 - [ ] X-Trans-tuned demosaic, with the Fuji container (#399)
 - [ ] Deflate, PackBits and lossy-JPEG DNGs and floating-point samples (#396)
-- [ ] Vendor raw containers: NEF, ARW/ARW2, ORF, RW2 and CR3 (#399)
+- [ ] Vendor raw containers: ORF, RW2 and CR3 (#399)
+- [ ] Every Nikon camera opens with colour: verify each layout, colour sources for ~70 bodies, recent models first (#1498)
 - [x] **DNG output** — Save Image… in the raw open's Pictura Raw dialog writes
       a mosaic DNG (lossless-JPEG tiles) or, with Convert to Linear Image, a
       linear DNG, with the colour tags, crop, orientation, the dialog's

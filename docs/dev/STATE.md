@@ -15,6 +15,56 @@ Snapshot for resuming after a context break. Update after each milestone.
   store, so a crop with `Delete Cropped Pixels` off is recoverable in one
   history state. Tests: `tst_crop_options`, `tst_image_ops`, and the
   `pictura-render::document_ops::crop` unit tests.
+- **Vendor raw containers — Sony ARW, #1470 implemented** (OpenSpec change
+  `vendor-raw-arw`, archived; `codec/vendor-raw-containers`,
+  `codec/camera-matrices` and `document/raw-open` modified). ARW files open.
+  `dng/arw.rs`: a TIFF without `DNGVersion` whose IFD0 `Make` starts `SONY`
+  is ARW (`tiff::ascii_in`, shared with NEF); the raw
+  SubIFD is read uncompressed (16-bit words), ARW2 (compression 32767, one
+  byte per photosite, `arw_decode`: 16-byte blocks of max/min/indices/7-bit
+  deltas, tone curve `0x7010` as the `Levels` linearization table on the
+  14-bit scale) or lossless (compression 7, 512² tiles, each four-component
+  frame sample one 2 × 2 quad — `decode_quad_tiles`; the row-pair placement
+  scrambled the CFA). Levels/WB: raw IFD `0x7310`/`0xC61D`/`0x7313` first,
+  else the SR2 block (IFD0 `0xC634` → SR2Private `0x7200/0x7201/0x7221`,
+  deciphered in-house, `0x7310`/`0x7300`, min of `0x787F`, `0x7313`/GRBG
+  `0x7303`). Area = plane, cut to `0x7038` for padded tiles; crop
+  `0xC61F/0xC620`. Refused: ARW 1.0 (A100: SubIFD points at data), YCbCr
+  small/medium lossless, packed uncompressed. 11 rawtoaces Sony bodies + 3
+  aliases in `gen-camera-matrices.py`. Checked on 27 raw.pixls.us files
+  (A100 … A1): every CFA file reads with matching greens, the A7R II's 12-bit
+  compressed and 14-bit uncompressed shots of one scene agree within 0.5 %,
+  table cameras decode at 3900–5900 K. Open dialog filters list `*.ARW`.
+  Tests: `tests/raw_arw.rs` (synthetic
+  `tests/raw/arw_builder.rs`), Sony rows of `tests/raw_camera_matrices.rs`,
+  `arw_decode` unit tests, `raw_open/tests.rs`, `tst_raw_open`. Series next: ORF/RW2 → RAF + X-Trans → CR3.
+- **Vendor raw containers — #1469 Nikon NEF implemented** (OpenSpec change
+  `vendor-raw-nef`, archived; `codec/vendor-raw-containers`,
+  `codec/camera-matrices` and `document/raw-open` modified). NEF files open.
+  `sniff_raw` names `RawFormat::Nef` (TIFF, no `DNGVersion`, IFD0 lists
+  `SubIFDs`, `Make` starts `NIKON`; `Tiff::ascii_in` keeps the 256 KiB prefix
+  sniff working). `dng/nef.rs`: first SubIFD with subfile 0 + CFA photometric;
+  Nikon maker note = embedded TIFF at byte 10. Compression 1: 16-bit
+  containers in file order when a strip holds 2 bytes/sample, else MSB-packed
+  (DNG `decode_plane`); 34713 + tag `0x0096`: Nikon Huffman
+  (`dng/nef_decode.rs`, `ljpeg::Bits::plain` without byte stuffing; six code
+  tables taken as format facts by owner decision, see assets/PROVENANCE.md;
+  stepped `0x44 0x20` and listed curves, split row at byte 562); 34713
+  without it: by exact strip size, LSB-packed (D850 12-bit uncompressed) or
+  16-byte groups of ten MSB samples + a pad byte (D100), else refused. Packed
+  compression 1 is an MSB stream of 32-bit words in file order (word-swapped
+  in little-endian Coolpix NRW). `NEFCompression` 8/13/14
+  refused. Black = `0x003D` on a 14-bit scale × `2^(bits−14)`; white
+  `2^bits − 1`; whole plane active. As-shot neutral from `0x000C`
+  `WB_RBLevels`. 11 Nikon bodies (+ D800, Z 6_2 aliases) in the generated
+  matrix table, plus proxy rows (owner decision) for bodies without open
+  sensitivities: D100 → D70 (ICX413), D7100 → D5300 (lower confidence),
+  Coolpix P7100 → PowerShot S90 (ICX685), `PROXIES` in the script. Checked on 20 real NEFs (D70, D100, D200, D700, D800E, D850 ×7
+  variants, D3300, D5100 ×2, D7000 ×2, D7100, Z f, Coolpix P7100 NRW): all read, green phases agree, the
+  six D850 variants agree on phase means, as-shot 4600–5950 K (D5100 tint
+  ≈ −66). Tests: `tests/raw_nef.rs` (synthetic `tests/raw/nef_builder.rs`
+  with a closed-loop Huffman encoder), `tests/raw_camera_matrices.rs`,
+  `tst_raw_open`. Series order next: ARW → ORF/RW2 → RAF + X-Trans → CR3.
 - **Interface localization — #642 implemented** (OpenSpec change
   `ui-localization`, archived). Pictura bundles German and Finnish catalogs.
   Preferences → Interface selects the startup language, imports community
