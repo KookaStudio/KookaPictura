@@ -276,15 +276,16 @@ that fan-out global.
 A standalone `#[cxx_qt::bridge]` file that exposes at least one `extern "Rust"` or
 `extern "RustQt"` function and two or fewer SHALL NOT exist. Its declarations SHALL
 live in a domain-neighbour bridge file, its `imp` module SHALL be re-homed (or the file
-SHALL remain as a plain, non-bridge module), and the build script's bridge-file list
-SHALL reflect the folded set. A bridge module that only imports `extern "C++"`
-functions (no `extern "Rust"`/`extern "RustQt"` function) is exempt.
+SHALL remain as a plain, non-bridge module), and the build script's inputs SHALL reflect
+the folded set. A bridge module that only imports `extern "C++"` functions (no
+`extern "Rust"`/`extern "RustQt"` function) is exempt.
 
 #### Scenario: The small bridges are gone
 
 - **WHEN** the bridge files are counted and each is inspected for exposed functions
 - **THEN** every bridge that exposes at least one Rust/RustQt function declares more
-  than two, import-only bridges are exempt, and the bridge count is `<= 69`
+  than two, import-only bridges are exempt, and the bridge count does not exceed the
+  budget the ratchet records
 
 #### Scenario: A folded verb keeps its call sites working
 
@@ -297,8 +298,11 @@ functions (no `extern "Rust"`/`extern "RustQt"` function) is exempt.
 
 A repository check SHALL fail when a C++ file outside `cpp/api/` includes a generated
 `*.cxxqt.h` (except the type bridge headers governed by the existing type-adapter
-requirement), when the bridge-file count exceeds 69, or when
-`crates/pictura-app/src/cxxqt_object.rs` exceeds 1,204 lines. The check SHALL run from
+requirement), when the bridge-file count exceeds the recorded budget, or when
+`crates/pictura-app/src/cxxqt_object.rs` exceeds the ceiling recorded for it. The
+budget and ceiling SHALL record the shipped tree: the bridge-file budget is 74 files
+and the `cxxqt_object.rs` ceiling is 1,204 lines. Both SHALL only shrink. The check
+SHALL verify that `build.rs` names no bridge source inline, and SHALL run from
 `scripts/verify-fast.sh`.
 
 #### Scenario: A new direct generated include fails the gate
@@ -309,5 +313,77 @@ requirement), when the bridge-file count exceeds 69, or when
 
 #### Scenario: Bridge growth fails the gate
 
-- **WHEN** a change adds a bridge file or grows `cxxqt_object.rs` past 1,204 lines
+- **WHEN** a change adds a bridge file beyond the recorded budget or grows `cxxqt_object.rs` past its ceiling
 - **THEN** `scripts/verify-fast.sh` fails
+
+### Requirement: Bridge registration is a checked-in list, not hand-edited build code
+
+The set of Rust sources the cxx-qt build script generates code for SHALL be
+recorded in a checked-in, generated file outside `build.rs`, and `build.rs` SHALL
+read that file rather than naming its sources inline. The file SHALL list exactly
+the files carrying a `#[cxx_qt::bridge]` module, sorted, with no entries for
+files that carry none. It SHALL be regenerated only by an explicit command, and
+SHALL NOT be edited by hand.
+
+A Rust test run by `scripts/verify-fast.sh` SHALL fail when the checked-in list
+and the bridge sources disagree, naming the unlisted and the stale entries.
+Because a bridge that is absent from the list would silently lose its generated
+headers, that test SHALL be the gate rather than a build-time discovery step.
+Adding a bridge SHALL require creating its Rust source, recording its generated
+header in a domain membrane, and regenerating the list; it SHALL NOT require
+editing `build.rs`.
+
+The build script SHALL watch the checked-in list and the bridge sources the list
+names, and SHALL NOT watch any other file under `crates/pictura-app/src/`, so an
+edit to a non-bridge source does not rerun it. The hand-written C++ edges a
+bridge includes SHALL stay tracked.
+
+#### Scenario: A new bridge needs no build-script edit
+- **WHEN** a change adds a Rust source carrying a `#[cxx_qt::bridge]` module, records its generated header in a domain membrane, and regenerates the bridge list
+- **THEN** the build generates and compiles that bridge without any edit to the cxx-qt build script
+
+#### Scenario: An unlisted bridge fails the gate
+- **WHEN** a file carrying a bridge module is absent from the checked-in list, or the list names a file carrying none
+- **THEN** the Rust test run by `scripts/verify-fast.sh` fails and names the offending file
+
+#### Scenario: A non-bridge source edit does not rerun the build script
+- **WHEN** a Rust source that carries no bridge module changes
+- **THEN** the cxx-qt build script does not rerun and the generated headers keep their modification times
+
+### Requirement: A checked-in verb manifest records every declared verb
+
+The repository SHALL carry a generated, checked-in manifest listing every verb
+declared in a bridge module — each function in an `extern "Rust"` or
+`extern "RustQt"` block, including `#[qinvokable]` and `#[qsignal]` items. Each
+row SHALL name the verb as C++ sees it (its `#[cxx_name]` override when one is
+declared, otherwise its Rust name), its kind (free function, invokable, or
+signal), the generated bridge header that declares it, and the membrane or
+adapter header under `cpp/api/` that owns that generated header. The manifest
+SHALL be sorted deterministically and SHALL NOT be edited by hand.
+
+A Rust test run by `scripts/verify-fast.sh` SHALL regenerate the manifest from
+the bridge sources and fail when the checked-in file differs, naming the missing,
+extra, and changed rows. The test SHALL offer a way to rewrite the checked-in
+file so a genuine change can be blessed. Because the manifest is checked in and
+not generated by the build, no CMake or build-order step is added, and the
+manifest SHALL NOT be read at runtime.
+
+#### Scenario: A verb's owning header is discoverable from the manifest
+- **WHEN** a caller needs to know which header under `cpp/api/` exposes a named verb
+- **THEN** the verb's row in the manifest names the owning membrane or adapter header
+
+#### Scenario: A renamed verb is visible without reading generated headers
+- **WHEN** a verb declares a `#[cxx_name]` different from its Rust name
+- **THEN** its manifest row carries the C++ name, so the mapping is readable from the manifest alone
+
+#### Scenario: A verb added, removed, or renamed fails the drift test
+- **WHEN** a bridge source gains, loses, or renames a verb and the checked-in manifest is not regenerated
+- **THEN** `scripts/verify-fast.sh` fails and names the row that drifted
+
+#### Scenario: The manifest matches the tree when blessed
+- **WHEN** the manifest is regenerated after a genuine verb change and the test is rerun
+- **THEN** the drift test passes and every declared verb has exactly one row
+
+#### Scenario: The manifest changes no runtime behavior
+- **WHEN** the manifest is added or regenerated
+- **THEN** the generated C++ interface, the self-test tokens, and the exit codes are unchanged
