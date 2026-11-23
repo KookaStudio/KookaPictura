@@ -4,13 +4,9 @@
 #include "api/document_api.h"
 #include "api/layer_comps_api.h"
 #include "api/layers_bridge.h"
-#include "busy_job.h"
 
 #include <QtCore/QDir>
 #include <QtCore/QFileInfo>
-#include <QtCore/QPointer>
-#include <QtCore/QStringList>
-#include <QtCore/QVector>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDialogButtonBox>
@@ -22,8 +18,6 @@
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QDialog>
-
-#include <memory>
 
 namespace pictura {
 
@@ -103,23 +97,6 @@ private:
     QCheckBox* icc_ = nullptr;
 };
 
-namespace {
-
-struct Target {
-    int id = -1;
-    QString path;
-};
-
-struct BatchState {
-    QVector<Target> targets;
-    int next = 0;
-    bool cancelled = false;
-    bool failed = false;
-    QString failing;
-};
-
-} // namespace
-
 QString layerCompsSuffix(const QString& format)
 {
     if (format == QLatin1String("JPEG")) {
@@ -137,89 +114,39 @@ QString layerCompsSuffix(const QString& format)
     return QStringLiteral(".psd");
 }
 
+ExportBatchSpec layerCompsExportBatchSpec(PictureView& view, QWidget* parent,
+                                          const QString& folder, const QString& prefix,
+                                          const QString& format, bool includeIcc)
+{
+    ExportBatchSpec spec;
+    spec.parent = parent;
+    spec.view = &view;
+    spec.title = QCoreApplication::translate("PicturaUi", "Layer Comps to Files");
+    spec.destination = folder;
+    spec.suffix = layerCompsSuffix(format);
+    spec.targetsText = layer_comps_api::exportTargets(view, prefix);
+    spec.destinationFailureText =
+        QCoreApplication::translate("PicturaUi", "The destination folder is not writable.");
+    spec.emptyInfoText = QCoreApplication::translate("PicturaUi", "This document has no layer comps.");
+    spec.write = [format, includeIcc](PictureView& targetView, const ExportTarget& target) {
+        return layer_comps_api::exportFile(targetView, target.key.toInt(), format, includeIcc,
+                                           target.path);
+    };
+    spec.failureText = [](const ExportTarget& target) {
+        return QCoreApplication::translate("PicturaUi", "Could not write %1.")
+            .arg(target.path);
+    };
+    return spec;
+}
+
 bool exportLayerComps(PictureView* view, const QString& folder, const QString& prefix,
                       const QString& format, bool includeIcc, QWidget* parent)
 {
     if (!view || !view->has_document()) {
         return false;
     }
-    const QFileInfo destination(folder);
-    if (!destination.isDir() || !destination.isWritable()) {
-        if (parent) {
-            QMessageBox::warning(parent, QCoreApplication::translate("PicturaUi", "Layer Comps to Files"),
-                                 QCoreApplication::translate("PicturaUi", "The destination folder is not writable."));
-        }
-        return false;
-    }
-    const QString targetsText = layer_comps_api::exportTargets(*view, prefix);
-    if (targetsText.isEmpty()) {
-        if (parent) {
-            QMessageBox::information(parent, QCoreApplication::translate("PicturaUi", "Layer Comps to Files"),
-                                     QCoreApplication::translate("PicturaUi", "This document has no layer comps."));
-        }
-        return false;
-    }
-    const QString suffix = layerCompsSuffix(format);
-    auto state = std::make_shared<BatchState>();
-    for (const QString& line : targetsText.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
-        const int tab = line.indexOf(QLatin1Char('\t'));
-        if (tab <= 0) {
-            continue;
-        }
-        const int id = line.left(tab).toInt();
-        const QString output = folder + QLatin1Char('/') + line.mid(tab + 1) + suffix;
-        if (QFileInfo(output).isDir()) {
-            state->failed = true;
-            state->failing = output;
-            break;
-        }
-        state->targets.append({id, output});
-    }
-    if (state->failed || state->targets.isEmpty()) {
-        if (parent && state->failed) {
-            QMessageBox::warning(parent, QCoreApplication::translate("PicturaUi", "Layer Comps to Files"),
-                                 QCoreApplication::translate("PicturaUi", "Could not write %1.").arg(state->failing));
-        }
-        return false;
-    }
-
-    const QPointer<PictureView> viewGuard(view);
-    const QPointer<QWidget> parentGuard(parent);
-    return runCancellableJob(
-        parent, QCoreApplication::translate("PicturaUi", "Layer Comps to Files"), QCoreApplication::translate("PicturaUi", "Writing files…"), [state] { return true; },
-        [state, viewGuard, format, includeIcc] {
-            if (state->cancelled || state->failed || state->next >= state->targets.size()) {
-                return false;
-            }
-            if (!viewGuard) {
-                state->failed = true;
-                return false;
-            }
-            const Target& target = state->targets[state->next];
-            if (!layer_comps_api::exportFile(*viewGuard.data(), target.id, format, includeIcc,
-                                             target.path)) {
-                state->failed = true;
-                state->failing = target.path;
-                return false;
-            }
-            ++state->next;
-            return state->next < state->targets.size();
-        },
-        [state] {
-            return state->targets.isEmpty() ? 1000
-                                            : state->next * 1000 / int(state->targets.size());
-        },
-        [state] { state->cancelled = true; },
-        [state, parentGuard] {
-            if (!state->cancelled && !state->failed) {
-                return true;
-            }
-            if (state->failed && parentGuard) {
-                QMessageBox::warning(parentGuard.data(), QCoreApplication::translate("PicturaUi", "Layer Comps to Files"),
-                                     QCoreApplication::translate("PicturaUi", "Could not write %1.").arg(state->failing));
-            }
-            return false;
-        });
+    return exportBatch(
+        layerCompsExportBatchSpec(*view, parent, folder, prefix, format, includeIcc));
 }
 
 bool exportLayerCompsFromView(QWidget* parent, PictureView* view)
