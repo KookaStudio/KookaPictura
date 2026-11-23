@@ -47,6 +47,9 @@ public:
     // Row index of the active layer's mask channel, or -1 when it has none.
     int maskRowIndexForTest() const;
     void toggleChannelForTest(int index);
+    // Toggle the row whose published shortcut ends in `digit` (`Ctrl+2`…).
+    // Returns whether a row matched; a non-working row is consumed but inert.
+    bool toggleChannelForShortcut(int digit);
     void selectChannelForTest(int index);
     // Hover the row at `index` with `mods` held and return the viewport cursor's
     // shape; also drives the Ctrl select-all overlay.
