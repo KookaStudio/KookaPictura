@@ -4,6 +4,7 @@
 
 #include <QtTest/QtTest>
 
+#include "api/layers_bridge.h"
 #include "api/transform_api.h"
 #include "commands.h"
 #include "frame.h"
@@ -24,6 +25,7 @@ private slots:
     void menuCommands();
     void alignToSelection();
     void moveToolButtons();
+    void shapeLayers();
 
 private:
     // Three 6x6 squares at (2, 4), (8, 12), (26, 24); returns their paths in
@@ -32,6 +34,8 @@ private:
     QAction* leaf(const QString& submenu, const QString& edge) const;
     // The layer's rect offset as (left, top).
     QPoint offset(const QString& path) const;
+    // A layer's ink box as Align computes it.
+    QRect contentRect(const QString& path) const;
     void select(const QStringList& paths);
 
     pictura::test::ScopedStateHome stateHome_;
@@ -89,6 +93,12 @@ QPoint AlignDistributeTest::offset(const QString& path) const
 {
     const QStringList parts = pictura::transform_api::layerRect(*view_, path).toString().split(QLatin1Char(' '));
     return parts.size() == 4 ? QPoint(parts[0].toInt(), parts[1].toInt()) : QPoint(-999, -999);
+}
+
+QRect AlignDistributeTest::contentRect(const QString& path) const
+{
+    const pictura::transform_api::LayerRect rect = pictura::transform_api::contentRect(*view_, path);
+    return rect.valid ? QRect(rect.left, rect.top, rect.width(), rect.height()) : QRect();
 }
 
 void AlignDistributeTest::select(const QStringList& paths)
@@ -187,6 +197,69 @@ void AlignDistributeTest::moveToolButtons()
     QCOMPARE(view_->history_label(view_->history_index()),
              QStringLiteral("Distribute Top Edges"));
     QCOMPARE(offset(squares[1]), QPoint(-6, 2));
+}
+
+void AlignDistributeTest::shapeLayers()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Shapes"), 100, 100, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(view_ && panel_);
+
+    const auto addShape = [this](int x0, int y0, int x1, int y1) {
+        pictura::ShapeSpec spec{};
+        spec.kind = 0;
+        spec.boxed = true;
+        spec.x0 = x0;
+        spec.y0 = y0;
+        spec.x1 = x1;
+        spec.y1 = y1;
+        return pictura::shape_add_layer(*view_, spec, 0xffff0000u);
+    };
+    const QString first = addShape(10, 10, 20, 20);
+    const QString middle = addShape(40, 50, 50, 60);
+    const QString last = addShape(90, 20, 100, 30);
+    QVERIFY(!first.isEmpty() && !middle.isEmpty() && !last.isEmpty());
+    QCoreApplication::processEvents();
+    const QStringList shapes{first, middle, last};
+
+    QAction* alignTop = leaf(QStringLiteral("Align"), QStringLiteral("Top"));
+    QAction* distributeLeft = leaf(QStringLiteral("Distribute"), QStringLiteral("Left"));
+    QVERIFY(alignTop && distributeLeft);
+    window_->setActiveTool(pictura::ToolId::Move);
+    auto* alignLeft = window_->findChild<QToolButton*>(QStringLiteral("optionsAlignLeft"));
+    auto* distributeTop = window_->findChild<QToolButton*>(QStringLiteral("optionsDistributeTop"));
+    QVERIFY(alignLeft && distributeTop);
+
+    select({first, middle});
+    QVERIFY(alignTop->isEnabled());
+    QVERIFY(alignLeft->isEnabled());
+    QVERIFY(!distributeLeft->isEnabled());
+    QVERIFY(!distributeTop->isEnabled());
+
+    select(shapes);
+    QVERIFY(distributeLeft->isEnabled());
+    QVERIFY(distributeTop->isEnabled());
+    QCOMPARE(contentRect(first), QRect(10, 10, 10, 10));
+    QCOMPARE(contentRect(middle), QRect(40, 50, 10, 10));
+    QCOMPARE(contentRect(last), QRect(90, 20, 10, 10));
+
+    alignTop->trigger();
+    QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Align Top Edges"));
+    for (const QString& shape : shapes) {
+        QCOMPARE(contentRect(shape).top(), 10);
+    }
+    // The fill layer's own rect is the canvas and does not move.
+    QCOMPARE(offset(first), QPoint(0, 0));
+
+    QVERIFY(view_->undo());
+    distributeLeft->trigger();
+    QCOMPARE(view_->history_label(view_->history_index()),
+             QStringLiteral("Distribute Left Edges"));
+    QCOMPARE(contentRect(first).left(), 10);
+    QCOMPARE(contentRect(middle).left(), 50);
+    QCOMPARE(contentRect(last).left(), 90);
 }
 
 QTEST_MAIN(AlignDistributeTest)

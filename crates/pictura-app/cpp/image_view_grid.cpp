@@ -36,6 +36,24 @@ void ImageView::setTargetPathVisible(bool on)
     update();
 }
 
+void ImageView::setTargetPathFollowsMove(bool on)
+{
+    if (targetPathFollowsMove_ == on) {
+        return;
+    }
+    targetPathFollowsMove_ = on;
+    update();
+}
+
+QPainterPath ImageView::targetPathCurve() const
+{
+    QPainterPath curve = targetPathOverlay_.curve;
+    if (movePreviewActive_ && movePreviewMovesLayer_ && targetPathFollowsMove_) {
+        curve.translate(qRound(moveDelta_.x()), qRound(moveDelta_.y()));
+    }
+    return curve;
+}
+
 void ImageView::setLayerEdges(const QRectF& rect)
 {
     if (layerEdges_ == rect) {
@@ -130,7 +148,7 @@ void ImageView::paintTargetPathOverlay(QPainter& painter)
     painter.setClipping(false);
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setBrush(Qt::NoBrush);
-    const QPainterPath curve = toWidget.map(targetPathOverlay_.curve);
+    const QPainterPath curve = toWidget.map(targetPathCurve());
     painter.setPen(QPen(Qt::white, 2.6));
     painter.drawPath(curve);
     painter.setPen(QPen(QColor(0x2c, 0x6f, 0xd6), 1.1));
@@ -138,9 +156,18 @@ void ImageView::paintTargetPathOverlay(QPainter& painter)
     painter.restore();
 }
 
+QRectF ImageView::layerEdgesRect() const
+{
+    if (!movePreviewActive_ || !movePreviewMovesLayer_) {
+        return layerEdges_;
+    }
+    return layerEdges_.translated(QPointF(qRound(moveDelta_.x()), qRound(moveDelta_.y())));
+}
+
 void ImageView::paintLayerEdges(QPainter& painter)
 {
-    if (!layerEdgesVisible_ || layerEdges_.isNull()) {
+    const QRectF edges = layerEdgesRect();
+    if (!layerEdgesVisible_ || edges.isNull()) {
         return;
     }
     const QTransform toWidget = QTransform::fromScale(zoom_, zoom_)
@@ -151,7 +178,7 @@ void ImageView::paintLayerEdges(QPainter& painter)
     painter.setRenderHint(QPainter::Antialiasing, false);
     painter.setBrush(Qt::NoBrush);
     painter.setPen(QPen(QColor(0x2c, 0x6f, 0xd6), 1.0, Qt::DashLine));
-    painter.drawRect(toWidget.mapRect(layerEdges_));
+    painter.drawRect(toWidget.mapRect(edges));
     painter.restore();
 }
 

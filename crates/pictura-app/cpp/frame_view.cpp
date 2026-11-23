@@ -256,6 +256,9 @@ void PicturaMainWindow::refreshViewOverlays()
 void PicturaMainWindow::refreshTargetPathOverlay(const DocWindow& window)
 {
     ImageView* canvas = window.canvas;
+    if (!canvas) {
+        return;
+    }
     const bool editingHere = pathToolActive() && tools_->canvas() == canvas;
     canvas->setPathOverlayVisible(effectiveExtra(command_ids::ViewShowTargetPath, true));
     const bool visible = effectiveExtra(command_ids::ViewShowTargetPath, showTargetPath_)
@@ -267,6 +270,10 @@ void PicturaMainWindow::refreshTargetPathOverlay(const DocWindow& window)
     }
     const bool shapeTarget = paths_active(*view) == -2;
     const bool hadLayerTarget = path_layer_target(*view);
+    const QString target = view->active_layer_path();
+    canvas->setTargetPathFollowsMove(
+        (shapeTarget || hadLayerTarget) && !target.isEmpty()
+        && shape_is_shape(*view, target));
     if (shapeTarget != hadLayerTarget) {
         path_set_layer_target(*view, shapeTarget);
     }

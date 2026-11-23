@@ -208,10 +208,12 @@ toggle.
 
 `View > Show > Layer Edges` SHALL be a checkable command, on by default. When on,
 the canvas SHALL outline the active layer's content bounds with a thin
-non-printing border that follows pan, zoom and view rotation. A target change or
-a document edit SHALL update the outline; no active layer or an empty content
-rect SHALL draw nothing. Extras off SHALL hide the outline without changing the
-Show toggle.
+non-printing border that follows pan, zoom and view rotation. A target change, a
+layer selection, or a document edit SHALL update the outline; while the Move tool
+previews a layer move, the outline SHALL follow the preview offset, and a
+selection-content move SHALL leave it in place. No active layer or an empty
+content rect SHALL draw nothing. Extras off SHALL hide the outline without
+changing the Show toggle.
 
 #### Scenario: The active layer is outlined [vm_layer_edges]
 
@@ -228,6 +230,16 @@ Show toggle.
 - **WHEN** the active layer's pixels change so its content bounds grow
 - **THEN** the outline updates to the new content rect
 
+#### Scenario: Dragging a layer moves its outline [vm_layer_edges_drag]
+
+- **WHEN** the Move tool drags a shape layer with Layer Edges on
+- **THEN** the dashed outline follows the preview offset during the drag and lands at the committed content bounds
+
+#### Scenario: Selecting another layer moves the outline [vm_layer_edges_active]
+
+- **WHEN** the Layers panel selects a different shape layer with Layer Edges on
+- **THEN** the dashed outline shows the newly selected layer's content bounds before any document edit
+
 ### Requirement: Target Path overlay
 
 `View > Show > Target Path` SHALL be a checkable command, on by default. When on
@@ -235,9 +247,11 @@ and a non-path tool is active, the canvas SHALL draw the Paths panel's active
 path (Work Path, saved path, or shape layer path) as a curve following pan, zoom
 and view rotation. The path tools SHALL keep their editing overlay with anchors
 and handles, and the base curve SHALL NOT draw while a path-editing tool is
-active. A target change or path edit SHALL update the curve; no active path or an
-empty path SHALL draw nothing. Extras off SHALL hide the curve without changing
-the Show toggle.
+active. A target change, a path edit, a layer selection, or a move or transform
+of the layer whose outline is the target SHALL update the curve; while the Move
+tool previews such a layer, the curve SHALL follow the preview offset. No active
+path or an empty path SHALL draw nothing. Extras off SHALL hide the curve without
+changing the Show toggle.
 
 #### Scenario: The target path shows with another tool [vm_target_path]
 
@@ -258,6 +272,21 @@ the Show toggle.
 
 - **WHEN** the Pen or Path Selection tool is active with Target Path on
 - **THEN** only the tool's editing overlay is drawn, with no duplicate base curve
+
+#### Scenario: Moving a shape layer moves its target path [vm_target_path_layer_move]
+
+- **WHEN** a shape layer's outline is the target path and the Move tool moves the layer
+- **THEN** the persistent curve follows the moved outline
+
+#### Scenario: Dragging a shape layer moves its target path [vm_target_path_layer_drag]
+
+- **WHEN** a shape layer's outline is the target path and the Move tool drags the layer
+- **THEN** the persistent curve follows the preview offset during the drag and lands at the committed position
+
+#### Scenario: Selecting another shape layer moves the target path [vm_target_path_active_layer]
+
+- **WHEN** the Layers panel selects a different shape layer whose outline is the target path
+- **THEN** the persistent curve shows the newly selected layer's outline before any document edit
 
 ### Requirement: Color sampler gating
 

@@ -247,6 +247,14 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck,
         if (tools_) {
             tools_->syncTransformControls();
         }
+        // A new active layer changes the Target Path and the Layer Edges box,
+        // even before the next document edit.
+        if (const DocWindow* window = documents_->activeWindow()) {
+            if (window->doc) {
+                refreshLayerEdges(*window->doc);
+            }
+            refreshTargetPathOverlay(*window);
+        }
     });
 
     // Double-clicking the empty workspace (no documents open) opens the Open

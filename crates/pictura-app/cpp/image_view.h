@@ -309,7 +309,8 @@ public:
     void beginMovePreview(const QImage& base, const QImage& layer, const QPointF& layerPos,
                           double opacity, std::optional<QPoint> basePos = std::nullopt,
                           int scale = 1, const QImage& above = QImage(),
-                          std::optional<QPoint> abovePos = std::nullopt, int aboveScale = 1);
+                          std::optional<QPoint> abovePos = std::nullopt, int aboveScale = 1,
+                          bool movesLayer = false);
     // Replace the moving image mid-drag (a view preview that followed the drag).
     void setMovePreviewLayer(const QImage& layer, const QPointF& layerPos);
     void setMovePreviewDelta(const QPointF& delta);
@@ -541,12 +542,16 @@ public:
     // tool overlay above keeps its anchors and handles.
     void setTargetPathOverlay(const PathOverlay& overlay);
     void setTargetPathVisible(bool on);
+    // Whether the target path is the active layer's own outline, so a Move
+    // preview carries it with the layer.
+    void setTargetPathFollowsMove(bool on);
     bool targetPathVisibleForTest() const { return targetPathVisible_; }
     const PathOverlay& targetPathOverlayForTest() const { return targetPathOverlay_; }
+    QPainterPath targetPathCurveForTest() const { return targetPathCurve(); }
     // View > Show > Layer Edges: the active layer's content box.
     void setLayerEdges(const QRectF& rect);
     void setLayerEdgesVisible(bool on);
-    QRectF layerEdgesForTest() const { return layerEdges_; }
+    QRectF layerEdgesForTest() const { return layerEdgesRect(); }
     bool layerEdgesVisibleForTest() const { return layerEdgesVisible_; }
     // View > Show > Grid and Pixel Grid.
     void setGrid(bool visible, const QColor& color, int style, double everyX, double everyY,
@@ -780,7 +785,9 @@ private:
     void paintGuides(QPainter& painter);
     void paintSmartGuides(QPainter& painter);
     void paintTargetPathOverlay(QPainter& painter);
+    QPainterPath targetPathCurve() const;
     void paintLayerEdges(QPainter& painter);
+    QRectF layerEdgesRect() const;
     void paintGrid(QPainter& painter);
     void paintPixelGrid(QPainter& painter);
     QString formatGuideDistance(double documentPixels) const;
@@ -815,6 +822,8 @@ private:
     bool pathOverlayVisible_ = true;
     PathOverlay targetPathOverlay_;
     bool targetPathVisible_ = true;
+    bool targetPathFollowsMove_ = false;
+    bool movePreviewMovesLayer_ = false;
     QRectF layerEdges_;
     bool layerEdgesVisible_ = true;
     bool gridVisible_ = false;

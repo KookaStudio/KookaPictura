@@ -1,12 +1,11 @@
 //! Layer > Align / Align Layers To Selection / Distribute, and the Move tool's
 //! matching options-bar buttons. Each layer lines up by its content — the
-//! box round its non-transparent pixels — not by its layer bounds. Ported
-//! from photorust's `core/src/document.rs` (`align_layers` /
-//! `distribute_layers`).
+//! box round its non-transparent pixels, or a shape layer's vector outline —
+//! not by its layer bounds. Ported from photorust's `core/src/document.rs`
+//! (`align_layers` / `distribute_layers`).
 //!
-//! ponytail: groups, adjustment layers, and fill / shape layers (whose
-//! content is a fill under a vector mask) are skipped rather than aligned by
-//! their descendants' content or their shape bounds.
+//! ponytail: groups and adjustment layers are skipped rather than aligned by
+//! their descendants' content; shape layers align by their outline bounds.
 
 use pictura_core::{layer_move_locked, Document, Layer, PsdRect};
 
@@ -93,11 +92,17 @@ impl AlignEdge {
     }
 }
 
-/// The document-space box round `layer`'s non-transparent pixels; the whole
-/// layer rect when it has no transparency channel. `None` for a group, an
-/// adjustment, or a layer with nothing showing.
-fn content_bounds(layer: &Layer) -> Option<PsdRect> {
-    if layer.is_group() || layer.has_adjustment_content() {
+/// The document-space box round `layer`'s non-transparent pixels, or a shape
+/// layer's vector outline; the whole layer rect when it has no transparency
+/// channel. `None` for a group, an adjustment, or a layer with nothing showing.
+fn content_bounds(layer: &Layer, width: u32, height: u32) -> Option<PsdRect> {
+    if layer.is_group() {
+        return None;
+    }
+    if super::shape_layer::is_shape_layer(layer) {
+        return super::shape_layer::shape_layer_rect(layer, width, height);
+    }
+    if layer.has_adjustment_content() {
         return None;
     }
     let r = layer.rect;
@@ -118,8 +123,14 @@ fn content_bounds(layer: &Layer) -> Option<PsdRect> {
 }
 
 /// Whether [`content_bounds`] would box something, without building the box.
-fn has_content(layer: &Layer) -> bool {
-    if layer.is_group() || layer.has_adjustment_content() {
+fn has_content(layer: &Layer, width: u32, height: u32) -> bool {
+    if layer.is_group() {
+        return false;
+    }
+    if super::shape_layer::is_shape_layer(layer) {
+        return super::shape_layer::shape_layer_rect(layer, width, height).is_some();
+    }
+    if layer.has_adjustment_content() {
         return false;
     }
     let (w, h) = (layer.rect.width().max(0), layer.rect.height().max(0));
@@ -136,7 +147,7 @@ fn has_content(layer: &Layer) -> bool {
 /// Whether the layer at `path` has content Align would move; the cheap form of
 /// [`layer_content_bounds`]`(..).is_some()`.
 pub fn layer_has_content(doc: &Document, path: &str) -> bool {
-    resolve_path(doc, path).is_some_and(has_content)
+    resolve_path(doc, path).is_some_and(|layer| has_content(layer, doc.width, doc.height))
 }
 
 /// How many of `paths` (deduplicated) have content.
@@ -150,19 +161,31 @@ fn content_count(doc: &Document, paths: &[&str]) -> usize {
 /// The document-space ink box round the layer at `path`, as Align computes it;
 /// `None` when the path is missing, a group, an adjustment, or empty.
 pub fn layer_content_bounds(doc: &Document, path: &str) -> Option<PsdRect> {
-    content_bounds(resolve_path(doc, path)?)
+    content_bounds(resolve_path(doc, path)?, doc.width, doc.height)
 }
 
 /// Each of `paths` (deduplicated) that has content, with its content box.
 fn contents(doc: &Document, paths: &[&str]) -> Vec<(String, PsdRect)> {
     unique(paths)
         .into_iter()
-        .filter_map(|p| Some((p.to_string(), content_bounds(resolve_path(doc, p)?)?)))
+        .filter_map(|p| {
+            Some((
+                p.to_string(),
+                content_bounds(resolve_path(doc, p)?, doc.width, doc.height)?,
+            ))
+        })
         .collect()
 }
 
-/// Move `path` by `(dx, dy)` unless it is position-locked or the Background.
+/// Move `path` by `(dx, dy)` unless it is position-locked or the Background. A
+/// shape layer moves its outline; a pixel layer moves its rect.
 fn shift(doc: &mut Document, path: &str, (dx, dy): (i32, i32)) -> bool {
+    if resolve_path(doc, path).is_some_and(super::shape_layer::is_shape_layer) {
+        let (fx, fy) = (f64::from(dx), f64::from(dy));
+        return super::shape_layer::map_shape_layer(doc, path, Some((fx, fy)), |x, y| {
+            Some((x + fx, y + fy))
+        });
+    }
     match resolve_path_mut(doc, path) {
         Some(layer) if !layer_move_locked(layer) && !layer.background => {
             offset_layer(layer, dx, dy);
@@ -243,7 +266,7 @@ pub fn distribute_layers(doc: &mut Document, paths: &[&str], edge: AlignEdge) ->
 mod tests {
     use super::super::tests::{doc_with, pixel_layer};
     use super::*;
-    use pictura_core::{Channel, LockFlags};
+    use pictura_core::{BitDepth, Channel, ColorMode, LockFlags};
 
     #[test]
     fn the_content_test_agrees_with_content_bounds() {
@@ -394,6 +417,82 @@ mod tests {
         let mut d = squares(&[(10, 40, 20)]);
         let _ = d.layers.push(super::super::create::empty_group("Group"));
         assert!(!can_align(&d, &["0", "0", "1"], false));
+    }
+
+    fn add_rectangle(doc: &mut Document, left: i32, top: i32, right: i32, bottom: i32) -> String {
+        use pictura_core::shape::{outline_in_box, ShapeKind, ShapeOptions};
+        let outline = outline_in_box(
+            ShapeOptions::new(ShapeKind::Rectangle, 0.0, 3),
+            (
+                f64::from(left),
+                f64::from(top),
+                f64::from(right - left),
+                f64::from(bottom - top),
+            ),
+        )
+        .expect("rectangle outline");
+        super::super::add_shape_layer(doc, "", [255, 0, 0, 255], "Rectangle", &outline, None)
+    }
+
+    fn shape_rect(doc: &Document, path: &str) -> Option<PsdRect> {
+        super::super::shape_layer_rect(resolve_path(doc, path)?, doc.width, doc.height)
+    }
+
+    #[test]
+    fn shape_layers_align_and_distribute_by_their_outline() {
+        let mut d = Document::new(100, 100, ColorMode::Rgb, BitDepth::Eight);
+        let a = add_rectangle(&mut d, 10, 10, 20, 20);
+        let b = add_rectangle(&mut d, 40, 50, 50, 60);
+        let c = add_rectangle(&mut d, 90, 20, 100, 30);
+        let paths = [a.as_str(), b.as_str(), c.as_str()];
+        assert_eq!(
+            shape_rect(&d, &a),
+            Some(PsdRect {
+                top: 10,
+                left: 10,
+                bottom: 20,
+                right: 20,
+            })
+        );
+        assert!(can_align(&d, &paths, false));
+        assert!(can_distribute(&d, &paths));
+        assert!(!can_align(&d, &[a.as_str()], false));
+
+        assert_eq!(align_layers(&mut d, &paths, AlignEdge::Top, None), 2);
+        for path in &paths {
+            assert_eq!(
+                shape_rect(&d, path).map(|r| r.top),
+                Some(10),
+                "shape {path}"
+            );
+        }
+        let canvas = PsdRect {
+            top: 0,
+            left: 0,
+            bottom: 100,
+            right: 100,
+        };
+        for path in &paths {
+            assert_eq!(resolve_path(&d, path).expect("shape layer").rect, canvas);
+        }
+
+        assert_eq!(distribute_layers(&mut d, &paths, AlignEdge::Left), 1);
+        assert_eq!(shape_rect(&d, &a).map(|r| r.left), Some(10));
+        assert_eq!(shape_rect(&d, &b).map(|r| r.left), Some(50));
+        assert_eq!(shape_rect(&d, &c).map(|r| r.left), Some(90));
+
+        let selection = PsdRect {
+            top: 80,
+            left: 0,
+            bottom: 90,
+            right: 100,
+        };
+        assert!(can_align(&d, &[a.as_str()], true));
+        assert_eq!(
+            align_layers(&mut d, &[a.as_str()], AlignEdge::Bottom, Some(selection)),
+            1
+        );
+        assert_eq!(shape_rect(&d, &a).map(|r| r.bottom), Some(90));
     }
 
     #[test]

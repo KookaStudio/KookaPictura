@@ -313,7 +313,7 @@ private:
                                 v.move_preview_opacity() / 255.0,
                                 transform_api::previewBaseOrigin(v), move_preview_scale(v),
                                 v.move_preview_above(), abovePos,
-                                move_preview_above_scale(v));
+                                move_preview_above_scale(v), true);
         // A view preview covers part of the layer, so Rust reports its box. A
         // full image is scanned once per image.
         const ::rust::Vec<int32_t> content = move_preview_content_extents(v);
