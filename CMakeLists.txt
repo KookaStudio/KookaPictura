@@ -274,12 +274,13 @@ function(pictura_bridge_hash_text path out_var)
     endif()
 endfunction()
 
-# The bridge sources are the Rust files carrying the cxx-qt bridge macro, plus
-# every file the build script's `.files([...])` list names. The scan finds a
-# bridge wherever it is; the list catches a listed file before it has one, so
-# the bridge it gains later is a configure dependency from the start. A listed
-# file without a bridge is hashed whole. CONFIGURE_DEPENDS re-runs the configure
-# step when a Rust file is added or removed.
+# The bridge sources are the Rust files carrying the cxx-qt bridge macro. The
+# scan finds a bridge wherever it is, including one whose checked-in list entry
+# is stale, so a bridge is a configure dependency from the moment it exists.
+# `bridge_sources.txt` is the build script's own view of the same set, drift-tested
+# by `pictura_app::build_config::bridge_sources_match_the_tree`; CMake does not
+# read it, so a stale list cannot hide a bridge from the stamp.
+# CONFIGURE_DEPENDS re-runs the configure step when a Rust file is added or removed.
 file(GLOB_RECURSE _pictura_rs_files RELATIVE "${CMAKE_SOURCE_DIR}" CONFIGURE_DEPENDS
     "crates/pictura-app/src/*.rs")
 set(_pictura_bridge_files "")
@@ -287,14 +288,6 @@ foreach(_file IN LISTS _pictura_rs_files)
     file(READ "${CMAKE_SOURCE_DIR}/${_file}" _content)
     string(FIND "${_content}" "cxx_qt::bridge" _bridge_at)
     if(NOT _bridge_at EQUAL -1)
-        list(APPEND _pictura_bridge_files "${_file}")
-    endif()
-endforeach()
-file(STRINGS "${CMAKE_SOURCE_DIR}/crates/pictura-app/build.rs" _pictura_listed
-    REGEX "^[ \t]*\"src/[^\"]+\\.rs\",?[ \t]*$")
-foreach(_line IN LISTS _pictura_listed)
-    string(REGEX REPLACE "^[ \t]*\"([^\"]+)\".*$" "crates/pictura-app/\\1" _file "${_line}")
-    if(EXISTS "${CMAKE_SOURCE_DIR}/${_file}")
         list(APPEND _pictura_bridge_files "${_file}")
     endif()
 endforeach()
@@ -309,8 +302,7 @@ endforeach()
 string(SHA256 _pictura_bridge_hash "${_pictura_bridge_digest}")
 
 # Only a bridge file, or build.rs, re-runs the configure step on an edit, so the
-# stamp is refreshed when a bridge changes. A file named in build.rs's list is
-# a configure dependency even before it carries a bridge.
+# stamp is refreshed when a bridge changes.
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     ${_pictura_bridge_files}
     crates/pictura-app/build.rs)

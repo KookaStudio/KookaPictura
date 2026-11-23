@@ -105,6 +105,26 @@ fn restore_unchanged_headers(before: &HashMap<PathBuf, (SystemTime, Vec<u8>)>) {
     }
 }
 
+/// The bridge sources, from the checked-in generated list.
+///
+/// The build script cannot scan `src/` for the bridge marker: watching the
+/// directory would rerun this script on every Rust edit, and it cannot skip its
+/// own work on such a rerun because `CxxQtBuilder::build` is what emits this
+/// crate's Qt link directives and the `cxxqt_*` cfg. The list is generated and
+/// drift-tested by `src/build_config/bridge_sources.rs`; edit it only with
+/// `PICTURA_WRITE_BRIDGE_SOURCES=1 cargo nextest run -p pictura-app bridge_sources`.
+const BRIDGE_SOURCES: &str = include_str!("bridge_sources.txt");
+
+fn bridge_sources() -> Vec<&'static str> {
+    let sources: Vec<&'static str> = BRIDGE_SOURCES
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .collect();
+    assert!(!sources.is_empty(), "bridge_sources.txt lists no bridges");
+    sources
+}
+
 fn main() {
     // cxx-qt compiles its exported initializer object with a separate cc::Build
     // that the cc_builder closure does not reach. CXXFLAGS is cc's shared hook;
@@ -120,6 +140,12 @@ fn main() {
             std::env::set_var("QMAKE", qmake);
         }
     }
+
+    // The bridge list decides which sources cxx-qt generates code for, so a
+    // regenerated list has to rerun this script. The bridge files themselves are
+    // watched by `CxxQtBuilder::files`; nothing else under `src/` is watched, so
+    // a non-bridge edit does not rerun this script.
+    println!("cargo::rerun-if-changed=bridge_sources.txt");
 
     // The hand-written bridge edges are the only C++ files this crate's
     // generated code depends on; track them explicitly.
@@ -152,82 +178,7 @@ fn main() {
     unsafe {
         CxxQtBuilder::new()
             .qt_module("Gui")
-            .files([
-                "src/cxxqt_object.rs",
-                "src/decode_bridge.rs",
-                "src/app_runtime_bridge.rs",
-                "src/preferences_bridge.rs",
-                "src/cxxqt_object/actions_engine.rs",
-                "src/cxxqt_object/engine_tables.rs",
-                "src/cxxqt_object/adjustment_edit.rs",
-                "src/cxxqt_object/adjustment_presets.rs",
-                "src/cxxqt_object/align.rs",
-                "src/cxxqt_object/auto_align.rs",
-                "src/cxxqt_object/auto_blend.rs",
-                "src/cxxqt_object/annotations.rs",
-                "src/cxxqt_object/channels.rs",
-                "src/cxxqt_object/clipping.rs",
-                "src/cxxqt_object/color_management.rs",
-                "src/cxxqt_object/color_range.rs",
-                "src/cxxqt_object/clipboard.rs",
-                "src/cxxqt_object/crop_group.rs",
-                "src/cxxqt_object/export.rs",
-                "src/cxxqt_object/fade.rs",
-                "src/cxxqt_object/filter_tools.rs",
-                "src/cxxqt_object/guides.rs",
-                "src/cxxqt_object/filter_tools/jobs.rs",
-                "src/cxxqt_object/filter_tools/liquify.rs",
-                "src/cxxqt_object/filter_tools/adaptive_wide_angle.rs",
-                "src/cxxqt_object/filter_tools/lens_correction.rs",
-                "src/cxxqt_object/filter_tools/vanishing_point.rs",
-                "src/cxxqt_object/filter_tools/vanishing_point_retouch.rs",
-                "src/cxxqt_object/healing.rs",
-                "src/cxxqt_object/image_adjust.rs",
-                "src/cxxqt_object/impl_selection/bridge.rs",
-                "src/cxxqt_object/impl_selection/refine.rs",
-                "src/cxxqt_object/impl_transform/bridge.rs",
-                "src/cxxqt_object/impl_transform/warp.rs",
-                "src/cxxqt_object/image_adjust/gradient_map.rs",
-                "src/cxxqt_object/image_adjust/image_mode.rs",
-                "src/cxxqt_object/image_adjust/image_ops.rs",
-                "src/cxxqt_object/image_adjust/image_size.rs",
-                "src/cxxqt_object/image_adjust/jobs.rs",
-                "src/cxxqt_object/impl_core/recovery.rs",
-                "src/cxxqt_object/impl_core/save_jobs.rs",
-                "src/cxxqt_object/image_replace_color.rs",
-                "src/cxxqt_object/image_apply_image.rs",
-                "src/cxxqt_object/image_match_color.rs",
-                "src/cxxqt_object/impl_paint/tool_recording.rs",
-                "src/cxxqt_object/layer_comps.rs",
-                "src/cxxqt_object/layer_style.rs",
-                "src/cxxqt_object/layer_target_bridge.rs",
-                "src/cxxqt_object/layers_smart_filters.rs",
-                "src/cxxqt_object/layer_arrange.rs",
-                "src/cxxqt_object/impl_layers/auto_select.rs",
-                "src/cxxqt_object/impl_layers/fill_content.rs",
-                "src/cxxqt_object/impl_layers/layer_masks.rs",
-                "src/cxxqt_object/impl_layers/mask_commands.rs",
-                "src/cxxqt_object/impl_layers/layers_surface.rs",
-                "src/cxxqt_object/impl_layers/mask_refine.rs",
-                "src/cxxqt_object/impl_layers/matting.rs",
-                "src/cxxqt_object/impl_layers/smart_object_actions.rs",
-                "src/cxxqt_object/impl_layers/vector_masks.rs",
-                "src/cxxqt_object/magnetic.rs",
-                "src/cxxqt_object/open_jobs.rs",
-                "src/cxxqt_object/paint_tools.rs",
-                "src/cxxqt_object/paint_tools/fills.rs",
-                "src/cxxqt_object/path_list.rs",
-                "src/cxxqt_object/impl_history/purge.rs",
-                "src/cxxqt_object/paths.rs",
-                "src/cxxqt_object/pdf_export.rs",
-                "src/cxxqt_object/pdf_export/import.rs",
-                "src/cxxqt_object/proofing.rs",
-                "src/cxxqt_object/shapes.rs",
-                "src/cxxqt_object/type_tools.rs",
-                "src/cxxqt_object/type_tools/warp.rs",
-                "src/cxxqt_object/type_tools/fonts.rs",
-                "src/cxxqt_object/web_export.rs",
-            ])
+            .files(bridge_sources())
             .cc_builder(|cc| {
                 cc.include("cpp");
                 // The bridge objects end up in the shared pictura_shell library in

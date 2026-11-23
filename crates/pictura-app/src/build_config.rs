@@ -3,9 +3,12 @@
 //! declarations-only bridge files, the `dev-app` profile's runtime semantics,
 //! the disabled doctests, and the justified fixed waits in the Qt Test suites.
 
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+mod bridge_sources;
+mod verb_manifest;
 mod view_oracle;
 
 // Split so this file does not itself read as a bridge file to the CMake scan.
@@ -382,39 +385,19 @@ fn implementation_items(src: &str, from: usize, to: usize) -> Vec<(usize, String
     found
 }
 
-/// The files build.rs hands to cxx-qt: the string literals of its
-/// `.files([...])` list, relative to the crate root.
-fn listed_bridge_files() -> Vec<String> {
-    let build = read(&Path::new(env!("CARGO_MANIFEST_DIR")).join("build.rs"));
-    let open = build
-        .find(".files([")
-        .expect("build.rs has no `.files([` list");
-    let start = open + ".files([".len();
-    let end = start
-        + build[start..]
-            .find("])")
-            .expect("the `.files([` list never closes");
-    build[start..end]
-        .split('"')
-        .skip(1)
-        .step_by(2)
-        .map(str::to_owned)
-        .collect()
-}
-
 /// A bridge file is regenerated and recompiled by the cxx-qt build script on
 /// any edit, so it holds the bridge module and the declarations that bind it,
 /// and the implementation lives in modules the build script does not track.
 #[test]
 fn bridge_files_hold_declarations_only() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let files = listed_bridge_files();
-    assert!(!files.is_empty(), "build.rs lists no bridge files");
+    let files = bridge_files();
+    assert!(!files.is_empty(), "no bridge files found");
     let mut violations = Vec::new();
-    for file in files {
-        let src = read(&root.join(&file));
+    for path in files {
+        let file = path.display();
+        let src = read(&path);
         let Some(attr) = src.find(BRIDGE_ATTRIBUTE) else {
-            violations.push(format!("{file}: listed in build.rs but holds no bridge"));
+            violations.push(format!("{file}: carries the bridge marker but no bridge"));
             continue;
         };
         let end = brace_counted_end(&src, attr).map_or(src.len(), |end| end + 1);
@@ -558,10 +541,12 @@ fn bridge_files() -> Vec<PathBuf> {
         &Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
         &mut files,
     );
-    files
+    let mut bridges: Vec<PathBuf> = files
         .into_iter()
         .filter(|path| read(path).contains(BRIDGE_MARKER))
-        .collect()
+        .collect();
+    bridges.sort();
+    bridges
 }
 
 fn membrane_headers() -> Vec<PathBuf> {
@@ -577,6 +562,53 @@ fn membrane_headers() -> Vec<PathBuf> {
         .collect();
     membranes.sort();
     membranes
+}
+
+/// Every file under `cpp/api/` that may own a generated header: the domain
+/// membranes, plus the type adapter, whose value types are the bridge's shared
+/// setting structs so it owns the `type_tools` headers.
+fn adapter_owner_files() -> Vec<PathBuf> {
+    let mut files = membrane_headers();
+    files.push(Path::new(env!("CARGO_MANIFEST_DIR")).join("cpp/api/type_api.h"));
+    files.push(Path::new(env!("CARGO_MANIFEST_DIR")).join("cpp/api/type_api.cpp"));
+    files
+}
+
+/// The generated headers `path` includes that are in `all`. The type adapter is
+/// the one file allowed to include a generated header other than a membrane, so
+/// it is held to `type_tools` and nothing else.
+fn owner_generated_includes(path: &Path, all: &HashSet<String>) -> Vec<String> {
+    let type_adapter = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name == "type_api.h" || name == "type_api.cpp");
+    let src = read(path);
+    src.lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            let name = line.strip_prefix("#include \"")?.strip_suffix('"')?;
+            if type_adapter && !name.contains("type_tools") {
+                return None;
+            }
+            all.contains(name).then(|| name.to_string())
+        })
+        .collect()
+}
+
+/// Generated header -> the `api/` file that owns it, as `api/<name>`; a header
+/// no file owns is absent. The same one-owner rule `no_universal_bridge_membrane`
+/// checks, so the verb manifest cannot name an owner that test would reject.
+fn bridge_header_owners() -> HashMap<String, String> {
+    let (_, owners) = header_owner_lists();
+    owners
+        .into_iter()
+        .filter_map(|(header, files)| {
+            let file = files.first()?;
+            assert_eq!(files.len(), 1, "{header} has more than one owner");
+            let name = Path::new(file).file_name()?.to_string_lossy().into_owned();
+            Some((header, format!("api/{name}")))
+        })
+        .collect()
 }
 
 #[test]
@@ -640,11 +672,11 @@ fn bridge_membranes_are_include_only() {
     );
 }
 
-#[test]
-fn no_universal_bridge_membrane() {
-    let membranes = membrane_headers();
-    assert!(!membranes.is_empty(), "no cpp/api/*_bridge.h membranes");
-    let all: std::collections::HashSet<String> = bridge_files()
+/// Header -> the adopting `cpp/api/` files. More than one entry is a violation
+/// of the one-owner rule; a header with no entry (other than the unconsumed
+/// `impl_paint/tool_recording`) has no membrane.
+fn header_owner_lists() -> (HashSet<String>, HashMap<String, Vec<String>>) {
+    let all: HashSet<String> = bridge_files()
         .iter()
         .map(|path| {
             let relative = path
@@ -653,41 +685,30 @@ fn no_universal_bridge_membrane() {
             generated_header(relative)
         })
         .collect();
-    let mut owners: std::collections::HashMap<String, Vec<String>> =
-        std::collections::HashMap::new();
-    let mut owner_files = membranes.clone();
-    owner_files.push(Path::new(env!("CARGO_MANIFEST_DIR")).join("cpp/api/type_api.h"));
-    owner_files.push(Path::new(env!("CARGO_MANIFEST_DIR")).join("cpp/api/type_api.cpp"));
-    for path in &owner_files {
-        let src = read(path);
-        let type_adapter = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|name| name == "type_api.h" || name == "type_api.cpp");
-        let included: Vec<String> = src
-            .lines()
-            .filter_map(|line| {
-                let line = line.trim();
-                let name = line.strip_prefix("#include \"")?.strip_suffix('"')?;
-                if type_adapter && !name.contains("type_tools") {
-                    return None;
-                }
-                all.contains(name).then(|| name.to_string())
-            })
-            .collect();
-        if membranes.contains(path) {
-            assert!(
-                included.len() < all.len(),
-                "{} includes every generated header",
-                path.display()
-            );
-        }
-        for header in included {
+    let mut owners: HashMap<String, Vec<String>> = HashMap::new();
+    for path in adapter_owner_files() {
+        for header in owner_generated_includes(&path, &all) {
             owners
                 .entry(header)
                 .or_default()
                 .push(path.display().to_string());
         }
+    }
+    (all, owners)
+}
+
+#[test]
+fn no_universal_bridge_membrane() {
+    let membranes = membrane_headers();
+    assert!(!membranes.is_empty(), "no cpp/api/*_bridge.h membranes");
+    let (all, owners) = header_owner_lists();
+    for path in &membranes {
+        let included = owner_generated_includes(path, &all);
+        assert!(
+            included.len() < all.len(),
+            "{} includes every generated header",
+            path.display()
+        );
     }
     let unowned: Vec<String> = all
         .iter()
@@ -732,27 +753,38 @@ fn no_small_bridge_files() {
     );
 }
 
+/// `build.rs` may not name its bridge sources: the set lives in the checked-in
+/// list so a bridge can be added without editing build code, and so the build
+/// script never has to watch `src/` (which would rerun it on every Rust edit).
+#[test]
+fn build_script_derives_bridge_sources() {
+    let build = read(&Path::new(env!("CARGO_MANIFEST_DIR")).join("build.rs"));
+    let inline: Vec<&str> = build
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("\"src/") && line.contains(".rs\""))
+        .collect();
+    assert!(
+        inline.is_empty(),
+        "build.rs names bridge sources inline: {inline:#?}"
+    );
+    assert!(
+        build.contains("bridge_sources.txt"),
+        "build.rs does not read the checked-in bridge list"
+    );
+    let listed: HashSet<String> = bridge_sources::listed().into_iter().collect();
+    let discovered: HashSet<String> = bridge_sources::discovered().into_iter().collect();
+    assert_eq!(
+        listed, discovered,
+        "the checked-in bridge list and the bridges on disk disagree"
+    );
+}
+
 #[test]
 fn bridge_count_within_budget() {
-    let files = bridge_files();
-    let count = files.len();
+    let count = bridge_files().len();
     assert!(count <= 74, "bridge file count grew to {count} (budget 74)");
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let listed: std::collections::HashSet<String> = listed_bridge_files().into_iter().collect();
-    let actual: std::collections::HashSet<String> = files
-        .iter()
-        .map(|path| {
-            path.strip_prefix(root)
-                .unwrap()
-                .to_string_lossy()
-                .into_owned()
-        })
-        .collect();
-    assert_eq!(
-        listed, actual,
-        "build.rs `.files([...])` does not match the bridge files on disk"
-    );
-    let main = read(&root.join("src/cxxqt_object.rs"));
+    let main = read(&Path::new(env!("CARGO_MANIFEST_DIR")).join("src/cxxqt_object.rs"));
     assert!(
         main.lines().count() <= 1204,
         "cxxqt_object.rs grew past 1204 lines"
