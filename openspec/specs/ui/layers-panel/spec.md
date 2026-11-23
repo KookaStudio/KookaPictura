@@ -2463,7 +2463,9 @@ and the name rect so nothing overlaps. A layer whose lock
 state has any flag set SHALL also show a lock badge at the right side of its
 row, except that the Transparency and Image locks a type or shape layer is
 forced to carry SHALL NOT by themselves show one (CS6 shows them only in the
-Lock strip); an unlocked layer SHALL show none. The lock badge's side SHALL be
+Lock strip). The Background SHALL show the lock badge regardless of its lock
+flags, since it is locked by kind; an unlocked ordinary layer SHALL show none.
+The lock badge's side SHALL be
 80% of its previous two-thirds-thumbnail side, so it reads as a smaller badge
 and the lock stays the rightmost badge. The `fx` badge's side SHALL be 80% of
 the row thumbnail's badge side, and the clipping-mask glyph's side SHALL be 80%

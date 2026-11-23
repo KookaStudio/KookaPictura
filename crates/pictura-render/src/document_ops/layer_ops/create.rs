@@ -614,10 +614,6 @@ pub fn background_from_layer(doc: &mut Document, path: &str) -> bool {
             return false;
         }
         opaque_transparency(layer, [255, 255, 255]);
-        // A Background is fully locked in CS6, so its row shows the lock badge
-        // (and the Lock strip reads all four flags) like an imported one. The
-        // grow above runs with the lock cleared; the lock returns after it.
-        layer.lock = LockFlags::all();
     }
     let promoted = doc.layers.promote_background(&segments).is_ok();
     if promoted {

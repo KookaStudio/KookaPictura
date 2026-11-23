@@ -330,6 +330,11 @@ public:
         case LockRole:
             return row.lockBits;
         case LockBadgeRole:
+            // A Background always shows the padlock, even though its lock bits
+            // stay clear so pixel edits such as filters still apply.
+            if (row.kind == QLatin1String("background")) {
+                return 0x0F;
+            }
             return row.kind == QLatin1String("type") || row.shape ? row.lockBits & ~0x03
                                                                   : row.lockBits;
         case ColorRole:
