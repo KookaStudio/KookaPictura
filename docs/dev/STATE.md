@@ -1575,10 +1575,10 @@ Snapshot for resuming after a context break. Update after each milestone.
   13.2 s. The bridge stamp hashes only each file's `#[cxx_qt::bridge]` module
   (checked: balanced braces, even quotes, no `/*`, else the whole file), so a
   body edit in a bridge file recompiles 0 C++ objects instead of 325. An edit
-  re-runs the configure step only in a bridge file, a file `build.rs` lists, or
-  `build.rs` itself; adding or removing a `.rs` file re-runs it too. The cargo
-  step of a bridge-file edit stays at about 55 s: any bridge-file edit reruns
-  the cxx-qt build script for all 77 bridges.
+  re-runs the configure step only in a bridge file or `build.rs` itself; adding
+  or removing a `.rs` file re-runs it too. The cargo step of a bridge-file edit
+  stays at about 55 s: any bridge-file edit reruns the cxx-qt build script for
+  all 74 bridges.
   Doctests are disabled workspace-wide and gone from the report; CI's `oracles`
   job is folded into `test` (ImageMagick cached, `ag-psd` pinned), and the
   `software-gpu` clippy runs in `lint`. A cached `-fuse-ld=` that hides an
@@ -1586,13 +1586,36 @@ Snapshot for resuming after a context break. Update after each milestone.
   `pictura_app::build_config::{bridge_modules_end_at_column_zero,
   dev_app_profile_keeps_release_semantics,
   every_workspace_library_disables_doctests}`.
+- **Checked-in bridge and verb registration** (#1187, OpenSpec change
+  `verb-manifest-registration`). Two generated, checked-in artifacts replace the
+  hand-maintained bookkeeping. `crates/pictura-app/bridge_sources.txt` lists the
+  74 bridge paths, sorted; `build.rs` reads it instead of naming 74 sources
+  inline, and emits one `rerun-if-changed` for it, so an implementation-body edit
+  still does not rerun the build script (`bp_bridge_impl_no_rerun` holds). A
+  build-time scan was rejected: watching `src/` reruns the script on every Rust
+  edit, and the script cannot skip its own work because `CxxQtBuilder::build()`
+  emits this crate's Qt link directives and the `cxxqt_*` cfg.
+  `crates/pictura-app/src/build_config/verb_manifest.tsv` maps all 1,465
+  declared verbs (1,155 free, 298 `#[qinvokable]`, 12 `#[qsignal]`) to the
+  `cpp/api/` header that owns them, with the C++ name for the 10 `#[cxx_name]`
+  renames, so a caller no longer greps to find which membrane to include. Bless
+  with `PICTURA_WRITE_BRIDGE_SOURCES=1` / `PICTURA_WRITE_VERB_MANIFEST=1`; both
+  drift tests run in the existing nextest step. Adding a bridge is now: create
+  the source, add its header to a membrane, regenerate the list. Tests:
+  `pictura_app::build_config::bridge_sources::{bridge_sources_match_the_tree,
+  bridge_sources_are_all_real_bridges}`,
+  `pictura_app::build_config::verb_manifest::{verb_manifest_matches_bridge_sources,
+  verb_manifest_counts_every_declared_function, verb_manifest_names_owners,
+  verb_manifest_names_renamed_verbs}`,
+  `pictura_app::build_config::build_script_derives_bridge_sources`.
 - **Domain bridge membranes** (#1160, OpenSpec change `bridge-membranes`).
   Eight `cpp/api/*_bridge.h` membranes own the generated cxx-qt headers; no C++
   file outside `cpp/api/` includes one, and `api/type_api.h` remains the type
   exception. The bridges that exposed one or two Rust functions were folded into
-  neighbours, leaving 69 bridge files. The bridge stamp is still global, so any
-  bridge edit recompiles every shell and test translation unit; the membranes bound the
-  per-translation-unit include surface. Tests:
+  neighbours; six bridges landed afterwards, so the tree holds 74. The bridge
+  stamp is still global, so any bridge edit recompiles every shell and test
+  translation unit; the membranes bound the per-translation-unit include
+  surface. Tests:
   `pictura_app::build_config::{bridge_headers_confined_to_api,
   bridge_membranes_are_include_only, no_universal_bridge_membrane,
   no_small_bridge_files, bridge_count_within_budget,
