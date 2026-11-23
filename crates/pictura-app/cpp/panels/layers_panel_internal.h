@@ -604,6 +604,11 @@ public:
         return maskSlotRight(itemRect, index);
     }
 
+    /// The label band a row reserves for its name: from the rendered label's
+    /// left edge to the right-edge cap left by the badges actually present.
+    /// Shared by paint, the double-click hit target, and the inline editor.
+    QRect nameBandRect(const QRect& itemRect, const QModelIndex& index) const;
+
     /// The rendered name label's rect: the middle-elided text width inside the
     /// available band, floored to a one-pixel hit target at the label's left.
     /// `drawnText` receives that same elided text, so paint never elides twice.
@@ -611,28 +616,13 @@ public:
                    const QFont& baseFont = QApplication::font(),
                    QString* drawnText = nullptr) const
     {
-        const int gap = isSyntheticRow(index) ? kNameGap / 2 : kNameGap;
-        int x = thumbsRight(itemRect, index) + gap;
-        int right = itemRect.right() - 3;
-        const int badge = fxBadgeSide();
-        if (showsLockBadge(index)) {
-            right -= lockBadgeSide() + 3;
-        }
-        right -= listToggleAdvance(index);
-        if (showsFx(index)
-            && !pictura::icon(QStringLiteral("layers.fx")).pixmap(badge, badge).isNull()) {
-            right -= badge + 3;
-        }
-        right -= linkBadgeAdvance(index);
-        right -= blendIfAdvance(index);
-        const int nameLeft = x + (index.data(ClippingRole).toBool() ? 12 : 0);
-        const int available = qMax(1, right - 4 - nameLeft);
+        const QRect band = nameBandRect(itemRect, index);
         const QFontMetrics metrics(nameFont(baseFont, index));
         const QString elided = metrics.elidedText(index.data(Qt::DisplayRole).toString(),
-                                                  Qt::ElideMiddle, available);
+                                                  Qt::ElideMiddle, band.width());
         if (drawnText) *drawnText = elided;
-        const int width = qBound(1, metrics.horizontalAdvance(elided), available);
-        return QRect(nameLeft, itemRect.top(), width, itemRect.height());
+        const int width = qBound(1, metrics.horizontalAdvance(elided), band.width());
+        return QRect(band.left(), band.top(), width, band.height());
     }
 
     /// One named row height (floor 32 px) shared by sizeHint and centring; a
@@ -674,6 +664,18 @@ public:
             index.data(KindRole).toString() == QLatin1String("group") ? kGroupRowShrink : 0;
         return QSize(200, qMax(kRowHeightFloor - kGroupRowShrink, rowHeight() - shrink));
     }
+
+    /// A plain line edit, not the base class's expanding one: the expanding
+    /// editor resizes itself to its text after setEditorData and would undo the
+    /// label-band geometry below.
+    QWidget* createEditor(QWidget* parent, const QStyleOptionViewItem& option,
+                          const QModelIndex& index) const override;
+
+    /// Confine the inline rename editor to the rendered label plus the name gap,
+    /// capped at the label band. The base class uses the whole row, which hides
+    /// the trailing lock/fx/list badges and makes a short name span the panel.
+    void updateEditorGeometry(QWidget* editor, const QStyleOptionViewItem& option,
+                              const QModelIndex& index) const override;
 
     /// CS6 rename navigation. The view installs this delegate as the editor's
     /// event filter, whose base implementation commits `Tab`/`Shift+Tab` and

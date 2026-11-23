@@ -10,6 +10,7 @@
 #include <QtGui/QImage>
 #include <QtGui/QPainter>
 #include <QtWidgets/QDialog>
+#include <QtWidgets/QLineEdit>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QTreeView>
@@ -86,6 +87,10 @@ private slots:
     void adjustmentMaskOff();
     void flyoutStateFollowsDocument();
     void renameHitAreaMatchesRenderedLabel();
+    void renameEditorStaysInsideLabelBand();
+    void renameEditorHugsTheNameOnPlainRows();
+    void renameEditorStopsBeforeLockBadge();
+    void renameEditorStopsAtTheBandForLongNames();
     void shortLayerNameIsNotElided();
     void layerNamesRenderInFullWhenTheyFit();
 
@@ -424,6 +429,146 @@ void LayersPanelBundleTest::renameHitAreaMatchesRenderedLabel()
     QVERIFY2(styleOpened, "a double-click right of the label opens Layer Style");
     QVERIFY2(!panel_->inlineEditorOpenForTest(),
              "a double-click right of the label opens no inline editor");
+}
+
+// #1545: the inline editor hugs the rendered label instead of filling the row,
+// and stops before the trailing badges so they keep their positions.
+void LayersPanelBundleTest::renameEditorStaysInsideLabelBand()
+{
+    QVERIFY(newDoc(QStringLiteral("RenameEditorBounds")));
+    window_->resize(1280, 800);
+    window_->show();
+    QTest::qWait(0);
+    const QString layer = makeLayer(QStringLiteral("A"));
+    QVERIFY(!layer.isEmpty());
+    QVERIFY(pictura::layer_style_set(*view_, layer, QStringLiteral("colorOverlay.on"), 1.0));
+    pictura::layer_style_commit(*view_, QStringLiteral("Layer Style"));
+    QCoreApplication::processEvents();
+    panel_->refresh();
+    auto* tree = panel_->findChild<QTreeView*>();
+    QVERIFY(tree != nullptr);
+    tree->setFont(QApplication::font());
+    QCoreApplication::processEvents();
+
+    const QRect name = panel_->rowNameRectForTest(layer);
+    const QRect row = panel_->rowViewportRectForTest(layer);
+    const QRect fx = panel_->rowFxRectForTest(layer);
+    QVERIFY2(name.width() > 0, "the short label has a hit width");
+    QVERIFY2(!fx.isEmpty(), "the styled row paints an fx badge");
+
+    QLineEdit* editor = panel_->openRenameEditorForTest(layer);
+    QVERIFY2(editor != nullptr, "the inline editor opens");
+    const QRect edit = editor->geometry();
+    QCOMPARE(edit.left(), row.left() + name.left());
+    QCOMPARE(edit.top(), row.top());
+    QCOMPARE(edit.height(), row.height());
+    QVERIFY2(edit.width() > name.width(), "the editor gives the short label room to type");
+    QVERIFY2(edit.width() <= name.width() + pictura::LayerRowDelegate::kNameGap,
+             "the editor hugs the short label instead of filling the band");
+    QVERIFY2(edit.right() < row.left() + fx.left(),
+             "the fx badge stays outside the editor");
+    QVERIFY2(edit.right() < row.right(), "the editor stops before the row's trailing edge");
+}
+
+// A plain row has no trailing badges, so the editor still ends at the rendered
+// label rather than stretching to the panel edge.
+void LayersPanelBundleTest::renameEditorHugsTheNameOnPlainRows()
+{
+    QVERIFY(newDoc(QStringLiteral("RenamePlain")));
+    window_->resize(1280, 800);
+    window_->show();
+    QTest::qWait(0);
+    const QString layer = makeLayer(QStringLiteral("Layer 1"));
+    QVERIFY(!layer.isEmpty());
+    panel_->refresh();
+    auto* tree = panel_->findChild<QTreeView*>();
+    QVERIFY(tree != nullptr);
+    tree->setFont(QApplication::font());
+    QCoreApplication::processEvents();
+
+    const QRect name = panel_->rowNameRectForTest(layer);
+    const QRect row = panel_->rowViewportRectForTest(layer);
+    QVERIFY2(name.width() > 0, "the label has a hit width");
+
+    QLineEdit* editor = panel_->openRenameEditorForTest(layer);
+    QVERIFY2(editor != nullptr, "the inline editor opens");
+    const QRect edit = editor->geometry();
+    QCOMPARE(edit.left(), row.left() + name.left());
+    QCOMPARE(edit.top(), row.top());
+    QCOMPARE(edit.height(), row.height());
+    QVERIFY2(edit.width() > name.width(), "the editor gives the name room to type");
+    QVERIFY2(edit.width() <= name.width() + pictura::LayerRowDelegate::kNameGap,
+             "the editor does not stretch across the empty label band");
+    QVERIFY2(edit.right() < row.right(), "the editor stops before the row's right edge");
+}
+
+// The lock badge is the right-most trailing icon; the editor must leave it
+// visible on a locked row.
+void LayersPanelBundleTest::renameEditorStopsBeforeLockBadge()
+{
+    QVERIFY(newDoc(QStringLiteral("RenameLocked")));
+    window_->resize(1280, 800);
+    window_->show();
+    QTest::qWait(0);
+    const QString layer = makeLayer(QStringLiteral("Locked"));
+    QVERIFY(!layer.isEmpty());
+    QVERIFY(view_->set_layer_lock(layer.toInt(), QStringLiteral("all"), true));
+    QCoreApplication::processEvents();
+    panel_->refresh();
+    auto* tree = panel_->findChild<QTreeView*>();
+    QVERIFY(tree != nullptr);
+    tree->setFont(QApplication::font());
+    QCoreApplication::processEvents();
+
+    const QRect name = panel_->rowNameRectForTest(layer);
+    const QRect row = panel_->rowViewportRectForTest(layer);
+    const int lockLeft = panel_->lockBadgeLeftForTest(layer);
+    QVERIFY2(name.width() > 0, "the label has a hit width");
+    QVERIFY2(lockLeft > 0, "the locked row paints a lock badge");
+
+    QLineEdit* editor = panel_->openRenameEditorForTest(layer);
+    QVERIFY2(editor != nullptr, "the inline editor opens");
+    const QRect edit = editor->geometry();
+    QCOMPARE(edit.left(), row.left() + name.left());
+    QVERIFY2(edit.width() <= name.width() + pictura::LayerRowDelegate::kNameGap,
+             "the editor hugs the name");
+    QVERIFY2(edit.right() < lockLeft, "the lock badge stays outside the editor");
+}
+
+// A name that fills the label band makes the editor as wide as the band, but it
+// still stops at the badge cap.
+void LayersPanelBundleTest::renameEditorStopsAtTheBandForLongNames()
+{
+    QVERIFY(newDoc(QStringLiteral("RenameLong")));
+    window_->resize(1280, 800);
+    window_->show();
+    QTest::qWait(0);
+    const QString layer = makeLayer(QStringLiteral("seed"));
+    QVERIFY(!layer.isEmpty());
+    QVERIFY(pictura::layer_style_set(*view_, layer, QStringLiteral("colorOverlay.on"), 1.0));
+    pictura::layer_style_commit(*view_, QStringLiteral("Layer Style"));
+    QVERIFY(view_->set_layer_name_path(
+        layer, QStringLiteral("start") + QString(200, QLatin1Char('W')) + QStringLiteral("end")));
+    QCoreApplication::processEvents();
+    panel_->refresh();
+    auto* tree = panel_->findChild<QTreeView*>();
+    QVERIFY(tree != nullptr);
+    tree->setFont(QApplication::font());
+    QCoreApplication::processEvents();
+
+    const QRect name = panel_->rowNameRectForTest(layer);
+    const QRect row = panel_->rowViewportRectForTest(layer);
+    const QRect fx = panel_->rowFxRectForTest(layer);
+    QVERIFY2(name.width() > 0, "the elided label has a hit width");
+    QVERIFY2(!fx.isEmpty(), "the styled row paints an fx badge");
+
+    QLineEdit* editor = panel_->openRenameEditorForTest(layer);
+    QVERIFY2(editor != nullptr, "the inline editor opens");
+    const QRect edit = editor->geometry();
+    QCOMPARE(edit.left(), row.left() + name.left());
+    QVERIFY2(edit.width() >= name.width(), "the editor covers the elided label");
+    QVERIFY2(edit.right() < row.left() + fx.left(),
+             "the fx badge stays outside the editor");
 }
 
 // #1533: a name that fits its label band renders in full for every row kind.
