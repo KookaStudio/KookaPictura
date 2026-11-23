@@ -408,6 +408,7 @@ fn background_from_layer_flags_opaque_and_moves_to_bottom() {
     let moved = &doc.layers[0];
     assert_eq!(moved.name, "Base", "node keeps its pixels and name");
     assert!(moved.background);
+    assert!(moved.lock.is_all(), "a Background is fully locked");
     assert_eq!(doc.layers[1].name, "other");
     assert_eq!(
         moved.channels()[3].data[0],

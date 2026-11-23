@@ -487,6 +487,8 @@ void LayersPanelBundleTest::shortLayerNameIsNotElided()
     pictura::layer_style_commit(*view_, QStringLiteral("Layer Style"));
     QCoreApplication::processEvents();
     panel_->refresh();
+    QVERIFY2(panel_->lockBadgeLeftForTest(QStringLiteral("0")) >= 0,
+             "a Background shows its lock badge");
     QCOMPARE(panel_->rowNameTextForTest(QStringLiteral("0")), QStringLiteral("Background"));
     QCOMPARE(panel_->rowNameTextForTest(group), QStringLiteral("Group Name"));
     QCOMPARE(panel_->rowNameTextForTest(styled), QStringLiteral("Styled"));
