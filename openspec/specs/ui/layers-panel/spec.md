@@ -366,7 +366,7 @@ SHALL leave the solo in place, with its snapshot still restorable.
 
 The system SHALL begin inline name editing only when the user double-clicks
 within the row's **rendered name label**: the painted name text's width after
-right-elision to the available label band, floored to a one-pixel target at the
+elision to the available label band, floored to a one-pixel target at the
 label's left edge. It SHALL NOT begin editing on the visibility, chevron,
 thumbnail, lock, fx, or mask regions, nor on empty row space to the right of the
 rendered label. The hit rectangle SHALL be the `nameRect` geometry the delegate
@@ -2463,7 +2463,9 @@ and the name rect so nothing overlaps. A layer whose lock
 state has any flag set SHALL also show a lock badge at the right side of its
 row, except that the Transparency and Image locks a type or shape layer is
 forced to carry SHALL NOT by themselves show one (CS6 shows them only in the
-Lock strip); an unlocked layer SHALL show none. The lock badge's side SHALL be
+Lock strip). The Background SHALL show the lock badge regardless of its lock
+flags, since it is locked by kind; an unlocked ordinary layer SHALL show none.
+The lock badge's side SHALL be
 80% of its previous two-thirds-thumbnail side, so it reads as a smaller badge
 and the lock stays the rightmost badge. The `fx` badge's side SHALL be 80% of
 the row thumbnail's badge side, and the clipping-mask glyph's side SHALL be 80%
@@ -3226,3 +3228,25 @@ draggable within its own list, and the synthetic group header SHALL NOT drag.
 - **WHEN** a group row with a child and a styled layer row are shown
 - **THEN** the group row keeps the left nested-layers chevron, and the styled
   layer row draws the right-edge list toggle
+
+### Requirement: Layer name label renders with one elision
+
+The system SHALL paint a layer row's name with a single elision to the available
+label band, for every row kind (layer, group, styled/effects, and synthetic
+effect rows). A name that fits the band SHALL be shown in full, with no
+ellipsis, and only the lock, fx, link, Blend If, and list-toggle badges actually
+present SHALL reduce the band. A name wider than the band SHALL be elided
+exactly once in the middle, keeping the start and the end with a single ellipsis
+between them. The painted text SHALL be the same text whose width the row's
+`nameRect` reports, so rendering and the inline-rename hit area cannot drift.
+
+#### Scenario: A name that fits is shown in full [lpr_name_fit]
+
+- **WHEN** a layer's name fits the available label band
+- **THEN** the row paints the full name with no ellipsis
+
+#### Scenario: An overlong name elides once [lpr_name_elide]
+
+- **WHEN** a layer's name is wider than the available label band
+- **THEN** the row paints the name middle-elided to the band, keeping its start
+  and end with a single ellipsis between them

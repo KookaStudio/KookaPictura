@@ -3,13 +3,16 @@
 
 #include <QtTest/QtTest>
 
+#include <QtCore/QAbstractItemModel>
 #include <QtCore/QRect>
 #include <QtGui/QAction>
 #include <QtGui/QColor>
 #include <QtGui/QImage>
+#include <QtGui/QPainter>
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QToolButton>
+#include <QtWidgets/QTreeView>
 
 #include "api/layers_api.h"
 
@@ -19,7 +22,43 @@
 #include "frame.h"
 #include "layer_style_dialog.h"
 #include "panels/layers_panel.h"
+#include "panels/layers_panel_internal.h"
 #include "qt_test_support.h"
+#include "theme.h"
+
+namespace {
+QModelIndex rowIndexForPath(QAbstractItemModel* model, const QString& path,
+                            const QModelIndex& parent = QModelIndex())
+{
+    for (int row = 0; row < model->rowCount(parent); ++row) {
+        const QModelIndex index = model->index(row, 0, parent);
+        if (index.data(pictura::PathRole).toString() == path) {
+            return index;
+        }
+        const QModelIndex child = rowIndexForPath(model, path, index);
+        if (child.isValid()) {
+            return child;
+        }
+    }
+    return {};
+}
+
+int differingPixels(const QImage& a, const QImage& b)
+{
+    if (a.size() != b.size()) {
+        return -1;
+    }
+    int diff = 0;
+    for (int y = 0; y < a.height(); ++y) {
+        for (int x = 0; x < a.width(); ++x) {
+            if (a.pixel(x, y) != b.pixel(x, y)) {
+                ++diff;
+            }
+        }
+    }
+    return diff;
+}
+} // namespace
 
 class LayersPanelBundleTest : public QObject {
     Q_OBJECT
@@ -47,6 +86,8 @@ private slots:
     void adjustmentMaskOff();
     void flyoutStateFollowsDocument();
     void renameHitAreaMatchesRenderedLabel();
+    void shortLayerNameIsNotElided();
+    void layerNamesRenderInFullWhenTheyFit();
 
 private:
     bool newDoc(const QString& name);
@@ -383,6 +424,132 @@ void LayersPanelBundleTest::renameHitAreaMatchesRenderedLabel()
     QVERIFY2(styleOpened, "a double-click right of the label opens Layer Style");
     QVERIFY2(!panel_->inlineEditorOpenForTest(),
              "a double-click right of the label opens no inline editor");
+}
+
+// #1533: a name that fits its label band renders in full for every row kind.
+// The row elided the label a second time using the first elision's width, so a
+// fitting name lost its tail and showed an ellipsis despite the row having room
+// to spare.
+void LayersPanelBundleTest::shortLayerNameIsNotElided()
+{
+    QVERIFY(newDoc(QStringLiteral("NameFit")));
+    const QString layer = makeLayer(QStringLiteral("r1 r2"));
+    QVERIFY(!layer.isEmpty());
+    // Lay the window out so the panel is wide enough to show the full names.
+    window_->resize(1280, 800);
+    window_->show();
+    QTest::qWait(0);
+    panel_->selectPaths({}, QString());
+    QCoreApplication::processEvents();
+    panel_->refresh();
+
+    auto* tree = panel_->findChild<QTreeView*>();
+    auto* delegate = static_cast<pictura::LayerRowDelegate*>(panel_->itemDelegateForTest());
+    QVERIFY(tree && delegate);
+    // Paint reads option.font from the view; pin both to the app font so the
+    // reference below uses the delegate's own font.
+    tree->setFont(QApplication::font());
+    QCoreApplication::processEvents();
+    const QModelIndex index = rowIndexForPath(tree->model(), layer);
+    QVERIFY(index.isValid());
+
+    const QRect vr = tree->visualRect(index);
+    const QRect name = delegate->nameRect(QRect(0, 0, vr.width(), vr.height()), index);
+    QVERIFY2(name.width() > 0, "the row has a name band");
+    const QImage row = panel_->rowImageForTest(layer);
+    QVERIFY(!row.isNull());
+
+    // Repaint the full name exactly as the delegate should: same surface,
+    // font, pen, and left-aligned band. The old double elision drew "r1 …",
+    // so its trailing glyphs differ from this reference.
+    QImage expected(row.size(), row.format());
+    expected.setDevicePixelRatio(row.devicePixelRatio());
+    expected.fill(pictura::Theme::contrastShade(QColor(128, 128, 128), 1));
+    QPainter painter(&expected);
+    painter.setFont(delegate->nameFont(QApplication::font(), index));
+    painter.setPen(tree->palette().color(QPalette::Text));
+    painter.drawText(name, Qt::AlignVCenter | Qt::AlignLeft, QStringLiteral("r1 r2"));
+    painter.end();
+
+    // Compare the name band, excluding the row's bottom rule.
+    const QRect band(name.left(), name.top(), name.width(), qMax(1, name.height() - 2));
+    QCOMPARE(differingPixels(row.copy(band), expected.copy(band)), 0);
+
+    // The Background (lock badge), a group (folder glyph), and a styled row
+    // (fx + list toggles) each use the band their own badges leave free.
+    QVERIFY(view_->background_from_layer(QStringLiteral("0")));
+    QVERIFY(view_->set_layer_name_path(QStringLiteral("0"), QStringLiteral("Background")));
+    const QString group = view_->add_group_in(QString());
+    QVERIFY(!group.isEmpty());
+    QVERIFY(view_->set_layer_name_path(group, QStringLiteral("Group Name")));
+    const QString styled = makeLayer(QStringLiteral("Styled"));
+    QVERIFY(!styled.isEmpty());
+    QVERIFY(pictura::layer_style_set(*view_, styled, QStringLiteral("colorOverlay.on"), 1.0));
+    pictura::layer_style_commit(*view_, QStringLiteral("Layer Style"));
+    QCoreApplication::processEvents();
+    panel_->refresh();
+    QVERIFY2(panel_->lockBadgeLeftForTest(QStringLiteral("0")) >= 0,
+             "a Background shows its lock badge");
+    QCOMPARE(panel_->rowNameTextForTest(QStringLiteral("0")), QStringLiteral("Background"));
+    QCOMPARE(panel_->rowNameTextForTest(group), QStringLiteral("Group Name"));
+    QCOMPARE(panel_->rowNameTextForTest(styled), QStringLiteral("Styled"));
+
+    // A name too wide for the band elides in the middle, keeping both ends.
+    const QString longName =
+        QStringLiteral("start") + QString(200, QLatin1Char('W')) + QStringLiteral("end");
+    QVERIFY(view_->set_layer_name_path(layer, longName));
+    panel_->refresh();
+    const QString shown = panel_->rowNameTextForTest(layer);
+    QVERIFY2(shown.size() < longName.size(), "an overlong name still elides");
+    QVERIFY2(shown.startsWith(QStringLiteral("start")), "the start is kept");
+    QVERIFY2(shown.endsWith(QStringLiteral("end")), "the end is kept");
+    QVERIFY2(shown.contains(QChar(0x2026)), "the middle carries an ellipsis");
+}
+
+// #1533: the names from the report and its follow-up all fit a normal panel
+// and must paint in full; only names wider than the band may elide.
+void LayersPanelBundleTest::layerNamesRenderInFullWhenTheyFit()
+{
+    QVERIFY(newDoc(QStringLiteral("NameBand")));
+    window_->resize(1280, 800);
+    window_->show();
+    QTest::qWait(0);
+    const QString layer = makeLayer(QStringLiteral("seed"));
+    QVERIFY(!layer.isEmpty());
+    panel_->selectPaths({}, QString());
+    QCoreApplication::processEvents();
+    panel_->refresh();
+
+    const QStringList fitting = {
+        QStringLiteral("f2"),
+        QStringLiteral("f2-1"),
+        QStringLiteral("r1 r2"),
+        QStringLiteral("Background"),
+        QStringLiteral("logo1 copy copy copy"),
+        QStringLiteral("5 copy copy copy"),
+        QStringLiteral("Layer 2 copy copy"),
+        QStringLiteral("A name with spaces and 123"),
+    };
+    for (const QString& name : fitting) {
+        QVERIFY2(view_->set_layer_name_path(layer, name), qPrintable(name));
+        panel_->refresh();
+        QCOMPARE(snapshotRow(layer).name, name);
+        QCOMPARE(panel_->rowNameTextForTest(layer), name);
+    }
+
+    const QStringList overlong = {
+        QStringLiteral("start") + QString(200, QLatin1Char('W')) + QStringLiteral("end"),
+        QStringLiteral("prefix ") + QString(200, QLatin1Char('W')) + QStringLiteral(" suffix"),
+    };
+    for (const QString& name : overlong) {
+        QVERIFY2(view_->set_layer_name_path(layer, name), qPrintable(name));
+        panel_->refresh();
+        const QString shown = panel_->rowNameTextForTest(layer);
+        QVERIFY2(shown.size() < name.size(), "an overlong name still elides");
+        QVERIFY2(name.startsWith(shown.left(3)), "the start is kept");
+        QVERIFY2(name.endsWith(shown.right(3)), "the end is kept");
+        QVERIFY2(shown.contains(QChar(0x2026)), "the middle carries an ellipsis");
+    }
 }
 
 QTEST_MAIN(LayersPanelBundleTest)

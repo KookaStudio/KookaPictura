@@ -1263,6 +1263,18 @@ QRect LayersPanel::rowNameRectForTest(const QString& path) const
     return delegate_->nameRect(QRect(0, 0, vr.width(), vr.height()), index);
 }
 
+QString LayersPanel::rowNameTextForTest(const QString& path) const
+{
+    const QModelIndex index = proxyIndexForPath(path);
+    if (!index.isValid() || !delegate_ || !tree_) {
+        return {};
+    }
+    const QRect vr = tree_->visualRect(index);
+    QString text;
+    delegate_->nameRect(QRect(0, 0, vr.width(), vr.height()), index, tree_->font(), &text);
+    return text;
+}
+
 QRect LayersPanel::rowViewportRectForTest(const QString& path) const
 {
     const QModelIndex index = proxyIndexForPath(path);

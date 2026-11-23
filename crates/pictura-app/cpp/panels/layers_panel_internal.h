@@ -604,10 +604,12 @@ public:
         return maskSlotRight(itemRect, index);
     }
 
-    /// The rendered name label's rect: the elided text width inside the
+    /// The rendered name label's rect: the middle-elided text width inside the
     /// available band, floored to a one-pixel hit target at the label's left.
+    /// `drawnText` receives that same elided text, so paint never elides twice.
     QRect nameRect(const QRect& itemRect, const QModelIndex& index,
-                   const QFont& baseFont = QApplication::font()) const
+                   const QFont& baseFont = QApplication::font(),
+                   QString* drawnText = nullptr) const
     {
         const int gap = isSyntheticRow(index) ? kNameGap / 2 : kNameGap;
         int x = thumbsRight(itemRect, index) + gap;
@@ -627,7 +629,8 @@ public:
         const int available = qMax(1, right - 4 - nameLeft);
         const QFontMetrics metrics(nameFont(baseFont, index));
         const QString elided = metrics.elidedText(index.data(Qt::DisplayRole).toString(),
-                                                  Qt::ElideRight, available);
+                                                  Qt::ElideMiddle, available);
+        if (drawnText) *drawnText = elided;
         const int width = qBound(1, metrics.horizontalAdvance(elided), available);
         return QRect(nameLeft, itemRect.top(), width, itemRect.height());
     }
@@ -760,14 +763,12 @@ public:
         painter->fillRect(QRect(rect.left() + kEyeColumn - 1, rect.top(), 1, height), separator);
 
         if (isSyntheticRow(index)) {
-            const QRect nr = nameRect(rect, index, option.font);
+            QString nameText;
+            const QRect nr = nameRect(rect, index, option.font, &nameText);
             painter->setFont(nameFont(option.font, index));
             painter->setPen(selected ? palette.color(QPalette::HighlightedText)
                                      : palette.color(QPalette::Text));
-            const QString elided =
-                painter->fontMetrics().elidedText(index.data(Qt::DisplayRole).toString(),
-                                                  Qt::ElideRight, nr.width());
-            painter->drawText(nr, Qt::AlignVCenter | Qt::AlignLeft, elided);
+            painter->drawText(nr, Qt::AlignVCenter | Qt::AlignLeft, nameText);
             painter->restore();
             return;
         }
@@ -1016,14 +1017,12 @@ public:
         }
 
         // Name, after the thumbnail block, drawn at the rendered label width.
-        const QRect name = nameRect(rect, index, option.font);
+        QString nameText;
+        const QRect name = nameRect(rect, index, option.font, &nameText);
         painter->setFont(nameFont(option.font, index));
         painter->setPen(selected ? palette.color(QPalette::HighlightedText)
                                  : palette.color(QPalette::Text));
-        const QString elided =
-            painter->fontMetrics().elidedText(index.data(Qt::DisplayRole).toString(),
-                                              Qt::ElideRight, name.width());
-        painter->drawText(name, Qt::AlignVCenter | Qt::AlignLeft, elided);
+        painter->drawText(name, Qt::AlignVCenter | Qt::AlignLeft, nameText);
 
         // White 1 px corner brackets one pixel outside each selected mask or
         // content thumbnail; never around a group's icon.

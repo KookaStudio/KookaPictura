@@ -279,6 +279,8 @@ public:
     QRect rowThumbRectForTest(const QString& path) const;
     QRect rowEyeRectForTest(const QString& path) const;
     QRect rowNameRectForTest(const QString& path) const;
+    // The name text the row paints (already right-elided to its band).
+    QString rowNameTextForTest(const QString& path) const;
     // The row's rect in viewport coordinates, resolved through the panel's own
     // proxy mapping (so a test clicks the same row the panel would toggle).
     QRect rowViewportRectForTest(const QString& path) const;
