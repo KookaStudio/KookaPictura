@@ -87,6 +87,7 @@ private slots:
     void flyoutStateFollowsDocument();
     void renameHitAreaMatchesRenderedLabel();
     void shortLayerNameIsNotElided();
+    void layerNamesRenderInFullWhenTheyFit();
 
 private:
     bool newDoc(const QString& name);
@@ -503,6 +504,52 @@ void LayersPanelBundleTest::shortLayerNameIsNotElided()
     QVERIFY2(shown.startsWith(QStringLiteral("start")), "the start is kept");
     QVERIFY2(shown.endsWith(QStringLiteral("end")), "the end is kept");
     QVERIFY2(shown.contains(QChar(0x2026)), "the middle carries an ellipsis");
+}
+
+// #1533: the names from the report and its follow-up all fit a normal panel
+// and must paint in full; only names wider than the band may elide.
+void LayersPanelBundleTest::layerNamesRenderInFullWhenTheyFit()
+{
+    QVERIFY(newDoc(QStringLiteral("NameBand")));
+    window_->resize(1280, 800);
+    window_->show();
+    QTest::qWait(0);
+    const QString layer = makeLayer(QStringLiteral("seed"));
+    QVERIFY(!layer.isEmpty());
+    panel_->selectPaths({}, QString());
+    QCoreApplication::processEvents();
+    panel_->refresh();
+
+    const QStringList fitting = {
+        QStringLiteral("f2"),
+        QStringLiteral("f2-1"),
+        QStringLiteral("r1 r2"),
+        QStringLiteral("Background"),
+        QStringLiteral("logo1 copy copy copy"),
+        QStringLiteral("5 copy copy copy"),
+        QStringLiteral("Layer 2 copy copy"),
+        QStringLiteral("A name with spaces and 123"),
+    };
+    for (const QString& name : fitting) {
+        QVERIFY2(view_->set_layer_name_path(layer, name), qPrintable(name));
+        panel_->refresh();
+        QCOMPARE(snapshotRow(layer).name, name);
+        QCOMPARE(panel_->rowNameTextForTest(layer), name);
+    }
+
+    const QStringList overlong = {
+        QStringLiteral("start") + QString(200, QLatin1Char('W')) + QStringLiteral("end"),
+        QStringLiteral("prefix ") + QString(200, QLatin1Char('W')) + QStringLiteral(" suffix"),
+    };
+    for (const QString& name : overlong) {
+        QVERIFY2(view_->set_layer_name_path(layer, name), qPrintable(name));
+        panel_->refresh();
+        const QString shown = panel_->rowNameTextForTest(layer);
+        QVERIFY2(shown.size() < name.size(), "an overlong name still elides");
+        QVERIFY2(name.startsWith(shown.left(3)), "the start is kept");
+        QVERIFY2(name.endsWith(shown.right(3)), "the end is kept");
+        QVERIFY2(shown.contains(QChar(0x2026)), "the middle carries an ellipsis");
+    }
 }
 
 QTEST_MAIN(LayersPanelBundleTest)
