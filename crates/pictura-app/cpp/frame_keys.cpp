@@ -6,6 +6,8 @@
 #include "menu_registrar.h"
 #include "text_input.h"
 
+#include "panels/channels_panel.h"
+
 #include <QtWidgets/QApplication>
 
 namespace pictura {
@@ -182,6 +184,18 @@ bool PicturaMainWindow::dispatchCommandKey(QKeyEvent* event)
             const QString path = layer_selection_anchor(*view);
             mask_solo_set(*view, mask_solo_get(*view) == path ? QString() : path);
             refresh();
+            event->accept();
+            return true;
+        }
+    }
+    // CS6's channel keys: the Channels panel labels its composite and working
+    // colour rows Ctrl+2..5, so they toggle those rows from anywhere in the
+    // window, not only while the panel has focus.
+    if (!event->isAutoRepeat() && (mods & Qt::ControlModifier)
+        && !(mods & Qt::AltModifier) && !(mods & Qt::ShiftModifier)
+        && event->key() >= Qt::Key_2 && event->key() <= Qt::Key_5) {
+        ChannelsPanel* panel = panels_ ? panels_->channelsPanel() : nullptr;
+        if (panel && panel->toggleChannelForShortcut(event->key() - Qt::Key_0)) {
             event->accept();
             return true;
         }

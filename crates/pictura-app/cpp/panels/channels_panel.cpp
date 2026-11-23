@@ -816,6 +816,21 @@ bool ChannelsPanel::channelEyeEnabledForTest(int index) const
 
 void ChannelsPanel::toggleChannelForTest(int index) { toggle(index); }
 
+bool ChannelsPanel::toggleChannelForShortcut(int digit)
+{
+    if (!view_ || !view_->has_document()) {
+        return false;
+    }
+    for (int i = 0; i < rows_.size(); ++i) {
+        const QString& shortcut = rows_.at(i).shortcut;
+        if (!shortcut.isEmpty() && shortcut.back().digitValue() == digit) {
+            toggle(i);
+            return true;
+        }
+    }
+    return false;
+}
+
 void ChannelsPanel::selectChannelForTest(int index) { list_->setCurrentRow(index); }
 
 int ChannelsPanel::hoverChannelForTest(int index, Qt::KeyboardModifiers mods)

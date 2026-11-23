@@ -119,6 +119,7 @@ private slots:
     void cleanup();
     void rowsAndThumbnails();
     void eyesHideChannelsOnTheCanvas();
+    void channelShortcutsToggleFromTheCanvas();
     void alphaChannelsAndFooter();
     void newChannelDisabledAtCap();
     void ctrlClickLoadsChannelSelection();
@@ -249,6 +250,52 @@ void ChannelsPanelTest::eyesHideChannelsOnTheCanvas()
     panel_->setView(window_->activeView());
     QVERIFY(panel_->channelVisibleForTest(1));
     QCOMPARE(window_->imageView()->channelMask(), 0x7);
+}
+
+// #1553: the rows' Ctrl+2..5 labels work from the canvas, not only while the
+// Channels panel has focus. Ctrl+3/4/5 flip Red/Green/Blue, and Ctrl+2 restores
+// every channel.
+void ChannelsPanelTest::channelShortcutsToggleFromTheCanvas()
+{
+    QTemporaryDir dir;
+    QImage image(40, 40, QImage::Format_RGB32);
+    image.fill(QColor(100, 150, 200));
+    const QString path = dir.filePath(QStringLiteral("photo.png"));
+    QVERIFY(image.save(path) && window_->openDocumentAtPath(path));
+    window_->show();
+    QVERIFY(QTest::qWaitForWindowExposed(window_.get()));
+    view_ = window_->activeView();
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    pictura::ImageView* canvas = window_->imageView();
+    QVERIFY(view_ && panel_ && canvas);
+    panel_->setView(view_);
+    canvas->setFocus();
+    QCOMPARE(canvas->channelMask(), 0x7);
+
+    QTest::keyClick(canvas, Qt::Key_3, Qt::ControlModifier);
+    QVERIFY(!panel_->channelVisibleForTest(1));
+    QCOMPARE(canvas->channelMask(), 0x6);
+    QTest::keyClick(canvas, Qt::Key_3, Qt::ControlModifier);
+    QVERIFY(panel_->channelVisibleForTest(1));
+    QCOMPARE(canvas->channelMask(), 0x7);
+
+    QTest::keyClick(canvas, Qt::Key_4, Qt::ControlModifier);
+    QCOMPARE(canvas->channelMask(), 0x5);
+    QTest::keyClick(canvas, Qt::Key_4, Qt::ControlModifier);
+    QCOMPARE(canvas->channelMask(), 0x7);
+
+    QTest::keyClick(canvas, Qt::Key_5, Qt::ControlModifier);
+    QCOMPARE(canvas->channelMask(), 0x3);
+    QTest::keyClick(canvas, Qt::Key_5, Qt::ControlModifier);
+    QCOMPARE(canvas->channelMask(), 0x7);
+
+    QTest::keyClick(canvas, Qt::Key_3, Qt::ControlModifier);
+    QCOMPARE(canvas->channelMask(), 0x6);
+    QTest::keyClick(canvas, Qt::Key_2, Qt::ControlModifier);
+    QCOMPARE(canvas->channelMask(), 0x7);
+    for (int i = 0; i < 4; ++i) {
+        QVERIFY(panel_->channelVisibleForTest(i));
+    }
 }
 
 // Alpha channels: New Channel (black) and Delete, Save Selection as Channel,
