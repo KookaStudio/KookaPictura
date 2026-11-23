@@ -240,6 +240,11 @@ changing the Show toggle.
 - **WHEN** the Layers panel selects a different shape layer with Layer Edges on
 - **THEN** the dashed outline shows the newly selected layer's content bounds before any document edit
 
+#### Scenario: A content move leaves the outline in place [vm_layer_edges_content_move]
+
+- **WHEN** a selection-content move preview offsets the canvas while Layer Edges is on
+- **THEN** the dashed outline stays at the committed content bounds
+
 ### Requirement: Target Path overlay
 
 `View > Show > Target Path` SHALL be a checkable command, on by default. When on

@@ -140,6 +140,7 @@ private slots:
     void targetPath();
     void shapeTargetPathFollowsMove();
     void shapeTargetPathFollowsActiveShape();
+    void contentMoveLeavesOverlays();
     void sliceVisibility();
     void sliceLock();
     void clearSlices();
@@ -797,6 +798,37 @@ void ViewMenuTest::shapeTargetPathFollowsActiveShape()
              "the dragged shape's layer edges follow the preview");
     canvas->endMovePreview();
     view->end_move_preview();
+}
+
+void ViewMenuTest::contentMoveLeavesOverlays()
+{
+    PictureView* view = window_->activeView();
+    ImageView* canvas = window_->imageView();
+    QVERIFY(view && canvas);
+
+    pictura::ShapeSpec spec{};
+    spec.kind = 0;
+    spec.boxed = true;
+    spec.x0 = 10;
+    spec.y0 = 10;
+    spec.x1 = 30;
+    spec.y1 = 30;
+    const QString path = pictura::shape_add_layer(*view, spec, 0xffff0000u);
+    QVERIFY(!path.isEmpty());
+    view->set_active_layer(path);
+    window_->refresh();
+    const QRectF edges = canvas->layerEdgesForTest();
+    const QRectF target = canvas->targetPathOverlayForTest().curve.boundingRect();
+    QVERIFY(!edges.isNull() && !target.isNull());
+
+    // The selection-content move preview uses the default (movesLayer false),
+    // so the document overlays stay at their committed positions.
+    canvas->beginMovePreview(QImage(), QImage(), QPointF(), 1.0, std::nullopt, 1, QImage(),
+                             std::nullopt, 1);
+    canvas->setMovePreviewDelta(QPointF(40, 20));
+    QCOMPARE(canvas->layerEdgesForTest(), edges);
+    QCOMPARE(canvas->targetPathCurveForTest().boundingRect().topLeft(), target.topLeft());
+    canvas->endMovePreview();
 }
 
 void ViewMenuTest::sliceVisibility()
