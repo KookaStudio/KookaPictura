@@ -489,6 +489,12 @@ gaps are the CS6 Extended 3D object and camera tools.
       the camera's embedded matrix (approximate parity); compressed ORFs are
       refused by name (#1471).
       `crates/pictura-codec/src/dng/orf.rs`, `crates/pictura-codec/src/dng/orf_meta.rs`.
+- [x] **Panasonic RW2, plain packings, decode only** — `read_raw` names the `IIU\0` header
+      as RW2 and reads 16-bit words and the two 16-byte packings (RawFormat 2
+      and 7), cropped to the sensor borders, with levels and as-shot white
+      balance from the Panasonic tags; other codings are refused by name, and
+      File ▸ Open refuses these bodies until they have colour (#1472).
+      `crates/pictura-codec/src/dng/rw2.rs`.
 - [x] **Per-camera colour matrices** — vendor raw files without a
       `ColorMatrix` take A and D65 matrices fitted from openly licensed camera
       spectral sensitivities (14 Canon CR2 and 11 Nikon NEF bodies, and 11
@@ -509,7 +515,9 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [ ] X-Trans-tuned demosaic, with the Fuji container (#399)
 - [ ] Deflate, PackBits and lossy-JPEG DNGs and floating-point samples (#396)
 - [ ] Olympus-compressed ORF sensor data, most bodies since 2007 (#1535)
-- [ ] Vendor raw containers: RW2 and CR3 (#399)
+- [ ] Compressed and RawFormat 5 RW2 sensor data, about 97 % of Panasonic samples (#1541)
+- [ ] Colour for Panasonic RW2 cameras, so they open (#1542)
+- [ ] Vendor raw containers: CR3 (#399)
 - [ ] Every Nikon camera opens with colour: verify each layout, colour sources for ~70 bodies, recent models first (#1498)
 - [x] **DNG output** — Save Image… in the raw open's Pictura Raw dialog writes
       a mosaic DNG (lossless-JPEG tiles) or, with Convert to Linear Image, a

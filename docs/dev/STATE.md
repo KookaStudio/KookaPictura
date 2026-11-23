@@ -4,6 +4,18 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Vendor raw containers — Panasonic RW2 (plain packings), #1472 part 1**
+  (OpenSpec change `vendor-raw-rw2`, archived; `codec/vendor-raw-containers`
+  and `document/raw-open` modified; #1472 stays open). `dng/rw2.rs`: header
+  `IIU\0`, Panasonic tags in IFD0; 16-bit words (compression 34828/34830,
+  levels = tags x 16) and RawFormat 2 / 7 (ten 12-bit / nine 14-bit samples
+  from the low bit of 16 bytes). The CFA code counts from the sensor corner,
+  so odd borders shift it. Decode only: no matrix, so File > Open names the
+  camera and refuses, and the dialog filters do not list RW2 yet (#1542).
+  Checked on 432 raw.pixls.us files (headers only for the refused): 12 read,
+  420 refused by RawFormat. Those codings = #1541, blocked on provenance and
+  a patent check: do not write those decoders from a model's memory or search
+  for existing ones. Series next: RAF + X-Trans -> CR3.
 - **Vendor raw containers — Olympus ORF (uncompressed), #1471 implemented**
   (OpenSpec change `vendor-raw-orf`, archived; `codec/vendor-raw-containers`
   and `document/raw-open` modified). `dng/orf.rs`: headers `IIRO`/`IIRS`/`MMOR`;
@@ -16,7 +28,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   (no Olympus in rawtoaces-data; warm tones lean pink on SP-350/510/550).
   Checked on the 22 uncompressed raw.pixls.us files. Compressed ORF = #1535, blocked on
   provenance and a patent check: do not write that decoder from a model's
-  memory or search for existing ones. Series next: RW2 → RAF + X-Trans → CR3.
+  memory or search for existing ones.
 - **Crop resampling and non-destructive Reveal All — #544 implemented**
   (OpenSpec change `crop-resampling-nondestructive`, archived; new capabilities
   `tools/crop-resampling` and `tools/non-destructive-crop`). `W x H x Resolution`
