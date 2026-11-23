@@ -15,7 +15,7 @@ namespace pictura {
 void ImageView::beginMovePreview(const QImage& base, const QImage& layer, const QPointF& layerPos,
                                  double opacity, std::optional<QPoint> basePos, int scale,
                                  const QImage& above, std::optional<QPoint> abovePos,
-                                 int aboveScale)
+                                 int aboveScale, bool movesLayer)
 {
     moveBase_ = base;
     moveBasePos_ = basePos;
@@ -27,6 +27,7 @@ void ImageView::beginMovePreview(const QImage& base, const QImage& layer, const 
     moveAbove_ = above;
     moveAbovePos_ = abovePos;
     moveAboveScale_ = std::max(1, aboveScale);
+    movePreviewMovesLayer_ = movesLayer;
     movePreviewActive_ = true;
     update();
 }
@@ -56,6 +57,7 @@ void ImageView::endMovePreview()
     moveDelta_ = QPointF();
     moveOpacity_ = 1.0;
     moveScale_ = 1;
+    movePreviewMovesLayer_ = false;
     update();
 }
 

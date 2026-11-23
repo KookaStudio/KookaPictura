@@ -228,6 +228,13 @@ void PicturaMainWindow::wireDocument(DocEntry& doc)
         }
         if (DocEntry* doc = documents_->docAt(index)) {
             refreshLayerEdges(*doc);
+            // A shape or vector-mask target path is drawn from the layer's
+            // outline, so a Move or transform present must redraw it too.
+            for (const DocWindow* window : doc->windows) {
+                if (window) {
+                    refreshTargetPathOverlay(*window);
+                }
+            }
         }
         if (view == activeView()) {
             panels_->setPanelsRefreshedByChanged(false);

@@ -7,6 +7,7 @@
 #include "canvas_scrollbars.h"
 #include "commands.h"
 #include "image_view.h"
+#include "panels/layers_panel.h"
 #include "preferences_dialog.h"
 #include "session.h"
 #include "show_extras_dialog.h"
@@ -137,6 +138,9 @@ private slots:
     void rotatedGrids();
     void layerEdges();
     void targetPath();
+    void shapeTargetPathFollowsMove();
+    void shapeTargetPathFollowsActiveShape();
+    void contentMoveLeavesOverlays();
     void sliceVisibility();
     void sliceLock();
     void clearSlices();
@@ -610,6 +614,31 @@ void ViewMenuTest::layerEdges()
     pictura::add_user_slice(*view, 0, 0, 10, 10);
     window_->refresh();
     QVERIFY(canvas->layerEdgesForTest().width() > 0);
+
+    // A shape layer's edge follows the outline when the Move tool moves it.
+    pictura::ShapeSpec shape{};
+    shape.kind = 0;
+    shape.boxed = true;
+    shape.x0 = 10;
+    shape.y0 = 10;
+    shape.x1 = 30;
+    shape.y1 = 30;
+    const QString shapePath = pictura::shape_add_layer(*view, shape, 0xffff0000u);
+    QVERIFY(!shapePath.isEmpty());
+    view->set_active_layer(shapePath);
+    window_->refresh();
+    const QRectF before = canvas->layerEdgesForTest();
+    QVERIFY(before.contains(QPointF(20, 20)));
+    QVERIFY(view->begin_move_preview());
+    canvas->beginMovePreview(QImage(), QImage(), QPointF(), 1.0, std::nullopt, 1, QImage(),
+                             std::nullopt, 1, true);
+    canvas->setMovePreviewDelta(QPointF(40, 20));
+    QCOMPARE(canvas->layerEdgesForTest().topLeft(), before.topLeft() + QPointF(40, 20));
+    canvas->endMovePreview();
+    QVERIFY(view->commit_move(40, 20));
+    QCoreApplication::processEvents();
+    window_->refresh();
+    QCOMPARE(canvas->layerEdgesForTest().topLeft(), before.topLeft() + QPointF(40, 20));
 }
 
 void ViewMenuTest::targetPath()
@@ -665,6 +694,141 @@ void ViewMenuTest::targetPath()
         QVERIFY(!item->targetPathVisibleForTest());
         QVERIFY(!item->pathOverlayVisibleForTest());
     }
+}
+
+void ViewMenuTest::shapeTargetPathFollowsMove()
+{
+    PictureView* view = window_->activeView();
+    ImageView* canvas = window_->imageView();
+    QVERIFY(view && canvas);
+
+    pictura::ShapeSpec spec{};
+    spec.kind = 0;
+    spec.boxed = true;
+    spec.x0 = 10;
+    spec.y0 = 10;
+    spec.x1 = 30;
+    spec.y1 = 30;
+    const QString path = pictura::shape_add_layer(*view, spec, 0xffff0000u);
+    QVERIFY(!path.isEmpty());
+    view->set_active_layer(path);
+    window_->refresh();
+    QVERIFY(!canvas->targetPathOverlayForTest().curve.isEmpty());
+    const QRectF before = canvas->targetPathOverlayForTest().curve.boundingRect();
+    QVERIFY(before.contains(QPointF(20, 20)));
+
+    QVERIFY(view->begin_move_preview());
+    canvas->beginMovePreview(QImage(), QImage(), QPointF(), 1.0, std::nullopt, 1, QImage(),
+                             std::nullopt, 1, true);
+    canvas->setMovePreviewDelta(QPointF(40, 20));
+    const QPointF expected = before.topLeft() + QPointF(40, 20);
+    const auto near = [](const QPointF& actual, const QPointF& want) {
+        return qAbs(actual.x() - want.x()) < 0.01 && qAbs(actual.y() - want.y()) < 0.01;
+    };
+    const QPointF during = canvas->targetPathCurveForTest().boundingRect().topLeft();
+    QVERIFY2(near(during, expected),
+             qPrintable(QStringLiteral("during %1,%2 expected %3,%4")
+                            .arg(during.x())
+                            .arg(during.y())
+                            .arg(expected.x())
+                            .arg(expected.y())));
+    canvas->endMovePreview();
+    QVERIFY(view->commit_move(40, 20));
+    QCoreApplication::processEvents();
+    const QPointF moved = canvas->targetPathOverlayForTest().curve.boundingRect().topLeft();
+    QVERIFY2(near(moved, expected),
+             qPrintable(QStringLiteral("moved %1,%2 expected %3,%4")
+                            .arg(moved.x())
+                            .arg(moved.y())
+                            .arg(expected.x())
+                            .arg(expected.y())));
+}
+
+void ViewMenuTest::shapeTargetPathFollowsActiveShape()
+{
+    PictureView* view = window_->activeView();
+    ImageView* canvas = window_->imageView();
+    auto* panel = window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+    QVERIFY(view && canvas && panel);
+
+    const auto addShape = [view](int x, int y) {
+        pictura::ShapeSpec spec{};
+        spec.kind = 0;
+        spec.boxed = true;
+        spec.x0 = x;
+        spec.y0 = y;
+        spec.x1 = x + 20;
+        spec.y1 = y + 20;
+        return pictura::shape_add_layer(*view, spec, 0xffff0000u);
+    };
+    const QString first = addShape(10, 10);
+    const QString second = addShape(60, 60);
+    QVERIFY(!first.isEmpty() && !second.isEmpty());
+    QCoreApplication::processEvents();
+
+    const auto near = [](const QPointF& actual, const QPointF& want) {
+        return qAbs(actual.x() - want.x()) < 0.01 && qAbs(actual.y() - want.y()) < 0.01;
+    };
+
+    panel->selectPaths({first}, first);
+    window_->refresh();
+    QVERIFY(near(canvas->targetPathOverlayForTest().curve.boundingRect().topLeft(),
+                 QPointF(10, 10)));
+    QVERIFY(near(canvas->layerEdgesForTest().topLeft(), QPointF(10, 10)));
+
+    // Selecting another shape moves the target path and layer edges before any
+    // document edit.
+    panel->selectPaths({second}, second);
+    QCoreApplication::processEvents();
+    QVERIFY2(near(canvas->targetPathOverlayForTest().curve.boundingRect().topLeft(),
+                  QPointF(60, 60)),
+             "the target path follows the active shape");
+    QVERIFY2(near(canvas->layerEdgesForTest().topLeft(), QPointF(60, 60)),
+             "the layer edges follow the active shape");
+
+    // A drag of that shape carries its own path and edges, not the previous
+    // layer's.
+    QVERIFY(view->begin_move_preview());
+    canvas->beginMovePreview(QImage(), QImage(), QPointF(), 1.0, std::nullopt, 1, QImage(),
+                             std::nullopt, 1, true);
+    canvas->setMovePreviewDelta(QPointF(-10, 5));
+    QVERIFY2(near(canvas->targetPathCurveForTest().boundingRect().topLeft(), QPointF(50, 65)),
+             "the dragged shape's target path follows the preview");
+    QVERIFY2(near(canvas->layerEdgesForTest().topLeft(), QPointF(50, 65)),
+             "the dragged shape's layer edges follow the preview");
+    canvas->endMovePreview();
+    view->end_move_preview();
+}
+
+void ViewMenuTest::contentMoveLeavesOverlays()
+{
+    PictureView* view = window_->activeView();
+    ImageView* canvas = window_->imageView();
+    QVERIFY(view && canvas);
+
+    pictura::ShapeSpec spec{};
+    spec.kind = 0;
+    spec.boxed = true;
+    spec.x0 = 10;
+    spec.y0 = 10;
+    spec.x1 = 30;
+    spec.y1 = 30;
+    const QString path = pictura::shape_add_layer(*view, spec, 0xffff0000u);
+    QVERIFY(!path.isEmpty());
+    view->set_active_layer(path);
+    window_->refresh();
+    const QRectF edges = canvas->layerEdgesForTest();
+    const QRectF target = canvas->targetPathOverlayForTest().curve.boundingRect();
+    QVERIFY(!edges.isNull() && !target.isNull());
+
+    // The selection-content move preview uses the default (movesLayer false),
+    // so the document overlays stay at their committed positions.
+    canvas->beginMovePreview(QImage(), QImage(), QPointF(), 1.0, std::nullopt, 1, QImage(),
+                             std::nullopt, 1);
+    canvas->setMovePreviewDelta(QPointF(40, 20));
+    QCOMPARE(canvas->layerEdgesForTest(), edges);
+    QCOMPARE(canvas->targetPathCurveForTest().boundingRect().topLeft(), target.topLeft());
+    canvas->endMovePreview();
 }
 
 void ViewMenuTest::sliceVisibility()
