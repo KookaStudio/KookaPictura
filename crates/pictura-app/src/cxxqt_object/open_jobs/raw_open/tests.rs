@@ -193,10 +193,13 @@ fn raw_sniff_detects_by_signature() {
     let other = write(&dir, "other.tif", &sony);
     // An Olympus header is enough to name an ORF.
     let olympus = write(&dir, "olympus.tif", b"IIRO\x08\0\0\0\0\0\0\0\0\0");
+    // So is a Panasonic one for an RW2.
+    let panasonic = write(&dir, "panasonic.tif", b"IIU\0\x08\0\0\0\0\0\0\0\0\0");
     let sniff = |p: &Path| raw_sniff_path(&QString::from(p.to_str().unwrap()));
     assert!(sniff(&dng));
     assert!(sniff(&arw));
     assert!(sniff(&olympus));
+    assert!(sniff(&panasonic));
     assert!(!sniff(&other));
     assert!(!sniff(&tiff));
     assert!(!sniff(&dir.join("missing.dng")));
