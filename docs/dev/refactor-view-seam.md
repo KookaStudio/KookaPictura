@@ -138,8 +138,9 @@ hand-written membranes under `cpp/api/`:
 Every C++ file that reaches the bridge includes a membrane, never a `*.cxxqt.h`
 directly.
 `api/type_api.h` remains the type domain's generated-header surface. The bridges
-that exposed one or two Rust functions were folded into neighbours, leaving 69
-bridge files. The bridge stamp is still global: any bridge edit recompiles every
+that exposed one or two Rust functions were folded into neighbours; six bridges
+landed afterwards, so the tree holds 74 (the budget the ratchet records). The
+bridge stamp is still global: any bridge edit recompiles every
 membrane consumer; the membranes bound the per-translation-unit include surface,
 not the rebuild fan-out. Tests:
 `pictura_app::build_config::{bridge_headers_confined_to_api,
@@ -149,4 +150,50 @@ adapter_and_membrane_headers_are_registered,
 generated_include_scan_rejects_violation}`.
 
 Change artifacts: `openspec/changes/archive/2026-11-04-bridge-membranes/`.
+
+## 8. Round 5: checked-in registration (#1187)
+
+Round 4 deferred "verb registration is in one place" to #1187. The deferral hid
+a distinction: adding a **verb** to an existing bridge was already one edit, and
+adding a **bridge** was three (the source, a line in `build.rs`'s `.files([...])`
+list, the membrane). Two checked-in generated artifacts replace both
+bookkeeping steps:
+
+| Artifact | Holds | Read by |
+|---|---|---|
+| `crates/pictura-app/bridge_sources.txt` | the 74 bridge paths, sorted | `build.rs`'s `.files(...)` |
+| `crates/pictura-app/src/build_config/verb_manifest.tsv` | 1,465 verbs: kind, C++ name, Rust name, owning `cpp/api/` header, bridge header | humans, and the drift test |
+
+`build.rs` no longer names a bridge source inline. It reads the list and emits
+one `rerun-if-changed` for it; the bridge files stay watched through
+`CxxQtBuilder::files`, and nothing else under `src/` is watched, so an
+implementation-body edit still does not rerun the build script. A build-time
+scan of `src/` was rejected: watching the directory reruns the script on every
+Rust edit (5.3 s to about 55 s of build-script time), and the script cannot skip
+its own work on such a rerun because `CxxQtBuilder::build()` is the only emitter
+of this crate's Qt `rustc-link-lib` directives and the `cxxqt_*` cfg.
+
+Both artifacts are generated, never hand-edited, and both are drift-tested in the
+nextest run `verify-fast` already performs:
+
+```bash
+PICTURA_WRITE_BRIDGE_SOURCES=1 cargo nextest run -p pictura-app bridge_sources
+PICTURA_WRITE_VERB_MANIFEST=1   cargo nextest run -p pictura-app verb_manifest
+```
+
+Adding a bridge is now: create the source, add its generated header to a
+membrane, regenerate the list. Adding a verb is one declaration edit; the
+manifest drift test then names the row to bless.
+
+Deliberately not done: generating the membranes (their grouping is editorial),
+per-membrane bridge stamps (a translation unit can reach a membrane through a
+header, which `OBJECT_DEPENDS` cannot express), and pruning verbs with no
+caller. Tests: `pictura_app::build_config::bridge_sources::{bridge_sources_match_the_tree,
+bridge_sources_are_all_real_bridges}`,
+`pictura_app::build_config::verb_manifest::{verb_manifest_matches_bridge_sources,
+verb_manifest_counts_every_declared_function, verb_manifest_names_owners,
+verb_manifest_names_renamed_verbs}`,
+`pictura_app::build_config::build_script_derives_bridge_sources`.
+
+Change artifacts: `openspec/changes/verb-manifest-registration/`.
 
