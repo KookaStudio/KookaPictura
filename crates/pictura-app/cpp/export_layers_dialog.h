@@ -1,5 +1,7 @@
 #pragma once
 
+#include "export_batch.h"
+
 #include <QtCore/QString>
 #include <QtWidgets/QDialog>
 
@@ -39,6 +41,12 @@ private:
 
 // The `.psd`, `.jpg`, `.tif`, `.bmp`, or `.pdf` suffix for a File Type.
 QString exportLayersSuffix(const QString& format);
+
+// The batch spec the export runs, for tests that replace only the writer.
+ExportBatchSpec layersExportBatchSpec(PictureView& view, QWidget* parent,
+                                      const QString& folder, const QString& prefix,
+                                      bool visibleOnly, const QString& format,
+                                      bool includeIcc);
 
 // Run the dialog and export the layers. False without a document, on a bad
 // destination, or when a file fails.

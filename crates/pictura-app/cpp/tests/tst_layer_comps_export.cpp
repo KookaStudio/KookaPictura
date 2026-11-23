@@ -75,10 +75,8 @@ private slots:
     void longPrefixIsHandled();
     void filesReplaceExistingFile();
     void transformSessionBlocksExport();
-    void cancelStopsBatch();
     void badDestinationWritesNothing();
     void directoryTargetStopsBatch();
-    void writeFailureStopsBatch();
     void pdfOnePagePerComp();
     void pdfPageSize();
     void pdfPagesMatchComps();
@@ -301,11 +299,6 @@ void LayerCompsExportTest::transformSessionBlocksExport()
     QSKIP("requires a live transform session fixture");
 }
 
-void LayerCompsExportTest::cancelStopsBatch()
-{
-    QSKIP("covered by the shared cancellable job");
-}
-
 void LayerCompsExportTest::badDestinationWritesNothing()
 {
     pictura::PictureView* view = newDoc(*window_, QStringLiteral("bad-dest"));
@@ -327,11 +320,6 @@ void LayerCompsExportTest::directoryTargetStopsBatch()
     QVERIFY(QDir(dir.path()).mkpath(QStringLiteral("xA.psd")));
     QVERIFY(!pictura::exportLayerComps(view, dir.path(), QStringLiteral("x"),
                                        QStringLiteral("PSD"), false));
-}
-
-void LayerCompsExportTest::writeFailureStopsBatch()
-{
-    QSKIP("permission checks are covered by the shared export job");
 }
 
 void LayerCompsExportTest::pdfOnePagePerComp()

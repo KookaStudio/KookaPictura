@@ -116,6 +116,7 @@ set(PICTURA_QT_TESTS
     tst_rotate_view
     tst_save_for_web
     tst_export_as
+    tst_export_batch
     tst_export_layers
     tst_file_export_tools
     tst_load_files_into_stack

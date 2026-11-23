@@ -2,13 +2,9 @@
 
 #include "api/document_api.h"
 #include "api/engine_bridge.h"
-#include "busy_job.h"
 
 #include <QtCore/QDir>
 #include <QtCore/QFileInfo>
-#include <QtCore/QPointer>
-#include <QtCore/QStringList>
-#include <QtCore/QVector>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDialogButtonBox>
@@ -16,29 +12,12 @@
 #include <QtWidgets/QFormLayout>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLineEdit>
-#include <QtWidgets/QMessageBox>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QVBoxLayout>
-
-#include <memory>
 
 namespace pictura {
 
 namespace {
-
-struct Target {
-    QString layerPath;
-    QString outputPath;
-};
-
-struct BatchState {
-    QVector<Target> targets;
-    int next = 0;
-    bool cancelled = false;
-    bool failed = false;
-    QString failingLayer;
-    QString failingPath;
-};
 
 QString defaultFolder(PictureView* view)
 {
@@ -158,98 +137,35 @@ bool ExportLayersDialog::includeIcc() const
     return icc_->isChecked();
 }
 
+ExportBatchSpec layersExportBatchSpec(PictureView& view, QWidget* parent,
+                                      const QString& folder, const QString& prefix,
+                                      bool visibleOnly, const QString& format, bool includeIcc)
+{
+    ExportBatchSpec spec;
+    spec.parent = parent;
+    spec.view = &view;
+    spec.title = QObject::tr("Export Layers to Files");
+    spec.destination = folder;
+    spec.suffix = exportLayersSuffix(format);
+    spec.targetsText = export_layer_targets(view, visibleOnly, prefix);
+    spec.destinationFailureText = QObject::tr("The destination folder is not writable.");
+    spec.write = [format, includeIcc](PictureView& targetView, const ExportTarget& target) {
+        return export_layer_file(targetView, target.key, format, includeIcc, target.path);
+    };
+    spec.failureText = [](const ExportTarget& target) {
+        return QObject::tr("Could not write layer %1 to %2.").arg(target.key, target.path);
+    };
+    return spec;
+}
+
 bool exportLayers(PictureView* view, const QString& folder, const QString& prefix,
                   bool visibleOnly, const QString& format, bool includeIcc, QWidget* parent)
 {
     if (!view || !view->has_document()) {
         return false;
     }
-    const QFileInfo destination(folder);
-    if (!destination.isDir() || !destination.isWritable()) {
-        if (parent) {
-            QMessageBox::warning(
-                parent, QObject::tr("Export Layers to Files"),
-                QObject::tr("The destination folder is not writable."));
-        }
-        return false;
-    }
-    const QString targetsText = export_layer_targets(*view, visibleOnly, prefix);
-    if (targetsText.isEmpty()) {
-        return false;
-    }
-    auto state = std::make_shared<BatchState>();
-    const QString suffix = exportLayersSuffix(format);
-    for (const QString& line : targetsText.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
-        const int tab = line.indexOf(QLatin1Char('\t'));
-        if (tab <= 0) {
-            continue;
-        }
-        const QString layerPath = line.left(tab);
-        const QString name = line.mid(tab + 1);
-        const QString output = folder + QLatin1Char('/') + name + suffix;
-        if (QFileInfo(output).isDir()) {
-            state->failingLayer = layerPath;
-            state->failingPath = output;
-            state->failed = true;
-            break;
-        }
-        state->targets.append({layerPath, output});
-    }
-    if (state->failed || state->targets.isEmpty()) {
-        if (parent && state->failed) {
-            QMessageBox::warning(
-                parent, QObject::tr("Export Layers to Files"),
-                QObject::tr("Could not write layer %1 to %2.")
-                    .arg(state->failingLayer, state->failingPath));
-        }
-        return false;
-    }
-
-    const QPointer<PictureView> viewGuard(view);
-    const QPointer<QWidget> parentGuard(parent);
-    const bool done = runCancellableJob(
-        parent, QObject::tr("Export Layers to Files"), QObject::tr("Writing files…"),
-        [state] { return true; },
-        [state, viewGuard, format, includeIcc] {
-            if (state->cancelled || state->failed || state->next >= state->targets.size()) {
-                return false;
-            }
-            if (!viewGuard) {
-                state->failed = true;
-                state->failingLayer = state->targets[state->next].layerPath;
-                state->failingPath = state->targets[state->next].outputPath;
-                return false;
-            }
-            const Target& target = state->targets[state->next];
-            if (!export_layer_file(*viewGuard.data(), target.layerPath, format, includeIcc,
-                                   target.outputPath)) {
-                state->failed = true;
-                state->failingLayer = target.layerPath;
-                state->failingPath = target.outputPath;
-                return false;
-            }
-            ++state->next;
-            return state->next < state->targets.size();
-        },
-        [state] {
-            return state->targets.isEmpty()
-                ? 1000
-                : state->next * 1000 / int(state->targets.size());
-        },
-        [state] { state->cancelled = true; },
-        [state, parentGuard] {
-            if (!state->cancelled && !state->failed) {
-                return true;
-            }
-            if (state->failed && parentGuard) {
-                QMessageBox::warning(
-                    parentGuard.data(), QObject::tr("Export Layers to Files"),
-                    QObject::tr("Could not write layer %1 to %2.")
-                        .arg(state->failingLayer, state->failingPath));
-            }
-            return false;
-        });
-    return done;
+    return exportBatch(layersExportBatchSpec(*view, parent, folder, prefix, visibleOnly, format,
+                                             includeIcc));
 }
 
 bool exportLayersFromView(QWidget* parent, PictureView* view)
