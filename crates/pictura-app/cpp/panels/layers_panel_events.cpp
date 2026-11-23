@@ -532,4 +532,45 @@ bool LayersPanel::eventFilter(QObject* watched, QEvent* event)
     return QWidget::eventFilter(watched, event);
 }
 
+QRect LayerRowDelegate::nameBandRect(const QRect& itemRect, const QModelIndex& index) const
+{
+    const int gap = isSyntheticRow(index) ? kNameGap / 2 : kNameGap;
+    int x = thumbsRight(itemRect, index) + gap;
+    int right = itemRect.right() - 3;
+    const int badge = fxBadgeSide();
+    if (showsLockBadge(index)) {
+        right -= lockBadgeSide() + 3;
+    }
+    right -= listToggleAdvance(index);
+    if (showsFx(index)
+        && !pictura::icon(QStringLiteral("layers.fx")).pixmap(badge, badge).isNull()) {
+        right -= badge + 3;
+    }
+    right -= linkBadgeAdvance(index);
+    right -= blendIfAdvance(index);
+    const int nameLeft = x + (index.data(ClippingRole).toBool() ? 12 : 0);
+    const int available = qMax(1, right - 4 - nameLeft);
+    return QRect(nameLeft, itemRect.top(), available, itemRect.height());
+}
+
+QWidget* LayerRowDelegate::createEditor(QWidget* parent, const QStyleOptionViewItem& option,
+                                        const QModelIndex& index) const
+{
+    Q_UNUSED(index);
+    auto* editor = new QLineEdit(parent);
+    editor->setFont(option.font);
+    return editor;
+}
+
+void LayerRowDelegate::updateEditorGeometry(QWidget* editor, const QStyleOptionViewItem& option,
+                                            const QModelIndex& index) const
+{
+    if (!editor) {
+        return;
+    }
+    const QRect name = nameRect(option.rect, index, option.font);
+    const int width = qMin(nameBandRect(option.rect, index).width(), name.width() + kNameGap);
+    editor->setGeometry(name.left(), name.top(), width, name.height());
+}
+
 } // namespace pictura
