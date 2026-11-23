@@ -23,6 +23,7 @@
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QMessageBox>
 
+#include "frame.h"
 #include "qt_test_support.h"
 
 using namespace pictura;

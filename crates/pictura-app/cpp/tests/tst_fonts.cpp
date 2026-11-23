@@ -9,6 +9,7 @@
 #include <QtWidgets/QTabBar>
 
 #include "fonts.h"
+#include "frame.h"
 #include "qt_test_support.h"
 
 namespace {

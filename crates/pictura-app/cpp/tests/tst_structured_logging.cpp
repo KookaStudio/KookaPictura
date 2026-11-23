@@ -12,6 +12,7 @@
 #include "api/view_bridge.h"
 #include "api/engine_bridge.h"
 #include "diagnostic_logging.h"
+#include "frame.h"
 #include "qt_test_support.h"
 
 Q_LOGGING_CATEGORY(logFixture, "pictura.fixture")

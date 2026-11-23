@@ -14,6 +14,7 @@
 #include "dialogs.h"
 #include "file_info_dialog.h"
 #include "preferences_dialog.h"
+#include "frame.h"
 #include "qt_test_support.h"
 #include "save_for_web_dialog.h"
 

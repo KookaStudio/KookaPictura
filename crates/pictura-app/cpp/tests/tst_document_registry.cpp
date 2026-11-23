@@ -17,6 +17,7 @@
 #include "document_registry.h"
 #include "document_tile_host.h"
 #include "image_view.h"
+#include "frame.h"
 #include "qt_test_support.h"
 
 namespace {

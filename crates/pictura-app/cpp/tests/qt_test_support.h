@@ -2,11 +2,9 @@
 
 #include <memory>
 
-#include <QtCore/QAbstractItemModel>
 #include <QtCore/QByteArray>
 #include <QtCore/QList>
 #include <QtCore/QLocale>
-#include <QtCore/QMetaMethod>
 #include <QtCore/QMetaObject>
 #include <QtCore/QScopedPointer>
 #include <QtCore/QString>
@@ -14,17 +12,20 @@
 #include <QtCore/QTemporaryDir>
 #include <QtTest/QTest>
 #include <QtWidgets/QApplication>
-#include <QtWidgets/QCompleter>
-#include <QtWidgets/QFontComboBox>
 
-#include "frame.h"
+class QFontComboBox;
+class QWidget;
+
+namespace pictura {
+class PicturaMainWindow;
+}
 
 namespace pictura::test {
 
 class ScopedDefaultLocale {
 public:
-    explicit ScopedDefaultLocale(const QLocale& locale) { QLocale::setDefault(locale); }
-    ~ScopedDefaultLocale() { QLocale::setDefault(previous_); }
+    explicit ScopedDefaultLocale(const QLocale& locale);
+    ~ScopedDefaultLocale();
 
     ScopedDefaultLocale(const ScopedDefaultLocale&) = delete;
     ScopedDefaultLocale& operator=(const ScopedDefaultLocale&) = delete;
@@ -37,43 +38,8 @@ private:
 // Construct it before the window so it outlives the window's session save.
 class ScopedStateHome {
 public:
-    ScopedStateHome()
-        : valid_(dir_.isValid())
-        , hadPrior_(qEnvironmentVariableIsSet("XDG_STATE_HOME"))
-        , prior_(hadPrior_ ? qgetenv("XDG_STATE_HOME") : QByteArray())
-        , hadConfig_(qEnvironmentVariableIsSet("XDG_CONFIG_HOME"))
-        , config_(hadConfig_ ? qgetenv("XDG_CONFIG_HOME") : QByteArray())
-        , hadSystems_(qEnvironmentVariableIsSet("XDG_CONFIG_DIRS"))
-        , systems_(hadSystems_ ? qgetenv("XDG_CONFIG_DIRS") : QByteArray())
-    {
-        if (valid_) {
-            qputenv("XDG_STATE_HOME", dir_.path().toUtf8());
-            qputenv("XDG_CONFIG_HOME", (dir_.path() + QStringLiteral("/config")).toUtf8());
-            qputenv("XDG_CONFIG_DIRS", (dir_.path() + QStringLiteral("/system")).toUtf8());
-        }
-    }
-
-    ~ScopedStateHome()
-    {
-        if (!valid_) {
-            return;
-        }
-        if (hadPrior_) {
-            qputenv("XDG_STATE_HOME", prior_);
-        } else {
-            qunsetenv("XDG_STATE_HOME");
-        }
-        if (hadConfig_) {
-            qputenv("XDG_CONFIG_HOME", config_);
-        } else {
-            qunsetenv("XDG_CONFIG_HOME");
-        }
-        if (hadSystems_) {
-            qputenv("XDG_CONFIG_DIRS", systems_);
-        } else {
-            qunsetenv("XDG_CONFIG_DIRS");
-        }
-    }
+    ScopedStateHome();
+    ~ScopedStateHome();
 
     ScopedStateHome(const ScopedStateHome&) = delete;
     ScopedStateHome& operator=(const ScopedStateHome&) = delete;
@@ -91,78 +57,23 @@ private:
     QByteArray systems_;
 };
 
-inline std::unique_ptr<PicturaMainWindow> makeMainWindow(QWidget* parent = nullptr)
-{
-    return std::make_unique<PicturaMainWindow>(parent, false);
-}
+std::unique_ptr<PicturaMainWindow> makeMainWindow(QWidget* parent = nullptr);
 
 // Whether `combo`'s current completion set offers `family`, ignoring case.
-inline bool completionOffers(QFontComboBox* combo, const QString& family)
-{
-    const QCompleter* completer = combo ? combo->completer() : nullptr;
-    const QAbstractItemModel* model = completer ? completer->completionModel() : nullptr;
-    if (!model) {
-        return false;
-    }
-    for (int row = 0; row < model->rowCount(); ++row) {
-        if (model->index(row, 0).data().toString().compare(family, Qt::CaseInsensitive) == 0) {
-            return true;
-        }
-    }
-    return false;
-}
+bool completionOffers(QFontComboBox* combo, const QString& family);
 
 // Pick an installed family by its exact name, as the popup does.
-inline void selectFamily(QFontComboBox* combo, const QString& family)
-{
-    const int index = combo->findText(family, Qt::MatchFixedString);
-    QVERIFY2(index >= 0, qPrintable(family));
-    combo->setCurrentIndex(index);
-    QCoreApplication::processEvents();
-    QCOMPARE(combo->currentText(), family);
-}
+void selectFamily(QFontComboBox* combo, const QString& family);
 
 // Type into a family field as the user does, then let the completion run.
-inline void typeFamily(QFontComboBox* combo, const QString& text)
-{
-    combo->setFocus();
-    QTest::keyClicks(combo, text);
-    QCoreApplication::processEvents();
-}
+void typeFamily(QFontComboBox* combo, const QString& text);
 
 // The test functions of a suite, in the order QTest finds them.
 //
 // QTest runs every private slot without parameters, except the lifecycle
 // hooks and the data functions of data-driven tests. The list has to match
 // QTest's own, or a share would leave a function unrun.
-inline QStringList testFunctions(const QMetaObject* metaObject)
-{
-    QStringList functions;
-    for (int i = QObject::staticMetaObject.methodCount(); i < metaObject->methodCount(); ++i) {
-        const QMetaMethod method = metaObject->method(i);
-        if (method.methodType() != QMetaMethod::Slot) {
-            continue;
-        }
-        if (method.parameterCount() != 0) {
-            continue;
-        }
-        if (method.access() != QMetaMethod::Private) {
-            continue;
-        }
-        const QByteArray signature = method.methodSignature();
-        if (signature == "init()" || signature == "cleanup()") {
-            continue;
-        }
-        if (signature == "initTestCase()" || signature == "cleanupTestCase()") {
-            continue;
-        }
-        if (signature.endsWith("_data()")) {
-            continue;
-        }
-        functions << QString::fromLatin1(signature.left(signature.indexOf('(')));
-    }
-    return functions;
-}
+QStringList testFunctions(const QMetaObject* metaObject);
 
 // The share of the test functions one registered entry runs.
 //
@@ -172,75 +83,35 @@ inline QStringList testFunctions(const QMetaObject* metaObject)
 // environment variable ("<index>/<count>"): the functions are distributed
 // over the shares in declaration order. A suite registered without the
 // variable runs every function.
-inline QStringList shardTestFunctions(const QMetaObject* metaObject, int index, int count)
-{
-    const QStringList functions = testFunctions(metaObject);
-    if (count <= 1) {
-        return functions;
-    }
-    QStringList selected;
-    for (int i = 0; i < functions.size(); ++i) {
-        if (i % count == index) {
-            selected << functions.at(i);
-        }
-    }
-    return selected;
-}
+QStringList shardTestFunctions(const QMetaObject* metaObject, int index, int count);
 
 // Whether the command line already names test functions to run.
 //
 // Arguments after the program name that do not start with '-' are function
 // names, except the values of the QTest options that take one.
-inline bool namesTestFunctions(const QList<QByteArray>& arguments)
-{
-    static const QList<QByteArray> optionsWithValue = {
-        "-o", "-maxwarnings", "-eventdelay", "-keydelay", "-mousedelay", "-seed",
-        "-repeat", "-iterations", "-median", "-minimumvalue", "-minimumtotal", "-perfcounter",
-        "-platform",
-    };
-    for (int i = 1; i < arguments.size(); ++i) {
-        const QByteArray& argument = arguments.at(i);
-        if (optionsWithValue.contains(argument)) {
-            ++i;
-        } else if (!argument.startsWith('-')) {
-            return true;
-        }
-    }
-    return false;
-}
+bool namesTestFunctions(const QList<QByteArray>& arguments);
 
 // The QTest command line for one share: the given arguments, followed by the
 // share's test functions unless the arguments already name the functions to
 // run, in which case they are kept as they are.
-inline QList<QByteArray> shardArguments(const QList<QByteArray>& arguments,
-                                        const QMetaObject* metaObject, int index, int count)
-{
-    if (namesTestFunctions(arguments)) {
-        return arguments;
-    }
-    QList<QByteArray> withShare = arguments;
-    for (const QString& function : shardTestFunctions(metaObject, index, count)) {
-        withShare << function.toLocal8Bit();
-    }
-    return withShare;
-}
+QList<QByteArray> shardArguments(const QList<QByteArray>& arguments,
+                                 const QMetaObject* metaObject, int index, int count);
 
 // Whether this share has nothing to run: the command line names no functions
 // and the share is empty. QTest given no function names runs them all, so such
 // a share must not reach it; it is a registration with more shares than the
 // suite has functions.
-inline bool shareRunsNothing(const QList<QByteArray>& arguments, const QMetaObject* metaObject,
-                             int index, int count)
-{
-    return !namesTestFunctions(arguments)
-           && shardTestFunctions(metaObject, index, count).isEmpty();
-}
+bool shareRunsNothing(const QList<QByteArray>& arguments, const QMetaObject* metaObject,
+                      int index, int count);
 
 // Runs the test object, restricted to the share named by PICTURA_TEST_SHARD.
 //
 // This is QTEST_MAIN with the share applied: the same application, the same
 // navigation mode, and the test functions of the share passed to QTest as the
 // functions to run. Functions named on the command line run instead.
+//
+// A template cannot be compiled out of line, so this definition stays here; it
+// is the only body the shared header still carries.
 template <typename TestObject>
 int shardedMain(int argc, char* argv[])
 {

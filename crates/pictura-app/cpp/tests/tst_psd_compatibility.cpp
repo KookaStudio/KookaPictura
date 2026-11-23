@@ -19,6 +19,7 @@
 #include "preferences.h"
 #include "preferences_dialog.h"
 #include "prefs_test_support.h"
+#include "frame.h"
 #include "qt_test_support.h"
 
 namespace {

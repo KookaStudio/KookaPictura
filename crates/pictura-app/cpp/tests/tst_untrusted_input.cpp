@@ -20,6 +20,7 @@
 #include <QtGui/QImage>
 #include <QtNetwork/QLocalSocket>
 
+#include "frame.h"
 #include "qt_test_support.h"
 
 namespace {

@@ -22,6 +22,7 @@
 #include "api/document_api.h"
 #include "dialogs.h"
 #include "preferences.h"
+#include "frame.h"
 #include "qt_test_support.h"
 #include "session.h"
 #include "update_checker.h"
