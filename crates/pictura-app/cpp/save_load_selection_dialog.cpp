@@ -264,3 +264,5 @@ bool SaveLoadSelectionDialog::okEnabledForTest() const
 }
 
 } // namespace pictura
+
+#include "moc_save_load_selection_dialog.cpp"

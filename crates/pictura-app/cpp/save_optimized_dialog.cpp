@@ -83,3 +83,5 @@ int SaveOptimizedDialog::layout() const
 }
 
 } // namespace pictura
+
+#include "moc_save_optimized_dialog.cpp"

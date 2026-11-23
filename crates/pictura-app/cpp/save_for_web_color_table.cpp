@@ -161,3 +161,5 @@ void ColorTableWidget::sortBy(int sort)
 }
 
 } // namespace pictura
+
+#include "moc_save_for_web_color_table.cpp"

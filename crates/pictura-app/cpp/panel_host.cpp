@@ -941,3 +941,5 @@ void PanelHost::refreshPanels()
 }
 
 } // namespace pictura
+
+#include "moc_panel_host.cpp"

@@ -52,3 +52,5 @@ QString SystemInfoDialog::reportForTest() const
 }
 
 } // namespace pictura
+
+#include "moc_system_info_dialog.cpp"

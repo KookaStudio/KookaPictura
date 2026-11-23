@@ -207,3 +207,5 @@ void LoadLayersDialog::refreshButtons()
 }
 
 } // namespace pictura
+
+#include "moc_load_layers_dialog.cpp"

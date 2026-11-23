@@ -133,3 +133,5 @@ void FadeDialog::reject()
 }
 
 } // namespace pictura
+
+#include "moc_fade_dialog.cpp"

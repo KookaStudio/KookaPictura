@@ -127,3 +127,5 @@ void ImportSaveCoordinator::onAboutToRemoveDocument(int index)
 }
 
 } // namespace pictura
+
+#include "moc_import_save_coordinator.cpp"
