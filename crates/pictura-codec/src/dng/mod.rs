@@ -8,8 +8,8 @@
 //! both kinds (#402).
 //! The demosaic (`demosaic`, #397) and the colour transform
 //! (`as_shot_transform`, #398) consume the result. Vendor containers (#399,
-//! `vendor.rs`, `cr2.rs`, `nef.rs`, `arw.rs`, `orf.rs`, `rw2.rs`) produce the same
-//! `DngImage` through `read_raw`.
+//! `vendor.rs`, `cr2.rs`, `cr3.rs`, `nef.rs`, `arw.rs`, `orf.rs`, `rw2.rs`)
+//! produce the same `DngImage` through `read_raw`.
 
 use rayon::prelude::*;
 
@@ -21,6 +21,10 @@ mod arw_decode;
 mod camera_color;
 mod camera_matrices;
 mod cr2;
+mod cr3;
+mod crx;
+mod crx_lines;
+mod crx_wavelet;
 mod demosaic;
 mod develop;
 mod levels;

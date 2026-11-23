@@ -3,7 +3,7 @@
 //! slices; one frame row may carry several sensor rows (EOS 5DS). Built from the TIFF and Exif specifications, ITU T.81 and public
 //! write-ups of the CR2 layout. The file has no colour matrix: colour comes
 //! from the fitted per-camera table (#1465) and the maker note's as-shot white
-//! balance.
+//! balance. CR3 (`cr3.rs`) shares the maker-note readers.
 
 use super::levels::{self, Area, Levels};
 use super::tiff::Tiff;
@@ -75,7 +75,7 @@ fn slices(tags: &Tags, width: usize) -> Result<Slices, PsdError> {
 /// The maker note's sensor information (Canon tag `0x00E0`): entries 1–2
 /// are the sensor width and height, 5–8 the active area's inclusive left,
 /// top, right and bottom.
-fn sensor_info(note: Option<&Tags>) -> Result<Option<Vec<f64>>, PsdError> {
+pub(super) fn sensor_info(note: Option<&Tags>) -> Result<Option<Vec<f64>>, PsdError> {
     let Some(note) = note else {
         return Ok(None);
     };
@@ -108,7 +108,11 @@ fn plane_size(
 }
 
 /// The active area from the sensor information; the whole plane without it.
-fn active_area(info: Option<&[f64]>, width: usize, height: usize) -> Result<Area, PsdError> {
+pub(super) fn active_area(
+    info: Option<&[f64]>,
+    width: usize,
+    height: usize,
+) -> Result<Area, PsdError> {
     let Some(v) = info else {
         return Ok(Area {
             top: 0,
@@ -131,7 +135,7 @@ fn active_area(info: Option<&[f64]>, width: usize, height: usize) -> Result<Area
 }
 
 /// The masked border left of the active area, else above it.
-fn mask(area: Area) -> Option<Area> {
+pub(super) fn mask(area: Area) -> Option<Area> {
     if area.left > 0 {
         Some(Area {
             top: area.top,
@@ -167,7 +171,7 @@ fn rggb_from_sensor_corner(area: Area) -> Vec<u8> {
 /// entry 0 (public write-ups of the layout, confirmed on real files from
 /// the 350D to the 6D Mark II). `None` for any other layout or an unusable
 /// multiplier.
-fn as_shot_neutral(note: Option<&Tags>) -> Result<Option<[f64; 3]>, PsdError> {
+pub(super) fn as_shot_neutral(note: Option<&Tags>) -> Result<Option<[f64; 3]>, PsdError> {
     let Some(data) = note.map(|n| n.reals(COLOR_DATA)).transpose()?.flatten() else {
         return Ok(None);
     };

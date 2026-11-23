@@ -45,7 +45,7 @@ OUT = (
 WAVELENGTHS = range(380, 781, 5)
 
 # Bodies whose raw files the vendor readers open, by rawtoaces-data file stem:
-# Canon bodies that write CR2 (the EOS R and later CR3 bodies wait for #399),
+# Canon bodies that write CR2 or CR3 (#1474),
 # Nikon bodies that write NEF (#1469), Sony bodies that write ARW (#1470) and
 # Panasonic bodies that write RW2 (#1542).
 BODIES = [
@@ -62,6 +62,13 @@ BODIES = [
     "Canon_EOS_5D_Mark_IV",
     # Canon_EOS_600D waits: the CR2 reader misreads its CFA phase (#1476).
     "Canon_EOS_M",
+    "Canon_EOS_R",
+    "Canon_EOS_R10",
+    "Canon_EOS_R5",
+    "Canon_EOS_R5m2",
+    "Canon_EOS_R6",
+    "Canon_EOS_R6m2",
+    "Canon_EOS_200D_II",
     # Its alias the EOS 6D Mark II (same sensor) writes CR2.
     "Canon_EOS_RP",
     "Canon_PowerShot_S90",

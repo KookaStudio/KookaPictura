@@ -527,7 +527,14 @@ gaps are the CS6 Extended 3D object and camera tools.
       `scripts/fit-camera-jpeg-matrices.py`,
       `crates/pictura-codec/src/dng/camera_matrices.rs`.
 - [ ] Colour for the remaining Panasonic RW2 bodies (#1558)
-- [ ] Vendor raw containers: CR3 (#399)
+- [x] **Canon CR3** — CR3 files (every Canon body since 2018) open: lossless
+      and C-RAW CRX frames, versions 1 and 2, the main image of the largest
+      raw track (bursts and Dual Pixel images keep their first frame), ported
+      openly from LibRaw 0.22.1 and bit-exact with it on 52 sample files; the
+      EOS R, RP, R5, R5 Mark II, R6, R6 Mark II, R10 and 250D (and the R50,
+      R8, Rebel SL3, Kiss X10) open with colour; the Open dialog lists CR3
+      (#1474). `crates/pictura-codec/src/dng/cr3.rs`, `crx*.rs`.
+- [ ] Colour for the other CR3 bodies (M50, 90D, R7, R3, PowerShots, …) (#1574)
 - [ ] Every Nikon camera opens with colour: verify each layout, colour sources for ~70 bodies, recent models first (#1498)
 - [x] **DNG output** — Save Image… in the raw open's Pictura Raw dialog writes
       a mosaic DNG (lossless-JPEG tiles) or, with Convert to Linear Image, a

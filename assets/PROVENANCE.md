@@ -152,7 +152,7 @@ Adobe DNG Converter matrix is used. Inputs, none bundled:
 
 The output holds only the fitted numbers and camera names.
 
-The table seeds Canon CR2 bodies (#1465), Nikon NEF bodies (#1469) and Sony
+The table seeds Canon CR2 bodies (#1465), Canon CR3 bodies (#1474), Nikon NEF bodies (#1469) and Sony
 ARW bodies (#1470), every body whose sensitivities rawtoaces-data publishes
 for those makes, plus the same-sensor aliases rawtoaces-data's own alias list
 names. Three
@@ -243,6 +243,43 @@ Panasonic-origin patents on fixed-length predictive RAW coding (US8090209B2,
 US9106250B2, now assigned to Nuvoton Technology Corp Japan). Whether any
 claim reads on these codings or on decoding them has not been assessed; this
 is not a legal conclusion.
+
+## Canon CRX coding (`crates/pictura-codec/src/dng/crx.rs`, `crx_lines.rs`, `crx_wavelet.rs`)
+
+**Ported code, not an independent implementation.** Every CR3 frame is
+CRX-coded, and the AI model that wrote the container has training exposure
+to LibRaw's open-source CRX decoder, so by owner decision (#1474) the coding
+is ported openly from LibRaw 0.22.1 (Source:
+https://github.com/LibRaw/LibRaw, tag `0.22.1`, commit
+b860248a89d9082b8e0a1e202e516f46af9adb29, file `src/decoders/crx.cpp`):
+the bit reader, the Golomb-Rice line decoders, inverse quantization, the
+inverse 5/3 wavelet, the tile, plane and subband headers, the quantizer
+tables and encoding 3's plane combination. LibRaw is dual-licensed
+**LGPL-2.1** or **CDDL-1.0**; the port takes the LGPL-2.1 and is distributed
+under **GPL-3.0-or-later** as LGPL-2.1 section 3 permits. Each file carries
+LibRaw's copyright notices (Alexey Danilchenko; Alex Tutubalin, LibRaw LLC).
+The port was checked bit-exact against LibRaw 0.22.1's unpacked sensor data
+(through rawpy) on 52 sample files from 29 bodies (raw.pixls.us, not
+committed).
+
+## Canon CR3 container (`crates/pictura-codec/src/dng/cr3.rs`)
+
+The box walk follows ISO/IEC 14496-12 and public write-ups of the CR3
+layout; the raw-track choice, the `CMP1` fields and the `CTMD` record walk
+follow LibRaw 0.22.1's `src/metadata/cr3_parser.cpp` (Copyright (C)
+2019-2025 LibRaw LLC, LGPL-2.1). The maker-note readers are the CR2
+reader's. No colour matrix comes from the file.
+
+Patents (OVR-004): a Google Patents status search on 2026-11-23 found active
+Canon Inc patents on related coding: US11140392B2 (Bayer RAW split into
+tiles and planes, sub-band transform, quantization parameters shared across
+sub-bands per segment and applied across tile boundaries; priority
+2018-06-15, adjusted expiry 2039-06-26) and US10609393B2 (raster-order
+coding switching between run-length and Golomb-Rice prediction coding, for
+colour planes or wavelet sub-bands; priority 2016-04-14, anticipated expiry
+2037-04-10). Google lists both as active, which is its assumption. Whether
+any claim reads on the CRX coding or on decoding it has not been assessed;
+this is not a legal conclusion.
 
 ## Test fixtures
 
