@@ -450,8 +450,9 @@ SHALL be reported from the active area's corner. The black SHALL be
 `0x001C`-`0x001E` for red, green and blue, 0 when absent, plus 15 for
 RawFormat 3 and 4; the white SHALL be the green linearity limit `0x000F` when
 it lies above the blacks and within the coding's range, else that range's top
-(4095 for words and RawFormat 3 and 4, the bit depth's top otherwise). Word
-files SHALL scale both by 16. The as-shot neutral SHALL be the green level
+(4095 for words and RawFormat 3 and 4, the bit depth's top otherwise), and
+for RawFormat 2 at most 3967, where its data saturates (observed on the FZ8
+and FZ18). Word files SHALL scale both by 16. The as-shot neutral SHALL be the green level
 over each of the red, green and blue white-balance levels `0x0024`-`0x0026`,
 and absent when one is zero or missing. The crop `0x002F`-`0x0032` (top,
 left, bottom, right in sensor coordinates) SHALL become the default crop when
@@ -477,8 +478,13 @@ without an allocation beyond the image budget.
 
 #### Scenario: A body without colour is refused at open [rw2_no_colour]
 
-- **WHEN** a decodable DMC-FZ50 file goes through `decode_raw_source`
-- **THEN** it is refused as unsupported, saying the camera colour for Panasonic DMC-FZ50 is not supported yet
+- **WHEN** a decodable DMC-FZ1 file, a body the matrix table does not hold, goes through `decode_raw_source`
+- **THEN** it is refused as unsupported, saying the camera colour for Panasonic DMC-FZ1 is not supported yet
+
+#### Scenario: RawFormat 2 saturates at 3967 [rw2_saturation]
+
+- **WHEN** a RawFormat 2 file and a 12-bit word file, each with white tag 4095, hold 3967 at every photosite
+- **THEN** the RawFormat 2 plane is 65535 throughout and the word plane is 3967 / 4095 of 65535
 
 #### Scenario: Hostile files fail cleanly [rw2_hostile]
 

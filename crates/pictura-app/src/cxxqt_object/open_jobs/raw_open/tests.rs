@@ -195,7 +195,13 @@ fn raw_sniff_detects_by_signature() {
     let olympus = write(&dir, "olympus.tif", b"IIRO\x08\0\0\0\0\0\0\0\0\0");
     // So is a Panasonic one for an RW2.
     let panasonic = write(&dir, "panasonic.tif", b"IIU\0\x08\0\0\0\0\0\0\0\0\0");
+    // A Panasonic `.RAW` routes by its header; a Photoshop Raw `.RAW` (bare
+    // interleaved pixels) does not.
+    let panasonic_raw = write(&dir, "P1000001.RAW", b"IIU\0\x08\0\0\0\0\0\0\0\0\0");
+    let photoshop_raw = write(&dir, "pixels.RAW", &[0x80u8; 48]);
     let sniff = |p: &Path| raw_sniff_path(&QString::from(p.to_str().unwrap()));
+    assert!(sniff(&panasonic_raw));
+    assert!(!sniff(&photoshop_raw));
     assert!(sniff(&dng));
     assert!(sniff(&arw));
     assert!(sniff(&olympus));

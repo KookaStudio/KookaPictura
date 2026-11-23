@@ -508,7 +508,7 @@ gaps are the CS6 Extended 3D object and camera tools.
       and a CR2 reports its as-shot white balance from the maker note
       (approximate parity) (#1465). `scripts/gen-camera-matrices.py`,
       `crates/pictura-codec/src/dng/camera_matrices.rs`.
-- [x] **Open camera raw files** — File ▸ Open recognises a DNG, CR2, NEF, ARW or ORF by its
+- [x] **Open camera raw files** — File ▸ Open recognises a DNG, CR2, NEF, ARW, ORF or RW2 by its
       signature, decodes it, shows Pictura Raw first (absolute white balance,
       sidecar or embedded `crs:` settings), and opens a 16-bit RGB document
       (approximate parity) (#400).
@@ -520,7 +520,13 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [ ] X-Trans-tuned demosaic, with the Fuji container (#399)
 - [ ] Deflate, PackBits and lossy-JPEG DNGs and floating-point samples (#396)
 - [ ] Olympus-compressed ORF sensor data, most bodies since 2007 (#1535)
-- [ ] Colour for Panasonic RW2 cameras, so they open (#1542)
+- [x] **Panasonic RW2 colour** — 10 Panasonic bodies open with colour: the
+      DC-GX9 from spectral data, nine others from matrices fitted against each
+      body's own camera JPEG (approximate, the maker's rendering); the Open
+      dialog lists RW2, RWL and RAW; RawFormat 2 whites at 3967 (#1542).
+      `scripts/fit-camera-jpeg-matrices.py`,
+      `crates/pictura-codec/src/dng/camera_matrices.rs`.
+- [ ] Colour for the remaining Panasonic RW2 bodies (#1558)
 - [ ] Vendor raw containers: CR3 (#399)
 - [ ] Every Nikon camera opens with colour: verify each layout, colour sources for ~70 bodies, recent models first (#1498)
 - [x] **DNG output** — Save Image… in the raw open's Pictura Raw dialog writes

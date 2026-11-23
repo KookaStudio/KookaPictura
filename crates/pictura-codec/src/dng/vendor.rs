@@ -12,8 +12,6 @@ use crate::probe::ImageBudget;
 
 const EXIF_IFD: u16 = 34665;
 const MAKER_NOTE: u16 = 0x927C;
-const ILLUMINANT_A: u16 = 17;
-const ILLUMINANT_D65: u16 = 21;
 
 /// A camera raw container `read_raw` reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -157,7 +155,7 @@ fn model_key(make: &str, model: &str) -> String {
 }
 
 /// The colour tags of a raw file that embeds no matrix: its camera's fitted
-/// matrices under illuminants A and D65 when the table knows the camera, none
+/// matrices (under the lights the table names) when the table knows the camera, none
 /// otherwise, and the as-shot neutral the file recorded.
 pub(super) fn camera_color(
     make: Option<&str>,
@@ -176,8 +174,10 @@ pub(super) fn camera_color(
         .iter()
         .find(|c| c.make == make_key && c.models.contains(&model_key.as_str()))
     {
-        color.color_matrix = [Some(camera.illuminant_a), Some(camera.d65)];
-        color.calibration_illuminant = [Some(ILLUMINANT_A), Some(ILLUMINANT_D65)];
+        for (i, &(light, matrix)) in camera.matrices.iter().take(2).enumerate() {
+            color.color_matrix[i] = Some(matrix);
+            color.calibration_illuminant[i] = Some(light);
+        }
     }
     color
 }

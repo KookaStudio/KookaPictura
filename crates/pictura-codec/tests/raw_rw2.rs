@@ -62,7 +62,11 @@ fn normalized(r: &Rw2) -> Vec<u16> {
         _ => (0, 1.0),
     };
     let [top, left, bottom, right] = r.borders.map(usize::from);
-    let white = f64::from(r.white) * scale;
+    // RawFormat 2 saturates at 3967.
+    let white = match r.data {
+        Data::Ten => f64::from(r.white.min(3967)),
+        _ => f64::from(r.white) * scale,
+    };
     let mut out = Vec::new();
     for y in top..bottom {
         for x in left..right {
@@ -194,6 +198,20 @@ fn rw2_borders_shift_the_colour_pattern() {
     }
 }
 
+// rw2_saturation
+#[test]
+fn raw_format_2_saturates_at_3967() {
+    let mut r = sample(Data::Ten);
+    r.samples.fill(3967);
+    assert!(read(&rw2(&r)).unwrap().samples.iter().all(|&v| v == 65535));
+    let mut words = sample(WORDS_12);
+    words.samples.fill(3967);
+    let plane = read(&rw2(&words)).unwrap().samples;
+    assert!(plane
+        .iter()
+        .all(|&v| v == (3967.0 * 65535.0 / 4095.0_f64).round() as u16));
+}
+
 #[test]
 fn rw2_crop_counts_from_the_sensor() {
     let whole = [0.0, 0.0, 83.0, 8.0];
@@ -225,19 +243,6 @@ fn rw2_reports_camera_tags() {
 
     r.wb[0] = 0;
     assert_eq!(read(&rw2(&r)).unwrap().color.as_shot_neutral, None);
-}
-
-#[test]
-fn rw2_without_colour_names_the_camera() {
-    let bytes = rw2(&sample(WORDS_12));
-    assert_eq!(read(&bytes).unwrap().color.color_matrix, [None, None]);
-    match decode_raw_source(&bytes, &ImageBudget::default()) {
-        Err(PsdError::Unsupported(why)) => assert!(
-            why.contains("camera colour for Panasonic DMC-FZ50 is not supported yet"),
-            "{why}"
-        ),
-        other => panic!("{:?}", other.err()),
-    }
 }
 
 #[test]

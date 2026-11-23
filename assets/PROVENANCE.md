@@ -160,6 +160,20 @@ bodies without published sensitivities reuse a sibling's fitted numbers by
 owner decision (#1469): the D100 (D70), D7100 (D5300) and Coolpix P7100
 (PowerShot S90); the basis of each is commented in the generated file.
 
+The DC-GX9 is the only Panasonic body rawtoaces-data covers (#1542). No other
+openly licensed sensitivities were found for Panasonic bodies: Physlight
+(Apache-2.0) has none, ilia3101/SpectralMeasurements carries no licence, and
+the Solomatov & Akkaynak estimates are fitted to Adobe DNG Converter output.
+By owner decision the other Panasonic rows are therefore **fitted from the
+camera's own rendering**: `scripts/fit-camera-jpeg-matrices.py` maps one
+sample file's white-balanced camera RGB to the JPEG the camera embedded in
+that same file, and builds the matrix pair from the white-balance presets the
+file records. The samples (raw.pixls.us files and owner-supplied files) are
+not committed; `scripts/camera-jpeg-fits.json` names each one with its
+SHA-256 and the fit's error. These rows reproduce Panasonic's colour
+rendering, saturation choices included, so they are approximate and not a
+colorimetric calibration.
+
 ## Nikon NEF code tables (`crates/pictura-codec/src/dng/nef_decode.rs`)
 
 The six Huffman code tables of Nikon's compressed NEF (code counts per length

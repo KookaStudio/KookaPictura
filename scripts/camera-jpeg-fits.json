@@ -1,0 +1,506 @@
+[
+ {
+  "make": "Panasonic",
+  "model": "DC-G9",
+  "aliases": [],
+  "sample": "P1000475.RW2",
+  "sha256": "7c24fefb1f73ad45c42a0be0078e15b7e91deab1d623efceebfc3c4d0d06135c",
+  "blocks": 234,
+  "median_de": 1.32,
+  "p90_de": 2.9,
+  "chroma_spread": 5.1,
+  "rejected": "too little colour in the scene"
+ },
+ {
+  "make": "Panasonic",
+  "model": "DC-G9",
+  "aliases": [],
+  "sample": "P1000951.RW2",
+  "sha256": "16282357ce0143ff7d36737f82074662db7aa0790ecd309196f406baf0f586a7",
+  "blocks": 480,
+  "median_de": 0.99,
+  "p90_de": 1.81,
+  "chroma_spread": 3.1,
+  "rejected": "too little colour in the scene"
+ },
+ {
+  "make": "Panasonic",
+  "model": "DC-G9M2",
+  "aliases": [],
+  "sample": "P1000019.RW2",
+  "sha256": "dd4bc19ed6cf6625608a1ff14ce1a9d16692e1bf1d50993a3fc076e18905b662",
+  "blocks": 511,
+  "median_de": 0.76,
+  "p90_de": 1.53,
+  "chroma_spread": 4.8,
+  "rejected": "too little colour in the scene"
+ },
+ {
+  "make": "Panasonic",
+  "model": "DC-G9M2",
+  "aliases": [],
+  "sample": "P1000024.RW2",
+  "sha256": "58b249e5c02fa389b257259ffe15f25d86d746955fb63ff1744717f7fb056ad9",
+  "blocks": 498,
+  "median_de": 0.91,
+  "p90_de": 2.14,
+  "chroma_spread": 4.5,
+  "rejected": "too little colour in the scene"
+ },
+ {
+  "make": "Panasonic",
+  "model": "DC-GH5S",
+  "aliases": [],
+  "sample": "P1022081.RW2",
+  "sha256": "b617151876e62b492641cef14b8c98ee3797e5014d24c6af1c780715a501fa53",
+  "blocks": 502,
+  "median_de": 1.88,
+  "p90_de": 3.77,
+  "chroma_spread": 15.5,
+  "illuminants": [
+   20,
+   3
+  ],
+  "matrices": [
+   [
+    0.7941,
+    -0.3054,
+    -0.0771,
+    -0.0485,
+    0.9301,
+    0.1263,
+    0.1314,
+    -0.0197,
+    0.4751
+   ],
+   [
+    0.9764,
+    -0.5545,
+    0.0078,
+    -0.1478,
+    1.0132,
+    0.4194,
+    0.0971,
+    -0.056,
+    0.8812
+   ]
+  ]
+ },
+ {
+  "make": "Panasonic",
+  "model": "DC-GH6",
+  "aliases": [],
+  "sample": "1-1.RW2",
+  "sha256": "69da3d4ad6ea3baee84801c59402b12e92378192f272b03eb6cc3c3bcbf38413",
+  "blocks": 518,
+  "median_de": 2.49,
+  "p90_de": 6.96,
+  "chroma_spread": 16.7,
+  "illuminants": [
+   20,
+   3
+  ],
+  "matrices": [
+   [
+    0.7624,
+    -0.2899,
+    -0.084,
+    0.01,
+    0.779,
+    0.2296,
+    0.081,
+    0.064,
+    0.4329
+   ],
+   [
+    0.9614,
+    -0.5402,
+    -0.0291,
+    -0.0725,
+    0.8308,
+    0.7001,
+    0.0604,
+    0.012,
+    0.8148
+   ]
+  ]
+ },
+ {
+  "make": "Panasonic",
+  "model": "DC-GX9",
+  "aliases": [],
+  "sample": "gx9_1_1.RW2",
+  "sha256": "15b17fb6f767164efbda1d40751f49566dc2090a1968fd464070c063f932f721",
+  "blocks": 483,
+  "median_de": 3.58,
+  "p90_de": 11.77,
+  "chroma_spread": 18.5,
+  "illuminants": [
+   20,
+   3
+  ],
+  "matrices": [
+   [
+    1.0252,
+    -0.4257,
+    -0.0811,
+    -0.0733,
+    0.9585,
+    0.1212,
+    0.1071,
+    0.0131,
+    0.4443
+   ],
+   [
+    1.2164,
+    -0.7346,
+    0.0703,
+    -0.173,
+    1.0474,
+    0.4009,
+    0.0776,
+    -0.0277,
+    0.8078
+   ]
+  ]
+ },
+ {
+  "make": "Panasonic",
+  "model": "DC-S1",
+  "aliases": [],
+  "sample": "P1033119.RW2",
+  "sha256": "45309a096d6010281e2fa310e6ec2fe1bcc02947fa37b1a2414cfc7377ce4ac6",
+  "blocks": 495,
+  "median_de": 1.88,
+  "p90_de": 4.07,
+  "chroma_spread": 24.6,
+  "illuminants": [
+   20,
+   3
+  ],
+  "matrices": [
+   [
+    1.2311,
+    -0.6687,
+    -0.0435,
+    -0.0874,
+    0.901,
+    0.1982,
+    -0.1643,
+    0.3748,
+    0.4179
+   ],
+   [
+    1.5301,
+    -1.1446,
+    0.2594,
+    -0.1734,
+    0.9779,
+    0.5981,
+    -0.1091,
+    0.2592,
+    0.7479
+   ]
+  ]
+ },
+ {
+  "make": "Panasonic",
+  "model": "DC-S5",
+  "aliases": [],
+  "sample": "P1047510.RW2",
+  "sha256": "3615c85207097180b231f0c89d018eb3f1a71988780612921eb0a05246bca706",
+  "blocks": 516,
+  "median_de": 0.79,
+  "p90_de": 1.22,
+  "chroma_spread": 6.0,
+  "rejected": "too little colour in the scene"
+ },
+ {
+  "make": "Panasonic",
+  "model": "DC-S5",
+  "aliases": [],
+  "sample": "dc-s5_6k4k.RW2",
+  "sha256": "350f4ad0839383b3e7bcb0feb2dda827fc81e97ab59917df2a1d824bb979234d",
+  "blocks": 520,
+  "median_de": 0.34,
+  "p90_de": 2.17,
+  "chroma_spread": 14.4,
+  "illuminants": [
+   20,
+   3
+  ],
+  "matrices": [
+   [
+    1.1696,
+    -0.5389,
+    -0.1159,
+    -0.1099,
+    0.9077,
+    0.2144,
+    -0.0564,
+    0.1923,
+    0.486
+   ],
+   [
+    1.3651,
+    -0.892,
+    -0.0085,
+    -0.1927,
+    0.9858,
+    0.6353,
+    -0.0296,
+    0.1161,
+    0.9103
+   ]
+  ]
+ },
+ {
+  "make": "Panasonic",
+  "model": "DMC-FZ18",
+  "aliases": [],
+  "sample": "RAW_PANASONIC_LUMIX_FZ18.RAW",
+  "sha256": "46309063503689a9e0e21fd3866b193b5853a4caf42f774189658ac3f05d31ef",
+  "blocks": 483,
+  "median_de": 2.68,
+  "p90_de": 5.11,
+  "chroma_spread": 20.5,
+  "illuminants": [
+   20,
+   3
+  ],
+  "matrices": [
+   [
+    1.2638,
+    -0.5813,
+    -0.0732,
+    -0.1031,
+    0.8921,
+    0.2243,
+    0.0612,
+    0.132,
+    0.3835
+   ],
+   [
+    1.7957,
+    -1.1769,
+    0.2059,
+    -0.1844,
+    0.967,
+    0.6626,
+    0.0435,
+    0.0718,
+    0.7688
+   ]
+  ]
+ },
+ {
+  "make": "Panasonic",
+  "model": "DMC-FZ28",
+  "aliases": [],
+  "sample": "P1120635.RW2",
+  "sha256": "82a561fbeda3b9825ce2b872b230d9a71960946173af84196fe88a5b19691fc6",
+  "blocks": 442,
+  "median_de": 2.13,
+  "p90_de": 5.04,
+  "chroma_spread": 17.0,
+  "illuminants": [
+   20,
+   3
+  ],
+  "matrices": [
+   [
+    1.2305,
+    -0.4864,
+    -0.1182,
+    0.1863,
+    0.617,
+    0.2225,
+    -0.0193,
+    0.1714,
+    0.423
+   ],
+   [
+    1.729,
+    -1.003,
+    0.0172,
+    0.0993,
+    0.6356,
+    0.7186,
+    -0.0084,
+    0.1043,
+    0.8174
+   ]
+  ]
+ },
+ {
+  "make": "Panasonic",
+  "model": "DMC-FZ30",
+  "aliases": [],
+  "sample": "RAW_PANASONIC_FZ30_SRGB.RAW",
+  "sha256": "b4efb9ee0398b968ccd8e818afe755a2ddc57776bdb0e8862381fefa086f5621",
+  "rejected": "no embedded JPEG"
+ },
+ {
+  "make": "Panasonic",
+  "model": "DMC-FZ50",
+  "aliases": [],
+  "sample": "P1250835.RAW",
+  "sha256": "a776a941758214bf4d1342e2b89ed756bfcad5877e038cf9df3bdda502c432ea",
+  "rejected": "no embedded JPEG"
+ },
+ {
+  "make": "Panasonic",
+  "model": "DMC-FZ8",
+  "aliases": [],
+  "sample": "P1240856.RAW",
+  "sha256": "a11f1534f3092a4d5f2b57d182f6b06f8d26cf766eb463c3e02b26a338b63b8b",
+  "rejected": "no embedded JPEG"
+ },
+ {
+  "make": "Panasonic",
+  "model": "DMC-G1",
+  "aliases": [],
+  "sample": "RAW_PANASONIC_G1.RW2",
+  "sha256": "aa3b92d6592744a889d7ea50aaf3ea55e0ec961d04c740d437d3396ca79757be",
+  "blocks": 520,
+  "median_de": 0.75,
+  "p90_de": 1.99,
+  "chroma_spread": 11.3,
+  "illuminants": [
+   20,
+   3
+  ],
+  "matrices": [
+   [
+    1.175,
+    -0.4648,
+    -0.1354,
+    -0.11,
+    0.9343,
+    0.1856,
+    0.1208,
+    0.0222,
+    0.5918
+   ],
+   [
+    1.4525,
+    -0.841,
+    -0.0684,
+    -0.1978,
+    1.018,
+    0.5606,
+    0.0902,
+    -0.0318,
+    1.0682
+   ]
+  ]
+ },
+ {
+  "make": "Panasonic",
+  "model": "DMC-GM1S",
+  "aliases": [
+   "DMC-GM1"
+  ],
+  "sample": "panasonic_DMC-GM1S.RW2",
+  "sha256": "079b1441aa9088f35ded291069adce43096f64316c26db4c661a003d93b0fcf5",
+  "blocks": 196,
+  "median_de": 1.98,
+  "p90_de": 3.87,
+  "chroma_spread": 7.9,
+  "illuminants": [
+   20,
+   3
+  ],
+  "matrices": [
+   [
+    1.0942,
+    -0.4718,
+    -0.1357,
+    -0.2167,
+    1.0192,
+    0.2043,
+    0.031,
+    0.0783,
+    0.5543
+   ],
+   [
+    1.3713,
+    -0.8483,
+    -0.1052,
+    -0.2993,
+    1.1202,
+    0.5866,
+    0.0355,
+    0.018,
+    1.0467
+   ]
+  ]
+ },
+ {
+  "make": "Panasonic",
+  "model": "DMC-L1",
+  "aliases": [],
+  "sample": "RAW_PANASONIC_LUMIX_L1.RAW",
+  "sha256": "ef7cabf0e23e4adbe3b8f3655a1047531c55d1af49c2eb7d61634f15b4a8da2b",
+  "rejected": "no embedded JPEG"
+ },
+ {
+  "make": "Panasonic",
+  "model": "DMC-LX1",
+  "aliases": [],
+  "sample": "P1080763.RAW",
+  "sha256": "8ff982526d215d337706640cc6aa0822cccbe65a86ebe01daef0fd43cb45a4ca",
+  "rejected": "no embedded JPEG"
+ },
+ {
+  "make": "Panasonic",
+  "model": "DMC-LX2",
+  "aliases": [],
+  "sample": "RAW_PANASONIC_LX2.RAW",
+  "sha256": "12ea3b97c87375f2ac352b22d2b857caf8c34e3dff21c53775ba749caafdfdf8",
+  "rejected": "no embedded JPEG"
+ },
+ {
+  "make": "Panasonic",
+  "model": "DMC-ZS100",
+  "aliases": [
+   "DMC-TZ100",
+   "DMC-TZ101",
+   "DMC-TZ110"
+  ],
+  "sample": "panasonic_DMC-ZS100.RW2",
+  "sha256": "fcf705bc64f5a2c0a2e90498c9fe9b6106527945acc1847b2c4f565e745fece2",
+  "blocks": 453,
+  "median_de": 3.79,
+  "p90_de": 7.79,
+  "chroma_spread": 12.8,
+  "illuminants": [
+   20,
+   3
+  ],
+  "matrices": [
+   [
+    0.9942,
+    -0.3911,
+    -0.1296,
+    -0.1208,
+    0.9275,
+    0.2041,
+    0.0642,
+    0.0284,
+    0.4402
+   ],
+   [
+    1.2181,
+    -0.701,
+    -0.1116,
+    -0.2051,
+    1.0098,
+    0.6064,
+    0.0555,
+    -0.0144,
+    0.8482
+   ]
+  ]
+ }
+]
