@@ -15,8 +15,6 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/cineon_options_dialog.h
     crates/pictura-app/cpp/dcs_options_dialog.cpp
     crates/pictura-app/cpp/dcs_options_dialog.h
-    crates/pictura-app/cpp/decode_image.cpp
-    crates/pictura-app/cpp/decode_image.h
     crates/pictura-app/cpp/document_float_window.cpp
     crates/pictura-app/cpp/document_float_window.h
     crates/pictura-app/cpp/document_tile_host.cpp
@@ -25,10 +23,8 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/document_window.h
     crates/pictura-app/cpp/duplicate_image_dialog.cpp
     crates/pictura-app/cpp/duplicate_image_dialog.h
-    crates/pictura-app/cpp/encode_image.cpp
     crates/pictura-app/cpp/eps_options_dialog.cpp
     crates/pictura-app/cpp/eps_options_dialog.h
-    crates/pictura-app/cpp/encode_image.h
     crates/pictura-app/cpp/export_as_dialog.cpp
     crates/pictura-app/cpp/export_as_dialog.h
     crates/pictura-app/cpp/export_batch.cpp
