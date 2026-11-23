@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-"""Verify the main-window shell seams and their fixed budgets.
+"""Verify the main-window shell seams, the moc owners, and their fixed budgets.
 
 The shell's panel translation units, the MenuRegistrar translation units, and
 the four collaborator translation units must not include `frame.h` or name
 `PicturaMainWindow`; no `frame_menus*.cpp` may remain; the collaborator headers
 must not include `frame.h`; and `frame.h` / `frame_includes.h` must stay inside
 their fixed ceilings (760 lines and 60 include lines). There is no allowlist.
+
+Two ownership rules ride along. Every QObject header with a same-named `.cpp`
+must have that `.cpp` include its generated `moc_<header>.cpp`, and a QObject
+header without one must have a consumer that includes its moc, so a header edit
+never recompiles a central moc unit (build-performance `bp_moc_includes`). The Qt
+Test fixture header must not include `frame.h`, so the suites' shared header does
+not pull the frame closure into every suite.
 
 Run from the repository root: python3 scripts/check-shell-seams.py [--self-test]
 """
@@ -25,6 +32,10 @@ FRAME_INCLUDES_MAX_INCLUDES = 60
 FRAME_INCLUDE = re.compile(r'^\s*#\s*include\s*"frame\.h"', re.MULTILINE)
 INCLUDE_LINE = re.compile(r"^\s*#\s*include\b", re.MULTILINE)
 FRAME_NAME = "PicturaMainWindow"
+
+TEST_FIXTURE = Path("tests/qt_test_support.h")
+QOBJECT = re.compile(r"\bQ_OBJECT\b|\bQ_GADGET\b")
+MOC_INCLUDE = "moc_{}.cpp"
 
 COLLABORATOR_HEADERS = (
     "document_registry.h",
@@ -109,6 +120,40 @@ def check_collaborator_headers(root: Path = ROOT) -> list[str]:
     return errors
 
 
+def check_moc_ownership(root: Path = ROOT) -> list[str]:
+    cpp = root / CPP
+    sources = sorted(cpp.rglob("*.cpp"))
+    includes: dict[str, list[Path]] = {}
+    for source in sources:
+        text = source.read_text(encoding="utf-8", errors="replace")
+        for stem in re.findall(r'^\s*#\s*include\s*"(moc_[^"]+)\.cpp"', text, re.MULTILINE):
+            includes.setdefault(f"{stem}.cpp", []).append(source)
+    errors = []
+    for header in sorted(cpp.rglob("*.h")):
+        if not QOBJECT.search(header.read_text(encoding="utf-8", errors="replace")):
+            continue
+        moc = MOC_INCLUDE.format(header.stem)
+        same = header.with_suffix(".cpp")
+        if same.is_file():
+            if moc not in same.read_text(encoding="utf-8", errors="replace"):
+                errors.append(f"{_rel(same, root)}: does not include its own {moc}")
+        elif not includes.get(moc):
+            errors.append(f"{_rel(header, root)}: no translation unit includes {moc}")
+    return errors
+
+
+def check_test_fixture_seam(root: Path = ROOT) -> list[str]:
+    fixture = root / CPP / TEST_FIXTURE
+    if not fixture.is_file():
+        return [f"{_rel(fixture, root)}: file is missing"]
+    if FRAME_INCLUDE.search(fixture.read_text(encoding="utf-8", errors="replace")):
+        return [
+            f'{_rel(fixture, root)}: includes "frame.h"; the suites\' shared header '
+            "must not pull the frame closure"
+        ]
+    return []
+
+
 def check_budgets(root: Path = ROOT) -> list[str]:
     cpp = root / CPP
     errors = []
@@ -185,6 +230,35 @@ def self_test() -> int:
         assert "panel_host.h" in header_errors
         assert "document_registry.h" not in header_errors
 
+        # A same-named `.cpp` owner that omits its moc, and a header with no
+        # owner at all, both fail; the compliant pair and the consumer-owned
+        # header pass.
+        (cpp / "owned.h").write_text("class Owned {\n    Q_OBJECT\n};\n", encoding="utf-8")
+        (cpp / "owned.cpp").write_text('#include "owned.h"\n', encoding="utf-8")
+        (cpp / "consumed.h").write_text(
+            "class Consumed {\n    Q_OBJECT\n};\n", encoding="utf-8"
+        )
+        (cpp / "consumed_owner.cpp").write_text(
+            '#include "consumed.h"\n#include "moc_consumed.cpp"\n', encoding="utf-8"
+        )
+        (cpp / "plain.h").write_text("class Plain;\n", encoding="utf-8")
+        moc_errors = errors_of(check_moc_ownership)
+        assert "owned.cpp" in moc_errors
+        assert "moc_owned.cpp" in moc_errors
+        assert "consumed" not in moc_errors
+        assert "plain.h" not in moc_errors
+        (cpp / "owned.cpp").write_text(
+            '#include "owned.h"\n#include "moc_owned.cpp"\n', encoding="utf-8"
+        )
+        assert errors_of(check_moc_ownership) == ""
+
+        fixture = cpp / TEST_FIXTURE
+        fixture.parent.mkdir(parents=True, exist_ok=True)
+        fixture.write_text("namespace pictura::test {}\n", encoding="utf-8")
+        assert errors_of(check_test_fixture_seam) == ""
+        fixture.write_text('#include "frame.h"\n', encoding="utf-8")
+        assert "qt_test_support.h" in errors_of(check_test_fixture_seam)
+
         (cpp / "frame.h").write_text("\n" * FRAME_H_MAX_LINES, encoding="utf-8")
         (cpp / "frame_includes.h").write_text(
             '#include "frame.h"\n' * FRAME_INCLUDES_MAX_INCLUDES, encoding="utf-8"
@@ -218,6 +292,8 @@ def main() -> int:
         ("menus", check_menu_tus),
         ("collaborator TUs", check_collaborator_tus),
         ("collaborator headers", check_collaborator_headers),
+        ("moc owners", check_moc_ownership),
+        ("test fixture seam", check_test_fixture_seam),
         ("budgets", check_budgets),
     )
     errors = [error for _, check in checks for error in check()]

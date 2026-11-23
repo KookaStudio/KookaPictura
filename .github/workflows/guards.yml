@@ -38,6 +38,10 @@ jobs:
         run: |
           python3 scripts/check-cmake-source-fragments.py --self-test
           python3 scripts/check-cmake-source-fragments.py
+      - name: Shell seams and moc owners
+        run: |
+          python3 scripts/check-shell-seams.py --self-test
+          python3 scripts/check-shell-seams.py
       - name: Self-test budget
         run: bash scripts/check-selftest-budget.sh
       - name: Managed agent resources and verification guards
