@@ -29,4 +29,5 @@ rows) draw that string. The rect width remains the elided text's advance, so the
 hit-testing share one elision.
 
 This is deliberately a single-elision change: an overlong name still elides to
-the band and ends in an ellipsis. Only the accidental second pass is removed.
+the band, but in the middle so both ends stay readable. Only the accidental
+second pass is removed.

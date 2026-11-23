@@ -425,14 +425,19 @@ void LayersPanelBundleTest::renameHitAreaMatchesRenderedLabel()
              "a double-click right of the label opens no inline editor");
 }
 
-// #1533: a name that fits its label band renders in full. The row elided the
-// label a second time using the first elision's width, so a fitting name lost
-// its tail and showed an ellipsis despite the row having room to spare.
+// #1533: a name that fits its label band renders in full for every row kind.
+// The row elided the label a second time using the first elision's width, so a
+// fitting name lost its tail and showed an ellipsis despite the row having room
+// to spare.
 void LayersPanelBundleTest::shortLayerNameIsNotElided()
 {
     QVERIFY(newDoc(QStringLiteral("NameFit")));
     const QString layer = makeLayer(QStringLiteral("r1 r2"));
     QVERIFY(!layer.isEmpty());
+    // Lay the window out so the panel is wide enough to show the full names.
+    window_->resize(1280, 800);
+    window_->show();
+    QTest::qWait(0);
     panel_->selectPaths({}, QString());
     QCoreApplication::processEvents();
     panel_->refresh();
@@ -469,13 +474,33 @@ void LayersPanelBundleTest::shortLayerNameIsNotElided()
     const QRect band(name.left(), name.top(), name.width(), qMax(1, name.height() - 2));
     QCOMPARE(differingPixels(row.copy(band), expected.copy(band)), 0);
 
-    // A name too wide for the band still elides, once, with a trailing ellipsis.
-    const QString longName = QString(200, QLatin1Char('W'));
+    // The Background (lock badge), a group (folder glyph), and a styled row
+    // (fx + list toggles) each use the band their own badges leave free.
+    QVERIFY(view_->background_from_layer(QStringLiteral("0")));
+    QVERIFY(view_->set_layer_name_path(QStringLiteral("0"), QStringLiteral("Background")));
+    const QString group = view_->add_group_in(QString());
+    QVERIFY(!group.isEmpty());
+    QVERIFY(view_->set_layer_name_path(group, QStringLiteral("Group Name")));
+    const QString styled = makeLayer(QStringLiteral("Styled"));
+    QVERIFY(!styled.isEmpty());
+    QVERIFY(pictura::layer_style_set(*view_, styled, QStringLiteral("colorOverlay.on"), 1.0));
+    pictura::layer_style_commit(*view_, QStringLiteral("Layer Style"));
+    QCoreApplication::processEvents();
+    panel_->refresh();
+    QCOMPARE(panel_->rowNameTextForTest(QStringLiteral("0")), QStringLiteral("Background"));
+    QCOMPARE(panel_->rowNameTextForTest(group), QStringLiteral("Group Name"));
+    QCOMPARE(panel_->rowNameTextForTest(styled), QStringLiteral("Styled"));
+
+    // A name too wide for the band elides in the middle, keeping both ends.
+    const QString longName =
+        QStringLiteral("start") + QString(200, QLatin1Char('W')) + QStringLiteral("end");
     QVERIFY(view_->set_layer_name_path(layer, longName));
     panel_->refresh();
     const QString shown = panel_->rowNameTextForTest(layer);
     QVERIFY2(shown.size() < longName.size(), "an overlong name still elides");
-    QVERIFY2(shown.endsWith(QChar(0x2026)), "an elided name ends in an ellipsis");
+    QVERIFY2(shown.startsWith(QStringLiteral("start")), "the start is kept");
+    QVERIFY2(shown.endsWith(QStringLiteral("end")), "the end is kept");
+    QVERIFY2(shown.contains(QChar(0x2026)), "the middle carries an ellipsis");
 }
 
 QTEST_MAIN(LayersPanelBundleTest)

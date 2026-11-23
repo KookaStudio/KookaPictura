@@ -366,7 +366,7 @@ SHALL leave the solo in place, with its snapshot still restorable.
 
 The system SHALL begin inline name editing only when the user double-clicks
 within the row's **rendered name label**: the painted name text's width after
-right-elision to the available label band, floored to a one-pixel target at the
+elision to the available label band, floored to a one-pixel target at the
 label's left edge. It SHALL NOT begin editing on the visibility, chevron,
 thumbnail, lock, fx, or mask regions, nor on empty row space to the right of the
 rendered label. The hit rectangle SHALL be the `nameRect` geometry the delegate
@@ -3229,10 +3229,13 @@ draggable within its own list, and the synthetic group header SHALL NOT drag.
 
 ### Requirement: Layer name label renders with one elision
 
-The system SHALL paint a layer row's name with a single right-elision to the
-available label band. A name that fits the band SHALL be shown in full, with no
-ellipsis. A name wider than the band SHALL be elided exactly once, ending in a
-single ellipsis. The painted text SHALL be the same text whose width the row's
+The system SHALL paint a layer row's name with a single elision to the available
+label band, for every row kind (layer, group, styled/effects, and synthetic
+effect rows). A name that fits the band SHALL be shown in full, with no
+ellipsis, and only the lock, fx, link, Blend If, and list-toggle badges actually
+present SHALL reduce the band. A name wider than the band SHALL be elided
+exactly once in the middle, keeping the start and the end with a single ellipsis
+between them. The painted text SHALL be the same text whose width the row's
 `nameRect` reports, so rendering and the inline-rename hit area cannot drift.
 
 #### Scenario: A name that fits is shown in full [lpr_name_fit]
@@ -3243,5 +3246,5 @@ single ellipsis. The painted text SHALL be the same text whose width the row's
 #### Scenario: An overlong name elides once [lpr_name_elide]
 
 - **WHEN** a layer's name is wider than the available label band
-- **THEN** the row paints the name right-elided to the band, ending in a single
-  ellipsis
+- **THEN** the row paints the name middle-elided to the band, keeping its start
+  and end with a single ellipsis between them

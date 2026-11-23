@@ -604,7 +604,7 @@ public:
         return maskSlotRight(itemRect, index);
     }
 
-    /// The rendered name label's rect: the elided text width inside the
+    /// The rendered name label's rect: the middle-elided text width inside the
     /// available band, floored to a one-pixel hit target at the label's left.
     /// `drawnText` receives that same elided text, so paint never elides twice.
     QRect nameRect(const QRect& itemRect, const QModelIndex& index,
@@ -629,7 +629,7 @@ public:
         const int available = qMax(1, right - 4 - nameLeft);
         const QFontMetrics metrics(nameFont(baseFont, index));
         const QString elided = metrics.elidedText(index.data(Qt::DisplayRole).toString(),
-                                                  Qt::ElideRight, available);
+                                                  Qt::ElideMiddle, available);
         if (drawnText) *drawnText = elided;
         const int width = qBound(1, metrics.horizontalAdvance(elided), available);
         return QRect(nameLeft, itemRect.top(), width, itemRect.height());

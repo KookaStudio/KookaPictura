@@ -18,8 +18,9 @@ plenty of space to spare.
   out-parameter, so paint can draw that exact string.
 - The regular and synthetic row paint paths draw the reported text instead of
   re-eliding it to `nameRect`'s width.
-- A Qt Test asserts a fitting name paints in full and an overlong name still
-  elides once with a trailing ellipsis.
+- A Qt Test asserts a fitting name paints in full for a layer, the Background,
+  a group, and a styled row, and that an overlong name middle-elides once while
+  keeping both ends.
 
 ## Capabilities
 
