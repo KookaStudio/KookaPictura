@@ -412,3 +412,95 @@ fn create_delete_and_rename_reject_missing_and_duplicate_names() {
     sheet.delete_character_style("Two").unwrap();
     assert!(sheet.character_styles.is_empty());
 }
+
+#[test]
+fn basic_paragraph_is_never_renamed() {
+    let mut sheet = TextStyleSheet::default();
+    let paragraph = ParagraphOverrides {
+        justify: Some(Justify::Center),
+        ..Default::default()
+    };
+    let attrs = || NamedStyleAttrs::Paragraph {
+        character: CharacterOverrides::default(),
+        paragraph: paragraph.clone(),
+    };
+    assert_eq!(
+        sheet.edit_style(BASIC_PARAGRAPH, "Body", attrs()),
+        Err(StyleError::Protected(BASIC_PARAGRAPH.to_string()))
+    );
+    sheet
+        .create_paragraph_style(
+            "Body",
+            CharacterOverrides::default(),
+            ParagraphOverrides::default(),
+        )
+        .unwrap();
+    assert_eq!(
+        sheet.edit_style("Body", BASIC_PARAGRAPH, attrs()),
+        Err(StyleError::Protected(BASIC_PARAGRAPH.to_string()))
+    );
+    assert!(sheet
+        .paragraph_style("Body")
+        .is_some_and(|style| style.paragraph == ParagraphOverrides::default()));
+
+    sheet
+        .edit_style(BASIC_PARAGRAPH, BASIC_PARAGRAPH, attrs())
+        .unwrap();
+    assert_eq!(
+        sheet.paragraph_style(BASIC_PARAGRAPH).unwrap().paragraph,
+        paragraph
+    );
+    assert_eq!(sheet.paragraph_styles.len(), 2);
+}
+
+#[test]
+fn edit_style_refuses_missing_and_duplicate_named_styles() {
+    let mut sheet = TextStyleSheet::default();
+    sheet
+        .create_character_style(
+            "Quote",
+            CharacterOverrides {
+                size: Some(40.0),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    sheet
+        .create_character_style(
+            "Caption",
+            CharacterOverrides {
+                size: Some(12.0),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let attrs = |size| {
+        NamedStyleAttrs::Character(CharacterOverrides {
+            size: Some(size),
+            ..Default::default()
+        })
+    };
+    assert_eq!(
+        sheet.edit_style("Ghost", "Ghost", attrs(10.0)),
+        Err(StyleError::NotFound("Ghost".to_string()))
+    );
+    assert_eq!(
+        sheet.edit_style("Quote", "Caption", attrs(10.0)),
+        Err(StyleError::Duplicate("Caption".to_string()))
+    );
+    assert_eq!(
+        sheet.character_style("Quote").unwrap().attrs.size,
+        Some(40.0)
+    );
+    assert_eq!(
+        sheet.character_style("Caption").unwrap().attrs.size,
+        Some(12.0)
+    );
+
+    sheet.edit_style("Quote", "Quote 2", attrs(55.0)).unwrap();
+    assert!(sheet.character_style("Quote").is_none());
+    assert_eq!(
+        sheet.character_style("Quote 2").unwrap().attrs.size,
+        Some(55.0)
+    );
+}

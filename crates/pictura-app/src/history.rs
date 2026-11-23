@@ -23,7 +23,7 @@ use planes::{
 };
 pub use styles::{
     create_character_style, create_paragraph_style, delete_character_style, delete_paragraph_style,
-    edit_character_style, edit_paragraph_style, rename_character_style,
+    edit_character_style, edit_paragraph_style,
 };
 
 #[derive(Clone)]

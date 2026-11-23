@@ -1,5 +1,6 @@
 mod restore;
 
+use super::styles::rename_character_style;
 use super::*;
 use pictura_core::TILE;
 use pictura_core::{BitDepth, Channel, CharacterOverrides, ColorMode, Layer};
@@ -1273,4 +1274,122 @@ fn a_pixel_undo_without_a_stored_composite_reports_its_layer_tiles() {
         "{rect:?} covers the changed pixels at the layer's place"
     );
     assert!(rect.width() < w as i32, "{rect:?} is bounded");
+}
+
+#[test]
+fn renaming_an_applied_paragraph_style_records_one_undoable_state() {
+    use pictura_core::{ParagraphOverrides, TypeSpec};
+    use pictura_render::{add_type_layer, apply_type_style};
+
+    let mut history = History::default();
+    let mut doc = Document::new(128, 64, ColorMode::Rgb, BitDepth::Eight);
+    let path = add_type_layer(&mut doc, "", &TypeSpec::new("Aa", "Liberation Sans", 20.0));
+    create_paragraph_style(
+        &mut doc,
+        "Body",
+        CharacterOverrides {
+            size: Some(30.0),
+            ..Default::default()
+        },
+        ParagraphOverrides::default(),
+    )
+    .unwrap();
+    assert!(apply_type_style(&mut doc, &path, "Body", true));
+    history.capture(
+        Snapshot {
+            quick_mask: None,
+            doc: doc.clone(),
+            selection: None,
+        },
+        "Open",
+    );
+
+    edit_paragraph_style(
+        &mut doc,
+        "Body",
+        "Body 2",
+        CharacterOverrides {
+            size: Some(48.0),
+            ..Default::default()
+        },
+        ParagraphOverrides::default(),
+    )
+    .unwrap();
+    history.capture(
+        Snapshot {
+            quick_mask: None,
+            doc: doc.clone(),
+            selection: None,
+        },
+        "Edit Paragraph Style",
+    );
+    assert_eq!(history.depth(), 1, "one state for the rename");
+    assert!(doc.text_styles.paragraph_style("Body 2").is_some());
+    assert_eq!(
+        doc.layers[0].applied_paragraph_style.as_deref(),
+        Some("Body 2")
+    );
+    assert_eq!(
+        pictura_render::type_layer_spec(&doc.layers[0])
+            .unwrap()
+            .character
+            .size,
+        48.0
+    );
+
+    let undone = history.undo().expect("undo the rename").doc;
+    assert!(undone.text_styles.paragraph_style("Body").is_some());
+    assert_eq!(
+        undone.layers[0].applied_paragraph_style.as_deref(),
+        Some("Body")
+    );
+    assert_eq!(
+        pictura_render::type_layer_spec(&undone.layers[0])
+            .unwrap()
+            .character
+            .size,
+        30.0
+    );
+
+    let redone = history.redo().expect("redo the rename").doc;
+    assert!(redone.text_styles.paragraph_style("Body 2").is_some());
+    assert_eq!(
+        redone.layers[0].applied_paragraph_style.as_deref(),
+        Some("Body 2")
+    );
+}
+
+#[test]
+fn a_refused_style_edit_records_nothing() {
+    use pictura_core::{ParagraphOverrides, StyleError};
+
+    let mut history = History::default();
+    let mut doc = doc(1, 1, 7);
+    create_paragraph_style(
+        &mut doc,
+        "Body",
+        CharacterOverrides::default(),
+        ParagraphOverrides::default(),
+    )
+    .unwrap();
+    history.capture(
+        Snapshot {
+            quick_mask: None,
+            doc: doc.clone(),
+            selection: None,
+        },
+        "Open",
+    );
+    let before = doc.clone();
+
+    let refused = edit_paragraph_style(
+        &mut doc,
+        "Body",
+        "Basic Paragraph",
+        CharacterOverrides::default(),
+        ParagraphOverrides::default(),
+    );
+    assert!(matches!(refused, Err(StyleError::Protected(_))));
+    assert_eq!(doc.text_styles, before.text_styles);
+    assert_eq!(history.depth(), 0, "the bridge captures only on success");
 }

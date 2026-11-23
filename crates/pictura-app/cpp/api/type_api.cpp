@@ -274,11 +274,12 @@ bool createParagraphStyle(PictureView& view, const QString& name, const QString&
     return ::pictura::type_create_paragraph_style(view, name, font, character, paragraph);
 }
 
-bool editParagraphStyle(PictureView& view, const QString& name, const QString& font,
-                        const CharacterSetting& character, const ParagraphSetting& paragraph)
+bool editParagraphStyle(PictureView& view, const QString& name, const QString& newName,
+                        const QString& font, const CharacterSetting& character,
+                        const ParagraphSetting& paragraph)
 {
     registerTypeFallbacks();
-    return ::pictura::type_edit_paragraph_style(view, name, font, character, paragraph);
+    return ::pictura::type_edit_paragraph_style(view, name, newName, font, character, paragraph);
 }
 
 bool previewParagraphStyle(PictureView& view, const QString& name, const QString& font,

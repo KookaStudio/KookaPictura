@@ -28,6 +28,7 @@
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QFontComboBox>
+#include <QtWidgets/QLineEdit>
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QStackedWidget>
@@ -79,6 +80,10 @@ private slots:
     void dialogShowsEveryPage();
     void dialogRoundTripsAttributes();
     void dialogPreviewAppliesAndCancelRestores();
+    void renameKeepsApplied();
+    void renameAndEditAreOneUndo();
+    void renameToExistingIsRefused();
+    void renamingBasicParagraphIsRefused();
     void dialogFontFamilyPopup();
     void optionsTypeFamilyTypeAhead();
     void paragraphStyleFamilyTypeAhead();
@@ -190,6 +195,13 @@ void ParagraphStylesPanelTest::createAndDelete()
     const int base = f.view->history_index();
     QVERIFY(panel->deleteSelectedStyle());
     QVERIFY2(f.committedOnce(base, "Delete Paragraph Style"), "one delete state");
+    QCOMPARE(panel->listForTest()->count(), 1);
+
+    QVERIFY(f.view->undo());
+    panel->refresh();
+    QCOMPARE(panel->listForTest()->count(), 2);
+    QVERIFY(f.view->redo());
+    panel->refresh();
     QCOMPARE(panel->listForTest()->count(), 1);
 }
 
@@ -334,6 +346,208 @@ void ParagraphStylesPanelTest::dialogPreviewAppliesAndCancelRestores()
     QVERIFY(!panel->editStyle(1));
     QVERIFY(previewed);
     QCOMPARE(pictura::type_api::findStyle(pictura::type_api::paragraphStyles(*f.view), QStringLiteral("Body")).character.size, 48.0);
+    QCOMPARE(f.view->history_index(), base);
+}
+
+void ParagraphStylesPanelTest::renameKeepsApplied()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_para_styles_rename"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    const QString path = makeTypeLayer(f);
+    QVERIFY2(!path.isEmpty(), "a type layer");
+    auto* panel = frame.findChild<pictura::ParagraphStylesPanel*>();
+    QVERIFY(panel);
+    panel->setView(f.view);
+
+    pictura::CharacterSetting c = pictura::type_api::defaultCharacterSetting();
+    c.size = 40.0;
+    const pictura::ParagraphSetting p = pictura::type_api::defaultParagraphSetting();
+    QVERIFY(pictura::type_api::createParagraphStyle(*f.view, QStringLiteral("Body"),
+                                                    QStringLiteral("Liberation Sans"), c, p));
+    panel->refresh();
+    panel->applyRowForTest(1);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.size, 40.0);
+
+    QTimer::singleShot(0, [&] {
+        auto* dialog = frame.findChild<pictura::ParagraphStyleDialog*>();
+        QVERIFY(dialog);
+        if (!dialog) {
+            return;
+        }
+        dialog->findChild<QLineEdit*>(QStringLiteral("paragraphStyleName"))
+            ->setText(QStringLiteral("Body 2"));
+        dialog->accept();
+    });
+    QVERIFY(panel->editStyle(1));
+    QCOMPARE(panel->listForTest()->item(1)->text(), QStringLiteral("Body 2"));
+
+    // The layer still applies the renamed style: editing it changes the layer.
+    const pictura::type_api::ParagraphStyle renamed =
+        pictura::type_api::findStyle(pictura::type_api::paragraphStyles(*f.view),
+                                     QStringLiteral("Body 2"));
+    pictura::CharacterSetting edited = renamed.character;
+    edited.size = 60.0;
+    QVERIFY(pictura::type_api::editParagraphStyle(*f.view, QStringLiteral("Body 2"),
+                                                  QStringLiteral("Body 2"), renamed.font, edited,
+                                                  p));
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.size, 60.0);
+}
+
+void ParagraphStylesPanelTest::renameAndEditAreOneUndo()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_para_styles_rename_undo"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    const QString path = makeTypeLayer(f);
+    QVERIFY2(!path.isEmpty(), "a type layer");
+    auto* panel = frame.findChild<pictura::ParagraphStylesPanel*>();
+    QVERIFY(panel);
+    panel->setView(f.view);
+
+    pictura::CharacterSetting c = pictura::type_api::defaultCharacterSetting();
+    c.size = 40.0;
+    const pictura::ParagraphSetting p = pictura::type_api::defaultParagraphSetting();
+    QVERIFY(pictura::type_api::createParagraphStyle(*f.view, QStringLiteral("Body"),
+                                                    QStringLiteral("Liberation Sans"), c, p));
+    panel->refresh();
+    panel->applyRowForTest(1);
+
+    const int base = f.view->history_index();
+    QTimer::singleShot(0, [&] {
+        auto* dialog = frame.findChild<pictura::ParagraphStyleDialog*>();
+        QVERIFY(dialog);
+        if (!dialog) {
+            return;
+        }
+        dialog->findChild<QLineEdit*>(QStringLiteral("paragraphStyleName"))
+            ->setText(QStringLiteral("Body 2"));
+        dialog->findChild<QDoubleSpinBox*>(QStringLiteral("paragraphStyleSize"))
+            ->setValue(60.0);
+        dialog->accept();
+    });
+    QVERIFY(panel->editStyle(1));
+    QVERIFY2(f.committedOnce(base, "Edit Paragraph Style"), "one rename state");
+    QCOMPARE(pictura::type_api::findStyle(pictura::type_api::paragraphStyles(*f.view),
+                                          QStringLiteral("Body 2"))
+                 .character.size,
+             60.0);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.size, 60.0);
+
+    QVERIFY(f.view->undo());
+    panel->refresh();
+    QCOMPARE(panel->listForTest()->item(1)->text(), QStringLiteral("Body"));
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.size, 40.0);
+
+    QVERIFY(f.view->redo());
+    panel->refresh();
+    QCOMPARE(panel->listForTest()->item(1)->text(), QStringLiteral("Body 2"));
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.size, 60.0);
+}
+
+void ParagraphStylesPanelTest::renameToExistingIsRefused()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_para_styles_duplicate"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    const QString path = makeTypeLayer(f);
+    QVERIFY2(!path.isEmpty(), "a type layer");
+    auto* panel = frame.findChild<pictura::ParagraphStylesPanel*>();
+    QVERIFY(panel);
+    panel->setView(f.view);
+
+    pictura::CharacterSetting c = pictura::type_api::defaultCharacterSetting();
+    c.size = 40.0;
+    const pictura::ParagraphSetting p = pictura::type_api::defaultParagraphSetting();
+    QVERIFY(pictura::type_api::createParagraphStyle(*f.view, QStringLiteral("Heading"),
+                                                    QStringLiteral("Liberation Sans"), c, p));
+    c.size = 20.0;
+    QVERIFY(pictura::type_api::createParagraphStyle(*f.view, QStringLiteral("Body"),
+                                                    QStringLiteral("Liberation Sans"), c, p));
+    panel->refresh();
+    panel->applyRowForTest(1);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.size, 40.0);
+
+    const int base = f.view->history_index();
+    QTimer::singleShot(0, [&] {
+        auto* dialog = frame.findChild<pictura::ParagraphStyleDialog*>();
+        QVERIFY(dialog);
+        if (!dialog) {
+            return;
+        }
+        dialog->findChild<QDoubleSpinBox*>(QStringLiteral("paragraphStyleSize"))
+            ->setValue(55.0);
+        dialog->findChild<QLineEdit*>(QStringLiteral("paragraphStyleName"))
+            ->setText(QStringLiteral("Body"));
+        dialog->accept();
+    });
+    QVERIFY(!panel->editStyle(1));
+    QCOMPARE(panel->listForTest()->count(), 3);
+    QCOMPARE(panel->listForTest()->item(1)->text(), QStringLiteral("Heading"));
+    QCOMPARE(pictura::type_api::findStyle(pictura::type_api::paragraphStyles(*f.view),
+                                          QStringLiteral("Heading"))
+                 .character.size,
+             40.0);
+    QCOMPARE(pictura::type_api::findStyle(pictura::type_api::paragraphStyles(*f.view),
+                                          QStringLiteral("Body"))
+                 .character.size,
+             20.0);
+    QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.character.size, 40.0);
+    QCOMPARE(f.view->history_index(), base);
+}
+
+void ParagraphStylesPanelTest::renamingBasicParagraphIsRefused()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_para_styles_protected"));
+    QVERIFY2(f.ok(), "type fixture");
+    showFrame();
+    auto* panel = frame.findChild<pictura::ParagraphStylesPanel*>();
+    QVERIFY(panel);
+    panel->setView(f.view);
+
+    pictura::CharacterSetting c = pictura::type_api::defaultCharacterSetting();
+    c.size = 30.0;
+    const pictura::ParagraphSetting p = pictura::type_api::defaultParagraphSetting();
+    QVERIFY(pictura::type_api::createParagraphStyle(*f.view, QStringLiteral("Body"),
+                                                    QStringLiteral("Liberation Sans"), c, p));
+    // Give the default style a real family so its options dialog opens on it.
+    QVERIFY(pictura::type_api::editParagraphStyle(
+        *f.view, QStringLiteral("Basic Paragraph"), QStringLiteral("Basic Paragraph"),
+        QStringLiteral("Liberation Sans"), pictura::type_api::defaultCharacterSetting(), p));
+    panel->refresh();
+
+    const int base = f.view->history_index();
+    QTimer::singleShot(0, [&] {
+        auto* dialog = frame.findChild<pictura::ParagraphStyleDialog*>();
+        QVERIFY(dialog);
+        if (!dialog) {
+            return;
+        }
+        dialog->findChild<QLineEdit*>(QStringLiteral("paragraphStyleName"))
+            ->setText(QStringLiteral("Other"));
+        dialog->accept();
+    });
+    QVERIFY(!panel->editStyle(0));
+
+    QTimer::singleShot(0, [&] {
+        auto* dialog = frame.findChild<pictura::ParagraphStyleDialog*>();
+        QVERIFY(dialog);
+        if (!dialog) {
+            return;
+        }
+        dialog->findChild<QLineEdit*>(QStringLiteral("paragraphStyleName"))
+            ->setText(QStringLiteral("Basic Paragraph"));
+        dialog->accept();
+    });
+    QVERIFY(!panel->editStyle(1));
+
+    QCOMPARE(panel->listForTest()->count(), 2);
+    QCOMPARE(panel->listForTest()->item(0)->text(), QStringLiteral("Basic Paragraph"));
+    QCOMPARE(panel->listForTest()->item(1)->text(), QStringLiteral("Body"));
     QCOMPARE(f.view->history_index(), base);
 }
 

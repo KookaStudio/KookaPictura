@@ -318,6 +318,20 @@ pub struct ParagraphStyle {
     pub paragraph: ParagraphOverrides,
 }
 
+/// The attribute sets one named-style edit writes. Pairing the attributes with
+/// their kind keeps a character-style request from carrying paragraph fields.
+// ponytail: one edit is built and consumed immediately; boxing the paragraph
+// overrides would only complicate every caller.
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Clone, PartialEq)]
+pub enum NamedStyleAttrs {
+    Character(CharacterOverrides),
+    Paragraph {
+        character: CharacterOverrides,
+        paragraph: ParagraphOverrides,
+    },
+}
+
 /// Named character and paragraph styles; always carries the editable,
 /// non-renamable default `Basic Paragraph` paragraph style.
 #[derive(Debug, Clone, PartialEq)]
@@ -583,6 +597,54 @@ impl TextStyleSheet {
         style.character = character;
         style.paragraph = paragraph;
         Ok(())
+    }
+
+    /// Rename `from` to `to` when the names differ and write `attrs`, as one
+    /// validated step. Nothing changes on `Err`: the source must exist, the
+    /// target name must be free, and a paragraph style may not be renamed away
+    /// from or into the protected `Basic Paragraph` (a same-name attribute edit
+    /// of it is accepted).
+    pub fn edit_style(
+        &mut self,
+        from: &str,
+        to: &str,
+        attrs: NamedStyleAttrs,
+    ) -> Result<(), StyleError> {
+        match attrs {
+            NamedStyleAttrs::Character(attributes) => {
+                if self.character_style(from).is_none() {
+                    return Err(StyleError::NotFound(from.to_string()));
+                }
+                if from != to {
+                    if self.character_style(to).is_some() {
+                        return Err(StyleError::Duplicate(to.to_string()));
+                    }
+                    self.rename_character_style(from, to)?;
+                }
+                self.edit_character_style(to, attributes)
+            }
+            NamedStyleAttrs::Paragraph {
+                character,
+                paragraph,
+            } => {
+                if self.paragraph_style(from).is_none() {
+                    return Err(StyleError::NotFound(from.to_string()));
+                }
+                if from != to {
+                    if from == BASIC_PARAGRAPH {
+                        return Err(StyleError::Protected(from.to_string()));
+                    }
+                    if to == BASIC_PARAGRAPH {
+                        return Err(StyleError::Protected(to.to_string()));
+                    }
+                    if self.paragraph_style(to).is_some() {
+                        return Err(StyleError::Duplicate(to.to_string()));
+                    }
+                    self.rename_paragraph_style(from, to)?;
+                }
+                self.edit_paragraph_style(to, character, paragraph)
+            }
+        }
     }
 
     pub fn delete_character_style(&mut self, name: &str) -> Result<(), StyleError> {

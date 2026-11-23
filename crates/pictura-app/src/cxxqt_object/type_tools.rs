@@ -374,7 +374,7 @@ pub mod ffi {
             character: &CharacterSetting,
         ) -> bool;
 
-        /// Edit the named character style to `character` (`new_name` may rename it), re-resolve every applying type layer, and record one "Edit Character Style" state; false (no state) for a missing style.
+        /// Edit the named character style to `character` (`new_name` may rename it), re-resolve every applying type layer, and record one "Edit Character Style" state; false (no state) for a missing, duplicate or protected name.
         fn type_edit_character_style(
             view: Pin<&mut PictureView>,
             name: &QString,
@@ -407,10 +407,11 @@ pub mod ffi {
             paragraph: &ParagraphSetting,
         ) -> bool;
 
-        /// Edit the named paragraph style, re-resolve every applying type layer, and record one "Edit Paragraph Style" state; false (no state) for a missing style.
+        /// Edit the named paragraph style to `character`/`paragraph` (`new_name` may rename it), re-resolve every applying type layer, and record one "Edit Paragraph Style" state; false (no state) for a missing, duplicate or protected name.
         fn type_edit_paragraph_style(
             view: Pin<&mut PictureView>,
             name: &QString,
+            new_name: &QString,
             font: &QString,
             character: &CharacterSetting,
             paragraph: &ParagraphSetting,

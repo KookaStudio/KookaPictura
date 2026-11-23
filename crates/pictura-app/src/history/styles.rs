@@ -1,5 +1,5 @@
 use pictura_core::{
-    CharacterOverrides, Document, Layer, LayerStack, ParagraphOverrides, StyleError,
+    CharacterOverrides, Document, LayerStack, NamedStyleAttrs, ParagraphOverrides, StyleError,
 };
 
 /// Create a named character style. No history; the caller records one state.
@@ -17,17 +17,32 @@ pub fn edit_character_style(
     name: &str,
     attrs: CharacterOverrides,
 ) -> Result<(), StyleError> {
-    doc.text_styles.edit_character_style(name, attrs)?;
-    re_resolve_layers(doc, name, false);
-    Ok(())
+    pictura_render::edit_named_style(
+        doc,
+        pictura_render::NamedStyleEdit {
+            from: name,
+            to: name,
+            attrs: NamedStyleAttrs::Character(attrs),
+        },
+    )
 }
 
 /// Rename a character style and rewrite every type layer's reference.
+#[cfg(test)]
 pub fn rename_character_style(doc: &mut Document, from: &str, to: &str) -> Result<(), StyleError> {
-    doc.text_styles.rename_character_style(from, to)?;
-    rename_applied(&mut doc.layers, from, to, false);
-    re_resolve_layers(doc, to, false);
-    Ok(())
+    let attrs = doc
+        .text_styles
+        .character_style(from)
+        .map(|style| style.attrs.clone())
+        .ok_or_else(|| StyleError::NotFound(from.to_string()))?;
+    pictura_render::edit_named_style(
+        doc,
+        pictura_render::NamedStyleEdit {
+            from,
+            to,
+            attrs: NamedStyleAttrs::Character(attrs),
+        },
+    )
 }
 
 /// Delete a named character style and unlink the type layers applying it.
@@ -48,17 +63,26 @@ pub fn create_paragraph_style(
         .create_paragraph_style(name, character, paragraph)
 }
 
-/// Edit a named paragraph style and re-resolve every type layer applying it.
+/// Edit a named paragraph style, renaming it when `from != to`, and re-resolve
+/// every type layer applying it.
 pub fn edit_paragraph_style(
     doc: &mut Document,
-    name: &str,
+    from: &str,
+    to: &str,
     character: CharacterOverrides,
     paragraph: ParagraphOverrides,
 ) -> Result<(), StyleError> {
-    doc.text_styles
-        .edit_paragraph_style(name, character, paragraph)?;
-    re_resolve_layers(doc, name, true);
-    Ok(())
+    pictura_render::edit_named_style(
+        doc,
+        pictura_render::NamedStyleEdit {
+            from,
+            to,
+            attrs: NamedStyleAttrs::Paragraph {
+                character,
+                paragraph,
+            },
+        },
+    )
 }
 
 /// Delete a named paragraph style and unlink the type layers applying it.
@@ -66,75 +90,6 @@ pub fn delete_paragraph_style(doc: &mut Document, name: &str) -> Result<(), Styl
     doc.text_styles.delete_paragraph_style(name)?;
     clear_applied(&mut doc.layers, name, true);
     Ok(())
-}
-
-/// Re-resolve every type layer that applies `name`, preserving its manual
-/// overrides, after an edit to that style.
-fn re_resolve_layers(doc: &mut Document, name: &str, paragraph: bool) -> bool {
-    let styles = doc.text_styles.clone();
-    let mut paths = Vec::new();
-    styled_layer_paths(&doc.layers, "", name, paragraph, &mut paths);
-    let mut changed = false;
-    for path in paths {
-        let Some(mut spec) =
-            pictura_render::resolve_path(doc, &path).and_then(pictura_render::type_layer_spec)
-        else {
-            continue;
-        };
-        let resolved = styles.resolve(
-            &spec.overrides,
-            spec.applied_character_style.as_deref(),
-            spec.applied_paragraph_style.as_deref(),
-        );
-        spec.character = resolved.character;
-        spec.paragraph = resolved.paragraph;
-        changed |= pictura_render::replace_type_layer(doc, &path, &spec);
-    }
-    changed
-}
-
-fn styled_layer_paths(
-    layers: &[Layer],
-    prefix: &str,
-    name: &str,
-    paragraph: bool,
-    out: &mut Vec<String>,
-) {
-    for (i, layer) in layers.iter().enumerate() {
-        let path = if prefix.is_empty() {
-            i.to_string()
-        } else {
-            format!("{prefix}/{i}")
-        };
-        if layer.is_group() {
-            styled_layer_paths(layer.children(), &path, name, paragraph, out);
-            continue;
-        }
-        let matches = if paragraph {
-            layer.applied_paragraph_style.as_deref() == Some(name)
-        } else {
-            layer.applied_character_style.as_deref() == Some(name)
-        };
-        if matches {
-            out.push(path);
-        }
-    }
-}
-
-fn rename_applied(layers: &mut LayerStack, from: &str, to: &str, paragraph: bool) {
-    for layer in layers {
-        if layer.is_group() {
-            rename_applied(layer.children_mut().expect("group"), from, to, paragraph);
-            continue;
-        }
-        if paragraph {
-            if layer.applied_paragraph_style.as_deref() == Some(from) {
-                layer.applied_paragraph_style = Some(to.to_string());
-            }
-        } else if layer.applied_character_style.as_deref() == Some(from) {
-            layer.applied_character_style = Some(to.to_string());
-        }
-    }
 }
 
 fn clear_applied(layers: &mut LayerStack, name: &str, paragraph: bool) {

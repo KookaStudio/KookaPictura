@@ -193,10 +193,17 @@ bool CharacterStylesPanel::editStyle(int row)
     registerTypeFont(newFamily, dialog.characterSetting().font_style);
     const bool edited = pictura::type_api::editCharacterStyle(
         *view_, name, dialog.styleName(), newFamily, dialog.characterSetting());
-    if (edited) {
-        refresh();
+    if (!edited) {
+        // Preview may have written the dialog's attributes into the old style;
+        // a refused rename restores them, recording nothing.
+        if (previewed) {
+            registerTypeFont(family, originalCharacter.font_style);
+            pictura::type_api::previewCharacterStyle(*view_, name, family, originalCharacter);
+        }
+        return false;
     }
-    return edited;
+    refresh();
+    return true;
 }
 
 bool CharacterStylesPanel::deleteSelectedStyle()
