@@ -495,6 +495,11 @@ gaps are the CS6 Extended 3D object and camera tools.
       balance from the Panasonic tags; other codings are refused by name, and
       File ▸ Open refuses these bodies until they have colour (#1472).
       `crates/pictura-codec/src/dng/rw2.rs`.
+- [x] **Panasonic RW2, compressed codings, decode only** — RawFormat 3 and 4
+      (predicted packets, zero photosites filled), 5, 6 and 8 (Huffman-coded
+      strips) are ported openly from darktable's rawspeed with attribution,
+      bit-exact against LibRaw on samples of each (#1541).
+      `crates/pictura-codec/src/dng/rw2_decode.rs`.
 - [x] **Per-camera colour matrices** — vendor raw files without a
       `ColorMatrix` take A and D65 matrices fitted from openly licensed camera
       spectral sensitivities (14 Canon CR2 and 11 Nikon NEF bodies, and 11
@@ -515,7 +520,6 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [ ] X-Trans-tuned demosaic, with the Fuji container (#399)
 - [ ] Deflate, PackBits and lossy-JPEG DNGs and floating-point samples (#396)
 - [ ] Olympus-compressed ORF sensor data, most bodies since 2007 (#1535)
-- [ ] Compressed and RawFormat 5 RW2 sensor data, about 97 % of Panasonic samples (#1541)
 - [ ] Colour for Panasonic RW2 cameras, so they open (#1542)
 - [ ] Vendor raw containers: CR3 (#399)
 - [ ] Every Nikon camera opens with colour: verify each layout, colour sources for ~70 bodies, recent models first (#1498)

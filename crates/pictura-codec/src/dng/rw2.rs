@@ -1,12 +1,14 @@
 //! Panasonic RW2, RWL and RAW (#1472): a TIFF with its own magic whose IFD0
-//! describes the sensor in Panasonic's tags. Three plain codings are read,
-//! 16-bit words and two packings in 16-byte groups; the others are refused
-//! (#1541). Built from the TIFF specification, ExifTool's public tag
-//! documentation and observation of real files.
+//! describes the sensor in Panasonic's tags. The container and the plain
+//! codings, 16-bit words and two packings in 16-byte groups, are built from the
+//! TIFF specification, ExifTool's public tag documentation and observation of
+//! real files; the other codings and the black-level offset are ported from
+//! rawspeed (#1541, `rw2_decode.rs`).
 
 use rayon::prelude::*;
 
 use super::levels::{self, Area, Levels};
+use super::rw2_decode;
 use super::tiff::{Order, Tiff};
 use super::vendor::camera_color;
 use super::{
@@ -56,40 +58,63 @@ enum Coding {
     /// As many samples of this many bits as fit in 16 bytes, from the low bit
     /// up, then padding.
     Groups(u32),
+    /// RawFormat 3 and 4: predicted 12-bit samples, 14 in 16 bytes, in blocks
+    /// swapped at this offset (0 for none).
+    Predictive(usize),
+    /// RawFormat 5: groups inside swapped blocks.
+    Blocked(u32),
+    /// RawFormat 6: this many bits in 16-byte packets of paired samples.
+    Paired(u32),
+    /// RawFormat 8: Huffman-coded strips of this many bits.
+    Strips(u32),
 }
 
 impl Coding {
     fn of(tags: &Tags) -> Result<Self, PsdError> {
         let format = tags.uint(RAW_FORMAT)?;
-        if let Some(n) = format.filter(|n| ![2, 7].contains(n)) {
-            return Err(unsupported(&format!(
-                "RawFormat {n} sensor data is not supported yet"
-            )));
-        }
         let compression = tags.uint(COMPRESSION)?;
         let bits = tags
             .uint(BITS)?
             .ok_or_else(|| invalid("missing BitsPerSample"))?;
+        let offset_tag = tags.uint(RAW_DATA_OFFSET)?.is_some();
         match (compression, format, bits) {
             (Some(34828 | 34830), None, 12 | 14) => Ok(Coding::Words),
             (Some(34316), Some(2), 12) => Ok(Coding::Groups(12)),
             (Some(34316), Some(7), 14) => Ok(Coding::Groups(14)),
+            (_, Some(3 | 4), _) => Ok(Coding::Predictive(if offset_tag { 0x1FF8 } else { 0 })),
+            (_, Some(5), 12 | 14) => Ok(Coding::Blocked(bits as u32)),
+            (_, Some(6), 12 | 14) => Ok(Coding::Paired(bits as u32)),
+            (_, Some(8), 1..=16) => Ok(Coding::Strips(bits as u32)),
+            (_, Some(n), _) => Err(unsupported(&format!(
+                "RawFormat {n} {bits}-bit sensor data is not supported yet"
+            ))),
             _ => Err(unsupported(&format!(
                 "{bits}-bit sensor data with compression {compression:?} and RawFormat {format:?}"
             ))),
         }
     }
 
-    fn row_bytes(self, width: usize) -> Result<usize, PsdError> {
+    /// Photosites per row must be a multiple of this.
+    fn row_multiple(self) -> usize {
         match self {
-            Coding::Words => Ok(2 * width),
-            Coding::Groups(bits) => {
-                let per_group = (128 / bits) as usize;
-                if !width.is_multiple_of(per_group) {
-                    return Err(unsupported("packed width"));
-                }
-                Ok(width / per_group * GROUP_BYTES)
-            }
+            Coding::Words => 1,
+            Coding::Groups(bits) | Coding::Blocked(bits) => (128 / bits) as usize,
+            Coding::Predictive(_) => 14,
+            Coding::Paired(bits) => rw2_decode::paired_pixels(bits),
+            Coding::Strips(_) => 2,
+        }
+    }
+
+    /// The input bytes the plane takes, for the codings stored in one run.
+    fn data_len(self, (width, height): (usize, usize)) -> usize {
+        let pixels = width * height;
+        match self {
+            Coding::Words => 2 * pixels,
+            Coding::Groups(bits) => pixels / (128 / bits) as usize * GROUP_BYTES,
+            Coding::Predictive(split) => rw2_decode::predictive_len(pixels, split),
+            Coding::Blocked(bits) => rw2_decode::blocked_len(pixels, bits),
+            Coding::Paired(bits) => pixels / rw2_decode::paired_pixels(bits) * GROUP_BYTES,
+            Coding::Strips(_) => 0,
         }
     }
 
@@ -98,32 +123,50 @@ impl Coding {
     fn level_range(self) -> (f64, f64) {
         match self {
             Coding::Words => (16.0, 4095.0),
-            Coding::Groups(bits) => (1.0, ((1u32 << bits) - 1) as f64),
+            Coding::Predictive(_) => (1.0, 4095.0),
+            Coding::Groups(bits)
+            | Coding::Blocked(bits)
+            | Coding::Paired(bits)
+            | Coding::Strips(bits) => (1.0, ((1u32 << bits) - 1) as f64),
         }
     }
 
-    fn unpack_row(self, src: &[u8], dst: &mut [u16]) {
+    fn decode(
+        self,
+        bytes: &[u8],
+        tags: &Tags,
+        size: (usize, usize),
+        data: &[u8],
+        plane: &mut [u16],
+    ) -> Result<(), PsdError> {
+        let width = size.0;
         match self {
             Coding::Words => {
-                for (d, &word) in dst.iter_mut().zip(src.as_chunks::<2>().0) {
-                    *d = u16::from_le_bytes(word);
-                }
+                plane
+                    .par_chunks_mut(width)
+                    .zip(data.par_chunks(2 * width))
+                    .for_each(|(dst, src)| {
+                        for (d, &word) in dst.iter_mut().zip(src.as_chunks::<2>().0) {
+                            *d = u16::from_le_bytes(word);
+                        }
+                    });
             }
             Coding::Groups(bits) => {
-                let per_group = (128 / bits) as usize;
-                let mask = (1u128 << bits) - 1;
-                for (out, &group) in dst
-                    .chunks_exact_mut(per_group)
-                    .zip(src.as_chunks::<GROUP_BYTES>().0)
-                {
-                    let mut value = u128::from_le_bytes(group);
-                    for d in out {
-                        *d = (value & mask) as u16;
-                        value >>= bits;
-                    }
-                }
+                let row_bytes = width / (128 / bits) as usize * GROUP_BYTES;
+                plane
+                    .par_chunks_mut(width)
+                    .zip(data.par_chunks(row_bytes))
+                    .for_each(|(dst, src)| rw2_decode::unpack_groups(src, bits, dst));
             }
+            Coding::Predictive(split) => {
+                rw2_decode::predictive(data, split, plane);
+                rw2_decode::fill_zeros(plane, width);
+            }
+            Coding::Blocked(bits) => rw2_decode::blocked(data, bits, plane),
+            Coding::Paired(bits) => rw2_decode::paired(data, bits, plane),
+            Coding::Strips(_) => rw2_decode::strips(bytes, tags, size, plane)?,
         }
+        Ok(())
     }
 }
 
@@ -197,9 +240,17 @@ fn default_crop(tags: &Tags, area: Area) -> Result<DngCrop, PsdError> {
 
 // ponytail: the green linearity limit is the white of all three colours.
 fn levels(tags: &Tags, coding: Coding, cfa: &CfaPattern) -> Result<Levels, PsdError> {
+    // rawspeed and LibRaw add 15 to RawFormat 3 and 4's black-level tags.
+    // rawspeed adds it to the plain codings of older files too, but their
+    // data (an FZ30's reaches 1) says otherwise.
+    let pedestal = if matches!(coding, Coding::Predictive(_)) {
+        15.0
+    } else {
+        0.0
+    };
     let mut black = [0.0f64; 3];
     for (value, tag) in black.iter_mut().zip(BLACK) {
-        *value = tags.uint(tag)?.unwrap_or(0) as f64;
+        *value = tags.uint(tag)?.map_or(0.0, |b| b as f64 + pedestal);
     }
     let top_black = black.iter().fold(0.0f64, |a, &b| a.max(b));
     let (scale, ceiling) = coding.level_range();
@@ -265,9 +316,14 @@ pub(super) fn read_rw2(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, P
         return Err(invalid("sensor plane exceeds the allocation budget"));
     }
 
-    let row_bytes = coding.row_bytes(width)?;
-    let stored = size(STRIP_BYTE_COUNTS, "missing StripByteCounts")?;
-    if stored != row_bytes * height {
+    if !width.is_multiple_of(coding.row_multiple()) {
+        return Err(unsupported("sensor width for its coding"));
+    }
+    let len = coding.data_len((width, height));
+    // Only the plain codings' StripByteCounts is reliable.
+    if matches!(coding, Coding::Words | Coding::Groups(_))
+        && size(STRIP_BYTE_COUNTS, "missing StripByteCounts")? != len
+    {
         return Err(unsupported("sensor data length"));
     }
     // `StripOffsets` is 0xFFFFFFFF in files that have `RawDataOffset`.
@@ -276,7 +332,7 @@ pub(super) fn read_rw2(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, P
         None => size(STRIP_OFFSETS, "missing sensor data offset")?,
     };
     let data = at
-        .checked_add(stored)
+        .checked_add(len)
         .and_then(|end| bytes.get(at..end))
         .ok_or(PsdError::Truncated)?;
 
@@ -286,10 +342,7 @@ pub(super) fn read_rw2(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, P
     let neutral = as_shot_neutral(&tags)?;
 
     let mut plane = vec![0u16; width * height];
-    plane
-        .par_chunks_mut(width)
-        .zip(data.par_chunks(row_bytes))
-        .for_each(|(dst, src)| coding.unpack_row(src, dst));
+    coding.decode(bytes, &tags, (width, height), data, &mut plane)?;
     let samples = levels::normalize(&plane, width, area, &levels);
 
     let (make, model) = (tags.ascii(MAKE), tags.ascii(MODEL));

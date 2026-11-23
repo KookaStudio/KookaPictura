@@ -13,9 +13,14 @@ Snapshot for resuming after a context break. Update after each milestone.
   so odd borders shift it. Decode only: no matrix, so File > Open names the
   camera and refuses, and the dialog filters do not list RW2 yet (#1542).
   Checked on 432 raw.pixls.us files (headers only for the refused): 12 read,
-  420 refused by RawFormat. Those codings = #1541, blocked on provenance and
-  a patent check: do not write those decoders from a model's memory or search
-  for existing ones. Series next: RAF + X-Trans -> CR3.
+  420 refused by RawFormat. Series next: RAF + X-Trans -> CR3.
+- **Panasonic RW2 compressed codings, #1541** (OpenSpec change
+  `vendor-raw-rw2-codings`, archived). Owner changed the provenance rule for
+  this format: `dng/rw2_decode.rs` is an open, attributed port of rawspeed
+  (LGPL-2.1+) — RawFormat 3/4 (V4, +15 black, zero fill), 5, 6, 8 (strips).
+  Bit-exact vs LibRaw 0.22.1 (rawpy) on 9 samples; samples kept in
+  ~/Downloads/rw2-1541. Patent search found active Nuvoton/Panasonic patents
+  (PROVENANCE). Still decode-only until colour (#1542).
 - **Vendor raw containers — Olympus ORF (uncompressed), #1471 implemented**
   (OpenSpec change `vendor-raw-orf`, archived; `codec/vendor-raw-containers`
   and `document/raw-open` modified). `dng/orf.rs`: headers `IIRO`/`IIRS`/`MMOR`;

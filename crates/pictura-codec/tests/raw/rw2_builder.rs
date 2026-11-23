@@ -1,5 +1,7 @@
 //! Lays out synthetic RW2s: the header, IFD0 with Panasonic's tags, its
-//! values, then the sensor data in one of the plain codings.
+//! values, then the sensor data in one of the codings.
+
+use super::rw2_encode;
 
 /// How the samples are stored.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -10,6 +12,14 @@ pub enum Data {
     Ten,
     /// RawFormat 7: nine 14-bit samples to 16 bytes.
     Nine,
+    /// RawFormat 4, or 3 without `RawDataOffset` (no swapped blocks).
+    Predictive,
+    /// RawFormat 5 at this many bits.
+    Blocked(u32),
+    /// RawFormat 6 at this many bits.
+    Paired(u32),
+    /// RawFormat 8 in this many columns and rows of strips.
+    Strips { columns: usize, rows: usize },
 }
 
 #[derive(Debug, Clone)]
@@ -36,6 +46,8 @@ pub struct Rw2 {
     pub raw_data_offset: bool,
     /// Added to `StripByteCounts`, and as many zero bytes to the data.
     pub extra: usize,
+    /// RawFormat 8's first predictions: red, first green, second green, blue.
+    pub initial: [u16; 4],
 }
 
 impl Rw2 {
@@ -44,7 +56,18 @@ impl Rw2 {
             Data::Words { shift, compression } => (16 - shift as u16, compression, None, 4095),
             Data::Ten => (12, 34316, Some(2), 4095),
             Data::Nine => (14, 34316, Some(7), 16383),
+            Data::Predictive => (12, 34316, Some(4), 4095),
+            Data::Blocked(bits) | Data::Paired(bits) => {
+                let format = if matches!(data, Data::Blocked(_)) {
+                    5
+                } else {
+                    6
+                };
+                (bits as u16, 34316, Some(format), (1 << bits) - 1)
+            }
+            Data::Strips { .. } => (16, 34316, Some(8), u16::MAX),
         };
+        let raw_data_offset = !matches!(data, Data::Words { .. } | Data::Ten | Data::Nine);
         Self {
             width,
             height,
@@ -62,9 +85,45 @@ impl Rw2 {
             white,
             wb: [512, 256, 384],
             crop: None,
-            raw_data_offset: false,
+            raw_data_offset,
             extra: 0,
+            initial: [0; 4],
         }
+    }
+
+    /// The strips' positions as `(x, y, width, height)`, row by row.
+    pub fn strip_rects(&self) -> Vec<(usize, usize, usize, usize)> {
+        let Data::Strips { columns, rows } = self.data else {
+            return Vec::new();
+        };
+        let (w, h) = (self.width / columns, self.height / rows);
+        let mut rects = Vec::new();
+        for row in 0..rows {
+            for col in 0..columns {
+                let width = if col + 1 == columns {
+                    self.width - col * w
+                } else {
+                    w
+                };
+                let height = if row + 1 == rows {
+                    self.height - row * h
+                } else {
+                    h
+                };
+                rects.push((col * w, row * h, width, height));
+            }
+        }
+        rects
+    }
+
+    /// Each strip's bytes and length in bits.
+    fn strips(&self) -> Vec<(Vec<u8>, usize)> {
+        // rawspeed starts both greens from the second green's tag.
+        let [r, _, g2, b] = self.initial;
+        self.strip_rects()
+            .into_iter()
+            .map(|rect| rw2_encode::strip(&self.samples, self.width, rect, [r, g2, g2, b]))
+            .collect()
     }
 
     fn stored(&self) -> Vec<u8> {
@@ -78,6 +137,10 @@ impl Rw2 {
             }
             Data::Ten => (12, 10),
             Data::Nine => (14, 9),
+            Data::Predictive => return rw2_encode::predictive(&self.samples, self.raw_data_offset),
+            Data::Blocked(bits) => return rw2_encode::blocked(&self.samples, bits),
+            Data::Paired(bits) => return rw2_encode::paired(&self.samples, bits),
+            Data::Strips { .. } => return self.strips().into_iter().flat_map(|s| s.0).collect(),
         };
         self.samples
             .chunks(per_group)
@@ -98,6 +161,61 @@ enum Value {
     Short(u16),
     Long(u32),
     Ascii(&'static str),
+    Bytes(Vec<u8>),
+}
+
+/// A Panasonic list tag: a 16-bit count, then the values.
+fn counted<const N: usize>(values: impl ExactSizeIterator<Item = u64>) -> Value {
+    let mut bytes = (values.len() as u16).to_le_bytes().to_vec();
+    for v in values {
+        bytes.extend(&v.to_le_bytes()[..N]);
+    }
+    Value::Bytes(bytes)
+}
+
+fn strip_tags(r: &Rw2, data_at: u32) -> Vec<(u16, Value)> {
+    use Value::Short;
+    let rects = r.strip_rects();
+    let strips = r.strips();
+    let mut offsets = Vec::new();
+    let mut at = u64::from(data_at);
+    for (bytes, _) in &strips {
+        offsets.push(at);
+        at += bytes.len() as u64;
+    }
+    let Data::Strips { columns, rows } = r.data else {
+        unreachable!()
+    };
+    let codes = rw2_encode::codes();
+    let mut table = vec![17u16];
+    for (len, code) in codes {
+        table.extend([len, code]);
+    }
+    let table = Value::Bytes(table.iter().flat_map(|v| v.to_le_bytes()).collect());
+    vec![
+        (0x0039, counted::<4>([65536u64; 6].into_iter())),
+        (0x003A, counted::<4>([0u64; 6].into_iter())),
+        (0x003B, Short(u16::MAX)),
+        (0x003C, Short(r.initial[0])),
+        (0x003D, Short(r.initial[1])),
+        (0x003E, Short(r.initial[2])),
+        (0x003F, Short(r.initial[3])),
+        (0x0040, table),
+        (0x0041, counted::<2>([0u64; 17].into_iter())),
+        (0x0042, Short(columns as u16)),
+        (0x0043, Short(rows as u16)),
+        (0x0044, counted::<4>(offsets.into_iter())),
+        (
+            0x0045,
+            counted::<4>(rects.iter().map(|&(x, y, ..)| (y as u64) << 16 | x as u64)),
+        ),
+        (
+            0x0046,
+            counted::<4>(strips.iter().map(|(_, bits)| *bits as u64)),
+        ),
+        (0x0047, counted::<2>(rects.iter().map(|r| r.2 as u64))),
+        (0x0048, counted::<2>(rects.iter().map(|r| r.3 as u64))),
+    ]
 }
 
 fn directory(r: &Rw2, data_at: u32, data_len: u32) -> Vec<(u16, Value)> {
@@ -130,6 +248,9 @@ fn directory(r: &Rw2, data_at: u32, data_len: u32) -> Vec<(u16, Value)> {
     if let Some(compression) = r.compression {
         tags.push((0x000B, Long(compression)));
     }
+    if matches!(r.data, Data::Strips { .. }) {
+        tags.extend(strip_tags(r, data_at));
+    }
     if r.raw_data_offset {
         tags.push((0x0111, Long(u32::MAX)));
         tags.push((0x0118, Long(data_at)));
@@ -147,6 +268,7 @@ pub fn data_start(r: &Rw2) -> usize {
         .iter()
         .map(|(_, value)| match value {
             Value::Ascii(text) if text.len() >= 4 => text.len() + 1,
+            Value::Bytes(bytes) if bytes.len() > 4 => bytes.len(),
             _ => 0,
         })
         .sum();
@@ -168,6 +290,17 @@ pub fn rw2(r: &Rw2) -> Vec<u8> {
         let (typ, count, field) = match *value {
             Value::Short(v) => (3u16, 1u32, u32::from(v).to_le_bytes()),
             Value::Long(v) => (4, 1, v.to_le_bytes()),
+            Value::Bytes(ref bytes) => {
+                let mut field = [0; 4];
+                if bytes.len() <= 4 {
+                    field[..bytes.len()].copy_from_slice(bytes);
+                } else {
+                    field = (values_at as u32).to_le_bytes();
+                    values_at += bytes.len();
+                    values.extend(bytes);
+                }
+                (7, bytes.len() as u32, field)
+            }
             Value::Ascii(text) => {
                 let bytes = [text.as_bytes(), &[0]].concat();
                 let mut field = [0; 4];
