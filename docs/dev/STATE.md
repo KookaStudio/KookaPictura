@@ -4,6 +4,17 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Panasonic RW2 colour, #1542** (OpenSpec change `vendor-raw-rw2-colour`,
+  archived). Only the DC-GX9 has open spectral data; by owner decision other
+  bodies take matrices fitted against their own embedded camera JPEG
+  (`examples/raw_jpeg_blocks.rs` + `scripts/fit-camera-jpeg-matrices.py` ->
+  `scripts/camera-jpeg-fits.json` -> `gen-camera-matrices.py`), placed under
+  the file's own D55/Fine Weather and tungsten presets. `CameraMatrices` now
+  names each matrix's LightSource. 10 bodies (GX9, GH5S, GH6, S1, S5, FZ18,
+  FZ28, G1, GM1S/GM1, ZS100/TZ100/101/110); pre-2007 `.RAW` bodies have no
+  embedded JPEG, G9/G9M2 samples too grey -> #1558. RawFormat 2 white capped
+  at 3967 (FZ8/FZ18 saturate there). Open dialog lists RW2/RWL/RAW. Samples
+  in ~/Downloads/rw2-1542 and rw2-1541.
 - **Vendor raw containers — Panasonic RW2 (plain packings), #1472 part 1**
   (OpenSpec change `vendor-raw-rw2`, archived; `codec/vendor-raw-containers`
   and `document/raw-open` modified; #1472 stays open). `dng/rw2.rs`: header
@@ -11,7 +22,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   levels = tags x 16) and RawFormat 2 / 7 (ten 12-bit / nine 14-bit samples
   from the low bit of 16 bytes). The CFA code counts from the sensor corner,
   so odd borders shift it. Decode only: no matrix, so File > Open names the
-  camera and refuses, and the dialog filters do not list RW2 yet (#1542).
+  camera and refuses (colour came with #1542).
   Checked on 432 raw.pixls.us files (headers only for the refused): 12 read,
   420 refused by RawFormat. Series next: RAF + X-Trans -> CR3.
 - **Panasonic RW2 compressed codings, #1541** (OpenSpec change
@@ -20,7 +31,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   (LGPL-2.1+) — RawFormat 3/4 (V4, +15 black, zero fill), 5, 6, 8 (strips).
   Bit-exact vs LibRaw 0.22.1 (rawpy) on 9 samples; samples kept in
   ~/Downloads/rw2-1541. Patent search found active Nuvoton/Panasonic patents
-  (PROVENANCE). Still decode-only until colour (#1542).
+  (PROVENANCE). Colour since #1542.
 - **Vendor raw containers — Olympus ORF (uncompressed), #1471 implemented**
   (OpenSpec change `vendor-raw-orf`, archived; `codec/vendor-raw-containers`
   and `document/raw-open` modified). `dng/orf.rs`: headers `IIRO`/`IIRS`/`MMOR`;
