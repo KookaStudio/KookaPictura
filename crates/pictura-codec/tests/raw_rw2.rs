@@ -12,8 +12,11 @@ use pictura_codec::{
 mod builder;
 #[path = "dng/ljpeg_encode.rs"]
 mod ljpeg_encode;
+#[allow(dead_code)]
 #[path = "raw/rw2_builder.rs"]
 mod rw2_builder;
+#[path = "raw/rw2_encode.rs"]
+mod rw2_encode;
 
 use builder::{noise_plane, write_tiff, IfdSpec, Val};
 use rw2_builder::{data_start, rw2, Data, Rw2};
@@ -40,6 +43,7 @@ fn sample(data: Data) -> Rw2 {
         Data::Ten => 4095,
         Data::Words { shift, .. } => u16::MAX >> shift,
         Data::Nine => 16383,
+        other => unreachable!("{other:?} lives in raw_rw2_codings.rs"),
     };
     let samples = noise_plane(WIDTH, HEIGHT, max, 23).samples;
     Rw2::new(WIDTH, HEIGHT, samples, data)
@@ -116,11 +120,12 @@ fn packed_rw2s_decode_exactly() {
 }
 
 #[test]
-fn other_rw2_codings_are_refused_by_name() {
-    for format in [3, 4, 5, 6, 8] {
+fn unknown_rw2_codings_are_refused_by_name() {
+    for (format, bits) in [(1, 12), (9, 12), (5, 10), (6, 16), (8, 17)] {
         for compression in [Some(34316), None] {
             let mut r = sample(Data::Ten);
             r.raw_format = Some(format);
+            r.bits = bits;
             r.compression = compression;
             let bytes = rw2(&r);
             assert_eq!(sniff_raw(&bytes), Some(RawFormat::Rw2));

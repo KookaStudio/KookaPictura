@@ -31,6 +31,7 @@ mod nef_decode;
 mod orf;
 mod orf_meta;
 mod rw2;
+mod rw2_decode;
 mod tiff;
 mod vendor;
 mod write;

@@ -205,12 +205,30 @@ were found by trying plain byte and bit orders and keeping the smoothest
 image. No dcraw, LibRaw or rawspeed code is used, and no colour matrix is
 included.
 
-The other codings are not implemented (#1541). The AI model that wrote this
-container has training exposure to open-source decoders of those codings, so
-a decoder it wrote would not be independent; it did not search for or write
-one. Its research also printed the header of an Adobe-converted DNG from the
-sample index, with truncated matrix values; the file was deleted and nothing
-from it is used.
+The #1472 research also printed the header of an Adobe-converted DNG from
+the sample index, with truncated matrix values; the file was deleted and
+nothing from it is used.
+
+## Panasonic RW2 compressed codings (`crates/pictura-codec/src/dng/rw2_decode.rs`)
+
+**Ported code, not an independent implementation.** The AI model that wrote
+the container has training exposure to open-source decoders of these codings,
+so by owner decision (#1541) they are ported openly from darktable's rawspeed
+(Source: https://github.com/darktable-org/rawspeed, commit
+718eae230df9ebb1750755b775e52185f2342a46): the `PanasonicV4`, `V5`, `V6` and
+`V8` decompressors, `Rw2Decoder`'s coding choice and black-level offset, and
+`RawImageDataU16::fixBadPixel`. rawspeed is **LGPL-2.1-or-later**; the port is
+distributed under **GPL-3.0-or-later** as LGPL-2.1 section 3 permits, and the
+file carries rawspeed's copyright notices (Klaus Post, Pedro Côrte-Real, Axel
+Waggershauser, Roman Lebedev, Alexey Danilchenko, Stefan Hoffmeister, LibRaw
+LLC, Daniel Vogelbacher, Kolton Yager). The port was checked against LibRaw
+0.22.1's unpacked sensor data on sample files (raw.pixls.us, not committed).
+
+Patents (OVR-004): a Google Patents status search on 2026-11-22 found active
+Panasonic-origin patents on fixed-length predictive RAW coding (US8090209B2,
+US9106250B2, now assigned to Nuvoton Technology Corp Japan). Whether any
+claim reads on these codings or on decoding them has not been assessed; this
+is not a legal conclusion.
 
 ## Test fixtures
 
