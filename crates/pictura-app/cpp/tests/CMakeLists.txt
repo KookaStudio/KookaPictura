@@ -313,14 +313,29 @@ if(PICTURA_DEV_PCH)
     target_precompile_headers(pictura_test_pch PRIVATE "${PICTURA_PCH_HEADER}")
 endif()
 
+# The shared fixture's bodies compile here, once, instead of in every suite that
+# includes qt_test_support.h. AUTOMOC OFF: its translation unit includes frame.h
+# to construct the window, and a moc scan of it would emit a second meta-object
+# for PicturaMainWindow. PIC for the same reason pictura_assets sets it: the
+# suites are PIE executables and reject non-PIC objects.
+add_library(pictura_test_support STATIC qt_test_support.cpp)
+set_target_properties(pictura_test_support PROPERTIES
+    AUTOMOC OFF
+    POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(pictura_test_support PRIVATE pictura_shell Qt6::Test)
+target_compile_options(pictura_test_support PRIVATE ${PICTURA_DEV_COMPILE_OPTIONS}
+    "$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-g1>")
+
 set(PICTURA_QT_TEST_SOURCES "")
 foreach(test_name IN LISTS PICTURA_QT_TESTS)
     list(APPEND PICTURA_QT_TEST_SOURCES ${test_name}.cpp)
     add_executable(${test_name} ${test_name}.cpp)
     if(PICTURA_SHELL_SHARED)
-        target_link_libraries(${test_name} PRIVATE pictura_shell Qt6::Test)
+        target_link_libraries(${test_name} PRIVATE pictura_shell Qt6::Test
+            pictura_test_support)
     else()
-        target_link_libraries(${test_name} PRIVATE pictura_shell Qt6::Test pictura_assets)
+        target_link_libraries(${test_name} PRIVATE pictura_shell Qt6::Test
+            pictura_assets pictura_test_support)
     endif()
     # Test debug info only needs line tables; the suites are not debugged through
     # full variable info, and this keeps the test objects and their links small.

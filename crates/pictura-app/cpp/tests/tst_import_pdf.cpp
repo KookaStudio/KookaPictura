@@ -28,6 +28,7 @@
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QStatusBar>
 
+#include "frame.h"
 #include "qt_test_support.h"
 
 using namespace pictura;

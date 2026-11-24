@@ -21,6 +21,7 @@
 #include "document_registry.h"
 #include "image_view.h"
 #include "panels/info_panel.h"
+#include "frame.h"
 #include "qt_test_support.h"
 #include "tools.h"
 

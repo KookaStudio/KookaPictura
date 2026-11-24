@@ -10,8 +10,10 @@ check keeps the split honest:
 - no path appears in two fragments,
 - every listed path exists on disk,
 - every `.cpp` under `crates/pictura-app/cpp/` is listed, except the Qt Test
-  sources and the bridge translation unit that the Rust build script compiles
-  and CMake does not (`panels/actions_tool_recording_bridge.cpp`),
+  sources and the three bridge translation units the Rust build script compiles
+  and CMake does not (`decode_image.cpp`, `encode_image.cpp`,
+  `panels/actions_tool_recording_bridge.cpp`), and none of those three is
+  listed,
 - `main.cpp` and `selftest*` sources live only in `selftest.cmake`, and
   `selftest.cmake` holds nothing else,
 - the root `CMakeLists.txt` includes every fragment.
@@ -36,7 +38,13 @@ CPP = Path("crates/pictura-app/cpp")
 SELFTEST_FRAGMENT = "selftest.cmake"
 SHELL_VARIABLE = "PICTURA_SHELL_SOURCES"
 SELFTEST_VARIABLE = "PICTURA_SELF_TEST_SOURCES"
-RUST_BUILT = "crates/pictura-app/cpp/panels/actions_tool_recording_bridge.cpp"
+RUST_BUILT = frozenset(
+    {
+        "crates/pictura-app/cpp/decode_image.cpp",
+        "crates/pictura-app/cpp/encode_image.cpp",
+        "crates/pictura-app/cpp/panels/actions_tool_recording_bridge.cpp",
+    }
+)
 PATH_RE = re.compile(r"crates/pictura-app/cpp/[^\s)]+")
 APPEND_RE = re.compile(r"list\(\s*APPEND\s+(\w+)(.*?)\)", re.S)
 INCLUDE_RE = re.compile(r"include\(\s*cmake/sources/([^\s)]+)\s*\)")
@@ -86,7 +94,7 @@ def check(root: Path) -> list[str]:
                 listed[path] = fragment.name
 
     for path, fragment in listed.items():
-        if path == RUST_BUILT:
+        if path in RUST_BUILT:
             errors.append(f"{fragment} lists the Rust-built translation unit: {path}")
         if not (root / path).is_file():
             errors.append(f"{fragment} lists a missing file: {path}")
@@ -100,7 +108,7 @@ def check(root: Path) -> list[str]:
     cpp = root / CPP
     for source in sorted(cpp.rglob("*.cpp")):
         rel = source.relative_to(root).as_posix()
-        if "/tests/" in rel or rel == RUST_BUILT:
+        if "/tests/" in rel or rel in RUST_BUILT:
             continue
         if rel not in listed:
             errors.append(f"translation unit not listed in any fragment: {rel}")
@@ -155,6 +163,7 @@ def self_test() -> int:
     b = "crates/pictura-app/cpp/b.h"
     main = "crates/pictura-app/cpp/main.cpp"
     selftest = "crates/pictura-app/cpp/selftest_x.cpp"
+    rust_built = sorted(RUST_BUILT)
     cases = [
         {
             "name": "pass",
@@ -166,7 +175,7 @@ def self_test() -> int:
                 main,
                 selftest,
                 "crates/pictura-app/cpp/tests/tst_x.cpp",
-                RUST_BUILT,
+                *rust_built,
             ],
             "expected": None,
         },
@@ -230,10 +239,24 @@ def self_test() -> int:
         },
         {
             "name": "rust built listed",
-            "shell": [RUST_BUILT],
+            "shell": [rust_built[0]],
             "selftest": [main],
-            "files": [RUST_BUILT, main],
+            "files": [*rust_built, main],
             "expected": "Rust-built",
+        },
+        {
+            "name": "every rust built edge excluded",
+            "shell": [a],
+            "selftest": [main],
+            "files": [a, *rust_built, main],
+            "expected": None,
+        },
+        {
+            "name": "widened exclusion hides a source",
+            "shell": [a],
+            "selftest": [main],
+            "files": [a, "crates/pictura-app/cpp/d.cpp", *rust_built, main],
+            "expected": "not listed",
         },
     ]
     failed = 0

@@ -11,6 +11,7 @@
 #include "session.h"
 #include "settings_backup.h"
 #include "prefs_test_support.h"
+#include "frame.h"
 #include "qt_test_support.h"
 
 using namespace pictura;

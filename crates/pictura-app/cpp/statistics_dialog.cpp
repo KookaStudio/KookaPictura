@@ -232,3 +232,5 @@ void StatisticsDialog::refreshButtons()
 }
 
 } // namespace pictura
+
+#include "moc_statistics_dialog.cpp"

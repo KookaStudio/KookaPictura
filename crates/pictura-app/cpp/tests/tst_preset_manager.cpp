@@ -1,3 +1,4 @@
+#include "frame.h"
 #include "qt_test_support.h"
 
 #include "command_ids.h"

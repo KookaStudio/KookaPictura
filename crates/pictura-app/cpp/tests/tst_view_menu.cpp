@@ -34,6 +34,7 @@
 #include <functional>
 #include <memory>
 
+#include "frame.h"
 #include "qt_test_support.h"
 
 namespace {

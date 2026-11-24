@@ -35,6 +35,7 @@
 #include "panels/numeric_field.h"
 #include "preferences.h"
 #include "preferences_dialog.h"
+#include "frame.h"
 #include "qt_test_support.h"
 #include "tools.h"
 #include "api/view_bridge.h"

@@ -7,6 +7,7 @@
 #include "panels/color_panel.h"
 #include "panels/swatches_panel.h"
 
+#include "frame.h"
 #include "qt_test_support.h"
 
 class SwatchesPanelTest : public QObject {

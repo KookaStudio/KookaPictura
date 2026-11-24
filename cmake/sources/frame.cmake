@@ -8,6 +8,7 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/document_registry_windows.cpp
     crates/pictura-app/cpp/frame.cpp
     crates/pictura-app/cpp/frame.h
+    crates/pictura-app/cpp/frame_forward.h
     crates/pictura-app/cpp/frame_build.cpp
     crates/pictura-app/cpp/frame_canvas.cpp
     crates/pictura-app/cpp/frame_canvas.h
