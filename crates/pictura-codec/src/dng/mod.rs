@@ -19,6 +19,7 @@ use crate::probe::ImageBudget;
 mod arw;
 mod arw_decode;
 mod camera_color;
+mod camera_jpeg_matrices;
 mod camera_matrices;
 mod cr2;
 mod cr3;

@@ -4,6 +4,15 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Canon CR3 colour, more bodies, #1579** (OpenSpec change
+  `vendor-raw-cr3-colour-r3-v1`, archived; `codec/camera-matrices`
+  modified). Owner-supplied samples (dpreview galleries, refuse scripted
+  downloads; copy in ~/Downloads/cr3-1579) add camera-JPEG rows for the EOS
+  R1, R3 and PowerShot V1 and restore the R6 Mark III pair; the generator
+  now prefers a body's sample with both matrices. The fit script knows
+  ColorData 67 (R8 Mark II, v64 layout); its fit misses (4.71 dE) -> #1583.
+  RP and R50 spectral rows kept: Canon's presets fit them like every other
+  spectral row, and the R50's presets match the R10's.
 - **Canon CR3 colour, #1574** (OpenSpec change `vendor-raw-cr3-colour`,
   archived; `codec/camera-matrices` modified). By owner decision CR3 bodies
   without rawtoaces data take camera-JPEG fits (the #1542 method) and, where

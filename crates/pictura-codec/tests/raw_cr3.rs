@@ -383,13 +383,16 @@ fn cr3_reports_camera_tags() {
     let s = sensor(64, 48, 70);
     let track = || raw_track(&Frame::lossless((64, 48)), &planes(&s, 0));
     let image = read(&cr3(&Cr3 {
-        cmt1: Some(cmt1("Canon", "Canon EOS R3", 6)),
+        cmt1: Some(cmt1("Canon", "Canon PowerShot G1 X Mark III", 6)),
         tracks: vec![track()],
         ..Cr3::default()
     }))
     .expect("tagged CR3");
     assert_eq!(image.make.as_deref(), Some("Canon"));
-    assert_eq!(image.model.as_deref(), Some("Canon EOS R3"));
+    assert_eq!(
+        image.model.as_deref(),
+        Some("Canon PowerShot G1 X Mark III")
+    );
     assert_eq!(image.orientation, 6);
     let crop = image.default_crop;
     assert_eq!(
@@ -580,7 +583,10 @@ fn cr3_models_get_both_matrices() {
         canon("Canon EOS R5").color_matrix,
         canon("Canon EOS R6").color_matrix
     );
-    assert_eq!(canon("Canon EOS R3").color_matrix, [None, None]);
+    assert_eq!(
+        canon("Canon PowerShot G1 X Mark III").color_matrix,
+        [None, None]
+    );
 }
 
 /// Colour data of `version` with the multipliers at `at`.

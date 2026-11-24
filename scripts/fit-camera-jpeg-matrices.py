@@ -29,8 +29,10 @@ ISO studio tungsten (code 24). A pair whose lights the colour stage would not
 read back (its as-shot solve, within 2 %) keeps the daylight matrix alone.
 
 Regenerate (samples from https://raw.pixls.us/data/Panasonic/ and
-https://raw.pixls.us/data/Canon/, one directory per body; the file names and
-SHA-256 sums used are in the output):
+https://raw.pixls.us/data/Canon/, one directory per body, and for the EOS R1,
+R3, R6 Mark III and PowerShot V1 (#1579) files from
+https://www.dpreview.com/sample-galleries/; the file names and SHA-256 sums
+used are in the output):
   cargo build --release -p pictura-codec --example raw_jpeg_blocks
   python3 scripts/fit-camera-jpeg-matrices.py SAMPLES_DIR \\
       target/release/examples/raw_jpeg_blocks
@@ -218,10 +220,10 @@ CANON_UUID = bytes.fromhex("85c0b687820f11e08111f4ce462b6a48")
 TAG_MAKER_NOTE, TAG_COLOR_DATA = 0x927C, 0x4001
 # ColorData version -> word index of WB_RGGBLevelsDaylight. Shade, Cloudy and
 # Tungsten follow it, each four levels and the temperature Canon records
-# (ExifTool's Canon ColorData9-12 tables; version 66, the R6 Mark III's, has
-# version 64's layout on the sample).
+# (ExifTool's Canon ColorData9-12 tables; versions 66 and 67, the R6 Mark
+# III's and R8 Mark II's, have version 64's layout on the samples).
 CANON_DAYLIGHT = {16: 136, 17: 136, 18: 136, 19: 136, 32: 150, 33: 150, 34: 205, 48: 205}
-CANON_DAYLIGHT |= {64: 110, 65: 110, 66: 110}
+CANON_DAYLIGHT |= {64: 110, 65: 110, 66: 110, 67: 110}
 D55 = 5503.0
 
 

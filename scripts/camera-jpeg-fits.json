@@ -346,6 +346,20 @@
  },
  {
   "make": "Canon",
+  "model": "Canon EOS M50",
+  "aliases": [
+   "Canon EOS Kiss M"
+  ],
+  "sample": "canon_eos_m50_02.cr3",
+  "sha256": "850e4c292fb98f32c29fe5d041ad8c8020348ee95690fbba9c680fee7dd12576",
+  "blocks": 401,
+  "median_de": 4.38,
+  "p90_de": 7.17,
+  "chroma_spread": 12.7,
+  "rejected": "matrix does not reproduce the camera JPEG"
+ },
+ {
+  "make": "Canon",
   "model": "Canon EOS M50m2",
   "aliases": [
    "Canon EOS Kiss M2"
@@ -567,6 +581,45 @@
  },
  {
   "make": "Canon",
+  "model": "Canon EOS R1",
+  "aliases": [],
+  "sample": "canon_eos_r1.cr3",
+  "sha256": "0d17bb2114dd83450c0b910d7108af79020e785b0bf3e21a438f39c8b02ac9d9",
+  "blocks": 488,
+  "median_de": 0.97,
+  "p90_de": 2.62,
+  "chroma_spread": 15.6,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    1.086,
+    -0.3975,
+    -0.1296,
+    -0.1262,
+    1.0154,
+    0.1143,
+    0.206,
+    -0.1039,
+    0.6173
+   ],
+   [
+    1.4699,
+    -0.7382,
+    -0.1125,
+    -0.2037,
+    1.0883,
+    0.2868,
+    0.1372,
+    -0.1062,
+    0.8482
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
   "model": "Canon EOS R10",
   "aliases": [],
   "sample": "Canon_EOS_R10__IMG_6310.CR3",
@@ -693,6 +746,45 @@
   "p90_de": 0.86,
   "chroma_spread": 1.6,
   "rejected": "too little colour in the scene"
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R3",
+  "aliases": [],
+  "sample": "canon_eos_r3.cr3",
+  "sha256": "b1763f019f35e56c192960ec0ff3f7a3b6e914301f712b8bd08a723cf775868a",
+  "blocks": 509,
+  "median_de": 2.87,
+  "p90_de": 7.02,
+  "chroma_spread": 30.3,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    1.0971,
+    -0.4294,
+    -0.131,
+    -0.1581,
+    0.9882,
+    0.177,
+    0.1313,
+    -0.0182,
+    0.5116
+   ],
+   [
+    1.4933,
+    -0.7921,
+    -0.1172,
+    -0.2269,
+    1.0574,
+    0.4114,
+    0.087,
+    -0.0401,
+    0.6965
+   ]
+  ]
  },
  {
   "make": "Canon",
@@ -1130,6 +1222,57 @@
  },
  {
   "make": "Canon",
+  "model": "Canon EOS R6 Mark III",
+  "aliases": [],
+  "sample": "canon_eos_R6_mk3.cr3",
+  "sha256": "20caa633038bbef08bfa2316bc9f300d7df161cf06dac73f380f6e9eb7d2356b",
+  "blocks": 505,
+  "median_de": 0.9,
+  "p90_de": 1.82,
+  "chroma_spread": 12.6,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.8866,
+    -0.2521,
+    -0.0912,
+    0.1358,
+    0.6884,
+    0.1974,
+    0.2425,
+    -0.0603,
+    0.4754
+   ],
+   [
+    1.1848,
+    -0.4874,
+    -0.0386,
+    0.063,
+    0.7127,
+    0.495,
+    0.1516,
+    -0.0727,
+    0.6663
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R6 Mark III",
+  "aliases": [],
+  "sample": "canon_eos_r6_mk3_pic2.cr3",
+  "sha256": "7fee3d4e0c84cdf311fcc564d12cd5a42975c88a93a276e4b63e8d563232bcd5",
+  "blocks": 80,
+  "median_de": 4.06,
+  "p90_de": 12.92,
+  "chroma_spread": 33.6,
+  "rejected": "matrix does not reproduce the camera JPEG"
+ },
+ {
+  "make": "Canon",
   "model": "Canon EOS R6m2",
   "aliases": [],
   "sample": "EOS_R6_Mark_II__canon-r6m2-img_0346-raw-normal-full.cr3",
@@ -1247,6 +1390,45 @@
  },
  {
   "make": "Canon",
+  "model": "Canon EOS R6m2",
+  "aliases": [],
+  "sample": "canon_eos_6_mk2.cr3",
+  "sha256": "2f5a50adb79ccb8959cc740803f0f29489aab02b04371d7aa3bf6e97bbf3516e",
+  "blocks": 435,
+  "median_de": 0.97,
+  "p90_de": 3.43,
+  "chroma_spread": 15.6,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    1.2803,
+    -0.5613,
+    -0.1632,
+    -0.3571,
+    1.2126,
+    0.14,
+    0.0881,
+    -0.0149,
+    0.677
+   ],
+   [
+    1.7508,
+    -1.0189,
+    -0.1753,
+    -0.4263,
+    1.3154,
+    0.3068,
+    0.0692,
+    -0.0442,
+    0.9411
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
   "model": "Canon EOS R7",
   "aliases": [],
   "sample": "EOS_R7__443A0157.CR3",
@@ -1286,6 +1468,57 @@
  },
  {
   "make": "Canon",
+  "model": "Canon EOS R7",
+  "aliases": [],
+  "sample": "canon_eos_r7.cr3",
+  "sha256": "e2105423f15236db47ab1268bfe6675405779f3e313800ba06679f36be60026e",
+  "blocks": 261,
+  "median_de": 4.38,
+  "p90_de": 8.04,
+  "chroma_spread": 22.3,
+  "rejected": "matrix does not reproduce the camera JPEG"
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R7",
+  "aliases": [],
+  "sample": "canon_eos_r7_pic2.cr3",
+  "sha256": "901c6cc68f67d5084bc7ec8a2a5c31dc25dd5ccf0afc32cec920eb111d416023",
+  "blocks": 445,
+  "median_de": 1.9,
+  "p90_de": 4.99,
+  "chroma_spread": 14.3,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.9067,
+    -0.2293,
+    -0.1003,
+    0.1992,
+    0.6051,
+    0.2219,
+    0.2634,
+    -0.0571,
+    0.4956
+   ],
+   [
+    1.2226,
+    -0.4588,
+    -0.0591,
+    0.1282,
+    0.617,
+    0.5546,
+    0.1671,
+    -0.074,
+    0.711
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
   "model": "Canon EOS R8",
   "aliases": [],
   "sample": "EOS_R8__CRAW_FULL_FRAME.CR3",
@@ -1299,6 +1532,18 @@
   "sample": "EOS_R8__RAW_FULL_FRAME.CR3",
   "sha256": "7d5c6dbb11ff7e6ee58715d90a20f5d801e8b103f4711ff6ea329ceafcef254c",
   "rejected": "no embedded JPEG"
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R8 Mark II",
+  "aliases": [],
+  "sample": "canon_eos_R8_mk2.CR3",
+  "sha256": "9666cb5262a4d165024f03d8ae92bcb3561c401eb49c95be10a0c843f598a5f1",
+  "blocks": 279,
+  "median_de": 4.71,
+  "p90_de": 9.23,
+  "chroma_spread": 19.5,
+  "rejected": "matrix does not reproduce the camera JPEG"
  },
  {
   "make": "Canon",
@@ -1713,6 +1958,45 @@
   "p90_de": 0.59,
   "chroma_spread": 2.3,
   "rejected": "too little colour in the scene"
+ },
+ {
+  "make": "Canon",
+  "model": "Canon PowerShot V1",
+  "aliases": [],
+  "sample": "canon_powershot_v1.cr3",
+  "sha256": "659797ce35fd854d7425da83ede22012937d08b4f51a0f77fbca982c5a156cdb",
+  "blocks": 375,
+  "median_de": 0.87,
+  "p90_de": 2.2,
+  "chroma_spread": 16.0,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    1.1076,
+    -0.2711,
+    -0.2469,
+    -0.1292,
+    0.9727,
+    0.1639,
+    0.2807,
+    -0.2619,
+    0.7178
+   ],
+   [
+    1.4886,
+    -0.5349,
+    -0.4651,
+    -0.2003,
+    1.0395,
+    0.3884,
+    0.1941,
+    -0.2244,
+    1.002
+   ]
+  ]
  },
  {
   "make": "Panasonic",
