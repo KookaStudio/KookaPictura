@@ -1060,6 +1060,7 @@ free	refine_mask_band_preview	refine_mask_band_preview	api/selection_bridge.h	pi
 free	refine_mask_preview	refine_mask_preview	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/refine.cxxqt.h
 free	save_selection_coverage	save_selection_coverage	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	save_selection_to	save_selection_to	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
+free	selection_clip_shape_to_canvas	selection_clip_shape_to_canvas	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	selection_coverage_bytes	selection_coverage_bytes	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	selection_end_lasso_aa	selection_end_lasso_aa	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	selection_magic_wand_aa	selection_magic_wand_aa	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h

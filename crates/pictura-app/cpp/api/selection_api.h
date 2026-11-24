@@ -1,9 +1,16 @@
 #pragma once
 
+#include "tool_options.h"
+
+#include <QtCore/QList>
+#include <QtCore/QPointF>
+#include <QtCore/QRect>
+#include <QtCore/QSize>
 #include <QtCore/QString>
 #include <QtCore/QtGlobal>
 #include <QtCore/QVector>
 #include <QtGui/QPolygon>
+#include <QtGui/QPolygonF>
 
 namespace pictura {
 class PictureView;
@@ -39,5 +46,13 @@ struct SelectionContour {
 /// point-count-prefixed integer corners; both empty without a selection.
 SelectionBounds bounds(const PictureView& view);
 SelectionContour contour(const PictureView& view);
+
+QRect marqueeDragRect(const QPointF& a, const QPointF& b, Qt::KeyboardModifiers mods,
+                      bool mirror, MarqueeStyle style, double fixedRatioW, double fixedRatioH,
+                      int fixedSizeW, int fixedSizeH);
+bool withinRadius(const QPointF& a, const QPointF& b, double radius);
+
+/// Engine-backed clipping for live selection-preview loops.
+QList<QPolygonF> clipSelectionShapeToCanvas(const QList<QPolygonF>& loops, const QSize& canvas);
 
 } // namespace pictura::selection_api

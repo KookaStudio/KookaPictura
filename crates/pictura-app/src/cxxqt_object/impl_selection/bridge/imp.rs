@@ -5,6 +5,7 @@ use crate::cxxqt_object::picture::{sample_tiles, tile_source};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
+use pictura_select::clip_selection_shape_to_canvas;
 use pictura_select::geometry::{marquee_rect, within_radius, MarqueeStyle};
 use pictura_select::Selection;
 
@@ -196,6 +197,63 @@ pub(super) fn selection_within_radius(x0: f64, y0: f64, x1: f64, y1: f64, radius
     within_radius((x0, y0), (x1, y1), radius)
 }
 
+fn invalid_clip_result() -> ffi::SelectionClipResult {
+    ffi::SelectionClipResult {
+        valid: false,
+        loop_lengths: Vec::new(),
+        points: Vec::new(),
+    }
+}
+
+pub(super) fn selection_clip_shape_to_canvas(
+    loop_lengths: &[u32],
+    points: &[f64],
+    canvas_width: f64,
+    canvas_height: f64,
+) -> ffi::SelectionClipResult {
+    if !points.len().is_multiple_of(2) {
+        return invalid_clip_result();
+    }
+    let pair_count = points.len() / 2;
+    let mut remaining = pair_count;
+    let mut consumed = 0usize;
+    let mut loops = Vec::with_capacity(loop_lengths.len());
+    for &length in loop_lengths {
+        let count = length as usize;
+        if count > remaining {
+            return invalid_clip_result();
+        }
+        let Some(end) = consumed.checked_add(count) else {
+            return invalid_clip_result();
+        };
+        loops.push(
+            (consumed..end)
+                .map(|index| (points[index * 2], points[index * 2 + 1]))
+                .collect(),
+        );
+        consumed = end;
+        remaining -= count;
+    }
+    if remaining != 0 {
+        return invalid_clip_result();
+    }
+
+    let clipped = clip_selection_shape_to_canvas(&loops, (canvas_width, canvas_height));
+    let mut result = ffi::SelectionClipResult {
+        valid: true,
+        loop_lengths: Vec::with_capacity(clipped.len()),
+        points: Vec::with_capacity(consumed),
+    };
+    for loop_points in clipped {
+        result.loop_lengths.push(loop_points.len() as u32);
+        for (x, y) in loop_points {
+            result.points.push(x);
+            result.points.push(y);
+        }
+    }
+    result
+}
+
 pub(super) fn save_selection_to(
     view: Pin<&mut PictureView>,
     target: &QString,
@@ -284,4 +342,34 @@ pub(super) fn new_selection_document(
     invert: bool,
 ) -> bool {
     view.new_selection_document(coverage, width, height, name, invert)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn selection_clip_shape_to_canvas_rejects_malformed_payloads() {
+        let cases = vec![
+            (&[1u32][..], vec![0.0, 0.0, 1.0]),
+            (&[u32::MAX, 1][..], vec![0.0, 0.0, 1.0, 1.0]),
+            (&[3u32][..], vec![0.0, 0.0, 1.0, 1.0]),
+            (&[1u32][..], vec![0.0, 0.0, 1.0, 1.0]),
+        ];
+        for (lengths, points) in cases {
+            let result = selection_clip_shape_to_canvas(lengths, &points, 64.0, 64.0);
+            assert!(!result.valid);
+            assert!(result.loop_lengths.is_empty());
+            assert!(result.points.is_empty());
+        }
+    }
+
+    #[test]
+    fn selection_clip_shape_to_canvas_round_trips_valid_payloads() {
+        let points = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        let result = selection_clip_shape_to_canvas(&[1, 2], &points, 0.0, 64.0);
+        assert!(result.valid);
+        assert_eq!(result.loop_lengths, vec![1u32, 2u32]);
+        assert_eq!(result.points, points.to_vec());
+    }
 }
