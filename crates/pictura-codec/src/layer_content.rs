@@ -24,9 +24,7 @@ pub use channel_mixer::{encode_channel_mixer, encode_channel_mixer_ink};
 pub use color_balance::encode_color_balance;
 pub use color_lookup::{encode_color_lookup, identity_cube};
 pub use curves::encode_curves;
-pub use defaults::{
-    default_adjustment_block, default_adjustment_block_in_mode, encode_shadows_highlights,
-};
+pub use defaults::{encode_shadows_highlights, Defaults};
 pub use fill::{
     decode_gradient_fill, decode_pattern_fill, encode_gradient_fill, encode_gradient_fill_params,
     encode_pattern_fill, gradient_params_from_desc, pattern_params_from_desc,

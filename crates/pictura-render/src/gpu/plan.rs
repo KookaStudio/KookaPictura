@@ -12,7 +12,7 @@ use std::sync::Arc;
 use pictura_adjust::AdjustmentLut;
 use pictura_core::{BlendMode, Document, Knockout, Layer, PsdRect};
 
-use super::{adjustment_params, GpuError};
+use super::{inline_params, uses_lut, GpuError};
 use crate::composite_route::{content_route, ContentRoute};
 use crate::layer_source::{self, CachedBuffer, LayerPasses, RasterRoute};
 
@@ -159,10 +159,15 @@ fn plan_layer<'a>(layer: &'a Layer, doc: &Document, region: Option<PsdRect>) -> 
             unreachable!("a non-group layer has a non-group content route")
         }
         ContentRoute::Adjustment(adjustment) => {
-            if let Some(adj) = adjustment_params(&adjustment) {
+            // The catalogue row names the route; only the parameter shape can
+            // still decline a routed kind.
+            if let Some(adj) = inline_params(&adjustment) {
                 Body::Adjustment(AdjustmentPlan::Inline(adj))
-            } else if let Some(lut) = pictura_adjust::adjustment_lut(&adjustment) {
-                Body::Adjustment(AdjustmentPlan::Lut(lut))
+            } else if uses_lut(&adjustment) {
+                match pictura_adjust::adjustment_lut(&adjustment) {
+                    Some(lut) => Body::Adjustment(AdjustmentPlan::Lut(lut)),
+                    None => Body::Decline(GpuError::UnsupportedAdjustment),
+                }
             } else {
                 Body::Decline(GpuError::UnsupportedAdjustment)
             }
@@ -256,9 +261,7 @@ fn plan_clip_member(layer: &Layer, doc: &Document) -> Result<(), GpuError> {
             plan_clip_children(layer.children(), doc)
         }
         ContentRoute::Adjustment(adjustment) => {
-            if adjustment_params(&adjustment).is_some()
-                || pictura_adjust::adjustment_lut(&adjustment).is_some()
-            {
+            if super::dispatches_on_gpu(&adjustment) {
                 Ok(())
             } else {
                 decline(GpuError::UnsupportedAdjustment)

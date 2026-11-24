@@ -99,6 +99,7 @@ pub use pictura_adjust::{
     MatchColorParams, MatchColorStats, OpacityStop, PatternFillParams, ReplaceColorParams,
     ReplaceColorSample,
 };
+pub use pictura_core::AdjustmentKind;
 
 mod color_balance;
 mod gradient_map;
@@ -116,10 +117,11 @@ pub use curves::encode_curves;
 
 mod adjustment_catalogue;
 pub use adjustment_catalogue::{
-    adjustment_entry, AdjustmentEntry, ImageCommand, LayerEntry, ADJUSTMENT_CATALOGUE,
+    adjustment_entry, direct_adjustment, entry_of, AdjustmentEntry, GpuRoute, ImageCommand,
+    LayerEntry, ADJUSTMENT_CATALOGUE,
 };
 mod adjustment_defaults;
-pub use adjustment_defaults::{default_adjustment_block, default_adjustment_block_in_mode};
+pub use adjustment_defaults::{dialog_default, layer_default, Defaults};
 mod adjustment_params;
 mod adjustment_presets;
 pub use adjustment_params::{
@@ -129,8 +131,8 @@ pub use adjustment_params::{
 };
 pub use adjustment_presets::{
     blocks_match as preset_blocks_match, delete as delete_preset,
-    is_saveable as preset_is_saveable, kind_of as preset_kind_of, save as save_preset,
-    saved_block as saved_preset_block, saved_names as saved_preset_names,
+    is_saveable as preset_is_saveable, kind as preset_kind, kind_of as preset_kind_of,
+    save as save_preset, saved_block as saved_preset_block, saved_names as saved_preset_names,
     supports_menu as preset_supports_menu, MENU_KINDS, SAVEABLE_KINDS,
 };
 

@@ -134,29 +134,32 @@ fn fill_scene_matches_cpu() {
     eprintln!("fill parity: max delta {max_delta} LSB, alpha unchanged");
 }
 
+/// Every catalogue kind that declares a GPU route, composited at its declared
+/// layer default. Iterating the rows means a new GPU-applicable kind is covered
+/// without editing this list; the non-default payloads live in
+/// `adjustment_luts_match_cpu`.
 #[test]
 #[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
 fn adjustment_layers_match_cpu() {
     require_gpu();
-    use pictura_render::{
-        encode_brightness_contrast, encode_hue_saturation, encode_invert, encode_posterize,
-        encode_threshold,
-    };
-    let cases: &[(&str, AdjustmentData)] = &[
-        ("invert", encode_invert()),
-        ("posterize", encode_posterize(4)),
-        ("threshold", encode_threshold(128)),
-        ("brightness_contrast", encode_brightness_contrast(20, 0)),
-        ("hue_saturation", encode_hue_saturation(30, 0, 0)),
-    ];
-    let mut checked = 0;
+    let expected = pictura_render::ADJUSTMENT_CATALOGUE
+        .iter()
+        .filter(|entry| entry.gpu != pictura_render::GpuRoute::None)
+        .count();
+    let mut checked = 0usize;
     let mut max_delta = 0i32;
-    for (name, data) in cases {
+    for entry in pictura_render::ADJUSTMENT_CATALOGUE {
+        if entry.gpu == pictura_render::GpuRoute::None {
+            continue;
+        }
+        let build = entry
+            .layer_default
+            .expect("every GPU-routed kind has a layer default");
+        let data = build(pictura_render::Defaults::rgb());
+        let name = entry.kind.name();
         let mut doc = Document::new(SIZE, SIZE, ColorMode::Rgb, BitDepth::Eight);
-        doc.layers = pictura_core::LayerStack::from_layers(vec![
-            base_layer(),
-            adjustment_layer(name, data.clone()),
-        ]);
+        doc.layers =
+            pictura_core::LayerStack::from_layers(vec![base_layer(), adjustment_layer(name, data)]);
         let cpu = composite_rgba(&doc);
         let (gpu, backend) = composite(CompositeRequest::whole(&doc, true));
         assert_eq!(backend, Backend::Gpu, "{name}: GPU backend");
@@ -171,6 +174,7 @@ fn adjustment_layers_match_cpu() {
         eprintln!("adjustment {name}: max delta {case_delta} LSB");
         checked += 1;
     }
+    assert_eq!(checked, expected, "every GPU-routed row composites");
     eprintln!("adjustment parity: {checked} kinds ok, max delta {max_delta} LSB");
 }
 

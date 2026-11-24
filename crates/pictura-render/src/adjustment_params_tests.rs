@@ -60,7 +60,8 @@ fn a_patch_keeps_what_the_model_does_not_carry() {
 
 #[test]
 fn black_white_tint_and_its_colour_are_editable() {
-    let bw = crate::default_adjustment_block("black-white", [0; 3], [255; 3]).unwrap();
+    let bw =
+        crate::dialog_default(crate::AdjustmentKind::BlackWhite, crate::Defaults::rgb()).unwrap();
     assert_eq!(value(&bw, "tint"), 0.0);
     assert_eq!(value(&bw, "tintColor"), f64::from(0xe1_d3_b4u32));
     let tinted = set_adjustment_param(&bw, "tint", 1.0).unwrap();
@@ -256,7 +257,8 @@ fn reset_restores_every_default() {
 
 #[test]
 fn exposure_specs_carry_the_dialog_precision() {
-    let block = crate::default_adjustment_block("exposure", [0; 3], [255; 3]).unwrap();
+    let block =
+        crate::dialog_default(crate::AdjustmentKind::Exposure, crate::Defaults::rgb()).unwrap();
     let editor = adjustment_editor(&block).unwrap();
     let spec = |key: &str| {
         let param = editor.params.iter().find(|p| p.key == key).unwrap();

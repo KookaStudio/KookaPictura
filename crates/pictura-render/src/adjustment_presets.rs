@@ -9,7 +9,6 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use pictura_adjust::Adjustment;
 use pictura_core::AdjustmentData;
 
 use crate::decode_adjustment;
@@ -40,40 +39,23 @@ const RESERVED_NAMES: [&str; 2] = ["Default", "Custom"];
 /// A preset name longer than this is truncated.
 const MAX_NAME_CHARS: usize = 80;
 
-/// The catalogue kind of `data`'s adjustment, or `None` when it does not
-/// decode.
+/// The catalogue kind id of `data`'s adjustment, or `None` when it does not
+/// decode or has no catalogue kind (Replace Color and Match Color).
+///
+/// This is the one block-to-kind mapping: the shell's layer rows use the same
+/// `Adjustment::kind()` / `FillContent::kind()` conversion, so the preset store
+/// and the panel cannot drift.
 pub fn kind_of(data: &AdjustmentData) -> Option<&'static str> {
+    kind(data).map(crate::AdjustmentKind::name)
+}
+
+/// The typed kind of `data`'s block, or `None` when it does not decode or has
+/// no catalogue kind.
+pub fn kind(data: &AdjustmentData) -> Option<crate::AdjustmentKind> {
     if let Some(fill) = pictura_codec::decode_fill(data) {
-        return Some(match fill {
-            pictura_core::FillContent::Solid(_) => "solid-color",
-            pictura_core::FillContent::Gradient(_) => "gradient",
-            pictura_core::FillContent::Pattern(_) => "pattern",
-        });
+        return Some(fill.kind());
     }
-    Some(match decode_adjustment(data)? {
-        Adjustment::Levels(_) => "levels",
-        Adjustment::Curves(_) => "curves",
-        Adjustment::BrightnessContrast(_) => "brightness-contrast",
-        Adjustment::Exposure(_) => "exposure",
-        Adjustment::Vibrance(_) => "vibrance",
-        Adjustment::HueSaturation(_) => "hue-saturation",
-        Adjustment::ColorBalance(_) => "color-balance",
-        Adjustment::BlackWhite(_) => "black-white",
-        Adjustment::PhotoFilter(_) => "photo-filter",
-        Adjustment::ChannelMixer(_) => "channel-mixer",
-        Adjustment::ColorLookup(_) => "color-lookup",
-        Adjustment::Invert => "invert",
-        Adjustment::Posterize(_) => "posterize",
-        Adjustment::Threshold(_) => "threshold",
-        Adjustment::GradientMap(_) => "gradient-map",
-        Adjustment::SelectiveColor(_) => "selective-color",
-        Adjustment::ShadowsHighlights(_) => "shadows-highlights",
-        Adjustment::Desaturate => "desaturate",
-        Adjustment::Equalize => "equalize",
-        Adjustment::Auto(_) => "auto",
-        Adjustment::ReplaceColor(_) => "replace-color",
-        Adjustment::MatchColor(_) => "match-color",
-    })
+    decode_adjustment(data)?.kind()
 }
 
 /// Whether `kind` is in the CS6 save whitelist.
@@ -321,14 +303,70 @@ fn hex_decode(text: &str) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::default_adjustment_block;
+    use crate::{dialog_default, Adjustment, AdjustmentKind, AutoKind, Defaults};
 
     fn temp_root(tag: &str) -> PathBuf {
         std::env::temp_dir().join(format!("pictura-presets-{}-{tag}", std::process::id()))
     }
 
     fn levels() -> AdjustmentData {
-        default_adjustment_block("levels", [0; 3], [255; 3]).unwrap()
+        dialog_default(AdjustmentKind::Levels, Defaults::rgb()).unwrap()
+    }
+
+    /// One block-to-kind map: a block for each catalogue kind resolves to its
+    /// id, and the typed and string forms agree.
+    #[test]
+    fn adjustment_kind_map_is_one_mapping() {
+        for typed in AdjustmentKind::ALL.iter().copied() {
+            let Some(block) = crate::layer_default(typed, Defaults::rgb()) else {
+                continue;
+            };
+            assert_eq!(kind_of(&block), Some(typed.name()), "{}", typed.name());
+            assert_eq!(kind(&block), Some(typed), "{}", typed.name());
+        }
+        // Undecodable bytes resolve to none in both forms.
+        let garbage = AdjustmentData {
+            key: *b"zzzz",
+            data: vec![1, 2, 3].into(),
+        };
+        assert_eq!(kind(&garbage), None);
+        assert_eq!(kind_of(&garbage), None);
+    }
+
+    #[test]
+    fn auto_kinds_are_not_saveable_and_non_catalogue_variants_stay_out() {
+        for (auto, name) in [
+            (AutoKind::Tone, "auto-tone"),
+            (AutoKind::Contrast, "auto-contrast"),
+            (AutoKind::Color, "auto-color"),
+        ] {
+            assert_eq!(
+                Adjustment::Auto(auto).kind().map(|kind| kind.name()),
+                Some(name)
+            );
+            assert!(!is_saveable(name), "{name} is not saveable");
+            assert!(!supports_menu(name), "{name} has no preset menu");
+            assert!(!is_known_kind(name), "{name} has no preset store");
+        }
+        for name in ["replace-color", "match-color"] {
+            assert_eq!(AdjustmentKind::from_name(name), None);
+            assert!(!is_saveable(name), "{name} is not saveable");
+            assert!(!is_known_kind(name), "{name} has no preset store");
+        }
+
+        let root = temp_root("non-saveable-kinds");
+        let _ = fs::remove_dir_all(&root);
+        let block = crate::layer_default(AdjustmentKind::Invert, Defaults::rgb()).unwrap();
+        for kind in [
+            "auto-tone",
+            "auto-contrast",
+            "auto-color",
+            "replace-color",
+            "match-color",
+        ] {
+            assert!(!save_at(&root, kind, "Look", &block), "{kind} is refused");
+        }
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
@@ -392,8 +430,11 @@ mod tests {
             "selective-color",
             "vibrance",
         ] {
-            let block = default_adjustment_block(kind, [0; 3], [255; 3])
-                .unwrap_or_else(|| panic!("{kind} has a default"));
+            let block = dialog_default(
+                AdjustmentKind::from_name(kind).expect("a catalogue kind"),
+                Defaults::rgb(),
+            )
+            .unwrap_or_else(|| panic!("{kind} has a default"));
             assert_eq!(kind_of(&block), Some(kind), "{kind}");
         }
     }
