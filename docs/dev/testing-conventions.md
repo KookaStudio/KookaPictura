@@ -153,30 +153,39 @@ The first check asserts the platform is `offscreen`.
   `ST_FINISH` macros; `ST_FAIL` prints its message and returns `code`. `SUITE` is
   emitted only when the suite changes; one `SUMMARY` closes the run. Legacy human
   `key=value` and `FAIL:` lines still appear, but only the tokens are
-  machine-read — the human lines do not match the token grammar.
-- **Names carry no milestone.** Check names and suites are descriptive
+  machine-read. The human lines do not match the token grammar.
+- **Declarative registries.** `selftest_codes.h` owns the append-only failure-code
+  constants and retired-code set; `selftest_checks.h` owns each check's name and
+  suite. Every failure site uses a named constant, and
+  `scripts/check-selftest-codes.py` rejects duplicate, unregistered, retired, or
+  check-mismatched codes as well as a failure before its own `ST_BEGIN`.
+- **Names and suites carry no milestone.** Check names and suites are descriptive
   (`float_close`, `compact_shade`, `platform_headless`); milestones appear only
-  in comments, docs, and specs. With no `m<NN>` prefix the harness groups every
-  check under the default suite `core`.
-- **Exit code is the failure identity.** Each `ST_FAIL` returns its check's code;
-  codes run from `2` upward, roughly one per check (currently into the `190s`,
-  e.g. `float_close` = 194, `compact_shade` = 195, `move_preview_cache` = 197).
-  Exit `0` = all passed.
+  in comments, docs, and specs. The reporter changes suites when a check declares
+  a different one. Existing checks remain registered under `core` so their token
+  bytes stay stable.
+- **Exit code is the failure identity.** Each `ST_FAIL` returns its allocated code;
+  the `FAIL` token keeps that raw value. At the process boundary, codes in 1..255
+  are returned unchanged and larger codes become status `1`, so no failure can
+  truncate to zero. Exit `0` = all passed.
 - **The reporter consumes this layer.** `scripts/report_tests.py` parses both
   self-test invocations' token streams and merges checks by `(suite, name)`, so a
-  check present in both runs counts once (the later stream's status wins).
-- **The source stays within its allowlist.** Instrumentation replaced the old
-  two-line `fprintf`/`fflush` sites with single `ST_PASS` calls, and migrating
-  suites to Qt Test shrank it further; `selftest.cpp`'s entry in
-  `scripts/file-size-allowlist.txt` is now a **6449-line** ceiling that may only
+  check present in both runs counts once. A `FAIL` in any capture stays a
+  failure; the later stream's status wins only between `PASS` and `SKIP`. Every
+  capture must end with exactly one complete `SUMMARY` whose counts match its
+  result tokens.
+- **One run fixture.** `selftest_run.{h,cpp}` owns the report guard, shared
+  non-interactive setup, document cleanup, and tool restoration for the whole
+  run. `selftest_fixture.h` provides the document RAII primitive reused by the
+  paint checks.
+- **The source stays within its allowlist.** `selftest.cpp`'s entry in
+  `scripts/file-size-allowlist.txt` is now a **6439-line** ceiling that may only
   shrink.
 - **No Qt Test inside `runSelfTest()`.** The self-test runs only as an explicit
   step in `scripts/verify-full.sh` and the CI `qt-headless` job; the Qt Test
   suites are a separate layer (see below).
 - **State isolation:** before running, `main.cpp` points `XDG_STATE_HOME` at a
   temporary dir, so the self-test never touches real preferences/recovery state.
-- The self-test is left with dirty documents on purpose and sets a non-interactive
-  unsaved-choice so headless shutdown does not open a modal prompt.
 
 ### Qt Test layer
 
@@ -208,11 +217,12 @@ self-test and links `pictura_shell`.
   212, 213, and 529. The tool-port checks for Gradient, Paint Bucket, and Blur
   followed into `tst_fill_tools` / `tst_retouch_tools`, retiring 552, 553, and
   554. Retired exit codes are append-only and never reused. The
-  mechanical guard is `scripts/check-selftest-budget.sh`: it counts `ST_BEGIN`
-  sites across `crates/pictura-app/cpp/**/*.cpp` and fails when the count exceeds
-  the lower-only budget in `scripts/selftest-budget.txt` (currently 511). It runs
-  from `scripts/verify-fast.sh` and the guards CI workflow, in addition to the
-  `selftest.cpp` ceiling in `scripts/file-size-allowlist.txt`.
+  mechanical guards are `scripts/check-selftest-budget.sh`, whose lower-only
+  `scripts/selftest-budget.txt` ceiling is currently 503, and
+  `scripts/check-selftest-codes.py`, which pins the declarative registries and
+  failure ownership. Both run from `scripts/verify-fast.sh` and the guards CI
+  workflow, in addition to the `selftest.cpp` ceiling in
+  `scripts/file-size-allowlist.txt`.
 - **Reports as per-executable JUnit.** `add_test` passes
   `-o <CMAKE_BINARY_DIR>/qt-test-results/<name>.xml,junitxml`, so CTest itself
   emits one JUnit file per executable; `scripts/test-report.sh` runs
