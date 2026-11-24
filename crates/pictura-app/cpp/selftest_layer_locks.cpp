@@ -24,6 +24,7 @@ int pictura::runLayerLocksChecks(pictura::PicturaMainWindow& frame)
     // refused at the shared translate entry, so the rect, the composite, and
     // the history are all unchanged.
     {
+        ST_BEGIN("llk_move_refusal");
         const bool created = frame.newDocument(QStringLiteral("LayerLockMove"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
@@ -31,7 +32,7 @@ int pictura::runLayerLocksChecks(pictura::PicturaMainWindow& frame)
         pictura::ImageView* canvas = frame.imageView();
         auto* tools = frame.findChild<pictura::ToolController*>();
         if (!created || !view || !canvas || !tools) {
-            return pictura::selfTest().fail(313, "move refusal fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode313, "move refusal fixture");
         }
         const int doc = frame.activeDocumentIndex();
         const QString locked = view->add_layer_in(QString());
@@ -48,12 +49,11 @@ int pictura::runLayerLocksChecks(pictura::PicturaMainWindow& frame)
         const bool rectSame = transform_api::layerRect(*view, locked).toString() == rectBefore;
         const bool compositeSame = view->composite_argb(2, 2) == pixelBefore;
         const bool noHistory = view->history_count() == historyBefore;
-        ST_BEGIN("llk_move_refusal");
         ST_PASS("llk_move_refusal rect=%d composite=%d history=%d", rectSame ? 1 : 0,
                 compositeSame ? 1 : 0, view->history_count() - historyBefore);
         if (!rectSame || !compositeSame || !noHistory) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(313, "move-tool lock refusal");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode313, "move-tool lock refusal");
         }
         frame.closeDocument(doc, false);
     }
@@ -61,12 +61,13 @@ int pictura::runLayerLocksChecks(pictura::PicturaMainWindow& frame)
     // llk_filter_refusal (314): a filter on a pixel-locked layer returns false
     // and leaves the composite and history untouched.
     {
+        ST_BEGIN("llk_filter_refusal");
         const bool created = frame.newDocument(QStringLiteral("LayerLockFilter"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         pictura::PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(314, "filter refusal fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode314, "filter refusal fixture");
         }
         const int doc = frame.activeDocumentIndex();
         const QString locked = view->add_layer_in(QString());
@@ -78,12 +79,11 @@ int pictura::runLayerLocksChecks(pictura::PicturaMainWindow& frame)
         const bool filtered = view->apply_filter(QStringLiteral("add-noise"));
         const bool compositeSame = view->composite_argb(4, 4) == pixelBefore;
         const bool noHistory = view->history_count() == historyBefore;
-        ST_BEGIN("llk_filter_refusal");
         ST_PASS("llk_filter_refusal applied=%d composite=%d history=%d", filtered ? 1 : 0,
                 compositeSame ? 1 : 0, view->history_count() - historyBefore);
         if (filtered || !compositeSame || !noHistory) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(314, "filter lock refusal");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode314, "filter lock refusal");
         }
         frame.closeDocument(doc, false);
     }
@@ -91,13 +91,14 @@ int pictura::runLayerLocksChecks(pictura::PicturaMainWindow& frame)
     // llk_locked_cursor (315): a paint tool over a pixel-locked layer shows the
     // forbidden cursor; unlocking restores the normal tool cursor.
     {
+        ST_BEGIN("llk_locked_cursor");
         const bool created = frame.newDocument(QStringLiteral("LayerLockCursor"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         pictura::PictureView* view = frame.activeView();
         auto* tools = frame.findChild<pictura::ToolController*>();
         if (!created || !view || !tools) {
-            return pictura::selfTest().fail(315, "locked cursor fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode315, "locked cursor fixture");
         }
         const int doc = frame.activeDocumentIndex();
         const QString locked = view->add_layer_in(QString());
@@ -112,12 +113,11 @@ int pictura::runLayerLocksChecks(pictura::PicturaMainWindow& frame)
         tools->refreshCursor();
         const bool restored =
             frame.imageView()->cursor().shape() != Qt::ForbiddenCursor;
-        ST_BEGIN("llk_locked_cursor");
         ST_PASS("llk_locked_cursor locked=%d unlocked=%d", forbidden ? 1 : 0,
                 restored ? 1 : 0);
         if (!forbidden || !restored) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(315, "locked pixel cursor");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode315, "locked pixel cursor");
         }
         frame.closeDocument(doc, false);
     }
@@ -126,12 +126,13 @@ int pictura::runLayerLocksChecks(pictura::PicturaMainWindow& frame)
     // stroke, writes no pixels, adds no history, and does not dirty the
     // document.
     {
+        ST_BEGIN("llk_paint_refusal");
         const bool created = frame.newDocument(QStringLiteral("LayerLockPaint"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         pictura::PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(316, "paint refusal fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode316, "paint refusal fixture");
         }
         const int doc = frame.activeDocumentIndex();
         const QString locked = view->add_layer_in(QString());
@@ -145,12 +146,11 @@ int pictura::runLayerLocksChecks(pictura::PicturaMainWindow& frame)
         const bool noStroke = !view->is_painting();
         const bool compositeSame = view->composite_argb(4, 4) == pixelBefore;
         const bool noHistory = view->history_count() == historyBefore;
-        ST_BEGIN("llk_paint_refusal");
         ST_PASS("llk_paint_refusal begun=%d stroke=%d composite=%d history=%d", begun ? 1 : 0,
                 noStroke ? 1 : 0, compositeSame ? 1 : 0, view->history_count() - historyBefore);
         if (begun || !noStroke || !compositeSame || !noHistory) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(316, "paint lock refusal");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode316, "paint lock refusal");
         }
         frame.closeDocument(doc, false);
     }
@@ -159,13 +159,14 @@ int pictura::runLayerLocksChecks(pictura::PicturaMainWindow& frame)
     // not the topmost. A pixel-locked active layer with an unlocked topmost must
     // still show Forbidden and refuse the stroke.
     {
+        ST_BEGIN("llk_active_lock_cursor");
         const bool created = frame.newDocument(QStringLiteral("LayerLockActive"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         pictura::PictureView* view = frame.activeView();
         auto* tools = frame.findChild<pictura::ToolController*>();
         if (!created || !view || !tools) {
-            return pictura::selfTest().fail(395, "active lock cursor fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode395, "active lock cursor fixture");
         }
         const int doc = frame.activeDocumentIndex();
         const QString active = view->add_layer_in(QString());
@@ -179,12 +180,11 @@ int pictura::runLayerLocksChecks(pictura::PicturaMainWindow& frame)
         const bool refused = !view->begin_paint(0xFFFF0000u, 0xFFFFFFFFu, 4, 100, 100, 0, 100,
                                                 100, 25, QStringLiteral("normal"), false, false);
         const bool noStroke = !view->is_painting();
-        ST_BEGIN("llk_active_lock_cursor");
         ST_PASS("llk_active_lock_cursor forbidden=%d refused=%d stroke=%d", forbidden ? 1 : 0,
                 refused ? 1 : 0, noStroke ? 1 : 0);
         if (!forbidden || !refused || !noStroke) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(395, "active-layer lock cursor");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode395, "active-layer lock cursor");
         }
         frame.closeDocument(doc, false);
     }
@@ -192,13 +192,14 @@ int pictura::runLayerLocksChecks(pictura::PicturaMainWindow& frame)
     // llk_topmost_lock_paints (396): a locked topmost layer must not blank the
     // cursor or refuse an edit that targets a lower, editable active layer.
     {
+        ST_BEGIN("llk_topmost_lock_paints");
         const bool created = frame.newDocument(QStringLiteral("LayerLockTop"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         pictura::PictureView* view = frame.activeView();
         auto* tools = frame.findChild<pictura::ToolController*>();
         if (!created || !view || !tools) {
-            return pictura::selfTest().fail(396, "topmost lock fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode396, "topmost lock fixture");
         }
         const int doc = frame.activeDocumentIndex();
         const QString active = view->add_layer_in(QString());
@@ -213,12 +214,11 @@ int pictura::runLayerLocksChecks(pictura::PicturaMainWindow& frame)
                                                100, 25, QStringLiteral("normal"), false, false)
             && view->paint_dab(4, 4, 1.0) && view->end_paint();
         const bool changed = before != view->composite_argb(4, 4);
-        ST_BEGIN("llk_topmost_lock_paints");
         ST_PASS("llk_topmost_lock_paints blank=%d painted=%d changed=%d", blank ? 1 : 0,
                 painted ? 1 : 0, changed ? 1 : 0);
         if (!blank || !painted || !changed) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(396, "topmost lock must not refuse a lower edit");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode396, "topmost lock must not refuse a lower edit");
         }
         frame.closeDocument(doc, false);
     }
@@ -226,13 +226,14 @@ int pictura::runLayerLocksChecks(pictura::PicturaMainWindow& frame)
     // llk_panel_multi_refusal (397): a panel multi-selection (and a cleared
     // selection) resolves to no single active layer, so the brush refuses.
     {
+        ST_BEGIN("llk_panel_multi_refusal");
         const bool created = frame.newDocument(QStringLiteral("LayerLockPanel"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         pictura::PictureView* view = frame.activeView();
         auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
         if (!created || !view || !panel) {
-            return pictura::selfTest().fail(397, "panel multi fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode397, "panel multi fixture");
         }
         const int doc = frame.activeDocumentIndex();
         const QString a = view->add_layer_in(QString());
@@ -250,13 +251,12 @@ int pictura::runLayerLocksChecks(pictura::PicturaMainWindow& frame)
                                                     100, 100, 25, QStringLiteral("normal"),
                                                     false, false);
         const bool noStroke = !view->is_painting();
-        ST_BEGIN("llk_panel_multi_refusal");
         ST_PASS("llk_panel_multi_refusal noSingle=%d multi=%d none=%d noneRefused=%d",
                 noSingle ? 1 : 0, multiRefused ? 1 : 0, nothingActive ? 1 : 0,
                 noneRefused ? 1 : 0);
         if (!noSingle || !multiRefused || !nothingActive || !noneRefused || !noStroke) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(397, "panel multi/none selection must refuse");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode397, "panel multi/none selection must refuse");
         }
         frame.closeDocument(doc, false);
     }
@@ -265,6 +265,7 @@ int pictura::runLayerLocksChecks(pictura::PicturaMainWindow& frame)
     // A=180 pixel's alpha exactly while recolouring its RGB, and leaves an A=0
     // pixel untouched. Documented divergence: content moves keep their existing
     // transparency refusal, which this paint-path lock does not model.
+    ST_BEGIN("llk_transparency_180");
     const QString alphaPath =
         QDir::tempPath() + QStringLiteral("/kooka-pictura-alpha180.png");
     {
@@ -273,7 +274,7 @@ int pictura::runLayerLocksChecks(pictura::PicturaMainWindow& frame)
                                                QStringLiteral("transparent"));
         pictura::PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(398, "transparency alpha fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode398, "transparency alpha fixture");
         }
         const int doc = frame.activeDocumentIndex();
         QImage seeded(8, 8, QImage::Format_ARGB32);
@@ -291,12 +292,11 @@ int pictura::runLayerLocksChecks(pictura::PicturaMainWindow& frame)
         const bool alphaKept = qAlpha(before) == 180 && qAlpha(after) == 180;
         const bool rgbChanged = (after & 0x00FFFFFFu) != (before & 0x00FFFFFFu);
         const bool clearUntouched = qAlpha(view->sample_argb(0, 0)) == 0;
-        ST_BEGIN("llk_transparency_180");
         ST_PASS("llk_transparency_180 opened=%d a0=%d a1=%d rgb=%d clear=%d", opened ? 1 : 0,
                 qAlpha(before), qAlpha(after), rgbChanged ? 1 : 0, clearUntouched ? 1 : 0);
         if (!opened || !alphaKept || !rgbChanged || !clearUntouched || !painted) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(398, "transparency lock must keep alpha 180");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode398, "transparency lock must keep alpha 180");
         }
         frame.closeDocument(doc, false);
     }

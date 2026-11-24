@@ -81,7 +81,7 @@ int runNumericFieldChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("lpn_scrub plain=%.0f shift=%.0f ctrl=%.0f previews=%d commits=%d", plain, shifted,
                 ctrl, previews, commits);
         if (!scrubOk) {
-            return pictura::selfTest().fail(303, "numeric field scrub");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode303, "numeric field scrub");
         }
         scrub.hide();
 
@@ -127,7 +127,7 @@ int runNumericFieldChecks(pictura::PicturaMainWindow& frame)
         ST_BEGIN("lpn_popup_keys");
         ST_PASS("lpn_popup_keys popup=%d ok=%d", popup ? 1 : 0, keysOk ? 1 : 0);
         if (!keysOk) {
-            return pictura::selfTest().fail(304, "popup key handling");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode304, "popup key handling");
         }
         popupField.hide();
 
@@ -165,7 +165,7 @@ int runNumericFieldChecks(pictura::PicturaMainWindow& frame)
         ST_BEGIN("lpn_jump_track");
         ST_PASS("lpn_jump_track press=%d move=%d", afterPress, afterMove);
         if (!trackOk) {
-            return pictura::selfTest().fail(305, "tracking slider drag");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode305, "tracking slider drag");
         }
         slider.hide();
 
@@ -178,7 +178,7 @@ int runNumericFieldChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("las_no_scratch normal=%d selftest=%d codec=%d", noScratch ? 1 : 0,
                 selfTestScratch ? 1 : 0, codecScratch ? 1 : 0);
         if (!noScratch || !selfTestScratch || !codecScratch) {
-            return pictura::selfTest().fail(306, "scratch document gating");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode306, "scratch document gating");
         }
 
         // lpn_brush_resync (307): the brush-size signal updates the tip button
@@ -205,7 +205,7 @@ int runNumericFieldChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("lpn_brush_resync bar=%d field=%d ok=%d", bar ? 1 : 0, sizeField ? 1 : 0,
                 resyncOk ? 1 : 0);
         if (!resyncOk) {
-            return pictura::selfTest().fail(307, "brush size resync");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode307, "brush size resync");
         }
 
         return 0;

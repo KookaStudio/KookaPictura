@@ -24,12 +24,13 @@ int pictura::runActiveLayerChecks(pictura::PicturaMainWindow& frame)
     // lal_no_active_refuses (334): with no active layer a paint and a filter are
     // both refused, no stroke starts, and no history state is added.
     {
+        ST_BEGIN("lal_no_active_refuses");
         const bool created = frame.newDocument(QStringLiteral("ActiveNone"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         pictura::PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(334, "no-active fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode334, "no-active fixture");
         }
         const int doc = frame.activeDocumentIndex();
         view->set_active_layer(QString());
@@ -40,13 +41,12 @@ int pictura::runActiveLayerChecks(pictura::PicturaMainWindow& frame)
         const bool filtered = view->apply_filter(QStringLiteral("add-noise"));
         const bool moved = view->begin_move_preview() || view->commit_move(1, 1);
         const bool noHistory = view->history_count() == historyBefore;
-        ST_BEGIN("lal_no_active_refuses");
         ST_PASS("lal_no_active painted=%d stroke=%d filtered=%d moved=%d hist=%d", painted ? 1 : 0,
                 noStroke ? 1 : 0, filtered ? 1 : 0, moved ? 1 : 0,
                 view->history_count() - historyBefore);
         if (painted || !noStroke || filtered || moved || !noHistory) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(334, "no active layer must refuse");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode334, "no active layer must refuse");
         }
         frame.closeDocument(doc, false);
     }
@@ -55,12 +55,13 @@ int pictura::runActiveLayerChecks(pictura::PicturaMainWindow& frame)
     // stroke on the lower layer is hidden behind the opaque blue top layer, so
     // the top layer was not touched; hiding it reveals the green edit.
     {
+        ST_BEGIN("lal_active_target");
         const bool created = frame.newDocument(QStringLiteral("ActiveTarget"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         pictura::PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(335, "active-target fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode335, "active-target fixture");
         }
         const int doc = frame.activeDocumentIndex();
         const QString top = view->add_layer_in(QString());
@@ -78,12 +79,11 @@ int pictura::runActiveLayerChecks(pictura::PicturaMainWindow& frame)
         const unsigned int revealed = view->sample_argb(5, 5);
         const bool revealedGreen = qGreen(revealed) > 200 && qBlue(revealed) < 60;
         view->set_layer_visible(1, true);
-        ST_BEGIN("lal_active_target");
         ST_PASS("lal_active_target blue=%d green=%d covered_blue=%d revealed_green=%d",
                 blue ? 1 : 0, green ? 1 : 0, coveredBlue ? 1 : 0, revealedGreen ? 1 : 0);
         if (!blue || !green || !coveredBlue || !revealedGreen) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(335, "active layer must receive the edit");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode335, "active layer must receive the edit");
         }
         frame.closeDocument(doc, false);
     }
@@ -91,12 +91,13 @@ int pictura::runActiveLayerChecks(pictura::PicturaMainWindow& frame)
     // lal_multi_refuses (336): more than one selected layer (an empty panel path)
     // refuses the edit and leaves the document unchanged.
     {
+        ST_BEGIN("lal_multi_refuses");
         const bool created = frame.newDocument(QStringLiteral("ActiveMulti"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         pictura::PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(336, "multi fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode336, "multi fixture");
         }
         const int doc = frame.activeDocumentIndex();
         view->add_layer_in(QString());
@@ -105,12 +106,11 @@ int pictura::runActiveLayerChecks(pictura::PicturaMainWindow& frame)
         const bool painted = view->begin_paint(kRed, kWhite, 4, 100, 100, 0, 100, 100, 25,
                                                QStringLiteral("normal"), false, false);
         const bool noHistory = view->history_count() == historyBefore;
-        ST_BEGIN("lal_multi_refuses");
         ST_PASS("lal_multi painted=%d hist=%d", painted ? 1 : 0,
                 view->history_count() - historyBefore);
         if (painted || view->is_painting() || !noHistory) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(336, "multi selection must refuse");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode336, "multi selection must refuse");
         }
         frame.closeDocument(doc, false);
     }
@@ -118,12 +118,13 @@ int pictura::runActiveLayerChecks(pictura::PicturaMainWindow& frame)
     // lal_transparency_alpha (338): a transparency-locked stroke keeps each
     // pixel's alpha and leaves a fully transparent pixel untouched.
     {
+        ST_BEGIN("lal_transparency_alpha");
         const bool created = frame.newDocument(QStringLiteral("ActiveAlpha"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("transparent"));
         pictura::PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(338, "alpha fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode338, "alpha fixture");
         }
         const int doc = frame.activeDocumentIndex();
         view->set_active_layer(QStringLiteral("0"));
@@ -144,12 +145,11 @@ int pictura::runActiveLayerChecks(pictura::PicturaMainWindow& frame)
             && alphaBefore < 255;
         const bool colourChanged = (after & 0x00FFFFFFu) != (before & 0x00FFFFFFu);
         const bool clearPixelUntouched = qAlpha(view->sample_argb(0, 0)) == 0;
-        ST_BEGIN("lal_transparency_alpha");
         ST_PASS("lal_transparency a0=%d a1=%d rgb=%d clear=%d", alphaBefore, qAlpha(after),
                 colourChanged ? 1 : 0, clearPixelUntouched ? 1 : 0);
         if (!alphaKept || !colourChanged || !clearPixelUntouched) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(338, "transparency lock must keep alpha");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode338, "transparency lock must keep alpha");
         }
         frame.closeDocument(doc, false);
     }
@@ -157,12 +157,13 @@ int pictura::runActiveLayerChecks(pictura::PicturaMainWindow& frame)
     // lal_import_activates (339): an imported opaque raster becomes the locked
     // Background and is made active so a following tool edit targets it.
     {
+        ST_BEGIN("lal_import_activates");
         const bool created = frame.newDocument(QStringLiteral("ActiveImport"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         pictura::PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(339, "import fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode339, "import fixture");
         }
         const int doc = frame.activeDocumentIndex();
         QImage image(8, 8, QImage::Format_RGB32);
@@ -176,12 +177,11 @@ int pictura::runActiveLayerChecks(pictura::PicturaMainWindow& frame)
         if (paintable) {
             view->cancel_paint();
         }
-        ST_BEGIN("lal_import_activates");
         ST_PASS("lal_import opened=%d active=%d background=%d paintable=%d", opened ? 1 : 0,
                 active ? 1 : 0, background ? 1 : 0, paintable ? 1 : 0);
         if (!opened || !active || !background || !paintable) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(339, "import must activate the Background");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode339, "import must activate the Background");
         }
         frame.closeDocument(doc, false);
     }

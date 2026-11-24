@@ -86,12 +86,13 @@ int pictura::runPaintPerfChecks(pictura::PicturaMainWindow& frame)
     // here every rect stays near the brush diameter. No wall-clock is measured
     // (flaky); the region/behavior is the assertion.
     {
+        ST_BEGIN("pp_dab_region");
         const bool created = frame.newDocument(QStringLiteral("PaintRegion"), 256, 256,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(344, "paint region fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode344, "paint region fixture");
         }
         const int doc = frame.activeDocumentIndex();
         view->set_active_layer(QStringLiteral("0"));
@@ -131,11 +132,10 @@ int pictura::runPaintPerfChecks(pictura::PicturaMainWindow& frame)
         const bool regionPerDab = blits >= dabs && dabs >= 16;
         const bool dabSized = maxW > 0 && maxW <= 16;
         const bool notStrokeSized = span >= 150 && maxW * 4 < span;
-        ST_BEGIN("pp_dab_region");
         ST_PASS("pp_dab_region dabs=%d blits=%d maxW=%d span=%d", dabs, blits, maxW, span);
         if (!begun || !ended || !regionPerDab || !dabSized || !notStrokeSized) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(344, "dab region not incremental");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode344, "dab region not incremental");
         }
         frame.closeDocument(doc, false);
     }
@@ -144,13 +144,14 @@ int pictura::runPaintPerfChecks(pictura::PicturaMainWindow& frame)
     // once, reused on the next paint, and byte-identical to a fresh re-render
     // (cache disabled), so the optimization cannot change the rendered result.
     {
+        ST_BEGIN("pp_present_cache");
         const bool created = frame.newDocument(QStringLiteral("PaintCache"), 96, 96,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         ImageView* canvas = frame.imageView();
         if (!created || !view || !canvas) {
-            return pictura::selfTest().fail(345, "present cache fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode345, "present cache fixture");
         }
         const int doc = frame.activeDocumentIndex();
         view->set_active_layer(QStringLiteral("0"));
@@ -189,12 +190,11 @@ int pictura::runPaintPerfChecks(pictura::PicturaMainWindow& frame)
         canvas->render(&full);
         canvas->setPresentLevelCropForTest(true);
         const bool cropIdentical = sameImage(cropA, full);
-        ST_BEGIN("pp_present_cache");
         ST_PASS("pp_present_cache begun=%d dab=%d same=%d reused=%d identical=%d", begun ? 1 : 0,
                 dabbed ? 1 : 0, same ? 1 : 0, cropReused ? 1 : 0, cropIdentical ? 1 : 0);
         if (!begun || !dabbed || !same || !cropReused || !cropIdentical) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(345, "present crop changed the render");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode345, "present crop changed the render");
         }
         frame.closeDocument(doc, false);
     }
@@ -204,13 +204,14 @@ int pictura::runPaintPerfChecks(pictura::PicturaMainWindow& frame)
     // requests one refresh through the debounced pass; pump the event loop past
     // the 120 ms interval before asserting it. No wall-clock budget.
     {
+        ST_BEGIN("pp_no_registry_refresh");
         const bool created = frame.newDocument(QStringLiteral("PaintRefresh"), 128, 128,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         CommandRegistry* registry = frame.registry();
         if (!created || !view || !registry) {
-            return pictura::selfTest().fail(394, "registry refresh fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode394, "registry refresh fixture");
         }
         const int doc = frame.activeDocumentIndex();
         view->set_active_layer(QStringLiteral("0"));
@@ -235,12 +236,11 @@ int pictura::runPaintPerfChecks(pictura::PicturaMainWindow& frame)
         const bool noPerDab = mid == before;
         const bool noSyncOnCommit = afterSync == mid;
         const bool onceOnCommit = after == mid + 1;
-        ST_BEGIN("pp_no_registry_refresh");
         ST_PASS("pp_no_registry_refresh dabs=%d before=%d mid=%d afterSync=%d after=%d", dabs,
                 before, mid, afterSync, after);
         if (!begun || !ended || dabs < 16 || !noPerDab || !noSyncOnCommit || !onceOnCommit) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(394, "registry refresh timing");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode394, "registry refresh timing");
         }
         frame.closeDocument(doc, false);
     }
@@ -251,12 +251,13 @@ int pictura::runPaintPerfChecks(pictura::PicturaMainWindow& frame)
     // commits. Frame-bounded present, so a fast stroke composites at the frame
     // rate rather than the input rate.
     {
+        ST_BEGIN("pp_present_flush");
         const bool created = frame.newDocument(QStringLiteral("PaintFlush"), 256, 256,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(544, "present flush fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode544, "present flush fixture");
         }
         const int doc = frame.activeDocumentIndex();
         view->set_active_layer(QStringLiteral("0"));
@@ -296,14 +297,13 @@ int pictura::runPaintPerfChecks(pictura::PicturaMainWindow& frame)
         const bool oneOnOpen = beforeFlush == 1;
         const bool coalesced = flushed && afterFlush == 2 && flushX >= 48 && flushW >= 24;
         const bool identical = sameImage(midStroke, afterCommit);
-        ST_BEGIN("pp_present_flush");
         ST_PASS("pp_present_flush dabs=%d before=%d after=%d flushed=%d x=%d w=%d identical=%d",
                 dabs, beforeFlush, afterFlush, flushed ? 1 : 0, flushX, flushW,
                 identical ? 1 : 0);
         if (!begun || !ended || dabs < 4 || !painting || !oneOnOpen || !coalesced
             || !identical) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(544, "in-stroke present was not frame-bounded");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode544, "in-stroke present was not frame-bounded");
         }
         frame.closeDocument(doc, false);
     }
@@ -314,13 +314,14 @@ int pictura::runPaintPerfChecks(pictura::PicturaMainWindow& frame)
     // the zoom-selected level with the canvas byte-identical to a full
     // recomposite. The exact full-resolution stroke still lands at release.
     {
+        ST_BEGIN("pp_large_preview");
         const bool created = frame.newDocument(QStringLiteral("PaintPreview"), 2048, 2048,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         ImageView* canvas = frame.imageView();
         if (!created || !view || !canvas) {
-            return pictura::selfTest().fail(545, "large preview fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode545, "large preview fixture");
         }
         const int doc = frame.activeDocumentIndex();
         view->set_active_layer(QStringLiteral("0"));
@@ -369,12 +370,11 @@ int pictura::runPaintPerfChecks(pictura::PicturaMainWindow& frame)
 
         const bool previewed = previewLevel == 3 && previewBlits > 0;
         const bool restored = levelAfter == 0;
-        ST_BEGIN("pp_large_preview");
         ST_PASS("pp_large_preview dabs=%d level=%d blits=%d after=%d identical=%d", dabs,
                 previewLevel, previewBlits, levelAfter, identical ? 1 : 0);
         if (!begun || !ended || dabs < 4 || !painting || !previewed || !restored || !identical) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(545, "large-brush preview did not present");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode545, "large-brush preview did not present");
         }
         frame.closeDocument(doc, false);
     }
@@ -391,60 +391,60 @@ int pictura::runPaintPerfChecks(pictura::PicturaMainWindow& frame)
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(546, "gpu commit fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode546, "gpu commit fixture");
         }
         const int gpuDoc = frame.activeDocumentIndex();
         if (!view->gpu_available()) {
             frame.closeDocument(gpuDoc, false);
             ST_SKIP("no GPU adapter");
-            return 0;
-        }
-        view->set_active_layer(QStringLiteral("0"));
-        view->set_gpu_compute(true);
-        // 600 px exceeds the 262 144 px raster budget (602² = 362 404), so the
-        // GPU path engages.
-        const bool begun = view->begin_paint(0xFFFF0000u, 0xFFFFFFFFu, 600, 100, 100, 0, 100, 100,
-                                             25, QStringLiteral("normal"), false, false);
-        int dabs = 0;
-        for (int i = 0; i < 6; ++i) {
-            if (view->paint_dab(150.0 + i * 150.0, 512.0, 1.0)) {
-                ++dabs;
+        } else {
+            view->set_active_layer(QStringLiteral("0"));
+            view->set_gpu_compute(true);
+            // 600 px exceeds the 262 144 px raster budget (602² = 362 404), so the
+            // GPU path engages.
+            const bool begun = view->begin_paint(0xFFFF0000u, 0xFFFFFFFFu, 600, 100, 100, 0, 100, 100,
+                                                 25, QStringLiteral("normal"), false, false);
+            int dabs = 0;
+            for (int i = 0; i < 6; ++i) {
+                if (view->paint_dab(150.0 + i * 150.0, 512.0, 1.0)) {
+                    ++dabs;
+                }
+                view->flush_present();
             }
-            view->flush_present();
-        }
-        const bool ended = view->end_paint();
-        const QImage gpuImage = view->image();
-        frame.closeDocument(gpuDoc, false);
+            const bool ended = view->end_paint();
+            const QImage gpuImage = view->image();
+            frame.closeDocument(gpuDoc, false);
 
-        const bool created2 = frame.newDocument(QStringLiteral("PaintCpuCommit"), 1024, 1024,
-                                                QStringLiteral("rgb"), 8,
-                                                QStringLiteral("white"));
-        PictureView* cpu = frame.activeView();
-        if (!created2 || !cpu) {
-            return pictura::selfTest().fail(546, "gpu commit cpu fixture");
-        }
-        const int cpuDoc = frame.activeDocumentIndex();
-        cpu->set_active_layer(QStringLiteral("0"));
-        cpu->set_gpu_compute(false);
-        const bool begun2 = cpu->begin_paint(0xFFFF0000u, 0xFFFFFFFFu, 600, 100, 100, 0, 100, 100,
-                                             25, QStringLiteral("normal"), false, false);
-        int dabs2 = 0;
-        for (int i = 0; i < 6; ++i) {
-            if (cpu->paint_dab(150.0 + i * 150.0, 512.0, 1.0)) {
-                ++dabs2;
+            const bool created2 = frame.newDocument(QStringLiteral("PaintCpuCommit"), 1024, 1024,
+                                                    QStringLiteral("rgb"), 8,
+                                                    QStringLiteral("white"));
+            PictureView* cpu = frame.activeView();
+            if (!created2 || !cpu) {
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode546, "gpu commit cpu fixture");
             }
-            cpu->flush_present();
-        }
-        const bool ended2 = cpu->end_paint();
-        const QImage cpuImage = cpu->image();
-        cpu->set_gpu_compute(true);
-        frame.closeDocument(cpuDoc, false);
+            const int cpuDoc = frame.activeDocumentIndex();
+            cpu->set_active_layer(QStringLiteral("0"));
+            cpu->set_gpu_compute(false);
+            const bool begun2 = cpu->begin_paint(0xFFFF0000u, 0xFFFFFFFFu, 600, 100, 100, 0, 100, 100,
+                                                 25, QStringLiteral("normal"), false, false);
+            int dabs2 = 0;
+            for (int i = 0; i < 6; ++i) {
+                if (cpu->paint_dab(150.0 + i * 150.0, 512.0, 1.0)) {
+                    ++dabs2;
+                }
+                cpu->flush_present();
+            }
+            const bool ended2 = cpu->end_paint();
+            const QImage cpuImage = cpu->image();
+            cpu->set_gpu_compute(true);
+            frame.closeDocument(cpuDoc, false);
 
-        const bool withinOneLsb = imageWithinTolerance(gpuImage, cpuImage, 1);
-        ST_PASS("pp_gpu_commit gpu=%d cpu=%d same_lsb1=%d worst=%d", dabs, dabs2,
-                withinOneLsb ? 1 : 0, maxChannelDiff(gpuImage, cpuImage));
-        if (!begun || !ended || !begun2 || !ended2 || dabs < 6 || dabs2 < 6 || !withinOneLsb) {
-            return pictura::selfTest().fail(546, "gpu commit differs from the CPU by >1 LSB");
+            const bool withinOneLsb = imageWithinTolerance(gpuImage, cpuImage, 1);
+            ST_PASS("pp_gpu_commit gpu=%d cpu=%d same_lsb1=%d worst=%d", dabs, dabs2,
+                    withinOneLsb ? 1 : 0, maxChannelDiff(gpuImage, cpuImage));
+            if (!begun || !ended || !begun2 || !ended2 || dabs < 6 || dabs2 < 6 || !withinOneLsb) {
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode546, "gpu commit differs from the CPU by >1 LSB");
+            }
         }
     }
 
@@ -459,7 +459,7 @@ int pictura::runPaintPerfChecks(pictura::PicturaMainWindow& frame)
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(547, "pyramid frame fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode547, "pyramid frame fixture");
         }
         const int doc = frame.activeDocumentIndex();
         view->set_active_layer(QStringLiteral("0"));
@@ -473,7 +473,7 @@ int pictura::runPaintPerfChecks(pictura::PicturaMainWindow& frame)
                                              100, 25, QStringLiteral("normal"), false, false);
         if (!begun) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(547, "pyramid begin");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode547, "pyramid begin");
         }
         const quint64 before = view->canvas_revision();
         int dabs = 0;
@@ -493,7 +493,7 @@ int pictura::runPaintPerfChecks(pictura::PicturaMainWindow& frame)
                                                 QStringLiteral("white"));
         PictureView* cpu = frame.activeView();
         if (!created2 || !cpu) {
-            return pictura::selfTest().fail(547, "pyramid cpu fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode547, "pyramid cpu fixture");
         }
         const int cpuDoc = frame.activeDocumentIndex();
         cpu->set_active_layer(QStringLiteral("0"));
@@ -519,7 +519,7 @@ int pictura::runPaintPerfChecks(pictura::PicturaMainWindow& frame)
                 identical ? 1 : 0, maxChannelDiff(deferredImage, baselineImage));
         if (!begun || !begun2 || !ended || !ended2 || dabs < 4 || !flushed || !frameBounded
             || !identical) {
-            return pictura::selfTest().fail(547, "pyramid rebuilt per dab");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode547, "pyramid rebuilt per dab");
         }
     }
 

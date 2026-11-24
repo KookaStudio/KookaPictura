@@ -439,7 +439,7 @@ include(cmake/sources/selftest.cmake)
 
 add_executable(pictura ${PICTURA_SELF_TEST_SOURCES})
 # No precompiled header here: the self-test sources do not see Qt's keyword
-# macros (selftest_report.h declares an `emit` function).
+# macros (selftest_report.h declares an `emitToken` member; `emit` is a macro).
 target_compile_options(pictura PRIVATE ${PICTURA_DEV_COMPILE_OPTIONS})
 # Menu construction is not on a hot path but compiles slowly; a lighter
 # optimization level keeps it off the development critical path.

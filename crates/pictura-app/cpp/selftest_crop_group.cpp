@@ -18,6 +18,7 @@
 
 int pictura::runCropGroupChecks(pictura::PicturaMainWindow& frame)
 {
+    ST_BEGIN("crop_group");
     QImage seed(40, 40, QImage::Format_RGB32);
     seed.fill(Qt::white);
     QPainter(&seed).fillRect(10, 10, 20, 20, Qt::black);
@@ -29,7 +30,7 @@ int pictura::runCropGroupChecks(pictura::PicturaMainWindow& frame)
     auto* tools = frame.findChild<pictura::ToolController*>();
     if (!created || !view || !canvas || !tools || !seed.save(seedPath, "PNG")
         || !view->open_image(seedPath)) {
-        return pictura::selfTest().fail(532, "crop group fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode532, "crop group fixture");
     }
     const int doc = frame.activeDocumentIndex();
     const auto drag = [canvas](QPointF from, QPointF to) {
@@ -149,7 +150,6 @@ int pictura::runCropGroupChecks(pictura::PicturaMainWindow& frame)
     const bool sliceSelect = selected && moved && resized && deselected && deleted;
     frame.setActiveTool(pictura::ToolId::Move);
 
-    ST_BEGIN("crop_group");
     ST_PASS("crop_group staged=%d cursor=%d discarded=%d degenerate=%d cropped=%d unsliced=%d added=%d "
             "click=%d undone=%d visible=%d select=%d/%d/%d/%d/%d",
             staged ? 1 : 0, crosshair && cornerCursor ? 1 : 0, discarded ? 1 : 0, degenerateKept ? 1 : 0, cropped ? 1 : 0,
@@ -160,7 +160,7 @@ int pictura::runCropGroupChecks(pictura::PicturaMainWindow& frame)
     QFile::remove(seedPath);
     if (!staged || !crosshair || !cornerCursor || !discarded || !degenerateKept || !cropped || !unsliced || !added
         || !clickNoSlice || !undone || !stillVisible || !sliceSelect) {
-        return pictura::selfTest().fail(532, "crop group");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode532, "crop group");
     }
     return 0;
 }

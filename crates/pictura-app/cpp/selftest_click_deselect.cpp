@@ -9,13 +9,14 @@
 
 int pictura::runClickDeselectChecks(pictura::PicturaMainWindow& frame)
 {
+    ST_BEGIN("click_deselect");
     const bool created = frame.newDocument(QStringLiteral("ClickDeselectCtl"), 20, 20,
                                            QStringLiteral("rgb"), 8, QStringLiteral("white"));
     pictura::PictureView* view = frame.activeView();
     pictura::ImageView* canvas = frame.imageView();
     auto* tools = frame.findChild<pictura::ToolController*>();
     if (!created || !view || !canvas || !tools) {
-        return pictura::selfTest().fail(531, "click deselect fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode531, "click deselect fixture");
     }
     const int doc = frame.activeDocumentIndex();
     tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setCombineMode(pictura::SelectionMode::New);
@@ -48,13 +49,12 @@ int pictura::runClickDeselectChecks(pictura::PicturaMainWindow& frame)
     const bool addKeeps = view->has_selection() && view->selection_coverage(3, 3) > 0
         && view->history_count() == addBase;
 
-    ST_BEGIN("click_deselect");
     ST_PASS("click_deselect marquee=%d lasso=%d polygon=%d addKeeps=%d", marquee ? 1 : 0,
             lasso ? 1 : 0, polygon ? 1 : 0, addKeeps ? 1 : 0);
     frame.setActiveTool(pictura::ToolId::Move);
     frame.closeDocument(doc, false);
     if (!marquee || !lasso || !polygon || !addKeeps) {
-        return pictura::selfTest().fail(531, "click deselect");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode531, "click deselect");
     }
     return 0;
 }

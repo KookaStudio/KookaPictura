@@ -37,12 +37,13 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
     // is hidden and reappears on create; closing the last document hides the
     // strip again.
     {
+        ST_BEGIN("lss_empty_pane");
         while (frame.documentCount() > 0) {
             frame.closeDocument(0, false);
         }
         auto* tabs = frame.findChild<QTabWidget*>(QStringLiteral("documentTabs"));
         if (!tabs) {
-            return pictura::selfTest().fail(349, "document tab pane missing");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode349, "document tab pane missing");
         }
         QCoreApplication::processEvents();
         const bool spaceEmpty = tabs->isVisible() && tabs->width() > 0
@@ -56,11 +57,10 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         QCoreApplication::processEvents();
         const bool spaceAgain = tabs->isVisible() && !tabs->tabBar()->isVisible();
 
-        ST_BEGIN("lss_empty_pane");
         ST_PASS("lss_empty_pane space=%d strip=%d space2=%d", spaceEmpty ? 1 : 0,
                 stripWithDoc ? 1 : 0, spaceAgain ? 1 : 0);
         if (!spaceEmpty || !created || !stripWithDoc || !spaceAgain) {
-            return pictura::selfTest().fail(349, "empty workspace did not keep its space");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode349, "empty workspace did not keep its space");
         }
     }
 
@@ -69,10 +69,11 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
     // empty tab strip; creating a document shows the strip, and closing the last
     // one hides it again.
     {
+        ST_BEGIN("lss_fresh_pane");
         pictura::PicturaMainWindow fresh;
         auto* freshTabs = fresh.findChild<QTabWidget*>(QStringLiteral("documentTabs"));
         if (!freshTabs) {
-            return pictura::selfTest().fail(380, "fresh document tab pane missing");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode380, "fresh document tab pane missing");
         }
         const bool freshSpace = freshTabs->isVisibleTo(&fresh)
                                 && !freshTabs->tabBar()->isVisibleTo(&fresh);
@@ -86,11 +87,10 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         }
         const bool freshSpaceAgain = freshTabs->isVisibleTo(&fresh)
                                      && !freshTabs->tabBar()->isVisibleTo(&fresh);
-        ST_BEGIN("lss_fresh_pane");
         ST_PASS("lss_fresh_pane space=%d strip=%d space2=%d", freshSpace ? 1 : 0,
                 freshStrip ? 1 : 0, freshSpaceAgain ? 1 : 0);
         if (!freshSpace || !freshCreated || !freshStrip || !freshSpaceAgain) {
-            return pictura::selfTest().fail(380, "fresh window ghost pane");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode380, "fresh window ghost pane");
         }
     }
 
@@ -106,19 +106,20 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         ST_PASS("lss_tab_weight scoped=%d weight=%d padding=%d", scoped ? 1 : 0, weight ? 1 : 0,
                 padding ? 1 : 0);
         if (!scoped || !weight || !padding) {
-            return pictura::selfTest().fail(350, "document tab rule missing");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode350, "document tab rule missing");
         }
     }
 
     // lss_brush_keys (351): the pure helper maps US keys, evdev scan codes, and
     // their Shift variants, and returns 0 for non-paint tools and other keys.
     {
+        ST_BEGIN("lss_brush_keys");
         const bool created = frame.newDocument(QStringLiteral("Round3Keys"), 32, 32,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(351, "brush key fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode351, "brush key fixture");
         }
         const int doc = frame.activeDocumentIndex();
         const bool usKeys =
@@ -135,13 +136,12 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
             view->brush_shortcut_delta(Qt::Key_BracketRight, 35, false, false) == 0
             && view->brush_shortcut_delta(Qt::Key_A, 0, false, true) == 0;
 
-        ST_BEGIN("lss_brush_keys");
         ST_PASS("lss_brush_keys us=%d native=%d guard=%d", usKeys ? 1 : 0, nativeKeys ? 1 : 0,
                 guard ? 1 : 0);
         const bool ok = usKeys && nativeKeys && guard;
         if (!ok) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(351, "brush key mapping wrong");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode351, "brush key mapping wrong");
         }
     }
 
@@ -181,7 +181,7 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         ST_PASS("lss_col_header_move made=%d indicator=%d moved=%d", made ? 1 : 0,
                 indicator ? 1 : 0, moved ? 1 : 0);
         if (!(made && indicator && moved)) {
-            return pictura::selfTest().fail(401, "column header move");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode401, "column header move");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
@@ -199,7 +199,7 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         ST_PASS("lss_tab_compress noScroll=%d expanding=%d", noScroll ? 1 : 0,
                 notExpanding ? 1 : 0);
         if (!(group && noScroll && notExpanding)) {
-            return pictura::selfTest().fail(402, "tab compression");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode402, "tab compression");
         }
     }
 
@@ -246,7 +246,7 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         ST_BEGIN("lss_grip_drag");
         ST_PASS("lss_grip_drag grip=%d started=%d", hasGrip ? 1 : 0, dragStarted ? 1 : 0);
         if (!(hasGrip && dragStarted)) {
-            return pictura::selfTest().fail(403, "header grip drag");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode403, "header grip drag");
         }
     }
 
@@ -312,7 +312,7 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
                 headerShown ? 1 : 0, toggleWorks ? 1 : 0, closeInHeader ? 1 : 0,
                 dragMoved ? 1 : 0);
         if (!(torn && headerShown && toggleWorks && closeInHeader && dragMoved)) {
-            return pictura::selfTest().fail(404, "float header");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode404, "float header");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
@@ -355,7 +355,7 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         ST_PASS("lss_float_icons torn=%d minHeight=%d themed=%d", torn ? 1 : 0,
                 minHeight ? 1 : 0, themed ? 1 : 0);
         if (!(torn && minHeight && themed)) {
-            return pictura::selfTest().fail(405, "float icon mode");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode405, "float icon mode");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
@@ -401,7 +401,7 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         ST_PASS("lss_toolbox_column_drop left=%d right=%d", leftHalf ? 1 : 0,
                 rightHalf ? 1 : 0);
         if (!(leftHalf && rightHalf)) {
-            return pictura::selfTest().fail(406, "toolbox column drop");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode406, "toolbox column drop");
         }
     }
 
@@ -409,6 +409,7 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
     // column beside a widget column on release, and a release over the empty
     // document area leaves it as an in-window overlay (never an OS window).
     {
+        ST_BEGIN("lss_tools_title_drag");
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
         auto* cs = frame.findChild<QSplitter*>(QStringLiteral("centerSplitter"));
@@ -416,7 +417,7 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         pictura::PanelColumn* tools = frame.toolsColumn();
         pictura::PanelColumn* primary = frame.panelColumn();
         if (!cs || !tabs || !tools || !primary) {
-            return pictura::selfTest().fail(407, "tools title drag fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode407, "tools title drag fixture");
         }
         auto startPoint = [tools]() {
             return tools->mapToGlobal(QPoint(qMax(1, tools->width() / 2), 8));
@@ -437,11 +438,10 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         const bool floated = floatWindow && toolFloatWindow(floatWindow) && cs->indexOf(tools) < 0;
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
-        ST_BEGIN("lss_tools_title_drag");
         ST_PASS("lss_tools_title_drag indicator=%d placed=%d float=%d",
                 indicator ? 1 : 0, placed ? 1 : 0, floated ? 1 : 0);
         if (!(indicator && placed && floated)) {
-            return pictura::selfTest().fail(407, "tools title drag");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode407, "tools title drag");
         }
     }
 
@@ -450,6 +450,7 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
     // splitter head, left of a Tools pane at index 0; and the header left-click
     // menu flips rail mode and both auto toggles and raises interface options.
     {
+        ST_BEGIN("lss_header_menu");
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
         auto* toolbox = frame.findChild<pictura::Toolbox*>(QStringLiteral("toolsPanel"));
@@ -460,7 +461,7 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         pump(6);
         pictura::PanelColumn* left = frame.columnForPanel(QStringLiteral("stylesPanel"));
         if (!toolbox || !cs || !primary || !left || primary == left) {
-            return pictura::selfTest().fail(408, "header menu fixture tb=%d cs=%d p=%d l=%d made=%d",
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode408, "header menu fixture tb=%d cs=%d p=%d l=%d made=%d",
                                             toolbox ? 1 : 0, cs ? 1 : 0, primary ? 1 : 0,
                                             left ? 1 : 0, made ? 1 : 0);
         }
@@ -525,7 +526,6 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
 
-        ST_BEGIN("lss_header_menu");
         ST_PASS("lss_header_menu made=%d moved=%d tools=%d leftOfTools=%d menu=%d rail=%d "
                 "autoC=%d autoS=%d options=%d",
                 made ? 1 : 0, moved ? 1 : 0, toolsSibling ? 1 : 0, leftOfTools ? 1 : 0,
@@ -534,7 +534,7 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         if (!(made && moved && indicator && toolsSibling && leftOfTools && menuComplete
               && railFlipped && autoCollapseFlipped && autoShowFlipped && optionsTriggered
               && optionsFired)) {
-            return pictura::selfTest().fail(408, "header menu");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode408, "header menu");
         }
     }
 
@@ -579,7 +579,7 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         ST_PASS("lss_float_toggle_place torn=%d placed=%d right=%d", torn ? 1 : 0,
                 placed ? 1 : 0, rightSide ? 1 : 0);
         if (!(torn && placed && rightSide)) {
-            return pictura::selfTest().fail(409, "float toggle placement");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode409, "float toggle placement");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
@@ -626,7 +626,7 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         ST_PASS("lss_float_icon_height torn=%d expanded=%d collapsed=%d snap=%d shrink=%d",
                 torn ? 1 : 0, expandedHeight, collapsedHeight, snapped ? 1 : 0, shrunk ? 1 : 0);
         if (!(torn && snapped && shrunk)) {
-            return pictura::selfTest().fail(410, "float icon height");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode410, "float icon height");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
@@ -667,7 +667,7 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         ST_PASS("lss_float_resize torn=%d grip=%d minsize=%d", torn ? 1 : 0, grip ? 1 : 0,
                 minSize ? 1 : 0);
         if (!(torn && grip && minSize)) {
-            return pictura::selfTest().fail(411, "float resize affordance");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode411, "float resize affordance");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
@@ -710,7 +710,7 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         ST_PASS("lss_float_single_drag floated=%d group=%d noextra=%d intact=%d",
                 floated ? 1 : 0, groupDrag ? 1 : 0, noExtra ? 1 : 0, intact ? 1 : 0);
         if (!(floated && groupDrag && noExtra && intact)) {
-            return pictura::selfTest().fail(412, "single-panel float drag");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode412, "single-panel float drag");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
@@ -749,7 +749,7 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         ST_PASS("lss_panel_menu_close label=%d groupLabel=%d tab=%d group=%d", hasClose ? 1 : 0,
                 hasCloseGroup ? 1 : 0, closesTab ? 1 : 0, closesGroup ? 1 : 0);
         if (!(hasClose && hasCloseGroup && closesTab && closesGroup)) {
-            return pictura::selfTest().fail(413, "panel menu close");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode413, "panel menu close");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
@@ -805,7 +805,7 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         ST_PASS("lss_float_drag_opacity torn=%d dimmed=%d restored=%d", torn ? 1 : 0,
                 dimmed ? 1 : 0, restored ? 1 : 0);
         if (!(torn && dimmed && restored)) {
-            return pictura::selfTest().fail(414, "float drag opacity");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode414, "float drag opacity");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
@@ -816,6 +816,7 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
     // in-window overlay, and a release on a widget column re-docks it, while a
     // release in the workspace outer band resolves a real sibling column.
     {
+        ST_BEGIN("lss_tools_dock_float");
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
         auto* cs = frame.findChild<QSplitter*>(QStringLiteral("centerSplitter"));
@@ -824,7 +825,7 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         pictura::PanelColumn* primary = frame.panelColumn();
         QWidget* central = frame.centralWidget();
         if (!cs || !tabs || !tools || !primary || !central) {
-            return pictura::selfTest().fail(415, "tools column fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode415, "tools column fixture");
         }
         auto startPoint = [tools]() {
             return tools->mapToGlobal(QPoint(qMax(1, tools->width() / 2), 8));
@@ -850,11 +851,10 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
 
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
-        ST_BEGIN("lss_tools_dock_float");
         ST_PASS("lss_tools_dock_float pane=%d float=%d redock=%d rightband=%d",
                 pane ? 1 : 0, floating ? 1 : 0, redocked ? 1 : 0, rightBand ? 1 : 0);
         if (!(pane && floating && redocked && rightBand)) {
-            return pictura::selfTest().fail(415, "tools column float");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode415, "tools column float");
         }
     }
 
@@ -879,7 +879,7 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         ST_BEGIN("lss_tools_pane_height");
         ST_PASS("lss_tools_pane_height ok=%d", ok ? 1 : 0);
         if (!ok) {
-            return pictura::selfTest().fail(416, "tools pane height");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode416, "tools pane height");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
@@ -909,7 +909,7 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         ST_BEGIN("lss_tools_top_align");
         ST_PASS("lss_tools_top_align ok=%d", ok ? 1 : 0);
         if (!ok) {
-            return pictura::selfTest().fail(417, "tools top align");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode417, "tools top align");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
@@ -937,7 +937,7 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         ST_BEGIN("lss_tools_edge_preview");
         ST_PASS("lss_tools_edge_preview ok=%d", ok ? 1 : 0);
         if (!ok) {
-            return pictura::selfTest().fail(418, "tools edge preview");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode418, "tools edge preview");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
@@ -971,7 +971,7 @@ int pictura::runShellRound3Checks(pictura::PicturaMainWindow& frame)
         ST_BEGIN("lss_tools_canvas_float");
         ST_PASS("lss_tools_canvas_float ok=%d", ok ? 1 : 0);
         if (!ok) {
-            return pictura::selfTest().fail(419, "tools canvas float");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode419, "tools canvas float");
         }
     }
 

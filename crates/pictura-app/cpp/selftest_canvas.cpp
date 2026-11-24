@@ -38,18 +38,19 @@ int pictura::runCanvasChecks(pictura::PicturaMainWindow& frame)
         // fractional zoom must not leak the transparency checkerboard through a
         // one-pixel seam at the document's right/bottom edge, and the cached and
         // direct present paths must agree pixel for pixel.
+        ST_BEGIN("present_cache_edge");
         const bool ceCreated = frame.newDocument(QStringLiteral("CacheEdge"), 101, 77,
                                                  QStringLiteral("rgb"), 8,
                                                  QStringLiteral("white"));
         pictura::PictureView* ceView = frame.activeView();
         pictura::ImageView* ceCanvas = frame.imageView();
         if (!ceCreated || !ceView || !ceCanvas) {
-            return pictura::selfTest().fail(295, "present cache fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode295, "present cache fixture");
         }
         const int ceDoc = frame.activeDocumentIndex();
         const QString ceFill = ceView->add_solid_fill(0xffff0000u);
         if (ceFill.isEmpty()) {
-            return pictura::selfTest().fail(295, "present cache fill");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode295, "present cache fill");
         }
         // The seam check measures the document's edge pixels, so keep the
         // default View overlays from painting over them.
@@ -116,11 +117,10 @@ int pictura::runCanvasChecks(pictura::PicturaMainWindow& frame)
             }
         }
 
-        ST_BEGIN("present_cache_edge");
         ST_PASS("present_cache_edge gapped=%d edge_red=%d identical=%d", ceGapped ? 1 : 0,
                 ceEdgeRed ? 1 : 0, ceIdentical ? 1 : 0);
         if (!ceGapped || !ceEdgeRed || !ceIdentical) {
-            return pictura::selfTest().fail(295, "present cache edge seam");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode295, "present cache edge seam");
         }
         frame.closeDocument(ceDoc, false);
         return 0;

@@ -44,6 +44,10 @@ jobs:
           python3 scripts/check-shell-seams.py
       - name: Self-test budget
         run: bash scripts/check-selftest-budget.sh
+      - name: Self-test failure codes
+        run: |
+          python3 scripts/check-selftest-codes.py --self-test
+          python3 scripts/check-selftest-codes.py
       - name: Managed agent resources and verification guards
         run: |
           python3 scripts/cpu-budget.py --self-check

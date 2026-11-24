@@ -44,13 +44,14 @@ int pictura::runLayersFilterChecks(pictura::PicturaMainWindow& frame)
     // lfs_name (201): Name is a case-insensitive substring; a match is shown and
     // every non-matching row (including the background) is hidden.
     {
+        ST_BEGIN("lfs_name");
         const bool created = frame.newDocument(QStringLiteral("FilterName"), 16, 16,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         pictura::PictureView* view = frame.activeView();
         auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
         if (!created || !view || !panel) {
-            return pictura::selfTest().fail(201, "name fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode201, "name fixture");
         }
         const int doc = frame.activeDocumentIndex();
         panel->setView(view);
@@ -64,10 +65,9 @@ int pictura::runLayersFilterChecks(pictura::PicturaMainWindow& frame)
         const bool named = pathSet(panel->visiblePathsForTest()) == QSet<QString>{sky};
         panel->setFilterNameForTest(QStringLiteral("SKY"), true);
         const bool cased = pathSet(panel->visiblePathsForTest()) == QSet<QString>{sky};
-        ST_BEGIN("lfs_name");
         ST_PASS("lfs_name full=%d named=%d cased=%d", full, named ? 1 : 0, cased ? 1 : 0);
         if (full < 3 || !named || !cased) {
-            return pictura::selfTest().fail(201, "name filter");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode201, "name filter");
         }
         frame.closeDocument(doc, false);
     }
@@ -75,13 +75,14 @@ int pictura::runLayersFilterChecks(pictura::PicturaMainWindow& frame)
     // lfs_kind (202): pixel and adjustment selected shows exactly those two;
     // group and background are hidden.
     {
+        ST_BEGIN("lfs_kind");
         const bool created = frame.newDocument(QStringLiteral("FilterKind"), 16, 16,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         pictura::PictureView* view = frame.activeView();
         auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
         if (!created || !view || !panel) {
-            return pictura::selfTest().fail(202, "kind fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode202, "kind fixture");
         }
         const int doc = frame.activeDocumentIndex();
         panel->setView(view);
@@ -96,10 +97,9 @@ int pictura::runLayersFilterChecks(pictura::PicturaMainWindow& frame)
         const QSet<QString> visible = pathSet(panel->visiblePathsForTest());
         const bool kindOk =
             visible == QSet<QString>{pixel, adjustment} && !adjustment.isEmpty();
-        ST_BEGIN("lfs_kind");
         ST_PASS("lfs_kind visible=%d", visible.size());
         if (!kindOk) {
-            return pictura::selfTest().fail(202, "kind filter");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode202, "kind filter");
         }
         frame.closeDocument(doc, false);
     }
@@ -107,13 +107,14 @@ int pictura::runLayersFilterChecks(pictura::PicturaMainWindow& frame)
     // lfs_mode (203): Multiply narrows to Multiply layers, and a second Name
     // criterion ANDs with it.
     {
+        ST_BEGIN("lfs_mode");
         const bool created = frame.newDocument(QStringLiteral("FilterMode"), 16, 16,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         pictura::PictureView* view = frame.activeView();
         auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
         if (!created || !view || !panel) {
-            return pictura::selfTest().fail(203, "mode fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode203, "mode fixture");
         }
         const int doc = frame.activeDocumentIndex();
         panel->setView(view);
@@ -132,23 +133,23 @@ int pictura::runLayersFilterChecks(pictura::PicturaMainWindow& frame)
         const QSet<QString> modeAndName = pathSet(panel->visiblePathsForTest());
         const bool modeOk = modeOnly == QSet<QString>{shadowMul, otherMul};
         const bool andOk = modeAndName == QSet<QString>{shadowMul};
-        ST_BEGIN("lfs_mode");
         ST_PASS("lfs_mode mode=%d and=%d", modeOk ? 1 : 0, andOk ? 1 : 0);
         if (!modeOk || !andOk) {
-            return pictura::selfTest().fail(203, "mode filter");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode203, "mode filter");
         }
         frame.closeDocument(doc, false);
     }
 
     // lfs_color (204): the Red label matches exactly the red-labelled row.
     {
+        ST_BEGIN("lfs_color");
         const bool created = frame.newDocument(QStringLiteral("FilterColor"), 16, 16,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         pictura::PictureView* view = frame.activeView();
         auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
         if (!created || !view || !panel) {
-            return pictura::selfTest().fail(204, "color fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode204, "color fixture");
         }
         const int doc = frame.activeDocumentIndex();
         panel->setView(view);
@@ -160,10 +161,9 @@ int pictura::runLayersFilterChecks(pictura::PicturaMainWindow& frame)
         panel->refresh();
         panel->setFilterColorForTest(1, true);
         const bool colorOk = pathSet(panel->visiblePathsForTest()) == QSet<QString>{red};
-        ST_BEGIN("lfs_color");
         ST_PASS("lfs_color ok=%d", colorOk ? 1 : 0);
         if (!colorOk) {
-            return pictura::selfTest().fail(204, "color filter");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode204, "color filter");
         }
         frame.closeDocument(doc, false);
     }
@@ -171,13 +171,14 @@ int pictura::runLayersFilterChecks(pictura::PicturaMainWindow& frame)
     // lfs_none (205): a no-match filter empties the view without touching the
     // document; toggling it off restores every row.
     {
+        ST_BEGIN("lfs_none");
         const bool created = frame.newDocument(QStringLiteral("FilterNone"), 16, 16,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         pictura::PictureView* view = frame.activeView();
         auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
         if (!created || !view || !panel) {
-            return pictura::selfTest().fail(205, "none fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode205, "none fixture");
         }
         const int doc = frame.activeDocumentIndex();
         panel->setView(view);
@@ -190,11 +191,10 @@ int pictura::runLayersFilterChecks(pictura::PicturaMainWindow& frame)
         const bool unchanged = pictura::layers_api::rowCount(*view) == rows;
         panel->setFilterNameForTest(QString(), false);
         const bool restored = panel->visiblePathsForTest().size() == rows;
-        ST_BEGIN("lfs_none");
         ST_PASS("lfs_none empty=%d unchanged=%d restored=%d", empty ? 1 : 0,
                 unchanged ? 1 : 0, restored ? 1 : 0);
         if (!empty || !unchanged || !restored) {
-            return pictura::selfTest().fail(205, "none filter");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode205, "none filter");
         }
         frame.closeDocument(doc, false);
     }
@@ -202,13 +202,14 @@ int pictura::runLayersFilterChecks(pictura::PicturaMainWindow& frame)
     // lfs_ancestor (206): a group with one matching child is promoted and
     // expanded; its non-matching sibling stays hidden.
     {
+        ST_BEGIN("lfs_ancestor");
         const bool created = frame.newDocument(QStringLiteral("FilterAncestor"), 16, 16,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         pictura::PictureView* view = frame.activeView();
         auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
         if (!created || !view || !panel) {
-            return pictura::selfTest().fail(206, "ancestor fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode206, "ancestor fixture");
         }
         const int doc = frame.activeDocumentIndex();
         panel->setView(view);
@@ -221,10 +222,9 @@ int pictura::runLayersFilterChecks(pictura::PicturaMainWindow& frame)
         panel->setFilterNameForTest(QStringLiteral("match"), true);
         const QSet<QString> visible = pathSet(panel->visiblePathsForTest());
         const bool ancestorOk = visible == QSet<QString>{group, match};
-        ST_BEGIN("lfs_ancestor");
         ST_PASS("lfs_ancestor visible=%d ok=%d", visible.size(), ancestorOk ? 1 : 0);
         if (!ancestorOk) {
-            return pictura::selfTest().fail(206, "ancestor promotion");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode206, "ancestor promotion");
         }
         frame.closeDocument(doc, false);
     }
@@ -232,13 +232,14 @@ int pictura::runLayersFilterChecks(pictura::PicturaMainWindow& frame)
     // lfs_toggle (207): enabling, changing, and disabling the filter adds no
     // history and does not dirty the document.
     {
+        ST_BEGIN("lfs_toggle");
         const bool created = frame.newDocument(QStringLiteral("FilterToggle"), 16, 16,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         pictura::PictureView* view = frame.activeView();
         auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
         if (!created || !view || !panel) {
-            return pictura::selfTest().fail(207, "toggle fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode207, "toggle fixture");
         }
         const int doc = frame.activeDocumentIndex();
         panel->setView(view);
@@ -252,10 +253,9 @@ int pictura::runLayersFilterChecks(pictura::PicturaMainWindow& frame)
         panel->setFilterNameForTest(QString(), false);
         const bool historyOk = view->history_count() == history;
         const bool dirtyOk = view->is_dirty() == dirty;
-        ST_BEGIN("lfs_toggle");
         ST_PASS("lfs_toggle history=%d dirty=%d", historyOk ? 1 : 0, dirtyOk ? 1 : 0);
         if (!historyOk || !dirtyOk) {
-            return pictura::selfTest().fail(207, "filter history");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode207, "filter history");
         }
         frame.closeDocument(doc, false);
     }
@@ -263,13 +263,14 @@ int pictura::runLayersFilterChecks(pictura::PicturaMainWindow& frame)
     // lfs_live (208): renaming a layer to match the active Name filter makes it
     // appear on the next refresh without re-entering the filter.
     {
+        ST_BEGIN("lfs_live");
         const bool created = frame.newDocument(QStringLiteral("FilterLive"), 16, 16,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         pictura::PictureView* view = frame.activeView();
         auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
         if (!created || !view || !panel) {
-            return pictura::selfTest().fail(208, "live fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode208, "live fixture");
         }
         const int doc = frame.activeDocumentIndex();
         panel->setView(view);
@@ -281,10 +282,9 @@ int pictura::runLayersFilterChecks(pictura::PicturaMainWindow& frame)
         view->set_layer_name_path(layer, QStringLiteral("sky"));
         panel->refresh();
         const bool shown = pathSet(panel->visiblePathsForTest()) == QSet<QString>{layer};
-        ST_BEGIN("lfs_live");
         ST_PASS("lfs_live hidden=%d shown=%d", hidden ? 1 : 0, shown ? 1 : 0);
         if (!hidden || !shown) {
-            return pictura::selfTest().fail(208, "live filter");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode208, "live filter");
         }
         frame.closeDocument(doc, false);
     }
@@ -292,13 +292,14 @@ int pictura::runLayersFilterChecks(pictura::PicturaMainWindow& frame)
     // lfs_reset (209): switching documents returns the filter to Kind/off and
     // shows the new document's full tree.
     {
+        ST_BEGIN("lfs_reset");
         const bool createdA = frame.newDocument(QStringLiteral("FilterResetA"), 16, 16,
                                                 QStringLiteral("rgb"), 8,
                                                 QStringLiteral("white"));
         pictura::PictureView* viewA = frame.activeView();
         auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
         if (!createdA || !viewA || !panel) {
-            return pictura::selfTest().fail(209, "reset fixture A");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode209, "reset fixture A");
         }
         const int docA = frame.activeDocumentIndex();
         panel->setView(viewA);
@@ -313,18 +314,17 @@ int pictura::runLayersFilterChecks(pictura::PicturaMainWindow& frame)
                                                 QStringLiteral("white"));
         pictura::PictureView* viewB = frame.activeView();
         if (!createdB || !viewB) {
-            return pictura::selfTest().fail(209, "reset fixture B");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode209, "reset fixture B");
         }
         const int docB = frame.activeDocumentIndex();
         panel->setView(viewB);
         panel->refresh();
         const bool minimal = pathSet(panel->visiblePathsForTest()) == pathSet(allPaths(viewB));
         const bool dimensionOk = panel->filterDimensionForTest() == 1;
-        ST_BEGIN("lfs_reset");
         ST_PASS("lfs_reset filtered=%d dimension=%d minimal=%d", filtered ? 1 : 0,
                 dimensionOk ? 1 : 0, minimal ? 1 : 0);
         if (!filtered || !dimensionOk || !minimal) {
-            return pictura::selfTest().fail(209, "filter reset");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode209, "filter reset");
         }
         frame.closeDocument(docB, false);
         frame.closeDocument(docA, false);

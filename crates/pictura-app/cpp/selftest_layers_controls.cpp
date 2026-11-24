@@ -48,13 +48,14 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         // to the stored 0..255 byte through the panel, a stored byte displays as
         // its percentage, a programmatic sync adds no history, and the lock
         // strip is five toggles.
+        ST_BEGIN("lpc_percent");
         const bool lpcCreated = frame.newDocument(QStringLiteral("PercentCtl"), 16, 16,
                                                   QStringLiteral("rgb"), 8,
                                                   QStringLiteral("white"));
         pictura::PictureView* lpcView = frame.activeView();
         auto* lpcPanel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
         if (!lpcCreated || !lpcView || !lpcPanel) {
-            return pictura::selfTest().fail(199, "percent fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode199, "percent fixture");
         }
         const int lpcDoc = frame.activeDocumentIndex();
         lpcPanel->setView(lpcView);
@@ -72,11 +73,10 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         lpcPanel->refresh();
         const bool lpcSyncOk = lpcView->history_count() == lpcSyncBase
             && lpcPanel->opacityPercentForTest() == 50;
-        ST_BEGIN("lpc_percent");
         ST_PASS("lpc_percent byte=%d display=%d sync=%d", lpcByteOk ? 1 : 0,
                      lpcDisplayOk ? 1 : 0, lpcSyncOk ? 1 : 0);
         if (!lpcByteOk || !lpcDisplayOk || !lpcSyncOk) {
-            return pictura::selfTest().fail(199, "percent controls");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode199, "percent controls");
         }
         frame.closeDocument(lpcDoc, false);
 
@@ -105,18 +105,19 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
                 rowBoth ? 1 : 0, rowSharesSlack ? 1 : 0, rowBlendLarger ? 1 : 0,
                 blendRow.width(), opacityCol.width(), opacityHint);
         if (!(rowBoth && rowSharesSlack && rowBlendLarger)) {
-            return pictura::selfTest().fail(452, "layers blend row");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode452, "layers blend row");
         }
 
         // lpc_preview (214): a preview stream adds no history and one commit
         // adds exactly one state for the finished edit.
+        ST_BEGIN("lpc_preview");
         const bool pvCreated = frame.newDocument(QStringLiteral("PreviewCtl"), 16, 16,
                                                  QStringLiteral("rgb"), 8,
                                                  QStringLiteral("white"));
         pictura::PictureView* pvView = frame.activeView();
         auto* pvPanel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
         if (!pvCreated || !pvView || !pvPanel) {
-            return pictura::selfTest().fail(214, "preview fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode214, "preview fixture");
         }
         const int pvDoc = frame.activeDocumentIndex();
         pvPanel->setView(pvView);
@@ -137,12 +138,11 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         const int pvSetBase = pvView->history_count();
         pvView->set_layers_opacity(QStringList{QStringLiteral("0")}, 200);
         const bool pvSetOk = pvView->history_count() == pvSetBase + 1;
-        ST_BEGIN("lpc_preview");
         ST_PASS("lpc_preview nohist=%d value=%d commit=%d fill=%d set=%d",
                 pvNoHistory ? 1 : 0, pvValueOk ? 1 : 0, pvCommitOk ? 1 : 0,
                 pvFillOk ? 1 : 0, pvSetOk ? 1 : 0);
         if (!pvNoHistory || !pvValueOk || !pvCommitOk || !pvFillOk || !pvSetOk) {
-            return pictura::selfTest().fail(214, "preview commit");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode214, "preview commit");
         }
 
         // lpr_percent (215): the `%` renders inside the value box, which is
@@ -152,7 +152,7 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         ST_BEGIN("lpr_percent");
         ST_PASS("lpr_percent inside=%d fits=%d", pvSuffix ? 1 : 0, pvFits ? 1 : 0);
         if (!pvSuffix || !pvFits) {
-            return pictura::selfTest().fail(215, "percent suffix");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode215, "percent suffix");
         }
 
         // lpc_lockbadge (216): an unlocked row has no badge; locking draws one
@@ -167,7 +167,7 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         ST_BEGIN("lpc_lockbadge");
         ST_PASS("lpc_lockbadge unlocked=%d badge=%d eye=%d", pvUnlocked ? 1 : 0, pvBadge, pvEye);
         if (!pvBadgeOk) {
-            return pictura::selfTest().fail(216, "lock badge");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode216, "lock badge");
         }
 
         // lpr_eye (217): the model exposes no check state; the eye is the only
@@ -176,7 +176,7 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         ST_BEGIN("lpr_eye");
         ST_PASS("lpr_eye nocheck=%d", pvNoCheck ? 1 : 0);
         if (!pvNoCheck) {
-            return pictura::selfTest().fail(217, "row eye");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode217, "row eye");
         }
 
         // lpr_slider (218): clicking the groove jumps the handle to that point
@@ -188,18 +188,19 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         ST_BEGIN("lpr_slider");
         ST_PASS("lpr_slider jump=%d drag=%d", sliderJump, sliderDrag);
         if (!sliderJumpOk || !sliderDragOk) {
-            return pictura::selfTest().fail(218, "slider jump");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode218, "slider jump");
         }
         frame.closeDocument(pvDoc, false);
 
         // lpr_merge_down (219): two pixel layers merge to one; the result
         // inherits the lower layer's name/blend/opacity in one undo state.
+        ST_BEGIN("lpr_merge_down");
         const bool mdCreated = frame.newDocument(QStringLiteral("MergeDownCtl"), 16, 16,
                                                  QStringLiteral("rgb"), 8,
                                                  QStringLiteral("white"));
         pictura::PictureView* mdView = frame.activeView();
         if (!mdCreated || !mdView) {
-            return pictura::selfTest().fail(219, "merge down fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode219, "merge down fixture");
         }
         const int mdDoc = frame.activeDocumentIndex();
         mdView->add_layer(0);
@@ -214,21 +215,21 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
             && mdView->layer_name(1) == QStringLiteral("Lower")
             && mdView->layer_blend(1) == QStringLiteral("mul ")
             && mdView->layer_opacity(1) == 128 && mdView->history_count() == mdBase + 1;
-        ST_BEGIN("lpr_merge_down");
         ST_PASS("lpr_merge_down path=%s count=%d", qPrintable(mdMerged), mdView->layer_count());
         if (!mdOk) {
-            return pictura::selfTest().fail(219, "merge down");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode219, "merge down");
         }
         frame.closeDocument(mdDoc, false);
 
         // lpr_merge_visible (220): visible layers collapse while the hidden
         // layer survives untouched, in one undo state.
+        ST_BEGIN("lpr_merge_visible");
         const bool mvCreated = frame.newDocument(QStringLiteral("MergeVisibleCtl"), 16, 16,
                                                  QStringLiteral("rgb"), 8,
                                                  QStringLiteral("white"));
         pictura::PictureView* mvView = frame.activeView();
         if (!mvCreated || !mvView) {
-            return pictura::selfTest().fail(220, "merge visible fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode220, "merge visible fixture");
         }
         const int mvDoc = frame.activeDocumentIndex();
         mvView->add_layer(0);
@@ -247,22 +248,22 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         const bool mvOk = mvMerged == QStringLiteral("0")
             && pictura::layers_api::rowCount(*mvView) == 2 && mvHiddenSurvives
             && mvView->history_count() == mvBase + 1;
-        ST_BEGIN("lpr_merge_visible");
         ST_PASS("lpr_merge_visible path=%s rows=%d hidden=%d", qPrintable(mvMerged),
                 pictura::layers_api::rowCount(*mvView), mvHiddenSurvives ? 1 : 0);
         if (!mvOk) {
-            return pictura::selfTest().fail(220, "merge visible");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode220, "merge visible");
         }
         frame.closeDocument(mvDoc, false);
 
         // lpr_flatten (221): one opaque Background, transparency filled white,
         // a hidden layer discarded, in one undo state.
+        ST_BEGIN("lpr_flatten");
         const bool flCreated = frame.newDocument(QStringLiteral("FlattenCtl"), 4, 4,
                                                  QStringLiteral("rgb"), 8,
                                                  QStringLiteral("transparent"));
         pictura::PictureView* flView = frame.activeView();
         if (!flCreated || !flView) {
-            return pictura::selfTest().fail(221, "flatten fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode221, "flatten fixture");
         }
         const int flDoc = frame.activeDocumentIndex();
         flView->add_layer(0);
@@ -273,45 +274,45 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         const bool flOk = flTransparentBefore && flReplaced == 2 && flView->layer_count() == 1
             && flView->layer_name(0) == QStringLiteral("Background") && flView->layer_visible(0)
             && flView->sample_argb(0, 0) == 0xFFFFFFFFu && flView->history_count() == flBase + 1;
-        ST_BEGIN("lpr_flatten");
         ST_PASS("lpr_flatten replaced=%d count=%d white=%08x", flReplaced,
                 flView->layer_count(), flView->sample_argb(0, 0));
         if (!flOk) {
-            return pictura::selfTest().fail(221, "flatten image");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode221, "flatten image");
         }
         frame.closeDocument(flDoc, false);
 
         // lpr_merge_clip (222): a plain layer is not a clipping base, so the
         // command refuses without recording history.
+        ST_BEGIN("lpr_merge_clip");
         const bool mcCreated =
             frame.newDocument(QStringLiteral("MergeClipCtl"), 8, 8, QStringLiteral("rgb"), 8,
                               QStringLiteral("white"));
         pictura::PictureView* mcView = frame.activeView();
         if (!mcCreated || !mcView) {
-            return pictura::selfTest().fail(222, "merge clip fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode222, "merge clip fixture");
         }
         const int mcDoc = frame.activeDocumentIndex();
         const int mcBase = mcView->history_count();
         const int mcReplaced = mcView->merge_clipping_mask(QStringLiteral("0"));
         const bool mcOk = mcReplaced == 0 && mcView->history_count() == mcBase
             && mcView->layer_count() == 1;
-        ST_BEGIN("lpr_merge_clip");
         ST_PASS("lpr_merge_clip replaced=%d history=%d", mcReplaced,
                 mcView->history_count() - mcBase);
         if (!mcOk) {
-            return pictura::selfTest().fail(222, "merge clipping mask");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode222, "merge clipping mask");
         }
         frame.closeDocument(mcDoc, false);
 
         // lpr_new_layer_dialog (223): the bridge creates a configured layer with
         // the chosen name/color/blend/opacity, and a Multiply-neutral fill is
         // opaque white, in one undo state.
+        ST_BEGIN("lpr_new_layer_dialog");
         const bool nldCreated =
             frame.newDocument(QStringLiteral("NewLayerCtl"), 4, 4, QStringLiteral("rgb"), 8,
                               QStringLiteral("transparent"));
         pictura::PictureView* nldView = frame.activeView();
         if (!nldCreated || !nldView) {
-            return pictura::selfTest().fail(223, "new layer dialog fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode223, "new layer dialog fixture");
         }
         const int nldDoc = frame.activeDocumentIndex();
         const int nldBase = nldView->history_count();
@@ -323,22 +324,22 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
             && nldView->layer_opacity(1) == 128 && nldView->layer_color(1) == 1
             && nldView->sample_argb(0, 0) == 0x80FFFFFFu
             && nldView->history_count() == nldBase + 1;
-        ST_BEGIN("lpr_new_layer_dialog");
         ST_PASS("lpr_new_layer_dialog path=%s pixel=%08x", qPrintable(nldPath),
                 nldView->sample_argb(0, 0));
         if (!nldOk) {
-            return pictura::selfTest().fail(223, "new layer dialog");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode223, "new layer dialog");
         }
         frame.closeDocument(nldDoc, false);
 
         // lpr_new_group_dialog (224): the group carries name/color/blend/opacity
         // and never a clipping flag, in one undo state.
+        ST_BEGIN("lpr_new_group_dialog");
         const bool ngdCreated =
             frame.newDocument(QStringLiteral("NewGroupCtl"), 4, 4, QStringLiteral("rgb"), 8,
                               QStringLiteral("transparent"));
         pictura::PictureView* ngdView = frame.activeView();
         if (!ngdCreated || !ngdView) {
-            return pictura::selfTest().fail(224, "new group dialog fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode224, "new group dialog fixture");
         }
         const int ngdDoc = frame.activeDocumentIndex();
         const int ngdBase = ngdView->history_count();
@@ -358,17 +359,17 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
             && pictura::layers_api::rowAt(*ngdView, ngdRow).color == 3
             && !pictura::layers_api::rowAt(*ngdView, ngdRow).clipping
             && ngdView->history_count() == ngdBase + 1;
-        ST_BEGIN("lpr_new_group_dialog");
         ST_PASS("lpr_new_group_dialog path=%s row=%d clip=%d", qPrintable(ngdPath), ngdRow,
                 pictura::layers_api::rowAt(*ngdView, ngdRow).clipping ? 1 : 0);
         if (!ngdOk) {
-            return pictura::selfTest().fail(224, "new group dialog");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode224, "new group dialog");
         }
         frame.closeDocument(ngdDoc, false);
 
         // lpr_new_neutral_option (225): the dialog disables the neutral fill for
         // Normal and hides clipping for a group; the engine's missing neutral
         // color creates a fully transparent layer.
+        ST_BEGIN("lpr_new_neutral_option");
         pictura::LayerNewDialog nnoLayer(false);
         nnoLayer.setModeForTest(QStringLiteral("norm"));
         const bool nnoNormalOff = !nnoLayer.neutralEnabledForTest();
@@ -381,7 +382,7 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
                               QStringLiteral("transparent"));
         pictura::PictureView* nnoView = frame.activeView();
         if (!nnoCreated || !nnoView) {
-            return pictura::selfTest().fail(225, "neutral option fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode225, "neutral option fixture");
         }
         const int nnoDoc = frame.activeDocumentIndex();
         const int nnoBase = nnoView->history_count();
@@ -390,23 +391,23 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         const bool nnoOk = nnoNormalOff && nnoMultiplyOn && nnoClippingHidden
             && !nnoPath.isEmpty() && nnoView->sample_argb(0, 0) == 0u
             && nnoView->history_count() == nnoBase + 1;
-        ST_BEGIN("lpr_new_neutral_option");
         ST_PASS("lpr_new_neutral_option normal=%d multiply=%d clip=%d pixel=%08x",
                 nnoNormalOff ? 1 : 0, nnoMultiplyOn ? 1 : 0, nnoClippingHidden ? 1 : 0,
                 nnoView->sample_argb(0, 0));
         if (!nnoOk) {
-            return pictura::selfTest().fail(225, "neutral option");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode225, "neutral option");
         }
         frame.closeDocument(nnoDoc, false);
 
         // lpr_background_roundtrip (226): a flagged layer is written under the
         // "Background" name and re-read from disk as the Background.
+        ST_BEGIN("lpr_background_roundtrip");
         const bool bgRtCreated = frame.newDocument(QStringLiteral("BackgroundRoundtrip"), 4, 4,
                                                    QStringLiteral("rgb"), 8,
                                                    QStringLiteral("transparent"));
         pictura::PictureView* bgRtView = frame.activeView();
         if (!bgRtCreated || !bgRtView) {
-            return pictura::selfTest().fail(226, "background roundtrip fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode226, "background roundtrip fixture");
         }
         const int bgRtDoc = frame.activeDocumentIndex();
         const int bgRtBase = bgRtView->history_count();
@@ -422,12 +423,11 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         const bool bgRtOk = bgRtState && bgRtSaved && bgRtReopened && bgRtReload
             && bgRtReload->layer_name(0) == QStringLiteral("Background")
             && pictura::layers_api::rowAt(*bgRtReload, 0).kind == QStringLiteral("background");
-        ST_BEGIN("lpr_background_roundtrip");
         ST_PASS("lpr_background_roundtrip state=%d saved=%d reopened=%d kind=%s",
                 bgRtState ? 1 : 0, bgRtSaved ? 1 : 0, bgRtReopened ? 1 : 0,
                 qPrintable(bgRtReload ? pictura::layers_api::rowAt(*bgRtReload, 0).kind : QString()));
         if (!bgRtOk) {
-            return pictura::selfTest().fail(226, "background roundtrip");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode226, "background roundtrip");
         }
         frame.closeDocument(bgRtReloadDoc, false);
         frame.closeDocument(bgRtDoc, false);
@@ -435,12 +435,13 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         // lpr_background_independence (227): the flag is independent of name and
         // position — a non-bottom layer named "Background" is not the Background,
         // and a flagged bottom layer under another name is.
+        ST_BEGIN("lpr_background_independence");
         const bool bgIndCreated =
             frame.newDocument(QStringLiteral("BackgroundIndependence"), 4, 4,
                               QStringLiteral("rgb"), 8, QStringLiteral("transparent"));
         pictura::PictureView* bgIndView = frame.activeView();
         if (!bgIndCreated || !bgIndView) {
-            return pictura::selfTest().fail(227, "background independence fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode227, "background independence fixture");
         }
         const int bgIndDoc = frame.activeDocumentIndex();
         const QString bgIndTop = bgIndView->add_layer_in(QString());
@@ -461,7 +462,6 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
             && pictura::layers_api::rowAt(*bgIndView, bgIndBottomRow).kind == QStringLiteral("background")
             && pictura::layers_api::rowAt(*bgIndView, bgIndTopRow).kind == QStringLiteral("pixel")
             && pictura::layers_api::rowAt(*bgIndView, bgIndTopRow).name == QStringLiteral("Background");
-        ST_BEGIN("lpr_background_independence");
         ST_PASS("lpr_background_independence named=%d bottom=%d top=%d",
                 bgIndNamed ? 1 : 0,
                 bgIndBottomRow >= 0 ? pictura::layers_api::rowAt(*bgIndView, bgIndBottomRow).kind ==
@@ -470,19 +470,20 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
                 bgIndTopRow >= 0 ? pictura::layers_api::rowAt(*bgIndView, bgIndTopRow).kind == QStringLiteral("pixel")
                                  : 0);
         if (!bgIndOk) {
-            return pictura::selfTest().fail(227, "background independence");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode227, "background independence");
         }
         frame.closeDocument(bgIndDoc, false);
 
         // lpr_background_convert (228): Background From Layer makes transparency
         // opaque and moves the node to the bottom; Layer from Background clears
         // the flag and unlocks.
+        ST_BEGIN("lpr_background_convert");
         const bool bgConvCreated =
             frame.newDocument(QStringLiteral("BackgroundConvert"), 4, 4, QStringLiteral("rgb"), 8,
                               QStringLiteral("transparent"));
         pictura::PictureView* bgConvView = frame.activeView();
         if (!bgConvCreated || !bgConvView) {
-            return pictura::selfTest().fail(228, "background convert fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode228, "background convert fixture");
         }
         const int bgConvDoc = frame.activeDocumentIndex();
         const QString bgConvTop = bgConvView->add_layer_in(QString());
@@ -500,24 +501,24 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
             && bgConvView->history_count() == bgConvFromBase + 1
             && bgConvView->layer_kind(0) == QStringLiteral("pixel")
             && bgConvView->layer_lock(0) == 0;
-        ST_BEGIN("lpr_background_convert");
         ST_PASS("lpr_background_convert to=%d pixel=%08x from=%d lock=%d",
                 bgConvTo ? 1 : 0, bgConvView->sample_argb(0, 0), bgConvFrom ? 1 : 0,
                 bgConvView->layer_lock(0));
         if (!bgConvToOk || !bgConvFromOk) {
-            return pictura::selfTest().fail(228, "background convert");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode228, "background convert");
         }
         frame.closeDocument(bgConvDoc, false);
 
         // lpr_via_copy (229): Layer via Copy adds a "Layer 0 copy" above the
         // source holding only the selected pixels; the source is untouched, in
         // one undo state.
+        ST_BEGIN("lpr_via_copy");
         const bool vcCreated = frame.newDocument(QStringLiteral("ViaCopyCtl"), 4, 4,
                                                  QStringLiteral("rgb"), 8,
                                                  QStringLiteral("white"));
         pictura::PictureView* vcView = frame.activeView();
         if (!vcCreated || !vcView) {
-            return pictura::selfTest().fail(229, "via copy fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode229, "via copy fixture");
         }
         const int vcDoc = frame.activeDocumentIndex();
         vcView->select_rect(0, 0, 2, 4, QStringLiteral("new"), 0.0);
@@ -530,23 +531,23 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
             && vcView->history_count() == vcBase + 1 && !vcCopy.isNull() && !vcSrc.isNull()
             && qAlpha(vcCopy.pixel(0, 0)) == 255 && qAlpha(vcCopy.pixel(3, 0)) == 0
             && qAlpha(vcSrc.pixel(0, 0)) == 255 && qAlpha(vcSrc.pixel(3, 0)) == 255;
-        ST_BEGIN("lpr_via_copy");
         ST_PASS("lpr_via_copy path=%s copy=%d/%d source=%d/%d", qPrintable(vcPath),
                 qAlpha(vcCopy.pixel(0, 0)), qAlpha(vcCopy.pixel(3, 0)),
                 qAlpha(vcSrc.pixel(0, 0)), qAlpha(vcSrc.pixel(3, 0)));
         if (!vcOk) {
-            return pictura::selfTest().fail(229, "layer via copy");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode229, "layer via copy");
         }
         frame.closeDocument(vcDoc, false);
 
         // lpr_via_cut (230): Layer via Cut fills the new layer with the selected
         // pixels and clears them from the source, in one undo state.
+        ST_BEGIN("lpr_via_cut");
         const bool vcutCreated = frame.newDocument(QStringLiteral("ViaCutCtl"), 4, 4,
                                                    QStringLiteral("rgb"), 8,
                                                    QStringLiteral("white"));
         pictura::PictureView* vcutView = frame.activeView();
         if (!vcutCreated || !vcutView) {
-            return pictura::selfTest().fail(230, "via cut fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode230, "via cut fixture");
         }
         const int vcutDoc = frame.activeDocumentIndex();
         vcutView->select_rect(0, 0, 2, 4, QStringLiteral("new"), 0.0);
@@ -558,23 +559,23 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
             && vcutView->history_count() == vcutBase + 1 && !vcutCopy.isNull() && !vcutSrc.isNull()
             && qAlpha(vcutCopy.pixel(0, 0)) == 255 && qAlpha(vcutCopy.pixel(3, 0)) == 0
             && qAlpha(vcutSrc.pixel(0, 0)) == 0 && qAlpha(vcutSrc.pixel(3, 0)) == 255;
-        ST_BEGIN("lpr_via_cut");
         ST_PASS("lpr_via_cut path=%s copy=%d/%d source=%d/%d", qPrintable(vcutPath),
                 qAlpha(vcutCopy.pixel(0, 0)), qAlpha(vcutCopy.pixel(3, 0)),
                 qAlpha(vcutSrc.pixel(0, 0)), qAlpha(vcutSrc.pixel(3, 0)));
         if (!vcutOk) {
-            return pictura::selfTest().fail(230, "layer via cut");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode230, "layer via cut");
         }
         frame.closeDocument(vcutDoc, false);
 
         // lpr_via_refuse (231): with no active selection both commands return
         // empty and add no history.
+        ST_BEGIN("lpr_via_refuse");
         const bool vrCreated = frame.newDocument(QStringLiteral("ViaRefuseCtl"), 4, 4,
                                                  QStringLiteral("rgb"), 8,
                                                  QStringLiteral("white"));
         pictura::PictureView* vrView = frame.activeView();
         if (!vrCreated || !vrView) {
-            return pictura::selfTest().fail(231, "via refuse fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode231, "via refuse fixture");
         }
         const int vrDoc = frame.activeDocumentIndex();
         const int vrBase = vrView->history_count();
@@ -583,11 +584,10 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         const QString vrCut = vrView->layer_via_cut(QStringLiteral("0"));
         const bool vrOk = vrCopy.isEmpty() && vrCut.isEmpty()
             && vrView->history_count() == vrBase && vrView->layer_count() == vrRows;
-        ST_BEGIN("lpr_via_refuse");
         ST_PASS("lpr_via_refuse copy=%d cut=%d history=%d", vrCopy.isEmpty() ? 1 : 0,
                 vrCut.isEmpty() ? 1 : 0, vrView->history_count() - vrBase);
         if (!vrOk) {
-            return pictura::selfTest().fail(231, "layer via no selection");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode231, "layer via no selection");
         }
         frame.closeDocument(vrDoc, false);
 
@@ -603,12 +603,13 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         // lpr_select_similar (232): Select Similar returns every layer of the
         // active pixel kind and blend mode, topmost-first, excluding the
         // reference and the differently-blended layer. No history.
+        ST_BEGIN("lpr_select_similar");
         const bool ssCreated = frame.newDocument(QStringLiteral("SelectSimilarCtl"), 4, 4,
                                                  QStringLiteral("rgb"), 8,
                                                  QStringLiteral("white"));
         pictura::PictureView* ssView = frame.activeView();
         if (!ssCreated || !ssView) {
-            return pictura::selfTest().fail(232, "select similar fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode232, "select similar fixture");
         }
         const int ssDoc = frame.activeDocumentIndex();
         ssView->add_layer(0);
@@ -622,23 +623,23 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
             && !ssMatched.contains(QStringLiteral("2"))
             && !ssMatched.contains(QStringLiteral("3"))
             && ssView->history_count() == ssBase;
-        ST_BEGIN("lpr_select_similar");
         ST_PASS("lpr_select_similar n=%d first=%s", ssMatched.size(),
                 qPrintable(ssMatched.isEmpty() ? QString() : ssMatched.first()));
         if (!ssOk) {
-            return pictura::selfTest().fail(232, "select similar");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode232, "select similar");
         }
         frame.closeDocument(ssDoc, false);
 
         // lpr_link_linked_unlink (233): linking two layers makes Select Linked
         // return both; unlinking one drops just that membership. View-only: no
         // history.
+        ST_BEGIN("lpr_link_linked_unlink");
         const bool lkCreated = frame.newDocument(QStringLiteral("LinkCtl"), 4, 4,
                                                  QStringLiteral("rgb"), 8,
                                                  QStringLiteral("white"));
         pictura::PictureView* lkView = frame.activeView();
         if (!lkCreated || !lkView) {
-            return pictura::selfTest().fail(233, "link fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode233, "link fixture");
         }
         const int lkDoc = frame.activeDocumentIndex();
         lkView->add_layer(0);
@@ -653,23 +654,23 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
             && lkBoth.contains(QStringLiteral("0")) && lkBoth.contains(QStringLiteral("1"))
             && lkUnlinked == 1 && lkOne.isEmpty() && lkGone.isEmpty()
             && lkView->history_count() == lkBase;
-        ST_BEGIN("lpr_link_linked_unlink");
         ST_PASS("lpr_link_linked_unlink linked=%d both=%d unlinked=%d one=%d",
                 lkLinked, lkBoth.size(), lkUnlinked, lkOne.size());
         if (!lkOk) {
-            return pictura::selfTest().fail(233, "link/linked/unlink");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode233, "link/linked/unlink");
         }
         frame.closeDocument(lkDoc, false);
 
         // lpr_delete_hidden (234): only the hidden layer is removed, in one undo
         // state; a second run with nothing hidden removes nothing and records
         // no history.
+        ST_BEGIN("lpr_delete_hidden");
         const bool dhCreated = frame.newDocument(QStringLiteral("DeleteHiddenCtl"), 4, 4,
                                                  QStringLiteral("rgb"), 8,
                                                  QStringLiteral("white"));
         pictura::PictureView* dhView = frame.activeView();
         if (!dhCreated || !dhView) {
-            return pictura::selfTest().fail(234, "delete hidden fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode234, "delete hidden fixture");
         }
         const int dhDoc = frame.activeDocumentIndex();
         dhView->add_layer(0);
@@ -689,23 +690,23 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         const int dhAgain = dhView->delete_hidden_layers();
         const bool dhOk = dhRemoved == 1 && dhGone && dhRecorded && dhAgain == 0
             && dhView->history_count() == dhBase2;
-        ST_BEGIN("lpr_delete_hidden");
         ST_PASS("lpr_delete_hidden removed=%d gone=%d again=%d", dhRemoved, dhGone ? 1 : 0,
                 dhAgain);
         if (!dhOk) {
-            return pictura::selfTest().fail(234, "delete hidden layers");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode234, "delete hidden layers");
         }
         frame.closeDocument(dhDoc, false);
 
         // lpr_hide_layers (235): Hide Layers hides the selected layer in one
         // undo state and leaves the unselected layer visible; hiding an
         // already-hidden layer records nothing.
+        ST_BEGIN("lpr_hide_layers");
         const bool hlCreated = frame.newDocument(QStringLiteral("HideLayersCtl"), 4, 4,
                                                  QStringLiteral("rgb"), 8,
                                                  QStringLiteral("white"));
         pictura::PictureView* hlView = frame.activeView();
         if (!hlCreated || !hlView) {
-            return pictura::selfTest().fail(235, "hide layers fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode235, "hide layers fixture");
         }
         const int hlDoc = frame.activeDocumentIndex();
         hlView->add_layer(0);
@@ -719,22 +720,22 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         const int hlBase2 = hlView->history_count();
         const int hlAgain = hlView->hide_layers(QStringList{QStringLiteral("0")});
         const bool hlNoop = hlAgain == 0 && hlView->history_count() == hlBase2;
-        ST_BEGIN("lpr_hide_layers");
         ST_PASS("lpr_hide_layers changed=%d hidden=%d again=%d", hlChanged,
                 hlRow0 >= 0 ? (pictura::layers_api::rowAt(*hlView, hlRow0).visible ? 0 : 1) : -1, hlAgain);
         if (!hlOk || !hlNoop) {
-            return pictura::selfTest().fail(235, "hide layers");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode235, "hide layers");
         }
         frame.closeDocument(hlDoc, false);
 
         // lpr_solid_fill (236): a solid fill layer is fill content, composites
         // its color over the stack, and records one undo state.
+        ST_BEGIN("lpr_solid_fill");
         const bool sfCreated = frame.newDocument(QStringLiteral("SolidFillCtl"), 4, 4,
                                                  QStringLiteral("rgb"), 8,
                                                  QStringLiteral("white"));
         pictura::PictureView* sfView = frame.activeView();
         if (!sfCreated || !sfView) {
-            return pictura::selfTest().fail(236, "solid fill fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode236, "solid fill fixture");
         }
         const int sfDoc = frame.activeDocumentIndex();
         const int sfBase = sfView->history_count();
@@ -743,23 +744,23 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
             && sfView->layer_is_fill_content(sfPath)
             && sfView->sample_argb(0, 0) == 0xff3366ffu
             && sfView->history_count() == sfBase + 1;
-        ST_BEGIN("lpr_solid_fill");
         ST_PASS("lpr_solid_fill path=%s fill=%d pixel=%08x", qPrintable(sfPath),
                 sfView->layer_is_fill_content(sfPath) ? 1 : 0, sfView->sample_argb(0, 0));
         if (!sfOk) {
-            return pictura::selfTest().fail(236, "solid fill layer");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode236, "solid fill layer");
         }
         frame.closeDocument(sfDoc, false);
 
         // lpr_rasterize_fill (237): Rasterize Fill Content bakes the color into
         // the layer's pixels, clears the fill data, and refuses a second run
         // without adding history.
+        ST_BEGIN("lpr_rasterize_fill");
         const bool rfCreated = frame.newDocument(QStringLiteral("RasterFillCtl"), 4, 4,
                                                  QStringLiteral("rgb"), 8,
                                                  QStringLiteral("white"));
         pictura::PictureView* rfView = frame.activeView();
         if (!rfCreated || !rfView) {
-            return pictura::selfTest().fail(237, "rasterize fill fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode237, "rasterize fill fixture");
         }
         const int rfDoc = frame.activeDocumentIndex();
         const QString rfPath = rfView->add_solid_fill(0xff2244aau);
@@ -772,12 +773,11 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         const bool rfAgain = rfView->rasterize_fill_content(rfPath);
         const bool rfOk = rfRaster && rfPixel && rfBaked && rfRecorded && !rfAgain
             && rfView->history_count() == rfBase2;
-        ST_BEGIN("lpr_rasterize_fill");
         ST_PASS("lpr_rasterize_fill raster=%d pixel=%d color=%08x again=%d",
                 rfRaster ? 1 : 0, rfPixel ? 1 : 0, rfView->sample_argb(0, 0),
                 rfAgain ? 1 : 0);
         if (!rfOk) {
-            return pictura::selfTest().fail(237, "rasterize fill content");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode237, "rasterize fill content");
         }
         frame.closeDocument(rfDoc, false);
 
@@ -785,12 +785,13 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         // generic, type, or all-layers commands, all without history; the
         // Rasterize variants with no matching current layer (Shape/Video/3D)
         // stay disabled; Layer Style is style-gated and covered by Qt Test.
+        ST_BEGIN("lpr_rasterize_refuse");
         const bool rrCreated = frame.newDocument(QStringLiteral("RasterRefuseCtl"), 4, 4,
                                                  QStringLiteral("rgb"), 8,
                                                  QStringLiteral("white"));
         pictura::PictureView* rrView = frame.activeView();
         if (!rrCreated || !rrView) {
-            return pictura::selfTest().fail(238, "rasterize refuse fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode238, "rasterize refuse fixture");
         }
         const int rrDoc = frame.activeDocumentIndex();
         const int rrBase = rrView->history_count();
@@ -808,12 +809,11 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
             }
         }
         const bool rrOk = !rrPlain && rrAll == 0 && !rrType && rrHistory && kindlessDisabled;
-        ST_BEGIN("lpr_rasterize_refuse");
         ST_PASS("lpr_rasterize_refuse plain=%d all=%d type=%d history=%d kindless=%d",
                 rrPlain ? 1 : 0, rrAll, rrType ? 1 : 0, rrView->history_count() - rrBase,
                 kindlessDisabled ? 1 : 0);
         if (!rrOk) {
-            return pictura::selfTest().fail(238, "rasterize refusal");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode238, "rasterize refusal");
         }
         frame.closeDocument(rrDoc, false);
 
@@ -824,12 +824,13 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         // lpr_drop_out (239): a layer nested in a group, dropped on the empty
         // viewport (empty target, mode 0), reparents to the document root in
         // one undo step; the validator accepts the root target.
+        ST_BEGIN("lpr_drop_out");
         const bool doCreated = frame.newDocument(QStringLiteral("DropOutCtl"), 8, 8,
                                                  QStringLiteral("rgb"), 8,
                                                  QStringLiteral("white"));
         pictura::PictureView* doView = frame.activeView();
         if (!doCreated || !doView) {
-            return pictura::selfTest().fail(239, "drop out fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode239, "drop out fixture");
         }
         const int doDoc = frame.activeDocumentIndex();
         lpcPanel->setView(doView);
@@ -848,23 +849,23 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         }
         const bool doOk = doCan && doMoved && doWhere == QStringLiteral("2")
             && doView->history_count() == doBase + 1;
-        ST_BEGIN("lpr_drop_out");
         ST_PASS("lpr_drop_out can=%d moved=%d path=%s history=%d", doCan ? 1 : 0,
                 doMoved ? 1 : 0, qPrintable(doWhere), doView->history_count() - doBase);
         if (!doOk) {
-            return pictura::selfTest().fail(239, "drop out of group");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode239, "drop out of group");
         }
         frame.closeDocument(doDoc, false);
 
         // lpr_drop_rules (240): the validator refuses a drop into a non-group,
         // onto a descendant, and onto self; a refused release changes nothing
         // and adds no history state.
+        ST_BEGIN("lpr_drop_rules");
         const bool drCreated = frame.newDocument(QStringLiteral("DropRulesCtl"), 8, 8,
                                                  QStringLiteral("rgb"), 8,
                                                  QStringLiteral("white"));
         pictura::PictureView* drView = frame.activeView();
         if (!drCreated || !drView) {
-            return pictura::selfTest().fail(240, "drop rules fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode240, "drop rules fixture");
         }
         const int drDoc = frame.activeDocumentIndex();
         lpcPanel->setView(drView);
@@ -881,23 +882,23 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         const bool drOk = drDescend && drIntoPlain && drSelf && drRefused
             && drView->history_count() == drBase
             && pictura::layers_api::rowCount(*drView) == drRowCount;
-        ST_BEGIN("lpr_drop_rules");
         ST_PASS("lpr_drop_rules descend=%d intoplain=%d self=%d history=%d",
                 drDescend ? 1 : 0, drIntoPlain ? 1 : 0, drSelf ? 1 : 0,
                 drView->history_count() - drBase);
         if (!drOk) {
-            return pictura::selfTest().fail(240, "drop rules refusal");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode240, "drop rules refusal");
         }
         frame.closeDocument(drDoc, false);
 
         // lpr_group_from_layers (241): the bridge wraps two pixel layers in one
         // group carrying the dialog's name/color/blend/opacity, in one undo step.
+        ST_BEGIN("lpr_group_from_layers");
         const bool gflCreated = frame.newDocument(QStringLiteral("GroupFromLayersCtl"), 4, 4,
                                                   QStringLiteral("rgb"), 8,
                                                   QStringLiteral("white"));
         pictura::PictureView* gflView = frame.activeView();
         if (!gflCreated || !gflView) {
-            return pictura::selfTest().fail(241, "group from layers fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode241, "group from layers fixture");
         }
         const int gflDoc = frame.activeDocumentIndex();
         const QString gflA = gflView->add_layer_in(QString());
@@ -920,13 +921,12 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
             && pictura::layers_api::rowAt(*gflView, gflRow).blend == QStringLiteral("scrn")
             && pictura::layers_api::rowAt(*gflView, gflRow).opacity == 180
             && gflView->history_count() == gflBase + 1;
-        ST_BEGIN("lpr_group_from_layers");
         ST_PASS("lpr_group_from_layers path=%s name=%s mode=%s opacity=%d history=%d",
                 qPrintable(gflGroup), qPrintable(pictura::layers_api::rowAt(*gflView, gflRow).name),
                 qPrintable(pictura::layers_api::rowAt(*gflView, gflRow).blend), pictura::layers_api::rowAt(*gflView, gflRow).opacity,
                 gflView->history_count() - gflBase);
         if (!gflOk) {
-            return pictura::selfTest().fail(241, "group from layers");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode241, "group from layers");
         }
         frame.closeDocument(gflDoc, false);
 
@@ -955,12 +955,13 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
         // lpr_gradient_fill (286): adding a gradient fill layer succeeds, the
         // layer is fill content, and the composite becomes a black-to-white ramp.
         {
+            ST_BEGIN("lpr_gradient_fill");
             const bool gfCreated = frame.newDocument(QStringLiteral("GradientFillCtl"), 4, 4,
                                                      QStringLiteral("rgb"), 8,
                                                      QStringLiteral("white"));
             pictura::PictureView* gfView = frame.activeView();
             if (!gfCreated || !gfView) {
-                return pictura::selfTest().fail(286, "gradient fill fixture");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode286, "gradient fill fixture");
             }
             const int gfDoc = frame.activeDocumentIndex();
             const unsigned int gfBefore = gfView->sample_argb(0, 0);
@@ -974,12 +975,11 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
                 && ((gfRight >> 16) & 0xffu) > 192u
                 && gfLeft != gfBefore
                 && gfView->history_count() == gfBase + 1;
-            ST_BEGIN("lpr_gradient_fill");
             ST_PASS("lpr_gradient_fill path=%s fill=%d left=%08x right=%08x history=%d",
                     qPrintable(gfPath), gfView->layer_is_fill_content(gfPath) ? 1 : 0, gfLeft,
                     gfRight, gfView->history_count() - gfBase);
             if (!gfOk) {
-                return pictura::selfTest().fail(286, "gradient fill layer");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode286, "gradient fill layer");
             }
             frame.closeDocument(gfDoc, false);
         }
@@ -1000,7 +1000,7 @@ int pictura::runLayersControlsChecks(pictura::PicturaMainWindow& frame)
             ST_BEGIN("lpr_gradient_fill_menu");
             ST_PASS("lpr_gradient_fill_menu entry=%d", gfEntry ? 1 : 0);
             if (!gfEntry) {
-                return pictura::selfTest().fail(287, "gradient fill menu");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode287, "gradient fill menu");
             }
         }
 

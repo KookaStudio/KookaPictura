@@ -21,6 +21,7 @@
 
 int pictura::runAnnotationChecks(pictura::PicturaMainWindow& frame)
 {
+    ST_BEGIN("annotation_tools");
     QImage seed(40, 40, QImage::Format_RGB32);
     seed.fill(Qt::white);
     QPainter(&seed).fillRect(10, 10, 20, 20, Qt::black);
@@ -34,7 +35,7 @@ int pictura::runAnnotationChecks(pictura::PicturaMainWindow& frame)
     auto* notes = frame.findChild<pictura::NotesPanel*>();
     if (!created || !view || !canvas || !tools || !info || !notes || !seed.save(seedPath, "PNG")
         || !view->open_image(seedPath)) {
-        return pictura::selfTest().fail(535, "annotation tools fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode535, "annotation tools fixture");
     }
     const int doc = frame.activeDocumentIndex();
     const auto press = [canvas](QPointF at, Qt::KeyboardModifiers mods = Qt::NoModifier) {
@@ -140,7 +141,6 @@ int pictura::runAnnotationChecks(pictura::PicturaMainWindow& frame)
     const bool note = noteAdded && noteEdited && second && reopened && noteDeleted && notesCleared;
     frame.setActiveTool(pictura::ToolId::Move);
 
-    ST_BEGIN("annotation_tools");
     ST_PASS("annotation_tools sampler=%d/%d/%d/%d/%d/%d/%d/%d ruler=%d/%d/%d/%d/%d "
             "note=%d/%d/%d/%d/%d/%d",
             active ? 1 : 0, placed ? 1 : 0, capped ? 1 : 0, moved ? 1 : 0, altDeleted ? 1 : 0,
@@ -151,7 +151,7 @@ int pictura::runAnnotationChecks(pictura::PicturaMainWindow& frame)
     frame.closeDocument(doc, false);
     QFile::remove(seedPath);
     if (!sampler || !ruler || !note) {
-        return pictura::selfTest().fail(535, "annotation tools");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode535, "annotation tools");
     }
     return 0;
 }

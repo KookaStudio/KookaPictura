@@ -41,13 +41,14 @@ double distance(const QPointF& a, const QPointF& b)
 
 int pictura::runWorkspaceInputChecks(pictura::PicturaMainWindow& frame)
 {
+    ST_BEGIN("ws_wheel_shift");
     const bool created = frame.newDocument(QStringLiteral("WorkspaceInput"), 2000, 2000,
                                            QStringLiteral("rgb"), 8, QStringLiteral("white"));
     PictureView* view = frame.activeView();
     ImageView* canvas = frame.imageView();
     auto* tools = frame.findChild<pictura::ToolController*>();
     if (!created || !view || !canvas || !tools) {
-        return pictura::selfTest().fail(372, "workspace input fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode372, "workspace input fixture");
     }
     const int doc = frame.activeDocumentIndex();
     const bool armedWithDoc = frame.workspaceOpenArmed();
@@ -70,12 +71,11 @@ int pictura::runWorkspaceInputChecks(pictura::PicturaMainWindow& frame)
     const double shiftRatio = canvas->zoom() / baseZoom;
     const bool doubled = plainRatio > 1.0
         && std::abs(std::log(shiftRatio) - 2.0 * std::log(plainRatio)) < 1e-6;
-    ST_BEGIN("ws_wheel_shift");
     ST_PASS("ws_wheel_shift plain=%.6f shift=%.6f doubled=%d", plainRatio, shiftRatio,
             doubled ? 1 : 0);
     if (!doubled) {
         frame.closeDocument(doc, false);
-        return pictura::selfTest().fail(372, "shift must double the wheel zoom step");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode372, "shift must double the wheel zoom step");
     }
 
     // ws_wheel_alt_pan (373): Alt+vertical wheel pans only the X offset.
@@ -90,7 +90,7 @@ int pictura::runWorkspaceInputChecks(pictura::PicturaMainWindow& frame)
     ST_PASS("ws_wheel_alt_pan dx=%d dy=%d zoom=%d", altX ? 1 : 0, altY ? 1 : 0, altZ ? 1 : 0);
     if (!altX || !altY || !altZ) {
         frame.closeDocument(doc, false);
-        return pictura::selfTest().fail(373, "alt wheel must pan horizontally only");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode373, "alt wheel must pan horizontally only");
     }
 
     // ws_wheel_ctrl_alt_pan (374): Ctrl+Alt+vertical wheel pans only Y.
@@ -105,7 +105,7 @@ int pictura::runWorkspaceInputChecks(pictura::PicturaMainWindow& frame)
     ST_PASS("ws_wheel_ctrl_alt_pan dx=%d dy=%d zoom=%d", caX ? 1 : 0, caY ? 1 : 0, caZ ? 1 : 0);
     if (!caX || !caY || !caZ) {
         frame.closeDocument(doc, false);
-        return pictura::selfTest().fail(374, "ctrl+alt wheel must pan vertically only");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode374, "ctrl+alt wheel must pan vertically only");
     }
 
     // ws_wheel_side_pan (375): a horizontal side-wheel pans only X.
@@ -120,7 +120,7 @@ int pictura::runWorkspaceInputChecks(pictura::PicturaMainWindow& frame)
     ST_PASS("ws_wheel_side_pan dx=%d dy=%d zoom=%d", sideX ? 1 : 0, sideY ? 1 : 0, sideZ ? 1 : 0);
     if (!sideX || !sideY || !sideZ) {
         frame.closeDocument(doc, false);
-        return pictura::selfTest().fail(375, "side wheel must pan horizontally only");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode375, "side wheel must pan horizontally only");
     }
 
     // ws_wheel_anchor (376): a plain wheel zooms and leaves the image point
@@ -136,7 +136,7 @@ int pictura::runWorkspaceInputChecks(pictura::PicturaMainWindow& frame)
             distance(anchorBefore, imageUnder(canvas, probe)));
     if (!anchorZoomed || !anchored) {
         frame.closeDocument(doc, false);
-        return pictura::selfTest().fail(376, "wheel zoom must anchor at the cursor");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode376, "wheel zoom must anchor at the cursor");
     }
 
     // ws_zoom_click_anchor (377): a Zoom-tool click magnifies and anchors at the
@@ -157,12 +157,13 @@ int pictura::runWorkspaceInputChecks(pictura::PicturaMainWindow& frame)
             distance(clickImage, canvas->widgetToImage(clickWidget)));
     if (!clickZoomed || !clickAnchored) {
         frame.closeDocument(doc, false);
-        return pictura::selfTest().fail(377, "zoom click must anchor at the click");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode377, "zoom click must anchor at the click");
     }
 
     // ws_alt_eyedropper (378): an Alt Brush press samples the foreground with no
     // stroke and no history, leaving the Brush active.
     {
+        ST_BEGIN("ws_alt_eyedropper");
         const bool paintCreated = frame.newDocument(QStringLiteral("AltEyedropper"), 16, 16,
                                                     QStringLiteral("rgb"), 8,
                                                     QStringLiteral("white"));
@@ -170,7 +171,7 @@ int pictura::runWorkspaceInputChecks(pictura::PicturaMainWindow& frame)
         ImageView* paintCanvas = frame.imageView();
         if (!paintCreated || !paintView || !paintCanvas) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(378, "alt eyedropper fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode378, "alt eyedropper fixture");
         }
         const int paintDoc = frame.activeDocumentIndex();
         paintView->set_active_layer(QStringLiteral("0"));
@@ -188,14 +189,13 @@ int pictura::runWorkspaceInputChecks(pictura::PicturaMainWindow& frame)
         const bool noStroke = !paintView->is_painting();
         const bool noHistory = paintView->history_count() == historyBefore;
         const bool toolKept = frame.activeTool() == pictura::ToolId::Brush;
-        ST_BEGIN("ws_alt_eyedropper");
         ST_PASS("ws_alt_eyedropper dabbed=%d sampled=%02x%02x%02x stroke=%d hist=%d tool=%d",
                 dabbed ? 1 : 0, sampled.red(), sampled.green(), sampled.blue(), noStroke ? 1 : 0,
                 noHistory ? 1 : 0, toolKept ? 1 : 0);
         frame.closeDocument(paintDoc, false);
         if (!redSampled || !noStroke || !noHistory || !toolKept) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(378, "alt brush press must sample without painting");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode378, "alt brush press must sample without painting");
         }
     }
 
@@ -215,7 +215,7 @@ int pictura::runWorkspaceInputChecks(pictura::PicturaMainWindow& frame)
                 eyedropper ? 1 : 0, restored ? 1 : 0, int(altShape));
         if (!blank || !eyedropper || !restored) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(379, "alt cursor must be the eyedropper");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode379, "alt cursor must be the eyedropper");
         }
     }
 
@@ -229,7 +229,7 @@ int pictura::runWorkspaceInputChecks(pictura::PicturaMainWindow& frame)
     ST_BEGIN("ws_empty_open");
     ST_PASS("ws_empty_open with_doc=%d docs=%d", armedWithDoc ? 1 : 0, frame.documentCount());
     if (!disarmedWithDoc) {
-        return pictura::selfTest().fail(533, "an open document must disarm the workspace open gesture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode533, "an open document must disarm the workspace open gesture");
     }
     return 0;
 }

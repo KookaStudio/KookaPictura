@@ -30,6 +30,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         // tsc_ellipse (242): an Elliptical Marquee drag commits the ellipse
         // inscribed in the drag rectangle; the corner is excluded, so the
         // coverage is strictly smaller than the bounding rectangle.
+        ST_BEGIN("tsc_ellipse");
         const bool ellipseCreated = frame.newDocument(
             QStringLiteral("ToolSelection"), 16, 16, QStringLiteral("rgb"), 8,
             QStringLiteral("white"));
@@ -37,7 +38,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         pictura::ImageView* ellipseCanvas = frame.imageView();
         auto* tools = frame.findChild<pictura::ToolController*>();
         if (!ellipseCreated || !ellipseView || !ellipseCanvas || !tools) {
-            return pictura::selfTest().fail(242, "selection tool fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode242, "selection tool fixture");
         }
         const int ellipseDoc = frame.activeDocumentIndex();
         frame.setActiveTool(pictura::ToolId::EllipticalMarquee);
@@ -51,12 +52,11 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         const int ellipsePx = ellipseView->selection_count();
         ellipseView->select_rect(2, 2, 1, 1, QStringLiteral("intersect"), 0.0);
         const int ellipseCornerPx = ellipseView->selection_count();
-        ST_BEGIN("tsc_ellipse");
         ST_PASS("tsc_ellipse active=%d drawn=%d px=%d corner=%d", ellipseActive ? 1 : 0,
                 ellipseDrawn ? 1 : 0, ellipsePx, ellipseCornerPx);
         if (!ellipseActive || !ellipseDrawn || ellipsePx <= 0 || ellipsePx >= 64
             || ellipseCornerPx != 0) {
-            return pictura::selfTest().fail(242, "elliptical marquee");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode242, "elliptical marquee");
         }
 
         // tsc_feather (243): a tool-time Feather softens the committed boundary,
@@ -84,7 +84,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("tsc_feather applied=%d drawn=%d soft=%d", featherApplied ? 1 : 0,
                 featherDrawn ? 1 : 0, softPixels);
         if (!featherApplied || !featherDrawn || softPixels <= 0) {
-            return pictura::selfTest().fail(243, "marquee feather");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode243, "marquee feather");
         }
         tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setFeather(0.0);
 
@@ -112,7 +112,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("tsc_polygon drawn=%d inside=%d outside=%d", polygonDrawn ? 1 : 0,
                 polygonInside, polygonOutside);
         if (!polygonDrawn || polygonInside <= 0 || polygonOutside != 0) {
-            return pictura::selfTest().fail(245, "polygonal lasso");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode245, "polygonal lasso");
         }
 
         // tsc_polygon_cancel (246): Escape discards an in-progress path without
@@ -138,7 +138,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("tsc_polygon_cancel clean=%d cleared=%d nocommit=%d", cancelClean ? 1 : 0,
                 cancelCleared ? 1 : 0, cancelNoCommit ? 1 : 0);
         if (!cancelClean || !cancelCleared || !cancelNoCommit) {
-            return pictura::selfTest().fail(246, "polygonal lasso cancel");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode246, "polygonal lasso cancel");
         }
 
         // tsc_polygon_feather (247): a tool-time Feather on the Polygonal Lasso
@@ -166,7 +166,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("tsc_polygon_feather drawn=%d soft=%d", polygonFeatherDrawn ? 1 : 0,
                 polygonSoft);
         if (!polygonFeatherDrawn || polygonSoft <= 0) {
-            return pictura::selfTest().fail(247, "polygonal lasso feather");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode247, "polygonal lasso feather");
         }
         tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setFeather(0.0);
 
@@ -198,7 +198,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("tsc_wand_contiguous active=%d drawn=%d px=%d excl=%d", wandActive ? 1 : 0,
                 wandContigDrawn ? 1 : 0, wandContigPx, wandContigExcludes ? 1 : 0);
         if (!wandActive || !wandContigDrawn || wandContigPx <= 0 || !wandContigExcludes) {
-            return pictura::selfTest().fail(248, "magic wand contiguous");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode248, "magic wand contiguous");
         }
 
         // tsc_wand_global (249): non-contiguous mode includes the disconnected
@@ -215,7 +215,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("tsc_wand_global drawn=%d px=%d hit=%d", wandGlobalDrawn ? 1 : 0,
                 wandGlobalPx, wandGlobalHit);
         if (!wandGlobalDrawn || wandGlobalPx <= wandContigPx || wandGlobalHit <= 0) {
-            return pictura::selfTest().fail(249, "magic wand global");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode249, "magic wand global");
         }
 
         // tsc_wand_add (250): Add mode unions the wand result with the existing
@@ -236,19 +236,20 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("tsc_wand_add drawn=%d px=%d kept=%d", wandAddDrawn ? 1 : 0, wandAddPx,
                 wandAddKept);
         if (!wandAddDrawn || wandAddPx <= wandSeedPx || wandAddKept <= 0) {
-            return pictura::selfTest().fail(250, "magic wand add");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode250, "magic wand add");
         }
         tools->optionsFor<SelectionOptions>(ToolId::Marquee)->setCombineMode(pictura::SelectionMode::New);
         frame.closeDocument(ellipseDoc, false);
 
         // tsc_select_inverse (251): Inverse complements the coverage and records
         // one undo state.
+        ST_BEGIN("tsc_select_inverse");
         const bool smCreated = frame.newDocument(QStringLiteral("SelectMenu"), 16, 16,
                                                  QStringLiteral("rgb"), 8, QStringLiteral("white"));
         pictura::PictureView* smView = frame.activeView();
         auto* smPanel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
         if (!smCreated || !smView || !smPanel) {
-            return pictura::selfTest().fail(251, "select menu fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode251, "select menu fixture");
         }
         const int smDoc = frame.activeDocumentIndex();
         const bool smSeed = smView->select_rect(0, 0, 8, 16, QStringLiteral("new"), 0.0);
@@ -256,11 +257,10 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         const bool smInverted = smView->invert_selection();
         const bool smFlipped = smView->selection_coverage(0, 0) == 0
             && smView->selection_coverage(8, 0) == 255;
-        ST_BEGIN("tsc_select_inverse");
         ST_PASS("tsc_select_inverse seed=%d drawn=%d flipped=%d states=%d", smSeed ? 1 : 0,
                 smInverted ? 1 : 0, smFlipped ? 1 : 0, smView->history_count() - smBase);
         if (!smSeed || !smInverted || !smFlipped || smView->history_count() != smBase + 1) {
-            return pictura::selfTest().fail(251, "select inverse");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode251, "select inverse");
         }
 
         // tsc_select_reselect (252): Deselect stores the selection and Reselect
@@ -276,7 +276,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("tsc_select_reselect stored=%d restored=%d exact=%d states=%d", rsStored ? 1 : 0,
                 rsRestored ? 1 : 0, rsExact ? 1 : 0, smView->history_count() - rsBase);
         if (!rsStored || !rsRestored || !rsExact || smView->history_count() != rsBase + 1) {
-            return pictura::selfTest().fail(252, "select reselect");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode252, "select reselect");
         }
 
         // tsc_select_modify (253): Border empties a block's interior, Expand and
@@ -320,7 +320,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         if (!mdSeed || !mdBorder || !mdBand || !mdExpand || !mdContract || !mdSmooth || !mdFeather
             || mdSoft <= 0 || mdExpanded <= mdExpandBefore || mdContracted >= mdContractBefore
             || mdStates != 1) {
-            return pictura::selfTest().fail(253, "select modify");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode253, "select modify");
         }
 
         frame.closeDocument(smDoc, false);
@@ -330,7 +330,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
                                                  QStringLiteral("rgb"), 8, QStringLiteral("white"));
         pictura::PictureView* grView = frame.activeView();
         if (!grCreated || !grView) {
-            return pictura::selfTest().fail(254, "grow fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode254, "grow fixture");
         }
         const int grDoc = frame.activeDocumentIndex();
         const auto grPaint = [grView](qreal x, qreal y) {
@@ -355,7 +355,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
                 grView->history_count() - grBase);
         if (!grPainted || !grSeed || !grGrown || grCount <= 1 || !grExcludes
             || grView->history_count() != grBase + 1) {
-            return pictura::selfTest().fail(254, "select grow");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode254, "select grow");
         }
 
         // tsc_select_similar (255): Similar reaches the disconnected patch.
@@ -368,17 +368,18 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("tsc_select_similar seed=%d drawn=%d reached=%d states=%d", siSeed ? 1 : 0,
                 siGrown ? 1 : 0, siReaches ? 1 : 0, grView->history_count() - siBase);
         if (!siSeed || !siGrown || !siReaches || grView->history_count() != siBase + 1) {
-            return pictura::selfTest().fail(255, "select similar");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode255, "select similar");
         }
         frame.closeDocument(grDoc, false);
 
         // tsc_save_load (256): a feathered selection round-trips byte for byte
         // through an extra channel; save and load each record one state.
+        ST_BEGIN("tsc_save_load");
         const bool slCreated = frame.newDocument(QStringLiteral("SelectMenuSave"), 16, 16,
                                                  QStringLiteral("rgb"), 8, QStringLiteral("white"));
         pictura::PictureView* slView = frame.activeView();
         if (!slCreated || !slView) {
-            return pictura::selfTest().fail(256, "save fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode256, "save fixture");
         }
         const int slDoc = frame.activeDocumentIndex();
         slView->deselect();
@@ -402,13 +403,12 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
                 }
             }
         }
-        ST_BEGIN("tsc_save_load");
         ST_PASS("tsc_save_load seed=%d saved=%d channel=%d loaded=%d exact=%d states=%d",
                 slSeed ? 1 : 0, slSaved ? 1 : 0, slChannel ? 1 : 0, slLoaded ? 1 : 0,
                 slExact ? 1 : 0, slView->history_count() - slBase);
         if (!slSeed || !slSaved || !slChannel || !slLoaded || !slExact
             || slView->history_count() != slBase + 3) {
-            return pictura::selfTest().fail(256, "save load selection");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode256, "save load selection");
         }
 
         // tsc_select_refusal (257): without a selection, and for unknown names or
@@ -443,18 +443,19 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
                 rfDisabled ? 1 : 0, rfNoHistory ? 1 : 0);
         if (!rfInvert || !rfModify || !rfGrow || !rfSimilar || !rfSave || !rfLoad || !rfZero
             || !rfUnknown || !rfDisabled || !rfNoHistory) {
-            return pictura::selfTest().fail(257, "select refusal");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode257, "select refusal");
         }
         frame.closeDocument(slDoc, false);
 
         // tsc_layer_select_commands (258): All Layers selects every row,
         // Deselect Layers clears the rows, and Similar Layers matches the
         // current layer's class/blend; none records history.
+        ST_BEGIN("tsc_layer_select_commands");
         const bool lsCreated = frame.newDocument(QStringLiteral("LayerSel"), 4, 4,
                                                  QStringLiteral("rgb"), 8, QStringLiteral("white"));
         pictura::PictureView* lsView = frame.activeView();
         if (!lsCreated || !lsView) {
-            return pictura::selfTest().fail(258, "layer select fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode258, "layer select fixture");
         }
         const int lsDoc = frame.activeDocumentIndex();
         const QString lsTop = lsView->add_layer_in(QString());
@@ -473,24 +474,24 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         const bool lsMatches = lsSimilar.contains(lsMid) && !lsSimilar.contains(lsTop)
             && !lsSimilar.isEmpty();
         const bool lsNoHistory = lsView->history_count() == lsBase;
-        ST_BEGIN("tsc_layer_select_commands");
         ST_PASS("tsc_layer_select_commands rows=%d all=%d cleared=%d similar=%d nohistory=%d",
                 lsAll, lsAllSelected, lsCleared ? 1 : 0, lsMatches ? 1 : 0, lsNoHistory ? 1 : 0);
         if (lsAllSelected != lsAll || !lsCleared || !lsMatches || !lsNoHistory) {
-            return pictura::selfTest().fail(258, "layer select commands");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode258, "layer select commands");
         }
         frame.closeDocument(lsDoc, false);
 
         // tsc_selection_ants (259): a committed rectangular marquee mirrors its
         // 50%-coverage contour onto the canvas as one loop carrying the
         // rectangle corners. Drives the frame's real document/tool wiring.
+        ST_BEGIN("tsc_selection_ants");
         const bool antsCreated = frame.newDocument(QStringLiteral("SelectionAnts"), 16, 16,
                                                    QStringLiteral("rgb"), 8,
                                                    QStringLiteral("white"));
         pictura::PictureView* antsView = frame.activeView();
         pictura::ImageView* antsCanvas = frame.imageView();
         if (!antsCreated || !antsView || !antsCanvas || !tools) {
-            return pictura::selfTest().fail(259, "selection ants fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode259, "selection ants fixture");
         }
         const int antsDoc = frame.activeDocumentIndex();
         frame.setActiveTool(pictura::ToolId::Marquee);
@@ -507,12 +508,11 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         const bool antsOutline = antsCanvas->hasSelectionContourForTest()
             && antsCanvas->selectionContourLoopCountForTest() == 1;
         const bool antsCorner = antsContour.hasVertex(2, 2) && antsContour.hasVertex(10, 10);
-        ST_BEGIN("tsc_selection_ants");
         ST_PASS("tsc_selection_ants committed=%d outline=%d loops=%d corner=%d",
                 antsCommitted ? 1 : 0, antsOutline ? 1 : 0,
                 antsCanvas->selectionContourLoopCountForTest(), antsCorner ? 1 : 0);
         if (!antsCommitted || !antsOutline || !antsCorner) {
-            return pictura::selfTest().fail(259, "selection ants contour");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode259, "selection ants contour");
         }
 
         // tsc_selection_ants_clear (260): Deselect clears the canvas contour
@@ -522,7 +522,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ST_BEGIN("tsc_selection_ants_clear");
         ST_PASS("tsc_selection_ants_clear cleared=%d", antsCleared ? 1 : 0);
         if (!antsCleared) {
-            return pictura::selfTest().fail(260, "deselect clears contour");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode260, "deselect clears contour");
         }
 
         // tsc_selection_edges_toggle (261): dropping `selectionEdgesVisible`
@@ -539,7 +539,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("tsc_selection_edges_toggle hidden=%d shown=%d", antsHidden ? 1 : 0,
                 antsShown ? 1 : 0);
         if (!antsHidden || !antsShown) {
-            return pictura::selfTest().fail(261, "selection edges toggle");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode261, "selection edges toggle");
         }
 
         // tsc_marquee_preview (262): the marquee shows a live selection preview
@@ -559,7 +559,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("tsc_marquee_preview during=%d replaced=%d", previewDuring ? 1 : 0,
                 previewReplaced ? 1 : 0);
         if (!previewDuring || !previewReplaced) {
-            return pictura::selfTest().fail(262, "marquee live preview");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode262, "marquee live preview");
         }
 
         // tsc_ellipse_preview (263): the elliptical rubber band previews the
@@ -576,7 +576,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("tsc_ellipse_preview points=%d committed=%d", ellipsePoints,
                 ellipseCommitted ? 1 : 0);
         if (ellipsePoints <= 6 || !ellipseCommitted) {
-            return pictura::selfTest().fail(263, "ellipse live preview");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode263, "ellipse live preview");
         }
 
         // tsc_cursor_modifiers (264): the marquee cursor assets swap to the
@@ -605,7 +605,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
                 qPrintable(marqueeNone), qPrintable(marqueeAdd), qPrintable(marqueeRemove),
                 qPrintable(ellipseAdd), qPrintable(ellipseRemove), qPrintable(lassoShift));
         if (!cursorMods) {
-            return pictura::selfTest().fail(264, "modifier cursor mapping");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode264, "modifier cursor mapping");
         }
 
         // tsc_polygon_preview_open (265): after two Polygonal Lasso clicks the
@@ -634,7 +634,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
                 previewOpen ? 1 : 0, previewCommitted ? 1 : 0,
                 antsCanvas->selectionContourLoopCountForTest());
         if (!previewOpen || !previewCommitted) {
-            return pictura::selfTest().fail(265, "polygon open preview");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode265, "polygon open preview");
         }
 
         // tsc_lasso_hotspot (266): the lasso cursors' arrow-tip hotspot is
@@ -651,7 +651,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("tsc_lasso_hotspot hotspot=%d cursor=%d", lassoHotspot ? 1 : 0,
                 lassoCursor ? 1 : 0);
         if (!lassoHotspot || !lassoCursor) {
-            return pictura::selfTest().fail(266, "lasso hotspot");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode266, "lasso hotspot");
         }
 
         // tsc_move_selection (267): pressing inside a live selection and
@@ -681,7 +681,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
                 moveSeed ? 1 : 0, movePreviewLive ? 1 : 0, moveCommitted ? 1 : 0,
                 qPrintable(selection_api::bounds(*antsView).toString()), moveOutline ? 1 : 0);
         if (!moveSeed || !movePreviewLive || !moveCommitted || !moveBounds || !moveOutline) {
-            return pictura::selfTest().fail(267, "move selection");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode267, "move selection");
         }
 
         // tsc_move_selection_noop (268): a press inside with no drag records
@@ -698,7 +698,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("tsc_move_selection_noop seed=%d clean=%d bounds=%s", noopSeed ? 1 : 0,
                 noopClean ? 1 : 0, qPrintable(selection_api::bounds(*antsView).toString()));
         if (!noopSeed || !noopClean) {
-            return pictura::selfTest().fail(268, "move selection noop");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode268, "move selection noop");
         }
 
         // tsc_translate_clip (269): moving a selection toward the document edge
@@ -722,7 +722,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
                 clipOutline ? 1 : 0);
         if (!clipSeed || !clipCommitted || clipBounds != QStringLiteral("0 0 2 2")
             || clipPx != 4 || !clipOutline) {
-            return pictura::selfTest().fail(269, "translate clip");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode269, "translate clip");
         }
         frame.closeDocument(antsDoc, false);
 
@@ -755,7 +755,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ST_BEGIN("tsc_quick_modes");
         ST_PASS("tsc_quick_modes mapped=%d", quickModes ? 1 : 0);
         if (!quickModes) {
-            return pictura::selfTest().fail(270, "modifier combine mapping");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode270, "modifier combine mapping");
         }
 
         // tsc_marquee_geometry (271): a Normal marquee squares the drag under
@@ -782,20 +782,21 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
                 geoAlt.width(), geoAlt.height(), geoMirror.x(), geoMirror.y(), geoMirror.width(),
                 geoMirror.height(), geoBoth.x(), geoBoth.y(), geoBoth.width(), geoBoth.height());
         if (!marqueeGeometry) {
-            return pictura::selfTest().fail(271, "marquee geometry");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode271, "marquee geometry");
         }
 
         // tsc_view_preview_hooks (272): the canvas receives hover moves, and the
         // solid/open preview flags and the drag size hint round-trip. The
         // ToolSelection document was closed above, taking the old canvas with
         // it, so recreate a live fixture and rebind the view and canvas first.
+        ST_BEGIN("tsc_view_preview_hooks");
         const bool contentCreated = frame.newDocument(QStringLiteral("ToolSelection"), 16, 16,
                                                       QStringLiteral("rgb"), 8,
                                                       QStringLiteral("white"));
         ellipseView = frame.activeView();
         ellipseCanvas = frame.imageView();
         if (!contentCreated || !ellipseView || !ellipseCanvas) {
-            return pictura::selfTest().fail(272, "content move fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode272, "content move fixture");
         }
         const bool viewTracking = ellipseCanvas->hasMouseTracking();
         ellipseCanvas->setSelectionPreview({QPolygonF(QRectF(0, 0, 2, 2))}, false, true);
@@ -808,14 +809,13 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         const bool viewSizeHint = ellipseCanvas->hasDragSizeHintForTest();
         ellipseCanvas->clearDragSizeHint();
         const bool viewSizeHintCleared = !ellipseCanvas->hasDragSizeHintForTest();
-        ST_BEGIN("tsc_view_preview_hooks");
         ST_PASS("tsc_view_preview_hooks tracking=%d preview=%d cleared=%d sizehint=%d "
                 "hintcleared=%d",
                 viewTracking ? 1 : 0, viewPreview ? 1 : 0, viewPreviewCleared ? 1 : 0,
                 viewSizeHint ? 1 : 0, viewSizeHintCleared ? 1 : 0);
         if (!viewTracking || !viewPreview || !viewPreviewCleared || !viewSizeHint
             || !viewSizeHintCleared) {
-            return pictura::selfTest().fail(272, "canvas preview hooks");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode272, "canvas preview hooks");
         }
 
         // tsc_polygon_cursor_band (273): after two Polygonal Lasso clicks the
@@ -841,7 +841,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("tsc_polygon_cursor_band open=%d points=%d cancelled=%d", bandOpen ? 1 : 0,
                 bandPoints, bandCancelled ? 1 : 0);
         if (!bandOpen || bandPoints != 3 || !bandCancelled) {
-            return pictura::selfTest().fail(273, "polygon cursor band");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode273, "polygon cursor band");
         }
 
         // tsc_content_move (274): with the Move tool a drag from inside a
@@ -865,7 +865,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
                 qPrintable(selection_api::bounds(*ellipseView).toString()),
                 ellipseView->select_all_layers().size(), cmLayersKept ? 1 : 0);
         if (!cmSeed || !cmCommitted || !cmBounds || !cmLayersKept) {
-            return pictura::selfTest().fail(274, "content move");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode274, "content move");
         }
 
         // tsc_content_duplicate (275): Alt with the Move tool copies the covered
@@ -893,7 +893,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
                 ellipseView->select_all_layers().size(), dupLayerAdded ? 1 : 0,
                 dupActiveIsClone ? 1 : 0);
         if (!dupSeed || !dupCommitted || !dupLayerAdded || !dupActiveIsClone) {
-            return pictura::selfTest().fail(275, "content duplicate");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode275, "content duplicate");
         }
 
         // tsc_quick_mode_drag (276): a Shift press drives the real marquee drag
@@ -915,7 +915,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("tsc_quick_mode_drag seed=%d added=%d bounds=%s", qmSeed ? 1 : 0,
                 qmAdded ? 1 : 0, qPrintable(selection_api::bounds(*ellipseView).toString()));
         if (!qmSeed || !qmAdded) {
-            return pictura::selfTest().fail(276, "quick mode drag");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode276, "quick mode drag");
         }
 
         // lst_combine_cursor (367): with an existing selection, a combine
@@ -967,7 +967,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
                 qPrintable(hoverLassoShift), hcMoved ? 1 : 0,
                 qPrintable(selection_api::bounds(*ellipseView).toString()));
         if (!combineCursor || !hcMoved) {
-            return pictura::selfTest().fail(367, "combine hover cursor");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode367, "combine hover cursor");
         }
 
         // lst_drag_retention (368): a Shift press locks Add and the square
@@ -995,7 +995,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
                 drCommitted ? 1 : 0, qPrintable(drBounds));
         if (!drSeed || !drMode || !drMods || drCursor != QStringLiteral("tool.marquee.add")
             || !drCommitted || drBounds != QStringLiteral("2 2 9 9")) {
-            return pictura::selfTest().fail(368, "drag modifier retention");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode368, "drag modifier retention");
         }
 
         // lst_alt_pivot (369): Alt at press with no selection draws from the
@@ -1026,7 +1026,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
                 qPrintable(apBounds), apSubtract ? 1 : 0);
         if (!apNoPretoggle || !apModsAlt || !apCommitted
             || apBounds != QStringLiteral("1 3 8 4") || !apSeed || !apSubtract) {
-            return pictura::selfTest().fail(369, "alt pivot pre-toggle");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode369, "alt pivot pre-toggle");
         }
 
         // lst_lasso_modes (381): the freehand Lasso resolves Shift and the
@@ -1056,7 +1056,7 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("lst_lasso_modes seed=%d shift=%d subtract=%d", lmSeed ? 1 : 0,
                 lmShift ? 1 : 0, lmSubtract ? 1 : 0);
         if (!lmSeed || !lmShift || !lmSubtract) {
-            return pictura::selfTest().fail(381, "lasso combine mode");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode381, "lasso combine mode");
         }
 
         // lst_drag_cursor_retention (382): a combine drag that starts inside the
@@ -1082,18 +1082,19 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("lst_drag_cursor_retention seed=%d dragx=%d movex=%d retained=%d", dcSeed ? 1 : 0,
                 dcDrag.hotSpot().x(), dcMove.hotSpot().x(), dcRetained ? 1 : 0);
         if (!dcSeed || !dcRetained) {
-            return pictura::selfTest().fail(382, "combine drag cursor retention");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode382, "combine drag cursor retention");
         }
 
         // lst_nudge (370): Move-tool arrow keys translate the active layer by
         // 1 px (plain) and 10 px (Shift) through `translate_layer`, one history
         // state each; a position-locked layer refuses with no new state.
+        ST_BEGIN("lst_nudge");
         const bool nudgeCreated = frame.newDocument(
             QStringLiteral("MoveNudge"), 16, 16, QStringLiteral("rgb"), 8,
             QStringLiteral("white"));
         pictura::PictureView* nudgeView = frame.activeView();
         if (!nudgeCreated || !nudgeView) {
-            return pictura::selfTest().fail(370, "nudge fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode370, "nudge fixture");
         }
         const int nudgeDoc = frame.activeDocumentIndex();
         // A new pixel layer is empty-rect (#1208); nudge a canvas-sized
@@ -1119,12 +1120,11 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         sendArrow(Qt::Key_Left, Qt::NoModifier);
         const bool nudgeLocked = transform_api::layerRect(*nudgeView, nudgeLayer).toString() == nudgeLockedRect
             && nudgeView->history_count() == nudgeLockBase;
-        ST_BEGIN("lst_nudge");
         ST_PASS("lst_nudge one=%d ten=%d locked=%d rect=%s", nudgeOne ? 1 : 0,
                 nudgeTen ? 1 : 0, nudgeLocked ? 1 : 0, qPrintable(nudgeLockedRect));
         if (!nudgeOne || !nudgeTen || !nudgeLocked) {
             frame.closeDocument(nudgeDoc, false);
-            return pictura::selfTest().fail(370, "move nudge");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode370, "move nudge");
         }
         frame.closeDocument(nudgeDoc, false);
 
@@ -1132,13 +1132,14 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
         // at press (no history yet) and previews the clone during the drag; on
         // release the clone is the active layer with exactly one "Move Layer"
         // state, the source is unchanged, and undo removes the clone.
+        ST_BEGIN("lst_alt_clone");
         const bool cloneCreated = frame.newDocument(
             QStringLiteral("MoveClone"), 16, 16, QStringLiteral("rgb"), 8,
             QStringLiteral("white"));
         pictura::PictureView* cloneView = frame.activeView();
         pictura::ImageView* cloneCanvas = frame.imageView();
         if (!cloneCreated || !cloneView || !cloneCanvas) {
-            return pictura::selfTest().fail(371, "clone fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode371, "clone fixture");
         }
         const int cloneDoc = frame.activeDocumentIndex();
         // A new pixel layer is empty-rect (#1208); fill it so the translated
@@ -1167,13 +1168,12 @@ int pictura::runToolsSelectionChecks(pictura::PicturaMainWindow& frame)
             && transform_api::layerRect(*cloneView, clonePath).toString() == QStringLiteral("2 2 18 18");
         const bool cloneUndo = cloneView->undo()
             && cloneView->select_all_layers().size() == cloneLayers;
-        ST_BEGIN("lst_alt_clone");
         ST_PASS("lst_alt_clone preview=%d committed=%d active=%d undo=%d path=%s",
                 clonePreview ? 1 : 0, cloneCommitted ? 1 : 0, cloneActive ? 1 : 0,
                 cloneUndo ? 1 : 0, qPrintable(clonePath));
         if (!clonePreview || !cloneCommitted || !cloneActive || !cloneUndo) {
             frame.closeDocument(cloneDoc, false);
-            return pictura::selfTest().fail(371, "alt clone");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode371, "alt clone");
         }
         frame.closeDocument(cloneDoc, false);
 

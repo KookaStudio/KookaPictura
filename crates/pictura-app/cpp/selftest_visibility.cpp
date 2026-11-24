@@ -27,12 +27,13 @@ int pictura::runVisibilityChecks(pictura::PicturaMainWindow& frame)
     // the sub-second target is enforced only on the reference run so a slow
     // shared machine does not fail the check.
     {
+        ST_BEGIN("vis_toggle_region");
         const bool created = frame.newDocument(QStringLiteral("VisRegion"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(363, "visibility region fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode363, "visibility region fixture");
         }
         const int doc = frame.activeDocumentIndex();
         // Grow the canvas around the small layer so the toggle's region is the
@@ -40,7 +41,7 @@ int pictura::runVisibilityChecks(pictura::PicturaMainWindow& frame)
         const bool resized = view->resize_canvas(QStringLiteral("center"), 4000, 4000);
         if (!resized) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(363, "visibility resize fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode363, "visibility resize fixture");
         }
         view->set_active_layer(QStringLiteral("0"));
 
@@ -66,7 +67,6 @@ int pictura::runVisibilityChecks(pictura::PicturaMainWindow& frame)
         const bool oneState = view->history_count() == historyBefore + 1;
         const bool reference = qEnvironmentVariableIsSet("PICTURA_REFERENCE_RUN");
         const bool underTarget = !reference || elapsedMs < 1000;
-        ST_BEGIN("vis_toggle_region");
         ST_PASS("vis_toggle_region toggled=%d invisible=%d blits=%d changed=%d hist=%d ms=%lld "
                 "ref=%d",
                 toggled, invisible ? 1 : 0, blits, changed,
@@ -74,7 +74,7 @@ int pictura::runVisibilityChecks(pictura::PicturaMainWindow& frame)
                 reference ? 1 : 0);
         if (toggled != 1 || !invisible || !regionFired || !noFull || !oneState || !underTarget) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(363, "visibility toggle must use the region path");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode363, "visibility toggle must use the region path");
         }
         frame.closeDocument(doc, false);
     }
@@ -82,13 +82,14 @@ int pictura::runVisibilityChecks(pictura::PicturaMainWindow& frame)
     // vis_invisible_paint (364): a paint tool over an invisible active layer
     // shows the Block/Forbidden cursor, begins no stroke, and adds no history.
     {
+        ST_BEGIN("vis_invisible_paint");
         const bool created = frame.newDocument(QStringLiteral("VisPaint"), 16, 16,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         auto* tools = frame.findChild<pictura::ToolController*>();
         if (!created || !view || !tools || !frame.imageView()) {
-            return pictura::selfTest().fail(364, "invisible paint fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode364, "invisible paint fixture");
         }
         const int doc = frame.activeDocumentIndex();
         view->set_layers_visible(QStringList{QStringLiteral("0")}, false);
@@ -102,13 +103,12 @@ int pictura::runVisibilityChecks(pictura::PicturaMainWindow& frame)
                                              QStringLiteral("normal"), false, false);
         const bool noStroke = !view->is_painting();
         const bool noHistory = view->history_count() == historyBefore;
-        ST_BEGIN("vis_invisible_paint");
         ST_PASS("vis_invisible_paint forbidden=%d begun=%d stroke=%d hist=%d",
                 forbidden ? 1 : 0, begun ? 1 : 0, noStroke ? 1 : 0,
                 view->history_count() - historyBefore);
         if (!forbidden || begun || !noStroke || !noHistory) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(364, "invisible active layer must refuse paint");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode364, "invisible active layer must refuse paint");
         }
         frame.closeDocument(doc, false);
     }
@@ -116,13 +116,14 @@ int pictura::runVisibilityChecks(pictura::PicturaMainWindow& frame)
     // vis_invisible_move (365): a Move drag on an invisible active layer is
     // refused: it neither moves nor records a state, and stays invisible.
     {
+        ST_BEGIN("vis_invisible_move");
         const bool created = frame.newDocument(QStringLiteral("VisMove"), 32, 32,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         ImageView* canvas = frame.imageView();
         if (!created || !view || !canvas) {
-            return pictura::selfTest().fail(365, "invisible move fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode365, "invisible move fixture");
         }
         const int doc = frame.activeDocumentIndex();
         view->set_layers_visible(QStringList{QStringLiteral("0")}, false);
@@ -141,12 +142,11 @@ int pictura::runVisibilityChecks(pictura::PicturaMainWindow& frame)
         const bool moved = transform_api::layerRect(*view, QStringLiteral("0")).toString() != rectBefore;
         const bool stillInvisible = !view->layer_visible(0);
         const bool noState = view->history_count() == historyBefore;
-        ST_BEGIN("vis_invisible_move");
         ST_PASS("vis_invisible_move moved=%d invisible=%d hist=%d", moved ? 1 : 0,
                 stillInvisible ? 1 : 0, view->history_count() - historyBefore);
         if (moved || !stillInvisible || !noState) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(365, "invisible layer must not move");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode365, "invisible layer must not move");
         }
         frame.closeDocument(doc, false);
     }
@@ -154,12 +154,13 @@ int pictura::runVisibilityChecks(pictura::PicturaMainWindow& frame)
     // vis_invisible_select (366): selection and Layer via Copy are not refused
     // on an invisible active layer.
     {
+        ST_BEGIN("vis_invisible_select");
         const bool created = frame.newDocument(QStringLiteral("VisSelect"), 16, 16,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(366, "invisible select fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode366, "invisible select fixture");
         }
         const int doc = frame.activeDocumentIndex();
         view->set_layers_visible(QStringList{QStringLiteral("0")}, false);
@@ -171,12 +172,11 @@ int pictura::runVisibilityChecks(pictura::PicturaMainWindow& frame)
         const QString copy = view->layer_via_copy(QStringLiteral("0"));
         const bool copied = !copy.isEmpty();
         const bool oneState = view->history_count() == historyBefore + 1;
-        ST_BEGIN("vis_invisible_select");
         ST_PASS("vis_invisible_select selected=%d copied=%d hist=%d", selected ? 1 : 0,
                 copied ? 1 : 0, view->history_count() - historyBefore);
         if (!selected || !copied || !oneState) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(366, "invisible layer must allow selection/copy");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode366, "invisible layer must allow selection/copy");
         }
         frame.closeDocument(doc, false);
     }
@@ -185,13 +185,14 @@ int pictura::runVisibilityChecks(pictura::PicturaMainWindow& frame)
     // the canvas cursor without a pointer move: hidden shows the Block cursor,
     // visible restores the tool cursor.
     {
+        ST_BEGIN("vis_cursor_refresh");
         const bool created = frame.newDocument(QStringLiteral("VisCursor"), 16, 16,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         ImageView* canvas = frame.imageView();
         if (!created || !view || !canvas) {
-            return pictura::selfTest().fail(383, "visibility cursor fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode383, "visibility cursor fixture");
         }
         const int doc = frame.activeDocumentIndex();
         view->set_active_layer(QStringLiteral("0"));
@@ -201,12 +202,11 @@ int pictura::runVisibilityChecks(pictura::PicturaMainWindow& frame)
         const bool hidden = canvas->cursor().shape() == Qt::ForbiddenCursor;
         view->set_layers_visible(QStringList{QStringLiteral("0")}, true);
         const bool restored = canvas->cursor().shape() != Qt::ForbiddenCursor;
-        ST_BEGIN("vis_cursor_refresh");
         ST_PASS("vis_cursor_refresh visible=%d hidden=%d restored=%d", visible ? 1 : 0,
                 hidden ? 1 : 0, restored ? 1 : 0);
         if (!visible || !hidden || !restored) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(383, "layer visibility cursor refresh");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode383, "layer visibility cursor refresh");
         }
         frame.closeDocument(doc, false);
     }

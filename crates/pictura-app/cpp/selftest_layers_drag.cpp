@@ -40,13 +40,14 @@ int rowForPath(pictura::PictureView* view, const QString& path)
 
 int pictura::runLayersDragChecks(pictura::PicturaMainWindow& frame)
 {
+        ST_BEGIN("lpr_drag_flags");
         auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
         const bool created = frame.newDocument(QStringLiteral("Batch1Interactions"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         pictura::PictureView* view = frame.activeView();
         if (!created || !view || !panel) {
-            return pictura::selfTest().fail(299, "batch1 fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode299, "batch1 fixture");
         }
         const int doc = frame.activeDocumentIndex();
         panel->setView(view);
@@ -63,11 +64,10 @@ int pictura::runLayersDragChecks(pictura::PicturaMainWindow& frame)
         const bool flagsTop = panel->layerDragFlagsForTest(top);
         const bool flagsBottom = panel->layerDragFlagsForTest(bottom);
         const bool viewDrag = panel->treeDragEnabledForTest();
-        ST_BEGIN("lpr_drag_flags");
         ST_PASS("lpr_drag_flags top=%d bottom=%d view=%d", flagsTop ? 1 : 0,
                 flagsBottom ? 1 : 0, viewDrag ? 1 : 0);
         if (!flagsTop || !flagsBottom || !viewDrag) {
-            return pictura::selfTest().fail(299, "layer drag flags");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode299, "layer drag flags");
         }
 
         // lpr_label_tint (300): a non-None label fills the visibility column;
@@ -86,7 +86,7 @@ int pictura::runLayersDragChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("lpr_label_tint tinted=%02x%02x%02x plain=%02x%02x%02x", tinted.red(),
                 tinted.green(), tinted.blue(), plain.red(), plain.green(), plain.blue());
         if (!tintOk) {
-            return pictura::selfTest().fail(300, "color label gutter tint");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode300, "color label gutter tint");
         }
 
         // lpr_rename_name_only (302): edit triggers are off; a double-click in
@@ -98,7 +98,7 @@ int pictura::runLayersDragChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("lpr_rename_name_only triggers=%d name=%d eye=%d", triggersOff ? 1 : 0,
                 nameOpens ? 1 : 0, eyeOpens ? 1 : 0);
         if (!triggersOff || !nameOpens || eyeOpens) {
-            return pictura::selfTest().fail(302, "rename name-only");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode302, "rename name-only");
         }
 
         // lpr_ctrl_g (301): the accelerator's handler routes through the
@@ -117,7 +117,7 @@ int pictura::runLayersDragChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("lpr_ctrl_g action=%d groups=%d history=%d", groupAction ? 1 : 0,
                 groupCount(view), view->history_count() - groupBase);
         if (!groupOk) {
-            return pictura::selfTest().fail(301, "ctrl+g groups selection");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode301, "ctrl+g groups selection");
         }
 
         frame.closeDocument(doc, false);
@@ -126,13 +126,14 @@ int pictura::runLayersDragChecks(pictura::PicturaMainWindow& frame)
         // the panel tree pipeline. It lands as the group's child in one undo
         // step -- not refused, not mis-nested into a sibling.
         {
+            ST_BEGIN("lpr_drag_into_above");
             const bool created = frame.newDocument(QStringLiteral("DragInto"), 8, 8,
                                                    QStringLiteral("rgb"), 8,
                                                    QStringLiteral("white"));
             PictureView* view = frame.activeView();
             auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
             if (!created || !view || !panel) {
-                return pictura::selfTest().fail(392, "drag into group fixture");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode392, "drag into group fixture");
             }
             const int intoDoc = frame.activeDocumentIndex();
             panel->setView(view);
@@ -152,25 +153,25 @@ int pictura::runLayersDragChecks(pictura::PicturaMainWindow& frame)
                 && pictura::layers_api::rowAt(*view, groupRow).name == QStringLiteral("G")
                 && pictura::layers_api::rowCount(*view) == 3;
             const bool oneStep = view->history_count() == base + 1;
-            ST_BEGIN("lpr_drag_into_above");
             ST_PASS("lpr_drag_into_above valid=%d drop=%d nested=%d history=%d", valid ? 1 : 0,
                     dropped ? 1 : 0, nested ? 1 : 0, view->history_count() - base);
             frame.closeDocument(intoDoc, false);
             if (!valid || !dropped || !nested || !oneStep) {
-                return pictura::selfTest().fail(392, "drag layer into group");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode392, "drag layer into group");
             }
         }
 
         // lpr_drag_out (393): a group child drops back out to the root above a
         // root sibling through the panel tree pipeline, in one undo step.
         {
+            ST_BEGIN("lpr_drag_out");
             const bool created = frame.newDocument(QStringLiteral("DragOut"), 8, 8,
                                                    QStringLiteral("rgb"), 8,
                                                    QStringLiteral("white"));
             PictureView* view = frame.activeView();
             auto* panel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
             if (!created || !view || !panel) {
-                return pictura::selfTest().fail(393, "drag out of group fixture");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode393, "drag out of group fixture");
             }
             const int outDoc = frame.activeDocumentIndex();
             panel->setView(view);
@@ -188,12 +189,11 @@ int pictura::runLayersDragChecks(pictura::PicturaMainWindow& frame)
                 && pictura::layers_api::rowAt(*view, movedRow).name == QStringLiteral("C")
                 && pictura::layers_api::rowCount(*view) == 4;
             const bool oneStep = view->history_count() == base + 1;
-            ST_BEGIN("lpr_drag_out");
             ST_PASS("lpr_drag_out drop=%d left=%d root=%d history=%d", dropped ? 1 : 0,
                     leftGroup ? 1 : 0, atRoot ? 1 : 0, view->history_count() - base);
             frame.closeDocument(outDoc, false);
             if (!dropped || !leftGroup || !atRoot || !oneStep) {
-                return pictura::selfTest().fail(393, "drag layer out of group");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode393, "drag layer out of group");
             }
         }
 

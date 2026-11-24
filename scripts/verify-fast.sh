@@ -47,6 +47,9 @@ if [ "$docs_only" -eq 1 ]; then
   bash scripts/guard.sh
   echo "== archive =="
   bash scripts/check-openspec-archived.sh
+  echo "== self-test codes =="
+  python3 scripts/check-selftest-codes.py --self-test
+  python3 scripts/check-selftest-codes.py
   echo "== test plan =="
   python3 scripts/check-test-plan.py
   echo "== parity =="
@@ -161,6 +164,8 @@ start_check worktree-hook bash scripts/check-worktree-hook.sh
 start_check build-caching bash scripts/check-local-build-caching.sh
 start_check build-lock bash scripts/check-build-lock.sh
 start_check selftest-budget bash scripts/check-selftest-budget.sh
+start_check selftest-codes python3 scripts/check-selftest-codes.py --self-test
+start_check selftest-codes-tree python3 scripts/check-selftest-codes.py
 start_check archive archive_check
 start_check icon-provenance python3 scripts/check-icon-provenance.py
 start_check guard bash scripts/guard.sh --changed "$changed_file"

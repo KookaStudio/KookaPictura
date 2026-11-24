@@ -244,6 +244,7 @@ set(PICTURA_QT_TESTS
     tst_selection_move
     tst_selection_preview
     tst_selection_save_load
+    tst_selftest_report
     tst_nested_layer_target
     tst_screen_modes
     tst_dialog_chrome
@@ -393,8 +394,16 @@ set_tests_properties(tst_quick_mask PROPERTIES TIMEOUT 300)
 
 # The suites include the generated cxx-qt header, so they follow the bridge
 # stamp like the shell does.
-pictura_depend_on_bridge_stamp(${PICTURA_QT_TEST_SOURCES})
+pictura_depend_on_bridge_stamp(${PICTURA_QT_TEST_SOURCES}
+    ${CMAKE_SOURCE_DIR}/crates/pictura-app/cpp/selftest_report.cpp
+    ${CMAKE_SOURCE_DIR}/crates/pictura-app/cpp/selftest_run.cpp)
 
 target_compile_definitions(tst_preferences_store PRIVATE
     PICTURA_TEST_EXECUTABLE="$<TARGET_FILE:pictura>")
 add_dependencies(tst_preferences_store pictura)
+
+# The self-test token harness lives in the selftest sources, which are linked
+# only into the pictura executable, so this suite compiles the harness itself.
+target_sources(tst_selftest_report PRIVATE
+    ${CMAKE_SOURCE_DIR}/crates/pictura-app/cpp/selftest_report.cpp
+    ${CMAKE_SOURCE_DIR}/crates/pictura-app/cpp/selftest_run.cpp)

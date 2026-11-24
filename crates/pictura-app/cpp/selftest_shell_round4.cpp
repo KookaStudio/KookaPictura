@@ -91,7 +91,7 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
                 floated ? 1 : 0, toolWindow ? 1 : 0, minWidth ? 1 : 0, grip ? 1 : 0,
                 redocked ? 1 : 0);
         if (!(floated && toolWindow && minWidth && grip && redocked)) {
-            return pictura::selfTest().fail(420, "column float");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode420, "column float");
         }
 
         frame.applyPanelSessionForTest(pictura::SessionState{});
@@ -131,7 +131,7 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
         ST_PASS("tools_column_outer_band indicator=%d committed=%d tail=%d",
                 indicator ? 1 : 0, committed ? 1 : 0, landedAtTail ? 1 : 0);
         if (!(indicator && committed && landedAtTail)) {
-            return pictura::selfTest().fail(421, "tools outer band");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode421, "tools outer band");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump4(6);
@@ -169,7 +169,7 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
         ST_PASS("tools_column_float_tabless float=%d tabless=%d redock=%d",
                 floated ? 1 : 0, tabless ? 1 : 0, redocked ? 1 : 0);
         if (!(floated && tabless && redocked)) {
-            return pictura::selfTest().fail(422, "tools column float");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode422, "tools column float");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump4(6);
@@ -214,7 +214,7 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
         ST_PASS("tools_column_atomic panel_rejected=%d sibling=%d never_group=%d",
                 panelRejected ? 1 : 0, sibling ? 1 : 0, neverGroup ? 1 : 0);
         if (!(panelRejected && sibling && neverGroup)) {
-            return pictura::selfTest().fail(423, "tools atomic");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode423, "tools atomic");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump4(6);
@@ -251,7 +251,7 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
         ST_PASS("tools_column_boundary_rejected above=%d below=%d atomic=%d",
                 aboveRejected ? 1 : 0, belowRejected ? 1 : 0, atomic ? 1 : 0);
         if (!(aboveRejected && belowRejected && atomic)) {
-            return pictura::selfTest().fail(424, "tools boundary rejected");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode424, "tools boundary rejected");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump4(6);
@@ -289,7 +289,7 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
         ST_PASS("tools_column_toggle toggled=%d restored=%d rail=%d",
                 toggled ? 1 : 0, restored ? 1 : 0, railUnchanged ? 1 : 0);
         if (!(toggled && restored && railUnchanged)) {
-            return pictura::selfTest().fail(425, "tools column toggle");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode425, "tools column toggle");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump4(6);
@@ -376,7 +376,7 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
                 floated ? 1 : 0, panelTabbed ? 1 : 0, indicator ? 1 : 0,
                 groupMerged ? 1 : 0, oneFloat ? 1 : 0);
         if (!(floated && panelTabbed && groupMerged && oneFloat)) {
-            return pictura::selfTest().fail(426, "float tabify");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode426, "float tabify");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump4(6);
@@ -444,7 +444,7 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
                 began ? 1 : 0, dropped ? 1 : 0, merged ? 1 : 0, sourceGone ? 1 : 0,
                 oneGroup ? 1 : 0);
         if (!(began && dropped && merged && sourceGone && oneGroup)) {
-            return pictura::selfTest().fail(427, "group tabify");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode427, "group tabify");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump4(6);
@@ -499,7 +499,7 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
         ST_PASS("panel_group_outline shown=%d cleared=%d", shown ? 1 : 0,
                 cleared ? 1 : 0);
         if (!(shown && cleared)) {
-            return pictura::selfTest().fail(428, "group outline");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode428, "group outline");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump4(6);
@@ -569,7 +569,7 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
         ST_PASS("panel_group_header_background checked=%d band=%d corner_right=%d",
                 checked ? 1 : 0, bandCoversHeader ? 1 : 0, cornerAtRight ? 1 : 0);
         if (!(checked && bandCoversHeader && cornerAtRight)) {
-            return pictura::selfTest().fail(429, "header background");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode429, "header background");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump4(6);
@@ -627,7 +627,7 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
         ST_PASS("panel_drag_whole_dim began=%d dimmed=%d floated=%d restored=%d",
                 began ? 1 : 0, dimmed ? 1 : 0, floated ? 1 : 0, restored ? 1 : 0);
         if (!(began && dimmed && !floated && restored)) {
-            return pictura::selfTest().fail(430, "whole-drag dim");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode430, "whole-drag dim");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump4(6);
@@ -699,7 +699,7 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
                 torn ? 1 : 0, opened ? 1 : 0, sameGroup ? 1 : 0, active ? 1 : 0,
                 parity ? 1 : 0, restored ? 1 : 0);
         if (!(torn && opened && sameGroup && active && parity && restored)) {
-            return pictura::selfTest().fail(431, "float icon flyout");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode431, "float icon flyout");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump4(6);
@@ -785,7 +785,7 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
                 torn ? 1 : 0, began ? 1 : 0, groupDrag ? 1 : 0, noGhost ? 1 : 0,
                 intact ? 1 : 0);
         if (!(torn && began && groupDrag && noGhost && intact)) {
-            return pictura::selfTest().fail(432, "float grip drag");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode432, "float grip drag");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump4(6);
@@ -857,7 +857,7 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
         ST_PASS("float_grip_resize torn=%d resized=%d window=%d", torn ? 1 : 0,
                 resized ? 1 : 0, windowUnchanged ? 1 : 0);
         if (!(torn && resized && windowUnchanged)) {
-            return pictura::selfTest().fail(433, "float grip resize");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode433, "float grip resize");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump4(6);
@@ -899,7 +899,7 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
         ST_PASS("tools_float_fixed float=%d fixed=%d sized=%d", floated ? 1 : 0,
                 fixed ? 1 : 0, sized ? 1 : 0);
         if (!(floated && fixed && sized)) {
-            return pictura::selfTest().fail(434, "tools float fixed");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode434, "tools float fixed");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump4(6);
@@ -941,7 +941,7 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
         ST_PASS("column_float_height float=%d shorter=%d redock=%d", floated ? 1 : 0,
                 shorter ? 1 : 0, redocked ? 1 : 0);
         if (!(floated && shorter && redocked)) {
-            return pictura::selfTest().fail(435, "column float height");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode435, "column float height");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump4(6);
@@ -1008,7 +1008,7 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
                 torn ? 1 : 0, snapped ? 1 : 0, widthShrunk ? 1 : 0, expandedWidth,
                 collapsedWidth, iconWidth);
         if (!(torn && snapped && widthShrunk)) {
-            return pictura::selfTest().fail(436, "float icon width snap");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode436, "float icon width snap");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump4(6);
@@ -1080,7 +1080,7 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
                 torn ? 1 : 0, onScreen ? 1 : 0, onScreenEdge ? 1 : 0, screenBottom,
                 screenRight, floatBottom, floatRight);
         if (!(torn && onScreen && onScreenEdge)) {
-            return pictura::selfTest().fail(437, "float screen bounds");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode437, "float screen bounds");
         }
         frame.move(framePosBefore);
         pump4(6);
@@ -1131,7 +1131,7 @@ int pictura::runShellRound4Checks(pictura::PicturaMainWindow& frame)
         ST_PASS("tools_column_drag_float floated=%d indicator=%d follows=%d redocked=%d",
                 floated ? 1 : 0, indicator ? 1 : 0, follows ? 1 : 0, redocked ? 1 : 0);
         if (!(floated && indicator && follows && redocked)) {
-            return pictura::selfTest().fail(439, "tools column drag float");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode439, "tools column drag float");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump4(6);

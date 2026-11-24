@@ -39,12 +39,13 @@ using paint_fixture::Fixture;
 int pictura::runRedEyeChecks(pictura::PicturaMainWindow& frame)
 {
     // Seed: skin tone with a red 5×5 pupil at (18, 18).
+    ST_BEGIN("red_eye_tool");
     QImage seed(40, 40, QImage::Format_RGB32);
     seed.fill(QColor(215, 175, 150));
     QPainter(&seed).fillRect(18, 18, 5, 5, QColor(220, 30, 30));
     Fixture f(frame, seed, QStringLiteral("pictura_redeye_seed"));
     if (!f.ok()) {
-        return pictura::selfTest().fail(539, "red eye fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode539, "red eye fixture");
     }
 
     frame.setActiveTool(pictura::ToolId::RedEye);
@@ -65,11 +66,10 @@ int pictura::runRedEyeChecks(pictura::PicturaMainWindow& frame)
     f.drag({QPointF(5, 5)});
     const bool clickNoop = f.view->history_index() == base + 1;
 
-    ST_BEGIN("red_eye_tool");
     ST_PASS("red eye active=%d bar=%d commit=%d fixed=%d skin=%d click=%d", active ? 1 : 0,
             bar ? 1 : 0, committed ? 1 : 0, fixed ? 1 : 0, skinKept ? 1 : 0, clickNoop ? 1 : 0);
     if (!active || !bar || !committed || !fixed || !skinKept || !clickNoop) {
-        return pictura::selfTest().fail(539, "red eye tool");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode539, "red eye tool");
     }
     return 0;
 }
@@ -77,12 +77,13 @@ int pictura::runRedEyeChecks(pictura::PicturaMainWindow& frame)
 int pictura::runColorReplacementChecks(pictura::PicturaMainWindow& frame)
 {
     // Seed: a blue field (x < 30) beside a yellow one.
+    ST_BEGIN("color_replacement_tool");
     QImage seed(60, 20, QImage::Format_RGB32);
     seed.fill(QColor(220, 220, 40));
     QPainter(&seed).fillRect(0, 0, 30, 20, QColor(40, 40, 200));
     Fixture f(frame, seed, QStringLiteral("pictura_replace_seed"));
     if (!f.ok()) {
-        return pictura::selfTest().fail(540, "color replacement fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode540, "color replacement fixture");
     }
 
     frame.setActiveTool(pictura::ToolId::ColorReplacement);
@@ -115,12 +116,11 @@ int pictura::runColorReplacementChecks(pictura::PicturaMainWindow& frame)
     f.tools->setForeground(foreground);
     f.tools->optionsFor<PaintOptions>(ToolId::Brush)->setSize(size);
 
-    ST_BEGIN("color_replacement_tool");
     ST_PASS("color replacement active=%d bar=%d commit=%d recoloured=%d far=%d",
             active ? 1 : 0, bar ? 1 : 0, committed ? 1 : 0, recoloured ? 1 : 0,
             farKept ? 1 : 0);
     if (!active || !bar || !committed || !recoloured || !farKept) {
-        return pictura::selfTest().fail(540, "color replacement tool");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode540, "color replacement tool");
     }
     return 0;
 }
@@ -128,12 +128,13 @@ int pictura::runColorReplacementChecks(pictura::PicturaMainWindow& frame)
 int pictura::runMixerBrushChecks(pictura::PicturaMainWindow& frame)
 {
     // Seed: a black band (x < 20) on white.
+    ST_BEGIN("mixer_brush_tool");
     QImage seed(64, 40, QImage::Format_RGB32);
     seed.fill(Qt::white);
     QPainter(&seed).fillRect(0, 0, 20, 40, Qt::black);
     Fixture f(frame, seed, QStringLiteral("pictura_mixer_seed"));
     if (!f.ok()) {
-        return pictura::selfTest().fail(541, "mixer brush fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode541, "mixer brush fixture");
     }
 
     frame.setActiveTool(pictura::ToolId::MixerBrush);
@@ -197,12 +198,11 @@ int pictura::runMixerBrushChecks(pictura::PicturaMainWindow& frame)
     }
     f.tools->optionsFor<PaintOptions>(ToolId::Brush)->setSize(savedSize);
 
-    ST_BEGIN("mixer_brush_tool");
     ST_PASS("mixer active=%d bar=%d commit=%d smeared=%d carried=%d cleaned=%d loaded=%d",
             active ? 1 : 0, bar ? 1 : 0, committed ? 1 : 0, smeared ? 1 : 0, carried ? 1 : 0,
             cleaned ? 1 : 0, loaded ? 1 : 0);
     if (!active || !bar || !committed || !smeared || !carried || !cleaned || !loaded) {
-        return pictura::selfTest().fail(541, "mixer brush tool");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode541, "mixer brush tool");
     }
     return 0;
 }
@@ -211,6 +211,7 @@ int pictura::runMixerBrushChecks(pictura::PicturaMainWindow& frame)
 int pictura::runCloneStampChecks(pictura::PicturaMainWindow& frame)
 {
     // Seed: red (x < 10), green (10..30), white beyond.
+    ST_BEGIN("clone_stamp_tool");
     QImage seed(60, 20, QImage::Format_RGB32);
     seed.fill(Qt::white);
     QPainter painter(&seed);
@@ -219,7 +220,7 @@ int pictura::runCloneStampChecks(pictura::PicturaMainWindow& frame)
     painter.end();
     Fixture f(frame, seed, QStringLiteral("pictura_clone_seed"));
     if (!f.ok()) {
-        return pictura::selfTest().fail(542, "clone stamp fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode542, "clone stamp fixture");
     }
     frame.setActiveTool(pictura::ToolId::CloneStamp);
     const bool active = f.tools->activeTool() == pictura::ToolId::CloneStamp;
@@ -247,23 +248,23 @@ int pictura::runCloneStampChecks(pictura::PicturaMainWindow& frame)
     f.drag({QPointF(45, 10)});
     const bool aligned = f.view->sample_argb(45, 10) == QColor(30, 200, 30).rgba();
 
-    ST_BEGIN("clone_stamp_tool");
     ST_PASS("clone stamp active=%d bar=%d refused=%d commit=%d copied=%d far=%d aligned=%d",
             active ? 1 : 0, bar ? 1 : 0, refused ? 1 : 0, committed ? 1 : 0, copied ? 1 : 0,
             farKept ? 1 : 0, aligned ? 1 : 0);
     if (!active || !bar || !refused || !committed || !copied || !farKept || !aligned) {
-        return pictura::selfTest().fail(542, "clone stamp tool");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode542, "clone stamp tool");
     }
     return 0;
 }
 
 int pictura::runPatternStampChecks(pictura::PicturaMainWindow& frame)
 {
+    ST_BEGIN("pattern_stamp_tool");
     QImage seed(64, 64, QImage::Format_RGB32);
     seed.fill(Qt::white);
     Fixture f(frame, seed, QStringLiteral("pictura_pattern_seed"));
     if (!f.ok()) {
-        return pictura::selfTest().fail(543, "pattern stamp fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode543, "pattern stamp fixture");
     }
     frame.setActiveTool(pictura::ToolId::PatternStamp);
     const bool active = f.tools->activeTool() == pictura::ToolId::PatternStamp;
@@ -291,22 +292,22 @@ int pictura::runPatternStampChecks(pictura::PicturaMainWindow& frame)
     f.drag({QPointF(20, 50)});
     const bool unaligned = qRed(f.view->sample_argb(20, 50)) == 215;
 
-    ST_BEGIN("pattern_stamp_tool");
     ST_PASS("pattern stamp active=%d bar=%d commit=%d tiled=%d unaligned=%d", active ? 1 : 0,
             bar ? 1 : 0, committed ? 1 : 0, tiledOk ? 1 : 0, unaligned ? 1 : 0);
     if (!active || !bar || !committed || !tiledOk || !unaligned) {
-        return pictura::selfTest().fail(543, "pattern stamp tool");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode543, "pattern stamp tool");
     }
     return 0;
 }
 
 int pictura::runHistoryBrushChecks(pictura::PicturaMainWindow& frame)
 {
+    ST_BEGIN("history_brush_tool");
     QImage seed(40, 40, QImage::Format_RGB32);
     seed.fill(Qt::white);
     Fixture f(frame, seed, QStringLiteral("pictura_history_brush_seed"));
     if (!f.ok()) {
-        return pictura::selfTest().fail(544, "history brush fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode544, "history brush fixture");
     }
     const BrushState brush(f.tools);
     const QColor foreground = f.tools->foreground();
@@ -350,12 +351,11 @@ int pictura::runHistoryBrushChecks(pictura::PicturaMainWindow& frame)
     f.drag({QPointF(5, 20), QPointF(10, 20), QPointF(15, 20)});
     const bool repainted = chosen && f.view->sample_argb(10, 20) == QColor(Qt::black).rgba();
 
-    ST_BEGIN("history_brush_tool");
     ST_PASS("history brush painted=%d active=%d commit=%d restored=%d chosen=%d repainted=%d",
             painted ? 1 : 0, active ? 1 : 0, committed ? 1 : 0, restored ? 1 : 0,
             chosen ? 1 : 0, repainted ? 1 : 0);
     if (!painted || !active || !committed || !restored || !chosen || !repainted) {
-        return pictura::selfTest().fail(544, "history brush tool");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode544, "history brush tool");
     }
     return 0;
 }
@@ -384,11 +384,12 @@ bool clickBar(pictura::PicturaMainWindow& frame, const char* name)
 
 int pictura::runBrushPanelChecks(pictura::PicturaMainWindow& frame)
 {
+    ST_BEGIN("brush_panel");
     QImage seed(60, 40, QImage::Format_RGB32);
     seed.fill(Qt::white);
     Fixture f(frame, seed, QStringLiteral("pictura_brush_panel_seed"));
     if (!f.ok()) {
-        return pictura::selfTest().fail(545, "brush panel fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode545, "brush panel fixture");
     }
     const BrushState brush(f.tools);
     frame.setActiveTool(pictura::ToolId::CloneStamp);
@@ -427,11 +428,10 @@ int pictura::runBrushPanelChecks(pictura::PicturaMainWindow& frame)
     f.tools->setForeground(foreground);
     f.tools->optionsFor<PaintOptions>(ToolId::Brush)->setRoundness(100);
 
-    ST_BEGIN("brush_panel");
     ST_PASS("brush panel shown=%d hidden=%d wired=%d preview=%d flat=%d", shown ? 1 : 0,
             hidden ? 1 : 0, wired ? 1 : 0, previewed ? 1 : 0, flat ? 1 : 0);
     if (!shown || !hidden || !wired || !previewed || !flat) {
-        return pictura::selfTest().fail(545, "brush panel");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode545, "brush panel");
     }
     return 0;
 }
@@ -439,6 +439,7 @@ int pictura::runBrushPanelChecks(pictura::PicturaMainWindow& frame)
 int pictura::runCloneSourcePanelChecks(pictura::PicturaMainWindow& frame)
 {
     // Seed: red (x < 5), green (5..10), white beyond.
+    ST_BEGIN("clone_source_panel");
     QImage seed(60, 20, QImage::Format_RGB32);
     seed.fill(Qt::white);
     QPainter painter(&seed);
@@ -447,7 +448,7 @@ int pictura::runCloneSourcePanelChecks(pictura::PicturaMainWindow& frame)
     painter.end();
     Fixture f(frame, seed, QStringLiteral("pictura_clone_source_seed"));
     if (!f.ok()) {
-        return pictura::selfTest().fail(546, "clone source panel fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode546, "clone source panel fixture");
     }
     const BrushState brush(f.tools);
     frame.setActiveTool(pictura::ToolId::CloneStamp);
@@ -485,23 +486,23 @@ int pictura::runCloneSourcePanelChecks(pictura::PicturaMainWindow& frame)
     const bool hidden =
         clickBar(frame, "optionsToggleCloneSourcePanel") && panelVisible(frame, name) == before;
 
-    ST_BEGIN("clone_source_panel");
     ST_PASS("clone source shown=%d slots=%d flip=%d mirrored=%d offset=%d reset=%d hidden=%d",
             shown ? 1 : 0, perSlot ? 1 : 0, flipped ? 1 : 0, mirrored ? 1 : 0, offset ? 1 : 0,
             reset ? 1 : 0, hidden ? 1 : 0);
     if (!shown || !perSlot || !flipped || !mirrored || !offset || !reset || !hidden) {
-        return pictura::selfTest().fail(546, "clone source panel");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode546, "clone source panel");
     }
     return 0;
 }
 
 int pictura::runArtHistoryBrushChecks(pictura::PicturaMainWindow& frame)
 {
+    ST_BEGIN("art_history_brush_tool");
     QImage seed(60, 40, QImage::Format_RGB32);
     seed.fill(Qt::red);
     Fixture f(frame, seed, QStringLiteral("pictura_art_history_seed"));
     if (!f.ok()) {
-        return pictura::selfTest().fail(548, "art history brush fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode548, "art history brush fixture");
     }
     const BrushState brush(f.tools);
     const QColor foreground = f.tools->foreground();
@@ -553,17 +554,17 @@ int pictura::runArtHistoryBrushChecks(pictura::PicturaMainWindow& frame)
     f.tools->optionsFor<ArtHistoryGroup>(ToolId::ArtHistoryBrush)->set(options);
     f.tools->setForeground(foreground);
 
-    ST_BEGIN("art_history_brush_tool");
     ST_PASS("art history bar=%d commit=%d reddened=%d gated=%d", bar ? 1 : 0, committed ? 1 : 0,
             reddened, gated ? 1 : 0);
     if (!bar || !painted || !gated) {
-        return pictura::selfTest().fail(548, "art history brush tool");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode548, "art history brush tool");
     }
     return 0;
 }
 
 int pictura::runBrushPresetPickerChecks(pictura::PicturaMainWindow& frame)
 {
+    ST_BEGIN("brush_preset_picker");
     namespace scale = pictura::brush_size_scale;
     // The first half of the Size slider runs 1-100 px; the second climbs to 5000.
     bool mapping = scale::sizeAt(0) == 1 && scale::sizeAt(scale::kSteps / 2) == 100
@@ -581,7 +582,7 @@ int pictura::runBrushPresetPickerChecks(pictura::PicturaMainWindow& frame)
     seed.fill(Qt::white);
     Fixture f(frame, seed, QStringLiteral("pictura_brush_picker_seed"));
     if (!f.ok()) {
-        return pictura::selfTest().fail(549, "brush preset picker fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode549, "brush preset picker fixture");
     }
     const BrushState brush(f.tools);
     const int hardness = f.tools->optionsFor<PaintOptions>(ToolId::Brush)->hardness();
@@ -639,11 +640,10 @@ int pictura::runBrushPresetPickerChecks(pictura::PicturaMainWindow& frame)
     f.tools->optionsFor<PaintOptions>(ToolId::Brush)->setSpacing(spacing);
     f.tools->optionsFor<PaintOptions>(ToolId::Brush)->setDynamics(pictura::BrushDynamics{});
 
-    ST_BEGIN("brush_preset_picker");
     ST_PASS("brush preset picker mapping=%d opened=%d slider=%d preset=%d scattered=%d",
             mapping ? 1 : 0, opened ? 1 : 0, slider ? 1 : 0, preset ? 1 : 0, scattered ? 1 : 0);
     if (!mapping || !opened || !slider || !preset || !scattered) {
-        return pictura::selfTest().fail(549, "brush preset picker");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode549, "brush preset picker");
     }
     return 0;
 }

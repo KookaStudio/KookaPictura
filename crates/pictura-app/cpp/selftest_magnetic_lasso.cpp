@@ -17,6 +17,7 @@
 
 int pictura::runMagneticLassoChecks(pictura::PicturaMainWindow& frame)
 {
+    ST_BEGIN("magnetic_lasso");
     QImage seed(40, 40, QImage::Format_RGB32);
     seed.fill(Qt::white);
     QPainter(&seed).fillRect(10, 10, 20, 20, Qt::black);
@@ -28,7 +29,7 @@ int pictura::runMagneticLassoChecks(pictura::PicturaMainWindow& frame)
     auto* tools = frame.findChild<pictura::ToolController*>();
     if (!created || !view || !canvas || !tools || !seed.save(seedPath, "PNG")
         || !view->open_image(seedPath)) {
-        return pictura::selfTest().fail(530, "magnetic lasso fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode530, "magnetic lasso fixture");
     }
     const int doc = frame.activeDocumentIndex();
     frame.setActiveTool(pictura::ToolId::MagneticLasso);
@@ -127,7 +128,6 @@ int pictura::runMagneticLassoChecks(pictura::PicturaMainWindow& frame)
         && tools->optionsFor<SelectionOptions>(ToolId::Marquee)->magneticWidth() == 10;
     const bool width = up && down && fieldFollows;
 
-    ST_BEGIN("magnetic_lasso");
     ST_PASS("magnetic_lasso active=%d snapped=%d peeled=%d escaped=%d click=%d dense=%d "
             "sparse=%d width=%d",
             active ? 1 : 0, snapped ? 1 : 0, peeled ? 1 : 0, escaped ? 1 : 0,
@@ -137,7 +137,7 @@ int pictura::runMagneticLassoChecks(pictura::PicturaMainWindow& frame)
     frame.closeDocument(doc, false);
     QFile::remove(seedPath);
     if (!active || !snapped || !peeled || !escaped || !clickDeselects || !frequency || !width) {
-        return pictura::selfTest().fail(530, "magnetic lasso");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode530, "magnetic lasso");
     }
     return 0;
 }

@@ -39,12 +39,13 @@ int runLargeDocumentChecks(pictura::PicturaMainWindow& frame)
     // rebuilt, so it must be unchanged across select/invert/deselect/select-all,
     // while the selection state actually changes.
     {
+        ST_BEGIN("ldoc_selection_no_recomposite");
         const bool created = frame.newDocument(QStringLiteral("SelectRefresh"), 64, 64,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(542, "selection refresh fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode542, "selection refresh fixture");
         }
         const int doc = frame.activeDocumentIndex();
         const quint64 before = view->canvas_revision();
@@ -59,14 +60,13 @@ int runLargeDocumentChecks(pictura::PicturaMainWindow& frame)
         const quint64 after = view->canvas_revision();
         const bool noRecomposite = before == after;
 
-        ST_BEGIN("ldoc_selection_no_recomposite");
         ST_PASS("ldoc_selection_no_recomposite before=%llu after=%llu rect=%d inverted=%d "
                 "deselected=%d select_all=%d",
                 static_cast<unsigned long long>(before), static_cast<unsigned long long>(after),
                 hasRect ? 1 : 0, inverted ? 1 : 0, gone ? 1 : 0, all ? 1 : 0);
         if (!selected || !hasRect || !inverted || !gone || !all || !noRecomposite) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(542, "selection edit ran the compositor");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode542, "selection edit ran the compositor");
         }
         frame.closeDocument(doc, false);
     }
@@ -76,13 +76,14 @@ int runLargeDocumentChecks(pictura::PicturaMainWindow& frame)
     // image. Compare the crop render against the crop-disabled full-resolution
     // draw mid-stroke; they must be identical, with the stroke still active.
     {
+        ST_BEGIN("ldoc_paint_presents_from_crop");
         const bool created = frame.newDocument(QStringLiteral("PaintCrop"), 512, 512,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         ImageView* canvas = frame.imageView();
         if (!created || !view || !canvas) {
-            return pictura::selfTest().fail(543, "paint crop fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode543, "paint crop fixture");
         }
         const int doc = frame.activeDocumentIndex();
         view->set_active_layer(QStringLiteral("0"));
@@ -107,12 +108,11 @@ int runLargeDocumentChecks(pictura::PicturaMainWindow& frame)
         view->cancel_paint();
         const bool identical = sameImage(crop, full);
 
-        ST_BEGIN("ldoc_paint_presents_from_crop");
         ST_PASS("ldoc_paint_presents_from_crop begun=%d dab=%d painting=%d identical=%d",
                 begun ? 1 : 0, dabbed ? 1 : 0, painting ? 1 : 0, identical ? 1 : 0);
         if (!begun || !dabbed || !painting || !identical) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(543, "mid-stroke present did not use the crop");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode543, "mid-stroke present did not use the crop");
         }
         frame.closeDocument(doc, false);
     }

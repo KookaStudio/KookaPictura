@@ -1,53 +1,27 @@
 #pragma once
 
-// The document fixture and brush-state guard the paint-tool self-tests share.
-
-#include "frame.h"
+#include "selftest_fixture.h"
 #include "image_view.h"
 #include "tools.h"
 
 #include "api/view_bridge.h"
 
-#include <QtCore/QDir>
-#include <QtCore/QFile>
-#include <QtGui/QImage>
-
 namespace paint_fixture {
 
-// A document opened from `seed`, closed (and its PNG removed) on scope exit.
-struct Fixture {
-    pictura::PicturaMainWindow& frame;
-    QString path;
-    pictura::PictureView* view = nullptr;
-    pictura::ImageView* canvas = nullptr;
+struct Fixture : pictura::selftest_fixture::DocumentFixture {
     pictura::ToolController* tools = nullptr;
-    int doc = -1;
 
-    Fixture(pictura::PicturaMainWindow& f, const QImage& seed, const QString& name)
-        : frame(f)
-        , path(QDir::temp().filePath(name + QStringLiteral(".png")))
+    Fixture(pictura::PicturaMainWindow& frame, const QImage& seed, const QString& name)
+        : pictura::selftest_fixture::DocumentFixture(frame, seed, name)
     {
-        if (!frame.newDocument(name, seed.width(), seed.height(), QStringLiteral("rgb"), 8,
-                               QStringLiteral("white"))) {
-            return;
-        }
-        doc = frame.activeDocumentIndex();
-        pictura::PictureView* v = frame.activeView();
-        if (v && seed.save(path, "PNG") && v->open_image(path)) {
-            view = v;
-            canvas = frame.imageView();
+        if (view) {
             tools = frame.findChild<pictura::ToolController*>();
         }
     }
-    ~Fixture()
-    {
-        frame.setActiveTool(pictura::ToolId::Move);
-        if (doc >= 0) {
-            frame.closeDocument(doc, false);
-        }
-        QFile::remove(path);
-    }
-    bool ok() const { return view && canvas && tools; }
+
+    ~Fixture() { frame.setActiveTool(pictura::ToolId::Move); }
+
+    bool ok() const { return DocumentFixture::ok() && tools; }
 
     void drag(const QList<QPointF>& points, Qt::KeyboardModifiers mods = Qt::NoModifier) const
     {
@@ -60,13 +34,10 @@ struct Fixture {
 
     bool committedOnce(int base, const char* label) const
     {
-        return view->history_index() == base + 1
-            && view->history_label(base + 1) == QString::fromLatin1(label);
+        return view->history_index() == base + 1 && view->history_label(base + 1) == QString::fromLatin1(label);
     }
 };
 
-
-// Brush settings a stamp check changes, restored on scope exit.
 struct BrushState {
     pictura::ToolController* tools;
     int size;
@@ -85,8 +56,7 @@ struct BrushState {
         , flow(t->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->flow())
         , airbrush(t->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->airbrush())
         , pressureSize(t->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->pressureSize())
-        , pressureOpacity(
-              t->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->pressureOpacity())
+        , pressureOpacity(t->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->pressureOpacity())
         , pressure(t->pressure())
         , stamp(t->optionsFor<pictura::StampGroup>(pictura::ToolId::CloneStamp)->get())
     {
@@ -94,19 +64,18 @@ struct BrushState {
         tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setOpacity(100);
         tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setFlow(100);
     }
+
     ~BrushState()
     {
         tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setSize(size);
         tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setOpacity(opacity);
         tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setFlow(flow);
         tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setAirbrush(airbrush);
-        tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)
-            ->setPressureSize(pressureSize);
-        tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)
-            ->setPressureOpacity(pressureOpacity);
+        tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setPressureSize(pressureSize);
+        tools->optionsFor<pictura::PaintOptions>(pictura::ToolId::Brush)->setPressureOpacity(pressureOpacity);
         tools->setPressure(pressure);
         tools->optionsFor<pictura::StampGroup>(pictura::ToolId::CloneStamp)->set(stamp);
     }
 };
 
-} // namespace paint_fixture
+}  // namespace paint_fixture

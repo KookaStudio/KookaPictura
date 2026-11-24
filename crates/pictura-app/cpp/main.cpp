@@ -73,6 +73,7 @@
 
 #include "interop.h"
 #include "selftest.h"
+#include "selftest_report.h"
 
 int main(int argc, char* argv[])
 {
@@ -255,12 +256,11 @@ int main(int argc, char* argv[])
         selfTestStateDir.emplace();
         if (!selfTestStateDir->isValid()) {
             // Never fall back to the real store: a self-test run must not write
-            // the user's session.
-            std::fprintf(stderr,
-                         "pictura self-test: FAIL core state_home_temp_dir 199 "
-                         "cannot create the self-test state dir\n");
-            std::fflush(stderr);
-            return 199;
+            // the user's session. Report through the harness so the FAIL token
+            // and the SUMMARY counters come from one place.
+            return pictura::selfTest().failRun(
+                "state_home_temp_dir", pictura::selftest_codes::kCode199,
+                "cannot create the self-test state dir");
         }
         isolateProfile(selfTestStateDir->path());
     }
@@ -293,6 +293,12 @@ int main(int argc, char* argv[])
         if (interactiveProfile) {
             QMessageBox::warning(nullptr, QObject::tr("Preferences"),
                                  QObject::tr("The profile could not be opened. %1").arg(profileWarning));
+        }
+        if (selfTest) {
+            const int rc = pictura::selfTest().failRun(
+                "profile_open", pictura::selftest_codes::kCode555,
+                "profile could not be opened: %s", qPrintable(profileWarning));
+            return rc <= 255 ? rc : 1;
         }
         return 2;
     }
@@ -405,7 +411,10 @@ int main(int argc, char* argv[])
         const int rc = runSelfTest(app, headless, psdPath, frame, view, image,
                                    codecLoaded, gpu);
         if (rc != 0) {
-            return rc;
+            // The status cannot carry a code above 255, and a whole multiple of
+            // 256 truncates to zero. The FAIL token keeps the true code; only the
+            // status is normalized, so no failure can report success.
+            return rc <= 255 ? rc : 1;
         }
     }
 

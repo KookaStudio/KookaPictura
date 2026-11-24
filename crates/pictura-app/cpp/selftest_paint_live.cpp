@@ -59,9 +59,10 @@ int pictura::runPaintLiveChecks(pictura::PicturaMainWindow& frame)
     // the scaled cache, so at zoom < 1 it is clipped off the cache entirely
     // and at zoom > 1 it lands at the wrong place; either way this check fails.
     const double zooms[2] = {0.5, 1.5};
-    const int codes[2] = {346, 347};
+    const int codes[2] = {pictura::selftest_codes::kCode346, pictura::selftest_codes::kCode347};
     const char* names[2] = {"pp_live_visible", "pp_live_visible_zoom"};
     for (int i = 0; i < 2; ++i) {
+        ST_BEGIN(names[i]);
         const bool created = frame.newDocument(QStringLiteral("PaintLive"), 240, 240,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
@@ -95,7 +96,6 @@ int pictura::runPaintLiveChecks(pictura::PicturaMainWindow& frame)
         view->end_paint();
 
         const bool ok = begun && dabs >= 1 && visible;
-        ST_BEGIN(names[i]);
         ST_PASS("%s begun=%d dabs=%d visible=%d zoom=%.2f", names[i], begun ? 1 : 0, dabs,
                 visible ? 1 : 0, canvas->zoom());
         frame.closeDocument(doc, false);
@@ -107,12 +107,13 @@ int pictura::runPaintLiveChecks(pictura::PicturaMainWindow& frame)
     // pp_live_commit (348): several dabs record exactly one history state on
     // release, and undo restores the pre-stroke image.
     {
+        ST_BEGIN("pp_live_commit");
         const bool created = frame.newDocument(QStringLiteral("PaintCommit"), 240, 240,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(348, "paint commit fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode348, "paint commit fixture");
         }
         const int doc = frame.activeDocumentIndex();
         view->set_active_layer(QStringLiteral("0"));
@@ -133,14 +134,13 @@ int pictura::runPaintLiveChecks(pictura::PicturaMainWindow& frame)
         const QImage restored = view->image();
         const bool restoredImage = sameImage(pre, restored);
 
-        ST_BEGIN("pp_live_commit");
         ST_PASS("pp_live_commit begun=%d dabs=%d base=%d after=%d one=%d undone=%d restored=%d",
                 begun ? 1 : 0, dabs, base, after, oneState ? 1 : 0, undone ? 1 : 0,
                 restoredImage ? 1 : 0);
         const bool ok = begun && dabs >= 4 && oneState && undone && restoredImage;
         frame.closeDocument(doc, false);
         if (!ok) {
-            return pictura::selfTest().fail(348, "stroke did not commit one undoable state");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode348, "stroke did not commit one undoable state");
         }
     }
 

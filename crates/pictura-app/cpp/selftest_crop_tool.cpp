@@ -19,6 +19,7 @@
 
 int pictura::runCropToolChecks(pictura::PicturaMainWindow& frame)
 {
+    ST_BEGIN("crop_tool");
     QImage seed(40, 40, QImage::Format_RGB32);
     seed.fill(Qt::white);
     QPainter(&seed).fillRect(10, 10, 20, 20, Qt::black);
@@ -30,7 +31,7 @@ int pictura::runCropToolChecks(pictura::PicturaMainWindow& frame)
     auto* tools = frame.findChild<pictura::ToolController*>();
     if (!created || !view || !canvas || !tools || !seed.save(seedPath, "PNG")
         || !view->open_image(seedPath)) {
-        return pictura::selfTest().fail(534, "crop tool fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode534, "crop tool fixture");
     }
     const int doc = frame.activeDocumentIndex();
     const auto drag = [canvas](QPointF from, QPointF to) {
@@ -122,7 +123,6 @@ int pictura::runCropToolChecks(pictura::PicturaMainWindow& frame)
         && view->history_label(view->history_index()) == cropLabel
         && view->document_width() == 20;
 
-    ST_BEGIN("crop_tool");
     ST_PASS("crop_tool default=%d resized=%d moved=%d esc=%d cancel=%d ratio=%d deleted=%d "
             "kept=%d dblclick=%d",
             defaultBox ? 1 : 0, resized ? 1 : 0, moved ? 1 : 0, escReset ? 1 : 0,
@@ -134,7 +134,7 @@ int pictura::runCropToolChecks(pictura::PicturaMainWindow& frame)
     QFile::remove(seedPath);
     if (!defaultBox || !resized || !moved || !escReset || !cancelReset || !ratioLocked
         || !deleted || !kept || !doubleClick) {
-        return pictura::selfTest().fail(534, "crop tool");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode534, "crop tool");
     }
     return 0;
 }

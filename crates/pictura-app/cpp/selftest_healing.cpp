@@ -24,6 +24,7 @@
 int pictura::runHealingChecks(pictura::PicturaMainWindow& frame)
 {
     // Seed: a white field with a black 6×6 blemish at (17, 17).
+    ST_BEGIN("healing_tools");
     QImage seed(40, 40, QImage::Format_RGB32);
     seed.fill(Qt::white);
     QPainter(&seed).fillRect(17, 17, 6, 6, Qt::black);
@@ -36,7 +37,7 @@ int pictura::runHealingChecks(pictura::PicturaMainWindow& frame)
     auto* tools = frame.findChild<pictura::ToolController*>();
     if (!created || !view || !canvas || !tools || !seed.save(seedPath, "PNG")
         || !view->open_image(seedPath)) {
-        return pictura::selfTest().fail(536, "healing fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode536, "healing fixture");
     }
     const int doc = frame.activeDocumentIndex();
     const auto press = [canvas](QPointF at, Qt::KeyboardModifiers mods = Qt::NoModifier) {
@@ -117,7 +118,6 @@ int pictura::runHealingChecks(pictura::PicturaMainWindow& frame)
         && !pictura::isWebColor(QColor(0x12, 0x40, 0x80)) && std::abs(l) < 1e-6
         && std::abs(a) < 1e-6 && std::abs(b) < 1e-6;
 
-    ST_BEGIN("healing_tools");
     ST_PASS("healing spot=%d/%d/%d heal=%d/%d count=%d/%d/%d/%d/%d/%d/%d picker=%d", spotActive ? 1 : 0,
             committed ? 1 : 0, healed ? 1 : 0, refused ? 1 : 0, transplanted ? 1 : 0,
             countActive ? 1 : 0, bar ? 1 : 0, counted ? 1 : 0, grouped ? 1 : 0, hidden ? 1 : 0,
@@ -126,7 +126,7 @@ int pictura::runHealingChecks(pictura::PicturaMainWindow& frame)
     QFile::remove(seedPath);
     if (!spotActive || !committed || !healed || !refused || !transplanted || !countActive || !bar
         || !counted || !grouped || !hidden || !styled || !deletedGroup || !cleared || !pickerOk) {
-        return pictura::selfTest().fail(536, "healing tools");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode536, "healing tools");
     }
     return 0;
 }
@@ -134,6 +134,7 @@ int pictura::runHealingChecks(pictura::PicturaMainWindow& frame)
 int pictura::runPatchChecks(pictura::PicturaMainWindow& frame)
 {
     // Seed: a white field with a black 8×8 blemish at (6, 6).
+    ST_BEGIN("patch_tool");
     QImage seed(60, 20, QImage::Format_RGB32);
     seed.fill(Qt::white);
     QPainter(&seed).fillRect(6, 6, 8, 8, Qt::black);
@@ -146,7 +147,7 @@ int pictura::runPatchChecks(pictura::PicturaMainWindow& frame)
     auto* tools = frame.findChild<pictura::ToolController*>();
     if (!created || !view || !canvas || !tools || !seed.save(seedPath, "PNG")
         || !view->open_image(seedPath)) {
-        return pictura::selfTest().fail(537, "patch fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode537, "patch fixture");
     }
     const int doc = frame.activeDocumentIndex();
     const auto drag = [canvas](const QList<QPointF>& path) {
@@ -195,14 +196,13 @@ int pictura::runPatchChecks(pictura::PicturaMainWindow& frame)
     const bool clickNoop = view->history_index() == base + 1;
     frame.setActiveTool(pictura::ToolId::Move);
 
-    ST_BEGIN("patch_tool");
     ST_PASS("patch active=%d arrow=%d bar=%d outline=%d commit=%d patched=%d click=%d",
             active ? 1 : 0, arrow ? 1 : 0, bar ? 1 : 0, outlined ? 1 : 0, committed ? 1 : 0, patched ? 1 : 0,
             clickNoop ? 1 : 0);
     frame.closeDocument(doc, false);
     QFile::remove(seedPath);
     if (!active || !arrow || !bar || !outlined || !committed || !patched || !clickNoop) {
-        return pictura::selfTest().fail(537, "patch tool");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode537, "patch tool");
     }
     return 0;
 }
@@ -210,6 +210,7 @@ int pictura::runPatchChecks(pictura::PicturaMainWindow& frame)
 int pictura::runContentAwareMoveChecks(pictura::PicturaMainWindow& frame)
 {
     // Seed: a white field with a black 8×8 subject at (6, 6).
+    ST_BEGIN("content_aware_move");
     QImage seed(60, 20, QImage::Format_RGB32);
     seed.fill(Qt::white);
     QPainter(&seed).fillRect(6, 6, 8, 8, Qt::black);
@@ -222,7 +223,7 @@ int pictura::runContentAwareMoveChecks(pictura::PicturaMainWindow& frame)
     auto* tools = frame.findChild<pictura::ToolController*>();
     if (!created || !view || !canvas || !tools || !seed.save(seedPath, "PNG")
         || !view->open_image(seedPath)) {
-        return pictura::selfTest().fail(538, "content-aware move fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode538, "content-aware move fixture");
     }
     const int doc = frame.activeDocumentIndex();
     const auto drag = [canvas](const QList<QPointF>& path) {
@@ -268,14 +269,13 @@ int pictura::runContentAwareMoveChecks(pictura::PicturaMainWindow& frame)
         view->selection_coverage(40, 10) > 0 && view->selection_coverage(10, 10) == 0;
     frame.setActiveTool(pictura::ToolId::Move);
 
-    ST_BEGIN("content_aware_move");
     ST_PASS("cam active=%d arrow=%d bar=%d outline=%d commit=%d moved=%d follow=%d",
             active ? 1 : 0, arrow ? 1 : 0, bar ? 1 : 0, outlined ? 1 : 0, committed ? 1 : 0,
             moved ? 1 : 0, followed ? 1 : 0);
     frame.closeDocument(doc, false);
     QFile::remove(seedPath);
     if (!active || !arrow || !bar || !outlined || !committed || !moved || !followed) {
-        return pictura::selfTest().fail(538, "content-aware move");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode538, "content-aware move");
     }
     return 0;
 }

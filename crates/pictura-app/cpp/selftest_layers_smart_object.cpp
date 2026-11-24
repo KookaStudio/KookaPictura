@@ -33,12 +33,13 @@ int pictura::runLayersSmartObjectConvertChecks(pictura::PicturaMainWindow& frame
     // authors an embedded smart object while keeping its raster proxy, so
     // the composite is unchanged and the object survives save→load; a group
     // refuses without history.
+    ST_BEGIN("lpr_smart_object_convert");
     const bool socCreated = frame.newDocument(QStringLiteral("SmartObjectCtl"), 4, 4,
                                               QStringLiteral("rgb"), 8,
                                               QStringLiteral("white"));
     pictura::PictureView* socView = frame.activeView();
     if (!socCreated || !socView) {
-        return pictura::selfTest().fail(277, "smart object fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode277, "smart object fixture");
     }
     const int socDoc = frame.activeDocumentIndex();
     const QString socPath = socView->add_solid_fill(0xff2244aau);
@@ -71,14 +72,13 @@ int pictura::runLayersSmartObjectConvertChecks(pictura::PicturaMainWindow& frame
     const bool socOk = socRaster && socCan && socConverted && socProxy && socRecorded
         && socEmbedded && socRefGroup && socRefHistory && socSaved
         && socRoundTrip;
-    ST_BEGIN("lpr_smart_object_convert");
     ST_PASS("lpr_smart_object_convert raster=%d can=%d convert=%d state=%s proxy=%d "
             "history=%d group=%d saved=%d reload=%s",
             socRaster ? 1 : 0, socCan ? 1 : 0, socConverted ? 1 : 0, qPrintable(socState),
             socProxy ? 1 : 0, socRecorded ? 1 : 0, socRefGroup ? 1 : 0,
             socSaved ? 1 : 0, qPrintable(socReloadState));
     if (!socOk) {
-        return pictura::selfTest().fail(277, "smart object convert");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode277, "smart object convert");
     }
     frame.closeDocument(socReloadDoc, false);
     frame.closeDocument(socDoc, false);
@@ -91,12 +91,13 @@ int pictura::runLayersSmartObjectRasterizeChecks(pictura::PicturaMainWindow& fra
     // pixel layer restores a plain pixel layer with the same composite, no
     // smart object on save→load, and refuses a non-smart layer without a
     // history state.
+    ST_BEGIN("lpr_smart_object_rasterize");
     const bool rosCreated = frame.newDocument(QStringLiteral("SmartObjectRasterCtl"), 4, 4,
                                               QStringLiteral("rgb"), 8,
                                               QStringLiteral("white"));
     pictura::PictureView* rosView = frame.activeView();
     if (!rosCreated || !rosView) {
-        return pictura::selfTest().fail(278, "smart object rasterize fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode278, "smart object rasterize fixture");
     }
     const int rosDoc = frame.activeDocumentIndex();
     const QString rosPath = rosView->add_solid_fill(0xff2244aau);
@@ -126,7 +127,6 @@ int pictura::runLayersSmartObjectRasterizeChecks(pictura::PicturaMainWindow& fra
     const bool rosOk = rosRaster && rosConverted && rosCanRaster && rosRasterized
         && rosBefore == rosAfterConvert && rosBefore == rosAfterRaster && rosState.isEmpty()
         && rosRecorded && rosPixel && rosRefuse && rosRefuseHistory && rosSaved && rosRoundTrip;
-    ST_BEGIN("lpr_smart_object_rasterize");
     ST_PASS("lpr_smart_object_rasterize raster=%d convert=%d can=%d rasterize=%d proxy=%d "
             "state=%s history=%d pixel=%d refuse=%d saved=%d reload=%s",
             rosRaster ? 1 : 0, rosConverted ? 1 : 0, rosCanRaster ? 1 : 0,
@@ -134,7 +134,7 @@ int pictura::runLayersSmartObjectRasterizeChecks(pictura::PicturaMainWindow& fra
             rosRecorded ? 1 : 0, rosPixel ? 1 : 0, rosRefuse ? 1 : 0, rosSaved ? 1 : 0,
             qPrintable(rosReloadState));
     if (!rosOk) {
-        return pictura::selfTest().fail(278, "smart object rasterize");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode278, "smart object rasterize");
     }
     frame.closeDocument(rosReloadDoc, false);
     frame.closeDocument(rosDoc, false);
@@ -146,12 +146,13 @@ int pictura::runLayersPlaceSmartObjectChecks(pictura::PicturaMainWindow& frame)
     // lpr_place_smart_object (279): placing a PSD file appends a channel-less
     // embedded smart-object layer that renders the source, in one undo state;
     // a malformed file refuses without changing the document.
+    ST_BEGIN("lpr_place_smart_object");
     const bool plSrcCreated = frame.newDocument(QStringLiteral("PlaceSource"), 4, 4,
                                                 QStringLiteral("rgb"), 8,
                                                 QStringLiteral("white"));
     pictura::PictureView* plSrcView = frame.activeView();
     if (!plSrcCreated || !plSrcView) {
-        return pictura::selfTest().fail(279, "place source fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode279, "place source fixture");
     }
     const int plSrcDoc = frame.activeDocumentIndex();
     const QString plSourcePath =
@@ -164,7 +165,7 @@ int pictura::runLayersPlaceSmartObjectChecks(pictura::PicturaMainWindow& frame)
                                              QStringLiteral("transparent"));
     pictura::PictureView* plView = frame.activeView();
     if (!plCreated || !plView) {
-        return pictura::selfTest().fail(279, "place fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode279, "place fixture");
     }
     const int plDoc = frame.activeDocumentIndex();
     const int plBase = plView->history_count();
@@ -188,12 +189,11 @@ int pictura::runLayersPlaceSmartObjectChecks(pictura::PicturaMainWindow& frame)
     const bool plRefusedOk = plRefused.isEmpty()
         && plView->history_count() == plBadBase
         && pictura::layers_api::rowCount(*plView) == plRows + 1;
-    ST_BEGIN("lpr_place_smart_object");
     ST_PASS("lpr_place_smart_object saved=%d path=%s pixel=%08x before=%08x refuse=%d",
             plSourceSaved ? 1 : 0, qPrintable(plPath), plView->sample_argb(0, 0), plBefore,
             plRefusedOk ? 1 : 0);
     if (!plSourceSaved || !plPlaced || !plRefusedOk) {
-        return pictura::selfTest().fail(279, "place smart object");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode279, "place smart object");
     }
     QFile::remove(plSourcePath);
     QFile::remove(plBadPath);
@@ -206,16 +206,17 @@ int pictura::runLayersSmartObjectReplaceChecks(pictura::PicturaMainWindow& frame
     // lpr_smart_object_replace (280): replacing a smart object's embedded
     // contents swaps the composite to the new source in one "Replace Contents"
     // history state; a malformed file refuses without adding a state.
+    ST_BEGIN("lpr_smart_object_replace");
     frame.newDocument(QStringLiteral("ReplaceSource"), 2, 2, QStringLiteral("rgb"), 8, QStringLiteral("white"));
     pictura::PictureView* rpSrcView = frame.activeView();
-    if (!rpSrcView) { return pictura::selfTest().fail(280, "replace source fixture"); }
+    if (!rpSrcView) { return pictura::selfTest().fail(pictura::selftest_codes::kCode280, "replace source fixture"); }
     const QString rpSource = QDir::tempPath() + QStringLiteral("/kooka-pictura-replace-source.psd");
     rpSrcView->rasterize_fill_content(rpSrcView->add_solid_fill(0xff22cc44u));
     const bool rpSaved = frame.saveActiveAs(rpSource);
     frame.closeDocument(frame.activeDocumentIndex(), false);
     frame.newDocument(QStringLiteral("SmartObjectReplaceCtl"), 4, 4, QStringLiteral("rgb"), 8, QStringLiteral("white"));
     pictura::PictureView* rpView = frame.activeView();
-    if (!rpView) { return pictura::selfTest().fail(280, "replace fixture"); }
+    if (!rpView) { return pictura::selfTest().fail(pictura::selftest_codes::kCode280, "replace fixture"); }
     const int rpDoc = frame.activeDocumentIndex();
     const QString rpPath = rpView->add_solid_fill(0xff2244aau);
     rpView->rasterize_fill_content(rpPath);
@@ -233,11 +234,10 @@ int pictura::runLayersSmartObjectReplaceChecks(pictura::PicturaMainWindow& frame
     const int rpBadBase = rpView->history_count();
     const bool rpRefused = !rpView->replace_smart_object_contents(rpPath, rpBad) && rpView->history_count() == rpBadBase;
     const bool rpOk = rpSaved && rpCan && rpReplaced && rpChanged && rpView->history_count() == rpBase + 1 && rpSmart && rpLabelOk && rpRefused;
-    ST_BEGIN("lpr_smart_object_replace");
     ST_PASS("lpr_smart_object_replace can=%d replace=%d pixel=%08x before=%08x state=%s history=%d smart=%d refuse=%d",
             rpCan ? 1 : 0, rpReplaced ? 1 : 0, rpView->sample_argb(0, 0), rpBefore, qPrintable(rpState),
             rpView->history_count() - rpBase, rpSmart ? 1 : 0, rpRefused ? 1 : 0);
-    if (!rpOk) { return pictura::selfTest().fail(280, "replace smart object"); }
+    if (!rpOk) { return pictura::selfTest().fail(pictura::selftest_codes::kCode280, "replace smart object"); }
     QFile::remove(rpSource);
     QFile::remove(rpBad);
     frame.closeDocument(rpDoc, false);
@@ -250,12 +250,13 @@ int pictura::runLayersOpenSmartObjectChecks(pictura::PicturaMainWindow& frame)
     // adds one untitled tab holding exactly one embedded smart-object layer
     // whose composite is the source colour, in one "Open As Smart Object"
     // history state; a malformed file refuses and adds no tab.
+    ST_BEGIN("lpr_open_as_smart_object");
     const bool ossSourceCreated = frame.newDocument(QStringLiteral("OpenSmartSource"), 4, 4,
                                                     QStringLiteral("rgb"), 8,
                                                     QStringLiteral("white"));
     pictura::PictureView* ossSrcView = frame.activeView();
     if (!ossSourceCreated || !ossSrcView) {
-        return pictura::selfTest().fail(281, "open smart object source fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode281, "open smart object source fixture");
     }
     ossSrcView->rasterize_fill_content(ossSrcView->add_solid_fill(0xff2244aau));
     const QString ossSourcePath =
@@ -290,7 +291,6 @@ int pictura::runLayersOpenSmartObjectChecks(pictura::PicturaMainWindow& frame)
 
     const bool ossOk = ossSourceSaved && ossAdded && ossUntitled && ossOneLayer && ossSmart
         && ossPixel && ossHistory && ossRefused && ossNoTab;
-    ST_BEGIN("lpr_open_as_smart_object");
     ST_PASS("lpr_open_as_smart_object opened=%d added=%d untitled=%d layers=%d state=%s "
             "pixel=%08x history=%d refused=%d notab=%d",
             ossOpened ? 1 : 0, ossAdded ? 1 : 0, ossUntitled ? 1 : 0,
@@ -298,7 +298,7 @@ int pictura::runLayersOpenSmartObjectChecks(pictura::PicturaMainWindow& frame)
             ossView ? ossView->sample_argb(0, 0) : 0, ossView ? ossView->history_count() : -1,
             ossRefused ? 1 : 0, ossNoTab ? 1 : 0);
     if (!ossOk) {
-        return pictura::selfTest().fail(281, "open as smart object");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode281, "open as smart object");
     }
     QFile::remove(ossSourcePath);
     QFile::remove(ossBadPath);
@@ -311,12 +311,13 @@ int pictura::runLayersExportSmartObjectChecks(pictura::PicturaMainWindow& frame)
     // lpr_export_smart_object_contents (282): exporting a smart object's
     // embedded source writes the payload bytes to the chosen file and adds no
     // history state; a non-smart layer refuses and writes nothing.
+    ST_BEGIN("lpr_export_smart_object_contents");
     const bool expCreated = frame.newDocument(QStringLiteral("ExportSmartCtl"), 4, 4,
                                               QStringLiteral("rgb"), 8,
                                               QStringLiteral("white"));
     pictura::PictureView* expView = frame.activeView();
     if (!expCreated || !expView) {
-        return pictura::selfTest().fail(282, "export smart object fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode282, "export smart object fixture");
     }
     const int expDoc = frame.activeDocumentIndex();
     const QString expPath = expView->add_solid_fill(0xff2244aau);
@@ -345,14 +346,13 @@ int pictura::runLayersExportSmartObjectChecks(pictura::PicturaMainWindow& frame)
 
     const bool expOk = expConverted && expCan && expExported && expPsd && expHistory
         && expPlainCan && expRefused;
-    ST_BEGIN("lpr_export_smart_object_contents");
     ST_PASS("lpr_export_smart_object_contents convert=%d can=%d export=%d psd=%d bytes=%d "
             "history=%d plain=%d refuse=%d",
             expConverted ? 1 : 0, expCan ? 1 : 0, expExported ? 1 : 0, expPsd ? 1 : 0,
             expBytes.size(), expHistoryDelta, expPlainCan ? 1 : 0,
             expRefused ? 1 : 0);
     if (!expOk) {
-        return pictura::selfTest().fail(282, "export smart object contents");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode282, "export smart object contents");
     }
     QFile::remove(expDest);
     QFile::remove(expPlainDest);
@@ -368,12 +368,13 @@ int pictura::runLayersEditSmartObjectChecks(pictura::PicturaMainWindow& frame)
     // "Edit Contents" history state and leaves the editor open and clean;
     // discarding a second editor leaves the origin unchanged; a non-editable
     // target refuses and adds no tab.
+    ST_BEGIN("lpr_edit_smart_object_contents");
     const bool editCreated = frame.newDocument(QStringLiteral("EditSmartCtl"), 4, 4,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
     pictura::PictureView* editView = frame.activeView();
     if (!editCreated || !editView) {
-        return pictura::selfTest().fail(288, "edit smart object fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode288, "edit smart object fixture");
     }
     const int editOriginDoc = frame.activeDocumentIndex();
     const QString editPath = editView->add_solid_fill(0xff2244aau);
@@ -431,7 +432,6 @@ int pictura::runLayersEditSmartObjectChecks(pictura::PicturaMainWindow& frame)
         && editDecoded && editOriginUntouched && editModified && editSaved && editCommitted
         && editOneState && editLabel && editClean && editStillOpen && editDiscarded
         && editDiscardNoop && editPlainCan && editRefused && editNoTab;
-    ST_BEGIN("lpr_edit_smart_object_contents");
     ST_PASS("lpr_edit_smart_object_contents can=%d open=%d added=%d untitled=%d decoded=%d "
             "origin=%d saved=%d pixel=%08x state=%d label=%s clean=%d discard=%d plain=%d "
             "refuse=%d notab=%d",
@@ -442,7 +442,7 @@ int pictura::runLayersEditSmartObjectChecks(pictura::PicturaMainWindow& frame)
             editDiscardNoop ? 1 : 0, editPlainCan ? 1 : 0, editRefused ? 1 : 0,
             editNoTab ? 1 : 0);
     if (!editOk) {
-        return pictura::selfTest().fail(288, "edit smart object contents");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode288, "edit smart object contents");
     }
     frame.closeDocument(editDocsBase, false);
     frame.closeDocument(editOriginDoc, false);
@@ -454,12 +454,13 @@ int pictura::runLayersEditSmartObjectSessionChecks(pictura::PicturaMainWindow& f
     // lpr_edit_smart_object_session (289): closing an Edit Contents editor
     // removes its session and temporary file; closing the origin first drops the
     // session temp and leaves the orphaned editor open as an untitled tab.
+    ST_BEGIN("lpr_edit_smart_object_session");
     const bool sesCreated = frame.newDocument(QStringLiteral("EditSessionCtl"), 4, 4,
                                               QStringLiteral("rgb"), 8,
                                               QStringLiteral("white"));
     pictura::PictureView* sesOrigin = frame.activeView();
     if (!sesCreated || !sesOrigin) {
-        return pictura::selfTest().fail(289, "edit session fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode289, "edit session fixture");
     }
     const int sesOriginDoc = frame.activeDocumentIndex();
     const QString sesPath = sesOrigin->add_solid_fill(0xff2244aau);
@@ -497,7 +498,6 @@ int pictura::runLayersEditSmartObjectSessionChecks(pictura::PicturaMainWindow& f
     const bool sesOk = sesConverted && sesOpened && sesTempLive && sesClosed && sesTempGone
         && sesDocsBack && sesOpened2 && sesOrphanUntitled && sesOrphanTempLive
         && sesOriginClosed && sesOrphanKept && sesOrphanTempGone && sesOrphanClosed;
-    ST_BEGIN("lpr_edit_smart_object_session");
     ST_PASS("lpr_edit_smart_object_session convert=%d open=%d temp=%d closed=%d tempgone=%d "
             "docsback=%d open2=%d untitled=%d originclosed=%d kept=%d orphantempgone=%d "
             "closed2=%d",
@@ -506,7 +506,7 @@ int pictura::runLayersEditSmartObjectSessionChecks(pictura::PicturaMainWindow& f
             sesOrphanUntitled ? 1 : 0, sesOriginClosed ? 1 : 0, sesOrphanKept ? 1 : 0,
             sesOrphanTempGone ? 1 : 0, sesOrphanClosed ? 1 : 0);
     if (!sesOk) {
-        return pictura::selfTest().fail(289, "edit smart object session");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode289, "edit smart object session");
     }
     return 0;
 }
@@ -517,12 +517,13 @@ int pictura::runImageImportChecks(pictura::PicturaMainWindow& frame)
     // untitled one-layer document in exactly one "Open" state; Place appends it
     // as a topmost smart-object layer in exactly one "Place" state; an
     // unrecognized and an over-budget file refuse without adding a state.
+    ST_BEGIN("lpr_image_import");
     const QString pngPath = QDir::tempPath() + QStringLiteral("/kooka-pictura-import.png");
     QImage png(2, 2, QImage::Format_RGBA8888);
     png.fill(QColor(255, 0, 0, 255));
     const bool pngSaved = png.save(pngPath, "PNG");
     if (!pngSaved) {
-        return pictura::selfTest().fail(290, "image import fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode290, "image import fixture");
     }
 
     const int openDocsBase = frame.documentCount();
@@ -614,7 +615,6 @@ int pictura::runImageImportChecks(pictura::PicturaMainWindow& frame)
         && openRecordedPath && openClean && openBackground && openLocked && placePlaced && badOpen
         && badOpenDocs && badPlace
         && bigOpen && bigOpenDocs && bigPlace && ppmOk && routing;
-    ST_BEGIN("lpr_image_import");
     ST_PASS("lpr_image_import saved=%d open=%d size=%dx%d layers=%d pixel=%08x history=%s "
             "recorded=%d clean=%d background=%d locked=%d place=%s placed=%d bad=%d big=%d "
             "ppm=%d routing=%d",
@@ -626,7 +626,7 @@ int pictura::runImageImportChecks(pictura::PicturaMainWindow& frame)
             (badOpen && badOpenDocs && badPlace) ? 1 : 0,
             (bigOpen && bigOpenDocs && bigPlace) ? 1 : 0, ppmOk ? 1 : 0, routing ? 1 : 0);
     if (!ok) {
-        return pictura::selfTest().fail(290, "image import");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode290, "image import");
     }
     QFile::remove(pngPath);
     QFile::remove(badPath);
@@ -663,6 +663,7 @@ int pictura::runFileDropChecks(pictura::PicturaMainWindow& frame)
     // strip, menu bar, or options bar opens one tab per file; a URL-less or
     // all-directory drag is never consumed and a regular but undecodable file
     // changes nothing; with no document open the document area opens tabs.
+    ST_BEGIN("lpr_file_drop");
     const QString pngA = QDir::tempPath() + QStringLiteral("/kooka-pictura-drop-a.png");
     const QString pngB = QDir::tempPath() + QStringLiteral("/kooka-pictura-drop-b.png");
     const QString badPath = QDir::tempPath() + QStringLiteral("/kooka-pictura-drop-bad.png");
@@ -680,7 +681,7 @@ int pictura::runFileDropChecks(pictura::PicturaMainWindow& frame)
     }
     badFile.close();
     if (!saved) {
-        return pictura::selfTest().fail(291, "file drop fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode291, "file drop fixture");
     }
 
     // A small native PSD fixture: both routes must send it to the native
@@ -690,7 +691,7 @@ int pictura::runFileDropChecks(pictura::PicturaMainWindow& frame)
                                                  QStringLiteral("white"));
     pictura::PictureView* psdSrcView = frame.activeView();
     if (!psdSrcCreated || !psdSrcView) {
-        return pictura::selfTest().fail(291, "file drop psd fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode291, "file drop psd fixture");
     }
     psdSrcView->rasterize_fill_content(psdSrcView->add_solid_fill(0xff3366ccu));
     const bool psdSaved = frame.saveActiveAs(psdPath);
@@ -700,7 +701,7 @@ int pictura::runFileDropChecks(pictura::PicturaMainWindow& frame)
     const QByteArray psdBytes = psdRead ? psdFile.readAll() : QByteArray();
     psdFile.close();
     if (!psdSaved || psdBytes.isEmpty()) {
-        return pictura::selfTest().fail(291, "file drop psd fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode291, "file drop psd fixture");
     }
 
     const bool placeCreated = frame.newDocument(QStringLiteral("FileDropPlace"), 4, 4,
@@ -709,7 +710,7 @@ int pictura::runFileDropChecks(pictura::PicturaMainWindow& frame)
     pictura::PictureView* placeView = frame.activeView();
     pictura::ImageView* placeCanvas = frame.imageView();
     if (!placeCreated || !placeView || !placeCanvas) {
-        return pictura::selfTest().fail(291, "file drop canvas fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode291, "file drop canvas fixture");
     }
     const int placeRows = pictura::layers_api::rowCount(*placeView);
     const int placeBase = placeView->history_count();
@@ -834,13 +835,12 @@ int pictura::runFileDropChecks(pictura::PicturaMainWindow& frame)
     QFile::remove(badPath);
     QFile::remove(psdPath);
     QFile::remove(psdExport);
-    ST_BEGIN("lpr_file_drop");
     ST_PASS("lpr_file_drop place=%d mixed=%d psd_native=%d open=%d psd_open=%d ignore=%d "
             "fallback=%d docs=%d",
             placed ? 1 : 0, mixedPlaced ? 1 : 0, psdNative ? 1 : 0, opened ? 1 : 0,
             psdOpened ? 1 : 0, ignored ? 1 : 0, fallback ? 1 : 0, endDocs);
     if (!ok) {
-        return pictura::selfTest().fail(291, "file drop routing");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode291, "file drop routing");
     }
     return 0;
 }
@@ -853,11 +853,12 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     // session's rotation cancels byte-identically with history unchanged; a
     // group, an adjustment layer, and the Background refuse both the predicate
     // and a session begin.
+    ST_BEGIN("lpr_free_transform");
     const QString png = QDir::tempPath() + QStringLiteral("/kooka-pictura-free-transform.png");
     QImage image(4, 4, QImage::Format_RGBA8888);
     image.fill(QColor(255, 0, 0, 255));
     if (!image.save(png, "PNG")) {
-        return pictura::selfTest().fail(292, "free transform fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode292, "free transform fixture");
     }
 
     const bool created = frame.newDocument(QStringLiteral("FreeTransformCtl"), 8, 8,
@@ -867,7 +868,7 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
     pictura::ImageView* canvas = frame.imageView();
     if (!created || !view || !canvas) {
         QFile::remove(png);
-        return pictura::selfTest().fail(292, "free transform canvas fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode292, "free transform canvas fixture");
     }
     const int doc = frame.activeDocumentIndex();
     const int base = view->history_count();
@@ -1125,7 +1126,6 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
         && identical && historyKept && identityBegin && identityNoState && keyBegin && keyCommitted
         && keyReenter && keyCancelled && groupCan && adjCan && bgCan && distortOk && perspOk
         && skewOk && escOk && switchOk;
-    ST_BEGIN("lpr_free_transform");
     ST_PASS("lpr_free_transform entered=%d select=%d begin=%d preview=%d hit=%d moved=%d "
             "commit=%d states=%d rect=%s->%s keys=%d rotate=%d cancel=%d identical=%d "
             "history=%d identity=%d group=%d adj=%d bg=%d distort=%d persp=%d skew=%d esc=%d "
@@ -1139,7 +1139,7 @@ int pictura::runFreeTransformChecks(pictura::PicturaMainWindow& frame)
             adjCan ? 1 : 0, bgCan ? 1 : 0, distortOk ? 1 : 0, perspOk ? 1 : 0, skewOk ? 1 : 0,
             escOk ? 1 : 0, switchOk ? 1 : 0);
     if (!ok) {
-        return pictura::selfTest().fail(292, "free transform");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode292, "free transform");
     }
     QFile::remove(png);
     QFile::remove(saveA);
