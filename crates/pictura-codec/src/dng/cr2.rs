@@ -169,13 +169,15 @@ fn rggb_from_sensor_corner(area: Area) -> Vec<u8> {
 /// `0x4001`): the camera's as-shot RGGB multipliers, at an index named by the
 /// array's length in the two oldest layouts and otherwise by its version in
 /// entry 0 (public write-ups of the layout, confirmed on real files from
-/// the 350D to the 6D Mark II). `None` for any other layout or an unusable
-/// multiplier.
+/// the 350D to the 6D Mark II). The array is 16-bit words, stored as SHORT
+/// values or, on some bodies (the PowerShot G1 X Mark III), as UNDEFINED
+/// bytes. `None` for any other type or layout or an unusable multiplier.
 pub(super) fn as_shot_neutral(note: Option<&Tags>) -> Result<Option<[f64; 3]>, PsdError> {
-    let Some(data) = note.map(|n| n.reals(COLOR_DATA)).transpose()?.flatten() else {
+    let Some(data) = note.and_then(|n| n.words(COLOR_DATA).ok().flatten()) else {
         return Ok(None);
     };
-    let version = data.first().map_or(0, |&v| v as i64 as u16 as i16);
+    let data: Vec<f64> = data.into_iter().map(f64::from).collect();
+    let version = data.first().map_or(0, |&v| v as u16 as i16);
     let at = match (data.len(), version) {
         (582, _) => 25,
         (653, _) => 34,

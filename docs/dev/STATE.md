@@ -4,6 +4,16 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Canon colour, remaining bodies, #1583** (OpenSpec change
+  `vendor-raw-canon-colour-remaining`, archived; `codec/camera-matrices`
+  modified). Owner-supplied samples (~/Downloads/PHOTOSHOP/RAW/Canon) give
+  own camera-JPEG fits to the R8 Mark II (pic2, 3.00 dE), M6 Mark II and
+  G7 X Mark III (proxies and `JPEG_PROXIES` removed). The G1 X Mark III is a
+  CR2 body: the fit script reads CR2 (IFD0 strip JPEG, Exif maker note) and
+  ColorData -4 (8-word records, Daylight at 103, camera-estimated
+  temperatures, so D55 only); the codec reads ColorData stored as UNDEFINED
+  bytes (`Tiff::words`). Tests use the EOS Ra as the colourless CR3 body.
+  CR2/CR3 white level (precision ceiling, 0.72 on the G1 X III) -> #1587.
 - **Canon CR3 colour, more bodies, #1579** (OpenSpec change
   `vendor-raw-cr3-colour-r3-v1`, archived; `codec/camera-matrices`
   modified). Owner-supplied samples (dpreview galleries, refuse scripted

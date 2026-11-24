@@ -1,6 +1,6 @@
 //! Colour for Canon CR3 bodies without published sensitivities
-//! (`codec/camera-matrices`, #1574, #1579): the table's camera-JPEG rows and
-//! proxies on synthetic CR3s.
+//! (`codec/camera-matrices`, #1574, #1579, #1583): the table's camera-JPEG
+//! rows on synthetic CR3s.
 
 use pictura_codec::{
     as_shot_transform, decode_raw_source, read_raw, DngColor, ImageBudget, PsdError,
@@ -27,36 +27,34 @@ const PAIR: [Option<u16>; 2] = [Some(20), Some(24)];
 
 /// Every Canon body the table colours from its own camera JPEG, with the
 /// EXIF `LightSource` codes of its matrices: D55 and ISO studio tungsten.
-const BODIES: [(&str, [Option<u16>; 2]); 15] = [
+const BODIES: [(&str, [Option<u16>; 2]); 18] = [
     ("Canon EOS 850D", PAIR),
     ("Canon EOS 90D", PAIR),
     ("Canon EOS M200", PAIR),
     ("Canon EOS M50", PAIR),
     ("Canon EOS M50m2", PAIR),
+    ("Canon EOS M6 Mark II", PAIR),
     ("Canon EOS R100", PAIR),
     ("Canon EOS R50 V", PAIR),
     ("Canon EOS R1", PAIR),
     ("Canon EOS R3", PAIR),
     ("Canon EOS R6 Mark III", PAIR),
     ("Canon EOS R7", PAIR),
+    ("Canon EOS R8 Mark II", PAIR),
     ("Canon EOS-1D X Mark III", PAIR),
     ("Canon PowerShot G5 X Mark II", PAIR),
+    ("Canon PowerShot G7 X Mark III", PAIR),
     ("Canon PowerShot SX70 HS", PAIR),
     ("Canon PowerShot V1", PAIR),
 ];
 
-/// Regional names and same-sensor proxies, with the body whose row they share.
-const SHARED: [(&str, &str); 7] = [
+/// Regional names, with the body whose row they share.
+const SHARED: [(&str, &str); 5] = [
     ("Canon EOS Kiss M", "Canon EOS M50"),
     ("Canon EOS KISS M", "Canon EOS M50"),
     ("Canon EOS Kiss M2", "Canon EOS M50m2"),
     ("Canon EOS Rebel T8i", "Canon EOS 850D"),
     ("Canon EOS Kiss X10i", "Canon EOS 850D"),
-    ("Canon EOS M6 Mark II", "Canon EOS 90D"),
-    (
-        "Canon PowerShot G7 X Mark III",
-        "Canon PowerShot G5 X Mark II",
-    ),
 ];
 
 /// A small lossless CR3 naming `model`, with colour data `color` in its
@@ -114,17 +112,18 @@ fn canon_jpeg_bodies_take_their_matrices() {
     for (name, body) in SHARED {
         assert_eq!(color(name).color_matrix, color(body).color_matrix, "{name}");
     }
-    assert_ne!(
-        color("Canon EOS 90D").color_matrix,
-        color("Canon EOS M50").color_matrix
-    );
-    assert_ne!(
-        color("Canon EOS R1").color_matrix,
-        color("Canon EOS R3").color_matrix
-    );
-    for model in ["Canon PowerShot G1 X Mark III", "Canon EOS R8 Mark II"] {
-        assert_eq!(color(model).color_matrix, [None, None], "{model}");
+    for (a, b) in [
+        ("Canon EOS 90D", "Canon EOS M50"),
+        ("Canon EOS 90D", "Canon EOS M6 Mark II"),
+        (
+            "Canon PowerShot G5 X Mark II",
+            "Canon PowerShot G7 X Mark III",
+        ),
+        ("Canon EOS R1", "Canon EOS R3"),
+    ] {
+        assert_ne!(color(a).color_matrix, color(b).color_matrix, "{a} / {b}");
     }
+    assert_eq!(color("Canon EOS Ra").color_matrix, [None, None]);
 }
 
 // cr3_jpeg_matrices_white

@@ -170,17 +170,23 @@ def read_ifd0(data: bytes) -> dict:
 def ifd_entries(data: bytes, order: str) -> dict:
     """The first IFD's entries of a TIFF-shaped block, offsets from its start."""
     (at,) = struct.unpack_from(order + "I", data, 4)
+    return ifd_at(data, order, at)
+
+
+def ifd_at(data: bytes, order: str, at: int) -> dict:
+    """The entries of the IFD at `at` as tag -> (type, count, value bytes,
+    value offset or None when inline)."""
     (n,) = struct.unpack_from(order + "H", data, at)
     tags = {}
     for i in range(n):
         tag, typ, count, inline = struct.unpack_from(order + "HHI4s", data, at + 2 + 12 * i)
         size = TYPE_SIZE.get(typ, 1) * count
         if size <= 4:
-            value = inline[:size]
+            value, off = inline[:size], None
         else:
             (off,) = struct.unpack(order + "I", inline)
             value = data[off : off + size]
-        tags[tag] = (typ, count, value)
+        tags[tag] = (typ, count, value, off)
     return tags
 
 
@@ -218,12 +224,18 @@ def rw2_meta(data: bytes):
 CR3_MAGIC = b"ftypcrx "
 CANON_UUID = bytes.fromhex("85c0b687820f11e08111f4ce462b6a48")
 TAG_MAKER_NOTE, TAG_COLOR_DATA = 0x927C, 0x4001
-# ColorData version -> word index of WB_RGGBLevelsDaylight. Shade, Cloudy and
-# Tungsten follow it, each four levels and the temperature Canon records
-# (ExifTool's Canon ColorData9-12 tables; versions 66 and 67, the R6 Mark
-# III's and R8 Mark II's, have version 64's layout on the samples).
-CANON_DAYLIGHT = {16: 136, 17: 136, 18: 136, 19: 136, 32: 150, 33: 150, 34: 205, 48: 205}
-CANON_DAYLIGHT |= {64: 110, 65: 110, 66: 110, 67: 110}
+# ColorData version (entry 0, unsigned) -> word index of
+# WB_RGGBLevelsDaylight and the length of each preset's record. Shade, Cloudy
+# and Tungsten follow it, each four levels, the record's other words, and last
+# the temperature Canon records (ExifTool's Canon ColorData8-12 tables;
+# versions 66 and 67, the R6 Mark III's and R8 Mark II's, have version 64's
+# layout on the samples). Version -4 (the CR2 PowerShot G1 X Mark III's)
+# records the camera's own estimate of each preset's temperature (Daylight
+# 5405 K, Tungsten 3037 K on the samples), not the nominal one.
+CANON_DAYLIGHT = {v: (136, 5) for v in (16, 17, 18, 19)}
+CANON_DAYLIGHT |= {32: (150, 5), 33: (150, 5), 34: (205, 5), 48: (205, 5)}
+CANON_DAYLIGHT |= {v: (110, 5) for v in (64, 65, 66, 67)}
+CANON_DAYLIGHT |= {0x10000 - 4: (103, 8)}
 D55 = 5503.0
 
 
@@ -285,19 +297,20 @@ def canon_presets(color_data: bytes) -> dict:
     """D55 (code 20), interpolated in mired between the Daylight and Cloudy
     presets, and Tungsten (code 24) when Canon recorded it at 3200 K."""
     words = struct.unpack(f"<{len(color_data) // 2}H", color_data)
-    at = CANON_DAYLIGHT.get(words[0])
-    if at is None or at + 20 > len(words):
+    at, stride = CANON_DAYLIGHT.get(words[0], (None, 0))
+    if at is None or at + 4 * stride > len(words):
         return {}
 
     def level(i):
-        r, g1, g2, b, kelvin = words[i : i + 5]
+        r, g1, g2, b = words[i : i + 4]
+        kelvin = words[i + stride - 1]
         g = (g1 + g2) / 2
         return ([g / r, 1.0, g / b], kelvin) if r and b and kelvin else (None, kelvin)
 
     (day, t_day), (cloudy, t_cloudy), (tungsten, t_tungsten) = (
         level(at),
-        level(at + 10),
-        level(at + 15),
+        level(at + 2 * stride),
+        level(at + 3 * stride),
     )
     out = {}
     if day and cloudy and t_day < D55 < t_cloudy:
@@ -326,6 +339,36 @@ def cr3_meta(data: bytes):
             found = canon_presets(tags[TAG_COLOR_DATA][2])
             break
     return ascii_tag(ifd0, TAG_MAKE), ascii_tag(ifd0, TAG_MODEL), jpeg, found
+
+
+# --- CR2 container --------------------------------------------------------
+
+TAG_STRIP_OFFSETS, TAG_STRIP_BYTE_COUNTS, TAG_EXIF_IFD = 0x0111, 0x0117, 0x8769
+
+
+def is_cr2(data: bytes) -> bool:
+    return data[:4] == b"II*\0" and data[8:10] == b"CR" and data[10] == 2
+
+
+def cr2_meta(data: bytes):
+    """IFD0's strip is the full-size camera JPEG; the Exif maker note, whose
+    offsets count from the file's start, holds the colour data."""
+    ifd0 = ifd_entries(data, "<")
+
+    def long(tags, tag):
+        return struct.unpack("<I", tags[tag][2][:4])[0]
+
+    start, size = long(ifd0, TAG_STRIP_OFFSETS), long(ifd0, TAG_STRIP_BYTE_COUNTS)
+    jpeg = data[start : start + size]
+    exif = ifd_at(data, "<", long(ifd0, TAG_EXIF_IFD))
+    note = ifd_at(data, "<", exif[TAG_MAKER_NOTE][3])
+    found = canon_presets(note[TAG_COLOR_DATA][2]) if TAG_COLOR_DATA in note else {}
+    return (
+        ascii_tag(ifd0, TAG_MAKE),
+        ascii_tag(ifd0, TAG_MODEL),
+        jpeg if jpeg.startswith(b"\xff\xd8") else None,
+        found,
+    )
 
 
 # --- fit ------------------------------------------------------------------
@@ -476,7 +519,8 @@ def pick(found: dict, codes):
 
 def body(raw: Path, tool: str) -> dict:
     data = raw.read_bytes()
-    make, model, jpeg, found = (cr3_meta if data[4:12] == CR3_MAGIC else rw2_meta)(data)
+    meta = cr3_meta if data[4:12] == CR3_MAGIC else cr2_meta if is_cr2(data) else rw2_meta
+    make, model, jpeg, found = meta(data)
     # A sample written under a regional name stands for its body.
     model = next(
         (body for body, names in SAME_CAMERA.items() if model.upper() in map(str.upper, names)),
@@ -529,7 +573,9 @@ def main() -> None:
         sys.exit(__doc__)
     root, tool = Path(sys.argv[1]), sys.argv[2]
     files = sorted(
-        p for p in root.rglob("*") if p.suffix.upper() in (".RW2", ".RWL", ".RAW", ".CR3")
+        p
+        for p in root.rglob("*")
+        if p.suffix.upper() in (".RW2", ".RWL", ".RAW", ".CR3", ".CR2")
     )
     # Fits of samples not in this run are kept, so one maker can be refitted alone.
     names = {p.name for p in files}

@@ -11,6 +11,9 @@ pub enum Val {
     Long(Vec<u32>),
     Rational(Vec<(u32, u32)>),
     SRational(Vec<(i32, i32)>),
+    /// Type 7 bytes; only the CR2 builder writes colour data this way.
+    #[allow(dead_code)]
+    Undefined(Vec<u8>),
     /// An entry whose value already sits at `at`, written as an offset only.
     /// Only the CR2 builder points at a maker note this way.
     #[allow(dead_code)]
@@ -55,6 +58,10 @@ impl Val {
                     out.extend(u32b(d as u32, be));
                 });
                 (10, v.len())
+            }
+            Val::Undefined(v) => {
+                out.extend(v);
+                (7, v.len())
             }
             Val::At { .. } => unreachable!("written by write_ifd"),
         };

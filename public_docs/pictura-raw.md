@@ -95,10 +95,10 @@ sold under another name.
 
 | Type | Cameras |
 |---|---|
-| EOS R mirrorless | EOS R, RP, R1\*, R3\*, R5, R5 C, R5 Mark II, R6, R6 Mark II, R6 Mark III\*, R7\*, R8, R10, R50, R50 V\*, R100\* |
+| EOS R mirrorless | EOS R, RP, R1\*, R3\*, R5, R5 C, R5 Mark II, R6, R6 Mark II, R6 Mark III\*, R7\*, R8, R8 Mark II\*, R10, R50, R50 V\*, R100\* |
 | EOS DSLR | EOS-1Ds Mark II, 1Ds Mark III, 1D X Mark II, 1D X Mark III\*, 5D, 5D Mark II, 5D Mark III, 5D Mark IV, 5DS, 5DS R, 6D Mark II, 90D\*, 100D / Rebel SL1 / Kiss X7, 200D / Rebel SL2 / Kiss X9, 250D / 200D II / Rebel SL3 / Kiss X10, 400D / Rebel XTi / Kiss X, 850D\* / Rebel T8i / Kiss X10i |
 | EOS M | EOS M, M50\* / Kiss M, M50 Mark II\* / Kiss M2, M6 Mark II\*, M200\* |
-| PowerShot | G5 X Mark II\*, G7 X Mark III\*, S90, SX70 HS\*, V1\* |
+| PowerShot | G1 X Mark III\*, G5 X Mark II\*, G7 X Mark III\*, S90, SX70 HS\*, V1\* |
 
 ### Nikon (NEF)
 

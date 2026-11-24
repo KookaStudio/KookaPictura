@@ -172,6 +172,10 @@ impl Tags<'_, '_> {
         self.ifd.get(tag).map(|e| self.tiff.reals(e)).transpose()
     }
 
+    fn words(&self, tag: u16) -> Result<Option<Vec<u16>>, PsdError> {
+        self.ifd.get(tag).map(|e| self.tiff.words(e)).transpose()
+    }
+
     fn fixed<const N: usize>(&self, tag: u16) -> Result<Option<[f64; N]>, PsdError> {
         self.reals(tag)?
             .map(|v| <[f64; N]>::try_from(v).map_err(|_| invalid(&format!("tag {tag} count"))))
