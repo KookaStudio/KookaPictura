@@ -7,7 +7,7 @@
 | bp_gpu_cpu_composite | Composite a small document through `CompositeRequest::whole(doc, true)` in a build without `gpu` | Bytes equal `composite_rgba` and the reported backend is `Backend::Cpu` | `pictura-render::gpu_enabled_request_falls_back_to_the_cpu_without_the_feature` |
 | bp_gpu_app_enables | Read `crates/pictura-app/Cargo.toml` | The `pictura-render` dependency carries `features = ["gpu"]`; the dev-dependency stays `test-oracle`-only | `pictura-render::app_manifest_enables_the_gpu_feature` |
 | bp_gpu_software | Read the renderer manifest's `software-gpu` definition and the `gpu` nextest profile command | `software-gpu` contains `gpu`; the documented command enables both | `pictura-render::software_gpu_implies_gpu` |
-| bp_gpu_tests | Inspect `require_gpu`/`require_device` and run the `gpu` profile on a host with no adapter | The device-dependent test asserts and fails; it never returns early as a pass | manual: a failing run needs a host with a `gpu` build and no Vulkan device, which this worktree cannot provide; the check is the existing `require_gpu` assertion in `crates/pictura-render/src/gpu/mod.rs` |
+| bp_gpu_tests | Call `require_device(false)` directly; the `gpu` profile therefore fails rather than skips when a device is missing | `require_device(false)` panics with `no usable GPU device`, and every device test routes through `require_gpu()` | `pictura-render::require_gpu_panics_without_a_device` |
 
 The two feature-state tests are compile-time gated so each build runs the one it
 can prove: `gpu_backend_is_one_type_behind_the_feature` is

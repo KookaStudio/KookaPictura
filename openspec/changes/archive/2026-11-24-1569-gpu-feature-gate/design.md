@@ -145,7 +145,9 @@ Two shapes, chosen per file:
 None of the `#[ignore]`d device tests changes its body or its ignore reason, and
 `require_gpu()` keeps asserting, so a `gpu` build without a device still fails
 rather than passes. This is the behaviour `docs/dev/testing-conventions.md`
-already specifies.
+already specifies, and `require_gpu_panics_without_a_device` proves it: it calls
+`require_device(false)` and asserts the panic message, so the fail-not-skip
+contract is a runnable check rather than a manual observation.
 
 `tests/backend_pin.rs` and `tests/backend_cpu.rs` are device-free but GPU-typed
 (`GpuBackend`, `set_backend`, `selected_backend`, `gpu_available`). They get the
