@@ -5,6 +5,7 @@
 
 use super::*;
 use crate::cxxqt_object::PictureViewRust;
+use pictura_codec::{SaveFormat, SaveRoute};
 use pictura_core::{ColorMode, Samples};
 use std::path::Path;
 
@@ -15,16 +16,49 @@ enum SaveIntent {
     Copy,
 }
 
+/// Resolve the save format for a call. An explicit catalog id wins; otherwise
+/// the path suffix decides. The remembered `save_options.kind` is deliberately
+/// not an input: a stale EPS/DCS choice must not route a later path.
+pub(super) fn save_format_for_save(format_id: i32, suffix: &str) -> Option<SaveFormat> {
+    let suffix_format = SaveFormat::from_suffix(suffix);
+    if format_id == -1 {
+        return suffix_format;
+    }
+    let format = SaveFormat::from_id(format_id)?;
+    suffix_format.is_some().then_some(format)
+}
+
 impl qobject::PictureView {
     pub fn save(mut self: Pin<&mut Self>, path: &QString) -> bool {
-        self.as_mut().save_with_intent(path, SaveIntent::Save)
+        self.as_mut().save_with_intent(path, SaveIntent::Save, -1)
     }
 
     pub fn save_copy(mut self: Pin<&mut Self>, path: &QString) -> bool {
-        self.as_mut().save_with_intent(path, SaveIntent::Copy)
+        self.as_mut().save_with_intent(path, SaveIntent::Copy, -1)
     }
 
-    fn save_with_intent(mut self: Pin<&mut Self>, path: &QString, intent: SaveIntent) -> bool {
+    /// Save with a format the shell resolved. `format_id` is a catalog ordinal;
+    /// `-1` resolves from the path.
+    pub(in crate::cxxqt_object) fn save_as_format(
+        mut self: Pin<&mut Self>,
+        path: &QString,
+        format_id: i32,
+        copy: bool,
+    ) -> bool {
+        let intent = if copy {
+            SaveIntent::Copy
+        } else {
+            SaveIntent::Save
+        };
+        self.as_mut().save_with_intent(path, intent, format_id)
+    }
+
+    fn save_with_intent(
+        mut self: Pin<&mut Self>,
+        path: &QString,
+        intent: SaveIntent,
+        format_id: i32,
+    ) -> bool {
         if self.rust().session.read_only() {
             return false;
         }
@@ -47,62 +81,49 @@ impl qobject::PictureView {
         }
         let suffix = format_for_path(&path_string);
         let commit = intent != SaveIntent::Copy;
-        if matches!(suffix.as_str(), "pdf" | "pdp") {
-            return super::super::pdf_export::save_with_last_options(
+        let Some(format) = save_format_for_save(format_id, &suffix) else {
+            return false;
+        };
+        match format.route() {
+            SaveRoute::Pdf => super::super::pdf_export::save_with_last_options(
                 self,
                 &QString::from(path_string.as_str()),
                 commit,
-            );
-        }
-        if matches!(suffix.as_str(), "psd" | "psb") {
-            if !super::save_jobs::save_start_rust(
-                &mut self.as_mut().rust_mut(),
-                &path_string,
-                !commit,
-            ) {
-                crate::diagnostic_logging::outcome("document.save", false);
-                return false;
-            }
-            return super::save_jobs::save_finish_rust(&mut self.as_mut().rust_mut());
-        }
-        if suffix == "gif" {
-            let written = write_gif(self.as_mut().rust_mut().get_mut(), &path_string);
-            crate::diagnostic_logging::outcome("document.save", written);
-            if written && commit {
-                let mut rust = self.as_mut().rust_mut();
-                rust.path = Some(path_string);
-                rust.source_format = "gif".to_string();
-                rust.session.mark_saved();
-            }
-            return written;
-        }
-        let mut resolved = pictura_codec::SaveKind::from_suffix(&suffix);
-        if suffix == "eps" {
-            if let Some(settings) = self.rust().save_options.as_ref() {
-                if let Some(kind) = pictura_codec::SaveKind::from_code(settings.kind) {
-                    if matches!(
-                        kind,
-                        pictura_codec::SaveKind::Eps | pictura_codec::SaveKind::Dcs
-                    ) {
-                        resolved = Some(kind);
-                    }
+            ),
+            SaveRoute::Native => {
+                if !super::save_jobs::save_start_rust(
+                    &mut self.as_mut().rust_mut(),
+                    &path_string,
+                    format.id(),
+                    !commit,
+                ) {
+                    crate::diagnostic_logging::outcome("document.save", false);
+                    return false;
                 }
+                super::save_jobs::save_finish_rust(&mut self.as_mut().rust_mut())
             }
-        }
-        if let Some(kind) = resolved {
-            if kind != pictura_codec::SaveKind::Jpeg {
+            SaveRoute::AppGif => {
+                let written = write_gif(self.as_mut().rust_mut().get_mut(), &path_string);
+                crate::diagnostic_logging::outcome("document.save", written);
+                if written && commit {
+                    let mut rust = self.as_mut().rust_mut();
+                    rust.path = Some(path_string);
+                    rust.source_format = "gif".to_string();
+                    rust.session.mark_saved();
+                }
+                written
+            }
+            SaveRoute::Engine(kind) => {
                 let written = self.save_engine(kind, &path_string, commit);
                 crate::diagnostic_logging::outcome("document.save", written);
-                return written;
+                written
+            }
+            SaveRoute::QtRaster(writer) => {
+                let written = self.as_mut().save_qt_raster(&path_string, writer, commit);
+                crate::diagnostic_logging::outcome("document.save", written);
+                written
             }
         }
-        if suffix != "webp" && suffix != "jpg" && suffix != "jpeg" && suffix != "jpe" {
-            return false;
-        }
-        let format = raster_writer_for_suffix(&suffix).unwrap_or("JPG");
-        let written = self.as_mut().save_qt_raster(&path_string, format, commit);
-        crate::diagnostic_logging::outcome("document.save", written);
-        written
     }
 
     fn save_qt_raster(
@@ -606,6 +627,25 @@ mod tests {
         assert_eq!(&std::fs::read(&target).unwrap()[..6], b"GIF89a");
         let _ = std::fs::remove_file(&target);
         target
+    }
+
+    #[test]
+    fn explicit_format_selects_the_route() {
+        assert_eq!(save_format_for_save(-1, "png"), Some(SaveFormat::Png));
+        assert_eq!(
+            save_format_for_save(SaveFormat::Dcs.id(), "png"),
+            Some(SaveFormat::Dcs)
+        );
+        assert_eq!(save_format_for_save(i32::MAX, "png"), None);
+        assert_eq!(save_format_for_save(-2, "png"), None);
+        assert_eq!(save_format_for_save(SaveFormat::Png.id(), "xyz"), None);
+        assert_eq!(save_format_for_save(-1, "eps"), Some(SaveFormat::Eps));
+        assert_eq!(save_format_for_save(-1, "dcs"), None);
+        assert_eq!(save_format_for_save(-1, ""), None);
+        assert_eq!(
+            SaveFormat::Dcs.route(),
+            SaveRoute::Engine(pictura_codec::SaveKind::Dcs)
+        );
     }
 
     #[test]

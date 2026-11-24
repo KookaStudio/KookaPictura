@@ -1,6 +1,6 @@
 #include "dialogs.h"
 
-#include <QtCore/QCoreApplication>
+#include "save_format_options.h"
 
 #include "api/document_api.h"
 #include "image_view.h"
@@ -8,6 +8,7 @@
 
 #include "api/engine_bridge.h"
 
+#include <QtCore/QCoreApplication>
 #include <QtCore/QDir>
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QEvent>
@@ -105,17 +106,7 @@ private:
 
 bool isKnownImageSuffix(const QString& suffix)
 {
-    static const QStringList known = {QStringLiteral("psd"), QStringLiteral("psb"),
-                                      QStringLiteral("png"), QStringLiteral("jpg"),
-                                      QStringLiteral("jpeg"), QStringLiteral("jpe"),
-                                      QStringLiteral("tif"), QStringLiteral("tiff"),
-                                      QStringLiteral("webp"), QStringLiteral("bmp"),
-                                      QStringLiteral("pdf"), QStringLiteral("pdp"),
-                                      QStringLiteral("gif"), QStringLiteral("eps"),
-                                      QStringLiteral("raw"), QStringLiteral("tga"),
-                                      QStringLiteral("vda"), QStringLiteral("icb"),
-                                      QStringLiteral("vst"), QStringLiteral("cin")};
-    return known.contains(suffix);
+    return saveFormatIdForSuffix(suffix) >= 0;
 }
 
 } // namespace
@@ -255,30 +246,22 @@ CropDecision askCropImage(QWidget* parent)
 
 QStringList saveFileFilters()
 {
-    const QString eps = QCoreApplication::translate("PicturaFiles", "Photoshop EPS");
-    QString dcs = QCoreApplication::translate("PicturaFiles", "Photoshop DCS");
-    if (dcs == eps) {
-        dcs += QStringLiteral(" (DCS)");
+    QStringList filters;
+    QString eps;
+    for (const SaveFormatRow& row : saveFormatRows()) {
+        QString label = QCoreApplication::translate("PicturaFiles", row.label);
+        if (row.kind == SaveFormatKind::Eps) {
+            eps = label;
+        } else if (row.kind == SaveFormatKind::Dcs && label == eps) {
+            label += QStringLiteral(" (DCS)");
+        }
+        filters.append(label + row.pattern);
     }
-    return {
-        QCoreApplication::translate("PicturaFiles", "Photoshop") + QStringLiteral(" (*.PSD)"),
-        QCoreApplication::translate("PicturaFiles", "Photoshop Large Format") + QStringLiteral(" (*.PSB)"),
-        QCoreApplication::translate("PicturaFiles", "PNG") + QStringLiteral(" (*.PNG)"),
-        QCoreApplication::translate("PicturaFiles", "JPEG") + QStringLiteral(" (*.JPG *.JPEG *.JPE)"),
-        QCoreApplication::translate("PicturaFiles", "TIFF") + QStringLiteral(" (*.TIF *.TIFF)"),
-        QCoreApplication::translate("PicturaFiles", "WebP") + QStringLiteral(" (*.WEBP)"),
-        QCoreApplication::translate("PicturaFiles", "BMP") + QStringLiteral(" (*.BMP)"),
-        QCoreApplication::translate("PicturaFiles", "Photoshop PDF") + QStringLiteral(" (*.PDF *.PDP)"),
-        QCoreApplication::translate("PicturaFiles", "CompuServe GIF") + QStringLiteral(" (*.GIF)"),
-        eps + QStringLiteral(" (*.EPS)"),
-        dcs + QStringLiteral(" (*.EPS)"),
-        QCoreApplication::translate("PicturaFiles", "Photoshop Raw") + QStringLiteral(" (*.RAW)"),
-        QCoreApplication::translate("PicturaFiles", "Targa") + QStringLiteral(" (*.TGA *.VDA *.ICB *.VST)"),
-        QCoreApplication::translate("PicturaFiles", "Cineon") + QStringLiteral(" (*.CIN)"),
-        QCoreApplication::translate("PicturaFiles", "All Formats") + QStringLiteral(" (*.PSD *.PSB *.PNG *.JPG *.JPEG *.JPE *.TIF *.TIFF "
-                       "*.WEBP *.BMP *.PDF *.PDP *.GIF *.EPS *.RAW *.TGA *.VDA *.ICB *.VST "
-                       "*.CIN)"),
-    };
+    filters.append(QCoreApplication::translate("PicturaFiles", "All Formats")
+                   + QStringLiteral(" (*.PSD *.PSB *.PNG *.JPG *.JPEG *.JPE *.TIF *.TIFF "
+                                    "*.WEBP *.BMP *.PDF *.PDP *.GIF *.EPS *.RAW *.TGA *.VDA *.ICB "
+                                    "*.VST *.CIN)"));
+    return filters;
 }
 
 QStringList openFileFilters()
@@ -318,13 +301,13 @@ bool savePathNeedsFormatDialog(const QString& path, PictureView* view, bool path
         return false;
     }
     const QString suffix = QFileInfo(path).suffix().toLower();
+    const int id = saveFormatIdForSuffix(suffix);
     // A TIFF keeps its layer section unless the options discard it, and the
     // remembered DCS kind is what makes a shared .eps path a separation set.
-    if (suffix == QLatin1String("tif") || suffix == QLatin1String("tiff")
-        || (suffix == QLatin1String("eps") && rememberedDcs)) {
+    if (saveFormatKeepsLayers(suffix)) {
         return false;
     }
-    return true;
+    return !(id >= 0 && rememberedDcs && id == saveFormatIdForKind(SaveFormatKind::Eps));
 }
 
 int defaultSaveFilterIndex(PictureView* view)
@@ -332,106 +315,33 @@ int defaultSaveFilterIndex(PictureView* view)
     if (!view || documentRequiresLayers(view)) {
         return 0; // Photoshop (*.PSD)
     }
-    const QString format = output_format(*view).toLower();
-    if (format == QLatin1String("psb")) {
-        return 1;
-    }
-    if (format == QLatin1String("png")) {
-        return 2;
-    }
-    if (format == QLatin1String("jpg") || format == QLatin1String("jpeg")
-        || format == QLatin1String("jpe")) {
-        return 3;
-    }
-    if (format == QLatin1String("tif") || format == QLatin1String("tiff")) {
-        return 4;
-    }
-    if (format == QLatin1String("webp")) {
-        return 5;
-    }
-    if (format == QLatin1String("bmp")) {
-        return 6;
-    }
-    if (format == QLatin1String("pdf")) {
-        return 7;
-    }
-    if (format == QLatin1String("gif")) {
-        return 8;
-    }
-    if (format == QLatin1String("eps")) {
-        return 9;
-    }
-    if (format == QLatin1String("dcs")) {
-        return 10;
-    }
-    if (format == QLatin1String("raw")) {
-        return 11;
-    }
-    if (format == QLatin1String("tga") || format == QLatin1String("vda")
-        || format == QLatin1String("icb") || format == QLatin1String("vst")) {
-        return 12;
-    }
-    if (format == QLatin1String("cin")) {
-        return 13;
-    }
-    return 0;
+    // Source names are catalog aliases, so "pdp" selects the PDF filter; PDF
+    // opens record source_format = "pdf", so this is only reachable via aliases.
+    const int id = saveFormatIdForSourceName(output_format(*view).toLower());
+    const int index = saveFormatFilterIndexForId(id);
+    return index < 0 ? 0 : index;
 }
 
-bool isRasterImageSuffix(const QString& suffix)
-{
-    static const QStringList raster = {QStringLiteral("png"), QStringLiteral("jpg"),
-                                       QStringLiteral("jpeg"), QStringLiteral("jpe"),
-                                       QStringLiteral("tif"), QStringLiteral("tiff"),
-                                       QStringLiteral("webp"), QStringLiteral("bmp"),
-                                       QStringLiteral("gif"), QStringLiteral("eps"),
-                                       QStringLiteral("raw"), QStringLiteral("tga"),
-                                       QStringLiteral("vda"), QStringLiteral("icb"),
-                                       QStringLiteral("vst"), QStringLiteral("cin")};
-    return raster.contains(suffix.toLower());
-}
+bool isRasterImageSuffix(const QString& suffix) { return saveFormatIsRasterSuffix(suffix); }
 
 bool saveAsNeedsFeatureWarning(const QString& path, PictureView* view)
 {
     const QString suffix = QFileInfo(path).suffix().toLower();
+    const int id = saveFormatIdForSuffix(suffix);
     // TIFF keeps the layer section unless its dialog selects Discard; that is
     // a user choice, not a silent flatten.
-    if (suffix == QLatin1String("tif") || suffix == QLatin1String("tiff")) {
+    if (id < 0 || !saveFormatHasFlag(id, kSaveFormatRaster)
+        || saveFormatHasFlag(id, kSaveFormatKeepsLayers)) {
         return false;
     }
-    return isRasterImageSuffix(suffix) && documentRequiresLayers(view);
+    return documentRequiresLayers(view);
 }
 
 QString defaultSuffixForFilter(int filterIndex)
 {
-    switch (filterIndex) {
-    case 1:
-        return QStringLiteral(".psb");
-    case 2:
-        return QStringLiteral(".png");
-    case 3:
-        return QStringLiteral(".jpg");
-    case 4:
-        return QStringLiteral(".tif");
-    case 5:
-        return QStringLiteral(".webp");
-    case 6:
-        return QStringLiteral(".bmp");
-    case 7:
-        return QStringLiteral(".pdf");
-    case 8:
-        return QStringLiteral(".gif");
-    case 9:
-    case 10:
-        return QStringLiteral(".eps");
-    case 11:
-        return QStringLiteral(".raw");
-    case 12:
-        return QStringLiteral(".tga");
-    case 13:
-        return QStringLiteral(".cin");
-    default:
-        return QStringLiteral(".psd");
-    }
+    const QVector<SaveFormatRow>& rows = saveFormatRows();
+    return filterIndex >= 0 && filterIndex < rows.size() ? rows.at(filterIndex).canonicalSuffix
+                                                         : QStringLiteral(".psd");
 }
 
 QString lowercasedImageSuffix(const QString& path)

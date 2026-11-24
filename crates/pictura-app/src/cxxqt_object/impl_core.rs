@@ -67,19 +67,6 @@ pub(super) fn format_for_path(path: &str) -> String {
         .unwrap_or_else(|| "psd".to_string())
 }
 
-/// The Qt image writer for a raster path suffix, or `None` for PSD/PSB and
-/// unrecognized suffixes (which go through the PSD codec).
-pub(super) fn raster_writer_for_suffix(suffix: &str) -> Option<&'static str> {
-    Some(match suffix {
-        "png" => "PNG",
-        "jpg" | "jpeg" | "jpe" => "JPG",
-        "tif" | "tiff" => "TIF",
-        "webp" => "WEBP",
-        "bmp" => "BMP",
-        _ => return None,
-    })
-}
-
 /// A built-in working profile by the command's index: 0 sRGB, 1 Adobe RGB,
 /// 2 Pro Photo RGB; `None` for any other index.
 fn builtin_profile(index: i32) -> Option<pictura_codec::Profile> {

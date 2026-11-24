@@ -207,7 +207,9 @@ pub use read::{
 };
 pub use save::{
     save_document, save_document_with_jpeg, save_document_with_jpeg_guarded,
-    streams as save_streams, BeforeWrite, JpegEncode, SaveKind, SaveOptions,
+    streams as save_streams, BeforeWrite, JpegEncode, SaveFormat, SaveFormatFacts, SaveKind,
+    SaveOptions, SaveRoute, FLAG_KEEPS_LAYERS, FLAG_NATIVE, FLAG_OFFERS_PROFILE, FLAG_PDF,
+    FLAG_RASTER,
 };
 pub use smart_filter::{
     append_smart_filter, attach_smart_filter, clear_smart_filters, delete_smart_filter,

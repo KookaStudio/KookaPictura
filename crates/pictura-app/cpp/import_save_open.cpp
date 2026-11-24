@@ -630,14 +630,12 @@ quint64 ImportSaveCoordinator::startOpenAsSmartObjectPath(const QString& path)
 
 bool ImportSaveCoordinator::isNativeDocumentPath(const QString& path)
 {
-    const QString suffix = QFileInfo(path).suffix().toLower();
-    return suffix == QStringLiteral("psd") || suffix == QStringLiteral("psb");
+    return saveFormatIsNativeSuffix(QFileInfo(path).suffix());
 }
 
 bool ImportSaveCoordinator::saveRunsOnWorker(const QString& path)
 {
-    const QString suffix = QFileInfo(path).suffix().toLower();
-    return suffix == QStringLiteral("psd") || suffix == QStringLiteral("psb");
+    return saveFormatIsNativeSuffix(QFileInfo(path).suffix());
 }
 
 quint64 ImportSaveCoordinator::startOpenDocumentAtPath(const QString& path, bool interactive,

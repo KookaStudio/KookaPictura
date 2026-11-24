@@ -10,6 +10,8 @@
 #include "dialogs.h"
 #include "frame.h"
 
+#include "save_format_options.h"
+
 #include "api/document_bridge.h"
 #include "api/engine_bridge.h"
 #include "api/paint_bridge.h"
@@ -27,7 +29,10 @@ bool activeSaveNeedsDialog(PicturaMainWindow* frame)
 {
     const QString path = frame->activeFilePath();
     PictureView* view = frame->activeView();
-    const bool rememberedDcs = view && output_format(*view) == QStringLiteral("dcs");
+    const bool rememberedDcs =
+        view
+        && saveFormatIdForSourceName(output_format(*view).toLower())
+            == saveFormatIdForKind(SaveFormatKind::Dcs);
     const bool native = PicturaMainWindow::isNativeDocumentPath(path);
     return !path.isEmpty()
         && (PicturaMainWindow::isPdfPath(path)

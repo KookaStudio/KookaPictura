@@ -46,14 +46,16 @@ enum SaveOutcome {
 pub(in crate::cxxqt_object) fn save_start_rust(
     rust: &mut PictureViewRust,
     path: &str,
+    format_id: i32,
     copy: bool,
 ) -> bool {
-    save_start_with_compatibility(rust, path, copy, None)
+    save_start_with_compatibility(rust, path, format_id, copy, None)
 }
 
 fn save_start_with_compatibility(
     rust: &mut PictureViewRust,
     path: &str,
+    format_id: i32,
     copy: bool,
     compatibility: Option<bool>,
 ) -> bool {
@@ -81,7 +83,10 @@ fn save_start_with_compatibility(
     let Some(suffix) = suffix else {
         return false;
     };
-    if !matches!(suffix.as_str(), "psd" | "psb") {
+    let Some(format) = super::super::save::save_format_for_save(format_id, &suffix) else {
+        return false;
+    };
+    if format.route() != pictura_codec::SaveRoute::Native {
         return false;
     }
     let session = &rust.session;
@@ -131,7 +136,7 @@ fn save_start_with_compatibility(
     let print_resources = session.print_resources.clone();
     let delay = rust.save_delay_for_test;
     let sync_failure = rust.save_sync_failure_for_test;
-    let psb = suffix == "psb";
+    let psb = format == pictura_codec::SaveFormat::Psb;
     let worker_path = path.to_string();
     let job_path = path.to_string();
     let progress = Arc::new(AtomicI32::new(0));
@@ -151,8 +156,7 @@ fn save_start_with_compatibility(
                 prepare_native_save(&mut doc, dirty);
             }
             worker_progress.store(30, Ordering::Relaxed);
-            // A `.psb` path forces a version-2 PSB container; every other native
-            // suffix writes a PSD.
+            // The resolved catalog id chooses the PSD or PSB container.
             let mut doc = pictura_render::save_view(&doc);
             pictura_codec::set_vanishing_point_data(doc.to_mut(), planes.as_deref());
             if !embed {
@@ -455,14 +459,28 @@ pub(super) fn save_set_sync_failure(mut view: Pin<&mut PictureView>, fail: bool)
     view.as_mut().rust_mut().save_sync_failure_for_test = fail;
 }
 
-pub(super) fn save_start(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
+pub(super) fn save_start(mut view: Pin<&mut PictureView>, path: &QString, format_id: i32) -> bool {
     view.as_mut().settle_pending_composite();
-    save_start_rust(&mut view.as_mut().rust_mut(), &path.to_string(), false)
+    save_start_rust(
+        &mut view.as_mut().rust_mut(),
+        &path.to_string(),
+        format_id,
+        false,
+    )
 }
 
-pub(super) fn save_copy_start(mut view: Pin<&mut PictureView>, path: &QString) -> bool {
+pub(super) fn save_copy_start(
+    mut view: Pin<&mut PictureView>,
+    path: &QString,
+    format_id: i32,
+) -> bool {
     view.as_mut().settle_pending_composite();
-    save_start_rust(&mut view.as_mut().rust_mut(), &path.to_string(), true)
+    save_start_rust(
+        &mut view.as_mut().rust_mut(),
+        &path.to_string(),
+        format_id,
+        true,
+    )
 }
 
 pub(super) fn native_save_can_omit_merged(view: &PictureView) -> bool {
@@ -476,6 +494,7 @@ pub(super) fn native_save_can_omit_merged(view: &PictureView) -> bool {
 pub(super) fn native_compatibility_save_start(
     mut view: Pin<&mut PictureView>,
     path: &QString,
+    format_id: i32,
     copy: bool,
     include: bool,
 ) -> bool {
@@ -483,6 +502,7 @@ pub(super) fn native_compatibility_save_start(
     save_start_with_compatibility(
         &mut view.as_mut().rust_mut(),
         &path.to_string(),
+        format_id,
         copy,
         Some(include),
     )

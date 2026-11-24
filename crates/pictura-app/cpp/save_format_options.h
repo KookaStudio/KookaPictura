@@ -2,6 +2,8 @@
 
 #include <QtCore/QJsonObject>
 #include <QtCore/QString>
+#include <QtCore/QVector>
+#include <QtCore/QtGlobal>
 
 namespace pictura {
 
@@ -24,6 +26,45 @@ enum class SaveFormatKind {
 // The options kind for a path suffix (without the dot, any case); None for a
 // format that opens no format options dialog.
 SaveFormatKind saveFormatKindForSuffix(const QString& suffix);
+
+// One displayed Save As format. The table order is the filter order. `id` is
+// the engine catalog ordinal, never the options wire code.
+struct SaveFormatRow {
+    int id;
+    SaveFormatKind kind;
+    QString name;
+    const char* label;
+    QString pattern;
+    QString canonicalSuffix;
+};
+
+// Policy flags mirrored from the engine catalog.
+constexpr quint32 kSaveFormatNative = 1u << 0;
+constexpr quint32 kSaveFormatPdf = 1u << 1;
+constexpr quint32 kSaveFormatRaster = 1u << 2;
+constexpr quint32 kSaveFormatKeepsLayers = 1u << 3;
+constexpr quint32 kSaveFormatOffersProfile = 1u << 4;
+
+// The 14 Save As formats in display order; "All Formats" is not a row.
+const QVector<SaveFormatRow>& saveFormatRows();
+
+// A catalog ordinal for a typed suffix (alias-only, so `.dcs` is unknown) or a
+// remembered source name (`"dcs"`), or -1.
+int saveFormatIdForSuffix(const QString& suffix);
+int saveFormatIdForSourceName(const QString& name);
+// The ordinal for an options kind, or -1 when it names no format.
+int saveFormatIdForKind(SaveFormatKind kind);
+// The display index for a catalog ordinal, or -1.
+int saveFormatFilterIndexForId(int id);
+quint32 saveFormatFlags(int id);
+bool saveFormatHasFlag(int id, quint32 flag);
+
+// Policy predicates derived from the catalog flags.
+bool saveFormatIsNativeSuffix(const QString& suffix);
+bool saveFormatKeepsLayers(const QString& suffix);
+bool saveFormatOffersProfile(const QString& suffix);
+bool saveFormatIsRasterSuffix(const QString& suffix);
+bool saveFormatIsPdfSuffix(const QString& suffix);
 
 // The options kind for a Save As filter index (index into saveFileFilters()).
 SaveFormatKind saveFormatKindForFilter(int filterIndex);
