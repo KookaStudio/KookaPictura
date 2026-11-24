@@ -168,9 +168,9 @@ fn save_as_step() -> ActionStep {
 
 fn play_step(target: &str) -> ActionStep {
     let mut step = ActionStep::command("layer.flatten.image", CommandParams::new());
-    step.kind = StepKind::Play {
+    step.set_kind(StepKind::Play {
         action: target.to_string(),
-    };
+    });
     step
 }
 

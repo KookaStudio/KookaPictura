@@ -2,8 +2,7 @@
 //! `.atn`/`.psp` load and replace with a keep-on-failure contract.
 
 use crate::action::{
-    Action, ActionColor, ActionSet, ActionStep, Condition, DialogOptions, DocumentFacts, StepFlags,
-    StepKind,
+    Action, ActionColor, ActionSet, ActionStep, Condition, DialogOptions, DocumentFacts, StepKind,
 };
 use crate::atn;
 use crate::command::{label_for, CommandId, CommandParams};
@@ -186,24 +185,7 @@ impl ActionLibrary {
         }
         for other in &mut set.actions {
             for step in &mut other.steps {
-                match &mut step.kind {
-                    StepKind::Conditional {
-                        then_action,
-                        else_action,
-                        ..
-                    } => {
-                        if then_action.as_deref() == Some(old_name.as_str()) {
-                            *then_action = Some(new_name.clone());
-                        }
-                        if else_action.as_deref() == Some(old_name.as_str()) {
-                            *else_action = Some(new_name.clone());
-                        }
-                    }
-                    StepKind::Play { action } if *action == old_name => {
-                        *action = new_name.clone();
-                    }
-                    _ => {}
-                }
+                step.rewrite_action_reference(&old_name, &new_name);
             }
         }
         set.actions[action].name = new_name;
@@ -288,7 +270,7 @@ impl ActionLibrary {
             });
         }
         for step in &source.actions[action].steps {
-            match &step.kind {
+            match step.kind() {
                 StepKind::Conditional {
                     then_action,
                     else_action,
@@ -420,7 +402,7 @@ impl ActionLibrary {
             return Ok(true);
         }
         if from_set != to_set {
-            match &self.sets[from_set].actions[from_action].steps[from_step].kind {
+            match self.sets[from_set].actions[from_action].steps[from_step].kind() {
                 StepKind::Conditional {
                     then_action,
                     else_action,
@@ -482,20 +464,7 @@ impl ActionLibrary {
         params: CommandParams,
     ) -> bool {
         match self.step_mut(set, action, step) {
-            Some(target) => {
-                let edited = match &mut target.kind {
-                    StepKind::Command { params: value, .. }
-                    | StepKind::MenuItem { params: value, .. } => {
-                        *value = params;
-                        true
-                    }
-                    _ => false,
-                };
-                if edited {
-                    target.imported = None;
-                }
-                edited
-            }
+            Some(target) => target.set_params(params),
             None => false,
         }
     }
@@ -514,7 +483,7 @@ impl ActionLibrary {
             condition,
             then_action,
             else_action,
-        } = &step.kind
+        } = step.kind()
         else {
             return None;
         };
@@ -554,16 +523,11 @@ impl ActionLibrary {
         message: impl Into<String>,
         allow_continue: bool,
     ) -> Result<usize, ActionError> {
-        let step = ActionStep {
-            flags: StepFlags::default(),
-            dialog_options: DialogOptions::OPTIONAL,
-            display_name: "Stop".into(),
-            kind: StepKind::Stop {
-                message: message.into(),
-                allow_continue,
-            },
-            imported: None,
-        };
+        let mut step = ActionStep::new(StepKind::Stop {
+            message: message.into(),
+            allow_continue,
+        });
+        step.display_name = "Stop".into();
         self.add_step(set, action, step)
     }
 
@@ -575,16 +539,10 @@ impl ActionLibrary {
         params: CommandParams,
     ) -> Result<usize, ActionError> {
         let command = command.into();
-        let step = ActionStep {
-            flags: StepFlags {
-                with_dialog: false,
-                ..StepFlags::default()
-            },
-            dialog_options: DialogOptions::SPECIFIC,
-            display_name: format!("Insert Menu Item: {}", label_for(command.as_str())),
-            kind: StepKind::MenuItem { command, params },
-            imported: None,
-        };
+        let label = label_for(command.as_str()).to_string();
+        let mut step = ActionStep::new(StepKind::MenuItem { command, params });
+        step.dialog_options = DialogOptions::SPECIFIC;
+        step.display_name = format!("Insert Menu Item: {label}");
         self.add_step(set, action, step)
     }
 
@@ -603,9 +561,8 @@ impl ActionLibrary {
             };
             let mut replaced = None;
             for (index, step) in target.steps.iter_mut().enumerate().rev() {
-                if let StepKind::InsertPath { path: existing } = &mut step.kind {
-                    *existing = path.clone();
-                    step.imported = None;
+                if matches!(step.kind(), StepKind::InsertPath { .. }) {
+                    step.set_kind(StepKind::InsertPath { path: path.clone() });
                     replaced = Some(index);
                     break;
                 }
@@ -618,13 +575,8 @@ impl ActionLibrary {
         if let Some(index) = replaced {
             return Ok(index);
         }
-        let step = ActionStep {
-            flags: StepFlags::default(),
-            dialog_options: DialogOptions::OPTIONAL,
-            display_name: "Insert Path".into(),
-            kind: StepKind::InsertPath { path },
-            imported: None,
-        };
+        let mut step = ActionStep::new(StepKind::InsertPath { path });
+        step.display_name = "Insert Path".into();
         self.add_step(set, action, step)
     }
 
@@ -640,17 +592,12 @@ impl ActionLibrary {
             return Err(ActionError::NoTarget);
         };
         target_set.validate_conditional(action, then_action.as_deref(), else_action.as_deref())?;
-        let step = ActionStep {
-            flags: StepFlags::default(),
-            dialog_options: DialogOptions::OPTIONAL,
-            display_name: "Conditional".into(),
-            kind: StepKind::Conditional {
-                condition,
-                then_action,
-                else_action,
-            },
-            imported: None,
-        };
+        let mut step = ActionStep::new(StepKind::Conditional {
+            condition,
+            then_action,
+            else_action,
+        });
+        step.display_name = "Conditional".into();
         self.add_step(set, action, step)
     }
 

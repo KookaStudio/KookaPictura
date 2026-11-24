@@ -279,7 +279,7 @@ impl Player {
             }
             self.last_step = Some(step_index);
             let opens_dialog = step.opens_dialog();
-            match step.kind {
+            match step.into_kind() {
                 StepKind::Command { command, params } => {
                     return Ok(PlaybackCommand::Execute {
                         set,

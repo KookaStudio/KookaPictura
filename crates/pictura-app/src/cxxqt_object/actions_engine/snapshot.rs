@@ -83,7 +83,7 @@ impl super::ffi::ActionsEngine {
                         command_id: q(&step_command(step)),
                         message: q(&step_message(step)),
                         allow_continue: matches!(
-                            &step.kind,
+                            step.kind(),
                             StepKind::Stop {
                                 allow_continue: true,
                                 ..
@@ -125,7 +125,7 @@ impl super::ffi::ActionsEngine {
 }
 
 fn step_kind(step: &pictura_script::ActionStep) -> &'static str {
-    match &step.kind {
+    match step.kind() {
         StepKind::Command { .. } => "command",
         StepKind::Stop { .. } => "stop",
         StepKind::MenuItem { .. } => "menuItem",
@@ -138,7 +138,7 @@ fn step_kind(step: &pictura_script::ActionStep) -> &'static str {
 }
 
 fn step_command(step: &pictura_script::ActionStep) -> String {
-    match &step.kind {
+    match step.kind() {
         StepKind::Command { command, .. } | StepKind::MenuItem { command, .. } => {
             command.to_string()
         }
@@ -147,7 +147,7 @@ fn step_command(step: &pictura_script::ActionStep) -> String {
 }
 
 fn step_message(step: &pictura_script::ActionStep) -> String {
-    match &step.kind {
+    match step.kind() {
         StepKind::Stop { message, .. } => message.clone(),
         StepKind::Unknown { event, .. } => event.display(),
         _ => String::new(),
@@ -155,7 +155,7 @@ fn step_message(step: &pictura_script::ActionStep) -> String {
 }
 
 fn step_condition(step: &pictura_script::ActionStep) -> String {
-    match &step.kind {
+    match step.kind() {
         StepKind::Conditional { condition, .. } => match condition {
             pictura_script::Condition::DocumentIsSquare => "square".into(),
             pictura_script::Condition::DocumentMode(_) => "mode".into(),
@@ -175,7 +175,7 @@ fn branch_node(
         then_action,
         else_action,
         ..
-    } = &step.kind
+    } = step.kind()
     else {
         return String::new();
     };
@@ -186,14 +186,14 @@ fn branch_node(
 }
 
 fn step_path(step: &pictura_script::ActionStep) -> String {
-    match &step.kind {
+    match step.kind() {
         StepKind::InsertPath { path } => path.clone(),
         _ => String::new(),
     }
 }
 
 fn step_params(step: &pictura_script::ActionStep) -> String {
-    match &step.kind {
+    match step.kind() {
         StepKind::Command { params, .. } | StepKind::MenuItem { params, .. } => params.to_json(),
         StepKind::ToolStroke { stroke } => {
             // The tree shows settings only; the full sample array stays in the

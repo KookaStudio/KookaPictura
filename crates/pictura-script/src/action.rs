@@ -3,9 +3,186 @@
 
 use crate::command::{CommandId, CommandParams};
 use crate::error::ActionError;
+use pictura_codec::action_descriptor::{
+    read_action_descriptor, write_action_descriptor, ActionKey, ActionValue,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashSet;
+
+const KEY_NAME: [u8; 4] = *b"Nm  ";
+const KEY_JSON: [u8; 4] = *b"jsn ";
+const JSON_ACTION: &str = "action";
+const JSON_CONDITION: &str = "condition";
+const JSON_THEN: &str = "then";
+const JSON_ELSE: &str = "else";
+
+type JsonReplacement = (usize, usize, String);
+
+fn key_is(key: &ActionKey, expected: [u8; 4]) -> bool {
+    match key {
+        ActionKey::Code(code) => *code == expected,
+        ActionKey::String(bytes) => bytes.as_slice() == expected,
+    }
+}
+
+fn skip_json_whitespace(text: &str, mut index: usize) -> usize {
+    while let Some(byte) = text.as_bytes().get(index) {
+        if !byte.is_ascii_whitespace() {
+            break;
+        }
+        index += 1;
+    }
+    index
+}
+
+fn json_string_end(text: &str, start: usize) -> Option<usize> {
+    let bytes = text.as_bytes();
+    let mut escaped = false;
+    for (offset, byte) in bytes.iter().enumerate().skip(start + 1) {
+        if escaped {
+            escaped = false;
+        } else if *byte == b'\\' {
+            escaped = true;
+        } else if *byte == b'"' {
+            return Some(offset + 1);
+        }
+    }
+    None
+}
+
+fn json_value_end(text: &str, start: usize) -> Option<usize> {
+    let bytes = text.as_bytes();
+    match *bytes.get(start)? {
+        b'"' => json_string_end(text, start),
+        b'{' | b'[' => {
+            let mut depth = 0usize;
+            let mut in_string = false;
+            let mut escaped = false;
+            for (offset, byte) in bytes.iter().enumerate().skip(start) {
+                if in_string {
+                    if escaped {
+                        escaped = false;
+                    } else if *byte == b'\\' {
+                        escaped = true;
+                    } else if *byte == b'"' {
+                        in_string = false;
+                    }
+                } else {
+                    match *byte {
+                        b'"' => in_string = true,
+                        b'{' | b'[' => depth += 1,
+                        b'}' | b']' => {
+                            depth = depth.checked_sub(1)?;
+                            if depth == 0 {
+                                return Some(offset + 1);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            None
+        }
+        _ => {
+            let mut end = start;
+            while let Some(byte) = bytes.get(end) {
+                if byte.is_ascii_whitespace() || matches!(*byte, b',' | b']' | b'}') {
+                    break;
+                }
+                end += 1;
+            }
+            (end > start).then_some(end)
+        }
+    }
+}
+
+fn json_object_members(text: &str) -> Option<Vec<(String, usize, usize)>> {
+    let bytes = text.as_bytes();
+    let mut index = skip_json_whitespace(text, 0);
+    if bytes.get(index) != Some(&b'{') {
+        return None;
+    }
+    index = skip_json_whitespace(text, index + 1);
+    let mut members = Vec::new();
+    if bytes.get(index) == Some(&b'}') {
+        return Some(members);
+    }
+    loop {
+        let key_start = index;
+        let key_end = json_string_end(text, key_start)?;
+        let key = serde_json::from_str(&text[key_start..key_end]).ok()?;
+        index = skip_json_whitespace(text, key_end);
+        if bytes.get(index) != Some(&b':') {
+            return None;
+        }
+        let value_start = skip_json_whitespace(text, index + 1);
+        let value_end = json_value_end(text, value_start)?;
+        members.push((key, value_start, value_end));
+        index = skip_json_whitespace(text, value_end);
+        match bytes.get(index) {
+            Some(&b',') => index = skip_json_whitespace(text, index + 1),
+            Some(&b'}') => return Some(members),
+            _ => return None,
+        }
+    }
+}
+
+fn json_member_replacements(
+    text: &str,
+    members: &[(String, usize, usize)],
+    key: &str,
+    before: Option<&str>,
+    after: Option<&str>,
+) -> Option<(bool, Vec<JsonReplacement>)> {
+    let mut found = false;
+    let mut replacements = Vec::new();
+    for (member_key, start, end) in members {
+        if member_key != key {
+            continue;
+        }
+        found = true;
+        let raw = &text[*start..*end];
+        match before {
+            Some(old) => {
+                let Ok(value) = serde_json::from_str::<String>(raw) else {
+                    return None;
+                };
+                if value != old {
+                    return None;
+                }
+                if let Some(new) = after {
+                    replacements.push((*start, *end, serde_json::to_string(new).ok()?));
+                }
+            }
+            None => {
+                let Ok(value) = serde_json::from_str::<Value>(raw) else {
+                    return None;
+                };
+                if value != Value::Null {
+                    return None;
+                }
+            }
+        }
+    }
+    Some((found, replacements))
+}
+
+fn replace_json_spans(text: &str, mut replacements: Vec<JsonReplacement>) -> Option<String> {
+    replacements.sort_by_key(|(start, _, _)| *start);
+    let mut patched = String::with_capacity(text.len());
+    let mut cursor = 0;
+    for (start, end, replacement) in replacements {
+        if start < cursor || end > text.len() {
+            return None;
+        }
+        patched.push_str(&text[cursor..start]);
+        patched.push_str(&replacement);
+        cursor = end;
+    }
+    patched.push_str(&text[cursor..]);
+    Some(patched)
+}
 
 /// The recorded dialog-options byte (0–4).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -357,9 +534,9 @@ pub struct ActionStep {
     pub flags: StepFlags,
     pub dialog_options: DialogOptions,
     pub display_name: String,
-    pub kind: StepKind,
-    /// The form read from disk, cleared when the step is edited.
-    pub imported: Option<ImportedStepForm>,
+    kind: StepKind,
+    /// The form read from disk, invalidated when a payload edit cannot preserve it.
+    imported: Option<ImportedStepForm>,
 }
 
 impl PartialEq for ActionStep {
@@ -372,15 +549,320 @@ impl PartialEq for ActionStep {
 }
 
 impl ActionStep {
-    pub fn command(command: impl Into<CommandId>, params: CommandParams) -> Self {
-        let command = command.into();
+    /// Build a step from its executable payload with no preserved form.
+    pub fn new(kind: StepKind) -> Self {
         Self {
             flags: StepFlags::default(),
             dialog_options: DialogOptions::OPTIONAL,
-            display_name: crate::command::label_for(command.as_str()).to_string(),
-            kind: StepKind::Command { command, params },
+            display_name: String::new(),
+            kind,
             imported: None,
         }
+    }
+
+    /// Attach the form read from disk. Only the ATN decoder calls this.
+    pub(crate) fn with_imported(kind: StepKind, imported: ImportedStepForm) -> Self {
+        let mut step = Self::new(kind);
+        step.imported = Some(imported);
+        step
+    }
+
+    pub fn kind(&self) -> &StepKind {
+        &self.kind
+    }
+
+    pub(crate) fn into_kind(self) -> StepKind {
+        self.kind
+    }
+
+    pub fn imported(&self) -> Option<&ImportedStepForm> {
+        self.imported.as_ref()
+    }
+
+    /// Replace the payload, keeping the preserved form only when it is unchanged.
+    pub fn set_kind(&mut self, kind: StepKind) {
+        if self.kind != kind {
+            self.kind = kind;
+            self.imported = None;
+        }
+    }
+
+    /// Edit a Command or MenuItem's parameters. Returns whether the step accepts
+    /// parameter edits, whether or not the value changed. The preserved form is
+    /// dropped only when the value actually differs.
+    pub fn set_params(&mut self, params: CommandParams) -> bool {
+        match &mut self.kind {
+            StepKind::Command { params: value, .. } | StepKind::MenuItem { params: value, .. } => {
+                if *value != params {
+                    *value = params;
+                    self.imported = None;
+                }
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Rewrite a Play or Conditional reference from `old` to `new`, keeping the
+    /// preserved descriptor's unrelated content when it can be patched.
+    pub fn rewrite_action_reference(&mut self, old: &str, new: &str) -> bool {
+        if old == new {
+            return false;
+        }
+        enum Edit {
+            Play,
+            Conditional {
+                condition: Condition,
+                before: (Option<String>, Option<String>),
+                after: (Option<String>, Option<String>),
+            },
+        }
+        let edit = match &mut self.kind {
+            StepKind::Play { action } if action == old => {
+                *action = new.to_owned();
+                Some(Edit::Play)
+            }
+            StepKind::Conditional {
+                condition,
+                then_action,
+                else_action,
+                ..
+            } => {
+                let before = (then_action.clone(), else_action.clone());
+                let mut changed = false;
+                if then_action.as_deref() == Some(old) {
+                    *then_action = Some(new.to_owned());
+                    changed = true;
+                }
+                if else_action.as_deref() == Some(old) {
+                    *else_action = Some(new.to_owned());
+                    changed = true;
+                }
+                let after = (then_action.clone(), else_action.clone());
+                changed.then_some(Edit::Conditional {
+                    condition: condition.clone(),
+                    before,
+                    after,
+                })
+            }
+            _ => None,
+        };
+        match edit {
+            Some(Edit::Play) => {
+                self.patch_imported_play(old, new);
+                true
+            }
+            Some(Edit::Conditional {
+                condition,
+                before,
+                after,
+            }) => {
+                self.patch_imported_conditional(&condition, &before, &after);
+                true
+            }
+            None => false,
+        }
+    }
+
+    fn patch_imported_play(&mut self, old: &str, new: &str) {
+        let Some(imported) = self.imported.clone() else {
+            return;
+        };
+        let Some(bytes) = imported.descriptor.as_deref() else {
+            self.imported = None;
+            return;
+        };
+        let Ok(mut descriptor) = read_action_descriptor(bytes, true) else {
+            self.imported = None;
+            return;
+        };
+        let mut has_reference = false;
+        let mut jsn_patches = Vec::new();
+        for (index, (key, value)) in descriptor.items.iter().enumerate() {
+            if key_is(key, KEY_NAME) {
+                if !matches!(value, ActionValue::Text(text) if text.as_str() == old) {
+                    self.imported = None;
+                    return;
+                }
+                has_reference = true;
+                continue;
+            }
+            if !key_is(key, KEY_JSON) {
+                continue;
+            }
+            let ActionValue::Text(text) = value else {
+                continue;
+            };
+            let Ok(parsed) = serde_json::from_str::<Value>(text) else {
+                continue;
+            };
+            if !parsed.is_object() {
+                continue;
+            }
+            let Some(members) = json_object_members(text) else {
+                self.imported = None;
+                return;
+            };
+            let Some((found, replacements)) =
+                json_member_replacements(text, &members, JSON_ACTION, Some(old), Some(new))
+            else {
+                self.imported = None;
+                return;
+            };
+            if !found {
+                continue;
+            }
+            let Some(patched) = replace_json_spans(text, replacements) else {
+                self.imported = None;
+                return;
+            };
+            has_reference = true;
+            jsn_patches.push((index, patched));
+        }
+        if !has_reference {
+            self.imported = None;
+            return;
+        }
+        for (key, value) in &mut descriptor.items {
+            if key_is(key, KEY_NAME) {
+                *value = ActionValue::Text(new.to_owned());
+            }
+        }
+        for (index, text) in jsn_patches {
+            descriptor.items[index].1 = ActionValue::Text(text);
+        }
+        if let Some(form) = &mut self.imported {
+            form.descriptor = Some(write_action_descriptor(&descriptor, true));
+        }
+    }
+
+    fn patch_imported_conditional(
+        &mut self,
+        condition: &Condition,
+        before: &(Option<String>, Option<String>),
+        after: &(Option<String>, Option<String>),
+    ) {
+        let Some(imported) = self.imported.clone() else {
+            return;
+        };
+        let Some(bytes) = imported.descriptor.as_deref() else {
+            self.imported = None;
+            return;
+        };
+        let Ok(mut descriptor) = read_action_descriptor(bytes, true) else {
+            self.imported = None;
+            return;
+        };
+        let mut found = false;
+        let mut decoded_seen = false;
+        for (key, value) in &mut descriptor.items {
+            if !key_is(key, KEY_JSON) {
+                continue;
+            }
+            let ActionValue::Text(text) = value else {
+                continue;
+            };
+            let Ok(parsed) = serde_json::from_str::<Value>(text) else {
+                continue;
+            };
+            let decoded = !decoded_seen;
+            decoded_seen = true;
+            let Some(object) = parsed.as_object() else {
+                if decoded {
+                    self.imported = None;
+                    return;
+                }
+                continue;
+            };
+            let Some(raw_condition) = object.get(JSON_CONDITION) else {
+                if decoded {
+                    self.imported = None;
+                    return;
+                }
+                continue;
+            };
+            let Ok(sidecar_condition) = serde_json::from_value::<Condition>(raw_condition.clone())
+            else {
+                if decoded {
+                    self.imported = None;
+                    return;
+                }
+                continue;
+            };
+            if &sidecar_condition != condition {
+                if decoded {
+                    self.imported = None;
+                    return;
+                }
+                continue;
+            }
+            let Some(members) = json_object_members(text) else {
+                if decoded {
+                    self.imported = None;
+                    return;
+                }
+                continue;
+            };
+            let Some((_, then_replacements)) = json_member_replacements(
+                text,
+                &members,
+                JSON_THEN,
+                before.0.as_deref(),
+                after.0.as_deref(),
+            ) else {
+                if decoded {
+                    self.imported = None;
+                    return;
+                }
+                continue;
+            };
+            let Some((_, else_replacements)) = json_member_replacements(
+                text,
+                &members,
+                JSON_ELSE,
+                before.1.as_deref(),
+                after.1.as_deref(),
+            ) else {
+                if decoded {
+                    self.imported = None;
+                    return;
+                }
+                continue;
+            };
+            let mut replacements = then_replacements;
+            replacements.extend(else_replacements);
+            if replacements.is_empty() {
+                if decoded {
+                    self.imported = None;
+                    return;
+                }
+                continue;
+            }
+            let Some(patched) = replace_json_spans(text, replacements) else {
+                if decoded {
+                    self.imported = None;
+                    return;
+                }
+                continue;
+            };
+            *value = ActionValue::Text(patched);
+            found = true;
+        }
+        if !decoded_seen || !found {
+            self.imported = None;
+            return;
+        }
+        if let Some(form) = &mut self.imported {
+            form.descriptor = Some(write_action_descriptor(&descriptor, true));
+        }
+    }
+
+    pub fn command(command: impl Into<CommandId>, params: CommandParams) -> Self {
+        let command = command.into();
+        let label = crate::command::label_for(command.as_str()).to_string();
+        let mut step = Self::new(StepKind::Command { command, params });
+        step.display_name = label;
+        step
     }
 
     pub fn modal_state(&self) -> ModalState {
