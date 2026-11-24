@@ -72,8 +72,6 @@ void PicturaMainWindow::openSaveSelectionDialog()
     if (!active || !active->has_document() || !active->has_selection()) {
         return;
     }
-    const int width = active->document_width();
-    const int height = active->document_height();
     const QList<int> indexes = sameSizeDocumentIndexes(*this);
     if (indexes.isEmpty()) {
         return;
@@ -94,14 +92,10 @@ void PicturaMainWindow::openSaveSelectionDialog()
         return;
     }
     const SelectionSaveRequest request = dialog.saveRequest();
-    // ponytail: the whole width x height coverage plane crosses FFI here and is
-    // cloned again by the Rust receiver. Same-size, user-initiated only; tile the
-    // transfer if large-document latency matters.
-    const auto coverage = selection_coverage_bytes(*active);
-    const ::rust::Slice<const std::uint8_t> bytes(coverage.data(), coverage.size());
+    const QString sourceTarget;
     if (request.newDocument) {
         auto* view = new PictureView(this);
-        if (!new_selection_document(*view, bytes, width, height, request.name, false)) {
+        if (!transfer_new_document(*view, *active, sourceTarget, 0, request.name, false)) {
             delete view;
             refuse();
             return;
@@ -120,8 +114,8 @@ void PicturaMainWindow::openSaveSelectionDialog()
         }
         return;
     }
-    if (save_selection_coverage(*target, bytes, width, height, request.target, request.name,
-                                        request.mode)) {
+    if (transfer_save_selection(*target, *active, sourceTarget, 0, request.target, request.name,
+                                request.mode)) {
         invalidateMaskOverlayFor(target);
         refresh();
     } else {
@@ -135,8 +129,6 @@ void PicturaMainWindow::openLoadSelectionDialog()
     if (!active || !active->has_document()) {
         return;
     }
-    const int width = active->document_width();
-    const int height = active->document_height();
     const QList<int> indexes = sameSizeDocumentIndexes(*this);
     if (indexes.isEmpty()) {
         return;
@@ -160,10 +152,8 @@ void PicturaMainWindow::openLoadSelectionDialog()
     }
     if (request.document == active) {
         if (isColourTarget(request.target)) {
-            const auto coverage = color_row_coverage(*active, colourRowOf(request.target), 0x7);
-            if (!load_selection_coverage(*active,
-                    ::rust::Slice<const std::uint8_t>(coverage.data(), coverage.size()), width,
-                    height, request.invert, request.mode)) {
+            if (!channels_load_color_selection(*active, colourRowOf(request.target), 0x7,
+                                               request.invert, request.mode)) {
                 refuse();
             }
             return;
@@ -173,17 +163,8 @@ void PicturaMainWindow::openLoadSelectionDialog()
         }
         return;
     }
-    // ponytail: same full-plane FFI copy as Save Selection.
-    const auto coverage = isColourTarget(request.target)
-        ? color_row_coverage(*request.document, colourRowOf(request.target), 0x7)
-        : channel_coverage(*request.document, request.target);
-    if (coverage.size() == 0) {
-        refuse();
-        return;
-    }
-    if (load_selection_coverage(*active,
-            ::rust::Slice<const std::uint8_t>(coverage.data(), coverage.size()), width, height,
-            request.invert, request.mode)) {
+    if (transfer_load_selection(*active, *request.document, request.target, 0x7, request.invert,
+                                false, request.mode)) {
         refresh();
     } else {
         refuse();
@@ -261,20 +242,14 @@ void PicturaMainWindow::openDuplicateChannelDialog()
     }
     const DuplicateChannelRequest request = dialog.request();
     const int alpha = panel->alphaIndexAt(row);
-    const auto coverage =
-        alpha >= 0
-            ? channel_coverage(*source, QStringLiteral("alpha:%1").arg(alpha))
-            : color_row_coverage(*source, row, panel->channelMask());
-    if (coverage.size() != std::size_t(width) * std::size_t(height)) {
-        QMessageBox::warning(
-            this, tr("Duplicate Channel"),
-            tr("Could not duplicate the channel. The source channel is no longer available."));
-        return;
-    }
-    const ::rust::Slice<const std::uint8_t> bytes(coverage.data(), coverage.size());
+    const QString sourceTarget = alpha >= 0
+        ? QStringLiteral("alpha:%1").arg(alpha)
+        : QStringLiteral("color:%1").arg(row);
+    const int mask = panel->channelMask();
     if (request.newDocument) {
         auto* view = new PictureView(this);
-        if (!new_selection_document(*view, bytes, width, height, request.name, request.invert)) {
+        if (!transfer_new_document(*view, *source, sourceTarget, mask, request.name,
+                                   request.invert)) {
             delete view;
             QMessageBox::warning(
                 this, tr("Duplicate Channel"),
@@ -286,8 +261,11 @@ void PicturaMainWindow::openDuplicateChannelDialog()
         return;
     }
     PictureView* target = request.document ? request.document : source;
-    if (!duplicate_channel_coverage(*target, bytes, width, height, request.name,
-                                     request.invert)) {
+    const bool duplicated = target == source
+        ? duplicate_channel_in_view(*source, sourceTarget, mask, request.name, request.invert)
+        : transfer_duplicate_channel(*target, *source, sourceTarget, mask, request.name,
+                                     request.invert);
+    if (!duplicated) {
         QMessageBox::warning(
             this, tr("Duplicate Channel"),
             tr("Could not duplicate the channel. The destination may have reached its "

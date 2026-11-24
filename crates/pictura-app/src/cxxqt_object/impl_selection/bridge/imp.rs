@@ -1,5 +1,6 @@
 use super::*;
 
+use crate::cxxqt_object::edit::Edit;
 use crate::cxxqt_object::helpers::{combine_mode_from, feathered, feathered_within};
 use crate::cxxqt_object::picture::{sample_tiles, tile_source};
 use core::pin::Pin;
@@ -288,27 +289,127 @@ pub(super) fn color_row_coverage(view: &PictureView, row: i32, mask: i32) -> Vec
     view.color_row_coverage(row, mask)
 }
 
-pub(super) fn duplicate_channel_coverage(
+pub(super) fn transfer_duplicate_channel(
     view: Pin<&mut PictureView>,
-    coverage: &[u8],
-    width: i32,
-    height: i32,
+    source: &PictureView,
+    source_target: &QString,
+    source_mask: i32,
     name: &QString,
     invert: bool,
 ) -> bool {
-    view.duplicate_channel_coverage(coverage, width, height, name, invert)
+    if view.rust().session.read_only()
+        || !view
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .is_some_and(|doc| doc.can_add_channel())
+    {
+        return false;
+    }
+    let spec = source_target.to_string();
+    let Some(shape) = source.rust().transfer_source(&spec, source_mask as u8) else {
+        return false;
+    };
+    let name = name.to_string();
+    let outcome = view.edit("Duplicate Channel", |rust| {
+        rust.transfer_channel(shape, &name, invert)
+    });
+    !matches!(outcome, Edit::None)
 }
 
-pub(super) fn save_selection_coverage(
+pub(super) fn transfer_save_selection(
     view: Pin<&mut PictureView>,
-    coverage: &[u8],
-    width: i32,
-    height: i32,
+    source: &PictureView,
+    source_target: &QString,
+    source_mask: i32,
     target: &QString,
     name: &QString,
     mode: &QString,
 ) -> bool {
-    view.save_selection_coverage(coverage, width, height, target, name, mode)
+    if view.rust().session.read_only() {
+        return false;
+    }
+    let spec = source_target.to_string();
+    let Some(shape) = source.rust().transfer_source(&spec, source_mask as u8) else {
+        return false;
+    };
+    let target = target.to_string();
+    let name = name.to_string();
+    let mode = combine_mode_from(&mode.to_string());
+    let outcome = view.edit("Save Selection", |rust| {
+        rust.transfer_save(shape, &target, &name, mode)
+    });
+    !matches!(outcome, Edit::None)
+}
+
+pub(super) fn transfer_load_selection(
+    view: Pin<&mut PictureView>,
+    source: &PictureView,
+    source_target: &QString,
+    source_mask: i32,
+    invert: bool,
+    fit: bool,
+    mode: &QString,
+) -> bool {
+    if view.rust().session.read_only() {
+        return false;
+    }
+    let spec = source_target.to_string();
+    let Some(shape) = source.rust().transfer_source(&spec, source_mask as u8) else {
+        return false;
+    };
+    let mode = combine_mode_from(&mode.to_string());
+    let outcome = view.edit("Load Selection", |rust| {
+        rust.transfer_load(shape, invert, fit, mode)
+    });
+    !matches!(outcome, Edit::None)
+}
+
+pub(super) fn transfer_new_document(
+    mut view: Pin<&mut PictureView>,
+    source: &PictureView,
+    source_target: &QString,
+    source_mask: i32,
+    name: &QString,
+    invert: bool,
+) -> bool {
+    let spec = source_target.to_string();
+    let Some(shape) = source.rust().transfer_source(&spec, source_mask as u8) else {
+        return false;
+    };
+    let name = name.to_string();
+    view.as_mut()
+        .rust_mut()
+        .transfer_document(shape, &name, invert)
+}
+
+pub(super) fn duplicate_channel_in_view(
+    view: Pin<&mut PictureView>,
+    source_target: &QString,
+    source_mask: i32,
+    name: &QString,
+    invert: bool,
+) -> bool {
+    if view.rust().session.read_only()
+        || !view
+            .rust()
+            .session
+            .doc
+            .as_ref()
+            .is_some_and(|doc| doc.can_add_channel())
+    {
+        return false;
+    }
+    let spec = source_target.to_string();
+    let Some(shape) = view.rust().transfer_source(&spec, source_mask as u8) else {
+        return false;
+    };
+    let name = name.to_string();
+    let outcome = view.edit("Duplicate Channel", |rust| {
+        rust.transfer_channel(shape, &name, invert)
+    });
+    !matches!(outcome, Edit::None)
 }
 
 pub(super) fn load_selection_coverage(
@@ -320,28 +421,6 @@ pub(super) fn load_selection_coverage(
     mode: &QString,
 ) -> bool {
     view.load_selection_coverage(coverage, width, height, invert, mode)
-}
-
-pub(super) fn load_selection_coverage_fit(
-    view: Pin<&mut PictureView>,
-    coverage: &[u8],
-    width: i32,
-    height: i32,
-    invert: bool,
-    mode: &QString,
-) -> bool {
-    view.load_selection_coverage_fit(coverage, width, height, invert, mode)
-}
-
-pub(super) fn new_selection_document(
-    view: Pin<&mut PictureView>,
-    coverage: &[u8],
-    width: i32,
-    height: i32,
-    name: &QString,
-    invert: bool,
-) -> bool {
-    view.new_selection_document(coverage, width, height, name, invert)
 }
 
 #[cfg(test)]

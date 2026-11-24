@@ -128,6 +128,14 @@ impl NativeCompatibility {
         }
     }
 
+    #[cfg(test)]
+    pub(in crate::cxxqt_object) fn read_only_for_test() -> Self {
+        Self {
+            access: VersionAccess::ReadOnly("read-only transfer test"),
+            ..Self::default()
+        }
+    }
+
     pub(in crate::cxxqt_object) fn activate(&self) {
         if let Some(source) = &self.source {
             let mut open = PROTECTED_SOURCES

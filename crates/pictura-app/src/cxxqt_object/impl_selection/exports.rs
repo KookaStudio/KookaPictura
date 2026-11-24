@@ -4,7 +4,7 @@
 
 use super::super::picture::{stream_picture, whole};
 use super::super::state::PictureViewRust;
-use super::channel_row_selection_from;
+use super::channel_rows::channel_row_selection_from;
 use super::save_load::selection_from_target;
 
 impl PictureViewRust {

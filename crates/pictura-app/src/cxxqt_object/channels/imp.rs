@@ -143,9 +143,10 @@ pub(super) fn channels_load_color_selection(
     view: Pin<&mut PictureView>,
     row: i32,
     mask: i32,
+    invert: bool,
     mode: &QString,
 ) -> bool {
-    view.load_channel_selection(row, mask, mode)
+    view.load_channel_selection(row, mask, invert, mode)
 }
 
 fn delete_alpha_with_name(doc: &mut Document, index: usize) -> bool {

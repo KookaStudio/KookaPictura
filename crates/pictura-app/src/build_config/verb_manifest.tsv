@@ -1038,12 +1038,10 @@ free	color_range_preview_image	color_range_preview_image	api/selection_bridge.h	
 free	color_range_preview_set	color_range_preview_set	api/selection_bridge.h	pictura_app/src/cxxqt_object/color_range.cxxqt.h
 free	color_row_coverage	color_row_coverage	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	commit_selection_move	commit_selection_move	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
-free	duplicate_channel_coverage	duplicate_channel_coverage	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
+free	duplicate_channel_in_view	duplicate_channel_in_view	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	load_selection_coverage	load_selection_coverage	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
-free	load_selection_coverage_fit	load_selection_coverage_fit	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	load_selection_target	load_selection_target	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	move_selection_content	move_selection_content	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
-free	new_selection_document	new_selection_document	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	preview_selection_move	preview_selection_move	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	quick_select	quick_select	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	quick_select_begin	quick_select_begin	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
@@ -1058,7 +1056,6 @@ free	refine_mask_apply	refine_mask_apply	api/selection_bridge.h	pictura_app/src/
 free	refine_mask_available	refine_mask_available	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/refine.cxxqt.h
 free	refine_mask_band_preview	refine_mask_band_preview	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/refine.cxxqt.h
 free	refine_mask_preview	refine_mask_preview	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/refine.cxxqt.h
-free	save_selection_coverage	save_selection_coverage	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	save_selection_to	save_selection_to	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	selection_clip_shape_to_canvas	selection_clip_shape_to_canvas	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	selection_coverage_bytes	selection_coverage_bytes	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
@@ -1068,6 +1065,10 @@ free	selection_marquee_rect	selection_marquee_rect	api/selection_bridge.h	pictur
 free	selection_mask_targets	selection_mask_targets	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	selection_select_ellipse_aa	selection_select_ellipse_aa	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	selection_within_radius	selection_within_radius	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
+free	transfer_duplicate_channel	transfer_duplicate_channel	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
+free	transfer_load_selection	transfer_load_selection	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
+free	transfer_new_document	transfer_new_document	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
+free	transfer_save_selection	transfer_save_selection	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	add_user_slice	add_user_slice	api/transform_bridge.h	pictura_app/src/cxxqt_object/crop_group.cxxqt.h
 free	align_apply	align_apply	api/transform_bridge.h	pictura_app/src/cxxqt_object/align.cxxqt.h
 free	align_can	align_can	api/transform_bridge.h	pictura_app/src/cxxqt_object/align.cxxqt.h
