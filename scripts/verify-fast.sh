@@ -27,30 +27,18 @@ fi
 : "${PICTURA_JOBS:?cpu-budget marker set without PICTURA_JOBS; run the gate through scripts/cpu-budget.py}"
 cd "$script_dir/.."
 
-base=""
-for ref in master main kooka/master kooka/main origin/master origin/main; do
-  if git rev-parse --verify -q "$ref" >/dev/null 2>&1; then
-    base=$(git merge-base HEAD "$ref" 2>/dev/null || true)
-    [ -n "$base" ] && break
-  fi
-done
-
-changed=$(
-  {
-    [ -n "$base" ] && git diff --name-only "$base" -- || true
-    git status --porcelain --untracked-files=all | sed 's/^...//'
-  } | sort -u
-)
+changed_file=$(mktemp "${TMPDIR:-/tmp}/pictura-changed.XXXXXX")
+python3 scripts/changed_files.py --output "$changed_file" >/dev/null
 
 docs_only=0
-if [ -n "$changed" ]; then
+if [ -s "$changed_file" ]; then
   docs_only=1
-  while IFS= read -r path; do
+  while IFS= read -r -d '' path; do
     case "$path" in
       docs/* | openspec/* | *.md | .serena/*) ;;
       *) docs_only=0; break ;;
     esac
-  done <<< "$changed"
+  done < "$changed_file"
 fi
 
 if [ "$docs_only" -eq 1 ]; then
@@ -66,6 +54,7 @@ if [ "$docs_only" -eq 1 ]; then
   python3 scripts/check-parity.py
   echo "== openspec =="
   openspec validate --all --strict 2>&1 | tail -1
+  rm -f "$changed_file"
   echo "verify-fast: OK (docs-only)"
   exit 0
 fi
@@ -92,7 +81,7 @@ echo "== test =="
 bash scripts/test-report.sh never
 
 checks_dir="$(mktemp -d "${TMPDIR:-/tmp}/pictura-verify.XXXXXX")"
-trap 'rm -rf "$checks_dir"; build_lock_release' EXIT
+trap 'rm -rf "$checks_dir"; rm -f "$changed_file"; build_lock_release' EXIT
 
 check_names=()
 batch_pids=()
@@ -126,6 +115,20 @@ archive_check() {
         bash scripts/check-openspec-archived.sh
 }
 
+file_size_check() {
+    bash scripts/check-file-size.sh --self-test &&
+        bash scripts/check-file-size.sh --changed "$1"
+}
+
+# guard.sh runs the file-local checks but only the MSVC check's self-test, so the
+# gate proves every scoped path here.
+scoped_self_tests() {
+    python3 scripts/changed_files.py --self-test &&
+        python3 scripts/check-milestone-names.py --self-test &&
+        python3 scripts/check-msvc-string-limits.py --self-test &&
+        python3 scripts/check-colour-literals.py --self-test
+}
+
 test_plan_check() {
     python3 scripts/check-test-plan.py --self-test &&
         python3 scripts/check-test-plan.py
@@ -151,7 +154,8 @@ openspec_check() {
 }
 
 echo "== checks (parallel) =="
-start_check file-size bash scripts/check-file-size.sh
+start_check file-size file_size_check "$changed_file"
+start_check scoped-self-tests scoped_self_tests
 start_check flatpak flatpak_check
 start_check worktree-hook bash scripts/check-worktree-hook.sh
 start_check build-caching bash scripts/check-local-build-caching.sh
@@ -159,7 +163,7 @@ start_check build-lock bash scripts/check-build-lock.sh
 start_check selftest-budget bash scripts/check-selftest-budget.sh
 start_check archive archive_check
 start_check icon-provenance python3 scripts/check-icon-provenance.py
-start_check guard bash scripts/guard.sh
+start_check guard bash scripts/guard.sh --changed "$changed_file"
 start_check shell-seams shell_seams_check
 start_check test-plan test_plan_check
 start_check parity parity_check
