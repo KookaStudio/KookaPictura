@@ -7821,6 +7821,37 @@ Process: every new milestone is proposed through OpenSpec first
 (`openspec/changes/<name>`, new capabilities), validated, then implemented.
 M6 through M34 are archived; their deltas now live in `openspec/specs/`.
 
+## Adjustment facts: one source (#955)
+
+`AdjustmentKind` in `pictura-core` is the catalogue taxonomy (25 kinds). Every
+kind fact now has one home. Exhaustive Rust conversions reject unclassified
+variants, and the catalogue test rejects a missing row:
+
+- `pictura-codec`'s `layer_content/defaults.rs` exposes per-kind block-builder
+  hooks. `pictura-render`'s `dialog_default(kind, ctx)` and
+  `layer_default(kind, ctx)` wrappers resolve the catalogue row and invoke its
+  builder. `Defaults` carries the foreground/background pair and CMYK flag.
+- `pictura-core` generates `AdjustmentKind` and `ALL` from one declaration and
+  exports const constructors for the six direct Image commands.
+- `Adjustment::kind()` / `FillContent::kind()` are the one block-to-kind map,
+  used by both the shell's layer rows and the preset store.
+- `ADJUSTMENT_CATALOGUE` rows carry typed `dialog_default`, `layer_default`, and
+  `direct` function pointers plus `GpuRoute` (`None` / `Inline { id }` / `Lut`).
+  Render's `direct_adjustment(kind)` wrapper invokes the row's constructor; the
+  history label remains the row's title.
+- The GPU plan resolves routes through those rows. The every-row route test
+  lives in `gpu/route_tests.rs`, derives WGSL markers from inline and LUT ids,
+  and checks the catalogue-driven parity source.
+
+Kept deliberately: Brightness/Contrast, Hue/Saturation, and Photo Filter have
+separate dialog and layer defaults. Gradient Map's dialog follows the toolbar,
+while its layer default stays black to white. `gpu/lut.rs::kind` selects table
+shape ids 6 and 7, and `pictura_adjust::adjustment_lut` builds the tables. A GPU
+route says the *kind* has a GPU path, not that every parameter set uses it.
+Hue/Saturation with colour ranges still declines to the CPU. The C++ dialog
+factory (`makeAdjustmentDialog`) is a runtime if/else with a generic fallback,
+so it is not compile-checked by this seam.
+
 ## Known risks / open items
 
 - Core API is frozen only where noted; adding a field to a core struct breaks
