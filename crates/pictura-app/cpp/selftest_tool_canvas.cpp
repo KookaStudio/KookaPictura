@@ -44,6 +44,7 @@ int pictura::runToolCanvasChecks(pictura::PicturaMainWindow& frame)
     // tc_brush_cursor (340): Brush/Pencil show a blank cursor while the drawn
     // ring carries the brush size, and another tool restores a visible cursor.
     {
+        ST_BEGIN("tc_brush_cursor");
         const bool created = frame.newDocument(QStringLiteral("BrushCursor"), 16, 16,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
@@ -51,7 +52,7 @@ int pictura::runToolCanvasChecks(pictura::PicturaMainWindow& frame)
         ImageView* canvas = frame.imageView();
         auto* tools = frame.findChild<ToolController*>();
         if (!created || !view || !canvas || !tools) {
-            return pictura::selfTest().fail(340, "brush cursor fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode340, "brush cursor fixture");
         }
         const int doc = frame.activeDocumentIndex();
         frame.setActiveTool(ToolId::Brush);
@@ -62,12 +63,11 @@ int pictura::runToolCanvasChecks(pictura::PicturaMainWindow& frame)
         frame.setActiveTool(ToolId::Move);
         tools->refreshCursor();
         const bool restored = canvas->cursor().shape() != Qt::BlankCursor;
-        ST_BEGIN("tc_brush_cursor");
         ST_PASS("tc_brush_cursor blank=%d outline=%d restored=%d", blank ? 1 : 0,
                 outline ? 1 : 0, restored ? 1 : 0);
         if (!blank || !outline || !restored) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(340, "blank brush cursor");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode340, "blank brush cursor");
         }
         frame.closeDocument(doc, false);
     }
@@ -75,12 +75,13 @@ int pictura::runToolCanvasChecks(pictura::PicturaMainWindow& frame)
     // tc_ring_outside (341): the brush ring is drawn outside the document rect
     // (bounded only by the widget), not clipped to it.
     {
+        ST_BEGIN("tc_ring_outside");
         const bool created = frame.newDocument(QStringLiteral("RingEdge"), 100, 100,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         ImageView* canvas = frame.imageView();
         if (!created || !canvas) {
-            return pictura::selfTest().fail(341, "ring fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode341, "ring fixture");
         }
         const int doc = frame.activeDocumentIndex();
         frame.resize(800, 600);
@@ -112,11 +113,10 @@ int pictura::runToolCanvasChecks(pictura::PicturaMainWindow& frame)
         }
         const bool ringDrawn = inside > 0;
         const bool ringOutside = outside > 0;
-        ST_BEGIN("tc_ring_outside");
         ST_PASS("tc_ring_outside inside=%d outside=%d", inside, outside);
         if (!ringDrawn || !ringOutside) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(341, "ring clipped to document");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode341, "ring clipped to document");
         }
         frame.closeDocument(doc, false);
     }
@@ -124,13 +124,14 @@ int pictura::runToolCanvasChecks(pictura::PicturaMainWindow& frame)
     // tc_space_pan (342): holding Space pans a left drag without starting the
     // tool's paint, and release restores the previous pan/cursor state.
     {
+        ST_BEGIN("tc_space_pan");
         const bool created = frame.newDocument(QStringLiteral("SpacePan"), 2000, 2000,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         ImageView* canvas = frame.imageView();
         if (!created || !view || !canvas) {
-            return pictura::selfTest().fail(342, "space pan fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode342, "space pan fixture");
         }
         const int doc = frame.activeDocumentIndex();
         frame.resize(800, 600);
@@ -156,13 +157,12 @@ int pictura::runToolCanvasChecks(pictura::PicturaMainWindow& frame)
         const bool released = !canvas->spacePanForTest();
         const bool panRestored = !canvas->panEnabled();
         const bool toolSame = frame.activeTool() == ToolId::Brush;
-        ST_BEGIN("tc_space_pan");
         ST_PASS("tc_space_pan panOn=%d panned=%d noPaint=%d released=%d restored=%d tool=%d",
                 panOn ? 1 : 0, panned ? 1 : 0, noPaint ? 1 : 0, released ? 1 : 0,
                 panRestored ? 1 : 0, toolSame ? 1 : 0);
         if (!panOn || !panned || !noPaint || !released || !panRestored || !toolSame) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(342, "space pan");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode342, "space pan");
         }
         frame.closeDocument(doc, false);
     }
@@ -171,12 +171,13 @@ int pictura::runToolCanvasChecks(pictura::PicturaMainWindow& frame)
     // selection, a held key highlights its keycap, and a tool with no keycaps
     // falls back to its text hint.
     {
+        ST_BEGIN("tc_hint_bar");
         const bool created = frame.newDocument(QStringLiteral("HintBar"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         auto* hintBar = frame.findChild<ToolHintBar*>(QStringLiteral("toolHintBar"));
         if (!created || !hintBar) {
-            return pictura::selfTest().fail(343, "hint bar fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode343, "hint bar fixture");
         }
         const int doc = frame.activeDocumentIndex();
         frame.setActiveTool(ToolId::Marquee);
@@ -192,12 +193,11 @@ int pictura::runToolCanvasChecks(pictura::PicturaMainWindow& frame)
         frame.setActiveTool(ToolId::Hand);
         const bool fallback =
             hintBar->hintCountForTest() == 0 && !hintBar->fallbackForTest().isEmpty();
-        ST_BEGIN("tc_hint_bar");
         ST_PASS("tc_hint_bar shift=%d highlight=%d cleared=%d fallback=%d", shiftHint ? 1 : 0,
                 highlighted ? 1 : 0, cleared ? 1 : 0, fallback ? 1 : 0);
         if (!shiftHint || !highlighted || !cleared || !fallback) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(343, "tool hint bar");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode343, "tool hint bar");
         }
         frame.closeDocument(doc, false);
     }
@@ -206,13 +206,14 @@ int pictura::runToolCanvasChecks(pictura::PicturaMainWindow& frame)
     // the document unchanged: no clone, the source still active, no history. A
     // following non-zero Alt drag still clones, proving the press state is intact.
     {
+        ST_BEGIN("tc_alt_clone_noop");
         const bool created = frame.newDocument(QStringLiteral("MoveCloneNoop"), 16, 16,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         ImageView* canvas = frame.imageView();
         if (!created || !view || !canvas) {
-            return pictura::selfTest().fail(384, "clone noop fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode384, "clone noop fixture");
         }
         const int doc = frame.activeDocumentIndex();
         const QString source = view->add_layer_in(QString());
@@ -236,12 +237,11 @@ int pictura::runToolCanvasChecks(pictura::PicturaMainWindow& frame)
         canvas->mouseReleased(QPointF(6, 6));
         const bool thenClone = view->select_all_layers().size() == layers + 1
             && view->history_count() == base + 1 && view->active_layer_path() != source;
-        ST_BEGIN("tc_alt_clone_noop");
         ST_PASS("tc_alt_clone_noop clean=%d thenclone=%d layers=%d", clean ? 1 : 0,
                 thenClone ? 1 : 0, view->select_all_layers().size());
         if (!clean || !thenClone) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(384, "alt clone no-op");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode384, "alt clone no-op");
         }
         frame.closeDocument(doc, false);
     }
@@ -251,6 +251,7 @@ int pictura::runToolCanvasChecks(pictura::PicturaMainWindow& frame)
     // outline; release adds one copy under one "Move Selection" state with the
     // clone active.
     {
+        ST_BEGIN("tc_content_duplicate_preview");
         frame.setActiveTool(ToolId::Move);
         const bool created = frame.newDocument(QStringLiteral("MoveSelDup"), 16, 16,
                                                QStringLiteral("rgb"), 8,
@@ -258,7 +259,7 @@ int pictura::runToolCanvasChecks(pictura::PicturaMainWindow& frame)
         PictureView* view = frame.activeView();
         ImageView* canvas = frame.imageView();
         if (!created || !view || !canvas) {
-            return pictura::selfTest().fail(385, "content duplicate preview fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode385, "content duplicate preview fixture");
         }
         const int doc = frame.activeDocumentIndex();
         const QString layer = view->add_layer_in(QString());
@@ -279,12 +280,11 @@ int pictura::runToolCanvasChecks(pictura::PicturaMainWindow& frame)
             && view->select_all_layers().size() == layers + 1;
         const bool active = !source.isEmpty()
             && view->active_layer_path() == QString::number(source.toInt() + 1);
-        ST_BEGIN("tc_content_duplicate_preview");
         ST_PASS("tc_content_duplicate_preview seed=%d preview=%d committed=%d active=%d",
                 seed ? 1 : 0, preview ? 1 : 0, committed ? 1 : 0, active ? 1 : 0);
         if (!seed || !preview || !committed || !active) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(385, "content duplicate preview");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode385, "content duplicate preview");
         }
 
         // tc_content_duplicate_cancel (386): an Alt content press+release with no
@@ -309,7 +309,7 @@ int pictura::runToolCanvasChecks(pictura::PicturaMainWindow& frame)
                 cancelClean ? 1 : 0, view->select_all_layers().size());
         frame.closeDocument(doc, false);
         if (!cancelSeed || !cancelClean) {
-            return pictura::selfTest().fail(386, "content duplicate cancel");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode386, "content duplicate cancel");
         }
     }
 

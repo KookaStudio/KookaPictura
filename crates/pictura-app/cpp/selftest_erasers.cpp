@@ -16,11 +16,12 @@ using paint_fixture::Fixture;
 
 int pictura::runEraserChecks(pictura::PicturaMainWindow& frame)
 {
+    ST_BEGIN("eraser_tool");
     QImage seed(40, 40, QImage::Format_RGB32);
     seed.fill(Qt::white);
     Fixture f(frame, seed, QStringLiteral("pictura_eraser_seed"));
     if (!f.ok()) {
-        return pictura::selfTest().fail(547, "eraser fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode547, "eraser fixture");
     }
     const BrushState brush(f.tools);
     const QColor foreground = f.tools->foreground();
@@ -69,11 +70,10 @@ int pictura::runEraserChecks(pictura::PicturaMainWindow& frame)
     f.tools->setForeground(foreground);
     f.tools->setBackground(background);
 
-    ST_BEGIN("eraser_tool");
     ST_PASS("eraser bar=%d background=%d history=%d transparent=%d block=%d", bar ? 1 : 0,
             toBackground ? 1 : 0, toHistoryOk ? 1 : 0, transparent ? 1 : 0, block ? 1 : 0);
     if (!bar || !toBackground || !toHistoryOk || !transparent || !block) {
-        return pictura::selfTest().fail(547, "eraser tool");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode547, "eraser tool");
     }
     return 0;
 }
@@ -81,12 +81,13 @@ int pictura::runEraserChecks(pictura::PicturaMainWindow& frame)
 int pictura::runBackgroundEraserChecks(pictura::PicturaMainWindow& frame)
 {
     // Sky (blue) left of x = 30, a subject (yellow) right of it.
+    ST_BEGIN("background_eraser_tool");
     QImage seed(60, 40, QImage::Format_RGB32);
     seed.fill(QColor(30, 120, 220));
     QPainter(&seed).fillRect(30, 0, 30, 40, QColor(220, 200, 40));
     Fixture f(frame, seed, QStringLiteral("pictura_background_eraser_seed"));
     if (!f.ok()) {
-        return pictura::selfTest().fail(550, "background eraser fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode550, "background eraser fixture");
     }
     const BrushState brush(f.tools);
     f.tools->optionsFor<PaintOptions>(ToolId::Brush)->setSize(16);
@@ -109,11 +110,10 @@ int pictura::runBackgroundEraserChecks(pictura::PicturaMainWindow& frame)
     const bool subjectKept = f.view->sample_argb(32, 20) == QColor(220, 200, 40).rgba();
     const bool farSkyKept = f.view->sample_argb(5, 20) == QColor(30, 120, 220).rgba();
 
-    ST_BEGIN("background_eraser_tool");
     ST_PASS("background eraser bar=%d commit=%d sky=%d subject=%d far=%d", bar ? 1 : 0,
             committed ? 1 : 0, skyGone ? 1 : 0, subjectKept ? 1 : 0, farSkyKept ? 1 : 0);
     if (!bar || !committed || !skyGone || !subjectKept || !farSkyKept) {
-        return pictura::selfTest().fail(550, "background eraser tool");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode550, "background eraser tool");
     }
     return 0;
 }
@@ -121,6 +121,7 @@ int pictura::runBackgroundEraserChecks(pictura::PicturaMainWindow& frame)
 int pictura::runMagicEraserChecks(pictura::PicturaMainWindow& frame)
 {
     // Two separate red squares on white.
+    ST_BEGIN("magic_eraser_tool");
     QImage seed(40, 40, QImage::Format_RGB32);
     seed.fill(Qt::white);
     {
@@ -130,7 +131,7 @@ int pictura::runMagicEraserChecks(pictura::PicturaMainWindow& frame)
     }
     Fixture f(frame, seed, QStringLiteral("pictura_magic_eraser_seed"));
     if (!f.ok()) {
-        return pictura::selfTest().fail(551, "magic eraser fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode551, "magic eraser fixture");
     }
     const pictura::MagicEraseOptions options = f.tools->optionsFor<MagicEraseGroup>(ToolId::MagicEraser)->get();
 
@@ -160,11 +161,10 @@ int pictura::runMagicEraserChecks(pictura::PicturaMainWindow& frame)
         && f.view->sample_argb(29, 29) == red;
     f.tools->optionsFor<MagicEraseGroup>(ToolId::MagicEraser)->set(options);
 
-    ST_BEGIN("magic_eraser_tool");
     ST_PASS("magic eraser bar=%d commit=%d square=%d kept=%d global=%d", bar ? 1 : 0,
             committed ? 1 : 0, squareGone ? 1 : 0, otherKept ? 1 : 0, whiteGone ? 1 : 0);
     if (!bar || !committed || !squareGone || !otherKept || !whiteGone) {
-        return pictura::selfTest().fail(551, "magic eraser tool");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode551, "magic eraser tool");
     }
     return 0;
 }

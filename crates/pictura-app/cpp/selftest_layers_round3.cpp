@@ -37,9 +37,10 @@ bool nearWhite(const QColor& color)
 
 int runLayersRound3Checks(PicturaMainWindow& frame)
 {
+    ST_BEGIN("lpr_rename_band");
     auto* panel = frame.findChild<LayersPanel*>(QStringLiteral("layersPanel"));
     if (!panel) {
-        return pictura::selfTest().fail(352, "round3 panel fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode352, "round3 panel fixture");
     }
 
     // lpr_rename_band (352): a double-click inside the rendered name label
@@ -51,7 +52,7 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(352, "rename band fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode352, "rename band fixture");
         }
         const int doc = frame.activeDocumentIndex();
         panel->setView(view);
@@ -68,12 +69,11 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
         panel->refresh();
         const bool zeroWidth = panel->rowNameRectForTest(namePath).width() > 0;
         const bool zeroWidthOpens = panel->doubleClickAtForTest(namePath, true);
-        ST_BEGIN("lpr_rename_band");
         ST_PASS("lpr_rename_band name=%d eye=%d chevron=%d zero=%d zeroopen=%d",
                 nameOpens ? 1 : 0, eyeNo ? 1 : 0, chevronNo ? 1 : 0, zeroWidth ? 1 : 0,
                 zeroWidthOpens ? 1 : 0);
         if (!nameOpens || !eyeNo || !chevronNo || !zeroWidth || !zeroWidthOpens) {
-            return pictura::selfTest().fail(352, "rename content band");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode352, "rename content band");
         }
         frame.closeDocument(doc, false);
     }
@@ -81,12 +81,13 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
     // lpr_drop_root (353): the invalid parent index is drop-enabled and a
     // top-level below-gap resolves to a real above/below indicator.
     {
+        ST_BEGIN("lpr_drop_root");
         const bool created = frame.newDocument(QStringLiteral("DropRoot"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(353, "root drop fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode353, "root drop fixture");
         }
         const int doc = frame.activeDocumentIndex();
         panel->setView(view);
@@ -98,11 +99,10 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
         const bool rootEnabled = panel->rootDropEnabledForTest();
         const int mode = panel->dragMoveModeAtForTest(a, b, false);
         const bool indicator = panel->dropIndicatorShownForTest();
-        ST_BEGIN("lpr_drop_root");
         ST_PASS("lpr_drop_root enabled=%d mode=%d indicator=%d", rootEnabled ? 1 : 0, mode,
                 indicator ? 1 : 0);
         if (!rootEnabled || (mode != 0 && mode != 1) || !indicator) {
-            return pictura::selfTest().fail(353, "top-level drop indicator");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode353, "top-level drop indicator");
         }
         frame.closeDocument(doc, false);
     }
@@ -120,7 +120,7 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
         ST_BEGIN("lpr_drag_cursor");
         ST_PASS("lpr_drag_cursor before=%d during=%d after=%d", before, during, after);
         if (!ok) {
-            return pictura::selfTest().fail(354, "drag closed-hand cursor");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode354, "drag closed-hand cursor");
         }
     }
 
@@ -128,12 +128,13 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
     // accepting the dialog converts in place to the next free `Layer N` with the
     // chosen label, in one undo state.
     {
+        ST_BEGIN("lpr_background_dialog");
         const bool created = frame.newDocument(QStringLiteral("BgConvertDialog"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("transparent"));
         PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(355, "background dialog fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode355, "background dialog fixture");
         }
         const int doc = frame.activeDocumentIndex();
         panel->setView(view);
@@ -155,14 +156,13 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
         const bool labeled = row >= 0 && pictura::layers_api::rowAt(*view, row).color == 3;
         const bool unlocked = view->layer_lock(0) == 0;
         const bool oneStep = view->history_count() == base + 1;
-        ST_BEGIN("lpr_background_dialog");
         ST_PASS("lpr_background_dialog factory=%d expected=%s kind=%s name=%s color=%d history=%d",
                 nameColorOnly ? 1 : 0, qPrintable(expected),
                 qPrintable(pictura::layers_api::rowAt(*view, row).kind), qPrintable(pictura::layers_api::rowAt(*view, row).name),
                 pictura::layers_api::rowAt(*view, row).color, view->history_count() - base);
         if (!nameColorOnly || !wasBackground || !converted || !named || !labeled || !unlocked
             || !oneStep) {
-            return pictura::selfTest().fail(355, "background conversion dialog");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode355, "background conversion dialog");
         }
         frame.closeDocument(doc, false);
     }
@@ -170,12 +170,13 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
     // lpr_background_cancel (356): cancelling the dialog leaves the Background
     // flag, lock, name, pixels, and history untouched.
     {
+        ST_BEGIN("lpr_background_cancel");
         const bool created = frame.newDocument(QStringLiteral("BgConvertCancel"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("transparent"));
         PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(356, "background cancel fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode356, "background cancel fixture");
         }
         const int doc = frame.activeDocumentIndex();
         panel->setView(view);
@@ -191,12 +192,11 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
         const bool unchanged = pictura::layers_api::rowAt(*view, row).kind == QStringLiteral("background")
             && pictura::layers_api::rowAt(*view, row).name == beforeName && view->layer_lock(0) == beforeLock
             && view->sample_argb(0, 0) == beforePixel && view->history_count() == base;
-        ST_BEGIN("lpr_background_cancel");
         ST_PASS("lpr_background_cancel kind=%s name=%s lock=%d history=%d",
                 qPrintable(pictura::layers_api::rowAt(*view, row).kind), qPrintable(pictura::layers_api::rowAt(*view, row).name),
                 view->layer_lock(0), view->history_count() - base);
         if (!unchanged) {
-            return pictura::selfTest().fail(356, "background conversion cancel");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode356, "background conversion cancel");
         }
         frame.closeDocument(doc, false);
     }
@@ -209,12 +209,13 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
     // the eye cell follows it; an unselected eye cell stays one shade lighter
     // than its row.
     {
+        ST_BEGIN("lpr_highlight_clip");
         const bool created = frame.newDocument(QStringLiteral("HighlightClip"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(358, "highlight clip fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode358, "highlight clip fixture");
         }
         const int doc = frame.activeDocumentIndex();
         panel->setView(view);
@@ -242,11 +243,10 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
         const QColor unselectedRow = unselected.pixelColor(unselected.width() - 4, 1);
         const bool eyeSelected = selectedEye == selectedRow;
         const bool eyeLighter = unselectedEye.lightness() > unselectedRow.lightness();
-        ST_BEGIN("lpr_highlight_clip");
         ST_PASS("lpr_highlight_clip contentDiffers=%d eyeSelected=%d eyeLighter=%d",
                 contentDiffers ? 1 : 0, eyeSelected ? 1 : 0, eyeLighter ? 1 : 0);
         if (!contentDiffers || !eyeSelected || !eyeLighter) {
-            return pictura::selfTest().fail(358, "selected-row eye clip");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode358, "selected-row eye clip");
         }
         frame.closeDocument(doc, false);
     }
@@ -256,12 +256,13 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
     // brackets one pixel outside, and zero selection drops them; a group keeps
     // the folder glyph and draws no checkerboard.
     {
+        ST_BEGIN("lpr_thumb_frame");
         const bool created = frame.newDocument(QStringLiteral("ThumbFrame"), 16, 16,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(359, "thumbnail frame fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode359, "thumbnail frame fixture");
         }
         const int doc = frame.activeDocumentIndex();
         panel->setView(view);
@@ -289,12 +290,11 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
         const QRect groupThumb = panel->rowThumbRectForTest(group);
         const bool groupNoChecker =
             !nearWhite(groupImage.pixelColor(groupThumb.left() + 2, groupThumb.top() + 2));
-        ST_BEGIN("lpr_thumb_frame");
         ST_PASS("lpr_thumb_frame checker=%d outline=%d bracket=%d none=%d group=%d",
                 checker ? 1 : 0, outlined ? 1 : 0, bracketed ? 1 : 0, noBrackets ? 1 : 0,
                 groupNoChecker ? 1 : 0);
         if (!checker || !outlined || !bracketed || !noBrackets || !groupNoChecker) {
-            return pictura::selfTest().fail(359, "thumbnail checker/frame/brackets");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode359, "thumbnail checker/frame/brackets");
         }
         frame.closeDocument(doc, false);
     }
@@ -302,12 +302,13 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
     // lpr_row_fonts (360): the Background name is italic, ordinary names normal,
     // and a linked row is underlined through its role.
     {
+        ST_BEGIN("lpr_row_fonts");
         const bool created = frame.newDocument(QStringLiteral("RowFonts"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("transparent"));
         PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(360, "row fonts fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode360, "row fonts fixture");
         }
         const int doc = frame.activeDocumentIndex();
         panel->setView(view);
@@ -323,13 +324,12 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
         const bool linkedRole = panel->rowLinkedForTest(plain);
         const bool linkedUnderline = panel->rowNameUnderlineForTest(plain);
         const bool placedRole = !panel->rowPlacedForTest(plain);
-        ST_BEGIN("lpr_row_fonts");
         ST_PASS("lpr_row_fonts bgItalic=%d bgPlain=%d plainNormal=%d linked=%d underline=%d placed=%d",
                 bgItalic ? 1 : 0, bgNoUnderline ? 1 : 0, plainNormal ? 1 : 0, linked ? 1 : 0,
                 linkedUnderline ? 1 : 0, placedRole ? 1 : 0);
         if (!bgItalic || !bgNoUnderline || !plainNormal || !linked || !linkedRole
             || !linkedUnderline || !placedRole) {
-            return pictura::selfTest().fail(360, "row typography roles");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode360, "row typography roles");
         }
         frame.closeDocument(doc, false);
     }
@@ -340,7 +340,7 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
         ST_BEGIN("lpr_row_height");
         ST_PASS("lpr_row_height height=%d", height);
         if (height < 28) {
-            return pictura::selfTest().fail(361, "row height floor");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode361, "row height floor");
         }
     }
 
@@ -353,7 +353,7 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
         ST_BEGIN("lpr_nesting_hidden");
         ST_PASS("lpr_nesting_hidden hidden=%d others=%d", hidden ? 1 : 0, others ? 1 : 0);
         if (!hidden || !others) {
-            return pictura::selfTest().fail(362, "nesting button hidden");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode362, "nesting button hidden");
         }
     }
 
@@ -365,12 +365,13 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
     // (390): a sibling gap yields a line and a drop-into a group an outline; an
     // invalid target yields none.
     {
+        ST_BEGIN("lpr_eye_gutter");
         const bool created = frame.newDocument(QStringLiteral("FollowupCosmetics"), 20, 10,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         if (!created || !view) {
-            return pictura::selfTest().fail(387, "follow-up cosmetics fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode387, "follow-up cosmetics fixture");
         }
         const int doc = frame.activeDocumentIndex();
         panel->setView(view);
@@ -385,11 +386,10 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
 
         const bool centred = panel->eyeGutterCentredForTest(a);
         const bool separator = panel->eyeSeparatorPresentForTest(a);
-        ST_BEGIN("lpr_eye_gutter");
         ST_PASS("lpr_eye_gutter centred=%d separator=%d", centred ? 1 : 0, separator ? 1 : 0);
         if (!centred || !separator) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(387, "eye gutter centring/separator");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode387, "eye gutter centring/separator");
         }
 
         const int regularLeft = panel->rowThumbRectForTest(a).left();
@@ -399,7 +399,7 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
         ST_PASS("lpr_thumb_gap regular=%d group=%d", regularLeft, groupLeft);
         if (!closer) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(388, "non-group thumbnail gap");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode388, "non-group thumbnail gap");
         }
 
         const QRect thumb = panel->rowThumbRectForTest(a);
@@ -409,7 +409,7 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
         ST_PASS("lpr_thumb_aspect w=%d h=%d", thumb.width(), thumb.height());
         if (!wide || !ratio) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(389, "thumbnail aspect letterbox");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode389, "thumbnail aspect letterbox");
         }
 
         const int sibling = panel->dropIndicatorForTest(a, b, 1);
@@ -419,7 +419,7 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
         ST_PASS("lpr_drop_indicator sibling=%d into=%d invalid=%d", sibling, into, invalid);
         if (sibling != 1 || into != 2 || invalid != 0) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(390, "custom drop indicator");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode390, "custom drop indicator");
         }
         frame.closeDocument(doc, false);
     }
@@ -432,7 +432,7 @@ int runLayersRound3Checks(PicturaMainWindow& frame)
         ST_BEGIN("lpr_row_height_raised");
         ST_PASS("lpr_row_height_raised height=%d", height);
         if (height < 34) {
-            return pictura::selfTest().fail(391, "raised row height");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode391, "raised row height");
         }
     }
 

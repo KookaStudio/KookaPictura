@@ -68,10 +68,10 @@
 int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                 pictura::PicturaMainWindow& frame, pictura::PictureView* view,
                 const QImage& image, bool codecLoaded, int gpu)
-{
+{ pictura::selftest::SelfTestRun run(frame);
         ST_BEGIN("platform_headless");
         if (headless && qApp->platformName() != QStringLiteral("offscreen")) {
-            ST_FAIL(152, "headless platform is %s, expected offscreen",
+            ST_FAIL(pictura::selftest_codes::kCode152, "headless platform is %s, expected offscreen",
                     qPrintable(qApp->platformName()));
         }
         ST_PASS("offscreen");
@@ -85,12 +85,12 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         std::fflush(stderr);
         ST_BEGIN("null_image");
         if (!view || image.isNull()) {
-            ST_FAIL(2, "null image");
+            ST_FAIL(pictura::selftest_codes::kCode002, "null image");
         }
         ST_PASS("image present");
         ST_BEGIN("gpu_blank");
         if (gpu == 2) {
-            ST_FAIL(4, "GPU render was blank");
+            ST_FAIL(pictura::selftest_codes::kCode004, "GPU render was blank");
         }
         ST_PASS("gpu=%d", gpu);
         if (!codecLoaded) {
@@ -109,7 +109,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             }
             ST_PASS("fresh_white=%d", freshWhite ? 1 : 0);
             if (!freshWhite) {
-                ST_FAIL(5, "fresh document not white");
+                ST_FAIL(pictura::selftest_codes::kCode005, "fresh document not white");
             }
         }
         if (codecLoaded) {
@@ -124,7 +124,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("layered_distinct");
             ST_PASS("layered distinct=%d", seen.size());
             if (seen.size() < 2) {
-                ST_FAIL(6, "blank composition");
+                ST_FAIL(pictura::selftest_codes::kCode006, "blank composition");
             }
             if (image.width() >= 8 && image.height() >= 8) {
                 const QRgb tl = image.pixel(2, 2);
@@ -148,12 +148,12 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                 const bool blue = qBlue(br) > 200 && qRed(br) < 60 && qGreen(br) < 60
                                   && qAlpha(br) == 255;
                 if (!red || !blue) {
-                    ST_FAIL(7, "composited quadrants wrong");
+                    ST_FAIL(pictura::selftest_codes::kCode007, "composited quadrants wrong");
                 }
                 // Uncovered quadrants must be transparent: this proves the layer
                 // stack was composited, not the opaque embedded PSD composite.
                 if (qAlpha(tr) != 0 || qAlpha(bl) != 0) {
-                    ST_FAIL(8, "layer stack not composited");
+                    ST_FAIL(pictura::selftest_codes::kCode008, "layer stack not composited");
                 }
             }
 
@@ -170,7 +170,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          selectedPx);
             if (!wand || !hasSelection || selectedPx <= 0
                 || selectedPx >= image.width() * image.height()) {
-                ST_FAIL(14, "wand selection wrong");
+                ST_FAIL(pictura::selftest_codes::kCode014, "wand selection wrong");
             }
             const bool maskedAdded = view->add_adjustment(QStringLiteral("invert"));
             const QImage masked = view->image();
@@ -190,12 +190,12 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             const bool maskedCyan = qRed(mtl) < 60 && qGreen(mtl) > 200 && qBlue(mtl) > 200;
             const bool maskedBlue = qBlue(mbr) > 200 && qRed(mbr) < 60 && qGreen(mbr) < 60;
             if (!maskedAdded || !maskedCyan || !maskedBlue) {
-                ST_FAIL(15, "masked adjustment not confined");
+                ST_FAIL(pictura::selftest_codes::kCode015, "masked adjustment not confined");
             }
             view->remove_layer(view->layer_count() - 1);
             view->deselect();
             if (view->has_selection() || view->selection_count() != 0) {
-                ST_FAIL(16, "deselect left a selection");
+                ST_FAIL(pictura::selftest_codes::kCode016, "deselect left a selection");
             }
 
             // M4-C: add an Invert adjustment layer over the stack and verify the
@@ -210,7 +210,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          view->layer_kind(layerCount - 1).toLocal8Bit().constData());
             if (!added || layerCount != 3
                 || view->layer_kind(layerCount - 1) != QStringLiteral("adjustment")) {
-                ST_FAIL(9, "invert adjustment not added");
+                ST_FAIL(pictura::selftest_codes::kCode009, "invert adjustment not added");
             }
             const QRgb atl = adjusted.pixel(2, 2);
             const QRgb abr = adjusted.pixel(6, 6);
@@ -228,15 +228,15 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             const bool yellow = qRed(abr) > 200 && qGreen(abr) > 200 && qBlue(abr) < 60
                                 && qAlpha(abr) == 255;
             if (!cyan || !yellow) {
-                ST_FAIL(10, "invert composite wrong");
+                ST_FAIL(pictura::selftest_codes::kCode010, "invert composite wrong");
             }
             if (beforeAdjust == adjusted) {
-                ST_FAIL(11, "adjustment did not change image");
+                ST_FAIL(pictura::selftest_codes::kCode011, "adjustment did not change image");
             }
 
             // Toggle the bottom pixel layer's visibility: the output must change.
             if (!view->layer_visible(0)) {
-                ST_FAIL(12, "base layer not visible");
+                ST_FAIL(pictura::selftest_codes::kCode012, "base layer not visible");
             }
             view->set_layer_visible(0, false);
             const QImage hidden = view->image();
@@ -252,7 +252,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("visibility_change");
             ST_PASS("visibility_change=%d", differs ? 1 : 0);
             if (!differs || view->layer_visible(0)) {
-                ST_FAIL(13, "visibility toggle did not change output");
+                ST_FAIL(pictura::selftest_codes::kCode013, "visibility toggle did not change output");
             }
             // The adjustment created above is the target under the creation
             // rule; the filter must edit the topmost pixel layer.
@@ -271,7 +271,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          filterSelectedPx);
             if (!filterWand || !filterSelected || filterSelectedPx <= 0
                 || filterSelectedPx >= view->image().width() * view->image().height()) {
-                ST_FAIL(17, "filter selection wrong");
+                ST_FAIL(pictura::selftest_codes::kCode017, "filter selection wrong");
             }
             const QImage filterBefore = view->image();
             const bool filtered = view->apply_filter(QStringLiteral("add-noise"));
@@ -297,7 +297,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          insideChanged,
                          outsideChanged);
             if (!filtered || insideChanged == 0 || outsideChanged != 0) {
-                ST_FAIL(18, "filter not confined");
+                ST_FAIL(pictura::selftest_codes::kCode018, "filter not confined");
             }
             view->deselect();
 
@@ -324,7 +324,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                 || rotTr != preRotate.pixel(2, 2) || rotBl != preRotate.pixel(6, 6)
                 || qAlpha(rotatedImg.pixel(5, 6)) != 0 || view->has_selection()
                 || view->selection_count() != 0) {
-                ST_FAIL(19, "rotate cw wrong");
+                ST_FAIL(pictura::selftest_codes::kCode019, "rotate cw wrong");
             }
 
             // M13: invalid document ops must be rejected and leave pixels put.
@@ -342,7 +342,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          badRotateClean && badResizeClean && badCanvasClean ? 1 : 0);
             if (badRotate || badResize || badCanvas || !badRotateClean || !badResizeClean
                 || !badCanvasClean) {
-                ST_FAIL(20, "invalid doc op accepted");
+                ST_FAIL(pictura::selftest_codes::kCode020, "invalid doc op accepted");
             }
 
             // M13: CCW must undo CW bit-exactly, then growing the canvas to
@@ -351,7 +351,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             const bool restoredOk = view->rotate_doc(3);
             const QImage restored = view->image();
             if (!restoredOk || restored != preRotate) {
-                ST_FAIL(21, "rotate ccw did not restore");
+                ST_FAIL(pictura::selftest_codes::kCode021, "rotate ccw did not restore");
             }
             const bool grown = view->resize_canvas(QStringLiteral("bottom-right"), 10, 12);
             const QImage grownImg = view->image();
@@ -367,7 +367,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                 || grownImg.pixel(4, 6) != restored.pixel(2, 2)
                 || grownImg.pixel(8, 10) != restored.pixel(6, 6)
                 || qAlpha(grownImg.pixel(0, 0)) != 0 || qAlpha(grownImg.pixel(1, 1)) != 0) {
-                ST_FAIL(21, "canvas growth wrong");
+                ST_FAIL(pictura::selftest_codes::kCode021, "canvas growth wrong");
             }
 
             // M14: mutating ops capture history; undo/redo must round-trip the
@@ -394,7 +394,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                 || !rotatedCanUndo || postRotate.width() != 12
                 || postRotate.height() != 10 || !undone || !undoIdentical
                 || !redone || !redoIdentical) {
-                ST_FAIL(22, "undo/redo round-trip wrong");
+                ST_FAIL(pictura::selftest_codes::kCode022, "undo/redo round-trip wrong");
             }
 
             // M14: a fresh op invalidates redo; reopening the fixture resets
@@ -413,7 +413,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          openReset ? 1 : 0,
                          boundaryUndone ? 1 : 0);
             if (!redoInvalidated || !openReset || boundaryUndone) {
-                ST_FAIL(23, "history invalidation wrong");
+                ST_FAIL(pictura::selftest_codes::kCode023, "history invalidation wrong");
             }
 
             // M15: render filters. The topmost pixel layer is the blue
@@ -460,7 +460,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             if (!clouded || cloudedImg == preClouds || cloudsInside == 0
                 || cloudsOutside != 0 || !reapplyIdentical || !flared
                 || flaredImg == cloudedImg || flareOutsideChanged != 0) {
-                ST_FAIL(24, "clouds/flare wrong");
+                ST_FAIL(pictura::selftest_codes::kCode024, "clouds/flare wrong");
             }
 
             pictura::CommandRegistry* registry = frame.registry();
@@ -481,7 +481,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_PASS("no_doc_disable=%d open_enable=%d", docDisabled ? 1 : 0,
                          openEnabled ? 1 : 0);
             if (!docDisabled || !openEnabled) {
-                ST_FAIL(27, "command enablement wrong");
+                ST_FAIL(pictura::selftest_codes::kCode027, "command enablement wrong");
             }
 
             // M16: brightness levels apply and differ (theme is the source of truth).
@@ -497,7 +497,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          darkWindow.name().toLocal8Bit().constData(),
                          lightWindow.name().toLocal8Bit().constData());
             if (!brightOk) {
-                ST_FAIL(28, "brightness wrong");
+                ST_FAIL(pictura::selftest_codes::kCode028, "brightness wrong");
             }
 
             // M16: screen modes cycle forward and backward.
@@ -516,7 +516,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("screen_modes");
             ST_PASS("screen_modes=%d", modesOk ? 1 : 0);
             if (!modesOk) {
-                ST_FAIL(29, "screen mode cycle wrong");
+                ST_FAIL(pictura::selftest_codes::kCode029, "screen mode cycle wrong");
             }
 
             // M16: verify layout and brightness using the isolated stores.
@@ -529,7 +529,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          loaded.layout.size(),
                          pictura::loadPreferences().brightnessLevel);
             if (!sessionOk) {
-                ST_FAIL(30, "session round-trip wrong");
+                ST_FAIL(pictura::selftest_codes::kCode030, "session round-trip wrong");
             }
 
             // M16: duplicate panel objectNames are rejected.
@@ -540,7 +540,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("dup_panel_rejected");
             ST_PASS("dup_panel_rejected=%d", duplicateRejected ? 1 : 0);
             if (!duplicateRejected) {
-                ST_FAIL(31, "duplicate panel accepted");
+                ST_FAIL(pictura::selftest_codes::kCode031, "duplicate panel accepted");
             }
 
             // M16: Tab hides and restores all panels.
@@ -553,7 +553,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_PASS("hide_all=%d restore=%d", panelsHidden ? 1 : 0,
                          panelsShown ? 1 : 0);
             if (!panelsHidden || !panelsShown) {
-                ST_FAIL(32, "hide-all wrong");
+                ST_FAIL(pictura::selftest_codes::kCode032, "hide-all wrong");
             }
 
             // M17: New creates an untitled document with the requested size and
@@ -572,7 +572,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("new_doc");
             ST_PASS("new_doc=%d white=%d", freshOk ? 1 : 0, whiteOk ? 1 : 0);
             if (!freshOk || !whiteOk) {
-                ST_FAIL(33, "new document wrong");
+                ST_FAIL(pictura::selftest_codes::kCode033, "new document wrong");
             }
 
             // M17: Save As then open round-trips the new document's pixels.
@@ -587,7 +587,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("roundtrip");
             ST_PASS("roundtrip=%d", roundtrip ? 1 : 0);
             if (!roundtrip) {
-                ST_FAIL(34, "save/open round-trip wrong");
+                ST_FAIL(pictura::selftest_codes::kCode034, "save/open round-trip wrong");
             }
 
             // M17: a mutating command sets dirty; save clears it.
@@ -600,7 +600,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_PASS("dirty clean=%d set=%d resave=%d cleared=%d", cleanAfterOpen ? 1 : 0, dirtyAfterMutate ? 1 : 0,
                          resaved ? 1 : 0, cleanAfterSave ? 1 : 0);
             if (!cleanAfterOpen || !dirtyAfterMutate || !resaved || !cleanAfterSave) {
-                ST_FAIL(35, "dirty state wrong");
+                ST_FAIL(pictura::selftest_codes::kCode035, "dirty state wrong");
             }
 
             // M17: multiple documents become multiple tabs; switching targets.
@@ -613,7 +613,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("tabs");
             ST_PASS("tabs=%d first=%d last=%d", totalDocs, firstActive ? 1 : 0, lastActive ? 1 : 0);
             if (totalDocs < 2 || !firstActive || !lastActive) {
-                ST_FAIL(36, "document tabs wrong");
+                ST_FAIL(pictura::selftest_codes::kCode036, "document tabs wrong");
             }
 
             // M17: closing a modified document honours the prompt: Cancel keeps
@@ -632,7 +632,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("close_cancel");
             ST_PASS("close_cancel=%d close_discard=%d", cancelled ? 1 : 0, discarded ? 1 : 0);
             if (!cancelled || !discarded) {
-                ST_FAIL(37, "unsaved close prompt wrong");
+                ST_FAIL(pictura::selftest_codes::kCode037, "unsaved close prompt wrong");
             }
 
             // M18: the frame's active tool round-trips through the controller.
@@ -652,7 +652,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          moveOn ? 1 : 0,
                          pictura::toolInfo(frame.activeTool()).label);
             if (!marqueeOn || !lassoOn || !eyedropOn || !moveOn) {
-                ST_FAIL(39, "tool switch wrong");
+                ST_FAIL(pictura::selftest_codes::kCode039, "tool switch wrong");
             }
 
             // M18: marquee rect/ellipse counts and pixel membership. The 4x4
@@ -691,7 +691,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          cornerOutside ? 1 : 0);
             if (!rectSel || rectPx != 16 || !ellipseSel || ellipsePx != 12 || !addIdempotent
                 || !centreInside || !cornerOutside) {
-                ST_FAIL(40, "marquee selection wrong");
+                ST_FAIL(pictura::selftest_codes::kCode040, "marquee selection wrong");
             }
 
             // M18: combine modes union/subtract/intersect on the 8x8 canvas.
@@ -719,7 +719,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          subPx,
                          interPx);
             if (newPx != 16 || addPx != 28 || subPx != 12 || interPx != 4) {
-                ST_FAIL(41, "combine modes wrong");
+                ST_FAIL(pictura::selftest_codes::kCode041, "combine modes wrong");
             }
 
             // M18: lasso fills a 5x5 square, and a two-point path is rejected
@@ -751,7 +751,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          shortUnchanged ? 1 : 0);
             if (!lassoStarted || !lassoEnded || lassoPx != 25 || !shortStarted || shortEnded
                 || !shortUnchanged) {
-                ST_FAIL(42, "lasso selection wrong");
+                ST_FAIL(pictura::selftest_codes::kCode042, "lasso selection wrong");
             }
 
             // M18: quick selection wands a white region and leaves a selection.
@@ -765,7 +765,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("quick_select");
             ST_PASS("quick_select=%d has=%d px=%d", quickOk ? 1 : 0, quickSelected ? 1 : 0, quickPx);
             if (!quickOk || !quickSelected || quickPx <= 0) {
-                ST_FAIL(43, "quick selection wrong");
+                ST_FAIL(pictura::selftest_codes::kCode043, "quick selection wrong");
             }
 
             // M18: crop the fixture to its blue bottom-right quadrant.
@@ -778,7 +778,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("crop");
             ST_PASS("crop=%d size=%dx%d blue=%d", cropOk ? 1 : 0, cropImg.width(), cropImg.height(), cropBlue ? 1 : 0);
             if (!cropOk || cropImg.width() != 4 || cropImg.height() != 4 || !cropBlue) {
-                ST_FAIL(44, "crop wrong");
+                ST_FAIL(pictura::selftest_codes::kCode044, "crop wrong");
             }
 
             // M18: move the topmost (blue) layer over the red quadrant.
@@ -791,7 +791,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("translate");
             ST_PASS("translate=%d blue=%d", moved ? 1 : 0, moveBlue ? 1 : 0);
             if (!moved || !moveBlue) {
-                ST_FAIL(45, "layer move wrong");
+                ST_FAIL(pictura::selftest_codes::kCode045, "layer move wrong");
             }
 
             // M18: eyedropper samples the composited red and rejects out-of-bounds.
@@ -808,7 +808,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          static_cast<unsigned>(outSample),
                          eyeDeselected ? 1 : 0);
             if (redSample != 0xFFFF0000u || outSample != 0u || !eyeDeselected) {
-                ST_FAIL(46, "eyedropper wrong");
+                ST_FAIL(pictura::selftest_codes::kCode046, "eyedropper wrong");
             }
 
             // M20: layer property getters/setters round-trip and mark dirty.
@@ -843,7 +843,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             if (layersCount != 2 || !renameOk || !renamedOk || !dirtyAfterRename || !blendOk
                 || !blendRoundTrip || !badBlendRejected || !opacityOk || roundTripOpacity != 128
                 || !clampOk || clampedOpacity != 255) {
-                ST_FAIL(50, "layer properties wrong");
+                ST_FAIL(pictura::selftest_codes::kCode050, "layer properties wrong");
             }
 
             // M20: labeled history, jump restore, and named snapshots.
@@ -877,14 +877,14 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             if (!histOpenLabel || !histMutated || !histGrew || !histTopLabel || !histAtTop
                 || !histJump || !histAtZero || !opacityRestored || !histJumpBack || !snapAdded
                 || snapCount < 1 || !snapLabelOk || !snapRestored) {
-                ST_FAIL(51, "history wrong");
+                ST_FAIL(pictura::selftest_codes::kCode051, "history wrong");
             }
         }
         const bool docTabReorderOk = frame.reorderDocumentsForTest();
         ST_BEGIN("doc_tab_reorder_aligned");
         ST_PASS("doc_tab_reorder aligned=%d", docTabReorderOk ? 1 : 0);
         if (!docTabReorderOk) {
-            ST_FAIL(196, "document tab reorder desync");
+            ST_FAIL(pictura::selftest_codes::kCode196, "document tab reorder desync");
         }
 
         // M19: every documented asset id resolves from the Qt resource
@@ -948,7 +948,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_PASS("icons=%d unknown_null=%d", iconsResolved,
                      unknownIconNull ? 1 : 0);
         if (iconsResolved != expectedIcons.size() || !unknownIconNull) {
-            ST_FAIL(47, "icon missing=%s unknown_null=%d", missingIcon.toLocal8Bit().constData(),
+            ST_FAIL(pictura::selftest_codes::kCode047, "icon missing=%s unknown_null=%d", missingIcon.toLocal8Bit().constData(),
                          unknownIconNull ? 1 : 0);
         }
 
@@ -979,7 +979,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_BEGIN("cursors");
         ST_PASS("cursors=%d", cursorsResolved);
         if (cursorsResolved != expectedCursors.size()) {
-            ST_FAIL(48, "cursor missing=%s", missingCursor.toLocal8Bit().constData());
+            ST_FAIL(pictura::selftest_codes::kCode048, "cursor missing=%s", missingCursor.toLocal8Bit().constData());
         }
 
         // M19: the window icon must be set from the app asset.
@@ -987,7 +987,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_BEGIN("window_icon");
         ST_PASS("window_icon=%d", windowIconSet ? 1 : 0);
         if (!windowIconSet) {
-            ST_FAIL(49, "window icon not set");
+            ST_FAIL(pictura::selftest_codes::kCode049, "window icon not set");
         }
 
         // M20: the seven panel docks are registered and their menu actions
@@ -1044,17 +1044,18 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      panelsToggled);
         if (panelsRegistered != expectedPanelDocks.size()
             || panelsToggled != panelCommands.size()) {
-            ST_FAIL(52, "panels wrong");
+            ST_FAIL(pictura::selftest_codes::kCode052, "panels wrong");
         }
 
         // M21: painting. A fresh transparent document keeps these checks
         // independent of any loaded PSD; every behaviour is read from pixels.
+        ST_BEGIN("stroke_ended");
         const bool paintDoc = frame.newDocument(QStringLiteral("Paint"), 32, 32,
                                                 QStringLiteral("rgb"), 8,
                                                 QStringLiteral("transparent"));
         pictura::PictureView* pv = frame.activeView();
         if (!paintDoc || !pv) {
-            ST_FAIL(53, "paint document");
+            ST_FAIL(pictura::selftest_codes::kCode053, "paint document");
         }
 
         // 53: a stroke marks pixels, dirties the document, and adds one state.
@@ -1075,24 +1076,24 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                 }
             }
         }
-        ST_BEGIN("stroke_ended");
         ST_PASS("stroke ended=%d painted=%d dirty=%d hist=%d", paintEnded ? 1 : 0,
                      paintPainted,
                      pv->is_dirty() ? 1 : 0,
                      pv->history_count());
         if (!paintEnded || !pv->is_dirty() || pv->history_count() != paintHistBefore + 1
             || paintPainted < 20) {
-            ST_FAIL(53, "stroke wrong");
+            ST_FAIL(pictura::selftest_codes::kCode053, "stroke wrong");
         }
 
         // 54: opacity caps one stroke and a second stroke adds coverage. A fresh
         // transparent canvas keeps the sampled point clear of the 53 stroke.
+        ST_BEGIN("opacity_a1");
         const bool opacityDoc = frame.newDocument(QStringLiteral("PaintOpacity"), 32, 32,
                                                   QStringLiteral("rgb"), 8,
                                                   QStringLiteral("transparent"));
         pv = frame.activeView();
         if (!opacityDoc || !pv) {
-            ST_FAIL(54, "opacity document");
+            ST_FAIL(pictura::selftest_codes::kCode054, "opacity document");
         }
         pv->begin_paint(0xFF00FF00u, 0xFFFFFFFFu, 12, 100, 100, 0, 33, 100, 0,
                         QStringLiteral("normal"), false, false);
@@ -1108,10 +1109,9 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         }
         pv->end_paint();
         const int paintA2 = qAlpha(pv->sample_argb(16, 16));
-        ST_BEGIN("opacity_a1");
         ST_PASS("opacity a1=%d a2=%d", paintA1, paintA2);
         if (!(paintA1 >= 78 && paintA1 <= 92) || !(paintA2 > paintA1 && paintA2 < 255)) {
-            ST_FAIL(54, "opacity wrong");
+            ST_FAIL(pictura::selftest_codes::kCode054, "opacity wrong");
         }
 
         // 55: Pencil edges are aliased; Brush edges are anti-aliased.
@@ -1181,7 +1181,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_BEGIN("aliased_pencil_ok");
         ST_PASS("aliased pencil_ok=%d brush_aa=%d", pencilOk ? 1 : 0, brushOk ? 1 : 0);
         if (!pencilOk || !brushOk) {
-            ST_FAIL(55, "aliasing wrong");
+            ST_FAIL(pictura::selftest_codes::kCode055, "aliasing wrong");
         }
 
         // 56: undo restores the touched pixels of the brush document.
@@ -1196,17 +1196,18 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_BEGIN("undo_changed");
         ST_PASS("undo changed=%d restored=%d", paintChanged ? 1 : 0, paintRestored ? 1 : 0);
         if (!paintChanged || !paintRestored) {
-            ST_FAIL(56, "undo wrong");
+            ST_FAIL(pictura::selftest_codes::kCode056, "undo wrong");
         }
 
         // M22: the 15 Artistic filters. A fresh white document exercises each
         // mapping end to end, and the seeded ones must reproduce bit-for-bit.
+        ST_BEGIN("applied_applied");
         const bool artDoc = frame.newDocument(QStringLiteral("Art"), 24, 24,
                                               QStringLiteral("rgb"), 8,
                                               QStringLiteral("white"));
         pictura::PictureView* av = frame.activeView();
         if (!artDoc || !av) {
-            ST_FAIL(57, "artistic document");
+            ST_FAIL(pictura::selftest_codes::kCode057, "artistic document");
         }
 
         // 57: every Artistic kind maps, applies, and changes the image.
@@ -1235,11 +1236,10 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                 ++artisticApplied;
             }
         }
-        ST_BEGIN("applied_applied");
         ST_PASS("applied applied=%d/%d", artisticApplied,
                      static_cast<int>(artisticKinds.size()));
         if (artisticApplied != artisticKinds.size()) {
-            ST_FAIL(57, "artistic apply wrong");
+            ST_FAIL(pictura::selftest_codes::kCode057, "artistic apply wrong");
         }
 
         // 58: a fixed seed makes a stochastic Artistic filter deterministic
@@ -1255,17 +1255,18 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_BEGIN("deterministic");
         ST_PASS("deterministic=%d", artisticDeterministic ? 1 : 0);
         if (!artisticDeterministic) {
-            ST_FAIL(58, "artistic determinism wrong");
+            ST_FAIL(pictura::selftest_codes::kCode058, "artistic determinism wrong");
         }
 
         // M25: the 29 new filter kinds. A clouds-filled document gives every
         // filter structured content; a pure-white source is a no-op for some.
+        ST_BEGIN("filterFamilies_applied_applied");
         const bool filterDoc = frame.newDocument(QStringLiteral("Filters"), 32, 32,
                                                     QStringLiteral("rgb"), 8,
                                                     QStringLiteral("white"));
         pictura::PictureView* filterFamiliesActiveView = frame.activeView();
         if (!filterDoc || !filterFamiliesActiveView || !filterFamiliesActiveView->apply_filter(QStringLiteral("clouds"))) {
-            ST_FAIL(68, "filter document");
+            ST_FAIL(pictura::selftest_codes::kCode068, "filter document");
         }
 
         // 68: every M25 kind maps, applies, and changes the image.
@@ -1311,11 +1312,10 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             // and the scratch history stays well under its 20-state cap.
             filterFamiliesActiveView->undo();
         }
-        ST_BEGIN("filterFamilies_applied_applied");
         ST_PASS("applied applied=%d/%d", filterFamiliesApplied,
                      static_cast<int>(filterFamiliesKinds.size()));
         if (filterFamiliesApplied != filterFamiliesKinds.size()) {
-            ST_FAIL(68, "filter apply wrong");
+            ST_FAIL(pictura::selftest_codes::kCode068, "filter apply wrong");
         }
 
         // 69: a fixed seed makes the seeded M25 filter deterministic across
@@ -1328,13 +1328,14 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_BEGIN("filterFamilies_deterministic");
         ST_PASS("deterministic=%d", filterFamiliesDeterministic ? 1 : 0);
         if (!filterFamiliesDeterministic) {
-            ST_FAIL(69, "filter determinism wrong");
+            ST_FAIL(pictura::selftest_codes::kCode069, "filter determinism wrong");
         }
 
         // 70: the M26 default follows candidate availability; the toggle flips to CPU and restores.
+        ST_BEGIN("gpu_available");
         pictura::PictureView* gpuView = frame.activeView();
         if (!gpuView) {
-            ST_FAIL(70, "no active view");
+            ST_FAIL(pictura::selftest_codes::kCode070, "no active view");
         }
         const bool avail = gpuView->gpu_available();
         const bool defaultOn = gpuView->gpu_compute();
@@ -1350,13 +1351,12 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                                   : offBackend == QStringLiteral("CPU (no GPU)");
         gpuView->set_gpu_compute(defaultOn);
         const bool gpuRestored = gpuView->active_backend() == onBackend;
-        ST_BEGIN("gpu_available");
         ST_PASS("gpu available=%d default_on=%d off_cpu=%d on_back=%d", avail ? 1 : 0,
                      defaultOn ? 1 : 0,
                      offCpu ? 1 : 0,
                      gpuRestored ? 1 : 0);
         if (defaultOn != candidateDefault || !onOk || !offCpu || !gpuRestored) {
-            ST_FAIL(70, "gpu backend wrong");
+            ST_FAIL(pictura::selftest_codes::kCode070, "gpu backend wrong");
         }
 
         // 71: the requested GPU preference round-trips and defaults to on.
@@ -1376,16 +1376,17 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      (savedOn && onRound) ? 1 : 0,
                      gpuDefault ? 1 : 0);
         if (!savedOff || !offRound || !savedOn || !onRound || !gpuDefault) {
-            ST_FAIL(71, "session persistence wrong");
+            ST_FAIL(pictura::selftest_codes::kCode071, "session persistence wrong");
         }
 
         // M27: the GPU filter path. A supported filter must produce the same
         // image through the GPU and CPU backends (the accelerated kernels are
         // byte-exact), and the gpuCompute preference is restored afterwards.
         // 72: gaussian-blur is byte-identical through both backends.
+        ST_BEGIN("filter_byte_identical");
         pictura::PictureView* gpuAccelView = frame.activeView();
         if (!gpuAccelView) {
-            ST_FAIL(72, "no active view");
+            ST_FAIL(pictura::selftest_codes::kCode072, "no active view");
         }
         gpuAccelView->set_gpu_compute(true);
         gpuAccelView->apply_filter(QStringLiteral("gaussian-blur"));
@@ -1396,19 +1397,19 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         const QImage cpu = gpuAccelView->image();
         gpuAccelView->set_gpu_compute(true);
         const bool gpuAccelIdentical = gpuAccelGpu == cpu;
-        ST_BEGIN("filter_byte_identical");
         ST_PASS("filter byte_identical=%d", gpuAccelIdentical ? 1 : 0);
         if (!gpuAccelIdentical) {
-            ST_FAIL(72, "filter byte-identity wrong");
+            ST_FAIL(pictura::selftest_codes::kCode072, "filter byte-identity wrong");
         }
 
         // M28: the heavy deterministic kernels. Surface Blur and Median must
         // produce the same image through the GPU and CPU backends (the M28
         // kernels are byte-exact, like the M27 set).
         // 73: both kinds match across backends.
+        ST_BEGIN("heavy_byte_identical");
         pictura::PictureView* gpuHeavyView = frame.activeView();
         if (!gpuHeavyView) {
-            ST_FAIL(73, "no active view");
+            ST_FAIL(pictura::selftest_codes::kCode073, "no active view");
         }
         const QStringList gpuHeavyKinds = {
             QStringLiteral("surface-blur"),
@@ -1437,21 +1438,21 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             }
         }
         gpuHeavyView->set_gpu_compute(true);
-        ST_BEGIN("heavy_byte_identical");
         ST_PASS("heavy byte_identical=%d", gpuHeavyHeavy ? 1 : 0);
         if (!gpuHeavyHeavy) {
-            ST_FAIL(73, "heavy byte-identity wrong");
+            ST_FAIL(pictura::selftest_codes::kCode073, "heavy byte-identity wrong");
         }
 
         // M30: canvas transparency display and document-rect clipping.
         // 74: an all-transparent document reveals the checkerboard, and a moved
         // layer is cropped to the document rect (no red on the canvas area).
+        ST_BEGIN("canvas_checker");
         const bool canvasCreated = frame.newDocument(QStringLiteral("Alpha"), 64, 64,
                                                   QStringLiteral("rgb"), 8,
                                                   QStringLiteral("transparent"));
         pictura::ImageView* canvasCanvas = frame.imageView();
         if (!canvasCreated || !canvasCanvas) {
-            ST_FAIL(74, "transparent document");
+            ST_FAIL(pictura::selftest_codes::kCode074, "transparent document");
         }
         const int docIndex = frame.activeDocumentIndex();
         if (canvasCanvas->width() <= 0 || canvasCanvas->height() <= 0) {
@@ -1523,11 +1524,10 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                                           == canvasCanvasColor.rgb();
         const bool canvasClipped = centreRed && overflowOk;
 
-        ST_BEGIN("canvas_checker");
         ST_PASS("canvas checker=%d clipped=%d", canvasChecker ? 1 : 0,
                      canvasClipped ? 1 : 0);
         if (!canvasChecker || !canvasClipped) {
-            ST_FAIL(74, "transparency/clipping wrong");
+            ST_FAIL(pictura::selftest_codes::kCode074, "transparency/clipping wrong");
         }
         // Restore the previously active document so later checks are undisturbed.
         frame.closeDocument(docIndex, false);
@@ -1553,18 +1553,19 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         // sample far outside the dirty union must be untouched, and undo must
         // restore the pre-move image.
         // 75: region move.
+        ST_BEGIN("region_moved");
         const bool regionCreated = frame.newDocument(QStringLiteral("Region"), 32, 32,
                                                   QStringLiteral("rgb"), 8,
                                                   QStringLiteral("white"));
         pictura::PictureView* regionView = frame.activeView();
         if (!regionCreated || !regionView) {
-            ST_FAIL(75, "document");
+            ST_FAIL(pictura::selftest_codes::kCode075, "document");
         }
         const int regionDocIndex = frame.activeDocumentIndex();
         const bool regionGrown =
             regionView->resize_canvas(QStringLiteral("top-left"), 128, 128);
         if (!regionGrown) {
-            ST_FAIL(75, "canvas growth");
+            ST_FAIL(pictura::selftest_codes::kCode075, "canvas growth");
         }
         const QImage regionBefore = regionView->image();
         const QRgb regionSrc = regionBefore.pixel(5, 5);         // inside the layer
@@ -1578,13 +1579,12 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         const bool regionVacated = regionAfter.pixel(2, 2) != regionSrc;
         const bool regionOutside = regionAfter.pixel(100, 100) == regionFar;
         const bool regionUndone = regionView->undo() && regionView->image() == regionBefore;
-        ST_BEGIN("region_moved");
         ST_PASS("region moved=%d outside_unchanged=%d undo=%d", (regionMoved && appeared && regionVacated) ? 1 : 0,
                      regionOutside ? 1 : 0,
                      regionUndone ? 1 : 0);
         if (!regionPreview || !regionMoved || !appeared || !regionVacated || !regionOutside
             || !regionUndone) {
-            ST_FAIL(75, "region move wrong");
+            ST_FAIL(pictura::selftest_codes::kCode075, "region move wrong");
         }
         // Leave the frame as M30 did: close the scratch document.
         frame.closeDocument(regionDocIndex, false);
@@ -1595,13 +1595,14 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         // full-document recomposite. `regionDamaged` fires; `changed` (emitted
         // only by a full recomposite) does not. The on-screen canvas must still
         // equal a full recomposite.
+        ST_BEGIN("region_large_moved");
         const bool regionAltCreated =
             frame.newDocument(QStringLiteral("RegionLarge"), 1024, 1024,
                               QStringLiteral("rgb"), 8, QStringLiteral("white"));
         pictura::PictureView* regionAltView = frame.activeView();
         pictura::ImageView* regionAltCanvas = frame.imageView();
         if (!regionAltCreated || !regionAltView || !regionAltCanvas) {
-            ST_FAIL(75, "large document");
+            ST_FAIL(pictura::selftest_codes::kCode075, "large document");
         }
         const int regionAltDocIndex = frame.activeDocumentIndex();
         const QImage regionAltBefore = regionAltView->image();
@@ -1624,7 +1625,6 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         const bool regionAltRegionPath = regionAltRegionBlits >= 1 && regionAltChanged == 0;
         const bool regionAltCanvasSame = samePixels(regionAltBlitted, regionAltFull);
         const bool regionAltUndone = regionAltView->undo() && regionAltView->image() == regionAltBefore;
-        ST_BEGIN("region_large_moved");
         ST_PASS("region_large moved=%d vacated=%d undo=%d "
                      "region=%d recomposite=%d canvas=%d", regionAltMoved ? 1 : 0,
                      regionAltVacated ? 1 : 0,
@@ -1633,7 +1633,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      regionAltChanged > 0 ? 1 : 0,
                      regionAltCanvasSame ? 1 : 0);
         if (!regionAltMoved || !regionAltVacated || !regionAltUndone || !regionAltRegionPath || !regionAltCanvasSame) {
-            ST_FAIL(75, "large-region blit wrong");
+            ST_FAIL(pictura::selftest_codes::kCode075, "large-region blit wrong");
         }
         frame.closeDocument(regionAltDocIndex, false);
 
@@ -1652,7 +1652,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      chromeDistinct ? 1 : 0);
         if (qApp->styleSheet().isEmpty() || chromeLevels != pictura::Theme::kLevelCount
             || !chromeDistinct) {
-            ST_FAIL(59, "stylesheet wrong");
+            ST_FAIL(pictura::selftest_codes::kCode059, "stylesheet wrong");
         }
 
         auto* chromeToolbox = frame.findChild<pictura::Toolbox*>(QStringLiteral("toolsPanel"));
@@ -1681,7 +1681,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      chromeScreenMode ? 1 : 0);
         if (!chromeToolbox || !chromeTabless || chromeSlotButtons.size() != 21 || !toggleDistinct
             || !chromeFgbg || !chromeScreenMode) {
-            ST_FAIL(60, "tools column wrong");
+            ST_FAIL(pictura::selftest_codes::kCode060, "tools column wrong");
         }
 
         // M24: CS6 right side. 61 default PanelColumn groups, 62 the new
@@ -1709,7 +1709,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_BEGIN("groups_grouped");
         ST_PASS("groups grouped=%d/5", railGroups);
         if (railGroups != 5) {
-            ST_FAIL(61, "panel grouping wrong");
+            ST_FAIL(pictura::selftest_codes::kCode061, "panel grouping wrong");
         }
 
         const QStringList railPanelNames = {
@@ -1741,7 +1741,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_PASS("panels found=%d/8 properties_empty=%d", railFound,
                      propsEmpty);
         if (railFound != 8 || propsEmpty != 1) {
-            ST_FAIL(62, "panels wrong");
+            ST_FAIL(pictura::selftest_codes::kCode062, "panels wrong");
         }
 
         const QStringList railCommands = {
@@ -1780,12 +1780,13 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      railToggled,
                      noRail ? 1 : 0);
         if (railActions < 5 || railToggled != 1 || !noRail) {
-            ST_FAIL(63, "rail wrong");
+            ST_FAIL(pictura::selftest_codes::kCode063, "rail wrong");
         }
 
+        ST_BEGIN("canvas_centre_offset");
         pictura::ImageView* canvas = frame.imageView();
         if (!canvas) {
-            ST_FAIL(64, "no active canvas");
+            ST_FAIL(pictura::selftest_codes::kCode064, "no active canvas");
         }
 
         // 64: a freshly set image is centred, not pinned to the top-left.
@@ -1802,12 +1803,11 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                                 && std::abs(filterFamiliesActual.y() - filterFamiliesExpected.y()) < 1e-6;
         const bool smaller = iw < vw && ih < filterFamiliesVh;
         const bool notTopLeft = !smaller || filterFamiliesActual != QPointF(0, 0);
-        ST_BEGIN("canvas_centre_offset");
         ST_PASS("canvas_centre offset=(%g,%g) zoom=%g", filterFamiliesActual.x(),
                      filterFamiliesActual.y(),
                      filterFamiliesZoom);
         if (!filterFamiliesCentred || !notTopLeft || filterFamiliesZoom <= 0.0) {
-            ST_FAIL(64, "centre wrong");
+            ST_FAIL(pictura::selftest_codes::kCode064, "centre wrong");
         }
 
         // 65: middle-button drag pans regardless of the active tool.
@@ -1840,13 +1840,14 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_PASS("canvas_middle_pan delta=(%g,%g)", filterFamiliesDelta.x(),
                      filterFamiliesDelta.y());
         if (!panned) {
-            ST_FAIL(65, "middle pan wrong");
+            ST_FAIL(pictura::selftest_codes::kCode065, "middle pan wrong");
         }
 
         // 66: a live move preview is transient; commit adds exactly one state.
+        ST_BEGIN("canvas_move_preview");
         pictura::PictureView* filterFamiliesView = frame.activeView();
         if (!filterFamiliesView) {
-            ST_FAIL(66, "move preview no document");
+            ST_FAIL(pictura::selftest_codes::kCode066, "move preview no document");
         }
         const int filterFamiliesHistBefore = filterFamiliesView->history_count();
         const QImage filterFamiliesPre = filterFamiliesView->image();
@@ -1858,13 +1859,12 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         const bool filterFamiliesDirty = filterFamiliesView->is_dirty();
         filterFamiliesView->undo();
         const bool filterFamiliesUndone = filterFamiliesView->image() == filterFamiliesPre;
-        ST_BEGIN("canvas_move_preview");
         ST_PASS("canvas_move preview=%d hist=%d undo=%d", previewed ? 1 : 0,
                      commitHistory ? 1 : 0,
                      filterFamiliesUndone ? 1 : 0);
         if (!previewed || !previewChanged || !previewNoHistory
             || !filterFamiliesCommitted || !commitHistory || !filterFamiliesDirty || !filterFamiliesUndone) {
-            ST_FAIL(66, "move preview wrong");
+            ST_FAIL(pictura::selftest_codes::kCode066, "move preview wrong");
         }
 
         // 67: the drag-start cache (base + layer) must not touch history.
@@ -1882,13 +1882,14 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      layerOk ? 1 : 0,
                      (cacheHistOk && histUnchanged) ? 1 : 0);
         if (!filterFamiliesBegan || !baseOk || !layerOk || !cacheHistOk || !histUnchanged) {
-            ST_FAIL(67, "preview cache wrong");
+            ST_FAIL(pictura::selftest_codes::kCode067, "preview cache wrong");
         }
 
         // 76: the present path crops a view-pyramid level instead of scaling the
         // full-resolution document. At a fixed view the chosen crop is reused;
         // crossing a level boundary re-crops; a pan re-crops then reuses; and at
         // level 0 the crop present is pixel-identical to a full-resolution draw.
+        ST_BEGIN("present_cache_reused");
         frame.resize(1000, 700);
         QApplication::processEvents();
         const bool pcCreated = frame.newDocument(QStringLiteral("PresentCache"), 520, 120,
@@ -1896,7 +1897,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                                                  QStringLiteral("white"));
         canvas = frame.imageView();
         if (!pcCreated || !canvas) {
-            ST_FAIL(76, "present cache no canvas");
+            ST_FAIL(pictura::selftest_codes::kCode076, "present cache no canvas");
         }
         const int pcDoc = frame.activeDocumentIndex();
         const QPointF pcCentre(canvas->width() / 2.0, canvas->height() / 2.0);
@@ -1933,7 +1934,6 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         canvas->render(&pcPan2);
         const bool pcPanStable = !canvas->presentCacheRebuiltOnLastPaint()
                                  && samePixels(pcPan1, pcPan2);
-        ST_BEGIN("present_cache_reused");
         ST_PASS("present_cache reused=%d stable=%d level0=520x120 full_identical=%d "
                      "zoom_rebuild=%d level1=%dx%d pan_reuse=%d pan_stable=%d",
                      pcReused ? 1 : 0, pcStable ? 1 : 0, pcIdentical ? 1 : 0,
@@ -1941,7 +1941,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      pcLevel1SizeActual.height(), pcPanReused ? 1 : 0, pcPanStable ? 1 : 0);
         if (!pcReused || !pcStable || !pcLevel0Size || !pcIdentical || !pcRebuiltOnZoom
             || !pcLevel1Size || !pcPanReused || !pcPanStable) {
-            ST_FAIL(76, "present cache wrong");
+            ST_FAIL(pictura::selftest_codes::kCode076, "present cache wrong");
         }
         frame.closeDocument(pcDoc, false);
 
@@ -1950,20 +1950,21 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         // rectangle.
         // 77: the move-preview base equals the canvas with the layer hidden.
         // 78: a raster visibility toggle equals a full recomposite.
+        ST_BEGIN("region_preview_base");
         const bool interactiveCreated = frame.newDocument(QStringLiteral("Region"), 32, 32,
                                                   QStringLiteral("rgb"), 8,
                                                   QStringLiteral("white"));
         pictura::PictureView* interactiveView = frame.activeView();
         if (!interactiveCreated || !interactiveView) {
-            ST_FAIL(77, "document");
+            ST_FAIL(pictura::selftest_codes::kCode077, "document");
         }
         const int interactiveDocIndex = frame.activeDocumentIndex();
         if (!interactiveView->resize_canvas(QStringLiteral("top-left"), 64, 64)) {
-            ST_FAIL(77, "canvas growth");
+            ST_FAIL(pictura::selftest_codes::kCode077, "canvas growth");
         }
         const int topLayer = interactiveView->topmost_pixel_layer_index();
         if (topLayer < 0) {
-            ST_FAIL(77, "no pixel layer");
+            ST_FAIL(pictura::selftest_codes::kCode077, "no pixel layer");
         }
         // Full pixel-by-pixel equality over the small (64x64) canvas.
         const bool interactiveBegan = interactiveView->begin_move_preview();
@@ -1981,26 +1982,26 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         interactiveView->end_move_preview();
         frame.closeDocument(interactiveDocIndex, false);
 
-        ST_BEGIN("region_preview_base");
         ST_PASS("region preview_base=%d visibility=%d", baseSame ? 1 : 0,
                      visibilitySame ? 1 : 0);
         if (!baseSame) {
-            ST_FAIL(77, "preview base wrong");
+            ST_FAIL(pictura::selftest_codes::kCode077, "preview base wrong");
         }
         if (!visibilitySame) {
-            ST_FAIL(78, "visibility region wrong");
+            ST_FAIL(pictura::selftest_codes::kCode078, "visibility region wrong");
         }
 
         // M34: composite coherence and cheap undo/redo. A region-path move must
         // leave the stored document composite equal to the displayed image;
         // undo/redo restore from the snapshot composite; and a save after the
         // edit must write that composite to disk.
+        ST_BEGIN("coherent_composite");
         const bool coherenceCreated = frame.newDocument(QStringLiteral("Coherent"), 32, 32,
                                                   QStringLiteral("rgb"), 8,
                                                   QStringLiteral("white"));
         pictura::PictureView* coherenceView = frame.activeView();
         if (!coherenceCreated || !coherenceView) {
-            ST_FAIL(79, "document");
+            ST_FAIL(pictura::selftest_codes::kCode079, "document");
         }
         const int coherenceDocIndex = frame.activeDocumentIndex();
         const QImage coherencePre = coherenceView->image();
@@ -2034,18 +2035,17 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             && static_cast<unsigned>(coherenceReloaded->composite_argb(6, 6))
                    == static_cast<unsigned>(coherenceEdited.pixel(6, 6));
 
-        ST_BEGIN("coherent_composite");
         ST_PASS("coherent composite=%d undo=%d save=%d", coherenceComposite ? 1 : 0,
                      coherenceUndo ? 1 : 0,
                      coherenceSave ? 1 : 0);
         if (!coherenceComposite) {
-            ST_FAIL(79, "composite coherence wrong");
+            ST_FAIL(pictura::selftest_codes::kCode079, "composite coherence wrong");
         }
         if (!coherenceUndo) {
-            ST_FAIL(80, "undo/redo wrong");
+            ST_FAIL(pictura::selftest_codes::kCode080, "undo/redo wrong");
         }
         if (!coherenceSave) {
-            ST_FAIL(81, "save round-trip wrong");
+            ST_FAIL(pictura::selftest_codes::kCode081, "save round-trip wrong");
         }
         frame.closeDocument(frame.activeDocumentIndex(), false);
         frame.closeDocument(coherenceDocIndex, false);
@@ -2055,17 +2055,18 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         // on-screen canvas equals a full recomposite; image() rebuilds from the
         // composite while dirty; the present cache is patched, not rebuilt.
         // 82: document; 83: blit equality; 84: present cache; 85: large region.
+        ST_BEGIN("region_blit_region");
         const bool blitCreated = frame.newDocument(QStringLiteral("RegionBlit"), 32, 32,
                                                   QStringLiteral("rgb"), 8,
                                                   QStringLiteral("white"));
         pictura::PictureView* blitView = frame.activeView();
         pictura::ImageView* blitCanvas = frame.imageView();
         if (!blitCreated || !blitView || !blitCanvas) {
-            ST_FAIL(82, "document");
+            ST_FAIL(pictura::selftest_codes::kCode082, "document");
         }
         const int blitDocIndex = frame.activeDocumentIndex();
         if (!blitView->resize_canvas(QStringLiteral("top-left"), 64, 64)) {
-            ST_FAIL(82, "canvas growth");
+            ST_FAIL(pictura::selftest_codes::kCode082, "canvas growth");
         }
         // Warm the present cache; the second paint at the same zoom must reuse it.
         QImage blitWarm(blitCanvas->size(), QImage::Format_ARGB32);
@@ -2104,7 +2105,6 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         const bool canvasSame = samePixels(blitBlitted, blitFull);
         const bool rebuiltSame = samePixels(blitRebuilt, blitFull);
         const bool cacheOk = reuseBefore && cropPatchedAfter && cropReusedAfter;
-        ST_BEGIN("region_blit_region");
         ST_PASS("region_blit region=%d changed=%d canvas=%d "
                      "rebuilt=%d cache=%d", regionPath ? 1 : 0,
                      blitChanged > 0 ? 1 : 0,
@@ -2112,22 +2112,23 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      rebuiltSame ? 1 : 0,
                      cacheOk ? 1 : 0);
         if (!blitPreviewed || !blitMoved || !regionPath || !canvasSame || !rebuiltSame) {
-            ST_FAIL(83, "region blit wrong");
+            ST_FAIL(pictura::selftest_codes::kCode083, "region blit wrong");
         }
         if (!cacheOk) {
-            ST_FAIL(84, "present cache wrong");
+            ST_FAIL(pictura::selftest_codes::kCode084, "present cache wrong");
         }
         frame.closeDocument(blitDocIndex, false);
 
         // M35 large region: a canvas-sized dirty union takes the C++ blit path
         // and does not recomposite the whole 1024² document.
+        ST_BEGIN("region_large_region");
         const bool blitAltCreated =
             frame.newDocument(QStringLiteral("RegionLarge"), 1024, 1024,
                               QStringLiteral("rgb"), 8, QStringLiteral("white"));
         pictura::PictureView* blitAltView = frame.activeView();
         pictura::ImageView* blitAltCanvas = frame.imageView();
         if (!blitAltCreated || !blitAltView || !blitAltCanvas) {
-            ST_FAIL(82, "large document");
+            ST_FAIL(pictura::selftest_codes::kCode082, "large document");
         }
         const int blitAltDocIndex = frame.activeDocumentIndex();
         // Run this pass on the CPU compositor to exercise the region-blit path
@@ -2148,12 +2149,11 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         const QImage blitAltFull = blitAltCanvas->image();
         const bool blitAltRegionPath = blitAltRegionBlits >= 1 && blitAltChanged == 0;
         const bool blitAltCanvasSame = samePixels(blitAltBlitted, blitAltFull);
-        ST_BEGIN("region_large_region");
         ST_PASS("region_large region=%d recomposite=%d canvas=%d", blitAltRegionPath ? 1 : 0,
                      blitAltChanged > 0 ? 1 : 0,
                      blitAltCanvasSame ? 1 : 0);
         if (!blitAltMoved || !blitAltRegionPath || !blitAltCanvasSame) {
-            ST_FAIL(85, "large-region blit wrong");
+            ST_FAIL(pictura::selftest_codes::kCode085, "large-region blit wrong");
         }
         frame.closeDocument(blitAltDocIndex, false);
 
@@ -2168,7 +2168,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         if (mpcView) mpcView->end_move_preview();
         ST_BEGIN("move_preview_cache_hit");
         ST_PASS("move_preview_cache hit=%d reuse=%d after_move=%d miss=%d", mpcHit ? 1 : 0, mpcReuse ? 1 : 0, mpcAfterMove ? 1 : 0, mpcMiss ? 1 : 0);
-        if (!mpcHit || !mpcReuse || !mpcAfterMove || !mpcMiss) { ST_FAIL(197, "move preview cache wrong"); }
+        if (!mpcHit || !mpcReuse || !mpcAfterMove || !mpcMiss) { ST_FAIL(pictura::selftest_codes::kCode197, "move preview cache wrong"); }
         frame.closeDocument(frame.activeDocumentIndex(), false);
         // Document size accessors: match full-image dims, then track a resize. 198: size.
         const bool dsCreated = frame.newDocument(QStringLiteral("DocSize"), 20, 12, QStringLiteral("rgb"), 8, QStringLiteral("white"));
@@ -2177,16 +2177,17 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         const bool dsResized = dsView && dsView->resize_canvas(QStringLiteral("top-left"), 30, 18) && dsView->document_width() == 30 && dsView->document_height() == 18 && dsView->document_width() == dsView->image().width() && dsView->document_height() == dsView->image().height();
         ST_BEGIN("document_size_match");
         ST_PASS("document_size match=%d resized=%d", dsMatch ? 1 : 0, dsResized ? 1 : 0);
-        if (!dsMatch || !dsResized) { ST_FAIL(198, "document size wrong"); }
+        if (!dsMatch || !dsResized) { ST_FAIL(pictura::selftest_codes::kCode198, "document size wrong"); }
         frame.closeDocument(frame.activeDocumentIndex(), false);
         // M36: layer attributes through the bridge — fill, lock, color, each one
         // history state and undoable. 86: fill; 87: lock; 88: color; 89: undo.
+        ST_BEGIN("attrs_fill");
         const bool attrsCreated = frame.newDocument(QStringLiteral("Attrs"), 16, 16,
                                                   QStringLiteral("rgb"), 8,
                                                   QStringLiteral("white"));
         pictura::PictureView* attrsView = frame.activeView();
         if (!attrsCreated || !attrsView) {
-            ST_FAIL(86, "document");
+            ST_FAIL(pictura::selftest_codes::kCode086, "document");
         }
         const int attrsDocIndex = frame.activeDocumentIndex();
         const int histBase = attrsView->history_count();
@@ -2211,33 +2212,33 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                              && attrsView->undo() && attrsView->layer_fill(0) == 255
                              && attrsView->redo() && attrsView->redo() && attrsView->redo()
                              && attrsView->layer_fill(0) == 128 && attrsView->layer_color(0) == 3;
-        ST_BEGIN("attrs_fill");
         ST_PASS("attrs fill=%d lock=%d color=%d undo=%d", fillOk ? 1 : 0,
                      lockOk ? 1 : 0,
                      colorOk ? 1 : 0,
                      attrsUndo ? 1 : 0);
         if (!fillOk) {
-            ST_FAIL(86, "fill");
+            ST_FAIL(pictura::selftest_codes::kCode086, "fill");
         }
         if (!lockOk) {
-            ST_FAIL(87, "lock");
+            ST_FAIL(pictura::selftest_codes::kCode087, "lock");
         }
         if (!colorOk) {
-            ST_FAIL(88, "color");
+            ST_FAIL(pictura::selftest_codes::kCode088, "color");
         }
         if (!attrsUndo) {
-            ST_FAIL(89, "undo restore");
+            ST_FAIL(pictura::selftest_codes::kCode089, "undo restore");
         }
         frame.closeDocument(attrsDocIndex, false);
         // M37: layer creation and grouping. Each op is exactly one history
         // step; a transparent new layer leaves the composite unchanged, and
         // undo restores the original stack.
+        ST_BEGIN("create_new");
         const bool layerOpsCreated = frame.newDocument(QStringLiteral("Create"), 16, 16,
                                                   QStringLiteral("rgb"), 8,
                                                   QStringLiteral("white"));
         pictura::PictureView* layerOpsView = frame.activeView();
         if (!layerOpsCreated || !layerOpsView) {
-            ST_FAIL(90, "no view");
+            ST_FAIL(pictura::selftest_codes::kCode090, "no view");
         }
         const int layerOpsDocIndex = frame.activeDocumentIndex();
         const int layerOpsBaseCount = layerOpsView->layer_count();
@@ -2280,7 +2281,6 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         }
         undoOk = undoOk && layerOpsView->layer_count() == layerOpsBaseCount;
 
-        ST_BEGIN("create_new");
         ST_PASS("create new=%d group=%d duplicate=%d "
                      "ungroup=%d undo=%d", addOk ? 1 : 0,
                      groupOk ? 1 : 0,
@@ -2288,19 +2288,19 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      ungroupOk ? 1 : 0,
                      undoOk ? 1 : 0);
         if (!addOk) {
-            ST_FAIL(90, "add failed");
+            ST_FAIL(pictura::selftest_codes::kCode090, "add failed");
         }
         if (!groupOk) {
-            ST_FAIL(91, "group failed");
+            ST_FAIL(pictura::selftest_codes::kCode091, "group failed");
         }
         if (!dupOk) {
-            ST_FAIL(92, "duplicate failed");
+            ST_FAIL(pictura::selftest_codes::kCode092, "duplicate failed");
         }
         if (!ungroupOk) {
-            ST_FAIL(93, "ungroup failed");
+            ST_FAIL(pictura::selftest_codes::kCode093, "ungroup failed");
         }
         if (!undoOk) {
-            ST_FAIL(94, "undo failed");
+            ST_FAIL(pictura::selftest_codes::kCode094, "undo failed");
         }
         frame.closeDocument(layerOpsDocIndex, false);
         // M38: the frozen 71-tool catalogue, its icons/cursors/hotspots, the
@@ -2363,16 +2363,16 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      slotsOk,
                      guardOk ? 1 : 0);
         if (!iconsOk) {
-            ST_FAIL(95, "tool icon missing=%s", missingToolIcon.toLocal8Bit().constData());
+            ST_FAIL(pictura::selftest_codes::kCode095, "tool icon missing=%s", missingToolIcon.toLocal8Bit().constData());
         }
         if (!cursorsOk) {
-            ST_FAIL(96, "tool cursor missing=%s", missingToolCursor.toLocal8Bit().constData());
+            ST_FAIL(pictura::selftest_codes::kCode096, "tool cursor missing=%s", missingToolCursor.toLocal8Bit().constData());
         }
         if (!slotsOk) {
-            ST_FAIL(97, "toolbox slots wrong");
+            ST_FAIL(pictura::selftest_codes::kCode097, "toolbox slots wrong");
         }
         if (!guardOk) {
-            ST_FAIL(98, "unimplemented tool activated");
+            ST_FAIL(pictura::selftest_codes::kCode098, "unimplemented tool activated");
         }
         // M38 panels: the former rail icon ids now live on the PanelColumn
         // group tabs, plus the Layers action strip and the History snapshot
@@ -2460,25 +2460,26 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      stripPass ? 1 : 0,
                      historyOk ? 1 : 0);
         if (!railOk) {
-            ST_FAIL(99, "rail icon missing=%s", railMissing.toLocal8Bit().constData());
+            ST_FAIL(pictura::selftest_codes::kCode099, "rail icon missing=%s", railMissing.toLocal8Bit().constData());
         }
         if (!stripPass) {
-            ST_FAIL(100, "strip button wrong=%s", stripWrong.toLocal8Bit().constData());
+            ST_FAIL(pictura::selftest_codes::kCode100, "strip button wrong=%s", stripWrong.toLocal8Bit().constData());
         }
         if (!historyOk) {
-            ST_FAIL(101, "snapshot icon wrong");
+            ST_FAIL(pictura::selftest_codes::kCode101, "snapshot icon wrong");
         }
         // M39: the layers panel's tree projection, multi-selection batches,
         // solo visibility, Tab rename, Panel Options, badges, menus, tooltips,
         // and the seven-button strip. A deterministic fixture is built through
         // the bridge; the panel is read through its M39 test hooks.
+        ST_BEGIN("tree_order");
         auto* anatomyPanel = frame.findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
         const bool anatomyCreated = frame.newDocument(QStringLiteral("PanelAnatomy"), 16, 16,
                                                   QStringLiteral("rgb"), 8,
                                                   QStringLiteral("white"));
         pictura::PictureView* anatomyView = frame.activeView();
         if (!anatomyCreated || !anatomyView || !anatomyPanel) {
-            ST_FAIL(102, "document/panel");
+            ST_FAIL(pictura::selftest_codes::kCode102, "document/panel");
         }
         const int anatomyDocIndex = frame.activeDocumentIndex();
 
@@ -2537,13 +2538,12 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             && anatomyView->history_count() == renameBase + 1
             && !anatomyView->set_layer_name_path(QStringLiteral("1/9"), QStringLiteral("Bogus"))
             && anatomyView->history_count() == renameBase + 1;
-        ST_BEGIN("tree_order");
         ST_PASS("tree order=%d add=%d rename=%d", orderOk ? 1 : 0, anatomyAddOk ? 1 : 0, treeRenameOk ? 1 : 0);
         if (!orderOk) {
-            ST_FAIL(102, "projection order");
+            ST_FAIL(pictura::selftest_codes::kCode102, "projection order");
         }
         if (!anatomyAddOk || !treeRenameOk) {
-            ST_FAIL(103, "tree add/nested rename");
+            ST_FAIL(pictura::selftest_codes::kCode103, "tree add/nested rename");
         }
 
         // 8.2 m39_multi (104-105): a batch is one undo step, the Background and
@@ -2591,10 +2591,10 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_PASS("multi batch=%d skip=%d group=%d undo=%d", batchOk ? 1 : 0, skipOk ? 1 : 0,
                      (groupStepOk && anatomyUngroupOk) ? 1 : 0, batchUndoOk ? 1 : 0);
         if (!batchOk || !skipOk || !batchUndoOk) {
-            ST_FAIL(104, "multi-selection batch");
+            ST_FAIL(pictura::selftest_codes::kCode104, "multi-selection batch");
         }
         if (!groupStepOk || !anatomyUngroupOk) {
-            ST_FAIL(105, "multi group/ungroup");
+            ST_FAIL(pictura::selftest_codes::kCode105, "multi group/ungroup");
         }
 
         // 8.3 m39_solo (106): Alt-solo hides every other row, a second Alt
@@ -2639,7 +2639,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_BEGIN("solo_solo");
         ST_PASS("solo solo=%d restore=%d undo=%d", soloOk ? 1 : 0, soloRestoreOk ? 1 : 0, soloUndoOk ? 1 : 0);
         if (!soloOk || !soloRestoreOk || !soloUndoOk) {
-            ST_FAIL(106, "solo visibility");
+            ST_FAIL(pictura::selftest_codes::kCode106, "solo visibility");
         }
 
         // 8.4 m39_rename (107): Tab commits and moves down, Shift+Tab up, and
@@ -2696,7 +2696,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_BEGIN("rename_down");
         ST_PASS("rename down=%d up=%d nowrap=%d", downOk ? 1 : 0, upOk ? 1 : 0, nowrapOk ? 1 : 0);
         if (!downOk || !upOk || !nowrapOk) {
-            ST_FAIL(107, "Tab rename");
+            ST_FAIL(pictura::selftest_codes::kCode107, "Tab rename");
         }
 
         // 8.5 m39_options (108): the defaults are Medium / Entire Document /
@@ -2721,7 +2721,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_BEGIN("options_defaults");
         ST_PASS("options defaults=%d roundtrip=%d", defaultsOk ? 1 : 0, roundtripOk ? 1 : 0);
         if (!defaultsOk || !roundtripOk) {
-            ST_FAIL(108, "panel options");
+            ST_FAIL(pictura::selftest_codes::kCode108, "panel options");
         }
 
         // 8.6 m39_badges (109): the mask and adjustment badge data reaches the
@@ -2745,7 +2745,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_BEGIN("badges_mask");
         ST_PASS("badges mask=%d fx=%d clip=%d", badgeMask ? 1 : 0, badgeFx ? 1 : 0, badgeClip ? 1 : 0);
         if (!badgeMask || !badgeFx || !badgeClip) {
-            ST_FAIL(109, "row badges");
+            ST_FAIL(pictura::selftest_codes::kCode109, "row badges");
         }
 
         // m39_tooltip (111): every row's tooltip is "<name> (<kind>)".
@@ -2765,7 +2765,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_BEGIN("tooltip_ok");
         ST_PASS("tooltip ok=%d", tipOk ? 1 : 0);
         if (!tipOk) {
-            ST_FAIL(111, "row tooltip");
+            ST_FAIL(pictura::selftest_codes::kCode111, "row tooltip");
         }
 
         // m39_strip (112): exactly the seven CS6 strip buttons, no Move text
@@ -2797,7 +2797,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_BEGIN("strip_seven");
         ST_PASS("strip seven=%d", anatomyStripOk ? 1 : 0);
         if (!anatomyStripOk) {
-            ST_FAIL(112, "action strip");
+            ST_FAIL(pictura::selftest_codes::kCode112, "action strip");
         }
         // M40: the tools panel — one/two columns, the flyout indicator, opening,
         // and keys, Shift-key cycling, the standalone dock, and session v4.
@@ -2867,10 +2867,10 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      (toolsPanelRestored && rowMajor && toolsPanelWidened) ? 1 : 0,
                      pinnedOk ? 1 : 0);
         if (!columnsOk) {
-            ST_FAIL(113, "column layout");
+            ST_FAIL(pictura::selftest_codes::kCode113, "column layout");
         }
         if (!pinnedOk) {
-            ST_FAIL(114, "pinned controls");
+            ST_FAIL(pictura::selftest_codes::kCode114, "pinned controls");
         }
 
         // m40_flyout (115): a multi-member group shows the triangle and opens a
@@ -2921,7 +2921,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      menuActions ? 1 : 0,
                      toolsPanelBeside ? 1 : 0);
         if (!flyoutOk) {
-            ST_FAIL(115, "flyout");
+            ST_FAIL(pictura::selftest_codes::kCode115, "flyout");
         }
 
         // m40_keys (116): every flyout action carries the group's letter, visible
@@ -2955,7 +2955,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_PASS("keys shown=%d disabled=%d", keysShown ? 1 : 0,
                      keysDisabled ? 1 : 0);
         if (!keysOk) {
-            ST_FAIL(116, "flyout keys");
+            ST_FAIL(pictura::selftest_codes::kCode116, "flyout keys");
         }
 
         // m40_shift (117): drive the real QShortcut path by synthesizing a key
@@ -3024,7 +3024,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                 jPlain ? 1 : 0, jShift ? 1 : 0, jWrap ? 1 : 0, sWrap ? 1 : 0, yShift ? 1 : 0,
                 noImpl ? 1 : 0, toolsPanelOff ? 1 : 0);
         if (!shiftOk) {
-            ST_FAIL(117, "shift cycling");
+            ST_FAIL(pictura::selftest_codes::kCode117, "shift cycling");
         }
 
         // m40_atomic (118): the Tools panel is a tabless, atomic column, so a
@@ -3049,7 +3049,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_PASS("dock tabless=%d atomic=%d", toolsAtomicNoTab ? 1 : 0,
                      toolsAtomicReject ? 1 : 0);
         if (!dockOk) {
-            ST_FAIL(118, "atomic tools column");
+            ST_FAIL(pictura::selftest_codes::kCode118, "atomic tools column");
         }
 
         pictura::SessionState toolsPanelState = pictura::loadSession();
@@ -3070,7 +3070,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_PASS("session roundtrip=%d defaults=%d", toolsPanelRoundtrip ? 1 : 0,
                      toolsPanelDefaults ? 1 : 0);
         if (!toolsPanelRoundtrip || !toolsPanelDefaults) {
-            ST_FAIL(119, "session v4");
+            ST_FAIL(pictura::selftest_codes::kCode119, "session v4");
         }
         // M41: the panel column — top tabs, the width toggle, the iconic strip
         // with its Qt::Popup flyout, the seven-item tab menu, minimize vs
@@ -3102,7 +3102,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_PASS("tabs tabs=north single=%d nolabel=%d", singleTab ? 1 : 0,
                      noLabel ? 1 : 0);
         if (!tabsOk) {
-            ST_FAIL(120, "top tabs");
+            ST_FAIL(pictura::selftest_codes::kCode120, "top tabs");
         }
 
         // m41_width (121): the `panelColumnToggle` flips normal/iconic, the
@@ -3137,7 +3137,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      noMin ? 1 : 0,
                      panelColumnScroll ? 1 : 0);
         if (!widthOk) {
-            ST_FAIL(121, "column width toggle");
+            ST_FAIL(pictura::selftest_codes::kCode121, "column width toggle");
         }
 
         // m41_iconic (122): iconic mode shows the icon strip with a divider,
@@ -3190,7 +3190,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      panelColumnPopup ? 1 : 0,
                      panelColumnRestore ? 1 : 0);
         if (!iconicOk) {
-            ST_FAIL(122, "iconic strip");
+            ST_FAIL(pictura::selftest_codes::kCode122, "iconic strip");
         }
 
         // m41_minimize (124): minimize hides the content but keeps the tab bar,
@@ -3225,7 +3225,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      minRestore ? 1 : 0,
                      panelColumnIcons ? 1 : 0);
         if (!minimizeOk) {
-            ST_FAIL(124, "minimize");
+            ST_FAIL(pictura::selftest_codes::kCode124, "minimize");
         }
 
         // m41_tools (130): no `Tools` title, content-fit widths, and the
@@ -3262,7 +3262,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      panelColumnMin2 ? 1 : 0,
                      panelColumnFit ? 1 : 0);
         if (!toolsOk) {
-            ST_FAIL(130, "tools panel");
+            ST_FAIL(pictura::selftest_codes::kCode130, "tools panel");
         }
 
         // m41_drag (126): a tab reorders within its group, a tab regroups into
@@ -3356,7 +3356,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      dragIndicator ? 1 : 0,
                      dragClear ? 1 : 0);
         if (!dragOk) {
-            ST_FAIL(126, "drag and drop");
+            ST_FAIL(pictura::selftest_codes::kCode126, "drag and drop");
         }
 
         // m41_tearoff (127): tearing a group off the column creates a visible
@@ -3401,7 +3401,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      panelColumnRedock ? 1 : 0,
                      tearEmpty ? 1 : 0);
         if (!tearoffOk) {
-            ST_FAIL(127, "tear-off and re-dock");
+            ST_FAIL(pictura::selftest_codes::kCode127, "tear-off and re-dock");
         }
         if (panelColumnColumn) {
             panelColumnColumn->setMinimumWidth(0);
@@ -3470,7 +3470,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      prefsShift ? 1 : 0,
                      prefsIconic ? 1 : 0);
         if (!prefsOk) {
-            ST_FAIL(125, "preferences dialog");
+            ST_FAIL(pictura::selftest_codes::kCode125, "preferences dialog");
         }
 
         // m41_session (128): the v5 fields round-trip through the real
@@ -3579,7 +3579,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      panelColumnUnknown ? 1 : 0,
                      panelColumnPanels ? 1 : 0);
         if (!panelColumnSessionOk) {
-            ST_FAIL(128, "session v5");
+            ST_FAIL(pictura::selftest_codes::kCode128, "session v5");
         }
         // M42 Phase A: the column's normal-mode minimum width and smallest-width
         // compact transition, the bigger strip and tool icons, the fg/bg swap
@@ -3624,7 +3624,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      normalMin,
                      iconicMin);
         if (!minWidthOk) {
-            ST_FAIL(131, "column minimum width");
+            ST_FAIL(pictura::selftest_codes::kCode131, "column minimum width");
         }
 
         // m42_iconic (132): the iconic-strip buttons and their pixmap are larger
@@ -3658,7 +3658,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_PASS("iconic bigger=%d smallest=%d", iconBig ? 1 : 0,
                      iconSmallest ? 1 : 0);
         if (!panelMenusIconicOk) {
-            ST_FAIL(132, "iconic strip");
+            ST_FAIL(pictura::selftest_codes::kCode132, "iconic strip");
         }
 
         // m42_fgbg (137): the swap control exists as a real hit target, clicking
@@ -3705,7 +3705,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      swapClick ? 1 : 0,
                      swapKey ? 1 : 0);
         if (!fgbgOk) {
-            ST_FAIL(137, "fg/bg swap");
+            ST_FAIL(pictura::selftest_codes::kCode137, "fg/bg swap");
         }
 
         // m42_dragstrip (133): a strip icon reorders within the strip and the
@@ -3796,7 +3796,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      stripIndicator ? 1 : 0,
                      stripClear ? 1 : 0);
         if (!dragStripOk) {
-            ST_FAIL(133, "strip drag");
+            ST_FAIL(pictura::selftest_codes::kCode133, "strip drag");
         }
 
         // m42_flyout (134): the flyout opens on the inner side of the right-hand
@@ -3835,7 +3835,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      flyoutGroup ? 1 : 0,
                      flyoutClose ? 1 : 0);
         if (!panelMenusFlyoutOk) {
-            ST_FAIL(134, "compact flyout");
+            ST_FAIL(pictura::selftest_codes::kCode134, "compact flyout");
         }
 
         // m42_float_overlay (136): a torn-off group is a frameless tool window
@@ -3908,7 +3908,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      floatMove ? 1 : 0,
                      floatRedock ? 1 : 0);
         if (!floatOk) {
-            ST_FAIL(136, "in-window float overlay");
+            ST_FAIL(pictura::selftest_codes::kCode136, "in-window float overlay");
         }
         // M43 Phase A: tab-vs-group drag + one-panel float (140), panel tab
         // colours (141), corner button at minimum width (142), one-panel float
@@ -4025,7 +4025,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      groupPanel ? 1 : 0,
                      multicolumnFloatPanel ? 1 : 0);
         if (!tabDragOk) {
-            ST_FAIL(140, "tab vs group drag");
+            ST_FAIL(pictura::selftest_codes::kCode140, "tab vs group drag");
         }
 
         // m43_tabcolors (141): the panel tab bar is named `panelTabBar`; its
@@ -4064,7 +4064,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      colorsInactive ? 1 : 0,
                      colorsDiffer ? 1 : 0);
         if (!tabColorsOk) {
-            ST_FAIL(141, "panel tab colours");
+            ST_FAIL(pictura::selftest_codes::kCode141, "panel tab colours");
         }
 
         // m43_corner (142): at the column minimum width the `▾` corner button is
@@ -4099,7 +4099,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_PASS("corner visible=%d elide=%d", cornerVisible ? 1 : 0,
                      cornerElide ? 1 : 0);
         if (!cornerOk) {
-            ST_FAIL(142, "corner button");
+            ST_FAIL(pictura::selftest_codes::kCode142, "corner button");
         }
 
         // m43_newcolumn (143): a panel dropped at the left or right workspace
@@ -4135,7 +4135,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      newTools ? 1 : 0,
                      newRemoved ? 1 : 0);
         if (!newColumnOk) {
-            ST_FAIL(143, "new column drop");
+            ST_FAIL(pictura::selftest_codes::kCode143, "new column drop");
         }
 
         // m43_intogroup (144): dropping a panel inside another group inserts it
@@ -4191,7 +4191,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      intoCompact ? 1 : 0,
                      intoIndex ? 1 : 0);
         if (!intoGroupOk) {
-            ST_FAIL(144, "into-group drop");
+            ST_FAIL(pictura::selftest_codes::kCode144, "into-group drop");
         }
 
         // m43_boundary (145): dropping a panel above or below a group inserts a
@@ -4230,7 +4230,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      multicolumnBelow ? 1 : 0,
                      boundaryCompact ? 1 : 0);
         if (!boundaryOk) {
-            ST_FAIL(145, "boundary drop");
+            ST_FAIL(pictura::selftest_codes::kCode145, "boundary drop");
         }
 
         // m43_singlefloat (146): a one-panel float carries only its panel, and
@@ -4278,7 +4278,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_PASS("singlefloat panel=%d redock=%d", singlePanel ? 1 : 0,
                      singleRedock ? 1 : 0);
         if (!singleFloatOk) {
-            ST_FAIL(146, "single-panel float");
+            ST_FAIL(pictura::selftest_codes::kCode146, "single-panel float");
         }
 
         // m43_tools (147): the Tools dock width is fixed to its content width in
@@ -4310,7 +4310,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      toolsContent1,
                      toolsContent2);
         if (!multicolumnToolsOk) {
-            ST_FAIL(147, "tools content width");
+            ST_FAIL(pictura::selftest_codes::kCode147, "tools content width");
         }
 
         // m43_icon (148): the compact strip button and pixmap are larger than
@@ -4336,7 +4336,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_BEGIN("icon_bigger");
         ST_PASS("icon bigger=%d", iconBigger ? 1 : 0);
         if (!iconBigger) {
-            ST_FAIL(148, "compact icon size");
+            ST_FAIL(pictura::selftest_codes::kCode148, "compact icon size");
         }
 
         // m43_flyout (149): the flyout meets the clicked button's actual edge on
@@ -4370,7 +4370,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_PASS("flyout inner=%d nooverlap=%d", flyoutInner ? 1 : 0,
                      flyoutNoOverlap ? 1 : 0);
         if (!multicolumnFlyoutOk) {
-            ST_FAIL(149, "inner-side flyout");
+            ST_FAIL(pictura::selftest_codes::kCode149, "inner-side flyout");
         }
 
         // m43_dreset (150): `D` resets the foreground to black and the
@@ -4402,7 +4402,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_PASS("dreset fg=%d bg=%d", dResetFg ? 1 : 0,
                      dResetBg ? 1 : 0);
         if (!dResetOk) {
-            ST_FAIL(150, "default-colours reset");
+            ST_FAIL(pictura::selftest_codes::kCode150, "default-colours reset");
         }
 
         // m43_session (151): the v6 store carries the per-column layout. A
@@ -4508,7 +4508,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                      sessionRound ? 1 : 0,
                      sessionUnknown ? 1 : 0);
         if (!multicolumnSessionOk) {
-            ST_FAIL(151, "session v6");
+            ST_FAIL(pictura::selftest_codes::kCode151, "session v6");
         }
 
         // m44_newdoc (153): E1. A newly created white document must present
@@ -4543,7 +4543,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
         ST_BEGIN("newdoc_white");
         ST_PASS("newdoc white=%d uniform=%d immediate=%d", themeWhite ? 1 : 0, themeUniform ? 1 : 0, themeImmediate ? 1 : 0);
         if (!newdocOk) {
-            ST_FAIL(153, "new-document render");
+            ST_FAIL(pictura::selftest_codes::kCode153, "new-document render");
         }
         frame.closeDocument(frame.documentCount() - 1, false);
         // M44 Phase B (154, 155, 156, 159, 161, 164, 165, 166): panel chrome,
@@ -4582,7 +4582,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("chevrons_mode");
             ST_PASS("chevrons mode=%d target=%d", chevronsMode ? 1 : 0, chevronsTarget ? 1 : 0);
             if (!(chevronsMode && chevronsTarget)) {
-                ST_FAIL(154, "collapse chevrons");
+                ST_FAIL(pictura::selftest_codes::kCode154, "collapse chevrons");
             }
 
             // 155: a restored layout leaves the first visible panel active, not
@@ -4610,7 +4610,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("defaultactive_first");
             ST_PASS("defaultactive first=%d", defaultActive ? 1 : 0);
             if (!defaultActive) {
-                ST_FAIL(155, "default active panel");
+                ST_FAIL(pictura::selftest_codes::kCode155, "default active panel");
             }
 
             // 156: the active panel tab matches the panel surface (`surface`),
@@ -4629,7 +4629,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          tabInactive ? 1 : 0,
                          tabDiffer ? 1 : 0);
             if (!tabDiffer) {
-                ST_FAIL(156, "panel tab colours");
+                ST_FAIL(pictura::selftest_codes::kCode156, "panel tab colours");
             }
 
             // 159: the inter-group splitter handle is thicker and darker grey.
@@ -4642,7 +4642,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("divider_thick");
             ST_PASS("divider thick=%d dark=%d", dividerThick ? 1 : 0, dividerDark ? 1 : 0);
             if (!(dividerThick && dividerDark)) {
-                ST_FAIL(159, "group divider");
+                ST_FAIL(pictura::selftest_codes::kCode159, "group divider");
             }
 
             // 161: the compact-strip group divider is an invisible layout/drop
@@ -4661,7 +4661,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("compactdivider_clear");
             ST_PASS("compactdivider clear=%d", compactDividerClear ? 1 : 0);
             if (!compactDividerClear) {
-                ST_FAIL(161, "compact divider");
+                ST_FAIL(pictura::selftest_codes::kCode161, "compact divider");
             }
 
             // 164: at a strip width with room only beyond the icon button, the
@@ -4690,7 +4690,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("elide_partial");
             ST_PASS("elide partial=%d", elidePartial ? 1 : 0);
             if (!elidePartial) {
-                ST_FAIL(164, "strip label elide");
+                ST_FAIL(pictura::selftest_codes::kCode164, "strip label elide");
             }
 
             // 165: the document tab strip is borderless flat chrome (the options
@@ -4703,7 +4703,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("filebar_borderless");
             ST_PASS("filebar pane=%d bar=%d", fileNoPaneBorder ? 1 : 0, fileNoBarBorder ? 1 : 0);
             if (!(themeDocBar && fileNoPaneBorder && fileNoBarBorder)) {
-                ST_FAIL(165, "document tab strip borders");
+                ST_FAIL(pictura::selftest_codes::kCode165, "document tab strip borders");
             }
 
             // 166: the tools panel and widget panes share the panel surface; the
@@ -4735,7 +4735,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_PASS("panelborder tools=%d panel=%d compact=%d header=%d", panelTools ? 1 : 0,
                          panelNormal ? 1 : 0, panelCompact ? 1 : 0, panelHeaderFlat ? 1 : 0);
             if (!(panelTools && panelNormal && panelCompact && panelHeaderFlat && panelParity)) {
-                ST_FAIL(166, "panel borders");
+                ST_FAIL(pictura::selftest_codes::kCode166, "panel borders");
             }
         }
         // M44 Phase C (157, 158, 160, 162, 163): float-drag continuation,
@@ -4790,7 +4790,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          fdFollows ? 1 : 0,
                          fdRelease ? 1 : 0);
             if (!(fdActive && fdFollows && fdRelease)) {
-                ST_FAIL(157, "float drag continuation");
+                ST_FAIL(pictura::selftest_codes::kCode157, "float drag continuation");
             }
 
             // 160: the compact flyout shares the docked widget's scoped
@@ -4813,7 +4813,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("popupstyle_parity");
             ST_PASS("popupstyle parity=%d", psParity ? 1 : 0);
             if (!psParity) {
-                ST_FAIL(160, "popup style parity");
+                ST_FAIL(pictura::selftest_codes::kCode160, "popup style parity");
             }
 
             // 162: compact drop placement. Onto a group inserts there; on the
@@ -4906,7 +4906,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          cdAbove ? 1 : 0,
                          cdBelow ? 1 : 0);
             if (!(cdInto && cdBetween && cdAbove && cdBelow)) {
-                ST_FAIL(162, "compact drop");
+                ST_FAIL(pictura::selftest_codes::kCode162, "compact drop");
             }
 
             // 163: every compact group carries a dots grip and dragging it moves
@@ -4941,7 +4941,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("draghandle_dots");
             ST_PASS("draghandle dots=%d groupdrag=%d", dhDots ? 1 : 0, dhGroup ? 1 : 0);
             if (!(dhDots && dhGroup)) {
-                ST_FAIL(163, "compact drag handle");
+                ST_FAIL(pictura::selftest_codes::kCode163, "compact drag handle");
             }
 
             // 158: a widget column docks at the toolbar side, beside another
@@ -5003,7 +5003,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          dsWorkspace ? 1 : 0,
                          dsFloat ? 1 : 0);
             if (!(dsToolbar && dsColumn && dsWorkspace && dsFloat)) {
-                ST_FAIL(158, "any-side docking");
+                ST_FAIL(pictura::selftest_codes::kCode158, "any-side docking");
             }
         }
         // M45 Phase A (167-169): the Tools toolbar content sizing, left/right-only
@@ -5043,7 +5043,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          "w1=%d h1=%d w2=%d h2=%d", panelFixOne ? 1 : 0, panelFixTwo ? 1 : 0, panelFixStable ? 1 : 0, panelFixW1, panelFixH1,
                          panelFixW2, panelFixH2);
             if (!(panelFixOne && panelFixTwo && panelFixStable)) {
-                ST_FAIL(167, "tools sizing");
+                ST_FAIL(pictura::selftest_codes::kCode167, "tools sizing");
             }
         }
 
@@ -5060,7 +5060,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_PASS("tools_sides left=%d atomic=%d window=%d", panelFixLeft ? 1 : 0,
                     panelFixAtomic ? 1 : 0, noWindow ? 1 : 0);
             if (!(panelFixLeft && panelFixAtomic && noWindow)) {
-                ST_FAIL(168, "tools sides");
+                ST_FAIL(pictura::selftest_codes::kCode168, "tools sides");
             }
         }
 
@@ -5089,7 +5089,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("tools_beside_column_left");
             ST_PASS("tools_beside_column sibling=%d", besideLeft ? 1 : 0);
             if (!besideLeft) {
-                ST_FAIL(169, "tools beside column");
+                ST_FAIL(pictura::selftest_codes::kCode169, "tools beside column");
             }
         }
         // M45 Phase B (170-177): the widget-panel drop indicator is rendered
@@ -5212,7 +5212,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("indicator_side_left");
             ST_PASS("indicator_side left=%d right=%d", sideLeft ? 1 : 0, sideRight ? 1 : 0);
             if (!(sideLeft && sideRight)) {
-                ST_FAIL(170, "indicator side");
+                ST_FAIL(pictura::selftest_codes::kCode170, "indicator side");
             }
 
             // 171: a cross-column IntoGroup drop shows the line in the target
@@ -5259,7 +5259,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("indicator_cross_column_shown");
             ST_PASS("indicator_cross_column shown=%d placed=%d", crossShown ? 1 : 0, crossPlaced ? 1 : 0);
             if (!(crossShown && crossPlaced)) {
-                ST_FAIL(171, "cross-column indicator");
+                ST_FAIL(pictura::selftest_codes::kCode171, "cross-column indicator");
             }
 
             // 172: the rightmost tab insertion draws at that tab's index, not
@@ -5300,7 +5300,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("indicator_rightmost_tab_rightmost");
             ST_PASS("indicator_rightmost_tab rightmost=%d", panelFixRightmost ? 1 : 0);
             if (!panelFixRightmost) {
-                ST_FAIL(172, "rightmost-tab indicator");
+                ST_FAIL(pictura::selftest_codes::kCode172, "rightmost-tab indicator");
             }
 
             // 173: a dynamic column emptied by a close path and by a move path
@@ -5371,7 +5371,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("empty_column_removed_closed");
             ST_PASS("empty_column_removed closed=%d moved=%d", panelFixClosed ? 1 : 0, panelFixMoved ? 1 : 0);
             if (!(panelFixClosed && panelFixMoved)) {
-                ST_FAIL(173, "empty column removed");
+                ST_FAIL(pictura::selftest_codes::kCode173, "empty column removed");
             }
 
             // 174: minimize collapses the group to its tab-bar height with the
@@ -5412,7 +5412,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_PASS("minimize_collapse height=%d content=%d "
                          "label=%d", minHeight ? 1 : 0, minContent ? 1 : 0, minLabel ? 1 : 0);
             if (!(minHeight && minContent && minLabel)) {
-                ST_FAIL(174, "minimize collapse");
+                ST_FAIL(pictura::selftest_codes::kCode174, "minimize collapse");
             }
 
             // 175: a bottom-boundary insert draws the horizontal line at the
@@ -5439,7 +5439,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("indicator_bottom_bottom");
             ST_PASS("indicator_bottom bottom=%d", panelFixBottom ? 1 : 0);
             if (!panelFixBottom) {
-                ST_FAIL(175, "bottom indicator");
+                ST_FAIL(pictura::selftest_codes::kCode175, "bottom indicator");
             }
 
             // 176: the column never clips — the tab text elides, the corner
@@ -5470,7 +5470,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("no_clip_elide");
             ST_PASS("no_clip elide=%d scroll=%d", noClipElide ? 1 : 0, noClipScroll ? 1 : 0);
             if (!(noClipElide && noClipScroll)) {
-                ST_FAIL(176, "no clip");
+                ST_FAIL(pictura::selftest_codes::kCode176, "no clip");
             }
 
             // 177: every normal-mode widget column shares one minimum-width
@@ -5513,7 +5513,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("min_width_floor_shared");
             ST_PASS("min_width_floor shared=%d notgone=%d", floorShared ? 1 : 0, floorNotGone ? 1 : 0);
             if (!(floorShared && floorNotGone)) {
-                ST_FAIL(177, "min width floor");
+                ST_FAIL(pictura::selftest_codes::kCode177, "min width floor");
             }
         }
         // M45 Phase C (178-179): the compact popup hosts the whole PanelGroup
@@ -5580,7 +5580,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          "restore=%d", popupTabs ? 1 : 0, popupActive ? 1 : 0, popupParity ? 1 : 0,
                          popupRestore ? 1 : 0);
             if (!(popupTabs && popupActive && popupParity && popupRestore)) {
-                ST_FAIL(178, "popup group");
+                ST_FAIL(pictura::selftest_codes::kCode178, "popup group");
             }
 
             // 179: dragging a whole group in compact mode shows the placement
@@ -5615,7 +5615,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("compact_group_line_above");
             ST_PASS("compact_group_line above=%d", compactAbove ? 1 : 0);
             if (!compactAbove) {
-                ST_FAIL(179, "compact group line");
+                ST_FAIL(pictura::selftest_codes::kCode179, "compact group line");
             }
         }
 
@@ -5748,7 +5748,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("indicator_hidden_tab_shown");
             ST_PASS("indicator_hidden_tab shown=%d placed=%d", hiddenShown ? 1 : 0, hiddenPlaced ? 1 : 0);
             if (!(hiddenShown && hiddenPlaced)) {
-                ST_FAIL(180, "hidden-tab indicator");
+                ST_FAIL(pictura::selftest_codes::kCode180, "hidden-tab indicator");
             }
 
             // 181: a cross-column drop onto a group body (and between two groups)
@@ -5825,7 +5825,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          boundaryShown ? 1 : 0, boundaryPlaced ? 1 : 0);
             if (!(toolbarFixCrossShown && toolbarFixCrossPlaced && boundaryShown
                   && boundaryPlaced)) {
-                ST_FAIL(181, "cross-column indicator");
+                ST_FAIL(pictura::selftest_codes::kCode181, "cross-column indicator");
             }
 
             // 182: the bottom-boundary line is clamped inside the scroll
@@ -5872,7 +5872,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("indicator_bottom_inside_inside");
             ST_PASS("indicator_bottom_inside inside=%d", bottomInside ? 1 : 0);
             if (!bottomInside) {
-                ST_FAIL(182, "bottom inside viewport");
+                ST_FAIL(pictura::selftest_codes::kCode182, "bottom inside viewport");
             }
 
             // 183: the tools column's own header drives the whole-column drag:
@@ -5900,7 +5900,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("tools_gesture_moved");
             ST_PASS("tools_gesture moved=%d finished=%d", toolsMoved ? 1 : 0, toolsFinished ? 1 : 0);
             if (!(toolsMoved && toolsFinished)) {
-                ST_FAIL(183, "tools column gesture");
+                ST_FAIL(pictura::selftest_codes::kCode183, "tools column gesture");
             }
 
             // 184: neither splitter collapses a pane, and the column cannot be
@@ -5922,7 +5922,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("splitter_nocollapse_nocollapse");
             ST_PASS("splitter_nocollapse nocollapse=%d kept=%d", noCollapse ? 1 : 0, columnKept ? 1 : 0);
             if (!(noCollapse && columnKept)) {
-                ST_FAIL(184, "splitter no collapse");
+                ST_FAIL(pictura::selftest_codes::kCode184, "splitter no collapse");
             }
 
             // 185: minimizing a group whose content minimum exceeds its tab bar
@@ -5955,7 +5955,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("minimize_tall_height");
             ST_PASS("minimize_tall height=%d", minTall ? 1 : 0);
             if (!minTall) {
-                ST_FAIL(185, "minimize tall group");
+                ST_FAIL(pictura::selftest_codes::kCode185, "minimize tall group");
             }
 
             // 186: the primary column hides when its last visible panel closes
@@ -5984,7 +5984,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("primary_empty_hide");
             ST_PASS("primary_empty hide=%d show=%d", primaryHide ? 1 : 0, primaryShow ? 1 : 0);
             if (!(primaryHide && primaryShow)) {
-                ST_FAIL(186, "primary empty");
+                ST_FAIL(pictura::selftest_codes::kCode186, "primary empty");
             }
 
             // M47 (187-195): empty-column-after-float, ghost-group hiding,
@@ -6100,7 +6100,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          "primary=%d", emptyGone ? 1 : 0, emptyFloat ? 1 : 0,
                          emptyPrimary ? 1 : 0);
             if (!(emptyGone && emptyFloat && emptyPrimary)) {
-                ST_FAIL(187, "empty after float");
+                ST_FAIL(pictura::selftest_codes::kCode187, "empty after float");
             }
 
             // 188: moving the last visible tab out of a group hides the emptied
@@ -6141,7 +6141,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_PASS("ghost_group hidden=%d found=%d shown=%d", ghostHidden ? 1 : 0, ghostFound ? 1 : 0,
                          ghostShown ? 1 : 0);
             if (!(ghostHidden && ghostFound && ghostShown)) {
-                ST_FAIL(188, "ghost group");
+                ST_FAIL(pictura::selftest_codes::kCode188, "ghost group");
             }
             // 189: a real press+move on a compact strip icon tears the panel
             // into a float that survives the (now non-rebuilding) strip and
@@ -6196,7 +6196,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          "released=%d", iconDrag ? 1 : 0, iconFloat ? 1 : 0,
                          iconReleased ? 1 : 0);
             if (!(iconDrag && iconFloat && iconReleased)) {
-                ST_FAIL(189, "compact icon float");
+                ST_FAIL(pictura::selftest_codes::kCode189, "compact icon float");
             }
             // 190: a single compact panel dropped on a group's grip creates a
             // new group immediately above (before) that group.
@@ -6242,7 +6242,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("compact_grip_group_above");
             ST_PASS("compact_grip_group above=%d", gripGroup ? 1 : 0);
             if (!gripGroup) {
-                ST_FAIL(190, "compact grip group");
+                ST_FAIL(pictura::selftest_codes::kCode190, "compact grip group");
             }
             // 191: the column never scrolls horizontally, even at its minimum
             // width, because the shared floor keeps the content visible.
@@ -6272,7 +6272,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                     panelColumnColumn ? panelColumnColumn->contentMinimumWidthForTest() : -1,
                     panelColumnColumn ? panelColumnColumn->viewportWidthForTest() : -1);
             if (!(hScrollOff && hScrollZero)) {
-                ST_FAIL(191, "no hscroll");
+                ST_FAIL(pictura::selftest_codes::kCode191, "no hscroll");
             }
             // 192: an iconic column keeps its narrow minimum but stays a
             // resizable splitter pane; a preferred-width change can widen it,
@@ -6303,7 +6303,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          "grow=%d exit=%d", interactionIconicWidth ? 1 : 0,
                          iconicResizable ? 1 : 0, iconicGrow ? 1 : 0, iconicExit ? 1 : 0);
             if (!(interactionIconicWidth && iconicResizable && iconicGrow && iconicExit)) {
-                ST_FAIL(192, "iconic resizable width");
+                ST_FAIL(pictura::selftest_codes::kCode192, "iconic resizable width");
             }
             // 193: the tools column can be re-placed beside a widget column
             // through its own header drag, landing as a real splitter column at
@@ -6342,7 +6342,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_PASS("tools_pane resolved=%d pane=%d index=%d", toolsResolved ? 1 : 0, toolsPane ? 1 : 0,
                          toolsIndex ? 1 : 0);
             if (!(toolsResolved && toolsPane && toolsIndex)) {
-                ST_FAIL(193, "tools pane");
+                ST_FAIL(pictura::selftest_codes::kCode193, "tools pane");
             }
             // 194: a floating group shows a visible close control; closing it
             // removes the overlay, hides the group's panels, and keeps the group
@@ -6386,7 +6386,7 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
                          "restore=%d", floatCloseBtn ? 1 : 0, floatClosed ? 1 : 0,
                          floatRestore ? 1 : 0);
             if (!(floatCloseBtn && floatClosed && floatRestore)) {
-                ST_FAIL(194, "float close");
+                ST_FAIL(pictura::selftest_codes::kCode194, "float close");
             }
             // 195: the compact group container uses the panel surface shade and
             // its drag dots are dark gray, not the near-white window text.
@@ -6410,12 +6410,13 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             ST_BEGIN("compact_shade_shade");
             ST_PASS("compact_shade shade=%d dots=%d", interactionShade ? 1 : 0, interactionDots ? 1 : 0);
             if (!(interactionShade && interactionDots)) {
-                ST_FAIL(195, "compact shade");
+                ST_FAIL(pictura::selftest_codes::kCode195, "compact shade");
             }
         }
         if (const int lpc = pictura::runLayersControlsChecks(frame); lpc != 0) { return lpc; } if (const int lfs = pictura::runLayersFilterChecks(frame); lfs != 0) { return lfs; } if (const int rcc = pictura::runCanvasChecks(frame); rcc != 0) { return rcc; } if (const int rcx = pictura::runControlChecks(frame); rcx != 0) { return rcx; }
         frame.closeDocument(anatomyDocIndex, false);
         // Re-acquire the canvas; create a document if the suites left none open.
+        ST_BEGIN("zoom");
         canvas = frame.imageView();
         if (!canvas) {
             frame.newDocument(QStringLiteral("TransformProbe"), 16, 16, QStringLiteral("rgb"), 8,
@@ -6423,21 +6424,16 @@ int runSelfTest(QApplication& app, bool headless, const QString& psdPath,
             canvas = frame.imageView();
         }
         if (!canvas) {
-            ST_FAIL(38, "no active canvas");
+            ST_FAIL(pictura::selftest_codes::kCode038, "no active canvas");
         }
         const QPointF center(canvas->width() / 2.0, canvas->height() / 2.0);
         canvas->zoomAt(center, 120);
         const QPointF afterZoom = canvas->offset();
         canvas->panBy(QPointF(10.0, 5.0));
         if (canvas->zoom() <= 1.0 || canvas->offset() != afterZoom + QPointF(10.0, 5.0)) {
-            ST_FAIL(3, "zoom/pan transform wrong");
+            ST_FAIL(pictura::selftest_codes::kCode003, "zoom/pan transform wrong");
         }
-        ST_BEGIN("zoom");
         ST_PASS("zoom=%.3f pan_ok=1", canvas->zoom());
-        // The self-test leaves dirty documents behind; headless shutdown closes
-        // the window and must discard them without opening a modal prompt.
-        pictura::setUnsavedPromptInteractive(false);
-        pictura::setNonInteractiveUnsavedChoice(pictura::UnsavedChoice::Discard);
         QTimer::singleShot(2000, &app, &QCoreApplication::quit);
     ST_FINISH();
 }

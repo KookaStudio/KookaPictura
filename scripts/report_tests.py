@@ -17,12 +17,14 @@ import json
 import os
 import re
 import sys
+import tempfile
 import xml.etree.ElementTree as ET
 
 RULE = "\u2500" * 48
 TOKEN_PREFIX_RE = re.compile(
     r"^pictura self-test: (SUITE|PASS|SKIP|FAIL|SUMMARY)(?:\s+(.*))?$"
 )
+SUMMARY_RE = re.compile(r"passed=(\d+) failed=(\d+) skipped=(\d+)")
 
 
 class Counts:
@@ -199,13 +201,9 @@ def parse_selftest_stream(text):
         keyword = match.group(1)
         rest = (match.group(2) or "").strip()
         if keyword == "SUMMARY":
-            found = dict(re.findall(r"(passed|failed|skipped)=(\d+)", rest))
-            if found:
-                summary = Counts(
-                    int(found.get("passed", 0)),
-                    int(found.get("failed", 0)),
-                    int(found.get("skipped", 0)),
-                )
+            match = SUMMARY_RE.fullmatch(rest)
+            if match:
+                summary = Counts(int(match.group(1)), int(match.group(2)), int(match.group(3)))
             continue
         if keyword == "SUITE":
             continue
@@ -227,24 +225,80 @@ def parse_selftest_stream(text):
     return order, checks, summary
 
 
+def validate_selftest_stream(text, label):
+    errors = []
+    counts = Counts()
+    summary = None
+    summary_count = 0
+    closed = False
+    for raw in text.splitlines():
+        match = TOKEN_PREFIX_RE.match(raw.strip())
+        if not match:
+            continue
+        keyword = match.group(1)
+        rest = (match.group(2) or "").strip()
+        if closed:
+            errors.append(f"{label}: self-test token after SUMMARY")
+            if keyword == "SUMMARY":
+                summary_count += 1
+            continue
+        if keyword == "SUMMARY":
+            summary_count += 1
+            parsed = SUMMARY_RE.fullmatch(rest)
+            if parsed is None:
+                errors.append(f"{label}: invalid SUMMARY: {raw.strip()}")
+            else:
+                summary = Counts(int(parsed.group(1)), int(parsed.group(2)), int(parsed.group(3)))
+            closed = True
+            continue
+        if keyword == "PASS":
+            counts.passed += 1
+        elif keyword == "FAIL":
+            counts.failed += 1
+        elif keyword == "SKIP":
+            counts.skipped += 1
+        if keyword in ("PASS", "SKIP", "FAIL"):
+            parts = rest.split(None, 2)
+            if len(parts) < 2:
+                errors.append(f"{label}: malformed {keyword} token: {raw.strip()}")
+    if summary_count == 0:
+        errors.append(f"{label}: self-test stream has no SUMMARY (truncated)")
+    elif summary_count > 1:
+        errors.append(f"{label}: self-test stream has multiple SUMMARY tokens")
+    if summary is not None and (
+        counts.passed != summary.passed
+        or counts.failed != summary.failed
+        or counts.skipped != summary.skipped
+    ):
+        errors.append(
+            f"{label}: SUMMARY counts {summary.passed}/{summary.failed}/{summary.skipped} "
+            f"do not match tokens {counts.passed}/{counts.failed}/{counts.skipped}"
+        )
+    return errors, summary, counts
+
+
 def merge_selftest_streams(texts):
     """Merge self-test streams, deduping checks by (suite, name).
 
-    A check present in several runs is counted once; the last stream's status
-    wins. Layer totals come from the SUMMARY only when a single stream is
-    supplied, otherwise they are recomputed from the merged unique checks.
-    Returns ({suite: Counts}, totals, [(label, message)], entries) where
-    ``entries`` is ``[(suite, name, status, detail)]`` in stream order.
+    A check present in several runs is counted once. The last stream's status
+    wins only among PASS and SKIP: a FAIL in any capture stays a failure, so a
+    later passing run cannot erase an earlier red one. Layer totals are
+    recomputed from the merged unique checks. Returns ({suite: Counts}, totals,
+    [(label, message)], entries) where ``entries`` is
+    ``[(suite, name, status, detail)]`` in stream order.
     """
     order = []
     merged = {}
-    summaries = []
     for text in texts:
-        stream_order, checks, summary = parse_selftest_stream(text)
-        summaries.append(summary)
+        stream_order, checks, _summary = parse_selftest_stream(text)
         for key in stream_order:
             if key not in merged:
                 order.append(key)
+                merged[key] = checks[key]
+                continue
+            previous = merged[key]
+            if previous["status"] == "FAIL" and checks[key]["status"] != "FAIL":
+                continue
             merged[key] = checks[key]
 
     suites = {}
@@ -269,11 +323,13 @@ def merge_selftest_streams(texts):
                 label += f" (exit {record['code']})"
             failures.append((label, record["message"]))
 
-    if len(texts) == 1 and summaries[0] is not None:
-        totals = summaries[0]
-    else:
-        totals = sum_counts(suites)
+    totals = sum_counts(suites)
     return suites, totals, failures, entries
+
+
+def selftest_summaries(texts):
+    """The parsed SUMMARY of each capture, in the order given, or None."""
+    return [parse_selftest_stream(text)[2] for text in texts]
 
 
 def parse_selftest(text):
@@ -315,11 +371,14 @@ def _style(text, code, color):
 
 
 class Layer:
-    def __init__(self, title, suites=None, totals=None, entries=None):
+    def __init__(self, title, suites=None, totals=None, entries=None, captures=None):
         self.title = title
         self.suites = suites or {}
         self.totals = totals if totals is not None else sum_counts(self.suites)
         self.entries = entries or []
+        # [(label, Counts)] for one line per capture, since the captures run
+        # different check sets and the merged total is not any one of them.
+        self.captures = captures or []
 
     def empty(self):
         return self.totals.total() == 0 and not self.suites
@@ -362,8 +421,10 @@ def _render_summary(visible, failures, color):
     labels = []
     for layer in visible:
         labels.extend(layer.suites)
+        labels.extend(label for label, _ in layer.captures)
         labels.append("subtotal")
-    width = max([24] + [len(label) for label in labels])
+    # +2 keeps one space before the counts even when a label is the longest.
+    width = max([24] + [len(label) + 2 for label in labels])
 
     lines = [_style("pictura test report", "1", color), RULE]
     totals = Counts()
@@ -372,6 +433,8 @@ def _render_summary(visible, failures, color):
         lines.append(_style(layer.title, "1", color))
         for name, counts in layer.suites.items():
             lines.append(f"  {name:<{width}}{_counts_compact(counts)}")
+        for label, counts in layer.captures:
+            lines.append(f"  {label:<{width}}{_counts_compact(counts)}")
         lines.append(f"  {'subtotal':<{width}}{_counts_dot(layer.totals)}")
     lines.append(RULE)
     lines.append(_style(f"TOTAL  {_counts_dot(totals)}", "1", color))
@@ -398,6 +461,8 @@ def render(layers, failures, color, show_tests=True):
         for suite, counts in layer.suites.items():
             lines.append(f"  {suite} ({_counts_compact(counts)})")
             lines.extend(_test_lines(by_suite.get(suite, []), color))
+        for label, counts in layer.captures:
+            lines.append(f"  {label} ({_counts_compact(counts)})")
         lines.append(f"  subtotal {_counts_brief(layer.totals)}")
         if index != last:
             lines.append("")
@@ -433,15 +498,43 @@ def build_layers(args, errors):
 
     if args.selftest:
         texts = []
+        labels = []
+        captures = []
         for path in args.selftest:
             text = _read(path, errors)
-            if text is not None:
-                texts.append(text)
+            if text is None:
+                continue
+            stream_errors, summary, _raw_counts = validate_selftest_stream(text, path)
+            errors.extend(stream_errors)
+            if summary is not None and summary.failed:
+                _order, checks, _summary = parse_selftest_stream(text)
+                if not any(record["status"] == "FAIL" for record in checks.values()):
+                    failures.append(
+                        (os.path.basename(path), f"SUMMARY reports {summary.failed} failed check(s)")
+                    )
+            texts.append(text)
+            labels.append(os.path.basename(path))
+            captures.append(summary)
         if texts:
             suites, totals, selftest_failures, entries = merge_selftest_streams(texts)
+            # One capture's own SUMMARY is authoritative: a check that passes and
+            # then fails is two tokens but one check, so the deduped count would
+            # under-report the passes the run itself counted.
+            if len(texts) == 1 and captures[0] is not None:
+                totals = captures[0]
             if suites or totals.total():
                 layers.append(
-                    Layer("App self-test (offscreen Qt)", suites, totals, entries=entries)
+                    Layer(
+                        "App self-test (offscreen Qt)",
+                        suites,
+                        totals,
+                        entries=entries,
+                        captures=[
+                            (label, counts)
+                            for label, counts in zip(labels, captures)
+                            if counts is not None
+                        ],
+                    )
                 )
             failures.extend(selftest_failures)
 
@@ -649,6 +742,135 @@ def run_self_check():
 
     suites, totals, _, _ = merge_selftest_streams([SELFTEST_BARE])
     assert (totals.passed, totals.failed, totals.skipped) == (2, 0, 0), totals
+
+    # Truncation: a capture that never reached its SUMMARY, end to end through
+    # build_layers (which records it in errors) and exit_code.
+    truncated = "pictura self-test: PASS core only_ran ok\n"
+    assert parse_selftest_stream(truncated)[2] is None, (
+        "a truncated capture must not yield a summary"
+    )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        trunc_path = os.path.join(tmpdir, "truncated.log")
+        whole_path = os.path.join(tmpdir, "complete.log")
+        with open(trunc_path, "w", encoding="utf-8") as handle:
+            handle.write(truncated)
+        with open(whole_path, "w", encoding="utf-8") as handle:
+            handle.write(SELFTEST_BARE)
+
+        trunc_errors = []
+        trunc_layers, trunc_failures = build_layers(
+            _parse_args(["--selftest", trunc_path]), trunc_errors
+        )
+        assert any(
+            trunc_path in error and "truncated" in error for error in trunc_errors
+        ), trunc_errors
+        assert exit_code(trunc_failures, trunc_errors) == 1, trunc_errors
+        assert trunc_layers == [] or trunc_layers[0].captures == [], trunc_layers
+
+        whole_errors = []
+        whole_layers, whole_failures = build_layers(
+            _parse_args(["--selftest", whole_path]), whole_errors
+        )
+        assert whole_errors == [], whole_errors
+        assert exit_code(whole_failures, whole_errors) == 0, whole_failures
+        assert len(whole_layers) == 1, whole_layers
+
+    invalid_captures = {
+        "partial": "pictura self-test: SUMMARY passed=1\n",
+        "trailing": (
+            "pictura self-test: PASS core one ok\n"
+            "pictura self-test: SUMMARY passed=1 failed=0 skipped=0\n"
+            "pictura self-test: PASS core two ok\n"
+        ),
+        "summary_only_failure": "pictura self-test: SUMMARY passed=0 failed=1 skipped=0\n",
+        "multiple": (
+            "pictura self-test: SUMMARY passed=0 failed=0 skipped=0\n"
+            "pictura self-test: SUMMARY passed=0 failed=0 skipped=0\n"
+        ),
+    }
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for name, capture in invalid_captures.items():
+            path = os.path.join(tmpdir, f"{name}.log")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(capture)
+            capture_errors = []
+            capture_layers, capture_failures = build_layers(
+                _parse_args(["--selftest", path]), capture_errors
+            )
+            assert capture_errors, (name, capture_errors)
+            assert exit_code(capture_failures, capture_errors) == 1, name
+            if name == "summary_only_failure":
+                assert any("SUMMARY reports 1 failed" in message for _, message in capture_failures)
+
+    # One truncated capture among two is still an error, and merging cannot hide
+    # the missing SUMMARY.
+    def triples(summaries):
+        return [None if s is None else (s.passed, s.failed, s.skipped) for s in summaries]
+
+    assert triples(selftest_summaries([SELFTEST_BARE, truncated])) == [
+        (2, 0, 0),
+        None,
+    ], triples(selftest_summaries([SELFTEST_BARE, truncated]))
+    assert triples(selftest_summaries([SELFTEST_BARE])) == [(2, 0, 0)]
+
+    # FAIL wins: a red check in one capture is not erased by a pass in another.
+    red_bare = "pictura self-test: FAIL core shared 7 boom\n" \
+               "pictura self-test: SUMMARY passed=0 failed=1 skipped=0\n"
+    green_psd = "pictura self-test: PASS core shared ok\n" \
+                "pictura self-test: SUMMARY passed=1 failed=0 skipped=0\n"
+    suites, totals, merge_failures, entries = merge_selftest_streams([red_bare, green_psd])
+    assert totals.failed == 1, totals
+    assert totals.passed == 0, totals
+    assert suites["core"].failed == 1, suites
+    assert len(merge_failures) == 1, merge_failures
+    assert merge_failures[0][0] == "core::shared (exit 7)", merge_failures
+    assert [e[1:] for e in entries] == [("shared", "fail", "")], entries
+
+    # And the reverse order is still a failure, not a pass.
+    suites, totals, merge_failures, _ = merge_selftest_streams([green_psd, red_bare])
+    assert totals.failed == 1, totals
+    assert suites["core"].failed == 1, suites
+
+    # Each capture's own SUMMARY is available next to the merged total.
+    per_capture = selftest_summaries([SELFTEST_BARE, SELFTEST_PSD])
+    assert [(c.passed, c.failed, c.skipped) for c in per_capture] == [
+        (2, 0, 0),
+        (1, 1, 0),
+    ], per_capture
+
+    # A single capture's own SUMMARY is the layer total, so a check that passes
+    # and then fails is counted as one pass and one failure, not zero passes.
+    pass_then_fail = (
+        "pictura self-test: PASS core two_phase ok\n"
+        "pictura self-test: FAIL core two_phase 9 late\n"
+        "pictura self-test: SUMMARY passed=1 failed=1 skipped=0\n"
+    )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = os.path.join(tmpdir, "single.log")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(pass_then_fail)
+        single_errors = []
+        single_layers, single_failures = build_layers(
+            _parse_args(["--selftest", path]), single_errors
+        )
+        assert single_errors == [], single_errors
+        assert len(single_layers) == 1, single_layers
+        assert (single_layers[0].totals.passed, single_layers[0].totals.failed) == (1, 1), (
+            single_layers[0].totals
+        )
+        assert exit_code(single_failures, single_errors) == 1, single_failures
+
+    # Per-capture lines render beside the merged subtotal.
+    capture_layer = Layer(
+        "App self-test (offscreen Qt)",
+        {"core": Counts(2, 1, 0)},
+        entries=[("core", "shared", "fail", "")],
+        captures=[("bare.log", Counts(2, 0, 0)), ("psd.log", Counts(1, 1, 0))],
+    )
+    rendered = render([capture_layer], [("core::shared (exit 7)", "boom")], False)
+    assert "bare.log (2 passed" in rendered, rendered
+    assert "psd.log (1 passed" in rendered, rendered
+    assert "subtotal" in rendered, rendered
 
     _, _, human, _ = parse_selftest(
         "pictura self-test: document_size=4000\npictura self-test: FAIL: nope"

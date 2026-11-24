@@ -110,7 +110,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
     pictura::ControlServer server(&frame, socketPath);
     ST_BEGIN("mcp_control_server");
     if (!dir.isValid() || !server.listen()) {
-        return pictura::selfTest().fail(463, "control server listen");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode463, "control server listen");
     }
     sessionToken = QString::fromLatin1(server.token());
     ST_PASS("socket=%s", qPrintable(server.socketPath()));
@@ -118,7 +118,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
     QLocalSocket socket;
     socket.connectToServer(socketPath);
     if (!socket.waitForConnected(2000)) {
-        return pictura::selfTest().fail(464, "control client connect");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode464, "control client connect");
     }
 
     ST_BEGIN("mcp_control_socket_mode");
@@ -132,7 +132,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
     const bool userOnly = ::stat(socketPath.toLocal8Bit().constData(), &status) == 0
                           && (status.st_mode & 0077) == 0;
     if (!userOnly) {
-        return pictura::selfTest().fail(465, "socket is not user-only");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode465, "socket is not user-only");
     }
     ST_PASS("mode=%03o", static_cast<int>(status.st_mode & 0777));
 #endif
@@ -146,7 +146,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
                                     .toArray();
     ST_BEGIN("mcp_control_commands");
     if (!parsed || !response.value(QStringLiteral("ok")).toBool() || commands.isEmpty()) {
-        return pictura::selfTest().fail(466, "list_commands response malformed");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode466, "list_commands response malformed");
     }
     ST_PASS("commands=%d", static_cast<int>(commands.size()));
 
@@ -157,7 +157,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
         || !statusResult.contains(QStringLiteral("documents"))
         || !statusResult.contains(QStringLiteral("documents_info"))
         || !statusResult.contains(QStringLiteral("active_tool"))) {
-        return pictura::selfTest().fail(467, "status response malformed");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode467, "status response malformed");
     }
     ST_PASS("documents=%d active_tool=%s", statusResult.value("documents").toInt(),
             qPrintable(statusResult.value("active_tool").toString()));
@@ -169,7 +169,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
                        &parsed);
     ST_BEGIN("mcp_control_new");
     if (!parsed || !response.value(QStringLiteral("ok")).toBool()) {
-        return pictura::selfTest().fail(468, "document new failed");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode468, "document new failed");
     }
     ST_PASS("count=%d", response.value("result").toObject().value("count").toInt());
 
@@ -179,7 +179,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
     ST_BEGIN("mcp_control_dispatch");
     if (!parsed || !response.value(QStringLiteral("ok")).toBool()
         || !dispatchResult.value(QStringLiteral("dispatched")).toBool()) {
-        return pictura::selfTest().fail(469, "dispatch_command response malformed");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode469, "dispatch_command response malformed");
     }
     ST_PASS("dispatched=%d", dispatchResult.value("dispatched").toBool() ? 1 : 0);
 
@@ -190,7 +190,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
     ST_BEGIN("mcp_control_mutate");
     if (!parsed || !response.value(QStringLiteral("ok")).toBool()
         || !mutateResult.value(QStringLiteral("dispatched")).toBool()) {
-        return pictura::selfTest().fail(482, "history mutation not dispatched");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode482, "history mutation not dispatched");
     }
     ST_PASS("dispatched=%d", mutateResult.value("dispatched").toBool() ? 1 : 0);
 
@@ -202,7 +202,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
         || !undoResult.value(QStringLiteral("success")).toBool()
         || !undoResult.value(QStringLiteral("can_redo")).toBool()
         || !undoResult.contains(QStringLiteral("depth"))) {
-        return pictura::selfTest().fail(470, "edit undo did not succeed");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode470, "edit undo did not succeed");
     }
     ST_PASS("undo success=1 can_redo=1 depth=%d", undoResult.value("depth").toInt());
 
@@ -213,7 +213,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
     if (!parsed || !response.value(QStringLiteral("ok")).toBool()
         || !redoResult.value(QStringLiteral("success")).toBool()
         || !redoResult.value(QStringLiteral("can_undo")).toBool()) {
-        return pictura::selfTest().fail(471, "edit redo did not succeed");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode471, "edit redo did not succeed");
     }
     ST_PASS("redo success=1 depth=%d", redoResult.value("depth").toInt());
 
@@ -221,7 +221,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
                        QJsonObject{{QStringLiteral("id"), QStringLiteral("file.open")}}, &parsed);
     ST_BEGIN("mcp_control_refused");
     if (!parsed || errorCode(response) != QStringLiteral("refused")) {
-        return pictura::selfTest().fail(472, "modal command not refused");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode472, "modal command not refused");
     }
     ST_PASS("code=%s", qPrintable(errorCode(response)));
 
@@ -229,7 +229,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
                        QJsonObject{{QStringLiteral("op"), QStringLiteral("save")}}, &parsed);
     ST_BEGIN("mcp_control_save_no_path");
     if (!parsed || errorCode(response) != QStringLiteral("invalid_param")) {
-        return pictura::selfTest().fail(473, "untitled save did not yield invalid_param");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode473, "untitled save did not yield invalid_param");
     }
     ST_PASS("code=%s", qPrintable(errorCode(response)));
 
@@ -243,7 +243,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
                        &parsed);
     ST_BEGIN("mcp_control_open_raster");
     if (!rasterWritten || !parsed || !response.value(QStringLiteral("ok")).toBool()) {
-        return pictura::selfTest().fail(474, "raster document open failed");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode474, "raster document open failed");
     }
     ST_PASS("count=%d", response.value("result").toObject().value("count").toInt());
 
@@ -260,7 +260,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
         || !activeInfo.contains(QStringLiteral("layers"))
         || !activeInfo.contains(QStringLiteral("selection_px"))
         || !activeInfo.contains(QStringLiteral("zoom"))) {
-        return pictura::selfTest().fail(475, "status per-document fields missing");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode475, "status per-document fields missing");
     }
     ST_PASS("mode=%s depth=%d layers=%d", qPrintable(activeInfo.value("mode").toString()),
             activeInfo.value("depth").toInt(), activeInfo.value("layers").toInt());
@@ -276,7 +276,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
         || !layer0.contains(QStringLiteral("opacity")) || !layer0.contains(QStringLiteral("blend"))
         || !layer0.contains(QStringLiteral("fill")) || !layer0.contains(QStringLiteral("lock"))
         || !layer0.contains(QStringLiteral("color"))) {
-        return pictura::selfTest().fail(476, "list_layers fields missing");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode476, "list_layers fields missing");
     }
     ST_PASS("layers=%d name=%s", static_cast<int>(layers.size()),
             qPrintable(layer0.value("name").toString()));
@@ -289,7 +289,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
         || !pixel.contains(QStringLiteral("r")) || !pixel.contains(QStringLiteral("g"))
         || !pixel.contains(QStringLiteral("b")) || !pixel.contains(QStringLiteral("a"))
         || pixel.value(QStringLiteral("a")).toInt() != 255) {
-        return pictura::selfTest().fail(477, "get_pixel response malformed");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode477, "get_pixel response malformed");
     }
     ST_PASS("argb=%s a=%d", qPrintable(pixel.value("argb").toString()),
             pixel.value("a").toInt());
@@ -299,7 +299,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
                        &parsed);
     ST_BEGIN("mcp_control_pixel_oob");
     if (!parsed || errorCode(response) != QStringLiteral("invalid_param")) {
-        return pictura::selfTest().fail(478, "out-of-range get_pixel did not yield invalid_param");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode478, "out-of-range get_pixel did not yield invalid_param");
     }
     ST_PASS("code=%s", qPrintable(errorCode(response)));
 
@@ -307,7 +307,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
     ST_BEGIN("mcp_control_bad_request");
     if (!parsed || response.value(QStringLiteral("ok")).toBool()
         || errorCode(response) != QStringLiteral("bad_request")) {
-        return pictura::selfTest().fail(479, "malformed line did not yield bad_request");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode479, "malformed line did not yield bad_request");
     }
     ST_PASS("code=%s", qPrintable(errorCode(response)));
 
@@ -316,7 +316,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
     if (!parsed || response.value(QStringLiteral("id")).toInt() != 7
         || response.value(QStringLiteral("ok")).toBool()
         || errorCode(response) != QStringLiteral("unknown_method")) {
-        return pictura::selfTest().fail(480, "unknown method did not yield unknown_method");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode480, "unknown method did not yield unknown_method");
     }
     ST_PASS("code=%s", qPrintable(errorCode(response)));
 
@@ -326,7 +326,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
     response = responseObject(oversizedLine, &parsed);
     ST_BEGIN("mcp_control_oversized");
     if (!parsed || errorCode(response) != QStringLiteral("bad_request")) {
-        return pictura::selfTest().fail(481, "oversized request not rejected");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode481, "oversized request not rejected");
     }
     ST_PASS("code=%s", qPrintable(errorCode(response)));
 
@@ -336,7 +336,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
     ST_BEGIN("mcp_control_vision_connect");
     visionSocket.connectToServer(socketPath);
     if (!visionSocket.waitForConnected(2000)) {
-        return pictura::selfTest().fail(483, "vision client reconnect");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode483, "vision client reconnect");
     }
 
     response = request(visionSocket, 20, QStringLiteral("screenshot"),
@@ -346,13 +346,13 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
     if (!parsed || !response.value(QStringLiteral("ok")).toBool()
         || imageResult.value(QStringLiteral("mime")).toString() != QStringLiteral("image/png")
         || imageResult.value(QStringLiteral("base64")).toString().isEmpty()) {
-        return pictura::selfTest().fail(484, "screenshot response malformed");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode484, "screenshot response malformed");
     }
     bool pngOk = false;
     QImage png = decodePng(imageResult.value(QStringLiteral("base64")).toString(), &pngOk);
     if (!pngOk || png.width() != imageResult.value(QStringLiteral("width")).toInt()
         || png.height() != imageResult.value(QStringLiteral("height")).toInt()) {
-        return pictura::selfTest().fail(485, "screenshot PNG/dimensions mismatch");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode485, "screenshot PNG/dimensions mismatch");
     }
     ST_PASS("png=%dx%d source=%dx%d", png.width(), png.height(),
             imageResult.value("source_width").toInt(),
@@ -370,7 +370,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
         qMax(imageResult.value("source_width").toInt(), imageResult.value("source_height").toInt());
     if (!parsed || !response.value(QStringLiteral("ok")).toBool() || scaledLong > 64
         || sourceLong <= scaledLong) {
-        return pictura::selfTest().fail(486, "screenshot downscale did not report source");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode486, "screenshot downscale did not report source");
     }
     ST_PASS("scaled=%d source=%d", scaledLong, sourceLong);
 
@@ -394,8 +394,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
     const bool rectSane = rectX > 0 && rectY >= 0 && rectW > 0 && rectH > 0
                           && rectX < frame.width() && rectY < frame.height();
     if (!parsed || !response.value(QStringLiteral("ok")).toBool() || !rectSane) {
-        return pictura::selfTest().fail(
-            487, "ui_tree layersPanel rect x=%d y=%d w=%d h=%d frame=%dx%d", rectX, rectY, rectW,
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode487, "ui_tree layersPanel rect x=%d y=%d w=%d h=%d frame=%dx%d", rectX, rectY, rectW,
             rectH, frame.width(), frame.height());
     }
     ST_PASS("nodes=%d layersPanel_rect=(%d,%d,%d,%d)", static_cast<int>(nodes.size()), rectX, rectY,
@@ -411,7 +410,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
     if (!parsed || !response.value(QStringLiteral("ok")).toBool()
         || imageResult.value(QStringLiteral("mime")).toString() != QStringLiteral("image/png")
         || !thumbOk || qMax(thumb.width(), thumb.height()) > 64) {
-        return pictura::selfTest().fail(488, "pixel layer thumbnail is not a PNG");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode488, "pixel layer thumbnail is not a PNG");
     }
     ST_PASS("thumbnail=%dx%d", thumb.width(), thumb.height());
 
@@ -423,7 +422,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
                        &parsed);
     ST_BEGIN("mcp_control_vision_group");
     if (groupIndex < 0 || !parsed || errorCode(response) != QStringLiteral("invalid_param")) {
-        return pictura::selfTest().fail(489, "group layer thumbnail did not yield invalid_param");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode489, "group layer thumbnail did not yield invalid_param");
     }
     ST_PASS("code=%s", qPrintable(errorCode(response)));
 
@@ -434,7 +433,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
                        &parsed);
     ST_BEGIN("mcp_control_vision_thumb_cap");
     if (!parsed || errorCode(response) != QStringLiteral("invalid_param")) {
-        return pictura::selfTest().fail(490, "oversized thumbnail size not rejected");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode490, "oversized thumbnail size not rejected");
     }
     ST_PASS("code=%s", qPrintable(errorCode(response)));
 
@@ -444,7 +443,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
                        &parsed);
     ST_BEGIN("mcp_control_vision_maxdim");
     if (!parsed || errorCode(response) != QStringLiteral("invalid_param")) {
-        return pictura::selfTest().fail(491, "non-positive max_dim not rejected");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode491, "non-positive max_dim not rejected");
     }
     ST_PASS("code=%s", qPrintable(errorCode(response)));
 
@@ -456,7 +455,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
                        QJsonObject{{QStringLiteral("scope"), QStringLiteral("canvas")}}, &parsed);
     ST_BEGIN("mcp_control_vision_canvas");
     if (!parsed || errorCode(response) != QStringLiteral("no_document")) {
-        return pictura::selfTest().fail(492, "canvas screenshot with no document not reported");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode492, "canvas screenshot with no document not reported");
     }
     ST_PASS("code=%s", qPrintable(errorCode(response)));
 
@@ -468,7 +467,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
     if (!parsed || !response.value(QStringLiteral("ok")).toBool()
         || actionResult.value(QStringLiteral("active_tool")).toString()
                != QStringLiteral("marquee")) {
-        return pictura::selfTest().fail(493, "set_tool did not switch to marquee");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode493, "set_tool did not switch to marquee");
     }
     ST_PASS("active_tool=%s", qPrintable(actionResult.value("active_tool").toString()));
 
@@ -479,7 +478,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
                    .value(QStringLiteral("active_tool"))
                    .toString()
                != QStringLiteral("marquee")) {
-        return pictura::selfTest().fail(494, "status disagrees with set_tool");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode494, "status disagrees with set_tool");
     }
 
     response = request(visionSocket, 42, QStringLiteral("set_tool"),
@@ -487,7 +486,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
                        &parsed);
     ST_BEGIN("mcp_control_action_tool_unknown");
     if (!parsed || errorCode(response) != QStringLiteral("invalid_param")) {
-        return pictura::selfTest().fail(495, "unknown tool did not yield invalid_param");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode495, "unknown tool did not yield invalid_param");
     }
     ST_PASS("code=%s", qPrintable(errorCode(response)));
 
@@ -498,7 +497,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
                                    {QStringLiteral("height"), 8}},
                        &parsed);
     if (!parsed || !response.value(QStringLiteral("ok")).toBool()) {
-        return pictura::selfTest().fail(496, "action document new failed");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode496, "action document new failed");
     }
 
     response = request(visionSocket, 44, QStringLiteral("selection"),
@@ -516,7 +515,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
         || !actionResult.value(QStringLiteral("has_selection")).toBool()
         || actionResult.value(QStringLiteral("count")).toInt() <= 0
         || actionResult.value(QStringLiteral("bounds")).toString().isEmpty()) {
-        return pictura::selfTest().fail(497, "rect selection produced no selection");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode497, "rect selection produced no selection");
     }
     ST_PASS("count=%d bounds=%s", actionResult.value("count").toInt(),
             qPrintable(actionResult.value("bounds").toString()));
@@ -528,7 +527,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
     if (!parsed || !response.value(QStringLiteral("ok")).toBool()
         || actionResult.value(QStringLiteral("has_selection")).toBool()
         || actionResult.value(QStringLiteral("count")).toInt() != 0) {
-        return pictura::selfTest().fail(498, "deselect did not clear the selection");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode498, "deselect did not clear the selection");
     }
     ST_PASS("has_selection=0 count=0");
 
@@ -541,7 +540,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
                        &parsed);
     ST_BEGIN("mcp_control_action_selection_zero");
     if (!parsed || errorCode(response) != QStringLiteral("invalid_param")) {
-        return pictura::selfTest().fail(507, "zero-size rect did not yield invalid_param");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode507, "zero-size rect did not yield invalid_param");
     }
     ST_PASS("code=%s", qPrintable(errorCode(response)));
 
@@ -555,7 +554,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
                        &parsed);
     ST_BEGIN("mcp_control_action_selection_mode");
     if (!parsed || errorCode(response) != QStringLiteral("invalid_param")) {
-        return pictura::selfTest().fail(508, "unknown selection mode did not yield invalid_param");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode508, "unknown selection mode did not yield invalid_param");
     }
     ST_PASS("code=%s", qPrintable(errorCode(response)));
 
@@ -568,7 +567,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
     response = request(visionSocket, 47, QStringLiteral("filter"),
                        QJsonObject{{QStringLiteral("kind"), QStringLiteral("add-noise")}}, &parsed);
     if (!parsed || !response.value(QStringLiteral("ok")).toBool()) {
-        return pictura::selfTest().fail(499, "add-noise filter failed");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode499, "add-noise filter failed");
     }
     response = request(visionSocket, 48, QStringLiteral("get_pixel"),
                        QJsonObject{{QStringLiteral("x"), 0}, {QStringLiteral("y"), 0}}, &parsed);
@@ -576,7 +575,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
         response.value(QStringLiteral("result")).toObject().value(QStringLiteral("argb")).toString();
     ST_BEGIN("mcp_control_action_filter");
     if (pixelFiltered == pixelBefore) {
-        return pictura::selfTest().fail(500, "filter did not change the pixel");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode500, "filter did not change the pixel");
     }
     response = request(visionSocket, 49, QStringLiteral("edit"),
                        QJsonObject{{QStringLiteral("op"), QStringLiteral("undo")}}, &parsed);
@@ -585,19 +584,19 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
                 .toObject()
                 .value(QStringLiteral("success"))
                 .toBool()) {
-        return pictura::selfTest().fail(509, "edit undo after filter failed");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode509, "edit undo after filter failed");
     }
     response = request(visionSocket, 50, QStringLiteral("filter"),
                        QJsonObject{{QStringLiteral("kind"), QStringLiteral("add-noise")}}, &parsed);
     if (!parsed || !response.value(QStringLiteral("ok")).toBool()) {
-        return pictura::selfTest().fail(501, "second add-noise filter failed");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode501, "second add-noise filter failed");
     }
     response = request(visionSocket, 51, QStringLiteral("get_pixel"),
                        QJsonObject{{QStringLiteral("x"), 0}, {QStringLiteral("y"), 0}}, &parsed);
     const QString pixelRefiltered =
         response.value(QStringLiteral("result")).toObject().value(QStringLiteral("argb")).toString();
     if (pixelRefiltered != pixelFiltered) {
-        return pictura::selfTest().fail(502, "filter is not deterministic");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode502, "filter is not deterministic");
     }
     ST_PASS("deterministic=1 argb=%s", qPrintable(pixelFiltered));
 
@@ -605,7 +604,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
                        QJsonObject{{QStringLiteral("kind"), QStringLiteral("no-such-kind")}}, &parsed);
     ST_BEGIN("mcp_control_action_filter_unknown");
     if (!parsed || errorCode(response) != QStringLiteral("invalid_param")) {
-        return pictura::selfTest().fail(503, "unknown filter kind did not yield invalid_param");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode503, "unknown filter kind did not yield invalid_param");
     }
     ST_PASS("code=%s", qPrintable(errorCode(response)));
 
@@ -621,7 +620,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
                                    {QStringLiteral("value"), 128}},
                        &parsed);
     if (!parsed || !response.value(QStringLiteral("ok")).toBool()) {
-        return pictura::selfTest().fail(504, "layer_op set_opacity failed");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode504, "layer_op set_opacity failed");
     }
     response = request(visionSocket, 54, QStringLiteral("list_layers"), QJsonObject(), &parsed);
     const QJsonArray actionLayers =
@@ -629,7 +628,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
     ST_BEGIN("mcp_control_action_layer");
     if (!parsed || actionLayers.isEmpty()
         || actionLayers.at(0).toObject().value(QStringLiteral("opacity")).toInt() != 128) {
-        return pictura::selfTest().fail(505, "layer opacity did not round-trip");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode505, "layer opacity did not round-trip");
     }
     ST_PASS("opacity=%d", actionLayers.at(0).toObject().value("opacity").toInt());
 
@@ -642,7 +641,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
         || actionResult.value(QStringLiteral("gpu_compute")).toBool()
         || !actionResult.contains(QStringLiteral("backend"))
         || actionResult.value(QStringLiteral("backend")).toString().isEmpty()) {
-        return pictura::selfTest().fail(506, "set_gpu_compute false not reported");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode506, "set_gpu_compute false not reported");
     }
     ST_PASS("gpu_compute=0 backend=%s", qPrintable(actionResult.value("backend").toString()));
 
@@ -655,7 +654,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
         || !actionResult.contains(QStringLiteral("gpu_compute"))
         || !actionResult.value(QStringLiteral("gpu_compute")).toBool()
         || actionResult.value(QStringLiteral("backend")).toString().isEmpty()) {
-        return pictura::selfTest().fail(512, "set_gpu_compute true not reported");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode512, "set_gpu_compute true not reported");
     }
     ST_PASS("gpu_compute=1 backend=%s", qPrintable(actionResult.value("backend").toString()));
 
@@ -673,7 +672,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
     ST_BEGIN("mcp_control_action_visible");
     if (!hidOk || !parsed || hiddenLayers.isEmpty()
         || hiddenLayers.at(0).toObject().value(QStringLiteral("visible")).toBool()) {
-        return pictura::selfTest().fail(513, "set_visible visible:false did not hide the layer");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode513, "set_visible visible:false did not hide the layer");
     }
     ST_PASS("visible=0");
 
@@ -689,7 +688,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
     ST_BEGIN("mcp_control_action_visible_on");
     if (!showOk || !parsed || shownLayers.isEmpty()
         || !shownLayers.at(0).toObject().value(QStringLiteral("visible")).toBool()) {
-        return pictura::selfTest().fail(514, "set_visible on:true did not show the layer");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode514, "set_visible on:true did not show the layer");
     }
     ST_PASS("visible=1");
 
@@ -700,7 +699,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
                        &parsed);
     ST_BEGIN("mcp_control_action_visible_type");
     if (!parsed || errorCode(response) != QStringLiteral("invalid_param")) {
-        return pictura::selfTest().fail(515, "non-bool set_visible did not yield invalid_param");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode515, "non-bool set_visible did not yield invalid_param");
     }
     ST_PASS("code=%s", qPrintable(errorCode(response)));
 
@@ -723,7 +722,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
     ST_BEGIN("mcp_control_action_filter_locked");
     if (!layerShown || !lockedOk || !parsed
         || errorCode(response) != QStringLiteral("refused")) {
-        return pictura::selfTest().fail(511, "filter on a pixel-locked layer did not yield refused");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode511, "filter on a pixel-locked layer did not yield refused");
     }
     ST_PASS("code=%s", qPrintable(errorCode(response)));
     request(visionSocket, 70, QStringLiteral("layer_op"),
@@ -785,7 +784,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
     if (layersAfterDuplicate != 2 || !opaqueTop || translatePixelBefore.isEmpty() || !translate0Ok
         || !undoOk || !translate1Ok || pixelAfterBottom != translatePixelBefore
         || pixelAfterTop == translatePixelBefore) {
-        return pictura::selfTest().fail(516, "translate did not move only the indexed layer");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode516, "translate did not move only the indexed layer");
     }
     ST_PASS("layer1_moved=1 layer0_intact=1");
 
@@ -797,7 +796,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
                        &parsed);
     ST_BEGIN("mcp_control_action_translate_oob");
     if (!parsed || errorCode(response) != QStringLiteral("invalid_param")) {
-        return pictura::selfTest().fail(517, "out-of-range translate index not rejected");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode517, "out-of-range translate index not rejected");
     }
     ST_PASS("code=%s", qPrintable(errorCode(response)));
 
@@ -822,7 +821,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
                                    {QStringLiteral("height"), 32}},
                        &parsed);
     if (!parsed || !response.value(QStringLiteral("ok")).toBool()) {
-        return pictura::selfTest().fail(523, "input fixture document new failed");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode523, "input fixture document new failed");
     }
     request(visionSocket, 81, QStringLiteral("set_tool"),
             QJsonObject{{QStringLiteral("tool"), QStringLiteral("marquee")}}, &parsed);
@@ -894,7 +893,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
     }
     if (!dragOk || selectionPx <= 0 || !badOp || !dragNoEnd || !badKey || !keyOk || !restoreOk
         || nudgeBefore.isEmpty() || nudgeMoved == nudgeBefore || nudgeRestored != nudgeBefore) {
-        return pictura::selfTest().fail(522, "pointer/key input synthesis");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode522, "pointer/key input synthesis");
     }
     ST_PASS("selection_px=%d nudge=%s->%s->%s", selectionPx, qPrintable(nudgeBefore),
             qPrintable(nudgeMoved), qPrintable(nudgeRestored));
@@ -910,7 +909,7 @@ int pictura::runControlChecks(pictura::PicturaMainWindow& frame)
                        &parsed);
     ST_BEGIN("mcp_control_pointer_no_document");
     if (!parsed || errorCode(response) != QStringLiteral("no_document")) {
-        return pictura::selfTest().fail(524, "image-space pointer with no document not reported");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode524, "image-space pointer with no document not reported");
     }
     ST_PASS("code=%s", qPrintable(errorCode(response)));
 

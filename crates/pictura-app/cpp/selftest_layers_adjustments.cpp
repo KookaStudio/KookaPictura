@@ -26,12 +26,13 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
         // as an adjustment and warms the composite (red exceeds blue at a
         // sampled pixel).
         {
+            ST_BEGIN("lpr_photo_filter");
             const bool pflCreated = frame.newDocument(QStringLiteral("PhotoFilterCtl"), 4, 4,
                                                       QStringLiteral("rgb"), 8,
                                                       QStringLiteral("white"));
             pictura::PictureView* pflView = frame.activeView();
             if (!pflCreated || !pflView) {
-                return pictura::selfTest().fail(283, "photo filter fixture");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode283, "photo filter fixture");
             }
             const int pflDoc = frame.activeDocumentIndex();
             const unsigned int pflBefore = pflView->sample_argb(1, 1);
@@ -41,12 +42,11 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
             const unsigned int pflAfter = pflView->sample_argb(1, 1);
             const bool pflWarm = qRed(pflAfter) > qBlue(pflAfter);
             const bool pflChanged = pflAfter != pflBefore;
-            ST_BEGIN("lpr_photo_filter");
             ST_PASS("lpr_photo_filter added=%d adjustment=%d before=%08x after=%08x warm=%d",
                     pflAdded ? 1 : 0, pflAdjustment ? 1 : 0, pflBefore, pflAfter,
                     pflWarm ? 1 : 0);
             if (!pflAdded || !pflAdjustment || !pflChanged || !pflWarm) {
-                return pictura::selfTest().fail(283, "photo filter adjustment");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode283, "photo filter adjustment");
             }
             frame.closeDocument(pflDoc, false);
         }
@@ -60,19 +60,20 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
         ST_BEGIN("adjustments_photo_filter_menu");
         ST_PASS("adjustments_photo_filter_menu row=%d", adjPF ? 1 : 0);
         if (!adjPF) {
-            return pictura::selfTest().fail(284, "adjustments photo filter menu");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode284, "adjustments photo filter menu");
         }
 
         // lpr_gradient_map (285): a gradient-map adjustment layer is reported as
         // an adjustment, maps a non-uniform backdrop's luminance through the
         // black-to-white gradient, and the Adjustments panel menu offers it.
         {
+            ST_BEGIN("lpr_gradient_map");
             const bool gmCreated = frame.newDocument(QStringLiteral("GradientMapCtl"), 8, 8,
                                                      QStringLiteral("rgb"), 8,
                                                      QStringLiteral("white"));
             pictura::PictureView* gmView = frame.activeView();
             if (!gmCreated || !gmView) {
-                return pictura::selfTest().fail(285, "gradient map fixture");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode285, "gradient map fixture");
             }
             const int gmDoc = frame.activeDocumentIndex();
             bool gmPainted = gmView->begin_paint(0xFFFF0000u, 0xFFFFFFFFu, 4, 100, 100, 0,
@@ -89,13 +90,12 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
             const bool gmMenu = gmColumn
                 && gmColumn->widgetMenuTextsForTest(QStringLiteral("adjustmentsPanel"))
                        .contains(QStringLiteral("Gradient Map"));
-            ST_BEGIN("lpr_gradient_map");
             ST_PASS("lpr_gradient_map added=%d adjustment=%d changed=%d menu=%d before=%08x "
                     "after=%08x",
                     gmAdded ? 1 : 0, gmAdjustment ? 1 : 0, gmAfter != gmBefore ? 1 : 0,
                     gmMenu ? 1 : 0, gmBefore, gmAfter);
             if (!gmPainted || !gmAdded || !gmAdjustment || gmAfter == gmBefore || !gmMenu) {
-                return pictura::selfTest().fail(285, "gradient map adjustment");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode285, "gradient map adjustment");
             }
             frame.closeDocument(gmDoc, false);
         }
@@ -104,12 +104,13 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
         // adjustment layer that leaves the composite unchanged, and the
         // Adjustments panel offers a `Color Balance` row.
         {
+            ST_BEGIN("lpr_color_balance");
             const bool cbCreated = frame.newDocument(QStringLiteral("ColorBalanceCtl"), 4, 4,
                                                      QStringLiteral("rgb"), 8,
                                                      QStringLiteral("white"));
             pictura::PictureView* cbView = frame.activeView();
             if (!cbCreated || !cbView) {
-                return pictura::selfTest().fail(293, "color balance fixture");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode293, "color balance fixture");
             }
             const int cbDoc = frame.activeDocumentIndex();
             const unsigned int cbBefore = cbView->sample_argb(1, 1);
@@ -122,11 +123,10 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
             const bool cbMenu = cbColumn
                 && cbColumn->widgetMenuTextsForTest(QStringLiteral("adjustmentsPanel"))
                        .contains(QStringLiteral("Color Balance"));
-            ST_BEGIN("lpr_color_balance");
             ST_PASS("lpr_color_balance added=%d adjustment=%d neutral=%d menu=%d",
                     cbAdded ? 1 : 0, cbAdjustment ? 1 : 0, cbNeutral ? 1 : 0, cbMenu ? 1 : 0);
             if (!cbAdded || !cbAdjustment || !cbNeutral || !cbMenu) {
-                return pictura::selfTest().fail(293, "color balance adjustment");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode293, "color balance adjustment");
             }
             frame.closeDocument(cbDoc, false);
         }
@@ -135,12 +135,13 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
         // adjustment layer that leaves the composite unchanged, and the
         // Adjustments panel offers a `Channel Mixer` row.
         {
+            ST_BEGIN("lpr_channel_mixer");
             const bool cmCreated = frame.newDocument(QStringLiteral("ChannelMixerCtl"), 4, 4,
                                                      QStringLiteral("rgb"), 8,
                                                      QStringLiteral("white"));
             pictura::PictureView* cmView = frame.activeView();
             if (!cmCreated || !cmView) {
-                return pictura::selfTest().fail(294, "channel mixer fixture");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode294, "channel mixer fixture");
             }
             const int cmDoc = frame.activeDocumentIndex();
             const unsigned int cmBefore = cmView->sample_argb(1, 1);
@@ -153,11 +154,10 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
             const bool cmMenu = cmColumn
                 && cmColumn->widgetMenuTextsForTest(QStringLiteral("adjustmentsPanel"))
                        .contains(QStringLiteral("Channel Mixer"));
-            ST_BEGIN("lpr_channel_mixer");
             ST_PASS("lpr_channel_mixer added=%d adjustment=%d neutral=%d menu=%d",
                     cmAdded ? 1 : 0, cmAdjustment ? 1 : 0, cmNeutral ? 1 : 0, cmMenu ? 1 : 0);
             if (!cmAdded || !cmAdjustment || !cmNeutral || !cmMenu) {
-                return pictura::selfTest().fail(294, "channel mixer adjustment");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode294, "channel mixer adjustment");
             }
             frame.closeDocument(cmDoc, false);
         }
@@ -166,12 +166,13 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
         // an adjustment layer that leaves the composite unchanged, and the
         // Adjustments panel offers a `Selective Color` row.
         {
+            ST_BEGIN("lpr_selective_color");
             const bool selCreated = frame.newDocument(QStringLiteral("SelectiveColorCtl"), 4, 4,
                                                       QStringLiteral("rgb"), 8,
                                                       QStringLiteral("white"));
             pictura::PictureView* selView = frame.activeView();
             if (!selCreated || !selView) {
-                return pictura::selfTest().fail(296, "selective color fixture");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode296, "selective color fixture");
             }
             const int selDoc = frame.activeDocumentIndex();
             const unsigned int selBefore = selView->sample_argb(1, 1);
@@ -184,12 +185,11 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
             const bool selMenu = selColumn
                 && selColumn->widgetMenuTextsForTest(QStringLiteral("adjustmentsPanel"))
                        .contains(QStringLiteral("Selective Color"));
-            ST_BEGIN("lpr_selective_color");
             ST_PASS("lpr_selective_color added=%d adjustment=%d neutral=%d menu=%d",
                     selAdded ? 1 : 0, selAdjustment ? 1 : 0, selNeutral ? 1 : 0,
                     selMenu ? 1 : 0);
             if (!selAdded || !selAdjustment || !selNeutral || !selMenu) {
-                return pictura::selfTest().fail(296, "selective color adjustment");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode296, "selective color adjustment");
             }
             frame.closeDocument(selDoc, false);
         }
@@ -198,12 +198,13 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
         // adjustment layer carrying an identity cube that leaves the composite
         // unchanged, and the Adjustments panel offers a `Color Lookup` row.
         {
+            ST_BEGIN("lpr_color_lookup");
             const bool clCreated = frame.newDocument(QStringLiteral("ColorLookupCtl"), 4, 4,
                                                      QStringLiteral("rgb"), 8,
                                                      QStringLiteral("white"));
             pictura::PictureView* clView = frame.activeView();
             if (!clCreated || !clView) {
-                return pictura::selfTest().fail(455, "color lookup fixture");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode455, "color lookup fixture");
             }
             const int clDoc = frame.activeDocumentIndex();
             const unsigned int clBefore = clView->sample_argb(1, 1);
@@ -216,11 +217,10 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
             const bool clMenu = clColumn
                 && clColumn->widgetMenuTextsForTest(QStringLiteral("adjustmentsPanel"))
                        .contains(QStringLiteral("Color Lookup"));
-            ST_BEGIN("lpr_color_lookup");
             ST_PASS("lpr_color_lookup added=%d adjustment=%d neutral=%d menu=%d",
                     clAdded ? 1 : 0, clAdjustment ? 1 : 0, clNeutral ? 1 : 0, clMenu ? 1 : 0);
             if (!clAdded || !clAdjustment || !clNeutral || !clMenu) {
-                return pictura::selfTest().fail(455, "color lookup adjustment");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode455, "color lookup adjustment");
             }
             frame.closeDocument(clDoc, false);
         }
@@ -278,7 +278,7 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
                 frame.closeDocument(frame.activeDocumentIndex(), false);
             }
             if (!cmOk) {
-                return pictura::selfTest().fail(297, "color mode open");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode297, "color mode open");
             }
         }
 
@@ -333,7 +333,7 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
                 frame.closeDocument(frame.activeDocumentIndex(), false);
             }
             if (!labOk) {
-                return pictura::selfTest().fail(518, "Lab mode open");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode518, "Lab mode open");
             }
         }
 
@@ -390,7 +390,7 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
                 frame.closeDocument(frame.activeDocumentIndex(), false);
             }
             if (!lab16Ok) {
-                return pictura::selfTest().fail(519, "16-bit Lab mode open");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode519, "16-bit Lab mode open");
             }
         }
 
@@ -452,7 +452,7 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
                 frame.closeDocument(frame.activeDocumentIndex(), false);
             }
             if (!idxOk) {
-                return pictura::selfTest().fail(520, "Indexed mode open");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode520, "Indexed mode open");
             }
         }
 
@@ -508,7 +508,7 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
                 frame.closeDocument(frame.activeDocumentIndex(), false);
             }
             if (!bmpOk) {
-                return pictura::selfTest().fail(521, "Bitmap mode open");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode521, "Bitmap mode open");
             }
         }
 
@@ -567,7 +567,7 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
                 frame.closeDocument(frame.activeDocumentIndex(), false);
             }
             if (!depthOk) {
-                return pictura::selfTest().fail(298, "depth open");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode298, "depth open");
             }
         }
 
@@ -630,7 +630,7 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
                 frame.closeDocument(frame.activeDocumentIndex(), false);
             }
             if (!hdrOpened || !hdrIs32 || !hdrConverted || !hdrIs16) {
-                return pictura::selfTest().fail(526, "hdr conversion");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode526, "hdr conversion");
             }
         }
 
@@ -645,7 +645,7 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
             pictura::PictureView* pcfView = frame.activeView();
             ST_BEGIN("profile_assign_convert");
             if (!pcfCreated || !pcfView) {
-                return pictura::selfTest().fail(458, "profile fixture");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode458, "profile fixture");
             }
             const int pcfDoc = frame.activeDocumentIndex();
             const int pcfBase = pcfView->history_count();
@@ -693,7 +693,7 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
             if (!pcfAssign || !pcfOneState || !pcfDirty || !pcfRestored || !pcfBadIndex
                 || !pcfConvert || !pcfConvertState || !pcfConvertUndone || !pcfAssignMapping
                 || !pcfConvertMapping) {
-                return pictura::selfTest().fail(458, "profile assign convert");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode458, "profile assign convert");
             }
         }
 
@@ -702,6 +702,7 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
         // document or its history, and applying it with each merge mode has that
         // mode's effect as one undoable state.
         {
+            ST_BEGIN("metadata_template_apply");
             QTemporaryDir mtDir;
             const QString mtPath = mtDir.filePath(QStringLiteral("t.xmp"));
             const bool mtCreated = frame.newDocument(QStringLiteral("TemplateCtl"), 4, 4,
@@ -709,7 +710,7 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
                                                      QStringLiteral("white"));
             pictura::PictureView* mtSource = frame.activeView();
             if (!mtCreated || !mtSource) {
-                return pictura::selfTest().fail(460, "metadata template fixture");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode460, "metadata template fixture");
             }
             const int mtSourceDoc = frame.activeDocumentIndex();
             mtSource->apply_metadata_edits(QStringList(
@@ -789,7 +790,6 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
                 && mtAppend && mtAppendDirty && mtAppendState && mtAppendEffect && mtAppendUndo
                 && mtReplace && mtReplaceState && mtReplaceEffect && mtReplaceUndo && mtKeep
                 && mtKeepState && mtKeepEffect && mtKeepUndo && mtControls && mtCallback;
-            ST_BEGIN("metadata_template_apply");
             ST_PASS("metadata_template_apply export=%d file=%d unchanged=%d clean=%d dirty=%d "
                     "append=%d replace=%d keep=%d state=%d undo=%d controls=%d callback=%d",
                     mtExported ? 1 : 0, mtFileOk ? 1 : 0, mtUnchanged ? 1 : 0,
@@ -803,7 +803,7 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
                 frame.closeDocument(frame.activeDocumentIndex(), false);
             }
             if (!mtOk) {
-                return pictura::selfTest().fail(460, "metadata template apply");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode460, "metadata template apply");
             }
         }
 
@@ -853,7 +853,7 @@ int pictura::runLayersAdjustmentChecks(pictura::PicturaMainWindow& frame)
             if (!cspDefault || !cspRoundTrip || !cspRejectsInvalid || !cspWorkingSpace
                 || !cspDefaultStored || !cspOff || !cspPreserve || !cspConvert || !cspLabels
                 || !cspCancel) {
-                return pictura::selfTest().fail(461, "color settings policy");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode461, "color settings policy");
             }
         }
 

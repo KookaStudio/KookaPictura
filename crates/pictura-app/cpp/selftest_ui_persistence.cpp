@@ -136,7 +136,7 @@ int runUiPersistenceChecks(pictura::PicturaMainWindow& frame)
                 qPrintable(storedLeft), qPrintable(storedRight), appliedOk ? 1 : 0,
                 allIconic ? 1 : 0, frame.panelColumnCountForTest());
         if (!storedOk || !appliedOk || !allIconic) {
-            return pictura::selfTest().fail(324, "per-column rail mode");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode324, "per-column rail mode");
         }
         frame.applyPanelSessionForTest(pictura::SessionState{});
         pump(6);
@@ -158,7 +158,7 @@ int runUiPersistenceChecks(pictura::PicturaMainWindow& frame)
         ST_PASS("lpn_paint_percent hardness=%s opacity=%s flow=%s", qPrintable(hardness),
                 qPrintable(opacity), qPrintable(flow));
         if (!percentOk) {
-            return pictura::selfTest().fail(325, "paint field percent suffix");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode325, "paint field percent suffix");
         }
     }
 
@@ -176,7 +176,7 @@ int runUiPersistenceChecks(pictura::PicturaMainWindow& frame)
         ST_BEGIN("lpn_feather_no_popup");
         ST_PASS("lpn_feather_no_popup popup=%d arrow=%d", popup ? 1 : 0, arrow ? 1 : 0);
         if (!noPopup) {
-            return pictura::selfTest().fail(326, "feather slider popup");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode326, "feather slider popup");
         }
     }
 
@@ -203,7 +203,7 @@ int runUiPersistenceChecks(pictura::PicturaMainWindow& frame)
                 edit ? qPrintable(edit->text()) : "-",
                 (edit && suffix) ? qPrintable(edit->text() + suffix->text()) : "-");
         if (!tightOk) {
-            return pictura::selfTest().fail(327, "px suffix spacing");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode327, "px suffix spacing");
         }
     }
 

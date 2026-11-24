@@ -32,13 +32,14 @@ int runLayersInteractionsChecks(PicturaMainWindow& frame)
     // sibling resolves to an above/below drop (not "into"), and the reorder is
     // one undo step.
     {
+        ST_BEGIN("lpr_drag_sibling");
         const bool created = frame.newDocument(QStringLiteral("DragReorder"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         auto* panel = frame.findChild<LayersPanel*>(QStringLiteral("layersPanel"));
         if (!created || !view || !panel) {
-            return pictura::selfTest().fail(328, "sibling drag fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode328, "sibling drag fixture");
         }
         const int doc = frame.activeDocumentIndex();
         panel->setView(view);
@@ -58,14 +59,13 @@ int runLayersInteractionsChecks(PicturaMainWindow& frame)
             && pictura::layers_api::rowAt(*view, rowB).name == QStringLiteral("A")
             && pictura::layers_api::rowAt(*view, rowA).name == QStringLiteral("B");
         const bool oneStep = view->history_count() == base + 1;
-        ST_BEGIN("lpr_drag_sibling");
         ST_PASS("lpr_drag_sibling support=%d mode=%d indicator=%d drop=%d reorder=%d history=%d",
                 supported ? 1 : 0, mode, indicator ? 1 : 0, dropped ? 1 : 0,
                 reordered ? 1 : 0, view->history_count() - base);
         if (!supported || (mode != 0 && mode != 1) || !indicator || !dropped || !reordered
             || !oneStep) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(328, "sibling drag reorder");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode328, "sibling drag reorder");
         }
         frame.closeDocument(doc, false);
     }
@@ -73,13 +73,14 @@ int runLayersInteractionsChecks(PicturaMainWindow& frame)
     // lpr_drag_invalid (329): the Background cannot be moved; the drop shows no
     // indicator and the document gains no history.
     {
+        ST_BEGIN("lpr_drag_invalid");
         const bool created = frame.newDocument(QStringLiteral("DragInvalid"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("transparent"));
         PictureView* view = frame.activeView();
         auto* panel = frame.findChild<LayersPanel*>(QStringLiteral("layersPanel"));
         if (!created || !view || !panel) {
-            return pictura::selfTest().fail(329, "invalid drag fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode329, "invalid drag fixture");
         }
         const int doc = frame.activeDocumentIndex();
         panel->setView(view);
@@ -93,13 +94,12 @@ int runLayersInteractionsChecks(PicturaMainWindow& frame)
         const bool unchanged = view->history_count() == base;
         const bool stillBackground = pictura::layers_api::rowAt(*view, rowForPath(view, QStringLiteral("0"))).kind
             == QStringLiteral("background");
-        ST_BEGIN("lpr_drag_invalid");
         ST_PASS("lpr_drag_invalid mode=%d indicator=%d drop=%d history=%d background=%d", mode,
                 indicator ? 1 : 0, dropped ? 1 : 0, view->history_count() - base,
                 stillBackground ? 1 : 0);
         if (indicator || !unchanged || !stillBackground) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(329, "invalid drop target");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode329, "invalid drop target");
         }
         frame.closeDocument(doc, false);
     }
@@ -107,13 +107,14 @@ int runLayersInteractionsChecks(PicturaMainWindow& frame)
     // lpr_background_dblclick (330): a double-click outside the name converts
     // the Background to a normal, unlocked layer in one undo step.
     {
+        ST_BEGIN("lpr_background_dblclick");
         const bool created = frame.newDocument(QStringLiteral("BgDbl"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("transparent"));
         PictureView* view = frame.activeView();
         auto* panel = frame.findChild<LayersPanel*>(QStringLiteral("layersPanel"));
         if (!created || !view || !panel) {
-            return pictura::selfTest().fail(330, "background dblclick fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode330, "background dblclick fixture");
         }
         const int doc = frame.activeDocumentIndex();
         panel->setView(view);
@@ -131,13 +132,12 @@ int runLayersInteractionsChecks(PicturaMainWindow& frame)
         const bool converted = row >= 0 && pictura::layers_api::rowAt(*view, row).kind == QStringLiteral("pixel");
         const bool unlocked = row >= 0 && pictura::layers_api::rowAt(*view, row).lockBits == 0;
         const bool oneStep = view->history_count() == base + 1;
-        ST_BEGIN("lpr_background_dblclick");
         ST_PASS("lpr_background_dblclick before=%d after=%s lock=%d history=%d",
                 wasBackground ? 1 : 0, qPrintable(pictura::layers_api::rowAt(*view, row).kind),
                 pictura::layers_api::rowAt(*view, row).lockBits, view->history_count() - base);
         if (!wasBackground || !converted || !unlocked || !oneStep) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(330, "background double-click convert");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode330, "background double-click convert");
         }
         frame.closeDocument(doc, false);
     }
@@ -145,13 +145,14 @@ int runLayersInteractionsChecks(PicturaMainWindow& frame)
     // lpr_background_drop (331): dropping the Background on New Layer converts
     // it in place; no `Background copy` is created and one state is recorded.
     {
+        ST_BEGIN("lpr_background_drop");
         const bool created = frame.newDocument(QStringLiteral("BgDrop"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("transparent"));
         PictureView* view = frame.activeView();
         auto* panel = frame.findChild<LayersPanel*>(QStringLiteral("layersPanel"));
         if (!created || !view || !panel) {
-            return pictura::selfTest().fail(331, "background drop fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode331, "background drop fixture");
         }
         const int doc = frame.activeDocumentIndex();
         panel->setView(view);
@@ -170,13 +171,12 @@ int runLayersInteractionsChecks(PicturaMainWindow& frame)
         const int row = rowForPath(view, QStringLiteral("0"));
         const bool converted = row >= 0 && pictura::layers_api::rowAt(*view, row).kind == QStringLiteral("pixel");
         const bool oneStep = view->history_count() == base + 1;
-        ST_BEGIN("lpr_background_drop");
         ST_PASS("lpr_background_drop dropped=%d copy=%d kind=%s history=%d", dropped ? 1 : 0,
                 copyExists ? 1 : 0, qPrintable(pictura::layers_api::rowAt(*view, row).kind),
                 view->history_count() - base);
         if (!dropped || copyExists || !converted || !oneStep) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(331, "background drop convert");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode331, "background drop convert");
         }
         frame.closeDocument(doc, false);
     }
@@ -185,13 +185,14 @@ int runLayersInteractionsChecks(PicturaMainWindow& frame)
     // selection with the layer's opaque pixels, starts no editor, and keeps the
     // row selected.
     {
+        ST_BEGIN("lpr_thumbnail_select");
         const bool created = frame.newDocument(QStringLiteral("ThumbSelect"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         auto* panel = frame.findChild<LayersPanel*>(QStringLiteral("layersPanel"));
         if (!created || !view || !panel) {
-            return pictura::selfTest().fail(332, "thumbnail select fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode332, "thumbnail select fixture");
         }
         const int doc = frame.activeDocumentIndex();
         panel->setView(view);
@@ -207,13 +208,12 @@ int runLayersInteractionsChecks(PicturaMainWindow& frame)
         const bool noEditor = !panel->inlineEditorOpenForTest();
         const bool keptRow = panel->currentPath() == path;
         const bool oneStep = view->history_count() == base + 1;
-        ST_BEGIN("lpr_thumbnail_select");
         ST_PASS("lpr_thumbnail_select consumed=%d pixels=%d editor=%d row=%d history=%d",
                 consumed ? 1 : 0, pixels, noEditor ? 1 : 0, keptRow ? 1 : 0,
                 view->history_count() - base);
         if (!selectedBefore || !consumed || pixels != 64 || !noEditor || !keptRow || !oneStep) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(332, "thumbnail alpha selection");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode332, "thumbnail alpha selection");
         }
         frame.closeDocument(doc, false);
     }
@@ -221,13 +221,14 @@ int runLayersInteractionsChecks(PicturaMainWindow& frame)
     // lpr_drag_nesting (333): a nesting-locked group refuses a reparent drop of
     // its child; no indicator, no history, parent unchanged.
     {
+        ST_BEGIN("lpr_drag_nesting");
         const bool created = frame.newDocument(QStringLiteral("NestDrop"), 8, 8,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
         PictureView* view = frame.activeView();
         auto* panel = frame.findChild<LayersPanel*>(QStringLiteral("layersPanel"));
         if (!created || !view || !panel) {
-            return pictura::selfTest().fail(333, "nesting drop fixture");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode333, "nesting drop fixture");
         }
         const int doc = frame.activeDocumentIndex();
         panel->setView(view);
@@ -243,12 +244,11 @@ int runLayersInteractionsChecks(PicturaMainWindow& frame)
         const bool unchanged = view->history_count() == base
             && rowForPath(view, child) >= 0
             && pictura::layers_api::rowAt(*view, rowForPath(view, child)).path == child;
-        ST_BEGIN("lpr_drag_nesting");
         ST_PASS("lpr_drag_nesting mode=%d indicator=%d drop=%d history=%d", mode,
                 indicator ? 1 : 0, dropped ? 1 : 0, view->history_count() - base);
         if (indicator || !unchanged) {
             frame.closeDocument(doc, false);
-            return pictura::selfTest().fail(333, "nesting-locked reparent drop");
+            return pictura::selfTest().fail(pictura::selftest_codes::kCode333, "nesting-locked reparent drop");
         }
         frame.closeDocument(doc, false);
     }

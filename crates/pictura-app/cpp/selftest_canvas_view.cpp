@@ -87,13 +87,14 @@ int pictura::runCanvasViewChecks(pictura::PicturaMainWindow& frame)
 {
     // 308: the pan clamp keeps the reveal margin visible on all four axes, and
     // an overshoot slides to the near side instead of wrapping to the far one.
+    ST_BEGIN("canvas_pan_margin");
     const bool bigCreated = frame.newDocument(QStringLiteral("CanvasView"), 2000, 2000,
                                               QStringLiteral("rgb"), 8,
                                               QStringLiteral("white"));
     pictura::PictureView* bigView = frame.activeView();
     pictura::ImageView* canvas = frame.imageView();
     if (!bigCreated || !bigView || !canvas) {
-        return pictura::selfTest().fail(308, "canvas view fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode308, "canvas view fixture");
     }
     const int bigDoc = frame.activeDocumentIndex();
     frame.resize(800, 600);
@@ -136,17 +137,17 @@ int pictura::runCanvasViewChecks(pictura::PicturaMainWindow& frame)
             nearSideOk = false;
         }
     }
-    ST_BEGIN("canvas_pan_margin");
     ST_PASS("canvas_pan_margin margin=%d nearside=%d", marginOk ? 1 : 0, nearSideOk ? 1 : 0);
     if (!marginOk || !nearSideOk) {
-        return pictura::selfTest().fail(308, "pan clamp margin");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode308, "pan clamp margin");
     }
 
     // 309: a scrollbar value round-trips through the canvas offset and the bar
     // follows a canvas pan (offset stays the single source of truth).
+    ST_BEGIN("canvas_scrollbar_roundtrip");
     auto* host = qobject_cast<pictura::CanvasScrollBars*>(canvas->parentWidget());
     if (!host) {
-        return pictura::selfTest().fail(309, "canvas scrollbars host");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode309, "canvas scrollbars host");
     }
     QScrollBar* hbar = host->horizontalBarForTest();
     const QSizeF bigImage(canvas->image().width(), canvas->image().height());
@@ -163,22 +164,22 @@ int pictura::runCanvasViewChecks(pictura::PicturaMainWindow& frame)
         pictura::offsetRangeFor(bigImage, canvas->zoom(), QSizeF(canvas->size()));
     const bool follows =
         std::abs(hbar->value() - int(std::lround(afterRange.maxX - canvas->offset().x()))) <= 1;
-    ST_BEGIN("canvas_scrollbar_roundtrip");
     ST_PASS("canvas_scrollbar_roundtrip shown=%d roundtrip=%d follows=%d value=%d",
             shown ? 1 : 0, roundTrip ? 1 : 0, follows ? 1 : 0, hbar->value());
     if (!shown || !roundTrip || !follows) {
-        return pictura::selfTest().fail(309, "scrollbar round trip");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode309, "scrollbar round trip");
     }
     frame.closeDocument(bigDoc, false);
 
     // 310: both bars stay visible when the document fits the viewport, and the
     // canvas is still pannable through the shared range.
+    ST_BEGIN("canvas_scrollbar_visible");
     const bool smallCreated = frame.newDocument(QStringLiteral("CanvasFits"), 16, 16,
                                                 QStringLiteral("rgb"), 8,
                                                 QStringLiteral("white"));
     pictura::ImageView* small = frame.imageView();
     if (!smallCreated || !small) {
-        return pictura::selfTest().fail(310, "canvas fits fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode310, "canvas fits fixture");
     }
     const int smallDoc = frame.activeDocumentIndex();
     frame.resize(800, 600);
@@ -187,28 +188,28 @@ int pictura::runCanvasViewChecks(pictura::PicturaMainWindow& frame)
     QApplication::processEvents();
     auto* smallHost = qobject_cast<pictura::CanvasScrollBars*>(small->parentWidget());
     if (!smallHost) {
-        return pictura::selfTest().fail(310, "canvas fits host");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode310, "canvas fits host");
     }
     QScrollBar* smallH = smallHost->horizontalBarForTest();
     const bool visible = !smallH->isHidden() && !smallHost->verticalBarForTest()->isHidden();
     const int beforePan = int(std::lround(small->offset().x()));
     smallH->setValue(smallH->minimum());
     const bool panned = int(std::lround(small->offset().x())) != beforePan;
-    ST_BEGIN("canvas_scrollbar_visible");
     ST_PASS("canvas_scrollbar_visible visible=%d panned=%d", visible ? 1 : 0, panned ? 1 : 0);
     if (!visible || !panned) {
-        return pictura::selfTest().fail(310, "scrollbars not visible");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode310, "scrollbars not visible");
     }
     frame.closeDocument(smallDoc, false);
 
     // 311/312: the drawn ring tracks the brush diameter, and because it lives in
     // image space its on-screen size scales with zoom.
+    ST_BEGIN("canvas_brush_outline_size");
     const bool ringCreated = frame.newDocument(QStringLiteral("BrushRing"), 200, 200,
                                                QStringLiteral("rgb"), 8,
                                                QStringLiteral("white"));
     pictura::ImageView* ringCanvas = frame.imageView();
     if (!ringCreated || !ringCanvas) {
-        return pictura::selfTest().fail(311, "brush ring fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode311, "brush ring fixture");
     }
     const int ringDoc = frame.activeDocumentIndex();
     frame.resize(800, 600);
@@ -224,10 +225,9 @@ int pictura::runCanvasViewChecks(pictura::PicturaMainWindow& frame)
     const bool sizeTracked = ringCanvas->hasBrushOutline()
                              && std::abs(widthNarrow - 40) <= 2
                              && std::abs(widthWide - 80) <= 2;
-    ST_BEGIN("canvas_brush_outline_size");
     ST_PASS("canvas_brush_outline_size narrow=%d wide=%d", widthNarrow, widthWide);
     if (!sizeTracked) {
-        return pictura::selfTest().fail(311, "brush outline size");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode311, "brush outline size");
     }
 
     ringCanvas->setBrushOutline(40.0, imageCentre);
@@ -240,7 +240,7 @@ int pictura::runCanvasViewChecks(pictura::PicturaMainWindow& frame)
     ST_BEGIN("canvas_brush_outline_zoom");
     ST_PASS("canvas_brush_outline_zoom one=%d two=%d", widthAtOne, widthAtTwo);
     if (!zoomTracked) {
-        return pictura::selfTest().fail(312, "brush outline zoom");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode312, "brush outline zoom");
     }
     frame.closeDocument(ringDoc, false);
 
@@ -263,17 +263,18 @@ int pictura::runCanvasViewChecks(pictura::PicturaMainWindow& frame)
     ST_PASS("present_filter_boundary smooth_below=%d nearest_at=%d levels=%d",
             smoothBelow ? 1 : 0, nearestAt ? 1 : 0, levelsOk ? 1 : 0);
     if (!smoothBelow || !nearestAt || !levelsOk) {
-        return pictura::selfTest().fail(539, "sampling filter or level formula wrong");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode539, "sampling filter or level formula wrong");
     }
 
     // 540: the navigator draws from a coarse pyramid level, not a scaled second
     // full-resolution copy, and refreshes on a content change.
+    ST_BEGIN("navigator_pyramid_level");
     const bool navCreated = frame.newDocument(QStringLiteral("Navigator"), 4000, 3000,
                                               QStringLiteral("rgb"), 8,
                                               QStringLiteral("white"));
     auto* nav = frame.findChild<pictura::NavigatorPanel*>();
     if (!navCreated || !nav) {
-        return pictura::selfTest().fail(540, "navigator fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode540, "navigator fixture");
     }
     const int navDoc = frame.activeDocumentIndex();
     nav->refresh();
@@ -287,12 +288,11 @@ int pictura::runCanvasViewChecks(pictura::PicturaMainWindow& frame)
                            && navSource.height() < 3000 && navSource.width() <= 512;
     const bool navUpdated = filled && !navBefore.isNull() && !navAfter.isNull()
                             && navBefore != navAfter;
-    ST_BEGIN("navigator_pyramid_level");
     ST_PASS("navigator_pyramid_level level=%dx%d doc=4000x3000 no_full=%d updated=%d",
             navSource.width(), navSource.height(), navNoFull ? 1 : 0, navUpdated ? 1 : 0);
     if (!navNoFull || !navUpdated) {
         frame.closeDocument(navDoc, false);
-        return pictura::selfTest().fail(540, "navigator not drawn from a pyramid level");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode540, "navigator not drawn from a pyramid level");
     }
     frame.closeDocument(navDoc, false);
 
@@ -301,13 +301,14 @@ int pictura::runCanvasViewChecks(pictura::PicturaMainWindow& frame)
     // full-resolution document; at level 0 the crop present is identical to a
     // full-resolution transform draw; and a region refresh still emits
     // regionDamaged with no changed.
+    ST_BEGIN("canvas_present_contract");
     const bool levelCreated = frame.newDocument(QStringLiteral("LevelCrop"), 512, 384,
                                                 QStringLiteral("rgb"), 8,
                                                 QStringLiteral("white"));
     pictura::ImageView* levelCanvas = frame.imageView();
     pictura::PictureView* levelView = frame.activeView();
     if (!levelCreated || !levelCanvas || !levelView) {
-        return pictura::selfTest().fail(541, "level crop fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode541, "level crop fixture");
     }
     const int levelDoc = frame.activeDocumentIndex();
     frame.resize(800, 600);
@@ -348,7 +349,6 @@ int pictura::runCanvasViewChecks(pictura::PicturaMainWindow& frame)
     QObject::disconnect(levelRegionConn);
     QObject::disconnect(levelChangedConn);
     const bool levelRegionPath = levelRegionBlits >= 1 && levelChanged == 0;
-    ST_BEGIN("canvas_present_contract");
     ST_PASS("canvas_present_contract reused=%d pan_reuse=%d crop=%dx%d identical=%d "
             "region=%d changed=%d",
             levelCropReused ? 1 : 0, levelPanReused ? 1 : 0, levelCropSize.width(),
@@ -356,7 +356,7 @@ int pictura::runCanvasViewChecks(pictura::PicturaMainWindow& frame)
     if (!levelCropReused || !levelPanReused || !levelCropBounded || !levelIdentical
         || !levelPreviewed || !levelMoved || !levelRegionPath) {
         frame.closeDocument(levelDoc, false);
-        return pictura::selfTest().fail(541, "present contract wrong");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode541, "present contract wrong");
     }
     frame.closeDocument(levelDoc, false);
     return 0;

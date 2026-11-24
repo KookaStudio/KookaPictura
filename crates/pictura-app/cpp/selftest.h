@@ -1,5 +1,7 @@
 #pragma once
 
+#include "selftest_run.h"
+
 #include <QtCore/QString>
 #include <QtGui/QImage>
 #include <QtWidgets/QApplication>

@@ -59,6 +59,11 @@ list(APPEND PICTURA_SELF_TEST_SOURCES
     crates/pictura-app/cpp/selftest_recent_files.h
     crates/pictura-app/cpp/selftest_report.cpp
     crates/pictura-app/cpp/selftest_report.h
+    crates/pictura-app/cpp/selftest_codes.h
+    crates/pictura-app/cpp/selftest_checks.h
+    crates/pictura-app/cpp/selftest_fixture.h
+    crates/pictura-app/cpp/selftest_run.cpp
+    crates/pictura-app/cpp/selftest_run.h
     crates/pictura-app/cpp/selftest_session.cpp
     crates/pictura-app/cpp/selftest_session.h
     crates/pictura-app/cpp/selftest_shell_round3.cpp

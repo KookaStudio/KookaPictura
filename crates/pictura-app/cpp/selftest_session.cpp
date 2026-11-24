@@ -75,7 +75,7 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
             ST_PASS("lpr_quit_save revision=%d schema=%d", after.layoutRevision,
                     after.schemaVersion);
             if (!quitSaved) {
-                return pictura::selfTest().fail(317, "quit-path session save");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode317, "quit-path session save");
             }
         }
 
@@ -134,7 +134,7 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
             ST_PASS("lpr_width_restart left=%d/%d right=%d/%d columns=%d", leftWidth,
                     storedLeft, primaryWidth, storedRight, frame.panelColumnCountForTest());
             if (!storedOk || !appliedOk) {
-                return pictura::selfTest().fail(318, "column width restart");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode318, "column width restart");
             }
         }
 
@@ -183,7 +183,7 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
             ST_PASS("lpr_v7_width seeded=%d default=%d/%d", seededWidth, defaultWidth,
                     pictura::PanelColumn::kDefaultNormalWidth);
             if (!v7Ok) {
-                return pictura::selfTest().fail(319, "v6 default width");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode319, "v6 default width");
             }
             frame.applyPanelSessionForTest(pictura::SessionState{});
             pump(6);
@@ -193,11 +193,12 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
         // normal width, never the icon strip and never an oversized value that
         // would expand the column across the workspace on the next launch.
         {
+            ST_BEGIN("lpr_iconic_flip_width");
             frame.applyPanelSessionForTest(pictura::SessionState{});
             pump(6);
             pictura::PanelColumn* primary = frame.panelColumn();
             if (!primary) {
-                return pictura::selfTest().fail(399, "iconic flip fixture");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode399, "iconic flip fixture");
             }
             primary->setPreferredWidth(245);
             pump(6);
@@ -225,14 +226,13 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
             const bool restoredOk = primary && !primary->railMode();
             const bool storedOk = storedRight >= pictura::PanelColumn::kMinNormalWidth
                 && storedRight <= pictura::PanelColumn::kMaxNormalWidth;
-            ST_BEGIN("lpr_iconic_flip_width");
             ST_PASS("lpr_iconic_flip_width stored=%d remembered=%d clamped=%d "
                     "restoredMode=%d width=%d",
                     storedRight, kRemembered, clamped, restoredOk ? 1 : 0,
                     primary ? primary->width() : -1);
             if (!storedOk || !restoredOk
                 || clamped != pictura::PanelColumn::kMaxNormalWidth) {
-                return pictura::selfTest().fail(399, "iconic->normal width persistence");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode399, "iconic->normal width persistence");
             }
             // Leave a sane store behind.
             frame.applyPanelSessionForTest(pictura::SessionState{});
@@ -313,7 +313,7 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
                     beforeCol, afterCol);
             if (!(paneShown && stripHidden && handleLeft && handleRight && reserved
                   && iconicNarrow && wsAbsorbs)) {
-                return pictura::selfTest().fail(400, "workspace space");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode400, "workspace space");
             }
             frame.applyPanelSessionForTest(pictura::SessionState{});
             pump(6);
@@ -334,7 +334,7 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
             ST_PASS("ldt_mode_bits opened=%d title=%s", opened ? 1 : 0,
                     qPrintable(tabText));
             if (!titleOk) {
-                return pictura::selfTest().fail(320, "tab mode/bits title");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode320, "tab mode/bits title");
             }
             frame.closeDocument(index, false);
         }
@@ -355,7 +355,7 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
             ST_PASS("ldt_untitled name=%s title=%s", qPrintable(name),
                     qPrintable(tabText));
             if (!untitledOk) {
-                return pictura::selfTest().fail(321, "untitled tab name");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode321, "untitled tab name");
             }
             frame.closeDocument(index, false);
         }
@@ -377,7 +377,7 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
                     view ? qPrintable(pictura::layers_api::rowAt(*view, 0).kind) : "-",
                     view ? pictura::layers_api::rowAt(*view, 0).lockBits : -1);
             if (!opaqueOk) {
-                return pictura::selfTest().fail(322, "opaque import background");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode322, "opaque import background");
             }
             frame.closeDocument(frame.activeDocumentIndex(), false);
         }
@@ -403,7 +403,7 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
                     view ? qPrintable(pictura::layers_api::rowAt(*view, 0).kind) : "-",
                     view ? pictura::layers_api::rowAt(*view, 0).lockBits : -1, pixel);
             if (!alphaOk) {
-                return pictura::selfTest().fail(323, "transparent import layer");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode323, "transparent import layer");
             }
             frame.closeDocument(frame.activeDocumentIndex(), false);
         }
@@ -434,7 +434,7 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
                     cpsDefault ? 1 : 0);
             if (!cpsSavedConvert || !cpsRoundConvert || !cpsSavedOff || !cpsRoundOff
                 || !cpsNormalized || !cpsDefault) {
-                return pictura::selfTest().fail(462, "session color policy");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode462, "session color policy");
             }
         }
 
@@ -723,7 +723,7 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
                 frame.closeDocument(frame.activeDocumentIndex(), false);
             }
             if (!exportOk) {
-                return pictura::selfTest().fail(532, "raster export");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode532, "raster export");
             }
         }
 
@@ -772,7 +772,7 @@ int runSessionChecks(pictura::PicturaMainWindow& frame)
                     urlOk ? 1 : 0, pathOk ? 1 : 0, missingOk ? 1 : 0, emptyOk ? 1 : 0,
                     documentOk ? 1 : 0, rememberedOk ? 1 : 0, homeOk ? 1 : 0);
             if (!dirsOk) {
-                return pictura::selfTest().fail(534, "dialog last dir");
+                return pictura::selfTest().fail(pictura::selftest_codes::kCode534, "dialog last dir");
             }
         }
 

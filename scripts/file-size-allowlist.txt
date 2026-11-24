@@ -4,7 +4,7 @@
 # lines starting with '#' are ignored. This list only shrinks: as files are
 # split along class/concern seams, remove their entry, and never raise a
 # recorded LOC — a file that grows is a violation.
-crates/pictura-app/cpp/selftest.cpp 6449
+crates/pictura-app/cpp/selftest.cpp 6439
 crates/pictura-app/src/cxxqt_object.rs 1204
 crates/pictura-render/src/document_ops/layer_ops/layer_style_tests.rs 1398
 crates/pictura-app/cpp/panels/layers_panel.cpp 1262

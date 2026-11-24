@@ -12,6 +12,7 @@
 
 int pictura::runRecentFilesChecks(pictura::PicturaMainWindow& frame)
 {
+    ST_BEGIN("recent_files");
     const QStringList saved = frame.recentFiles();
     QMenu* menu = frame.recentMenu();
     const QString imagePath = QDir::temp().filePath(QStringLiteral("pictura_recent_seed.png"));
@@ -19,7 +20,7 @@ int pictura::runRecentFilesChecks(pictura::PicturaMainWindow& frame)
     QImage seed(8, 8, QImage::Format_RGB32);
     seed.fill(Qt::red);
     if (!menu || !seed.save(imagePath, "PNG")) {
-        return pictura::selfTest().fail(533, "recent files fixture");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode533, "recent files fixture");
     }
     QFile::remove(missingPath);
     // The visible file rows (everything but the placeholder, separator, Clear).
@@ -81,12 +82,11 @@ int pictura::runRecentFilesChecks(pictura::PicturaMainWindow& frame)
     frame.setRecentFiles(saved);
     QFile::remove(imagePath);
 
-    ST_BEGIN("recent_files");
     ST_PASS("recent_files empty=%d opened=%d front=%d offered=%d reopened=%d cleared=%d",
             empty ? 1 : 0, opened ? 1 : 0, front ? 1 : 0, offered ? 1 : 0, reopened ? 1 : 0,
             cleared ? 1 : 0);
     if (!empty || !opened || !front || !offered || !reopened || !cleared) {
-        return pictura::selfTest().fail(533, "recent files");
+        return pictura::selfTest().fail(pictura::selftest_codes::kCode533, "recent files");
     }
     return 0;
 }
