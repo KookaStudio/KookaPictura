@@ -4,6 +4,18 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Canon CR3 colour, #1574** (OpenSpec change `vendor-raw-cr3-colour`,
+  archived; `codec/camera-matrices` modified). By owner decision CR3 bodies
+  without rawtoaces data take camera-JPEG fits (the #1542 method) and, where
+  the sample is too grey, a same-sensor sibling's fit. The fit script reads
+  CR3 (full-size JPEG track, CMT1, CTMD ColorData presets: Daylight at word
+  136/150/205/110 for versions 16-19/32-33/34-48/64-66), places D55 (mired
+  between Daylight 5200 K and Cloudy 6000 K) and Tungsten 3200 K (code 24),
+  drops a tungsten matrix whose pair does not read back its lights (R6 Mark
+  III), and keeps recorded fits of samples outside the run. 12 fitted bodies
+  + M6 II (90D) and G7 X III (G5 X II) proxies + Kiss M/M2, Rebel T8i, Kiss
+  X10i names. R3, V1, the R6 III pair and the RP/R50 spectral rows (6-11 dE
+  from their camera JPEGs) -> #1579. Samples in ~/Downloads/cr3-1474.
 - **Canon CR3, #1474** (OpenSpec change `vendor-raw-cr3`, archived;
   `codec/vendor-raw-containers`, `codec/camera-matrices`, `document/raw-open`
   modified). Owner chose an open, attributed port of LibRaw 0.22.1's CRX
