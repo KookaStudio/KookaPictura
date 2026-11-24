@@ -21,6 +21,9 @@ pub struct Cr2 {
     pub ifd0_tags: Vec<(u16, Val)>,
     /// The maker note's colour data, tag `0x4001`.
     pub color_data: Option<Vec<u16>>,
+    /// Its TIFF type: 3 (SHORT), 7 (UNDEFINED, little-endian byte pairs) or
+    /// 4 (LONG, one word per value).
+    pub color_data_type: u16,
 }
 
 impl Cr2 {
@@ -35,6 +38,7 @@ impl Cr2 {
             rows_per_frame_row: 1,
             ifd0_tags: Vec::new(),
             color_data: None,
+            color_data_type: 3,
         }
     }
 }
@@ -73,7 +77,13 @@ pub fn cr2(spec: &Cr2) -> Vec<u8> {
         note_tags.push((0x00E0, Val::Short(info)));
     }
     if let Some(data) = &spec.color_data {
-        note_tags.push((0x4001, Val::Short(data.clone())));
+        let val = match spec.color_data_type {
+            3 => Val::Short(data.clone()),
+            7 => Val::Undefined(data.iter().flat_map(|w| w.to_le_bytes()).collect()),
+            4 => Val::Long(data.iter().map(|&w| w.into()).collect()),
+            other => panic!("colour data type {other}"),
+        };
+        note_tags.push((0x4001, val));
     }
     let mut exif_tags = Vec::new();
     if !note_tags.is_empty() {

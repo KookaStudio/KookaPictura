@@ -178,15 +178,17 @@ rawtoaces-data covers no Canon CR3 body beyond the eight #1474 added. By the
 same owner decision (#1574) the other CR3 rows are fitted from each body's
 own camera JPEG (the CR3's full-size JPEG track) and placed under the Daylight,
 Cloudy and Tungsten presets of the file's own colour data; the samples are
-the raw.pixls.us files `scripts/camera-jpeg-fits.json` names. Two bodies whose
-samples were too grey to fit, the EOS M6 Mark II and PowerShot G7 X Mark III,
-reuse the fit of a body with the same sensor (the 90D and PowerShot G5 X Mark
-II), commented in the generated file. Canon's preset layout per colour-data
-version was located with ExifTool's public tag documentation and checked on
-the samples' recorded temperatures. The EOS R1, R3, R6 Mark III and
-PowerShot V1 rows (#1579) are fitted the same way from owner-supplied files
-from dpreview's public sample galleries, also not committed and named with
-their SHA-256 in `scripts/camera-jpeg-fits.json`.
+the raw.pixls.us files `scripts/camera-jpeg-fits.json` names. Canon's preset
+layout per colour-data version was located with ExifTool's public tag
+documentation and checked on the samples' recorded temperatures. The EOS R1,
+R3, R6 Mark III and PowerShot V1 rows (#1579), and the EOS R8 Mark II, EOS M6
+Mark II and PowerShot G7 X Mark III rows (#1583, replacing the M6 Mark II's
+and G7 X Mark III's same-sensor proxies) are fitted the same way from
+owner-supplied files from dpreview's public sample galleries, also not
+committed and named with their SHA-256 in `scripts/camera-jpeg-fits.json`.
+The PowerShot G1 X Mark III, a CR2 body, is fitted the same way (#1583) from
+an owner-supplied CR2: the camera JPEG is IFD0's full-size strip and the
+presets come from the Exif maker note's colour data.
 
 ## Nikon NEF code tables (`crates/pictura-codec/src/dng/nef_decode.rs`)
 

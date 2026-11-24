@@ -349,8 +349,14 @@ fn color_data(len: usize, version: i16, at: usize, levels: [u16; 4]) -> Vec<u16>
 }
 
 fn as_shot(data: Vec<u16>) -> Option<[f64; 3]> {
+    as_shot_typed(data, 3)
+}
+
+/// The as-shot neutral of colour data written as TIFF type `typ`.
+fn as_shot_typed(data: Vec<u16>, typ: u16) -> Option<[f64; 3]> {
     let mut spec = Cr2::new(noise_plane(32, 16, 4095, 4), 12);
     spec.color_data = Some(data);
+    spec.color_data_type = typ;
     read(&cr2(&spec))
         .expect("CR2 with colour data reads")
         .color
@@ -369,6 +375,7 @@ fn cr2_as_shot_neutral_by_layout() {
         (15, 63),
         (17, 71),
         (-3, 71),
+        (-4, 71),
         (33, 85),
         (48, 105),
     ] {
@@ -395,5 +402,16 @@ fn unusable_colour_data_leaves_no_neutral() {
         color_data(1400, 10, 63, [0, 1000, 1024, 1500]),
     ] {
         assert_eq!(as_shot(data), None);
+    }
+    assert_eq!(as_shot_typed(color_data(1400, 10, 63, levels), 4), None);
+}
+
+#[test]
+fn cr2_colour_data_as_bytes() {
+    let got = as_shot_typed(color_data(1400, -4, 71, [2000, 1000, 1024, 1500]), 7)
+        .expect("colour data stored as bytes gives a neutral");
+    let want = [1012.0 / 2000.0, 1.0, 1012.0 / 1500.0];
+    for (g, w) in got.iter().zip(want) {
+        assert!((g - w).abs() <= 1e-9, "{got:?}");
     }
 }

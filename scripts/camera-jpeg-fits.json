@@ -425,6 +425,84 @@
  },
  {
   "make": "Canon",
+  "model": "Canon EOS M6 Mark II",
+  "aliases": [],
+  "sample": "canon_eos_M6_mk2.cr3",
+  "sha256": "bf95310ee06e4a817b8057e3fed32efbfde5dc9cf7c3f545c5beaf25a422e201",
+  "blocks": 487,
+  "median_de": 2.17,
+  "p90_de": 5.41,
+  "chroma_spread": 21.7,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    1.2046,
+    -0.4312,
+    -0.168,
+    0.1278,
+    0.6961,
+    0.1973,
+    0.0069,
+    0.105,
+    0.5809
+   ],
+   [
+    1.6714,
+    -0.8228,
+    -0.2051,
+    0.0553,
+    0.7215,
+    0.4937,
+    0.0128,
+    0.0471,
+    0.8047
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS M6 Mark II",
+  "aliases": [],
+  "sample": "canon_eos_M6_mk2_pic2.cr3",
+  "sha256": "8193d7b962c2a8a0bf8ed0793e8691821579a937010bf9b6f6297217e1c3ef8f",
+  "blocks": 520,
+  "median_de": 1.02,
+  "p90_de": 2.69,
+  "chroma_spread": 15.7,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    1.0207,
+    -0.2904,
+    -0.1298,
+    0.0641,
+    0.7378,
+    0.2181,
+    0.258,
+    -0.0827,
+    0.5239
+   ],
+   [
+    1.4062,
+    -0.5769,
+    -0.1257,
+    -0.0044,
+    0.7697,
+    0.5275,
+    0.1672,
+    -0.0931,
+    0.7517
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
   "model": "Canon EOS R",
   "aliases": [],
   "sample": "EOS_R__Canon_EOS_R_CRAW_ISO_100.CR3",
@@ -1547,6 +1625,84 @@
  },
  {
   "make": "Canon",
+  "model": "Canon EOS R8 Mark II",
+  "aliases": [],
+  "sample": "canon_eos_r8_mk2_pic2.CR3",
+  "sha256": "2f456992c0e3781487e17fc50eed52c97df341718b115fcccded9b602e33d5ac",
+  "blocks": 471,
+  "median_de": 3.0,
+  "p90_de": 5.66,
+  "chroma_spread": 12.5,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.9045,
+    -0.2659,
+    -0.0818,
+    0.2751,
+    0.514,
+    0.242,
+    0.1787,
+    0.0614,
+    0.4829
+   ],
+   [
+    1.2142,
+    -0.5136,
+    -0.0053,
+    0.2051,
+    0.5123,
+    0.6067,
+    0.113,
+    0.0127,
+    0.6998
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R8 Mark II",
+  "aliases": [],
+  "sample": "canon_eos_r8_mk2_pic3.CR3",
+  "sha256": "b049cb0edece033c5f365985fcf0fc22436c6de3744b3dcdd639c4908be9b1e0",
+  "blocks": 471,
+  "median_de": 0.76,
+  "p90_de": 2.3,
+  "chroma_spread": 11.9,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.1309,
+    0.4685,
+    -0.0861,
+    -0.6013,
+    1.3717,
+    0.221,
+    1.8031,
+    -1.5083,
+    0.5146
+   ],
+   [
+    0.1004,
+    0.7321,
+    -0.181,
+    -0.6548,
+    1.4989,
+    0.4389,
+    1.1578,
+    -1.1732,
+    0.8949
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
   "model": "Canon EOS RP",
   "aliases": [],
   "sample": "EOS_RP__Canon_EOS_RP_CRAW_ISO_100_crop_nodual.CR3",
@@ -1820,6 +1976,45 @@
  },
  {
   "make": "Canon",
+  "model": "Canon PowerShot G1 X Mark III",
+  "aliases": [],
+  "sample": "canon_g1_x_mk3.cr2",
+  "sha256": "e5125242c4c27e18859e79c2ed654dc1838c9fb378335b702aee319c2c19f80b",
+  "blocks": 490,
+  "median_de": 1.48,
+  "p90_de": 2.66,
+  "chroma_spread": 4.6,
+  "rejected": "too little colour in the scene"
+ },
+ {
+  "make": "Canon",
+  "model": "Canon PowerShot G1 X Mark III",
+  "aliases": [],
+  "sample": "canon_g1_x_mk3_pic2.cr2",
+  "sha256": "40eff245bf7b97cf0502f2e8febec4abc400908816888e5d548b194786f5d5df",
+  "blocks": 499,
+  "median_de": 2.54,
+  "p90_de": 7.5,
+  "chroma_spread": 17.3,
+  "illuminants": [
+   20
+  ],
+  "matrices": [
+   [
+    1.0676,
+    -0.1259,
+    -0.2042,
+    0.1766,
+    0.6384,
+    0.2093,
+    0.4589,
+    -0.2877,
+    0.6958
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
   "model": "Canon PowerShot G5 X Mark II",
   "aliases": [],
   "sample": "PowerShot_G5_X_Mark_II__Canon_-_PowerShot_G5_X_Mark_II_-_CRAW_(3:2).CR3",
@@ -1907,6 +2102,57 @@
   "p90_de": 2.88,
   "chroma_spread": 5.7,
   "rejected": "too little colour in the scene"
+ },
+ {
+  "make": "Canon",
+  "model": "Canon PowerShot G7 X Mark III",
+  "aliases": [],
+  "sample": "canon_g7_x_mk3_pic1.cr3",
+  "sha256": "02fa11d6f42af73dd9fe8225de8de7365685d4f47a9f6492ac886a1da0b3c569",
+  "blocks": 365,
+  "median_de": 4.07,
+  "p90_de": 7.62,
+  "chroma_spread": 35.0,
+  "rejected": "matrix does not reproduce the camera JPEG"
+ },
+ {
+  "make": "Canon",
+  "model": "Canon PowerShot G7 X Mark III",
+  "aliases": [],
+  "sample": "canon_g7_x_mk3_pic2.cr3",
+  "sha256": "d5a56385a9996e4246bf01af029912471f0f6232f27b1d5d4ef197d9ba77ec16",
+  "blocks": 318,
+  "median_de": 2.61,
+  "p90_de": 5.05,
+  "chroma_spread": 20.2,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    1.1766,
+    -0.6273,
+    -0.0682,
+    -0.6472,
+    1.4945,
+    0.1353,
+    0.1207,
+    0.0249,
+    0.4713
+   ],
+   [
+    1.6394,
+    -1.1278,
+    0.0848,
+    -0.7106,
+    1.6395,
+    0.256,
+    0.079,
+    -0.0092,
+    0.655
+   ]
+  ]
  },
  {
   "make": "Canon",

@@ -347,6 +347,57 @@ fn known_camera_cr2_decodes() {
     );
 }
 
+const G1_X_MARK_III: &str = "Canon PowerShot G1 X Mark III";
+
+// cr2_jpeg_matrices
+#[test]
+fn g1_x_mark_iii_takes_its_matrix() {
+    let color = canon(G1_X_MARK_III);
+    assert_eq!(color.calibration_illuminant, [Some(20), None]);
+    assert!(color.color_matrix[0].is_some() && color.color_matrix[1].is_none());
+}
+
+// cr2_jpeg_matrices_white
+#[test]
+fn g1_x_mark_iii_matrix_keeps_white_neutral() {
+    let color = canon(G1_X_MARK_III);
+    let cm = color.color_matrix[0].expect("D55 matrix");
+    let white = chroma::temperature_tint_to_xy(5503.0, 0.0);
+    let neutral = chroma::mul_vec(&matrix(cm), chroma::xy_to_xyz(white));
+    assert!(neutral.iter().all(|&v| v > 0.0), "{neutral:?}");
+    let shot = DngColor {
+        as_shot_neutral: Some(neutral),
+        ..color
+    };
+    let t = as_shot_transform(&shot).unwrap().white_balance.temperature;
+    assert!((t - 5503.0).abs() <= 0.02 * 5503.0, "{t} K");
+}
+
+// cr2_jpeg_camera_decodes
+#[test]
+fn g1_x_mark_iii_cr2_decodes() {
+    let mut spec = spec(Some("Canon"), Some(G1_X_MARK_III));
+    let mut data = vec![7u16; 2560];
+    data[0] = -4i16 as u16;
+    data[71..75].copy_from_slice(&[1361, 1024, 1024, 1333]);
+    spec.color_data = Some(data);
+    spec.color_data_type = 7;
+    let bytes = cr2(&spec);
+    let image = read_raw(&bytes, &ImageBudget::default()).expect("G1 X Mark III CR2 reads");
+    assert!(image.color.as_shot_neutral.is_some());
+    let source = match decode_raw_source(&bytes, &ImageBudget::default()) {
+        Ok(source) => source,
+        Err(PsdError::Unsupported(why)) => panic!("refused: {why}"),
+        Err(e) => panic!("{e}"),
+    };
+    let expected = as_shot_transform(&image.color).unwrap().white_balance;
+    assert_eq!(source.as_shot, expected);
+    assert!(
+        (2000.0..=12000.0).contains(&expected.temperature),
+        "{expected:?}"
+    );
+}
+
 #[test]
 fn cr2_corpus_colour_when_present() {
     let Some(root) = std::env::var_os("PICTURA_RAW_CORPUS") else {
@@ -364,7 +415,7 @@ fn cr2_corpus_colour_when_present() {
         let bytes = std::fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         let image = read_raw(&bytes, &ImageBudget::default())
             .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-        let known = image.color.color_matrix.iter().all(Option::is_some);
+        let known = image.color.color_matrix.iter().any(Option::is_some);
         let decoded = decode_raw_source(&bytes, &ImageBudget::default());
         if known {
             let source = decoded.unwrap_or_else(|e| panic!("{}: {e}", path.display()));

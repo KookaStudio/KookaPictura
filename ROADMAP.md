@@ -548,7 +548,14 @@ gaps are the CS6 Extended 3D object and camera tools.
       pair; the RP and R50 spectral rows stay, checked against Canon's own
       white-balance presets (#1579). `scripts/fit-camera-jpeg-matrices.py`,
       `crates/pictura-codec/src/dng/camera_jpeg_matrices.rs`.
-- [ ] Colour for the EOS R8 Mark II and the remaining CR3 bodies (#1583)
+- [x] **Canon colour, remaining bodies** — the EOS R8 Mark II opens with
+      colour, and the EOS M6 Mark II and PowerShot G7 X Mark III trade their
+      same-sensor proxies for their own fits, all against their own camera
+      JPEGs from owner-supplied samples; the fit script reads CR2, so the
+      PowerShot G1 X Mark III (a CR2 body) opens with a D55 matrix, and CR2
+      colour data stored as bytes now gives the as-shot white balance
+      (#1583). `scripts/fit-camera-jpeg-matrices.py`,
+      `crates/pictura-codec/src/dng/camera_jpeg_matrices.rs`, `cr2.rs`.
 - [ ] Every Nikon camera opens with colour: verify each layout, colour sources for ~70 bodies, recent models first (#1498)
 - [x] **DNG output** — Save Image… in the raw open's Pictura Raw dialog writes
       a mosaic DNG (lossless-JPEG tiles) or, with Convert to Linear Image, a
