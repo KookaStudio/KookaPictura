@@ -4,6 +4,17 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Canon CR3, #1474** (OpenSpec change `vendor-raw-cr3`, archived;
+  `codec/vendor-raw-containers`, `codec/camera-matrices`, `document/raw-open`
+  modified). Owner chose an open, attributed port of LibRaw 0.22.1's CRX
+  decoder (`dng/crx.rs`, `crx_lines.rs`, `crx_wavelet.rs`; LGPL-2.1 side of
+  the dual licence). `dng/cr3.rs`: ISO box walk, largest CRAW track, first
+  sample (bursts / Dual Pixel: main image), CMT1 IFD0, CMT3 sensor info, as-
+  shot WB from the CTMD track's type-8 maker note (CR2 ColorData layouts).
+  Encoding 1 refused; rounded lines ported but unobserved. Bit-exact vs
+  LibRaw (rawpy) on 52 raw.pixls.us samples, 29 bodies, kept in
+  ~/Downloads/cr3-1474. Colour: 8 rawtoaces bodies + aliases; others refused.
+  Active Canon patents recorded in PROVENANCE. Series next: RAF + X-Trans.
 - **Panasonic RW2 colour, #1542** (OpenSpec change `vendor-raw-rw2-colour`,
   archived). Only the DC-GX9 has open spectral data; by owner decision other
   bodies take matrices fitted against their own embedded camera JPEG
@@ -24,7 +35,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   so odd borders shift it. Decode only: no matrix, so File > Open names the
   camera and refuses (colour came with #1542).
   Checked on 432 raw.pixls.us files (headers only for the refused): 12 read,
-  420 refused by RawFormat. Series next: RAF + X-Trans -> CR3.
+  420 refused by RawFormat. Series next: RAF + X-Trans.
 - **Panasonic RW2 compressed codings, #1541** (OpenSpec change
   `vendor-raw-rw2-codings`, archived). Owner changed the provenance rule for
   this format: `dng/rw2_decode.rs` is an open, attributed port of rawspeed

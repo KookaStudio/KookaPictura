@@ -1,12 +1,14 @@
 //! The camera raw entry point (#399): names a container by its signature and
-//! reads any supported one (DNG, Canon CR2, Nikon NEF, Sony ARW, Olympus ORF,
-//! Panasonic RW2) into the same normalized CFA image as `read_dng`.
+//! reads any supported one (DNG, Canon CR2 and CR3, Nikon NEF, Sony ARW,
+//! Olympus ORF, Panasonic RW2) into the same normalized CFA image as `read_dng`.
 //! Also the helpers the TIFF-based vendor containers share.
 
 use super::camera_matrices::CAMERAS;
 use super::levels::Area;
 use super::tiff::{Entry, Ifd, Tiff};
-use super::{arw, cr2, nef, orf, read_dng, rw2, to_usize, DngColor, DngImage, Tags, DNG_VERSION};
+use super::{
+    arw, cr2, cr3, nef, orf, read_dng, rw2, to_usize, DngColor, DngImage, Tags, DNG_VERSION,
+};
 use crate::error::PsdError;
 use crate::probe::ImageBudget;
 
@@ -18,6 +20,7 @@ const MAKER_NOTE: u16 = 0x927C;
 pub enum RawFormat {
     Dng,
     Cr2,
+    Cr3,
     Nef,
     Arw,
     Orf,
@@ -29,6 +32,9 @@ pub enum RawFormat {
 pub fn sniff_raw(bytes: &[u8]) -> Option<RawFormat> {
     if cr2::is_cr2(bytes) {
         return Some(RawFormat::Cr2);
+    }
+    if cr3::is_cr3(bytes) {
+        return Some(RawFormat::Cr3);
     }
     if orf::is_orf(bytes) {
         return Some(RawFormat::Orf);
@@ -50,7 +56,7 @@ pub fn sniff_raw(bytes: &[u8]) -> Option<RawFormat> {
 /// IFD0's entry table (and, for a NEF or an ARW, its `Make` value) is read, so the
 /// prefix need not hold the other values.
 pub fn sniff_raw_prefix(prefix: &[u8]) -> bool {
-    if cr2::is_cr2(prefix) || orf::is_orf(prefix) || rw2::is_rw2(prefix) {
+    if cr2::is_cr2(prefix) || cr3::is_cr3(prefix) || orf::is_orf(prefix) || rw2::is_rw2(prefix) {
         return true;
     }
     Tiff::parse(prefix).is_ok_and(|(tiff, first)| {
@@ -64,6 +70,7 @@ pub fn read_raw(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, PsdError
     match sniff_raw(bytes) {
         Some(RawFormat::Dng) => read_dng(bytes, budget),
         Some(RawFormat::Cr2) => cr2::read_cr2(bytes, budget),
+        Some(RawFormat::Cr3) => cr3::read_cr3(bytes, budget),
         Some(RawFormat::Nef) => nef::read_nef(bytes, budget),
         Some(RawFormat::Arw) => arw::read_arw(bytes, budget),
         Some(RawFormat::Orf) => orf::read_orf(bytes, budget),
