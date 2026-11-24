@@ -4,6 +4,14 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Canon white level, #1587** (OpenSpec change
+  `canon-white-precision-ceiling`, archived; `codec/vendor-raw-containers`
+  modified). The issue's premise was wrong: on 70 Canon CR2/CR3 files blown
+  highlights pile at 16383, above ColorData's Normal/SpecularWhiteLevel
+  (LibRaw agrees), so the precision ceiling stays as the white and the
+  levels are not read. Tests guard it; offsets per version are in the
+  change's design.md. "PowerShot A480.CR2" in the owner's Canon folder is
+  not a CR2 (fails the CR2 corpus test there, as SX150IS would).
 - **Canon colour, remaining bodies, #1583** (OpenSpec change
   `vendor-raw-canon-colour-remaining`, archived; `codec/camera-matrices`
   modified). Owner-supplied samples (~/Downloads/PHOTOSHOP/RAW/Canon) give
@@ -13,7 +21,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   ColorData -4 (8-word records, Daylight at 103, camera-estimated
   temperatures, so D55 only); the codec reads ColorData stored as UNDEFINED
   bytes (`Tiff::words`). Tests use the EOS Ra as the colourless CR3 body.
-  CR2/CR3 white level (precision ceiling, 0.72 on the G1 X III) -> #1587.
+  CR2/CR3 white level -> #1587 (precision ceiling confirmed).
 - **Canon CR3 colour, more bodies, #1579** (OpenSpec change
   `vendor-raw-cr3-colour-r3-v1`, archived; `codec/camera-matrices`
   modified). Owner-supplied samples (dpreview galleries, refuse scripted

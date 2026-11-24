@@ -416,3 +416,19 @@ fn cr2_colour_data_as_bytes() {
         assert!((g - w).abs() <= 1e-9, "{got:?}");
     }
 }
+
+/// Canon files store clipped photosites at the precision ceiling, above the
+/// white levels the colour data records (#1587), so those levels are ignored.
+#[test]
+fn colour_data_white_levels_leave_cr2_samples() {
+    let mut data = color_data(1602, 15, 63, [2000, 1000, 1024, 1500]);
+    data[0x30e] = 4000;
+    data[0x30f] = 4500;
+    let mut spec = Cr2::new(plane_14bit(), 14);
+    let plain = read(&cr2(&spec)).expect("CR2 without colour data reads");
+    spec.color_data = Some(data);
+    let image = read(&cr2(&spec)).expect("CR2 with white levels reads");
+    assert!(image.color.as_shot_neutral.is_some());
+    assert_eq!(image.samples, plain.samples);
+    assert!(image.samples.iter().any(|&v| v > 20000 && v < 65535));
+}

@@ -96,7 +96,9 @@ without it the whole plane SHALL be active. The black level SHALL be the
 mean of the masked photosites left of the active area, or above it when
 there is no left mask, taken separately for each position of the 2 × 2 phase
 measured from the active area's corner, and 0 without a mask. The white level
-SHALL be `2^precision − 1` of the JPEG frame. Samples SHALL be normalized as
+SHALL be `2^precision − 1` of the JPEG frame; the white levels the maker
+note's colour data records (`NormalWhiteLevel`, `SpecularWhiteLevel`) SHALL
+NOT set it, because Canon files store clipped photosites at the ceiling. Samples SHALL be normalized as
 DNG samples are, the CFA SHALL be RGGB at the sensor plane's corner and
 reported from the active corner, shifted by the active area's offset,
 the default crop SHALL be the whole active area, make, model and orientation
@@ -123,6 +125,11 @@ are in the table, and the as-shot neutral from the maker note's colour data.
 
 - **WHEN** `PICTURA_RAW_CORPUS` names a directory holding user-supplied `.CR2` files
 - **THEN** each one reads, its samples are not all equal, and the two positions reported green have means within 5 % of each other
+
+#### Scenario: Colour-data white levels do not set the white [cr2_white_ceiling]
+
+- **WHEN** a 14-bit CR2 carries version-15 colour data recording a normal white level of 4000 and a specular white level of 4500 below most of its samples
+- **THEN** its samples equal those of the same CR2 without colour data, normalized to the 14-bit white
 
 ### Requirement: A NEF's sensor image is found and decoded
 
@@ -654,7 +661,8 @@ The active area SHALL come from the `CMT3` maker note's sensor information
 in the frame's coordinates; without it the whole frame SHALL be active. The
 black level SHALL be the mean of the masked photosites left of the active
 area, else above it, per position of the 2 × 2 phase measured from the
-active corner, and 0 without a mask. The white SHALL be `2^precision − 1`.
+active corner, and 0 without a mask. The white SHALL be `2^precision − 1`;
+the colour data's recorded white levels SHALL NOT set it, as for CR2.
 The CFA SHALL be the header's layout at the frame's corner, reported from the
 active corner. The default crop SHALL be the whole active area. Make, model
 and orientation SHALL come from `CMT1`, else be absent (orientation 1). The
@@ -685,3 +693,8 @@ fail without a panic and without an allocation beyond the image budget.
 
 - **WHEN** `PICTURA_RAW_CORPUS` names a directory holding user-supplied `.CR3` files
 - **THEN** each one reads, its samples are not all equal, and the two positions reported green have means within 5 % of each other
+
+#### Scenario: Colour-data white levels do not set the white [cr3_white_ceiling]
+
+- **WHEN** a 14-bit CR3 carries version-48 colour data in its CTMD recording a normal white level of 4000 and a specular white level of 4500 below most of its samples
+- **THEN** its samples equal those of the same CR3 without CTMD, normalized to the 14-bit white

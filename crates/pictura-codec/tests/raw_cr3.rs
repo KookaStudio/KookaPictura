@@ -668,3 +668,18 @@ fn cr3_colour_corpus_when_present() {
     }
     assert!(seen > 0, "PICTURA_RAW_CORPUS holds no .CR3 file");
 }
+
+/// As for CR2: the colour data's white levels sit below the stored clip
+/// (#1587) and do not set the white.
+#[test]
+fn colour_data_white_levels_leave_cr3_samples() {
+    let mut data = color_data(48, 105, [2000, 1000, 1024, 1500]);
+    data[0x280] = 4000;
+    data[0x281] = 4500;
+    let plain = read(&colour_file("Canon EOS R3", None)).expect("CR3 without CTMD");
+    let image =
+        read(&colour_file("Canon EOS R3", Some(ctmd(&data)))).expect("CR3 with white levels");
+    assert!(image.color.as_shot_neutral.is_some());
+    assert_eq!(image.samples, plain.samples);
+    assert!(image.samples.iter().any(|&v| v > 20000 && v < 65535));
+}

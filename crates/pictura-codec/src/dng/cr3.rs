@@ -204,9 +204,10 @@ fn pattern(cfa: u32, area: Area) -> Vec<u8> {
 }
 
 /// Reads a CR3's main sensor plane, normalized and cropped to its active area.
-// ponytail: white is the frame's precision ceiling, not the camera's
-// saturation (ColorData's per-version white levels are not read), and the
-// black is one mean per CFA position; as for CR2.
+// White is the frame's precision ceiling: Canon files store clipped
+// photosites there, above the white levels ColorData records, which are
+// not read (#1587).
+// ponytail: the black is one mean per CFA position; as for CR2.
 pub(super) fn read_cr3(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, PsdError> {
     if !is_cr3(bytes) {
         return Err(invalid("not a CR3 header"));
