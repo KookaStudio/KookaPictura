@@ -77,5 +77,6 @@ None.
   two device-free backend test binaries.
 - `.github/workflows/ci.yml`: the Windows renderer step splits its library run
   from the two integration binaries, so the library tests keep running without
-  the feature while the binaries are compiled with it.
+  the feature while the binaries are compiled with `gpu` alone (not
+  `software-gpu`, which would accept WARP's CPU device).
 - No new dependency. No `.psd`, docs or user-visible change.

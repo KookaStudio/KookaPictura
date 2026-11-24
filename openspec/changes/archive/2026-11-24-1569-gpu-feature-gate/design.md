@@ -153,9 +153,13 @@ feature gate too, and the `gpu` nextest profile's filter gains
 `binary(backend_pin) | binary(backend_cpu)` so they keep running in the
 `gpu-parity` job. The Windows renderer step keeps its library run feature-less —
 the WARP device cannot survive the full compositor validation, so the gated lib
-tests must stay out of it — and passes `--features software-gpu` only to the two
-integration binaries. Nothing is dropped, only moved to a command that compiles
-the feature.
+tests must stay out of it — and compiles the two integration binaries with
+`--features gpu` alone. `software-gpu` must not be used there: it makes the probe
+accept WARP's CPU-type device, and WARP then loses it mid-validation, which is
+exactly why those tests assert the no-acceptable-device path. With `gpu` alone
+they keep the pre-change device-free behaviour (the first CI run with
+`software-gpu` failed `late_pin_is_refused_after_resolution` this way). Nothing
+is dropped, only moved to a command that compiles the feature.
 
 ### D6a — Feature unification, and which build proves the win
 

@@ -302,11 +302,12 @@ jobs:
 
       # The GPU-gated library tests stay out of the WARP run (the full compositor
       # validation loses the device there); the two device-free backend binaries
-      # are compiled with the feature that makes them non-empty.
+      # need the feature to compile but must not accept the WARP software device,
+      # so they run with `gpu` alone — the same device-free behaviour as before.
       - name: Test
         run: |
           cargo test -p pictura-render --lib
-          cargo test -p pictura-render --test backend_pin --test backend_cpu --features software-gpu
+          cargo test -p pictura-render --test backend_pin --test backend_cpu --features gpu
 
       # WARP is the runner's only DX12 adapter. The software-gpu feature lets
       # the device come up; the full compositor validation loses the WARP

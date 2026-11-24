@@ -28,7 +28,7 @@
 ## 4. CI and test profile
 
 - [x] 4.1 Add `binary(backend_pin) | binary(backend_cpu)` to the `[profile.gpu]` `default-filter` in `.config/nextest.toml` and update its comment to state that `software-gpu` implies `gpu`.
-- [x] 4.2 In `.github/workflows/ci.yml`, split the Windows renderer test step so the library tests stay feature-less and the two gated integration binaries build with the feature: `cargo test -p pictura-render --lib` then `cargo test -p pictura-render --test backend_pin --test backend_cpu --features software-gpu`.
+- [x] 4.2 In `.github/workflows/ci.yml`, split the Windows renderer test step so the library tests stay feature-less and the two gated integration binaries build with `gpu` alone (not `software-gpu`, which would accept WARP's CPU-type device): `cargo test -p pictura-render --lib` then `cargo test -p pictura-render --test backend_pin --test backend_cpu --features gpu`.
 
 ## 5. Verification
 
