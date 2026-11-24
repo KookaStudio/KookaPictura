@@ -25,6 +25,11 @@ std::optional<QPoint> previewAboveOrigin(const PictureView& view);
 /// Document pixels per pixel of the above-layer image.
 int previewAboveScale(const PictureView& view);
 
+/// Whether the live transform belongs to the Move tool's controls box. The
+/// controller combines this with its own idle-box state instead of keeping a
+/// copy of the flag.
+bool controlsSessionActive(const PictureView& view);
+
 /// A layer's document-space rectangle; invalid when `path` does not resolve.
 struct LayerRect {
     int left = 0;

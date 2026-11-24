@@ -117,6 +117,10 @@ pub mod ffi {
         /// Mark whether the live transform belongs to the Move tool's controls
         /// box; such a session is per-gesture and never locks.
         fn transform_set_controls(view: Pin<&mut PictureView>, controls: bool);
+        /// Whether the live transform belongs to the Move tool's controls box.
+        /// The controller derives its predicate from this and its own idle-box
+        /// state instead of keeping a copy.
+        fn transform_controls_session(view: &PictureView) -> bool;
         fn transform_set_width(view: Pin<&mut PictureView>, pct: f64, link: bool) -> bool;
         fn transform_set_height(view: Pin<&mut PictureView>, pct: f64, link: bool) -> bool;
         fn transform_set_angle(view: Pin<&mut PictureView>, degrees: f64) -> bool;

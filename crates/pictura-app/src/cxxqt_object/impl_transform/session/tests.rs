@@ -1,8 +1,7 @@
 use super::super::super::document_session::{TransformMode, TransformSession, TransformTarget};
-use super::super::geometry::{
-    apply_session_transform, pivot_point, rect_center, set_pivot, source_corners, MapParams,
-};
+use super::super::geometry::{apply_session_transform, pivot_point, set_pivot, MapParams};
 use super::super::group::{commit_cost, move_commit_cost, warp_strip_bytes};
+use super::preview::TransformPreview;
 use super::selection::selection_covers;
 use super::*;
 use pictura_core::shape::{outline_in_box, ShapeKind, ShapeOptions};
@@ -39,45 +38,15 @@ fn the_selection_test_agrees_with_the_lift_coverage() {
 }
 
 fn transform_session(rect: PsdRect) -> TransformSession {
-    TransformSession {
-        target: TransformTarget::Layer,
-        path: "0".to_string(),
-        members: vec![("0".to_string(), rect)],
-        orig_rect: rect,
-        scale_x: 1.0,
-        scale_y: 1.0,
-        angle: 0.0,
-        dx: 0.0,
-        dy: 0.0,
-        handle: -1,
-        press_x: 0.0,
-        press_y: 0.0,
-        start: [1.0, 1.0, 0.0, 0.0, 0.0],
-        dragging: false,
-        mode: TransformMode::Free,
-        type_layer: false,
-        quad: None,
-        base_quad: None,
-        free_perspective: false,
-        free_distort: false,
-        free_skew: false,
-        perspective_side: None,
-        start_quad: source_corners(rect),
-        pivot: rect_center(rect),
-        pivot_origin: rect_center(rect),
-        start_pivot: rect_center(rect),
-        show_pivot: true,
-        skew_x: 0.0,
-        skew_y: 0.0,
-        interpolation: Interpolation::Bicubic,
-        warp: None,
-        warp_drag: None,
-        warp_editing: false,
-        warp_post: None,
-        lifted: None,
-        untrimmed: Vec::new(),
-        history_label: "Free Transform".to_string(),
-    }
+    TransformSession::new(
+        TransformTarget::Layer,
+        "0".to_string(),
+        vec![("0".to_string(), rect)],
+        rect,
+        TransformMode::Free,
+        false,
+        "Free Transform",
+    )
 }
 
 #[test]

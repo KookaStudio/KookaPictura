@@ -93,7 +93,6 @@ pub(super) fn gesture_free_distort(
 mod tests {
     use super::super::super::document_session::{TransformMode, TransformSession, TransformTarget};
     use super::super::convex::quad_is_convex;
-    use super::super::geometry::source_corners;
     use super::*;
     use pictura_core::PsdRect;
 
@@ -107,46 +106,18 @@ mod tests {
     }
 
     fn distort_session() -> TransformSession {
-        let corners = source_corners(rect100x50());
-        TransformSession {
-            target: TransformTarget::Layer,
-            path: "0".to_string(),
-            members: vec![("0".to_string(), rect100x50())],
-            orig_rect: rect100x50(),
-            scale_x: 1.0,
-            scale_y: 1.0,
-            angle: 0.0,
-            dx: 0.0,
-            dy: 0.0,
-            handle: -1,
-            press_x: 0.0,
-            press_y: 0.0,
-            start: [1.0, 1.0, 0.0, 0.0, 0.0],
-            dragging: true,
-            mode: TransformMode::Distort,
-            type_layer: false,
-            quad: Some(corners),
-            base_quad: None,
-            free_perspective: false,
-            free_distort: false,
-            free_skew: false,
-            perspective_side: None,
-            start_quad: corners,
-            pivot: (50.0, 25.0),
-            pivot_origin: (50.0, 25.0),
-            start_pivot: (50.0, 25.0),
-            show_pivot: false,
-            skew_x: 0.0,
-            skew_y: 0.0,
-            interpolation: pictura_render::Interpolation::Bicubic,
-            warp: None,
-            warp_drag: None,
-            warp_editing: false,
-            warp_post: None,
-            lifted: None,
-            untrimmed: Vec::new(),
-            history_label: "Free Transform".to_string(),
-        }
+        let mut s = TransformSession::new(
+            TransformTarget::Layer,
+            "0".to_string(),
+            vec![("0".to_string(), rect100x50())],
+            rect100x50(),
+            TransformMode::Distort,
+            false,
+            "Free Transform",
+        );
+        s.dragging = true;
+        s.show_pivot = false;
+        s
     }
 
     #[test]

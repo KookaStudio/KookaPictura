@@ -997,6 +997,110 @@ fn replacement_clears_edit_state() {
     assert!(view.warp_text_original.is_none());
 }
 
+/// A replaced document leaves no preview field behind, including the base
+/// origin the document-scoped clear used to miss.
+#[test]
+fn a_replaced_document_clears_the_preview_fields() {
+    let mut view = view();
+    view.move_base_origin = Some((3, 4));
+    view.move_prepared_layer = "0\n1".to_string();
+    view.transform_preview_level = 2;
+
+    view.replace_document(
+        Some(doc()),
+        History::default(),
+        LayerTarget::only("0"),
+        None,
+    );
+
+    assert!(
+        view.move_base_origin.is_none(),
+        "the base origin follows the outgoing document"
+    );
+    assert!(
+        view.move_prepared_layer.is_empty(),
+        "the prepared-group key names the outgoing layers"
+    );
+    assert_eq!(view.transform_preview_level, 0, "the preview level is back");
+}
+
+/// Cancelling a Move controls gesture through the document session must clear
+/// the above-layer image and the drag flag, not just the fields the Move tool's
+/// own cancel clears: a landing composite reads the flag.
+#[test]
+fn a_cancelled_controls_gesture_clears_the_above_layer() {
+    let mut view = view();
+    let session = view
+        .prepare_transform("0", TransformMode::Free)
+        .expect("the layer transforms");
+    view.session.live.set_transform(session);
+    view.transform_controls = true;
+    let rect = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: 2,
+        right: 2,
+    };
+    view.move_above = Some(cxx_qt_lib::QImage::default());
+    view.move_above_origin = Some((1, 2));
+    view.move_above_scale = 4;
+    view.move_above_presented = Some((2, rect));
+    view.move_drag_active = true;
+    view.move_base_origin = Some((3, 4));
+    let original = view.session.doc.as_ref().expect("document").layers[0].clone();
+    view.mask_move_baseline = Some(("0".to_string(), original));
+
+    let _ = view.cancel_active_sessions();
+
+    assert!(!view.has_active_session(), "the gesture is gone");
+    assert!(
+        !view.transform_controls,
+        "the session's controls flag goes with it"
+    );
+    assert!(view.move_above.is_none(), "the above-layer image is stale");
+    assert!(view.move_above_origin.is_none(), "its origin is stale");
+    assert_eq!(view.move_above_scale, 1, "the overlay scale is back");
+    assert!(
+        view.move_above_presented.is_none(),
+        "the presented key named the outgoing view"
+    );
+    assert!(
+        !view.move_drag_active,
+        "a landing composite must not be told a drag owns the canvas"
+    );
+    assert!(
+        view.move_base_origin.is_none(),
+        "the base origin goes with the rest"
+    );
+    assert!(
+        view.mask_move_baseline.is_none(),
+        "the mask-move baseline named the outgoing layer"
+    );
+}
+
+/// A session carries the pre-trim layer extent, so cancelling it restores the
+/// extent a begin trimmed: a trimmed layer would clip later filters.
+#[test]
+fn a_cancelled_transform_restores_the_untrimmed_extent() {
+    let mut view = view_with_trimmable_layer();
+    let before = view.session.doc.as_ref().expect("document").layers[0].rect;
+    let session = view
+        .prepare_transform("0", TransformMode::Free)
+        .expect("the layer transforms");
+    let trimmed = view.session.doc.as_ref().expect("document").layers[0].rect;
+    assert_ne!(trimmed, before, "the begin trimmed the layer");
+    view.session.live.set_transform(session);
+
+    let _ = view.cancel_active_sessions();
+
+    assert!(!view.has_active_session(), "the session is gone");
+    assert_eq!(
+        view.session.doc.as_ref().expect("document").layers[0].rect,
+        before,
+        "the cancel restored the untrimmed extent"
+    );
+}
+
 #[test]
 fn returning_to_the_saved_state_clears_dirty() {
     let mut view = view();
