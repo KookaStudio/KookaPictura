@@ -19,6 +19,9 @@ pub use contour::{contour, contour_within};
 
 mod blur;
 
+mod clip;
+pub use clip::clip_selection_shape_to_canvas;
+
 mod magnetic;
 pub use magnetic::{EdgeMap, EdgePeak, OwnedTileFetch};
 

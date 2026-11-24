@@ -23,6 +23,13 @@ pub mod ffi {
     }
 
     #[namespace = "pictura"]
+    struct SelectionClipResult {
+        valid: bool,
+        loop_lengths: Vec<u32>,
+        points: Vec<f64>,
+    }
+
+    #[namespace = "pictura"]
     extern "Rust" {
         /// Capture the current selection as the origin of a move drag; false without one.
         fn begin_selection_move(view: Pin<&mut PictureView>) -> bool;
@@ -122,6 +129,14 @@ pub mod ffi {
 
         /// Whether `(x1, y1)` lies within `radius` of `(x0, y0)`.
         fn selection_within_radius(x0: f64, y0: f64, x1: f64, y1: f64, radius: f64) -> bool;
+
+        /// Clip point-count-prefixed selection loops to a canvas in the engine.
+        fn selection_clip_shape_to_canvas(
+            loop_lengths: &[u32],
+            points: &[f64],
+            canvas_width: f64,
+            canvas_height: f64,
+        ) -> SelectionClipResult;
 
         /// Save into `target` (`new`, `alpha:<index>`, `mask:<path>`) with `mode`.
         fn save_selection_to(

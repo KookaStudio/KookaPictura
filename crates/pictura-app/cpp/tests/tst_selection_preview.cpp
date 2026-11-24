@@ -20,7 +20,10 @@
 #include <QtGui/QPolygonF>
 #include <QtWidgets/QApplication>
 
+#include <algorithm>
 #include <array>
+#include <cmath>
+#include <initializer_list>
 #include <memory>
 #include <set>
 #include <utility>
@@ -88,6 +91,246 @@ bool touchesBorder(const QPolygonF& loop)
     }
     return false;
 }
+
+constexpr double kTopologyTolerance = 1e-6;
+
+QList<QPolygonF> qtClipSelectionShapeToCanvas(const QList<QPolygonF>& loops, const QSize& canvas)
+{
+    QList<QPolygonF> out;
+    if (canvas.isEmpty()) {
+        return loops;
+    }
+    const QRectF area(0.0, 0.0, canvas.width(), canvas.height());
+    for (const QPolygonF& loop : loops) {
+        if (loop.size() < 3) {
+            out << loop;
+            continue;
+        }
+        const QRectF bounds = loop.boundingRect();
+        if (bounds.left() >= area.left() && bounds.right() <= area.right()
+            && bounds.top() >= area.top() && bounds.bottom() <= area.bottom()) {
+            out << loop;
+            continue;
+        }
+        if (bounds.right() < area.left() || bounds.left() > area.right()
+            || bounds.bottom() < area.top() || bounds.top() > area.bottom()) {
+            continue;
+        }
+        QPainterPath shape;
+        shape.addPolygon(loop);
+        QPainterPath areaPath;
+        areaPath.addRect(area);
+        const QList<QPolygonF> parts = shape.intersected(areaPath).toSubpathPolygons();
+        if (parts.isEmpty()) {
+            out << loop;
+            continue;
+        }
+        for (const QPolygonF& part : parts) {
+            if (part.size() >= 2) {
+                out << part;
+            }
+        }
+    }
+    return out;
+}
+
+bool samePolygonExact(const QPolygonF& a, const QPolygonF& b)
+{
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (qsizetype i = 0; i < a.size(); ++i) {
+        if (a.at(i) != b.at(i)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool sameLoopsExact(const QList<QPolygonF>& a, const QList<QPolygonF>& b)
+{
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (qsizetype i = 0; i < a.size(); ++i) {
+        if (!samePolygonExact(a.at(i), b.at(i))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+double pointDistance(const QPointF& a, const QPointF& b)
+{
+    return std::hypot(a.x() - b.x(), a.y() - b.y());
+}
+
+double pointSegmentDistance(const QPointF& point, const QPointF& a, const QPointF& b)
+{
+    const double dx = b.x() - a.x();
+    const double dy = b.y() - a.y();
+    const double length_squared = dx * dx + dy * dy;
+    if (length_squared <= kTopologyTolerance * kTopologyTolerance) {
+        return pointDistance(point, a);
+    }
+    const double t = std::clamp(
+        ((point.x() - a.x()) * dx + (point.y() - a.y()) * dy) / length_squared, 0.0, 1.0);
+    return pointDistance(point, QPointF(a.x() + t * dx, a.y() + t * dy));
+}
+
+QPolygonF simplifiedLoop(const QPolygonF& loop)
+{
+    QPolygonF clean;
+    for (const QPointF& point : loop) {
+        if (clean.isEmpty() || pointDistance(clean.last(), point) > kTopologyTolerance) {
+            clean << point;
+        }
+    }
+    if (clean.size() > 1 && pointDistance(clean.first(), clean.last()) <= kTopologyTolerance) {
+        clean.pop_back();
+    }
+    bool changed = true;
+    while (changed && clean.size() > 3) {
+        changed = false;
+        for (qsizetype i = 0; i < clean.size(); ++i) {
+            const QPointF previous = clean.at((i + clean.size() - 1) % clean.size());
+            const QPointF current = clean.at(i);
+            const QPointF next = clean.at((i + 1) % clean.size());
+            const double dot = (previous.x() - current.x()) * (next.x() - current.x())
+                + (previous.y() - current.y()) * (next.y() - current.y());
+            if (dot <= kTopologyTolerance
+                && pointSegmentDistance(current, previous, next) <= kTopologyTolerance) {
+                clean.removeAt(i);
+                changed = true;
+                break;
+            }
+        }
+    }
+    return clean;
+}
+
+struct BoundarySegment {
+    QPointF a;
+    QPointF b;
+};
+
+double crossProduct(const QPointF& a, const QPointF& b)
+{
+    return a.x() * b.y() - a.y() * b.x();
+}
+
+bool segmentIntersection(const QPointF& a, const QPointF& b, const QPointF& c, const QPointF& d,
+                         QPointF& point)
+{
+    const QPointF r = b - a;
+    const QPointF s = d - c;
+    const double denominator = crossProduct(r, s);
+    if (std::abs(denominator) <= 1e-12) {
+        return false;
+    }
+    const QPointF offset = c - a;
+    const double t = crossProduct(offset, s) / denominator;
+    const double u = crossProduct(offset, r) / denominator;
+    if (t <= 0.0 || t >= 1.0 || u <= 0.0 || u >= 1.0) {
+        return false;
+    }
+    point = a + r * t;
+    return true;
+}
+
+QList<BoundarySegment> boundarySegments(const QPolygonF& loop)
+{
+    const QPolygonF clean = simplifiedLoop(loop);
+    if (clean.size() < 2) {
+        return {};
+    }
+    const qsizetype edge_count = clean.size() == 2 ? 1 : clean.size();
+    QList<QList<QPointF>> split_points;
+    for (qsizetype i = 0; i < edge_count; ++i) {
+        split_points << QList<QPointF>{clean.at(i), clean.at((i + 1) % clean.size())};
+    }
+    for (qsizetype i = 0; i < edge_count; ++i) {
+        for (qsizetype j = i + 1; j < edge_count; ++j) {
+            if (j == i + 1 || (i == 0 && j == edge_count - 1)) {
+                continue;
+            }
+            QPointF point;
+            if (segmentIntersection(clean.at(i), clean.at((i + 1) % clean.size()),
+                                    clean.at(j), clean.at((j + 1) % clean.size()), point)) {
+                split_points[i].append(point);
+                split_points[j].append(point);
+            }
+        }
+    }
+
+    QList<BoundarySegment> out;
+    for (const QList<QPointF>& points : split_points) {
+        QList<QPointF> ordered = points;
+        const QPointF start = ordered.first();
+        const QPointF edge = ordered.last() - start;
+        const double length_squared = edge.x() * edge.x() + edge.y() * edge.y();
+        std::sort(ordered.begin(), ordered.end(), [&](const QPointF& a, const QPointF& b) {
+            const QPointF da = a - start;
+            const QPointF db = b - start;
+            return (da.x() * edge.x() + da.y() * edge.y())
+                < (db.x() * edge.x() + db.y() * edge.y());
+        });
+        QPolygonF unique;
+        for (const QPointF& point : ordered) {
+            if (unique.isEmpty() || pointDistance(unique.last(), point) > kTopologyTolerance) {
+                unique << point;
+            }
+        }
+        if (length_squared > 0.0) {
+            for (qsizetype i = 1; i < unique.size(); ++i) {
+                out << BoundarySegment{unique.at(i - 1), unique.at(i)};
+            }
+        }
+    }
+    return out;
+}
+
+bool sameSegment(const BoundarySegment& a, const BoundarySegment& b)
+{
+    return (pointDistance(a.a, b.a) <= kTopologyTolerance
+               && pointDistance(a.b, b.b) <= kTopologyTolerance)
+        || (pointDistance(a.a, b.b) <= kTopologyTolerance
+            && pointDistance(a.b, b.a) <= kTopologyTolerance);
+}
+
+bool sameOutline(const QList<QPolygonF>& a, const QList<QPolygonF>& b)
+{
+    QList<BoundarySegment> left;
+    QList<BoundarySegment> right;
+    for (const QPolygonF& loop : a) {
+        left << boundarySegments(loop);
+    }
+    for (const QPolygonF& loop : b) {
+        right << boundarySegments(loop);
+    }
+    if (left.size() != right.size()) {
+        return false;
+    }
+    QList<bool> matched;
+    matched.reserve(right.size());
+    for (qsizetype i = 0; i < right.size(); ++i) {
+        matched << false;
+    }
+    for (const BoundarySegment& segment : left) {
+        bool found = false;
+        for (qsizetype i = 0; i < right.size(); ++i) {
+            if (!matched.at(i) && sameSegment(segment, right.at(i))) {
+                matched[i] = true;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            return false;
+        }
+    }
+    return true;
+}
 } // namespace
 
 class SelectionPreviewTest : public QObject {
@@ -101,6 +344,11 @@ private slots:
     void clipToCanvasKeepsDegenerateLoops();
     void clipToCanvasKeepsATraceThatEnclosesNothing();
     void clipToCanvasClosesASelfOverlappingShape();
+    void outlineComparisonToleranceHasTeeth();
+    void clipToCanvasKeepsNearTouchesSeparate();
+    void clipToCanvasHandlesTangentDegeneracies();
+    void clipDifferentialCorpusMatchesQt();
+    void clipParityIgnoresLoopOrder();
     void marqueePastTheEdgeClosesAlongTheBorder();
     void ellipticalMarqueePastTheEdgeClosesAlongTheBorder();
     void lassoPastTheEdgeClosesAlongTheBorder();
@@ -167,9 +415,11 @@ pictura::SelectionOptions* SelectionPreviewTest::selectOptions(Fixture& f, pictu
 
 void SelectionPreviewTest::clipToCanvasClosesAlongTheBorder()
 {
-    const QList<QPolygonF> clipped = pictura::clipSelectionShapeToCanvas(
-        {QPolygonF(QRectF(50, 50, 50, 50))}, QSize(kCanvas, kCanvas));
+    const QList<QPolygonF> input{QPolygonF(QRectF(50, 50, 50, 50))};
+    const QList<QPolygonF> clipped = pictura::clipSelectionShapeToCanvas(input, QSize(kCanvas, kCanvas));
+    const QList<QPolygonF> reference = qtClipSelectionShapeToCanvas(input, QSize(kCanvas, kCanvas));
     QCOMPARE(int(clipped.size()), 1);
+    QVERIFY(sameOutline(clipped, reference));
     const QPolygonF& loop = clipped.first();
     // The run along the border and the corner are part of the outline.
     QVERIFY(hasVertex(loop, QPointF(kCanvas, 50)));
@@ -181,9 +431,11 @@ void SelectionPreviewTest::clipToCanvasClosesAlongTheBorder()
 void SelectionPreviewTest::clipToCanvasLeavesInnerShapesAlone()
 {
     const QPolygonF shape(QRectF(10, 10, 20, 20));
-    const QList<QPolygonF> clipped = pictura::clipSelectionShapeToCanvas({shape},
-                                                                         QSize(kCanvas, kCanvas));
+    const QList<QPolygonF> input{shape};
+    const QList<QPolygonF> clipped = pictura::clipSelectionShapeToCanvas(input, QSize(kCanvas, kCanvas));
+    const QList<QPolygonF> reference = qtClipSelectionShapeToCanvas(input, QSize(kCanvas, kCanvas));
     QCOMPARE(int(clipped.size()), 1);
+    QVERIFY(sameLoopsExact(clipped, reference));
     QCOMPARE(int(clipped.first().size()), int(shape.size()));
     for (qsizetype i = 0; i < shape.size(); ++i) {
         QVERIFY(clipped.first().at(i) == shape.at(i));
@@ -192,21 +444,29 @@ void SelectionPreviewTest::clipToCanvasLeavesInnerShapesAlone()
 
 void SelectionPreviewTest::clipToCanvasDropsOuterShapes()
 {
-    const QList<QPolygonF> clipped = pictura::clipSelectionShapeToCanvas(
-        {QPolygonF(QRectF(80, 80, 20, 20))}, QSize(kCanvas, kCanvas));
+    const QList<QPolygonF> input{QPolygonF(QRectF(80, 80, 20, 20))};
+    const QList<QPolygonF> clipped = pictura::clipSelectionShapeToCanvas(input, QSize(kCanvas, kCanvas));
+    const QList<QPolygonF> reference = qtClipSelectionShapeToCanvas(input, QSize(kCanvas, kCanvas));
     QVERIFY(clipped.isEmpty());
+    QVERIFY(sameLoopsExact(clipped, reference));
 }
 
 void SelectionPreviewTest::clipToCanvasKeepsDegenerateLoops()
 {
-    // A trace that has not closed yet is one point; it must not disappear.
     QPolygonF point;
     point << QPointF(5, 5);
-    const QList<QPolygonF> clipped = pictura::clipSelectionShapeToCanvas({point},
-                                                                         QSize(kCanvas, kCanvas));
-    QCOMPARE(int(clipped.size()), 1);
-    QCOMPARE(int(clipped.first().size()), 1);
-    QVERIFY(clipped.first().first() == point.first());
+    QPolygonF segment;
+    segment << QPointF(5, 5) << QPointF(90, 5);
+    const QList<QPolygonF> input{QPolygonF{}, point, segment};
+    const QList<QPolygonF> clipped = pictura::clipSelectionShapeToCanvas(input, QSize(kCanvas, kCanvas));
+    const QList<QPolygonF> reference = qtClipSelectionShapeToCanvas(input, QSize(kCanvas, kCanvas));
+    QCOMPARE(int(clipped.size()), int(input.size()));
+    QVERIFY(sameLoopsExact(clipped, reference));
+    QCOMPARE(int(clipped.at(0).size()), 0);
+    QCOMPARE(int(clipped.at(1).size()), 1);
+    QVERIFY(clipped.at(1).first() == point.first());
+    QCOMPARE(int(clipped.at(2).size()), int(segment.size()));
+    QVERIFY(samePolygonExact(clipped.at(2), segment));
 }
 
 void SelectionPreviewTest::clipToCanvasKeepsATraceThatEnclosesNothing()
@@ -216,9 +476,11 @@ void SelectionPreviewTest::clipToCanvasKeepsATraceThatEnclosesNothing()
     QPolygonF stroke;
     stroke << QPointF(20, 20) << QPointF(90, 20) << QPointF(90, 20) << QPointF(60, 20)
            << QPointF(20, 20);
-    const QList<QPolygonF> clipped = pictura::clipSelectionShapeToCanvas({stroke},
-                                                                         QSize(kCanvas, kCanvas));
+    const QList<QPolygonF> input{stroke};
+    const QList<QPolygonF> clipped = pictura::clipSelectionShapeToCanvas(input, QSize(kCanvas, kCanvas));
+    const QList<QPolygonF> reference = qtClipSelectionShapeToCanvas(input, QSize(kCanvas, kCanvas));
     QCOMPARE(int(clipped.size()), 1);
+    QVERIFY(sameLoopsExact(clipped, reference));
     QCOMPARE(int(clipped.first().size()), int(stroke.size()));
     QVERIFY(clipped.first().first() == stroke.first());
 }
@@ -231,11 +493,102 @@ void SelectionPreviewTest::clipToCanvasClosesASelfOverlappingShape()
     QPolygonF shape;
     shape << QPointF(20, 20) << QPointF(90, 20) << QPointF(20, 50) << QPointF(90, 50)
           << QPointF(20, 20);
-    const QList<QPolygonF> clipped = pictura::clipSelectionShapeToCanvas({shape},
-                                                                         QSize(kCanvas, kCanvas));
+    const QList<QPolygonF> input{shape};
+    const QList<QPolygonF> clipped = pictura::clipSelectionShapeToCanvas(input, QSize(kCanvas, kCanvas));
+    const QList<QPolygonF> reference = qtClipSelectionShapeToCanvas(input, QSize(kCanvas, kCanvas));
     QCOMPARE(int(clipped.size()), 1);
+    QVERIFY(sameOutline(clipped, reference));
     QVERIFY(insideCanvas(clipped.first()));
     QVERIFY(touchesBorder(clipped.first()));
+}
+
+void SelectionPreviewTest::outlineComparisonToleranceHasTeeth()
+{
+    const QPolygonF square(QRectF(10, 10, 20, 20));
+    const QPolygonF near = square.translated(QPointF(0.5e-6, 0.5e-6));
+    const QPolygonF far = square.translated(QPointF(2e-6, 0.0));
+    QVERIFY(sameOutline({square}, {near}));
+    QVERIFY(!sameOutline({square}, {far}));
+
+    QPolygonF collinear;
+    collinear << QPointF(10, 10) << QPointF(20, 10) << QPointF(30, 10) << QPointF(30, 30)
+              << QPointF(10, 30) << QPointF(10, 10);
+    QVERIFY(sameOutline({square}, {collinear}));
+}
+
+void SelectionPreviewTest::clipToCanvasKeepsNearTouchesSeparate()
+{
+    QPolygonF first(QPolygonF(QRectF(50, 50, 30, 10)));
+    QPolygonF second(QPolygonF(QRectF(50, 50 + 0.5e-6, 30, 10)));
+    const QList<QPolygonF> input{first, second};
+    const QList<QPolygonF> clipped = pictura::clipSelectionShapeToCanvas(input, QSize(kCanvas, kCanvas));
+    const QList<QPolygonF> reference = qtClipSelectionShapeToCanvas(input, QSize(kCanvas, kCanvas));
+    QCOMPARE(int(clipped.size()), 2);
+    QVERIFY(sameOutline(clipped, reference));
+}
+
+void SelectionPreviewTest::clipToCanvasHandlesTangentDegeneracies()
+{
+    QPolygonF point_tangent;
+    point_tangent << QPointF(-10, 0) << QPointF(0, 0) << QPointF(-5, -10) << QPointF(-10, 0);
+    QPolygonF line_tangent(QPolygonF(QRectF(-10, 0, 10, 10)));
+    const QList<QPolygonF> input{point_tangent, line_tangent};
+    const QList<QPolygonF> clipped = pictura::clipSelectionShapeToCanvas(input, QSize(kCanvas, kCanvas));
+    const QList<QPolygonF> reference = qtClipSelectionShapeToCanvas(input, QSize(kCanvas, kCanvas));
+    QVERIFY(sameLoopsExact(clipped, reference));
+    QVERIFY(sameLoopsExact(clipped, input));
+}
+
+void SelectionPreviewTest::clipDifferentialCorpusMatchesQt()
+{
+    auto polygon = [](std::initializer_list<QPointF> points) {
+        QPolygonF out;
+        for (const QPointF& point : points) {
+            out << point;
+        }
+        return out;
+    };
+    const QPolygonF outer = polygon({QPointF(-10, -10), QPointF(74, -10), QPointF(74, 74),
+                                     QPointF(-10, 74), QPointF(-10, -10)});
+    const QPolygonF hole = polygon({QPointF(-10, 20), QPointF(30, 20), QPointF(30, 40),
+                                    QPointF(-10, 40), QPointF(-10, 20)});
+    const QPolygonF duplicate_close = polygon({QPointF(50, 50), QPointF(60, 50), QPointF(100, 50),
+                                               QPointF(100, 100), QPointF(50, 100),
+                                               QPointF(50, 50), QPointF(50, 50)});
+    QPolygonF point_tangent;
+    point_tangent << QPointF(-10, 0) << QPointF(0, 0) << QPointF(-5, -10) << QPointF(-10, 0);
+    const QList<QList<QPolygonF>> cases{
+        {QPolygonF(QRectF(10, 10, 20, 20)), QPolygonF(QRectF(80, 80, 20, 20))},
+        {outer, hole},
+        {hole, outer},
+        {duplicate_close},
+        {QPolygonF(QRectF(50, 50, 30, 10)), QPolygonF(QRectF(50, 50 + 0.5e-6, 30, 10))},
+        {point_tangent, QPolygonF(QRectF(-10, 0, 10, 10))},
+        {polygon({QPointF(50, 50), QPointF(75, 75), QPointF(100, 100)})},
+        {QPolygonF{}, polygon({QPointF(5, 5)}), polygon({QPointF(5, 5), QPointF(90, 5)})},
+    };
+    for (const QList<QPolygonF>& input : cases) {
+        const QList<QPolygonF> reference = qtClipSelectionShapeToCanvas(input, QSize(kCanvas, kCanvas));
+        const QList<QPolygonF> clipped = pictura::clipSelectionShapeToCanvas(input, QSize(kCanvas, kCanvas));
+        if (sameLoopsExact(reference, input)) {
+            QVERIFY2(sameLoopsExact(clipped, reference), "preserved trace changed");
+        } else {
+            QVERIFY2(sameOutline(clipped, reference), "filled intersection topology changed");
+        }
+    }
+}
+
+void SelectionPreviewTest::clipParityIgnoresLoopOrder()
+{
+    const QPolygonF outer(QPolygonF(QRectF(10, 10, 40, 40)));
+    const QPolygonF hole(QPolygonF(QRectF(20, 20, 20, 20)));
+    const QList<QPolygonF> forward = pictura::clipSelectionShapeToCanvas({outer, hole},
+                                                                         QSize(kCanvas, kCanvas));
+    const QList<QPolygonF> reverse = pictura::clipSelectionShapeToCanvas({hole, outer},
+                                                                         QSize(kCanvas, kCanvas));
+    QVERIFY(sameLoopsExact(forward, {outer, hole}));
+    QVERIFY(sameLoopsExact(reverse, {hole, outer}));
+    QVERIFY(sameOutline(forward, reverse));
 }
 
 void SelectionPreviewTest::marqueePastTheEdgeClosesAlongTheBorder()
