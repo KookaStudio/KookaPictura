@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::cxxqt_object::state::PictureViewRust;
+use pictura_core::{Document, LayerMask};
 
 #[derive(Clone, Debug)]
 pub(super) enum SelectionTarget {
@@ -34,30 +35,12 @@ pub(super) fn document_matches(rust: &PictureViewRust, width: i32, height: i32) 
         .is_some_and(|doc| doc.width == width as u32 && doc.height == height as u32)
 }
 
-pub(super) fn save_selection_target(
-    rust: &mut PictureViewRust,
-    target: SelectionTarget,
-    name: &str,
-    mode: CombineMode,
-) -> Edit {
-    let Some(selection) = rust.session.selection.clone() else {
-        return Edit::None;
-    };
-    save_selection_shape(rust, selection, target, name, mode)
-}
-
 #[cfg(test)]
 pub(super) fn save_selection_channel(rust: &mut PictureViewRust) -> Edit {
-    let Some(selection) = rust.session.selection.clone() else {
+    let Some(selection) = rust.transfer_source("", 0) else {
         return Edit::None;
     };
-    save_selection_shape(
-        rust,
-        selection,
-        SelectionTarget::NewChannel,
-        "",
-        CombineMode::New,
-    )
+    rust.transfer_save(selection, "new", "", CombineMode::New)
 }
 
 pub(super) fn save_selection_shape(

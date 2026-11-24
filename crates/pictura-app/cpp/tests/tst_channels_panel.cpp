@@ -131,6 +131,7 @@ private slots:
     void ctrlAltSubtracts();
     void ctrlShiftAltIntersects();
     void dragLoadsChannel();
+    void closedChannelSourceDropsIgnored();
     void altClickSaveOpensDialog();
     void alphaRowShowsStoredName();
     void modifierClickRecordsOneState();
@@ -148,6 +149,7 @@ private slots:
     void duplicateChannelNewDocument();
     void duplicateChannelInvert();
     void duplicateChannelOntoNewButton();
+    void crossDocumentNewButtonDrop();
     void dragChannelOntoAnotherDocument();
     void dragChannelToDifferentSizeFits();
     void dragChannelInvalidSourceIgnored();
@@ -568,18 +570,57 @@ void ChannelsPanelTest::dragLoadsChannel()
     panel_->refresh();
     QToolButton* load = panel_->findChild<QToolButton*>(QStringLiteral("channelsLoadSelection"));
     QVERIFY(load);
-    QMimeData mime;
-    mime.setData(QStringLiteral("application/x-pictura-channel-row"), QByteArray::number(4));
-    QDragEnterEvent enter(QPoint(0, 0), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+    std::unique_ptr<QMimeData> mime(pictura::makeChannelDragMime(
+        view_, 4, 0, 0x7, QStringLiteral("Hair")));
+    QVERIFY(mime);
+    QDragEnterEvent enter(QPoint(0, 0), Qt::CopyAction, mime.get(), Qt::LeftButton, Qt::NoModifier);
     QCoreApplication::sendEvent(load, &enter);
     QVERIFY(enter.isAccepted());
-    QDropEvent drop(QPointF(0, 0), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+    QDropEvent drop(QPointF(0, 0), Qt::CopyAction, mime.get(), Qt::LeftButton, Qt::NoModifier);
     const int before = view_->history_count();
     QCoreApplication::sendEvent(load, &drop);
     QVERIFY2(drop.isAccepted(), "the Load button did not accept the channel drop");
     QCOMPARE(view_->history_count(), before + 1);
     QVERIFY(view_->has_selection());
     QCOMPARE(view_->selection_coverage(8, 8), 255);
+}
+
+void ChannelsPanelTest::closedChannelSourceDropsIgnored()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("ClosedSource"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* source = window_->activeView();
+    QVERIFY(source);
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(panel_);
+    panel_->setView(source);
+    panel_->refresh();
+    panel_->selectChannelForTest(1);
+    std::unique_ptr<QMimeData> mime(panel_->channelDragMime(1));
+    QVERIFY(mime);
+
+    QVERIFY(window_->newDocument(QStringLiteral("ClosedTarget"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* target = window_->activeView();
+    QVERIFY(target);
+    view_ = target;
+    panel_->setView(target);
+    panel_->refresh();
+    auto* add = panel_->findChild<QToolButton*>(QStringLiteral("channelsNew"));
+    auto* load = panel_->findChild<QToolButton*>(QStringLiteral("channelsLoadSelection"));
+    QVERIFY(add && load);
+    const int channels = target->selection_channel_count();
+    const int history = target->history_count();
+    QVERIFY(!target->has_selection());
+    QVERIFY(window_->closeDocument(0, false));
+
+    QVERIFY2(!dragMimeOver(add, mime.get(), QPoint(1, 1), true),
+             "a closed source is ignored by New Channel");
+    QVERIFY2(!dragMimeOver(load, mime.get(), QPoint(1, 1), true),
+             "a closed source is ignored by Load Selection");
+    QCOMPARE(target->selection_channel_count(), channels);
+    QCOMPARE(target->history_count(), history);
+    QVERIFY(!target->has_selection());
 }
 
 void ChannelsPanelTest::altClickSaveOpensDialog()
@@ -977,11 +1018,13 @@ void ChannelsPanelTest::duplicateChannelInvert()
     QVERIFY(view_ && panel_);
     panel_->setView(view_);
     const QByteArray flat(16 * 16, char(64));
-    QVERIFY(pictura::save_selection_coverage(
+    QVERIFY(pictura::load_selection_coverage(
         *view_,
         ::rust::Slice<const std::uint8_t>(
             reinterpret_cast<const std::uint8_t*>(flat.constData()), flat.size()),
-        16, 16, QStringLiteral("new"), QStringLiteral("Src"), QStringLiteral("replace")));
+        16, 16, false, QStringLiteral("new")));
+    QVERIFY(pictura::save_selection_to(*view_, QStringLiteral("new"), QStringLiteral("Src"),
+                                       QStringLiteral("replace")));
     panel_->refresh();
     panel_->selectChannelForTest(4);
     QVERIFY(applyDuplicateDialog(*window_, [](pictura::DuplicateChannelDialog* dialog) {
@@ -1015,6 +1058,44 @@ void ChannelsPanelTest::duplicateChannelOntoNewButton()
     QCOMPARE(QString(pictura::channels_alpha_name(*view_, 1)), QStringLiteral("Hair copy"));
     QCOMPARE(view_->history_count(), before + 1);
     QCOMPARE(view_->history_label(view_->history_index()), QStringLiteral("Duplicate Channel"));
+}
+
+void ChannelsPanelTest::crossDocumentNewButtonDrop()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("DropSource"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* source = window_->activeView();
+    QVERIFY(source);
+    addNamedAlpha(source, QStringLiteral("Hair"), 2, 2, 8, 8);
+    QVERIFY(window_->newDocument(QStringLiteral("DropTarget"), 16, 16, QStringLiteral("rgb"), 8,
+                                 QStringLiteral("white")));
+    pictura::PictureView* target = window_->activeView();
+    QVERIFY(target);
+    panel_ = window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+    QVERIFY(panel_);
+    panel_->setView(source);
+    panel_->refresh();
+    panel_->selectChannelForTest(4);
+    std::unique_ptr<QMimeData> mime(panel_->channelDragMime(4));
+    QVERIFY(mime);
+    const QByteArray sourceCoverage =
+        coverageBytes(pictura::channel_coverage(*source, QStringLiteral("alpha:0")));
+    const int sourceHistory = source->history_count();
+
+    panel_->setView(target);
+    panel_->refresh();
+    auto* add = panel_->findChild<QToolButton*>(QStringLiteral("channelsNew"));
+    QVERIFY(add);
+    const int before = target->history_count();
+    QVERIFY2(dragMimeOver(add, mime.get(), QPoint(1, 1), true),
+             "cross-document New Channel drop");
+    QCOMPARE(target->selection_channel_count(), 1);
+    QCOMPARE(QString(pictura::channels_alpha_name(*target, 0)), QStringLiteral("Hair copy"));
+    QCOMPARE(coverageBytes(pictura::channel_coverage(*target, QStringLiteral("alpha:0"))),
+             sourceCoverage);
+    QCOMPARE(target->history_count(), before + 1);
+    QCOMPARE(source->selection_channel_count(), 1);
+    QCOMPARE(source->history_count(), sourceHistory);
 }
 
 void ChannelsPanelTest::dragChannelOntoAnotherDocument()
@@ -1109,10 +1190,10 @@ void ChannelsPanelTest::dragChannelInvalidSourceIgnored()
     QVERIFY(bar && bar->count() == 2);
     const int targetChannels = target->selection_channel_count();
     const int targetHistory = target->history_count();
-    std::unique_ptr<QMimeData> mime(pictura::makeChannelDragMime(
-        reinterpret_cast<const void*>(quintptr(1)), 4, 0, 0x7, QStringLiteral("Hair")));
-    QVERIFY(mime);
-    QVERIFY2(!dragMimeOver(bar, mime.get(), bar->tabRect(1).center(), true),
+    QMimeData mime;
+    mime.setData(pictura::kChannelRowMime, QByteArray::number(4));
+    mime.setData(pictura::kChannelSourceMime, QByteArray::number(quintptr(1)));
+    QVERIFY2(!dragMimeOver(bar, &mime, bar->tabRect(1).center(), true),
              "an unknown source is ignored");
     QCOMPARE(window_->activeView(), source);
     QCOMPARE(target->selection_channel_count(), targetChannels);
@@ -1133,14 +1214,9 @@ void ChannelsPanelTest::duplicateChannelAtCapRefused()
     for (int i = 0; i < 53; ++i) {
         QCOMPARE(pictura::channels_new_alpha(*target), i);
     }
-    const QByteArray coverage =
-        coverageBytes(pictura::channel_coverage(*source, QStringLiteral("alpha:0")));
     const int before = target->history_count();
-    QVERIFY(!pictura::duplicate_channel_coverage(
-        *target,
-        ::rust::Slice<const std::uint8_t>(
-            reinterpret_cast<const std::uint8_t*>(coverage.constData()), coverage.size()),
-        16, 16, QStringLiteral("Refused"), false));
+    QVERIFY(!pictura::transfer_duplicate_channel(*target, *source, QStringLiteral("alpha:0"), 0,
+                                                 QStringLiteral("Refused"), false));
     QCOMPARE(target->selection_channel_count(), 53);
     QCOMPARE(target->history_count(), before);
 }

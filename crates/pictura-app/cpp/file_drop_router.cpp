@@ -199,8 +199,9 @@ bool FileDropRouter::routeChannelDrag(QObject* watched, QEvent* event)
     if (!qobject_cast<QTabBar*>(watched) && !qobject_cast<ImageView*>(watched)) {
         return false;
     }
-    const auto* source = static_cast<const PictureView*>(channelDragSource(mime));
-    if (!isOpenView(source)) {
+    const ChannelDrag payload = channelDrag(mime);
+    auto* source = qobject_cast<PictureView*>(payload.sourceGuard.data());
+    if (!source || !isOpenView(source)) {
         drag->ignore();
         return true;
     }
@@ -211,22 +212,14 @@ bool FileDropRouter::routeChannelDrag(QObject* watched, QEvent* event)
         return true;
     }
     if (event->type() == QEvent::Drop) {
-        const ChannelDrag payload = channelDrag(mime);
-        const int width = source->document_width();
-        const int height = source->document_height();
-        const auto coverage =
-            payload.alpha >= 0
-                ? channel_coverage(*source, QStringLiteral("alpha:%1").arg(payload.alpha))
-                : color_row_coverage(*source, payload.row, payload.mask);
-        if (coverage.size() != std::size_t(width) * std::size_t(height)) {
-            drag->ignore();
-            return true;
-        }
+        const QString sourceTarget = payload.alpha >= 0
+            ? QStringLiteral("alpha:%1").arg(payload.alpha)
+            : QStringLiteral("color:%1").arg(payload.row);
         const QString name = payload.name.isEmpty()
             ? tr("Alpha 1 copy")
             : tr("%1 copy").arg(payload.name);
-        const ::rust::Slice<const std::uint8_t> bytes(coverage.data(), coverage.size());
-        if (!duplicate_channel_coverage(*target, bytes, width, height, name, false)) {
+        if (!transfer_duplicate_channel(*target, *source, sourceTarget, payload.mask, name,
+                                        false)) {
             drag->ignore();
             return true;
         }
@@ -248,7 +241,7 @@ bool FileDropRouter::routeSelectionDrag(QObject* watched, QEvent* event)
     if (!qobject_cast<QTabBar*>(watched) && !qobject_cast<ImageView*>(watched)) {
         return false;
     }
-    const auto* source = static_cast<const PictureView*>(selectionDragSource(mime));
+    auto* source = static_cast<PictureView*>(const_cast<void*>(selectionDragSource(mime)));
     if (!isOpenView(source)) {
         drag->ignore();
         return true;
@@ -260,16 +253,8 @@ bool FileDropRouter::routeSelectionDrag(QObject* watched, QEvent* event)
         return true;
     }
     if (event->type() == QEvent::Drop) {
-        const int width = source->document_width();
-        const int height = source->document_height();
-        const auto coverage = selection_coverage_bytes(*source);
-        if (coverage.size() != std::size_t(width) * std::size_t(height)) {
-            drag->ignore();
-            return true;
-        }
-        const ::rust::Slice<const std::uint8_t> bytes(coverage.data(), coverage.size());
-        if (!load_selection_coverage_fit(*target, bytes, width, height, false,
-                                         QStringLiteral("new"))) {
+        if (!transfer_load_selection(*target, *source, QString(), 0, false, true,
+                                     QStringLiteral("new"))) {
             drag->ignore();
             return true;
         }

@@ -4,7 +4,7 @@ use super::*;
 use crate::cxxqt_object::document_session::DocumentSession;
 use crate::cxxqt_object::edit::Edit;
 use crate::cxxqt_object::state::PictureViewRust;
-use pictura_core::{BitDepth, Channel};
+use pictura_core::{BitDepth, Channel, ColorMode, Document, LayerMask};
 
 #[test]
 fn save_selection_notifies() {

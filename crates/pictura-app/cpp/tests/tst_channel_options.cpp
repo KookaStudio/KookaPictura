@@ -430,11 +430,8 @@ void ChannelOptionsTest::duplicateSelectedChannelNormalizesToMasked()
     const QByteArray sourcePlane = alphaPlaneBytes(view_, 0);
     const int sourceHistory = view_->history_count();
 
-    const ::rust::Slice<const std::uint8_t> bytes(
-        reinterpret_cast<const std::uint8_t*>(source.constData()),
-        std::size_t(source.size()));
-    QVERIFY(pictura::duplicate_channel_coverage(*view_, bytes, 16, 16,
-                                                QStringLiteral("Copy"), false));
+    QVERIFY(pictura::duplicate_channel_in_view(*view_, QStringLiteral("alpha:0"), 0,
+                                               QStringLiteral("Copy"), false));
     QCOMPARE(view_->selection_channel_count(), 2);
     QVERIFY(!pictura::channels_selected_areas(*view_, 1));
     QCOMPARE(coverageBytes(pictura::channel_coverage(*view_, QStringLiteral("alpha:1"))),
@@ -448,7 +445,7 @@ void ChannelOptionsTest::duplicateSelectedChannelNormalizesToMasked()
     pictura::PictureView* target = window_->activeView();
     QVERIFY(target);
     const int targetHistory = target->history_count();
-    QVERIFY(pictura::duplicate_channel_coverage(*target, bytes, 16, 16,
+    QVERIFY(pictura::transfer_duplicate_channel(*target, *view_, QStringLiteral("alpha:0"), 0,
                                                 QStringLiteral("Cross"), false));
     QCOMPARE(target->selection_channel_count(), 1);
     QVERIFY(!pictura::channels_selected_areas(*target, 0));

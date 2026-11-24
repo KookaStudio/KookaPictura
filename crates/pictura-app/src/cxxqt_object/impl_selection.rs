@@ -1,12 +1,12 @@
 use super::edit::Edit;
 use super::helpers::*;
 use super::helpers_composite::*;
-use super::picture::{sample_tiles, stream_picture, tile_source, whole};
+use super::picture::{sample_tiles, tile_source};
 use super::qobject;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QImage, QString, QStringList};
-use pictura_core::{ColorMode, Document, LayerMask, PsdRect};
+use pictura_core::PsdRect;
 use pictura_select::{CombineMode, Selection};
 use save_load::*;
 
@@ -21,8 +21,8 @@ mod refine;
 mod save_load;
 #[cfg(test)]
 mod tests;
+mod transfer;
 
-use channel_rows::channel_row_selection_from;
 #[cfg(test)]
 use channel_rows::{channel_row_selection, cmyk_ink};
 pub(super) use channel_rows::{channel_value, color_rows, q_gray};
@@ -444,13 +444,14 @@ impl qobject::PictureView {
         name: &QString,
         mode: &QString,
     ) -> bool {
-        let Some(target) = parse_selection_target(&target.to_string()) else {
-            return false;
-        };
+        let target = target.to_string();
         let mode = combine_mode_from(&mode.to_string());
         let name = name.to_string();
         let outcome = self.as_mut().edit("Save Selection", |rust| {
-            save_selection_target(rust, target, &name, mode)
+            let Some(shape) = rust.transfer_source("", 0) else {
+                return Edit::None;
+            };
+            rust.transfer_save(shape, &target, &name, mode)
         });
         !matches!(outcome, Edit::None)
     }
@@ -491,56 +492,42 @@ impl qobject::PictureView {
         invert: bool,
         mode: &QString,
     ) -> bool {
-        let shape = {
-            let rust = self.rust();
-            let Some(doc) = rust.session.doc.as_ref() else {
-                return false;
-            };
-            let Some(shape) = selection_from_target(doc, &target.to_string()) else {
-                return false;
-            };
-            if invert {
-                shape.invert()
-            } else {
-                shape
-            }
+        if self.rust().session.read_only() {
+            return false;
+        }
+        let spec = target.to_string();
+        let Some(shape) = self.rust().transfer_source(&spec, 0) else {
+            return false;
         };
-        self.as_mut().apply_selection_labeled(
-            shape,
-            combine_mode_from(&mode.to_string()),
-            "Load Selection",
-        )
+        let mode = combine_mode_from(&mode.to_string());
+        let outcome = self.as_mut().edit("Load Selection", |rust| {
+            rust.transfer_load(shape, invert, false, mode)
+        });
+        !matches!(outcome, Edit::None)
     }
 
     /// Load the Channels-panel colour row `row` (0 = the composite) as the
     /// selection, using the same grayscale derivation as the row thumbnails.
     /// `mask` is the visible RGB channels (bit 0 red, 1 green, 2 blue).
     pub fn load_channel_selection(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         row: i32,
         mask: i32,
+        invert: bool,
         mode: &QString,
     ) -> bool {
-        let shape = {
-            let rust = self.rust();
-            let Some(doc) = rust.session.doc.as_ref() else {
-                return false;
-            };
-            channel_row_selection_from(
-                doc,
-                |f| stream_picture(doc, rust, whole(doc), f),
-                row,
-                mask as u8,
-            )
-        };
-        let Some(shape) = shape else {
+        if self.rust().session.read_only() {
+            return false;
+        }
+        let spec = format!("color:{row}");
+        let Some(shape) = self.rust().transfer_source(&spec, mask as u8) else {
             return false;
         };
-        self.apply_selection_labeled(
-            shape,
-            combine_mode_from(&mode.to_string()),
-            "Load Selection",
-        )
+        let mode = combine_mode_from(&mode.to_string());
+        let outcome = self.as_mut().edit("Load Selection", |rust| {
+            rust.transfer_load(shape, invert, false, mode)
+        });
+        !matches!(outcome, Edit::None)
     }
 
     /// Every existing raster layer mask as `"path|Layer Name Mask"`.
@@ -568,70 +555,6 @@ impl qobject::PictureView {
         self.rust().color_row_coverage(row, mask as u8)
     }
 
-    /// Duplicate `coverage` into this document as a new channel: fit it to the
-    /// canvas, apply Invert, and record one "Duplicate Channel" state.
-    pub fn duplicate_channel_coverage(
-        mut self: Pin<&mut Self>,
-        coverage: &[u8],
-        width: i32,
-        height: i32,
-        name: &QString,
-        invert: bool,
-    ) -> bool {
-        let Some(shape) = coverage_selection(coverage, width, height) else {
-            return false;
-        };
-        let Some((target_width, target_height)) = self
-            .rust()
-            .session
-            .doc
-            .as_ref()
-            .map(|doc| (doc.width, doc.height))
-        else {
-            return false;
-        };
-        let shape = if invert { shape.invert() } else { shape };
-        let fitted = shape.fit_centered(target_width, target_height);
-        let name = name.to_string();
-        let outcome = self.as_mut().edit("Duplicate Channel", |rust| {
-            save_selection_shape(
-                rust,
-                fitted,
-                SelectionTarget::NewChannel,
-                &name,
-                CombineMode::New,
-            )
-        });
-        !matches!(outcome, Edit::None)
-    }
-
-    /// Save `coverage` transferred from another document into `target`.
-    pub fn save_selection_coverage(
-        mut self: Pin<&mut Self>,
-        coverage: &[u8],
-        width: i32,
-        height: i32,
-        target: &QString,
-        name: &QString,
-        mode: &QString,
-    ) -> bool {
-        let Some(shape) = coverage_selection(coverage, width, height) else {
-            return false;
-        };
-        if !document_matches(self.rust(), width, height) {
-            return false;
-        }
-        let Some(target) = parse_selection_target(&target.to_string()) else {
-            return false;
-        };
-        let mode = combine_mode_from(&mode.to_string());
-        let name = name.to_string();
-        let outcome = self.as_mut().edit("Save Selection", |rust| {
-            save_selection_shape(rust, shape, target, &name, mode)
-        });
-        !matches!(outcome, Edit::None)
-    }
-
     /// Load `coverage` transferred from another document into this one.
     pub fn load_selection_coverage(
         mut self: Pin<&mut Self>,
@@ -647,90 +570,11 @@ impl qobject::PictureView {
         if !document_matches(self.rust(), width, height) {
             return false;
         }
-        let shape = if invert { shape.invert() } else { shape };
-        self.as_mut().apply_selection_labeled(
-            shape,
-            combine_mode_from(&mode.to_string()),
-            "Load Selection",
-        )
-    }
-
-    /// Load `coverage` transferred from another document of any size: fit it
-    /// to this canvas, apply Invert, and record one "Load Selection" state.
-    pub fn load_selection_coverage_fit(
-        mut self: Pin<&mut Self>,
-        coverage: &[u8],
-        width: i32,
-        height: i32,
-        invert: bool,
-        mode: &QString,
-    ) -> bool {
-        let Some(shape) = coverage_selection(coverage, width, height) else {
-            return false;
-        };
-        let Some((target_width, target_height)) = self
-            .rust()
-            .session
-            .doc
-            .as_ref()
-            .map(|doc| (doc.width, doc.height))
-        else {
-            return false;
-        };
-        let shape = if invert { shape.invert() } else { shape };
-        let fitted = shape.fit_centered(target_width, target_height);
-        self.as_mut().apply_selection_labeled(
-            fitted,
-            combine_mode_from(&mode.to_string()),
-            "Load Selection",
-        )
-    }
-
-    /// Build a new grayscale document holding `coverage` as its extra channel.
-    /// The codec does not write Multichannel, so the design's grayscale+alpha
-    /// fallback is used.
-    pub fn new_selection_document(
-        mut self: Pin<&mut Self>,
-        coverage: &[u8],
-        width: i32,
-        height: i32,
-        name: &QString,
-        invert: bool,
-    ) -> bool {
-        let Some(shape) = coverage_selection(coverage, width, height) else {
-            return false;
-        };
-        let shape = if invert { shape.invert() } else { shape };
-        let mut doc = Document::new(
-            width as u32,
-            height as u32,
-            ColorMode::Grayscale,
-            pictura_core::BitDepth::Eight,
-        );
-        doc.channels.push(shape.to_channel(0));
-        let label = if name.trimmed().is_empty() {
-            "Alpha 1".to_string()
-        } else {
-            name.trimmed().to_string()
-        };
-        pictura_codec::set_alpha_names(&mut doc, &[label]);
-        let mut view = self.as_mut().rust_mut();
-        view.replace_document(
-            Some(doc),
-            crate::history::History::default(),
-            Default::default(),
-            None,
-        );
-        let target = view.layer_target.clone();
-        let view = &mut *view;
-        if let Some(doc) = view.session.doc.as_mut() {
-            view.session
-                .history
-                .capture_live(doc, &None, &target, "New");
-        }
-        view.path = None;
-        view.session.mark_saved();
-        true
+        let mode = combine_mode_from(&mode.to_string());
+        let outcome = self.as_mut().edit("Load Selection", |rust| {
+            rust.transfer_load(shape, invert, false, mode)
+        });
+        !matches!(outcome, Edit::None)
     }
 
     pub fn selection_channel_count(&self) -> i32 {
@@ -866,6 +710,9 @@ impl qobject::PictureView {
         mode: CombineMode,
         label: &str,
     ) -> bool {
+        if self.rust().session.read_only() {
+            return false;
+        }
         {
             let mut rust = self.as_mut().rust_mut();
             if rust.session.doc.is_none() {
@@ -873,8 +720,8 @@ impl qobject::PictureView {
             }
             combine_selection(&mut rust, shape, mode, false);
         }
-        self.as_mut().edit(label, |_| Edit::Meta);
-        true
+        let outcome = self.as_mut().edit(label, |_| Edit::Meta);
+        !matches!(outcome, Edit::None)
     }
 
     pub fn select_rect(

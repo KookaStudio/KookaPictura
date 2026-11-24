@@ -23,6 +23,7 @@
 #include <QtGui/QDragEnterEvent>
 #include <QtGui/QDropEvent>
 #include <QtGui/QImage>
+#include <QtWidgets/QApplication>
 #include <QtWidgets/QTabBar>
 
 namespace {
@@ -92,6 +93,9 @@ private slots:
     void loadColourRowCombines();
     void loadColourRowCrossDocument();
     void loadColourRowThroughFrame();
+    void saveDialogThroughFrame();
+    void saveDialogCrossDocument();
+    void loadDialogThroughFrame();
     void selectLoadEnabledWithoutChannels();
     void loadDialogInvertAndOps();
     void loadDialogCrossDocument();
@@ -300,25 +304,43 @@ void SelectionSaveLoadTest::saveDialogNewImage()
     pictura::PictureView* view = newDoc(16, 16);
     QVERIFY(view);
     view->select_all();
-    const QList<pictura::SelectionDocument> documents {{view, QStringLiteral("Doc"), true}};
-    pictura::SaveLoadSelectionDialog dialog(pictura::SaveLoadSelectionDialog::Mode::Save, documents,
-                                            window_.get());
-    dialog.setDocumentIndexForTest(dialog.documentCountForTest() - 1);
-    dialog.setNameForTest(QStringLiteral("Hair"));
-    const pictura::SelectionSaveRequest request = dialog.saveRequest();
-    QVERIFY(request.newDocument);
-    QCOMPARE(request.target, QStringLiteral("new"));
-    QCOMPARE(request.name, QStringLiteral("Hair"));
-
     const auto coverage = pictura::selection_coverage_bytes(*view);
-    auto* created = new pictura::PictureView(window_.get());
-    QVERIFY(pictura::new_selection_document(*created, coverageSlice(
-        QByteArray(reinterpret_cast<const char*>(coverage.data()), int(coverage.size()))),
-        16, 16, request.name, false));
+    const int sourceHistory = view->history_count();
+    const int sourceChannels = view->selection_channel_count();
+    const int documents = window_->documentCount();
+    window_->show();
+    QTest::qWait(0);
+    bool seen = false;
+    QTimer driver;
+    driver.setInterval(0);
+    QObject::connect(&driver, &QTimer::timeout, [&] {
+        auto* dialog = qobject_cast<pictura::SaveLoadSelectionDialog*>(
+            QApplication::activeModalWidget());
+        if (!dialog) {
+            return;
+        }
+        driver.stop();
+        seen = true;
+        dialog->setDocumentIndexForTest(dialog->documentCountForTest() - 1);
+        dialog->setNameForTest(QStringLiteral("Hair"));
+        dialog->accept();
+    });
+    driver.start();
+    pictura::CommandRegistry* registry = window_->registry();
+    QVERIFY(registry);
+    registry->refresh();
+    QVERIFY(registry->dispatch(QString::fromLatin1(pictura::command_ids::SelectSave)));
+    driver.stop();
+    QVERIFY(seen);
+    QCOMPARE(window_->documentCount(), documents + 1);
+    pictura::PictureView* created = window_->activeView();
+    QVERIFY(created && created != view);
     QCOMPARE(created->document_width(), 16);
     QCOMPARE(created->document_height(), 16);
     QCOMPARE(pictura::channels_mode(*created), QStringLiteral("grayscale"));
     QCOMPARE(created->selection_channel_count(), 1);
+    QCOMPARE(created->history_count(), 1);
+    QCOMPARE(created->history_label(created->history_index()), QStringLiteral("New"));
     const auto channel = pictura::channel_coverage(*created, QStringLiteral("alpha:0"));
     QCOMPARE(int(channel.size()), int(coverage.size()));
     for (int i = 0; i < int(channel.size()); ++i) {
@@ -326,12 +348,18 @@ void SelectionSaveLoadTest::saveDialogNewImage()
     }
     QCOMPARE(pictura::channels_alpha_names(*created).size(), 1);
     QCOMPARE(pictura::channels_alpha_names(*created).at(0), QStringLiteral("Hair"));
+    QCOMPARE(view->selection_channel_count(), sourceChannels);
+    QCOMPARE(view->history_count(), sourceHistory);
+    const auto sourceAfter = pictura::selection_coverage_bytes(*view);
+    QCOMPARE(int(sourceAfter.size()), int(coverage.size()));
+    for (int i = 0; i < int(sourceAfter.size()); ++i) {
+        QCOMPARE(int(sourceAfter[i]), int(coverage[i]));
+    }
 
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const QString path = dir.filePath(QStringLiteral("selection.psd"));
     QVERIFY(pictura::document_api::save(*created, path));
-    delete created;
 
     QVERIFY(window_->openDocumentAtPath(path));
     pictura::PictureView* reopened = window_->activeView();
@@ -609,6 +637,109 @@ void SelectionSaveLoadTest::loadColourRowThroughFrame()
     QCOMPARE(cross.target, QStringLiteral("color:1"));
     QCOMPARE(target->selection_coverage(8, 8), 100);
     QCOMPARE(target->history_count(), targetBefore + 1);
+    QCOMPARE(target->history_label(target->history_index()), QStringLiteral("Load Selection"));
+}
+
+void SelectionSaveLoadTest::saveDialogThroughFrame()
+{
+    pictura::PictureView* view = newDoc(16, 16);
+    QVERIFY(view);
+    view->select_all();
+    const int before = view->history_count();
+    window_->show();
+    QTest::qWait(0);
+    bool seen = false;
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<pictura::SaveLoadSelectionDialog*>(
+            QApplication::activeModalWidget());
+        if (!dialog) {
+            return;
+        }
+        seen = true;
+        dialog->setNameForTest(QStringLiteral("Frame"));
+        dialog->accept();
+    });
+    pictura::CommandRegistry* registry = window_->registry();
+    QVERIFY(registry);
+    registry->refresh();
+    QVERIFY(registry->dispatch(QString::fromLatin1(pictura::command_ids::SelectSave)));
+    QVERIFY(seen);
+    QCOMPARE(view->history_count(), before + 1);
+    QCOMPARE(view->history_label(view->history_index()), QStringLiteral("Save Selection"));
+    QVERIFY(pictura::channels_alpha_names(*view).contains(QStringLiteral("Frame")));
+}
+
+void SelectionSaveLoadTest::saveDialogCrossDocument()
+{
+    pictura::PictureView* source = newDoc(16, 16);
+    QVERIFY(source);
+    source->select_all();
+    pictura::PictureView* target = newDoc(16, 16);
+    QVERIFY(target && target != source);
+    window_->setActiveDocumentIndex(0);
+    const int sourceHistory = source->history_count();
+    const int targetHistory = target->history_count();
+    window_->show();
+    QTest::qWait(0);
+    bool seen = false;
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<pictura::SaveLoadSelectionDialog*>(
+            QApplication::activeModalWidget());
+        if (!dialog) {
+            return;
+        }
+        seen = true;
+        dialog->setDocumentIndexForTest(1);
+        dialog->setNameForTest(QStringLiteral("Cross"));
+        dialog->accept();
+    });
+    pictura::CommandRegistry* registry = window_->registry();
+    QVERIFY(registry);
+    registry->refresh();
+    QVERIFY(registry->dispatch(QString::fromLatin1(pictura::command_ids::SelectSave)));
+    QVERIFY(seen);
+    QCOMPARE(target->selection_channel_count(), 1);
+    const QStringList names = pictura::channels_alpha_names(*target);
+    QCOMPARE(names.size(), 1);
+    QCOMPARE(names.at(0), QStringLiteral("Cross"));
+    QCOMPARE(target->history_count(), targetHistory + 1);
+    QCOMPARE(target->history_label(target->history_index()), QStringLiteral("Save Selection"));
+    QCOMPARE(source->selection_channel_count(), 0);
+    QCOMPARE(source->history_count(), sourceHistory);
+}
+
+void SelectionSaveLoadTest::loadDialogThroughFrame()
+{
+    pictura::PictureView* source = newDoc(16, 16);
+    QVERIFY(source);
+    source->select_all();
+    QVERIFY(pictura::save_selection_to(*source, QStringLiteral("new"), QStringLiteral("Hair"),
+                                      QStringLiteral("replace")));
+    pictura::PictureView* target = newDoc(16, 16);
+    QVERIFY(target && target != source);
+    window_->setActiveDocumentIndex(1);
+    const int before = target->history_count();
+    window_->show();
+    QTest::qWait(0);
+    bool seen = false;
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<pictura::SaveLoadSelectionDialog*>(
+            QApplication::activeModalWidget());
+        if (!dialog) {
+            return;
+        }
+        seen = true;
+        dialog->setDocumentIndexForTest(0);
+        dialog->setChannelIndexForTest(4);
+        dialog->accept();
+    });
+    pictura::CommandRegistry* registry = window_->registry();
+    QVERIFY(registry);
+    registry->refresh();
+    QVERIFY(registry->dispatch(QString::fromLatin1(pictura::command_ids::SelectLoad)));
+    QVERIFY(seen);
+    QCOMPARE(target->selection_coverage(8, 8), 255);
+    QCOMPARE(target->history_count(), before + 1);
     QCOMPARE(target->history_label(target->history_index()), QStringLiteral("Load Selection"));
 }
 

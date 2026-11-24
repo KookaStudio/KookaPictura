@@ -78,6 +78,7 @@ pub mod ffi {
             view: Pin<&mut PictureView>,
             row: i32,
             mask: i32,
+            invert: bool,
             mode: &QString,
         ) -> bool;
 

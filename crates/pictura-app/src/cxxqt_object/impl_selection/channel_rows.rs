@@ -79,35 +79,51 @@ pub(super) fn channel_row_selection_from(
         return None;
     }
     let w = doc.width as usize;
-    let mut data = vec![0u8; w * doc.height as usize];
-    if data.is_empty() {
+    let h = doc.height as usize;
+    if w == 0 || h == 0 {
         return None;
     }
+    let mut plane = pictura_core::Plane::filled(w, h, 1, 0u8);
     let mut rows = 0usize;
+    let mut row_buffer = vec![0u8; w];
     // The picture arrives in full-width bands (#1274); each writes its rows.
     bands(&mut |offset, band| {
         let srgb = buffer_to_srgb(doc, &band);
         let buffer = srgb.as_ref();
-        let plane = buffer.pixel_count();
+        let pixels = buffer.pixel_count();
         let depth = buffer.channels as usize;
-        let at = offset as usize * w;
+        let at = offset as usize;
         if depth == 0
             || buffer.width as usize != w
-            || buffer.data.len() != plane * depth
-            || at + plane > data.len()
+            || buffer.data.len() != pixels * depth
+            || at + buffer.height as usize > h
         {
             return;
         }
         let samples = buffer.data.as_slice();
-        for (i, out) in data[at..at + plane].iter_mut().enumerate() {
-            *out = channel_row_value(mode, composite, row, mask, samples, plane, depth, i);
+        for dy in 0..buffer.height as usize {
+            for (x, out) in row_buffer.iter_mut().enumerate() {
+                *out = channel_row_value(
+                    mode,
+                    composite,
+                    row,
+                    mask,
+                    samples,
+                    pixels,
+                    depth,
+                    dy * w + x,
+                );
+            }
+            if !plane.write_row_from(at + dy, w, &row_buffer) {
+                return;
+            }
         }
         rows += buffer.height as usize;
     });
-    (rows == doc.height as usize).then(|| Selection {
+    (rows == h).then(|| Selection {
         width: doc.width,
         height: doc.height,
-        data: data.into(),
+        data: plane,
     })
 }
 

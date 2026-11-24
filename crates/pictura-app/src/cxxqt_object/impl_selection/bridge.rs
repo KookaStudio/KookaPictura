@@ -166,26 +166,56 @@ pub mod ffi {
         /// The coverage of colour row `row` (0 is the composite) under `mask`.
         fn color_row_coverage(view: &PictureView, row: i32, mask: i32) -> Vec<u8>;
 
-        /// Duplicate transferred coverage as a new channel: fit to this canvas,
-        /// optionally invert, and record one "Duplicate Channel" state.
-        fn duplicate_channel_coverage(
+        /// Duplicate `source_target`'s coverage as a new channel in this
+        /// document, fitted to its canvas and optionally inverted.
+        fn transfer_duplicate_channel(
             view: Pin<&mut PictureView>,
-            coverage: &[u8],
-            width: i32,
-            height: i32,
+            source: &PictureView,
+            source_target: &QString,
+            source_mask: i32,
             name: &QString,
             invert: bool,
         ) -> bool;
 
-        /// Save transferred coverage into `target`; one history state.
-        fn save_selection_coverage(
+        /// Save `source_target`'s coverage into this document's `target`.
+        fn transfer_save_selection(
             view: Pin<&mut PictureView>,
-            coverage: &[u8],
-            width: i32,
-            height: i32,
+            source: &PictureView,
+            source_target: &QString,
+            source_mask: i32,
             target: &QString,
             name: &QString,
             mode: &QString,
+        ) -> bool;
+
+        /// Load `source_target`'s coverage into this document's selection.
+        fn transfer_load_selection(
+            view: Pin<&mut PictureView>,
+            source: &PictureView,
+            source_target: &QString,
+            source_mask: i32,
+            invert: bool,
+            fit: bool,
+            mode: &QString,
+        ) -> bool;
+
+        /// Build this view's document from `source_target`'s coverage.
+        fn transfer_new_document(
+            view: Pin<&mut PictureView>,
+            source: &PictureView,
+            source_target: &QString,
+            source_mask: i32,
+            name: &QString,
+            invert: bool,
+        ) -> bool;
+
+        /// Duplicate this document's own `source_target` as a new channel.
+        fn duplicate_channel_in_view(
+            view: Pin<&mut PictureView>,
+            source_target: &QString,
+            source_mask: i32,
+            name: &QString,
+            invert: bool,
         ) -> bool;
 
         /// Load transferred coverage into this document; one history state.
@@ -196,27 +226,6 @@ pub mod ffi {
             height: i32,
             invert: bool,
             mode: &QString,
-        ) -> bool;
-
-        /// Load transferred coverage into this document of any size; fit it to
-        /// the canvas and record one "Load Selection" state.
-        fn load_selection_coverage_fit(
-            view: Pin<&mut PictureView>,
-            coverage: &[u8],
-            width: i32,
-            height: i32,
-            invert: bool,
-            mode: &QString,
-        ) -> bool;
-
-        /// Build a single-channel multichannel document from coverage.
-        fn new_selection_document(
-            view: Pin<&mut PictureView>,
-            coverage: &[u8],
-            width: i32,
-            height: i32,
-            name: &QString,
-            invert: bool,
         ) -> bool;
     }
 }

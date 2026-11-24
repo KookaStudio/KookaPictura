@@ -15,6 +15,7 @@
 mod readers;
 mod scenarios;
 mod selection_readers;
+mod selection_transfers;
 
 use super::super::state::PictureViewRust;
 use scenarios as sc;

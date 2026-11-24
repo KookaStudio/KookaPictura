@@ -562,7 +562,8 @@ bool ChannelsPanel::eventFilter(QObject* watched, QEvent* event)
         } else if (event->type() == QEvent::Drop) {
             auto* drop = static_cast<QDropEvent*>(event);
             const ChannelDrag drag = channelDrag(drop->mimeData());
-            if (drag.source && drag.source != view_) {
+            auto* source = qobject_cast<PictureView*>(drag.sourceGuard.data());
+            if (!source || source != view_) {
                 drop->ignore();
                 return true;
             }
@@ -681,7 +682,7 @@ void ChannelsPanel::loadRowSelection(int row, Qt::KeyboardModifiers mods)
         load_selection_target(*view_, QStringLiteral("alpha:%1").arg(alpha), false, mode);
     } else if (alpha == -1) {
         // The mask row (kMaskChannel) keeps its view-only solo, not a load.
-        channels_load_color_selection(*view_, row, mask_, mode);
+        channels_load_color_selection(*view_, row, mask_, false, mode);
     }
 }
 
@@ -718,23 +719,19 @@ QMimeData* ChannelsPanel::channelDragMime(int row) const
 bool ChannelsPanel::duplicateChannelFromMime(const QMimeData* mime)
 {
     const ChannelDrag drag = channelDrag(mime);
-    auto* source = static_cast<PictureView*>(const_cast<void*>(drag.source));
+    auto* source = qobject_cast<PictureView*>(drag.sourceGuard.data());
     if (!source || !source->has_document() || !view_ || !view_->has_document()
         || drag.row < 0) {
         return false;
     }
-    const int width = source->document_width();
-    const int height = source->document_height();
-    const auto coverage =
-        drag.alpha >= 0
-            ? channel_coverage(*source, QStringLiteral("alpha:%1").arg(drag.alpha))
-            : color_row_coverage(*source, drag.row, drag.mask);
-    if (coverage.size() != std::size_t(width) * std::size_t(height)) {
-        return false;
-    }
+    const QString sourceTarget = drag.alpha >= 0
+        ? QStringLiteral("alpha:%1").arg(drag.alpha)
+        : QStringLiteral("color:%1").arg(drag.row);
     const QString name = drag.name.isEmpty() ? tr("Alpha 1 copy") : tr("%1 copy").arg(drag.name);
-    const ::rust::Slice<const std::uint8_t> bytes(coverage.data(), coverage.size());
-    if (!duplicate_channel_coverage(*view_, bytes, width, height, name, false)) {
+    const bool duplicated = source == view_
+        ? duplicate_channel_in_view(*view_, sourceTarget, drag.mask, name, false)
+        : transfer_duplicate_channel(*view_, *source, sourceTarget, drag.mask, name, false);
+    if (!duplicated) {
         return false;
     }
     refresh();
