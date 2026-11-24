@@ -1057,7 +1057,7 @@ void ToolController::handleReleased(const QPointF& imagePos)
                     canvas_->setTransformWarp(transform_api::warpOverlay(*v));
                 }
             }
-            if (transformControls_) {
+            if (transformControlsSession()) {
                 if (transform_is_identity(*v)) {
                     // A press/release (or a drag that returned to the start)
                     // changed nothing: drop the session and restore the box.

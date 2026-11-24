@@ -11,7 +11,9 @@
 
 #include "commands.h"
 
+#include "api/document_bridge.h"
 #include "api/paint_bridge.h"
+#include "api/transform_api.h"
 #include "api/transform_bridge.h"
 
 #include "qt_test_support.h"
@@ -20,7 +22,10 @@
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QToolButton>
 #include <QtCore/QCoreApplication>
+#include <QtCore/QTemporaryDir>
 #include <QtGui/QAction>
+#include <QtGui/QColor>
+#include <QtGui/QImage>
 
 namespace {
 
@@ -64,6 +69,10 @@ private slots:
     void lowerLayerStaysUnderTheLayersAbove();
     void topmostLayerBuildsNoAboveImage();
     void previewEdgeMatchesTheCommittedResample();
+    void everyTransformEndingClearsTheSamePreviewFields();
+    void controlsSessionFlagIsDerived();
+    void directTransformLifecycleOwnsTheControlsFlag();
+    void movePreviewKeepsAPromotedTransform();
 
 private:
     // New document + one filled raster layer selected, Move active; toggles the
@@ -757,6 +766,232 @@ void TransformControlsTest::previewEdgeMatchesTheCommittedResample()
     tools->commitFreeTransform();
     QCoreApplication::processEvents();
     QVERIFY2(edgeIsHard(canvas->grab().toImage()), "the committed edge is hard");
+}
+
+// [ds_preview_one_teardown] every way a transform ends clears the same preview
+// state. A preview is built by the begin; the ending must leave no cached base,
+// moving, or above-layer image and no base origin.
+void TransformControlsTest::everyTransformEndingClearsTheSamePreviewFields()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QVERIFY(frame.newDocument(QStringLiteral("Endings"), 100, 100, QStringLiteral("rgb"), 8,
+                              QStringLiteral("white")));
+    pictura::PictureView* view = frame.activeView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && tools);
+
+    // Two filled raster layers, so a begin can replace another session.
+    view->select_all();
+    QVERIFY(pictura::edit_fill(*view, qRgba(0, 0, 0, 255), -1, QStringLiteral("normal"), 100,
+                               false));
+    view->deselect();
+    QVERIFY(view->add_layer(0) > 0);
+    const QString lower = QStringLiteral("1");
+    QVERIFY(view->select_rect(10, 10, 20, 20, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::edit_fill(*view, qRgba(255, 0, 0, 255), -1, QStringLiteral("normal"), 100,
+                               false));
+    view->deselect();
+
+    // The observable preview set. The preview level is not observable here: the
+    // scale readout is 1 whenever no session is live. The Rust test
+    // `a_replaced_document_clears_the_preview_fields` asserts the level itself.
+    const auto cleared = [](const pictura::PictureView* v) {
+        return v->move_preview_base().isNull() && v->move_preview_above().isNull()
+            && v->move_preview_layer().isNull() && pictura::move_preview_base_origin(*v).empty();
+    };
+    const auto built = [view](const QString& path) {
+        if (!view->begin_free_transform(path)) {
+            return false;
+        }
+        QCoreApplication::processEvents();
+        return !view->move_preview_layer().isNull()
+            || !view->move_preview_base().isNull();
+    };
+
+    // 1. An explicit cancel.
+    QVERIFY2(built(lower), "the preview is built");
+    QVERIFY2(!cleared(view), "a live session holds its preview");
+    view->cancel_transform();
+    QCoreApplication::processEvents();
+    QVERIFY2(cleared(view), "cancel clears the preview");
+
+    // 2. A commit that changed the document.
+    QVERIFY2(built(lower), "the preview is built");
+    QVERIFY(pictura::transform_set_angle(*view, 15.0));
+    QVERIFY(view->commit_transform());
+    QCoreApplication::processEvents();
+    QVERIFY2(cleared(view), "a changed commit clears the preview");
+
+    // 3. A commit refused for memory. A rotation keeps the session off the
+    // identity path, so the commit reaches the governor and is refused there.
+    QVERIFY2(built(QStringLiteral("1")), "the preview is built");
+    QVERIFY(pictura::transform_set_angle(*view, 15.0));
+    pictura::set_available_memory_for_test(0);
+    const bool refusedCommit = view->commit_transform();
+    pictura::set_available_memory_for_test(-1);
+    QVERIFY2(!refusedCommit, "the commit is refused");
+    QVERIFY2(pictura::edit_refused_for_memory(), "the refusal is a memory refusal");
+    QCoreApplication::processEvents();
+    QVERIFY2(cleared(view), "a refused commit clears the preview");
+
+    // 4. A failed begin that replaced a live session: the outgoing preview must
+    // not survive the refusal. The refusal comes from the preview's memory gate,
+    // after `prepare_transform` has already taken the outgoing session.
+    QVERIFY2(tools->beginFreeTransform(QStringLiteral("1")), "the preview is built");
+    pictura::ImageView* canvas = frame.imageView();
+    QVERIFY(canvas && canvas->transformPreviewActive());
+    pictura::set_available_memory_for_test(0);
+    const bool refusedBegin = !tools->beginFreeTransform(QStringLiteral("0"));
+    pictura::set_available_memory_for_test(-1);
+    QVERIFY2(refusedBegin, "the begin is refused");
+    QCoreApplication::processEvents();
+    QVERIFY2(cleared(view), "a failed begin clears the replaced session's preview");
+    QVERIFY2(!canvas->transformPreviewActive(), "the failed begin clears the C++ overlay");
+
+    // A placed smart object, for the two endings that only its vector path and
+    // its rect-commit path reach.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString source = dir.filePath(QStringLiteral("placed.png"));
+    QImage seed(40, 30, QImage::Format_RGB32);
+    seed.fill(QColor(30, 120, 220));
+    QVERIFY(seed.save(source, "PNG"));
+    const QString placed = view->place_image(source);
+    QVERIFY2(!placed.isEmpty(), "the source is placed");
+    view->cancel_transform();
+    frame.setActiveTool(pictura::ToolId::Move);
+    QCoreApplication::processEvents();
+
+    // 5. A smart-object commit: an axis-aligned scale commits by moving the
+    // layer rect, with no resample and no worker.
+    QVERIFY2(built(placed), "the placed preview is built");
+    QVERIFY(pictura::transform_set_width(*view, 200.0, true));
+    QVERIFY(view->commit_transform());
+    QCoreApplication::processEvents();
+    QVERIFY2(cleared(view), "a smart-object commit clears the preview");
+
+    // 6. A deferred commit that lands. The engine defers only past the area
+    // threshold, so this leg needs a layer larger than it: a fresh document.
+    QVERIFY(frame.newDocument(QStringLiteral("EndingsDeferred"), 2048, 2048,
+                              QStringLiteral("rgb"), 8, QStringLiteral("white")));
+    view = frame.activeView();
+    QVERIFY(view);
+    QVERIFY(view->begin_free_transform(QStringLiteral("0")));
+    QVERIFY(pictura::transform_set_angle(*view, 15.0));
+    QVERIFY(view->commit_transform());
+    QVERIFY2(pictura::transform_pending(*view), "the commit runs deferred");
+    QVERIFY(pictura::transform_commit_finish(*view));
+    QCoreApplication::processEvents();
+    QVERIFY2(cleared(view), "a landed deferred commit clears the preview");
+}
+
+// [ds_controls_flag_derived] the predicate is derived, not stored: idle box →
+// handle gesture → changed release (pending) → cancel (idle box rebuilt).
+void TransformControlsTest::controlsSessionFlagIsDerived()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginControls(frame, true);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && canvas && tools);
+
+    // The idle box is a controls session with no live transform.
+    QVERIFY2(tools->transformControlsSession(), "the idle box is a controls session");
+    QVERIFY2(tools->transformControlsIdleForTest(), "and it is the idle one");
+    QVERIFY2(!view->transform_session_active(), "no transform is live");
+    QVERIFY2(!tools->transformPending(), "and none is pending");
+
+    // A handle gesture: the box owns a live per-gesture session.
+    canvas->mousePressed(QPointF(10.0, 8.0), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY2(view->transform_session_active(), "the gesture started a session");
+    QVERIFY2(tools->transformControlsSession(), "still a controls session");
+    QVERIFY2(!tools->transformPending(), "not pending while the gesture is held");
+
+    // A changed release promotes the transform to pending: the box is no
+    // longer the controls session, and the transform is now pending.
+    canvas->mouseMoved(QPointF(4.0, 2.0));
+    canvas->mouseReleased(QPointF(4.0, 2.0));
+    QVERIFY2(view->transform_session_active(), "the session outlives the release");
+    QVERIFY2(!tools->transformControlsSession(), "a pending transform is not a controls session");
+    QVERIFY2(tools->transformPending(), "the transform is pending");
+
+    // Cancel: no session, nothing pending, and the idle box is rebuilt, so the
+    // predicate is true again for the reason it was true at the start.
+    tools->cancelFreeTransform();
+    QCoreApplication::processEvents();
+    QVERIFY2(!view->transform_session_active(), "the session ended");
+    QVERIFY2(!tools->transformPending(), "nothing is pending");
+    QVERIFY2(tools->transformControlsSession(), "the idle box is back");
+    QVERIFY2(tools->transformControlsIdleForTest(), "and it is idle again");
+}
+
+void TransformControlsTest::directTransformLifecycleOwnsTheControlsFlag()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginControls(frame, true);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    pictura::ImageView* canvas = frame.imageView();
+    QVERIFY(view && canvas);
+
+    canvas->mousePressed(QPointF(10.0, 8.0), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY(view->transform_session_active());
+    QVERIFY(pictura::transform_api::controlsSessionActive(*view));
+
+    QVERIFY(!view->begin_free_transform(QStringLiteral("missing")));
+    QVERIFY(view->transform_session_active());
+    QVERIFY(pictura::transform_api::controlsSessionActive(*view));
+
+    view->commit_transform();
+    QVERIFY(!view->transform_session_active());
+    QVERIFY(!pictura::transform_api::controlsSessionActive(*view));
+    canvas->clearTransformPreview();
+    canvas->mouseReleased(QPointF(10.0, 8.0));
+}
+
+// [ds_controls_flag_move_path] Move previews preserve a live controls flag and
+// leave a pending transform pending.
+void TransformControlsTest::movePreviewKeepsAPromotedTransform()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    const QString layer = beginControls(frame, true);
+    QVERIFY(!layer.isEmpty());
+    pictura::PictureView* view = frame.activeView();
+    pictura::ImageView* canvas = frame.imageView();
+    auto* tools = frame.findChild<pictura::ToolController*>();
+    QVERIFY(view && canvas && tools);
+
+    const int base = view->history_count();
+    canvas->mousePressed(QPointF(10.0, 8.0), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY2(pictura::transform_api::controlsSessionActive(*view),
+             "the live gesture owns the controls flag");
+    QVERIFY2(view->begin_move_preview(), "a Move preview begins during the controls gesture");
+    QVERIFY2(pictura::transform_api::controlsSessionActive(*view),
+             "the Move preview preserves the live controls flag");
+    QVERIFY2(tools->transformControlsSession(), "the live gesture is still a controls session");
+    view->end_move_preview();
+    QVERIFY2(pictura::transform_api::controlsSessionActive(*view),
+             "ending the Move preview preserves the live controls flag");
+
+    canvas->mouseMoved(QPointF(4.0, 2.0));
+    canvas->mouseReleased(QPointF(4.0, 2.0));
+    QVERIFY2(tools->transformPending(), "the released gesture is pending");
+
+    // Start a Move preview over the pending session's target.
+    QVERIFY2(view->begin_move_preview(), "a Move preview begins");
+    QVERIFY2(!pictura::transform_api::controlsSessionActive(*view),
+             "the Move preview did not clear the transform's controls flag");
+    QVERIFY2(tools->transformPending(), "the transform is still pending");
+
+    // Its own cancel path leaves the pending transform alone too.
+    view->end_move_preview();
+    QVERIFY2(tools->transformPending(), "ending the Move preview leaves it pending");
+    QCOMPARE(view->history_count(), base);
+
+    tools->cancelFreeTransform();
+    QCOMPARE(view->history_count(), base);
 }
 
 QTEST_MAIN(TransformControlsTest)

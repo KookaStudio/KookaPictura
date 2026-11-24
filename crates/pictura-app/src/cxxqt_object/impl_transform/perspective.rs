@@ -279,46 +279,17 @@ mod tests {
     }
 
     fn session(mode: TransformMode) -> TransformSession {
-        let corners = source_corners(rect100());
-        TransformSession {
-            target: TransformTarget::Layer,
-            path: "0".to_string(),
-            members: vec![("0".to_string(), rect100())],
-            orig_rect: rect100(),
-            scale_x: 1.0,
-            scale_y: 1.0,
-            angle: 0.0,
-            dx: 0.0,
-            dy: 0.0,
-            handle: -1,
-            press_x: 0.0,
-            press_y: 0.0,
-            start: [1.0, 1.0, 0.0, 0.0, 0.0],
-            dragging: true,
+        let mut s = TransformSession::new(
+            TransformTarget::Layer,
+            "0".to_string(),
+            vec![("0".to_string(), rect100())],
+            rect100(),
             mode,
-            type_layer: false,
-            quad: mode.is_projective().then_some(corners),
-            base_quad: None,
-            free_perspective: false,
-            free_distort: false,
-            free_skew: false,
-            perspective_side: None,
-            start_quad: corners,
-            pivot: (50.0, 50.0),
-            pivot_origin: (50.0, 50.0),
-            start_pivot: (50.0, 50.0),
-            show_pivot: true,
-            skew_x: 0.0,
-            skew_y: 0.0,
-            interpolation: pictura_render::Interpolation::Bicubic,
-            warp: None,
-            warp_drag: None,
-            warp_editing: false,
-            warp_post: None,
-            lifted: None,
-            untrimmed: Vec::new(),
-            history_label: "Free Transform".to_string(),
-        }
+            false,
+            "Free Transform",
+        );
+        s.dragging = true;
+        s
     }
 
     /// Press `handle` at `(x, y)` the way `transform_press` does.

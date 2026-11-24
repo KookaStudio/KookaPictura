@@ -14,6 +14,7 @@ mod smart_rect;
 mod warp;
 
 pub(in crate::cxxqt_object) use dispatch::land_hdr_conversion;
+pub(in crate::cxxqt_object) use geometry::{rect_center, source_corners};
 pub(in crate::cxxqt_object) use session::{MoveView, MoveViewPixels};
 
 use super::helpers::*;

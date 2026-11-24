@@ -1,0 +1,24 @@
+# Test Plan
+
+| Scenario | Steps | Expected result | Coverage |
+|---|---|---|---|
+| `ds_slot_kind` | Begin a Free Transform on one layer with another kind's optional state absent, then read the live session kind. | The document session reports the `Transform` kind and holds no payload of another kind. | `pictura-app::the_slot_names_the_live_session_kind` |
+| `ds_slot_one_state` | Begin a filter preview on a layer's pixels, then cancel the session. | No mask filter preview is held, and the cancel restores the layer's pre-preview pixels. | `pictura-app::only_the_live_sessions_state_exists` |
+| `ds_slot_drag_handle` | Press a transform drag on a corner handle, read the handle over the bridge, release, read it again. | The handle is the corner's index while the drag is live and -1 after the release. | `tst_document_session::theTransformDragHandleComesFromTheSession` |
+| `ds_preview_one_teardown` | Build previews, then end a transform in turn six ways: an explicit cancel, a commit that changes the document, a commit refused for memory, a failed replacement begin, a deferred commit that lands, and a smart-object commit. Use `ToolController` for the outgoing preview and failed replacement. | After each ending the same four observed fields are clear: no base image, no moving image, no above-layer image, and no base origin. The failed replacement also leaves `ImageView::transformPreviewActive` false. | `tst_transform_controls::everyTransformEndingClearsTheSamePreviewFields` |
+| `ds_preview_cancel_clears` | Set the above-layer image, origin, scale, and presented key, a mask-move baseline, and an active drag on a live controls transform, then cancel through the document-session teardown rather than the Move tool's cancel. | The four above-layer fields and the mask-move baseline are cleared, and the active-drag flag is false, so a landing Move composite is not told a drag owns the canvas. | `pictura-app::a_cancelled_controls_gesture_clears_the_above_layer` |
+| `ds_preview_replacement` | Set the preview base origin, the prepared-group key, and a non-zero preview level, then replace the document. | The base origin, the prepared-group key, and the preview level are cleared along with the rest of the preview fields. | `pictura-app::a_replaced_document_clears_the_preview_fields` |
+| `ds_controls_flag_derived` | Check the idle controls box, begin a handle gesture, release a changed drag, then cancel the transform, reading the controller predicate at each step. | It reports a controls session while idle and during the gesture, no controls session after the changed release while the session is still active, and after the cancel no active session and no pending transform with the controls predicate true again because the idle box is rebuilt. | `tst_transform_controls::controlsSessionFlagIsDerived` |
+| `ds_controls_flag_move_path` | Begin and end a Move preview during a live controls gesture, release a changed drag to pending, then begin another Move preview. | The live controls flag stays set during the first preview. The transform stays pending with its flag unchanged during the second. | `tst_transform_controls::movePreviewKeepsAPromotedTransform` |
+| `ds_controls_flag_direct_lifecycle` | Refuse a direct begin on a missing path during a live controls gesture, then commit the live session directly. | The refused begin preserves the session and controls flag. The direct commit clears the flag. | `tst_transform_controls::directTransformLifecycleOwnsTheControlsFlag` |
+
+## Verification record
+
+- `cargo fmt --all`: passed.
+- `bash scripts/with-build-lock.sh -- bash -c 'cmake -S . -B build -G Ninja && cmake --build build --parallel'`: passed after replacing the invalid `QVERIFY(view->select_all())` with the API's `void` call.
+- `PICTURA_WRITE_VERB_MANIFEST=1 cargo nextest run -p pictura_app verb_manifest`, followed by the same command without write mode: 4/4 passed. The generated manifest now includes `transform_controls_session`.
+- `CARGO_TARGET_DIR=build/cargo bash scripts/with-build-lock.sh -- env LC_ALL=C bash scripts/verify-fast.sh`: fmt and clippy passed. Nextest passed 6,866/6,866 tests with 138 skipped. The Qt and self-test report passed 11,822 with 152 skipped and one failure, `PresentCacheTest::frameBoundedPaintMatchesCpu(gpu)`. A clean `origin/master` worktree reproduces the same failure at `tst_present_cache.cpp:1013`.
+- Focused Qt checks under `LC_ALL=C`: Move/controls 5/5, transform 11/11, and document-session 1/1 passed.
+- Remaining static checks passed, including file size, guard, archive, test plan, parity, source fragments, and build/lock checks. `check-milestone-names.py --self-test` failed with the same scoped-scan assertion on clean `origin/master`; the MSVC and colour self-tests passed separately.
+- `openspec validate --all --strict`: 529 passed, 0 failed.
+- Manual checks: none.

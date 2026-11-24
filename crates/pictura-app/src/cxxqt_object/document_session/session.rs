@@ -733,8 +733,6 @@ impl PictureViewRust {
     /// Clear every field that names or belongs to the outgoing document.
     pub(in crate::cxxqt_object) fn clear_document_scoped_state(&mut self) {
         self.cancel_move_composite();
-        self.move_drag_active = false;
-        self.mask_move_baseline = None;
         self.session.quick_mask.active = false;
         self.session.quick_mask.coverage = None;
         self.session.quick_mask.deselected = None;
@@ -769,24 +767,11 @@ impl PictureViewRust {
         self.isolation = None;
         self.session.clear_edit_state();
         self.expanded_groups.clear();
-        self.move_base = None;
-        self.move_view = None;
-        self.move_view_pixels = Default::default();
-        self.move_layer = None;
-        self.move_x = 0;
-        self.move_y = 0;
-        self.move_layer_offset = (0, 0);
-        self.move_opacity = 0;
-        self.move_prepared_revision = 0;
-        self.move_prepared_layer.clear();
-        self.move_prepared_union = None;
-        self.move_preview_cache_hit = false;
+        // The preview overlay has one teardown, so the replacement path cannot
+        // miss a field the other clear paths clear (`move_base_origin` was the
+        // one the hand-maintained list here dropped).
+        self.clear_preview_overlay();
         self.path_drag_damage = None;
-        self.move_above = None;
-        self.move_above_origin = None;
-        self.move_above_scale = 1;
-        self.move_above_presented = None;
-        self.transform_preview_level = 0;
         self.transform_controls = false;
         self.ruler = None;
         self.canvas_proxy = None;
@@ -819,18 +804,12 @@ impl PictureViewRust {
     /// Restore the pre-lift document or the pre-trim layer extent. Returns
     /// whether the document changed and needs a rebuild.
     fn cancel_transform_session(&mut self, session: TransformSession) -> bool {
-        self.move_base = None;
-        self.move_view = None;
-        self.move_view_pixels = Default::default();
-        self.move_layer = None;
-        self.move_x = 0;
-        self.move_y = 0;
-        self.move_layer_offset = (0, 0);
-        self.move_opacity = 0;
-        self.move_prepared_revision = 0;
-        self.move_prepared_layer.clear();
-        self.move_prepared_union = None;
-        self.move_preview_cache_hit = false;
+        // The one preview teardown, so this route cannot clear a different field
+        // set from the controller's own cancel. The controls flag goes too: this
+        // route (history restore, Undo/redo, a tool switch, a document swap) does
+        // not call the controller's setter.
+        self.clear_preview_overlay();
+        self.transform_controls = false;
         for (member, rect) in &session.untrimmed {
             if let Some(doc) = self.session.doc.as_mut() {
                 pictura_render::untrim_to(doc, member, *rect);

@@ -12,7 +12,7 @@ pub(super) const MOVE_HANDLE: i32 = 9;
 pub(super) const PIVOT_HANDLE: i32 = 10;
 
 /// Centre of `rect` as a document-space point.
-pub(super) fn rect_center(rect: PsdRect) -> (f64, f64) {
+pub(in crate::cxxqt_object) fn rect_center(rect: PsdRect) -> (f64, f64) {
     (
         (rect.left as f64 + rect.right as f64) / 2.0,
         (rect.top as f64 + rect.bottom as f64) / 2.0,
@@ -20,7 +20,7 @@ pub(super) fn rect_center(rect: PsdRect) -> (f64, f64) {
 }
 
 /// Source-rect corners in order top-left, top-right, bottom-right, bottom-left.
-pub(super) fn source_corners(rect: PsdRect) -> [(f64, f64); 4] {
+pub(in crate::cxxqt_object) fn source_corners(rect: PsdRect) -> [(f64, f64); 4] {
     [
         (rect.left as f64, rect.top as f64),
         (rect.right as f64, rect.top as f64),
@@ -736,45 +736,17 @@ mod tests {
     }
 
     fn session() -> TransformSession {
-        TransformSession {
-            target: TransformTarget::Layer,
-            path: "0".to_string(),
-            members: vec![("0".to_string(), rect4())],
-            orig_rect: rect4(),
-            scale_x: 1.0,
-            scale_y: 1.0,
-            angle: 0.0,
-            dx: 0.0,
-            dy: 0.0,
-            handle: -1,
-            press_x: 0.0,
-            press_y: 0.0,
-            start: [1.0, 1.0, 0.0, 0.0, 0.0],
-            dragging: true,
-            mode: TransformMode::Free,
-            type_layer: false,
-            quad: None,
-            base_quad: None,
-            free_perspective: false,
-            free_distort: false,
-            free_skew: false,
-            perspective_side: None,
-            start_quad: source_corners(rect4()),
-            pivot: (2.0, 2.0),
-            pivot_origin: (2.0, 2.0),
-            start_pivot: (2.0, 2.0),
-            show_pivot: true,
-            skew_x: 0.0,
-            skew_y: 0.0,
-            interpolation: pictura_render::Interpolation::Bicubic,
-            warp: None,
-            warp_drag: None,
-            warp_editing: false,
-            warp_post: None,
-            lifted: None,
-            untrimmed: Vec::new(),
-            history_label: "Free Transform".to_string(),
-        }
+        let mut s = TransformSession::new(
+            TransformTarget::Layer,
+            "0".to_string(),
+            vec![("0".to_string(), rect4())],
+            rect4(),
+            TransformMode::Free,
+            false,
+            "Free Transform",
+        );
+        s.dragging = true;
+        s
     }
 
     fn projective() -> TransformSession {

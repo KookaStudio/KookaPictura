@@ -53,9 +53,8 @@ bool ToolController::beginTransformSelection()
     if (!v) {
         return false;
     }
-    if (transformControls_) {
+    if (transformControlsSession()) {
         // A user command takes the Move tool's controls box over.
-        transformControls_ = false;
         clearControlsBox();
         v->cancel_transform();
     }
@@ -63,7 +62,6 @@ bool ToolController::beginTransformSelection()
         return false;
     }
     transform_set_controls(*v, false);
-    transformControls_ = false;
     transformGuideSnap_ = false;
     if (canvas_) {
         canvas_->beginTransformOverlay();
@@ -127,10 +125,9 @@ bool ToolController::beginTransformImpl(const QString& path, const QString& mode
     if (!v) {
         return false;
     }
-    if (transformControls_ && !controls) {
+    if (transformControlsSession() && !controls) {
         // A user command takes the Move tool's controls box over as a modal
         // session (the same path would otherwise be a begin no-op).
-        transformControls_ = false;
         clearControlsBox();
         if (v->transform_session_active()) {
             v->cancel_transform();
@@ -139,13 +136,15 @@ bool ToolController::beginTransformImpl(const QString& path, const QString& mode
     const bool ok = mode.isEmpty() ? v->begin_free_transform(path)
                                    : v->begin_transform_mode(path, mode);
     if (!ok) {
+        if (!v->transform_session_active()) {
+            resetTransformUi();
+        }
         if (edit_refused_for_memory()) {
             refused(transformMemoryRefusalMessage());
         }
         return false;
     }
     transform_set_controls(*v, controls);
-    transformControls_ = controls;
     transformGuideSnap_ = false;
     if (canvas_) {
         canvas_->beginTransformPreview(v->move_preview_base(), v->move_preview_layer(),
@@ -175,6 +174,15 @@ bool ToolController::transformSessionActive() const
 {
     PictureView* v = view();
     return v && v->transform_session_active();
+}
+
+bool ToolController::transformControlsSession() const
+{
+    // The idle box is a controls session with no Rust session; a handle gesture
+    // mid-drag is one the Rust side marks. A promoted pending transform is
+    // neither. One owner: `controlsIdle_` here, the flag over the bridge.
+    PictureView* v = view();
+    return controlsIdle_ || (v && transform_api::controlsSessionActive(*v));
 }
 
 void ToolController::updateTransformOverlay(PictureView* v)
@@ -282,12 +290,11 @@ bool ToolController::handleTransformPress(PictureView* v, const QPointF& imagePo
                                        mods.testFlag(Qt::AltModifier));
     transformGuideSnap_ = false;
     transformPressPos_ = imagePos;
-    if (transformControls_ && (hit < 0 || hit == 9)) {
+    if (transformControlsSession() && (hit < 0 || hit == 9)) {
         // Inside or outside the Move tool's controls box: an ordinary Move
         // drag. Suspend the box for the drag; the release path brings it
         // back on the moved layer.
         v->transform_release();
-        transformControls_ = false;
         v->cancel_transform();
         if (canvas_) {
             canvas_->clearTransformPreview();
@@ -368,7 +375,6 @@ void ToolController::commitFreeTransform()
     if (!v || !v->transform_session_active()) {
         return;
     }
-    transformControls_ = false;
     transform_set_controls(*v, false);
     const bool committed = runTransformCommit(canvas_ ? canvas_->window() : nullptr, *v);
     if (!committed && v->transform_session_active()) {
@@ -388,7 +394,6 @@ void ToolController::commitFreeTransform()
 // with Confirm/Reject. The session is not committed here.
 void ToolController::promoteControlsTransform(PictureView& v)
 {
-    transformControls_ = false;
     transform_set_controls(v, false);
     transform_set_show_pivot(v, true);
     updateTransformOverlay(&v);
@@ -404,7 +409,6 @@ void ToolController::cancelFreeTransform()
     if (!v || !v->transform_session_active()) {
         return;
     }
-    transformControls_ = false;
     transform_set_controls(*v, false);
     v->cancel_transform();
     transformGuideSnap_ = false;
@@ -413,7 +417,6 @@ void ToolController::cancelFreeTransform()
 
 void ToolController::resetTransformUi(bool keepPreview)
 {
-    transformControls_ = false;
     transformGuideSnap_ = false;
     clearControlsBox();
     if (canvas_) {
@@ -441,16 +444,15 @@ void ToolController::syncTransformControls()
 {
     PictureView* v = view();
     if (!v) {
-        transformControls_ = false;
         clearControlsBox();
         return;
     }
     // A modal (Ctrl+T) session owns the overlay; never touch it here.
-    if (v->transform_session_active() && !transformControls_) {
+    if (v->transform_session_active() && !transformControlsSession()) {
         return;
     }
     // A gesture in progress keeps its session until the release applies it.
-    if (transformControls_ && v->transform_session_active()) {
+    if (transformControlsSession() && v->transform_session_active()) {
         return;
     }
     const bool want = active_ == ToolId::Move && move_->get().showTransformControls
@@ -471,15 +473,13 @@ void ToolController::syncTransformControls()
         ? controls_box_extents(*v, active)
         : ::rust::Vec<int32_t>();
     if (box.size() != 4) {
-        if (transformControls_) {
-            transformControls_ = false;
+        if (transformControlsSession()) {
             clearControlsBox();
             emit transformChanged();
         }
         return;
     }
-    const bool was = transformControls_;
-    transformControls_ = true;
+    const bool was = transformControlsSession();
     controlsIdle_ = true;
     controlsPath_ = active;
     controlsKey_ = key;
@@ -512,7 +512,6 @@ bool ToolController::beginControlsGesture(PictureView* v)
 {
     clearControlsBox();
     if (!beginTransformImpl(controlsPath_, QString(), true)) {
-        transformControls_ = false;
         return false;
     }
     // CS6's controls box has no reference point (that is the modal command's).

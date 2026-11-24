@@ -1116,6 +1116,7 @@ free	transform_begin_free_distort	transform_begin_free_distort	api/transform_bri
 free	transform_begin_free_perspective	transform_begin_free_perspective	api/transform_bridge.h	pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h
 free	transform_begin_free_skew	transform_begin_free_skew	api/transform_bridge.h	pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h
 free	transform_can_set_mode	transform_can_set_mode	api/transform_bridge.h	pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h
+free	transform_controls_session	transform_controls_session	api/transform_bridge.h	pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h
 free	transform_drag_angle_degrees	transform_drag_angle_degrees	api/transform_bridge.h	pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h
 free	transform_enter_warp	transform_enter_warp	api/transform_bridge.h	pictura_app/src/cxxqt_object/impl_transform/warp.cxxqt.h
 free	transform_has_repeat	transform_has_repeat	api/transform_bridge.h	pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h
