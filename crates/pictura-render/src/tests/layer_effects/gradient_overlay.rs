@@ -591,6 +591,7 @@ fn small_gradient_overlay_layer_is_bounded() {
 // --- GPU fallback ----------------------------------------------------------
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_rejects_a_gradient_overlay_layer_and_falls_back() {
     let d = doc(
         12,
@@ -611,6 +612,7 @@ fn gpu_rejects_a_gradient_overlay_layer_and_falls_back() {
 }
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_does_not_reject_an_inert_or_undecodable_gradient_overlay() {
     let disabled = doc(
         12,

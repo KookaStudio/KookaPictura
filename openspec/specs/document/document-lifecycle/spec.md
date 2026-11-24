@@ -814,7 +814,6 @@ A native PSD/PSB loading-tab request SHALL carry its status on completion. The r
 - **WHEN** a native Open refused by the memory budget through a ControlServer open route overlaps an independent application or GUI open that fails or is cancelled; each control completion adapter is exercised separately
 - **THEN** each completion and protocol response belongs to its own request, the memory refusal retains its existing protocol code, and cancellation takes precedence over a late failure
 
-
 ### Requirement: Native Save reports an error and its publication outcome
 
 Native PSD/PSB Save, Save As and Save a Copy SHALL carry the operation status separately from the file publication outcome. A codec refusal SHALL use `OP_ERR_CODEC`, a file I/O failure SHALL use `OP_ERR_IO`, and a guarded unwind SHALL use `OP_ERR_PANIC`. A panic before rename SHALL have the same preservation and temporary-file cleanup guarantees as any other pre-rename failure. A panic after rename and before durable acknowledgement SHALL be treated as uncertain publication. For Save and Save As, the existing uncertainty notice and recovery rules SHALL apply only to the still-current originating session. Save a Copy SHALL follow the copy-specific uncertainty rule in `interop/save-a-copy`; a replacement session SHALL NOT inherit the original save's protection obligations.
@@ -838,3 +837,42 @@ Native PSD/PSB Save, Save As and Save a Copy SHALL carry the operation status se
 
 - **WHEN** a native save panics after rename and before durable acknowledgement, and its originating session is replaced before completion
 - **THEN** the originating attempt reports `OP_ERR_PANIC` and uncertain publication while the replacement session keeps its path, dirty state, history and recovery data unchanged
+
+### Requirement: New Document background color swatch
+
+The New Document dialog SHALL show a color swatch to the right of its Background
+Contents list. The list SHALL offer White, Background Color, and Transparent,
+and SHALL offer Custom only after a custom color has been chosen. The swatch
+SHALL show the fill color the current choice would use (white, the toolbox
+Background Color, or the chosen custom color) and SHALL be disabled while
+Transparent is selected. Clicking an enabled swatch SHALL open the color picker
+for the shown color; accepting a color SHALL add or select the Custom choice and
+make that color the new document's initial fill; cancelling SHALL leave the
+choice and the swatch unchanged. Confirming the dialog with Custom SHALL create
+the document filled with the chosen color as its locked Background layer.
+
+#### Scenario: The swatch follows Background Contents [ndb_swatch_follows_contents]
+
+- **WHEN** the New Document dialog opens, the user chooses Background Color, and
+  then chooses Transparent
+- **THEN** the list offers White, Background Color, and Transparent, the swatch
+  shows white, then the toolbox Background Color, and is disabled for
+  Transparent
+
+#### Scenario: A picked color becomes the initial background [ndb_swatch_pick]
+
+- **WHEN** the user clicks the swatch, picks a color, and confirms the dialog
+- **THEN** the list adds and selects Custom, the swatch shows the picked color,
+  and the new document's locked Background layer is filled with it
+
+#### Scenario: Cancelling the picker keeps the choice [ndb_swatch_cancel]
+
+- **WHEN** the user clicks the swatch from Custom and cancels the color picker
+- **THEN** Custom stays selected, and the swatch and the initial fill are
+  unchanged
+
+#### Scenario: Transparent disables the swatch [ndb_swatch_transparent]
+
+- **WHEN** the user chooses Transparent in Background Contents
+- **THEN** the swatch is disabled and the new document has a transparent
+  initial layer

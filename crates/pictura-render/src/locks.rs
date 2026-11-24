@@ -1,8 +1,9 @@
 //! Shared layer-lock predicates (design D5).
 //!
-//! The canonical definitions live in `pictura-core` because `pictura-paint`
-//! also needs them and must not depend on this crate (which pulls in wgpu).
-//! This module re-exports them for renderer and app callers.
+//! The canonical definitions live in `pictura-core` because they are
+//! layer-model predicates that `pictura-paint` also needs, and paint does not
+//! depend on this crate. This module re-exports them for renderer and app
+//! callers.
 
 pub use pictura_core::{layer_move_locked, layer_pixel_locked, layer_transparency_locked};
 

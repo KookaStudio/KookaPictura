@@ -240,9 +240,13 @@ fn selection_move_drag_costs() {
             pictura_render::composite(pictura_render::CompositeRequest::region(&doc, dirty, true))
         }),
     );
+    #[cfg(feature = "gpu")]
+    let gpu_present = pictura_render::gpu_available();
+    #[cfg(not(feature = "gpu"))]
+    let gpu_present = false;
     println!(
         "region composite backend: {}",
-        if pictura_render::gpu_available() {
+        if gpu_present {
             "gpu available"
         } else {
             "cpu only (no Vulkan device in this environment)"

@@ -1,25 +1,26 @@
 //! The camera raw entry point (#399): names a container by its signature and
-//! reads any supported one (DNG, Canon CR2, Nikon NEF, Sony ARW, Olympus ORF,
-//! Panasonic RW2) into the same normalized CFA image as `read_dng`.
+//! reads any supported one (DNG, Canon CR2 and CR3, Nikon NEF, Sony ARW,
+//! Olympus ORF, Panasonic RW2) into the same normalized CFA image as `read_dng`.
 //! Also the helpers the TIFF-based vendor containers share.
 
 use super::camera_matrices::CAMERAS;
 use super::levels::Area;
 use super::tiff::{Entry, Ifd, Tiff};
-use super::{arw, cr2, nef, orf, read_dng, rw2, to_usize, DngColor, DngImage, Tags, DNG_VERSION};
+use super::{
+    arw, cr2, cr3, nef, orf, read_dng, rw2, to_usize, DngColor, DngImage, Tags, DNG_VERSION,
+};
 use crate::error::PsdError;
 use crate::probe::ImageBudget;
 
 const EXIF_IFD: u16 = 34665;
 const MAKER_NOTE: u16 = 0x927C;
-const ILLUMINANT_A: u16 = 17;
-const ILLUMINANT_D65: u16 = 21;
 
 /// A camera raw container `read_raw` reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RawFormat {
     Dng,
     Cr2,
+    Cr3,
     Nef,
     Arw,
     Orf,
@@ -31,6 +32,9 @@ pub enum RawFormat {
 pub fn sniff_raw(bytes: &[u8]) -> Option<RawFormat> {
     if cr2::is_cr2(bytes) {
         return Some(RawFormat::Cr2);
+    }
+    if cr3::is_cr3(bytes) {
+        return Some(RawFormat::Cr3);
     }
     if orf::is_orf(bytes) {
         return Some(RawFormat::Orf);
@@ -52,7 +56,7 @@ pub fn sniff_raw(bytes: &[u8]) -> Option<RawFormat> {
 /// IFD0's entry table (and, for a NEF or an ARW, its `Make` value) is read, so the
 /// prefix need not hold the other values.
 pub fn sniff_raw_prefix(prefix: &[u8]) -> bool {
-    if cr2::is_cr2(prefix) || orf::is_orf(prefix) || rw2::is_rw2(prefix) {
+    if cr2::is_cr2(prefix) || cr3::is_cr3(prefix) || orf::is_orf(prefix) || rw2::is_rw2(prefix) {
         return true;
     }
     Tiff::parse(prefix).is_ok_and(|(tiff, first)| {
@@ -66,6 +70,7 @@ pub fn read_raw(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, PsdError
     match sniff_raw(bytes) {
         Some(RawFormat::Dng) => read_dng(bytes, budget),
         Some(RawFormat::Cr2) => cr2::read_cr2(bytes, budget),
+        Some(RawFormat::Cr3) => cr3::read_cr3(bytes, budget),
         Some(RawFormat::Nef) => nef::read_nef(bytes, budget),
         Some(RawFormat::Arw) => arw::read_arw(bytes, budget),
         Some(RawFormat::Orf) => orf::read_orf(bytes, budget),
@@ -157,7 +162,7 @@ fn model_key(make: &str, model: &str) -> String {
 }
 
 /// The colour tags of a raw file that embeds no matrix: its camera's fitted
-/// matrices under illuminants A and D65 when the table knows the camera, none
+/// matrices (under the lights the table names) when the table knows the camera, none
 /// otherwise, and the as-shot neutral the file recorded.
 pub(super) fn camera_color(
     make: Option<&str>,
@@ -176,8 +181,10 @@ pub(super) fn camera_color(
         .iter()
         .find(|c| c.make == make_key && c.models.contains(&model_key.as_str()))
     {
-        color.color_matrix = [Some(camera.illuminant_a), Some(camera.d65)];
-        color.calibration_illuminant = [Some(ILLUMINANT_A), Some(ILLUMINANT_D65)];
+        for (i, &(light, matrix)) in camera.matrices.iter().take(2).enumerate() {
+            color.color_matrix[i] = Some(matrix);
+            color.calibration_illuminant[i] = Some(light);
+        }
     }
     color
 }

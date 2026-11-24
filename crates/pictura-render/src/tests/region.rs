@@ -141,7 +141,10 @@ fn shape_commit_profile() {
         .and_then(|v| v.parse().ok())
         .unwrap_or(8000);
     let base = Document::from_rgba("Background", n, n, &vec![200; (n as usize).pow(2) * 4]);
+    #[cfg(feature = "gpu")]
     let gpu = crate::gpu_available();
+    #[cfg(not(feature = "gpu"))]
+    let gpu = false;
     let box_ = (
         n as f64 * 0.2,
         n as f64 * 0.2,

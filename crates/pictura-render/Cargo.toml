@@ -15,10 +15,14 @@ path = "src/bin/cold_compare.rs"
 [features]
 # Cross-crate tests opt in; ordinary renderer and application builds exclude the oracle.
 test-oracle = []
+# The wgpu/Vulkan compositor, the GPU filter kernels and the GPU stroke engine.
+# Off by default so a CPU-only build compiles without the wgpu closure; the
+# application and the GPU parity job enable it.
+gpu = ["dep:wgpu", "dep:pollster"]
 # Test-only: let the GPU probe accept a software (CPU-type) device so the GPU
 # parity tests run on lavapipe (Linux) or WARP (Windows) in CI. Never enable it
-# in a manifest.
-software-gpu = []
+# in a manifest. Implies `gpu`, so the CI spelling keeps compiling the stack.
+software-gpu = ["gpu"]
 
 [dependencies]
 unicode-bidi = "0.3"
@@ -37,8 +41,8 @@ pictura-codec = { path = "../pictura-codec" }
 # Mask feather reuses the selection feather's blur.
 pictura-select = { path = "../pictura-select" }
 # wgpu/pollster versions track `pictura-app`, which already pulls wgpu 30.0.1.
-wgpu = { version = "30.0.1", default-features = false, features = ["std", "vulkan", "wgsl"] }
-pollster = "1"
+wgpu = { version = "30.0.1", default-features = false, features = ["std", "vulkan", "wgsl"], optional = true }
+pollster = { version = "1", optional = true }
 # Pure-Rust HarfBuzz port for line shaping (kerning + default GPOS/GSUB).
 rustybuzz = "0.20"
 # Pure-Rust glyph rasterizer honoring fractional subpixel offsets.
@@ -56,4 +60,4 @@ flate2 = "1"
 # Vulkan-only graph. The feature is target-scoped so Windows-only transitive
 # crates never enter the Linux build.
 [target.'cfg(windows)'.dependencies]
-wgpu = { version = "30.0.1", default-features = false, features = ["std", "dx12", "vulkan", "wgsl"] }
+wgpu = { version = "30.0.1", default-features = false, features = ["std", "dx12", "vulkan", "wgsl"], optional = true }

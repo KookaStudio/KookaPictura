@@ -33,6 +33,7 @@ const RAW_FORMAT: u16 = 0x002D;
 /// Top, left, bottom, right.
 const CROP: [u16; 4] = [0x002F, 0x0030, 0x0031, 0x0032];
 const RAW_DATA_OFFSET: u16 = 0x0118;
+const RAW_FORMAT_2_SATURATION: f64 = 3967.0;
 
 const MAGIC: &[u8; 4] = b"IIU\0";
 const HEADER_LEN: usize = 8;
@@ -259,6 +260,13 @@ fn levels(tags: &Tags, coding: Coding, cfa: &CfaPattern) -> Result<Levels, PsdEr
         .map(|w| w as f64)
         .filter(|&w| w > top_black && w <= ceiling)
         .unwrap_or(ceiling);
+    // RawFormat 2 data (the FZ8 and FZ18) saturates at 3967 under a white tag
+    // of 4095; whiter would leave clipped areas short of white in green.
+    let white = if coding == Coding::Groups(12) {
+        white.min(RAW_FORMAT_2_SATURATION)
+    } else {
+        white
+    };
     Ok(Levels {
         linearization: None,
         black: cfa

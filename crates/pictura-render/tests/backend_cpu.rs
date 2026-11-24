@@ -1,3 +1,4 @@
+#![cfg(feature = "gpu")]
 use pictura_core::{BitDepth, BlendMode, Channel, ColorMode, Document, LockFlags, PsdRect};
 use pictura_render::{
     composite, composite_rgba, gpu_available, set_backend, Backend, CompositeRequest, GpuBackend,

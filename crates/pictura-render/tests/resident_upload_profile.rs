@@ -1,3 +1,4 @@
+#![cfg(feature = "gpu")]
 //! Ignored profile for the resident upload store. Run with:
 //! `cargo test -p pictura-render --test resident_upload_profile -- --ignored --nocapture`
 //!

@@ -644,6 +644,7 @@ fn composite_satin_clamps_hand_built_non_finite_parameters() {
 // --- GPU fallback ----------------------------------------------------------
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_rejects_a_satin_layer_and_falls_back() {
     let d = doc(
         12,
@@ -664,6 +665,7 @@ fn gpu_rejects_a_satin_layer_and_falls_back() {
 }
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_does_not_reject_a_disabled_or_malformed_satin() {
     let disabled = spec_satin(&SatinSpec {
         enabled: false,

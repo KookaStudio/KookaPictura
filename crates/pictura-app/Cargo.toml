@@ -17,7 +17,10 @@ pictura-codec = { path = "../pictura-codec" }
 pictura-error = { path = "../pictura-error" }
 pictura-color = { path = "../pictura-color" }
 pictura-ops = { path = "../pictura-ops" }
-pictura-render = { path = "../pictura-render" }
+# The application is the end-user GPU build: enable the renderer standalone GPU
+# stack. CPU-only consumers (the codec dev-dependency, render test binaries
+# built on their own) leave it off and do not compile wgpu.
+pictura-render = { path = "../pictura-render", features = ["gpu"] }
 pictura-select = { path = "../pictura-select" }
 pictura-script = { path = "../pictura-script" }
 pictura-mcp = { path = "../pictura-mcp" }
@@ -55,6 +58,9 @@ ash = "0.38"
 # The counting allocator the memory guards install in the unit-test binary
 # (#1210); a workspace crate, no new dependency.
 [dev-dependencies]
+# Cargo unifies this with the dependency above, so test builds keep the GPU
+# stack without this line naming it; the `view_oracle` guard pins this line to
+# the oracle feature alone.
 pictura-render = { path = "../pictura-render", features = ["test-oracle"] }
 pictura-testkit = { path = "../pictura-testkit" }
 

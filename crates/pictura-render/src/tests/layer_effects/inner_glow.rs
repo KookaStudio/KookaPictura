@@ -877,6 +877,7 @@ fn channel_less_smart_object_inner_glow_covers_the_rect() {
 // --- GPU fallback ----------------------------------------------------------
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_rejects_an_inner_glow_layer_and_falls_back() {
     let d = doc(
         12,
@@ -897,6 +898,7 @@ fn gpu_rejects_an_inner_glow_layer_and_falls_back() {
 }
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_does_not_reject_a_disabled_or_not_present_inner_glow() {
     for spec in [
         InnerGlowSpec {

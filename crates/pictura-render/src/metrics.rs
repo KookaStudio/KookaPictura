@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+#[cfg(feature = "gpu")]
 use crate::GpuError;
 
 /// Whether `PICTURA_METRICS` was a non-zero integer at first use.
@@ -138,6 +139,7 @@ pub const DECLINE_REASONS: [&str; 12] = [
     "memory",
 ];
 
+#[cfg(feature = "gpu")]
 fn reason_index(err: &GpuError) -> usize {
     match err {
         GpuError::Unavailable => 0,
@@ -175,16 +177,19 @@ thread_local! {
 static DEVICE_NS: AtomicU64 = AtomicU64::new(u64::MAX);
 
 /// Count one GPU decline under its reason.
+#[cfg(feature = "gpu")]
 pub(crate) fn count_decline(err: &GpuError) {
     DECLINES[reason_index(err)].fetch_add(1, Relaxed);
 }
 
 /// Count one declining layer the plan walk sees. A corpus run ranks reasons
 /// without stopping at the first declining layer.
+#[cfg(feature = "gpu")]
 pub(crate) fn count_layer_decline(err: &GpuError) {
     LAYER_DECLINES[reason_index(err)].fetch_add(1, Relaxed);
 }
 
+#[cfg_attr(not(feature = "gpu"), allow(dead_code))]
 pub(crate) fn count_resident(hit: bool) {
     if hit {
         RESIDENT_HITS.fetch_add(1, Relaxed);
@@ -194,6 +199,7 @@ pub(crate) fn count_resident(hit: bool) {
 }
 
 /// Publish the resident store's post-eviction size.
+#[cfg_attr(not(any(feature = "gpu", test)), allow(dead_code))]
 pub(crate) fn set_resident(entries: usize, bytes: u64) {
     RESIDENT_ENTRIES.store(entries as u64, Relaxed);
     RESIDENT_BYTES.store(bytes, Relaxed);
@@ -242,6 +248,7 @@ pub fn take_largest_canvas() -> u64 {
 }
 
 /// Publish the device-side time of the GPU composite that just finished.
+#[cfg_attr(not(any(feature = "gpu", test)), allow(dead_code))]
 pub(crate) fn publish_device_ms(ms: f64) {
     DEVICE_NS.store((ms * 1.0e6).max(0.0) as u64, Relaxed);
 }
@@ -346,6 +353,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "gpu")]
     fn dissolve_decline_is_counted() {
         let doc = solid_doc(4, 4, BlendMode::Dissolve);
         let before = decline_count("unsupported_mode");
@@ -357,6 +365,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "gpu")]
     fn layer_decline_is_counted() {
         let doc = solid_doc(4, 4, BlendMode::Dissolve);
         let before = counters()
@@ -377,6 +386,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "gpu")]
     fn type_source_decline_is_counted() {
         let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
             name: "text".into(),

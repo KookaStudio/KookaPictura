@@ -4,6 +4,7 @@ use super::*;
 
 /// The GPU accepts an enabled effect and either matches the CPU within ±1 LSB
 /// or falls back to the exact CPU oracle.
+#[cfg(feature = "gpu")]
 pub(crate) fn assert_gpu_accepts_and_matches_cpu(doc: &Document) {
     let cpu = composite_rgba(doc);
     let (out, backend) = crate::composite_request::composite(
@@ -260,6 +261,7 @@ fn spec_shadow(spec: &ShadowSpec) -> Layer {
 }
 
 /// A drop shadow with `uglg` set, for the global-light acceptance test.
+#[cfg_attr(not(feature = "gpu"), allow(dead_code))]
 pub(crate) fn global_shadow_block() -> LayerBlock {
     spec_block(&ShadowSpec {
         global: true,
@@ -861,6 +863,7 @@ fn max_size_small_layer_is_bounded() {
 // --- GPU fallback ----------------------------------------------------------
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_rejects_a_drop_shadow_layer_and_falls_back() {
     let d = doc(
         9,
@@ -881,6 +884,7 @@ fn gpu_rejects_a_drop_shadow_layer_and_falls_back() {
 }
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_does_not_reject_a_disabled_or_not_present_effect() {
     for spec in [
         ShadowSpec {
@@ -898,6 +902,7 @@ fn gpu_does_not_reject_a_disabled_or_not_present_effect() {
 }
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_reports_the_effect_for_a_fill_layer() {
     let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Solid".into(),

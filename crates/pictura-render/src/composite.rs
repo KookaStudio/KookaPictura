@@ -576,6 +576,7 @@ pub(crate) fn channel_plane(layer: &Layer, id: i16) -> Option<&pictura_core::Pla
 ///
 /// The raster and vector coverages multiply, so either can suppress the layer;
 /// an absent or disabled part contributes `255`.
+#[cfg_attr(not(any(feature = "gpu", test)), allow(dead_code))]
 pub(crate) fn mask_alpha(layer: &Layer, clip: PsdRect, x: i32, y: i32) -> u8 {
     let raster = raster_mask_alpha(layer, clip, x, y);
     let vector = crate::mask_refine::vector(layer.vector_mask.as_ref(), clip, x, y);
@@ -584,6 +585,7 @@ pub(crate) fn mask_alpha(layer: &Layer, clip: PsdRect, x: i32, y: i32) -> u8 {
 
 /// The raster layer-mask sample at a canvas pixel, with its density and
 /// feather; `255` when absent/disabled.
+#[cfg_attr(not(any(feature = "gpu", test)), allow(dead_code))]
 pub(crate) fn raster_mask_alpha(layer: &Layer, clip: PsdRect, x: i32, y: i32) -> u8 {
     match layer.mask.as_ref() {
         Some(mask) => crate::mask_refine::raster(mask, clip, x, y),

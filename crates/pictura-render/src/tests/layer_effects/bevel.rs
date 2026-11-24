@@ -903,6 +903,7 @@ fn composite_bevel_emboss_clamps_hand_built_non_finite_parameters() {
 // --- GPU fallback ----------------------------------------------------------
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_rejects_a_bevel_layer_and_falls_back() {
     let d = doc(
         12,
@@ -923,6 +924,7 @@ fn gpu_rejects_a_bevel_layer_and_falls_back() {
 }
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_does_not_reject_a_disabled_or_stroke_emboss_bevel() {
     for spec in [
         BevelSpec {

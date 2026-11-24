@@ -508,7 +508,7 @@ gaps are the CS6 Extended 3D object and camera tools.
       and a CR2 reports its as-shot white balance from the maker note
       (approximate parity) (#1465). `scripts/gen-camera-matrices.py`,
       `crates/pictura-codec/src/dng/camera_matrices.rs`.
-- [x] **Open camera raw files** — File ▸ Open recognises a DNG, CR2, NEF, ARW or ORF by its
+- [x] **Open camera raw files** — File ▸ Open recognises a DNG, CR2, NEF, ARW, ORF or RW2 by its
       signature, decodes it, shows Pictura Raw first (absolute white balance,
       sidecar or embedded `crs:` settings), and opens a 16-bit RGB document
       (approximate parity) (#400).
@@ -520,8 +520,29 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [ ] X-Trans-tuned demosaic, with the Fuji container (#399)
 - [ ] Deflate, PackBits and lossy-JPEG DNGs and floating-point samples (#396)
 - [ ] Olympus-compressed ORF sensor data, most bodies since 2007 (#1535)
-- [ ] Colour for Panasonic RW2 cameras, so they open (#1542)
-- [ ] Vendor raw containers: CR3 (#399)
+- [x] **Panasonic RW2 colour** — 10 Panasonic bodies open with colour: the
+      DC-GX9 from spectral data, nine others from matrices fitted against each
+      body's own camera JPEG (approximate, the maker's rendering); the Open
+      dialog lists RW2, RWL and RAW; RawFormat 2 whites at 3967 (#1542).
+      `scripts/fit-camera-jpeg-matrices.py`,
+      `crates/pictura-codec/src/dng/camera_matrices.rs`.
+- [ ] Colour for the remaining Panasonic RW2 bodies (#1558)
+- [x] **Canon CR3** — CR3 files (every Canon body since 2018) open: lossless
+      and C-RAW CRX frames, versions 1 and 2, the main image of the largest
+      raw track (bursts and Dual Pixel images keep their first frame), ported
+      openly from LibRaw 0.22.1 and bit-exact with it on 52 sample files; the
+      EOS R, RP, R5, R5 Mark II, R6, R6 Mark II, R10 and 250D (and the R50,
+      R8, Rebel SL3, Kiss X10) open with colour; the Open dialog lists CR3
+      (#1474). `crates/pictura-codec/src/dng/cr3.rs`, `crx*.rs`.
+- [x] **Canon CR3 colour** — 15 more CR3 bodies open with colour: the 850D,
+      90D, M200, M50, M50 Mark II, R100, R50 V, R6 Mark III, R7, 1D X Mark
+      III, PowerShot G5 X Mark II and SX70 HS from matrices fitted against
+      each body's own camera JPEG (approximate, Canon's rendering), the M6
+      Mark II and PowerShot G7 X Mark III by same-sensor proxy, and Canon's
+      regional names (Kiss M, Kiss M2, Rebel T8i, Kiss X10i) (#1574).
+      `scripts/fit-camera-jpeg-matrices.py`,
+      `crates/pictura-codec/src/dng/camera_matrices.rs`.
+- [ ] Colour for the EOS R3, PowerShot V1 and the weak CR3 rows (#1579)
 - [ ] Every Nikon camera opens with colour: verify each layout, colour sources for ~70 bodies, recent models first (#1498)
 - [x] **DNG output** — Save Image… in the raw open's Pictura Raw dialog writes
       a mosaic DNG (lossless-JPEG tiles) or, with Convert to Linear Image, a

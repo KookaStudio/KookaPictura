@@ -249,6 +249,7 @@ fn compare_scene(scene_name: &str, modes: &[(BlendMode, &str, u8)]) {
 /// document must have declined to the CPU with identical bytes.
 #[test]
 #[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
+#[cfg(feature = "gpu")]
 fn fixture_scenes_match_oracle_on_active_backend() {
     assert!(
         pictura_render::gpu_available(),
@@ -285,6 +286,7 @@ fn fixture_scenes_match_oracle_on_active_backend() {
 /// A fixture scene the GPU declines (Dissolve) falls back to the CPU oracle.
 #[test]
 #[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
+#[cfg(feature = "gpu")]
 fn declined_fixture_scene_equals_oracle() {
     assert!(
         pictura_render::gpu_available(),

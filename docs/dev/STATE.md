@@ -4,6 +4,40 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Canon CR3 colour, #1574** (OpenSpec change `vendor-raw-cr3-colour`,
+  archived; `codec/camera-matrices` modified). By owner decision CR3 bodies
+  without rawtoaces data take camera-JPEG fits (the #1542 method) and, where
+  the sample is too grey, a same-sensor sibling's fit. The fit script reads
+  CR3 (full-size JPEG track, CMT1, CTMD ColorData presets: Daylight at word
+  136/150/205/110 for versions 16-19/32-33/34-48/64-66), places D55 (mired
+  between Daylight 5200 K and Cloudy 6000 K) and Tungsten 3200 K (code 24),
+  drops a tungsten matrix whose pair does not read back its lights (R6 Mark
+  III), and keeps recorded fits of samples outside the run. 12 fitted bodies
+  + M6 II (90D) and G7 X III (G5 X II) proxies + Kiss M/M2, Rebel T8i, Kiss
+  X10i names. R3, V1, the R6 III pair and the RP/R50 spectral rows (6-11 dE
+  from their camera JPEGs) -> #1579. Samples in ~/Downloads/cr3-1474.
+- **Canon CR3, #1474** (OpenSpec change `vendor-raw-cr3`, archived;
+  `codec/vendor-raw-containers`, `codec/camera-matrices`, `document/raw-open`
+  modified). Owner chose an open, attributed port of LibRaw 0.22.1's CRX
+  decoder (`dng/crx.rs`, `crx_lines.rs`, `crx_wavelet.rs`; LGPL-2.1 side of
+  the dual licence). `dng/cr3.rs`: ISO box walk, largest CRAW track, first
+  sample (bursts / Dual Pixel: main image), CMT1 IFD0, CMT3 sensor info, as-
+  shot WB from the CTMD track's type-8 maker note (CR2 ColorData layouts).
+  Encoding 1 refused; rounded lines ported but unobserved. Bit-exact vs
+  LibRaw (rawpy) on 52 raw.pixls.us samples, 29 bodies, kept in
+  ~/Downloads/cr3-1474. Colour: 8 rawtoaces bodies + aliases; others refused.
+  Active Canon patents recorded in PROVENANCE. Series next: RAF + X-Trans.
+- **Panasonic RW2 colour, #1542** (OpenSpec change `vendor-raw-rw2-colour`,
+  archived). Only the DC-GX9 has open spectral data; by owner decision other
+  bodies take matrices fitted against their own embedded camera JPEG
+  (`examples/raw_jpeg_blocks.rs` + `scripts/fit-camera-jpeg-matrices.py` ->
+  `scripts/camera-jpeg-fits.json` -> `gen-camera-matrices.py`), placed under
+  the file's own D55/Fine Weather and tungsten presets. `CameraMatrices` now
+  names each matrix's LightSource. 10 bodies (GX9, GH5S, GH6, S1, S5, FZ18,
+  FZ28, G1, GM1S/GM1, ZS100/TZ100/101/110); pre-2007 `.RAW` bodies have no
+  embedded JPEG, G9/G9M2 samples too grey -> #1558. RawFormat 2 white capped
+  at 3967 (FZ8/FZ18 saturate there). Open dialog lists RW2/RWL/RAW. Samples
+  in ~/Downloads/rw2-1542 and rw2-1541.
 - **Vendor raw containers — Panasonic RW2 (plain packings), #1472 part 1**
   (OpenSpec change `vendor-raw-rw2`, archived; `codec/vendor-raw-containers`
   and `document/raw-open` modified; #1472 stays open). `dng/rw2.rs`: header
@@ -11,16 +45,16 @@ Snapshot for resuming after a context break. Update after each milestone.
   levels = tags x 16) and RawFormat 2 / 7 (ten 12-bit / nine 14-bit samples
   from the low bit of 16 bytes). The CFA code counts from the sensor corner,
   so odd borders shift it. Decode only: no matrix, so File > Open names the
-  camera and refuses, and the dialog filters do not list RW2 yet (#1542).
+  camera and refuses (colour came with #1542).
   Checked on 432 raw.pixls.us files (headers only for the refused): 12 read,
-  420 refused by RawFormat. Series next: RAF + X-Trans -> CR3.
+  420 refused by RawFormat. Series next: RAF + X-Trans.
 - **Panasonic RW2 compressed codings, #1541** (OpenSpec change
   `vendor-raw-rw2-codings`, archived). Owner changed the provenance rule for
   this format: `dng/rw2_decode.rs` is an open, attributed port of rawspeed
   (LGPL-2.1+) — RawFormat 3/4 (V4, +15 black, zero fill), 5, 6, 8 (strips).
   Bit-exact vs LibRaw 0.22.1 (rawpy) on 9 samples; samples kept in
   ~/Downloads/rw2-1541. Patent search found active Nuvoton/Panasonic patents
-  (PROVENANCE). Still decode-only until colour (#1542).
+  (PROVENANCE). Colour since #1542.
 - **Vendor raw containers — Olympus ORF (uncompressed), #1471 implemented**
   (OpenSpec change `vendor-raw-orf`, archived; `codec/vendor-raw-containers`
   and `document/raw-open` modified). `dng/orf.rs`: headers `IIRO`/`IIRS`/`MMOR`;

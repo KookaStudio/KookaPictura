@@ -158,14 +158,7 @@ impl fmt::Display for GpuError {
 
 impl std::error::Error for GpuError {}
 
-/// The compositing backend that produced a buffer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Backend {
-    /// The wgpu compute compositor on the selected backend.
-    Gpu,
-    /// The CPU oracle [`crate::composite_rgba`].
-    Cpu,
-}
+pub use crate::backend::Backend;
 
 /// Composite `doc` on the GPU for Normal + every separable mode.
 ///

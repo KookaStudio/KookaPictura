@@ -507,6 +507,7 @@ pub(crate) fn fill_coverage_matte(
 
 /// Rasterize a fill layer's content into the straight-alpha RGBA buffer the GPU
 /// uploads, or `None` when the layer is not a decoded fill.
+#[cfg_attr(not(any(feature = "gpu", test)), allow(dead_code))]
 pub(crate) fn fill_source(
     layer: &Layer,
     doc: &Document,
@@ -602,6 +603,7 @@ pub(crate) fn fill_source(
     })
 }
 
+#[cfg_attr(not(any(feature = "gpu", test)), allow(dead_code))]
 fn rgba_to_planar(px: &[[u8; 4]], w: i32, h: i32) -> PixelBuffer {
     let n = (w.max(0) as usize) * (h.max(0) as usize);
     let mut buf = PixelBuffer::new(w.max(0) as u32, h.max(0) as u32, 4);

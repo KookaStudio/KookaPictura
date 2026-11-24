@@ -195,11 +195,26 @@ fn raw_sniff_detects_by_signature() {
     let olympus = write(&dir, "olympus.tif", b"IIRO\x08\0\0\0\0\0\0\0\0\0");
     // So is a Panasonic one for an RW2.
     let panasonic = write(&dir, "panasonic.tif", b"IIU\0\x08\0\0\0\0\0\0\0\0\0");
+    // A CR3 is an ISO media file of brand `crx `; another brand is not.
+    let canon = write(
+        &dir,
+        "IMG_0001.mp4",
+        b"\0\0\0\x18ftypcrx \0\0\0\x01crx isom",
+    );
+    let movie = write(&dir, "clip.cr3", b"\0\0\0\x18ftypisom\0\0\x02\0isomiso2");
+    // A Panasonic `.RAW` routes by its header; a Photoshop Raw `.RAW` (bare
+    // interleaved pixels) does not.
+    let panasonic_raw = write(&dir, "P1000001.RAW", b"IIU\0\x08\0\0\0\0\0\0\0\0\0");
+    let photoshop_raw = write(&dir, "pixels.RAW", &[0x80u8; 48]);
     let sniff = |p: &Path| raw_sniff_path(&QString::from(p.to_str().unwrap()));
+    assert!(sniff(&panasonic_raw));
+    assert!(!sniff(&photoshop_raw));
     assert!(sniff(&dng));
     assert!(sniff(&arw));
     assert!(sniff(&olympus));
     assert!(sniff(&panasonic));
+    assert!(sniff(&canon));
+    assert!(!sniff(&movie));
     assert!(!sniff(&other));
     assert!(!sniff(&tiff));
     assert!(!sniff(&dir.join("missing.dng")));

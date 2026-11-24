@@ -3,6 +3,7 @@
 //! wide, and these tests read the default.
 
 use super::*;
+#[cfg(feature = "gpu")]
 use crate::gpu::composite_gpu;
 use crate::text_gamma::{text_gamma_alpha, DEFAULT_TEXT_GAMMA};
 use pictura_core::TypeTool;
@@ -85,6 +86,7 @@ fn pixel_layers_skip_the_curve() {
 }
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_accepts_proxied_type_while_gamma_is_on() {
     let _gamma = crate::test_support::gamma_guard();
     assert!(

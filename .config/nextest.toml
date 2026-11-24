@@ -22,8 +22,11 @@ report-skipped = "ignored"
 # The GPU parity run (`gpu-parity` CI job on lavapipe, or locally on any Vulkan
 # or DX12 device):
 #   cargo nextest run -p pictura-render --features software-gpu --profile gpu --run-ignored all
-# Selects the device-dependent tests and the device-free GPU checks; the
-# PICTURA_GPU_BENCH timing and profile evidence is excluded by name.
+# `software-gpu` implies the renderer's `gpu` feature, so the command compiles
+# the wgpu stack; `--features "gpu software-gpu"` is the explicit equivalent.
+# Selects the device-dependent tests, the device-free GPU checks and the
+# device-free backend tests; the PICTURA_GPU_BENCH timing and profile evidence
+# is excluded by name.
 [profile.gpu]
 fail-fast = false
 status-level = "all"
@@ -33,6 +36,7 @@ success-output = "never"
 default-filter = """
 package(pictura-render) & (
     binary(gpu_parity) | binary(gpu_filter_parity)
+    | binary(backend_pin) | binary(backend_cpu)
     | test(/^gpu(_filter)?::/) | test(/fixture_scene/)
     | test(/^cold_engine_profile$/)
 ) & !test(/timing|_1024_|over_1d_limit|full_4000|composite_profile/)
