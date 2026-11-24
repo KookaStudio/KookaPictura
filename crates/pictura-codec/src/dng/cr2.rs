@@ -198,9 +198,10 @@ pub(super) fn as_shot_neutral(note: Option<&Tags>) -> Result<Option<[f64; 3]>, P
 }
 
 /// Reads a CR2's sensor plane, normalized and cropped to its active area.
-// ponytail: white is the frame's precision ceiling, not the camera's
-// saturation (ColorData's per-version white levels are not read), and the
-// black is one mean per CFA position.
+// White is the frame's precision ceiling: Canon files store clipped
+// photosites there, above the white levels ColorData records, which are
+// not read (#1587).
+// ponytail: the black is one mean per CFA position.
 pub(super) fn read_cr2(bytes: &[u8], budget: &ImageBudget) -> Result<DngImage, PsdError> {
     if !is_cr2(bytes) {
         return Err(invalid("not a CR2 header"));
