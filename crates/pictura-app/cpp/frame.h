@@ -25,6 +25,8 @@
 #include "tools.h"
 #include "frame_forward.h"
 
+namespace pictura {
+
 // True when a launch should seed the scratch white document. Only the self-test
 // path needs it (headless implies self-test), so a normal launch starts on the
 // empty workspace with the document commands disabled.
