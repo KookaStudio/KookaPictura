@@ -7,7 +7,7 @@ use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
 use pictura_core::{AdjustmentData, PsdRect};
-use pictura_render::{Adjustment, AutoKind};
+use pictura_render::Adjustment;
 
 pub(super) fn to_block(data: Option<AdjustmentData>) -> Vec<u8> {
     data.map(|d| {
@@ -37,12 +37,15 @@ pub(super) fn image_adjustment_default(
     background: u32,
     cmyk: bool,
 ) -> Vec<u8> {
-    to_block(pictura_render::default_adjustment_block_in_mode(
-        &kind.to_string(),
-        rgb(foreground),
-        rgb(background),
+    let Some(kind) = pictura_render::AdjustmentKind::from_name(&kind.to_string()) else {
+        return Vec::new();
+    };
+    let ctx = pictura_render::Defaults {
+        foreground: rgb(foreground),
+        background: rgb(background),
         cmyk,
-    ))
+    };
+    to_block(pictura_render::dialog_default(kind, ctx))
 }
 
 pub(super) fn image_adjustment_page(block: &[u8], cmyk: bool) -> QStringList {
@@ -162,22 +165,19 @@ pub(super) fn image_adjust_apply(
     }
 }
 
-/// A dialog-less command's adjustment and history name.
-pub(super) fn direct(kind: &str) -> Option<(Adjustment, &'static str)> {
-    Some(match kind {
-        "invert" => (Adjustment::Invert, "Invert"),
-        "desaturate" => (Adjustment::Desaturate, "Desaturate"),
-        "equalize" => (Adjustment::Equalize, "Equalize"),
-        "auto-tone" => (Adjustment::Auto(AutoKind::Tone), "Auto Tone"),
-        "auto-contrast" => (Adjustment::Auto(AutoKind::Contrast), "Auto Contrast"),
-        "auto-color" => (Adjustment::Auto(AutoKind::Color), "Auto Color"),
-        _ => return None,
-    })
+/// A dialog-less command's adjustment and history name. Both come from the
+/// catalogue: the adjustment from the row's direct constructor, the label from
+/// the row's title.
+pub(super) fn direct(kind: &str) -> Option<(Adjustment, String)> {
+    let kind = pictura_render::AdjustmentKind::from_name(kind)?;
+    let adjustment = pictura_render::direct_adjustment(kind)?;
+    let title = pictura_render::entry_of(kind)?.title.to_string();
+    Some((adjustment, title))
 }
 
 pub(super) fn image_adjust_direct(view: Pin<&mut PictureView>, kind: &QString) -> bool {
     match direct(&kind.to_string()) {
-        Some((adjustment, label)) => run(view, adjustment, None, Some(label)),
+        Some((adjustment, label)) => run(view, adjustment, None, Some(&label)),
         None => false,
     }
 }
@@ -188,10 +188,9 @@ mod tests {
 
     #[test]
     fn blocks_round_trip_and_edit() {
-        let block = to_block(pictura_render::default_adjustment_block(
-            "threshold",
-            [0; 3],
-            [255; 3],
+        let block = to_block(pictura_render::dialog_default(
+            pictura_render::AdjustmentKind::Threshold,
+            pictura_render::Defaults::rgb(),
         ));
         assert_eq!(&block[..4], b"thrs");
         let edited = image_adjustment_set(&block, &QString::from("level"), 200.0, false);

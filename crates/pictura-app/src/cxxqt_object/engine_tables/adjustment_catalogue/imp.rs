@@ -13,7 +13,7 @@ pub(crate) fn image_name(image: ImageCommand) -> &'static str {
 
 pub(crate) fn row(entry: &AdjustmentEntry) -> AdjustmentRow {
     AdjustmentRow {
-        kind: QString::from(entry.kind),
+        kind: QString::from(entry.kind.name()),
         title: QString::from(entry.title),
         image: QString::from(image_name(entry.image)),
         layer: entry.layer != LayerEntry::None,

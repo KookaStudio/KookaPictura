@@ -44,6 +44,31 @@ fn pixels() -> Layer {
     })
 }
 
+fn red_pixels() -> Layer {
+    pictura_codec::layer_from_parts(pictura_core::LayerParts {
+        rect: rect(),
+        channels: vec![
+            Channel {
+                id: 0,
+                data: vec![255, 0, 255, 0].into(),
+            },
+            Channel {
+                id: 1,
+                data: vec![0; 4].into(),
+            },
+            Channel {
+                id: 2,
+                data: vec![0; 4].into(),
+            },
+            Channel {
+                id: -1,
+                data: vec![255; 4].into(),
+            },
+        ],
+        ..Default::default()
+    })
+}
+
 fn renderable_type() -> Layer {
     let mut layer = type_layer(Vec::new());
     layer.rect = PsdRect {
@@ -290,9 +315,10 @@ fn hidden_clipping_base_suppresses_run() {
 }
 
 fn adjustment_of_kind(kind: &str, rect: PsdRect) -> Layer {
+    let kind = crate::AdjustmentKind::from_name(kind).expect("a catalogue kind");
     pictura_codec::layer_from_parts(pictura_core::LayerParts {
         rect,
-        adjustment: crate::default_adjustment_block(kind, [0; 3], [255; 3]),
+        adjustment: crate::dialog_default(kind, crate::Defaults::rgb()),
         ..Default::default()
     })
 }
@@ -317,6 +343,66 @@ fn adjustment_without_a_gpu_kind_declines_at_any_rect() {
                 "{kind} at {area:?}"
             );
         }
+    }
+}
+
+/// A kind whose row declares a GPU route still declines when the parameter
+/// shape is one the shader does not model — Hue/Saturation with a colour range
+/// has no shader form. The row says "this kind has a GPU path", not "every
+/// parameter set uses it".
+#[test]
+fn gpu_route_falls_back_for_unmodelled_parameters() {
+    // The Master-only shape is routed on the GPU.
+    let modelled = pictura_codec::layer_from_parts(pictura_core::LayerParts {
+        adjustment: Some(crate::encode_hue_saturation(10, 0, 0)),
+        ..Default::default()
+    });
+    let doc = doc_layers(vec![pixels(), modelled]);
+    assert_eq!(reason(check_supported(&doc)), "ok", "Master only is routed");
+
+    // The same kind carrying a colour-range edit is not.
+    let ranged = pictura_codec::layer_from_parts(pictura_core::LayerParts {
+        adjustment: Some(hue_saturation_with_a_range()),
+        ..Default::default()
+    });
+    let baseline = doc_layers(vec![red_pixels()]);
+    let baseline_cpu = crate::composite_rgba(&baseline);
+    let doc = doc_layers(vec![red_pixels(), ranged]);
+    assert_eq!(
+        reason(check_supported(&doc)),
+        "UnsupportedAdjustment",
+        "colour ranges are CPU-only"
+    );
+    let adjusted_cpu = crate::composite_rgba(&doc);
+    assert_ne!(
+        adjusted_cpu.data, baseline_cpu.data,
+        "the CPU fallback applies the ranged edit"
+    );
+}
+
+/// A `hue2` block whose Reds band carries a Hue edit, so the decoded adjustment
+/// has a non-empty `ranges` list.
+fn hue_saturation_with_a_range() -> AdjustmentData {
+    let mut data = vec![0u8, 2, 1, 0];
+    data.extend_from_slice(&[0u8; 6]);
+    for v in [0i16, 0, 0] {
+        data.extend_from_slice(&v.to_be_bytes());
+    }
+    for (band, edit) in [(0usize, (10i16, 0i16, 0i16)), (1, (0, 0, 0))]
+        .into_iter()
+        .chain((2..6).map(|k| (k, (0, 0, 0))))
+    {
+        let strip: [i16; 4] = match band {
+            0 => [315, 345, 15, 45],
+            _ => [0; 4],
+        };
+        for v in strip.into_iter().chain([edit.0, edit.1, edit.2]) {
+            data.extend_from_slice(&v.to_be_bytes());
+        }
+    }
+    AdjustmentData {
+        key: *b"hue2",
+        data: data.into(),
     }
 }
 

@@ -18,6 +18,7 @@
 #include "filter_commands.h"
 #include "frame.h"
 
+#include "adjustment_catalogue.h"
 #include "api/document_bridge.h"
 #include "api/layers_bridge.h"
 #include "api/paint_bridge.h"
@@ -168,13 +169,16 @@ bool resizeFitsBudget(PictureView& view, const QString& id, const QJsonObject& v
 
 QStringList ControlServer::adjustmentKinds()
 {
-    return {QStringLiteral("levels"),          QStringLiteral("curves"),
-            QStringLiteral("brightness-contrast"), QStringLiteral("hue-saturation"),
-            QStringLiteral("color-balance"),   QStringLiteral("exposure"),
-            QStringLiteral("vibrance"),        QStringLiteral("black-white"),
-            QStringLiteral("photo-filter"),    QStringLiteral("channel-mixer"),
-            QStringLiteral("selective-color"), QStringLiteral("gradient-map"),
-            QStringLiteral("posterize"),       QStringLiteral("threshold")};
+    // The catalogue's dialog entries, in catalogue order: no second kind table
+    // to keep in step with the engine.
+    QStringList kinds;
+    for (const AdjustmentKind& entry : adjustmentCatalogue()) {
+        if (entry.image != QLatin1String("dialog")) {
+            continue;
+        }
+        kinds.append(entry.kind);
+    }
+    return kinds;
 }
 
 QJsonObject ControlServer::applyFilterWithParams(const QString& kind, const QJsonValue& values)

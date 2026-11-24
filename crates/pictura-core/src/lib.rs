@@ -13,8 +13,13 @@ mod coverage;
 pub use coverage::Coverage;
 mod color_match;
 pub use color_match::{localization_strength, match_weight, spatial_sigma};
+mod adjustment_kind;
 mod content_params;
 mod crs;
+pub use adjustment_kind::{
+    direct_auto_color, direct_auto_contrast, direct_auto_tone, direct_desaturate, direct_equalize,
+    direct_invert, AdjustmentKind,
+};
 pub use content_params::*;
 mod digest;
 mod document_composite;

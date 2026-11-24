@@ -50,6 +50,8 @@ use std::fmt;
 use std::sync::OnceLock;
 
 use pictura_adjust::Adjustment;
+
+use crate::GpuRoute;
 #[cfg(test)]
 use pictura_core::Layer;
 use pictura_core::{
@@ -441,25 +443,68 @@ pub(crate) fn storage_entry(binding: u32, read_only: bool) -> wgpu::BindGroupLay
     }
 }
 
-/// Map a decoded adjustment to the shader's kind id plus up to three integer
-/// params, or `None` when the GPU has no implementation for it.
-fn adjustment_params(adjustment: &Adjustment) -> Option<(u32, i32, i32, i32)> {
-    match adjustment {
-        Adjustment::Invert => Some((1, 0, 0, 0)),
-        Adjustment::Posterize(levels) => Some((2, i32::from(*levels), 0, 0)),
-        Adjustment::Threshold(level) => Some((3, i32::from(*level), 0, 0)),
-        Adjustment::BrightnessContrast(p) => {
-            Some((4, i32::from(p.brightness), i32::from(p.contrast), 0))
-        }
-        // The shader carries Master only; colour ranges run on the CPU.
-        Adjustment::HueSaturation(p) if p.ranges.is_empty() => Some((
-            5,
+/// The GPU route the catalogue declares for `adjustment`'s kind, or `None` when
+/// the kind is outside the catalogue (Replace Color, Match Color).
+pub(super) fn gpu_route(adjustment: &Adjustment) -> Option<GpuRoute> {
+    Some(crate::entry_of(adjustment.kind()?)?.gpu)
+}
+
+/// The shader's inline dispatch for `adjustment`: its row's kind id plus up to
+/// three integer params, or `None` when the kind is not inline-routed or this
+/// parameter shape is not modelled.
+///
+/// The route comes from the catalogue row, not from a second kind table; only
+/// the parameter shape is decided here. Hue/Saturation carries Master alone —
+/// colour ranges run on the CPU.
+pub(super) fn inline_params(adjustment: &Adjustment) -> Option<(u32, i32, i32, i32)> {
+    let GpuRoute::Inline { id } = gpu_route(adjustment)? else {
+        return None;
+    };
+    let params = match adjustment {
+        Adjustment::Invert => (0, 0, 0),
+        Adjustment::Posterize(levels) => (i32::from(*levels), 0, 0),
+        Adjustment::Threshold(level) => (i32::from(*level), 0, 0),
+        Adjustment::BrightnessContrast(p) => (i32::from(p.brightness), i32::from(p.contrast), 0),
+        Adjustment::HueSaturation(p) if p.ranges.is_empty() => (
             i32::from(p.hue),
             i32::from(p.saturation),
             i32::from(p.lightness),
-        )),
-        _ => None,
+        ),
+        Adjustment::Levels(_)
+        | Adjustment::Curves(_)
+        | Adjustment::Exposure(_)
+        | Adjustment::Vibrance(_)
+        | Adjustment::HueSaturation(_)
+        | Adjustment::ColorBalance(_)
+        | Adjustment::BlackWhite(_)
+        | Adjustment::PhotoFilter(_)
+        | Adjustment::ChannelMixer(_)
+        | Adjustment::ColorLookup(_)
+        | Adjustment::ShadowsHighlights(_)
+        | Adjustment::SelectiveColor(_)
+        | Adjustment::GradientMap(_)
+        | Adjustment::Desaturate
+        | Adjustment::Equalize
+        | Adjustment::Auto(_)
+        | Adjustment::ReplaceColor(_)
+        | Adjustment::MatchColor(_) => return None,
+    };
+    Some((id, params.0, params.1, params.2))
+}
+
+/// Whether the GPU compositor can apply `adjustment`: the kind declares a route
+/// and, for an inline route, this parameter shape is one the shader models.
+pub(crate) fn dispatches_on_gpu(adjustment: &Adjustment) -> bool {
+    match gpu_route(adjustment) {
+        Some(GpuRoute::Inline { .. }) => inline_params(adjustment).is_some(),
+        Some(GpuRoute::Lut) => pictura_adjust::adjustment_lut(adjustment).is_some(),
+        Some(GpuRoute::None) | None => false,
     }
+}
+
+/// Whether `adjustment` composites through the lookup-table route.
+pub(super) fn uses_lut(adjustment: &Adjustment) -> bool {
+    matches!(gpu_route(adjustment), Some(GpuRoute::Lut))
 }
 
 /// Whether the GPU can composite `doc` exactly as the CPU oracle would.
@@ -487,6 +532,9 @@ pub(crate) fn require_device(available: bool) {
 
 #[cfg(test)]
 mod eligibility_tests;
+
+#[cfg(test)]
+mod route_tests;
 
 #[cfg(test)]
 mod oracle_tests;

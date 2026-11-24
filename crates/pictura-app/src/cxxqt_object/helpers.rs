@@ -1,7 +1,5 @@
 use cxx_qt_lib::{QString, QStringList};
-use pictura_core::{
-    AdjustmentData, BlendMode, ColorLabel, Document, Layer, LayerMask, LockFlags, PsdRect,
-};
+use pictura_core::{BlendMode, ColorLabel, Document, Layer, LayerMask, LockFlags, PsdRect};
 use pictura_paint::{PaintMode, Rgba};
 use pictura_select::CombineMode;
 
@@ -47,12 +45,11 @@ fn document_fits(width: i32, height: i32, bits: i32, budget: &pictura_codec::Ima
     bytes <= budget.max_alloc_bytes && bytes <= budget.max_document_bytes
 }
 
-/// Build an adjustment layer for `kind`, or `None` for an unknown kind.
+/// Build an adjustment layer for `kind`, or `None` for a kind without one.
 ///
-/// Most defaults are chosen so a freshly added layer visibly changes the
-/// composite; a few kinds (e.g. Color Balance) use the reference's neutral default.
-/// Editing parameters is out of scope for M4-C. `mask` confines the effect to a
-/// selection when one is active.
+/// The block is the catalogue's declared new-layer default — most kinds carry a
+/// visible change so a freshly added layer has an effect — and `mask` confines
+/// the effect to a selection when one is active.
 #[cfg(test)]
 pub(super) fn adjustment_layer(kind: &str, mask: Option<LayerMask>) -> Option<Layer> {
     adjustment_layer_in_mode(kind, mask, false)
@@ -64,79 +61,10 @@ pub(super) fn adjustment_layer_in_mode(
     mask: Option<LayerMask>,
     cmyk: bool,
 ) -> Option<Layer> {
-    use pictura_render::{
-        encode_brightness_contrast, encode_channel_mixer, encode_channel_mixer_ink,
-        encode_color_balance, encode_color_lookup, encode_gradient_map, encode_hue_saturation,
-        encode_invert, encode_photo_filter, encode_posterize, encode_selective_color,
-        encode_threshold, identity_cube, GradientMapParams, GradientStop, SelectiveColorMethod,
-        SelectiveRange,
-    };
-
-    let data: AdjustmentData = match kind {
-        "invert" => encode_invert(),
-        "posterize" => encode_posterize(4),
-        "threshold" => encode_threshold(128),
-        "brightness-contrast" => encode_brightness_contrast(20, 0),
-        "hue-saturation" => encode_hue_saturation(30, 0, 0),
-        "photo-filter" => encode_photo_filter([255, 180, 80], 25.0, true),
-        "gradient-map" => encode_gradient_map(
-            &GradientMapParams {
-                stops: vec![
-                    GradientStop {
-                        location: 0,
-                        color: [0, 0, 0],
-                    },
-                    GradientStop {
-                        location: 4096,
-                        color: [255, 255, 255],
-                    },
-                ],
-                reverse: false,
-                transparency: Vec::new(),
-            },
-            false,
-        ),
-        "color-balance" => encode_color_balance([0.0; 3], [0.0; 3], [0.0; 3], true),
-        "channel-mixer" => {
-            if cmyk {
-                encode_channel_mixer_ink(
-                    [
-                        [100.0, 0.0, 0.0, 0.0],
-                        [0.0, 100.0, 0.0, 0.0],
-                        [0.0, 0.0, 100.0, 0.0],
-                        [0.0, 0.0, 0.0, 100.0],
-                    ],
-                    [0.0; 4],
-                )
-            } else {
-                encode_channel_mixer(
-                    false,
-                    [100.0, 0.0, 0.0],
-                    [0.0, 100.0, 0.0],
-                    [0.0, 0.0, 100.0],
-                    [0.0; 3],
-                )
-            }
-        }
-        "selective-color" => encode_selective_color(
-            SelectiveColorMethod::Relative,
-            &[SelectiveRange::default(); 9],
-        ),
-        "color-lookup" => encode_color_lookup(&identity_cube(), "Identity.CUBE"),
-        "levels" => pictura_render::default_adjustment_block("levels", [0, 0, 0], [255, 255, 255])?,
-        "curves" => pictura_render::default_adjustment_block("curves", [0, 0, 0], [255, 255, 255])?,
-        "exposure" => {
-            pictura_render::default_adjustment_block("exposure", [0, 0, 0], [255, 255, 255])?
-        }
-        "vibrance" => {
-            pictura_render::default_adjustment_block("vibrance", [0, 0, 0], [255, 255, 255])?
-        }
-        "black-white" => {
-            pictura_render::default_adjustment_block("black-white", [0, 0, 0], [255, 255, 255])?
-        }
-        _ => return None,
-    };
-    let name = pictura_render::adjustment_entry(kind)?.title;
+    let kind = pictura_render::AdjustmentKind::from_name(kind)?;
+    let data =
+        pictura_render::layer_default(kind, pictura_render::Defaults::rgb().with_cmyk(cmyk))?;
+    let name = pictura_render::entry_of(kind)?.title;
 
     Some(pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: name.into(),
@@ -164,42 +92,18 @@ pub(super) fn adjustment_layer_in_mode(
 }
 /// The adjustments-panel kind key for `layer`'s decoded adjustment block, or
 /// empty when it has none. Fill blocks map to the three fill kinds.
+///
+/// One mapping with the preset store: both go through the block-to-kind
+/// conversion, never a second hand-written match.
 pub(super) fn adjustment_kind(layer: &Layer) -> String {
-    use pictura_render::Adjustment;
     if let Some(fill) = layer.fill_content() {
-        return match fill {
-            pictura_core::FillContent::Solid(_) => "solid-color",
-            pictura_core::FillContent::Gradient(_) => "gradient",
-            pictura_core::FillContent::Pattern(_) => "pattern",
-        }
-        .into();
+        return fill.kind().name().to_string();
     }
-    match layer.adjustment_parameters() {
-        Some(Adjustment::Levels(_)) => "levels",
-        Some(Adjustment::Curves(_)) => "curves",
-        Some(Adjustment::BrightnessContrast(_)) => "brightness-contrast",
-        Some(Adjustment::Exposure(_)) => "exposure",
-        Some(Adjustment::HueSaturation(_)) => "hue-saturation",
-        Some(Adjustment::BlackWhite(_)) => "black-white",
-        Some(Adjustment::PhotoFilter(_)) => "photo-filter",
-        Some(Adjustment::ChannelMixer(_)) => "channel-mixer",
-        Some(Adjustment::Vibrance(_)) => "vibrance",
-        Some(Adjustment::ShadowsHighlights(_)) => "shadows-highlights",
-        Some(Adjustment::ColorBalance(_)) => "color-balance",
-        Some(Adjustment::SelectiveColor(_)) => "selective-color",
-        Some(Adjustment::Auto(_)) => "auto",
-        Some(Adjustment::Invert) => "invert",
-        Some(Adjustment::Posterize(_)) => "posterize",
-        Some(Adjustment::Threshold(_)) => "threshold",
-        Some(Adjustment::Desaturate) => "desaturate",
-        Some(Adjustment::Equalize) => "equalize",
-        Some(Adjustment::GradientMap(_)) => "gradient-map",
-        Some(Adjustment::ColorLookup(_)) => "color-lookup",
-        Some(Adjustment::ReplaceColor(_)) => "replace-color",
-        Some(Adjustment::MatchColor(_)) => "match-color",
-        None => "",
-    }
-    .to_string()
+    layer
+        .adjustment_parameters()
+        .and_then(|adjustment| adjustment.kind())
+        .map(|kind| kind.name().to_string())
+        .unwrap_or_default()
 }
 /// Delegates to the shared M36 Background heuristic in `pictura-render`, so the
 /// panel core and the bridge agree on one definition.
@@ -1059,15 +963,54 @@ mod tests {
             .iter()
             .filter(|entry| !entry.fill && entry.layer != pictura_render::LayerEntry::None);
         for entry in layers {
-            let kind = entry.kind;
+            let kind = entry.kind.name();
             let layer = adjustment_layer(kind, None).unwrap_or_else(|| panic!("{kind} should map"));
             assert!(
                 layer.adjustment().is_some(),
                 "{kind} carries adjustment data"
             );
             assert_eq!(layer.name, entry.title);
+            assert_eq!(adjustment_kind(&layer), kind, "{kind} reports its own kind");
         }
         assert!(adjustment_layer("bogus", None).is_none());
+        assert!(adjustment_layer("match-color", None).is_none());
+    }
+
+    #[test]
+    fn color_lookup_layer_names_none_preset() {
+        let layer = adjustment_layer("color-lookup", None).expect("color lookup");
+        let block = layer.adjustment().expect("clrL block");
+        assert_eq!(block.key, *b"clrL");
+        assert_eq!(
+            pictura_render::color_lookup_preset_index(block),
+            Some(0),
+            "the stored name resolves to the None preset"
+        );
+        assert_eq!(pictura_render::preset_kind_of(block), Some("color-lookup"));
+    }
+
+    /// The shell's layer-row kind names the same kind the preset store does for
+    /// every catalogue kind, because both route through one block-to-kind map.
+    #[test]
+    fn layer_row_kind_matches_the_store_kind() {
+        for kind in pictura_render::AdjustmentKind::ALL.iter().copied() {
+            let Some(block) = pictura_render::layer_default(kind, pictura_render::Defaults::rgb())
+            else {
+                continue;
+            };
+            assert_eq!(
+                pictura_render::preset_kind_of(&block),
+                Some(kind.name()),
+                "{}",
+                kind.name()
+            );
+            let layer = adjustment_layer(kind.name(), None)
+                .unwrap_or_else(|| panic!("{} has a layer", kind.name()));
+            assert_eq!(adjustment_kind(&layer), kind.name(), "{}", kind.name());
+        }
+        // A layer with no adjustment content reports no kind.
+        let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts::default());
+        assert_eq!(adjustment_kind(&layer), "");
     }
 
     fn r(top: i32, left: i32, w: i32, h: i32) -> PsdRect {

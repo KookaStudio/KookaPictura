@@ -12,6 +12,7 @@
 #include "api/history_api.h"
 #include "api/paint_bridge.h"
 #include "api/transform_api.h"
+#include "adjustment_catalogue.h"
 #include "control_server.h"
 #include "control_test_client.h"
 #include "frame.h"
@@ -38,6 +39,7 @@ private slots:
     void adjustmentApplies();
     void unknownAdjustmentIsRefused();
     void adjustmentsAreListed();
+    void adjustmentsListEveryDialogKind();
     void resizeRunsWithoutADialog();
     void unlistedCommandIsRefused();
     void unlistedKeyIsRefused();
@@ -173,6 +175,34 @@ void ControlEditingTest::adjustmentsAreListed()
         QVERIFY2(!value.toObject().value(QStringLiteral("page")).toArray().isEmpty(),
                  qPrintable(value.toObject().value(QStringLiteral("kind")).toString()));
     }
+}
+
+void ControlEditingTest::adjustmentsListEveryDialogKind()
+{
+    // The list is the catalogue's dialog entries by name, not a hand-written
+    // subset: it carries Color Lookup and Shadows/Highlights, which the old
+    // fourteen-kind hand list left out.
+    QStringList expected;
+    for (const pictura::AdjustmentKind& entry : pictura::adjustmentCatalogue()) {
+        if (entry.image == QLatin1String("dialog")) {
+            expected << entry.kind;
+        }
+    }
+    QCOMPARE(expected.size(), 16);
+    QVERIFY(expected.contains(QStringLiteral("color-lookup")));
+    QVERIFY(expected.contains(QStringLiteral("shadows-highlights")));
+
+    const QJsonArray adjustments = call(QStringLiteral("list_adjustments"))
+                                       .value(QStringLiteral("result")).toObject()
+                                       .value(QStringLiteral("adjustments")).toArray();
+    QStringList listed;
+    for (const QJsonValue& value : adjustments) {
+        const QJsonObject adjustment = value.toObject();
+        listed << adjustment.value(QStringLiteral("kind")).toString();
+        QVERIFY2(!adjustment.value(QStringLiteral("page")).toArray().isEmpty(),
+                 qPrintable(adjustment.value(QStringLiteral("kind")).toString()));
+    }
+    QCOMPARE(listed, expected);
 }
 
 void ControlEditingTest::resizeRunsWithoutADialog()

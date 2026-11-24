@@ -40,6 +40,19 @@ pub(super) fn adjustment_block(view: &PictureView, path: &QString) -> Vec<u8> {
         .unwrap_or_default()
 }
 
+/// Whether `next` may replace `current`: both must resolve to the same
+/// catalogue kind. Replace Color and Match Color resolve to no kind. Auto has a
+/// catalogue kind but no layer default and is not saveable.
+pub(super) fn same_adjustment_kind(current: &AdjustmentData, next: &AdjustmentData) -> bool {
+    match (
+        pictura_render::preset_kind(current),
+        pictura_render::preset_kind(next),
+    ) {
+        (Some(a), Some(b)) => a == b,
+        _ => false,
+    }
+}
+
 pub(super) fn adjustment_set_block(
     view: Pin<&mut PictureView>,
     path: &QString,
@@ -49,8 +62,7 @@ pub(super) fn adjustment_set_block(
         return false;
     };
     edit_adjustment(view, path, |current| {
-        (pictura_render::preset_kind_of(current) == pictura_render::preset_kind_of(&next))
-            .then_some(next)
+        same_adjustment_kind(current, &next).then_some(next)
     })
 }
 
@@ -252,5 +264,24 @@ mod tests {
         );
         assert_eq!(parse_points("0,0 300,1"), None);
         assert_eq!(parse_points("bad"), None);
+    }
+
+    #[test]
+    fn same_kind_guard_rejects_different_or_undecodable_blocks() {
+        let ctx = pictura_render::Defaults::rgb();
+        let threshold =
+            pictura_render::dialog_default(pictura_render::AdjustmentKind::Threshold, ctx)
+                .expect("threshold default");
+        let posterize =
+            pictura_render::dialog_default(pictura_render::AdjustmentKind::Posterize, ctx)
+                .expect("posterize default");
+        let garbage = AdjustmentData {
+            key: *b"zzzz",
+            data: vec![1, 2, 3].into(),
+        };
+        assert!(same_adjustment_kind(&threshold, &threshold));
+        assert!(!same_adjustment_kind(&threshold, &posterize));
+        assert!(!same_adjustment_kind(&threshold, &garbage));
+        assert!(!same_adjustment_kind(&garbage, &garbage));
     }
 }
