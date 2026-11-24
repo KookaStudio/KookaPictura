@@ -258,13 +258,15 @@ for gate in "$fast" "$full" scripts/with-build-lock.sh scripts/test-report.sh; d
 done
 
 # bl_timeout: a bounded wait exits non-zero, names the holder, and leaves no lock.
-export PICTURA_VERIFY_LOCK=1 PICTURA_VERIFY_LOCK_TIMEOUT=1
+# Only the waiter is bounded: a 1 s holder can itself time out on a loaded
+# runner while an earlier case's lock is still being released.
+export PICTURA_VERIFY_LOCK=1 PICTURA_VERIFY_LOCK_TIMEOUT=10
 hold_async 2
 holder=$HOLDER_PID
 wait_for_lock || fail "timeout holder did not acquire the lock"
 timeout_log="$sandbox/timeout.log"
 set +e
-( . "$helper"; build_lock_acquire ) 2>"$timeout_log"
+( . "$helper"; PICTURA_VERIFY_LOCK_TIMEOUT=1 build_lock_acquire ) 2>"$timeout_log"
 timeout_rc=$?
 set -e
 [ "$timeout_rc" -ne 0 ] || fail "waiter did not time out"
