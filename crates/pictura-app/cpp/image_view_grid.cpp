@@ -48,7 +48,8 @@ void ImageView::setTargetPathFollowsMove(bool on)
 QPainterPath ImageView::targetPathCurve() const
 {
     QPainterPath curve = targetPathOverlay_.curve;
-    if (movePreviewActive_ && movePreviewMovesLayer_ && targetPathFollowsMove_) {
+    if (movePreviewActive_ && movePreviewMovesLayer_ && !movePreviewCommitted_
+        && targetPathFollowsMove_) {
         curve.translate(qRound(moveDelta_.x()), qRound(moveDelta_.y()));
     }
     return curve;
@@ -56,6 +57,14 @@ QPainterPath ImageView::targetPathCurve() const
 
 void ImageView::setLayerEdges(const QRectF& rect)
 {
+    // A deferred Move commit keeps the preview after the document has already
+    // moved. The refresh then lands at the old outline plus the drag delta; stop
+    // applying that delta to the outline, or it would be added twice.
+    const QPointF delta(qRound(moveDelta_.x()), qRound(moveDelta_.y()));
+    if (movePreviewActive_ && movePreviewMovesLayer_ && !movePreviewCommitted_ && !delta.isNull()
+        && rect == layerEdges_.translated(delta)) {
+        movePreviewCommitted_ = true;
+    }
     if (layerEdges_ == rect) {
         return;
     }
@@ -158,7 +167,7 @@ void ImageView::paintTargetPathOverlay(QPainter& painter)
 
 QRectF ImageView::layerEdgesRect() const
 {
-    if (!movePreviewActive_ || !movePreviewMovesLayer_) {
+    if (!movePreviewActive_ || !movePreviewMovesLayer_ || movePreviewCommitted_) {
         return layerEdges_;
     }
     return layerEdges_.translated(QPointF(qRound(moveDelta_.x()), qRound(moveDelta_.y())));

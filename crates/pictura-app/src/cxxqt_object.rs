@@ -93,6 +93,8 @@ mod tests_impl;
 #[cfg(test)]
 mod tests_profiles;
 #[cfg(test)]
+mod tests_type_move;
+#[cfg(test)]
 mod tool_recording_tests;
 #[cxx_qt::bridge]
 pub mod qobject {

@@ -14,7 +14,7 @@ mod recovery;
 pub(crate) use recovery::{apply_recovery_delta, recovery_delta};
 mod styles;
 
-pub(crate) use budget::{document_bytes, tile_table_bytes, unreadable_tiles};
+pub(crate) use budget::{tile_table_bytes, unreadable_tiles};
 use damage::{display_differs, meta_damage, Damage};
 use planes::{
     adopt_metadata, apply_tiles, composite_change, composite_unchanged, delta_allocations,

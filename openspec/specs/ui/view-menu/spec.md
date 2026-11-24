@@ -211,9 +211,11 @@ the canvas SHALL outline the active layer's content bounds with a thin
 non-printing border that follows pan, zoom and view rotation. A target change, a
 layer selection, or a document edit SHALL update the outline; while the Move tool
 previews a layer move, the outline SHALL follow the preview offset, and a
-selection-content move SHALL leave it in place. No active layer or an empty
-content rect SHALL draw nothing. Extras off SHALL hide the outline without
-changing the Show toggle.
+selection-content move SHALL leave it in place. A type layer's outline SHALL be
+its ink and SHALL follow a Move through the drag and after the commit, including
+on a large document whose move is deferred or leaves display tiles stale. No
+active layer or an empty content rect SHALL draw nothing. Extras off SHALL hide
+the outline without changing the Show toggle.
 
 #### Scenario: The active layer is outlined [vm_layer_edges]
 
@@ -244,6 +246,11 @@ changing the Show toggle.
 
 - **WHEN** a selection-content move preview offsets the canvas while Layer Edges is on
 - **THEN** the dashed outline stays at the committed content bounds
+
+#### Scenario: A type layer's outline follows its move [vm_layer_edges_type_move]
+
+- **WHEN** on a 4000 × 4000 document a paragraph type layer is Move-dragged by (40, 20) with Layer Edges on
+- **THEN** the dashed outline follows the text during the drag and lands at the moved text after the commit
 
 ### Requirement: Target Path overlay
 

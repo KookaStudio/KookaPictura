@@ -21,6 +21,12 @@ fn ms(label: &str, t: Instant) {
 /// `PICTURA_PROFILE_DIVISOR` shrinks both sides for a machine without the
 /// memory the full size takes; the costs measured here scale with area.
 fn size() -> (u32, u32) {
+    if let Some(side) = std::env::var("PICTURA_PROFILE_SIDE")
+        .ok()
+        .and_then(|value| value.parse::<u32>().ok())
+    {
+        return (side.max(1), side.max(1));
+    }
     let divisor = std::env::var("PICTURA_PROFILE_DIVISOR")
         .ok()
         .and_then(|value| value.parse::<u32>().ok())
@@ -120,4 +126,202 @@ fn move_gesture_profile() {
         view.settle_move_composite();
         ms("commit settle (synchronous)", t);
     }
+
+    let t = Instant::now();
+    view.fit_tiles();
+    let (level, rect) = view.fit_view(700, 700);
+    view.presented_level = level;
+    view.presented_rect = rect;
+    let keys = view.presented_tiles_to_build();
+    ms("plain presented keys", t);
+    let t = Instant::now();
+    let built = view.run_tile_job(&keys);
+    println!("plain built {built}/{} tiles at level {level}", keys.len());
+    ms("plain lazy tile rebuild", t);
+}
+
+/// A paragraph type layer on a large document: the ink bounds, the press
+/// images, the commit, and the lazy tile rebuild the Move leaves behind.
+#[test]
+#[ignore = "large-document type Move profile; run explicitly with --ignored --nocapture"]
+fn type_move_gesture_profile() {
+    use super::preview::moving_layer_image;
+    use pictura_core::TypeSpec;
+
+    let (width, height) = size();
+    println!("type document {width}x{height}");
+    let mut doc = Document::new(width, height, ColorMode::Rgb, BitDepth::Eight);
+    doc.layers =
+        LayerStack::from_layers(vec![pixel_layer("under", width, height, (120, 170, 220))]);
+    let spec = TypeSpec {
+        box_bounds: Some([0.0, 0.0, f64::from(width) / 2.0, f64::from(height) / 2.0]),
+        ..TypeSpec::new("Lorem Ipsum Pictura", "Liberation Sans", 20.0)
+    };
+    let path = pictura_render::add_type_layer(&mut doc, "0", &spec);
+    assert!(!path.is_empty(), "a paragraph type layer");
+    if std::env::var_os("PICTURA_PROFILE_TYPE_SOURCE").is_some() {
+        if let Some(layer) = pictura_render::resolve_path_mut(&mut doc, &path) {
+            layer.channels_mut().clear();
+        }
+        let t = Instant::now();
+        let materialized = pictura_render::materialize_type_layer(&mut doc, &path);
+        ms("type materialize (first press)", t);
+        assert!(materialized);
+    }
+    let paths = vec![path.clone()];
+    let mut view = PictureViewRust {
+        session: DocumentSession::with_document(doc),
+        gpu_compute: false,
+        ..Default::default()
+    };
+    view.reset_pyramid();
+    let doc = view.session.doc.as_ref().expect("document");
+
+    let t = Instant::now();
+    let ink = pictura_render::damage::type_ink_influence(doc, &path);
+    ms("type ink", t);
+    assert!(ink.is_some());
+
+    let t = Instant::now();
+    let base = backdrop_patch(doc, &paths, false);
+    ms("type backdrop patch", t);
+    drop(base);
+
+    let t = Instant::now();
+    let image = moving_layer_image(doc, &path, ink.expect("ink"), 0, false);
+    ms("type moving image", t);
+    drop(image);
+
+    let t = Instant::now();
+    let _ = pictura_render::layer_content_bounds(doc, &path);
+    ms("type content bounds", t);
+
+    let doc = view.session.doc.as_mut().expect("document");
+    let t = Instant::now();
+    let dirty = translate_move_group(doc, &paths, 40, 25).expect("moved");
+    ms("type translate", t);
+
+    let t = Instant::now();
+    let _applied = view.apply_edit_move("Move Layer", Edit::regions(vec![dirty], false));
+    ms("type commit edit", t);
+    println!("type commit pending: {}", view.move_composite_pending());
+
+    let t = Instant::now();
+    view.fit_tiles();
+    let (level, rect) = view.fit_view(700, 700);
+    view.presented_level = level;
+    view.presented_rect = rect;
+    let keys = view.presented_tiles_to_build();
+    ms("type presented keys", t);
+
+    let t = Instant::now();
+    let built = view.run_tile_job(&keys);
+    println!("type built {built}/{} tiles at level {level}", keys.len());
+    ms("type lazy tile rebuild", t);
+}
+
+/// The user's recovered 20000² type document, moved by the Move tool: the
+/// actual layer state, its reach, the press images, the commit, and the lazy
+/// tile rebuild.
+#[test]
+#[ignore = "recovered-document Move profile; run explicitly with --ignored --nocapture"]
+fn recovered_type_move_profile() {
+    use super::preview::moving_layer_image;
+    use crate::layer_target::LayerTarget;
+
+    let Some(file) = std::env::var_os("PICTURA_RECOVERED_PSD").map(std::path::PathBuf::from) else {
+        println!("skip: set PICTURA_RECOVERED_PSD");
+        return;
+    };
+    let bytes = std::fs::read(&file).expect("read the recovered psd");
+    let t = Instant::now();
+    let doc = pictura_codec::read_psd(&bytes).expect("decode the recovered psd");
+    ms("recovered read", t);
+    let type_path = pictura_render::flatten_rows(&doc)
+        .into_iter()
+        .find(|(path, _)| {
+            pictura_render::resolve_path(&doc, path).is_some_and(|layer| layer.is_type())
+        })
+        .map(|(path, _)| path.to_string())
+        .expect("a type layer");
+    let layer = pictura_render::resolve_path(&doc, &type_path).expect("type layer");
+    println!(
+        "type path {type_path} rect {:?} channels {} clipping {} knockout {:?} vector {} type_tool {}",
+        layer.rect,
+        layer.channels().len(),
+        layer.clipping,
+        layer.knockout,
+        layer.vector_mask.is_some(),
+        layer.type_tool().is_some()
+    );
+    let mut view = PictureViewRust {
+        session: DocumentSession::with_document(doc),
+        gpu_compute: false,
+        ..Default::default()
+    };
+    view.reset_pyramid();
+    view.layer_target = LayerTarget::only(&type_path);
+    let paths = vec![type_path.clone()];
+    let doc = view.session.doc.as_ref().expect("document");
+
+    let t = Instant::now();
+    let ink = pictura_render::damage::type_ink_influence(doc, &type_path);
+    ms("recovered type ink", t);
+    println!("recovered ink {ink:?}");
+    let t = Instant::now();
+    let conservative = pictura_render::damage::content_influence(doc, &type_path);
+    ms("recovered conservative reach", t);
+    println!("recovered conservative {conservative:?}");
+
+    let t = Instant::now();
+    let base = backdrop_patch(doc, &paths, false);
+    ms("recovered backdrop patch", t);
+    drop(base);
+    let t = Instant::now();
+    let image = ink.and_then(|ink| moving_layer_image(doc, &type_path, ink, 0, false));
+    ms("recovered moving image", t);
+    drop(image);
+
+    let doc = view.session.doc.as_mut().expect("document");
+    let t = Instant::now();
+    let dirty = translate_move_group(doc, &paths, 40, 25).expect("moved");
+    ms("recovered translate", t);
+    println!("recovered dirty {dirty:?}");
+
+    let low_room = std::env::var_os("PICTURA_PROFILE_LOW_ROOM").is_some();
+    if low_room {
+        pictura_core::memory::set_host_for_test(Some(pictura_core::memory::HostReading {
+            total: Some(2 * 1024 * 1024 * 1024),
+            available: Some(256 * 1024 * 1024),
+            rss: Some(128 * 1024 * 1024),
+            ..Default::default()
+        }));
+    }
+    crate::HEAP.reset();
+    let t = Instant::now();
+    let _applied = view.apply_edit_move("Move Layer", Edit::regions(vec![dirty], false));
+    ms("recovered commit edit", t);
+    println!(
+        "recovered commit heap peak {:.1} MiB, pending {}",
+        crate::HEAP.peak() as f64 / (1024.0 * 1024.0),
+        view.move_composite_pending()
+    );
+    if low_room {
+        pictura_core::memory::set_host_for_test(None);
+    }
+
+    let t = Instant::now();
+    view.fit_tiles();
+    let (level, rect) = view.fit_view(700, 700);
+    view.presented_level = level;
+    view.presented_rect = rect;
+    let keys = view.presented_tiles_to_build();
+    ms("recovered presented keys", t);
+    let t = Instant::now();
+    let built = view.run_tile_job(&keys);
+    println!(
+        "recovered built {built}/{} tiles at level {level}",
+        keys.len()
+    );
+    ms("recovered lazy tile rebuild", t);
 }

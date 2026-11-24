@@ -292,7 +292,13 @@ void PicturaMainWindow::refreshLayerEdges(DocEntry& doc)
     }
     const QString active = view->active_layer_path();
     const quint64 revision = view->canvas_revision();
-    if (!doc.layerEdges || doc.layerEdges->path != active || doc.layerEdges->revision != revision) {
+    // A Move changes the layer's rect before (or without) a canvas revision on
+    // the deferred paths; key on the rect too, so the outline follows the text
+    // instead of staying at the previous place.
+    const QString geometry =
+        active.isEmpty() ? QString() : transform_api::layerRect(*view, active).toString();
+    if (!doc.layerEdges || doc.layerEdges->path != active
+        || doc.layerEdges->revision != revision || doc.layerEdges->geometry != geometry) {
         QRectF edges;
         if (!active.isEmpty()) {
             const auto rect = transform_api::contentRect(*view, active);
@@ -300,7 +306,7 @@ void PicturaMainWindow::refreshLayerEdges(DocEntry& doc)
                 edges = QRectF(rect.left, rect.top, rect.width(), rect.height());
             }
         }
-        doc.layerEdges = DocEntry::LayerEdgeCache{active, revision, edges};
+        doc.layerEdges = DocEntry::LayerEdgeCache{active, revision, geometry, edges};
     }
     forEachCanvas(doc, [&doc](ImageView* canvas) { canvas->setLayerEdges(doc.layerEdges->rect); });
 }

@@ -26,6 +26,10 @@ pub(super) fn cancel_selection_move(view: Pin<&mut PictureView>) -> bool {
     view.cancel_selection_move()
 }
 
+pub(super) fn selection_content_movable(view: &PictureView, duplicate: bool) -> bool {
+    view.selection_content_movable(duplicate)
+}
+
 pub(super) fn move_selection_content(
     view: Pin<&mut PictureView>,
     dx: i32,

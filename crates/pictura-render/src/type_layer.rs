@@ -772,6 +772,9 @@ pub fn transform_type_layer(doc: &mut Document, path: &str, a: [f64; 6]) -> Opti
     Some(replace_type_layer(doc, path, &spec))
 }
 
+mod materialize;
+pub use materialize::materialize_type_layer;
+
 #[cfg(test)]
 #[path = "type_layer/refresh_tests.rs"]
 mod refresh_tests;

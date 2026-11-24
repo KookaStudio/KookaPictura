@@ -15,6 +15,7 @@ mod bridge;
 mod cap_tests;
 mod channel_rows;
 mod exports;
+mod movable;
 mod query;
 mod quick;
 mod refine;

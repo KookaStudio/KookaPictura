@@ -1,5 +1,6 @@
 //! The images a transform previews: the moving layer and its backdrop.
 
+use super::super::move_content_rect;
 use super::view_preview::{self, align, inner_aligned, MAX_LEVEL};
 use super::*;
 use pictura_core::PixelBuffer;
@@ -160,6 +161,31 @@ pub(super) fn needs_rendered_appearance(layer: &pictura_core::Layer) -> bool {
         || pictura_render::is_shape_layer(layer)
         || pictura_render::decode_layer_fill(layer).is_some()
         || pictura_render::has_layer_style(layer)
+}
+
+/// The moving image of a single layer, its document origin, and its crop
+/// offset from the layer rect: a type layer's ink, else its content rect (or
+/// the layer rect). A shape layer is rendered whole with a zero offset.
+pub(super) fn single_layer_move_image(
+    doc: &pictura_core::Document,
+    path: &str,
+    gpu_compute: bool,
+) -> Option<(QImage, i32, i32, (i32, i32))> {
+    let layer = pictura_render::resolve_path(doc, path)?;
+    if pictura_render::is_shape_layer(layer) {
+        let (image, x, y) = rendered_layer_image(doc, path, gpu_compute)?;
+        return Some((image, x, y, (0, 0)));
+    }
+    let (rect, offset) = move_content_rect(doc, &[path.to_string()])?;
+    if !memory_gate::admit_resident(16 * memory_gate::area(rect)).admitted() {
+        return None;
+    }
+    let image = if needs_rendered_appearance(layer) {
+        moving_layer_image(doc, path, rect, 0, gpu_compute)
+    } else {
+        layer_image_within(layer, rect)
+    }?;
+    Some((image, rect.left, rect.top, offset))
 }
 
 /// The Move preview's moving image: the layer at `path` over `region`
@@ -445,6 +471,10 @@ fn backdrop_patch_rect(
             pictura_render::damage::content_influence(doc, path)?
         } else if reaching {
             pictura_render::damage::influence(doc, path)?
+        } else if layer.is_type() {
+            // A paragraph box can be document-sized around a few words; only
+            // the ink changes when the layer moves.
+            pictura_render::damage::type_ink_influence(doc, path)?
         } else {
             pictura_render::content_rect(doc, path).unwrap_or(layer.rect)
         };

@@ -18,6 +18,11 @@ use crate::cxxqt_object::filter_tools::store_planes;
 use crate::cxxqt_object::helpers::{safe_io, save_gate};
 
 const MAX_QUEUED_COMMITS: usize = 8;
+/// The non-plane memory a copy-on-write snapshot adds: the document metadata,
+/// layer structs, and their extra blocks. The pixel planes and tile tables are
+/// counted separately.
+const SNAPSHOT_METADATA_BYTES: u64 = 4 * 1024 * 1024;
+
 const MAX_RESOURCES: usize = 64 * 1024 * 1024;
 const RECOVERY_FORMAT: u64 = 2;
 
@@ -130,7 +135,11 @@ impl RecoveryAttachment {
         if degraded || pending.inputs.len() == MAX_QUEUED_COMMITS {
             pending.inputs.clear();
         }
-        let bytes = crate::history::document_bytes(doc) + crate::history::tile_table_bytes(doc);
+        // The snapshot is a copy-on-write clone: it shares the live document's
+        // planes and adds only its tile tables and metadata. Reserving the whole
+        // document would hold room the move's own gate needs and refuse a move
+        // that allocates nothing new.
+        let bytes = crate::history::tile_table_bytes(doc) + SNAPSHOT_METADATA_BYTES;
         let governor = pictura_core::memory::governor();
         let memory = match governor.reserve(bytes, "recovery snapshot") {
             Ok(memory) => memory,
@@ -1039,6 +1048,69 @@ mod tests {
             }
         }
         assert_eq!(fs::read_dir(&root).unwrap().count(), 4);
+        fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod reservation_tests {
+    use super::*;
+    use pictura_core::memory::{set_host_for_test, HostReading};
+
+    const MIB: u64 = 1024 * 1024;
+
+    /// A snapshot is a copy-on-write clone: it shares the live document's pixel
+    /// planes and adds only its tile tables and metadata. Reserving the whole
+    /// document would hold room the move needs and refuse a move that allocates
+    /// nothing new.
+    #[test]
+    fn a_cow_snapshot_reserves_only_its_tables() {
+        let root = std::env::temp_dir().join(format!(
+            "pictura-cow-reserve-{:016x}",
+            u64::from_le_bytes(pictura_codec::os_random())
+        ));
+        fs::create_dir(&root).unwrap();
+        let attachment = RecoveryAttachment::new(&root, 1, "test".into(), "".into(), 10);
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        attachment
+            .writer
+            .tx
+            .send(Work::Hold(entered_tx, release_rx))
+            .unwrap();
+        entered_rx.recv().unwrap();
+
+        set_host_for_test(Some(HostReading {
+            total: Some(1024 * MIB),
+            available: Some(400 * MIB),
+            rss: Some(8 * MIB),
+            ..HostReading::default()
+        }));
+        let doc = Document::from_rgba("Layer", 7000, 7000, &vec![255u8; 7000 * 7000 * 4]);
+        let cache = Arc::new(pictura_codec::EncodeCache::new());
+        let print_resources = Arc::default();
+        attachment.capture(
+            &doc,
+            None,
+            &print_resources,
+            &cache,
+            RecoveryIdentity {
+                history: Some(1),
+                metadata: 0,
+                generation: 1,
+            },
+            false,
+        );
+        assert_eq!(
+            attachment.status(),
+            0,
+            "a 196 MiB COW snapshot fits a room below its plane bytes"
+        );
+        set_host_for_test(None);
+
+        release_tx.send(()).unwrap();
+        assert!(attachment.flush());
+        drop(attachment);
         fs::remove_dir_all(root).unwrap();
     }
 }

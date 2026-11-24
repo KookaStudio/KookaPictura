@@ -28,6 +28,7 @@ void ImageView::beginMovePreview(const QImage& base, const QImage& layer, const 
     moveAbovePos_ = abovePos;
     moveAboveScale_ = std::max(1, aboveScale);
     movePreviewMovesLayer_ = movesLayer;
+    movePreviewCommitted_ = false;
     movePreviewActive_ = true;
     update();
 }
@@ -58,6 +59,7 @@ void ImageView::endMovePreview()
     moveOpacity_ = 1.0;
     moveScale_ = 1;
     movePreviewMovesLayer_ = false;
+    movePreviewCommitted_ = false;
     update();
 }
 
