@@ -1,3 +1,4 @@
+#![cfg(feature = "gpu")]
 use pictura_render::{gpu_available, selected_backend, set_backend, GpuBackend};
 
 #[test]

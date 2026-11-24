@@ -1,3 +1,4 @@
+#![cfg(feature = "gpu")]
 //! Opt-in benchmark: a proxied type layer with the text gamma on.
 //!
 //! Before this branch `check_supported` declined the whole document while the

@@ -801,6 +801,7 @@ fn legacy_effects_fixture_decodes_and_composites() {
 // --- GPU -------------------------------------------------------------------
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_rejects_a_legacy_effect_and_falls_back() {
     let d = doc(
         9,
@@ -824,6 +825,7 @@ fn gpu_rejects_a_legacy_effect_and_falls_back() {
 }
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_does_not_reject_disabled_or_unmapped_legacy() {
     let disabled = legacy_layer(lr_fx(&[(
         b"dsdw",

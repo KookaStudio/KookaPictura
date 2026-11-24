@@ -111,6 +111,7 @@ mod shadows;
 mod strokes;
 
 pub(crate) use legacy::{decode_legacy_effects, LegacyEffects};
+#[cfg(any(feature = "gpu", test))]
 pub(crate) use planes::EffectColor;
 pub(crate) use planes::EffectPass;
 

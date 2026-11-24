@@ -27,6 +27,8 @@
 //! is not implemented. Exact pass-through parity is limited to the 255/no-mask
 //! case (see the test below).
 
+mod backend;
+pub use backend::Backend;
 mod blend;
 mod canvas_damage;
 pub mod cold_profile;
@@ -73,7 +75,9 @@ pub use tile_pyramid::{
 mod pyramid_level;
 #[cfg(any(test, feature = "test-oracle"))]
 mod view_pyramid;
-pub(crate) use composite::{channel, channel_plane, mask_alpha, render_smart_source};
+#[cfg(any(feature = "gpu", test))]
+pub(crate) use composite::mask_alpha;
+pub(crate) use composite::{channel, channel_plane, render_smart_source};
 pub use composite::{
     composite_rgba, decode_adjustment, encode_brightness_contrast, encode_hue_saturation,
     encode_invert, encode_photo_filter, encode_posterize, encode_solid_color_fill,
@@ -163,17 +167,18 @@ pub use layer_effects::{
     Stroke, StrokeFill, StrokeLine, StrokePosition,
 };
 
-pub mod gpu;
 /// Whether this build was compiled with the test-only `software-gpu` feature,
 /// which lets the GPU probe accept a software (CPU-type) device on any backend.
 /// No workspace manifest enables it; only the GPU parity CI jobs pass it.
 pub const SOFTWARE_GPU: bool = cfg!(feature = "software-gpu");
+#[cfg(feature = "gpu")]
+pub mod gpu;
+#[cfg(feature = "gpu")]
 pub use gpu::{
     backend_label, compiled_backends, device_available, dx12_compiler, dx12_compiler_label,
     env_candidates, gpu_adapter_info, gpu_available, gpu_backend_status, platform, probe_backend,
     probe_backend_outcome, resolve_candidates, selected_backend, set_backend, set_safe_mode,
-    Backend, GpuAdapterInfo, GpuBackend, GpuBackendStatus, GpuError, Platform, ProbeOutcome,
-    ProbeReport,
+    GpuAdapterInfo, GpuBackend, GpuBackendStatus, GpuError, Platform, ProbeOutcome, ProbeReport,
 };
 
 mod apply_image;
@@ -198,8 +203,10 @@ pub mod locks;
 mod filter_proxy;
 pub use filter_proxy::{FilterProxy, MaskExtremes};
 
+#[cfg(feature = "gpu")]
 mod gpu_filter;
 pub mod metrics;
+#[cfg(feature = "gpu")]
 pub use gpu_filter::{apply_filter_active, filter_gpu_available};
 
 pub mod document_ops;
@@ -331,6 +338,8 @@ use composite::blend;
 #[cfg(test)]
 use composite::blend_if_factor;
 
+#[cfg(test)]
+mod feature_gate_tests;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]

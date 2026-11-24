@@ -62,6 +62,7 @@ impl TextCurve {
 
     /// The sampled table, `STEPS + 1` entries wide. The GPU uploads this so its
     /// interpolation matches [`Self::apply`] exactly.
+    #[cfg_attr(not(feature = "gpu"), allow(dead_code))]
     pub(crate) fn samples(&self) -> &[f32] {
         &self.table
     }

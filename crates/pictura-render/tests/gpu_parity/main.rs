@@ -1,3 +1,4 @@
+#![cfg(feature = "gpu")]
 //! GPU vs CPU parity for the separable blend modes.
 //!
 //! The CPU compositor is the oracle. Each scene drives one blend mode with a
