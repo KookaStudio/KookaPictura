@@ -5,10 +5,7 @@ use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
 use pictura_script::{
-    action::{
-        ActionColor, ActionStep, Condition, DialogOptions, FunctionKey, Platform, StepFlags,
-        StepKind,
-    },
+    action::{ActionColor, ActionStep, Condition, FunctionKey, Platform, StepKind},
     command::{CommandId, CommandParams},
     ActionError,
 };
@@ -520,15 +517,10 @@ impl super::ffi::ActionsEngine {
                             .insert_path(set, action, path.to_string())
                             .map_or(-1, |index| index as i32)
                     } else {
-                        let step = ActionStep {
-                            flags: StepFlags::default(),
-                            dialog_options: DialogOptions::OPTIONAL,
-                            display_name: "Insert Path".into(),
-                            kind: StepKind::InsertPath {
-                                path: path.to_string(),
-                            },
-                            imported: None,
-                        };
+                        let mut step = ActionStep::new(StepKind::InsertPath {
+                            path: path.to_string(),
+                        });
+                        step.display_name = "Insert Path".into();
                         let outcome = this.library.add_step(set, action, step);
                         outcome
                             .map(|inserted| {

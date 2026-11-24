@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use crate::action::{ActionStep, DialogOptions, EventKey, StepFlags, StepKind, ToolStroke};
+use crate::action::{ActionStep, DialogOptions, EventKey, StepKind, ToolStroke};
 use crate::command::{self, CommandClass, CommandId, CommandParams, DialogMode};
 use crate::error::ActionError;
 use crate::library::ActionLibrary;
@@ -47,7 +47,7 @@ struct Anchor {
 
 fn anchor_of(step: &ActionStep) -> Anchor {
     Anchor {
-        kind: match &step.kind {
+        kind: match step.kind() {
             StepKind::Command { .. } => "command",
             StepKind::Stop { .. } => "stop",
             StepKind::MenuItem { .. } => "menuItem",
@@ -178,19 +178,13 @@ impl Recorder {
             .steps[target.insert_at - 1];
         self.next_pending = self.next_pending.wrapping_add(1).max(1);
         let token = self.next_pending;
-        let placeholder = ActionStep {
-            flags: StepFlags {
-                enabled: false,
-                ..StepFlags::default()
-            },
-            dialog_options: DialogOptions::NONE,
-            display_name: format!("{} (pending)", step.display_name),
-            kind: StepKind::Unknown {
-                event: pending_key(token),
-                descriptor: None,
-            },
-            imported: None,
-        };
+        let mut placeholder = ActionStep::new(StepKind::Unknown {
+            event: pending_key(token),
+            descriptor: None,
+        });
+        placeholder.flags.enabled = false;
+        placeholder.dialog_options = DialogOptions::NONE;
+        placeholder.display_name = format!("{} (pending)", step.display_name);
         self.pending
             .insert(token, std::mem::replace(step, placeholder));
         target.anchor = Some(anchor_of(step));
@@ -210,7 +204,7 @@ impl Recorder {
             library.sets().iter().enumerate().find_map(|(set, group)| {
                 group.actions.iter().enumerate().find_map(|(action, item)| {
                     item.steps.iter().position(|step| matches!(
-                    &step.kind,
+                    step.kind(),
                     StepKind::Unknown { event, .. } if *event == key && pending_step(step)
                 )).map(|index| (set, action, index))
                 })
@@ -263,19 +257,13 @@ impl Recorder {
             DialogMode::Required => (DialogOptions::REQUIRED, false),
             DialogMode::Specific => (DialogOptions::SPECIFIC, false),
         };
-        let step = ActionStep {
-            flags: StepFlags {
-                with_dialog,
-                ..StepFlags::default()
-            },
-            dialog_options,
-            display_name: definition.label.to_string(),
-            kind: StepKind::Command {
-                command: command.clone(),
-                params: params.clone(),
-            },
-            imported: None,
-        };
+        let mut step = ActionStep::new(StepKind::Command {
+            command: command.clone(),
+            params: params.clone(),
+        });
+        step.flags.with_dialog = with_dialog;
+        step.dialog_options = dialog_options;
+        step.display_name = definition.label.to_string();
         let anchor = anchor_of(&step);
         insert(library, target, step)?;
         if let Some(target) = &mut self.target {
@@ -316,13 +304,9 @@ impl Recorder {
                 limit: MAX_TOOL_SAMPLES,
             });
         }
-        let step = ActionStep {
-            flags: StepFlags::default(),
-            dialog_options: crate::action::DialogOptions::OPTIONAL,
-            display_name: format!("Tool Stroke: {}", stroke.tool),
-            kind: StepKind::ToolStroke { stroke },
-            imported: None,
-        };
+        let label = format!("Tool Stroke: {}", stroke.tool);
+        let mut step = ActionStep::new(StepKind::ToolStroke { stroke });
+        step.display_name = label;
         let anchor = anchor_of(&step);
         insert(library, target, step)?;
         if let Some(target) = &mut self.target {
@@ -394,7 +378,7 @@ fn pending_key(token: u64) -> EventKey {
 }
 
 pub(crate) fn pending_step(step: &ActionStep) -> bool {
-    step.imported.is_none()
-        && matches!(&step.kind, StepKind::Unknown { event: EventKey::Text(value), .. }
+    step.imported().is_none()
+        && matches!(step.kind(), StepKind::Unknown { event: EventKey::Text(value), .. }
            if value.starts_with(PENDING_COMMAND_PREFIX) && value.len() == PENDING_COMMAND_PREFIX.len() + 8)
 }

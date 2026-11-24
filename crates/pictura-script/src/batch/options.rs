@@ -160,7 +160,7 @@ fn reaches(
         return false;
     };
     for step in action_ref.steps.iter().filter(|step| step.flags.enabled) {
-        let nested: Vec<&str> = match &step.kind {
+        let nested: Vec<&str> = match step.kind() {
             StepKind::Command { command: id, .. } if id.as_str() == command => return true,
             StepKind::Play { action } => vec![action.as_str()],
             StepKind::Conditional {

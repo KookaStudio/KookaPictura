@@ -71,60 +71,57 @@ fn every_step_kind_round_trips_through_the_palette() {
     let mut action = Action::new("Steps");
     action.steps = vec![
         command_step("edit.cut"),
-        ActionStep {
-            flags: StepFlags::default(),
-            dialog_options: DialogOptions::OPTIONAL,
-            display_name: "Stop".into(),
-            kind: StepKind::Stop {
+        {
+            let mut step = ActionStep::new(StepKind::Stop {
                 message: "Paused".into(),
                 allow_continue: true,
-            },
-            imported: None,
+            });
+            step.flags = StepFlags::default();
+            step.dialog_options = DialogOptions::OPTIONAL;
+            step.display_name = "Stop".into();
+            step
         },
-        ActionStep {
-            flags: StepFlags::default(),
-            dialog_options: DialogOptions::SPECIFIC,
-            display_name: "Menu".into(),
-            kind: StepKind::MenuItem {
+        {
+            let mut step = ActionStep::new(StepKind::MenuItem {
                 command: CommandId::new("edit.copy"),
                 params: CommandParams::new().with("layer", 2),
-            },
-            imported: None,
+            });
+            step.flags = StepFlags::default();
+            step.dialog_options = DialogOptions::SPECIFIC;
+            step.display_name = "Menu".into();
+            step
         },
-        ActionStep {
-            flags: StepFlags::default(),
-            dialog_options: DialogOptions::OPTIONAL,
-            display_name: "Path".into(),
-            kind: StepKind::InsertPath {
+        {
+            let mut step = ActionStep::new(StepKind::InsertPath {
                 path: "Work Path".into(),
-            },
-            imported: None,
+            });
+            step.flags = StepFlags::default();
+            step.dialog_options = DialogOptions::OPTIONAL;
+            step.display_name = "Path".into();
+            step
         },
-        ActionStep {
-            flags: StepFlags::default(),
-            dialog_options: DialogOptions::OPTIONAL,
-            display_name: "Play".into(),
-            kind: StepKind::Play {
+        {
+            let mut step = ActionStep::new(StepKind::Play {
                 action: "Steps".into(),
-            },
-            imported: None,
+            });
+            step.flags = StepFlags::default();
+            step.dialog_options = DialogOptions::OPTIONAL;
+            step.display_name = "Play".into();
+            step
         },
-        ActionStep {
-            flags: StepFlags::default(),
-            dialog_options: DialogOptions::OPTIONAL,
-            display_name: "Conditional".into(),
-            kind: StepKind::Conditional {
+        {
+            let mut step = ActionStep::new(StepKind::Conditional {
                 condition: Condition::DocumentHasSelection,
                 then_action: Some("Steps".into()),
                 else_action: None,
-            },
-            imported: None,
+            });
+            step.flags = StepFlags::default();
+            step.dialog_options = DialogOptions::OPTIONAL;
+            step.display_name = "Conditional".into();
+            step
         },
-        ActionStep {
-            flags: StepFlags::default(),
-            dialog_options: DialogOptions::OPTIONAL,
-            display_name: "Stroke".into(),
-            kind: StepKind::ToolStroke {
+        {
+            let mut step = ActionStep::new(StepKind::ToolStroke {
                 stroke: pictura_script::ToolStroke::new(
                     "brush",
                     CommandParams::new().with("size", 12),
@@ -135,8 +132,11 @@ fn every_step_kind_round_trips_through_the_palette() {
                         time: 0.0,
                     }],
                 ),
-            },
-            imported: None,
+            });
+            step.flags = StepFlags::default();
+            step.dialog_options = DialogOptions::OPTIONAL;
+            step.display_name = "Stroke".into();
+            step
         },
     ];
     let mut set = ActionSet::new("Kinds");
@@ -225,11 +225,11 @@ fn ae_record_lifecycle() {
     let steps = &library.action(0, 0).expect("action").steps;
     assert_eq!(steps.len(), 2);
     assert!(matches!(
-        &steps[0].kind,
+        steps[0].kind(),
         StepKind::Command { command, .. } if command.as_str() == "edit.cut"
     ));
     assert!(matches!(
-        &steps[1].kind,
+        steps[1].kind(),
         StepKind::Command { command, .. } if command.as_str() == "edit.copy"
     ));
 }
@@ -276,22 +276,22 @@ fn ae_play_recursion() {
         actions: vec![
             action(
                 "A",
-                vec![ActionStep {
-                    flags: StepFlags::default(),
-                    dialog_options: DialogOptions::OPTIONAL,
-                    display_name: "Play B".into(),
-                    kind: StepKind::Play { action: "B".into() },
-                    imported: None,
+                vec![{
+                    let mut step = ActionStep::new(StepKind::Play { action: "B".into() });
+                    step.flags = StepFlags::default();
+                    step.dialog_options = DialogOptions::OPTIONAL;
+                    step.display_name = "Play B".into();
+                    step
                 }],
             ),
             action(
                 "B",
-                vec![ActionStep {
-                    flags: StepFlags::default(),
-                    dialog_options: DialogOptions::OPTIONAL,
-                    display_name: "Play A".into(),
-                    kind: StepKind::Play { action: "A".into() },
-                    imported: None,
+                vec![{
+                    let mut step = ActionStep::new(StepKind::Play { action: "A".into() });
+                    step.flags = StepFlags::default();
+                    step.dialog_options = DialogOptions::OPTIONAL;
+                    step.display_name = "Play A".into();
+                    step
                 }],
             ),
         ],
@@ -317,14 +317,14 @@ fn ae_play_error() {
         expanded: true,
         actions: vec![action(
             "Broken",
-            vec![ActionStep {
-                flags: StepFlags::default(),
-                dialog_options: DialogOptions::OPTIONAL,
-                display_name: "Play missing".into(),
-                kind: StepKind::Play {
+            vec![{
+                let mut step = ActionStep::new(StepKind::Play {
                     action: "Missing".into(),
-                },
-                imported: None,
+                });
+                step.flags = StepFlags::default();
+                step.dialog_options = DialogOptions::OPTIONAL;
+                step.display_name = "Play missing".into();
+                step
             }],
         )],
         trailing: Vec::new(),
@@ -357,15 +357,15 @@ fn ae_unsupported_play() {
         expanded: true,
         actions: vec![action(
             "Imported",
-            vec![ActionStep {
-                flags: StepFlags::default(),
-                dialog_options: DialogOptions::OPTIONAL,
-                display_name: "Unknown".into(),
-                kind: StepKind::Unknown {
+            vec![{
+                let mut step = ActionStep::new(StepKind::Unknown {
                     event: EventKey::text("AdobeNope"),
                     descriptor: None,
-                },
-                imported: None,
+                });
+                step.flags = StepFlags::default();
+                step.dialog_options = DialogOptions::OPTIONAL;
+                step.display_name = "Unknown".into();
+                step
             }],
         )],
         trailing: Vec::new(),
@@ -447,7 +447,7 @@ fn ae_default_provenance() {
     assert_eq!(colors.len(), 4, "each default action needs its own color");
     let resize = &set.actions[3].steps[0];
     assert!(matches!(
-        &resize.kind,
+        resize.kind(),
         StepKind::Command { command, params }
             if command.as_str() == "image.image.size"
                 && params.get("width").and_then(serde_json::Value::as_i64) == Some(1000)
@@ -464,16 +464,16 @@ fn conditional_step(
     then_action: Option<&str>,
     else_action: Option<&str>,
 ) -> ActionStep {
-    ActionStep {
-        flags: StepFlags::default(),
-        dialog_options: DialogOptions::OPTIONAL,
-        display_name: "Conditional".into(),
-        kind: StepKind::Conditional {
+    {
+        let mut step = ActionStep::new(StepKind::Conditional {
             condition,
             then_action: then_action.map(ToString::to_string),
             else_action: else_action.map(ToString::to_string),
-        },
-        imported: None,
+        });
+        step.flags = StepFlags::default();
+        step.dialog_options = DialogOptions::OPTIONAL;
+        step.display_name = "Conditional".into();
+        step
     }
 }
 
@@ -558,7 +558,7 @@ fn ae_conditional_move_guard() {
     assert!(library.sets()[0].action("Source").is_some());
     let conditional = &library.sets()[0].actions[0].steps[0];
     assert!(matches!(
-        &conditional.kind,
+        conditional.kind(),
         StepKind::Conditional { then_action: Some(name), .. } if name == "Source"
     ));
 }
@@ -672,7 +672,7 @@ fn tool_stroke_is_bounded_and_captures_settings() {
         .record_tool_stroke(&mut library, true, stroke)
         .expect("record"));
     let step = &library.sets()[0].actions[0].steps[0];
-    match &step.kind {
+    match step.kind() {
         StepKind::ToolStroke { stroke } => {
             assert_eq!(stroke.settings().get("size"), Some(&serde_json::json!(12)));
         }
@@ -681,27 +681,27 @@ fn tool_stroke_is_bounded_and_captures_settings() {
 }
 
 fn stop_step(message: &str, allow_continue: bool) -> ActionStep {
-    ActionStep {
-        flags: StepFlags::default(),
-        dialog_options: DialogOptions::OPTIONAL,
-        display_name: "Stop".into(),
-        kind: StepKind::Stop {
+    {
+        let mut step = ActionStep::new(StepKind::Stop {
             message: message.into(),
             allow_continue,
-        },
-        imported: None,
+        });
+        step.flags = StepFlags::default();
+        step.dialog_options = DialogOptions::OPTIONAL;
+        step.display_name = "Stop".into();
+        step
     }
 }
 
 fn play_step(name: &str) -> ActionStep {
-    ActionStep {
-        flags: StepFlags::default(),
-        dialog_options: DialogOptions::OPTIONAL,
-        display_name: format!("Play {name}"),
-        kind: StepKind::Play {
+    {
+        let mut step = ActionStep::new(StepKind::Play {
             action: name.into(),
-        },
-        imported: None,
+        });
+        step.flags = StepFlags::default();
+        step.dialog_options = DialogOptions::OPTIONAL;
+        step.display_name = format!("Play {name}");
+        step
     }
 }
 
@@ -898,7 +898,7 @@ fn rename_updates_play_refs_and_rejects_duplicates() {
     library.rename_action(0, 1, "Renamed").expect("rename");
     let caller = &library.sets()[0].actions[0].steps[0];
     assert!(matches!(
-        &caller.kind,
+        caller.kind(),
         StepKind::Play { action } if action == "Renamed"
     ));
     assert!(matches!(
@@ -966,7 +966,7 @@ fn moves_accept_append_and_noop() {
 
     assert!(library.move_step(0, 1, 0, 2));
     assert!(matches!(
-        &library.sets()[0].actions[1].steps[0].kind,
+        library.sets()[0].actions[1].steps[0].kind(),
         StepKind::Command { command, .. } if command.as_str() == "edit.copy"
     ));
     assert!(library.move_step(0, 1, 1, 1));
@@ -1002,13 +1002,13 @@ fn move_step_to_moves_across_actions_and_sets() {
     let source = &library.sets()[0].actions[0].steps;
     assert_eq!(source.len(), 1);
     assert!(matches!(
-        &source[0].kind,
+        source[0].kind(),
         StepKind::Command { command, .. } if command.as_str() == "edit.copy"
     ));
     let destination = &library.sets()[1].actions[0].steps;
     assert_eq!(destination.len(), 2);
     assert!(matches!(
-        &destination[0].kind,
+        destination[0].kind(),
         StepKind::Command { command, .. } if command.as_str() == "edit.cut"
     ));
     assert!(library
@@ -1018,7 +1018,7 @@ fn move_step_to_moves_across_actions_and_sets() {
     let destination = &library.sets()[1].actions[0].steps;
     assert_eq!(destination.len(), 3);
     assert!(matches!(
-        &destination[2].kind,
+        destination[2].kind(),
         StepKind::Command { command, .. } if command.as_str() == "edit.copy"
     ));
     assert!(library.move_step_to(1, 0, 1, 1, 0, 1).expect("noop"));
@@ -1145,7 +1145,7 @@ fn insert_path_replaces_until_a_save_path() {
     assert_eq!(library.insert_path(0, 0, "two").expect("replace"), 0);
     assert_eq!(library.sets()[0].actions[0].steps.len(), 1);
     assert!(matches!(
-        &library.sets()[0].actions[0].steps[0].kind,
+        library.sets()[0].actions[0].steps[0].kind(),
         StepKind::InsertPath { path } if path == "two"
     ));
 
@@ -1156,7 +1156,7 @@ fn insert_path_replaces_until_a_save_path() {
     assert_eq!(library.insert_path(0, 0, "four").expect("replace"), 2);
     assert_eq!(library.sets()[0].actions[0].steps.len(), 3);
     assert!(matches!(
-        &library.sets()[0].actions[0].steps[2].kind,
+        library.sets()[0].actions[0].steps[2].kind(),
         StepKind::InsertPath { path } if path == "four"
     ));
 }
@@ -1234,4 +1234,35 @@ fn oversized_tool_strokes_are_refused() {
         recorder.record_tool_stroke(&mut library, true, too_many),
         Err(ActionError::ToolStrokeTooLarge { .. })
     ));
+}
+
+#[test]
+fn rejected_duplicate_rename_leaves_bytes_unchanged() {
+    let mut library = library(ActionSet {
+        name: "Set".into(),
+        expanded: true,
+        actions: vec![
+            action("Play Caller", vec![play_step("First")]),
+            action(
+                "Conditional Caller",
+                vec![conditional_step(
+                    Condition::DocumentHasSelection,
+                    Some("First"),
+                    None,
+                )],
+            ),
+            action("First", vec![command_step("edit.cut")]),
+            action("Second", vec![command_step("edit.copy")]),
+        ],
+        trailing: Vec::new(),
+        raw_name: None,
+    });
+    let before = library.clone();
+    let before_bytes = library.save_bytes();
+    assert!(matches!(
+        library.rename_action(0, 2, "Second"),
+        Err(ActionError::DuplicateActionName { .. })
+    ));
+    assert_eq!(library, before);
+    assert_eq!(library.save_bytes(), before_bytes);
 }
