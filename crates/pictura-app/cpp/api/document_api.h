@@ -30,15 +30,15 @@ bool newDocument(PictureView& view, int width, int height, const QString& mode, 
 /// one layer per decodable path. Returns the paths that could not be loaded.
 QStringList loadFilesIntoStack(PictureView& view, const QStringList& paths, bool align,
                                bool smartObject);
-bool save(PictureView& view, const QString& path);
+bool save(PictureView& view, const QString& path, int formatId = -1);
 /// Write a copy without recording the path or clearing the modified state.
-bool saveCopy(PictureView& view, const QString& path);
-// Native PSD/PSB save off the GUI thread. `saveStart` is false for every other
-// suffix, including the engine Save As formats; `saveFinish` joins and applies
-// the path/dirty result.
-bool saveStart(PictureView& view, const QString& path);
+bool saveCopy(PictureView& view, const QString& path, int formatId = -1);
+// Native PSD/PSB save off the GUI thread. `formatId` is a resolved catalog id;
+// -1 resolves from the suffix. `saveFinish` joins and applies the path/dirty
+// result.
+bool saveStart(PictureView& view, const QString& path, int formatId = -1);
 /// Native PSD/PSB copy off the GUI thread; `saveFinish` skips the bookkeeping.
-bool saveCopyStart(PictureView& view, const QString& path);
+bool saveCopyStart(PictureView& view, const QString& path, int formatId = -1);
 bool saveRunning(const PictureView& view);
 bool saveFinish(PictureView& view);
 void saveSetDelayForTest(PictureView& view, quint64 ms);

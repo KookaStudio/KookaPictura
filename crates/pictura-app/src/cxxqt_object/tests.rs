@@ -1,10 +1,11 @@
 use super::helpers::*;
 use super::helpers_composite::*;
-use super::impl_core::{format_for_path, raster_writer_for_suffix};
+use super::impl_core::format_for_path;
 use super::impl_transform::{build_move_preview_base, duplicate_move_target, translate_move_group};
 use super::open_jobs::finalize_import;
 use crate::history::{History, Snapshot};
 use crate::layer_target::LayerTarget;
+use pictura_codec::{SaveFormat, SaveKind, SaveRoute};
 use pictura_core::{
     BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LayerBlock, LayerMask,
     LockFlags, PixelBuffer, PsdRect,
@@ -1377,16 +1378,17 @@ fn output_format_classification_matches_suffix() {
     assert_eq!(format_for_path("/tmp/doc.psd"), "psd");
     assert_eq!(format_for_path("/tmp/noext"), "psd");
 
-    assert_eq!(raster_writer_for_suffix("png"), Some("PNG"));
-    assert_eq!(raster_writer_for_suffix("jpeg"), Some("JPG"));
-    assert_eq!(raster_writer_for_suffix("jpe"), Some("JPG"));
-    assert_eq!(raster_writer_for_suffix("tiff"), Some("TIF"));
-    assert_eq!(raster_writer_for_suffix("webp"), Some("WEBP"));
-    assert_eq!(raster_writer_for_suffix("bmp"), Some("BMP"));
-    assert_eq!(raster_writer_for_suffix("psd"), None);
-    assert_eq!(raster_writer_for_suffix("gif"), None);
+    assert_eq!(output_route("png"), Some(SaveRoute::Engine(SaveKind::Png)));
+    assert_eq!(output_route("jpeg"), Some(SaveRoute::QtRaster("JPG")));
+    assert_eq!(output_route("webp"), Some(SaveRoute::QtRaster("WEBP")));
+    assert_eq!(output_route("gif"), Some(SaveRoute::AppGif));
+    assert_eq!(output_route("eps"), Some(SaveRoute::Engine(SaveKind::Eps)));
 
     assert_eq!(super::PictureViewRust::default().source_format, "psd");
+}
+
+fn output_route(suffix: &str) -> Option<SaveRoute> {
+    SaveFormat::from_suffix(suffix).map(SaveFormat::route)
 }
 
 mod image_conversion;

@@ -10,7 +10,9 @@ mod imp;
 use super::export_tools::*;
 use super::qobject::PictureView;
 use super::save_format::{
-    raster_preview_bytes, set_save_gif_options, set_save_options, set_save_raster_options,
+    raster_preview_bytes, save_document_format, save_format_aliases, save_format_canonical,
+    save_format_code, save_format_flags, save_format_id_for_source_name, save_format_id_for_suffix,
+    set_save_gif_options, set_save_options, set_save_raster_options,
 };
 pub use imp::*;
 
@@ -114,6 +116,32 @@ pub mod ffi {
 
         /// Store the typed Save As kind and JSON options for the engine writers.
         fn set_save_options(view: Pin<&mut PictureView>, kind: i32, json: &str);
+
+        /// The catalog ordinal a typed suffix names, or -1. Alias-only.
+        fn save_format_id_for_suffix(suffix: &str) -> i32;
+
+        /// The catalog ordinal a remembered source name or suffix names, or -1.
+        fn save_format_id_for_source_name(name: &str) -> i32;
+
+        /// The policy flags for a catalog ordinal; 0 when the id is unknown.
+        fn save_format_flags(id: i32) -> u32;
+
+        /// The options wire code for a catalog ordinal; 0 when it opens no dialog.
+        fn save_format_code(id: i32) -> i32;
+
+        /// The canonical extension for a catalog ordinal; empty when unknown.
+        fn save_format_canonical(id: i32) -> QString;
+
+        /// The lowercase aliases for a catalog ordinal as one space-separated string.
+        fn save_format_aliases(id: i32) -> QString;
+
+        /// Save `path` with a shell-resolved catalog ordinal; -1 resolves from the path.
+        fn save_document_format(
+            view: Pin<&mut PictureView>,
+            path: &QString,
+            format_id: i32,
+            copy: bool,
+        ) -> bool;
 
         /// Store the palette settings the next GIF save of this document uses.
         fn set_save_gif_options(

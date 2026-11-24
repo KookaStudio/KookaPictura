@@ -166,7 +166,7 @@ void HistoryLogTest::undoExplicitHistoryPreservesRestoredValue()
     pictura::history_log_configure(true, metadata, concise, {});
     QVERIFY(resize(fixture.view(), 15));
     pictura::save_set_delay(fixture.view(), 100);
-    QVERIFY(pictura::save_start(fixture.view(), path));
+    QVERIFY(pictura::save_start(fixture.view(), path, -1));
     QVERIFY(fixture.view().undo());
     QVERIFY(fixture.view().undo());
     QVERIFY(pictura::save_finish(fixture.view()));
@@ -405,7 +405,7 @@ void HistoryLogTest::saveSnapshotsKeepPendingRecords()
     QVERIFY(resize(fixture.view(), 14));
     const auto path = fixture.path(QStringLiteral("source.psd"));
     pictura::save_set_delay(fixture.view(), 100);
-    QVERIFY(pictura::save_start(fixture.view(), path));
+    QVERIFY(pictura::save_start(fixture.view(), path, -1));
     QVERIFY(resize(fixture.view(), 15));
     QVERIFY(pictura::save_finish(fixture.view()));
     QCOMPARE(bytes(path).count("Image Size"), 1);
@@ -454,7 +454,7 @@ void HistoryLogTest::fileInfoEditsDuringSave()
         QVERIFY(resize(fixture.view(), 14));
         const auto path = fixture.path(QStringLiteral("rebase.psd"));
         pictura::save_set_delay(fixture.view(), 100);
-        QVERIFY(pictura::save_start(fixture.view(), path));
+        QVERIFY(pictura::save_start(fixture.view(), path, -1));
         const auto updated = QStringLiteral("<fixture:other>new value</fixture:other>");
         const auto desired = mode == 0 ? QStringLiteral("baseline")
                           : mode == 1 ? QStringLiteral("replacement") : QString();

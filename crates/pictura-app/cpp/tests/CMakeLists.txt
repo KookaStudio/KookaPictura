@@ -158,6 +158,7 @@ set(PICTURA_QT_TESTS
     tst_save_options
     tst_psd_compatibility
     tst_save_format_options
+    tst_save_format_catalog
     tst_batch_dialog
     tst_batch_run
     tst_save_format_dialogs

@@ -51,19 +51,21 @@ pub mod ffi {
 
     #[namespace = "pictura"]
     extern "Rust" {
-        /// Start a native `.psd`/`.psb` save on a worker. False for a raster or
-        /// PDF path, no document, or a save already running.
-        fn save_start(view: Pin<&mut PictureView>, path: &QString) -> bool;
+        /// Start a native save on a worker with a resolved catalog id; -1 resolves
+        /// from the path. False for a non-native format, no document, or a save
+        /// already running.
+        fn save_start(view: Pin<&mut PictureView>, path: &QString, format_id: i32) -> bool;
 
-        /// Start a native `.psd`/`.psb` copy on a worker without recording the
-        /// path or clearing modified.
-        fn save_copy_start(view: Pin<&mut PictureView>, path: &QString) -> bool;
+        /// Start a native copy on a worker without recording the path or clearing
+        /// modified; -1 resolves the catalog id from the path.
+        fn save_copy_start(view: Pin<&mut PictureView>, path: &QString, format_id: i32) -> bool;
 
         fn native_save_can_omit_merged(view: &PictureView) -> bool;
 
         fn native_compatibility_save_start(
             view: Pin<&mut PictureView>,
             path: &QString,
+            format_id: i32,
             copy: bool,
             include: bool,
         ) -> bool;

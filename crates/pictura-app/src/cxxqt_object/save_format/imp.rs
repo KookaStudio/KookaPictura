@@ -231,9 +231,82 @@ pub fn raster_preview_bytes(
     )
 }
 
+/// The catalog ordinal a typed suffix names, or -1. Alias-only, so `.dcs` stays
+/// unknown.
+pub fn save_format_id_for_suffix(suffix: &str) -> i32 {
+    pictura_codec::SaveFormat::from_suffix(suffix).map_or(-1, pictura_codec::SaveFormat::id)
+}
+
+/// The catalog ordinal a remembered source name or suffix names, or -1. Unlike
+/// the suffix lookup, this accepts identity names, so `"dcs"` finds DCS.
+pub fn save_format_id_for_source_name(name: &str) -> i32 {
+    pictura_codec::SaveFormat::from_source_name(name).map_or(-1, pictura_codec::SaveFormat::id)
+}
+
+/// The policy flags for a catalog ordinal; 0 when the id is unknown.
+pub fn save_format_flags(id: i32) -> u32 {
+    pictura_codec::SaveFormat::from_id(id).map_or(0, pictura_codec::SaveFormat::flags)
+}
+
+/// The options wire code for a catalog ordinal; 0 when it opens no dialog.
+pub fn save_format_code(id: i32) -> i32 {
+    pictura_codec::SaveFormat::from_id(id).map_or(0, pictura_codec::SaveFormat::code)
+}
+
+/// The canonical extension for a catalog ordinal; empty when unknown.
+pub fn save_format_canonical(id: i32) -> QString {
+    pictura_codec::SaveFormat::from_id(id).map_or(QString::from(""), |format| {
+        QString::from(format.canonical())
+    })
+}
+
+/// The lowercase aliases for a catalog ordinal as one space-separated string.
+pub fn save_format_aliases(id: i32) -> QString {
+    pictura_codec::SaveFormat::from_id(id).map_or(QString::from(""), |format| {
+        QString::from(format.aliases_text().as_str())
+    })
+}
+
+/// Save `path` with a format the shell resolved. `format_id` is a catalog
+/// ordinal; `-1` resolves from the path. `copy` skips the path and modified
+/// bookkeeping.
+pub fn save_document_format(
+    mut view: Pin<&mut PictureView>,
+    path: &QString,
+    format_id: i32,
+    copy: bool,
+) -> bool {
+    view.as_mut().save_as_format(path, format_id, copy)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pictura_codec::{SaveFormat, FLAG_KEEPS_LAYERS};
+
+    #[test]
+    fn save_format_queries_match_the_catalog() {
+        assert_eq!(save_format_id_for_suffix("PNG"), SaveFormat::Png.id());
+        assert_eq!(save_format_id_for_suffix("dcs"), -1);
+        assert_eq!(save_format_id_for_source_name("dcs"), SaveFormat::Dcs.id());
+        assert_eq!(
+            save_format_flags(SaveFormat::Tiff.id()) & FLAG_KEEPS_LAYERS,
+            FLAG_KEEPS_LAYERS
+        );
+        assert_eq!(save_format_code(SaveFormat::Jpeg.id()), 1);
+        assert_eq!(
+            save_format_canonical(SaveFormat::Tiff.id()).to_string(),
+            ".tif"
+        );
+        assert_eq!(
+            save_format_aliases(SaveFormat::Jpeg.id()).to_string(),
+            "jpg jpeg jpe"
+        );
+        assert_eq!(save_format_id_for_suffix("xyz"), -1);
+        assert_eq!(save_format_id_for_source_name("xyz"), -1);
+        assert_eq!(save_format_flags(-1), 0);
+        assert_eq!(save_format_code(-1), 0);
+    }
 
     #[test]
     fn default_options_are_unset() {

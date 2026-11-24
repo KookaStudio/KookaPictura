@@ -238,7 +238,7 @@ void OffthreadJobsTest::saveKeepsTheEventLoopLive()
     QObject::connect(&probe.timer, &QTimer::timeout, window_->imageView(),
                      [this] { window_->imageView()->update(); });
     probe.start();
-    QVERIFY(pictura::save_start(*view, path));
+    QVERIFY(pictura::save_start(*view, path, -1));
     QVERIFY(pictura::save_running(*view));
 
     pumpUntil([&] { return !pictura::save_running(*view); });
@@ -260,7 +260,7 @@ void OffthreadJobsTest::aCompletedSaveWritesAndClearsModified()
     QVERIFY(pictura::image_adjust_direct(*view, QStringLiteral("invert")));
     QVERIFY(pictura::document_api::isDirty(*view));
     const QString path = dir_.filePath(QStringLiteral("current.psd"));
-    QVERIFY(pictura::save_start(*view, path));
+    QVERIFY(pictura::save_start(*view, path, -1));
     pumpUntil([&] { return !pictura::save_running(*view); });
     QVERIFY(pictura::save_finish(*view));
     QVERIFY(!pictura::document_api::isDirty(*view));
@@ -278,7 +278,7 @@ void OffthreadJobsTest::aFailedSaveLeavesTheDocumentUntouched()
     pictura::PictureView* view = newDoc(32, 32);
     QVERIFY(view);
     QVERIFY(pictura::image_adjust_direct(*view, QStringLiteral("invert")));
-    QVERIFY(pictura::save_start(*view, QStringLiteral("/proc/does-not-exist/x.psd")));
+    QVERIFY(pictura::save_start(*view, QStringLiteral("/proc/does-not-exist/x.psd"), -1));
     pumpUntil([&] { return !pictura::save_running(*view); });
     QVERIFY(!pictura::save_finish(*view));
     QVERIFY(pictura::document_api::filePath(*view).isEmpty());
@@ -292,7 +292,7 @@ void OffthreadJobsTest::anEditDuringSaveLeavesTheDocumentModified()
     QVERIFY(pictura::image_adjust_direct(*view, QStringLiteral("invert")));
     const QString path = dir_.filePath(QStringLiteral("stale.psd"));
     pictura::save_set_delay(*view, 300);
-    QVERIFY(pictura::save_start(*view, path));
+    QVERIFY(pictura::save_start(*view, path, -1));
     QTimer::singleShot(50, view, [view] {
         pictura::image_adjust_direct(*view, QStringLiteral("desaturate"));
     });

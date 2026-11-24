@@ -41,8 +41,7 @@ bool isOn(const QString& options, const char* field)
 
 bool ImportSaveCoordinator::isPdfPath(const QString& path)
 {
-    const QString suffix = QFileInfo(path).suffix().toLower();
-    return suffix == QStringLiteral("pdf") || suffix == QStringLiteral("pdp");
+    return saveFormatIsPdfSuffix(QFileInfo(path).suffix());
 }
 
 bool ImportSaveCoordinator::runPdfDialog(QDialog& dialog)
