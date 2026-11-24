@@ -1,6 +1,6 @@
 //! Colour for Canon CR3 bodies without published sensitivities
-//! (`codec/camera-matrices`, #1574): the table's camera-JPEG rows and proxies
-//! on synthetic CR3s.
+//! (`codec/camera-matrices`, #1574, #1579): the table's camera-JPEG rows and
+//! proxies on synthetic CR3s.
 
 use pictura_codec::{
     as_shot_transform, decode_raw_source, read_raw, DngColor, ImageBudget, PsdError,
@@ -26,9 +26,8 @@ use crx_encode::{frame, Frame, Grid};
 const PAIR: [Option<u16>; 2] = [Some(20), Some(24)];
 
 /// Every Canon body the table colours from its own camera JPEG, with the
-/// EXIF `LightSource` codes of its matrices: D55 and ISO studio tungsten, or
-/// D55 alone where the fit and the tungsten preset disagree.
-const BODIES: [(&str, [Option<u16>; 2]); 12] = [
+/// EXIF `LightSource` codes of its matrices: D55 and ISO studio tungsten.
+const BODIES: [(&str, [Option<u16>; 2]); 15] = [
     ("Canon EOS 850D", PAIR),
     ("Canon EOS 90D", PAIR),
     ("Canon EOS M200", PAIR),
@@ -36,11 +35,14 @@ const BODIES: [(&str, [Option<u16>; 2]); 12] = [
     ("Canon EOS M50m2", PAIR),
     ("Canon EOS R100", PAIR),
     ("Canon EOS R50 V", PAIR),
-    ("Canon EOS R6 Mark III", [Some(20), None]),
+    ("Canon EOS R1", PAIR),
+    ("Canon EOS R3", PAIR),
+    ("Canon EOS R6 Mark III", PAIR),
     ("Canon EOS R7", PAIR),
     ("Canon EOS-1D X Mark III", PAIR),
     ("Canon PowerShot G5 X Mark II", PAIR),
     ("Canon PowerShot SX70 HS", PAIR),
+    ("Canon PowerShot V1", PAIR),
 ];
 
 /// Regional names and same-sensor proxies, with the body whose row they share.
@@ -116,7 +118,11 @@ fn canon_jpeg_bodies_take_their_matrices() {
         color("Canon EOS 90D").color_matrix,
         color("Canon EOS M50").color_matrix
     );
-    for model in ["Canon EOS R3", "Canon PowerShot V1"] {
+    assert_ne!(
+        color("Canon EOS R1").color_matrix,
+        color("Canon EOS R3").color_matrix
+    );
+    for model in ["Canon PowerShot G1 X Mark III", "Canon EOS R8 Mark II"] {
         assert_eq!(color(model).color_matrix, [None, None], "{model}");
     }
 }

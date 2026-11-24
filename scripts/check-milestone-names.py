@@ -34,8 +34,9 @@ MILESTONE = re.compile(r"(?:^|[_-])[mM]\d|[a-z]M\d")
 PREFILTER = re.compile(r"[mM]\d")
 SUFFIXES = (".rs", ".cpp", ".h")
 # Generated tables whose strings are product names, not milestones: Canon's
-# EOS M50, M200 and M6 Mark II normalize to model keys like "M50" (#1574).
-EXEMPT = {"crates/pictura-codec/src/dng/camera_matrices.rs"}
+# EOS M50, M200 and M6 Mark II normalize to model keys like "M50" (#1574,
+# camera-JPEG rows since #1579).
+EXEMPT = {"crates/pictura-codec/src/dng/camera_jpeg_matrices.rs"}
 
 
 def violations(text: str):

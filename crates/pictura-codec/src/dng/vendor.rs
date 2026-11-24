@@ -3,6 +3,7 @@
 //! Olympus ORF, Panasonic RW2) into the same normalized CFA image as `read_dng`.
 //! Also the helpers the TIFF-based vendor containers share.
 
+use super::camera_jpeg_matrices::JPEG_CAMERAS;
 use super::camera_matrices::CAMERAS;
 use super::levels::Area;
 use super::tiff::{Entry, Ifd, Tiff};
@@ -179,6 +180,7 @@ pub(super) fn camera_color(
     let (make_key, model_key) = (make_key(make), model_key(make, model));
     if let Some(camera) = CAMERAS
         .iter()
+        .chain(JPEG_CAMERAS)
         .find(|c| c.make == make_key && c.models.contains(&model_key.as_str()))
     {
         for (i, &(light, matrix)) in camera.matrices.iter().take(2).enumerate() {
