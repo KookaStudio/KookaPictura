@@ -12,6 +12,8 @@ class QSpinBox;
 
 namespace pictura {
 
+class ColorSwatchWidget;
+
 // The values collected by the New Document dialog.
 struct NewDocumentSpec {
     QString name;
@@ -60,7 +62,9 @@ private:
     void unitChosen(int unit);
     void resolutionUnitChosen(int unit);
     void modeChosen();
-    void backgroundChosen();
+    void contentsChosen();
+    void pickBackgroundColor();
+    void updateBackgroundSwatch();
     void dimensionEdited();
     void setPixels(double width, double height, int unit);
     void updateImageSize();
@@ -87,6 +91,7 @@ private:
     QComboBox* mode_ = nullptr;
     QComboBox* depth_ = nullptr;
     QComboBox* contents_ = nullptr;
+    ColorSwatchWidget* backgroundSwatch_ = nullptr;
     QLabel* imageSize_ = nullptr;
 };
 

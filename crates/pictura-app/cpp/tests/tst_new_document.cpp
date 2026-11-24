@@ -5,15 +5,19 @@
 #include <QtTest/QtTest>
 
 #include "canvas_ruler.h"
+#include "color_picker_dialog.h"
 #include "frame.h"
 #include "new_document_dialog.h"
+#include "panels/color_swatch_widget.h"
 
 #include "api/document_bridge.h"
 
 #include <QtCore/QTemporaryDir>
+#include <QtCore/QTimer>
 #include <QtGui/QClipboard>
 #include <QtGui/QImage>
 #include <QtGui/QStandardItemModel>
+#include <QtWidgets/QApplication>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QLabel>
@@ -29,6 +33,16 @@ bool itemEnabled(QComboBox* combo, int index)
     return model && model->item(index) && model->item(index)->isEnabled();
 }
 
+pictura::ColorPickerDialog* colorPicker()
+{
+    for (QWidget* widget : QApplication::topLevelWidgets()) {
+        if (auto* picker = qobject_cast<pictura::ColorPickerDialog*>(widget)) {
+            return picker;
+        }
+    }
+    return nullptr;
+}
+
 } // namespace
 
 class NewDocumentTest : public QObject {
@@ -39,6 +53,8 @@ private slots:
     void presetsUnitsAndDepths();
     void createsEachModeWithOneState();
     void filledContentsMakeTheLockedBackground();
+    void backgroundSwatchFollowsBackgroundContents();
+    void backgroundSwatchPicksAndCancelsACustomColor();
     void clipboardImagePreselectsClipboardType();
     void localizedWidthSurvivesPsdRoundTrip();
 
@@ -174,6 +190,93 @@ void NewDocumentTest::filledContentsMakeTheLockedBackground()
         QCOMPARE(view.layer_kind(0), QStringLiteral("pixel"));
         QCOMPARE(view.layer_lock(0), 0);
     }
+}
+
+void NewDocumentTest::backgroundSwatchFollowsBackgroundContents()
+{
+    pictura::NewDocumentDialog dialog(QStringLiteral("Untitled-1"), QColor(10, 20, 30));
+    auto* contents = qobject_cast<QComboBox*>(dialog.controlForTest(QStringLiteral("newDocBackground")));
+    auto* swatch = qobject_cast<pictura::ColorSwatchWidget*>(
+        dialog.controlForTest(QStringLiteral("newDocBackgroundSwatch")));
+    QVERIFY(contents && swatch);
+
+    // CS6's list, before any custom color has been chosen.
+    QCOMPARE(contents->count(), 3);
+    QCOMPARE(contents->itemText(0), QStringLiteral("White"));
+    QCOMPARE(contents->itemText(1), QStringLiteral("Background Color"));
+    QCOMPARE(contents->itemText(2), QStringLiteral("Transparent"));
+    QCOMPARE(contents->findText(QStringLiteral("Custom")), -1);
+    QVERIFY(swatch->isEnabled());
+    QCOMPARE(swatch->color(), QColor(Qt::white));
+
+    contents->setCurrentIndex(contents->findText(QStringLiteral("Background Color")));
+    QVERIFY(swatch->isEnabled());
+    QCOMPARE(swatch->color(), QColor(10, 20, 30));
+
+    contents->setCurrentIndex(contents->findText(QStringLiteral("Transparent")));
+    QVERIFY(!swatch->isEnabled());
+    QVERIFY(dialog.spec().transparent);
+
+    contents->setCurrentIndex(contents->findText(QStringLiteral("White")));
+    QVERIFY(swatch->isEnabled());
+    QCOMPARE(swatch->color(), QColor(Qt::white));
+    QCOMPARE(dialog.spec().fill, QColor(Qt::white));
+}
+
+void NewDocumentTest::backgroundSwatchPicksAndCancelsACustomColor()
+{
+    pictura::ColorPickerDialog::setPickerPreference(0);
+    pictura::NewDocumentDialog dialog(QStringLiteral("Untitled-1"), QColor(10, 20, 30));
+    auto* contents = qobject_cast<QComboBox*>(dialog.controlForTest(QStringLiteral("newDocBackground")));
+    auto* swatch = qobject_cast<pictura::ColorSwatchWidget*>(
+        dialog.controlForTest(QStringLiteral("newDocBackgroundSwatch")));
+    QVERIFY(contents && swatch);
+
+    bool picked = false;
+    QTimer::singleShot(0, &dialog, [&]() {
+        auto* picker = colorPicker();
+        if (!picker) {
+            return;
+        }
+        auto* field = picker->findChild<QLineEdit*>(QStringLiteral("colorPickerHex"));
+        if (field) {
+            field->setText(QStringLiteral("336699"));
+            QMetaObject::invokeMethod(field, "textEdited", Q_ARG(QString, QStringLiteral("336699")));
+            picked = true;
+        }
+        picker->accept();
+    });
+    swatch->click();
+    QVERIFY(picked);
+
+    const int custom = contents->findText(QStringLiteral("Custom"));
+    QVERIFY(custom >= 0);
+    QCOMPARE(contents->currentIndex(), custom);
+    QCOMPARE(swatch->color(), QColor(0x33, 0x66, 0x99));
+    const auto spec = dialog.spec();
+    QVERIFY(!spec.transparent);
+    QCOMPARE(spec.fill, QColor(0x33, 0x66, 0x99));
+
+    pictura::PictureView view;
+    QVERIFY(pictura::create_document(view, 4, 4, spec.mode, spec.depth,
+                                     spec.fill.rgb() & 0xffffffu, spec.transparent,
+                                     spec.ppi, spec.perCm));
+    QCOMPARE(view.composite_argb(2, 2), qRgb(0x33, 0x66, 0x99));
+
+    bool rejected = false;
+    QTimer::singleShot(0, &dialog, [&]() {
+        auto* picker = colorPicker();
+        if (!picker) {
+            return;
+        }
+        rejected = true;
+        picker->reject();
+    });
+    swatch->click();
+    QVERIFY(rejected);
+    QCOMPARE(contents->currentText(), QStringLiteral("Custom"));
+    QCOMPARE(swatch->color(), QColor(0x33, 0x66, 0x99));
+    QCOMPARE(dialog.spec().fill, QColor(0x33, 0x66, 0x99));
 }
 
 void NewDocumentTest::clipboardImagePreselectsClipboardType()

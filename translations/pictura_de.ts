@@ -13933,10 +13933,6 @@ ID: %3</translation>
         <translation>Bitmap</translation>
     </message>
     <message>
-        <source>Black</source>
-        <translation>Schwarz</translation>
-    </message>
-    <message>
         <source>CMYK Color</source>
         <translation>CMYK-Farbe</translation>
     </message>
@@ -13949,6 +13945,10 @@ ID: %3</translation>
         <translation>Zentimeter</translation>
     </message>
     <message>
+        <source>Choose the background color</source>
+        <translation>Hintergrundfarbe auswählen</translation>
+    </message>
+    <message>
         <source>Clipboard</source>
         <translation>Zwischenablage</translation>
     </message>
@@ -13957,8 +13957,8 @@ ID: %3</translation>
         <translation>Farbmodus:</translation>
     </message>
     <message>
-        <source>Color Picker (Custom Background Color)</source>
-        <translation>Farbwähler (eigene Hintergrundfarbe)</translation>
+        <source>Color Picker (Background Color)</source>
+        <translation>Farbwähler (Hintergrundfarbe)</translation>
     </message>
     <message>
         <source>Color Profile:</source>
@@ -13971,10 +13971,6 @@ ID: %3</translation>
     <message>
         <source>Custom</source>
         <translation>Benutzerdefiniert</translation>
-    </message>
-    <message>
-        <source>Custom…</source>
-        <translation>Benutzerdefiniert…</translation>
     </message>
     <message>
         <source>Default Photoshop Size</source>

@@ -5,6 +5,7 @@
 
 #include "color_picker_dialog.h"
 #include "dialogs.h"
+#include "panels/color_swatch_widget.h"
 
 #include <QtGui/QClipboard>
 #include <QtGui/QGuiApplication>
@@ -105,7 +106,7 @@ const Mode kModes[] = {
 };
 constexpr int kDepths[] = {1, 8, 16, 32};
 
-enum BackgroundChoice { White, Black, BackgroundColor, Transparent, CustomColor };
+enum BackgroundChoice { White, BackgroundColor, Transparent, CustomColor };
 
 constexpr int kLargeSide = 30000;
 
@@ -245,9 +246,15 @@ void NewDocumentDialog::buildUi()
     label(tr("Background Contents:"));
     contents_ = new QComboBox(this);
     contents_->setObjectName(QStringLiteral("newDocBackground"));
-    contents_->addItems({tr("White"), tr("Black"), tr("Background Color"),
-                         tr("Transparent"), tr("Custom…")});
-    grid->addWidget(contents_, row++, 1);
+    contents_->addItem(tr("White"), int(White));
+    contents_->addItem(tr("Background Color"), int(BackgroundColor));
+    contents_->addItem(tr("Transparent"), int(Transparent));
+    grid->addWidget(contents_, row, 1);
+    backgroundSwatch_ = new ColorSwatchWidget(this);
+    backgroundSwatch_->setObjectName(QStringLiteral("newDocBackgroundSwatch"));
+    backgroundSwatch_->setFixedSize(24, 22);
+    backgroundSwatch_->setToolTip(plainUiTooltip(tr("Choose the background color")));
+    grid->addWidget(backgroundSwatch_, row++, 2, Qt::AlignLeft | Qt::AlignVCenter);
     left->addLayout(grid);
     left->addSpacing(8);
 
@@ -314,8 +321,12 @@ void NewDocumentDialog::buildUi()
     connect(resolution_, &QDoubleSpinBox::valueChanged, this, &NewDocumentDialog::dimensionEdited);
     connect(mode_, &QComboBox::currentIndexChanged, this, &NewDocumentDialog::modeChosen);
     connect(depth_, &QComboBox::currentIndexChanged, this, &NewDocumentDialog::updateImageSize);
-    connect(contents_, &QComboBox::activated, this, &NewDocumentDialog::backgroundChosen);
+    connect(contents_, &QComboBox::currentIndexChanged, this,
+            &NewDocumentDialog::contentsChosen);
+    connect(backgroundSwatch_, &QPushButton::clicked, this,
+            &NewDocumentDialog::pickBackgroundColor);
     modeChosen();
+    updateBackgroundSwatch();
 }
 
 double NewDocumentDialog::ppi() const
@@ -476,17 +487,47 @@ void NewDocumentDialog::modeChosen()
     updateImageSize();
 }
 
-void NewDocumentDialog::backgroundChosen()
+void NewDocumentDialog::contentsChosen()
 {
-    if (contents_->currentIndex() != CustomColor) {
+    updateBackgroundSwatch();
+}
+
+void NewDocumentDialog::pickBackgroundColor()
+{
+    if (contents_->currentData().toInt() == Transparent) {
         return;
     }
     const QColor picked = ColorPickerDialog::getColor(
-        custom_, this, tr("Color Picker (Custom Background Color)"));
-    if (picked.isValid()) {
-        custom_ = picked;
-    } else {
-        contents_->setCurrentIndex(White);
+        backgroundSwatch_->color(), this, tr("Color Picker (Background Color)"));
+    if (!picked.isValid()) {
+        return;
+    }
+    custom_ = picked;
+    int index = contents_->findData(int(CustomColor));
+    if (index < 0) {
+        contents_->addItem(tr("Custom"), int(CustomColor));
+        index = contents_->count() - 1;
+    }
+    contents_->setCurrentIndex(index);
+    updateBackgroundSwatch();
+}
+
+void NewDocumentDialog::updateBackgroundSwatch()
+{
+    const int choice = contents_->currentData().toInt();
+    backgroundSwatch_->setEnabled(choice != Transparent);
+    switch (choice) {
+    case BackgroundColor:
+        backgroundSwatch_->setColor(background_);
+        break;
+    case CustomColor:
+        backgroundSwatch_->setColor(custom_);
+        break;
+    case Transparent:
+        break;
+    default:
+        backgroundSwatch_->setColor(Qt::white);
+        break;
     }
 }
 
@@ -505,12 +546,11 @@ NewDocumentSpec NewDocumentDialog::spec() const
     result.height = heightPixels();
     result.mode = mode_->currentData().toString();
     result.depth = depth_->currentData().toInt();
-    const int contents = contents_->currentIndex();
+    const int contents = contents_->currentData().toInt();
     result.transparent = contents == Transparent;
-    result.fill = contents == Black             ? QColor(Qt::black)
-                  : contents == BackgroundColor ? background_
-                  : contents == CustomColor     ? custom_
-                                                : QColor(Qt::white);
+    result.fill = contents == BackgroundColor ? background_
+                  : contents == CustomColor   ? custom_
+                                              : QColor(Qt::white);
     result.ppi = ppi();
     result.perCm = resolutionUnit_->currentIndex() == 1;
     return result;

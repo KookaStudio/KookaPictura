@@ -13933,10 +13933,6 @@ ID:%3</translation>
         <translation>Bittikartta</translation>
     </message>
     <message>
-        <source>Black</source>
-        <translation>Musta</translation>
-    </message>
-    <message>
         <source>CMYK Color</source>
         <translation>CMYK-väri</translation>
     </message>
@@ -13949,6 +13945,10 @@ ID:%3</translation>
         <translation>Senttimetrit</translation>
     </message>
     <message>
+        <source>Choose the background color</source>
+        <translation>Valitse taustaväri</translation>
+    </message>
+    <message>
         <source>Clipboard</source>
         <translation>Leikepöytä</translation>
     </message>
@@ -13957,8 +13957,8 @@ ID:%3</translation>
         <translation>Väritila:</translation>
     </message>
     <message>
-        <source>Color Picker (Custom Background Color)</source>
-        <translation>Värinvalitsin (mukautettu taustaväri)</translation>
+        <source>Color Picker (Background Color)</source>
+        <translation>Värinvalitsin (taustaväri)</translation>
     </message>
     <message>
         <source>Color Profile:</source>
@@ -13971,10 +13971,6 @@ ID:%3</translation>
     <message>
         <source>Custom</source>
         <translation>Mukautettu</translation>
-    </message>
-    <message>
-        <source>Custom…</source>
-        <translation>Mukautettu…</translation>
     </message>
     <message>
         <source>Default Photoshop Size</source>
