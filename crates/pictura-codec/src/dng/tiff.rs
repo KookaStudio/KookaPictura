@@ -266,10 +266,14 @@ impl<'a> Tiff<'a> {
 
     /// 16-bit words: SHORT values, or BYTE and UNDEFINED bytes taken in pairs
     /// in the file's byte order (some Canon bodies store their colour data
-    /// so).
+    /// so). An odd byte count is refused, not truncated.
     pub fn words(&self, e: &Entry) -> Result<Vec<u16>, PsdError> {
         match e.typ {
             3 => (0..e.count).map(|i| self.u16_at(e.at + 2 * i)).collect(),
+            1 | 7 if !e.count.is_multiple_of(2) => Err(invalid(&format!(
+                "tag {} has an odd byte count for 16-bit words",
+                e.tag
+            ))),
             1 | 7 => Ok(self
                 .raw(e)
                 .as_chunks::<2>()

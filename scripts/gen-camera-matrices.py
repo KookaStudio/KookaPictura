@@ -20,10 +20,10 @@ Sources (download them yourself; see assets/PROVENANCE.md):
 CIE illuminant A is computed from its Planckian definition.
 
 Panasonic (#1542) and Canon CR3 (#1574) and CR2 (#1583) bodies without
-published sensitivities take the matrices `scripts/fit-camera-jpeg-matrices.py` fitted
-from each body's own camera JPEG and recorded in
-`scripts/camera-jpeg-fits.json`; this script copies the accepted ones. A body
-with sensitivities keeps the spectral fit.
+published sensitivities take the matrices
+`scripts/fit-camera-jpeg-matrices.py` fitted from each body's own camera JPEG
+and recorded in `scripts/camera-jpeg-fits.json`; this script copies the
+accepted ones. A body with sensitivities keeps the spectral fit.
 
 Regenerate with:
   git clone https://github.com/AcademySoftwareFoundation/rawtoaces-data

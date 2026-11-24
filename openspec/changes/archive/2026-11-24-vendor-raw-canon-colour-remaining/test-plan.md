@@ -14,7 +14,7 @@ and the external datasets, none of which are committed.
 |---|---|---|---|
 | `cr2_as_shot_layouts` | Colour data of each layout, version -4 added, multipliers at the layout's index | Each reports (1012/2000, 1, 1012/1500) within 1e-9 | `pictura-codec::cr2_as_shot_neutral_by_layout` |
 | `cr2_as_shot_bytes` | Version -4 colour data written as an UNDEFINED entry | Reports (1012/2000, 1, 1012/1500) within 1e-9 | `pictura-codec::cr2_colour_data_as_bytes` |
-| `cr2_as_shot_refused` | Version 25; 40 entries; zero red; version 10 as a LONG entry | Each reads with no neutral | `pictura-codec::unusable_colour_data_leaves_no_neutral` |
+| `cr2_as_shot_refused` | Version 25; 40 entries; zero red; version 10 as a LONG entry; version -4 as BYTE values of an odd count | Each reads with no neutral | `pictura-codec::unusable_colour_data_leaves_no_neutral` |
 | `cr2_known_camera_decodes` | Unchanged 5DS decode test | Decodes; as-shot equals `as_shot_transform`, 2000–12000 K | `pictura-codec::known_camera_cr2_decodes` |
 | `cr2_colour_corpus` | `PICTURA_RAW_CORPUS=<dir with the G1 X Mark III CR2s> cargo test -p pictura-codec --test raw_camera_matrices cr2_corpus_colour` | Both decode at 2000–12000 K | `pictura-codec::cr2_corpus_colour_when_present` |
 | `cr3_matrices_lookup` | Spectral CR3 lookup test, the colourless body now the EOS Ra | Spectral bodies under 17 and 21; aliases equal; EOS Ra none | `pictura-codec::cr3_models_get_both_matrices` |

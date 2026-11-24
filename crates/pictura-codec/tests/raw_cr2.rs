@@ -404,6 +404,7 @@ fn unusable_colour_data_leaves_no_neutral() {
         assert_eq!(as_shot(data), None);
     }
     assert_eq!(as_shot_typed(color_data(1400, 10, 63, levels), 4), None);
+    assert_eq!(as_shot_typed(color_data(1400, -4, 71, levels), 1), None);
 }
 
 #[test]

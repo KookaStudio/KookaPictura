@@ -49,7 +49,8 @@ Raw is approximate.
 
 The CR2 reader SHALL set `AsShotNeutral` from the Canon maker note's colour
 data (tag `0x4001`), read as 16-bit words: SHORT values, or BYTE and
-UNDEFINED bytes taken in pairs in the file's byte order. The as-shot RGGB
+UNDEFINED bytes taken in pairs in the file's byte order (an odd byte
+count is unusable). The as-shot RGGB
 multipliers start at entry 25 for a 582-entry array, 34 for a 653-entry
 array, and otherwise by entry 0 as a signed version: 63 for versions 1 to 15,
 71 for 16 to 19 and negative versions, 85 for 32 and 33, and 105 for 34, 48
@@ -70,7 +71,7 @@ array too short, or a multiplier that is not positive SHALL leave
 
 #### Scenario: Unusable colour data [cr2_as_shot_refused]
 
-- **WHEN** synthetic CR2s carry colour data of version 25, a version-10 array of 40 entries, version 10 with a zero red multiplier, and version 10 written as a LONG entry
+- **WHEN** synthetic CR2s carry colour data of version 25, a version-10 array of 40 entries, version 10 with a zero red multiplier, version 10 written as a LONG entry, and version -4 written as BYTE values of an odd count
 - **THEN** each reads with no `AsShotNeutral`
 
 #### Scenario: A known camera's CR2 decodes [cr2_known_camera_decodes]
