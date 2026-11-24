@@ -19,10 +19,11 @@ Sources (download them yourself; see assets/PROVENANCE.md):
   https://files.cie.co.at/Publications-datasets/CIE_std_illum_D65.csv
 CIE illuminant A is computed from its Planckian definition.
 
-Panasonic bodies without published sensitivities (#1542) take the matrices
-`scripts/fit-camera-jpeg-matrices.py` fitted from each body's own camera JPEG
-and recorded in `scripts/camera-jpeg-fits.json`; this script copies the
-accepted ones. A body with sensitivities keeps the spectral fit.
+Panasonic (#1542) and Canon CR3 (#1574) bodies without published
+sensitivities take the matrices `scripts/fit-camera-jpeg-matrices.py` fitted
+from each body's own camera JPEG and recorded in
+`scripts/camera-jpeg-fits.json`; this script copies the accepted ones. A body
+with sensitivities keeps the spectral fit.
 
 Regenerate with:
   git clone https://github.com/AcademySoftwareFoundation/rawtoaces-data
@@ -116,6 +117,24 @@ PROXIES = [
         "COOLPIX P7100",
         "Canon_PowerShot_S90",
         "same 10 MP 1/1.7-inch Sony ICX685 CCD",
+    ),
+]
+
+# Bodies whose sample scene was too grey to fit that take a camera-JPEG-fitted
+# body's matrices, by owner decision (#1574): (make, Exif model, fitted Exif
+# model, why). Approximate.
+JPEG_PROXIES = [
+    (
+        "Canon",
+        "Canon EOS M6 Mark II",
+        "Canon EOS 90D",
+        "same 32.5 MP APS-C sensor, announced together",
+    ),
+    (
+        "Canon",
+        "Canon PowerShot G7 X Mark III",
+        "Canon PowerShot G5 X Mark II",
+        "same 20.1 MP stacked 1-inch sensor, announced together",
     ),
 ]
 
@@ -274,9 +293,10 @@ def row(make: str, keys: list, fitted: list) -> str:
     )
 
 
-def jpeg_fit_rows(taken: set) -> list:
+def jpeg_fit_rows(taken: set, by_key: dict) -> list:
     """The accepted camera-JPEG fits of bodies without a spectral fit, the
-    first sample of a body that has several."""
+    first sample of a body that has several; `by_key` gathers each row's
+    matrices by (make key, model key)."""
     fits = json.loads((Path(__file__).resolve().parent / "camera-jpeg-fits.json").read_text())
     out = []
     for fit in fits:
@@ -292,6 +312,7 @@ def jpeg_fit_rows(taken: set) -> list:
             (code, [m[0:3], m[3:6], m[6:9]])
             for code, m in zip(fit["illuminants"], fit["matrices"])
         ]
+        by_key[key] = pairs
         out.append(row(fit["make"], sorted(keys), pairs))
     return out
 
@@ -334,7 +355,12 @@ def main() -> int:
     for make, model, stem, why in PROXIES:
         out.append(f"    // Proxy of {stem}: {why}.\n")
         out.append(row(make, [model_key(make, model)], by_stem[stem]))
-    out.extend(jpeg_fit_rows(spectral))
+    jpeg_fitted = {}
+    out.extend(jpeg_fit_rows(spectral, jpeg_fitted))
+    for make, model, source, why in JPEG_PROXIES:
+        out.append(f"    // Proxy of the {source} camera-JPEG fit: {why}; approximate.\n")
+        source_key = (make_key(make), model_key(make, source))
+        out.append(row(make, [model_key(make, model)], jpeg_fitted[source_key]))
     out.append("];\n")
     OUT.write_text("".join(out))
     print(f"wrote {OUT}", file=sys.stderr)

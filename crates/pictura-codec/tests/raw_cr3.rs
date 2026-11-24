@@ -644,7 +644,7 @@ fn cr3_colour_corpus_when_present() {
         let bytes = std::fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         let image = read(&bytes).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         let decoded = decode_raw_source(&bytes, &ImageBudget::default());
-        if image.color.color_matrix.iter().all(Option::is_some) {
+        if image.color.color_matrix.iter().any(Option::is_some) {
             let source = decoded.unwrap_or_else(|e| panic!("{}: {e}", path.display()));
             let t = source.as_shot.temperature;
             assert!((2000.0..=12000.0).contains(&t), "{}: {t} K", path.display());

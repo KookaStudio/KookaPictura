@@ -174,6 +174,17 @@ SHA-256 and the fit's error. These rows reproduce Panasonic's colour
 rendering, saturation choices included, so they are approximate and not a
 colorimetric calibration.
 
+rawtoaces-data covers no Canon CR3 body beyond the eight #1474 added. By the
+same owner decision (#1574) the other CR3 rows are fitted from each body's
+own camera JPEG (the CR3's full-size JPEG track) and placed under the Daylight,
+Cloudy and Tungsten presets of the file's own colour data; the samples are
+the raw.pixls.us files `scripts/camera-jpeg-fits.json` names. Two bodies whose
+samples were too grey to fit, the EOS M6 Mark II and PowerShot G7 X Mark III,
+reuse the fit of a body with the same sensor (the 90D and PowerShot G5 X Mark
+II), commented in the generated file. Canon's preset layout per colour-data
+version was located with ExifTool's public tag documentation and checked on
+the samples' recorded temperatures.
+
 ## Nikon NEF code tables (`crates/pictura-codec/src/dng/nef_decode.rs`)
 
 The six Huffman code tables of Nikon's compressed NEF (code counts per length

@@ -15,6 +15,9 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MILESTONE = re.compile(r"(?:^|[_-])[mM]\d|[a-z]M\d")
+# Generated tables whose strings are product names, not milestones: Canon's
+# EOS M50, M200 and M6 Mark II normalize to model keys like "M50" (#1574).
+EXEMPT = {"crates/pictura-codec/src/dng/camera_matrices.rs"}
 
 
 def violations(text: str):
@@ -92,6 +95,8 @@ def main() -> int:
     bad = 0
     for path in sorted((ROOT / "crates").rglob("*")):
         if path.suffix not in (".rs", ".cpp", ".h"):
+            continue
+        if path.relative_to(ROOT).as_posix() in EXEMPT:
             continue
         try:
             text = path.read_text()

@@ -1,5 +1,1720 @@
 [
  {
+  "make": "Canon",
+  "model": "Canon EOS 200D II",
+  "aliases": [],
+  "sample": "EOS_200D_Mark_II___MG_3608.CR3",
+  "sha256": "4ea0cbd52b760a5654d3f431c7c9ecf8acdc62a6aa74a2cfbfe651693c740c77",
+  "blocks": 520,
+  "median_de": 0.82,
+  "p90_de": 1.24,
+  "chroma_spread": 4.3,
+  "rejected": "too little colour in the scene"
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS 250D",
+  "aliases": [],
+  "sample": "EOS_250D__Canon250D_RAW-1:1.CR3",
+  "sha256": "1af771b745999f058c89d70514a154007480bdcea0cd6ca7db14f65e6a422a6b",
+  "blocks": 495,
+  "median_de": 1.66,
+  "p90_de": 3.13,
+  "chroma_spread": 12.4,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.7565,
+    -0.1098,
+    -0.0927,
+    0.1916,
+    0.6338,
+    0.1987,
+    0.4042,
+    -0.207,
+    0.4881
+   ],
+   [
+    0.983,
+    -0.2458,
+    -0.0678,
+    0.1178,
+    0.6498,
+    0.5057,
+    0.2718,
+    -0.195,
+    0.7554
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS 250D",
+  "aliases": [],
+  "sample": "EOS_250D__Canon250D_cRAW-3:2.CR3",
+  "sha256": "69bdd267defb3d676f41f62a5e5ea65651669a04191cf4e89740917c59cedbcc",
+  "blocks": 501,
+  "median_de": 1.55,
+  "p90_de": 3.11,
+  "chroma_spread": 12.3,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.7371,
+    -0.0928,
+    -0.091,
+    0.2215,
+    0.6001,
+    0.2041,
+    0.4084,
+    -0.2059,
+    0.4827
+   ],
+   [
+    0.9559,
+    -0.2176,
+    -0.0666,
+    0.1478,
+    0.6112,
+    0.5211,
+    0.2742,
+    -0.1942,
+    0.7481
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS 850D",
+  "aliases": [
+   "Canon EOS Rebel T8i",
+   "Canon EOS Kiss X10i"
+  ],
+  "sample": "EOS_850D__IMG_1837.CR3",
+  "sha256": "47f7747b74073515bdbd65015738bc31947504d68255c5377baa21f179df2486",
+  "blocks": 520,
+  "median_de": 1.53,
+  "p90_de": 2.71,
+  "chroma_spread": 16.5,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.8222,
+    -0.1876,
+    -0.0717,
+    0.2429,
+    0.5664,
+    0.2186,
+    0.3022,
+    -0.0739,
+    0.4506
+   ],
+   [
+    1.0738,
+    -0.374,
+    0.0091,
+    0.1706,
+    0.5725,
+    0.5538,
+    0.2001,
+    -0.0905,
+    0.6916
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS 90D",
+  "aliases": [],
+  "sample": "EOS_90D__Canon-90D-RAW-ISO-100.CR3",
+  "sha256": "e47981d90142291a2bd7ba5a3dea51a25fff72ad3dad83dd2d2698f3ef5f59a8",
+  "blocks": 500,
+  "median_de": 1.13,
+  "p90_de": 2.34,
+  "chroma_spread": 9.8,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.9151,
+    -0.1486,
+    -0.1906,
+    -0.299,
+    1.1256,
+    0.1742,
+    0.6046,
+    -0.5073,
+    0.6487
+   ],
+   [
+    1.2207,
+    -0.3232,
+    -0.3342,
+    -0.3651,
+    1.2154,
+    0.3855,
+    0.3972,
+    -0.4116,
+    0.9544
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS 90D",
+  "aliases": [],
+  "sample": "EOS_90D__Canon-90D-cRAW-ISO-100.CR3",
+  "sha256": "c8c918b2d1a53e64d7d5009ebac89a920dbba5f766c2f396bb4ec95312b21034",
+  "blocks": 494,
+  "median_de": 1.41,
+  "p90_de": 2.47,
+  "chroma_spread": 10.3,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.7768,
+    -0.0218,
+    -0.1845,
+    -0.4039,
+    1.2209,
+    0.1797,
+    0.8424,
+    -0.7246,
+    0.6377
+   ],
+   [
+    1.02,
+    -0.1057,
+    -0.3448,
+    -0.467,
+    1.3252,
+    0.3818,
+    0.5475,
+    -0.5743,
+    0.9616
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS M200",
+  "aliases": [],
+  "sample": "Canon_EOS_M200___MG_2231.CR3",
+  "sha256": "9b900c04ae37ba827b7894e66907657a0b174a74855c40039a8ca0c95583f141",
+  "blocks": 509,
+  "median_de": 1.37,
+  "p90_de": 2.2,
+  "chroma_spread": 12.5,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    1.1278,
+    -0.2323,
+    -0.21,
+    0.0144,
+    0.811,
+    0.1902,
+    0.4171,
+    -0.285,
+    0.7401
+   ],
+   [
+    1.4802,
+    -0.4689,
+    -0.3309,
+    -0.0565,
+    0.8537,
+    0.463,
+    0.2811,
+    -0.2547,
+    1.078
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS M50",
+  "aliases": [
+   "Canon EOS Kiss M"
+  ],
+  "sample": "EOS_Kiss_M__IMG_2695.CR3",
+  "sha256": "49a4bcd16e0236451b73ae052af8a4d0c9872063f79fc62fdf982d462792741c",
+  "blocks": 357,
+  "median_de": 6.28,
+  "p90_de": 10.43,
+  "chroma_spread": 25.2,
+  "rejected": "matrix does not reproduce the camera JPEG"
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS M50",
+  "aliases": [
+   "Canon EOS Kiss M"
+  ],
+  "sample": "EOS_M50__Canon_EOS_M50_CRAW_ISO_100_nocrop_nodual.CR3",
+  "sha256": "27a88fdae82516ba136e12c2cc9b934f25dbaaac24d64ab4e5517f8524463594",
+  "blocks": 323,
+  "median_de": 2.23,
+  "p90_de": 3.74,
+  "chroma_spread": 9.1,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    1.1379,
+    -0.3599,
+    -0.0989,
+    0.1156,
+    0.7048,
+    0.2005,
+    0.2891,
+    -0.0342,
+    0.597
+   ],
+   [
+    1.5085,
+    -0.6763,
+    0.0035,
+    0.0437,
+    0.7315,
+    0.4986,
+    0.1879,
+    -0.0656,
+    0.8771
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS M50",
+  "aliases": [
+   "Canon EOS Kiss M"
+  ],
+  "sample": "EOS_M50__Canon_EOS_M50_RAW_ISO_100_nocrop_nodual.CR3",
+  "sha256": "1ba9ad6b51b315b88820eb0fe5fd7f52bc136ba37b1a5ca76825ebfe25b18058",
+  "blocks": 280,
+  "median_de": 2.03,
+  "p90_de": 3.55,
+  "chroma_spread": 7.7,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.7244,
+    0.1001,
+    -0.1688,
+    0.2576,
+    0.5492,
+    0.222,
+    0.6905,
+    -0.4825,
+    0.6669
+   ],
+   [
+    0.9087,
+    0.0908,
+    -0.2907,
+    0.1853,
+    0.5527,
+    0.563,
+    0.4537,
+    -0.4066,
+    1.01
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS M50m2",
+  "aliases": [
+   "Canon EOS Kiss M2"
+  ],
+  "sample": "EOS_M50_Mark_II__IMG_0051.CR3",
+  "sha256": "1a3c11d85f48b8c644664b505f69fbdd75eb51270bb8ab556dbc660f0487e957",
+  "blocks": 257,
+  "median_de": 3.19,
+  "p90_de": 6.56,
+  "chroma_spread": 10.6,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    1.1302,
+    -0.2858,
+    -0.1817,
+    -0.6643,
+    1.5732,
+    0.0676,
+    0.905,
+    -0.8177,
+    0.8176
+   ],
+   [
+    1.4728,
+    -0.5483,
+    -0.2447,
+    -0.736,
+    1.7296,
+    0.1143,
+    0.6171,
+    -0.6751,
+    1.2611
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS M6 Mark II",
+  "aliases": [],
+  "sample": "EOS_M6_Mark_II__IMG_CRAW_3_2.CR3",
+  "sha256": "94635c6f91e7d743cee6881cc2519992ae9f9031fd86b49e5d0f16edf5961b55",
+  "blocks": 520,
+  "median_de": 0.55,
+  "p90_de": 1.15,
+  "chroma_spread": 5.3,
+  "rejected": "too little colour in the scene"
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS M6 Mark II",
+  "aliases": [],
+  "sample": "EOS_M6_Mark_II__IMG_RAW_3_2.CR3",
+  "sha256": "48be4fbcc36e4f9bf31dd63ba7f97aa906a39b29f6b2caa679506c4cdb20f5a7",
+  "blocks": 520,
+  "median_de": 0.78,
+  "p90_de": 1.53,
+  "chroma_spread": 5.4,
+  "rejected": "too little colour in the scene"
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R",
+  "aliases": [],
+  "sample": "EOS_R__Canon_EOS_R_CRAW_ISO_100.CR3",
+  "sha256": "1b3efe0664a28a0decb53e225cbfecdbc0dd27d85abdc4683fc2a4add5129b4d",
+  "blocks": 478,
+  "median_de": 0.61,
+  "p90_de": 1.57,
+  "chroma_spread": 11.9,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.7606,
+    -0.1854,
+    -0.0592,
+    0.1943,
+    0.5714,
+    0.2637,
+    0.3647,
+    -0.0671,
+    0.4685
+   ],
+   [
+    0.9952,
+    -0.3649,
+    0.0288,
+    0.1288,
+    0.5785,
+    0.6398,
+    0.237,
+    -0.0893,
+    0.7239
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R",
+  "aliases": [],
+  "sample": "EOS_R__Canon_EOS_R_CRAW_ISO_100_dual_pixel_on.CR3",
+  "sha256": "cfd118af4477ef37538eb953421572a7a5c80694e59764049223107cc0c9ae83",
+  "blocks": 424,
+  "median_de": 0.66,
+  "p90_de": 1.92,
+  "chroma_spread": 13.2,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.7612,
+    -0.1873,
+    -0.0578,
+    0.1967,
+    0.5714,
+    0.2611,
+    0.362,
+    -0.0644,
+    0.4683
+   ],
+   [
+    0.9963,
+    -0.3679,
+    0.0331,
+    0.1308,
+    0.5785,
+    0.6348,
+    0.2352,
+    -0.0872,
+    0.7234
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R",
+  "aliases": [],
+  "sample": "EOS_R__Canon_EOS_R_RAW_ISO_100.CR3",
+  "sha256": "89bd55532b0cceb5efa360e97827ba35c2076bce0de4675f3a4413a883dac880",
+  "blocks": 477,
+  "median_de": 0.66,
+  "p90_de": 1.6,
+  "chroma_spread": 12.1,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.7603,
+    -0.1845,
+    -0.0599,
+    0.1911,
+    0.5699,
+    0.2685,
+    0.3674,
+    -0.0674,
+    0.466
+   ],
+   [
+    0.9946,
+    -0.3634,
+    0.0268,
+    0.1263,
+    0.5769,
+    0.6493,
+    0.2385,
+    -0.0895,
+    0.7206
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R",
+  "aliases": [],
+  "sample": "EOS_R__Canon_EOS_R_RAW_ISO_100_dual_pixel_on.CR3",
+  "sha256": "4b0809c4fca8c00d84df0a1b0ebbe4959784e50bf865616f151e67d76a9e4b01",
+  "blocks": 433,
+  "median_de": 0.65,
+  "p90_de": 1.69,
+  "chroma_spread": 12.9,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.7636,
+    -0.1868,
+    -0.0608,
+    0.1959,
+    0.5725,
+    0.2608,
+    0.3592,
+    -0.0659,
+    0.4729
+   ],
+   [
+    0.9991,
+    -0.3672,
+    0.0246,
+    0.1299,
+    0.5798,
+    0.6341,
+    0.2337,
+    -0.0883,
+    0.7295
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R10",
+  "aliases": [],
+  "sample": "Canon_EOS_R10__IMG_6310.CR3",
+  "sha256": "2dc0bbdf04c93ca62c914604f644c735286037912d6fba609d0cb78d00acd097",
+  "blocks": 481,
+  "median_de": 0.4,
+  "p90_de": 1.1,
+  "chroma_spread": 8.3,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    1.2272,
+    -0.4882,
+    -0.1341,
+    -0.0307,
+    0.8501,
+    0.1947,
+    0.0688,
+    0.0701,
+    0.5119
+   ],
+   [
+    1.633,
+    -0.8787,
+    -0.0905,
+    -0.1001,
+    0.8987,
+    0.4657,
+    0.0507,
+    0.0238,
+    0.7467
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R10",
+  "aliases": [],
+  "sample": "EOS_R10__IMG_4276.CR3",
+  "sha256": "5d2e076d38e7835d4c4f13dc2030a913cc573a31d7199b60777d23a25ccc3ef9",
+  "blocks": 328,
+  "median_de": 1.91,
+  "p90_de": 4.08,
+  "chroma_spread": 12.8,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    1.0919,
+    -0.1619,
+    -0.348,
+    -0.2006,
+    1.1069,
+    0.0923,
+    0.3171,
+    -0.437,
+    0.8026
+   ],
+   [
+    1.41,
+    -0.34,
+    -0.7589,
+    -0.2793,
+    1.1934,
+    0.2309,
+    0.2419,
+    -0.3716,
+    1.1838
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R100",
+  "aliases": [],
+  "sample": "Canon_EOS_R100___MG_2195[1].CR3",
+  "sha256": "0b66842b2fe00329ebc05fe8ab9357ddbbe1a0a2d2e69a2893102de7fdf5c942",
+  "blocks": 383,
+  "median_de": 3.81,
+  "p90_de": 10.98,
+  "chroma_spread": 28.6,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.9944,
+    -0.3393,
+    -0.0966,
+    0.0003,
+    0.8358,
+    0.1779,
+    0.2287,
+    -0.0565,
+    0.507
+   ],
+   [
+    1.3178,
+    -0.6269,
+    -0.0308,
+    -0.0719,
+    0.8822,
+    0.4357,
+    0.157,
+    -0.077,
+    0.7685
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R3",
+  "aliases": [],
+  "sample": "EOS_R3___C3A1200.CR3",
+  "sha256": "295d46a4d5383895e63126f67000d4352a5bb425ee4d8b16eb6b6c284bdf7994",
+  "blocks": 492,
+  "median_de": 0.5,
+  "p90_de": 0.86,
+  "chroma_spread": 1.6,
+  "rejected": "too little colour in the scene"
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R5",
+  "aliases": [],
+  "sample": "EOS_R5__Canon_EOS_R5_CRAW_ISO_100_nocrop_dual.CR3",
+  "sha256": "00b80633af35c0f85b0299a1d2ea87c6788a9007a1df8a3c5c05ea487b2549e1",
+  "blocks": 420,
+  "median_de": 1.83,
+  "p90_de": 4.27,
+  "chroma_spread": 20.8,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.9554,
+    -0.2882,
+    -0.1382,
+    0.1211,
+    0.709,
+    0.1902,
+    0.1282,
+    -0.0191,
+    0.4991
+   ],
+   [
+    1.3046,
+    -0.5592,
+    -0.1713,
+    0.0478,
+    0.7364,
+    0.478,
+    0.0845,
+    -0.0398,
+    0.6752
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R5",
+  "aliases": [],
+  "sample": "EOS_R5__Canon_EOS_R5_CRAW_ISO_100_nocrop_nodual.CR3",
+  "sha256": "2deae46b816e56ba91ae7a3892ca121290e12d5b22afb11f5b05a3d8f09f759f",
+  "blocks": 420,
+  "median_de": 1.74,
+  "p90_de": 4.59,
+  "chroma_spread": 20.7,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.9783,
+    -0.3087,
+    -0.1397,
+    0.0972,
+    0.7317,
+    0.1905,
+    0.1158,
+    -0.0086,
+    0.5006
+   ],
+   [
+    1.3379,
+    -0.5947,
+    -0.1709,
+    0.0244,
+    0.7624,
+    0.4753,
+    0.0771,
+    -0.0323,
+    0.676
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R5",
+  "aliases": [],
+  "sample": "EOS_R5__Canon_EOS_R5_RAW_ISO_100_nocrop_dual.CR3",
+  "sha256": "d52fca2f9233211d7912632f0f27b7284807ed3262627bfce7e4f12cf343820e",
+  "blocks": 421,
+  "median_de": 1.93,
+  "p90_de": 4.43,
+  "chroma_spread": 21.0,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.9612,
+    -0.2933,
+    -0.1386,
+    0.1199,
+    0.7084,
+    0.192,
+    0.1224,
+    -0.0129,
+    0.4985
+   ],
+   [
+    1.3129,
+    -0.5681,
+    -0.1712,
+    0.0469,
+    0.7357,
+    0.4817,
+    0.0809,
+    -0.0354,
+    0.6739
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R5",
+  "aliases": [],
+  "sample": "EOS_R5__Canon_EOS_R5_RAW_ISO_100_nocrop_nodual.CR3",
+  "sha256": "21430c36387efe65bd09ac0fcd724bfd959d93dd391ec811a1b741c8663becb5",
+  "blocks": 416,
+  "median_de": 1.88,
+  "p90_de": 4.29,
+  "chroma_spread": 21.8,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.9441,
+    -0.2827,
+    -0.1324,
+    0.1197,
+    0.7184,
+    0.1814,
+    0.1418,
+    -0.0305,
+    0.4975
+   ],
+   [
+    1.289,
+    -0.5497,
+    -0.1557,
+    0.0453,
+    0.7471,
+    0.4599,
+    0.0926,
+    -0.048,
+    0.6743
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R50",
+  "aliases": [],
+  "sample": "EOS_R50__Canon_R50_ISO100_RAW_mechanicShutter.CR3",
+  "sha256": "cbc0666f27d37007203df53f3668c30d3980aab93c3e33e7bff41c72b77414e9",
+  "blocks": 303,
+  "median_de": 1.45,
+  "p90_de": 3.64,
+  "chroma_spread": 12.0,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.9035,
+    -0.1038,
+    -0.2153,
+    0.1394,
+    0.6841,
+    0.1982,
+    0.3158,
+    -0.2449,
+    0.5987
+   ],
+   [
+    1.1687,
+    -0.2419,
+    -0.4016,
+    0.0668,
+    0.7078,
+    0.4971,
+    0.2245,
+    -0.2238,
+    0.9042
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R50",
+  "aliases": [],
+  "sample": "EOS_R50__Canon_R50_ISO100_cRAW_mechanicShutter.CR3",
+  "sha256": "b79af9ffa184dd740e8af7a9f451f7150053d7e456b3435ca2e43bbbf5f65026",
+  "blocks": 326,
+  "median_de": 1.77,
+  "p90_de": 3.91,
+  "chroma_spread": 11.3,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.9675,
+    -0.1551,
+    -0.226,
+    0.1342,
+    0.6905,
+    0.1966,
+    0.2497,
+    -0.1932,
+    0.6112
+   ],
+   [
+    1.2577,
+    -0.328,
+    -0.4204,
+    0.0615,
+    0.7151,
+    0.4932,
+    0.1813,
+    -0.183,
+    0.9154
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R50 V",
+  "aliases": [],
+  "sample": "Canon_EOS_R50_V__IMG_0034.CR3",
+  "sha256": "955ff98710505498ce7f98cbcc5875793ef2d6941b3b5692ed3baf2817ee7c9f",
+  "blocks": 455,
+  "median_de": 1.74,
+  "p90_de": 4.63,
+  "chroma_spread": 12.4,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.9352,
+    -0.1084,
+    -0.2422,
+    0.0763,
+    0.7407,
+    0.2023,
+    0.3199,
+    -0.2731,
+    0.6217
+   ],
+   [
+    1.1962,
+    -0.2475,
+    -0.4706,
+    0.0055,
+    0.7729,
+    0.4966,
+    0.2291,
+    -0.2453,
+    0.9352
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R5m2",
+  "aliases": [],
+  "sample": "Canon_EOS_R5m2__APS-C_CRAW.CR3",
+  "sha256": "6a597497776a6abbfab8fcf12d0086ac7a3f8afea2879d61accf6bbf48d357d7",
+  "blocks": 428,
+  "median_de": 3.49,
+  "p90_de": 8.62,
+  "chroma_spread": 25.4,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.9657,
+    -0.2871,
+    -0.1297,
+    0.0118,
+    0.7836,
+    0.2227,
+    0.2587,
+    -0.088,
+    0.5531
+   ],
+   [
+    1.2876,
+    -0.5463,
+    -0.1374,
+    -0.0549,
+    0.8224,
+    0.5296,
+    0.1664,
+    -0.0968,
+    0.7814
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R5m2",
+  "aliases": [],
+  "sample": "Canon_EOS_R5m2__CRAW.CR3",
+  "sha256": "b3c08a5c7a97299dfd58896a12b939e7b43ec78682761812524825e6e5d087be",
+  "rejected": "no embedded JPEG"
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R5m2",
+  "aliases": [],
+  "sample": "Canon_EOS_R5m2__RAW.CR3",
+  "sha256": "d6e6aa3b493ea8936dff0efb0cc17c87471437e7317bce37c8c82ba08b9cab7b",
+  "rejected": "no embedded JPEG"
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R6",
+  "aliases": [],
+  "sample": "EOS_R6__Canon_EOS_R6_CRAW_ISO_100_nocrop_nodual.CR3",
+  "sha256": "4775df76433b1e5844bc7a42b95d93efc8438c0a4cd9681e120e23fe3e3007e8",
+  "blocks": 478,
+  "median_de": 1.06,
+  "p90_de": 2.73,
+  "chroma_spread": 20.4,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    1.0772,
+    -0.3735,
+    -0.1395,
+    0.0046,
+    0.8315,
+    0.1783,
+    0.1471,
+    -0.0182,
+    0.5857
+   ],
+   [
+    1.4391,
+    -0.691,
+    -0.1424,
+    -0.0677,
+    0.8772,
+    0.437,
+    0.1049,
+    -0.0473,
+    0.856
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R6",
+  "aliases": [],
+  "sample": "EOS_R6__Canon_EOS_R6_RAW_ISO_100_nocrop_nodual.CR3",
+  "sha256": "81fab349ae9080fd0172583b7fd5ea36806e95ffa434909d2ccc6527dde34ee6",
+  "blocks": 478,
+  "median_de": 1.06,
+  "p90_de": 2.78,
+  "chroma_spread": 20.5,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    1.0788,
+    -0.3746,
+    -0.1399,
+    0.0056,
+    0.8288,
+    0.1801,
+    0.1445,
+    -0.0151,
+    0.585
+   ],
+   [
+    1.4413,
+    -0.6929,
+    -0.1433,
+    -0.0665,
+    0.8741,
+    0.441,
+    0.1032,
+    -0.0448,
+    0.8548
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R6 Mark III",
+  "aliases": [],
+  "sample": "Canon_EOS_R6_Mark_III__IMG_4241.CR3",
+  "sha256": "e491e4bb960961b5fa299361bf698310a80cbe7b15d30d8dad3bb21bc5457dab",
+  "blocks": 277,
+  "median_de": 2.45,
+  "p90_de": 4.15,
+  "chroma_spread": 16.1,
+  "note": "tungsten matrix dropped: the pair does not read back its lights",
+  "illuminants": [
+   20
+  ],
+  "matrices": [
+   [
+    1.373,
+    -0.3524,
+    -0.4833,
+    -0.4692,
+    1.2482,
+    0.2179,
+    0.0448,
+    -0.2863,
+    0.9289
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R6m2",
+  "aliases": [],
+  "sample": "EOS_R6_Mark_II__canon-r6m2-img_0346-raw-normal-full.cr3",
+  "sha256": "1a93f96556aabbc4a7260750ab0a191ec7926bb978fe8428bf3465121da730d6",
+  "blocks": 453,
+  "median_de": 0.54,
+  "p90_de": 1.25,
+  "chroma_spread": 11.2,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.9999,
+    -0.3372,
+    -0.1243,
+    -0.0159,
+    0.8641,
+    0.1641,
+    0.2124,
+    -0.07,
+    0.6229
+   ],
+   [
+    1.3514,
+    -0.6349,
+    -0.1165,
+    -0.0896,
+    0.9146,
+    0.4049,
+    0.1431,
+    -0.0865,
+    0.8842
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R6m2",
+  "aliases": [],
+  "sample": "EOS_R6_Mark_II__canon-r6m2-img_0351-raw-dual-full.cr3",
+  "sha256": "9ecb9254ff3873091a7f69e5af8509547a4d2cda3c715c1ddb4397067fd4ebc4",
+  "blocks": 453,
+  "median_de": 0.52,
+  "p90_de": 1.2,
+  "chroma_spread": 10.4,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    1.027,
+    -0.3827,
+    -0.1031,
+    -0.0282,
+    0.8823,
+    0.1571,
+    0.1832,
+    -0.0192,
+    0.5981
+   ],
+   [
+    1.3946,
+    -0.712,
+    -0.0462,
+    -0.1024,
+    0.9354,
+    0.3889,
+    0.1224,
+    -0.0487,
+    0.8483
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R6m2",
+  "aliases": [],
+  "sample": "EOS_R6_Mark_II__canon-r6m2-img_0361-craw-normal-full.cr3",
+  "sha256": "409eb724212abde94e18fbd3170abf3264951fab13384c36cbf6fb4f22ea4201",
+  "blocks": 448,
+  "median_de": 0.61,
+  "p90_de": 1.52,
+  "chroma_spread": 11.3,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.9595,
+    -0.3034,
+    -0.1191,
+    -0.0096,
+    0.8675,
+    0.1539,
+    0.2645,
+    -0.1197,
+    0.6228
+   ],
+   [
+    1.2941,
+    -0.5774,
+    -0.1092,
+    -0.0847,
+    0.9184,
+    0.3848,
+    0.1761,
+    -0.1237,
+    0.8889
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R7",
+  "aliases": [],
+  "sample": "EOS_R7__443A0157.CR3",
+  "sha256": "887439cb1a45becd6a5c85fe75ae10e6c520a9f13a8b9ed077c6cf5d7c37700c",
+  "blocks": 516,
+  "median_de": 2.65,
+  "p90_de": 5.5,
+  "chroma_spread": 18.0,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.8469,
+    -0.1862,
+    -0.0782,
+    0.302,
+    0.5004,
+    0.2288,
+    0.2893,
+    -0.0445,
+    0.4803
+   ],
+   [
+    1.145,
+    -0.3875,
+    -0.0036,
+    0.2297,
+    0.4967,
+    0.5833,
+    0.1786,
+    -0.0651,
+    0.6859
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R8",
+  "aliases": [],
+  "sample": "EOS_R8__CRAW_FULL_FRAME.CR3",
+  "sha256": "df33cf394573645ce03dea1b2e9f0b5cc2b7734e9e3391ee7114151414cf2812",
+  "rejected": "no embedded JPEG"
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS R8",
+  "aliases": [],
+  "sample": "EOS_R8__RAW_FULL_FRAME.CR3",
+  "sha256": "7d5c6dbb11ff7e6ee58715d90a20f5d801e8b103f4711ff6ea329ceafcef254c",
+  "rejected": "no embedded JPEG"
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS RP",
+  "aliases": [],
+  "sample": "EOS_RP__Canon_EOS_RP_CRAW_ISO_100_crop_nodual.CR3",
+  "sha256": "4a859ab137f792aedaf3416b0aad1497ebaab02052a49453902e226699154aa7",
+  "blocks": 480,
+  "median_de": 1.55,
+  "p90_de": 3.44,
+  "chroma_spread": 19.7,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    1.302,
+    -0.5719,
+    -0.2067,
+    -0.3924,
+    1.152,
+    0.2425,
+    -0.0228,
+    0.0804,
+    0.6156
+   ],
+   [
+    1.7747,
+    -1.0318,
+    -0.3057,
+    -0.4477,
+    1.2463,
+    0.5129,
+    -0.002,
+    0.0305,
+    0.8613
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS RP",
+  "aliases": [],
+  "sample": "EOS_RP__Canon_EOS_RP_CRAW_ISO_100_nocrop_nodual.CR3",
+  "sha256": "bd3270610593d37ff8a399908bb9406a4e32f9151d55bf19ac1cf8f10d787b46",
+  "blocks": 475,
+  "median_de": 0.95,
+  "p90_de": 2.01,
+  "chroma_spread": 14.4,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    1.3898,
+    -0.6429,
+    -0.2208,
+    -0.484,
+    1.2432,
+    0.2386,
+    -0.0792,
+    0.1152,
+    0.6363
+   ],
+   [
+    1.8989,
+    -1.1526,
+    -0.3303,
+    -0.5378,
+    1.3512,
+    0.4918,
+    -0.0365,
+    0.057,
+    0.8842
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS RP",
+  "aliases": [],
+  "sample": "EOS_RP__Canon_EOS_RP_RAW_ISO_100_crop_nodual.CR3",
+  "sha256": "7d4ba45dc9264d598336133593c677b09774bcdf13b602ee770e72415a652a16",
+  "blocks": 480,
+  "median_de": 1.53,
+  "p90_de": 3.25,
+  "chroma_spread": 19.4,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    1.2909,
+    -0.5619,
+    -0.206,
+    -0.3801,
+    1.1394,
+    0.2435,
+    -0.0161,
+    0.0753,
+    0.6141
+   ],
+   [
+    1.7588,
+    -1.0148,
+    -0.3059,
+    -0.4356,
+    1.2318,
+    0.5165,
+    0.0023,
+    0.0267,
+    0.86
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS RP",
+  "aliases": [],
+  "sample": "EOS_RP__Canon_EOS_RP_RAW_ISO_100_nocrop_nodual.CR3",
+  "sha256": "dcbd0f6f9929de2e2331b0fd10a9d01e7cfd04c5a5e4038456de1647d714cdf2",
+  "blocks": 475,
+  "median_de": 0.94,
+  "p90_de": 2.2,
+  "chroma_spread": 14.0,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    1.3377,
+    -0.6153,
+    -0.1966,
+    -0.4166,
+    1.1849,
+    0.2319,
+    -0.0539,
+    0.116,
+    0.6092
+   ],
+   [
+    1.8282,
+    -1.1055,
+    -0.2676,
+    -0.4727,
+    1.2841,
+    0.4876,
+    -0.0225,
+    0.0575,
+    0.8498
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS Rebel SL3",
+  "aliases": [],
+  "sample": "EOS_Rebel_SL3__Sedona2020_SL3__MG_1061.CR3",
+  "sha256": "6f26a2e4ea5a3e3b859662c9b01da6b24731413835aa601065bff1d7f30c6092",
+  "blocks": 381,
+  "median_de": 1.01,
+  "p90_de": 2.01,
+  "chroma_spread": 7.3,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    1.0519,
+    -0.366,
+    -0.1214,
+    0.0764,
+    0.7179,
+    0.227,
+    0.1276,
+    0.046,
+    0.5149
+   ],
+   [
+    1.3957,
+    -0.673,
+    -0.0923,
+    0.0088,
+    0.7469,
+    0.5475,
+    0.0887,
+    0.0032,
+    0.7683
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS-1D X Mark III",
+  "aliases": [],
+  "sample": "EOS-1D_X_Mark_III__Canon_EOS-1D_X_Mark_III_CRAW_ISO_100_nocrop_nodual.CR3",
+  "sha256": "e5755d1414a2dd51fb0120b272058f00b0199861646070c00304d927eb119560",
+  "blocks": 499,
+  "median_de": 1.33,
+  "p90_de": 2.55,
+  "chroma_spread": 13.0,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    1.0077,
+    -0.3152,
+    -0.1341,
+    0.0087,
+    0.8468,
+    0.1573,
+    0.2257,
+    -0.0999,
+    0.5987
+   ],
+   [
+    1.3323,
+    -0.5886,
+    -0.1399,
+    -0.0663,
+    0.8946,
+    0.3945,
+    0.1538,
+    -0.1081,
+    0.8614
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon EOS-1D X Mark III",
+  "aliases": [],
+  "sample": "EOS-1D_X_Mark_III__Canon_EOS-1D_X_Mark_III_RAW_ISO_100_nocrop_nodual.CR3",
+  "sha256": "8f38b9de90eaebefcd54022fcbfdf38e05fb86831c4c976c8ac05c599e63535b",
+  "blocks": 491,
+  "median_de": 1.03,
+  "p90_de": 2.16,
+  "chroma_spread": 12.2,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.9916,
+    -0.2861,
+    -0.149,
+    0.0214,
+    0.8166,
+    0.1769,
+    0.2376,
+    -0.1167,
+    0.6045
+   ],
+   [
+    1.3068,
+    -0.5403,
+    -0.1877,
+    -0.0514,
+    0.86,
+    0.4366,
+    0.1619,
+    -0.1208,
+    0.8705
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon PowerShot G5 X Mark II",
+  "aliases": [],
+  "sample": "PowerShot_G5_X_Mark_II__Canon_-_PowerShot_G5_X_Mark_II_-_CRAW_(3:2).CR3",
+  "sha256": "16d7b944344004c866bf2f84c5673969e76adfe16e5fb4388da48c72bdd58058",
+  "blocks": 241,
+  "median_de": 1.39,
+  "p90_de": 2.04,
+  "chroma_spread": 6.6,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    0.7398,
+    -0.0209,
+    -0.2758,
+    -0.7005,
+    1.6491,
+    0.0227,
+    0.7091,
+    -0.8483,
+    0.7973
+   ],
+   [
+    0.9603,
+    -0.0902,
+    -0.6417,
+    -0.7771,
+    1.8167,
+    0.0166,
+    0.4752,
+    -0.6507,
+    1.1408
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon PowerShot G5 X Mark II",
+  "aliases": [],
+  "sample": "PowerShot_G5_X_Mark_II__Canon_-_PowerShot_G5_X_Mark_II_-_RAW_(3:2).CR3",
+  "sha256": "16f69a73e25e0555259a942d65be816042dcb3af03505b25335e5d02ad6f2af6",
+  "blocks": 237,
+  "median_de": 1.28,
+  "p90_de": 2.35,
+  "chroma_spread": 8.9,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    1.3433,
+    -0.5712,
+    -0.305,
+    -1.3816,
+    2.2926,
+    0.0313,
+    0.307,
+    -0.4943,
+    0.8305
+   ],
+   [
+    1.8305,
+    -1.0299,
+    -0.6038,
+    -1.4421,
+    2.557,
+    -0.0623,
+    0.226,
+    -0.3897,
+    1.148
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon PowerShot G7 X Mark III",
+  "aliases": [],
+  "sample": "PowerShot_G7_X_Mark_III__IMG_0253.CR3",
+  "sha256": "63ce623055dd2ac7374e0b1c645a4eabc7e181cd12c2039625f64b4e63a5ee86",
+  "blocks": 434,
+  "median_de": 1.02,
+  "p90_de": 2.88,
+  "chroma_spread": 5.7,
+  "rejected": "too little colour in the scene"
+ },
+ {
+  "make": "Canon",
+  "model": "Canon PowerShot SX70 HS",
+  "aliases": [],
+  "sample": "PowerShot_SX70_HS__IMG_1000.CR3",
+  "sha256": "3b346078836f933f505338ba45965be17a39cac82bfffc7006db07e3af944839",
+  "blocks": 374,
+  "median_de": 1.28,
+  "p90_de": 3.78,
+  "chroma_spread": 8.4,
+  "illuminants": [
+   20,
+   24
+  ],
+  "matrices": [
+   [
+    1.7998,
+    -0.8323,
+    -0.2607,
+    -0.524,
+    1.2151,
+    0.3107,
+    0.0102,
+    0.0959,
+    0.5212
+   ],
+   [
+    2.4498,
+    -1.4882,
+    -0.3469,
+    -0.5677,
+    1.3194,
+    0.6345,
+    0.0144,
+    0.0456,
+    0.7621
+   ]
+  ]
+ },
+ {
+  "make": "Canon",
+  "model": "Canon PowerShot V1",
+  "aliases": [],
+  "sample": "Canon_PowerShot_V1__IMG_1225.CR3",
+  "sha256": "0a0abfd81b3a34fa513ac8ed24c809275160d65b07e892c2eb4353b77c535a31",
+  "blocks": 514,
+  "median_de": 0.25,
+  "p90_de": 0.59,
+  "chroma_spread": 2.3,
+  "rejected": "too little colour in the scene"
+ },
+ {
   "make": "Panasonic",
   "model": "DC-G9",
   "aliases": [],
