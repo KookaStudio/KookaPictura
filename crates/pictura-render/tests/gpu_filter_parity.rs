@@ -1,3 +1,4 @@
+#![cfg(feature = "gpu")]
 //! GPU filter parity for the M27 accelerated kernel set.
 //!
 //! `pictura_filters::apply` is the oracle. Every accelerated filter must match

@@ -1,4 +1,5 @@
 use super::*;
+#[cfg(feature = "gpu")]
 use crate::gpu::composite_gpu;
 use pictura_core::{BlendIf, CharacterAttrs, Knockout, ParagraphAttrs, TextStyle, TypeTool};
 
@@ -803,7 +804,17 @@ fn proxy_less_type_layer_composites_live_coverage() {
         covered < plane,
         "a proxy-less type layer is not an opaque black rect"
     );
-    let expected = if gpu_available() {
+    let gpu_present = {
+        #[cfg(feature = "gpu")]
+        {
+            gpu_available()
+        }
+        #[cfg(not(feature = "gpu"))]
+        {
+            false
+        }
+    };
+    let expected = if gpu_present {
         Backend::Gpu
     } else {
         Backend::Cpu
@@ -913,6 +924,7 @@ fn proxy_less_type_that_paints_nothing_leaves_the_backdrop() {
 
 #[test]
 #[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
+#[cfg(feature = "gpu")]
 fn gpu_composites_a_proxy_less_type_layer() {
     let d = doc(200, 80, vec![type_layer(Some(type_style()))]);
     let gpu = composite_gpu(&d).expect("the cached type raster composites on the GPU");
@@ -1008,6 +1020,7 @@ fn transparent_knockout_pixel_leaves_the_backdrop() {
 }
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_declines_a_knockout_layer() {
     assert!(matches!(
         composite_gpu(&knockout_stack(Knockout::Deep)),

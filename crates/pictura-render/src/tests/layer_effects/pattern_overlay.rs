@@ -421,6 +421,7 @@ fn small_pattern_overlay_layer_on_a_larger_canvas_is_bounded() {
 // --- GPU fallback ----------------------------------------------------------
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_rejects_a_pattern_overlay_layer_and_falls_back() {
     let mut d = pattern_fixture_doc();
     d.layers = pictura_core::LayerStack::from_layers(vec![
@@ -438,6 +439,7 @@ fn gpu_rejects_a_pattern_overlay_layer_and_falls_back() {
 }
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_does_not_reject_an_inert_or_undecodable_pattern_overlay() {
     let d = doc(
         8,

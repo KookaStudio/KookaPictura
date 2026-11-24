@@ -1275,6 +1275,7 @@ fn channel_less_smart_object_stroke_covers_the_rect() {
 // --- GPU fallback ----------------------------------------------------------
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_rejects_a_stroke_layer_and_falls_back() {
     let d = doc(
         12,
@@ -1295,6 +1296,7 @@ fn gpu_rejects_a_stroke_layer_and_falls_back() {
 }
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_accepts_a_gradient_or_pattern_stroke() {
     let gradient = doc(
         12,
@@ -1308,6 +1310,7 @@ fn gpu_accepts_a_gradient_or_pattern_stroke() {
 }
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_does_not_reject_an_inert_or_malformed_stroke() {
     for spec in [
         StrokeSpec {

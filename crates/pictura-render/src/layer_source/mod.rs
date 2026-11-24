@@ -42,6 +42,7 @@ enum Kind {
     Text,
     Effects,
     Passes,
+    #[cfg_attr(not(any(feature = "gpu", test)), allow(dead_code))]
     Composited,
 }
 
@@ -112,9 +113,11 @@ pub(crate) struct CachedBuffer {
     pub(crate) buffer: Arc<PixelBuffer>,
     /// A content identity for the buffer, so the GPU resident store can key an
     /// upload without plane stamps.
+    #[cfg_attr(not(any(feature = "gpu", test)), allow(dead_code))]
     pub(crate) content: u64,
     /// Whether a whole-document composite may retain the upload. A pattern
     /// fill reads the document pattern library, which the key does not cover.
+    #[cfg_attr(not(any(feature = "gpu", test)), allow(dead_code))]
     pub(crate) retain: bool,
 }
 
@@ -467,6 +470,7 @@ pub(crate) fn filtered_source(layer: &Layer, doc: &Document) -> Option<CachedBuf
 
 /// Which cached raster a GPU route needs.
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(not(any(feature = "gpu", test)), allow(dead_code))]
 pub(crate) enum RasterRoute {
     Type,
     SmartSource,
@@ -476,6 +480,7 @@ pub(crate) enum RasterRoute {
 /// The exact straight-alpha RGBA the CPU blends for a proxy-less type layer, a
 /// channel-less smart-object source, or a smart-filtered source (including the
 /// smart-filter mask mix), cached by content.
+#[cfg_attr(not(any(feature = "gpu", test)), allow(dead_code))]
 pub(crate) fn composited_source(
     layer: &Layer,
     doc: &Document,
@@ -616,6 +621,7 @@ fn pass_key_hash(layer: &Layer, doc: &Document) -> u64 {
 
 /// The built pass groups for `layer`. Pattern-driven passes are rebuilt on
 /// every call instead of cached.
+#[cfg_attr(not(feature = "gpu"), allow(dead_code))]
 pub(crate) fn effect_passes(
     layer: &Layer,
     doc: &Document,

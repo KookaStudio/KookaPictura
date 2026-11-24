@@ -3,7 +3,7 @@
 
 use pictura_core::{ColorMode, Document, PixelBuffer, PsdRect, TILE};
 
-use crate::gpu::Backend;
+use crate::Backend;
 
 /// What a cache refresh covers.
 #[derive(Clone, Debug, PartialEq, Eq)]

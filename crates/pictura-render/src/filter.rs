@@ -14,14 +14,32 @@ use rayon::prelude::*;
 
 use crate::channel;
 
+#[cfg(feature = "gpu")]
+fn apply_kernel_filter(
+    filter: &Filter,
+    buf: &mut PixelBuffer,
+    gpu: bool,
+) -> Result<(), FilterError> {
+    crate::gpu_filter::apply_filter_active(filter, buf, gpu).map(|_| ())
+}
+
+#[cfg(not(feature = "gpu"))]
+fn apply_kernel_filter(
+    filter: &Filter,
+    buf: &mut PixelBuffer,
+    _gpu: bool,
+) -> Result<(), FilterError> {
+    pictura_filters::apply(filter, buf)
+}
+
 /// Apply a destructive `filter` to a pixel layer's color channels (0,1,2),
 /// gated by an optional document-coordinate coverage `mask` (`None` = full
 /// frame). An unlocked layer's transparency is filtered too; a transparency
 /// lock preserves `-1` and leaves clear pixels untouched.
 ///
-/// When `gpu_enabled` is set the filter runs through
-/// [`crate::gpu_filter::apply_filter_active`], which uses the GPU when a kernel
-/// exists and falls back to the CPU oracle otherwise.
+/// When `gpu_enabled` is set the filter runs through the GPU kernels when the
+/// build carries them (`gpu_filter::apply_filter_active`, gated on the `gpu`
+/// feature) and falls back to the CPU oracle otherwise.
 pub fn apply_filter(
     layer: &mut Layer,
     filter: &Filter,
@@ -229,7 +247,7 @@ fn apply_op_region(
     match op {
         Op::Filter(filter, gpu_enabled) => {
             let gpu = gpu_enabled && !filter.cpu_outruns_gpu();
-            crate::gpu_filter::apply_filter_active(filter, &mut buf, gpu)?;
+            apply_kernel_filter(filter, &mut buf, gpu)?;
         }
         Op::Adjustment(adjustment) => {
             let ink = match (cmyk, adjustment) {

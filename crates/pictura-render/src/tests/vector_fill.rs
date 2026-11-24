@@ -1,4 +1,5 @@
 use super::*;
+#[cfg(feature = "gpu")]
 use crate::gpu::composite_gpu;
 use pictura_adjust::{GradientKind, GradientStop};
 use pictura_core::{AdjustmentData, LayerBlock};
@@ -202,6 +203,7 @@ fn malformed_vector_fill_is_a_no_op() {
 
 #[test]
 #[ignore = "requires a Vulkan device; run with --profile gpu --run-ignored all"]
+#[cfg(feature = "gpu")]
 fn vector_fill_composites_on_the_gpu() {
     let fill = vscg(b"SoCo", &encode_solid_color_fill([1, 2, 3]).data);
     let shape = shaped_layer("shape", 4, 4, fill);

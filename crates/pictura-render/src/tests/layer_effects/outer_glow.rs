@@ -502,6 +502,7 @@ fn huge_glow_is_bounded() {
 }
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_rejects_an_outer_glow_layer_and_falls_back() {
     let d = doc(
         9,
@@ -522,6 +523,7 @@ fn gpu_rejects_an_outer_glow_layer_and_falls_back() {
 }
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_does_not_reject_a_disabled_or_not_present_glow() {
     for spec in [
         GlowSpec {
@@ -719,6 +721,7 @@ fn softer_and_precise_glow_render_identically() {
 }
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_reports_the_effect_for_a_glow_fill_layer() {
     let mut layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
         name: "Solid".into(),

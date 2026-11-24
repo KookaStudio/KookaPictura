@@ -295,8 +295,18 @@ jobs:
       - name: Clippy
         run: cargo clippy -p pictura-render --all-targets -- -D warnings
 
+      # The DX12 backend and the gated test targets only compile on Windows with
+      # the feature on, so this is the only place they are linted.
+      - name: Clippy with software-gpu
+        run: cargo clippy -p pictura-render --all-targets --features software-gpu -- -D warnings
+
+      # The GPU-gated library tests stay out of the WARP run (the full compositor
+      # validation loses the device there); the two device-free backend binaries
+      # are compiled with the feature that makes them non-empty.
       - name: Test
-        run: cargo test -p pictura-render --lib --test backend_pin --test backend_cpu
+        run: |
+          cargo test -p pictura-render --lib
+          cargo test -p pictura-render --test backend_pin --test backend_cpu --features software-gpu
 
       # WARP is the runner's only DX12 adapter. The software-gpu feature lets
       # the device come up; the full compositor validation loses the WARP

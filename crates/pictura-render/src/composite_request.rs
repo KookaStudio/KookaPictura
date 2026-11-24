@@ -7,7 +7,9 @@
 
 use pictura_core::{Document, PixelBuffer, PsdRect};
 
-use crate::gpu::{self, Backend};
+#[cfg(feature = "gpu")]
+use crate::gpu;
+use crate::Backend;
 
 /// A request to composite `doc` over `region` through the requested backend.
 ///
@@ -44,6 +46,8 @@ impl<'a> CompositeRequest<'a> {
 /// The CPU result is byte-identical to [`crate::composite_rgba`] for a
 /// whole-document request and to the matching slice for a region request. A GPU
 /// result comes from the existing GPU kernel, within ±1 LSB of the CPU oracle.
+/// A build without the `gpu` feature always takes the CPU path, so a request
+/// that permits the GPU still reports [`Backend::Cpu`].
 pub fn composite(request: CompositeRequest<'_>) -> (PixelBuffer, Backend) {
     let (pixels, backend, _) = composite_with_blend_time(request);
     (pixels, backend)
@@ -58,6 +62,7 @@ pub fn composite_with_blend_time(
         return (PixelBuffer::new(0, 0, 4), Backend::Cpu, None);
     };
     let whole = x0 == 0 && y0 == 0 && w == doc.width && h == doc.height;
+    #[cfg(feature = "gpu")]
     if request.gpu_enabled && gpu::gpu_available() {
         if let Ok((buffer, blend_ns)) = gpu::composite_gpu_region(doc, x0, y0, w, h) {
             return (buffer, Backend::Gpu, blend_ns);

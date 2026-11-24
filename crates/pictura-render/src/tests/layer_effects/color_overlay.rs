@@ -370,6 +370,7 @@ fn non_finite_or_zero_color_overlay_is_a_bounded_no_op() {
 // --- GPU fallback ----------------------------------------------------------
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_rejects_a_color_overlay_layer_and_falls_back() {
     let d = doc(
         12,
@@ -390,6 +391,7 @@ fn gpu_rejects_a_color_overlay_layer_and_falls_back() {
 }
 
 #[test]
+#[cfg(feature = "gpu")]
 fn gpu_does_not_reject_an_inert_or_undecodable_color_overlay() {
     // A disabled effect.
     let disabled = doc(

@@ -284,7 +284,11 @@ fn cold_engine_child() {
         pictura_render::Backend::Gpu => "gpu".to_string(),
         pictura_render::Backend::Cpu => "cpu".to_string(),
     };
-    if gpu && !pictura_render::gpu_available() {
+    #[cfg(feature = "gpu")]
+    let gpu_present = pictura_render::gpu_available();
+    #[cfg(not(feature = "gpu"))]
+    let gpu_present = false;
+    if gpu && !gpu_present {
         report.cohort.fallback = Some("unavailable".to_string());
     }
     report.cohort.metrics = if pictura_render::metrics::enabled() {

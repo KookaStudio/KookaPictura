@@ -60,9 +60,18 @@ fn view_oracle_is_test_only() {
     assert!(!boundary(&ungated, &render, &app, &oracle, &shared));
     let coupled = format!("{oracle}\nuse crate::region_level::level_size;");
     assert!(!boundary(&lib, &render, &app, &coupled, &shared));
+    // The dependency also carries the renderer's own `gpu` feature; the oracle
+    // must stay out of it. The simulation is asserted to have changed the line,
+    // so a future edit to the dependency cannot leave this case testing nothing.
+    let dependency = "pictura-render = { path = \"../pictura-render\", features = [\"gpu\"] }";
+    assert!(app.contains(dependency), "the app dependency shape moved");
     let enabled = app.replace(
-        "pictura-render = { path = \"../pictura-render\" }",
-        "pictura-render = { path = \"../pictura-render\", features = [\"test-oracle\"] }",
+        dependency,
+        "pictura-render = { path = \"../pictura-render\", features = [\"gpu\", \"test-oracle\"] }",
+    );
+    assert_ne!(
+        enabled, app,
+        "the oracle-in-the-dependency case tested nothing"
     );
     assert!(!boundary(&lib, &render, &enabled, &oracle, &shared));
 }
