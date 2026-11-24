@@ -534,7 +534,15 @@ gaps are the CS6 Extended 3D object and camera tools.
       EOS R, RP, R5, R5 Mark II, R6, R6 Mark II, R10 and 250D (and the R50,
       R8, Rebel SL3, Kiss X10) open with colour; the Open dialog lists CR3
       (#1474). `crates/pictura-codec/src/dng/cr3.rs`, `crx*.rs`.
-- [ ] Colour for the other CR3 bodies (M50, 90D, R7, R3, PowerShots, …) (#1574)
+- [x] **Canon CR3 colour** — 15 more CR3 bodies open with colour: the 850D,
+      90D, M200, M50, M50 Mark II, R100, R50 V, R6 Mark III, R7, 1D X Mark
+      III, PowerShot G5 X Mark II and SX70 HS from matrices fitted against
+      each body's own camera JPEG (approximate, Canon's rendering), the M6
+      Mark II and PowerShot G7 X Mark III by same-sensor proxy, and Canon's
+      regional names (Kiss M, Kiss M2, Rebel T8i, Kiss X10i) (#1574).
+      `scripts/fit-camera-jpeg-matrices.py`,
+      `crates/pictura-codec/src/dng/camera_matrices.rs`.
+- [ ] Colour for the EOS R3, PowerShot V1 and the weak CR3 rows (#1579)
 - [ ] Every Nikon camera opens with colour: verify each layout, colour sources for ~70 bodies, recent models first (#1498)
 - [x] **DNG output** — Save Image… in the raw open's Pictura Raw dialog writes
       a mosaic DNG (lossless-JPEG tiles) or, with Convert to Linear Image, a

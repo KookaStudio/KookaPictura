@@ -773,6 +773,205 @@ pub(super) const CAMERAS: &[CameraMatrices] = &[
             ]),
         ],
     },
+    // Fitted from the camera JPEG in EOS_850D__IMG_1837.CR3; approximate.
+    CameraMatrices {
+        make: "CANON",
+        models: &["850D", "KISS X10I", "REBEL T8I"],
+        matrices: &[
+            (20, [
+                0.822200, -0.187600, -0.071700,
+                0.242900, 0.566400, 0.218600,
+                0.302200, -0.073900, 0.450600,
+            ]),
+            (24, [
+                1.073800, -0.374000, 0.009100,
+                0.170600, 0.572500, 0.553800,
+                0.200100, -0.090500, 0.691600,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in EOS_90D__Canon-90D-RAW-ISO-100.CR3; approximate.
+    CameraMatrices {
+        make: "CANON",
+        models: &["90D"],
+        matrices: &[
+            (20, [
+                0.915100, -0.148600, -0.190600,
+                -0.299000, 1.125600, 0.174200,
+                0.604600, -0.507300, 0.648700,
+            ]),
+            (24, [
+                1.220700, -0.323200, -0.334200,
+                -0.365100, 1.215400, 0.385500,
+                0.397200, -0.411600, 0.954400,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in Canon_EOS_M200___MG_2231.CR3; approximate.
+    CameraMatrices {
+        make: "CANON",
+        models: &["M200"],
+        matrices: &[
+            (20, [
+                1.127800, -0.232300, -0.210000,
+                0.014400, 0.811000, 0.190200,
+                0.417100, -0.285000, 0.740100,
+            ]),
+            (24, [
+                1.480200, -0.468900, -0.330900,
+                -0.056500, 0.853700, 0.463000,
+                0.281100, -0.254700, 1.078000,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in EOS_M50__Canon_EOS_M50_CRAW_ISO_100_nocrop_nodual.CR3; approximate.
+    CameraMatrices {
+        make: "CANON",
+        models: &["KISS M", "M50"],
+        matrices: &[
+            (20, [
+                1.137900, -0.359900, -0.098900,
+                0.115600, 0.704800, 0.200500,
+                0.289100, -0.034200, 0.597000,
+            ]),
+            (24, [
+                1.508500, -0.676300, 0.003500,
+                0.043700, 0.731500, 0.498600,
+                0.187900, -0.065600, 0.877100,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in EOS_M50_Mark_II__IMG_0051.CR3; approximate.
+    CameraMatrices {
+        make: "CANON",
+        models: &["KISS M2", "M50M2"],
+        matrices: &[
+            (20, [
+                1.130200, -0.285800, -0.181700,
+                -0.664300, 1.573200, 0.067600,
+                0.905000, -0.817700, 0.817600,
+            ]),
+            (24, [
+                1.472800, -0.548300, -0.244700,
+                -0.736000, 1.729600, 0.114300,
+                0.617100, -0.675100, 1.261100,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in Canon_EOS_R100___MG_2195[1].CR3; approximate.
+    CameraMatrices {
+        make: "CANON",
+        models: &["R100"],
+        matrices: &[
+            (20, [
+                0.994400, -0.339300, -0.096600,
+                0.000300, 0.835800, 0.177900,
+                0.228700, -0.056500, 0.507000,
+            ]),
+            (24, [
+                1.317800, -0.626900, -0.030800,
+                -0.071900, 0.882200, 0.435700,
+                0.157000, -0.077000, 0.768500,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in Canon_EOS_R50_V__IMG_0034.CR3; approximate.
+    CameraMatrices {
+        make: "CANON",
+        models: &["R50 V"],
+        matrices: &[
+            (20, [
+                0.935200, -0.108400, -0.242200,
+                0.076300, 0.740700, 0.202300,
+                0.319900, -0.273100, 0.621700,
+            ]),
+            (24, [
+                1.196200, -0.247500, -0.470600,
+                0.005500, 0.772900, 0.496600,
+                0.229100, -0.245300, 0.935200,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in Canon_EOS_R6_Mark_III__IMG_4241.CR3; approximate.
+    CameraMatrices {
+        make: "CANON",
+        models: &["R6 MARK III"],
+        matrices: &[
+            (20, [
+                1.373000, -0.352400, -0.483300,
+                -0.469200, 1.248200, 0.217900,
+                0.044800, -0.286300, 0.928900,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in EOS_R7__443A0157.CR3; approximate.
+    CameraMatrices {
+        make: "CANON",
+        models: &["R7"],
+        matrices: &[
+            (20, [
+                0.846900, -0.186200, -0.078200,
+                0.302000, 0.500400, 0.228800,
+                0.289300, -0.044500, 0.480300,
+            ]),
+            (24, [
+                1.145000, -0.387500, -0.003600,
+                0.229700, 0.496700, 0.583300,
+                0.178600, -0.065100, 0.685900,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in EOS-1D_X_Mark_III__Canon_EOS-1D_X_Mark_III_CRAW_ISO_100_nocrop_nodual.CR3; approximate.
+    CameraMatrices {
+        make: "CANON",
+        models: &["1D X MARK III"],
+        matrices: &[
+            (20, [
+                1.007700, -0.315200, -0.134100,
+                0.008700, 0.846800, 0.157300,
+                0.225700, -0.099900, 0.598700,
+            ]),
+            (24, [
+                1.332300, -0.588600, -0.139900,
+                -0.066300, 0.894600, 0.394500,
+                0.153800, -0.108100, 0.861400,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in PowerShot_G5_X_Mark_II__Canon_-_PowerShot_G5_X_Mark_II_-_CRAW_(3:2).CR3; approximate.
+    CameraMatrices {
+        make: "CANON",
+        models: &["POWERSHOT G5 X MARK II"],
+        matrices: &[
+            (20, [
+                0.739800, -0.020900, -0.275800,
+                -0.700500, 1.649100, 0.022700,
+                0.709100, -0.848300, 0.797300,
+            ]),
+            (24, [
+                0.960300, -0.090200, -0.641700,
+                -0.777100, 1.816700, 0.016600,
+                0.475200, -0.650700, 1.140800,
+            ]),
+        ],
+    },
+    // Fitted from the camera JPEG in PowerShot_SX70_HS__IMG_1000.CR3; approximate.
+    CameraMatrices {
+        make: "CANON",
+        models: &["POWERSHOT SX70 HS"],
+        matrices: &[
+            (20, [
+                1.799800, -0.832300, -0.260700,
+                -0.524000, 1.215100, 0.310700,
+                0.010200, 0.095900, 0.521200,
+            ]),
+            (24, [
+                2.449800, -1.488200, -0.346900,
+                -0.567700, 1.319400, 0.634500,
+                0.014400, 0.045600, 0.762100,
+            ]),
+        ],
+    },
     // Fitted from the camera JPEG in P1022081.RW2; approximate.
     CameraMatrices {
         make: "PANASONIC",
@@ -923,6 +1122,40 @@ pub(super) const CAMERAS: &[CameraMatrices] = &[
                 1.218100, -0.701000, -0.111600,
                 -0.205100, 1.009800, 0.606400,
                 0.055500, -0.014400, 0.848200,
+            ]),
+        ],
+    },
+    // Proxy of the Canon EOS 90D camera-JPEG fit: same 32.5 MP APS-C sensor, announced together; approximate.
+    CameraMatrices {
+        make: "CANON",
+        models: &["M6 MARK II"],
+        matrices: &[
+            (20, [
+                0.915100, -0.148600, -0.190600,
+                -0.299000, 1.125600, 0.174200,
+                0.604600, -0.507300, 0.648700,
+            ]),
+            (24, [
+                1.220700, -0.323200, -0.334200,
+                -0.365100, 1.215400, 0.385500,
+                0.397200, -0.411600, 0.954400,
+            ]),
+        ],
+    },
+    // Proxy of the Canon PowerShot G5 X Mark II camera-JPEG fit: same 20.1 MP stacked 1-inch sensor, announced together; approximate.
+    CameraMatrices {
+        make: "CANON",
+        models: &["POWERSHOT G7 X MARK III"],
+        matrices: &[
+            (20, [
+                0.739800, -0.020900, -0.275800,
+                -0.700500, 1.649100, 0.022700,
+                0.709100, -0.848300, 0.797300,
+            ]),
+            (24, [
+                0.960300, -0.090200, -0.641700,
+                -0.777100, 1.816700, 0.016600,
+                0.475200, -0.650700, 1.140800,
             ]),
         ],
     },
