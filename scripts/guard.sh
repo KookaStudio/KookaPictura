@@ -27,9 +27,31 @@
 #                            only uncommitted docs/ changes are checked, so the
 #                            guard is green on a clean checkout of already-reviewed history.
 #   TASK_ALLOWS_DOCS=1       allow docs/ changes without the commit-message marker
+#
+# Usage: guard.sh [--changed FILE]
+#   --changed FILE  pass the changed-path list to the three file-local checks
+#                   (milestone names, colour literals, MSVC literal length), so a
+#                   local edit loop inspects only what it touched. The checks
+#                   themselves fall back to a whole-tree scan on an empty list.
+#                   Without the flag -- and in CI -- every check is whole-tree.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+scoped=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --changed)
+            [ $# -ge 2 ] || { echo "guard: --changed needs a file" >&2; exit 2; }
+            scoped=(--changed "$2")
+            shift 2
+            ;;
+        *)
+            echo "guard: unknown option: $1" >&2
+            exit 2
+            ;;
+    esac
+done
 
 fail=0
 echo "guard: repo $(pwd)"
@@ -109,7 +131,7 @@ done
 
 # --- 3. milestone names in crates/ identifiers or strings ---------------------
 echo "check: no milestone names in crates/ code"
-if ! python3 "$(dirname "$0")/check-milestone-names.py"; then
+if ! python3 "$(dirname "$0")/check-milestone-names.py" ${scoped[@]+"${scoped[@]}"}; then
     fail=1
 fi
 
@@ -146,7 +168,7 @@ fi
 
 # --- 6. theme-like grey colour literals outside the theme layer ---------------
 echo "check: no theme-like grey colour literals outside the theme layer"
-if ! python3 "$(dirname "$0")/check-colour-literals.py"; then
+if ! python3 "$(dirname "$0")/check-colour-literals.py" ${scoped[@]+"${scoped[@]}"}; then
     fail=1
 fi
 
@@ -166,7 +188,7 @@ done
 # concatenated (C2026); GCC/Clang do not, so only the Windows build catches it.
 echo "check: C++ string literals within MSVC's per-literal limit"
 if ! python3 "$(dirname "$0")/check-msvc-string-limits.py" --self-test \
-    || ! python3 "$(dirname "$0")/check-msvc-string-limits.py"; then
+    || ! python3 "$(dirname "$0")/check-msvc-string-limits.py" ${scoped[@]+"${scoped[@]}"}; then
     fail=1
 fi
 
