@@ -103,6 +103,7 @@ set(PICTURA_QT_TESTS
     tst_layer_commands
     tst_fill_tools
     tst_memory_governor
+    tst_performance_preferences
     tst_eraser_tools
     tst_retouch_tools
     tst_stamp_hold

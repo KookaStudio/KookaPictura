@@ -26,6 +26,7 @@
 #include "panels/numeric_field.h"
 #include "pictura_debug_timing.h"
 #include "screen_mode_message.h"
+#include "status_readouts.h"
 #include "text_input.h"
 #include "value_input_enter.h"
 
@@ -301,6 +302,8 @@ PicturaMainWindow::PicturaMainWindow(QWidget* parent, bool enableUpdateCheck,
     gpuCompute_ = prefs.gpuCompute;
     set_memory_usage_percent(prefs.memoryUsagePercent);
     set_scratch_volumes(prefs.scratchVolumes.join(QLatin1Char('\n')));
+    set_history_states(prefs.historyStates);
+    set_cache_levels(prefs.cacheLevels);
     start_memory_eviction();
     colorPolicy_ = prefs.colorPolicy;
     cmykPolicy_ = prefs.cmykPolicy;
@@ -1013,22 +1016,7 @@ void PicturaMainWindow::updateStatus()
     }
     if (sizeLabel_) {
         sizeLabel_->setVisible(showReadouts);
-        QString text = QStringLiteral("—");
-        PictureView* view = activeView();
-        if (view && view->has_document()) {
-            const int width = view->document_width();
-            const int height = view->document_height();
-            if (statusReadout_ == QStringLiteral("measurementScale")) {
-                text = measurement_scale_text(*view);
-            } else if (statusReadout_ == QStringLiteral("dimensions")) {
-                text = QStringLiteral("W %1  H %2").arg(width).arg(height);
-            } else {
-                // ponytail: 72 ppi is the PSD default; wire to document
-                // resolution once the codec surfaces it.
-                text = QStringLiteral("%1 px x %2 px (72 ppi)").arg(width).arg(height);
-            }
-        }
-        sizeLabel_->setText(text);
+        sizeLabel_->setText(statusReadoutText(statusReadout_, activeView(), efficiency_));
     }
     if (backendLabel_) {
         backendLabel_->setVisible(showReadouts);

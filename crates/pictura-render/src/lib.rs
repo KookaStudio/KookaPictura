@@ -70,7 +70,8 @@ mod frame_samples;
 pub use frame_samples::{FrameTileSample, FrameTileSamples};
 mod tile_pyramid;
 pub use tile_pyramid::{
-    interleave, level_count, Ticket, TileKey, TilePyramid, TileSource, TileStats, TILE_SIDE,
+    cache_levels, interleave, level_count, set_cache_levels, Ticket, TileKey, TilePyramid,
+    TileSource, TileStats, MAX_CACHE_LEVELS, MIN_CACHE_LEVELS, TILE_SIDE,
 };
 mod pyramid_level;
 #[cfg(any(test, feature = "test-oracle"))]

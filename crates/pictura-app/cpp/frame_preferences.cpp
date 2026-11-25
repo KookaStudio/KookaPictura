@@ -15,6 +15,7 @@
 #include "panels/actions_engine_bridge.h"
 #include "preferences_agent_page.h"
 #include "settings_backup.h"
+#include "status_readouts.h"
 #include "update_preferences_page.h"
 
 #include <QtCore/QCoreApplication>
@@ -154,6 +155,15 @@ void PicturaMainWindow::showPreferences(const QString& page)
         preferencesDialog_->setPickerChoice(pickerChoice_);
         preferencesDialog_->setGpuCompute(gpuCompute_);
         preferencesDialog_->setMemoryUsagePercent(memory_usage_percent());
+        preferencesDialog_->setMemoryCeiling(readMemory().ceiling);
+        preferencesDialog_->setHistoryStates(history_states());
+        preferencesDialog_->setCacheLevels(cache_levels());
+        preferencesDialog_->setScratchVolumes(
+            scratch_volumes().split(QLatin1Char('\n'), Qt::SkipEmptyParts));
+        {
+            PictureView probe;
+            preferencesDialog_->setGpuAdapter(probe.gpu_adapter_info().value(0));
+        }
         preferencesDialog_->setGpuComputeEnabled(gpuCandidatesAvailable_);
         preferencesDialog_->setTypePlaceholderText(!tools_ || tools_->typePlaceholderText());
         preferencesDialog_->setTypeShowAsianOptions(typeShowAsianOptions_);
@@ -268,6 +278,32 @@ void PicturaMainWindow::showPreferences(const QString& page)
         connect(preferencesDialog_, &PreferencesDialog::memoryUsagePercentChanged, this,
                 [this](int percent) {
                     set_memory_usage_percent(percent);
+                    preferencesDialog_->setMemoryCeiling(readMemory().ceiling);
+                    saveSession();
+                });
+        connect(preferencesDialog_, &PreferencesDialog::historyStatesChanged, this,
+                [this](int states) {
+                    set_history_states(states);
+                    for (const DocEntry* entry : documents_->docs()) {
+                        if (entry && entry->view) {
+                            apply_history_states(*entry->view);
+                        }
+                    }
+                    saveSession();
+                });
+        connect(preferencesDialog_, &PreferencesDialog::cacheLevelsChanged, this,
+                [this](int levels) {
+                    set_cache_levels(levels);
+                    for (const DocEntry* entry : documents_->docs()) {
+                        if (entry) {
+                            forEachCanvas(*entry, [](ImageView* canvas) { canvas->update(); });
+                        }
+                    }
+                    saveSession();
+                });
+        connect(preferencesDialog_, &PreferencesDialog::scratchVolumesChanged, this,
+                [this](const QStringList& volumes) {
+                    set_scratch_volumes(volumes.join(QLatin1Char('\n')));
                     saveSession();
                 });
         connect(preferencesDialog_, &PreferencesDialog::typePlaceholderTextChanged, this,

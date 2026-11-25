@@ -55,6 +55,8 @@ fields! {
     "performance" / "gpuCompute": bool = true;
     "performance" / "memoryUsagePercent": i32 = 60;
     "performance" / "scratchVolumes": Vec<String> = Vec::new();
+    "performance" / "historyStates": i32 = 20;
+    "performance" / "cacheLevels": i32 = 8;
     "color" / "colorPolicy": i32 = 0;
     "color" / "cmykPolicy": i32 = 0;
     "color" / "workingCmyk": i32 = 0;
@@ -204,6 +206,8 @@ fn normalize(key: &str, value: Json) -> Result<Json, String> {
     };
     let setting = match key {
         "memoryUsagePercent" => Json::from(int().clamp(5, 100)),
+        "historyStates" => Json::from(int().clamp(1, 1000)),
+        "cacheLevels" => Json::from(int().clamp(2, 8)),
         "textGamma" => {
             let gamma = value.as_f64().ok_or("textGamma must be finite")?;
             Json::from(gamma.clamp(1.0, 2.2))

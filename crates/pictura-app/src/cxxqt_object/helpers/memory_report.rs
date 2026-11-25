@@ -1,5 +1,6 @@
 //! The memory governor's bridge functions (#1211), declared in the fills
-//! bridge: the Memory Usage preference, the governor's state for the control
+//! bridge: the Memory Usage, History States and Cache Levels preferences
+//! (#636), the governor's state for the control
 //! server's `status`, the scratch disk and eviction readouts and volumes
 //! (#1217), and the test hooks the Qt suites pin a host with.
 
@@ -14,6 +15,22 @@ pub(in crate::cxxqt_object) fn memory_usage_percent() -> i32 {
 
 pub(in crate::cxxqt_object) fn set_memory_usage_percent(percent: i32) {
     memory::governor().set_usage_percent(percent.clamp(5, 100) as u8);
+}
+
+pub(in crate::cxxqt_object) fn history_states() -> i32 {
+    crate::history::state_limit() as i32
+}
+
+pub(in crate::cxxqt_object) fn set_history_states(states: i32) {
+    crate::history::set_state_limit(states.max(1) as usize);
+}
+
+pub(in crate::cxxqt_object) fn cache_levels() -> i32 {
+    pictura_render::cache_levels() as i32
+}
+
+pub(in crate::cxxqt_object) fn set_cache_levels(levels: i32) {
+    pictura_render::set_cache_levels(levels.max(0) as usize);
 }
 
 fn status_json(status: &MemoryStatus) -> String {

@@ -276,6 +276,8 @@ void PicturaMainWindow::saveSession()
     prefs.gpuCompute = gpuCompute_;
     prefs.memoryUsagePercent = memory_usage_percent();
     prefs.scratchVolumes = scratch_volumes().split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    prefs.historyStates = history_states();
+    prefs.cacheLevels = cache_levels();
     prefs.colorPolicy = colorPolicy_;
     prefs.cmykPolicy = cmykPolicy_;
     prefs.workingCmyk = workingCmyk_;

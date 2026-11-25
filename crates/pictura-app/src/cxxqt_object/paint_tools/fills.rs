@@ -13,9 +13,10 @@ use super::super::helpers::memory_gate::{
     set_available_memory_for_test, set_scratch_available_for_test,
 };
 use super::super::helpers::memory_report::{
-    fail_next_plane_for_test, inject_scratch_fault_for_test, memory_status_json,
-    memory_usage_percent, open_refused_for_memory, scratch_volumes, set_memory_cgroup_for_test,
-    set_memory_usage_percent, set_scratch_volumes, start_memory_eviction,
+    cache_levels, fail_next_plane_for_test, history_states, inject_scratch_fault_for_test,
+    memory_status_json, memory_usage_percent, open_refused_for_memory, scratch_volumes,
+    set_cache_levels, set_history_states, set_memory_cgroup_for_test, set_memory_usage_percent,
+    set_scratch_volumes, start_memory_eviction,
 };
 use super::super::qobject::PictureView;
 pub(crate) use imp::*;
@@ -167,6 +168,22 @@ pub mod ffi {
 
         /// Set Memory Usage; clamped to 5–100.
         fn set_memory_usage_percent(percent: i32);
+
+        /// History States: the most undo states a document keeps (1–1000,
+        /// default 20, #636).
+        fn history_states() -> i32;
+
+        /// Set History States; clamped to 1–1000. Open documents trim when
+        /// `apply_history_states` runs on them.
+        fn set_history_states(states: i32);
+
+        /// Cache Levels: the most levels a view's tile pyramid has (2–8,
+        /// default 8, #636).
+        fn cache_levels() -> i32;
+
+        /// Set Cache Levels; clamped to 2–8. Each view rebuilds its pyramid at
+        /// its next paint.
+        fn set_cache_levels(levels: i32);
 
         /// The governor now, as the JSON object of `status.memory`: `ceiling`,
         /// `used`, `reserved`, `room` (bytes, `null` when unknown),

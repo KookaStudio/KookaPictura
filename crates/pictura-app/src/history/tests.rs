@@ -6,6 +6,7 @@ use pictura_core::TILE;
 use pictura_core::{BitDepth, Channel, CharacterOverrides, ColorMode, Layer};
 
 mod cache;
+mod depth;
 mod hint;
 mod mask_damage;
 mod sharing;
