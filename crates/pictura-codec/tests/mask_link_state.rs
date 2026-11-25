@@ -2,9 +2,31 @@ use std::process::Command;
 
 use pictura_codec::{read_psd, write_psb, write_psd};
 use pictura_core::{Document, PsdRect};
-use pictura_render::{layer_mask_linked, set_layer_mask_linked};
 
 const COVERAGE: [u8; 6] = [0, 64, 255, 192, 128, 32];
+
+fn layer_mask_linked(doc: &Document) -> bool {
+    doc.layers[0]
+        .mask
+        .as_ref()
+        .is_some_and(|mask| mask.flags & 1 == 0)
+}
+
+fn set_layer_mask_linked(doc: &mut Document, linked: bool) -> bool {
+    let Some(mask) = doc.layers[0].mask.as_mut() else {
+        return false;
+    };
+    let flags = if linked {
+        mask.flags & !1
+    } else {
+        mask.flags | 1
+    };
+    if flags == mask.flags {
+        return false;
+    }
+    mask.flags = flags;
+    true
+}
 
 fn fixture(linked: bool) -> Document {
     let bytes: &[u8] = if linked {
@@ -39,11 +61,11 @@ fn check_external(linked: bool) {
         }
     );
     assert_eq!(mask.data.as_ref().unwrap().as_slice(), COVERAGE);
-    assert_eq!(layer_mask_linked(&doc, "0"), linked);
+    assert_eq!(layer_mask_linked(&doc), linked);
     let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
     assert_eq!(back.layers[0].rect, doc.layers[0].rect);
     assert_eq!(back.layers[0].mask, doc.layers[0].mask);
-    assert_eq!(layer_mask_linked(&back, "0"), linked);
+    assert_eq!(layer_mask_linked(&back), linked);
 }
 
 #[test]
@@ -64,7 +86,7 @@ fn mask_link_toggles_survive_psd_and_psb() {
         let mut expected = doc.layers[0].mask.as_ref().unwrap().clone();
         let layer_rect = doc.layers[0].rect;
         for linked in [true, false] {
-            assert!(set_layer_mask_linked(&mut doc, "0", linked));
+            assert!(set_layer_mask_linked(&mut doc, linked));
             expected.flags = 0xA0 | u8::from(!linked);
             assert_eq!(doc.layers[0].mask.as_ref().unwrap(), &expected);
             let bytes = if psb {
@@ -78,7 +100,7 @@ fn mask_link_toggles_survive_psd_and_psb() {
                 if psb { 2 } else { 1 }
             );
             doc = read_psd(&bytes).unwrap();
-            assert_eq!(layer_mask_linked(&doc, "0"), linked);
+            assert_eq!(layer_mask_linked(&doc), linked);
             assert_eq!(doc.layers[0].rect, layer_rect);
             assert_eq!(doc.layers[0].mask.as_ref().unwrap(), &expected);
         }
@@ -108,7 +130,7 @@ print(' '.join(str(x) for x in layer.mask.topil().tobytes()))
     for psb in [false, true] {
         for linked in [true, false] {
             let mut doc = fixture(!linked);
-            assert!(set_layer_mask_linked(&mut doc, "0", linked));
+            assert!(set_layer_mask_linked(&mut doc, linked));
             let bytes = if psb {
                 write_psb(&doc)
             } else {

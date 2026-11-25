@@ -10,7 +10,8 @@ use pictura_core::{BitDepth, ColorMode, Document, Samples};
 use pictura_paint::bucket::{fill, BucketPaint};
 use pictura_paint::{Alpha, PaintMode, Rgba};
 use pictura_render::{
-    refresh_native_composite, transform_layer, transform_layer_quad, LayerTransform,
+    convert_depth_exposure_gamma, refresh_native_composite, transform_layer, transform_layer_quad,
+    ExposureGamma, LayerTransform,
 };
 
 #[test]
@@ -316,4 +317,36 @@ fn a_depth16_filter_survives_a_psd_round_trip() {
         .find(|(id, _)| *id == 0)
         .expect("the color plane");
     assert_eq!(native.narrow_to_u8(), after);
+}
+
+#[test]
+fn depth32_converted_to_16_writes_a_16bit_file() {
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../pictura-codec/tests/fixtures/rgb32.psd");
+    let bytes = std::fs::read(&path).unwrap();
+    let mut doc = read_psd(&bytes).unwrap();
+    assert_eq!(doc.source.depth(), Some(BitDepth::ThirtyTwo));
+    assert!(doc.retains_source_depth());
+
+    convert_depth_exposure_gamma(&mut doc, BitDepth::Sixteen, ExposureGamma::default()).unwrap();
+    assert_eq!(doc.depth, BitDepth::Eight, "the working model stays 8-bit");
+    assert_eq!(doc.source.depth(), Some(BitDepth::Sixteen));
+    assert!(doc.retains_source_depth());
+
+    let out = write_psd(&doc).unwrap();
+    assert_eq!(
+        u16::from_be_bytes(out[22..24].try_into().unwrap()),
+        16,
+        "the save re-emits the converted source depth"
+    );
+    let back = read_psd(&out).unwrap();
+    assert_eq!(back.source.depth(), Some(BitDepth::Sixteen));
+    assert_eq!(back.composite, doc.composite);
+    let Samples::U16(samples) = &back.source.planes().as_ref().unwrap().samples else {
+        panic!("the read-back store is 16-bit");
+    };
+    assert_eq!(
+        samples[4], 65535,
+        "the fixture's 1.5 sample clamps at 16-bit"
+    );
 }

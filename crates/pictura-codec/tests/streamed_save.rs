@@ -178,7 +178,8 @@ fn raster_save_heap_is_bounded() {
     let _lock = MEASURE.lock().unwrap_or_else(|e| e.into_inner());
     let n = (SIDE * SIDE) as usize * 4;
     let mut doc = Document::from_rgba("Layer 0", SIDE, SIDE, &noise(9, n));
-    let tiled = pictura_render::composite_tiled(&doc);
+    let mut tiled = doc.composite.buffer().clone();
+    assert!(tiled.data.tile(SIDE as usize, SIDE as usize));
     doc.composite.replace(tiled).expect("valid composite");
     let dir = temp_dir("raster");
     let cases = [

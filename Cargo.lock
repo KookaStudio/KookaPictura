@@ -1203,7 +1203,6 @@ dependencies = [
  "md-5",
  "pictura-color",
  "pictura-core",
- "pictura-render",
  "pictura-testkit",
  "quick-xml",
  "rayon",

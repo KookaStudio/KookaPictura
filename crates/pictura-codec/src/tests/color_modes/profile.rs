@@ -289,24 +289,6 @@ fn convert_srgb_to_adobe_matches_lcms2() {
 }
 
 #[test]
-fn convert_flatten_leaves_one_background() {
-    let mut doc = rgb_doc(2, 1, &[[255, 0, 0], [0, 255, 0]]);
-    pictura_render::add_layer(&mut doc, 0, "Second");
-    pictura_render::flatten(&mut doc).expect("flattens");
-    let options = ConversionOptions {
-        dither: false,
-        ..ConversionOptions::default()
-    };
-    assert!(convert_document_with(
-        &mut doc,
-        &Profile::adobe_rgb(),
-        options
-    ));
-    assert_eq!(doc.layers.len(), 1);
-    assert!(doc.layers[0].background);
-}
-
-#[test]
 fn convert_refuses_non_rgb() {
     let mut doc = flat_cmyk_document();
     let before = doc.clone();
@@ -324,14 +306,6 @@ fn flat_cmyk_document() -> Document {
         .replace_data(vec![10, 20, 30, 40].into())
         .expect("valid composite plane");
     doc
-}
-
-fn rgb_doc(width: u32, height: u32, pixels: &[[u8; 3]]) -> Document {
-    let rgba: Vec<u8> = pixels
-        .iter()
-        .flat_map(|p| [p[0], p[1], p[2], 255])
-        .collect();
-    Document::from_rgba("Layer 1", width, height, &rgba)
 }
 
 #[test]

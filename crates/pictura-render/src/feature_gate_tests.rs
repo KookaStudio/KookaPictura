@@ -66,6 +66,16 @@ fn renderer_manifest_gates_wgpu_behind_the_gpu_feature() {
             );
         }
     }
+    let codec = manifest("../pictura-codec/Cargo.toml");
+    let dev = codec
+        .split_once("[dev-dependencies]")
+        .expect("the codec manifest has a dev-dependencies table")
+        .1;
+    assert!(
+        !dev.lines()
+            .any(|line| line.trim_start().starts_with("pictura-render = ")),
+        "codec tests must not depend on pictura-render"
+    );
 }
 
 #[cfg(feature = "gpu")]
