@@ -22,3 +22,4 @@ pub(crate) mod layer_target;
 mod mcp_entry;
 mod preferences_bridge;
 mod prefs;
+mod worker_threads;

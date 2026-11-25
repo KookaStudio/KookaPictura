@@ -141,6 +141,7 @@ int main(int argc, char* argv[])
 
     std::optional<QTemporaryDir> selfTestStateDir;
     pictura::DiagnosticLogging logging;
+    pictura::worker_threads_init();
     QApplication app(argc, argv);
     QApplication::setWindowIcon(pictura::icon(QStringLiteral("app")));
     // Pin the UI to the bundled Noto Sans so every OS resolves the same family

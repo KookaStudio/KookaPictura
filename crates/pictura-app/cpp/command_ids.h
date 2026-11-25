@@ -302,6 +302,7 @@ inline constexpr char HelpSystemInfo[] = "help.system.info";
 inline constexpr char HelpSubmitIssue[] = "help.submit.issue";
 inline constexpr char HelpAbout[] = "help.about";
 inline constexpr char HelpDeveloperDesignSystem[] = "help.developer.designSystem";
+inline constexpr char HelpDeveloperDebugToolset[] = "help.developer.debugToolset";
 inline constexpr char FilePrint[] = "file.print";
 inline constexpr char FilePrintOneCopy[] = "file.print.one.copy";
 inline constexpr char ImageApplyImage[] = "image.apply.image";

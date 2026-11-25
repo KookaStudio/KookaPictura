@@ -501,6 +501,13 @@ void PicturaMainWindow::registerFrameCommands(CommandRegistry& registry)
     registry.setHandler(command_ids::HelpDeveloperDesignSystem,
                         [this]() { showDesignSystemDialog(); });
 
+    // Flip the real state, not the action's check mark: a scripted dispatch never
+    // toggles the action, and the menu re-reads the check from the provider.
+    registry.setHandler(command_ids::HelpDeveloperDebugToolset,
+                        [this]() { setDebugToolsetEnabled(!debugToolsetEnabled()); });
+    registry.setCheckedProvider(command_ids::HelpDeveloperDebugToolset,
+                                [this]() { return debugToolsetEnabled(); });
+
     registry.setExecutor(command_ids::FileSave, [this](const CommandParams& params) {
         return saveActiveAsWithRememberedOptions(
             params.values.value(QStringLiteral("in")).toString());

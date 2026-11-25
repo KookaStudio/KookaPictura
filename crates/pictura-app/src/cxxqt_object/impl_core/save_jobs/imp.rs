@@ -136,124 +136,126 @@ fn save_start_with_compatibility(
     let job_path = path.to_string();
     let progress = Arc::new(AtomicI32::new(0));
     let worker_progress = progress.clone();
-    let handle = std::thread::Builder::new().spawn(move || {
-        let _reservation = reservation;
-        let mut renamed = false;
-        // Only this worker owns the snapshot and temp writer. The rename marker survives unwind.
-        let result = guard(AssertUnwindSafe(|| {
-            let _efficiency = pictura_core::scratch::operation();
-            let unreadable_before = pictura_core::memory::eviction::unreadable_reads();
-            let mut doc = doc;
-            print_resources.apply(&mut doc);
-            if let Some(include) = compatibility {
-                prepare_compatibility_save(&mut doc, include, dirty);
-            } else {
-                prepare_native_save(&mut doc, dirty);
-            }
-            worker_progress.store(30, Ordering::Relaxed);
-            // A `.psb` path forces a version-2 PSB container; every other native
-            // suffix writes a PSD.
-            let mut doc = pictura_render::save_view(&doc);
-            pictura_codec::set_vanishing_point_data(doc.to_mut(), planes.as_deref());
-            if !embed {
-                pictura_codec::remove_document_profile(doc.to_mut());
-            }
-            use super::super::super::helpers::safe_io::{
-                sync_directory, write_durable_with, DurableWriteError,
-            };
-            // The file streams into the temp file a band of rows at a time (#1320).
-            let mut skipped_xmp_mirror = false;
-            let mut scratch_failure = false;
-            let result = write_durable_with(
-                Path::new(&worker_path),
-                |out| {
-                    if fault == 3 {
-                        out.write_all(b"8BPS")?;
-                        panic!("injected panic while writing a native save");
-                    }
-                    if fault == 1 {
-                        doc.to_mut().depth = pictura_core::BitDepth::Sixteen;
-                    }
-                    let encoded = if fault == 2 {
-                        let mut empty = [];
-                        let mut full_stream = std::io::Cursor::new(&mut empty[..]);
-                        pictura_codec::write_versioned_to_checked(
-                            &mut full_stream,
-                            &doc,
-                            psb,
-                            Some(&cache),
-                            env!("CARGO_PKG_VERSION"),
-                            compatibility.is_some(),
-                        )
-                    } else {
-                        pictura_codec::write_versioned_to_checked(
-                            out,
-                            &doc,
-                            psb,
-                            Some(&cache),
-                            env!("CARGO_PKG_VERSION"),
-                            compatibility.is_some(),
-                        )
-                    };
-                    skipped_xmp_mirror = encoded.map_err(|error| match error {
-                        pictura_codec::NativeWriteError::Codec(error) => {
-                            std::io::Error::other(error)
-                        }
-                        pictura_codec::NativeWriteError::Io(error) => error,
-                    })?;
-                    // A tile lost while encoding wrote defaults in its place.
-                    if pictura_core::memory::eviction::unreadable_reads() != unreadable_before
-                        && crate::history::unreadable_tiles(&doc) > 0
-                    {
-                        scratch_failure = true;
-                        return Err(std::io::Error::other("tiles lost while encoding"));
-                    }
-                    worker_progress.store(85, Ordering::Relaxed);
-                    if delay > 0 {
-                        std::thread::sleep(Duration::from_millis(delay));
-                    }
-                    Ok(())
-                },
-                |parent| {
-                    renamed = true;
-                    if fault == 4 {
-                        panic!("injected panic after native save rename");
-                    }
-                    if sync_failure {
-                        return Err(std::io::Error::other("directory sync fault"));
-                    }
-                    sync_directory(parent)
-                },
-            );
-            result.map_err(|error| {
-                let cause = match error {
-                    DurableWriteError::BeforeRename(cause)
-                    | DurableWriteError::AfterRename(cause) => cause,
-                };
-                let code = if scratch_failure {
-                    ErrorCode::Scratch
-                } else if cause
-                    .get_ref()
-                    .is_some_and(|source| source.is::<pictura_codec::PsdError>())
-                {
-                    ErrorCode::Codec
+    let handle = std::thread::Builder::new()
+        .name(crate::worker_threads::SAVE.into())
+        .spawn(move || {
+            let _reservation = reservation;
+            let mut renamed = false;
+            // Only this worker owns the snapshot and temp writer. The rename marker survives unwind.
+            let result = guard(AssertUnwindSafe(|| {
+                let _efficiency = pictura_core::scratch::operation();
+                let unreadable_before = pictura_core::memory::eviction::unreadable_reads();
+                let mut doc = doc;
+                print_resources.apply(&mut doc);
+                if let Some(include) = compatibility {
+                    prepare_compatibility_save(&mut doc, include, dirty);
                 } else {
-                    ErrorCode::Io
+                    prepare_native_save(&mut doc, dirty);
+                }
+                worker_progress.store(30, Ordering::Relaxed);
+                // A `.psb` path forces a version-2 PSB container; every other native
+                // suffix writes a PSD.
+                let mut doc = pictura_render::save_view(&doc);
+                pictura_codec::set_vanishing_point_data(doc.to_mut(), planes.as_deref());
+                if !embed {
+                    pictura_codec::remove_document_profile(doc.to_mut());
+                }
+                use super::super::super::helpers::safe_io::{
+                    sync_directory, write_durable_with, DurableWriteError,
                 };
-                Error::with_source(code, cause.to_string(), cause)
-            })?;
-            Ok(skipped_xmp_mirror)
-        }));
-        let publication = if result.is_ok() {
-            worker_progress.store(100, Ordering::Relaxed);
-            SaveOutcome::Saved
-        } else if renamed {
-            SaveOutcome::Uncertain
-        } else {
-            SaveOutcome::Failed
-        };
-        (publication, result)
-    });
+                // The file streams into the temp file a band of rows at a time (#1320).
+                let mut skipped_xmp_mirror = false;
+                let mut scratch_failure = false;
+                let result = write_durable_with(
+                    Path::new(&worker_path),
+                    |out| {
+                        if fault == 3 {
+                            out.write_all(b"8BPS")?;
+                            panic!("injected panic while writing a native save");
+                        }
+                        if fault == 1 {
+                            doc.to_mut().depth = pictura_core::BitDepth::Sixteen;
+                        }
+                        let encoded = if fault == 2 {
+                            let mut empty = [];
+                            let mut full_stream = std::io::Cursor::new(&mut empty[..]);
+                            pictura_codec::write_versioned_to_checked(
+                                &mut full_stream,
+                                &doc,
+                                psb,
+                                Some(&cache),
+                                env!("CARGO_PKG_VERSION"),
+                                compatibility.is_some(),
+                            )
+                        } else {
+                            pictura_codec::write_versioned_to_checked(
+                                out,
+                                &doc,
+                                psb,
+                                Some(&cache),
+                                env!("CARGO_PKG_VERSION"),
+                                compatibility.is_some(),
+                            )
+                        };
+                        skipped_xmp_mirror = encoded.map_err(|error| match error {
+                            pictura_codec::NativeWriteError::Codec(error) => {
+                                std::io::Error::other(error)
+                            }
+                            pictura_codec::NativeWriteError::Io(error) => error,
+                        })?;
+                        // A tile lost while encoding wrote defaults in its place.
+                        if pictura_core::memory::eviction::unreadable_reads() != unreadable_before
+                            && crate::history::unreadable_tiles(&doc) > 0
+                        {
+                            scratch_failure = true;
+                            return Err(std::io::Error::other("tiles lost while encoding"));
+                        }
+                        worker_progress.store(85, Ordering::Relaxed);
+                        if delay > 0 {
+                            std::thread::sleep(Duration::from_millis(delay));
+                        }
+                        Ok(())
+                    },
+                    |parent| {
+                        renamed = true;
+                        if fault == 4 {
+                            panic!("injected panic after native save rename");
+                        }
+                        if sync_failure {
+                            return Err(std::io::Error::other("directory sync fault"));
+                        }
+                        sync_directory(parent)
+                    },
+                );
+                result.map_err(|error| {
+                    let cause = match error {
+                        DurableWriteError::BeforeRename(cause)
+                        | DurableWriteError::AfterRename(cause) => cause,
+                    };
+                    let code = if scratch_failure {
+                        ErrorCode::Scratch
+                    } else if cause
+                        .get_ref()
+                        .is_some_and(|source| source.is::<pictura_codec::PsdError>())
+                    {
+                        ErrorCode::Codec
+                    } else {
+                        ErrorCode::Io
+                    };
+                    Error::with_source(code, cause.to_string(), cause)
+                })?;
+                Ok(skipped_xmp_mirror)
+            }));
+            let publication = if result.is_ok() {
+                worker_progress.store(100, Ordering::Relaxed);
+                SaveOutcome::Saved
+            } else if renamed {
+                SaveOutcome::Uncertain
+            } else {
+                SaveOutcome::Failed
+            };
+            (publication, result)
+        });
     let Ok(handle) = handle else {
         rust.last_native_save.code = ErrorCode::Host.status().raw();
         return false;

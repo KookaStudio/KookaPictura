@@ -280,7 +280,7 @@ static NON_RECORDABLE: &[&str] = &[
     "window.panels.patterns", "window.panels.properties", "window.panels.swatches",
     "window.panels.tools",
     "help.search", "help.system.info", "help.submit.issue", "help.about",
-    "help.developer.designSystem",
+    "help.developer.designSystem", "help.developer.debugToolset",
 ];
 
 /// The definition for `id`, auto-classifying catalogue commands as app-native

@@ -360,28 +360,30 @@ pub(in crate::cxxqt_object) fn commit_op_start(
     let job_label = label.clone();
     let panic_for_test = std::mem::take(&mut rust.filter_jobs.panic_for_test);
     history.panic_after_truncation_for_test = panic_for_test == 2;
-    let handle = std::thread::Builder::new().spawn(move || {
-        // The worker owns this document and a separate history index over shared tiles.
-        let committed = guard(AssertUnwindSafe(|| {
-            commit(
-                doc,
-                history,
-                target,
-                &path,
-                op,
-                source,
-                mask,
-                &selection,
-                &label,
-                gpu,
-                panic_for_test == 1,
-            )
-        }));
-        if delay > 0 {
-            std::thread::sleep(std::time::Duration::from_millis(delay));
-        }
-        committed
-    });
+    let handle = std::thread::Builder::new()
+        .name(crate::worker_threads::FILTER.into())
+        .spawn(move || {
+            // The worker owns this document and a separate history index over shared tiles.
+            let committed = guard(AssertUnwindSafe(|| {
+                commit(
+                    doc,
+                    history,
+                    target,
+                    &path,
+                    op,
+                    source,
+                    mask,
+                    &selection,
+                    &label,
+                    gpu,
+                    panic_for_test == 1,
+                )
+            }));
+            if delay > 0 {
+                std::thread::sleep(std::time::Duration::from_millis(delay));
+            }
+            committed
+        });
     let Ok(handle) = handle else {
         rust.filter_jobs.commit_status = ErrorCode::Host.status();
         rust.filter_error = Some("could not start the filter worker".to_string());

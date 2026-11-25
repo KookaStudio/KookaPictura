@@ -145,6 +145,7 @@ set(PICTURA_QT_TESTS
     tst_value_input_enter
     tst_info_panel
     tst_system_info
+    tst_debug_toolset
     tst_histogram_panel
     tst_tool_hint_bar
     tst_swatches_panel

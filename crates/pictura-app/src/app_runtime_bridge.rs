@@ -46,6 +46,9 @@ pub mod ffi {
         /// The five-state status label for the status bar and About.
         fn gpu_active_backend_label(gpu_compute: bool) -> String;
 
+        /// Name the global rayon pool's workers; call once before any parallel work.
+        fn worker_threads_init();
+
         fn diagnostics_start(path: &QString, stall_for_test: bool);
         fn diagnostics_stop();
         fn diagnostics_qt(level: i32, category: &str, fatal: bool);

@@ -5,6 +5,10 @@ use std::pin::Pin;
 use super::PictureView;
 use crate::{diagnostic_logging, history_log};
 
+pub(super) fn worker_threads_init() {
+    crate::worker_threads::init_rayon_names();
+}
+
 pub(super) fn diagnostics_start(path: &QString, stall_for_test: bool) {
     diagnostic_logging::start(&path.to_string(), stall_for_test);
 }

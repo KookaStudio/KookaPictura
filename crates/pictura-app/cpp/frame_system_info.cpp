@@ -1,7 +1,11 @@
 #include "frame.h"
 
+#include "api/paint_bridge.h"
 #include "api/view_bridge.h"
 
+#include "command_ids.h"
+#include "commands.h"
+#include "debug_toolset_panel.h"
 #include "system_info.h"
 #include "system_info_dialog.h"
 
@@ -24,6 +28,43 @@ void PicturaMainWindow::showSystemInfo()
     systemInfoDialog_->show();
     systemInfoDialog_->raise();
     systemInfoDialog_->activateWindow();
+}
+
+void PicturaMainWindow::setDebugToolsetEnabled(bool enabled)
+{
+    if (!debugToolset_) {
+        if (!enabled) {
+            return;
+        }
+        debugToolset_ = new DebugToolsetPanel(this);
+        connect(debugToolset_, &DebugToolsetPanel::deactivated, this,
+                [this] { syncDebugToolsetCheck(); });
+        // The snapshot is empty unless the process started with PICTURA_METRICS, so
+        // skip building a view at all in the common case.
+        debugToolset_->setMetricsProvider([]() -> QString {
+            if (qEnvironmentVariableIntValue("PICTURA_METRICS") == 0) {
+                return {};
+            }
+            PictureView probe;
+            return probe.metrics_snapshot(false);
+        });
+        debugToolset_->setMemoryProvider([]() { return memory_status_json(); });
+    }
+    debugToolset_->setActive(enabled);
+    syncDebugToolsetCheck();
+}
+
+void PicturaMainWindow::syncDebugToolsetCheck()
+{
+    if (QAction* action = registry() ? registry()->action(command_ids::HelpDeveloperDebugToolset)
+                                     : nullptr) {
+        action->setChecked(debugToolsetEnabled());
+    }
+}
+
+bool PicturaMainWindow::debugToolsetEnabled() const
+{
+    return debugToolset_ && debugToolset_->isActive();
 }
 
 void PicturaMainWindow::submitIssue()
