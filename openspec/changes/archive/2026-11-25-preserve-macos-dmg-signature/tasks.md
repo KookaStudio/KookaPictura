@@ -7,4 +7,5 @@
 ## 2. Verify the fix
 
 - [x] Check that strict verification rejects a post-signing resource addition.
-- [ ] Run the macOS DMG build on the fix PR and restore the permanent trigger.
+- [x] Verify signing, the Applications shortcut, and the headless self-test from a locally mounted DMG.
+- [x] Restore the release-only macOS workflow trigger.

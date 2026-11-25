@@ -49,9 +49,8 @@ jobs:
     timeout-minutes: 90
     if: >-
       github.event_name != 'pull_request' ||
-      (github.event.pull_request.head.repo.full_name == github.repository &&
-       (github.head_ref == 'release-please--branches--master' ||
-        github.head_ref == 'fix/1605-macos-dmg-signature'))
+      (github.head_ref == 'release-please--branches--master' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
     env:
       TAG: ${{ inputs.tag }}
       VERSION: ${{ inputs.tag || format('0.0.0~pr{0}', github.event.number) }}
