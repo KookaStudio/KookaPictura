@@ -15,6 +15,7 @@ Photoshop background.
 
 ## Settings
 
+- [Performance: memory, history, cache, scratch disks and GPU](performance.md)
 - [Backing up and restoring settings](settings-backup.md)
 
 ## Tools
