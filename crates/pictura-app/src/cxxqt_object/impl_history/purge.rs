@@ -10,7 +10,7 @@ mod frame_capture;
 mod imp;
 
 use super::super::qobject::PictureView;
-use super::display::{frame_revision, preview_present_level};
+use super::display::{frame_revision, preview_present_level, tiles_pending};
 use frame_capture::*;
 use imp::*;
 
@@ -65,6 +65,10 @@ pub mod ffi {
         /// standing in for a pyramid a worker is still building. A GPU stroke
         /// presents the zoom-selected level.
         fn preview_present_level(view: &PictureView) -> i32;
+
+        /// Whether display tiles are being built on a worker or queued for
+        /// one (#1608): the canvas shows it is still rendering.
+        fn tiles_pending(view: &PictureView) -> bool;
     }
 
     #[namespace = "pictura"]

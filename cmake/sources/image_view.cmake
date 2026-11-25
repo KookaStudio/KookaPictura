@@ -22,6 +22,8 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/image_view_smart_guides.cpp
     crates/pictura-app/cpp/image_view_transform_warp.cpp
     crates/pictura-app/cpp/image_view_type.cpp
+    crates/pictura-app/cpp/rendering_indicator.cpp
+    crates/pictura-app/cpp/rendering_indicator.h
     crates/pictura-app/cpp/screen_mode_message.cpp
     crates/pictura-app/cpp/screen_mode_message.h
     crates/pictura-app/cpp/vp_canvas.cpp

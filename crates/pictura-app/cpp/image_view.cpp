@@ -3,10 +3,12 @@
 #include "api/selection_api.h"
 #include "icons.h"
 #include "pictura_debug_timing.h"
+#include "rendering_indicator.h"
 #include "text_input.h"
 
 #include <QtCore/QDebug>
 #include <QtCore/QRect>
+#include <QtCore/QScopeGuard>
 #include <QtCore/QStringList>
 #include <QtCore/QTimer>
 #include <QtCore/QtNumeric>
@@ -87,6 +89,7 @@ ImageView::ImageView(QWidget* parent)
         ++antsTicks_;
         update(antsUpdateRect());
     });
+    rendering_ = new RenderingIndicator(this);
 }
 
 void ImageView::setCanvasColor(const QColor& color)
@@ -402,6 +405,7 @@ void ImageView::setPresentLevelCropForTest(bool enabled)
 void ImageView::setLevelProvider(LevelProvider provider)
 {
     levelProvider_ = std::move(provider);
+    rendering_->setPendingSource(levelProvider_.tilesPending);
     dropPresentCache();
     presentedLevel_ = -1;
     presentedDocRect_ = QRect();
@@ -478,6 +482,9 @@ bool ImageView::presentLevelRect(int level, QRect& docRect, QRect& sourceRect) c
 void ImageView::paintEvent(QPaintEvent* event)
 {
     lastPaintRect_ = event ? event->rect() : rect();
+    // A crop that misses tiles queues them during this paint, so the badge
+    // reads the pending state once the paint is done, whichever way it returns.
+    const auto pokeRendering = qScopeGuard([this] { rendering_->poke(); });
     pictura::ScopedTimer paintTimer("cxx_paintEvent");
     FramePaintTiming frameTiming(*this, event);
     QPainter painter(this);
@@ -1001,6 +1008,7 @@ void ImageView::mouseReleaseEvent(QMouseEvent* event)
 
 void ImageView::resizeEvent(QResizeEvent* event)
 {
+    rendering_->place();
     // A fresh document set before layout runs its automatic fit against a
     // stale viewport, so while the settle is pending every resize re-fits;
     // the show pass ends it. A load/fit also leaves userAdjusted_ false until

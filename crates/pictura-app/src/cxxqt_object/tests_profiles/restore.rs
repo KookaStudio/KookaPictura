@@ -213,3 +213,130 @@ fn solo_mask_profile() {
     ms("solo mask restore display (GUI thread)", t.elapsed());
     present_fit("solo mask", &view, TileSource::Mask);
 }
+
+/// A History panel jump back across brush strokes on a 21000² document
+/// (#1608): the history walk and the display, timed apart. The document is
+/// built as New Document and New Layer build it, then painted with 15 long
+/// 400 px strokes, each its own history state.
+#[test]
+#[ignore = "21000x21000 jump profile; run explicitly with --release --ignored --nocapture"]
+fn jump_back_across_strokes_profile() {
+    use super::super::edit::insertion_edit;
+    use pictura_paint::stroke::Stroke;
+    use pictura_paint::{Rgba, StrokeConfig, StrokeSample};
+
+    const SIDE: u32 = 21_000;
+    const STROKES: usize = 15;
+    const BACK: usize = 12;
+    let n = SIDE as usize;
+    let canvas = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: SIDE as i32,
+        right: SIDE as i32,
+    };
+    let mut doc =
+        Document::with_uniform_composite(SIDE, SIDE, ColorMode::Rgb, BitDepth::Eight, 255);
+    let channels = (0..4)
+        .map(|id| Channel {
+            id: if id == 3 { -1 } else { id },
+            data: pictura_core::Plane::filled(n, n, 1, 255),
+        })
+        .collect();
+    doc.layers
+        .push(pictura_codec::layer_from_parts(pictura_core::LayerParts {
+            name: "Background".to_string(),
+            rect: canvas,
+            opacity: 255,
+            fill: 255,
+            visible: true,
+            channels,
+            ..Default::default()
+        }))
+        .expect("the layer is added");
+    super::super::open_jobs::make_background(doc.layers.first_mut().expect("the layer"));
+    pictura_render::DocumentComposite::new(&mut doc)
+        .refresh(pictura_render::CompositeScope::Full, false);
+    let mut view = PictureViewRust {
+        gpu_compute: false,
+        ..Default::default()
+    };
+    view.replace_document(
+        Some(doc),
+        crate::history::History::default(),
+        LayerTarget::default(),
+        None,
+    );
+    view.select_only_layer("0");
+    let target = view.layer_target.clone();
+    assert!(view.session.record(&target, "New"));
+
+    let doc = view.session.doc.as_mut().expect("document");
+    let created = pictura_render::add_layer(doc, -1, "Layer 1");
+    let path = created.to_string();
+    let edit = insertion_edit(doc, &path);
+    view.layer_target.select_only(&path);
+    view.apply_edit("New Layer", edit);
+
+    let cfg = StrokeConfig {
+        color: Rgba {
+            r: 200,
+            g: 30,
+            b: 30,
+            a: 255,
+        },
+        diameter: 400,
+        hardness: 100,
+        opacity: 100,
+        flow: 100,
+        ..StrokeConfig::default()
+    }
+    .sanitized();
+    let t = Instant::now();
+    for s in 0..STROKES {
+        let doc = view.session.doc.as_mut().expect("document");
+        let mut stroke = Stroke::begin_at(doc, &path, cfg).expect("a stroke");
+        let (x0, x1) = (1_500.0 + s as f32 * 800.0, 4_500.0 + s as f32 * 800.0);
+        for i in 0..=120 {
+            let t = i as f32 / 120.0;
+            stroke.sample(
+                doc,
+                StrokeSample {
+                    x: x0 + (x1 - x0) * t,
+                    y: 2_000.0 + 15_500.0 * t,
+                    pressure: 1.0,
+                },
+            );
+        }
+        let rect = stroke.finish().expect("the stroke paints");
+        view.apply_edit("Brush", Edit::regions(vec![rect], false));
+    }
+    ms(
+        &format!("{STROKES} strokes painted and recorded"),
+        t.elapsed(),
+    );
+    let layer = &view.session.doc.as_ref().expect("document").layers[created as usize];
+    println!("painted layer rect {:?}", layer.rect);
+
+    let session = &mut view.session;
+    let doc = session.doc.as_mut().expect("document");
+    let to = session.history.index() - BACK;
+    let t = Instant::now();
+    let restored = session
+        .history
+        .jump_live(to, doc, &mut session.selection, &mut LayerTarget::default())
+        .expect("a state to jump to");
+    ms(
+        &format!("jump back {BACK} history ({restored:?})"),
+        t.elapsed(),
+    );
+    let t = Instant::now();
+    match restored {
+        Restored::Region(rect) | Restored::Composite(rect) => {
+            view.refresh_from_composite(rect);
+        }
+        Restored::Everywhere => view.reset_pyramid(),
+    }
+    ms(&format!("jump back {BACK} display"), t.elapsed());
+    present_fit("jump back", &view, TileSource::Composite);
+}

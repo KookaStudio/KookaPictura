@@ -50,6 +50,8 @@ struct SelectionContour;
 
 namespace pictura {
 
+class RenderingIndicator;
+
 /// A CPU-warped live projective preview: the warped image, its local
 /// destination origin (relative to the moving layer's document origin), and
 /// its pixels per document pixel; it covers `image.size() / scale`.
@@ -134,6 +136,9 @@ public:
         // render session can composite a preview for exactly that frame.
         std::function<void(int level, const QRect& docRect)> reportView;
         std::function<CanvasFrameCrop(int level, const QRect& rect)> frameCrop = {};
+        // Whether display tiles are still on their way (#1608): the canvas
+        // shows its "Rendering…" badge while they are.
+        std::function<bool()> tilesPending = {};
     };
     void setLevelProvider(LevelProvider provider);
 
@@ -673,6 +678,7 @@ public:
     QSize presentCacheImageSize() const { return presentedImageSize_; }
     qint64 presentCacheImageKey() const { return presentedImageKey_; }
     int presentLevelForTest() const { return presentLevel(); }
+    RenderingIndicator* renderingIndicatorForTest() const { return rendering_; }
     bool presentCacheValidForTest() const { return presentCache_.valid; }
     QImage presentCacheCropForTest() const { return presentCache_.crop.copy(); }
     void setPresentCacheEnabledForTest(bool enabled);
@@ -745,6 +751,7 @@ protected:
 
 private:
     friend class FramePaintTiming;
+    RenderingIndicator* rendering_ = nullptr;
     friend class FrameViewportTiming;
 
     struct FrameTimingState {
