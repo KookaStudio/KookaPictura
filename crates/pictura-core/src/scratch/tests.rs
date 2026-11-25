@@ -368,12 +368,19 @@ fn a_busy_store_blocks_neither_set_volumes_nor_readouts() {
         let stale = volumes();
         let _ = sizes();
         set_volumes(&[target]);
-        done.send(stale).unwrap();
+        // A readout with the change still pending must not wait either.
+        let pending = volumes();
+        let _ = sizes();
+        done.send((stale, pending)).unwrap();
     });
-    let stale = finished
+    let (stale, pending) = finished
         .recv_timeout(Duration::from_secs(5))
         .expect("readouts and set_volumes return while the store is held");
     assert_eq!(stale[0].path, first, "the last reading stands in");
+    assert_eq!(
+        pending[0].path, first,
+        "the last reading stands in while pending"
+    );
     drop(held);
     caller.join().unwrap();
     assert_eq!(volumes()[0].path, second, "the pending change applied");

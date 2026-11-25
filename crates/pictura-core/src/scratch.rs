@@ -251,15 +251,16 @@ pub fn set_volumes(dirs: &[PathBuf]) {
 }
 
 /// The volumes and Scratch Sizes, read without waiting while the store is
-/// busy: the last reading stands in, unless a volume change is still pending.
+/// busy: the last successful reading stands in, even when a volume change is
+/// pending (it shows at the first reading after the store frees). Only the
+/// very first reading waits.
 fn readout() -> (Vec<VolumeInfo>, Sizes) {
     let mut last = LAST_READOUT.lock().unwrap_or_else(|e| e.into_inner());
-    let pending = PENDING.lock().unwrap_or_else(|e| e.into_inner()).is_some();
     let store = match try_locked() {
         Some(store) => store,
         None => match last.as_ref() {
-            Some(reading) if !pending => return reading.clone(),
-            _ => locked(),
+            Some(reading) => return reading.clone(),
+            None => locked(),
         },
     };
     let reading = (store.volumes(), store.sizes());

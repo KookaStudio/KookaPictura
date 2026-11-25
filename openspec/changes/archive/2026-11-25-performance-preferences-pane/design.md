@@ -81,3 +81,12 @@ a document.
 `historyStates` (1–1000, default 20) and `cacheLevels` (2–8, default 8) join
 `[performance]` in the schema and `preference_fields.inc`. The frame applies
 them at start.
+
+## Scratch store access from the GUI (review follow-up)
+
+`scratch::set_volumes` queues the new list in `PENDING` and applies it on
+the first `try_lock` that succeeds, or when the next holder of the store
+lock takes it. `volumes()` and `sizes()` try the lock and fall back to the
+last successful reading. They do this even while a change is pending, so a
+2 s readout can be one sample stale but never waits behind a spill. Only
+the first reading in a process blocks.
