@@ -4,6 +4,21 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Performance pane, #636** (OpenSpec change `performance-preferences-pane`,
+  capabilities `ui/performance-preferences`, `ui/status-scratch-efficiency`,
+  `document/memory-governor` modified). The page is now its own file
+  (`preferences_performance.cpp`). History States (1–1000, default 20) is a
+  process-wide limit (`history/depth.rs`) applied at once through
+  `apply_history_states`: open histories drop their oldest states, then redo
+  states if the oldest state is current. Cache Levels (2–8, default 8 = the
+  old depth, by owner decision) caps `TilePyramid` depth, and `fits()`
+  compares it, so views rebuild on their next paint. A brush preview past
+  the cap runs exact. The presets are Tall and Thin 4, Default 8, Big and
+  Flat 8. Tile size is fixed at 256 px. The Scratch Disks list edits
+  `scratchVolumes`. The GPU line comes from `gpu_adapter_info()`, with no
+  drawing modes. The status bar's Scratch Sizes shows governor used/ceiling
+  (CS6 meaning) and Efficiency covers the latest interval, refreshed every
+  2 s while shown; the logic is in `status_readouts.*`.
 - **Debug toolset, #1589** (OpenSpec changes `debug-toolset` and
   `debug-toolset-panel-redesign`, capability `ui/debug-toolset`).
   `Help > Developer > Pictura Metrics` toggles a light-yellow floating tool window

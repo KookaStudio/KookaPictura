@@ -512,6 +512,31 @@ void PicturaMainWindow::buildStatusBar()
             updateStatus();
         });
     }
+    // Scratch Sizes and Efficiency (#636) read the governor, so a timer keeps
+    // them current while one is shown.
+    statusReadoutTimer_ = new QTimer(this);
+    statusReadoutTimer_->setInterval(2000);
+    connect(statusReadoutTimer_, &QTimer::timeout, this, [this]() { updateStatus(); });
+    const std::pair<QString, QString> memoryReadouts[] = {
+        {QStringLiteral("scratchSizes"), tr("Scratch Sizes")},
+        {QStringLiteral("efficiency"), tr("Efficiency")},
+    };
+    for (const auto& [key, label] : memoryReadouts) {
+        QAction* option = optionsMenu->addAction(label);
+        option->setCheckable(true);
+        option->setData(key);
+        group->addAction(option);
+    }
+    connect(group, &QActionGroup::triggered, this, [this](QAction* option) {
+        const QString key = option->data().toString();
+        if (!statusReadoutIsLive(key)) {
+            statusReadoutTimer_->stop();
+            return;
+        }
+        statusReadout_ = key;
+        statusReadoutTimer_->start();
+        updateStatus();
+    });
     statusOptionsButton_->setMenu(optionsMenu);
 
     backendLabel_ = new QLabel(QStringLiteral("—"), bar);

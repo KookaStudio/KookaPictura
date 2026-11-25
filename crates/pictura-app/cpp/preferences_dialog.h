@@ -18,6 +18,7 @@ class QLabel;
 class QRadioButton;
 class QPushButton;
 class QListWidget;
+class QSlider;
 class QStackedWidget;
 
 namespace pictura {
@@ -72,6 +73,17 @@ public:
     // Memory Usage, in percent of the host's memory (#1211).
     void setMemoryUsagePercent(int percent);
     void setGpuComputeEnabled(bool on);
+    // Performance (#636): "Let Pictura Use" in bytes, negative when unknown.
+    void setMemoryCeiling(qint64 bytes);
+    void setHistoryStates(int states);
+    void setCacheLevels(int levels);
+    // The configured scratch volumes in order; empty for the default.
+    void setScratchVolumes(const QStringList& volumes);
+    // Append `path` to the scratch volumes (Add's chosen directory); ignored
+    // when listed or at four.
+    void addScratchVolume(const QString& path);
+    // The detected adapter's name; empty when there is none.
+    void setGpuAdapter(const QString& name);
     // File Handling: Automatically Save Recovery Information Every `minutes`.
     void setSaveInBackground(bool on);
     void setAutoSaveRecovery(bool on, int minutes);
@@ -118,6 +130,9 @@ signals:
     void pickerChoiceChanged(int choice);
     void gpuComputeChanged(bool on);
     void memoryUsagePercentChanged(int percent);
+    void historyStatesChanged(int states);
+    void cacheLevelsChanged(int levels);
+    void scratchVolumesChanged(const QStringList& volumes);
     void saveInBackgroundChanged(bool on);
     void autoSaveRecoveryChanged(bool on, int minutes);
     void nativeSaveCompatibilityChanged(int choice);
@@ -145,6 +160,9 @@ private:
     void showPage(const QString& page);
     QCheckBox* makeCheckbox(const QString& key, const QString& label, QWidget* page);
     QCheckBox* checkbox(const QString& key) const;
+    QWidget* buildPerformancePage();
+    void showScratchVolumes();
+    void moveScratchVolume(int delta);
     QWidget* buildUnitsPage();
     QWidget* buildGuidesPage();
     void showGuideColor(const QColor& color);
@@ -164,6 +182,17 @@ private:
     QComboBox* nativeSaveCompatibility_ = nullptr;
     QComboBox* rawSettingsStore_ = nullptr;
     QSpinBox* memoryUsage_ = nullptr;
+    QSlider* memorySlider_ = nullptr;
+    QLabel* memoryCeiling_ = nullptr;
+    QSpinBox* historyStates_ = nullptr;
+    QSpinBox* cacheLevels_ = nullptr;
+    QListWidget* scratchList_ = nullptr;
+    QPushButton* scratchAdd_ = nullptr;
+    QPushButton* scratchRemove_ = nullptr;
+    QPushButton* scratchUp_ = nullptr;
+    QPushButton* scratchDown_ = nullptr;
+    QStringList scratchVolumes_;
+    QLabel* gpuAdapter_ = nullptr;
     QComboBox* guideColor_ = nullptr;
     QComboBox* guideStyle_ = nullptr;
     ColorSwatchWidget* guideSwatch_ = nullptr;

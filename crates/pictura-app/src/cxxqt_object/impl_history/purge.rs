@@ -42,6 +42,10 @@ pub mod ffi {
         /// undo history. Returns false without a document.
         fn purge_named_history(view: Pin<&mut PictureView>) -> bool;
 
+        /// Trim the history to History States now (#636); emit `changed`
+        /// when a state went. Returns whether one did.
+        fn apply_history_states(view: Pin<&mut PictureView>) -> bool;
+
         /// The label of the current history state, or empty without a document.
         fn current_history_label(view: &PictureView) -> QString;
 

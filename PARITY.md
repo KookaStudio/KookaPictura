@@ -1,7 +1,7 @@
 # Feature parity tracker
 
-Assessed: 2026-11-21
-Pictura commit: 4736b57e
+Assessed: 2026-11-25
+Pictura commit: 5bba3258
 CS6 baseline: Adobe Photoshop CS6 13.0 (2012), Standard and Extended
 CC baseline: Adobe Photoshop 28.0 (November 2026 release; LTS 27.11.1)
 
@@ -11,12 +11,12 @@ This tracker measures feature coverage against a frozen Photoshop baseline. It d
 
 | Baseline | Complete | Partial | Missing | Unknown | Denominator | Coverage | Excluded non-goals |
 |---|---|---|---|---|---|---|---|
-| CS6 Standard | 208 | 79 | 58 | 4 | 349 | 59.6% | 8 |
-| CS6 Standard, in scope | 208 | 79 | 52 | 2 | 341 | 61.0% | 8 |
-| CS6 Extended | 209 | 79 | 74 | 4 | 366 | 57.1% | 23 |
-| CS6 Extended, in scope | 209 | 79 | 53 | 2 | 343 | 60.9% | 23 |
-| CC 28.0 | 210 | 81 | 79 | 4 | 374 | 56.1% | 20 |
-| CC 28.0, in scope | 210 | 81 | 61 | 2 | 354 | 59.3% | 20 |
+| CS6 Standard | 209 | 78 | 58 | 4 | 349 | 59.9% | 8 |
+| CS6 Standard, in scope | 209 | 78 | 52 | 2 | 341 | 61.3% | 8 |
+| CS6 Extended | 210 | 78 | 74 | 4 | 366 | 57.4% | 23 |
+| CS6 Extended, in scope | 210 | 78 | 53 | 2 | 343 | 61.2% | 23 |
+| CC 28.0 | 211 | 80 | 79 | 4 | 374 | 56.4% | 20 |
+| CC 28.0, in scope | 211 | 80 | 61 | 2 | 354 | 59.6% | 20 |
 
 ## Baselines
 
@@ -46,7 +46,7 @@ Coverage is not behavioural or pixel parity with Photoshop. Every Complete row n
 | Type & vector | 17/17 (100.0%) | 17/17 (100.0%) | 17/19 (89.5%) |
 | Color & bit depth | 14/29 (48.3%) | 14/29 (48.3%) | 14/29 (48.3%) |
 | Automation & extensibility | 3/18 (16.7%) | 3/18 (16.7%) | 3/22 (13.6%) |
-| Shell, panels & preferences | 27/60 (45.0%) | 27/63 (42.9%) | 27/62 (43.5%) |
+| Shell, panels & preferences | 28/60 (46.7%) | 28/63 (44.4%) | 28/62 (45.2%) |
 
 ## Feature rows
 
@@ -467,7 +467,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 | P-PREF-01 | General preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Sparse pane | #506 |
 | P-PREF-02 | Interface preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Sparse pane | #506 |
 | P-PREF-03 | File Handling preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Sparse pane | #506 |
-| P-PREF-04 | Performance preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Memory, history, cache, tile, scratch, and GPU controls remain | #636 |
+| P-PREF-04 | Performance preferences | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/preferences_performance.cpp; crates/pictura-app/cpp/status_readouts.cpp | manual:tst_performance_preferences covers the pane | Presets approximated; Cache Tile Size fixed at 256 px; no Basic/Normal/Advanced GPU modes (owner decision); Cache Levels default 8, not CS6's 4 | — |
 | P-PREF-05 | Units & Rulers preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Sparse pane | #506 |
 | P-PREF-06 | Guides, Grid & Slices preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Sparse pane | #506 |
 | P-PREF-07 | Cursors preferences | Y | Y | Y | Missing | in-scope | — | none | Pane absent | UI-9 |
@@ -524,6 +524,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
 |---|---|---|---|---|---|
+| 2026-11-25 | 5bba3258 | 209/349 (59.9%) | 210/366 (57.4%) | 28.0 | 211/374 (56.4%) |
 | 2026-11-21 | 4736b57e | 208/349 (59.6%) | 209/366 (57.1%) | 28.0 | 210/374 (56.1%) |
 | 2026-11-21 | 39ea0380 | 202/349 (57.9%) | 203/366 (55.5%) | 28.0 | 204/374 (54.5%) |
 | 2026-11-21 | 7ab28fc5 | 192/349 (55.0%) | 193/366 (52.7%) | 28.0 | 194/374 (51.9%) |

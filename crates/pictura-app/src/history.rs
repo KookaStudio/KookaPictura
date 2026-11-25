@@ -9,6 +9,8 @@ use std::sync::Arc;
 
 mod budget;
 mod damage;
+mod depth;
+pub use depth::{set_state_limit, state_limit};
 mod planes;
 mod recovery;
 pub(crate) use recovery::{apply_recovery_delta, recovery_delta};
@@ -161,9 +163,13 @@ pub struct History {
     /// The byte cap a test sets in place of the host's (see `budget`).
     #[cfg(test)]
     byte_cap: Option<usize>,
+    /// The History States limit a test sets in place of the process's.
+    #[cfg(test)]
+    state_limit: Option<usize>,
 }
 
-const MAX_DEPTH: usize = 20;
+#[cfg(test)]
+const MAX_DEPTH: usize = depth::DEFAULT_STATES;
 const MAX_SNAPSHOTS: usize = 10;
 
 /// Every tile allocation a stored state holds; a hollow anchor holds none.
@@ -307,9 +313,7 @@ impl History {
             history_value,
         });
         self.cursor = self.states.len() - 1;
-        while self.states.len() > MAX_DEPTH + 1 {
-            self.drop_oldest_state();
-        }
+        self.enforce_depth();
         self.enforce_byte_cap();
     }
 

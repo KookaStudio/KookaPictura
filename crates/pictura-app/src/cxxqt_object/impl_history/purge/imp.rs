@@ -33,6 +33,14 @@ pub(super) fn purge_named_history(mut view: Pin<&mut PictureView>) -> bool {
     true
 }
 
+pub(super) fn apply_history_states(mut view: Pin<&mut PictureView>) -> bool {
+    let trimmed = view.as_mut().rust_mut().session.history.apply_state_limit();
+    if trimmed {
+        view.as_mut().changed();
+    }
+    trimmed
+}
+
 pub(super) fn current_history_label(view: &PictureView) -> QString {
     let history = &view.rust().session.history;
     QString::from(history.label(history.index()))

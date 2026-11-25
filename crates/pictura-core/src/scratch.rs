@@ -206,28 +206,76 @@ pub fn store() -> &'static Mutex<Store> {
     STORE.get_or_init(|| Mutex::new(Store::new(&[default_volume()])))
 }
 
-fn locked() -> std::sync::MutexGuard<'static, Store> {
-    store().lock().unwrap_or_else(|e| e.into_inner())
+/// Volumes set while the store was busy; whoever takes the store next applies
+/// them, so the GUI thread never waits behind a spill to change volumes (#636).
+static PENDING: Mutex<Option<Vec<PathBuf>>> = Mutex::new(None);
+
+/// The last readouts, served while the store is busy.
+static LAST_READOUT: Mutex<Option<(Vec<VolumeInfo>, Sizes)>> = Mutex::new(None);
+
+fn apply_pending(store: &mut Store) {
+    let pending = PENDING.lock().unwrap_or_else(|e| e.into_inner()).take();
+    if let Some(dirs) = pending {
+        store.set_volumes(&dirs);
+    }
 }
 
-/// Configure the process's volumes (an empty list keeps the default).
+fn locked() -> std::sync::MutexGuard<'static, Store> {
+    let mut store = store().lock().unwrap_or_else(|e| e.into_inner());
+    apply_pending(&mut store);
+    store
+}
+
+/// The store when no other thread holds it.
+fn try_locked() -> Option<std::sync::MutexGuard<'static, Store>> {
+    let mut store = match store().try_lock() {
+        Ok(store) => store,
+        Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner(),
+        Err(std::sync::TryLockError::WouldBlock) => return None,
+    };
+    apply_pending(&mut store);
+    Some(store)
+}
+
+/// Configure the process's volumes (an empty list keeps the default). Never
+/// waits for the store: while another thread holds it, the change applies
+/// when that thread is done.
 pub fn set_volumes(dirs: &[PathBuf]) {
     let dirs = if dirs.is_empty() {
         vec![default_volume()]
     } else {
         dirs.to_vec()
     };
-    locked().set_volumes(&dirs);
+    *PENDING.lock().unwrap_or_else(|e| e.into_inner()) = Some(dirs);
+    drop(try_locked());
+}
+
+/// The volumes and Scratch Sizes, read without waiting while the store is
+/// busy: the last successful reading stands in, even when a volume change is
+/// pending (it shows at the first reading after the store frees). Only the
+/// very first reading waits.
+fn readout() -> (Vec<VolumeInfo>, Sizes) {
+    let mut last = LAST_READOUT.lock().unwrap_or_else(|e| e.into_inner());
+    let store = match try_locked() {
+        Some(store) => store,
+        None => match last.as_ref() {
+            Some(reading) => return reading.clone(),
+            None => locked(),
+        },
+    };
+    let reading = (store.volumes(), store.sizes());
+    *last = Some(reading.clone());
+    reading
 }
 
 /// The process's configured volumes.
 pub fn volumes() -> Vec<VolumeInfo> {
-    locked().volumes()
+    readout().0
 }
 
 /// The process's Scratch Sizes.
 pub fn sizes() -> Sizes {
-    locked().sizes()
+    readout().1
 }
 
 /// Write `payload` to the process's store, timed as scratch I/O.

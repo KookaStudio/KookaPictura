@@ -4,6 +4,7 @@
 # the cpp/api/ header that owns the bridge's generated header, the bridge header.
 kind	cpp_name	rust_name	owner	bridge
 free	add_guide	add_guide	api/document_bridge.h	pictura_app/src/cxxqt_object/guides.cxxqt.h
+free	apply_history_states	apply_history_states	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h
 free	cancel_mode_preview	cancel_mode_preview	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
 free	canvas_size_apply	canvas_size_apply	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h
 free	canvas_size_fits_budget	canvas_size_fits_budget	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h
@@ -904,6 +905,7 @@ free	begin_tone	begin_tone	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint
 free	brush_dab_preview	brush_dab_preview	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
 free	brush_tip_preview	brush_tip_preview	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
 free	bucket_fill_at	bucket_fill_at	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
+free	cache_levels	cache_levels	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
 free	calibrated_ruler_length	calibrated_ruler_length	api/paint_bridge.h	pictura_app/src/cxxqt_object/annotations.cxxqt.h
 free	clear_markers	clear_markers	api/paint_bridge.h	pictura_app/src/cxxqt_object/annotations.cxxqt.h
 free	clear_ruler	clear_ruler	api/paint_bridge.h	pictura_app/src/cxxqt_object/annotations.cxxqt.h
@@ -953,6 +955,7 @@ free	healing_commit	healing_commit	api/paint_bridge.h	pictura_app/src/cxxqt_obje
 free	healing_dab	healing_dab	api/paint_bridge.h	pictura_app/src/cxxqt_object/healing.cxxqt.h
 free	history_brush_source_snapshot	history_brush_source_snapshot	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
 free	history_brush_source_state	history_brush_source_state	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
+free	history_states	history_states	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
 free	inject_scratch_fault_for_test	inject_scratch_fault_for_test	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
 free	last_refusal	last_refusal	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
 free	magic_erase_at	magic_erase_at	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
@@ -986,7 +989,9 @@ free	ruler_measurement	ruler_measurement	api/paint_bridge.h	pictura_app/src/cxxq
 free	sample_argb_scoped	sample_argb_scoped	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
 free	scratch_volumes	scratch_volumes	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
 free	set_available_memory_for_test	set_available_memory_for_test	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
+free	set_cache_levels	set_cache_levels	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
 free	set_history_brush_source	set_history_brush_source	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
+free	set_history_states	set_history_states	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
 free	set_memory_cgroup_for_test	set_memory_cgroup_for_test	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
 free	set_memory_usage_percent	set_memory_usage_percent	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
 free	set_note_text	set_note_text	api/paint_bridge.h	pictura_app/src/cxxqt_object/annotations.cxxqt.h

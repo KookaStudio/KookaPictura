@@ -21,6 +21,7 @@
 #include "preferences.h"
 #include "quick_mask_ui.h"
 #include "save_format_options.h"
+#include "status_readouts.h"
 #include "menu_registrar.h"
 #include "tools.h"
 #include "frame_forward.h"
@@ -600,6 +601,10 @@ private:
     QFrame* actionSeparator_ = nullptr;
     QToolButton* statusOptionsButton_ = nullptr;
     QString statusReadout_ = QStringLiteral("sizes");
+    // Scratch Sizes and Efficiency go stale without an event: this refreshes
+    // them while one is shown (#636).
+    QTimer* statusReadoutTimer_ = nullptr;
+    EfficiencyMeter efficiency_;
     bool hintsVisible_ = true;
     // Free Pan allows off-centre panning when the document fits the viewport.
     bool freePan_ = true;

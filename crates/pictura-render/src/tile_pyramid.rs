@@ -20,7 +20,7 @@ use crate::pyramid_level::{PyramidLevel, SMALLEST_SIDE};
 use crate::region_level::{halve_level, level_size};
 use pictura_core::{PixelBuffer, PsdRect};
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 /// Epochs are unique across caches, so a worker result for a cache that has
@@ -33,6 +33,28 @@ fn next_epoch() -> u64 {
 
 /// A tile's side in its own level's pixels.
 pub const TILE_SIDE: u32 = 256;
+
+/// The Cache Levels preference's range (#636). The default is the most, the
+/// depth every pyramid had before the preference: a shallower one makes a
+/// zoomed-out view of a large image reduce from a finer level.
+pub const MAX_CACHE_LEVELS: usize = 8;
+pub const MIN_CACHE_LEVELS: usize = 2;
+
+static CACHE_LEVELS: AtomicUsize = AtomicUsize::new(MAX_CACHE_LEVELS);
+
+/// The most levels a new pyramid has, level 0 included.
+pub fn cache_levels() -> usize {
+    CACHE_LEVELS.load(Ordering::Relaxed)
+}
+
+/// Set Cache Levels, clamped to its range. A view's pyramid rebuilds when it
+/// next fits itself to the document ([`TilePyramid::fits`]).
+pub fn set_cache_levels(levels: usize) {
+    CACHE_LEVELS.store(
+        levels.clamp(MIN_CACHE_LEVELS, MAX_CACHE_LEVELS),
+        Ordering::Relaxed,
+    );
+}
 
 /// What a tile shows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -129,12 +151,18 @@ pub fn level_count(width: u32, height: u32) -> usize {
 }
 
 impl TilePyramid {
+    /// A pyramid of at most [`cache_levels`] levels.
     pub fn new(width: u32, height: u32, budget: u64) -> Self {
+        Self::with_levels(width, height, budget, cache_levels())
+    }
+
+    /// A pyramid of at most `max_levels` levels (at least one).
+    pub fn with_levels(width: u32, height: u32, budget: u64, max_levels: usize) -> Self {
         let (cols, rows) = grid(width, height);
         Self {
             width,
             height,
-            levels: level_count(width, height),
+            levels: level_count(width, height).min(max_levels.max(1)),
             tiles: HashMap::new(),
             pinned: HashSet::new(),
             budget,
@@ -146,8 +174,12 @@ impl TilePyramid {
         }
     }
 
+    /// Whether the pyramid has `width`×`height` and the depth Cache Levels
+    /// now gives that size.
     pub fn fits(&self, width: u32, height: u32) -> bool {
-        self.width == width && self.height == height
+        self.width == width
+            && self.height == height
+            && self.levels == level_count(width, height).min(cache_levels())
     }
 
     pub fn size(&self) -> (u32, u32) {
@@ -247,7 +279,7 @@ impl TilePyramid {
     /// in a pyramid of the same size with no budget: what a worker build
     /// folds from, current as of [`Self::ticket`] taken alongside.
     pub fn snapshot(&self, below: usize) -> TilePyramid {
-        let mut out = TilePyramid::new(self.width, self.height, u64::MAX);
+        let mut out = TilePyramid::with_levels(self.width, self.height, u64::MAX, self.levels);
         for (key, entry) in &self.tiles {
             if !entry.stale && (key.level as usize) < below {
                 out.insert(*key, Arc::clone(&entry.data));

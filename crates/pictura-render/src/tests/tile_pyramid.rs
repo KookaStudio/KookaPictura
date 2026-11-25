@@ -471,3 +471,19 @@ fn interleave_matches_a_serial_copy() {
     }
     assert_eq!(interleave(&planar), serial);
 }
+
+#[test]
+fn cache_levels_cap_the_pyramid() {
+    let full = level_count(20_000, 20_000);
+    assert!(full > 3, "the size must have more levels than the cap");
+    assert_eq!(
+        TilePyramid::with_levels(20_000, 20_000, 0, 3).level_count(),
+        3
+    );
+    assert_eq!(
+        TilePyramid::with_levels(20_000, 20_000, 0, MAX_CACHE_LEVELS).level_count(),
+        full.min(MAX_CACHE_LEVELS)
+    );
+    let capped = TilePyramid::with_levels(20_000, 20_000, 0, 3);
+    assert_eq!(capped.level_size(3), (0, 0));
+}

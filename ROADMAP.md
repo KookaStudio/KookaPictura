@@ -748,9 +748,11 @@ gaps are the CS6 Extended 3D object and camera tools.
       tiles, so a snapshot and its restore copy no pixels, and history's budget
       counts each tile it keeps beyond the live document once (#1215).
       `crates/pictura-app/src/history/`, `crates/pictura-core/src/memory/census.rs`.
-- [ ] The Performance preferences pane: memory, history states, cache level and
-      tile size, scratch disks and GPU, plus the Efficiency and Scratch readouts
-      (#636)
+- [x] The Performance preferences pane: Memory Usage slider and ceiling, History
+      States (applied at once), Cache Levels capping the view pyramid with the
+      History & Cache presets, the fixed tile size, the Scratch Disks list and
+      the graphics processor, plus the Scratch Sizes and Efficiency status-bar
+      readouts (#636). `crates/pictura-app/cpp/preferences_performance.cpp`.
 - [ ] AT-SPI2 and `QAccessible`, high contrast, colour-blind and reduced-motion
       support (#507)
 - [ ] Shortcut sets: save and load, workspace-assigned, Summarize HTML, and
