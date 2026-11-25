@@ -275,13 +275,29 @@ pub(in crate::cxxqt_object) fn add_layer_bytes(_doc: &Document) -> u64 {
     256 * 1024
 }
 
-/// A brush stroke's start (M6): the target layer's planes and the stroke's
-/// canvas-sized buffers.
+/// A brush stroke's start (M6, #1603): the bytes the target layer's planes
+/// hold, which bound the undo copy's tiles over its pixels (a uniform tile
+/// holds nothing), its retained native store included for a 16-bit tone
+/// stroke, and one byte a canvas pixel for the stroke's own tiles: saved tiles
+/// over pixels the layer does not hold, the tiled scratch and applied
+/// coverage, and the history delta.
 pub(in crate::cxxqt_object) fn brush_bytes(doc: &Document, path: &str) -> u64 {
+    use pictura_core::Samples;
     let layer = pictura_render::resolve_path(doc, path).map_or(0, |l| {
-        l.channels().iter().map(|c| c.data.len() as u64).sum()
+        let planes: usize = l.channels().iter().map(|c| c.data.allocated_bytes()).sum();
+        let native: usize = l
+            .source_channels
+            .iter()
+            .flat_map(|s| &s.planes)
+            .map(|(_, samples)| match samples {
+                Samples::U8(p) => p.allocated_bytes(),
+                Samples::U16(p) => p.allocated_bytes(),
+                Samples::F32(p) => p.allocated_bytes(),
+            })
+            .sum();
+        (planes + native) as u64
     });
-    layer + 3 * canvas(doc)
+    layer + canvas(doc)
 }
 
 /// Undo, Redo or a history jump (M7): a stored composite and the display

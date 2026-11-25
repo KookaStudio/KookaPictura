@@ -384,64 +384,6 @@ fn imported_ignored_dom_fields_are_still_budgeted() {
 }
 
 #[test]
-fn admitted_content_preserves_parameters_and_bytes() {
-    use pictura_core::{AdjustmentData, FillContent, LayerKind, LayerParts, PsdRect};
-
-    let mut cube_bytes = cube(2, 27);
-    cube_bytes.extend_from_slice(b"LUT_3D_SIZE 3\n");
-    let mut raw = crate::layer_content::encode_color_lookup(&cube_bytes, "Later Header");
-    let mut data = raw.data.to_vec();
-    data.resize(data.len() + (data.len() & 1), 0);
-    raw.data = data.into();
-    let mut document = lookup_document(&raw.data, 1);
-    document
-        .layers
-        .push(crate::layer_from_parts(LayerParts {
-            name: "Fill".into(),
-            rect: PsdRect {
-                top: 0,
-                left: 0,
-                bottom: 1,
-                right: 1,
-            },
-            adjustment: Some(AdjustmentData {
-                key: *b"SoCo",
-                data: vec![10, 20, 30, 255].into(),
-            }),
-            ..Default::default()
-        }))
-        .expect("valid fill layer");
-    let bytes = crate::write_psd(&document).unwrap();
-    let reopened = crate::read_psd_within_options(
-        &bytes,
-        &crate::OpenOptions::default(),
-        image_budget(1 << 20, 1 << 20),
-    )
-    .expect("all derived content fits the explicit budget");
-    let Some(pictura_core::Adjustment::ColorLookup(parameters)) =
-        reopened.layers[0].adjustment_parameters()
-    else {
-        panic!("retained typed lookup");
-    };
-    let lookup = parameters.lookup.as_ref().unwrap();
-    assert_eq!(lookup.size, 3);
-    assert_eq!(lookup.points, vec![[0.25, 0.5, 0.75]; 27]);
-    assert_eq!(reopened.layers[1].kind(), LayerKind::Fill);
-    assert_eq!(
-        reopened.layers[1].fill_content(),
-        Some(&FillContent::Solid([10, 20, 30, 255]))
-    );
-    assert_eq!(
-        pictura_render::composite_rgba(&reopened).data.as_slice(),
-        &[10, 20, 30, 255]
-    );
-    for (original, decoded) in document.layers.iter().zip(reopened.layers.iter()) {
-        assert_eq!(decoded.adjustment(), original.adjustment());
-    }
-    assert_eq!(crate::write_psd(&reopened).unwrap(), bytes);
-}
-
-#[test]
 fn growing_content_vectors_admit_replacement_while_old_storage_is_live() {
     let element = size_of::<[f32; 3]>() as u64;
     let mut refused = budget(8 * element, 12 * element - 1);

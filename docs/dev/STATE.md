@@ -16,6 +16,16 @@ Snapshot for resuming after a context break. Update after each milestone.
   `paintEvent`, re-read on each 80 ms animation tick, no timer while idle.
   `jump_back_across_strokes_profile` (tests_profiles/restore.rs) is the
   release profile behind the numbers.
+- **Brush memory, #1603** (OpenSpec change `tile-aware-brush-memory`,
+  capability `document/brush-stroke-memory`). A stroke's undo copy
+  (`stroke/saved.rs`) is a grid of boxed 64² tiles anchored to document
+  coordinates, each holding only its part inside the layer when first saved;
+  a layer grow re-indexes the boxes and copies nothing. The stencil reads it
+  through `Saved::pixel(x, y)`. `brush_bytes` charges the layer's held bytes
+  (`allocated_bytes`, native store included) plus 1 × canvas, down from
+  logical size + 3 × canvas. At 4250²: M6 0.54 MiB (was 0.75), a new
+  dense-layer stroke 2.5 MiB (70.8 MiB before). Stroke growth after the start
+  is still ungated, as before.
 - **Performance pane, #636** (OpenSpec change `performance-preferences-pane`,
   capabilities `ui/performance-preferences`, `ui/status-scratch-efficiency`,
   `document/memory-governor` modified). The page is now its own file

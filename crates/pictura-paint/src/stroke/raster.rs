@@ -149,11 +149,10 @@ impl DabRaster<'_> {
                 continue;
             }
             cell.applied[at] = v;
-            let i = ly * w + lx as usize;
             if !self.stencil.composite(
                 &mut cell.planes,
                 at,
-                i,
+                (lx as usize, ly),
                 rng.as_deref_mut(),
                 v,
                 self.paint,

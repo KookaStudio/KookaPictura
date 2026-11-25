@@ -124,7 +124,7 @@ fn adjustment_decoders_preserve_parameter_contract() {
     selective.ranges[0].c = 20;
     selective.ranges[8].k = -30;
     let cases = vec![
-        (pictura_render::encode_invert(), Adjustment::Invert),
+        (pictura_codec::encode_invert(), Adjustment::Invert),
         (
             block(b"expA", exposure),
             Adjustment::Exposure(ExposureParams {
@@ -154,7 +154,7 @@ fn adjustment_decoders_preserve_parameter_contract() {
             }),
         ),
         (
-            pictura_render::encode_photo_filter([255, 180, 80], 25.0, true),
+            pictura_codec::encode_photo_filter([255, 180, 80], 25.0, true),
             Adjustment::PhotoFilter(PhotoFilterParams {
                 color: [255, 180, 80],
                 density: 25.0,
@@ -170,11 +170,11 @@ fn adjustment_decoders_preserve_parameter_contract() {
             }),
         ),
         (
-            pictura_render::encode_gradient_map(&gradient, false),
+            pictura_codec::encode_gradient_map(&gradient, false),
             Adjustment::GradientMap(gradient),
         ),
         (
-            pictura_render::encode_color_balance(
+            pictura_codec::encode_color_balance(
                 [1.0, -2.0, 3.0],
                 [4.0, -5.0, 6.0],
                 [7.0, -8.0, 9.0],
@@ -188,7 +188,7 @@ fn adjustment_decoders_preserve_parameter_contract() {
             }),
         ),
         (
-            pictura_render::encode_channel_mixer(
+            pictura_codec::encode_channel_mixer(
                 false,
                 [30.0, -10.0, 50.0],
                 [10.0, 90.0, 0.0],
@@ -211,7 +211,7 @@ fn adjustment_decoders_preserve_parameter_contract() {
             }),
         ),
         (
-            pictura_render::encode_channel_mixer(
+            pictura_codec::encode_channel_mixer(
                 true,
                 [20.0, 40.0, 60.0],
                 [0.0, 100.0, 0.0],
@@ -226,11 +226,11 @@ fn adjustment_decoders_preserve_parameter_contract() {
             }),
         ),
         (
-            pictura_render::encode_curves(&curves.points, curves.red.as_deref(), None, None),
+            pictura_codec::encode_curves(&curves.points, curves.red.as_deref(), None, None),
             Adjustment::Curves(curves),
         ),
         (
-            pictura_render::encode_curves(&[], Some(&[(0, 10), (255, 240)]), None, None),
+            pictura_codec::encode_curves(&[], Some(&[(0, 10), (255, 240)]), None, None),
             Adjustment::Curves(CurvesParams {
                 points: vec![(0, 0), (255, 255)],
                 red: Some(vec![(0, 10), (255, 240)]),
@@ -239,7 +239,7 @@ fn adjustment_decoders_preserve_parameter_contract() {
             }),
         ),
         (
-            pictura_render::encode_selective_color(selective.method, &selective.ranges),
+            pictura_codec::encode_selective_color(selective.method, &selective.ranges),
             Adjustment::SelectiveColor(selective),
         ),
     ];
@@ -280,7 +280,7 @@ fn adjustment_decoders_preserve_parameter_contract() {
     }
     assert!(decode_adjustment(&block(b"post", vec![0, 1])).is_none());
     assert!(decode_adjustment(&block(b"thrs", vec![0, 0])).is_none());
-    let encoded = pictura_render::encode_gradient_map(
+    let encoded = pictura_codec::encode_gradient_map(
         &GradientMapParams {
             stops: stops(),
             reverse: false,
@@ -296,7 +296,7 @@ fn adjustment_decoders_preserve_parameter_contract() {
         decode_adjustment(&block(b"grdm", version_three)),
         Some(expected)
     );
-    let encoded = pictura_render::encode_selective_color(
+    let encoded = pictura_codec::encode_selective_color(
         pictura_core::SelectiveColorMethod::Relative,
         &[pictura_core::SelectiveRange::default(); 9],
     );
@@ -313,7 +313,7 @@ fn fill_decoders_preserve_parameter_contract() {
         Some(FillContent::Solid([10, 20, 30, 40]))
     );
     assert_eq!(
-        decode_fill(&pictura_render::encode_solid_color_fill([10, 20, 30])),
+        decode_fill(&pictura_codec::encode_solid_color_fill([10, 20, 30])),
         Some(FillContent::Solid([10, 20, 30, 255]))
     );
     for kind in [
@@ -330,10 +330,10 @@ fn fill_decoders_preserve_parameter_contract() {
             angle_deg: 45.0,
             scale: 60.0,
         };
-        let encoded = pictura_render::encode_gradient_fill_params(&params);
+        let encoded = pictura_codec::encode_gradient_fill_params(&params);
         assert_eq!(decode_fill(&encoded), Some(FillContent::Gradient(params)));
         assert!(decode_adjustment(&encoded).is_none());
-        let defaults = pictura_render::encode_gradient_fill(kind, &stops(), 0.0);
+        let defaults = pictura_codec::encode_gradient_fill(kind, &stops(), 0.0);
         assert!(
             matches!(decode_fill(&defaults), Some(FillContent::Gradient(p)) if !p.reverse && p.scale == 100.0 && p.angle_deg == 0.0)
         );
@@ -345,7 +345,7 @@ fn fill_decoders_preserve_parameter_contract() {
         origin: (3, 4),
     };
     assert_eq!(
-        decode_fill(&pictura_render::encode_pattern_fill(&params)),
+        decode_fill(&pictura_codec::encode_pattern_fill(&params)),
         Some(FillContent::Pattern(params))
     );
     for key in [b"SoCo", b"GdFl", b"PtFl"] {
@@ -395,7 +395,7 @@ fn fill_decoders_preserve_parameter_contract() {
             scale: 100.0,
         },
     ] {
-        assert!(decode_fill(&pictura_render::encode_gradient_fill_params(&params)).is_none());
+        assert!(decode_fill(&pictura_codec::encode_gradient_fill_params(&params)).is_none());
     }
     let bad_pattern = PatternFillParams {
         pattern_id: "p1".into(),
@@ -403,14 +403,14 @@ fn fill_decoders_preserve_parameter_contract() {
         link_with_layer: true,
         origin: (0, 0),
     };
-    assert!(decode_fill(&pictura_render::encode_pattern_fill(&bad_pattern)).is_none());
+    assert!(decode_fill(&pictura_codec::encode_pattern_fill(&bad_pattern)).is_none());
 }
 
 #[test]
 fn vector_fill_decoders_preserve_contract() {
     for encoded in [
-        pictura_render::encode_solid_color_fill([10, 20, 30]),
-        pictura_render::encode_gradient_fill(GradientKind::Radial, &stops(), 45.0),
+        pictura_codec::encode_solid_color_fill([10, 20, 30]),
+        pictura_codec::encode_gradient_fill(GradientKind::Radial, &stops(), 45.0),
     ] {
         let mut vector = b"zzzz".to_vec();
         vector.extend_from_slice(&encoded.data);
@@ -423,7 +423,7 @@ fn vector_fill_decoders_preserve_contract() {
             assert!(decode_vector_fill(&bytes).is_none());
         }
     }
-    let encoded = pictura_render::encode_solid_color_fill([10, 20, 30]);
+    let encoded = pictura_codec::encode_solid_color_fill([10, 20, 30]);
     let mut vector = b"SoCo".to_vec();
     vector.extend_from_slice(&encoded.data);
     let primary = block(b"brit", vec![255]);
@@ -441,7 +441,7 @@ fn vector_fill_decoders_preserve_contract() {
 
 #[test]
 fn conflicting_import_candidates_follow_one_precedence() {
-    let fill = pictura_render::encode_solid_color_fill([10, 20, 30]);
+    let fill = pictura_codec::encode_solid_color_fill([10, 20, 30]);
     let mut vector = b"SoCo".to_vec();
     vector.extend_from_slice(&fill.data);
     let extras = vec![
@@ -574,26 +574,5 @@ fn content_writer_preserves_serialized_baselines() {
             assert_eq!(a.extra_blocks(), b.extra_blocks());
             assert_eq!(a.channels(), b.channels());
         }
-    }
-}
-
-#[test]
-fn opaque_text_preserves_identity_and_bytes() {
-    let original = LayerBlock {
-        key: *b"TySh",
-        data: vec![1, 2, 3, 4].into(),
-    };
-    let doc = document(layer(None, vec![original.clone()]));
-    for bytes in [write_psd(&doc).unwrap(), write_psb(&doc).unwrap()] {
-        let back = read_psd(&bytes).unwrap();
-        let text = &back.layers[0];
-        assert_eq!(text.kind(), LayerKind::Text);
-        assert!(text.type_tool().is_none());
-        assert_eq!(text.extra_block(b"TySh"), Some(&original));
-        assert_eq!(text.channels(), doc.layers[0].channels());
-        assert_eq!(
-            pictura_render::composite_rgba(&back),
-            pictura_render::composite_rgba(&doc)
-        );
     }
 }

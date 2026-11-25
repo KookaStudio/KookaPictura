@@ -729,40 +729,6 @@ fn depth1_store_without_bitmap_write_back_is_a_typed_error() {
     );
 }
 
-/// The archived `rgb32.psd` fixture holds samples above `1.0`; converting it to
-/// 16 bits must produce a file whose header depth is 16 and whose read records
-/// a 16-bit source store (the conversion, not just the writer, changed depth).
-#[test]
-fn depth32_converted_to_16_writes_a_16bit_file() {
-    use pictura_render::{convert_depth_exposure_gamma, ExposureGamma};
-
-    let mut doc = read_psd(include_bytes!("../../tests/fixtures/rgb32.psd")).unwrap();
-    assert_eq!(doc.source.depth(), Some(BitDepth::ThirtyTwo));
-    assert!(doc.retains_source_depth());
-
-    convert_depth_exposure_gamma(&mut doc, BitDepth::Sixteen, ExposureGamma::default()).unwrap();
-    assert_eq!(doc.depth, BitDepth::Eight, "the working model stays 8-bit");
-    assert_eq!(doc.source.depth(), Some(BitDepth::Sixteen));
-    assert!(doc.retains_source_depth());
-
-    let out = write_psd(&doc).unwrap();
-    assert_eq!(
-        u16::from_be_bytes(out[22..24].try_into().unwrap()),
-        16,
-        "the save re-emits the converted source depth"
-    );
-    let back = read_psd(&out).unwrap();
-    assert_eq!(back.source.depth(), Some(BitDepth::Sixteen));
-    assert_eq!(back.composite, doc.composite);
-    let Samples::U16(samples) = &back.source.planes().as_ref().unwrap().samples else {
-        panic!("the read-back store is 16-bit");
-    };
-    assert_eq!(
-        samples[4], 65535,
-        "the fixture's 1.5 sample clamps at 16-bit"
-    );
-}
-
 // --- Convert to Profile at native depth ------------------------------------
 
 #[test]

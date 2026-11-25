@@ -56,7 +56,7 @@ impl Stroke {
         );
         self.scratch = padded_plane(&self.scratch, old_w, old_h, new_w, new_h, dx, dy);
         self.applied = padded_plane(&self.applied, old_w, old_h, new_w, new_h, dx, dy);
-        self.saved.grow(layer, self.ch, new);
+        self.saved.grow(new);
         if let Some(per) = self.per_dab.as_mut() {
             per.pixels
                 .grow(new_w as i32, new_h as i32, dx as i32, dy as i32);
