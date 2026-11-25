@@ -22,7 +22,7 @@
 ## 4. Geometry, transform and save families
 
 - [x] 4.1 Rewrite `helpers/geometry_admit.rs` so its four gates consume one `Admission` from `admit_commit`, dropping redundant clears while retaining the side-limit clear.
-- [x] 4.2 Convert the admission call sites in `impl_transform/session.rs`, `impl_transform/selection/mod.rs`, `impl_transform/mask_move.rs`, `impl_paint/mask.rs` and `image_adjust/new_document/imp.rs`. `impl_transform/dispatch.rs`, `impl_transform/bridge/imp.rs`, `image_adjust/image_ops/imp.rs` and `image_adjust/image_size/imp.rs` are unchanged from `origin/master` and already route through `geometry_admit` or their own precondition clears.
+- [x] 4.2 Convert the admission call sites in `impl_transform/session.rs`, `impl_transform/session/move_preview.rs`, `impl_transform/selection/mod.rs`, `impl_transform/mask_move.rs`, `impl_paint/mask.rs` and `image_adjust/new_document/imp.rs`. `impl_transform/dispatch.rs`, `impl_transform/bridge/imp.rs`, `image_adjust/image_ops/imp.rs` and `image_adjust/image_size/imp.rs` are unchanged from `origin/master` and already route through `geometry_admit` or their own precondition clears.
 - [x] 4.3 Audit `impl_core/save.rs`, `impl_core/save_jobs/imp.rs` and `helpers/save_gate.rs`: they are unchanged from `origin/master` and already use `save_gate` reservations plus precondition clears. Keep `SaveAdmission` and the native save result contract; scratch-full records through the shared typed refusal.
 - [x] 4.4 Route `scratch_rollback.rs` through `refuse_for_scratch`, keep the read-count check inside the seam, and add `a_rolled_back_edit_reports_unreadable_tiles`.
 

@@ -97,9 +97,9 @@ can ignore the return and the compiler says nothing. The return value makes the
 admission decision explicit; `LAST_REFUSAL` is only the same-thread presentation
 record for callers that cannot hold that return value.
 
-`Admitted { spill }` absorbs `expects_spill`, which today every spilling caller
-asks separately right after admitting (`impl_transform/session.rs:352`). One
-call replaces two in the spill cases.
+`Admitted { spill }` replaces `expects_spill`. A spilling transform reads `spill`
+from the same admission result in `impl_transform/session.rs`, so one call
+replaces two.
 
 **Alternative rejected:** an out-parameter (`-> bool, &mut Option<Refusal>`).
 Compiles, but nothing forces the caller to read the out-parameter either — same
