@@ -1,54 +1,125 @@
 //! A stroke's pre-stroke pixels, saved a tile at a time just before a dab first
-//! writes the tile. The 8-bit planes are the working copy; the optional native
-//! planes are the retained store a 16-bit tone dab edits.
+//! writes the tile (#1603). The 8-bit planes are the working copy; the optional
+//! native planes are the retained store a 16-bit tone dab edits.
+//!
+//! Tiles are boxed on first save, so a stroke holds only what its dabs reached,
+//! and sit on a grid anchored to document coordinates, so a layer that grows
+//! under the stroke moves no saved pixel.
 
 use super::PlaneIndex;
 use pictura_core::{BitDepth, Layer, Plane, PsdRect, Samples};
+use std::ops::Range;
 
 /// Tile edge of the pre-stroke pixels a stroke keeps.
 const SAVED_TILE: i32 = 64;
 
-/// The target layer's pre-stroke pixels. The planes are layer-sized but
-/// zero-filled by the allocator, so only the saved tiles ever take memory.
+/// One saved tile: the part of a 64² grid tile inside the layer when it was
+/// saved, as a `width × height` block per 8-bit plane the stroke edits, then
+/// one per native plane. The rest of the grid tile lay outside the layer then,
+/// so any of it the layer grew into is new: its pre-stroke value is zero.
+struct SavedTile {
+    /// The saved box's document origin.
+    left: i32,
+    top: i32,
+    width: usize,
+    height: usize,
+    planes: Box<[u8]>,
+    native: Box<[u16]>,
+}
+
+impl SavedTile {
+    fn len(&self) -> usize {
+        self.width * self.height
+    }
+
+    /// The saved box as layer-local columns and rows of a layer at `rect`.
+    fn local(&self, rect: PsdRect) -> (Range<usize>, Range<usize>) {
+        let x = (self.left - rect.left) as usize;
+        let y = (self.top - rect.top) as usize;
+        (x..x + self.width, y..y + self.height)
+    }
+}
+
+/// The target layer's pre-stroke pixels.
 pub(super) struct Saved {
-    planes: [Option<Vec<u8>>; 4],
-    /// The native colour planes a 16-bit tone stroke edits, keyed by id.
-    native: Option<NativeSaved>,
-    tiles: Vec<bool>,
+    /// Each edited plane's block in a tile, by R, G, B, alpha.
+    slots: [Option<usize>; 4],
+    slot_count: usize,
+    /// The native colour plane ids a 16-bit tone stroke edits.
+    native: Option<Vec<i16>>,
+    /// The tiles crossing `rect`, row-major from document tile
+    /// `(first_column, first_row)`.
+    tiles: Vec<Option<Box<SavedTile>>>,
+    first_column: i32,
+    first_row: i32,
     columns: i32,
-    /// The target layer's bounds when the stroke began.
+    /// The target layer's bounds when the stroke began, or after it grew.
     rect: PsdRect,
     pub(super) width: i32,
     pub(super) height: i32,
 }
 
-struct NativeSaved {
-    ids: Vec<i16>,
-    planes: Vec<Vec<u16>>,
+/// The document tiles `[first, first + count)` that `from..to` crosses.
+fn tile_span(from: i32, to: i32) -> (i32, i32) {
+    if to <= from {
+        return (from.div_euclid(SAVED_TILE), 0);
+    }
+    let first = from.div_euclid(SAVED_TILE);
+    (first, (to - 1).div_euclid(SAVED_TILE) - first + 1)
 }
 
 impl Saved {
     pub(super) fn new(layer: &Layer, ch: PlaneIndex) -> Self {
-        let width = layer.rect.width().max(0);
-        let height = layer.rect.height().max(0);
-        let columns = (width + SAVED_TILE - 1) / SAVED_TILE;
-        let rows = (height + SAVED_TILE - 1) / SAVED_TILE;
-        let planes = ch.map(|k| {
-            k.and_then(|k| layer.channels().get(k))
-                .map(|c| vec![0u8; c.data.len()])
-        });
-        Self {
-            planes,
-            native: None,
-            tiles: vec![false; (columns * rows) as usize],
-            columns,
-            rect: layer.rect,
-            width,
-            height,
+        let mut slots = [None; 4];
+        let mut slot_count = 0;
+        for (slot, k) in slots.iter_mut().zip(ch) {
+            if k.and_then(|k| layer.channels().get(k)).is_some() {
+                *slot = Some(slot_count);
+                slot_count += 1;
+            }
         }
+        let mut saved = Self {
+            slots,
+            slot_count,
+            native: None,
+            tiles: Vec::new(),
+            first_column: 0,
+            first_row: 0,
+            columns: 0,
+            rect: layer.rect,
+            width: 0,
+            height: 0,
+        };
+        saved.cover(layer.rect);
+        saved
+    }
+
+    /// Lay the tile grid over `rect`, moving every saved tile to its slot.
+    fn cover(&mut self, rect: PsdRect) {
+        let (first_column, columns) = tile_span(rect.left, rect.right);
+        let (first_row, rows) = tile_span(rect.top, rect.bottom);
+        let mut tiles: Vec<Option<Box<SavedTile>>> = Vec::new();
+        tiles.resize_with((columns * rows).max(0) as usize, || None);
+        let old = std::mem::take(&mut self.tiles);
+        for (t, tile) in old.into_iter().enumerate() {
+            let Some(tile) = tile else { continue };
+            let tx = self.first_column + t as i32 % self.columns - first_column;
+            let ty = self.first_row + t as i32 / self.columns - first_row;
+            if (0..columns).contains(&tx) && (0..rows).contains(&ty) {
+                tiles[(ty * columns + tx) as usize] = Some(tile);
+            }
+        }
+        self.tiles = tiles;
+        self.first_column = first_column;
+        self.first_row = first_row;
+        self.columns = columns;
+        self.rect = rect;
+        self.width = rect.width().max(0);
+        self.height = rect.height().max(0);
     }
 
     /// Keep the layer's retained 16-bit colour planes `ids` for a tone stroke.
+    /// Called before any dab, so no tile is saved yet.
     pub(super) fn enable_native(&mut self, layer: &Layer, ids: &[i16]) -> bool {
         let Some(store) = layer.source_channels.as_ref() else {
             return false;
@@ -57,22 +128,31 @@ impl Saved {
             return false;
         }
         let n = (self.width * self.height).max(0) as usize;
-        let mut planes = Vec::with_capacity(ids.len());
-        for &id in ids {
-            let Some((_, Samples::U16(plane))) = store.planes.iter().find(|(cid, _)| *cid == id)
-            else {
-                return false;
-            };
-            if plane.len() != n {
-                return false;
-            }
-            planes.push(vec![0u16; n]);
-        }
-        self.native = Some(NativeSaved {
-            ids: ids.to_vec(),
-            planes,
+        let all_present = ids.iter().all(|&id| {
+            store.planes.iter().any(|(cid, samples)| {
+                *cid == id && matches!(samples, Samples::U16(plane) if plane.len() == n)
+            })
         });
+        if !all_present || self.tiles.iter().any(Option::is_some) {
+            return false;
+        }
+        self.native = Some(ids.to_vec());
         true
+    }
+
+    /// Grid tile `t` clipped to the layer, as layer-local columns and rows.
+    fn local_box(&self, t: usize) -> (Range<usize>, Range<usize>) {
+        let left = (self.first_column + t as i32 % self.columns) * SAVED_TILE;
+        let top = (self.first_row + t as i32 / self.columns) * SAVED_TILE;
+        let x0 = left.max(self.rect.left);
+        let y0 = top.max(self.rect.top);
+        let x1 = (left + SAVED_TILE).min(self.rect.right).max(x0);
+        let y1 = (top + SAVED_TILE).min(self.rect.bottom).max(y0);
+        let local = |a: i32, origin: i32| (a - origin) as usize;
+        (
+            local(x0, self.rect.left)..local(x1, self.rect.left),
+            local(y0, self.rect.top)..local(y1, self.rect.top),
+        )
     }
 
     /// Save every unsaved tile meeting the layer-local box `[x0, x1] × [y0, y1]`
@@ -93,88 +173,96 @@ impl Saved {
             return;
         }
         let w = self.width as usize;
-        let mut tile = Vec::new();
-        for ty in y0 / SAVED_TILE..=y1 / SAVED_TILE {
-            for tx in x0 / SAVED_TILE..=x1 / SAVED_TILE {
+        let (left, top) = (self.rect.left, self.rect.top);
+        let column = |x: i32| (left + x).div_euclid(SAVED_TILE) - self.first_column;
+        let row = |y: i32| (top + y).div_euclid(SAVED_TILE) - self.first_row;
+        let (c0, c1, r0, r1) = (column(x0), column(x1), row(y0), row(y1));
+        let native_planes = self.native.as_ref().map_or(0, Vec::len);
+        for ty in r0..=r1 {
+            for tx in c0..=c1 {
                 let t = (ty * self.columns + tx) as usize;
-                if self.tiles[t] {
+                if self.tiles[t].is_some() {
                     continue;
                 }
-                self.tiles[t] = true;
-                let (left, top) = (tx * SAVED_TILE, ty * SAVED_TILE);
-                let right = (left + SAVED_TILE).min(self.width) as usize;
-                let bottom = (top + SAVED_TILE).min(self.height) as usize;
-                for (k, plane) in self.planes.iter_mut().enumerate() {
-                    let (Some(plane), Some(src)) =
-                        (plane.as_mut(), ch[k].and_then(|k| layer.channels().get(k)))
+                let (xs, ys) = self.local_box(t);
+                let n = xs.len() * ys.len();
+                let mut tile = SavedTile {
+                    left: self.rect.left + xs.start as i32,
+                    top: self.rect.top + ys.start as i32,
+                    width: xs.len(),
+                    height: ys.len(),
+                    planes: vec![0u8; self.slot_count * n].into_boxed_slice(),
+                    native: vec![0u16; native_planes * n].into_boxed_slice(),
+                };
+                // One read per tile, not per row (#1238): a tiled plane is
+                // never materialized, and a 64-row tile costs one lookup.
+                for (slot, k) in self.slots.iter().zip(ch) {
+                    let (Some(slot), Some(src)) = (*slot, k.and_then(|k| layer.channels().get(k)))
                     else {
                         continue;
                     };
-                    // One read per tile, not per row (#1238): a tiled plane
-                    // is never materialized, and a 64-row tile costs one
-                    // lookup instead of 64.
-                    let (xs, ys) = (left as usize..right, top as usize..bottom);
-                    let tw = xs.len();
-                    tile.clear();
-                    tile.resize(tw * ys.len(), 0);
-                    src.data
-                        .read_rect_into(xs.clone(), ys.clone(), w, &mut tile);
-                    for (row, y) in tile.chunks_exact(tw).zip(ys) {
-                        let (a, b) = (y * w + xs.start, (y * w + xs.end).min(plane.len()));
-                        if a < b {
-                            plane[a..b].copy_from_slice(&row[..b - a]);
-                        }
-                    }
+                    let block = &mut tile.planes[slot * n..][..n];
+                    src.data.read_rect_into(xs.clone(), ys.clone(), w, block);
                 }
-                if let Some(native) = self.native.as_mut() {
-                    let Some(store) = layer.source_channels.as_ref() else {
-                        continue;
-                    };
-                    for (slot, id) in native.ids.iter().enumerate() {
+                if let (Some(ids), Some(store)) =
+                    (self.native.as_ref(), layer.source_channels.as_ref())
+                {
+                    for (slot, id) in ids.iter().enumerate() {
                         let Some((_, Samples::U16(src))) =
                             store.planes.iter().find(|(cid, _)| cid == id)
                         else {
                             continue;
                         };
-                        let dst = &mut native.planes[slot];
-                        for y in top as usize..bottom {
-                            let (a, b) = (y * w + left as usize, (y * w + right).min(dst.len()));
-                            if a < b {
-                                src.read_rect_into(
-                                    left as usize..right,
-                                    y..y + 1,
-                                    w,
-                                    &mut dst[a..b],
-                                );
-                            }
-                        }
+                        let block = &mut tile.native[slot * n..][..n];
+                        src.read_rect_into(xs.clone(), ys.clone(), w, block);
                     }
                 }
+                self.tiles[t] = Some(Box::new(tile));
             }
         }
+    }
+
+    /// The saved R, G, B and alpha of layer-local `(x, y)`: `None` for a plane
+    /// the layer lacks, zero for a tile not saved yet or a pixel the layer grew
+    /// into after its tile was saved.
+    #[inline]
+    pub(super) fn pixel(&self, x: usize, y: usize) -> [Option<u8>; 4] {
+        let dx = self.rect.left + x as i32;
+        let dy = self.rect.top + y as i32;
+        let tx = dx.div_euclid(SAVED_TILE) - self.first_column;
+        let ty = dy.div_euclid(SAVED_TILE) - self.first_row;
+        let tile = if (0..self.columns).contains(&tx) && ty >= 0 {
+            self.tiles
+                .get((ty * self.columns + tx) as usize)
+                .and_then(Option::as_deref)
+        } else {
+            None
+        };
+        let at = tile.and_then(|tile| {
+            let x = usize::try_from(dx - tile.left).ok()?;
+            let y = usize::try_from(dy - tile.top).ok()?;
+            (x < tile.width && y < tile.height).then(|| (tile, y * tile.width + x))
+        });
+        self.slots.map(|slot| {
+            slot.map(|slot| at.map_or(0, |(tile, at)| tile.planes[slot * tile.len() + at]))
+        })
     }
 
     /// Whether `layer` still has the planes and bounds this stroke began on. A
     /// document restructured or a target moved under a live stroke is refused
     /// rather than painted at stale coordinates or indexed out of bounds.
     pub(super) fn fits(&self, layer: &Layer, ch: PlaneIndex) -> bool {
+        let n = (self.width * self.height) as usize;
         if layer.rect != self.rect
-            || !self
-                .planes
-                .iter()
-                .zip(ch)
-                .all(|(plane, k)| match (plane, k) {
-                    (Some(plane), Some(k)) => layer
-                        .channels()
-                        .get(k)
-                        .is_some_and(|c| c.data.len() == plane.len()),
-                    (None, None) => true,
-                    _ => false,
-                })
+            || !self.slots.iter().zip(ch).all(|(slot, k)| match (slot, k) {
+                (Some(_), Some(k)) => layer.channels().get(k).is_some_and(|c| c.data.len() == n),
+                (None, None) => true,
+                _ => false,
+            })
         {
             return false;
         }
-        let Some(native) = self.native.as_ref() else {
+        let Some(ids) = self.native.as_ref() else {
             return true;
         };
         let Some(store) = layer.source_channels.as_ref() else {
@@ -183,211 +271,88 @@ impl Saved {
         if store.depth != BitDepth::Sixteen || store.rect != self.rect {
             return false;
         }
-        native.ids.iter().enumerate().all(|(slot, id)| {
-            store
-                .planes
-                .iter()
-                .find(|(cid, _)| cid == id)
-                .is_some_and(|(_, samples)| match samples {
-                    Samples::U16(plane) => plane.len() == native.planes[slot].len(),
-                    _ => false,
-                })
+        ids.iter().all(|id| {
+            store.planes.iter().any(|(cid, samples)| {
+                cid == id && matches!(samples, Samples::U16(plane) if plane.len() == n)
+            })
         })
-    }
-
-    pub(super) fn planes(&self) -> [Option<&[u8]>; 4] {
-        [0, 1, 2, 3].map(|k| self.planes[k].as_deref())
     }
 
     /// Write every saved tile back into `layer`.
     pub(super) fn restore(&self, layer: &mut Layer, ch: PlaneIndex) {
-        let w = self.width as usize;
-        for (t, _) in self.tiles.iter().enumerate().filter(|(_, saved)| **saved) {
-            let (tx, ty) = (t as i32 % self.columns, t as i32 / self.columns);
-            let (left, top) = (tx * SAVED_TILE, ty * SAVED_TILE);
-            let right = (left + SAVED_TILE).min(self.width) as usize;
-            let bottom = (top + SAVED_TILE).min(self.height) as usize;
-            for (k, plane) in self.planes.iter().enumerate() {
-                let (Some(plane), Some(k)) = (plane.as_ref(), ch[k]) else {
-                    continue;
-                };
-                let Some(dst) = layer.channels_mut().get_mut(k) else {
-                    continue;
-                };
-                for y in top as usize..bottom {
-                    let (a, b) = (y * w + left as usize, (y * w + right).min(plane.len()));
-                    if a < b {
-                        dst.data
-                            .write_rect_from(left as usize..right, y..y + 1, w, &plane[a..b]);
-                    }
-                }
-                dst.data.settle();
-            }
-        }
-        let Some(native) = self.native.as_ref() else {
-            return;
-        };
-        let Some(store) = layer.source_channels.as_mut() else {
-            return;
-        };
-        // Resolve each native destination once, then walk the saved tiles once
-        // for every plane rather than rescanning the tile grid per plane.
-        let mut dests: Vec<Option<&mut Plane<u16>>> = native.ids.iter().map(|_| None).collect();
-        for (id, samples) in store.planes.iter_mut() {
-            let Some(slot) = native.ids.iter().position(|want| want == id) else {
+        let (w, rect) = (self.width as usize, self.rect);
+        let saved = || self.tiles.iter().flatten();
+        for (slot, k) in self.slots.iter().zip(ch) {
+            let (Some(slot), Some(k)) = (*slot, k) else {
                 continue;
             };
-            let Samples::U16(plane) = samples else {
+            let Some(dst) = layer.channels_mut().get_mut(k) else {
                 continue;
             };
-            if dests[slot].is_none() {
-                dests[slot] = Some(plane);
+            for tile in saved() {
+                let (xs, ys) = tile.local(rect);
+                let n = tile.len();
+                dst.data
+                    .write_rect_from(xs, ys, w, &tile.planes[slot * n..][..n]);
             }
+            dst.data.settle();
         }
-        for (t, _) in self.tiles.iter().enumerate().filter(|(_, saved)| **saved) {
-            let (tx, ty) = (t as i32 % self.columns, t as i32 / self.columns);
-            let (left, top) = (tx * SAVED_TILE, ty * SAVED_TILE);
-            let right = (left + SAVED_TILE).min(self.width) as usize;
-            let bottom = (top + SAVED_TILE).min(self.height) as usize;
-            for (slot, dst) in dests.iter_mut().enumerate() {
-                let Some(dst) = dst.as_mut() else {
-                    continue;
-                };
-                let saved = &native.planes[slot];
-                for y in top as usize..bottom {
-                    let (a, b) = (y * w + left as usize, (y * w + right).min(saved.len()));
-                    if a < b {
-                        dst.write_rect_from(left as usize..right, y..y + 1, w, &saved[a..b]);
-                    }
-                }
+        let (Some(ids), Some(store)) = (self.native.as_ref(), layer.source_channels.as_mut())
+        else {
+            return;
+        };
+        for (slot, id) in ids.iter().enumerate() {
+            let Some(dst): Option<&mut Plane<u16>> =
+                store
+                    .planes
+                    .iter_mut()
+                    .find_map(|(cid, samples)| match samples {
+                        Samples::U16(plane) if cid == id => Some(plane),
+                        _ => None,
+                    })
+            else {
+                continue;
+            };
+            for tile in saved() {
+                let (xs, ys) = tile.local(rect);
+                let n = tile.len();
+                dst.write_rect_from(xs, ys, w, &tile.native[slot * n..][..n]);
             }
         }
     }
 
-    /// Pad the saved planes when the layer grows (#1208). Saved tiles keep
-    /// their pre-stroke bytes; old pixels no tile saved yet are still the
-    /// layer's own, so they are copied from `layer` now.
-    pub(super) fn grow(&mut self, layer: &Layer, ch: PlaneIndex, new_rect: PsdRect) {
-        let old_rect = self.rect;
-        let (old_w, old_h) = (self.width, self.height);
-        let (new_w, new_h) = (new_rect.width().max(0), new_rect.height().max(0));
-        if new_w == old_w && new_h == old_h {
-            return;
+    /// Follow the layer as it grows (#1208): the grid is laid over the new
+    /// bounds and the saved tiles keep their document position, so nothing is
+    /// copied. A pixel the layer grew into reads zero, its pre-stroke value.
+    pub(super) fn grow(&mut self, new_rect: PsdRect) {
+        if new_rect != self.rect {
+            self.cover(new_rect);
         }
-        let (dx, dy) = (
-            (old_rect.left - new_rect.left).max(0),
-            (old_rect.top - new_rect.top).max(0),
-        );
-        let old_tiles = std::mem::take(&mut self.tiles);
-        let old_columns = self.columns;
+    }
 
-        for (k, plane) in self.planes.iter_mut().enumerate() {
-            let Some(plane) = plane else { continue };
-            let mut data = vec![0u8; (new_w * new_h) as usize];
-            for y in 0..old_h {
-                let src = (y * old_w) as usize;
-                let dst = ((dy + y) * new_w + dx) as usize;
-                let n = old_w as usize;
-                if src + n <= plane.len() && dst + n <= data.len() {
-                    data[dst..dst + n].copy_from_slice(&plane[src..src + n]);
-                }
-            }
-            if let Some(source) = ch[k].and_then(|i| layer.channels().get(i)) {
-                // The layer has already grown, so an old pixel sits at its
-                // grown position; the unsaved tiles' rows are read in place.
-                let stride = new_w as usize;
-                for ty in 0..(old_h + SAVED_TILE - 1) / SAVED_TILE {
-                    for tx in 0..old_columns {
-                        if old_tiles[(ty * old_columns + tx) as usize] {
-                            continue;
-                        }
-                        let (x0, y0) = (tx * SAVED_TILE, ty * SAVED_TILE);
-                        let x1 = (x0 + SAVED_TILE).min(old_w);
-                        let n = (x1 - x0) as usize;
-                        for y in y0..(y0 + SAVED_TILE).min(old_h) {
-                            let (gx, gy) = ((dx + x0) as usize, (dy + y) as usize);
-                            let at = gy * stride + gx;
-                            if at + n <= data.len() {
-                                source.data.read_rect_into(
-                                    gx..gx + n,
-                                    gy..gy + 1,
-                                    stride,
-                                    &mut data[at..at + n],
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-            *plane = data;
-        }
-        if let Some(native) = self.native.as_mut() {
-            for (slot, id) in native.ids.iter().enumerate() {
-                let saved = &native.planes[slot];
-                let mut data = vec![0u16; (new_w * new_h) as usize];
-                for y in 0..old_h {
-                    let src = (y * old_w) as usize;
-                    let dst = ((dy + y) * new_w + dx) as usize;
-                    let n = old_w as usize;
-                    if src + n <= saved.len() && dst + n <= data.len() {
-                        data[dst..dst + n].copy_from_slice(&saved[src..src + n]);
-                    }
-                }
-                if let Some(store) = layer.source_channels.as_ref() {
-                    if let Some((_, Samples::U16(source))) =
-                        store.planes.iter().find(|(cid, _)| cid == id)
-                    {
-                        let stride = new_w as usize;
-                        for ty in 0..(old_h + SAVED_TILE - 1) / SAVED_TILE {
-                            for tx in 0..old_columns {
-                                if old_tiles[(ty * old_columns + tx) as usize] {
-                                    continue;
-                                }
-                                let (x0, y0) = (tx * SAVED_TILE, ty * SAVED_TILE);
-                                let x1 = (x0 + SAVED_TILE).min(old_w);
-                                let n = (x1 - x0) as usize;
-                                for y in y0..(y0 + SAVED_TILE).min(old_h) {
-                                    let (gx, gy) = ((dx + x0) as usize, (dy + y) as usize);
-                                    let at = gy * stride + gx;
-                                    if at + n <= data.len() {
-                                        source.read_rect_into(
-                                            gx..gx + n,
-                                            gy..gy + 1,
-                                            stride,
-                                            &mut data[at..at + n],
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                native.planes[slot] = data;
-            }
-        }
-        let columns = (new_w + SAVED_TILE - 1) / SAVED_TILE;
-        let rows = (new_h + SAVED_TILE - 1) / SAVED_TILE;
-        let mut tiles = vec![false; (columns * rows) as usize];
-        let (old_right, old_bottom) = (old_rect.left + old_w, old_rect.top + old_h);
-        for ty in 0..rows {
-            for tx in 0..columns {
-                let (left, top) = (
-                    new_rect.left + tx * SAVED_TILE,
-                    new_rect.top + ty * SAVED_TILE,
-                );
-                if left < old_right
-                    && left + SAVED_TILE > old_rect.left
-                    && top < old_bottom
-                    && top + SAVED_TILE > old_rect.top
-                {
-                    tiles[(ty * columns + tx) as usize] = true;
-                }
-            }
-        }
-        self.columns = columns;
-        self.tiles = tiles;
-        self.rect = new_rect;
-        self.width = new_w;
-        self.height = new_h;
+    /// The document tile coordinates of every saved tile, in grid order.
+    #[cfg(test)]
+    pub(super) fn saved_tiles(&self) -> Vec<(i32, i32)> {
+        self.tiles
+            .iter()
+            .enumerate()
+            .filter(|(_, tile)| tile.is_some())
+            .map(|(t, _)| {
+                (
+                    self.first_column + t as i32 % self.columns,
+                    self.first_row + t as i32 / self.columns,
+                )
+            })
+            .collect()
+    }
+
+    /// The bytes the saved tiles hold.
+    #[cfg(test)]
+    pub(super) fn held_bytes(&self) -> usize {
+        self.tiles
+            .iter()
+            .flatten()
+            .map(|tile| tile.planes.len() + tile.native.len() * 2)
+            .sum()
     }
 }

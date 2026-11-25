@@ -217,6 +217,29 @@ pub(super) fn bucket_at(view: &mut PictureViewRust, quarter: i32) {
     });
 }
 
+/// Layer 1 made dense (#1603): it covers the canvas with tiled planes whose
+/// every tile holds varying pixels, recorded as one history state so the
+/// stroke after it commits only the tiles it reaches.
+pub(super) fn dense_layer(view: &mut PictureViewRust, side: u32) {
+    let n = side as usize;
+    let doc = view.session.doc.as_mut().expect("document");
+    let layer = pictura_render::resolve_path_mut(doc, "1").expect("Layer 1");
+    layer.rect = canvas(side);
+    let mut row = vec![0u8; n];
+    for (c, channel) in layer.channels_mut().iter_mut().enumerate() {
+        let mut data = pictura_core::Plane::filled(n, n, 1, 0u8);
+        for y in 0..n {
+            for (x, v) in row.iter_mut().enumerate() {
+                *v = ((x * 7 + y * 13 + c * 31) % 251) as u8;
+            }
+            data.write_rect_from(0..n, y..y + 1, n, &row);
+        }
+        data.settle();
+        channel.data = data;
+    }
+    view.apply_edit("Noise", Edit::regions(vec![canvas(side)], false));
+}
+
 /// M6, as `begin_paint` / `paint_dab` / `end_paint`: a 300 px hard round
 /// brush across 4000 px of Layer 1, in the 60 motion events the script sends.
 pub(super) fn brush_stroke(view: &mut PictureViewRust, side: u32) {

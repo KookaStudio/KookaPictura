@@ -585,7 +585,7 @@ impl Stroke {
         let stencil = Stencil {
             inverse_grayscale: *inverse_grayscale,
             coverage_clip: coverage_clip.as_ref(),
-            base: saved.planes(),
+            base: saved,
             locked: *locked,
             cfg,
             source: source.as_ref(),
@@ -883,6 +883,12 @@ impl Stroke {
             let (w, h) = (self.saved.width, self.saved.height);
             self.saved.save(layer, self.ch, 0, 0, w - 1, h - 1);
         }
+    }
+
+    /// The document tiles the stroke's undo copy holds, and their bytes.
+    #[cfg(test)]
+    fn saved_tiles(&self) -> (Vec<(i32, i32)>, usize) {
+        (self.saved.saved_tiles(), self.saved.held_bytes())
     }
 
     /// Abandon the stroke, writing every pixel it changed in `doc` back to its
