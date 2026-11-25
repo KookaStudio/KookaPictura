@@ -1,0 +1,6 @@
+| Scenario | Steps | Expected result | Coverage |
+|---|---|---|---|
+| The DMG contains the application | Open the candidate DMG in Finder and inspect the two items at the root. | The app and the Applications shortcut appear in the same window. The mounted-DMG check confirms the shortcut points to `/Applications`. | manual: requires Finder to verify the drag-to-install presentation |
+| The smoke check runs before packing | Run the macOS workflow on the fix PR and inspect the step order. | The deployed app passes the headless self-test before the workflow packs the DMG. | manual: the runner automates the smoke check and the workflow log shows the order |
+| The build runs without signing secrets | Run the macOS workflow on the fix PR and check the mounted DMG. | The bundle contains the package marker and passes strict signature verification and its headless self-test. | manual: the macOS workflow verifies the full DMG on an Apple Silicon runner outside the cross-platform test suites |
+| Packaging alters the signed bundle | Add a resource after signing a disposable app copy and run the mounted-DMG signature check against it. | The same `codesign` command exits nonzero and reports the added resource. | manual: requires a signed Apple Silicon app and macOS `codesign` |
