@@ -97,8 +97,8 @@ DMG before retaining or publishing the artifact.
 #### Scenario: The DMG contains the application
 
 - **WHEN** the DMG is opened in Finder
-- **THEN** the application and a shortcut to `/Applications` are available
-  in the same window
+- **THEN** `Kooka Pictura.app` and a shortcut to `/Applications` are available
+  in the same window, and the bundle declares `Kooka Pictura` as its display name
 
 #### Scenario: The smoke check runs before packing
 
