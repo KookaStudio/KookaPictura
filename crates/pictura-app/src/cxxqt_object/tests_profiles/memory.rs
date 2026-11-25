@@ -46,7 +46,11 @@ const BASELINE: &[(&str, usize)] = &[
     ("edit_fill", 847_250),
     ("bucket_in_selection", 667_356),
     ("bucket_whole_layer", 189_136),
-    ("brush_stroke", 791_775),
+    // Lowered by #1603: the undo copy holds the tiles the stroke reached,
+    // each clipped to the layer, not a dense buffer rebuilt on every grow.
+    ("brush_stroke", 569_891),
+    // #1603: the dense-layer stroke; 74_244_859 with the dense undo copy.
+    ("brush_stroke_dense", 2_615_130),
     ("undo_redo", 136_590),
     ("snapshot_restore", 102_945),
     ("move_layer", 61_123),
@@ -72,6 +76,7 @@ const STREAMED: &[&str] = &[
     "bucket_in_selection",
     "bucket_whole_layer",
     "brush_stroke",
+    "brush_stroke_dense",
     "undo_redo",
     "snapshot_restore",
     "move_layer",
@@ -196,6 +201,14 @@ fn with_history(side: u32) -> PictureViewRust {
     view.session.set_selection(None);
     sc::bucket_at(&mut view, 4);
     sc::brush_stroke(&mut view, side);
+    view
+}
+
+/// The dense-layer brush scenario's start (#1603): Layer 1 covers the canvas
+/// with varying pixels.
+fn with_dense_layer(side: u32) -> PictureViewRust {
+    let mut view = with_layer(side);
+    sc::dense_layer(&mut view, side);
     view
 }
 
@@ -400,6 +413,17 @@ fn brush_stroke_heap_peak_full() {
         "brush_stroke",
         || with_layer(FULL_SIDE),
         |v| sc::brush_stroke(v, FULL_SIDE),
+    );
+}
+
+/// M6 on a dense layer (#1603): the undo copy holds the tiles the stroke
+/// reaches, not the layer.
+#[test]
+fn brush_stroke_dense_heap_peak() {
+    guard(
+        "brush_stroke_dense",
+        || with_dense_layer(GUARD_SIDE),
+        |v| sc::brush_stroke(v, GUARD_SIDE),
     );
 }
 
@@ -634,6 +658,15 @@ fn estimates_cover_the_measured_peaks() {
     let estimate = gate::brush_bytes(&doc(&with_layer(side)), "1");
     let peak = measure(|| with_layer(side), |v| sc::brush_stroke(v, side)).0;
     check("brush_stroke", peak, estimate);
+
+    let estimate = gate::brush_bytes(&doc(&with_dense_layer(side)), "1");
+    let peak = measure(|| with_dense_layer(side), |v| sc::brush_stroke(v, side)).0;
+    check("brush_stroke_dense", peak, estimate);
+    let layer = 4 * side as usize * side as usize;
+    assert!(
+        peak * 8 < layer,
+        "brush_stroke_dense: heap peak {peak} B is not far below the layer's {layer} B"
+    );
 
     let estimate = gate::restore_bytes(&doc(&with_history(side)));
     check(

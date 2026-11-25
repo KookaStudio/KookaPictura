@@ -467,3 +467,95 @@ fn a_fill_that_grows_the_layer_forks_the_grown_tiles() {
     // The grown layer is one 120×140 tile.
     assert_eq!(fork_bytes(&doc, "0", bounds), planes * 140 * 120);
 }
+
+/// A `side`² RGB/8 document whose one layer covers `rect` with tiled planes
+/// that hold `dense`² of varying pixels at the layer's corner and are uniform
+/// elsewhere.
+fn layer_with_dense_corner(side: u32, rect: PsdRect, dense: usize) -> Document {
+    let (w, h) = (rect.width() as usize, rect.height() as usize);
+    let block: Vec<u8> = (0..dense * dense).map(|i| (i % 251) as u8).collect();
+    let channels = [0i16, 1, 2, -1]
+        .into_iter()
+        .map(|id| {
+            let mut data = pictura_core::Plane::filled(w, h, 1, 0u8);
+            data.write_rect_from(0..dense, 0..dense, w, &block);
+            data.settle();
+            pictura_core::Channel { id, data }
+        })
+        .collect();
+    let layer = pictura_codec::layer_from_parts(pictura_core::LayerParts {
+        name: "scribble".into(),
+        rect,
+        opacity: 255,
+        fill: 255,
+        visible: true,
+        channels,
+        ..Default::default()
+    });
+    let mut doc = Document::new(1, 1, pictura_core::ColorMode::Rgb, BitDepth::Eight);
+    doc.width = side;
+    doc.height = side;
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+    doc
+}
+
+/// Gate a brush stroke on layer "0" of `doc` with `available` bytes free:
+/// whether it was admitted and whether it was refused for memory.
+fn gate_brush(doc: &Document, available: i64) -> (bool, bool) {
+    set_available_memory_for_test(available);
+    let admitted = admit_resident(brush_bytes(doc, "0")).admitted();
+    let refused = edit_refused_for_memory();
+    set_available_memory_for_test(-1);
+    (admitted, refused)
+}
+
+// [bsm_gate_sparse]
+/// #1603: a sparse 15,000 × 17,500 scribble layer on a 21,000² canvas with
+/// about 1.9 GiB of room. The old charge (logical size + 3 × canvas) was
+/// above the room.
+#[test]
+fn a_sparse_layer_on_a_large_canvas_admits_a_stroke() {
+    let side = 21_000u32;
+    let rect = PsdRect {
+        top: 1_500,
+        left: 3_000,
+        bottom: 19_000,
+        right: 18_000,
+    };
+    let doc = layer_with_dense_corner(side, rect, 2_048);
+    let room = (2_200 - 256) * MIB as u64;
+    let logical = 4 * rect.width() as u64 * rect.height() as u64;
+    let canvas = u64::from(side) * u64::from(side);
+    assert!(logical + 3 * canvas > room, "the old charge fit the room");
+    let estimate = brush_bytes(&doc, "0");
+    assert!(
+        estimate < room,
+        "estimate {estimate} B is above the room {room} B"
+    );
+    assert!(
+        estimate >= 4 * 2_048 * 2_048 + canvas,
+        "the estimate dropped the layer's held tiles"
+    );
+    assert_eq!(gate_brush(&doc, 2_200 * MIB), (true, false));
+}
+
+// [bsm_gate_dense]
+/// A dense layer still pays its full size: with room for the canvas term but
+/// not the layer, the stroke is refused, while an empty layer on the same
+/// canvas paints.
+#[test]
+fn a_dense_layer_beyond_the_room_refuses_a_stroke() {
+    let side = 2_048u32;
+    let rect = PsdRect {
+        top: 0,
+        left: 0,
+        bottom: side as i32,
+        right: side as i32,
+    };
+    let dense = layer_with_dense_corner(side, rect, side as usize);
+    let empty = layer_with_dense_corner(side, rect, 0);
+    // 16 MiB of room: above 4 MiB of canvas term, below 16 MiB of planes.
+    let available = (256 + 16) * MIB;
+    assert_eq!(gate_brush(&empty, available), (true, false));
+    assert_eq!(gate_brush(&dense, available), (false, true));
+}

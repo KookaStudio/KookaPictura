@@ -5,7 +5,7 @@ pub use pictura_core::Coverage;
 /// A stroke's per-pixel inputs, resolved once per sample so a dab's loop walks
 /// neither the layer path nor the channel list and re-derives no profile.
 pub(super) struct Stencil<'a> {
-    pub(super) base: [Option<&'a [u8]>; 4],
+    pub(super) base: &'a Saved,
     pub(super) locked: bool,
     pub(super) inverse_grayscale: bool,
     pub(super) coverage_clip: Option<&'a Coverage>,
@@ -17,7 +17,7 @@ pub(super) struct Stencil<'a> {
 }
 
 impl Stencil<'_> {
-    /// Lay the paint at `coverage` over the saved pixel `i` (layer-local) and
+    /// Lay the paint at `coverage` over the saved pixel `(x, y)` (layer-local) and
     /// write it to `planes` at `at`, the same pixel's index in the band the
     /// planes were cut to. `rng` is the stroke's Dissolve state.
     #[allow(clippy::too_many_arguments)]
@@ -25,7 +25,7 @@ impl Stencil<'_> {
         &self,
         planes: &mut CellPlanes<'_>,
         at: usize,
-        i: usize,
+        (x, y): (usize, usize),
         rng: Option<&mut u64>,
         coverage: u8,
         paint: Rgba,
@@ -33,40 +33,25 @@ impl Stencil<'_> {
     ) -> bool {
         let clip = match self.coverage_clip {
             None => 255,
-            Some(c) => {
-                let w = self.rect.width().max(1) as usize;
-                let dx = self.rect.left + (i % w) as i32;
-                let dy = self.rect.top + (i / w) as i32;
-                c.sample(dx, dy)
-            }
+            Some(c) => c.sample(self.rect.left + x as i32, self.rect.top + y as i32),
         };
         let cov = coverage as f32 / 255.0 * clip as f32 / 255.0;
         if clip == 0 {
             return false;
         }
         let a = (cov * opacity).clamp(0.0, 1.0);
-        let plane = |k: usize, missing: u8| {
-            self.base[k]
-                .and_then(|d| d.get(i))
-                .copied()
-                .unwrap_or(missing)
-        };
-        let dr = plane(0, 0);
+        let [dr, dg, db, da] = self.base.pixel(x, y);
+        let dr = dr.unwrap_or(0);
         let dr = if self.inverse_grayscale { 255 - dr } else { dr };
-        let dg = plane(1, 0);
-        let db = plane(2, 0);
+        let (dg, db) = (dg.unwrap_or(0), db.unwrap_or(0));
         // A layer without an alpha channel (a Background) is opaque.
-        let da = plane(3, 255);
+        let da = da.unwrap_or(255);
         let s = match self.source {
             None => paint,
-            Some(source) => {
-                let w = self.rect.width() as usize;
-                let (x, y) = ((i % w) as i32, (i / w) as i32);
-                match source.at(self.rect.left + x, self.rect.top + y) {
-                    Some(color) => color,
-                    None => return false,
-                }
-            }
+            Some(source) => match source.at(self.rect.left + x as i32, self.rect.top + y as i32) {
+                Some(color) => color,
+                None => return false,
+            },
         };
         let mode = self.cfg.mode;
         let roll = match rng {
