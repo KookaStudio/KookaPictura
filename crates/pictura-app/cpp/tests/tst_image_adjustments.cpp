@@ -1227,5 +1227,5 @@ void ImageAdjustmentsTest::handLaidDialogRangesMatchLayout()
     verifyRanges(view_, "levels", same({"gamma", "outputBlack", "outputWhite"}));
 }
 
-QTEST_MAIN(ImageAdjustmentsTest)
+PICTURA_QT_TEST_MAIN(ImageAdjustmentsTest)
 #include "tst_image_adjustments.moc"

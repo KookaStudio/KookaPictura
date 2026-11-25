@@ -306,5 +306,5 @@ void PsdCompatibilityTest::nativeModesDoNotPrompt()
     QCOMPARE(prompt.count, 0);
 }
 
-QTEST_MAIN(PsdCompatibilityTest)
+PICTURA_QT_TEST_MAIN(PsdCompatibilityTest)
 #include "tst_psd_compatibility.moc"

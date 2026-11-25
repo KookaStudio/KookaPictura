@@ -137,5 +137,5 @@ void PanelHostTest::buildColumnsToggleAndWorkspace()
     QVERIFY(host.columnForPanel(QStringLiteral("brushPanel")) != nullptr);
 }
 
-QTEST_MAIN(PanelHostTest)
+PICTURA_QT_TEST_MAIN(PanelHostTest)
 #include "tst_panel_host.moc"

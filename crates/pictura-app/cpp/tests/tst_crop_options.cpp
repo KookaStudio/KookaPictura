@@ -723,5 +723,5 @@ void CropOptionsTest::integerFieldsRejectFractions()
     QCOMPARE(fedit->validator()->validate(fraction2, pos), QValidator::Acceptable);
 }
 
-QTEST_MAIN(CropOptionsTest)
+PICTURA_QT_TEST_MAIN(CropOptionsTest)
 #include "tst_crop_options.moc"

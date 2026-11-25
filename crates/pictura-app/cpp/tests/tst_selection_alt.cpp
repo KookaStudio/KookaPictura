@@ -185,5 +185,5 @@ void SelectionAltTest::altWithNoSelectionDrawsFromTheCentre()
     QCOMPARE(f.view->selection_coverage(15, 15), 0);
 }
 
-QTEST_MAIN(SelectionAltTest)
+PICTURA_QT_TEST_MAIN(SelectionAltTest)
 #include "tst_selection_alt.moc"

@@ -601,8 +601,11 @@ void RawOpenTest::declinedReplaceWritesNothing()
     QVERIFY(status.isEmpty());
 }
 
+namespace picturaQtTest_RawOpenTest {
 int main(int argc, char* argv[])
 {
     return pictura::test::shardedMain<RawOpenTest>(argc, argv);
+}
+PICTURA_QT_TEST_REGISTER(RawOpenTest)
 }
 #include "tst_raw_open.moc"

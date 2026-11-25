@@ -1057,5 +1057,5 @@ void PresentCacheTest::panelsUseTileCrops()
     }
 }
 
-QTEST_MAIN(PresentCacheTest)
+PICTURA_QT_TEST_MAIN(PresentCacheTest)
 #include "tst_present_cache.moc"

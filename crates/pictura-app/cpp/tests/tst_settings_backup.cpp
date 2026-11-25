@@ -880,5 +880,5 @@ void SettingsBackupTest::preferenceImportReceiptsSurviveSharedConfig()
     QVERIFY(!exported.contains(QStringLiteral("import_receipts")));
 }
 
-QTEST_MAIN(SettingsBackupTest)
+PICTURA_QT_TEST_MAIN(SettingsBackupTest)
 #include "tst_settings_backup.moc"

@@ -177,5 +177,5 @@ void WebpTest::exportLosslessRoundTrips()
              source.convertToFormat(QImage::Format_RGBA8888_Premultiplied));
 }
 
-QTEST_MAIN(WebpTest)
+PICTURA_QT_TEST_MAIN(WebpTest)
 #include "tst_webp.moc"

@@ -321,5 +321,5 @@ void AutoAlignTest::selectionAfterCommit()
     QVERIFY(selected.contains(paths_[1]));
 }
 
-QTEST_MAIN(AutoAlignTest)
+PICTURA_QT_TEST_MAIN(AutoAlignTest)
 #include "tst_auto_align.moc"

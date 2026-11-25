@@ -416,5 +416,5 @@ void LightingEffectsDialogTest::lastFilterSettingsReopensTheRig()
     QCOMPARE(preset, QStringLiteral("Custom"));
 }
 
-QTEST_MAIN(LightingEffectsDialogTest)
+PICTURA_QT_TEST_MAIN(LightingEffectsDialogTest)
 #include "tst_lighting_effects_dialog.moc"

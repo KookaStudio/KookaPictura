@@ -535,5 +535,5 @@ void BatchRunTest::openStepForAMissingFileFails()
     QCOMPARE(window_->documentCount(), 0);
 }
 
-QTEST_MAIN(BatchRunTest)
+PICTURA_QT_TEST_MAIN(BatchRunTest)
 #include "tst_batch_run.moc"

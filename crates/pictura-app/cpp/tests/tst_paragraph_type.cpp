@@ -424,5 +424,5 @@ void ParagraphTypeTest::ctrlScalesPointType()
     QVERIFY2(s.xx > 1.2 && s.yy > 1.2, "scaled up");
 }
 
-QTEST_MAIN(ParagraphTypeTest)
+PICTURA_QT_TEST_MAIN(ParagraphTypeTest)
 #include "tst_paragraph_type.moc"

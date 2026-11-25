@@ -295,5 +295,5 @@ void ImageImportTest::profileNotice()
     closeActive();
 }
 
-QTEST_MAIN(ImageImportTest)
+PICTURA_QT_TEST_MAIN(ImageImportTest)
 #include "tst_image_import.moc"

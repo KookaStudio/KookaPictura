@@ -301,5 +301,5 @@ void MaskLinkStateTest::togglesAndHistory()
     QCOMPARE(panel_->rowImageForTest(clicked), full);
 }
 
-QTEST_MAIN(MaskLinkStateTest)
+PICTURA_QT_TEST_MAIN(MaskLinkStateTest)
 #include "tst_mask_link_state.moc"

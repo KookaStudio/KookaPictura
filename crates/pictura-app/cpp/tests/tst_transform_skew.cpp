@@ -1020,5 +1020,5 @@ void TransformSkewTest::ctrlShiftSideKeepsType()
     QVERIFY(pictura::type_api::readLayer(*f.view, path).isType);
 }
 
-QTEST_MAIN(TransformSkewTest)
+PICTURA_QT_TEST_MAIN(TransformSkewTest)
 #include "tst_transform_skew.moc"

@@ -639,5 +639,5 @@ void MergeCommandsTest::shortcutFollowsSelection()
     frame.closeDocument(doc, false);
 }
 
-QTEST_MAIN(MergeCommandsTest)
+PICTURA_QT_TEST_MAIN(MergeCommandsTest)
 #include "tst_merge_commands.moc"

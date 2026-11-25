@@ -186,5 +186,5 @@ void TypePanelsTest::glyphsFamilyEnterCommitsAndLeaves()
     QVERIFY(!family->lineEdit()->hasFocus());
 }
 
-QTEST_MAIN(TypePanelsTest)
+PICTURA_QT_TEST_MAIN(TypePanelsTest)
 #include "tst_type_panels.moc"

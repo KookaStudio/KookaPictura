@@ -104,6 +104,10 @@ QList<QByteArray> shardArguments(const QList<QByteArray>& arguments,
 bool shareRunsNothing(const QList<QByteArray>& arguments, const QMetaObject* metaObject,
                       int index, int count);
 
+using SuiteMain = int (*)(int, char**);
+bool registerSuite(const char* sourceFile, SuiteMain main);
+int runSuiteDriver(int argc, char* argv[]);
+
 // Runs the test object, restricted to the share named by PICTURA_TEST_SHARD.
 //
 // This is QTEST_MAIN with the share applied: the same application, the same
@@ -145,7 +149,34 @@ int shardedMain(int argc, char* argv[])
     for (QByteArray& argument : arguments) {
         pointers << argument.data();
     }
-    return QTest::qExec(test.data(), pointers.size(), pointers.data());
+    pointers << nullptr;
+    return QTest::qExec(test.data(), pointers.size() - 1, pointers.data());
 }
 
 } // namespace pictura::test
+
+#define PICTURA_QT_TEST_JOIN_INNER(a, b) a##b
+#define PICTURA_QT_TEST_JOIN(a, b) PICTURA_QT_TEST_JOIN_INNER(a, b)
+#define PICTURA_QT_TEST_NAMESPACE(TestClass) \
+    namespace PICTURA_QT_TEST_JOIN(picturaQtTest_, TestClass) {
+#define PICTURA_QT_TEST_REGISTER(TestClass) \
+    [[maybe_unused]] static const bool PICTURA_QT_TEST_JOIN(picturaQtTestRegistered_, TestClass) = \
+        ::pictura::test::registerSuite(__FILE__, &main);
+#define PICTURA_QT_TEST_MAIN(TestClass) \
+    PICTURA_QT_TEST_NAMESPACE(TestClass) \
+    QTEST_MAIN(TestClass) \
+    PICTURA_QT_TEST_REGISTER(TestClass) \
+    }
+#define PICTURA_QT_TEST_GUILESS_MAIN(TestClass) \
+    PICTURA_QT_TEST_NAMESPACE(TestClass) \
+    QTEST_GUILESS_MAIN(TestClass) \
+    PICTURA_QT_TEST_REGISTER(TestClass) \
+    }
+#define PICTURA_QT_TEST_SHARDED_MAIN(TestClass) \
+    PICTURA_QT_TEST_NAMESPACE(TestClass) \
+    int main(int argc, char* argv[]) \
+    { \
+        return ::pictura::test::shardedMain<TestClass>(argc, argv); \
+    } \
+    PICTURA_QT_TEST_REGISTER(TestClass) \
+    }

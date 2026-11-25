@@ -656,6 +656,6 @@ void SearchBarTest::rebindUpdatesHint()
     QVERIFY(!hint->isHidden());
 }
 
-QTEST_MAIN(SearchBarTest)
+PICTURA_QT_TEST_MAIN(SearchBarTest)
 
 #include "tst_search_bar.moc"

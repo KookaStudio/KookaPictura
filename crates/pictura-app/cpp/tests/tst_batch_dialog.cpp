@@ -323,5 +323,5 @@ void BatchDialogTest::commandDisabledWithoutActions()
     QVERIFY(window_->registry()->action(QStringLiteral("file.automate.batch"))->isEnabled());
 }
 
-QTEST_MAIN(BatchDialogTest)
+PICTURA_QT_TEST_MAIN(BatchDialogTest)
 #include "tst_batch_dialog.moc"

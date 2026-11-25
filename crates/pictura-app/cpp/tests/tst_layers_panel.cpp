@@ -1404,5 +1404,5 @@ void LayersPanelTest::eyeGutterIsCentredAndSeparated()
     QVERIFY2(panel_->eyeSeparatorPresentForTest(a_), "the gutter has a separator");
     window_->closeDocument(doc, false);
 }
-QTEST_MAIN(LayersPanelTest)
+PICTURA_QT_TEST_MAIN(LayersPanelTest)
 #include "tst_layers_panel.moc"

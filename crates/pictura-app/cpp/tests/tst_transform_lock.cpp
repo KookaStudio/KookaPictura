@@ -521,5 +521,5 @@ void TransformLockTest::noPromptWithoutAPendingTransform()
     QVERIFY(!frame.layersLockedForTest());
 }
 
-QTEST_MAIN(TransformLockTest)
+PICTURA_QT_TEST_MAIN(TransformLockTest)
 #include "tst_transform_lock.moc"

@@ -153,5 +153,5 @@ void ColorSettingsTest::pickerFollowsConversionOptions()
     pictura::set_color_settings(view, 0, 0, 1, true, false, false, false);
 }
 
-QTEST_MAIN(ColorSettingsTest)
+PICTURA_QT_TEST_MAIN(ColorSettingsTest)
 #include "tst_color_settings.moc"

@@ -220,5 +220,5 @@ void ControlSerialTest::lastClientLeavingIsReported()
     QTRY_COMPARE(left.count(), 1);
 }
 
-QTEST_MAIN(ControlSerialTest)
+PICTURA_QT_TEST_MAIN(ControlSerialTest)
 #include "tst_control_serial.moc"

@@ -153,5 +153,5 @@ void FontsTest::tabBarsAreBold()
     }
 }
 
-QTEST_MAIN(FontsTest)
+PICTURA_QT_TEST_MAIN(FontsTest)
 #include "tst_fonts.moc"

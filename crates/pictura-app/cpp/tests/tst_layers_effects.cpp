@@ -605,5 +605,5 @@ void LayersEffectsTest::syntheticRowsDoNotDrag()
              QStringList{QStringLiteral("1")});
 }
 
-QTEST_MAIN(LayersEffectsTest)
+PICTURA_QT_TEST_MAIN(LayersEffectsTest)
 #include "tst_layers_effects.moc"

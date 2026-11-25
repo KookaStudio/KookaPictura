@@ -1222,5 +1222,5 @@ void ChannelsPanelTest::duplicateChannelAtCapRefused()
 }
 
 
-QTEST_MAIN(ChannelsPanelTest)
+PICTURA_QT_TEST_MAIN(ChannelsPanelTest)
 #include "tst_channels_panel.moc"

@@ -388,6 +388,6 @@ void AdjustmentPresetsTest::malformedStoreReadsEmpty()
     QCOMPARE(combo->findText(QStringLiteral("garbage")), -1);
 }
 
-QTEST_MAIN(AdjustmentPresetsTest)
+PICTURA_QT_TEST_MAIN(AdjustmentPresetsTest)
 
 #include "tst_adjustment_presets.moc"

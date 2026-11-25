@@ -110,5 +110,5 @@ void CanvasBackdropTest::hiddenBackgroundShowsCheckerboard()
     QTRY_VERIFY2(checker(centerPixel()), "hiding the Background reveals the checkerboard");
 }
 
-QTEST_MAIN(CanvasBackdropTest)
+PICTURA_QT_TEST_MAIN(CanvasBackdropTest)
 #include "tst_canvas_backdrop.moc"

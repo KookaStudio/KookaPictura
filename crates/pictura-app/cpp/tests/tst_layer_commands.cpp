@@ -566,5 +566,5 @@ void LayerCommandsTest::managementCommandRecordsOneState()
     QCOMPARE(view->layer_count(), 2);
 }
 
-QTEST_MAIN(LayerCommandsTest)
+PICTURA_QT_TEST_MAIN(LayerCommandsTest)
 #include "tst_layer_commands.moc"

@@ -356,6 +356,6 @@ void BlurGalleryEffectsTest::squeezingKeepsEveryControlReadable()
     }
 }
 
-QTEST_MAIN(BlurGalleryEffectsTest)
+PICTURA_QT_TEST_MAIN(BlurGalleryEffectsTest)
 
 #include "tst_blur_gallery_effects.moc"

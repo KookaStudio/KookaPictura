@@ -653,5 +653,5 @@ void LayersRowMenuTest::clearLayerStyleClearsSelection()
     QVERIFY2(!pictura::layer_style_has(*view_, a), "the first selected layer is cleared");
     QVERIFY2(!pictura::layer_style_has(*view_, b), "the clicked layer is cleared");
 }
-QTEST_MAIN(LayersRowMenuTest)
+PICTURA_QT_TEST_MAIN(LayersRowMenuTest)
 #include "tst_layers_row_menu.moc"

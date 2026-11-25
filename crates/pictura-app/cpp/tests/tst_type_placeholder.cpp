@@ -215,5 +215,5 @@ void TypePlaceholderTest::preferenceIsSaved()
     QVERIFY(pictura::loadPreferences().typePlaceholderText);
 }
 
-QTEST_MAIN(TypePlaceholderTest)
+PICTURA_QT_TEST_MAIN(TypePlaceholderTest)
 #include "tst_type_placeholder.moc"

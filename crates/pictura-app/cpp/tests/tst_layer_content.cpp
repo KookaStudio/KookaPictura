@@ -571,5 +571,5 @@ void LayerContentTest::vectorMaskTransitionsKeepRowsAndHistory()
     }
 }
 
-QTEST_MAIN(LayerContentTest)
+PICTURA_QT_TEST_MAIN(LayerContentTest)
 #include "tst_layer_content.moc"

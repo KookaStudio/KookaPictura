@@ -299,5 +299,5 @@ void DamageBoundsTest::moveAndTransformRefuseWhatMemoryCannotHold()
     QTRY_COMPARE(view_->sample_argb(100, 80), black);
 }
 
-QTEST_MAIN(DamageBoundsTest)
+PICTURA_QT_TEST_MAIN(DamageBoundsTest)
 #include "tst_damage_bounds.moc"

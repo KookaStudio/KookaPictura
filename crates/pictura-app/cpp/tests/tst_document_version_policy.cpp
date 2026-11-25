@@ -474,5 +474,5 @@ void DocumentVersionPolicyTest::refusesUnsafeCompatibilityCopies()
     QCOMPARE(readFile(path), source);
 }
 
-QTEST_MAIN(DocumentVersionPolicyTest)
+PICTURA_QT_TEST_MAIN(DocumentVersionPolicyTest)
 #include "tst_document_version_policy.moc"

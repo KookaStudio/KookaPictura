@@ -153,5 +153,5 @@ void LastLayerTest::canDeleteAgrees()
     QVERIFY(pictura::layers_can_delete(*view, QStringList{top, bottom}));
     frame.closeDocument(frame.activeDocumentIndex(), false);
 }
-QTEST_MAIN(LastLayerTest)
+PICTURA_QT_TEST_MAIN(LastLayerTest)
 #include "tst_last_layer.moc"

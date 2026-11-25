@@ -345,5 +345,5 @@ void StampHoldTest::airbrushTogglesPersist()
     }
 }
 
-QTEST_MAIN(StampHoldTest)
+PICTURA_QT_TEST_MAIN(StampHoldTest)
 #include "tst_stamp_hold.moc"

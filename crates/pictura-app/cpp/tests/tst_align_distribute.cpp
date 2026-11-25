@@ -262,5 +262,5 @@ void AlignDistributeTest::shapeLayers()
     QCOMPARE(contentRect(last).left(), 90);
 }
 
-QTEST_MAIN(AlignDistributeTest)
+PICTURA_QT_TEST_MAIN(AlignDistributeTest)
 #include "tst_align_distribute.moc"

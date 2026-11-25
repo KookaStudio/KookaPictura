@@ -494,5 +494,5 @@ void OptionsBarsParityTest::eyedropperSamplingRing()
     QVERIFY(!f.canvas->hasSamplingRingForTest());
 }
 
-QTEST_MAIN(OptionsBarsParityTest)
+PICTURA_QT_TEST_MAIN(OptionsBarsParityTest)
 #include "tst_options_bars_parity.moc"

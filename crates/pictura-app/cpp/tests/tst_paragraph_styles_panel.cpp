@@ -973,5 +973,5 @@ void ParagraphStylesPanelTest::styleLibraryReadsInOneCall()
     }
 }
 
-QTEST_MAIN(ParagraphStylesPanelTest)
+PICTURA_QT_TEST_MAIN(ParagraphStylesPanelTest)
 #include "tst_paragraph_styles_panel.moc"

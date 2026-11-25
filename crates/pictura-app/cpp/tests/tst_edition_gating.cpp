@@ -131,5 +131,5 @@ void EditionGatingTest::editionGating()
     }
 }
 
-QTEST_MAIN(EditionGatingTest)
+PICTURA_QT_TEST_MAIN(EditionGatingTest)
 #include "tst_edition_gating.moc"

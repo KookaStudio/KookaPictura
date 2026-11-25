@@ -484,5 +484,5 @@ void EditShortcutsTest::backgroundCopyIsUnlockedAndTheLockBadgeUnlocks()
     frame.closeDocument(doc, false);
 }
 
-QTEST_MAIN(EditShortcutsTest)
+PICTURA_QT_TEST_MAIN(EditShortcutsTest)
 #include "tst_edit_shortcuts.moc"

@@ -897,5 +897,5 @@ void LayerStyleTest::copyEnabledForChannelOnlyStyle()
     QVERIFY(!clear->isEnabled());
 }
 
-QTEST_MAIN(LayerStyleTest)
+PICTURA_QT_TEST_MAIN(LayerStyleTest)
 #include "tst_layer_style.moc"

@@ -1394,5 +1394,5 @@ void CharacterParagraphPanelsTest::scrubKerningLeavesMetrics()
     QCOMPARE(panel->kerningFieldForTest()->currentText(), QStringLiteral("10"));
 }
 
-QTEST_MAIN(CharacterParagraphPanelsTest)
+PICTURA_QT_TEST_MAIN(CharacterParagraphPanelsTest)
 #include "tst_character_paragraph_panels.moc"

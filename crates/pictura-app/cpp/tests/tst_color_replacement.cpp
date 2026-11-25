@@ -201,6 +201,6 @@ void ColorReplacementTest::repaintAField()
     fixture.tools->setForeground(foreground);
 }
 
-QTEST_MAIN(ColorReplacementTest)
+PICTURA_QT_TEST_MAIN(ColorReplacementTest)
 
 #include "tst_color_replacement.moc"

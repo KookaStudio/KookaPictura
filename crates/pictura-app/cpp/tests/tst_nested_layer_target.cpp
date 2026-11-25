@@ -85,5 +85,5 @@ void NestedLayerTargetTest::brushPaintsTheNestedLeaf()
     QVERIFY2(f.view->selection_count() > before, "stroke landed in the nested leaf");
 }
 
-QTEST_MAIN(NestedLayerTargetTest)
+PICTURA_QT_TEST_MAIN(NestedLayerTargetTest)
 #include "tst_nested_layer_target.moc"

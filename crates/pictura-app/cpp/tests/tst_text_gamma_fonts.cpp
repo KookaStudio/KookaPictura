@@ -348,5 +348,5 @@ void TextGammaFontsTest::replaceDisabledOutsideRgb8()
     QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.font, kMissing);
 }
 
-QTEST_MAIN(TextGammaFontsTest)
+PICTURA_QT_TEST_MAIN(TextGammaFontsTest)
 #include "tst_text_gamma_fonts.moc"

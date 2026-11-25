@@ -416,6 +416,6 @@ void FadeTest::commandIsImplementedAndDispatchable()
     QVERIFY(opened);
 }
 
-QTEST_MAIN(FadeTest)
+PICTURA_QT_TEST_MAIN(FadeTest)
 
 #include "tst_fade.moc"

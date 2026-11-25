@@ -404,5 +404,5 @@ void FindReplaceTest::roundTripsAsType()
     QVERIFY(window_->closeActiveDocument(false));
 }
 
-QTEST_MAIN(FindReplaceTest)
+PICTURA_QT_TEST_MAIN(FindReplaceTest)
 #include "tst_find_replace.moc"

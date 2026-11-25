@@ -381,5 +381,7 @@ void ValueInputEnterTest::multiLineEditorKeepsEnterForNewline()
     QVERIFY(text->hasFocus());
 }
 
-QTEST_MAIN(ValueInputEnterTest)
+#include "qt_test_support.h"
+
+PICTURA_QT_TEST_MAIN(ValueInputEnterTest)
 #include "tst_value_input_enter.moc"

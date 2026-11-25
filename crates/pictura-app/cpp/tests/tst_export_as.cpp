@@ -474,5 +474,5 @@ void ExportAsTest::svgExportPaintServers()
     }
 }
 
-QTEST_MAIN(ExportAsTest)
+PICTURA_QT_TEST_MAIN(ExportAsTest)
 #include "tst_export_as.moc"

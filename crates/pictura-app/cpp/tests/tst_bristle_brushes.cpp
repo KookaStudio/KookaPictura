@@ -296,5 +296,5 @@ void BristleBrushesTest::legacySettingsKeepSmoothTip()
     QCOMPARE(paint->bristleStiffness(), 50);
 }
 
-QTEST_MAIN(BristleBrushesTest)
+PICTURA_QT_TEST_MAIN(BristleBrushesTest)
 #include "tst_bristle_brushes.moc"

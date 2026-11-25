@@ -247,5 +247,7 @@ void LayersRowModelTest::absentPathResolvesToEmpty()
     QVERIFY(model.rowForPath(QStringLiteral("1")) != nullptr);
 }
 
-QTEST_MAIN(LayersRowModelTest)
+#include "qt_test_support.h"
+
+PICTURA_QT_TEST_MAIN(LayersRowModelTest)
 #include "tst_layers_row_model.moc"

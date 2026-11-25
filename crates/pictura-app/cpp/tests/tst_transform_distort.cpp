@@ -993,5 +993,5 @@ void TransformDistortTest::plainDragScalesTheDistortedBox()
     f.tools->cancelFreeTransform();
 }
 
-QTEST_MAIN(TransformDistortTest)
+PICTURA_QT_TEST_MAIN(TransformDistortTest)
 #include "tst_transform_distort.moc"

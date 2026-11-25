@@ -223,5 +223,5 @@ void EraserToolsTest::blockCursorSnapsToTheScreenGrid()
     QVERIFY2(cornerDark, "the outline is a square");
 }
 
-QTEST_MAIN(EraserToolsTest)
+PICTURA_QT_TEST_MAIN(EraserToolsTest)
 #include "tst_eraser_tools.moc"

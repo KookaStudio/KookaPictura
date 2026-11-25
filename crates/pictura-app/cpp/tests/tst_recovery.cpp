@@ -722,7 +722,9 @@ void RecoveryTest::staleBackgroundSaveLeavesJournalRecoverable()
     auto env = QProcessEnvironment::systemEnvironment();
     env.insert(QStringLiteral("PICTURA_TEST_RECOVERY_CHILD"), path);
     child.setProcessEnvironment(env);
-    child.start(QCoreApplication::applicationFilePath(), {QStringLiteral("staleBackgroundSaveLeavesJournalRecoverable")});
+    child.start(QCoreApplication::applicationFilePath(),
+                {QStringLiteral("--suite"), QStringLiteral("tst_recovery"),
+                 QStringLiteral("staleBackgroundSaveLeavesJournalRecoverable")});
     QVERIFY(child.waitForStarted());
     QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(path + QStringLiteral(".ready")), 10000);
     child.kill();
@@ -884,6 +886,6 @@ void RecoveryTest::firstStoreSyncsAncestorEntries()
     }
 }
 
-QTEST_MAIN(RecoveryTest)
+PICTURA_QT_TEST_MAIN(RecoveryTest)
 
 #include "tst_recovery.moc"

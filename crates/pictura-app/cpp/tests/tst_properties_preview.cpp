@@ -145,5 +145,5 @@ void PropertiesPreviewTest::commitFlushesThePendingPreview()
     QCOMPARE(qGray(view_->composite_argb(4, 4)), 0);
 }
 
-QTEST_MAIN(PropertiesPreviewTest)
+PICTURA_QT_TEST_MAIN(PropertiesPreviewTest)
 #include "tst_properties_preview.moc"

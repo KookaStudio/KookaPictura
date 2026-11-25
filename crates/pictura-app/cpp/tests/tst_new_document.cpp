@@ -339,5 +339,5 @@ void NewDocumentTest::localizedWidthSurvivesPsdRoundTrip()
              QStringLiteral("1,500 in"));
 }
 
-QTEST_MAIN(NewDocumentTest)
+PICTURA_QT_TEST_MAIN(NewDocumentTest)
 #include "tst_new_document.moc"

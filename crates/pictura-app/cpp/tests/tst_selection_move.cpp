@@ -103,5 +103,5 @@ void SelectionMoveTest::cancelDropsTheOffset()
     QVERIFY(contourHasCorner(*f.canvas, QPointF(10, 10)));
 }
 
-QTEST_MAIN(SelectionMoveTest)
+PICTURA_QT_TEST_MAIN(SelectionMoveTest)
 #include "tst_selection_move.moc"

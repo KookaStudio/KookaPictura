@@ -465,5 +465,5 @@ void DocumentNavigateTest::handZoomOptionsPersist()
     }
 }
 
-QTEST_MAIN(DocumentNavigateTest)
+PICTURA_QT_TEST_SHARDED_MAIN(DocumentNavigateTest)
 #include "tst_document_navigate.moc"

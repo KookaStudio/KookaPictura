@@ -507,5 +507,5 @@ void BrushTipPreviewTest::previewFollowsTheActiveDocument()
     f.frame.closeDocument(secondIndex, false);
 }
 
-QTEST_MAIN(BrushTipPreviewTest)
+PICTURA_QT_TEST_MAIN(BrushTipPreviewTest)
 #include "tst_brush_tip_preview.moc"

@@ -154,5 +154,5 @@ void RotateViewTest::rotateView()
     QCOMPARE(QColor(f.view->sample_argb(10, 30)), QColor(Qt::red));
 }
 
-QTEST_MAIN(RotateViewTest)
+PICTURA_QT_TEST_MAIN(RotateViewTest)
 #include "tst_rotate_view.moc"

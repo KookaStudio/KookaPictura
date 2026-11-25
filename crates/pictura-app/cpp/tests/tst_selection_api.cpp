@@ -63,5 +63,7 @@ void SelectionApiTest::typedContourMatchesTheLegacyString()
     QVERIFY(contour.hasVertex(9, 9));
 }
 
-QTEST_MAIN(SelectionApiTest)
+#include "qt_test_support.h"
+
+PICTURA_QT_TEST_MAIN(SelectionApiTest)
 #include "tst_selection_api.moc"

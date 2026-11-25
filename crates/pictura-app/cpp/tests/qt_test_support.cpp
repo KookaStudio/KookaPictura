@@ -105,6 +105,9 @@ QStringList testFunctions(const QMetaObject* metaObject)
         if (method.parameterCount() != 0) {
             continue;
         }
+        if (method.returnType() != QMetaType::Void) {
+            continue;
+        }
         if (method.access() != QMetaMethod::Private) {
             continue;
         }
@@ -176,4 +179,72 @@ bool shareRunsNothing(const QList<QByteArray>& arguments, const QMetaObject* met
            && shardTestFunctions(metaObject, index, count).isEmpty();
 }
 
+namespace {
+
+struct RegisteredSuite {
+    QByteArray name;
+    SuiteMain main;
+};
+
+QList<RegisteredSuite>& registeredSuites()
+{
+    static QList<RegisteredSuite> suites;
+    return suites;
+}
+
+QByteArray suiteNameFromSource(const char* sourceFile)
+{
+    const QByteArray file(sourceFile);
+    const int separator = qMax(file.lastIndexOf('/'), file.lastIndexOf('\\'));
+    QByteArray name = file.mid(separator + 1);
+    if (!name.endsWith(".cpp")) {
+        return QByteArray();
+    }
+    name.chop(4);
+    return name;
+}
+
+}
+
+bool registerSuite(const char* sourceFile, SuiteMain main)
+{
+    registeredSuites().append({suiteNameFromSource(sourceFile), main});
+    return true;
+}
+
+int runSuiteDriver(int argc, char* argv[])
+{
+    if (argc < 3 || QByteArray(argv[1]) != "--suite" || argv[2][0] == '\0') {
+        qCritical("usage: Qt Test driver --suite <name> [Qt Test arguments]");
+        return 2;
+    }
+
+    const QByteArray name(argv[2]);
+    SuiteMain selected = nullptr;
+    int matches = 0;
+    for (const RegisteredSuite& suite : registeredSuites()) {
+        if (suite.name == name) {
+            selected = suite.main;
+            ++matches;
+        }
+    }
+    if (matches != 1) {
+        qCritical("Qt Test suite '%s' has %d registrations", name.constData(), matches);
+        return 2;
+    }
+
+    QByteArray program(name);
+    QList<char*> arguments{program.data()};
+    for (int i = 3; i < argc; ++i) {
+        arguments << argv[i];
+    }
+    arguments << nullptr;
+    return selected(arguments.size() - 1, arguments.data());
+}
+
 } // namespace pictura::test
+
+int main(int argc, char* argv[])
+{
+    return pictura::test::runSuiteDriver(argc, argv);
+}

@@ -721,8 +721,11 @@ void PrintTest::pageSetupReachesOutput()
     QCOMPARE(saved.paperSource, QPrinter::Cassette);
 }
 
+namespace picturaQtTest_PrintTest {
 int main(int argc, char* argv[])
 {
     return pictura::test::shardedMain<PrintTest>(argc, argv);
+}
+PICTURA_QT_TEST_REGISTER(PrintTest)
 }
 #include "tst_print.moc"

@@ -1108,5 +1108,5 @@ void AppUpdaterTest::saveFailureAbortsInstall()
     QVERIFY(pictura::document_api::isDirty(*view));
 }
 
-QTEST_MAIN(AppUpdaterTest)
+PICTURA_QT_TEST_MAIN(AppUpdaterTest)
 #include "tst_app_updater.moc"

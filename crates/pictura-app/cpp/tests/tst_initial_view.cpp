@@ -111,5 +111,5 @@ void InitialViewTest::userZoomSurvivesLaterResizes()
     closeActiveDocument();
 }
 
-QTEST_MAIN(InitialViewTest)
+PICTURA_QT_TEST_MAIN(InitialViewTest)
 #include "tst_initial_view.moc"

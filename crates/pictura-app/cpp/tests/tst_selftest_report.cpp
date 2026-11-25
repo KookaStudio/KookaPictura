@@ -269,5 +269,5 @@ void SelfTestReportTest::documentFixtureRemovesSeedAndClosesDocument()
     QCOMPARE(window->documentCount(), baseline);
 }
 
-QTEST_MAIN(SelfTestReportTest)
+PICTURA_QT_TEST_MAIN(SelfTestReportTest)
 #include "tst_selftest_report.moc"

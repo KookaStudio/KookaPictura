@@ -497,4 +497,4 @@ void CalculationsTest::previewMatchesCommit()
 
 #include "tst_calculations.moc"
 
-QTEST_MAIN(CalculationsTest)
+PICTURA_QT_TEST_MAIN(CalculationsTest)

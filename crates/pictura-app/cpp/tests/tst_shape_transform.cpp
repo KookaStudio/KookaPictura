@@ -222,5 +222,5 @@ void ShapeTransformTest::rotatedShapeEdgesAreSmooth()
     QVERIFY2(blended > 40, qPrintable(QStringLiteral("%1 blended edge pixels").arg(blended)));
 }
 
-QTEST_MAIN(ShapeTransformTest)
+PICTURA_QT_TEST_MAIN(ShapeTransformTest)
 #include "tst_shape_transform.moc"

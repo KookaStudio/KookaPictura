@@ -80,5 +80,5 @@ void FloatingWorkspacesRestartTest::restartRestoresFloatAtRightOfRestoredFrame()
     }
 }
 
-QTEST_MAIN(FloatingWorkspacesRestartTest)
+PICTURA_QT_TEST_MAIN(FloatingWorkspacesRestartTest)
 #include "tst_floating_workspaces_restart.moc"

@@ -526,5 +526,5 @@ void HistoryLogTest::webJpegOverflowKeepsSourceRecords()
     QCOMPARE(bytes(output).count("Image Size"), 1);
 }
 
-QTEST_MAIN(HistoryLogTest)
+PICTURA_QT_TEST_MAIN(HistoryLogTest)
 #include "tst_history_log.moc"

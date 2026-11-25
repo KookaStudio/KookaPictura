@@ -627,5 +627,7 @@ void DesignSystemTest::inputsShareOneHeight()
                             .arg(spinBox)));
 }
 
-QTEST_MAIN(DesignSystemTest)
+#include "qt_test_support.h"
+
+PICTURA_QT_TEST_MAIN(DesignSystemTest)
 #include "tst_design_system.moc"

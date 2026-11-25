@@ -72,7 +72,9 @@ void ControlMetricsOffTest::frameCapturePreservesOutput()
         env.insert(QStringLiteral("PICTURA_METRICS"), mode);
         env.insert(QStringLiteral("PICTURA_FRAME_TEST_OUTPUT"), output.filePath(mode));
         child.setProcessEnvironment(env);
-        child.start(QCoreApplication::applicationFilePath(), {QStringLiteral("frameCapturePreservesOutput")});
+        child.start(QCoreApplication::applicationFilePath(),
+                    {QStringLiteral("--suite"), QStringLiteral("tst_control_metrics_off"),
+                     QStringLiteral("frameCapturePreservesOutput")});
         QVERIFY(child.waitForFinished());
         QCOMPARE(child.exitStatus(), QProcess::NormalExit);
         QVERIFY2(child.exitCode() == 0, child.readAllStandardOutput().constData());
@@ -85,5 +87,5 @@ void ControlMetricsOffTest::frameCapturePreservesOutput()
     }
 }
 
-QTEST_MAIN(ControlMetricsOffTest)
+PICTURA_QT_TEST_MAIN(ControlMetricsOffTest)
 #include "tst_control_metrics_off.moc"

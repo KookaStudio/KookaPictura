@@ -502,5 +502,5 @@ void TransformPerspectiveTest::lopsidedBowtiePreviewHasStraightEdges()
     QCOMPARE(qAlpha(warped.image.pixel((QPointF(70.5, 55.5) - warped.origin).toPoint())), 0);
 }
 
-QTEST_MAIN(TransformPerspectiveTest)
+PICTURA_QT_TEST_MAIN(TransformPerspectiveTest)
 #include "tst_transform_perspective.moc"

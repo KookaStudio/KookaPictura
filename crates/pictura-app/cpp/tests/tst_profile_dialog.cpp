@@ -98,5 +98,5 @@ void ProfileDialogTest::commitAddsOneState()
     closeActive();
 }
 
-QTEST_MAIN(ProfileDialogTest)
+PICTURA_QT_TEST_MAIN(ProfileDialogTest)
 #include "tst_profile_dialog.moc"

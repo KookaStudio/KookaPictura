@@ -688,5 +688,5 @@ void TypeSessionPanelsTest::enterInSizeFieldCommitsAndLeaves()
     QVERIFY(!edit->hasFocus());
 }
 
-QTEST_MAIN(TypeSessionPanelsTest)
+PICTURA_QT_TEST_MAIN(TypeSessionPanelsTest)
 #include "tst_type_session_panels.moc"

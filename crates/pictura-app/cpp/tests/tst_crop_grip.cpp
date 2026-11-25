@@ -167,5 +167,7 @@ void CropGripTest::fitBoxInsideRotatedContent()
     QCOMPARE(pictura::fitBoxInRotated(off, content, 10.0, pivot), off);
 }
 
-QTEST_GUILESS_MAIN(CropGripTest)
+#include "qt_test_support.h"
+
+PICTURA_QT_TEST_GUILESS_MAIN(CropGripTest)
 #include "tst_crop_grip.moc"

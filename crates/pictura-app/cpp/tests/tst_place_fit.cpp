@@ -308,5 +308,5 @@ void PlaceFitTest::transparentRasterKeepsAlphaThroughResetAndRasterize()
     QCOMPARE(qAlpha(view->sample_argb(50, 50)), 255);
 }
 
-QTEST_MAIN(PlaceFitTest)
+PICTURA_QT_TEST_MAIN(PlaceFitTest)
 #include "tst_place_fit.moc"

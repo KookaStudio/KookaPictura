@@ -137,5 +137,7 @@ void SaveFormatDialogsTest::rawMacDisabled()
     QVERIFY(!dialog.findChild<QLineEdit*>(QStringLiteral("rawOptionsFileCreator"))->isEnabled());
 }
 
-QTEST_MAIN(SaveFormatDialogsTest)
+#include "qt_test_support.h"
+
+PICTURA_QT_TEST_MAIN(SaveFormatDialogsTest)
 #include "tst_save_format_dialogs.moc"

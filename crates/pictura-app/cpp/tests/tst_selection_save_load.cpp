@@ -969,5 +969,5 @@ void SelectionSaveLoadTest::selectionDragPreparationRestoresSource()
     QCOMPARE(source->history_count(), history);
 }
 
-QTEST_MAIN(SelectionSaveLoadTest)
+PICTURA_QT_TEST_MAIN(SelectionSaveLoadTest)
 #include "tst_selection_save_load.moc"

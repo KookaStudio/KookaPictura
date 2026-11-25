@@ -162,5 +162,5 @@ void ZoomToolTest::marqueeFillsViewport()
              "the marquee area must be centred in the viewport");
 }
 
-QTEST_MAIN(ZoomToolTest)
+PICTURA_QT_TEST_MAIN(ZoomToolTest)
 #include "tst_zoom_tool.moc"

@@ -708,5 +708,5 @@ void TransformWarpTest::warpPreviewKeepsTheReducedLevel()
                             .arg(sizes[0].height())));
 }
 
-QTEST_MAIN(TransformWarpTest)
+PICTURA_QT_TEST_MAIN(TransformWarpTest)
 #include "tst_transform_warp.moc"

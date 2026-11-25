@@ -328,5 +328,5 @@ void LoadFilesIntoStackTest::noSmartObjectKeepsLayers()
     QVERIFY(!pictura::layers_api::rowAt(view, 1).smartObject);
 }
 
-QTEST_MAIN(LoadFilesIntoStackTest)
+PICTURA_QT_TEST_MAIN(LoadFilesIntoStackTest)
 #include "tst_load_files_into_stack.moc"

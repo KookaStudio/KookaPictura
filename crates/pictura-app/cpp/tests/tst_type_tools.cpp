@@ -1356,5 +1356,5 @@ void TypeToolsTest::droppedEditSessionCancels()
     QCOMPARE(pictura::type_api::readLayer(*f.view, path).spec.text, QStringLiteral("Session"));
 }
 
-QTEST_MAIN(TypeToolsTest)
+PICTURA_QT_TEST_MAIN(TypeToolsTest)
 #include "tst_type_tools.moc"

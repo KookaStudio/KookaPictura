@@ -283,5 +283,5 @@ void ProofSetupTest::customDialogAppliesAndCancelKeeps()
     window_->closeActiveDocument(false);
 }
 
-QTEST_MAIN(ProofSetupTest)
+PICTURA_QT_TEST_MAIN(ProofSetupTest)
 #include "tst_proof_setup.moc"

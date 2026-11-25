@@ -345,5 +345,5 @@ void CropCursorTest::firstBoxClampedThenGrows()
     frame.closeDocument(doc, false);
 }
 
-QTEST_MAIN(CropCursorTest)
+PICTURA_QT_TEST_MAIN(CropCursorTest)
 #include "tst_crop_cursor.moc"

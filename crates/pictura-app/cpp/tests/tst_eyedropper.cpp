@@ -208,5 +208,5 @@ void EyedropperTest::sampleAllLayersReadsTheComposite()
     window_->hide();
 }
 
-QTEST_MAIN(EyedropperTest)
+PICTURA_QT_TEST_MAIN(EyedropperTest)
 #include "tst_eyedropper.moc"

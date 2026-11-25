@@ -189,5 +189,5 @@ void ReduceNoiseDialogTest::lastFilterSettingsReopensItPrefilled()
     QCOMPARE(seen, committed);
 }
 
-QTEST_MAIN(ReduceNoiseDialogTest)
+PICTURA_QT_TEST_MAIN(ReduceNoiseDialogTest)
 #include "tst_reduce_noise_dialog.moc"

@@ -132,5 +132,5 @@ void ImageRotateTest::rotationRefusalsNameMemory()
     frame.closeDocument(doc, false);
 }
 
-QTEST_MAIN(ImageRotateTest)
+PICTURA_QT_TEST_MAIN(ImageRotateTest)
 #include "tst_image_rotate.moc"

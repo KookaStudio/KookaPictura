@@ -507,5 +507,5 @@ void CharacterStylesPanelTest::styleLibraryReadsInOneCall()
     }
 }
 
-QTEST_MAIN(CharacterStylesPanelTest)
+PICTURA_QT_TEST_MAIN(CharacterStylesPanelTest)
 #include "tst_character_styles_panel.moc"

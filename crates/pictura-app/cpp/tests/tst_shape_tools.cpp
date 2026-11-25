@@ -942,5 +942,5 @@ void ShapeToolsTest::shapeLayerActions()
     QCOMPARE(view->sample_argb(21, 21), 0xffff0000u);
 }
 
-QTEST_MAIN(ShapeToolsTest)
+PICTURA_QT_TEST_MAIN(ShapeToolsTest)
 #include "tst_shape_tools.moc"

@@ -437,6 +437,6 @@ void FileExportToolsTest::exportProgressShowsTheJobWindow()
     QVERIFY2(shown, "the pumped export reports progress in the job window");
 }
 
-QTEST_MAIN(FileExportToolsTest)
+PICTURA_QT_TEST_MAIN(FileExportToolsTest)
 
 #include "tst_file_export_tools.moc"

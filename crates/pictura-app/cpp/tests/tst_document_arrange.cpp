@@ -1028,9 +1028,12 @@ void DocumentArrangeTest::closeAllPromptsOncePerDocument()
     QCOMPARE(window_->documentCount(), 0);
 }
 
+namespace picturaQtTest_DocumentArrangeTest {
 int main(int argc, char* argv[])
 {
     return pictura::test::shardedMain<DocumentArrangeTest>(argc, argv);
+}
+PICTURA_QT_TEST_REGISTER(DocumentArrangeTest)
 }
 
 #include "tst_document_arrange.moc"

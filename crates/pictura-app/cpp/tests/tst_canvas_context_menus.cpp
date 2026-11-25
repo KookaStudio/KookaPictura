@@ -563,5 +563,5 @@ void CanvasContextMenusTest::stampPresetApplies()
     }
 }
 
-QTEST_MAIN(CanvasContextMenusTest)
+PICTURA_QT_TEST_MAIN(CanvasContextMenusTest)
 #include "tst_canvas_context_menus.moc"

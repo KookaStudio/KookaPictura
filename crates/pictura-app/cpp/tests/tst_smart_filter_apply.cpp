@@ -341,5 +341,5 @@ void SmartFilterApplyTest::dragReordersSmartFilters()
     QCOMPARE(pictura::layer_smart_filter_name(*view, path, 0), QStringLiteral("Gaussian Blur"));
 }
 
-QTEST_MAIN(SmartFilterApplyTest)
+PICTURA_QT_TEST_MAIN(SmartFilterApplyTest)
 #include "tst_smart_filter_apply.moc"

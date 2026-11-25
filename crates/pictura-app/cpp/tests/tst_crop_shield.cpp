@@ -63,5 +63,5 @@ void CropShieldTest::shieldDoesNotDimTheWorkspace()
              "canvas outside the box must be dimmed");
 }
 
-QTEST_MAIN(CropShieldTest)
+PICTURA_QT_TEST_MAIN(CropShieldTest)
 #include "tst_crop_shield.moc"

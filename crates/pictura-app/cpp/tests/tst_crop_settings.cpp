@@ -590,5 +590,5 @@ void CropSettingsTest::settingsPersist()
     QCOMPARE(back.overlayOrientation, 3);
 }
 
-QTEST_MAIN(CropSettingsTest)
+PICTURA_QT_TEST_MAIN(CropSettingsTest)
 #include "tst_crop_settings.moc"

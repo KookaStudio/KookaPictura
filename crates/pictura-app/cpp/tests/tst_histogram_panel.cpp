@@ -82,5 +82,5 @@ void HistogramPanelTest::singleChannelDropsToItsCurve()
     QCOMPARE(panel_->seriesColorsForTest().at(0).name(), QStringLiteral("#dcdcdc"));
 }
 
-QTEST_MAIN(HistogramPanelTest)
+PICTURA_QT_TEST_MAIN(HistogramPanelTest)
 #include "tst_histogram_panel.moc"

@@ -510,5 +510,5 @@ void ColorRangeTest::previewReflectsTheLiveSelection()
     QCOMPARE(view_->selection_coverage(8, 8), 0);
 }
 
-QTEST_MAIN(ColorRangeTest)
+PICTURA_QT_TEST_MAIN(ColorRangeTest)
 #include "tst_color_range.moc"

@@ -639,6 +639,6 @@ void BlurGalleryDialogTest::scrollbarsAndMiddleDragPan()
     dialog.reject();
 }
 
-QTEST_MAIN(BlurGalleryDialogTest)
+PICTURA_QT_TEST_MAIN(BlurGalleryDialogTest)
 
 #include "tst_blur_gallery_dialog.moc"

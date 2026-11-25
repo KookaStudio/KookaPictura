@@ -694,5 +694,5 @@ void ControlEditingTest::newDocumentCanHaveABackgroundLayer()
              QStringLiteral("invalid_param"));
 }
 
-QTEST_MAIN(ControlEditingTest)
+PICTURA_QT_TEST_MAIN(ControlEditingTest)
 #include "tst_control_editing.moc"

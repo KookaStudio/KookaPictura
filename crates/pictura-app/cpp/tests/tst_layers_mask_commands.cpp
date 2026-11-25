@@ -854,5 +854,5 @@ void LayersMaskCommandsTest::vectorThumbnailSelectsTheMaskPath()
     QCOMPARE(pictura::paths_active(*view), -2);
 }
 
-QTEST_MAIN(LayersMaskCommandsTest)
+PICTURA_QT_TEST_MAIN(LayersMaskCommandsTest)
 #include "tst_layers_mask_commands.moc"

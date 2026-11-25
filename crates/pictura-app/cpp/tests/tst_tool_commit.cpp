@@ -567,5 +567,5 @@ void ToolCommitTest::quickSelectionKeepsMarqueeModeIndependent()
     QCOMPARE(marquee->combineMode(), pictura::SelectionMode::New);
 }
 
-QTEST_MAIN(ToolCommitTest)
+PICTURA_QT_TEST_MAIN(ToolCommitTest)
 #include "tst_tool_commit.moc"

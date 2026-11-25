@@ -426,5 +426,5 @@ void ColorPickerTest::colorPanelSwatchOpensPicker()
     QCOMPARE(state.foreground(), QColor(12, 34, 56));
 }
 
-QTEST_MAIN(ColorPickerTest)
+PICTURA_QT_TEST_MAIN(ColorPickerTest)
 #include "tst_color_picker.moc"

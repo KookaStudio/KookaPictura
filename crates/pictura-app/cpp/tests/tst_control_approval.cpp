@@ -174,5 +174,5 @@ void ControlApprovalTest::disconnectWithdrawsThePrompt()
     QVERIFY(succeeded(next.call(QStringLiteral("status"))));
 }
 
-QTEST_MAIN(ControlApprovalTest)
+PICTURA_QT_TEST_MAIN(ControlApprovalTest)
 #include "tst_control_approval.moc"

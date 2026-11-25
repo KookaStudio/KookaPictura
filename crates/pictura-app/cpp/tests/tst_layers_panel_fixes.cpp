@@ -1390,5 +1390,5 @@ void LayersPanelFixesTest::maskThumbnailKeepsDocumentAspect()
     window_->closeDocument(window_->activeDocumentIndex(), false);
 }
 
-QTEST_MAIN(LayersPanelFixesTest)
+PICTURA_QT_TEST_MAIN(LayersPanelFixesTest)
 #include "tst_layers_panel_fixes.moc"

@@ -348,5 +348,5 @@ void VanishingPointRetouchTest::bracketsChangeDiameter()
     QVERIFY(window_->closeActiveDocument(false));
 }
 
-QTEST_MAIN(VanishingPointRetouchTest)
+PICTURA_QT_TEST_MAIN(VanishingPointRetouchTest)
 #include "tst_vanishing_point_retouch.moc"

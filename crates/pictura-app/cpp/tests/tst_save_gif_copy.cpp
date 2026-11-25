@@ -811,5 +811,5 @@ void SaveGifCopyTest::saveCopyFailurePreservesPreviousFile()
              qPrintable(window_->statusBar()->currentMessage()));
 }
 
-QTEST_MAIN(SaveGifCopyTest)
+PICTURA_QT_TEST_MAIN(SaveGifCopyTest)
 #include "tst_save_gif_copy.moc"

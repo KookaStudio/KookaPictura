@@ -567,5 +567,5 @@ void UpdatePreferencesTest::aboutDisplaysUnavailableAdapterFields()
     QVERIFY(partial.contains(QStringLiteral("GPU driver: Unavailable")));
 }
 
-QTEST_MAIN(UpdatePreferencesTest)
+PICTURA_QT_TEST_MAIN(UpdatePreferencesTest)
 #include "tst_update_preferences.moc"

@@ -36,5 +36,7 @@ void ToolHintBarTest::chevronsUseLucideChevronIcons()
     }
 }
 
-QTEST_MAIN(ToolHintBarTest)
+#include "qt_test_support.h"
+
+PICTURA_QT_TEST_MAIN(ToolHintBarTest)
 #include "tst_tool_hint_bar.moc"

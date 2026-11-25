@@ -214,5 +214,7 @@ void DesignSystemDialogTest::pagesRender()
     QVERIFY(!dialog.grab().toImage().isNull());
 }
 
-QTEST_MAIN(DesignSystemDialogTest)
+#include "qt_test_support.h"
+
+PICTURA_QT_TEST_MAIN(DesignSystemDialogTest)
 #include "tst_design_system_dialog.moc"

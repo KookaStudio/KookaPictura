@@ -143,5 +143,5 @@ void NotificationStatusBarTest::messageSurvivesAStatusRefresh()
              "the banner still intersects no visible footer child");
 }
 
-QTEST_MAIN(NotificationStatusBarTest)
+PICTURA_QT_TEST_MAIN(NotificationStatusBarTest)
 #include "tst_notification_status_bar.moc"

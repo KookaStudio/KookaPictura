@@ -299,5 +299,5 @@ void SaveOptionsTest::exportEdgeScaleAlpha()
     closeActive();
 }
 
-QTEST_MAIN(SaveOptionsTest)
+PICTURA_QT_TEST_MAIN(SaveOptionsTest)
 #include "tst_save_options.moc"

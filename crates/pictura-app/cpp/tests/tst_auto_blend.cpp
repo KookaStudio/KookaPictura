@@ -236,5 +236,5 @@ void AutoBlendTest::selectionAfterCommit()
     QCOMPARE(selected, paths_);
 }
 
-QTEST_MAIN(AutoBlendTest)
+PICTURA_QT_TEST_MAIN(AutoBlendTest)
 #include "tst_auto_blend.moc"

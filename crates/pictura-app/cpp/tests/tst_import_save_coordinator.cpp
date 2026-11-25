@@ -128,5 +128,5 @@ void ImportSaveCoordinatorTest::saveOpenAndRemember()
     QCOMPARE(save->recentFiles().value(0), path);
 }
 
-QTEST_MAIN(ImportSaveCoordinatorTest)
+PICTURA_QT_TEST_MAIN(ImportSaveCoordinatorTest)
 #include "tst_import_save_coordinator.moc"

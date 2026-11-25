@@ -342,6 +342,6 @@ void SpinBlurTest::combinesWithFieldBlur()
     dialog.reject();
 }
 
-QTEST_MAIN(SpinBlurTest)
+PICTURA_QT_TEST_MAIN(SpinBlurTest)
 
 #include "tst_spin_blur.moc"

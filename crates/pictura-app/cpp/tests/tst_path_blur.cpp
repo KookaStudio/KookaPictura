@@ -476,6 +476,6 @@ void PathBlurTest::combinesWithFieldBlur()
     dialog.reject();
 }
 
-QTEST_MAIN(PathBlurTest)
+PICTURA_QT_TEST_MAIN(PathBlurTest)
 
 #include "tst_path_blur.moc"

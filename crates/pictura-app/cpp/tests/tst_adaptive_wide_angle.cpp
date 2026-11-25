@@ -577,5 +577,5 @@ void AdaptiveWideAngleTest::lastFilterRefusesOffEightBit()
     QVERIFY(window_->closeActiveDocument(false));
 }
 
-QTEST_MAIN(AdaptiveWideAngleTest)
+PICTURA_QT_TEST_MAIN(AdaptiveWideAngleTest)
 #include "tst_adaptive_wide_angle.moc"

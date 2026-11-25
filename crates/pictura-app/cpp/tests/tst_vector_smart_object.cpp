@@ -602,5 +602,5 @@ void VectorSmartObjectTest::discardDuringApply()
     QCOMPARE(exported(view, path, dir), original);
 }
 
-QTEST_MAIN(VectorSmartObjectTest)
+PICTURA_QT_TEST_MAIN(VectorSmartObjectTest)
 #include "tst_vector_smart_object.moc"

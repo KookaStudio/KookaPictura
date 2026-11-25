@@ -853,5 +853,5 @@ void TransformSelectionTest::warpKeepsAnOpenBorderSession()
     tools->cancelFreeTransform();
 }
 
-QTEST_MAIN(TransformSelectionTest)
+PICTURA_QT_TEST_MAIN(TransformSelectionTest)
 #include "tst_transform_selection.moc"

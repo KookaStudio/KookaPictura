@@ -402,5 +402,5 @@ void SaveFormatCatalogTest::recordedDcsStepKeepsDcs()
     closeActive();
 }
 
-QTEST_MAIN(SaveFormatCatalogTest)
+PICTURA_QT_TEST_MAIN(SaveFormatCatalogTest)
 #include "tst_save_format_catalog.moc"

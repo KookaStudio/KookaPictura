@@ -657,6 +657,6 @@ void PresetManagerTest::libraryEditsPreserveStrokeAndDocumentContent()
     QCOMPARE(reopened->activeView()->composite_argb(4, 4), 0xff2255ccu);
 }
 
-QTEST_MAIN(PresetManagerTest)
+PICTURA_QT_TEST_MAIN(PresetManagerTest)
 
 #include "tst_preset_manager.moc"

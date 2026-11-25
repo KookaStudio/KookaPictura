@@ -455,5 +455,5 @@ void SmokeTest::lightSessionRestoresFamilyAndIcon()
     restored->setThemeFamily(0);
 }
 
-QTEST_MAIN(SmokeTest)
+PICTURA_QT_TEST_MAIN(SmokeTest)
 #include "tst_smoke.moc"

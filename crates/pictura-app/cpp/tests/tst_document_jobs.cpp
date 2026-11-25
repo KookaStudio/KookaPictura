@@ -393,5 +393,5 @@ void DocumentJobsTest::deferredTransformSettlesBeforeWorkerSnapshot()
     QCOMPARE(f.view->document_width(), kTall);
 }
 
-QTEST_MAIN(DocumentJobsTest)
+PICTURA_QT_TEST_MAIN(DocumentJobsTest)
 #include "tst_document_jobs.moc"

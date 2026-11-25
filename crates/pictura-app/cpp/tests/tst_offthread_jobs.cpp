@@ -1091,5 +1091,5 @@ void OffthreadJobsTest::adjustmentDialogOkReportsPanic()
     QCOMPARE(view->composite_argb(0, 0), pixel);
 }
 
-QTEST_MAIN(OffthreadJobsTest)
+PICTURA_QT_TEST_MAIN(OffthreadJobsTest)
 #include "tst_offthread_jobs.moc"

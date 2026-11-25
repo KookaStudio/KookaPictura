@@ -686,5 +686,5 @@ void LargeDocumentTest::aRotatedPixelEdgeIsAntialiased()
     QVERIFY2(partial, "the rotated edge has no partial-coverage pixels");
 }
 
-QTEST_MAIN(LargeDocumentTest)
+PICTURA_QT_TEST_MAIN(LargeDocumentTest)
 #include "tst_large_document.moc"

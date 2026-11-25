@@ -792,5 +792,5 @@ void MemoryGovernorTest::everyCommandFamilyShowsItsOwnWording()
     QCOMPARE(pictura::document_api::isDirty(*view), dirty);
 }
 
-QTEST_MAIN(MemoryGovernorTest)
+PICTURA_QT_TEST_MAIN(MemoryGovernorTest)
 #include "tst_memory_governor.moc"

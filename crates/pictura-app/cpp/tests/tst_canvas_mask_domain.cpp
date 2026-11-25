@@ -1001,8 +1001,11 @@ void CanvasMaskDomainTest::propertiesInvertPreservesOffcanvasCoverage()
     QCOMPARE(quint8(coverage(*v)[16]),quint8(64));
 }
 
+namespace picturaQtTest_CanvasMaskDomainTest {
 int main(int argc, char** argv)
 {
     return pictura::test::shardedMain<CanvasMaskDomainTest>(argc, argv);
+}
+PICTURA_QT_TEST_REGISTER(CanvasMaskDomainTest)
 }
 #include "tst_canvas_mask_domain.moc"

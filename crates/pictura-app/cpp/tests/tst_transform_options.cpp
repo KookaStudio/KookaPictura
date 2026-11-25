@@ -733,5 +733,5 @@ void TransformOptionsTest::enterInFieldKeepsTransformActive()
     QCOMPARE(view->history_label(base), QStringLiteral("Free Transform"));
 }
 
-QTEST_MAIN(TransformOptionsTest)
+PICTURA_QT_TEST_MAIN(TransformOptionsTest)
 #include "tst_transform_options.moc"

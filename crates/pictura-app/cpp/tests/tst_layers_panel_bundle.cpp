@@ -697,5 +697,5 @@ void LayersPanelBundleTest::layerNamesRenderInFullWhenTheyFit()
     }
 }
 
-QTEST_MAIN(LayersPanelBundleTest)
+PICTURA_QT_TEST_MAIN(LayersPanelBundleTest)
 #include "tst_layers_panel_bundle.moc"

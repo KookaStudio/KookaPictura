@@ -349,5 +349,5 @@ void PreferencesStoreTest::legacyShiftSwitchDefaultsToOn()
     QCOMPARE(loadSession().toolsColumns, 1);
 }
 
-QTEST_MAIN(PreferencesStoreTest)
+PICTURA_QT_TEST_MAIN(PreferencesStoreTest)
 #include "tst_preferences_store.moc"

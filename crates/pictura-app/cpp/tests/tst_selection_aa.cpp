@@ -438,5 +438,5 @@ void SelectionAaTest::saveSelectionRefusesAtCap()
     window_->closeDocument(window_->activeDocumentIndex(), false);
 }
 
-QTEST_MAIN(SelectionAaTest)
+PICTURA_QT_TEST_MAIN(SelectionAaTest)
 #include "tst_selection_aa.moc"

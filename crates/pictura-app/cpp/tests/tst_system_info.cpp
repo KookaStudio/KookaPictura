@@ -380,5 +380,5 @@ void SystemInfoTest::helpMenuWiresSubmitIssue()
     QCOMPARE(labels.value(systemInfo + 1), QStringLiteral("Submit Issue"));
 }
 
-QTEST_MAIN(SystemInfoTest)
+PICTURA_QT_TEST_MAIN(SystemInfoTest)
 #include "tst_system_info.moc"

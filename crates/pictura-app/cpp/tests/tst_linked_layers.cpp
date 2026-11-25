@@ -740,5 +740,5 @@ void LinkedLayersTest::linkedControlsBoxResizesTheSet()
     QVERIFY(view_->linked_together({red, blue}));
 }
 
-QTEST_MAIN(LinkedLayersTest)
+PICTURA_QT_TEST_MAIN(LinkedLayersTest)
 #include "tst_linked_layers.moc"
