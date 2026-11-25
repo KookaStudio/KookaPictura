@@ -12,6 +12,8 @@
 | `pp_presets` | Click Tall and Thin, Default, Big and Flat | 4, 8, 8; engine follows | `tst_performance_preferences::presetsSetCacheLevels` |
 | `pp_tile_fixed` | Show the page | Tile menu disabled, 256 px | `tst_performance_preferences::cacheTileSizeIsFixed` |
 | `pp_scratch_list` | Add two dirs, move second up, remove first | Store and saved list follow | `tst_performance_preferences::scratchVolumesAddReorderRemove` |
+| `pp_scratch_keeps_default` | Empty list, add a directory | Default first, then the directory | `tst_performance_preferences::scratchVolumesAddReorderRemove` |
+| `pp_scratch_nonblocking` | Hold the store on one thread; read volumes and set new ones on another | Both return at once; stale reading; change applies on release | `pictura-core::a_busy_store_blocks_neither_set_volumes_nor_readouts` |
 | `pp_scratch_limit` | List four volumes | Add disabled | `tst_performance_preferences::scratchVolumesStopAtFour` |
 | `pp_scratch_default` | No volume configured | One disabled default row, Remove disabled | `tst_performance_preferences::emptyScratchListShowsTheDefault` |
 | `pp_gpu_adapter` | Set an adapter name, then empty | Named, then "No graphics processor found" | `tst_performance_preferences::gpuLineNamesTheAdapter` |

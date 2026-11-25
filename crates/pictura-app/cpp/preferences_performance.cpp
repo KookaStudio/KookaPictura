@@ -95,7 +95,7 @@ QWidget* PreferencesDialog::buildPerformancePage()
     });
     connect(memorySlider_, &QSlider::valueChanged, memoryUsage_, &QSpinBox::setValue);
 
-    auto* cache = new QGroupBox(tr("History & Cache"), page);
+    auto* cache = new QGroupBox(tr("History && Cache"), page);
     auto* cacheLayout = new QFormLayout(cache);
     auto* presets = new QHBoxLayout;
     // CS6 picks each preset's values from RAM and CPU count; ours are fixed
@@ -232,6 +232,11 @@ void PreferencesDialog::addScratchVolume(const QString& path)
     if (clean.isEmpty() || scratchVolumes_.contains(clean)
         || scratchVolumes_.size() >= kMaxScratchVolumes) {
         return;
+    }
+    // The default stays first: Add adds a volume, it never replaces one.
+    const QString fallback = QDir::cleanPath(defaultScratchVolume());
+    if (scratchVolumes_.isEmpty() && clean != fallback) {
+        scratchVolumes_.append(fallback);
     }
     scratchVolumes_.append(clean);
     showScratchVolumes();

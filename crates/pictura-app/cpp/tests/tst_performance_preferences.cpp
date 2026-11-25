@@ -8,6 +8,7 @@
 #include <QtCore/QRegularExpression>
 #include <QtCore/QTemporaryDir>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QGroupBox>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QMenu>
@@ -219,6 +220,12 @@ void PerformancePreferencesTest::cacheTileSizeIsFixed()
     auto* tile = find<QComboBox>("preferencesCacheTileSize");
     QVERIFY(tile);
     QVERIFY(!tile->isEnabled());
+    bool titled = false;
+    for (QGroupBox* group : window_->preferencesDialog()->findChildren<QGroupBox*>()) {
+        // `&&` shows one ampersand; a single `&` would turn into an underline.
+        titled = titled || group->title() == QStringLiteral("History && Cache");
+    }
+    QVERIFY(titled);
     QVERIFY(tile->currentText().contains(QStringLiteral("256")));
 }
 
@@ -233,6 +240,11 @@ void PerformancePreferencesTest::scratchVolumesAddReorderRemove()
     QVERIFY(list);
 
     dialog->addScratchVolume(first.path());
+    const QString fallback = list->item(0)->data(Qt::UserRole).toString();
+    QVERIFY(fallback.endsWith(QStringLiteral("kooka-pictura/scratch")));
+    QCOMPARE(pictura::scratch_volumes(), fallback + QLatin1Char('\n') + first.path());
+    list->setCurrentRow(0);
+    find<QPushButton>("preferencesScratchRemove")->click();
     dialog->addScratchVolume(second.path());
     QCOMPARE(pictura::scratch_volumes(), first.path() + QLatin1Char('\n') + second.path());
     QCOMPARE(list->count(), 2);
@@ -256,7 +268,8 @@ void PerformancePreferencesTest::scratchVolumesStopAtFour()
     QVERIFY(dialog);
     auto* add = find<QPushButton>("preferencesScratchAdd");
     QVERIFY(add);
-    for (int i = 0; i < 4; ++i) {
+    // The first Add keeps the default volume, so three more reach four.
+    for (int i = 0; i < 3; ++i) {
         QVERIFY(dirs[i].isValid());
         QVERIFY(add->isEnabled());
         dialog->addScratchVolume(dirs[i].path());

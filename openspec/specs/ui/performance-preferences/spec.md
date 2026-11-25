@@ -89,13 +89,30 @@ The page SHALL list the configured scratch volumes in order, each with its
 free space, and SHALL mark a tmpfs volume as using RAM. Add, Remove, Move Up
 and Move Down SHALL edit the list. Add SHALL be disabled at four volumes. A
 change SHALL apply to the scratch store at once and SHALL be saved. An empty
-list SHALL show the default volume as a placeholder.
+list SHALL show the default volume as a placeholder, and the first Add to it
+SHALL keep the default volume first rather than replace it. Changing the
+volumes and reading the scratch readouts SHALL NOT wait for scratch I/O in
+progress on another thread: a change made while the store is busy SHALL apply
+when it is free, and a readout SHALL show the last reading meanwhile. No
+spilled data moves; extents on a removed volume stay readable until freed.
 
 #### Scenario: Volumes are added, reordered and removed [pp_scratch_list]
 
 - **WHEN** two directories are added, the second is moved up, and the first
   listed is removed
 - **THEN** the store's volumes and the saved list follow each step
+
+#### Scenario: Adding keeps the default volume [pp_scratch_keeps_default]
+
+- **WHEN** no volume is configured and a directory is added
+- **THEN** the list holds the default volume, then the directory
+
+#### Scenario: A busy store does not block the change [pp_scratch_nonblocking]
+
+- **WHEN** another thread holds the scratch store, and the volumes are read
+  and then changed
+- **THEN** both calls return at once, the reading is the last one, and the
+  change applies once the store is released
 
 #### Scenario: Four is the most [pp_scratch_limit]
 

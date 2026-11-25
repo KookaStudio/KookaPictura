@@ -351,3 +351,31 @@ fn scratch_io_benchmark() {
         );
     }
 }
+
+#[test]
+fn a_busy_store_blocks_neither_set_volumes_nor_readouts() {
+    let _serial = serial();
+    let before = store().lock().unwrap_or_else(|e| e.into_inner()).dirs();
+    let first = temp_volume("busy-first");
+    let second = temp_volume("busy-second");
+    set_volumes(std::slice::from_ref(&first));
+    assert_eq!(volumes()[0].path, first);
+
+    let held = store().lock().unwrap_or_else(|e| e.into_inner());
+    let (done, finished) = std::sync::mpsc::channel();
+    let target = second.clone();
+    let caller = std::thread::spawn(move || {
+        let stale = volumes();
+        let _ = sizes();
+        set_volumes(&[target]);
+        done.send(stale).unwrap();
+    });
+    let stale = finished
+        .recv_timeout(Duration::from_secs(5))
+        .expect("readouts and set_volumes return while the store is held");
+    assert_eq!(stale[0].path, first, "the last reading stands in");
+    drop(held);
+    caller.join().unwrap();
+    assert_eq!(volumes()[0].path, second, "the pending change applied");
+    set_volumes(&before);
+}
