@@ -1,5 +1,6 @@
 #include "rendering_indicator.h"
 
+#include <QtCore/QEvent>
 #include <QtCore/QTimer>
 #include <QtGui/QFontMetrics>
 #include <QtGui/QPainter>
@@ -19,6 +20,7 @@ constexpr int kSpinner = 14;
 
 RenderingIndicator::RenderingIndicator(QWidget* canvas)
     : QWidget(canvas)
+    , canvas_(canvas)
     , delay_(new QTimer(this))
     , animation_(new QTimer(this))
 {
@@ -40,6 +42,28 @@ RenderingIndicator::RenderingIndicator(QWidget* canvas)
     resize(kPadding * 3 + kSpinner + metrics.horizontalAdvance(label),
            std::max(kSpinner, metrics.height()) + kPadding * 2);
     hide();
+    canvas->installEventFilter(this);
+    // Once laid over the canvas from its host, the badge is no longer the
+    // canvas's child, so it goes with the canvas explicitly.
+    connect(canvas, &QObject::destroyed, this, &QObject::deleteLater);
+}
+
+bool RenderingIndicator::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == canvas_) {
+        switch (event->type()) {
+        case QEvent::Move:
+        case QEvent::Resize:
+            place();
+            break;
+        case QEvent::Hide:
+            stop();
+            break;
+        default:
+            break;
+        }
+    }
+    return QWidget::eventFilter(watched, event);
 }
 
 void RenderingIndicator::setPendingSource(std::function<bool()> pending)
@@ -66,14 +90,26 @@ void RenderingIndicator::poke()
 
 void RenderingIndicator::place()
 {
-    const QWidget* canvas = parentWidget();
-    if (canvas) {
-        move(canvas->width() - width() - kMargin, kMargin);
+    if (!canvas_) {
+        return;
     }
+    // The canvas's top-right corner, in the coordinates of whichever widget
+    // the badge is drawn from.
+    const QPoint corner = parentWidget() == canvas_.data()
+                              ? QPoint(canvas_->width(), 0)
+                              : canvas_->geometry().topLeft() + QPoint(canvas_->width(), 0);
+    move(corner.x() - width() - kMargin, corner.y() + kMargin);
 }
 
 void RenderingIndicator::showNow()
 {
+    if (!canvas_ || !canvas_->isVisible()) {
+        return;
+    }
+    QWidget* host = canvas_->parentWidget() ? canvas_->parentWidget() : canvas_.data();
+    if (parentWidget() != host) {
+        setParent(host);
+    }
     place();
     raise();
     show();

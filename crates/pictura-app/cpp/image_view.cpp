@@ -1008,7 +1008,6 @@ void ImageView::mouseReleaseEvent(QMouseEvent* event)
 
 void ImageView::resizeEvent(QResizeEvent* event)
 {
-    rendering_->place();
     // A fresh document set before layout runs its automatic fit against a
     // stale viewport, so while the settle is pending every resize re-fits;
     // the show pass ends it. A load/fit also leaves userAdjusted_ false until

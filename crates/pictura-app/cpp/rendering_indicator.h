@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QtCore/QPointer>
 #include <QtWidgets/QWidget>
 
 #include <functional>
@@ -9,10 +10,12 @@ class QTimer;
 
 namespace pictura {
 
-// The canvas's "Rendering…" badge (#1608): shown in the canvas's top-right
+// The canvas's "Rendering…" badge (#1608): shown over the canvas's top-right
 // corner once the display tiles the view asked for have been pending for
-// `kDelayMs`, hidden as soon as none are. Mouse-transparent and focus-less, so
-// the canvas keeps every press. No timer runs while it is hidden and nothing is
+// `kDelayMs`, hidden as soon as none are. It is laid over the canvas from the
+// canvas's host widget, not drawn as the canvas's child, so a render or grab of
+// the canvas never contains it. Mouse-transparent and focus-less, so the
+// canvas keeps every press. No timer runs while it is hidden and nothing is
 // pending.
 class RenderingIndicator : public QWidget {
     Q_OBJECT
@@ -28,21 +31,22 @@ public:
     // Re-read the pending state after the canvas painted: arm the delay when
     // tiles are pending, hide when none are.
     void poke();
-    // Keep the badge in the canvas's top-right corner.
-    void place();
 
     bool delayActiveForTest() const;
     bool animationActiveForTest() const;
 
 protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
 
 private:
     bool pending() const;
+    void place();
     void showNow();
     void stop();
     void tick();
 
+    QPointer<QWidget> canvas_;
     std::function<bool()> pending_;
     QTimer* delay_ = nullptr;
     QTimer* animation_ = nullptr;

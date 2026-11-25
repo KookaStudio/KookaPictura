@@ -13,7 +13,8 @@ top-right corner once the display tiles its view asked for have been pending
 for 250 ms without a break, whatever made them pending: a history restore, a
 zoom, a pan, or an edit. The indicator SHALL hide as soon as no display tile is
 pending. Pending tiles that land within 250 ms SHALL show no indicator. The
-indicator SHALL NOT take input focus or mouse events from the canvas.
+indicator SHALL NOT take input focus or mouse events from the canvas, and SHALL
+NOT appear in a render or grab of the canvas widget itself.
 
 #### Scenario: A slow redraw shows the indicator [cri_shows]
 
@@ -30,6 +31,13 @@ indicator SHALL NOT take input focus or mouse events from the canvas.
 
 - **WHEN** display tiles are pending and land within 250 ms
 - **THEN** the indicator never becomes visible
+
+#### Scenario: Canvas renders leave the indicator out [cri_not_in_render]
+
+- **WHEN** the indicator is visible over a canvas inside its host and the canvas
+  widget is rendered to an image
+- **THEN** the image equals a render taken while the indicator was hidden, and
+  the indicator sits over the canvas's top-right corner
 
 #### Scenario: The indicator passes the mouse through [cri_transparent]
 

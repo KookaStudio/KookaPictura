@@ -41,6 +41,7 @@ private slots:
     void fastRedrawShowsNothing();
     void passesMouseThrough();
     void noTimerWhileIdle();
+    void staysOutOfCanvasRenders();
     void requestedTilesArePendingUntilTheyLand();
 
 private:
@@ -101,9 +102,11 @@ void RenderingIndicatorTest::fastRedrawShowsNothing()
 {
     pending_ = true;
     repaint();
+    // Tiles that land before the 250 ms delay: pending for 100 ms only.
     QTest::qWait(100);
     pending_ = false;
     repaint();
+    // Past the point where the delay would have shown the badge.
     QTest::qWait(pictura::RenderingIndicator::kDelayMs + 150);
     QVERIFY(!badge()->isVisible());
 }
@@ -130,6 +133,37 @@ void RenderingIndicatorTest::noTimerWhileIdle()
     repaint();
     QVERIFY(!badge()->delayActiveForTest());
     QVERIFY(!badge()->animationActiveForTest());
+}
+
+// [cri_not_in_render]
+void RenderingIndicatorTest::staysOutOfCanvasRenders()
+{
+    // A canvas inside a host, as the document window lays it out.
+    QWidget host;
+    host.resize(700, 520);
+    auto* canvas = new pictura::ImageView(&host);
+    canvas->setGeometry(20, 30, 640, 480);
+    bool pending = false;
+    pictura::ImageView::LevelProvider provider;
+    provider.tilesPending = [&pending] { return pending; };
+    canvas->setLevelProvider(std::move(provider));
+    host.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&host));
+    const auto shot = [canvas] {
+        QImage image(canvas->size(), QImage::Format_ARGB32);
+        canvas->render(&image);
+        return image;
+    };
+    const QImage idle = shot();
+    pending = true;
+    canvas->repaint();
+    auto* badge = canvas->renderingIndicatorForTest();
+    QTRY_VERIFY_WITH_TIMEOUT(badge->isVisible(), 2000);
+    QCOMPARE(badge->parentWidget(), &host);
+    // Over the canvas's top-right corner, in the host's coordinates.
+    QCOMPARE(badge->geometry().right(), canvas->geometry().right() - 10);
+    QCOMPARE(badge->geometry().top(), canvas->geometry().top() + 10);
+    QVERIFY(shot() == idle);
 }
 
 // [cri_pending]

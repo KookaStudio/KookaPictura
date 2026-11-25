@@ -47,12 +47,17 @@ indicator hides, both timers stop.
 The 250 ms delay matches the delay `document/long-operation-progress` uses
 before its window.
 
-### A child widget of the canvas
+### Laid over the canvas from its host
 
-`RenderingIndicator` is a small `QWidget` child of `ImageView`. It keeps itself
-in the top-right corner on resize, sets `WA_TransparentForMouseEvents` and
-`Qt::NoFocus`, and paints a rounded translucent badge with a rotating arc and
-the text "Rendering…". It lives in its own files because `image_view.cpp` and
+`RenderingIndicator` is a small `QWidget` that `ImageView` creates. When it
+first shows, it moves to the canvas's parent (the document window's canvas
+host) and sits over the canvas's top-right corner. As a child of the canvas it
+would be painted into every `render()` and `grab()` of the canvas: the full gate
+caught it in `tst_present_cache`'s screenshots. It follows the canvas's
+move and resize through an event filter, stops when the canvas hides, and is
+deleted with the canvas. A canvas without a parent (a test) keeps it as a
+child. It sets `WA_TransparentForMouseEvents` and `Qt::NoFocus`, and paints a
+rounded translucent badge with a rotating arc and the text "Rendering…". It lives in its own files because `image_view.cpp` and
 `image_view.h` are close to the file-size target. `ImageView` gains one member
 and one call.
 
