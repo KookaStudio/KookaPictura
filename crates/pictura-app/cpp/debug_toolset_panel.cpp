@@ -735,8 +735,8 @@ void DebugToolsetPanel::apply(const DebugSnapshot& s)
 
     set(QStringLiteral("os"), os_);
     set(QStringLiteral("architecture"), architecture_);
-    set(QStringLiteral("desktop"), desktop_);
-    set(QStringLiteral("session"), session_);
+    set(QStringLiteral("desktop"), desktop_.isEmpty() ? tr("Unknown") : desktop_);
+    set(QStringLiteral("session"), session_.isEmpty() ? tr("Unknown") : session_);
     set(QStringLiteral("memory"),
         tr("%1 total, %2 used, %3 cached")
             .arg(formatBytes(s.memTotal), formatBytes(s.memUsed), formatBytes(s.memCached)));

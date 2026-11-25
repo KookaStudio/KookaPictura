@@ -1964,6 +1964,10 @@ Näytönohjaimen ajuri: %5</translation>
         <translation>Yhdistä valokuvat…</translation>
     </message>
     <message>
+        <source>Pictura Metrics</source>
+        <translation>Pictura-mittarit</translation>
+    </message>
+    <message>
         <source>Pictura Raw…</source>
         <translation>Pictura Raw…</translation>
     </message>
