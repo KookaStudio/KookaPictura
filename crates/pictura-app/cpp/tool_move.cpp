@@ -2,6 +2,7 @@
 
 #include "file_drop_router.h"
 #include "image_view.h"
+#include "memory_refusal.h"
 #include "panels/layers_panel_internal.h"
 #include "smart_guides.h"
 #include "tools.h"
@@ -355,12 +356,15 @@ std::unique_ptr<ToolHandler> makeMoveToolHandler(std::shared_ptr<MoveGroup> move
 
 QString moveMemoryRefusalMessage()
 {
-    if (edit_refused_for_scratch_full()) {
-        return QObject::tr("Could not move: the scratch disks are full. Free space on the "
-                           "scratch disks, then try again.");
-    }
-    return QObject::tr("Could not move: not enough memory. Close other documents or free "
-                       "memory and try again.");
+    const QString memory = QObject::tr("Could not move: not enough memory. Close other documents "
+                                       "or free memory and try again.");
+    const QString scratchFull = QObject::tr("Could not move: the scratch disks are full. Free "
+                                            "space on the scratch disks, then try again.");
+    const QString unreadable = QObject::tr("Could not move: image data could not be read back "
+                                           "from the scratch disk. Check the scratch disks, then "
+                                           "try again.");
+    const QString message = refusalMessage(last_refusal(), memory, scratchFull, unreadable);
+    return message.isEmpty() ? memory : message;
 }
 
 } // namespace pictura

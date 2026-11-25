@@ -128,7 +128,7 @@ impl PictureViewRust {
         let cost = area(dest.unwrap_or(session.orig_rect))
             .saturating_mul(8)
             .saturating_add(area(session.orig_rect).saturating_mul(8));
-        if !memory_gate::admit_fresh(cost) {
+        if !memory_gate::admit_resident(cost).admitted() {
             return false;
         }
         let result = match session.warp.as_ref() {

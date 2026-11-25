@@ -115,7 +115,7 @@ impl qobject::PictureView {
                 right: doc.width as i32,
                 bottom: doc.height as i32,
             };
-            if !memory_gate::admit(12 * memory_gate::area(canvas)) {
+            if !memory_gate::admit_resident(12 * memory_gate::area(canvas)).admitted() {
                 return Edit::None;
             }
             let mut candidate = doc.clone();

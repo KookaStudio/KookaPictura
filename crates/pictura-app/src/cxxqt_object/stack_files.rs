@@ -149,7 +149,7 @@ pub fn load_files_into_stack(
         .iter()
         .map(|image| u64::from(image.width) * u64::from(image.height) * 4)
         .sum();
-    if !memory_gate::admit_fresh(estimate) {
+    if !memory_gate::admit_resident(estimate).admitted() {
         failed.extend(images.into_iter().map(|image| image.path));
         return to_qstringlist(&failed);
     }

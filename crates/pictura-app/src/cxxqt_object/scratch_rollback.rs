@@ -16,7 +16,7 @@ impl PictureViewRust {
     /// since the last commit and that state holds one; the presentation of
     /// the restore, or `None` to let the edit commit.
     pub(super) fn roll_back_unreadable(&mut self) -> Option<Presentation> {
-        if !memory_gate::take_unreadable_reads() {
+        if !memory_gate::read_lost_tiles() {
             return None;
         }
         let prior = self.session.history.current_snapshot()?;

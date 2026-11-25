@@ -84,3 +84,36 @@ fn an_edit_on_unreadable_tiles_changes_nothing() {
     );
     assert!(eviction::unreadable_count() > 0);
 }
+
+// [mga_rollback]
+#[test]
+fn a_rolled_back_edit_reports_unreadable_tiles() {
+    let mut view = PictureViewRust {
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(dense_doc()),
+        ..Default::default()
+    };
+    view.apply_edit("Setup", Edit::Full);
+    let before = view.session.doc.snapshot().expect("document");
+    lose_tiles(&before);
+    memory_gate::clear();
+    // The "filter" reads lost tiles, so the edit rolls back.
+    {
+        let doc = view.session.doc.as_mut().expect("document");
+        let w = doc.width as usize;
+        let plane = &mut doc.layers[0].channels_mut()[0].data;
+        let mut row = vec![0u8; w];
+        for y in 0..8 {
+            plane.read_row_into(y, w, &mut row);
+            row.iter_mut().for_each(|v| *v = 255 - *v);
+            plane.write_row_from(y, w, &row);
+        }
+    }
+    view.apply_edit("Invert", Edit::Full);
+    // The typed reason, not a separate predicate, is what the presentation reads.
+    assert_eq!(
+        memory_gate::last_refusal(),
+        Some(memory_gate::Refusal::ScratchUnreadable)
+    );
+    assert!(!memory_gate::edit_refused_for_scratch_full());
+    assert!(!memory_gate::edit_refused_for_memory());
+}

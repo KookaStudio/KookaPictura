@@ -406,7 +406,7 @@ impl PictureViewRust {
             return false;
         };
         let path = self.layer_target.single().unwrap_or_default().to_string();
-        if !memory_gate::admit_fresh(memory_gate::brush_bytes(doc, &path)) {
+        if !memory_gate::admit_resident(memory_gate::brush_bytes(doc, &path)).admitted() {
             return false;
         }
         // A mask target paints the mask's coverage instead of the layer: the

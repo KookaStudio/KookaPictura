@@ -312,7 +312,7 @@ impl qobject::PictureView {
             .doc
             .as_ref()
             .map_or(0, memory_gate::add_layer_bytes);
-        if !memory_gate::admit_fresh(estimate) {
+        if !memory_gate::admit_resident(estimate).admitted() {
             return -1;
         }
         let mut created = -1;
@@ -921,7 +921,7 @@ impl qobject::PictureView {
             .doc
             .as_ref()
             .map_or(0, memory_gate::add_layer_bytes);
-        if !memory_gate::admit_fresh(estimate) {
+        if !memory_gate::admit_resident(estimate).admitted() {
             return QString::default();
         }
         let selection_path = selection_path.to_string();

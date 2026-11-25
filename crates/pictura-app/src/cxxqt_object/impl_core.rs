@@ -242,7 +242,7 @@ impl qobject::PictureView {
         let (w, h) = (width as u32, height as u32);
         let estimate =
             memory_gate::new_document_bytes(w, h, mode.color_channels(), BitDepth::Eight);
-        if !memory_gate::admit_fresh(estimate) {
+        if !memory_gate::admit_resident(estimate).admitted() {
             return false;
         }
         // Every plane starts as uniform tiles, so a white Background and its

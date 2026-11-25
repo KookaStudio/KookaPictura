@@ -31,8 +31,30 @@ pub mod ffi {
         type PictureView = super::PictureView;
     }
 
+    /// Why a gated edit was refused. One typed reason, so a presenter never
+    /// re-derives which message applies.
+    #[namespace = "pictura"]
+    #[repr(u8)]
+    enum Refusal {
+        /// The last edit was admitted: nothing to present.
+        None,
+        /// The governor's room could not hold the edit.
+        Memory,
+        /// The edit needed tiles that could not be read back from the scratch
+        /// disk.
+        ScratchUnreadable,
+        /// The spillable output did not fit the room plus the scratch disks.
+        ScratchFull,
+    }
+
     #[namespace = "pictura"]
     extern "Rust" {
+        /// Why the last gated edit (a fill, a Move or Free Transform, or a path
+        /// the memory benchmark drives, #1211) was refused, or `None` when it
+        /// was admitted or made no admission call. A refusal the governor
+        /// recorded past the gate reads as `Memory`.
+        fn last_refusal() -> Refusal;
+
         /// The number of built-in gradients.
         fn gradient_preset_count() -> i32;
 

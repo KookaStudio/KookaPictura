@@ -31,10 +31,10 @@ impl qobject::PictureView {
     /// Reuses the cached base when the content revision and move-group key
     /// match; otherwise it recomputes.
     pub fn begin_move_preview(mut self: Pin<&mut Self>) -> bool {
+        memory_gate::clear();
         if !self.rust().quick_mask_content_allowed() {
             return false;
         }
-        memory_gate::clear();
         if let Some(path) = super::super::mask_move::target(self.rust()) {
             return self.begin_mask_move(path);
         }
@@ -309,7 +309,7 @@ impl qobject::PictureView {
                     .unwrap_or(layer.rect);
                 // The planar copy, its RGBA bytes, the image, and the copy the
                 // canvas takes of it.
-                if !memory_gate::admit(16 * memory_gate::area(rect)) {
+                if !memory_gate::admit_resident(16 * memory_gate::area(rect)).admitted() {
                     return false;
                 }
                 offset = (rect.left - layer.rect.left, rect.top - layer.rect.top);
@@ -429,10 +429,10 @@ impl qobject::PictureView {
     }
 
     pub fn commit_move(mut self: Pin<&mut Self>, dx: i32, dy: i32) -> bool {
+        memory_gate::clear();
         if !self.rust().quick_mask_content_allowed() {
             return false;
         }
-        memory_gate::clear();
         if dx == 0 && dy == 0 {
             return false;
         }
@@ -450,7 +450,7 @@ impl qobject::PictureView {
             let original = doc.clone();
             let dirty = translate_move_group(doc, &paths, dx, dy);
             let cost = dirty.map(move_commit_cost);
-            if cost.is_some_and(|c| !memory_gate::admit_spilling(c.working, c.spillable)) {
+            if cost.is_some_and(|cost| !memory_gate::admit_commit(&cost).admitted()) {
                 *doc = original;
                 return false;
             }
