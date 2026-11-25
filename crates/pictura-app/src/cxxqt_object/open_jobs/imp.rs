@@ -805,11 +805,13 @@ fn start_with_status(
             .ok();
     };
     let failure_thread = qt_thread.clone();
-    let worker = std::thread::Builder::new().spawn(move || {
-        let (result, status) = work(&progress);
-        delay(delay_ms);
-        finish_open(qt_thread, request, result, status);
-    });
+    let worker = std::thread::Builder::new()
+        .name(crate::worker_threads::OPEN.into())
+        .spawn(move || {
+            let (result, status) = work(&progress);
+            delay(delay_ms);
+            finish_open(qt_thread, request, result, status);
+        });
     if worker.is_err() {
         finish_open(
             failure_thread,

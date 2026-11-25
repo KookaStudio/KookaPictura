@@ -302,6 +302,7 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("HelpSubmitIssue", "help.submit.issue"),
     ("HelpAbout", "help.about"),
     ("HelpDeveloperDesignSystem", "help.developer.designSystem"),
+    ("HelpDeveloperDebugToolset", "help.developer.debugToolset"),
     ("FilePrint", "file.print"),
     ("FilePrintOneCopy", "file.print.one.copy"),
     ("ImageApplyImage", "image.apply.image"),

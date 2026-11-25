@@ -444,6 +444,11 @@ public:
     void showDesignSystemDialog();
     // Help > System Info: collect a snapshot and show/refresh the report.
     void showSystemInfo();
+    // Help > Developer > Pictura Metrics: show or hide the floating metrics panel;
+    // hidden means no timer and no sample (the panel is built on first use).
+    void setDebugToolsetEnabled(bool enabled);
+    bool debugToolsetEnabled() const;
+    void syncDebugToolsetCheck();
     // Help > Submit Issue: copy the report and open the repository's new-issue
     // page prefilled with it.
     void submitIssue();
@@ -577,6 +582,7 @@ private:
     void restoreHistoryLog(const Preferences& prefs);
     QPointer<DesignSystemDialog> designSystemDialog_;
     QPointer<SystemInfoDialog> systemInfoDialog_;
+    DebugToolsetPanel* debugToolset_ = nullptr;
     ToolController* tools_ = nullptr;
     QuickMaskUiState quickMaskUi_;
 

@@ -629,6 +629,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "help.submit.issue", path: &["Help", "Submit Issue"], label: "Submit Issue", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "help.about", path: &["Help", "About Kooka Pictura"], label: "About Kooka Pictura", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "help.developer.designSystem", path: &["Help", "Developer", "Design System..."], label: "Design System...", shortcut: "", implemented: true, checkable: false },
+    CommandSpec { id: "help.developer.debugToolset", path: &["Help", "Developer", "Pictura Metrics"], label: "Pictura Metrics", shortcut: "", implemented: true, checkable: true },
     CommandSpec { id: "panel.layers.newLayer", path: &[], label: "New Layer", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "panel.layers.newGroup", path: &[], label: "New Group", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "panel.layers.moveUp", path: &[], label: "Move Layer Up", shortcut: "", implemented: true, checkable: false },

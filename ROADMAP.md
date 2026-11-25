@@ -689,6 +689,17 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [x] **Help ▸ System Info and Submit Issue** — a snapshot environment report
       with Copy, and a prefilled GitHub issue carrying the same report.
       `crates/pictura-app/cpp/system_info.cpp`.
+- [x] **Help ▸ Developer ▸ Pictura Metrics (#1589)** — a light-yellow floating
+      tool window (off at startup, never saved; drag it off the app, resize it,
+      close it to stop collecting) refreshed every 2 s, laid out as tables in two columns (titled Pictura Metrics):
+      Pictura Resource Usage (RAM, swap, CPU, threads, GPU time, CPU by thread
+      group, RAM, CPU and per-group history charts, GPU busy and memory from DRM
+      fdinfo), Pictura Memory Budget (governor, scratch disk, tiles), Pictura
+      Activity (open files, disk I/O, page faults, context switches, jobs
+      running, edit and paint p50/p95), Platform (OS, desktop, memory, swap, a
+      per-CPU heat matrix, system GPU) and the build placeholder. Linux only; not a CS6 feature,
+      added by owner decision.
+      `crates/pictura-app/cpp/debug_toolset_panel.cpp`.
 - [ ] Status bar readouts and the status-bar options popup (#497)
 - [ ] The active layer name in the title bar (#498)
 - [x] `Ctrl+Tab` and `Shift+Ctrl+Tab` document cycling (#499)

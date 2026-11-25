@@ -1964,6 +1964,10 @@ GPU-Treiber: %5</translation>
         <translation>Panorama zusammenfügen…</translation>
     </message>
     <message>
+        <source>Pictura Metrics</source>
+        <translation>Pictura-Metriken</translation>
+    </message>
+    <message>
         <source>Pictura Raw…</source>
         <translation>Pictura Raw…</translation>
     </message>

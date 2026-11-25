@@ -274,6 +274,7 @@ free	web_quantize_custom	web_quantize_custom	api/engine_bridge.h	pictura_app/src
 free	web_quantize_locked	web_quantize_locked	api/engine_bridge.h	pictura_app/src/cxxqt_object/web_export.cxxqt.h
 free	web_slice_html	web_slice_html	api/engine_bridge.h	pictura_app/src/cxxqt_object/web_export.cxxqt.h
 free	webp_encode	webp_encode	api/engine_bridge.h	pictura_app/src/cxxqt_object/export.cxxqt.h
+free	worker_threads_init	worker_threads_init	api/engine_bridge.h	pictura_app/src/app_runtime_bridge.cxxqt.h
 free	zoomify_group_for	zoomify_group_for	api/engine_bridge.h	pictura_app/src/cxxqt_object/export.cxxqt.h
 free	zoomify_html	zoomify_html	api/engine_bridge.h	pictura_app/src/cxxqt_object/export.cxxqt.h
 free	zoomify_plan_flat	zoomify_plan_flat	api/engine_bridge.h	pictura_app/src/cxxqt_object/export.cxxqt.h

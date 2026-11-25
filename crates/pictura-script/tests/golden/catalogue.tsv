@@ -624,6 +624,7 @@ help.system.info	Help/System Info	System Info		1	0
 help.submit.issue	Help/Submit Issue	Submit Issue		1	0
 help.about	Help/About Kooka Pictura	About Kooka Pictura		1	0
 help.developer.designSystem	Help/Developer/Design System...	Design System...		1	0
+help.developer.debugToolset	Help/Developer/Pictura Metrics	Pictura Metrics		1	1
 panel.layers.newLayer		New Layer		1	0
 panel.layers.newGroup		New Group		1	0
 panel.layers.moveUp		Move Layer Up		1	0

@@ -29,6 +29,7 @@ class ColorPanel;
 class ChannelsPanel;
 class ColorState;
 class CanvasScrollBars;
+class DebugToolsetPanel;
 class DesignSystemDialog;
 class DocumentFloatWindow;
 class DocumentTileHost;

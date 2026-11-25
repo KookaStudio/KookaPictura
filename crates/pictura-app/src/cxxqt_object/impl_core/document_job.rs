@@ -357,18 +357,22 @@ impl PictureViewRust {
         let panic_for_test = std::mem::take(&mut self.document_jobs.panic_for_test);
         let worker = {
             let progress = progress.clone();
-            std::thread::Builder::new().spawn(move || {
-                let outcome = job::run(&progress, || {
-                    // The snapshot and progress token are exclusive to this stage.
-                    let outcome = guard(AssertUnwindSafe(|| {
-                        run_document_engine(&mut doc, op, panic_for_test)
-                    }));
-                    hold_for_test(&progress, delay);
-                    outcome
+            std::thread::Builder::new()
+                .name(crate::worker_threads::DOCUMENT.into())
+                .spawn(move || {
+                    let outcome = job::run(&progress, || {
+                        // The snapshot and progress token are exclusive to this stage.
+                        let outcome = guard(AssertUnwindSafe(|| {
+                            run_document_engine(&mut doc, op, panic_for_test)
+                        }));
+                        hold_for_test(&progress, delay);
+                        outcome
+                    })
+                    .map_err(|_| {
+                        Error::new(ErrorCode::Cancelled, "the operation was cancelled")
+                    })??;
+                    Ok(outcome.map(|outcome| (doc, outcome)))
                 })
-                .map_err(|_| Error::new(ErrorCode::Cancelled, "the operation was cancelled"))??;
-                Ok(outcome.map(|outcome| (doc, outcome)))
-            })
         };
         let Ok(worker) = worker else {
             return self.note_document_failure(ErrorCode::Host);
