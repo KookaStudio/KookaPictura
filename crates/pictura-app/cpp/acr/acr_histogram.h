@@ -28,12 +28,22 @@ public:
     void setImage(const QImage& image);
     void clear();
 
+    // The camera exposure readout beside the RGB values, one line each. An
+    // empty line is hidden.
+    void setExposureInfo(const QString& top, const QString& bottom);
+    // Show the hovered pixel's values; a negative channel restores the average.
+    void setPickerColor(int r, int g, int b);
+
     int seriesCountForTest() const;
     QString readoutForTest() const;
 
 private:
     HistogramView* view_ = nullptr;
     QLabel* readout_ = nullptr;
+    QLabel* exposureTop_ = nullptr;
+    QLabel* exposureBottom_ = nullptr;
+    QString defaultReadout_;
+    bool pickerActive_ = false;
 };
 
 } // namespace pictura

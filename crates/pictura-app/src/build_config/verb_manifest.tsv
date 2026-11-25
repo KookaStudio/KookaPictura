@@ -513,6 +513,7 @@ free	liquify_stroke_to	liquify_stroke_to	api/filters_bridge.h	pictura_app/src/cx
 free	liquify_undo	liquify_undo	api/filters_bridge.h	pictura_app/src/cxxqt_object/filter_tools/liquify.cxxqt.h
 free	match_color_source_stats	match_color_source_stats	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_match_color.cxxqt.h
 free	match_color_target_stats	match_color_target_stats	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_match_color.cxxqt.h
+free	photo_info	photo_info	api/filters_bridge.h	pictura_app/src/cxxqt_object/filter_tools.cxxqt.h
 free	read_watermark	read_watermark	api/filters_bridge.h	pictura_app/src/cxxqt_object/filter_tools.cxxqt.h
 free	reveal_all	reveal_all	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_ops.cxxqt.h
 free	rotate_document_arbitrary	rotate_document_arbitrary	api/filters_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_ops.cxxqt.h

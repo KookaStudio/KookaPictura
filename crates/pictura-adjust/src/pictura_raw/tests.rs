@@ -247,6 +247,112 @@ fn split_toning_tints_the_two_ends_oppositely() {
 }
 
 #[test]
+fn split_toning_balance_biases_the_highlights() {
+    let input = gray(1, 1, 128);
+    let settings = |balance: i32| {
+        settings_with(|s| {
+            s.split_toning.shadow_hue = Some(0);
+            s.split_toning.shadow_saturation = Some(100);
+            s.split_toning.highlight_hue = Some(240);
+            s.split_toning.highlight_saturation = Some(100);
+            s.split_toning.balance = Some(balance);
+        })
+    };
+    let highlights = render_pictura_raw(&input, &settings(100)).unwrap();
+    let shadows = render_pictura_raw(&input, &settings(-100)).unwrap();
+    assert!(
+        px(&highlights, 0)[2] > px(&highlights, 0)[0],
+        "a positive balance favours the highlight hue"
+    );
+    assert!(
+        px(&shadows, 0)[0] > px(&shadows, 0)[2],
+        "a negative balance favours the shadow hue"
+    );
+}
+
+#[test]
+fn split_toning_highlights_only_tints_the_bright_end() {
+    let input = rgb_grid(&[[40, 40, 40], [220, 220, 220]]);
+    let out = render_pictura_raw(
+        &input,
+        &settings_with(|s| {
+            s.split_toning.highlight_hue = Some(167);
+            s.split_toning.highlight_saturation = Some(85);
+        }),
+    )
+    .unwrap();
+    assert_eq!(
+        px(&out, 0),
+        px(&input, 0),
+        "a highlight-only tint leaves the shadow alone"
+    );
+    assert!(
+        px(&out, 1)[1] > px(&out, 1)[0],
+        "the highlight takes the green-cyan tint"
+    );
+}
+
+#[test]
+fn split_toning_highlights_tint_the_upper_midtones() {
+    let input = gray(1, 1, 153);
+    let out = render_pictura_raw(
+        &input,
+        &settings_with(|s| {
+            s.split_toning.highlight_hue = Some(230);
+            s.split_toning.highlight_saturation = Some(52);
+        }),
+    )
+    .unwrap();
+    let p = px(&out, 0);
+    assert!(
+        p[2] as i32 - p[0] as i32 > 40,
+        "a moderate highlight tint is visible in the upper midtones: {p:?}"
+    );
+    assert!(p[0] < 153, "the tint cools the red channel: {p:?}");
+}
+
+#[test]
+fn split_toning_shadows_tint_the_lower_midtones() {
+    let input = gray(1, 1, 90);
+    let out = render_pictura_raw(
+        &input,
+        &settings_with(|s| {
+            s.split_toning.shadow_hue = Some(30);
+            s.split_toning.shadow_saturation = Some(52);
+        }),
+    )
+    .unwrap();
+    let p = px(&out, 0);
+    assert!(
+        p[0] as i32 - p[2] as i32 > 30,
+        "a moderate shadow tint is visible in the lower midtones: {p:?}"
+    );
+    assert!(p[2] < 90, "the tint cools the blue channel: {p:?}");
+}
+
+#[test]
+fn split_toning_preserves_luminance() {
+    let input = rgb_grid(&[[40, 40, 40], [220, 220, 220]]);
+    let out = render_pictura_raw(
+        &input,
+        &settings_with(|s| {
+            s.split_toning.shadow_hue = Some(0);
+            s.split_toning.shadow_saturation = Some(100);
+            s.split_toning.highlight_hue = Some(240);
+            s.split_toning.highlight_saturation = Some(100);
+        }),
+    )
+    .unwrap();
+    let luma = |p: [u8; 3]| 0.299 * p[0] as f64 + 0.587 * p[1] as f64 + 0.114 * p[2] as f64;
+    for i in 0..2 {
+        assert!(
+            (luma(px(&out, i)) - luma(px(&input, i))).abs() < 3.0,
+            "split toning keeps the pixel's luminance"
+        );
+    }
+}
+
+#[test]
 fn lens_vignette_darkens_the_corners() {
     let input = gray(9, 9, 200);
     let out = render_pictura_raw(

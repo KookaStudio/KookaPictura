@@ -317,7 +317,7 @@ Source list: the Image > Adjustments list (23 rows; 25 commands when Auto Tone/C
 | P-FLT-18 | Adaptive Wide Angle | Y | Y | Y | Partial | in-scope | crates/pictura-filters/src | none | Auto, lens profiles, Panorama, Smart Filter re-edit, and rotation handles remain | #891 |
 | P-FLT-19 | Lens Correction | Y | Y | Y | Partial | in-scope | crates/pictura-filters/src | none | Save/Load Settings, Set Lens Default, and Alt-drag fringe isolation remain | #933 |
 | P-FLT-20 | Vanishing Point | Y | Y | Y | Complete | in-scope | crates/pictura-filters/src | none | — | #349 |
-| P-FLT-21 | Camera Raw Filter | N/A | N/A | Y | Partial | in-scope | crates/pictura-app/cpp/pictura_raw_dialog.cpp | none | post-CS6:src:1; src:4; Pictura Raw is an independent approximation; Presets is a stub | #633 |
+| P-FLT-21 | Camera Raw Filter | N/A | N/A | Y | Partial | in-scope | crates/pictura-app/cpp/pictura_raw_dialog.cpp | none | post-CS6:src:1; src:4; Pictura Raw is an independent approximation; the Camera Raw settings and preset menu is not implemented | #633 |
 | P-FLT-22 | Lighting Effects | Y | Y | Y | Unknown | in-scope | crates/pictura-filters/src/render/lighting.rs | none | conflict:11; src:3; the general filter reference predates CC 28.0 and the former 3D FAQ now redirects; availability in CC 28.0 is unverified | follow-up:verify the menu and filter in Photoshop CC 28.0 |
 | P-FLT-23 | Extract and Pattern Maker | Y | Y | Y | Missing | non-goal | — | none | Optional CS6 plug-ins; not a parity target | non-goal:ROADMAP.md:705 |
 | P-FLT-24 | Digimarc watermark | Y | Y | Y | Complete | in-scope | crates/pictura-filters/src | none | Approximate spread-spectrum carrier; not Digimarc-compatible | #350 |

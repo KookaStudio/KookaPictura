@@ -5,6 +5,7 @@
 
 #include <QtGui/QColor>
 #include <QtGui/QImage>
+#include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QVBoxLayout>
 
@@ -35,14 +36,56 @@ AcrHistogram::AcrHistogram(QWidget* parent)
     view_ = new HistogramView(this);
     view_->setMinimumHeight(80);
     layout->addWidget(view_);
-    readout_ = new QLabel(QCoreApplication::translate("PicturaUi", "R: —  G: —  B: —"), this);
-    layout->addWidget(readout_);
+
+    defaultReadout_ = QCoreApplication::translate("PicturaUi", "R: —  G: —  B: —");
+    readout_ = new QLabel(defaultReadout_, this);
+    auto* row = new QHBoxLayout;
+    row->setContentsMargins(0, 0, 0, 0);
+    row->addWidget(readout_);
+    row->addStretch(1);
+    auto* exposure = new QVBoxLayout;
+    exposure->setContentsMargins(0, 0, 0, 0);
+    exposure->setSpacing(0);
+    exposureTop_ = new QLabel(this);
+    exposureTop_->setObjectName(QStringLiteral("acrExposureTop"));
+    exposureTop_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    exposureBottom_ = new QLabel(this);
+    exposureBottom_->setObjectName(QStringLiteral("acrExposureBottom"));
+    exposureBottom_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    exposure->addWidget(exposureTop_);
+    exposure->addWidget(exposureBottom_);
+    row->addLayout(exposure);
+    layout->addLayout(row);
+}
+
+void AcrHistogram::setExposureInfo(const QString& top, const QString& bottom)
+{
+    exposureTop_->setText(top);
+    exposureTop_->setVisible(!top.isEmpty());
+    exposureBottom_->setText(bottom);
+    exposureBottom_->setVisible(!bottom.isEmpty());
+}
+
+void AcrHistogram::setPickerColor(int r, int g, int b)
+{
+    if (r < 0 || g < 0 || b < 0) {
+        pickerActive_ = false;
+        readout_->setText(defaultReadout_);
+        return;
+    }
+    pickerActive_ = true;
+    readout_->setText(QCoreApplication::translate("PicturaUi", "R: %1  G: %2  B: %3")
+                          .arg(r)
+                          .arg(g)
+                          .arg(b));
 }
 
 void AcrHistogram::clear()
 {
     view_->clear();
-    readout_->setText(QCoreApplication::translate("PicturaUi", "R: —  G: —  B: —"));
+    pickerActive_ = false;
+    defaultReadout_ = QCoreApplication::translate("PicturaUi", "R: —  G: —  B: —");
+    readout_->setText(defaultReadout_);
 }
 
 void AcrHistogram::setImage(const QImage& image)
@@ -85,10 +128,13 @@ void AcrHistogram::setImage(const QImage& image)
     view_->setSeries(series);
 
     if (count > 0) {
-        readout_->setText(QCoreApplication::translate("PicturaUi", "R: %1  G: %2  B: %3")
+        defaultReadout_ = QCoreApplication::translate("PicturaUi", "R: %1  G: %2  B: %3")
                               .arg(sumR / count)
                               .arg(sumG / count)
-                              .arg(sumB / count));
+                              .arg(sumB / count);
+        if (!pickerActive_) {
+            readout_->setText(defaultReadout_);
+        }
     }
 }
 

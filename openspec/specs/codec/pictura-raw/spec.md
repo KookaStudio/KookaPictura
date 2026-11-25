@@ -1,7 +1,9 @@
 # pictura-raw Specification
 
 ## Purpose
-The Pictura Raw smart filter: settings alias, Fltr codec, layer attachment, render, document op, and apply command.
+The Pictura Raw smart filter and dialog: settings alias, Fltr codec, layer
+attachment, render, document op, apply command, and the dialog's settings
+actions, `crs:` XMP load/save, and preview zoom.
 
 ## Requirements
 
@@ -362,3 +364,179 @@ or an empty image, SHALL be refused.
 
 - **WHEN** a buffer one sample short, and a 0 × 0 image, render
 - **THEN** each returns an error
+
+### Requirement: Pictura Raw preview zoom
+
+The preview pane SHALL change its zoom on a mouse wheel over the image, using the
+same zoom ladder as the − and + buttons. A wheel up SHALL step toward a larger
+zoom and a wheel down toward a smaller one.
+
+#### Scenario: The wheel steps the preview zoom [ra_zoom_wheel]
+- **WHEN** the mouse wheel is turned over the preview
+- **THEN** the zoom readout moves one step along the ladder
+
+#### Scenario: The wheel follows the button ladder [ra_zoom_ladder]
+- **WHEN** the wheel is turned up from Fit in one dialog and the + button is
+  pressed once in another
+- **THEN** both dialogs show the same zoom readout
+
+### Requirement: Pictura Raw dialog layout
+
+The Pictura Raw dialog's tab strip SHALL be an even icon strip that draws no base
+line, and the controls column SHALL be separated from the preview so the image
+does not touch the controls.
+
+#### Scenario: The tab strip has no base line and even icons [ra_layout_tabs]
+- **WHEN** the dialog is opened
+- **THEN** the tab strip draws no base line, expands its tabs evenly, and uses one
+  icon size
+
+#### Scenario: The controls clear the preview [ra_layout_spacing]
+- **WHEN** the dialog is opened
+- **THEN** the outer layout that separates the preview from the controls column
+  carries spacing
+
+### Requirement: Pictura Raw bottom bar
+
+The dialog SHALL align the zoom/Fit controls, the Shadows/Highlights toggles,
+and the Done/Cancel/OK actions on one baseline, and SHALL show a resize grip in
+the bottom-right corner below the OK action.
+
+#### Scenario: The bottom controls share a baseline [rb_baseline]
+
+- **WHEN** the dialog is shown
+- **THEN** the Shadows/Highlights toggles and the OK button have the same bottom
+  edge
+
+#### Scenario: A resize grip sits below OK [rb_size_grip]
+
+- **WHEN** the dialog is shown
+- **THEN** a visible size grip lies below the OK button at the bottom-right
+  corner
+
+### Requirement: Pictura Raw photo information
+
+The dialog SHALL show the photo's name, colour space, bit depth, pixel
+dimensions with megapixels, and resolution in ppi for the pending raw file or
+the open document, plus the file size when the file is on disk. It SHALL show
+the camera's f-number, exposure time, ISO, and focal length in the histogram
+area when the source metadata provides them, and SHALL omit a value that is
+missing. A raw file's resolution SHALL come from its EXIF when present, else
+72 ppi; a document without a resolution resource SHALL report 72 ppi.
+
+#### Scenario: A raw open shows the raw file's information [rb_photo_raw]
+
+- **WHEN** the raw open dialog is shown for a 16 by 12 DNG named `shot.dng`
+- **THEN** the status bar names `shot.dng` and reports 16 by 12 and 16 bits
+
+#### Scenario: A filter shows the document's information [rb_photo_document]
+
+- **WHEN** the filter dialog is shown for a 16 by 16 8-bit RGB document
+- **THEN** the status bar reports 16 by 16, 8 bits, sRGB, and 72 ppi
+
+#### Scenario: Missing camera metadata is omitted [rb_photo_missing]
+
+- **WHEN** the source carries no EXIF exposure tags
+- **THEN** the histogram's exposure labels are empty
+
+### Requirement: Pictura Raw preview picker
+
+Hovering the preview SHALL set the histogram's RGB readout to the pixel under
+the cursor. Leaving the image SHALL restore the readout the preview's average
+provides.
+
+#### Scenario: Hovering samples the pixel [rb_picker_hover]
+
+- **WHEN** the cursor is over a red pixel of the preview
+- **THEN** the RGB readout shows that pixel's red, green, and blue values
+
+#### Scenario: Leaving restores the average [rb_picker_leave]
+
+- **WHEN** the cursor leaves the preview after hovering
+- **THEN** the RGB readout returns to the default average readout
+
+### Requirement: Pictura Raw panel inset
+
+Every control panel SHALL inset its content from the panel's left and right
+edges so a slider's name does not touch the border. The left inset SHALL be at
+least twelve pixels.
+
+#### Scenario: Slider names clear the panel border [rp_panel_inset]
+
+- **WHEN** a control panel is shown
+- **THEN** its layout carries a left content margin of at least twelve pixels and
+  a right content margin of at least eight pixels
+
+### Requirement: Pictura Raw HSL range colours
+
+The HSL/Grayscale Hue, Saturation, and Luminance sliders SHALL each paint the
+colour ramp of their own range: reds, oranges, yellows, greens, aquas, blues,
+purples, and magentas, in the same order as the range labels. The Grayscale Mix
+sliders SHALL stay grey.
+
+#### Scenario: Each range slider carries its own colours [rp_hsl_ramps]
+
+- **WHEN** the Hue, Saturation, or Luminance tab is shown
+- **THEN** the Reds slider's middle stop is red, Oranges orange, Yellows
+  yellow, Greens green, Aquas cyan, Blues blue, Purples violet, and Magentas
+  magenta, and the Grayscale Mix sliders are grey
+
+### Requirement: Pictura Raw effects tab
+
+The tab strip SHALL expose eight tabs, with the Effects tab carrying the `fx`
+icon and its Grain and Post Crop Vignetting controls. The dialog SHALL NOT show
+a separate settings button or settings list at the right of the tab strip.
+
+#### Scenario: The Effects tab is the fx tab [rp_effects_icon]
+
+- **WHEN** the dialog is shown
+- **THEN** the tab strip has eight tabs, the Effects tab is the sixth, it carries
+  the `fx` icon, and no settings button sits at its right
+
+### Requirement: Pictura Raw split toning
+
+The Split Toning tab SHALL tint shadows and highlights with the selected hue
+and saturation while preserving each pixel's luminance. The shadow and
+highlight tints SHALL overlap across a crossover centred on the Balance pivot,
+so a moderate saturation visibly tints the upper midtones a highlight tint
+targets and the lower midtones a shadow tint targets, not only the tonal ends.
+A non-zero saturation on one side SHALL tint that side even when the other
+side's saturation is zero. A positive Balance SHALL bias the tint toward the
+highlights and a negative Balance toward the shadows. Each Saturation slider's
+track SHALL run from neutral grey to the colour of its paired Hue slider, and
+the Hue tracks SHALL show a full hue wheel.
+
+#### Scenario: Positive balance favours highlights [rs_balance]
+
+- **WHEN** a mid-grey pixel renders with a red shadow tint, a blue highlight
+  tint, and Balance +100, then with Balance -100
+- **THEN** the positive balance leaves the pixel blue and the negative balance
+  leaves it red
+
+#### Scenario: Split toning preserves luminance [rs_luminance]
+
+- **WHEN** a dark and a bright grey pixel render with opposite shadow and
+  highlight tints
+- **THEN** each pixel's luminance is unchanged within rounding
+
+#### Scenario: Saturation tracks follow the hue [rs_saturation_ramp]
+
+- **WHEN** the Highlights Hue is 167 and the Shadows Hue is 291
+- **THEN** the matching Saturation tracks end in those hue colours, and the Hue
+  tracks span the full wheel
+
+#### Scenario: Highlights tint alone [rs_highlights_only]
+
+- **WHEN** the Highlights Hue is 167 and Highlights Saturation is 85 while the
+  Shadows Saturation is zero
+- **THEN** a bright neutral pixel turns green-cyan and a dark neutral pixel is
+  unchanged, and the dialog's preview follows the highlight sliders
+
+#### Scenario: A moderate tint is visible in the midtones [rs_midtone_visibility]
+
+- **WHEN** a neutral pixel at about 60% luminance renders with Highlights Hue
+  230 and Highlights Saturation 52, and a neutral pixel at about 35% luminance
+  renders with Shadows Hue 30 and Shadows Saturation 52
+- **THEN** the highlight pixel's blue channel is more than 40 levels above its
+  red channel, and the shadow pixel's red channel is more than 30 levels above
+  its blue channel

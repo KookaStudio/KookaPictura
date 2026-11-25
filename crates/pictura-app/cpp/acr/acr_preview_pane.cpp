@@ -6,7 +6,10 @@
 #include "theme.h"
 
 #include <QtCore/QRect>
+#include <QtGui/QColor>
+#include <QtGui/QMouseEvent>
 #include <QtGui/QPainter>
+#include <QtGui/QWheelEvent>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QToolButton>
@@ -27,12 +30,13 @@ AcrPreviewPane::AcrPreviewPane(PictureView* view, const QString& path, QWidget* 
     : QWidget(parent), view_(view), path_(path)
 {
     setMinimumSize(240, 200);
+    setMouseTracking(true);
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->addStretch(1);
 
     auto* row = new QHBoxLayout;
-    row->setContentsMargins(4, 0, 4, 4);
+    row->setContentsMargins(4, 0, 4, 0);
 
     zoomOut_ = new QToolButton(this);
     zoomOut_->setObjectName(QStringLiteral("acrZoomOut"));
@@ -89,6 +93,15 @@ void AcrPreviewPane::setSettingsText(const QString& text)
     } else {
         image_ = view_->pictura_raw_preview(path_, text, kPreviewEdge);
     }
+    update();
+    if (pickerActive_) {
+        updatePicker(lastPickPos_);
+    }
+}
+
+void AcrPreviewPane::setPreviewImageForTest(const QImage& image)
+{
+    image_ = image;
     update();
 }
 
@@ -171,12 +184,58 @@ QImage AcrPreviewPane::applyClipping(const QImage& image, bool shadow, bool high
     return out;
 }
 
+void AcrPreviewPane::mouseMoveEvent(QMouseEvent* event)
+{
+    updatePicker(event->position().toPoint());
+    QWidget::mouseMoveEvent(event);
+}
+
+void AcrPreviewPane::leaveEvent(QEvent* event)
+{
+    if (pickerActive_) {
+        pickerActive_ = false;
+        emit picked(-1, -1, -1);
+    }
+    QWidget::leaveEvent(event);
+}
+
+void AcrPreviewPane::updatePicker(const QPoint& pos)
+{
+    if (image_.isNull() || imageRect_.isEmpty() || !imageRect_.contains(pos)) {
+        if (pickerActive_) {
+            pickerActive_ = false;
+            emit picked(-1, -1, -1);
+        }
+        return;
+    }
+    const int x = qBound(0, (pos.x() - imageRect_.x()) * image_.width() / imageRect_.width(),
+                         image_.width() - 1);
+    const int y = qBound(0, (pos.y() - imageRect_.y()) * image_.height() / imageRect_.height(),
+                         image_.height() - 1);
+    const QColor color = image_.pixelColor(x, y);
+    pickerActive_ = true;
+    lastPickPos_ = pos;
+    emit picked(color.red(), color.green(), color.blue());
+}
+
+void AcrPreviewPane::wheelEvent(QWheelEvent* event)
+{
+    const int delta = event->angleDelta().y();
+    if (delta == 0) {
+        event->ignore();
+        return;
+    }
+    stepZoom(delta > 0 ? 1 : -1);
+    event->accept();
+}
+
 void AcrPreviewPane::paintEvent(QPaintEvent*)
 {
     QPainter painter(this);
     const QRect area = rect().adjusted(0, 0, 0, -kBottomRowHeight);
     painter.fillRect(area, Theme::workspaceColor());
     if (image_.isNull() || area.isEmpty()) {
+        imageRect_ = QRect();
         return;
     }
     const QImage shown = applyClipping(image_, shadowClipping(), highlightClipping());
@@ -189,6 +248,7 @@ void AcrPreviewPane::paintEvent(QPaintEvent*)
     }
     const QRect target(area.center().x() - scaled.width() / 2,
                        area.center().y() - scaled.height() / 2, scaled.width(), scaled.height());
+    imageRect_ = target;
     painter.drawImage(target, shown);
 }
 

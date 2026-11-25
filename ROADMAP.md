@@ -445,11 +445,10 @@ gaps are the CS6 Extended 3D object and camera tools.
 
 ## Camera raw
 
-- [x] **Pictura Raw**, reached through `Filter > Pictura Raw…`, with nine tabs:
+- [x] **Pictura Raw**, reached through `Filter > Pictura Raw…`, with eight tabs:
       Basic, Tone Curve, Detail, HSL/Grayscale, Split Toning, Lens Corrections,
-      Effects, Camera Calibration and Presets. Eight are wired to a Rust
-      renderer; Presets is a stub. It applies to an already-decoded image — it
-      does not read a camera raw file.
+      Effects and Camera Calibration, all wired to a Rust renderer. It applies
+      to an already-decoded image — it does not read a camera raw file.
       `crates/pictura-app/cpp/pictura_raw_dialog.cpp`,
       `crates/pictura-adjust/src/pictura_raw/`.
 - [x] **DNG sensor reader** — `pictura_codec::read_dng` reads a DNG's CFA plane
@@ -578,7 +577,7 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [ ] JPEG, TIFF and PSD from Save Options, file-naming templates (#633)
 - [ ] ACR Workflow Options, ACR preferences, batch raw processing, and Purge
       Camera Raw (#633)
-- [ ] The Pictura Raw Presets tab is a stub list with no persistence (#633)
+- [ ] A Camera Raw settings and preset menu (#633)
 
 ## Panels
 

@@ -300,6 +300,12 @@ QTabBar::tab { background: ${surface-recessed}; color: ${content}; border: 1px s
 QTabBar::tab:hover { background: ${surface-hover}; }
 QTabBar::tab:selected { background: ${surface-tab-active}; color: ${content}; }
 QTabBar::tab:disabled { color: ${content-disabled}; }
+/* The Pictura Raw tab strip is an even icon row: no base line or tab borders,
+   and only the selected tab is filled. */
+QTabBar#acrTabBar { background: transparent; }
+QTabBar#acrTabBar::tab { background: transparent; border: 1px solid transparent; border-bottom: 0; padding: 4px 6px; margin: 0; }
+QTabBar#acrTabBar::tab:hover { background: ${surface-hover}; }
+QTabBar#acrTabBar::tab:selected { background: ${surface-tab-active}; border-color: ${border}; }
 
 /* M44: the active panel tab takes the panel surface (`${surface}`) so it reads as
    continuous with the body; inactive tabs recede to the darker `${surface-header}`.

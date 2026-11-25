@@ -4,6 +4,10 @@
 //! [`PictureView`] (their own bridge, so the `PictureView` declaration list does
 //! not grow). Ported from perfecto25/photorust's filter commit path.
 //!
+//! The Pictura Raw dialog's `crs:` settings-file conversion lives here too: the
+//! dialog belongs to the Pictura Raw filter, and the conversion is a pair of
+//! free functions like the rest of this bridge.
+//!
 //! Source: https://github.com/perfecto25/photorust
 //!
 //! [`PictureView`]: super::qobject::PictureView
@@ -301,5 +305,11 @@ pub mod ffi {
         /// Source slot (0 None, 1 Transparency, 2 Layer Mask, 3 Selection) and
         /// return its id, or 0 when the source is unavailable.
         fn filter_lens_blur_depth(view: &PictureView, source: i32) -> i32;
+
+        /// The Pictura Raw dialog's photo information as `key\tvalue` rows:
+        /// name, width, height, depth, ppi, profile, file_size, f_number,
+        /// exposure, iso, and focal_length. The pending raw file is used when
+        /// one is open, else the document; missing metadata leaves its row out.
+        fn photo_info(view: &PictureView) -> QStringList;
     }
 }

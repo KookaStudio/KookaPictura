@@ -22,8 +22,10 @@
 
 #include "api/document_bridge.h"
 
+#include <QtCore/QCoreApplication>
 #include <QtCore/QDir>
 #include <QtCore/QFile>
+#include <QtCore/QFileInfo>
 #include <QtCore/QTemporaryDir>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
@@ -121,6 +123,7 @@ private slots:
     void openWithoutDialog();
     void unsupportedColourFailsClearly();
     void rawDialogShowsAbsoluteSliders();
+    void rawDialogShowsPhotoInfo();
     void reciprocalSliderSpreadsDaylight();
 
     void settingsStorePreferencePersists();
@@ -322,6 +325,30 @@ void RawOpenTest::rawDialogShowsAbsoluteSliders()
     QVERIFY(relative);
     QCOMPARE(relative->minimum(), -100.0);
     QCOMPARE(relative->maximum(), 100.0);
+}
+
+// raw_open_photo_info
+void RawOpenTest::rawDialogShowsPhotoInfo()
+{
+    QTemporaryDir dir;
+    const QString path = writeFile(dir, QStringLiteral("shot.dng"), test::rawDng(16, 12, true));
+    QString name;
+    QString info;
+    window_->setImportDialogDriverForTest([&](QDialog& dialog) {
+        if (auto* raw = qobject_cast<PicturaRawDialog*>(&dialog)) {
+            if (auto* label = raw->findChild<QLabel*>(QStringLiteral("rawPhotoName"))) {
+                name = label->text();
+            }
+            if (auto* label = raw->findChild<QLabel*>(QStringLiteral("rawPhotoInfo"))) {
+                info = label->text();
+            }
+        }
+        return false;
+    });
+    window_->openDocumentAtPathOutcome(path, true);
+    QVERIFY2(name.contains(QStringLiteral("shot.dng")), qPrintable(name));
+    QVERIFY2(info.contains(QStringLiteral("16 by 12")), qPrintable(info));
+    QVERIFY2(info.contains(QStringLiteral("16 bits")), qPrintable(info));
 }
 
 // raw_open_reciprocal_slider

@@ -9,15 +9,20 @@
 #include "icons.h"
 #include "raw_save_options_dialog.h"
 
+#include "api/filters_bridge.h"
 #include "api/view_bridge.h"
 
 #include <QtCore/QList>
+#include <QtCore/QMap>
+#include <QtCore/QSize>
+#include <QtCore/QStringList>
 #include <QtCore/QTimer>
 #include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QPushButton>
+#include <QtWidgets/QSizeGrip>
 #include <QtWidgets/QStackedWidget>
 #include <QtWidgets/QTabBar>
 #include <QtWidgets/QVBoxLayout>
@@ -39,60 +44,64 @@ PicturaRawDialog::PicturaRawDialog(PictureView* view, const AcrAsShot& asShot,
 PicturaRawDialog::PicturaRawDialog(PictureView* view, const QString& path,
                                    std::optional<AcrAsShot> asShot,
                                    const QString& initialSettings, QWidget* parent)
-    : QDialog(parent), view_(view), path_(path), settings_(AcrSettings::decode(initialSettings))
+    : QDialog(parent), view_(view), path_(path),
+      settings_(AcrSettings::decode(initialSettings)), asShot_(asShot)
 {
     setObjectName(QStringLiteral("picturaRawDialog"));
     setWindowTitle(QStringLiteral("Pictura Raw"));
 
-    auto* outer = new QHBoxLayout(this);
+    auto* root = new QVBoxLayout(this);
+    root->setContentsMargins(8, 8, 8, 4);
+    root->setSpacing(4);
+
+    auto* outer = new QHBoxLayout;
+    outer->setSpacing(14);
 
     preview_ = new AcrPreviewPane(view, path, this);
     preview_->setRawSource(asShot.has_value());
     outer->addWidget(preview_, 1);
 
     auto* right = new QVBoxLayout;
+    right->setContentsMargins(0, 0, 0, 0);
+    right->setSpacing(6);
     histogram_ = new AcrHistogram(this);
     right->addWidget(histogram_);
+    connect(preview_, &AcrPreviewPane::picked, this, [this](int r, int g, int b) {
+        histogram_->setPickerColor(r, g, b);
+    });
 
     tabs_ = new QTabBar(this);
-    auto* stack = new QStackedWidget(this);
-
-    auto* basicPanel = new AcrBasicPanel(&settings_, this, asShot);
-    auto* toneCurvePanel = new AcrToneCurvePanel(&settings_, this);
-    toneCurve_ = toneCurvePanel;
+    tabs_->setObjectName(QStringLiteral("acrTabBar"));
+    tabs_->setDrawBase(false);
+    tabs_->setExpanding(true);
+    tabs_->setUsesScrollButtons(false);
+    tabs_->setIconSize(QSize(16, 16));
+    stack_ = new QStackedWidget(this);
 
     struct Tab {
         QString title;
         QString iconId;
-        AcrPanel* panel;
     };
-    const QList<Tab> panels = {
-        {tr("Basic"), QStringLiteral("view.options"), basicPanel},
-        {tr("Tone Curve"), QStringLiteral("window.panels.paths"), toneCurvePanel},
-        {tr("Detail"), QStringLiteral("tool.sharpen"), new AcrDetailPanel(&settings_, this)},
-        {tr("HSL / Grayscale"), QStringLiteral("window.panels.color"),
-         new AcrHslPanel(&settings_, this)},
-        {tr("Split Toning"), QStringLiteral("window.panels.swatches"),
-         new AcrSplitToningPanel(&settings_, this)},
-        {tr("Lens Corrections"), QStringLiteral("window.panels.patterns"),
-         new AcrLensPanel(&settings_, this)},
-        {tr("Effects"), QStringLiteral("tool.blur"), new AcrEffectsPanel(&settings_, this)},
-        {tr("Camera Calibration"), QStringLiteral("tool.colorsampler"),
-         new AcrCalibrationPanel(&settings_, this)},
-        {tr("Presets"), QStringLiteral("layers.fx"), new AcrPresetsPanel(&settings_, this)},
+    const QList<Tab> tabDefs = {
+        {tr("Basic"), QStringLiteral("view.options")},
+        {tr("Tone Curve"), QStringLiteral("window.panels.paths")},
+        {tr("Detail"), QStringLiteral("tool.sharpen")},
+        {tr("HSL / Grayscale"), QStringLiteral("window.panels.color")},
+        {tr("Split Toning"), QStringLiteral("window.panels.swatches")},
+        {tr("Lens Corrections"), QStringLiteral("window.panels.patterns")},
+        {tr("Effects"), QStringLiteral("layers.fx")},
+        {tr("Camera Calibration"), QStringLiteral("tool.colorsampler")},
     };
-    int index = 0;
-    for (const Tab& entry : panels) {
-        tabs_->addTab(pictura::icon(entry.iconId), QString());
+    for (const Tab& entry : tabDefs) {
+        const int index = tabs_->addTab(pictura::icon(entry.iconId), QString());
         tabs_->setTabToolTip(index, entry.title);
-        stack->addWidget(entry.panel);
-        connect(entry.panel, &AcrPanel::changed, this, &PicturaRawDialog::refresh);
-        ++index;
     }
-    connect(tabs_, &QTabBar::currentChanged, stack, &QStackedWidget::setCurrentIndex);
+    connect(tabs_, &QTabBar::currentChanged, stack_, &QStackedWidget::setCurrentIndex);
+
+    buildControlPanels();
 
     right->addWidget(tabs_);
-    right->addWidget(stack, 1);
+    right->addWidget(stack_, 1);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     connect(buttons, &QDialogButtonBox::accepted, this, &PicturaRawDialog::accept);
@@ -118,6 +127,25 @@ PicturaRawDialog::PicturaRawDialog(PictureView* view, const QString& path,
     right->addWidget(buttons);
 
     outer->addLayout(right);
+    root->addLayout(outer, 1);
+
+    auto* status = new QHBoxLayout;
+    status->setContentsMargins(0, 0, 0, 0);
+    status->setSpacing(8);
+    photoName_ = new QLabel(this);
+    photoName_->setObjectName(QStringLiteral("rawPhotoName"));
+    photoName_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    photoInfo_ = new QLabel(this);
+    photoInfo_->setObjectName(QStringLiteral("rawPhotoInfo"));
+    photoInfo_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    photoInfo_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    status->addWidget(photoName_);
+    status->addStretch(1);
+    status->addWidget(photoInfo_);
+    auto* grip = new QSizeGrip(this);
+    grip->setObjectName(QStringLiteral("rawSizeGrip"));
+    status->addWidget(grip);
+    root->addLayout(status);
 
     refreshTimer_ = new QTimer(this);
     refreshTimer_->setSingleShot(true);
@@ -132,6 +160,91 @@ PicturaRawDialog::PicturaRawDialog(PictureView* view, const QString& path,
 
     resize(1100, 680);
     render();
+    updatePhotoInfo();
+}
+
+void PicturaRawDialog::updatePhotoInfo()
+{
+    QMap<QString, QString> info;
+    if (view_) {
+        const QStringList rows = pictura::photo_info(*view_);
+        for (const QString& row : rows) {
+            const int tab = row.indexOf(QLatin1Char('\t'));
+            if (tab > 0) {
+                info.insert(row.left(tab), row.mid(tab + 1));
+            }
+        }
+    }
+
+    const auto append = [](QString& text, const QString& value) {
+        if (value.isEmpty()) {
+            return;
+        }
+        if (!text.isEmpty()) {
+            text += QStringLiteral("  ");
+        }
+        text += value;
+    };
+    QString top;
+    QString bottom;
+    append(top, info.value(QStringLiteral("f_number")));
+    append(top, info.value(QStringLiteral("exposure")));
+    append(bottom, info.value(QStringLiteral("iso")));
+    append(bottom, info.value(QStringLiteral("focal_length")));
+    histogram_->setExposureInfo(top, bottom);
+
+    if (photoName_) {
+        photoName_->setText(info.value(QStringLiteral("name")));
+    }
+    if (!photoInfo_) {
+        return;
+    }
+    QStringList parts;
+    const QString profile = info.value(QStringLiteral("profile"));
+    if (!profile.isEmpty()) {
+        parts.append(profile);
+    }
+    const QString depth = info.value(QStringLiteral("depth"));
+    if (!depth.isEmpty()) {
+        parts.append(tr("%1 bits").arg(depth));
+    }
+    const int width = info.value(QStringLiteral("width")).toInt();
+    const int height = info.value(QStringLiteral("height")).toInt();
+    if (width > 0 && height > 0) {
+        const double megapixels = double(width) * double(height) / 1e6;
+        parts.append(tr("%1 by %2 (%3MP)").arg(width).arg(height).arg(megapixels, 0, 'f', 1));
+    }
+    const QString ppi = info.value(QStringLiteral("ppi"));
+    if (!ppi.isEmpty()) {
+        parts.append(ppi);
+    }
+    const qint64 bytes = info.value(QStringLiteral("file_size")).toLongLong();
+    if (bytes > 0) {
+        parts.append(tr("%1 MB").arg(double(bytes) / (1024.0 * 1024.0), 0, 'f', 1));
+    }
+    photoInfo_->setText(parts.join(QStringLiteral("; ")));
+}
+
+void PicturaRawDialog::buildControlPanels()
+{
+    const auto add = [this](AcrPanel* panel) {
+        if (auto* layout = panel->layout()) {
+            layout->setContentsMargins(12, 2, 8, 2);
+        }
+        stack_->insertWidget(controlPanels_.size(), panel);
+        connect(panel, &AcrPanel::changed, this, &PicturaRawDialog::refresh);
+        controlPanels_.append(panel);
+    };
+    add(new AcrBasicPanel(&settings_, this, asShot_));
+    auto* toneCurve = new AcrToneCurvePanel(&settings_, this);
+    toneCurve_ = toneCurve;
+    add(toneCurve);
+    add(new AcrDetailPanel(&settings_, this));
+    add(new AcrHslPanel(&settings_, this));
+    add(new AcrSplitToningPanel(&settings_, this));
+    add(new AcrLensPanel(&settings_, this));
+    add(new AcrEffectsPanel(&settings_, this));
+    add(new AcrCalibrationPanel(&settings_, this));
 }
 
 void PicturaRawDialog::refresh()
