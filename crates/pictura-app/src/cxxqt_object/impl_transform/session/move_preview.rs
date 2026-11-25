@@ -13,9 +13,7 @@ use super::super::{
     build_move_preview_base, duplicate_move_target, link_members, movable_layer, move_group_key,
     move_group_union, move_origin_opacity, rendered_move_group, translate_move_group,
 };
-use super::preview::{
-    backdrop_patch, moving_layer_image, needs_rendered_appearance, rendered_layer_image,
-};
+use super::preview::{backdrop_patch, single_layer_move_image};
 use crate::cxxqt_object::edit::Edit;
 use crate::cxxqt_object::helpers::memory_gate;
 use core::pin::Pin;
@@ -41,6 +39,14 @@ impl qobject::PictureView {
         let Some(paths) = self.as_ref().move_group_paths() else {
             return false;
         };
+        // A channel-less type layer has no alpha to measure its ink; render its
+        // raster once, so this and later drags preview the words, not the whole
+        // paragraph box.
+        if let Some(doc) = self.as_mut().rust_mut().session.doc.as_mut() {
+            for path in &paths {
+                pictura_render::materialize_type_layer(doc, path);
+            }
+        }
         // A committed move leaves the cached base valid: its content and the
         // hidden-layer backdrop do not change with the layer's position. Reuse
         // it before settling a pending composite, which is a whole-document
@@ -53,6 +59,11 @@ impl qobject::PictureView {
                 .as_ref()
                 .and_then(|doc| move_group_union(doc, &paths));
             let moved = union != self.rust().move_prepared_union;
+            let offset = if moved {
+                self.rust().cached_move_offset(&paths)
+            } else {
+                (0, 0)
+            };
             // A whole-document base is position-independent. A patch cropped to
             // the content rect is tied to the rect it was built over: its
             // backdrop (including the layers above the group) would shift with
@@ -76,8 +87,9 @@ impl qobject::PictureView {
                 {
                     let mut rust = self.as_mut().rust_mut();
                     if moved {
-                        // A commit trims each member to its content.
-                        rust.move_layer_offset = (0, 0);
+                        // A commit trims a pixel layer to its content; a type
+                        // layer keeps its box, so its ink offset is recomputed.
+                        rust.move_layer_offset = offset;
                         rust.move_prepared_union = union;
                     }
                     let (x, y, opacity) = rust
@@ -294,32 +306,10 @@ impl qobject::PictureView {
         };
         let mut offset = (0, 0);
         let moving = if let [path] = paths.as_slice() {
-            let Some(layer) = pictura_render::resolve_path(doc, path) else {
-                return false;
-            };
-            // A shape layer has no pixels of its own: its fill cut to the
-            // outline is rendered.
-            if pictura_render::is_shape_layer(layer) {
-                rendered_layer_image(doc, path, gpu_compute)
-            } else {
-                // A painted layer's rect is often the whole canvas around a
-                // small mark: the moving image covers the mark (#1207).
-                let rect = pictura_render::content_rect(doc, path)
-                    .and_then(|content| content.intersect(layer.rect))
-                    .unwrap_or(layer.rect);
-                // The planar copy, its RGBA bytes, the image, and the copy the
-                // canvas takes of it.
-                if !memory_gate::admit_resident(16 * memory_gate::area(rect)).admitted() {
-                    return false;
-                }
-                offset = (rect.left - layer.rect.left, rect.top - layer.rect.top);
-                if needs_rendered_appearance(layer) {
-                    moving_layer_image(doc, path, rect, 0, gpu_compute)
-                        .map(|image| (image, rect.left, rect.top))
-                } else {
-                    layer_image_within(layer, rect).map(|image| (image, rect.left, rect.top))
-                }
-            }
+            single_layer_move_image(doc, path, gpu_compute).map(|(image, x, y, crop_offset)| {
+                offset = crop_offset;
+                (image, x, y)
+            })
         } else {
             rendered_move_group(doc, &paths, gpu_compute)
         };

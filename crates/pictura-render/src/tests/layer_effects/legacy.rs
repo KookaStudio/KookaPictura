@@ -844,3 +844,29 @@ fn gpu_does_not_reject_disabled_or_unmapped_legacy() {
         assert_gpu_accepts_and_matches_cpu(&d);
     }
 }
+
+/// A type layer's Move reach is its ink plus the enabled effect pad, not its
+/// paragraph box.
+#[test]
+fn type_ink_reach_keeps_the_shadow_pad() {
+    let mut doc = pictura_core::Document::new(
+        400,
+        400,
+        pictura_core::ColorMode::Rgb,
+        pictura_core::BitDepth::Eight,
+    );
+    let spec = pictura_core::TypeSpec {
+        box_bounds: Some([0.0, 0.0, 400.0, 400.0]),
+        ..pictura_core::TypeSpec::new("Type move", "Liberation Sans", 20.0)
+    };
+    let path = crate::add_type_layer(&mut doc, "", &spec);
+    assert!(!path.is_empty(), "a paragraph type layer");
+    let block = lfx2_drsh(b"mul ", [0, 0, 0], 75.0, 45.0, 8.0, 10.0, 5.0);
+    if let Some(layer) = crate::resolve_path_mut(&mut doc, &path) {
+        pictura_codec::edit_layer(layer, |parts| parts.extra_blocks.push(block));
+    }
+    let ink = crate::layer_content_bounds(&doc, &path).expect("the text inks");
+    let reach = crate::damage::type_ink_influence(&doc, &path).expect("a bounded reach");
+    assert!(reach.width() > ink.width(), "the shadow pad is added");
+    assert!(reach.width() < 400, "the paragraph box is not the reach");
+}

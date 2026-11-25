@@ -10,6 +10,7 @@
 #include "api/document_bridge.h"
 #include "api/layers_bridge.h"
 #include "api/paint_bridge.h"
+#include "api/selection_bridge.h"
 #include "api/transform_bridge.h"
 
 #include <QtCore/QDebug>
@@ -133,10 +134,15 @@ public:
         if (!v) {
             return true;
         }
-        if (v->has_selection()) {
-            ctx.beginContentMove(v, imagePos, mods.testFlag(Qt::AltModifier));
+        const bool alt = mods.testFlag(Qt::AltModifier);
+        if (v->has_selection() && pictura::selection_content_movable(*v, alt)) {
+            ctx.beginContentMove(v, imagePos, alt);
             return true;
         }
+        // A type or shape layer, or a locked target, cannot move its selected
+        // pixels: fall through to the whole-layer move, which moves the type
+        // content with its box and refuses a position lock cleanly instead of
+        // previewing a content move the engine would then refuse.
         const MoveOptions moveOptions = move_->get();
         // A held Ctrl flips Auto-Select for this press, as CS6 does.
         const bool autoSelect = moveOptions.autoSelectOn != mods.testFlag(Qt::ControlModifier);
@@ -149,11 +155,10 @@ public:
         }
         QElapsedTimer pressClock;
         pressClock.start();
-        const bool alt = mods.testFlag(Qt::AltModifier);
         const bool prepared = v->begin_move_preview();
         pendingDuplicate_ = alt;
         duplicated_ = false;
-        // A layer the move preview cannot take (a group, text, a nested layer)
+        // A layer the move preview cannot take (a group or a nested layer)
         // still leaves for another document's tab.
         pressed_ = true;
         const qint64 pressNs = pressClock.nsecsElapsed();

@@ -322,9 +322,9 @@ mod type_warp;
 mod variable_pixels;
 pub use type_box::TypePlacement;
 pub use type_layer::{
-    add_type_layer, apply_type_style, has_type_layers, re_render_type_layers, render_type,
-    replace_type_layer, replace_variable_text, type_layer_at, type_layer_spec,
-    type_layers_editable, type_mask, type_placement,
+    add_type_layer, apply_type_style, has_type_layers, materialize_type_layer,
+    re_render_type_layers, render_type, replace_type_layer, replace_variable_text, type_layer_at,
+    type_layer_spec, type_layers_editable, type_mask, type_placement,
 };
 pub use type_outline::{
     outline_paths as type_outline_paths, outline_refusal as type_outline_refusal, OutlineRefusal,
