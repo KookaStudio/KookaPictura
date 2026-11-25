@@ -4,6 +4,18 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Debug toolset, #1589** (OpenSpec changes `debug-toolset` and
+  `debug-toolset-panel-redesign`, capability `ui/debug-toolset`).
+  `Help > Developer > Pictura Metrics` toggles a light-yellow floating tool window
+  (`debug_toolset_panel.*`, sampler `debug_toolset.*`), titled Pictura Metrics: tables per group in two columns, RAM and
+  CPU history charts (60 samples), per-CPU heat matrix, memory-budget and activity tables (governor, scratch, tiles, fds, I/O, faults, jobs, edit/paint p50/p95, GPU via DRM fdinfo and sysfs), drag icon, close button, resize grip, free to
+  leave the app window. Off at startup, never persisted, closing it stops all
+  collection, no timer or `/proc` read while off, 2 s refresh, Linux only. GPU row shows Pictura's own last GPU time and only works when
+  launched with `PICTURA_METRICS` (read once at start). CPU attribution is by
+  thread group, not crate: job threads and rayon workers are now named
+  (`worker_threads.rs`, `pictura-*`). Build number is a placeholder. Not in
+  PARITY.md: its rows are Photoshop baselines and cannot hold an app-only
+  feature (the checker rejects all-N/A rows); ROADMAP.md has it.
 - **Canon white level, #1587** (OpenSpec change
   `canon-white-precision-ceiling`, archived; `codec/vendor-raw-containers`
   modified). The issue's premise was wrong: on 70 Canon CR2/CR3 files blown

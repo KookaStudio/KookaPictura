@@ -397,6 +397,14 @@ CS6 reworked the 3D engine; each command below is named in the CS6 Help
 > in-app design-system browser: a modeless storybook over the real widgets
 > (foundations, shell, controls, patterns) with a live brightness preview. It is
 > a Kooka Pictura developer affordance, deliberately outside the CS6 Help menu.
+>
+> **App extension (not CS6).** *Help ▸ Developer ▸ Pictura Metrics* is a
+> checkable command that shows a small floating metrics window (light yellow,
+> tables of process, memory-budget, activity and platform metrics plus RAM, CPU
+> and thread-group history charts,
+> refreshed every 2 s). It can be dragged outside the application, resized, and
+> closed from its own close button. It is off at every launch, its state and
+> position are never saved, and with it off nothing is collected. Linux only.
 
 > **App extension (not CS6).** *Help ▸ Search…* (`Shift+Space`, rebindable in
 > Edit ▸ Keyboard Shortcuts) opens a search bar over the canvas. Typing lists
