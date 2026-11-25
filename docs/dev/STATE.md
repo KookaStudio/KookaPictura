@@ -4,6 +4,18 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Rendering indicator, #1608** (OpenSpec change `canvas-rendering-indicator`,
+  capability `ui/canvas-rendering-indicator`). Measured first: a History jump
+  back 12 states on a 21000² document is 9 ms on the GUI thread; the wait is
+  the worker rebuilding visible tiles (2.6 s at fit zoom, speed tracked in
+  #1610). So no progress-window job: the canvas shows a "Rendering…" badge
+  (`rendering_indicator.*`, a child of `ImageView`) top-right once display tiles
+  have been pending 250 ms, and hides when none are. Pending is
+  `tiles_pending` (worker in flight or keys queued), read through
+  `LevelProvider::tilesPending`; poked from a scope guard at the end of every
+  `paintEvent`, re-read on each 80 ms animation tick, no timer while idle.
+  `jump_back_across_strokes_profile` (tests_profiles/restore.rs) is the
+  release profile behind the numbers.
 - **Brush memory, #1603** (OpenSpec change `tile-aware-brush-memory`,
   capability `document/brush-stroke-memory`). A stroke's undo copy
   (`stroke/saved.rs`) is a grid of boxed 64² tiles anchored to document

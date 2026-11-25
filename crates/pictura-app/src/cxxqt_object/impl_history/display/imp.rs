@@ -13,3 +13,7 @@ pub(crate) fn preview_present_level(view: &PictureView) -> i32 {
         .preview()
         .map_or(0, |preview| preview.level as i32)
 }
+
+pub(crate) fn tiles_pending(view: &PictureView) -> bool {
+    view.rust().tiles_pending()
+}

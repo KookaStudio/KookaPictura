@@ -216,6 +216,13 @@ impl PictureViewRust {
         self.session.live.stroke().is_some() || self.session.live.mask_stroke().is_some()
     }
 
+    /// Whether display tiles are on their way: a worker is building them or
+    /// they are queued for the next one (#1608). Tiles built at once on the
+    /// GUI thread are never pending.
+    pub(in crate::cxxqt_object) fn tiles_pending(&self) -> bool {
+        self.tiles.in_flight.get() || !self.tiles.wanted.borrow().is_empty()
+    }
+
     /// Whether missing tiles are built at once on the GUI thread.
     fn tiles_sync(&self) -> bool {
         let pixels = self

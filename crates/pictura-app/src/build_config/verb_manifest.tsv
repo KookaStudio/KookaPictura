@@ -119,6 +119,7 @@ free	save_set_delay	save_set_delay	api/document_bridge.h	pictura_app/src/cxxqt_o
 free	save_set_fault_for_test	save_set_fault_for_test	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_core/save_jobs.cxxqt.h
 free	save_set_sync_failure	save_set_sync_failure	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_core/save_jobs.cxxqt.h
 free	save_start	save_start	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_core/save_jobs.cxxqt.h
+free	tiles_pending	tiles_pending	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h
 free	transform_commit_cancel	transform_commit_cancel	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_core/save_jobs.cxxqt.h
 free	transform_commit_finish	transform_commit_finish	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_core/save_jobs.cxxqt.h
 free	transform_commit_progress	transform_commit_progress	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_core/save_jobs.cxxqt.h

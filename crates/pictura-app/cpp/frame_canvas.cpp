@@ -58,7 +58,8 @@ void wireCanvasLevelProvider(PictureView* view, ImageView* canvas)
         },
         [levelView](int level, const QRect& rect) {
             return levelView ? canvasFrameCrop(*levelView, level, rect) : CanvasFrameCrop{};
-        }});
+        },
+        [levelView]() { return levelView && pictura::tiles_pending(*levelView); }});
 }
 
 // Create the canvas for `window` and show its document's current image (or the
