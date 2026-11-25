@@ -17,24 +17,19 @@ toolkit's own Qt Test for the C++ GUI suites.
 | Rust unit | std `#[test]` in inline `#[cfg(test)] mod tests` | `crates/*/src/` (4–23 files/crate) | cargo/nextest |
 | Rust integration / oracle | std `#[test]` in `tests/*.rs` binaries | `crates/*/tests/` | cargo/nextest |
 | C++ GUI self-test | hand-rolled `runSelfTest()` + `SelfTestReport` | `crates/pictura-app/cpp/selftest.cpp`, `selftest_report.cpp` | `pictura self-test:` tokens + `SUMMARY` + exit code |
-| C++ Qt shell tests | Qt Test + CTest (`add_test`) | `crates/pictura-app/cpp/tests/` | per-executable JUnit, folded into the unified report by `scripts/test-report.sh` |
+| C++ Qt shell tests | Qt Test + CTest (`add_test`) | `crates/pictura-app/cpp/tests/` | per-entry JUnit, folded into the unified report by `scripts/test-report.sh` |
 | Python oracle tooling | `argparse` CLIs, no test framework | `scripts/*.py` | stdout (machine-readable or raw bytes) + exit code |
 
-Current inventory: **1990 `#[test]`**, **8 `#[ignore]`** (all profiling/GPU tests,
-see §3), **511** `ST_BEGIN` self-test sites (**475** executed in a bare
-`--headless --self-test` run), and seventeen Qt Test suites (`tst_smoke`,
-`tst_command_tree`, `tst_layers_panel`, `tst_align_distribute`,
-`tst_edit_clipboard`, `tst_fill_tools`, `tst_retouch_tools`, `tst_pen_tools`,
-`tst_path_selection_tools`, `tst_shape_tools`, `tst_rotate_view`,
-`tst_save_for_web`, `tst_type_tools`, `tst_type_panels`, `tst_color_range`,
-`tst_print`, `tst_image_adjustments`) run under CTest.
+Current inventory: **7043 `#[test]`**, **153 `#[ignore]`** (all profiling/GPU
+tests, see §3), **503** `ST_BEGIN` self-test sites, and **272 Qt Test suites**
+built as fourteen subsystem driver executables under CTest.
 `pictura-testkit` is the only dev-dependency; there are no
 test-runner crates outside Qt Test.
 
 `.config/nextest.toml` makes nextest the local and CI runner: fail-fast off, every
 status streamed, JUnit written to `target/nextest/default/junit.xml`.
 `scripts/test-report.sh` folds that XML, the self-test token
-streams, and the per-executable Qt JUnit (`build/qt-test-results/*.xml`) into one
+streams, and the per-entry Qt JUnit (`build/qt-test-results/*.xml`) into one
 pytest/vitest-like report through `scripts/report_tests.py` (§6); CI uploads the
 JUnit file as an artifact.
 
@@ -196,9 +191,29 @@ self-test and links `pictura_shell`.
 
 - **Layout.** `crates/pictura-app/cpp/tests/` holds `CMakeLists.txt`,
   `qt_test_support.h` (the shared `ScopedStateHome` fixture and
-  `makeMainWindow`), and one `tst_*.cpp` per suite. Each is built as its own
-  executable linking `pictura_shell` + `Qt6::Test`, registered with `add_test`
-  under `QT_QPA_PLATFORM=offscreen` and `TIMEOUT 120`.
+  `makeMainWindow`), and one `tst_*.cpp` per suite.
+- **One executable per subsystem.** `CMakeLists.txt` owns fourteen explicit
+  `PICTURA_QT_TEST_DRIVER_<subsystem>` lists (`shell`, `document`, `io`,
+  `selection`, `paint`, `transform`, `layers`, `type`, `ui`, `filters`,
+  `imaging`, `control`, `preferences`, `raw`) and builds one
+  `tst_driver_<subsystem>` executable per list, linking `pictura_shell` +
+  `Qt6::Test` + `pictura_test_support`. Configuration fails when a standalone
+  `tst_*.cpp` is in no list, a listed source is missing, or a suite appears
+  twice; `tst_actions_panel_cases.cpp` is listed as an included implementation
+  source. Each `add_test` keeps one suite name and runs
+  `tst_driver_<subsystem> --suite <name>` under `QT_QPA_PLATFORM=offscreen` and
+  `TIMEOUT 120`, so every entry is still one process with one suite identity.
+- **Suite entry points.** Suites end with `PICTURA_QT_TEST_MAIN`,
+  `PICTURA_QT_TEST_GUILESS_MAIN`, or `PICTURA_QT_TEST_SHARDED_MAIN` from
+  `qt_test_support.h` instead of the bare Qt macros. Each wraps the Qt macro in
+  a `picturaQtTest_<TestClass>` namespace and registers the entry point under
+  the source basename, which is what `--suite` selects; a hand-written `main`
+  uses `PICTURA_QT_TEST_REGISTER`. A suite that restarts itself passes
+  `--suite <its name>` before its own flags.
+- **Sharding.** `PICTURA_QT_TEST_SHARDS` names the suites whose functions are
+  independent (`shardedMain` runs only the functions named on its command
+  line); each gets `PICTURA_QT_TEST_SHARD_COUNT` entries (4, `tst_ui_scale` 8)
+  registered as `<suite>_<index>` with `PICTURA_TEST_SHARD=<index>/<count>`.
 - **Gated on `BUILD_TESTING`.** `include(CTest)` and `find_package(Qt6
   COMPONENTS Test)` live in an `if(BUILD_TESTING)` branch, so a build can opt out.
 - **Seed suites.** `tst_smoke` (the `ScopedStateHome` temp-`XDG_STATE_HOME`
@@ -223,10 +238,11 @@ self-test and links `pictura_shell`.
   failure ownership. Both run from `scripts/verify-fast.sh` and the guards CI
   workflow, in addition to the `selftest.cpp` ceiling in
   `scripts/file-size-allowlist.txt`.
-- **Reports as per-executable JUnit.** `add_test` passes
-  `-o <CMAKE_BINARY_DIR>/qt-test-results/<name>.xml,junitxml`, so CTest itself
-  emits one JUnit file per executable; `scripts/test-report.sh` runs
-  `ctest --test-dir build -R '^tst_'` and folds `build/qt-test-results/*.xml`.
+- **Reports as per-entry JUnit.** `add_test` passes
+  `-o <CMAKE_BINARY_DIR>/qt-test-results/<entry>.xml,junitxml` to the driver, so
+  each registered entry still writes its own JUnit file regardless of which
+  driver runs it; `scripts/test-report.sh` runs `ctest --test-dir build -R
+  '^tst_'` and folds `build/qt-test-results/*.xml`.
 
 ## 7. Python oracle CLI conventions
 
