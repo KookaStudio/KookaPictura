@@ -15,7 +15,9 @@
 #include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QLabel>
+#include <QtWidgets/QLayout>
 #include <QtWidgets/QLineEdit>
+#include <QtWidgets/QPushButton>
 #include <QtWidgets/QSizeGrip>
 #include <QtWidgets/QTabBar>
 #include <QtWidgets/QToolButton>
