@@ -5,8 +5,6 @@
 #include <QtWidgets/QMainWindow>
 #include <QtWidgets/QStatusBar>
 
-#include "api/paint_bridge.h"
-
 namespace pictura {
 
 QString memoryRefusalMessage(const QString& action)
@@ -34,10 +32,31 @@ QString scratchFullRefusalMessage(const QString& action)
         .arg(action);
 }
 
+QString refusalMessage(Refusal reason, const QString& memory, const QString& scratchFull,
+                       const QString& unreadable)
+{
+    switch (reason) {
+    case Refusal::Memory: return memory;
+    case Refusal::ScratchFull: return scratchFull;
+    case Refusal::ScratchUnreadable: return unreadable;
+    case Refusal::None: break;
+    }
+    return {};
+}
+
+QString refusalMessage(Refusal reason, const QString& action)
+{
+    return refusalMessage(reason, memoryRefusalMessage(action), scratchFullRefusalMessage(action),
+                          scratchRefusalMessage(action));
+}
+
 QString commitRefusalMessage(const QString& action)
 {
-    return edit_refused_for_scratch_full() ? scratchFullRefusalMessage(action)
-                                           : memoryRefusalMessage(action);
+    const Refusal reason = last_refusal();
+    if (reason != Refusal::Memory && reason != Refusal::ScratchFull) {
+        return {};
+    }
+    return refusalMessage(reason, action);
 }
 
 namespace {
@@ -57,28 +76,29 @@ QMainWindow* mainWindowOf(QWidget* within)
 
 } // namespace
 
-bool reportMemoryRefusal(QWidget* within, const QString& action)
+bool reportRefusal(QWidget* within, Refusal reason, const QString& action)
 {
-    const bool scratch = edit_refused_for_scratch();
-    if (!scratch && !edit_refused_for_memory()) {
+    if (reason == Refusal::None) {
         return false;
     }
     if (QMainWindow* main = mainWindowOf(within)) {
-        main->statusBar()->showMessage(
-            scratch ? scratchRefusalMessage(action) : memoryRefusalMessage(action), 6000);
+        main->statusBar()->showMessage(refusalMessage(reason, action), 6000);
     }
     return true;
 }
 
+bool reportMemoryRefusal(QWidget* within, const QString& action)
+{
+    return reportRefusal(within, last_refusal(), action);
+}
+
 bool reportCommitRefusal(QWidget* within, const QString& action)
 {
-    if (!edit_refused_for_memory()) {
+    const Refusal reason = last_refusal();
+    if (reason != Refusal::Memory && reason != Refusal::ScratchFull) {
         return false;
     }
-    if (QMainWindow* main = mainWindowOf(within)) {
-        main->statusBar()->showMessage(commitRefusalMessage(action), 6000);
-    }
-    return true;
+    return reportRefusal(within, reason, action);
 }
 
 } // namespace pictura

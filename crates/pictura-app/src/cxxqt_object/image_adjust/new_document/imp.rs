@@ -83,7 +83,7 @@ pub(crate) fn create_document(
         channels,
         depth.unwrap_or(BitDepth::Eight),
     );
-    if !memory_gate::admit_fresh(estimate) {
+    if !memory_gate::admit_resident(estimate).admitted() {
         return false;
     }
     let background = if transparent { "transparent" } else { "white" };

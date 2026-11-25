@@ -953,6 +953,7 @@ free	healing_dab	healing_dab	api/paint_bridge.h	pictura_app/src/cxxqt_object/hea
 free	history_brush_source_snapshot	history_brush_source_snapshot	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
 free	history_brush_source_state	history_brush_source_state	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
 free	inject_scratch_fault_for_test	inject_scratch_fault_for_test	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
+free	last_refusal	last_refusal	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
 free	magic_erase_at	magic_erase_at	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
 free	magnetic_begin	magnetic_begin	api/paint_bridge.h	pictura_app/src/cxxqt_object/magnetic.cxxqt.h
 free	magnetic_end	magnetic_end	api/paint_bridge.h	pictura_app/src/cxxqt_object/magnetic.cxxqt.h

@@ -4,6 +4,8 @@
 
 #include <QtCore/QString>
 
+#include "api/paint_bridge.h"
+
 class QWidget;
 
 namespace pictura {
@@ -16,19 +18,32 @@ QString memoryRefusalMessage(const QString& action);
 QString scratchRefusalMessage(const QString& action);
 QString scratchFullRefusalMessage(const QString& action);
 
-// "Could not <action>: the scratch disks are full. …" after a scratch-full
-// refusal of a spilling commit (#1294), memoryRefusalMessage(action) otherwise.
+// The message for the typed `Refusal` the bridge reported, using `action` for
+// the command: a memory shortfall, full scratch disks, or image data that could
+// not be read back. `Refusal::None` yields no message.
+QString refusalMessage(Refusal reason, const QString& action);
+
+// As above with per-command copy: `memory` when the room could not hold the
+// edit, `scratchFull` when the scratch disks are full, `unreadable` when image
+// data could not be read back. `Refusal::None` yields no message.
+QString refusalMessage(Refusal reason, const QString& memory, const QString& scratchFull,
+                       const QString& unreadable);
+
+// The typed memory or scratch-full message for a refused geometry commit.
+// Other refusal reasons yield no message.
 QString commitRefusalMessage(const QString& action);
 
-// Show commitRefusalMessage(action) on the status bar of the main window that
-// holds `within` when the last gated edit was refused for memory; returns
-// whether it was.
+// Show refusalMessage(reason, action) on the status bar of the main window that
+// holds `within`; returns whether a refusal was presented.
+bool reportRefusal(QWidget* within, Refusal reason, const QString& action);
+
+// Show a typed memory or scratch-full commit refusal on the status bar of the
+// main window that holds `within`; returns whether it was.
 bool reportCommitRefusal(QWidget* within, const QString& action);
 
-// Show memoryRefusalMessage(action), or scratchRefusalMessage(action), on the
-// status bar of the main window that holds `within` (a panel may float in a
-// window of its own) when the last gated edit was refused for memory or for
-// tiles lost from the scratch disk; returns whether it was.
+// Show the last refusal's message on the status bar of the main window that
+// holds `within` (a panel may float in a window of its own) when the last gated
+// edit was refused; returns whether it was.
 bool reportMemoryRefusal(QWidget* within, const QString& action);
 
 } // namespace pictura

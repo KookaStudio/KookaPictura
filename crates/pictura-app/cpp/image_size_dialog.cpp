@@ -5,6 +5,7 @@
 #include "api/document_bridge.h"
 #include "api/paint_bridge.h"
 #include "dialogs.h"
+#include "memory_refusal.h"
 
 #include <QtCore/QSignalBlocker>
 #include <QtGui/QPainter>
@@ -205,18 +206,24 @@ bool imageSizeFitsBudget(PictureView& view, int width, int height)
 
 QString imageSizeBudgetMessage(int width, int height)
 {
-    if (edit_refused_for_scratch_full()) {
-        return ImageSizeDialog::tr(
-                   "Could not resize to %1 × %2 pixels: the scratch disks are full. Free "
-                   "space on the scratch disks, then try again.")
-            .arg(width)
-            .arg(height);
-    }
-    return ImageSizeDialog::tr(
-               "Not enough memory to resize to %1 × %2 pixels. Close other documents "
-               "or free memory and try again.")
-        .arg(width)
-        .arg(height);
+    const QString memory = ImageSizeDialog::tr(
+                               "Not enough memory to resize to %1 × %2 pixels. Close other "
+                               "documents or free memory and try again.")
+                               .arg(width)
+                               .arg(height);
+    const QString scratchFull = ImageSizeDialog::tr(
+                                    "Could not resize to %1 × %2 pixels: the scratch disks are "
+                                    "full. Free space on the scratch disks, then try again.")
+                                    .arg(width)
+                                    .arg(height);
+    const QString unreadable = ImageSizeDialog::tr(
+                                   "Could not resize to %1 × %2 pixels: image data could not be "
+                                   "read back from the scratch disk. Check the scratch disks, "
+                                   "then try again.")
+                                   .arg(width)
+                                   .arg(height);
+    const QString message = refusalMessage(last_refusal(), memory, scratchFull, unreadable);
+    return message.isEmpty() ? memory : message;
 }
 
 void setImageSizeDialogDriverForTest(std::function<bool(QDialog&)> driver)

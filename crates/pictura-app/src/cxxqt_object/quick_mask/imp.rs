@@ -257,7 +257,7 @@ impl PictureViewRust {
     pub(in crate::cxxqt_object) fn quick_mask_document(&self, working: bool) -> Option<Document> {
         let real = self.session.doc.as_ref()?;
         let bytes = u64::from(real.width) * u64::from(real.height);
-        if !crate::cxxqt_object::helpers::memory_gate::admit(bytes * 4) {
+        if !crate::cxxqt_object::helpers::memory_gate::admit_resident(bytes * 4).admitted() {
             return None;
         }
         let mut coverage = self
@@ -334,6 +334,7 @@ impl PictureViewRust {
         label: &str,
         tip: Option<pictura_paint::stroke::SampledTip>,
     ) -> bool {
+        crate::cxxqt_object::helpers::memory_gate::clear();
         if !self.session.quick_mask.active
             || self.layer_target.is_empty()
             || !self.slot_allows(SessionKind::MaskPaint)

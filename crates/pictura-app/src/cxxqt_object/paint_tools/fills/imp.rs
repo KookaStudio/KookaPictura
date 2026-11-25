@@ -1,5 +1,21 @@
 use super::*;
 
+/// The seam's typed reason, as the bridge enum the shell reads.
+///
+/// The seam's own reason wins, so a `ScratchFull` or `ScratchUnreadable` is
+/// never downgraded. With no seam reason, a refusal the governor recorded past
+/// the gate (`try_plane`'s failpoint, a save's own reservation) is still a
+/// memory refusal — the same rule `edit_refused_for_memory` applies.
+pub(super) fn last_refusal() -> ffi::Refusal {
+    match budget::last_refusal() {
+        Some(budget::Refusal::Memory) => ffi::Refusal::Memory,
+        Some(budget::Refusal::ScratchUnreadable) => ffi::Refusal::ScratchUnreadable,
+        Some(budget::Refusal::ScratchFull) => ffi::Refusal::ScratchFull,
+        None if pictura_core::memory::last_refusal().is_some() => ffi::Refusal::Memory,
+        None => ffi::Refusal::None,
+    }
+}
+
 use super::super::super::helpers::{
     active_layer_visible, active_mask_target, active_pixel_layer, paint_mode_from, rgba_from_argb,
 };
@@ -173,7 +189,7 @@ pub(super) fn draw_gradient(
 /// forks may spill to scratch.
 fn spill_gate(doc: &Document, path: &str, bounds: PsdRect, resident: u64) -> bool {
     let cost = budget::fill_cost(doc, path, bounds, resident);
-    budget::admit_spilling(cost.working, cost.spillable)
+    budget::admit_commit(&cost).admitted()
 }
 
 pub(super) fn bucket_fill_at(

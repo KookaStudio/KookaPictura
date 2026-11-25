@@ -327,7 +327,7 @@ fn begin_brush_tip(
         let path = rust.layer_target.single().unwrap_or_default();
         rust.session.doc.as_ref().is_none_or(|doc| {
             let gate = crate::cxxqt_object::helpers::memory_gate::brush_bytes(doc, path);
-            crate::cxxqt_object::helpers::memory_gate::admit_fresh(gate)
+            crate::cxxqt_object::helpers::memory_gate::admit_resident(gate).admitted()
         })
     };
     if !fits {

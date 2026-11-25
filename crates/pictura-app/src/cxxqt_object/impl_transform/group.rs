@@ -78,6 +78,51 @@ pub(super) fn commit_cost(quad: &[(f64, f64); 4], orig_rect: PsdRect) -> CommitC
     }
 }
 
+/// What a transform commit's admission decided (#1290): whether to commit
+/// without admitting (an identity transform changes nothing), or the admission
+/// outcome, whose `spill` decides whether the commit needs a job.
+pub(super) enum CommitDecision {
+    /// Nothing changed: commit without asking the governor.
+    Identity,
+    Admitted {
+        spill: bool,
+    },
+    Refused,
+}
+
+/// The admission a session commit needs, given its preview quad, the source
+/// rect, whether it carries a warp, and whether it is the identity.
+pub(super) fn commit_decision(
+    preview_quad: &[(f64, f64); 4],
+    orig_rect: PsdRect,
+    warp: bool,
+    identity: bool,
+) -> CommitDecision {
+    if identity {
+        return CommitDecision::Identity;
+    }
+    let mut cost = commit_cost(preview_quad, orig_rect);
+    if warp {
+        cost.working += warp_strip_bytes(preview_quad);
+    }
+    match memory_gate::admit_commit(&cost) {
+        memory_gate::Admission::Admitted { spill } => CommitDecision::Admitted { spill },
+        memory_gate::Admission::Refused(_) => CommitDecision::Refused,
+    }
+}
+
+/// Whether any member is a placed smart object, whose commit renders through
+/// its embedding rather than resampling the layer's pixels.
+pub(super) fn has_vector_placement(doc: Option<&Document>, members: &[(String, PsdRect)]) -> bool {
+    doc.is_some_and(|doc| {
+        members.iter().any(|(member, _)| {
+            pictura_render::resolve_path(doc, member)
+                .and_then(|layer| layer.smart_object())
+                .is_some_and(|object| object.vector_placement.is_some())
+        })
+    })
+}
+
 /// A warp commit's output strips (#1292): up to five planes of 32-bit samples,
 /// 256 rows across the result's width, held while a strip's blocks are written.
 pub(super) fn warp_strip_bytes(quad: &[(f64, f64); 4]) -> u64 {

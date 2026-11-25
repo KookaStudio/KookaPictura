@@ -3,6 +3,7 @@
 #include "api/transform_api.h"
 #include "icons.h"
 #include "image_view.h"
+#include "memory_refusal.h"
 #include "transform_commit.h"
 
 #include "api/layers_bridge.h"
@@ -687,12 +688,16 @@ bool ToolController::setTransformWarpVertical(bool vertical)
 
 QString transformMemoryRefusalMessage()
 {
-    if (edit_refused_for_scratch_full()) {
-        return QObject::tr("Could not transform: the scratch disks are full. Free space on the "
-                           "scratch disks, then try again.");
-    }
-    return QObject::tr("Could not transform: not enough memory. Make the result smaller, close "
-                       "other documents, or free memory and try again.");
+    const QString memory = QObject::tr("Could not transform: not enough memory. Make the result "
+                                       "smaller, close other documents, or free memory and try "
+                                       "again.");
+    const QString scratchFull = QObject::tr("Could not transform: the scratch disks are full. Free "
+                                            "space on the scratch disks, then try again.");
+    const QString unreadable = QObject::tr("Could not transform: image data could not be read back "
+                                           "from the scratch disk. Check the scratch disks, then "
+                                           "try again.");
+    const QString message = refusalMessage(last_refusal(), memory, scratchFull, unreadable);
+    return message.isEmpty() ? memory : message;
 }
 
 } // namespace pictura

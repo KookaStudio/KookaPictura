@@ -138,11 +138,13 @@ saved with the session and restored at start.
 New Document, Add Layer, the start of a brush stroke, Undo, Redo, a history
 jump, adding a snapshot, restoring a snapshot, Save, and Open SHALL each
 estimate their peak bytes and ask the governor before they allocate or change
-anything, as the fills, Move, Free Transform and Image Size do. A refused path
-SHALL leave the document, its history and its modified flag unchanged, SHALL
-record no history state, SHALL report "not enough memory" on the status bar, and
-over the control server SHALL answer the error `refused`. Each estimate SHALL be
-at least the heap peak the memory benchmark measures for its scenario.
+anything, as the fills, Move, Free Transform and Image Size do, through the
+admission seam of `document/memory-gate-admission`. A refused path SHALL leave
+the document, its history and its modified flag unchanged, SHALL record no
+history state, SHALL report its refusal on the status bar through the one
+presentation path as `document/memory-gate-admission` requires, and over the
+control server SHALL answer the error `refused`. Each estimate SHALL be at least
+the heap peak the memory benchmark measures for its scenario.
 
 #### Scenario: Each path refuses without room [mg_gates_refuse]
 

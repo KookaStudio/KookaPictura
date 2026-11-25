@@ -7,8 +7,8 @@ use super::geometry::{
     apply_session_transform, identity_transform, quad_driven, session_quad, MapParams,
 };
 use super::group::{
-    can_free_transform, commit_cost, group_apply, lifted_apply, repeatable_transform,
-    transform_group, transform_group_edit, transform_rect, warp_strip_bytes,
+    can_free_transform, commit_decision, group_apply, has_vector_placement, lifted_apply,
+    repeatable_transform, transform_group, transform_group_edit, transform_rect, CommitDecision,
 };
 use crate::cxxqt_object::edit::Edit;
 use crate::cxxqt_object::helpers::memory_gate;
@@ -170,9 +170,10 @@ impl qobject::PictureView {
         // The preview is built before the session opens; one that does not
         // fit is refused rather than left to the OOM killer (#1297).
         let fits = rust.session.doc.as_ref().is_some_and(|doc| {
-            memory_gate::admit_fresh(transform_preview_bytes(
+            memory_gate::admit_resident(transform_preview_bytes(
                 doc, path, members, orig_rect, bounded,
             ))
+            .admitted()
         });
         if !fits {
             return false;
@@ -219,10 +220,14 @@ impl qobject::PictureView {
         if self.rust().pending_vector_place.is_some() {
             drop(self.as_mut().rust_mut().deferred_transform.take());
         }
+        self.as_mut().finish_transform(VectorPlaceResult::Cancelled);
+    }
+
+    /// Clear the session and report `result` to a pending vector place.
+    fn finish_transform(mut self: Pin<&mut Self>, result: VectorPlaceResult) -> bool {
         self.as_mut().drop_transform_session();
         self.as_mut().clear_transform_preview();
-        self.as_mut()
-            .finish_vector_place(VectorPlaceResult::Cancelled);
+        self.as_mut().finish_vector_place(result)
     }
 
     /// Drop any session, restoring the document from before a lift, or the
@@ -320,32 +325,25 @@ impl qobject::PictureView {
                 return changed;
             }
         }
-        let mut cost = commit_cost(&preview_quad, orig_rect);
-        if warp.is_some() {
-            cost.working += warp_strip_bytes(&preview_quad);
-        }
-        if identity || !memory_gate::admit_spilling(cost.working, cost.spillable) {
-            self.as_mut().drop_transform_session();
-            self.as_mut().clear_transform_preview();
-            return self.as_mut().finish_vector_place(if identity {
-                VectorPlaceResult::Committed
-            } else {
-                VectorPlaceResult::Refused
-            });
-        }
+        // One admission answers both: whether the commit fits, and whether it can
+        // only fit by spilling (#1290). An identity commit changes nothing, so it
+        // never asks.
+        let spill = match commit_decision(&preview_quad, orig_rect, warp.is_some(), identity) {
+            CommitDecision::Identity => {
+                return self.as_mut().finish_transform(VectorPlaceResult::Committed)
+            }
+            CommitDecision::Refused => {
+                return self.as_mut().finish_transform(VectorPlaceResult::Refused)
+            }
+            CommitDecision::Admitted { spill } => spill,
+        };
         let area = u64::from(orig_rect.width().max(0) as u32)
             * u64::from(orig_rect.height().max(0) as u32);
         // A large engine, or one that will spill tiles to scratch (#1290), runs
         // as a cancellable job (#1278); the session stays live until it lands,
         // so a cancel resumes it.
-        let vector = self.rust().session.doc.as_ref().is_some_and(|doc| {
-            members.iter().any(|(member, _)| {
-                pictura_render::resolve_path(doc, member)
-                    .and_then(|layer| layer.smart_object())
-                    .is_some_and(|object| object.vector_placement.is_some())
-            })
-        });
-        if vector || area >= DEFERRED_TRANSFORM_PIXELS || memory_gate::expects_spill(&cost) {
+        let vector = has_vector_placement(self.rust().session.doc.as_ref(), &members);
+        if vector || area >= DEFERRED_TRANSFORM_PIXELS || spill {
             let lifted = self
                 .rust()
                 .session
