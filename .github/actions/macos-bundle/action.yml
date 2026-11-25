@@ -77,4 +77,5 @@ runs:
           echo "::error::a bundle binary still references the runner's Qt"
           exit 1
         fi
+        printf 'macos-dmg\n' > "$app/Contents/Resources/package-method"
         codesign --force --deep --sign - "$app"
