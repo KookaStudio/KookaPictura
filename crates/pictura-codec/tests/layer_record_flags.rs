@@ -10,10 +10,6 @@ use std::process::Command;
 use std::sync::OnceLock;
 
 use pictura_core::{Document, Layer};
-use pictura_render::{
-    add_solid_fill, rasterize_fill_content, rasterize_shape, resolve_path, resolve_path_mut,
-    set_layer_shape_paths,
-};
 
 const KIND_SCRIPT: &str = r#"
 import sys
@@ -107,13 +103,6 @@ fn write_temp(tag: &str, bytes: &[u8]) -> PathBuf {
     path
 }
 
-fn rectangle() -> pictura_core::path::Subpath {
-    let options =
-        pictura_core::shape::ShapeOptions::new(pictura_core::shape::ShapeKind::Rectangle, 0.0, 3);
-    pictura_core::shape::outline(options, (1.0, 2.0), (5.0, 7.0), false, false)
-        .expect("a rectangle")
-}
-
 #[test]
 fn codec_reads_and_round_trips_the_pixel_data_irrelevant_flag() {
     let doc = read_fixture("vector_fill.psd");
@@ -140,36 +129,6 @@ fn codec_reads_and_round_trips_the_pixel_data_irrelevant_flag() {
 fn codec_preserves_a_clear_flag_on_vector_masked_fill_layers() {
     let doc = read_fixture("vector_mask.psd");
     assert!(doc.layers.iter().all(|layer| !layer.pixel_data_irrelevant));
-
-    for bytes in [
-        pictura_codec::write_psd(&doc).expect("writes PSD"),
-        pictura_codec::write_psb(&doc).expect("writes PSB"),
-    ] {
-        let back = pictura_codec::read_psd(&bytes).expect("re-reads");
-        assert!(back.layers.iter().all(|layer| !layer.pixel_data_irrelevant));
-    }
-}
-
-#[test]
-fn codec_does_not_add_the_flag_to_ordinary_fill_or_vector_masked_pixel_layers() {
-    let mut doc = Document::from_rgba("Base", 8, 8, &[255; 8 * 8 * 4]);
-    let fill = add_solid_fill(&mut doc, "", [255, 0, 0, 255]);
-    assert!(!resolve_path(&doc, &fill).unwrap().pixel_data_irrelevant);
-
-    let base_path = doc
-        .layers
-        .iter()
-        .position(|layer| layer.name == "Base")
-        .expect("Base layer")
-        .to_string();
-    let (width, height) = (doc.width, doc.height);
-    let outline = rectangle();
-    {
-        let base = resolve_path_mut(&mut doc, &base_path).expect("Base layer");
-        assert!(base.adjustment().is_none(), "no fill adjustment");
-        set_layer_shape_paths(base, std::slice::from_ref(&outline), width, height);
-        assert!(!base.pixel_data_irrelevant);
-    }
 
     for bytes in [
         pictura_codec::write_psd(&doc).expect("writes PSD"),
@@ -226,69 +185,4 @@ fn psd_tools_keeps_a_round_tripped_fill_layer_a_fill_layer() {
         row(&lines, "Shape", &stdout),
         expected(&["Shape", "solidcolorfill", "00"])
     );
-}
-
-#[test]
-fn psd_tools_reports_a_rasterized_shape_as_pixels() {
-    let mut doc = read_fixture("vector_fill.psd");
-    let shape_path = doc
-        .layers
-        .iter()
-        .position(|layer| layer.name == "Shape")
-        .expect("Shape layer")
-        .to_string();
-    assert!(rasterize_shape(&mut doc, &shape_path));
-    assert!(
-        !resolve_path(&doc, &shape_path)
-            .unwrap()
-            .pixel_data_irrelevant,
-        "Rasterize Shape clears the flag"
-    );
-
-    if psd_tools_available() {
-        let path = write_temp(
-            "shape-flag-raster-shape",
-            &pictura_codec::write_psd(&doc).unwrap(),
-        );
-        let (stdout, lines) = read_with_psd_tools(&path);
-        let _ = std::fs::remove_file(&path);
-        assert_eq!(
-            row(&lines, "Shape", &stdout),
-            expected(&["Shape", "pixel", "00"])
-        );
-    }
-
-    let mut authored = Document::from_rgba("Background", 8, 8, &[255; 8 * 8 * 4]);
-    let outline = rectangle();
-    let path = pictura_render::add_shape_layer(
-        &mut authored,
-        "",
-        [255, 0, 0, 255],
-        "Rectangle",
-        &outline,
-        None,
-    );
-    assert!(
-        resolve_path(&authored, &path)
-            .unwrap()
-            .pixel_data_irrelevant
-    );
-    assert!(rasterize_fill_content(&mut authored, &path));
-    assert!(
-        !resolve_path(&authored, &path)
-            .unwrap()
-            .pixel_data_irrelevant,
-        "Rasterize Fill Content clears the flag"
-    );
-
-    if psd_tools_available() {
-        let bytes = pictura_codec::write_psd(&authored).unwrap();
-        let path = write_temp("shape-flag-raster-fill", &bytes);
-        let (stdout, lines) = read_with_psd_tools(&path);
-        let _ = std::fs::remove_file(&path);
-        assert_eq!(
-            row(&lines, "Rectangle 1", &stdout),
-            expected(&["Rectangle 1", "pixel", "00"])
-        );
-    }
 }

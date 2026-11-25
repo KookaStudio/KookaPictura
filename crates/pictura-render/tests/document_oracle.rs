@@ -13,15 +13,15 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use pictura_codec::{read_psd, write_psd};
+use pictura_codec::{convert_document_with, read_psd, write_psd, ConversionOptions, Profile};
 use pictura_core::{
     BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LayerMask, LockFlags,
     PixelBuffer, PsdRect,
 };
 use pictura_ops::{Anchor, Resample};
 use pictura_render::{
-    composite_rgba, flip_document, resize_canvas_document, resize_document, rotate_document,
-    rotate_document_in,
+    add_layer, composite_rgba, flatten, flip_document, resize_canvas_document, resize_document,
+    rotate_document, rotate_document_in,
 };
 use pictura_testkit::compare;
 
@@ -635,4 +635,22 @@ fn rotate_document_in_matches_imagemagick_central_region() {
         diff.samples,
         diff.max_delta
     );
+}
+
+#[test]
+fn convert_flatten_leaves_one_background() {
+    let mut doc = Document::from_rgba("Layer 1", 2, 1, &[255, 0, 0, 255, 0, 255, 0, 255]);
+    add_layer(&mut doc, 0, "Second");
+    flatten(&mut doc).expect("flattens");
+    let options = ConversionOptions {
+        dither: false,
+        ..ConversionOptions::default()
+    };
+    assert!(convert_document_with(
+        &mut doc,
+        &Profile::adobe_rgb(),
+        options
+    ));
+    assert_eq!(doc.layers.len(), 1);
+    assert!(doc.layers[0].background);
 }

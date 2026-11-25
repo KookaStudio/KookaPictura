@@ -8,7 +8,9 @@
 use std::process::Command;
 
 use pictura_codec::{read_psd, write_psd};
-use pictura_core::{Document, LayerMask, PsdRect, RawChannel};
+use pictura_core::{
+    Channel, Document, FillContent, Layer, LayerBlock, LayerMask, LayerParts, PsdRect, RawChannel,
+};
 
 const SCRIPT: &str = r#"
 import sys
@@ -40,11 +42,44 @@ fn rect(right: i32, bottom: i32) -> PsdRect {
     }
 }
 
+fn empty_pixel_layer(name: &str) -> Layer {
+    pictura_codec::layer_from_parts(LayerParts {
+        name: name.into(),
+        channels: [0i16, 1, 2, -1]
+            .into_iter()
+            .map(|id| Channel {
+                id,
+                data: Default::default(),
+            })
+            .collect(),
+        ..Default::default()
+    })
+}
+
+fn shape_layer(name: &str, rgba: [u8; 4], outline: &pictura_core::path::Subpath) -> Layer {
+    let width = 8u32;
+    let height = 8u32;
+    let mask = pictura_codec::encode_vector_mask(std::slice::from_ref(outline), width, height);
+    pictura_codec::layer_from_parts(LayerParts {
+        name: name.into(),
+        rect: rect(width as i32, height as i32),
+        pixel_data_irrelevant: true,
+        adjustment: Some(pictura_codec::encode_fill_content(&FillContent::Solid(
+            rgba,
+        ))),
+        extra_blocks: vec![LayerBlock {
+            key: *b"vmsk",
+            data: mask.into(),
+        }],
+        ..Default::default()
+    })
+}
+
 /// A background, a masked layer with density 128 and feather 12.5, and a
 /// rectangle shape layer whose vector mask has feather 3 and no raster mask.
 fn refined_document() -> Document {
     let mut doc = Document::from_rgba("Background", 8, 8, &[255; 8 * 8 * 4]);
-    pictura_render::add_layer(&mut doc, 0, "Masked");
+    doc.layers.push(empty_pixel_layer("Masked")).expect("added");
     let masked = doc.layers.last_mut().expect("added");
     let mut mask = LayerMask {
         rect: rect(8, 8),
@@ -60,7 +95,9 @@ fn refined_document() -> Document {
         pictura_core::shape::ShapeOptions::new(pictura_core::shape::ShapeKind::Rectangle, 0.0, 3);
     let outline = pictura_core::shape::outline(options, (1.0, 2.0), (5.0, 7.0), false, false)
         .expect("a rectangle");
-    pictura_render::add_shape_layer(&mut doc, "", [255, 0, 0, 255], "Shape", &outline, None);
+    doc.layers
+        .push(shape_layer("Shape 1", [255, 0, 0, 255], &outline))
+        .expect("shape");
     let shape = doc.layers.last_mut().expect("shape");
     shape
         .vector_mask
@@ -110,7 +147,7 @@ fn defaults_leave_flag_bit_4_clear_and_reset_values_round_trip() {
 /// and density 64.
 fn real_mask_document() -> (Document, Vec<u8>) {
     let mut doc = Document::from_rgba("Background", 2, 2, &[255; 2 * 2 * 4]);
-    pictura_render::add_layer(&mut doc, 0, "Real");
+    doc.layers.push(empty_pixel_layer("Real")).unwrap();
     let layer = doc.layers.last_mut().unwrap();
     layer.rect = rect(2, 2);
     for channel in layer.channels_mut() {
