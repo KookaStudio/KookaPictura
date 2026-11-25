@@ -4,83 +4,146 @@
 //! exceed the room under its ceiling, instead of leaving the process to the
 //! kernel's OOM killer.
 //!
-//! GUI thread only: the refusal record and the test host are the governor's
-//! thread-locals, so an edit gated on a worker thread would not report its
-//! refusal to the bridge, which reads it on the GUI thread.
+//! GUI thread only: the refusal record and test pins are thread-locals, as is
+//! the governor's test host, so an edit gated on a worker thread would not
+//! report its refusal to the bridge, which reads it on the GUI thread.
 
 use pictura_core::memory::{self, HostReading};
 use pictura_core::{BitDepth, Document, PsdRect, TILE};
 
-/// Forget the last refusal; every gated edit starts here.
-pub(in crate::cxxqt_object) fn clear() {
-    memory::clear_refusal();
-    SCRATCH_REFUSED.set(false);
-    SCRATCH_FULL.set(false);
+/// Why a gated edit was refused. One value, three cases, so no two readers can
+/// disagree about which refusal happened.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cxxqt_object) enum Refusal {
+    /// The governor's room could not hold the edit.
+    Memory,
+    /// The edit needed tiles that could not be read back from the scratch disk.
+    ScratchUnreadable,
+    /// The spillable output did not fit the room plus the scratch disks' free
+    /// space (#1290).
+    ScratchFull,
+}
+
+/// What one admission decided. `spill` reports whether an admitted commit can
+/// fit only by packing or spilling tiles (#1290), so a caller asks once.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cxxqt_object) enum Admission {
+    Admitted {
+        /// The commit exceeds the room and must spill to fit room plus scratch.
+        spill: bool,
+    },
+    Refused(Refusal),
+}
+
+impl Admission {
+    pub(in crate::cxxqt_object) fn admitted(self) -> bool {
+        matches!(self, Self::Admitted { .. })
+    }
 }
 
 std::thread_local! {
-    /// The last gated edit or save was refused because it needed tiles lost
-    /// from the scratch disk (#1217).
-    static SCRATCH_REFUSED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-    /// The last gated edit was refused because its spillable output did not
-    /// fit the room plus the scratch disks' free space (#1290).
-    static SCRATCH_FULL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Why the last gated edit was refused, if it was. The one cell the
+    /// `edit_refused_for_*` predicates read.
+    static LAST_REFUSAL: std::cell::Cell<Option<Refusal>> =
+        const { std::cell::Cell::new(None) };
     /// The scratch disks' free bytes as a test pins them; `None` reads them.
+    /// Not refusal state: it is how the scratch room is read.
     static SCRATCH_AVAILABLE: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
-    /// `unreadable_reads()` when the last edit committed.
+    /// `unreadable_reads()` when the last edit committed. Not refusal state:
+    /// it is the read counter the rollback diffs.
     static UNREADABLE_SEEN: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// Forget the last refusal; every admission starts here.
+fn reset() {
+    LAST_REFUSAL.set(None);
+    memory::clear_refusal();
+}
+
+/// The last refusal recorded on this thread, or `None`.
+pub(in crate::cxxqt_object) fn last_refusal() -> Option<Refusal> {
+    LAST_REFUSAL.get()
+}
+
+/// Record a refusal this gate decided beyond the governor's room.
+fn record(reason: Refusal) {
+    LAST_REFUSAL.set(Some(reason));
+}
+
+/// Forget the last refusal; every gated edit starts here.
+pub(in crate::cxxqt_object) fn clear() {
+    reset();
 }
 
 /// Record a refusal for unreadable scratch tiles.
 pub(in crate::cxxqt_object) fn refuse_for_scratch() {
-    SCRATCH_REFUSED.set(true);
+    record(Refusal::ScratchUnreadable);
 }
 
 /// Whether the last gated edit or save was refused for unreadable tiles.
 pub(in crate::cxxqt_object) fn edit_refused_for_scratch() -> bool {
-    SCRATCH_REFUSED.get()
+    last_refusal() == Some(Refusal::ScratchUnreadable)
 }
 
-/// Whether unreadable tiles were read since the last commit; marks them seen.
-pub(in crate::cxxqt_object) fn take_unreadable_reads() -> bool {
+/// Whether an edit that just committed read tiles lost from the scratch disk
+/// and so must be rolled back (#1217); marks the reads seen.
+pub(in crate::cxxqt_object) fn read_lost_tiles() -> bool {
     let now = memory::eviction::unreadable_reads();
     UNREADABLE_SEEN.replace(now) != now
 }
 
-/// Whether `bytes` more fit the governor's room now. A refusal is remembered
-/// for [`edit_refused_for_memory`].
-pub(in crate::cxxqt_object) fn admit(bytes: u64) -> bool {
-    memory::governor().admit(bytes, "an edit")
+/// Whether `bytes` fit the governor's room, resetting the last refusal first.
+/// A path that runs no other gate calls this.
+pub(in crate::cxxqt_object) fn admit_resident(bytes: u64) -> Admission {
+    reset();
+    if memory::governor().admit(bytes, "an edit") {
+        return Admission::Admitted { spill: false };
+    }
+    record(Refusal::Memory);
+    Admission::Refused(Refusal::Memory)
 }
 
-/// Whether a commit fits: its `working` bytes must fit the governor's room
-/// (a memory refusal), and its `spillable` bytes, which the evictor may pack
-/// or spill as they are written, the room plus the scratch disks' free space
-/// (a scratch-full refusal, which also counts as a memory refusal) (#1290).
-pub(in crate::cxxqt_object) fn admit_spilling(working: u64, spillable: u64) -> bool {
-    if !admit(working) {
-        return false;
+/// Whether a commit fits (#1290): its `working` bytes must fit the governor's
+/// room, and its `spillable` bytes, which the evictor may pack or spill as they
+/// are written, the room plus the scratch disks' free space. Resets the last
+/// refusal first.
+pub(in crate::cxxqt_object) fn admit_commit(cost: &CommitCost) -> Admission {
+    reset();
+    if !memory::governor().admit(cost.working, "an edit") {
+        record(Refusal::Memory);
+        return Admission::Refused(Refusal::Memory);
     }
     let Some(room) = memory::governor().room() else {
-        return true;
+        return Admission::Admitted { spill: false };
     };
-    if spillable <= room.saturating_add(scratch_available()) {
-        return true;
+    if cost.spillable > room.saturating_add(scratch_available()) {
+        refuse_scratch_full("an edit", cost.spillable);
+        return Admission::Refused(Refusal::ScratchFull);
     }
-    refuse_scratch_full("an edit", spillable);
-    false
+    Admission::Admitted {
+        spill: cost.working.saturating_add(cost.spillable) > room,
+    }
+}
+
+/// [`admit_commit`] for a caller that holds the two byte counts apart. Kept for
+/// the gate tests the retained suites drive.
+#[cfg(test)]
+pub(in crate::cxxqt_object) fn admit_spilling(working: u64, spillable: u64) -> bool {
+    admit_commit(&CommitCost { working, spillable }).admitted()
 }
 
 /// Record that `bytes` of spillable output for `purpose` did not fit the room
 /// plus the scratch disks' free space (#1290); it counts as a memory refusal.
 pub(in crate::cxxqt_object) fn refuse_scratch_full(purpose: &'static str, bytes: u64) {
-    SCRATCH_FULL.set(true);
+    record(Refusal::ScratchFull);
     memory::record_refusal(purpose, bytes);
 }
 
-/// Whether a commit [`admit_spilling`] admitted can only fit by packing or
-/// spilling tiles: its working and spillable bytes together exceed the room
-/// (#1290). Such a commit runs as a cancellable job.
+/// Whether a commit can only fit by packing or spilling tiles: its working and
+/// spillable bytes together exceed the room (#1290). Prefer
+/// [`Admission::Admitted`]'s `spill`, which answers this from the admission.
+/// Kept for the gate tests the retained suites drive.
+#[cfg(test)]
 pub(in crate::cxxqt_object) fn expects_spill(cost: &CommitCost) -> bool {
     memory::governor()
         .room()
@@ -97,19 +160,7 @@ pub(in crate::cxxqt_object) fn scratch_available() -> u64 {
 /// Whether the last gated edit was refused because the scratch disks could not
 /// hold its spillable output.
 pub(in crate::cxxqt_object) fn edit_refused_for_scratch_full() -> bool {
-    SCRATCH_FULL.get()
-}
-
-/// Pin this thread's scratch disks to `bytes` free; a negative value reads
-/// them again.
-pub(in crate::cxxqt_object) fn set_scratch_available_for_test(bytes: i64) {
-    SCRATCH_AVAILABLE.set(u64::try_from(bytes).ok());
-}
-
-/// [`clear`], then [`admit`]: the gate of a path that runs no other gate.
-pub(in crate::cxxqt_object) fn admit_fresh(bytes: u64) -> bool {
-    clear();
-    admit(bytes)
+    last_refusal() == Some(Refusal::ScratchFull)
 }
 
 /// The pixels of `bounds`.
@@ -383,339 +434,55 @@ pub(in crate::cxxqt_object) fn snapshot_restore_bytes(doc: &Document) -> u64 {
 }
 
 /// Whether the last gated edit was refused because it did not fit the
-/// governor's room.
+/// governor's room. A scratch-full refusal counts as one too, as before
+/// (#1290); an unreadable-tile refusal does not.
+///
+/// The governor's own refusal is consulted only when the seam has no typed
+/// reason, for an allocation that fails past the gate (`try_plane`'s failpoint,
+/// `fallible-allocation`).
 pub(in crate::cxxqt_object) fn edit_refused_for_memory() -> bool {
-    memory::last_refusal().is_some()
+    match last_refusal() {
+        Some(Refusal::Memory | Refusal::ScratchFull) => true,
+        Some(Refusal::ScratchUnreadable) => false,
+        None => memory::last_refusal().is_some(),
+    }
 }
 
-/// Pin the host this thread's governor sees to `bytes` of available memory
-/// and nothing else; a negative value reads the host again.
-pub(in crate::cxxqt_object) fn set_available_memory_for_test(bytes: i64) {
-    memory::set_host_for_test(u64::try_from(bytes).ok().map(|available| HostReading {
-        available: Some(available),
-        ..HostReading::default()
-    }));
+/// The test pins: how a suite fixes the host and the scratch disks. Not part of
+/// the seam's contract, so they sit together and away from the admission verbs.
+pub(in crate::cxxqt_object) mod test_pins {
+    use super::{memory, HostReading, SCRATCH_AVAILABLE};
+
+    /// Pin the host this thread's governor sees to `bytes` of available memory
+    /// and nothing else; a negative value reads the host again.
+    pub(in crate::cxxqt_object) fn set_available_memory_for_test(bytes: i64) {
+        memory::set_host_for_test(u64::try_from(bytes).ok().map(|available| HostReading {
+            available: Some(available),
+            ..HostReading::default()
+        }));
+    }
+
+    /// Pin the host to a cgroup limited to `max` bytes with `current` in use; a
+    /// negative `max` reads the host again.
+    pub(in crate::cxxqt_object) fn set_cgroup_for_test(max: i64, current: i64) {
+        memory::set_host_for_test(u64::try_from(max).ok().map(|max| HostReading {
+            cgroup_max: Some(max),
+            cgroup_current: Some(current.max(0) as u64),
+            ..HostReading::default()
+        }));
+    }
+
+    /// Pin this thread's scratch disks to `bytes` free; a negative value reads
+    /// them again.
+    pub(in crate::cxxqt_object) fn set_scratch_available_for_test(bytes: i64) {
+        SCRATCH_AVAILABLE.set(u64::try_from(bytes).ok());
+    }
 }
 
-/// Pin the host to a cgroup limited to `max` bytes with `current` in use; a
-/// negative `max` reads the host again.
-pub(in crate::cxxqt_object) fn set_cgroup_for_test(max: i64, current: i64) {
-    memory::set_host_for_test(u64::try_from(max).ok().map(|max| HostReading {
-        cgroup_max: Some(max),
-        cgroup_current: Some(current.max(0) as u64),
-        ..HostReading::default()
-    }));
-}
+pub(in crate::cxxqt_object) use test_pins::{
+    set_available_memory_for_test, set_cgroup_for_test, set_scratch_available_for_test,
+};
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    const MIB: i64 = 1024 * 1024;
-
-    #[test]
-    fn a_refusal_is_remembered_until_the_next_fill() {
-        // 1 GiB available leaves 768 MiB of room.
-        set_available_memory_for_test(1024 * MIB);
-        clear();
-        assert!(admit(700 * MIB as u64));
-        assert!(!edit_refused_for_memory());
-        assert!(!admit(800 * MIB as u64));
-        assert!(edit_refused_for_memory());
-        clear();
-        assert!(!edit_refused_for_memory());
-        set_available_memory_for_test(-1);
-    }
-
-    #[test]
-    fn a_write_forks_the_tiles_it_crosses() {
-        let mut doc = Document::new(
-            100,
-            300,
-            pictura_core::ColorMode::Rgb,
-            pictura_core::BitDepth::Eight,
-        );
-        doc.layers =
-            pictura_core::LayerStack::from_layers(vec![crate::cxxqt_object::tests::pixel_layer(
-                "layer",
-                100,
-                300,
-                (0, 0, 0),
-            )]);
-        let planes = doc.layers[0]
-            .channels()
-            .iter()
-            .filter(|c| c.id >= -1)
-            .count() as u64;
-        let rows = |top, bottom| PsdRect {
-            top,
-            left: 10,
-            bottom,
-            right: 20,
-        };
-        // Rows 70..140 lie in tile row 0: 256 rows, clipped to the 100 columns.
-        assert_eq!(fork_bytes(&doc, "0", rows(70, 140)), planes * 256 * 100);
-        // The last tile row is cut at the layer's bottom: rows 256..300.
-        assert_eq!(fork_bytes(&doc, "0", rows(290, 300)), planes * 44 * 100);
-        // A box off the layer grows it to the union: 100×500, rows 256..500.
-        assert_eq!(fork_bytes(&doc, "0", rows(400, 500)), planes * 244 * 100);
-        assert_eq!(fork_bytes(&doc, "9", rows(0, 10)), 0, "no such layer");
-    }
-
-    // [tp_gate]
-    /// An RGB/8 document of `side`² whose one layer covers the canvas, sized
-    /// without its planes: the cost reads only the rect and the channel ids.
-    fn full_canvas(side: u32) -> Document {
-        let mut doc = Document::new(1, 1, pictura_core::ColorMode::Rgb, BitDepth::Eight);
-        let mut layer = crate::cxxqt_object::tests::pixel_layer("layer", 1, 1, (0, 0, 0));
-        layer.rect = PsdRect {
-            top: 0,
-            left: 0,
-            bottom: side as i32,
-            right: side as i32,
-        };
-        doc.width = side;
-        doc.height = side;
-        doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
-        doc
-    }
-
-    fn whole(side: u32) -> PsdRect {
-        PsdRect {
-            top: 0,
-            left: 0,
-            bottom: side as i32,
-            right: side as i32,
-        }
-    }
-
-    // [ocf_gate_spills]
-    #[test]
-    fn a_large_fill_spills_its_tiles() {
-        let doc = full_canvas(17_000);
-        let bounds = whole(17_000);
-        let cost = fill_cost(&doc, "0", bounds, 0);
-        // 2 GiB available leaves 1.75 GiB of room, under the old RAM charge.
-        let room = (2048 - 256) * MIB as u64;
-        assert!(fork_bytes(&doc, "0", bounds) + refresh_bytes(bounds) > room);
-        assert_eq!(cost.working, 0);
-        set_available_memory_for_test(2048 * MIB);
-        set_scratch_available_for_test(64 * 1024 * MIB);
-        clear();
-        let admitted = admit_spilling(cost.working, cost.spillable);
-        let refused = edit_refused_for_memory();
-        set_available_memory_for_test(-1);
-        set_scratch_available_for_test(-1);
-        assert!(admitted);
-        assert!(!refused);
-    }
-
-    /// Gate an Image Size of a 17000² full-canvas layer to 150 % on a host with
-    /// 1.75 GiB of room and `scratch` bytes free: whether it was admitted,
-    /// whether it expects to spill, and whether a refusal was scratch-full.
-    fn gate_large_image_size(scratch: i64) -> (bool, bool, bool) {
-        let doc = full_canvas(17_000);
-        let cost = image_size_cost(&doc, 25_500, 25_500);
-        set_available_memory_for_test(2048 * MIB);
-        set_scratch_available_for_test(scratch);
-        clear();
-        let admitted = admit_spilling(cost.working, cost.spillable);
-        let spills = expects_spill(&cost);
-        let scratch_full = edit_refused_for_scratch_full();
-        set_available_memory_for_test(-1);
-        set_scratch_available_for_test(-1);
-        (admitted, spills, scratch_full)
-    }
-
-    /// A 17000² document with a Background and one full-canvas layer.
-    fn background_and_layer(side: u32) -> Document {
-        let mut doc = full_canvas(side);
-        let layer = doc.layers[0].clone();
-        let mut background = layer.clone();
-        background.background = true;
-        doc.layers = pictura_core::LayerStack::from_layers(vec![background, layer]);
-        doc
-    }
-
-    /// Gate each of the three canvas commands at 1.75 GiB of room and
-    /// `scratch` bytes of scratch: (admitted, expected to spill, scratch-full).
-    fn gate_large_canvas_commands(scratch: i64) -> Vec<(bool, bool, bool)> {
-        let doc = background_and_layer(17_000);
-        let costs = [
-            canvas_size_cost(&doc, 25_500, 25_500, pictura_ops::Anchor::Center),
-            orient_cost(&doc, 1),
-            rotate_cost(&doc, 15.0).0,
-        ];
-        set_available_memory_for_test(2048 * MIB);
-        set_scratch_available_for_test(scratch);
-        let gated = costs
-            .iter()
-            .map(|cost| {
-                clear();
-                let admitted = admit_spilling(cost.working, cost.spillable);
-                (
-                    admitted,
-                    expects_spill(cost),
-                    edit_refused_for_scratch_full(),
-                )
-            })
-            .collect();
-        set_available_memory_for_test(-1);
-        set_scratch_available_for_test(-1);
-        gated
-    }
-
-    // [ocg_gate_spills]
-    #[test]
-    fn large_canvas_commands_are_admitted_when_scratch_holds_them() {
-        let doc = background_and_layer(17_000);
-        let planes = doc.layers[0].channels().len() as u64;
-        let canvas = canvas_size_cost(&doc, 25_500, 25_500, pictura_ops::Anchor::Center);
-        assert_eq!(
-            canvas.spillable,
-            planes * 25_500 * 25_500,
-            "only the Background is rewritten"
-        );
-        assert_eq!(orient_cost(&doc, 1).spillable, 2 * planes * 17_000 * 17_000);
-        let (rotate, (w, h)) = rotate_cost(&doc, 15.0);
-        assert!(w > 17_000 && h > 17_000, "the canvas grows: {w}×{h}");
-        assert_eq!(rotate.spillable, 2 * planes * u64::from(w) * u64::from(h));
-        for (i, (admitted, spills, _)) in gate_large_canvas_commands(64 * 1024 * MIB)
-            .into_iter()
-            .enumerate()
-        {
-            assert!(admitted, "command {i}");
-            assert!(spills, "command {i}: the planes exceed the room");
-        }
-    }
-
-    // [ocg_gate_scratch_full]
-    #[test]
-    fn full_scratch_disks_refuse_large_canvas_commands() {
-        for (i, (admitted, _, scratch_full)) in
-            gate_large_canvas_commands(0).into_iter().enumerate()
-        {
-            assert!(!admitted, "command {i}");
-            assert!(scratch_full, "command {i}");
-        }
-    }
-
-    // [ocr_gate_spills]
-    #[test]
-    fn a_large_image_size_is_admitted_when_scratch_holds_it() {
-        let doc = full_canvas(17_000);
-        let cost = image_size_cost(&doc, 25_500, 25_500);
-        let planes = doc.layers[0].channels().len() as u64;
-        assert_eq!(cost.spillable, planes * 25_500 * 25_500);
-        assert!(
-            cost.working >= 4 * TILE as u64 * 25_500,
-            "one strip is charged"
-        );
-        let (admitted, spills, _) = gate_large_image_size(64 * 1024 * MIB);
-        assert!(admitted);
-        assert!(spills, "the planes exceed the room");
-    }
-
-    // [ocr_gate_scratch_full]
-    #[test]
-    fn full_scratch_disks_refuse_a_large_image_size() {
-        let (admitted, _, scratch_full) = gate_large_image_size(0);
-        assert!(!admitted);
-        assert!(scratch_full);
-    }
-
-    // [mcr_transform_spill_job] [mcr_transform_fits_sync]
-    #[test]
-    fn a_commit_beyond_the_room_expects_to_spill() {
-        let cost = CommitCost {
-            working: 100 * MIB as u64,
-            spillable: 200 * MIB as u64,
-        };
-        // 256 MiB of headroom is kept under the pinned available memory.
-        set_available_memory_for_test((256 + 200) * MIB);
-        set_scratch_available_for_test(64 * 1024 * MIB);
-        clear();
-        let admitted = admit_spilling(cost.working, cost.spillable);
-        let spills = expects_spill(&cost);
-        set_available_memory_for_test((256 + 300) * MIB);
-        let fits = expects_spill(&cost);
-        set_available_memory_for_test(-1);
-        set_scratch_available_for_test(-1);
-        assert!(admitted, "the scratch disks hold the rest");
-        assert!(spills, "300 MiB over 200 MiB of room");
-        assert!(!fits, "the room holds all of it");
-    }
-
-    // [ocf_small_refresh]
-    #[test]
-    fn a_small_document_fill_charges_its_refresh() {
-        let doc = full_canvas(2000);
-        let bounds = whole(2000);
-        let cost = fill_cost(&doc, "0", bounds, 0);
-        assert_eq!(cost.working, refresh_bytes(bounds));
-        assert_eq!(cost.spillable, fork_bytes(&doc, "0", bounds));
-        // A large document's small region is composited densely too.
-        let doc = full_canvas(17_000);
-        let small = whole(1000);
-        assert_eq!(refresh_working(&doc, small), refresh_bytes(small));
-    }
-
-    #[test]
-    fn fork_bytes_counts_tiles() {
-        for (depth, bytes) in [
-            (pictura_core::BitDepth::Eight, 1),
-            (pictura_core::BitDepth::Sixteen, 2),
-            (pictura_core::BitDepth::ThirtyTwo, 4),
-        ] {
-            let mut doc = Document::new(1000, 1000, pictura_core::ColorMode::Rgb, depth);
-            doc.layers = pictura_core::LayerStack::from_layers(vec![
-                crate::cxxqt_object::tests::pixel_layer("layer", 1000, 1000, (0, 0, 0)),
-            ]);
-            let planes = doc.layers[0]
-                .channels()
-                .iter()
-                .filter(|c| c.id >= -1)
-                .count() as u64;
-            let inside = PsdRect {
-                top: 300,
-                left: 300,
-                bottom: 310,
-                right: 310,
-            };
-            let one_tile = (TILE * TILE) as u64;
-            assert_eq!(fork_bytes(&doc, "0", inside), planes * one_tile * bytes);
-        }
-    }
-
-    #[test]
-    fn a_fill_that_grows_the_layer_forks_the_grown_tiles() {
-        let mut doc = Document::new(
-            100,
-            300,
-            pictura_core::ColorMode::Rgb,
-            pictura_core::BitDepth::Eight,
-        );
-        doc.layers =
-            pictura_core::LayerStack::from_layers(vec![crate::cxxqt_object::tests::pixel_layer(
-                "layer",
-                20,
-                20,
-                (0, 0, 0),
-            )]);
-        // The layer is 20×20 at the origin; a fill box at (80, 80)–(120, 140)
-        // grows it to 120×140, whose tiles the fill forks.
-        let bounds = PsdRect {
-            top: 80,
-            left: 80,
-            bottom: 140,
-            right: 120,
-        };
-        let planes = doc.layers[0]
-            .channels()
-            .iter()
-            .filter(|c| c.id >= -1)
-            .count() as u64;
-        // The grown layer is one 120×140 tile.
-        assert_eq!(fork_bytes(&doc, "0", bounds), planes * 140 * 120);
-    }
-}
+#[path = "memory_gate_tests.rs"]
+mod tests;

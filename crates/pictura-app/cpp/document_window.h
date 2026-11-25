@@ -44,6 +44,7 @@ struct DocEntry {
     struct LayerEdgeCache {
         QString path;
         quint64 revision;
+        QString geometry;
         QRectF rect;
     };
 

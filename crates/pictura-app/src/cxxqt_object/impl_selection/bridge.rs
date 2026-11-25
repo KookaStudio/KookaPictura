@@ -43,6 +43,10 @@ pub mod ffi {
         /// Restore the origin selection and drop the drag; no history.
         fn cancel_selection_move(view: Pin<&mut PictureView>) -> bool;
 
+        /// Whether the active target can move selected pixels; `duplicate`
+        /// ignores the cut's transparency-lock refusal.
+        fn selection_content_movable(view: &PictureView, duplicate: bool) -> bool;
+
         /// Move selected content by `(dx, dy)`; `duplicate` copies. One undo state.
         fn move_selection_content(
             view: Pin<&mut PictureView>,

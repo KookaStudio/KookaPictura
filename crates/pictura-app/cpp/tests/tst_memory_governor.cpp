@@ -25,6 +25,8 @@
 #include "command_ids.h"
 #include "control_server.h"
 #include "frame.h"
+#include "image_size_dialog.h"
+#include "image_view.h"
 #include "memory_refusal.h"
 #include "preferences_dialog.h"
 #include "session.h"
@@ -34,8 +36,10 @@
 #include "api/document_api.h"
 #include "api/document_bridge.h"
 #include "api/history_api.h"
+#include "api/layers_bridge.h"
 #include "api/paint_bridge.h"
 #include "api/transform_api.h"
+#include "api/transform_bridge.h"
 
 #include "qt_test_support.h"
 
@@ -61,6 +65,9 @@ private slots:
     void transformBeginRefusedBeyondTheRoom();
     void fillsSpillToScratch();
     void fillRefusalNamesFullScratchDisks();
+    void quickMaskStrokeAfterRefusalShowsNoMemoryMessage();
+    void scratchFullRefusalThroughTheGenericPathNamesTheScratchDisks();
+    void everyCommandFamilyShowsItsOwnWording();
 
 private:
     // A white 40×40 document, made active.
@@ -597,6 +604,192 @@ void MemoryGovernorTest::fillRefusalNamesFullScratchDisks()
     QVERIFY(full);
     QCOMPARE(view->history_count(), count);
     QVERIFY2(message.contains(QStringLiteral("scratch disks")), qPrintable(message));
+}
+
+// [mga_quick_mask_clean]
+void MemoryGovernorTest::quickMaskStrokeAfterRefusalShowsNoMemoryMessage()
+{
+    pictura::PictureView* view = newDocument();
+    QVERIFY(view);
+    QStatusBar* bar = window_->statusBar();
+    const auto paint = [&] {
+        return view->begin_paint(0xff000000u, 0xffffffffu, 10, 100, 20, 0, 100, 100, 25,
+                                 QStringLiteral("normal"), false, false);
+    };
+    const auto refusePaint = [&] {
+        pinNoRoom();
+        const bool refused = !paint();
+        unpin();
+        return refused && pictura::edit_refused_for_memory();
+    };
+
+    pinNoRoom();
+    QVERIFY(view->add_layer(-1) < 0);
+    unpin();
+    QVERIFY(pictura::edit_refused_for_memory());
+    QVERIFY(pictura::quick_mask_set(*view, true));
+    const int maskBegin = paint();
+    QCOMPARE(maskBegin, 1);
+    view->end_paint();
+    QVERIFY(!pictura::edit_refused_for_memory());
+    QVERIFY2(!pictura::reportMemoryRefusal(window_.get(), QStringLiteral("paint")),
+             "the satisfied Quick Mask gate presented an earlier refusal");
+
+    QVERIFY(refusePaint());
+    pictura::clear_layer_target(*view);
+    window_->setActiveTool(pictura::ToolId::Brush);
+    auto* canvas = window_->imageView();
+    QVERIFY(canvas);
+    bar->clearMessage();
+    canvas->mousePressed(QPointF(20, 20), Qt::LeftButton, int(Qt::NoModifier));
+    canvas->mouseReleased(QPointF(20, 20));
+    QVERIFY(!pictura::edit_refused_for_memory());
+    QVERIFY2(bar->currentMessage().contains(QStringLiteral("select a single layer")),
+             qPrintable(bar->currentMessage()));
+    QVERIFY2(!bar->currentMessage().contains(QStringLiteral("not enough memory")),
+             qPrintable(bar->currentMessage()));
+
+    view->set_active_layer(QStringLiteral("0"));
+    QVERIFY(refusePaint());
+    QVERIFY(!view->begin_move_preview());
+    QVERIFY(!pictura::edit_refused_for_memory());
+    QVERIFY(!pictura::reportMemoryRefusal(window_.get(), QStringLiteral("move")));
+    QVERIFY(refusePaint());
+    QVERIFY(!view->commit_move(1, 0));
+    QVERIFY(!pictura::edit_refused_for_memory());
+    QVERIFY(!pictura::reportMemoryRefusal(window_.get(), QStringLiteral("move")));
+    QVERIFY(pictura::quick_mask_set(*view, false));
+}
+
+// [mga_scratch_full_presented]
+// The generic presenter must name full scratch disks rather than claiming a
+// memory shortfall, including on a legacy (non-native, raster) save.
+void MemoryGovernorTest::scratchFullRefusalThroughTheGenericPathNamesTheScratchDisks()
+{
+    pictura::PictureView* view = largeFillDocument();
+    QVERIFY(view);
+    // Room for the gradient's working set but none of its forked tiles.
+    pinRoom(16, 0);
+    const bool drawn = pictura::draw_gradient(
+        *view, 0, QString(), 0xFF000000u, 0xFFFFFFFFu, 0, QStringLiteral("normal"), 100, false,
+        false, false, 0.0, 0.0, 4099.0, 4099.0);
+    QVERIFY(!drawn);
+    // The typed reason the bridge reports, and the message the one path builds.
+    QCOMPARE(pictura::last_refusal(), pictura::Refusal::ScratchFull);
+    const QString fill = pictura::refusalMessage(pictura::Refusal::ScratchFull,
+                                                 QStringLiteral("fill"));
+    pictura::set_scratch_available_for_test(-1);
+    unpin();
+    QVERIFY2(fill.contains(QStringLiteral("scratch disks")), qPrintable(fill));
+
+    // A legacy (non-native) PNG save takes the same path: its working set is the
+    // 177 MiB compositor band plus the encoder's rows, so the room holds it while
+    // the document's whole spillable composite does not. The canvas is large
+    // because the band alone sets the floor; the document is created with room
+    // so its own gate passes.
+    QStatusBar* bar = window_->statusBar();
+    pinRoom(1024, 0);
+    const bool created = window_->newDocument(QStringLiteral("ScratchSave"), 7400, 7400,
+                                              QStringLiteral("rgb"), 8, QStringLiteral("white"));
+    unpin();
+    QVERIFY(created);
+    QVERIFY(window_->activeView());
+    const QString target = files_.filePath(QStringLiteral("scratch-full.png"));
+    pinRoom(200, 0);
+    bar->clearMessage();
+    const bool saved = window_->saveActiveAs(target);
+    const QString message = bar->currentMessage();
+    pictura::set_scratch_available_for_test(-1);
+    unpin();
+    QVERIFY(!saved);
+    QVERIFY(!QFileInfo::exists(target));
+    QCOMPARE(pictura::last_refusal(), pictura::Refusal::ScratchFull);
+    QVERIFY2(message.contains(QStringLiteral("scratch disks")), qPrintable(message));
+    QVERIFY2(!message.contains(QStringLiteral("not enough memory")), qPrintable(message));
+}
+
+// [mga_one_path]
+void MemoryGovernorTest::everyCommandFamilyShowsItsOwnWording()
+{
+    pictura::PictureView* view = newDocument();
+    QVERIFY(view);
+    QVERIFY(view->add_layer(-1) >= 0);
+    QCOMPARE(view->duplicate_layer(0), 1);
+    view->set_active_layer(QStringLiteral("1"));
+    auto* tools = window_->findChild<pictura::ToolController*>();
+    QVERIFY(tools);
+    QStatusBar* bar = window_->statusBar();
+    const int history = view->history_count();
+    const int historyIndex = view->history_index();
+    const int layers = view->layer_count();
+    const bool dirty = pictura::document_api::isDirty(*view);
+    const auto wording = [](const QString& message, const QString& action) {
+        return message.contains(action) &&
+               message.contains(QStringLiteral("not enough memory"), Qt::CaseInsensitive);
+    };
+    QVERIFY(pictura::refusalMessage(pictura::Refusal::None, QStringLiteral("fill")).isEmpty());
+    QVERIFY2(pictura::refusalMessage(pictura::Refusal::ScratchUnreadable, QStringLiteral("edit"))
+                 .contains(QStringLiteral("could not be read back")),
+             "unreadable scratch tiles have distinct presentation wording");
+
+    pinNoRoom();
+    QVERIFY(!pictura::edit_fill(*view, 0xFF808080u, -1, QStringLiteral("normal"), 100, false));
+    const QString fill = pictura::fillMemoryRefusalMessage();
+    unpin();
+    QVERIFY2(wording(fill, QStringLiteral("fill")), qPrintable(fill));
+
+    pinNoRoom();
+    QVERIFY(!view->commit_move(1, 0));
+    const QString move = pictura::moveMemoryRefusalMessage();
+    unpin();
+    QVERIFY2(wording(move, QStringLiteral("move")), qPrintable(move));
+
+    QVERIFY(tools->beginFreeTransform(QStringLiteral("1")));
+    QVERIFY(pictura::transform_apply(*view, QStringLiteral("flipHorizontal")));
+    pinNoRoom();
+    tools->commitFreeTransform();
+    const QString transform = bar->currentMessage();
+    unpin();
+    QVERIFY2(wording(transform, QStringLiteral("transform")), qPrintable(transform));
+
+    pinNoRoom();
+    QVERIFY(!pictura::image_size_apply(*view, QStringLiteral("bicubic"), 80, 80, 72.0, false));
+    const QString resize = pictura::imageSizeBudgetMessage(80, 80);
+    const QString commit = pictura::refusalMessage(pictura::Refusal::Memory, QStringLiteral("resize"));
+    QCOMPARE(pictura::commitRefusalMessage(QStringLiteral("resize")), commit);
+    QVERIFY(pictura::reportCommitRefusal(window_.get(), QStringLiteral("resize")));
+    QCOMPARE(bar->currentMessage(), commit);
+    unpin();
+    QVERIFY2(wording(resize, QStringLiteral("resize")), qPrintable(resize));
+
+    pinNoRoom();
+    bar->clearMessage();
+    QVERIFY(window_->registry()->dispatch(QString::fromLatin1(pictura::command_ids::EditUndo)));
+    const QString undo = bar->currentMessage();
+    unpin();
+    QVERIFY2(wording(undo, QStringLiteral("undo")), qPrintable(undo));
+
+    pinNoRoom();
+    auto* newLayer = window_->findChild<QToolButton*>(QStringLiteral("layersStripNewLayer"));
+    QVERIFY(newLayer);
+    bar->clearMessage();
+    newLayer->click();
+    const QString layer = bar->currentMessage();
+    unpin();
+    QVERIFY2(wording(layer, QStringLiteral("add a layer")), qPrintable(layer));
+
+    const QString target = files_.filePath(QStringLiteral("family-refused.psd"));
+    pinNoRoom();
+    bar->clearMessage();
+    QVERIFY(!window_->saveActiveAs(target));
+    const QString save = bar->currentMessage();
+    unpin();
+    QVERIFY2(wording(save, QStringLiteral("save the document")), qPrintable(save));
+    QVERIFY(!QFileInfo::exists(target));
+    QCOMPARE(view->history_count(), history);
+    QCOMPARE(view->history_index(), historyIndex);
+    QCOMPARE(view->layer_count(), layers);
+    QCOMPARE(pictura::document_api::isDirty(*view), dirty);
 }
 
 QTEST_MAIN(MemoryGovernorTest)

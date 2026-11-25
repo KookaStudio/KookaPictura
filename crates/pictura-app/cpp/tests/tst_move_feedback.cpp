@@ -7,6 +7,7 @@
 
 #include "api/transform_api.h"
 #include "api/type_api.h"
+#include "api/selection_api.h"
 #include "canvas_ruler.h"
 #include "selftest_paint_fixture.h"
 
@@ -56,6 +57,10 @@ private slots:
     void initTestCase();
     void transformControlsOnByDefault();
     void dragShowsAntsAndReadout();
+    void typeLayerMovesWholeWithASelection();
+    void pixelSelectionStillContentMoves();
+    void positionLockedTypeLayerRefusesCleanly();
+    void largeTypeMoveKeepsLayerEdgesOnTheText();
     void readoutFollowsTheRulerUnit();
     void switchingToMoveBuildsNoPreview();
     void largeLayerPreviewsFromTheView();
@@ -134,9 +139,148 @@ void MoveFeedbackTest::dragShowsAntsAndReadout()
     QVERIFY(f.canvas->hasDragSizeHintForTest());
     QCOMPARE(f.canvas->dragSizeHintForTest(), QStringLiteral("ΔX: 0.500 in\nΔY: 0.250 in"));
 
+    const pictura::transform_api::LayerRect before =
+        pictura::transform_api::layerRect(*f.view, typeLayer(f));
     f.canvas->mouseReleased(QPointF(186, 158));
     QVERIFY(!f.canvas->hasDragSizeHintForTest());
     QVERIFY(f.canvas->moveOutlineForTest().isEmpty());
+    const pictura::transform_api::LayerRect after =
+        pictura::transform_api::layerRect(*f.view, typeLayer(f));
+    QVERIFY(before.valid && after.valid);
+    QCOMPARE(QPoint(after.left, after.top), QPoint(before.left + 36, before.top + 18));
+}
+
+// [lct_move_type_selection] A selection over a type layer moves the whole type
+// layer, not a content move the type's pixel lock refuses.
+void MoveFeedbackTest::typeLayerMovesWholeWithASelection()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_move_type_selection"));
+    QVERIFY2(f.ok(), "move fixture");
+    showFrame();
+    f.canvas->setSmartGuidesEnabled(false);
+
+    frame.setActiveTool(pictura::ToolId::HorizontalType);
+    f.drag({QPointF(20, 60)});
+    QTest::keyClicks(f.canvas, QStringLiteral("Move me"));
+    QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
+    frame.setActiveTool(pictura::ToolId::Move);
+    const QString path = typeLayer(f);
+    QVERIFY2(!path.isEmpty(), "a type layer");
+    QVERIFY(f.view->select_rect(10, 10, 120, 100, QStringLiteral("new"), 0.0));
+    const QString selection = pictura::selection_api::bounds(*f.view).toString();
+    const pictura::transform_api::LayerRect before = pictura::transform_api::layerRect(*f.view, path);
+    QVERIFY(before.valid);
+    const int base = f.view->history_index();
+
+    f.canvas->mousePressed(QPointF(150, 140), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY2(f.canvas->movePreviewActive(),
+             "the whole type layer previews instead of a refused content move");
+    f.canvas->mouseMoved(QPointF(186, 158));
+    f.canvas->mouseReleased(QPointF(186, 158));
+
+    const pictura::transform_api::LayerRect after = pictura::transform_api::layerRect(*f.view, path);
+    QVERIFY(after.valid);
+    QCOMPARE(QPoint(after.left, after.top), QPoint(before.left + 36, before.top + 18));
+    QVERIFY2(f.committedOnce(base, "Move Layer"), "one whole-layer Move state");
+    QCOMPARE(pictura::selection_api::bounds(*f.view).toString(), selection);
+}
+
+// A plain pixel layer keeps the selected-pixel content move under a selection.
+void MoveFeedbackTest::pixelSelectionStillContentMoves()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_move_pixel_selection"));
+    QVERIFY2(f.ok(), "move fixture");
+    showFrame();
+    f.canvas->setSmartGuidesEnabled(false);
+    QCOMPARE(f.view->duplicate_layer(0), 1);
+    f.view->set_active_layer(QStringLiteral("1"));
+    QVERIFY(f.view->select_rect(10, 10, 40, 40, QStringLiteral("new"), 0.0));
+    const int base = f.view->history_index();
+    frame.setActiveTool(pictura::ToolId::Move);
+
+    f.canvas->mousePressed(QPointF(20, 20), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY2(!f.canvas->movePreviewActive(), "a content move, not a whole-layer preview");
+    f.canvas->mouseMoved(QPointF(60, 50));
+    f.canvas->mouseReleased(QPointF(60, 50));
+    QVERIFY2(f.committedOnce(base, "Move Selection"), "one content-move state");
+}
+
+// [llk_position_drag] A position-locked type layer refuses the Move drag
+// cleanly: no preview, no history, and no half-applied selection outline.
+void MoveFeedbackTest::positionLockedTypeLayerRefusesCleanly()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    Fixture f(frame, seed(), QStringLiteral("pictura_move_type_locked"));
+    QVERIFY2(f.ok(), "move fixture");
+    showFrame();
+    f.canvas->setSmartGuidesEnabled(false);
+
+    frame.setActiveTool(pictura::ToolId::HorizontalType);
+    f.drag({QPointF(20, 60)});
+    QTest::keyClicks(f.canvas, QStringLiteral("Move me"));
+    QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
+    frame.setActiveTool(pictura::ToolId::Move);
+    const QString path = typeLayer(f);
+    QVERIFY2(!path.isEmpty(), "a type layer");
+    QVERIFY(f.view->set_layers_lock({path}, QStringLiteral("position"), true));
+    const pictura::transform_api::LayerRect before = pictura::transform_api::layerRect(*f.view, path);
+    QVERIFY(before.valid);
+    const int base = f.view->history_index();
+
+    f.canvas->mousePressed(QPointF(150, 140), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY2(!f.canvas->movePreviewActive(), "a locked layer starts no preview");
+    f.canvas->mouseMoved(QPointF(186, 158));
+    f.canvas->mouseReleased(QPointF(186, 158));
+    QCOMPARE(f.view->history_index(), base);
+    const pictura::transform_api::LayerRect after = pictura::transform_api::layerRect(*f.view, path);
+    QVERIFY(after.valid);
+    QCOMPARE(QPoint(after.left, after.top), QPoint(before.left, before.top));
+
+    // With a selection the same press must not preview a content move either.
+    QVERIFY(f.view->select_rect(10, 10, 120, 100, QStringLiteral("new"), 0.0));
+    const int withSelection = f.view->history_index();
+    f.canvas->mousePressed(QPointF(150, 140), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY2(!f.canvas->movePreviewActive(), "no selection-content preview either");
+    f.canvas->mouseMoved(QPointF(186, 158));
+    f.canvas->mouseReleased(QPointF(186, 158));
+    QCOMPARE(f.view->history_index(), withSelection);
+}
+
+// On a large document the deferred/lazy Move path must still leave the Layer
+// Edges outline on the moved type text, not at an older place.
+void MoveFeedbackTest::largeTypeMoveKeepsLayerEdgesOnTheText()
+{
+    pictura::PicturaMainWindow& frame = *window_;
+    QImage big(4000, 4000, QImage::Format_RGB32);
+    big.fill(Qt::white);
+    Fixture f(frame, big, QStringLiteral("pictura_move_type_edges"));
+    QVERIFY2(f.ok(), "large move fixture");
+    showFrame();
+    f.canvas->setSmartGuidesEnabled(false);
+
+    frame.setActiveTool(pictura::ToolId::HorizontalType);
+    f.drag({QPointF(200, 200), QPointF(1200, 900)});
+    QTest::keyClicks(f.canvas, QStringLiteral("Hello"));
+    QTest::keyClick(f.canvas, Qt::Key_Return, Qt::ControlModifier);
+    frame.setActiveTool(pictura::ToolId::Move);
+    window_->refresh();
+    const QRectF before = f.canvas->layerEdgesForTest();
+    QVERIFY2(!before.isEmpty(), "the type layer edges box the text");
+
+    f.canvas->mousePressed(QPointF(700, 550), Qt::LeftButton, int(Qt::NoModifier));
+    QVERIFY(f.canvas->movePreviewActive());
+    f.canvas->mouseMoved(QPointF(740, 570));
+    QCOMPARE(f.canvas->layerEdgesForTest().topLeft(), before.topLeft() + QPointF(40, 20));
+    f.canvas->mouseReleased(QPointF(740, 570));
+    // A deferred/lazy commit keeps the preview until its tiles land; the
+    // outline is already at the committed text and must not add the drag delta
+    // a second time.
+    QCOMPARE(f.canvas->layerEdgesForTest().topLeft(), before.topLeft() + QPointF(40, 20));
+    QCoreApplication::processEvents();
+    window_->refresh();
+    QCOMPARE(f.canvas->layerEdgesForTest().topLeft(), before.topLeft() + QPointF(40, 20));
 }
 
 void MoveFeedbackTest::readoutFollowsTheRulerUnit()

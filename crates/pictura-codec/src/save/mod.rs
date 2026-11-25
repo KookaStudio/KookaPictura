@@ -2,6 +2,7 @@
 //! Qt's image writers cannot express (`codec/raster-save-encoders`).
 
 mod eps;
+mod format;
 mod rows;
 mod stream;
 #[cfg(test)]
@@ -17,6 +18,10 @@ use pictura_core::{ColorMode, Document, Samples};
 
 use crate::error::PsdError;
 use crate::write_stream::{io_error, Sink};
+pub use format::{
+    SaveFormat, SaveFormatFacts, SaveRoute, FLAG_KEEPS_LAYERS, FLAG_NATIVE, FLAG_OFFERS_PROFILE,
+    FLAG_PDF, FLAG_RASTER,
+};
 use rows::RasterRows;
 
 /// A Save As format the engine writes.
@@ -64,25 +69,6 @@ impl SaveKind {
             Self::Tga => 9,
             Self::Cineon => 10,
         }
-    }
-
-    pub fn from_suffix(suffix: &str) -> Option<Self> {
-        Some(match suffix.to_ascii_lowercase().as_str() {
-            "jpg" | "jpeg" | "jpe" => Self::Jpeg,
-            "png" => Self::Png,
-            "bmp" => Self::Bmp,
-            "tif" | "tiff" => Self::Tiff,
-            "gif" => Self::Gif,
-            "eps" => Self::Eps,
-            "tga" | "vda" | "icb" | "vst" => Self::Tga,
-            "raw" => Self::Raw,
-            "cin" => Self::Cineon,
-            _ => return None,
-        })
-    }
-
-    pub fn is_engine_writer(self) -> bool {
-        !matches!(self, Self::Jpeg)
     }
 }
 

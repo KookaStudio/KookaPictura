@@ -492,8 +492,10 @@ public:
     bool transformSessionActive() const;
     // Whether the Move tool's `Show Transform Controls` box is up: idle, or a
     // handle gesture in progress. A released changed gesture is a pending modal
-    // transform (`transformControls_` false), not a controls session.
-    bool transformControlsSession() const { return transformControls_; }
+    // transform (`transformControlsSession()` false), not a controls session.
+    // Derived from the idle-box state plus the session flag, which has one
+    // owner; see `tool_transform.cpp`.
+    bool transformControlsSession() const;
     // Begin the Move tool's controls-box session directly (the entry point a
     // handle press would take).
     bool beginControlsGestureForTest(PictureView* v) { return beginControlsGesture(v); }
@@ -506,7 +508,7 @@ public:
     {
         cropPrompt_ = std::move(prompt);
     }
-    bool transformPending() const { return transformSessionActive() && !transformControls_; }
+    bool transformPending() const { return transformSessionActive() && !transformControlsSession(); }
     // Asked when a tool switch would leave a pending transform; unset (or
     // headless) behaves as Don't Apply.
     void setTransformDecisionPrompt(std::function<TransformDecision()> prompt)
@@ -735,9 +737,6 @@ private:
     QPointF transformPressPos_;
     QPointF transformStartCorner_;
     bool transformGuideSnap_ = false;
-    // True while the Move tool's controls box is up (idle or mid-gesture). A
-    // released changed gesture clears it and becomes a pending modal session.
-    bool transformControls_ = false;
     // The box is up with no session (`controlsIdle_`): on `controlsPath_`,
     // last built for `controlsKey_` (path, rect, history step).
     bool controlsIdle_ = false;

@@ -6,6 +6,7 @@ use super::super::document_session::SessionKind;
 use super::super::document_session::{
     MaskPreview, MaskStroke, MaskStrokeFinish, PreviewSample, PreviewStroke, StrokePlan,
 };
+use super::super::helpers::memory_gate;
 use super::super::helpers::*;
 use super::super::helpers_composite::display_rgba_bytes;
 use super::super::qobject;
@@ -200,7 +201,7 @@ fn mask_plan_with_tip(
     tip: Option<pictura_paint::stroke::SampledTip>,
 ) -> Option<StrokePlan> {
     let doc = rust.session.doc.as_ref()?;
-    if !memory_gate::admit(u64::from(doc.width) * u64::from(doc.height) * 4) {
+    if !memory_gate::admit_resident(u64::from(doc.width) * u64::from(doc.height) * 4).admitted() {
         return None;
     }
     let mask = pictura_render::mask_document_coverage(doc, path)?;

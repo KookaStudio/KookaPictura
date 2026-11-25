@@ -32,7 +32,7 @@ impl PictureViewRust {
             .doc
             .as_ref()
             .map_or(0, memory_gate::restore_bytes);
-        memory_gate::admit_fresh(estimate)
+        memory_gate::admit_resident(estimate).admitted()
     }
 
     /// Fold `rect` of the document's own composite into level 0 and the
@@ -290,7 +290,7 @@ impl qobject::PictureView {
             .doc
             .as_ref()
             .map_or(0, |doc| memory_gate::snapshot_bytes(doc, stroking));
-        if !memory_gate::admit_fresh(estimate) {
+        if !memory_gate::admit_resident(estimate).admitted() {
             return false;
         }
         let Some(snapshot) = self.rust().named_snapshot() else {
@@ -323,7 +323,9 @@ impl qobject::PictureView {
             .session
             .history
             .snapshot_history_marker(i as usize);
-        if !memory_gate::admit_fresh(memory_gate::snapshot_restore_bytes(&snapshot.doc)) {
+        if !memory_gate::admit_resident(memory_gate::snapshot_restore_bytes(&snapshot.doc))
+            .admitted()
+        {
             return false;
         }
         let label = self

@@ -88,6 +88,72 @@ pub fn ink_influence(doc: &Document, path: &str) -> Option<PsdRect> {
     if area(rect).saturating_mul(4) < canvas.saturating_mul(3) {
         return Some(rect);
     }
+    ink_trim(doc, path, rect)
+}
+
+/// [`content_influence`], trimmed to the inked pixels of any type layer whose
+/// reach is the raster alone, however large its paragraph box is.
+///
+/// A Move previews and damages the layer it moves; a box of tens of millions of
+/// pixels around a few words would make that work proportional to the box, not
+/// the words. The alpha scan is bounded by the box, which the move would
+/// otherwise composite anyway. Effects, a clipped run, or a non-type layer keep
+/// the untrimmed rectangle.
+pub fn type_ink_influence(doc: &Document, path: &str) -> Option<PsdRect> {
+    let layer = resolve_path(doc, path)?;
+    // An effects block makes `paint_bounds` report the canvas, but a type
+    // layer's effects draw around its ink, not its paragraph box. With no
+    // knockout or clipping and no vector mask, the reach is the ink plus the
+    // effect pad.
+    if layer.type_tool().is_some()
+        && layer.knockout == pictura_core::Knockout::None
+        && layer.vector_mask.is_none()
+        && (layer.clipping || !clipped_above(doc, path))
+    {
+        let raster = layer.rect.clip_to(doc.width, doc.height)?;
+        let Some(ink) = ink_bounds(layer) else {
+            return Some(raster);
+        };
+        let pad = crate::layer_effects::effects_pad(layer);
+        let reach = PsdRect {
+            top: ink.top.saturating_sub(pad),
+            left: ink.left.saturating_sub(pad),
+            bottom: ink.bottom.saturating_add(pad),
+            right: ink.right.saturating_add(pad),
+        };
+        return reach.clip_to(doc.width, doc.height).or(Some(raster));
+    }
+    let rect = content_influence(doc, path)?;
+    ink_trim(doc, path, rect)
+}
+
+/// Whether a clipped run sits above `path`, so moving the layer as its base
+/// changes those members' clip too.
+fn clipped_above(doc: &Document, path: &str) -> bool {
+    let Some(index) = path
+        .rsplit('/')
+        .next()
+        .and_then(|s| s.parse::<usize>().ok())
+    else {
+        return false;
+    };
+    let siblings: &[Layer] = match parent_path(path) {
+        Some(parent) => match resolve_path(doc, parent) {
+            Some(layer) => layer.children(),
+            None => return false,
+        },
+        None => &doc.layers,
+    };
+    siblings
+        .iter()
+        .skip(index + 1)
+        .take_while(|layer| layer.clipping)
+        .any(|_| true)
+}
+
+/// Trim `rect` (the layer's content reach) to the type layer's ink when the
+/// reach is the raster alone.
+fn ink_trim(doc: &Document, path: &str, rect: PsdRect) -> Option<PsdRect> {
     let layer = resolve_path(doc, path)?;
     let raster_alone = influence_of(doc, layer) == Some(layer.rect)
         && layer.rect.clip_to(doc.width, doc.height) == Some(rect);

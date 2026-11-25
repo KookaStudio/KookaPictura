@@ -96,11 +96,12 @@ QJsonObject saveParameters(const QString& path, bool fromSave)
     return values;
 }
 
-bool startNativeSave(PictureView& view, const QString& path, std::optional<bool> includeMerged)
+bool startNativeSave(PictureView& view, const QString& path, std::optional<bool> includeMerged,
+                     int formatId)
 {
     return includeMerged.has_value()
-        ? pictura::native_compatibility_save_start(view, path, false, *includeMerged)
-        : document_api::saveStart(view, path);
+        ? pictura::native_compatibility_save_start(view, path, formatId, false, *includeMerged)
+        : document_api::saveStart(view, path, formatId);
 }
 
 } // namespace
@@ -194,9 +195,15 @@ bool ImportSaveCoordinator::saveActive(bool interactive, bool backgroundAllowed)
         }
         return saved;
     }
-    SaveFormatKind kind = lastSaveKinds_.value(view, SaveFormatKind::None);
-    if (kind == SaveFormatKind::None) {
-        kind = saveFormatKindForSuffix(QFileInfo(path).suffix());
+    const QString saveSuffix = QFileInfo(path).suffix();
+    SaveFormatKind kind = saveFormatKindForSuffix(saveSuffix);
+    // The per-document remembered kind only disambiguates the shared .eps
+    // suffix; every other suffix owns its format.
+    if (saveSuffix.compare(QLatin1String("eps"), Qt::CaseInsensitive) == 0) {
+        const SaveFormatKind remembered = lastSaveKinds_.value(view, SaveFormatKind::None);
+        if (remembered == SaveFormatKind::Eps || remembered == SaveFormatKind::Dcs) {
+            kind = remembered;
+        }
     }
     const bool rememberedDcs = kind == SaveFormatKind::Dcs;
     if (path.isEmpty()
@@ -217,7 +224,8 @@ bool ImportSaveCoordinator::saveActive(bool interactive, bool backgroundAllowed)
             return false;
         }
     }
-    const bool saved = saveActiveAs(path, backgroundAllowed, includeMerged);
+    const bool saved = saveActiveAs(path, backgroundAllowed, includeMerged,
+                                   saveFormatIdForKind(kind));
     if (saved && !backgroundSaves_.contains(view)) {
         record();
     }
@@ -237,13 +245,13 @@ bool ImportSaveCoordinator::canStartNativeSave(PictureView* view, const QString&
 }
 
 bool ImportSaveCoordinator::startBackgroundSave(PictureView* view, const QString& path,
-                                                std::optional<bool> includeMerged)
+                                                 std::optional<bool> includeMerged, int formatId)
 {
     const QString destination = destinationKey(path);
     if (!canStartNativeSave(view, destination)) {
         return false;
     }
-    if (!startNativeSave(*view, path, includeMerged)) {
+    if (!startNativeSave(*view, path, includeMerged, formatId)) {
         return applySaveResult(view, path, 0, true, save_last_result(*view).code, true, save_last_result(*view).admission);
     }
     const bool fromSave = saveActiveInProgress();
@@ -402,15 +410,16 @@ bool ImportSaveCoordinator::applySaveResult(PictureView* view, const QString& pa
 }
 
 bool ImportSaveCoordinator::saveActiveAs(const QString& path, bool backgroundAllowed,
-                                         std::optional<bool> includeMerged)
+                                         std::optional<bool> includeMerged, int formatId)
 {
     PictureView* view = documents_.activeView();
     if (!view || path.isEmpty() || !pictura::compatibility_reason(*view).isEmpty()) {
         return false;
     }
-    const bool native = saveRunsOnWorker(path);
+    const bool native = formatId == -1 ? saveRunsOnWorker(path)
+                                       : saveFormatHasFlag(formatId, kSaveFormatNative);
     if (backgroundAllowed && saveInBackground_ && native) {
-        return startBackgroundSave(view, path, includeMerged);
+        return startBackgroundSave(view, path, includeMerged, formatId);
     }
     const QString destination = destinationKey(path);
     if (!canStartNativeSave(view, destination)) {
@@ -424,8 +433,8 @@ bool ImportSaveCoordinator::saveActiveAs(const QString& path, bool backgroundAll
     int admission = 0;
     if (native) {
         runBusyJob(dialogParent_, name, tr("Saving %1…").arg(name),
-                   [view, path, includeMerged, &code, &admission] {
-                       if (startNativeSave(*view, path, includeMerged)) {
+                   [view, path, includeMerged, formatId, &code, &admission] {
+                       if (startNativeSave(*view, path, includeMerged, formatId)) {
                            return true;
                        }
                        code = save_last_result(*view).code;
@@ -441,7 +450,7 @@ bool ImportSaveCoordinator::saveActiveAs(const QString& path, bool backgroundAll
                        return outcome == 1;
                    });
     } else {
-        outcome = document_api::save(*view, path) ? 1 : 0;
+        outcome = document_api::save(*view, path, formatId) ? 1 : 0;
     }
     if (!applySaveResult(view, path, outcome, false, code, native, admission)) {
         return false;
@@ -494,11 +503,8 @@ bool ImportSaveCoordinator::confirmSaveProfile(const QString& path, const Pictur
                                                std::optional<bool>& choice)
 {
     const QString suffix = QFileInfo(path).suffix().toLower();
-    const bool native = suffix == QStringLiteral("psd") || suffix == QStringLiteral("psb");
-    const bool offersProfile = native || suffix == QStringLiteral("jpg")
-        || suffix == QStringLiteral("jpeg") || suffix == QStringLiteral("jpe")
-        || suffix == QStringLiteral("tif") || suffix == QStringLiteral("tiff");
-    if (!offersProfile) {
+    const bool native = saveFormatIsNativeSuffix(suffix);
+    if (!saveFormatOffersProfile(suffix)) {
         return true;
     }
     const bool initial = pictura::default_save_embed_profile(view, native);
@@ -601,6 +607,10 @@ bool ImportSaveCoordinator::saveCopyAsWithOptions(const QString& path, SaveForma
     if (!view || !view->has_document()) {
         return false;
     }
+    SaveFormatKind kind = hint;
+    if (kind == SaveFormatKind::None) {
+        kind = saveFormatKindForSuffix(QFileInfo(path).suffix());
+    }
     std::optional<bool> embed;
     if (!confirmFeatureWarning(path, *view, tr("Save a Copy"))
         || !promptSaveFormatOptions(path, hint) || !confirmSaveProfile(path, *view, embed)) {
@@ -613,10 +623,11 @@ bool ImportSaveCoordinator::saveCopyAsWithOptions(const QString& path, SaveForma
     if (embed.has_value()) {
         pictura::set_save_embed_profile(*view, *embed);
     }
-    return saveCopyAs(path, includeMerged);
+    return saveCopyAs(path, includeMerged, saveFormatIdForKind(kind));
 }
 
-bool ImportSaveCoordinator::saveCopyAs(const QString& path, std::optional<bool> includeMerged)
+bool ImportSaveCoordinator::saveCopyAs(const QString& path, std::optional<bool> includeMerged,
+                                      int formatId)
 {
     const int index = documents_.activeIndex();
     PictureView* view = documents_.viewAt(index);
@@ -630,14 +641,16 @@ bool ImportSaveCoordinator::saveCopyAs(const QString& path, std::optional<bool> 
     synchronousDestinations_.insert(destination);
     const auto release = qScopeGuard([&] { synchronousDestinations_.remove(destination); });
     const QString name = QFileInfo(path).fileName();
-    const bool native = saveRunsOnWorker(path);
+    const bool native = formatId == -1 ? saveRunsOnWorker(path)
+                                       : saveFormatHasFlag(formatId, kSaveFormatNative);
     NativeSaveResult result{};
     const bool saved = native
         ? runBusyJob(dialogParent_, name, tr("Saving %1…").arg(name),
-                     [view, path, includeMerged, &result] {
+                     [view, path, includeMerged, formatId, &result] {
                          const bool started = includeMerged.has_value()
-                             ? pictura::native_compatibility_save_start(*view, path, true, *includeMerged)
-                             : document_api::saveCopyStart(*view, path);
+                             ? pictura::native_compatibility_save_start(
+                                   *view, path, formatId, true, *includeMerged)
+                             : document_api::saveCopyStart(*view, path, formatId);
                          if (!started) {
                              result = save_last_result(*view);
                          }
@@ -648,7 +661,7 @@ bool ImportSaveCoordinator::saveCopyAs(const QString& path, std::optional<bool> 
                          result = save_finish_result(*view);
                          return result.publication == 1 && !result.replaced;
                      })
-        : document_api::saveCopy(*view, path);
+        : document_api::saveCopy(*view, path, formatId);
     if (!saved) {
         if (native && result.publication == 2) {
             if (hooks_.showStatus) {
@@ -680,7 +693,24 @@ bool ImportSaveCoordinator::saveActiveAtPath(const QString& path, const QJsonObj
     if (!view || path.isEmpty()) {
         return false;
     }
-    const SaveFormatKind kind = saveFormatKindForSuffix(QFileInfo(path).suffix());
+    const QString suffix = QFileInfo(path).suffix();
+    SaveFormatKind kind = saveFormatKindForSuffix(suffix);
+    // The shared .eps suffix does not name EPS or DCS on its own. A recorded
+    // DCS step carries the DCS-only `version` option; otherwise the remembered
+    // kind or the document's source format decides.
+    if (suffix.compare(QLatin1String("eps"), Qt::CaseInsensitive) == 0) {
+        if (stepOptions.contains(QStringLiteral("version"))) {
+            kind = SaveFormatKind::Dcs;
+        } else {
+            const SaveFormatKind remembered = lastSaveKinds_.value(view, SaveFormatKind::None);
+            if (remembered == SaveFormatKind::Eps || remembered == SaveFormatKind::Dcs) {
+                kind = remembered;
+            } else if (saveFormatIdForSourceName(output_format(*view).toLower())
+                       == saveFormatIdForKind(SaveFormatKind::Dcs)) {
+                kind = SaveFormatKind::Dcs;
+            }
+        }
+    }
     if (kind != SaveFormatKind::None) {
         // A step's own options overlay the remembered ones for this save only.
         QJsonObject root = saveFormatOptions_;
@@ -693,7 +723,7 @@ bool ImportSaveCoordinator::saveActiveAtPath(const QString& path, const QJsonObj
         applySaveRasterOptions(*view, kind, saveFormatOptionsFromJson(root));
         lastSaveKinds_.insert(view, kind);
     }
-    return saveActiveAs(path);
+    return saveActiveAs(path, false, std::nullopt, saveFormatIdForKind(kind));
 }
 
 bool ImportSaveCoordinator::saveAsWithDialog(bool backgroundAllowed)
@@ -789,7 +819,7 @@ bool ImportSaveCoordinator::saveActiveAsWithOptions(const QString& path, SaveFor
     } else {
         lastSaveKinds_.remove(view);
     }
-    return saveActiveAs(path, backgroundAllowed, includeMerged);
+    return saveActiveAs(path, backgroundAllowed, includeMerged, saveFormatIdForKind(kind));
 }
 
 bool ImportSaveCoordinator::promptSaveFormatOptions(const QString& path, SaveFormatKind hint)

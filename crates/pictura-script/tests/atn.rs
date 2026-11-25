@@ -112,10 +112,10 @@ fn mapped_steps_reemit_duplicate_unknown_and_unit_items() {
     let set = read_atn(&bytes).expect("decode");
     let step = &set.actions[0].steps[0];
     assert!(matches!(
-        &step.kind,
+        step.kind(),
         StepKind::Command { command, .. } if command.as_str() == "filter.blur.gaussian.blur"
     ));
-    assert!(step.imported.is_some(), "imported form must be kept");
+    assert!(step.imported().is_some(), "imported form must be kept");
 
     let reencoded = write_atn(&set);
     assert_eq!(bytes, reencoded, "unedited step must re-emit byte-for-byte");
@@ -164,15 +164,15 @@ fn stop_play_and_menu_item_keep_their_imported_descriptors() {
     let bytes = raw_bytes(raw_set("Set".encode_utf16().chain([0]).collect(), steps));
     let set = read_atn(&bytes).expect("decode");
     assert!(matches!(
-        set.actions[0].steps[0].kind,
+        set.actions[0].steps[0].kind(),
         StepKind::Stop { .. }
     ));
     assert!(matches!(
-        set.actions[0].steps[1].kind,
+        set.actions[0].steps[1].kind(),
         StepKind::Play { .. }
     ));
     assert!(matches!(
-        set.actions[0].steps[2].kind,
+        set.actions[0].steps[2].kind(),
         StepKind::MenuItem { .. }
     ));
     let normalized = write_atn(&set);
@@ -190,15 +190,15 @@ fn unknown_steps_round_trip_with_their_descriptor() {
         "Mystery",
         vec![code(*b"Data", ActionValue::RawData(vec![1, 2, 3]))],
     );
-    let step = ActionStep {
-        flags: Default::default(),
-        dialog_options: DialogOptions::OPTIONAL,
-        display_name: "Mystery".into(),
-        kind: StepKind::Unknown {
+    let step = {
+        let mut step = ActionStep::new(StepKind::Unknown {
             event: EventKey::text("AdobeMystery"),
             descriptor: Some(write_action_descriptor(&descriptor, true)),
-        },
-        imported: None,
+        });
+        step.flags = Default::default();
+        step.dialog_options = DialogOptions::OPTIONAL;
+        step.display_name = "Mystery".into();
+        step
     };
     let mut set = ActionSet::new("Set");
     let mut action = Action::new("Action");
@@ -209,7 +209,7 @@ fn unknown_steps_round_trip_with_their_descriptor() {
     let loaded = read_atn(&bytes).expect("load");
     let loaded_step = &loaded.actions[0].steps[0];
     assert!(matches!(
-        &loaded_step.kind,
+        loaded_step.kind(),
         StepKind::Unknown { event, .. } if event.display() == "AdobeMystery"
     ));
     let reencoded = write_atn(&loaded);
@@ -220,7 +220,7 @@ fn unknown_steps_round_trip_with_their_descriptor() {
         .expect("descriptor");
     assert_eq!(raw_descriptor.items.len(), 1);
     assert_eq!(raw_descriptor.items[0].0, ActionKey::Code(*b"Data"));
-    assert_eq!(loaded_step.kind, step.kind);
+    assert_eq!(loaded_step.kind(), step.kind());
 }
 
 #[test]
@@ -274,7 +274,7 @@ fn unknown_conditional_json_is_an_unknown_step() {
     ));
     let set = read_atn(&bytes).expect("decode");
     assert!(matches!(
-        &set.actions[0].steps[0].kind,
+        set.actions[0].steps[0].kind(),
         StepKind::Unknown { event, .. } if event.display() == "pictura.conditional"
     ));
     assert_eq!(write_atn(&set), bytes);
@@ -293,7 +293,7 @@ fn unknown_conditional_json_is_an_unknown_step() {
     )))
     .expect("decode missing");
     assert!(matches!(
-        set.actions[0].steps[0].kind,
+        set.actions[0].steps[0].kind(),
         StepKind::Unknown { .. }
     ));
 }
@@ -315,7 +315,7 @@ fn tool_strokes_enforce_the_version_and_payload_bound() {
     )))
     .expect("decode valid");
     assert!(matches!(
-        set.actions[0].steps[0].kind,
+        set.actions[0].steps[0].kind(),
         StepKind::ToolStroke { .. }
     ));
 
@@ -344,7 +344,7 @@ fn tool_strokes_enforce_the_version_and_payload_bound() {
         ));
         let set = read_atn(&bytes).expect("decode invalid");
         assert!(matches!(
-            &set.actions[0].steps[0].kind,
+            set.actions[0].steps[0].kind(),
             StepKind::Unknown { event, descriptor }
                 if event.display() == "pictura.toolStroke" && descriptor.is_some()
         ));
@@ -380,7 +380,7 @@ fn adobe_when_parameter_is_written_and_used_for_mapping() {
     let loaded = read_atn(&bytes).expect("decode");
     let step = &loaded.actions[0].steps[0];
     assert!(matches!(
-        &step.kind,
+        step.kind(),
         StepKind::Command { command, params }
             if command.as_str() == "image.mode.grayscale"
                 && params.get_str("mode") == Some("grayscale")
@@ -409,7 +409,7 @@ fn adobe_when_parameter_is_written_and_used_for_mapping() {
     )))
     .expect("decode imported mode");
     assert!(matches!(
-        &set.actions[0].steps[0].kind,
+        set.actions[0].steps[0].kind(),
         StepKind::Command { command, .. } if command.as_str() == "image.mode.grayscale"
     ));
 }
@@ -432,7 +432,7 @@ fn dialog_options_are_validated_and_menu_items_are_specific() {
     )))
     .expect("decode menu");
     let decoded = &set.actions[0].steps[0];
-    assert!(matches!(decoded.kind, StepKind::MenuItem { .. }));
+    assert!(matches!(decoded.kind(), StepKind::MenuItem { .. }));
     assert_eq!(decoded.dialog_options, DialogOptions::SPECIFIC);
     assert!(!decoded.flags.with_dialog);
 
@@ -448,7 +448,7 @@ fn dialog_options_are_validated_and_menu_items_are_specific() {
     )))
     .expect("decode invalid");
     assert!(matches!(
-        set.actions[0].steps[0].kind,
+        set.actions[0].steps[0].kind(),
         StepKind::Unknown { .. }
     ));
 }
@@ -546,7 +546,7 @@ fn a_layer_reference_selects_the_transform_family() {
     )))
     .expect("decode");
     assert!(matches!(
-        &set.actions[0].steps[0].kind,
+        set.actions[0].steps[0].kind(),
         StepKind::Command { command, .. } if command.as_str() == "edit.transform.rotate90cw"
     ));
 }
@@ -648,8 +648,8 @@ fn atn_round_trips_an_open_step() {
         RawEventId::Long(*b"Opn ")
     );
     let back = round_trip_single_step(step);
-    let StepKind::Command { command, params } = back.kind else {
-        panic!("not a command step: {:?}", back.kind);
+    let StepKind::Command { command, params } = back.kind() else {
+        panic!("not a command step: {:?}", back.kind());
     };
     assert_eq!(command.as_str(), "file.open");
     assert_eq!(params.get_str("path"), Some("/home/u/pictures/a.png"));
@@ -669,11 +669,588 @@ fn atn_round_trips_save_as_options() {
     let StepKind::Command {
         command,
         params: read,
-    } = back.kind
+    } = back.kind()
     else {
-        panic!("not a command step: {:?}", back.kind);
+        panic!("not a command step: {:?}", back.kind());
     };
     assert_eq!(command.as_str(), "file.saveAs");
     assert_eq!(read.get("options"), params.get("options"));
     assert_eq!(read.get_str("in"), Some("/tmp/out.jpg"));
+}
+
+fn raw_action(name: &str, steps: Vec<RawStep>) -> RawAction {
+    RawAction {
+        function_key: 0,
+        shift: false,
+        ctrl: false,
+        color: 0,
+        name: name.encode_utf16().chain([0]).collect(),
+        expanded: true,
+        steps,
+    }
+}
+
+fn raw_set_actions(name: &str, actions: Vec<RawAction>) -> RawActionSet {
+    RawActionSet {
+        name: name.encode_utf16().chain([0]).collect(),
+        expanded: true,
+        actions,
+    }
+}
+
+fn imported_set(source: RawActionSet) -> ActionSet {
+    read_atn(&raw_bytes(source)).expect("decode imported set")
+}
+
+fn reload(library: &ActionLibrary) -> ActionLibrary {
+    let bytes = library.set_bytes(0).expect("one set");
+    let mut loaded = ActionLibrary::empty();
+    loaded.load_bytes("test.atn", &bytes).expect("reload");
+    loaded
+}
+
+fn first_step(library: &ActionLibrary) -> &ActionStep {
+    &library.sets()[0].actions[0].steps[0]
+}
+
+fn play_kind(step: &ActionStep) -> &str {
+    match step.kind() {
+        StepKind::Play { action } => action,
+        other => panic!("expected Play, got {other:?}"),
+    }
+}
+
+fn imported_blur() -> RawStep {
+    raw_step(
+        RawEventId::Long(*b"GsnB"),
+        Some(descriptor(
+            "Gaussian Blur",
+            vec![
+                code(
+                    *b"Rds ",
+                    ActionValue::UnitFloat {
+                        unit: *b"#Pxl",
+                        value: 4.0,
+                    },
+                ),
+                json_item(json!({ "radius": 4.0 })),
+            ],
+        )),
+        "Gaussian Blur",
+    )
+}
+
+#[test]
+fn renaming_an_action_updates_an_imported_play_reference() {
+    let play = raw_step(
+        RawEventId::Long(*b"Ply "),
+        Some(descriptor(
+            "Play",
+            vec![code(*b"Nm  ", ActionValue::Text("Target".into()))],
+        )),
+        "Play",
+    );
+    let set = imported_set(raw_set_actions(
+        "Set",
+        vec![
+            raw_action("Caller", vec![play]),
+            raw_action("Target", Vec::new()),
+        ],
+    ));
+    let mut library = ActionLibrary::from_sets(vec![set]);
+    assert!(library.rename_action(0, 1, "Renamed").expect("rename"));
+    let reloaded = reload(&library);
+    assert_eq!(play_kind(first_step(&reloaded)), "Renamed");
+}
+
+#[test]
+fn renaming_an_action_updates_imported_conditional_branches() {
+    let mut conditional = raw_step(
+        RawEventId::Text(b"pictura.conditional".to_vec()),
+        Some(descriptor(
+            "pictura.conditional",
+            vec![
+                json_item(json!({
+                    "v": 1,
+                    "condition": "DocumentHasSelection",
+                    "then": "Target",
+                    "else": "Target",
+                })),
+                code(*b"Xtra", ActionValue::Text("keep me".into())),
+            ],
+        )),
+        "Conditional",
+    );
+    conditional.display_name = vec![0xFF, 0xFE];
+    let set = imported_set(raw_set_actions(
+        "Set",
+        vec![
+            raw_action("Caller", vec![conditional]),
+            raw_action("Target", Vec::new()),
+        ],
+    ));
+    let mut library = ActionLibrary::from_sets(vec![set]);
+    assert!(library.rename_action(0, 1, "Renamed").expect("rename"));
+    let bytes = library.set_bytes(0).expect("set");
+    let raw = codec_read_atn(&bytes).expect("codec");
+    let step = &raw.set.actions[0].steps[0];
+    let items = &step.descriptor.as_ref().expect("descriptor").items;
+    assert!(items.iter().any(|(key, value)| {
+        key == &ActionKey::Code(*b"Xtra")
+            && matches!(value, ActionValue::Text(text) if text == "keep me")
+    }));
+    let saved_jsn = items
+        .iter()
+        .find_map(|(key, value)| {
+            if key != &ActionKey::Code(*b"jsn ") {
+                return None;
+            }
+            match value {
+                ActionValue::Text(text) => serde_json::from_str::<serde_json::Value>(text).ok(),
+                _ => None,
+            }
+        })
+        .expect("jsn item");
+    assert_eq!(saved_jsn.get("v"), Some(&json!(1)));
+    assert_eq!(step.display_name, vec![0xFF, 0xFE]);
+    let reloaded = reload(&library);
+    match first_step(&reloaded).kind() {
+        StepKind::Conditional {
+            then_action,
+            else_action,
+            ..
+        } => {
+            assert_eq!(then_action.as_deref(), Some("Renamed"));
+            assert_eq!(else_action.as_deref(), Some("Renamed"));
+        }
+        other => panic!("expected Conditional, got {other:?}"),
+    }
+}
+
+#[test]
+fn renaming_a_jsn_only_play_reference_updates_it() {
+    let play = raw_step(
+        RawEventId::Long(*b"Ply "),
+        Some(descriptor(
+            "Play",
+            vec![json_item(json!({ "action": "Target" }))],
+        )),
+        "Play",
+    );
+    let set = imported_set(raw_set_actions(
+        "Set",
+        vec![
+            raw_action("Caller", vec![play]),
+            raw_action("Target", Vec::new()),
+        ],
+    ));
+    let mut library = ActionLibrary::from_sets(vec![set]);
+    assert!(library.rename_action(0, 1, "Renamed").expect("rename"));
+    let reloaded = reload(&library);
+    assert_eq!(play_kind(first_step(&reloaded)), "Renamed");
+}
+
+#[test]
+fn renaming_keeps_unknown_imported_descriptor_items() {
+    let mut play = raw_step(
+        RawEventId::Long(*b"Ply "),
+        Some(descriptor(
+            "Play",
+            vec![
+                code(*b"Nm  ", ActionValue::Text("Target".into())),
+                code(*b"Nm  ", ActionValue::Text("Target".into())),
+                code(*b"Xtra", ActionValue::Text("keep me".into())),
+                json_item(json!({ "action": "Target" })),
+            ],
+        )),
+        "Play",
+    );
+    play.display_name = vec![0xFF, 0xFE];
+    let set = imported_set(raw_set_actions(
+        "Set",
+        vec![
+            raw_action("Caller", vec![play]),
+            raw_action("Target", Vec::new()),
+        ],
+    ));
+    let mut library = ActionLibrary::from_sets(vec![set]);
+    assert!(library.rename_action(0, 1, "Renamed").expect("rename"));
+    let bytes = library.set_bytes(0).expect("set");
+    let raw = codec_read_atn(&bytes).expect("codec");
+    let step = &raw.set.actions[0].steps[0];
+    let items = &step.descriptor.as_ref().expect("descriptor").items;
+    let renamed = items
+        .iter()
+        .filter(|(key, value)| {
+            key == &ActionKey::Code(*b"Nm  ")
+                && matches!(value, ActionValue::Text(text) if text == "Renamed")
+        })
+        .count();
+    assert_eq!(renamed, 2);
+    assert!(items.iter().any(|(key, value)| {
+        key == &ActionKey::Code(*b"Xtra")
+            && matches!(value, ActionValue::Text(text) if text == "keep me")
+    }));
+    let saved_jsn = items
+        .iter()
+        .find_map(|(key, value)| {
+            if key != &ActionKey::Code(*b"jsn ") {
+                return None;
+            }
+            match value {
+                ActionValue::Text(text) => serde_json::from_str::<serde_json::Value>(text).ok(),
+                _ => None,
+            }
+        })
+        .expect("jsn item");
+    assert_eq!(saved_jsn.get("action"), Some(&json!("Renamed")));
+    assert_eq!(step.display_name, vec![0xFF, 0xFE]);
+    assert_eq!(play_kind(first_step(&reload(&library))), "Renamed");
+}
+
+#[test]
+fn renaming_a_play_preserves_unrelated_json_bytes() {
+    let source = r#" { "precision" : 1.234567890123456789, "action" : "Target", "dup": 1, "dup": 2, "nested": { "action": "Target" }, "action" : "Target" } "#;
+    let expected = r#" { "precision" : 1.234567890123456789, "action" : "Renamed", "dup": 1, "dup": 2, "nested": { "action": "Target" }, "action" : "Renamed" } "#;
+    let play = raw_step(
+        RawEventId::Long(*b"Ply "),
+        Some(descriptor(
+            "Play",
+            vec![code(*b"jsn ", ActionValue::Text(source.to_string()))],
+        )),
+        "Play",
+    );
+    let set = imported_set(raw_set_actions(
+        "Set",
+        vec![
+            raw_action("Caller", vec![play]),
+            raw_action("Target", Vec::new()),
+        ],
+    ));
+    let mut library = ActionLibrary::from_sets(vec![set]);
+    assert!(library.rename_action(0, 1, "Renamed").expect("rename"));
+    let raw = codec_read_atn(&library.set_bytes(0).expect("set")).expect("codec");
+    let saved = raw.set.actions[0].steps[0]
+        .descriptor
+        .as_ref()
+        .expect("descriptor")
+        .items
+        .iter()
+        .find_map(|(key, value)| {
+            if key != &ActionKey::Code(*b"jsn ") {
+                return None;
+            }
+            match value {
+                ActionValue::Text(text) => Some(text.as_str()),
+                _ => None,
+            }
+        })
+        .expect("jsn item");
+    assert_eq!(saved, expected);
+    assert_eq!(play_kind(first_step(&reload(&library))), "Renamed");
+}
+
+#[test]
+fn renaming_a_conditional_leaves_unrelated_jsn_sidecars_untouched() {
+    let conditional = r#" { "v":1, "condition":"DocumentHasSelection", "then":"Target", "else":null, "precision":1.234567890123456789 } "#;
+    let expected = r#" { "v":1, "condition":"DocumentHasSelection", "then":"Renamed", "else":null, "precision":1.234567890123456789 } "#;
+    let unrelated = r#"{"then":"Target","else":null,"note":"keep"}"#;
+    let matching_copy =
+        r#"{ "condition": "DocumentHasSelection", "then": "Target", "else": null, "copy": true }"#;
+    let expected_copy =
+        r#"{ "condition": "DocumentHasSelection", "then": "Renamed", "else": null, "copy": true }"#;
+    let other_condition = r#"{"condition":"DocumentIsSquare","then":"Target","else":null}"#;
+    let other_branches = r#"{"condition":"DocumentHasSelection","then":"Other","else":null}"#;
+    let step = raw_step(
+        RawEventId::Text(b"pictura.conditional".to_vec()),
+        Some(descriptor(
+            "pictura.conditional",
+            vec![
+                code(*b"jsn ", ActionValue::Text(conditional.to_string())),
+                code(*b"jsn ", ActionValue::Text(unrelated.to_string())),
+                code(*b"jsn ", ActionValue::Text(matching_copy.to_string())),
+                code(*b"jsn ", ActionValue::Text(other_condition.to_string())),
+                code(*b"jsn ", ActionValue::Text(other_branches.to_string())),
+            ],
+        )),
+        "Conditional",
+    );
+    let set = imported_set(raw_set_actions(
+        "Set",
+        vec![
+            raw_action("Caller", vec![step]),
+            raw_action("Target", Vec::new()),
+        ],
+    ));
+    let mut library = ActionLibrary::from_sets(vec![set]);
+    assert!(library.rename_action(0, 1, "Renamed").expect("rename"));
+    let raw = codec_read_atn(&library.set_bytes(0).expect("set")).expect("codec");
+    let saved: Vec<_> = raw.set.actions[0].steps[0]
+        .descriptor
+        .as_ref()
+        .expect("descriptor")
+        .items
+        .iter()
+        .filter_map(|(key, value)| {
+            if key != &ActionKey::Code(*b"jsn ") {
+                return None;
+            }
+            match value {
+                ActionValue::Text(text) => Some(text.as_str()),
+                _ => None,
+            }
+        })
+        .collect();
+    assert_eq!(
+        saved,
+        vec![
+            expected,
+            unrelated,
+            expected_copy,
+            other_condition,
+            other_branches
+        ]
+    );
+    match first_step(&reload(&library)).kind() {
+        StepKind::Conditional {
+            then_action,
+            else_action,
+            ..
+        } => {
+            assert_eq!(then_action.as_deref(), Some("Renamed"));
+            assert_eq!(else_action.as_deref(), None);
+        }
+        other => panic!("expected Conditional, got {other:?}"),
+    }
+}
+
+#[test]
+fn renaming_a_conditional_with_conflicting_duplicate_branches_reauthors() {
+    let decoded =
+        r#"{"condition":"DocumentHasSelection","then":"Other","then":"Target","else":null}"#;
+    let later = r#"{"condition":"DocumentHasSelection","then":"Target","else":null}"#;
+    let step = raw_step(
+        RawEventId::Text(b"pictura.conditional".to_vec()),
+        Some(descriptor(
+            "pictura.conditional",
+            vec![
+                code(*b"jsn ", ActionValue::Text(decoded.to_string())),
+                code(*b"jsn ", ActionValue::Text(later.to_string())),
+                code(*b"Xtra", ActionValue::Text("drop me".into())),
+            ],
+        )),
+        "Conditional",
+    );
+    let set = imported_set(raw_set_actions(
+        "Set",
+        vec![
+            raw_action("Caller", vec![step]),
+            raw_action("Target", Vec::new()),
+        ],
+    ));
+    let mut library = ActionLibrary::from_sets(vec![set]);
+    assert!(library.rename_action(0, 1, "Renamed").expect("rename"));
+    assert!(first_step(&library).imported().is_none());
+    match first_step(&reload(&library)).kind() {
+        StepKind::Conditional {
+            then_action,
+            else_action,
+            ..
+        } => {
+            assert_eq!(then_action.as_deref(), Some("Renamed"));
+            assert_eq!(else_action.as_deref(), None);
+        }
+        other => panic!("expected Conditional, got {other:?}"),
+    }
+    let raw = codec_read_atn(&library.set_bytes(0).expect("set")).expect("codec");
+    let items = &raw.set.actions[0].steps[0]
+        .descriptor
+        .as_ref()
+        .expect("descriptor")
+        .items;
+    assert_eq!(items.len(), 1);
+    assert!(!items
+        .iter()
+        .any(|(key, _)| key == &ActionKey::Code(*b"Xtra")));
+}
+
+#[test]
+fn renaming_an_action_leaves_unrelated_imported_steps_untouched() {
+    let play = raw_step(
+        RawEventId::Long(*b"Ply "),
+        Some(descriptor(
+            "Play",
+            vec![code(*b"Nm  ", ActionValue::Text("Target".into()))],
+        )),
+        "Play",
+    );
+    let mut unknown = raw_step(
+        RawEventId::Text(b"AdobeMystery".to_vec()),
+        Some(descriptor(
+            "Mystery",
+            vec![code(*b"Data", ActionValue::RawData(vec![1, 2, 3]))],
+        )),
+        "Mystery",
+    );
+    unknown.display_name = vec![0xFF, 0xFE];
+    let set = imported_set(raw_set_actions(
+        "Set",
+        vec![
+            raw_action("Caller", vec![play, unknown]),
+            raw_action("Target", Vec::new()),
+        ],
+    ));
+    let mut library = ActionLibrary::from_sets(vec![set]);
+    let before = library.set_bytes(0).expect("set");
+    assert!(library.rename_action(0, 1, "Renamed").expect("rename"));
+    let after = library.set_bytes(0).expect("set");
+    let before_raw = codec_read_atn(&before).expect("codec");
+    let after_raw = codec_read_atn(&after).expect("codec");
+    let before_step = &before_raw.set.actions[0].steps[1];
+    let after_step = &after_raw.set.actions[0].steps[1];
+    assert_eq!(after_step, before_step);
+    assert_eq!(after_step.display_name, vec![0xFF, 0xFE]);
+}
+
+#[test]
+fn structural_step_edits_keep_the_imported_form() {
+    let other = raw_step(RawEventId::Long(*b"slct"), None, "menu");
+    let set = imported_set(raw_set_actions(
+        "Set",
+        vec![raw_action("A", vec![imported_blur(), other])],
+    ));
+    let original = set.actions[0].steps[0]
+        .imported()
+        .cloned()
+        .expect("imported blur");
+    let mut library = ActionLibrary::from_sets(vec![set]);
+    assert!(library.move_step(0, 0, 0, 2));
+    assert!(library.duplicate_step(0, 0, 1));
+    let reloaded = reload(&library);
+    let steps = &reloaded.sets()[0].actions[0].steps;
+    assert_eq!(steps.len(), 3);
+    let preserved: Vec<_> = steps
+        .iter()
+        .filter_map(|step| step.imported())
+        .filter(|form| form.descriptor.is_some())
+        .collect();
+    assert_eq!(preserved.len(), 2);
+    for form in preserved {
+        assert_eq!(form.descriptor, original.descriptor);
+        assert_eq!(form.event, original.event);
+        assert_eq!(form.display_name, original.display_name);
+    }
+}
+
+#[test]
+fn no_op_parameter_edit_keeps_the_imported_form() {
+    let set = imported_set(raw_set_actions(
+        "Set",
+        vec![raw_action("A", vec![imported_blur()])],
+    ));
+    let mut library = ActionLibrary::from_sets(vec![set]);
+    let before = library.set_bytes(0).expect("set");
+    let params = match first_step(&library).kind() {
+        StepKind::Command { params, .. } => params.clone(),
+        other => panic!("expected Command, got {other:?}"),
+    };
+    assert!(library.set_step_params(0, 0, 0, params));
+    assert_eq!(library.set_bytes(0).expect("set"), before);
+}
+
+#[test]
+fn repeated_insert_path_keeps_the_imported_form() {
+    let path = raw_step(
+        RawEventId::Text(b"pictura.insertPath".to_vec()),
+        Some(descriptor(
+            "pictura.insertPath",
+            vec![
+                json_item(json!({ "path": "Work Path" })),
+                code(*b"Xtra", ActionValue::Text("keep me".into())),
+            ],
+        )),
+        "Insert Path",
+    );
+    let set = imported_set(raw_set_actions("Set", vec![raw_action("A", vec![path])]));
+    let mut library = ActionLibrary::from_sets(vec![set]);
+    let imported = first_step(&library)
+        .imported()
+        .cloned()
+        .expect("imported path");
+    let before = library.set_bytes(0).expect("set");
+    assert_eq!(library.insert_path(0, 0, "Work Path").expect("insert"), 0);
+    let after = library.set_bytes(0).expect("set");
+    assert_eq!(after, before);
+    assert_eq!(first_step(&library).imported(), Some(&imported));
+    let before_raw = codec_read_atn(&before).expect("codec");
+    let after_raw = codec_read_atn(&after).expect("codec");
+    assert_eq!(
+        before_raw.set.actions[0].steps[0],
+        after_raw.set.actions[0].steps[0]
+    );
+}
+
+#[test]
+fn changing_an_imported_insert_path_reauthors_the_step() {
+    let path = raw_step(
+        RawEventId::Text(b"pictura.insertPath".to_vec()),
+        Some(descriptor(
+            "pictura.insertPath",
+            vec![
+                json_item(json!({ "path": "Work Path" })),
+                code(*b"Xtra", ActionValue::Text("drop me".into())),
+            ],
+        )),
+        "Insert Path",
+    );
+    let set = imported_set(raw_set_actions("Set", vec![raw_action("A", vec![path])]));
+    let mut library = ActionLibrary::from_sets(vec![set]);
+    assert_eq!(library.insert_path(0, 0, "New Path").expect("insert"), 0);
+    assert!(first_step(&library).imported().is_none());
+    let reloaded = reload(&library);
+    assert!(matches!(
+        first_step(&reloaded).kind(),
+        StepKind::InsertPath { path } if path == "New Path"
+    ));
+    let raw = codec_read_atn(&library.set_bytes(0).expect("set")).expect("codec");
+    let items = &raw.set.actions[0].steps[0]
+        .descriptor
+        .as_ref()
+        .expect("descriptor")
+        .items;
+    assert!(!items
+        .iter()
+        .any(|(key, _)| key == &ActionKey::Code(*b"Xtra")));
+    let saved = items
+        .iter()
+        .find_map(|(key, value)| {
+            if key != &ActionKey::Code(*b"jsn ") {
+                return None;
+            }
+            match value {
+                ActionValue::Text(text) => serde_json::from_str::<serde_json::Value>(text).ok(),
+                _ => None,
+            }
+        })
+        .expect("jsn item");
+    assert_eq!(saved.get("path"), Some(&json!("New Path")));
+}
+
+#[test]
+fn flag_only_edits_keep_the_imported_form() {
+    let set = imported_set(raw_set_actions(
+        "Set",
+        vec![raw_action("A", vec![imported_blur()])],
+    ));
+    let mut library = ActionLibrary::from_sets(vec![set]);
+    let before = library.set_bytes(0).expect("set");
+    assert!(library.set_step_enabled(0, 0, 0, false));
+    assert!(library.set_step_with_dialog(0, 0, 0, true));
+    let after = library.set_bytes(0).expect("set");
+    let before_raw = codec_read_atn(&before).expect("codec");
+    let after_raw = codec_read_atn(&after).expect("codec");
+    assert_eq!(
+        before_raw.set.actions[0].steps[0].descriptor,
+        after_raw.set.actions[0].steps[0].descriptor
+    );
 }

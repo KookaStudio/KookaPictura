@@ -179,13 +179,11 @@ fn decode_step(raw: RawStep) -> ActionStep {
     };
     let display_name = String::from_utf8_lossy(&raw.display_name).into_owned();
     let Ok(mut dialog_options) = DialogOptions::from_raw(raw.dialog_options) else {
-        return ActionStep {
-            flags,
-            dialog_options: DialogOptions::OPTIONAL,
-            display_name,
-            kind: StepKind::Unknown { event, descriptor },
-            imported: Some(imported),
-        };
+        let mut step = ActionStep::with_imported(StepKind::Unknown { event, descriptor }, imported);
+        step.flags = flags;
+        step.dialog_options = DialogOptions::OPTIONAL;
+        step.display_name = display_name;
+        return step;
     };
     let params = merged_params(&event, raw.descriptor.as_ref());
     let kind = decode_kind(&event, raw.descriptor.as_ref(), &params);
@@ -193,13 +191,11 @@ fn decode_step(raw: RawStep) -> ActionStep {
         dialog_options = DialogOptions::SPECIFIC;
         flags.with_dialog = false;
     }
-    ActionStep {
-        flags,
-        dialog_options,
-        display_name,
-        kind,
-        imported: Some(imported),
-    }
+    let mut step = ActionStep::with_imported(kind, imported);
+    step.flags = flags;
+    step.dialog_options = dialog_options;
+    step.display_name = display_name;
+    step
 }
 
 fn merged_params(event: &EventKey, descriptor: Option<&ActionDescriptor>) -> CommandParams {
@@ -361,7 +357,7 @@ fn unknown(event: &EventKey, descriptor: Option<&ActionDescriptor>) -> StepKind 
 }
 
 fn encode_step(step: &ActionStep) -> RawStep {
-    let (event_id, descriptor) = if let Some(imported) = &step.imported {
+    let (event_id, descriptor) = if let Some(imported) = step.imported() {
         (
             event_id(&imported.event),
             imported
@@ -373,8 +369,7 @@ fn encode_step(step: &ActionStep) -> RawStep {
         encode_step_kind(step)
     };
     let display_name = step
-        .imported
-        .as_ref()
+        .imported()
         .filter(|imported| {
             String::from_utf8_lossy(&imported.display_name).as_bytes()
                 == step.display_name.as_bytes()
@@ -400,7 +395,7 @@ fn event_id(event: &EventKey) -> RawEventId {
 }
 
 fn encode_step_kind(step: &ActionStep) -> (RawEventId, Option<ActionDescriptor>) {
-    match &step.kind {
+    match step.kind() {
         StepKind::Command { command, params } => command_event(command, params),
         StepKind::Stop {
             message,

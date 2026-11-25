@@ -87,6 +87,11 @@ int previewAboveScale(const PictureView& view)
     return move_preview_above_scale(view);
 }
 
+bool controlsSessionActive(const PictureView& view)
+{
+    return transform_controls_session(view);
+}
+
 LayerRect layerRect(const PictureView& view, const QString& path)
 {
     const ::rust::Vec<int32_t> extents = layer_rect_extents(view, path);

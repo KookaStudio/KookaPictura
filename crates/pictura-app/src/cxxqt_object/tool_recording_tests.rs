@@ -438,7 +438,7 @@ fn a_recorded_stroke_reaches_the_engine_recorder() {
         .steps
         .last()
         .expect("one tool step");
-    match &step.kind {
+    match step.kind() {
         StepKind::ToolStroke { stroke } => {
             assert_eq!(stroke.tool, "Brush");
             assert_eq!(stroke.samples.len(), samples().len());

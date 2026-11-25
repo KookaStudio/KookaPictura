@@ -101,7 +101,7 @@ public:
     // Save / close.
     bool saveActive(bool interactive = true, bool backgroundAllowed = false);
     bool saveActiveAs(const QString& path, bool backgroundAllowed = false,
-                      std::optional<bool> includeMerged = std::nullopt);
+                      std::optional<bool> includeMerged = std::nullopt, int formatId = -1);
     // Save a known path with the remembered options for its suffix (no dialog):
     // the path used by the control server and recorded-command replay. A
     // recorded Save As step's `stepOptions` overlay the remembered options for
@@ -117,7 +117,8 @@ public:
     bool saveResolutionNeedsPrompt(PictureView* view) const;
     void acknowledgeSaveResolution(PictureView* view);
     bool saveCopyWithDialog();
-    bool saveCopyAs(const QString& path, std::optional<bool> includeMerged = std::nullopt);
+    bool saveCopyAs(const QString& path, std::optional<bool> includeMerged = std::nullopt,
+                    int formatId = -1);
     bool saveCopyAsWithOptions(const QString& path,
                                SaveFormatKind hint = SaveFormatKind::None);
     bool confirmFeatureWarning(const QString& path, PictureView& view, const QString& title);
@@ -333,7 +334,7 @@ private:
     };
     bool canStartNativeSave(PictureView* view, const QString& destination);
     bool startBackgroundSave(PictureView* view, const QString& path,
-                             std::optional<bool> includeMerged);
+                             std::optional<bool> includeMerged, int formatId);
     void pollBackgroundSaves();
     bool finishBackgroundSave(PictureView* view);
     bool applySaveResult(PictureView* view, const QString& path, int outcome,

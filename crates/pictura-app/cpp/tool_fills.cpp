@@ -9,6 +9,7 @@
 #include "document_command.h"
 #include "gradient_editor_dialog.h"
 #include "image_view.h"
+#include "memory_refusal.h"
 #include "tools.h"
 
 #include "api/paint_bridge.h"
@@ -32,7 +33,10 @@ QWidget* jobParent(ToolServices& ctx)
 
 void reportRefusal(ToolServices& ctx, PictureView* v)
 {
-    if (edit_refused_for_memory()) {
+    // The fill's memory message covers a memory or a scratch-full refusal; an
+    // unreadable-tile refusal falls through to the layer checks, as before.
+    const pictura::Refusal reason = last_refusal();
+    if (reason == pictura::Refusal::Memory || reason == pictura::Refusal::ScratchFull) {
         ctx.refused(fillMemoryRefusalMessage());
     } else if (activePixelLocked(v)) {
         ctx.refused(QObject::tr("Could not fill: the layer's pixels are locked."));
@@ -177,12 +181,20 @@ private:
 
 QString fillMemoryRefusalMessage()
 {
-    if (edit_refused_for_scratch_full()) {
-        return QObject::tr("Could not fill: the scratch disks are full. Free space on the "
-                           "scratch disks, then try again.");
-    }
-    return QObject::tr("Could not fill: not enough memory. Make a smaller selection, close "
-                       "other documents, or free memory and try again.");
+    // The reason comes from the seam; only the wording is the fill's.
+    const QString memory = QObject::tr("Could not fill: not enough memory. Make a smaller "
+                                       "selection, close other documents, or free memory and try "
+                                       "again.");
+    const QString scratchFull = QObject::tr("Could not fill: the scratch disks are full. Free "
+                                            "space on the scratch disks, then try again.");
+    const QString unreadable = QObject::tr("Could not fill: image data could not be read back "
+                                           "from the scratch disk. Check the scratch disks, then "
+                                           "try again.");
+    const Refusal reason = last_refusal();
+    const QString message =
+        refusalMessage(reason, memory, scratchFull, unreadable);
+    // Callers only ask after a refusal; a missing reason keeps the memory copy.
+    return message.isEmpty() ? memory : message;
 }
 
 std::unique_ptr<ToolHandler> makeGradientToolHandler(std::shared_ptr<GradientGroup> gradient)

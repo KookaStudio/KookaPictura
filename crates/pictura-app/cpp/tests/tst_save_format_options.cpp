@@ -4,6 +4,7 @@
 
 #include <QtTest/QtTest>
 
+#include <QtCore/QByteArray>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QJsonObject>

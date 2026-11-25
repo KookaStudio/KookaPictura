@@ -338,6 +338,10 @@ pub(super) fn transform_set_controls(mut view: Pin<&mut PictureView>, controls: 
     view.as_mut().rust_mut().transform_controls = controls;
 }
 
+pub(super) fn transform_controls_session(view: &PictureView) -> bool {
+    view.rust().transform_controls
+}
+
 pub(super) fn transform_set_width(view: Pin<&mut PictureView>, pct: f64, link: bool) -> bool {
     set_scale_axis(view, pct, link, true)
 }

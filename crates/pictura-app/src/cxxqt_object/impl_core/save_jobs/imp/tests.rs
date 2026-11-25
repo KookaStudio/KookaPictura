@@ -37,6 +37,7 @@ fn save_compatible(doc: Document, name: &str, include: bool, dirty: bool) -> Vec
     assert!(save_start_with_compatibility(
         &mut rust,
         &target,
+        -1,
         false,
         Some(include)
     ));
@@ -152,7 +153,7 @@ fn signed_alpha_survives_direct_and_noninteractive_resave() {
         let mut rust = PictureViewRust::default();
         rust.session.doc.set(Some(reopened));
         let target = path(name);
-        assert!(save_start_rust(&mut rust, &target, false));
+        assert!(save_start_rust(&mut rust, &target, -1, false));
         assert!(save_finish_rust(&mut rust));
         let reopened = pictura_codec::read_psd(&std::fs::read(&target).unwrap()).unwrap();
         assert!(reopened.composite.signed_merged_alpha());
@@ -171,7 +172,7 @@ fn legacy_save_stages_detached_omitted_composite() {
     let mut rust = PictureViewRust::default();
     rust.session.doc.set(Some(doc));
     let target = path("legacy.psd");
-    assert!(save_start_rust(&mut rust, &target, false));
+    assert!(save_start_rust(&mut rust, &target, -1, false));
     assert!(save_finish_rust(&mut rust));
     let reopened = pictura_codec::read_psd(&std::fs::read(&target).unwrap()).unwrap();
     assert!(!reopened.composite.merged_output());
@@ -204,7 +205,7 @@ fn legacy_save_preserves_channels_from_marked_placeholder() {
     let mut rust = PictureViewRust::default();
     rust.session.doc.set(Some(doc));
     let target = path("with-channel.psd");
-    assert!(save_start_rust(&mut rust, &target, false));
+    assert!(save_start_rust(&mut rust, &target, -1, false));
     assert!(save_finish_rust(&mut rust));
     let reopened = pictura_codec::read_psd(&std::fs::read(&target).unwrap()).unwrap();
     assert!(reopened.composite.merged_output());
@@ -453,11 +454,46 @@ fn native_save_codec_preconditions() {
 }
 
 #[test]
+fn explicit_native_format_selects_the_container() {
+    use pictura_codec::SaveFormat;
+
+    for (format, name, version) in [
+        (SaveFormat::Psd, "explicit-psd.png", 1),
+        (SaveFormat::Psb, "explicit-psb.png", 2),
+    ] {
+        let mut rust = view();
+        let target = path(name);
+        assert!(save_start_rust(&mut rust, &target, format.id(), false));
+        wait(&rust);
+        assert!(save_finish_rust(&mut rust));
+        let bytes = std::fs::read(&target).unwrap();
+        assert_eq!(bytes[5], version);
+        assert_eq!(
+            pictura_codec::read_psd(&bytes).unwrap().is_psb,
+            format == SaveFormat::Psb
+        );
+        std::fs::remove_dir_all(std::path::Path::new(&target).parent().unwrap()).unwrap();
+    }
+
+    let mut rust = view();
+    let target = path("refused.psd");
+    assert!(!save_start_rust(
+        &mut rust,
+        &target,
+        SaveFormat::Png.id(),
+        false
+    ));
+    assert!(!save_start_rust(&mut rust, &target, i32::MAX, false));
+    assert!(!std::path::Path::new(&target).exists());
+    std::fs::remove_dir_all(std::path::Path::new(&target).parent().unwrap()).unwrap();
+}
+
+#[test]
 fn native_save_stamps_document_versions() {
     for (name, native_version) in [("version.psd", 1), ("version.psb", 2)] {
         let mut rust = view();
         let target = path(name);
-        assert!(save_start_rust(&mut rust, &target, false));
+        assert!(save_start_rust(&mut rust, &target, -1, false));
         wait(&rust);
         assert!(save_finish_rust(&mut rust));
         let bytes = std::fs::read(&target).unwrap();
@@ -488,7 +524,7 @@ fn save_absent_composite_preserves_merged_output_policy() {
     rust.session.doc.as_mut().unwrap().composite.detach_plane();
     assert!(pictura_codec::write_psd(rust.session.doc.as_ref().unwrap()).is_err());
     let target = path("absent.psd");
-    assert!(save_start_rust(&mut rust, &target, false));
+    assert!(save_start_rust(&mut rust, &target, -1, false));
     wait(&rust);
     assert!(save_finish_rust(&mut rust));
     let saved = pictura_codec::read_psd(&std::fs::read(&target).unwrap()).unwrap();
@@ -499,7 +535,7 @@ fn save_absent_composite_preserves_merged_output_policy() {
     let doc = rust.session.doc.as_mut().unwrap();
     doc.composite.replace(expected).unwrap();
     doc.composite.set_merged_output(false);
-    assert!(save_start_rust(&mut rust, &target, false));
+    assert!(save_start_rust(&mut rust, &target, -1, false));
     wait(&rust);
     assert!(save_finish_rust(&mut rust));
     let saved = pictura_codec::read_psd(&std::fs::read(&target).unwrap()).unwrap();
@@ -511,7 +547,7 @@ fn save_absent_composite_preserves_merged_output_policy() {
 fn a_started_save_finishes_writes_and_clears_modified() {
     let mut rust = view();
     let path = path("save.psd");
-    assert!(save_start_rust(&mut rust, &path, false));
+    assert!(save_start_rust(&mut rust, &path, -1, false));
     wait(&rust);
     assert!(save_finish_rust(&mut rust));
     assert_eq!(rust.path.as_deref(), Some(path.as_str()));
@@ -549,14 +585,14 @@ fn print_metadata_survives_undo_and_concurrent_save() {
     rust.session.doc.set(Some(restored.doc));
     assert!(rust.session.derived_dirty());
     let path = path("print.psb");
-    assert!(save_start_rust(&mut rust, &path, false));
+    assert!(save_start_rust(&mut rust, &path, -1, false));
     stage(&mut rust, 6.0);
     wait(&rust);
     assert!(save_finish_rust(&mut rust));
     assert!(rust.session.dirty);
     let first = pictura_codec::read_psd(&std::fs::read(&path).unwrap()).unwrap();
     assert_eq!(read_print_settings(&first).border, Some(4.0));
-    assert!(save_start_rust(&mut rust, &path, false));
+    assert!(save_start_rust(&mut rust, &path, -1, false));
     wait(&rust);
     assert!(save_finish_rust(&mut rust));
     assert!(!rust.session.dirty);
@@ -573,7 +609,7 @@ fn save_refuses_unreadable_tiles() {
     rust.session.dirty = true;
     lose_tiles(rust.session.doc.as_ref().unwrap());
     let path = path("unreadable.psd");
-    assert!(!save_start_rust(&mut rust, &path, false));
+    assert!(!save_start_rust(&mut rust, &path, -1, false));
     assert!(crate::cxxqt_object::helpers::memory_gate::edit_refused_for_scratch());
     assert!(!std::path::Path::new(&path).exists(), "nothing was written");
 }
@@ -586,8 +622,8 @@ fn a_second_start_while_running_is_refused() {
     // legitimately succeeds.
     rust.save_delay_for_test = 200;
     let path = path("twice.psd");
-    assert!(save_start_rust(&mut rust, &path, false));
-    assert!(!save_start_rust(&mut rust, &path, false));
+    assert!(save_start_rust(&mut rust, &path, -1, false));
+    assert!(!save_start_rust(&mut rust, &path, -1, false));
     wait(&rust);
     assert!(save_finish_rust(&mut rust));
     let _ = std::fs::remove_file(&path);
@@ -598,7 +634,7 @@ fn an_edit_during_the_save_keeps_the_document_modified() {
     let mut rust = view();
     let path = path("stale.psd");
     let snapshot = rust.session.doc.snapshot().expect("document");
-    assert!(save_start_rust(&mut rust, &path, false));
+    assert!(save_start_rust(&mut rust, &path, -1, false));
     rust.session.content_revision = rust.session.content_revision.wrapping_add(1);
     wait(&rust);
     assert!(save_finish_rust(&mut rust));
@@ -618,7 +654,7 @@ fn a_replaced_document_keeps_its_path_and_dirty_state() {
     let mut rust = view();
     rust.path = Some("original.psd".to_string());
     let path = path("replaced.psd");
-    assert!(save_start_rust(&mut rust, &path, false));
+    assert!(save_start_rust(&mut rust, &path, -1, false));
     rust.session
         .doc
         .set(Some(Document::from_rgba("Other", 4, 4, &[1u8; 4 * 4 * 4])));
@@ -635,7 +671,7 @@ fn a_failed_write_leaves_the_document_untouched() {
     let mut rust = view();
     let path = path("save.psd");
     std::fs::create_dir_all(&path).unwrap();
-    assert!(save_start_rust(&mut rust, &path, false));
+    assert!(save_start_rust(&mut rust, &path, -1, false));
     wait(&rust);
     assert!(!save_finish_rust(&mut rust));
     assert!(rust.path.is_none());
@@ -657,13 +693,13 @@ fn native_save_distinguishes_publication_failures() {
     rust.path = Some("prior.psd".into());
     std::fs::write(&target, b"prior snapshot").unwrap();
     let bad_target = format!("{target}/missing.psd");
-    assert!(save_start_rust(&mut rust, &bad_target, false));
+    assert!(save_start_rust(&mut rust, &bad_target, -1, false));
     wait(&rust);
     assert!(!save_finish_rust(&mut rust));
     assert!(!rust.session.save_publication_uncertain);
     assert_eq!(std::fs::read(&target).unwrap(), b"prior snapshot");
     rust.save_sync_failure_for_test = true;
-    assert!(save_start_rust(&mut rust, &target, false));
+    assert!(save_start_rust(&mut rust, &target, -1, false));
     wait(&rust);
     assert!(!save_finish_rust(&mut rust));
     assert!(rust.session.save_publication_uncertain);
@@ -677,7 +713,7 @@ fn native_save_distinguishes_publication_failures() {
 fn a_synchronous_save_writes_the_worker_bytes() {
     let mut rust = view();
     let path = path("sync.psd");
-    assert!(save_start_rust(&mut rust, &path, false));
+    assert!(save_start_rust(&mut rust, &path, -1, false));
     wait(&rust);
     assert!(save_finish_rust(&mut rust));
     let written = std::fs::read(&path).expect("saved file");
@@ -713,7 +749,7 @@ fn a_layered_document_round_trips_through_the_job() {
     rust.session.doc.set(Some(doc));
     rust.session.dirty = true;
     let path = path("layers.psd");
-    assert!(save_start_rust(&mut rust, &path, false));
+    assert!(save_start_rust(&mut rust, &path, -1, false));
     wait(&rust);
     assert!(save_finish_rust(&mut rust));
     let back = pictura_codec::read_psd(&std::fs::read(&path).unwrap()).expect("reads");
@@ -726,7 +762,7 @@ fn copy_intent_skips_path_and_dirty() {
     let mut rust = view();
     rust.path = Some("original.psd".to_string());
     let path = path("copy.psd");
-    assert!(save_start_rust(&mut rust, &path, true));
+    assert!(save_start_rust(&mut rust, &path, -1, true));
     wait(&rust);
     assert!(save_finish_rust(&mut rust));
     assert_eq!(rust.path.as_deref(), Some("original.psd"));
@@ -740,7 +776,7 @@ fn native_save_replaced_session_panic() {
     let mut rust = view();
     let target = path("replaced-panic.psd");
     rust.save_fault_for_test = 4;
-    assert!(save_start_rust(&mut rust, &target, false));
+    assert!(save_start_rust(&mut rust, &target, -1, false));
     let generation = rust.session.document_generation;
     rust.session = crate::cxxqt_object::document_session::DocumentSession::with_document(
         Document::from_rgba("Replacement", 4, 4, &[1; 64]),
@@ -769,7 +805,7 @@ fn admission_status_is_owned_by_the_save_attempt() {
     let target = path("admission.psd");
     let limit = 1_i64 << 30;
     set_cgroup_for_test(limit, 768_i64 << 20);
-    assert!(!save_start_rust(&mut rust, &target, false));
+    assert!(!save_start_rust(&mut rust, &target, -1, false));
     set_cgroup_for_test(-1, 0);
     clear();
     assert_eq!(rust.last_native_save.code, ErrorCode::Host.status().raw());

@@ -66,7 +66,7 @@ pub(super) fn switch_mode(session: &mut TransformSession, mode: TransformMode) -
 #[cfg(test)]
 mod tests {
     use super::super::super::document_session::TransformTarget;
-    use super::super::geometry::{source_corners, MapParams};
+    use super::super::geometry::MapParams;
     use super::*;
     use pictura_core::PsdRect;
 
@@ -78,46 +78,15 @@ mod tests {
     };
 
     fn free_session() -> TransformSession {
-        let corners = source_corners(RECT);
-        TransformSession {
-            target: TransformTarget::Layer,
-            path: "0".to_string(),
-            members: vec![("0".to_string(), RECT)],
-            orig_rect: RECT,
-            scale_x: 1.0,
-            scale_y: 1.0,
-            angle: 0.0,
-            dx: 0.0,
-            dy: 0.0,
-            handle: -1,
-            press_x: 0.0,
-            press_y: 0.0,
-            start: [1.0, 1.0, 0.0, 0.0, 0.0],
-            dragging: false,
-            mode: TransformMode::Free,
-            type_layer: false,
-            quad: None,
-            base_quad: None,
-            free_perspective: false,
-            free_distort: false,
-            free_skew: false,
-            perspective_side: None,
-            start_quad: corners,
-            pivot: (70.0, 35.0),
-            pivot_origin: (70.0, 35.0),
-            start_pivot: (70.0, 35.0),
-            show_pivot: true,
-            skew_x: 0.0,
-            skew_y: 0.0,
-            interpolation: pictura_render::Interpolation::Bicubic,
-            warp: None,
-            warp_drag: None,
-            warp_editing: false,
-            warp_post: None,
-            lifted: None,
-            untrimmed: Vec::new(),
-            history_label: "Free Transform".to_string(),
-        }
+        TransformSession::new(
+            TransformTarget::Layer,
+            "0".to_string(),
+            vec![("0".to_string(), RECT)],
+            RECT,
+            TransformMode::Free,
+            false,
+            "Free Transform",
+        )
     }
 
     fn close(a: (f64, f64), b: (f64, f64)) -> bool {

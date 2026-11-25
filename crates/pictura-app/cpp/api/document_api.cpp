@@ -1,6 +1,7 @@
 #include "api/document_api.h"
 
 #include "pictura_app/src/cxxqt_object.cxxqt.h"
+#include "pictura_app/src/cxxqt_object/export.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/impl_core/save_jobs.cxxqt.h"
 #include "pictura_app/src/cxxqt_object/open_jobs.cxxqt.h"
 
@@ -40,24 +41,24 @@ QStringList loadFilesIntoStack(PictureView& view, const QStringList& paths, bool
     return pictura::load_files_into_stack(view, paths, align, smartObject);
 }
 
-bool save(PictureView& view, const QString& path)
+bool save(PictureView& view, const QString& path, int formatId)
 {
-    return view.save(path);
+    return pictura::save_document_format(view, path, formatId, false);
 }
 
-bool saveCopy(PictureView& view, const QString& path)
+bool saveCopy(PictureView& view, const QString& path, int formatId)
 {
-    return view.save_copy(path);
+    return pictura::save_document_format(view, path, formatId, true);
 }
 
-bool saveStart(PictureView& view, const QString& path)
+bool saveStart(PictureView& view, const QString& path, int formatId)
 {
-    return pictura::save_start(view, path);
+    return pictura::save_start(view, path, formatId);
 }
 
-bool saveCopyStart(PictureView& view, const QString& path)
+bool saveCopyStart(PictureView& view, const QString& path, int formatId)
 {
-    return pictura::save_copy_start(view, path);
+    return pictura::save_copy_start(view, path, formatId);
 }
 
 bool saveRunning(const PictureView& view)

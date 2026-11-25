@@ -1,5 +1,7 @@
 #include "save_format_options.h"
 
+#include "api/engine_bridge.h"
+
 #include <QtCore/QJsonValue>
 #include <QtCore/QtGlobal>
 
@@ -14,95 +16,149 @@ int clamped(int value, int low, int high)
 
 } // namespace
 
+const QVector<SaveFormatRow>& saveFormatRows()
+{
+    static const QVector<SaveFormatRow> rows = {
+        {0, SaveFormatKind::None, QStringLiteral("psd"),
+         QT_TRANSLATE_NOOP("PicturaFiles", "Photoshop"), QStringLiteral(" (*.PSD)"),
+         QStringLiteral(".psd")},
+        {1, SaveFormatKind::None, QStringLiteral("psb"),
+         QT_TRANSLATE_NOOP("PicturaFiles", "Photoshop Large Format"), QStringLiteral(" (*.PSB)"),
+         QStringLiteral(".psb")},
+        {2, SaveFormatKind::Png, QStringLiteral("png"),
+         QT_TRANSLATE_NOOP("PicturaFiles", "PNG"), QStringLiteral(" (*.PNG)"),
+         QStringLiteral(".png")},
+        {3, SaveFormatKind::Jpeg, QStringLiteral("jpeg"),
+         QT_TRANSLATE_NOOP("PicturaFiles", "JPEG"), QStringLiteral(" (*.JPG *.JPEG *.JPE)"),
+         QStringLiteral(".jpg")},
+        {4, SaveFormatKind::Tiff, QStringLiteral("tiff"),
+         QT_TRANSLATE_NOOP("PicturaFiles", "TIFF"), QStringLiteral(" (*.TIF *.TIFF)"),
+         QStringLiteral(".tif")},
+        {5, SaveFormatKind::None, QStringLiteral("webp"),
+         QT_TRANSLATE_NOOP("PicturaFiles", "WebP"), QStringLiteral(" (*.WEBP)"),
+         QStringLiteral(".webp")},
+        {6, SaveFormatKind::Bmp, QStringLiteral("bmp"),
+         QT_TRANSLATE_NOOP("PicturaFiles", "BMP"), QStringLiteral(" (*.BMP)"),
+         QStringLiteral(".bmp")},
+        {7, SaveFormatKind::None, QStringLiteral("pdf"),
+         QT_TRANSLATE_NOOP("PicturaFiles", "Photoshop PDF"), QStringLiteral(" (*.PDF *.PDP)"),
+         QStringLiteral(".pdf")},
+        {8, SaveFormatKind::Gif, QStringLiteral("gif"),
+         QT_TRANSLATE_NOOP("PicturaFiles", "CompuServe GIF"), QStringLiteral(" (*.GIF)"),
+         QStringLiteral(".gif")},
+        {9, SaveFormatKind::Eps, QStringLiteral("eps"),
+         QT_TRANSLATE_NOOP("PicturaFiles", "Photoshop EPS"), QStringLiteral(" (*.EPS)"),
+         QStringLiteral(".eps")},
+        {10, SaveFormatKind::Dcs, QStringLiteral("dcs"),
+         QT_TRANSLATE_NOOP("PicturaFiles", "Photoshop DCS"), QStringLiteral(" (*.EPS)"),
+         QStringLiteral(".eps")},
+        {11, SaveFormatKind::Raw, QStringLiteral("raw"),
+         QT_TRANSLATE_NOOP("PicturaFiles", "Photoshop Raw"), QStringLiteral(" (*.RAW)"),
+         QStringLiteral(".raw")},
+        {12, SaveFormatKind::Tga, QStringLiteral("tga"),
+         QT_TRANSLATE_NOOP("PicturaFiles", "Targa"), QStringLiteral(" (*.TGA *.VDA *.ICB *.VST)"),
+         QStringLiteral(".tga")},
+        {13, SaveFormatKind::Cineon, QStringLiteral("cineon"),
+         QT_TRANSLATE_NOOP("PicturaFiles", "Cineon"), QStringLiteral(" (*.CIN)"),
+         QStringLiteral(".cin")},
+    };
+    return rows;
+}
+
+int saveFormatIdForSuffix(const QString& suffix)
+{
+    const QByteArray utf8 = suffix.toUtf8();
+    return pictura::save_format_id_for_suffix(
+        ::rust::Str(utf8.constData(), static_cast<size_t>(utf8.size())));
+}
+
+int saveFormatIdForSourceName(const QString& name)
+{
+    const QByteArray utf8 = name.toUtf8();
+    return pictura::save_format_id_for_source_name(
+        ::rust::Str(utf8.constData(), static_cast<size_t>(utf8.size())));
+}
+
+int saveFormatIdForKind(SaveFormatKind kind)
+{
+    if (kind == SaveFormatKind::None) {
+        return -1;
+    }
+    for (const SaveFormatRow& row : saveFormatRows()) {
+        if (row.kind == kind) {
+            return row.id;
+        }
+    }
+    return -1;
+}
+
+int saveFormatFilterIndexForId(int id)
+{
+    const QVector<SaveFormatRow>& rows = saveFormatRows();
+    for (int i = 0; i < rows.size(); ++i) {
+        if (rows.at(i).id == id) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+quint32 saveFormatFlags(int id) { return pictura::save_format_flags(id); }
+
+bool saveFormatHasFlag(int id, quint32 flag)
+{
+    return id >= 0 && (saveFormatFlags(id) & flag) != 0;
+}
+
+bool saveFormatIsNativeSuffix(const QString& suffix)
+{
+    return saveFormatHasFlag(saveFormatIdForSuffix(suffix), kSaveFormatNative);
+}
+
+bool saveFormatKeepsLayers(const QString& suffix)
+{
+    return saveFormatHasFlag(saveFormatIdForSuffix(suffix), kSaveFormatKeepsLayers);
+}
+
+bool saveFormatOffersProfile(const QString& suffix)
+{
+    return saveFormatHasFlag(saveFormatIdForSuffix(suffix), kSaveFormatOffersProfile);
+}
+
+bool saveFormatIsRasterSuffix(const QString& suffix)
+{
+    return saveFormatHasFlag(saveFormatIdForSuffix(suffix), kSaveFormatRaster);
+}
+
+bool saveFormatIsPdfSuffix(const QString& suffix)
+{
+    return saveFormatHasFlag(saveFormatIdForSuffix(suffix), kSaveFormatPdf);
+}
+
 SaveFormatKind saveFormatKindForSuffix(const QString& suffix)
 {
-    const QString lower = suffix.toLower();
-    if (lower == QLatin1String("jpg") || lower == QLatin1String("jpeg")
-        || lower == QLatin1String("jpe")) {
-        return SaveFormatKind::Jpeg;
-    }
-    if (lower == QLatin1String("png")) {
-        return SaveFormatKind::Png;
-    }
-    if (lower == QLatin1String("bmp")) {
-        return SaveFormatKind::Bmp;
-    }
-    if (lower == QLatin1String("tif") || lower == QLatin1String("tiff")) {
-        return SaveFormatKind::Tiff;
-    }
-    if (lower == QLatin1String("gif")) {
-        return SaveFormatKind::Gif;
-    }
-    if (lower == QLatin1String("eps")) {
-        return SaveFormatKind::Eps;
-    }
-    if (lower == QLatin1String("raw")) {
-        return SaveFormatKind::Raw;
-    }
-    if (lower == QLatin1String("tga") || lower == QLatin1String("vda")
-        || lower == QLatin1String("icb") || lower == QLatin1String("vst")) {
-        return SaveFormatKind::Tga;
-    }
-    if (lower == QLatin1String("cin")) {
-        return SaveFormatKind::Cineon;
-    }
-    return SaveFormatKind::None;
+    const int index = saveFormatFilterIndexForId(saveFormatIdForSuffix(suffix));
+    return index < 0 ? SaveFormatKind::None : saveFormatRows().at(index).kind;
 }
 
 SaveFormatKind saveFormatKindForFilter(int filterIndex)
 {
-    switch (filterIndex) {
-    case 2:
-        return SaveFormatKind::Png;
-    case 3:
-        return SaveFormatKind::Jpeg;
-    case 4:
-        return SaveFormatKind::Tiff;
-    case 6:
-        return SaveFormatKind::Bmp;
-    case 8:
-        return SaveFormatKind::Gif;
-    case 9:
-        return SaveFormatKind::Eps;
-    case 10:
-        return SaveFormatKind::Dcs;
-    case 11:
-        return SaveFormatKind::Raw;
-    case 12:
-        return SaveFormatKind::Tga;
-    case 13:
-        return SaveFormatKind::Cineon;
-    default:
-        return SaveFormatKind::None;
-    }
+    const QVector<SaveFormatRow>& rows = saveFormatRows();
+    return filterIndex >= 0 && filterIndex < rows.size() ? rows.at(filterIndex).kind
+                                                         : SaveFormatKind::None;
 }
 
 QString saveFormatKey(SaveFormatKind kind)
 {
-    switch (kind) {
-    case SaveFormatKind::Jpeg:
-        return QStringLiteral("jpeg");
-    case SaveFormatKind::Png:
-        return QStringLiteral("png");
-    case SaveFormatKind::Bmp:
-        return QStringLiteral("bmp");
-    case SaveFormatKind::Tiff:
-        return QStringLiteral("tiff");
-    case SaveFormatKind::Gif:
-        return QStringLiteral("gif");
-    case SaveFormatKind::Eps:
-        return QStringLiteral("eps");
-    case SaveFormatKind::Dcs:
-        return QStringLiteral("dcs");
-    case SaveFormatKind::Raw:
-        return QStringLiteral("raw");
-    case SaveFormatKind::Tga:
-        return QStringLiteral("tga");
-    case SaveFormatKind::Cineon:
-        return QStringLiteral("cineon");
-    default:
+    if (kind == SaveFormatKind::None) {
         return QString();
     }
+    for (const SaveFormatRow& row : saveFormatRows()) {
+        if (row.kind == kind) {
+            return row.name;
+        }
+    }
+    return QString();
 }
 
 QJsonObject saveFormatOptionsToJson(const SaveFormatOptions& options)

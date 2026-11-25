@@ -787,46 +787,17 @@ mod tests {
             right: 90,
             bottom: 60,
         };
-        let center = (45.0, 30.0);
-        TransformSession {
-            target: TransformTarget::Layer,
-            path: "0".to_string(),
-            members: vec![("0".to_string(), rect)],
-            orig_rect: rect,
-            scale_x: 1.0,
-            scale_y: 1.0,
-            angle: 0.0,
-            dx: 0.0,
-            dy: 0.0,
-            handle: -1,
-            press_x: 0.0,
-            press_y: 0.0,
-            start: [1.0, 1.0, 0.0, 0.0, 0.0],
-            dragging: false,
-            mode: super::super::super::super::document_session::TransformMode::Free,
-            type_layer: false,
-            quad: None,
-            base_quad: None,
-            free_perspective: false,
-            free_distort: false,
-            free_skew: false,
-            perspective_side: None,
-            start_quad: CORNERS,
-            pivot: center,
-            pivot_origin: center,
-            start_pivot: center,
-            show_pivot: true,
-            skew_x: 0.0,
-            skew_y: 0.0,
-            interpolation: pictura_render::Interpolation::Bicubic,
-            warp: Some(warp),
-            warp_drag: None,
-            warp_editing: false,
-            warp_post: None,
-            lifted: None,
-            untrimmed: Vec::new(),
-            history_label: "Free Transform".to_string(),
-        }
+        let mut s = TransformSession::new(
+            TransformTarget::Layer,
+            "0".to_string(),
+            vec![("0".to_string(), rect)],
+            rect,
+            super::super::super::super::document_session::TransformMode::Free,
+            false,
+            "Free Transform",
+        );
+        s.warp = Some(warp);
+        s
     }
 
     #[test]

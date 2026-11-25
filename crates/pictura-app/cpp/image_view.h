@@ -824,6 +824,7 @@ private:
     bool targetPathVisible_ = true;
     bool targetPathFollowsMove_ = false;
     bool movePreviewMovesLayer_ = false;
+    bool movePreviewCommitted_ = false;
     QRectF layerEdges_;
     bool layerEdgesVisible_ = true;
     bool gridVisible_ = false;

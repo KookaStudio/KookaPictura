@@ -635,6 +635,10 @@ void ViewMenuTest::layerEdges()
                              std::nullopt, 1, true);
     canvas->setMovePreviewDelta(QPointF(40, 20));
     QCOMPARE(canvas->layerEdgesForTest().topLeft(), before.topLeft() + QPointF(40, 20));
+    // A deferred commit keeps the preview after the document moved; the outline
+    // refresh lands at the old outline plus the delta and must not add it again.
+    canvas->setLayerEdges(before.translated(QPointF(40, 20)));
+    QCOMPARE(canvas->layerEdgesForTest().topLeft(), before.topLeft() + QPointF(40, 20));
     canvas->endMovePreview();
     QVERIFY(view->commit_move(40, 20));
     QCoreApplication::processEvents();

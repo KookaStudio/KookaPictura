@@ -405,3 +405,37 @@ impl PictureViewRust {
         self.set_layer_target(target);
     }
 }
+
+impl PictureViewRust {
+    /// Drop every preview field a gesture draws with: the cached base and moving
+    /// image, their origins and level, the above-layer overlay, the Move cache
+    /// keys, mask-move baseline, and drag flag.
+    ///
+    /// One teardown for every ending: a cancel, a commit (changed, identity, or
+    /// refused), a failed begin, a landed deferred commit, a smart-object commit,
+    /// and a document replacement. The controls flag belongs to the transform
+    /// lifecycle, not this field teardown; transform begin, commit, and cancel
+    /// paths clear it.
+    pub(in crate::cxxqt_object) fn clear_preview_overlay(&mut self) {
+        self.move_base = None;
+        self.move_base_origin = None;
+        self.move_view = None;
+        self.move_view_pixels = Default::default();
+        self.move_layer = None;
+        self.transform_preview_level = 0;
+        self.move_x = 0;
+        self.move_y = 0;
+        self.move_above = None;
+        self.move_above_origin = None;
+        self.move_above_scale = 1;
+        self.move_above_presented = None;
+        self.move_layer_offset = (0, 0);
+        self.move_opacity = 0;
+        self.move_prepared_revision = 0;
+        self.move_prepared_layer.clear();
+        self.move_prepared_union = None;
+        self.move_preview_cache_hit = false;
+        self.move_drag_active = false;
+        self.mask_move_baseline = None;
+    }
+}

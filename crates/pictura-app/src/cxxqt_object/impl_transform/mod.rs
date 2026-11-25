@@ -14,6 +14,7 @@ mod smart_rect;
 mod warp;
 
 pub(in crate::cxxqt_object) use dispatch::land_hdr_conversion;
+pub(in crate::cxxqt_object) use geometry::{rect_center, source_corners};
 pub(in crate::cxxqt_object) use session::{MoveView, MoveViewPixels};
 
 use super::helpers::*;
@@ -134,6 +135,13 @@ fn move_reach(doc: &Document, path: &str) -> Option<PsdRect> {
             return Some(reach);
         }
     }
+    // A paragraph box can be document-sized around a few words; its ink is all
+    // the composite reads, so a move damages (and previews) only that.
+    if layer.is_type() {
+        if let Some(ink) = pictura_render::damage::type_ink_influence(doc, path) {
+            return Some(ink);
+        }
+    }
     let plain = !layer.is_group() && !layer.has_adjustment_content() && !layer_has_effects(layer);
     if plain {
         if let Some(content) = pictura_render::content_rect(doc, path) {
@@ -229,6 +237,44 @@ pub(super) fn move_origin_opacity(doc: &Document, paths: &[String]) -> Option<(i
         bounds = Some(bounds.map_or(layer.rect, |rect| rect.union(layer.rect)));
     }
     bounds.map(|rect| (rect.left.max(0), rect.top.max(0), 255))
+}
+
+/// The crop of a single non-shape layer's moving image and its offset from the
+/// layer's rect: a type layer's ink, else its content rect (or the layer rect).
+/// `None` for a shape layer, which is rendered whole, or several layers.
+pub(super) fn move_content_rect(doc: &Document, paths: &[String]) -> Option<(PsdRect, (i32, i32))> {
+    let [path] = paths else {
+        return None;
+    };
+    let layer = pictura_render::resolve_path(doc, path)?;
+    if pictura_render::is_shape_layer(layer) {
+        return None;
+    }
+    let content = if layer.is_type() {
+        pictura_render::damage::type_ink_influence(doc, path)
+    } else {
+        pictura_render::content_rect(doc, path)
+    };
+    let rect = content
+        .and_then(|content| content.intersect(layer.rect))
+        .unwrap_or(layer.rect);
+    Some((
+        rect,
+        (rect.left - layer.rect.left, rect.top - layer.rect.top),
+    ))
+}
+
+impl PictureViewRust {
+    /// The crop offset of the Move preview's moving image, recomputed for a
+    /// cache hit: a type layer keeps its box after a commit, so its ink offset
+    /// must not reset to zero.
+    pub(super) fn cached_move_offset(&self, paths: &[String]) -> (i32, i32) {
+        self.session
+            .doc
+            .as_ref()
+            .and_then(|doc| move_content_rect(doc, paths))
+            .map_or((0, 0), |(_, offset)| offset)
+    }
 }
 
 /// The layer at `path` the Move tool drags: a pixel layer, or a shape layer,

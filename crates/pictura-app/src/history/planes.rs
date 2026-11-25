@@ -403,7 +403,18 @@ pub(super) fn tile_planes(doc: &mut Document) {
             PlanePlacement::Composite => doc_height,
             _ => height,
         };
-        plane.tile(width, height);
+        if !plane.is_tiled() {
+            // A large flat plane (a decoded 20000² layer) costs a second copy
+            // to tile. Under memory pressure, keep it flat: the history then
+            // stores a full, copy-on-write state instead of a tile delta.
+            // Do not evict display tiles for an optional history conversion;
+            // a plane that does not fit right now stays flat.
+            let Some(_held) = pictura_core::memory::governor().reserve_if_room(plane.len() as u64)
+            else {
+                return;
+            };
+            plane.tile(width, height);
+        }
         plane.settle();
     });
 }
@@ -810,5 +821,30 @@ fn each_layer_plane_mut(
     }
     for child in layer.children_iter_mut() {
         each_layer_plane_mut(child, &mut *f);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pictura_core::memory::{set_host_for_test, HostReading};
+
+    const MIB: u64 = 1024 * 1024;
+
+    #[test]
+    fn a_flat_plane_stays_flat_when_the_room_is_small() {
+        set_host_for_test(Some(HostReading {
+            total: Some(2 * MIB),
+            available: Some(MIB),
+            rss: Some(MIB),
+            ..HostReading::default()
+        }));
+        let mut doc = Document::from_rgba("flat", 2000, 2000, &vec![255u8; 2000 * 2000 * 4]);
+        tile_planes(&mut doc);
+        set_host_for_test(None);
+        assert!(
+            !doc.layers[0].channels()[0].data.is_tiled(),
+            "a plane that does not fit the room stays flat"
+        );
     }
 }

@@ -229,7 +229,14 @@ free	relink_fixture_for_test	relink_fixture_for_test	api/engine_bridge.h	pictura
 free	relink_source_id	relink_source_id	api/engine_bridge.h	pictura_app/src/cxxqt_object/pdf_export/import.cxxqt.h
 free	relink_source_location	relink_source_location	api/engine_bridge.h	pictura_app/src/cxxqt_object/pdf_export/import.cxxqt.h
 free	render_intent	render_intent	api/engine_bridge.h	pictura_app/src/cxxqt_object/color_management.cxxqt.h
+free	save_document_format	save_document_format	api/engine_bridge.h	pictura_app/src/cxxqt_object/export.cxxqt.h
 free	save_embed_profile	save_embed_profile	api/engine_bridge.h	pictura_app/src/cxxqt_object/color_management.cxxqt.h
+free	save_format_aliases	save_format_aliases	api/engine_bridge.h	pictura_app/src/cxxqt_object/export.cxxqt.h
+free	save_format_canonical	save_format_canonical	api/engine_bridge.h	pictura_app/src/cxxqt_object/export.cxxqt.h
+free	save_format_code	save_format_code	api/engine_bridge.h	pictura_app/src/cxxqt_object/export.cxxqt.h
+free	save_format_flags	save_format_flags	api/engine_bridge.h	pictura_app/src/cxxqt_object/export.cxxqt.h
+free	save_format_id_for_source_name	save_format_id_for_source_name	api/engine_bridge.h	pictura_app/src/cxxqt_object/export.cxxqt.h
+free	save_format_id_for_suffix	save_format_id_for_suffix	api/engine_bridge.h	pictura_app/src/cxxqt_object/export.cxxqt.h
 free	set_color_settings	set_color_settings	api/engine_bridge.h	pictura_app/src/cxxqt_object/color_management.cxxqt.h
 free	set_open_policy_override	set_open_policy_override	api/engine_bridge.h	pictura_app/src/cxxqt_object/color_management.cxxqt.h
 free	set_picker_choice	set_picker_choice	api/engine_bridge.h	pictura_app/src/cxxqt_object/color_management.cxxqt.h
@@ -946,6 +953,7 @@ free	healing_dab	healing_dab	api/paint_bridge.h	pictura_app/src/cxxqt_object/hea
 free	history_brush_source_snapshot	history_brush_source_snapshot	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
 free	history_brush_source_state	history_brush_source_state	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
 free	inject_scratch_fault_for_test	inject_scratch_fault_for_test	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
+free	last_refusal	last_refusal	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools/fills.cxxqt.h
 free	magic_erase_at	magic_erase_at	api/paint_bridge.h	pictura_app/src/cxxqt_object/paint_tools.cxxqt.h
 free	magnetic_begin	magnetic_begin	api/paint_bridge.h	pictura_app/src/cxxqt_object/magnetic.cxxqt.h
 free	magnetic_end	magnetic_end	api/paint_bridge.h	pictura_app/src/cxxqt_object/magnetic.cxxqt.h
@@ -1058,6 +1066,7 @@ free	refine_mask_band_preview	refine_mask_band_preview	api/selection_bridge.h	pi
 free	refine_mask_preview	refine_mask_preview	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/refine.cxxqt.h
 free	save_selection_to	save_selection_to	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	selection_clip_shape_to_canvas	selection_clip_shape_to_canvas	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
+free	selection_content_movable	selection_content_movable	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	selection_coverage_bytes	selection_coverage_bytes	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	selection_end_lasso_aa	selection_end_lasso_aa	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
 free	selection_magic_wand_aa	selection_magic_wand_aa	api/selection_bridge.h	pictura_app/src/cxxqt_object/impl_selection/bridge.cxxqt.h
@@ -1109,6 +1118,7 @@ free	transform_begin_free_distort	transform_begin_free_distort	api/transform_bri
 free	transform_begin_free_perspective	transform_begin_free_perspective	api/transform_bridge.h	pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h
 free	transform_begin_free_skew	transform_begin_free_skew	api/transform_bridge.h	pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h
 free	transform_can_set_mode	transform_can_set_mode	api/transform_bridge.h	pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h
+free	transform_controls_session	transform_controls_session	api/transform_bridge.h	pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h
 free	transform_drag_angle_degrees	transform_drag_angle_degrees	api/transform_bridge.h	pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h
 free	transform_enter_warp	transform_enter_warp	api/transform_bridge.h	pictura_app/src/cxxqt_object/impl_transform/warp.cxxqt.h
 free	transform_has_repeat	transform_has_repeat	api/transform_bridge.h	pictura_app/src/cxxqt_object/impl_transform/bridge.cxxqt.h

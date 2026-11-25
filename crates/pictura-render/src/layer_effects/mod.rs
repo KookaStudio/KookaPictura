@@ -414,7 +414,7 @@ pub(crate) fn effects_reach(layer: &Layer) -> PsdRect {
 
 /// The padding a layer's effects add around its content, without adding it to
 /// a particular base box.
-fn effects_pad(layer: &Layer) -> i32 {
+pub(crate) fn effects_pad(layer: &Layer) -> i32 {
     let effects = crate::layer_source::decoded_effects(layer);
     let mut reach = 0.0f32;
     if let Some(shadow) = effects.drop_shadow.as_ref() {

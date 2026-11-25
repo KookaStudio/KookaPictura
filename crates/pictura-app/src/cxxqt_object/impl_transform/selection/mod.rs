@@ -14,13 +14,12 @@ use super::super::edit::Edit;
 use super::super::helpers::memory_gate;
 use super::super::qobject;
 use super::super::state::PictureViewRust;
-use super::geometry::{rect_center, session_quad, source_corners};
+use super::geometry::{session_quad, source_corners};
 use super::group::repeatable_transform;
 use super::warp::{map_source_point, warp_preview_quad};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use pictura_core::PsdRect;
-use pictura_render::Interpolation;
 
 /// The integer box around a session quad, or `None` for a non-finite corner.
 fn quad_rect(quad: &[(f64, f64); 4]) -> Option<PsdRect> {
@@ -80,48 +79,16 @@ impl PictureViewRust {
         if orig_rect.width() <= 0 || orig_rect.height() <= 0 {
             return false;
         }
-        let corners = source_corners(orig_rect);
-        let center = rect_center(orig_rect);
         self.transform_controls = false;
-        self.session.live.set_transform(TransformSession {
-            target: TransformTarget::Selection,
-            path: String::new(),
-            members: Vec::new(),
+        self.session.live.set_transform(TransformSession::new(
+            TransformTarget::Selection,
+            String::new(),
+            Vec::new(),
             orig_rect,
-            scale_x: 1.0,
-            scale_y: 1.0,
-            angle: 0.0,
-            dx: 0.0,
-            dy: 0.0,
-            handle: -1,
-            press_x: 0.0,
-            press_y: 0.0,
-            start: [1.0, 1.0, 0.0, 0.0, 0.0],
-            dragging: false,
-            mode: Default::default(),
-            type_layer: false,
-            quad: None,
-            base_quad: None,
-            free_perspective: false,
-            free_distort: false,
-            free_skew: false,
-            perspective_side: None,
-            start_quad: corners,
-            pivot: center,
-            pivot_origin: center,
-            start_pivot: center,
-            show_pivot: true,
-            skew_x: 0.0,
-            skew_y: 0.0,
-            interpolation: Interpolation::Bicubic,
-            warp: None,
-            warp_drag: None,
-            warp_editing: false,
-            warp_post: None,
-            lifted: None,
-            untrimmed: Vec::new(),
-            history_label: "Transform Selection".to_string(),
-        });
+            Default::default(),
+            false,
+            "Transform Selection",
+        ));
         true
     }
 
@@ -161,7 +128,7 @@ impl PictureViewRust {
         let cost = area(dest.unwrap_or(session.orig_rect))
             .saturating_mul(8)
             .saturating_add(area(session.orig_rect).saturating_mul(8));
-        if !memory_gate::admit_fresh(cost) {
+        if !memory_gate::admit_resident(cost).admitted() {
             return false;
         }
         let result = match session.warp.as_ref() {

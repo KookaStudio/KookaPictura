@@ -3,6 +3,7 @@
 //!
 //! The session slot owns this value, so the transform has one home.
 
+use super::super::impl_transform::{rect_center, source_corners};
 use pictura_core::PsdRect;
 
 /// The live Free Transform gesture mode. `Free` is the unconstrained
@@ -179,4 +180,120 @@ pub(in crate::cxxqt_object) struct TransformSession {
     /// session; an exact command (`Rotate 90° Clockwise`, `Transform Again`, …)
     /// sets its own before committing immediately.
     pub(in crate::cxxqt_object) history_label: String,
+}
+
+impl TransformSession {
+    /// The only place a session is built: a fresh, ungestured session over
+    /// `orig_rect`, with its reference point at the rect's centre and its quad
+    /// set for a projective mode.
+    ///
+    /// `type_layer` and `history_label` are the caller's, because both need
+    /// state this type cannot see: the members resolved against the document,
+    /// and whether a Place owns the begin.
+    #[allow(clippy::too_many_arguments)]
+    pub(in crate::cxxqt_object) fn new(
+        target: TransformTarget,
+        path: String,
+        members: Vec<(String, PsdRect)>,
+        orig_rect: PsdRect,
+        mode: TransformMode,
+        type_layer: bool,
+        history_label: &str,
+    ) -> Self {
+        let corners = source_corners(orig_rect);
+        let centre = rect_center(orig_rect);
+        Self {
+            target,
+            path,
+            members,
+            orig_rect,
+            scale_x: 1.0,
+            scale_y: 1.0,
+            angle: 0.0,
+            dx: 0.0,
+            dy: 0.0,
+            handle: -1,
+            press_x: 0.0,
+            press_y: 0.0,
+            start: [1.0, 1.0, 0.0, 0.0, 0.0],
+            dragging: false,
+            mode,
+            type_layer,
+            quad: mode.is_projective().then_some(corners),
+            base_quad: None,
+            free_perspective: false,
+            free_distort: false,
+            free_skew: false,
+            perspective_side: None,
+            start_quad: corners,
+            pivot: centre,
+            pivot_origin: centre,
+            start_pivot: centre,
+            show_pivot: true,
+            skew_x: 0.0,
+            skew_y: 0.0,
+            interpolation: pictura_render::Interpolation::Bicubic,
+            warp: None,
+            warp_drag: None,
+            warp_editing: false,
+            warp_post: None,
+            lifted: None,
+            untrimmed: Vec::new(),
+            history_label: history_label.to_string(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{TransformMode, TransformSession, TransformTarget};
+    use pictura_core::PsdRect;
+
+    fn rect() -> PsdRect {
+        PsdRect {
+            left: 0,
+            top: 0,
+            bottom: 10,
+            right: 20,
+        }
+    }
+
+    #[test]
+    fn a_free_session_has_no_quad() {
+        let session = TransformSession::new(
+            TransformTarget::Layer,
+            "0".to_string(),
+            vec![("0".to_string(), rect())],
+            rect(),
+            TransformMode::Free,
+            false,
+            "Free Transform",
+        );
+        assert!(session.quad.is_none(), "Free is a similarity gesture");
+        assert_eq!(
+            session.pivot,
+            (10.0, 5.0),
+            "the reference point is the centre"
+        );
+        assert_eq!(session.pivot_origin, (10.0, 5.0));
+    }
+
+    #[test]
+    fn a_projective_session_starts_on_the_source_corners() {
+        let session = TransformSession::new(
+            TransformTarget::Layer,
+            "0".to_string(),
+            vec![("0".to_string(), rect())],
+            rect(),
+            TransformMode::Distort,
+            false,
+            "Free Transform",
+        );
+        assert_eq!(
+            session.quad,
+            Some([(0.0, 0.0), (20.0, 0.0), (20.0, 10.0), (0.0, 10.0)]),
+            "the quad starts as the source rect"
+        );
+        assert_eq!(session.start_quad, session.quad.expect("a quad"));
+    }
 }
