@@ -3,8 +3,8 @@ use super::*;
 /// ImageMagick opens a written RLE document and reports its dimensions.
 #[test]
 fn imagemagick_reads_written_rle() {
-    if Command::new("magick").arg("-version").output().is_err() {
-        eprintln!("skipping: `magick` not on PATH");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
 
@@ -21,7 +21,7 @@ fn imagemagick_reads_written_rle() {
     let path = dir.join("rle.psd");
     std::fs::write(&path, write_psd(&doc).unwrap()).unwrap();
 
-    let out = Command::new("magick")
+    let out = std::process::Command::new("magick")
         .arg("identify")
         .arg("-format")
         .arg("%wx%h")

@@ -8,13 +8,7 @@
 use std::process::Command;
 
 use pictura_codec::{encode_gif, encode_wbmp, quantize, ColorReduction, Dither, PaletteOptions};
-
-fn magick_available() -> bool {
-    Command::new("magick")
-        .arg("-version")
-        .output()
-        .is_ok_and(|o| o.status.success())
-}
+use pictura_testkit::oracle;
 
 /// Decode `bytes` (in `format`) with ImageMagick to raw RGBA. The bytes go
 /// through a file, not stdin: newer ImageMagick's WBMP reader checks the
@@ -60,8 +54,8 @@ fn picture() -> (Vec<u8>, u32, u32) {
 
 #[test]
 fn magick_decodes_our_gifs_exactly() {
-    if !magick_available() {
-        eprintln!("skipping: magick not available");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let (rgba, w, h) = picture();
@@ -96,8 +90,8 @@ fn magick_decodes_our_gifs_exactly() {
 
 #[test]
 fn magick_decodes_our_wbmp_exactly() {
-    if !magick_available() {
-        eprintln!("skipping: magick not available");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let (rgba, w, h) = picture();

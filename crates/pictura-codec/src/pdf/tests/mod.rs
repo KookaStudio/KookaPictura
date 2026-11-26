@@ -7,6 +7,7 @@ mod standards;
 use std::io::Read as _;
 
 use pictura_core::{BitDepth, ColorMode, Document, MarkerKind, PixelBuffer, Samples, SourcePlanes};
+use pictura_testkit::oracle;
 
 use super::*;
 use crate::image_resources::{set_document_resolution, Resolution};
@@ -692,13 +693,8 @@ fn pdf_preserve_editing_defaults_to_masked() {
 
 #[test]
 fn pdf_spot_payload_matches_psd_tools() {
-    if std::process::Command::new("python3")
-        .args(["-c", "import psd_tools"])
-        .output()
-        .map(|o| !o.status.success())
-        .unwrap_or(true)
-    {
-        eprintln!("SKIP: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let options = PdfOptions {
@@ -713,7 +709,7 @@ fn pdf_spot_payload_matches_psd_tools() {
         std::env::temp_dir().join(format!("pictura-spot-payload-{}.psd", std::process::id()));
     std::fs::write(&path, &psd).expect("temp PSD");
     let script = "from psd_tools import PSDImage\nimport sys\npsd=PSDImage.open(sys.argv[1])\nprint(psd.channels)\n";
-    let out = std::process::Command::new("python3")
+    let out = oracle::Command::new("python3")
         .args(["-c", script, path.to_str().unwrap()])
         .output()
         .expect("run python3");

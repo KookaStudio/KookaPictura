@@ -5,8 +5,7 @@
 //! The psd-tools check needs `python3` with `psd-tools`; it self-skips with a
 //! message otherwise.
 
-use std::process::Command;
-
+use pictura_testkit::oracle;
 use pictura_codec::{read_psd, write_psd};
 use pictura_core::{
     Channel, Document, FillContent, Layer, LayerBlock, LayerMask, LayerParts, PsdRect, RawChannel,
@@ -187,17 +186,13 @@ fn the_real_mask_header_survives_beside_parameters() {
 /// One `|`-separated row per layer record, as `SCRIPT` prints them; `None`
 /// when psd-tools is unavailable.
 fn psd_tools_rows(doc: &Document, tag: &str) -> Option<String> {
-    let available = Command::new("python3")
-        .args(["-c", "import psd_tools"])
-        .output()
-        .is_ok_and(|o| o.status.success());
-    if !available {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return None;
     }
     let path = std::env::temp_dir().join(format!("pictura-{tag}-{}.psd", std::process::id()));
     std::fs::write(&path, write_psd(doc).expect("writes")).expect("write");
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .args(["-c", SCRIPT, path.to_str().expect("utf-8 path")])
         .output()
         .expect("run python3");

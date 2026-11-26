@@ -17,10 +17,10 @@
 //! `tests/README.md`.
 
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use pictura_select::{SelectOp, Selection};
+use pictura_testkit::{compare, oracle};
 
 /// Side length of the raw 8-bit grayscale test mask.
 const SIZE: u32 = 8;
@@ -76,17 +76,6 @@ fn script() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../scripts/select_oracle.py")
 }
 
-fn magick_available() -> bool {
-    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        Command::new("magick")
-            .arg("-version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    })
-}
-
 /// Unique scratch directory per call so tests can run in parallel.
 fn scratch_dir(tag: &str) -> PathBuf {
     static SEQ: AtomicU64 = AtomicU64::new(0);
@@ -98,33 +87,6 @@ fn scratch_dir(tag: &str) -> PathBuf {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir
-}
-
-/// Compare two byte buffers with an absolute per-sample tolerance. Mirrors
-/// `pictura_testkit::compare`, inlined because M5-B owns only `tests/**` and
-/// may not add a dev-dependency to the crate manifest.
-struct Diff {
-    samples: usize,
-    differing: usize,
-    max_delta: u16,
-}
-
-fn compare(a: &[u8], b: &[u8], tolerance: u8) -> Diff {
-    assert_eq!(a.len(), b.len(), "length mismatch");
-    let mut differing = 0usize;
-    let mut max_delta = 0u16;
-    for (x, y) in a.iter().zip(b.iter()) {
-        let d = x.abs_diff(*y);
-        if d > tolerance {
-            differing += 1;
-        }
-        max_delta = max_delta.max(d as u16);
-    }
-    Diff {
-        samples: a.len(),
-        differing,
-        max_delta,
-    }
 }
 
 /// A 4x4 block centred in the 8x8 mask (expand/contract stay clear of the
@@ -163,7 +125,7 @@ fn run_oracle(extra: &[&str], input: &[u8]) -> Vec<u8> {
     let input_path = dir.join("in.gray");
     let output_path = dir.join("out.gray");
     std::fs::write(&input_path, input).unwrap();
-    let result = Command::new("python3")
+    let result = oracle::Command::new("python3")
         .arg(script())
         .arg("apply")
         .args(["--size", "8x8"])
@@ -185,14 +147,14 @@ fn run_oracle(extra: &[&str], input: &[u8]) -> Vec<u8> {
 /// Diff a `Selection` op against the ImageMagick oracle. Skips when `magick`
 /// is absent.
 fn differential<F: Fn(&Selection) -> Selection>(op: F, extra: &[&str], tolerance: u8, label: &str) {
-    if !magick_available() {
-        eprintln!("skipping {label}: `magick` not on PATH");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let mask = test_mask();
     let reference = run_oracle(extra, &mask.data);
     let got = op(&mask);
-    let diff = compare(&got.data, &reference, tolerance);
+    let diff = compare(&got.data, &reference, tolerance).expect("buffer lengths agree");
     assert!(
         diff.differing == 0,
         "{label}: {} of {} samples over tolerance {tolerance} (max delta {})",
@@ -210,7 +172,7 @@ fn reference_script_is_present() {
         "missing oracle script at {}",
         path.display()
     );
-    let help = Command::new("python3")
+    let help = oracle::Command::new("python3")
         .arg(&path)
         .arg("apply")
         .arg("--help")
@@ -225,11 +187,11 @@ fn reference_script_is_present() {
 
 #[test]
 fn imagemagick_runs() {
-    if !magick_available() {
-        eprintln!("skipping: `magick` not on PATH");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg(script())
         .arg("version")
         .output()
@@ -250,8 +212,8 @@ fn imagemagick_runs() {
 /// `255 - v` for every sample (also proves the raw grayscale round-trip).
 #[test]
 fn oracle_negate_matches_expected_bytes() {
-    if !magick_available() {
-        eprintln!("skipping: `magick` not on PATH");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let input = test_mask().data;
@@ -265,8 +227,8 @@ fn oracle_negate_matches_expected_bytes() {
 /// four-connected cross (proves the morphology flags and kernel shape).
 #[test]
 fn oracle_dilate_grows_a_single_pixel() {
-    if !magick_available() {
-        eprintln!("skipping: `magick` not on PATH");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let output = run_oracle(

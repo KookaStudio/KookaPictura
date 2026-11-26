@@ -45,17 +45,6 @@ pub fn load(name: &str) -> pictura_core::Document {
     read_psd(&bytes).unwrap_or_else(|e| panic!("{} failed to parse: {e}", path.display()))
 }
 
-pub fn psd_tools_available() -> bool {
-    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        Command::new("python3")
-            .args(["-c", "import psd_tools"])
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    })
-}
-
 /// Unique scratch directory per call so tests can run in parallel.
 pub fn scratch_dir(tag: &str) -> PathBuf {
     static SEQ: AtomicU64 = AtomicU64::new(0);

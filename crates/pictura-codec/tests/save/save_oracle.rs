@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use pictura_codec::{save_document, save_document_with_jpeg, SaveKind, SaveOptions};
 use pictura_core::Document;
+use pictura_testkit::oracle;
 
 static NEXT: AtomicU64 = AtomicU64::new(1);
 
@@ -57,8 +58,8 @@ fn close(a: u8, b: u8) -> bool {
 
 #[test]
 fn magick_decodes_the_raster_containers() {
-    if !tool("magick") {
-        eprintln!("skipping: magick not found");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let source = doc();
@@ -103,8 +104,8 @@ fn magick_decodes_the_raster_containers() {
 
 #[test]
 fn magick_decodes_bmp_rle4_and_rle8() {
-    if !tool("magick") {
-        eprintln!("skipping: magick not found");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let mut pixels = Vec::new();
@@ -198,8 +199,8 @@ fn ghostscript_opens_dcs_files() {
 
 #[test]
 fn magick_identifies_cineon() {
-    if !tool("magick") {
-        eprintln!("skipping: magick not found");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let source = doc();
@@ -224,8 +225,8 @@ fn magick_identifies_cineon() {
 
 #[test]
 fn magick_decodes_layered_tiff_flat_image() {
-    if !tool("magick") {
-        eprintln!("skipping: magick not found");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let mut source = doc();
@@ -253,8 +254,8 @@ fn magick_decodes_layered_tiff_flat_image() {
 
 #[test]
 fn magick_decodes_tiff_jpeg() {
-    if !tool("magick") {
-        eprintln!("skipping: magick not found");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let source = doc();
@@ -347,8 +348,8 @@ fn ghostscript_opens_dos_eps_preview() {
 
 #[test]
 fn magick_decodes_bmp_16_layouts_and_tga_depths() {
-    if !tool("magick") {
-        eprintln!("skipping: magick not found");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let source = doc();
@@ -387,8 +388,8 @@ fn magick_decodes_bmp_16_layouts_and_tga_depths() {
 
 #[test]
 fn magick_preserves_gif_transparency() {
-    if !tool("magick") {
-        eprintln!("skipping: magick not found");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let source = Document::from_rgba("gif", 2, 1, &[255, 0, 0, 0, 0, 0, 255, 255]);
@@ -403,8 +404,8 @@ fn magick_preserves_gif_transparency() {
 
 #[test]
 fn magick_decodes_tiff_compressions() {
-    if !tool("magick") {
-        eprintln!("skipping: magick not found");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let source = doc();
@@ -424,8 +425,8 @@ fn magick_decodes_tiff_compressions() {
 
 #[test]
 fn magick_decodes_planar_and_big_endian_tiff() {
-    if !tool("magick") {
-        eprintln!("skipping: magick not found");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let mut source = doc();
@@ -448,8 +449,8 @@ fn magick_decodes_planar_and_big_endian_tiff() {
 
 #[test]
 fn magick_decodes_png_adam7() {
-    if !tool("magick") {
-        eprintln!("skipping: magick not found");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let source = doc();

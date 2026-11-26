@@ -31,8 +31,8 @@ fn outer_glow_layer_preserves_effect_block() {
         "lfx2 survives a round-trip"
     );
 
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let dir = scratch_dir("psd-outer-glow");
@@ -58,7 +58,7 @@ print(effect.glow_type.decode())
 print(int(round(effect.choke)))
 print(int(round(effect.size)))
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)

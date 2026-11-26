@@ -57,6 +57,7 @@ pub fn compare(a: &[u8], b: &[u8], tolerance: u8) -> Result<Diff, String> {
     })
 }
 
+pub mod oracle;
 mod peak_alloc;
 pub use peak_alloc::PeakAlloc;
 

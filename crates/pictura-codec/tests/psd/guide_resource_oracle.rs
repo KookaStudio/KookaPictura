@@ -7,9 +7,8 @@
 //!
 //! Needs `python3` with `psd-tools`; self-skips with a message otherwise.
 
-use std::process::Command;
-
 use pictura_core::{BitDepth, ColorMode, Document, Guide, GuideOrientation};
+use pictura_testkit::oracle;
 
 const SCRIPT: &str = r#"
 import sys
@@ -22,18 +21,10 @@ for location, direction in info.data:
     print(f"{location},{direction}")
 "#;
 
-fn psd_tools_available() -> bool {
-    Command::new("python3")
-        .args(["-c", "import psd_tools"])
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
-}
-
 #[test]
 fn psd_tools_reads_the_written_guides() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 with psd-tools is not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let mut doc = Document::new(200, 100, ColorMode::Rgb, BitDepth::Eight);
@@ -53,7 +44,7 @@ fn psd_tools_reads_the_written_guides() {
     let file = dir.join("guides.psd");
     std::fs::write(&file, &bytes).expect("write file");
 
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .args(["-c", SCRIPT, file.to_str().expect("utf-8 path")])
         .output()
         .expect("run python3");

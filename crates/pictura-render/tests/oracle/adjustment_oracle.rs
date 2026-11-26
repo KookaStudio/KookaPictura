@@ -8,12 +8,11 @@
 //! blob; ag-psd (`crates/pictura-codec/tests/psd/agpsd_oracle.rs`) is the
 //! full-field oracle. Self-skips when `python3`/`psd_tools` is absent.
 
-use std::process::Command;
-
 use pictura_adjust::{
     Adjustment, CurvesParams, SelectiveColorMethod, SelectiveColorParams, SelectiveRange,
 };
 use pictura_render::{decode_adjustment, encode_color_balance};
+use pictura_testkit::oracle;
 
 /// Print `shadows midtones highlights luminosity` as whitespace-separated
 /// integers, reading the hex-encoded `blnc` payload from `argv[1]`.
@@ -25,21 +24,10 @@ cb = ColorBalance.read(BytesIO(bytes.fromhex(sys.argv[1])))
 print(*cb.shadows, *cb.midtones, *cb.highlights, int(cb.luminosity))
 ";
 
-fn psd_tools_available() -> bool {
-    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        Command::new("python3")
-            .args(["-c", "import psd_tools"])
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    })
-}
-
 #[test]
 fn psd_tools_reads_encoded_color_balance() {
-    if !psd_tools_available() {
-        eprintln!("skipping psd-tools check: python3 + psd_tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -53,7 +41,7 @@ fn psd_tools_reads_encoded_color_balance() {
     assert_eq!(encoded.data.len(), 20);
 
     let hex: String = encoded.data.iter().map(|b| format!("{b:02x}")).collect();
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .args(["-c", SCRIPT, &hex])
         .output()
         .expect("run python3");
@@ -87,8 +75,8 @@ print(cm.version, cm.monochrome, *cm.data)
 
 #[test]
 fn psd_tools_reads_fixture_channel_mixer_prefix() {
-    if !psd_tools_available() {
-        eprintln!("skipping psd-tools check: python3 + psd_tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -108,7 +96,7 @@ fn psd_tools_reads_fixture_channel_mixer_prefix() {
     assert_eq!(block.data.len(), 44);
 
     let hex: String = block.data.iter().map(|b| format!("{b:02x}")).collect();
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .args(["-c", MIXR_SCRIPT, &hex])
         .output()
         .expect("run python3");
@@ -190,8 +178,8 @@ fn fixture_curves_decodes() {
 /// a partial check; the ag-psd oracle in `pictura-codec` is the full-field one.
 #[test]
 fn psd_tools_reads_fixture_curves_prefix() {
-    if !psd_tools_available() {
-        eprintln!("skipping psd-tools check: python3 + psd_tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -210,7 +198,7 @@ fn psd_tools_reads_fixture_curves_prefix() {
     assert_eq!(block.key, *b"curv");
 
     let hex: String = block.data.iter().map(|b| format!("{b:02x}")).collect();
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .args(["-c", CURVES_SCRIPT, &hex])
         .output()
         .expect("run python3");
@@ -322,8 +310,8 @@ print(sc.version, sc.method, *[v for plate in sc.data for v in plate])
 /// the full-field, labelled one.
 #[test]
 fn psd_tools_reads_fixture_selective_color_prefix() {
-    if !psd_tools_available() {
-        eprintln!("skipping psd-tools check: python3 + psd_tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -342,7 +330,7 @@ fn psd_tools_reads_fixture_selective_color_prefix() {
     assert_eq!(block.key, *b"selc");
 
     let hex: String = block.data.iter().map(|b| format!("{b:02x}")).collect();
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .args(["-c", SELECTIVE_COLOR_SCRIPT, &hex])
         .output()
         .expect("run python3");
@@ -415,8 +403,8 @@ print(cl.data_version, cl[b'lookupType'].enum.decode(), cl[b'LUTFormat'].enum.de
 /// block our decoder accepts is a real PSD-shaped `clrL`.
 #[test]
 fn psd_tools_reads_fixture_color_lookup_prefix() {
-    if !psd_tools_available() {
-        eprintln!("skipping psd-tools check: python3 + psd_tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -434,7 +422,7 @@ fn psd_tools_reads_fixture_color_lookup_prefix() {
     let block = layer.adjustment().expect("clrL block");
     let hex: String = block.data.iter().map(|b| format!("{b:02x}")).collect();
 
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .args(["-c", COLOR_LOOKUP_SCRIPT, &hex])
         .output()
         .expect("run python3");

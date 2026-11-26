@@ -11,14 +11,7 @@ use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use pictura_codec::{decode_webp, encode_webp, encode_webp_lossy, ImageBudget};
-use pictura_testkit::compare;
-
-fn magick_available() -> bool {
-    Command::new("magick")
-        .arg("-version")
-        .output()
-        .is_ok_and(|o| o.status.success())
-}
+use pictura_testkit::{compare, oracle};
 
 // A unique path per call: nextest runs the tests of one binary in parallel
 // threads, so the process id alone would let two tests clobber each other's
@@ -106,8 +99,8 @@ fn magick_encode_lossy_webp(rgba: &[u8], w: u32, h: u32, quality: u32) -> Vec<u8
 
 #[test]
 fn magick_decodes_our_lossless_webp_exactly() {
-    if !magick_available() {
-        eprintln!("skipping: magick not available");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let (rgba, w, h) = alpha_picture();
@@ -119,8 +112,8 @@ fn magick_decodes_our_lossless_webp_exactly() {
 
 #[test]
 fn magick_decodes_our_lossy_webp_within_tolerance() {
-    if !magick_available() {
-        eprintln!("skipping: magick not available");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let (rgba, w, h) = opaque_picture();
@@ -133,8 +126,8 @@ fn magick_decodes_our_lossy_webp_within_tolerance() {
 
 #[test]
 fn our_decoder_reads_a_lossy_webp_within_tolerance() {
-    if !magick_available() {
-        eprintln!("skipping: magick not available");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let (rgba, w, h) = opaque_picture();
@@ -147,8 +140,8 @@ fn our_decoder_reads_a_lossy_webp_within_tolerance() {
 
 #[test]
 fn the_oracle_has_teeth() {
-    if !magick_available() {
-        eprintln!("skipping: magick not available");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let (rgba, w, h) = alpha_picture();

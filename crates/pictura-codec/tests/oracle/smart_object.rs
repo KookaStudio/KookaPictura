@@ -78,7 +78,7 @@ fn psd_tools_inspect(tag: &str, bytes: &[u8], script: &str) -> String {
     let dir = scratch_dir(tag);
     let path = dir.join("doc.psb");
     std::fs::write(&path, bytes).unwrap();
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)
@@ -120,8 +120,8 @@ fn assert_embedded_smart_object(stdout: &str) {
 /// without a framing error (previously a MemoryError).
 #[test]
 fn psd_tools_parses_authored_smart_object_in_psb() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let bytes = write_psb(&embedded_smart_doc()).unwrap();
@@ -171,6 +171,10 @@ fn vector_source_round_trips_with_its_preview_and_selection() {
     doc.layers.push(shared).unwrap();
     doc.layers.push(independent).unwrap();
 
+    let psd_tools = oracle::require(oracle::Tool::PsdTools);
+    if let Err(skip) = &psd_tools {
+        skip.clone().report();
+    }
     for bytes in [write_psd(&doc).unwrap(), write_psb(&doc).unwrap()] {
         let restored = pictura_codec::read_psd(&bytes).unwrap();
         assert_eq!(restored.layers.len(), 3);
@@ -187,7 +191,7 @@ fn vector_source_round_trips_with_its_preview_and_selection() {
             assert_eq!(object.payload(), Some(pdf.as_slice()));
             assert_eq!(layer.channels(), original.channels());
         }
-        if psd_tools_available() {
+        if psd_tools.is_ok() {
             let stdout = psd_tools_reads("vector-smart-object", &bytes);
             let lines = stdout.lines().collect::<Vec<_>>();
             assert_eq!(lines, vec!["data", "vector.ai", &pdf.len().to_string()]);
@@ -197,8 +201,8 @@ fn vector_source_round_trips_with_its_preview_and_selection() {
 
 #[test]
 fn authored_vector_placement_descriptor_oracle() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let mut doc = embedded_smart_doc();
@@ -280,8 +284,8 @@ print(f"{desc[b'warp'][b'warpValue'].value:.8g}")
 /// pad inside, so psd-tools still finds the block that follows it.
 #[test]
 fn psd_tools_parses_block_after_odd_length_block_in_psb() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let mut doc = embedded_smart_doc();
@@ -309,8 +313,8 @@ fn psd_tools_parses_block_after_odd_length_block_in_psb() {
 /// u32-framed is re-framed to u64 when written as a PSB, so psd-tools reads it.
 #[test]
 fn psd_tools_parses_reframed_psd_big_key_in_psb() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let psd_bytes = write_psd(&embedded_smart_doc()).unwrap();
@@ -332,8 +336,8 @@ fn psd_tools_parses_reframed_psd_big_key_in_psb() {
 /// psd-tools still reads the authored `lnk2` that follows it.
 #[test]
 fn psd_tools_parses_doc_level_block_not_multiple_of_four_in_psb() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let mut doc = embedded_smart_doc();

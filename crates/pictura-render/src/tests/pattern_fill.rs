@@ -1,5 +1,6 @@
 use super::*;
 use pictura_adjust::PatternFillParams;
+use pictura_testkit::oracle;
 
 #[test]
 fn pattern_fill_output_remains_unchanged() {
@@ -288,8 +289,8 @@ fn fixture_16bit_pattern_falls_back_to_placeholder() {
 
 #[test]
 fn psd_tools_draw_pattern_fill_matches_composite() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools + skimage not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdToolsSkimage) {
+        skip.report();
         return;
     }
     let dir = scratch_dir("draw-pattern-fill");
@@ -310,7 +311,7 @@ q = np.round(rgb * 255).astype(np.uint8)
 for c in range(3):
     print(q[:, :, c].tobytes().hex())
 "#;
-    let out = std::process::Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)
@@ -339,17 +340,6 @@ for c in range(3):
         })
         .collect();
     assert_eq!(got, ours, "psd-tools tiling matches the composite");
-}
-
-fn psd_tools_available() -> bool {
-    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        std::process::Command::new("python3")
-            .args(["-c", "import psd_tools, skimage, numpy"])
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    })
 }
 
 fn scratch_dir(tag: &str) -> std::path::PathBuf {

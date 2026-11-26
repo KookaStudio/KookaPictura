@@ -8,10 +8,9 @@
 //!
 //! Needs `python3` with `psd-tools`; self-skips with a message otherwise.
 
-use std::process::Command;
-
 use pictura_core::path::{NamedPath, PathPoint, Subpath, VectorPath};
 use pictura_core::{BitDepth, ColorMode, Document};
+use pictura_testkit::oracle;
 
 const SCRIPT: &str = r#"
 import sys
@@ -35,14 +34,6 @@ for key in sorted(psd.image_resources.keys()):
         subpaths.append(("closed" if kind == "ClosedPath" else "open") + ":" + anchors)
     print("|".join([str(rid), resource.name] + subpaths))
 "#;
-
-fn psd_tools_available() -> bool {
-    Command::new("python3")
-        .args(["-c", "import psd_tools"])
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
-}
 
 fn subpath(points: &[(f64, f64)], closed: bool) -> Subpath {
     Subpath {
@@ -69,8 +60,8 @@ fn path(subpaths: Vec<Subpath>) -> VectorPath {
 
 #[test]
 fn psd_tools_reads_the_written_work_and_saved_paths() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 with psd-tools is not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let mut doc = Document::new(200, 100, ColorMode::Rgb, BitDepth::Eight);
@@ -100,7 +91,7 @@ fn psd_tools_reads_the_written_work_and_saved_paths() {
     let file = dir.join("paths.psd");
     std::fs::write(&file, &bytes).expect("write file");
 
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .args(["-c", SCRIPT, file.to_str().expect("utf-8 path")])
         .output()
         .expect("run python3");

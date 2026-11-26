@@ -235,20 +235,32 @@ jobs:
       - name: Install ag-psd
         run: npm i --no-save --prefix "$RUNNER_TEMP/agpsd" ag-psd@34.1.0
 
+      - name: Reporter self-check
+        run: python3 scripts/report_tests.py --self-check
+
       - name: Renderer tests without the oracle feature
         run: cargo nextest run -p pictura-render
 
       - name: Test
-        run: cargo nextest run --workspace
+        run: |
+          : > "$RUNNER_TEMP/oracle-skips.log"
+          cargo nextest run --workspace
         env:
           NODE_PATH: ${{ runner.temp }}/agpsd/node_modules
+          PICTURA_ORACLE_SKIPS: ${{ runner.temp }}/oracle-skips.log
+
+      - name: Report oracle skips
+        if: always()
+        run: python3 scripts/report_tests.py --junit target/nextest/default/junit.xml --oracle-skips "$RUNNER_TEMP/oracle-skips.log" --color never
 
       - name: Upload nextest JUnit
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: nextest-junit
-          path: target/nextest/default/junit.xml
+          path: |
+            target/nextest/default/junit.xml
+            ${{ runner.temp }}/oracle-skips.log
 
   # GPU parity on Mesa's lavapipe: the software Vulkan device the
   # `software-gpu` feature lets the probe accept. The tests it runs are

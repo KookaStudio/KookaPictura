@@ -1,0 +1,12 @@
+# Test plan
+
+| Scenario | Steps | Expected | Coverage |
+|---|---|---|---|
+| `oracle_skip_token` | Call the typed requirement with an unavailable probe and inspect the emitted token | One typed skip names `magick`, the nextest binary, and the test | `pictura-testkit::oracle::tests::missing_tool_returns_typed_skip` |
+| `oracle_capability_skip` | Inspect each capability variant's family and reason, then round-trip a reason token through the reporter | RSVG and scikit-image report `magick`/`psd-tools`; shallow knockout reports `psd-tools`; the report keeps the reason | `pictura-testkit::oracle::tests::capability_variants_keep_tool_family`, `scripts/report_tests.py::run_self_check` |
+| `oracle_skip_report` | Feed a passed nextest case and a matching binary-qualified oracle token through the reporter self-check | The case becomes skipped, passed falls by one, skipped rises by one, and the tool/name/reason render | `scripts/report_tests.py::run_self_check` |
+| `oracle_skip_unmatched` | Feed malformed, duplicate, unmatched, ambiguous, and same-named-different-binary tokens through the reporter self-check | Each invalid case records an error and exits non-zero; the valid binary-qualified case matches once | `scripts/report_tests.py::run_self_check` |
+| `oracle_skip_failure` | Feed a failed nextest case and a matching oracle token through the reporter self-check | The failure remains failed and the report exits non-zero | `scripts/report_tests.py::run_self_check` |
+| `oracle_batch_order` | Send two different `python3 -c` requests and two different `node -e` requests in one test binary | Each reply keeps its label and arguments, and each interpreter returns one worker PID | `pictura-testkit::oracle::tests::python_batch_replies_stay_in_request_order`, `pictura-testkit::oracle::tests::node_batch_replies_stay_in_request_order` |
+| `oracle_batch_status` | Run failing Python and Node requests with stdout/stderr, then successful requests | Status 3 and both streams survive; the next request succeeds on the same worker PID | `pictura-testkit::oracle::tests::python_worker_preserves_status_and_survives`, `pictura-testkit::oracle::tests::node_worker_preserves_status_and_survives` |
+| `oracle_teeth` | Run a successful oracle that prints wrong bytes, compare with zero tolerance, and assert equality | The comparison assertion panics with `oracle mismatch`, satisfying the exact `should_panic` contract | `pictura-testkit::tests::oracle::present_oracle_with_wrong_answer_fails` |

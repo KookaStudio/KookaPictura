@@ -6,8 +6,8 @@ use super::*;
 /// proves the alternate-channel layout matches a second PSD implementation.
 #[test]
 fn psd_tools_sees_written_extra_channel() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -36,7 +36,7 @@ psd = PSDImage.open(sys.argv[1])
 print(psd.channels)
 print(psd.composite().getchannel("A").tobytes().hex())
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)
@@ -70,8 +70,8 @@ print(psd.composite().getchannel("A").tobytes().hex())
 /// engine-encoded layer channels: psd-tools must recover the exact pixels.
 #[test]
 fn psd_tools_reads_rle_composite_and_layer() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -141,7 +141,7 @@ print(arr[:, :, 1].tobytes().hex())
 print(arr[:, :, 2].tobytes().hex())
 print(np.round(psd[0].numpy()[:, :, 0] * 255).astype(np.uint8).tobytes().hex())
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)
@@ -167,8 +167,8 @@ print(np.round(psd[0].numpy()[:, :, 0] * 255).astype(np.uint8).tobytes().hex())
 /// same composite pixels.
 #[test]
 fn psd_tools_reads_written_psb_composite() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -198,7 +198,7 @@ print(arr[:, :, 0].tobytes().hex())
 print(arr[:, :, 1].tobytes().hex())
 print(arr[:, :, 2].tobytes().hex())
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)
@@ -224,8 +224,8 @@ print(arr[:, :, 2].tobytes().hex())
 /// independent oracle to the same pixels.
 #[test]
 fn psd_tools_reads_written_compression_kinds() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -321,7 +321,7 @@ for c in range(2):
     print(np.round(layer[:, :, c] * 255).astype(np.uint8).tobytes().hex())
 print(np.array(psd[0].mask.topil()).tobytes().hex())
 "#;
-        let out = Command::new("python3")
+        let out = oracle::Command::new("python3")
             .arg("-c")
             .arg(script)
             .arg(&path)
@@ -350,8 +350,8 @@ print(np.array(psd[0].mask.topil()).tobytes().hex())
 /// the Unicode alpha-names resource (1045).
 #[test]
 fn psd_tools_reports_alpha_names() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -379,7 +379,7 @@ from psd_tools import PSDImage
 psd = PSDImage.open(sys.argv[1])
 print("|".join(str(name) for name in psd.image_resources.get_data(1045)))
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)
@@ -403,8 +403,8 @@ print("|".join(str(name) for name in psd.image_resources.get_data(1045)))
 /// psd-tools: the Pascal strings are unpadded and MacRoman-encoded.
 #[test]
 fn psd_tools_reports_pascal_alpha_names() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -443,7 +443,7 @@ from psd_tools import PSDImage
 psd = PSDImage.open(sys.argv[1])
 print("|".join(str(name) for name in psd.image_resources.get_data(1006)))
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)

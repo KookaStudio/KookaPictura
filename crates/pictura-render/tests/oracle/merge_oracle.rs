@@ -13,12 +13,12 @@
 //! merged pixels must match ImageMagick's operator for that mode.
 
 use std::path::PathBuf;
-use std::process::Command;
 
 use pictura_core::{
     BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LockFlags, PsdRect,
 };
 use pictura_render::{merge_scope, MergeScope};
+use pictura_testkit::oracle;
 
 const SIZE: u32 = 8;
 
@@ -231,8 +231,8 @@ fn merge_down_bakes_the_sources_blend_into_the_pixels() {
 
 #[test]
 fn merge_down_matches_live_imagemagick() {
-    if Command::new("magick").arg("-version").output().is_err() {
-        eprintln!("skipping live ImageMagick merge oracle: `magick` not on PATH");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
 
@@ -248,7 +248,7 @@ fn merge_down_matches_live_imagemagick() {
         std::fs::create_dir_all(&dir).unwrap();
         let out = dir.join(format!("{scene}_{operator}.rgba"));
 
-        let status = Command::new("python3")
+        let status = oracle::Command::new("python3")
             .arg(script())
             .arg("compose")
             .arg(operator)

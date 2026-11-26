@@ -94,8 +94,8 @@ fn one_layer_zip_psd(compression: u16, encoded: &[u8]) -> Vec<u8> {
 /// `numpy()` scaled to 0..1 floats, so a byte is `round(v * 255)`.
 #[test]
 fn zip_prediction_layer_channel_matches_psd_tools() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -115,7 +115,7 @@ layer = psd[0]
 arr = layer.numpy()
 print(",".join(str(int(round(v * 255))) for v in arr[..., 0].flatten()))
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)
@@ -145,8 +145,8 @@ print(",".join(str(int(round(v * 255))) for v in arr[..., 0].flatten()))
 /// psd-tools, to the same RGB planes our reader recovers.
 #[test]
 fn zip_prediction_composite_matches_psd_tools() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -172,7 +172,7 @@ for c in range(arr.shape[2]):
     vals.extend(int(round(v * 255)) for v in arr[..., c].flatten())
 print(",".join(str(v) for v in vals))
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)

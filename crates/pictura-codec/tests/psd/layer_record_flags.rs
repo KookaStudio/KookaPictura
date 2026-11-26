@@ -5,9 +5,8 @@
 //! clear). The psd-tools checks self-skip when `python3` + `psd-tools` is not
 //! available, following the existing oracle convention.
 
+use pictura_testkit::oracle;
 use std::path::PathBuf;
-use std::process::Command;
-use std::sync::OnceLock;
 
 use pictura_core::{Document, Layer};
 
@@ -47,20 +46,9 @@ fn layer_named<'a>(doc: &'a Document, name: &str) -> &'a Layer {
         .unwrap_or_else(|| panic!("layer {name}"))
 }
 
-fn psd_tools_available() -> bool {
-    static AVAILABLE: OnceLock<bool> = OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        Command::new("python3")
-            .args(["-c", "import psd_tools"])
-            .output()
-            .map(|out| out.status.success())
-            .unwrap_or(false)
-    })
-}
-
 /// One `|`-separated `name|kind|flags` row per layer.
 fn read_with_psd_tools(path: &std::path::Path) -> (String, Vec<Vec<String>>) {
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .args(["-c", KIND_SCRIPT, path.to_str().expect("utf-8 path")])
         .output()
         .expect("run python3");
@@ -141,8 +129,8 @@ fn codec_preserves_a_clear_flag_on_vector_masked_fill_layers() {
 
 #[test]
 fn psd_tools_keeps_a_round_tripped_shape_layer_a_shape() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 
@@ -163,8 +151,8 @@ fn psd_tools_keeps_a_round_tripped_shape_layer_a_shape() {
 
 #[test]
 fn psd_tools_keeps_a_round_tripped_fill_layer_a_fill_layer() {
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
 

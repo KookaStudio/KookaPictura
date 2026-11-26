@@ -8,7 +8,6 @@
 //! Regenerate the fixtures with `python3 scripts/generate-fixtures.py`.
 
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use pictura_codec::{read_descriptor, read_psd, write_psb, write_psd, DescValue};
@@ -16,6 +15,7 @@ use pictura_core::{
     BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Compression, Document, LayerBlock,
     LayerMask, LockFlags, PsdRect, SmartObject, SmartObjectKind,
 };
+use pictura_testkit::oracle;
 
 #[path = "oracle/support.rs"]
 mod support;

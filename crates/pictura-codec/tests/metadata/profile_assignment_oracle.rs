@@ -4,13 +4,13 @@
 //! 1039 that PIL can open and name.
 
 use std::path::PathBuf;
-use std::process::Command;
 
 use pictura_codec::{
     assign_document_profile, convert_document, decode_image_resources, write_psd, Profile,
     ICC_PROFILE,
 };
 use pictura_core::{Document, PixelBuffer};
+use pictura_testkit::oracle;
 
 fn temp_path(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("pictura_profile_{name}_{}.tmp", std::process::id()))
@@ -19,7 +19,7 @@ fn temp_path(name: &str) -> PathBuf {
 fn pil_available() -> bool {
     static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *AVAILABLE.get_or_init(|| {
-        Command::new("python3")
+        oracle::Command::new("python3")
             .args(["-c", "import PIL.ImageCms"])
             .output()
             .map(|o| o.status.success())
@@ -73,7 +73,7 @@ print(";".join(",".join(str(c) for c in px) for px in out.getdata()))
         .map(|p| format!("{},{},{}", p[0], p[1], p[2]))
         .collect::<Vec<_>>()
         .join(";");
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&profile)
@@ -145,7 +145,7 @@ if not data:
 open(sys.argv[2], "wb").write(data)
 print(ImageCms.getProfileDescription(ImageCms.getOpenProfile(sys.argv[2])))
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&psd)

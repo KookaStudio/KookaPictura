@@ -21,13 +21,13 @@ mod merge_oracle;
 mod svg_oracle;
 
 use std::path::PathBuf;
-use std::process::Command;
 
 use pictura_core::{
-    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LockFlags, PixelBuffer,
-    PsdRect,
+    BitDepth, BlendMode, Channel, ColorLabel, ColorMode, Document, Layer, LayerBlock, LockFlags,
+    PixelBuffer, PsdRect,
 };
-use pictura_testkit::compare;
+use pictura_render::composite_rgba;
+use pictura_testkit::{compare, oracle};
 
 const SIZE: u32 = 8;
 const SCENES: [&str; 2] = ["solid", "ramp"];
@@ -197,11 +197,11 @@ fn reference_script_is_present() {
 /// with a message when `magick`/`python3` are unavailable.
 #[test]
 fn imagemagick_fixtures_reproduce() {
-    if Command::new("magick").arg("-version").output().is_err() {
-        eprintln!("skipping: `magick` not on PATH");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
-    let output = Command::new("python3")
+    let output = oracle::Command::new("python3")
         .arg(script())
         .arg("check")
         .output()

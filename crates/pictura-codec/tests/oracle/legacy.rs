@@ -33,8 +33,8 @@ fn legacy_effects_layer_preserves_block() {
         "lrFX survives a round-trip"
     );
 
-    if !psd_tools_available() {
-        eprintln!("skipping: python3 + psd-tools not available");
+    if let Err(skip) = oracle::require(oracle::Tool::PsdTools) {
+        skip.report();
         return;
     }
     let dir = scratch_dir("psd-legacy-effects");
@@ -67,7 +67,7 @@ print(oglw.color.values[0], oglw.color.values[1], oglw.color.values[2])
 print(oglw.blend_mode.decode())
 print(oglw.opacity)
 "#;
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg("-c")
         .arg(script)
         .arg(&path)

@@ -17,7 +17,6 @@
 //! `tests/README.md`.
 
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use pictura_adjust::{
@@ -25,7 +24,7 @@ use pictura_adjust::{
     GradientStop, HueSaturationParams, LevelsParams,
 };
 use pictura_core::PixelBuffer;
-use pictura_testkit::compare;
+use pictura_testkit::{compare, oracle};
 
 /// Side length of the raw planar RGB8 test image.
 const SIZE: u32 = 8;
@@ -195,17 +194,6 @@ fn script() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../scripts/adjust_oracle.py")
 }
 
-fn magick_available() -> bool {
-    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        Command::new("magick")
-            .arg("-version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
-    })
-}
-
 /// Unique scratch directory per call so tests can run in parallel.
 fn scratch_dir(tag: &str) -> PathBuf {
     static SEQ: AtomicU64 = AtomicU64::new(0);
@@ -318,7 +306,7 @@ fn oracle(extra: &[&str], input_planar: &[u8]) -> Vec<u8> {
     let input_path = dir.join("in.rgb");
     let output_path = dir.join("out.rgb");
     std::fs::write(&input_path, input_planar).unwrap();
-    let result = Command::new("python3")
+    let result = oracle::Command::new("python3")
         .arg(script())
         .arg("apply")
         .args(["--size", "8x8", "--planar"])
@@ -339,8 +327,8 @@ fn oracle(extra: &[&str], input_planar: &[u8]) -> Vec<u8> {
 
 /// Diff `apply` against the ImageMagick oracle. Skips when `magick` is absent.
 fn differential(adjustment: Adjustment, extra: &[&str], tolerance: u8, label: &str) {
-    if !magick_available() {
-        eprintln!("skipping {label}: `magick` not on PATH");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let original = test_image_planar();
@@ -370,7 +358,7 @@ fn reference_script_is_present() {
         "missing oracle script at {}",
         path.display()
     );
-    let help = Command::new("python3")
+    let help = oracle::Command::new("python3")
         .arg(&path)
         .arg("apply")
         .arg("--help")
@@ -385,11 +373,11 @@ fn reference_script_is_present() {
 
 #[test]
 fn imagemagick_runs() {
-    if !magick_available() {
-        eprintln!("skipping: `magick` not on PATH");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
-    let out = Command::new("python3")
+    let out = oracle::Command::new("python3")
         .arg(script())
         .arg("version")
         .output()
@@ -410,8 +398,8 @@ fn imagemagick_runs() {
 /// for every planar sample (this also proves the planar round-trip).
 #[test]
 fn oracle_negate_matches_expected_bytes() {
-    if !magick_available() {
-        eprintln!("skipping: `magick` not on PATH");
+    if let Err(skip) = oracle::require(oracle::Tool::Magick) {
+        skip.report();
         return;
     }
     let input = test_image_planar();
