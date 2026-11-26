@@ -11,12 +11,12 @@ This tracker measures feature coverage against a frozen Photoshop baseline. It d
 
 | Baseline | Complete | Partial | Missing | Unknown | Denominator | Coverage | Excluded non-goals |
 |---|---|---|---|---|---|---|---|
-| CS6 Standard | 211 | 79 | 55 | 4 | 349 | 60.5% | 8 |
-| CS6 Standard, in scope | 211 | 79 | 49 | 2 | 341 | 61.9% | 8 |
-| CS6 Extended | 212 | 79 | 71 | 4 | 366 | 57.9% | 23 |
-| CS6 Extended, in scope | 212 | 79 | 50 | 2 | 343 | 61.8% | 23 |
-| CC 28.0 | 213 | 81 | 76 | 4 | 374 | 57.0% | 20 |
-| CC 28.0, in scope | 213 | 81 | 58 | 2 | 354 | 60.2% | 20 |
+| CS6 Standard | 212 | 78 | 55 | 4 | 349 | 60.7% | 8 |
+| CS6 Standard, in scope | 212 | 78 | 49 | 2 | 341 | 62.2% | 8 |
+| CS6 Extended | 213 | 78 | 71 | 4 | 366 | 58.2% | 23 |
+| CS6 Extended, in scope | 213 | 78 | 50 | 2 | 343 | 62.1% | 23 |
+| CC 28.0 | 214 | 80 | 76 | 4 | 374 | 57.2% | 20 |
+| CC 28.0, in scope | 214 | 80 | 58 | 2 | 354 | 60.5% | 20 |
 
 ## Baselines
 
@@ -526,7 +526,7 @@ Canvas Size supports picas and columns and gates extension fill on the Backgroun
 
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
 |---|---|---|---|---|---|
-| 2026-11-26 | 68a47c69 | 211/349 (60.5%) | 212/366 (57.9%) | 28.0 | 213/374 (57.0%) |
+| 2026-11-26 | 68a47c69 | 212/349 (60.7%) | 213/366 (58.2%) | 28.0 | 214/374 (57.2%) |
 | 2026-11-26 | 141c21da | 210/349 (60.2%) | 211/366 (57.7%) | 28.0 | 212/374 (56.7%) |
 | 2026-11-26 | 1fd5bcad6 | 209/349 (59.9%) | 210/366 (57.4%) | 28.0 | 211/374 (56.4%) |
 | 2026-11-25 | 5bba3258 | 209/349 (59.9%) | 210/366 (57.4%) | 28.0 | 211/374 (56.4%) |

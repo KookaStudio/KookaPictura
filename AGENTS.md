@@ -42,9 +42,9 @@ bash scripts/with-build-lock.sh -- cargo clippy --workspace --all-targets -- -D 
 bash scripts/with-build-lock.sh -- cargo nextest run --workspace   # one crate/test: -p <crate> [name]
 bash scripts/with-build-lock.sh -- cargo test -p pictura-render --test document document_oracle::       # one integration suite
 bash scripts/with-build-lock.sh -- cargo test -p pictura-core -- <name> --ignored --nocapture # ignored profiling/GPU
-bash scripts/test-report.sh                      # nextest + app self-test + Qt JUnit -> unified report
+bash scripts/test-report.sh                      # shared Qt executor: build, tests, CTest, report
 bash scripts/verify-fast.sh                      # fmt, clippy, test-report, file-size, guard, openspec
-bash scripts/verify-full.sh                      # CMake build first, then verify-fast
+bash scripts/verify-full.sh                      # verify-fast with the Qt build, then live checks
 bash scripts/with-build-lock.sh -- <command>     # applies the CPU budget and the opt-in lock
 openspec validate --all --strict                 # openspec 1.13.2
 bash scripts/with-build-lock.sh -- bash -c 'cmake -S . -B build -G Ninja && cmake --build build --parallel'
@@ -147,7 +147,10 @@ offscreen-compatible. See `DEVELOPING.md` for the self-test token protocol.
 - **The report is honest about missing suites.** A CTest-registered suite that
   produced no JUnit report fails the run and is named: a suite that never
   started is not a silently missing line. The two application self-test
-  invocations run concurrently with each other and with the Qt Test layer.
+  invocations run concurrently with each other; CTest starts only after both
+  finish and the Qt Test build is complete, unless `PICTURA_QT_SELFTEST_OVERLAP=1`
+  lets them overlap the build tail (off by default, awaiting #1570's
+  measurement).
 - **The gates check the tree they test.** `scripts/check-build-tree.sh` fails
   the full gate when `build/pictura` predates a tracked source under
   `crates/pictura-app` or when a registered suite has no executable, and the
