@@ -1,7 +1,7 @@
 # Feature parity tracker
 
-Assessed: 2026-11-26
-Pictura commit: 68a47c69
+Assessed: 2026-11-27
+Pictura commit: 4a1fc6771
 CS6 baseline: Adobe Photoshop CS6 13.0 (2012), Standard and Extended
 CC baseline: Adobe Photoshop 28.0 (November 2026 release; LTS 27.11.1)
 
@@ -11,12 +11,12 @@ This tracker measures feature coverage against a frozen Photoshop baseline. It d
 
 | Baseline | Complete | Partial | Missing | Unknown | Denominator | Coverage | Excluded non-goals |
 |---|---|---|---|---|---|---|---|
-| CS6 Standard | 212 | 78 | 55 | 4 | 349 | 60.7% | 8 |
-| CS6 Standard, in scope | 212 | 78 | 49 | 2 | 341 | 62.2% | 8 |
-| CS6 Extended | 213 | 78 | 71 | 4 | 366 | 58.2% | 23 |
-| CS6 Extended, in scope | 213 | 78 | 50 | 2 | 343 | 62.1% | 23 |
-| CC 28.0 | 214 | 80 | 76 | 4 | 374 | 57.2% | 20 |
-| CC 28.0, in scope | 214 | 80 | 58 | 2 | 354 | 60.5% | 20 |
+| CS6 Standard | 213 | 78 | 54 | 4 | 349 | 61.0% | 8 |
+| CS6 Standard, in scope | 213 | 78 | 48 | 2 | 341 | 62.5% | 8 |
+| CS6 Extended | 214 | 78 | 70 | 4 | 366 | 58.5% | 23 |
+| CS6 Extended, in scope | 214 | 78 | 49 | 2 | 343 | 62.4% | 23 |
+| CC 28.0 | 215 | 80 | 75 | 4 | 374 | 57.5% | 20 |
+| CC 28.0, in scope | 215 | 80 | 57 | 2 | 354 | 60.7% | 20 |
 
 ## Baselines
 
@@ -44,7 +44,7 @@ Coverage is not behavioural or pixel parity with Photoshop. Every Complete row n
 | Selections & masking | 18/22 (81.8%) | 18/22 (81.8%) | 18/22 (81.8%) |
 | Adjustments & filters | 31/55 (56.4%) | 31/55 (56.4%) | 31/64 (48.4%) |
 | Type & vector | 17/17 (100.0%) | 17/17 (100.0%) | 17/19 (89.5%) |
-| Color & bit depth | 15/29 (51.7%) | 15/29 (51.7%) | 15/29 (51.7%) |
+| Color & bit depth | 16/29 (55.2%) | 16/29 (55.2%) | 16/29 (55.2%) |
 | Automation & extensibility | 3/18 (16.7%) | 3/18 (16.7%) | 3/22 (13.6%) |
 | Shell, panels & preferences | 28/60 (46.7%) | 28/63 (44.4%) | 28/62 (45.2%) |
 
@@ -383,7 +383,7 @@ Source list: Image > Mode, Color Settings, picker, and swatch capabilities.
 | P-CLR-10 | 16-bit per channel | Y | Y | Y | Complete | in-scope | crates/pictura-core/src | none | — | — |
 | P-CLR-11 | 32-bit per channel | Y | Y | Y | Partial | in-scope | crates/pictura-core/src | none | 32-bit preview options and the Info readout remain | #570 |
 | P-CLR-12 | Image mode conversion | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
-| P-CLR-13 | Colour Table, Indexed transparency, and Forced palette | Y | Y | Y | Missing | in-scope | — | none | No colour table UI or forced palette | #555 |
+| P-CLR-13 | Colour Table, Indexed transparency, and Forced palette | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/color_table_dialog.cpp; crates/pictura-render/src/document_ops/mode/indexed.rs | automated:tst_image_mode::colorTableActRoundTrip | Entry and range edits, ACT files, forced colours, and a transparent palette index | #555 |
 | P-CLR-14 | Bitmap Halftone Screen and Custom Pattern | Y | Y | Y | Complete | in-scope | crates/pictura-render/src/document_ops/mode/flat.rs; crates/pictura-app/cpp/bitmap_mode_dialog.cpp | none | Screen geometry is a behavioral approximation | — |
 | P-CLR-15 | Assign Profile | Y | Y | Y | Complete | in-scope | crates/pictura-color/src | none | — | — |
 | P-CLR-16 | Convert to Profile | Y | Y | Y | Complete | in-scope | crates/pictura-color/src | none | — | #568 |
@@ -526,6 +526,7 @@ Canvas Size supports picas and columns and gates extension fill on the Backgroun
 
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
 |---|---|---|---|---|---|
+| 2026-11-27 | 4a1fc6771 | 213/349 (61.0%) | 214/366 (58.5%) | 28.0 | 215/374 (57.5%) |
 | 2026-11-26 | 68a47c69 | 212/349 (60.7%) | 213/366 (58.2%) | 28.0 | 214/374 (57.2%) |
 | 2026-11-26 | 141c21da | 210/349 (60.2%) | 211/366 (57.7%) | 28.0 | 212/374 (56.7%) |
 | 2026-11-26 | 1fd5bcad6 | 209/349 (59.9%) | 210/366 (57.4%) | 28.0 | 211/374 (56.4%) |
