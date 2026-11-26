@@ -148,7 +148,37 @@ fn attach_resized_merged_native(
         };
         planes.push((id, samples));
     }
+    fn narrow_plane<T: TileSample>(
+        src: &Plane<T>,
+        w: usize,
+        h: usize,
+        narrow: impl Fn(T) -> u8,
+    ) -> Result<Plane<u8>, MemoryError> {
+        let mut native = vec![T::default(); w];
+        Plane::build_tiled(w, h, 1, |y, row| {
+            src.read_into(y * w, &mut native);
+            for (pixel, &sample) in row.iter_mut().zip(&native) {
+                *pixel = narrow(sample);
+            }
+            Ok(())
+        })
+    }
+
     let layer = &mut doc.layers[0];
+    // The PSD writer preserves native samples only when they narrow to the
+    // working plane. Derive both copies from the same resized samples.
+    for channel in layer.channels_mut() {
+        let Some((_, samples)) = planes.iter().find(|(id, _)| *id == channel.id) else {
+            continue;
+        };
+        channel.data = match samples {
+            Samples::U16(src) => narrow_plane(src, w, h, |s| (s >> 8) as u8)?,
+            Samples::F32(src) => {
+                narrow_plane(src, w, h, |s| (s * 256.0).trunc().clamp(0.0, 255.0) as u8)?
+            }
+            Samples::U8(src) => src.clone(),
+        };
+    }
     layer.source_channels = Some(SourceChannels::new(store.depth, layer.rect, planes));
     Ok(())
 }
@@ -309,7 +339,7 @@ pub fn resized_plane_bytes(doc: &pictura_core::Document, width: u32, height: u32
                 let alpha = u64::from(
                     doc.mode == pictura_core::ColorMode::Rgb && doc.composite.signed_merged_alpha(),
                 );
-                bytes += area * (colors + alpha) * sample_bytes(&store.samples);
+                bytes += area * (colors + alpha) * (sample_bytes(&store.samples) + 1);
             }
         }
         widest = widest.max(u64::from(width));
