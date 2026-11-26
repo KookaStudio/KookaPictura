@@ -331,7 +331,7 @@ fn replace_layer_palette(
         layer
             .channels()
             .iter()
-            .filter(|channel| !matches!(channel.id, 0..=2 | -1))
+            .filter(|channel| !matches!(channel.id, -1..=2))
             .cloned(),
     );
     *layer.channels_mut() = updated;
