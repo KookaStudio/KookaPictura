@@ -23,6 +23,7 @@ pub mod action_file;
 mod advanced_blending;
 mod budget;
 mod color_mode;
+mod indexed_metadata;
 mod common;
 mod compatibility;
 mod crs_xmp;
@@ -238,7 +239,7 @@ pub use vector_mask::{
 pub use web::{
     embed_web_metadata, encode_act, encode_gif, encode_wbmp, pack_indexed, palette_delete,
     palette_edit, palette_map_transparency, palette_sort, parse_act, quantize, quantize_custom,
-    quantize_locked, sfw_metadata, slice_html, unpack_indexed, web_safe_palette, ColorReduction,
+    indexed_document_exact_fits, quantize_document_indexed, quantize_locked, sfw_metadata, slice_html, unpack_indexed, web_safe_palette, ColorReduction,
     ColorTable, Dither, Indexed, MetadataLevel, PaletteOptions, PaletteSort, SliceCell,
     SliceHtmlOptions, SliceLayout, WebMetadata,
 };
@@ -249,6 +250,7 @@ pub use write::{
     NativeWriteError, VersionedWrite,
 };
 pub use write_cache::{warm_encode_idents, EncodeCache, EncodeStats};
+pub use indexed_metadata::{indexed_metadata, indexed_working_buffer, set_indexed_metadata};
 pub use write_indexed::{gif_indexed_source_is_current, indexed_source_is_current};
 pub use xmp::{parse_xmp, patch_xmp, patch_xmp_values, to_xmp_packet, XmpField, XmpProperties};
 

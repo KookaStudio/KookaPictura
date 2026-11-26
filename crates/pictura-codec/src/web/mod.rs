@@ -23,7 +23,10 @@ pub use palette::{
     delete as palette_delete, edit as palette_edit, map_transparency as palette_map_transparency,
     pack as pack_indexed, sort as palette_sort, unpack as unpack_indexed, PaletteSort,
 };
-pub use quantize::{quantize, quantize_custom, quantize_locked, web_safe_palette};
+pub use quantize::{
+    indexed_document_exact_fits, quantize, quantize_custom, quantize_document_indexed,
+    quantize_locked, web_safe_palette,
+};
 
 /// The Color Reduction methods. Perceptual, Selective, and Adaptive are all
 /// median cut, differing in how a box is chosen for splitting: Adaptive by

@@ -304,6 +304,7 @@ pub(crate) fn build_raster(
         && !downsampled
         && options.compression != super::options::Compression::Jpeg
         && crate::write_indexed::writes_indexed(doc, 8, plane)
+        && crate::indexed_metadata(doc).1.is_none()
     {
         let palette = doc.source.palette().expect("writes_indexed checked it");
         let index = crate::write::composite_retained(doc, 8, 0)

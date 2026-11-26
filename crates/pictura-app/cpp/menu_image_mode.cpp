@@ -16,6 +16,7 @@
 #include <utility>
 
 #include "bitmap_mode_dialog.h"
+#include "color_table_dialog.h"
 #include "document_command.h"
 #include "hdr_conversion_dialog.h"
 #include "indexed_color_dialog.h"
@@ -105,11 +106,14 @@ void MenuRegistrar::wireImageModeMenu()
             if (mode == QLatin1String("bitmap")) {
                 applied = applyBitmap(*view, params.values);
             } else if (mode == QLatin1String("indexed")) {
-                applied = convert_to_indexed(
+                applied = convert_to_indexed_with_options(
                     *view, params.values.value(QStringLiteral("palette")).toInt(4),
                     params.values.value(QStringLiteral("colors")).toInt(256),
                     params.values.value(QStringLiteral("dither")).toInt(),
-                    params.values.value(QStringLiteral("amount")).toInt());
+                    params.values.value(QStringLiteral("amount")).toInt(),
+                    params.values.value(QStringLiteral("transparency")).toBool(),
+                    QByteArray::fromHex(
+                        params.values.value(QStringLiteral("forced_rgb")).toString().toLatin1()));
             } else {
                 if (mode != QLatin1String("multichannel")
                     && params.values.value(QStringLiteral("flatten")).toBool()
@@ -124,6 +128,28 @@ void MenuRegistrar::wireImageModeMenu()
             return applied;
         });
     }
+
+    commands_->setEnabledProvider(command_ids::ImageModeColorTable, [this] {
+        const auto* view = activeView();
+        return view && indexed_color_table_minimum(*view) > 0;
+    });
+    commands_->setHandler(command_ids::ImageModeColorTable, [this] {
+        QPointer<PictureView> view = activeView();
+        if (!view) {
+            return;
+        }
+        const QByteArray table = indexed_color_table(*view);
+        if (table.isEmpty()) {
+            return;
+        }
+        ColorTableDialog dialog(table, indexed_color_table_minimum(*view), dialogParent());
+        if (runDialog(dialog, dialogParent()) == QDialog::Accepted && view
+            && dialog.table() != table) {
+            runDocumentCommand(dialogParent(), *view, tr("Color Table"),
+                               [view, &dialog] { apply_indexed_color_table(*view, dialog.table()); });
+            refresh();
+        }
+    });
 
     const std::pair<const char*, int> depths[] = {
         {command_ids::ImageMode8Bits, 8},
@@ -213,12 +239,22 @@ void MenuRegistrar::convertImageMode(const QString& mode, const CommandContext* 
             }
             return;
         }
-        IndexedColorDialog dialog(indexed_exact_available(*view), dialogParent());
-        const auto preview = [view, &dialog]() {
-            if (dialog.preview()) {
-                preview_indexed(*view, dialog.palette(), dialog.colors(), dialog.dither(),
-                                dialog.amount());
-            } else {
+        QByteArray lastForced;
+        bool lastTransparency = true;
+        const bool exact = indexed_exact_available_with_options(*view, lastTransparency, lastForced);
+        IndexedColorDialog dialog(exact, true, dialogParent());
+        const auto preview = [view, &dialog, &lastForced, &lastTransparency]() {
+            const auto forced = dialog.forcedColors();
+            const bool transparency = dialog.transparency();
+            if (forced != lastForced || transparency != lastTransparency) {
+                dialog.setExactAvailable(
+                    indexed_exact_available_with_options(*view, transparency, forced));
+                lastForced = forced;
+                lastTransparency = transparency;
+            }
+            if (!dialog.preview()
+                || !preview_indexed_with_options(*view, dialog.palette(), dialog.colors(),
+                    dialog.dither(), dialog.amount(), transparency, forced)) {
                 cancel_mode_preview(*view);
             }
         };
@@ -226,8 +262,8 @@ void MenuRegistrar::convertImageMode(const QString& mode, const CommandContext* 
         preview();
         if (runDialog(dialog, dialogParent()) == QDialog::Accepted) {
             const auto convert = [view, &dialog] {
-                convert_to_indexed(*view, dialog.palette(), dialog.colors(), dialog.dither(),
-                                   dialog.amount());
+                convert_to_indexed_with_options(*view, dialog.palette(), dialog.colors(),
+                    dialog.dither(), dialog.amount(), dialog.transparency(), dialog.forcedColors());
             };
             if (runDocumentCommand(dialogParent(), *view, title, convert)) {
                 CommandParams command;
@@ -236,6 +272,9 @@ void MenuRegistrar::convertImageMode(const QString& mode, const CommandContext* 
                 command.values.insert(QStringLiteral("colors"), dialog.colors());
                 command.values.insert(QStringLiteral("dither"), dialog.dither());
                 command.values.insert(QStringLiteral("amount"), dialog.amount());
+                command.values.insert(QStringLiteral("transparency"), dialog.transparency());
+                command.values.insert(QStringLiteral("forced_rgb"),
+                                      QString::fromLatin1(dialog.forcedColors().toHex()));
                 commands_->recordCommand(command_ids::ImageModeIndexed, command);
             }
         } else {

@@ -52,17 +52,33 @@ pub(super) fn normalize(
         embedded_cmyk.as_ref().or(working_cmyk.as_ref())
     };
 
+    let indexed_clear = if header_mode == ColorMode::Indexed {
+        crate::indexed_metadata(&doc).1
+    } else {
+        None
+    };
     if !bitmap_composite_decoded {
-        doc.composite
-            .replace(convert_pixels(
-                doc.composite.buffer().clone(),
-                header_mode,
-                depth,
-                Some(palette),
-                decode_profile,
-                options.conversion,
-            ))
-            .expect("valid composite");
+        let buffer = doc.composite.buffer();
+        let converted = if header_mode == ColorMode::Indexed {
+            let plane = buffer.width as usize * buffer.height as usize;
+            let indices = &buffer.data[..plane];
+            let mut converted = crate::indexed_working_buffer(
+                buffer.width, buffer.height, indices, palette, indexed_clear,
+            );
+            if buffer.channels > 1 {
+                let alpha = &buffer.data[plane..2 * plane];
+                let mut data = converted.data[..3 * plane].to_vec();
+                data.extend(alpha.iter().zip(indices).map(|(&a, &i)| {
+                    if Some(i) == indexed_clear { 0 } else { a }
+                }));
+                converted.channels = 4;
+                converted.data = data.into();
+            }
+            converted
+        } else {
+            convert_pixels(buffer.clone(), header_mode, depth, Some(palette), decode_profile, options.conversion)
+        };
+        doc.composite.replace(converted).expect("valid composite");
     }
     for layer in &mut doc.layers {
         crate::color_mode::convert_layer_color_channels(
@@ -72,6 +88,9 @@ pub(super) fn normalize(
             decode_profile,
             options.conversion,
         );
+    }
+    if let Some(clear) = indexed_clear {
+        crate::indexed_metadata::restore_layer_transparency(&mut doc.layers, clear);
     }
     doc.mode = ColorMode::Rgb;
     doc.depth = BitDepth::Eight;

@@ -88,6 +88,9 @@ fn layer_store_plane(store: &SourceChannels, id: i16) -> Option<&Samples> {
 /// Forget the mode a read (or an earlier conversion) recorded, with every store
 /// and palette encoded in it, so the document saves as its working mode.
 pub(super) fn drop_source_state(doc: &mut Document) {
+    if doc.source.mode() == Some(ColorMode::Indexed) {
+        pictura_codec::set_indexed_metadata(doc, None, None);
+    }
     if doc.source.mode().is_some() {
         doc.source
             .replace_planes(None)
