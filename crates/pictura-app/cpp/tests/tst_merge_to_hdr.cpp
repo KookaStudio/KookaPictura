@@ -572,7 +572,7 @@ void MergeToHdrTest::loadsLegacyTonePreset()
     const QString path = fixtures_.filePath(QStringLiteral("legacy.phdr-preset"));
     QFile file(path);
     QVERIFY(file.open(QIODevice::WriteOnly));
-    QVERIFY(file.write(R"({"kind":"pictura-hdr-preset","version":1,"align":false,"ghosts":false,"depth":32,"previewEv":0,"tone":[187,4,0.99,0,30,0,0,0,20,1,0]})") > 0);
+    QVERIFY(file.write(R"({"kind":"pictura-hdr-preset","version":1,"align":false,"ghosts":false,"depth":32,"previewEv":0,"tone":[187,4,0.99,0,30,0,0,0,20,0,0.5,0]})") > 0);
     file.close();
     pictura::setOpenFileNameProviderForTest([&](QWidget*, const QString&, const QString&,
                                                 const QStringList&, QString*) { return path; });
