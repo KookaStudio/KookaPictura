@@ -18,6 +18,11 @@
       "evidence": "inherited four-share registration; regenerate from the timing store"
     },
     {
+      "name": "tst_document_navigate",
+      "count": 4,
+      "evidence": "inherited four-share registration from #1566; regenerate from measured per-function timings"
+    },
+    {
       "name": "tst_document_windows",
       "count": 4,
       "evidence": "inherited four-share registration; regenerate from the timing store"
@@ -49,8 +54,8 @@
     },
     {
       "name": "tst_quick_mask",
-      "count": 2,
-      "evidence": "112s recorded local run against a 389s layer median: two shares keep each entry under a quarter (issue #1599); regenerate per-function splits from the timing store"
+      "count": 4,
+      "evidence": "inherited four-share registration from #1566; regenerate from measured per-function timings"
     },
     {
       "name": "tst_save_pdf",

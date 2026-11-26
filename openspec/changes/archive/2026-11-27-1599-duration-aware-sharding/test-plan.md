@@ -18,10 +18,10 @@
 | `qth_negative_wait` | Scan a wait asserted to prove nothing happens in a window, with its comment | The wait is accepted and kept | `check-qt-test-waits::self_test` |
 | `vh_wait_guard` | Run `guard.sh` over a tree with an uncommented non-zero wait | The guard exits non-zero and names the file and line | `check-qt-test-waits::self_test`, `check-qt-test-waits::violations` |
 | `qth_suite_process` | Read the CMake registration and the CTest list for the layer | Each suite has one CTest entry per share and runs in its own process; no suite is grouped into another suite's process | manual: the process/entry mapping is a configured-build observation, read from `ctest --show-only=json-v1` (design.md) |
-| Configure builds the suites | Configure with `BUILD_TESTING` on | The tests subdirectory is added and every suite is registered with a process of its own linked against `pictura_shell` and `Qt6::Test` | manual: configure output is a build-tree observation, recorded in design.md |
+| Configure builds the suites | Configure with `BUILD_TESTING` on | The tests subdirectory is added and every suite maps to one driver linked against `pictura_shell` and `Qt6::Test` and invalid registry entries fail configuration | manual: configure output is a build-tree observation, recorded in design.md |
 | CTest runs each suite offscreen | Run a registered entry | It runs offscreen with its suite timeout | manual: `ENVIRONMENT`/`TIMEOUT` are CTest properties in the configured tree |
-| CTest emits per-entry JUnit | Run a registered entry | It writes `build/qt-test-results/<entry>.xml` | `report_tests::missing_ctest_reports`, `report_tests::run_self_check` |
-| Tests are optional | Configure with `BUILD_TESTING` off | No test entry or registration is emitted | manual: configure output is a build-tree observation, recorded in design.md |
+| CTest emits per-executable JUnit | Run a registered entry | It writes `build/qt-test-results/<entry>.xml` | `report_tests::missing_ctest_reports`, `report_tests::run_self_check` |
+| Tests are optional | Configure with `BUILD_TESTING` off | No driver executable or test registration is emitted | manual: configure output is a build-tree observation, recorded in design.md |
 | CTest does not wrap nextest | Inspect the registered commands | No CTest command invokes `cargo nextest` | manual: the command list is read from the configured tree |
 | `.8bf reference under crates/` | Run the guard on a tree with a tracked `.8bf` reference | The guard exits non-zero and prints the offending lines | manual: unchanged guard behaviour, owned by its existing guard self-test |
 | `artboard artifact under crates/` | Run the guard on a tree with an `artboard*` file | The guard exits non-zero and names the file | manual: unchanged guard behaviour, owned by its existing guard self-test |
@@ -31,3 +31,6 @@
 | Each run starts clean | Write preferences in one run and rerun the suite | It starts from a clean temporary state directory | `tst_smoke::stateHomeIsolationRestoresPriorValue` |
 | A pre-existing state home is restored | Set `XDG_STATE_HOME` before the fixture is destroyed | The previous value is restored, not unset | `tst_smoke::stateHomeIsolationRestoresPriorValue` |
 | Clean tree | Run `guard.sh` on a tree whose waits are all justified and whose files are unchanged | The guard exits 0 including the wait check | `check-qt-test-waits::violations` |
+| `qth_long_suites_sharded` | Run the four registered shares of Quick Mask and Document Navigate and compare each function list with the suite inventory | Every function appears once, with 300-second Quick Mask and 120-second Document Navigate timeouts | manual: inspect CTest registrations and the per-share JUnit reports on the same runner |
+| `qth_driver_selection` | Dispatch a named suite with Qt Test arguments | Only that suite runs and receives the original arguments and exit status | `tst_test_support::driverDispatchesSelectedSuite` |
+| `qth_driver_invalid` | Dispatch missing, malformed, unknown and duplicate suite selectors | The driver exits with an error before running a suite | `tst_test_support::driverRejectsInvalidSelection` |

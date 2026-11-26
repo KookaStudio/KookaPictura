@@ -25,8 +25,8 @@
       `PICTURA_TEST_SHARD` and pass the named functions on the command line.
 - [x] 2.2 Keep `shardedMain` as the only scheduler: named functions run as given,
       a share with no functions falls back to the declaration-order split, and an
-      empty share still fails. Add `tst_quick_mask` to the plan with two shares;
-      leave `tst_document_navigate` unsharded (21 s is under the quarter budget).
+      empty share still fails. Preserve the four existing shares each for `tst_quick_mask` and
+      `tst_document_navigate` until matched timing evidence supports a change.
 - [x] 2.3 Interpret one executable per `tst_*.cpp` as one process and one CTest
       entry per suite on #1566's registry-driver model: the plan changes entry
       membership only; per-suite state isolation, JUnit path, timeout, and
