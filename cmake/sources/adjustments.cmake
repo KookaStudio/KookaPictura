@@ -25,6 +25,7 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/color_balance_dialog.h
     crates/pictura-app/cpp/color_models.cpp
     crates/pictura-app/cpp/color_models.h
+    crates/pictura-app/cpp/hdr_color_picker.cpp
     crates/pictura-app/cpp/color_picker_dialog.cpp
     crates/pictura-app/cpp/color_picker_dialog.h
     crates/pictura-app/cpp/color_picker_math.cpp

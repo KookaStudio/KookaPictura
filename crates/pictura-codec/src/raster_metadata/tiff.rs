@@ -377,7 +377,7 @@ fn tail(
             data: Some(xmp.clone()),
         });
     }
-    if let Some(block) = metadata.photoshop_block() {
+    if let Some(block) = metadata.photoshop_block(true) {
         entries.push(OutEntry {
             tag: TAG_PHOTOSHOP,
             typ: 7,
@@ -479,6 +479,7 @@ mod tests {
             xmp: Some(b"<x:xmpmeta/>".to_vec()),
             vanishing_point: None,
             icc: Some(b"fake-icc".to_vec()),
+            ..RasterMetadata::default()
         };
         let out = embed(&minimal_tiff(), &metadata).expect("embed");
         let (order, offset) = parse_header(&out).expect("header");
@@ -499,7 +500,7 @@ mod tests {
             ..RasterMetadata::default()
         };
         let once = embed(&minimal_tiff(), &metadata).expect("embed");
-        assert_eq!(photoshop_block(&once), metadata.photoshop_block());
+        assert_eq!(photoshop_block(&once), metadata.photoshop_block(true));
         let twice = embed(&once, &metadata).expect("re-embed");
         let (order, offset) = parse_header(&twice).expect("header");
         let entries = read_ifd(&twice, order, offset).expect("IFD0");
@@ -508,6 +509,6 @@ mod tests {
             1,
             "a re-save replaces the block"
         );
-        assert_eq!(photoshop_block(&twice), metadata.photoshop_block());
+        assert_eq!(photoshop_block(&twice), metadata.photoshop_block(true));
     }
 }

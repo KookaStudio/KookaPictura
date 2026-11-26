@@ -16,6 +16,7 @@
 #include "pictura_debug_timing.h"
 
 #include "api/document_bridge.h"
+#include "api/engine_bridge.h"
 #include "api/paint_bridge.h"
 
 #include <QtCore/QStringList>
@@ -34,10 +35,9 @@ void wireCanvasLevelProvider(PictureView* view, ImageView* canvas)
     // scaling the full-resolution image. The lambdas stay valid via QPointer.
     QPointer<PictureView> levelView = view;
     canvas->setLevelProvider(ImageView::LevelProvider{
-        [levelView](int level, int x, int y, int w, int h) {
-            // The canvas display source: the solo mask plane while a mask is
-            // soloed, else the composite. Other panels keep `display_image`.
-            return levelView ? levelView->canvas_display_image(level, x, y, w, h) : QImage();
+        [levelView, canvas](int level, int x, int y, int w, int h) {
+            return levelView ? pictura::hdr_canvas_image(*levelView, level, x, y, w, h,
+                                                        canvas->hdrExposure()) : QImage();
         },
         [levelView]() { return levelView ? document_api::levelCount(*levelView) : 0; },
         [levelView](int level) {
@@ -56,8 +56,16 @@ void wireCanvasLevelProvider(PictureView* view, ImageView* canvas)
                                               docRect.width(), docRect.height());
             }
         },
-        [levelView](int level, const QRect& rect) {
-            return levelView ? canvasFrameCrop(*levelView, level, rect) : CanvasFrameCrop{};
+        [levelView, canvas](int level, const QRect& rect) {
+            if (!levelView) {
+                return CanvasFrameCrop{};
+            }
+            const int offset = canvas->hdrExposure();
+            if (!offset) {
+                return canvasFrameCrop(*levelView, level, rect);
+            }
+            return CanvasFrameCrop{pictura::hdr_canvas_image(*levelView, level, rect.x(), rect.y(),
+                                                        rect.width(), rect.height(), offset), {}};
         },
         [levelView]() { return levelView && pictura::tiles_pending(*levelView); }});
 }

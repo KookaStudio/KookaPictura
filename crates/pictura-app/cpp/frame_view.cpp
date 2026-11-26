@@ -384,6 +384,7 @@ void PicturaMainWindow::refreshDocumentSelection(DocEntry& doc)
 
 void PicturaMainWindow::registerViewHandlers()
 {
+    registerHdrPreviewHandler();
     CommandRegistry* registry = commandRegistry();
     if (!registry) {
         return;

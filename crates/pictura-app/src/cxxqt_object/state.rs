@@ -175,6 +175,9 @@ pub struct PictureViewRust {
     /// `image` or the pyramid is rebuilt. Lets the shell cache without draining
     /// the damage account before `image` reads it.
     pub(super) canvas_revision: u64,
+    pub(super) hdr_merged_current: bool,
+    pub(super) hdr_merged_history_ids: Vec<u64>,
+    pub(super) hdr_preview_draft: Option<(u64, pictura_codec::hdr_preview::PreviewOptions)>,
     /// Bumped when the level-0 frame is rebuilt whole **or the canvas display
     /// source changes** (mask solo enter/exit); a region change always reaches
     /// the shell as a `region_damaged`. A shell whose copy of the frame carries
@@ -333,6 +336,9 @@ impl Default for PictureViewRust {
             save_gif_options: None,
             damage: CanvasDamage::default(),
             canvas_revision: 0,
+            hdr_merged_current: false,
+            hdr_merged_history_ids: Vec::new(),
+            hdr_preview_draft: None,
             frame_revision: 0,
             render_session: pictura_render::RenderSession::default(),
             display_preview: None,

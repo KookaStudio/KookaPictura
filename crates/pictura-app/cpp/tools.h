@@ -298,9 +298,9 @@ public:
     bool canvasBrushActive() const { return bool(canvasBrush_); }
 
     QColor foreground() const override;
-    void setForeground(const QColor& color);
+    void setForeground(const QColor& color, bool reflected = false);
     QColor background() const override;
-    void setBackground(const QColor& color);
+    void setBackground(const QColor& color, bool reflected = false);
     double pressure() const override { return pressure_; }
     double tiltX() const override { return tiltX_; }
     double tiltY() const override { return tiltY_; }
@@ -594,6 +594,8 @@ signals:
     void cloneSourceChanged();
     // The foreground or background colour changed.
     void colorsChanged();
+    void foregroundSelected(QColor color);
+    void backgroundSelected(QColor color);
     // A tool created the layer at `path` (a committed type layer).
     void layerCreated(const QString& path);
     // A tool asks the Layers panel to select the existing layer at `path`.

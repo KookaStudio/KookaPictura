@@ -219,6 +219,7 @@ inline constexpr char ViewFreePan[] = "view.freePan";
 inline constexpr char ViewSnapCanvasToWorkspace[] = "view.snapCanvasToWorkspace";
 inline constexpr char ViewToolHints[] = "view.toolHints";
 inline constexpr char ViewShowSelectionEdges[] = "view.show.selectionEdges";
+inline constexpr char ViewHdrPreviewOptions[] = "view.hdr.preview";
 inline constexpr char ViewExtras[] = "view.extras";
 inline constexpr char ViewShowAll[] = "view.show.all";
 inline constexpr char ViewShowNone[] = "view.show.none";

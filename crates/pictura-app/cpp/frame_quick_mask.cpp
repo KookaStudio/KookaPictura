@@ -132,17 +132,17 @@ void PicturaMainWindow::syncQuickMask()
             }
         }
         panels_->colorState()->setMaskActive(quickMaskUi_.returnMask);
-        panels_->colorState()->setForeground(quickMaskUi_.returnForeground);
-        panels_->colorState()->setBackground(quickMaskUi_.returnBackground);
+        panels_->colorState()->setSceneColor(true, quickMaskUi_.returnForeground);
+        panels_->colorState()->setSceneColor(false, quickMaskUi_.returnBackground);
         quickMaskUi_.colorsActive = false;
     }
     if (!quickMaskUi_.colorsActive) {
         const bool mask = view && !mask_edit_target_get(*view).isEmpty();
         if (panels_->colorState()->maskActive() != mask) {
-            const QColor fg = panels_->colorState()->foreground(),
-                         bg = panels_->colorState()->background();
-            panels_->colorState()->setForeground(otherForeground_);
-            panels_->colorState()->setBackground(otherBackground_);
+            const auto fg = panels_->colorState()->sceneColor(true);
+            const auto bg = panels_->colorState()->sceneColor(false);
+            panels_->colorState()->setSceneColor(true, otherForeground_);
+            panels_->colorState()->setSceneColor(false, otherBackground_);
             otherForeground_ = fg;
             otherBackground_ = bg;
             panels_->colorState()->setMaskActive(mask);
@@ -151,8 +151,8 @@ void PicturaMainWindow::syncQuickMask()
             if (tools_)
                 tools_->onSessionCancelled();
             quickMaskUi_.returnMask = panels_->colorState()->maskActive();
-            quickMaskUi_.returnForeground = panels_->colorState()->foreground();
-            quickMaskUi_.returnBackground = panels_->colorState()->background();
+            quickMaskUi_.returnForeground = panels_->colorState()->sceneColor(true);
+            quickMaskUi_.returnBackground = panels_->colorState()->sceneColor(false);
             quickMaskUi_.colorView = view;
             panels_->colorState()->setMaskActive(true);
             panels_->colorState()->setForeground(

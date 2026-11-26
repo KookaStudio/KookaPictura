@@ -349,13 +349,13 @@ fn blend_row_general(
             continue;
         }
         let (r, g, b) = if gray {
-            let v = source_unit(native[0], rows[0], lx, from, 0);
+            let v = source_color(native[0], rows[0], lx, from);
             (v, v, v)
         } else {
             (
-                source_unit(native[0], rows[0], lx, from, 0),
-                source_unit(native[1], rows[1], lx, from, 0),
-                source_unit(native[2], rows[2], lx, from, 0),
+                source_color(native[0], rows[0], lx, from),
+                source_color(native[1], rows[1], lx, from),
+                source_color(native[2], rows[2], lx, from),
             )
         };
         blend_into_row_ctx(
@@ -409,6 +409,20 @@ fn source_unit(
             .copied()
             .unwrap_or(default),
     )
+}
+
+fn source_color(
+    native: Option<SampleRow<'_>>,
+    bytes: Option<&[u8]>,
+    lx: usize,
+    from: usize,
+) -> f32 {
+    if let Some(SampleRow::F32(row)) = native {
+        if let Some(&sample) = row.get(lx) {
+            return if sample.is_finite() { sample } else { 0.0 };
+        }
+    }
+    source_unit(native, bytes, lx, from, 0)
 }
 
 /// Paint a pixel layer's own channels over the canvas, row-parallel.

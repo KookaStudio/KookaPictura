@@ -517,6 +517,7 @@ view.proof.setup.custom	View/Proof Setup/Custom	Custom		1	0
 view.proof.setup.color.blindness.protanopia.type	View/Proof Setup/Color Blindness/Protanopia-type	Protanopia-type		0	0
 view.proof.setup.color.blindness.deuteranopia.type	View/Proof Setup/Color Blindness/Deuteranopia-type	Deuteranopia-type		0	0
 view.proof.colors	View/Proof Colors	Proof Colors	Ctrl+Y	1	1
+view.hdr.preview	View/32-Bit Preview Options…	32-Bit Preview Options…		1	0
 view.gamut.warning	View/Gamut Warning	Gamut Warning	Shift+Ctrl+Y	0	0
 view.quickMask	View/Quick Mask Mode	Quick Mask Mode	Q	1	1
 view.zoomIn	View/Zoom In	Zoom In	Ctrl++	1	0

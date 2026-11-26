@@ -38,6 +38,10 @@ pub(crate) fn composite_rgba_region(
     if banded(doc, rh) {
         return composite_banded(doc, x0, y0, rw, rh);
     }
+    region_canvas(doc, x0, y0, rw, rh).into_pixel_buffer()
+}
+
+pub(crate) fn region_canvas(doc: &Document, x0: u32, y0: u32, rw: u32, rh: u32) -> Canvas {
     let mut canvas = Canvas::new_region(x0 as i32, y0 as i32, rw as usize, rh as usize);
     canvas.clip = PsdRect {
         top: y0 as i32,
@@ -51,7 +55,7 @@ pub(crate) fn composite_rgba_region(
     let plan = CompositePlan::build(doc, canvas.clip, canvas.effect_region);
     let _span = crate::metrics::phase("render_execute", false);
     composite_layers(&mut canvas, doc, &plan);
-    canvas.into_pixel_buffer()
+    canvas
 }
 
 /// Composite one layer alone over transparency for the document-space region

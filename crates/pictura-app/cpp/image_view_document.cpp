@@ -202,6 +202,16 @@ void ImageView::blitRegion(const QImage& region, int x, int y)
     update();
 }
 
+void ImageView::setHdrExposure(int offset)
+{
+    offset = qBound(-160, offset, 160);
+    if (hdrExposure_ != offset) {
+        hdrExposure_ = offset;
+        dropPresentCache();
+        update();
+    }
+}
+
 void ImageView::damageRegion(const QRect& damaged)
 {
     const QRect docRect = damaged.intersected(QRect(QPoint(0, 0), docSize_));

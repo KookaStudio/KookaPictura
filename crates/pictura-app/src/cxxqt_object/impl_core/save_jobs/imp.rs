@@ -119,7 +119,7 @@ fn save_start_with_compatibility(
     let embed = rust
         .save_embed_profile
         .unwrap_or_else(|| save_embed_default(rust, true));
-    let dirty = session.dirty;
+    let dirty = session.dirty && !rust.hdr_merged_current;
     let planes = store_planes(session.vanishing_planes.as_ref(), doc_ref);
     let start_history = session.history.current_id();
     let start_revision = session.content_revision;

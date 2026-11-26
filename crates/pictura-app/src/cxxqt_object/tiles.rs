@@ -124,6 +124,8 @@ struct TileJob {
     mask: Option<LayerMask>,
     painting: bool,
     preview: Option<pictura_codec::MergedPreview>,
+    hdr: Option<pictura_codec::hdr_preview::PreviewOptions>,
+    hdr_merged: bool,
     ticket: Ticket,
     /// The cache's current tiles as of `ticket`, which coarser keys fold
     /// from (#1321).
@@ -141,6 +143,8 @@ impl TileJob {
             self.mask.as_ref(),
             self.painting,
             self.preview.as_ref(),
+            self.hdr,
+            self.hdr_merged,
             &mut self.local,
             &self.keys,
         )
@@ -155,17 +159,24 @@ fn build_keys(
     mask: Option<&LayerMask>,
     painting: bool,
     preview: Option<&pictura_codec::MergedPreview>,
+    hdr: Option<pictura_codec::hdr_preview::PreviewOptions>,
+    hdr_merged: bool,
     local: &mut TilePyramid,
     keys: &[TileKey],
 ) -> Vec<(TileKey, Arc<[u8]>)> {
     let mut built = Vec::new();
-    for source in [TileSource::Composite, TileSource::Mask] {
+    let sources: HashSet<_> = keys.iter().map(|key| key.source).collect();
+    for source in sources {
         let keys: Vec<TileKey> = keys
             .iter()
             .copied()
             .filter(|k| k.source == source)
             .collect();
-        if keys.is_empty() {
+        if let TileSource::Hdr(offset) = source {
+            if let Some(options) = hdr {
+                let level0 = |rect| super::hdr_preview::hdr_display_region(doc, rect, options, offset, hdr_merged && !painting);
+                built.extend(pictura_render::build_keys(local, &keys, &level0));
+            }
             continue;
         }
         built.extend(match (source, mask, preview) {
@@ -267,6 +278,13 @@ impl PictureViewRust {
         self.tiles.wanted.get_mut().clear();
     }
 
+    pub(in crate::cxxqt_object) fn refresh_hdr_tiles(&mut self) {
+        self.fit_tiles();
+        self.tiles.cache.get_mut().invalidate();
+        self.tiles.wanted.get_mut().clear();
+        self.canvas_revision = self.canvas_revision.wrapping_add(1);
+    }
+
     /// The soloed mask changed as a whole (entered, restored): its tiles go
     /// stale and the composite's stay.
     pub(crate) fn invalidate_mask_tiles(&mut self) {
@@ -361,6 +379,8 @@ impl PictureViewRust {
             self.solo_mask(),
             self.painting(),
             self.tiles.preview.borrow().as_ref(),
+            self.hdr_preview_options(),
+            self.hdr_merged_current && !self.display_preview_active(),
             &mut local,
             keys,
         );
@@ -466,6 +486,7 @@ impl PictureViewRust {
         self.fit_tiles();
         let painting = self.painting();
         let cache = self.tiles.cache.get_mut();
+        cache.damage_hdr(clipped);
         if !cache.any_current_under(TileSource::Composite, clipped) {
             cache.damage(TileSource::Composite, clipped);
             return;
@@ -558,6 +579,7 @@ impl PictureViewRust {
             (doc.width, doc.height, doc.composite_is_authoritative())
         };
         let clipped = clip(rect, width, height)?;
+        self.tiles.cache.get_mut().damage_hdr(clipped);
         let aligned = self.tiles.cache.get_mut().repair_rect(clipped);
         let area = aligned.width() as u64 * aligned.height() as u64;
         let has_current = self
@@ -853,7 +875,7 @@ impl qobject::PictureView {
                 .wanted
                 .borrow_mut()
                 .drain()
-                .filter(|&key| key.source == TileSource::Composite || soloed)
+                .filter(|&key| key.source != TileSource::Mask || soloed)
                 .filter(|&key| !cache.contains(key) && (key.level as usize) < cache.level_count())
                 .collect();
             if keys.is_empty() {
@@ -868,6 +890,8 @@ impl qobject::PictureView {
             mask: rust.solo_mask().cloned(),
             painting: rust.painting(),
             preview: rust.tiles.preview.borrow().clone(),
+            hdr: rust.hdr_preview_options(),
+            hdr_merged: rust.hdr_merged_current && !rust.display_preview_active(),
             ticket,
             local,
             keys,
@@ -914,7 +938,7 @@ impl qobject::PictureView {
                 // Mask tiles built for a solo that has since ended are dropped.
                 for (key, data) in built
                     .into_iter()
-                    .filter(|(key, _)| key.source == TileSource::Composite || soloed)
+                    .filter(|(key, _)| key.source != TileSource::Mask || soloed)
                 {
                     if cache.install(key, ticket, data) {
                         landed = true;
@@ -1125,6 +1149,8 @@ impl PictureViewRust {
                 mask: self.solo_mask().cloned(),
                 painting: self.painting(),
                 preview: self.tiles.preview.borrow().clone(),
+                hdr: self.hdr_preview_options(),
+                hdr_merged: self.hdr_merged_current && !self.display_preview_active(),
                 ticket: cache.ticket(),
                 local: cache.snapshot(below),
                 keys: keys.to_vec(),

@@ -95,6 +95,8 @@ public:
     // possible and repaint. No pixels are passed; the level provider already
     // holds them.
     void damageRegion(const QRect& docRect);
+    void setHdrExposure(int offset);
+    int hdrExposure() const { return hdrExposure_; }
 
     // A zoomed-out filter dialog's preview: `picture`, a reduced render of the
     // document rect `area`, drawn over the document there until cleared. The
@@ -751,6 +753,7 @@ protected:
     void leaveEvent(QEvent* event) override;
 
 private:
+    int hdrExposure_ = 0;
     friend class FramePaintTiming;
     RenderingIndicator* rendering_ = nullptr;
     friend class FrameViewportTiming;

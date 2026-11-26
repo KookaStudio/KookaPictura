@@ -6,10 +6,13 @@ mod imp;
 
 use super::qobject::PictureView;
 pub use imp::*;
+use super::hdr_preview::{hdr_canvas_image, hdr_preview_options, hdr_scene_pixel, hdr_swatch_argb, set_hdr_preview_options};
 
 #[cxx_qt::bridge]
 pub mod ffi {
     unsafe extern "C++" {
+        include!("cxx-qt-lib/qimage.h");
+        type QImage = cxx_qt_lib::QImage;
         include!("cxx-qt-lib/qstring.h");
         type QString = cxx_qt_lib::QString;
         include!("cxx-qt-lib/qstringlist.h");
@@ -22,6 +25,12 @@ pub mod ffi {
 
     #[namespace = "pictura"]
     extern "Rust" {
+        fn hdr_preview_options(view: &PictureView) -> Vec<f64>;
+        fn set_hdr_preview_options(view: Pin<&mut PictureView>, method: i32, exposure: f64, gamma: f64, mode: i32) -> bool;
+        fn hdr_scene_pixel(view: &PictureView, x: i32, y: i32) -> Vec<f64>;
+        fn hdr_canvas_image(view: &PictureView, level: i32, x: i32, y: i32, w: i32, h: i32, offset: i32) -> QImage;
+        fn hdr_swatch_argb(method: i32, exposure: f64, gamma: f64, r: f64, g: f64, b: f64) -> u32;
+
         /// Store the Color Settings values on the view. Codes follow the
         /// session schema: policy 0/1/2, intent 0/1/2/3, working CMYK 0.
         fn set_color_settings(

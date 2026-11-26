@@ -522,6 +522,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "view.proof.setup.color.blindness.protanopia.type", path: &["View", "Proof Setup", "Color Blindness", "Protanopia-type"], label: "Protanopia-type", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "view.proof.setup.color.blindness.deuteranopia.type", path: &["View", "Proof Setup", "Color Blindness", "Deuteranopia-type"], label: "Deuteranopia-type", shortcut: "", implemented: false, checkable: false },
     CommandSpec { id: "view.proof.colors", path: &["View", "Proof Colors"], label: "Proof Colors", shortcut: "Ctrl+Y", implemented: true, checkable: true },
+    CommandSpec { id: "view.hdr.preview", path: &["View", "32-Bit Preview Options…"], label: "32-Bit Preview Options…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "view.gamut.warning", path: &["View", "Gamut Warning"], label: "Gamut Warning", shortcut: "Shift+Ctrl+Y", implemented: false, checkable: false },
     CommandSpec { id: "view.quickMask", path: &["View", "Quick Mask Mode"], label: "Quick Mask Mode", shortcut: "Q", implemented: true, checkable: true },
     CommandSpec { id: "view.zoomIn", path: &["View", "Zoom In"], label: "Zoom In", shortcut: "Ctrl++", implemented: true, checkable: false },

@@ -38,7 +38,7 @@ pub(super) fn embed(bytes: &[u8], metadata: &RasterMetadata) -> Result<Vec<u8>, 
         payload.extend_from_slice(xmp);
         push_segment(&mut out, 0xE1, &payload)?;
     }
-    if let Some(block) = metadata.photoshop_block() {
+    if let Some(block) = metadata.photoshop_block(false) {
         for chunk in block.chunks(IRB_CHUNK) {
             push_segment(&mut out, 0xED, &[PHOTOSHOP_SIGNATURE, chunk].concat())?;
         }
@@ -175,6 +175,7 @@ mod tests {
             xmp: Some(b"<x:xmpmeta/>".to_vec()),
             vanishing_point: None,
             icc: Some(b"fake-icc".to_vec()),
+            ..RasterMetadata::default()
         };
         let mut existing = vec![0xFF, 0xD8];
         push_segment(&mut existing, 0xE1, b"Exif\0\0old").expect("existing exif");
@@ -225,6 +226,6 @@ mod tests {
         let block = resources(&out)
             .and_then(|metadata| metadata.photoshop)
             .expect("the block reads back");
-        assert_eq!(Some(block), metadata.photoshop_block());
+        assert_eq!(Some(block), metadata.photoshop_block(false));
     }
 }

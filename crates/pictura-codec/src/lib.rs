@@ -43,6 +43,7 @@ mod guide_resources;
 mod icc;
 mod icc_convert;
 pub mod illustrator;
+pub mod hdr_preview;
 mod image_resources;
 mod indexed_metadata;
 mod iptc;

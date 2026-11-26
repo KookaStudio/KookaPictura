@@ -66,6 +66,7 @@ mod picture;
 mod prepared_job;
 mod presentation;
 mod proofing;
+mod hdr_preview;
 mod quick_mask;
 mod save_format;
 mod scratch_rollback;

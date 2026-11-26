@@ -371,9 +371,9 @@ fn emit_native(canvas: &Canvas, depth: BitDepth) -> Samples {
         _ => {
             let mut out = vec![0f32; n * 4];
             for (i, p) in canvas.px.iter().enumerate() {
-                out[i] = p.r.clamp(0.0, 1.0);
-                out[n + i] = p.g.clamp(0.0, 1.0);
-                out[2 * n + i] = p.b.clamp(0.0, 1.0);
+                out[i] = p.r;
+                out[n + i] = p.g;
+                out[2 * n + i] = p.b;
                 out[3 * n + i] = p.a.clamp(0.0, 1.0);
             }
             Samples::F32(out.into())
