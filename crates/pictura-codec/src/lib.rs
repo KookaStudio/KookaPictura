@@ -23,7 +23,6 @@ pub mod action_file;
 mod advanced_blending;
 mod budget;
 mod color_mode;
-mod indexed_metadata;
 mod common;
 mod compatibility;
 mod crs_xmp;
@@ -45,6 +44,7 @@ mod icc;
 mod icc_convert;
 pub mod illustrator;
 mod image_resources;
+mod indexed_metadata;
 mod iptc;
 mod layer_comps;
 pub mod layer_content;
@@ -188,6 +188,7 @@ pub use smart_object::{
 pub use smart_writer::new_vector_source_id;
 // Re-exported so the app's profile commands can name a `Profile` without adding
 // a direct dependency on `pictura-color`.
+pub use indexed_metadata::{indexed_metadata, indexed_working_buffer, set_indexed_metadata};
 pub use lazy::{read_psd_lazy, MergedPreview, SourcePin};
 pub use live_shape::{
     decode_live_shape, encode_live_shape, LiveShape, ORIGIN_ELLIPSE, ORIGIN_RECTANGLE,
@@ -237,11 +238,12 @@ pub use vector_mask::{
     encode_vector_mask_with_rule,
 };
 pub use web::{
-    embed_web_metadata, encode_act, encode_gif, encode_wbmp, pack_indexed, palette_delete,
-    palette_edit, palette_map_transparency, palette_sort, parse_act, quantize, quantize_custom,
-    indexed_document_exact_fits, quantize_document_indexed, quantize_locked, sfw_metadata, slice_html, unpack_indexed, web_safe_palette, ColorReduction,
-    ColorTable, Dither, Indexed, MetadataLevel, PaletteOptions, PaletteSort, SliceCell,
-    SliceHtmlOptions, SliceLayout, WebMetadata,
+    embed_web_metadata, encode_act, encode_gif, encode_wbmp, indexed_document_exact_fits,
+    pack_indexed, palette_delete, palette_edit, palette_map_transparency, palette_sort, parse_act,
+    quantize, quantize_custom, quantize_document_indexed, quantize_locked, sfw_metadata,
+    slice_html, unpack_indexed, web_safe_palette, ColorReduction, ColorTable, Dither, Indexed,
+    MetadataLevel, PaletteOptions, PaletteSort, SliceCell, SliceHtmlOptions, SliceLayout,
+    WebMetadata,
 };
 pub use webp::{decode_webp, encode_webp, encode_webp_lossy};
 pub use write::{
@@ -250,7 +252,6 @@ pub use write::{
     NativeWriteError, VersionedWrite,
 };
 pub use write_cache::{warm_encode_idents, EncodeCache, EncodeStats};
-pub use indexed_metadata::{indexed_metadata, indexed_working_buffer, set_indexed_metadata};
 pub use write_indexed::{gif_indexed_source_is_current, indexed_source_is_current};
 pub use xmp::{parse_xmp, patch_xmp, patch_xmp_values, to_xmp_packet, XmpField, XmpProperties};
 

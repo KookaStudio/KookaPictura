@@ -82,17 +82,29 @@ pub mod ffi {
         ) -> bool;
 
         fn indexed_exact_available_with_options(
-            view: &PictureView, transparency: bool, forced_rgb: &QByteArray,
+            view: &PictureView,
+            transparency: bool,
+            forced_rgb: &QByteArray,
         ) -> bool;
 
         fn convert_to_indexed_with_options(
-            view: Pin<&mut PictureView>, palette: i32, colors: i32, dither: i32, amount: i32,
-            transparency: bool, forced_rgb: &QByteArray,
+            view: Pin<&mut PictureView>,
+            palette: i32,
+            colors: i32,
+            dither: i32,
+            amount: i32,
+            transparency: bool,
+            forced_rgb: &QByteArray,
         ) -> bool;
 
         fn preview_indexed_with_options(
-            view: Pin<&mut PictureView>, palette: i32, colors: i32, dither: i32, amount: i32,
-            transparency: bool, forced_rgb: &QByteArray,
+            view: Pin<&mut PictureView>,
+            palette: i32,
+            colors: i32,
+            dither: i32,
+            amount: i32,
+            transparency: bool,
+            forced_rgb: &QByteArray,
         ) -> bool;
 
         // Color Table uses tightly packed RGBA entries with at most one clear entry.

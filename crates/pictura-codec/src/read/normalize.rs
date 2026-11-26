@@ -63,20 +63,35 @@ pub(super) fn normalize(
             let plane = buffer.width as usize * buffer.height as usize;
             let indices = &buffer.data[..plane];
             let mut converted = crate::indexed_working_buffer(
-                buffer.width, buffer.height, indices, palette, indexed_clear,
+                buffer.width,
+                buffer.height,
+                indices,
+                palette,
+                indexed_clear,
             );
             if buffer.channels > 1 {
                 let alpha = &buffer.data[plane..2 * plane];
                 let mut data = converted.data[..3 * plane].to_vec();
                 data.extend(alpha.iter().zip(indices).map(|(&a, &i)| {
-                    if Some(i) == indexed_clear { 0 } else { a }
+                    if Some(i) == indexed_clear {
+                        0
+                    } else {
+                        a
+                    }
                 }));
                 converted.channels = 4;
                 converted.data = data.into();
             }
             converted
         } else {
-            convert_pixels(buffer.clone(), header_mode, depth, Some(palette), decode_profile, options.conversion)
+            convert_pixels(
+                buffer.clone(),
+                header_mode,
+                depth,
+                Some(palette),
+                decode_profile,
+                options.conversion,
+            )
         };
         doc.composite.replace(converted).expect("valid composite");
     }

@@ -12,15 +12,22 @@ pub fn indexed_metadata(doc: &Document) -> (usize, Option<u8>) {
         let bytes: [u8; 2] = data.as_slice().try_into().ok()?;
         Some(u16::from_be_bytes(bytes))
     };
-    let count = value(COLOR_COUNT).filter(|n| (1..=256).contains(n)).unwrap_or(256);
-    let transparent = value(TRANSPARENCY_INDEX).filter(|i| *i < count).map(|i| i as u8);
+    let count = value(COLOR_COUNT)
+        .filter(|n| (1..=256).contains(n))
+        .unwrap_or(256);
+    let transparent = value(TRANSPARENCY_INDEX)
+        .filter(|i| *i < count)
+        .map(|i| i as u8);
     (usize::from(count), transparent)
 }
 
 pub fn set_indexed_metadata(doc: &mut Document, count: Option<u16>, transparent: Option<u8>) {
     let (mut resources, consumed) = decode_section(&doc.image_resources);
     resources.retain(|resource| !matches!(resource.id, COLOR_COUNT | TRANSPARENCY_INDEX));
-    for (id, value) in [(COLOR_COUNT, count), (TRANSPARENCY_INDEX, transparent.map(u16::from))] {
+    for (id, value) in [
+        (COLOR_COUNT, count),
+        (TRANSPARENCY_INDEX, transparent.map(u16::from)),
+    ] {
         if let Some(value) = value {
             resources.push(frame_image_resource(id, "", &value.to_be_bytes()));
         }
@@ -76,8 +83,11 @@ pub(crate) fn restore_layer_transparency(layers: &mut pictura_core::LayerStack, 
             } else {
                 alpha.push(pictura_core::Channel {
                     id: -1,
-                    data: indices.into_iter().map(|i| if i == clear { 0 } else { 255 })
-                        .collect::<Vec<_>>().into(),
+                    data: indices
+                        .into_iter()
+                        .map(|i| if i == clear { 0 } else { 255 })
+                        .collect::<Vec<_>>()
+                        .into(),
                 });
             }
             layer.background = false;

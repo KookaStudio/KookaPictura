@@ -1,9 +1,7 @@
 //! Bitmap conversion and legacy Exact eligibility for GIF save options.
 
 use pictura_codec::{document_resolution, PatternPixels};
-use pictura_core::{
-    BitDepth, ColorMode, Document, PixelBuffer, PsdRect, Samples, SourcePlanes,
-};
+use pictura_core::{BitDepth, ColorMode, Document, PixelBuffer, PsdRect, Samples, SourcePlanes};
 use pictura_ops::OpsError;
 
 use super::{can_convert_mode, planes};

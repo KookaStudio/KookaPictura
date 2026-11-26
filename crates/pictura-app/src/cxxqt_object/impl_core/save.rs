@@ -727,29 +727,41 @@ mod tests {
 
     #[test]
     fn gif_retains_transparent_index_above_used_opaque_colors() {
-        let mut doc = pictura_core::Document::from_rgba(
-            "Source", 2, 1, &[255, 0, 0, 255, 0, 0, 0, 0],
-        );
+        let mut doc =
+            pictura_core::Document::from_rgba("Source", 2, 1, &[255, 0, 0, 255, 0, 0, 0, 0]);
         let mut settings = options();
         settings.transparency = true;
         pictura_render::document_ops::convert_to_indexed_with_forced(
-            &mut doc, settings, &[[255, 0, 0], [0, 255, 0], [0, 0, 255]], true,
-        ).unwrap();
+            &mut doc,
+            settings,
+            &[[255, 0, 0], [0, 255, 0], [0, 0, 255]],
+            true,
+        )
+        .unwrap();
         let palette = doc.source.palette().unwrap();
         let clear = pictura_codec::indexed_metadata(&doc).1.unwrap();
         assert_eq!(clear, 3);
         let Samples::U8(indices) = &doc.source.planes().as_ref().unwrap().samples else {
             panic!("expected indices");
         };
-        let expected = pictura_codec::encode_gif(&pictura_codec::Indexed {
-            width: 2,
-            height: 1,
-            palette: (0..=usize::from(clear)).map(|i| [
-                palette[i], palette[256 + i], palette[512 + i],
-                if i == usize::from(clear) { 0 } else { 255 },
-            ]).collect(),
-            indices: indices.to_vec(),
-        }, false);
+        let expected = pictura_codec::encode_gif(
+            &pictura_codec::Indexed {
+                width: 2,
+                height: 1,
+                palette: (0..=usize::from(clear))
+                    .map(|i| {
+                        [
+                            palette[i],
+                            palette[256 + i],
+                            palette[512 + i],
+                            if i == usize::from(clear) { 0 } else { 255 },
+                        ]
+                    })
+                    .collect(),
+                indices: indices.to_vec(),
+            },
+            false,
+        );
         let mut rust = PictureViewRust::default();
         rust.session.doc.set(Some(doc));
         rust.session.dirty = true;

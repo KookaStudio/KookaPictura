@@ -37,7 +37,12 @@ fn layer_rgb_planes(layer: &Layer) -> Option<Vec<&[u8]>> {
 /// True when every non-group layer that carries RGB color can be rebuilt from
 /// its retained index plane. A group recurses; a layer with no RGB color
 /// channels (an adjustment or empty layer) does not participate.
-fn indexed_layers_unchanged(layers: &[Layer], palette: &[u8; 768], depth: u16, clear: Option<u8>) -> bool {
+fn indexed_layers_unchanged(
+    layers: &[Layer],
+    palette: &[u8; 768],
+    depth: u16,
+    clear: Option<u8>,
+) -> bool {
     layers.iter().all(|layer| {
         if layer.is_group() {
             return indexed_layers_unchanged(layer.children(), palette, depth, clear);
@@ -75,7 +80,9 @@ fn writes_indexed_impl(doc: &Document, depth: u16, plane: usize, allow_opaque_rg
     }
     let clear = crate::indexed_metadata(doc).1;
     let composite_channels = doc.composite.channels;
-    if composite_channels != 3 && !((allow_opaque_rgba || clear.is_some()) && composite_channels == 4) {
+    if composite_channels != 3
+        && !((allow_opaque_rgba || clear.is_some()) && composite_channels == 4)
+    {
         return false;
     }
     let Some(palette) = doc.source.palette() else {
@@ -94,9 +101,10 @@ fn writes_indexed_impl(doc: &Document, depth: u16, plane: usize, allow_opaque_rg
             return false;
         };
         if (0..3).any(|c| {
-            current[c * plane..(c + 1) * plane].iter().zip(&index).any(|(&rgb, &i)| {
-                Some(i) != clear && rgb != palette[c * 256 + usize::from(i)]
-            })
+            current[c * plane..(c + 1) * plane]
+                .iter()
+                .zip(&index)
+                .any(|(&rgb, &i)| Some(i) != clear && rgb != palette[c * 256 + usize::from(i)])
         }) {
             return false;
         }
@@ -104,9 +112,11 @@ fn writes_indexed_impl(doc: &Document, depth: u16, plane: usize, allow_opaque_rg
             let Some(alpha) = doc.composite.data.get(3 * plane..4 * plane) else {
                 return false;
             };
-            if alpha.iter().zip(&index).any(|(&value, &i)| {
-                value != if Some(i) == clear { 0 } else { 255 }
-            }) {
+            if alpha
+                .iter()
+                .zip(&index)
+                .any(|(&value, &i)| value != if Some(i) == clear { 0 } else { 255 })
+            {
                 return false;
             }
         } else if clear.is_some_and(|i| index.contains(&i)) {

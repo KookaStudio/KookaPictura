@@ -256,7 +256,15 @@ pub(super) fn convert_to_indexed(
     dither: i32,
     amount: i32,
 ) -> bool {
-    convert_to_indexed_with_options(view, palette, colors, dither, amount, false, &QByteArray::default())
+    convert_to_indexed_with_options(
+        view,
+        palette,
+        colors,
+        dither,
+        amount,
+        false,
+        &QByteArray::default(),
+    )
 }
 
 pub(super) fn preview_indexed(
@@ -266,7 +274,15 @@ pub(super) fn preview_indexed(
     dither: i32,
     amount: i32,
 ) -> bool {
-    preview_indexed_with_options(view, palette, colors, dither, amount, false, &QByteArray::default())
+    preview_indexed_with_options(
+        view,
+        palette,
+        colors,
+        dither,
+        amount,
+        false,
+        &QByteArray::default(),
+    )
 }
 
 fn forced_colors(rgb: &QByteArray) -> Option<Vec<[u8; 3]>> {
@@ -285,13 +301,19 @@ pub(super) fn indexed_exact_available_with_options(
     let mut options = palette_options(0, 256, 0, 0);
     options.transparency = transparency;
     let rust = view.rust();
-    rust.session.live.mode_preview().or(rust.session.doc.as_ref())
+    rust.session
+        .live
+        .mode_preview()
+        .or(rust.session.doc.as_ref())
         .is_some_and(|doc| pictura_render::document_ops::indexed_exact_fits(doc, options, &forced))
 }
 
 pub(super) fn convert_to_indexed_with_options(
     view: Pin<&mut PictureView>,
-    palette: i32, colors: i32, dither: i32, amount: i32,
+    palette: i32,
+    colors: i32,
+    dither: i32,
+    amount: i32,
     transparency: bool,
     forced_rgb: &QByteArray,
 ) -> bool {
@@ -301,13 +323,21 @@ pub(super) fn convert_to_indexed_with_options(
     let mut options = palette_options(palette, colors, dither, amount);
     options.transparency = transparency;
     commit(view, move |doc| {
-        pictura_render::document_ops::convert_to_indexed_with_forced(doc, options, &forced, palette == 0)
+        pictura_render::document_ops::convert_to_indexed_with_forced(
+            doc,
+            options,
+            &forced,
+            palette == 0,
+        )
     })
 }
 
 pub(super) fn preview_indexed_with_options(
     mut view: Pin<&mut PictureView>,
-    palette: i32, colors: i32, dither: i32, amount: i32,
+    palette: i32,
+    colors: i32,
+    dither: i32,
+    amount: i32,
     transparency: bool,
     forced_rgb: &QByteArray,
 ) -> bool {
@@ -322,8 +352,12 @@ pub(super) fn preview_indexed_with_options(
             return false;
         };
         let ok = pictura_render::document_ops::convert_to_indexed_with_forced(
-            &mut converted, options, &forced, palette == 0,
-        ).is_ok();
+            &mut converted,
+            options,
+            &forced,
+            palette == 0,
+        )
+        .is_ok();
         if ok {
             rust.session.doc.set(Some(converted));
         }
@@ -336,9 +370,23 @@ pub(super) fn preview_indexed_with_options(
 }
 
 fn pack_table(table: pictura_codec::ColorTable) -> QByteArray {
-    let bytes: Vec<_> = table.colors.iter().enumerate().flat_map(|(i, &[r, g, b])| {
-        [r, g, b, if table.transparent == Some(i as u8) { 0 } else { 255 }]
-    }).collect();
+    let bytes: Vec<_> = table
+        .colors
+        .iter()
+        .enumerate()
+        .flat_map(|(i, &[r, g, b])| {
+            [
+                r,
+                g,
+                b,
+                if table.transparent == Some(i as u8) {
+                    0
+                } else {
+                    255
+                },
+            ]
+        })
+        .collect();
     QByteArray::from(bytes.as_slice())
 }
 
@@ -360,13 +408,19 @@ fn unpack_table(rgba: &QByteArray) -> Option<pictura_codec::ColorTable> {
 }
 
 pub(super) fn indexed_color_table(view: &PictureView) -> QByteArray {
-    view.rust().session.doc.as_ref()
+    view.rust()
+        .session
+        .doc
+        .as_ref()
         .and_then(pictura_render::document_ops::indexed_color_table)
         .map_or_else(QByteArray::default, pack_table)
 }
 
 pub(super) fn indexed_color_table_minimum(view: &PictureView) -> i32 {
-    view.rust().session.doc.as_ref()
+    view.rust()
+        .session
+        .doc
+        .as_ref()
         .and_then(pictura_render::document_ops::indexed_color_table_minimum)
         .map_or(0, |count| count as i32)
 }
@@ -375,7 +429,11 @@ pub(super) fn apply_indexed_color_table(view: Pin<&mut PictureView>, rgba: &QByt
     let Some(table) = unpack_table(rgba) else {
         return view.document_preflight_refusal(pictura_error::ErrorCode::InvalidArg);
     };
-    if view.rust().session.doc.as_ref()
+    if view
+        .rust()
+        .session
+        .doc
+        .as_ref()
         .and_then(pictura_render::document_ops::indexed_color_table)
         .is_some_and(|current| current == table)
     {

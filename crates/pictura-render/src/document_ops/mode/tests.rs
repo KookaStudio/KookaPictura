@@ -1413,9 +1413,15 @@ fn color_table_replacement_preserves_indices() {
 #[test]
 fn flat_grayscale_alpha_converts_to_indexed_with_and_without_transparency() {
     let mut source = Document::new(2, 1, ColorMode::Grayscale, BitDepth::Eight);
-    source.composite.replace(PixelBuffer {
-        width: 2, height: 1, channels: 2, data: vec![40, 80, 255, 0].into(),
-    }).unwrap();
+    source
+        .composite
+        .replace(PixelBuffer {
+            width: 2,
+            height: 1,
+            channels: 2,
+            data: vec![40, 80, 255, 0].into(),
+        })
+        .unwrap();
     for transparency in [false, true] {
         let mut doc = source.clone();
         let mut options = indexed_options(ColorReduction::Adaptive, Dither::None);
@@ -1423,7 +1429,14 @@ fn flat_grayscale_alpha_converts_to_indexed_with_and_without_transparency() {
         assert!(indexed_exact_fits(&doc, options, &[]));
         convert_to_indexed_with_forced(&mut doc, options, &[], true).unwrap();
         assert_eq!(layer_plane(&doc, 0)[0], 40);
-        assert_eq!(layer_plane(&doc, -1), if transparency { vec![255, 0] } else { vec![255, 255] });
+        assert_eq!(
+            layer_plane(&doc, -1),
+            if transparency {
+                vec![255, 0]
+            } else {
+                vec![255, 255]
+            }
+        );
         if !transparency {
             assert_eq!(layer_plane(&doc, 0)[1], 255);
         }

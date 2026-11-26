@@ -103,12 +103,21 @@ pub fn quantize_document_indexed(
             let generated = if options.reduction == ColorReduction::Restrictive {
                 web_safe_palette()
             } else {
-                let skip: Vec<_> = rgb.iter().zip(&transparent).map(|(color, &clear)| {
-                    clear || seen.contains(&color.map(|channel| channel.round() as u8))
-                }).collect();
+                let skip: Vec<_> = rgb
+                    .iter()
+                    .zip(&transparent)
+                    .map(|(color, &clear)| {
+                        clear || seen.contains(&color.map(|channel| channel.round() as u8))
+                    })
+                    .collect();
                 median_cut(&rgb, &skip, remaining, options.reduction)
             };
-            palette.extend(generated.into_iter().filter(|color| seen.insert(*color)).take(remaining));
+            palette.extend(
+                generated
+                    .into_iter()
+                    .filter(|color| seen.insert(*color))
+                    .take(remaining),
+            );
         }
     }
 
@@ -117,12 +126,20 @@ pub fn quantize_document_indexed(
         mapping.dither = Dither::None;
     }
     let indices = map_pixels(&rgb, &transparent, width as usize, &palette, mapping);
-    let mut table: Vec<_> = palette.into_iter().map(|[r, g, b]| [r, g, b, 255]).collect();
+    let mut table: Vec<_> = palette
+        .into_iter()
+        .map(|[r, g, b]| [r, g, b, 255])
+        .collect();
     if has_clear {
         let [r, g, b] = options.matte;
         table.push([r, g, b, 0]);
     }
-    Some(Indexed { width, height, palette: table, indices })
+    Some(Indexed {
+        width,
+        height,
+        palette: table,
+        indices,
+    })
 }
 
 /// Compute only whether the source and required entries fit an Exact table.
