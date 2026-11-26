@@ -2,9 +2,9 @@
 
 ## Purpose
 The Qt Test + CTest harness for the C++ GUI shell: an application static library
-that test executables link, per-suite executables registered with CTest, per-suite
-state isolation, the seeded suites migrated off the self-test, and the contract
-that the monolithic self-test only shrinks as checks move.
+that subsystem driver executables link, one suite per CTest entry dispatched by
+name, per-suite state isolation, the seeded suites migrated off the self-test, and
+the contract that the monolithic self-test only shrinks as checks move.
 
 ## Requirements
 
@@ -76,43 +76,69 @@ self-contained. Installing a SHARED development build SHALL NOT be supported.
 ### Requirement: Qt Test and CTest harness
 
 The build SHALL call `include(CTest)` gated on `BUILD_TESTING` and SHALL add a
-`crates/pictura-app/cpp/tests/` directory with its own `CMakeLists.txt`. That
-file SHALL build each `tst_*.cpp` as its own executable, linking `pictura_shell`
-and `Qt6::Test`, and SHALL register each executable with `add_test` under
-`ENVIRONMENT QT_QPA_PLATFORM=offscreen` and `TIMEOUT 120`. Each `add_test` SHALL
-pass `-o <CMAKE_BINARY_DIR>/qt-test-results/<name>.xml,junitxml` so CTest itself
-emits a per-executable JUnit report. The harness SHALL be gated on
+`crates/pictura-app/cpp/tests/` directory with its own `CMakeLists.txt`. That file
+SHALL own one explicit registry of Qt Test suites and SHALL build those suites as
+a smaller set of subsystem driver executables linked to `pictura_shell`,
+`Qt6::Test`, and the shared test support library. Each registered suite SHALL map
+to exactly one driver. Configuration SHALL fail when a standalone suite source
+is missing from the registry or a suite appears in more than one subsystem list.
+Sources explicitly listed as included implementation files SHALL NOT be treated
+as standalone suites. Each CTest entry SHALL invoke that driver with
+`--suite <name>` and SHALL run in its own process. Sharded suites SHALL keep one
+entry per share, with the share selected by `PICTURA_TEST_SHARD`.
+
+Each `add_test` SHALL run under `ENVIRONMENT QT_QPA_PLATFORM=offscreen`, keep its
+per-suite `TIMEOUT`, and pass
+`-o <CMAKE_BINARY_DIR>/qt-test-results/<entry>.xml,junitxml`. The driver SHALL
+require `--suite` as its first argument and a non-empty registered suite name as
+its second argument. It SHALL pass the suite name as `argv[0]` and every later
+argument unchanged to the selected suite, and SHALL return that suite's exit
+status unchanged. A missing, incomplete, malformed, unknown, or duplicate suite
+selection SHALL fail before any test starts. The harness SHALL be gated on
 `BUILD_TESTING` with no effect when it is off. CTest SHALL own only the Qt Test
-executables and SHALL NOT wrap or replace `cargo nextest`; the Rust suite stays with
+drivers and SHALL NOT wrap or replace `cargo nextest`; the Rust suite stays with
 `scripts/test-report.sh`.
 
 #### Scenario: Configure builds the suites
 
 - **WHEN** CMake configures with `BUILD_TESTING` on
-- **THEN** the tests subdirectory is added and each `tst_*.cpp` is built as its
-  own executable linked against `pictura_shell` and `Qt6::Test`
+- **THEN** the tests subdirectory is added, every `tst_*.cpp` belongs to exactly
+  one `tst_driver_<subsystem>` executable linked against `pictura_shell` and
+  `Qt6::Test`, no per-suite executable is emitted, and a missing, unregistered,
+  or duplicate registry entry fails configuration
 
 #### Scenario: CTest runs each suite offscreen
 
-- **WHEN** `ctest` runs a registered Qt test executable
-- **THEN** it runs with `QT_QPA_PLATFORM=offscreen` and a `TIMEOUT` of 120
-  seconds
+- **WHEN** `ctest` runs a registered Qt test entry
+- **THEN** one driver process selects the named suite, the entry runs with
+  `QT_QPA_PLATFORM=offscreen` and keeps its `TIMEOUT`, and a sharded entry runs
+  only its share
 
 #### Scenario: CTest emits per-executable JUnit
 
-- **WHEN** `ctest` runs a registered Qt test executable
-- **THEN** the executable writes a JUnit report to
-  `build/qt-test-results/<name>.xml`
+- **WHEN** `ctest` runs a registered Qt test entry
+- **THEN** the selected suite writes a JUnit report to
+  `build/qt-test-results/<entry>.xml`
 
 #### Scenario: Tests are optional
 
 - **WHEN** CMake configures with `BUILD_TESTING` off
-- **THEN** no test executable or test registration is emitted
+- **THEN** no driver executable or test registration is emitted
 
 #### Scenario: CTest does not wrap nextest
 
 - **WHEN** the harness is built
 - **THEN** no CTest test invokes `cargo nextest`
+
+#### Scenario: The driver selects exactly one suite [qth_driver_selection]
+
+- **WHEN** a driver receives `--suite <name>` followed by Qt Test arguments
+- **THEN** it invokes only that suite, uses the suite name as `argv[0]`, forwards every later argument unchanged, and returns its exit status
+
+#### Scenario: Invalid dispatch fails [qth_driver_invalid]
+
+- **WHEN** a driver receives no suite selection, an incomplete or wrong-position selector, an empty name, a name with a `.cpp` suffix, an unknown suite, or duplicate registrations for the requested name
+- **THEN** it exits nonzero without starting a suite
 
 ### Requirement: Per-suite state isolation
 
@@ -121,18 +147,21 @@ mutates another's preferences or recovery state. Each suite SHALL declare a
 `pictura::test::ScopedStateHome` RAII member constructed BEFORE its main window,
 so the fixture outlives the window's session save. The fixture's constructor
 SHALL point `XDG_STATE_HOME` at a fresh temporary directory, and its destructor
-SHALL restore the previous value (including unsetting it only when it was not
-set before), rather than blanket-unsetting. Isolation SHALL NOT rely on
+SHALL restore the previous value, including unsetting it only when it was not
+set before, rather than blanket-unsetting. Isolation SHALL NOT rely on
 `initTestCase()`: the fixture must be alive across window construction and
 destruction, which `initTestCase()` cannot guarantee. The frame SHALL read
-`XDG_STATE_HOME` and `QApplication` SHALL NOT, so `QTEST_MAIN` SHALL be used
-without a custom main function or a global setup hook.
+`XDG_STATE_HOME` and `QApplication` SHALL NOT, so the suite's existing main
+SHALL remain responsible for constructing its test object and application.
+
+Each CTest entry SHALL start a fresh driver process even when several entries
+use the same driver executable. Dispatching to another suite in the same
+process SHALL NOT satisfy this isolation rule.
 
 #### Scenario: Suites do not share state
 
 - **WHEN** two suites run in the same `ctest` invocation
-- **THEN** each runs as its own executable in its own process with its own
-  temporary state home, so neither observes state written by the other
+- **THEN** each entry runs in its own process with its own temporary state home, so neither observes state written by the other
 
 #### Scenario: Each run starts clean
 
@@ -141,8 +170,7 @@ without a custom main function or a global setup hook.
 
 #### Scenario: A pre-existing state home is restored
 
-- **WHEN** `XDG_STATE_HOME` is already set in the environment and the fixture is
-  destroyed
+- **WHEN** `XDG_STATE_HOME` is already set in the environment and the fixture is destroyed
 - **THEN** the previous value is restored, not unset
 
 ### Requirement: Self-test migration and code retirement
@@ -195,15 +223,16 @@ ceiling that may only shrink.
 
 ### Requirement: Seeded suites
 
-The change SHALL seed four Qt Test executables: the three MIGRATED suites
+The initial harness SHALL seed four Qt Test suites: the three migrated suites
 `tst_command_tree`, `tst_layers_panel`, and `tst_edit_clipboard`, plus
 `tst_smoke`, the harness smoke suite that exercises the state-home fixture and
-proves CTest runs a suite offscreen. `tst_command_tree` SHALL cover the command
-registry and menu tree, including the widget-level menu checks `menus`,
-`dispatch`, `menu_count`, `menubar_clear`, `menus_panel`,
+proves CTest runs a suite offscreen. These suites SHALL remain registered when
+subsystem drivers replace per-suite executables. `tst_command_tree` SHALL cover
+the command registry and menu tree, including the widget-level menu checks
+`menus`, `dispatch`, `menu_count`, `menubar_clear`, `menus_panel`,
 `panelMenus_tools_icons`, and `widgetmenu_button`. `tst_layers_panel` SHALL cover
-Layers panel row controls/chrome (the opacity label, `%` suffix, semantic lock
-icons, and tree drag enabled), group expand/collapse, and drop bands via
+Layers panel row controls and chrome, the opacity label, `%` suffix, semantic
+lock icons, tree drag enabled, group expand and collapse, and drop bands via
 `lpc_nesting`, `lpc_chrome`, `lpr_rows`, `lpr_drag`, and `lpr_drop`; it does not
 assert row selection. `tst_edit_clipboard` SHALL cover the whole
 `edit_clipboard` check.
@@ -211,8 +240,7 @@ assert row selection. `tst_edit_clipboard` SHALL cover the whole
 #### Scenario: The seeded suites run
 
 - **WHEN** `ctest` runs the harness
-- **THEN** it runs `tst_smoke`, `tst_command_tree`, `tst_layers_panel`, and
-  `tst_edit_clipboard`
+- **THEN** it runs `tst_smoke`, `tst_command_tree`, `tst_layers_panel`, and `tst_edit_clipboard` through their registered drivers
 
 #### Scenario: The migrated checks leave the self-test
 
@@ -232,6 +260,11 @@ the layer's total wall time, both as CTest reports them, unless the entry's
 test functions share state; such an entry SHALL be named, with its reason, next
 to the shard registration.
 
+`tst_quick_mask` and `tst_document_navigate` SHALL use the existing shard
+mechanism. Their shares together SHALL run every test function exactly once.
+Quick Mask's 300-second timeout SHALL apply to every share. Consolidation into
+drivers SHALL NOT remove or rename any other existing registration.
+
 #### Scenario: the critical path names more than one suite [qth_critical_path]
 
 - **WHEN** the CTest run finishes and prints its critical path
@@ -246,6 +279,11 @@ to the shard registration.
 
 - **WHEN** the Qt Test layer runs at the default parallel level
 - **THEN** no entry's time in CTest's report exceeds a quarter of CTest's total real time, or the entry is named next to the shard registration with the reason it cannot be split
+
+#### Scenario: the two long suites use disjoint complete shares [qth_long_suites_sharded]
+
+- **WHEN** all registered shares of `tst_quick_mask` and `tst_document_navigate` run
+- **THEN** each suite's test functions run exactly once across its four shares, Quick Mask keeps a 300-second timeout per share, and Document Navigate keeps the default 120-second timeout per share
 
 ### Requirement: Qt Test suites wait on conditions, not fixed delays
 
