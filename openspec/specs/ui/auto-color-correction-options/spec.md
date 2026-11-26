@@ -1,7 +1,8 @@
 # ui/auto-color-correction-options Specification
 
 ## Purpose
-TBD - created by archiving change auto-color-correction-options. Update Purpose after archive.
+
+Define how Levels and Curves users configure, preview, and apply automatic color correction, how saved defaults affect the Image Auto commands, and how fitted adjustments remain editable after saving and reopening a PSD or PSB.
 
 ## Requirements
 
