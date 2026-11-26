@@ -13,7 +13,14 @@ use pictura_ops::Resample;
 use super::native_store::resize_samples;
 use super::{resample_plane, resize_document};
 
-const RESAMPLES: [Resample; 3] = [Resample::Nearest, Resample::Bilinear, Resample::Bicubic];
+const RESAMPLES: [Resample; 6] = [
+    Resample::Nearest,
+    Resample::Bilinear,
+    Resample::Bicubic,
+    Resample::BicubicSmoother,
+    Resample::BicubicSharper,
+    Resample::Automatic,
+];
 
 fn rect(left: i32, top: i32, w: i32, h: i32) -> PsdRect {
     PsdRect {
@@ -109,7 +116,7 @@ fn assert_dense(
 // [ocr_resize_exact]
 #[test]
 fn tiled_image_size_matches_the_dense_resampler() {
-    for (w, h) in [(450, 300), (150, 100), (21, 62), (699, 200)] {
+    for (w, h) in [(450, 300), (150, 100), (21, 62), (699, 200), (150, 300)] {
         for r in RESAMPLES {
             let before = document();
             let mut doc = before.clone();
@@ -217,10 +224,10 @@ fn deep_document<T: Seeded>(depth: BitDepth) -> Document {
     doc
 }
 
-fn assert_deep<T: Seeded>(depth: BitDepth) {
+fn assert_deep<T: Seeded>(depth: BitDepth, to: (u32, u32), method: Resample) {
     let before = deep_document::<T>(depth);
     let mut doc = before.clone();
-    resize_document(&mut doc, 450, 300, Resample::Bicubic).expect("resizes");
+    resize_document(&mut doc, to.0, to.1, method).expect("resizes");
     let (old, new) = (&before.layers[1], &doc.layers[1]);
     let old_store = old.source_channels.as_ref().unwrap();
     let new_store = new.source_channels.as_ref().unwrap();
@@ -233,16 +240,16 @@ fn assert_deep<T: Seeded>(depth: BitDepth) {
             (dims(old.rect), dims(new.rect))
         };
         assert!(is_tiled(now), "{depth:?} plane {id} not tiled");
-        let want = resize_samples(was, from.0, from.1, to.0, to.1, Resample::Bicubic);
+        let want = resize_samples(was, from.0, from.1, to.0, to.1, method);
         assert!(bits(now) == bits(&want), "{depth:?} plane {id}");
     }
     let (was, now) = (
         before.source.planes().as_ref().unwrap(),
         doc.source.planes().as_ref().unwrap(),
     );
-    assert_eq!((now.width, now.height), (450, 300));
+    assert_eq!((now.width, now.height), to);
     assert!(is_tiled(&now.samples), "{depth:?} document store not tiled");
-    let want = resize_samples(&was.samples, 300, 200, 450, 300, Resample::Bicubic);
+    let want = resize_samples(&was.samples, 300, 200, to.0 as usize, to.1 as usize, method);
     assert!(
         bits(&now.samples) == bits(&want),
         "{depth:?} document store"
@@ -252,8 +259,43 @@ fn assert_deep<T: Seeded>(depth: BitDepth) {
 // [ocr_resize_deep]
 #[test]
 fn retained_stores_resize_through_tiles() {
-    assert_deep::<u16>(BitDepth::Sixteen);
-    assert_deep::<f32>(BitDepth::ThirtyTwo);
+    for method in RESAMPLES {
+        for to in [(450, 300), (150, 300), (3, 7)] {
+            assert_deep::<u16>(BitDepth::Sixteen, to, method);
+            assert_deep::<f32>(BitDepth::ThirtyTwo, to, method);
+        }
+    }
+}
+
+#[test]
+fn resize_retains_extended_float_range() {
+    let mut doc = Document::new(2, 1, ColorMode::Rgb, BitDepth::ThirtyTwo);
+    let depth = doc.depth;
+    let bounds = rect(0, 0, 2, 1);
+    let mut raster = layer("HDR", bounds, 1);
+    let input = Samples::F32(Plane::from(vec![-2.0, 4.0]));
+    raster.source_channels = Some(SourceChannels::new(depth, bounds, vec![(0, input)]));
+    doc.layers = LayerStack::from_layers(vec![raster]);
+    doc.source
+        .set_native(
+            Some(depth),
+            Some(SourcePlanes {
+                depth,
+                width: 2,
+                height: 1,
+                samples: Samples::F32(Plane::from(vec![-2.0, 4.0, 0.0, 0.0, 0.0, 0.0])),
+            }),
+        )
+        .unwrap();
+
+    resize_document(&mut doc, 4, 1, Resample::Bilinear).unwrap();
+    let layer = &doc.layers[0].source_channels.as_ref().unwrap().planes[0].1;
+    let merged = &doc.source.planes().as_ref().unwrap().samples;
+    for store in [layer, merged] {
+        let Samples::F32(samples) = store else { panic!("expected float samples") };
+        assert!(samples.is_tiled());
+        assert_eq!(&every(samples)[..4], &[-2.0, -0.5, 2.5, 4.0]);
+    }
 }
 
 // [ocr_uniform_tiles]
@@ -302,4 +344,18 @@ fn resized_tiles_spill_and_read_back() {
         "spilled tiles read back differently"
     );
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn nearest_float_sanitizes_nonfinite_without_changing_finite_samples() {
+    use super::resize_tiled::{resize, Kernel};
+    let values = vec![f32::NAN, f32::INFINITY, f32::NEG_INFINITY, -2.0, 4.0, -0.0];
+    let src = Plane::from(values.clone());
+    let out = resize(&src, (6, 1), 1, (12, 1), Kernel::float(Resample::Nearest)).unwrap();
+    let actual = every(&out);
+    let expected = [0.0f32, 0.0, 0.0, -2.0, 4.0, -0.0];
+    for (i, want) in expected.iter().enumerate() {
+        assert_eq!(actual[2 * i].to_bits(), want.to_bits());
+        assert_eq!(actual[2 * i + 1].to_bits(), want.to_bits());
+    }
 }

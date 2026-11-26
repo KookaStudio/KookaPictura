@@ -115,6 +115,7 @@ pub use layer_masks::{
     layer_mask_refinement, replace_layer_mask, set_layer_mask_density, set_layer_mask_enabled,
     set_layer_mask_feather, set_layer_mask_linked, LayerMaskKind, MASK_FLAG_UNLINKED,
 };
+pub(super) use layer_style::scale_layer_style;
 pub use layer_style::{
     any_effects_visible, builtin_pattern, builtin_pattern_by_id, builtin_pattern_id,
     can_create_style_layers, clear_layer_style, copy_layer_style, create_style_layers,

@@ -718,6 +718,8 @@ private:
     bool rulersVisible_ = false;
     RulerUnit rulerUnit_ = RulerUnit::Inches;
     bool traditionalPoints_ = false;
+    double columnWidthInches_ = 2.5;
+    double columnGutterInches_ = 1.0 / 6.0;
     bool guidesVisible_ = true;
     bool guidesLocked_ = false;
     bool smartGuidesVisible_ = true;

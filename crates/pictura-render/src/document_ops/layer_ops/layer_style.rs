@@ -909,32 +909,41 @@ pub fn scale_layer_effects(doc: &mut Document, paths: &[&str], percent: f64) -> 
         return 0;
     }
     let factor = percent / 100.0;
-    edit_styles(doc, paths, |layer| {
-        let mut changed = false;
-        for effect in EFFECTS {
-            if layer_style_value(layer, &format!("{}.on", effect.name)) != Some(1.0) {
-                continue;
-            }
-            for f in effect.fields {
-                // Spread and Choke are percentages stored in pixel units.
-                let scaled = match f.kind {
-                    Kind::Unit(b"#Pxl", ..) => !matches!(f.name, "spread" | "choke"),
-                    Kind::Unit(b"#Prc", ..) => f.name == "scale",
-                    _ => false,
+    edit_styles(doc, paths, |layer| scale_layer_style(layer, factor, false))
+}
+
+pub(crate) fn scale_layer_style(layer: &mut Layer, factor: f64, include_disabled: bool) -> bool {
+    if !styleable(layer) {
+        return false;
+    }
+    if layer.extra_block(b"lfx2").is_none() {
+        return include_disabled && crate::layer_effects::legacy::scale_legacy_effects(layer, factor);
+    }
+    let mut changed = false;
+    let flag = if include_disabled { "exists" } else { "on" };
+    for effect in EFFECTS {
+        if layer_style_value(layer, &format!("{}.{flag}", effect.name)) != Some(1.0) {
+            continue;
+        }
+        for f in effect.fields {
+            // Spread and Choke are percentages stored in pixel units.
+            let scaled = match f.kind {
+                Kind::Unit(b"#Pxl", ..) => !matches!(f.name, "spread" | "choke"),
+                Kind::Unit(b"#Prc", ..) => f.name == "scale",
+                _ => false,
+            };
+            let key = format!("{}.{}", effect.name, f.name);
+            if let (true, Some(v)) = (scaled, layer_style_value(layer, &key)) {
+                let next = if f.name == "size" && effect.name == "stroke" {
+                    (v * factor).round()
+                } else {
+                    v * factor
                 };
-                let key = format!("{}.{}", effect.name, f.name);
-                if let (true, Some(v)) = (scaled, layer_style_value(layer, &key)) {
-                    let next = if f.name == "size" && effect.name == "stroke" {
-                        (v * factor).round()
-                    } else {
-                        v * factor
-                    };
-                    changed |= set_layer_style_value(layer, &key, next);
-                }
+                changed |= set_layer_style_value(layer, &key, next);
             }
         }
-        changed
-    })
+    }
+    changed
 }
 
 /// Show or hide every layer's effects at once (the master `fx` switch), as

@@ -328,6 +328,8 @@ void PicturaMainWindow::saveSession()
     state.rulersVisible = rulersVisible_;
     prefs.rulerUnit = int(rulerUnit_);
     prefs.traditionalPoints = traditionalPoints_;
+    prefs.columnWidthInches = columnWidthInches_;
+    prefs.columnGutterInches = columnGutterInches_;
     state.guidesVisible = guidesVisible_;
     state.guidesLocked = guidesLocked_;
     state.smartGuidesVisible = smartGuidesVisible_;

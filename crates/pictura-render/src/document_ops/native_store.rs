@@ -108,117 +108,98 @@ pub(super) fn resize_samples(
     }
     let plane = sw * sh;
     match samples {
-        Samples::U8(v) => {
-            Samples::U8(each_plane(v, plane, |p| resize_plane(p, sw, sh, dw, dh, resample)).into())
-        }
-        Samples::U16(v) => {
-            Samples::U16(each_plane(v, plane, |p| resize_plane(p, sw, sh, dw, dh, resample)).into())
-        }
-        Samples::F32(v) => {
-            Samples::F32(each_plane(v, plane, |p| resize_plane(p, sw, sh, dw, dh, resample)).into())
-        }
+        Samples::U8(v) => Samples::U8(
+            each_plane(v, plane, |p| resize_plane(p, (sw, sh), (dw, dh), resample, u8::to_unit))
+                .into(),
+        ),
+        Samples::U16(v) => Samples::U16(
+            each_plane(v, plane, |p| resize_plane(p, (sw, sh), (dw, dh), resample, u16::to_unit))
+                .into(),
+        ),
+        Samples::F32(v) => Samples::F32(
+            each_plane(v, plane, |p| {
+                resize_plane(p, (sw, sh), (dw, dh), resample, |v| {
+                    if v.is_finite() {
+                        f64::from(v)
+                    } else {
+                        0.0
+                    }
+                })
+            })
+            .into(),
+        ),
     }
 }
 
 #[cfg(test)]
 fn resize_plane<T: Sample>(
     data: &[T],
-    sw: usize,
-    sh: usize,
-    dw: usize,
-    dh: usize,
+    (sw, sh): (usize, usize),
+    (dw, dh): (usize, usize),
     resample: pictura_ops::Resample,
+    value: impl Fn(T) -> f64,
 ) -> Vec<T> {
     let xscale = sw as f64 / dw as f64;
     let yscale = sh as f64 / dh as f64;
     let mut out = Vec::with_capacity(dw * dh);
     for y in 0..dh {
         let sy = (y as f64 + 0.5) * yscale - 0.5;
+        let yt = dense_taps(sy, sh, dh, resample);
         for x in 0..dw {
             let sx = (x as f64 + 0.5) * xscale - 0.5;
-            out.push(sample_plane(data, sw, sh, sx, sy, resample));
+            let xt = dense_taps(sx, sw, dw, resample);
+            let (mut sum, mut weight) = (0.0, 0.0);
+            for &(i, wx) in xt.iter().flatten() {
+                for &(j, wy) in yt.iter().flatten() {
+                    sum += wx * wy * value(data[j * sw + i]);
+                    weight += wx * wy;
+                }
+            }
+            out.push(T::from_unit(sum / weight));
         }
     }
     out
 }
 
 #[cfg(test)]
-/// Clamp an out-of-bounds sample axis to `0..n-1`.
-fn idx(i: i64, n: usize) -> usize {
-    i.clamp(0, n as i64 - 1) as usize
-}
-
-#[cfg(test)]
-/// 2×2 tent weights for one axis at source coordinate `s`.
-fn bilevel(s: f64, n: usize) -> ([usize; 2], [f64; 2]) {
-    let x0 = s.floor();
-    let f = s - x0;
-    let x0 = x0 as i64;
-    ([idx(x0, n), idx(x0 + 1, n)], [1.0 - f, f])
-}
-
-#[cfg(test)]
-/// Keys cubic kernel `a = -0.75` (Mitchell–Netravali `cubic(0, 0.75)`).
-fn cubic(t: f64) -> f64 {
-    let a = -0.75;
-    let x = t.abs();
-    if x <= 1.0 {
-        (a + 2.0) * x * x * x - (a + 3.0) * x * x + 1.0
-    } else if x < 2.0 {
-        a * x * x * x - 5.0 * a * x * x + 8.0 * a * x - 4.0 * a
-    } else {
-        0.0
-    }
-}
-
-#[cfg(test)]
-/// 4×4 cubic weights for one axis at source coordinate `s`.
-fn cubics(s: f64, n: usize) -> ([usize; 4], [f64; 4]) {
-    let x0 = s.floor() as i64;
-    let at = |k: i64| x0 + k - 1;
-    let i: [usize; 4] = std::array::from_fn(|k| idx(at(k as i64), n));
-    let w: [f64; 4] = std::array::from_fn(|k| cubic(s - at(k as i64) as f64));
-    (i, w)
-}
-
-#[cfg(test)]
-fn sample_plane<T: Sample>(
-    plane: &[T],
-    w: usize,
-    h: usize,
-    sx: f64,
-    sy: f64,
+fn dense_taps(
+    at: f64,
+    n: usize,
+    dest: usize,
     resample: pictura_ops::Resample,
-) -> T {
+) -> [Option<(usize, f64)>; 4] {
+    use pictura_ops::Resample;
+    let index = |i: i64| i.clamp(0, n as i64 - 1) as usize;
+    let base = at.floor() as i64;
+    let fraction = at - base as f64;
     match resample {
-        pictura_ops::Resample::Nearest => {
-            let x = idx(sx.round() as i64, w);
-            let y = idx(sy.round() as i64, h);
-            plane[y * w + x]
-        }
-        pictura_ops::Resample::Bilinear => {
-            let (xi, xw) = bilevel(sx, w);
-            let (yi, yw) = bilevel(sy, h);
-            let (mut acc, mut ws) = (0.0, 0.0);
-            for (i, wx) in xi.iter().zip(xw) {
-                for (j, wy) in yi.iter().zip(yw) {
-                    acc += wx * wy * plane[j * w + i].to_unit();
-                    ws += wx * wy;
-                }
-            }
-            T::from_unit(acc / ws)
-        }
-        pictura_ops::Resample::Bicubic => {
-            let (xi, xw) = cubics(sx, w);
-            let (yi, yw) = cubics(sy, h);
-            let (mut acc, mut ws) = (0.0, 0.0);
-            for (i, wx) in xi.iter().zip(xw) {
-                for (j, wy) in yi.iter().zip(yw) {
-                    acc += wx * wy * plane[j * w + i].to_unit();
-                    ws += wx * wy;
-                }
-            }
-            T::from_unit(acc / ws)
+        Resample::Nearest => [Some((index(at.round() as i64), 1.0)), None, None, None],
+        Resample::Bilinear => [
+            Some((index(base), 1.0 - fraction)),
+            Some((index(base + 1), fraction)),
+            None,
+            None,
+        ],
+        cubic_method => {
+            let a = match cubic_method {
+                Resample::BicubicSmoother => -0.5,
+                Resample::BicubicSharper => -1.0,
+                Resample::Automatic if dest > n => -0.5,
+                Resample::Automatic if dest < n => -1.0,
+                _ => -0.75,
+            };
+            std::array::from_fn(|k| {
+                let i = base + k as i64 - 1;
+                let x = (at - i as f64).abs();
+                let weight = if x <= 1.0 {
+                    (a + 2.0) * x * x * x - (a + 3.0) * x * x + 1.0
+                } else if x < 2.0 {
+                    a * x * x * x - 5.0 * a * x * x + 8.0 * a * x - 4.0 * a
+                } else {
+                    0.0
+                };
+                Some((index(i), weight))
+            })
         }
     }
 }

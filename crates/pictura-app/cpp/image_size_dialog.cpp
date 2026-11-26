@@ -4,15 +4,19 @@
 #include "api/document_api.h"
 #include "api/document_bridge.h"
 #include "api/paint_bridge.h"
+#include "canvas_ruler.h"
 #include "dialogs.h"
 #include "memory_refusal.h"
+#include "preferences.h"
 
 #include <QtCore/QSignalBlocker>
 #include <QtGui/QPainter>
-#include <QtGui/QStandardItemModel>
+
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
+#include <QtWidgets/QDialogButtonBox>
 #include <QtWidgets/QDoubleSpinBox>
+#include <QtWidgets/QFormLayout>
 #include <QtWidgets/QGridLayout>
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
@@ -24,6 +28,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iterator>
+#include <limits>
 
 namespace pictura {
 
@@ -35,7 +40,9 @@ std::function<bool(QDialog&)> imageSizeDialogDriver;
 
 // Width/Height units, in CS6's order. Pixels and Percent stand apart from the
 // physical units, which all convert through the resolution.
-enum Unit { UnitPixels = 0, UnitInches, UnitCm, UnitMm, UnitPoints, UnitPercent };
+enum Unit {
+    UnitPixels = 0, UnitInches, UnitCm, UnitMm, UnitPoints, UnitPercent, UnitPicas, UnitColumns
+};
 
 constexpr int kPreviewBox = 220;
 
@@ -76,10 +83,10 @@ struct ResampleEntry {
     const char* kind;
 };
 const ResampleEntry kResample[] = {
-    {"Automatic", "bicubic"},
+    {"Automatic", "automatic"},
     {"Preserve Details (enlargement)", "bicubic"},
-    {"Bicubic Smoother (enlargement)", "bicubic"},
-    {"Bicubic Sharper (reduction)", "bicubic"},
+    {"Bicubic Smoother (enlargement)", "bicubic-smoother"},
+    {"Bicubic Sharper (reduction)", "bicubic-sharper"},
     {"Bicubic (smooth gradients)", "bicubic"},
     {"Nearest Neighbor (hard edges)", "nearest"},
     {"Bilinear", "bilinear"},
@@ -142,22 +149,24 @@ protected:
     }
 };
 
-void addUnits(QComboBox* box, bool percent)
+void addUnits(QComboBox* box, bool columns)
 {
     box->addItems({QStringLiteral("Pixels"), QStringLiteral("Inches"),
                    QStringLiteral("Centimeters"), QStringLiteral("Millimeters"),
-                   QStringLiteral("Points")});
-    if (percent) {
-        box->addItem(QCoreApplication::translate("PicturaUi", "Percent"));
+                   QStringLiteral("Points"),
+                   QCoreApplication::translate("PicturaUi", "Percent"),
+                   ImageSizeDialog::tr("Picas")});
+    if (columns) {
+        box->addItem(ImageSizeDialog::tr("Columns"));
     }
 }
 
 bool isPhysical(int unit)
 {
-    return unit == UnitInches || unit == UnitCm || unit == UnitMm || unit == UnitPoints;
+    return unit != UnitPixels && unit != UnitPercent;
 }
 
-double inchesPerUnit(int unit)
+double inchesPerUnit(int unit, bool traditionalPoints)
 {
     switch (unit) {
     case UnitCm:
@@ -165,10 +174,17 @@ double inchesPerUnit(int unit)
     case UnitMm:
         return 1.0 / 25.4;
     case UnitPoints:
-        return 1.0 / 72.0;
+        return pixelsPerRulerUnit(RulerUnit::Points, 1.0, traditionalPoints, 0.0);
+    case UnitPicas:
+        return pixelsPerRulerUnit(RulerUnit::Picas, 1.0, traditionalPoints, 0.0);
     default:
         return 1.0;
     }
+}
+
+int roundedPixelCount(double pixels)
+{
+    return qRound(std::clamp(pixels, 1.0, double(std::numeric_limits<int>::max())));
 }
 
 } // namespace
@@ -259,6 +275,14 @@ ImageSizeDialog::ImageSizeDialog(PictureView* view, QWidget* parent)
         pixelHeight_ = qMax(1, int(view_->document_height()));
         resolution_ = document_ppi(*view_);
     }
+    const auto prefs = loadPreferences();
+    traditionalPoints_ = prefs.traditionalPoints;
+    if (std::isfinite(prefs.columnWidthInches) && prefs.columnWidthInches > 0.0) {
+        columnWidthInches_ = prefs.columnWidthInches;
+    }
+    if (std::isfinite(prefs.columnGutterInches) && prefs.columnGutterInches >= 0.0) {
+        columnGutterInches_ = prefs.columnGutterInches;
+    }
     bytesPerPixel_ = bytesPerPixel(view_);
     originalWidth_ = pixelWidth_;
     originalHeight_ = pixelHeight_;
@@ -281,14 +305,49 @@ QString ImageSizeDialog::resampleKind() const
     if (!resample_->isChecked()) {
         return {};
     }
-    return QLatin1String(kResample[qBound(0, resampleMode_->currentIndex(),
-                                          int(std::size(kResample)) - 1)]
-                             .kind);
+    return resampleMode_->currentData().toString();
 }
 
-double ImageSizeDialog::unitScale(int unit) const
+bool ImageSizeDialog::scaleStylesForResize() const
 {
-    return isPhysical(unit) ? resolution_ * inchesPerUnit(unit) : 1.0;
+    return resample_->isChecked() && chain_->isChecked() && scaleStyles_->isChecked();
+}
+
+double ImageSizeDialog::enteredInches(double size, int unit) const
+{
+    if (unit == UnitColumns) {
+        return size * columnWidthInches_ + std::max(0.0, size - 1.0) * columnGutterInches_;
+    }
+    return size * inchesPerUnit(unit, traditionalPoints_);
+}
+
+double ImageSizeDialog::displayedSize(int pixels, int unit, int originalPixels) const
+{
+    if (unit == UnitPixels) {
+        return pixels;
+    }
+    if (unit == UnitPercent) {
+        return 100.0 * pixels / originalPixels;
+    }
+    const double inches = pixels / resolution_;
+    if (unit == UnitColumns) {
+        if (inches < columnWidthInches_) {
+            return inches / columnWidthInches_;
+        }
+        return (inches + columnGutterInches_) / (columnWidthInches_ + columnGutterInches_);
+    }
+    return inches / inchesPerUnit(unit, traditionalPoints_);
+}
+
+int ImageSizeDialog::enteredPixels(double size, int unit, int originalPixels) const
+{
+    if (unit == UnitPixels) {
+        return roundedPixelCount(size);
+    }
+    if (unit == UnitPercent) {
+        return roundedPixelCount(originalPixels * size / 100.0);
+    }
+    return roundedPixelCount(enteredInches(size, unit) * resolution_);
 }
 
 void ImageSizeDialog::buildUi()
@@ -342,11 +401,6 @@ void ImageSizeDialog::buildUi()
             fitTo_->insertSeparator(fitTo_->count());
         }
     }
-    if (auto* model = qobject_cast<QStandardItemModel*>(fitTo_->model())) {
-        if (QStandardItem* item = model->item(fitTo_->findData(kFitAutoResolution))) {
-            item->setEnabled(false);
-        }
-    }
     fitRow->addWidget(fitTo_, 1);
     right->addLayout(fitRow);
 
@@ -371,13 +425,13 @@ void ImageSizeDialog::buildUi()
     grid->addWidget(height_, 1, 2);
     heightUnit_ = new QComboBox(this);
     heightUnit_->setObjectName(QStringLiteral("imageSizeHeightUnit"));
-    addUnits(heightUnit_, true);
+    addUnits(heightUnit_, false);
     grid->addWidget(heightUnit_, 1, 3);
     chain_ = new ChainToggle(this);
     grid->addWidget(chain_, 0, 0, 2, 1);
     grid->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Resolution:"), this), 2, 1, Qt::AlignRight);
-    resolutionField_ = field(QStringLiteral("imageSizeResolution"), 1.0);
-    resolutionField_->setDecimals(0);
+    resolutionField_ = field(QStringLiteral("imageSizeResolution"), 0.01);
+    resolutionField_->setDecimals(2);
     grid->addWidget(resolutionField_, 2, 2);
     resolutionUnit_ = new QComboBox(this);
     resolutionUnit_->setObjectName(QStringLiteral("imageSizeResolutionUnit"));
@@ -393,10 +447,14 @@ void ImageSizeDialog::buildUi()
     resampleMode_ = new QComboBox(this);
     resampleMode_->setObjectName(QStringLiteral("imageSizeResampleMode"));
     for (const ResampleEntry& entry : kResample) {
-        resampleMode_->addItem(QLatin1String(entry.label));
+        resampleMode_->addItem(QLatin1String(entry.label), QString::fromLatin1(entry.kind));
     }
     resampleRow->addWidget(resampleMode_, 1);
     right->addLayout(resampleRow);
+    scaleStyles_ = new QCheckBox(tr("Scale Styles"), this);
+    scaleStyles_->setObjectName(QStringLiteral("imageSizeScaleStyles"));
+    scaleStyles_->setChecked(true);
+    right->addWidget(scaleStyles_);
     right->addStretch();
     outer->addLayout(right, 1);
 
@@ -421,6 +479,7 @@ void ImageSizeDialog::buildUi()
         connect(unit, &QComboBox::currentIndexChanged, this, &ImageSizeDialog::syncFields);
     }
     connect(resample_, &QCheckBox::toggled, this, &ImageSizeDialog::resampleToggled);
+    connect(chain_, &QToolButton::toggled, this, &ImageSizeDialog::updateResampleControls);
     connect(fitTo_, &QComboBox::currentIndexChanged, this, &ImageSizeDialog::fitToChosen);
 }
 
@@ -429,12 +488,14 @@ void ImageSizeDialog::syncFields()
     updating_ = true;
     const int wUnit = widthUnit_->currentIndex();
     const int hUnit = heightUnit_->currentIndex();
-    width_->setDecimals(wUnit == UnitPixels ? 0 : 2);
-    height_->setDecimals(hUnit == UnitPixels ? 0 : 2);
-    width_->setValue(wUnit == UnitPercent ? 100.0 * pixelWidth_ / originalWidth_
-                                          : pixelWidth_ / unitScale(wUnit));
-    height_->setValue(hUnit == UnitPercent ? 100.0 * pixelHeight_ / originalHeight_
-                                           : pixelHeight_ / unitScale(hUnit));
+    const auto sync = [this](QDoubleSpinBox* field, int unit, int pixels, int original) {
+        field->setDecimals(unit == UnitPixels ? 0 : 4);
+        field->setMinimum(unit == UnitPixels ? 1.0 : 0.0001);
+        field->setValue(displayedSize(pixels, unit, original));
+        field->setReadOnly(!resample_->isChecked() && !isPhysical(unit));
+    };
+    sync(width_, wUnit, pixelWidth_, originalWidth_);
+    sync(height_, hUnit, pixelHeight_, originalHeight_);
     resolutionField_->setValue(resultPerCm() ? resolution_ / 2.54 : resolution_);
     updating_ = false;
     updateSummary();
@@ -456,15 +517,14 @@ void ImageSizeDialog::widthEdited()
     if (!resample_->isChecked()) {
         // The pixels are fixed, so a new printed width is a new resolution.
         if (isPhysical(unit) && width_->value() > 0.0) {
-            resolution_ = pixelWidth_ / (width_->value() * inchesPerUnit(unit));
+            resolution_ = pixelWidth_ / enteredInches(width_->value(), unit);
         }
         syncFields();
         return;
     }
-    pixelWidth_ = qMax(1, unit == UnitPercent ? qRound(originalWidth_ * width_->value() / 100.0)
-                                              : qRound(width_->value() * unitScale(unit)));
+    pixelWidth_ = enteredPixels(width_->value(), unit, originalWidth_);
     if (chain_->isChecked()) {
-        pixelHeight_ = qMax(1, qRound(double(pixelWidth_) * originalHeight_ / originalWidth_));
+        pixelHeight_ = roundedPixelCount(double(pixelWidth_) * originalHeight_ / originalWidth_);
     }
     syncFields();
 }
@@ -478,16 +538,14 @@ void ImageSizeDialog::heightEdited()
     const int unit = heightUnit_->currentIndex();
     if (!resample_->isChecked()) {
         if (isPhysical(unit) && height_->value() > 0.0) {
-            resolution_ = pixelHeight_ / (height_->value() * inchesPerUnit(unit));
+            resolution_ = pixelHeight_ / enteredInches(height_->value(), unit);
         }
         syncFields();
         return;
     }
-    pixelHeight_ = qMax(1, unit == UnitPercent
-                               ? qRound(originalHeight_ * height_->value() / 100.0)
-                               : qRound(height_->value() * unitScale(unit)));
+    pixelHeight_ = enteredPixels(height_->value(), unit, originalHeight_);
     if (chain_->isChecked()) {
-        pixelWidth_ = qMax(1, qRound(double(pixelHeight_) * originalWidth_ / originalHeight_));
+        pixelWidth_ = roundedPixelCount(double(pixelHeight_) * originalWidth_ / originalHeight_);
     }
     syncFields();
 }
@@ -497,9 +555,13 @@ void ImageSizeDialog::resolutionEdited()
     if (updating_) {
         return;
     }
-    markCustom();
     const double entered = resolutionField_->value();
-    const double ppi = resultPerCm() ? entered * 2.54 : entered;
+    setResolutionPpi(resultPerCm() ? entered * 2.54 : entered);
+}
+
+void ImageSizeDialog::setResolutionPpi(double ppi)
+{
+    markCustom();
     // With Resample on, a physical Width/Height keeps its printed size, so
     // its pixel count follows the resolution; in pixels it stays put. Chained,
     // either physical axis carries the other with it.
@@ -509,10 +571,10 @@ void ImageSizeDialog::resolutionEdited()
         const bool physicalWidth = isPhysical(widthUnit_->currentIndex());
         const bool physicalHeight = isPhysical(heightUnit_->currentIndex());
         if (physicalWidth || (chained && physicalHeight)) {
-            pixelWidth_ = qMax(1, qRound(pixelWidth_ * scale));
+            pixelWidth_ = roundedPixelCount(pixelWidth_ * scale);
         }
         if (physicalHeight || (chained && physicalWidth)) {
-            pixelHeight_ = qMax(1, qRound(pixelHeight_ * scale));
+            pixelHeight_ = roundedPixelCount(pixelHeight_ * scale);
         }
     }
     resolution_ = ppi;
@@ -525,8 +587,59 @@ void ImageSizeDialog::fitToChosen(int index)
         return;
     }
     const int data = fitTo_->itemData(index).toInt();
-    if (data != kFitCustom && data != kFitAutoResolution) {
+    if (data == kFitAutoResolution) {
+        showAutoResolution();
+        return;
+    }
+    lastFitIndex_ = index;
+    if (data != kFitCustom) {
         applyFitPreset(data);
+    }
+}
+
+void ImageSizeDialog::showAutoResolution()
+{
+    {
+        const QSignalBlocker blocked(fitTo_);
+        fitTo_->setCurrentIndex(lastFitIndex_);
+    }
+    QDialog dialog(this);
+    dialog.setObjectName(QStringLiteral("imageSizeAutoResolution"));
+    dialog.setWindowTitle(tr("Auto Resolution"));
+    auto* layout = new QFormLayout(&dialog);
+    auto* screen = new QDoubleSpinBox(&dialog);
+    screen->setObjectName(QStringLiteral("imageSizeAutoScreen"));
+    screen->setDecimals(2);
+    screen->setRange(0.01, 150000.0);
+    screen->setValue(150.0);
+    auto* unit = new QComboBox(&dialog);
+    unit->setObjectName(QStringLiteral("imageSizeAutoScreenUnit"));
+    unit->addItems({tr("Lines/Inch"), tr("Lines/Centimeter")});
+    auto* screenRow = new QHBoxLayout;
+    screenRow->addWidget(screen);
+    screenRow->addWidget(unit);
+    layout->addRow(tr("Screen:"), screenRow);
+
+    auto* quality = new QComboBox(&dialog);
+    quality->setObjectName(QStringLiteral("imageSizeAutoQuality"));
+    quality->addItems({tr("Draft"), tr("Good"), tr("Best")});
+    quality->setCurrentIndex(1);
+    layout->addRow(tr("Quality:"), quality);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    layout->addRow(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    connect(unit, &QComboBox::currentIndexChanged, &dialog, [screen](int index) {
+        const double converted = index == 1 ? screen->value() / 2.54 : screen->value() * 2.54;
+        screen->setMaximum(index == 1 ? 150000.0 / 2.54 : 150000.0);
+        screen->setValue(converted);
+    });
+
+    if (answerImageSizeDialog(dialog, this)) {
+        const double frequency = screen->value() * (unit->currentIndex() == 1 ? 2.54 : 1.0);
+        const int choice = quality->currentIndex();
+        const double ppi = frequency * (1.0 + 0.5 * choice);
+        setResolutionPpi(choice == 0 ? std::max(72.0, ppi) : ppi);
     }
 }
 
@@ -556,7 +669,7 @@ void ImageSizeDialog::applyFitPreset(int preset)
     if (!resample_->isChecked()) {
         const QSignalBlocker block(resample_);
         resample_->setChecked(true);
-        resampleMode_->setEnabled(true);
+        updateResampleControls();
     }
     syncFields();
 }
@@ -567,12 +680,21 @@ void ImageSizeDialog::markCustom()
     if (custom >= 0 && fitTo_->currentIndex() != custom) {
         const QSignalBlocker block(fitTo_);
         fitTo_->setCurrentIndex(custom);
+        lastFitIndex_ = custom;
     }
+}
+
+void ImageSizeDialog::updateResampleControls()
+{
+    const bool resample = resample_->isChecked();
+    resampleMode_->setEnabled(resample);
+    chain_->setEnabled(resample);
+    scaleStyles_->setEnabled(resample && chain_->isChecked());
 }
 
 void ImageSizeDialog::resampleToggled(bool on)
 {
-    resampleMode_->setEnabled(on);
+    updateResampleControls();
     if (!on) {
         // From here only the print size can change, never the pixels.
         pixelWidth_ = originalWidth_;

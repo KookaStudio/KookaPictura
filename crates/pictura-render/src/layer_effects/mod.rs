@@ -100,7 +100,7 @@ mod bevel;
 pub(crate) use bevel::blur_reference;
 pub mod contour;
 mod glows;
-mod legacy;
+pub(crate) mod legacy;
 mod light;
 mod materialize;
 mod overlays;

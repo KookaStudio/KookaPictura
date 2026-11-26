@@ -98,6 +98,7 @@ public:
     // (72.27) rather than PostScript (72) points per inch.
     void setRulerUnit(int unit);
     void setTraditionalPoints(bool on);
+    void setColumnSize(double widthInches, double gutterInches);
     // Type: Fill New Type Layers With Placeholder Text (not CS6; Photoshop CC).
     void setTypePlaceholderText(bool on);
     // Type: Show Asian Text Options, Middle Eastern, Missing Glyph Protection.
@@ -142,6 +143,7 @@ signals:
                              int subdivisions);
     void rulerUnitChanged(int unit);
     void traditionalPointsChanged(bool on);
+    void columnSizeChanged(double widthInches, double gutterInches);
     void typePlaceholderTextChanged(bool on);
     void typeShowAsianOptionsChanged(bool on);
     void typeMiddleEasternChanged(bool on);
@@ -164,6 +166,7 @@ private:
     void showScratchVolumes();
     void moveScratchVolume(int delta);
     QWidget* buildUnitsPage();
+    void syncColumnSizeFields();
     QWidget* buildGuidesPage();
     void showGuideColor(const QColor& color);
 
@@ -204,6 +207,12 @@ private:
     QSpinBox* gridSubdivisions_ = nullptr;
     ColorSwatchWidget* gridSwatch_ = nullptr;
     QColor gridColorValue_{0xc0, 0xc0, 0xc0};
+    double columnWidthInches_ = 2.5;
+    double columnGutterInches_ = 1.0 / 6.0;
+    QDoubleSpinBox* columnWidth_ = nullptr;
+    QDoubleSpinBox* columnGutter_ = nullptr;
+    QComboBox* columnWidthUnit_ = nullptr;
+    QComboBox* columnGutterUnit_ = nullptr;
     QComboBox* rulerUnit_ = nullptr;
     QRadioButton* postScriptPoints_ = nullptr;
     QRadioButton* traditionalPoints_ = nullptr;

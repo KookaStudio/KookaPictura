@@ -426,3 +426,49 @@ fn hide_all(e: &mut LegacyEffects) {
         c.enabled = false;
     }
 }
+
+/// Scale the dimensional fields of supported legacy records without rewriting
+/// unknown records or changing their visibility. Used only by Image Size.
+pub(crate) fn scale_legacy_effects(layer: &mut Layer, factor: f64) -> bool {
+    let Some(block) = layer.extra_block(b"lrFX") else { return false };
+    let mut data = block.data.to_vec();
+    let mut reader = Reader::new(&data);
+    if reader.u16() != Some(0) { return false; }
+    let Some(count) = reader.u16() else { return false };
+    let mut fields = Vec::new();
+    for _ in 0..count {
+        if reader.fourcc() != Some(*b"8BIM") { return false; }
+        let Some(kind) = reader.fourcc() else { return false };
+        let Some(len) = reader.u32() else { return false };
+        let start = reader.pos;
+        let Some(body) = reader.take(len as usize) else { return false };
+        let valid = match &kind {
+            b"dsdw" => decode_drop_shadow_record(&mut Reader::new(body)).is_some(),
+            b"isdw" => decode_inner_shadow_record(&mut Reader::new(body)).is_some(),
+            b"oglw" => decode_glow_record(&mut Reader::new(body), false).is_some(),
+            b"iglw" => decode_inner_glow_record(&mut Reader::new(body)).is_some(),
+            b"bevl" => decode_bevel_record(&mut Reader::new(body)).is_some(),
+            _ => false,
+        };
+        if valid {
+            match &kind {
+                b"dsdw" | b"isdw" => fields.extend([start + 4, start + 16]),
+                b"oglw" | b"iglw" => fields.push(start + 4),
+                b"bevl" => fields.push(start + 12),
+                _ => {}
+            }
+        }
+    }
+    let mut changed = false;
+    for offset in fields {
+        let bytes = &mut data[offset..offset + 4];
+        let value = u32::from_be_bytes(bytes.try_into().expect("validated record"));
+        let scaled = (f64::from(value) * factor).round().clamp(0.0, f64::from(u32::MAX)) as u32;
+        if value != scaled {
+            bytes.copy_from_slice(&scaled.to_be_bytes());
+            changed = true;
+        }
+    }
+    if changed { layer.set_metadata_block(*b"lrFX", Some(data.into())); }
+    changed
+}

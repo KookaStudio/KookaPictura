@@ -122,7 +122,8 @@ const QHash<QString, QStringList>& runnableCommands()
     static const QHash<QString, QStringList> table = {
         {QStringLiteral("image.image.size"),
          {QStringLiteral("width"), QStringLiteral("height"), QStringLiteral("constrainProportions"),
-          QStringLiteral("resolution"), QStringLiteral("perCm"), QStringLiteral("resample")}},
+          QStringLiteral("resolution"), QStringLiteral("perCm"), QStringLiteral("resample"),
+          QStringLiteral("scaleStyles")}},
         {QStringLiteral("image.canvas.size"),
          {QStringLiteral("width"), QStringLiteral("height"), QStringLiteral("anchor"),
           QStringLiteral("color")}},
@@ -313,7 +314,7 @@ QJsonObject ControlServer::methodRunCommand(const QJsonObject& params)
     CommandParams command;
     command.values = values;
     // Empty means "keep the pixels", which refuses any change of size. The
-    // dialog opens on Bicubic, and that is what someone naming a size wants.
+    // dialog-free command retains its original Bicubic default.
     if (id == QStringLiteral("image.image.size")
         && !values.contains(QStringLiteral("resample"))) {
         command.values.insert(QStringLiteral("resample"), QStringLiteral("bicubic"));

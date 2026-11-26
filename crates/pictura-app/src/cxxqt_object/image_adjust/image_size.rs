@@ -44,7 +44,7 @@ pub mod ffi {
         fn canvas_size_has_background(view: &PictureView) -> bool;
 
         /// Image ▸ Image Size: resample to `width` × `height` with `resample`
-        /// (`"nearest"`, `"bilinear"`, `"bicubic"`; empty keeps the pixels) and
+        /// (empty keeps the pixels) and
         /// set the resolution to `ppi` (shown per cm when `per_cm`). One
         /// "Image Size" state; false when nothing changes or the size is
         /// refused.
@@ -55,6 +55,18 @@ pub mod ffi {
             height: i32,
             ppi: f64,
             per_cm: bool,
+        ) -> bool;
+
+        /// Apply Image Size and scale stored layer effects when requested and
+        /// the target dimensions represent a proportional change.
+        fn image_size_apply_with_styles(
+            view: Pin<&mut PictureView>,
+            resample: &QString,
+            width: i32,
+            height: i32,
+            ppi: f64,
+            per_cm: bool,
+            scale_styles: bool,
         ) -> bool;
 
         /// Whether Image Size can resample the document to `width` ×

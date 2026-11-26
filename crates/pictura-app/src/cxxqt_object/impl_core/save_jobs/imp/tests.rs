@@ -363,6 +363,45 @@ fn native_save_restores_missing_native_composite() {
 }
 
 #[test]
+fn resized_layerless_native_store_survives_compatible_save() {
+    use pictura_core::{PixelBuffer, Samples, SourcePlanes};
+    for mode in [ColorMode::Rgb, ColorMode::Grayscale] {
+        for depth in [BitDepth::Sixteen, BitDepth::ThirtyTwo] {
+            let colors = mode.color_channels() as usize;
+            let signed_alpha = mode == ColorMode::Rgb;
+            let planes = colors + usize::from(signed_alpha);
+            let mut doc = Document::new(2, 1, mode, depth);
+            doc.layers = LayerStack::default();
+            doc.composite.replace(PixelBuffer {
+                width: 2, height: 1, channels: planes as u8,
+                data: vec![100; 2 * planes].into(),
+            }).unwrap();
+            doc.composite.set_signed_merged_alpha(signed_alpha);
+            let samples = match depth {
+                BitDepth::Sixteen => Samples::U16((0..planes).flat_map(|i| {
+                    if i == colors { [12001, 52003] } else { [10001, 30003] }
+                }).collect::<Vec<_>>().into()),
+                _ => Samples::F32((0..planes).flat_map(|i| {
+                    if i == colors { [0.3, 0.8] } else { [-2.0, 4.0] }
+                }).collect::<Vec<_>>().into()),
+            };
+            doc.source.set_native(Some(depth), Some(SourcePlanes {
+                depth, width: 2, height: 1, samples,
+            })).unwrap();
+            pictura_render::resize_document(&mut doc, 4, 1, pictura_render::Resample::Nearest).unwrap();
+            let before = doc.layers[0].source_channels.as_ref().unwrap().clone();
+            assert_eq!(before.planes.len(), planes);
+            let bytes = save_compatible(doc, "layerless.psd", true, true);
+            let read = pictura_codec::read_psd(&bytes).unwrap();
+            let after = read.layers[0].source_channels.as_ref().unwrap();
+            for (id, expected) in &before.planes {
+                assert_eq!(&after.planes.iter().find(|(other, _)| other == id).unwrap().1, expected);
+            }
+        }
+    }
+}
+
+#[test]
 fn native_depth_save_regressions() {
     use pictura_core::{Channel, Samples, SourcePlanes};
 
