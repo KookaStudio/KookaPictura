@@ -263,6 +263,7 @@ void AutoCorrectionTest::autoOptionsPreviewAndUndo()
         QVERIFY(clip);
         clip->setValue(15.0);
         QVERIFY(block(*view_, path_) != opening);
+        // Let the Properties panel’s 500 ms commit timer expire if preview armed it.
         QTest::qWait(600);
         QCOMPARE(view_->history_count(), history);
     };

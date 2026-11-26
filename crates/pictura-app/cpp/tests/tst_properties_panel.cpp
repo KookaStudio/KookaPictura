@@ -134,8 +134,11 @@ void PropertiesPanelTest::autoSelectParameter()
     const auto panelName = QStringLiteral("propertiesPanel");
     auto* column = window_->columnForPanel(panelName);
     QVERIFY(column);
-    QVERIFY(column->showPanel(panelName, true));
     window_->show();
+    window_->setScreenMode(pictura::ScreenMode::Standard);
+    window_->setPanelsHidden(false);
+    column->setRailMode(false);
+    QVERIFY(column->showPanel(panelName, true));
     window_->activateWindow();
     QVERIFY(QTest::qWaitForWindowActive(window_.get()));
     QTRY_VERIFY(panel_->isVisible());
