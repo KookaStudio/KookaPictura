@@ -296,9 +296,11 @@ LevelsDialog::LevelsDialog(PictureView* view, const QByteArray& block, const QRe
 
     left->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Input Levels:"), this));
     histogram_ = new LevelsStrip(false, 120, this);
+    histogram_->setFixedWidth(kStripWidth);
     histogram_->setObjectName(QStringLiteral("levelsHistogram"));
     left->addWidget(histogram_);
     input_ = new TriangleSlider(3, this);
+    input_->setFixedWidth(kStripWidth);
     input_->setObjectName(QStringLiteral("levelsInputSlider"));
     input_->setColor(0, Qt::black);
     input_->setColor(1, QColor(128, 128, 128));
@@ -325,8 +327,11 @@ LevelsDialog::LevelsDialog(PictureView* view, const QByteArray& block, const QRe
     left->addSpacing(10);
 
     left->addWidget(new QLabel(QCoreApplication::translate("PicturaUi", "Output Levels:"), this));
-    left->addWidget(new LevelsStrip(true, 16, this));
+    auto* outputRamp = new LevelsStrip(true, 16, this);
+    outputRamp->setFixedWidth(kStripWidth);
+    left->addWidget(outputRamp);
     output_ = new TriangleSlider(2, this);
+    output_->setFixedWidth(kStripWidth);
     output_->setObjectName(QStringLiteral("levelsOutputSlider"));
     output_->setColor(0, Qt::black);
     output_->setColor(1, Qt::white);
