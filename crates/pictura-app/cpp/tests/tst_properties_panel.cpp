@@ -8,6 +8,7 @@
 #include "selftest_paint_fixture.h"
 #include "panels/histogram_panel.h"
 #include "panels/layers_panel.h"
+#include "panels/panel_column.h"
 #include "panels/properties_panel.h"
 #include "api/layers_bridge.h"
 
@@ -130,7 +131,14 @@ void PropertiesPanelTest::cleanup()
 void PropertiesPanelTest::autoSelectParameter()
 {
     QVERIFY(setupAdjustment(QStringLiteral("levels")));
+    const auto panelName = QStringLiteral("propertiesPanel");
+    auto* column = window_->columnForPanel(panelName);
+    QVERIFY(column);
+    QVERIFY(column->showPanel(panelName, true));
     window_->show();
+    window_->activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(window_.get()));
+    QTRY_VERIFY(panel_->isVisible());
     QMenu menu;
     auto* action = menu.addAction(QStringLiteral("Auto-Select Parameter"));
     action->setCheckable(true);

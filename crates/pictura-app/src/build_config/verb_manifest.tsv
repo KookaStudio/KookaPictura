@@ -520,9 +520,6 @@ free	liquify_finish	liquify_finish	api/filters_bridge.h	pictura_app/src/cxxqt_ob
 free	liquify_geometry	liquify_geometry	api/filters_bridge.h	pictura_app/src/cxxqt_object/filter_tools/liquify.cxxqt.h
 free	liquify_grid_lines	liquify_grid_lines	api/filters_bridge.h	pictura_app/src/cxxqt_object/filter_tools/liquify.cxxqt.h
 free	liquify_hold	liquify_hold	api/filters_bridge.h	pictura_app/src/cxxqt_object/filter_tools/liquify.cxxqt.h
-free	adjustment_auto_block	adjustment_auto_block	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_edit.cxxqt.h
-free	adjustment_auto_source	adjustment_auto_source	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_edit.cxxqt.h
-free	image_auto_configured	image_auto_configured	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_edit.cxxqt.h
 free	liquify_last_mesh_id	liquify_last_mesh_id	api/filters_bridge.h	pictura_app/src/cxxqt_object/filter_tools/liquify.cxxqt.h
 free	liquify_load_mesh	liquify_load_mesh	api/filters_bridge.h	pictura_app/src/cxxqt_object/filter_tools/liquify.cxxqt.h
 free	liquify_mask	liquify_mask	api/filters_bridge.h	pictura_app/src/cxxqt_object/filter_tools/liquify.cxxqt.h
@@ -621,10 +618,15 @@ free	variables_command	variables_command	api/layer_comps_bridge.h	pictura_app/sr
 free	variables_preview	variables_preview	api/layer_comps_bridge.h	pictura_app/src/cxxqt_object/layer_comps.cxxqt.h
 free	variables_state	variables_state	api/layer_comps_bridge.h	pictura_app/src/cxxqt_object/layer_comps.cxxqt.h
 free	add_fill_layer	add_fill_layer	api/layers_bridge.h	pictura_app/src/cxxqt_object/impl_layers/fill_content.cxxqt.h
+free	adjustment_auto_block	adjustment_auto_block	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_edit.cxxqt.h
+free	adjustment_auto_source	adjustment_auto_source	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_edit.cxxqt.h
 free	adjustment_block	adjustment_block	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_edit.cxxqt.h
 free	adjustment_cancel	adjustment_cancel	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_edit.cxxqt.h
 free	adjustment_commit	adjustment_commit	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_edit.cxxqt.h
 free	adjustment_curve	adjustment_curve	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_edit.cxxqt.h
+free	adjustment_input_argb	adjustment_input_argb	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_edit.cxxqt.h
+free	adjustment_input_histogram	adjustment_input_histogram	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_edit.cxxqt.h
+free	adjustment_input_image	adjustment_input_image	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_edit.cxxqt.h
 free	adjustment_page	adjustment_page	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_edit.cxxqt.h
 free	adjustment_preset_can_save	adjustment_preset_can_save	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_presets.cxxqt.h
 free	adjustment_preset_delete	adjustment_preset_delete	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_presets.cxxqt.h
@@ -672,6 +674,7 @@ free	delete_layer_smart_filter_mask	delete_layer_smart_filter_mask	api/layers_br
 free	document_pattern_ids	document_pattern_ids	api/layers_bridge.h	pictura_app/src/cxxqt_object/impl_layers/fill_content.cxxqt.h
 free	expansion_paths	expansion_paths	api/layers_bridge.h	pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h
 free	expansion_set	expansion_set	api/layers_bridge.h	pictura_app/src/cxxqt_object/layer_target_bridge.cxxqt.h
+free	image_auto_configured	image_auto_configured	api/layers_bridge.h	pictura_app/src/cxxqt_object/adjustment_edit.cxxqt.h
 free	layer_can_convert_smart_object_to_layers	layer_can_convert_smart_object_to_layers	api/layers_bridge.h	pictura_app/src/cxxqt_object/impl_layers/smart_object_actions.cxxqt.h
 free	layer_can_new_smart_object_via_copy	layer_can_new_smart_object_via_copy	api/layers_bridge.h	pictura_app/src/cxxqt_object/impl_layers/smart_object_actions.cxxqt.h
 free	layer_can_reset_smart_object_transform	layer_can_reset_smart_object_transform	api/layers_bridge.h	pictura_app/src/cxxqt_object/impl_layers/smart_object_actions.cxxqt.h

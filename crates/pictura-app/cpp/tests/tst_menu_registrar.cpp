@@ -65,6 +65,11 @@ void MenuRegistrarTest::buildsMenuWithoutFrame()
         QString::fromLatin1(pictura::command_ids::ViewScreenModeStandard));
     QVERIFY(standard != nullptr);
     QVERIFY2(standard->isChecked(), "a checked provider reaches the menu action");
+
+    QAction* autoOptions = registrar.commands()->action(
+        QString::fromLatin1(pictura::command_ids::PanelPropertiesAutoOptions));
+    QVERIFY(autoOptions);
+    QVERIFY(!autoOptions->isEnabled());
 }
 
 #include "qt_test_support.h"

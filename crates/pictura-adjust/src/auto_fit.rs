@@ -97,8 +97,11 @@ impl AutoHistogram {
         let mut bins = [0u32; 256];
         let count = self.luma.len();
         for index in 0..count {
-            let value = if channel == 0 { self.luma[index].count }
-                else { self.channels[(channel - 1).min(2)][index] };
+            let value = if channel == 0 {
+                self.luma[index].count
+            } else {
+                self.channels[(channel - 1).min(2)][index]
+            };
             let target = index * 255 / (count - 1).max(1);
             bins[target] = bins[target].saturating_add(value.min(u32::MAX as u64) as u32);
         }
@@ -147,10 +150,7 @@ impl AutoHistogram {
             .unwrap_or_default()
     }
 
-    fn band_color<'a>(
-        bins: impl Iterator<Item = &'a ColorBin>,
-        mut count: u64,
-    ) -> [f64; 3] {
+    fn band_color<'a>(bins: impl Iterator<Item = &'a ColorBin>, mut count: u64) -> [f64; 3] {
         let total = count;
         let mut sum = [0.0; 3];
         for bin in bins {
@@ -170,9 +170,12 @@ impl AutoHistogram {
     }
 
     pub fn fit(&self, options: &AutoOptions) -> [Option<AutoTransfer>; 3] {
-        if self.total < 2 || self.channels.iter().all(|counts| {
-            counts.iter().filter(|&&n| n != 0).take(2).count() <= 1
-        }) {
+        if self.total < 2
+            || self
+                .channels
+                .iter()
+                .all(|counts| counts.iter().filter(|&&n| n != 0).take(2).count() <= 1)
+        {
             return [None; 3];
         }
 
@@ -193,13 +196,19 @@ impl AutoHistogram {
                 let fixed_cut = cut(self.total, 0.1);
                 [bounds(&luminance, fixed_cut, fixed_cut); 3]
             }
-            AutoKind::Tone => self.channels.each_ref().map(|counts| bounds(counts, shadow_cut, highlight_cut)),
+            AutoKind::Tone => self
+                .channels
+                .each_ref()
+                .map(|counts| bounds(counts, shadow_cut, highlight_cut)),
             AutoKind::Contrast => {
                 let shared: Vec<u64> = (0..=last)
                     .map(|i| self.channels.iter().map(|counts| counts[i]).sum())
                     .collect();
-                [bounds(&shared, cut(self.total * 3, options.shadow_clip),
-                    cut(self.total * 3, options.highlight_clip)); 3]
+                [bounds(
+                    &shared,
+                    cut(self.total * 3, options.shadow_clip),
+                    cut(self.total * 3, options.highlight_clip),
+                ); 3]
             }
             AutoKind::Color => {
                 let low = Self::band_color(self.luma.iter(), shadow_cut + 1);
@@ -214,10 +223,22 @@ impl AutoHistogram {
                 return None;
             }
             let brightness_contrast = options.algorithm == AutoKind::BrightnessContrast;
-            let shadow = if brightness_contrast { 0.0 } else { options.shadow[c].to_unit() };
-            let highlight = if brightness_contrast { 1.0 } else { options.highlight[c].to_unit() };
+            let shadow = if brightness_contrast {
+                0.0
+            } else {
+                options.shadow[c].to_unit()
+            };
+            let highlight = if brightness_contrast {
+                1.0
+            } else {
+                options.highlight[c].to_unit()
+            };
             let mut gamma = 1.0;
-            if !brightness_contrast && options.snap_midtones && self.neutral.count != 0 && shadow != highlight {
+            if !brightness_contrast
+                && options.snap_midtones
+                && self.neutral.count != 0
+                && shadow != highlight
+            {
                 let mean = self.neutral.sum[c] / self.neutral.count as f64;
                 let input = (mean - low) / (high - low);
                 let output = (options.midtone[c].to_unit() - shadow) / (highlight - shadow);
@@ -225,7 +246,13 @@ impl AutoHistogram {
                     gamma = (input.ln() / output.ln()).clamp(0.1, 9.99);
                 }
             }
-            Some(AutoTransfer { low, high, shadow, highlight, gamma })
+            Some(AutoTransfer {
+                low,
+                high,
+                shadow,
+                highlight,
+                gamma,
+            })
         })
     }
 }
@@ -264,8 +291,12 @@ mod tests {
         assert_eq!(histogram.fit(&AutoOptions::default()), [None; 3]);
         histogram.add_planes([&r, &g, &b], |_| true);
         let mut options = AutoOptions {
-            shadow_clip: 20.0, highlight_clip: 20.0, shadow: [20; 3],
-            highlight: [235; 3], midtone: [145; 3], ..AutoOptions::default()
+            shadow_clip: 20.0,
+            highlight_clip: 20.0,
+            shadow: [20; 3],
+            highlight: [235; 3],
+            midtone: [145; 3],
+            ..AutoOptions::default()
         };
         let tone = histogram.fit(&options);
         assert_eq!(tone[0].unwrap().levels().input_black, 50);
@@ -288,8 +319,14 @@ mod tests {
     #[test]
     fn brightness_contrast_uses_luminance_and_ignores_target_settings() {
         let mut histogram = AutoHistogram::new(255);
-        histogram.add_planes([&[20u8, 80, 180], &[40u8, 100, 200], &[60u8, 120, 220]], |_| true);
-        let mut options = AutoOptions { algorithm: AutoKind::BrightnessContrast, ..AutoOptions::default() };
+        histogram.add_planes(
+            [&[20u8, 80, 180], &[40u8, 100, 200], &[60u8, 120, 220]],
+            |_| true,
+        );
+        let mut options = AutoOptions {
+            algorithm: AutoKind::BrightnessContrast,
+            ..AutoOptions::default()
+        };
         let fit = histogram.fit(&options);
         assert_eq!(fit[0], fit[1]);
         assert_eq!(fit[1], fit[2]);
@@ -305,8 +342,17 @@ mod tests {
     fn configured_auto_keeps_u16_precision() {
         let input = [1200u16, 1223, 1300];
         let mut data = [input, input, input, [17, 18, 19]].concat();
-        apply_configured(&AutoOptions { shadow_clip: 0.0, highlight_clip: 0.0,
-            ..AutoOptions::default() }, &mut data, 3, u16::MAX, |_| true);
+        apply_configured(
+            &AutoOptions {
+                shadow_clip: 0.0,
+                highlight_clip: 0.0,
+                ..AutoOptions::default()
+            },
+            &mut data,
+            3,
+            u16::MAX,
+            |_| true,
+        );
         assert_eq!(&data[..3], &[0, 15073, 65535]);
         assert_eq!(&data[9..], &[17, 18, 19]);
     }

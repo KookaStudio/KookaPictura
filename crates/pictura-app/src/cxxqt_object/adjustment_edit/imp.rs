@@ -3,25 +3,37 @@ use super::*;
 use super::super::display_preview::{commit_display_preview, PreviewKind};
 use super::super::edit::Edit;
 use super::super::presentation::{Dirty, Presentation, Rebuild};
+use super::ffi::AutoCorrectionSettings;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
 use pictura_core::{AdjustmentData, AutoKind, AutoOptions};
-use super::ffi::AutoCorrectionSettings;
 use pictura_render::ParamKind;
 
 pub struct AutoCorrectionSource(Option<pictura_render::AutoHistogram>);
 
-pub(super) fn adjustment_auto_source(view: &PictureView, path: &QString) -> Box<AutoCorrectionSource> {
-    let source = view.rust().session.doc.as_ref().and_then(|doc| {
-        pictura_render::adjustment_auto_source(doc, &path.to_string())
-    });
+pub(super) fn adjustment_auto_source(
+    view: &PictureView,
+    path: &QString,
+) -> Box<AutoCorrectionSource> {
+    let source = view
+        .rust()
+        .session
+        .doc
+        .as_ref()
+        .and_then(|doc| pictura_render::adjustment_auto_source(doc, &path.to_string()));
     Box::new(AutoCorrectionSource(source))
 }
 
 fn auto_options(settings: &AutoCorrectionSettings) -> AutoOptions {
     let rgb = |color: u32| [(color >> 16) as u8, (color >> 8) as u8, color as u8];
-    let percent = |value: f64| if value.is_finite() { value.clamp(0.0, 49.99) } else { 0.1 };
+    let percent = |value: f64| {
+        if value.is_finite() {
+            value.clamp(0.0, 49.99)
+        } else {
+            0.1
+        }
+    };
     AutoOptions {
         algorithm: match settings.algorithm {
             0 => AutoKind::Contrast,
@@ -39,21 +51,25 @@ fn auto_options(settings: &AutoCorrectionSettings) -> AutoOptions {
 }
 
 fn adjustment_input_document(view: &PictureView, path: &QString) -> Option<pictura_core::Document> {
-    let Some(doc) = view.rust().session.doc.as_ref() else { return None };
+    let doc = view.rust().session.doc.as_ref()?;
     let path = path.to_string();
-    if !pictura_render::resolve_path(doc, &path).is_some_and(|layer| layer.has_adjustment_content()) {
+    if !pictura_render::resolve_path(doc, &path).is_some_and(|layer| layer.has_adjustment_content())
+    {
         return None;
     }
-    let Some(indices) = path.split('/').map(|part| part.parse::<usize>().ok()).collect::<Option<Vec<_>>>() else {
-        return None;
-    };
+    let indices = path
+        .split('/')
+        .map(|part| part.parse::<usize>().ok())
+        .collect::<Option<Vec<_>>>()?;
     let mut prefix = doc.clone();
     let mut root = 0;
     let mut layers = &doc.layers;
     for (depth, &index) in indices.iter().enumerate().take(indices.len() - 1) {
         let layer = &layers[index];
         if layer.blend != pictura_core::BlendMode::PassThrough
-            || layer.opacity != 255 || layer.mask.is_some() || layer.vector_mask.is_some()
+            || layer.opacity != 255
+            || layer.mask.is_some()
+            || layer.vector_mask.is_some()
         {
             prefix.layers = pictura_core::LayerStack::from_layers(layer.children().to_vec());
             root = depth + 1;
@@ -62,32 +78,75 @@ fn adjustment_input_document(view: &PictureView, path: &QString) -> Option<pictu
     }
     let indices = &indices[root..];
     for (depth, &index) in indices.iter().enumerate() {
-        let keep = if depth + 1 == indices.len() { index } else { index + 1 };
+        let keep = if depth + 1 == indices.len() {
+            index
+        } else {
+            index + 1
+        };
         prefix.layers.truncate(&indices[..depth], keep);
     }
     Some(prefix)
 }
 
-pub(super) fn adjustment_input_image(view: &PictureView, path: &QString, x: i32, y: i32, width: i32, height: i32) -> cxx_qt_lib::QImage {
-    let Some(doc) = adjustment_input_document(view, path) else { return cxx_qt_lib::QImage::default() };
-    if x < 0 || y < 0 || width <= 0 || height <= 0 || x.saturating_add(width) > doc.width as i32 || y.saturating_add(height) > doc.height as i32 {
+pub(super) fn adjustment_input_image(
+    view: &PictureView,
+    path: &QString,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+) -> cxx_qt_lib::QImage {
+    let Some(doc) = adjustment_input_document(view, path) else {
+        return cxx_qt_lib::QImage::default();
+    };
+    if x < 0
+        || y < 0
+        || width <= 0
+        || height <= 0
+        || x.saturating_add(width) > doc.width as i32
+        || y.saturating_add(height) > doc.height as i32
+    {
         return cxx_qt_lib::QImage::default();
     }
-    let rect = pictura_core::PsdRect { left: x, top: y, right: x + width, bottom: y + height };
-    let (pixels, _) = pictura_render::composite(pictura_render::CompositeRequest::region(&doc, rect, false));
+    let rect = pictura_core::PsdRect {
+        left: x,
+        top: y,
+        right: x + width,
+        bottom: y + height,
+    };
+    let (pixels, _) =
+        pictura_render::composite(pictura_render::CompositeRequest::region(&doc, rect, false));
     super::super::helpers_composite::buffer_to_image(&pixels)
 }
 
 pub(super) fn adjustment_input_argb(view: &PictureView, path: &QString, x: i32, y: i32) -> u32 {
-    let Some(doc) = adjustment_input_document(view, path) else { return 0 };
-    if x < 0 || y < 0 || x as u32 >= doc.width || y as u32 >= doc.height { return 0; }
-    let rect = pictura_core::PsdRect { left: x, top: y, right: x + 1, bottom: y + 1 };
-    let (pixels, _) = pictura_render::composite(pictura_render::CompositeRequest::region(&doc, rect, false));
+    let Some(doc) = adjustment_input_document(view, path) else {
+        return 0;
+    };
+    if x < 0 || y < 0 || x as u32 >= doc.width || y as u32 >= doc.height {
+        return 0;
+    }
+    let rect = pictura_core::PsdRect {
+        left: x,
+        top: y,
+        right: x + 1,
+        bottom: y + 1,
+    };
+    let (pixels, _) =
+        pictura_render::composite(pictura_render::CompositeRequest::region(&doc, rect, false));
     super::super::helpers_composite::sample_planar_argb(&pixels, 0, 0)
 }
 
 pub(super) fn adjustment_input_histogram(source: &AutoCorrectionSource, channel: i32) -> Vec<u32> {
-    source.0.as_ref().map(|histogram| histogram.display_bins(channel.clamp(0, 3) as usize).to_vec()).unwrap_or_default()
+    source
+        .0
+        .as_ref()
+        .map(|histogram| {
+            histogram
+                .display_bins(channel.clamp(0, 3) as usize)
+                .to_vec()
+        })
+        .unwrap_or_default()
 }
 
 pub(super) fn adjustment_auto_block(
@@ -95,9 +154,19 @@ pub(super) fn adjustment_auto_block(
     opening: &[u8],
     settings: &AutoCorrectionSettings,
 ) -> Vec<u8> {
-    source.0.as_ref().and_then(|histogram| {
-        pictura_render::auto_adjustment_block(&block_data(opening)?, histogram, &auto_options(settings))
-    }).as_ref().map(block_bytes).unwrap_or_default()
+    source
+        .0
+        .as_ref()
+        .and_then(|histogram| {
+            pictura_render::auto_adjustment_block(
+                &block_data(opening)?,
+                histogram,
+                &auto_options(settings),
+            )
+        })
+        .as_ref()
+        .map(block_bytes)
+        .unwrap_or_default()
 }
 
 pub(super) fn image_auto_configured(

@@ -221,7 +221,9 @@ fn normalize(key: &str, value: Json) -> Result<Json, String> {
         "autoCorrectionMidtone" => Json::from(bounded(0..=0xff_ff_ff, 0x80_80_80)),
         "autoCorrectionHighlight" => Json::from(bounded(0..=0xff_ff_ff, 0xff_ff_ff)),
         "autoCorrectionShadowClip" | "autoCorrectionHighlightClip" => {
-            let clip = value.as_f64().ok_or("Auto correction clipping must be finite")?;
+            let clip = value
+                .as_f64()
+                .ok_or("Auto correction clipping must be finite")?;
             Json::from(clip.clamp(0.0, 49.99))
         }
         "memoryUsagePercent" => Json::from(int().clamp(5, 100)),

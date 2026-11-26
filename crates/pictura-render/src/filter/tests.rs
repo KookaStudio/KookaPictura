@@ -1045,7 +1045,9 @@ fn auto_tone_uses_selection_histogram() {
 fn configured_auto_uses_selection_histogram() {
     let mut layer = step_layer(5, 1, 255);
     for ch in layer.channels_mut().iter_mut().filter(|c| c.id >= 0) {
-        ch.data.as_mut_slice().copy_from_slice(&[5, 40, 60, 140, 251]);
+        ch.data
+            .as_mut_slice()
+            .copy_from_slice(&[5, 40, 60, 140, 251]);
     }
     let alpha = chan(&layer, -1).to_vec();
     let region = rect(0, 0, 1, 5);
@@ -1064,7 +1066,8 @@ fn configured_auto_uses_selection_histogram() {
         &Adjustment::ConfiguredAuto(options),
         mask.edit_coverage().as_ref(),
         region,
-    ).unwrap();
+    )
+    .unwrap();
     assert_eq!(chan(&layer, 0), &[5, 20, 60, 220, 251]);
     assert_eq!(chan(&layer, -1), alpha.as_slice());
 }

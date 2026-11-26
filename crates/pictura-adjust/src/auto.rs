@@ -17,9 +17,14 @@ pub(crate) fn auto(
         AutoKind::Tone => auto_per_channel(buf, n, 0.001, coverage),
         AutoKind::Contrast => auto_joint(buf, n, 0.005, coverage),
         AutoKind::BrightnessContrast => {
-            let options = pictura_core::AutoOptions { algorithm: kind, ..Default::default() };
+            let options = pictura_core::AutoOptions {
+                algorithm: kind,
+                ..Default::default()
+            };
             let n = n.min(buf.data.len() / 3);
-            crate::auto_fit::apply_configured(&options, &mut buf.data, n, 255, |i| selected(coverage, i));
+            crate::auto_fit::apply_configured(&options, &mut buf.data, n, 255, |i| {
+                selected(coverage, i)
+            });
         }
         AutoKind::Color => {
             auto_per_channel(buf, n, 0.005, coverage);

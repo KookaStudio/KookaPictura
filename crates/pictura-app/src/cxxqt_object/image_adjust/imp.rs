@@ -347,7 +347,12 @@ pub(in crate::cxxqt_object) fn configured_direct(
     };
     options.algorithm = algorithm;
     options.snap_midtones &= algorithm == pictura_core::AutoKind::Color;
-    run(view, Adjustment::ConfiguredAuto(options), None, Some(&label))
+    run(
+        view,
+        Adjustment::ConfiguredAuto(options),
+        None,
+        Some(&label),
+    )
 }
 
 pub(super) fn image_adjust_direct(view: Pin<&mut PictureView>, kind: &QString) -> bool {

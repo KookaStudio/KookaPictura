@@ -20,11 +20,19 @@ pub fn apply_configured_auto_native(
     }
     let mut store = layer.source_channels.clone().ok_or_else(missing)?;
     let depth = store.depth;
-    let color_ids = if crate::channel(layer, 1).is_some() { &[0, 1, 2][..] } else { &[0][..] };
+    let color_ids = if crate::channel(layer, 1).is_some() {
+        &[0, 1, 2][..]
+    } else {
+        &[0][..]
+    };
     let indices: Vec<usize> = color_ids
         .iter()
         .map(|id| {
-            store.planes.iter().position(|(channel, _)| channel == id).ok_or_else(missing)
+            store
+                .planes
+                .iter()
+                .position(|(channel, _)| channel == id)
+                .ok_or_else(missing)
         })
         .collect::<Result<_, _>>()?;
     let width = rect.width() as usize;
@@ -66,10 +74,24 @@ pub fn apply_configured_auto_native(
     };
     match depth {
         pictura_core::BitDepth::Sixteen => {
-            apply::<u16>(&mut store.planes, indices_rgb, indices.len(), &included, options, Sample::to_unit)?;
+            apply::<u16>(
+                &mut store.planes,
+                indices_rgb,
+                indices.len(),
+                &included,
+                options,
+                Sample::to_unit,
+            )?;
         }
         pictura_core::BitDepth::ThirtyTwo => {
-            apply::<f32>(&mut store.planes, indices_rgb, indices.len(), &included, options, f64::from)?;
+            apply::<f32>(
+                &mut store.planes,
+                indices_rgb,
+                indices.len(),
+                &included,
+                options,
+                f64::from,
+            )?;
         }
         _ => return Err(missing()),
     }

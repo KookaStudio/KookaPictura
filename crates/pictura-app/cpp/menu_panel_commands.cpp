@@ -259,12 +259,13 @@ void MenuRegistrar::wirePanelMenuCommands()
         });
     }
     bindPanel(command_ids::PanelPropertiesAutoOptions, [this]() {
-        if (auto* panel = panels_->propertiesPanel(); panel && panel->canAutoCorrect()) {
+        if (auto* panel = panels_ ? panels_->propertiesPanel() : nullptr;
+            panel && panel->canAutoCorrect()) {
             panel->performPanelMenuAction(QStringLiteral("autoOptions"));
         }
     });
     commands_->setEnabledProvider(command_ids::PanelPropertiesAutoOptions, [this]() {
-        const auto* panel = panels_->propertiesPanel();
+        const auto* panel = panels_ ? panels_->propertiesPanel() : nullptr;
         return panel && panel->canAutoCorrect();
     });
     bindPanel(command_ids::PanelPropertiesSavePreset, [this]() {

@@ -344,6 +344,10 @@ Näytönohjaimen ajuri: %5</translation>
         <translation>Automaattinen kontrasti</translation>
     </message>
     <message>
+        <source>Auto Options…</source>
+        <translation>Automaattikorjauksen asetukset…</translation>
+    </message>
+    <message>
         <source>Auto Tone</source>
         <translation>Automaattinen sävy</translation>
     </message>

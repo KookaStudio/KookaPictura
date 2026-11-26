@@ -259,15 +259,13 @@ pub(super) fn apply_op_active_region(
             ActiveOp::ApplyImage(_)
             | ActiveOp::Adjustment(pictura_render::Adjustment::ConfiguredAuto(_)),
             Some(doc),
-        ) => {
-            match pictura_render::apply_image_native(doc, &path) {
-                Ok(native) => native,
-                Err(error) => {
-                    rust.filter_error = Some(error.to_string());
-                    return None;
-                }
+        ) => match pictura_render::apply_image_native(doc, &path) {
+            Ok(native) => native,
+            Err(error) => {
+                rust.filter_error = Some(error.to_string());
+                return None;
             }
-        }
+        },
         (ActiveOp::Adjustment(adjustment), Some(doc)) => {
             match pictura_render::adjustment_native_target(doc, &path, adjustment) {
                 Ok(native) => native,
