@@ -4,6 +4,8 @@
 
 #include "commands.h"
 #include "frame.h"
+#include "selftest_paint_fixture.h"
+#include "panels/histogram_panel.h"
 #include "panels/layers_panel.h"
 #include "panels/properties_panel.h"
 #include "api/layers_bridge.h"
@@ -17,6 +19,7 @@
 #include <QtWidgets/QSlider>
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QToolButton>
+#include <QtWidgets/QVBoxLayout>
 
 #include <QtCore/QCoreApplication>
 #include <QtGui/QImage>
@@ -33,6 +36,10 @@ private slots:
     void adjustmentLayerShowsItsName();
     void clipIsDisabledAboveABackground();
     void slidersEditLiveAndCommitOnce();
+    void thresholdHistogramShowsLowerLayers();
+    void thresholdHistogramRefreshesSourceAndSelection();
+    void thresholdHistogramTracksSelectionMove();
+    void thresholdHistogramRespectsGroupBoundaries();
     void groupsCurvesAndFooter();
     void channelMixerMonochrome();
     void channelMixerCmykGroups();
@@ -47,6 +54,7 @@ private slots:
 private:
     // A white 16x16 document whose layer is selected and shown in the panel.
     bool setupLayer(const QString& name);
+    bool addThresholdFromActiveLayer();
 
     // A white 16x16 document with one `kind` adjustment layer, selected.
     bool setupAdjustment(const QString& kind);
@@ -133,6 +141,125 @@ bool PropertiesPanelTest::setupAdjustment(const QString& kind)
     view_->set_presented_view(0, 0, 0, 16, 16);
     panel_->refresh();
     return panel_->pathForTest() == path_;
+}
+
+namespace {
+
+pictura::HistogramView* thresholdHistogram(pictura::PropertiesPanel& panel)
+{
+    return dynamic_cast<pictura::HistogramView*>(
+        panel.findChild<QWidget*>(QStringLiteral("thresholdHistogram")));
+}
+
+} // namespace
+
+bool PropertiesPanelTest::addThresholdFromActiveLayer()
+{
+    if (!view_->add_adjustment(QStringLiteral("threshold"))) {
+        return false;
+    }
+    path_ = pictura::layer_selection_anchor(*view_);
+    panel_->refresh();
+    return !path_.isEmpty() && panel_->pathForTest() == path_;
+}
+
+void PropertiesPanelTest::thresholdHistogramShowsLowerLayers()
+{
+    QVERIFY(setupLayer(QStringLiteral("Threshold histogram")));
+    QVERIFY(!view_->add_solid_fill(0xff5a5a5au).isEmpty());
+    QVERIFY(addThresholdFromActiveLayer());
+    QVERIFY(!view_->add_solid_fill(0xffb4b4b4u).isEmpty());
+    window_->selectLayerPath(path_);
+    QCOMPARE(panel_->pathForTest(), path_);
+    auto* histogram = thresholdHistogram(*panel_);
+    auto* slider = panel_->controlForTest(QStringLiteral("level"));
+    QVERIFY(histogram && slider);
+    auto* layout = qobject_cast<QVBoxLayout*>(slider->parentWidget()->layout());
+    QVERIFY(layout && layout->indexOf(histogram) > 0);
+    QVERIFY(layout->itemAt(0)->layout());
+    QVERIFY(layout->indexOf(histogram) < layout->indexOf(slider));
+    QCOMPARE(histogram->binForTest(90), 256u * 255);
+    QCOMPARE(histogram->binForTest(0), 0u);
+    QCOMPARE(histogram->binForTest(180), 0u);
+}
+
+void PropertiesPanelTest::thresholdHistogramRefreshesSourceAndSelection()
+{
+    QVERIFY(setupLayer(QStringLiteral("Threshold histogram refresh")));
+    QVERIFY(view_->select_rect(0, 0, 8, 16, QStringLiteral("new"), 0.0));
+    const QString lower = view_->add_solid_fill(0xff5a5a5au);
+    QVERIFY(!lower.isEmpty());
+    view_->deselect();
+    QVERIFY(addThresholdFromActiveLayer());
+    auto* histogram = thresholdHistogram(*panel_);
+    QVERIFY(histogram);
+    QCOMPARE(histogram->binForTest(90), 128u * 255);
+    QCOMPARE(histogram->binForTest(255), 128u * 255);
+    QCOMPARE(view_->set_layers_visible(QStringList{lower}, false), 1);
+    QTRY_COMPARE(histogram->binForTest(255), 256u * 255);
+    QCOMPARE(histogram->binForTest(90), 0u);
+    QCOMPARE(view_->set_layers_visible(QStringList{lower}, true), 1);
+    QTRY_COMPARE(histogram->binForTest(90), 128u * 255);
+    QVERIFY(view_->select_rect(0, 0, 8, 16, QStringLiteral("new"), 0.0));
+    QTRY_COMPARE(histogram->binForTest(255), 0u);
+    QCOMPARE(histogram->binForTest(90), 128u * 255);
+}
+
+void PropertiesPanelTest::thresholdHistogramRespectsGroupBoundaries()
+{
+    QVERIFY(setupLayer(QStringLiteral("Threshold histogram groups")));
+    const QString group = view_->add_group_in(QString());
+    QVERIFY(!group.isEmpty());
+    QVERIFY(view_->set_layer_blend(group.toInt(), QStringLiteral("pass")));
+    QVERIFY(view_->select_rect(0, 0, 8, 16, QStringLiteral("new"), 0.0));
+    QVERIFY(view_->add_solid_fill(0xff5a5a5au).startsWith(group + QLatin1Char('/')));
+    view_->deselect();
+    QVERIFY(addThresholdFromActiveLayer());
+    QVERIFY(path_.startsWith(group + QLatin1Char('/')));
+    auto* histogram = thresholdHistogram(*panel_);
+    QVERIFY(histogram);
+    QCOMPARE(histogram->binForTest(90), 128u * 255);
+    QCOMPARE(histogram->binForTest(255), 128u * 255);
+    QVERIFY(view_->set_layer_blend(group.toInt(), QStringLiteral("norm")));
+    QTRY_COMPARE(histogram->binForTest(255), 0u);
+    QCOMPARE(histogram->binForTest(90), 128u * 255);
+}
+
+void PropertiesPanelTest::thresholdHistogramTracksSelectionMove()
+{
+    QImage seed(64, 64, QImage::Format_RGB32);
+    seed.fill(QColor(90, 90, 90));
+    for (int y = 0; y < 64; ++y) {
+        for (int x = 32; x < 64; ++x) {
+            seed.setPixelColor(x, y, QColor(180, 180, 180));
+        }
+    }
+    paint_fixture::Fixture f(*window_, seed, QStringLiteral("threshold_selection_move"));
+    QVERIFY(f.ok());
+    view_ = f.view;
+    panel_ = window_->findChild<pictura::PropertiesPanel*>(QStringLiteral("propertiesPanel"));
+    QVERIFY(panel_);
+    panel_->setView(view_);
+    QVERIFY(addThresholdFromActiveLayer());
+    auto* histogram = thresholdHistogram(*panel_);
+    QVERIFY(histogram);
+    window_->setActiveTool(pictura::ToolId::Marquee);
+    auto* options = f.tools->optionsFor<pictura::SelectionOptions>(pictura::ToolId::Marquee);
+    options->setCombineMode(pictura::SelectionMode::New);
+    options->setMarqueeStyle(pictura::MarqueeStyle::Normal);
+    options->setFeather(0.0);
+    f.canvas->mousePressed(QPointF(4, 4), Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseMoved(QPointF(12, 12));
+    f.canvas->mouseReleased(QPointF(12, 12));
+    QTRY_COMPARE(histogram->binForTest(90), 64u * 255);
+    QCOMPARE(histogram->binForTest(180), 0u);
+    f.canvas->mousePressed(QPointF(6, 6), Qt::LeftButton, int(Qt::NoModifier));
+    f.canvas->mouseMoved(QPointF(38, 6));
+    QTRY_COMPARE(histogram->binForTest(180), 64u * 255);
+    QCOMPARE(histogram->binForTest(90), 0u);
+    window_->setActiveTool(pictura::ToolId::EllipticalMarquee);
+    QTRY_COMPARE(histogram->binForTest(90), 64u * 255);
+    QCOMPARE(histogram->binForTest(180), 0u);
 }
 
 void PropertiesPanelTest::adjustmentLayerShowsItsName()

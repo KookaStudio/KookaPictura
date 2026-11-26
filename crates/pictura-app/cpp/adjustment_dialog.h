@@ -36,7 +36,7 @@ class ToolController;
 // and Curves subclass it with CS6's hand-laid-out pages (ported from
 // photorust's BrightnessContrastDialog / LevelsDialog / CurvesDialog) over the
 // same block, preview, and apply.
-// ponytail: the generic pages have no Auto / eyedropper buttons, histograms, or
+// ponytail: the generic pages have no Auto / eyedropper buttons or
 // Load / Save; the preview covers the visible canvas section.
 class AdjustmentDialog : public QDialog {
     Q_OBJECT
@@ -86,6 +86,8 @@ protected:
                      const QString& title, QWidget* parent);
 
     ToolController* tools() const { return tools_; }
+    PictureView* pictureView() const { return view_; }
+    void setPreviewSuspended(bool suspended);
     // The document is CMYK, so the hand-laid pages read their descriptor page
     // as ink rows.
     bool cmyk() const { return cmyk_; }
@@ -103,6 +105,7 @@ protected:
     bool setParam(const QString& key, double value);
     // Several edits in order, previewed once; none land if any is refused.
     bool setParams(const QList<QPair<QString, double>>& edits);
+    bool setParams(QByteArray start, const QList<QPair<QString, double>>& edits);
     // Curves `channel`'s points as `"x,y x,y …"`, and their replacement.
     QString curve(int channel) const;
     bool setCurve(int channel, const QString& points);
@@ -156,6 +159,7 @@ protected:
 
 private:
     void edited(const QByteArray& next);
+    void schedulePreview();
     void preview();
     void pollPreview();
     void cancelPreview();
@@ -169,6 +173,7 @@ private:
     QString title_;
     bool cmyk_ = false;
     bool previewing_ = false;
+    bool previewSuspended_ = false;
     AdjustmentControls* controls_ = nullptr;
     PresetCombo* preset_ = nullptr;
     QCheckBox* preview_ = nullptr;

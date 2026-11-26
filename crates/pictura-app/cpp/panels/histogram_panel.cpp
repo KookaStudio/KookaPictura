@@ -22,9 +22,10 @@ HistogramView::HistogramView(QWidget* parent)
 {
 }
 
-void HistogramView::setSeries(const QVector<Series>& series)
+void HistogramView::setSeries(const QVector<Series>& series, bool additive)
 {
     series_ = series;
+    additive_ = additive;
     update();
 }
 
@@ -61,7 +62,9 @@ void HistogramView::paintEvent(QPaintEvent*)
     painter.setPen(Qt::NoPen);
     // Additive blend so overlapping channel curves brighten toward white, the
     // way Photoshop's RGB overlay reads.
-    painter.setCompositionMode(QPainter::CompositionMode_Plus);
+    if (additive_) {
+        painter.setCompositionMode(QPainter::CompositionMode_Plus);
+    }
     for (const Series& series : series_) {
         if (series.bins.isEmpty()) {
             continue;

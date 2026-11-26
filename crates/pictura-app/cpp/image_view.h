@@ -102,6 +102,7 @@ public:
     void setFilterPreview(const QImage& picture, const QRect& area, bool replaceComposite = false);
     void clearFilterPreview();
     bool filterPreviewShownForTest() const { return !filterPreview_.isNull(); }
+    const QImage& filterPreviewImageForTest() const { return filterPreview_; }
 
     // The rubylith overlay of a layer mask: `overlay`, a reduced image of the
     // document rect `area`, drawn over the document until cleared. Display

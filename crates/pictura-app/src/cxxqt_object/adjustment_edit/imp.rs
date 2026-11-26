@@ -69,9 +69,10 @@ pub(super) fn adjustment_set_block(
 pub(super) fn adjustment_page(view: &PictureView, path: &QString) -> QStringList {
     let cmyk = document_is_cmyk(view);
     adjustment_data(view, &path.to_string())
-        .as_ref()
-        .and_then(|data| pictura_render::adjustment_editor_in_mode(data, cmyk))
-        .map(|editor| page_rows(&editor))
+        .and_then(|data| {
+            let editor = pictura_render::adjustment_editor_in_mode(&data, cmyk)?;
+            Some(page_rows(&editor, data.key == *b"thrs"))
+        })
         .unwrap_or_default()
 }
 
@@ -83,10 +84,16 @@ fn document_is_cmyk(view: &PictureView) -> bool {
 
 /// An editor page as the tab-separated rows [`adjustment_page`] documents
 /// (shared with the Image > Adjustments dialogs).
-pub(in crate::cxxqt_object) fn page_rows(editor: &pictura_render::AdjustmentEditor) -> QStringList {
+pub(in crate::cxxqt_object) fn page_rows(
+    editor: &pictura_render::AdjustmentEditor,
+    threshold_histogram: bool,
+) -> QStringList {
     let mut rows = QStringList::default();
     let mut push = |row: String| rows.append(QString::from(row.as_str()));
     push(format!("title\t{}", editor.title));
+    if threshold_histogram {
+        push("threshold-histogram".into());
+    }
     if let Some(note) = editor.note {
         push(format!("note\t{note}"));
     }

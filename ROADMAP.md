@@ -307,12 +307,12 @@ gaps are the CS6 Extended 3D object and camera tools.
 - [ ] Merge To HDR Pro (#558)
 - [ ] The Local Adaptation Toning Curve and Corner option (follow-up to #557)
 - [ ] The Auto Color Correction Options dialog (#559)
-- [ ] Levels eyedroppers and the Alt-drag clipping preview (#560)
+- [x] Levels eyedroppers and the Alt-drag clipping preview for RGB and Grayscale (#560)
 - [ ] The Curves secondary UI: on-image, pencil and smooth, sliders and
       eyedroppers, display options, and the CMYK and Lab graphs (#561)
 - [ ] The Shadows/Highlights local-surround operator and its eight controls
       (#562)
-- [ ] The Threshold histogram under the slider (#563)
+- [x] The Threshold histogram under the slider (#563)
 - [ ] Vibrance Auto and presets (#564)
 - [ ] Smoother, Sharper and Automatic image-size kernels, Scale Styles, Auto
       resolution, picas and columns, and float resample (#565)

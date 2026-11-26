@@ -14,6 +14,8 @@ class QVBoxLayout;
 namespace pictura {
 
 class CurveWidget;
+class HistogramView;
+class PictureView;
 
 // An adjustment's controls, built from the engine's descriptor page (the rows
 // `adjustment_page` / `image_adjustment_page` return): sliders with number
@@ -30,6 +32,8 @@ public:
     // Rebuild for `page` when its set of controls differs from the built one;
     // otherwise reload the values (never while `holdValues`).
     void setPage(const QStringList& page, bool holdValues = false);
+    void refreshThresholdHistogram(const PictureView& view, const QString& path = {});
+    bool hasThresholdHistogram() const { return thresholdHistogram_ != nullptr; }
     QString title() const { return title_; }
     // Where the Curves editor reads `channel`'s points (`"x,y x,y …"`).
     void setCurveSource(std::function<QString(int)> source) { curveSource_ = std::move(source); }
@@ -54,7 +58,7 @@ private:
     void load(const QStringList& page);
     void clear();
     void insert(QWidget* widget);
-    void addSlider(const QStringList& cells);
+    void addSlider(const QStringList& cells, bool threshold);
     void addCheck(const QStringList& cells);
     void addChoice(const QStringList& cells);
     void addColor(const QStringList& cells);
@@ -69,6 +73,7 @@ private:
     std::vector<Row> rows_;
     QComboBox* groups_ = nullptr;
     CurveWidget* curve_ = nullptr;
+    HistogramView* thresholdHistogram_ = nullptr;
     QComboBox* curveChannel_ = nullptr;
     std::function<QString(int)> curveSource_;
 };

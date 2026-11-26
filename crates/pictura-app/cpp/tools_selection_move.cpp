@@ -89,6 +89,7 @@ void ToolController::cancelSelectionMove()
     PictureView* v = view();
     if (v) {
         pictura::cancel_selection_move(*v);
+        emit selectionMovePreviewed();
     }
 }
 
@@ -116,6 +117,7 @@ void ToolController::dragSelectionMove(const QPointF& imagePos)
     const int dy = qRound(imagePos.y() - selectionMoveAnchor_.y());
     if (pictura::preview_selection_move(*v, dx, dy) && canvas_) {
         canvas_->setSelectionContourOffset(QPointF(dx, dy));
+        emit selectionMovePreviewed();
     }
     if (contentPreviewActive_ && canvas_) {
         canvas_->setMovePreviewDelta(QPointF(dx, dy));
@@ -182,15 +184,20 @@ void ToolController::releaseSelectionMove(const QPointF& imagePos)
             contentPreviewActive_ = false;
         }
         contentDuplicate_ = false;
+        emit selectionMovePreviewed();
         refreshCursor();
         return;
     }
     if (v && (dx != 0 || dy != 0)) {
         if (pictura::preview_selection_move(*v, dx, dy) && pictura::commit_selection_move(*v)) {
             emit selectionCommitted();
+        } else {
+            pictura::cancel_selection_move(*v);
+            emit selectionMovePreviewed();
         }
     } else if (v) {
         pictura::cancel_selection_move(*v);
+        emit selectionMovePreviewed();
     }
     refreshCursor();
 }

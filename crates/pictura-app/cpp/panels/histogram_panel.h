@@ -24,17 +24,22 @@ public:
 
     explicit HistogramView(QWidget* parent = nullptr);
 
-    void setSeries(const QVector<Series>& series);
+    void setSeries(const QVector<Series>& series, bool additive = true);
     void clear();
 
     int seriesCountForTest() const { return series_.size(); }
     QColor seriesColorForTest(int index) const;
+    quint32 binForTest(int index) const
+    {
+        return series_.isEmpty() ? 0 : series_.first().bins.value(index);
+    }
 
 protected:
     void paintEvent(QPaintEvent* event) override;
 
 private:
     QVector<Series> series_;
+    bool additive_ = true;
 };
 
 class HistogramPanel : public QWidget {
