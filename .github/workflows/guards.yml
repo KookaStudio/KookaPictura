@@ -32,6 +32,10 @@ jobs:
         run: |
           python3 scripts/check-parity.py --self-check
           python3 scripts/check-parity.py
+      - name: Public docs command coverage
+        run: |
+          python3 scripts/check-public-docs-commands.py --self-test
+          python3 scripts/check-public-docs-commands.py
       - name: File size
         run: bash scripts/check-file-size.sh
       - name: CMake source fragments

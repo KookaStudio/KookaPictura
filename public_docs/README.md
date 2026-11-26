@@ -72,6 +72,21 @@ Photoshop background.
 - [Vanishing Point](filter-vanishing-point.md)
 - [Video, Other and Digimarc](filter-video-other-digimarc.md)
 
+## Menus
+
+- [File menu](menu-file.md)
+- [Edit menu](menu-edit.md)
+- [Image menu](menu-image.md)
+- [Layer menu](menu-layer.md)
+- [Type menu](menu-type.md)
+- [Select menu](menu-select.md)
+- [Filter menu](menu-filter.md)
+- [View menu](menu-view.md)
+- [Window menu](menu-window.md)
+- [Help menu](menu-help.md)
+- [Preferences](preferences.md)
+- [The status bar](status-bar.md)
+
 ## Working with AI
 
 - [Working with AI agents](agent-control.md)

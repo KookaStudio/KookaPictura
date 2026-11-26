@@ -1,0 +1,73 @@
+# Command ids that are not menu commands and therefore have no menu page.
+#
+# One entry per line: <id> <reason>. Blank lines and lines starting with '#'
+# are ignored. Every id without a menu path in the command catalogue must be
+# listed here with a non-empty reason; an id with a menu path must be
+# documented on its page instead. This list is for panel- and tool-internal
+# actions, never for a menu command the user can reach.
+panel.layers.newLayer Layer panel row action
+panel.layers.newGroup Layer panel row action
+panel.layers.moveUp Layer panel row action
+panel.layers.moveDown Layer panel row action
+panel.layers.editAdjustment Layer panel row action
+panel.layers.maskAdd Layer panel mask action
+panel.layers.maskSubtract Layer panel mask action
+panel.layers.maskIntersect Layer panel mask action
+panel.layers.refineMask Layer panel mask action
+panel.layers.maskOptions Layer panel mask action
+panel.layers.panelOptions Layer panel options menu
+panel.channels.duplicateChannel Channels panel action
+panel.channels.channelOptions Channels panel options menu
+panel.history.stepForward History panel action
+panel.history.stepBackward History panel action
+panel.history.newSnapshot History panel action
+actions.buttonMode Actions panel control
+actions.newAction Actions panel control
+actions.newSet Actions panel control
+actions.duplicate Actions panel control
+actions.delete Actions panel control
+actions.play Actions panel control
+actions.toggleRecording Actions panel control
+actions.recordAgain Actions panel control
+actions.insertMenuItem Actions panel control
+actions.insertStop Actions panel control
+actions.insertConditional Actions panel control
+actions.insertPath Actions panel control
+actions.options Actions panel control
+actions.playbackOptions Actions panel control
+actions.allowToolRecording Actions panel control
+actions.clear Actions panel control
+actions.reset Actions panel control
+actions.load Actions panel control
+actions.replace Actions panel control
+actions.save Actions panel control
+character.fauxBold Character panel control
+character.fauxItalic Character panel control
+character.allCaps Character panel control
+character.smallCaps Character panel control
+character.superscript Character panel control
+character.subscript Character panel control
+character.underline Character panel control
+character.strikethrough Character panel control
+character.fractionalWidths Character panel control
+character.systemLayout Character panel control
+character.standardLigatures Character panel control
+character.contextualAlternates Character panel control
+character.discretionaryLigatures Character panel control
+character.swash Character panel control
+character.stylisticAlternates Character panel control
+character.titlingAlternates Character panel control
+character.ordinals Character panel control
+character.fractions Character panel control
+character.reset Character panel control
+paragraph.hanging Paragraph panel control
+paragraph.justification Paragraph panel control
+paragraph.singleLineComposer Paragraph panel control
+paragraph.everyLineComposer Paragraph panel control
+paragraph.reset Paragraph panel control
+panel.properties.savePreset Properties panel control
+panel.properties.loadPreset Properties panel control
+panel.properties.clipToggle Properties panel control
+panel.properties.reset Properties panel control
+panel.properties.toggleVisibility Properties panel control
+panel.properties.deleteLayer Properties panel control
