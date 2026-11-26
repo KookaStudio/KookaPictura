@@ -39,12 +39,12 @@ private:
     std::function<void()> openOptions_;
 };
 
-QByteArray bytes(const rust::Vec<std::uint8_t>& block)
+QByteArray bytes(const ::rust::Vec<std::uint8_t>& block)
 {
     return QByteArray(reinterpret_cast<const char*>(block.data()), qsizetype(block.size()));
 }
 
-rust::Slice<const std::uint8_t> slice(const QByteArray& block)
+::rust::Slice<const std::uint8_t> slice(const QByteArray& block)
 {
     return {reinterpret_cast<const std::uint8_t*>(block.constData()), std::size_t(block.size())};
 }
