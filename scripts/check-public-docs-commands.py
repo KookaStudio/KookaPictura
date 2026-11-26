@@ -223,6 +223,17 @@ def check_public_docs(root: Path = ROOT) -> list[str]:
 
     guards = root / GUARDS
     guards_text = guards.read_text(encoding="utf-8") if guards.is_file() else ""
+    manifest_path = root / "scripts/checks.toml"
+    if "gate_manifest.py run ci-guards" in guards_text and manifest_path.is_file():
+        import tomllib
+        rows = tomllib.loads(manifest_path.read_text(encoding="utf-8")).get("check", [])
+        entry = next((row for row in rows if row.get("id") == "public-docs"), {})
+        if (all(entry.get(key) for key in ("local_fast", "local_full", "docs_only", "ci_guards"))
+                and "scripts/check-public-docs-commands.py --self-test" in entry.get("command", "")
+                and "gate_manifest.py run" in (root / VERIFY_FAST).read_text(encoding="utf-8")):
+            return errors
+        errors.append("manifest: public docs check is missing required placements")
+        return errors
     if "check-public-docs-commands.py" not in guards_text:
         errors.append(f"{GUARDS}: does not run scripts/check-public-docs-commands.py")
     if "check-public-docs-commands.py --self-test" not in guards_text:

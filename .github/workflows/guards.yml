@@ -17,56 +17,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Install OpenSpec
         run: npm i -g @fission-ai/openspec@1.13.2
-      - name: Non-goal guard
+      - name: Run mandatory guards
         env:
           GUARD_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-        run: bash scripts/guard.sh
-      - name: Test plan
-        env:
-          GUARD_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          git fetch --no-tags --depth=1 origin "$GUARD_BASE"
-          python3 scripts/check-test-plan.py --self-test
-          python3 scripts/check-test-plan.py
-      - name: Feature parity
-        run: |
-          python3 scripts/check-parity.py --self-check
-          python3 scripts/check-parity.py
-      - name: Public docs command coverage
-        run: |
-          python3 scripts/check-public-docs-commands.py --self-test
-          python3 scripts/check-public-docs-commands.py
-      - name: File size
-        run: bash scripts/check-file-size.sh
-      - name: CMake source fragments
-        run: |
-          python3 scripts/check-cmake-source-fragments.py --self-test
-          python3 scripts/check-cmake-source-fragments.py
-      - name: Shell seams and moc owners
-        run: |
-          python3 scripts/check-shell-seams.py --self-test
-          python3 scripts/check-shell-seams.py
-      - name: Self-test budget
-        run: bash scripts/check-selftest-budget.sh
-      - name: Self-test failure codes
-        run: |
-          python3 scripts/check-selftest-codes.py --self-test
-          python3 scripts/check-selftest-codes.py
-      - name: Managed agent resources and verification guards
-        run: |
-          python3 scripts/cpu-budget.py --self-check
-          python3 scripts/check-agent-cpu-budget.py --self-check
-          python3 scripts/check-agent-build.py --self-check
-          python3 scripts/heavy_command_policy.py --self-check
-          python3 scripts/check-agent-command-guard.py
-          bash scripts/check-build-lock.sh
-      - name: Worktree hook
-        run: bash scripts/check-worktree-hook.sh
-      - name: Local build caching
-        run: bash scripts/check-local-build-caching.sh --full
-      - name: OpenSpec validation
-        run: openspec validate --all --strict
-      - name: OpenSpec archive
-        run: |
-          bash scripts/check-openspec-archived.sh --self-test
-          bash scripts/check-openspec-archived.sh
+        run: python3 scripts/gate_manifest.py run ci-guards --parallel 1

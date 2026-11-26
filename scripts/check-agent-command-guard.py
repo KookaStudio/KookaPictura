@@ -261,6 +261,14 @@ def main() -> int:
     codex = load(ROOT / ".codex" / "hooks.json")
     plugin_text = (ROOT / ".opencode" / "plugins" / "cpu-budget.ts").read_text(encoding="utf-8")
     fast_text = (ROOT / "scripts" / "verify-fast.sh").read_text(encoding="utf-8")
+    if "gate_manifest.py run" in fast_text:
+        import tomllib
+        rows = tomllib.loads((ROOT / "scripts/checks.toml").read_text(encoding="utf-8"))["check"]
+        checks = {row["id"]: row for row in rows}
+        for name in ("heavy-policy", "agent-command-guard"):
+            row = checks.get(name, {})
+            if row.get("local_fast") and row.get("local_full") and row.get("ci_guards"):
+                fast_text += "\n" + row.get("command", "")
     errors = validate(
         claude,
         codex,

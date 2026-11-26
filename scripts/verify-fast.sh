@@ -7,11 +7,11 @@
 #
 # The test step routes through scripts/test-report.sh (nextest + the app
 # self-tests when ./build/pictura exists), which prints the unified report.
-# One nextest run per gate.
+# Script checks and their placements come from scripts/checks.toml.
 #
 # Docs-only fast path: when the working diff (against the merge base with the
 # default branch, plus untracked files) touches only docs/, openspec/, *.md, or
-# .serena/, run just the guard and spec validation. An empty diff falls through
+# .serena/, run the manifest's docs-only checks. An empty diff falls through
 # to the full gate.
 
 set -euo pipefail
@@ -43,23 +43,7 @@ fi
 
 if [ "$docs_only" -eq 1 ]; then
   echo "verify-fast: docs-only diff; skipping fmt, clippy, and tests"
-  echo "== guard =="
-  bash scripts/guard.sh
-  echo "== archive =="
-  bash scripts/check-openspec-archived.sh
-  echo "== self-test codes =="
-  python3 scripts/check-selftest-codes.py --self-test
-  python3 scripts/check-selftest-codes.py
-  echo "== test plan =="
-  python3 scripts/check-test-plan.py
-  echo "== public docs =="
-  python3 scripts/check-public-docs-commands.py --self-test
-  python3 scripts/check-public-docs-commands.py
-  echo "== parity =="
-  python3 scripts/check-parity.py --self-check
-  python3 scripts/check-parity.py
-  echo "== openspec =="
-  openspec validate --all --strict 2>&1 | tail -1
+  python3 scripts/gate_manifest.py run docs-only --changed "$changed_file"
   rm -f "$changed_file"
   echo "verify-fast: OK (docs-only)"
   exit 0
@@ -67,140 +51,20 @@ fi
 
 build_lock_install_traps
 build_lock_acquire || exit 1
+trap 'rm -f "$changed_file"; build_lock_release' EXIT
 
-echo "== fmt =="
-cargo fmt --all --check
-echo "fmt=ok"
+case "${PICTURA_FULL_GATES:-0}" in
+  0) placement=local-fast ;;
+  1) placement=local-full ;;
+  *) echo "verify-fast: PICTURA_FULL_GATES must be 0 or 1" >&2; exit 2 ;;
+esac
 
-echo "== clippy =="
-clippy_errors=$(cargo clippy --workspace --all-targets -- -D warnings 2>&1 | grep -cE '^error' || true)
-echo "clippy_errors=$clippy_errors"
-[ "$clippy_errors" -eq 0 ] || { echo "clippy: FAILED"; exit 1; }
-
-echo "== build tree =="
-# The gate runs the tests against ./build, so a tree that predates the sources
-# would test something else. The full gate fails on this; the fast gate only
-# reports it, because it does not own the build tree.
-bash scripts/check-build-tree.sh --warn
-
-echo "== test =="
-bash scripts/test-report.sh never
-
-checks_dir="$(mktemp -d "${TMPDIR:-/tmp}/pictura-verify.XXXXXX")"
-trap 'rm -rf "$checks_dir"; rm -f "$changed_file"; build_lock_release' EXIT
-
-check_names=()
-batch_pids=()
-
-drain_batch() {
-    local pid
-    for pid in ${batch_pids[@]+"${batch_pids[@]}"}; do
-        wait "$pid" || true
-    done
-    batch_pids=()
-}
-
-start_check() { # <name> <command...>
-    local name="$1"; shift
-    if [ "${#batch_pids[@]}" -ge "$PICTURA_JOBS" ]; then
-        drain_batch
-    fi
-    printf 'start %s\n' "$name"
-    check_names+=("$name")
-    ( set +e; "$@" >"$checks_dir/$name.log" 2>&1; printf '%s' "$?" >"$checks_dir/$name.rc" ) &
-    batch_pids+=("$!")
-}
-
-flatpak_check() {
-    python3 scripts/check-flatpak-cargo-sources.py --self-test &&
-        python3 scripts/check-flatpak-cargo-sources.py
-}
-
-archive_check() {
-    bash scripts/check-openspec-archived.sh --self-test &&
-        bash scripts/check-openspec-archived.sh
-}
-
-file_size_check() {
-    bash scripts/check-file-size.sh --self-test &&
-        bash scripts/check-file-size.sh --changed "$1"
-}
-
-# guard.sh runs the file-local checks but only the MSVC check's self-test, so the
-# gate proves every scoped path here.
-scoped_self_tests() {
-    python3 scripts/changed_files.py --self-test &&
-        python3 scripts/check-milestone-names.py --self-test &&
-        python3 scripts/check-msvc-string-limits.py --self-test &&
-        python3 scripts/check-colour-literals.py --self-test
-}
-
-test_plan_check() {
-    python3 scripts/check-test-plan.py --self-test &&
-        python3 scripts/check-test-plan.py
-}
-
-public_docs_check() {
-    python3 scripts/check-public-docs-commands.py --self-test &&
-        python3 scripts/check-public-docs-commands.py
-}
-
-parity_check() {
-    python3 scripts/check-parity.py --self-check &&
-        python3 scripts/check-parity.py
-}
-
-source_fragments_check() {
-    python3 scripts/check-cmake-source-fragments.py --self-test &&
-        python3 scripts/check-cmake-source-fragments.py
-}
-
-shell_seams_check() {
-    python3 scripts/check-shell-seams.py --self-test &&
-        python3 scripts/check-shell-seams.py
-}
-
-openspec_check() {
-    openspec validate --all --strict
-}
+echo "== checks (sequential) =="
+python3 scripts/gate_manifest.py run "$placement" \
+  --phase sequential --changed "$changed_file"
 
 echo "== checks (parallel) =="
-start_check file-size file_size_check "$changed_file"
-start_check scoped-self-tests scoped_self_tests
-start_check flatpak flatpak_check
-start_check worktree-hook bash scripts/check-worktree-hook.sh
-start_check build-caching bash scripts/check-local-build-caching.sh
-start_check build-lock bash scripts/check-build-lock.sh
-start_check selftest-budget bash scripts/check-selftest-budget.sh
-start_check selftest-codes python3 scripts/check-selftest-codes.py --self-test
-start_check selftest-codes-tree python3 scripts/check-selftest-codes.py
-start_check archive archive_check
-start_check icon-provenance python3 scripts/check-icon-provenance.py
-start_check guard bash scripts/guard.sh --changed "$changed_file"
-start_check shell-seams shell_seams_check
-start_check test-plan test_plan_check
-start_check public-docs public_docs_check
-start_check parity parity_check
-start_check source-fragments source_fragments_check
-start_check cpu-budget python3 scripts/cpu-budget.py --self-check
-start_check agent-cpu-budget python3 scripts/check-agent-cpu-budget.py --self-check
-start_check agent-build python3 scripts/check-agent-build.py --self-check
-start_check heavy-policy python3 scripts/heavy_command_policy.py --self-check
-start_check agent-guard python3 scripts/check-agent-command-guard.py
-start_check openspec openspec_check
-
-drain_batch
-check_failed=0
-for name in "${check_names[@]}"; do
-    rc=$(cat "$checks_dir/$name.rc" 2>/dev/null || printf 1)
-    if [ "$rc" -eq 0 ]; then
-        printf '%s=ok\n' "$name"
-    else
-        printf '%s=FAILED (rc=%s)\n' "$name" "$rc"
-        sed 's/^/  /' "$checks_dir/$name.log" || true
-        check_failed=1
-    fi
-done
-[ "$check_failed" -eq 0 ] || { echo "verify-fast: FAILED"; exit 1; }
+python3 scripts/gate_manifest.py run "$placement" \
+  --phase parallel --parallel "$PICTURA_JOBS" --changed "$changed_file"
 
 echo "verify-fast: OK"
