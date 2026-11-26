@@ -157,6 +157,27 @@ PreferencesDialog::PreferencesDialog(QWidget* parent)
         emit pickerChoiceChanged(pickerChoice_->itemData(index).toInt());
     });
 
+    imageInterpolation_ = new QComboBox(generalPage);
+    imageInterpolation_->setObjectName(QStringLiteral("preferencesImageInterpolation"));
+    imageInterpolation_->addItem(tr("Nearest Neighbor"), QStringLiteral("nearest"));
+    imageInterpolation_->addItem(tr("Bilinear"), QStringLiteral("bilinear"));
+    imageInterpolation_->addItem(tr("Bicubic"), QStringLiteral("bicubic"));
+    imageInterpolation_->addItem(tr("Bicubic Smoother"), QStringLiteral("bicubic-smoother"));
+    imageInterpolation_->addItem(tr("Bicubic Sharper"), QStringLiteral("bicubic-sharper"));
+    imageInterpolation_->addItem(tr("Bicubic Automatic"), QStringLiteral("bicubic-automatic"));
+    generalForm->addRow(tr("Image Interpolation"), imageInterpolation_);
+    connect(imageInterpolation_, &QComboBox::currentIndexChanged, this, [this](int index) {
+        const auto before = loadPreferences();
+        auto after = before;
+        after.imageInterpolation = imageInterpolation_->itemData(index).toString();
+        if (!savePreferences(before, after)) {
+            const QSignalBlocker block(imageInterpolation_);
+            imageInterpolation_->setCurrentIndex(imageInterpolation_->findData(before.imageInterpolation));
+            QMessageBox::warning(this, tr("Image Interpolation"),
+                                 tr("The interpolation preference could not be saved."));
+        }
+    });
+
     auto* settingsRow = new QWidget(generalPage);
     auto* settingsLayout = new QHBoxLayout(settingsRow);
     settingsLayout->setContentsMargins(0, 0, 0, 0);
@@ -616,6 +637,9 @@ void PreferencesDialog::showPage(const QString& page)
 
 void PreferencesDialog::openOn(const QString& page)
 {
+    const QSignalBlocker block(imageInterpolation_);
+    imageInterpolation_->setCurrentIndex(
+        imageInterpolation_->findData(loadPreferences().imageInterpolation));
     showPage(page);
     show();
     raise();

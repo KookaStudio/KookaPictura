@@ -108,11 +108,23 @@ pub(super) fn reveal_all(mut view: Pin<&mut PictureView>) -> bool {
     !matches!(edited, Edit::None)
 }
 
-pub(super) fn rotate_document_arbitrary(mut view: Pin<&mut PictureView>, angle_deg: f64) -> bool {
+pub(super) fn rotate_document_arbitrary(view: Pin<&mut PictureView>, angle_deg: f64) -> bool {
+    rotate_document_arbitrary_with(view, angle_deg, &QString::from("bilinear"))
+}
+
+pub(super) fn rotate_document_arbitrary_with(
+    mut view: Pin<&mut PictureView>,
+    angle_deg: f64,
+    interpolation_id: &QString,
+) -> bool {
     crate::cxxqt_object::helpers::memory_gate::clear();
     if view.rust().modal_transform_blocks_edit() {
         return view.document_preflight_refusal(pictura_error::ErrorCode::Capability);
     }
+    let id = interpolation_id.to_string();
+    let Some(interpolation) = pictura_render::Interpolation::from_id(&id) else {
+        return view.document_preflight_refusal(pictura_error::ErrorCode::InvalidArg);
+    };
     if !angle_deg.is_finite() || angle_deg == 0.0 || !(-359.99..=359.99).contains(&angle_deg) {
         return view.document_preflight_refusal(pictura_error::ErrorCode::InvalidArg);
     }
@@ -131,7 +143,7 @@ pub(super) fn rotate_document_arbitrary(mut view: Pin<&mut PictureView>, angle_d
         JobBar::Counted,
         move |doc| {
             let pivot = (doc.width as f64 / 2.0, doc.height as f64 / 2.0);
-            pictura_render::rotate_document_in(doc, angle_deg, pivot)
+            pictura_render::rotate_document_in_with(doc, angle_deg, pivot, interpolation)
                 .then(|| Some(Outcome::default()))
                 .ok_or_else(|| {
                     pictura_error::Error::new(

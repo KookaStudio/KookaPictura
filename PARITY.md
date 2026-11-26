@@ -171,7 +171,7 @@ Source list: CS6 toolbox slots (71 catalogue slots plus the two missing single r
 | P-TOOL-12 | Slice Select | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Slice style and modifiers, Divide/Combine/Duplicate, and the Slice Options dialog remain | TOOL-19 |
 | P-TOOL-13 | Eyedropper | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Modifiers and Shift-click sampler remain | TOOL-12 |
 | P-TOOL-14 | Color Sampler | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Modifiers and Shift-click sampler remain | TOOL-12 |
-| P-TOOL-15 | Ruler | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Protractor and Straighten from the ruler remain | TOOL-11 |
+| P-TOOL-15 | Ruler | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Arbitrary rotation prefills from the ruler. Protractor and direct Straighten remain | TOOL-11 |
 | P-TOOL-16 | Note | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-17 | Count (Extended) | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-TOOL-18 | Spot Healing Brush | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Healing Mode, Source, Sample All Layers, and depth/mode handling remain | TOOL-14 |
@@ -464,7 +464,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 | P-PAN-26 | 3D panel | N/A | Y | N/A | Missing | non-goal | — | none | edition:Extended-only; retired:src:3 | non-goal:feasibility:72 |
 | P-PAN-27 | Mini Bridge panel | Y | Y | Y | Unknown | non-goal | — | none | Cloud/Bridge service; CC presence unverified; src:1; src:7 | non-goal:feasibility:76 |
 | P-PAN-28 | Libraries panel | N/A | N/A | Y | Missing | non-goal | — | none | post-CS6:src:4; Adobe cloud service | non-goal:feasibility:76 |
-| P-PREF-01 | General preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Sparse pane | #506 |
+| P-PREF-01 | General preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Image Interpolation controls Arbitrary rotation. Other General options remain | #506 |
 | P-PREF-02 | Interface preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Sparse pane | #506 |
 | P-PREF-03 | File Handling preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Sparse pane | #506 |
 | P-PREF-04 | Performance preferences | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/preferences_performance.cpp; crates/pictura-app/cpp/status_readouts.cpp | manual:tst_performance_preferences covers the pane | Presets approximated; Cache Tile Size fixed at 256 px; no Basic/Normal/Advanced GPU modes (owner decision); Cache Levels default 8, not CS6's 4 | — |
@@ -498,7 +498,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 | P-SHELL-21 | Rulers and guides | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-SHELL-22 | Smart guides | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 | P-SHELL-23 | Isolation mode | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
-| P-SHELL-24 | Canvas rotation | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | — | — |
+| P-SHELL-24 | Canvas rotation | Y | Y | Y | Complete | in-scope | crates/pictura-render/src | none | Arbitrary supports direction, ruler prefill, and the General interpolation choice | — |
 | P-SHELL-25 | Panel column and rail | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp | none | — | — |
 
 ## Worked examples

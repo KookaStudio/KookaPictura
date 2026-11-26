@@ -454,6 +454,48 @@ fn dialog_options_are_validated_and_menu_items_are_specific() {
 }
 
 #[test]
+fn rotation_atn_round_trip() {
+    let mut set = ActionSet::new("Rotation");
+    let mut action = Action::new("Rotate");
+    action.steps.push(ActionStep::command(
+        "image.rotate.arbitrary",
+        CommandParams::new()
+            .with("angle", -24.5)
+            .with("interpolation", "nearest"),
+    ));
+    set.actions.push(action);
+    let loaded = read_atn(&write_atn(&set)).expect("Pictura round trip");
+    assert!(matches!(
+        loaded.actions[0].steps[0].kind(),
+        StepKind::Command { command, params }
+            if command.as_str() == "image.rotate.arbitrary"
+                && params.get("angle").and_then(|value| value.as_f64()) == Some(-24.5)
+                && params.get_str("interpolation") == Some("nearest")
+    ));
+
+    let imported = raw_step(
+        RawEventId::Long(*b"Rtte"),
+        Some(descriptor("Rotate", vec![code(
+            *b"Angl",
+            ActionValue::UnitFloat { unit: *b"#Ang", value: -24.5 },
+        )])),
+        "Rotate",
+    );
+    let bytes = raw_bytes(raw_set(
+        "Adobe".encode_utf16().chain([0]).collect(),
+        vec![imported],
+    ));
+    let loaded = read_atn(&bytes).expect("import Adobe");
+    assert!(matches!(
+        loaded.actions[0].steps[0].kind(),
+        StepKind::Command { command, params }
+            if command.as_str() == "image.rotate.arbitrary"
+                && params.get("angle").and_then(|value| value.as_f64()) == Some(-24.5)
+                && params.get("interpolation").is_none()
+    ));
+}
+
+#[test]
 fn rotate_and_flip_events_map_by_angle_axis_and_family() {
     let angle = |value: f64| CommandParams::new().with("angle", value);
     assert_eq!(

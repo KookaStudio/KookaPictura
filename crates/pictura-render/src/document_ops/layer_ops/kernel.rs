@@ -170,7 +170,7 @@ fn bicubic<T: Sample>(src: &[T], w: usize, h: usize, lx: f64, ly: f64, bc: (f64,
 /// Sample a plane at source-local `(lx, ly)` with `interpolation`, in the
 /// pixel-centre convention. `BicubicAutomatic` must be resolved by the caller
 /// ([`Interpolation::resolve`]); it falls back to bilinear here.
-pub(super) fn sample<T: Sample>(
+pub(in crate::document_ops) fn sample<T: Sample>(
     src: &[T],
     w: usize,
     h: usize,
