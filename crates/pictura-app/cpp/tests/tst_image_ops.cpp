@@ -8,6 +8,7 @@
 #include "commands.h"
 #include "frame.h"
 #include "image_size_dialog.h"
+#include "preferences.h"
 
 #include "api/document_bridge.h"
 #include "api/layers_bridge.h"
@@ -19,6 +20,9 @@
 
 #include <rust/cxx.h>
 
+#include <QtCore/QDataStream>
+#include <QtCore/QFile>
+#include <QtCore/QScopeGuard>
 #include <QtCore/QStringList>
 #include <QtCore/QTemporaryDir>
 #include <QtCore/QTimer>
@@ -51,7 +55,14 @@ private slots:
     void imageSizeShowsTheBudgetWarning();
     void imageSizeRefusesASideOverTheLimit();
     void imageSizeNamesFullScratchDisks();
+    void canvasSizePicasUseResolution();
+    void canvasSizeAbsoluteColumnsUseGutter();
+    void canvasSizeRelativeColumnsUsePitch();
+    void canvasSizeLargeUnitRestatementPreservesPixels();
     void canvasSizeGrowsAroundTheAnchor();
+    void canvasSizeWithoutBackgroundGrowsTransparently();
+    void canvasSizeMergedOnlyGrowsTransparently();
+    void canvasSizeRevealsRetainedPixels();
     void canvasSizeRefusalNamesMemory();
     void canvasSizeNamesFullScratchDisks();
     void canvasSizeRefusesASideOverTheLimit();
@@ -487,13 +498,132 @@ void ImageOpsTest::imageSizeEstimatesTheStoredMode()
     QCOMPARE(bytes(QStringLiteral("bitmap"), 1), 0.125);
 }
 
+void ImageOpsTest::canvasSizePicasUseResolution()
+{
+    const auto before = pictura::loadPreferences();
+    auto prefs = before;
+    prefs.traditionalPoints = true;
+    QVERIFY(pictura::savePreferences(before, prefs));
+    const auto restorePrefs = qScopeGuard([&] { pictura::savePreferences(prefs, before); });
+    pictura::PictureView view;
+    QVERIFY(pictura::create_document(view, 600, 300, QStringLiteral("rgb"), 8,
+                                     0xffffffu, false, 300.0, false));
+    pictura::CanvasSizeDialog dialog(&view, Qt::black, Qt::white);
+    auto* widthUnit = dialog.findChild<QComboBox*>(QStringLiteral("canvasSizeWidthUnit"));
+    auto* heightUnit = dialog.findChild<QComboBox*>(QStringLiteral("canvasSizeHeightUnit"));
+    auto* width = dialog.findChild<QDoubleSpinBox*>(QStringLiteral("canvasSizeWidth"));
+    QVERIFY(widthUnit && heightUnit && width);
+    QVERIFY(widthUnit->findText(QStringLiteral("Picas")) >= 0);
+    QVERIFY(heightUnit->findText(QStringLiteral("Picas")) >= 0);
+    widthUnit->setCurrentText(QStringLiteral("Picas"));
+    heightUnit->setCurrentText(QStringLiteral("Picas"));
+    QCOMPARE(dialog.resultWidth(), 600);
+    QCOMPARE(dialog.resultHeight(), 300);
+    width->setValue(6.0);
+    QCOMPARE(dialog.resultWidth(), 299);
+}
+
+void ImageOpsTest::canvasSizeAbsoluteColumnsUseGutter()
+{
+    const auto before = pictura::loadPreferences();
+    auto prefs = before;
+    prefs.columnWidthInches = 1.0;
+    prefs.columnGutterInches = 0.25;
+    QVERIFY(pictura::savePreferences(before, prefs));
+    const auto restorePrefs = qScopeGuard([&] { pictura::savePreferences(prefs, before); });
+    pictura::PictureView view;
+    QVERIFY(pictura::create_document(view, 600, 300, QStringLiteral("rgb"), 8,
+                                     0xffffffu, false, 300.0, false));
+    pictura::CanvasSizeDialog dialog(&view, Qt::black, Qt::white);
+    auto* widthUnit = dialog.findChild<QComboBox*>(QStringLiteral("canvasSizeWidthUnit"));
+    auto* heightUnit = dialog.findChild<QComboBox*>(QStringLiteral("canvasSizeHeightUnit"));
+    auto* width = dialog.findChild<QDoubleSpinBox*>(QStringLiteral("canvasSizeWidth"));
+    auto* height = dialog.findChild<QDoubleSpinBox*>(QStringLiteral("canvasSizeHeight"));
+    QVERIFY(widthUnit && heightUnit && width && height);
+    QVERIFY(widthUnit->findText(QStringLiteral("Columns")) >= 0);
+    QVERIFY(heightUnit->findText(QStringLiteral("Columns")) >= 0);
+    widthUnit->setCurrentText(QStringLiteral("Columns"));
+    heightUnit->setCurrentText(QStringLiteral("Columns"));
+    QCOMPARE(dialog.resultWidth(), 600);
+    QCOMPARE(dialog.resultHeight(), 300);
+    width->setValue(2.0);
+    height->setValue(0.5);
+    QCOMPARE(dialog.resultWidth(), 675);
+    QCOMPARE(dialog.resultHeight(), 150);
+}
+
+void ImageOpsTest::canvasSizeRelativeColumnsUsePitch()
+{
+    const auto before = pictura::loadPreferences();
+    auto prefs = before;
+    prefs.columnWidthInches = 1.0;
+    prefs.columnGutterInches = 0.25;
+    QVERIFY(pictura::savePreferences(before, prefs));
+    const auto restorePrefs = qScopeGuard([&] { pictura::savePreferences(prefs, before); });
+    pictura::PictureView view;
+    QVERIFY(pictura::create_document(view, 600, 500, QStringLiteral("rgb"), 8,
+                                     0xffffffu, false, 300.0, false));
+    pictura::CanvasSizeDialog dialog(&view, Qt::black, Qt::white);
+    auto* widthUnit = dialog.findChild<QComboBox*>(QStringLiteral("canvasSizeWidthUnit"));
+    auto* heightUnit = dialog.findChild<QComboBox*>(QStringLiteral("canvasSizeHeightUnit"));
+    auto* width = dialog.findChild<QDoubleSpinBox*>(QStringLiteral("canvasSizeWidth"));
+    auto* height = dialog.findChild<QDoubleSpinBox*>(QStringLiteral("canvasSizeHeight"));
+    auto* relative = dialog.findChild<QCheckBox*>(QStringLiteral("canvasSizeRelative"));
+    QVERIFY(widthUnit && heightUnit && width && height && relative);
+    widthUnit->setCurrentText(QStringLiteral("Columns"));
+    heightUnit->setCurrentText(QStringLiteral("Columns"));
+    relative->setChecked(true);
+    QCOMPARE(width->value(), 0.0);
+    QCOMPARE(height->value(), 0.0);
+    QCOMPARE(dialog.resultWidth(), 600);
+    QCOMPARE(dialog.resultHeight(), 500);
+    width->setValue(1.0);
+    height->setValue(-1.0);
+    QCOMPARE(dialog.resultWidth(), 975);
+    QCOMPARE(dialog.resultHeight(), 125);
+}
+
+void ImageOpsTest::canvasSizeLargeUnitRestatementPreservesPixels()
+{
+    const auto before = pictura::loadPreferences();
+    auto prefs = before;
+    prefs.columnWidthInches = 0.000001;
+    prefs.columnGutterInches = 0.0;
+    QVERIFY(pictura::savePreferences(before, prefs));
+    const auto restorePrefs = qScopeGuard([&] { pictura::savePreferences(prefs, before); });
+    pictura::PictureView view;
+    QVERIFY(pictura::create_document(view, 10000, 2, QStringLiteral("rgb"), 8,
+                                     0xffffffu, false, 0.1, false));
+    pictura::CanvasSizeDialog dialog(&view, Qt::black, Qt::white);
+    auto* unit = dialog.findChild<QComboBox*>(QStringLiteral("canvasSizeWidthUnit"));
+    auto* width = dialog.findChild<QDoubleSpinBox*>(QStringLiteral("canvasSizeWidth"));
+    auto* relative = dialog.findChild<QCheckBox*>(QStringLiteral("canvasSizeRelative"));
+    QVERIFY(unit && width && relative);
+    relative->setChecked(true);
+    width->setRange(-300000.0, 300000.0);
+    unit->setCurrentText(QStringLiteral("Picas"));
+    relative->setChecked(false);
+    QVERIFY(width->value() > 300000.0);
+    QCOMPARE(dialog.resultWidth(), 10000);
+    unit->setCurrentText(QStringLiteral("Pixels"));
+    QCOMPARE(dialog.resultWidth(), 10000);
+    unit->setCurrentText(QStringLiteral("Picas"));
+    QVERIFY(width->value() > 300000.0);
+    QCOMPARE(dialog.resultWidth(), 10000);
+    unit->setCurrentText(QStringLiteral("Pixels"));
+    QCOMPARE(dialog.resultWidth(), 10000);
+    unit->setCurrentText(QStringLiteral("Columns"));
+    QVERIFY(width->value() > 300000.0);
+    QCOMPARE(dialog.resultWidth(), 10000);
+    unit->setCurrentText(QStringLiteral("Pixels"));
+    QCOMPARE(dialog.resultWidth(), 10000);
+}
+
 // Canvas Size: Relative grows the canvas around the anchor and the
 // Background's new area takes the extension colour.
 void ImageOpsTest::canvasSizeGrowsAroundTheAnchor()
 {
     pictura::PicturaMainWindow& frame = *window_;
-    // An opaque image opens as a Background; a new white document's Layer 0
-    // would keep the new area transparent, as CS6 does for a plain layer.
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     QImage image(20, 10, QImage::Format_RGB32);
@@ -510,7 +640,10 @@ void ImageOpsTest::canvasSizeGrowsAroundTheAnchor()
     auto* width = qobject_cast<QDoubleSpinBox*>(dialog.controlForTest(QStringLiteral("canvasSizeWidth")));
     auto* unit = qobject_cast<QComboBox*>(dialog.controlForTest(QStringLiteral("canvasSizeWidthUnit")));
     auto* extension = qobject_cast<QComboBox*>(dialog.controlForTest(QStringLiteral("canvasSizeExtension")));
-    QVERIFY(relative && width && unit && extension);
+    auto* swatch = dialog.controlForTest(QStringLiteral("canvasSizeSwatch"));
+    QVERIFY(relative && width && unit && extension && swatch);
+    QVERIFY(extension->isEnabled());
+    QVERIFY(swatch->isEnabled());
     QCOMPARE(dialog.resultWidth(), 20);
     unit->setCurrentIndex(unit->findText(QStringLiteral("Percent")));
     QCOMPARE(width->value(), 100.0);
@@ -531,6 +664,75 @@ void ImageOpsTest::canvasSizeGrowsAroundTheAnchor()
     QCOMPARE(QColor::fromRgba(view->composite_argb(15, 5)), QColor(Qt::white));
     QCOMPARE(QColor::fromRgba(view->composite_argb(27, 5)), QColor(Qt::black));
     frame.closeDocument(doc, false);
+}
+
+void ImageOpsTest::canvasSizeWithoutBackgroundGrowsTransparently()
+{
+    pictura::PictureView view;
+    QVERIFY(pictura::create_document(view, 20, 10, QStringLiteral("rgb"), 8,
+                                     0xffffffu, false, 72.0, false));
+    QVERIFY(view.layer_from_background(QStringLiteral("0")));
+    QCOMPARE(view.layer_kind(0), QStringLiteral("pixel"));
+    pictura::CanvasSizeDialog dialog(&view, Qt::red, Qt::white);
+    auto* extension = dialog.controlForTest(QStringLiteral("canvasSizeExtension"));
+    auto* swatch = dialog.controlForTest(QStringLiteral("canvasSizeSwatch"));
+    auto* width = dialog.findChild<QDoubleSpinBox*>(QStringLiteral("canvasSizeWidth"));
+    QVERIFY(extension && swatch && width);
+    QVERIFY(!extension->isEnabled());
+    QVERIFY(!swatch->isEnabled());
+    width->setValue(30);
+    QVERIFY(pictura::canvas_size_apply(view, dialog.anchorName(), dialog.resultWidth(),
+                                       dialog.resultHeight(), 0xff0000u));
+    QCOMPARE(qAlpha(view.composite_argb(2, 5)), 0);
+    QCOMPARE(view.composite_argb(15, 5), qRgb(255, 255, 255));
+}
+
+void ImageOpsTest::canvasSizeMergedOnlyGrowsTransparently()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("merged-only.psd"));
+    {
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QDataStream out(&file);
+        QCOMPARE(out.writeRawData("8BPS", 4), 4);
+        out << quint16(1);
+        QCOMPARE(out.writeRawData("\0\0\0\0\0\0", 6), 6);
+        out << quint16(3) << quint32(1) << quint32(2) << quint16(8) << quint16(3);
+        out << quint32(0) << quint32(0) << quint32(0) << quint16(0);
+        out << quint8(0) << quint8(0) << quint8(0) << quint8(0) << quint8(255) << quint8(255);
+        QCOMPARE(out.status(), QDataStream::Ok);
+    }
+    auto& frame = *window_;
+    QVERIFY(frame.openDocumentAtPath(path));
+    const int doc = frame.activeDocumentIndex();
+    const auto closeDoc = qScopeGuard([&] { frame.closeDocument(doc, false); });
+    auto* view = frame.activeView();
+    QVERIFY(view);
+    QCOMPARE(view->layer_count(), 0);
+    pictura::CanvasSizeDialog dialog(view, Qt::red, Qt::white);
+    auto* extension = dialog.controlForTest(QStringLiteral("canvasSizeExtension"));
+    auto* swatch = dialog.controlForTest(QStringLiteral("canvasSizeSwatch"));
+    QVERIFY(extension && swatch);
+    QVERIFY(!extension->isEnabled());
+    QVERIFY(!swatch->isEnabled());
+    QVERIFY(pictura::canvas_size_apply(*view, QStringLiteral("center"), 4, 3, 0xff0000u));
+    QCOMPARE(view->composite_argb(1, 1), qRgb(0, 0, 255));
+    QCOMPARE(qAlpha(view->composite_argb(0, 1)), 0);
+}
+
+void ImageOpsTest::canvasSizeRevealsRetainedPixels()
+{
+    pictura::PictureView view;
+    QVERIFY(pictura::create_document(view, 20, 10, QStringLiteral("rgb"), 8,
+                                     0x336699u, false, 72.0, false));
+    QVERIFY(view.layer_from_background(QStringLiteral("0")));
+    const QString anchor = QStringLiteral("top-left");
+    QVERIFY(pictura::canvas_size_apply(view, anchor, 10, 10, 0xff0000u));
+    QVERIFY(pictura::canvas_size_apply(view, anchor, 30, 10, 0xff0000u));
+    QCOMPARE(view.composite_argb(15, 5), qRgb(0x33, 0x66, 0x99));
+    QCOMPARE(qAlpha(view.composite_argb(25, 5)), 0);
 }
 
 // Image Size refuses a target that does not fit the document budget, and a
