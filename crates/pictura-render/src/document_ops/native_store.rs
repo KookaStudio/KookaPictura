@@ -109,12 +109,16 @@ pub(super) fn resize_samples(
     let plane = sw * sh;
     match samples {
         Samples::U8(v) => Samples::U8(
-            each_plane(v, plane, |p| resize_plane(p, (sw, sh), (dw, dh), resample, u8::to_unit))
-                .into(),
+            each_plane(v, plane, |p| {
+                resize_plane(p, (sw, sh), (dw, dh), resample, u8::to_unit)
+            })
+            .into(),
         ),
         Samples::U16(v) => Samples::U16(
-            each_plane(v, plane, |p| resize_plane(p, (sw, sh), (dw, dh), resample, u16::to_unit))
-                .into(),
+            each_plane(v, plane, |p| {
+                resize_plane(p, (sw, sh), (dw, dh), resample, u16::to_unit)
+            })
+            .into(),
         ),
         Samples::F32(v) => Samples::F32(
             each_plane(v, plane, |p| {

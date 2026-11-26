@@ -292,7 +292,9 @@ fn resize_retains_extended_float_range() {
     let layer = &doc.layers[0].source_channels.as_ref().unwrap().planes[0].1;
     let merged = &doc.source.planes().as_ref().unwrap().samples;
     for store in [layer, merged] {
-        let Samples::F32(samples) = store else { panic!("expected float samples") };
+        let Samples::F32(samples) = store else {
+            panic!("expected float samples")
+        };
         assert!(samples.is_tiled());
         assert_eq!(&every(samples)[..4], &[-2.0, -0.5, 2.5, 4.0]);
     }

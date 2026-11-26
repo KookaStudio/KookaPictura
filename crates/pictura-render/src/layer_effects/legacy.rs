@@ -430,18 +430,32 @@ fn hide_all(e: &mut LegacyEffects) {
 /// Scale the dimensional fields of supported legacy records without rewriting
 /// unknown records or changing their visibility. Used only by Image Size.
 pub(crate) fn scale_legacy_effects(layer: &mut Layer, factor: f64) -> bool {
-    let Some(block) = layer.extra_block(b"lrFX") else { return false };
+    let Some(block) = layer.extra_block(b"lrFX") else {
+        return false;
+    };
     let mut data = block.data.to_vec();
     let mut reader = Reader::new(&data);
-    if reader.u16() != Some(0) { return false; }
-    let Some(count) = reader.u16() else { return false };
+    if reader.u16() != Some(0) {
+        return false;
+    }
+    let Some(count) = reader.u16() else {
+        return false;
+    };
     let mut fields = Vec::new();
     for _ in 0..count {
-        if reader.fourcc() != Some(*b"8BIM") { return false; }
-        let Some(kind) = reader.fourcc() else { return false };
-        let Some(len) = reader.u32() else { return false };
+        if reader.fourcc() != Some(*b"8BIM") {
+            return false;
+        }
+        let Some(kind) = reader.fourcc() else {
+            return false;
+        };
+        let Some(len) = reader.u32() else {
+            return false;
+        };
         let start = reader.pos;
-        let Some(body) = reader.take(len as usize) else { return false };
+        let Some(body) = reader.take(len as usize) else {
+            return false;
+        };
         let valid = match &kind {
             b"dsdw" => decode_drop_shadow_record(&mut Reader::new(body)).is_some(),
             b"isdw" => decode_inner_shadow_record(&mut Reader::new(body)).is_some(),
@@ -463,12 +477,16 @@ pub(crate) fn scale_legacy_effects(layer: &mut Layer, factor: f64) -> bool {
     for offset in fields {
         let bytes = &mut data[offset..offset + 4];
         let value = u32::from_be_bytes(bytes.try_into().expect("validated record"));
-        let scaled = (f64::from(value) * factor).round().clamp(0.0, f64::from(u32::MAX)) as u32;
+        let scaled = (f64::from(value) * factor)
+            .round()
+            .clamp(0.0, f64::from(u32::MAX)) as u32;
         if value != scaled {
             bytes.copy_from_slice(&scaled.to_be_bytes());
             changed = true;
         }
     }
-    if changed { layer.set_metadata_block(*b"lrFX", Some(data.into())); }
+    if changed {
+        layer.set_metadata_block(*b"lrFX", Some(data.into()));
+    }
     changed
 }

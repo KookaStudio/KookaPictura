@@ -917,7 +917,8 @@ pub(crate) fn scale_layer_style(layer: &mut Layer, factor: f64, include_disabled
         return false;
     }
     if layer.extra_block(b"lfx2").is_none() {
-        return include_disabled && crate::layer_effects::legacy::scale_legacy_effects(layer, factor);
+        return include_disabled
+            && crate::layer_effects::legacy::scale_legacy_effects(layer, factor);
     }
     let mut changed = false;
     let flag = if include_disabled { "exists" } else { "on" };

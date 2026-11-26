@@ -215,10 +215,18 @@ fn normalize(key: &str, value: Json) -> Result<Json, String> {
             Json::from(gamma.clamp(1.0, 2.2))
         }
         "columnWidthInches" => Json::from(
-            value.as_f64().filter(|v| *v > 0.0).unwrap_or(2.5).clamp(0.0001, 100_000.0),
+            value
+                .as_f64()
+                .filter(|v| *v > 0.0)
+                .unwrap_or(2.5)
+                .clamp(0.0001, 100_000.0),
         ),
         "columnGutterInches" => Json::from(
-            value.as_f64().filter(|v| *v >= 0.0).unwrap_or(1.0 / 6.0).min(100_000.0),
+            value
+                .as_f64()
+                .filter(|v| *v >= 0.0)
+                .unwrap_or(1.0 / 6.0)
+                .min(100_000.0),
         ),
         "scratchVolumes" => Json::Array(
             value

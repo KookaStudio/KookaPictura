@@ -107,7 +107,9 @@ fn attach_resized_merged_native(
     if doc.source.mode().is_some() || !matches!(doc.mode, ColorMode::Rgb | ColorMode::Grayscale) {
         return Ok(());
     }
-    let Some(store) = doc.source.planes().as_ref() else { return Ok(()) };
+    let Some(store) = doc.source.planes().as_ref() else {
+        return Ok(());
+    };
     if !matches!(store.depth, BitDepth::Sixteen | BitDepth::ThirtyTwo)
         || (store.width, store.height) != (width, height)
     {
@@ -116,16 +118,22 @@ fn attach_resized_merged_native(
     let (w, h) = (width as usize, height as usize);
     let area = w * h;
     let colors = doc.mode.color_channels() as usize;
-    if store.samples.len() < area * colors { return Ok(()); }
+    if store.samples.len() < area * colors {
+        return Ok(());
+    }
     let mut ids: Vec<(i16, usize)> = (0..colors).map(|i| (i as i16, i)).collect();
-    if doc.mode == ColorMode::Rgb && doc.composite.signed_merged_alpha()
+    if doc.mode == ColorMode::Rgb
+        && doc.composite.signed_merged_alpha()
         && store.samples.len() >= area * (colors + 1)
     {
         ids.push((-1, colors));
     }
-    fn copy_plane<T: TileSample>(src: &Plane<T>, w: usize, h: usize, index: usize)
-        -> Result<Plane<T>, MemoryError>
-    {
+    fn copy_plane<T: TileSample>(
+        src: &Plane<T>,
+        w: usize,
+        h: usize,
+        index: usize,
+    ) -> Result<Plane<T>, MemoryError> {
         Plane::build_tiled(w, h, 1, |y, row| {
             src.read_into(index * w * h + y * w, row);
             Ok(())
@@ -286,9 +294,21 @@ pub fn resized_plane_bytes(doc: &pictura_core::Document, width: u32, height: u32
         let area = u64::from(width) * u64::from(height);
         let colors = doc.mode.color_channels() as u64;
         bytes += area * (colors + 1);
-        if doc.source.mode().is_none() && matches!(doc.mode, pictura_core::ColorMode::Rgb | pictura_core::ColorMode::Grayscale) {
-            if let Some(store) = doc.source.planes().as_ref().filter(|s| matches!(s.depth, pictura_core::BitDepth::Sixteen | pictura_core::BitDepth::ThirtyTwo)) {
-                let alpha = u64::from(doc.mode == pictura_core::ColorMode::Rgb && doc.composite.signed_merged_alpha());
+        if doc.source.mode().is_none()
+            && matches!(
+                doc.mode,
+                pictura_core::ColorMode::Rgb | pictura_core::ColorMode::Grayscale
+            )
+        {
+            if let Some(store) = doc.source.planes().as_ref().filter(|s| {
+                matches!(
+                    s.depth,
+                    pictura_core::BitDepth::Sixteen | pictura_core::BitDepth::ThirtyTwo
+                )
+            }) {
+                let alpha = u64::from(
+                    doc.mode == pictura_core::ColorMode::Rgb && doc.composite.signed_merged_alpha(),
+                );
                 bytes += area * (colors + alpha) * sample_bytes(&store.samples);
             }
         }
@@ -498,7 +518,9 @@ mod tests {
         let mut doc = Document::new(4, 4, ColorMode::Rgb, BitDepth::Eight);
         let mut layer = pixel_layer("Legacy", rect(0, 0, 4, 4), None);
         let mut shadow = Vec::new();
-        for value in [0u32, 8, 25, 45, 12] { shadow.extend_from_slice(&value.to_be_bytes()); }
+        for value in [0u32, 8, 25, 45, 12] {
+            shadow.extend_from_slice(&value.to_be_bytes());
+        }
         shadow.extend_from_slice(&[0; 10]);
         shadow.extend_from_slice(b"8BIMnorm");
         shadow.extend_from_slice(&[0, 0, 255]);
@@ -518,10 +540,21 @@ mod tests {
         expected[20..24].copy_from_slice(&16u32.to_be_bytes());
         expected[32..36].copy_from_slice(&24u32.to_be_bytes());
         assert_eq!(result, expected);
-        assert_eq!(before.layers[0].extra_block(b"lrFX").unwrap().data.to_vec(), legacy);
+        assert_eq!(
+            before.layers[0].extra_block(b"lrFX").unwrap().data.to_vec(),
+            legacy
+        );
         let mut unchanged = before;
-        resize_document_with_styles(&mut unchanged, 8, 8, pictura_ops::Resample::Nearest, false).unwrap();
-        assert_eq!(unchanged.layers[0].extra_block(b"lrFX").unwrap().data.to_vec(), legacy);
+        resize_document_with_styles(&mut unchanged, 8, 8, pictura_ops::Resample::Nearest, false)
+            .unwrap();
+        assert_eq!(
+            unchanged.layers[0]
+                .extra_block(b"lrFX")
+                .unwrap()
+                .data
+                .to_vec(),
+            legacy
+        );
     }
 
     #[test]
@@ -537,10 +570,23 @@ mod tests {
             let mut doc = original.clone();
             resize_document_with_styles(&mut doc, 5, 3, pictura_ops::Resample::Nearest, scale)
                 .unwrap();
-            assert_eq!(layer_style_value(&doc.layers[0], "innerShadow.on"), Some(0.0));
-            assert!(set_layer_style_value(&mut doc.layers[0], "innerShadow.on", 1.0));
-            assert_eq!(layer_style_value(&doc.layers[0], "dropShadow.size"), Some(outer));
-            assert_eq!(layer_style_value(&doc.layers[0], "innerShadow.size"), Some(inner));
+            assert_eq!(
+                layer_style_value(&doc.layers[0], "innerShadow.on"),
+                Some(0.0)
+            );
+            assert!(set_layer_style_value(
+                &mut doc.layers[0],
+                "innerShadow.on",
+                1.0
+            ));
+            assert_eq!(
+                layer_style_value(&doc.layers[0], "dropShadow.size"),
+                Some(outer)
+            );
+            assert_eq!(
+                layer_style_value(&doc.layers[0], "innerShadow.size"),
+                Some(inner)
+            );
         }
     }
 
