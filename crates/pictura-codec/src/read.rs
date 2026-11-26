@@ -197,7 +197,7 @@ pub(crate) fn read_container(
                 mode,
                 ColorMode::Grayscale | ColorMode::Rgb | ColorMode::Lab | ColorMode::Cmyk
             ) || (depth == 16 && mode == ColorMode::Multichannel)
-        },
+        }
         _ => false,
     };
     if !depth_ok {
@@ -208,7 +208,11 @@ pub(crate) fn read_container(
     let retain_planes = (matches!(depth, 16 | 32)
         && matches!(
             mode,
-            ColorMode::Grayscale | ColorMode::Rgb | ColorMode::Lab | ColorMode::Cmyk | ColorMode::Multichannel
+            ColorMode::Grayscale
+                | ColorMode::Rgb
+                | ColorMode::Lab
+                | ColorMode::Cmyk
+                | ColorMode::Multichannel
         ))
         || (depth == 8
             && matches!(

@@ -849,7 +849,9 @@ fn write_container_to(
             || doc.channels.is_empty()
             || !doc.composite.merged_output())
     {
-        return Err(PsdError::Invalid("invalid Multichannel plate document".into()));
+        return Err(PsdError::Invalid(
+            "invalid Multichannel plate document".into(),
+        ));
     }
     let mode_code = if bitmap_mode {
         MODE_BITMAP

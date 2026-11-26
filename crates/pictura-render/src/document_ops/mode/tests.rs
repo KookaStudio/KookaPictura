@@ -365,7 +365,7 @@ fn the_matrix_dims_unsupported_targets_and_refusals_do_not_mutate() {
     let mut doc = ramp(2, 2);
     assert!(!can_convert_mode(&doc, ColorMode::Rgb), "current mode");
     assert!(!can_convert_mode(&doc, ColorMode::Duotone));
-    assert!(!can_convert_mode(&doc, ColorMode::Multichannel));
+    assert!(can_convert_mode(&doc, ColorMode::Multichannel));
     assert!(!can_convert_mode(&doc, ColorMode::Bitmap));
     assert!(can_convert_mode(&doc, ColorMode::Indexed));
     assert!(!can_convert_depth(&doc, BitDepth::Eight), "current depth");
@@ -775,16 +775,25 @@ fn multichannel_flattens_visible_rgb_and_preserves_extra() {
     let mut hidden = rgb_doc(1, 1, &[[255, 5, 10]]).layers[0].clone();
     hidden.visible = false;
     doc.layers = pictura_core::LayerStack::from_layers(vec![doc.layers[0].clone(), hidden]);
-    doc.channels.push(Channel { id: 0, data: vec![77].into() });
+    doc.channels.push(Channel {
+        id: 0,
+        data: vec![77].into(),
+    });
     pictura_codec::set_alpha_names(&mut doc, &["Saved outline".into()]);
 
     convert_mode(&mut doc, ColorMode::Multichannel).unwrap();
 
     assert!(doc.layers.is_empty());
     assert!(doc.source.multichannel_plates());
-    assert_eq!(pictura_codec::alpha_names(&doc), ["Cyan", "Magenta", "Yellow", "Saved outline"]);
+    assert_eq!(
+        pictura_codec::alpha_names(&doc),
+        ["Cyan", "Magenta", "Yellow", "Saved outline"]
+    );
     assert_eq!(pictura_codec::spot_channel_indices(&doc), [0, 1, 2]);
-    assert_eq!(doc.channels.iter().map(|c| c.data[0]).collect::<Vec<_>>(), [33, 112, 203, 77]);
+    assert_eq!(
+        doc.channels.iter().map(|c| c.data[0]).collect::<Vec<_>>(),
+        [33, 112, 203, 77]
+    );
     assert_eq!(doc.composite.data, [33, 112, 203]);
 }
 
@@ -794,7 +803,11 @@ fn multichannel_preserves_source_component_order() {
     let lab = [153, 118, 159];
     let gray = [64];
     for (mode, plates, names) in [
-        (ColorMode::Cmyk, cmyk.as_slice(), &["Cyan", "Magenta", "Yellow", "Black"][..]),
+        (
+            ColorMode::Cmyk,
+            cmyk.as_slice(),
+            &["Cyan", "Magenta", "Yellow", "Black"][..],
+        ),
         (ColorMode::Lab, lab.as_slice(), &["Lightness", "a", "b"][..]),
         (ColorMode::Grayscale, gray.as_slice(), &["Black"][..]),
     ] {
@@ -803,7 +816,16 @@ fn multichannel_preserves_source_component_order() {
             ColorMode::Lab => pictura_codec::lab_to_rgb(plates),
             _ => plates.to_vec(),
         };
-        let mut doc = Document::new(1, 1, if mode == ColorMode::Grayscale { mode } else { ColorMode::Rgb }, BitDepth::Eight);
+        let mut doc = Document::new(
+            1,
+            1,
+            if mode == ColorMode::Grayscale {
+                mode
+            } else {
+                ColorMode::Rgb
+            },
+            BitDepth::Eight,
+        );
         doc.composite
             .replace(PixelBuffer {
                 width: 1,
@@ -814,18 +836,23 @@ fn multichannel_preserves_source_component_order() {
             .unwrap();
         if mode != ColorMode::Grayscale {
             doc.source.set_encoding(Some(mode), None).unwrap();
-            doc.source.replace_planes(Some(pictura_core::SourcePlanes {
-                width: 1,
-                height: 1,
-                depth: BitDepth::Eight,
-                samples: Samples::U8(plates.to_vec().into()),
-            })).unwrap();
+            doc.source
+                .replace_planes(Some(pictura_core::SourcePlanes {
+                    width: 1,
+                    height: 1,
+                    depth: BitDepth::Eight,
+                    samples: Samples::U8(plates.to_vec().into()),
+                }))
+                .unwrap();
         }
 
         convert_mode(&mut doc, ColorMode::Multichannel).unwrap();
 
         assert_eq!(pictura_codec::alpha_names(&doc), names);
-        assert_eq!(doc.channels.iter().map(|c| c.data[0]).collect::<Vec<_>>(), plates);
+        assert_eq!(
+            doc.channels.iter().map(|c| c.data[0]).collect::<Vec<_>>(),
+            plates
+        );
     }
 }
 
@@ -833,39 +860,64 @@ fn multichannel_preserves_source_component_order() {
 fn multichannel_native_plates_round_trip() {
     let values = [0x1234, 0x5678, 0x9abc, 0x0def];
     let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.composite.replace(PixelBuffer {
-        width: 1,
-        height: 1,
-        channels: 3,
-        data: vec![0x12, 0x56, 0x9a].into(),
-    }).unwrap();
-    doc.channels.push(Channel { id: 0, data: vec![0x0d].into() });
+    doc.composite
+        .replace(PixelBuffer {
+            width: 1,
+            height: 1,
+            channels: 3,
+            data: vec![0x12, 0x56, 0x9a].into(),
+        })
+        .unwrap();
+    doc.channels.push(Channel {
+        id: 0,
+        data: vec![0x0d].into(),
+    });
     pictura_codec::set_alpha_names(&mut doc, &["Saved".into()]);
-    doc.source.set_native(Some(BitDepth::Sixteen), Some(pictura_core::SourcePlanes {
-        width: 1,
-        height: 1,
-        depth: BitDepth::Sixteen,
-        samples: Samples::U16(values.to_vec().into()),
-    })).unwrap();
+    doc.source
+        .set_native(
+            Some(BitDepth::Sixteen),
+            Some(pictura_core::SourcePlanes {
+                width: 1,
+                height: 1,
+                depth: BitDepth::Sixteen,
+                samples: Samples::U16(values.to_vec().into()),
+            }),
+        )
+        .unwrap();
 
     convert_mode(&mut doc, ColorMode::Multichannel).unwrap();
 
-    for (write, version) in [(write_psd as fn(&Document) -> _, 1), (pictura_codec::write_psb, 2)] {
+    for (write, version) in [
+        (write_psd as fn(&Document) -> _, 1),
+        (pictura_codec::write_psb, 2),
+    ] {
         let encoded = write(&doc).unwrap();
         assert_eq!(&encoded[4..6], &[0, version]);
         assert_eq!(&encoded[24..26], &[0, 7]);
         let reopened = read_psd(&encoded).unwrap();
         assert!(reopened.source.multichannel_plates());
         assert_eq!(reopened.document_bit_depth(), BitDepth::Sixteen);
-        assert_eq!(pictura_codec::alpha_names(&reopened), ["Cyan", "Magenta", "Yellow", "Saved"]);
-        assert_eq!(reopened.source.planes().as_ref().unwrap().samples.to_u16(), values);
+        assert_eq!(
+            pictura_codec::alpha_names(&reopened),
+            ["Cyan", "Magenta", "Yellow", "Saved"]
+        );
+        assert_eq!(
+            reopened.source.planes().as_ref().unwrap().samples.to_u16(),
+            values
+        );
         assert_eq!(reopened.composite, doc.composite);
     }
 }
 
 #[test]
 fn multichannel_rgb_plate_polarity() {
-    let pixels = [[0, 0, 0], [255, 255, 255], [255, 0, 0], [0, 255, 0], [0, 0, 255]];
+    let pixels = [
+        [0, 0, 0],
+        [255, 255, 255],
+        [255, 0, 0],
+        [0, 255, 0],
+        [0, 0, 255],
+    ];
     for depth in [BitDepth::Eight, BitDepth::Sixteen] {
         let mut doc = rgb_doc(5, 1, &pixels);
         if depth == BitDepth::Sixteen {
@@ -877,9 +929,22 @@ fn multichannel_rgb_plate_polarity() {
             assert_eq!(plate.data, expected);
             if depth == BitDepth::Sixteen {
                 let start = channel * pixels.len();
-                let actual = doc.source.planes().as_ref().unwrap().samples
-                    .slice(start..start + pixels.len()).unwrap().to_u16();
-                assert_eq!(actual, expected.iter().map(|&sample| u16::from(sample) * 257).collect::<Vec<_>>());
+                let actual = doc
+                    .source
+                    .planes()
+                    .as_ref()
+                    .unwrap()
+                    .samples
+                    .slice(start..start + pixels.len())
+                    .unwrap()
+                    .to_u16();
+                assert_eq!(
+                    actual,
+                    expected
+                        .iter()
+                        .map(|&sample| u16::from(sample) * 257)
+                        .collect::<Vec<_>>()
+                );
             }
         }
     }
@@ -888,11 +953,20 @@ fn multichannel_rgb_plate_polarity() {
 #[test]
 fn multichannel_refuses_without_mutation() {
     let mut indexed = rgb_doc(1, 1, &[[20, 42, 180]]);
-    convert_to_indexed(&mut indexed, indexed_options(ColorReduction::Adaptive, Dither::None)).unwrap();
+    convert_to_indexed(
+        &mut indexed,
+        indexed_options(ColorReduction::Adaptive, Dither::None),
+    )
+    .unwrap();
     let mut hdr = rgb_doc(1, 1, &[[20, 42, 180]]);
     convert_bit_depth(&mut hdr, BitDepth::ThirtyTwo).unwrap();
     let mut over_capacity = rgb_doc(1, 1, &[[20, 42, 180]]);
-    over_capacity.channels = (0..54).map(|id| Channel { id, data: vec![0].into() }).collect();
+    over_capacity.channels = (0..54)
+        .map(|id| Channel {
+            id,
+            data: vec![0].into(),
+        })
+        .collect();
 
     for mut doc in [indexed, hdr, over_capacity] {
         let original = doc.clone();
@@ -905,14 +979,20 @@ fn multichannel_refuses_without_mutation() {
 #[test]
 fn multichannel_geometry_keeps_plates_layerless_and_savable() {
     for depth in [BitDepth::Eight, BitDepth::Sixteen] {
-        let mut source = rgb_doc(2, 2, &[[10, 20, 30], [40, 50, 60], [70, 80, 90], [100, 110, 120]]);
+        let mut source = rgb_doc(
+            2,
+            2,
+            &[[10, 20, 30], [40, 50, 60], [70, 80, 90], [100, 110, 120]],
+        );
         if depth == BitDepth::Sixteen {
             convert_bit_depth(&mut source, depth).unwrap();
         }
         convert_mode(&mut source, ColorMode::Multichannel).unwrap();
         if depth == BitDepth::Sixteen {
             let mut store = source.source.planes().clone().unwrap();
-            let Samples::U16(ref mut samples) = store.samples else { unreachable!() };
+            let Samples::U16(ref mut samples) = store.samples else {
+                unreachable!()
+            };
             for value in samples.iter_mut() {
                 *value = (*value & 0xff00) | 0x34;
             }
@@ -937,7 +1017,10 @@ fn multichannel_geometry_keeps_plates_layerless_and_savable() {
 
         for doc in [cropped, resized, rotated, canvas, expanded_crop] {
             assert!(doc.layers.is_empty());
-            assert_eq!(doc.composite.buffer(), &pictura_codec::multichannel_preview(&doc));
+            assert_eq!(
+                doc.composite.buffer(),
+                &pictura_codec::multichannel_preview(&doc)
+            );
             let back = read_psd(&write_psd(&doc).unwrap()).unwrap();
             assert_eq!(back.channels, doc.channels);
             assert_eq!(back.composite, doc.composite);

@@ -13,7 +13,11 @@ pub(crate) fn complete_plate_display(doc: &mut Document) {
     }
     let names = crate::alpha_names(doc);
     for index in display.len()..doc.channels.len() {
-        let color: [u8; 3] = match names.get(index).map(|name| name.to_ascii_lowercase()).as_deref() {
+        let color: [u8; 3] = match names
+            .get(index)
+            .map(|name| name.to_ascii_lowercase())
+            .as_deref()
+        {
             Some("cyan") => [0, 255, 255],
             Some("magenta") => [255, 0, 255],
             Some("yellow") => [255, 255, 0],
@@ -41,7 +45,13 @@ pub fn multichannel_preview(doc: &Document) -> PixelBuffer {
         .iter()
         .zip(&display)
         .filter(|(channel, info)| info.mode == SPOT_CHANNEL_MODE && channel.data.len() == pixels)
-        .map(|(channel, info)| (&channel.data, preview_rgb(info), u32::from(info.opacity.min(100))))
+        .map(|(channel, info)| {
+            (
+                &channel.data,
+                preview_rgb(info),
+                u32::from(info.opacity.min(100)),
+            )
+        })
         .collect();
     let mut preview = Plane::filled(width, height, 3, 255u8);
     let mut shown = [vec![255u8; width], vec![255u8; width], vec![255u8; width]];
@@ -55,7 +65,8 @@ pub fn multichannel_preview(doc: &Document) -> PixelBuffer {
             for (row, color) in shown.iter_mut().zip(color) {
                 let absorb = (255 - u32::from(*color)) * opacity;
                 for (out, &sample) in row.iter_mut().zip(&samples) {
-                    let transmittance = 255 - ((255 - u32::from(sample)) * absorb + 12_750) / 25_500;
+                    let transmittance =
+                        255 - ((255 - u32::from(sample)) * absorb + 12_750) / 25_500;
                     *out = (u32::from(*out) * transmittance / 255) as u8;
                 }
             }

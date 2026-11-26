@@ -18,7 +18,11 @@ fn source_inks(mode: ColorMode) -> &'static [(&'static str, [u8; 3])] {
         ColorMode::Grayscale => &[BLACK],
         // ponytail: lightness and opponent axes retain their samples; the
         // display inks approximate their appearance as separate spot plates.
-        ColorMode::Lab => &[("Lightness", [0, 0, 0]), ("a", [0, 160, 0]), ("b", [0, 0, 220])],
+        ColorMode::Lab => &[
+            ("Lightness", [0, 0, 0]),
+            ("a", [0, 160, 0]),
+            ("b", [0, 0, 220]),
+        ],
         _ => &[],
     }
 }
@@ -36,16 +40,24 @@ pub(super) fn split(doc: &mut Document, options: ConversionOptions) -> Result<()
     let depth = doc.document_bit_depth();
     let (width, height) = (doc.width, doc.height);
     let pixels = width as usize * height as usize;
-    if doc.channels.iter().any(|channel| channel.data.len() != pixels) {
-        return Err(OpsError::InvalidParams("Multichannel extra plane length".into()));
+    if doc
+        .channels
+        .iter()
+        .any(|channel| channel.data.len() != pixels)
+    {
+        return Err(OpsError::InvalidParams(
+            "Multichannel extra plane length".into(),
+        ));
     }
 
     let mut staged = doc.clone();
     let rgb = flattened_rgb(&mut staged)?;
     let inks = source_inks(source);
-    let store = doc.source.planes().as_ref().filter(|store| {
-        store.width == width && store.height == height && store.depth == depth
-    });
+    let store = doc
+        .source
+        .planes()
+        .as_ref()
+        .filter(|store| store.width == width && store.height == height && store.depth == depth);
     let retained = store.and_then(|store| store.samples.slice(0..pixels * inks.len()));
     let profile = (source == ColorMode::Cmyk)
         .then(|| pictura_codec::document_cmyk_profile(doc))
@@ -55,9 +67,13 @@ pub(super) fn split(doc: &mut Document, options: ConversionOptions) -> Result<()
         (ColorMode::Rgb, _) => rgb,
         (ColorMode::Grayscale, _) => rgb[..pixels].to_vec(),
         (ColorMode::Cmyk, Some(values))
-            if profile.as_ref().and_then(|profile| {
-                pictura_codec::cmyk_to_rgb_with_profile(&values, profile, options)
-            }).unwrap_or_else(|| pictura_codec::cmyk_to_rgb(&values)) == rgb =>
+            if profile
+                .as_ref()
+                .and_then(|profile| {
+                    pictura_codec::cmyk_to_rgb_with_profile(&values, profile, options)
+                })
+                .unwrap_or_else(|| pictura_codec::cmyk_to_rgb(&values))
+                == rgb =>
         {
             values
         }
@@ -89,7 +105,10 @@ pub(super) fn split(doc: &mut Document, options: ConversionOptions) -> Result<()
 
     let mut channels: Vec<_> = separation
         .chunks_exact(pixels)
-        .map(|plane| Channel { id: 0, data: plane.to_vec().into() })
+        .map(|plane| Channel {
+            id: 0,
+            data: plane.to_vec().into(),
+        })
         .collect();
     channels.append(&mut staged.channels);
     for (i, channel) in channels.iter_mut().enumerate() {
@@ -102,7 +121,8 @@ pub(super) fn split(doc: &mut Document, options: ConversionOptions) -> Result<()
         let mut samples = Vec::with_capacity(channels.len() * pixels);
         for (i, channel) in channels.iter().enumerate() {
             let index = i + usize::from(merged_alpha && i >= inks.len());
-            let old = store.and_then(|store| store.samples.slice(index * pixels..(index + 1) * pixels));
+            let old =
+                store.and_then(|store| store.samples.slice(index * pixels..(index + 1) * pixels));
             append_native(&mut samples, &channel.data, old);
         }
         Some(SourcePlanes {
@@ -122,13 +142,18 @@ pub(super) fn split(doc: &mut Document, options: ConversionOptions) -> Result<()
     staged.source.set_multichannel_plates();
     staged.source.set_original_profile(None);
     pictura_codec::strip_document_icc(&mut staged);
-    staged.source.set_native((depth == BitDepth::Sixteen).then_some(depth), native)
+    staged
+        .source
+        .set_native((depth == BitDepth::Sixteen).then_some(depth), native)
         .expect("matching plate sample depth");
     staged.channels = channels;
     pictura_codec::set_alpha_names(&mut staged, &names);
     pictura_codec::set_display_info(&mut staged, &display);
     let preview = pictura_codec::multichannel_preview(&staged);
-    staged.composite.replace(preview).expect("valid plate preview");
+    staged
+        .composite
+        .replace(preview)
+        .expect("valid plate preview");
     staged.composite.set_signed_merged_alpha(false);
     staged.composite.set_merged_output(true);
     *doc = staged;
@@ -148,7 +173,9 @@ fn flattened_rgb(doc: &mut Document) -> Result<Vec<u8>, OpsError> {
     }
     let composite = &doc.composite;
     if !doc.has_stored_composite() || !matches!(composite.channels, 1 | 3 | 4) {
-        return Err(OpsError::InvalidParams("Multichannel needs a source image".into()));
+        return Err(OpsError::InvalidParams(
+            "Multichannel needs a source image".into(),
+        ));
     }
     let mut rgb = vec![0; 3 * pixels];
     for (index, out) in rgb.chunks_exact_mut(pixels).enumerate() {
@@ -169,7 +196,11 @@ fn flattened_rgb(doc: &mut Document) -> Result<Vec<u8>, OpsError> {
 
 fn append_native(samples: &mut Vec<u16>, current: &[u8], retained: Option<Samples>) {
     if let Some(Samples::U16(native)) = retained {
-        if native.iter().zip(current).all(|(&value, &shown)| (value >> 8) as u8 == shown) {
+        if native
+            .iter()
+            .zip(current)
+            .all(|(&value, &shown)| (value >> 8) as u8 == shown)
+        {
             samples.extend(native.iter().copied());
             return;
         }
@@ -179,7 +210,9 @@ fn append_native(samples: &mut Vec<u16>, current: &[u8], retained: Option<Sample
 
 pub(super) fn to_rgb(doc: &mut Document) -> Result<(), OpsError> {
     if !doc.has_stored_composite() || doc.composite.channels != 3 {
-        return Err(OpsError::InvalidParams("Multichannel has no RGB preview".into()));
+        return Err(OpsError::InvalidParams(
+            "Multichannel has no RGB preview".into(),
+        ));
     }
     let depth = doc.document_bit_depth();
     let pixels = doc.width as usize * doc.height as usize;
@@ -187,7 +220,10 @@ pub(super) fn to_rgb(doc: &mut Document) -> Result<(), OpsError> {
         let mut samples = Vec::with_capacity((3 + doc.channels.len()) * pixels);
         append_native(&mut samples, &doc.composite.data, None);
         for (i, channel) in doc.channels.iter().enumerate() {
-            let retained = doc.source.planes().as_ref()
+            let retained = doc
+                .source
+                .planes()
+                .as_ref()
                 .and_then(|store| store.samples.slice(i * pixels..(i + 1) * pixels));
             append_native(&mut samples, &channel.data, retained);
         }
@@ -198,7 +234,9 @@ pub(super) fn to_rgb(doc: &mut Document) -> Result<(), OpsError> {
             samples: Samples::U16(samples.into()),
         }
     });
-    doc.source.set_encoding(None, None).expect("RGB source encoding");
+    doc.source
+        .set_encoding(None, None)
+        .expect("RGB source encoding");
     doc.source
         .set_native((depth == BitDepth::Sixteen).then_some(depth), native)
         .expect("matching RGB sample depth");

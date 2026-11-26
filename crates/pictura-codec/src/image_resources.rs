@@ -248,18 +248,21 @@ pub(crate) fn has_multichannel_metadata(section: &[u8], channels: u16) -> bool {
     let has_names = channel_names_from_resources(&resources).is_some_and(|names| {
         names.len() <= count && names.iter().any(|name| !name.trim().is_empty())
     });
-    has_names || resources.iter().any(|resource| {
-        let data = &resource.data;
-        if resource.id != DISPLAY_INFO
-            || !data.starts_with(&1u32.to_be_bytes())
-            || data.len() <= 4
-            || !(data.len() - 4).is_multiple_of(13)
-            || (data.len() - 4) / 13 > count
-        {
-            return false;
-        }
-        decode_display_info(data).iter().all(|item| item.mode <= SPOT_CHANNEL_MODE)
-    })
+    has_names
+        || resources.iter().any(|resource| {
+            let data = &resource.data;
+            if resource.id != DISPLAY_INFO
+                || !data.starts_with(&1u32.to_be_bytes())
+                || data.len() <= 4
+                || !(data.len() - 4).is_multiple_of(13)
+                || (data.len() - 4) / 13 > count
+            {
+                return false;
+            }
+            decode_display_info(data)
+                .iter()
+                .all(|item| item.mode <= SPOT_CHANNEL_MODE)
+        })
 }
 
 fn decode_display_info(data: &[u8]) -> Vec<ChannelDisplayInfo> {

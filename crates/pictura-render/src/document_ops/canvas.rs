@@ -99,17 +99,35 @@ pub(super) fn fill_plate_padding(
     let y0 = i64::from(dy).clamp(0, height as i64) as usize;
     let y1 = (i64::from(dy) + i64::from(old_h)).clamp(0, height as i64) as usize;
     for &index in &spots {
-        fill_padding(&mut doc.channels[index].data, width, height, 0, x0, x1, y0, y1, 255);
+        fill_padding(
+            &mut doc.channels[index].data,
+            width,
+            height,
+            0,
+            x0,
+            x1,
+            y0,
+            y1,
+            255,
+        );
     }
     if let Some(mut store) = doc.source.planes().clone() {
         for &index in &spots {
             match &mut store.samples {
-                pictura_core::Samples::U8(plane) => fill_padding(plane, width, height, index, x0, x1, y0, y1, 255),
-                pictura_core::Samples::U16(plane) => fill_padding(plane, width, height, index, x0, x1, y0, y1, u16::MAX),
-                pictura_core::Samples::F32(plane) => fill_padding(plane, width, height, index, x0, x1, y0, y1, 1.0),
+                pictura_core::Samples::U8(plane) => {
+                    fill_padding(plane, width, height, index, x0, x1, y0, y1, 255)
+                }
+                pictura_core::Samples::U16(plane) => {
+                    fill_padding(plane, width, height, index, x0, x1, y0, y1, u16::MAX)
+                }
+                pictura_core::Samples::F32(plane) => {
+                    fill_padding(plane, width, height, index, x0, x1, y0, y1, 1.0)
+                }
             }
         }
-        doc.source.replace_planes(Some(store)).expect("matching plate sample depth");
+        doc.source
+            .replace_planes(Some(store))
+            .expect("matching plate sample depth");
     }
 }
 
@@ -135,7 +153,12 @@ fn fill_padding<T: pictura_core::TileSample>(
                 plane.write_rect_from(0..x0, row_index..row_index + 1, width, &row[..x0]);
             }
             if x1 < width {
-                plane.write_rect_from(x1..width, row_index..row_index + 1, width, &row[..width - x1]);
+                plane.write_rect_from(
+                    x1..width,
+                    row_index..row_index + 1,
+                    width,
+                    &row[..width - x1],
+                );
             }
         }
     }

@@ -44,11 +44,11 @@ mod icc;
 mod icc_convert;
 pub mod illustrator;
 mod image_resources;
-mod multichannel;
 mod iptc;
 mod layer_comps;
 pub mod layer_content;
 mod layer_content_budget;
+mod multichannel;
 mod normalize_content;
 pub use normalize_content::{edit_layer, layer_from_parts, retire_layer_content};
 mod source_content;
@@ -155,7 +155,6 @@ pub use image_resources::{
     VANISHING_POINT, VANISHING_POINT_NAME, XMP_METADATA,
 };
 pub use iptc::{encode_iptc, iptc_field_name, parse_iptc, Iptc};
-pub use multichannel::multichannel_preview;
 pub use lens_correction::{
     attach_lens_correction_filter, decode_lens_correction_slots,
     DEFAULT_SLOTS as LENS_CORRECTION_DEFAULT_SLOTS, LENS_CORRECTION_FILTER_ID,
@@ -167,6 +166,7 @@ pub use metadata::{
     set_file_info_values, set_iptc_fields, set_iptc_values, set_xmp_fields, set_xmp_packet,
     set_xmp_values, xmp_properties, DocumentMetadata, MergeMode,
 };
+pub use multichannel::multichannel_preview;
 pub use patterns::{builtin_patterns, decode_patterns, PatternPixels};
 pub use patterns_write::{add_document_pattern, encode_rgb_pattern, encode_rgba_pattern};
 pub use pictura_filter::{

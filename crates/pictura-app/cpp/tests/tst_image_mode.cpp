@@ -149,10 +149,13 @@ void ImageModeTest::multichannelPromptsAndUndoes()
     for (auto choice : {QMessageBox::Cancel, QMessageBox::Ok}) {
         bool prompted = false;
         QTimer::singleShot(0, window_.get(), [&] {
-            auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
-            if (box && box->button(choice)) {
-                prompted = true;
-                box->button(choice)->click();
+            for (QWidget* widget : QApplication::topLevelWidgets()) {
+                auto* box = qobject_cast<QMessageBox*>(widget);
+                if (box && box->isVisible() && box->button(choice)) {
+                    prompted = true;
+                    box->button(choice)->click();
+                    break;
+                }
             }
         });
         multichannel->trigger();

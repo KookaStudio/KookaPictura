@@ -153,18 +153,29 @@ fn edited_duotone_and_multichannel_write_rgb() {
 #[test]
 fn multichannel_channel_owned_and_legacy_read() {
     let mut metadata = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
-    metadata.channels = (0..4).map(|id| Channel { id, data: vec![0].into() }).collect();
+    metadata.channels = (0..4)
+        .map(|id| Channel {
+            id,
+            data: vec![0].into(),
+        })
+        .collect();
     let names = ["Cyan", "Magenta", "Yellow", "Black"].map(str::to_owned);
     crate::set_alpha_names(&mut metadata, &names);
     let named_resources = metadata.image_resources.to_vec();
     crate::set_alpha_names(&mut metadata, &[]);
-    let display = [crate::ChannelDisplayInfo { mode: crate::SPOT_CHANNEL_MODE, opacity: 100, ..Default::default() }; 4];
+    let display = [crate::ChannelDisplayInfo {
+        mode: crate::SPOT_CHANNEL_MODE,
+        opacity: 100,
+        ..Default::default()
+    }; 4];
     crate::set_display_info(&mut metadata, &display);
     let display_resources = metadata.image_resources.to_vec();
 
     for version in [1, 2] {
         for depth in [8, 16] {
-            let bytes: Vec<_> = if depth == 8 { vec![0x12, 0x56, 0x9a, 0x0d] } else {
+            let bytes: Vec<_> = if depth == 8 {
+                vec![0x12, 0x56, 0x9a, 0x0d]
+            } else {
                 vec![0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0x0d, 0xef]
             };
             for (resources, expected_names, expected_display) in [
@@ -182,13 +193,24 @@ fn multichannel_channel_owned_and_legacy_read() {
                 let doc = read_psd(&fixture).unwrap();
                 assert!(doc.source.multichannel_plates());
                 assert!(doc.layers.is_empty());
-                assert_eq!(doc.channels.iter().map(|channel| channel.data[0]).collect::<Vec<_>>(), [0x12, 0x56, 0x9a, 0x0d]);
-                assert_eq!(doc.source.planes().as_ref().unwrap().samples.to_bytes(), bytes);
+                assert_eq!(
+                    doc.channels
+                        .iter()
+                        .map(|channel| channel.data[0])
+                        .collect::<Vec<_>>(),
+                    [0x12, 0x56, 0x9a, 0x0d]
+                );
+                assert_eq!(
+                    doc.source.planes().as_ref().unwrap().samples.to_bytes(),
+                    bytes
+                );
                 assert_eq!(crate::alpha_names(&doc), expected_names);
                 if expected_display.is_empty() {
                     let info = crate::display_info(&doc);
                     assert_eq!(info.len(), 4);
-                    assert!(info.iter().all(|entry| entry.mode == crate::SPOT_CHANNEL_MODE));
+                    assert!(info
+                        .iter()
+                        .all(|entry| entry.mode == crate::SPOT_CHANNEL_MODE));
                     assert_ne!(doc.composite.data, [255, 255, 255]);
                 } else {
                     assert_eq!(crate::display_info(&doc), expected_display);
@@ -207,7 +229,10 @@ fn multichannel_channel_owned_and_legacy_read() {
     }
     for (bytes, preview) in [
         (flat_psd(8, 7, 1, 1, 1, &[&[40]]), [40, 40, 40]),
-        (flat_psd(8, 7, 3, 1, 1, &[&[0], &[255], &[128]]), [255, 0, 127]),
+        (
+            flat_psd(8, 7, 3, 1, 1, &[&[0], &[255], &[128]]),
+            [255, 0, 127],
+        ),
     ] {
         let doc = read_psd(&bytes).unwrap();
         assert!(!doc.source.multichannel_plates());
@@ -220,21 +245,36 @@ fn multichannel_channel_owned_and_legacy_read() {
 #[test]
 fn psd_header_zero_dimension_is_invalid() {
     for (width, height) in [(0, 1), (1, 0)] {
-        assert!(matches!(read_psd(&header(1, 3, width, height, 3)), Err(PsdError::Invalid(_))));
+        assert!(matches!(
+            read_psd(&header(1, 3, width, height, 3)),
+            Err(PsdError::Invalid(_))
+        ));
     }
 }
 
 #[test]
 fn psd_header_channel_count_is_invalid() {
     for channels in [0, 57] {
-        assert!(matches!(read_psd(&header(1, channels, 1, 1, 3)), Err(PsdError::Invalid(_))));
+        assert!(matches!(
+            read_psd(&header(1, channels, 1, 1, 3)),
+            Err(PsdError::Invalid(_))
+        ));
     }
 }
 
 #[test]
 fn named_multichannel_keeps_fallback_colors_after_channel_removal() {
     let mut doc = Document::new(1, 1, ColorMode::Rgb, BitDepth::Eight);
-    doc.channels = vec![Channel { id: 0, data: vec![0].into() }, Channel { id: 1, data: vec![0].into() }];
+    doc.channels = vec![
+        Channel {
+            id: 0,
+            data: vec![0].into(),
+        },
+        Channel {
+            id: 1,
+            data: vec![0].into(),
+        },
+    ];
     crate::set_alpha_names(&mut doc, &["Cyan".into(), "Yellow".into()]);
     crate::multichannel::complete_plate_display(&mut doc);
     assert_eq!(crate::multichannel_preview(&doc).data, [0, 255, 0]);

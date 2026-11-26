@@ -164,8 +164,7 @@ pub(super) fn channels_load_color_selection(
 }
 
 fn delete_alpha_with_name(doc: &mut Document, index: usize) -> bool {
-    if index >= doc.channels.len()
-        || (doc.source.multichannel_plates() && doc.channels.len() == 1)
+    if index >= doc.channels.len() || (doc.source.multichannel_plates() && doc.channels.len() == 1)
     {
         return false;
     }
@@ -174,13 +173,19 @@ fn delete_alpha_with_name(doc: &mut Document, index: usize) -> bool {
         if let Some(mut store) = doc.source.planes().clone() {
             let plane = doc.width as usize * doc.height as usize;
             let mut bytes = store.samples.to_bytes();
-            let sample_width = if store.depth == pictura_core::BitDepth::Sixteen { 2 } else { 1 };
+            let sample_width = if store.depth == pictura_core::BitDepth::Sixteen {
+                2
+            } else {
+                1
+            };
             let start = index * plane * sample_width;
             let end = start + plane * sample_width;
             if end <= bytes.len() {
                 bytes.drain(start..end);
                 store.samples = pictura_core::Samples::from_bytes(&bytes, store.depth);
-                doc.source.replace_planes(Some(store)).expect("matching plate sample depth");
+                doc.source
+                    .replace_planes(Some(store))
+                    .expect("matching plate sample depth");
             }
         }
     }
