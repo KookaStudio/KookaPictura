@@ -19,6 +19,7 @@
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QPushButton>
+#include <QtWidgets/QMenu>
 #include <QtWidgets/QRadioButton>
 
 #include <functional>
@@ -56,6 +57,7 @@ private slots:
     void init();
     void cleanup();
     void autoOptionsEntryPoints();
+    void propertiesPresetMenuNames();
     void autoOptionsPreviewAndUndo();
     void autoOptionsCancelExactPreview();
     void autoOptionsRestoredPreviewIsClean();
@@ -204,6 +206,26 @@ void AutoCorrectionTest::autoOptionsEntryPoints()
     QVERIFY(!panel_->canAutoCorrect());
     QVERIFY(panel_->findChild<QPushButton*>(QStringLiteral("propertiesAuto"))->isHidden());
     QVERIFY(!withOptions(false, [](QDialog&) {}));
+}
+
+void AutoCorrectionTest::propertiesPresetMenuNames()
+{
+    QVERIFY(openRamp());
+    QMenu menu;
+    auto* save = menu.addAction(QStringLiteral("Save Preset…"));
+    save->setData(QStringLiteral("panel.properties.savePreset"));
+    auto* load = menu.addAction(QStringLiteral("Load Preset…"));
+    load->setData(QStringLiteral("panel.properties.loadPreset"));
+    for (const auto& kind : {QStringLiteral("levels"), QStringLiteral("curves")}) {
+        QVERIFY(addAdjustment(kind));
+        panel_->updatePanelMenu(&menu);
+        const QString name = kind == QLatin1String("levels") ? QStringLiteral("Levels")
+                                                               : QStringLiteral("Curves");
+        QCOMPARE(save->text(), QStringLiteral("Save %1 Preset…").arg(name));
+        QCOMPARE(load->text(), QStringLiteral("Load %1 Preset…").arg(name));
+        QVERIFY(save->isEnabled());
+        QVERIFY(!load->isEnabled());
+    }
 }
 
 void AutoCorrectionTest::autoOptionsPreviewAndUndo()

@@ -909,8 +909,14 @@ void PropertiesPanel::updatePanelMenu(QMenu* menu)
         if (id == QLatin1String(command_ids::PanelPropertiesAutoOptions)) {
             action->setEnabled(canAutoCorrect());
         } else if (id == QLatin1String("panel.properties.savePreset")) {
+            action->setText(kind_ == QLatin1String("levels") ? tr("Save Levels Preset…")
+                            : kind_ == QLatin1String("curves") ? tr("Save Curves Preset…")
+                            : tr("Save Preset…"));
             action->setEnabled(hasLayer && adjustmentPresetCanSave(kind_));
         } else if (id == QLatin1String("panel.properties.loadPreset")) {
+            action->setText(kind_ == QLatin1String("levels") ? tr("Load Levels Preset…")
+                            : kind_ == QLatin1String("curves") ? tr("Load Curves Preset…")
+                            : tr("Load Preset…"));
             action->setEnabled(hasLayer && adjustmentPresetCanSave(kind_)
                                && !savedPresetNames(kind_).isEmpty());
         }
