@@ -33,7 +33,9 @@ pub(super) fn threshold_bins(rust: &PictureViewRust, path: &str) -> Bins {
         if !path.is_empty() {
             if let Some(&(dx, dy)) = rust.session.live.selection_move_delta() {
                 let Some(translated) = dx.checked_neg().zip(dy.checked_neg()).and_then(|(x, y)| {
-                    selection.as_ref().and_then(|coverage| coverage.rebased(x, y))
+                    selection
+                        .as_ref()
+                        .and_then(|coverage| coverage.rebased(x, y))
                 }) else {
                     return bins;
                 };
@@ -77,21 +79,38 @@ pub(super) fn threshold_bins(rust: &PictureViewRust, path: &str) -> Bins {
             };
             if let Some(coverage) = coverage {
                 for tile in sample_tiles(region) {
-                    add_samples(&mut bins, tile, selection, |x, y| Some(coverage.sample(x, y)));
+                    add_samples(&mut bins, tile, selection, |x, y| {
+                        Some(coverage.sample(x, y))
+                    });
                 }
             }
         }
-    } else if let Some(layer) = rust.layer_target.single().and_then(|p| resolve_path(doc, p)) {
+    } else if let Some(layer) = rust
+        .layer_target
+        .single()
+        .and_then(|p| resolve_path(doc, p))
+    {
         add_raster_samples(&mut bins, layer, region, selection);
     }
     bins
 }
 
-fn add_raster_samples(bins: &mut Bins, layer: &Layer, region: PsdRect, selection: Option<&Coverage>) {
+fn add_raster_samples(
+    bins: &mut Bins,
+    layer: &Layer,
+    region: PsdRect,
+    selection: Option<&Coverage>,
+) {
     let Some(region) = region.intersect(layer.rect) else {
         return;
     };
-    let plane = |id| layer.channels().iter().find(|c| c.id == id).map(|c| &c.data);
+    let plane = |id| {
+        layer
+            .channels()
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| &c.data)
+    };
     let Some(red) = plane(0) else { return };
     let (green, blue) = match (plane(1), plane(2)) {
         (Some(g), Some(b)) => (g, b),
@@ -106,7 +125,11 @@ fn add_raster_samples(bins: &mut Bins, layer: &Layer, region: PsdRect, selection
             if alpha.is_some_and(|a| a.sample(i) == Some(0)) {
                 return None;
             }
-            Some(rec601_luma(red.sample(i)?, green.sample(i)?, blue.sample(i)?))
+            Some(rec601_luma(
+                red.sample(i)?,
+                green.sample(i)?,
+                blue.sample(i)?,
+            ))
         });
     }
 }
