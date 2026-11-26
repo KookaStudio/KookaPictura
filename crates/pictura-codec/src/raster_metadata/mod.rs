@@ -88,7 +88,8 @@ pub fn raster_metadata(document: &Document) -> RasterMetadata {
             XMP_METADATA if metadata.xmp.is_none() && !resource.data.is_empty() => {
                 metadata.xmp = Some(resource.data);
             }
-            ICC_PROFILE | EXIF_DATA_1 | EXIF_DATA_3 | IPTC_NAA | XMP_METADATA | VANISHING_POINT => {}
+            ICC_PROFILE | EXIF_DATA_1 | EXIF_DATA_3 | IPTC_NAA | XMP_METADATA | VANISHING_POINT => {
+            }
             _ => metadata.tiff_resources.push(resource),
         }
     }
@@ -205,7 +206,12 @@ mod tests {
         use crate::hdr_preview::{get, set, PreviewOptions};
 
         let options = PreviewOptions::new(1, -2.5, 1.25).unwrap();
-        let mut doc = Document::new(1, 1, pictura_core::ColorMode::Rgb, pictura_core::BitDepth::ThirtyTwo);
+        let mut doc = Document::new(
+            1,
+            1,
+            pictura_core::ColorMode::Rgb,
+            pictura_core::BitDepth::ThirtyTwo,
+        );
         let iptc = frame_image_resource(IPTC_NAA, "", b"iptc");
         let opaque = frame_image_resource(4200, "opaque", b"preserve me");
         doc.image_resources = encode_image_resources(&[iptc.clone(), opaque.clone()]).into();

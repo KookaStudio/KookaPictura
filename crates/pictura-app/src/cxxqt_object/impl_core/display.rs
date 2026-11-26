@@ -36,8 +36,14 @@ impl qobject::PictureView {
 
     #[allow(clippy::too_many_arguments)]
     pub(in crate::cxxqt_object) fn canvas_hdr_display_crop(
-        &self, level: i32, x: i32, y: i32, w: i32, h: i32,
-        samples: Option<&mut FrameTileSamples>, offset: i16,
+        &self,
+        level: i32,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        samples: Option<&mut FrameTileSamples>,
+        offset: i16,
     ) -> QImage {
         if w <= 0 || h <= 0 {
             return QImage::default();
@@ -48,7 +54,9 @@ impl qobject::PictureView {
             bottom: y + h,
             right: x + w,
         };
-        let (image, missing) = self.rust().canvas_present_image(level, rect, samples, offset);
+        let (image, missing) = self
+            .rust()
+            .canvas_present_image(level, rect, samples, offset);
         self.request_tiles(missing);
         image
     }
@@ -80,7 +88,9 @@ impl PictureViewRust {
             return (QImage::default(), Vec::new());
         }
         let source = match self.canvas_source() {
-            TileSource::Composite if self.hdr_preview_options().is_some() => TileSource::Hdr(offset),
+            TileSource::Composite if self.hdr_preview_options().is_some() => {
+                TileSource::Hdr(offset)
+            }
             other => other,
         };
         let (crop, missing) = self.tile_crop_with_samples(source, level, rect, samples);

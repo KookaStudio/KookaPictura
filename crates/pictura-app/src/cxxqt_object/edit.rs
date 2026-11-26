@@ -282,7 +282,10 @@ impl PictureViewRust {
             } if self.structural_is_full(&rects) => Edit::Structural { damage: None },
             other => other,
         };
-        if matches!(edit, Edit::Regions { .. } | Edit::Full | Edit::Structural { .. } | Edit::Record) {
+        if matches!(
+            edit,
+            Edit::Regions { .. } | Edit::Full | Edit::Structural { .. } | Edit::Record
+        ) {
             self.hdr_merged_current = false;
         }
         let hint = if pending {
@@ -320,7 +323,8 @@ impl PictureViewRust {
                         .capture_move_without_bookkeeping(&target, label, hint.as_deref());
                 }
                 if self.hdr_merged_current {
-                    self.hdr_merged_history_ids.extend(self.session.history.current_id());
+                    self.hdr_merged_history_ids
+                        .extend(self.session.history.current_id());
                 }
                 metrics::record_phase("history_capture", t.elapsed());
             }

@@ -174,7 +174,15 @@ fn build_keys(
             .collect();
         if let TileSource::Hdr(offset) = source {
             if let Some(options) = hdr {
-                let level0 = |rect| super::hdr_preview::hdr_display_region(doc, rect, options, offset, hdr_merged && !painting);
+                let level0 = |rect| {
+                    super::hdr_preview::hdr_display_region(
+                        doc,
+                        rect,
+                        options,
+                        offset,
+                        hdr_merged && !painting,
+                    )
+                };
                 built.extend(pictura_render::build_keys(local, &keys, &level0));
             }
             continue;

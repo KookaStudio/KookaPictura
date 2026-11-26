@@ -28,18 +28,24 @@ impl Default for PreviewOptions {
 
 impl PreviewOptions {
     pub fn new(method: i32, exposure: f32, gamma: f32) -> Option<Self> {
-        (matches!(method, 0 | 1) && (-20.0..=20.0).contains(&exposure) && (0.1..=9.99).contains(&gamma))
-            .then_some(Self {
-                method,
-                exposure,
-                gamma,
-            })
+        (matches!(method, 0 | 1)
+            && (-20.0..=20.0).contains(&exposure)
+            && (0.1..=9.99).contains(&gamma))
+        .then_some(Self {
+            method,
+            exposure,
+            gamma,
+        })
     }
 
     pub fn map(self, rgb: [f32; 3], view_ev: f32) -> [f32; 3] {
         let gain = f64::from(self.exposure + view_ev).exp2();
         let rgb = rgb.map(|channel| {
-            if channel.is_finite() { f64::from(channel.max(0.0)) * gain } else { 0.0 }
+            if channel.is_finite() {
+                f64::from(channel.max(0.0)) * gain
+            } else {
+                0.0
+            }
         });
         if self.method == 1 {
             let light = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];

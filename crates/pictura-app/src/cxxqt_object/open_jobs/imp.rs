@@ -117,10 +117,12 @@ pub(in crate::cxxqt_object) fn apply_opened(rust: &mut PictureViewRust, opened: 
     );
     rust.hdr_merged_current = rust.session.doc.as_ref().is_some_and(|doc| {
         pictura_render::supports_hdr_scene(doc)
-            && doc.composite.merged_output() && doc.source.planes().is_some()
+            && doc.composite.merged_output()
+            && doc.source.planes().is_some()
     });
     if rust.hdr_merged_current {
-        rust.hdr_merged_history_ids.extend(rust.session.history.current_id());
+        rust.hdr_merged_history_ids
+            .extend(rust.session.history.current_id());
     }
     // After the replace, whose display reset drops any preview.
     *rust.tiles.preview.get_mut() = opened.preview;

@@ -24,9 +24,19 @@ pub fn hdr_scene_region(doc: &Document, rect: PsdRect, use_merged: bool) -> Opti
     let h = rect.height() as usize;
     if !doc.layers.is_empty() && !use_merged {
         let canvas = crate::composite_region::region_canvas(
-            doc, rect.left as u32, rect.top as u32, w as u32, h as u32,
+            doc,
+            rect.left as u32,
+            rect.top as u32,
+            w as u32,
+            h as u32,
         );
-        return Some(canvas.px.into_iter().map(|p| [p.r, p.g, p.b, p.a]).collect());
+        return Some(
+            canvas
+                .px
+                .into_iter()
+                .map(|p| [p.r, p.g, p.b, p.a])
+                .collect(),
+        );
     }
 
     let retained = doc.source.planes().as_ref()?;

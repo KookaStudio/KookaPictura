@@ -97,7 +97,10 @@ impl PictureViewRust {
         let cancelled = self.cancel_active_sessions_report_only();
         let t = Instant::now();
         let restored = self.session.restore(&mut self.layer_target, step, legacy)?;
-        self.hdr_merged_current = self.session.history.current_id()
+        self.hdr_merged_current = self
+            .session
+            .history
+            .current_id()
             .is_some_and(|id| self.hdr_merged_history_ids.contains(&id));
         if self.session.recheck_compatibility_on_restore {
             let access = self.session.doc.as_ref().map(|doc| {

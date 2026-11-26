@@ -381,7 +381,9 @@ impl TilePyramid {
 
     /// The native composite changed under each cached HDR exposure.
     pub fn damage_hdr(&mut self, rect: PsdRect) {
-        let sources: std::collections::HashSet<_> = self.tiles.keys()
+        let sources: std::collections::HashSet<_> = self
+            .tiles
+            .keys()
             .filter_map(|key| matches!(key.source, TileSource::Hdr(_)).then_some(key.source))
             .collect();
         for source in sources {

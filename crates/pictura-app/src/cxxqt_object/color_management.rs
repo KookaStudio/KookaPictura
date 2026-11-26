@@ -4,9 +4,12 @@
 
 mod imp;
 
+use super::hdr_preview::{
+    hdr_canvas_image, hdr_preview_options, hdr_scene_pixel, hdr_swatch_argb,
+    set_hdr_preview_options,
+};
 use super::qobject::PictureView;
 pub use imp::*;
-use super::hdr_preview::{hdr_canvas_image, hdr_preview_options, hdr_scene_pixel, hdr_swatch_argb, set_hdr_preview_options};
 
 #[cxx_qt::bridge]
 pub mod ffi {
@@ -26,9 +29,23 @@ pub mod ffi {
     #[namespace = "pictura"]
     extern "Rust" {
         fn hdr_preview_options(view: &PictureView) -> Vec<f64>;
-        fn set_hdr_preview_options(view: Pin<&mut PictureView>, method: i32, exposure: f64, gamma: f64, mode: i32) -> bool;
+        fn set_hdr_preview_options(
+            view: Pin<&mut PictureView>,
+            method: i32,
+            exposure: f64,
+            gamma: f64,
+            mode: i32,
+        ) -> bool;
         fn hdr_scene_pixel(view: &PictureView, x: i32, y: i32) -> Vec<f64>;
-        fn hdr_canvas_image(view: &PictureView, level: i32, x: i32, y: i32, w: i32, h: i32, offset: i32) -> QImage;
+        fn hdr_canvas_image(
+            view: &PictureView,
+            level: i32,
+            x: i32,
+            y: i32,
+            w: i32,
+            h: i32,
+            offset: i32,
+        ) -> QImage;
         fn hdr_swatch_argb(method: i32, exposure: f64, gamma: f64, r: f64, g: f64, b: f64) -> u32;
 
         /// Store the Color Settings values on the view. Codes follow the

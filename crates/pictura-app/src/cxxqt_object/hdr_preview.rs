@@ -53,9 +53,15 @@ fn display_byte(value: f32) -> u8 {
 }
 
 pub fn hdr_preview_options(view: &PictureView) -> Vec<f64> {
-    view.rust().hdr_preview_options().map_or_else(Vec::new, |o| {
-        vec![f64::from(o.method), f64::from(o.exposure), f64::from(o.gamma)]
-    })
+    view.rust()
+        .hdr_preview_options()
+        .map_or_else(Vec::new, |o| {
+            vec![
+                f64::from(o.method),
+                f64::from(o.exposure),
+                f64::from(o.gamma),
+            ]
+        })
 }
 
 /// Mode 0 drafts the display, mode 1 commits a metadata edit, and mode 2
@@ -104,8 +110,20 @@ pub fn hdr_scene_pixel(view: &PictureView, x: i32, y: i32) -> Vec<f64> {
     let (Some(right), Some(bottom)) = (x.checked_add(1), y.checked_add(1)) else {
         return Vec::new();
     };
-    let rect = PsdRect { top: y, left: x, bottom, right };
-    pictura_render::hdr_scene_region(doc, rect, view.rust().hdr_merged_current && !view.rust().has_active_session() && !view.rust().display_preview_active()).map_or_else(Vec::new, |samples| {
+    let rect = PsdRect {
+        top: y,
+        left: x,
+        bottom,
+        right,
+    };
+    pictura_render::hdr_scene_region(
+        doc,
+        rect,
+        view.rust().hdr_merged_current
+            && !view.rust().has_active_session()
+            && !view.rust().display_preview_active(),
+    )
+    .map_or_else(Vec::new, |samples| {
         samples[0].into_iter().map(f64::from).collect()
     })
 }
@@ -125,6 +143,8 @@ pub fn hdr_canvas_image(
 pub fn hdr_swatch_argb(method: i32, exposure: f64, gamma: f64, r: f64, g: f64, b: f64) -> u32 {
     let exposure = (exposure as f32).clamp(-20.0, 20.0);
     let options = PreviewOptions::new(method, exposure, gamma as f32).unwrap_or_default();
-    let [r, g, b] = options.map([r as f32, g as f32, b as f32], 0.0).map(display_byte);
+    let [r, g, b] = options
+        .map([r as f32, g as f32, b as f32], 0.0)
+        .map(display_byte);
     u32::from_be_bytes([255, r, g, b])
 }
