@@ -26,9 +26,10 @@ fn auto_options(settings: &AutoCorrectionSettings) -> AutoOptions {
         algorithm: match settings.algorithm {
             0 => AutoKind::Contrast,
             2 => AutoKind::Color,
+            3 => AutoKind::BrightnessContrast,
             _ => AutoKind::Tone,
         },
-        snap_midtones: settings.snap,
+        snap_midtones: settings.snap && settings.algorithm == 2,
         shadow_clip: percent(settings.shadow_clip),
         highlight_clip: percent(settings.highlight_clip),
         shadow: rgb(settings.shadow),

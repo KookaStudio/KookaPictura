@@ -371,6 +371,7 @@ pub struct ColorLookupParams {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AutoKind {
+    BrightnessContrast,
     Tone,
     Contrast,
     Color,

@@ -41,6 +41,7 @@ private slots:
     void thresholdHistogramTracksSelectionMove();
     void thresholdHistogramRespectsGroupBoundaries();
     void groupsCurvesAndFooter();
+    void curvesPointFields();
     void channelMixerMonochrome();
     void channelMixerCmykGroups();
     void canvasSectionReadsAndResizes();
@@ -87,6 +88,16 @@ void PropertiesPanelTest::cleanup()
 
 // No document reads No Properties; a plain layer gets the read-only summary
 // (a post-CS6 page ported from photorust, #70).
+void PropertiesPanelTest::curvesPointFields()
+{
+    QVERIFY(setupAdjustment(QStringLiteral("curves")));
+    auto* input = panel_->findChild<QSpinBox*>(QStringLiteral("adjustmentCurveInput"));
+    auto* output = panel_->findChild<QSpinBox*>(QStringLiteral("adjustmentCurveOutput"));
+    QVERIFY(input && output);
+    QVERIFY(!input->isEnabled());
+    QVERIFY(!output->isEnabled());
+}
+
 void PropertiesPanelTest::plainDocumentShowsNoProperties()
 {
     panel_ = window_->findChild<pictura::PropertiesPanel*>(QStringLiteral("propertiesPanel"));

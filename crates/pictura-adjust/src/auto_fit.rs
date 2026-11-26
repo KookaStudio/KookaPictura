@@ -175,6 +175,11 @@ impl AutoHistogram {
             (low as f64 / last as f64, high as f64 / last as f64)
         };
         let endpoints = match options.algorithm {
+            AutoKind::BrightnessContrast => {
+                let luminance: Vec<u64> = self.luma.iter().map(|bin| bin.count).collect();
+                let fixed_cut = cut(self.total, 0.1);
+                [bounds(&luminance, fixed_cut, fixed_cut); 3]
+            }
             AutoKind::Tone => self.channels.each_ref().map(|counts| bounds(counts, shadow_cut, highlight_cut)),
             AutoKind::Contrast => {
                 let shared: Vec<u64> = (0..=last)
@@ -195,10 +200,11 @@ impl AutoHistogram {
             if low >= high {
                 return None;
             }
-            let shadow = options.shadow[c].to_unit();
-            let highlight = options.highlight[c].to_unit();
+            let brightness_contrast = options.algorithm == AutoKind::BrightnessContrast;
+            let shadow = if brightness_contrast { 0.0 } else { options.shadow[c].to_unit() };
+            let highlight = if brightness_contrast { 1.0 } else { options.highlight[c].to_unit() };
             let mut gamma = 1.0;
-            if options.snap_midtones && self.neutral.count != 0 && shadow != highlight {
+            if !brightness_contrast && options.snap_midtones && self.neutral.count != 0 && shadow != highlight {
                 let mean = self.neutral.sum[c] / self.neutral.count as f64;
                 let input = (mean - low) / (high - low);
                 let output = (options.midtone[c].to_unit() - shadow) / (highlight - shadow);
@@ -264,6 +270,22 @@ mod tests {
         let mut flat = AutoHistogram::new(255);
         flat.add_planes([&[15u8; 4], &[22u8; 4], &[44u8; 4]], |_| true);
         assert_eq!(flat.fit(&options), [None; 3]);
+    }
+
+    #[test]
+    fn brightness_contrast_uses_luminance_and_ignores_target_settings() {
+        let mut histogram = AutoHistogram::new(255);
+        histogram.add_planes([&[20u8, 80, 180], &[40u8, 100, 200], &[60u8, 120, 220]], |_| true);
+        let mut options = AutoOptions { algorithm: AutoKind::BrightnessContrast, ..AutoOptions::default() };
+        let fit = histogram.fit(&options);
+        assert_eq!(fit[0], fit[1]);
+        assert_eq!(fit[1], fit[2]);
+        assert!(fit[0].is_some());
+        options.shadow = [50; 3];
+        options.highlight = [180; 3];
+        options.snap_midtones = true;
+        options.shadow_clip = 30.0;
+        assert_eq!(fit, histogram.fit(&options));
     }
 
     #[test]

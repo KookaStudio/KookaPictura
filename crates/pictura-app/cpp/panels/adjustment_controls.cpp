@@ -17,6 +17,7 @@
 #include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QSlider>
+#include <QtWidgets/QSpinBox>
 #include <QtWidgets/QToolButton>
 #include <QtWidgets/QVBoxLayout>
 
@@ -306,6 +307,44 @@ void AdjustmentControls::addCurves()
     curve_->setMinimumSize(180, 180);
     curve_->setShowHistogram(false);
     insert(curve_);
+    auto* pointFields = new QWidget(this);
+    auto* pointLayout = new QHBoxLayout(pointFields);
+    pointLayout->setContentsMargins(0, 0, 0, 0);
+    auto* input = new QSpinBox(pointFields);
+    auto* output = new QSpinBox(pointFields);
+    input->setObjectName(QStringLiteral("adjustmentCurveInput"));
+    output->setObjectName(QStringLiteral("adjustmentCurveOutput"));
+    input->setRange(0, 255);
+    output->setRange(0, 255);
+    input->setKeyboardTracking(false);
+    output->setKeyboardTracking(false);
+    pointLayout->addWidget(new QLabel(tr("Input"), pointFields));
+    pointLayout->addWidget(input);
+    pointLayout->addWidget(new QLabel(tr("Output"), pointFields));
+    pointLayout->addWidget(output);
+    insert(pointFields);
+    const auto refreshPoint = [this, input, output] {
+        const int selected = curve_->selected();
+        const auto points = curve_->points();
+        const bool valid = selected >= 0 && selected < points.size();
+        input->setEnabled(valid);
+        output->setEnabled(valid);
+        if (valid) {
+            const QSignalBlocker blockInput(input);
+            const QSignalBlocker blockOutput(output);
+            input->setValue(qRound(points[selected].x() * 255.0));
+            output->setValue(qRound(points[selected].y() * 255.0));
+        }
+    };
+    connect(curve_, &CurveWidget::selectionChanged, this, refreshPoint);
+    connect(curve_, &CurveWidget::curveChanged, this, refreshPoint);
+    connect(input, &QSpinBox::valueChanged, this, [this, input, output](int) {
+        curve_->moveSelected(input->value(), output->value());
+    });
+    connect(output, &QSpinBox::valueChanged, this, [this, input, output](int) {
+        curve_->moveSelected(input->value(), output->value());
+    });
+    refreshPoint();
     connect(curveChannel_, &QComboBox::currentIndexChanged, this, [this]() {
         emit gestureEnded();
         loading_ = true;

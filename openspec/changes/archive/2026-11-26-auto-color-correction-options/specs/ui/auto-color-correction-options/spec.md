@@ -58,3 +58,15 @@ The fitted Levels and Curves parameters SHALL remain editable and survive PSD an
 #### Scenario: Compare visual behavior against CS6 [auto_options_cs6]
 - **WHEN** a reference CS6 installation and the same RGB image are available
 - **THEN** the two entry points, controls, default persistence, and accept/cancel behavior can be compared side by side
+
+#### Scenario: Brightness and Contrast algorithm availability [auto_options_brightness]
+
+- **WHEN** the user selects Enhance Brightness and Contrast in either Properties dialog
+- **THEN** the system SHALL fit a shared luminance-based transfer and disable the target, clipping and neutral-midtones controls while retaining their saved values
+- **AND** selecting Find Dark & Light Colors SHALL re-enable those controls
+
+#### Scenario: Curves selected point values [curves_selected_point]
+
+- **WHEN** a point is selected in the Curves Properties graph
+- **THEN** the system SHALL show editable input and output values for that point
+- **AND** the values SHALL be disabled when no point is selected

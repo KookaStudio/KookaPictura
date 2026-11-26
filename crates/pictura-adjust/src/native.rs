@@ -927,6 +927,8 @@ fn auto_u16(kind: AutoKind, data: &mut [u16], n: usize) {
     match kind {
         AutoKind::Tone => auto_per_channel_u16(data, n, 0.001),
         AutoKind::Contrast => auto_joint_u16(data, n, 0.005),
+        AutoKind::BrightnessContrast => crate::auto_fit::apply_configured(
+            &pictura_core::AutoOptions { algorithm: kind, ..Default::default() }, data, n, u16::MAX, |_| true),
         AutoKind::Color => {
             auto_per_channel_u16(data, n, 0.005);
             snap_neutral_native(data, n);
@@ -938,6 +940,8 @@ fn auto_f32(kind: AutoKind, data: &mut [f32], n: usize) {
     match kind {
         AutoKind::Tone => auto_per_channel_f32(data, n, 0.001),
         AutoKind::Contrast => auto_joint_f32(data, n, 0.005),
+        AutoKind::BrightnessContrast => crate::auto_fit::apply_configured(
+            &pictura_core::AutoOptions { algorithm: kind, ..Default::default() }, data, n, u16::MAX, |_| true),
         AutoKind::Color => {
             auto_per_channel_f32(data, n, 0.005);
             snap_neutral_native(data, n);

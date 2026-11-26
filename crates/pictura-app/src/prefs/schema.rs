@@ -216,7 +216,7 @@ fn normalize(key: &str, value: Json) -> Result<Json, String> {
         }
     };
     let setting = match key {
-        "autoCorrectionAlgorithm" => Json::from(bounded(0..=2, 1)),
+        "autoCorrectionAlgorithm" => Json::from(bounded(0..=3, 1)),
         "autoCorrectionShadow" => Json::from(bounded(0..=0xff_ff_ff, 0)),
         "autoCorrectionMidtone" => Json::from(bounded(0..=0xff_ff_ff, 0x80_80_80)),
         "autoCorrectionHighlight" => Json::from(bounded(0..=0xff_ff_ff, 0xff_ff_ff)),

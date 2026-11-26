@@ -52,7 +52,8 @@ AutoCorrectionOptionsDialog::AutoCorrectionOptionsDialog(
     const std::array algorithmLabels{
         QCoreApplication::translate("PicturaUi", "Enhance Monochromatic Contrast"),
         QCoreApplication::translate("PicturaUi", "Enhance Per Channel Contrast"),
-        QCoreApplication::translate("PicturaUi", "Find Dark && Light Colors")};
+        QCoreApplication::translate("PicturaUi", "Find Dark && Light Colors"),
+        QCoreApplication::translate("PicturaUi", "Enhance Brightness and Contrast")};
     for (int index = 0; index < int(algorithmLabels.size()); ++index) {
         auto* radio = new QRadioButton(algorithmLabels[index], group);
         radio->setObjectName(QStringLiteral("autoCorrectionAlgorithm%1").arg(index));
@@ -106,6 +107,13 @@ AutoCorrectionOptionsDialog::AutoCorrectionOptionsDialog(
     form->addRow(QCoreApplication::translate("PicturaUi", "Shadow Clip"), shadowClip_);
     form->addRow(QCoreApplication::translate("PicturaUi", "Highlight Clip"), highlightClip_);
     layout->addWidget(targets);
+    const auto updateAvailability = [this, targets] {
+        const int algorithm = algorithms_->checkedId();
+        targets->setEnabled(algorithm != 3);
+        snap_->setEnabled(algorithm == 2);
+    };
+    connect(algorithms_, &QButtonGroup::idClicked, this, [updateAvailability](int) { updateAvailability(); });
+    updateAvailability();
     save_ = new QCheckBox(QCoreApplication::translate("PicturaUi", "Save as Defaults"), this);
     save_->setObjectName(QStringLiteral("autoCorrectionSaveDefaults"));
     layout->addWidget(save_);

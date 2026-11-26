@@ -58,6 +58,7 @@ private slots:
     void cleanup();
     void autoOptionsEntryPoints();
     void propertiesPresetMenuNames();
+    void algorithmAvailability();
     void autoOptionsPreviewAndUndo();
     void autoOptionsCancelExactPreview();
     void autoOptionsRestoredPreviewIsClean();
@@ -206,6 +207,27 @@ void AutoCorrectionTest::autoOptionsEntryPoints()
     QVERIFY(!panel_->canAutoCorrect());
     QVERIFY(panel_->findChild<QPushButton*>(QStringLiteral("propertiesAuto"))->isHidden());
     QVERIFY(!withOptions(false, [](QDialog&) {}));
+}
+
+void AutoCorrectionTest::algorithmAvailability()
+{
+    QVERIFY(openRamp());
+    for (const auto& kind : {QStringLiteral("levels"), QStringLiteral("curves")}) {
+        QVERIFY(addAdjustment(kind));
+        QVERIFY(withOptions(false, [](QDialog& dialog) {
+            auto* brightness = dialog.findChild<QRadioButton*>(QStringLiteral("autoCorrectionAlgorithm3"));
+            auto* colors = dialog.findChild<QRadioButton*>(QStringLiteral("autoCorrectionAlgorithm2"));
+            auto* snap = dialog.findChild<QCheckBox*>(QStringLiteral("autoCorrectionSnap"));
+            auto* clip = shadowClip(dialog);
+            QVERIFY(brightness && colors && snap && clip);
+            brightness->click();
+            QVERIFY(!snap->isEnabled());
+            QVERIFY(!clip->isEnabled());
+            colors->click();
+            QVERIFY(snap->isEnabled());
+            QVERIFY(clip->isEnabled());
+        }));
+    }
 }
 
 void AutoCorrectionTest::propertiesPresetMenuNames()
