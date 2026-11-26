@@ -12,6 +12,8 @@
 #include "api/document_bridge.h"
 #include "api/view_bridge.h"
 
+#include "qt_test_support.h"
+
 namespace {
 
 // A canvas whose pending state is a test flag, so no case depends on how fast
@@ -179,5 +181,5 @@ void RenderingIndicatorTest::requestedTilesArePendingUntilTheyLand()
     QTRY_VERIFY_WITH_TIMEOUT(!pictura::tiles_pending(view), 10000);
 }
 
-QTEST_MAIN(RenderingIndicatorTest)
+PICTURA_QT_TEST_MAIN(RenderingIndicatorTest)
 #include "tst_rendering_indicator.moc"
