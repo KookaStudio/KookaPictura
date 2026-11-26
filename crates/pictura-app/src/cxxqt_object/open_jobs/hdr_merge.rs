@@ -180,18 +180,20 @@ pub fn hdr_bracket_base(exposures: &[f64]) -> i32 {
 pub fn hdr_bracket_merge(
     bracket: &HdrBracket,
     ev100: &[f64],
+    included: &[u32],
     align: bool,
     ghost_base: i32,
     curve: &[f64],
 ) -> Box<HdrResult> {
     Box::new(HdrResult(merge_prepared(
-        bracket, ev100, align, ghost_base, curve,
+        bracket, ev100, included, align, ghost_base, curve,
     )))
 }
 
 fn merge_prepared(
     bracket: &HdrBracket,
     ev100: &[f64],
+    included: &[u32],
     align: bool,
     ghost_base: i32,
     curve: &[f64],
@@ -210,18 +212,25 @@ fn merge_prepared(
                 .ok_or_else(|| "Invalid Pictura response curve".to_owned())?,
         )
     };
-    let sources: Vec<_> = prepared
-        .sources
-        .iter()
-        .zip(ev100)
-        .map(|(rgba, &ev100)| Exposure {
+    let mut sources = Vec::with_capacity(included.len());
+    let mut seen = HashSet::new();
+    for &index in included {
+        let index = index as usize;
+        let rgba = prepared
+            .sources
+            .get(index)
+            .filter(|_| seen.insert(index))
+            .ok_or_else(|| "Invalid included HDR source".to_owned())?;
+        sources.push(Exposure {
             rgba: rgba.as_chunks::<4>().0,
-            ev100,
-        })
-        .collect();
+            ev100: ev100[index],
+        });
+    }
     let options = MergeOptions {
         align,
-        ghost_base: usize::try_from(ghost_base).ok(),
+        ghost_base: u32::try_from(ghost_base)
+            .ok()
+            .and_then(|base| included.iter().position(|&index| index == base)),
         response,
     };
     merge(&sources, prepared.width, prepared.height, &options).map_err(|error| match error {
@@ -229,7 +238,7 @@ fn merge_prepared(
         MergeError::InvalidExposure => {
             "Supply distinct, finite EV100 values within 32 stops".to_owned()
         }
-        MergeError::Alignment(index) => format!("Could not align exposure {}", index + 1),
+        MergeError::Alignment(index) => format!("Could not align exposure {}", included[index] + 1),
     })
 }
 
@@ -298,73 +307,131 @@ pub fn hdr_bracket_install_stack(
     true
 }
 
+pub fn hdr_bracket_thumbnail(bracket: &HdrBracket, index: u32) -> QImage {
+    let Ok(input) = &bracket.0 else {
+        return QImage::default();
+    };
+    let Some(rgba) = input.sources.get(index as usize) else {
+        return QImage::default();
+    };
+    let stride = input.width.max(input.height).div_ceil(120);
+    let width = input.width.div_ceil(stride);
+    let height = input.height.div_ceil(stride);
+    let mut pixels = Vec::with_capacity((width * height * 4) as usize);
+    for y in (0..input.height).step_by(stride as usize) {
+        for x in (0..input.width).step_by(stride as usize) {
+            let offset = (y as usize * input.width as usize + x as usize) * 4;
+            pixels.extend_from_slice(&rgba[offset..offset + 4]);
+        }
+    }
+    rgba_image(pixels, width as i32, height as i32)
+}
+
+fn luminance(rgb: [f64; 3]) -> f64 {
+    (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]).max(0.0)
+}
+
+fn curve_luminance(lut: &[f64], input: f64) -> f64 {
+    if lut.is_empty() {
+        return input;
+    }
+    // Continue from the white endpoint with a unit slope to retain highlight separation.
+    if input >= 1.0 {
+        return input + (lut[255] - 1.0);
+    }
+    let position = input * 255.0;
+    let bin = position as usize;
+    let fraction = position - bin as f64;
+    lut[bin] + (lut[(bin + 1).min(255)] - lut[bin]) * fraction
+}
+
+fn tone_planes(
+    merged: &HdrMerge,
+    [width, height]: [u32; 2],
+    stride: u32,
+    controls: &[f64],
+    lut: &[f64],
+    mut histogram: Option<&mut [i32]>,
+) -> Result<HdrMerge, String> {
+    let [radius, strength, gamma, exposure, detail, shadow, highlight, vibrance, saturation, smooth, legacy, method] =
+        controls
+    else {
+        return Err("Invalid toning controls".to_owned());
+    };
+    if controls.iter().any(|value| !value.is_finite()) || *gamma <= 0.0
+        || (!lut.is_empty() && (lut.len() != 256 || lut.iter().any(|v| !(0.0..=1.0).contains(v))))
+    {
+        return Err("Invalid toning controls or curve".to_owned());
+    }
+    let [columns, rows] = [width.div_ceil(stride), height.div_ceil(stride)];
+    let indices = || (0..height).step_by(stride as usize).flat_map(move |y| {
+        (0..width).step_by(stride as usize).map(move |x| y as usize * width as usize + x as usize)
+    });
+    let rgb_at = |i: usize| std::array::from_fn(|c| f64::from(merged.planes[c][i]));
+    let mut local = Vec::new();
+    if *method <= 0.5 {
+        local.extend(indices().map(|i| luminance(rgb_at(i))));
+        pictura_core::blur::approx_gaussian(
+            &mut local,
+            columns as usize,
+            rows as usize,
+            radius / f64::from(stride) * if *smooth > 0.5 { 1.5 } else { 1.0 },
+        );
+    }
+    let compression = 1.0 / (1.0 + strength.max(0.0) * 0.1);
+    let exposure_scale = exposure.exp2();
+    let mut planes = std::array::from_fn(|_| Vec::with_capacity(columns as usize * rows as usize));
+    for (sample, i) in indices().enumerate() {
+        let rgb = rgb_at(i);
+        let lum = luminance(rgb);
+        let mut target = if local.is_empty() {
+            lum.powf(1.0 / gamma) * exposure_scale
+        } else {
+            let base = local[sample].max(0.0);
+            let ratio = (lum + 0.0001) / (base + 0.0001);
+            base.powf(compression / gamma) * ratio.powf(1.0 + detail / 100.0) * exposure_scale
+        };
+        target *= (legacy * (lum / (1.0 + lum) - 0.5)).exp2();
+        target *= 1.0 + shadow / 100.0 * (1.0 / (1.0 + lum)) * 0.5;
+        target *= 1.0 + highlight / 100.0 * (lum / (1.0 + lum)) * 0.5;
+        let alpha = merged.planes[3][i];
+        if lut.is_empty() && *legacy != 0.0 && lum <= 0.0001 {
+            target = 0.0;
+        }
+        if let Some(bins) = histogram.as_deref_mut().filter(|_| alpha > 0.0) {
+            bins[(target.clamp(0.0, 1.0) * 255.0).round() as usize] += 1;
+        }
+        let mapped = curve_luminance(lut, target.min(f64::from(f32::MAX)));
+        let max = rgb.into_iter().fold(0.0_f64, f64::max);
+        let min = rgb.into_iter().fold(f64::INFINITY, f64::min);
+        let chroma = if max > 0.0 { (max - min) / max } else { 0.0 };
+        let color = (1.0 + saturation / 100.0 + vibrance / 100.0 * (1.0 - chroma)).max(0.0);
+        for (plane, component) in planes[..3].iter_mut().zip(rgb) {
+            let value = if lum > 0.0 {
+                ((component / lum - 1.0) * color + 1.0).max(0.0) * mapped
+            } else {
+                mapped
+            };
+            plane.push(value.clamp(0.0, f64::from(f32::MAX)) as f32);
+        }
+        planes[3].push(alpha);
+    }
+    Ok(HdrMerge {
+        planes,
+        response: merged.response,
+    })
+}
+
 pub fn hdr_result_tone(
     bracket: &HdrBracket,
     result: &HdrResult,
     controls: &[f64],
+    tone_lut: &[f64],
 ) -> Box<HdrResult> {
-    let tone = || -> Result<HdrMerge, String> {
+    let tone = || {
         let input = bracket.0.as_ref().map_err(Clone::clone)?;
         let merged = result.0.as_ref().map_err(Clone::clone)?;
-        let [radius, strength, gamma, exposure, detail, shadow, highlight, vibrance, saturation, smooth, curve, method] =
-            controls
-        else {
-            return Err("Invalid toning controls".to_owned());
-        };
-        if controls.iter().any(|value| !value.is_finite()) || *gamma <= 0.0 {
-            return Err("Invalid toning controls".to_owned());
-        }
-        let count = merged.planes[0].len();
-        let mut local: Vec<f64> = (0..count)
-            .map(|i| {
-                0.2126 * f64::from(merged.planes[0][i])
-                    + 0.7152 * f64::from(merged.planes[1][i])
-                    + 0.0722 * f64::from(merged.planes[2][i])
-            })
-            .collect();
-        pictura_core::blur::approx_gaussian(
-            &mut local,
-            input.width as usize,
-            input.height as usize,
-            radius * if *smooth > 0.5 { 1.5 } else { 1.0 },
-        );
-        let mut planes = merged.planes.clone();
-        for i in 0..count {
-            let rgb = [
-                f64::from(merged.planes[0][i]),
-                f64::from(merged.planes[1][i]),
-                f64::from(merged.planes[2][i]),
-            ];
-            let lum = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]).max(0.0);
-            let base = local[i].max(0.0);
-            let ratio = (lum + 0.0001) / (base + 0.0001);
-            let compression = 1.0 / (1.0 + strength.max(0.0) * 0.1);
-            let mut target = if *method > 0.5 {
-                lum.powf(1.0 / gamma) * exposure.exp2()
-            } else {
-                base.powf(compression / gamma) * ratio.powf(1.0 + detail / 100.0) * exposure.exp2()
-            };
-            target *= (curve * (lum / (1.0 + lum) - 0.5)).exp2();
-            target *= 1.0 + shadow / 100.0 * (1.0 / (1.0 + lum)) * 0.5;
-            target *= 1.0 + highlight / 100.0 * (lum / (1.0 + lum)) * 0.5;
-            let factor = if lum > 0.0001 { target / lum } else { 0.0 };
-            let max = rgb.into_iter().fold(0.0_f64, f64::max);
-            let min = rgb.into_iter().fold(f64::INFINITY, f64::min);
-            let chroma = if max > 0.0 { (max - min) / max } else { 0.0 };
-            let color = (1.0 + saturation / 100.0 + vibrance / 100.0 * (1.0 - chroma)).max(0.0);
-            for channel in 0..3 {
-                let value = ((lum + (rgb[channel] - lum) * color) * factor).max(0.0);
-                planes[channel][i] = if value.is_finite() {
-                    value.min(f64::from(f32::MAX)) as f32
-                } else {
-                    f32::MAX
-                };
-            }
-        }
-        Ok(HdrMerge {
-            planes,
-            response: merged.response,
-        })
+        tone_planes(merged, [input.width, input.height], 1, controls, tone_lut, None)
     };
     Box::new(HdrResult(tone()))
 }
@@ -385,21 +452,39 @@ pub fn hdr_result_curve(result: &HdrResult) -> Vec<f64> {
         .unwrap_or_default()
 }
 
-pub fn hdr_result_preview(bracket: &HdrBracket, result: &HdrResult, ev: f64) -> QImage {
+pub fn hdr_result_preview(
+    bracket: &HdrBracket,
+    result: &HdrResult,
+    controls: &[f64],
+    tone_lut: &[f64],
+    ev: f64,
+    histogram: &mut [i32],
+) -> QImage {
     let (Ok(input), Ok(merged)) = (&bracket.0, &result.0) else {
         return QImage::default();
     };
-    let stride = input.width.max(input.height).div_ceil(640).max(1);
+    let stride = input.width.max(input.height).div_ceil(1440);
     let width = input.width.div_ceil(stride);
     let height = input.height.div_ceil(stride);
+    if histogram.len() != 256 {
+        return QImage::default();
+    }
+    histogram.fill(0);
+    let Ok(toned) = tone_planes(
+        merged,
+        [input.width, input.height],
+        stride,
+        controls,
+        tone_lut,
+        Some(histogram),
+    ) else {
+        return QImage::default();
+    };
     let scale = ev.clamp(-8.0, 8.0).exp2() as f32;
     let mut pixels = Vec::with_capacity((width * height * 4) as usize);
-    for y in (0..input.height).step_by(stride as usize) {
-        for x in (0..input.width).step_by(stride as usize) {
-            let i = (y * input.width + x) as usize;
-            pixels.extend(merged.planes[..3].iter().map(|p| display(p[i] * scale)));
-            pixels.push(display(merged.planes[3][i]));
-        }
+    for i in 0..(width * height) as usize {
+        pixels.extend(toned.planes[..3].iter().map(|p| display(p[i] * scale)));
+        pixels.push(display(toned.planes[3][i]));
     }
     rgba_image(pixels, width as i32, height as i32)
 }
@@ -491,6 +576,29 @@ mod tests {
     }
 
     #[test]
+    fn hdr_tone_curve_preserves_headroom() {
+        let source = HdrMerge {
+            planes: [vec![0.0, 0.4, 1.0, 3.0], vec![0.0, 0.4, 1.0, 3.0],
+                     vec![0.0, 0.4, 1.0, 3.0], vec![1.0; 4]],
+            response: ResponseCurve::new([1.0; 3]).unwrap(),
+        };
+        let mut controls = [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0];
+        let mut bins = [0; 256];
+        let identity = tone_planes(&source, [4, 1], 1, &controls, &[], Some(&mut bins)).unwrap();
+        assert_eq!(identity.planes, source.planes);
+        assert_eq!((bins[0], bins[102], bins[255]), (1, 1, 2));
+        let curve: [f64; 256] = std::array::from_fn(|i| 0.1 + i as f64 / 255.0 * 0.7);
+        assert!((curve_luminance(&curve, 1.0 - 1e-8) - curve_luminance(&curve, 1.0 + 1e-8)).abs() < 1e-7);
+        let edited = tone_planes(&source, [4, 1], 1, &controls, &curve, None).unwrap();
+        assert_eq!(edited.planes[0], [0.1, 0.38, 0.8, 2.8]);
+        assert_eq!(edited.planes[3], source.planes[3]);
+        controls[10] = 0.5;
+        let migrated = tone_planes(&source, [4, 1], 1, &controls, &[], None).unwrap();
+        let expected = 3.0 * (0.5_f64 * (3.0 / 4.0 - 0.5)).exp2();
+        assert_eq!(migrated.planes[0][3], expected as f32);
+    }
+
+    #[test]
     fn tone_keeps_float_highlights_and_alpha() {
         let bracket = HdrBracket(Ok(Prepared {
             sources: vec![],
@@ -504,7 +612,7 @@ mod tests {
             response: ResponseCurve::new([1.0; 3]).unwrap(),
         }));
         let controls = [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0];
-        let toned = hdr_result_tone(&bracket, &result, &controls);
+        let toned = hdr_result_tone(&bracket, &result, &controls, &[]);
         let toned = toned.0.as_ref().unwrap();
         assert!(toned.planes[0][0] > 1.0);
         assert_eq!(toned.planes[3][0], 0.5);

@@ -61,6 +61,7 @@ free	hdr_bracket_exposures	hdr_bracket_exposures	api/document_bridge.h	pictura_a
 free	hdr_bracket_install_stack	hdr_bracket_install_stack	api/document_bridge.h	pictura_app/src/cxxqt_object/open_jobs.cxxqt.h
 free	hdr_bracket_merge	hdr_bracket_merge	api/document_bridge.h	pictura_app/src/cxxqt_object/open_jobs.cxxqt.h
 free	hdr_bracket_open	hdr_bracket_open	api/document_bridge.h	pictura_app/src/cxxqt_object/open_jobs.cxxqt.h
+free	hdr_bracket_thumbnail	hdr_bracket_thumbnail	api/document_bridge.h	pictura_app/src/cxxqt_object/open_jobs.cxxqt.h
 free	hdr_result_curve	hdr_result_curve	api/document_bridge.h	pictura_app/src/cxxqt_object/open_jobs.cxxqt.h
 free	hdr_result_error	hdr_result_error	api/document_bridge.h	pictura_app/src/cxxqt_object/open_jobs.cxxqt.h
 free	hdr_result_install	hdr_result_install	api/document_bridge.h	pictura_app/src/cxxqt_object/open_jobs.cxxqt.h

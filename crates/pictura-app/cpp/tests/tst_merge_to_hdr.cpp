@@ -7,6 +7,7 @@
 #include "frame.h"
 #include "hdr_conversion_dialog.h"
 #include "load_layers_dialog.h"
+#include "panels/curve_widget.h"
 #include "qt_test_support.h"
 
 #include <QtCore/QFile>
@@ -24,6 +25,9 @@
 #include <QtWidgets/QListWidget>
 #include <QtWidgets/QMessageBox>
 #include <QtWidgets/QPushButton>
+#include <QtWidgets/QScrollArea>
+#include <QtWidgets/QTabWidget>
+#include <QtWidgets/QSpinBox>
 #include <QtWidgets/QDoubleSpinBox>
 
 #include <functional>
@@ -69,6 +73,9 @@ private slots:
     void publishesOrCancels();
     void temporaryStackAndBackground();
     void adjustsFloatTone();
+    void togglesSourcesAtTwo();
+    void editsToneCurve();
+    void loadsLegacyTonePreset();
     void budgetFailureIsAtomic();
 
 private:
@@ -447,6 +454,148 @@ void MergeToHdrTest::adjustsFloatTone()
     }));
     QVERIFY(changed);
     QCOMPARE(frame_->activeView()->document_depth_bits(), 32);
+}
+
+void MergeToHdrTest::togglesSourcesAtTwo()
+{
+    bool previewSeen = false;
+    QVERIFY(run([&](Stage stage, QDialog& dialog) {
+        if (stage != Stage::Preview) { return; }
+        previewSeen = true;
+        QVERIFY(dialog.isFullScreen());
+        auto* strip = control<QScrollArea>(dialog, "hdrMergeSources");
+        auto* first = control<QCheckBox>(dialog, "hdrMergeSource0");
+        auto* second = control<QCheckBox>(dialog, "hdrMergeSource1");
+        auto* third = control<QCheckBox>(dialog, "hdrMergeSource2");
+        auto* ghost = control<QCheckBox>(dialog, "hdrMergeGhost");
+        auto* base = control<QComboBox>(dialog, "hdrMergeBase");
+        auto* image = control<QLabel>(dialog, "hdrMergeImage");
+        auto* accept = control<QPushButton>(dialog, "hdrMergeAccept");
+        QVERIFY(strip && first && second && third && ghost && base && image && accept);
+        QVERIFY(first->isChecked() && second->isChecked() && third->isChecked());
+        ghost->setChecked(true);
+        base->setCurrentIndex(0);
+        first->click();
+        QVERIFY(!first->isChecked() && first->isEnabled());
+        QVERIFY(second->isChecked() && !second->isEnabled());
+        QVERIFY(third->isChecked() && !third->isEnabled());
+        second->click();
+        QVERIFY(second->isChecked());
+        QVERIFY(!frame_->activeView()->layer_visible(1));
+        QVERIFY(base->currentIndex() != 0);
+        QVERIFY(accept->isEnabled());
+        first->click();
+        QVERIFY(first->isChecked() && second->isEnabled() && third->isEnabled());
+        QCOMPARE(base->currentIndex(), 0);
+        QVERIFY(frame_->activeView()->layer_visible(1));
+        ghost->setChecked(false);
+        const QImage full = image->pixmap().toImage();
+        second->click();
+        QVERIFY(!image->pixmap().isNull());
+        QVERIFY(full != image->pixmap().toImage());
+        QTest::keyClick(&dialog, Qt::Key_Escape);
+    }));
+    QVERIFY(previewSeen);
+    QCOMPARE(frame_->documentCount(), 0);
+
+    QVERIFY(run());
+    const auto full = frame_->activeView()->composite_argb(1, 1);
+    QVERIFY(run([&](Stage stage, QDialog& dialog) {
+        if (stage == Stage::Preview) {
+            auto* middle = control<QCheckBox>(dialog, "hdrMergeSource1");
+            QVERIFY(middle);
+            middle->click();
+        }
+    }));
+    QCOMPARE(frame_->documentCount(), 2);
+    QCOMPARE(frame_->activeView()->layer_count(), 1);
+    QCOMPARE(frame_->activeView()->document_depth_bits(), 32);
+    QVERIFY(frame_->activeView()->composite_argb(1, 1) != full);
+}
+
+void MergeToHdrTest::editsToneCurve()
+{
+    QVERIFY(run());
+    const auto baseline = frame_->activeView()->composite_argb(1, 1);
+    bool previewSeen = false;
+    QVERIFY(run([&](Stage stage, QDialog& dialog) {
+        if (stage != Stage::Preview) { return; }
+        previewSeen = true;
+        auto* tabs = control<QTabWidget>(dialog, "hdrMergeTabs");
+        auto* image = control<QLabel>(dialog, "hdrMergeImage");
+        QVERIFY(tabs && image);
+        QCOMPARE(tabs->tabText(0), QStringLiteral("Advanced"));
+        QCOMPARE(tabs->tabText(1), QStringLiteral("Curve"));
+        QVERIFY(tabs->widget(0)->findChild<QSpinBox*>(QStringLiteral("hdrShadow")));
+        tabs->setCurrentIndex(1);
+        auto* curve = control<pictura::CurveWidget>(dialog, "hdrMergeToneCurve");
+        auto* input = control<QDoubleSpinBox>(dialog, "hdrMergeCurveInput");
+        auto* output = control<QDoubleSpinBox>(dialog, "hdrMergeCurveOutput");
+        auto* corner = control<QCheckBox>(dialog, "hdrMergeCurveCorner");
+        auto* reset = control<QPushButton>(dialog, "hdrMergeCurveReset");
+        QVERIFY(curve && input && output && corner && reset);
+        QCOMPARE(curve->points().size(), 2);
+        QCOMPARE(curve->points().first(), QPointF(0, 0));
+        QCOMPARE(curve->points().last(), QPointF(1, 1));
+        QVERIFY(!input->isEnabled() && !output->isEnabled());
+        const QImage identity = image->pixmap().toImage();
+        QTest::mousePress(curve, Qt::LeftButton, Qt::NoModifier, QPoint(65, 45));
+        QCOMPARE(curve->points().size(), 3);
+        const QPointF inserted = curve->points().at(1);
+        QTest::mouseMove(curve, QPoint(80, 55));
+        QTest::mouseRelease(curve, Qt::LeftButton, Qt::NoModifier, QPoint(80, 55));
+        QVERIFY(curve->points().at(1) != inserted);
+        QVERIFY(input->isEnabled() && output->isEnabled());
+        input->setValue(40);
+        output->setValue(15);
+        QVERIFY(QMetaObject::invokeMethod(output, "editingFinished"));
+        QVERIFY(qAbs(curve->points().at(1).x() - 0.4) < 0.005);
+        QVERIFY(qAbs(curve->points().at(1).y() - 0.15) < 0.005);
+        corner->click();
+        QVERIFY(corner->isChecked());
+        QVERIFY(identity != image->pixmap().toImage());
+        reset->click();
+        QVERIFY(!corner->isChecked());
+        QCOMPARE(curve->points().size(), 2);
+        QCOMPARE(image->pixmap().toImage(), identity);
+        QTest::mouseClick(curve, Qt::LeftButton, Qt::NoModifier, QPoint(65, 45));
+        output->setValue(10);
+        QVERIFY(QMetaObject::invokeMethod(output, "editingFinished"));
+    }));
+    QVERIFY(previewSeen);
+    QCOMPARE(frame_->activeView()->document_depth_bits(), 32);
+    QVERIFY(frame_->activeView()->composite_argb(1, 1) != baseline);
+}
+
+void MergeToHdrTest::loadsLegacyTonePreset()
+{
+    const QString path = fixtures_.filePath(QStringLiteral("legacy.phdr-preset"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    QVERIFY(file.write(R"({"kind":"pictura-hdr-preset","version":1,"align":false,"ghosts":false,"depth":32,"previewEv":0,"tone":[187,4,0.99,0,30,0,0,0,20,1,0]})") > 0);
+    file.close();
+    pictura::setOpenFileNameProviderForTest([&](QWidget*, const QString&, const QString&,
+                                                const QStringList&, QString*) { return path; });
+    const auto resetProvider = qScopeGuard([] { pictura::setOpenFileNameProviderForTest({}); });
+    bool previewSeen = false;
+    QVERIFY(run([&](Stage stage, QDialog& dialog) {
+        if (stage != Stage::Preview) { return; }
+        previewSeen = true;
+        auto* presets = control<QComboBox>(dialog, "hdrMergePreset");
+        auto* curve = control<pictura::CurveWidget>(dialog, "hdrMergeToneCurve");
+        auto* reset = control<QPushButton>(dialog, "hdrMergeCurveReset");
+        auto* image = control<QLabel>(dialog, "hdrMergeImage");
+        QVERIFY(presets && curve && reset && image);
+        const QImage baseline = image->pixmap().toImage();
+        QVERIFY(QMetaObject::invokeMethod(presets, "activated", Q_ARG(int, 1)));
+        QCOMPARE(curve->points().size(), 2);
+        QVERIFY(image->pixmap().toImage() != baseline);
+        reset->click();
+        QCOMPARE(image->pixmap().toImage(), baseline);
+        dialog.reject();
+    }));
+    QVERIFY(previewSeen);
+    QCOMPARE(frame_->documentCount(), 0);
 }
 
 void MergeToHdrTest::budgetFailureIsAtomic()

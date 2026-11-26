@@ -93,3 +93,23 @@ The command SHALL create a temporary 32-bit document with a bottom placeholder n
 
 - **WHEN** checked memory estimation overflows or the photo and working memory reservation is refused
 - **THEN** the command SHALL report failure, release its resources, and leave inputs and document count unchanged
+
+### Requirement: Refine an HDR merge in a full-screen preview
+
+The HDR preview SHALL use a full-screen dialog with the image on the left, controls and confirmation on the right, and a horizontally scrollable strip of source thumbnails below. Advanced lighting controls and the editable luminance curve SHALL have separate tabs.
+
+#### Scenario: Toggle HDR source inclusion
+
+- **WHEN** at least three source files have been accepted and the preview opens
+- **THEN** all sources SHALL initially be included and represented by checked thumbnails
+- **AND** excluding a source SHALL hide its temporary layer and recompute the preview from the remaining sources
+- **AND** with two included sources the checked boxes SHALL be disabled while excluded sources remain available to restore
+- **AND** accepting SHALL merge the included sources only and canceling SHALL discard the temporary stack
+
+#### Scenario: Edit the HDR tone curve
+
+- **WHEN** the Curve tab opens
+- **THEN** the graph SHALL show the input luminance histogram and start at identity
+- **AND** users SHALL be able to insert and move points, enter the selected point's input and output percentages, choose corner interpolation, and reset the curve
+- **AND** the curve SHALL map native float luminance continuously through display white and preserve highlight headroom
+- **AND** loading a legacy scalar-curve preset SHALL reproduce its prior tone adjustment and Reset SHALL clear it

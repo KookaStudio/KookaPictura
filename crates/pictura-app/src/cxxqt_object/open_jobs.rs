@@ -63,9 +63,11 @@ pub mod ffi {
         fn hdr_bracket_error(bracket: &HdrBracket) -> QString;
         fn hdr_bracket_exposures(bracket: &HdrBracket) -> Vec<f64>;
         fn hdr_bracket_base(exposures: &[f64]) -> i32;
+        fn hdr_bracket_thumbnail(bracket: &HdrBracket, index: u32) -> QImage;
         fn hdr_bracket_merge(
             bracket: &HdrBracket,
             ev100: &[f64],
+            included: &[u32],
             align: bool,
             ghost_base: i32,
             curve: &[f64],
@@ -79,10 +81,18 @@ pub mod ffi {
             bracket: &HdrBracket,
             result: &HdrResult,
             controls: &[f64],
+            tone_lut: &[f64],
         ) -> Box<HdrResult>;
         fn hdr_result_error(result: &HdrResult) -> QString;
         fn hdr_result_curve(result: &HdrResult) -> Vec<f64>;
-        fn hdr_result_preview(bracket: &HdrBracket, result: &HdrResult, ev: f64) -> QImage;
+        fn hdr_result_preview(
+            bracket: &HdrBracket,
+            result: &HdrResult,
+            controls: &[f64],
+            tone_lut: &[f64],
+            ev: f64,
+            histogram: &mut [i32],
+        ) -> QImage;
         fn hdr_result_install(
             view: Pin<&mut PictureView>,
             bracket: &HdrBracket,

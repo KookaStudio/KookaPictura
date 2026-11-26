@@ -26,7 +26,7 @@ public:
         int saturation = 20;
     };
 
-    explicit HdrToningControls(QWidget* parent = nullptr);
+    explicit HdrToningControls(QWidget* parent = nullptr, QWidget* advancedPage = nullptr);
 
     Values values() const;
     void setValues(const Values& values);

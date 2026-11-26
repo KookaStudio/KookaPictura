@@ -431,7 +431,7 @@ Source list: File > Automate, Scripts, Actions, and plug-in capabilities.
 | P-AUT-20 | Cloud Documents | N/A | N/A | Y | Missing | non-goal | — | none | post-CS6:src:4; Adobe cloud service | non-goal:feasibility:76 |
 | P-AUT-21 | Share for Review | N/A | N/A | Y | Missing | non-goal | — | none | post-CS6:src:4; Adobe cloud service | non-goal:feasibility:76 |
 | P-AUT-22 | UXP plug-ins | N/A | N/A | Y | Missing | non-goal | — | none | post-CS6:src:4; Adobe ecosystem | non-goal:feasibility:76 |
-| P-AUT-23 | Merge To HDR Pro | Y | Y | Y | Partial | in-scope | crates/pictura-core/src/hdr_merge.rs; crates/pictura-app/cpp/merge_to_hdr_dialog.cpp | none | Approximate CPU merge and 32-bit float output; native-depth inputs, persisted white point, and Adobe settings interchange remain | #558 |
+| P-AUT-23 | Merge To HDR Pro | Y | Y | Y | Partial | in-scope | crates/pictura-core/src/hdr_merge.rs; crates/pictura-app/cpp/merge_to_hdr_dialog.cpp | none | Approximate CPU merge with full-screen preview, source toggles, editable tone curves, and 32-bit float output; native-depth inputs, persisted white point, and Adobe settings interchange remain | #558 |
 
 ### Shell, panels & preferences
 

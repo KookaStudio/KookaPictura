@@ -274,8 +274,10 @@ void CurveWidget::moveSelected(int input, int output)
     } else if (selected_ == last) {
         x = points_[last].x();
     } else {
-        const double step = 1.0 / 255.0;
-        x = std::clamp(x, points_[selected_ - 1].x() + step, points_[selected_ + 1].x() - step);
+        const double left = points_[selected_ - 1].x();
+        const double right = points_[selected_ + 1].x();
+        const double step = std::min(1.0 / 255.0, (right - left) / 3.0);
+        x = std::clamp(x, left + step, right - step);
     }
     points_[selected_] = QPointF(x, qBound(0, output, 255) / 255.0);
     interpolate();
@@ -388,11 +390,15 @@ void CurveWidget::mousePressEvent(QMouseEvent* event)
             return;
         }
     }
-    if (points_.size() >= kMaxPoints) {
+    if (points_.size() >= kMaxPoints || !plot().contains(event->position())) {
         return;
     }
     QPointF pos = fromWidget(event->position());
     pos = QPointF(qBound(0.0, pos.x(), 1.0), qBound(0.0, pos.y(), 1.0));
+    if (std::any_of(points_.cbegin(), points_.cend(),
+                    [pos](QPointF point) { return point.x() == pos.x(); })) {
+        return;
+    }
     points_.append(pos);
     interpolate();
     dragging_ = int(points_.indexOf(pos));
@@ -411,6 +417,12 @@ void CurveWidget::mouseMoveEvent(QMouseEvent* event)
         pos.setX(points_.first().x());
     } else if (dragging_ == points_.size() - 1) {
         pos.setX(points_.last().x());
+    }
+    for (int i = 0; i < points_.size(); ++i) {
+        if (i != dragging_ && points_[i].x() == pos.x()) {
+            pos.setX(points_[dragging_].x());
+            break;
+        }
     }
     points_[dragging_] = pos;
     interpolate();

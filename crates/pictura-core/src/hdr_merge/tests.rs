@@ -193,3 +193,23 @@ fn rejects_ambiguous_periodic_and_smooth_registration() {
     let smooth: Vec<_> = (0..96 * 64).map(|i| gray((i % 96 * 2) as u8)).collect();
     assert_eq!(registration::offset(&smooth, &smooth, 96, 64), None);
 }
+
+
+#[test]
+fn merges_two_included_exposures() {
+    let dark = [[64, 64, 64, 255]];
+    let light = [[128, 128, 128, 255]];
+    for light_ev in [8.0, 10.0] {
+        let inputs = [
+            Exposure { rgba: &dark, ev100: 10.0 },
+            Exposure { rgba: &light, ev100: light_ev },
+        ];
+        let result = merge(&inputs, 1, 1, &MergeOptions::default()).unwrap();
+        assert!(result.planes[0][0] > 0.0);
+        assert_eq!(result.planes[3], [1.0]);
+        assert!(matches!(
+            merge(&inputs[..1], 1, 1, &MergeOptions::default()),
+            Err(MergeError::InvalidBracket)
+        ));
+    }
+}

@@ -74,7 +74,7 @@ pub fn merge_working_bytes(width: u32, height: u32, sources: usize) -> Option<u6
 }
 
 pub fn valid_bracket_ev(values: &[f64]) -> bool {
-    if values.len() < 3 || values.iter().any(|v| !v.is_finite()) {
+    if values.len() < 2 || values.iter().any(|v| !v.is_finite()) {
         return false;
     }
     let (lo, hi) = values
@@ -82,7 +82,8 @@ pub fn valid_bracket_ev(values: &[f64]) -> bool {
         .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &v| {
             (lo.min(v), hi.max(v))
         });
-    (0.01..=32.0).contains(&(hi - lo))
+    let minimum_span = if values.len() == 2 { 0.0 } else { 0.01 };
+    (minimum_span..=32.0).contains(&(hi - lo))
 }
 
 /// Median exposure is independent of the chosen ghost-removal base.
@@ -106,7 +107,7 @@ pub fn merge(
         .checked_mul(height)
         .filter(|&size| size > 0)
         .ok_or(MergeError::InvalidBracket)?;
-    if exposures.len() < 3
+    if exposures.len() < 2
         || exposures.iter().any(|input| input.rgba.len() != size)
         || options
             .ghost_base
