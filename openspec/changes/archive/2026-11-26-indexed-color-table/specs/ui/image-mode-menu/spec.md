@@ -31,7 +31,8 @@ document to Indexed Color, Bitmap, or Multichannel SHALL ask to flatten layers
 (Exact when eligible, Web, Local Perceptual/Selective/Adaptive), Colors,
 Forced, Transparency, Dither (None, Diffusion, Pattern, Noise), Amount, and Preview. Preview SHALL show the conversion without recording history, and
 Cancel SHALL restore the document exactly. Bitmap SHALL open a dialog offering
-50% Threshold, Pattern Dither, and Diffusion Dither. Leaving a 32-bit document
+50% Threshold, Pattern Dither, Diffusion Dither, Halftone Screen, and Custom
+Pattern. Leaving a 32-bit document
 SHALL open the HDR Conversion dialog. Cancelling any prompt or dialog SHALL
 change nothing.
 
