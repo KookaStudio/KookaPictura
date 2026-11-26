@@ -11,7 +11,7 @@ use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_adjust::Adjustment;
+use pictura_render::Adjustment;
 use pictura_core::{layer_pixel_locked, layer_transparency_locked, PsdRect};
 
 impl qobject::PictureView {
