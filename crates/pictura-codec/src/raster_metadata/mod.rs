@@ -93,6 +93,10 @@ pub fn raster_metadata(document: &Document) -> RasterMetadata {
             _ => metadata.tiff_resources.push(resource),
         }
     }
+    // Only carry opaque Photoshop resources alongside explicit HDR preview settings.
+    if metadata.hdr_preview.is_none() {
+        metadata.tiff_resources.clear();
+    }
     metadata
 }
 

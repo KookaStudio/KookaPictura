@@ -7,6 +7,7 @@
 #include "image_view.h"
 #include "panels/color_panel.h"
 #include "panels/info_panel.h"
+#include "panels/layers_panel.h"
 #include "qt_test_support.h"
 
 #include <QtCore/QDataStream>
@@ -291,18 +292,24 @@ void HdrPreviewTest::lossySwatchRequiresConfirmation()
         auto* add = dialog->findChild<QPushButton*>(QStringLiteral("hdrPickerAddSwatch"));
         if (red && add && add->isEnabled()) {
             red->setValue(4.0);
-            QTimer::singleShot(0, this, [&] {
-                if (auto* warning = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
-                    cancelled = true;
-                    warning->done(QMessageBox::Cancel);
+            QTimer::singleShot(0, dialog, [&] {
+                auto* warning = dialog->findChild<QMessageBox*>();
+                if (warning && warning->isVisible()) {
+                    if (auto* response = warning->button(QMessageBox::Cancel)) {
+                        cancelled = true;
+                        response->click();
+                    }
                 }
             });
             add->click();
             cancelled = cancelled && grid->swatches().size() == before;
-            QTimer::singleShot(0, this, [&] {
-                if (auto* warning = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
-                    accepted = true;
-                    warning->done(QMessageBox::Ok);
+            QTimer::singleShot(0, dialog, [&] {
+                auto* warning = dialog->findChild<QMessageBox*>();
+                if (warning && warning->isVisible()) {
+                    if (auto* response = warning->button(QMessageBox::Ok)) {
+                        accepted = true;
+                        response->click();
+                    }
                 }
             });
             add->click();
@@ -379,11 +386,15 @@ void HdrPreviewTest::maskTransitionsPreserveSceneColor()
     QCoreApplication::processEvents();
     QCOMPARE(colors->sceneColor(true)[0], 4.0);
     QCOMPARE(colors->sceneColor(false)[0], 2.0);
+    auto* layers = window_->findChild<pictura::LayersPanel*>();
+    QVERIFY(layers);
     QVERIFY(pictura::layer_mask_add(*view_, QStringLiteral("reveal-all")));
-    QVERIFY(pictura::mask_edit_target_set(*view_, QStringLiteral("0")));
     QCoreApplication::processEvents();
-    QVERIFY(pictura::mask_edit_target_set(*view_, QString()));
-    QCoreApplication::processEvents();
+    const QString path = QStringLiteral("0");
+    QVERIFY(layers->clickMaskThumbnailForTest(path));
+    QVERIFY(colors->maskActive());
+    QVERIFY(layers->clickLayerThumbnailForTest(path));
+    QVERIFY(!colors->maskActive());
     QCOMPARE(colors->sceneColor(true)[0], 4.0);
     QCOMPARE(colors->sceneColor(false)[0], 2.0);
 }
