@@ -26,6 +26,9 @@ const KEY_CONTINUE: [u8; 4] = *b"Cntn";
 const KEY_NAME: [u8; 4] = *b"Nm  ";
 const KEY_COMMAND_ID: [u8; 4] = *b"cmid";
 const KEY_COMMAND: [u8; 4] = *b"null";
+const KEY_BITMAP_PATTERN: [u8; 4] = *b"bPat";
+const BITMAP_CHUNK_BYTES: usize = 512 * 1024;
+const MAX_BITMAP_ENCODED_BYTES: usize = 180 * 1024 * 1024;
 
 const EVENT_INSERT_PATH: &str = "pictura.insertPath";
 const EVENT_CONDITIONAL: &str = "pictura.conditional";
@@ -530,7 +533,24 @@ fn command_event(
                 ActionKey::Code(KEY_COMMAND_ID),
                 ActionValue::Text(command.as_str().to_string()),
             ));
-            items.push(json_item(params.value()));
+            if command.as_str() == "image.mode.bitmap" {
+                let mut json = params.value().clone();
+                let native = json.as_object_mut().and_then(|map| {
+                    if map.get("patternNative").is_some_and(Value::is_string) {
+                        map.remove("patternNative")
+                    } else {
+                        None
+                    }
+                });
+                if let Some(Value::String(native)) = native {
+                    let chunks = native.as_bytes().chunks(BITMAP_CHUNK_BYTES)
+                        .map(|chunk| ActionValue::RawData(chunk.to_vec())).collect();
+                    items.push((ActionKey::Code(KEY_BITMAP_PATTERN), ActionValue::List(chunks)));
+                }
+                items.push(json_item(&json));
+            } else {
+                items.push(json_item(params.value()));
+            }
             (
                 RawEventId::Long(fourcc(def.event_id())),
                 Some(descriptor(command.as_str(), items)),
@@ -622,7 +642,27 @@ fn json_params(desc: &ActionDescriptor) -> Option<CommandParams> {
             let ActionValue::Text(text) = value else {
                 continue;
             };
-            if let Ok(value) = serde_json::from_str::<Value>(text) {
+            if let Ok(mut value) = serde_json::from_str::<Value>(text) {
+                if descriptor_text(Some(desc), KEY_COMMAND_ID).as_deref() == Some("image.mode.bitmap") {
+                    if let Some((_, chunks)) = desc.items.iter().find(|(key, _)| {
+                        key_bytes(key).as_deref() == Some(KEY_BITMAP_PATTERN.as_slice())
+                    }) {
+                        let native = match chunks {
+                            ActionValue::List(chunks) => chunks.iter().try_fold(Vec::new(), |mut bytes, chunk| {
+                                let ActionValue::RawData(chunk) = chunk else { return None; };
+                                if bytes.len().checked_add(chunk.len())? > MAX_BITMAP_ENCODED_BYTES {
+                                    return None;
+                                }
+                                bytes.extend_from_slice(chunk);
+                                Some(bytes)
+                            }).and_then(|bytes| String::from_utf8(bytes).ok()),
+                            _ => None,
+                        };
+                        if let Some(map) = value.as_object_mut() {
+                            map.insert("patternNative".into(), Value::String(native.unwrap_or_default()));
+                        }
+                    }
+                }
                 return Some(CommandParams::from_value(value));
             }
         }

@@ -31,6 +31,7 @@ class PanelHost;
 class PictureView;
 class ReplaceColorDialog;
 class ToolController;
+struct CommandContext;
 struct CommandParams;
 struct FilterCommandSpec;
 
@@ -93,7 +94,7 @@ public:
     bool beginTransformMode(const QString& path, const QString& mode);
     void selectLayerPath(const QString& path);
     void editSmartFilter(const QString& path, int index);
-    void convertImageMode(const QString& mode);
+    void convertImageMode(const QString& mode, const CommandContext* context = nullptr);
     void convertImageDepth(int bits);
     void cancelDocumentDialogs(PictureView* view);
     void importSystemClipboard();

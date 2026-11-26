@@ -284,6 +284,7 @@ pub use document_ops::{
     write_mask_back, AlignEdge, ApplyOutcome, Arrange, AutoAlignCancelled, AutoAlignOptions,
     AutoAlignPlan, AutoAlignProjection, AutoAlignProjectionKind, AutoBlendCancelled,
     AutoBlendOptions, AutoBlendPlan, BitmapMethod, BlendObjective, BlendedLayer, Clip,
+    HalftoneScreen, HalftoneShape,
     Interpolation, LayerMaskKind, LayerStyle, LayerTransform, LayerWarp, MaskDocument,
     MatteBackground, MattingError, MergeError, MergeOutcome, MergeScope, NewLayerSpec, PasteMode,
     ShapeAttributes, ShapeFill, ShapeStroke, ShapeStrokeFill, Slice, StampScope, VectorMaskKind,

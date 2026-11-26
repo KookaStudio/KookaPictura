@@ -2,7 +2,7 @@
 //! Both modes hold no layers in CS6, so the visible stack is flattened first
 //! (hidden layers are discarded) and the result is one history state.
 
-use pictura_codec::{quantize, PaletteOptions};
+use pictura_codec::{document_resolution, quantize, PaletteOptions, PatternPixels};
 use pictura_core::{
     BitDepth, ColorMode, Document, PixelBuffer, PsdRect, Samples, SourceChannels, SourcePlanes,
 };
@@ -11,8 +11,8 @@ use pictura_ops::OpsError;
 use super::{can_convert_mode, planes};
 
 /// How `Image > Mode > Bitmap` reduces gray to black and white.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BitmapMethod {
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum BitmapMethod<'a> {
     /// Above mid-gray (128) is white, at or below is black.
     Threshold,
     /// An 8x8 ordered (Bayer) dot pattern.
@@ -22,6 +22,29 @@ pub enum BitmapMethod {
     Pattern,
     /// Floyd-Steinberg error diffusion from the upper left.
     Diffusion,
+    /// A rotated periodic screen at a physical frequency.
+    HalftoneScreen(HalftoneScreen),
+    /// A document-origin tile. A missing pattern is a refused conversion.
+    CustomPattern(Option<&'a PatternPixels>),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HalftoneScreen {
+    /// Lines per inch, or lines per centimeter when `per_cm` is set.
+    pub frequency: f64,
+    pub per_cm: bool,
+    pub angle: f64,
+    pub shape: HalftoneShape,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HalftoneShape {
+    Round,
+    Diamond,
+    Ellipse,
+    Line,
+    Square,
+    Cross,
 }
 
 fn refuse(doc: &Document, target: ColorMode) -> OpsError {
@@ -177,8 +200,89 @@ const BAYER8: [[u8; 8]; 8] = [
     [63, 31, 55, 23, 61, 29, 53, 21],
 ];
 
-/// Reduce a gray plane to white (`true`) / black (`false`) per `method`.
-pub(super) fn bitmap_whites(gray: &[u8], width: usize, method: BitmapMethod) -> Vec<bool> {
+const SCREEN_SIDE: usize = 128;
+
+fn screen_thresholds(shape: HalftoneShape) -> [u8; SCREEN_SIDE * SCREEN_SIDE] {
+    let mut scores: Vec<_> = (0..SCREEN_SIDE * SCREEN_SIDE)
+        .map(|index| {
+            let centered = |sample: usize| (2 * sample + 1).abs_diff(SCREEN_SIDE);
+            let x = centered(index % SCREEN_SIDE);
+            let y = centered(index / SCREEN_SIDE);
+            let score = match shape {
+                HalftoneShape::Round => x * x + y * y,
+                HalftoneShape::Diamond => x + y,
+                HalftoneShape::Ellipse => x * x + 3 * y * y,
+                HalftoneShape::Line => y,
+                HalftoneShape::Square => x.max(y),
+                HalftoneShape::Cross => 3 * x.min(y) + x.max(y),
+            };
+            (score, index)
+        })
+        .collect();
+    scores.sort_unstable_by_key(|&(score, _)| score);
+    let mut thresholds = [0; SCREEN_SIDE * SCREEN_SIDE];
+    let mut start = 0;
+    while start < scores.len() {
+        let score = scores[start].0;
+        let end = start + scores[start..].partition_point(|&(other, _)| other == score);
+        // Equal spots share an ink threshold. The cell's center receives ink first.
+        let threshold = 255 - ((start + end) * 128 / scores.len()) as u8;
+        for &(_, index) in &scores[start..end] {
+            thresholds[index] = threshold;
+        }
+        start = end;
+    }
+    thresholds
+}
+
+fn screen_whites(gray: &[u8], width: usize, ppi: f64, options: HalftoneScreen) -> Vec<bool> {
+    let lpi = options.frequency * if options.per_cm { 2.54 } else { 1.0 };
+    let cells_per_pixel = lpi / ppi;
+    let (sin, cos) = options.angle.to_radians().sin_cos();
+    let thresholds = screen_thresholds(options.shape);
+    let sample = |coord: f64| {
+        ((coord.rem_euclid(1.0) * SCREEN_SIDE as f64) as usize).min(SCREEN_SIDE - 1)
+    };
+    gray.iter()
+        .enumerate()
+        .map(|(i, &value)| {
+            let x = (i % width) as f64 + 0.5;
+            let y = (i / width) as f64 + 0.5;
+            let u = sample((x * cos + y * sin) * cells_per_pixel);
+            let v = sample((-x * sin + y * cos) * cells_per_pixel);
+            screen_white(value, thresholds[v * SCREEN_SIDE + u])
+        })
+        .collect()
+}
+
+fn screen_white(value: u8, threshold: u8) -> bool {
+    value == 255 || value > threshold
+}
+
+fn custom_pattern_whites(gray: &[u8], width: usize, pattern: &PatternPixels) -> Vec<bool> {
+    let (tile_w, tile_h) = (pattern.width as usize, pattern.height as usize);
+    gray.iter()
+        .enumerate()
+        .map(|(i, &value)| {
+            let x = i % width % tile_w;
+            let y = (i / width) % tile_h;
+            let offset = (y * tile_w + x) * 4;
+            let rgba = &pattern.rgba[offset..offset + 4];
+            let luma = u32::from(planes::luma_u8(rgba[0], rgba[1], rgba[2]));
+            let alpha = u32::from(rgba[3]);
+            let threshold = ((luma * alpha + 255 * (255 - alpha) + 127) / 255) as u8;
+            screen_white(value, threshold)
+        })
+        .collect()
+}
+
+/// Reduce a gray plane to white (`true`) / black (`false`) per validated `method`.
+pub(super) fn bitmap_whites(
+    gray: &[u8],
+    width: usize,
+    method: BitmapMethod<'_>,
+    ppi: f64,
+) -> Vec<bool> {
     match method {
         BitmapMethod::Threshold => gray.iter().map(|&v| v > 128).collect(),
         BitmapMethod::Pattern => gray
@@ -210,6 +314,10 @@ pub(super) fn bitmap_whites(gray: &[u8], width: usize, method: BitmapMethod) -> 
             }
             out
         }
+        BitmapMethod::HalftoneScreen(options) => screen_whites(gray, width, ppi, options),
+        BitmapMethod::CustomPattern(pattern) => {
+            custom_pattern_whites(gray, width, pattern.expect("validated pattern"))
+        }
     }
 }
 
@@ -218,13 +326,39 @@ pub(super) fn bitmap_whites(gray: &[u8], width: usize, method: BitmapMethod) -> 
 /// MSB first, a set bit black) that a save writes as header mode Bitmap. The
 /// document becomes layerless with no extra channels, as a Bitmap file reads.
 ///
-/// ponytail: Output resolution is kept (no resample) and Halftone Screen /
-/// Custom Pattern are absent; a Bitmap document is edited as RGB, and any edit
-/// saves the working RGB instead.
-pub fn convert_to_bitmap(doc: &mut Document, method: BitmapMethod) -> Result<(), OpsError> {
+/// ponytail: output resolution is kept (no resample). Screen spot geometry
+/// models tones and shapes without an Adobe pixel oracle. A Bitmap document is
+/// edited as RGB, and any edit saves the working RGB instead.
+pub fn convert_to_bitmap(doc: &mut Document, method: BitmapMethod<'_>) -> Result<(), OpsError> {
     if !can_convert_mode(doc, ColorMode::Bitmap) {
         return Err(refuse(doc, ColorMode::Bitmap));
     }
+    let ppi = match method {
+        BitmapMethod::HalftoneScreen(options) => {
+            let frequency_range = if options.per_cm { 0.4..=400.0 } else { 1.0..=999.999 };
+            if !frequency_range.contains(&options.frequency)
+                || !(-180.0..=180.0).contains(&options.angle)
+            {
+                return Err(OpsError::InvalidParams("invalid halftone screen options".into()));
+            }
+            document_resolution(doc).map_or(72.0, |resolution| resolution.ppi)
+        }
+        BitmapMethod::CustomPattern(pattern) => {
+            let valid = pattern.is_some_and(|tile| {
+                tile.width > 0
+                    && tile.height > 0
+                    && (tile.width as usize)
+                        .checked_mul(tile.height as usize)
+                        .and_then(|pixels| pixels.checked_mul(4))
+                        == Some(tile.rgba.len())
+            });
+            if !valid {
+                return Err(OpsError::InvalidParams("invalid or missing bitmap pattern".into()));
+            }
+            72.0
+        }
+        _ => 72.0,
+    };
     flatten(doc)?;
     let (w, h) = (doc.width as usize, doc.height as usize);
     let layer = &doc.layers[0];
@@ -243,7 +377,7 @@ pub fn convert_to_bitmap(doc: &mut Document, method: BitmapMethod) -> Result<(),
             .map(|pos| layer.channels()[pos[0]].data.to_vec())
             .ok_or_else(|| OpsError::InvalidParams("flattened layer has no gray plane".into()))?,
     };
-    let whites = bitmap_whites(&gray, w, method);
+    let whites = bitmap_whites(&gray, w, method, ppi);
     let row = w.div_ceil(8);
     let mut packed = vec![0u8; row * h];
     for (i, &white) in whites.iter().enumerate() {

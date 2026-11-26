@@ -14,6 +14,8 @@ free	compatibility_reason	compatibility_reason	api/document_bridge.h	pictura_app
 free	convert_image_depth	convert_image_depth	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
 free	convert_image_mode	convert_image_mode	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
 free	convert_to_bitmap	convert_to_bitmap	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
+free	convert_to_bitmap_halftone	convert_to_bitmap_halftone	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
+free	convert_to_bitmap_pattern	convert_to_bitmap_pattern	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
 free	convert_to_indexed	convert_to_indexed	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
 free	create_document	create_document	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h
 free	current_history_label	current_history_label	api/document_bridge.h	pictura_app/src/cxxqt_object/impl_history/purge.cxxqt.h
