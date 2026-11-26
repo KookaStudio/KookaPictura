@@ -219,6 +219,7 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("ViewSnapCanvasToWorkspace", "view.snapCanvasToWorkspace"),
     ("ViewToolHints", "view.toolHints"),
     ("ViewShowSelectionEdges", "view.show.selectionEdges"),
+    ("ViewHdrPreviewOptions", "view.hdr.preview"),
     ("ViewExtras", "view.extras"),
     ("ViewShowAll", "view.show.all"),
     ("ViewShowNone", "view.show.none"),
