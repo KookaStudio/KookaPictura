@@ -284,12 +284,12 @@ pub use document_ops::{
     write_mask_back, AlignEdge, ApplyOutcome, Arrange, AutoAlignCancelled, AutoAlignOptions,
     AutoAlignPlan, AutoAlignProjection, AutoAlignProjectionKind, AutoBlendCancelled,
     AutoBlendOptions, AutoBlendPlan, BitmapMethod, BlendObjective, BlendedLayer, Clip,
-    HalftoneScreen, HalftoneShape,
-    Interpolation, LayerMaskKind, LayerStyle, LayerTransform, LayerWarp, MaskDocument,
-    MatteBackground, MattingError, MergeError, MergeOutcome, MergeScope, NewLayerSpec, PasteMode,
-    ShapeAttributes, ShapeFill, ShapeStroke, ShapeStrokeFill, Slice, StampScope, VectorMaskKind,
-    AUTO_ALIGN_PROGRESS_MAX, AUTO_BLEND_PROGRESS_MAX, MASK_FLAG_UNLINKED,
-    VECTOR_MASK_FLAG_DISABLED, VECTOR_MASK_FLAG_INVERT, VECTOR_MASK_FLAG_NOT_LINKED,
+    HalftoneScreen, HalftoneShape, Interpolation, LayerMaskKind, LayerStyle, LayerTransform,
+    LayerWarp, MaskDocument, MatteBackground, MattingError, MergeError, MergeOutcome, MergeScope,
+    NewLayerSpec, PasteMode, ShapeAttributes, ShapeFill, ShapeStroke, ShapeStrokeFill, Slice,
+    StampScope, VectorMaskKind, AUTO_ALIGN_PROGRESS_MAX, AUTO_BLEND_PROGRESS_MAX,
+    MASK_FLAG_UNLINKED, VECTOR_MASK_FLAG_DISABLED, VECTOR_MASK_FLAG_INVERT,
+    VECTOR_MASK_FLAG_NOT_LINKED,
 };
 pub use document_ops::{apply_smart_filter, replace_smart_filter_at, smart_filter_record};
 

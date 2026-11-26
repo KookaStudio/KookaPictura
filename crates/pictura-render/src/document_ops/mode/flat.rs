@@ -240,9 +240,8 @@ fn screen_whites(gray: &[u8], width: usize, ppi: f64, options: HalftoneScreen) -
     let cells_per_pixel = lpi / ppi;
     let (sin, cos) = options.angle.to_radians().sin_cos();
     let thresholds = screen_thresholds(options.shape);
-    let sample = |coord: f64| {
-        ((coord.rem_euclid(1.0) * SCREEN_SIDE as f64) as usize).min(SCREEN_SIDE - 1)
-    };
+    let sample =
+        |coord: f64| ((coord.rem_euclid(1.0) * SCREEN_SIDE as f64) as usize).min(SCREEN_SIDE - 1);
     gray.iter()
         .enumerate()
         .map(|(i, &value)| {
@@ -335,11 +334,17 @@ pub fn convert_to_bitmap(doc: &mut Document, method: BitmapMethod<'_>) -> Result
     }
     let ppi = match method {
         BitmapMethod::HalftoneScreen(options) => {
-            let frequency_range = if options.per_cm { 0.4..=400.0 } else { 1.0..=999.999 };
+            let frequency_range = if options.per_cm {
+                0.4..=400.0
+            } else {
+                1.0..=999.999
+            };
             if !frequency_range.contains(&options.frequency)
                 || !(-180.0..=180.0).contains(&options.angle)
             {
-                return Err(OpsError::InvalidParams("invalid halftone screen options".into()));
+                return Err(OpsError::InvalidParams(
+                    "invalid halftone screen options".into(),
+                ));
             }
             document_resolution(doc).map_or(72.0, |resolution| resolution.ppi)
         }
@@ -353,7 +358,9 @@ pub fn convert_to_bitmap(doc: &mut Document, method: BitmapMethod<'_>) -> Result
                         == Some(tile.rgba.len())
             });
             if !valid {
-                return Err(OpsError::InvalidParams("invalid or missing bitmap pattern".into()));
+                return Err(OpsError::InvalidParams(
+                    "invalid or missing bitmap pattern".into(),
+                ));
             }
             72.0
         }

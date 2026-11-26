@@ -543,9 +543,15 @@ fn command_event(
                     }
                 });
                 if let Some(Value::String(native)) = native {
-                    let chunks = native.as_bytes().chunks(BITMAP_CHUNK_BYTES)
-                        .map(|chunk| ActionValue::RawData(chunk.to_vec())).collect();
-                    items.push((ActionKey::Code(KEY_BITMAP_PATTERN), ActionValue::List(chunks)));
+                    let chunks = native
+                        .as_bytes()
+                        .chunks(BITMAP_CHUNK_BYTES)
+                        .map(|chunk| ActionValue::RawData(chunk.to_vec()))
+                        .collect();
+                    items.push((
+                        ActionKey::Code(KEY_BITMAP_PATTERN),
+                        ActionValue::List(chunks),
+                    ));
                 }
                 items.push(json_item(&json));
             } else {
@@ -643,23 +649,35 @@ fn json_params(desc: &ActionDescriptor) -> Option<CommandParams> {
                 continue;
             };
             if let Ok(mut value) = serde_json::from_str::<Value>(text) {
-                if descriptor_text(Some(desc), KEY_COMMAND_ID).as_deref() == Some("image.mode.bitmap") {
+                if descriptor_text(Some(desc), KEY_COMMAND_ID).as_deref()
+                    == Some("image.mode.bitmap")
+                {
                     if let Some((_, chunks)) = desc.items.iter().find(|(key, _)| {
                         key_bytes(key).as_deref() == Some(KEY_BITMAP_PATTERN.as_slice())
                     }) {
                         let native = match chunks {
-                            ActionValue::List(chunks) => chunks.iter().try_fold(Vec::new(), |mut bytes, chunk| {
-                                let ActionValue::RawData(chunk) = chunk else { return None; };
-                                if bytes.len().checked_add(chunk.len())? > MAX_BITMAP_ENCODED_BYTES {
-                                    return None;
-                                }
-                                bytes.extend_from_slice(chunk);
-                                Some(bytes)
-                            }).and_then(|bytes| String::from_utf8(bytes).ok()),
+                            ActionValue::List(chunks) => chunks
+                                .iter()
+                                .try_fold(Vec::new(), |mut bytes, chunk| {
+                                    let ActionValue::RawData(chunk) = chunk else {
+                                        return None;
+                                    };
+                                    if bytes.len().checked_add(chunk.len())?
+                                        > MAX_BITMAP_ENCODED_BYTES
+                                    {
+                                        return None;
+                                    }
+                                    bytes.extend_from_slice(chunk);
+                                    Some(bytes)
+                                })
+                                .and_then(|bytes| String::from_utf8(bytes).ok()),
                             _ => None,
                         };
                         if let Some(map) = value.as_object_mut() {
-                            map.insert("patternNative".into(), Value::String(native.unwrap_or_default()));
+                            map.insert(
+                                "patternNative".into(),
+                                Value::String(native.unwrap_or_default()),
+                            );
                         }
                     }
                 }

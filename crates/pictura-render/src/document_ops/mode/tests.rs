@@ -1077,10 +1077,11 @@ fn bitmap_halftone_rotates_and_repeats_at_document_resolution() {
     .unwrap();
 
     let stripe = [255, 255, 0, 0, 0, 0, 255, 255];
-    for (y, row) in horizontal.composite.data[..256].chunks_exact(16).enumerate() {
+    let (rows, _) = horizontal.composite.data[..256].as_chunks::<16>();
+    for (y, row) in rows.iter().enumerate() {
         assert_eq!(row, &[stripe[y % 8]; 16]);
     }
-    for row in vertical.composite.data[..256].chunks_exact(16) {
+    for row in vertical.composite.data[..256].as_chunks::<16>().0 {
         assert_eq!(&row[..8], &stripe);
         assert_eq!(&row[8..], &stripe);
     }
@@ -1095,14 +1096,15 @@ fn bitmap_custom_pattern_tiles_from_canvas_origin() {
         pattern_id: "test tile".into(),
         width: 2,
         height: 3,
-        rgba: vec![32, 32, 32, 255, 224, 224, 224, 255,
-                   224, 224, 224, 255, 32, 32, 32, 255,
-                   32, 32, 32, 255, 32, 32, 32, 255],
+        rgba: vec![
+            32, 32, 32, 255, 224, 224, 224, 255, 224, 224, 224, 255, 32, 32, 32, 255, 32, 32, 32,
+            255, 32, 32, 32, 255,
+        ],
     };
     let mut doc = bitmap_gray_doc(5, 7, &[128; 35]);
     convert_to_bitmap(&mut doc, BitmapMethod::CustomPattern(Some(&pattern))).unwrap();
     let tile = [[255, 0], [0, 255], [255, 255]];
-    for (y, row) in doc.composite.data[..35].chunks_exact(5).enumerate() {
+    for (y, row) in doc.composite.data[..35].as_chunks::<5>().0.iter().enumerate() {
         for (x, &white) in row.iter().enumerate() {
             assert_eq!(white, tile[y % 3][x % 2]);
         }
@@ -1180,7 +1182,13 @@ fn bitmap_screen_units_shapes_rotation_and_endpoints() {
             }),
             output
         );
-        assert_ne!(render(HalftoneScreen { angle: 0.0, ..options }), output);
+        assert_ne!(
+            render(HalftoneScreen {
+                angle: 0.0,
+                ..options
+            }),
+            output
+        );
         outputs.push(output);
     }
 }
@@ -1256,17 +1264,32 @@ fn bitmap_screen_shapes_match_independent_area_ranks() {
             HalftoneShape::Cross => x.max(y) + 3 * x.min(y),
         }
     }
-    let shapes = [HalftoneShape::Round, HalftoneShape::Diamond, HalftoneShape::Ellipse,
-                  HalftoneShape::Line, HalftoneShape::Square, HalftoneShape::Cross];
+    let shapes = [
+        HalftoneShape::Round,
+        HalftoneShape::Diamond,
+        HalftoneShape::Ellipse,
+        HalftoneShape::Line,
+        HalftoneShape::Square,
+        HalftoneShape::Cross,
+    ];
     let points = [(0usize, 0usize), (1, 2), (3, 5), (7, 1), (11, 9), (15, 15)];
     for shape in shapes {
-        for (angle, sin, cos) in [(0.0, 0.0_f64, 1.0_f64),
-                                  (23.0, 0.39073112848927377, 0.9205048534524404)] {
+        for (angle, sin, cos) in [
+            (0.0, 0.0_f64, 1.0_f64),
+            (23.0, 0.39073112848927377, 0.9205048534524404),
+        ] {
             for gray in [48u8, 96, 160, 208] {
-                let result = flat::bitmap_whites(&vec![gray; 16 * 16], 16,
+                let result = flat::bitmap_whites(
+                    &vec![gray; 16 * 16],
+                    16,
                     BitmapMethod::HalftoneScreen(HalftoneScreen {
-                        frequency: 9.0, per_cm: false, angle, shape,
-                    }), 72.0);
+                        frequency: 9.0,
+                        per_cm: false,
+                        angle,
+                        shape,
+                    }),
+                    72.0,
+                );
                 for (x, y) in points {
                     let px = x as f64 + 0.5;
                     let py = y as f64 + 0.5;
@@ -1284,8 +1307,11 @@ fn bitmap_screen_shapes_match_independent_area_ranks() {
                         }
                     }
                     let threshold = 255 - ((2 * lower + equal) * 128 / (128 * 128)) as u8;
-                    assert_eq!(result[y * 16 + x], gray > threshold,
-                               "{shape:?} angle {angle} at ({x},{y}) gray {gray}");
+                    assert_eq!(
+                        result[y * 16 + x],
+                        gray > threshold,
+                        "{shape:?} angle {angle} at ({x},{y}) gray {gray}"
+                    );
                 }
             }
         }
