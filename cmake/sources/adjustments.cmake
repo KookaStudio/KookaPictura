@@ -4,6 +4,7 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/adjustment_catalogue.cpp
     crates/pictura-app/cpp/adjustment_catalogue.h
     crates/pictura-app/cpp/adjustment_dialog.cpp
+    crates/pictura-app/cpp/auto_correction_options.cpp
     crates/pictura-app/cpp/adjustment_presets.cpp
     crates/pictura-app/cpp/apply_image_dialog.cpp
     crates/pictura-app/cpp/apply_image_dialog.h

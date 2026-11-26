@@ -486,6 +486,7 @@ pub(super) fn inline_params(adjustment: &Adjustment) -> Option<(u32, i32, i32, i
         | Adjustment::Desaturate
         | Adjustment::Equalize
         | Adjustment::Auto(_)
+        | Adjustment::ConfiguredAuto(_)
         | Adjustment::ReplaceColor(_)
         | Adjustment::MatchColor(_) => return None,
     };

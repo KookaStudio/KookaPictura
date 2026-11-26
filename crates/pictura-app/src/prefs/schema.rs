@@ -57,6 +57,14 @@ fields! {
     "performance" / "scratchVolumes": Vec<String> = Vec::new();
     "performance" / "historyStates": i32 = 20;
     "performance" / "cacheLevels": i32 = 8;
+    "autoCorrection" / "autoCorrectionSaved": bool = false;
+    "autoCorrection" / "autoCorrectionAlgorithm": i32 = 1;
+    "autoCorrection" / "autoCorrectionSnap": bool = false;
+    "autoCorrection" / "autoCorrectionShadowClip": f64 = 0.1;
+    "autoCorrection" / "autoCorrectionHighlightClip": f64 = 0.1;
+    "autoCorrection" / "autoCorrectionShadow": i32 = 0;
+    "autoCorrection" / "autoCorrectionMidtone": i32 = 0x80_80_80;
+    "autoCorrection" / "autoCorrectionHighlight": i32 = 0xff_ff_ff;
     "color" / "colorPolicy": i32 = 0;
     "color" / "cmykPolicy": i32 = 0;
     "color" / "workingCmyk": i32 = 0;
@@ -208,6 +216,14 @@ fn normalize(key: &str, value: Json) -> Result<Json, String> {
         }
     };
     let setting = match key {
+        "autoCorrectionAlgorithm" => Json::from(bounded(0..=2, 1)),
+        "autoCorrectionShadow" => Json::from(bounded(0..=0xff_ff_ff, 0)),
+        "autoCorrectionMidtone" => Json::from(bounded(0..=0xff_ff_ff, 0x80_80_80)),
+        "autoCorrectionHighlight" => Json::from(bounded(0..=0xff_ff_ff, 0xff_ff_ff)),
+        "autoCorrectionShadowClip" | "autoCorrectionHighlightClip" => {
+            let clip = value.as_f64().ok_or("Auto correction clipping must be finite")?;
+            Json::from(clip.clamp(0.0, 49.99))
+        }
         "memoryUsagePercent" => Json::from(int().clamp(5, 100)),
         "historyStates" => Json::from(int().clamp(1, 1000)),
         "cacheLevels" => Json::from(int().clamp(2, 8)),

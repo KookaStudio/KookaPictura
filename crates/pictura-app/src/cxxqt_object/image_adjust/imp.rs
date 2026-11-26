@@ -337,6 +337,19 @@ pub(super) fn direct(kind: &str) -> Option<(Adjustment, String)> {
     Some((adjustment, title))
 }
 
+pub(in crate::cxxqt_object) fn configured_direct(
+    view: Pin<&mut PictureView>,
+    kind: &str,
+    mut options: pictura_core::AutoOptions,
+) -> bool {
+    let Some((Adjustment::Auto(algorithm), label)) = direct(kind) else {
+        return false;
+    };
+    options.algorithm = algorithm;
+    options.snap_midtones &= algorithm == pictura_core::AutoKind::Color;
+    run(view, Adjustment::ConfiguredAuto(options), None, Some(&label))
+}
+
 pub(super) fn image_adjust_direct(view: Pin<&mut PictureView>, kind: &QString) -> bool {
     match direct(&kind.to_string()) {
         Some((adjustment, label)) => run(view, adjustment, None, Some(&label)),

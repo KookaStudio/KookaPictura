@@ -15,6 +15,7 @@ class QComboBox;
 class QFormLayout;
 class QLabel;
 class QMenu;
+class QPushButton;
 class QSpinBox;
 class QStackedWidget;
 class QTimer;
@@ -83,6 +84,7 @@ public:
     // The Preset menu, for the Qt Test.
     PresetCombo* presetComboForTest() const { return preset_; }
     bool canSavePresetForTest() const;
+    bool canAutoCorrect() const;
     // Run a Properties panel-menu entry (`savePreset`, `loadPreset`).
     void performPanelMenuAction(const QString& id);
     // Enable / disable the panel-menu entries as the active layer changes.
@@ -111,6 +113,8 @@ private:
     void showAdjustment(const QStringList& page);
     // Apply a preset block as one "Modify … Layer" state.
     void applyPresetBlock(const QByteArray& block);
+    QPushButton* makeAutoButton(QWidget* parent);
+    void applyAuto(bool showOptions);
     void savePreset();
     void loadPreset();
     // Shrink the hidden pages so the stack sizes to the current one.
@@ -134,6 +138,7 @@ private:
     QString kind_;
     bool dirty_ = false;
     bool thresholdSelectionRefreshPending_ = false;
+    bool autoDialogOpen_ = false;
     std::function<QString()> presetNameProvider_;
     std::function<QString(const QStringList&)> presetPickProvider_;
 
@@ -150,6 +155,7 @@ private:
 
     AdjustmentControls* controls_ = nullptr;
     PresetCombo* preset_ = nullptr;
+    QPushButton* autoButton_ = nullptr;
     QWidget* footer_ = nullptr;
     QToolButton* clip_ = nullptr;
     QToolButton* visible_ = nullptr;

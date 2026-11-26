@@ -160,6 +160,22 @@ pub fn apply_native_in_mode(
             selective_color_native(p, samples, width, height, channels)
         }
         Adjustment::Auto(kind) => auto_native(*kind, samples, width, height, channels),
+        Adjustment::ConfiguredAuto(options) => {
+            let n = width * height;
+            use crate::auto_fit::apply_configured;
+            match samples {
+                Samples::U8(data) => apply_configured(options, data.as_mut_slice(), n, 255, |_| true),
+                Samples::U16(data) => apply_configured(options, data.as_mut_slice(), n, u16::MAX, |_| true),
+                Samples::F32(data) => {
+                    let extended: Vec<_> = data.iter().enumerate()
+                        .filter(|(_, value)| !value.is_finite() || !(0.0..=1.0).contains(*value))
+                        .map(|(index, &value)| (index, value)).collect();
+                    apply_configured(options, data.as_mut_slice(), n, u16::MAX, |_| true);
+                    for (index, value) in extended { data[index] = value; }
+                }
+            }
+            Ok(())
+        }
         Adjustment::ColorLookup(p) => color_lookup_native(p, samples, width, height, channels),
         other => Err(AdjustError::Unsupported(format!(
             "native-depth apply does not support {other:?}"

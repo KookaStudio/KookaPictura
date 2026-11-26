@@ -958,3 +958,80 @@ fn apply_image_grown_32_bit_store_keeps_values() {
     assert_eq!(channel.data[at(16, 16)], 64);
     assert_eq!(channel.data[at(2, 2)], 200);
 }
+
+#[test]
+fn configured_auto_native_selection_and_history() {
+    use pictura_core::{AutoOptions, Channel};
+    for depth in [BitDepth::Sixteen, BitDepth::ThirtyTwo] {
+        let mut doc = Document::new(6, 1, ColorMode::Rgb, depth);
+        doc.source.set_native(Some(depth), doc.source.planes().clone()).unwrap();
+        let mut layer = pixel_layer("native", 6, 1, (41, 42, 43));
+        let color = match depth {
+            BitDepth::Sixteen => Samples::U16(vec![1000, 1200, 1223, 1300, 1400, 5000].into()),
+            _ => Samples::F32(vec![-0.25, 0.2, 0.35, 0.6, 1.5, 0.8].into()),
+        };
+        let alpha = match depth {
+            BitDepth::Sixteen => Samples::U16(vec![11111; 6].into()),
+            _ => Samples::F32(vec![0.25; 6].into()),
+        };
+        let mut planes: Vec<_> = (0..3).map(|id| (id, color.clone())).collect();
+        planes.push((-1, alpha.clone()));
+        layer.source_channels = Some(SourceChannels::new(depth, layer.rect, planes));
+        doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+        let mut rust = PictureViewRust {
+            session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
+            layer_target: LayerTarget::only("0"),
+            ..Default::default()
+        };
+        rust.session.selection = Some(pictura_select::Selection::from_channel(
+            &Channel { id: 0, data: vec![255, 255, 128, 255, 255, 0].into() }, 6, 1,
+        ).unwrap());
+        rust.session.record(&rust.layer_target, "Open");
+        let before = rust.session.doc.snapshot().unwrap();
+        let options = AutoOptions { shadow_clip: 0.0, highlight_clip: 0.0,
+            shadow: [32; 3], highlight: [224; 3], ..AutoOptions::default() };
+        assert!(apply_op_active_region(&mut rust,
+            &ActiveOp::Adjustment(pictura_render::Adjustment::ConfiguredAuto(options)),
+            true, None, false).is_some());
+        let layer = &rust.session.doc.as_ref().unwrap().layers[0];
+        let store = layer.source_channels.as_ref().unwrap();
+        assert_eq!(store.planes.iter().find(|(id, _)| *id == -1).unwrap().1, alpha);
+        match &store.planes.iter().find(|(id, _)| *id == 0).unwrap().1 {
+            Samples::U16(values) => {
+                assert_eq!(values[0], 32 * 257);
+                assert!(values[2] != 1223 && values[2] % 257 != 0);
+                assert_eq!(values[5], 5000);
+            }
+            Samples::F32(values) => {
+                assert_eq!(values[0], -0.25);
+                assert_eq!(values[4], 1.5);
+                assert_eq!(values[5], 0.8);
+                assert!(values[2] != 0.35);
+            }
+            _ => unreachable!(),
+        }
+        assert_eq!(layer.channels().iter().find(|c| c.id == 0).unwrap().data[5], 41);
+        rust.session.record(&rust.layer_target, "Auto Tone");
+        assert_eq!(rust.session.history.undo().unwrap().doc, before);
+    }
+}
+
+#[test]
+fn configured_auto_refuses_short_working_plane_without_mutation() {
+    let mut doc = Document::new(3, 1, ColorMode::Rgb, BitDepth::Sixteen);
+    doc.source.set_native(Some(BitDepth::Sixteen), doc.source.planes().clone()).unwrap();
+    let mut layer = pixel_layer("native", 3, 1, (10, 20, 30));
+    layer.source_channels = Some(SourceChannels::new(BitDepth::Sixteen, layer.rect,
+        (0..3).map(|id| (id, Samples::U16(vec![1000, 2000, 3000].into()))).collect()));
+    layer.channels_mut().iter_mut().find(|c| c.id == 2).unwrap().data = vec![30; 2].into();
+    let before = layer.clone();
+    doc.layers = pictura_core::LayerStack::from_layers(vec![layer]);
+    let mut rust = PictureViewRust {
+        session: crate::cxxqt_object::document_session::DocumentSession::with_document(doc),
+        layer_target: LayerTarget::only("0"),
+        ..Default::default()
+    };
+    let op = ActiveOp::Adjustment(pictura_render::Adjustment::ConfiguredAuto(Default::default()));
+    assert!(apply_op_active_region(&mut rust, &op, true, None, false).is_none());
+    assert_eq!(rust.session.doc.as_ref().unwrap().layers[0], before);
+}

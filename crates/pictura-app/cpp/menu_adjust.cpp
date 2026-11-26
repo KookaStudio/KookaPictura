@@ -17,6 +17,8 @@
 #include "adjustment_catalogue.h"
 #include "adjustment_dialog.h"
 #include "panels/channels_panel.h"
+#include "auto_correction_options.h"
+#include "preferences.h"
 #include "panels/properties_panel.h"
 #include "api/document_api.h"
 #include "api/document_bridge.h"
@@ -94,9 +96,21 @@ void MenuRegistrar::wireImageAdjustments()
         if (entry.image != QLatin1String("dialog")) {
             commands_->setHandler(id, [this, kind]() {
                 PictureView* view = activeView();
-                if (view && image_adjust_direct(*view, kind)) {
+                if (!view) {
+                    return;
+                }
+                bool applied = false;
+                if (kind.startsWith(QLatin1String("auto-"))) {
+                    const auto prefs = loadPreferences();
+                    applied = prefs.autoCorrectionSaved
+                        ? image_auto_configured(*view, kind, autoCorrectionSettings(prefs))
+                        : image_adjust_direct(*view, kind);
+                } else {
+                    applied = image_adjust_direct(*view, kind);
+                }
+                if (applied) {
                     refresh();
-                } else if (view) {
+                } else {
                     reportFilterRefusal(view);
                 }
             });

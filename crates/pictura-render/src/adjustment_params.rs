@@ -594,6 +594,7 @@ fn layout(data: &AdjustmentData, adjustment: &Adjustment, cmyk: bool) -> Option<
         Adjustment::Desaturate
         | Adjustment::Equalize
         | Adjustment::Auto(_)
+        | Adjustment::ConfiguredAuto(_)
         | Adjustment::ReplaceColor(_)
         | Adjustment::MatchColor(_) => None,
     }

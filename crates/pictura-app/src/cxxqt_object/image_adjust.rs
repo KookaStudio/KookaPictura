@@ -23,6 +23,7 @@ use super::hdr_conversion::convert_depth_method;
 use super::image_hdr_toning::{hdr_toning_apply, hdr_toning_preview};
 use super::qobject::PictureView;
 use imp::*;
+pub(super) use imp::configured_direct;
 
 #[cxx_qt::bridge]
 pub mod ffi {

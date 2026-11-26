@@ -297,6 +297,7 @@ set(PICTURA_QT_TEST_DRIVER_imaging
     tst_match_color
     tst_image_adjustments
     tst_levels_canvas_controls
+    tst_auto_correction
 )
 set(PICTURA_QT_TEST_DRIVER_control
     tst_client_registration

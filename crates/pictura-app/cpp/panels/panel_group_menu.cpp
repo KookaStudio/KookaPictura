@@ -317,7 +317,7 @@ const QList<MenuRow>& rowsForPanel(const QString& panel)
              imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Save Preset…")), QStringLiteral("savePreset")),
              imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Load Preset…")), QStringLiteral("loadPreset")),
              dis(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Save Black & White Preset"))),
-             dis(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Auto Options…")), true),
+             imp(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Auto Options…")), QStringLiteral("autoOptions"), true),
              dis(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Curves Display Options…"))),
              chk(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Show Clipping For Black/White Points")), true),
              chk(QString::fromUtf8(QT_TRANSLATE_NOOP("PicturaUi", "Auto-Select Parameter"))),
@@ -384,6 +384,7 @@ QString panelCommandId(const QString& panel, const QString& action)
     }
     if (panel == QStringLiteral("propertiesPanel")) {
         static const QHash<QString, const char*> map = {
+            {QStringLiteral("autoOptions"), command_ids::PanelPropertiesAutoOptions},
             {QStringLiteral("savePreset"), command_ids::PanelPropertiesSavePreset},
             {QStringLiteral("loadPreset"), command_ids::PanelPropertiesLoadPreset},
         };

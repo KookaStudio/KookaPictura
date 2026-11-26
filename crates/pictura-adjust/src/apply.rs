@@ -76,6 +76,12 @@ pub fn apply_with_coverage_in_mode(
         Adjustment::ColorBalance(p) => color_balance(p, buf, n, mode),
         Adjustment::SelectiveColor(p) => selective_color(p, buf, n),
         Adjustment::Auto(kind) => auto(*kind, buf, n, coverage),
+        Adjustment::ConfiguredAuto(options) => {
+            crate::auto_fit::apply_configured(options, buf.data.as_mut_slice(), n, 255, |i| {
+                coverage.is_none_or(|mask| mask[i] != 0)
+            });
+            Ok(())
+        }
         Adjustment::Invert => {
             map_float(buf, n, |v| 255 - v);
             Ok(())

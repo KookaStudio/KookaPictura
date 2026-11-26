@@ -193,7 +193,10 @@ pub use apply_image::{
 };
 mod calculations;
 pub use calculations::{calculate, CalculationsParams};
+mod auto_adjustment;
+pub use auto_adjustment::{adjustment_auto_source, auto_adjustment_block, AutoHistogram};
 mod filter;
+pub use filter::apply_configured_auto_native;
 pub use filter::{
     adjustment_native_target, apply_adjustment_region, apply_adjustment_region_in_mode,
     apply_adjustment_region_with_native, apply_filter, apply_filter_region,

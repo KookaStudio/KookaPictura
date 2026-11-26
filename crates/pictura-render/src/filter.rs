@@ -5,6 +5,10 @@
 //! transparency-locked. [`apply_filter_region`] bounds the work to a document
 //! rectangle for viewport-sized previews.
 
+mod configured_auto;
+
+pub use configured_auto::apply_configured_auto_native;
+
 use pictura_adjust::{Adjustment, ColorBalanceMode};
 use pictura_core::{
     layer_pixel_locked, layer_transparency_locked, Coverage, Layer, PixelBuffer, PsdRect,

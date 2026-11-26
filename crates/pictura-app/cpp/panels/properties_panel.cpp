@@ -23,6 +23,7 @@
 #include <QtWidgets/QInputDialog>
 #include <QtWidgets/QMenu>
 #include <QtWidgets/QMessageBox>
+#include <QtWidgets/QPushButton>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QDoubleSpinBox>
@@ -179,6 +180,8 @@ PropertiesPanel::PropertiesPanel(QWidget* parent)
     preset_->setObjectName(QStringLiteral("propertiesPreset"));
     preset_->hide();
     adjustmentLayout->addWidget(preset_);
+    autoButton_ = makeAutoButton(adjustmentPage);
+    adjustmentLayout->addWidget(autoButton_, 0, Qt::AlignRight);
     controls_ = new AdjustmentControls(adjustmentPage);
     controls_->setObjectName(QStringLiteral("propertiesControls"));
     controls_->setCurveSource([this](int channel) {
@@ -803,6 +806,7 @@ void PropertiesPanel::showAdjustment(const QStringList& page)
     setPage(AdjustmentPage);
     canvas_->hide();
     footer_->show();
+    autoButton_->setVisible(canAutoCorrect());
     const bool supported = adjustmentPresetSupportsMenu(kind_);
     preset_->setVisible(supported);
     if (supported && view_) {
@@ -889,6 +893,8 @@ void PropertiesPanel::performPanelMenuAction(const QString& id)
         savePreset();
     } else if (id == QLatin1String("loadPreset")) {
         loadPreset();
+    } else if (id == QLatin1String("autoOptions")) {
+        applyAuto(true);
     }
 }
 
@@ -900,7 +906,9 @@ void PropertiesPanel::updatePanelMenu(QMenu* menu)
     const bool hasLayer = !path_.isEmpty();
     for (QAction* action : menu->actions()) {
         const QString id = action->data().toString();
-        if (id == QLatin1String("panel.properties.savePreset")) {
+        if (id == QLatin1String(command_ids::PanelPropertiesAutoOptions)) {
+            action->setEnabled(canAutoCorrect());
+        } else if (id == QLatin1String("panel.properties.savePreset")) {
             action->setEnabled(hasLayer && adjustmentPresetCanSave(kind_));
         } else if (id == QLatin1String("panel.properties.loadPreset")) {
             action->setEnabled(hasLayer && adjustmentPresetCanSave(kind_)
@@ -974,6 +982,9 @@ void PropertiesPanel::edited()
 
 void PropertiesPanel::commit()
 {
+    if (autoDialogOpen_) {
+        return;
+    }
     // A slider release can beat the 0 ms preview timer; apply the latest value
     // before the exact commit so the recorded state is the one on screen.
     flushPendingPreview();

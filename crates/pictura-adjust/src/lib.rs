@@ -11,6 +11,8 @@
 
 mod apply;
 mod auto;
+mod auto_fit;
+pub use auto_fit::{AutoHistogram, AutoTransfer};
 mod color;
 mod common;
 mod hdr_toning;

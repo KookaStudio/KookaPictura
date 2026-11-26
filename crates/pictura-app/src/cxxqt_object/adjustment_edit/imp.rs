@@ -6,8 +6,54 @@ use super::super::presentation::{Dirty, Presentation, Rebuild};
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QString, QStringList};
-use pictura_core::AdjustmentData;
+use pictura_core::{AdjustmentData, AutoKind, AutoOptions};
+use super::ffi::AutoCorrectionSettings;
 use pictura_render::ParamKind;
+
+pub struct AutoCorrectionSource(Option<pictura_render::AutoHistogram>);
+
+pub(super) fn adjustment_auto_source(view: &PictureView, path: &QString) -> Box<AutoCorrectionSource> {
+    let source = view.rust().session.doc.as_ref().and_then(|doc| {
+        pictura_render::adjustment_auto_source(doc, &path.to_string())
+    });
+    Box::new(AutoCorrectionSource(source))
+}
+
+fn auto_options(settings: &AutoCorrectionSettings) -> AutoOptions {
+    let rgb = |color: u32| [(color >> 16) as u8, (color >> 8) as u8, color as u8];
+    let percent = |value: f64| if value.is_finite() { value.clamp(0.0, 49.99) } else { 0.1 };
+    AutoOptions {
+        algorithm: match settings.algorithm {
+            0 => AutoKind::Contrast,
+            2 => AutoKind::Color,
+            _ => AutoKind::Tone,
+        },
+        snap_midtones: settings.snap,
+        shadow_clip: percent(settings.shadow_clip),
+        highlight_clip: percent(settings.highlight_clip),
+        shadow: rgb(settings.shadow),
+        midtone: rgb(settings.midtone),
+        highlight: rgb(settings.highlight),
+    }
+}
+
+pub(super) fn adjustment_auto_block(
+    source: &AutoCorrectionSource,
+    opening: &[u8],
+    settings: &AutoCorrectionSettings,
+) -> Vec<u8> {
+    source.0.as_ref().and_then(|histogram| {
+        pictura_render::auto_adjustment_block(&block_data(opening)?, histogram, &auto_options(settings))
+    }).as_ref().map(block_bytes).unwrap_or_default()
+}
+
+pub(super) fn image_auto_configured(
+    view: Pin<&mut PictureView>,
+    kind: &QString,
+    settings: &AutoCorrectionSettings,
+) -> bool {
+    super::super::image_adjust::configured_direct(view, &kind.to_string(), auto_options(settings))
+}
 
 pub(super) fn adjustment_data(view: &PictureView, path: &str) -> Option<AdjustmentData> {
     let doc = view.rust().session.doc.as_ref()?;
@@ -184,7 +230,8 @@ pub(super) fn edit_adjustment(
             None => Edit::Full,
         }
     });
-    if let Some(saved) = saved {
+    if let Some(mut saved) = saved {
+        saved.exact_fallback = true;
         view.as_mut().rust_mut().display_preview = Some(saved);
     }
     !matches!(applied, Edit::None)
@@ -263,7 +310,10 @@ pub(super) fn adjustment_commit(mut view: Pin<&mut PictureView>, title: &QString
 }
 
 pub(super) fn adjustment_cancel(mut view: Pin<&mut PictureView>) {
-    view.as_mut().rust_mut().cancel_display_preview();
+    let exact_fallback = view.as_mut().rust_mut().cancel_display_preview();
+    if exact_fallback {
+        view.as_mut().preview(|_| Edit::Full);
+    }
     view.as_mut().changed();
 }
 
