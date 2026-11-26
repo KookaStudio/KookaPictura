@@ -1,7 +1,7 @@
 # Feature parity tracker
 
 Assessed: 2026-11-26
-Pictura commit: 1fd5bcad6
+Pictura commit: 141c21da
 CS6 baseline: Adobe Photoshop CS6 13.0 (2012), Standard and Extended
 CC baseline: Adobe Photoshop 28.0 (November 2026 release; LTS 27.11.1)
 
@@ -11,12 +11,12 @@ This tracker measures feature coverage against a frozen Photoshop baseline. It d
 
 | Baseline | Complete | Partial | Missing | Unknown | Denominator | Coverage | Excluded non-goals |
 |---|---|---|---|---|---|---|---|
-| CS6 Standard | 209 | 79 | 57 | 4 | 349 | 59.9% | 8 |
-| CS6 Standard, in scope | 209 | 79 | 51 | 2 | 341 | 61.3% | 8 |
-| CS6 Extended | 210 | 79 | 73 | 4 | 366 | 57.4% | 23 |
-| CS6 Extended, in scope | 210 | 79 | 52 | 2 | 343 | 61.2% | 23 |
-| CC 28.0 | 211 | 81 | 78 | 4 | 374 | 56.4% | 20 |
-| CC 28.0, in scope | 211 | 81 | 60 | 2 | 354 | 59.6% | 20 |
+| CS6 Standard | 210 | 79 | 56 | 4 | 349 | 60.2% | 8 |
+| CS6 Standard, in scope | 210 | 79 | 50 | 2 | 341 | 61.6% | 8 |
+| CS6 Extended | 211 | 79 | 72 | 4 | 366 | 57.7% | 23 |
+| CS6 Extended, in scope | 211 | 79 | 51 | 2 | 343 | 61.5% | 23 |
+| CC 28.0 | 212 | 81 | 77 | 4 | 374 | 56.7% | 20 |
+| CC 28.0, in scope | 212 | 81 | 59 | 2 | 354 | 59.9% | 20 |
 
 ## Baselines
 
@@ -38,7 +38,7 @@ Coverage is not behavioural or pixel parity with Photoshop. Every Complete row n
 
 | Category | CS6 Standard | CS6 Extended | CC 28.0 |
 |---|---|---|---|
-| Files & interchange | 27/40 (67.5%) | 27/42 (64.3%) | 28/46 (60.9%) |
+| Files & interchange | 28/40 (70.0%) | 28/42 (66.7%) | 29/46 (63.0%) |
 | Layers & compositing | 31/38 (81.6%) | 31/39 (79.5%) | 31/39 (79.5%) |
 | Tools & painting | 41/70 (58.6%) | 42/81 (51.9%) | 42/71 (59.2%) |
 | Selections & masking | 18/22 (81.8%) | 18/22 (81.8%) | 18/22 (81.8%) |
@@ -72,7 +72,7 @@ Source list: CS6 and CC supported-format lists plus named File-menu, metadata, p
 | P-FMT-14 | Cineon export | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src | none | — | — |
 | P-FMT-15 | DCS export | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src | none | Process-ink-only ceiling | — |
 | P-FMT-16 | Photoshop Raw export | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src | none | 8-bit ceiling | — |
-| P-FMT-17 | PICT read and write | Y | Y | Y | Missing | in-scope | — | none | Legacy Adobe format | #1503 |
+| P-FMT-17 | PICT read and write | Y | Y | Y | Complete | in-scope | crates/pictura-codec/src/pict/; crates/pictura-codec/src/save/pict.rs | manual:tst_image_import pictOpens; codec PICT tests and the magick oracle | Bitmap-only PICT v1/v2 read (Bits/PackBits/DirectBits and QuickTime JPEG); QuickDraw vector records are skipped and a vector-only picture is refused; write 16/32-bit PackBits or JPEG, with 8191 px (32-bit) and 16383 px (16-bit) width ceilings | — |
 | P-FMT-18 | IFF read and write | Y | Y | Y | Missing | in-scope | — | none | Legacy Adobe format | #1504 |
 | P-FMT-19 | PCX read and write | Y | Y | Y | Missing | in-scope | — | none | Legacy Adobe format | #1505 |
 | P-FMT-20 | SGI read and write | Y | Y | Y | Missing | in-scope | — | none | Legacy Adobe format | #1506 |
@@ -524,6 +524,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
 |---|---|---|---|---|---|
+| 2026-11-26 | 141c21da | 210/349 (60.2%) | 211/366 (57.7%) | 28.0 | 212/374 (56.7%) |
 | 2026-11-26 | 1fd5bcad6 | 209/349 (59.9%) | 210/366 (57.4%) | 28.0 | 211/374 (56.4%) |
 | 2026-11-25 | 5bba3258 | 209/349 (59.9%) | 210/366 (57.4%) | 28.0 | 211/374 (56.4%) |
 | 2026-11-21 | 4736b57e | 208/349 (59.6%) | 209/366 (57.1%) | 28.0 | 210/374 (56.1%) |

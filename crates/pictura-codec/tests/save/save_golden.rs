@@ -227,6 +227,7 @@ fn extension(kind: SaveKind) -> &'static str {
         SaveKind::Raw => "raw",
         SaveKind::Tga => "tga",
         SaveKind::Cineon => "cin",
+        SaveKind::Pict => "pct",
         SaveKind::Jpeg => "jpg",
     }
 }

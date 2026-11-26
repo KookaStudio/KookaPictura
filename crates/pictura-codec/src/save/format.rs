@@ -50,6 +50,7 @@ pub enum SaveFormat {
     Raw,
     Tga,
     Cineon,
+    Pict,
 }
 
 /// The facts behind a [`SaveFormat`], in display order.
@@ -69,7 +70,7 @@ pub struct SaveFormatFacts {
     pub flags: u32,
 }
 
-const FORMATS: [SaveFormatFacts; 14] = [
+const FORMATS: [SaveFormatFacts; 15] = [
     SaveFormatFacts {
         id: 0,
         name: "psd",
@@ -196,11 +197,20 @@ const FORMATS: [SaveFormatFacts; 14] = [
         route: SaveRoute::Engine(SaveKind::Cineon),
         flags: FLAG_RASTER,
     },
+    SaveFormatFacts {
+        id: 14,
+        name: "pict",
+        code: 11,
+        aliases: &["pct", "pic", "pict"],
+        canonical: ".pct",
+        route: SaveRoute::Engine(SaveKind::Pict),
+        flags: FLAG_RASTER,
+    },
 ];
 
 impl SaveFormat {
     /// Every displayed Save As format, in ordinal/display order.
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::Psd,
         Self::Psb,
         Self::Png,
@@ -215,6 +225,7 @@ impl SaveFormat {
         Self::Raw,
         Self::Tga,
         Self::Cineon,
+        Self::Pict,
     ];
 
     /// The catalog ordinal (0..13); the bridge's `i32` id.
@@ -320,6 +331,9 @@ mod tests {
         assert_eq!(SaveFormat::Dcs.id(), 10);
         assert_eq!(SaveFormat::Dcs.code(), 7);
         assert_ne!(SaveFormat::Dcs.id(), SaveFormat::Dcs.code());
+        assert_eq!(SaveFormat::Pict.id(), 14);
+        assert_eq!(SaveFormat::Pict.code(), 11);
+        assert_ne!(SaveFormat::Pict.id(), SaveFormat::Pict.code());
         assert_eq!(SaveFormat::Psd.id(), 0);
         assert_eq!(SaveFormat::Psd.code(), 0);
         for format in [SaveFormat::Psb, SaveFormat::Webp, SaveFormat::Pdf] {
@@ -384,6 +398,7 @@ mod tests {
             (SaveFormat::Raw, SaveRoute::Engine(SaveKind::Raw)),
             (SaveFormat::Tga, SaveRoute::Engine(SaveKind::Tga)),
             (SaveFormat::Cineon, SaveRoute::Engine(SaveKind::Cineon)),
+            (SaveFormat::Pict, SaveRoute::Engine(SaveKind::Pict)),
         ];
         for (format, route) in expected {
             assert_eq!(format.route(), route, "{format:?}");

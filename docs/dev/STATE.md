@@ -22,6 +22,21 @@ Snapshot for resuming after a context break. Update after each milestone.
   dialog reads RAF shooting data from the camera JPEG's Exif (`raw_exif`)
   and every raw's size readout is the cropped, oriented size. Samples:
   `~/Downloads/PHOTOSHOP/RAW/FujiFilm/pixls` (raw.pixls.us).
+- **PICT read/write, #1503** (OpenSpec change `pict-format`, capability
+  `codec/pict-format`). `pictura-codec/src/pict/` reads bitmap-only PICT v1 and
+  extended v2 files, with or without the 512-byte header: Bits/PackBits/
+  DirectBits records at 1/2/4/8-bit indexed, 16-bit RGB555 and 32-bit RGB/RGBA,
+  packing types 1-4 and the `$8200` QuickTime JPEG. QuickDraw vector records are
+  skipped and a vector-only picture is refused. `save/pict.rs` writes extended
+  v2 with a 16-bit unpacked or 32-bit PackBits `DirectBitsRect`, or a `$8200`
+  JPEG; the PICT Options dialog chooses Resolution 16/32 and Compression
+  None/JPEG Low/Medium/High/Maximum. Width ceilings: 8191 px at 32 bits, 16383
+  at 16 bits; either dimension at most 32767. Tests: `pict` unit tests,
+  `save::pict_tests`, the `magick` PICT oracle, `tst_image_import::pictOpens`,
+  `tst_import_pdf::openAsPict`, `tst_save_format_dialogs::pictControls` and the
+  PICT cases in `tst_save_format_options`. The other legacy formats (IFF, PCX,
+  SGI) stay with #1504-#1506.
+
 - **Layer grow cost, #1609** (OpenSpec change `tile-aware-layer-grow`,
   capability `document/layer-grow-cost`). Long strokes on a 21000² document
   spent 93 % of their time growing the layer: `padded_plane` copied every

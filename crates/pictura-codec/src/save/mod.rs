@@ -3,6 +3,9 @@
 
 mod eps;
 mod format;
+mod pict;
+#[cfg(test)]
+mod pict_tests;
 mod rows;
 mod stream;
 #[cfg(test)]
@@ -37,6 +40,7 @@ pub enum SaveKind {
     Raw,
     Tga,
     Cineon,
+    Pict,
 }
 
 impl SaveKind {
@@ -52,6 +56,7 @@ impl SaveKind {
             8 => Self::Raw,
             9 => Self::Tga,
             10 => Self::Cineon,
+            11 => Self::Pict,
             _ => return None,
         })
     }
@@ -68,6 +73,7 @@ impl SaveKind {
             Self::Raw => 8,
             Self::Tga => 9,
             Self::Cineon => 10,
+            Self::Pict => 11,
         }
     }
 }
@@ -106,6 +112,11 @@ pub struct SaveOptions {
     pub eps_interpolation: bool,
     pub dcs_version: u8,
     pub dcs_preview: u8,
+    /// PICT resolution in bits per pixel: 16 or 32.
+    pub pict_resolution: u8,
+    /// PICT compression: 0 None, 1 JPEG Low, 2 JPEG Medium, 3 JPEG High,
+    /// 4 JPEG Maximum.
+    pub pict_compression: u8,
     /// The working RGB profile to embed in a TIFF; `None` writes no profile.
     pub icc: Option<Vec<u8>>,
 }
@@ -144,6 +155,8 @@ impl Default for SaveOptions {
             eps_interpolation: true,
             dcs_version: 2,
             dcs_preview: 2,
+            pict_resolution: 32,
+            pict_compression: 0,
             icc: None,
         }
     }
@@ -168,6 +181,12 @@ impl SaveOptions {
         }
         if self.dcs_version != 1 {
             self.dcs_version = 2;
+        }
+        if self.pict_resolution != 16 {
+            self.pict_resolution = 32;
+        }
+        if self.pict_compression > 4 {
+            self.pict_compression = 0;
         }
         self
     }
@@ -412,6 +431,7 @@ pub fn save_document_with_jpeg_guarded(
         SaveKind::Raw => write_raw(&raster, &options)?,
         SaveKind::Tiff => tiff::write(doc, &raster, &options, jpeg)?,
         SaveKind::Eps => eps::write(&raster, &options, doc, jpeg)?,
+        SaveKind::Pict => pict::write(&raster, &options, jpeg)?,
         SaveKind::Dcs => {
             return eps::write_dcs_guarded(path, &raster, &options, doc, jpeg, before_write)
         }
@@ -437,7 +457,7 @@ pub fn streams(kind: SaveKind, doc: &Document, options: &SaveOptions) -> bool {
         SaveKind::Png | SaveKind::Tga | SaveKind::Cineon => true,
         SaveKind::Bmp => options.bmp_depth > 8,
         SaveKind::Raw | SaveKind::Tiff => !separated,
-        SaveKind::Gif | SaveKind::Eps | SaveKind::Dcs | SaveKind::Jpeg => false,
+        SaveKind::Gif | SaveKind::Eps | SaveKind::Dcs | SaveKind::Jpeg | SaveKind::Pict => false,
     }
 }
 

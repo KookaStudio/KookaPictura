@@ -61,6 +61,9 @@ const QVector<SaveFormatRow>& saveFormatRows()
         {13, SaveFormatKind::Cineon, QStringLiteral("cineon"),
          QT_TRANSLATE_NOOP("PicturaFiles", "Cineon"), QStringLiteral(" (*.CIN)"),
          QStringLiteral(".cin")},
+        {14, SaveFormatKind::Pict, QStringLiteral("pict"),
+         QT_TRANSLATE_NOOP("PicturaFiles", "PICT File"),
+         QStringLiteral(" (*.PCT *.PIC *.PICT)"), QStringLiteral(".pct")},
     };
     return rows;
 }
@@ -226,6 +229,10 @@ QJsonObject saveFormatOptionsToJson(const SaveFormatOptions& options)
     QJsonObject cineon;
     cineon.insert(QStringLiteral("bits"), options.cineonBits);
 
+    QJsonObject pict;
+    pict.insert(QStringLiteral("resolution"), options.pictResolution);
+    pict.insert(QStringLiteral("compression"), options.pictCompression);
+
     QJsonObject root;
     root.insert(QStringLiteral("jpeg"), jpeg);
     root.insert(QStringLiteral("png"), png);
@@ -237,6 +244,7 @@ QJsonObject saveFormatOptionsToJson(const SaveFormatOptions& options)
     root.insert(QStringLiteral("raw"), raw);
     root.insert(QStringLiteral("tga"), tga);
     root.insert(QStringLiteral("cineon"), cineon);
+    root.insert(QStringLiteral("pict"), pict);
     return root;
 }
 
@@ -308,6 +316,13 @@ SaveFormatOptions saveFormatOptionsFromJson(const QJsonObject& root)
 
     const QJsonObject cineon = root.value(QStringLiteral("cineon")).toObject();
     options.cineonBits = clamped(cineon.value(QStringLiteral("bits")).toInt(options.cineonBits), 1, 16);
+
+    const QJsonObject pict = root.value(QStringLiteral("pict")).toObject();
+    options.pictResolution = clamped(pict.value(QStringLiteral("resolution")).toInt(options.pictResolution), 16, 32);
+    if (options.pictResolution != 16) {
+        options.pictResolution = 32;
+    }
+    options.pictCompression = clamped(pict.value(QStringLiteral("compression")).toInt(options.pictCompression), 0, 4);
     return options;
 }
 

@@ -50,6 +50,7 @@ const QVector<OpenAsFormat>& openAsFormats()
         {"WebP (*.WEBP)", "image", {QByteArray("RIFF")}},
         {"GIF (*.GIF)", "image", {QByteArray("GIF8")}},
         {"BMP (*.BMP)", "image", {QByteArray("BM")}},
+        {"PICT (*.PCT *.PIC *.PICT)", "pict", {}},
     };
     return formats;
 }
@@ -311,6 +312,15 @@ quint64 ImportSaveCoordinator::startOpenAsPath(const QString& path, int formatIn
     }
     if (kind == QStringLiteral("pdf") || kind == QStringLiteral("eps")) {
         matches = QString(vector_sniff(path)) == kind;
+    }
+    if (kind == QStringLiteral("pict")) {
+        QFile file(path);
+        const QByteArray header = file.open(QIODevice::ReadOnly) ? file.read(526) : QByteArray();
+        const QByteArray v2("\x00\x11\x02\xFF", 4);
+        const QByteArray v1("\x11\x01", 2);
+        matches = (header.size() >= 526 && header.mid(522, 4) == v2)
+            || (header.size() >= 524 && header.mid(522, 2) == v1)
+            || (header.size() >= 14 && (header.mid(10, 4) == v2 || header.mid(10, 2) == v1));
     }
     if (!matches) {
         reportImportError(path, tr("format mismatch or damaged file."));

@@ -1,4 +1,5 @@
 mod pack_codec_benchmark;
+mod pict_oracle;
 mod save_golden;
 mod save_oracle;
 mod web_oracle;

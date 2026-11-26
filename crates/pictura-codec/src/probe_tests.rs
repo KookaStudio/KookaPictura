@@ -77,6 +77,22 @@ fn webp_vp8x(width: u32, height: u32) -> Vec<u8> {
     v
 }
 
+fn pict(width: u16, height: u16, headerless: bool) -> Vec<u8> {
+    let mut v = if headerless {
+        Vec::new()
+    } else {
+        vec![0u8; 512]
+    };
+    v.extend_from_slice(&0u16.to_be_bytes());
+    v.extend_from_slice(&0u16.to_be_bytes());
+    v.extend_from_slice(&0u16.to_be_bytes());
+    v.extend_from_slice(&height.to_be_bytes());
+    v.extend_from_slice(&width.to_be_bytes());
+    v.extend_from_slice(&[0x00, 0x11, 0x02, 0xFF]);
+    v.extend_from_slice(&[0x00, 0xFF]);
+    v
+}
+
 #[test]
 fn recognizes_each_container_header() {
     let budget = ImageBudget::default();
@@ -114,6 +130,27 @@ fn recognizes_each_container_header() {
     assert_eq!(
         (p.format, p.width, p.height, p.bit_depth),
         (ImageFormat::WebP, 800, 600, 8)
+    );
+
+    let p = probe_image(&pict(45, 32, false), budget).expect("pict");
+    assert_eq!(
+        (p.format, p.width, p.height, p.bit_depth),
+        (ImageFormat::Pict, 45, 32, 8)
+    );
+}
+
+#[test]
+fn recognizes_a_pict_header() {
+    let budget = ImageBudget::default();
+    let file = probe_image(&pict(45, 32, false), budget).expect("file form");
+    assert_eq!(
+        (file.format, file.width, file.height),
+        (ImageFormat::Pict, 45, 32)
+    );
+    let headerless = probe_image(&pict(45, 32, true), budget).expect("headerless form");
+    assert_eq!(
+        (headerless.format, headerless.width, headerless.height),
+        (ImageFormat::Pict, 45, 32)
     );
 }
 

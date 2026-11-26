@@ -296,6 +296,7 @@ impl qobject::PictureView {
                 | pictura_codec::SaveKind::Gif
                 | pictura_codec::SaveKind::Eps
                 | pictura_codec::SaveKind::Dcs
+                | pictura_codec::SaveKind::Pict
         ) && source_mode == ColorMode::Rgb;
         doc.composite
             .replace(save_composite(&doc, srgb))
