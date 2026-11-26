@@ -274,7 +274,7 @@ pub(crate) fn read_container(
     if owned_plates && !layers.is_empty() {
         return Err(PsdError::Unsupported("layered Multichannel plates".into()));
     }
-    let merged_alpha = merged_alpha && mode == ColorMode::Rgb;
+    let merged_alpha = merged_alpha && matches!(mode, ColorMode::Rgb | ColorMode::Indexed);
     // Derive the smart-object view from the preserved bytes; a malformed
     // descriptor or linked-layer record degrades to Unresolved (design D5).
     crate::smart_object::resolve_smart_objects_within(

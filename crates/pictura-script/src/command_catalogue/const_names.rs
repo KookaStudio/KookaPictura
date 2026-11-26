@@ -99,6 +99,7 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("ImageMode8Bits", "image.mode.8.bits"),
     ("ImageMode16Bits", "image.mode.16.bits"),
     ("ImageMode32Bits", "image.mode.32.bits"),
+    ("ImageModeColorTable", "image.mode.color.table"),
     ("SelectAll", "select.all"),
     ("SelectDeselect", "select.deselect"),
     ("SelectReselect", "select.reselect"),
