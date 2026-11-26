@@ -468,7 +468,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 | P-PREF-02 | Interface preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Sparse pane | #506 |
 | P-PREF-03 | File Handling preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Sparse pane | #506 |
 | P-PREF-04 | Performance preferences | Y | Y | Y | Complete | in-scope | crates/pictura-app/cpp/preferences_performance.cpp; crates/pictura-app/cpp/status_readouts.cpp | manual:tst_performance_preferences covers the pane | Presets approximated; Cache Tile Size fixed at 256 px; no Basic/Normal/Advanced GPU modes (owner decision); Cache Levels default 8, not CS6's 4 | — |
-| P-PREF-05 | Units & Rulers preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Sparse pane | #506 |
+| P-PREF-05 | Units & Rulers preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Column width and gutter are editable and persistent; Type and New Document Preset Resolutions remain | #506 |
 | P-PREF-06 | Guides, Grid & Slices preferences | Y | Y | Y | Partial | in-scope | crates/pictura-app/cpp | none | Sparse pane | #506 |
 | P-PREF-07 | Cursors preferences | Y | Y | Y | Missing | in-scope | — | none | Pane absent | UI-9 |
 | P-PREF-08 | Transparency & Gamut preferences | Y | Y | Y | Missing | in-scope | — | none | Pane absent | UI-9 |

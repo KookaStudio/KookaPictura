@@ -20,6 +20,8 @@ void PicturaMainWindow::loadGuideSession(const SessionState& state, const Prefer
         rulerUnit_ = RulerUnit(prefs.rulerUnit);
     }
     traditionalPoints_ = prefs.traditionalPoints;
+    columnWidthInches_ = prefs.columnWidthInches;
+    columnGutterInches_ = prefs.columnGutterInches;
     guidesVisible_ = state.guidesVisible;
     guidesLocked_ = state.guidesLocked;
     smartGuidesVisible_ = state.smartGuidesVisible;
@@ -191,6 +193,13 @@ void PicturaMainWindow::connectGuidePreferences(PreferencesDialog* dialog)
 {
     dialog->setRulerUnit(int(rulerUnit_));
     dialog->setTraditionalPoints(traditionalPoints_);
+    dialog->setColumnSize(columnWidthInches_, columnGutterInches_);
+    connect(dialog, &PreferencesDialog::columnSizeChanged, this,
+            [this](double width, double gutter) {
+                columnWidthInches_ = width;
+                columnGutterInches_ = gutter;
+                saveSession();
+            });
     connect(dialog, &PreferencesDialog::rulerUnitChanged, this, [this](int unit) {
         if (unit >= 0 && unit < kRulerUnitCount) {
             setRulerUnit(RulerUnit(unit));

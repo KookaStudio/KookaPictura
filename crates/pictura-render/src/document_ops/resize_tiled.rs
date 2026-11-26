@@ -29,6 +29,7 @@ pub(super) struct Kernel<T> {
     resample: Resample,
     value: fn(T) -> f64,
     finish: fn(f64) -> T,
+    nearest: fn(T) -> T,
 }
 
 impl Kernel<u8> {
@@ -38,6 +39,19 @@ impl Kernel<u8> {
             resample,
             value: |v| v as f64,
             finish: |v| v.round().clamp(0.0, 255.0) as u8,
+            nearest: |v| v,
+        }
+    }
+}
+
+impl Kernel<f32> {
+    /// Retained float color may be negative or above display white.
+    pub(super) fn float(resample: Resample) -> Self {
+        Self {
+            resample,
+            value: |v| if v.is_finite() { f64::from(v) } else { 0.0 },
+            finish: |v| v as f32,
+            nearest: |v| if v.is_finite() { v } else { 0.0 },
         }
     }
 }
@@ -49,6 +63,7 @@ impl<T: Sample> Kernel<T> {
             resample,
             value: T::to_unit,
             finish: T::from_unit,
+            nearest: |v| v,
         }
     }
 }
@@ -79,11 +94,13 @@ pub(super) fn resize<T: TileSample>(
         &padded
     };
     let (xscale, yscale) = (sw as f64 / dw as f64, sh as f64 / dh as f64);
+    let x_method = kernel.resample.for_axis(sw, dw);
+    let y_method = kernel.resample.for_axis(sh, dh);
     let cols: Vec<Taps> = (0..dw)
-        .map(|x| axis_taps(source_coord(x, xscale), sw, kernel.resample))
+        .map(|x| axis_taps(source_coord(x, xscale), sw, x_method))
         .collect();
     let rows: Vec<Taps> = (0..dh)
-        .map(|y| axis_taps(source_coord(y, yscale), sh, kernel.resample))
+        .map(|y| axis_taps(source_coord(y, yscale), sh, y_method))
         .collect();
     let mut strip = memory::try_buffer(dw * TILE.min(dh), T::default(), "an image size")?;
     let job = pictura_core::job::current();
@@ -229,12 +246,13 @@ impl<T: TileSample> Block<'_, T> {
             resample,
             value,
             finish,
+            nearest,
         } = self.kernel;
         for (dy, yt) in ys.iter().enumerate() {
             let line = &mut out[(area.y + dy) * stride + area.x..][..area.w];
             for (o, xt) in line.iter_mut().zip(xs.iter()) {
                 *o = if resample == Resample::Nearest {
-                    window[yt.idx[0] * ww + xt.idx[0]]
+                    nearest(window[yt.idx[0] * ww + xt.idx[0]])
                 } else {
                     finish(weigh(xt, yt, |i, j| value(window[j * ww + i])))
                 };

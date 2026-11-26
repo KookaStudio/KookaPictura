@@ -67,12 +67,24 @@ pub(super) fn canvas_size_fits_budget(
 }
 
 pub(super) fn image_size_apply(
+    view: Pin<&mut PictureView>,
+    resample: &QString,
+    width: i32,
+    height: i32,
+    ppi: f64,
+    per_cm: bool,
+) -> bool {
+    image_size_apply_with_styles(view, resample, width, height, ppi, per_cm, false)
+}
+
+pub(super) fn image_size_apply_with_styles(
     mut view: Pin<&mut PictureView>,
     resample: &QString,
     width: i32,
     height: i32,
     ppi: f64,
     per_cm: bool,
+    scale_styles: bool,
 ) -> bool {
     if view.rust().modal_transform_blocks_edit() {
         return view.document_preflight_refusal(pictura_error::ErrorCode::Capability);
@@ -118,8 +130,14 @@ pub(super) fn image_size_apply(
         bar,
         move |doc| {
             if let Some(resample) = resize {
-                pictura_render::resize_document(doc, width as u32, height as u32, resample)
-                    .map_err(document_engine_error)?;
+                pictura_render::resize_document_with_styles(
+                    doc,
+                    width as u32,
+                    height as u32,
+                    resample,
+                    scale_styles,
+                )
+                .map_err(document_engine_error)?;
             }
             if needed {
                 set_document_resolution(doc, wanted);

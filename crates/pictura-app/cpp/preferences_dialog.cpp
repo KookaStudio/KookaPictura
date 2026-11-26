@@ -648,9 +648,8 @@ bool PreferencesDialog::checkboxForTest(const QString& key) const
     return box && box->isChecked();
 }
 
-// Units & Rulers: the ruler unit and Point/Pica Size are live; Type, Column
-// Size, and New Document Preset Resolutions show CS6's defaults, disabled
-// until something reads them.
+// Units & Rulers: ruler units, Point/Pica Size, and Column Size are live.
+// Type and New Document Preset Resolutions show disabled defaults.
 QWidget* PreferencesDialog::buildUnitsPage()
 {
     auto* page = new QWidget(this);
@@ -666,6 +665,7 @@ QWidget* PreferencesDialog::buildUnitsPage()
     }
     rulerUnit_->setCurrentIndex(int(RulerUnit::Inches));
     auto* typeUnit = new QComboBox(units);
+    typeUnit->setObjectName(QStringLiteral("preferencesTypeUnit"));
     typeUnit->addItems({tr("Pixels"), tr("Points"), tr("Millimeters")});
     typeUnit->setCurrentIndex(1);
     typeUnit->setEnabled(false);
@@ -684,17 +684,42 @@ QWidget* PreferencesDialog::buildUnitsPage()
         rowLayout->addWidget(unit);
         return row;
     };
-    const QStringList columnUnits = {tr("Points"), tr("Inches"), tr("Centimeters"),
-                                     tr("Millimeters"), tr("Picas")};
     auto* columns = new QGroupBox(tr("Column Size"), page);
     auto* columnsForm = new QFormLayout(columns);
-    columnsForm->addRow(tr("Width:"), valueAndUnit(columns, QStringLiteral("180"), columnUnits));
-    columnsForm->addRow(tr("Gutter:"), valueAndUnit(columns, QStringLiteral("12"), columnUnits));
-    columns->setEnabled(false);
+    const auto columnField = [this, columns, columnsForm](
+                                 const QString& label, const QString& name, double* inches,
+                                 QDoubleSpinBox*& value, QComboBox*& unit) {
+        auto* row = new QHBoxLayout;
+        value = new QDoubleSpinBox(columns);
+        value->setObjectName(name);
+        value->setDecimals(6);
+        value->setKeyboardTracking(false);
+        unit = new QComboBox(columns);
+        unit->setObjectName(name + QStringLiteral("Unit"));
+        for (const auto choice : {RulerUnit::Points, RulerUnit::Inches, RulerUnit::Centimeters,
+                                  RulerUnit::Millimeters, RulerUnit::Picas}) {
+            unit->addItem(tr(rulerUnitName(choice).toUtf8().constData()), int(choice));
+        }
+        row->addWidget(value);
+        row->addWidget(unit);
+        columnsForm->addRow(label, row);
+        connect(unit, &QComboBox::currentIndexChanged,
+                this, &PreferencesDialog::syncColumnSizeFields);
+        connect(value, &QDoubleSpinBox::valueChanged, this, [this, inches, unit](double amount) {
+            const auto choice = RulerUnit(unit->currentData().toInt());
+            *inches = amount * pixelsPerRulerUnit(choice, 1.0, traditionalPoints_->isChecked(), 0);
+            emit columnSizeChanged(columnWidthInches_, columnGutterInches_);
+        });
+    };
+    columnField(tr("Width:"), QStringLiteral("preferencesColumnWidth"), &columnWidthInches_,
+                columnWidth_, columnWidthUnit_);
+    columnField(tr("Gutter:"), QStringLiteral("preferencesColumnGutter"), &columnGutterInches_,
+                columnGutter_, columnGutterUnit_);
     layout->addWidget(columns, 1, 0);
 
     const QStringList resolutionUnits = {tr("Pixels/Inch"), tr("Pixels/Centimeter")};
     auto* resolutions = new QGroupBox(tr("New Document Preset Resolutions"), page);
+    resolutions->setObjectName(QStringLiteral("preferencesNewDocumentPresetResolutions"));
     auto* resolutionsForm = new QFormLayout(resolutions);
     resolutionsForm->addRow(tr("Print Resolution:"),
                             valueAndUnit(resolutions, QStringLiteral("300"), resolutionUnits));
@@ -717,8 +742,11 @@ QWidget* PreferencesDialog::buildUnitsPage()
 
     connect(rulerUnit_, &QComboBox::activated, this,
             [this](int index) { emit rulerUnitChanged(index); });
-    connect(traditionalPoints_, &QRadioButton::toggled, this,
-            [this](bool on) { emit traditionalPointsChanged(on); });
+    connect(traditionalPoints_, &QRadioButton::toggled, this, [this](bool on) {
+        syncColumnSizeFields();
+        emit traditionalPointsChanged(on);
+    });
+    syncColumnSizeFields();
     return page;
 }
 
@@ -733,6 +761,29 @@ void PreferencesDialog::setTraditionalPoints(bool on)
     const QSignalBlocker blockTraditional(traditionalPoints_);
     const QSignalBlocker blockPostScript(postScriptPoints_);
     (on ? traditionalPoints_ : postScriptPoints_)->setChecked(true);
+    syncColumnSizeFields();
+}
+
+void PreferencesDialog::setColumnSize(double widthInches, double gutterInches)
+{
+    columnWidthInches_ = widthInches;
+    columnGutterInches_ = gutterInches;
+    syncColumnSizeFields();
+}
+
+void PreferencesDialog::syncColumnSizeFields()
+{
+    const bool traditional = traditionalPoints_->isChecked();
+    const auto sync = [traditional](QDoubleSpinBox* field, QComboBox* unit,
+                                    double inches, double minInches) {
+        const auto choice = RulerUnit(unit->currentData().toInt());
+        const double inchesPerUnit = pixelsPerRulerUnit(choice, 1.0, traditional, 0);
+        const QSignalBlocker blocked(field);
+        field->setRange(minInches / inchesPerUnit, 100000.0 / inchesPerUnit);
+        field->setValue(inches / inchesPerUnit);
+    };
+    sync(columnWidth_, columnWidthUnit_, columnWidthInches_, 0.0001);
+    sync(columnGutter_, columnGutterUnit_, columnGutterInches_, 0.0);
 }
 
 // Guides and Grid are editable. Smart Guides and Slices show their defaults.

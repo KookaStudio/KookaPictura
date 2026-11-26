@@ -63,6 +63,7 @@ free	image_mode	image_mode	api/document_bridge.h	pictura_app/src/cxxqt_object/im
 free	image_mode_available	image_mode_available	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
 free	image_resolution	image_resolution	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
 free	image_size_apply	image_size_apply	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h
+free	image_size_apply_with_styles	image_size_apply_with_styles	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h
 free	image_size_fits_budget	image_size_fits_budget	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_size.cxxqt.h
 free	indexed_color_table	indexed_color_table	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h
 free	indexed_color_table_minimum	indexed_color_table_minimum	api/document_bridge.h	pictura_app/src/cxxqt_object/image_adjust/image_mode.cxxqt.h

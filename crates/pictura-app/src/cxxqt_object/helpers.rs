@@ -183,6 +183,9 @@ pub(super) fn parse_resample(kind: &str) -> Option<pictura_render::Resample> {
         "nearest" => Resample::Nearest,
         "bilinear" => Resample::Bilinear,
         "bicubic" => Resample::Bicubic,
+        "bicubic-smoother" => Resample::BicubicSmoother,
+        "bicubic-sharper" => Resample::BicubicSharper,
+        "automatic" => Resample::Automatic,
         _ => return None,
     })
 }

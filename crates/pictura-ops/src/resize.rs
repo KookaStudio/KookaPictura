@@ -3,7 +3,7 @@
 //! The exact edge handling is unpublished, so parity is behavioral only,
 //! but its Bicubic coefficient is publicly documented as a Mitchell–Netravali
 //! `cubic(0, 0.75)` kernel (Jason Summers, entropymine.com/resamplescope), not
-//! Catmull-Rom. All three kernels sample each plane independently and clamp to
+//! Catmull-Rom. The kernels sample each plane independently and clamp to
 //! the edge at borders.
 
 use pictura_core::PixelBuffer;
@@ -15,6 +15,22 @@ pub enum Resample {
     Nearest,
     Bilinear,
     Bicubic,
+    BicubicSmoother,
+    BicubicSharper,
+    Automatic,
+}
+
+impl Resample {
+    pub fn for_axis(self, source: usize, destination: usize) -> Self {
+        if self != Self::Automatic {
+            return self;
+        }
+        match source.cmp(&destination) {
+            std::cmp::Ordering::Less => Self::BicubicSmoother,
+            std::cmp::Ordering::Greater => Self::BicubicSharper,
+            std::cmp::Ordering::Equal => Self::Bicubic,
+        }
+    }
 }
 
 /// One axis's taps for a sample at a source coordinate: up to four indices,
@@ -34,7 +50,8 @@ pub fn source_coord(i: usize, scale: f64) -> f64 {
 }
 
 /// The taps of source coordinate `s` on an axis of `n` samples: one for
-/// Nearest, a 2-tap tent for Bilinear, four Keys taps for Bicubic.
+/// Nearest, a 2-tap tent for Bilinear, or four Keys taps for a cubic method.
+/// Callers with destination dimensions resolve Automatic using `for_axis`.
 pub fn axis_taps(s: f64, n: usize, resample: Resample) -> Taps {
     let idx = |i: i64| i.clamp(0, n as i64 - 1) as usize;
     let mut taps = Taps::default();
@@ -52,12 +69,17 @@ pub fn axis_taps(s: f64, n: usize, resample: Resample) -> Taps {
             taps.weight[..2].copy_from_slice(&[1.0 - f, f]);
             taps.len = 2;
         }
-        Resample::Bicubic => {
+        cubic_method => {
+            let a = match cubic_method {
+                Resample::BicubicSmoother => -0.5,
+                Resample::BicubicSharper => -1.0,
+                _ => -0.75,
+            };
             let x0 = s.floor() as i64;
             for k in 0..4 {
                 let at = x0 + k as i64 - 1;
                 taps.idx[k] = idx(at);
-                taps.weight[k] = cubic(s - at as f64);
+                taps.weight[k] = cubic(s - at as f64, a);
             }
             taps.len = 4;
         }
@@ -65,10 +87,8 @@ pub fn axis_taps(s: f64, n: usize, resample: Resample) -> Taps {
     taps
 }
 
-/// Keys cubic kernel `a = -0.75`, i.e. Mitchell–Netravali `cubic(0, 0.75)`, the
-/// documents the reference Bicubic coefficient.
-fn cubic(t: f64) -> f64 {
-    let a = -0.75;
+/// Keys cubic kernel. The coefficient controls the negative lobes.
+fn cubic(t: f64, a: f64) -> f64 {
     let x = t.abs();
     if x <= 1.0 {
         (a + 2.0) * x * x * x - (a + 3.0) * x * x + 1.0
@@ -93,14 +113,6 @@ pub fn weigh(xt: &Taps, yt: &Taps, mut at: impl FnMut(usize, usize) -> f64) -> f
     acc / ws
 }
 
-/// Sample one planar channel at source coordinate (`sx`, `sy`).
-fn sample(plane: &[u8], w: u32, h: u32, sx: f64, sy: f64, resample: Resample) -> f64 {
-    let stride = w as usize;
-    let xt = axis_taps(sx, w as usize, resample);
-    let yt = axis_taps(sy, h as usize, resample);
-    weigh(&xt, &yt, |i, j| plane[j * stride + i] as f64)
-}
-
 pub fn resize(
     buf: &PixelBuffer,
     width: u32,
@@ -122,6 +134,8 @@ pub fn resize(
     let channels = buf.channels as usize;
     let xscale = sw as f64 / width as f64;
     let yscale = sh as f64 / height as f64;
+    let x_method = resample.for_axis(sw as usize, width as usize);
+    let y_method = resample.for_axis(sh as usize, height as usize);
     let dst_plane = width as usize * height as usize;
 
     let mut out = PixelBuffer::new(width, height, buf.channels);
@@ -136,14 +150,15 @@ pub fn resize(
             job.advance(1);
         }
         let sy = source_coord(y as usize, yscale);
+        let yt = axis_taps(sy, sh as usize, y_method);
         for x in 0..width {
             let sx = source_coord(x as usize, xscale);
+            let xt = axis_taps(sx, sw as usize, x_method);
             let d = y as usize * width as usize + x as usize;
             for c in 0..channels {
                 let plane = &buf.data[c * planes..(c + 1) * planes];
-                out.data[c * dst_plane + d] = sample(plane, sw, sh, sx, sy, resample)
-                    .round()
-                    .clamp(0.0, 255.0) as u8;
+                let sample = weigh(&xt, &yt, |i, j| f64::from(plane[j * sw as usize + i]));
+                out.data[c * dst_plane + d] = sample.round().clamp(0.0, 255.0) as u8;
             }
         }
     }
@@ -181,6 +196,38 @@ mod tests {
 
     fn at(b: &PixelBuffer, x: u32, y: u32, c: usize) -> u8 {
         b.data[c * b.pixel_count() + (y * b.width + x) as usize]
+    }
+
+    #[test]
+    fn automatic_resolves_each_axis() {
+        let src = buf3(9, 5, |x, y| {
+            let v = (35 + (x * 17 + y * 29) % 175) as u8;
+            [v, v, v]
+        });
+        for (width, height, x_method, y_method) in [
+            (5, 8, Resample::BicubicSharper, Resample::BicubicSmoother),
+            (13, 5, Resample::BicubicSmoother, Resample::Bicubic),
+        ] {
+            let out = resize(&src, width, height, Resample::Automatic).unwrap();
+            let plane = &src.data[..src.pixel_count()];
+            for y in 0..height {
+                let sy = source_coord(y as usize, 5.0 / f64::from(height));
+                let yt = axis_taps(sy, 5, y_method);
+                for x in 0..width {
+                    let sx = source_coord(x as usize, 9.0 / f64::from(width));
+                    let xt = axis_taps(sx, 9, x_method);
+                    let want = weigh(&xt, &yt, |i, j| f64::from(plane[j * 9 + i]))
+                        .round()
+                        .clamp(0.0, 255.0) as u8;
+                    assert_eq!(at(&out, x, y, 0), want);
+                }
+            }
+        }
+        let smooth = resize(&src, 14, 8, Resample::BicubicSmoother).unwrap();
+        let sharp = resize(&src, 14, 8, Resample::BicubicSharper).unwrap();
+        let cubic = resize(&src, 14, 8, Resample::Bicubic).unwrap();
+        assert_ne!(smooth, cubic);
+        assert_ne!(sharp, cubic);
     }
 
     #[test]

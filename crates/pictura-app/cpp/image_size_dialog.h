@@ -37,8 +37,7 @@ void showImageSizeBudgetWarning(QWidget* parent, int width, int height);
 // print size changes. Fit To offers CS6's screen and print presets (a
 // landscape image takes a preset on its side). Ported from photorust's
 // ImageSizeDialog.
-// ponytail: Auto Resolution is listed but disabled; Automatic, Preserve
-// Details, and the Bicubic Smoother/Sharper entries all resample bicubic.
+// ponytail: Preserve Details still uses the ordinary Bicubic kernel.
 class ImageSizeDialog : public QDialog {
     Q_OBJECT
 
@@ -49,9 +48,9 @@ public:
     int resultHeight() const { return pixelHeight_; }
     double resultPpi() const { return resolution_; }
     bool resultPerCm() const;
-    // The engine resample kind ("bicubic", "nearest", "bilinear"), or empty
-    // with Resample off.
+    // The engine resample kind, or empty with Resample off.
     QString resampleKind() const;
+    bool scaleStylesForResize() const;
 
     QWidget* controlForTest(const QString& name) const;
 
@@ -62,13 +61,17 @@ private:
     void widthEdited();
     void heightEdited();
     void resolutionEdited();
+    void setResolutionPpi(double ppi);
+    void showAutoResolution();
+    void updateResampleControls();
     void fitToChosen(int index);
     void applyFitPreset(int preset);
     void markCustom();
     void resampleToggled(bool on);
     void updateSummary();
-    // Pixels per unit of Width/Height unit `unit`.
-    double unitScale(int unit) const;
+    double enteredInches(double size, int unit) const;
+    double displayedSize(int pixels, int unit, int originalPixels) const;
+    int enteredPixels(double size, int unit, int originalPixels) const;
 
     PictureView* view_ = nullptr;
     int pixelWidth_ = 1;
@@ -79,6 +82,10 @@ private:
     double originalResolution_ = 72.0;
     double bytesPerPixel_ = 3.0;
     bool updating_ = false;
+    bool traditionalPoints_ = false;
+    double columnWidthInches_ = 2.5;
+    double columnGutterInches_ = 1.0 / 6.0;
+    int lastFitIndex_ = 0;
 
     QLabel* summary_ = nullptr;
     QLabel* dimensions_ = nullptr;
@@ -91,6 +98,7 @@ private:
     QComboBox* heightUnit_ = nullptr;
     QComboBox* resolutionUnit_ = nullptr;
     QCheckBox* resample_ = nullptr;
+    QCheckBox* scaleStyles_ = nullptr;
     QComboBox* resampleMode_ = nullptr;
     QToolButton* chain_ = nullptr;
 };

@@ -105,7 +105,7 @@ void MenuRegistrar::wireImageMenu()
     // Resampling keeps each window on the same relative point of the image, so
     // a shrunken image stays centred where the whole of it was.
     const auto applyImageSize = [this](PictureView* view, const QString& resample, int width,
-                                       int height, double ppi, bool perCm) {
+                                       int height, double ppi, bool perCm, bool scaleStyles) {
         const int index = documents_ ? documents_->indexOfView(view) : -1;
         const QSizeF before(view->document_width(), view->document_height());
         QList<QPair<QPointer<ImageView>, QPointF>> centres;
@@ -116,8 +116,8 @@ void MenuRegistrar::wireImageMenu()
                                                 centre.y() / before.height())});
             });
         }
-        const auto apply = [view, &resample, width, height, ppi, perCm] {
-            image_size_apply(*view, resample, width, height, ppi, perCm);
+        const auto apply = [view, &resample, width, height, ppi, perCm, scaleStyles] {
+            image_size_apply_with_styles(*view, resample, width, height, ppi, perCm, scaleStyles);
         };
         if (!runDocumentCommand(dialogParent(), *view, tr("Image Size"), apply)) {
             return false;
@@ -227,7 +227,8 @@ void MenuRegistrar::wireImageMenu()
             return;
         }
         if (!applyImageSize(view, dialog.resampleKind(), dialog.resultWidth(),
-                            dialog.resultHeight(), dialog.resultPpi(), dialog.resultPerCm())) {
+                            dialog.resultHeight(), dialog.resultPpi(), dialog.resultPerCm(),
+                            dialog.scaleStylesForResize())) {
             return;
         }
         CommandParams command;
@@ -236,6 +237,7 @@ void MenuRegistrar::wireImageMenu()
         command.values.insert(QStringLiteral("resolution"), dialog.resultPpi());
         command.values.insert(QStringLiteral("perCm"), dialog.resultPerCm());
         command.values.insert(QStringLiteral("resample"), dialog.resampleKind());
+        command.values.insert(QStringLiteral("scaleStyles"), dialog.scaleStylesForResize());
         commands_->recordCommand(imageSize, command);
     });
     commands_->setExecutor(imageSize, [this, applyImageSize](const CommandParams& params) {
@@ -268,7 +270,9 @@ void MenuRegistrar::wireImageMenu()
         if (resamples && !imageSizeFitsBudget(*view, width, height)) {
             return false;
         }
-        return applyImageSize(view, kind, width, height, ppi, perCm);
+        const bool scaleStyles = constrain
+            && params.values.value(QStringLiteral("scaleStyles")).toBool();
+        return applyImageSize(view, kind, width, height, ppi, perCm, scaleStyles);
     });
 
     const QString canvasSize = QString::fromLatin1(command_ids::ImageCanvasSize);
