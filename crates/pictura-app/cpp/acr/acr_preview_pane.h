@@ -5,12 +5,16 @@
 // toggles.
 
 #include <QtCore/QString>
+#include <QtCore/QRect>
 #include <QtGui/QImage>
 #include <QtWidgets/QWidget>
 
+class QEvent;
 class QLabel;
 class QLineEdit;
+class QMouseEvent;
 class QToolButton;
+class QWheelEvent;
 
 namespace pictura {
 
@@ -31,18 +35,30 @@ public:
     bool shadowClipping() const;
     bool highlightClipping() const;
 
+    // Test seam: replace the rendered image without a bridge call.
+    void setPreviewImageForTest(const QImage& image);
+
     QToolButton* shadowToggleForTest() const { return shadowToggle_; }
     QToolButton* highlightToggleForTest() const { return highlightToggle_; }
     QLineEdit* zoomEditForTest() const { return zoomEdit_; }
+    QRect imageRectForTest() const { return imageRect_; }
 
     // Tint pixels at or below black (blue) / at or above white (red).
     static QImage applyClipping(const QImage& image, bool shadow, bool highlight);
 
+signals:
+    // The pixel under the cursor, or -1 in each channel when it leaves.
+    void picked(int r, int g, int b);
+
 protected:
     void paintEvent(QPaintEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void leaveEvent(QEvent* event) override;
 
 private:
     void setZoom(double zoom);
+    void updatePicker(const QPoint& pos);
     void stepZoom(int direction);
     void commitZoomEdit();
     void refreshZoomEdit();
@@ -51,6 +67,9 @@ private:
     QString path_;
     bool rawSource_ = false;
     QImage image_;
+    QRect imageRect_;
+    QPoint lastPickPos_;
+    bool pickerActive_ = false;
     double zoom_ = 1.0;
     bool fit_ = true;
     QToolButton* zoomOut_ = nullptr;

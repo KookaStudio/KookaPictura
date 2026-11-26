@@ -12,7 +12,6 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/acr/acr_hsl_panel.cpp
     crates/pictura-app/cpp/acr/acr_lens_panel.cpp
     crates/pictura-app/cpp/acr/acr_panels.h
-    crates/pictura-app/cpp/acr/acr_presets_panel.cpp
     crates/pictura-app/cpp/acr/acr_preview_pane.cpp
     crates/pictura-app/cpp/acr/acr_preview_pane.h
     crates/pictura-app/cpp/acr/acr_settings.cpp

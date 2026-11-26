@@ -9,7 +9,7 @@ use core::pin::Pin;
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::{QImage, QString, QStringList};
 use pictura_codec::{
-    CameraRgb, DevelopedRgb, ImageBudget, PsdError, RawLook, RawSource, WhiteBalance,
+    parse_exif, CameraRgb, DevelopedRgb, ImageBudget, PsdError, RawLook, RawSource, WhiteBalance,
 };
 use pictura_core::{
     BitDepth, Document, PicturaRawSettings, PsdRect, Samples, SourceChannels, SourcePlanes,
@@ -26,6 +26,18 @@ const MIN_TEMPERATURE: f64 = 2000.0;
 const MAX_TEMPERATURE: f64 = 50000.0;
 const TINT_REACH: f64 = 150.0;
 
+/// The camera metadata the dialog shows beside the histogram and in its status
+/// bar, captured while the raw bytes are already in hand.
+pub(in crate::cxxqt_object) struct RawPhotoInfo {
+    pub name: String,
+    pub width: usize,
+    pub height: usize,
+    pub ppi: Option<f64>,
+    pub file_size: u64,
+    /// `(row key, formatted value)` for the exposure tags the file carries.
+    pub exposure: Vec<(&'static str, String)>,
+}
+
 /// A decoded raw file waiting for the dialog's settings.
 pub(in crate::cxxqt_object) struct PendingRaw {
     pub(super) path: String,
@@ -37,8 +49,25 @@ pub(in crate::cxxqt_object) struct PendingRaw {
     pub(super) key: String,
     /// The settings record the seed came from, the base of a later save.
     pub(super) record: Option<Vec<u8>>,
+    /// The photo information the dialog's status bar and histogram show.
+    pub(in crate::cxxqt_object) info: RawPhotoInfo,
     /// A Save Image running while the dialog is open (#402).
     pub(super) dng_job: Option<super::save_dng::DngJob>,
+}
+
+fn raw_photo_info(path: &str, bytes: &[u8], width: usize, height: usize) -> RawPhotoInfo {
+    let exif = parse_exif(bytes);
+    RawPhotoInfo {
+        name: Path::new(path)
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+        width,
+        height,
+        ppi: pictura_codec::resolution_ppi(&exif),
+        file_size: bytes.len() as u64,
+        exposure: pictura_codec::camera_exposure_rows(&exif),
+    }
 }
 
 pub fn raw_sniff_path(path: &QString) -> bool {
@@ -76,6 +105,7 @@ pub(super) fn decode_pending(
     let record = store::read_record(Path::new(path), &key, stores)
         .or_else(|| pictura_codec::raw_xmp(&bytes));
     let seed = seed_settings(record.as_deref(), source.as_shot);
+    let info = raw_photo_info(path, &bytes, source.camera.width, source.camera.height);
     Ok(PendingRaw {
         path: path.to_string(),
         source,
@@ -84,6 +114,7 @@ pub(super) fn decode_pending(
         seed,
         key,
         record,
+        info,
         dng_job: None,
     })
 }
@@ -387,5 +418,87 @@ pub fn raw_preview(view: &PictureView, settings: &QString, max_dim: i32) -> QIma
     match preview_rgba(pending, &settings, max_dim.max(1) as usize) {
         Some((rgba, width, height)) => rgba_image(rgba, width as i32, height as i32),
         None => QImage::default(),
+    }
+}
+
+#[cfg(test)]
+mod photo_info_tests {
+    use super::*;
+
+    /// A little-endian TIFF with IFD0 (XResolution 240/1, inches) and an Exif
+    /// IFD (f/8, 1/30 s, ISO 100, 50 mm).
+    fn tiff_with_exposure() -> Vec<u8> {
+        let mut data = Vec::new();
+        let u16v = |data: &mut Vec<u8>, v: u16| data.extend_from_slice(&v.to_le_bytes());
+        let u32v = |data: &mut Vec<u8>, v: u32| data.extend_from_slice(&v.to_le_bytes());
+        data.extend_from_slice(b"II");
+        u16v(&mut data, 42);
+        u32v(&mut data, 8);
+        u16v(&mut data, 3);
+        u16v(&mut data, 0x011A);
+        u16v(&mut data, 5);
+        u32v(&mut data, 1);
+        u32v(&mut data, 104);
+        u16v(&mut data, 0x0128);
+        u16v(&mut data, 3);
+        u32v(&mut data, 1);
+        u32v(&mut data, 2);
+        u16v(&mut data, 0x8769);
+        u16v(&mut data, 4);
+        u32v(&mut data, 1);
+        u32v(&mut data, 50);
+        u32v(&mut data, 0);
+        u16v(&mut data, 4);
+        u16v(&mut data, 0x829D);
+        u16v(&mut data, 5);
+        u32v(&mut data, 1);
+        u32v(&mut data, 112);
+        u16v(&mut data, 0x829A);
+        u16v(&mut data, 5);
+        u32v(&mut data, 1);
+        u32v(&mut data, 120);
+        u16v(&mut data, 0x8827);
+        u16v(&mut data, 3);
+        u32v(&mut data, 1);
+        u32v(&mut data, 100);
+        u16v(&mut data, 0x920A);
+        u16v(&mut data, 5);
+        u32v(&mut data, 1);
+        u32v(&mut data, 128);
+        u32v(&mut data, 0);
+        u32v(&mut data, 240);
+        u32v(&mut data, 1);
+        u32v(&mut data, 8);
+        u32v(&mut data, 1);
+        u32v(&mut data, 1);
+        u32v(&mut data, 30);
+        u32v(&mut data, 50);
+        u32v(&mut data, 1);
+        data
+    }
+
+    #[test]
+    fn raw_photo_info_reads_camera_exposure() {
+        let info = raw_photo_info("shot.dng", &tiff_with_exposure(), 16, 12);
+        assert_eq!(info.name, "shot.dng");
+        assert_eq!((info.width, info.height), (16, 12));
+        let row = |key: &str| {
+            info.exposure
+                .iter()
+                .find(|(name, _)| *name == key)
+                .map(|(_, value)| value.as_str())
+        };
+        assert_eq!(row("f_number"), Some("f/8"));
+        assert_eq!(row("exposure"), Some("1/30 s"));
+        assert_eq!(row("iso"), Some("ISO 100"));
+        assert_eq!(row("focal_length"), Some("50 mm"));
+        assert_eq!(info.ppi, Some(240.0));
+    }
+
+    #[test]
+    fn raw_photo_info_omits_missing_tags() {
+        let info = raw_photo_info("shot.dng", b"not a tiff", 4, 3);
+        assert!(info.exposure.is_empty());
+        assert!(info.ppi.is_none());
     }
 }

@@ -13,7 +13,7 @@ use crate::cxxqt_object::edit::Edit;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QByteArray, QImage, QList, QString, QStringList};
-use pictura_core::{layer_pixel_locked, Document, Layer, PixelBuffer, PsdRect};
+use pictura_core::{layer_pixel_locked, BitDepth, Document, Layer, PixelBuffer, PsdRect};
 
 pub(super) fn apply_filter_params(
     mut view: Pin<&mut PictureView>,
@@ -530,6 +530,89 @@ pub(super) fn filter_thumbnail(
         return QImage::default();
     }
     buffer_to_image(&buffer)
+}
+
+/// The Pictura Raw dialog's photo information: `key\tvalue` rows for the
+/// pending raw file or the open document.
+pub(super) fn photo_info(view: &PictureView) -> QStringList {
+    let rust = view.rust();
+    let mut rows: Vec<(String, String)> = Vec::new();
+    if let Some(pending) = rust.pending_raw.as_ref() {
+        let info = &pending.info;
+        rows.push(("name".into(), info.name.clone()));
+        rows.push(("width".into(), info.width.to_string()));
+        rows.push(("height".into(), info.height.to_string()));
+        rows.push(("depth".into(), "16".into()));
+        rows.push(("ppi".into(), format_ppi(info.ppi)));
+        rows.push(("profile".into(), "sRGB".into()));
+        if info.file_size > 0 {
+            rows.push(("file_size".into(), info.file_size.to_string()));
+        }
+        for (key, value) in &info.exposure {
+            rows.push(((*key).to_string(), value.clone()));
+        }
+    } else if let Some(doc) = rust.session.doc.as_ref() {
+        let name = rust
+            .path
+            .as_deref()
+            .map(file_name)
+            .unwrap_or_else(|| "Untitled".to_string());
+        rows.push(("name".into(), name));
+        rows.push(("width".into(), doc.width.to_string()));
+        rows.push(("height".into(), doc.height.to_string()));
+        rows.push(("depth".into(), document_depth(doc).to_string()));
+        let ppi = pictura_codec::document_resolution(doc).map(|resolution| resolution.ppi);
+        rows.push(("ppi".into(), format_ppi(ppi)));
+        let profile = doc
+            .source
+            .working_profile()
+            .as_deref()
+            .and_then(pictura_codec::profile_description)
+            .unwrap_or_else(|| "sRGB".to_string());
+        rows.push(("profile".into(), profile));
+        let exif = pictura_codec::read_metadata(doc).exif;
+        for (key, value) in pictura_codec::camera_exposure_rows(&exif) {
+            rows.push((key.to_string(), value));
+        }
+        if let Some(path) = rust.path.as_deref() {
+            if let Ok(metadata) = std::fs::metadata(path) {
+                rows.push(("file_size".into(), metadata.len().to_string()));
+            }
+        }
+    }
+    rows.into_iter()
+        .map(|(key, value)| QString::from(format!("{key}\t{value}")))
+        .collect()
+}
+
+fn file_name(path: &str) -> String {
+    std::path::Path::new(path)
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default()
+}
+
+fn format_ppi(ppi: Option<f64>) -> String {
+    let ppi = ppi.filter(|value| *value > 0.0).unwrap_or(72.0);
+    if ppi.fract().abs() < 1e-6 {
+        format!("{} ppi", ppi as i64)
+    } else {
+        format!("{ppi:.1} ppi")
+    }
+}
+
+fn document_depth(doc: &Document) -> i32 {
+    let depth = if doc.retains_source_depth() {
+        doc.source.depth().unwrap_or(doc.depth)
+    } else {
+        doc.depth
+    };
+    match depth {
+        BitDepth::Eight => 8,
+        BitDepth::Sixteen => 16,
+        BitDepth::ThirtyTwo => 32,
+        BitDepth::One => 1,
+    }
 }
 
 /// Packed RGBA bytes as a planar four-channel buffer.

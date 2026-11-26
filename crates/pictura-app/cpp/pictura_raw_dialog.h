@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QtCore/QList>
 #include <QtCore/QString>
 #include <QtWidgets/QDialog>
 
@@ -10,19 +11,21 @@
 #include <optional>
 
 class QLabel;
+class QStackedWidget;
 class QTabBar;
 class QTimer;
 
 namespace pictura {
 
 class AcrHistogram;
+class AcrPanel;
 class AcrPreviewPane;
 class AcrToneCurvePanel;
 class PictureView;
 
 // `Filter > Pictura Raw…`: the tabbed ACR dialog — a preview pane, a histogram,
-// an icon/text tab strip of the nine panels, and OK / Cancel, over the shared
-// settings map carried as text.
+// an icon tab strip of the eight panels, a photo-information status bar, and
+// OK / Cancel, over the shared settings map carried as text.
 class PicturaRawDialog : public QDialog {
     Q_OBJECT
 
@@ -58,6 +61,8 @@ private:
     PicturaRawDialog(PictureView* view, const QString& path, std::optional<AcrAsShot> asShot,
                      const QString& initialSettings, QWidget* parent);
 
+    void buildControlPanels();
+    void updatePhotoInfo();
     void refresh();
     void render();
     void saveImage();
@@ -65,12 +70,17 @@ private:
     PictureView* view_ = nullptr;
     QString path_;
     AcrSettings settings_;
+    std::optional<AcrAsShot> asShot_;
     QTabBar* tabs_ = nullptr;
+    QStackedWidget* stack_ = nullptr;
     AcrPreviewPane* preview_ = nullptr;
     AcrHistogram* histogram_ = nullptr;
+    QList<AcrPanel*> controlPanels_;
     AcrToneCurvePanel* toneCurve_ = nullptr;
     QTimer* refreshTimer_ = nullptr;
     QLabel* saveStatus_ = nullptr;
+    QLabel* photoName_ = nullptr;
+    QLabel* photoInfo_ = nullptr;
     std::function<bool(QDialog&)> runner_;
     bool renderPending_ = false;
     bool saveOnly_ = false;

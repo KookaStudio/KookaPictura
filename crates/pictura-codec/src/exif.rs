@@ -168,6 +168,52 @@ pub fn parse_exif(data: &[u8]) -> Exif {
     exif
 }
 
+/// The camera exposure fields the Pictura Raw dialog shows, as
+/// `(key, formatted value)` pairs: `f_number`, `exposure`, `iso`, and
+/// `focal_length`. Missing tags are omitted.
+pub fn camera_exposure_rows(exif: &Exif) -> Vec<(&'static str, String)> {
+    let mut rows = Vec::new();
+    if let Some(value) = exif.get(0x829d).and_then(ExifValue::as_f64) {
+        rows.push(("f_number", format!("f/{}", number_text(value))));
+    }
+    if let Some(value) = exif.get(0x829a).and_then(ExifValue::as_f64) {
+        if value > 0.0 {
+            let text = if value < 1.0 {
+                format!("1/{} s", (1.0 / value).round() as i64)
+            } else {
+                format!("{} s", number_text(value))
+            };
+            rows.push(("exposure", text));
+        }
+    }
+    if let Some(value) = exif.get(0x8827).and_then(ExifValue::as_f64) {
+        rows.push(("iso", format!("ISO {}", number_text(value))));
+    }
+    if let Some(value) = exif.get(0x920a).and_then(ExifValue::as_f64) {
+        rows.push(("focal_length", format!("{} mm", number_text(value))));
+    }
+    rows
+}
+
+/// The horizontal resolution in ppi, converting a per-centimetre unit.
+pub fn resolution_ppi(exif: &Exif) -> Option<f64> {
+    let x = exif.get(0x011a)?.as_f64()?;
+    let unit = match exif.get(0x0128) {
+        Some(ExifValue::Short(unit)) => *unit,
+        _ => 2,
+    };
+    Some(if unit == 3 { x * 2.54 } else { x })
+}
+
+/// A float without a trailing `.0`, so `8` stays `8` and `2.8` stays `2.8`.
+fn number_text(value: f64) -> String {
+    if value.fract().abs() < 1e-6 {
+        format!("{}", value as i64)
+    } else {
+        format!("{value:.1}")
+    }
+}
+
 fn walk_ifd(
     data: &[u8],
     offset: usize,
@@ -457,6 +503,23 @@ mod tests {
         out.extend_from_slice(&le32(28));
         out.extend_from_slice(&le32(10));
         out
+    }
+
+    #[test]
+    fn camera_exposure_rows_format_the_fixture() {
+        let exif = parse_exif(&sample_tiff());
+        assert_eq!(
+            camera_exposure_rows(&exif),
+            vec![
+                ("f_number", "f/2.8".to_string()),
+                ("iso", "ISO 200".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn resolution_ppi_is_absent_without_a_resolution_tag() {
+        assert_eq!(resolution_ppi(&parse_exif(&sample_tiff())), None);
     }
 
     #[test]

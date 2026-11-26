@@ -134,7 +134,7 @@ pub use duotone::{parse_duotone, DuotoneInk, DuotoneSpec, InkColor};
 pub use engine_data::{extract_fonts, extract_style, parse_engine_data, EngineValue};
 pub use engine_data_encode::encode_engine_data;
 pub use error::PsdError;
-pub use exif::{exif_tag_name, parse_exif, Exif, ExifValue};
+pub use exif::{camera_exposure_rows, exif_tag_name, parse_exif, resolution_ppi, Exif, ExifValue};
 pub use filter_effects::remove_filter_mask;
 pub use ghostscript::{sniff_vector, Ghostscript, Raster, RasterError, VectorKind};
 pub use global_light::resolve_global_light;

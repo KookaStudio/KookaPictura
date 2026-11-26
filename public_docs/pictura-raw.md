@@ -20,10 +20,13 @@ whatever camera took it.
 ## The window
 
 The photo is at the left, with a **histogram** at the top right. Click **Fit** or the **−** and **+** buttons to
-change the zoom. **Shadows** and **Highlights** at the bottom show where the picture is clipped. Click **OK** to
-apply or **Cancel** to leave the picture alone.
+change the zoom, or turn the mouse wheel over the photo. Hover the photo to read the pixel's **R**, **G** and **B**
+values under the histogram; the camera's f-number, shutter speed, ISO and focal length appear beside them when the
+file carries them. **Shadows** and **Highlights** at the bottom show where the picture is clipped. The status bar
+below the photo shows the file name, colour space, bit depth, dimensions, resolution and file size. Drag the
+bottom-right corner to resize the window. Click **OK** to apply or **Cancel** to leave the picture alone.
 
-Nine tabs run along the top of the controls.
+Eight tabs run along the top of the controls.
 
 ## Basic
 
@@ -55,7 +58,9 @@ Magentas separately. Tick **Convert to Grayscale** for a mixer for black and whi
 
 ![Split Toning](images/raw-tab5.jpg)
 
-Tints the **Highlights** and **Shadows** with different colours, with a **Balance** slider between them.
+Tints the **Highlights** and **Shadows** with different colours, with a **Balance** slider between them. A
+positive Balance favours the highlights and a negative one the shadows, and each Saturation slider shows the
+colour it adds.
 
 ## Lens Corrections
 
@@ -76,13 +81,6 @@ has moved to the Transform tool.
 
 Choose the **Process** version and camera profile, then adjust the primary colours (Red, Green and Blue Hue and
 Saturation) and the **Shadows Tint**.
-
-## Presets (the fx tab)
-
-![Presets menu](images/raw-tab9.jpg)
-
-A list with **Image Settings**, **Camera Raw Defaults**, **Previous Conversion**, **Custom Settings**, **Preset Settings**,
-**Apply Preset**, **Clear Imported Settings**, **Load Settings…** and **Save Settings…**.
 
 ## Supported cameras
 

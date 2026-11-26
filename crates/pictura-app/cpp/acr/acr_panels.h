@@ -88,11 +88,4 @@ public:
     explicit AcrCalibrationPanel(AcrSettings* settings, QWidget* parent = nullptr);
 };
 
-class AcrPresetsPanel : public AcrPanel {
-    Q_OBJECT
-
-public:
-    explicit AcrPresetsPanel(AcrSettings* settings, QWidget* parent = nullptr);
-};
-
 } // namespace pictura

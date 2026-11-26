@@ -17,14 +17,24 @@ QByteArray rangeKey(const char* prefix, char code)
     return key;
 }
 
-QList<QColor> spectrumRamp()
-{
-    return {QColor(0xff, 0x00, 0x00), QColor(0xff, 0xff, 0x00), QColor(0x00, 0xff, 0x00),
-            QColor(0x00, 0xff, 0xff), QColor(0x00, 0x00, 0xff), QColor(0xff, 0x00, 0xff),
-            QColor(0xff, 0x00, 0x00)};
-}
-
 const QList<QColor> kGrayRamp = {QColor(0x33, 0x33, 0x33), QColor(0xdd, 0xdd, 0xdd)};
+
+// Each range's track spans the hues between its neighbours, centred on the
+// range's own colour, as Camera Raw paints them.
+QList<QColor> rangeRamp(int index)
+{
+    static const QList<QList<QColor>> ramps = {
+        {QColor(0xd1, 0x3b, 0x8f), QColor(0xff, 0x00, 0x00), QColor(0xff, 0x80, 0x00)},
+        {QColor(0xff, 0x00, 0x00), QColor(0xff, 0x80, 0x00), QColor(0xff, 0xff, 0x00)},
+        {QColor(0xff, 0x80, 0x00), QColor(0xff, 0xff, 0x00), QColor(0x00, 0xff, 0x00)},
+        {QColor(0xff, 0xff, 0x00), QColor(0x00, 0xff, 0x00), QColor(0x00, 0xff, 0xff)},
+        {QColor(0x00, 0xff, 0x00), QColor(0x00, 0xff, 0xff), QColor(0x00, 0x00, 0xff)},
+        {QColor(0x00, 0xff, 0xff), QColor(0x00, 0x00, 0xff), QColor(0x80, 0x00, 0xff)},
+        {QColor(0x00, 0x00, 0xff), QColor(0x80, 0x00, 0xff), QColor(0xff, 0x00, 0xff)},
+        {QColor(0x80, 0x00, 0xff), QColor(0xff, 0x00, 0xff), QColor(0xff, 0x00, 0x00)},
+    };
+    return ramps.value(index, kGrayRamp);
+}
 } // namespace
 
 AcrHslPanel::AcrHslPanel(AcrSettings* settings, QWidget* parent)
@@ -43,10 +53,9 @@ AcrHslPanel::AcrHslPanel(AcrSettings* settings, QWidget* parent)
         auto* page = new QWidget(this);
         auto* pageColumn = new QVBoxLayout(page);
         pageColumn->setContentsMargins(0, 0, 0, 0);
-        const QList<QColor> ramp = h == 0 ? spectrumRamp() : kGrayRamp;
         for (int i = 0; i < 8; ++i) {
             addSlider(pageColumn, rangeKey(prefixes[h], acr::kRangeCodes[i]),
-                      tr(acr::kRangeNames[i]), -100, 100, 0, 0, ramp);
+                      tr(acr::kRangeNames[i]), -100, 100, 0, 0, rangeRamp(i));
         }
         pageColumn->addStretch(1);
         subtabs->addTab(page, tr(headings[h]));

@@ -45,6 +45,7 @@ public:
     double value() const;
     void setValue(double value);
     void setRamp(const QList<QColor>& stops);
+    QList<QColor> rampForTest() const { return ramp_; }
     // Place the handle linearly in 1/value (mired for a colour temperature),
     // so a wide kelvin range keeps daylight off the end of the track. Needs a
     // positive minimum.
