@@ -60,14 +60,15 @@ private slots:
     void init();
     void rejectsTwoSources();
     void rejectsDeepSources();
-    void requiresExplicitExposure();
+    void estimatesMissingExposure();
     void addsCleanSavedDocuments();
     void rejectsInvalidCurve();
     void alignmentFailureIsAtomic();
     void selectsGhostBase();
     void previewBrightness();
     void publishesOrCancels();
-    void convertsIntegerOutput();
+    void temporaryStackAndBackground();
+    void adjustsFloatTone();
     void budgetFailureIsAtomic();
 
 private:
@@ -254,31 +255,25 @@ void MergeToHdrTest::rejectsDeepSources()
     QCOMPARE(frame_->documentCount(), 0);
 }
 
-void MergeToHdrTest::requiresExplicitExposure()
+void MergeToHdrTest::estimatesMissingExposure()
 {
+    bool previewSeen = false;
     bool exposureSeen = false;
     QVERIFY(run([&](Stage stage, QDialog& dialog) {
         if (stage == Stage::Exposure) {
             exposureSeen = true;
-            auto* first = control<QLineEdit>(dialog, "hdrMergeEv0");
-            auto* second = control<QLineEdit>(dialog, "hdrMergeEv1");
-            auto* third = control<QLineEdit>(dialog, "hdrMergeEv2");
-            auto* ok = control<QPushButton>(dialog, "hdrMergeAcceptExposure");
-            QVERIFY(first && second && third && ok);
-            QVERIFY(first->text().isEmpty());
-            QVERIFY(second->text().isEmpty());
-            QVERIFY(third->text().isEmpty());
-            QVERIFY(!ok->isEnabled());
-            first->setText(QStringLiteral("1"));
-            second->setText(QStringLiteral("NaN"));
-            third->setText(QStringLiteral("-1"));
-            QVERIFY(!ok->isEnabled());
-            second->setText(QStringLiteral("0"));
-            QVERIFY(ok->isEnabled());
+        }
+        if (stage == Stage::Preview) {
+            previewSeen = true;
+            auto* base = control<QComboBox>(dialog, "hdrMergeBase");
+            QVERIFY(base);
+            QCOMPARE(base->count(), 3);
+            QVERIFY(base->itemText(0).contains(QStringLiteral("EV100")));
             dialog.reject();
         }
     }));
-    QVERIFY(exposureSeen);
+    QVERIFY(previewSeen);
+    QVERIFY(!exposureSeen);
     QCOMPARE(frame_->documentCount(), 0);
 }
 
@@ -405,8 +400,7 @@ void MergeToHdrTest::publishesOrCancels()
     QCOMPARE(frame_->activeView()->document_depth_bits(), 32);
     QVERIFY(frame_->documentPath(0).isEmpty());
     QVERIFY(frame_->isDocumentDirty(0));
-    depth_ = 16;
-    for (Stage phase : {Stage::Picker, Stage::Preview, Stage::Conversion}) {
+    for (Stage phase : {Stage::Picker, Stage::Preview}) {
         bool reached = false;
         QVERIFY(run([&](Stage stage, QDialog& dialog) {
             if (stage == phase) {
@@ -419,16 +413,40 @@ void MergeToHdrTest::publishesOrCancels()
     }
 }
 
-void MergeToHdrTest::convertsIntegerOutput()
+void MergeToHdrTest::temporaryStackAndBackground()
 {
-    for (int bits : {8, 16}) {
-        depth_ = bits;
-        QVERIFY(run());
-        QCOMPARE(frame_->activeView()->document_depth_bits(), bits);
-        const int signal = qRed(frame_->activeView()->composite_argb(1, 1));
-        QVERIFY2(qAbs(signal - 38) <= 2, qPrintable(QString::number(signal)));
-    }
-    QCOMPARE(frame_->documentCount(), 2);
+    bool inspected = false;
+    QVERIFY(run([&](Stage stage, QDialog&) {
+        if (stage == Stage::Preview) {
+            inspected = true;
+            QVERIFY(frame_->activeView());
+            QCOMPARE(frame_->activeView()->document_depth_bits(), 32);
+            QCOMPARE(frame_->activeView()->layer_count(), 4);
+            QCOMPARE(frame_->activeView()->layer_name(0), QStringLiteral("Merge to HDR Pro"));
+        }
+    }));
+    QVERIFY(inspected);
+    QCOMPARE(frame_->activeView()->layer_count(), 1);
+    QCOMPARE(frame_->activeView()->layer_name(0), QStringLiteral("Background"));
+    QCOMPARE(frame_->activeView()->document_depth_bits(), 32);
+}
+
+void MergeToHdrTest::adjustsFloatTone()
+{
+    bool changed = false;
+    QVERIFY(run([&](Stage stage, QDialog& dialog) {
+        if (stage != Stage::Preview) { return; }
+        auto* image = control<QLabel>(dialog, "hdrMergeImage");
+        auto* exposure = control<QDoubleSpinBox>(dialog, "hdrExposure");
+        auto* method = control<QComboBox>(dialog, "hdrMergeToneMethod");
+        QVERIFY(image && exposure && method);
+        const QImage before = image->pixmap().toImage();
+        method->setCurrentIndex(1);
+        exposure->setValue(-1.0);
+        changed = before != image->pixmap().toImage();
+    }));
+    QVERIFY(changed);
+    QCOMPARE(frame_->activeView()->document_depth_bits(), 32);
 }
 
 void MergeToHdrTest::budgetFailureIsAtomic()

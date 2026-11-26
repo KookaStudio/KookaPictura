@@ -1,11 +1,9 @@
 #include "merge_to_hdr_dialog.h"
 
 #include "api/document_bridge.h"
-#include "api/filters_bridge.h"
 #include "dialogs.h"
-#include "document_command.h"
 #include "frame.h"
-#include "hdr_conversion_dialog.h"
+#include "hdr_toning_controls.h"
 #include "load_layers_dialog.h"
 
 #include <QtCore/QCoreApplication>
@@ -32,6 +30,7 @@
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QScrollArea>
 #include <QtWidgets/QVBoxLayout>
+#include <QtWidgets/QHBoxLayout>
 
 #include <cmath>
 #include <memory>
@@ -54,64 +53,6 @@ QString tr(const char* text)
 ::rust::Slice<const double> asSlice(const std::vector<double>& numbers)
 {
     return {numbers.data(), numbers.size()};
-}
-
-std::optional<std::vector<double>> exposureValues(QWidget* parent, const QStringList& paths,
-                                                 const ::rust::Vec<double>& source)
-{
-    std::vector<double> values(source.begin(), source.end());
-    if (hdr_bracket_base(asSlice(values)) >= 0) {
-        return values;
-    }
-    QDialog dialog(parent);
-    dialog.setObjectName(QStringLiteral("hdrMergeManualExposure"));
-    dialog.setWindowTitle(tr("Set Exposure Values"));
-    auto* layout = new QVBoxLayout(&dialog);
-    auto* explanation = new QLabel(tr("Enter EV100 for each image. Higher EV100 means less exposure."),
-                                   &dialog);
-    explanation->setWordWrap(true);
-    layout->addWidget(explanation);
-    auto* scroll = new QScrollArea(&dialog);
-    scroll->setWidgetResizable(true);
-    auto* page = new QWidget(scroll);
-    auto* rows = new QFormLayout(page);
-    std::vector<QLineEdit*> editors;
-    for (qsizetype i = 0; i < paths.size(); ++i) {
-        auto* editor = new QLineEdit(page);
-        editor->setObjectName(QStringLiteral("hdrMergeEv%1").arg(i));
-        auto* validator = new QDoubleValidator(-64.0, 64.0, 8, editor);
-        validator->setLocale(QLocale::c());
-        editor->setValidator(validator);
-        if (std::isfinite(values[size_t(i)])) {
-            editor->setText(QString::number(values[size_t(i)], 'f', 6));
-        }
-        rows->addRow(QFileInfo(paths[i]).fileName(), editor);
-        editors.push_back(editor);
-    }
-    scroll->setWidget(page);
-    layout->addWidget(scroll);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    layout->addWidget(buttons);
-    auto* accept = buttons->button(QDialogButtonBox::Ok);
-    accept->setObjectName(QStringLiteral("hdrMergeAcceptExposure"));
-    const auto refresh = [&] {
-        for (size_t i = 0; i < editors.size(); ++i) {
-            if (!editors[i]->hasAcceptableInput()) {
-                accept->setEnabled(false);
-                return;
-            }
-            values[i] = QLocale::c().toDouble(editors[i]->text());
-        }
-        accept->setEnabled(hdr_bracket_base(asSlice(values)) >= 0);
-    };
-    for (auto* editor : editors) {
-        QObject::connect(editor, &QLineEdit::textChanged, &dialog, refresh);
-    }
-    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    refresh();
-    return dialog.exec() == QDialog::Accepted && accept->isEnabled()
-        ? std::optional(std::move(values)) : std::nullopt;
 }
 
 class MergePreview final : public QDialog {
@@ -140,6 +81,12 @@ private:
     QCheckBox* ghost_;
     QComboBox* base_;
     QDoubleSpinBox* brightness_;
+    HdrToningControls* toning_;
+    QCheckBox* smooth_;
+    QComboBox* method_;
+    QComboBox* zoom_;
+    QDoubleSpinBox* curve_;
+    std::vector<double> toneValues() const;
 };
 
 MergePreview::MergePreview(QWidget* parent, const HdrBracket& bracket, const QStringList& paths,
@@ -154,6 +101,22 @@ MergePreview::MergePreview(QWidget* parent, const HdrBracket& bracket, const QSt
     image_->setAlignment(Qt::AlignCenter);
     image_->setMinimumSize(360, 220);
     layout->addWidget(image_);
+    zoom_ = new QComboBox(this);
+    zoom_->setObjectName(QStringLiteral("hdrMergeZoom"));
+    for (int percent : {50, 100, 200}) { zoom_->addItem(tr("%1%").arg(percent), percent); }
+    zoom_->setCurrentIndex(1);
+    layout->addWidget(zoom_);
+    auto* thumbnails = new QHBoxLayout;
+    for (qsizetype i = 0; i < paths.size(); ++i) {
+        auto* thumbnail = new QLabel(this);
+        thumbnail->setPixmap(QPixmap(paths[i]).scaled(96, 64, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        thumbnail->setToolTip(tr("%1 (%2 EV100)").arg(QFileInfo(paths[i]).fileName()).arg(ev100[size_t(i)], 0, 'f', 2));
+        auto* item = new QVBoxLayout;
+        item->addWidget(thumbnail);
+        item->addWidget(new QLabel(tr("%1 EV100").arg(ev100[size_t(i)], 0, 'f', 2), this));
+        thumbnails->addLayout(item);
+    }
+    layout->addLayout(thumbnails);
     error_ = new QLabel(this);
     error_->setObjectName(QStringLiteral("hdrMergeError"));
     error_->setWordWrap(true);
@@ -169,8 +132,7 @@ MergePreview::MergePreview(QWidget* parent, const HdrBracket& bracket, const QSt
     depth_ = new QComboBox(this);
     depth_->setObjectName(QStringLiteral("hdrMergeDepth"));
     depth_->addItem(tr("32 bits per channel"), 32);
-    depth_->addItem(tr("16 bits per channel"), 16);
-    depth_->addItem(tr("8 bits per channel"), 8);
+
     form->addRow(tr("Output depth"), depth_);
     align_ = new QCheckBox(tr("Align sources"), this);
     align_->setChecked(align);
@@ -187,7 +149,27 @@ MergePreview::MergePreview(QWidget* parent, const HdrBracket& bracket, const QSt
     form->addRow(align_);
     form->addRow(ghost_);
     form->addRow(tr("Base exposure"), base_);
+    method_ = new QComboBox(this);
+    method_->setObjectName(QStringLiteral("hdrMergeToneMethod"));
+    method_->addItem(tr("Local Adaptation"));
+    method_->addItem(tr("Exposure and Gamma"));
+    form->addRow(tr("Tone method"), method_);
+    smooth_ = new QCheckBox(tr("Edge smoothness"), this);
+    smooth_->setObjectName(QStringLiteral("hdrMergeSmooth"));
+    form->addRow(smooth_);
+    curve_ = new QDoubleSpinBox(this);
+    curve_->setObjectName(QStringLiteral("hdrMergeToneCurve"));
+    curve_->setRange(-1.0, 1.0);
+    curve_->setSingleStep(0.05);
+    form->addRow(tr("Tone curve"), curve_);
     layout->addLayout(form);
+    toning_ = new HdrToningControls(this);
+    layout->addWidget(toning_);
+    connect(toning_, &HdrToningControls::edited, this, &MergePreview::updatePreview);
+    connect(method_, &QComboBox::currentIndexChanged, this, &MergePreview::updatePreview);
+    connect(zoom_, &QComboBox::currentIndexChanged, this, &MergePreview::updatePreview);
+    connect(smooth_, &QCheckBox::toggled, this, &MergePreview::updatePreview);
+    connect(curve_, &QDoubleSpinBox::valueChanged, this, &MergePreview::updatePreview);
 
     auto* actions = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     accept_ = actions->button(QDialogButtonBox::Ok);
@@ -211,11 +193,26 @@ MergePreview::MergePreview(QWidget* parent, const HdrBracket& bracket, const QSt
     rebuild();
 }
 
+std::vector<double> MergePreview::toneValues() const
+{
+    const auto value = toning_->values();
+    return {double(value.radius), value.strength, value.gamma, value.exposure,
+            double(value.detail), double(value.shadow), double(value.highlight),
+            double(value.vibrance), double(value.saturation),
+            smooth_->isChecked() ? 1.0 : 0.0, curve_->value(), double(method_->currentIndex())};
+}
+
 void MergePreview::updatePreview()
 {
-    image_->setPixmap(merged_ && hdr_result_error(**merged_).isEmpty()
-        ? QPixmap::fromImage(hdr_result_preview(bracket_, **merged_, brightness_->value()))
-        : QPixmap());
+    if (!merged_ || !hdr_result_error(**merged_).isEmpty()) {
+        image_->clear();
+        return;
+    }
+    const auto values = toneValues();
+    const auto toned = hdr_result_tone(bracket_, **merged_, asSlice(values));
+    const QImage image = hdr_result_preview(bracket_, *toned, brightness_->value());
+    const int percent = zoom_->currentData().toInt();
+    image_->setPixmap(QPixmap::fromImage(image.scaled(image.size() * percent / 100, Qt::KeepAspectRatio, Qt::SmoothTransformation)));
 }
 
 void MergePreview::rebuild()
@@ -239,8 +236,10 @@ void MergePreview::rebuild()
 
 bool MergePreview::install(PictureView& view)
 {
-    return accept_->isEnabled() && merged_
-        && hdr_result_install(view, bracket_, std::move(*merged_));
+    if (!accept_->isEnabled() || !merged_) { return false; }
+    const auto values = toneValues();
+    auto toned = hdr_result_tone(bracket_, **merged_, asSlice(values));
+    return hdr_result_install(view, bracket_, std::move(toned));
 }
 
 void MergePreview::exchange(bool saving, bool curve)
@@ -275,6 +274,9 @@ void MergePreview::exchange(bool saving, bool curve)
             data.insert(QStringLiteral("ghosts"), ghost_->isChecked());
             data.insert(QStringLiteral("depth"), depth());
             data.insert(QStringLiteral("previewEv"), brightness_->value());
+            QJsonArray tone;
+            for (double value : toneValues()) { tone.append(value); }
+            data.insert(QStringLiteral("tone"), tone);
         }
         QSaveFile file(path);
         const QByteArray encoded = QJsonDocument(data).toJson();
@@ -333,23 +335,25 @@ void MergePreview::exchange(bool saving, bool curve)
         ghost_->setChecked(ghosts.toBool());
         brightness_->setValue(ev);
         depth_->setCurrentIndex(index);
+        const auto tone = data.value(QStringLiteral("tone")).toArray();
+        if (tone.size() == 12) {
+            HdrToningControls::Values values;
+            values.radius = tone[0].toInt();
+            values.strength = tone[1].toDouble();
+            values.gamma = tone[2].toDouble();
+            values.exposure = tone[3].toDouble();
+            values.detail = tone[4].toInt();
+            values.shadow = tone[5].toInt();
+            values.highlight = tone[6].toInt();
+            values.vibrance = tone[7].toInt();
+            values.saturation = tone[8].toInt();
+            toning_->setValues(values);
+            smooth_->setChecked(tone[9].toDouble() > 0.5);
+            curve_->setValue(tone[10].toDouble());
+            method_->setCurrentIndex(tone[11].toInt());
+        }
         rebuild();
     }
-}
-
-bool convertOutput(QWidget* parent, PictureView& view, int bits)
-{
-    if (bits == 32) {
-        return true;
-    }
-    HdrConversionSpec spec;
-    return HdrConversionDialog::get(parent, &spec)
-        && runDocumentCommand(parent, view, tr("HDR Conversion"), [&] {
-            convert_depth_method(view, bits, int(spec.method), spec.exposure_ev, spec.gamma,
-                                 spec.radius, spec.strength, spec.local_gamma, spec.local_exposure,
-                                 spec.detail, spec.shadow, spec.highlight, spec.vibrance,
-                                 spec.saturation);
-        });
 }
 
 } // namespace
@@ -374,22 +378,25 @@ void showMergeToHdrDialog(PicturaMainWindow& frame)
         QMessageBox::warning(&frame, tr("Merge To HDR Pro"), error);
         return;
     }
-    const auto ev = exposureValues(&frame, paths, hdr_bracket_exposures(*bracket));
-    if (!ev) {
-        return;
-    }
-    MergePreview preview(&frame, *bracket, paths, *ev, picker.alignImages());
-    if (preview.exec() != QDialog::Accepted) {
-        return;
-    }
+    const auto estimated = hdr_bracket_exposures(*bracket);
+    const std::vector<double> ev(estimated.begin(), estimated.end());
     auto result = std::make_unique<PictureView>(&frame);
-    if (!preview.install(*result)) {
+    if (!hdr_bracket_install_stack(*result, *bracket, paths)) {
         QMessageBox::warning(&frame, tr("Merge To HDR Pro"), tr("Could not create the HDR document."));
         return;
     }
-    if (convertOutput(&frame, *result, preview.depth())) {
-        frame.addDocument(result.release(), QString());
+    const int previous = frame.activeDocumentIndex();
+    auto* target = result.release();
+    const int index = frame.addDocument(target, QString());
+    MergePreview preview(&frame, *bracket, paths, ev, picker.alignImages());
+    if (preview.exec() != QDialog::Accepted || !preview.install(*target)) {
+        frame.closeDocument(index, false);
+        if (previous >= 0) {
+            frame.setActiveDocumentIndex(previous);
+        }
+        return;
     }
+    frame.refresh();
 }
 
 } // namespace pictura

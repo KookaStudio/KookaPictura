@@ -2,7 +2,7 @@
 
 ### Requirement: Resolve an exposure bracket
 
-File > Automate > Merge To HDR Pro SHALL accept browsed files, a folder, and clean saved open documents without modifying any input. The picker SHALL require at least three distinct readable, equal-sized sources. Inputs above 8 bits per channel SHALL be refused visibly before decoding. Complete JPEG and TIFF exposure metadata SHALL populate EV100 values; missing rows SHALL require explicit finite EV100 values and SHALL NOT default to zero. Invalid or unrepresentable exposure ratios SHALL be rejected.
+File > Automate > Merge To HDR Pro SHALL accept browsed files, a folder, and clean saved open documents without modifying any input. The picker SHALL require at least three distinct readable, equal-sized sources. Inputs above 8 bits per channel SHALL be refused visibly before decoding. Complete JPEG and TIFF exposure metadata SHALL populate EV100 values; missing values SHALL use deterministic relative image-based estimates anchored to available metadata. Invalid or unrepresentable exposure ratios SHALL be rejected.
 
 #### Scenario: Reject two sources
 
@@ -14,10 +14,10 @@ File > Automate > Merge To HDR Pro SHALL accept browsed files, a folder, and cle
 - **WHEN** a source has more than 8 bits per channel
 - **THEN** the command SHALL explain the precision limit and publish no document
 
-#### Scenario: Complete the missing exposure values
+#### Scenario: Estimate missing exposure values
 
 - **WHEN** three matching sources include rows without complete exposure metadata
-- **THEN** those EV100 fields SHALL be empty and proceeding SHALL require an explicit finite value for each missing row
+- **THEN** the command SHALL estimate missing EV100 values from the images and open the preview without another exposure-entry dialog
 - **AND** cancelling SHALL leave all input files and documents untouched
 
 #### Scenario: Add clean saved open documents
@@ -62,7 +62,7 @@ The merge SHALL combine encoded samples in an exposure-normalized linear domain,
 
 ### Requirement: Preview and publish a merged document
 
-The command SHALL show the selected sources and a preview with adjustable brightness before opening a new document. Preview brightness SHALL NOT change merged pixels. The command SHALL offer 32-, 16-, and 8-bit output and separate Pictura preset and response-curve save and load actions. 32-bit output SHALL preserve merged floating-point data; 16- and 8-bit output SHALL use existing HDR conversion choices. The job SHALL check and reserve its decoded photo and working memory against the existing budget before allocation. Overflow, budget failure, cancellation, or any other failure SHALL release temporary resources, leave all input files and existing documents untouched, and publish no document. Publication SHALL be atomic after acceptance and successful conversion. Persisting preview white point on PSD/PSB/TIFF reopen remains a #558 parity gap.
+The command SHALL create a temporary 32-bit document with a bottom placeholder named Merge to HDR Pro and a layer for each selected source. It SHALL show the selected sources, estimated EV labels and adjustable lighting controls in a preview. Preview brightness SHALL NOT change merged pixels. The command SHALL support Pictura preset and response-curve save and load actions. Acceptance SHALL replace the temporary stack with one locked Background containing float samples. The job SHALL check and reserve its decoded photo and working memory against the existing budget before allocation. Overflow, budget failure, cancellation, or any other failure SHALL release temporary resources, leave all input files and existing documents untouched, and remove the temporary document. Persisting preview white point on PSD/PSB/TIFF reopen remains a #558 parity gap.
 
 #### Scenario: Adjust preview brightness
 
@@ -73,12 +73,13 @@ The command SHALL show the selected sources and a preview with adjustable bright
 
 - **WHEN** the preview is accepted at 32 bits per channel
 - **THEN** exactly one untitled 32-bit document SHALL open with the merged samples
-- **AND** cancellation at source selection, preview, or conversion SHALL open no document and leave inputs untouched
+- **AND** cancellation at source selection or preview SHALL remove the temporary document and leave inputs untouched
 
-#### Scenario: Convert the merged output
+#### Scenario: Inspect temporary layers and final background
 
-- **WHEN** the user selects 8- or 16-bit output and confirms HDR conversion
-- **THEN** exactly one new document SHALL open at the selected depth with the converted pixels
+- **WHEN** the preview is open after selecting three sources
+- **THEN** the temporary 32-bit document SHALL contain the placeholder and three source layers
+- **AND** accepting SHALL replace them with one locked Background layer
 
 #### Scenario: Reject an over-budget job
 

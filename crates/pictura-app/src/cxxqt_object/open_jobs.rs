@@ -70,6 +70,8 @@ pub mod ffi {
             ghost_base: i32,
             curve: &[f64],
         ) -> Box<HdrResult>;
+        fn hdr_bracket_install_stack(view: Pin<&mut PictureView>, bracket: &HdrBracket, paths: &QStringList) -> bool;
+        fn hdr_result_tone(bracket: &HdrBracket, result: &HdrResult, controls: &[f64]) -> Box<HdrResult>;
         fn hdr_result_error(result: &HdrResult) -> QString;
         fn hdr_result_curve(result: &HdrResult) -> Vec<f64>;
         fn hdr_result_preview(bracket: &HdrBracket, result: &HdrResult, ev: f64) -> QImage;
