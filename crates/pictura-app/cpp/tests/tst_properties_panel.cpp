@@ -135,7 +135,7 @@ void PropertiesPanelTest::autoSelectParameter()
     auto* column = window_->columnForPanel(panelName);
     QVERIFY(column);
     window_->show();
-    window_->setScreenMode(pictura::ScreenMode::Standard);
+    window_->setScreenMode(pictura::PicturaMainWindow::ScreenMode::Standard);
     window_->setPanelsHidden(false);
     column->setRailMode(false);
     QVERIFY(column->showPanel(panelName, true));
