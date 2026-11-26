@@ -442,15 +442,16 @@ fn merged_document(width: u32, height: u32, merge: HdrMerge) -> Option<Document>
     Some(doc)
 }
 
+#[allow(clippy::boxed_local)] // The CXX bridge transfers ownership in a Box.
 pub fn hdr_result_install(
     mut view: Pin<&mut PictureView>,
     bracket: &HdrBracket,
-    mut result: Box<HdrResult>,
+    result: Box<HdrResult>,
 ) -> bool {
     let Ok(input) = &bracket.0 else {
         return false;
     };
-    let Ok(merge) = std::mem::replace(&mut result.0, Err(String::new())) else {
+    let Ok(merge) = result.0 else {
         return false;
     };
     let Some(mut doc) = merged_document(input.width, input.height, merge) else {
@@ -463,7 +464,6 @@ pub fn hdr_result_install(
     rust.session.mark_unsaved();
     rust.path = None;
     rust.source_format = "psd".to_owned();
-    drop(rust);
     view.as_mut().edit("Merge To HDR Pro", |_| {
         crate::cxxqt_object::edit::Edit::Full
     });

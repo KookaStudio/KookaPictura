@@ -1,7 +1,10 @@
 # imaging/hdr-merge Specification
 
 ## Purpose
-TBD - created by archiving change merge-to-hdr-pro. Update Purpose after archive.
+Merge To HDR Pro combines bracketed photos into a 32-bit floating-point
+document. It resolves exposure values, aligns and merges the sources when
+requested, and lets the user adjust the result in a preview before publishing
+the merged Background layer.
 
 ## Requirements
 
