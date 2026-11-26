@@ -51,6 +51,7 @@ private slots:
     void saveIsWhitelisted();
     void panelLoadAppliesASavedPreset();
     void dialogLoadAppliesASavedPreset();
+    void selectiveColorPresetRoundTrips();
     void establishedBuiltinsAreListed();
     void photoFilterPresetKeepsDensity();
     void presetsSurviveARestart();
@@ -295,6 +296,51 @@ void AdjustmentPresetsTest::dialogLoadAppliesASavedPreset()
     QVERIFY(spin != nullptr);
     QCOMPARE(spin->value(), 10);
     dialog.reject();
+}
+
+void AdjustmentPresetsTest::selectiveColorPresetRoundTrips()
+{
+    const QString kind = QStringLiteral("selective-color");
+    const QString name = QStringLiteral("My Selective Color");
+    QVERIFY(setupAdjustment(kind));
+    QVERIFY(panel_->canSavePresetForTest());
+
+    auto* method = qobject_cast<QComboBox*>(panel_->controlForTest(QStringLiteral("method")));
+    auto* cyan = qobject_cast<QSlider*>(panel_->controlForTest(QStringLiteral("reds.cyan")));
+    QVERIFY(method && cyan);
+    QCOMPARE(method->currentText(), QStringLiteral("Relative"));
+    method->setCurrentIndex(1);
+    cyan->setValue(27);
+    panel_->commitForTest();
+
+    panel_->setPresetNameProviderForTest([name] { return name; });
+    panel_->performPanelMenuAction(QStringLiteral("savePreset"));
+    QVERIFY(pictura::savedPresetNames(kind).contains(name));
+    const QByteArray saved = pictura::savedPresetBlock(kind, name);
+    QVERIFY(!saved.isEmpty());
+
+    method->setCurrentIndex(0);
+    cyan->setValue(0);
+    panel_->commitForTest();
+    QVERIFY(!pictura::adjustmentPresetMatches(toBytes(pictura::adjustment_block(*view_, path_)),
+                                              saved));
+    panel_->setPresetPickProviderForTest([name](const QStringList& names) {
+        return names.contains(name) ? name : QString();
+    });
+    panel_->performPanelMenuAction(QStringLiteral("loadPreset"));
+    QCOMPARE(method->currentText(), QStringLiteral("Absolute"));
+    QCOMPARE(cyan->value(), 27);
+
+    const auto dialog =
+        pictura::makeAdjustmentDialog(kind, view_, pictura::defaultPresetBlock(kind), QRect());
+    auto* combo = qobject_cast<pictura::PresetCombo*>(
+        dialog->controlForTest(QStringLiteral("preset")));
+    QVERIFY(combo);
+    const int index = combo->findText(name);
+    QVERIFY(index >= 0);
+    emit combo->activated(index);
+    QVERIFY(pictura::adjustmentPresetMatches(dialog->block(), saved));
+    dialog->reject();
 }
 
 void AdjustmentPresetsTest::establishedBuiltinsAreListed()

@@ -16,8 +16,8 @@
 
 #include "adjustment_catalogue.h"
 #include "adjustment_dialog.h"
-#include "panels/properties_panel.h"
 #include "panels/channels_panel.h"
+#include "panels/properties_panel.h"
 #include "api/document_api.h"
 #include "fill_layer_editor.h"
 #include "hdr_toning_dialog.h"
@@ -28,6 +28,19 @@
 #include "api/filters_bridge.h"
 
 namespace pictura {
+
+namespace {
+
+bool adjustmentChannelAvailable(const QString& kind, PictureView* view, PanelHost* panels)
+{
+    if (!adjustmentRequiresCompositeChannel(kind)) {
+        return true;
+    }
+    auto* channels = panels ? panels->channelsPanel() : nullptr;
+    return channels && channels->isCompositeChannelActive(view);
+}
+
+} // namespace
 
 void MenuRegistrar::wireImageAdjustments()
 {
@@ -65,8 +78,9 @@ void MenuRegistrar::wireImageAdjustments()
         commands_->setImplemented(id, true);
         const bool needsComposite = entry.image != QLatin1String("root")
                                     && compositeOnly.contains(entry.title);
-        commands_->setEnabledProvider(id, [ready, compositeRgb, needsComposite]() {
-            return ready() && (!needsComposite || compositeRgb());
+        commands_->setEnabledProvider(id, [this, ready, compositeRgb, needsComposite, kind]() {
+            return ready() && (!needsComposite || compositeRgb())
+                   && adjustmentChannelAvailable(kind, activeView(), panels_);
         });
         if (entry.image != QLatin1String("dialog")) {
             commands_->setHandler(id, [this, kind]() {
@@ -84,7 +98,8 @@ void MenuRegistrar::wireImageAdjustments()
         commands_->setLabelProvider(id, [leaf]() { return commandDisplayText(leaf + QStringLiteral("…")); });
         commands_->setHandler(id, [this, kind]() {
             PictureView* view = activeView();
-            if (!view) {
+            if (!view || !adjustmentChannelAvailable(kind, view, panels_)
+                || (adjustmentRequiresCompositeChannel(kind) && filter_target_smart(*view))) {
                 return;
             }
             if (!filter_target_ready(*view)) {
@@ -216,11 +231,14 @@ void MenuRegistrar::wireLayerAdjustments()
         }
         commands_->setHandler(id, [this, kind]() {
             PictureView* view = activeView();
-            if (view && view->add_adjustment(kind)) {
+            if (view && adjustmentChannelAvailable(kind, view, panels_)
+                && view->add_adjustment(kind)) {
                 refresh();
             }
         });
-        commands_->setEnabledProvider(id, ready);
+        commands_->setEnabledProvider(id, [this, ready, kind]() {
+            return ready() && adjustmentChannelAvailable(kind, activeView(), panels_);
+        });
     }
 }
 

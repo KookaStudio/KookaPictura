@@ -184,6 +184,7 @@ ChannelsPanel::ChannelsPanel(QWidget* parent)
         if (!syncing_) {
             applyChannelSolo(row);
             emit channelTargetChanged();
+            notifyCompositeChannelChanged();
         }
     });
     connect(load_, &QToolButton::clicked, this,
@@ -352,8 +353,14 @@ void ChannelsPanel::setView(PictureView* view)
         // Another document: rebuild its rows, which shows all its channels.
         alphaCount_ = -1;
         shownAlphas_.clear();
+        compositeChannelActive_.reset();
+        disconnect(viewChanged_);
+        view_ = view;
+        if (view_) {
+            viewChanged_ = connect(view_, &PictureView::changed, this,
+                                   &ChannelsPanel::notifyCompositeChannelChanged);
+        }
     }
-    view_ = view;
     refresh();
 }
 
@@ -378,6 +385,27 @@ void ChannelsPanel::refresh()
     }
     refreshThumbnails();
     updateFooter();
+    notifyCompositeChannelChanged();
+}
+
+bool ChannelsPanel::isCompositeChannelActive(PictureView* view) const
+{
+    return view && view == view_ && view->has_document()
+           && mode_ != QLatin1String("multichannel") && currentRow() == 0
+           && mask_ == 0x7 && shownAlphas_.isEmpty() && !quick_mask_active(*view)
+           && mask_solo_get(*view).isEmpty();
+}
+
+void ChannelsPanel::notifyCompositeChannelChanged()
+{
+    if (syncing_) {
+        return;
+    }
+    const bool active = isCompositeChannelActive(view_);
+    if (compositeChannelActive_ != active) {
+        compositeChannelActive_ = active;
+        emit compositeChannelChanged();
+    }
 }
 
 void ChannelsPanel::refreshThumbnails()
@@ -472,6 +500,7 @@ void ChannelsPanel::setRgbVisibility(int mask)
         applyEyeIcon(rows_[i].eye);
     }
     emit channelMaskChanged(mask_);
+    notifyCompositeChannelChanged();
 }
 
 void ChannelsPanel::selectRow(int index)
@@ -503,6 +532,7 @@ void ChannelsPanel::toggleAlpha(int alpha)
     }
     updateAlphaEyes();
     emit alphaVisibilityChanged();
+    notifyCompositeChannelChanged();
 }
 
 void ChannelsPanel::updateAlphaEyes()

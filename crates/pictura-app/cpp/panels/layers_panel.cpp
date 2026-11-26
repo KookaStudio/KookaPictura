@@ -333,14 +333,7 @@ LayersPanel::LayersPanel(ColorState* colors, QWidget* parent)
         if (entry.fill || !entry.layer) {
             continue;
         }
-        QAction* action =
-            menu->addAction(entry.layerEllipsis ? entry.title + QStringLiteral("…") : entry.title);
-        const QString kind = entry.kind;
-        connect(action, &QAction::triggered, this, [this, kind] {
-            if (view_) {
-                view_->add_adjustment(kind);
-            }
-        });
+        addAdjustmentMenuAction(menu, entry);
     }
     addButton->setMenu(menu);
 

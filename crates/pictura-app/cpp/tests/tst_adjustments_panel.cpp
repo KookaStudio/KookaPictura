@@ -4,10 +4,15 @@
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QDialog>
 #include "api/layers_api.h"
+#include "api/layers_bridge.h"
+#include "api/selection_bridge.h"
 
 #include "adjustment_catalogue.h"
+#include "adjustment_dialog.h"
+#include "commands.h"
 #include "frame.h"
 #include "panels/adjustments_panel.h"
+#include "panels/channels_panel.h"
 #include "panels/layers_panel.h"
 #include "panels/panel_group.h"
 #include "panels/properties_panel.h"
@@ -37,6 +42,17 @@ QColor panelSurfaceColor(QWidget* window, const QWidget* panel)
     return image.pixelColor(qRound(point.x() * dpr), qRound(point.y() * dpr));
 }
 
+QString imageAdjustmentId(const QString& name)
+{
+    return pictura::commandIdForPath({QStringLiteral("Image"), QStringLiteral("Adjustments"), name});
+}
+
+QString layerAdjustmentId(const QString& name)
+{
+    return pictura::commandIdForPath(
+        {QStringLiteral("Layer"), QStringLiteral("New Adjustment Layer"), name});
+}
+
 } // namespace
 
 class AdjustmentsPanelTest : public QObject {
@@ -54,6 +70,10 @@ private slots:
     void patternIconCreatesDefaultFill();
     void noDocumentDisablesGrid();
     void documentEnablesGrid();
+    void selectiveColorRequiresComposite();
+    void selectiveColorRequiresCompositeDisplay();
+    void selectiveColorFollowsExternalMaskSolo();
+    void selectiveColorFollowsDocument();
     void narrowPanelWrapsGrid();
     void tilesAndMenuFollowCatalogue();
     void layersPanelAdjustmentMenuFollowsCatalogue();
@@ -62,6 +82,10 @@ private slots:
 
 private:
     pictura::AdjustmentsPanel* panel() const;
+    pictura::ChannelsPanel* channels() const;
+    pictura::LayersPanel* layers() const;
+    QList<QAction*> selectiveColorActions();
+    void compareSelectiveColorAvailability(bool enabled);
     pictura::PictureView* newDocument();
 
     pictura::test::ScopedStateHome stateHome_;
@@ -87,6 +111,59 @@ void AdjustmentsPanelTest::cleanup()
 pictura::AdjustmentsPanel* AdjustmentsPanelTest::panel() const
 {
     return window_->findChild<pictura::AdjustmentsPanel*>(QStringLiteral("adjustmentsPanel"));
+}
+
+pictura::ChannelsPanel* AdjustmentsPanelTest::channels() const
+{
+    return window_->findChild<pictura::ChannelsPanel*>(QStringLiteral("channelsPanel"));
+}
+
+pictura::LayersPanel* AdjustmentsPanelTest::layers() const
+{
+    return window_->findChild<pictura::LayersPanel*>(QStringLiteral("layersPanel"));
+}
+
+QList<QAction*> AdjustmentsPanelTest::selectiveColorActions()
+{
+    auto* registry = window_->commandRegistry();
+    const QString name = QStringLiteral("Selective Color");
+    const QString layerId = layerAdjustmentId(name);
+    QAction* image = registry->action(imageAdjustmentId(name));
+    QAction* layer = registry->action(layerId);
+
+    QAction* footer = nullptr;
+    auto* add = layers()->findChild<QToolButton*>(QStringLiteral("layersStripFillAdjustment"));
+    for (QAction* action : add->menu()->actions()) {
+        if (action->text() == name + QStringLiteral("…")) {
+            footer = action;
+        }
+    }
+
+    QAction* flyout = nullptr;
+    auto* column = window_->columnForPanel(QStringLiteral("adjustmentsPanel"));
+    if (auto* group = column->groupForPanel(QStringLiteral("adjustmentsPanel"))) {
+        group->setCurrentPanel(QStringLiteral("adjustmentsPanel"));
+        if (auto* menu = group->headerMenuButtonForTest()->menu()) {
+            QMetaObject::invokeMethod(menu, "aboutToShow", Qt::DirectConnection);
+            for (QAction* action : menu->actions()) {
+                if (action->data().toString() == layerId) {
+                    flyout = action;
+                }
+            }
+        }
+    }
+    return {image, layer, footer, flyout};
+}
+
+void AdjustmentsPanelTest::compareSelectiveColorAvailability(bool enabled)
+{
+    for (QAction* action : selectiveColorActions()) {
+        QVERIFY(action);
+        QCOMPARE(action->isEnabled(), enabled);
+    }
+    auto* tile = panel()->buttonByIdForTest(QStringLiteral("selective-color"));
+    QVERIFY(tile);
+    QCOMPARE(tile->isEnabled(), enabled);
 }
 
 pictura::PictureView* AdjustmentsPanelTest::newDocument()
@@ -287,6 +364,132 @@ void AdjustmentsPanelTest::documentEnablesGrid()
     for (int i = 0; i < panel()->buttonCountForTest(); ++i) {
         QVERIFY2(panel()->buttonForTest(i)->isEnabled(), qPrintable(QString::number(i)));
     }
+}
+
+void AdjustmentsPanelTest::selectiveColorRequiresComposite()
+{
+    auto* view = newDocument();
+    QVERIFY(view && channels());
+    QTRY_VERIFY(panel()->buttonByIdForTest(QStringLiteral("selective-color"))->isEnabled());
+    compareSelectiveColorAvailability(true);
+
+    channels()->selectChannelForTest(1);
+    compareSelectiveColorAvailability(false);
+    auto* registry = window_->commandRegistry();
+    QVERIFY(registry->action(imageAdjustmentId(QStringLiteral("Levels")))->isEnabled());
+    QVERIFY(panel()->buttonByIdForTest(QStringLiteral("levels"))->isEnabled());
+    const int history = view->history_count();
+    const int layerCount = pictura::layers_api::rowCount(*view);
+    const QString name = QStringLiteral("Selective Color");
+
+    bool opened = false;
+    QTimer dismiss;
+    dismiss.setSingleShot(true);
+    connect(&dismiss, &QTimer::timeout, this, [&opened] {
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            if (auto* dialog = qobject_cast<pictura::AdjustmentDialog*>(widget);
+                dialog && dialog->isVisible()) {
+                opened = true;
+                dialog->reject();
+            }
+        }
+    });
+    dismiss.start(0);
+    registry->dispatch(imageAdjustmentId(name));
+    dismiss.stop();
+    registry->dispatch(layerAdjustmentId(name));
+    layers()->performPanelMenuAction(QStringLiteral("adjustment:selective-color"));
+    QVERIFY(!opened);
+    QCOMPARE(view->history_count(), history);
+    QCOMPARE(pictura::layers_api::rowCount(*view), layerCount);
+
+    channels()->selectChannelForTest(0);
+    compareSelectiveColorAvailability(true);
+}
+
+void AdjustmentsPanelTest::selectiveColorRequiresCompositeDisplay()
+{
+    auto* view = newDocument();
+    QVERIFY(view && channels());
+    auto* tile = panel()->buttonByIdForTest(QStringLiteral("selective-color"));
+    QTRY_VERIFY(tile->isEnabled());
+
+    channels()->toggleChannelForTest(1);
+    QCOMPARE(channels()->currentChannelForTest(), 0);
+    compareSelectiveColorAvailability(false);
+    channels()->toggleChannelForTest(0);
+    compareSelectiveColorAvailability(true);
+
+    QCOMPARE(pictura::channels_new_alpha(*view), 0);
+    channels()->refresh();
+    const int alphaRow = channels()->channelCountForTest() - 1;
+    channels()->toggleChannelForTest(alphaRow);
+    compareSelectiveColorAvailability(false);
+    channels()->toggleChannelForTest(alphaRow);
+    compareSelectiveColorAvailability(true);
+
+    QVERIFY(pictura::layer_mask_add(*view, QStringLiteral("reveal-all")));
+    channels()->refresh();
+    QVERIFY(channels()->maskRowIndexForTest() >= 0);
+    channels()->selectChannelForTest(channels()->maskRowIndexForTest());
+    compareSelectiveColorAvailability(false);
+    channels()->selectChannelForTest(0);
+    compareSelectiveColorAvailability(true);
+
+    QVERIFY(pictura::quick_mask_set(*view, true));
+    QTRY_VERIFY(!tile->isEnabled());
+    compareSelectiveColorAvailability(false);
+    QVERIFY(pictura::quick_mask_set(*view, false));
+    QTRY_VERIFY(tile->isEnabled());
+    compareSelectiveColorAvailability(true);
+}
+
+void AdjustmentsPanelTest::selectiveColorFollowsExternalMaskSolo()
+{
+    auto* view = newDocument();
+    QVERIFY(view && channels() && layers());
+    QVERIFY(pictura::layer_mask_add(*view, QStringLiteral("reveal-all")));
+    const QString path = pictura::layer_selection_anchor(*view);
+    QVERIFY(!path.isEmpty());
+    window_->show();
+    auto* tile = panel()->buttonByIdForTest(QStringLiteral("selective-color"));
+    QTRY_VERIFY(tile->isEnabled());
+    QTRY_VERIFY(layers()->rowHasMaskForTest(path));
+    QCOMPARE(channels()->currentChannelForTest(), 0);
+
+    QVERIFY(layers()->altClickMaskThumbnailForTest(path));
+    QTRY_VERIFY(!tile->isEnabled());
+    compareSelectiveColorAvailability(false);
+    QVERIFY(layers()->altClickMaskThumbnailForTest(path));
+    QTRY_VERIFY(tile->isEnabled());
+    compareSelectiveColorAvailability(true);
+
+    QTest::keyClick(window_.get(), Qt::Key_Backslash, Qt::ControlModifier);
+    QTRY_VERIFY(!tile->isEnabled());
+    compareSelectiveColorAvailability(false);
+    QTest::keyClick(window_.get(), Qt::Key_Backslash, Qt::ControlModifier);
+    QTRY_VERIFY(tile->isEnabled());
+    compareSelectiveColorAvailability(true);
+    QCOMPARE(channels()->currentChannelForTest(), 0);
+}
+
+void AdjustmentsPanelTest::selectiveColorFollowsDocument()
+{
+    auto* first = newDocument();
+    QVERIFY(first);
+    const int firstIndex = window_->activeDocumentIndex();
+    auto* second = newDocument();
+    QVERIFY(second && second != first);
+    auto* tile = panel()->buttonByIdForTest(QStringLiteral("selective-color"));
+    QTRY_VERIFY(tile->isEnabled());
+
+    channels()->selectChannelForTest(1);
+    compareSelectiveColorAvailability(false);
+    window_->setActiveDocumentIndex(firstIndex);
+    QCOMPARE(window_->activeView(), first);
+    QTRY_VERIFY(tile->isEnabled());
+    QCOMPARE(channels()->currentChannelForTest(), 0);
+    compareSelectiveColorAvailability(true);
 }
 
 void AdjustmentsPanelTest::narrowPanelWrapsGrid()

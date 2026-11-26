@@ -791,7 +791,8 @@ bool LayersPanel::performPanelMenuAction(const QString& actionId)
     } else if (actionId == QLatin1String("panelOptions")) {
         openPanelOptions();
     } else if (actionId.startsWith(QLatin1String("adjustment:"))) {
-        if (view_ && view_->add_adjustment(actionId.mid(QLatin1String("adjustment:").size()))) {
+        const QString kind = actionId.mid(QLatin1String("adjustment:").size());
+        if (canCreateAdjustment(kind) && view_->add_adjustment(kind)) {
             refresh();
         }
     } else {

@@ -27,4 +27,9 @@ struct AdjustmentKind {
 // the Adjustments panel all build from it.
 const QVector<AdjustmentKind>& adjustmentCatalogue();
 
+inline bool adjustmentRequiresCompositeChannel(const QString& kind)
+{
+    return kind == QLatin1String("selective-color");
+}
+
 } // namespace pictura
