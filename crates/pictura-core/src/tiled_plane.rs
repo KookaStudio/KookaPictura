@@ -9,6 +9,7 @@ use std::ops::Range;
 use std::sync::Arc;
 
 mod body;
+mod pad;
 mod rows;
 
 pub use crate::memory::eviction::Residency;
@@ -883,5 +884,7 @@ fn fork_tile<T: TileSample>(tile: &mut Tile<T>, n: usize) {
     }
 }
 
+#[cfg(test)]
+mod pad_tests;
 #[cfg(test)]
 mod tests;

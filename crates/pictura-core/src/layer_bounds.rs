@@ -232,8 +232,9 @@ pub fn cropped_plane(
 }
 
 /// `data` (`old_w × old_h`) placed at `(x0, y0)` in an otherwise empty
-/// `new_w × new_h` tiled plane, copied one strip of tiles at a time; the empty
-/// area holds no tile.
+/// `new_w × new_h` tiled plane; the empty area holds no tile. A tiled `data`
+/// is moved tile by tile ([`crate::Plane::padded`], #1609); a flat one is
+/// copied one strip of tiles at a time.
 pub fn padded_plane(
     data: &crate::Plane<u8>,
     old_w: usize,
@@ -243,6 +244,11 @@ pub fn padded_plane(
     x0: usize,
     y0: usize,
 ) -> crate::Plane<u8> {
+    if data.geometry() == Some((old_w, old_h, 1)) {
+        if let Some(out) = data.padded(new_w, new_h, x0, y0) {
+            return out;
+        }
+    }
     let mut out = crate::Plane::filled(new_w, new_h, 1, 0u8);
     let mut strip = vec![0u8; old_w * TILE.min(old_h)];
     let mut y = 0;
@@ -378,6 +384,38 @@ mod tests {
             .clone();
         assert_eq!(red.len(), 16);
         assert_eq!(red.slice(5..6), Some(Samples::U16(vec![7u16].into())));
+    }
+
+    /// A brush growing a tiled layer right and down keeps the layer's full
+    /// tiles in place: the grown planes hold the same allocations (#1609).
+    #[test]
+    fn a_grow_right_and_down_keeps_the_tiles() {
+        use crate::TILE;
+        let side = 2 * TILE;
+        let mut layer = layer_at(rect(10, 20, 10 + side as i32, 20 + side as i32), 0, 0);
+        for channel in layer.channels_mut() {
+            let data: Vec<u8> = (0..side * side).map(|i| (i % 253) as u8).collect();
+            channel.data = Plane::from(data);
+            assert!(channel.data.tile(side, side));
+        }
+        let held: Vec<_> = layer
+            .channels()
+            .iter()
+            .map(|c| c.data.allocations())
+            .collect();
+        let grown = rect(10, 20, 10 + 3 * side as i32, 20 + 2 * side as i32);
+        assert!(grow_layer_to(&mut layer, grown, "a test").unwrap());
+        for (channel, held) in layer.channels().iter().zip(held) {
+            let mut now = channel.data.allocations();
+            now.sort_unstable();
+            let mut held = held;
+            held.sort_unstable();
+            assert_eq!(now, held, "the grow shared every tile and added none");
+            let mut row = vec![0u8; 2 * side];
+            assert!(channel.data.read_row_into(3, 2 * side, &mut row));
+            assert_eq!(row[5], ((3 * side + 5) % 253) as u8, "old pixel kept");
+            assert_eq!(row[side + 5], 0, "new area is transparent");
+        }
     }
 
     #[test]
