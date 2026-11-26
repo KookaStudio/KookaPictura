@@ -321,7 +321,7 @@ python3 scripts/report_tests.py --self-check
 cargo nextest run --workspace         # writes target/nextest/default/junit.xml
 
 # One oracle suite explicitly:
-cargo test -p pictura-render --test document_oracle
+cargo test -p pictura-render --test document document_oracle::
 
 # The C++ self-test, offscreen:
 ./build/pictura --headless --self-test

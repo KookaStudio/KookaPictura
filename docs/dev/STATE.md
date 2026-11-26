@@ -186,8 +186,8 @@ Snapshot for resuming after a context break. Update after each milestone.
   (A100 … A1): every CFA file reads with matching greens, the A7R II's 12-bit
   compressed and 14-bit uncompressed shots of one scene agree within 0.5 %,
   table cameras decode at 3900–5900 K. Open dialog filters list `*.ARW`.
-  Tests: `tests/raw_arw.rs` (synthetic
-  `tests/raw/arw_builder.rs`), Sony rows of `tests/raw_camera_matrices.rs`,
+  Tests: `tests/camera_raw/raw_arw.rs` (synthetic
+  `tests/camera_raw/raw/arw_builder.rs`), Sony rows of `tests/camera_raw/raw_camera_matrices.rs`,
   `arw_decode` unit tests, `raw_open/tests.rs`, `tst_raw_open`.
 - **Vendor raw containers — #1469 Nikon NEF implemented** (OpenSpec change
   `vendor-raw-nef`, archived; `codec/vendor-raw-containers`,
@@ -213,8 +213,8 @@ Snapshot for resuming after a context break. Update after each milestone.
   Coolpix P7100 → PowerShot S90 (ICX685), `PROXIES` in the script. Checked on 20 real NEFs (D70, D100, D200, D700, D800E, D850 ×7
   variants, D3300, D5100 ×2, D7000 ×2, D7100, Z f, Coolpix P7100 NRW): all read, green phases agree, the
   six D850 variants agree on phase means, as-shot 4600–5950 K (D5100 tint
-  ≈ −66). Tests: `tests/raw_nef.rs` (synthetic `tests/raw/nef_builder.rs`
-  with a closed-loop Huffman encoder), `tests/raw_camera_matrices.rs`,
+  ≈ −66). Tests: `tests/camera_raw/raw_nef.rs` (synthetic `tests/camera_raw/raw/nef_builder.rs`
+  with a closed-loop Huffman encoder), `tests/camera_raw/raw_camera_matrices.rs`,
   `tst_raw_open`. Series order next: ARW → ORF/RW2 → RAF + X-Trans → CR3.
 - **Interface localization — #642 implemented** (OpenSpec change
   `ui-localization`, archived). Pictura bundles German and Finnish catalogs.
@@ -277,7 +277,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   mosaic stores normalized samples (not raw values), no EXIF copy, no lossy
   DNG. Follow-ups: #1484 (Export Settings To XMP, in-DNG settings, Update DNG
   Previews), Save Options formats with #633. Tests: `dng/write/tests.rs`,
-  `tests/dng_linear.rs`, `tests/dng_writer_oracle.rs` (LibRaw + ExifTool),
+  `tests/camera_raw/dng_linear.rs`, `tests/camera_raw/dng_writer_oracle.rs` (LibRaw + ExifTool),
   `raw_open/save_dng_tests.rs`, `tst_raw_open`.
 - **Raw settings stores — #401 implemented** (OpenSpec change
   `raw-settings-storage`, archived; new capabilities `codec/raw-settings-xmp`
@@ -296,7 +296,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   is derived from the values (the dialog never updates `WBal`). DNGs are never
   written. Follow-ups: in-DNG settings / Export Settings To XMP (#1484), Ignore
   Sidecar and the ACR preferences dialog (#633). Tests:
-  `tests/raw_settings_xmp.rs`, `raw_open/{tests,store_tests}.rs`,
+  `tests/metadata/raw_settings_xmp.rs`, `raw_open/{tests,store_tests}.rs`,
   `tst_raw_open`.
 - **Per-camera colour matrices — #1465 implemented** (OpenSpec change
   `vendor-camera-matrices`, archived; new capability `codec/camera-matrices`,
@@ -312,8 +312,8 @@ Snapshot for resuming after a context break. Update after each milestone.
   decision, no fallback). `cr2::as_shot_neutral` reads the maker note's
   `0x4001` as-shot RGGB multipliers by array length / version (observed on 16
   real CR2s, agreeing with exiftool). New vendor families add body names to
-  the script's `BODIES` and rerun it. Tests: `tests/raw_camera_matrices.rs`,
-  the as-shot rows of `tests/raw_cr2.rs`.
+  the script's `BODIES` and rerun it. Tests: `tests/camera_raw/raw_camera_matrices.rs`,
+  the as-shot rows of `tests/camera_raw/raw_cr2.rs`.
 - **File ▸ Browse… and File ▸ Scripts ▸ Statistics… — #504 implemented** (OpenSpec
   change `file-browse-and-statistics`; capabilities `interop/file-browse`,
   `interop/image-stack-statistics`, `ui/statistics-dialog`).
@@ -363,7 +363,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   untitled 16-bit RGB document, one "Background" layer, one "Open" state;
   Cancel opens nothing. Ponytails: locus caps at 15000 K, prefix sniff, `>> 8`
   display plane, no Workflow Options. Follow-ups: #1465 (vendor matrices),
-  #1466 (open as smart object). Tests: `tests/raw_develop.rs`,
+  #1466 (open as smart object). Tests: `tests/camera_raw/raw_develop.rs`,
   `rgb16_tests`, `raw_open/tests.rs`, `tst_raw_open`.
 - **Vendor raw containers — #399 part 1, Canon CR2** (OpenSpec change
   `vendor-raw-cr2`, archived; capability `codec/vendor-raw-containers`).
@@ -380,7 +380,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   precision white, one black per phase. Checked on real EOS 5DS and 450D
   files. Series order:
   NEF → ARW → ORF/RW2 → RAF + X-Trans demosaic → CR3. Tests:
-  `tests/raw_cr2.rs` (synthetic `tests/raw/cr2_builder.rs`); real files opt-in
+  `tests/camera_raw/raw_cr2.rs` (synthetic `tests/camera_raw/raw/cr2_builder.rs`); real files opt-in
   via `PICTURA_RAW_CORPUS`.
 - **Camera colour — #398 implemented** (OpenSpec change `camera-colour`,
   archived; capabilities `codec/camera-colour`, `color/colour-temperature`).
@@ -398,7 +398,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   1000–15000 K, highlights clip neutral, per-channel gamut clip, signatures and
   `AsShotWhiteXY` not read, `BaselineExposure` left to #400. Pictura Raw's
   relative Temperature/Tint sliders unchanged until #400. Tests:
-  `tests/dng_camera_colour.rs`, `chroma` units; Leica M9 opt-in (6715 K, 7458 K).
+  `tests/camera_raw/dng_camera_colour.rs`, `chroma` units; Leica M9 opt-in (6715 K, 7458 K).
 - **Raw demosaic — #397 implemented** (OpenSpec change `raw-demosaic`,
   archived; capability `codec/raw-demosaic`). Second stage of raw open (#86).
   `pictura_codec::demosaic(image, method, budget)`
@@ -410,7 +410,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   2×2 Bayer in 32-row mirrored bands, falling back to bilinear otherwise or
   under 8 × 8. Each photosite keeps its own sample. Ponytails: Lab from camera
   RGB as if sRGB, green clamp, no median pass, dense output. Tests:
-  `tests/dng_demosaic.rs`; Leica corpus opt-in via `PICTURA_DNG_CORPUS`.
+  `tests/camera_raw/dng_demosaic.rs`; Leica corpus opt-in via `PICTURA_DNG_CORPUS`.
 - **DNG sensor reader — #396 implemented** (OpenSpec change `dng-raw-reader`,
   archived; capability `codec/dng-raw-reader`). First stage of raw open (#86).
   `pictura_codec::read_dng` (`crates/pictura-codec/src/dng/`) reads classic
@@ -423,7 +423,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   Deflate, PackBits, lossy JPEG, linear DNG, float samples and non-RGB CFAs are
   refused (`Unsupported`). Declared sizes are charged to `ImageBudget`, and
   every chunk must hold its samples before the plane is allocated. Tests:
-  `tests/dng_reader.rs` (synthetic DNGs from `tests/dng/builder.rs` and a test
+  `tests/camera_raw/dng_reader.rs` (synthetic DNGs from `tests/camera_raw/dng/builder.rs` and a test
   lossless JPEG encoder); the user's Leica M9 samples check opt-in through
   `PICTURA_DNG_CORPUS`. Nothing in the app opens a DNG yet (#400).
 - **Vector-mask path authoring — #261 implemented** (OpenSpec change
@@ -1325,8 +1325,8 @@ Snapshot for resuming after a context break. Update after each milestone.
   buffer. All first/median checks pass the 1000 ms ceiling; one later sample
   reaches 1022 ms. Peak process RSS reaches about 1.46 GiB,
   including retained allocations and reference/output buffers. Unit render
-  timings include per-pixel mask-counter contention; use the ignored integration
-  test `effect_cold_latency` for production acceptance. Scalar field, Gaussian
+  timings include per-pixel mask-counter contention; use the ignored profiling
+  example `effect_cold_latency` for production acceptance. Scalar field, Gaussian
   tile-edge, mask, replay, and full-composite tests preserve exact output.
   Review corrections publish resolved feather planes without waiting during
   nested Rayon work and release scalar sampling's thread-local borrow before
@@ -2741,7 +2741,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   is one raster; a raster fallback no longer bakes in the opacity its `<g>`
   re-applies (v1 applied it twice); a shape scales its fill by fill opacity and
   rasterizes with effects or a pixel mask. Text stays a raster (decision).
-  Oracle: `pictura-render/tests/svg_oracle.rs` renders a vector document with
+  Oracle: `pictura-render/tests/oracle/svg_oracle.rs` renders a vector document with
   ImageMagick's `RSVG:` coder (librsvg) and compares with the CPU composite on
   white (2% / mean 1.5 edge tolerance; self-skips without the coder). Docs:
   `export-formats.md` *SVG (CC)*.
@@ -3760,7 +3760,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   channel is bit-unpacked like the composite. Multichannel/Duotone and all 16/32-bit
   depth stay `PsdError::Unsupported`. Four new fixtures
   (`indexed/cmyk/lab/bitmap.psd`) are compared to psd-tools/lcms2 by
-  `tests/color_mode_oracle.rs`; the app shows a status-bar "Converted from …"
+  `tests/psd/color_mode_oracle.rs`; the app shows a status-bar "Converted from …"
   notice and the C++ self-test `color_mode_open` (code 297) covers it. No new
   dependency. A depth-1 layer channel with ZIP compression is `Unsupported` (as
   for the composite); the Lab tolerance ceiling is 1 LSB against the exact
@@ -5211,7 +5211,7 @@ Snapshot for resuming after a context break. Update after each milestone.
   archived): a committed `knockout.psd` (red Background, green layer, half-fill
   blue with `knko = Deep`) is diffed against psd-tools' own compositor (which
   documents its deep knockout as "Verified against Photoshop") by
-  `crates/pictura-render/tests/knockout_oracle.rs`, tolerance 1 (psd-tools
+  `crates/pictura-render/tests/oracle/knockout_oracle.rs`, tolerance 1 (psd-tools
   floors 8-bit, the CPU rounds: 126 vs 127); the reference is regenerated by
   `scripts/psd_knockout_reference.py`. Authoring the fixture surfaced a real
   nuance now marked: psd-tools (and Photoshop) only treat a channel-less

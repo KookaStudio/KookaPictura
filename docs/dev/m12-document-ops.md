@@ -7,7 +7,7 @@ landed in M10 (`pictura-ops`). New `pictura-render::document_ops` module. Specs:
 `image-rotation-and-flip.md` (`IMG-003`).
 
 This change landed the module split, the public contract, the document-tree
-math, and the structural oracle (`crates/pictura-render/tests/document_oracle.rs`).
+math, and the structural oracle (`crates/pictura-render/tests/document/document_oracle.rs`).
 
 ## Scope
 
