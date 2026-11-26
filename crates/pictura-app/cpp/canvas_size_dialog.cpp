@@ -231,7 +231,7 @@ int CanvasSizeDialog::resultSize(const QDoubleSpinBox* field, int unit, int base
 {
     const qint64 pixels = toPixels(field->value(), unit, base);
     const qint64 size = relative_->isChecked() ? base + pixels : pixels;
-    return static_cast<int>(qBound<qint64>(1, size, std::numeric_limits<int>::max()));
+    return static_cast<int>(qBound(qint64{1}, size, qint64{std::numeric_limits<int>::max()}));
 }
 
 int CanvasSizeDialog::resultWidth() const
