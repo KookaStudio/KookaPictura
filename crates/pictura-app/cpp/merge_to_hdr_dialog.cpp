@@ -51,13 +51,13 @@ QString tr(const char* text)
     return QCoreApplication::translate("MergeToHdrDialog", text);
 }
 
-rust::Slice<const double> asSlice(const std::vector<double>& numbers)
+::rust::Slice<const double> asSlice(const std::vector<double>& numbers)
 {
     return {numbers.data(), numbers.size()};
 }
 
 std::optional<std::vector<double>> exposureValues(QWidget* parent, const QStringList& paths,
-                                                 const rust::Vec<double>& source)
+                                                 const ::rust::Vec<double>& source)
 {
     std::vector<double> values(source.begin(), source.end());
     if (hdr_bracket_base(asSlice(values)) >= 0) {
@@ -129,7 +129,7 @@ private:
     const HdrBracket& bracket_;
     const QStringList& paths_;
     const std::vector<double>& ev100_;
-    std::optional<rust::Box<HdrResult>> merged_;
+    std::optional<::rust::Box<HdrResult>> merged_;
     std::vector<double> response_;
     QLabel* image_;
     QLabel* error_;
