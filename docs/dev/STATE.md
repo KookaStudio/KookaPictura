@@ -4,6 +4,17 @@ Snapshot for resuming after a context break. Update after each milestone.
 
 ## Where things are
 
+- **Layer grow cost, #1609** (OpenSpec change `tile-aware-layer-grow`,
+  capability `document/layer-grow-cost`). Long strokes on a 21000² document
+  spent 93 % of their time growing the layer: `padded_plane` copied every
+  pixel of the layer's four planes and the stroke's scratch and applied masks
+  on each of 32–121 grows per stroke. It now goes through `Plane::padded`
+  (`tiled_plane/pad.rs`), which skips empty tiles and shares a tile that lands
+  on a same-sized tile of the new grid, so a right or down grow copies only the
+  old edge tiles. With `long_stroke_phases_profile`
+  (tests_profiles/long_stroke.rs), 15 strokes went from 60 s to 3.6 s; dabs
+  (~185 ms per stroke) now dominate. A left or up grow by a non-tile offset
+  still copies the painted tiles.
 - **Rendering indicator, #1608** (OpenSpec change `canvas-rendering-indicator`,
   capability `ui/canvas-rendering-indicator`). Measured first: a History jump
   back 12 states on a 21000² document is 9 ms on the GUI thread; the wait is

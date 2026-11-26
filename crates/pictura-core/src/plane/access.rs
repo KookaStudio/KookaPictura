@@ -274,6 +274,20 @@ impl<T: TileSample> Plane<T> {
         }
     }
 
+    /// A tiled plane's channels placed at `(x0, y0)` in an otherwise zero
+    /// `new_w × new_h` tiled plane, copying only the tiles that hold
+    /// something and sharing those a whole-tile offset lands on a tile of the
+    /// same size (#1609). `None` while flat.
+    pub fn padded(&self, new_w: usize, new_h: usize, x0: usize, y0: usize) -> Option<Self> {
+        let t = self.tiled()?;
+        if x0 + t.width > new_w || y0 + t.height > new_h {
+            return None;
+        }
+        Some(Plane::with_store(Store::Tiled(
+            t.padded(new_w, new_h, x0, y0),
+        )))
+    }
+
     /// Run `f` on every tile meeting the rectangle, in parallel, then settle.
     pub fn for_each_tile_mut(
         &mut self,

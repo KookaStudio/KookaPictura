@@ -9,6 +9,7 @@ mod art_history;
 mod bucket;
 mod cold;
 mod damage;
+mod long_stroke;
 mod marquee;
 mod memory;
 mod open;
