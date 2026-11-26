@@ -10,6 +10,8 @@
 #include "curves_dialog.h"
 #include "gradient_map_dialog.h"
 #include "panels/percent_field.h"
+#include "panels/histogram_panel.h"
+#include "api/layers_bridge.h"
 #include "levels_dialog.h"
 #include "panels/curve_widget.h"
 #include "commands.h"
@@ -39,8 +41,11 @@
 #include <QtWidgets/QSpinBox>
 #include <QtWidgets/QStatusBar>
 #include <QtWidgets/QToolButton>
+#include <QtWidgets/QVBoxLayout>
 
 #include <algorithm>
+#include <initializer_list>
+#include <utility>
 
 #include "qt_test_support.h"
 
@@ -153,6 +158,10 @@ private slots:
     void hdrToningPresetsPopulateControls();
     void hdrToningRefusedApplyDoesNotAccept();
     void directCommandsRespectTheSelection();
+    void thresholdHistogramTracksOpeningSelection();
+    void thresholdHistogramUsesRasterMask();
+    void thresholdHistogramUsesQuickMask();
+    void thresholdHistogramShowsEmptyInput();
     void genericDialogRangesMatchLayout();
     void handLaidDialogRangesMatchLayout();
 
@@ -1225,6 +1234,112 @@ void ImageAdjustmentsTest::handLaidDialogRangesMatchLayout()
                   {QStringLiteral("blue"), QStringLiteral("0.blue")},
                   {QStringLiteral("constant"), QStringLiteral("0.constant")}});
     verifyRanges(view_, "levels", same({"gamma", "outputBlack", "outputWhite"}));
+}
+
+namespace {
+
+pictura::HistogramView* thresholdHistogram(QWidget& dialog)
+{
+    return dynamic_cast<pictura::HistogramView*>(
+        dialog.findChild<QWidget*>(QStringLiteral("thresholdHistogram")));
+}
+
+QSlider* thresholdSlider(QWidget& dialog)
+{
+    return dialog.findChild<QSlider*>(QStringLiteral("adjustmentSlider.level"));
+}
+
+void compareThresholdBins(const pictura::HistogramView& histogram,
+                          std::initializer_list<std::pair<int, quint32>> expected)
+{
+    for (int bin = 0; bin < 256; ++bin) {
+        const auto it = std::find_if(expected.begin(), expected.end(),
+                                     [bin](const auto& entry) { return entry.first == bin; });
+        QCOMPARE(histogram.binForTest(bin), it != expected.end() ? it->second : quint32(0));
+    }
+}
+
+} // namespace
+
+void ImageAdjustmentsTest::thresholdHistogramTracksOpeningSelection()
+{
+    QVERIFY(openRamp(30, 220));
+    QVERIFY(view_->select_rect(2, 0, 1, 20, QStringLiteral("new"), 0.0));
+    const auto dialog = pictura::makeAdjustmentDialog(QStringLiteral("threshold"), view_,
+                                                       block("threshold"), QRect(0, 0, 20, 20));
+    auto* histogram = thresholdHistogram(*dialog);
+    auto* slider = thresholdSlider(*dialog);
+    QVERIFY(histogram && slider);
+    auto* layout = qobject_cast<QVBoxLayout*>(slider->parentWidget()->layout());
+    QVERIFY(layout && layout->indexOf(histogram) > 0);
+    QVERIFY(layout->itemAt(0)->layout());
+    QVERIFY(layout->indexOf(histogram) < layout->indexOf(slider));
+    compareThresholdBins(*histogram, {{50, 20u * 255}});
+    waitForPreview(*view_);
+    QTRY_COMPARE(view_->composite_argb(2, 0), qRgb(0, 0, 0));
+    slider->setValue(40);
+    waitForPreview(*view_);
+    QTRY_COMPARE(view_->composite_argb(2, 0), qRgb(255, 255, 255));
+    compareThresholdBins(*histogram, {{50, 20u * 255}});
+    dialog->reject();
+}
+
+void ImageAdjustmentsTest::thresholdHistogramUsesRasterMask()
+{
+    QVERIFY(openImage(QColor(100, 100, 100)));
+    const QString layer = QStringLiteral("0");
+    QVERIFY(view_->select_rect(0, 0, 5, 20, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::layer_mask_add_path(*view_, layer, QStringLiteral("reveal-selection")));
+    view_->deselect();
+    QVERIFY(pictura::mask_edit_target_set(*view_, layer));
+    const auto dialog = pictura::makeAdjustmentDialog(QStringLiteral("threshold"), view_,
+                                                       block("threshold"), QRect(0, 0, 20, 20));
+    auto* histogram = thresholdHistogram(*dialog);
+    auto* slider = thresholdSlider(*dialog);
+    QVERIFY(histogram && slider);
+    compareThresholdBins(*histogram, {{0, 300u * 255}, {255, 100u * 255}});
+    slider->setValue(255);
+    waitForPreview(*view_);
+    compareThresholdBins(*histogram, {{0, 300u * 255}, {255, 100u * 255}});
+    dialog->reject();
+}
+
+void ImageAdjustmentsTest::thresholdHistogramUsesQuickMask()
+{
+    QVERIFY(openImage(QColor(100, 100, 100)));
+    QVERIFY(view_->select_rect(0, 0, 5, 20, QStringLiteral("new"), 0.0));
+    QVERIFY(pictura::quick_mask_set(*view_, true));
+    for (const bool selected : {false, true}) {
+        QVERIFY(pictura::quick_mask_set_options(*view_, selected, 0xffff0000u, 50));
+        const auto dialog = pictura::makeAdjustmentDialog(QStringLiteral("threshold"), view_,
+                                                           block("threshold"), QRect(0, 0, 20, 20));
+        auto* histogram = thresholdHistogram(*dialog);
+        auto* slider = thresholdSlider(*dialog);
+        QVERIFY(histogram && slider);
+        const quint32 light = (selected ? 300u : 100u) * 255;
+        const quint32 dark = 400u * 255 - light;
+        compareThresholdBins(*histogram, {{0, dark}, {255, light}});
+        slider->setValue(255);
+        waitForPreview(*view_);
+        compareThresholdBins(*histogram, {{0, dark}, {255, light}});
+        dialog->reject();
+    }
+    QVERIFY(pictura::quick_mask_set(*view_, false));
+}
+
+void ImageAdjustmentsTest::thresholdHistogramShowsEmptyInput()
+{
+    QVERIFY(window_->newDocument(QStringLiteral("Transparent"), 16, 16, QStringLiteral("rgb"),
+                                 8, QStringLiteral("transparent")));
+    view_ = window_->activeView();
+    QVERIFY(view_);
+    const auto dialog = pictura::makeAdjustmentDialog(QStringLiteral("threshold"), view_,
+                                                       block("threshold"), QRect(0, 0, 16, 16));
+    auto* histogram = thresholdHistogram(*dialog);
+    auto* slider = thresholdSlider(*dialog);
+    QVERIFY(histogram && slider && slider->isEnabled());
+    compareThresholdBins(*histogram, {});
+    dialog->reject();
 }
 
 PICTURA_QT_TEST_MAIN(ImageAdjustmentsTest)

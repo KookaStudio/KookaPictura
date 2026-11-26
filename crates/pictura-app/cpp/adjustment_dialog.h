@@ -36,7 +36,7 @@ class ToolController;
 // and Curves subclass it with CS6's hand-laid-out pages (ported from
 // photorust's BrightnessContrastDialog / LevelsDialog / CurvesDialog) over the
 // same block, preview, and apply.
-// ponytail: the generic pages have no Auto / eyedropper buttons, histograms, or
+// ponytail: the generic pages have no Auto / eyedropper buttons or
 // Load / Save; the preview covers the visible canvas section.
 class AdjustmentDialog : public QDialog {
     Q_OBJECT

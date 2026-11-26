@@ -9,6 +9,7 @@
 #include "panels/notes_panel.h"
 #include "panels/paragraph_panel.h"
 #include "panels/paths_panel.h"
+#include "panels/properties_panel.h"
 #include "panels/panel_column.h"
 #include "menu_registrar.h"
 #include "api/layers_bridge.h"
@@ -96,6 +97,10 @@ void PicturaMainWindow::buildTools(int toolsColumns, bool useShiftKeyForToolSwit
     // picture view without a `changed` emission, so refresh the overlay directly.
     connect(tools_, &ToolController::selectionCommitted, this,
             &PicturaMainWindow::refreshSelectionOverlay);
+    connect(tools_, &ToolController::selectionCommitted, panels_->propertiesPanel(),
+            &PropertiesPanel::scheduleThresholdSelectionRefresh);
+    connect(tools_, &ToolController::selectionMovePreviewed, panels_->propertiesPanel(),
+            &PropertiesPanel::scheduleThresholdSelectionRefresh);
     // A locked pixel edit is refused silently at the bridge; report it so the
     // user learns why nothing was painted.
     connect(tools_, &ToolController::pixelEditRefused, this, [this](const QString& message) {

@@ -84,6 +84,9 @@ AdjustmentDialog::AdjustmentDialog(PictureView* view, const QByteArray& block,
     controls_->setCurveSource(
         [this](int channel) { return QString(image_adjustment_curve(slice(block_), channel)); });
     controls_->setPage(image_adjustment_page(slice(block_), cmyk_));
+    if (view_) {
+        controls_->refreshThresholdHistogram(*view_);
+    }
     title_ = controls_->title();
     setWindowTitle(title_);
     addPresetRow(left);
