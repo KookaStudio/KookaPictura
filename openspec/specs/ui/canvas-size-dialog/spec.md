@@ -1,7 +1,8 @@
 # ui/canvas-size-dialog Specification
 
 ## Purpose
-TBD - created by archiving change canvas-size-units-and-fill. Update Purpose after archive.
+Define how Canvas Size converts dimensions to pixels and when it offers an
+extension color for newly exposed canvas.
 
 ## Requirements
 

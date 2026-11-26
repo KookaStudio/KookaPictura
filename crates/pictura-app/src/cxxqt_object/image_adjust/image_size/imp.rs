@@ -27,11 +27,17 @@ pub(super) fn document_ppi_per_cm(view: &PictureView) -> bool {
 }
 
 fn has_canvas_background(doc: &pictura_core::Document) -> bool {
-    doc.layers.iter().any(|layer| layer.background && !layer.is_group())
+    doc.layers
+        .iter()
+        .any(|layer| layer.background && !layer.is_group())
 }
 
 pub(super) fn canvas_size_has_background(view: &PictureView) -> bool {
-    view.rust().session.doc.as_ref().is_some_and(has_canvas_background)
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .is_some_and(has_canvas_background)
 }
 
 /// Whether a resample of the document to `width` × `height` passes the Image
@@ -224,13 +230,18 @@ pub(super) fn preview_image(view: &PictureView, max_side: i32) -> cxx_qt_lib::QI
 #[cfg(test)]
 mod tests {
     use super::has_canvas_background;
-    use pictura_core::{BitDepth, ColorMode, Document, Layer, LayerContent, LayerParts, LayerStack};
+    use pictura_core::{
+        BitDepth, ColorMode, Document, Layer, LayerContent, LayerParts, LayerStack,
+    };
 
     #[test]
     fn canvas_background_predicate_uses_flag_for_non_pixel_layers() {
         let mut doc = Document::new(2, 2, ColorMode::Rgb, BitDepth::Eight);
         let text = Layer::from_parts(
-            LayerParts { background: true, ..Default::default() },
+            LayerParts {
+                background: true,
+                ..Default::default()
+            },
             LayerContent::Text(None),
         );
         doc.layers = LayerStack::from_layers(vec![text]);
@@ -238,7 +249,10 @@ mod tests {
         doc.layers[0].background = false;
         assert!(!has_canvas_background(&doc));
         let group = Layer::from_parts(
-            LayerParts { background: true, ..Default::default() },
+            LayerParts {
+                background: true,
+                ..Default::default()
+            },
             LayerContent::Group(LayerStack::default()),
         );
         doc.layers = LayerStack::from_layers(vec![group]);
