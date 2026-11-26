@@ -11,7 +11,7 @@ The system SHALL provide a unified end-of-run test report spanning every test
 layer: Rust unit, integration, and oracle tests, the C++
 application self-test, and the C++ Qt Test executables. `scripts/test-report.sh`
 SHALL run the workspace suite under `cargo nextest run --workspace --no-fail-fast`,
-run the self-test both with and without a document fixture, run
+run the self-test once with the `two_layers.psd` document fixture, run
 the Qt Test layer through `ctest --test-dir build -R '^tst_' --output-on-failure -j
 <level>` (CTest registers each executable under
 `build/crates/pictura-app/cpp/tests/` and passes
@@ -386,29 +386,28 @@ be counted as passing, skipped, or absent.
 
 ### Requirement: The test layers run concurrently
 
-The two application self-test invocations SHALL run concurrently with each
-other and SHALL retain separate captures. When
-`PICTURA_QT_SELFTEST_OVERLAP=1`, they SHALL also run while the remaining Qt Test
+The application SHALL run one combined self-test invocation and retain its
+capture. When `PICTURA_QT_SELFTEST_OVERLAP=1`, it SHALL also run while the remaining Qt Test
 targets build after `pictura` has linked. The overlap flag SHALL default to
 disabled, and CI and local adapters SHALL NOT enable it until #1570 records a
 net wall-time improvement on four vCPUs without new flakes or CPU-contention
-regressions. CTest SHALL wait for the full Qt Test build and both self-test runs
+regressions. CTest SHALL wait for the full Qt Test build and the self-test run
 to finish. A failure in any layer SHALL still fail the report.
 
 #### Scenario: the self-test layer overlaps the Qt Test layer [tr_layers_concurrent]
 
 - **WHEN** the shared Qt executor runs with a built application and built Qt Test executables
-- **THEN** both self-test invocations run concurrently with each other, each keeps its own capture, and a failure in either fails the report
+- **THEN** one combined self-test invocation retains its capture, and a failure fails the report
 
 #### Scenario: build-tail overlap is opt-in [qe_overlap_opt_in]
 
 - **WHEN** `PICTURA_QT_SELFTEST_OVERLAP=1` and the Qt Test build tail is still running after `pictura` links
-- **THEN** both self-test invocations start before the build tail finishes, and CTest starts only after the build tail and both self-test runs finish
+- **THEN** the combined self-test starts before the build tail finishes, and CTest starts only after the build tail and self-test finish
 
 #### Scenario: overlap stays disabled before measurement [qe_overlap_default]
 
 - **WHEN** the shared Qt executor runs without `PICTURA_QT_SELFTEST_OVERLAP=1`
-- **THEN** it waits for both self-test runs before starting the remaining Qt Test build
+- **THEN** it waits for the self-test run before starting the remaining Qt Test build
 
 ### Requirement: One shared Qt execution implementation
 
@@ -437,7 +436,7 @@ build, self-test, or CTest stages in this change.
 ### Requirement: Qt builds are staged with one Ninja writer
 
 When building is requested, the shared Qt executor SHALL configure first, build
-and link `pictura` before starting either self-test invocation, and then build
+and link `pictura` before starting the self-test invocation, and then build
 all remaining targets. It SHALL run at most one `cmake --build` process against
 the build tree at a time. CTest SHALL start only after the full build succeeds
 and every required Qt Test executable exists.
@@ -445,7 +444,7 @@ and every required Qt Test executable exists.
 #### Scenario: pictura links before self-tests [qe_pictura_first]
 
 - **WHEN** the shared Qt executor performs a staged build
-- **THEN** the `pictura` target build completes before either self-test invocation starts
+- **THEN** the `pictura` target build completes before the self-test invocation starts
 
 #### Scenario: CTest waits for every Qt executable [qe_ctest_after_build]
 
@@ -459,18 +458,17 @@ and every required Qt Test executable exists.
 
 ### Requirement: Qt execution preserves failure identity and process cleanup
 
-The shared Qt executor SHALL keep each self-test capture separate, run the
+The shared Qt executor SHALL retain the combined self-test capture, run the
 reporter even after a failed stage, and return the first non-zero stage status
-in deterministic order. For concurrent self-tests, the bare invocation's status
-SHALL precede the document invocation's status. A failed `pictura` build SHALL
+in deterministic order. A failed `pictura` build SHALL
 prevent self-tests and CTest. A failed Qt Test build SHALL prevent CTest. On
 interrupt or termination, the executor SHALL terminate and reap its child
 processes before exiting.
 
 #### Scenario: self-test failure identity survives aggregation [qe_failure_identity]
 
-- **WHEN** the bare self-test exits 7 and the document self-test exits 9
-- **THEN** the reporter receives both separate captures and the executor exits 7
+- **WHEN** the combined self-test exits 9
+- **THEN** the reporter receives its capture and the executor exits 9
 
 #### Scenario: a failed build stops later stages [qe_build_failure]
 
@@ -503,7 +501,7 @@ when a stale file for that suite existed before the run.
 ### Requirement: Qt execution records stage timings
 
 The shared Qt executor SHALL print elapsed durations for Configure, the
-`pictura` build, the Qt Test build tail, each self-test invocation, CTest, and
+`pictura` build, the Qt Test build tail, the self-test invocation, CTest, and
 reporting. A stage that is skipped SHALL say so rather than report a fabricated
 zero duration. The timing output SHALL be sufficient for #1570 to compare the
 sequential and overlapped candidates.
@@ -511,7 +509,7 @@ sequential and overlapped candidates.
 #### Scenario: every executed Qt stage is timed [qe_timings]
 
 - **WHEN** the shared Qt executor completes a staged run
-- **THEN** its output records all six stage durations, including separate durations for the two self-test invocations
+- **THEN** its output records all six stage durations, including the self-test duration
 
 ### Requirement: Overlap retention depends on measurement
 
@@ -562,3 +560,42 @@ each entry as within or over a quarter of the layer's measured total.
 
 - **WHEN** the timing store holds per-entry execution times
 - **THEN** the reporter prints each entry's seconds and marks it within or over a quarter of the layer's measured total
+
+### Requirement: One in-process self-test capture preserves the unique check set
+
+The unified report SHALL launch one application self-test process with the
+`two_layers.psd` fixture. The process SHALL start on the scratch document and
+run `fresh_white` while one mutable boolean is false. It SHALL
+then open the fixture in-process, close the scratch document after a successful
+open, update the active view and image, and set that same boolean from the open
+result. The 36 document-only checks SHALL run only when the boolean is true.
+The 466 shared checks SHALL run once. The combined
+capture SHALL contain the same unique `(suite, name)` check keys as the merged
+legacy bare and document captures, currently 503.
+
+#### Scenario: One process produces one summary [tr_single_document_capture]
+
+- **WHEN** `scripts/test-report.sh` runs with a built application
+- **THEN** it starts one self-test process with `two_layers.psd`, passes one capture to the reporter, and that capture ends with exactly one SUMMARY
+
+#### Scenario: The combined capture keeps the legacy unique checks [tr_unique_checks_preserved]
+
+- **WHEN** the 466 shared checks, `fresh_white`, and 36 document-only checks pass
+- **THEN** the report contains 503 unique check entries, with no duplicate shared checks
+
+#### Scenario: Mode-specific checks stay mutually exclusive [tr_mode_conditional_checks]
+
+- **WHEN** the self-test starts and the document has not opened
+- **THEN** it runs `fresh_white` and does not run the document-only block, and after a successful in-process open it runs the document-only block without running `fresh_white` again
+
+### Requirement: A single self-test capture keeps its summary and unique entries
+
+The reporter SHALL use a single complete capture's SUMMARY as the layer total
+and SHALL build the displayed check entries from that capture's unique
+`(suite, name)` keys. Multi-capture merging SHALL keep its existing FAIL-wins
+behavior and recomputed unique totals.
+
+#### Scenario: One summary remains authoritative [tr_single_summary_authoritative]
+
+- **WHEN** one complete self-test capture contains unique checks and a matching SUMMARY
+- **THEN** the app-self-test subtotal equals that SUMMARY and the listed entries equal the capture's unique check keys
