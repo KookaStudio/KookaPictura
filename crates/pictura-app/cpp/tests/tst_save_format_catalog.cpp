@@ -133,7 +133,7 @@ pictura::PictureView* SaveFormatCatalogTest::newView(const QString& background)
 void SaveFormatCatalogTest::everyDisplayedFormatResolvesItsPathAndKind()
 {
     const QVector<pictura::SaveFormatRow>& rows = pictura::saveFormatRows();
-    QCOMPARE(static_cast<int>(rows.size()), 14);
+    QCOMPARE(static_cast<int>(rows.size()), 15);
     for (int i = 0; i < static_cast<int>(rows.size()); ++i) {
         const pictura::SaveFormatRow& row = rows.at(i);
         QCOMPARE(row.id, i);

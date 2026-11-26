@@ -67,6 +67,7 @@ mod path_resources;
 mod patterns;
 mod patterns_write;
 pub mod pdf;
+pub(crate) mod pict;
 mod pictura_filter;
 mod pictura_raw;
 pub(crate) mod png;
@@ -192,6 +193,7 @@ pub use live_shape::{
     ORIGIN_ROUNDED_RECTANGLE,
 };
 pub use mapped::MappedFile;
+pub use pict::{decode_pict, decode_pict_rgba, PictError, PictImage};
 pub use pictura_color::{ConversionOptions, Intent, Policy, Profile};
 pub use png::{encode_base64 as encode_png_base64, encode_rgba as encode_png_rgba};
 pub use probe::{probe_image, ImageBudget, ImageFormat, ImageProbe, ImportError, LimitKind};

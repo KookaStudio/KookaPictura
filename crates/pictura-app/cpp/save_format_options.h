@@ -21,6 +21,7 @@ enum class SaveFormatKind {
     Raw = 8,
     Tga = 9,
     Cineon = 10,
+    Pict = 11,
 };
 
 // The options kind for a path suffix (without the dot, any case); None for a
@@ -134,6 +135,10 @@ struct SaveFormatOptions {
 
     // Cineon Options (fixed).
     int cineonBits = 10;
+
+    // PICT Options.
+    int pictResolution = 32;   // 16 or 32 bits per pixel
+    int pictCompression = 0;   // 0 None, 1 JPEG Low, 2 JPEG Medium, 3 JPEG High, 4 JPEG Maximum
 };
 
 // The whole value as a session object keyed by the per-format keys.

@@ -15,7 +15,8 @@ dialog for the chosen raster format: JPEG Options for `.jpg`, `.jpeg`, and
 `.jpe`; PNG Options for `.png`; BMP Options for `.bmp`; TIFF Options for `.tif`
 and `.tiff`; GIF Options for `.gif`; Photoshop EPS Options for `.eps`;
 DCS Format for the DCS filter; Photoshop Raw Options for `.raw`; Targa Options
-for `.tga`, `.vda`, `.icb`, and `.vst`; and Cineon Options for `.cin`.
+for `.tga`, `.vda`, `.icb`, and `.vst`; Cineon Options for `.cin`; and PICT
+Options for `.pct`, `.pic`, and `.pict`.
 
 Photoshop EPS and Photoshop DCS share the `.eps` suffix. When the selected Save
 As filter names DCS, the DCS Format dialog SHALL open; otherwise a `.eps`
@@ -24,9 +25,7 @@ no Save As format, or that has no suffix, SHALL be refused: no file is written
 and the save reports failure, rather than writing another format's bytes under
 that name.
 
-WebP and Photoshop PDF SHALL NOT open a format options dialog. PSD and PSB SHALL
-open a compatibility prompt only when Ask applies as specified in
-`interop/psd-psb-compatibility`.
+PSD, PSB, WebP, and Photoshop PDF SHALL NOT open a format options dialog.
 Cancelling a format options dialog SHALL abort the save: no file is written and
 the document's pixels, path, modified state, and history are unchanged.
 
@@ -85,6 +84,11 @@ the document's pixels, path, modified state, and history are unchanged.
 - **WHEN** Save As is confirmed with a `.cin` destination
 - **THEN** the Cineon Options dialog is shown before anything is written
 
+#### Scenario: PICT opens PICT Options [save-options-pict]
+
+- **WHEN** Save As is confirmed with a `.pct`, `.pic`, or `.pict` destination
+- **THEN** the PICT Options dialog is shown before anything is written
+
 #### Scenario: Native and other formats open no format dialog [save-options-native]
 
 - **WHEN** Save As targets PSD or PSB with Always or Never, or targets WebP or PDF
@@ -114,8 +118,9 @@ Encoding (with JPEG quality), Include Halftone Screen, Include Transfer
 Function, Transparent Whites, PostScript Color Management, Include Vector Data,
 and Image Interpolation; DCS Format its version (1.0 or 2.0) and Preview;
 Photoshop Raw Options its Header size and Interleave; Targa Options its
-Resolution and Compress (RLE); and Cineon Options its fixed 10-bit RGB
-conversion.
+Resolution and Compress (RLE); Cineon Options its fixed 10-bit RGB conversion;
+and PICT Options its Resolution (16 or 32 bits per pixel) and Compression
+(None, JPEG Low, JPEG Medium, JPEG High, JPEG Maximum).
 
 A dialog SHALL seed its controls from the last accepted settings for that format,
 persisted in the session store, and SHALL use the CS6 default when none are
@@ -126,12 +131,17 @@ write `.eps`.
 #### Scenario: First use shows the CS6 defaults [save-options-defaults]
 
 - **WHEN** a format options dialog is opened with no stored settings for that format
-- **THEN** its controls hold the CS6 defaults (JPEG quality 10 and Baseline, PNG None/Fast, TIFF LZW, BMP Windows at 24-bit, GIF Normal, EPS Binary with TIFF preview, DCS 2.0 with TIFF 8-bit preview, Raw header 0 and interleaved, TGA 24-bit with no RLE, Cineon 10-bit)
+- **THEN** its controls hold the CS6 defaults (JPEG quality 10 and Baseline, PNG None/Fast, TIFF LZW, BMP Windows at 24-bit, GIF Normal, EPS Binary with TIFF preview, DCS 2.0 with TIFF 8-bit preview, Raw header 0 and interleaved, TGA 24-bit with no RLE, Cineon 10-bit, PICT 32-bit with no compression)
 
 #### Scenario: Accepted settings seed the next dialog [save-options-remembered]
 
 - **WHEN** settings are accepted in a format options dialog and the dialog is opened again
 - **THEN** its controls hold the accepted settings
+
+#### Scenario: PICT settings are remembered [save-options-pict-remembered]
+
+- **WHEN** PICT Options is accepted with 16-bit resolution and JPEG High, and reopened
+- **THEN** it shows 16-bit resolution and JPEG High
 
 ### Requirement: Options the encoder can honor take effect
 
@@ -145,7 +155,8 @@ white), the GIF Row Order, the EPS Encoding, Preview, JPEG quality, Include
 Halftone Screen, Include Transfer Function, Transparent Whites, PostScript Color
 Management, Include Vector Data and Image Interpolation, the DCS version and
 Preview, the Photoshop Raw Header size and Interleave, the Targa Resolution and
-Compress (RLE), and the Cineon 10-bit RGB conversion.
+Compress (RLE), the Cineon 10-bit RGB conversion, and the PICT Resolution and
+Compression.
 
 A control the encoder cannot honor SHALL be shown disabled with a tooltip naming
 the ceiling and SHALL NOT be represented as taking effect. The JPEG Matte SHALL
@@ -154,7 +165,9 @@ opaque white. The Photoshop Raw File Type and File Creator controls SHALL be
 shown disabled on Linux with a tooltip. Named spot inks in DCS 2.0 are not
 supported by the document model and SHALL be reported as a feature-loss warning
 rather than written. Raw and Cineon SHALL carry 8-bit document samples; the
-Cineon writer packs them into 10-bit code values.
+Cineon writer packs them into 10-bit code values. A PICT JPEG compression SHALL
+flatten alpha over opaque white; 32-bit PICT without compression SHALL keep
+alpha.
 
 #### Scenario: Lower JPEG quality writes a smaller file [jpeg-quality]
 
@@ -230,6 +243,11 @@ Cineon writer packs them into 10-bit code values.
 
 - **WHEN** a document is saved as Cineon
 - **THEN** the written file carries three 10-bit channels packed into 32-bit words and no 8-bit samples
+
+#### Scenario: PICT resolution and compression are written [pict-options]
+
+- **WHEN** PICT Options chooses 16 or 32 bits per pixel and None or a JPEG level
+- **THEN** the written file carries the matching direct-pixel record or `$8200` JPEG record, and a 32-bit None save keeps alpha
 
 #### Scenario: Unsupported controls are disabled [unsupported-disabled]
 

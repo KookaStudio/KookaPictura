@@ -59,6 +59,9 @@ fn parse_save_options(kind: i32, json: &str) -> SaveSettings {
     options.raw_interleaved = int(&raw, "interleave", 0) == 0;
     let cineon = root.get("cineon").cloned().unwrap_or_default();
     options.cineon_bits = int(&cineon, "bits", 10) as u8;
+    let pict = root.get("pict").cloned().unwrap_or_default();
+    options.pict_resolution = int(&pict, "resolution", 32) as u8;
+    options.pict_compression = int(&pict, "compression", 0) as u8;
     let eps = root.get("eps").cloned().unwrap_or_default();
     options.eps_preview = int(&eps, "preview", 2) as u8;
     options.eps_encoding = int(&eps, "encoding", 2) as u8;

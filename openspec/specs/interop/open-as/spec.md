@@ -11,7 +11,7 @@ mismatch when that decoder rejects the file.
 
 `File > Open As…` (`Ctrl+Alt+Shift+O`) SHALL show the open file dialog with
 one filter per readable format: Photoshop, Large Document Format, Generic PDF,
-Generic EPS, PNG, JPEG, TIFF, WebP, GIF, and BMP. The chosen filter SHALL
+Generic EPS, PNG, JPEG, TIFF, WebP, GIF, BMP, and PICT. The chosen filter SHALL
 select the decoder regardless of the file's extension or signature. When that
 decoder rejects the file, the window SHALL report `Could not open <file>:
 format mismatch or damaged file.` and open nothing. `File > Open`'s filters
@@ -27,6 +27,11 @@ SHALL list Generic PDF (`*.PDF *.PDP *.AI`) and Generic EPS (`*.EPS *.EPSF
 
 - **WHEN** a PNG file named `photo.dat` is opened with Open As and the PNG format
 - **THEN** a document opens with the PNG's pixels
+
+#### Scenario: A PICT file opens with the PICT format [open-as-pict]
+
+- **WHEN** a PICT file is opened with Open As and the PICT format
+- **THEN** a document opens with the PICT's pixels, and a non-PICT file chosen with the PICT format reports `format mismatch or damaged file.`
 
 #### Scenario: A mismatched format is reported [open_as_mismatch]
 

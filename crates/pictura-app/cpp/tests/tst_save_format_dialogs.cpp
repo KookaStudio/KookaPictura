@@ -12,6 +12,7 @@
 #include "dcs_options_dialog.h"
 #include "eps_options_dialog.h"
 #include "gif_options_dialog.h"
+#include "pict_options_dialog.h"
 #include "raw_options_dialog.h"
 #include "save_format_options.h"
 #include "tga_options_dialog.h"
@@ -27,6 +28,7 @@ private slots:
     void rawControls();
     void tgaControls();
     void cineonControls();
+    void pictControls();
     void bmpAdvancedControls();
     void rawMacDisabled();
 };
@@ -117,6 +119,28 @@ void SaveFormatDialogsTest::cineonControls()
     pictura::CineonOptionsDialog dialog(defaults);
     QCOMPARE(dialog.bits(), 10);
     QVERIFY(dialog.findChild<QWidget*>(QStringLiteral("cineonOptionsBits")));
+}
+
+void SaveFormatDialogsTest::pictControls()
+{
+    const pictura::SaveFormatOptions defaults;
+    pictura::PictOptionsDialog dialog(defaults);
+    QCOMPARE(dialog.resolution(), 32);
+    QCOMPARE(dialog.compression(), 0);
+    auto* low = dialog.findChild<QRadioButton*>(QStringLiteral("pictOptionsResolution16"));
+    QVERIFY(low);
+    low->setChecked(true);
+    QCOMPARE(dialog.resolution(), 16);
+    auto* jpeg = dialog.findChild<QRadioButton*>(QStringLiteral("pictOptionsCompressionHigh"));
+    QVERIFY(jpeg);
+    jpeg->setChecked(true);
+    QCOMPARE(dialog.compression(), 3);
+    pictura::SaveFormatOptions remembered;
+    remembered.pictResolution = 16;
+    remembered.pictCompression = 3;
+    pictura::PictOptionsDialog seeded(remembered);
+    QCOMPARE(seeded.resolution(), 16);
+    QCOMPARE(seeded.compression(), 3);
 }
 
 void SaveFormatDialogsTest::bmpAdvancedControls()

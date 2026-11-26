@@ -97,6 +97,7 @@ private slots:
     void tiffConvert();
     void pngOff();
     void untagged();
+    void pictOpens();
     void malformedProfileIgnored();
     void placeConvertsProfile();
     void profileNotice();
@@ -253,6 +254,19 @@ void ImageImportTest::untagged()
     QVERIFY(!path.isEmpty());
     QVERIFY(window_->openImagePath(path));
     QVERIFY(pictura::document_profile_name(*window_->activeView()).contains(QStringLiteral("sRGB")));
+    closeActive();
+}
+
+void ImageImportTest::pictOpens()
+{
+    const QString path =
+        QFINDTESTDATA("../../../../crates/pictura-codec/tests/fixtures/pict_rgb.pct");
+    QVERIFY(!path.isEmpty());
+    QVERIFY(window_->openImagePath(path));
+    pictura::PictureView* view = window_->activeView();
+    QVERIFY(view);
+    QCOMPARE(view->document_width(), 4);
+    QCOMPARE(view->document_height(), 3);
     closeActive();
 }
 

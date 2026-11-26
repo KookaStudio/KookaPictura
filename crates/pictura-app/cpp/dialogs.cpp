@@ -260,7 +260,7 @@ QStringList saveFileFilters()
     filters.append(QCoreApplication::translate("PicturaFiles", "All Formats")
                    + QStringLiteral(" (*.PSD *.PSB *.PNG *.JPG *.JPEG *.JPE *.TIF *.TIFF "
                                     "*.WEBP *.BMP *.PDF *.PDP *.GIF *.EPS *.RAW *.TGA *.VDA *.ICB "
-                                    "*.VST *.CIN)"));
+                                    "*.VST *.CIN *.PCT *.PIC *.PICT)"));
     return filters;
 }
 
@@ -268,16 +268,17 @@ QStringList openFileFilters()
 {
     return {
         QCoreApplication::translate("PicturaFiles", "All Formats") + QStringLiteral(" (*.PSD *.PSB *.PNG *.JPG *.JPEG *.JPE *.GIF *.BMP "
-                       "*.TIF *.TIFF *.WEBP *.PDF *.PDP *.AI *.EPS *.EPSF *.PS *.DNG *.CR2 *.CR3 *.NEF *.ARW *.ORF *.ORI *.RW2 *.RWL *.RAW *.RAF)"),
+                       "*.TIF *.TIFF *.WEBP *.PDF *.PDP *.AI *.EPS *.EPSF *.PS *.DNG *.CR2 *.CR3 *.NEF *.ARW *.ORF *.ORI *.RW2 *.RWL *.RAW *.RAF *.PCT *.PIC *.PICT)"),
         QCoreApplication::translate("PicturaFiles", "Photoshop") + QStringLiteral(" (*.PSD)"),
         QCoreApplication::translate("PicturaFiles", "Photoshop Large Format") + QStringLiteral(" (*.PSB)"),
-        QCoreApplication::translate("PicturaFiles", "Images") + QStringLiteral(" (*.PNG *.JPG *.JPEG *.JPE *.GIF *.BMP *.TIF *.TIFF *.WEBP)"),
+        QCoreApplication::translate("PicturaFiles", "Images") + QStringLiteral(" (*.PNG *.JPG *.JPEG *.JPE *.GIF *.BMP *.TIF *.TIFF *.WEBP *.PCT *.PIC *.PICT)"),
         QCoreApplication::translate("PicturaFiles", "PNG") + QStringLiteral(" (*.PNG)"),
         QCoreApplication::translate("PicturaFiles", "JPEG") + QStringLiteral(" (*.JPG *.JPEG *.JPE)"),
         QCoreApplication::translate("PicturaFiles", "TIFF") + QStringLiteral(" (*.TIF *.TIFF)"),
         QCoreApplication::translate("PicturaFiles", "WebP") + QStringLiteral(" (*.WEBP)"),
         QCoreApplication::translate("PicturaFiles", "GIF") + QStringLiteral(" (*.GIF)"),
         QCoreApplication::translate("PicturaFiles", "BMP") + QStringLiteral(" (*.BMP)"),
+        QCoreApplication::translate("PicturaFiles", "PICT") + QStringLiteral(" (*.PCT *.PIC *.PICT)"),
         QCoreApplication::translate("PicturaFiles", "Photoshop PDF") + QStringLiteral(" (*.PDF *.PDP)"),
         QCoreApplication::translate("PicturaFiles", "Generic PDF") + QStringLiteral(" (*.PDF *.PDP *.AI)"),
         QCoreApplication::translate("PicturaFiles", "Generic EPS") + QStringLiteral(" (*.EPS *.EPSF *.PS)"),

@@ -16,6 +16,7 @@ pub enum ImageFormat {
     Bmp,
     Tiff,
     WebP,
+    Pict,
 }
 
 impl ImageFormat {
@@ -27,6 +28,7 @@ impl ImageFormat {
             ImageFormat::Bmp => "BMP",
             ImageFormat::Tiff => "TIFF",
             ImageFormat::WebP => "WebP",
+            ImageFormat::Pict => "PICT",
         }
     }
 }
@@ -197,11 +199,63 @@ fn sniff(bytes: &[u8]) -> Result<ImageProbe, ImportError> {
         parse_tiff(bytes)
     } else if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
         parse_webp(bytes)
+    } else if pict_header_offset(bytes).is_some() {
+        parse_pict(bytes)
     } else {
         Err(ImportError::UnknownContainer {
             bytes_read: bytes.len(),
         })
     }
+}
+
+fn pict_header_offset(bytes: &[u8]) -> Option<usize> {
+    if bytes.len() >= 524 && bytes[522..524] == [0x11, 0x01] {
+        return Some(512);
+    }
+    if bytes.len() >= 526
+        && matches!(
+            &bytes[522..526],
+            [0x00, 0x11, 0x02, 0xFF] | [0x00, 0x11, 0x00, 0x02]
+        )
+    {
+        return Some(512);
+    }
+    if bytes.len() >= 12 && bytes[10..12] == [0x11, 0x01] {
+        return Some(0);
+    }
+    if bytes.len() >= 14
+        && matches!(
+            &bytes[10..14],
+            [0x00, 0x11, 0x02, 0xFF] | [0x00, 0x11, 0x00, 0x02]
+        )
+    {
+        return Some(0);
+    }
+    None
+}
+
+fn parse_pict(bytes: &[u8]) -> Result<ImageProbe, ImportError> {
+    let Some(offset) = pict_header_offset(bytes) else {
+        return Err(trunc("PICT", bytes));
+    };
+    if bytes.len() < offset + 10 {
+        return Err(trunc("PICT", bytes));
+    }
+    let top = i16::from_be_bytes([bytes[offset + 2], bytes[offset + 3]]);
+    let left = i16::from_be_bytes([bytes[offset + 4], bytes[offset + 5]]);
+    let bottom = i16::from_be_bytes([bytes[offset + 6], bytes[offset + 7]]);
+    let right = i16::from_be_bytes([bytes[offset + 8], bytes[offset + 9]]);
+    let width = (i32::from(right) - i32::from(left)).max(0) as u32;
+    let height = (i32::from(bottom) - i32::from(top)).max(0) as u32;
+    if width == 0 || height == 0 {
+        return Err(trunc("PICT", bytes));
+    }
+    Ok(ImageProbe {
+        format: ImageFormat::Pict,
+        width,
+        height,
+        bit_depth: 8,
+    })
 }
 
 fn parse_png(bytes: &[u8]) -> Result<ImageProbe, ImportError> {

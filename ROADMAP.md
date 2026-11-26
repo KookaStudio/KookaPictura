@@ -44,15 +44,15 @@ The quantified comparison against Photoshop CS6 and CC 28.0 is in
   8/16/32-bit, with raw, RLE and ZIP compression, preserving blocks the engine
   does not model. `crates/pictura-codec/src/read.rs`,
   `crates/pictura-codec/src/write.rs`.
-- [x] **Import.** PSD, PSB, PNG, JPEG, TIFF, WebP, GIF, BMP, and PDF and EPS
-  through Ghostscript. `crates/pictura-app/cpp/frame_import.cpp`.
+- [x] **Import.** PSD, PSB, PNG, JPEG, TIFF, WebP, GIF, BMP, PICT, and PDF
+  and EPS through Ghostscript. `crates/pictura-app/cpp/frame_import.cpp`.
 - [x] **Multi-file selection in File > Place**, with one Free Transform session
   per file and a summary for files that could not be placed (#755).
 - [x] **Non-destructive canvas fit for oversized Place sources**, keeping the
   native embedded source and its alpha through scale/translation (#755).
-- [x] **Export.** PSD, PSB, PNG, JPEG, TIFF, WebP, BMP, GIF, SVG and Photoshop
-  PDF, plus Save for Web with palette reduction, dithering and transparency.
-  `crates/pictura-app/cpp/export_as_dialog.cpp`,
+- [x] **Export.** PSD, PSB, PNG, JPEG, TIFF, WebP, BMP, GIF, SVG, PICT and
+  Photoshop PDF, plus Save for Web with palette reduction, dithering and
+  transparency. `crates/pictura-app/cpp/export_as_dialog.cpp`,
   `crates/pictura-app/cpp/save_for_web_dialog.cpp`.
 - [x] **Print.** A print dialog over `QPrinter`, with printer-managed colour and
   a "Save as PDF" option. `crates/pictura-app/cpp/print_dialog.cpp`.
@@ -66,10 +66,11 @@ The quantified comparison against Photoshop CS6 and CC 28.0 is in
   `png_options_dialog.cpp`, `bmp_options_dialog.cpp`, `tiff_options_dialog.cpp`.
 - [x] The Save As options the Qt writer cannot honor (BMP format/depth/RLE/flip,
       PNG interlace, TIFF pixel/byte order, pyramid, layer compression) and the
-      GIF, EPS, DCS, Raw, TGA and Cineon dialogs (#625).
+      GIF, EPS, DCS, Raw, TGA, Cineon and PICT dialogs (#625, #1503).
       `crates/pictura-codec/src/save/`, `crates/pictura-app/cpp/gif_options_dialog.cpp`,
       `eps_options_dialog.cpp`, `dcs_options_dialog.cpp`, `raw_options_dialog.cpp`,
-      `tga_options_dialog.cpp`, `cineon_options_dialog.cpp`.
+      `tga_options_dialog.cpp`, `cineon_options_dialog.cpp`,
+      `pict_options_dialog.cpp`.
 - [x] JPEG 2000 compression, Spot Colors, and Use Proof Setup in the PDF writer
       (#626)
 - [x] Native CMYK and 16-bit PDF and EPS rendering, Images mode on encrypted
@@ -103,7 +104,10 @@ The quantified comparison against Photoshop CS6 and CC 28.0 is in
       supported `.abr`, `.aco`, `.ase`, `.asl`, `.csh`, `.grd`, `.pat`, `.shc`,
       and `.tpl` variants. Exports ACO and ASE swatches and provides a standalone
       `.csf` codec (#489).
-- [ ] PICT, IFF, PCX and SGI read and write (#1503, #1504, #1505, #1506)
+- [x] PICT read and write (#1503). Bitmap-only PICT v1/v2 (PackBits, DirectBits
+  and QuickTime JPEG read; 16/32-bit PackBits and JPEG write); QuickDraw vector
+  records are skipped and a vector-only picture is refused.
+- [ ] IFF, PCX and SGI read and write (#1504, #1505, #1506)
 - [ ] OpenEXR, JPEG 2000, HEIC/HEIF and AVIF read and write (#1507, #1508, #1509, #1510)
 - [ ] SVG import (#1511)
 - [ ] Content Credentials (#1512)
