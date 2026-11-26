@@ -475,10 +475,16 @@ fn rotation_atn_round_trip() {
 
     let imported = raw_step(
         RawEventId::Long(*b"Rtte"),
-        Some(descriptor("Rotate", vec![code(
-            *b"Angl",
-            ActionValue::UnitFloat { unit: *b"#Ang", value: -24.5 },
-        )])),
+        Some(descriptor(
+            "Rotate",
+            vec![code(
+                *b"Angl",
+                ActionValue::UnitFloat {
+                    unit: *b"#Ang",
+                    value: -24.5,
+                },
+            )],
+        )),
         "Rotate",
     );
     let bytes = raw_bytes(raw_set(

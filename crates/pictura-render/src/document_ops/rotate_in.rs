@@ -793,7 +793,13 @@ mod tests {
         let n = w as usize * h as usize;
         let source = canvas_rect(w, h);
         let pixels: Vec<u8> = (0..n)
-            .map(|i| if (i / w as usize + i % w as usize) % 3 == 0 { 255 } else { 0 })
+            .map(|i| {
+                if (i / w as usize + i % w as usize).is_multiple_of(3) {
+                    255
+                } else {
+                    0
+                }
+            })
             .collect();
         let mask: Vec<u8> = pixels.iter().map(|&v| 255 - v).collect();
         let native: Vec<u16> = pixels.iter().map(|&v| u16::from(v) * 251).collect();
@@ -812,7 +818,10 @@ mod tests {
         ));
         let mut before = Document::new(w, h, ColorMode::Rgb, BitDepth::Sixteen);
         before.layers = pictura_core::LayerStack::from_layers(vec![layer]);
-        before.channels.push(Channel { id: 0, data: mask.clone().into() });
+        before.channels.push(Channel {
+            id: 0,
+            data: mask.clone().into(),
+        });
 
         let pivot = (f64::from(w) / 2.0, f64::from(h) / 2.0);
         let degrees = 21.0;
@@ -822,22 +831,56 @@ mod tests {
         let mut prior_red = Vec::new();
         for interpolation in INTERPOLATIONS {
             let mut actual = before.clone();
-            assert!(rotate_document_in_with(&mut actual, degrees, pivot, interpolation));
+            assert!(rotate_document_in_with(
+                &mut actual,
+                degrees,
+                pivot,
+                interpolation
+            ));
             assert_eq!((actual.width, actual.height), (new_w, new_h));
 
-            let dense_rotation = Rotation { interpolation: interpolation.resolve(1, 1), ..rotation };
+            let dense_rotation = Rotation {
+                interpolation: interpolation.resolve(1, 1),
+                ..rotation
+            };
             let layer = &actual.layers[0];
-            let wanted_red = resample_samples(&pixels, w as usize, h as usize, source, dest, &dense_rotation);
-            let wanted_mask = resample_samples(&mask, w as usize, h as usize, source, dest, &dense_rotation);
-            let wanted_native = resample_samples(&native, w as usize, h as usize, source, dest, &dense_rotation);
+            let wanted_red = resample_samples(
+                &pixels,
+                w as usize,
+                h as usize,
+                source,
+                dest,
+                &dense_rotation,
+            );
+            let wanted_mask =
+                resample_samples(&mask, w as usize, h as usize, source, dest, &dense_rotation);
+            let wanted_native = resample_samples(
+                &native,
+                w as usize,
+                h as usize,
+                source,
+                dest,
+                &dense_rotation,
+            );
             assert_eq!(layer.rect, dest);
             assert_eq!(wanted_red[0], 0);
             assert_eq!(wanted_mask[0], 0);
             assert!(layer.channels()[0].data.is_tiled());
-            assert_eq!(layer.channels()[0].data, wanted_red, "{interpolation:?} raster");
-            assert_eq!(layer.mask.as_ref().unwrap().data.as_ref().unwrap(), &wanted_mask);
-            assert_eq!(actual.channels[0].data, wanted_mask, "{interpolation:?} document channel");
-            let Samples::U16(native_plane) = &layer.source_channels.as_ref().unwrap().planes[0].1 else {
+            assert_eq!(
+                layer.channels()[0].data,
+                wanted_red,
+                "{interpolation:?} raster"
+            );
+            assert_eq!(
+                layer.mask.as_ref().unwrap().data.as_ref().unwrap(),
+                &wanted_mask
+            );
+            assert_eq!(
+                actual.channels[0].data, wanted_mask,
+                "{interpolation:?} document channel"
+            );
+            let Samples::U16(native_plane) = &layer.source_channels.as_ref().unwrap().planes[0].1
+            else {
                 panic!("expected 16-bit samples");
             };
             assert_eq!(native_plane, &wanted_native);
@@ -845,7 +888,10 @@ mod tests {
             if interpolation == Interpolation::BicubicAutomatic {
                 assert_eq!(wanted_red, prior_red[2]);
             } else {
-                assert!(!prior_red.contains(&wanted_red), "{interpolation:?} must be distinct");
+                assert!(
+                    !prior_red.contains(&wanted_red),
+                    "{interpolation:?} must be distinct"
+                );
                 prior_red.push(wanted_red);
             }
         }
@@ -865,20 +911,35 @@ mod tests {
         for (method, expected, expected_native) in cases {
             // The window spans source columns 254..258; x=256 lies on
             // the destination tile seam between source pixel centres.
-            assert_eq!(sample_window((520, 1), (256.0, 0.5), &seam, 4, (254, 0), method), expected);
-            assert_eq!(sample_window((520, 1), (256.0, 0.5), &native, 4, (254, 0), method), expected_native);
+            assert_eq!(
+                sample_window((520, 1), (256.0, 0.5), &seam, 4, (254, 0), method),
+                expected
+            );
+            assert_eq!(
+                sample_window((520, 1), (256.0, 0.5), &native, 4, (254, 0), method),
+                expected_native
+            );
             let edge = [100u8, 100, 100, 100];
-            assert_eq!(sample_window((4, 1), (0.25, 0.5), &edge, 4, (0, 0), method), 100);
-            assert_eq!(sample_window((4, 1), (-0.01, 0.5), &edge, 4, (0, 0), method), 0);
-            assert_eq!(sample_window((4, 1), (4.01, 0.5), &edge, 4, (0, 0), method), 0);
+            assert_eq!(
+                sample_window((4, 1), (0.25, 0.5), &edge, 4, (0, 0), method),
+                100
+            );
+            assert_eq!(
+                sample_window((4, 1), (-0.01, 0.5), &edge, 4, (0, 0), method),
+                0
+            );
+            assert_eq!(
+                sample_window((4, 1), (4.01, 0.5), &edge, 4, (0, 0), method),
+                0
+            );
         }
     }
 
     #[test]
     fn vector_mask_right_angle_rotation_is_exact() {
         let mut before = doc();
-        before.layers[1].channels_mut()[0].data = (0..15).map(|i| (i * 13) as u8)
-            .collect::<Vec<_>>().into();
+        before.layers[1].channels_mut()[0].data =
+            (0..15).map(|i| (i * 13) as u8).collect::<Vec<_>>().into();
         let mut exact = before.clone();
         super::super::rotate_document(&mut exact, 1).unwrap();
         before.layers[1].vector_mask = Some(pictura_core::VectorMask {
@@ -891,12 +952,20 @@ mod tests {
         });
         for interpolation in INTERPOLATIONS {
             let mut actual = before.clone();
-            assert!(rotate_document_in_with(&mut actual, 90.0, (2.5, 1.5), interpolation));
+            assert!(rotate_document_in_with(
+                &mut actual,
+                90.0,
+                (2.5, 1.5),
+                interpolation
+            ));
             assert_eq!((actual.width, actual.height), (3, 5));
             assert_eq!(actual.layers[1].rect, exact.layers[1].rect);
             assert_eq!(actual.layers[1].channels(), exact.layers[1].channels());
             let vector = actual.layers[1].vector_mask.as_ref().unwrap();
-            assert_eq!(vector.subpaths[0].points, [[768, 0], [768, 1280], [0, 1280]]);
+            assert_eq!(
+                vector.subpaths[0].points,
+                [[768, 0], [768, 1280], [0, 1280]]
+            );
         }
     }
 
