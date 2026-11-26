@@ -174,6 +174,7 @@ view.fitOnScreen
 view.actualPixels
 view.200
 view.print.size
+view.hdr.preview
 view.freePan
 view.snapCanvasToWorkspace
 view.screenMode.standard
