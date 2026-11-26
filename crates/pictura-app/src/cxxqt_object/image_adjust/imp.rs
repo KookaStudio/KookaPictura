@@ -156,14 +156,22 @@ fn vibrance_auto_amount(layer: &Layer, selection: Option<&Selection>) -> i32 {
     const MAX_VIBRANCE: f64 = 35.0;
 
     let rect = match selection {
-        Some(selection) => selection.bounds().and_then(|rect| layer.rect.intersect(rect)),
+        Some(selection) => selection
+            .bounds()
+            .and_then(|rect| layer.rect.intersect(rect)),
         None => (!layer.rect.is_empty()).then_some(layer.rect),
     };
     let Some(rect) = rect else {
         return 0;
     };
     let coverage = selection.map(Selection::coverage);
-    let plane = |id| layer.channels().iter().find(|c| c.id == id).map(|c| &c.data);
+    let plane = |id| {
+        layer
+            .channels()
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| &c.data)
+    };
     let (Some(red), Some(green), Some(blue)) = (plane(0), plane(1), plane(2)) else {
         return 0;
     };
@@ -364,13 +372,18 @@ mod tests {
             right: 2,
         };
         layer.set_channels(
-            [(0, [105, 5]), (1, [125, 240]), (2, [135, 5]), (-1, [255, vivid_alpha])]
-                .into_iter()
-                .map(|(id, data)| pictura_core::Channel {
-                    id,
-                    data: data.to_vec().into(),
-                })
-                .collect(),
+            [
+                (0, [105, 5]),
+                (1, [125, 240]),
+                (2, [135, 5]),
+                (-1, [255, vivid_alpha]),
+            ]
+            .into_iter()
+            .map(|(id, data)| pictura_core::Channel {
+                id,
+                data: data.to_vec().into(),
+            })
+            .collect(),
         );
         layer
     }
@@ -400,7 +413,10 @@ mod tests {
         let feathered = vibrance_sample_selection(64);
         let alpha_amount = vibrance_auto_amount(&translucent, None);
         assert!((1..35).contains(&alpha_amount));
-        assert_eq!(vibrance_auto_amount(&opaque, Some(&feathered)), alpha_amount);
+        assert_eq!(
+            vibrance_auto_amount(&opaque, Some(&feathered)),
+            alpha_amount
+        );
         assert!(vibrance_auto_amount(&translucent, Some(&feathered)) > alpha_amount);
     }
 

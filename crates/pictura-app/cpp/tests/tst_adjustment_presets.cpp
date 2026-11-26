@@ -354,6 +354,7 @@ void AdjustmentPresetsTest::vibrancePresetRestoresBothValues()
     auto* saturation = qobject_cast<QSlider*>(panel_->controlForTest(QStringLiteral("saturation")));
     QVERIFY(amount && saturation);
     amount->setValue(36);
+    panel_->commitForTest();
     saturation->setValue(-12);
     panel_->commitForTest();
     panel_->setPresetNameProviderForTest([name] { return name; });
@@ -361,6 +362,7 @@ void AdjustmentPresetsTest::vibrancePresetRestoresBothValues()
     QCOMPARE(pictura::savedPresetNames(kind), QStringList{name});
 
     amount->setValue(0);
+    panel_->commitForTest();
     saturation->setValue(0);
     panel_->commitForTest();
     panel_->setPresetNameProviderForTest({});
