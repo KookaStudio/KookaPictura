@@ -1,0 +1,388 @@
+[[check]]
+id = "agent-build"
+scope = "guards"
+cost = "cheap"
+phase = "parallel"
+command = "python3 scripts/check-agent-build.py --self-check"
+script = "scripts/check-agent-build.py"
+local_fast = true
+local_full = true
+ci_guards = true
+
+[[check]]
+id = "agent-command-guard"
+scope = "guards"
+cost = "cheap"
+phase = "parallel"
+command = "python3 scripts/check-agent-command-guard.py"
+script = "scripts/check-agent-command-guard.py"
+local_fast = true
+local_full = true
+ci_guards = true
+
+[[check]]
+id = "agent-cpu-budget"
+scope = "guards"
+cost = "cheap"
+phase = "parallel"
+command = "python3 scripts/check-agent-cpu-budget.py --self-check"
+script = "scripts/check-agent-cpu-budget.py"
+local_fast = true
+local_full = true
+ci_guards = true
+
+[[check]]
+id = "archive"
+scope = "guards"
+cost = "cheap"
+phase = "parallel"
+command = '''
+bash scripts/check-openspec-archived.sh --self-test &&
+  bash scripts/check-openspec-archived.sh
+'''
+script = "scripts/check-openspec-archived.sh"
+local_fast = true
+local_full = true
+docs_only = true
+ci_guards = true
+
+[[check]]
+id = "build-caching"
+scope = "guards"
+cost = "expensive"
+phase = "parallel"
+command = '''
+if [ "$GATE_PLACEMENT" = ci-guards ] || [ "${PICTURA_FULL_GATES:-0}" = 1 ]; then
+  bash scripts/check-local-build-caching.sh --full
+else
+  bash scripts/check-local-build-caching.sh
+fi
+'''
+script = "scripts/check-local-build-caching.sh"
+local_fast = true
+local_full = true
+ci_guards = true
+
+[[check]]
+id = "build-lock"
+scope = "guards"
+cost = "moderate"
+phase = "parallel"
+command = "bash scripts/check-build-lock.sh"
+script = "scripts/check-build-lock.sh"
+local_fast = true
+local_full = true
+ci_guards = true
+
+[[check]]
+id = "build-tree"
+scope = "build"
+cost = "cheap"
+phase = "sequential"
+command = '''
+bash scripts/check-build-tree.sh --self-test &&
+  if [ "${PICTURA_FULL_GATES:-0}" = 1 ]; then
+    bash scripts/check-build-tree.sh
+  else
+    bash scripts/check-build-tree.sh --warn
+  fi
+'''
+script = "scripts/check-build-tree.sh"
+local_fast = true
+local_full = true
+ci_guards = false
+ci_build = true
+
+[[check]]
+id = "clippy"
+scope = "build"
+cost = "expensive"
+phase = "sequential"
+command = '''
+clippy_errors=$(cargo clippy --workspace --all-targets -- -D warnings 2>&1 | grep -cE '^error' || true)
+echo "clippy_errors=$clippy_errors"
+[ "$clippy_errors" -eq 0 ] || { echo "clippy: FAILED"; exit 1; }
+'''
+local_fast = true
+local_full = true
+ci_guards = false
+ci_build = true
+
+[[check]]
+id = "cpu-budget"
+scope = "guards"
+cost = "cheap"
+phase = "parallel"
+command = "python3 scripts/cpu-budget.py --self-check"
+script = "scripts/cpu-budget.py"
+local_fast = true
+local_full = true
+ci_guards = true
+
+[[check]]
+id = "file-size"
+scope = "guards"
+cost = "cheap"
+phase = "parallel"
+command = '''
+bash scripts/check-file-size.sh --self-test &&
+  bash scripts/check-file-size.sh ${GATE_CHANGED_FILE:+--changed "$GATE_CHANGED_FILE"}
+'''
+script = "scripts/check-file-size.sh"
+local_fast = true
+local_full = true
+ci_guards = true
+
+[[check]]
+id = "flatpak"
+scope = "guards"
+cost = "cheap"
+phase = "parallel"
+command = '''
+python3 scripts/check-flatpak-cargo-sources.py --self-test &&
+  python3 scripts/check-flatpak-cargo-sources.py
+'''
+script = "scripts/check-flatpak-cargo-sources.py"
+local_fast = true
+local_full = true
+ci_guards = true
+
+[[check]]
+id = "fmt"
+scope = "build"
+cost = "cheap"
+phase = "sequential"
+command = "cargo fmt --all --check"
+local_fast = true
+local_full = true
+ci_guards = false
+ci_build = true
+
+[[check]]
+id = "gate-manifest"
+scope = "guards"
+cost = "cheap"
+phase = "parallel"
+command = '''
+python3 scripts/check-gate-manifest.py --self-test &&
+  python3 scripts/check-gate-manifest.py
+'''
+script = "scripts/check-gate-manifest.py"
+local_fast = true
+local_full = true
+ci_guards = true
+
+[[check]]
+id = "guard"
+scope = "guards"
+cost = "cheap"
+phase = "parallel"
+command = '''
+if [ "$GATE_PLACEMENT" != docs-only ]; then
+  python3 scripts/changed_files.py --self-test &&
+    python3 scripts/check-milestone-names.py --self-test &&
+    python3 scripts/check-msvc-string-limits.py --self-test &&
+    python3 scripts/check-colour-literals.py --self-test
+fi
+bash scripts/guard.sh ${GATE_CHANGED_FILE:+--changed "$GATE_CHANGED_FILE"}
+'''
+scripts = [
+  "scripts/check-colour-literals.py",
+  "scripts/check-doc-claims.py",
+  "scripts/check-milestone-names.py",
+  "scripts/check-msvc-string-limits.py",
+  "scripts/changed_files.py",
+  "scripts/guard.sh",
+]
+local_fast = true
+local_full = true
+docs_only = true
+ci_guards = true
+
+[[check]]
+id = "heavy-policy"
+scope = "guards"
+cost = "cheap"
+phase = "parallel"
+command = "python3 scripts/heavy_command_policy.py --self-check"
+script = "scripts/heavy_command_policy.py"
+local_fast = true
+local_full = true
+ci_guards = true
+
+[[check]]
+id = "icon-provenance"
+scope = "guards"
+cost = "cheap"
+phase = "parallel"
+command = "python3 scripts/check-icon-provenance.py"
+script = "scripts/check-icon-provenance.py"
+local_fast = true
+local_full = true
+ci_guards = true
+
+[[check]]
+id = "openspec"
+scope = "guards"
+cost = "cheap"
+phase = "parallel"
+command = "openspec validate --all --strict"
+local_fast = true
+local_full = true
+docs_only = true
+ci_guards = true
+
+[[check]]
+id = "parity"
+scope = "guards"
+cost = "cheap"
+phase = "parallel"
+command = '''
+python3 scripts/check-parity.py --self-check &&
+  python3 scripts/check-parity.py
+'''
+script = "scripts/check-parity.py"
+local_fast = true
+local_full = true
+docs_only = true
+ci_guards = true
+
+[[check]]
+id = "public-docs"
+scope = "guards"
+cost = "cheap"
+phase = "parallel"
+command = '''
+python3 scripts/check-public-docs-commands.py --self-test &&
+  python3 scripts/check-public-docs-commands.py
+'''
+script = "scripts/check-public-docs-commands.py"
+local_fast = true
+local_full = true
+docs_only = true
+ci_guards = true
+
+
+[[check]]
+id = "sandbox-mcp"
+scope = "manual"
+cost = "expensive"
+phase = "parallel"
+command = "bash scripts/check-sandbox-mcp.sh flatpak"
+script = "scripts/check-sandbox-mcp.sh"
+local_fast = false
+local_full = false
+ci_guards = false
+
+[[check]]
+id = "selftest-budget"
+scope = "guards"
+cost = "cheap"
+phase = "parallel"
+command = "bash scripts/check-selftest-budget.sh"
+script = "scripts/check-selftest-budget.sh"
+local_fast = true
+local_full = true
+ci_guards = true
+
+[[check]]
+id = "selftest-codes"
+scope = "guards"
+cost = "cheap"
+phase = "parallel"
+command = '''
+python3 scripts/check-selftest-codes.py --self-test &&
+  python3 scripts/check-selftest-codes.py
+'''
+script = "scripts/check-selftest-codes.py"
+local_fast = true
+local_full = true
+docs_only = true
+ci_guards = true
+
+[[check]]
+id = "shell-seams"
+scope = "guards"
+cost = "cheap"
+phase = "parallel"
+command = '''
+python3 scripts/check-shell-seams.py --self-test &&
+  python3 scripts/check-shell-seams.py
+'''
+script = "scripts/check-shell-seams.py"
+local_fast = true
+local_full = true
+ci_guards = true
+
+[[check]]
+id = "source-fragments"
+scope = "guards"
+cost = "cheap"
+phase = "parallel"
+command = '''
+python3 scripts/check-cmake-source-fragments.py --self-test &&
+  python3 scripts/check-cmake-source-fragments.py
+'''
+script = "scripts/check-cmake-source-fragments.py"
+local_fast = true
+local_full = true
+ci_guards = true
+
+[[check]]
+id = "test-plan"
+scope = "guards"
+cost = "cheap"
+phase = "parallel"
+command = '''
+if [ "$GATE_PLACEMENT" = ci-guards ]; then
+  git fetch --no-tags --depth=1 origin "${GUARD_BASE:?GUARD_BASE is required}"
+fi
+python3 scripts/check-test-plan.py --self-test &&
+  python3 scripts/check-test-plan.py
+'''
+script = "scripts/check-test-plan.py"
+local_fast = true
+local_full = true
+docs_only = true
+ci_guards = true
+
+[[check]]
+id = "tests"
+scope = "build"
+cost = "expensive"
+phase = "sequential"
+command = "bash scripts/test-report.sh never"
+local_fast = true
+local_full = true
+ci_guards = false
+ci_build = true
+
+[[check]]
+id = "view-oracle"
+scope = "build"
+cost = "expensive"
+phase = "sequential"
+command = '''
+python3 scripts/check-view-oracle.py --self-check
+for profile in release dev-app; do
+  report="${RUNNER_TEMP:?RUNNER_TEMP is required}/view-oracle-$profile.jsonl"
+  cargo build -p pictura_app --lib --profile "$profile" --message-format=json > "$report"
+  python3 scripts/check-view-oracle.py --profile "$profile" "$report"
+done
+'''
+script = "scripts/check-view-oracle.py"
+local_fast = false
+local_full = false
+ci_guards = false
+ci_build = true
+
+[[check]]
+id = "worktree-hook"
+scope = "guards"
+cost = "moderate"
+phase = "parallel"
+command = "bash scripts/check-worktree-hook.sh"
+script = "scripts/check-worktree-hook.sh"
+local_fast = true
+local_full = true
+ci_guards = true

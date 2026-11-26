@@ -44,6 +44,7 @@ bash scripts/check-build-tree.sh
 echo "== build cache =="
 bash scripts/check-local-build-caching.sh --rebuild --dir build
 
+export PICTURA_FULL_GATES=1
 bash scripts/verify-fast.sh
 
 echo "== control =="
