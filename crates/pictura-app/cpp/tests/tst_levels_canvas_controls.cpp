@@ -135,8 +135,16 @@ std::unique_ptr<pictura::LevelsDialog> LevelsCanvasControlsTest::makeDialog()
 
 void LevelsCanvasControlsTest::pick(const QPoint& pixel)
 {
-    QTest::mouseClick(canvas_, Qt::LeftButton, Qt::NoModifier,
-                      canvas_->imageToWidget(QPointF(pixel) + QPointF(0.5, 0.5)).toPoint());
+    // Keep the pixel centre at fractional zoom, where integer rounding can
+    // move the click into a different source pixel.
+    const QPointF local = canvas_->imageToWidget(QPointF(pixel) + QPointF(0.5, 0.5));
+    const QPointF global = canvas_->mapToGlobal(local);
+    QMouseEvent press(QEvent::MouseButtonPress, local, global, Qt::LeftButton,
+                      Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(canvas_, &press);
+    QMouseEvent release(QEvent::MouseButtonRelease, local, global, Qt::LeftButton,
+                        Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(canvas_, &release);
 }
 
 void LevelsCanvasControlsTest::levelsPickEndpoints()

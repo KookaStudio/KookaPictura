@@ -117,7 +117,12 @@ pub(super) fn image_adjust_clipping_source(
     let (Some(right), Some(bottom)) = (x.checked_add(w), y.checked_add(h)) else {
         return QImage::default();
     };
-    let rect = PsdRect { top: y, left: x, bottom, right };
+    let rect = PsdRect {
+        top: y,
+        left: x,
+        bottom,
+        right,
+    };
     let frame = pictura_render::composite_region_level(doc, rect, level as usize, &|chunk| {
         pictura_codec::buffer_to_srgb(doc, &chunk).into_owned()
     });

@@ -59,7 +59,14 @@ pub mod ffi {
         fn image_adjust_sample(view: &PictureView, x: i32, y: i32, size: i32) -> u32;
 
         /// Bounded display crop at a pyramid level beyond the configured cache.
-        fn image_adjust_clipping_source(view: &PictureView, level: i32, x: i32, y: i32, w: i32, h: i32) -> QImage;
+        fn image_adjust_clipping_source(
+            view: &PictureView,
+            level: i32,
+            x: i32,
+            y: i32,
+            w: i32,
+            h: i32,
+        ) -> QImage;
 
         /// A Curves `block`'s `channel` points as `"x,y x,y …"`, or empty.
         fn image_adjustment_curve(block: &[u8], channel: i32) -> QString;
