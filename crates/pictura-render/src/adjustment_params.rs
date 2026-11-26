@@ -255,15 +255,57 @@ fn layout(data: &AdjustmentData, adjustment: &Adjustment, cmyk: bool) -> Option<
             ];
             if expanded {
                 specs.extend([
-                    slider("shadowWidth", "Shadows Tonal Width", U16(6), (0.0, 100.0), 50.0),
+                    slider(
+                        "shadowWidth",
+                        "Shadows Tonal Width",
+                        U16(6),
+                        (0.0, 100.0),
+                        50.0,
+                    ),
                     slider("shadowRadius", "Shadows Radius", U16(8), (0.0, 500.0), 30.0),
-                    slider("highlightWidth", "Highlights Tonal Width", U16(10), (0.0, 100.0), 50.0),
-                    slider("highlightRadius", "Highlights Radius", U16(12), (0.0, 500.0), 30.0),
+                    slider(
+                        "highlightWidth",
+                        "Highlights Tonal Width",
+                        U16(10),
+                        (0.0, 100.0),
+                        50.0,
+                    ),
+                    slider(
+                        "highlightRadius",
+                        "Highlights Radius",
+                        U16(12),
+                        (0.0, 500.0),
+                        30.0,
+                    ),
                     slider("brightness", "Brightness", I16(14), (-100.0, 100.0), 0.0),
-                    slider("colorCorrection", "Color Correction", I16(16), (-100.0, 100.0), 20.0),
-                    slider("midtoneContrast", "Midtone Contrast", I16(18), (-100.0, 100.0), 0.0),
-                    slider("blackClip", "Black Clip", U16Hundredths(20), (0.0, 10.0), 0.01),
-                    slider("whiteClip", "White Clip", U16Hundredths(22), (0.0, 10.0), 0.01),
+                    slider(
+                        "colorCorrection",
+                        "Color Correction",
+                        I16(16),
+                        (-100.0, 100.0),
+                        20.0,
+                    ),
+                    slider(
+                        "midtoneContrast",
+                        "Midtone Contrast",
+                        I16(18),
+                        (-100.0, 100.0),
+                        0.0,
+                    ),
+                    slider(
+                        "blackClip",
+                        "Black Clip",
+                        U16Hundredths(20),
+                        (0.0, 10.0),
+                        0.01,
+                    ),
+                    slider(
+                        "whiteClip",
+                        "White Clip",
+                        U16Hundredths(22),
+                        (0.0, 10.0),
+                        0.01,
+                    ),
                 ]);
             }
             plain("Shadows/Highlights", specs)

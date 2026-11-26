@@ -1354,12 +1354,17 @@ void ImageAdjustmentsTest::shadowsHighlightsAdvanced()
         dialog->show();
         return dialog;
     };
+    const auto spinFor = [](const pictura::AdjustmentDialog& dialog, const QString& key) {
+        const auto* slider = dialog.controlForTest(key);
+        return slider ? slider->parentWidget()->findChild<QDoubleSpinBox*>() : nullptr;
+    };
     auto dialog = makeDialog();
     auto* more = dialog->findChild<QCheckBox*>(QStringLiteral("shadowHighlightMoreOptions"));
-    auto* correction = qobject_cast<QDoubleSpinBox*>(
-        dialog->controlForTest(QStringLiteral("colorCorrection")));
-    auto* black = qobject_cast<QDoubleSpinBox*>(dialog->controlForTest(QStringLiteral("blackClip")));
-    QVERIFY(more && correction && black);
+    QVERIFY(more);
+    auto* correction = spinFor(*dialog, QStringLiteral("colorCorrection"));
+    QVERIFY(correction);
+    auto* black = spinFor(*dialog, QStringLiteral("blackClip"));
+    QVERIFY(black);
     QVERIFY(!more->isChecked() && !correction->isVisible());
     QVERIFY(dialog->controlForTest(QStringLiteral("shadowAmount"))->isVisible());
     QVERIFY(dialog->controlForTest(QStringLiteral("highlightAmount"))->isVisible());
@@ -1403,9 +1408,10 @@ void ImageAdjustmentsTest::shadowsHighlightsAdvanced()
 
     QVERIFY(pictura::convert_image_mode(*view_, QStringLiteral("grayscale")));
     dialog = makeDialog();
-    dialog->findChild<QCheckBox*>(QStringLiteral("shadowHighlightMoreOptions"))->setChecked(true);
-    auto* brightness = qobject_cast<QDoubleSpinBox*>(
-        dialog->controlForTest(QStringLiteral("brightness")));
+    more = dialog->findChild<QCheckBox*>(QStringLiteral("shadowHighlightMoreOptions"));
+    QVERIFY(more);
+    more->setChecked(true);
+    auto* brightness = spinFor(*dialog, QStringLiteral("brightness"));
     QVERIFY(brightness && brightness->isVisible());
     QVERIFY(!dialog->controlForTest(QStringLiteral("colorCorrection")));
     brightness->setValue(-30.0);

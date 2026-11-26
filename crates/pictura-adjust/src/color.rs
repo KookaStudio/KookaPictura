@@ -171,7 +171,9 @@ pub(crate) fn color_balance(
     }
     map_rgb(buf, n, |rv, gv, bv| {
         let out = match mode {
-            ColorBalanceMode::Rgb | ColorBalanceMode::Grayscale => rgb_pixel(p, rv as f64, gv as f64, bv as f64),
+            ColorBalanceMode::Rgb | ColorBalanceMode::Grayscale => {
+                rgb_pixel(p, rv as f64, gv as f64, bv as f64)
+            }
             ColorBalanceMode::Lab => lab_pixel(p, rv, gv, bv),
             ColorBalanceMode::Cmyk => cmyk_pixel(p, rv, gv, bv),
         };

@@ -144,9 +144,7 @@ pub fn apply_adjustment_region_with_native(
     native: bool,
 ) -> Result<(), FilterError> {
     if native && local_shadows_highlights(adjustment) {
-        return crate::shadow_highlight::apply_native_region(
-            layer, adjustment, mask, region, mode,
-        );
+        return crate::shadow_highlight::apply_native_region(layer, adjustment, mask, region, mode);
     }
     apply_adjustment_region_in_mode(layer, adjustment, mask, region, cmyk, mode)
 }
@@ -316,7 +314,11 @@ fn apply_op_region(
                     adjustment,
                     &mut buf,
                     coverage_plane.as_deref(),
-                    if local && grayscale { ColorBalanceMode::Grayscale } else { color_balance },
+                    if local && grayscale {
+                        ColorBalanceMode::Grayscale
+                    } else {
+                        color_balance
+                    },
                 )
                 .map_err(|error| FilterError::InvalidParams(error.to_string()))?
             }

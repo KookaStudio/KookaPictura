@@ -622,7 +622,10 @@ fn shadow_highlight_blocks_round_trip() {
     let doc = document(layer(Some(expanded.clone()), Vec::new()));
     for bytes in [write_psd(&doc).unwrap(), write_psb(&doc).unwrap()] {
         let loaded = read_psd(&bytes).unwrap();
-        assert_eq!(decode_adjustment(loaded.layers[0].adjustment().unwrap()), expected);
+        assert_eq!(
+            decode_adjustment(loaded.layers[0].adjustment().unwrap()),
+            expected
+        );
     }
 
     let mut unsupported = expanded.data.to_vec();

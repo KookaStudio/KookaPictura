@@ -11,8 +11,8 @@ use crate::layer_target::LayerTarget;
 use core::pin::Pin;
 use cxx_qt::CxxQtType;
 use cxx_qt_lib::QString;
-use pictura_render::Adjustment;
 use pictura_core::{layer_pixel_locked, layer_transparency_locked, PsdRect};
+use pictura_render::Adjustment;
 
 impl qobject::PictureView {
     pub fn apply_filter(mut self: Pin<&mut Self>, kind: &QString) -> bool {

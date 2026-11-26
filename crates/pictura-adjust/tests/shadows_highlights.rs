@@ -109,7 +109,11 @@ fn local_options() -> pictura_adjust::ShadowsHighlightsOptions {
     }
 }
 
-fn local(shadows: f64, highlights: f64, options: pictura_adjust::ShadowsHighlightsOptions) -> Adjustment {
+fn local(
+    shadows: f64,
+    highlights: f64,
+    options: pictura_adjust::ShadowsHighlightsOptions,
+) -> Adjustment {
     Adjustment::ShadowsHighlights(ShadowsHighlightsParams {
         shadows_amount: shadows,
         highlights_amount: highlights,
@@ -223,7 +227,9 @@ fn expanded_precision_and_validation() {
     apply_native(&neutral, &mut native, 2, 1, 4).unwrap();
     assert_eq!(native, original);
     apply_native(&local(10.0, 0.0, options), &mut native, 2, 1, 4).unwrap();
-    let Samples::U16(values) = native else { unreachable!() };
+    let Samples::U16(values) = native else {
+        unreachable!()
+    };
     assert!(values[0] > 8001 && values[1] > values[0]);
     assert_eq!(&values[6..], &[21, 43210]);
 

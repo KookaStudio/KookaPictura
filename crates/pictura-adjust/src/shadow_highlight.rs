@@ -17,7 +17,11 @@ pub(crate) fn apply<T: Sample>(
         .filter(|_| params.is_valid())
         .ok_or_else(|| AdjustError::InvalidParams("invalid Shadows/Highlights settings".into()))?;
     let grayscale = mode == ColorBalanceMode::Grayscale;
-    let brightness = if grayscale { options.brightness / 100.0 } else { 0.0 };
+    let brightness = if grayscale {
+        options.brightness / 100.0
+    } else {
+        0.0
+    };
     let contrast = options.midtone_contrast / 100.0;
     let shadow_amount = params.shadows_amount / 100.0;
     let highlight_amount = params.highlights_amount / 100.0;
@@ -125,7 +129,10 @@ fn clip_endpoints(
     let Some(first) = histogram.iter().position(|&count| count != 0) else {
         return (0.0, 1.0);
     };
-    let last = histogram.iter().rposition(|&count| count != 0).unwrap_or(first);
+    let last = histogram
+        .iter()
+        .rposition(|&count| count != 0)
+        .unwrap_or(first);
     if first == last {
         return (0.0, 1.0);
     }
@@ -133,10 +140,13 @@ fn clip_endpoints(
         0.0
     } else {
         let mut total = 0;
-        let position = histogram.iter().position(|&bin| {
-            total += bin;
-            total >= black_rank
-        }).unwrap_or(first);
+        let position = histogram
+            .iter()
+            .position(|&bin| {
+                total += bin;
+                total >= black_rank
+            })
+            .unwrap_or(first);
         // Use the upper edge of the endpoint bin to clip every sample in it.
         (position as f64 + 0.5) / scale
     };
@@ -144,11 +154,19 @@ fn clip_endpoints(
         1.0
     } else {
         let mut total = 0;
-        let position = histogram.iter().rev().position(|&bin| {
-            total += bin;
-            total >= white_rank
-        }).map_or(last, |offset| bins - 1 - offset);
+        let position = histogram
+            .iter()
+            .rev()
+            .position(|&bin| {
+                total += bin;
+                total >= white_rank
+            })
+            .map_or(last, |offset| bins - 1 - offset);
         (position as f64 - 0.5) / scale
     };
-    if lo < hi { (lo, hi) } else { (0.0, 1.0) }
+    if lo < hi {
+        (lo, hi)
+    } else {
+        (0.0, 1.0)
+    }
 }

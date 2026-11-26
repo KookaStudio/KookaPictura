@@ -53,7 +53,10 @@ pub(crate) fn adjustment(layer: &Layer) -> Result<Option<AdjustmentData>, PsdErr
             if p.local.is_some() {
                 crate::encode_shadows_highlights_local(*p).ok_or_else(unsupported)?
             } else {
-                crate::encode_shadows_highlights(p.shadows_amount as u16, p.highlights_amount as u16)
+                crate::encode_shadows_highlights(
+                    p.shadows_amount as u16,
+                    p.highlights_amount as u16,
+                )
             }
         }
         Adjustment::Levels(_)

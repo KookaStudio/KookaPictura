@@ -2,8 +2,8 @@ use crate::layer_content_budget::ContentAlloc;
 use crate::DescValue;
 use pictura_core::{
     Adjustment, BlackWhiteParams, BrightnessContrastParams, ExposureParams, HueRange,
-    HueSaturationParams, LevelsChannel, LevelsParams, PhotoFilterParams, ShadowsHighlightsOptions, ShadowsHighlightsParams,
-    VibranceParams,
+    HueSaturationParams, LevelsChannel, LevelsParams, PhotoFilterParams, ShadowsHighlightsOptions,
+    ShadowsHighlightsParams, VibranceParams,
 };
 use pictura_core::{AdjustmentData, FillContent};
 
@@ -344,7 +344,9 @@ pub fn decode_shadows_highlights_local(d: &[u8]) -> Option<Adjustment> {
             white_clip: unsigned(22)? / 100.0,
         }),
     };
-    params.is_valid().then_some(Adjustment::ShadowsHighlights(params))
+    params
+        .is_valid()
+        .then_some(Adjustment::ShadowsHighlights(params))
 }
 
 /// `blwh`: descriptor block with the six channel-percentage longs, a `useTint`

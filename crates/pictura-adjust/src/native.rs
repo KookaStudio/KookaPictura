@@ -137,9 +137,14 @@ pub fn apply_native_in_mode(
                 Samples::U8(data) => {
                     crate::shadow_highlight::apply(p, data.as_mut_slice(), width, height, mode, 256)
                 }
-                Samples::U16(data) => {
-                    crate::shadow_highlight::apply(p, data.as_mut_slice(), width, height, mode, 65536)
-                }
+                Samples::U16(data) => crate::shadow_highlight::apply(
+                    p,
+                    data.as_mut_slice(),
+                    width,
+                    height,
+                    mode,
+                    65536,
+                ),
                 Samples::F32(_) => Err(AdjustError::Unsupported(
                     "expanded Shadows/Highlights supports 8 and 16 bits per channel".into(),
                 )),

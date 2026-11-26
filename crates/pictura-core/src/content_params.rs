@@ -191,9 +191,13 @@ impl ShadowsHighlightsOptions {
             && [self.shadows_radius, self.highlights_radius]
                 .into_iter()
                 .all(|v| (0.0..=500.0).contains(&v))
-            && [self.brightness, self.color_correction, self.midtone_contrast]
-                .into_iter()
-                .all(|v| (-100.0..=100.0).contains(&v))
+            && [
+                self.brightness,
+                self.color_correction,
+                self.midtone_contrast,
+            ]
+            .into_iter()
+            .all(|v| (-100.0..=100.0).contains(&v))
             && [self.black_clip, self.white_clip]
                 .into_iter()
                 .all(|v| (0.0..=10.0).contains(&v))

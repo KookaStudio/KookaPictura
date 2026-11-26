@@ -23,7 +23,8 @@ pub(crate) fn apply_native_region(
     let width = rect.width() as usize;
     let height = rect.height() as usize;
     let n = width * height;
-    let invalid = || FilterError::InvalidParams("incomplete 16-bit Shadows/Highlights layer".into());
+    let invalid =
+        || FilterError::InvalidParams("incomplete 16-bit Shadows/Highlights layer".into());
     let clear_locked = layer_transparency_locked(layer);
     let grayscale = channel(layer, 1).is_none() && channel(layer, 2).is_none();
     let ids: &[i16] = if grayscale { &[0] } else { &[0, 1, 2] };
@@ -35,11 +36,17 @@ pub(crate) fn apply_native_region(
     let mut packed = Vec::with_capacity(3 * n);
     let mut targets = Vec::with_capacity(ids.len());
     for &id in ids {
-        let bytes = channels.iter().position(|c| c.id == id && c.data.len() == n)
+        let bytes = channels
+            .iter()
+            .position(|c| c.id == id && c.data.len() == n)
             .ok_or_else(invalid)?;
-        let plane = store.planes.iter().position(|(key, data)| {
-            *key == id && matches!(data, Samples::U16(values) if values.len() == n)
-        }).ok_or_else(invalid)?;
+        let plane = store
+            .planes
+            .iter()
+            .position(|(key, data)| {
+                *key == id && matches!(data, Samples::U16(values) if values.len() == n)
+            })
+            .ok_or_else(invalid)?;
         let Samples::U16(values) = &store.planes[plane].1 else {
             return Err(invalid());
         };
@@ -52,8 +59,16 @@ pub(crate) fn apply_native_region(
     }
     let mut samples = Samples::U16(packed.into());
     pictura_adjust::apply_native_in_mode(
-        adjustment, &mut samples, width, height, 3,
-        if grayscale { ColorBalanceMode::Grayscale } else { mode },
+        adjustment,
+        &mut samples,
+        width,
+        height,
+        3,
+        if grayscale {
+            ColorBalanceMode::Grayscale
+        } else {
+            mode
+        },
     )
     .map_err(|error| FilterError::InvalidParams(error.to_string()))?;
     let Samples::U16(output) = samples else {
@@ -63,12 +78,17 @@ pub(crate) fn apply_native_region(
     // Resolve the transparency lock from the authoritative alpha, with the
     // same byte-plane fallback used by compositing.
     let clear: Option<Vec<bool>> = if clear_locked {
-        if let Some((_, Samples::U16(alpha))) = store.planes.iter().find(|(id, _)| *id == -1)
+        if let Some((_, Samples::U16(alpha))) = store
+            .planes
+            .iter()
+            .find(|(id, _)| *id == -1)
             .filter(|(_, plane)| plane.len() == n)
         {
             Some(alpha.iter().map(|&sample| sample == 0).collect())
         } else {
-            channels.iter().find(|c| c.id == -1 && c.data.len() == n)
+            channels
+                .iter()
+                .find(|c| c.id == -1 && c.data.len() == n)
                 .map(|alpha| alpha.data.iter().map(|&sample| sample == 0).collect())
         }
     } else {
