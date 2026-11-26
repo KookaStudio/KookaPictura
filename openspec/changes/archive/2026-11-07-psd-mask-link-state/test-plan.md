@@ -22,7 +22,7 @@ observe.
 
 ## Execution during apply
 
-- Put new codec tests in `crates/pictura-codec/tests/mask_link_state.rs` and
+- Put new codec tests in `crates/pictura-codec/tests/psd/mask_link_state.rs` and
   new GUI tests in `crates/pictura-app/cpp/tests/tst_mask_link_state.cpp`.
 - Register the new Qt suite explicitly. Reuse committed small independent
   fixtures; do not make automated tests depend on the local artwork paths.

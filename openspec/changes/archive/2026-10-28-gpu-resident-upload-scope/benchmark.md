@@ -3,7 +3,7 @@
 Run with:
 
 ```bash
-cargo test -p pictura-render --test resident_upload_profile -- --ignored --nocapture
+cargo run -p pictura-render --features gpu --example resident_upload_profile
 ```
 
 The test is `#[ignore]`d and is not part of the gpu-parity CI profile. It skips

@@ -30,7 +30,7 @@
 
 - [x] 5.1 In `scripts/generate-fixtures.py`, add `rgb16()` and `rgb32()` builders: a flat RGB document with `header.depth = 16`/`32` and hand-built big-endian planes (`struct.pack(">H"…)` / `struct.pack(">f"…)`) via the existing `_set_composite`; register both in `FIXTURES`. Confirm regeneration is byte-stable and additive.
 - [x] 5.2 Commit `crates/pictura-codec/tests/fixtures/{rgb16,rgb32}.psd`.
-- [x] 5.3 Add `crates/pictura-codec/tests/depth_oracle.rs` (mirroring `color_mode_oracle.rs`): decode each fixture with `read_psd`, compare to `psd-tools`' `.convert("RGB")` composite with **tolerance 0**, and self-skip with a clear message when `psd-tools` is absent.
+- [x] 5.3 Add `crates/pictura-codec/tests/psd/depth_oracle.rs` (mirroring `color_mode_oracle.rs`): decode each fixture with `read_psd`, compare to `psd-tools`' `.convert("RGB")` composite with **tolerance 0**, and self-skip with a clear message when `psd-tools` is absent.
 - [x] 5.4 Add a round-trip test: read each fixture, assert `depth == Eight`, `source_depth == Some(..)`, `mode == Rgb`; write with `write_psd`, re-read, assert `source_depth == None` and stable pixels, and confirm `psd-tools` opens the output as an 8-bit RGB document.
 - [x] 5.5 Confirm no existing fixture or golden changes.
 

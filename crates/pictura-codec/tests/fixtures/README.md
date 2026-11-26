@@ -91,7 +91,7 @@ transparency channel, so the `-1` channel psd-tools appends in
 is a `ByteElement`, authored through
 `tagged_blocks.set_data(Tag.KNOCKOUT_SETTING, 2)` so its single value byte
 survives; `read_psd` decodes it as `Knockout::Deep`, and
-`crates/pictura-render/tests/knockout_oracle.rs` uses it to diff the CPU
+`crates/pictura-render/tests/oracle/knockout_oracle.rs` uses it to diff the CPU
 compositor against psd-tools' own compositor.
 
 `pass_through_vector_mask.psd` is authored by the `pass_through_vector_mask()`

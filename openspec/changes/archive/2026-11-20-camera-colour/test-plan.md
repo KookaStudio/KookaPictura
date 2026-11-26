@@ -25,4 +25,4 @@ opt-in through `PICTURA_DNG_CORPUS`.
 | `camera_colour_white_balance_round_trip` | `white_balance_transform` at the as-shot temperature and tint | Gains and matrix within 1e-4 relative | `pictura-codec::white_balance_round_trips` |
 | `camera_colour_default_white` | ColorMatrix1 only, no AsShotNeutral | 5003 ± 15 K | `pictura-codec::missing_neutral_defaults_to_d50` |
 | `camera_colour_refused` | No matrix; zero ColorMatrix1; AsShotNeutral (0, 1, 1) | Unsupported, Unsupported, Invalid | `pictura-codec::unusable_colour_tags_are_refused` |
-| `camera_colour_m9_corpus` | `PICTURA_DNG_CORPUS=~/Downloads cargo test -p pictura-codec --test dng_camera_colour leica` | 2000–15000 K; 5216 × 3472; not all black | `pictura-codec::leica_samples_convert_when_present` |
+| `camera_colour_m9_corpus` | `PICTURA_DNG_CORPUS=~/Downloads cargo test -p pictura-codec --test camera_raw dng_camera_colour::leica` | 2000–15000 K; 5216 × 3472; not all black | `pictura-codec::leica_samples_convert_when_present` |

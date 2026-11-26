@@ -11,7 +11,7 @@ algorithm the mode is not used as an oracle at all.
   RGBA8**, 8×8, row-major. `*_base.rgba` / `*_src.rgba` are the two input
   layers (base = destination, src = source); `<scene>_<Mode>.rgba` is the
   `magick -compose` result for that PSD mode.
-- Tests: `crates/pictura-render/tests/oracle.rs`. The tests that call
+- Tests: `crates/pictura-render/tests/oracle/main.rs`. The tests that call
   `composite_rgba` are `#[ignore]`d until task M2-A lands.
 - Verified against: ImageMagick **7.1.2-29 Q16-HDRI**.
 
@@ -92,11 +92,11 @@ keeps the alpha semantics correct.
 
 The scenes are pure functions of pixel coordinates, so generation is
 deterministic; `check` is exercised by `imagemagick_fixtures_reproduce` in
-`oracle.rs`.
+`oracle/main.rs`.
 
 # Merge Down oracle
 
-`tests/merge_oracle.rs` diffs `pictura_render::merge_scope` (Merge Down)
+`tests/oracle/merge_oracle.rs` diffs `pictura_render::merge_scope` (Merge Down)
 against the same ImageMagick references. The merge composites the source and
 the target through the document compositor, so the **source's own blend mode**
 governs the result, and the merged pixels must match ImageMagick's operator
@@ -129,7 +129,7 @@ against the fully opaque `solid` and `ramp` scenes.
 
 # Knockout psd-tools oracle
 
-`tests/knockout_oracle.rs` diffs `pictura_render::composite_rgba` against
+`tests/oracle/knockout_oracle.rs` diffs `pictura_render::composite_rgba` against
 **psd-tools**' own compositor, an independent implementation of deep knockout
 (`psd_tools/composite/composite.py`, "Verified against Photoshop"). The fixture
 `../pictura-codec/tests/fixtures/knockout.psd` is a red Background, an
@@ -142,7 +142,7 @@ at every sample; a larger disagreement is a behavior bug, not rounding. The test
 also asserts the semantic punch-through (the intermediate green channel is
 exactly 0 at a covered pixel).
 
-`tests/knockout_oracle.rs` also covers `knockout_group.psd`: a red Background
+`tests/oracle/knockout_oracle.rs` also covers `knockout_group.psd`: a red Background
 plus a **pass-through** group of green and the same half-fill `knko = Deep`
 blue. psd-tools' own compositor applies a knockout inside a pass-through group,
 so the group's green is punched through to the background; its reference is
@@ -152,7 +152,7 @@ crates/pictura-render/tests/fixtures/knockout_group.rgba`. The test asserts the
 group decodes as `PassThrough` and its child as `Deep`, so a fixture that
 silently becomes isolated fails rather than passing for the wrong reason.
 
-`tests/knockout_oracle.rs` also covers `knockout_isolated_group.psd`: a red
+`tests/oracle/knockout_oracle.rs` also covers `knockout_isolated_group.psd`: a red
 Background, a `Yellow` layer below, and an **isolated** (explicit Normal) group
 of green and the same half-fill `knko = Deep` blue. psd-tools stops a deep
 knockout at an isolated group, so the group's green is punched through to the
@@ -167,7 +167,7 @@ background would zero the green channel).
 
 # M12-B — structural document-ops oracle
 
-`tests/document_oracle.rs` covers the M12 document operations
+`tests/document/document_oracle.rs` covers the M12 document operations
 (`resize_document`, `resize_canvas_document`, `rotate_document`,
 `flip_document`). It is a **structural** oracle, not a pixel-parity one: it
 checks that an operation leaves a document that still round-trips and stays
@@ -220,6 +220,6 @@ trips a resized document and asserts `check_dims` accepts the right size and
 rejects a deliberately corrupted width or height.
 
 ```bash
-cargo test -p pictura-render --test document_oracle
+cargo test -p pictura-render --test document document_oracle::
 ```
 

@@ -2,7 +2,7 @@
 
 ## 1. Tests
 - [x] 1.1 Every `pictura-color` test named in `test-plan.md` (`chroma.rs` tests, `lib.rs` tests)
-- [x] 1.2 Every `pictura-codec` test named in `test-plan.md` (`tests/dng_camera_colour.rs`)
+- [x] 1.2 Every `pictura-codec` test named in `test-plan.md` (`tests/camera_raw/dng_camera_colour.rs`)
 
 ## 2. Colour
 - [x] 2.1 `pictura-color/src/chroma.rs`: matrices, primaries, Bradford, temperature and tint

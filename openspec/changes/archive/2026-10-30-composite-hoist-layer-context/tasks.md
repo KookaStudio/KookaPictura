@@ -2,7 +2,7 @@
 
 ## 1. Measurement protocol
 
-- [x] 1.1 Add `crates/pictura-render/tests/composite_profile.rs` with an ignored `cpu_composite_profile_4000` test (the GPU profile already uses `composite_profile_4000`) that builds a 4000² document (edge overridable with `PICTURA_PROFILE_SIZE`) and prints the wall time for Normal without a mask, Multiply, a feathered raster mask, a vector mask, and a full-canvas type layer (the sparse case the early-out targets); verify `cargo test -p pictura-render --test composite_profile -- --ignored --nocapture` prints one timing per scenario.
+- [x] 1.1 Add `crates/pictura-render/examples/composite_profile.rs` with an ignored `cpu_composite_profile_4000` test (the GPU profile already uses `composite_profile_4000`) that builds a 4000² document (edge overridable with `PICTURA_PROFILE_SIZE`) and prints the wall time for Normal without a mask, Multiply, a feathered raster mask, a vector mask, and a full-canvas type layer (the sparse case the early-out targets); verify `cargo run -p pictura-render --example composite_profile` prints one timing per scenario.
 - [x] 1.2 Run the profile before any implementation change and record the five baseline timings in the task result and the PR body; verify the recorded numbers match the printed output.
 
 ## 2. Tests (written before the implementation they cover)

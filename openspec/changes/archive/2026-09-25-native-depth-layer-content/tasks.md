@@ -11,4 +11,4 @@
 - [x] 2.1 Render test: a depth-16 RGB document with a pixel layer whose `source_channels` native samples are not the 8-bit widening yields `composite_native` samples that differ from the widening of `composite_rgba`.
 - [x] 2.2 Render test: a `source_mode = Some(Cmyk)` depth-16 document takes the 8-bit path (native composite equals the widening of the composited color).
 - [x] 2.3 Render test: a depth-16 layer without a matching store falls back to 8-bit.
-- [x] 2.4 `cargo nextest run --workspace`, `cargo test -p pictura-render --test document_oracle`, `cargo test -p pictura-render`, `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `bash scripts/check-file-size.sh` (report `composite.rs` LOC), `openspec validate native-depth-layer-content --strict`.
+- [x] 2.4 `cargo nextest run --workspace`, `cargo test -p pictura-render --test document document_oracle::`, `cargo test -p pictura-render`, `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `bash scripts/check-file-size.sh` (report `composite.rs` LOC), `openspec validate native-depth-layer-content --strict`.

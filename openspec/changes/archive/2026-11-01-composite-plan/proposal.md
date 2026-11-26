@@ -71,5 +71,5 @@ No observable output changes: every composite and saved file stays byte-identica
 - `crates/pictura-render/src/mask_refine.rs` — the raster and vector gates become
   `Clone`.
 - `crates/pictura-core/src/vector.rs` — `VectorCoverage` gains `Clone, Copy`.
-- `crates/pictura-render/tests/composite_profile.rs` and new unit tests.
+- `crates/pictura-render/examples/composite_profile.rs` and new unit tests.
 - No new dependencies. No `docs/` change.

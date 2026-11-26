@@ -4,7 +4,7 @@ This plan covers `vendor-raw-cr3-colour-r3-v1` (#1579): `codec/camera-matrices`
 (modified; the table split into a second generated file).
 
 **Fixtures.** Synthetic CR3s are written in the test by
-`tests/raw/cr3_builder.rs` and `tests/raw/crx_encode.rs`. The corpus row reads
+`tests/camera_raw/raw/cr3_builder.rs` and `tests/camera_raw/raw/crx_encode.rs`. The corpus row reads
 user-supplied camera files, opt-in through `PICTURA_RAW_CORPUS`.
 
 | Scenario | Steps | Expected | Coverage |
@@ -16,7 +16,7 @@ user-supplied camera files, opt-in through `PICTURA_RAW_CORPUS`.
 | `cr3_matrices_lookup` | Spectral CR3 lookup test, the colourless body now the G1 X Mark III | Spectral bodies under 17 and 21; aliases equal; G1 X Mark III none | `pictura-codec::cr3_models_get_both_matrices` |
 | `cr3_as_shot` | Unchanged CTMD colour-data test | Versions 19/32/48/64 report the neutral; none without CTMD or with an overrun | `pictura-codec::cr3_as_shot_neutral_from_ctmd` |
 | `cr3_known_camera_decodes` | Unchanged R5 decode test | Decodes; as-shot equals `as_shot_transform`, 2000–12000 K | `pictura-codec::known_camera_cr3_decodes` |
-| `cr3_colour_corpus` | `PICTURA_RAW_CORPUS=~/Downloads/cr3-1579 cargo test -p pictura-codec --test raw_cr3 colour_corpus`, then the same on `~/Downloads/cr3-1474` | Table bodies (now R1, R3, V1) decode at 2000–12000 K; the R8 Mark II refused as camera colour | `pictura-codec::cr3_colour_corpus_when_present` |
+| `cr3_colour_corpus` | `PICTURA_RAW_CORPUS=~/Downloads/cr3-1579 cargo test -p pictura-codec --test camera_raw raw_cr3::colour_corpus`, then the same on `~/Downloads/cr3-1474` | Table bodies (now R1, R3, V1) decode at 2000–12000 K; the R8 Mark II refused as camera colour | `pictura-codec::cr3_colour_corpus_when_present` |
 | `cr3_jpeg_matrices` | Synthetic CR3s naming each camera-JPEG body (R1, R3, V1 added), regional name, proxy, the G1 X Mark III and the R8 Mark II | Bodies under 20 and 24 (R6 Mark III too); names and proxies equal their body; 90D ≠ M50; R1 ≠ R3; G1 X Mark III and R8 Mark II none | `pictura-codec::canon_jpeg_bodies_take_their_matrices` |
 | `cr3_jpeg_matrices_white` | Each camera-JPEG matrix's response to the Planckian white at its light as the as-shot neutral | Neutral positive; that light's temperature within 2 % | `pictura-codec::canon_jpeg_matrices_keep_white_neutral` |
 | `cr3_jpeg_camera_decodes` | Unchanged M50 decode test | Decodes; as-shot equals `as_shot_transform`, 2000–12000 K | `pictura-codec::jpeg_fitted_cr3_decodes` |

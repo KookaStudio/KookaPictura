@@ -1,7 +1,7 @@
 # Tasks
 
 ## 1. Tests
-- [x] 1.1 Synthetic RW2 writer (`tests/raw/rw2_builder.rs`)
+- [x] 1.1 Synthetic RW2 writer (`tests/camera_raw/raw/rw2_builder.rs`)
 - [x] 1.2 Every test named in `test-plan.md`
 
 ## 2. Codec

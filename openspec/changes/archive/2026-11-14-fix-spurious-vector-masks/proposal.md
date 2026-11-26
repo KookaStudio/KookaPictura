@@ -54,7 +54,7 @@ None.
 - `crates/pictura-codec/src/mask_params.rs`: one mask-flag constant.
 - `crates/pictura-codec/tests/fixtures/`: one new fixture and its README row,
   authored by `scripts/generate-fixtures.py`.
-- `crates/pictura-codec/tests/vector_mask_oracle.rs` and the `vector_mask`
+- `crates/pictura-codec/tests/psd/vector_mask_oracle.rs` and the `vector_mask`
   unit tests: coverage.
 - No render, UI, application, dependency, or performance change. The writer
   clears the render flag for a live pixel-layer vector mask, and a suppressed

@@ -54,7 +54,7 @@ those controls and the layer's shape identity must work for `'vsms'` too.
   block for authoring, shape identity, and block sync.
 - `scripts/generate-fixtures.py` and
   `crates/pictura-codec/tests/fixtures/`: a small `'vsms'` fixture.
-- `crates/pictura-codec/tests/vector_mask_oracle.rs` and the codec/render unit
+- `crates/pictura-codec/tests/psd/vector_mask_oracle.rs` and the codec/render unit
   tests: decode, precedence, base rendering, clipping coverage, authoring, and
   shape rasterization.
 - Closes #1284 and #1114. No dependency or API changes; both keys were already

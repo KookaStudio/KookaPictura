@@ -111,7 +111,7 @@ that audit pass.
 
 ## Impact
 
-- Engine: `crates/pictura-render` (new `rotate_document_in`; grow instead of clamp in `crop_document`; leaf-path resolution for active-layer targeting), `crates/pictura-ops` (reused `rotate_in`), `crates/pictura-render/tests/document_oracle.rs`.
+- Engine: `crates/pictura-render` (new `rotate_document_in`; grow instead of clamp in `crop_document`; leaf-path resolution for active-layer targeting), `crates/pictura-ops` (reused `rotate_in`), `crates/pictura-render/tests/document/document_oracle.rs`.
 - App Rust bridge: `crates/pictura-app/src/cxxqt_object*` (crop/rotate entry, active-layer resolution, eyedropper sampling size/scope, Move/Auto-Select/align-to state, Layers active-thumb/lock).
 - App C++: `tool_crop.cpp`, `crop_grip.h`, `image_view.{h,cpp}` + `image_view_overlays.cpp`, `options_bar*.cpp/.h`, `panels/numeric_field.*`, `layers_panel*.{cpp,h}`, `channels_panel.cpp`, `panels/info_panel.cpp`, `panels/histogram_panel.{h,cpp}`, `tool_hint_bar.cpp`, `tools.{h,cpp}`, `tool_context.h`, `tool_handler.h`, `tool_selection.cpp`, `selection_geometry.{h,cpp}`, `tools_marquee.cpp`, `tool_eyedropper.cpp`, `tool_move.cpp`, `frame*.cpp`, `icons.{h,cpp}`, `tool_transform.cpp`.
 - Assets: `assets/cursors/*.svg`, `assets/icons/*.svg` (link-2/unlink-2, chevron-up/left), `lucide-map.json`, `pictura.qrc`.

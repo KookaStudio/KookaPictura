@@ -97,9 +97,9 @@ deferred set.
 - `crates/pictura-render/src/tests/adjustment.rs`: decode, malformed-rejection,
   encoder round-trip, fixture-decode, per-channel composite tests; drop `curv`
   from `deferred_keys_still_none`.
-- `crates/pictura-render/tests/adjustment_oracle.rs`: a psd-tools partial read
+- `crates/pictura-render/tests/oracle/adjustment_oracle.rs`: a psd-tools partial read
   of the fixture's `curv` block (optional, always-run-with-psd-tools).
-- `crates/pictura-codec/tests/agpsd_oracle.rs`: a second ag-psd oracle over the
+- `crates/pictura-codec/tests/psd/agpsd_oracle.rs`: a second ag-psd oracle over the
   new fixture (self-skips without `node`/`ag-psd`).
 - `crates/pictura-codec/tests/fixtures/curves.psd`: new committed fixture.
 - `scripts/generate-fixtures.py`: a `_curv_data` raw-byte helper and the

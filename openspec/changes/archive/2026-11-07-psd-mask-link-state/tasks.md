@@ -12,7 +12,7 @@ deferred until all code is finished, following the compile-last rule.
 ## 2. External PSD/PSB link-state coverage
 
 - [x] 2.1 Add small linked/unlinked PSD fixture generators through psd-tools with distinct non-zero layer/mask origins and non-uniform mask pixels, and commit their outputs; verify raw bit values and expected bounds through psd-tools and confirm no pre-existing fixture changed.
-- [x] 2.2 Add `linked_external_mask_preserves_flags_and_bounds`, `unlinked_external_mask_preserves_flags_and_bounds`, and `mask_link_toggles_survive_psd_and_psb` to `crates/pictura-codec/tests/mask_link_state.rs`; verify assertions compare the actual renderer predicate and all preserved mask attributes, and after the final build all three tests pass.
+- [x] 2.2 Add `linked_external_mask_preserves_flags_and_bounds`, `unlinked_external_mask_preserves_flags_and_bounds`, and `mask_link_toggles_survive_psd_and_psb` to `crates/pictura-codec/tests/psd/mask_link_state.rs`; verify assertions compare the actual renderer predicate and all preserved mask attributes, and after the final build all three tests pass.
 - [x] 2.3 Add `psd_tools_reads_both_mask_link_states` with the existing dependency-availability self-skip convention; verify after the final build that independent decoding checks both flag polarities, mask bounds, and coverage, without changing the codec reader/writer's raw-flag representation.
 
 ## 3. Mask-control opacity and interaction

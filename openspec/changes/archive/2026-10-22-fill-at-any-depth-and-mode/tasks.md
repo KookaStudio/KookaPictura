@@ -4,7 +4,7 @@
 
 - [x] 1.1 Rust (`pictura-paint`): the colour-space tests — `a_gray_layer_takes_the_colours_luma`, `an_rgb_layer_keeps_the_colours_channels`, `a_gray_ramp_lies_on_the_gray_axis`, `an_eight_bit_fill_is_byte_identical`, `a_layer_above_the_canvas_fills_the_rows_on_the_canvas`; verified by the five tests naming the pixels, the ramp and the layer's rows they pin.
 - [x] 1.2 Rust (`pictura-paint`): the native-store tests — `a_depth16_fill_writes_the_native_store`, `a_depth32_fill_writes_the_native_store`, `a_depth16_fill_blends_at_the_stores_depth`, `the_depth16_mirror_is_the_stores_narrowing`, `a_store_without_a_transparency_plane_still_fills`, `a_mismatched_store_falls_back_to_the_eight_bit_path`, `a_converted_mode_document_fills_the_eight_bit_path`, `a_native_blend_matches_the_eight_bit_modes`, `a_native_fill_refuses_a_locked_layer`, `a_native_dissolve_picks_the_same_pixels_as_the_eight_bit_path`; verified by the twelve tests naming the store and the working copy they pin.
-- [x] 1.3 Rust (`pictura-render`): `a_depth16_fill_survives_a_psd_round_trip` in `crates/pictura-render/tests/native_depth_roundtrip.rs`; verified by the test naming the re-read native samples it pins.
+- [x] 1.3 Rust (`pictura-render`): `a_depth16_fill_survives_a_psd_round_trip` in `crates/pictura-render/tests/document/native_depth_roundtrip.rs`; verified by the test naming the re-read native samples it pins.
 - [x] 1.4 Qt (`tst_fill_tools`): `fillCommandOnADepth16Document`, `fillCommandOnAGrayDocument`, `fillCommandPreservesTransparency`, `paintBucketOnADepth16Document`, `gradientOnADepth16Document` and `strokeCommandOnADepth16Document`, declared in the suite's private slots; verified by the six cases existing in the suite and by 6.2.
 
 ## 2. The shared rules

@@ -1,8 +1,8 @@
 # Tasks
 
 ## 1. Tests
-- [x] 1.1 `tests/raw_rw2_colour.rs`: Panasonic lookup, white, decode, refusal and corpus tests
-- [x] 1.2 `raw_format_2_saturates_at_3967` and the updated normalization helper in `tests/raw_rw2.rs`
+- [x] 1.1 `tests/camera_raw/raw_rw2_colour.rs`: Panasonic lookup, white, decode, refusal and corpus tests
+- [x] 1.2 `raw_format_2_saturates_at_3967` and the updated normalization helper in `tests/camera_raw/raw_rw2.rs`
 - [x] 1.3 `raw_sniff_detects_by_signature` with Panasonic and Photoshop Raw `.RAW` files; `tst_raw_open::openFiltersListCameraRaw` with the RW2 extensions
 
 ## 2. Tools and table

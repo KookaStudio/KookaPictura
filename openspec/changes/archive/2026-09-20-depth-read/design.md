@@ -238,7 +238,7 @@ the header claims 16/32, and the merged composite is left 8-bit-sized, so
 therefore proven by a hand-built Rust file in the `layered_psd_depth` style
 (the shipped depth-1 precedent), not by psd-tools.
 
-The oracle (`tests/depth_oracle.rs`, mirroring `color_mode_oracle.rs`) re-reads
+The oracle (`tests/psd/depth_oracle.rs`, mirroring `color_mode_oracle.rs`) re-reads
 each fixture with psd-tools' `.convert("RGB")` composite and compares exactly
 (tolerance 0); a Rust unit suite (`tests/depth.rs`) covers the RLE row stride,
 the ZIP/ZIP-with-prediction layouts (streams built from the psd-tools

@@ -76,7 +76,7 @@ rewrite its path, and delete/rasterize remove it. No writer change is needed.
   only mask is a closed-rectangle `'vsms'`. It carries no clipped layer;
   clipping tests append a full-canvas clipped layer in memory. Existing fixtures
   stay byte-identical.
-- `crates/pictura-codec/tests/vector_mask_oracle.rs`'s psd-tools script
+- `crates/pictura-codec/tests/psd/vector_mask_oracle.rs`'s psd-tools script
   currently reads only `VECTOR_MASK_SETTING1`; it gains the `'vsms'` fallback.
   The Pictura-only fixture decode and the round-trip are separate,
   non-skipping tests; only the psd-tools comparison self-skips without

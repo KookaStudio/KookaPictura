@@ -16,6 +16,6 @@
 ## 3. Verification
 
 - [x] 3.1 `cargo nextest run -p pictura-core -p pictura-codec -p pictura-render` green with no golden change.
-- [x] 3.2 `cargo test -p pictura-codec --test depth_oracle` and `--test color_mode_oracle` green (self-skip if `psd-tools` absent).
+- [x] 3.2 `cargo test -p pictura-codec --test psd depth_oracle::` and `--test psd color_mode_oracle::` green (self-skip if `psd-tools` absent).
 - [x] 3.3 Add the byte-exact encoded-equals-decoded unit test for depth 16 and 32.
 - [x] 3.4 `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `scripts/check-file-size.sh`.

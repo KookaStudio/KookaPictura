@@ -4,7 +4,7 @@ This plan covers `vendor-raw-rw2` (#1472, plain packings):
 `codec/vendor-raw-containers` and `document/raw-open` (both modified).
 
 **Fixtures.** Synthetic RW2s are written in the test by
-`tests/raw/rw2_builder.rs`; planes are deterministic. The corpus row reads
+`tests/camera_raw/raw/rw2_builder.rs`; planes are deterministic. The corpus row reads
 user-supplied camera files, opt-in through `PICTURA_RAW_CORPUS`.
 
 | Scenario | Steps | Expected | Coverage |
@@ -22,6 +22,6 @@ user-supplied camera files, opt-in through `PICTURA_RAW_CORPUS`.
 | `rw2_tags` | Orientation 6, WB 512/256/384; zero red level | Reported; neutral, none; demosaic Ok | `pictura-codec::rw2_reports_camera_tags` |
 | `rw2_no_colour` | `decode_raw_source` on a DMC-FZ50 file | `Unsupported`, naming the camera | `pictura-codec::rw2_without_colour_names_the_camera` |
 | `rw2_hostile` | Every prefix; corrupt directory; bad borders; huge width | Errors, no panic | `pictura-codec::hostile_rw2s_fail_cleanly` |
-| `rw2_corpus` | `PICTURA_RAW_CORPUS=<dir> cargo test -p pictura-codec --test raw_rw2 corpus` | Plain files read, greens agree; others refused | `pictura-codec::rw2_corpus_reads_when_present` |
+| `rw2_corpus` | `PICTURA_RAW_CORPUS=<dir> cargo test -p pictura-codec --test camera_raw raw_rw2::corpus` | Plain files read, greens agree; others refused | `pictura-codec::rw2_corpus_reads_when_present` |
 | `raw_open_sniff` | DNG, Sony, other make, IIRO and IIU as `.tif`, plain TIFF, missing path | DNG, Sony, IIRO and IIU detected | `pictura-app::raw_sniff_detects_by_signature` |
 | `raw_open_filter` | Read `openFileFilters()` (unchanged) | Six raw extensions in both filters | `tst_raw_open::openFiltersListCameraRaw` |

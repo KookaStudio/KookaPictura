@@ -59,7 +59,7 @@ file per checked row, but SVG silently exports the whole document.
 - `crates/pictura-app/cpp/export_as_dialog.{h,cpp}`: per-row SVG target
   selection and writing.
 - `crates/pictura-app/cpp/tests/tst_export_as.cpp`: per-layer SVG coverage.
-- `crates/pictura-render/tests/svg_oracle.rs`: librsvg oracle coverage for
+- `crates/pictura-render/tests/oracle/svg_oracle.rs`: librsvg oracle coverage for
   gradients, patterns, and strokes.
 - `docs/10-workflow-io/export-formats.md` and `docs/dev/STATE.md`
   (`TASK-ALLOWS-DOCS`).

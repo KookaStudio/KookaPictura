@@ -1,7 +1,7 @@
 # Tasks
 
 ## 1. Tests
-- [x] 1.1 `tests/raw_cr3_colour.rs`: camera-JPEG lookup, white and decode tests; the CR3 corpus test accepts a one-matrix row
+- [x] 1.1 `tests/camera_raw/raw_cr3_colour.rs`: camera-JPEG lookup, white and decode tests; the CR3 corpus test accepts a one-matrix row
 
 ## 2. Tools and table
 - [x] 2.1 `fit-camera-jpeg-matrices.py` reads CR3 (JPEG track, CMT1, CTMD presets) and keeps fits of samples outside the run

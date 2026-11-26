@@ -2,9 +2,9 @@
 
 ## 1. Engine kernel
 
-- [x] 1.1 Add a public grayscale accessor to `ApplyImagePlanes` using the Grayscale conversion weights (Rec.601, matching Image ▸ Mode ▸ Grayscale) and verify the existing Apply Image suite still passes: `cargo nextest run -p pictura-render --test apply_image`.
+- [x] 1.1 Add a public grayscale accessor to `ApplyImagePlanes` using the Grayscale conversion weights (Rec.601, matching Image ▸ Mode ▸ Grayscale) and verify the existing Apply Image suite still passes: `cargo nextest run -p pictura-render --test document apply_image::`.
 - [x] 1.2 Add `pictura-render/src/calculations.rs` with the two-source blend, per-source Invert, Opacity toward Source 1, mask scaling toward black, Add/Subtract arithmetic, and 8-bit output; export it from `lib.rs` and verify with `cargo check -p pictura-render`.
-- [x] 1.3 Write the engine tests `add_scale_two_averages`, `subtract_honours_scale_and_offset`, `layer_modes_match_the_compositor`, `invert_applies_per_source`, `opacity_mixes_toward_source_one`, `gray_matches_grayscale_conversion`, `alpha_channel_as_source`, `sixteen_bit_sources_keep_precision`, `mask_hides`, `inverted_mask_reveals_dark`, `selection_as_mask`, and `no_mask_applies_everywhere`; verify with `cargo nextest run -p pictura-render --test calculations`.
+- [x] 1.3 Write the engine tests `add_scale_two_averages`, `subtract_honours_scale_and_offset`, `layer_modes_match_the_compositor`, `invert_applies_per_source`, `opacity_mixes_toward_source_one`, `gray_matches_grayscale_conversion`, `alpha_channel_as_source`, `sixteen_bit_sources_keep_precision`, `mask_hides`, `inverted_mask_reveals_dark`, `selection_as_mask`, and `no_mask_applies_everywhere`; verify with `cargo nextest run -p pictura-render --test document calculations::`.
 
 ## 2. App bridge and result writers
 

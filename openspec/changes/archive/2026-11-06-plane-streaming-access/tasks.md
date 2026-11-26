@@ -36,7 +36,7 @@
 
 - [x] 4.1 `cargo fmt`, `cargo clippy --workspace --all-targets -D warnings`,
   `cargo nextest run -p pictura-core -p pictura-render`, and
-  `cargo test -p pictura-render --test document_oracle`, with no golden
+  `cargo test -p pictura-render --test document document_oracle::`, with no golden
   changed.
 - [x] 4.2 `cargo nextest run -p pictura_app heap_peak`: all 12 pass, and
   M2–M10 report 0 materializations.

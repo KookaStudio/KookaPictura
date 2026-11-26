@@ -19,13 +19,13 @@
 - [x] 3.1 Add `parallel_rle_composite_matches_serial` at depth 8, 16, 32, and depth-1 Bitmap with one and with several channels, comparing the parallel and single-thread pools
 - [x] 3.2 Add `merged_zip_composite_matches_serial` for ZIP and ZIP-with-prediction image data, leaving the deflate stream serial
 - [x] 3.3 Rewrite `read_rle` to prefix-sum the scanline byte counts with checked offsets, decode each row into its own `par_chunks_mut` slice from the file-tail payload, and scan the collected row results in order; verify 3.1 and 3.2 pass
-- [x] 3.4 Verify `cargo nextest run -p pictura-codec` and `cargo test -p pictura-codec --test depth_oracle` pass
+- [x] 3.4 Verify `cargo nextest run -p pictura-codec` and `cargo test -p pictura-codec --test psd depth_oracle::` pass
 
 ## 4. ZIP-with-prediction inversion (`pictura-codec`)
 
 - [x] 4.1 Add `parallel_prediction_matches_serial` comparing the parallel and single-thread pools at depth 8, 16, and 32
 - [x] 4.2 Rewrite `undo_prediction` to process rows with `par_chunks_mut` at depth 8, 16, and 32, move the depth-32 unshuffle into the per-row closure so it no longer copies the whole buffer, and preserve the per-depth short-row, `width == 0`, and `rows` semantics; verify 4.1 passes
-- [x] 4.3 Verify `cargo test -p pictura-codec --test depth_oracle`, `cargo test -p pictura-codec --test oracle`, and `cargo test -p pictura-codec --test hostile_inputs` pass
+- [x] 4.3 Verify `cargo test -p pictura-codec --test psd depth_oracle::`, `cargo test -p pictura-codec --test oracle`, and `cargo test -p pictura-codec --test hostile_inputs` pass
 
 ## 5. Integration and repository contracts
 

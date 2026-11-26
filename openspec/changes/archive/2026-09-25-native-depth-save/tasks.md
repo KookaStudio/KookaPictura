@@ -14,4 +14,4 @@
 - [x] 3.1 Render/codec test: a depth-16 RGB document with a pixel layer (native samples not the 8-bit widening) is edited/marked so the refresh runs; `write_psd` then `read_psd` yields depth 16 and a retained composite that is not the 8-bit widening.
 - [x] 3.2 Render test: `refresh_native_composite` returns `false` and mutates nothing for a no-layer, converted-mode (`Some(Cmyk)`), 8-bit, or `source_depth`-absent document.
 - [x] 3.3 App test (if the harness allows): a dirty 16-bit view saves depth 16; an open→save with no edit is byte-identical.
-- [x] 3.4 `cargo test -p pictura-codec --test depth_oracle` and `--test color_mode_oracle` still green; `cargo nextest run --workspace`; `cargo fmt --all --check`; `cargo clippy --workspace --all-targets -- -D warnings`; `bash scripts/check-file-size.sh`; `openspec validate native-depth-save --strict`.
+- [x] 3.4 `cargo test -p pictura-codec --test psd depth_oracle::` and `--test psd color_mode_oracle::` still green; `cargo nextest run --workspace`; `cargo fmt --all --check`; `cargo clippy --workspace --all-targets -- -D warnings`; `bash scripts/check-file-size.sh`; `openspec validate native-depth-save --strict`.

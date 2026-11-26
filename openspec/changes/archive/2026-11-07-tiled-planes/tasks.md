@@ -11,7 +11,7 @@
 - [x] 1.4 History: tile tests, `untouched_tile_keeps_its_arc`, the hinted
   capture sharing fully hinted tiles.
 - [x] 1.5 `fork_bytes_counts_tiles`; M1, M2 and M3 plane-cost guards.
-- [x] 1.6 Codec `tests/tiled_planes.rs`: byte-identical tiled write, tiled read.
+- [x] 1.6 Codec `tests/psd/tiled_planes.rs`: byte-identical tiled write, tiled read.
 
 ## 2. Core
 

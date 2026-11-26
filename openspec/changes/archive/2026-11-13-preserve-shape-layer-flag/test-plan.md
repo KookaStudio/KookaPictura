@@ -19,7 +19,7 @@ oracle convention; CI's oracle job runs them.
 
 ## Execution during apply
 
-- Put the new codec checks in `crates/pictura-codec/tests/layer_record_flags.rs`
+- Put the new codec checks in `crates/pictura-codec/tests/psd/layer_record_flags.rs`
   and the two render checks in `crates/pictura-render/src/tests/rasterize.rs`.
 - Give the authored-shape oracle check its own script constant in
   `vector_mask_oracle.rs`; keep the shared `SCRIPT` and the expected rows of

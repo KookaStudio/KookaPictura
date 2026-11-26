@@ -25,13 +25,13 @@ composite_rows.rs:115                             layer.blend);
 ```
 
 The scratch composite is the merge's only compositor; there is no second one.
-`crates/pictura-render/tests/oracle.rs` already diffs `composite_rgba` against
+`crates/pictura-render/tests/oracle/main.rs` already diffs `composite_rgba` against
 the committed ImageMagick `-compose` references for the 19 modes ImageMagick
 implements with the same formula, in the `solid` and `ramp` scenes, at
 tolerance 0 (Vivid Light 1). Because the merge's scratch composite *is*
 `composite_rgba` of exactly the two layers, the merge inherits that proof —
 but nothing in the test suite exercises it through the merge, and
-`tests/merge_oracle.rs` covers the `Normal` source-over case only.
+`tests/oracle/merge_oracle.rs` covers the `Normal` source-over case only.
 
 The guarantee is not undocumented, only unchecked. The corpus states that
 "the upper layer is composited over the lower layer using the upper layer's
@@ -135,7 +135,7 @@ assertion discriminates: a merged node that hardcoded `Normal` would fail
 it. The target's blend mode does not change the merged pixels, because
 inside the scratch it is the bottom layer over a transparent backdrop and
 the blend term is multiplied by `as * ab` with `ab` zero there — the
-target's blend reaches the backdrop only later, through the merged node. It lives in `crates/pictura-render/tests/merge_oracle.rs`:
+target's blend reaches the backdrop only later, through the merged node. It lives in `crates/pictura-render/tests/oracle/merge_oracle.rs`:
 `merge_tests.rs` is at 795 lines against a 800-line target, the integration
 file has the test budget and room, and the `layer` helper the test needs is
 already there.
@@ -201,7 +201,7 @@ inheritance rule where the corpus already marks it as unverified.
   check in `tasks.md` 2.4 is a one-time sanity check on the new test, not the
   durable guard.
 - **The mode table is a third copy** of the mapping in
-  `scripts/im_compose.py` and `tests/oracle.rs`. → *Mitigation:* it mirrors
+  `scripts/im_compose.py` and `tests/oracle/main.rs`. → *Mitigation:* it mirrors
   both, and `im_compose.py check` regenerates the references. That catches a
   changed reference, but not a mode added to or removed from the mapping:
   `im_compose.py check` treats an extra committed fixture as a note, and

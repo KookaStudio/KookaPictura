@@ -21,8 +21,8 @@
 ## 4. Fixture and oracles
 
 - [x] 4.1 Add a `color_lookup()` builder to `scripts/generate-fixtures.py` (a `ColorLookup(version=1, data_version=16, …)` or raw `TaggedBlock` embedding a small `LUT_3D_SIZE 2` identity `.cube`), register it in `FIXTURES`, and commit `crates/pictura-codec/tests/fixtures/color_lookup.psd`.
-- [x] 4.2 Add a psd-tools oracle test in `crates/pictura-render/tests/adjustment_oracle.rs` (`fixture_color_lookup_decodes`) asserting the decoded `lookupType`, `LUTFormat`, `DThr`, and the `LUT3DFileData` bytes.
-- [x] 4.3 Add an ag-psd oracle test in `crates/pictura-codec/tests/agpsd_oracle.rs` (`ag_psd_reads_color_lookup_fixture`) asserting `lookupType`/`lutFormat`/`dataOrder`/`tableOrder`/`dither`/`lut3DFileData`; self-skip without node/ag-psd.
+- [x] 4.2 Add a psd-tools oracle test in `crates/pictura-render/tests/oracle/adjustment_oracle.rs` (`fixture_color_lookup_decodes`) asserting the decoded `lookupType`, `LUTFormat`, `DThr`, and the `LUT3DFileData` bytes.
+- [x] 4.3 Add an ag-psd oracle test in `crates/pictura-codec/tests/psd/agpsd_oracle.rs` (`ag_psd_reads_color_lookup_fixture`) asserting `lookupType`/`lutFormat`/`dataOrder`/`tableOrder`/`dither`/`lut3DFileData`; self-skip without node/ag-psd.
 - [x] 4.4 Update `crates/pictura-codec/tests/fixtures/README.md` with the new fixture row.
 
 ## 5. App wiring and self-test

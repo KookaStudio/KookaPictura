@@ -43,7 +43,7 @@ giving an independent reference.
 - `crates/pictura-render/src/composite.rs`: thread the knockout base through the
   pass-through group branch; make the knockout-presence check recursive.
 - `scripts/generate-fixtures.py` + `scripts/psd_knockout_reference.py` +
-  `crates/pictura-render/tests/knockout_oracle.rs`: the group fixture and its
+  `crates/pictura-render/tests/oracle/knockout_oracle.rs`: the group fixture and its
   reference.
 - No new dependency; no app UI; no PSD byte-layout change.
 - Ceiling: isolated-group knockout, nested-group **shallow** stopping points

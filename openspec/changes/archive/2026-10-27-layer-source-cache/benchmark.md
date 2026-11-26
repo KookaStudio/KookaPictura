@@ -1,7 +1,7 @@
 # Benchmark — layer-source-cache (#969)
 
 The benchmark is the ignored integration test
-`crates/pictura-render/tests/source_cache_profile.rs`, function
+`crates/pictura-render/examples/source_cache_profile.rs`, function
 `warm_region_is_ten_times_faster`. It builds a 4000×4000 RGB document with:
 
 - a 200×200 embedded smart object (with a real merged composite) scaled into a
@@ -16,8 +16,7 @@ each cold (cache purged before every iteration) and warm.
 ## Reproduce
 
 ```bash
-cargo test --release -p pictura-render --test source_cache_profile -- \
-  --ignored --nocapture
+cargo run --release -p pictura-render --example source_cache_profile
 ```
 
 Debug numbers are similar in ratio; use `--release` for absolute times.

@@ -67,7 +67,7 @@ the 8-bit working model, and be explicit that the save is lossy in depth.
   prediction, sample narrowing for the composite and every layer channel.
 - `crates/pictura-codec/src/color_mode.rs` (or a small depth module): the
   `u16`→8 and `f32`→8 narrowing helpers, each with a `ponytail:` ceiling.
-- `crates/pictura-codec/src/tests/depth.rs` (new), `tests/depth_oracle.rs`
+- `crates/pictura-codec/src/tests/depth.rs` (new), `tests/psd/depth_oracle.rs`
   (new), `tests/fixtures/{rgb16,rgb32}.psd`, `scripts/generate-fixtures.py`.
 - `crates/pictura-app`: a `depth_notice` invokable, the status-bar notice in
   `frame.cpp`, and one self-test check (exit code 298).

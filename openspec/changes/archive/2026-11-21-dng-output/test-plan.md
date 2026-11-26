@@ -7,7 +7,7 @@ and `document/raw-save-image`, and the requirements added to
 **Fixtures.** Writer tests build `DngImage` / `CameraRgb` inputs in code and
 inspect the output with the codec's own TIFF parser (unit tests in
 `dng/write/tests.rs`). Linear-reader tests use the synthetic DNG builder and
-lossless-JPEG encoder under `tests/dng/`. App Rust tests reuse the minimal
+lossless-JPEG encoder under `tests/camera_raw/dng/`. App Rust tests reuse the minimal
 uncompressed DNG writer in `raw_open/tests.rs` and decode a `PendingRaw` with
 an explicit temporary database. The Qt suite `tst_raw_open` already points
 `XDG_DATA_HOME` at a temporary folder. The reference-tool test skips when

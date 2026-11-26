@@ -147,7 +147,7 @@ is a later refinement.
   each primitive (`rect`, rounded `rect`, `ellipse`, `path`, `image`); XML
   escaping; the CC header byte-for-byte for a raster-only document; layer
   skipping; the opacity `<g>`.
-- An oracle (`pictura-render/tests/svg_oracle.rs`): ImageMagick's `RSVG:`
+- An oracle (`pictura-render/tests/oracle/svg_oracle.rs`): ImageMagick's `RSVG:`
   coder (librsvg) renders a vector-only document's SVG onto white and it is
   compared with the CPU composite on white within a tolerance. `magick` is
   already in the CI `oracles` job; the test self-skips when the coder is

@@ -6,7 +6,7 @@
 - [x] 1.3 `assets/PROVENANCE.md` entry
 
 ## 2. Tests
-- [x] 2.1 `tests/raw/cr2_builder.rs`: maker-note colour data
+- [x] 2.1 `tests/camera_raw/raw/cr2_builder.rs`: maker-note colour data
 - [x] 2.2 Every test named in `test-plan.md`
 
 ## 3. Codec

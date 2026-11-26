@@ -33,7 +33,7 @@ This is a refactor with one deliberate behavior fix (merged-only geometry edits 
 
 - `crates/pictura-app/src/cxxqt_object/`: new transaction module; ~40 command files migrate their commit tails; the existing helpers (`mutate_layer`, `mutate_meta`, `batch_changed`, `batch_property`, `edit_active`, `edit_target`, `edit_adjustment`, `commit_style`, `commit_edit`, the fills' `apply`) become thin wrappers or disappear.
 - `crates/pictura-render/src/document_ops/`: remove the private `recompute` and its nine call sites; add a merged-composite materialization helper used by the geometry operations; update the ops' doc comments and their composite-equality tests and oracles.
-- `crates/pictura-render/tests/document_oracle.rs` and the geometry unit tests materialize `doc.composite` explicitly before writing or comparing.
+- `crates/pictura-render/tests/document/document_oracle.rs` and the geometry unit tests materialize `doc.composite` explicitly before writing or comparing.
 - History, pyramid, damage, canvas-present, and region-blit behaviour are unchanged for layered documents; no C++/Qt production changes are expected.
 - No new dependencies. No changes to `docs/` or the main spec corpus beyond the three capability deltas listed above.
 - Related: #738 (layer-stack invariants, already merged) gives structural edits one owner below this one; #740 (document session) depends on this interface; #448 and #404 remain preview-path work.

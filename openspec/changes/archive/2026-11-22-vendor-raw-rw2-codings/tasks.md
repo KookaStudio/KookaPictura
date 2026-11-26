@@ -1,7 +1,7 @@
 # Tasks
 
 ## 1. Tests
-- [x] 1.1 Encoders per coding (`tests/raw/rw2_encode.rs`) and the builder's new codings
+- [x] 1.1 Encoders per coding (`tests/camera_raw/raw/rw2_encode.rs`) and the builder's new codings
 - [x] 1.2 Every test named in `test-plan.md`
 
 ## 2. Codec

@@ -11,11 +11,11 @@
 
 - [x] 2.1 Add `knockout_shallow_group` to `scripts/generate-fixtures.py`: red Background, an opaque intervening layer, then a pass-through group of green and a half-fill blue with `Tag.KNOCKOUT_SETTING = 1`; regenerate `crates/pictura-codec/tests/fixtures/knockout_shallow_group.psd`.
 - [x] 2.2 Add the fixture to `scripts/psd_knockout_reference.py` and generate `crates/pictura-render/tests/fixtures/knockout_shallow_group.rgba` with `psd-tools` 1.19.
-- [x] 2.3 Add a test to `crates/pictura-render/tests/knockout_oracle.rs` that decodes the fixture (asserting the group is `PassThrough` and the child is `Shallow`), composites it, and diffs against the reference at the documented tolerance; self-skip when `psd_tools` is unavailable.
+- [x] 2.3 Add a test to `crates/pictura-render/tests/oracle/knockout_oracle.rs` that decodes the fixture (asserting the group is `PassThrough` and the child is `Shallow`), composites it, and diffs against the reference at the documented tolerance; self-skip when `psd_tools` is unavailable.
 - [x] 2.4 Pin `psd-tools>=1.19` in `.github/workflows/ci.yml`.
 
 ## 3. Verification
 
 - [x] 3.1 `cargo nextest run --workspace` green, including the existing Deep root/group/isolated knockout oracles.
-- [x] 3.2 `cargo test -p pictura-render --test knockout_oracle` green (all four fixtures).
+- [x] 3.2 `cargo test -p pictura-render --test oracle knockout_oracle::` green (all four fixtures).
 - [x] 3.3 `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `bash scripts/check-file-size.sh`, `openspec validate knockout-shallow-base --strict`.

@@ -128,10 +128,10 @@ Two shapes, chosen per file:
 
 - **GPU-only binaries** get a crate-level `#![cfg(feature = "gpu")]`:
   `tests/gpu_parity/main.rs` (the parity binary), `tests/gpu_filter_parity.rs`,
-  `tests/gpu_text_gamma_bench.rs`, `tests/resident_upload_profile.rs`. With the
+  `examples/gpu_text_gamma_bench.rs`, `examples/resident_upload_profile.rs`. With the
   feature off they build to an empty test binary; with it on they run exactly as
   before.
-- **Mixed files** gate only the GPU functions: `tests/oracle.rs`'s two ignored
+- **Mixed files** gate only the GPU functions: `tests/oracle/main.rs`'s two ignored
   GPU tests, the `composite_gpu` tests in
   `src/tests/{composite,text_gamma,vector_fill}.rs`, the
   `assert_gpu_accepts_and_matches_cpu` helper together with all 32 of its call
@@ -140,7 +140,7 @@ Two shapes, chosen per file:
   is an availability probe make that probe feature-aware instead:
   `src/tests/region.rs`, `src/tests/composite.rs`'s
   `proxy_less_type_layer_composites_live_coverage`, `tests/cold_engine_profile.rs`
-  and `tests/selection_move_perf.rs`.
+  and `examples/selection_move_perf.rs`.
 
 None of the `#[ignore]`d device tests changes its body or its ignore reason, and
 `require_gpu()` keeps asserting, so a `gpu` build without a device still fails

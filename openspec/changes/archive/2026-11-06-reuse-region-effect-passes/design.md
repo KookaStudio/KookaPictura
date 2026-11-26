@@ -79,7 +79,7 @@ existing cache test guard in cache-sensitive tests. Cover ready probes of
 absent, Empty, Building, evicted, and over-budget entries; coordinate the
 Building case explicitly rather than timing a race.
 
-Add an ignored profile to `tests/source_cache_profile.rs` using a fixed generated
+Add an ignored profile to `examples/source_cache_profile.rs` using a fixed generated
 4934x1500 8-bit RGB document: an opaque white background and two opaque Normal
 pixel layers, red and blue, each with a full-canvas rect and a vector mask.
 Use straight polygon masks with document-space vertices
@@ -118,10 +118,11 @@ styled layer, four hits per call with the current routing. Also assert zero
 warm `source_misses` and `effect_decodes`. Document that these are reuse
 signals; the unit tests above supply direct zero-build evidence. Reconcile
 the documented expected hit delta if routing changes, preserving the explicit
-pass-hit contribution. Run the profile alone to isolate its process-global
-metrics:
+pass-hit contribution. Run the example in its own process. It executes all
+three source-cache profiles in order, and the warm-bevel profile purges the
+cache before taking its local metric samples:
 
-`cargo test -p pictura-render --test source_cache_profile warm_bevel_region_replay_profile -- --ignored --exact --nocapture --test-threads=1`
+`cargo run -p pictura-render --example source_cache_profile`
 
 The wall-time ratio assertion belongs only to this explicitly invoked ignored
 profile. Ordinary CI tests assert routing, freshness, bounds and exact pixels.

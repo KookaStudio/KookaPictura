@@ -27,7 +27,7 @@
 
 - [x] 5.1 In `scripts/generate-fixtures.py`, add `indexed()`, `cmyk()`, `lab()`, and `bitmap()` builders (design D8) and register them in `FIXTURES`; the `bitmap()` builder mutates `header.depth = 1` before `set_data`. Confirm the CMYK fixture carries one pixel layer to exercise layer conversion, and that regeneration is byte-stable and additive.
 - [x] 5.2 Commit `crates/pictura-codec/tests/fixtures/{indexed,cmyk,lab,bitmap}.psd`.
-- [x] 5.3 Add a psd-tools oracle (extend `tests/oracle.rs` or add `tests/color_mode_oracle.rs`) that decodes each fixture with `psd-tools` (composite/indices), compares to `read_psd` (Indexed/Bitmap exact, CMYK within the 1-LSB rounding, Lab within 1 against lcms2's exact `Flags.NOOPTIMIZE` transform rather than psd-tools' optimized `.convert("RGB")`), and self-skips with a clear message when psd-tools is absent.
+- [x] 5.3 Add a psd-tools oracle (extend `tests/oracle.rs` or add `tests/psd/color_mode_oracle.rs`) that decodes each fixture with `psd-tools` (composite/indices), compares to `read_psd` (Indexed/Bitmap exact, CMYK within the 1-LSB rounding, Lab within 1 against lcms2's exact `Flags.NOOPTIMIZE` transform rather than psd-tools' optimized `.convert("RGB")`), and self-skips with a clear message when psd-tools is absent.
 - [x] 5.4 Add a pure-Rust hand-built depth-1 Bitmap **RLE** file test (the P1 `one_layer_zip_psd` precedent) and assert the decoded pixels against the hand-computed pattern.
 - [x] 5.5 Add a round-trip test: read each fixture, assert `mode`/`source_mode`/empty palette for Indexed; write with `write_psd`, re-read, and assert the normalized document is stable and the output's header mode is RGB; confirm psd-tools opens the output as RGB.
 - [x] 5.6 Confirm no existing fixture or golden changes.

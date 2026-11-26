@@ -61,7 +61,7 @@
 
 ## 5. Oracle
 
-- [x] 5.1 `crates/pictura-render/tests/svg_oracle.rs`: librsvg renders a
+- [x] 5.1 `crates/pictura-render/tests/oracle/svg_oracle.rs`: librsvg renders a
   vector-only document's SVG and it matches the CPU composite within tolerance;
   self-skips when the renderer is absent.
 

@@ -96,11 +96,11 @@ fixture plus independent oracles, and the drop of `selc` from the deferred set.
 - `crates/pictura-render/src/lib.rs`: the `encode_selective_color` re-export.
 - `crates/pictura-render/src/tests/adjustment.rs`: drop `selc` from
   `deferred_keys_still_none`.
-- `crates/pictura-render/tests/adjustment_oracle.rs`: a psd-tools partial read of
+- `crates/pictura-render/tests/oracle/adjustment_oracle.rs`: a psd-tools partial read of
   the fixture's `selc` block and a pure-Rust fixture-decode check.
 - `crates/pictura-codec/src/tests.rs`: a `selc` case in the adjustment
   round-trip whitelist.
-- `crates/pictura-codec/tests/agpsd_oracle.rs`: a new ag-psd oracle over the
+- `crates/pictura-codec/tests/psd/agpsd_oracle.rs`: a new ag-psd oracle over the
   fixture (self-skips without `node`/`ag-psd`).
 - `crates/pictura-codec/tests/fixtures/selective_color.psd`: new committed
   fixture.

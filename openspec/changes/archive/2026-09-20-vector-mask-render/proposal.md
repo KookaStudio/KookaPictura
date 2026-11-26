@@ -73,8 +73,8 @@ format, and the raster mask machinery the compositor already uses
   vector mask.
 - `crates/pictura-render/src/tests/vector_mask.rs` (new) and
   `crates/pictura-render/src/tests/mod.rs`: render + fixture-decode tests.
-- `crates/pictura-codec/tests/vector_mask_oracle.rs` (new): psd-tools oracle.
-- `crates/pictura-codec/tests/agpsd_oracle.rs`: a `vmsk` fixture test.
+- `crates/pictura-codec/tests/psd/vector_mask_oracle.rs` (new): psd-tools oracle.
+- `crates/pictura-codec/tests/psd/agpsd_oracle.rs`: a `vmsk` fixture test.
 - `scripts/generate-fixtures.py`: a `vector_mask()` builder and a `FIXTURES`
   entry.
 - `crates/pictura-codec/tests/fixtures/vector_mask.psd` (new committed

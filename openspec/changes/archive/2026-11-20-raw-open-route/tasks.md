@@ -1,7 +1,7 @@
 # Tasks
 
 ## 1. Tests
-- [x] 1.1 `pictura-codec` tests in `tests/raw_develop.rs`
+- [x] 1.1 `pictura-codec` tests in `tests/camera_raw/raw_develop.rs`
 - [x] 1.2 `pictura-adjust` 16-bit render tests
 - [x] 1.3 `pictura-app` Rust tests in `cxxqt_object/raw_open/tests.rs`
 - [x] 1.4 Qt suite `tst_raw_open` (registered in `cpp/tests/CMakeLists.txt`)

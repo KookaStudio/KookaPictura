@@ -28,7 +28,7 @@ bash scripts/guard.sh          # docs guard + milestone-name + file-size checks
 
 ```bash
 bash scripts/with-build-lock.sh -- cargo nextest run --workspace   # preferred; -p <crate> [name] for one crate/test
-bash scripts/with-build-lock.sh -- cargo test -p pictura-render --test document_oracle          # one integration suite
+bash scripts/with-build-lock.sh -- cargo test -p pictura-render --test document document_oracle::          # one integration suite
 bash scripts/with-build-lock.sh -- cargo test -p pictura-core -- <name> --ignored --nocapture   # ignored profiling/GPU tests
 ```
 

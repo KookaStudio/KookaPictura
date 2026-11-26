@@ -38,5 +38,5 @@ None.
 - `crates/pictura-select/src/lib.rs` (anti-aliased ellipse and polygon builders), `src/wand.rs` (wand ramp).
 - `crates/pictura-app/src/cxxqt_object/impl_selection/bridge.rs` (free anti-alias commit functions) and `impl_selection/bridge/imp.rs` (implementations), `channels/imp.rs`, `impl_selection.rs`.
 - `crates/pictura-app/cpp/tool_options.h`, `tool_options_json.cpp`, `options_bar.cpp`, `tools.cpp`, `tool_selection.cpp`, `tool_magneticlasso.cpp`, `tool_wand.cpp`, `panels/channels_panel.cpp`, `frame_menus_select.cpp`.
-- New tests: `crates/pictura-select/tests/aa.rs`, `crates/pictura-codec/tests/channel_budget.rs` (cap tests), `tst_selection_aa.cpp`, plus `tst_channels_panel` and `tst_tool_options_persistence` cases.
+- New tests: `crates/pictura-select/tests/aa.rs`, `crates/pictura-codec/tests/psd/channel_budget.rs` (cap tests), `tst_selection_aa.cpp`, plus `tst_channels_panel` and `tst_tool_options_persistence` cases.
 - Docs: `ROADMAP.md`, `docs/dev/doc-code-parity-gaps.md`, `docs/dev/STATE.md`.

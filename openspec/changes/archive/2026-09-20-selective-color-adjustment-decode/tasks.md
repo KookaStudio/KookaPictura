@@ -29,14 +29,14 @@
 ## 5. Renderer: fixture decode and deferred set
 
 - [x] 5.1 Update `deferred_keys_still_none` (`crates/pictura-render/src/tests/adjustment.rs:882`): drop `selc` from the deferred key list (it is now committed); keep `clrL` and version-3 `phfl`.
-- [x] 5.2 Add `fixture_selective_color_decodes` to `crates/pictura-render/tests/adjustment_oracle.rs`: read `crates/pictura-codec/tests/fixtures/selective_color.psd`, find the `Selective Color` and `Selective Color Abs` layers, and assert `decode_adjustment` yields the authored relative and absolute params.
+- [x] 5.2 Add `fixture_selective_color_decodes` to `crates/pictura-render/tests/oracle/adjustment_oracle.rs`: read `crates/pictura-codec/tests/fixtures/selective_color.psd`, find the `Selective Color` and `Selective Color Abs` layers, and assert `decode_adjustment` yields the authored relative and absolute params.
 - [x] 5.3 Add a psd-tools partial/field check to `adjustment_oracle.rs` feeding the fixture's relative `selc` block to `psd_tools.psd.adjustments.SelectiveColor.read` and asserting `version == 1`, `method == 0`, and `data[1..]` equals the nine authored plates. Self-skip without psd-tools; comment that psd-tools names no plates, so ag-psd is the full-field oracle.
 
 ## 6. Oracle: fixture and ag-psd
 
 - [x] 6.1 In `scripts/generate-fixtures.py`, import `SelectiveColor` from `psd_tools.psd.adjustments`, add a `selective_color()` builder with a Base layer plus the relative and absolute `selc` layers from design D7 (plate 0 zero; reds through blacks authored), register `"selective_color.psd": selective_color` in `FIXTURES`, and regenerate.
 - [x] 6.2 Confirm empirically that psd-tools writes the `SelectiveColor` object verbatim (10 plates, 84 bytes) and that reopening the fixture yields `version=1` and the authored plates; record that regeneration is byte-stable and no existing golden changes.
-- [x] 6.3 Add an ag-psd oracle test to `crates/pictura-codec/tests/agpsd_oracle.rs`: run `node -e "<script>" <fixture>` where the script reads with `require('ag-psd').readPsd(bytes, { skipLayerImageData: true, skipCompositeImageData: true })` and prints one whitespace-separated line per `selective color` adjustment (mode plus the nine named ranges). Parse the tokens in Rust (no JSON, no new dependency) and assert the authored relative and absolute values. Self-skip with a clear message when `node` or `ag-psd` is unavailable. Update the file header to describe the `selc` oracle alongside `mixr`/`curv`.
+- [x] 6.3 Add an ag-psd oracle test to `crates/pictura-codec/tests/psd/agpsd_oracle.rs`: run `node -e "<script>" <fixture>` where the script reads with `require('ag-psd').readPsd(bytes, { skipLayerImageData: true, skipCompositeImageData: true })` and prints one whitespace-separated line per `selective color` adjustment (mode plus the nine named ranges). Parse the tokens in Rust (no JSON, no new dependency) and assert the authored relative and absolute values. Self-skip with a clear message when `node` or `ag-psd` is unavailable. Update the file header to describe the `selc` oracle alongside `mixr`/`curv`.
 - [x] 6.4 Confirm `.github/workflows/ci.yml`'s `oracles` job already installs `ag-psd`; note the result.
 
 ## 7. App: kind, panel entry, self-test check

@@ -71,7 +71,7 @@
 
 ## 10. Benchmark and full gate
 
-- [x] 10.1 Add `crates/pictura-render/tests/source_cache_profile.rs` with an `#[ignore]` benchmark named `warm_region_is_ten_times_faster`: 4000² document, a Camera Raw (or Lens Correction) smart-filtered layer, and a text layer with a drop shadow; measure cold vs warm 512×120 region composites (height below `2 * BAND`) and repeated full composites
-- [x] 10.2 Run `cargo test -p pictura-render --test source_cache_profile -- --ignored --nocapture` and confirm the warm region is at least 10× the cold baseline and full composites report cache hits
+- [x] 10.1 Add `crates/pictura-render/examples/source_cache_profile.rs` with an `#[ignore]` benchmark named `warm_region_is_ten_times_faster`: 4000² document, a Camera Raw (or Lens Correction) smart-filtered layer, and a text layer with a drop shadow; measure cold vs warm 512×120 region composites (height below `2 * BAND`) and repeated full composites
+- [x] 10.2 Run `cargo run -p pictura-render --example source_cache_profile` and confirm the warm region is at least 10× the cold baseline and full composites report cache hits
 - [x] 10.3 Run `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo nextest run --workspace`, and `cargo test --workspace --doc`
 - [x] 10.4 Run `bash scripts/verify-fast.sh`, `openspec validate --all --strict`, and `openspec archive layer-source-cache`; verify only `openspec/changes/archive/` remains for this change

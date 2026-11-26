@@ -223,7 +223,7 @@ Deleted by the migration: `select::median`, `select::morph`,
   at radius 10 and 100; Expand at radius 1 and 100; plus the three 6000×4000
   targets (Similar 10 000 < 100 ms, Smooth r=100 < 1 s, Expand r=100 < 300 ms).
   It reports rather than asserts wall-clock time, matching
-  `selection_move_perf.rs`; the spec's targets are reviewed from its output.
+  `examples/selection_move_perf.rs`; the spec's targets are reviewed from its output.
 - The 6000×4000 profile on the 16-core dev box after the strip rewrite printed
   Similar 10 000 colours ~52–57 ms, Smooth r=10 ~495 ms, Smooth r=100 ~478 ms,
   Expand r=100 ~55 ms.

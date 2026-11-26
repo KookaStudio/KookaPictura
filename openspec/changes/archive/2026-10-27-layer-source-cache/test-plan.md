@@ -18,7 +18,7 @@ cargo nextest run -p pictura-render layer_effects
 cargo nextest run -p pictura-codec smart_object
 cargo nextest run -p pictura-app
 ctest --test-dir build -R '^tst_layer_style' --output-on-failure
-cargo test -p pictura-render --test source_cache_profile -- --ignored --nocapture
+cargo run -p pictura-render --example source_cache_profile
 ```
 
 | Scenario | Steps | Expected result | Coverage |

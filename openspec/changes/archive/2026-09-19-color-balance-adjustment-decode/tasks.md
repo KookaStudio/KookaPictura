@@ -23,7 +23,7 @@
 
 ## 5. Renderer: psd-tools parity
 
-- [x] 5.1 Add `crates/pictura-render/tests/adjustment_oracle.rs`: call `encode_color_balance` with known bands, get the 20 raw bytes, and run a `python3` script that does `from psd_tools.psd.adjustments import ColorBalance; ColorBalance.read(BytesIO(data))`, printing `shadows`, `midtones`, `highlights`, and `luminosity`; assert they equal the encoder inputs. Self-skip with a message when `python3` or `psd_tools` is absent, mirroring `crates/pictura-render/tests/document_oracle.rs`.
+- [x] 5.1 Add `crates/pictura-render/tests/oracle/adjustment_oracle.rs`: call `encode_color_balance` with known bands, get the 20 raw bytes, and run a `python3` script that does `from psd_tools.psd.adjustments import ColorBalance; ColorBalance.read(BytesIO(data))`, printing `shadows`, `midtones`, `highlights`, and `luminosity`; assert they equal the encoder inputs. Self-skip with a message when `python3` or `psd_tools` is absent, mirroring `crates/pictura-render/tests/document/document_oracle.rs`.
 
 ## 6. App wiring
 
