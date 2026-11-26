@@ -63,6 +63,18 @@ def renderer_artifact(report: str, profile: str) -> Path:
     return library
 
 
+def dependency_dirs(report: str, library: Path) -> list[Path]:
+    # Cargo with --target puts procedural macros in the host profile directory.
+    directories = {library.parent}
+    for record in cargo_records(report):
+        if record.get("reason") != "compiler-artifact":
+            continue
+        target = record.get("target")
+        if isinstance(target, dict) and target.get("kind") == ["proc-macro"]:
+            directories.update(Path(filename).resolve().parent for filename in record["filenames"])
+    return [library.parent, *sorted(directories - {library.parent})]
+
+
 def oracle_imports_are_missing(result: subprocess.CompletedProcess[str]) -> bool:
     if result.returncode == 0:
         return False
@@ -92,7 +104,8 @@ def oracle_imports_are_missing(result: subprocess.CompletedProcess[str]) -> bool
 
 
 def check_profile(report: Path, profile: str, rustc: str = "rustc") -> None:
-    library = renderer_artifact(report.read_text(encoding="utf-8"), profile)
+    report_text = report.read_text(encoding="utf-8")
+    library = renderer_artifact(report_text, profile)
     with tempfile.TemporaryDirectory(prefix="pictura-view-oracle-") as directory:
         work = Path(directory)
         source = work / "probe.rs"
@@ -100,8 +113,10 @@ def check_profile(report: Path, profile: str, rustc: str = "rustc") -> None:
             rustc, "--edition=2021", "--crate-type=lib", "--emit=metadata",
             "--crate-name=view_oracle_probe", "--error-format=json",
             "--extern", f"pictura_render={library}",
-            "-L", f"dependency={library.parent}", "--out-dir", str(work), str(source),
         ]
+        for deps in dependency_dirs(report_text, library):
+            command.extend(["-L", f"dependency={deps}"])
+        command.extend(["--out-dir", str(work), str(source)])
         source.write_text(
             "use pictura_render::{PyramidLevel, SMALLEST_SIDE, TILE};\n"
             "pub fn shared(level: &PyramidLevel) -> (u32, u32, u32, i32) {\n"
@@ -147,6 +162,21 @@ def self_check() -> None:
             + "\n[2/2] Linking pictura_app\n"
         )
         assert renderer_artifact(mixed, "dev-app") == libraries["dev-app"]
+
+        host_deps = libraries["dev-app"].parent
+        target_library = Path(directory) / "x86_64-unknown-linux-gnu/dev-app/deps/libpictura_render.rlib"
+        target_library.parent.mkdir(parents=True)
+        target_library.touch()
+        proc_macro = {
+            "reason": "compiler-artifact", "target": {"kind": ["proc-macro"]},
+            "filenames": [str(host_deps / "libthiserror_impl.so")],
+        }
+        target_report = report(
+            dict(artifacts["dev-app"], filenames=[str(target_library)]), proc_macro, finished,
+        )
+        assert renderer_artifact(target_report, "dev-app") == target_library
+        assert dependency_dirs(target_report, target_library) == [target_library.parent, host_deps]
+        assert dependency_dirs(report(artifacts["dev-app"], proc_macro, finished), libraries["dev-app"]) == [host_deps]
 
         artifact = artifacts["release"]
         invalid = [

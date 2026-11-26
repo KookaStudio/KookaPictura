@@ -450,6 +450,7 @@ jobs:
         # precompiled headers, so a header a local PCH would mask cannot reach
         # the release build.
         run: |
+          set -o pipefail
           export LD_LIBRARY_PATH="$RUNNER_TEMP/qt-tiff/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           export PICTURA_CPU_BUDGET_PERCENT=100
           export PICTURA_CTEST_REGISTRATION_FILE="$RUNNER_TEMP/qt-ctest.json"
