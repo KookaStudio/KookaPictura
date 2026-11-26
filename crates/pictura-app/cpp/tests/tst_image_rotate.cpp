@@ -18,6 +18,7 @@
 
 #include "commands.h"
 #include "frame.h"
+#include "image_view.h"
 #include "preferences.h"
 #include "preferences_dialog.h"
 #include "selftest_fixture.h"
