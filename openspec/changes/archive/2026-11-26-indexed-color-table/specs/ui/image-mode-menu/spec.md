@@ -2,19 +2,19 @@
 
 ### Requirement: The Mode submenu reflects the document
 
-The Bitmap, Grayscale, Indexed Color, RGB Color, CMYK Color, Lab Color, and
-8/16/32 Bits/Channel entries SHALL be checkable commands. The entry for the
+The Bitmap, Grayscale, Indexed Color, RGB Color, CMYK Color, Lab Color,
+Multichannel, and 8/16/32 Bits/Channel entries SHALL be checkable commands. The entry for the
 document's mode and the entry for its depth SHALL be checked. An entry SHALL be
 enabled when the conversion is available or it is the checked entry, and
-selecting the checked entry SHALL change nothing. Duotone and Multichannel SHALL
-remain disabled stubs. Color Table SHALL follow the depth entries and SHALL be
+selecting the checked entry SHALL change nothing. Duotone SHALL remain a
+disabled stub. Color Table SHALL follow the depth entries and SHALL be
 enabled for an Indexed document with a current editable table. Without a
 document every entry SHALL be disabled.
 
 #### Scenario: An RGB document
 
 - **WHEN** an 8-bit RGB document is active
-- **THEN** RGB Color and 8 Bits/Channel are checked and enabled, Grayscale, Indexed Color, CMYK Color, Lab Color and 16/32 Bits/Channel are enabled, and Bitmap, Duotone, Multichannel and Color Table are disabled
+- **THEN** RGB Color and 8 Bits/Channel are checked and enabled, Grayscale, Indexed Color, CMYK Color, Lab Color, Multichannel, and 16/32 Bits/Channel are enabled; Bitmap, Duotone, and Color Table are disabled
 
 #### Scenario: An indexed document
 
@@ -26,8 +26,8 @@ document every entry SHALL be disabled.
 Converting a color document to Grayscale SHALL first ask to discard color
 information (Discard / Cancel). Converting a layered document to Grayscale,
 CMYK, or Lab SHALL offer Flatten / Don't Flatten / Cancel. Converting a layered
-document to Indexed Color or Bitmap SHALL ask to flatten layers (OK / Cancel),
-since the conversion flattens. Indexed Color SHALL open a dialog with Palette
+document to Indexed Color, Bitmap, or Multichannel SHALL ask to flatten layers
+(OK / Cancel), since the conversion flattens. Indexed Color SHALL open a dialog with Palette
 (Exact when eligible, Web, Local Perceptual/Selective/Adaptive), Colors,
 Forced, Transparency, Dither (None, Diffusion, Pattern, Noise), Amount, and Preview. Preview SHALL show the conversion without recording history, and
 Cancel SHALL restore the document exactly. Bitmap SHALL open a dialog offering

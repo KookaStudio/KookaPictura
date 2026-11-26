@@ -11,4 +11,4 @@
 ## 3. Scenario coverage
 
 - [x] 3.1 Write engine and Qt tests from the test plan.
-- [ ] 3.2 Run deferred build, tests and OpenSpec validation.
+- [x] 3.2 Run the Mac Release build, targeted tests, and OpenSpec change validation before rebasing onto the merged Multichannel work. The PR records the exact revisions and leaves combined-tree execution to CI.
