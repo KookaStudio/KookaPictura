@@ -194,8 +194,10 @@ void ImageModeTest::multichannelDimsUnsupportedSources()
     QVERIFY(!multichannel->isEnabled());
     closeActive();
 
-    QVERIFY(window_->newDocument(QStringLiteral("HDR"), 16, 12, QStringLiteral("rgb"), 32,
-                                 QStringLiteral("white")));
+    view = newFilled(QColor(32, 71, 120));
+    QVERIFY(view);
+    QVERIFY(pictura::convert_image_depth(*view, 32));
+    QCOMPARE(pictura::image_depth_bits(*view), 32);
     window_->registry()->refresh();
     QVERIFY(!multichannel->isEnabled());
     closeActive();
