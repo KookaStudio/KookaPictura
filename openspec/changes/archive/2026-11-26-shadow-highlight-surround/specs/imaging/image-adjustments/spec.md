@@ -4,6 +4,21 @@
 
 The system SHALL use the full input layer luminance to compute independent smooth shadow and highlight weights for an expanded Shadows/Highlights adjustment. Both bands SHALL have Amount 0–100%, Tonal Width 0–100%, and Radius 0–500 px. Increasing width SHALL expand the affected range from the corresponding tonal extreme toward and into the midtones; 50% SHALL split the bands near middle gray and 100% SHALL include midtones without affecting the opposite extreme. It SHALL provide Color Correction or grayscale Brightness and Midtone Contrast, each from −100 to +100, and Black Clip and White Clip at 0–10% in increments of 0.01%. Positive Color Correction SHALL increase chroma in adjusted color areas and negative values SHALL decrease it; positive grayscale Brightness SHALL lighten and negative values SHALL darken. Neutral settings SHALL preserve all samples. Invalid parameters SHALL be rejected before any write. Existing four-byte `shdH` settings SHALL retain their former pointwise behavior. Expanded settings SHALL use a distinct versioned `shd2` block and round-trip with all values preserved. The encoding SHALL represent amounts, widths, radii and signed correction values in whole units and clip percentages in 0.01% increments; the encoder SHALL reject values outside those increments. Unsupported versions and malformed expanded blocks SHALL be rejected without applying or rewriting them as legacy settings.
 
+#### Scenario: Lifting shadows and pulling highlights
+
+- **WHEN** Shadows/Highlights with a positive shadow amount is applied to a buffer containing a dark pixel, or with a positive highlight amount to a bright pixel
+- **THEN** the dark pixel lightens or the bright pixel darkens respectively
+
+#### Scenario: Neutral amounts are identity
+
+- **WHEN** Shadows/Highlights is applied with both amounts zero
+- **THEN** the buffer is bit-exactly unchanged and alpha is preserved
+
+#### Scenario: Invalid amounts are rejected
+
+- **WHEN** either amount is non-finite or outside `0.0..=100.0`
+- **THEN** `apply` returns `AdjustError::InvalidParams` and does not panic
+
 #### Scenario: Matching pixels have different surrounds
 
 - **WHEN** equally bright shadow pixels have different local neighborhoods and the shadow amount and radius are positive
@@ -20,6 +35,8 @@ The system SHALL use the full input layer luminance to compute independent smoot
 - **WHEN** an expanded operator is applied to 8- or 16-bit samples
 - **THEN** neutral settings preserve color and alpha, 16-bit adjustment retains precision, and invalid parameters leave the input unchanged
 - **AND** non-neutral legacy `shdH` blocks produce their former pointwise output at both depths, representable `shd2` settings retain all fields, and nonrepresentable values, unsupported versions or malformed expanded blocks are rejected
+
+## ADDED Requirements
 
 ### Requirement: Shadows/Highlights image dialog
 

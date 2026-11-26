@@ -290,7 +290,7 @@ Source list: the Image > Adjustments list (23 rows; 25 commands when Auto Tone/C
 | P-IMG-14 | Threshold | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src; crates/pictura-app/cpp/panels/adjustment_controls.cpp | none | Histogram samples large inputs and approximates specialized clipping and knockout cases | #563 |
 | P-IMG-15 | Gradient Map | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Dither and CS6 print-toning presets remain | #574 |
 | P-IMG-16 | Selective Colour | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src; crates/pictura-app/cpp/menu_adjust.cpp | none | Composite-channel gate and preset whitelist. Family weighting is modelled. | #577 |
-| P-IMG-17 | Shadows/Highlights | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Local-surround operator and eight controls remain | #562 |
+| P-IMG-17 | Shadows/Highlights | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Local-surround operator and controls implemented; 32-bit and Smart Filter support remain | #996 |
 | P-IMG-18 | HDR Toning | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Local Adaptation Toning Curve and Corner remain | #557 |
 | P-IMG-19 | Desaturate | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src | none | — | — |
 | P-IMG-20 | Match Colour | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | On-canvas eyedropper and live Info feedback remain | #575 |
