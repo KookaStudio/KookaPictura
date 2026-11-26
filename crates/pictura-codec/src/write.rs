@@ -842,8 +842,19 @@ fn write_container_to(
     let indexed_mode = writes_indexed(doc, depth, plane);
     // Flat unedited Duotone/Multichannel re-emits retained plates; edits fall back to RGB.
     let flat_source = crate::write_duotone::flat_source_mode(doc, depth, plane);
+    let owned_plates = doc.source.multichannel_plates();
+    if owned_plates
+        && (!matches!(depth, 8 | 16)
+            || !doc.layers.is_empty()
+            || doc.channels.is_empty()
+            || !doc.composite.merged_output())
+    {
+        return Err(PsdError::Invalid("invalid Multichannel plate document".into()));
+    }
     let mode_code = if bitmap_mode {
         MODE_BITMAP
+    } else if owned_plates {
+        crate::common::MODE_MULTICHANNEL
     } else if let Some((code, _, _)) = flat_source {
         code
     } else if lab_mode {
@@ -862,7 +873,9 @@ fn write_container_to(
     let color_channels = doc.composite.channels as usize;
     // Header channel count follows the output mode: 4 CMYK, 1 Indexed, 1-or-3
     // flat Duotone/Multichannel, else the working count. Composite data stays working-term.
-    let out_color_channels = if bitmap_mode {
+    let out_color_channels = if owned_plates {
+        0
+    } else if bitmap_mode {
         1
     } else if cmyk_mode {
         4

@@ -18,6 +18,14 @@ pub(super) fn normalize(
     if matches!(header_mode, ColorMode::Grayscale | ColorMode::Rgb) {
         return doc;
     }
+    if doc.source.multichannel_plates() {
+        crate::multichannel::complete_plate_display(&mut doc);
+        doc.composite
+            .replace(crate::multichannel_preview(&doc))
+            .expect("valid plate preview");
+        doc.mode = ColorMode::Rgb;
+        return doc;
+    }
     if header_mode == ColorMode::Lab {
         crate::color_mode::retain_lab_layer_planes(&mut doc.layers, depth);
     }

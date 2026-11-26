@@ -72,6 +72,9 @@ pub(super) fn channel_row_selection_from(
     row: i32,
     mask: u8,
 ) -> Option<Selection> {
+    if doc.source.multichannel_plates() {
+        return None;
+    }
     let row = usize::try_from(row).ok()?;
     let mode = doc.source.mode().unwrap_or(doc.mode);
     let (composite, channels) = color_rows(mode);

@@ -7,13 +7,14 @@
 //! `source_palette` / `source_depth` stores the PSD writer already re-emits, so
 //! a converted document saves in its new mode instead of only being relabelled.
 //!
-//! ponytail: Duotone and Multichannel (no ink/plate model to author), the Color
+//! ponytail: Duotone (no ink model to author), the Color
 //! Table, Bitmap Halftone Screen / Custom Pattern, and Grayscale-from-Bitmap's
 //! size ratio are not converted; CMYK/Lab are profile-free (no ICC working
 //! space); a conversion into CMYK/Lab of a 16-bit document, or out of one,
 //! passes through the 8-bit working planes.
 
 mod flat;
+mod multichannel;
 mod planes;
 mod stream;
 
@@ -47,6 +48,10 @@ pub fn can_convert_mode(doc: &Document, target: ColorMode) -> bool {
     }
     let from = document_color_mode(doc);
     let depth = document_bit_depth(doc);
+    if doc.source.multichannel_plates() {
+        return target == ColorMode::Rgb
+            && doc.channels.len() + 3 <= pictura_core::channels::MAX_CHANNELS as usize;
+    }
     if from == target {
         return false;
     }
@@ -64,7 +69,8 @@ pub fn can_convert_mode(doc: &Document, target: ColorMode) -> bool {
         ColorMode::Indexed => {
             matches!(from, ColorMode::Rgb | ColorMode::Grayscale) && depth == BitDepth::Eight
         }
-        ColorMode::Duotone | ColorMode::Multichannel => false,
+        ColorMode::Multichannel => multichannel::can_split(doc, from, depth),
+        ColorMode::Duotone => false,
     }
 }
 
@@ -83,7 +89,7 @@ pub fn can_convert_depth(doc: &Document, out: BitDepth) -> bool {
     }
 }
 
-/// Convert `doc` to Grayscale, RGB, CMYK, or Lab (Bitmap and Indexed have their
+/// Convert `doc` to Grayscale, RGB, CMYK, Lab, or Multichannel (Bitmap and Indexed have their
 /// own options: [`convert_to_bitmap`], [`convert_to_indexed`]).
 ///
 /// Grayscale is a Rec. 601 luma of the working RGB (at native depth when a
@@ -116,6 +122,12 @@ pub fn convert_mode_with_profiles(
             "cannot convert {:?} to {target:?}",
             document_color_mode(doc)
         )));
+    }
+    if target == ColorMode::Multichannel {
+        return multichannel::split(doc, options);
+    }
+    if doc.source.multichannel_plates() {
+        return multichannel::to_rgb(doc);
     }
     let depth = document_bit_depth(doc);
     // A layered RGB document keeps no composite: Grayscale, CMYK and Lab read

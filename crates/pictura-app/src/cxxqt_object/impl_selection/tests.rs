@@ -667,3 +667,28 @@ fn selected_channel_soft_coverage_is_not_quantized() {
         vec![128; 4]
     );
 }
+
+#[test]
+fn save_selection_on_spot_refreshes_plate_preview() {
+    let mut doc = test_doc(2, 2);
+    doc.layers = pictura_core::LayerStack::default();
+    doc.channels = vec![channel_value(255, 4)];
+    doc.source.set_multichannel_plates();
+    pictura_codec::set_display_info(&mut doc, &[pictura_codec::ChannelDisplayInfo {
+        color_space: 0,
+        components: [0, 0, 0, 0],
+        opacity: 100,
+        mode: pictura_codec::SPOT_CHANNEL_MODE,
+    }]);
+    let preview = pictura_codec::multichannel_preview(&doc);
+    doc.composite.replace(preview).unwrap();
+    let mut rust = test_rust(doc);
+    let outcome = save_selection_shape(
+        &mut rust, selection(0, 2, 2), SelectionTarget::Channel(0), "", CombineMode::New,
+    );
+    assert!(matches!(outcome, Edit::Full));
+    let doc = rust.session.doc.as_ref().unwrap();
+    assert_eq!(doc.channels[0].data, vec![0; 4]);
+    assert_eq!(doc.composite.data, vec![0; 12]);
+    assert_eq!(doc.composite.buffer(), &pictura_codec::multichannel_preview(doc));
+}

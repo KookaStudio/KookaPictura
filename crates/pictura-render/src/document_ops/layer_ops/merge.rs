@@ -139,7 +139,7 @@ pub fn flatten(doc: &mut Document) -> Result<MergeOutcome, MergeError> {
     if doc.width == 0 || doc.height == 0 {
         return Err(MergeError::NoDocument);
     }
-    if !doc.variables.protected_ids().is_empty() {
+    if doc.source.multichannel_plates() || !doc.variables.protected_ids().is_empty() {
         return Err(MergeError::InvalidTarget);
     }
     let replaced = count_layers(&doc.layers);

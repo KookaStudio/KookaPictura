@@ -188,38 +188,27 @@ pub(crate) fn read_container(
         )));
     }
     let mode = color_mode_from_code(mode_code)?;
-    // Depth 1 is Bitmap-only; Multichannel/Duotone open only at depth 8;
-    // 16/32 is Grayscale/RGB/CMYK/Lab only (see `psd-bit-depth`).
+    // Named Multichannel adds depth 16. Its metadata is checked below.
     let depth_ok = match depth {
         1 => mode == ColorMode::Bitmap,
         8 => true,
-        16 | 32 => matches!(
-            mode,
-            ColorMode::Grayscale | ColorMode::Rgb | ColorMode::Lab | ColorMode::Cmyk
-        ),
+        16 | 32 => {
+            matches!(
+                mode,
+                ColorMode::Grayscale | ColorMode::Rgb | ColorMode::Lab | ColorMode::Cmyk
+            ) || (depth == 16 && mode == ColorMode::Multichannel)
+        },
         _ => false,
     };
     if !depth_ok {
         return Err(PsdError::Unsupported(format!("bit depth {depth}")));
     }
-    // Multichannel opens only for header channel count 1 or 3; other counts stay Unsupported.
-    if mode == ColorMode::Multichannel && !matches!(channels, 1 | 3) {
-        return Err(PsdError::Unsupported(format!(
-            "Multichannel channel count {channels}"
-        )));
-    }
-    // Multichannel has no fixed `color_channels()`; the header count is authoritative.
-    let color_count = if mode == ColorMode::Multichannel {
-        channels as usize
-    } else {
-        mode.color_channels() as usize
-    };
-    // Retain native planes for 16/32 Grayscale/RGB/Lab/CMYK, and 8-bit Lab/
-    // CMYK/Indexed/Duotone/Multichannel, plus the depth-1 Bitmap packed plane.
+    // Retain native planes for 16/32 Grayscale/RGB/Lab/CMYK, 16-bit
+    // Multichannel, 8-bit Lab/CMYK/Indexed/Duotone/Multichannel, and Bitmap.
     let retain_planes = (matches!(depth, 16 | 32)
         && matches!(
             mode,
-            ColorMode::Grayscale | ColorMode::Rgb | ColorMode::Lab | ColorMode::Cmyk
+            ColorMode::Grayscale | ColorMode::Rgb | ColorMode::Lab | ColorMode::Cmyk | ColorMode::Multichannel
         ))
         || (depth == 8
             && matches!(
@@ -255,6 +244,18 @@ pub(crate) fn read_container(
     // Image resources section: 4-byte length + opaque bytes, kept verbatim.
     let resources_len = r.u32()? as usize;
     let image_resources = r.take(resources_len)?.to_vec();
+    let owned_plates = mode == ColorMode::Multichannel
+        && crate::image_resources::has_multichannel_metadata(&image_resources, channels);
+    let color_count = match mode {
+        ColorMode::Multichannel if owned_plates => 0,
+        ColorMode::Multichannel if depth == 8 && matches!(channels, 1 | 3) => channels as usize,
+        ColorMode::Multichannel => {
+            return Err(PsdError::Unsupported(format!(
+                "Multichannel layout with {channels} unnamed channels at {depth} bits"
+            )));
+        }
+        _ => mode.color_channels() as usize,
+    };
     // Layer and mask information section: 4-byte length (8 in PSB).
     let (mut layers, global_layer_mask, layer_section_extra, layer_compression, merged_alpha) =
         read_layer_section(
@@ -266,6 +267,9 @@ pub(crate) fn read_container(
             budget,
             options.source.as_ref(),
         )?;
+    if owned_plates && !layers.is_empty() {
+        return Err(PsdError::Unsupported("layered Multichannel plates".into()));
+    }
     let merged_alpha = merged_alpha && mode == ColorMode::Rgb;
     // Derive the smart-object view from the preserved bytes; a malformed
     // descriptor or linked-layer record degrades to Unresolved (design D5).
@@ -312,8 +316,11 @@ pub(crate) fn read_container(
             channels: color_count as u8,
             data: Plane::filled(width as usize, height as usize, color_count, 0u8),
         };
-        let doc =
+        let mut doc =
             merged::without_merged_image(sections, blank, false, Compression::Rle, Vec::new());
+        if owned_plates {
+            doc.source.set_multichannel_plates();
+        }
         return Ok(crate::icc::apply_icc_policy_with_options(
             normalize(doc, mode, depth, palette.as_ref(), options, false),
             options.policy,
@@ -503,6 +510,9 @@ pub(crate) fn read_container(
     doc.source
         .replace_planes(source_planes.filter(|_| keep_native))
         .expect("valid source planes");
+    if owned_plates {
+        doc.source.set_multichannel_plates();
+    }
     Ok(crate::icc::apply_icc_policy_with_options(
         normalize(
             doc,

@@ -15,13 +15,16 @@ impl Document {
     /// The colour count comes from the opened mode (`source_mode` when the file
     /// was converted for editing), because that is what a save emits: a CMYK
     /// source writes four colour channels even though the working composite is
-    /// RGB. Multichannel uses its post-normalization composite count; a
-    /// constructed zero-channel Multichannel is not savable and cannot add one.
+    /// RGB. Channel-owned Multichannel counts its document channels alone.
+    /// Legacy Multichannel uses the post-normalization composite count.
     /// An RGBA composite's display alpha is dropped by `save_view` once a
     /// document extra exists, so it counts as three colour channels. A converted
     /// Indexed/Bitmap/Duotone document may save back at the working RGB count;
     /// taking the larger of the two is conservative.
     pub fn can_add_channel(&self) -> bool {
+        if self.source.multichannel_plates() {
+            return self.channels.len() < MAX_CHANNELS as usize;
+        }
         let opened = self.source.mode().unwrap_or(self.mode);
         let colour = if opened == ColorMode::Multichannel {
             let channels = self.composite.channels as usize;

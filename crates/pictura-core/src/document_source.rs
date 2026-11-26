@@ -21,6 +21,7 @@ pub struct SourceState {
     depth: Option<BitDepth>,
     planes: Option<SourcePlanes>,
     palette: Option<[u8; 768]>,
+    multichannel_plates: bool,
     original_profile: Option<Plane<u8>>,
     working_profile: Option<Plane<u8>>,
 }
@@ -73,6 +74,17 @@ impl SourceState {
     pub fn mode(&self) -> Option<ColorMode> {
         self.mode
     }
+    /// Whether mode 7 stores every file plane in the document channel list.
+    pub fn multichannel_plates(&self) -> bool {
+        self.multichannel_plates
+    }
+
+    pub fn set_multichannel_plates(&mut self) {
+        self.mode = Some(ColorMode::Multichannel);
+        self.palette = None;
+        self.multichannel_plates = true;
+    }
+
     pub fn depth(&self) -> Option<BitDepth> {
         self.depth
     }
@@ -105,6 +117,7 @@ impl SourceState {
         }
         self.mode = mode;
         self.palette = palette;
+        self.multichannel_plates = false;
         Ok(())
     }
 

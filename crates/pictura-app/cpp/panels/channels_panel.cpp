@@ -222,7 +222,7 @@ ChannelsPanel::ChannelsPanel(QWidget* parent)
             refresh();
         }
     });
-    rebuild(QStringLiteral("rgb"), QStringList());
+    rebuild(QStringLiteral("rgb"), QStringList(), false);
     updateFooter();
 }
 
@@ -270,7 +270,7 @@ void ChannelsPanel::addRow(const QString& name, const QString& shortcut, int alp
     styleRows();
 }
 
-void ChannelsPanel::rebuild(const QString& mode, const QStringList& alphaNames)
+void ChannelsPanel::rebuild(const QString& mode, const QStringList& alphaNames, bool storedPlates)
 {
     QScopedValueRollback<bool> syncing(syncing_,true);
     quickMask_=view_ && quick_mask_active(*view_);
@@ -279,7 +279,7 @@ void ChannelsPanel::rebuild(const QString& mode, const QStringList& alphaNames)
     rows_.clear();
     maskRowIndex_ = -1;
     maskName_.clear();
-    const QList<ChannelRowDef> defs = channelsForMode(mode);
+    const QList<ChannelRowDef> defs = channelsForMode(mode, storedPlates);
     for (const ChannelRowDef& def : defs) {
         addRow(QLatin1String(def.name), QLatin1String(def.shortcut), -1);
     }
@@ -294,7 +294,7 @@ void ChannelsPanel::rebuild(const QString& mode, const QStringList& alphaNames)
         }
     }
     // Alpha channels follow on the next Ctrl+number, as far as Ctrl+9 goes.
-    int key = QString::fromLatin1(defs.last().shortcut).back().digitValue() + 1;
+    int key = defs.isEmpty() ? 1 : QString::fromLatin1(defs.last().shortcut).back().digitValue() + 1;
     for (int i = 0; i < alphaNames.size(); ++i, ++key) {
         addRow(alphaNames.value(i, QStringLiteral("Alpha %1").arg(i + 1)),
                key <= 9 ? QStringLiteral("Ctrl+%1").arg(key) : QString(), i);
@@ -322,6 +322,7 @@ void ChannelsPanel::rebuild(const QString& mode, const QStringList& alphaNames)
         }
     }
     mode_ = mode;
+    storedPlates_ = storedPlates;
     alphaCount_ = alphaNames.size();
     alphaNames_ = alphaNames;
     if (mask_ != 0x7) {
@@ -353,6 +354,7 @@ void ChannelsPanel::refresh()
     const bool document = view_ && view_->has_document();
     const QString mode = document ? QString(channels_mode(*view_)) : QStringLiteral("rgb");
     const QStringList alphaNames = document ? channels_alpha_names(*view_) : QStringList();
+    const bool storedPlates = document && channels_multichannel_plates(*view_);
     for (auto it = shownAlphas_.begin(); it != shownAlphas_.end();) {
         if (*it >= alphaNames.size()) {
             it = shownAlphas_.erase(it);
@@ -362,9 +364,9 @@ void ChannelsPanel::refresh()
     }
     const QString maskName = document ? QString(channels_active_mask_name(*view_)) : QString();
     if (mode != mode_ || alphaNames.size() != alphaCount_ || alphaNames != alphaNames_
-        || maskName != maskName_
+        || storedPlates != storedPlates_ || maskName != maskName_
         || quickMask_ != (document && quick_mask_active(*view_))) {
-        rebuild(mode, alphaNames);
+        rebuild(mode, alphaNames, storedPlates);
     }
     refreshThumbnails();
     updateFooter();

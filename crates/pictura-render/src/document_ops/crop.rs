@@ -62,6 +62,8 @@ fn crop_to_frame(doc: &mut Document, x0: i32, y0: i32, new_w: u32, new_h: u32) -
 
     doc.width = new_w;
     doc.height = new_h;
+    super::canvas::fill_plate_padding(doc, old_w, old_h, dx, dy);
+    super::refresh_plate_preview(doc);
     true
 }
 

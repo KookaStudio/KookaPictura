@@ -68,6 +68,7 @@ pub fn resize_document(
     if (width, height) != (old_w, old_h) {
         next.measurement_scale.invalidate_for_resample();
     }
+    super::refresh_plate_preview(&mut next);
     *doc = next;
     Ok(())
 }

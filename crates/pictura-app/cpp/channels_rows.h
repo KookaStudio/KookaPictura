@@ -13,8 +13,11 @@ struct ChannelRowDef {
 // CS6's rows per mode: the composite on Ctrl+2, the channels from Ctrl+3
 // (Multichannel has no composite and starts at Ctrl+1). Shared by the Channels
 // panel and the Load Selection dialog so the two colour-row lists cannot drift.
-inline QList<ChannelRowDef> channelsForMode(const QString& mode)
+inline QList<ChannelRowDef> channelsForMode(const QString& mode, bool storedPlates = false)
 {
+    if (storedPlates) {
+        return {};
+    }
     if (mode == QLatin1String("grayscale")) {
         return {{"Gray", "Ctrl+2"}};
     }

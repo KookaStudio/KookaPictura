@@ -44,6 +44,7 @@ mod icc;
 mod icc_convert;
 pub mod illustrator;
 mod image_resources;
+mod multichannel;
 mod iptc;
 mod layer_comps;
 pub mod layer_content;
@@ -154,6 +155,7 @@ pub use image_resources::{
     VANISHING_POINT, VANISHING_POINT_NAME, XMP_METADATA,
 };
 pub use iptc::{encode_iptc, iptc_field_name, parse_iptc, Iptc};
+pub use multichannel::multichannel_preview;
 pub use lens_correction::{
     attach_lens_correction_filter, decode_lens_correction_slots,
     DEFAULT_SLOTS as LENS_CORRECTION_DEFAULT_SLOTS, LENS_CORRECTION_FILTER_ID,

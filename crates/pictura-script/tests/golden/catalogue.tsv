@@ -121,7 +121,7 @@ image.mode.indexed.color	Image/Mode/Indexed Color	Indexed Color		1	1
 image.mode.rgb.color	Image/Mode/RGB Color	RGB Color		1	1
 image.mode.cmyk.color	Image/Mode/CMYK Color	CMYK Color		1	1
 image.mode.lab.color	Image/Mode/Lab Color	Lab Color		1	1
-image.mode.multichannel	Image/Mode/Multichannel	Multichannel		0	0
+image.mode.multichannel	Image/Mode/Multichannel	Multichannel		1	1
 image.mode.8.bits	Image/Mode/8 Bits/Channel	8 Bits/Channel		1	1
 image.mode.16.bits	Image/Mode/16 Bits/Channel	16 Bits/Channel		1	1
 image.mode.32.bits	Image/Mode/32 Bits/Channel	32 Bits/Channel		1	1

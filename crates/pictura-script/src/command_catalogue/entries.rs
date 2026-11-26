@@ -126,7 +126,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "image.mode.rgb.color", path: &["Image", "Mode", "RGB Color"], label: "RGB Color", shortcut: "", implemented: true, checkable: true },
     CommandSpec { id: "image.mode.cmyk.color", path: &["Image", "Mode", "CMYK Color"], label: "CMYK Color", shortcut: "", implemented: true, checkable: true },
     CommandSpec { id: "image.mode.lab.color", path: &["Image", "Mode", "Lab Color"], label: "Lab Color", shortcut: "", implemented: true, checkable: true },
-    CommandSpec { id: "image.mode.multichannel", path: &["Image", "Mode", "Multichannel"], label: "Multichannel", shortcut: "", implemented: false, checkable: false },
+    CommandSpec { id: "image.mode.multichannel", path: &["Image", "Mode", "Multichannel"], label: "Multichannel", shortcut: "", implemented: true, checkable: true },
     CommandSpec { id: "image.mode.8.bits", path: &["Image", "Mode", "8 Bits/Channel"], label: "8 Bits/Channel", shortcut: "", implemented: true, checkable: true },
     CommandSpec { id: "image.mode.16.bits", path: &["Image", "Mode", "16 Bits/Channel"], label: "16 Bits/Channel", shortcut: "", implemented: true, checkable: true },
     CommandSpec { id: "image.mode.32.bits", path: &["Image", "Mode", "32 Bits/Channel"], label: "32 Bits/Channel", shortcut: "", implemented: true, checkable: true },

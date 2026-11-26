@@ -37,6 +37,9 @@ pub fn perspective_crop_size(quad: [(f64, f64); 4]) -> (u32, u32) {
 /// register by a pixel warp, and retained 16/32-bit samples cannot be warped
 /// yet, so these refuse rather than being silently rasterized or dropped.
 pub fn perspective_crop_refusal(doc: &Document) -> Option<&'static str> {
+    if doc.source.multichannel_plates() {
+        return Some("Perspective Crop is not available for Multichannel documents.");
+    }
     if doc.retains_source_depth() {
         return Some("Perspective Crop is not available for 16/32-bit documents yet.");
     }

@@ -29,6 +29,14 @@ pub(super) fn channels_mode(view: &PictureView) -> QString {
     QString::from(name)
 }
 
+pub(super) fn channels_multichannel_plates(view: &PictureView) -> bool {
+    view.rust()
+        .session
+        .doc
+        .as_ref()
+        .is_some_and(|doc| doc.source.multichannel_plates())
+}
+
 /// Nearest-neighbour shrink of a `width` x `height` plane to fit `max_side`.
 pub(super) fn shrink_plane(
     data: &[u8],
@@ -134,7 +142,13 @@ pub(super) fn channels_delete_alpha(mut view: Pin<&mut PictureView>, index: i32)
             return Edit::None;
         }
         removed = true;
-        Edit::Meta
+        if doc.source.multichannel_plates() {
+            let preview = pictura_codec::multichannel_preview(doc);
+            doc.composite.replace(preview).expect("valid plate preview");
+            Edit::Full
+        } else {
+            Edit::Meta
+        }
     });
     removed
 }
@@ -150,10 +164,26 @@ pub(super) fn channels_load_color_selection(
 }
 
 fn delete_alpha_with_name(doc: &mut Document, index: usize) -> bool {
-    if index >= doc.channels.len() {
+    if index >= doc.channels.len()
+        || (doc.source.multichannel_plates() && doc.channels.len() == 1)
+    {
         return false;
     }
     let mut names = pictura_codec::alpha_names(doc);
+    if doc.source.multichannel_plates() {
+        if let Some(mut store) = doc.source.planes().clone() {
+            let plane = doc.width as usize * doc.height as usize;
+            let mut bytes = store.samples.to_bytes();
+            let sample_width = if store.depth == pictura_core::BitDepth::Sixteen { 2 } else { 1 };
+            let start = index * plane * sample_width;
+            let end = start + plane * sample_width;
+            if end <= bytes.len() {
+                bytes.drain(start..end);
+                store.samples = pictura_core::Samples::from_bytes(&bytes, store.depth);
+                doc.source.replace_planes(Some(store)).expect("matching plate sample depth");
+            }
+        }
+    }
     doc.channels.remove(index);
     pictura_codec::remove_channel_display_info(doc, index);
     if index < names.len() {
