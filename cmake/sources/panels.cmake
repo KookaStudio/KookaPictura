@@ -101,6 +101,7 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/panels/percent_field.h
     crates/pictura-app/cpp/panels/placeholder_panel.cpp
     crates/pictura-app/cpp/panels/placeholder_panel.h
+    crates/pictura-app/cpp/panels/properties_adjustment_canvas.cpp
     crates/pictura-app/cpp/panels/properties_auto.cpp
     crates/pictura-app/cpp/panels/properties_panel.cpp
     crates/pictura-app/cpp/panels/properties_panel.h
