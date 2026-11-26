@@ -95,6 +95,7 @@ pub(super) static CONST_NAMES: &[(&str, &str)] = &[
     ("ImageModeRgb", "image.mode.rgb.color"),
     ("ImageModeCmyk", "image.mode.cmyk.color"),
     ("ImageModeLab", "image.mode.lab.color"),
+    ("ImageModeMultichannel", "image.mode.multichannel"),
     ("ImageMode8Bits", "image.mode.8.bits"),
     ("ImageMode16Bits", "image.mode.16.bits"),
     ("ImageMode32Bits", "image.mode.32.bits"),

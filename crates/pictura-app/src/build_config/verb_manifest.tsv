@@ -630,6 +630,7 @@ free	channels_delete_alpha	channels_delete_alpha	api/layers_bridge.h	pictura_app
 free	channels_load_color_selection	channels_load_color_selection	api/layers_bridge.h	pictura_app/src/cxxqt_object/channels.cxxqt.h
 free	channels_max	channels_max	api/layers_bridge.h	pictura_app/src/cxxqt_object/channels.cxxqt.h
 free	channels_mode	channels_mode	api/layers_bridge.h	pictura_app/src/cxxqt_object/channels.cxxqt.h
+free	channels_multichannel_plates	channels_multichannel_plates	api/layers_bridge.h	pictura_app/src/cxxqt_object/channels.cxxqt.h
 free	channels_new_alpha	channels_new_alpha	api/layers_bridge.h	pictura_app/src/cxxqt_object/channels.cxxqt.h
 free	channels_selected_areas	channels_selected_areas	api/layers_bridge.h	pictura_app/src/cxxqt_object/channels.cxxqt.h
 free	channels_set_sense	channels_set_sense	api/layers_bridge.h	pictura_app/src/cxxqt_object/channels.cxxqt.h

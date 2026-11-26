@@ -95,6 +95,7 @@ inline constexpr char ImageModeIndexed[] = "image.mode.indexed.color";
 inline constexpr char ImageModeRgb[] = "image.mode.rgb.color";
 inline constexpr char ImageModeCmyk[] = "image.mode.cmyk.color";
 inline constexpr char ImageModeLab[] = "image.mode.lab.color";
+inline constexpr char ImageModeMultichannel[] = "image.mode.multichannel";
 inline constexpr char ImageMode8Bits[] = "image.mode.8.bits";
 inline constexpr char ImageMode16Bits[] = "image.mode.16.bits";
 inline constexpr char ImageMode32Bits[] = "image.mode.32.bits";

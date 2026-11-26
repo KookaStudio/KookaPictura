@@ -205,7 +205,13 @@ pub(super) fn refresh_active_layer(rust: &mut PictureViewRust) {
 
 pub(super) fn convert_image_mode(view: Pin<&mut PictureView>, mode: &QString) -> bool {
     match mode_from_name(&mode.to_string()) {
-        Some(mode @ (ColorMode::Grayscale | ColorMode::Rgb | ColorMode::Cmyk | ColorMode::Lab)) => {
+        Some(
+            mode @ (ColorMode::Grayscale
+            | ColorMode::Rgb
+            | ColorMode::Cmyk
+            | ColorMode::Lab
+            | ColorMode::Multichannel),
+        ) => {
             let (icc, options) = {
                 let rust = view.rust();
                 (rust.working_cmyk.clone(), rust.conversion_options)

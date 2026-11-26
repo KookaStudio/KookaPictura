@@ -166,6 +166,7 @@ fn transform_document(doc: &mut Document, kind: Kind) -> Result<(), OpsError> {
     if kind.swaps_axes() {
         std::mem::swap(&mut next.width, &mut next.height);
     }
+    super::refresh_plate_preview(&mut next);
     *doc = next;
     Ok(())
 }

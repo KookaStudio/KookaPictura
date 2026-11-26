@@ -75,8 +75,93 @@ pub fn resize_canvas_document(
 
     next.width = width;
     next.height = height;
+    fill_plate_padding(&mut next, old_w, old_h, dx, dy);
+    super::refresh_plate_preview(&mut next);
     *doc = next;
     Ok(())
+}
+
+// Spot samples use 255 for no ink, while selection channels keep zero padding.
+pub(super) fn fill_plate_padding(
+    doc: &mut pictura_core::Document,
+    old_w: u32,
+    old_h: u32,
+    dx: i32,
+    dy: i32,
+) {
+    if !doc.source.multichannel_plates() {
+        return;
+    }
+    let spots = pictura_codec::spot_channel_indices(doc);
+    let (width, height) = (doc.width as usize, doc.height as usize);
+    let x0 = i64::from(dx).clamp(0, width as i64) as usize;
+    let x1 = (i64::from(dx) + i64::from(old_w)).clamp(0, width as i64) as usize;
+    let y0 = i64::from(dy).clamp(0, height as i64) as usize;
+    let y1 = (i64::from(dy) + i64::from(old_h)).clamp(0, height as i64) as usize;
+    for &index in &spots {
+        fill_padding(
+            &mut doc.channels[index].data,
+            width,
+            height,
+            0,
+            x0,
+            x1,
+            y0,
+            y1,
+            255,
+        );
+    }
+    if let Some(mut store) = doc.source.planes().clone() {
+        for &index in &spots {
+            match &mut store.samples {
+                pictura_core::Samples::U8(plane) => {
+                    fill_padding(plane, width, height, index, x0, x1, y0, y1, 255)
+                }
+                pictura_core::Samples::U16(plane) => {
+                    fill_padding(plane, width, height, index, x0, x1, y0, y1, u16::MAX)
+                }
+                pictura_core::Samples::F32(plane) => {
+                    fill_padding(plane, width, height, index, x0, x1, y0, y1, 1.0)
+                }
+            }
+        }
+        doc.source
+            .replace_planes(Some(store))
+            .expect("matching plate sample depth");
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn fill_padding<T: pictura_core::TileSample>(
+    plane: &mut pictura_core::Plane<T>,
+    width: usize,
+    height: usize,
+    index: usize,
+    x0: usize,
+    x1: usize,
+    y0: usize,
+    y1: usize,
+    value: T,
+) {
+    let row = vec![value; width];
+    for y in 0..height {
+        let row_index = index * height + y;
+        if y < y0 || y >= y1 {
+            plane.write_rect_from(0..width, row_index..row_index + 1, width, &row);
+        } else {
+            if x0 > 0 {
+                plane.write_rect_from(0..x0, row_index..row_index + 1, width, &row[..x0]);
+            }
+            if x1 < width {
+                plane.write_rect_from(
+                    x1..width,
+                    row_index..row_index + 1,
+                    width,
+                    &row[..width - x1],
+                );
+            }
+        }
+    }
 }
 
 /// What [`resize_canvas_document`] to `width × height` at `anchor` and

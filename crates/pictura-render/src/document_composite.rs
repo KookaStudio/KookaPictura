@@ -64,6 +64,9 @@ impl<'a> DocumentComposite<'a> {
     /// `min(rendered, composite)` planes, so a 1-plane grayscale composite stays
     /// 1-plane. A composite whose dimensions no longer match is replaced.
     pub fn store(&mut self, rendered: &PixelBuffer) {
+        if self.doc.source.multichannel_plates() {
+            return;
+        }
         if !self.doc.composite_is_authoritative() {
             self.drop_stored();
             return;

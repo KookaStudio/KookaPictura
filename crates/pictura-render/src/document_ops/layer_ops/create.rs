@@ -212,7 +212,7 @@ pub fn next_layer_name(doc: &Document, prefix: &str) -> String {
 }
 
 pub fn add_layer(doc: &mut Document, above: i32, name: &str) -> i32 {
-    if doc.width == 0 || doc.height == 0 {
+    if doc.width == 0 || doc.height == 0 || doc.source.multichannel_plates() {
         return -1;
     }
     let index = insertion_index(doc.layers.len(), above);
@@ -223,6 +223,9 @@ pub fn add_layer(doc: &mut Document, above: i32, name: &str) -> i32 {
 }
 
 pub fn add_group(doc: &mut Document, above: i32, name: &str) -> i32 {
+    if doc.source.multichannel_plates() {
+        return -1;
+    }
     let index = insertion_index(doc.layers.len(), above);
     match doc.layers.insert(&[], index, empty_group(name)) {
         Ok(()) => index as i32,
@@ -285,6 +288,9 @@ pub fn ungroup_layer(doc: &mut Document, index: i32) -> bool {
 }
 
 pub(crate) fn insert_node(doc: &mut Document, selection_path: &str, node: Layer) -> String {
+    if doc.source.multichannel_plates() {
+        return String::new();
+    }
     if let Some(segments) = parse_path(selection_path) {
         if resolve_path(doc, selection_path).is_some_and(|layer| layer.is_group()) {
             let index = resolve_path(doc, selection_path).map_or(0, |group| group.children().len());

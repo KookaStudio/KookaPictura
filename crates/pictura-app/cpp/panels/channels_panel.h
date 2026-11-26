@@ -102,7 +102,7 @@ private:
         QWidget* widget = nullptr;  // the row's own widget (for its surface)
     };
 
-    void rebuild(const QString& mode, const QStringList& alphaNames);
+    void rebuild(const QString& mode, const QStringList& alphaNames, bool storedPlates);
     void addRow(const QString& name, const QString& shortcut, int alpha, RowKind kind=RowKind::Color);
     void refreshThumbnails();
     void toggle(int index);
@@ -129,6 +129,7 @@ private:
     QList<Row> rows_;
     QString mode_;
     int alphaCount_ = -1;
+    bool storedPlates_ = false;
     QStringList alphaNames_;
     int dragRow_ = -1;
     QPoint dragStart_;

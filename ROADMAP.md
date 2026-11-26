@@ -295,8 +295,8 @@ gaps are the CS6 Extended 3D object and camera tools.
       `crates/pictura-render/src/document_ops/crop.rs`.
 - [x] **Transforms** — Free Transform, skew, distort, perspective, and warp.
       `crates/pictura-render/src/document_ops/layer_ops/transform.rs`.
-- [ ] Duotone conversion and its Options dialog (#553); Multichannel
-      conversion (#554)
+- [ ] Duotone conversion and its Options dialog (#553)
+- [x] Multichannel conversion (#554)
 - [ ] The Color Table, and Indexed transparency and Forced palette (#555)
 - [ ] Bitmap Halftone Screen and Custom Pattern (#556)
 - [x] The HDR Conversion tone methods (#557)

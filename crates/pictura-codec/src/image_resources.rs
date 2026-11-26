@@ -144,6 +144,10 @@ pub fn alpha_names(document: &Document) -> Vec<String> {
 
 fn stored_alpha_names(document: &Document) -> Option<Vec<String>> {
     let (resources, _) = decode_image_resources_with_len(document);
+    channel_names_from_resources(&resources)
+}
+
+fn channel_names_from_resources(resources: &[ImageResource]) -> Option<Vec<String>> {
     let unicode = resources
         .iter()
         .find(|r| r.id == ALPHA_NAMES_UNICODE)
@@ -236,6 +240,29 @@ pub fn display_info(document: &Document) -> Vec<ChannelDisplayInfo> {
         .find(|r| r.id == DISPLAY_INFO)
         .map(|r| decode_display_info(&r.data))
         .unwrap_or_default()
+}
+
+pub(crate) fn has_multichannel_metadata(section: &[u8], channels: u16) -> bool {
+    let (resources, _) = decode_section(section);
+    let count = usize::from(channels);
+    let has_names = channel_names_from_resources(&resources).is_some_and(|names| {
+        names.len() <= count && names.iter().any(|name| !name.trim().is_empty())
+    });
+    has_names
+        || resources.iter().any(|resource| {
+            let data = &resource.data;
+            if resource.id != DISPLAY_INFO
+                || !data.starts_with(&1u32.to_be_bytes())
+                || data.len() <= 4
+                || !(data.len() - 4).is_multiple_of(13)
+                || (data.len() - 4) / 13 > count
+            {
+                return false;
+            }
+            decode_display_info(data)
+                .iter()
+                .all(|item| item.mode <= SPOT_CHANNEL_MODE)
+        })
 }
 
 fn decode_display_info(data: &[u8]) -> Vec<ChannelDisplayInfo> {

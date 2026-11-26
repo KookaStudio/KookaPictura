@@ -15,6 +15,7 @@
 #include "qt_test_support.h"
 
 #include <QtCore/QCoreApplication>
+#include <QtCore/QFile>
 #include <QtCore/QMimeData>
 #include <QtCore/QTemporaryDir>
 #include <QtCore/QTimer>
@@ -88,6 +89,8 @@ private slots:
     void loadDialogWithNoSavedChannels();
     void loadDialogGrayscaleCompositeRow();
     void loadDialogModeRows();
+    void multichannelLoadsStoredPlates();
+    void multichannelSpotSelectionRefreshesAndUndoes();
     void loadDialogColourRowTarget();
     void loadColourRowCoverage();
     void loadColourRowCombines();
@@ -504,9 +507,75 @@ void SelectionSaveLoadTest::loadDialogModeRows()
     QVERIFY(indexed && pictura::convert_to_indexed(*indexed, 1, 256, 0, 0));
     checkMode(indexed, {QStringLiteral("Index")});
 
-    // Bitmap, Duotone, and Multichannel documents cannot be built by these
-    // fixtures: convert_image_mode() accepts only Grayscale, RGB, CMYK, and Lab,
-    // and the codec has no writer for Multichannel.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QFile legacy(dir.filePath(QStringLiteral("legacy.psd")));
+    QVERIFY(legacy.open(QIODevice::WriteOnly));
+    QByteArray psd = QByteArray::fromHex(
+        "3842505300010000000000000003000000100000001000080007"
+        "0000000000000000000000000000");
+    psd.append(QByteArray(3 * 16 * 16, char(100)));
+    QCOMPARE(legacy.write(psd), qint64(psd.size()));
+    legacy.close();
+    QVERIFY(window_->openDocumentAtPath(legacy.fileName()));
+    checkMode(window_->activeView(), {QStringLiteral("Cyan"), QStringLiteral("Magenta"),
+                                     QStringLiteral("Yellow")});
+}
+
+void SelectionSaveLoadTest::multichannelLoadsStoredPlates()
+{
+    const QStringList grayNames{QStringLiteral("Black")};
+    const QStringList cmykNames{QStringLiteral("Cyan"), QStringLiteral("Magenta"),
+                                QStringLiteral("Yellow"), QStringLiteral("Black")};
+    for (const QString& sourceMode : {QStringLiteral("grayscale"), QStringLiteral("cmyk")}) {
+        auto* view = openFlatImage(*window_, QColor(100, 150, 200));
+        QVERIFY(view && pictura::convert_image_mode(*view, sourceMode));
+        const QByteArray saved(16 * 16, char(87));
+        QVERIFY(pictura::load_selection_coverage(*view, coverageSlice(saved), 16, 16, false,
+                                                 QStringLiteral("new")));
+        QVERIFY(pictura::save_selection_to(*view, QStringLiteral("new"), QStringLiteral("Saved"),
+                                           QStringLiteral("new")));
+        QVERIFY(pictura::convert_image_mode(*view, QStringLiteral("multichannel")));
+
+        const QList<pictura::SelectionDocument> documents{{view, QStringLiteral("Doc"), true}};
+        pictura::SaveLoadSelectionDialog dialog(pictura::SaveLoadSelectionDialog::Mode::Load,
+                                                documents, window_.get());
+        const auto plates = sourceMode == QLatin1String("cmyk") ? cmykNames : grayNames;
+        QCOMPARE(dialog.channelCountForTest(), int(plates.size() + 1));
+        for (int i = 0; i < dialog.channelCountForTest(); ++i) {
+            const bool isPlate = i < plates.size();
+            QCOMPARE(dialog.channelTextForTest(i), isPlate ? plates.at(i) : QStringLiteral("Saved"));
+            QCOMPARE(pictura::channels_alpha_is_spot(*view, i), isPlate);
+            dialog.setChannelIndexForTest(i);
+            const auto request = dialog.loadRequest();
+            QCOMPARE(request.target, QStringLiteral("alpha:%1").arg(i));
+
+            int width = 0;
+            int height = 0;
+            const auto samples = pictura::channels_alpha_thumbnail(*view, i, 16, width, height);
+            QCOMPARE(width, 16);
+            QCOMPARE(height, 16);
+            QCOMPARE(samples.size(), std::size_t(16 * 16));
+            QVERIFY(pictura::load_selection_target(*view, request.target, request.invert, request.mode));
+            QCOMPARE(view->selection_coverage(8, 8), isPlate ? int(samples[8 * 16 + 8]) : 87);
+        }
+    }
+}
+
+void SelectionSaveLoadTest::multichannelSpotSelectionRefreshesAndUndoes()
+{
+    auto* view = openFlatImage(*window_, QColor(0, 0, 0));
+    QVERIFY(view);
+    QVERIFY(pictura::convert_image_mode(*view, QStringLiteral("multichannel")));
+    QCOMPARE(view->composite_argb(0, 0), QColor(0, 0, 0).rgba());
+    view->select_all();
+    QVERIFY(pictura::save_selection_to(*view, QStringLiteral("alpha:0"), QString(),
+                                       QStringLiteral("replace")));
+    QCOMPARE(view->composite_argb(0, 0), QColor(255, 0, 0).rgba());
+    QVERIFY(view->undo());
+    QCOMPARE(view->composite_argb(0, 0), QColor(0, 0, 0).rgba());
+    QVERIFY(view->redo());
+    QCOMPARE(view->composite_argb(0, 0), QColor(255, 0, 0).rgba());
 }
 
 void SelectionSaveLoadTest::loadDialogColourRowTarget()

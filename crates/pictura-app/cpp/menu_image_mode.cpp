@@ -50,6 +50,7 @@ void MenuRegistrar::wireImageModeMenu()
         {command_ids::ImageModeBitmap, "bitmap"}, {command_ids::ImageModeGrayscale, "grayscale"},
         {command_ids::ImageModeIndexed, "indexed"}, {command_ids::ImageModeRgb, "rgb"},
         {command_ids::ImageModeCmyk, "cmyk"},      {command_ids::ImageModeLab, "lab"},
+        {command_ids::ImageModeMultichannel, "multichannel"},
     };
     for (const auto& [id, name] : modes) {
         const QString mode = QString::fromLatin1(name);
@@ -79,7 +80,8 @@ void MenuRegistrar::wireImageModeMenu()
                     params.values.value(QStringLiteral("dither")).toInt(),
                     params.values.value(QStringLiteral("amount")).toInt());
             } else {
-                if (params.values.value(QStringLiteral("flatten")).toBool()
+                if (mode != QLatin1String("multichannel")
+                    && params.values.value(QStringLiteral("flatten")).toBool()
                     && view->layer_count() > 1) {
                     view->flatten_image();
                 }
@@ -139,9 +141,10 @@ void MenuRegistrar::convertImageMode(const QString& mode)
     }
     const bool layered = view->layer_count() > 1;
 
-    // Bitmap and Indexed hold no layers: the conversion flattens.
+    // These modes require flattening in the conversion transaction.
     const QString title = tr("Convert Mode");
-    if (mode == QLatin1String("bitmap") || mode == QLatin1String("indexed")) {
+    if (mode == QLatin1String("bitmap") || mode == QLatin1String("indexed")
+        || mode == QLatin1String("multichannel")) {
         if (layered) {
             QMessageBox box(QMessageBox::Question, tr("Kooka Pictura"), tr("Flatten layers?"),
                             QMessageBox::Ok | QMessageBox::Cancel, dialogParent());
@@ -149,6 +152,15 @@ void MenuRegistrar::convertImageMode(const QString& mode)
             if (box.clickedButton() != box.button(QMessageBox::Ok)) {
                 return;
             }
+        }
+        if (mode == QLatin1String("multichannel")) {
+            if (runDocumentCommand(dialogParent(), *view, title,
+                                   [view, &mode] { convert_image_mode(*view, mode); })) {
+                CommandParams command;
+                command.values.insert(QStringLiteral("mode"), mode);
+                commands_->recordCommand(command_ids::ImageModeMultichannel, command);
+            }
+            return;
         }
         if (mode == QLatin1String("bitmap")) {
             BitmapModeDialog dialog(dialogParent());

@@ -11,16 +11,10 @@ Opens non-RGB PSD colour modes by normalizing to the working mode, including Bit
 (2), RGB (3), CMYK (4), Multichannel (7), Duotone (8), and Lab (9). It SHALL convert a non-RGB mode's color
 planes into the engine's working mode (RGB for Bitmap/Indexed/CMYK/Lab,
 Grayscale unchanged) and SHALL set the returned document's `mode` to `Rgb` or
-`Grayscale` and its `depth` to `Eight`. For CMYK, the conversion SHALL use the
+`Grayscale` and its `depth` to `Eight`, except for channel-owned Multichannel as specified below. For CMYK, the conversion SHALL use the
 embedded resource `1039` profile when it parses as a CMYK profile; otherwise the
 working CMYK profile supplied by the caller when one is available; otherwise the
-documented profile-free fallback. A header color mode of Duotone (8) or Multichannel (7)
-with header channel count 1 or 3 at depth 8 SHALL open by normalizing to the
-working mode (Duotone and 1-channel Multichannel as grayscale; 3-channel
-Multichannel as profile-free CMY→RGB). Multichannel with any other channel
-count, any other mode code, and any bit depth other than 8 (other than depth 1
-for Bitmap, and depths 16/32 for the Grayscale/RGB/CMYK/Lab modes read per
-`psd-bit-depth`) SHALL return `PsdError::Unsupported`. A header channel count
+documented profile-free fallback. A Duotone header at depth 8 and an unnamed Multichannel header at depth 8 with one or three channels SHALL open by the legacy normalization (grayscale for Duotone and one-channel Multichannel; profile-free CMY-to-RGB for three-channel Multichannel). A mode-7 file at depth 8 or 16 with valid DisplayInfo or channel names SHALL instead open as channel-owned Multichannel with its stored planes and metadata. Unnamed Multichannel files outside the legacy subset, other unknown modes, and unsupported depths SHALL return `PsdError::Unsupported`. A header channel count
 below the mode's color-channel count SHALL return `PsdError::Invalid`.
 
 #### Scenario: An Indexed document opens as RGB with palette colors
@@ -66,17 +60,17 @@ below the mode's color-channel count SHALL return `PsdError::Invalid`.
 
 #### Scenario: One-channel Multichannel opens as grayscale-normalized RGB
 
-- **WHEN** the header color mode is Multichannel (7) at depth 8 with header channel count 1
+- **WHEN** an unnamed header color mode is Multichannel (7) at depth 8 with header channel count 1
 - **THEN** `read_psd` succeeds and normalizes like grayscale with `source_mode` `Some(Multichannel)`
 
 #### Scenario: Three-channel Multichannel opens as CMY-normalized RGB
 
-- **WHEN** the header color mode is Multichannel (7) at depth 8 with header channel count 3
+- **WHEN** an unnamed header color mode is Multichannel (7) at depth 8 with header channel count 3
 - **THEN** `read_psd` succeeds and the composite is the profile-free CMY→RGB map of the three plates with `source_mode` `Some(Multichannel)`
 
 #### Scenario: Other Multichannel channel counts stay unsupported
 
-- **WHEN** the header color mode is Multichannel (7) with channel count not in {1, 3}
+- **WHEN** an unnamed Multichannel (7) file has a channel count not in {1, 3}
 - **THEN** `read_psd` returns `PsdError::Unsupported` and does not panic
 
 #### Scenario: Unknown mode codes stay unsupported
@@ -226,7 +220,7 @@ is unavailable and SHALL NOT fail the suite in that case.
 
 ### Requirement: A normalized document records its source mode and saves in it when the mode maps back
 
-When `read_psd` normalizes a non-RGB mode, it SHALL set
+When `read_psd` normalizes a non-RGB mode, excluding channel-owned Multichannel which retains its own source state and planes, it SHALL set
 `Document.source_mode` to `Some(header_mode)` and SHALL set it to `None` for a
 Grayscale or RGB file and for a constructed document. It SHALL convert every
 color plane of the document, the composite and each layer, recursing into a
@@ -269,11 +263,10 @@ out of scope.
 `write_psd` SHALL write an 8-bit Duotone document back with header color mode
 8 when its `source_mode` is `Duotone`, it is flat and unedited, and the retained
 plane still converts to the working RGB; it SHALL re-emit `color_mode_data`
-unchanged. `write_psd` SHALL write an 8-bit Multichannel document back with
+unchanged. `write_psd` SHALL write an 8-bit legacy composite-backed Multichannel document back with
 header color mode 7 when its `source_mode` is `Multichannel`, its header channel
 count was 1 or 3, it is flat and unedited, and the retained plates still convert
-to the working RGB. An edited or layered Duotone/Multichannel document SHALL
-write the working mode; no plate layout or duotone curve SHALL be invented.
+to the working RGB. An edited or layered Duotone or legacy composite-backed Multichannel document SHALL write the working mode; no plate layout or duotone curve SHALL be invented. A channel-owned Multichannel document SHALL instead save its actual stored channels as mode 7 at its document depth, preserving channel names and display metadata, as required by Authored Multichannel plates are independent and persistent.
 
 It SHALL re-emit the preserved color-mode-data and image-resource sections. For
 a document with no source mode it SHALL continue to write the working mode.
@@ -395,17 +388,17 @@ a document with no source mode it SHALL continue to write the working mode.
 
 #### Scenario: An unchanged one-channel Multichannel document saves as Multichannel
 
-- **WHEN** a flat 1-channel Multichannel document is opened and written without edits
+- **WHEN** a flat legacy 1-channel Multichannel document is opened and written without edits
 - **THEN** the header color mode is 7 and the plate bytes match the retained source
 
 #### Scenario: An unchanged three-channel Multichannel document saves as Multichannel
 
-- **WHEN** a flat 3-channel Multichannel document is opened and written without edits
+- **WHEN** a flat legacy 3-channel Multichannel document is opened and written without edits
 - **THEN** the header color mode is 7 and the three plate bytes match the retained source
 
 #### Scenario: An edited Multichannel document saves as RGB
 
-- **WHEN** a Multichannel document's composite is edited before save
+- **WHEN** a legacy composite-backed Multichannel document's composite is edited before save
 - **THEN** the header color mode is RGB
 
 ### Requirement: Duotone color-mode data is decoded
@@ -478,3 +471,39 @@ The test corpus SHALL include a CMYK PSD fixture carrying the bundled Photocraft
 
 - **WHEN** the legacy profile-free `cmyk.psd` fixture is read
 - **THEN** its decoded pixels equal the documented integer formula
+
+### Requirement: Authored Multichannel plates are independent and persistent
+
+The application SHALL convert an eligible 8- or 16-bit RGB, Grayscale, CMYK, or Lab document into layerless Multichannel. It SHALL flatten visible layers, discard hidden layers, promote the source components to named spot channels in source order, retain existing document-level channels in their order, and preserve document depth. It SHALL write and reopen the resulting plates at that depth in PSD and PSB. Authored plate samples SHALL use low values for ink. The original interpretation of legacy unnamed 8-bit one- and three-plane files SHALL remain available. A valid mode-7 DisplayInfo or channel-name resource SHALL identify channel-owned files; without either resource only the legacy 8-bit one- and three-plane subset SHALL open, and other layouts SHALL be refused. The source state SHALL distinguish legacy composite-backed files from channel-owned files.
+
+#### Scenario: RGB visible artwork becomes CMY plates [multi_rgb_split]
+- **WHEN** a layered RGB image with hidden artwork and an extra channel is converted
+- **THEN** its visible flattened components become Cyan, Magenta, and Yellow spot channels, followed by the unchanged extra channel, and no layers remain
+
+#### Scenario: CMYK, Lab, and Grayscale expose the source components [multi_components]
+- **WHEN** supported CMYK, Lab, and Grayscale documents are converted
+- **THEN** their plates are named Cyan/Magenta/Yellow/Black, Lightness/a/b, and Black respectively
+
+#### Scenario: Native plates round-trip [multi_native_round_trip]
+- **WHEN** an authored 16-bit Multichannel document with an extra channel is saved and reopened
+- **THEN** its mode, depth, channel names, and retained native samples survive in PSD and PSB
+
+#### Scenario: Invalid sources preserve the document [multi_refusal]
+- **WHEN** an unsupported source requests Multichannel conversion
+- **THEN** the request fails with no changes to the document
+
+#### Scenario: Authored metadata and legacy files are distinguished [multi_read_compatibility]
+- **WHEN** mode-7 PSD and PSB files have valid DisplayInfo or channel names at depths 8 and 16, and unnamed 8-bit one- and three-plane and unnamed unsupported-layout files are read
+- **THEN** metadata-bearing files open with their channel planes and metadata, the legacy subset retains its previous preview and write-back behavior, and other unnamed layouts are refused
+
+#### Scenario: Plate sample polarity [multi_plate_polarity]
+- **WHEN** RGB black, white, and primary colors are converted to spot plates
+- **THEN** low plate samples represent ink and high samples represent no ink, at both supported depths
+
+#### Scenario: Layer insertion is refused [multi_layer_refusal]
+- **WHEN** insertion of a layer is requested in a channel-owned Multichannel document
+- **THEN** the request is refused and document and history remain unchanged
+
+#### Scenario: Convert a plate document back to RGB [multi_rgb_exit]
+- **WHEN** a channel-owned Multichannel document is converted to RGB
+- **THEN** the preview becomes the RGB composite, the channel-owned state is cleared, every named plate and pre-existing extra remains exactly once as a normal extra channel, and fabricated mode-7 rows disappear, and undo restores the plate document

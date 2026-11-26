@@ -92,7 +92,15 @@ pub(super) fn save_selection_shape(
             }
             let written = if selected { base.invert() } else { base };
             doc.channels[index] = written.to_channel(id);
-            Edit::Meta
+            if doc.source.multichannel_plates()
+                && pictura_codec::spot_channel_indices(doc).contains(&index)
+            {
+                let preview = pictura_codec::multichannel_preview(doc);
+                doc.composite.replace(preview).expect("valid plate preview");
+                Edit::Full
+            } else {
+                Edit::Meta
+            }
         }
         SelectionTarget::Mask(path) => {
             let Some(layer) = pictura_render::resolve_path(doc, &path) else {

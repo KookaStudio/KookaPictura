@@ -150,7 +150,8 @@ void SaveLoadSelectionDialog::refreshChannels()
         if (mode_ == Mode::Load) {
             // The Channels panel's colour rows lead the list. The dialog has no
             // eye column, so every colour channel counts as visible.
-            const QList<ChannelRowDef> rows = channelsForMode(channels_mode(*view));
+            const QList<ChannelRowDef> rows =
+                channelsForMode(channels_mode(*view), channels_multichannel_plates(*view));
             for (int row = 0; row < rows.size(); ++row) {
                 channel_->addItem(QLatin1String(rows.at(row).name),
                                   QStringLiteral("color:%1").arg(row));

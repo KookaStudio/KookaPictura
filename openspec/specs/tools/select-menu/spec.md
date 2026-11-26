@@ -225,7 +225,7 @@ mode has one, then its colour plates), every existing raster layer mask, and
 every extra channel under its stored name. The composite row SHALL derive
 coverage as the luminance of all its colour channels; each plate row SHALL use
 the Channels panel's mode-specific derivation for that row (the colour plane for
-RGB, the naive ink level for CMYK and Multichannel, and the luminance for Lab).
+RGB, the naive ink level for CMYK and legacy Multichannel, and the luminance for Lab). Channel-owned Multichannel SHALL have no fabricated colour rows: each stored plate is listed once as an extra channel and loads via the existing alpha/spot channel selection handling.
 Invert SHALL default off. Operation SHALL offer New, Add, Subtract, and
 Intersect and SHALL default to New. The default Channel SHALL be the first extra
 channel when the document has one, otherwise the first listed colour row (the
@@ -285,7 +285,7 @@ byte for byte.
 
 #### Scenario: A composite-less mode defaults to its first colour row [sm_load_multichannel_default]
 
-- **WHEN** Load Selection opens for a Multichannel document with no extra channel
+- **WHEN** Load Selection opens for a legacy Multichannel document with no extra channel
 - **THEN** the default target is the first colour row (Cyan), `color:0`
 
 #### Scenario: Cross-document colour row load [sm_load_colour_cross_doc]
@@ -302,3 +302,7 @@ byte for byte.
 
 - **WHEN** a selection is saved to a channel and loaded back
 - **THEN** the resulting selection equals the saved selection byte for byte and one undo state is recorded
+
+#### Scenario: Load actual authored Multichannel plates [multi_load_selection]
+- **WHEN** Load Selection lists the stored channels of converted Grayscale and CMYK documents with an existing saved selection
+- **THEN** each actual plate and extra channel appears once, each plate loads its stored samples through spot handling, and the saved selection remains unchanged

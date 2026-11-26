@@ -381,6 +381,9 @@ pub fn rotate_document_in(doc: &mut Document, angle_deg: f64, pivot: (f64, f64))
         }
     }
 
+    if doc.source.multichannel_plates() {
+        return false;
+    }
     rotate_frame(doc, angle_deg, pivot).is_ok()
 }
 

@@ -19,16 +19,7 @@ version 2 (PSB) and SHALL reject any other version with `PsdError::Unsupported`.
 - **THEN** it returns `PsdError::Unsupported`
 
 ### Requirement: Header validation for the composite subset
-The system SHALL parse the channel count, height, width, bit depth, and color
-mode, and SHALL accept 1–56 channels, non-zero dimensions within the PSD/PSB
-dimension limit, color modes Bitmap (0), Grayscale (1), Indexed (2), RGB (3),
-CMYK (4), or Lab (9), and bit depth 8 for every accepted mode, bit depth 1 for
-Bitmap only, and bit depths 16 and 32 for the Grayscale, RGB, CMYK, and Lab
-modes (see `psd-bit-depth`). It SHALL return `PsdError::Unsupported` for
-Multichannel (7), Duotone (8), any other color-mode code, any bit depth other
-than 1, 8, 16, or 32, and bit depth 16 or 32 for a Bitmap or Indexed document;
-it SHALL return `PsdError::Invalid` for a channel count or dimension outside
-the accepted range.
+The system SHALL parse the channel count, height, width, bit depth, and color mode, accepting 1–56 channels and non-zero dimensions within the PSD/PSB limit. Bitmap (0), Grayscale (1), Indexed (2), RGB (3), CMYK (4), Multichannel (7), Duotone (8), and Lab (9) SHALL be accepted at the depths and channel layouts specified by `codec/psd-color-modes` and `psd-bit-depth`. Unknown mode codes, unsupported depths, and unsupported Multichannel layouts SHALL return `PsdError::Unsupported`. A channel count or dimension outside the accepted range SHALL return `PsdError::Invalid`.
 
 #### Scenario: Zero dimension
 - **WHEN** the header declares a width or height of zero
@@ -54,9 +45,9 @@ the accepted range.
 - **WHEN** the header declares Indexed (2), CMYK (4), or Lab (9)
 - **THEN** the header is accepted and the document is normalized to RGB
 
-#### Scenario: Multichannel and Duotone are unsupported
-- **WHEN** the header declares Multichannel (7) or Duotone (8)
-- **THEN** it returns `PsdError::Unsupported`
+#### Scenario: Multichannel and Duotone follow their mode contracts [multi_header_modes]
+- **WHEN** a Multichannel or Duotone header declares a supported depth and channel layout
+- **THEN** it is accepted under `codec/psd-color-modes`, and an unsupported depth or layout is refused
 
 ### Requirement: Composite image read with raw and RLE compression
 The system SHALL read the color-mode data and image-resource sections by their

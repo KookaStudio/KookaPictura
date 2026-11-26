@@ -1,7 +1,7 @@
 # Feature parity tracker
 
-Assessed: 2026-11-25
-Pictura commit: 5bba3258
+Assessed: 2026-11-26
+Pictura commit: 1fd5bcad6
 CS6 baseline: Adobe Photoshop CS6 13.0 (2012), Standard and Extended
 CC baseline: Adobe Photoshop 28.0 (November 2026 release; LTS 27.11.1)
 
@@ -11,12 +11,12 @@ This tracker measures feature coverage against a frozen Photoshop baseline. It d
 
 | Baseline | Complete | Partial | Missing | Unknown | Denominator | Coverage | Excluded non-goals |
 |---|---|---|---|---|---|---|---|
-| CS6 Standard | 209 | 78 | 58 | 4 | 349 | 59.9% | 8 |
-| CS6 Standard, in scope | 209 | 78 | 52 | 2 | 341 | 61.3% | 8 |
-| CS6 Extended | 210 | 78 | 74 | 4 | 366 | 57.4% | 23 |
-| CS6 Extended, in scope | 210 | 78 | 53 | 2 | 343 | 61.2% | 23 |
-| CC 28.0 | 211 | 80 | 79 | 4 | 374 | 56.4% | 20 |
-| CC 28.0, in scope | 211 | 80 | 61 | 2 | 354 | 59.6% | 20 |
+| CS6 Standard | 209 | 79 | 57 | 4 | 349 | 59.9% | 8 |
+| CS6 Standard, in scope | 209 | 79 | 51 | 2 | 341 | 61.3% | 8 |
+| CS6 Extended | 210 | 79 | 73 | 4 | 366 | 57.4% | 23 |
+| CS6 Extended, in scope | 210 | 79 | 52 | 2 | 343 | 61.2% | 23 |
+| CC 28.0 | 211 | 81 | 78 | 4 | 374 | 56.4% | 20 |
+| CC 28.0, in scope | 211 | 81 | 60 | 2 | 354 | 59.6% | 20 |
 
 ## Baselines
 
@@ -378,7 +378,7 @@ Source list: Image > Mode, Color Settings, picker, and swatch capabilities.
 | P-CLR-05 | Indexed colour mode | Y | Y | Y | Complete | in-scope | crates/pictura-color/src | none | — | — |
 | P-CLR-06 | Bitmap colour mode | Y | Y | Y | Complete | in-scope | crates/pictura-color/src | none | — | — |
 | P-CLR-07 | Duotone colour mode | Y | Y | Y | Missing | in-scope | — | none | No duotone conversion or Options dialog | #553 |
-| P-CLR-08 | Multichannel colour mode | Y | Y | Y | Missing | in-scope | — | none | No multichannel conversion | #554 |
+| P-CLR-08 | Multichannel colour mode | Y | Y | Y | Partial | in-scope | crates/pictura-render/src/document_ops/mode/multichannel.rs; crates/pictura-codec/src/multichannel.rs | none | 8/16-bit conversion and PSD/PSB plates; spot preview approximate; arbitrary rotation and perspective crop unavailable | #554 |
 | P-CLR-09 | 8-bit per channel | Y | Y | Y | Complete | in-scope | crates/pictura-core/src | none | — | — |
 | P-CLR-10 | 16-bit per channel | Y | Y | Y | Complete | in-scope | crates/pictura-core/src | none | — | — |
 | P-CLR-11 | 32-bit per channel | Y | Y | Y | Partial | in-scope | crates/pictura-core/src | none | 32-bit preview options and the Info readout remain | #570 |
@@ -524,6 +524,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
 |---|---|---|---|---|---|
+| 2026-11-26 | 1fd5bcad6 | 209/349 (59.9%) | 210/366 (57.4%) | 28.0 | 211/374 (56.4%) |
 | 2026-11-25 | 5bba3258 | 209/349 (59.9%) | 210/366 (57.4%) | 28.0 | 211/374 (56.4%) |
 | 2026-11-21 | 4736b57e | 208/349 (59.6%) | 209/366 (57.1%) | 28.0 | 210/374 (56.1%) |
 | 2026-11-21 | 39ea0380 | 202/349 (57.9%) | 203/366 (55.5%) | 28.0 | 204/374 (54.5%) |

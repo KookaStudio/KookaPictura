@@ -139,6 +139,13 @@ pub(crate) fn materialize_composite(doc: &mut pictura_core::Document) {
     }
 }
 
+fn refresh_plate_preview(doc: &mut pictura_core::Document) {
+    if doc.source.multichannel_plates() {
+        let preview = pictura_codec::multichannel_preview(doc);
+        doc.composite.replace(preview).expect("valid plate preview");
+    }
+}
+
 /// Install a layer-less document's merged composite as a bottom Background.
 ///
 /// A geometry operation calls this before mutating so it transforms real
@@ -146,7 +153,8 @@ pub(crate) fn materialize_composite(doc: &mut pictura_core::Document) {
 /// when the document already has layers, or when the composite does not match
 /// the document size (there are then no reliable source pixels).
 pub(crate) fn materialize_merged_composite(doc: &mut pictura_core::Document) {
-    if !doc.layers.is_empty()
+    if doc.source.multichannel_plates()
+        || !doc.layers.is_empty()
         || !doc.composite.merged_output()
         || doc.width == 0
         || doc.height == 0

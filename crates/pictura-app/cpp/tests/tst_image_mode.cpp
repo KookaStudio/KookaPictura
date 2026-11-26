@@ -1,6 +1,10 @@
 // Image > Mode: color-mode and bit-depth conversions, ported from photorust.
 
 #include <QtTest/QtTest>
+#include <QtCore/QTimer>
+#include <QtWidgets/QAbstractButton>
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QMessageBox>
 
 #include "bitmap_mode_dialog.h"
 #include "commands.h"
@@ -8,6 +12,8 @@
 #include "indexed_color_dialog.h"
 
 #include "api/document_bridge.h"
+#include "api/layers_bridge.h"
+#include "api/selection_bridge.h"
 #include "api/paint_bridge.h"
 
 #include "qt_test_support.h"
@@ -19,6 +25,10 @@ private slots:
     void initTestCase();
     void menuChecksTheModeAndDimsUnavailableTargets();
     void grayscaleIsOneStateAndUndoRestoresColor();
+    void multichannelPromptsAndUndoes();
+    void multichannelDimsUnsupportedSources();
+    void multichannelRejectsLayerInsertion();
+    void multichannelReturnsToRgbAndUndoes();
     void cmykAndLabSaveInTheirMode();
     void indexedPreviewsCancelsAndFlattens();
     void bitmapNeedsGrayscaleAndSavesAsBitmap();
@@ -88,12 +98,13 @@ void ImageModeTest::menuChecksTheModeAndDimsUnavailableTargets()
     for (const char* id :
          {pictura::command_ids::ImageModeGrayscale, pictura::command_ids::ImageModeIndexed,
           pictura::command_ids::ImageModeCmyk, pictura::command_ids::ImageModeLab,
+          pictura::command_ids::ImageModeMultichannel,
           pictura::command_ids::ImageMode16Bits, pictura::command_ids::ImageMode32Bits}) {
         QVERIFY2(action(id)->isEnabled(), id);
         QVERIFY2(!action(id)->isChecked(), id);
     }
     QVERIFY(!action(pictura::command_ids::ImageModeBitmap)->isEnabled());
-    for (const char* name : {"Duotone", "Multichannel", "Color Table"}) {
+    for (const char* name : {"Duotone", "Color Table"}) {
         QAction* stub = window_->registry()->action(pictura::commandIdForPath(
             {QStringLiteral("Image"), QStringLiteral("Mode"), QString::fromUtf8(name)}));
         QVERIFY2(stub && !stub->isEnabled(), name);
@@ -123,6 +134,112 @@ void ImageModeTest::grayscaleIsOneStateAndUndoRestoresColor()
     QCOMPARE(view->composite_argb(4, 4), before);
     // Converting to the current mode is refused and records nothing.
     QVERIFY(!pictura::convert_image_mode(*view, QStringLiteral("rgb")));
+    closeActive();
+}
+
+void ImageModeTest::multichannelPromptsAndUndoes()
+{
+    auto* view = newFilled(QColor(100, 150, 200));
+    QVERIFY(view);
+    QVERIFY(view->add_layer(0) >= 0);
+    const int history = view->history_count();
+    QAction* multichannel = action(pictura::command_ids::ImageModeMultichannel);
+    QVERIFY(multichannel && multichannel->isEnabled());
+
+    for (auto choice : {QMessageBox::Cancel, QMessageBox::Ok}) {
+        bool prompted = false;
+        QTimer::singleShot(0, window_.get(), [&] {
+            for (QWidget* widget : QApplication::topLevelWidgets()) {
+                auto* box = qobject_cast<QMessageBox*>(widget);
+                if (box && box->isVisible() && box->button(choice)) {
+                    prompted = true;
+                    box->button(choice)->click();
+                    break;
+                }
+            }
+        });
+        multichannel->trigger();
+        QVERIFY(prompted);
+        if (choice == QMessageBox::Cancel) {
+            QCOMPARE(pictura::image_mode(*view), QStringLiteral("rgb"));
+            QCOMPARE(view->layer_count(), 2);
+            QCOMPARE(view->history_count(), history);
+        }
+    }
+    QVERIFY(multichannel->isChecked());
+    QCOMPARE(view->layer_count(), 0);
+    QCOMPARE(view->history_count(), history + 1);
+    QCOMPARE(view->history_label(view->history_index()), QStringLiteral("Convert Mode"));
+    const QStringList names{QStringLiteral("Cyan"), QStringLiteral("Magenta"),
+                            QStringLiteral("Yellow")};
+    QCOMPARE(pictura::channels_alpha_names(*view), names);
+    for (int channel = 0; channel < names.size(); ++channel) {
+        QVERIFY(pictura::channels_alpha_is_spot(*view, channel));
+    }
+
+    QVERIFY(view->undo());
+    QCOMPARE(pictura::image_mode(*view), QStringLiteral("rgb"));
+    QCOMPARE(view->layer_count(), 2);
+    closeActive();
+}
+
+void ImageModeTest::multichannelDimsUnsupportedSources()
+{
+    QAction* multichannel = action(pictura::command_ids::ImageModeMultichannel);
+    QVERIFY(multichannel);
+
+    auto* view = newFilled(QColor(32, 71, 120));
+    QVERIFY(view && pictura::convert_to_indexed(*view, 1, 256, 0, 0));
+    window_->registry()->refresh();
+    QVERIFY(!multichannel->isEnabled());
+    closeActive();
+
+    view = newFilled(QColor(32, 71, 120));
+    QVERIFY(view);
+    QVERIFY(pictura::convert_image_depth(*view, 32));
+    QCOMPARE(pictura::image_depth_bits(*view), 32);
+    window_->registry()->refresh();
+    QVERIFY(!multichannel->isEnabled());
+    closeActive();
+}
+
+void ImageModeTest::multichannelRejectsLayerInsertion()
+{
+    auto* view = newFilled(QColor(32, 71, 120));
+    QVERIFY(view && pictura::convert_image_mode(*view, QStringLiteral("multichannel")));
+    const int history = view->history_count();
+    QVERIFY(view->add_layer(-1) < 0);
+    QCOMPARE(view->layer_count(), 0);
+    QCOMPARE(view->history_count(), history);
+    QCOMPARE(pictura::image_mode(*view), QStringLiteral("multichannel"));
+    closeActive();
+}
+
+void ImageModeTest::multichannelReturnsToRgbAndUndoes()
+{
+    auto* view = newFilled(QColor(32, 71, 120));
+    QVERIFY(view);
+    view->select_all();
+    QVERIFY(pictura::save_selection_to(*view, QStringLiteral("new"), QStringLiteral("Saved"),
+                                       QStringLiteral("new")));
+    QVERIFY(pictura::convert_image_mode(*view, QStringLiteral("multichannel")));
+    const int history = view->history_count();
+    const auto preview = view->composite_argb(4, 4);
+    const QStringList names{QStringLiteral("Cyan"), QStringLiteral("Magenta"),
+                            QStringLiteral("Yellow"), QStringLiteral("Saved")};
+    QCOMPARE(pictura::channels_alpha_names(*view), names);
+
+    QVERIFY(pictura::convert_image_mode(*view, QStringLiteral("rgb")));
+    QCOMPARE(view->layer_count(), 1);
+    QCOMPARE(view->history_count(), history + 1);
+    QCOMPARE(view->composite_argb(4, 4), preview);
+    QVERIFY(!pictura::channels_multichannel_plates(*view));
+    QCOMPARE(pictura::channels_alpha_names(*view), names);
+
+    QVERIFY(view->undo());
+    QCOMPARE(view->layer_count(), 0);
+    QVERIFY(pictura::channels_multichannel_plates(*view));
+    QCOMPARE(pictura::channels_alpha_names(*view), names);
     closeActive();
 }
 

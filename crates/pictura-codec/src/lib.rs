@@ -48,6 +48,7 @@ mod iptc;
 mod layer_comps;
 pub mod layer_content;
 mod layer_content_budget;
+mod multichannel;
 mod normalize_content;
 pub use normalize_content::{edit_layer, layer_from_parts, retire_layer_content};
 mod source_content;
@@ -165,6 +166,7 @@ pub use metadata::{
     set_file_info_values, set_iptc_fields, set_iptc_values, set_xmp_fields, set_xmp_packet,
     set_xmp_values, xmp_properties, DocumentMetadata, MergeMode,
 };
+pub use multichannel::multichannel_preview;
 pub use patterns::{builtin_patterns, decode_patterns, PatternPixels};
 pub use patterns_write::{add_document_pattern, encode_rgb_pattern, encode_rgba_pattern};
 pub use pictura_filter::{

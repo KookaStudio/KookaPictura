@@ -51,6 +51,7 @@ pub mod ffi {
 
         /// The mode the Channels panel lists: `"rgb"`, `"grayscale"`, `"cmyk"`, `"lab"`, `"multichannel"`, `"indexed"`, `"bitmap"`, or `"duotone"` — the opened file's mode when it was converted for editing. Empty without a document.
         fn channels_mode(view: &PictureView) -> QString;
+        fn channels_multichannel_plates(view: &PictureView) -> bool;
 
         /// Alpha channel `index` scaled to fit `max_side` (one byte a pixel, row-major), its size in `width` / `height`; empty for a bad index.
         fn channels_alpha_thumbnail(
