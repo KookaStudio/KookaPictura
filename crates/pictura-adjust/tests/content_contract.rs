@@ -33,6 +33,7 @@ fn neutral_adjustments() -> Vec<(Adjustment, u8)> {
                 red: None,
                 green: None,
                 blue: None,
+                black: None,
             }),
             128,
         ),
@@ -204,6 +205,7 @@ fn invalid_adjustment_parameters_leave_buffers_unchanged() {
             red: None,
             green: None,
             blue: None,
+            black: None,
         }),
         Adjustment::GradientMap(GradientMapParams {
             stops: vec![],

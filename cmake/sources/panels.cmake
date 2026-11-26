@@ -41,6 +41,8 @@ list(APPEND PICTURA_SHELL_SOURCES
     crates/pictura-app/cpp/panels/color_swatch_widget.h
     crates/pictura-app/cpp/panels/curve_widget.cpp
     crates/pictura-app/cpp/panels/curve_widget.h
+    crates/pictura-app/cpp/panels/curves_controls.cpp
+    crates/pictura-app/cpp/panels/curves_controls.h
     crates/pictura-app/cpp/panels/glyphs_panel.cpp
     crates/pictura-app/cpp/panels/histogram_panel.cpp
     crates/pictura-app/cpp/panels/histogram_panel.h

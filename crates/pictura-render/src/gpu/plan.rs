@@ -161,7 +161,9 @@ fn plan_layer<'a>(layer: &'a Layer, doc: &Document, region: Option<PsdRect>) -> 
         ContentRoute::Adjustment(adjustment) => {
             // The catalogue row names the route; only the parameter shape can
             // still decline a routed kind.
-            if let Some(adj) = inline_params(&adjustment) {
+            if mode_curves_need_cpu(&adjustment, doc) {
+                Body::Decline(GpuError::UnsupportedAdjustment)
+            } else if let Some(adj) = inline_params(&adjustment) {
                 Body::Adjustment(AdjustmentPlan::Inline(adj))
             } else if uses_lut(&adjustment) {
                 match pictura_adjust::adjustment_lut(&adjustment) {
@@ -244,6 +246,14 @@ fn plan_layer<'a>(layer: &'a Layer, doc: &Document, region: Option<PsdRect>) -> 
     }
 }
 
+fn mode_curves_need_cpu(adjustment: &pictura_adjust::Adjustment, doc: &Document) -> bool {
+    matches!(adjustment, pictura_adjust::Adjustment::Curves(_))
+        && matches!(
+            crate::document_color_mode(doc),
+            pictura_core::ColorMode::Cmyk | pictura_core::ColorMode::Lab
+        )
+}
+
 /// Eligibility for a member of a clipping run. The member is composited by the
 /// CPU sibling algorithm, so this checks its route and attributes without
 /// building a source raster or effect passes.
@@ -261,7 +271,7 @@ fn plan_clip_member(layer: &Layer, doc: &Document) -> Result<(), GpuError> {
             plan_clip_children(layer.children(), doc)
         }
         ContentRoute::Adjustment(adjustment) => {
-            if super::dispatches_on_gpu(&adjustment) {
+            if !mode_curves_need_cpu(&adjustment, doc) && super::dispatches_on_gpu(&adjustment) {
                 Ok(())
             } else {
                 decline(GpuError::UnsupportedAdjustment)

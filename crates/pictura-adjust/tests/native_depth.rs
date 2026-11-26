@@ -73,6 +73,7 @@ fn covered() -> Vec<Adjustment> {
             red: Some(vec![(0, 0), (128, 100), (255, 255)]),
             green: None,
             blue: Some(vec![(0, 10), (255, 245)]),
+            black: None,
         }),
         Adjustment::BrightnessContrast(BrightnessContrastParams {
             brightness: 30,
@@ -559,4 +560,49 @@ fn unparseable_color_lookup_is_a_noop_at_native_depth() {
     };
     apply_native(&Adjustment::ColorLookup(params), &mut store, 2, 1, 3).unwrap();
     assert_eq!(store, before);
+}
+
+#[test]
+fn curves_mode_transform_and_identity() {
+    let identity = CurvesParams {
+        points: vec![(0, 0), (255, 255)],
+        red: None,
+        green: None,
+        blue: None,
+        black: None,
+    };
+    let original = PixelBuffer {
+        width: 1,
+        height: 1,
+        channels: 4,
+        data: vec![120, 180, 240, 255].into(),
+    };
+    for mode in [ColorBalanceMode::Cmyk, ColorBalanceMode::Lab] {
+        let mut edited = original.clone();
+        apply_in_mode(&Adjustment::Curves(identity.clone()), &mut edited, mode).unwrap();
+        assert_eq!(edited.data, original.data);
+    }
+    let mut cmyk = original.clone();
+    apply_in_mode(
+        &Adjustment::Curves(CurvesParams {
+            black: Some(vec![(0, 128), (255, 128)]),
+            ..identity.clone()
+        }),
+        &mut cmyk,
+        ColorBalanceMode::Cmyk,
+    ).unwrap();
+    assert_eq!(cmyk.data.as_slice(), &[63, 95, 127, 255]);
+
+    let mut lab = original;
+    apply_in_mode(
+        &Adjustment::Curves(CurvesParams {
+            points: vec![(0, 0), (255, 0)],
+            green: Some(vec![(0, 128), (255, 128)]),
+            blue: Some(vec![(0, 128), (255, 128)]),
+            ..identity
+        }),
+        &mut lab,
+        ColorBalanceMode::Lab,
+    ).unwrap();
+    assert_eq!(lab.data.as_slice(), &[0, 0, 0, 255]);
 }

@@ -37,6 +37,7 @@ mod tests {
             red: None,
             green: None,
             blue: None,
+            black: None,
         }));
         assert_eq!(decode(data.clone()), expected);
         let mut with_extra = data;
@@ -59,6 +60,7 @@ mod tests {
                 red: Some(vec![(0, 0), (128, 255), (255, 255)]),
                 green: Some(vec![(0, 0), (64, 16), (255, 255)]),
                 blue: Some(vec![(0, 255), (255, 0)]),
+                black: None,
             }))
         );
     }
@@ -73,6 +75,7 @@ mod tests {
                 red: Some(vec![(0, 0), (128, 255), (255, 255)]),
                 green: None,
                 blue: None,
+                black: None,
             }))
         );
     }
@@ -119,6 +122,7 @@ mod tests {
                 red: None,
                 green: None,
                 blue: None,
+                black: None,
             }))
         );
 
@@ -136,6 +140,7 @@ mod tests {
                 red: Some(vec![(0, 0), (128, 255), (255, 255)]),
                 green: Some(vec![(0, 0), (64, 16), (255, 255)]),
                 blue: Some(vec![(0, 255), (255, 0)]),
+                black: None,
             }))
         );
     }

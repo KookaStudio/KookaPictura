@@ -313,6 +313,11 @@ void MenuRegistrar::wirePanelMenuCommands()
         const auto* panel = panels_ ? panels_->propertiesPanel() : nullptr;
         return panel && panel->canAutoCorrect();
     });
+    bindPanel(command_ids::PanelPropertiesCurvesDisplay, [this]() {
+        if (panels_->propertiesPanel()) {
+            panels_->propertiesPanel()->performPanelMenuAction(QStringLiteral("curvesDisplay"));
+        }
+    });
     bindPanel(command_ids::PanelPropertiesSavePreset, [this]() {
         if (panels_->propertiesPanel()) {
             panels_->propertiesPanel()->performPanelMenuAction(QStringLiteral("savePreset"));

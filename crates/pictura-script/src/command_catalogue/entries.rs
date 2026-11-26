@@ -695,6 +695,7 @@ pub(super) static ROWS: &[CommandSpec] = &[
     CommandSpec { id: "paragraph.everyLineComposer", path: &[], label: "Every-line Composer", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "paragraph.reset", path: &[], label: "Reset Paragraph", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "panel.properties.autoOptions", path: &[], label: "Auto Options…", shortcut: "", implemented: true, checkable: false },
+    CommandSpec { id: "panel.properties.curvesDisplay", path: &[], label: "Curves Display Options…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "panel.properties.savePreset", path: &[], label: "Save Preset…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "panel.properties.loadPreset", path: &[], label: "Load Preset…", shortcut: "", implemented: true, checkable: false },
     CommandSpec { id: "panel.properties.clipToggle", path: &[], label: "Clip to Layer", shortcut: "", implemented: true, checkable: false },

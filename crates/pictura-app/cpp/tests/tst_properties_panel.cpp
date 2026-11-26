@@ -1,3 +1,4 @@
+#include "tools.h"
 #include <QtTest/QtTest>
 #include "api/layers_api.h"
 #include "api/document_bridge.h"
@@ -199,12 +200,14 @@ void PropertiesPanelTest::curvesControlsAndMenu()
     auto* black = panel_->findChild<QSlider*>(QStringLiteral("curvesBlackSlider"));
     QVERIFY(graph && black);
     auto* target = panel_->findChild<QToolButton*>(QStringLiteral("curvesTarget"));
-    auto* controls = panel_->findChild<pictura::AdjustmentControls*>(QStringLiteral("propertiesControls"));
-    QVERIFY(target && controls);
-    QSignalSpy requested(controls, &pictura::AdjustmentControls::curvesCanvasRequested);
+    auto* tools = window_->findChild<pictura::ToolController*>();
+    QVERIFY(target && tools);
+    QVERIFY(!tools->canvasBrushActive());
     target->click();
-    QCOMPARE(requested.count(), 1);
-    QCOMPARE(requested.takeFirst().at(0).toInt(), 0);
+    QVERIFY(target->isChecked());
+    QVERIFY(tools->canvasBrushActive());
+    target->click();
+    QVERIFY(!tools->canvasBrushActive());
     QVERIFY(panel_->findChild<QToolButton*>(QStringLiteral("curvesBlackPoint")));
     QVERIFY(panel_->findChild<QToolButton*>(QStringLiteral("curvesGrayPoint")));
     QVERIFY(panel_->findChild<QToolButton*>(QStringLiteral("curvesWhitePoint")));
@@ -219,7 +222,10 @@ void PropertiesPanelTest::curvesControlsAndMenu()
     QCOMPARE(qRound(graph->points().first().x() * 255), 20);
     QMenu menu;
     auto* display = menu.addAction(QStringLiteral("Display"));
-    display->setData(QStringLiteral("properties.curvesDisplay"));
+    display->setData(QStringLiteral("panel.properties.curvesDisplay"));
+    connect(display, &QAction::triggered, panel_, [this] {
+        panel_->performPanelMenuAction(QStringLiteral("curvesDisplay"));
+    });
     auto* clipping = menu.addAction(QStringLiteral("Clipping"));
     clipping->setData(QStringLiteral("properties.showClipping"));
     clipping->setCheckable(true);

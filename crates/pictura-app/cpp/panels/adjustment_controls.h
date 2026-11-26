@@ -4,6 +4,8 @@
 #include <QtCore/QStringList>
 #include <QtWidgets/QWidget>
 
+#include "curves_controls.h"
+
 #include <array>
 #include <functional>
 #include <vector>
@@ -14,7 +16,6 @@ class QVBoxLayout;
 
 namespace pictura {
 
-class CurveWidget;
 class HistogramView;
 class PictureView;
 
@@ -39,21 +40,22 @@ public:
     // Where the Curves editor reads `channel`'s points (`"x,y x,y …"`).
     void setCurveSource(std::function<QString(int)> source) { curveSource_ = std::move(source); }
     void setLevelsHistogramSource(std::function<std::array<int, 256>(int)> source);
-    CurveWidget* curveWidget() const { return curve_; }
-    int curveChannel() const;
     void focusFirstParameter();
-    void toggleCurvesDisplay();
     bool levelsClippingParameters(int& channel, int& black, int& white) const;
+    void setCurvesContext(const QString& mode, const CurveHistograms& histograms,
+                          ToolController* tools, CurvesControls::CanvasSample sample);
+    CurvesControls* curves() const { return curves_; }
     QWidget* controlForTest(const QString& key) const;
 
 signals:
     void valueChanged(const QString& key, double value);
     void levelsPickRequested(int point);
     void levelsChannelChanged();
-    void curvesCanvasRequested(int action);
     void curveChanged(int channel, const QString& points);
     // A gesture ended (a slider release, toggle, menu, or colour pick).
     void gestureEnded();
+    void curveGestureStarted();
+    void grayPointPicked(const QColor& color);
 
 private:
     struct Row {
@@ -83,10 +85,12 @@ private:
     bool loading_ = false;
     std::vector<Row> rows_;
     QComboBox* groups_ = nullptr;
-    CurveWidget* curve_ = nullptr;
     HistogramView* thresholdHistogram_ = nullptr;
-    QComboBox* curveChannel_ = nullptr;
-    QWidget* curveDisplay_ = nullptr;
+    CurvesControls* curves_ = nullptr;
+    QString curveMode_ = QStringLiteral("rgb");
+    CurveHistograms curveHistograms_{};
+    ToolController* curveTools_ = nullptr;
+    CurvesControls::CanvasSample curveSample_;
     std::function<QString(int)> curveSource_;
     std::function<std::array<int, 256>(int)> levelsHistogramSource_;
     std::function<void()> levelsRefresh_;

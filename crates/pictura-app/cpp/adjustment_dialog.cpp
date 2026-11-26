@@ -1,4 +1,5 @@
 #include "adjustment_dialog.h"
+#include "panels/curves_controls.h"
 
 #include "adjustment_presets.h"
 
@@ -190,25 +191,7 @@ const std::array<int, 256>& AdjustmentDialog::histogram(int channel) const
 
 bool AdjustmentDialog::autoEndpoints(int channel, int& lo, int& hi) const
 {
-    const std::array<int, 256>& bins = histogram(channel);
-    long long total = 0;
-    for (int count : bins) {
-        total += count;
-    }
-    if (total == 0) {
-        return false;
-    }
-    // CS6's default clip: 0.1% of the pixels off each end.
-    const long long clip = total / 1000;
-    lo = 0;
-    for (long long seen = 0; lo < 255 && (seen += bins[lo]) <= clip;) {
-        ++lo;
-    }
-    hi = 255;
-    for (long long seen = 0; hi > 0 && (seen += bins[hi]) <= clip;) {
-        --hi;
-    }
-    return hi - lo >= 2;
+    return curveAutoEndpoints(histogram(channel), lo, hi);
 }
 
 void AdjustmentDialog::applyAuto() {}
