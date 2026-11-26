@@ -186,6 +186,8 @@ def report(results: list[tuple[str, int, str]]) -> int:
     failed = 0
     for check_id, returncode, output in results:
         if returncode == 0:
+            if check_id == "tests" and output:
+                print(output, end="" if output.endswith("\n") else "\n")
             print(f"{check_id}=ok")
             continue
         failed = 1

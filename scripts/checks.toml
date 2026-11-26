@@ -81,7 +81,9 @@ cost = "cheap"
 phase = "sequential"
 command = '''
 bash scripts/check-build-tree.sh --self-test &&
-  if [ "${PICTURA_FULL_GATES:-0}" = 1 ]; then
+  if [ "${PICTURA_VERIFY_QT_BUILD:-0}" = 1 ]; then
+    echo "build-tree: skipped before staged rebuild"
+  elif [ "${PICTURA_FULL_GATES:-0}" = 1 ]; then
     bash scripts/check-build-tree.sh
   else
     bash scripts/check-build-tree.sh --warn
@@ -351,7 +353,13 @@ id = "tests"
 scope = "build"
 cost = "expensive"
 phase = "sequential"
-command = "bash scripts/test-report.sh never"
+command = '''
+python3 scripts/test_report_execution.py --self-check
+args=(never)
+if [ "${PICTURA_VERIFY_QT_CONFIGURE:-0}" = 1 ]; then args+=(--configure); fi
+if [ "${PICTURA_VERIFY_QT_BUILD:-0}" = 1 ]; then args+=(--build); fi
+bash scripts/test-report.sh "${args[@]}"
+'''
 local_fast = true
 local_full = true
 ci_guards = false

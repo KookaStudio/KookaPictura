@@ -334,21 +334,9 @@ jobs:
       - *sccache
       - *rustcache
 
-      - name: Configure
-        # CI compiles every source without precompiled headers, so a header a
-        # local precompiled header would mask cannot break the release build.
-        run: cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER_LAUNCHER=sccache -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON
-
-      - name: Build
-        run: cmake --build build --parallel
-
-      - name: Self-test
-        run: ./build/pictura --headless --self-test
-
-      - name: Self-test with document
-        run: ./build/pictura --headless --self-test crates/pictura-codec/tests/fixtures/two_layers.psd
-
       - name: Provide the TIFF runtime for Qt
+        # The runtime must exist before the shared executor reaches CTest,
+        # because CTest inherits LD_LIBRARY_PATH from the step that runs it.
         run: |
           # The Linux Qt SDK builds libqtiff against RHEL's libtiff.so.5.
           tiff_package="$RUNNER_TEMP/libtiff5.deb"
@@ -358,24 +346,21 @@ jobs:
           printf '%s  %s\n' 298a778a6a579a556f6bb4e32512cd76e0483b57b4a379ee85397f62fe21f225 "$tiff_package" | sha256sum --check --status
           dpkg-deb --extract "$tiff_package" "$RUNNER_TEMP/qt-tiff"
 
-      - name: CTest
+      - name: Qt execution self-check
+        run: python3 scripts/test_report_execution.py --self-check
+
+      - name: Configure, build, self-test, CTest, report
+        # One shared Qt executor owns the stage order; CI keeps only the setup
+        # above. It requests the whole runner CPU count, and an explicit
+        # CTEST_PARALLEL_LEVEL still wins. CI compiles every source without
+        # precompiled headers, so a header a local PCH would mask cannot reach
+        # the release build.
         run: |
           export LD_LIBRARY_PATH="$RUNNER_TEMP/qt-tiff/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-          # The runner runs nothing else here, so every CPU takes a suite.
-          level="${CTEST_PARALLEL_LEVEL:-$(nproc)}"
-          echo "ctest -j $level"
-          ctest --test-dir build --output-on-failure -j "$level"
-
-      - name: Qt test report
-        if: always()
-        run: |
-          shopt -s nullglob
-          files=(build/qt-test-results/*.xml)
-          if [ ${#files[@]} -gt 0 ]; then
-            python3 scripts/report_tests.py --qt-junit "${files[@]}" --color never
-          else
-            echo "no Qt test results to report"
-          fi
+          export PICTURA_CPU_BUDGET_PERCENT=100
+          bash scripts/test-report.sh never --qt-only --configure --build \
+            --cmake-arg -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            --cmake-arg -DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON
 
       - name: Control e2e
         run: bash scripts/verify-control.sh

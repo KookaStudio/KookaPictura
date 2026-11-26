@@ -5,9 +5,8 @@
 # Format, lint, one test run, the non-goal guard, and spec validation. No Qt
 # build and no app self-tests; use verify-full.sh for those.
 #
-# The test step routes through scripts/test-report.sh (nextest + the app
-# self-tests when ./build/pictura exists), which prints the unified report.
-# Script checks and their placements come from scripts/checks.toml.
+# The test step runs nextest and the shared Qt executor through checks.toml.
+# The full gate forwards configure and build so the executor stages the Qt build.
 #
 # Docs-only fast path: when the working diff (against the merge base with the
 # default branch, plus untracked files) touches only docs/, openspec/, *.md, or
@@ -27,11 +26,27 @@ fi
 : "${PICTURA_JOBS:?cpu-budget marker set without PICTURA_JOBS; run the gate through scripts/cpu-budget.py}"
 cd "$script_dir/.."
 
+# Forward the Qt build options to the shared executor. The full gate asks for a
+# configure and a staged build; the plain fast gate does neither.
+export PICTURA_VERIFY_QT_CONFIGURE=0 PICTURA_VERIFY_QT_BUILD=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --configure) PICTURA_VERIFY_QT_CONFIGURE=1 ;;
+    --build) PICTURA_VERIFY_QT_BUILD=1 ;;
+    *)
+      echo "verify-fast: unknown argument '$1'" >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+
 changed_file=$(mktemp "${TMPDIR:-/tmp}/pictura-changed.XXXXXX")
 python3 scripts/changed_files.py --output "$changed_file" >/dev/null
 
 docs_only=0
-if [ -s "$changed_file" ]; then
+# A requested build always runs: the docs-only fast path skips cmake.
+if [ "$PICTURA_VERIFY_QT_CONFIGURE" = 0 ] && [ "$PICTURA_VERIFY_QT_BUILD" = 0 ] && [ -s "$changed_file" ]; then
   docs_only=1
   while IFS= read -r -d '' path; do
     case "$path" in
