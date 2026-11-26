@@ -1,7 +1,7 @@
 # Feature parity tracker
 
 Assessed: 2026-11-26
-Pictura commit: 141c21da
+Pictura commit: a0a62c059
 CS6 baseline: Adobe Photoshop CS6 13.0 (2012), Standard and Extended
 CC baseline: Adobe Photoshop 28.0 (November 2026 release; LTS 27.11.1)
 
@@ -11,12 +11,12 @@ This tracker measures feature coverage against a frozen Photoshop baseline. It d
 
 | Baseline | Complete | Partial | Missing | Unknown | Denominator | Coverage | Excluded non-goals |
 |---|---|---|---|---|---|---|---|
-| CS6 Standard | 210 | 79 | 56 | 4 | 349 | 60.2% | 8 |
-| CS6 Standard, in scope | 210 | 79 | 50 | 2 | 341 | 61.6% | 8 |
-| CS6 Extended | 211 | 79 | 72 | 4 | 366 | 57.7% | 23 |
-| CS6 Extended, in scope | 211 | 79 | 51 | 2 | 343 | 61.5% | 23 |
-| CC 28.0 | 212 | 81 | 77 | 4 | 374 | 56.7% | 20 |
-| CC 28.0, in scope | 212 | 81 | 59 | 2 | 354 | 59.9% | 20 |
+| CS6 Standard | 211 | 78 | 56 | 4 | 349 | 60.5% | 8 |
+| CS6 Standard, in scope | 211 | 78 | 50 | 2 | 341 | 61.9% | 8 |
+| CS6 Extended | 212 | 78 | 72 | 4 | 366 | 57.9% | 23 |
+| CS6 Extended, in scope | 212 | 78 | 51 | 2 | 343 | 61.8% | 23 |
+| CC 28.0 | 213 | 80 | 77 | 4 | 374 | 57.0% | 20 |
+| CC 28.0, in scope | 213 | 80 | 59 | 2 | 354 | 60.2% | 20 |
 
 ## Baselines
 
@@ -42,7 +42,7 @@ Coverage is not behavioural or pixel parity with Photoshop. Every Complete row n
 | Layers & compositing | 31/38 (81.6%) | 31/39 (79.5%) | 31/39 (79.5%) |
 | Tools & painting | 41/70 (58.6%) | 42/81 (51.9%) | 42/71 (59.2%) |
 | Selections & masking | 18/22 (81.8%) | 18/22 (81.8%) | 18/22 (81.8%) |
-| Adjustments & filters | 30/55 (54.5%) | 30/55 (54.5%) | 30/64 (46.9%) |
+| Adjustments & filters | 31/55 (56.4%) | 31/55 (56.4%) | 31/64 (48.4%) |
 | Type & vector | 17/17 (100.0%) | 17/17 (100.0%) | 17/19 (89.5%) |
 | Color & bit depth | 14/29 (48.3%) | 14/29 (48.3%) | 14/29 (48.3%) |
 | Automation & extensibility | 3/18 (16.7%) | 3/18 (16.7%) | 3/22 (13.6%) |
@@ -287,7 +287,7 @@ Source list: the Image > Adjustments list (23 rows; 25 commands when Auto Tone/C
 | P-IMG-11 | Colour Lookup | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src | none | — | — |
 | P-IMG-12 | Invert | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src | none | — | — |
 | P-IMG-13 | Posterize | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src | none | — | — |
-| P-IMG-14 | Threshold | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Histogram under the slider remains | #563 |
+| P-IMG-14 | Threshold | Y | Y | Y | Complete | in-scope | crates/pictura-adjust/src; crates/pictura-app/cpp/panels/adjustment_controls.cpp | none | Histogram samples large inputs and approximates specialized clipping and knockout cases | #563 |
 | P-IMG-15 | Gradient Map | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Dither and CS6 print-toning presets remain | #574 |
 | P-IMG-16 | Selective Colour | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Composite-channel-only gate and preset whitelist remain | #577 |
 | P-IMG-17 | Shadows/Highlights | Y | Y | Y | Partial | in-scope | crates/pictura-adjust/src | none | Local-surround operator and eight controls remain | #562 |
@@ -524,6 +524,7 @@ Source list: Window-menu panels, Preferences panes, workspaces, shortcuts, and a
 
 | Date | Pictura commit | CS6 Standard | CS6 Extended | CC version | CC |
 |---|---|---|---|---|---|
+| 2026-11-26 | a0a62c059 | 211/349 (60.5%) | 212/366 (57.9%) | 28.0 | 213/374 (57.0%) |
 | 2026-11-26 | 141c21da | 210/349 (60.2%) | 211/366 (57.7%) | 28.0 | 212/374 (56.7%) |
 | 2026-11-26 | 1fd5bcad6 | 209/349 (59.9%) | 210/366 (57.4%) | 28.0 | 211/374 (56.4%) |
 | 2026-11-25 | 5bba3258 | 209/349 (59.9%) | 210/366 (57.4%) | 28.0 | 211/374 (56.4%) |
