@@ -1,3 +1,10 @@
+# curves-secondary-controls Specification
+
+## Purpose
+Define the secondary editing tools, graph display, and document behavior shared by the Curves dialog and adjustment-layer Properties.
+
+## Requirements
+
 ### Requirement: Curve points and display options
 
 Both Curves surfaces SHALL expose exact numeric input/output and movable black and white input endpoints. They SHALL support simple and detailed grids, a histogram, a baseline, component overlays on a composite graph, and alignment guides. Changing display settings SHALL preserve the adjustment. CMYK SHALL retain a composite and four independent component curves. Non-RGB edits SHALL transform the RGB-backed input into the document mode, apply the curves there, and transform back. Identity SHALL bypass conversion. Non-RGB Curves SHALL use CPU rendering rather than the GPU independent-channel LUT path.

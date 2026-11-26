@@ -1,7 +1,7 @@
 use pictura_color::model;
 use pictura_core::Samples;
 
-use super::{Rgb, map};
+use super::{map, Rgb};
 use crate::color::cmyk_unit_to_rgb;
 use crate::common::{hermite_eval, monotone_tangents};
 use crate::types::{AdjustError, ColorBalanceMode, CurvesParams};
